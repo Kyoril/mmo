@@ -416,7 +416,18 @@ namespace mmo
 
 		TextStyle resolved = style;
 		resolved.color = label.color;
-		DrawText(canvas, face, label.text, Scale(label.rect), label.align, resolved);
+
+		const Rect area = Scale(label.rect);
+
+		// Status text is whatever the network stack produced and can be arbitrarily
+		// long, so it is shortened to fit. The clip is the backstop: without it, an
+		// overlong string would draw straight across the panel and under the PLAY
+		// button, since DrawText does not clip on its own.
+		const std::string text = ElideText(face, label.text, area.GetWidth());
+
+		canvas.PushClip(area);
+		DrawText(canvas, face, text, area, label.align, resolved);
+		canvas.PopClip();
 	}
 
 	void LauncherView::DrawButton(Canvas& canvas, const Button& button)

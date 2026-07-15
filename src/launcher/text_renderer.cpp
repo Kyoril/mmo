@@ -260,6 +260,38 @@ namespace mmo
 		return width;
 	}
 
+	std::string ElideText(FontFace& face, const std::string& utf8, const int32 maxWidth)
+	{
+		if (!face.IsValid() || utf8.empty() || MeasureText(face, utf8) <= maxWidth)
+		{
+			return utf8;
+		}
+
+		static const std::string ellipsis = "...";
+		const int32 ellipsisWidth = MeasureText(face, ellipsis);
+
+		// Collect the byte offset of every code point so the string can be cut without
+		// splitting a multi-byte sequence.
+		std::vector<size_t> boundaries;
+		for (size_t i = 0; i < utf8.size(); )
+		{
+			boundaries.push_back(i);
+			DecodeUtf8(utf8, i);
+		}
+
+		// Walk back from the end until the remaining text plus the ellipsis fits.
+		for (size_t count = boundaries.size(); count > 0; --count)
+		{
+			const std::string candidate = utf8.substr(0, boundaries[count - 1]);
+			if (MeasureText(face, candidate) + ellipsisWidth <= maxWidth)
+			{
+				return candidate + ellipsis;
+			}
+		}
+
+		return ellipsis;
+	}
+
 	void DrawText(Canvas& canvas, FontFace& face, const std::string& utf8,
 		const Rect& area, const TextAlign align, const TextStyle& style)
 	{

@@ -98,6 +98,13 @@ namespace mmo
 	/// Measures a single line UTF-8 run in pixels. Ignores shadow and outline.
 	int32 MeasureText(FontFace& face, const std::string& utf8);
 
+	/// Shortens `utf8` with a trailing ellipsis until it fits `maxWidth`.
+	///
+	/// Status text comes from the network stack and can be arbitrarily long, so it
+	/// cannot be assumed to fit. Cutting on a code point boundary keeps the result
+	/// valid UTF-8.
+	std::string ElideText(FontFace& face, const std::string& utf8, int32 maxWidth);
+
 	/// Draws a single line UTF-8 run, aligned horizontally within `area` and centered
 	/// vertically on it. The caller is responsible for clipping.
 	void DrawText(Canvas& canvas, FontFace& face, const std::string& utf8,
