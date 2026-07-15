@@ -227,6 +227,22 @@ namespace mmo
 
 		void OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue);
 
+		/// @brief Called when the gxSsao console variable changed.
+		void OnSsaoEnabledChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when the gxSsaoQuality console variable changed.
+		void OnSsaoQualityChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when the gxSsaoHalfRes console variable changed.
+		void OnSsaoHalfResChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when any of the gxSsaoRadius / gxSsaoIntensity / gxSsaoThickness
+		///        console variables changed.
+		void OnSsaoParametersChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when the gxSsaoDebug console variable changed.
+		void OnSsaoDebugChanged(ConsoleVar &var, const std::string &oldValue);
+
 		void OnCombatVignetteChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue);

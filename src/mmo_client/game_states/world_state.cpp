@@ -125,6 +125,14 @@ namespace mmo
 		static ConsoleVar *s_shadowQualityVar = nullptr;
 		static ConsoleVar *s_shadowTemporalVar = nullptr;
 
+		static ConsoleVar *s_ssaoVar = nullptr;
+		static ConsoleVar *s_ssaoQualityVar = nullptr;
+		static ConsoleVar *s_ssaoHalfResVar = nullptr;
+		static ConsoleVar *s_ssaoRadiusVar = nullptr;
+		static ConsoleVar *s_ssaoIntensityVar = nullptr;
+		static ConsoleVar *s_ssaoThicknessVar = nullptr;
+		static ConsoleVar *s_ssaoDebugVar = nullptr;
+
 		static ConsoleVar *s_renderScaleVar = nullptr;
 
 		static ConsoleVar *s_depthPrepassVar = nullptr;
@@ -1773,6 +1781,29 @@ namespace mmo
 
 		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "0");
 		m_cvarChangedSignals += s_depthPrepassVar->Changed.connect(this, &WorldState::OnDepthPrepassChanged);
+
+		// Screen-space ambient occlusion (visibility-bitmask / SSILVB occlusion core). All
+		// distances are world units; 1 unit = 1 metre.
+		s_ssaoVar = ConsoleVarMgr::RegisterConsoleVar("gxSsao", "Screen-space ambient occlusion. 1 = on, 0 = off.", "1");
+		m_cvarChangedSignals += s_ssaoVar->Changed.connect(this, &WorldState::OnSsaoEnabledChanged);
+
+		s_ssaoQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoQuality", "SSAO detail preset: 0 = Low (2 slices, 4 steps), 1 = Medium (3/8), 2 = High (4/12). Lower values improve performance.", "2");
+		m_cvarChangedSignals += s_ssaoQualityVar->Changed.connect(this, &WorldState::OnSsaoQualityChanged);
+
+		s_ssaoHalfResVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoHalfRes", "Compute SSAO at half resolution and upscale. 1 = on (faster), 0 = full resolution (sharper).", "1");
+		m_cvarChangedSignals += s_ssaoHalfResVar->Changed.connect(this, &WorldState::OnSsaoHalfResChanged);
+
+		s_ssaoRadiusVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoRadius", "SSAO sampling radius in world units (metres). Larger values need a higher gxSsaoQuality to avoid banding.", "0.75");
+		m_cvarChangedSignals += s_ssaoRadiusVar->Changed.connect(this, &WorldState::OnSsaoParametersChanged);
+
+		s_ssaoIntensityVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoIntensity", "SSAO strength multiplier. Higher values darken occluded areas more.", "1.0");
+		m_cvarChangedSignals += s_ssaoIntensityVar->Changed.connect(this, &WorldState::OnSsaoParametersChanged);
+
+		s_ssaoThicknessVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoThickness", "Assumed occluder thickness in world units (metres). Too low leaks light through solid geometry; too high makes thin objects occlude like walls.", "0.25");
+		m_cvarChangedSignals += s_ssaoThicknessVar->Changed.connect(this, &WorldState::OnSsaoParametersChanged);
+
+		s_ssaoDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoDebug", "Visualize the raw SSAO term instead of the lit scene. 1 = on, 0 = off.", "0");
+		m_cvarChangedSignals += s_ssaoDebugVar->Changed.connect(this, &WorldState::OnSsaoDebugChanged);
 
 		// Distance (world units) beyond which authored instanced foliage (trees, bushes, rocks) is
 		// culled. Lower values cut the overdraw from dense forests. Read each frame in OnIdle, so no
@@ -5377,6 +5408,150 @@ namespace mmo
 		const bool enabled = var.GetIntValue() != 0;
 		ILOG("Depth pre-pass " << (enabled ? "enabled" : "disabled"));
 		deferred->SetDepthPrepassEnabled(enabled);
+	}
+
+	void WorldState::OnSsaoEnabledChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const bool enabled = var.GetIntValue() != 0;
+		ILOG("SSAO " << (enabled ? "enabled" : "disabled"));
+		deferred->SetSsaoEnabled(enabled);
+	}
+
+	void WorldState::OnSsaoQualityChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const int level = Clamp(var.GetIntValue(), 0, 2);
+		ILOG("Updating SSAO quality to level " << level);
+		deferred->SetSsaoQuality(level);
+	}
+
+	void WorldState::OnSsaoHalfResChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const bool enabled = var.GetIntValue() != 0;
+		ILOG("SSAO half resolution " << (enabled ? "enabled" : "disabled"));
+		deferred->SetSsaoHalfResolution(enabled);
+	}
+
+	void WorldState::OnSsaoParametersChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		// One handler for all three scalar parameters: each setter clamps its own value, so
+		// pushing all three on any change is both cheap and idempotent.
+		deferred->SetSsaoRadius(s_ssaoRadiusVar->GetFloatValue());
+		deferred->SetSsaoIntensity(s_ssaoIntensityVar->GetFloatValue());
+		deferred->SetSsaoThickness(s_ssaoThicknessVar->GetFloatValue());
+
+		DLOG("Updated SSAO parameters");
+	}
+
+	void WorldState::OnSsaoDebugChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const bool enabled = var.GetIntValue() != 0;
+		ILOG("SSAO debug visualization " << (enabled ? "enabled" : "disabled"));
+		deferred->SetSsaoDebugVisualization(enabled);
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)

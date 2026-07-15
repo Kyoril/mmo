@@ -117,7 +117,11 @@ cbuffer ShadowBuffer : register(b3)
     float CascadeBlendFactor;   // Blend factor for cascade transitions
 
     uint PcfSampleCount;        // Number of PCF taps per shadow lookup (shadow quality)
-    float3 _ShadowPadding;
+    uint SsaoDebugMode;         // Non-zero: lighting pass outputs the raw SSAO term instead of the lit scene.
+                                // NOTE: stays 0 (and disables the debug view) whenever the scene has no
+                                // shadow-casting directional light, since ShadowBuffer is zero-initialised
+                                // in that branch of DeferredRenderer::Render. Accepted limitation.
+    float2 _ShadowPadding;
 };
 
 // Debug colors for cascade visualization
@@ -559,6 +563,12 @@ float4 main(PS_INPUT input) : SV_TARGET
     
     // Apply gamma correction
     lighting = pow(lighting, 1.0 / 2.2);
+
+    // SSAO debug visualization: show the raw AO term instead of the lit scene.
+    if (SsaoDebugMode != 0)
+    {
+        return float4(ssao.xxx, 1.0f);
+    }
 
     return float4(lighting, opacity);
 }

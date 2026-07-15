@@ -42,7 +42,10 @@ namespace mmo
         float cascadeBlendFactor;   // Blend factor for cascade transitions
 
         uint32 pcfSampleCount;      // Number of PCF taps per shadow lookup (shadow quality)
-        float shadowPadding0;
+        uint32 ssaoDebugMode;       // Non-zero: lighting pass outputs the raw SSAO term instead
+                                    // of the lit scene. NOTE: this stays 0 (disabling the debug
+                                    // view) in the no-shadow-casting-light branch of Render(),
+                                    // where ShadowBuffer is zero-initialised. Accepted limitation.
         float shadowPadding1;
         float shadowPadding2;
     };
@@ -321,7 +324,11 @@ namespace mmo
         }
         else
         {
-            // No shadow-casting light - ensure shadow buffer indicates no shadows
+            // No shadow-casting light - ensure shadow buffer indicates no shadows.
+            // NOTE (known limitation): this leaves ssaoDebugMode zero-initialised regardless of
+            // gxSsaoDebug, so the SSAO raw-AO debug visualization (PS_DeferredLighting.hlsl,
+            // SsaoDebugMode) does not work in a scene with no shadow-casting directional light.
+            // Accepted: it is a debug aid only, and the alternative is a whole new cbuffer for one flag.
             ShadowBuffer buffer{};
             buffer.cascadeCount = 0;
             m_shadowBuffer->Update(&buffer);
@@ -620,6 +627,7 @@ namespace mmo
         buffer.debugCascades = m_debugCascades ? 1 : 0;
         buffer.cascadeBlendFactor = 0.0f;
         buffer.pcfSampleCount = m_pcfSampleCount;
+        buffer.ssaoDebugMode = m_ssaoPass->GetSettings().debugVisualization ? 1u : 0u;
         m_shadowBuffer->Update(&buffer);
 
         // Render the shadow map
@@ -745,6 +753,7 @@ namespace mmo
         buffer.debugCascades = m_debugCascades ? 1 : 0;
         buffer.cascadeBlendFactor = config.cascadeBlendFactor;
         buffer.pcfSampleCount = m_pcfSampleCount;
+        buffer.ssaoDebugMode = m_ssaoPass->GetSettings().debugVisualization ? 1u : 0u;
         m_shadowBuffer->Update(&buffer);
 
         // Reset depth bias
