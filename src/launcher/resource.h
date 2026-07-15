@@ -22,6 +22,7 @@
 #define IDR_PNG_PROGRESS_FILL           307
 #define IDR_PNG_ICON_CLOSE              308
 #define IDR_PNG_ICON_MINIMIZE           309
+#define IDR_PNG_BORDER_FRAME            310
 
 // --- Embedded fonts (RCDATA, TTF): 400-499 ----------------------------------
 #define IDR_TTF_DISPLAY                 400

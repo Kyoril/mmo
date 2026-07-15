@@ -40,6 +40,13 @@ namespace mmo
 		/// stretches rather than tiles.
 		constexpr NineSliceDef PanelBottom{ IDR_PNG_PANEL_BOTTOM, { 44, 18, 44, 18 }, false };
 
+		/// fg4_borders_01_03, 984x623. The window frame, drawn with NineSliceFill::FrameOnly:
+		/// the source's middle is an opaque panel fill, which would paint over the splash.
+		/// 48 captures the metal band plus a thin inner lip; more drags in the interior
+		/// gradient, less clips the corner ornaments. The unused middle of the asset has
+		/// been cleared to transparent so it costs almost nothing to embed.
+		constexpr NineSliceDef WindowBorder{ IDR_PNG_BORDER_FRAME, { 48, 48, 48, 48 }, false };
+
 		/// fg4_buttonBrown1_*, 72x72. The Up and Disabled states measure 14 and Down
 		/// measures 16 (a thicker pressed bevel). All four share 16 so that the button
 		/// geometry does not shift when the state changes; on Up the extra band is flat
@@ -90,6 +97,12 @@ namespace mmo
 
 		/// Shown before the splash is available, and behind it if decoding ever fails.
 		constexpr Color WindowBackground = FromArgb(0xFF17110B);
+
+		/// The frame art keeps a band of intentional negative space around its outer
+		/// edge, with only the corner and edge ornaments breaking out into it. Left as
+		/// is, the splash would show through that band and read as art leaking around
+		/// the border, so the band is matted with this first and the frame drawn over it.
+		constexpr Color BorderMatte = FromArgb(0xFF0A0806);
 
 		// --- fonts -------------------------------------------------------------
 		/// Logical pixel heights; scaled by DPI when the faces are built.

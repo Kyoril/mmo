@@ -397,7 +397,7 @@ namespace mmo
 	}
 
 	void Canvas::DrawNineSlice(const Bitmap& src, const Insets& insets, const Rect& dstRect,
-		const Color tint, const bool tileEdges)
+		const Color tint, const bool tileEdges, const NineSliceFill fill)
 	{
 		if (!src.IsValid() || dstRect.IsEmpty())
 		{
@@ -447,7 +447,7 @@ namespace mmo
 		}
 
 		// Center.
-		if (cx1 > cx0 && cy1 > cy0)
+		if (fill == NineSliceFill::Full && cx1 > cx0 && cy1 > cy0)
 		{
 			BlitRegion(src, Rect{ insets.left, insets.top, sw - insets.right, sh - insets.bottom },
 				Rect{ cx0, cy0, cx1, cy1 }, tint, tileEdges);

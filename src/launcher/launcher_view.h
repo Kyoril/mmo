@@ -71,6 +71,9 @@ namespace mmo
 
 		const Bitmap* GetAsset(uint32 resourceId) const;
 
+		/// Mattes the outer band and draws the ornate window frame over it.
+		void DrawWindowFrame(Canvas& canvas);
+
 		void DrawButton(Canvas& canvas, const Button& button);
 		void DrawProgress(Canvas& canvas);
 		void DrawLabel(Canvas& canvas, FontFace& face, const Label& label,

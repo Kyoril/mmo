@@ -64,8 +64,9 @@ namespace mmo
 		/// Converts a physical client point into the view's logical coordinate space.
 		Point ToLogical(POINT physical) const;
 
-		/// Asks DWM for rounded corners. A no-op before Windows 11.
-		void ApplyRoundedCorners() const;
+		/// Tells DWM not to round the window corners, so the frame art's own corners are
+		/// not clipped. A no-op before Windows 11.
+		void ApplyCornerPreference() const;
 
 		LauncherModel& m_model;
 		UpdateWorker& m_worker;

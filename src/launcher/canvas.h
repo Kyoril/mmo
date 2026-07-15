@@ -20,6 +20,16 @@ namespace mmo
 		Bilinear
 	};
 
+	enum class NineSliceFill
+	{
+		/// Draw all nine regions.
+		Full,
+		/// Draw the eight border regions and leave the middle untouched. Required for
+		/// frame art whose center is opaque, which would otherwise paint over whatever
+		/// the frame is supposed to be framing.
+		FrameOnly
+	};
+
 	/// A drawing target over a caller-supplied premultiplied BGRA buffer.
 	///
 	/// The canvas does not own its pixels: on Win32 the buffer is the DIB section the
@@ -72,7 +82,8 @@ namespace mmo
 		/// Insets are clamped when `dstRect` is smaller than the corners, so a degenerate
 		/// destination degrades instead of corrupting.
 		void DrawNineSlice(const Bitmap& src, const Insets& insets, const Rect& dstRect,
-			Color tint = Color{ 255, 255, 255, 255 }, bool tileEdges = false);
+			Color tint = Color{ 255, 255, 255, 255 }, bool tileEdges = false,
+			NineSliceFill fill = NineSliceFill::Full);
 
 	private:
 		Color* GetPixel(const int32 x, const int32 y) { return m_pixels + static_cast<size_t>(y) * m_stride + x; }

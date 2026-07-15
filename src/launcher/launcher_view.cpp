@@ -21,9 +21,10 @@ namespace mmo
 	{
 		/// Every image the skin needs. Decoded up front: the whole set is under half a
 		/// megabyte and decoding on demand would stutter the first hover.
-		constexpr std::array<uint32, 9> RequiredImages = {
+		constexpr std::array<uint32, 10> RequiredImages = {
 			IDR_PNG_SPLASH,
 			IDR_PNG_PANEL_BOTTOM,
+			IDR_PNG_BORDER_FRAME,
 			IDR_PNG_BUTTON_UP,
 			IDR_PNG_BUTTON_OVER,
 			IDR_PNG_BUTTON_DOWN,
@@ -257,12 +258,35 @@ namespace mmo
 		// for whatever art gets swapped in later.
 		canvas.FillGradient(Scale(layout::TopScrim), theme::TopScrimFrom, theme::TopScrimTo, false);
 		canvas.FillGradient(Scale(layout::BottomScrim), theme::BottomScrimFrom, theme::BottomScrimTo, false);
-		canvas.DrawVignette(Scale(layout::Splash), layout::VignetteStrength);
+		canvas.DrawVignette(Scale(layout::Content), layout::VignetteStrength);
 
 		if (const Bitmap* panel = GetAsset(theme::PanelBottom.resourceId))
 		{
 			canvas.DrawNineSlice(*panel, Scale(theme::PanelBottom.insets),
 				Scale(layout::BottomPanel), Color{ 255, 255, 255, 255 }, theme::PanelBottom.tileEdges);
+		}
+
+		DrawWindowFrame(canvas);
+	}
+
+	void LauncherView::DrawWindowFrame(Canvas& canvas)
+	{
+		const Rect frame = Scale(layout::WindowFrame);
+		const int32 matte = Scale(layout::BorderMatteThickness);
+
+		// Matte the frame band before the art goes on top. The art's outer band is
+		// ornamental tabs with transparent gaps between them, so without this the
+		// splash shows through the gaps and reads as art leaking around the border.
+		canvas.FillRect(Rect{ frame.left, frame.top, frame.right, frame.top + matte }, theme::BorderMatte);
+		canvas.FillRect(Rect{ frame.left, frame.bottom - matte, frame.right, frame.bottom }, theme::BorderMatte);
+		canvas.FillRect(Rect{ frame.left, frame.top, frame.left + matte, frame.bottom }, theme::BorderMatte);
+		canvas.FillRect(Rect{ frame.right - matte, frame.top, frame.right, frame.bottom }, theme::BorderMatte);
+
+		if (const Bitmap* border = GetAsset(theme::WindowBorder.resourceId))
+		{
+			canvas.DrawNineSlice(*border, Scale(theme::WindowBorder.insets), frame,
+				Color{ 255, 255, 255, 255 }, theme::WindowBorder.tileEdges,
+				NineSliceFill::FrameOnly);
 		}
 	}
 
@@ -324,7 +348,12 @@ namespace mmo
 
 	bool LauncherView::HitTestCaption(const Point& logical) const
 	{
-		if (!Rect(layout::Caption).Contains(logical))
+		// The title strip drags, and so does the frame band itself: with an ornate
+		// border around the window, the whole frame reads as grabbable chrome.
+		const bool onChrome = Rect(layout::Caption).Contains(logical)
+			|| !Rect(layout::Content).Contains(logical);
+
+		if (!onChrome)
 		{
 			return false;
 		}

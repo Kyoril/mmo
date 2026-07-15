@@ -34,6 +34,7 @@ namespace mmo
 		{ IDR_PNG_PROGRESS_FILL,    "progress_fill.png" },
 		{ IDR_PNG_ICON_CLOSE,       "icon_close.png" },
 		{ IDR_PNG_ICON_MINIMIZE,    "icon_minimize.png" },
+		{ IDR_PNG_BORDER_FRAME,     "border_frame.png" },
 		{ IDR_TTF_DISPLAY,          "font_display.ttf" },
 		{ IDR_TTF_BODY,             "font_body.ttf" },
 	};

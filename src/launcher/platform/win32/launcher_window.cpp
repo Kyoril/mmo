@@ -26,11 +26,14 @@ namespace mmo
 
 		constexpr UINT WM_APP_SELF_UPDATE_FINISHED = WM_APP + 1;
 
-		/// DWMWA_WINDOW_CORNER_PREFERENCE and DWMWCP_ROUND. Spelled out rather than
+		/// DWMWA_WINDOW_CORNER_PREFERENCE and DWMWCP_DONOTROUND. Spelled out rather than
 		/// including dwmapi.h so the launcher does not hard link dwmapi.lib for a
 		/// cosmetic call that does nothing before Windows 11.
+		///
+		/// Rounding is explicitly disabled: the ornate frame art draws its own corners,
+		/// and letting DWM round the window would clip them off.
 		constexpr DWORD DwmWindowCornerPreference = 33;
-		constexpr DWORD DwmCornerPreferenceRound = 2;
+		constexpr DWORD DwmCornerPreferenceDoNotRound = 1;
 
 		/// Opts the process into PerMonitorV2.
 		///
@@ -157,7 +160,7 @@ namespace mmo
 
 		SetWindowPos(m_handle, nullptr, x, y, m_surfaceWidth, m_surfaceHeight, SWP_NOZORDER);
 
-		ApplyRoundedCorners();
+		ApplyCornerPreference();
 
 		SetTimer(m_handle, RenderTimerId, RenderTimerIntervalMs, nullptr);
 
@@ -166,7 +169,7 @@ namespace mmo
 		return true;
 	}
 
-	void LauncherWindow::ApplyRoundedCorners() const
+	void LauncherWindow::ApplyCornerPreference() const
 	{
 		using DwmSetWindowAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
 
@@ -180,7 +183,7 @@ namespace mmo
 			reinterpret_cast<void*>(GetProcAddress(dwmapi, "DwmSetWindowAttribute")));
 		if (setAttribute)
 		{
-			const DWORD preference = DwmCornerPreferenceRound;
+			const DWORD preference = DwmCornerPreferenceDoNotRound;
 			setAttribute(m_handle, DwmWindowCornerPreference, &preference, sizeof(preference));
 		}
 

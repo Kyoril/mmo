@@ -15,9 +15,33 @@ namespace mmo::layout
 	constexpr int32 WindowWidth = 900;
 	constexpr int32 WindowHeight = 550;
 
+	// --- window frame ---------------------------------------------------------
+	/// The ornate border wraps the whole window; all content sits inside its opening.
+	constexpr Rect WindowFrame{ 0, 0, WindowWidth, WindowHeight };
+
+	/// How far the frame art reaches in from each edge. Content is inset by this.
+	constexpr int32 FrameThickness = 48;
+
+	/// The frame band is matted dark before the art is drawn over it.
+	///
+	/// The art is only solid across the inner part of its band: the outer part is
+	/// ornamental tabs with transparent gaps between them, and the top rail is not
+	/// fully opaque until roughly 32px in. Without a matte, those gaps show the splash
+	/// and read as art leaking around the border. Matting the full band rather than
+	/// just the outer margin costs nothing, since the art is drawn over it and covers
+	/// the matte everywhere it is opaque.
+	constexpr int32 BorderMatteThickness = FrameThickness;
+
+	/// The frame's inner opening. Everything below lives inside it.
+	constexpr Rect Content{
+		FrameThickness, FrameThickness,
+		WindowWidth - FrameThickness, WindowHeight - FrameThickness
+	};
+
 	// --- splash ---------------------------------------------------------------
 	/// The splash is drawn full bleed and cover-fitted, so swapping in art of a
-	/// different aspect ratio is a content change and not a layout change.
+	/// different aspect ratio is a content change and not a layout change. The frame
+	/// is drawn over its edges.
 	constexpr Rect Splash{ 0, 0, WindowWidth, WindowHeight };
 
 	/// Crop anchor when the art is wider or taller than the window. Biased above
@@ -28,16 +52,27 @@ namespace mmo::layout
 	// --- scrims ---------------------------------------------------------------
 	/// Drawn over the splash so that text keeps its contrast regardless of the art
 	/// behind it. This does the real legibility work; glyph outlines are insurance.
-	constexpr Rect TopScrim{ 0, 0, WindowWidth, 96 };
-	constexpr Rect BottomScrim{ 0, 300, WindowWidth, WindowHeight };
+	///
+	/// Both ramps start at the frame's opening rather than the window edge: the frame
+	/// covers the outer FrameThickness pixels, so a ramp anchored to the window would
+	/// hide its strongest end underneath the border and leave the title row washed out.
+	constexpr Rect TopScrim{ 0, FrameThickness, WindowWidth, 200 };
+	constexpr Rect BottomScrim{ 0, 300, WindowWidth, WindowHeight - FrameThickness };
+
+	/// Applied to the frame's opening, not the window, so the darkening lands on the
+	/// visible art instead of underneath the border.
 	constexpr float VignetteStrength = 0.35f;
 
 	// --- title bar ------------------------------------------------------------
-	constexpr Rect Caption{ 0, 0, WindowWidth, 40 };
-	constexpr Rect TitleText{ 20, 0, 600, 40 };
-	constexpr Rect VersionText{ 600, 12, 808, 32 };
-	constexpr Rect MinimizeButton{ 816, 4, 848, 36 };
-	constexpr Rect CloseButton{ 856, 4, 888, 36 };
+	/// The drag strip covers the whole top of the window including the frame itself,
+	/// so the border is grabbable and not just the text row. The buttons are carved
+	/// out of it in LauncherView::HitTestCaption.
+	constexpr Rect Caption{ 0, 0, WindowWidth, 88 };
+
+	constexpr Rect TitleText{ 68, 48, 600, 88 };
+	constexpr Rect VersionText{ 600, 60, 756, 80 };
+	constexpr Rect MinimizeButton{ 768, 52, 800, 84 };
+	constexpr Rect CloseButton{ 808, 52, 840, 84 };
 
 	/// Titlebar icons are square and centered in their button.
 	constexpr int32 TitleIconSize = 16;
@@ -45,10 +80,11 @@ namespace mmo::layout
 	// --- bottom bar -----------------------------------------------------------
 	/// 98 tall on purpose: that is exactly the source art's height, so at 100% DPI the
 	/// panel needs no vertical resampling and only its center stretches horizontally.
-	constexpr Rect BottomPanel{ 16, 436, 884, 534 };
+	/// Sits inside the frame opening with a small margin below it.
+	constexpr Rect BottomPanel{ 60, 392, 840, 490 };
 
-	constexpr Rect StatusLabel{ 44, 448, 620, 470 };
-	constexpr Rect ProgressTrack{ 44, 478, 620, 506 };
-	constexpr Rect PercentText{ 520, 481, 617, 503 };
-	constexpr Rect PlayButton{ 648, 452, 868, 518 };
+	constexpr Rect StatusLabel{ 88, 404, 580, 426 };
+	constexpr Rect ProgressTrack{ 88, 434, 580, 462 };
+	constexpr Rect PercentText{ 480, 437, 577, 459 };
+	constexpr Rect PlayButton{ 600, 408, 820, 474 };
 }
