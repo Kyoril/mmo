@@ -16,8 +16,9 @@ Texture2D AlbedoTexture : register(t0);
 Texture2D NormalTexture : register(t1);
 Texture2D MaterialTexture : register(t2);
 Texture2D EmissiveTexture : register(t3);
-// Slot t4 (formerly the ViewRay G-Buffer) is intentionally unused: the view-space ray is
-// reconstructed from InverseProjection and the screen UV in main() instead of being read back.
+// Screen-space ambient occlusion term (single channel, R). A 1x1 white texture is bound here
+// when SSAO is disabled, so this can be sampled unconditionally.
+Texture2D SsaoTexture : register(t4);
 
 // Cascade shadow maps
 Texture2D ShadowMapCascade0 : register(t5);
@@ -489,7 +490,10 @@ float4 main(PS_INPUT input) : SV_TARGET
     float metallic = materialData.r;
     float roughness = materialData.g;
     float specular = materialData.b;
-    float ao = materialData.a;
+    // Combine the material's baked AO with the screen-space AO term. Sampled with a linear
+    // sampler so a half-resolution AO target upsamples smoothly.
+    float ssao = SsaoTexture.Sample(PointSampler, input.TexCoord).r;
+    float ao = materialData.a * ssao;
     
     float3 emissive = emissiveData.rgb;
     

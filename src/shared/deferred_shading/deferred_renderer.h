@@ -4,6 +4,7 @@
 
 #include "shadow_camera_setup.h"
 #include "cascaded_shadow_camera_setup.h"
+#include "ssao_pass.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
@@ -213,6 +214,11 @@ namespace mmo
 
         /// @brief The G-Buffer.
         GBuffer m_gBuffer;
+
+        /// @brief The screen-space ambient occlusion pass. Runs between the geometry and
+        ///        lighting passes and produces the AO term the lighting pass multiplies into
+        ///        its ambient contribution.
+        std::unique_ptr<SsaoPass> m_ssaoPass;
 
         /// @brief The light metadata constant buffer (contains light count and ambient color).
         ConstantBufferPtr m_lightMetadataBuffer;

@@ -2,6 +2,7 @@
 
 #include "deferred_renderer.h"
 #include "cascaded_shadow_camera_setup.h"
+#include "ssao_pass.h"
 
 #include "frame_ui/rect.h"
 #include "graphics/graphics_device.h"
@@ -100,7 +101,9 @@ namespace mmo
         };
 
         m_quadBuffer = m_device.CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
-        
+
+        m_ssaoPass = std::make_unique<SsaoPass>(m_device, width, height);
+
 		// Create shadow maps for each cascade. Distant cascades cover a far larger world area per texel,
         // so they are rendered at a lower resolution (see GetCascadeShadowMapSize) — this cuts shadow
         // fill/overdraw for the cascades where the resolution loss is least noticeable.
@@ -281,6 +284,7 @@ namespace mmo
         m_gBuffer.Resize(width, height);
 		m_renderTexture->Resize(width, height);
 		m_sceneColorCopy->Resize(width, height);
+        m_ssaoPass->Resize(width, height);
     }
 
     void DeferredRenderer::Render(Scene& scene, Camera& camera)
@@ -332,6 +336,10 @@ namespace mmo
 #ifdef _WIN32
         if (m_gpuTimingActiveThisFrame) { GpuTimerMark(2); } // after G-Buffer
 #endif
+
+        // Screen-space ambient occlusion. Consumes the G-Buffer normal target (normal + radial
+        // depth) and produces the AO term sampled by the lighting pass at t4.
+        m_ssaoPass->Render(camera, m_gBuffer.GetNormalRT(), *m_quadBuffer, *m_deferredLightVs);
 
         // Render the lighting pass
         RenderLightingPass(scene, camera);
@@ -462,8 +470,9 @@ namespace mmo
         m_gBuffer.GetNormalRT().Bind(ShaderType::PixelShader, 1);
         m_gBuffer.GetMaterialRT().Bind(ShaderType::PixelShader, 2);
         m_gBuffer.GetEmissiveRT().Bind(ShaderType::PixelShader, 3);
-        // Slot 4 (former ViewRay G-Buffer) is no longer bound — the view ray is reconstructed
-        // analytically in the lighting shader from InverseProjection and the screen UV.
+        // Slot 4 now carries the SSAO term. When SSAO is disabled this is a 1x1 white texture,
+        // so the lighting shader samples unconditionally with no permutation and no branch.
+        m_device.BindTexture(m_ssaoPass->GetResult(), ShaderType::PixelShader, 4);
 
         // Bind all cascade shadow maps
         for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
