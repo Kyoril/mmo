@@ -21,7 +21,7 @@ namespace mmo
 	{
 		/// Every image the skin needs. Decoded up front: the whole set is under half a
 		/// megabyte and decoding on demand would stutter the first hover.
-		constexpr std::array<uint32, 10> RequiredImages = {
+		constexpr std::array<uint32, 12> RequiredImages = {
 			IDR_PNG_SPLASH,
 			IDR_PNG_PANEL_BOTTOM,
 			IDR_PNG_BORDER_FRAME,
@@ -31,7 +31,9 @@ namespace mmo
 			IDR_PNG_BUTTON_DISABLED,
 			IDR_PNG_PROGRESS_TRACK,
 			IDR_PNG_PROGRESS_FILL,
-			IDR_PNG_ICON_CLOSE
+			IDR_PNG_ICON_CLOSE,
+			IDR_PNG_CONTENT_TEXTURE,
+			IDR_PNG_HERO_FRAME
 		};
 
 		const NineSliceDef& SelectButtonAsset(const ButtonState state)
@@ -93,6 +95,16 @@ namespace mmo
 		m_versionLabel.text = MMO_VERSION_STR;
 		m_versionLabel.align = TextAlign::Right;
 		m_versionLabel.color = theme::VersionColor;
+
+		m_heroTitleLabel.rect = layout::HeroTitle;
+		m_heroTitleLabel.text = "ENTER THE WORLD OF ALESTIA";
+		m_heroTitleLabel.align = TextAlign::Left;
+		m_heroTitleLabel.color = theme::HeroTitleColor;
+
+		m_heroSubtitleLabel.rect = layout::HeroSubtitle;
+		m_heroSubtitleLabel.text = "YOUR ADVENTURE AWAITS";
+		m_heroSubtitleLabel.align = TextAlign::Left;
+		m_heroSubtitleLabel.color = theme::HeroSubtitleColor;
 
 		m_statusLabel.rect = layout::StatusLabel;
 		m_statusLabel.text = "Checking for updates...";
@@ -173,12 +185,15 @@ namespace mmo
 		};
 
 		m_titleFont = build(display, Scale(theme::TitleFontSize));
+		m_heroTitleFont = build(display, Scale(theme::HeroTitleFontSize));
+		m_heroSubtitleFont = build(body, Scale(theme::HeroSubtitleFontSize));
 		m_playFont = build(display, Scale(theme::PlayFontSize));
 		m_versionFont = build(body, Scale(theme::VersionFontSize));
 		m_statusFont = build(body, Scale(theme::StatusFontSize));
 		m_percentFont = build(body, Scale(theme::PercentFontSize));
 
-		if (!m_titleFont || !m_playFont || !m_versionFont || !m_statusFont || !m_percentFont)
+		if (!m_titleFont || !m_heroTitleFont || !m_heroSubtitleFont || !m_playFont
+			|| !m_versionFont || !m_statusFont || !m_percentFont)
 		{
 			ELOG("Failed to build the launcher fonts");
 			return false;
@@ -193,21 +208,19 @@ namespace mmo
 
 		BuildFonts();
 
-		const int32 surfaceWidth = Scale(layout::WindowWidth);
-		const int32 surfaceHeight = Scale(layout::WindowHeight);
-
-		// Cover-fit the splash to the window and pre-scale it once, so that drawing it
-		// each frame is a straight 1:1 blit.
+		// Cover-fit the splash to the panoramic feature stage. The source and target are
+		// intentionally close in aspect ratio, so the full composition remains visible.
 		if (const Bitmap* splash = GetAsset(IDR_PNG_SPLASH); splash && splash->IsValid())
 		{
-			const float scaleX = static_cast<float>(surfaceWidth) / static_cast<float>(splash->GetWidth());
-			const float scaleY = static_cast<float>(surfaceHeight) / static_cast<float>(splash->GetHeight());
+			const Rect hero = Scale(layout::HeroImage);
+			const float scaleX = static_cast<float>(hero.GetWidth()) / static_cast<float>(splash->GetWidth());
+			const float scaleY = static_cast<float>(hero.GetHeight()) / static_cast<float>(splash->GetHeight());
 			const float scale = std::max(scaleX, scaleY);
 
 			const int32 width = std::max(1, static_cast<int32>(splash->GetWidth() * scale + 0.5f));
 			const int32 height = std::max(1, static_cast<int32>(splash->GetHeight() * scale + 0.5f));
 
-			Bitmap::Resample(*splash, width, height, m_splashScaled);
+			Bitmap::Resample(*splash, width, height, m_heroScaled);
 		}
 
 		const int32 iconSize = Scale(layout::TitleIconSize);
@@ -252,23 +265,50 @@ namespace mmo
 
 		canvas.Clear(theme::WindowBackground);
 
-		// Splash, cropped around the focal anchor.
-		if (m_splashScaled.IsValid())
+		if (const Bitmap* texture = GetAsset(IDR_PNG_CONTENT_TEXTURE))
 		{
-			const int32 overflowX = m_splashScaled.GetWidth() - surfaceWidth;
-			const int32 overflowY = m_splashScaled.GetHeight() - surfaceHeight;
-			const int32 offsetX = -static_cast<int32>(overflowX * layout::SplashAnchorX);
-			const int32 offsetY = -static_cast<int32>(overflowY * layout::SplashAnchorY);
-
-			canvas.Blit(m_splashScaled, m_splashScaled.GetBounds(),
-				Rect{ offsetX, offsetY, offsetX + m_splashScaled.GetWidth(), offsetY + m_splashScaled.GetHeight() },
-				BlitFilter::Nearest);
+			// The stone source includes a narrow presentation bevel. Crop to the quiet
+			// mineral center so it behaves as a surface texture rather than a second frame.
+			const Rect textureCenter = Inflate(texture->GetBounds(), -8);
+			canvas.Blit(*texture, textureCenter, Scale(layout::Content));
+			canvas.FillRect(Scale(layout::Content), theme::ContentShade);
 		}
 
-		// Scrims do the real legibility work; the glyph outlines are only insurance
-		// for whatever art gets swapped in later.
-		canvas.FillGradient(Scale(layout::TopScrim), theme::TopScrimFrom, theme::TopScrimTo, false);
-		canvas.FillGradient(Scale(layout::BottomScrim), theme::BottomScrimFrom, theme::BottomScrimTo, false);
+		// The title row is deliberately opaque window chrome. Its full-surface value
+		// change establishes the boundary; the narrow bronze lip only finishes the edge.
+		canvas.FillGradient(Scale(layout::TitleBarPlate),
+			theme::TitleBarFrom, theme::TitleBarTo, false);
+		canvas.FillRect(Scale(layout::TitleBarEdge), theme::TitleBarEdge);
+		canvas.FillGradient(Scale(layout::TitleBarShadow),
+			theme::TitleBarShadowFrom, theme::TitleBarShadowTo, false);
+
+		const Rect hero = Scale(layout::HeroImage);
+		canvas.FillRect(hero, theme::HeroBacking);
+
+		// Feature art, cropped minimally around the focal anchor.
+		if (m_heroScaled.IsValid())
+		{
+			const int32 overflowX = m_heroScaled.GetWidth() - hero.GetWidth();
+			const int32 overflowY = m_heroScaled.GetHeight() - hero.GetHeight();
+			const int32 offsetX = hero.left - static_cast<int32>(overflowX * layout::SplashAnchorX);
+			const int32 offsetY = hero.top - static_cast<int32>(overflowY * layout::SplashAnchorY);
+
+			canvas.PushClip(hero);
+			canvas.Blit(m_heroScaled, m_heroScaled.GetBounds(),
+				Rect{ offsetX, offsetY, offsetX + m_heroScaled.GetWidth(), offsetY + m_heroScaled.GetHeight() },
+				BlitFilter::Nearest);
+			canvas.PopClip();
+		}
+
+		canvas.FillGradient(Scale(layout::HeroScrim), theme::HeroScrimFrom, theme::HeroScrimTo, false);
+
+		if (const Bitmap* frame = GetAsset(theme::HeroFrame.resourceId))
+		{
+			canvas.DrawNineSlice(*frame, Scale(theme::HeroFrame.insets),
+				Scale(layout::HeroFrame), Color{ 255, 255, 255, 255 },
+				theme::HeroFrame.tileEdges, NineSliceFill::FrameOnly);
+		}
+
 		canvas.DrawVignette(Scale(layout::Content), layout::VignetteStrength);
 
 		if (const Bitmap* panel = GetAsset(theme::PanelBottom.resourceId))
@@ -598,6 +638,22 @@ namespace mmo
 		if (m_versionFont)
 		{
 			DrawLabel(canvas, *m_versionFont, m_versionLabel, bodyStyle);
+		}
+
+		TextStyle heroTitleStyle;
+		heroTitleStyle.outline = theme::PlayTextOutline;
+		heroTitleStyle.outlineWidth = std::max(1, Scale(2));
+		heroTitleStyle.shadow = theme::TextShadow;
+		heroTitleStyle.shadowOffset = Point{ 0, Scale(2) };
+
+		if (m_heroTitleFont)
+		{
+			DrawLabel(canvas, *m_heroTitleFont, m_heroTitleLabel, heroTitleStyle);
+		}
+
+		if (m_heroSubtitleFont)
+		{
+			DrawLabel(canvas, *m_heroSubtitleFont, m_heroSubtitleLabel, bodyStyle);
 		}
 
 		DrawButton(canvas, m_minimizeButton);

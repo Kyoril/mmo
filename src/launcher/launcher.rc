@@ -73,6 +73,8 @@ IDR_PNG_PROGRESS_FILL   RCDATA                  "res/progress_fill.png"
 IDR_PNG_ICON_CLOSE      RCDATA                  "res/icon_close.png"
 IDR_PNG_ICON_MINIMIZE   RCDATA                  "res/icon_minimize.png"
 IDR_PNG_BORDER_FRAME    RCDATA                  "res/border_frame.png"
+IDR_PNG_CONTENT_TEXTURE RCDATA                  "res/content_texture.png"
+IDR_PNG_HERO_FRAME      RCDATA                  "res/hero_frame.png"
 
 IDR_TTF_DISPLAY         RCDATA                  "res/font_display.ttf"
 IDR_TTF_BODY            RCDATA                  "res/font_body.ttf"

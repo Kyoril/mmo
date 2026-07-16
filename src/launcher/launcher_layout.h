@@ -30,30 +30,36 @@ namespace mmo::layout
 		WindowWidth - FrameThickness, WindowHeight - FrameThickness
 	};
 
-	// --- splash ---------------------------------------------------------------
-	/// The splash is cover-fitted to the window and clipped to the frame's opening, so
-	/// swapping in art of a different aspect ratio is a content change and not a layout
-	/// change.
-	constexpr Rect Splash{ 0, 0, WindowWidth, WindowHeight };
+	// --- feature art ----------------------------------------------------------
+	/// The panoramic artwork has its own framed stage. Its aspect ratio closely matches
+	/// the source art, keeping the whole castle readable instead of cover-cropping most
+	/// of it away to fill the much taller window.
+	constexpr Rect HeroFrame{ 62, 104, 838, 376 };
+	constexpr Rect HeroImage{ 72, 114, 828, 364 };
 
-	/// Crop anchor when the art is wider or taller than the window. Biased above
-	/// center vertically so a horizon stays where it belongs instead of being cut.
+	/// Crop anchor for replacement art that does not exactly match HeroImage.
 	constexpr float SplashAnchorX = 0.5f;
-	constexpr float SplashAnchorY = 0.35f;
+	constexpr float SplashAnchorY = 0.45f;
 
-	// --- scrims ---------------------------------------------------------------
-	/// Drawn over the splash so that text keeps its contrast regardless of the art
-	/// behind it. This does the real legibility work; glyph outlines are insurance.
-	///
-	/// Both ramps start at the frame's opening rather than the window edge: the frame
-	/// covers the outer FrameThickness pixels, so a ramp anchored to the window would
-	/// hide its strongest end underneath the border and leave the title row washed out.
-	constexpr Rect TopScrim{ 0, FrameThickness, WindowWidth, 200 };
-	constexpr Rect BottomScrim{ 0, 300, WindowWidth, WindowHeight - FrameThickness };
+	/// A dark lower ramp gives the feature caption a stable reading surface without
+	/// flattening the brighter upper half of the artwork.
+	constexpr Rect HeroScrim{ 72, 270, 828, 364 };
+
+	constexpr Rect HeroTitle{ 96, 300, 700, 332 };
+	constexpr Rect HeroSubtitle{ 98, 332, 640, 352 };
+
+	/// The title row is an opaque piece of window chrome, not text floating over the
+	/// content surface. A short shadow below it separates chrome from feature content.
+	constexpr Rect TitleBarPlate{ FrameThickness, FrameThickness,
+		WindowWidth - FrameThickness, 96 };
+	constexpr Rect TitleBarEdge{ FrameThickness, 94,
+		WindowWidth - FrameThickness, 97 };
+	constexpr Rect TitleBarShadow{ FrameThickness, 97,
+		WindowWidth - FrameThickness, 104 };
 
 	/// Applied to the frame's opening, not the window, so the darkening lands on the
-	/// visible art instead of underneath the border.
-	constexpr float VignetteStrength = 0.35f;
+	/// leather and feature stage instead of underneath the border.
+	constexpr float VignetteStrength = 0.22f;
 
 	// --- title bar ------------------------------------------------------------
 	/// The drag strip covers the whole top of the window including the frame itself,
@@ -75,7 +81,7 @@ namespace mmo::layout
 	/// Sits inside the frame opening with a small margin below it.
 	constexpr Rect BottomPanel{ 60, 392, 840, 490 };
 
-	constexpr Rect StatusLabel{ 88, 404, 580, 426 };
+	constexpr Rect StatusLabel{ 88, 410, 580, 430 };
 	constexpr Rect ProgressTrack{ 88, 434, 580, 462 };
 	constexpr Rect PercentText{ 480, 437, 577, 459 };
 	constexpr Rect PlayButton{ 600, 408, 820, 474 };

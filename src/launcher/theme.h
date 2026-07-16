@@ -47,14 +47,17 @@ namespace mmo
 		/// been cleared to transparent so it costs almost nothing to embed.
 		constexpr NineSliceDef WindowBorder{ IDR_PNG_BORDER_FRAME, { 48, 48, 48, 48 }, false };
 
-		/// fg4_buttonBrown1_*, 72x72. The Up and Disabled states measure 14 and Down
-		/// measures 16 (a thicker pressed bevel). All four share 16 so that the button
-		/// geometry does not shift when the state changes; on Up the extra band is flat
-		/// fill and the difference is invisible.
-		constexpr NineSliceDef ButtonUp{ IDR_PNG_BUTTON_UP, { 16, 16, 16, 16 }, false };
-		constexpr NineSliceDef ButtonOver{ IDR_PNG_BUTTON_OVER, { 16, 16, 16, 16 }, false };
-		constexpr NineSliceDef ButtonDown{ IDR_PNG_BUTTON_DOWN, { 16, 16, 16, 16 }, false };
-		constexpr NineSliceDef ButtonDisabled{ IDR_PNG_BUTTON_DISABLED, { 16, 16, 16, 16 }, false };
+		/// fg4_borders_01_07, 970x118. Used frame-only around the panoramic feature
+		/// art. The 18px bevel rail is preserved while the long straight runs stretch.
+		constexpr NineSliceDef HeroFrame{ IDR_PNG_HERO_FRAME, { 18, 18, 18, 18 }, false };
+
+		/// fg4_buttonRed3_*, 128x128. The square source is nine-sliced into the wide
+		/// Play silhouette. Twenty-four pixels preserve the gold corners and bevel while
+		/// allowing the deep red center to expand cleanly.
+		constexpr NineSliceDef ButtonUp{ IDR_PNG_BUTTON_UP, { 24, 24, 24, 24 }, false };
+		constexpr NineSliceDef ButtonOver{ IDR_PNG_BUTTON_OVER, { 24, 24, 24, 24 }, false };
+		constexpr NineSliceDef ButtonDown{ IDR_PNG_BUTTON_DOWN, { 24, 24, 24, 24 }, false };
+		constexpr NineSliceDef ButtonDisabled{ IDR_PNG_BUTTON_DISABLED, { 24, 24, 24, 24 }, false };
 
 		/// fg4_borders_insetBlack, 66x66. A soft inner shadow with a fully transparent
 		/// center, not an opaque frame -- it only reads as a recess when drawn on top
@@ -73,6 +76,19 @@ namespace mmo
 		constexpr Color StatusErrorColor = FromArgb(0xFFE08A70);
 		constexpr Color PercentColor = FromArgb(0xFFF0E2C0);
 		constexpr Color TextShadow = FromArgb(0xB4000000);
+
+		constexpr Color HeroBacking = FromArgb(0xFF090705);
+		constexpr Color HeroScrimFrom = FromArgb(0x00000000);
+		constexpr Color HeroScrimTo = FromArgb(0xE6080503);
+		constexpr Color HeroTitleColor = FromArgb(0xFFF3D58A);
+		constexpr Color HeroSubtitleColor = FromArgb(0xFFD2C09A);
+		constexpr Color ContentShade = FromArgb(0xC4000000);
+
+		constexpr Color TitleBarFrom = FromArgb(0xFF211B16);
+		constexpr Color TitleBarTo = FromArgb(0xFF090807);
+		constexpr Color TitleBarEdge = FromArgb(0xFF6B5840);
+		constexpr Color TitleBarShadowFrom = FromArgb(0xA8000000);
+		constexpr Color TitleBarShadowTo = FromArgb(0x00000000);
 
 		constexpr Color PlayTextEnabled = FromArgb(0xFFF6E7C0);
 		constexpr Color PlayTextDisabled = FromArgb(0x80A09070);
@@ -106,6 +122,8 @@ namespace mmo
 		// --- fonts -------------------------------------------------------------
 		/// Logical pixel heights; scaled by DPI when the faces are built.
 		constexpr int32 TitleFontSize = 15;
+		constexpr int32 HeroTitleFontSize = 24;
+		constexpr int32 HeroSubtitleFontSize = 11;
 		constexpr int32 VersionFontSize = 11;
 		constexpr int32 StatusFontSize = 13;
 		constexpr int32 PercentFontSize = 12;

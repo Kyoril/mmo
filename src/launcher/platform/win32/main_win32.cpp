@@ -93,11 +93,12 @@ namespace
 	/// blank rectangle somewhere in the UI much later.
 	void VerifyEmbeddedAssets()
 	{
-		constexpr std::array<uint32, 11> images = {
+		constexpr std::array<uint32, 13> images = {
 			IDR_PNG_SPLASH, IDR_PNG_PANEL_BOTTOM, IDR_PNG_BORDER_FRAME,
 			IDR_PNG_BUTTON_UP, IDR_PNG_BUTTON_OVER, IDR_PNG_BUTTON_DOWN, IDR_PNG_BUTTON_DISABLED,
 			IDR_PNG_PROGRESS_TRACK, IDR_PNG_PROGRESS_FILL,
-			IDR_PNG_ICON_CLOSE, IDR_PNG_ICON_MINIMIZE
+			IDR_PNG_ICON_CLOSE, IDR_PNG_ICON_MINIMIZE,
+			IDR_PNG_CONTENT_TEXTURE, IDR_PNG_HERO_FRAME
 		};
 
 		for (const uint32 id : images)

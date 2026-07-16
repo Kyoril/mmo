@@ -64,6 +64,8 @@ set(launcherAssets
     ${CMAKE_CURRENT_SOURCE_DIR}/res/icon_close.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/icon_minimize.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/border_frame.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/content_texture.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/hero_frame.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/font_display.ttf
     ${CMAKE_CURRENT_SOURCE_DIR}/res/font_body.ttf
 )

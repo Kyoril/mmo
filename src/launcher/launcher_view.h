@@ -89,9 +89,9 @@ namespace mmo
 		/// Decoded art, keyed by resource id.
 		std::unordered_map<uint32, Bitmap> m_assets;
 
-		/// The splash resampled to exactly the physical surface size, so the per frame
-		/// path is a 1:1 blit rather than a scale.
-		Bitmap m_splashScaled;
+		/// The feature art cover-fitted to its stage once per scale change, so the
+		/// per-frame path is a filtered 1:1 blit rather than a resize.
+		Bitmap m_heroScaled;
 
 		/// Titlebar icons resampled once from 128x128 to their drawn size. An 8x
 		/// bilinear reduction per frame would alias badly; stb's filtered reduction
@@ -103,6 +103,8 @@ namespace mmo
 		Bitmap m_background;
 
 		std::unique_ptr<FontFace> m_titleFont;
+		std::unique_ptr<FontFace> m_heroTitleFont;
+		std::unique_ptr<FontFace> m_heroSubtitleFont;
 		std::unique_ptr<FontFace> m_versionFont;
 		std::unique_ptr<FontFace> m_statusFont;
 		std::unique_ptr<FontFace> m_percentFont;
@@ -113,6 +115,8 @@ namespace mmo
 		Button m_minimizeButton;
 		ProgressBar m_progress;
 		Label m_titleLabel;
+		Label m_heroTitleLabel;
+		Label m_heroSubtitleLabel;
 		Label m_versionLabel;
 		Label m_statusLabel;
 		Label m_percentLabel;
