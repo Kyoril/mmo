@@ -404,6 +404,158 @@ float SampleShadowCSM(float3 worldPos, float3 normal, float viewDepth, out uint 
     return shadow;
 }
 
+// Interleaved gradient noise, keyed on pixel position ONLY — deliberately not on a frame index.
+// There is no TAA in this engine, so a frame-varying pattern would shimmer with nothing to resolve
+// it. Copied from PS_Ssao.hlsl, but note the conclusion does NOT carry over: SSAO resolves its fixed
+// pattern spatially with a bilateral blur, and the contact shadow march has no blur pass. See the
+// note on jitter in ComputeContactShadow.
+float InterleavedGradientNoise(float2 pixelCoord)
+{
+    return frac(52.9829189f * frac(dot(pixelCoord, float2(0.06711056f, 0.00583715f))));
+}
+
+// Screen-space contact shadows: marches a short ray toward the sun through the G-Buffer's depth to
+// fill in the small-scale occlusion the cascaded shadow maps are too coarse to resolve — a
+// character's feet on the ground, a crate against a wall. Returns a [0,1] multiplier for the CSM
+// shadow term.
+//
+// The CSM's depth bias and finite resolution are what erase the shadow in the last few centimetres
+// before contact, which is exactly the band this fills. It is a supplement to the shadow map, not a
+// replacement: it can only see what is on screen and in the depth buffer.
+//
+// `viewPos` is the shading point in view space; `depth` is its RADIAL depth (length(viewPos)) — the
+// same quantity GBuffer_Normal.a stores. `viewDepth` is distance from the camera in world space.
+float ComputeContactShadow(float3 lightDir, float3 normal, float3 viewPos, float depth, float viewDepth, float2 pixelCoord)
+{
+    // ContactShadowSteps is a cbuffer value, so this is a scalar branch: uniform across the whole
+    // draw, and it skips the entire loop including every texture fetch. This is the "costs nothing
+    // when switched off" path, and the reason ContactShadowSettings folds `enabled` into the step
+    // count rather than passing a separate flag.
+    if (ContactShadowSteps == 0u)
+    {
+        return 1.0f;
+    }
+
+    // Sky. GBuffer_Normal is cleared to zero and never written there, so depth 0 means "no surface".
+    if (depth <= 0.0f)
+    {
+        return 1.0f;
+    }
+
+    // Surfaces facing away from the sun are already black — CalculateDirectionalLight multiplies by
+    // NdotL = max(dot(normal, lightDir), 0) — so marching there could only darken zero, and the ray
+    // would immediately self-intersect the surface it started on. Correctness and a large win: this
+    // takes out roughly half of all lit geometry before a single tap.
+    if (dot(normal, lightDir) <= 0.0f)
+    {
+        return 1.0f;
+    }
+
+    // Distance fade. This is a correctness requirement, not a quality knob: GBuffer_Normal is
+    // RGBA16F, so the radial depth in its alpha is a half float whose ULP grows with distance
+    // (~16mm at 35m, ~63mm at 100m). That is the same order as the thickness window tested below,
+    // so past the fade the term would be reading quantization noise rather than geometry. It costs
+    // nothing visually: a 0.3m ray subtends well under a pixel at that range.
+    float distFade = 1.0f - saturate((viewDepth - ContactShadowFadeStart) /
+                                     max(ContactShadowFadeEnd - ContactShadowFadeStart, 0.001f));
+    if (distFade <= 0.0f)
+    {
+        return 1.0f;
+    }
+
+    // From here on everything is in view space. This engine is row-vector: the vector goes FIRST.
+    // mul(matView, v) would silently apply the inverse rotation and still hand back a unit-length
+    // vector, so the bug looks like "the shadows point the wrong way" rather than a crash.
+    float3 viewL = normalize(mul(lightDir, (float3x3) matView));
+    float3 viewN = normalize(mul(normal, (float3x3) matView));
+
+    // Push the ray origin off the surface so it cannot shadow itself. Two terms: a constant, and one
+    // proportional to depth, sized to the fp16 quantization of the depth we are about to compare
+    // against. The ray is also implicitly offset along its own direction, since the first sample
+    // sits at t >= 0.5/steps rather than at 0.
+    float3 rayOrigin = viewPos + viewN * (ContactShadowNormalBias + depth * 0.001f);
+
+    float noise = InterleavedGradientNoise(pixelCoord);
+    float hit = 0.0f;
+    float edgeFade = 1.0f;
+
+    [loop]
+    for (uint s = 0u; s < ContactShadowSteps; ++s)
+    {
+        // Jittered, linearly increasing march distance. The +0.5 keeps step 0 off the shading point
+        // itself. Same idiom as the SSAO march.
+        //
+        // Jitter here trades banding for per-pixel noise rather than removing error: the hit test is
+        // binary, there is no blur pass and no TAA to resolve the pattern. That is the real cost of
+        // marching inline instead of in a pass of its own, and it is tolerable because the term is
+        // confined to a narrow band at contacts rather than washing the whole screen, and is
+        // modulated down by intensity and both fades. If it ever reads as too noisy the lever is
+        // gxContactShadowQuality (more steps) or a shorter gxContactShadowLength — reach for a blur
+        // pass only with evidence that neither is enough.
+        float t = (float(s) + 0.5f + noise) / float(ContactShadowSteps);
+        float3 samplePos = rayOrigin + viewL * (t * ContactShadowRayLength);
+
+        // Project properly through the projection matrix, per step. This deliberately does NOT reuse
+        // the SSAO pass's screen-radius approximation: that exists so SSAO can walk a straight line
+        // in UV space, and it drags in per-axis P00/P11 scaling and a uniform-clamp trap along with
+        // it. A sun ray is not axis-aligned in UV space, so projecting for real is both correct and
+        // simpler, and makes that whole class of bug unreachable.
+        float4 clip = mul(float4(samplePos, 1.0f), matProj);
+        if (clip.w <= 0.0001f)
+        {
+            break;  // Behind the eye.
+        }
+
+        float2 sndc = clip.xy / clip.w;
+        // Inverse of the ndc built in main(): ndc = (u * 2 - 1, 1 - v * 2).
+        float2 uv = float2(sndc.x * 0.5f + 0.5f, 0.5f - sndc.y * 0.5f);
+
+        if (any(uv < 0.0f) || any(uv > 1.0f))
+        {
+            break;  // Off screen: there is no depth information out there to test against.
+        }
+
+        // Point sampler (s2), never the Trilinear s0 — see the sampler declarations at the top.
+        float sampleDepth = NormalTexture.SampleLevel(ContactShadowSampler, uv, 0).a;
+        if (sampleDepth <= 0.0f)
+        {
+            continue;  // Sky along the ray: nothing there to occlude us, keep marching.
+        }
+
+        // The whole test runs in RADIAL depth, and that is precisely why it is correct here. `uv` is
+        // the projection of samplePos, so the camera ray through `uv` passes through samplePos by
+        // construction: length(samplePos) and the stored sampleDepth are therefore both radial
+        // distances measured along the SAME ray, and their difference is a true depth difference.
+        // This sidesteps the radial-vs-view-Z trap PS_Ssao.hlsl documents — that pass needs view Z
+        // only because it approximates the projection with a screen radius. (The tap lands on a
+        // texel centre whose ray differs from samplePos's by a sub-texel angle; that error is orders
+        // of magnitude below the epsilon below.)
+        float diff = length(samplePos) - sampleDepth;   // > 0: the ray is behind the stored surface.
+
+        // Epsilon sized to the fp16 ULP of GBuffer_Normal.a, with ~2x margin.
+        float depthEpsilon = depth * 0.002f;
+
+        // The upper bound is load-bearing, not a tuning nicety. The depth buffer is a heightfield:
+        // only the front surface is known, so "the ray is behind this surface" does not mean "the
+        // ray is inside this object". Without the bound, a ray passing behind a DISTANT background
+        // object reports a hit and shadows a foreground surface that object cannot possibly occlude.
+        if (diff > depthEpsilon && diff < ContactShadowThickness + depthEpsilon)
+        {
+            hit = 1.0f;
+
+            // Screen-edge fade, evaluated at the hit. A ray whose occluder sits just off-screen
+            // finds nothing at all, so without this, contact shadows pop in and out as the camera
+            // turns. Fading the outer 15% of the frame trades a wrong-but-smooth result for a
+            // wrong-and-discontinuous one.
+            float2 edge = abs(uv * 2.0f - 1.0f);
+            edgeFade = 1.0f - saturate((max(edge.x, edge.y) - 0.85f) / 0.15f);
+            break;
+        }
+    }
+
+    return 1.0f - hit * ContactShadowIntensity * distFade * edgeFade;
+}
+
 // Calculates directional light contribution
 float3 CalculateDirectionalLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular, float shadow)
 {
@@ -530,7 +682,11 @@ float4 main(PS_INPUT input) : SV_TARGET
     
     // Debug cascade visualization color
     float3 cascadeDebugColor = float3(1.0, 1.0, 1.0);
-    
+
+    // Raw contact shadow term, kept for the debug view. Stays 1 (unoccluded) when the effect is off
+    // or the pixel takes one of the march's early-outs.
+    float contactShadowDebug = 1.0f;
+
     // Calculate lighting for each light
     for (uint i = 0; i < LightCount; i++)
     {
@@ -554,7 +710,24 @@ float4 main(PS_INPUT input) : SV_TARGET
                     cascadeDebugColor = CASCADE_COLORS[selectedCascade];
                 }
             }
-            
+
+            // Contact shadows are applied OUTSIDE the block above on purpose. They need no shadow
+            // map and no cascades, only the G-Buffer, so a scene with shadow maps off still gets
+            // them. They multiply the CSM term rather than replace it: the CSM resolves the
+            // large-scale occlusion, this fills in the sub-texel detail it cannot.
+            //
+            // The guard skips the march wherever the CSM already fully occludes, since the term
+            // could only darken black. Unlike the early-outs inside ComputeContactShadow this one is
+            // pixel-varying, so it pays off per-wave rather than per-pixel — still worth it, as
+            // fully shadowed regions are large and contiguous. Note it never fires when there is no
+            // shadow map (shadow stays 1.0), which is exactly the case that must keep working.
+            if (shadow > 0.001f)
+            {
+                float3 sunDir = -normalize(light.Direction);
+                contactShadowDebug = ComputeContactShadow(sunDir, normal, viewRay * depth, depth, viewDepth, input.Position.xy);
+                shadow *= contactShadowDebug;
+            }
+
             lighting += CalculateDirectionalLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular, shadow);
         }
         else if (light.Type == 2) // Spot light
@@ -584,6 +757,15 @@ float4 main(PS_INPUT input) : SV_TARGET
     if (SsaoDebugMode != 0)
     {
         return float4(ssao.xxx, 1.0f);
+    }
+
+    // Contact shadow debug visualization: white = unoccluded, black = fully occluded. A healthy
+    // image is near-white with thin dark bands at contacts; a grey wash or moire on flat ground is
+    // the surface shadowing itself, and wants a higher gxContactShadowBias. If both debug modes are
+    // on, SSAO wins by being checked first - they are alternative diagnostics, not a blend.
+    if (ContactShadowDebugMode != 0)
+    {
+        return float4(contactShadowDebug.xxx, 1.0f);
     }
 
     return float4(lighting, opacity);
