@@ -44,9 +44,30 @@ namespace mmo
         uint32 pcfSampleCount;      // Number of PCF taps per shadow lookup (shadow quality)
         uint32 ssaoDebugMode;       // Non-zero: lighting pass outputs the raw SSAO term instead
                                     // of the lit scene.
+
+        // Contact shadow parameters. These live here rather than in a cbuffer of their own because
+        // this buffer is already bound to the lighting pass and nowhere else, and changes at exactly
+        // the same cadence. MUST stay field-for-field in sync with the ShadowBuffer cbuffer in
+        // PS_DeferredLighting.hlsl: a drift of one field silently makes every field after it read
+        // garbage, with no error anywhere.
+        uint32 contactShadowSteps;  // 0 disables the march entirely (see ContactShadowSettings)
+        uint32 contactShadowDebugMode;
+        float contactShadowRayLength;
+        float contactShadowThickness;
+        float contactShadowIntensity;
+        float contactShadowNormalBias;
+        float contactShadowFadeStart;
+        float contactShadowFadeEnd;
+
         float shadowPadding1;
         float shadowPadding2;
     };
+
+    // HLSL packs cbuffer fields into 16-byte rows and never lets a field straddle a row boundary,
+    // so a C++ struct whose size is not a multiple of 16 is a sign the two layouts have diverged.
+    // This catches the cheap half of that mistake; the expensive half - fields in a different order
+    // than the cbuffer in PS_DeferredLighting.hlsl - no compiler can catch, so keep them adjacent.
+    static_assert(sizeof(ShadowBuffer) % 16 == 0, "ShadowBuffer must be 16-byte aligned to match the HLSL cbuffer layout");
 
     // Light metadata constant buffer - small struct with just count and ambient color
     struct alignas(16) LightMetadata
@@ -65,6 +86,17 @@ namespace mmo
         buffer.debugCascades = m_debugCascades ? 1 : 0;
         buffer.pcfSampleCount = m_pcfSampleCount;
         buffer.ssaoDebugMode = m_ssaoPass->GetSettings().debugVisualization ? 1u : 0u;
+
+        // GetEffectiveStepCount folds in `enabled`, so zero here is the single representation of
+        // "contact shadows are off" and the only thing the shader has to branch on.
+        buffer.contactShadowSteps = m_contactShadowSettings.GetEffectiveStepCount();
+        buffer.contactShadowDebugMode = m_contactShadowSettings.debugVisualization ? 1u : 0u;
+        buffer.contactShadowRayLength = m_contactShadowSettings.rayLength;
+        buffer.contactShadowThickness = m_contactShadowSettings.thickness;
+        buffer.contactShadowIntensity = m_contactShadowSettings.intensity;
+        buffer.contactShadowNormalBias = m_contactShadowSettings.normalBias;
+        buffer.contactShadowFadeStart = m_contactShadowSettings.fadeStart;
+        buffer.contactShadowFadeEnd = m_contactShadowSettings.fadeEnd;
     }
 
 	DeferredRenderer::DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height)
@@ -164,6 +196,28 @@ namespace mmo
 		GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)device;
         ID3D11Device& d3d11dev = d3ddev;
         d3d11dev.CreateSamplerState(&sampDesc, &m_shadowSampler);
+
+        // The contact shadow march reads radial depth out of GBuffer_Normal.a at arbitrary UVs
+        // along the ray, and it must do so with POINT filtering. RenderLightingPass sets a
+        // Trilinear filter on s0 (despite the shader calling it PointSampler), and a bilinear depth
+        // tap interpolates ACROSS silhouettes: the result is a depth belonging to no real surface,
+        // i.e. a phantom occluder on exactly the edges this effect exists to shadow.
+        //
+        // s0 cannot simply be switched to point filtering to fix that: the lighting pass relies on
+        // linear filtering there to upsample the half-resolution SSAO target smoothly, and
+        // gxSsaoHalfRes defaults on. Hence a second, dedicated sampler.
+        //
+        // Clamp rather than Border addressing is cosmetic - the march breaks out on out-of-range
+        // UVs before it ever taps - but it matches the rest of the pass.
+        D3D11_SAMPLER_DESC contactSampDesc = {};
+        contactSampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+        contactSampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+        contactSampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+        contactSampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        contactSampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+        contactSampDesc.MinLOD = 0;
+        contactSampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+        d3d11dev.CreateSamplerState(&contactSampDesc, &m_contactShadowSampler);
 #endif
     }
 
@@ -531,8 +585,11 @@ namespace mmo
 #ifdef WIN32
         GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)GraphicsDevice::Get();
         ID3D11DeviceContext& d3d11ctx = d3ddev;
-		ID3D11SamplerState* samplers[1] = { m_shadowSampler.Get() };
-        d3d11ctx.PSSetSamplers(1, 1, samplers);
+        // s1 = shadow map comparison, s2 = point sampler for the contact shadow depth march. The
+        // latter cannot share s0: SetTextureFilter above puts a Trilinear filter there, which the
+        // half-resolution SSAO upsample needs and a depth march must not have.
+		ID3D11SamplerState* samplers[2] = { m_shadowSampler.Get(), m_contactShadowSampler.Get() };
+        d3d11ctx.PSSetSamplers(1, 2, samplers);
 #endif
         
         // Draw a full-screen quad

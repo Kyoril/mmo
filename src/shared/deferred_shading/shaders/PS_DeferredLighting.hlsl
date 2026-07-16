@@ -27,8 +27,14 @@ Texture2D ShadowMapCascade2 : register(t7);
 Texture2D ShadowMapCascade3 : register(t8);
 
 // Samplers
+// WARNING: despite the name, s0 is NOT a point sampler. RenderLightingPass binds a Trilinear
+// filter here, which the half-resolution SSAO upsample depends on. Anything that needs real point
+// taps - notably the contact shadow depth march - must use ContactShadowSampler below.
 SamplerState PointSampler : register(s0);
 SamplerComparisonState ShadowSampler : register(s1);
+// Genuine point sampler, for reading depth out of the G-Buffer at arbitrary UVs. Bilinear depth
+// taps interpolate across silhouettes and invent surfaces that are not there.
+SamplerState ContactShadowSampler : register(s2);
 
 // Poisson disk samples for shadow sampling
 static const float2 POISSON_DISK[16] = {
@@ -118,6 +124,19 @@ cbuffer ShadowBuffer : register(b3)
 
     uint PcfSampleCount;        // Number of PCF taps per shadow lookup (shadow quality)
     uint SsaoDebugMode;         // Non-zero: lighting pass outputs the raw SSAO term instead of the lit scene.
+
+    // Contact shadow parameters. MUST stay field-for-field in sync with struct ShadowBuffer in
+    // deferred_renderer.cpp - a drift of one field silently makes every field after it read
+    // garbage, with no error anywhere. All distances are world units (1 unit = 1 metre).
+    uint ContactShadowSteps;        // 0 disables the march entirely
+    uint ContactShadowDebugMode;    // Non-zero: output the raw contact shadow term
+    float ContactShadowRayLength;
+    float ContactShadowThickness;
+    float ContactShadowIntensity;
+    float ContactShadowNormalBias;
+    float ContactShadowFadeStart;
+    float ContactShadowFadeEnd;
+
     float2 _ShadowPadding;
 };
 
