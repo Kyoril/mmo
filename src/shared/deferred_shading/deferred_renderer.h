@@ -5,7 +5,7 @@
 #include "shadow_camera_setup.h"
 #include "cascaded_shadow_camera_setup.h"
 #include "ssao_pass.h"
-#include "contact_shadow_settings.h"
+#include "contact_shadow_pass.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
@@ -183,32 +183,32 @@ namespace mmo
         /// @brief Enables or disables screen-space contact shadows for the sun.
         /// @remark Unlike SSAO there is no pass object to switch off: the march is inline in the
         ///         lighting shader, and disabling it just means uploading a step count of zero.
-        void SetContactShadowsEnabled(bool enabled) { m_contactShadowSettings.enabled = enabled; }
+        void SetContactShadowsEnabled(bool enabled) { m_contactShadowPass->GetSettings().enabled = enabled; }
 
         /// @brief Returns whether screen-space contact shadows are enabled.
-        [[nodiscard]] bool IsContactShadowsEnabled() const { return m_contactShadowSettings.enabled; }
+        [[nodiscard]] bool IsContactShadowsEnabled() const { return m_contactShadowPass->GetSettings().enabled; }
 
         /// @brief Applies a coarse contact shadow quality preset.
         /// @param level 0 = Low, 1 = Medium, 2 = High. Out-of-range values clamp.
-        void SetContactShadowQuality(int level) { m_contactShadowSettings.ApplyQualityLevel(level); }
+        void SetContactShadowQuality(int level) { m_contactShadowPass->GetSettings().ApplyQualityLevel(level); }
 
         /// @brief Sets the contact shadow ray length in world units (metres).
-        void SetContactShadowRayLength(float length) { m_contactShadowSettings.SetRayLength(length); }
+        void SetContactShadowRayLength(float length) { m_contactShadowPass->GetSettings().SetRayLength(length); }
 
         /// @brief Sets the assumed occluder thickness in world units (metres).
-        void SetContactShadowThickness(float thickness) { m_contactShadowSettings.SetThickness(thickness); }
+        void SetContactShadowThickness(float thickness) { m_contactShadowPass->GetSettings().SetThickness(thickness); }
 
         /// @brief Sets the contact shadow strength, in [0, 1].
-        void SetContactShadowIntensity(float intensity) { m_contactShadowSettings.SetIntensity(intensity); }
+        void SetContactShadowIntensity(float intensity) { m_contactShadowPass->GetSettings().SetIntensity(intensity); }
 
         /// @brief Sets the ray origin's normal bias in world units (metres).
-        void SetContactShadowNormalBias(float bias) { m_contactShadowSettings.SetNormalBias(bias); }
+        void SetContactShadowNormalBias(float bias) { m_contactShadowPass->GetSettings().SetNormalBias(bias); }
 
         /// @brief Sets the distance in world units (metres) at which contact shadows finish fading out.
-        void SetContactShadowFadeDistance(float distance) { m_contactShadowSettings.SetFadeDistance(distance); }
+        void SetContactShadowFadeDistance(float distance) { m_contactShadowPass->GetSettings().SetFadeDistance(distance); }
 
         /// @brief Enables or disables raw contact shadow debug visualization.
-        void SetContactShadowDebugVisualization(bool enabled) { m_contactShadowSettings.debugVisualization = enabled; }
+        void SetContactShadowDebugVisualization(bool enabled) { m_contactShadowPass->GetSettings().debugVisualization = enabled; }
 
         /// @brief Gets the light rendering statistics from the last frame.
         /// @return Reference to the light render statistics.
@@ -295,10 +295,9 @@ namespace mmo
         ///        its ambient contribution.
         std::unique_ptr<SsaoPass> m_ssaoPass;
 
-        /// @brief Tunables for the screen-space contact shadow term. There is no pass object to
-        ///        hang these off: the march is inline in the deferred lighting pixel shader, so
-        ///        they reach the GPU through the ShadowBuffer like the rest of its shadow settings.
-        ContactShadowSettings m_contactShadowSettings;
+        /// @brief The screen-space contact shadow pass. Runs between the geometry and lighting
+        ///        passes and produces the term the lighting pass multiplies into the sun's shadow.
+        std::unique_ptr<ContactShadowPass> m_contactShadowPass;
 
         /// @brief The light metadata constant buffer (contains light count and ambient color).
         ConstantBufferPtr m_lightMetadataBuffer;
@@ -339,12 +338,6 @@ namespace mmo
 #ifdef _WIN32
 		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
 
-        /// @brief Point sampler bound at s2, used only by the contact shadow depth march.
-        /// @remark Do not "simplify" this away by making s0 a point sampler: the lighting pass needs
-        ///         linear filtering there to upsample the half-resolution SSAO target. Conversely
-        ///         the march must not use s0, because a bilinear depth tap interpolates across
-        ///         silhouettes and fabricates an occluder that does not exist.
-        ComPtr<ID3D11SamplerState> m_contactShadowSampler{ nullptr };
 #endif
 
         /// @brief Cascaded shadow camera setup.
@@ -414,7 +407,7 @@ namespace mmo
         // Timestamp points: 0 = start, 1 = after shadows, 2 = after G-Buffer, 3 = after SSAO,
         // 4 = after lighting, 5 = after the forward/translucent pass (end). Differences give
         // per-pass GPU time.
-        static constexpr uint32 GpuTimerPointCount = 6;
+        static constexpr uint32 GpuTimerPointCount = 7;
         // Deep ring so we read results back several frames late and never stall the GPU, and so
         // that all timestamps in a frame have comfortably resolved before we poll them.
         static constexpr uint32 GpuTimerFrameCount = 6;

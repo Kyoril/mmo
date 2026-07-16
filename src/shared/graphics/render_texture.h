@@ -49,6 +49,16 @@ namespace mmo
 
 		bool HasShaderResourceView() const { return (m_flags & RenderTextureFlags::ShaderResourceView) != RenderTextureFlags::None; }
 
+		/// @brief Binds the STENCIL plane of this render texture's depth buffer for reading.
+		/// @param shader The shader stage to bind to.
+		/// @param slot The resource slot to bind to.
+		/// @remark Only valid on a texture with a depth buffer and a shader resource view. Bind is
+		///         the colour/depth counterpart; a single view cannot address both depth and
+		///         stencil, so reading stencil needs its own entry point.
+		/// @remark In HLSL this appears as Texture2D<uint2>, read with .Load() - integer formats
+		///         cannot be sampled.
+		virtual void BindStencil(ShaderType shader, uint32 slot = 0) = 0;
+
 	protected:
 		RenderTextureFlags m_flags;
 

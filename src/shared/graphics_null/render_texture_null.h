@@ -21,6 +21,9 @@ namespace mmo
 	public:
 		virtual void LoadRaw(void* data, size_t dataSize) final override;
 		virtual void Bind(ShaderType shader, uint32 slot = 0) final override;
+
+		/// @copydoc RenderTexture::BindStencil
+		void BindStencil(ShaderType shader, uint32 slot = 0) final override {}
 		virtual void Activate() final override;
 		virtual void Clear(ClearFlags flags) final override;
 		virtual void Resize(uint16 width, uint16 height) final override;

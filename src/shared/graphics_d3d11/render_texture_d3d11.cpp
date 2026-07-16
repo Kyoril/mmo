@@ -258,6 +258,26 @@ namespace mmo
 		}
 	}
 
+	void RenderTextureD3D11::BindStencil(ShaderType shader, uint32 slot)
+	{
+		ASSERT(HasDepthBuffer() && HasShaderResourceView());
+
+		ID3D11DeviceContext& context = m_device;
+		ID3D11ShaderResourceView* views = m_stencilShaderView.Get();
+
+		switch (shader)
+		{
+		case ShaderType::VertexShader:
+			context.VSSetShaderResources(slot, 1, &views);
+			break;
+		case ShaderType::PixelShader:
+			context.PSSetShaderResources(slot, 1, &views);
+			break;
+		default:
+			throw std::runtime_error("Shader type not yet supported for binding!");
+		}
+	}
+
 	void RenderTextureD3D11::CopyPixelDataTo(uint8* destination)
 	{
 		// Step 1: Create a staging texture with CPU read access

@@ -25,6 +25,8 @@ namespace mmo
 	public:
 		void LoadRaw(void* data, size_t dataSize) final override;
 		void Bind(ShaderType shader, uint32 slot = 0) final override;
+
+		void BindStencil(ShaderType shader, uint32 slot = 0) final override;
 		void Activate() final override;
 		void ApplyPendingResize() final override;
 		void Clear(ClearFlags flags) final override;

@@ -3,6 +3,7 @@
 #include "deferred_renderer.h"
 #include "cascaded_shadow_camera_setup.h"
 #include "ssao_pass.h"
+#include "contact_shadow_pass.h"
 
 #include "frame_ui/rect.h"
 #include "graphics/graphics_device.h"
@@ -45,19 +46,11 @@ namespace mmo
         uint32 ssaoDebugMode;       // Non-zero: lighting pass outputs the raw SSAO term instead
                                     // of the lit scene.
 
-        // Contact shadow parameters. These live here rather than in a cbuffer of their own because
-        // this buffer is already bound to the lighting pass and nowhere else, and changes at exactly
-        // the same cadence. MUST stay field-for-field in sync with the ShadowBuffer cbuffer in
+        // MUST stay field-for-field in sync with the ShadowBuffer cbuffer in
         // PS_DeferredLighting.hlsl: a drift of one field silently makes every field after it read
         // garbage, with no error anywhere.
-        uint32 contactShadowSteps;  // 0 disables the march entirely (see ContactShadowSettings)
-        uint32 contactShadowDebugMode;
-        float contactShadowRayLength;
-        float contactShadowThickness;
-        float contactShadowIntensity;
-        float contactShadowNormalBias;
-        float contactShadowFadeStart;
-        float contactShadowFadeEnd;
+        uint32 contactShadowDebugMode;  // Non-zero: output the raw contact shadow term
+        float shadowPadding0;
 
         float shadowPadding1;
         float shadowPadding2;
@@ -87,16 +80,9 @@ namespace mmo
         buffer.pcfSampleCount = m_pcfSampleCount;
         buffer.ssaoDebugMode = m_ssaoPass->GetSettings().debugVisualization ? 1u : 0u;
 
-        // GetEffectiveStepCount folds in `enabled`, so zero here is the single representation of
-        // "contact shadows are off" and the only thing the shader has to branch on.
-        buffer.contactShadowSteps = m_contactShadowSettings.GetEffectiveStepCount();
-        buffer.contactShadowDebugMode = m_contactShadowSettings.debugVisualization ? 1u : 0u;
-        buffer.contactShadowRayLength = m_contactShadowSettings.rayLength;
-        buffer.contactShadowThickness = m_contactShadowSettings.thickness;
-        buffer.contactShadowIntensity = m_contactShadowSettings.intensity;
-        buffer.contactShadowNormalBias = m_contactShadowSettings.normalBias;
-        buffer.contactShadowFadeStart = m_contactShadowSettings.fadeStart;
-        buffer.contactShadowFadeEnd = m_contactShadowSettings.fadeEnd;
+        // Only the debug flag lives here now: the contact shadow parameters belong to
+        // ContactShadowPass's own cbuffer, since the march moved out of the lighting shader.
+        buffer.contactShadowDebugMode = m_contactShadowPass->GetSettings().debugVisualization ? 1u : 0u;
     }
 
 	DeferredRenderer::DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height)
@@ -148,6 +134,7 @@ namespace mmo
         m_quadBuffer = m_device.CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
 
         m_ssaoPass = std::make_unique<SsaoPass>(m_device, width, height);
+        m_contactShadowPass = std::make_unique<ContactShadowPass>(m_device, width, height);
 
 		// Create shadow maps for each cascade. Distant cascades cover a far larger world area per texel,
         // so they are rendered at a lower resolution (see GetCascadeShadowMapSize) — this cuts shadow
@@ -197,27 +184,6 @@ namespace mmo
         ID3D11Device& d3d11dev = d3ddev;
         d3d11dev.CreateSamplerState(&sampDesc, &m_shadowSampler);
 
-        // The contact shadow march reads radial depth out of GBuffer_Normal.a at arbitrary UVs
-        // along the ray, and it must do so with POINT filtering. RenderLightingPass sets a
-        // Trilinear filter on s0 (despite the shader calling it PointSampler), and a bilinear depth
-        // tap interpolates ACROSS silhouettes: the result is a depth belonging to no real surface,
-        // i.e. a phantom occluder on exactly the edges this effect exists to shadow.
-        //
-        // s0 cannot simply be switched to point filtering to fix that: the lighting pass relies on
-        // linear filtering there to upsample the half-resolution SSAO target smoothly, and
-        // gxSsaoHalfRes defaults on. Hence a second, dedicated sampler.
-        //
-        // Clamp rather than Border addressing is cosmetic - the march breaks out on out-of-range
-        // UVs before it ever taps - but it matches the rest of the pass.
-        D3D11_SAMPLER_DESC contactSampDesc = {};
-        contactSampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
-        contactSampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-        contactSampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-        contactSampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-        contactSampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-        contactSampDesc.MinLOD = 0;
-        contactSampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-        d3d11dev.CreateSamplerState(&contactSampDesc, &m_contactShadowSampler);
 #endif
     }
 
@@ -336,9 +302,10 @@ namespace mmo
                 emit("GPU: Shadows", 0, 1);
                 emit("GPU: GBuffer", 1, 2);
                 emit("GPU: SSAO", 2, 3);
-                emit("GPU: Lighting", 3, 4);
-                emit("GPU: Forward", 4, 5);
-                emit("GPU: Total (passes)", 0, 5);
+                emit("GPU: ContactShadows", 3, 4);
+                emit("GPU: Lighting", 4, 5);
+                emit("GPU: Forward", 5, 6);
+                emit("GPU: Total (passes)", 0, 6);
             }
         }
 
@@ -353,6 +320,7 @@ namespace mmo
 		m_renderTexture->Resize(width, height);
 		m_sceneColorCopy->Resize(width, height);
         m_ssaoPass->Resize(width, height);
+        m_contactShadowPass->Resize(width, height);
     }
 
     void DeferredRenderer::Render(Scene& scene, Camera& camera)
@@ -417,11 +385,28 @@ namespace mmo
         if (m_gpuTimingActiveThisFrame) { GpuTimerMark(3); } // after SSAO
 #endif
 
+        // Screen-space contact shadows for the sun, sampled by the lighting pass at t10. Skipped
+        // entirely without a sun: this term only ever modulates the directional light, so with no
+        // light to modulate the pass has nothing to compute and GetResult() yields white.
+        if (m_shadowCastingDirectionalLight)
+        {
+            // Direction TOWARD the sun. GetDerivedDirection points the way the light travels, and
+            // the lighting shader negates it at every use site (`-normalize(light.Direction)`), so
+            // negate once here rather than making the pass repeat the convention.
+            const Vector3 sunDirection = -m_shadowCastingDirectionalLight->GetDerivedDirection().NormalizedCopy();
+            m_contactShadowPass->Render(camera, m_gBuffer.GetNormalRT(), m_gBuffer.GetDepthRT(),
+                sunDirection, *m_quadBuffer, *m_deferredLightVs);
+        }
+
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(4); } // after contact shadows
+#endif
+
         // Render the lighting pass
         RenderLightingPass(scene, camera);
 
 #ifdef _WIN32
-        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(4); } // after lighting
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(5); } // after lighting
 #endif
 
         // Forward transparency pass: render objects in the Transparent queue group and above
@@ -477,7 +462,7 @@ namespace mmo
 #ifdef _WIN32
         if (m_gpuTimingActiveThisFrame)
         {
-            GpuTimerMark(5); // after forward/translucent pass (end of GPU frame work)
+            GpuTimerMark(6); // after forward/translucent pass (end of GPU frame work)
             GpuTimerEndAndCollect();
         }
 #endif
@@ -557,6 +542,9 @@ namespace mmo
         // Slot 4 now carries the SSAO term. When SSAO is disabled this is a 1x1 white texture,
         // so the lighting shader samples unconditionally with no permutation and no branch.
         m_device.BindTexture(m_ssaoPass->GetResult(), ShaderType::PixelShader, 4);
+        // Slot 10 carries the contact shadow term. As with SSAO this is a 1x1 white texture when the
+        // effect is disabled, so the lighting shader samples unconditionally with no permutation.
+        m_device.BindTexture(m_contactShadowPass->GetResult(), ShaderType::PixelShader, 10);
 
         // Bind all cascade shadow maps
         for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
@@ -593,11 +581,8 @@ namespace mmo
 #ifdef WIN32
         GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)GraphicsDevice::Get();
         ID3D11DeviceContext& d3d11ctx = d3ddev;
-        // s1 = shadow map comparison, s2 = point sampler for the contact shadow depth march. The
-        // latter cannot share s0: SetTextureFilter above puts a Trilinear filter there, which the
-        // half-resolution SSAO upsample needs and a depth march must not have.
-		ID3D11SamplerState* samplers[2] = { m_shadowSampler.Get(), m_contactShadowSampler.Get() };
-        d3d11ctx.PSSetSamplers(1, 2, samplers);
+		ID3D11SamplerState* samplers[1] = { m_shadowSampler.Get() };
+        d3d11ctx.PSSetSamplers(1, 1, samplers);
 #endif
         
         // Draw a full-screen quad
