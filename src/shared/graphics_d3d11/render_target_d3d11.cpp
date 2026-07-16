@@ -52,11 +52,26 @@ namespace mmo
 			context.ClearRenderTargetView(m_renderTargetView.Get(), m_clearColorFloat);
 		}
 
-		// Clear depth stencil view
-		if ((converted & static_cast<uint32>(ClearFlags::Depth)) != 0 && m_depthStencilView)
+		// Clear depth and/or stencil. These are separate D3D11 clear bits on the same view, so the
+		// two flags are honoured independently rather than Depth implying both - ClearFlags::Stencil
+		// was previously accepted by the API and then silently ignored here, which left stencil
+		// carrying whatever the previous frame wrote.
+		if (m_depthStencilView)
 		{
-			context.ClearDepthStencilView(m_depthStencilView.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
-		}
+			UINT clearFlags = 0;
+			if ((converted & static_cast<uint32>(ClearFlags::Depth)) != 0)
+			{
+				clearFlags |= D3D11_CLEAR_DEPTH;
+			}
+			if ((converted & static_cast<uint32>(ClearFlags::Stencil)) != 0)
+			{
+				clearFlags |= D3D11_CLEAR_STENCIL;
+			}
 
+			if (clearFlags != 0)
+			{
+				context.ClearDepthStencilView(m_depthStencilView.Get(), clearFlags, 1.0f, 0);
+			}
+		}
 	}
 }
