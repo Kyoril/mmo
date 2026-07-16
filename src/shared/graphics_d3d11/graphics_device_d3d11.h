@@ -120,6 +120,10 @@ namespace mmo
 
 		void SetDepthWriteEnabled(bool enable) override;
 
+		void SetStencilWriteEnabled(bool enable) override;
+
+		void SetStencilRef(uint8 reference) override;
+
 		void SetDepthTestComparison(DepthTestMethod comparison) override;
 		
 		std::unique_ptr<MaterialCompiler> CreateMaterialCompiler() override;
@@ -299,6 +303,14 @@ namespace mmo
 		size_t m_depthStencilHash = 0;
 		bool m_depthStencilChanged = false;
 		ID3D11DepthStencilState* m_currentDepthStencilState = nullptr;
+
+		/// @brief Value written to stencil by subsequent draws while stencil writes are enabled.
+		/// @remark NOT part of D3D11_DEPTH_STENCIL_DESC, so it is not covered by the state hash and
+		///         cannot be cached alongside the state object - it is a separate argument to
+		///         OMSetDepthStencilState. Hence its own dirty flag: without one, changing only the
+		///         ref would hash identically and the redundant-call guard would skip the update.
+		uint8 m_stencilRef = 0;
+		bool m_stencilRefChanged = false;
 
 #ifdef _DEBUG
 		ComPtr<ID3D11Debug> m_d3dDebug;

@@ -426,10 +426,10 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::UpdateDepthStencilState()
 	{
-		if (m_depthStencilChanged)
+		if (m_depthStencilChanged || m_stencilRefChanged)
 		{
 			const auto hash = DepthStencilHash()(m_depthStencilDesc);
-			if (hash != m_depthStencilHash)
+			if (hash != m_depthStencilHash || m_stencilRefChanged)
 			{
 				auto it = m_depthStencilStates.find(hash);
 				if (it == m_depthStencilStates.end())
@@ -441,13 +441,16 @@ namespace mmo
 					ASSERT(it != m_depthStencilStates.end());
 				}
 
-				// Only issue the API call if the state object actually changed
-				if (m_currentDepthStencilState != it->second.Get())
+				// Re-issue when the state object changed OR when only the stencil ref changed: the
+				// ref is a separate argument to OMSetDepthStencilState rather than part of the state
+				// object, so it is invisible to the hash and to the pointer comparison below.
+				if (m_currentDepthStencilState != it->second.Get() || m_stencilRefChanged)
 				{
 					m_currentDepthStencilState = it->second.Get();
-					m_immContext->OMSetDepthStencilState(m_currentDepthStencilState, 0);
+					m_immContext->OMSetDepthStencilState(m_currentDepthStencilState, m_stencilRef);
 				}
 				m_depthStencilHash = hash;
+				m_stencilRefChanged = false;
 			}
 			// else: hash matches, state is already bound — skip redundant API call
 
@@ -1244,6 +1247,51 @@ namespace mmo
 
 		m_depthStencilDesc.DepthWriteMask = enable ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
 		m_depthStencilChanged = true;
+
+		UpdateDepthStencilState();
+	}
+
+	void GraphicsDeviceD3D11::SetStencilWriteEnabled(const bool enable)
+	{
+		if ((m_depthStencilDesc.StencilEnable == TRUE) == enable)
+		{
+			return;
+		}
+
+		m_depthStencilDesc.StencilEnable = enable ? TRUE : FALSE;
+
+		// Tag mode: any pixel that survives depth stamps the stencil ref. Both faces are configured
+		// identically because the tag is a property of the object, not of which side we happen to
+		// see - and foliage, the first user of this, is two-sided.
+		//
+		// The defaults this replaces (FrontFace INCR / BackFace DECR on depth-fail) are a
+		// shadow-volume setup that nothing ever enabled; they are wrong for tagging, so every op is
+		// set explicitly here rather than inherited.
+		const D3D11_DEPTH_STENCILOP_DESC tagOp
+		{
+			D3D11_STENCIL_OP_KEEP,      // StencilFailOp    - depth/stencil failed: leave the tag alone
+			D3D11_STENCIL_OP_KEEP,      // StencilDepthFailOp - occluded pixel must not tag
+			D3D11_STENCIL_OP_REPLACE,   // StencilPassOp    - visible pixel takes the ref
+			D3D11_COMPARISON_ALWAYS     // StencilFunc      - write-only; there is no stencil test
+		};
+		m_depthStencilDesc.FrontFace = tagOp;
+		m_depthStencilDesc.BackFace = tagOp;
+		m_depthStencilChanged = true;
+
+		UpdateDepthStencilState();
+	}
+
+	void GraphicsDeviceD3D11::SetStencilRef(const uint8 reference)
+	{
+		if (m_stencilRef == reference)
+		{
+			return;
+		}
+
+		m_stencilRef = reference;
+		m_stencilRefChanged = true;
+
+		UpdateDepthStencilState();
 	}
 
 	namespace

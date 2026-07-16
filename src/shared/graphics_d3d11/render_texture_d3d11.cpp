@@ -243,6 +243,17 @@ namespace mmo
 				shaderResourceViewDesc.Texture2D.MostDetailedMip = 0;
 				shaderResourceViewDesc.Texture2D.MipLevels = 1;
 				d3d_dev.CreateShaderResourceView(depthBuffer.Get(), &shaderResourceViewDesc, &m_depthShaderView);
+
+				// A second view onto the same D24S8 resource exposing the STENCIL plane. A single
+				// SRV can only address one plane, hence two views rather than swizzling one.
+				// X24_TYPELESS_G8_UINT reads as Texture2D<uint2> with the tag in .g, and it is
+				// Load-only - integer formats cannot be Sample'd.
+				D3D11_SHADER_RESOURCE_VIEW_DESC stencilViewDesc;
+				stencilViewDesc.Format = DXGI_FORMAT_X24_TYPELESS_G8_UINT;
+				stencilViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+				stencilViewDesc.Texture2D.MostDetailedMip = 0;
+				stencilViewDesc.Texture2D.MipLevels = 1;
+				d3d_dev.CreateShaderResourceView(depthBuffer.Get(), &stencilViewDesc, &m_stencilShaderView);
 			}
 		}
 	}

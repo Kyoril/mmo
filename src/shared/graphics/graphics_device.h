@@ -335,6 +335,17 @@ namespace mmo
 
 		virtual void SetDepthTestComparison(DepthTestMethod comparison);
 
+		/// @brief Enables or disables stencil writes.
+		/// @remark When enabled, every pixel that passes depth REPLACES the stencil value with the
+		///         current stencil reference (see SetStencilRef) - the only stencil mode the engine
+		///         uses today is "tag pixels with an id for a later full-screen pass to read".
+		///         There is deliberately no stencil *test* mode: nothing needs one yet.
+		virtual void SetStencilWriteEnabled(bool enable) {}
+
+		/// @brief Sets the value written into the stencil buffer by subsequent draws.
+		/// @param reference The value to write. Only meaningful while SetStencilWriteEnabled(true).
+		virtual void SetStencilRef(uint8 reference) {}
+
 		/// @brief Enables/disables "depth pre-pass" mode for the G-Buffer geometry pass.
 		/// @remark When active, opaque G-Buffer materials switch from (Less, depth-write on) to
 		///         (LessEqual, depth-write off) because a prior depth-only pass has already

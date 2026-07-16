@@ -42,6 +42,12 @@ namespace mmo
 
 		inline ID3D11ShaderResourceView* GetDepthShaderResourceView() const { ASSERT(HasDepthBuffer() && HasShaderResourceView());  return m_depthShaderView.Get(); }
 
+		/// @brief Returns a view onto the STENCIL plane of the depth buffer, for shaders that read
+		///        per-pixel tags written during the geometry pass.
+		/// @remark Bind as Texture2D<uint2> and read with .Load(int3(pixelCoord, 0)).g - integer
+		///         formats cannot be sampled, only loaded, so there is no filtering and no mip.
+		inline ID3D11ShaderResourceView* GetStencilShaderResourceView() const { ASSERT(HasDepthBuffer() && HasShaderResourceView());  return m_stencilShaderView.Get(); }
+
 		/// @brief Gets the render target view.
 		/// @return The render target view.
 		inline ID3D11RenderTargetView* GetRenderTargetView() const { ASSERT(HasColorBuffer()); return m_renderTargetView.Get(); }
@@ -62,6 +68,9 @@ namespace mmo
 		ComPtr<ID3D11Texture2D> m_renderTargetTex;
 		ComPtr<ID3D11ShaderResourceView> m_colorShaderView;
 		ComPtr<ID3D11ShaderResourceView> m_depthShaderView;
+
+		/// @brief View onto the stencil plane of the same D24S8 resource as m_depthShaderView.
+		ComPtr<ID3D11ShaderResourceView> m_stencilShaderView;
 		bool m_resizePending;
 	};
 
