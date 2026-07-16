@@ -25,6 +25,10 @@ using Microsoft::WRL::ComPtr;
 
 namespace mmo
 {
+    /// @brief The b3 constant buffer of the deferred lighting pixel shader. Defined in the .cpp,
+    ///        since only DeferredRenderer ever fills it.
+    struct ShadowBuffer;
+
     /// @brief Class that implements deferred rendering.
     class DeferredRenderer
     {
@@ -198,6 +202,19 @@ namespace mmo
 		void RenderShadowMap(Scene& scene, Camera& camera);
 
         void RenderCascadedShadowMaps(Scene& scene, Camera& camera);
+
+        /// @brief Fills every ShadowBuffer field that does not depend on which shadow path ran.
+        /// @remark Called from ALL THREE sites that fill the buffer: the cascaded path, the legacy
+        ///         single-map path, and the branch in Render() taken when there is no shadow-casting
+        ///         directional light at all. That last one is the reason this helper exists. It used
+        ///         to zero-initialise the buffer and set nothing else, which silently disabled every
+        ///         lighting-pass flag living here regardless of its cvar - gxSsaoDebug was a
+        ///         documented casualty. Routing all three through one function means a flag added
+        ///         here works in every scene by construction, rather than by everyone remembering
+        ///         three call sites.
+        /// @remark Callers are responsible only for the cascade-specific fields: the view-projection
+        ///         matrices, the split distances, cascadeCount and cascadeBlendFactor.
+        void FillShadowBufferCommonSettings(ShadowBuffer& buffer) const;
 
         /// @brief Returns the shadow-map resolution to use for a given cascade index. Distant cascades
         ///        (index >= 2) render at half the base resolution (floored at 256) to cut shadow fill,

@@ -118,9 +118,6 @@ cbuffer ShadowBuffer : register(b3)
 
     uint PcfSampleCount;        // Number of PCF taps per shadow lookup (shadow quality)
     uint SsaoDebugMode;         // Non-zero: lighting pass outputs the raw SSAO term instead of the lit scene.
-                                // NOTE: stays 0 (and disables the debug view) whenever the scene has no
-                                // shadow-casting directional light, since ShadowBuffer is zero-initialised
-                                // in that branch of DeferredRenderer::Render. Accepted limitation.
     float2 _ShadowPadding;
 };
 

@@ -43,9 +43,7 @@ namespace mmo
 
         uint32 pcfSampleCount;      // Number of PCF taps per shadow lookup (shadow quality)
         uint32 ssaoDebugMode;       // Non-zero: lighting pass outputs the raw SSAO term instead
-                                    // of the lit scene. NOTE: this stays 0 (disabling the debug
-                                    // view) in the no-shadow-casting-light branch of Render(),
-                                    // where ShadowBuffer is zero-initialised. Accepted limitation.
+                                    // of the lit scene.
         float shadowPadding1;
         float shadowPadding2;
     };
@@ -56,6 +54,18 @@ namespace mmo
         uint32 lightCount;
         Vector3 ambientColor;
     };
+
+    void DeferredRenderer::FillShadowBufferCommonSettings(ShadowBuffer& buffer) const
+    {
+        buffer.shadowBias = m_shadowBias;
+        buffer.normalBiasScale = m_normalBiasScale;
+        buffer.shadowSoftness = m_shadowSoftness;
+        buffer.blockerSearchRadius = m_blockerSearchRadius;
+        buffer.lightSize = m_lightSize;
+        buffer.debugCascades = m_debugCascades ? 1 : 0;
+        buffer.pcfSampleCount = m_pcfSampleCount;
+        buffer.ssaoDebugMode = m_ssaoPass->GetSettings().debugVisualization ? 1u : 0u;
+    }
 
 	DeferredRenderer::DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height)
         : m_device(device)
@@ -324,12 +334,12 @@ namespace mmo
         }
         else
         {
-            // No shadow-casting light - ensure shadow buffer indicates no shadows.
-            // NOTE (known limitation): this leaves ssaoDebugMode zero-initialised regardless of
-            // gxSsaoDebug, so the SSAO raw-AO debug visualization (PS_DeferredLighting.hlsl,
-            // SsaoDebugMode) does not work in a scene with no shadow-casting directional light.
-            // Accepted: it is a debug aid only, and the alternative is a whole new cbuffer for one flag.
+            // No shadow-casting light. The cascade matrices are left zeroed, which is safe because
+            // cascadeCount = 0 gates every cascade lookup in the shader - but the buffer still
+            // carries the lighting-pass settings that have nothing to do with shadow maps (the SSAO
+            // debug view, the contact shadow parameters), so they must be filled here too.
             ShadowBuffer buffer{};
+            FillShadowBufferCommonSettings(buffer);
             buffer.cascadeCount = 0;
             m_shadowBuffer->Update(&buffer);
         }
@@ -616,18 +626,11 @@ namespace mmo
         
         // Update the shadow buffer with legacy single cascade data
         ShadowBuffer buffer{};
+        FillShadowBufferCommonSettings(buffer);
         buffer.cascadeViewProjections[0] = (m_shadowCameras[0]->GetProjectionMatrix() * m_shadowCameras[0]->GetViewMatrix());
         buffer.cascadeSplitDistances = Vector4(camera.GetFarClipDistance(), 0.0f, 0.0f, 0.0f);
-        buffer.shadowBias = m_shadowBias;
-        buffer.normalBiasScale = m_normalBiasScale;
-        buffer.shadowSoftness = m_shadowSoftness;
-        buffer.blockerSearchRadius = m_blockerSearchRadius;
-        buffer.lightSize = m_lightSize;
         buffer.cascadeCount = 1;
-        buffer.debugCascades = m_debugCascades ? 1 : 0;
         buffer.cascadeBlendFactor = 0.0f;
-        buffer.pcfSampleCount = m_pcfSampleCount;
-        buffer.ssaoDebugMode = m_ssaoPass->GetSettings().debugVisualization ? 1u : 0u;
         m_shadowBuffer->Update(&buffer);
 
         // Render the shadow map
@@ -733,6 +736,7 @@ namespace mmo
         // Update the shadow buffer with cascade data
         // Use the actual shadow camera matrices (what we rendered with) instead of computed ones
         ShadowBuffer buffer{};
+        FillShadowBufferCommonSettings(buffer);
         for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
         {
             // Use the shadow camera's actual view-projection matrix
@@ -744,16 +748,8 @@ namespace mmo
             cascades[2].splitDistance,
             cascades[3].splitDistance
         );
-        buffer.shadowBias = m_shadowBias;
-        buffer.normalBiasScale = m_normalBiasScale;
-        buffer.shadowSoftness = m_shadowSoftness;
-        buffer.blockerSearchRadius = m_blockerSearchRadius;
-        buffer.lightSize = m_lightSize;
         buffer.cascadeCount = activeCascades;
-        buffer.debugCascades = m_debugCascades ? 1 : 0;
         buffer.cascadeBlendFactor = config.cascadeBlendFactor;
-        buffer.pcfSampleCount = m_pcfSampleCount;
-        buffer.ssaoDebugMode = m_ssaoPass->GetSettings().debugVisualization ? 1u : 0u;
         m_shadowBuffer->Update(&buffer);
 
         // Reset depth bias
