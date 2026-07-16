@@ -7,6 +7,7 @@
 
 #include "camera.h"
 #include "debug_geometry.h"
+#include "graphics/g_buffer.h"
 #include "material_manager.h"
 #include "mesh_manager.h"
 #include "render_operation.h"
@@ -820,6 +821,15 @@ namespace mmo
 			}
 
 			op.material = material;
+		}
+
+		// Tag non-shadow-casting geometry in the stencil buffer so the contact shadow pass can skip
+		// it as an occluder. Only meaningful in the G-Buffer pass: that is the only pass whose
+		// stencil the contact shadow pass reads, and the shadow-map passes have no stencil target
+		// worth writing. Stencil writes stay disabled elsewhere, so this costs nothing there.
+		if (m_pixelShaderType == PixelShaderType::GBuffer)
+		{
+			gx.SetStencilRef(renderable.GetCastsShadows() ? 0 : kStencilNonShadowCaster);
 		}
 
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());

@@ -22,6 +22,11 @@ namespace mmo
 		operation.material = m_material;
 	}
 
+	bool ManualRenderOperation::GetCastsShadows() const
+	{
+		return m_parent.IsCastingShadows();
+	}
+
 	const Matrix4& ManualRenderOperation::GetWorldTransform() const
 	{
 		return m_parent.GetParentNodeFullTransform();

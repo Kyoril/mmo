@@ -35,6 +35,11 @@ namespace mmo
 		/// @copydoc Renderable::GetMaterial
 		[[nodiscard]] MaterialPtr GetMaterial() const override { return m_material ? m_material : m_subMesh.GetMaterial(); }
 
+		/// @copydoc Renderable::GetCastsShadows
+		/// @remark Forwards to the owning Entity: shadow casting is a property of the whole object,
+		///         and the Entity is what the shadow-caster gather filters on.
+		[[nodiscard]] bool GetCastsShadows() const override;
+
 		/// @brief Sets the material to use when rendering this renderable.
 		/// @param material The material to use for rendering or nullptr to use a default material.
 		void SetMaterial(const MaterialPtr& material) { m_material = material; }

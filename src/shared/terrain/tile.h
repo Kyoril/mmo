@@ -80,6 +80,11 @@ namespace mmo
 			/// @return Pointer to the material.
 			[[nodiscard]] MaterialPtr GetMaterial() const override;
 
+			/// @copydoc Renderable::GetCastsShadows
+			/// @remark Tiles are both the MovableObject and the Renderable, so this forwards to the
+			///         single flag rather than duplicating it. Terrain sets it false in its ctor.
+			[[nodiscard]] bool GetCastsShadows() const override { return MovableObject::IsCastingShadows(); }
+
 			/// @brief Gets the base material without instance-specific modifications.
 			/// @return Pointer to the base material.
 			[[nodiscard]] MaterialPtr GetBaseMaterial() const;

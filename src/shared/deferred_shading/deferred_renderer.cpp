@@ -507,7 +507,12 @@ namespace mmo
 
             m_device.SetGBufferDepthPrepass(true);
             scene.SetReuseRenderQueue(true);
+            // Tag non-shadow-casters in stencil for the contact shadow pass (Scene::RenderSingleObject
+            // sets the ref per object). Enabled only around the G-Buffer render: the depth pre-pass
+            // above would otherwise stamp every pixel with a stale ref.
+            m_device.SetStencilWriteEnabled(true);
             scene.Render(camera, PixelShaderType::GBuffer);
+            m_device.SetStencilWriteEnabled(false);
             scene.SetReuseRenderQueue(false);
             m_device.SetGBufferDepthPrepass(false);
             return;
@@ -521,8 +526,11 @@ namespace mmo
         m_gBuffer.GetEmissiveRT().Clear(ClearFlags::Color);
         m_gBuffer.GetMaterialRT().Clear(ClearFlags::Color);
 
-        // Render the scene using the camera
+        // Render the scene using the camera. Stencil writes tag non-shadow-casting geometry for the
+        // contact shadow pass; see Scene::RenderSingleObject.
+        m_device.SetStencilWriteEnabled(true);
         scene.Render(camera, PixelShaderType::GBuffer);
+        m_device.SetStencilWriteEnabled(false);
     }
 
     void DeferredRenderer::RenderLightingPass(Scene& scene, Camera& camera)

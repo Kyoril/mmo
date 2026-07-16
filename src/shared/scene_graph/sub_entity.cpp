@@ -27,6 +27,11 @@ namespace mmo
 		operation.material = GetMaterial();
 	}
 
+	bool SubEntity::GetCastsShadows() const
+	{
+		return m_parent.IsCastingShadows();
+	}
+
 	float SubEntity::GetSquaredViewDepth(const Camera& camera) const
 	{
         if (m_cachedCamera == &camera)

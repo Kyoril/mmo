@@ -63,7 +63,15 @@ namespace mmo
 
 		[[nodiscard]] virtual float GetSquaredViewDepth(const Camera& camera) const = 0;
         
-        [[nodiscard]] virtual bool GetCastsShadows() const { return false; }
+        /// @brief Whether this renderable casts shadows - both into the cascaded shadow maps and,
+        ///        via a stencil tag written during the G-Buffer pass, into screen-space contact
+        ///        shadows.
+        /// @remark MUST agree with the owning MovableObject's IsCastingShadows(), which is what the
+        ///         shadow-caster gather actually filters on. Implementations forward to it rather
+        ///         than storing a second copy - the two silently disagreeing is exactly the bug this
+        ///         default used to cause: it returned false while MovableObject defaulted to true,
+        ///         so anything trusting the Renderable saw "nothing casts shadows".
+        [[nodiscard]] virtual bool GetCastsShadows() const { return true; }
         
         [[nodiscard]] virtual MaterialPtr GetMaterial() const = 0;
 	};

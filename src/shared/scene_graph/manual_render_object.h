@@ -45,6 +45,11 @@ namespace mmo
 
 		[[nodiscard]] MaterialPtr GetMaterial() const override { return m_material; }
 
+		/// @copydoc Renderable::GetCastsShadows
+		/// @remark Forwards to the owning ManualRenderObject. Debug visuals (ping markers, path
+		///         lines, editor brush circles) routinely SetCastShadows(false) on it.
+		[[nodiscard]] bool GetCastsShadows() const override;
+
 		void SetMaterial(const MaterialPtr& material) { m_material = material; }
 
 		void PrepareRenderOperation(RenderOperation& operation) override;

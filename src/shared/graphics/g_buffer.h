@@ -9,6 +9,14 @@
 
 namespace mmo
 {
+	/// @brief Stencil value written during the G-Buffer pass for geometry that does NOT cast
+	///        shadows (foliage, terrain, debug visuals - see Renderable::GetCastsShadows).
+	/// @remark Read back by the contact shadow pass, which must not treat these pixels as
+	///         occluders: grass deliberately casts no shadow, and letting it occlude a
+	///         screen-space ray would reintroduce grass shadows through the back door.
+	/// @remark Zero means "casts shadows", so the cleared stencil defaults to the common case.
+	constexpr uint8 kStencilNonShadowCaster = 1;
+
 	/// @brief Class that represents a G-Buffer for deferred rendering.
 	class GBuffer final : public NonCopyable
 	{

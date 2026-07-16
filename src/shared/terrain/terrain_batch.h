@@ -65,6 +65,10 @@ namespace mmo
 			[[nodiscard]] const Matrix4& GetWorldTransform() const override;
 			[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
 			[[nodiscard]] MaterialPtr GetMaterial() const override { return m_materialInstance; }
+
+			/// @copydoc Renderable::GetCastsShadows
+			/// @remark Both the MovableObject and the Renderable, so forward to the single flag.
+			[[nodiscard]] bool GetCastsShadows() const override { return MovableObject::IsCastingShadows(); }
 			bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera) override;
 			// ~ End Renderable
 
