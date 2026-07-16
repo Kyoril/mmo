@@ -133,6 +133,15 @@ namespace mmo
 		static ConsoleVar *s_ssaoThicknessVar = nullptr;
 		static ConsoleVar *s_ssaoDebugVar = nullptr;
 
+		static ConsoleVar *s_contactShadowsVar = nullptr;
+		static ConsoleVar *s_contactShadowQualityVar = nullptr;
+		static ConsoleVar *s_contactShadowLengthVar = nullptr;
+		static ConsoleVar *s_contactShadowThicknessVar = nullptr;
+		static ConsoleVar *s_contactShadowIntensityVar = nullptr;
+		static ConsoleVar *s_contactShadowFadeVar = nullptr;
+		static ConsoleVar *s_contactShadowBiasVar = nullptr;
+		static ConsoleVar *s_contactShadowDebugVar = nullptr;
+
 		static ConsoleVar *s_renderScaleVar = nullptr;
 
 		static ConsoleVar *s_depthPrepassVar = nullptr;
@@ -1805,6 +1814,32 @@ namespace mmo
 		s_ssaoDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoDebug", "Visualize the raw SSAO term instead of the lit scene. 1 = on, 0 = off.", "0");
 		m_cvarChangedSignals += s_ssaoDebugVar->Changed.connect(this, &WorldState::OnSsaoDebugChanged);
 
+		// Screen-space contact shadows, marched inline in the deferred lighting pass. All distances
+		// are world units; 1 unit = 1 metre.
+		s_contactShadowsVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadows", "Screen-space contact shadows for the sun. Adds the short, sharp shadows where objects meet surfaces that shadow maps are too coarse to resolve. 1 = on, 0 = off.", "1");
+		m_cvarChangedSignals += s_contactShadowsVar->Changed.connect(this, &WorldState::OnContactShadowsEnabledChanged);
+
+		s_contactShadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowQuality", "Contact shadow detail preset: 0 = Low (4 steps), 1 = Medium (8), 2 = High (16). Lower values improve performance.", "1");
+		m_cvarChangedSignals += s_contactShadowQualityVar->Changed.connect(this, &WorldState::OnContactShadowQualityChanged);
+
+		s_contactShadowLengthVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowLength", "Contact shadow ray length in world units (metres). Longer rays catch more distant contacts but cost more and grow noisier at a given gxContactShadowQuality.", "0.3");
+		m_cvarChangedSignals += s_contactShadowLengthVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
+
+		s_contactShadowThicknessVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowThickness", "Assumed occluder thickness in world units (metres). Too low and solid objects stop occluding; too high and distant background geometry shadows the foreground.", "0.2");
+		m_cvarChangedSignals += s_contactShadowThicknessVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
+
+		s_contactShadowIntensityVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowIntensity", "Contact shadow strength, from 0 to 1. 1 = a hit shadows fully.", "1.0");
+		m_cvarChangedSignals += s_contactShadowIntensityVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
+
+		s_contactShadowFadeVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowFade", "Distance in world units (metres) at which contact shadows finish fading out. They are unreliable beyond this because the G-Buffer stores depth at half-float precision.", "35");
+		m_cvarChangedSignals += s_contactShadowFadeVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
+
+		s_contactShadowBiasVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowBias", "Contact shadow normal bias in world units (metres). Raise if surfaces shadow themselves, which shows up as a grey wash or moire under gxContactShadowDebug.", "0.02");
+		m_cvarChangedSignals += s_contactShadowBiasVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
+
+		s_contactShadowDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowDebug", "Visualize the raw contact shadow term instead of the lit scene. Healthy is near-white with thin dark bands at contacts. 1 = on, 0 = off.", "0");
+		m_cvarChangedSignals += s_contactShadowDebugVar->Changed.connect(this, &WorldState::OnContactShadowDebugChanged);
+
 		// Distance (world units) beyond which authored instanced foliage (trees, bushes, rocks) is
 		// culled. Lower values cut the overdraw from dense forests. Read each frame in OnIdle, so no
 		// change handler is required. A very large value = unlimited (render everything).
@@ -1905,6 +1940,10 @@ namespace mmo
 		OnSsaoHalfResChanged(*s_ssaoHalfResVar, "");
 		OnSsaoParametersChanged(*s_ssaoRadiusVar, "");
 		OnSsaoDebugChanged(*s_ssaoDebugVar, "");
+		OnContactShadowsEnabledChanged(*s_contactShadowsVar, "");
+		OnContactShadowQualityChanged(*s_contactShadowQualityVar, "");
+		OnContactShadowParametersChanged(*s_contactShadowLengthVar, "");
+		OnContactShadowDebugChanged(*s_contactShadowDebugVar, "");
 	}
 
 	void WorldState::RemoveGameplayCommands()
@@ -1926,6 +1965,14 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoIntensity");
 		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoThickness");
 		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoDebug");
+		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadows");
+		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowLength");
+		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowThickness");
+		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowIntensity");
+		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowFade");
+		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowBias");
+		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
@@ -5564,6 +5611,124 @@ namespace mmo
 		const bool enabled = var.GetIntValue() != 0;
 		ILOG("SSAO debug visualization " << (enabled ? "enabled" : "disabled"));
 		deferred->SetSsaoDebugVisualization(enabled);
+	}
+
+	void WorldState::OnContactShadowsEnabledChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const bool enabled = var.GetIntValue() != 0;
+		ILOG("Contact shadows " << (enabled ? "enabled" : "disabled"));
+		deferred->SetContactShadowsEnabled(enabled);
+	}
+
+	void WorldState::OnContactShadowQualityChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const int level = Clamp(var.GetIntValue(), 0, 2);
+		ILOG("Updating contact shadow quality to level " << level);
+		deferred->SetContactShadowQuality(level);
+	}
+
+	void WorldState::OnContactShadowParametersChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		// One handler for all five scalar parameters: each setter clamps its own value, so pushing
+		// all five on any change is both cheap and idempotent.
+		deferred->SetContactShadowRayLength(s_contactShadowLengthVar->GetFloatValue());
+		deferred->SetContactShadowThickness(s_contactShadowThicknessVar->GetFloatValue());
+		deferred->SetContactShadowIntensity(s_contactShadowIntensityVar->GetFloatValue());
+		deferred->SetContactShadowFadeDistance(s_contactShadowFadeVar->GetFloatValue());
+		deferred->SetContactShadowNormalBias(s_contactShadowBiasVar->GetFloatValue());
+
+		DLOG("Updated contact shadow parameters");
+	}
+
+	void WorldState::OnContactShadowDebugChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const bool enabled = var.GetIntValue() != 0;
+		ILOG("Contact shadow debug visualization " << (enabled ? "enabled" : "disabled"));
+		deferred->SetContactShadowDebugVisualization(enabled);
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)

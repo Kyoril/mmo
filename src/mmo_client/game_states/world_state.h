@@ -243,6 +243,20 @@ namespace mmo
 		/// @brief Called when the gxSsaoDebug console variable changed.
 		void OnSsaoDebugChanged(ConsoleVar &var, const std::string &oldValue);
 
+		/// @brief Called when the gxContactShadows console variable changed.
+		void OnContactShadowsEnabledChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when the gxContactShadowQuality console variable changed.
+		void OnContactShadowQualityChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when any of the gxContactShadowLength / gxContactShadowThickness /
+		///        gxContactShadowIntensity / gxContactShadowFade / gxContactShadowBias console
+		///        variables changed.
+		void OnContactShadowParametersChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when the gxContactShadowDebug console variable changed.
+		void OnContactShadowDebugChanged(ConsoleVar &var, const std::string &oldValue);
+
 		void OnCombatVignetteChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue);
