@@ -144,6 +144,15 @@ namespace mmo
         /// @brief Gets the current PCF tap count used by the shadow filter.
         [[nodiscard]] uint32 GetPcfSampleCount() const { return m_pcfSampleCount; }
 
+        /// @brief Sets the shadow light direction quantization step in degrees (0 disables it).
+        /// @remark Larger steps mean rock-stable shadows that visibly jump on each step; smaller
+        ///         steps move more smoothly but re-rasterize the cascades more often. Purely a CPU
+        ///         scheduling knob — no GPU cost either way.
+        void SetShadowLightStepDegrees(float degrees)
+        {
+            m_cascadedShadowSetup->GetConfig().lightStepDegrees = degrees < 0.0f ? 0.0f : degrees;
+        }
+
         /// @brief Enables or disables the opaque depth pre-pass for the G-Buffer geometry pass.
         /// @remark When enabled, a cheap depth-only pass populates the depth buffer first so the
         ///         expensive G-Buffer shader only runs on visible (front-most) pixels — a large win

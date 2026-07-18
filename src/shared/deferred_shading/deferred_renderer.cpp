@@ -704,14 +704,22 @@ namespace mmo
 
         const uint32 activeCascades = m_cascadedShadowSetup->GetConfig().GetActiveCascadeCount();
 
+        // Feed the light-direction quantizer (see CascadedShadowConfig::lightStepDegrees). Between
+        // steps the cascade matrices are bit-identical, so static shadows hold perfectly still under
+        // the day/night cycle instead of shimmering every frame.
+        const bool lightStepped = m_cascadedShadowSetup->UpdateLightDirection(
+            m_shadowCastingDirectionalLight->GetDerivedDirection());
+
         // Temporal cascade staggering: distant cascades change little frame-to-frame, so we re-render
         // them only every few frames and reuse their previous depth map in between. Cascade 0 (near,
         // highest detail) always refreshes. The staggered phases are chosen so at most one distant
         // cascade refreshes on any given frame, which also smooths the per-frame cost. The first frames
-        // force a full update so every cascade's map is initialised before it is sampled.
+        // force a full update so every cascade's map is initialised before it is sampled. On the frame
+        // the quantized light direction steps, all cascades refresh together — letting the stagger
+        // spread the step across three frames would make near and far shadows jump at different times.
         ++m_shadowFrameCounter;
         uint32 updateMask = (1u << activeCascades) - 1u; // default: all active cascades
-        if (m_temporalShadows && m_shadowFrameCounter > NUM_SHADOW_CASCADES)
+        if (m_temporalShadows && !lightStepped && m_shadowFrameCounter > NUM_SHADOW_CASCADES)
         {
             updateMask = 1u << 0; // cascade 0 every frame
             if ((m_shadowFrameCounter % 2u) == 0u) { updateMask |= 1u << 1; } // cascade 1 every 2 frames

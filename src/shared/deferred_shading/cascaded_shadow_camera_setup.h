@@ -48,6 +48,15 @@ namespace mmo
 		/// @brief Blend factor for cascade transitions (0 = hard transition, 1 = full blend).
 		float cascadeBlendFactor = 0.1f;
 
+		/// @brief Quantization step for the shadow light direction, in degrees. A continuously moving
+		///        sun (day/night cycle) re-rasterizes every shadow map each frame, which texel snapping
+		///        cannot stabilize (snapping fixes translation, not rotation) — distant cascades shimmer
+		///        badly. With quantization the shadow system keeps using the last direction until the
+		///        real light has moved more than this angle, so cascade matrices are bit-identical
+		///        between steps and static geometry is perfectly stable. Set to 0 to disable and track
+		///        the light continuously. Lighting itself is unaffected — only shadows step.
+		float lightStepDegrees = 0.35f;
+
 		/// @brief Number of active cascades to render (1..NUM_SHADOW_CASCADES). Rendering fewer
 		///        cascades means fewer full-scene shadow passes — a large saving on lower-end GPUs —
 		///        at the cost of near-camera shadow resolution. The split scheme is computed over
@@ -75,6 +84,15 @@ namespace mmo
 	public:
 		/// @copydoc ShadowCameraSetup::SetupShadowCamera
 		void SetupShadowCamera(Scene& scene, Camera& camera, Light& light, Camera& shadowCamera) override;
+
+		/// @brief Feeds the current world light direction into the quantizer and returns whether the
+		///        quantized direction the cascades use actually changed. Callers that stagger cascade
+		///        updates should force a full refresh on frames where this returns true, so the whole
+		///        shadow picture steps coherently in one frame instead of cascade-by-cascade.
+		/// @param worldLightDir The light's current (continuous) world-space direction.
+		/// @return true if the quantized direction stepped this call. Idempotent within a frame: a
+		///         second call with the same input returns false.
+		bool UpdateLightDirection(const Vector3& worldLightDir);
 
 		/// @brief Sets up shadow cameras for all cascades.
 		/// @param scene The scene.
@@ -130,5 +148,11 @@ namespace mmo
 		CascadedShadowConfig m_config;
 		std::array<ShadowCascade, NUM_SHADOW_CASCADES> m_cascades;
 		std::array<float, NUM_SHADOW_CASCADES + 1> m_splitDistances;
+
+		/// @brief The quantized light direction the cascades are currently built from.
+		Vector3 m_quantizedLightDir = Vector3::Zero;
+
+		/// @brief Whether m_quantizedLightDir holds a valid direction yet.
+		bool m_hasQuantizedLightDir = false;
 	};
 }

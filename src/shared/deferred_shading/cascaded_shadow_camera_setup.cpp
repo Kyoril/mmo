@@ -6,6 +6,7 @@
 #include "scene_graph/camera.h"
 #include "scene_graph/light.h"
 #include "graphics/graphics_device.h"
+#include "math/constants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -21,6 +22,34 @@ namespace mmo
 			cascade.splitDistance = 0.0f;
 			cascade.worldTexelSize = 0.0f;
 		}
+	}
+
+	bool CascadedShadowCameraSetup::UpdateLightDirection(const Vector3& worldLightDir)
+	{
+		Vector3 dir = worldLightDir;
+		dir.Normalize();
+
+		if (m_config.lightStepDegrees <= 0.0f)
+		{
+			// Quantization disabled: track the light continuously.
+			const bool changed = !m_hasQuantizedLightDir || dir != m_quantizedLightDir;
+			m_quantizedLightDir = dir;
+			m_hasQuantizedLightDir = true;
+			return changed;
+		}
+
+		if (m_hasQuantizedLightDir)
+		{
+			const float cosStep = std::cos(m_config.lightStepDegrees * Pi / 180.0f);
+			if (m_quantizedLightDir.Dot(dir) >= cosStep)
+			{
+				return false;
+			}
+		}
+
+		m_quantizedLightDir = dir;
+		m_hasQuantizedLightDir = true;
+		return true;
 	}
 
 	void CascadedShadowCameraSetup::SetupShadowCamera(Scene& scene, Camera& camera, Light& light, Camera& shadowCamera)
@@ -48,9 +77,11 @@ namespace mmo
 		// Calculate cascade split distances
 		CalculateSplitDistances(nearClip, farClip);
 
-		// Get light direction
-		Vector3 lightDir = light.GetDerivedDirection();
-		lightDir.Normalize();
+		// Use the quantized light direction so the cascade matrices stay bit-identical between light
+		// steps (see CascadedShadowConfig::lightStepDegrees). Idempotent if the renderer already fed
+		// the quantizer this frame.
+		UpdateLightDirection(light.GetDerivedDirection());
+		const Vector3 lightDir = m_quantizedLightDir;
 
 		// Setup each active cascade (inactive cascades are neither set up nor rendered).
 		const uint32 activeCascades = m_config.GetActiveCascadeCount();
@@ -90,9 +121,8 @@ namespace mmo
 			float worldTexelSize;
 			ComputeCascadeMatrix(lightDir, frustumCorners, i, viewProj, worldTexelSize);
 
-			// Store cascade data
+			// Store cascade data (worldTexelSize is set below, from the final ortho window size)
 			m_cascades[i].viewProjection = viewProj;
-			m_cascades[i].worldTexelSize = worldTexelSize;
 
 			// Set up the shadow camera
 			// Extract the view matrix from the combined view-projection (we need separate matrices)
@@ -126,13 +156,24 @@ namespace mmo
 				radius = std::max(radius, distance);
 			}
 
-			// Round radius to prevent shadow flickering
+			// Quantize the radius so the ortho window is piecewise constant. The corner math above
+			// re-derives the radius from camera state every frame, and its float noise would rescale
+			// the texel grid slightly each frame — a whole-map sub-texel shimmer that no position
+			// snap can fix. (The previous code rounded the radius "up to the nearest texel", but
+			// texelSize was itself defined as radius / (mapSize / 2), which makes that rounding an
+			// exact no-op.) Half a world unit is far coarser than the noise and widens the window by
+			// at most ~2.5% on the nearest cascade.
 			if (m_config.stableCascades)
 			{
-				// Round up to the nearest texel
-				const float texelSize = (radius * 2.0f) / static_cast<float>(m_config.shadowMapSize);
-				radius = std::ceil(radius / texelSize) * texelSize;
+				radius = std::ceil(radius * 2.0f) * 0.5f;
 			}
+
+			// The texel size of the map as actually rendered with this window. The position snap
+			// below MUST use exactly this value: snapping to any other grid spacing (e.g. the one
+			// ComputeCascadeMatrix derives from a differently-rounded radius) leaves sub-texel
+			// drift whenever the camera moves.
+			const float snapTexelSize = (radius * 2.0f) / static_cast<float>(m_config.shadowMapSize);
+			m_cascades[i].worldTexelSize = snapTexelSize;
 
 			// Position the shadow camera
 			// Use a larger extrusion distance based on the cascade size to capture shadow casters
@@ -140,27 +181,31 @@ namespace mmo
 			const float extrusionDistance = std::max(baseExtrusionDistance, radius * 2.0f + 100.0f);
 			Vector3 shadowCamPos = frustumCenter - lightDir * extrusionDistance;
 
+			// The exact light-space basis the texel snap below works in. The camera orientation must
+			// use this same basis: deriving it any other way (e.g. LookAt, whose roll comes from the
+			// node's previous orientation) rotates the rendered texel grid out of alignment with the
+			// grid we snapped to, silently defeating the stabilization.
+			Quaternion lightRotation;
+			lightRotation.FromAxes(right, up, lightDir);
+
 			// Snap to texel grid to prevent shadow swimming
 			if (m_config.stableCascades)
 			{
-				// Create a light-space transform
-				Quaternion lightRotation;
-				lightRotation.FromAxes(right, up, lightDir);
-
 				// Transform position to light space
 				Vector3 lightSpacePos = lightRotation.Inverse() * shadowCamPos;
 
 				// Snap to texel grid
-				lightSpacePos.x = std::floor(lightSpacePos.x / worldTexelSize) * worldTexelSize;
-				lightSpacePos.y = std::floor(lightSpacePos.y / worldTexelSize) * worldTexelSize;
+				lightSpacePos.x = std::floor(lightSpacePos.x / snapTexelSize) * snapTexelSize;
+				lightSpacePos.y = std::floor(lightSpacePos.y / snapTexelSize) * snapTexelSize;
 
 				// Transform back to world space
 				shadowCamPos = lightRotation * lightSpacePos;
 			}
 
-			// Set camera parameters
+			// Set camera parameters. Orientation comes straight from the snap basis (local +Z is the
+			// render direction for the orthographic projection, exactly along the light).
 			shadowCam.GetParentNode()->SetPosition(shadowCamPos);
-			shadowCam.GetParentSceneNode()->LookAt(frustumCenter, TransformSpace::World, Vector3::UnitZ);
+			shadowCam.GetParentSceneNode()->SetOrientation(lightRotation);
 
 			// Set orthographic projection to exactly fit the cascade
 			shadowCam.SetOrthoWindow(radius * 2.0f, radius * 2.0f);

@@ -225,6 +225,9 @@ namespace mmo
 
 		void OnShadowTemporalChanged(ConsoleVar &var, const std::string &oldValue);
 
+		/// @brief Called when the ShadowLightStep console variable changed.
+		void OnShadowLightStepChanged(ConsoleVar &var, const std::string &oldValue);
+
 		void OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue);
 
 		/// @brief Called when the gxSsao console variable changed.

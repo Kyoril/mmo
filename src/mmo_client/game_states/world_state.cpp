@@ -124,6 +124,7 @@ namespace mmo
 		static ConsoleVar *s_shadowTextureSizeVar = nullptr;
 		static ConsoleVar *s_shadowQualityVar = nullptr;
 		static ConsoleVar *s_shadowTemporalVar = nullptr;
+		static ConsoleVar *s_shadowLightStepVar = nullptr;
 
 		static ConsoleVar *s_ssaoVar = nullptr;
 		static ConsoleVar *s_ssaoQualityVar = nullptr;
@@ -1774,7 +1775,7 @@ namespace mmo
 		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0.0");
 		m_cvarChangedSignals += s_clampDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
 
-		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "1");
+		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "Shadow map resolution per cascade: 0 = 512, 1 = 1024, 2 = 2048, 3 = 4096. Higher values sharpen shadows at the cost of GPU memory and shadow-pass fill rate.", "2");
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
 
 		s_shadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("ShadowQuality", "Shadow detail preset: 0 = Low (2 cascades, 4 PCF taps), 1 = Medium (3/8), 2 = High (4/16). Lower values improve performance.", "2");
@@ -1782,6 +1783,9 @@ namespace mmo
 
 		s_shadowTemporalVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTemporal", "Temporal cascade staggering: 1 = distant cascades refresh every few frames (faster), 0 = every cascade every frame.", "1");
 		m_cvarChangedSignals += s_shadowTemporalVar->Changed.connect(this, &WorldState::OnShadowTemporalChanged);
+
+		s_shadowLightStepVar = ConsoleVarMgr::RegisterConsoleVar("ShadowLightStep", "Sun-shadow direction quantization step in degrees. Shadows hold perfectly still until the day/night sun has moved this far, then jump once; prevents distant shadow flicker. 0 = track the sun continuously.", "0.35");
+		m_cvarChangedSignals += s_shadowLightStepVar->Changed.connect(this, &WorldState::OnShadowLightStepChanged);
 
 		// Internal 3D render-scale: the world is rendered at this fraction of the frame size and then
 		// upscaled. 1.0 = native; lower values trade sharpness for a large performance gain on weak
@@ -1930,6 +1934,7 @@ namespace mmo
 		OnShadowTextureSizeChanged(*s_shadowTextureSizeVar, "");
 		OnShadowQualityChanged(*s_shadowQualityVar, "");
 		OnShadowTemporalChanged(*s_shadowTemporalVar, "");
+		OnShadowLightStepChanged(*s_shadowLightStepVar, "");
 		OnDepthPrepassChanged(*s_depthPrepassVar, "");
 		OnRenderShadowsChanged(*s_renderShadowsVar, "");
 		OnShadowBiasChanged(*s_depthBiasVar, "");
@@ -1956,6 +1961,7 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTemporal");
+		ConsoleVarMgr::UnregisterConsoleVar("ShadowLightStep");
 		ConsoleVarMgr::UnregisterConsoleVar("gxRenderScale");
 		ConsoleVarMgr::UnregisterConsoleVar("gxDepthPrepass");
 		ConsoleVarMgr::UnregisterConsoleVar("gxSsao");
@@ -5439,6 +5445,34 @@ namespace mmo
 		const bool enabled = var.GetIntValue() != 0;
 		ILOG("Temporal shadow staggering " << (enabled ? "enabled" : "disabled"));
 		deferred->SetTemporalShadowsEnabled(enabled);
+	}
+
+	void WorldState::OnShadowLightStepChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const float degrees = var.GetFloatValue();
+		ILOG("Shadow light direction step set to " << degrees << " degrees");
+		deferred->SetShadowLightStepDegrees(degrees);
 	}
 
 	void WorldState::OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue)
