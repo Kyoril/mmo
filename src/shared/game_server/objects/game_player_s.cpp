@@ -1956,6 +1956,13 @@ namespace mmo
 		// Levelup as often as required
 		while (currentXp >= Get<uint32>(object_fields::NextLevelXp))
 		{
+			// A single grant can overshoot the last level up; cap the leftover so the loop terminates.
+			if (GetLevel() >= GetMaxLevel())
+			{
+				currentXp = Get<uint32>(object_fields::NextLevelXp) - 1;
+				break;
+			}
+
 			if (GetLevel() < GetMaxLevel())
 			{
 				if (m_netUnitWatcher)

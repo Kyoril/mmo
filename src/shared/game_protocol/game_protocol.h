@@ -356,6 +356,15 @@ namespace mmo
 				/// Dev command: learn an emote for testing. Payload: uint32 emoteId. Requires MMO_WITH_DEV_COMMANDS.
 				CheatLearnEmote,
 
+				/// Dev command: accept a quest without a questgiver interaction. Payload: uint32 questId. Requires MMO_WITH_DEV_COMMANDS.
+				CheatAcceptQuest,
+
+				/// Dev command: turn in a completed quest without a quest ender interaction. Payload: uint32 questId, uint8 rewardChoice. Requires MMO_WITH_DEV_COMMANDS.
+				CheatTurnInQuest,
+
+				/// Dev command: destroy every item in the character's backpack (equipment is kept). No payload. Requires MMO_WITH_DEV_COMMANDS.
+				CheatClearInventory,
+
 				/// Counter constant
 				Count_,
 			};

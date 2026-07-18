@@ -100,6 +100,26 @@ try
 			$characterName = "Test$suffix" + [char](97 + $classId)
 		}
 
+		# Scenarios that must not share progression state with other scenarios of the
+		# same class (e.g. leveling tests) can request a dedicated character via
+		# "-- e2e-own-character: <letters>". The letters are appended to the name.
+		$ownCharDirective = Select-String -Path $file.FullName -Pattern '^--\s*e2e-own-character:\s*([a-z]+)' |
+			Select-Object -First 1
+		if ($ownCharDirective)
+		{
+			$characterName += $ownCharDirective.Matches[0].Groups[1].Value
+		}
+
+		# Long-running scenarios can extend the client timeout via a header directive,
+		# e.g. "-- e2e-timeout: 600" (seconds). Default stays at 120.
+		$timeoutSeconds = 120
+		$timeoutDirective = Select-String -Path $file.FullName -Pattern '^--\s*e2e-timeout:\s*(\d+)' |
+			Select-Object -First 1
+		if ($timeoutDirective)
+		{
+			$timeoutSeconds = [int]$timeoutDirective.Matches[0].Groups[1].Value
+		}
+
 		while ($true)
 		{
 			$attempts++
@@ -110,7 +130,7 @@ try
 				"--script", $file.FullName,
 				"--transcript", $transcript,
 				"--character", $characterName,
-				"--timeout", "120"
+				"--timeout", "$timeoutSeconds"
 			) + $classArgs) -WorkingDirectory $s.RepoRoot -PassThru -WindowStyle Hidden -Wait -RedirectStandardOutput $stdout
 
 			$exitCode = $process.ExitCode

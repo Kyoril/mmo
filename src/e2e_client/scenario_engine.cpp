@@ -323,6 +323,18 @@ namespace mmo
 			return selfUnit ? static_cast<int32>(selfUnit->GetMoney()) : -1;
 		}
 
+		int32 luaGetXp()
+		{
+			const BotUnit* selfUnit = self();
+			return selfUnit ? static_cast<int32>(selfUnit->GetXp()) : -1;
+		}
+
+		int32 luaGetNextLevelXp()
+		{
+			const BotUnit* selfUnit = self();
+			return selfUnit ? static_cast<int32>(selfUnit->GetNextLevelXp()) : -1;
+		}
+
 		int32 luaGetStandState(const std::string& guid)
 		{
 			const BotUnit* unit = findUnit(guid);
@@ -692,6 +704,33 @@ namespace mmo
 			}
 		}
 
+		void luaGmAcceptQuest(const uint32 questId)
+		{
+			g_runtime->session->GetRealm().CheatAcceptQuest(questId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.AcceptQuest", { { "quest_id", questId } });
+			}
+		}
+
+		void luaGmTurnInQuest(const uint32 questId, const uint32 rewardChoice)
+		{
+			g_runtime->session->GetRealm().CheatTurnInQuest(questId, static_cast<uint8>(rewardChoice));
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.TurnInQuest", { { "quest_id", questId }, { "reward_choice", rewardChoice } });
+			}
+		}
+
+		void luaGmClearInventory()
+		{
+			g_runtime->session->GetRealm().CheatClearInventory();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.ClearInventory", {});
+			}
+		}
+
 		void registerScenarioApi(lua_State* state)
 		{
 			luabind::scope apiScope = (
@@ -720,6 +759,8 @@ namespace mmo
 				luabind::def_lambda("HasSpell", &luaHasSpell),
 				luabind::def_lambda("GetItemCount", &luaGetItemCount),
 				luabind::def_lambda("GetMoney", &luaGetMoney),
+				luabind::def_lambda("GetXp", &luaGetXp),
+				luabind::def_lambda("GetNextLevelXp", &luaGetNextLevelXp),
 				luabind::def_lambda("GetStandState", &luaGetStandState),
 				luabind::def_lambda("GetMoodEmote", &luaGetMoodEmote),
 				luabind::def_lambda("GetIdlePoseEmote", &luaGetIdlePoseEmote),
@@ -751,7 +792,10 @@ namespace mmo
 				luabind::def_lambda("GM_DestroyMonster", &luaGmDestroyMonster),
 				luabind::def_lambda("GM_KillTarget", &luaGmKillTarget),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
-				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed)
+				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
+				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
+				luabind::def_lambda("GM_TurnInQuest", &luaGmTurnInQuest),
+				luabind::def_lambda("GM_ClearInventory", &luaGmClearInventory)
 			);
 
 			luabind::module(state)[std::move(apiScope)];
@@ -789,6 +833,9 @@ namespace mmo
 				KillTarget = GM_KillTarget,
 				Worldport = GM_WorldPort,
 				SetSpeed = GM_SetSpeed,
+				AcceptQuest = GM_AcceptQuest,
+				TurnInQuest = function(questId, rewardChoice) GM_TurnInQuest(questId, rewardChoice or 0) end,
+				ClearInventory = GM_ClearInventory,
 			}
 		)LUA";
 

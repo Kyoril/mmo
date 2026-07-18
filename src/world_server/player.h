@@ -680,6 +680,24 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatRevive(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to accept a quest without any questgiver interaction or proximity check.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatAcceptQuest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to turn in a completed quest without any quest ender interaction or proximity check.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatTurnInQuest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to destroy every item in the characters backpack. Equipped items are kept.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatClearInventory(uint16 opCode, uint32 size, io::Reader& contentReader);
 #endif
 
 	private:

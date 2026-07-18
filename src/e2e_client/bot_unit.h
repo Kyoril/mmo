@@ -329,6 +329,18 @@ namespace mmo
 		/// @brief Gets the money amount in copper (players only).
 		uint32 GetMoney() const { return m_money; }
 
+		/// @brief Sets the current experience points (players only).
+		void SetXp(uint32 xp) { m_xp = xp; }
+
+		/// @brief Gets the current experience points (players only).
+		uint32 GetXp() const { return m_xp; }
+
+		/// @brief Sets the experience points required for the next level (players only).
+		void SetNextLevelXp(uint32 nextLevelXp) { m_nextLevelXp = nextLevelXp; }
+
+		/// @brief Gets the experience points required for the next level (players only).
+		uint32 GetNextLevelXp() const { return m_nextLevelXp; }
+
 		/// @brief Sets the active power snapshot.
 		void SetPower(PowerType powerType, uint32 power, uint32 maxPower);
 
@@ -412,6 +424,8 @@ namespace mmo
 		uint32 m_level = 1;
 		uint32 m_health = 0;
 		uint32 m_money = 0;
+		uint32 m_xp = 0;
+		uint32 m_nextLevelXp = 0;
 		uint32 m_maxHealth = 0;
 		PowerType m_powerType = power_type::Invalid_;
 		uint32 m_power = 0;

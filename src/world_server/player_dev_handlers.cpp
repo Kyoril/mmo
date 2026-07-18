@@ -476,6 +476,14 @@ namespace mmo
 		}
 
 		DLOG("GM kill on unit " << log_hex_digit(targetGuid));
+
+		// Tag untagged creatures for the GM character so the kill grants xp and quest kill credit,
+		// just as if the character had opened combat before the kill.
+		if (GameCreatureS* creature = dynamic_cast<GameCreatureS*>(unit); creature != nullptr && !creature->IsTagged())
+		{
+			creature->AddLootRecipient(m_character->GetGuid());
+		}
+
 		unit->Kill(m_character.get());
 	}
 #endif
@@ -568,6 +576,112 @@ namespace mmo
 				<< io::write<float>(hitPoint.x) << io::write<float>(hitPoint.y) << io::write<float>(hitPoint.z);
 			packet.Finish();
 		});
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatAcceptQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 questId = 0;
+		if (!(contentReader >> io::read<uint32>(questId)))
+		{
+			ELOG("Failed to read CheatAcceptQuest packet!");
+			return;
+		}
+
+		const proto::QuestEntry* quest = m_project.quests.getById(questId);
+		if (!quest)
+		{
+			ELOG("CheatAcceptQuest: unknown quest id " << questId);
+			return;
+		}
+
+		if (m_character->IsQuestlogFull())
+		{
+			SendPacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::QuestLogFull);
+				packet.Finish();
+			});
+			return;
+		}
+
+		if (!m_character->AcceptQuest(questId))
+		{
+			ELOG("CheatAcceptQuest: failed to accept quest " << questId);
+			return;
+		}
+
+		DLOG("GM accepted quest " << questId << " for player " << m_characterData.name);
+
+		SendPacket([questId, quest, locale = GetLocale()](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::QuestAccepted);
+			packet
+				<< io::write_dynamic_range<uint8>(GetLocalizedString(quest->name(), quest->name_loc(), locale))
+				<< io::write<uint32>(questId);
+			packet.Finish();
+		});
+
+		RefreshQuestObjectInteractability(questId);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatTurnInQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 questId = 0;
+		uint8 rewardChoice = 0;
+		if (!(contentReader >> io::read<uint32>(questId) >> io::read<uint8>(rewardChoice)))
+		{
+			ELOG("Failed to read CheatTurnInQuest packet!");
+			return;
+		}
+
+		const proto::QuestEntry* quest = m_project.quests.getById(questId);
+		if (!quest)
+		{
+			ELOG("CheatTurnInQuest: unknown quest id " << questId);
+			return;
+		}
+
+		// The reward path requires the quest to be in the Complete state; there is no quest
+		// ender involved, so the completion notification carries the players own guid.
+		if (!m_character->RewardQuest(m_character->GetGuid(), questId, rewardChoice))
+		{
+			ELOG("CheatTurnInQuest: failed to turn in quest " << questId << " (status " <<
+				static_cast<uint32>(m_character->GetQuestStatus(questId)) << ", reward choice " <<
+				static_cast<uint32>(rewardChoice) << " of " << quest->rewarditemschoice_size() << ")");
+			return;
+		}
+
+		DLOG("GM turned in quest " << questId << " for player " << m_characterData.name);
+
+		RefreshQuestObjectInteractability(questId);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatClearInventory(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		auto& inventory = m_character->GetInventory();
+
+		uint32 removed = 0;
+		for (uint8 slot = player_inventory_pack_slots::Start; slot < player_inventory_pack_slots::End; ++slot)
+		{
+			const uint16 absoluteSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, slot).GetAbsolute();
+			if (!inventory.GetItemAtSlot(absoluteSlot))
+			{
+				continue;
+			}
+
+			if (inventory.RemoveItem(absoluteSlot) == inventory_change_failure::Okay)
+			{
+				++removed;
+			}
+		}
+
+		DLOG("GM cleared inventory of player " << m_characterData.name << " (" << removed << " backpack stacks removed)");
 	}
 #endif
 }

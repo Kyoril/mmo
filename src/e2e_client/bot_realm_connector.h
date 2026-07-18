@@ -303,6 +303,15 @@ namespace mmo
 		/// GAME MASTER only. Instantly kills the selected unit.
 		void CheatKill();
 
+		/// GAME MASTER only. Accepts the given quest without a questgiver interaction.
+		void CheatAcceptQuest(uint32 questId);
+
+		/// GAME MASTER only. Turns in the given completed quest without a quest ender interaction.
+		void CheatTurnInQuest(uint32 questId, uint8 rewardChoice);
+
+		/// GAME MASTER only. Destroys every item in the characters backpack (equipment is kept).
+		void CheatClearInventory();
+
 	private:
 		void RegisterWorldPacketHandlers();
 		BotUnit* GetSelfMutable();

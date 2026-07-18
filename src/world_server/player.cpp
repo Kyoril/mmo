@@ -803,6 +803,15 @@ namespace mmo
 		case game::client_realm_packet::CheatRevive:
 			OnCheatRevive(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatAcceptQuest:
+			OnCheatAcceptQuest(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatTurnInQuest:
+			OnCheatTurnInQuest(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatClearInventory:
+			OnCheatClearInventory(opCode, buffer.size(), reader);
+			break;
 #endif
 
 		case game::client_realm_packet::CastSpell:

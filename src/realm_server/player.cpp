@@ -762,6 +762,9 @@ namespace mmo
 		case game::client_realm_packet::CheatLevelUp:
 		case game::client_realm_packet::CheatGiveMoney:
 		case game::client_realm_packet::CheatAddItem:
+		case game::client_realm_packet::CheatAcceptQuest:
+		case game::client_realm_packet::CheatTurnInQuest:
+		case game::client_realm_packet::CheatClearInventory:
 			// Require GM level 2
 			if (!HasGMLevel(2))
 			{
@@ -3110,6 +3113,9 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatMorph, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatKill, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatRevive, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatAcceptQuest, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatTurnInQuest, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatClearInventory, *this, &Player::OnProxyPacket);
 #endif
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);

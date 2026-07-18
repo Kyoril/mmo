@@ -63,6 +63,7 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `Me()`, `UnitExists(g)`, `GetHealth(g)`, `GetMaxHealth(g)`, `GetLevel(g)`, `GetPower(g)`,
 `GetMaxPower(g)`, `IsAlive(g)`, `GetName(g)`, `GetPosX/Y/Z(g)`, `GetDistance(a, b)`,
 `HasAura(g, spellId)`, `HasSpell(spellId)`, `GetItemCount(itemId)`, `GetMoney()`,
+`GetXp()`, `GetNextLevelXp()` (own character only),
 `LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`),
 `FindUnitByEntry(entry) -> g|nil`, `FindUnitByName(name) -> g|nil`
 
@@ -74,8 +75,13 @@ automatically), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 GM commands (server must run with dev commands; the test account has GM level 3):
 `GM.AddItem(itemId, count)`, `GM.LearnSpell(spellId)`, `GM.LevelUp(levels)`,
 `GM.GiveMoney(copper)`, `GM.CreateMonster(entry) -> g` (waits for the spawn),
-`GM.DestroyMonster(g)`, `GM.KillTarget()`, `GM.Worldport(map, x, y, z, facing)`
-(waits for the teleport), `GM.SetSpeed(multiplier)`
+`GM.DestroyMonster(g)`, `GM.KillTarget()` (tags an untagged creature to the GM
+character first, so the kill grants real kill xp and quest kill credit),
+`GM.Worldport(map, x, y, z, facing)` (waits for the teleport),
+`GM.SetSpeed(multiplier)`, `GM.AcceptQuest(questId)` (no questgiver needed),
+`GM.TurnInQuest(questId [, rewardChoice])` (quest must be objective-complete; no
+quest ender needed), `GM.ClearInventory()` (destroys all backpack items, keeps
+equipment)
 
 ### Gotchas
 
@@ -92,6 +98,12 @@ GM commands (server must run with dev commands; the test account has GM level 3)
   (kept honest by server-side movement validation).
 - Scenarios expected to fail (negative controls) are registered in `$expectedFailures`
   inside `tools/e2e/e2e_run.ps1`.
+- Header directives (first comment lines of a scenario): `-- e2e-class: <id>` picks the
+  character class (each class gets its own character), `-- e2e-timeout: <seconds>`
+  extends the 120s default for long scenarios, and `-- e2e-own-character: <letters>`
+  gives the scenario a dedicated character so it does not share progression state with
+  other scenarios of the same class (see `quest_path_1_to_10.lua`, which must start
+  at level 1).
 - The runner retries a scenario **once** on infrastructure failures (exit 2/3/4 —
   connect, timeout, disconnect) because a reconnect within ~1s of the previous
   session can race server-side session cleanup. Assertion failures (exit 1) are

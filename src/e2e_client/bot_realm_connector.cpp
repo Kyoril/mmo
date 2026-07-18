@@ -1458,6 +1458,18 @@ namespace mmo
 			unit.SetMoney(fieldMap.GetFieldValue<uint32>(object_fields::Money));
 		}
 
+		// Experience fields are player-only and used by scenario assertions.
+		if (typeId == ObjectTypeId::Player &&
+			(creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Xp)))
+		{
+			unit.SetXp(fieldMap.GetFieldValue<uint32>(object_fields::Xp));
+		}
+		if (typeId == ObjectTypeId::Player &&
+			(creation || fieldMap.IsFieldMarkedAsChanged(object_fields::NextLevelXp)))
+		{
+			unit.SetNextLevelXp(fieldMap.GetFieldValue<uint32>(object_fields::NextLevelXp));
+		}
+
 		// Set position/movement - this should always be present for creation
 		if (updateFlags & object_update_flags::HasMovementInfo)
 		{
@@ -2039,6 +2051,32 @@ namespace mmo
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatKill);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatAcceptQuest(const uint32 questId)
+	{
+		sendSinglePacket([questId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatAcceptQuest);
+			packet << io::write<uint32>(questId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatTurnInQuest(const uint32 questId, const uint8 rewardChoice)
+	{
+		sendSinglePacket([questId, rewardChoice](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatTurnInQuest);
+			packet << io::write<uint32>(questId) << io::write<uint8>(rewardChoice);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatClearInventory()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatClearInventory);
 			packet.Finish();
 			});
 	}
