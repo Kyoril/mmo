@@ -326,8 +326,269 @@ namespace mmo
 		UpdateRegionOverlay();
 	}
 
+	void TerrainEditMode::CopySelection()
+	{
+		if (!HasRegionSelection())
+		{
+			return;
+		}
+
+		auto snapshot = m_terrain.CaptureRegion(m_selection);
+		if (snapshot.IsValid())
+		{
+			m_clipboard = std::move(snapshot);
+		}
+	}
+
+	void TerrainEditMode::CutSelection()
+	{
+		if (!HasRegionSelection())
+		{
+			return;
+		}
+
+		auto snapshot = m_terrain.CaptureRegion(m_selection);
+		if (!snapshot.IsValid())
+		{
+			return;
+		}
+
+		m_clipboard = snapshot;
+		m_undoStack.Push("Cut Region", { std::move(snapshot) });
+		m_terrain.FillRegionFromEdges(m_selection);
+		UpdateRegionOverlay();
+	}
+
+	void TerrainEditMode::BeginGhostDrag(const bool isMove)
+	{
+		if (isMove)
+		{
+			if (!HasRegionSelection())
+			{
+				return;
+			}
+			CopySelection();
+		}
+
+		if (!m_clipboard || !m_clipboard->IsValid())
+		{
+			return;
+		}
+
+		m_ghostIsMove = isMove;
+		m_ghostHeightOffset = 0.0f;
+		m_regionState = RegionEditState::GhostDrag;
+		UpdateGhostOverlay();
+	}
+
+	terrain::region_math::VertexRect TerrainEditMode::ComputeGhostDestRect() const
+	{
+		if (!m_clipboard)
+		{
+			return {};
+		}
+
+		const int32 pagesW = static_cast<int32>(m_terrain.GetWidth());
+		const int32 pagesH = static_cast<int32>(m_terrain.GetHeight());
+		const int32 sizeX = m_clipboard->rect.sizeX;
+		const int32 sizeZ = m_clipboard->rect.sizeZ;
+
+		int32 minX = terrain::region_math::RoundWorldToVertex(m_brushPosition.x, pagesW) - sizeX / 2;
+		int32 minZ = terrain::region_math::RoundWorldToVertex(m_brushPosition.z, pagesH) - sizeZ / 2;
+
+		// Clamp so the whole rect stays inside the terrain without shrinking.
+		minX = std::clamp(minX, 0, pagesW * terrain::region_math::CellsPerPage - sizeX);
+		minZ = std::clamp(minZ, 0, pagesH * terrain::region_math::CellsPerPage - sizeZ);
+
+		return terrain::region_math::VertexRect{ minX, minZ, sizeX, sizeZ };
+	}
+
+	void TerrainEditMode::CommitGhostDrag()
+	{
+		if (!m_clipboard || !m_clipboard->IsValid() || !m_brushPositionValid)
+		{
+			CancelGhostDrag();
+			return;
+		}
+
+		const auto destRect = ComputeGhostDestRect();
+		if (destRect.IsEmpty())
+		{
+			CancelGhostDrag();
+			return;
+		}
+
+		std::vector<terrain::TerrainRegionSnapshot> before;
+		before.push_back(m_terrain.CaptureRegion(destRect));
+		if (m_ghostIsMove)
+		{
+			// The clipboard IS the source's before-state.
+			before.push_back(*m_clipboard);
+		}
+		m_undoStack.Push(m_ghostIsMove ? "Move Region" : "Paste Region", std::move(before));
+
+		if (m_ghostIsMove)
+		{
+			m_terrain.FillRegionFromEdges(m_clipboard->rect);
+		}
+		m_terrain.ApplyRegion(*m_clipboard, destRect.minX, destRect.minZ, m_ghostHeightOffset);
+
+		// The pasted area becomes the new selection.
+		m_selection = destRect;
+		m_regionState = RegionEditState::Selected;
+		m_ghostIsMove = false;
+		if (m_ghostOverlay)
+		{
+			m_ghostOverlay->Clear();
+		}
+		UpdateRegionOverlay();
+	}
+
+	void TerrainEditMode::CancelGhostDrag()
+	{
+		if (m_regionState != RegionEditState::GhostDrag)
+		{
+			return;
+		}
+
+		m_ghostIsMove = false;
+		m_regionState = m_selection.IsEmpty() ? RegionEditState::Idle : RegionEditState::Selected;
+		if (m_ghostOverlay)
+		{
+			m_ghostOverlay->Clear();
+		}
+	}
+
+	void TerrainEditMode::UpdateGhostOverlay()
+	{
+		if (!m_ghostOverlay)
+		{
+			return;
+		}
+
+		m_ghostOverlay->Clear();
+
+		if (m_regionState != RegionEditState::GhostDrag || !m_clipboard || !m_brushPositionValid)
+		{
+			return;
+		}
+
+		if (m_ghostOverlayNode)
+		{
+			m_ghostOverlayNode->SetPosition(Vector3::Zero);
+		}
+
+		const auto destRect = ComputeGhostDestRect();
+		if (destRect.IsEmpty())
+		{
+			return;
+		}
+
+		const int32 pagesW = static_cast<int32>(m_terrain.GetWidth());
+		const int32 pagesH = static_cast<int32>(m_terrain.GetHeight());
+		const int32 sizeX = destRect.sizeX;
+		const int32 sizeZ = destRect.sizeZ;
+
+		// Decimate so even page-sized ghosts stay around ~32x32 grid lines.
+		const int32 step = std::max(1, std::max(sizeX, sizeZ) / 32);
+
+		MaterialPtr mat = MaterialManager::Get().Load("Editor/Wireframe.hmat");
+		auto lineOp = m_ghostOverlay->AddLineListOperation(mat);
+
+		auto ghostPoint = [&](const int32 x, const int32 z) -> Vector3
+		{
+			const float wx = terrain::region_math::VertexToWorld(destRect.minX + x, pagesW);
+			const float wz = terrain::region_math::VertexToWorld(destRect.minZ + z, pagesH);
+			const float h = m_clipboard->outerHeights[static_cast<size_t>(z) * (m_clipboard->rect.sizeX + 1) + x]
+				+ m_ghostHeightOffset;
+			return Vector3(wx, h, wz);
+		};
+
+		constexpr uint32 ghostColor = 0xFF40C8FFu; // ghost cyan
+
+		for (int32 z = 0; z <= sizeZ; z += step)
+		{
+			const int32 zc = std::min(z, sizeZ);
+			for (int32 x = 0; x < sizeX; x += step)
+			{
+				const int32 x2 = std::min(x + step, sizeX);
+				auto& line = lineOp->AddLine(ghostPoint(x, zc), ghostPoint(x2, zc));
+				line.SetColor(ghostColor);
+			}
+		}
+		for (int32 x = 0; x <= sizeX; x += step)
+		{
+			const int32 xc = std::min(x, sizeX);
+			for (int32 z = 0; z < sizeZ; z += step)
+			{
+				const int32 z2 = std::min(z + step, sizeZ);
+				auto& line = lineOp->AddLine(ghostPoint(xc, z), ghostPoint(xc, z2));
+				line.SetColor(ghostColor);
+			}
+		}
+	}
+
+	void TerrainEditMode::HandleShortcuts()
+	{
+		const ImGuiIO& io = ImGui::GetIO();
+		if (io.WantTextInput)
+		{
+			return;
+		}
+
+		// Undo/redo apply to all terrain sub-modes (they only cover region/stamp ops).
+		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false))
+		{
+			if (io.KeyShift)
+			{
+				m_undoStack.Redo(m_terrain);
+			}
+			else
+			{
+				m_undoStack.Undo(m_terrain);
+			}
+			UpdateRegionOverlay();
+		}
+		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y, false))
+		{
+			m_undoStack.Redo(m_terrain);
+			UpdateRegionOverlay();
+		}
+
+		if (m_type != TerrainEditType::Region)
+		{
+			return;
+		}
+
+		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C, false))
+		{
+			CopySelection();
+		}
+		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_X, false))
+		{
+			CutSelection();
+		}
+		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false))
+		{
+			BeginGhostDrag(false);
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+		{
+			if (m_regionState == RegionEditState::GhostDrag)
+			{
+				CancelGhostDrag();
+			}
+			else
+			{
+				ClearRegionSelection();
+			}
+		}
+	}
+
 	void TerrainEditMode::DrawViewportOverlay(ImDrawList* drawList, const ImVec2& viewportMin, const ImVec2& viewportSize)
 	{
+		HandleShortcuts();
+
 		if (m_type == TerrainEditType::Water)
 		{
 			if (m_waterEditMode)
@@ -455,6 +716,65 @@ namespace mmo
 		}
 	}
 
+	void TerrainEditMode::DrawRegionDetails()
+	{
+		if (HasRegionSelection())
+		{
+			const double cellSize = terrain::constants::PageSize / static_cast<double>(terrain::region_math::CellsPerPage);
+			ImGui::Text("Selection: %d x %d cells (%.0f x %.0f units)",
+				m_selection.sizeX, m_selection.sizeZ,
+				m_selection.sizeX * cellSize, m_selection.sizeZ * cellSize);
+		}
+		else
+		{
+			ImGui::TextDisabled("Drag on the terrain to select a rectangle.");
+		}
+
+		const bool hasSelection = HasRegionSelection();
+		const bool hasClipboard = m_clipboard && m_clipboard->IsValid();
+		const bool ghostActive = m_regionState == RegionEditState::GhostDrag;
+
+		ImGui::BeginDisabled(!hasSelection || ghostActive);
+		if (ImGui::Button("Copy (Ctrl+C)"))
+		{
+			CopySelection();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cut (Ctrl+X)"))
+		{
+			CutSelection();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Move"))
+		{
+			BeginGhostDrag(true);
+		}
+		ImGui::EndDisabled();
+
+		ImGui::BeginDisabled(!hasClipboard || ghostActive);
+		if (ImGui::Button("Paste (Ctrl+V)"))
+		{
+			BeginGhostDrag(false);
+		}
+		ImGui::EndDisabled();
+
+		if (ghostActive)
+		{
+			ImGui::TextDisabled("Click to place, Esc to cancel, mouse wheel adjusts height.");
+			if (ImGui::InputFloat("Height Offset", &m_ghostHeightOffset, 0.5f, 5.0f, "%.1f"))
+			{
+				UpdateGhostOverlay();
+			}
+		}
+
+		ImGui::BeginDisabled(!hasSelection || ghostActive);
+		if (ImGui::Button("Deselect (Esc)"))
+		{
+			ClearRegionSelection();
+		}
+		ImGui::EndDisabled();
+	}
+
 	void TerrainEditMode::DrawDetails()
 	{
 		if (ImGui::BeginCombo("Terrain Edit Mode", s_terrainEditModeStrings[static_cast<uint32>(m_type)], ImGuiComboFlags_None))
@@ -491,6 +811,27 @@ namespace mmo
 			{
 				ClearRegionSelection();
 			}
+		}
+
+		{
+			const String* undoLabel = m_undoStack.GetUndoLabel();
+			const String* redoLabel = m_undoStack.GetRedoLabel();
+
+			ImGui::BeginDisabled(!m_undoStack.CanUndo());
+			if (ImGui::Button(undoLabel ? ("Undo " + *undoLabel + "##terrainUndo").c_str() : "Undo##terrainUndo"))
+			{
+				m_undoStack.Undo(m_terrain);
+				UpdateRegionOverlay();
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			ImGui::BeginDisabled(!m_undoStack.CanRedo());
+			if (ImGui::Button(redoLabel ? ("Redo " + *redoLabel + "##terrainRedo").c_str() : "Redo##terrainRedo"))
+			{
+				m_undoStack.Redo(m_terrain);
+				UpdateRegionOverlay();
+			}
+			ImGui::EndDisabled();
 		}
 
 		// Water editing is a sub-mode: delegate entirely to WaterEditMode.
@@ -682,6 +1023,10 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 		}
+		else if (m_type == TerrainEditType::Region)
+		{
+			DrawRegionDetails();
+		}
 		if (m_type == TerrainEditType::VertexShading)
 		{
 			const Color color(m_selectedColor);
@@ -775,7 +1120,7 @@ namespace mmo
 		{
 			if (m_regionState == RegionEditState::GhostDrag)
 			{
-				// Task 7 replaces this with CommitGhostDrag().
+				CommitGhostDrag();
 				return;
 			}
 
@@ -953,6 +1298,16 @@ namespace mmo
 			return;
 		}
 
+		if (m_type == TerrainEditType::Region)
+		{
+			if (m_regionState == RegionEditState::GhostDrag && !ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyCtrl)
+			{
+				m_ghostHeightOffset += delta * 0.5f;
+				UpdateGhostOverlay();
+			}
+			return;
+		}
+
 		if (ImGui::GetIO().KeyShift)
 		{
 			m_terrainBrushSize = std::max(0.01f, std::min(m_terrainBrushSize + delta * 2.0f, 256.0f));
@@ -970,6 +1325,11 @@ namespace mmo
 		m_brushPosition = position;
 		m_brushPositionValid = true;
 		UpdateBrushOverlay();
+
+		if (m_type == TerrainEditType::Region && m_regionState == RegionEditState::GhostDrag)
+		{
+			UpdateGhostOverlay();
+		}
 	}
 
 	void TerrainEditMode::UpdateBrushOverlay()

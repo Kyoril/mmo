@@ -179,6 +179,42 @@ namespace mmo
 		/// Clears the selection and any ghost drag, hiding both overlays.
 		void ClearRegionSelection();
 
+		/// True when a committed (non-empty, non-dragging) selection exists.
+		[[nodiscard]] bool HasRegionSelection() const
+		{
+			return (m_regionState == RegionEditState::Selected || m_regionState == RegionEditState::GhostDrag)
+				&& !m_selection.IsEmpty();
+		}
+
+		/// Captures the current selection into the clipboard.
+		void CopySelection();
+
+		/// Captures the selection into the clipboard, records undo, and edge-fills the source.
+		void CutSelection();
+
+		/// Enters ghost-drag mode. isMove additionally captures the selection as the move source
+		/// so the commit can edge-fill it.
+		void BeginGhostDrag(bool isMove);
+
+		/// Applies the clipboard at the current ghost position (move also fills the source),
+		/// recording a single undo entry.
+		void CommitGhostDrag();
+
+		/// Leaves ghost-drag mode without mutating the terrain.
+		void CancelGhostDrag();
+
+		/// Destination rect of the ghost, centered on the cursor and clamped so it fits.
+		[[nodiscard]] terrain::region_math::VertexRect ComputeGhostDestRect() const;
+
+		/// Rebuilds the translucent clipboard height-grid preview at the cursor.
+		void UpdateGhostOverlay();
+
+		/// Keyboard shortcuts: Ctrl+C/X/V, Esc, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y.
+		void HandleShortcuts();
+
+		/// Region-mode section of the details panel.
+		void DrawRegionDetails();
+
 	private:
 		/// State machine for the Region edit type.
 		enum class RegionEditState : uint8
