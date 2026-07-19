@@ -354,7 +354,9 @@ namespace mmo
 		}
 
 		m_clipboard = snapshot;
-		m_undoStack.Push("Cut Region", { std::move(snapshot) });
+		std::vector<terrain::TerrainRegionSnapshot> before;
+		before.push_back(std::move(snapshot));
+		m_undoStack.Push("Cut Region", std::move(before));
 		m_terrain.FillRegionFromEdges(m_selection);
 		UpdateRegionOverlay();
 	}
@@ -560,15 +562,17 @@ namespace mmo
 			return;
 		}
 
-		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C, false))
+		const bool ghostActive = m_regionState == RegionEditState::GhostDrag;
+
+		if (!ghostActive && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C, false))
 		{
 			CopySelection();
 		}
-		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_X, false))
+		if (!ghostActive && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_X, false))
 		{
 			CutSelection();
 		}
-		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false))
+		if (!ghostActive && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false))
 		{
 			BeginGhostDrag(false);
 		}
