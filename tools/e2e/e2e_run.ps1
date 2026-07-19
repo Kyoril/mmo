@@ -59,6 +59,20 @@ if (-not $NoStack)
 	& (Join-Path $PSScriptRoot "e2e_up.ps1") -BuildConfig $BuildConfig
 }
 
+# Reads a header directive ("-- e2e-<name>: <value>") from a scenario's leading
+# comment block. Returns the captured value, or $null if the directive is absent.
+function Get-ScenarioDirective([string[]]$headerLines, [string]$name, [string]$valuePattern)
+{
+	foreach ($line in $headerLines)
+	{
+		if ($line -match "^--\s*e2e-${name}:\s*($valuePattern)")
+		{
+			return $Matches[1]
+		}
+	}
+	return $null
+}
+
 $results = @()
 $allGood = $true
 
@@ -86,16 +100,23 @@ try
 		$attempts = 0
 		$exitCode = -1
 
+		# Header directives are read once from the scenario's leading comment block.
+		$headerLines = @()
+		foreach ($line in Get-Content $file.FullName)
+		{
+			if ($line -notmatch '^--') { break }
+			$headerLines += $line
+		}
+
 		# Scenarios can request a specific character class via a header directive, e.g.
 		# "-- e2e-class: 1" (warrior). Each class gets its own character (names must be
 		# letters only, so the class id is encoded as a letter suffix).
-		$classDirective = Select-String -Path $file.FullName -Pattern '^--\s*e2e-class:\s*(\d+)' |
-			Select-Object -First 1
 		$characterName = "Test$suffix"
 		$classArgs = @()
+		$classDirective = Get-ScenarioDirective $headerLines 'class' '\d+'
 		if ($classDirective)
 		{
-			$classId = [int]$classDirective.Matches[0].Groups[1].Value
+			$classId = [int]$classDirective
 			$classArgs = @("--class", "$classId")
 			$characterName = "Test$suffix" + [char](97 + $classId)
 		}
@@ -103,21 +124,19 @@ try
 		# Scenarios that must not share progression state with other scenarios of the
 		# same class (e.g. leveling tests) can request a dedicated character via
 		# "-- e2e-own-character: <letters>". The letters are appended to the name.
-		$ownCharDirective = Select-String -Path $file.FullName -Pattern '^--\s*e2e-own-character:\s*([a-z]+)' |
-			Select-Object -First 1
+		$ownCharDirective = Get-ScenarioDirective $headerLines 'own-character' '[a-z]+'
 		if ($ownCharDirective)
 		{
-			$characterName += $ownCharDirective.Matches[0].Groups[1].Value
+			$characterName += $ownCharDirective
 		}
 
 		# Long-running scenarios can extend the client timeout via a header directive,
 		# e.g. "-- e2e-timeout: 600" (seconds). Default stays at 120.
 		$timeoutSeconds = 120
-		$timeoutDirective = Select-String -Path $file.FullName -Pattern '^--\s*e2e-timeout:\s*(\d+)' |
-			Select-Object -First 1
+		$timeoutDirective = Get-ScenarioDirective $headerLines 'timeout' '\d+'
 		if ($timeoutDirective)
 		{
-			$timeoutSeconds = [int]$timeoutDirective.Matches[0].Groups[1].Value
+			$timeoutSeconds = [int]$timeoutDirective
 		}
 
 		while ($true)

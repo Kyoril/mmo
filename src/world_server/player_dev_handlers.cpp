@@ -596,32 +596,12 @@ namespace mmo
 			return;
 		}
 
-		if (m_character->IsQuestlogFull())
+		if (!AcceptQuestAndNotify(questId, *quest))
 		{
-			SendPacket([](game::OutgoingPacket& packet)
-			{
-				packet.Start(game::realm_client_packet::QuestLogFull);
-				packet.Finish();
-			});
-			return;
-		}
-
-		if (!m_character->AcceptQuest(questId))
-		{
-			ELOG("CheatAcceptQuest: failed to accept quest " << questId);
 			return;
 		}
 
 		DLOG("GM accepted quest " << questId << " for player " << m_characterData.name);
-
-		SendPacket([questId, quest, locale = GetLocale()](game::OutgoingPacket& packet)
-		{
-			packet.Start(game::realm_client_packet::QuestAccepted);
-			packet
-				<< io::write_dynamic_range<uint8>(GetLocalizedString(quest->name(), quest->name_loc(), locale))
-				<< io::write<uint32>(questId);
-			packet.Finish();
-		});
 
 		RefreshQuestObjectInteractability(questId);
 	}

@@ -63,6 +63,39 @@ namespace mmo
 		m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer);
 	}
 
+	bool Player::AcceptQuestAndNotify(const uint32 questId, const proto::QuestEntry& quest)
+	{
+		// We need this check since the quest can fail for various other reasons
+		if (m_character->IsQuestlogFull())
+		{
+			SendPacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::QuestLogFull);
+				packet.Finish();
+			});
+			return false;
+		}
+
+		// Accept that quest
+		if (!m_character->AcceptQuest(questId))
+		{
+			ELOG("Failed to accept quest " << questId);
+			return false;
+		}
+
+		// Notify client that quest was accepted
+		SendPacket([questId, quest = &quest, locale = GetLocale()](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::QuestAccepted);
+			packet
+				<< io::write_dynamic_range<uint8>(GetLocalizedString(quest->name(), quest->name_loc(), locale))
+				<< io::write<uint32>(questId);
+			packet.Finish();
+		});
+
+		return true;
+	}
+
 	void Player::OnAcceptQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 questGiverGuid = 0;
@@ -89,35 +122,12 @@ namespace mmo
 			return;
 		}
 
-		// We need this check since the quest can fail for various other reasons
-		if (m_character->IsQuestlogFull())
+		if (!AcceptQuestAndNotify(questId, *quest))
 		{
-			SendPacket([this](game::OutgoingPacket& packet)
-			{
-				packet.Start(game::realm_client_packet::QuestLogFull);
-				packet.Finish();
-			});
-			return;
-		}
-
-		// Accept that quest
-		if (!m_character->AcceptQuest(questId))
-		{
-			ELOG("Failed to accept quest " << questId);
 			return;
 		}
 
 		DLOG("Player " << m_characterData.name << " accepted quest " << questId << " from quest giver object " << log_hex_digit(questGiverGuid));
-		
-		// Notify client that quest was accepted
-		SendPacket([questId, quest, locale = GetLocale()](game::OutgoingPacket& packet)
-		{
-			packet.Start(game::realm_client_packet::QuestAccepted);
-			packet
-				<< io::write_dynamic_range<uint8>(GetLocalizedString(quest->name(), quest->name_loc(), locale))
-				<< io::write<uint32>(questId);
-			packet.Finish();
-		});
 
 		if (questGiver->IsUnit())
 		{

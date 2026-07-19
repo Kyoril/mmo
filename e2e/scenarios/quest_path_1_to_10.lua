@@ -22,8 +22,11 @@
 -- If this scenario reaches level 10, live players can too.
 --
 -- The table below mirrors the natural play order (warrior character):
--- Haven/farm starter quests -> Briarwatch March -> class-unlock chains ->
--- Kingsroad Waypost -> Mirewater camp -> Barrowfront camp.
+-- Haven/farm starter quests -> Briarwatch March -> Kingsroad Waypost ->
+-- Mirewater camp -> Barrowfront camp.
+--
+-- Class-unlock chains (quests 31-40) are deliberately NOT part of the path:
+-- reaching level 10 must not require doing the class-change content.
 
 local PATH = {
 	{ q = 1,  kills = { { 14, 10 } } },                  -- The Boar Problem
@@ -36,22 +39,14 @@ local PATH = {
 	{ q = 25 },                                          -- Briarwatch Dispatch
 	{ q = 26, kills = { { 44, 8 } } },                   -- Teeth at the Treeline
 	{ q = 6,  kills = { { 21, 1 } } },                   -- The Alpha of the Herd
-	{ q = 28, items = { { 121, 5 }, { 122, 3 } } },      -- For Camp and Kettle
-	{ q = 54, kills = { { 45, 6 } } },                   -- Wolves at the Watch
+	{ q = 28, items = { { 121, 5 }, { 142, 3 } } },      -- For Camp and Kettle
+	{ q = 54, kills = { { 67, 6 } } },                   -- Wolves at the Watch
 	{ q = 19, items = { { 66, 10 }, { 67, 12 } } },      -- Foundations of Progress
-	{ q = 33, kills = { { 39, 4 } } },                   -- Sparks of Talent
-	{ q = 34 },                                          -- Path of the Mage
-	{ q = 35, kills = { { 45, 5 } } },                   -- A Shepherd's Mercy
-	{ q = 36 },                                          -- Path of the Cleric
-	{ q = 37, kills = { { 44, 8 } } },                   -- Essence of the Wild
-	{ q = 38 },                                          -- Path of the Acolyte
-	{ q = 39, kills = { { 48, 4 } } },                   -- Eyes on the Kingsroad
-	{ q = 40 },                                          -- Path of the Scout
 	{ q = 27, kills = { { 48, 6 }, { 49, 2 } } },        -- The Old King's Road
-	{ q = 29, kills = { { 45, 6 } }, items = { { 123, 2 } } }, -- Deepwood Teeth
+	{ q = 29, kills = { { 45, 6 } }, items = { { 141, 2 } } }, -- Deepwood Teeth
 	{ q = 41 },                                          -- Word for the Waypost
 	{ q = 30, kills = { { 50, 2 }, { 51, 1 } } },        -- Broken Ground
-	{ q = 42, kills = { { 48, 8 }, { 49, 3 } } },        -- Thinning the Roadside Packs
+	{ q = 42, kills = { { 66, 10 } } },                  -- Thinning the Roadside Packs
 	{ q = 43, items = { { 139, 8 } }, reward = 126 },    -- Contraband Recovery
 	{ q = 44, reward = 128 },                            -- Past the Reeds
 	{ q = 45, kills = { { 55, 10 } } },                  -- Rats in the Reeds

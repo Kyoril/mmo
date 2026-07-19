@@ -1954,36 +1954,32 @@ namespace mmo
 		currentXp += xp;
 
 		// Levelup as often as required
-		while (currentXp >= Get<uint32>(object_fields::NextLevelXp))
+		while (GetLevel() < GetMaxLevel() && currentXp >= Get<uint32>(object_fields::NextLevelXp))
 		{
-			// A single grant can overshoot the last level up; cap the leftover so the loop terminates.
-			if (GetLevel() >= GetMaxLevel())
+			if (m_netUnitWatcher)
 			{
-				currentXp = Get<uint32>(object_fields::NextLevelXp) - 1;
-				break;
+				const auto &levelStats = m_classEntry->levelbasevalues(GetLevel() - 1);
+				const auto &nextLevelStats = m_classEntry->levelbasevalues(GetLevel());
+				m_netUnitWatcher->OnLevelUp(GetLevel() + 1,
+											static_cast<int32>(nextLevelStats.health()) - static_cast<int32>(levelStats.health()),
+											static_cast<int32>(nextLevelStats.mana()) - static_cast<int32>(levelStats.mana()),
+											static_cast<int32>(nextLevelStats.stamina()) - static_cast<int32>(levelStats.stamina()),
+											static_cast<int32>(nextLevelStats.strength()) - static_cast<int32>(levelStats.strength()),
+											static_cast<int32>(nextLevelStats.agility()) - static_cast<int32>(levelStats.agility()),
+											static_cast<int32>(nextLevelStats.intellect()) - static_cast<int32>(levelStats.intellect()),
+											static_cast<int32>(nextLevelStats.spirit()) - static_cast<int32>(levelStats.spirit()),
+											nextLevelStats.talentpoints(),
+											nextLevelStats.attributepoints());
 			}
 
-			if (GetLevel() < GetMaxLevel())
-			{
-				if (m_netUnitWatcher)
-				{
-					const auto &levelStats = m_classEntry->levelbasevalues(GetLevel() - 1);
-					const auto &nextLevelStats = m_classEntry->levelbasevalues(GetLevel());
-					m_netUnitWatcher->OnLevelUp(GetLevel() + 1,
-												static_cast<int32>(nextLevelStats.health()) - static_cast<int32>(levelStats.health()),
-												static_cast<int32>(nextLevelStats.mana()) - static_cast<int32>(levelStats.mana()),
-												static_cast<int32>(nextLevelStats.stamina()) - static_cast<int32>(levelStats.stamina()),
-												static_cast<int32>(nextLevelStats.strength()) - static_cast<int32>(levelStats.strength()),
-												static_cast<int32>(nextLevelStats.agility()) - static_cast<int32>(levelStats.agility()),
-												static_cast<int32>(nextLevelStats.intellect()) - static_cast<int32>(levelStats.intellect()),
-												static_cast<int32>(nextLevelStats.spirit()) - static_cast<int32>(levelStats.spirit()),
-												nextLevelStats.talentpoints(),
-												nextLevelStats.attributepoints());
-				}
+			currentXp -= GetNextLevelXp();
+			SetLevel(GetLevel() + 1);
+		}
 
-				currentXp -= GetNextLevelXp();
-				SetLevel(GetLevel() + 1);
-			}
+		// A single grant can overshoot the last level up; cap the leftover below the next-level requirement.
+		if (GetLevel() >= GetMaxLevel() && currentXp >= Get<uint32>(object_fields::NextLevelXp))
+		{
+			currentXp = Get<uint32>(object_fields::NextLevelXp) - 1;
 		}
 
 		// Store remaining xp after potential level ups

@@ -544,6 +544,13 @@ namespace mmo
 		///	@param questId The quest ID that changed status.
 		void RefreshQuestObjectInteractability(uint32 questId);
 
+		/// Accepts a quest for the character and notifies the client (QuestLogFull or QuestAccepted packet).
+		///	Questgiver-independent part shared by the regular accept handler and the accept cheat.
+		///	@param questId The ID of the quest to accept.
+		///	@param quest The quest entry matching questId.
+		///	@returns true if the quest was accepted, false otherwise (the client has been notified on a full quest log).
+		bool AcceptQuestAndNotify(uint32 questId, const proto::QuestEntry& quest);
+
 		/// Handles the client's request to query a quest giver for an offered quest.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.

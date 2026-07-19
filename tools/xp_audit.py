@@ -41,7 +41,6 @@ def main() -> int:
     units.ParseFromString((data / "units.data").read_bytes())
     classes = mods["classes"].Classes()
     classes.ParseFromString((data / "classes.data").read_bytes())
-    loot = mods.get("unit_loot")
 
     unit_by_id = {u.id: u for u in units.entry}
 
@@ -57,6 +56,7 @@ def main() -> int:
         unit_loot.ParseFromString((data / "unit_loot.data").read_bytes())
         loot_by_id = {e.id: e for e in unit_loot.entry}
         for u in units.entry:
+            avg_xp = (u.minlevelxp + u.maxlevelxp) / 2.0
             table_ids = list(u.unitlootentries) or ([u.unitlootentry] if u.unitlootentry else [])
             for tid in table_ids:
                 entry = loot_by_id.get(tid)
@@ -64,7 +64,6 @@ def main() -> int:
                     continue
                 for group in entry.groups:
                     for d in group.definitions:
-                        avg_xp = (u.minlevelxp + u.maxlevelxp) / 2.0
                         prev = drop_sources.get(d.item)
                         # Prefer the highest drop chance source (the intended farm target).
                         if prev is None or d.dropchance > prev[1]:
@@ -75,13 +74,23 @@ def main() -> int:
     max_level = len(class_entry.levelbasevalues)
     xp_needed = sum(xp_to_next[: args.target_level - 1])
 
-    def class_allowed(mask: int) -> bool:
-        if mask == 0:
-            return True
-        bit = (1 << ((args.class_id - 1) % 32)) & 0xFFFFFFFF
-        return bool(mask & bit)
+    class_bit = 1 << (args.class_id - 1)
 
-    quest_by_id = {q.id: q for q in quests.entry}
+    def class_allowed(mask: int) -> bool:
+        return mask == 0 or bool(mask & class_bit)
+
+    # Static eligibility: predicates that never change during the simulation.
+    eligible = [
+        q for q in quests.entry
+        if class_allowed(q.requiredclasses)
+        # Class-unlock chains are optional side content: reaching the target level
+        # must not depend on them, so the audit excludes them entirely.
+        and not q.HasField("unlocksclass")
+        # Exploration / scripted quests can't be completed by kills or items.
+        and all(r.creatureid or r.itemid for r in q.requirements)
+        and q.minlevel < args.target_level
+    ]
+
     rewarded = set()
     level = 1
     xp_into_level = 0
@@ -104,27 +113,17 @@ def main() -> int:
             return False
         if q.prevquestid and q.prevquestid not in rewarded:
             return False
-        if not class_allowed(q.requiredclasses):
-            return False
-        # unlocksclass quests for the own class never show up.
-        if q.HasField("unlocksclass") and q.unlocksclass == args.class_id:
-            return False
-        # Exploration / scripted quests can't be completed by kills or items.
-        if any(r.creatureid == 0 and r.itemid == 0 for r in q.requirements):
-            return False
-        if q.minlevel >= args.target_level:
-            return False
         return True
 
     print(f"XP needed for level {args.target_level}: {xp_needed}")
     print(f"{'quest':>5}  {'name':<32} {'reward':>6} {'killxp':>6}  level after")
 
     while True:
-        candidates = [q for q in quests.entry if available(q)]
+        candidates = [q for q in eligible if available(q)]
         if not candidates:
             break
         # Lowest quest level first, then id, mirrors natural play order.
-        q = sorted(candidates, key=lambda e: (e.questlevel, e.id))[0]
+        q = min(candidates, key=lambda e: (e.questlevel, e.id))
 
         kill_xp = 0.0
         for r in q.requirements:

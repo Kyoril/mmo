@@ -1459,15 +1459,16 @@ namespace mmo
 		}
 
 		// Experience fields are player-only and used by scenario assertions.
-		if (typeId == ObjectTypeId::Player &&
-			(creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Xp)))
+		if (typeId == ObjectTypeId::Player)
 		{
-			unit.SetXp(fieldMap.GetFieldValue<uint32>(object_fields::Xp));
-		}
-		if (typeId == ObjectTypeId::Player &&
-			(creation || fieldMap.IsFieldMarkedAsChanged(object_fields::NextLevelXp)))
-		{
-			unit.SetNextLevelXp(fieldMap.GetFieldValue<uint32>(object_fields::NextLevelXp));
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Xp))
+			{
+				unit.SetXp(fieldMap.GetFieldValue<uint32>(object_fields::Xp));
+			}
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::NextLevelXp))
+			{
+				unit.SetNextLevelXp(fieldMap.GetFieldValue<uint32>(object_fields::NextLevelXp));
+			}
 		}
 
 		// Set position/movement - this should always be present for creation
