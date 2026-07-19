@@ -12,6 +12,7 @@
 #include "graphics/material.h"
 
 #include "constants.h"
+#include "terrain_region_snapshot.h"
 
 namespace mmo
 {
@@ -347,6 +348,33 @@ namespace mmo
 			/// @param power The strength of the coloring effect.
 			/// @param color The color to apply as a packed uint32 value.
 			void Color(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, uint32 color);
+
+			/// @brief Gets the inner (cell-center) vertex height at global inner indices.
+			/// @param ix Global inner vertex X index in [0, width * (OuterVerticesPerPageSide-1) - 1].
+			/// @param iz Global inner vertex Z index.
+			/// @return The inner vertex height, or 0.0f if out of bounds / page not prepared.
+			[[nodiscard]] float GetInnerHeightAt(int32 ix, int32 iz) const;
+
+			/// @brief Sets the inner (cell-center) vertex height at global inner indices.
+			void SetInnerHeightAt(int32 ix, int32 iz, float height) const;
+
+			/// @brief Returns whether the inner vertex at global inner indices is a terrain hole.
+			[[nodiscard]] bool IsHoleAtInnerVertex(int32 ix, int32 iz) const;
+
+			/// @brief Sets or clears the hole flag of the inner vertex at global inner indices.
+			void SetHoleAtInnerVertex(int32 ix, int32 iz, bool hole) const;
+
+			/// @brief Captures every terrain channel (heights, colors, splats, holes, area IDs)
+			///        inside the given vertex rect. The rect is clamped to terrain bounds.
+			/// @return The captured snapshot; IsValid() is false if the clamped rect is empty.
+			TerrainRegionSnapshot CaptureRegion(const region_math::VertexRect& rect);
+
+			/// @brief Hard-replaces terrain content at the destination with the snapshot.
+			///        Writes are clipped at terrain bounds. Area IDs are written only for
+			///        destination tiles fully covered by the pasted rect. Ends with a single
+			///        UpdateTiles / UpdateTileCoverage refresh over the affected region.
+			/// @param heightOffset Uniform offset added to every pasted height value.
+			void ApplyRegion(const TerrainRegionSnapshot& snapshot, int32 destMinVertX, int32 destMinVertZ, float heightOffset = 0.0f);
 
 			/// @brief Sets the height at a specific coordinate.
 			/// @param x The X coordinate.

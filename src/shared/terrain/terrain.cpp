@@ -2,6 +2,7 @@
 
 #include "terrain.h"
 
+#include <algorithm>
 #include <set>
 #include <utility>
 
@@ -1326,6 +1327,92 @@ namespace mmo
 			}
 		}
 
+		float Terrain::GetInnerHeightAt(const int32 ix, const int32 iz) const
+		{
+			const int32 maxInner = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			if (ix < 0 || iz < 0 || ix > maxInner || iz > maxInner)
+			{
+				return 0.0f;
+			}
+
+			const uint32 pageX = static_cast<uint32>(ix) / (constants::OuterVerticesPerPageSide - 1);
+			const uint32 pageZ = static_cast<uint32>(iz) / (constants::OuterVerticesPerPageSide - 1);
+			const uint32 localX = static_cast<uint32>(ix) % (constants::OuterVerticesPerPageSide - 1);
+			const uint32 localZ = static_cast<uint32>(iz) % (constants::OuterVerticesPerPageSide - 1);
+
+			Page* page = GetPage(pageX, pageZ);
+			if (!page || !page->IsPrepared())
+			{
+				return 0.0f;
+			}
+
+			return page->GetInnerHeightAt(localX, localZ);
+		}
+
+		void Terrain::SetInnerHeightAt(const int32 ix, const int32 iz, const float height) const
+		{
+			const int32 maxInner = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			if (ix < 0 || iz < 0 || ix > maxInner || iz > maxInner)
+			{
+				return;
+			}
+
+			const uint32 pageX = static_cast<uint32>(ix) / (constants::OuterVerticesPerPageSide - 1);
+			const uint32 pageZ = static_cast<uint32>(iz) / (constants::OuterVerticesPerPageSide - 1);
+			const uint32 localX = static_cast<uint32>(ix) % (constants::OuterVerticesPerPageSide - 1);
+			const uint32 localZ = static_cast<uint32>(iz) % (constants::OuterVerticesPerPageSide - 1);
+
+			Page* page = GetPage(pageX, pageZ);
+			if (page && page->IsPrepared())
+			{
+				page->SetInnerHeightAt(localX, localZ, height);
+			}
+		}
+
+		bool Terrain::IsHoleAtInnerVertex(const int32 ix, const int32 iz) const
+		{
+			const int32 maxInner = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			if (ix < 0 || iz < 0 || ix > maxInner || iz > maxInner)
+			{
+				return false;
+			}
+
+			const uint32 pageX = static_cast<uint32>(ix) / constants::InnerVerticesPerPageSide;
+			const uint32 pageZ = static_cast<uint32>(iz) / constants::InnerVerticesPerPageSide;
+			const uint32 remX = static_cast<uint32>(ix) % constants::InnerVerticesPerPageSide;
+			const uint32 remZ = static_cast<uint32>(iz) % constants::InnerVerticesPerPageSide;
+
+			Page* page = GetPage(pageX, pageZ);
+			if (!page || !page->IsPrepared())
+			{
+				return false;
+			}
+
+			return page->IsHole(remX / constants::InnerVerticesPerTileSide, remZ / constants::InnerVerticesPerTileSide,
+				remX % constants::InnerVerticesPerTileSide, remZ % constants::InnerVerticesPerTileSide);
+		}
+
+		void Terrain::SetHoleAtInnerVertex(const int32 ix, const int32 iz, const bool hole) const
+		{
+			const int32 maxInner = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			if (ix < 0 || iz < 0 || ix > maxInner || iz > maxInner)
+			{
+				return;
+			}
+
+			const uint32 pageX = static_cast<uint32>(ix) / constants::InnerVerticesPerPageSide;
+			const uint32 pageZ = static_cast<uint32>(iz) / constants::InnerVerticesPerPageSide;
+			const uint32 remX = static_cast<uint32>(ix) % constants::InnerVerticesPerPageSide;
+			const uint32 remZ = static_cast<uint32>(iz) % constants::InnerVerticesPerPageSide;
+
+			Page* page = GetPage(pageX, pageZ);
+			if (page && page->IsPrepared())
+			{
+				page->SetHole(remX / constants::InnerVerticesPerTileSide, remZ / constants::InnerVerticesPerTileSide,
+					remX % constants::InnerVerticesPerTileSide, remZ % constants::InnerVerticesPerTileSide, hole);
+			}
+		}
+
 		void Terrain::UpdateInnerVertices(const int fromX, const int fromZ, const int toX, const int toZ)
 		{
 			// Inner vertices are cell-centered between outer vertices
@@ -1361,6 +1448,211 @@ namespace mmo
 					}
 				}
 			}
+		}
+
+		TerrainRegionSnapshot Terrain::CaptureRegion(const region_math::VertexRect& rect)
+		{
+			TerrainRegionSnapshot snap;
+			snap.rect = region_math::ClampToBounds(rect, static_cast<int32>(m_width), static_cast<int32>(m_height));
+			if (snap.rect.IsEmpty())
+			{
+				return snap;
+			}
+
+			const int32 vx0 = snap.rect.minX;
+			const int32 vz0 = snap.rect.minZ;
+			const int32 sx = snap.rect.sizeX;
+			const int32 sz = snap.rect.sizeZ;
+
+			// Outer vertices: heights + colors.
+			snap.outerHeights.resize(static_cast<size_t>(sx + 1) * (sz + 1));
+			snap.outerColors.resize(snap.outerHeights.size());
+			for (int32 z = 0; z <= sz; ++z)
+			{
+				for (int32 x = 0; x <= sx; ++x)
+				{
+					const size_t i = static_cast<size_t>(z) * (sx + 1) + x;
+					snap.outerHeights[i] = GetHeightAt(vx0 + x, vz0 + z);
+					snap.outerColors[i] = GetColorAt(vx0 + x, vz0 + z);
+				}
+			}
+
+			// Inner vertices: heights + colors + hole flags.
+			snap.innerHeights.resize(static_cast<size_t>(sx) * sz);
+			snap.innerColors.resize(snap.innerHeights.size());
+			snap.holes.resize(snap.innerHeights.size());
+			for (int32 z = 0; z < sz; ++z)
+			{
+				for (int32 x = 0; x < sx; ++x)
+				{
+					const size_t i = static_cast<size_t>(z) * sx + x;
+					const int32 ix = vx0 + x;
+					const int32 iz = vz0 + z;
+					snap.innerHeights[i] = GetInnerHeightAt(ix, iz);
+					snap.innerColors[i] = GetColorAt(-(ix + 1), -(iz + 1));
+					snap.holes[i] = IsHoleAtInnerVertex(ix, iz) ? 1 : 0;
+				}
+			}
+
+			// Splat pixels (padded so pastes at unaligned offsets can resample).
+			int32 minPX, minPZ, maxPX, maxPZ;
+			region_math::PixelRangePadded(snap.rect, minPX, minPZ, maxPX, maxPZ);
+			const int32 maxPixel = static_cast<int32>(m_width) * region_math::PixelCellsPerPage;
+			minPX = std::clamp(minPX, 0, maxPixel);
+			minPZ = std::clamp(minPZ, 0, maxPixel);
+			maxPX = std::clamp(maxPX, 0, maxPixel);
+			maxPZ = std::clamp(maxPZ, 0, maxPixel);
+
+			snap.minPixelX = minPX;
+			snap.minPixelZ = minPZ;
+			snap.pixelCountX = maxPX - minPX + 1;
+			snap.pixelCountZ = maxPZ - minPZ + 1;
+			snap.splatPixels.resize(static_cast<size_t>(snap.pixelCountX) * snap.pixelCountZ);
+			for (int32 z = 0; z < snap.pixelCountZ; ++z)
+			{
+				for (int32 x = 0; x < snap.pixelCountX; ++x)
+				{
+					snap.splatPixels[static_cast<size_t>(z) * snap.pixelCountX + x] =
+						GetLayersAt(minPX + x, minPZ + z);
+				}
+			}
+
+			// Area IDs of fully covered tiles.
+			int32 minTX, minTZ, maxTX, maxTZ;
+			if (region_math::TileRangeFullyCovered(snap.rect, minTX, minTZ, maxTX, maxTZ))
+			{
+				snap.minTileX = minTX;
+				snap.minTileZ = minTZ;
+				snap.tileCountX = maxTX - minTX + 1;
+				snap.tileCountZ = maxTZ - minTZ + 1;
+				snap.areaIds.resize(static_cast<size_t>(snap.tileCountX) * snap.tileCountZ);
+				for (int32 z = 0; z < snap.tileCountZ; ++z)
+				{
+					for (int32 x = 0; x < snap.tileCountX; ++x)
+					{
+						snap.areaIds[static_cast<size_t>(z) * snap.tileCountX + x] =
+							GetAreaForTile(minTX + x, minTZ + z);
+					}
+				}
+			}
+
+			return snap;
+		}
+
+		void Terrain::ApplyRegion(const TerrainRegionSnapshot& snap, const int32 destMinVertX, const int32 destMinVertZ, const float heightOffset)
+		{
+			if (!snap.IsValid())
+			{
+				return;
+			}
+
+			const int32 sx = snap.rect.sizeX;
+			const int32 sz = snap.rect.sizeZ;
+			const int32 maxVert = static_cast<int32>(m_width) * region_math::CellsPerPage;
+
+			// Outer vertices (SetHeightAt / SetColorAt clip out-of-range indices themselves,
+			// but skip early to avoid pointless page lookups).
+			for (int32 z = 0; z <= sz; ++z)
+			{
+				const int32 dz = destMinVertZ + z;
+				if (dz < 0 || dz > maxVert)
+				{
+					continue;
+				}
+				for (int32 x = 0; x <= sx; ++x)
+				{
+					const int32 dx = destMinVertX + x;
+					if (dx < 0 || dx > maxVert)
+					{
+						continue;
+					}
+					const size_t i = static_cast<size_t>(z) * (sx + 1) + x;
+					SetHeightAt(dx, dz, snap.outerHeights[i] + heightOffset);
+					SetColorAt(dx, dz, snap.outerColors[i]);
+				}
+			}
+
+			// Inner vertices + holes.
+			for (int32 z = 0; z < sz; ++z)
+			{
+				const int32 dz = destMinVertZ + z;
+				if (dz < 0 || dz >= maxVert)
+				{
+					continue;
+				}
+				for (int32 x = 0; x < sx; ++x)
+				{
+					const int32 dx = destMinVertX + x;
+					if (dx < 0 || dx >= maxVert)
+					{
+						continue;
+					}
+					const size_t i = static_cast<size_t>(z) * sx + x;
+					SetInnerHeightAt(dx, dz, snap.innerHeights[i] + heightOffset);
+					SetColorAt(-(dx + 1), -(dz + 1), snap.innerColors[i]);
+					SetHoleAtInnerVertex(dx, dz, snap.holes[i] != 0);
+				}
+			}
+
+			// Splat coverage: nearest-resample the captured pixels into the destination range.
+			const region_math::VertexRect destRect{ destMinVertX, destMinVertZ, sx, sz };
+			int32 minPX, minPZ, maxPX, maxPZ;
+			region_math::PixelRangeInside(destRect, minPX, minPZ, maxPX, maxPZ);
+			const int32 maxPixel = static_cast<int32>(m_width) * region_math::PixelCellsPerPage;
+			minPX = std::clamp(minPX, 0, maxPixel);
+			minPZ = std::clamp(minPZ, 0, maxPixel);
+			maxPX = std::clamp(maxPX, 0, maxPixel);
+			maxPZ = std::clamp(maxPZ, 0, maxPixel);
+
+			for (int32 pz = minPZ; pz <= maxPZ; ++pz)
+			{
+				const int32 spz = std::clamp(
+					region_math::MapDestPixelToSourcePixel(pz, snap.rect.minZ, destMinVertZ) - snap.minPixelZ,
+					0, snap.pixelCountZ - 1);
+				for (int32 px = minPX; px <= maxPX; ++px)
+				{
+					const int32 spx = std::clamp(
+						region_math::MapDestPixelToSourcePixel(px, snap.rect.minX, destMinVertX) - snap.minPixelX,
+						0, snap.pixelCountX - 1);
+					const uint32 packed = snap.splatPixels[static_cast<size_t>(spz) * snap.pixelCountX + spx];
+					for (uint8 layer = 0; layer < 4; ++layer)
+					{
+						SetLayerAt(px, pz, layer, ((packed >> (8 * layer)) & 0xFF) / 255.0f);
+					}
+				}
+			}
+
+			// Area IDs: only destination tiles fully covered by the pasted rect.
+			if (snap.tileCountX > 0 && snap.tileCountZ > 0)
+			{
+				int32 minTX, minTZ, maxTX, maxTZ;
+				if (region_math::TileRangeFullyCovered(destRect, minTX, minTZ, maxTX, maxTZ))
+				{
+					const int32 maxTile = static_cast<int32>(m_width * constants::TilesPerPage) - 1;
+					for (int32 tz = std::max(0, minTZ); tz <= std::min(maxTZ, maxTile); ++tz)
+					{
+						const int32 stz = region_math::MapDestTileToSourceTile(tz, snap.rect.minZ, destMinVertZ) - snap.minTileZ;
+						if (stz < 0 || stz >= snap.tileCountZ)
+						{
+							continue;
+						}
+						for (int32 tx = std::max(0, minTX); tx <= std::min(maxTX, maxTile); ++tx)
+						{
+							const int32 stx = region_math::MapDestTileToSourceTile(tx, snap.rect.minX, destMinVertX) - snap.minTileX;
+							if (stx < 0 || stx >= snap.tileCountX)
+							{
+								continue;
+							}
+							SetAreaForTile(tx, tz, snap.areaIds[static_cast<size_t>(stz) * snap.tileCountX + stx]);
+						}
+					}
+				}
+			}
+
+			// Single refresh over the affected region (expanded by one vertex so normals of
+			// neighboring cells pick up the new border heights).
+			UpdateTiles(destMinVertX - 1, destMinVertZ - 1, destMinVertX + sx + 1, destMinVertZ + sz + 1);
+			UpdateTileCoverage(minPX, minPZ, maxPX, maxPZ);
 		}
 
 		void Terrain::UpdateTiles(const int fromX, const int fromZ, const int toX, const int toZ)
