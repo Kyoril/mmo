@@ -9,8 +9,11 @@
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
 #include "graphics/texture.h"
+#include "terrain/terrain_region_snapshot.h"
+#include "editors/world_editor/terrain_undo_stack.h"
 
 #include <vector>
+#include <optional>
 
 namespace mmo
 {
@@ -27,6 +30,9 @@ namespace mmo
 	{
 		/// Allows you to select and manage certain terrain tiles and view or adjust their.
 		Select,
+
+		/// Rectangle-select terrain regions for copy/cut/paste/move operations.
+		Region,
 
 		/// Allows you to deform the terrain geometry in certain ways.
 		Deform,
@@ -163,6 +169,44 @@ namespace mmo
 		/// Samples the loaded brush mask at normalized coordinates (u, v) in [0, 1], applying the
 		/// current rotation and invert settings. Returns a value in [0, 1]; out-of-range coords → 0.
 		[[nodiscard]] float SampleBrushMask(float u, float v) const;
+
+		/// Converts two world-space drag corners into a clamped, vertex-snapped selection rect.
+		[[nodiscard]] terrain::region_math::VertexRect SelectionFromWorldCorners(const Vector3& a, const Vector3& b) const;
+
+		/// Rebuilds the draped selection-rectangle outline (or clears it when idle).
+		void UpdateRegionOverlay();
+
+		/// Clears the selection and any ghost drag, hiding both overlays.
+		void ClearRegionSelection();
+
+	private:
+		/// State machine for the Region edit type.
+		enum class RegionEditState : uint8
+		{
+			/// Nothing selected.
+			Idle,
+
+			/// Left mouse held, rubber-banding the selection rectangle.
+			Dragging,
+
+			/// A selection rectangle exists.
+			Selected,
+
+			/// A clipboard ghost follows the cursor awaiting a commit click (move/paste).
+			GhostDrag,
+		};
+
+		RegionEditState m_regionState = RegionEditState::Idle;
+		terrain::region_math::VertexRect m_selection{};
+		Vector3 m_regionDragStart{};
+		std::optional<terrain::TerrainRegionSnapshot> m_clipboard;
+		bool m_ghostIsMove = false;
+		float m_ghostHeightOffset = 0.0f;
+		ManualRenderObject* m_regionOverlay = nullptr;
+		SceneNode* m_regionOverlayNode = nullptr;
+		ManualRenderObject* m_ghostOverlay = nullptr;
+		SceneNode* m_ghostOverlayNode = nullptr;
+		TerrainUndoStack m_undoStack;
 
 	private:
 		terrain::Terrain& m_terrain;

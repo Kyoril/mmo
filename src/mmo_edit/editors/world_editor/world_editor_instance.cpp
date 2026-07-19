@@ -734,6 +734,7 @@ namespace mmo
 
 			// TODO: Move this into edit modes handling of OnMouseMoved
 			if (m_rightButtonPressed || (m_leftButtonPressed && !isDraggingWaypoint && m_editMode != m_foliageEditMode.get() && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Region &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Area &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading &&

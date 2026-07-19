@@ -68,6 +68,7 @@ namespace mmo
 
 	static const char* s_terrainEditModeStrings[] = {
 		"Select",
+		"Region Select",
 		"Deform",
 		"Paint",
 		"Area",
@@ -136,6 +137,28 @@ namespace mmo
 		{
 			m_areaOverlayNode->AttachObject(*m_areaOverlay);
 		}
+
+		m_regionOverlay = m_worldEditor.CreateManualRenderObject("TerrainRegionOverlay");
+		if (m_regionOverlay)
+		{
+			m_regionOverlay->SetCastShadows(false);
+		}
+		m_regionOverlayNode = m_worldEditor.CreateChildSceneNode();
+		if (m_regionOverlayNode && m_regionOverlay)
+		{
+			m_regionOverlayNode->AttachObject(*m_regionOverlay);
+		}
+
+		m_ghostOverlay = m_worldEditor.CreateManualRenderObject("TerrainRegionGhost");
+		if (m_ghostOverlay)
+		{
+			m_ghostOverlay->SetCastShadows(false);
+		}
+		m_ghostOverlayNode = m_worldEditor.CreateChildSceneNode();
+		if (m_ghostOverlayNode && m_ghostOverlay)
+		{
+			m_ghostOverlayNode->AttachObject(*m_ghostOverlay);
+		}
 	}
 
 	TerrainEditMode::~TerrainEditMode()
@@ -170,6 +193,26 @@ namespace mmo
 			m_worldEditor.DestroySceneNode(*m_areaOverlayNode);
 			m_areaOverlayNode = nullptr;
 		}
+		if (m_regionOverlay)
+		{
+			m_worldEditor.DestroyManualRenderObject(*m_regionOverlay);
+			m_regionOverlay = nullptr;
+		}
+		if (m_regionOverlayNode)
+		{
+			m_worldEditor.DestroySceneNode(*m_regionOverlayNode);
+			m_regionOverlayNode = nullptr;
+		}
+		if (m_ghostOverlay)
+		{
+			m_worldEditor.DestroyManualRenderObject(*m_ghostOverlay);
+			m_ghostOverlay = nullptr;
+		}
+		if (m_ghostOverlayNode)
+		{
+			m_worldEditor.DestroySceneNode(*m_ghostOverlayNode);
+			m_ghostOverlayNode = nullptr;
+		}
 	}
 
 	const char* TerrainEditMode::GetName() const
@@ -198,6 +241,89 @@ namespace mmo
 		{
 			m_areaOverlay->Clear();
 		}
+	}
+
+	terrain::region_math::VertexRect TerrainEditMode::SelectionFromWorldCorners(const Vector3& a, const Vector3& b) const
+	{
+		const int32 pagesW = static_cast<int32>(m_terrain.GetWidth());
+		const int32 pagesH = static_cast<int32>(m_terrain.GetHeight());
+
+		const int32 x0 = terrain::region_math::RoundWorldToVertex(std::min(a.x, b.x), pagesW);
+		const int32 x1 = terrain::region_math::RoundWorldToVertex(std::max(a.x, b.x), pagesW);
+		const int32 z0 = terrain::region_math::RoundWorldToVertex(std::min(a.z, b.z), pagesH);
+		const int32 z1 = terrain::region_math::RoundWorldToVertex(std::max(a.z, b.z), pagesH);
+
+		return terrain::region_math::VertexRect{ x0, z0, x1 - x0, z1 - z0 };
+	}
+
+	void TerrainEditMode::UpdateRegionOverlay()
+	{
+		if (!m_regionOverlay)
+		{
+			return;
+		}
+
+		m_regionOverlay->Clear();
+
+		if (m_type != TerrainEditType::Region || m_regionState == RegionEditState::Idle || m_selection.IsEmpty())
+		{
+			return;
+		}
+
+		if (m_regionOverlayNode)
+		{
+			m_regionOverlayNode->SetPosition(Vector3::Zero);
+		}
+
+		const int32 pagesW = static_cast<int32>(m_terrain.GetWidth());
+		const int32 pagesH = static_cast<int32>(m_terrain.GetHeight());
+		constexpr float yBias = 0.2f;
+
+		MaterialPtr mat = MaterialManager::Get().Load("Editor/Wireframe.hmat");
+		auto lineOp = m_regionOverlay->AddLineListOperation(mat);
+
+		// Draw the four draped edges; cap segments so huge selections stay cheap.
+		const int32 stepX = std::max(1, m_selection.sizeX / 128);
+		const int32 stepZ = std::max(1, m_selection.sizeZ / 128);
+
+		auto edgePoint = [&](const int32 vx, const int32 vz) -> Vector3
+		{
+			const float wx = terrain::region_math::VertexToWorld(vx, pagesW);
+			const float wz = terrain::region_math::VertexToWorld(vz, pagesH);
+			return Vector3(wx, m_terrain.GetSmoothHeightAt(wx, wz) + yBias, wz);
+		};
+
+		constexpr uint32 selColor = 0xFFFFD800u; // selection yellow
+
+		for (int32 x = 0; x < m_selection.sizeX; x += stepX)
+		{
+			const int32 x2 = std::min(x + stepX, m_selection.sizeX);
+			auto& l1 = lineOp->AddLine(edgePoint(m_selection.minX + x, m_selection.minZ), edgePoint(m_selection.minX + x2, m_selection.minZ));
+			l1.SetColor(selColor);
+			auto& l2 = lineOp->AddLine(edgePoint(m_selection.minX + x, m_selection.minZ + m_selection.sizeZ), edgePoint(m_selection.minX + x2, m_selection.minZ + m_selection.sizeZ));
+			l2.SetColor(selColor);
+		}
+		for (int32 z = 0; z < m_selection.sizeZ; z += stepZ)
+		{
+			const int32 z2 = std::min(z + stepZ, m_selection.sizeZ);
+			auto& l1 = lineOp->AddLine(edgePoint(m_selection.minX, m_selection.minZ + z), edgePoint(m_selection.minX, m_selection.minZ + z2));
+			l1.SetColor(selColor);
+			auto& l2 = lineOp->AddLine(edgePoint(m_selection.minX + m_selection.sizeX, m_selection.minZ + z), edgePoint(m_selection.minX + m_selection.sizeX, m_selection.minZ + z2));
+			l2.SetColor(selColor);
+		}
+	}
+
+	void TerrainEditMode::ClearRegionSelection()
+	{
+		m_regionState = RegionEditState::Idle;
+		m_selection = {};
+		m_ghostIsMove = false;
+		m_ghostHeightOffset = 0.0f;
+		if (m_ghostOverlay)
+		{
+			m_ghostOverlay->Clear();
+		}
+		UpdateRegionOverlay();
 	}
 
 	void TerrainEditMode::DrawViewportOverlay(ImDrawList* drawList, const ImVec2& viewportMin, const ImVec2& viewportSize)
@@ -358,6 +484,12 @@ namespace mmo
 			if (previousType == TerrainEditType::Water && m_waterEditMode)
 			{
 				m_waterEditMode->ClearBrushPosition();
+			}
+
+			// Leaving Region mode drops any in-progress selection or ghost drag.
+			if (previousType == TerrainEditType::Region)
+			{
+				ClearRegionSelection();
 			}
 		}
 
@@ -560,7 +692,7 @@ namespace mmo
 			}
 		}
 
-		if (m_type != TerrainEditType::Water)
+		if (m_type != TerrainEditType::Water && m_type != TerrainEditType::Region)
 		{
 			ImGui::SliderFloat("Brush Radius", &m_terrainBrushSize, 0.01f, 256.0f);
 			ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
@@ -638,6 +770,24 @@ namespace mmo
 		{
 			m_waterEditMode->OnMouseDown(x, y);
 		}
+
+		if (m_type == TerrainEditType::Region)
+		{
+			if (m_regionState == RegionEditState::GhostDrag)
+			{
+				// Task 7 replaces this with CommitGhostDrag().
+				return;
+			}
+
+			if (m_brushPositionValid)
+			{
+				m_regionDragStart = m_brushPosition;
+				m_selection = SelectionFromWorldCorners(m_regionDragStart, m_brushPosition);
+				m_regionState = RegionEditState::Dragging;
+				UpdateRegionOverlay();
+			}
+			return;
+		}
 	}
 
 	void TerrainEditMode::OnMouseHold(const float deltaSeconds)
@@ -649,6 +799,16 @@ namespace mmo
 			if (m_waterEditMode)
 			{
 				m_waterEditMode->OnMouseHold(deltaSeconds);
+			}
+			return;
+		}
+
+		if (m_type == TerrainEditType::Region)
+		{
+			if (m_regionState == RegionEditState::Dragging && m_brushPositionValid)
+			{
+				m_selection = SelectionFromWorldCorners(m_regionDragStart, m_brushPosition);
+				UpdateRegionOverlay();
 			}
 			return;
 		}
@@ -764,6 +924,16 @@ namespace mmo
 			return;
 		}
 
+		if (m_type == TerrainEditType::Region)
+		{
+			if (m_regionState == RegionEditState::Dragging)
+			{
+				m_regionState = m_selection.IsEmpty() ? RegionEditState::Idle : RegionEditState::Selected;
+				UpdateRegionOverlay();
+			}
+			return;
+		}
+
 		// Refresh the area overlay after a paint stroke finishes.
 		if (m_areaOverlayDirty)
 		{
@@ -815,6 +985,12 @@ namespace mmo
 
 		// Water sub-mode uses its own brush circle; hide terrain overlay.
 		if (m_type == TerrainEditType::Water)
+		{
+			return;
+		}
+
+		// Region mode uses its own selection/ghost overlays; hide the brush visuals.
+		if (m_type == TerrainEditType::Region)
 		{
 			return;
 		}
