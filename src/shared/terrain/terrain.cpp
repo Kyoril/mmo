@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "math/noise.h"
 #include "page.h"
@@ -1662,6 +1663,81 @@ namespace mmo
 			UpdateTiles(
 				std::max(0, destMinVertX - 1), std::max(0, destMinVertZ - 1),
 				std::min(destMinVertX + sx + 1, maxVertX), std::min(destMinVertZ + sz + 1, maxVertZ));
+			UpdateTileCoverage(minPX, minPZ, maxPX, maxPZ);
+		}
+
+		void Terrain::FillRegionFromEdges(const region_math::VertexRect& rect)
+		{
+			const region_math::VertexRect r = region_math::ClampToBounds(rect, static_cast<int32>(m_width), static_cast<int32>(m_height));
+			if (r.sizeX < 2 || r.sizeZ < 2)
+			{
+				// No interior vertices to fill.
+				return;
+			}
+
+			const int32 vx0 = r.minX;
+			const int32 vz0 = r.minZ;
+			const int32 sx = r.sizeX;
+			const int32 sz = r.sizeZ;
+
+			// Copy the border heights first — they are the interpolation source and stay fixed.
+			std::vector<float> top(sx + 1), bottom(sx + 1), left(sz + 1), right(sz + 1);
+			for (int32 x = 0; x <= sx; ++x)
+			{
+				top[x] = GetHeightAt(vx0 + x, vz0);
+				bottom[x] = GetHeightAt(vx0 + x, vz0 + sz);
+			}
+			for (int32 z = 0; z <= sz; ++z)
+			{
+				left[z] = GetHeightAt(vx0, vz0 + z);
+				right[z] = GetHeightAt(vx0 + sx, vz0 + z);
+			}
+
+			// Interior outer vertices: Coons interpolation + white color.
+			for (int32 z = 1; z < sz; ++z)
+			{
+				const float v = static_cast<float>(z) / sz;
+				for (int32 x = 1; x < sx; ++x)
+				{
+					const float u = static_cast<float>(x) / sx;
+					const float h = region_math::CoonsHeight(u, v,
+						left[z], right[z], top[x], bottom[x],
+						top[0], top[sx], bottom[0], bottom[sx]);
+					SetHeightAt(vx0 + x, vz0 + z, h);
+					SetColorAt(vx0 + x, vz0 + z, 0xFFFFFFFFu);
+				}
+			}
+
+			// Inner vertices: regenerate from the new outer heights, reset colors and holes.
+			UpdateInnerVertices(vx0, vz0, vx0 + sx - 1, vz0 + sz - 1);
+			for (int32 z = 0; z < sz; ++z)
+			{
+				for (int32 x = 0; x < sx; ++x)
+				{
+					SetColorAt(-(vx0 + x + 1), -(vz0 + z + 1), 0xFFFFFFFFu);
+					SetHoleAtInnerVertex(vx0 + x, vz0 + z, false);
+				}
+			}
+
+			// Splat coverage: clear all four paint layers so the base material shows.
+			int32 minPX, minPZ, maxPX, maxPZ;
+			region_math::PixelRangeInside(r, minPX, minPZ, maxPX, maxPZ);
+			for (int32 pz = minPZ; pz <= maxPZ; ++pz)
+			{
+				for (int32 px = minPX; px <= maxPX; ++px)
+				{
+					for (uint8 layer = 0; layer < 4; ++layer)
+					{
+						SetLayerAt(px, pz, layer, 0.0f);
+					}
+				}
+			}
+
+			const int32 maxVertX = static_cast<int32>(m_width) * region_math::CellsPerPage;
+			const int32 maxVertZ = static_cast<int32>(m_height) * region_math::CellsPerPage;
+			UpdateTiles(
+				std::max(0, vx0 - 1), std::max(0, vz0 - 1),
+				std::min(vx0 + sx + 1, maxVertX), std::min(vz0 + sz + 1, maxVertZ));
 			UpdateTileCoverage(minPX, minPZ, maxPX, maxPZ);
 		}
 

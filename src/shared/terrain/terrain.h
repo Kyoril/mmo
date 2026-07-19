@@ -376,6 +376,12 @@ namespace mmo
 			/// @param heightOffset Uniform offset added to every pasted height value.
 			void ApplyRegion(const TerrainRegionSnapshot& snapshot, int32 destMinVertX, int32 destMinVertZ, float heightOffset = 0.0f);
 
+			/// @brief Fills a region as if it were cut out: interior heights are Coons-patch
+			///        interpolated from the rect's border vertices, inner vertices are regenerated,
+			///        splat coverage is cleared to the base material, vertex colors reset to white
+			///        and holes removed. Area IDs are left unchanged. Border vertices are untouched.
+			void FillRegionFromEdges(const region_math::VertexRect& rect);
+
 			/// @brief Sets the height at a specific coordinate.
 			/// @param x The X coordinate.
 			/// @param y The Y coordinate.
