@@ -83,7 +83,8 @@ namespace mmo
 		"Sculpt",
 		"Smooth",
 		"Flatten",
-		"Noise"
+		"Noise",
+		"Stamp"
 	};
 
 	static_assert(std::size(s_terrainDeformModeStrings) == static_cast<uint32>(TerrainDeformMode::Count_), "There needs to be one string per enum value to display!");
@@ -720,6 +721,53 @@ namespace mmo
 		}
 	}
 
+	void TerrainEditMode::ApplyStamp()
+	{
+		const float radius = m_terrainBrushSize;
+		const auto rect = terrain::region_math::VertexRectForBrush(
+			m_brushPosition.x, m_brushPosition.z, radius,
+			static_cast<int32>(m_terrain.GetWidth()), static_cast<int32>(m_terrain.GetHeight()));
+		if (rect.IsEmpty())
+		{
+			return;
+		}
+
+		std::vector<terrain::TerrainRegionSnapshot> before;
+		before.push_back(m_terrain.CaptureRegion(rect));
+		m_undoStack.Push("Stamp", std::move(before));
+
+		const float strength = ImGui::GetIO().KeyShift ? -m_stampStrength : m_stampStrength;
+
+		terrain::BrushMaskSampler sampler;
+		if (m_useBrushMask && !m_brushMaskData.empty())
+		{
+			sampler = [this](const float u, const float v)
+			{
+				return SampleBrushMask(u, v);
+			};
+		}
+		else
+		{
+			// Procedural fallback: fBm noise with a radial falloff so the stamp blends
+			// into the surroundings instead of leaving a square seam.
+			sampler = [this](const float u, const float v)
+			{
+				if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f)
+				{
+					return 0.0f;
+				}
+				const float du = (u - 0.5f) * 2.0f;
+				const float dv = (v - 0.5f) * 2.0f;
+				const float falloff = std::max(0.0f, 1.0f - std::sqrt(du * du + dv * dv));
+				const float n = (noise::fBm(u * m_noiseFrequency * 200.0f, v * m_noiseFrequency * 200.0f,
+					m_noiseOctaves, m_noisePersistence) + 1.0f) * 0.5f;
+				return n * falloff;
+			};
+		}
+
+		m_terrain.Stamp(m_brushPosition.x, m_brushPosition.z, radius, strength, sampler);
+	}
+
 	void TerrainEditMode::DrawRegionDetails()
 	{
 		if (HasRegionSelection())
@@ -777,6 +825,65 @@ namespace mmo
 			ClearRegionSelection();
 		}
 		ImGui::EndDisabled();
+	}
+
+	void TerrainEditMode::DrawBrushMaskControls()
+	{
+		// --- Brush mask (stencil/pattern painting) ---
+		ImGui::Separator();
+		ImGui::Checkbox("Use Brush Mask", &m_useBrushMask);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Import a greyscale image (red channel used as mask) to paint\n"
+				"patterns into the splat layers. The mask modulates the brush falloff.");
+		}
+
+		if (ImGui::Button("Import Mask..."))
+		{
+			const std::vector<FileDialogFilter> filters = {
+				FileDialogFilter("Image files", "*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.psd"),
+			};
+			const std::optional<String> path = FileDialog::ShowOpen("Import Brush Mask", filters);
+			if (path)
+			{
+				if (LoadBrushMask(*path))
+				{
+					m_useBrushMask = true;
+				}
+			}
+		}
+
+		if (!m_brushMaskData.empty())
+		{
+			ImGui::SameLine();
+			if (ImGui::Button("Clear Mask"))
+			{
+				m_brushMaskData.clear();
+				m_brushMaskWidth = m_brushMaskHeight = 0;
+				m_brushMaskName.clear();
+				m_brushMaskPreviewTex.reset();
+				m_useBrushMask = false;
+			}
+
+			ImGui::TextDisabled("%s (%dx%d)", m_brushMaskName.c_str(), m_brushMaskWidth, m_brushMaskHeight);
+
+			ImGui::Checkbox("Invert Mask", &m_brushMaskInvert);
+			ImGui::SliderFloat("Mask Rotation", &m_brushMaskRotation, 0.0f, 360.0f, "%.0f deg");
+
+			if (m_brushMaskPreviewInvert != m_brushMaskInvert)
+			{
+				UpdateBrushMaskPreview();
+			}
+
+			if (m_brushMaskPreviewTex && m_brushMaskPreviewTex->GetTextureObject())
+			{
+				ImGui::Spacing();
+				ImGui::Text("Mask Preview:");
+				ImGui::Image(m_brushMaskPreviewTex->GetTextureObject(), ImVec2(96.0f, 96.0f));
+			}
+		}
 	}
 
 	void TerrainEditMode::DrawDetails()
@@ -866,7 +973,15 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 
-			if (m_deformMode == TerrainDeformMode::Noise)
+			if (m_deformMode == TerrainDeformMode::Stamp)
+			{
+				ImGui::SliderFloat("Stamp Strength", &m_stampStrength, 0.1f, 100.0f, "%.1f");
+				ImGui::TextDisabled("Click to stamp. Hold Shift to carve downward.");
+				DrawBrushMaskControls();
+			}
+
+			if (m_deformMode == TerrainDeformMode::Noise
+				|| (m_deformMode == TerrainDeformMode::Stamp && (!m_useBrushMask || m_brushMaskData.empty())))
 			{
 				ImGui::SliderFloat("Frequency", &m_noiseFrequency, 0.001f, 0.1f);
 				ImGui::SliderFloat("Amplitude", &m_noiseAmplitude, 0.1f, 50.0f);
@@ -954,61 +1069,7 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 
-			// --- Brush mask (stencil/pattern painting) ---
-			ImGui::Separator();
-			ImGui::Checkbox("Use Brush Mask", &m_useBrushMask);
-			ImGui::SameLine();
-			ImGui::TextDisabled("(?)");
-			if (ImGui::IsItemHovered())
-			{
-				ImGui::SetTooltip("Import a greyscale image (red channel used as mask) to paint\n"
-					"patterns into the splat layers. The mask modulates the brush falloff.");
-			}
-
-			if (ImGui::Button("Import Mask..."))
-			{
-				const std::vector<FileDialogFilter> filters = {
-					FileDialogFilter("Image files", "*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.psd"),
-				};
-				const std::optional<String> path = FileDialog::ShowOpen("Import Brush Mask", filters);
-				if (path)
-				{
-					if (LoadBrushMask(*path))
-					{
-						m_useBrushMask = true;
-					}
-				}
-			}
-
-			if (!m_brushMaskData.empty())
-			{
-				ImGui::SameLine();
-				if (ImGui::Button("Clear Mask"))
-				{
-					m_brushMaskData.clear();
-					m_brushMaskWidth = m_brushMaskHeight = 0;
-					m_brushMaskName.clear();
-					m_brushMaskPreviewTex.reset();
-					m_useBrushMask = false;
-				}
-
-				ImGui::TextDisabled("%s (%dx%d)", m_brushMaskName.c_str(), m_brushMaskWidth, m_brushMaskHeight);
-
-				ImGui::Checkbox("Invert Mask", &m_brushMaskInvert);
-				ImGui::SliderFloat("Mask Rotation", &m_brushMaskRotation, 0.0f, 360.0f, "%.0f deg");
-
-				if (m_brushMaskPreviewInvert != m_brushMaskInvert)
-				{
-					UpdateBrushMaskPreview();
-				}
-
-				if (m_brushMaskPreviewTex && m_brushMaskPreviewTex->GetTextureObject())
-				{
-					ImGui::Spacing();
-					ImGui::Text("Mask Preview:");
-					ImGui::Image(m_brushMaskPreviewTex->GetTextureObject(), ImVec2(96.0f, 96.0f));
-				}
-			}
+			DrawBrushMaskControls();
 		}
 		else if (m_type == TerrainEditType::Holes)
 		{
@@ -1137,6 +1198,12 @@ namespace mmo
 			}
 			return;
 		}
+
+		if (m_type == TerrainEditType::Deform && m_deformMode == TerrainDeformMode::Stamp && m_brushPositionValid)
+		{
+			ApplyStamp();
+			return;
+		}
 	}
 
 	void TerrainEditMode::OnMouseHold(const float deltaSeconds)
@@ -1197,6 +1264,10 @@ namespace mmo
 					m_terrain.ApplyNoise(m_brushPosition.x, m_brushPosition.z,
 						innerRadius, outerRadius, m_noiseAmplitude * factor, m_noiseFrequency,
 						m_noiseOctaves, m_noisePersistence);
+				} break;
+				case TerrainDeformMode::Stamp:
+				{
+					// One stamp per click — applied in OnMouseDown.
 				} break;
 				}
 			}

@@ -70,6 +70,9 @@ namespace mmo
 		/// Apply Perlin noise to the terrain, varying height naturally.
 		Noise,
 
+		/// Applies a one-click height stamp shaped by the imported brush mask (or noise).
+		Stamp,
+
 		/// The total number of terrain deform modes. Always the last element!
 		Count_
 	};
@@ -215,6 +218,12 @@ namespace mmo
 		/// Region-mode section of the details panel.
 		void DrawRegionDetails();
 
+		/// Applies one stamp at the current brush position (mouse-down driven, undoable).
+		void ApplyStamp();
+
+		/// Shared brush-mask import/invert/rotation/preview controls (used by Paint and Stamp).
+		void DrawBrushMaskControls();
+
 	private:
 		/// State machine for the Region edit type.
 		enum class RegionEditState : uint8
@@ -271,6 +280,8 @@ namespace mmo
 		float m_noiseAmplitude = 5.0f;
 		int   m_noiseOctaves = 4;
 		float m_noisePersistence = 0.5f;
+
+		float m_stampStrength = 10.0f;
 
 		uint8 m_terrainPaintLayer = 0;
 
