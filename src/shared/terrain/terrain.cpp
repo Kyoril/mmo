@@ -1329,8 +1329,9 @@ namespace mmo
 
 		float Terrain::GetInnerHeightAt(const int32 ix, const int32 iz) const
 		{
-			const int32 maxInner = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
-			if (ix < 0 || iz < 0 || ix > maxInner || iz > maxInner)
+			const int32 maxInnerX = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			const int32 maxInnerZ = static_cast<int32>(m_height * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			if (ix < 0 || iz < 0 || ix > maxInnerX || iz > maxInnerZ)
 			{
 				return 0.0f;
 			}
@@ -1351,8 +1352,9 @@ namespace mmo
 
 		void Terrain::SetInnerHeightAt(const int32 ix, const int32 iz, const float height) const
 		{
-			const int32 maxInner = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
-			if (ix < 0 || iz < 0 || ix > maxInner || iz > maxInner)
+			const int32 maxInnerX = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			const int32 maxInnerZ = static_cast<int32>(m_height * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			if (ix < 0 || iz < 0 || ix > maxInnerX || iz > maxInnerZ)
 			{
 				return;
 			}
@@ -1371,8 +1373,9 @@ namespace mmo
 
 		bool Terrain::IsHoleAtInnerVertex(const int32 ix, const int32 iz) const
 		{
-			const int32 maxInner = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
-			if (ix < 0 || iz < 0 || ix > maxInner || iz > maxInner)
+			const int32 maxInnerX = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			const int32 maxInnerZ = static_cast<int32>(m_height * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			if (ix < 0 || iz < 0 || ix > maxInnerX || iz > maxInnerZ)
 			{
 				return false;
 			}
@@ -1394,8 +1397,9 @@ namespace mmo
 
 		void Terrain::SetHoleAtInnerVertex(const int32 ix, const int32 iz, const bool hole) const
 		{
-			const int32 maxInner = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
-			if (ix < 0 || iz < 0 || ix > maxInner || iz > maxInner)
+			const int32 maxInnerX = static_cast<int32>(m_width * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			const int32 maxInnerZ = static_cast<int32>(m_height * (constants::OuterVerticesPerPageSide - 1)) - 1;
+			if (ix < 0 || iz < 0 || ix > maxInnerX || iz > maxInnerZ)
 			{
 				return;
 			}
@@ -1497,11 +1501,12 @@ namespace mmo
 			// Splat pixels (padded so pastes at unaligned offsets can resample).
 			int32 minPX, minPZ, maxPX, maxPZ;
 			region_math::PixelRangePadded(snap.rect, minPX, minPZ, maxPX, maxPZ);
-			const int32 maxPixel = static_cast<int32>(m_width) * region_math::PixelCellsPerPage;
-			minPX = std::clamp(minPX, 0, maxPixel);
-			minPZ = std::clamp(minPZ, 0, maxPixel);
-			maxPX = std::clamp(maxPX, 0, maxPixel);
-			maxPZ = std::clamp(maxPZ, 0, maxPixel);
+			const int32 maxPixelX = static_cast<int32>(m_width) * region_math::PixelCellsPerPage;
+			const int32 maxPixelZ = static_cast<int32>(m_height) * region_math::PixelCellsPerPage;
+			minPX = std::clamp(minPX, 0, maxPixelX);
+			minPZ = std::clamp(minPZ, 0, maxPixelZ);
+			maxPX = std::clamp(maxPX, 0, maxPixelX);
+			maxPZ = std::clamp(maxPZ, 0, maxPixelZ);
 
 			snap.minPixelX = minPX;
 			snap.minPixelZ = minPZ;
@@ -1548,21 +1553,22 @@ namespace mmo
 
 			const int32 sx = snap.rect.sizeX;
 			const int32 sz = snap.rect.sizeZ;
-			const int32 maxVert = static_cast<int32>(m_width) * region_math::CellsPerPage;
+			const int32 maxVertX = static_cast<int32>(m_width) * region_math::CellsPerPage;
+			const int32 maxVertZ = static_cast<int32>(m_height) * region_math::CellsPerPage;
 
 			// Outer vertices (SetHeightAt / SetColorAt clip out-of-range indices themselves,
 			// but skip early to avoid pointless page lookups).
 			for (int32 z = 0; z <= sz; ++z)
 			{
 				const int32 dz = destMinVertZ + z;
-				if (dz < 0 || dz > maxVert)
+				if (dz < 0 || dz > maxVertZ)
 				{
 					continue;
 				}
 				for (int32 x = 0; x <= sx; ++x)
 				{
 					const int32 dx = destMinVertX + x;
-					if (dx < 0 || dx > maxVert)
+					if (dx < 0 || dx > maxVertX)
 					{
 						continue;
 					}
@@ -1576,14 +1582,14 @@ namespace mmo
 			for (int32 z = 0; z < sz; ++z)
 			{
 				const int32 dz = destMinVertZ + z;
-				if (dz < 0 || dz >= maxVert)
+				if (dz < 0 || dz >= maxVertZ)
 				{
 					continue;
 				}
 				for (int32 x = 0; x < sx; ++x)
 				{
 					const int32 dx = destMinVertX + x;
-					if (dx < 0 || dx >= maxVert)
+					if (dx < 0 || dx >= maxVertX)
 					{
 						continue;
 					}
@@ -1598,11 +1604,12 @@ namespace mmo
 			const region_math::VertexRect destRect{ destMinVertX, destMinVertZ, sx, sz };
 			int32 minPX, minPZ, maxPX, maxPZ;
 			region_math::PixelRangeInside(destRect, minPX, minPZ, maxPX, maxPZ);
-			const int32 maxPixel = static_cast<int32>(m_width) * region_math::PixelCellsPerPage;
-			minPX = std::clamp(minPX, 0, maxPixel);
-			minPZ = std::clamp(minPZ, 0, maxPixel);
-			maxPX = std::clamp(maxPX, 0, maxPixel);
-			maxPZ = std::clamp(maxPZ, 0, maxPixel);
+			const int32 maxPixelX = static_cast<int32>(m_width) * region_math::PixelCellsPerPage;
+			const int32 maxPixelZ = static_cast<int32>(m_height) * region_math::PixelCellsPerPage;
+			minPX = std::clamp(minPX, 0, maxPixelX);
+			minPZ = std::clamp(minPZ, 0, maxPixelZ);
+			maxPX = std::clamp(maxPX, 0, maxPixelX);
+			maxPZ = std::clamp(maxPZ, 0, maxPixelZ);
 
 			for (int32 pz = minPZ; pz <= maxPZ; ++pz)
 			{
@@ -1628,15 +1635,16 @@ namespace mmo
 				int32 minTX, minTZ, maxTX, maxTZ;
 				if (region_math::TileRangeFullyCovered(destRect, minTX, minTZ, maxTX, maxTZ))
 				{
-					const int32 maxTile = static_cast<int32>(m_width * constants::TilesPerPage) - 1;
-					for (int32 tz = std::max(0, minTZ); tz <= std::min(maxTZ, maxTile); ++tz)
+					const int32 maxTileX = static_cast<int32>(m_width * constants::TilesPerPage) - 1;
+					const int32 maxTileZ = static_cast<int32>(m_height * constants::TilesPerPage) - 1;
+					for (int32 tz = std::max(0, minTZ); tz <= std::min(maxTZ, maxTileZ); ++tz)
 					{
 						const int32 stz = region_math::MapDestTileToSourceTile(tz, snap.rect.minZ, destMinVertZ) - snap.minTileZ;
 						if (stz < 0 || stz >= snap.tileCountZ)
 						{
 							continue;
 						}
-						for (int32 tx = std::max(0, minTX); tx <= std::min(maxTX, maxTile); ++tx)
+						for (int32 tx = std::max(0, minTX); tx <= std::min(maxTX, maxTileX); ++tx)
 						{
 							const int32 stx = region_math::MapDestTileToSourceTile(tx, snap.rect.minX, destMinVertX) - snap.minTileX;
 							if (stx < 0 || stx >= snap.tileCountX)
@@ -1651,7 +1659,9 @@ namespace mmo
 
 			// Single refresh over the affected region (expanded by one vertex so normals of
 			// neighboring cells pick up the new border heights).
-			UpdateTiles(destMinVertX - 1, destMinVertZ - 1, destMinVertX + sx + 1, destMinVertZ + sz + 1);
+			UpdateTiles(
+				std::max(0, destMinVertX - 1), std::max(0, destMinVertZ - 1),
+				std::min(destMinVertX + sx + 1, maxVertX), std::min(destMinVertZ + sz + 1, maxVertZ));
 			UpdateTileCoverage(minPX, minPZ, maxPX, maxPZ);
 		}
 
