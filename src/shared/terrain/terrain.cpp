@@ -991,6 +991,67 @@ namespace mmo
 				} });
 		}
 
+		void Terrain::Stamp(const float brushCenterX, const float brushCenterZ, const float outerRadius, const float heightScale, const BrushMaskSampler& maskSampler)
+		{
+			if (!maskSampler)
+			{
+				return;
+			}
+
+			const float maskExtent = outerRadius * 2.0f;
+			const float invMaskExtent = maskExtent > 0.0f ? 1.0f / maskExtent : 0.0f;
+			const float maskOriginX = brushCenterX - outerRadius;
+			const float maskOriginZ = brushCenterZ - outerRadius;
+
+			// Constant intensity: the mask alone shapes the stamp.
+			const auto constantIntensity = [](const float, const float, const float)
+			{
+				return 1.0f;
+			};
+
+			TerrainVertexBrush(brushCenterX, brushCenterZ, outerRadius, outerRadius, true, constantIntensity,
+				[&](const int32 vx, const int32 vy, const float)
+				{
+					float worldX = 0.0f, worldZ = 0.0f;
+					if (vx >= 0 && vy >= 0)
+					{
+						GetGlobalVertexWorldPosition(vx, vy, &worldX, &worldZ);
+					}
+					else
+					{
+						// Inner vertex: world position is the average of the 4 surrounding corners.
+						const int32 ix = -vx - 1;
+						const int32 iz = -vy - 1;
+						float v0x, v0z, v1x, v1z, v2x, v2z, v3x, v3z;
+						GetGlobalVertexWorldPosition(ix, iz, &v0x, &v0z);
+						GetGlobalVertexWorldPosition(ix + 1, iz, &v1x, &v1z);
+						GetGlobalVertexWorldPosition(ix, iz + 1, &v2x, &v2z);
+						GetGlobalVertexWorldPosition(ix + 1, iz + 1, &v3x, &v3z);
+						worldX = (v0x + v1x + v2x + v3x) * 0.25f;
+						worldZ = (v0z + v1z + v2z + v3z) * 0.25f;
+					}
+
+					const float u = (worldX - maskOriginX) * invMaskExtent;
+					const float v = (worldZ - maskOriginZ) * invMaskExtent;
+					const float factor = maskSampler(u, v);
+					if (factor == 0.0f)
+					{
+						return;
+					}
+
+					if (vx >= 0 && vy >= 0)
+					{
+						SetHeightAt(vx, vy, GetHeightAt(vx, vy) + heightScale * factor);
+					}
+					else
+					{
+						const int32 ix = -vx - 1;
+						const int32 iz = -vy - 1;
+						SetInnerHeightAt(ix, iz, GetInnerHeightAt(ix, iz) + heightScale * factor);
+					}
+				});
+		}
+
 		void Terrain::Smooth(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
 		{
 			// First collect average height value

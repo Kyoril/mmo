@@ -329,6 +329,12 @@ namespace mmo
 			/// @param persistence Amplitude multiplier per octave (e.g. 0.5).
 			void ApplyNoise(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float amplitude, float frequency, int octaves, float persistence);
 
+			/// @brief Applies a single height stamp: every vertex inside the brush circle gets
+			///        heights += maskSampler(u, v) * heightScale, where (u, v) span the square
+			///        footprint of side 2*outerRadius (same mask mapping as Paint). There is no
+			///        radial falloff — the mask fully defines the shape. Negative heightScale carves.
+			void Stamp(float brushCenterX, float brushCenterZ, float outerRadius, float heightScale, const BrushMaskSampler& maskSampler);
+
 			/// @brief Paints a texture layer on the terrain in a brush area.
 			/// @param layer The layer index (0-3) to paint.
 			/// @param brushCenterX World X position of the brush center.
