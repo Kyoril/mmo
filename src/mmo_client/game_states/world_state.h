@@ -512,6 +512,8 @@ namespace mmo
 
 		void Command_LevelUp(const std::string &cmd, const std::string &args) const;
 
+		void Command_ClassLevelUp(const std::string &cmd, const std::string &args) const;
+
 		void Command_GiveMoney(const std::string &cmd, const std::string &args) const;
 
 		void Command_AddItem(const std::string &cmd, const std::string &args) const;

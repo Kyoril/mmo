@@ -279,6 +279,80 @@ namespace mmo
 #endif
 
 #if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatClassLevelUp(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 levels;
+		if (!(contentReader >> io::read<uint8>(levels)))
+		{
+			ELOG("Missing level parameter!");
+			return;
+		}
+
+		// Check if we have a player character in target
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		// Find target unit
+		GamePlayerS* targetUnit = m_worldInstance->FindByGuid<GamePlayerS>(targetGuid);
+		if (!targetUnit || targetUnit->GetTypeId() != ObjectTypeId::Player)
+		{
+			targetUnit = m_character.get();
+		}
+
+		if (!targetUnit)
+		{
+			ELOG("Unable to find target character!");
+			return;
+		}
+
+		const proto::ClassEntry* classEntry = targetUnit->GetClassEntry();
+		if (!classEntry)
+		{
+			ELOG("Target character has no active class!");
+			return;
+		}
+
+		// A class without a class-level curve is frozen at class level 1 and can not be leveled.
+		if (classEntry->classlevels_size() == 0)
+		{
+			ELOG("Class " << classEntry->name() << " has no class level curve and can not gain class levels");
+			return;
+		}
+
+		const uint32 maxClassLevel = std::min<uint32>(classEntry->classlevels_size(), 255);
+
+		uint32 classLevel = targetUnit->GetActiveClassLevel();
+		uint32 targetLevel = classLevel + levels;
+
+		// Check for overflow
+		if (targetLevel >= maxClassLevel)
+		{
+			targetLevel = maxClassLevel;
+		}
+
+		if (targetLevel == classLevel)
+		{
+			ELOG("Class level is unchanged");
+			return;
+		}
+
+		DLOG("Setting class level of target to " << targetLevel);
+
+		// Grant class experience while the target class level is not reached
+		while (classLevel < targetLevel)
+		{
+			targetUnit->RewardClassExperience(classEntry->classlevels(classLevel - 1).xptonextlevel() - targetUnit->GetActiveClassXp());
+			ASSERT(targetUnit->GetActiveClassLevel() > classLevel);
+
+			classLevel = targetUnit->GetActiveClassLevel();
+		}
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
 	void Player::OnCheatGiveMoney(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint32 amount;

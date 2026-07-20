@@ -1678,6 +1678,8 @@ namespace mmo
 								 { Command_FaceMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature face towards you.");
 		Console::RegisterCommand("level", [this](const std::string &cmd, const std::string &args)
 								 { Command_LevelUp(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets level if possible.");
+		Console::RegisterCommand("classlevel", [this](const std::string &cmd, const std::string &args)
+								 { Command_ClassLevelUp(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets active class level if possible.");
 		Console::RegisterCommand("money", [this](const std::string &cmd, const std::string &args)
 								 { Command_GiveMoney(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets money.");
 		Console::RegisterCommand("additem", [this](const std::string &cmd, const std::string &args)

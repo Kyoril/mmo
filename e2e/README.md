@@ -74,6 +74,7 @@ automatically), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 
 GM commands (server must run with dev commands; the test account has GM level 3):
 `GM.AddItem(itemId, count)`, `GM.LearnSpell(spellId)`, `GM.LevelUp(levels)`,
+`GM.ClassLevelUp(levels)` (levels the active class, not the character),
 `GM.GiveMoney(copper)`, `GM.CreateMonster(entry) -> g` (waits for the spawn),
 `GM.DestroyMonster(g)`, `GM.KillTarget()` (tags an untagged creature to the GM
 character first, so the kill grants real kill xp and quest kill credit),

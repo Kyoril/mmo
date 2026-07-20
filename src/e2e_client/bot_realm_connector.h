@@ -288,6 +288,9 @@ namespace mmo
 		/// GAME MASTER only. Increases the player level by the given amount.
 		void CheatLevelUp(uint8 levels);
 
+		/// GAME MASTER only. Increases the active class level by the given amount.
+		void CheatClassLevelUp(uint8 levels);
+
 		/// GAME MASTER only. Gives money (in copper) to the player.
 		void CheatGiveMoney(uint32 amount);
 

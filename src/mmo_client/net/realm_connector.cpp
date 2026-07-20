@@ -522,6 +522,15 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::ClassLevelUp(uint8 levels)
+	{
+		sendSinglePacket([levels](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatClassLevelUp);
+			packet << io::write<uint8>(levels);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::GiveMoney(uint32 amount)
 	{
 		sendSinglePacket([amount](game::OutgoingPacket& packet) {

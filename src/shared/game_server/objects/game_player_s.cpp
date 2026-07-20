@@ -2425,6 +2425,20 @@ namespace mmo
 		return 1;
 	}
 
+	uint32 GamePlayerS::GetActiveClassXp() const
+	{
+		const uint32 activeId = Get<uint32>(object_fields::Class);
+		for (const auto& classData : m_knownClasses)
+		{
+			if (classData.classId == activeId)
+			{
+				return classData.classXp;
+			}
+		}
+
+		return 0;
+	}
+
 	bool GamePlayerS::IsClassKnown(const uint32 classId) const
 	{
 		for (const auto& classData : m_knownClasses)

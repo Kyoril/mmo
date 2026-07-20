@@ -600,6 +600,15 @@ namespace mmo
 			}
 		}
 
+		void luaGmClassLevelUp(const uint32 levels)
+		{
+			g_runtime->session->GetRealm().CheatClassLevelUp(static_cast<uint8>(levels));
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.ClassLevelUp", { { "levels", levels } });
+			}
+		}
+
 		void luaGmGiveMoney(const uint32 amount)
 		{
 			g_runtime->session->GetRealm().CheatGiveMoney(amount);
@@ -787,6 +796,7 @@ namespace mmo
 				luabind::def_lambda("GM_LearnSpell", &luaGmLearnSpell),
 				luabind::def_lambda("GM_LearnEmote", &luaGmLearnEmote),
 				luabind::def_lambda("GM_LevelUp", &luaGmLevelUp),
+				luabind::def_lambda("GM_ClassLevelUp", &luaGmClassLevelUp),
 				luabind::def_lambda("GM_GiveMoney", &luaGmGiveMoney),
 				luabind::def_lambda("GM_CreateMonster", &luaGmCreateMonster),
 				luabind::def_lambda("GM_DestroyMonster", &luaGmDestroyMonster),
@@ -827,6 +837,7 @@ namespace mmo
 				LearnSpell = GM_LearnSpell,
 				LearnEmote = GM_LearnEmote,
 				LevelUp = GM_LevelUp,
+				ClassLevelUp = GM_ClassLevelUp,
 				GiveMoney = GM_GiveMoney,
 				CreateMonster = GM_CreateMonster,
 				DestroyMonster = GM_DestroyMonster,

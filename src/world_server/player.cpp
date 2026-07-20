@@ -812,6 +812,9 @@ namespace mmo
 		case game::client_realm_packet::CheatClearInventory:
 			OnCheatClearInventory(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatClassLevelUp:
+			OnCheatClassLevelUp(opCode, buffer.size(), reader);
+			break;
 #endif
 
 		case game::client_realm_packet::CastSpell:

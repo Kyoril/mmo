@@ -110,6 +110,9 @@ namespace mmo
 		/// Returns the class level of the currently active class (defaults to 1).
 		[[nodiscard]] uint32 GetActiveClassLevel() const;
 
+		/// Returns the class experience accumulated towards the next class level of the currently active class.
+		[[nodiscard]] uint32 GetActiveClassXp() const;
+
 		/// Returns true if the character has unlocked the given class (the active class is always
 		/// known). Class ids are 0-based, so do not treat 0 as "no class".
 		[[nodiscard]] bool IsClassKnown(uint32 classId) const;

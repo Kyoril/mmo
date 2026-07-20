@@ -649,6 +649,12 @@ namespace mmo
 		///	@param contentReader Reader object used to read the packets content bytes.
 		void OnCheatLevelUp(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to increase the selected players active class level by a specific amount. Grants class experience until the target class level is reached.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		///	@param contentReader Reader object used to read the packets content bytes.
+		void OnCheatClassLevelUp(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to increase the selected players money by a specific amount.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.

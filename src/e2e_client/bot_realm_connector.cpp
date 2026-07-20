@@ -2008,6 +2008,15 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::CheatClassLevelUp(const uint8 levels)
+	{
+		sendSinglePacket([levels](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatClassLevelUp);
+			packet << io::write<uint8>(levels);
+			packet.Finish();
+			});
+	}
+
 	void BotRealmConnector::CheatGiveMoney(const uint32 amount)
 	{
 		sendSinglePacket([amount](game::OutgoingPacket& packet) {

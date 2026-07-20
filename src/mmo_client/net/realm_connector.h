@@ -274,6 +274,10 @@ namespace mmo
 		///	@param level The amount of levels to increase the player by.
 		void LevelUp(uint8 level);
 
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Increases the active class level of the selected player (or the controlled player if no player is selected) by a specific amount.
+		///	@param levels The amount of class levels to increase the player by.
+		void ClassLevelUp(uint8 levels);
+
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Gives the selected player (or the controlled player if no player is selected) a specific amount of money.
 		///	@param amount The amount of money to give to the player. 10 = 10 copper, 100 = 1 silver, 10000 = 1 gold, etc.
 		void GiveMoney(uint32 amount);

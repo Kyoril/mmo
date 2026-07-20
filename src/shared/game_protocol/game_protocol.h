@@ -365,6 +365,9 @@ namespace mmo
 				/// Dev command: destroy every item in the character's backpack (equipment is kept). No payload. Requires MMO_WITH_DEV_COMMANDS.
 				CheatClearInventory,
 
+				/// Dev command: increase the selected player's active class level. Payload: uint8 levels. Requires MMO_WITH_DEV_COMMANDS.
+				CheatClassLevelUp,
+
 				/// Counter constant
 				Count_,
 			};

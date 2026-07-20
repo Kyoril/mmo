@@ -189,6 +189,23 @@ namespace mmo
 		m_realmConnector.LevelUp(level);
 	}
 
+	void WorldState::Command_ClassLevelUp(const std::string &cmd, const std::string &args) const
+	{
+		const auto tokens = ParseCommandArgs(args);
+
+		uint32 levels = 1;
+		if (!tokens.empty())
+		{
+			if (!ParseUInt(tokens[0], levels))
+			{
+				ELOG("Invalid class level value: " + tokens[0]);
+				return;
+			}
+		}
+
+		m_realmConnector.ClassLevelUp(levels);
+	}
+
 	void WorldState::Command_GiveMoney(const std::string &cmd, const std::string &args) const
 	{
 		const auto tokens = ParseCommandArgs(args);
