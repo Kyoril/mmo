@@ -756,6 +756,10 @@ namespace mmo
 			DrawSoundEntryCombo(m_project.sounds, "Gossip Pissed Sound", currentEntry.gossip_pissed_sound_id(), m_gossipPissedSoundFilter,
 				[&currentEntry](const uint32 id) { currentEntry.set_gossip_pissed_sound_id(id); });
 			ImGui::TextDisabled("Annoyed voice line played after repeatedly clicking the same unit. Falls back to the normal gossip sound when unset.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Goodbye Sound", currentEntry.goodbye_sound_id(), m_goodbyeSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_goodbye_sound_id(id); });
+			ImGui::TextDisabled("Voice line played when the player closes this NPC's dialog without opening another one.");
 		}
 	}
 

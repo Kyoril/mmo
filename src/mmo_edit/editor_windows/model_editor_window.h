@@ -52,5 +52,6 @@ namespace mmo
 
 		ImGuiTextFilter m_gossipSoundFilter;
 		ImGuiTextFilter m_gossipPissedSoundFilter;
+		ImGuiTextFilter m_goodbyeSoundFilter;
 	};
 }

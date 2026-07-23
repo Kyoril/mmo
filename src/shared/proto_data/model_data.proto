@@ -23,6 +23,11 @@ message ModelDataEntry {
 	// AnimationProfileEntry id driving the model's animation slot bindings.
 	// 0 = use the built-in default clip names (Idle, Run, Swim, ...).
 	optional uint32 animation_profile = 8 [default = 0];
+
+	// SoundEntry id played when the player closes this NPC's dialog for real,
+	// i.e. without another dialog of the same NPC opening right after.
+	// 0 = no goodbye sound (default).
+	optional uint32 goodbye_sound_id = 9 [default = 0];
 }
 
 message ModelDatas {
