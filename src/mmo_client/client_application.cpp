@@ -182,7 +182,7 @@ namespace mmo
 
 		context.soundEntryPlayer = std::make_unique<SoundEntryPlayer>(*context.audio, context.project->sounds);
 		CastErrorVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->races);
-		UnitGossipVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->models);
+		UnitGossipVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->models, context.timerQueue.get());
 		GameUnitC::SetSoundEntryPlayer(context.soundEntryPlayer.get());
 
 		context.clientCache = std::make_unique<ClientCache>(realmConnector);
