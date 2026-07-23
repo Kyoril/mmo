@@ -170,6 +170,7 @@ namespace mmo
 			luabind::def_lambda("GetQuestObjectiveCount", [this]() { return GetQuestObjectiveCount(); }),
 			luabind::def_lambda("GetQuestObjectiveText", [this](uint32 index) { return GetQuestObjectiveText(index); }),
 			luabind::def_lambda("GossipAction", [this](int32 index) { return ExecuteGossipAction(index); }),
+			luabind::def_lambda("NotifyQuestDialogClosed", [this]() { CloseQuest(); }),
 			luabind::def_lambda("GetQuestDetailsText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->description; ProcessQuestText(questText); return questText; }),
 			luabind::def_lambda("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; ProcessQuestText(questText); return questText; }),
 			luabind::def_lambda("GetQuestRewardItemCount", [this]() -> uint32 { return static_cast<uint32>(m_questDetails.rewardItems.size()); }),
