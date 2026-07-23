@@ -17,9 +17,12 @@ Companion feature to the existing client-local hello/pissed gossip voice lines
 - **Scope — whole interaction chain:** the gossip/quest frame, vendor window and
   trainer window all count as "the dialog". The goodbye plays when the last open
   window of that NPC closes without a follow-up dialog opening.
-- **Voice overlap — skip:** if the NPC's hello line is (likely) still playing when
-  the dialog closes, the goodbye is skipped entirely (consistent with the existing
-  click-throttle rule). No queueing, no overlap.
+- **Voice overlap — skip (same NPC only):** if the SAME NPC's own line is (likely)
+  still playing when the goodbye would fire, the goodbye is skipped entirely — the
+  NPC never talks over themselves. No queueing. A *different* NPC's line does not
+  suppress the goodbye (decision 3 below); the service tracks which unit owns the
+  current busy window (`m_busyGuid`). The click gate for hello lines remains
+  global (pre-existing behavior, unchanged).
 - **Approach:** fully client-local C++, extending the existing `UnitGossipVoice`
   system. No network protocol changes, no server changes.
 
@@ -64,8 +67,12 @@ same way.
 
 Behavior:
 
-1. **On open:** record `m_openDialogGuids[source] = guid`; if a goodbye is
-   pending for this guid, cancel it (covers gossip page reloads and
+1. **On open:** if the source slot currently holds a DIFFERENT non-zero guid,
+   that old npc's dialog was displaced without an explicit close (e.g. the
+   gossip frame stays visible but now shows another npc) — treat it as an
+   implicit close first (same still-open-elsewhere check, arms the old npc's
+   goodbye). Then record `m_openDialogGuids[source] = guid`; if a goodbye is
+   pending for this (new) guid, cancel it (covers gossip page reloads and
    close-then-open transitions like `GossipComplete` + follow-up window).
 2. **On close:** clear the source slot; if the guid is still open in another
    slot, do nothing (the conversation continues in another window). Otherwise
