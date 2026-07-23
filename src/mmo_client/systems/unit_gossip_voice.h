@@ -85,6 +85,8 @@ namespace mmo
 		GameTime m_lastClickTime = 0;
 		/// Until this time the current voice line is (likely) still playing.
 		GameTime m_busyUntil = 0;
+		/// Unit whose voice line is (likely) still playing until m_busyUntil.
+		ObjectGuid m_busyGuid = 0;
 
 		/// Which npc guid each dialog source currently has open (0 = none).
 		ObjectGuid m_openDialogGuids[npc_dialog_source::Count_] = {};

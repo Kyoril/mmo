@@ -128,8 +128,14 @@ namespace mmo
 				break;
 			}
 
-			m_vendorGuid = 0;
-			FrameManager::Get().TriggerLuaEvent("VENDOR_CLOSED");
+			if (m_vendorGuid != 0)
+			{
+				CloseVendor();
+			}
+			else
+			{
+				FrameManager::Get().TriggerLuaEvent("VENDOR_CLOSED");
+			}
 
 			return PacketParseResult::Pass;
 		}

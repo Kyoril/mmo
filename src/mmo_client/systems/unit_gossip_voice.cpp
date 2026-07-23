@@ -44,6 +44,7 @@ namespace mmo
 		m_clickCount = 0;
 		m_lastClickTime = 0;
 		m_busyUntil = 0;
+		m_busyGuid = 0;
 
 		for (ObjectGuid& openGuid : m_openDialogGuids)
 		{
@@ -100,6 +101,7 @@ namespace mmo
 		}
 
 		m_busyUntil = now + static_cast<GameTime>(m_player->GetEntryLength(soundId) * 1000.0f);
+		m_busyGuid = unit.GetGuid();
 	}
 
 	void UnitGossipVoice::OnNpcDialogOpened(const npc_dialog_source::Type source, const ObjectGuid guid)
@@ -107,6 +109,14 @@ namespace mmo
 		if (guid == 0)
 		{
 			return;
+		}
+
+		const ObjectGuid oldGuid = m_openDialogGuids[source];
+		if (oldGuid != 0 && oldGuid != guid)
+		{
+			// The window swapped to a different npc without an explicit close
+			// (e.g. gossip frame content changed) - treat the old npc as closed.
+			OnNpcDialogClosed(source, oldGuid);
 		}
 
 		m_openDialogGuids[source] = guid;
@@ -168,9 +178,9 @@ namespace mmo
 		}
 
 		const GameTime now = GetAsyncTimeMs();
-		if (now < m_busyUntil)
+		if (now < m_busyUntil && m_busyGuid == guid)
 		{
-			DLOG("Goodbye voice line skipped for npc " << guid << ": another voice line is still playing");
+			DLOG("Goodbye voice line skipped for npc " << guid << ": its own voice line is still playing");
 			return;
 		}
 
@@ -187,6 +197,7 @@ namespace mmo
 		}
 
 		m_busyUntil = now + static_cast<GameTime>(m_player->GetEntryLength(model->goodbye_sound_id()) * 1000.0f);
+		m_busyGuid = guid;
 		DLOG("Goodbye voice line played for npc " << guid);
 	}
 }

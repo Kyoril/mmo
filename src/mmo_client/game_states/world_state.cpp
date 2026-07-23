@@ -459,8 +459,6 @@ namespace mmo
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
 
-		UnitGossipVoice::Get().Reset();
-
 		// Force a zone (and thus music/ambience) resolve on the next world enter.
 		m_lastZoneId = UINT32_MAX;
 
@@ -485,6 +483,11 @@ namespace mmo
 
 		m_worldInstance.reset();
 		RemovePacketHandler();
+
+		// Must run after RemovePacketHandler(): shutting down the quest/vendor/trainer/bank
+		// clients there can still arm a goodbye line (e.g. QuestClient::Shutdown -> CloseQuest),
+		// so the reset that clears/cancels all pending state needs to happen afterwards.
+		UnitGossipVoice::Get().Reset();
 
 		RemoveGameplayCommands();
 
