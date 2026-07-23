@@ -3,6 +3,7 @@
 #include "frame_ui/frame_mgr.h"
 #include "game/vendor.h"
 #include "game_client/object_mgr.h"
+#include "unit_gossip_voice.h"
 
 #include "luabind_lambda.h"
 
@@ -74,6 +75,8 @@ namespace mmo
 			return;
 		}
 
+		UnitGossipVoice::Get().OnNpcDialogClosed(npc_dialog_source::Vendor, m_vendorGuid);
+
 		m_vendorGuid = 0;
 		m_vendorItems.clear();
 
@@ -137,6 +140,7 @@ namespace mmo
 		m_vendorItems.clear();
 		m_vendorItems.reserve(listCount);
 		m_vendorGuid = vendorGuid;
+		UnitGossipVoice::Get().OnNpcDialogOpened(npc_dialog_source::Vendor, m_vendorGuid);
 
 		auto player = ObjectMgr::GetActivePlayer();
 		ASSERT(player);

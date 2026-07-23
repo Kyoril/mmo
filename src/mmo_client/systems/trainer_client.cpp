@@ -5,6 +5,7 @@
 #include "game/vendor.h"
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
+#include "unit_gossip_voice.h"
 
 namespace mmo
 {
@@ -37,6 +38,8 @@ namespace mmo
 		{
 			return;
 		}
+
+		UnitGossipVoice::Get().OnNpcDialogClosed(npc_dialog_source::Trainer, m_trainerGuid);
 
 		m_trainerGuid = 0;
 		m_trainerSpells.clear();
@@ -116,6 +119,8 @@ namespace mmo
 		}
 
 		m_trainerGuid = trainerGuid;
+		UnitGossipVoice::Get().OnNpcDialogOpened(npc_dialog_source::Trainer, m_trainerGuid);
+
 		m_trainerTitle = std::move(trainerTitle);
 		m_trainerType = trainerType;
 		m_trainerSpells.clear();

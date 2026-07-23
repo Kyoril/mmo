@@ -6,6 +6,7 @@
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
 #include "base/clock.h"
+#include "unit_gossip_voice.h"
 
 #include "luabind_lambda.h"
 
@@ -198,6 +199,15 @@ namespace mmo
 
 	void QuestClient::CloseQuest()
 	{
+		if (m_questGiverGuid == 0)
+		{
+			// Already closed - makes the Lua OnHide notification and the server
+			// driven close path safely re-entrant.
+			return;
+		}
+
+		UnitGossipVoice::Get().OnNpcDialogClosed(npc_dialog_source::Quest, m_questGiverGuid);
+
 		m_gossipMenu = 0;
 		m_questGiverGuid = 0;
 		m_questDetails.Clear();
@@ -691,6 +701,8 @@ namespace mmo
 		}
 
 		m_questGiverGuid = npcGuid;
+		UnitGossipVoice::Get().OnNpcDialogOpened(npc_dialog_source::Quest, m_questGiverGuid);
+
 		m_greetingText = std::move(menuText);
 		ProcessQuestText(m_greetingText);
 
@@ -765,6 +777,8 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		UnitGossipVoice::Get().OnNpcDialogOpened(npc_dialog_source::Quest, m_questGiverGuid);
+
 		if (!ReadQuestList(packet))
 		{
 			return PacketParseResult::Disconnect;
@@ -787,6 +801,8 @@ namespace mmo
 			ELOG("Failed to read QuestGiverQuestDetails packet");
 			return PacketParseResult::Disconnect;
 		}
+
+		UnitGossipVoice::Get().OnNpcDialogOpened(npc_dialog_source::Quest, m_questGiverGuid);
 
 		if (!(packet 
 				>> io::read_container<uint8>(m_questDetails.questTitle)
@@ -909,6 +925,8 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		UnitGossipVoice::Get().OnNpcDialogOpened(npc_dialog_source::Quest, m_questGiverGuid);
+
 		if (!(packet
 			>> io::read_container<uint8>(m_questDetails.questTitle)
 			>> io::read_container<uint16>(m_questDetails.questOfferRewardText, 512)))
@@ -993,6 +1011,8 @@ namespace mmo
 			ELOG("Failed to read QuestGiverRequestItems packet");
 			return PacketParseResult::Disconnect;
 		}
+
+		UnitGossipVoice::Get().OnNpcDialogOpened(npc_dialog_source::Quest, m_questGiverGuid);
 
 		if (!(packet
 			>> io::read_container<uint8>(m_questDetails.questTitle)

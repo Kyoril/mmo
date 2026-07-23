@@ -6,6 +6,7 @@
 #include "game/bank.h"
 #include "game/object_type_id.h"
 #include "game_client/object_mgr.h"
+#include "unit_gossip_voice.h"
 
 #include "luabind_lambda.h"
 
@@ -63,6 +64,8 @@ namespace mmo
 			return;
 		}
 
+		UnitGossipVoice::Get().OnNpcDialogClosed(npc_dialog_source::Bank, m_bankerGuid);
+
 		m_bankerGuid = 0;
 
 		FrameManager::Get().TriggerLuaEvent("BANK_CLOSED");
@@ -101,6 +104,7 @@ namespace mmo
 		}
 
 		m_bankerGuid = bankerGuid;
+		UnitGossipVoice::Get().OnNpcDialogOpened(npc_dialog_source::Bank, m_bankerGuid);
 
 		const auto player = ObjectMgr::GetActivePlayer();
 		ASSERT(player);
