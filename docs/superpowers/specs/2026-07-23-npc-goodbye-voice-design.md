@@ -30,8 +30,11 @@ see proto-data field-number invariant):
 
 ```proto
 // SoundEntry id played when the player closes this NPC's dialog for real.
-optional uint32 goodbye_sound_id = 8 [default = 0];
+optional uint32 goodbye_sound_id = 9 [default = 0];
 ```
+
+(Field 8 is already taken by `animation_profile` — corrected from the first
+draft of this spec.)
 
 - `src/shared/proto_data/model_data.proto`
 - client mirror under `src/shared/client_data/`
@@ -43,21 +46,32 @@ reusing the shared `DrawSoundEntryCombo` helper
 
 ## Core logic — `UnitGossipVoice`
 
-Two new notifications:
+Two new notifications, each tagged with the dialog *source* (an enum:
+`Quest`, `Vendor`, `Trainer`, `Bank`):
 
-- `OnNpcDialogOpened(ObjectGuid guid)`
-- `OnNpcDialogClosed(ObjectGuid guid)`
+- `OnNpcDialogOpened(npc_dialog_source::Type source, ObjectGuid guid)`
+- `OnNpcDialogClosed(npc_dialog_source::Type source, ObjectGuid guid)`
+
+**Why sources (correction to the first draft):** for Vendor/Trainer gossip
+actions the world server does NOT send `GossipComplete` — the quest frame is
+only displaced client-side *after* the vendor/trainer window shows, so the
+quest-dialog "close" can arrive *after* the vendor "open". A pure
+pending-cancel would mis-fire there. Instead the service tracks which guid
+each source currently has open (`m_openDialogGuids[source]`), and a close only
+arms the goodbye when the guid is no longer open in ANY source slot. The Bank
+source is included because the Banker gossip action opens the bank window the
+same way.
 
 Behavior:
 
-1. **On close:** remember the guid and arm a **500 ms** grace timer
-   ("pending goodbye").
-2. **On open with the same guid** while pending: cancel the pending goodbye.
-   This covers gossip→vendor / gossip→trainer transitions (server sends
-   `GossipComplete` followed by the next window's packet), gossip page reloads,
-   and quest-list navigation.
-3. **On open with a different guid:** do NOT cancel — NPC A still says goodbye
-   while NPC B greets the player (3D audio separates them).
+1. **On open:** record `m_openDialogGuids[source] = guid`; if a goodbye is
+   pending for this guid, cancel it (covers gossip page reloads and
+   close-then-open transitions like `GossipComplete` + follow-up window).
+2. **On close:** clear the source slot; if the guid is still open in another
+   slot, do nothing (the conversation continues in another window). Otherwise
+   arm a **500 ms** grace timer ("pending goodbye").
+3. **Open with a different guid:** does NOT cancel a pending goodbye — NPC A
+   still says goodbye while NPC B greets the player (3D audio separates them).
 4. **When the timer fires:**
    - unit no longer exists (despawned/left view) → silent no-op;
    - unit dead or hello line still playing (`m_busyUntil` in the future) →
@@ -81,15 +95,20 @@ update).
 - `QuestClient::CloseQuest` — capture `m_questGiverGuid` **before** clearing it.
 - `VendorClient::CloseVendor` (guid check already guards the no-vendor case).
 - `TrainerClient::CloseTrainer`.
+- `BankClient::CloseBank`.
 - Vendor/trainer error paths that fire `VENDOR_CLOSED` / `TRAINER_CLOSED` with a
   session that never opened do NOT count as closes (no dialog was open).
 
-**Open** (all routed to `OnNpcDialogOpened`):
+**Open** (all routed to `OnNpcDialogOpened`, at the synchronous point where the
+packet handler stores the npc guid — NOT where the async UI event fires):
 
-- `QuestClient` packet handlers that fire `QUEST_GREETING`, `GOSSIP_SHOW`,
-  `QUEST_DETAIL`, `QUEST_REQUEST_ITEMS`, `QUEST_OFFER_REWARDS`.
-- `VendorClient::OnListInventory` success path (`VENDOR_SHOW`).
-- `TrainerClient` trainer-list handler (`TRAINER_SHOW`).
+- `QuestClient` handlers `OnGossipMenu`, `OnQuestGiverQuestList`,
+  `OnQuestGiverQuestDetails`, `OnQuestGiverOfferReward`,
+  `OnQuestGiverRequestItems` (not `OnQuestGiverQuestComplete` — that is a
+  turn-in toast which immediately calls `CloseQuest`).
+- `VendorClient::OnListInventory` success path (where `m_vendorGuid` is set).
+- `TrainerClient::OnTrainerList` (where `m_trainerGuid` is set).
+- `BankClient::OnShowBank` (where `m_bankerGuid` is set).
 
 **Lua-only close path:** the QuestFrame close button / Escape only calls
 `HideUIPanel` — C++ is never notified today (and `QuestClient` state goes stale;
@@ -101,6 +120,11 @@ path — which also ends up hiding the frame and re-firing `OnHide` — cannot
 double-fire the goodbye. Note `CloseQuest` fires `QUEST_FINISHED`, whose Lua
 handler calls `HideUIPanel` on an already-hidden frame; `OnHide` re-entry then
 hits the idempotency early-out.
+
+`VendorFrame.xml` and `BankFrame.xml` already follow this exact pattern
+(`OnHide` → `CloseVendor()` / `CloseBank()`); **`TrainerFrame.xml` does not**
+and gets the same `OnHide` → `CloseTrainer()` handler added (binding already
+exists).
 
 ## Edge cases
 
