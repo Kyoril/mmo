@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake --build build:*)",
+      "PowerShell(cmake --build build:*)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/verify.ps1:*)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/verify.ps1:*)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File tools/e2e/e2e_run.ps1:*)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File tools/e2e/e2e_run.ps1:*)",
+      "Bash(powershell -File tools/e2e/e2e_run.ps1:*)",
+      "Bash(./bin/Debug/unit_tests.exe:*)",
+      "Bash(./bin/Debug/game_server_unit_tests.exe:*)",
+      "Bash(./bin/Debug/login_server_tests.exe:*)",
+      "Bash(python .claude/skills/:*)",
+      "Bash(python tools/:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git worktree:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)"
+    ]
+  }
+}

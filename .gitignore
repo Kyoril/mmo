@@ -62,6 +62,7 @@ bin/Debug2/
 .claude/*
 !.claude/commands/
 !.claude/commands/**
+!.claude/settings.json
 
 generated/
 artifacts/
