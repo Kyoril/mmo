@@ -3252,6 +3252,8 @@ namespace mmo
 				std::vector<GameUnitC *> targets;
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, *spell, casterUnit.get(), targets);
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, *spell, casterUnit.get(), targets);
+
+				casterUnit->NotifyCastStarted(*spell, castTime);
 			}
 		}
 
@@ -3293,6 +3295,13 @@ namespace mmo
 		// Get the spell
 		const auto *spell = m_project.spells.getById(spellId);
 		ASSERT(spell);
+
+		// End the caster's tracked cast bar state (no-op for instant casts, which
+		// never started tracking).
+		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+		{
+			casterUnit->NotifyCastSucceeded();
+		}
 
 		// Get spell visualization for projectile config
 		const proto_client::SpellVisualization *visualization = nullptr;
@@ -3562,6 +3571,10 @@ namespace mmo
 				// Trigger spell visualization for cancel cast
 				std::vector<GameUnitC *> targets;
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CancelCast, *spell, casterUnit.get(), targets);
+
+				// Ends a tracked cast with the "Interrupted" nameplate flash. No-op if
+				// this unit had no cast bar running (e.g. instant cast validation failure).
+				casterUnit->NotifyCastFailed();
 			}
 		}
 
@@ -3632,6 +3645,8 @@ namespace mmo
 				std::vector<GameUnitC *> targets;
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, *spell, casterUnit.get(), targets);
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, *spell, casterUnit.get(), targets);
+
+				casterUnit->NotifyChannelStarted(*spell, static_cast<GameTime>(duration));
 			}
 		}
 
@@ -3654,6 +3669,13 @@ namespace mmo
 		if (!(packet >> io::read_packed_guid(casterId) >> io::read<GameTime>(timeLeft)))
 		{
 			return PacketParseResult::Disconnect;
+		}
+
+		// Update the caster's nameplate cast bar state for ANY unit (the packet is
+		// broadcast to nearby players; timeLeft == 0 is the regular end-of-channel).
+		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+		{
+			casterUnit->NotifyChannelUpdate(timeLeft);
 		}
 
 		if (m_playerController->GetControlledUnit())

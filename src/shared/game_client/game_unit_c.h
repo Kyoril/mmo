@@ -20,6 +20,8 @@
 #include "movement_event.h"
 #include "remote_movement_renderer.h"
 #include "animation/animation_context.h"
+#include "unit_cast_info.h"
+#include "base/clock.h"
 
 namespace mmo
 {
@@ -612,6 +614,43 @@ namespace mmo
 
 		void NotifyHitEvent();
 
+		/// Starts tracking a regular cast on this unit (SpellStart with castTime > 0).
+		void NotifyCastStarted(const proto_client::SpellEntry& spell, const GameTime castTimeMs)
+		{
+			m_castInfo.BeginCast(spell, GetAsyncTimeMs(), castTimeMs);
+		}
+
+		/// Starts tracking a channeled cast on this unit (ChannelStart with duration > 0).
+		void NotifyChannelStarted(const proto_client::SpellEntry& spell, const GameTime durationMs)
+		{
+			m_castInfo.BeginChannel(spell, GetAsyncTimeMs(), durationMs);
+		}
+
+		/// Applies a channel pushback / end signal (ChannelUpdate).
+		void NotifyChannelUpdate(const GameTime timeLeftMs)
+		{
+			m_castInfo.UpdateChannel(GetAsyncTimeMs(), timeLeftMs);
+		}
+
+		/// Ends the tracked cast successfully (SpellGo). No-op while idle.
+		void NotifyCastSucceeded()
+		{
+			m_castInfo.FinishSucceeded();
+		}
+
+		/// Ends the tracked cast as failed/interrupted (SpellFailure), triggering the
+		/// nameplate "Interrupted" flash. No-op while idle.
+		void NotifyCastFailed()
+		{
+			m_castInfo.FinishFailed(GetAsyncTimeMs());
+		}
+
+		/// Gets this unit's current cast state (read by the nameplate cast bar).
+		[[nodiscard]] const UnitCastInfo& GetCastInfo() const
+		{
+			return m_castInfo;
+		}
+
 		/// @brief Queues a callback to run when the current attack animation reaches its SwingHit
 		///        notify, or at the end of the animation if no such notify exists.
 		///        If no one-shot is currently playing the callback fires immediately.
@@ -814,6 +853,9 @@ namespace mmo
 
 		std::vector<const proto_client::SpellEntry *> m_spells;
 		std::vector<const proto_client::SpellEntry *> m_spellBookSpells;
+
+		/// Client-side cast state driving the nameplate cast bar.
+		UnitCastInfo m_castInfo;
 
 		uint64 m_victim = 0;
 
