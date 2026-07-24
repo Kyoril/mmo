@@ -4,6 +4,7 @@
 #include "sound_entry_player.h"
 #include "spell_visualization_service.h"
 #include "movement_log.h"
+#include "path_movement_utils.h"
 #include "animation/animation_controller.h"
 
 #include <sstream>
@@ -1587,10 +1588,6 @@ namespace mmo
 		m_targetRotation.reset();
 		m_pathCompleted = false;
 
-		// Reset easing state when new path is assigned
-		m_easingProgress = 0.0f;
-		m_easingTransitionDistance = 0.0f;
-
 		if (points.empty())
 		{
 			return;
@@ -1744,9 +1741,15 @@ namespace mmo
 		// prevents premature completion on stacked geometry (e.g. a path ending directly above
 		// on a staircase) while still completing despite legitimate nav mesh height error.
 		constexpr float arrivalHeightTolerance = 3.5f;
-		const bool nearDestination =
-			horizontalDistanceToDestination <= arrivalThreshold &&
-			::fabsf(finalDestination.y - currentPosition.y) <= arrivalHeightTolerance;
+		const float finalSegmentLength = m_pathSegmentLengths.empty() ? 0.0f : m_pathSegmentLengths.back();
+		const bool nearDestination = HasReachedPathDestination(
+			targetDistance,
+			m_pathTotalLength,
+			finalSegmentLength,
+			horizontalDistanceToDestination,
+			::fabsf(finalDestination.y - currentPosition.y),
+			arrivalThreshold,
+			arrivalHeightTolerance);
 
 		// Failsafe: if we overshot the expected path length by a large margin without getting
 		// close to the destination (e.g. blocked by client-side collision), snap to the
@@ -1875,111 +1878,7 @@ namespace mmo
 			return m_sceneNode->GetDerivedPosition();
 		}
 
-		float remainingDistance = distance;
-		Vector3 currentPos = m_pathStartPosition; // Start from where the path began
-
-		// Easing zone distance: smooth transitions over ~0.5 units on either side of a turn
-		constexpr float easingZoneDistance = 0.5f;
-
-		// Walk through path segments until we find where we should be
-		for (size_t i = 0; i < m_movementPath.size() && i < m_pathSegmentLengths.size(); ++i)
-		{
-			const float segmentLength = m_pathSegmentLengths[i];
-			Vector3 segmentEnd = m_movementPath[i];
-
-			if (remainingDistance <= segmentLength)
-			{
-				// We're somewhere along this segment
-				if (segmentLength > 0.0f)
-				{
-					float t = remainingDistance / segmentLength;
-
-					// Check if we're in an easing zone
-					// Note: A turn exists at waypoint[i] if there's a turn between i-1, i, i+1
-					// and a turn exists at waypoint[i+1] if there's a turn between i, i+1, i+2
-					
-					bool hasTurnAtStart = false;  // Is there a turn at the START of this segment?
-					bool hasTurnAtEnd = false;    // Is there a turn at the END of this segment?
-
-					// Check for turn at start of segment
-					if (i > 0)
-					{
-						// Three points: waypoint at i-1, waypoint at i, waypoint at i+1
-						Vector3 prevWaypoint = (i > 1) ? m_movementPath[i - 2] : m_pathStartPosition;
-						hasTurnAtStart = DetectTurnBetweenSegments(prevWaypoint, currentPos, segmentEnd);
-					}
-
-					// Check for turn at end of segment
-					if (i + 1 < m_movementPath.size())
-					{
-						// Three points: waypoint at i, waypoint at i+1, waypoint at i+2
-						Vector3 nextWaypoint = (i + 1 < m_movementPath.size() - 1) ? m_movementPath[i + 2] : m_movementPath.back();
-						hasTurnAtEnd = DetectTurnBetweenSegments(currentPos, segmentEnd, nextWaypoint);
-					}
-
-					// Apply easing if we're near a turn
-					if (hasTurnAtEnd && remainingDistance >= segmentLength - easingZoneDistance)
-					{
-						// Near the end of segment with a turn - ease out as we approach it
-						float distanceFromTurn = segmentLength - remainingDistance;
-						float easeProgress = 1.0f - (distanceFromTurn / easingZoneDistance);
-						easeProgress = std::max(0.0f, std::min(1.0f, easeProgress)); // Clamp to [0, 1]
-						
-						// Apply easing function to smooth the exit from this segment
-						float easedT = EaseInOutCubic(easeProgress);
-						t = (segmentLength - easingZoneDistance + easedT * easingZoneDistance) / segmentLength;
-						t = std::max(0.0f, std::min(1.0f, t)); // Clamp interpolation
-						
-						m_easingProgress = easeProgress;
-						m_easingTransitionDistance = easingZoneDistance;
-					}
-					else if (hasTurnAtStart && remainingDistance <= easingZoneDistance)
-					{
-						// Near the start of segment with a turn - ease in as we leave it
-						float easeProgress = remainingDistance / easingZoneDistance;
-						easeProgress = std::max(0.0f, std::min(1.0f, easeProgress)); // Clamp to [0, 1]
-						
-						// Apply easing function to smooth the entry to this segment
-						float easedT = EaseInOutCubic(easeProgress);
-						t = easedT * easingZoneDistance / segmentLength;
-						t = std::max(0.0f, std::min(1.0f, t)); // Clamp interpolation
-						
-						m_easingProgress = easeProgress;
-						m_easingTransitionDistance = easingZoneDistance;
-					}
-					else
-					{
-						m_easingProgress = 0.0f;
-					}
-
-					return currentPos + (segmentEnd - currentPos) * t;
-				}
-				else
-				{
-					return segmentEnd;
-				}
-			}
-
-			// Move to the end of this segment and continue
-			remainingDistance -= segmentLength;
-			currentPos = segmentEnd;
-		}
-
-		// If we get here, we've gone past the end of the path
-		return m_movementPath.back();
-	}
-
-	bool GameUnitC::DetectTurnBetweenSegments(const Vector3& prevPoint, const Vector3& currPoint, const Vector3& nextPoint) const
-	{
-		// Use the ComputeSegmentAngle utility from math_utils to determine if a turn exists
-		// A turn is detected if the angle between the two segments is greater than a threshold
-		const float segmentAngle = ComputeSegmentAngle(prevPoint, currPoint, nextPoint);
-		
-		// Define turn threshold: we consider angles > 30 degrees as a "turn" requiring easing
-		// This is approximately 0.524 radians (Pi/6)
-		constexpr float turnThresholdRadians = 0.524f;
-		
-		return segmentAngle > turnThresholdRadians;
+		return SamplePathPosition(m_pathStartPosition, m_movementPath, m_pathSegmentLengths, distance);
 	}
 
 	bool GameUnitC::IsControlledByLocalPlayer() const

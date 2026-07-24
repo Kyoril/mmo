@@ -12,6 +12,7 @@ target_sources(unit_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../shared/game_client/remote_movement_queue.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../shared/game_client/remote_movement_renderer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../shared/graphics/float_curve.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../shared/frame_ui/text_wrap.cpp
 )
 
 # CrossfadingSoundLoop tests exercise sound_entry_player.cpp, which needs the

@@ -11,6 +11,9 @@
 
 #include "log/default_log_levels.h"
 
+#include <algorithm>
+#include <limits>
+
 
 namespace mmo
 {
@@ -40,6 +43,7 @@ namespace mmo
 		// Add the masked property
 		m_propConnections += AddProperty("Masked", "false").Changed.connect(this, &TextField::OnMaskedPropChanged);
 		m_propConnections += AddProperty("AcceptsTab", "false").Changed.connect(this, &TextField::OnAcceptTabChanged);
+		m_propConnections += AddProperty("MultiLine", "false").Changed.connect(this, &TextField::OnMultiLinePropChanged);
 		m_propConnections += AddProperty("EnabledTextColor", "FFFFFFFF").Changed.connect(this, &TextField::OnEnabledTextColorChanged);
 		m_propConnections += AddProperty("DisabledTextColor", "FF808080").Changed.connect(this, &TextField::OnDisabledTextColorChanged);
 
@@ -67,6 +71,20 @@ namespace mmo
 		otherTextField->m_disabledColor = m_disabledColor;
 		otherTextField->m_scrollOffset = m_scrollOffset;
 		otherTextField->m_parsedTextDirty = true;
+		otherTextField->m_multiLine = m_multiLine;
+		otherTextField->m_lineCacheDirty = true;
+	}
+
+	void TextField::SetMultiLine(const bool value)
+	{
+		if (m_multiLine != value)
+		{
+			m_multiLine = value;
+			m_scrollOffset = 0.0f;
+			m_vertScrollOffset = 0.0f;
+			m_lineCacheDirty = true;
+			Invalidate();
+		}
 	}
 
 	void TextField::SetTextMasked(bool value)
@@ -83,8 +101,9 @@ namespace mmo
 		// Call base implementation first
 		Frame::SetText(std::move(text));
 		
-		// Reset scroll offset when text is set
+		// Reset scroll offsets when text is set
 		m_scrollOffset = 0.0f;
+		m_vertScrollOffset = 0.0f;
 		
 		// Mark for reparsing first
 		m_parsedTextDirty = true;
@@ -207,6 +226,70 @@ namespace mmo
 
 		// Use the plain text for cursor calculations when not masked
 		const std::string& textForCalculation = m_masked ? GetVisualText() : m_parsedText.plainText;
+
+		if (IsMultiLine())
+		{
+			const auto& lines = GetLineLayout();
+			const float lineHeight = font->GetHeight(textScale);
+			if (lines.empty() || lineHeight <= 0.0f)
+			{
+				return 0;
+			}
+
+			const float uiScale = FrameManager::Get().GetUIScaleSize().height;
+
+			// Pick the visual line from the y coordinate (position.y already
+			// contains the vertical scroll offset, applied by OnMouseDown)
+			const float localY = position.y - m_textAreaOffset.top * uiScale;
+			std::size_t lineIndex = 0;
+			if (localY > 0.0f)
+			{
+				lineIndex = std::min(static_cast<std::size_t>(localY / lineHeight), lines.size() - 1);
+			}
+
+			// Walk the line's glyphs to find the column at the x coordinate
+			const TextWrapLine& line = lines[lineIndex];
+			const float localX = position.x - m_textAreaOffset.left * uiScale;
+
+			float x = 0.0f;
+			std::size_t column = 0;
+
+			for (std::size_t byteIndex = line.startByte; byteIndex < line.endByte && byteIndex < textForCalculation.length();)
+			{
+				std::size_t iterations = 1;
+				uint32_t codepoint;
+
+				if (textForCalculation[byteIndex] == '\t')
+				{
+					codepoint = ' ';
+					iterations = 4;
+					byteIndex++;
+				}
+				else
+				{
+					const std::size_t startPos = byteIndex;
+					codepoint = utf8::next_codepoint(textForCalculation, byteIndex);
+					if (codepoint == 0 && startPos < byteIndex)
+					{
+						continue;
+					}
+				}
+
+				if (const FontGlyph* glyph = font->GetGlyphData(codepoint))
+				{
+					const float advance = glyph->GetAdvance(textScale) * static_cast<float>(iterations);
+					if (x + advance > localX)
+					{
+						break;
+					}
+					x += advance;
+				}
+
+				column++;
+			}
+
+			return static_cast<int32>(GetCaretIndexAt(lines, lineIndex, column));
+		}
 
 		// Adjust position for scroll offset
 		const float adjustedX = position.x;
@@ -387,9 +470,10 @@ namespace mmo
 		{
 			// Convert position to local position
 			Point localPosition = position - GetAbsoluteFrameRect().GetPosition();
-			
+
 			// Adjust for scroll offset
 			localPosition.x += m_scrollOffset;
+			localPosition.y += m_vertScrollOffset;
 			
 			// Try to find cursor position
 			m_cursor = GetCursorAt(localPosition);
@@ -581,20 +665,83 @@ namespace mmo
 				m_needsRedraw = true;
 			}
 		}
+		else if (key == 0x26)   // VK_UP
+		{
+			if (IsMultiLine())
+			{
+				MoveCaretLine(-1);
+			}
+		}
+		else if (key == 0x28)   // VK_DOWN
+		{
+			if (IsMultiLine())
+			{
+				MoveCaretLine(1);
+			}
+		}
 		else if (key == 0x24)   // VK_HOME
 		{
-			m_cursor = 0;
+			if (IsMultiLine())
+			{
+				// Move to the start of the current visual line
+				const auto& lines = GetLineLayout();
+				const TextCaretLocation location = GetCaretLineColumn();
+				m_cursor = static_cast<int32>(GetCaretIndexAt(lines, location.line, 0));
+			}
+			else
+			{
+				m_cursor = 0;
+			}
 			EnsureCursorVisible();
 			m_needsRedraw = true;
 		}
 		else if (key == 0x23)   // VK_END
 		{
-			UpdateParsedText();
-			const std::size_t textLength = m_masked ? utf8::length(GetVisualText()) : utf8::length(m_parsedText.plainText);
-			m_cursor = static_cast<int32>(textLength);
+			if (IsMultiLine())
+			{
+				// Move to the end of the current visual line
+				const auto& lines = GetLineLayout();
+				const TextCaretLocation location = GetCaretLineColumn();
+				m_cursor = static_cast<int32>(GetCaretIndexAt(lines, location.line, std::numeric_limits<std::size_t>::max()));
+			}
+			else
+			{
+				UpdateParsedText();
+				const std::size_t textLength = m_masked ? utf8::length(GetVisualText()) : utf8::length(m_parsedText.plainText);
+				m_cursor = static_cast<int32>(textLength);
+			}
 			EnsureCursorVisible();
 			m_needsRedraw = true;
 		}
+	}
+
+	void TextField::MoveCaretLine(const int delta)
+	{
+		const auto& lines = GetLineLayout();
+		const TextCaretLocation location = GetCaretLineColumn();
+
+		if (delta < 0 && location.line == 0)
+		{
+			return;
+		}
+
+		const std::size_t targetLine = delta < 0 ? location.line - 1 : location.line + 1;
+		if (targetLine >= lines.size())
+		{
+			return;
+		}
+
+		m_cursor = static_cast<int32>(GetCaretIndexAt(lines, targetLine, location.column));
+
+		// Don't place the caret inside a hyperlink token
+		const int hyperlinkIndex = FindHyperlinkAtPosition(m_cursor);
+		if (hyperlinkIndex >= 0)
+		{
+			m_cursor = static_cast<int32>(m_parsedText.hyperlinks[hyperlinkIndex].plainTextEnd);
+		}
+
+		EnsureCursorVisible();
+		m_needsRedraw = true;
 	}
 
 	void TextField::OnKeyChar(uint16 codepoint)
@@ -606,11 +753,17 @@ namespace mmo
 			return;
 		}
 
-		if (codepoint == 0x0D)  // VK_RETURN
+		if (codepoint == 0x0D || codepoint == 0x0A)  // VK_RETURN / line feed
 		{
-			return;
+			if (!IsMultiLine())
+			{
+				return;
+			}
+
+			// Insert a hard line break
+			codepoint = '\n';
 		}
-		
+
 		if (codepoint == 0x8)   // VK_BACKSPACE
 			return;
 
@@ -712,6 +865,7 @@ namespace mmo
 		std::string filteredText;
 		filteredText.reserve(clipboardText->size());
 
+		bool previousWasCarriageReturn = false;
 		for (std::size_t bytePos = 0; bytePos < clipboardText->size();)
 		{
 			const std::size_t prevBytePos = bytePos;
@@ -724,8 +878,19 @@ namespace mmo
 
 			if (codepoint == '\r' || codepoint == '\n')
 			{
+				// Multi-line fields keep newlines (normalizing \r\n and \r to \n)
+				if (IsMultiLine())
+				{
+					if (codepoint == '\r' || !previousWasCarriageReturn)
+					{
+						utf8::append_codepoint(filteredText, '\n');
+					}
+				}
+
+				previousWasCarriageReturn = (codepoint == '\r');
 				continue;
 			}
+			previousWasCarriageReturn = false;
 
 			if (!AcceptsTab() && codepoint == '\t')
 			{
@@ -805,9 +970,12 @@ namespace mmo
 	{
 		// Invalidate masked text
 		m_maskTextDirty = true;
-		
+
 		// Invalidate parsed text
 		m_parsedTextDirty = true;
+
+		// Invalidate the word-wrap line layout
+		m_lineCacheDirty = true;
 
 		// Call superclass method
 		Frame::OnTextChanged();
@@ -843,8 +1011,150 @@ namespace mmo
 		return m_parsedText.plainText;
 	}
 
+	float TextField::GetWrapWidth() const
+	{
+		// Match the renderer, which insets the frame rect by the text area offsets
+		// scaled with the ui scale height.
+		const float scale = FrameManager::Get().GetUIScaleSize().height;
+		const float width = const_cast<TextField*>(this)->GetAbsoluteFrameRect().GetWidth() -
+			(m_textAreaOffset.left + m_textAreaOffset.right) * scale;
+		return std::max(width, 1.0f);
+	}
+
+	const std::vector<TextWrapLine>& TextField::GetLineLayout() const
+	{
+		const float wrapWidth = GetWrapWidth();
+		const float textScale = FrameManager::Get().GetTextScale();
+
+		if (m_lineCacheDirty || wrapWidth != m_lineCacheWidth || textScale != m_lineCacheScale)
+		{
+			const std::string& text = GetParsedPlainText();
+
+			const FontPtr font = GetFont();
+			if (font)
+			{
+				m_lineCache = ComputeLineBreaks(text, wrapWidth, [&font, textScale](const uint32_t codepoint) -> float
+					{
+						const FontGlyph* glyph = font->GetGlyphData(codepoint);
+						return glyph ? glyph->GetAdvance(textScale) : 0.0f;
+					});
+			}
+			else
+			{
+				// No font: fall back to a single line spanning the whole text
+				m_lineCache.clear();
+				TextWrapLine line;
+				line.endByte = text.length();
+				line.endChar = utf8::length(text);
+				m_lineCache.push_back(line);
+			}
+
+			m_lineCacheDirty = false;
+			m_lineCacheWidth = wrapWidth;
+			m_lineCacheScale = textScale;
+		}
+
+		return m_lineCache;
+	}
+
+	TextCaretLocation TextField::GetCaretLineColumn() const
+	{
+		return mmo::GetCaretLocation(GetLineLayout(), static_cast<std::size_t>(std::max(m_cursor, 0)));
+	}
+
+	float TextField::GetCaretPixelX() const
+	{
+		const auto& lines = GetLineLayout();
+		const TextCaretLocation location = GetCaretLineColumn();
+
+		const FontPtr font = GetFont();
+		if (!font || location.line >= lines.size())
+		{
+			return 0.0f;
+		}
+
+		const float textScale = FrameManager::Get().GetTextScale();
+		const TextWrapLine& line = lines[location.line];
+		const std::string& text = GetParsedPlainText();
+
+		float x = 0.0f;
+		std::size_t column = 0;
+
+		for (std::size_t byteIndex = line.startByte; byteIndex < line.endByte && byteIndex < text.length() && column < location.column;)
+		{
+			std::size_t iterations = 1;
+			uint32_t codepoint;
+
+			if (text[byteIndex] == '\t')
+			{
+				codepoint = ' ';
+				iterations = 4;
+				byteIndex++;
+			}
+			else
+			{
+				const std::size_t startPos = byteIndex;
+				codepoint = utf8::next_codepoint(text, byteIndex);
+				if (codepoint == 0 && startPos < byteIndex)
+				{
+					continue;
+				}
+			}
+
+			if (const FontGlyph* glyph = font->GetGlyphData(codepoint))
+			{
+				x += glyph->GetAdvance(textScale) * static_cast<float>(iterations);
+			}
+
+			column++;
+		}
+
+		return x;
+	}
+
 	void TextField::EnsureCursorVisible()
 	{
+		if (IsMultiLine())
+		{
+			const FontPtr font = GetFont();
+			if (!font)
+			{
+				return;
+			}
+
+			const float textScale = FrameManager::Get().GetTextScale();
+			const float lineHeight = font->GetHeight(textScale);
+			if (lineHeight <= 0.0f)
+			{
+				return;
+			}
+
+			const float uiScale = FrameManager::Get().GetUIScaleSize().height;
+			const float visibleHeight = GetAbsoluteFrameRect().GetHeight() -
+				(m_textAreaOffset.top + m_textAreaOffset.bottom) * uiScale;
+
+			// Scroll in whole lines so rendered lines never cross the frame border
+			// (the geometry buffer has no clipping support).
+			const auto visibleLines = std::max<std::size_t>(1, static_cast<std::size_t>(visibleHeight / lineHeight));
+			const std::size_t caretLine = GetCaretLineColumn().line;
+
+			std::size_t firstVisibleLine = static_cast<std::size_t>(m_vertScrollOffset / lineHeight + 0.5f);
+			if (caretLine < firstVisibleLine)
+			{
+				firstVisibleLine = caretLine;
+			}
+			else if (caretLine >= firstVisibleLine + visibleLines)
+			{
+				firstVisibleLine = caretLine - visibleLines + 1;
+			}
+
+			m_vertScrollOffset = static_cast<float>(firstVisibleLine) * lineHeight;
+			m_scrollOffset = 0.0f;
+
+			Invalidate();
+			return;
+		}
+
 		const float cursorPixelPos = GetCaretPixelOffset(FrameManager::Get().GetTextScale());
 		const float visibleWidth = GetVisibleTextWidth();
 		
@@ -936,6 +1246,11 @@ namespace mmo
 	void TextField::OnAcceptTabChanged(const Property& property)
 	{
 		SetAcceptsTab(property.GetBoolValue());
+	}
+
+	void TextField::OnMultiLinePropChanged(const Property& property)
+	{
+		SetMultiLine(property.GetBoolValue());
 	}
 
 	void TextField::OnEnabledTextColorChanged(const Property& property)

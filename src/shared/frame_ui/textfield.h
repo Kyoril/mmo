@@ -5,6 +5,7 @@
 #include "frame.h"
 
 #include "text_component.h"
+#include "text_wrap.h"
 #include "hyperlink.h"
 
 
@@ -38,6 +39,13 @@ namespace mmo
 
 		/// Determines whether the text field accepts tabs as text input.
 		bool AcceptsTab() const { return m_acceptsTab; }
+
+		/// Determines whether the text field edits multiple lines with word wrap.
+		/// Masked text fields are always single-line.
+		bool IsMultiLine() const { return m_multiLine && !m_masked; }
+
+		/// Sets whether the text field edits multiple lines with word wrap.
+		void SetMultiLine(bool value);
 
 		/// Sets the mask code point to use when rendering the text masked.
 		void SetMaskCodePoint(std::string::value_type value);
@@ -78,6 +86,16 @@ namespace mmo
 		/// Gets the parsed plain text (hyperlinks show as display text only)
 		const std::string& GetParsedPlainText() const;
 
+		/// Gets the cached word-wrap line layout of the plain text (multi-line mode).
+		/// Recomputes the cache if the text, wrap width or text scale changed.
+		const std::vector<TextWrapLine>& GetLineLayout() const;
+		/// Gets the caret position as visual line and column (multi-line mode).
+		TextCaretLocation GetCaretLineColumn() const;
+		/// Gets the pixel x offset of the caret within its visual line (multi-line mode).
+		float GetCaretPixelX() const;
+		/// Gets the vertical scroll offset in pixels (multi-line mode).
+		float GetVerticalScrollOffset() const { return m_vertScrollOffset; }
+
 
 	public:
 		virtual bool OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
@@ -100,9 +118,10 @@ namespace mmo
 		void PasteFromClipboard();
 		void InsertTextAtCursor(const std::string& utf8Text);
 
-		/// 
+		///
 		void OnMaskedPropChanged(const Property& property);
 		void OnAcceptTabChanged(const Property& property);
+		void OnMultiLinePropChanged(const Property& property);
 		void OnEnabledTextColorChanged(const Property& property);
 		void OnDisabledTextColorChanged(const Property& property);
 
@@ -118,6 +137,11 @@ namespace mmo
 		std::string RebuildTextForPlainLength(std::size_t targetPlainLength);
 		/// Rebuilds the raw text from the given plain text position to the end
 		std::string RebuildTextFromPlainPosition(std::size_t fromPlainPos);
+
+		/// Gets the pixel width available for word wrapping (frame width minus scaled text area offsets).
+		float GetWrapWidth() const;
+		/// Moves the caret up or down by the given number of visual lines, clamping the column.
+		void MoveCaretLine(int delta);
 
 	private:
 		/// Whether the text of this textfield should be masked.
@@ -149,5 +173,18 @@ namespace mmo
 		ParsedText m_parsedText;
 		/// Whether the parsed text needs updating
 		mutable bool m_parsedTextDirty;
+
+		/// Whether the text field edits multiple lines with word wrap.
+		bool m_multiLine{ false };
+		/// Vertical scroll offset in pixels (multi-line mode), quantized to whole lines.
+		float m_vertScrollOffset{ 0.0f };
+		/// Cached word-wrap line layout of the plain text (multi-line mode).
+		mutable std::vector<TextWrapLine> m_lineCache;
+		/// Whether the line layout cache needs recomputing due to a text change.
+		mutable bool m_lineCacheDirty{ true };
+		/// Wrap width the line layout cache was computed with.
+		mutable float m_lineCacheWidth{ -1.0f };
+		/// Text scale the line layout cache was computed with.
+		mutable float m_lineCacheScale{ -1.0f };
 	};
 }
