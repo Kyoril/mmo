@@ -62,6 +62,10 @@ namespace mmo
 		/// Refreshes name text, health bar progress, reaction color and selection state.
 		void UpdateContent(GameUnitC& unit);
 
+		/// Refreshes the cast bar from the unit's current cast state (progress, spell
+		/// name, interrupted flash, visibility, cvar filter).
+		void UpdateCastBar(GameUnitC& unit);
+
 	private:
 		Camera* m_camera = nullptr;
 		ObjectGuid m_unitGuid = 0;
@@ -74,6 +78,20 @@ namespace mmo
 		std::shared_ptr<ProgressBar> m_healthBar;
 		/// The unit name text above the health bar.
 		FramePtr m_nameText;
+
+		/// The cast/channel bar below the health bar - visible only while the unit is
+		/// casting (or briefly flashing "Interrupted" after a failed cast).
+		std::shared_ptr<ProgressBar> m_castBar;
+
+		/// The spell whose name the cast bar currently displays, so the (truncated)
+		/// caption is only recomputed when the cast changes.
+		const void* m_lastCastSpell = nullptr;
+
+		/// Whether the cast bar currently shows the interrupted flash styling.
+		bool m_castBarInterrupted = false;
+
+		/// Cached cast bar fill color so the color property is only written on changes.
+		argb_t m_castBarColor = 0;
 
 		/// The unit name the plate currently displays (before truncation), so the
 		/// truncated display text is only recomputed when the name actually changes.

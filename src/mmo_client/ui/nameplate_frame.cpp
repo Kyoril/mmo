@@ -2,8 +2,12 @@
 
 #include "nameplate_frame.h"
 
+#include "base/clock.h"
 #include "base/signal.h"
+#include "client_data/project.h"
+#include "console/console_var.h"
 #include "frame_ui/frame_mgr.h"
+#include "frame_ui/localizer.h"
 #include "frame_ui/progress_bar.h"
 #include "frame_ui/property.h"
 #include "game_client/game_player_c.h"
@@ -32,11 +36,26 @@ namespace mmo
 		// Opacity of the highlight outline while the plate is only hovered (the selected
 		// plate shows it fully opaque).
 		constexpr float NameplateHoverHighlightOpacity = 0.4f;
+		// Vertical gap between the health bar bottom and the cast bar.
+		constexpr float NameplateCastBarGap = 2.0f;
+		// Cast bar fill while casting/channeling (warm yellow) and during the
+		// short "Interrupted" flash (desaturated red).
+		constexpr argb_t NameplateCastBarColor = 0xFFE8B923;
+		constexpr argb_t NameplateCastBarInterruptedColor = 0xFF8B3A3A;
 
 		const std::string NameplateTemplateName("NameplateTemplate");
 		const std::string NameplateNameTemplateName("NameplateNameTemplate");
 		const std::string NameplateHealthBarTemplateName("NameplateHealthBarTemplate");
 		const std::string NameplateHighlightTemplateName("NameplateHighlightTemplate");
+		const std::string NameplateCastBarTemplateName("NameplateCastBarTemplate");
+
+		/// Reads a boolean console variable, falling back to a default if it doesn't
+		/// exist (same idiom as NameplateManager).
+		bool GetBoolCVar(const char* name, const bool defaultValue)
+		{
+			const ConsoleVar* var = ConsoleVarMgr::FindConsoleVar(name);
+			return var ? var->GetBoolValue() : defaultValue;
+		}
 
 		/// Bar fill and name text color for one reaction. The name colors are lightened
 		/// variants of the bar colors so the text (with its 1px font shadow) stays
@@ -162,7 +181,8 @@ namespace mmo
 		const FramePtr highlightTemplate = FrameManager::Get().Find(NameplateHighlightTemplateName);
 		const FramePtr healthBarTemplate = FrameManager::Get().Find(NameplateHealthBarTemplateName);
 		const FramePtr nameTemplate = FrameManager::Get().Find(NameplateNameTemplateName);
-		if (!highlightTemplate || !healthBarTemplate || !nameTemplate)
+		const FramePtr castBarTemplate = FrameManager::Get().Find(NameplateCastBarTemplateName);
+		if (!highlightTemplate || !healthBarTemplate || !nameTemplate || !castBarTemplate)
 		{
 			ELOG("Missing nameplate child templates - is Nameplate.xml loaded?");
 			return;
@@ -188,10 +208,17 @@ namespace mmo
 		m_nameText->SetClickable(false);
 		m_nameText->SetEnabled(false);
 
+		m_castBar = std::make_shared<ProgressBar>("ProgressBar", GetName() + "_Cast");
+		castBarTemplate->Copy(*m_castBar);
+		m_castBar->SetClickable(false);
+		m_castBar->SetEnabled(false);
+		m_castBar->SetVisible(false);
+
 		// Highlight first so it renders behind the health bar and reads as an outline.
 		AddChild(m_highlight);
 		AddChild(m_healthBar);
 		AddChild(m_nameText);
+		AddChild(m_castBar);
 
 		// Name spans the top of the plate; the bar spans the bottom (height from template).
 		m_nameText->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr, 0.0f);
@@ -207,6 +234,12 @@ namespace mmo
 		m_highlight->SetAnchor(anchor_point::Right, anchor_point::Right, m_healthBar, NameplateHighlightBorder);
 		m_highlight->SetAnchor(anchor_point::Top, anchor_point::Top, m_healthBar, -NameplateHighlightBorder);
 		m_highlight->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, m_healthBar, NameplateHighlightBorder);
+
+		// The cast bar hangs below the plate rect, attached to the health bar. Children
+		// may render outside the parent rect (the highlight already does).
+		m_castBar->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr, 0.0f);
+		m_castBar->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr, 0.0f);
+		m_castBar->SetAnchor(anchor_point::Top, anchor_point::Bottom, m_healthBar, NameplateCastBarGap);
 	}
 
 	void NameplateFrame::UpdateContent(GameUnitC& unit)
@@ -264,6 +297,67 @@ namespace mmo
 		}
 
 		SetOpacity(selected || hovered ? 1.0f : NameplateUnselectedOpacity);
+
+		UpdateCastBar(unit);
+	}
+
+	void NameplateFrame::UpdateCastBar(GameUnitC& unit)
+	{
+		if (!m_castBar)
+		{
+			return;
+		}
+
+		const UnitCastInfo& cast = unit.GetCastInfo();
+		const GameTime now = GetAsyncTimeMs();
+
+		const bool enabled = GetBoolCVar("NameplateShowCastBars", true);
+		const bool interrupted = cast.IsInterruptFlashActive(now);
+		const bool active = cast.IsActive();
+		if (!enabled || (!active && !interrupted))
+		{
+			m_castBar->SetVisible(false);
+			m_lastCastSpell = nullptr;
+			return;
+		}
+
+		if (interrupted)
+		{
+			// Full grey-red bar with a localized "Interrupted" caption for the flash.
+			if (!m_castBarInterrupted)
+			{
+				m_castBarInterrupted = true;
+				m_lastCastSpell = nullptr;
+				m_castBar->SetText(Localize(FrameManager::Get().GetLocalization(), "NAMEPLATE_INTERRUPTED"));
+			}
+			m_castBar->SetProgress(1.0f);
+		}
+		else
+		{
+			m_castBarInterrupted = false;
+
+			// Only re-fit the caption when the cast (or the text scale) changes.
+			if (m_lastCastSpell != cast.spell)
+			{
+				m_lastCastSpell = cast.spell;
+				const float maxTextWidth = ((GetWidth() > 0.0f ? GetWidth() : 240.0f) - 8.0f) * FrameManager::Get().GetUIScale().x;
+				m_castBar->SetText(FitNameToWidth(cast.spell->name(), m_castBar->GetFont(), maxTextWidth));
+			}
+
+			m_castBar->SetProgress(cast.GetProgress(now));
+		}
+
+		const argb_t color = interrupted ? NameplateCastBarInterruptedColor : NameplateCastBarColor;
+		if (color != m_castBarColor)
+		{
+			m_castBarColor = color;
+			if (Property* progressColor = m_castBar->GetProperty("ProgressColor"))
+			{
+				progressColor->Set(ToHexColor(color));
+			}
+		}
+
+		m_castBar->SetVisible(true);
 	}
 
 	void NameplateFrame::Animate(float)
