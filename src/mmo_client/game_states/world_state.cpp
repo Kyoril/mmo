@@ -1875,6 +1875,7 @@ namespace mmo
 		s_nameplateFriendlyPlayersVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowFriendlyPlayers", "Show nameplates for friendly players.", "0");
 		s_nameplateEnemyPetsVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowEnemyPets", "Show nameplates for enemy pets.", "0");
 		s_nameplateFriendlyPetsVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowFriendlyPets", "Show nameplates for friendly pets.", "0");
+		ConsoleVarMgr::RegisterConsoleVar("NameplateShowCastBars", "Show cast bars on unit nameplates.", "1");
 		s_nameplateDistanceVar = ConsoleVarMgr::RegisterConsoleVar("NameplateDistance", "Maximum distance (world units) at which unit nameplates are shown.", "40");
 
 		// Camera shake on incoming damage is opt-in: screen shake can cause discomfort for some
@@ -1996,6 +1997,7 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowFriendlyPlayers");
 		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowEnemyPets");
 		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowFriendlyPets");
+		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowCastBars");
 		ConsoleVarMgr::UnregisterConsoleVar("NameplateDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("CombatCameraShake");
 		ConsoleVarMgr::UnregisterConsoleVar("CombatVignette");
