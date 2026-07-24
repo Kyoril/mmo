@@ -69,3 +69,7 @@ e2e/runtime/
 
 # Visual Studio resource editor cache
 *.aps
+
+tools/gate/last_report.json
+tools/gate/logs/
+tools/gate/reports/
