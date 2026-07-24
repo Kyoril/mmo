@@ -23,8 +23,14 @@ namespace mmo
 		static constexpr GameTime InterruptFlashDurationMs = 800;
 
 		/// The spell being cast, or nullptr while idle. Stored for identity and
-		/// name display only; this struct never dereferences it.
+		/// name display only; this struct itself never dereferences it. Consumers
+		/// (the nameplate cast bar) do read name() from it, which is safe because
+		/// the client's spell data lives for the whole session.
 		const proto_client::SpellEntry* spell = nullptr;
+
+		/// Id of the spell being cast, or 0 while idle. Used to disambiguate
+		/// SpellGo/SpellFailure broadcasts for unrelated casts by the same unit.
+		uint32 spellId = 0;
 
 		/// Client timestamp (GetAsyncTimeMs) when the cast/channel started.
 		GameTime startTime = 0;
@@ -40,9 +46,10 @@ namespace mmo
 		GameTime interruptedAt = 0;
 
 		/// Starts tracking a regular cast.
-		void BeginCast(const proto_client::SpellEntry& castSpell, const GameTime now, const GameTime castTimeMs)
+		void BeginCast(const proto_client::SpellEntry& castSpell, const uint32 castSpellId, const GameTime now, const GameTime castTimeMs)
 		{
 			spell = &castSpell;
+			spellId = castSpellId;
 			startTime = now;
 			endTime = now + castTimeMs;
 			channeling = false;
@@ -50,9 +57,9 @@ namespace mmo
 		}
 
 		/// Starts tracking a channeled cast.
-		void BeginChannel(const proto_client::SpellEntry& castSpell, const GameTime now, const GameTime durationMs)
+		void BeginChannel(const proto_client::SpellEntry& castSpell, const uint32 castSpellId, const GameTime now, const GameTime durationMs)
 		{
-			BeginCast(castSpell, now, durationMs);
+			BeginCast(castSpell, castSpellId, now, durationMs);
 			channeling = true;
 		}
 
@@ -67,32 +74,40 @@ namespace mmo
 
 			if (timeLeftMs == 0)
 			{
-				FinishSucceeded();
+				Clear();
 				return;
 			}
 
 			endTime = now + timeLeftMs;
 		}
 
-		/// Clears the cast without any failure feedback (SpellGo / channel end).
-		void FinishSucceeded()
+		/// Clears a successfully completed cast (SpellGo) without any failure
+		/// feedback. No-op unless the given spell id matches the tracked, non-
+		/// channeling cast: SpellGo is also broadcast at the start of a channel
+		/// (the channel is ended later via UpdateChannel(0)) and for unrelated
+		/// instant/proc casts by the same unit, neither of which should clear a
+		/// tracked cast bar.
+		void FinishSucceeded(const uint32 endedSpellId)
 		{
-			spell = nullptr;
-			startTime = 0;
-			endTime = 0;
-			channeling = false;
-		}
-
-		/// Clears the cast and stamps the interrupt flash - but only if a cast was
-		/// actually tracked (failures of instant casts never showed a bar).
-		void FinishFailed(const GameTime now)
-		{
-			if (!IsActive())
+			if (!IsActive() || channeling || endedSpellId != spellId)
 			{
 				return;
 			}
 
-			FinishSucceeded();
+			Clear();
+		}
+
+		/// Clears the cast and stamps the interrupt flash - but only if the failure
+		/// is for the tracked cast (failures of instant casts, or of unrelated
+		/// casts by the same unit, never touch the bar).
+		void FinishFailed(const GameTime now, const uint32 failedSpellId)
+		{
+			if (!IsActive() || failedSpellId != spellId)
+			{
+				return;
+			}
+
+			Clear();
 			interruptedAt = now;
 		}
 
@@ -106,6 +121,14 @@ namespace mmo
 		/// 1 -> 0. Clamped to [0, 1].
 		[[nodiscard]] float GetProgress(const GameTime now) const
 		{
+			if (now < startTime)
+			{
+				// Before the tracked start (e.g. a stale/out-of-order update): report
+				// the bar's starting value rather than relying on the clamp below to
+				// paper over the unsigned time subtraction wrapping around.
+				return channeling ? 1.0f : 0.0f;
+			}
+
 			float progress = 1.0f;
 			if (endTime > startTime)
 			{
@@ -120,6 +143,19 @@ namespace mmo
 		[[nodiscard]] bool IsInterruptFlashActive(const GameTime now) const
 		{
 			return interruptedAt != 0 && now >= interruptedAt && now - interruptedAt < InterruptFlashDurationMs;
+		}
+
+	private:
+		/// Unconditionally clears the tracked spell/id/times/channeling flag.
+		/// Does NOT touch interruptedAt - callers that want the interrupt flash
+		/// stamp it themselves after calling this.
+		void Clear()
+		{
+			spell = nullptr;
+			spellId = 0;
+			startTime = 0;
+			endTime = 0;
+			channeling = false;
 		}
 	};
 }

@@ -615,15 +615,18 @@ namespace mmo
 		void NotifyHitEvent();
 
 		/// Starts tracking a regular cast on this unit (SpellStart with castTime > 0).
-		void NotifyCastStarted(const proto_client::SpellEntry& spell, const GameTime castTimeMs)
+		/// @param spellId Id of the spell being cast, passed alongside spell because this
+		///        header only forward-declares proto_client::SpellEntry and cannot call spell.id().
+		void NotifyCastStarted(const proto_client::SpellEntry& spell, const uint32 spellId, const GameTime castTimeMs)
 		{
-			m_castInfo.BeginCast(spell, GetAsyncTimeMs(), castTimeMs);
+			m_castInfo.BeginCast(spell, spellId, GetAsyncTimeMs(), castTimeMs);
 		}
 
 		/// Starts tracking a channeled cast on this unit (ChannelStart with duration > 0).
-		void NotifyChannelStarted(const proto_client::SpellEntry& spell, const GameTime durationMs)
+		/// @param spellId Id of the spell being channeled; see NotifyCastStarted for why it's a parameter.
+		void NotifyChannelStarted(const proto_client::SpellEntry& spell, const uint32 spellId, const GameTime durationMs)
 		{
-			m_castInfo.BeginChannel(spell, GetAsyncTimeMs(), durationMs);
+			m_castInfo.BeginChannel(spell, spellId, GetAsyncTimeMs(), durationMs);
 		}
 
 		/// Applies a channel pushback / end signal (ChannelUpdate).
@@ -632,17 +635,20 @@ namespace mmo
 			m_castInfo.UpdateChannel(GetAsyncTimeMs(), timeLeftMs);
 		}
 
-		/// Ends the tracked cast successfully (SpellGo). No-op while idle.
-		void NotifyCastSucceeded()
+		/// Ends the tracked cast successfully (SpellGo). No-op unless this is the
+		/// tracked, non-channeling cast: SpellGo also fires at channel start (the
+		/// channel itself only ends via NotifyChannelUpdate(0)) and for unrelated
+		/// instant/proc casts by the same unit.
+		void NotifyCastSucceeded(const uint32 spellId)
 		{
-			m_castInfo.FinishSucceeded();
+			m_castInfo.FinishSucceeded(spellId);
 		}
 
 		/// Ends the tracked cast as failed/interrupted (SpellFailure), triggering the
-		/// nameplate "Interrupted" flash. No-op while idle.
-		void NotifyCastFailed()
+		/// nameplate "Interrupted" flash. No-op unless spellId matches the tracked cast.
+		void NotifyCastFailed(const uint32 spellId)
 		{
-			m_castInfo.FinishFailed(GetAsyncTimeMs());
+			m_castInfo.FinishFailed(GetAsyncTimeMs(), spellId);
 		}
 
 		/// Gets this unit's current cast state (read by the nameplate cast bar).
@@ -839,17 +845,6 @@ namespace mmo
 		// Path gravity simulation
 		float m_pathVerticalVelocity = 0.0f; // Current vertical velocity for gravity
 		bool m_pathOnGround = true;			 // Whether unit is on ground during path movement
-
-		// Easing state tracking for smooth path transitions
-		float m_easingProgress = 0.0f;		 // Current easing progress [0, 1] within waypoint transition
-		float m_easingTransitionDistance = 0.0f; // Distance being eased for current turn
-
-		/// @brief Detects if there's a turn between two consecutive path segments
-		/// @param prevPoint Previous waypoint
-		/// @param currPoint Current waypoint
-		/// @param nextPoint Next waypoint
-		/// @return True if a turn is detected (angle > threshold)
-		bool DetectTurnBetweenSegments(const Vector3& prevPoint, const Vector3& currPoint, const Vector3& nextPoint) const;
 
 		std::vector<const proto_client::SpellEntry *> m_spells;
 		std::vector<const proto_client::SpellEntry *> m_spellBookSpells;

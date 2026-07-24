@@ -3255,7 +3255,7 @@ namespace mmo
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, *spell, casterUnit.get(), targets);
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, *spell, casterUnit.get(), targets);
 
-				casterUnit->NotifyCastStarted(*spell, castTime);
+				casterUnit->NotifyCastStarted(*spell, spellId, castTime);
 			}
 		}
 
@@ -3302,7 +3302,7 @@ namespace mmo
 		// never started tracking).
 		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
 		{
-			casterUnit->NotifyCastSucceeded();
+			casterUnit->NotifyCastSucceeded(spellId);
 		}
 
 		// Get spell visualization for projectile config
@@ -3576,7 +3576,7 @@ namespace mmo
 
 				// Ends a tracked cast with the "Interrupted" nameplate flash. No-op if
 				// this unit had no cast bar running (e.g. instant cast validation failure).
-				casterUnit->NotifyCastFailed();
+				casterUnit->NotifyCastFailed(spellId);
 			}
 		}
 
@@ -3648,7 +3648,7 @@ namespace mmo
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, *spell, casterUnit.get(), targets);
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, *spell, casterUnit.get(), targets);
 
-				casterUnit->NotifyChannelStarted(*spell, static_cast<GameTime>(duration));
+				casterUnit->NotifyChannelStarted(*spell, spellId, static_cast<GameTime>(duration));
 			}
 		}
 
