@@ -59,7 +59,9 @@ bin/Debug2/
 /src/shared/deferred_shading/shaders/PS_ContactShadows.h
 /src/shared/deferred_shading/shaders/PS_ContactShadowBlur.h
 *.local.json
-.claude/
+.claude/*
+!.claude/commands/
+!.claude/commands/**
 
 generated/
 artifacts/
