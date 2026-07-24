@@ -13,8 +13,10 @@ Run the local quality gate for the current branch, then review the branch diff.
 2. **If the gate is RED** (non-zero exit): read `tools/gate/last_report.json`, identify
    the failing step, and quote the relevant lines from its log under `tools/gate/logs/`.
    For an `e2e` failure, also read `e2e/runtime/logs/summary.json` and quote the failing
-   scenario's transcript tail from `e2e/runtime/logs/<scenario>.jsonl`. Summarize the
-   failure and STOP — no review, no merge.
+   scenario's transcript tail from `e2e/runtime/logs/<scenario>.jsonl`. Exception: if the
+   `e2e` step has `"log": null` and `exit_code` -1, E2E never ran because
+   `MMO_E2E_MYSQL_PASSWORD` is not set — report exactly that instead of hunting for logs.
+   Summarize the failure and STOP — no review, no merge.
 3. **If the gate is GREEN** and the current branch is not `develop`: dispatch a code
    review of `git diff develop...HEAD` using the superpowers:requesting-code-review
    skill with base `develop`. (On `develop` itself there is nothing to review — skip.)
