@@ -23,6 +23,20 @@ The following systems are fully implemented and should not be suggested as futur
 - **Unit stat system** — creatures use stat formulas instead of hardcoded values
 - **Asset browser** — visual thumbnails, text search, drag & drop from browser into viewport
 
+## Agentic Workflow
+
+- All agent implementation work happens on a `feature/<topic>` branch (use a worktree
+  for parallel sessions). Direct commits to `develop` are reserved for trivial
+  data/docs tweaks the user explicitly requests.
+- Merging to `develop` goes through the local quality gate: `/gate` runs
+  `tools/gate/verify.ps1` (Debug build + unit tests + E2E) and then a code review of
+  the branch diff; `/ship` performs the merge and refuses without a green, full,
+  HEAD-matching `tools/gate/last_report.json`.
+- Never push to origin unless the user explicitly asks.
+- Scheduled reports land in `tools/gate/reports/` (nightly gate on develop, weekly
+  content audit). At session start, if the newest nightly report there is red,
+  surface it to the user before starting new work.
+
 ## Build Commands
 
 ### Prerequisites
