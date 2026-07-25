@@ -530,7 +530,13 @@ namespace mmo
 
 	void GameCreatureS::SetFollowedUnit(const std::shared_ptr<GameUnitS>& target, const float followDistance)
 	{
+		if (!target || target.get() == this)
+		{
+			return;
+		}
+
 		m_followTarget = target;
+		m_hasFollowTarget = true;
 		m_followDistance = std::max(0.5f, followDistance);
 
 		if (m_ai)
@@ -543,12 +549,13 @@ namespace mmo
 
 	void GameCreatureS::ClearFollowedUnit()
 	{
-		if (m_followTarget.expired())
+		if (!m_hasFollowTarget)
 		{
 			return;
 		}
 
 		m_followTarget.reset();
+		m_hasFollowTarget = false;
 
 		if (m_ai)
 		{

@@ -285,6 +285,9 @@ namespace mmo
 		std::vector<PatrolWaypoint> m_patrolWaypoints;
 		/// Unit this creature follows while idle (escort mode). Empty when not following.
 		std::weak_ptr<GameUnitS> m_followTarget;
+		/// Whether a follow target is currently assigned (distinguishes "never followed" from
+		/// "followed unit despawned", which leaves the weak pointer expired).
+		bool m_hasFollowTarget = false;
 		/// Distance in world units kept to the followed unit.
 		float m_followDistance = 2.5f;
 		LootRecipients m_lootRecipients;

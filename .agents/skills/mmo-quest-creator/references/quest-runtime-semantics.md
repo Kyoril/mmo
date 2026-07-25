@@ -103,8 +103,11 @@ mixed orderings desynchronize the displayed counter slot from the server's requi
 `AutoRewarded` quests reward themselves the moment they complete (any credit path, scripted
 completion, or auto-completion at accept), without visiting a turn-in NPC. Restriction: the quest
 must not offer choice rewards — with `rewarditemschoice` rows the flag is ignored (with a server
-warning) and the quest falls back to manual turn-in. Still wire an ender NPC as a fallback for
-older content, but new auto-rewarded quests don't need one.
+warning) and the quest falls back to manual turn-in; the editor shows a warning for this combo.
+A failed auto-reward (e.g. bags full while the quest grants fixed reward items) is retried on the
+player's next login. For auto-rewarded quests that grant reward ITEMS, still wire an ender NPC as
+a manual fallback so a full-bags player is not stuck until relog; pure XP/money/spell rewards
+cannot fail and need no ender.
 
 Repeatability now behaves in three different ways:
 

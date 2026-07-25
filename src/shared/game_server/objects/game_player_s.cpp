@@ -7,6 +7,7 @@
 
 #include "game_item_s.h"
 #include "quest_status_data.h"
+#include "game_server/quest_chain_gating.h"
 #include "game_server/quest_class_xp.h"
 #include "game_server/quest_reset.h"
 #include "game_server/world/universe.h"
@@ -35,6 +36,17 @@ namespace mmo
 	GamePlayerS::GamePlayerS(const proto::Project &project, TimerQueue &timerQueue)
 		: GameUnitS(project, timerQueue), m_inventory(*this)
 	{
+		// Auto-reward checks scheduled before the player entered a world (e.g. for quests loaded
+		// as Complete on login) are flushed once the player spawns.
+		m_onSpawnedAutoReward = spawned.connect([this](WorldInstance&)
+		{
+			const auto pending = std::move(m_pendingAutoRewardChecks);
+			m_pendingAutoRewardChecks.clear();
+			for (const uint32 questId : pending)
+			{
+				ScheduleAutoRewardCheck(questId);
+			}
+		});
 	}
 
 	void GamePlayerS::Initialize()
@@ -510,63 +522,27 @@ namespace mmo
 			}
 		}
 
-		// nextquestid back-links: a quest that another quest names as its nextquestid is locked
-		// until at least one of those predecessor quests has been rewarded. Multiple predecessors
-		// act as alternatives (e.g. race-forked breadcrumbs pointing at the same follow-up).
+		// Chain gating: nextquestid back-links (locked until a predecessor is rewarded) and
+		// positive exclusive groups (mutually exclusive quests). Both use HasRewardedQuest
+		// instead of GetQuestStatus to avoid recursing between group members.
+		const auto isRewarded = [this](const uint32 questId) { return HasRewardedQuest(questId); };
+		const auto isActiveInLog = [this](const uint32 questId)
 		{
-			bool hasBackLink = false;
-			bool anyBackLinkRewarded = false;
+			const auto oit = m_quests.find(questId);
+			return oit != m_quests.end() &&
+				(oit->second.status == quest_status::Incomplete ||
+				 oit->second.status == quest_status::Complete ||
+				 oit->second.status == quest_status::Failed);
+		};
 
-			const auto& questTemplates = GetProject().quests.getTemplates();
-			for (int i = 0; i < questTemplates.entry_size(); ++i)
-			{
-				const auto& other = questTemplates.entry(i);
-				if (other.id() != quest && other.nextquestid() == static_cast<int32>(quest))
-				{
-					hasBackLink = true;
-					if (HasRewardedQuest(other.id()))
-					{
-						anyBackLinkRewarded = true;
-						break;
-					}
-				}
-			}
-
-			if (hasBackLink && !anyBackLinkRewarded)
-			{
-				return quest_status::Unavailable;
-			}
+		if (IsQuestLockedByBackLinks(GetProject().quests.getTemplates(), quest, isRewarded))
+		{
+			return quest_status::Unavailable;
 		}
 
-		// Positive exclusive groups are mutually exclusive: while any other quest of the same
-		// group is in the quest log or has been rewarded, this quest stays unavailable.
-		// (Negative groups are not supported by the runtime.)
-		if (entry->exclusivegroup() > 0)
+		if (IsQuestLockedByExclusiveGroup(GetProject().quests.getTemplates(), *entry, isRewarded, isActiveInLog))
 		{
-			const auto& questTemplates = GetProject().quests.getTemplates();
-			for (int i = 0; i < questTemplates.entry_size(); ++i)
-			{
-				const auto& other = questTemplates.entry(i);
-				if (other.id() == quest || other.exclusivegroup() != entry->exclusivegroup())
-				{
-					continue;
-				}
-
-				if (HasRewardedQuest(other.id()))
-				{
-					return quest_status::Unavailable;
-				}
-
-				if (const auto oit = m_quests.find(other.id()); oit != m_quests.end())
-				{
-					if (oit->second.status == quest_status::Incomplete ||
-						oit->second.status == quest_status::Complete ||
-						oit->second.status == quest_status::Failed)
-					{
-						return quest_status::Unavailable;
-					}
-				}
-			}
+			return quest_status::Unavailable;
 		}
 
 		// Check if the quest is available for us
@@ -632,6 +608,8 @@ namespace mmo
 		auto* world = GetWorldInstance();
 		if (!world)
 		{
+			// Not in a world yet (login-time load) — retried when the player spawns.
+			m_pendingAutoRewardChecks.insert(questId);
 			return;
 		}
 
@@ -1940,6 +1918,17 @@ namespace mmo
 
 			// ArmQuestTimer fails the quest immediately if the deadline already passed.
 			ArmQuestTimer(questId, data.expiration);
+		}
+
+		// Retry auto-rewards for quests that completed but could not be rewarded before the
+		// player logged out (e.g. full bags at completion time, or a crash between completion
+		// and the deferred reward).
+		for (const auto &[questId, data] : m_quests)
+		{
+			if (data.status == quest_status::Complete)
+			{
+				ScheduleAutoRewardCheck(questId);
+			}
 		}
 	}
 

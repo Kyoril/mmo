@@ -267,7 +267,13 @@ namespace mmo
 				ImGui::TableNextColumn();
 				CHECKBOX_FLAG_PROP(flags, "Auto Rewarded", quest_flags::AutoRewarded);
 				ImGui::SameLine();
-				DrawHelpMarker("Quest is automatically rewarded on completion");
+				DrawHelpMarker("Quest is automatically rewarded on completion. Incompatible with choice rewards - the runtime falls back to manual turn-in.");
+				if ((currentEntry.flags() & quest_flags::AutoRewarded) != 0 && currentEntry.rewarditemschoice_size() > 0)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.2f, 1.0f));
+					ImGui::TextWrapped("Has choice rewards: will NOT auto-reward!");
+					ImGui::PopStyleColor();
+				}
 
 				ImGui::TableNextColumn();
 				CHECKBOX_FLAG_PROP(flags, "Repeatable", quest_flags::Repeatable);

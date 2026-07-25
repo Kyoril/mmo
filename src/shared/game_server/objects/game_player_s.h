@@ -302,7 +302,8 @@ namespace mmo
 		bool TryAutoRewardQuest(uint32 questId);
 
 		/// Schedules a deferred auto-reward attempt for a quest that just completed, if it is
-		/// flagged as AutoRewarded. Deferred to run outside the completing credit path.
+		/// flagged as AutoRewarded. Deferred to run outside the completing credit path. When the
+		/// player is not in a world yet (login-time load), the check is queued and flushed on spawn.
 		void ScheduleAutoRewardCheck(uint32 questId);
 
 		/// Called when a quest-related creature was killed.
@@ -579,6 +580,12 @@ namespace mmo
 			scoped_connection onExpired;
 		};
 		std::map<uint32, QuestTimer> m_questTimers;
+
+		/// Auto-reward checks requested before the player entered a world (login-time quest data
+		/// load); flushed once the player spawns.
+		std::set<uint32> m_pendingAutoRewardChecks;
+		scoped_connection m_onSpawnedAutoReward;
+
 		NetPlayerWatcher *m_netPlayerWatcher = nullptr;
 		uint64 m_groupId = 0;
 		PlayerGroup* m_playerGroup = nullptr;

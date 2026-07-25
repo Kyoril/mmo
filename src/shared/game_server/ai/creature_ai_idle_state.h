@@ -85,6 +85,12 @@ namespace mmo
 		scoped_connection_container m_connections;
 
 		std::unique_ptr<UnitWatcher> m_unitWatcher;
+
+		/// Last destination issued to the mover while following (avoids replanning the nav path
+		/// every poll while the followed unit stands still).
+		Vector3 m_followDestination;
+		bool m_hasFollowDestination = false;
+
 		size_t m_nextPatrolWaypointIndex = 0;
 		/// Ordered patrol waypoint indices of the chain currently being traversed.
 		std::vector<size_t> m_currentChainWaypointIndices;

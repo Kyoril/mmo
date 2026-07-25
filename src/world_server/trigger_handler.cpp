@@ -873,6 +873,12 @@ namespace mmo
 			return;
 		}
 
+		if (followedUnit.get() == creature)
+		{
+			WLOG("TRIGGER_ACTION_SET_FOLLOW_TARGET: Creature cannot follow itself - check the action's target configuration");
+			return;
+		}
+
 		// Data: optional follow distance in tenths of a world unit (0 = default 2.5).
 		const int32 distanceTenths = GetActionData(action, 0);
 		const float followDistance = distanceTenths > 0 ? static_cast<float>(distanceTenths) * 0.1f : 2.5f;
