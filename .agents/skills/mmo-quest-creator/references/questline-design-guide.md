@@ -30,6 +30,8 @@ built in THIS engine:
 7. **Use object N times** — "burn 10 remains", "poison the 3 food racks". Build: object-use
    requirement (`objectid + objectcount`, `spellcast` 0) — credit is granted natively when the
    player uses the object. Distinct named racks = one requirement row per object entry (max 4).
+   QuestObjects despawn on use and respawn on the spawner's delay, so place enough spawns for
+   the required count plus contention (rule of thumb: 1.5-2x the count, short respawn).
 8. **Cast spell on target** — use a quest item's spell on a creature or object. Build:
    `objectid + objectcount + spellcast` requirement; credit via the spell-cast path.
 9. **Exploration / investigate** — "investigate the ruins", possibly combined with kill counters.
@@ -111,6 +113,8 @@ Rules of thumb:
   "Investigate An'daroth" next to the counters.
 - Multi-counter quests: 2 counters is the comfortable default, 3 for "war effort" quests, 4 is the
   hard engine limit — reserve it for showcase quests (four lieutenants, four weapon types).
+- Order requirement rows: creature counters first, then object counters, then items. The client
+  assigns quest-log counter display slots in that order.
 - Distinct-named single collects ("Stone of Light" + "Stone of Flame") read better than "2 Stones"
   and give each sub-location a purpose. Each is its own requirement row with count 1.
 </objective_writing>

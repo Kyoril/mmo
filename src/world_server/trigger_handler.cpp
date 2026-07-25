@@ -939,7 +939,8 @@ namespace mmo
 			return;
 		}
 
-		if (!target->IsUnit())
+		const bool isWorldObject = target->GetTypeId() == ObjectTypeId::Object;
+		if (target->IsPlayer() || (!target->IsUnit() && !isWorldObject))
 		{
 			ELOG("TRIGGER_ACTION_DESPAWN: Target has to be a creature or world object");
 			return;

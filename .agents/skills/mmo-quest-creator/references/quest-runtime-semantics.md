@@ -49,8 +49,19 @@ The runtime updates quest progress through these paths:
 
 Every successful `GameWorldObjectS::Use` (chest looted, door used, quest object used) also fires
 the object's `OnInteraction` triggers: base `ObjectEntry.triggers` plus the per-spawn
-`ObjectSpawnEntry.trigger_id` override. The world object type `QuestObject` exists specifically
-for credit-and-trigger interactables with no other behavior.
+`ObjectSpawnEntry.trigger_id` override (deduplicated if the override also appears in the base
+list). The world object type `QuestObject` exists specifically for credit-and-trigger
+interactables with no other behavior; a QuestObject despawns after each successful use so one
+spawn cannot be spam-clicked to full credit — the spawner's respawn delay controls availability.
+
+Credit-per-use caveats: chests grant use credit on OPEN (reopening a partially looted chest
+grants again, capped at the required count), and doors grant credit on every toggle. Use
+`requiredquest` gating plus sensible counts for chest/door objectives, or prefer QuestObject.
+
+The client displays object objectives as real counter lines ("<Object name>: n/m" via
+`QUEST_OBJECTS_USED`), fed by `QuestInfo.requiredObjects`. Counter display slots are assigned in
+order creatures-then-objects, so author requirement rows in that order, with item rows LAST —
+mixed orderings desynchronize the displayed counter slot from the server's requirement index.
 </progression>
 
 <fulfillment>
@@ -105,6 +116,7 @@ Quest-relevant trigger actions in `src/world_server/trigger_handler.cpp`:
 - `QuestExplorationCredit`: grants only the exploration/event credit of the quest to a player target
 - `QuestFailQuest`: fails the quest for a player target if it is in their quest log (escort death
   and similar failure conditions); `failtriggers` of the quest fire as usual
+- `Despawn`: works on creatures AND world objects (players are rejected)
 
 Useful trigger events:
 

@@ -99,7 +99,7 @@ namespace mmo
 	class QuestClient final : public NonCopyable
 	{
 	public:
-		QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, const proto_client::EmoteManager& emotes, DBItemCache& itemCache, DBCreatureCache& creatureCache, const Localization& localization);
+		QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, const proto_client::EmoteManager& emotes, DBItemCache& itemCache, DBCreatureCache& creatureCache, DBObjectCache& objectCache, const Localization& localization);
 		~QuestClient() override = default;
 
 	public:
@@ -204,6 +204,7 @@ namespace mmo
 		const proto_client::EmoteManager& m_emotes;
 		DBItemCache& m_itemCache;
 		DBCreatureCache& m_creatureCache;
+		DBObjectCache& m_objectCache;
 		const Localization& m_localization;
 
 		std::vector<QuestListEntry> m_questList;

@@ -668,6 +668,7 @@ namespace mmo
 
 			if (m_character->GetQuestStatus(entry.questentry()) != quest_status::Available)
 			{
+				DLOG("Quest-starter item " << entry.id() << " used, but quest " << entry.questentry() << " is not available for the character");
 				return;
 			}
 

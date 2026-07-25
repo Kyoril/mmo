@@ -30,6 +30,12 @@ namespace mmo
 		uint32 count;
 	};
 
+	struct QuestRequiredObject
+	{
+		uint32 objectId;
+		uint32 count;
+	};
+
 	struct QuestInfo
 	{
 		uint64 id;
@@ -53,6 +59,8 @@ namespace mmo
 		uint32 flags = 0;
 		std::vector<QuestRequiredItem> requiredItems;
 		std::vector<QuestRequiredCreature> requiredCreatures;
+		/// World objects that have to be used (or hit with a quest spell) for this quest.
+		std::vector<QuestRequiredObject> requiredObjects;
 		std::vector<QuestRewardItem> rewardItems;
 		std::vector<QuestRewardItem> optionalItems;
 	};

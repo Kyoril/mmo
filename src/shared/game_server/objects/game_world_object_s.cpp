@@ -100,12 +100,14 @@ namespace mmo
 			}
 		};
 
+		bool overrideInBaseList = false;
 		for (const auto& triggerId : m_entry.triggers())
 		{
 			raiseMatching(triggerId);
+			overrideInBaseList = overrideInBaseList || (triggerId == m_triggerIdOverride);
 		}
 
-		if (m_triggerIdOverride != 0)
+		if (m_triggerIdOverride != 0 && !overrideInBaseList)
 		{
 			raiseMatching(m_triggerIdOverride);
 		}
@@ -217,6 +219,13 @@ namespace mmo
 		// plus the per-spawn override).
 		player.OnQuestObjectUseCredit(GetGuid(), m_entry.id());
 		RaiseTrigger(trigger_event::OnInteraction, &player);
+
+		// Quest objects are consumed by their use — despawn so one spawn cannot be spammed for
+		// repeated credit; the spawner's respawn delay brings it back.
+		if (GetType() == GameWorldObjectType::QuestObject)
+		{
+			Despawn();
+		}
 	}
 
 	uint32 GameWorldObjectS::GetPostUnlockLockType() const

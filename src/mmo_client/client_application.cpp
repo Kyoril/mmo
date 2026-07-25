@@ -211,7 +211,7 @@ namespace mmo
 		context.trainerClient = std::make_unique<TrainerClient>(realmConnector, context.project->spells);
 		context.inventoryClient = std::make_unique<InventoryClient>(realmConnector);
 		context.uiRuntime->LoadLocalization();
-		context.questClient = std::make_unique<QuestClient>(realmConnector, context.clientCache->GetQuestCache(), context.project->spells, context.project->emotes, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), context.uiRuntime->GetLocalization());
+		context.questClient = std::make_unique<QuestClient>(realmConnector, context.clientCache->GetQuestCache(), context.project->spells, context.project->emotes, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), context.clientCache->GetObjectCache(), context.uiRuntime->GetLocalization());
 		context.partyInfo = std::make_unique<PartyInfo>(realmConnector, context.clientCache->GetNameCache());
 		context.guildClient = std::make_unique<GuildClient>(realmConnector, context.clientCache->GetGuildCache(), context.project->races, context.project->classes);
 		context.friendClient = std::make_unique<FriendClient>(realmConnector, context.project->races, context.project->classes);

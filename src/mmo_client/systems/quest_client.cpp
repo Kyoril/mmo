@@ -1,6 +1,7 @@
 #include "quest_client.h"
 
 #include "frame_ui/frame_mgr.h"
+#include "game/guid_utils.h"
 #include "game/quest.h"
 #include "game/quest_info.h"
 #include "game_client/game_player_c.h"
@@ -32,13 +33,14 @@ namespace mmo
 		}
 	}
 
-	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, const proto_client::EmoteManager& emotes, DBItemCache& itemCache, DBCreatureCache& creatureCache, const Localization& localization)
+	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, const proto_client::EmoteManager& emotes, DBItemCache& itemCache, DBCreatureCache& creatureCache, DBObjectCache& objectCache, const Localization& localization)
 		: m_connector(connector)
 		, m_questCache(questCache)
 		, m_spells(spells)
 		, m_emotes(emotes)
 		, m_itemCache(itemCache)
 		, m_creatureCache(creatureCache)
+		, m_objectCache(objectCache)
 		, m_localization(localization)
 	{
 	}
@@ -506,6 +508,42 @@ namespace mmo
 			else
 			{
 				snprintf(buffer, 512, "QUEST_MONSTERS_KILLED");
+			}
+			++counter;
+
+			m_questObjectiveTexts.emplace_back(buffer);
+		}
+
+		// Object-use objectives occupy the counter slots after the creature objectives (author
+		// requirement rows counter-based first: creatures, then objects, then items).
+		const String* objectsUsedFormat = m_localization.FindStringById("QUEST_OBJECTS_USED");
+		for (const auto& object : quest->requiredObjects)
+		{
+			const ObjectInfo* objectEntry = m_objectCache.Get(object.objectId);
+			if (!objectEntry)
+			{
+				// Not in cache yet — register a callback to rebuild when data arrives.
+				DLOG("Object " << object.objectId << " not yet in cache, deferring objective text");
+				m_objectCache.Get(object.objectId, [this, questId](uint64, const ObjectInfo&)
+				{
+					if (m_selectedQuestLogQuest == questId)
+					{
+						QuestLogSelectQuest(questId);
+						FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
+					}
+				});
+				++counter;
+				continue;
+			}
+
+			if (objectsUsedFormat)
+			{
+				ASSERT(counter < 4);
+				snprintf(buffer, 512, objectsUsedFormat->c_str(), objectEntry->name.c_str(), questLogEntryIt->counters[counter], object.count);
+			}
+			else
+			{
+				snprintf(buffer, 512, "QUEST_OBJECTS_USED");
 			}
 			++counter;
 
@@ -1087,14 +1125,29 @@ namespace mmo
 
 			ASSERT(entry);
 
-			static const String s_monsterKilledFormat = "QUEST_MONSTERS_KILLED";
-			const String* format = m_localization.FindStringById("QUEST_MONSTERS_KILLED");
-			if (!format) format = &s_monsterKilledFormat;
-
-			const CreatureInfo* creature = m_creatureCache.Get(entry);
-
 			char buffer[512];
-			snprintf(buffer, 512, format->c_str(), creature ? creature->name.c_str() : "UNKNOWN", count, maxCount);
+
+			// The same packet carries both creature kill credit and world-object use credit;
+			// the credited object's guid tells them apart.
+			if (IsGameObjectGUID(guid))
+			{
+				static const String s_objectUsedFormat = "QUEST_OBJECTS_USED";
+				const String* format = m_localization.FindStringById("QUEST_OBJECTS_USED");
+				if (!format) format = &s_objectUsedFormat;
+
+				const ObjectInfo* object = m_objectCache.Get(entry);
+				snprintf(buffer, 512, format->c_str(), object ? object->name.c_str() : "UNKNOWN", count, maxCount);
+			}
+			else
+			{
+				static const String s_monsterKilledFormat = "QUEST_MONSTERS_KILLED";
+				const String* format = m_localization.FindStringById("QUEST_MONSTERS_KILLED");
+				if (!format) format = &s_monsterKilledFormat;
+
+				const CreatureInfo* creature = m_creatureCache.Get(entry);
+				snprintf(buffer, 512, format->c_str(), creature ? creature->name.c_str() : "UNKNOWN", count, maxCount);
+			}
+
 			FrameManager::Get().TriggerLuaEvent("UI_INFO_MESSAGE", buffer);
 		}
 			break;
@@ -1192,6 +1245,12 @@ namespace mmo
 		for (auto& creature : entry.requiredCreatures)
 		{
 			m_creatureCache.Get(creature.creatureId);
+		}
+
+		// Ensure world objects are known
+		for (auto& object : entry.requiredObjects)
+		{
+			m_objectCache.Get(object.objectId);
 		}
 
 		m_questCache.NotifyObjectResponse(id, std::move(entry));

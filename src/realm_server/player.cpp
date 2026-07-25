@@ -3654,6 +3654,10 @@ namespace mmo
 			{
 				quest.requiredCreatures.emplace_back(requirement.creatureid(), requirement.creaturecount());
 			}
+			else if (requirement.objectid() != 0)
+			{
+				quest.requiredObjects.emplace_back(requirement.objectid(), requirement.objectcount());
+			}
 		}
 
 		for (const auto &reward : questEntry->rewarditems())

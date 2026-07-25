@@ -1324,6 +1324,12 @@ namespace mmo
 			uint8 reqIndex = 0;
 			for (const auto& req : quest->requirements())
 			{
+				// Only four packed counter bytes exist per quest log slot; ignore excess rows.
+				if (reqIndex >= 4)
+				{
+					break;
+				}
+
 				// Object requirements with a spellcast id are only credited through the
 				// spell-cast-on-object path (OnQuestSpellCastCredit).
 				if (req.objectid() == objectEntryId && req.objectcount() > 0 && req.spellcast() == 0)

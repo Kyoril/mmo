@@ -215,7 +215,7 @@ namespace mmo
 				spawn.animprogress(),
 				spawn.state(),
 				spawn.loot_entry(),
-			spawn.trigger_id()));
+				spawn.trigger_id()));
 			m_objectSpawners.push_back(std::move(spawner));
 			if (!spawn.name().empty())
 			{

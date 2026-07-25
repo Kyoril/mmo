@@ -1166,7 +1166,8 @@ namespace mmo
 					DrawActionDataInt(action, 0, "##FailQuestId", "Quest ID");
 					ImGui::TextDisabled("Fails the quest for the player target if it is in their quest log (e.g. escort npc died).");
 					break;
-				}default:
+				}
+				default:
 			{
 				ImGui::TextDisabled("Unknown action type.");
 				break;
