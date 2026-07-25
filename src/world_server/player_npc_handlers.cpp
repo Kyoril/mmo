@@ -114,12 +114,25 @@ namespace mmo
 			return;
 		}
 
-		// Check if that object exists and provides the requested quest
-		ASSERT(m_worldInstance);
-		GameObjectS* questGiver = m_worldInstance->FindByGuid<GameObjectS>(questGiverGuid);
-		if (!questGiver || !questGiver->ProvidesQuest(questId))
+		// Quest-starting items act as their own quest giver: validate against the player's
+		// inventory instead of a world object.
+		GameObjectS* questGiver = nullptr;
+		if (IsItemGUID(questGiverGuid))
 		{
-			return;
+			if (!ProvidesQuestFromItem(questGiverGuid, questId))
+			{
+				return;
+			}
+		}
+		else
+		{
+			// Check if that object exists and provides the requested quest
+			ASSERT(m_worldInstance);
+			questGiver = m_worldInstance->FindByGuid<GameObjectS>(questGiverGuid);
+			if (!questGiver || !questGiver->ProvidesQuest(questId))
+			{
+				return;
+			}
 		}
 
 		if (!AcceptQuestAndNotify(questId, *quest))
@@ -129,7 +142,7 @@ namespace mmo
 
 		DLOG("Player " << m_characterData.name << " accepted quest " << questId << " from quest giver object " << log_hex_digit(questGiverGuid));
 
-		if (questGiver->IsUnit())
+		if (questGiver && questGiver->IsUnit())
 		{
 			questGiver->AsUnit().RaiseTrigger(trigger_event::OnQuestAccept, { questId }, m_character.get());
 		}
@@ -193,6 +206,18 @@ namespace mmo
 
 		ASSERT(m_worldInstance);
 
+		// Quest-starting items can be queried as quest givers as well.
+		if (IsItemGUID(questGiverGuid))
+		{
+			if (!ProvidesQuestFromItem(questGiverGuid, questId))
+			{
+				return;
+			}
+
+			SendQuestDetails(questGiverGuid, *quest);
+			return;
+		}
+
 		GameObjectS* questGiverObject = m_worldInstance->FindByGuid<GameObjectS>(questGiverGuid);
 		if (!questGiverObject)
 		{
@@ -210,6 +235,23 @@ namespace mmo
 		}
 
 		SendQuestDetails(questGiverGuid, *quest);
+	}
+
+	bool Player::ProvidesQuestFromItem(const uint64 itemGuid, const uint32 questId) const
+	{
+		uint16 itemSlot = 0;
+		if (!m_character->GetInventory().FindItemByGUID(itemGuid, itemSlot))
+		{
+			return false;
+		}
+
+		const auto item = m_character->GetInventory().GetItemAtSlot(itemSlot);
+		if (!item)
+		{
+			return false;
+		}
+
+		return item->GetEntry().questentry() == questId;
 	}
 
 	void Player::QuestGiverChooseQuestReward(uint16 opCode, uint32 size, io::Reader& contentReader)

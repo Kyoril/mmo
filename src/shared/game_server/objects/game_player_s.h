@@ -301,8 +301,14 @@ namespace mmo
 		/// Determines whether the players questlog is full.
 		bool IsQuestlogFull() const;
 
-		/// Called when an exploration area trigger was raised.
+		/// Called when the exploration/event objective of the given quest was fulfilled (area
+		/// trigger reached or QuestExplorationCredit trigger action fired). Marks the quest's
+		/// exploration credit without force-completing its remaining objectives.
 		void OnQuestExploration(uint32 questId);
+
+		/// Called when the player successfully used a world object. Grants object-use credit for
+		/// quest requirements that reference the object's entry id without a spellcast id.
+		void OnQuestObjectUseCredit(uint64 objectGuid, uint32 objectEntryId);
 
 		/// Called when a quest item was added to the inventory.
 		void OnQuestItemAddedCredit(const proto::ItemEntry &entry, uint32 amount);

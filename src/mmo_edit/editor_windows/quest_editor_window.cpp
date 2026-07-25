@@ -578,7 +578,7 @@ namespace mmo
 
 			ImGui::Spacing();
 
-			if (currentEntry.requirements_size() > 0 && ImGui::BeginTable("questRequirements", 6,
+			if (currentEntry.requirements_size() > 0 && ImGui::BeginTable("questRequirements", 7,
 																		  ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV |
 																			  ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 			{
@@ -586,6 +586,7 @@ namespace mmo
 				ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_WidthFixed, 80);
 				ImGui::TableSetupColumn("Creature", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Object", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Custom Text", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 80);
 				ImGui::TableHeadersRow();
@@ -609,6 +610,12 @@ namespace mmo
 					{
 						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.3f, 1.0f));
 						ImGui::Text("Kill");
+						ImGui::PopStyleColor();
+					}
+					else if (currentItem->objectid() != 0)
+					{
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.5f, 1.0f, 1.0f));
+						ImGui::Text(currentItem->spellcast() != 0 ? "Cast" : "Use");
 						ImGui::PopStyleColor();
 					}
 					else
@@ -681,6 +688,17 @@ namespace mmo
 							currentItem->set_creaturecount(count);
 						}
 					}
+					else if (currentItem->objectid() != 0)
+					{
+						// Object use count input
+						int32 count = currentItem->objectcount();
+						ImGui::SetNextItemWidth(-1);
+						if (ImGui::InputInt("##object_count", &count))
+						{
+							count = Clamp(count, 1, 255);
+							currentItem->set_objectcount(count);
+						}
+					}
 
 					// Creature selection
 					ImGui::TableNextColumn();
@@ -721,6 +739,64 @@ namespace mmo
 						}
 
 						ImGui::EndCombo();
+					}
+
+					// Object selection (use-object or cast-spell-on-object objectives)
+					ImGui::TableNextColumn();
+					uint32 object = currentItem->objectid();
+					const auto *objectEntry = m_project.objects.getById(object);
+					ImGui::SetNextItemWidth(-1);
+					if (ImGui::BeginCombo("##object", objectEntry != nullptr ? objectEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						if (ImGui::Selectable("None"))
+						{
+							currentItem->set_objectid(0);
+							currentItem->set_spellcast(0);
+						}
+						else
+						{
+							for (int i = 0; i < m_project.objects.count(); i++)
+							{
+								ImGui::PushID(i);
+								const bool object_selected = m_project.objects.getTemplates().entry(i).id() == object;
+								const char *object_text = m_project.objects.getTemplates().entry(i).name().c_str();
+								if (ImGui::Selectable(object_text, object_selected))
+								{
+									currentItem->set_objectid(m_project.objects.getTemplates().entry(i).id());
+									if (currentItem->objectcount() == 0)
+									{
+										currentItem->set_objectcount(1);
+									}
+
+									// Reset other requirements back to 0
+									currentItem->set_itemid(0);
+									currentItem->set_creatureid(0);
+								}
+								if (object_selected)
+								{
+									ImGui::SetItemDefaultFocus();
+								}
+								ImGui::PopID();
+							}
+						}
+
+						ImGui::EndCombo();
+					}
+
+					if (currentItem->objectid() != 0)
+					{
+						// Optional spell id: 0 = credit on plain object use, otherwise credit only
+						// when this spell is cast on the object.
+						int32 spellCast = currentItem->spellcast();
+						ImGui::SetNextItemWidth(-1);
+						if (ImGui::InputInt("##object_spellcast", &spellCast))
+						{
+							currentItem->set_spellcast(std::max(0, spellCast));
+						}
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::SetTooltip("Optional spell id. 0 = credit when the object is used; otherwise credit requires casting this spell on the object.");
+						}
 					}
 
 					// Custom text

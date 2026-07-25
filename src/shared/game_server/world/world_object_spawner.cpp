@@ -22,7 +22,8 @@ namespace mmo
 		float radius,
 		uint32 animProgress,
 		uint32 state,
-		uint32 lootEntryOverride)
+		uint32 lootEntryOverride,
+		uint32 triggerIdOverride)
 		: m_world(world)
 		, m_entry(entry)
 		, m_maxCount(maxCount)
@@ -35,6 +36,7 @@ namespace mmo
 		, m_animProgress(animProgress)
 		, m_state(state)
 		, m_lootEntryOverride(lootEntryOverride)
+		, m_triggerIdOverride(triggerIdOverride)
 	{
 		// Immediately spawn all objects
 		for (size_t i = 0; i < m_maxCount; ++i)
@@ -70,6 +72,12 @@ namespace mmo
 		if (m_lootEntryOverride != 0)
 		{
 			spawned->SetLootEntryOverride(m_lootEntryOverride);
+		}
+
+		// Apply per-spawn trigger override if one is configured
+		if (m_triggerIdOverride != 0)
+		{
+			spawned->SetTriggerIdOverride(m_triggerIdOverride);
 		}
 
 		// Initialization is done: clear the field change marks so the first real field change

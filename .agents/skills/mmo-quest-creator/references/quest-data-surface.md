@@ -46,10 +46,13 @@ Each `QuestRequirement` can model one of these patterns:
 - item collection: `itemid + itemcount`
 - hidden item drop dependency: `sourceid + sourcecount`
 - creature kill credit: `creatureid + creaturecount`
+- object use ("use/burn/deactivate N objects"): `objectid + objectcount` with `spellcast` 0
 - spell cast on object: `objectid + objectcount + spellcast`
 - scripted or exploration display text: `text`
 
-The current editor UI only exposes item, creature, and freeform text objectives. `objectid`, `objectcount`, `spellcast`, and some other advanced fields exist in the schema and runtime, but are not surfaced by the quest editor window.
+The quest editor window exposes item, creature, object (with optional spell id), and freeform
+text objectives. The object requirement's spell id field is 0 for plain use-credit and a spell id
+for cast-on-object credit.
 </quest_requirement_shapes>
 
 <provider_and_ender_wiring>
@@ -70,6 +73,13 @@ World objects can be visible or usable only while a quest is active through `Obj
 - object `2` `Lina's Crate` requires quest `9`
 
 This is how the current repository gates quest-only interactables such as collection nodes and recovery crates.
+
+Object types are Chest (loot), Door, Mailbox, and QuestObject. QuestObject is the generic quest
+interactable: using it grants object-use quest credit and fires the object's `OnInteraction`
+triggers, nothing else. All types grant use-credit and fire interaction triggers on successful
+use; QuestObject is simply the type to pick when that is the whole point.
+
+Quest-starting items use `ItemEntry.questentry` (exposed in the item editor as "Starts Quest").
 </gated_world_objects>
 
 <live_examples>

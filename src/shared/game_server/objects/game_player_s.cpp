@@ -1171,18 +1171,21 @@ namespace mmo
 			return false;
 		}
 
-		// Now check for quest requirements
-		if (entry.requirements_size() == 0)
-		{
-			return true;
-		}
-
+		// Exploration quests need their exploration/event credit even when they have no
+		// counter-based requirements at all, so this must be checked before the
+		// requirement-count shortcut below.
 		if (entry.flags() & quest_flags::Exploration)
 		{
 			if (!it->second.explored)
 			{
 				return false;
 			}
+		}
+
+		// Now check for quest requirements
+		if (entry.requirements_size() == 0)
+		{
+			return true;
 		}
 
 		// Now check all available quest requirements
@@ -1242,7 +1245,126 @@ namespace mmo
 
 	void GamePlayerS::OnQuestExploration(uint32 questId)
 	{
-		// TODO
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId != questId)
+			{
+				continue;
+			}
+
+			auto it = m_quests.find(field.questId);
+			if (it == m_quests.end())
+			{
+				return;
+			}
+
+			if (it->second.status != quest_status::Incomplete || it->second.explored)
+			{
+				return;
+			}
+
+			const auto* quest = GetProject().quests.getById(field.questId);
+			if (!quest)
+			{
+				return;
+			}
+
+			it->second.explored = true;
+
+			if (FulfillsQuestRequirements(*quest))
+			{
+				it->second.status = quest_status::Complete;
+				field.status = quest_status::Complete;
+				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+			}
+
+			if (m_netPlayerWatcher)
+			{
+				m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+			}
+
+			return;
+		}
+	}
+
+	void GamePlayerS::OnQuestObjectUseCredit(const uint64 objectGuid, const uint32 objectEntryId)
+	{
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId == 0)
+			{
+				continue;
+			}
+
+			auto it = m_quests.find(field.questId);
+			if (it == m_quests.end())
+			{
+				continue;
+			}
+
+			if (it->second.status != quest_status::Incomplete)
+			{
+				continue;
+			}
+
+			const auto* quest = GetProject().quests.getById(field.questId);
+			if (!quest)
+			{
+				continue;
+			}
+
+			// Class-gated quests are frozen while a non-matching class is active: no progress.
+			if (!IsQuestClassAllowed(*quest))
+			{
+				continue;
+			}
+
+			uint8 reqIndex = 0;
+			for (const auto& req : quest->requirements())
+			{
+				// Object requirements with a spellcast id are only credited through the
+				// spell-cast-on-object path (OnQuestSpellCastCredit).
+				if (req.objectid() == objectEntryId && req.objectcount() > 0 && req.spellcast() == 0)
+				{
+					uint8 counter = field.counters[reqIndex];
+					if (counter < req.objectcount())
+					{
+						field.counters[reqIndex] = ++counter;
+						it->second.creatures[reqIndex]++;
+
+						Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+
+						if (m_netPlayerWatcher)
+						{
+							m_netPlayerWatcher->OnQuestKillCredit(*quest, objectGuid, objectEntryId, counter, req.objectcount());
+						}
+
+						// If this was the last use needed for this specific object requirement,
+						// tell the player watcher so it can refresh nearby object interactability.
+						if (counter >= req.objectcount() && m_netPlayerWatcher)
+						{
+							m_netPlayerWatcher->OnQuestObjectRequirementMet(field.questId);
+						}
+
+						if (FulfillsQuestRequirements(*quest))
+						{
+							it->second.status = quest_status::Complete;
+							field.status = quest_status::Complete;
+							Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+						}
+
+						if (m_netPlayerWatcher)
+						{
+							m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+						}
+					}
+				}
+
+				reqIndex++;
+			}
+		}
 	}
 
 	void GamePlayerS::OnQuestItemAddedCredit(const proto::ItemEntry &entry, uint32 amount)

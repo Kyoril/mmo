@@ -4,6 +4,7 @@
 
 #include "game_player_s.h"
 #include "shared/proto_data/objects.pb.h"
+#include "shared/proto_data/triggers.pb.h"
 #include "game/quest.h"
 
 namespace mmo
@@ -79,6 +80,37 @@ namespace mmo
 		return true;
 	}
 
+	void GameWorldObjectS::RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit)
+	{
+		auto raiseMatching = [this, e, triggeringUnit](const uint32 triggerId)
+		{
+			const auto* triggerEntry = m_project.triggers.getById(triggerId);
+			if (!triggerEntry)
+			{
+				return;
+			}
+
+			for (const auto& triggerEvent : triggerEntry->newevents())
+			{
+				if (triggerEvent.type() == e)
+				{
+					objectTrigger(std::cref(*triggerEntry), std::ref(*this), triggeringUnit);
+					break;
+				}
+			}
+		};
+
+		for (const auto& triggerId : m_entry.triggers())
+		{
+			raiseMatching(triggerId);
+		}
+
+		if (m_triggerIdOverride != 0)
+		{
+			raiseMatching(m_triggerIdOverride);
+		}
+	}
+
 	void GameWorldObjectS::Use(GamePlayerS& player)
 	{
 		// Validate that the player can use this object
@@ -137,8 +169,6 @@ namespace mmo
 						lootEntries,
 						std::vector{ weakPlayer });
 
-					// TODO: wire trigger_id — fire a specific trigger on chest open when trigger_id != 0
-
 					auto weakThis = std::weak_ptr(shared_from_this());
 					m_lootSignals += m_loot->closed.connect(this, &GameWorldObjectS::OnLootClosed);
 					m_lootSignals += m_loot->cleared.connect(this, &GameWorldObjectS::OnLootCleared);
@@ -172,10 +202,21 @@ namespace mmo
 			player.NotifyMailboxUsed(GetGuid());
 			break;
 
+		case GameWorldObjectType::QuestObject:
+			// No type-specific behavior: the shared post-use logic below grants quest credit
+			// and fires OnInteraction triggers, which is this type's whole purpose.
+			break;
+
 		default:
 			WLOG("Player tried to use world object with unhandled type " << static_cast<uint32>(GetType()));
-			break;
+			return;
 		}
+
+		// Shared post-use behavior for all successfully used objects: grant quest object-use
+		// credit for matching requirements and fire OnInteraction triggers (base entry triggers
+		// plus the per-spawn override).
+		player.OnQuestObjectUseCredit(GetGuid(), m_entry.id());
+		RaiseTrigger(trigger_event::OnInteraction, &player);
 	}
 
 	uint32 GameWorldObjectS::GetPostUnlockLockType() const

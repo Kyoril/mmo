@@ -80,6 +80,9 @@ namespace mmo
 		/// Returns the binding type from the item entry (0=none, 1=BoP, 2=BoE, 3=BoU).
 		[[nodiscard]] uint32 GetBonding() const;
 
+		/// @brief Returns the id of the quest this item starts, or 0 if it does not start one.
+		[[nodiscard]] uint32 GetStartQuestId() const;
+
 		/// Returns true if this item instance is currently bound to a player.
 		[[nodiscard]] bool IsBound() const;
 

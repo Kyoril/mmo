@@ -214,7 +214,8 @@ namespace mmo
 				spawn.radius(),
 				spawn.animprogress(),
 				spawn.state(),
-				spawn.loot_entry()));
+				spawn.loot_entry(),
+			spawn.trigger_id()));
 			m_objectSpawners.push_back(std::move(spawner));
 			if (!spawn.name().empty())
 			{
@@ -370,6 +371,14 @@ namespace mmo
 			m_triggerHandler.ExecuteTrigger(trigger, TriggerContext(&owner, triggeringUnit), 0);
 			});
 		}
+
+	// World objects raise their own triggers on interaction (mirrors the unitTrigger wiring above).
+	if (const auto worldObject = dynamic_cast<GameWorldObjectS*>(&added))
+	{
+		worldObject->objectTrigger.connect([this](const proto::TriggerEntry& trigger, GameWorldObjectS& owner, GameUnitS* triggeringUnit) {
+			m_triggerHandler.ExecuteTrigger(trigger, TriggerContext(&owner, triggeringUnit), 0);
+			});
+	}
 
 	if (added.GetTypeId() == ObjectTypeId::Player)
 	{

@@ -88,7 +88,7 @@ namespace mmo
 			}
 
 			// Object type dropdown
-			static const char* s_objectTypeNames[] = { "Chest", "Door", "Mailbox" };
+			static const char* s_objectTypeNames[] = { "Chest", "Door", "Mailbox", "Quest Object" };
 			static_assert(std::size(s_objectTypeNames) == game_world_object_type::Count_,
 				"s_objectTypeNames must match game_world_object_type::Type");
 

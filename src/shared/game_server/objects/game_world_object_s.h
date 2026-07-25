@@ -4,9 +4,15 @@
 
 #include "game_object_s.h"
 #include "game_server/loot_instance.h"
+#include "shared/proto_data/trigger_helper.h"
 
 namespace mmo
 {
+	namespace proto
+	{
+		class TriggerEntry;
+	}
+
 	namespace world_object_flags
 	{
 		enum Type : uint32
@@ -77,6 +83,14 @@ namespace mmo
 
 		void Use(GamePlayerS& player);
 
+		/// Fired when one of this object's triggers should be executed. Connected to the trigger
+		/// handler by the world instance, mirroring GameUnitS::unitTrigger.
+		signal<void(const proto::TriggerEntry&, GameWorldObjectS&, GameUnitS*)> objectTrigger;
+
+		/// Raises all of this object's triggers (base entry triggers plus the per-spawn override)
+		/// that listen to the given event.
+		void RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit = nullptr);
+
 		const String& GetName() const override;
 
 		bool HasMovementInfo() const override { return true; }
@@ -104,9 +118,16 @@ namespace mmo
 		/// @brief Per-spawn loot entry override. 0 = use base ObjectEntry.objectlootentry.
 		uint32 m_lootEntryOverride = 0;
 
+		/// @brief Per-spawn additional trigger id. 0 = only the base ObjectEntry.triggers apply.
+		uint32 m_triggerIdOverride = 0;
+
 	public:
 		/// @brief Sets a per-spawn loot entry override for this world object.
 		/// @param lootEntry The loot entry ID to use, or 0 to fall back to the base entry.
 		void SetLootEntryOverride(uint32 lootEntry) { m_lootEntryOverride = lootEntry; }
+
+		/// @brief Sets a per-spawn additional trigger for this world object.
+		/// @param triggerId The trigger ID to raise in addition to the base entry's triggers, or 0 for none.
+		void SetTriggerIdOverride(uint32 triggerId) { m_triggerIdOverride = triggerId; }
 	};
 }

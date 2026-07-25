@@ -76,6 +76,9 @@ namespace mmo
 			case GameWorldObjectType::Mailbox:
 				m_typeData = std::make_unique<GameWorldObjectC_Type_Mailbox>();
 				break;
+			case GameWorldObjectType::QuestObject:
+				m_typeData = std::make_unique<GameWorldObjectC_Type_QuestObject>();
+				break;
 			default:
 				ASSERT(false);
 				break;

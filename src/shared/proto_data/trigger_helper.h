@@ -224,6 +224,17 @@ namespace mmo
 			/// Targets: NONE; Data: [<MESSAGE-TYPE:0=system,1=raid-warning>]; Texts: <MESSAGE>;
 			BroadcastMessage = 32,
 
+			/// Marks the exploration/event objective of an active quest as completed for a player
+			/// without force-completing the quest's other objectives. The quest is only marked
+			/// complete once all remaining requirements are fulfilled as well.
+			/// Targets: PLAYER; Data: <QUEST-ID>; Texts: NONE;
+			QuestExplorationCredit = 33,
+
+			/// Fails an active quest for a player (e.g. when an escorted npc dies). Players who do
+			/// not have the quest in their quest log are unaffected.
+			/// Targets: PLAYER; Data: <QUEST-ID>; Texts: NONE;
+			QuestFailQuest = 34,
+
 			Invalid,
 			Count_ = Invalid
 		};

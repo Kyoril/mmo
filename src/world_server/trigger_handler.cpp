@@ -139,6 +139,8 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(RemoveAura)
 				MMO_HANDLE_TRIGGER_ACTION(SetInstanceVariable)
 				MMO_HANDLE_TRIGGER_ACTION(BroadcastMessage)
+				MMO_HANDLE_TRIGGER_ACTION(QuestExplorationCredit)
+				MMO_HANDLE_TRIGGER_ACTION(QuestFailQuest)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -804,6 +806,46 @@ namespace mmo
 
 		uint32 questId = GetActionData(action, 0);
 		target->AsPlayer().CompleteQuest(questId);
+	}
+
+	void TriggerHandler::HandleQuestExplorationCredit(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_QUEST_EXPLORATION_CREDIT: No target found, action will be ignored");
+			return;
+		}
+
+		if (!target->IsPlayer())
+		{
+			WLOG("TRIGGER_ACTION_QUEST_EXPLORATION_CREDIT: Needs a player target - action ignored");
+			return;
+		}
+
+		const uint32 questId = GetActionData(action, 0);
+		target->AsPlayer().OnQuestExploration(questId);
+	}
+
+	void TriggerHandler::HandleQuestFailQuest(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_QUEST_FAIL_QUEST: No target found, action will be ignored");
+			return;
+		}
+
+		if (!target->IsPlayer())
+		{
+			WLOG("TRIGGER_ACTION_QUEST_FAIL_QUEST: Needs a player target - action ignored");
+			return;
+		}
+
+		const uint32 questId = GetActionData(action, 0);
+
+		// FailQuest is a no-op for players that do not have the quest in their quest log.
+		target->AsPlayer().FailQuest(questId);
 	}
 
 	void TriggerHandler::HandleSetVariable(const proto::TriggerAction& action, TriggerContext& context)

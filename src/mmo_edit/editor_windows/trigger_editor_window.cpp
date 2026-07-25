@@ -462,7 +462,8 @@ namespace mmo
 				"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
 				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote",
 				"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
-				"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage"
+				"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
+				"QuestExplorationCredit", "QuestFailQuest"
 			};
 
 			// Select the trigger action type.
@@ -1150,6 +1151,20 @@ namespace mmo
 					ImGui::SameLine();
 					ImGui::Text("Message");
 					ImGui::TextDisabled("Sent as a system message to every player in the instance.");
+					break;
+				}
+				case trigger_actions::QuestExplorationCredit:
+				{
+					// Data: <QUEST-ID>
+					DrawActionDataInt(action, 0, "##ExploreQuestId", "Quest ID");
+					ImGui::TextDisabled("Marks the exploration/event objective of the quest as done for the player target without completing its other objectives.");
+					break;
+				}
+				case trigger_actions::QuestFailQuest:
+				{
+					// Data: <QUEST-ID>
+					DrawActionDataInt(action, 0, "##FailQuestId", "Quest ID");
+					ImGui::TextDisabled("Fails the quest for the player target if it is in their quest log (e.g. escort npc died).");
 					break;
 				}default:
 			{
