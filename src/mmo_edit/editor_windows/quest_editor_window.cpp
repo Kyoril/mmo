@@ -267,7 +267,13 @@ namespace mmo
 				ImGui::TableNextColumn();
 				CHECKBOX_FLAG_PROP(flags, "Auto Rewarded", quest_flags::AutoRewarded);
 				ImGui::SameLine();
-				DrawHelpMarker("Quest is automatically rewarded on completion");
+				DrawHelpMarker("Quest is automatically rewarded on completion. Incompatible with choice rewards - the runtime falls back to manual turn-in.");
+				if ((currentEntry.flags() & quest_flags::AutoRewarded) != 0 && currentEntry.rewarditemschoice_size() > 0)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.2f, 1.0f));
+					ImGui::TextWrapped("Has choice rewards: will NOT auto-reward!");
+					ImGui::PopStyleColor();
+				}
 
 				ImGui::TableNextColumn();
 				CHECKBOX_FLAG_PROP(flags, "Repeatable", quest_flags::Repeatable);
@@ -393,6 +399,63 @@ namespace mmo
 			ImGui::Text("Required Previous Quest");
 			ImGui::SameLine();
 			DrawHelpMarker("Quest that must be completed before this one");
+
+			// Ensure we don't unlock ourself
+			uint32 nextQuestId = currentEntry.nextquestid();
+			if (nextQuestId == static_cast<int32>(currentEntry.id()))
+			{
+				currentEntry.set_nextquestid(0);
+				nextQuestId = 0;
+			}
+
+			const auto *nextQuestEntry = m_project.quests.getById(nextQuestId);
+			ImGui::SetNextItemWidth(300);
+			if (ImGui::BeginCombo("##NextQuest", nextQuestEntry != nullptr ? nextQuestEntry->name().c_str() : "(None)", ImGuiComboFlags_None))
+			{
+				ImGui::PushID(0);
+				if (ImGui::Selectable("(None)"))
+				{
+					currentEntry.set_nextquestid(0);
+					nextQuestId = 0;
+				}
+				ImGui::PopID();
+
+				for (int i = 0; i < m_project.quests.count(); i++)
+				{
+					if (m_project.quests.getTemplates().entry(i).id() == currentEntry.id())
+					{
+						continue;
+					}
+
+					ImGui::PushID(i);
+					const bool item_selected = m_project.quests.getTemplates().entry(i).id() == nextQuestId;
+					const char *item_text = m_project.quests.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_nextquestid(m_project.quests.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			ImGui::Text("Unlocks Next Quest");
+			ImGui::SameLine();
+			DrawHelpMarker("Quest that only becomes available after this quest is rewarded. When several quests name the same follow-up, rewarding any one of them unlocks it (use for race/class-forked breadcrumbs).");
+
+			int32 exclusiveGroup = currentEntry.exclusivegroup();
+			ImGui::SetNextItemWidth(100);
+			if (ImGui::InputInt("Exclusive Group", &exclusiveGroup))
+			{
+				currentEntry.set_exclusivegroup(std::max(0, exclusiveGroup));
+			}
+			ImGui::SameLine();
+			DrawHelpMarker("Quests sharing the same positive group number are mutually exclusive: accepting or completing one makes the others unavailable. 0 = no group.");
 
 			ImGui::Spacing();
 			ImGui::SetNextItemWidth(100);

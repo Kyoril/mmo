@@ -13,6 +13,12 @@ It currently checks:
 - `maxlevel`
 - required race and class masks
 - `prevquestid`
+- `nextquestid` back-links: a quest named as another quest's `nextquestid` stays unavailable
+  until at least ONE of those predecessors is rewarded (OR semantics — use for race/class-forked
+  breadcrumbs that all point at the same follow-up)
+- `exclusivegroup`: quests sharing the same POSITIVE group number are mutually exclusive — while
+  any other member is in the quest log or rewarded, this one is unavailable (negative groups are
+  not supported)
 - `minlevel`
 
 It does not currently enforce every possible schema field. In particular, `requiredskill` is still marked TODO in the runtime, so do not assume that field is fully enforced without verifying the surrounding gameplay path.
@@ -94,6 +100,15 @@ mixed orderings desynchronize the displayed counter slot from the server's requi
 
 `failtriggers` are also executed on quest failure.
 
+`AutoRewarded` quests reward themselves the moment they complete (any credit path, scripted
+completion, or auto-completion at accept), without visiting a turn-in NPC. Restriction: the quest
+must not offer choice rewards — with `rewarditemschoice` rows the flag is ignored (with a server
+warning) and the quest falls back to manual turn-in; the editor shows a warning for this combo.
+A failed auto-reward (e.g. bags full while the quest grants fixed reward items) is retried on the
+player's next login. For auto-rewarded quests that grant reward ITEMS, still wire an ender NPC as
+a manual fallback so a full-bags player is not stuck until relog; pure XP/money/spell rewards
+cannot fail and need no ender.
+
 Repeatability now behaves in three different ways:
 
 - plain `Repeatable`: the quest becomes immediately available again after reward
@@ -117,6 +132,12 @@ Quest-relevant trigger actions in `src/world_server/trigger_handler.cpp`:
 - `QuestFailQuest`: fails the quest for a player target if it is in their quest log (escort death
   and similar failure conditions); `failtriggers` of the quest fire as usual
 - `Despawn`: works on creatures AND world objects (players are rejected)
+- `SetFollowTarget`: makes a creature target follow the triggering unit (escort mode; data =
+  optional follow distance in tenths of a unit, default 2.5). Follow overrides idle
+  patrol/random movement, runs to catch up when far behind, pauses at the target's corpse if it
+  dies, is interrupted by combat and resumes after reset, and falls back to normal idle movement
+  if the followed unit despawns
+- `ClearFollowTarget`: stops following and resumes the creature's configured idle movement
 
 Useful trigger events:
 
@@ -138,12 +159,12 @@ triggering unit, so `TriggeringUnit`-targeted quest actions work from object int
 Non-obvious runtime caveats that matter when authoring:
 
 - `QuestEntry.starttriggers` are currently unused by runtime code.
-- `AutoRewarded` is exposed in data and editor UI, but the normal quest runtime still does not auto-turn-in completed quests purely from that flag.
 - `rewardspellcast` is cast in `GamePlayerS::RewardQuest`, and the NPC reward handler also attempts to cast it again. Verify live behavior before depending on visible one-shot spell rewards.
 - `QuestEntry.rewardreputations` and faction base-rep data exist in schema only — there is no
   runtime reputation standing yet, so rep rewards do nothing at present.
-- `exclusivegroup` and `nextquestid` are not enforced by `GetQuestStatus`; model mutually
-  exclusive quests through race/class gates or `prevquestid` ancestry.
+- `AutoRewarded` quests with choice rewards are NOT auto-rewarded (manual turn-in fallback).
+- Negative `exclusivegroup` values ("all of group required") are not supported — only positive
+  mutually-exclusive groups.
 - Object-use credit is only granted on a SUCCESSFUL use: quest-gated objects stop being usable
   once their specific requirement is met, which naturally caps farming. Ungated objects (doors)
   can be used repeatedly, but counters cap at the required count.

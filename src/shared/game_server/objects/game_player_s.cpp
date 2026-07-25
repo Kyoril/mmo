@@ -7,8 +7,10 @@
 
 #include "game_item_s.h"
 #include "quest_status_data.h"
+#include "game_server/quest_chain_gating.h"
 #include "game_server/quest_class_xp.h"
 #include "game_server/quest_reset.h"
+#include "game_server/world/universe.h"
 #include "base/utilities.h"
 #include "proto_data/project.h"
 #include "game/emote_defs.h"
@@ -34,6 +36,17 @@ namespace mmo
 	GamePlayerS::GamePlayerS(const proto::Project &project, TimerQueue &timerQueue)
 		: GameUnitS(project, timerQueue), m_inventory(*this)
 	{
+		// Auto-reward checks scheduled before the player entered a world (e.g. for quests loaded
+		// as Complete on login) are flushed once the player spawns.
+		m_onSpawnedAutoReward = spawned.connect([this](WorldInstance&)
+		{
+			const auto pending = std::move(m_pendingAutoRewardChecks);
+			m_pendingAutoRewardChecks.clear();
+			for (const uint32 questId : pending)
+			{
+				ScheduleAutoRewardCheck(questId);
+			}
+		});
 	}
 
 	void GamePlayerS::Initialize()
@@ -509,6 +522,29 @@ namespace mmo
 			}
 		}
 
+		// Chain gating: nextquestid back-links (locked until a predecessor is rewarded) and
+		// positive exclusive groups (mutually exclusive quests). Both use HasRewardedQuest
+		// instead of GetQuestStatus to avoid recursing between group members.
+		const auto isRewarded = [this](const uint32 questId) { return HasRewardedQuest(questId); };
+		const auto isActiveInLog = [this](const uint32 questId)
+		{
+			const auto oit = m_quests.find(questId);
+			return oit != m_quests.end() &&
+				(oit->second.status == quest_status::Incomplete ||
+				 oit->second.status == quest_status::Complete ||
+				 oit->second.status == quest_status::Failed);
+		};
+
+		if (IsQuestLockedByBackLinks(GetProject().quests.getTemplates(), quest, isRewarded))
+		{
+			return quest_status::Unavailable;
+		}
+
+		if (IsQuestLockedByExclusiveGroup(GetProject().quests.getTemplates(), *entry, isRewarded, isActiveInLog))
+		{
+			return quest_status::Unavailable;
+		}
+
 		// Check if the quest is available for us
 		if (entry->minlevel() > 0 && GetLevel() < entry->minlevel())
 		{
@@ -527,6 +563,66 @@ namespace mmo
 	{
 		ASSERT(m_classEntry);
 		return mmo::IsQuestClassAllowed(entry.requiredclasses(), m_classEntry->id());
+	}
+
+	bool GamePlayerS::HasRewardedQuest(const uint32 quest) const
+	{
+		// Interval-repeatable quests count as rewarded while they are still locked until their
+		// next reset boundary.
+		if (const auto rit = m_repeatableResets.find(quest); rit != m_repeatableResets.end())
+		{
+			return static_cast<GameTime>(::time(nullptr)) < rit->second;
+		}
+
+		return m_rewardedQuestIds.contains(quest);
+	}
+
+	bool GamePlayerS::TryAutoRewardQuest(const uint32 questId)
+	{
+		const auto* entry = GetProject().quests.getById(questId);
+		if (!entry || (entry->flags() & quest_flags::AutoRewarded) == 0)
+		{
+			return false;
+		}
+
+		// Choice rewards need a player decision — such quests fall back to the manual
+		// turn-in flow even when flagged as auto-rewarded.
+		if (entry->rewarditemschoice_size() > 0)
+		{
+			WLOG("Quest " << questId << " is flagged AutoRewarded but offers choice rewards - manual turn-in required");
+			return false;
+		}
+
+		// RewardQuest validates the Complete status itself.
+		return RewardQuest(GetGuid(), questId, 0);
+	}
+
+	void GamePlayerS::ScheduleAutoRewardCheck(const uint32 questId)
+	{
+		const auto* entry = GetProject().quests.getById(questId);
+		if (!entry || (entry->flags() & quest_flags::AutoRewarded) == 0)
+		{
+			return;
+		}
+
+		auto* world = GetWorldInstance();
+		if (!world)
+		{
+			// Not in a world yet (login-time load) — retried when the player spawns.
+			m_pendingAutoRewardChecks.insert(questId);
+			return;
+		}
+
+		// Deferred so the reward runs outside the credit path that completed the quest (which may
+		// still be iterating quest log slots) and after pending status packets have been sent.
+		std::weak_ptr weakThis = std::static_pointer_cast<GamePlayerS>(shared_from_this());
+		world->GetUniverse().Post([weakThis, questId]()
+		{
+			if (const auto strongThis = weakThis.lock())
+			{
+				strongThis->TryAutoRewardQuest(questId);
+			}
+		});
 	}
 
 	bool GamePlayerS::IsQuestObjectRequirementMet(const uint32 questId, const uint32 objectEntryId) const
@@ -654,6 +750,11 @@ namespace mmo
 					ArmQuestTimer(quest, data.expiration);
 				}
 
+				if (data.status == quest_status::Complete)
+				{
+					ScheduleAutoRewardCheck(quest);
+				}
+
 				return true;
 			}
 		}
@@ -753,6 +854,8 @@ namespace mmo
 			Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
 			if (m_netPlayerWatcher)
 				m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+
+			ScheduleAutoRewardCheck(field.questId);
 
 			return true;
 		}
@@ -1144,6 +1247,7 @@ namespace mmo
 							// Complete quest
 							it->second.status = quest_status::Complete;
 							field.status = quest_status::Complete;
+							ScheduleAutoRewardCheck(field.questId);
 						}
 
 						// Save quest progress
@@ -1277,6 +1381,7 @@ namespace mmo
 				it->second.status = quest_status::Complete;
 				field.status = quest_status::Complete;
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+				ScheduleAutoRewardCheck(field.questId);
 			}
 
 			if (m_netPlayerWatcher)
@@ -1359,6 +1464,7 @@ namespace mmo
 							it->second.status = quest_status::Complete;
 							field.status = quest_status::Complete;
 							Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+							ScheduleAutoRewardCheck(field.questId);
 						}
 
 						if (m_netPlayerWatcher)
@@ -1466,6 +1572,8 @@ namespace mmo
 					field.status = quest_status::Complete;
 					if (m_netPlayerWatcher)
 						m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+
+					ScheduleAutoRewardCheck(field.questId);
 				}
 
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
@@ -1614,6 +1722,8 @@ namespace mmo
 							{
 								m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
 							}
+
+							ScheduleAutoRewardCheck(field.questId);
 						}
 					}
 				}
@@ -1808,6 +1918,17 @@ namespace mmo
 
 			// ArmQuestTimer fails the quest immediately if the deadline already passed.
 			ArmQuestTimer(questId, data.expiration);
+		}
+
+		// Retry auto-rewards for quests that completed but could not be rewarded before the
+		// player logged out (e.g. full bags at completion time, or a crash between completion
+		// and the deferred reward).
+		for (const auto &[questId, data] : m_quests)
+		{
+			if (data.status == quest_status::Complete)
+			{
+				ScheduleAutoRewardCheck(questId);
+			}
 		}
 	}
 

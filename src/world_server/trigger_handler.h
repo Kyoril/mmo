@@ -224,6 +224,12 @@ namespace mmo
 		/// Handles failing an active quest for a player target.
 		void HandleQuestFailQuest(const proto::TriggerAction& action, TriggerContext& context);
 
+		/// Handles making a creature follow the triggering unit (escort mode).
+		void HandleSetFollowTarget(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles clearing a creature's follow target.
+		void HandleClearFollowTarget(const proto::TriggerAction& action, TriggerContext& context);
+
 		/// Collects all alive players currently in the given world instance.
 		/// @param world The world instance to enumerate. May be nullptr.
 		/// @return Vector of alive player units (possibly empty).

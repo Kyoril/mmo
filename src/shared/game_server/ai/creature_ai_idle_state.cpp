@@ -231,6 +231,13 @@ namespace mmo
 	{
 		m_waitCountdown.Cancel();
 
+		// Escort mode: following a unit takes priority over any configured idle movement.
+		if (GetControlled().GetFollowedUnit())
+		{
+			FollowStep();
+			return;
+		}
+
 		if (GetControlled().GetMovementType() == creature_movement::None)
 		{
 			GetControlled().GetMover().StopMovement();
@@ -358,6 +365,12 @@ namespace mmo
 
 	void CreatureAIIdleState::OnTargetReached()
 	{
+		if (GetControlled().GetFollowedUnit())
+		{
+			StartWait(FollowUpdateInterval);
+			return;
+		}
+
 		if (GetControlled().GetMovementType() == creature_movement::Patrol)
 		{
 			const auto& patrolWaypoints = GetControlled().GetPatrolWaypoints();
@@ -383,6 +396,12 @@ namespace mmo
 			return;
 		}
 
+		if (GetControlled().GetFollowedUnit())
+		{
+			FollowStep();
+			return;
+		}
+
 		if (GetControlled().GetMovementType() == creature_movement::Patrol)
 		{
 			MoveToNextPatrolWaypoint();
@@ -393,6 +412,72 @@ namespace mmo
 		{
 			MoveToRandomPointInRange();
 		}
+	}
+
+	void CreatureAIIdleState::FollowStep()
+	{
+		auto& controlled = GetControlled();
+
+		const auto target = controlled.GetFollowedUnit();
+		if (!target || target->GetWorldInstance() != controlled.GetWorldInstance())
+		{
+			// The followed unit despawned or left this world instance — the escort cannot
+			// continue. Clearing notifies the AI, which resumes the configured idle movement.
+			controlled.ClearFollowedUnit();
+			return;
+		}
+
+		// A fear/disorient controller owns the creature's movement right now; keep the follow
+		// polling alive but don't fight the forced movement.
+		if (controlled.IsUnderForcedMovement())
+		{
+			StartWait(FollowUpdateInterval);
+			return;
+		}
+
+		if (!target->IsAlive())
+		{
+			// Wait next to the corpse; the escort may be resumed by a revive or a script.
+			controlled.GetMover().StopMovement();
+			m_hasFollowDestination = false;
+			StartWait(FollowUpdateInterval);
+			return;
+		}
+
+		const float followDistance = controlled.GetFollowDistance();
+		const Vector3 targetPosition = target->GetPosition();
+		const float distanceSq = controlled.GetSquaredDistanceTo(targetPosition, true);
+
+		// Small slack over the follow distance so the creature doesn't jitter while the
+		// target stands still.
+		const float startMoveDistance = followDistance + 1.0f;
+		if (distanceSq > startMoveDistance * startMoveDistance)
+		{
+			// Only replan when the target actually moved since the last issued destination —
+			// MoveTo recalculates the nav path and broadcasts a movement packet every time.
+			constexpr float replanDistanceSq = 1.5f * 1.5f;
+			if (!m_hasFollowDestination ||
+				(targetPosition - m_followDestination).GetSquaredLength() > replanDistanceSq)
+			{
+				// Run to catch up when the target got far ahead, walk when merely adjusting.
+				constexpr float catchUpDistance = 15.0f;
+				controlled.SetMovementMode(distanceSq > catchUpDistance * catchUpDistance
+					? unit_movement_mode::Run
+					: unit_movement_mode::Walk);
+
+				if (controlled.GetMover().MoveTo(targetPosition, followDistance))
+				{
+					m_followDestination = targetPosition;
+					m_hasFollowDestination = true;
+				}
+			}
+		}
+		else
+		{
+			m_hasFollowDestination = false;
+		}
+
+		StartWait(FollowUpdateInterval);
 	}
 
 	void CreatureAIIdleState::MoveToNextPatrolWaypoint()

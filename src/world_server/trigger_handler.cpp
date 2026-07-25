@@ -141,6 +141,8 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(BroadcastMessage)
 				MMO_HANDLE_TRIGGER_ACTION(QuestExplorationCredit)
 				MMO_HANDLE_TRIGGER_ACTION(QuestFailQuest)
+				MMO_HANDLE_TRIGGER_ACTION(SetFollowTarget)
+				MMO_HANDLE_TRIGGER_ACTION(ClearFollowTarget)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -846,6 +848,61 @@ namespace mmo
 
 		// FailQuest is a no-op for players that do not have the quest in their quest log.
 		target->AsPlayer().FailQuest(questId);
+	}
+
+	void TriggerHandler::HandleSetFollowTarget(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_SET_FOLLOW_TARGET: No target found, action will be ignored");
+			return;
+		}
+
+		auto* creature = dynamic_cast<GameCreatureS*>(target);
+		if (!creature)
+		{
+			WLOG("TRIGGER_ACTION_SET_FOLLOW_TARGET: Needs a creature target - action ignored");
+			return;
+		}
+
+		const auto followedUnit = context.triggeringUnit.lock();
+		if (!followedUnit)
+		{
+			WLOG("TRIGGER_ACTION_SET_FOLLOW_TARGET: No triggering unit to follow - action ignored");
+			return;
+		}
+
+		if (followedUnit.get() == creature)
+		{
+			WLOG("TRIGGER_ACTION_SET_FOLLOW_TARGET: Creature cannot follow itself - check the action's target configuration");
+			return;
+		}
+
+		// Data: optional follow distance in tenths of a world unit (0 = default 2.5).
+		const int32 distanceTenths = GetActionData(action, 0);
+		const float followDistance = distanceTenths > 0 ? static_cast<float>(distanceTenths) * 0.1f : 2.5f;
+
+		creature->SetFollowedUnit(followedUnit, followDistance);
+	}
+
+	void TriggerHandler::HandleClearFollowTarget(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_CLEAR_FOLLOW_TARGET: No target found, action will be ignored");
+			return;
+		}
+
+		auto* creature = dynamic_cast<GameCreatureS*>(target);
+		if (!creature)
+		{
+			WLOG("TRIGGER_ACTION_CLEAR_FOLLOW_TARGET: Needs a creature target - action ignored");
+			return;
+		}
+
+		creature->ClearFollowedUnit();
 	}
 
 	void TriggerHandler::HandleSetVariable(const proto::TriggerAction& action, TriggerContext& context)
