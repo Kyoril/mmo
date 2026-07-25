@@ -264,6 +264,10 @@ namespace mmo
 
 		void SendQuestDetails(uint64 questgiverGuid, const proto::QuestEntry& quest);
 
+		/// Checks whether the given item guid refers to an inventory item of the character whose
+		/// entry starts the given quest (quest-starting items act as their own quest giver).
+		bool ProvidesQuestFromItem(uint64 itemGuid, uint32 questId) const;
+
 		void SendQuestReward(uint64 questgiverGuid, const proto::QuestEntry& quest);
 
 		void SendGossipMenu(const GameCreatureS& npc, const proto::GossipMenuEntry& menu);

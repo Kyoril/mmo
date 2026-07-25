@@ -7,10 +7,14 @@ Read these reference files now:
 </required_reading>
 
 <process>
-1. Decide which runtime completion path the quest actually uses:
-   - area trigger entering a region
+1. Decide which runtime progression/completion path the quest actually uses:
+   - area trigger entering a region → `QuestExplorationCredit` (partial credit) or
+     `QuestEventOrExploration` (full scripted completion)
    - provider or encounter unit trigger on `OnQuestAccept`, `OnKilled`, `OnSpellHit`, or another event
+   - plain object-use credit through `objectid + objectcount` (spellcast 0), optionally with the
+     object's `OnInteraction` triggers for extra scripted behavior (say lines, summons, spawn state)
    - spell-cast-on-object credit through `spellcast + objectid`
+   - escort/failure conditions through `QuestFailQuest` (e.g. `OnKilled` trigger on the escortee)
    - fail or reward triggers after state changes
    - custom Lua or C++ code only when data-driven paths are insufficient
 2. Author or export the quest JSON draft and add any required:
@@ -19,8 +23,10 @@ Read these reference files now:
    - `gated_object_ids`
 3. Keep the runtime caveats in mind:
    - `starttriggers` are not executed by the current runtime
-   - `Exploration` alone does not complete a quest
-   - object requirements do not progress by plain object use without an explicit spell or trigger path
+   - the `Exploration` flag alone detects nothing; some trigger must fire `QuestExplorationCredit`
+     or `QuestEventOrExploration`
+   - mixed quests (counters + investigate objective) must use `QuestExplorationCredit`, because
+     `QuestEventOrExploration` force-fills every counter
 4. Prefer the live patterns already present in the repository:
    - quest `8` for trigger-driven heal-credit flow
    - quest `20` for area-trigger completion

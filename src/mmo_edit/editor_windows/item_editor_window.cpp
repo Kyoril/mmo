@@ -1045,6 +1045,11 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Item level, used for stat budgets and comparisons");
 
+			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT32_PROP(questentry, "Starts Quest", 0, 100000000);
+			ImGui::SameLine();
+			DrawHelpMarker("Quest id this item starts when used (0 = none). Using the item opens the quest offer; the item should usually also be listed as a required item of that quest so it is consumed on turn-in.");
+
 			ImGui::Spacing();
 			DrawSectionHeader("Display Properties");
 

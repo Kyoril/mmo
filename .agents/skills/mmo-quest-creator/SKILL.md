@@ -8,9 +8,9 @@ Treat `data/editor/data/quests.data` as only one part of quest authoring. A ques
 
 Do not rely on `QuestEntry.starttriggers`. The field exists in `quests.proto`, but the runtime currently does not execute it anywhere. Quest-start behavior in live content is driven through questgiver unit triggers using `OnQuestAccept` or by custom Lua/C++ logic.
 
-Do not assume the `Exploration` quest flag is self-sufficient. `GamePlayerS::OnQuestExploration` is currently a TODO. Exploration and scripted completion in this project work when an area trigger or another trigger path eventually fires `QuestEventOrExploration`, which calls `CompleteQuest`.
+Exploration quests still need a trigger path — the flag alone detects nothing. Fire the `QuestExplorationCredit` trigger action (from an area trigger or any other trigger) to grant only the exploration credit while leaving other objectives open; `QuestEventOrExploration` force-completes ALL objectives and is reserved for pure scripted completion. A quest flagged `Exploration` with zero requirement rows stays incomplete until one of these paths fires.
 
-Do not model pure object-use quests as if the engine had a native "use object N times" counter. The current runtime increments object objective counters through `OnQuestSpellCastCredit` for spell-cast-on-object requirements, or through an explicit `CompleteQuest` trigger/script path. If a quest requirement uses `objectid` without a matching spell/trigger path, validate the design carefully.
+Object-use counters are native: a requirement with `objectid + objectcount` and `spellcast` 0 is incremented whenever the player successfully uses a matching world object, and every successful object use also fires the object's `OnInteraction` triggers. Requirements with a `spellcast` id are still credited only through the spell-cast-on-object path. Items can start quests via `ItemEntry.questentry`, and escort failure is modeled with the `QuestFailQuest` trigger action.
 
 Do not assume the `AutoRewarded` flag is fully wired just because the editor exposes it. As of the current runtime, the flag is present in quest data and the editor UI, but normal quest completion still expects the usual reward-turn-in flow unless custom logic handles it.
 
@@ -71,6 +71,9 @@ Read these references as directed by the active workflow:
 - `references/quest-runtime-semantics.md`
 - `references/quest-json-format.md`
 - `references/quest-authoring-patterns.md`
+- `references/questline-design-guide.md` — WoW-derived design guidance (goal taxonomy, zone
+  structure, reward pacing) for building questlines; read it whenever designing new quest content
+  rather than fixing existing wiring
 </reference_guides>
 
 <workflows_index>

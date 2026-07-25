@@ -16,6 +16,11 @@ namespace mmo
 			/// Using this object opens the players mailbox.
 			Mailbox,
 
+			/// Generic quest interactable ("goober"): using it grants quest object-use credit for
+			/// matching quest requirements and fires the object's OnInteraction triggers. Used for
+			/// objectives like "burn the remains" or "deactivate the crystal".
+			QuestObject,
+
 			// TODO: Add additional types here
 
 			Count_,

@@ -1110,6 +1110,7 @@ namespace mmo
 							   .def<std::function<const char *(const ItemInfo *)>>("GetIcon", [this](const ItemInfo *self) -> const char *
 																				   { return this->m_project.itemDisplays.getById(self->displayId)->icon().c_str(); })
 							   .def_readonly("sellPrice", &ItemInfo::sellPrice)
+							   .def_readonly("startQuestId", &ItemInfo::startquestid)
 							   .def_readonly("attackSpeed", &ItemInfo::GetAttackSpeed)
 							   .def("GetStatType", &ItemInfo::GetStatType)
 							   .def("GetStatValue", &ItemInfo::GetStatValue)
@@ -1202,6 +1203,7 @@ namespace mmo
 							   .def("GetProficiency", &ItemHandle::GetProficiency)
 							   .def("GetStatValue", &ItemHandle::GetStatValue)
 							   .def("GetBonding", &ItemHandle::GetBonding)
+							   .def("GetStartQuestId", &ItemHandle::GetStartQuestId)
 							   .def("IsBound", &ItemHandle::IsBound)
 							   .def("IsUsable", &ItemHandle::IsUsable)
 							   .def("GetRequiredLevel", &ItemHandle::GetRequiredLevel)),
@@ -2140,6 +2142,14 @@ namespace mmo
 		if (entry->inventoryType != inventory_type::NonEquip)
 		{
 			m_realmConnector.AutoEquipItem((slot >> 8) & 0xff, slot & 0xff);
+			return;
+		}
+
+		// Quest-starting items are usable without an on-use spell: the server responds with the
+		// quest offer instead of casting anything.
+		if (entry->startquestid != 0)
+		{
+			m_realmConnector.UseItem((slot >> 8) & 0xFF, slot & 0xFF, item->GetGuid(), SpellTargetMap());
 			return;
 		}
 

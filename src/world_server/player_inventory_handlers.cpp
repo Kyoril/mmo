@@ -656,6 +656,26 @@ namespace mmo
 
 		auto &entry = item->GetEntry();
 
+		// Quest-starting items open the quest offer instead of casting a spell.
+		if (entry.questentry() != 0)
+		{
+			const proto::QuestEntry* quest = m_project.quests.getById(entry.questentry());
+			if (!quest)
+			{
+				WLOG("Item " << entry.id() << " references unknown quest " << entry.questentry());
+				return;
+			}
+
+			if (m_character->GetQuestStatus(entry.questentry()) != quest_status::Available)
+			{
+				DLOG("Quest-starter item " << entry.id() << " used, but quest " << entry.questentry() << " is not available for the character");
+				return;
+			}
+
+			SendQuestDetails(item->GetGuid(), *quest);
+			return;
+		}
+
 		// Find all OnUse spells
 		for (int i = 0; i < entry.spells_size(); ++i)
 		{

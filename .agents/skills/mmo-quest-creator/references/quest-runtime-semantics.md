@@ -38,17 +38,38 @@ The runtime updates quest progress through these paths:
 
 - creature death calls `OnQuestKillCredit`
 - inventory changes call `OnQuestItemAddedCredit` and `OnQuestItemRemovedCredit`
-- spell-cast-on-object credit calls `OnQuestSpellCastCredit`
-- trigger action `QuestEventOrExploration` calls `CompleteQuest`
+- spell-cast-on-object credit calls `OnQuestSpellCastCredit` (requirements with `objectid` + `spellcast`)
+- using a world object calls `OnQuestObjectUseCredit`, which increments requirements whose
+  `objectid` matches the object entry and whose `spellcast` is 0 — "use object N times" is native
+- trigger action `QuestExplorationCredit` calls `OnQuestExploration`, which sets the quest's
+  exploration credit WITHOUT completing its other objectives (the quest completes only once the
+  remaining counters are also met)
+- trigger action `QuestEventOrExploration` calls `CompleteQuest`, which force-fills ALL counters —
+  use it only for pure scripted completion, never for mixed objective quests
 
-There is no native generic "use world object N times" increment path in `GameWorldObjectS::Use`. If a requirement uses `objectid`, progress currently comes from spell-cast credit or forced completion triggers.
+Every successful `GameWorldObjectS::Use` (chest looted, door used, quest object used) also fires
+the object's `OnInteraction` triggers: base `ObjectEntry.triggers` plus the per-spawn
+`ObjectSpawnEntry.trigger_id` override (deduplicated if the override also appears in the base
+list). The world object type `QuestObject` exists specifically for credit-and-trigger
+interactables with no other behavior; a QuestObject despawns after each successful use so one
+spawn cannot be spam-clicked to full credit — the spawner's respawn delay controls availability.
+
+Credit-per-use caveats: chests grant use credit on OPEN (reopening a partially looted chest
+grants again, capped at the required count), and doors grant credit on every toggle. Use
+`requiredquest` gating plus sensible counts for chest/door objectives, or prefer QuestObject.
+
+The client displays object objectives as real counter lines ("<Object name>: n/m" via
+`QUEST_OBJECTS_USED`), fed by `QuestInfo.requiredObjects`. Counter display slots are assigned in
+order creatures-then-objects, so author requirement rows in that order, with item rows LAST —
+mixed orderings desynchronize the displayed counter slot from the server's requirement index.
 </progression>
 
 <fulfillment>
 `FulfillsQuestRequirements` checks:
 
 - the quest is in the active quest map
-- `Exploration` quests require `explored == true`
+- `Exploration` quests require `explored == true` (checked even when the quest has zero
+  requirement rows, so a pure exploration quest no longer auto-completes at accept)
 - creature counters meet `creaturecount`
 - object counters meet `objectcount`
 - current inventory counts meet `itemcount`
@@ -91,7 +112,11 @@ The runtime now has two important failure paths beyond manual abandonment:
 Quest-relevant trigger actions in `src/world_server/trigger_handler.cpp`:
 
 - `QuestKillCredit`: grants kill credit for a unit entry to a player target
-- `QuestEventOrExploration`: calls `CompleteQuest(questId)` on a player target
+- `QuestEventOrExploration`: calls `CompleteQuest(questId)` on a player target (force-fills all counters)
+- `QuestExplorationCredit`: grants only the exploration/event credit of the quest to a player target
+- `QuestFailQuest`: fails the quest for a player target if it is in their quest log (escort death
+  and similar failure conditions); `failtriggers` of the quest fire as usual
+- `Despawn`: works on creatures AND world objects (players are rejected)
 
 Useful trigger events:
 
@@ -101,19 +126,40 @@ Useful trigger events:
 - `OnGossipAction`
 - `OnSpawn`
 - `OnReachedTriggeredTarget`
+- `OnInteraction` (world objects: fired on every successful object use)
 
 Area triggers call their linked `on_enter_trigger`, which can then complete or advance a quest.
+World objects execute their own triggers (`ObjectEntry.triggers` + per-spawn
+`ObjectSpawnEntry.trigger_id`) with the object as trigger owner and the using player as the
+triggering unit, so `TriggeringUnit`-targeted quest actions work from object interaction.
 </trigger_actions>
 
 <important_caveats>
 Non-obvious runtime caveats that matter when authoring:
 
 - `QuestEntry.starttriggers` are currently unused by runtime code.
-- `GamePlayerS::OnQuestExploration` is still TODO, so exploration quests need a trigger path that reaches `CompleteQuest`.
-- The current quest editor window does not expose object-use or spell-cast-on-object requirement fields even though the runtime supports them.
 - `AutoRewarded` is exposed in data and editor UI, but the normal quest runtime still does not auto-turn-in completed quests purely from that flag.
 - `rewardspellcast` is cast in `GamePlayerS::RewardQuest`, and the NPC reward handler also attempts to cast it again. Verify live behavior before depending on visible one-shot spell rewards.
+- `QuestEntry.rewardreputations` and faction base-rep data exist in schema only — there is no
+  runtime reputation standing yet, so rep rewards do nothing at present.
+- `exclusivegroup` and `nextquestid` are not enforced by `GetQuestStatus`; model mutually
+  exclusive quests through race/class gates or `prevquestid` ancestry.
+- Object-use credit is only granted on a SUCCESSFUL use: quest-gated objects stop being usable
+  once their specific requirement is met, which naturally caps farming. Ungated objects (doors)
+  can be used repeatedly, but counters cap at the required count.
 </important_caveats>
+
+<item_started_quests>
+`ItemEntry.questentry` links an item to the quest it starts. Runtime behavior:
+
+- Using the item (client sends UseItem even without an on-use spell when `startquestid` is set)
+  makes the world server answer with the quest details offer if the quest status is `Available`.
+- Accepting uses the item guid as quest giver guid; the server validates the item is in the
+  player's inventory and its entry starts that quest.
+- The item tooltip shows the localized "This Item Begins a Quest" line automatically.
+- List the item as a required item of the quest so it is removed on turn-in; otherwise the player
+  keeps a dead quest-starter in their bags.
+</item_started_quests>
 
 <client_support>
 The client quest system now exposes `GetQuestLogTimeLeft(questId)` so UI can display timed-quest countdowns using the local reconstructed deadline.

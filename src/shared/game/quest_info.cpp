@@ -40,6 +40,14 @@ namespace mmo
 				<< io::write<uint32>(requiredCreature.count);
 		}
 
+		writer << io::write<uint8>(itemInfo.requiredObjects.size());
+		for (const auto& requiredObject : itemInfo.requiredObjects)
+		{
+			writer
+				<< io::write<uint32>(requiredObject.objectId)
+				<< io::write<uint32>(requiredObject.count);
+		}
+
 		writer << io::write<uint8>(itemInfo.rewardItems.size());
 		for (const auto& rewardItem : itemInfo.rewardItems)
 		{
@@ -95,6 +103,16 @@ namespace mmo
 				>> io::read<uint32>(creature.creatureId)
 				>> io::read<uint32>(creature.count);
 			outItemInfo.requiredCreatures.emplace_back(creature);
+		}
+
+		reader >> io::read<uint8>(num);
+		for (uint8 i = 0; i < num; ++i)
+		{
+			QuestRequiredObject object;
+			reader
+				>> io::read<uint32>(object.objectId)
+				>> io::read<uint32>(object.count);
+			outItemInfo.requiredObjects.emplace_back(object);
 		}
 
 		reader >> io::read<uint8>(num);

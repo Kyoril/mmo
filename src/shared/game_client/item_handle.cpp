@@ -334,6 +334,16 @@ namespace mmo
 		return (Get()->Get<uint32>(object_fields::ItemFlags) & item_flags::Bound) != 0;
 	}
 
+	uint32 ItemHandle::GetStartQuestId() const
+	{
+		if (!CheckNonNull()) return 0;
+
+		const ItemInfo* info = Get()->GetEntry();
+		if (!info) return 0;
+
+		return info->startquestid;
+	}
+
 	bool ItemHandle::IsUsable() const
 	{
 		if (!CheckNonNull()) return true;

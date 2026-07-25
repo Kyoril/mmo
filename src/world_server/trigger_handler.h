@@ -218,6 +218,12 @@ namespace mmo
 		/// Handles broadcasting a message to all players in the instance.
 		void HandleBroadcastMessage(const proto::TriggerAction& action, TriggerContext& context);
 
+		/// Handles granting exploration/event credit for a quest without force-completing it.
+		void HandleQuestExplorationCredit(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles failing an active quest for a player target.
+		void HandleQuestFailQuest(const proto::TriggerAction& action, TriggerContext& context);
+
 		/// Collects all alive players currently in the given world instance.
 		/// @param world The world instance to enumerate. May be nullptr.
 		/// @return Vector of alive player units (possibly empty).

@@ -88,7 +88,7 @@ namespace mmo
 			}
 
 			// Object type dropdown
-			static const char* s_objectTypeNames[] = { "Chest", "Door", "Mailbox" };
+			static const char* s_objectTypeNames[] = { "Chest", "Door", "Mailbox", "Quest Object" };
 			static_assert(std::size(s_objectTypeNames) == game_world_object_type::Count_,
 				"s_objectTypeNames must match game_world_object_type::Type");
 
@@ -209,6 +209,110 @@ namespace mmo
 					if (ImGui::IsItemHovered())
 						ImGui::SetTooltip("After the first successful unlock, the door's active lock type\nchanges to this value. Set to None to keep the original lock type.");
 				}
+			}
+		}
+
+		if (const auto section = ScopedEditorSection("Triggers", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Triggers listening to OnInteraction fire whenever a player successfully uses this object.");
+
+			// Display existing triggers in a table
+			if (currentEntry.triggers_size() > 0 && ImGui::BeginTable("ObjectTriggerTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+			{
+				ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+				ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+				ImGui::TableHeadersRow();
+
+				for (int i = 0; i < currentEntry.triggers_size(); ++i)
+				{
+					const uint32 triggerId = currentEntry.triggers(i);
+
+					ImGui::TableNextRow();
+					ImGui::PushID(i);
+
+					// ID Column
+					ImGui::TableNextColumn();
+					ImGui::Text("%u", triggerId);
+
+					// Name Column
+					ImGui::TableNextColumn();
+					const auto* trigger = m_project.triggers.getById(triggerId);
+					ImGui::TextUnformatted(trigger ? trigger->name().c_str() : "(Unknown Trigger)");
+
+					// Actions Column
+					ImGui::TableNextColumn();
+					if (DrawDangerButton("Remove"))
+					{
+						auto* triggers = currentEntry.mutable_triggers();
+						triggers->erase(triggers->begin() + i);
+						i--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+
+			// Add trigger button
+			if (DrawSuccessButton("Add Trigger"))
+			{
+				ImGui::OpenPopup("AddObjectTriggerPopup");
+			}
+
+			// Add Trigger Popup
+			if (ImGui::BeginPopupModal("AddObjectTriggerPopup", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				// Static filter to allow user to search triggers by name or ID.
+				static ImGuiTextFilter triggerFilter;
+				triggerFilter.Draw("Filter (by name or ID)", 200.0f);
+
+				ImGui::Text("Select a trigger to add:");
+				ImGui::Separator();
+
+				ImGui::BeginChild("ObjectTriggersList", ImVec2(400, 300), true);
+
+				static int selectedTriggerId = -1;
+
+				for (int i = 0; i < m_project.triggers.count(); ++i)
+				{
+					const auto& trigger = m_project.triggers.getTemplates().entry(i);
+					char label[128];
+					snprintf(label, sizeof(label), "%u - %s", trigger.id(), trigger.name().c_str());
+
+					if (!triggerFilter.PassFilter(label))
+						continue;
+
+					if (ImGui::Selectable(label, selectedTriggerId == trigger.id()))
+					{
+						selectedTriggerId = trigger.id();
+					}
+				}
+
+				ImGui::EndChild();
+
+				ImGui::Separator();
+
+				if (DrawSuccessButton("OK", ImVec2(120, 0)))
+				{
+					if (selectedTriggerId != -1)
+					{
+						currentEntry.add_triggers(selectedTriggerId);
+					}
+					selectedTriggerId = -1;
+					triggerFilter.Clear();
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SameLine();
+				if (DrawNeutralButton("Cancel", ImVec2(120, 0)))
+				{
+					selectedTriggerId = -1;
+					triggerFilter.Clear();
+					ImGui::CloseCurrentPopup();
+				}
+
+				ImGui::EndPopup();
 			}
 		}
 

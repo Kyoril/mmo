@@ -38,6 +38,7 @@ namespace mmo
 		/// @param animProgress Initial animation progress value.
 		/// @param state Initial object state value.
 		/// @param lootEntryOverride Per-spawn loot entry override (0 = use base ObjectEntry).
+		/// @param triggerIdOverride Per-spawn additional trigger id (0 = only base ObjectEntry triggers).
 		explicit WorldObjectSpawner(
 			WorldInstance& world,
 			const proto::ObjectEntry& entry,
@@ -48,7 +49,8 @@ namespace mmo
 			float radius,
 			uint32 animProgress,
 			uint32 state,
-			uint32 lootEntryOverride = 0);
+			uint32 lootEntryOverride = 0,
+			uint32 triggerIdOverride = 0);
 		virtual ~WorldObjectSpawner();
 
 		///
@@ -103,6 +105,7 @@ namespace mmo
 		uint32 m_animProgress;
 		uint32 m_state;
 		uint32 m_lootEntryOverride;
+		uint32 m_triggerIdOverride;
 		bool m_active = true;
 		bool m_respawn = true;
 	};

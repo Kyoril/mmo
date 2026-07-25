@@ -56,4 +56,14 @@ namespace mmo
 			return true;
 		}
 	};
+
+	/// @brief Generic quest interactable world objects (grant quest credit / fire triggers on use).
+	class GameWorldObjectC_Type_QuestObject : public GameWorldObjectC_Type_Base
+	{
+	public:
+		bool CanUse() const override
+		{
+			return true;
+		}
+	};
 }
