@@ -110,3 +110,4 @@ anything rewriting `develop` history.
 - Hooks-based hard enforcement (declined for now).
 - Self-hosted Windows CI runner + PR flow (possible later; habits transfer unchanged).
 - Crash-fix sweep automation (`/fix-crash` stays manual).
+- The gate flow was verified end-to-end on 2026-07-24.
