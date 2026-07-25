@@ -21,6 +21,7 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $steps = @()
 $allPassed = $true
+$gateCompleted = $false
 
 function Invoke-GateStep
 {
@@ -33,23 +34,53 @@ function Invoke-GateStep
 	$log = Join-Path $script:logDir ($Name + ".log")
 	Write-Host ("== {0} ==" -f $Name)
 	$sw = [System.Diagnostics.Stopwatch]::StartNew()
-	# Out-Host keeps the command output off the pipeline so the function returns ONLY the boolean.
-	& $Exe @Arguments 2>&1 | Tee-Object -FilePath $log | Out-Host
-	$exit = $LASTEXITCODE
-	$sw.Stop()
 
-	$script:steps += [ordered]@{
-		name = $Name
-		passed = ($exit -eq 0)
-		exit_code = $exit
-		log = ("tools/gate/logs/{0}.log" -f $Name)
-		duration_s = [math]::Round($sw.Elapsed.TotalSeconds, 1)
-	}
-	if ($exit -ne 0)
+	try
 	{
-		$script:allPassed = $false
+		# Pass/fail must rest on exit codes, not stderr chatter, so native invocation runs
+		# under 'Continue'. Scoped narrowly and restored immediately after.
+		$previousEap = $ErrorActionPreference
+		$ErrorActionPreference = "Continue"
+		try
+		{
+			# Out-Host keeps the command output off the pipeline so the function returns ONLY the boolean.
+			& $Exe @Arguments 2>&1 | Tee-Object -FilePath $log | Out-Host
+		}
+		finally
+		{
+			$ErrorActionPreference = $previousEap
+		}
+		$exit = $LASTEXITCODE
+		$sw.Stop()
+
+		$script:steps += [ordered]@{
+			name = $Name
+			passed = ($exit -eq 0)
+			exit_code = $exit
+			log = ("tools/gate/logs/{0}.log" -f $Name)
+			duration_s = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+		}
+		if ($exit -ne 0)
+		{
+			$script:allPassed = $false
+		}
+		return ($exit -eq 0)
 	}
-	return ($exit -eq 0)
+	catch
+	{
+		$sw.Stop()
+		Add-Content -Path $log -Value ("EXCEPTION: {0}" -f $_.Exception.Message)
+
+		$script:steps += [ordered]@{
+			name = $Name
+			passed = $false
+			exit_code = -1
+			log = ("tools/gate/logs/{0}.log" -f $Name)
+			duration_s = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+		}
+		$script:allPassed = $false
+		return $false
+	}
 }
 
 $branch = (& git -C $repoRoot rev-parse --abbrev-ref HEAD)
@@ -85,10 +116,16 @@ try
 			$null = Invoke-GateStep -Name "e2e" -Exe "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $repoRoot "tools\e2e\e2e_run.ps1"))
 		}
 	}
+
+	$gateCompleted = $true
 }
 finally
 {
 	Pop-Location
+
+	# Belt-and-suspenders: any crash that skips the rest of the try block leaves
+	# $gateCompleted false, so the report is red even if $allPassed never flipped.
+	$reportPassed = ($allPassed -and $gateCompleted)
 
 	[ordered]@{
 		branch = $branch
@@ -97,10 +134,10 @@ finally
 		config = "Debug"
 		e2e_skipped = [bool]$SkipE2E
 		steps = $steps
-		passed = $allPassed
+		passed = $reportPassed
 	} | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PSScriptRoot "last_report.json") -Encoding UTF8
 }
 
 Write-Host ""
-Write-Host ("Gate result: {0} (report: tools/gate/last_report.json)" -f $(if ($allPassed) { "GREEN" } else { "RED" }))
-exit $(if ($allPassed) { 0 } else { 1 })
+Write-Host ("Gate result: {0} (report: tools/gate/last_report.json)" -f $(if ($reportPassed) { "GREEN" } else { "RED" }))
+exit $(if ($reportPassed) { 0 } else { 1 })

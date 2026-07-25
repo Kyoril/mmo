@@ -4,6 +4,10 @@ description: Merge the current gated feature branch into develop. Refuses withou
 
 Merge the current feature branch into develop, gated by `tools/gate/last_report.json`.
 
+## Step 0
+
+Record the current branch name first — every `<branch>` below means that recorded name.
+
 ## Preconditions — refuse (explain which check failed, tell the user to run /gate, and STOP) unless ALL hold:
 
 1. Current branch is not `develop`.
@@ -12,6 +16,7 @@ Merge the current feature branch into develop, gated by `tools/gate/last_report.
 4. In the report: `passed` is `true` AND `e2e_skipped` is `false`.
 5. The report's `commit` equals the output of `git rev-parse HEAD` (a gate run followed
    by any new commit invalidates the report — this is intentional).
+6. The report's `steps` array contains an entry with `name` `"e2e"` and `passed` `true`.
 
 ## Merge (only when every precondition holds)
 

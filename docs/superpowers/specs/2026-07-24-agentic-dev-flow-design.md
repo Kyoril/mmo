@@ -111,3 +111,7 @@ anything rewriting `develop` history.
 - Self-hosted Windows CI runner + PR flow (possible later; habits transfer unchanged).
 - Crash-fix sweep automation (`/fix-crash` stays manual).
 - The gate flow was verified end-to-end on 2026-07-24.
+- Enforcement is advisory (prompt-level guidance in `/gate`, `/ship`, and CLAUDE.md);
+  hooks-based hard enforcement was declined. Script allowlists (e.g. `python tools/`)
+  are an accepted residual risk — an allowlisted script could in principle be edited to
+  do something other than what its path implies.
