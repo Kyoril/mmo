@@ -36,6 +36,11 @@ The following systems are fully implemented and should not be suggested as futur
 - Scheduled reports land in `tools/gate/reports/` (nightly gate on develop, weekly
   content audit). At session start, if the newest nightly report there is red,
   surface it to the user before starting new work.
+- A nightly report with `"skipped": true` / `"passed": null` means the run was skipped
+  because the repo was busy (dirty tree or non-develop branch checked out) — treat
+  that as "did not run," not as red. Note also that `.claude/settings.local.json`
+  (htex MCP config) does not follow git worktrees, so parallel worktree sessions run
+  without it.
 
 ## Build Commands
 
