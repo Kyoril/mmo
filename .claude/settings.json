@@ -28,7 +28,15 @@
     "deny": [
       "Bash(git push:*)",
       "Bash(git reset --hard:*)",
-      "Bash(git clean:*)"
+      "Bash(git clean:*)",
+      "PowerShell(git push:*)",
+      "PowerShell(git reset --hard:*)",
+      "PowerShell(git clean:*)",
+      "Bash(git branch -f:*)",
+      "Bash(git branch -M:*)",
+      "Bash(git checkout -B:*)",
+      "PowerShell(git branch -f:*)",
+      "PowerShell(git checkout -B:*)"
     ]
   }
 }
