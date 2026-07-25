@@ -689,19 +689,15 @@ namespace mmo
 
 	bool AuraContainer::CheckProcFamilyFlags(uint64 familyFlags) const
 	{
-		// If no proc family flags set, any spell can trigger
-		if (GetProcFamily() == 0 || familyFlags == 0)
+		// If no proc family flags set on the aura, any spell can trigger
+		if (GetProcFamily() == 0)
 		{
 			return true;
 		}
 
-		// We need to check that the trigger was a spell with the given flag set
-		if ((m_spell.procfamily() & familyFlags) == 0)
-		{
-			return false;
-		}
-
-		return true;
+		// The aura restricts its proc family, so the triggering spell must carry a matching
+		// family flag; spells without family flags never match a restricted proc.
+		return (m_spell.procfamily() & familyFlags) != 0;
 	}
 
 	void AuraContainer::ExecuteProcEffects(GameUnitS* target)
