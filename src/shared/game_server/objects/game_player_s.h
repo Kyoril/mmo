@@ -292,6 +292,19 @@ namespace mmo
 		/// Rewards the given quest (gives items, xp and saves quest status).
 		bool RewardQuest(uint64 questgiverGuid, uint32 quest, uint8 rewardChoice);
 
+		/// Determines whether the given quest counts as rewarded (including interval-repeatable
+		/// quests that are still locked until their next reset). Unlike GetQuestStatus this never
+		/// evaluates availability rules, so it is safe to use from within GetQuestStatus itself.
+		bool HasRewardedQuest(uint32 quest) const;
+
+		/// Immediately rewards a completed quest flagged as AutoRewarded (no choice rewards).
+		/// @return true if the quest was rewarded.
+		bool TryAutoRewardQuest(uint32 questId);
+
+		/// Schedules a deferred auto-reward attempt for a quest that just completed, if it is
+		/// flagged as AutoRewarded. Deferred to run outside the completing credit path.
+		void ScheduleAutoRewardCheck(uint32 questId);
+
 		/// Called when a quest-related creature was killed.
 		void OnQuestKillCredit(uint64 unitGuid, const proto::UnitEntry &entry);
 

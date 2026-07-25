@@ -12,7 +12,7 @@ Exploration quests still need a trigger path — the flag alone detects nothing.
 
 Object-use counters are native: a requirement with `objectid + objectcount` and `spellcast` 0 is incremented whenever the player successfully uses a matching world object, and every successful object use also fires the object's `OnInteraction` triggers. Requirements with a `spellcast` id are still credited only through the spell-cast-on-object path. Items can start quests via `ItemEntry.questentry`, and escort failure is modeled with the `QuestFailQuest` trigger action.
 
-Do not assume the `AutoRewarded` flag is fully wired just because the editor exposes it. As of the current runtime, the flag is present in quest data and the editor UI, but normal quest completion still expects the usual reward-turn-in flow unless custom logic handles it.
+`AutoRewarded` quests reward themselves the moment they complete — but only when they have no choice rewards (`rewarditemschoice` forces manual turn-in and logs a server warning). Chain gating is enforced: `prevquestid`, `nextquestid` back-links (OR semantics across multiple predecessors) and positive `exclusivegroup` mutual exclusion all affect availability, so verify chain fields against the intended flow instead of treating them as documentation.
 
 Default to cloning the closest live quest and editing the minimal set of fields instead of inventing quest data from scratch. Existing quests in this repository already cover handoff quests, kill quests, item collection quests, multi-objective turn-ins, trigger-completed scripted quests, and area-trigger exploration quests.
 

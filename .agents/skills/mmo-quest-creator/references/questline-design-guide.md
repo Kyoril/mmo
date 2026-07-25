@@ -40,10 +40,15 @@ built in THIS engine:
    This credits only the exploration objective; remaining counters still have to be completed.
    `QuestEventOrExploration` (force-completes ALL objectives) is only for pure scripted completion.
 10. **Escort / rescue** — protect an NPC walking a route, or free captives.
-    Build (escort): start via gossip or `OnQuestAccept` trigger on the escortee; chain `MoveTo`
-    actions with `OnReachedTriggeredTarget` events for the route; final waypoint fires
-    `QuestEventOrExploration` (or `QuestExplorationCredit`); an `OnKilled` trigger on the escortee
-    fires `QuestFailQuest` so the quest fails when the NPC dies.
+    Build (escort, route-driven): start via gossip or `OnQuestAccept` trigger on the escortee;
+    chain `MoveTo` actions with `OnReachedTriggeredTarget` events for the route; final waypoint
+    fires `QuestEventOrExploration` (or `QuestExplorationCredit`); an `OnKilled` trigger on the
+    escortee fires `QuestFailQuest` so the quest fails when the NPC dies.
+    Build (escort, follow-driven): fire `SetFollowTarget` from the `OnQuestAccept`/gossip trigger
+    so the NPC walks WITH the player instead of leading; complete via an area trigger at the
+    destination (`QuestExplorationCredit`) and `ClearFollowTarget`; same `OnKilled` →
+    `QuestFailQuest` fail wiring. Use follow-driven escorts for "take me to X" flows and
+    route-driven ones for "protect me while I walk my path" flows.
     Build (rescue captives): each captive is a gossip NPC whose `OnGossipAction` trigger fires
     `QuestKillCredit` for a hidden credit unit, then plays a walk-off + despawn sequence.
 11. **Summon boss by ritual** — use an item/object at a location, boss spawns, kill it.
@@ -79,9 +84,9 @@ How a Ghostlands-style zone hangs together:
 - **Difficulty band**: quest level minus required level stays small (2-6). Elite/group quests cap
   the zone (wanted posters, the villain) and sit 1-2 levels above the surrounding solo content.
 - **Race/class forks**: when two audiences need different flavor for the same beat, author two
-  quests gated by `requiredraces`/`requiredclasses` pointing at the same follow-up. (The runtime
-  does not enforce `exclusivegroup`, so make forks mutually exclusive via race/class gates or
-  distinct `prevquestid` ancestry, never via exclusivegroup alone.)
+  quests gated by `requiredraces`/`requiredclasses` pointing at the same follow-up. Both forks
+  can name the same follow-up via `nextquestid` — rewarding either one unlocks it. For forks the
+  same character could otherwise take twice, put both in the same positive `exclusivegroup`.
 </zone_structure>
 
 <reward_pacing>
@@ -139,10 +144,11 @@ Known limits that still constrain design (verify before assuming they changed):
   no runtime reputation standing. Do not build rep-reward loops yet; keep repeatables item/money
   based. When designing a zone meant for a future rep faction, still author the rewardreputations
   rows so content is ready.
-- **exclusivegroup / nextquestid**: present in schema, not enforced by `GetQuestStatus`.
-- **AutoRewarded**: still not auto-turn-in at runtime.
 - **starttriggers**: still unused by the runtime; quest-accept scripting goes through the
   questgiver unit's `OnQuestAccept` trigger.
+- **AutoRewarded + choice rewards**: incompatible — auto-rewarded quests must use fixed rewards.
+- **Negative exclusive groups** ("all of group must be completed"): not supported; only positive
+  mutually-exclusive groups are enforced.
 - Kill counters and object counters share the same four `QuestField.counters` bytes: max 4
   counter-based objectives per quest, values cap at 255.
 </engine_gaps_to_respect>

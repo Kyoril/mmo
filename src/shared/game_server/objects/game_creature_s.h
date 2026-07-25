@@ -227,6 +227,22 @@ namespace mmo
 
 		const String& GetName() const override;
 
+		/// @brief Makes this creature follow the given unit while idle (escort mode). Follow
+		/// movement takes priority over patrol and random idle movement; combat interrupts it
+		/// and following resumes after the creature resets.
+		/// @param target The unit to follow.
+		/// @param followDistance Distance in world units to keep to the target.
+		void SetFollowedUnit(const std::shared_ptr<GameUnitS>& target, float followDistance);
+
+		/// @brief Stops following a unit and resumes the configured idle movement.
+		void ClearFollowedUnit();
+
+		/// @brief Returns the currently followed unit, or nullptr if none (or it despawned).
+		[[nodiscard]] std::shared_ptr<GameUnitS> GetFollowedUnit() const { return m_followTarget.lock(); }
+
+		/// @brief Returns the distance in world units kept to the followed unit.
+		[[nodiscard]] float GetFollowDistance() const { return m_followDistance; }
+
 		/// Sets the list of spawn-specific additional triggers. These are fired in addition
 		/// to any triggers defined on the creature template.
 		void SetSpawnAdditionalTriggers(std::vector<uint32> triggerIds) { m_spawnAdditionalTriggers = std::move(triggerIds); }
@@ -267,6 +283,10 @@ namespace mmo
 		std::set<uint64> m_combatParticipantGuids;
 		CreatureMovement m_movement = creature_movement::None;
 		std::vector<PatrolWaypoint> m_patrolWaypoints;
+		/// Unit this creature follows while idle (escort mode). Empty when not following.
+		std::weak_ptr<GameUnitS> m_followTarget;
+		/// Distance in world units kept to the followed unit.
+		float m_followDistance = 2.5f;
 		LootRecipients m_lootRecipients;
 		float m_healthPercent = 1.0f;
 		bool m_combatMovementEnabled = true;

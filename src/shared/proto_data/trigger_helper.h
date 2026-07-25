@@ -235,6 +235,17 @@ namespace mmo
 			/// Targets: PLAYER; Data: <QUEST-ID>; Texts: NONE;
 			QuestFailQuest = 34,
 
+			/// Makes a creature follow the unit that raised this trigger (escort mode). Follow
+			/// movement takes priority over idle patrol/random movement; combat interrupts it and
+			/// following resumes after the creature resets.
+			/// Targets: UNIT (the creature that should follow); Data: [<DISTANCE-TENTHS>] (default 25 = 2.5 units); Texts: NONE;
+			SetFollowTarget = 35,
+
+			/// Stops a creature from following its current follow target and resumes its
+			/// configured idle movement.
+			/// Targets: UNIT; Data: NONE; Texts: NONE;
+			ClearFollowTarget = 36,
+
 			Invalid,
 			Count_ = Invalid
 		};

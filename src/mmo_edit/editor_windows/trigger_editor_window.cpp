@@ -463,7 +463,7 @@ namespace mmo
 				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote",
 				"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
 				"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
-				"QuestExplorationCredit", "QuestFailQuest"
+				"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget"
 			};
 
 			// Select the trigger action type.
@@ -1165,6 +1165,18 @@ namespace mmo
 					// Data: <QUEST-ID>
 					DrawActionDataInt(action, 0, "##FailQuestId", "Quest ID");
 					ImGui::TextDisabled("Fails the quest for the player target if it is in their quest log (e.g. escort npc died).");
+					break;
+				}
+				case trigger_actions::SetFollowTarget:
+				{
+					// Data: [<DISTANCE-TENTHS>]
+					DrawActionDataInt(action, 0, "##FollowDistance", "Distance (tenths, 0 = 2.5 units)");
+					ImGui::TextDisabled("Makes the creature target follow the unit that raised this trigger (escort). Combat interrupts; follow resumes after reset.");
+					break;
+				}
+				case trigger_actions::ClearFollowTarget:
+				{
+					ImGui::TextDisabled("Stops the creature target from following and resumes its normal idle movement.");
 					break;
 				}
 				default:

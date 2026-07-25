@@ -231,6 +231,13 @@ namespace mmo
 	{
 		m_waitCountdown.Cancel();
 
+		// Escort mode: following a unit takes priority over any configured idle movement.
+		if (GetControlled().GetFollowedUnit())
+		{
+			FollowStep();
+			return;
+		}
+
 		if (GetControlled().GetMovementType() == creature_movement::None)
 		{
 			GetControlled().GetMover().StopMovement();
@@ -358,6 +365,12 @@ namespace mmo
 
 	void CreatureAIIdleState::OnTargetReached()
 	{
+		if (GetControlled().GetFollowedUnit())
+		{
+			StartWait(FollowUpdateInterval);
+			return;
+		}
+
 		if (GetControlled().GetMovementType() == creature_movement::Patrol)
 		{
 			const auto& patrolWaypoints = GetControlled().GetPatrolWaypoints();
@@ -383,6 +396,12 @@ namespace mmo
 			return;
 		}
 
+		if (GetControlled().GetFollowedUnit())
+		{
+			FollowStep();
+			return;
+		}
+
 		if (GetControlled().GetMovementType() == creature_movement::Patrol)
 		{
 			MoveToNextPatrolWaypoint();
@@ -393,6 +412,46 @@ namespace mmo
 		{
 			MoveToRandomPointInRange();
 		}
+	}
+
+	void CreatureAIIdleState::FollowStep()
+	{
+		auto& controlled = GetControlled();
+
+		const auto target = controlled.GetFollowedUnit();
+		if (!target)
+		{
+			// The followed unit despawned — fall back to the configured idle movement.
+			OnCreatureMovementChanged();
+			return;
+		}
+
+		if (!target->IsAlive())
+		{
+			// Wait next to the corpse; the escort may be resumed by a revive or a script.
+			controlled.GetMover().StopMovement();
+			StartWait(FollowUpdateInterval);
+			return;
+		}
+
+		const float followDistance = controlled.GetFollowDistance();
+		const float distanceSq = controlled.GetSquaredDistanceTo(target->GetPosition(), true);
+
+		// Small slack over the follow distance so the creature doesn't jitter while the
+		// target stands still.
+		const float startMoveDistance = followDistance + 1.0f;
+		if (distanceSq > startMoveDistance * startMoveDistance)
+		{
+			// Run to catch up when the target got far ahead, walk when merely adjusting.
+			constexpr float catchUpDistance = 15.0f;
+			controlled.SetMovementMode(distanceSq > catchUpDistance * catchUpDistance
+				? unit_movement_mode::Run
+				: unit_movement_mode::Walk);
+
+			controlled.GetMover().MoveTo(target->GetPosition(), followDistance);
+		}
+
+		StartWait(FollowUpdateInterval);
 	}
 
 	void CreatureAIIdleState::MoveToNextPatrolWaypoint()

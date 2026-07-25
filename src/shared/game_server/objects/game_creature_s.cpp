@@ -528,6 +528,34 @@ namespace mmo
 		m_patrolWaypoints = std::move(patrolWaypoints);
 	}
 
+	void GameCreatureS::SetFollowedUnit(const std::shared_ptr<GameUnitS>& target, const float followDistance)
+	{
+		m_followTarget = target;
+		m_followDistance = std::max(0.5f, followDistance);
+
+		if (m_ai)
+		{
+			// Reuses the movement-changed notification so the active AI state re-evaluates
+			// its idle movement immediately.
+			m_ai->OnCreatureMovementChanged();
+		}
+	}
+
+	void GameCreatureS::ClearFollowedUnit()
+	{
+		if (m_followTarget.expired())
+		{
+			return;
+		}
+
+		m_followTarget.reset();
+
+		if (m_ai)
+		{
+			m_ai->OnCreatureMovementChanged();
+		}
+	}
+
 	void GameCreatureS::RefreshStats()
 	{
 		GameUnitS::RefreshStats();

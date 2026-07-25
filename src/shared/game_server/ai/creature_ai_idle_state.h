@@ -21,6 +21,9 @@ namespace mmo
 		/// Interval between periodic scans for stealthed hostile units (milliseconds).
 		static constexpr GameTime StealthScanInterval = 500;
 
+		/// Interval between follow-target distance checks while escorting (milliseconds).
+		static constexpr GameTime FollowUpdateInterval = 500;
+
 	public:
 		/// Initializes a new instance of the CreatureAIIdleState class.
 		/// @param ai The ai class instance this state belongs to.
@@ -46,6 +49,10 @@ namespace mmo
 	protected:
 		/// @brief Advances the creature's current idle movement mode.
 		void AdvanceIdleMovement();
+
+		/// @brief Performs one follow-movement step towards the followed unit and schedules the
+		/// next distance check. Falls back to normal idle movement when the target despawned.
+		void FollowStep();
 
 		/// @brief Starts moving towards the next patrol waypoint.
 		void MoveToNextPatrolWaypoint();
