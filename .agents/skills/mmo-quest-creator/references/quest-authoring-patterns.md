@@ -61,8 +61,11 @@ Placement rules learned the hard way: spawn the escortee OUTSIDE ambient aggro r
 nearby hostiles (roughly 25+ units), or wandering mobs kill it on a respawn loop with no
 player involved. The danger belongs on the escort ROUTE, not at the pickup point.
 
-Known limitation: a second player accepting the quest mid-escort re-targets the follow to
-themselves (there is no "is already being escorted" gate yet).
+Known limitations: a second player accepting the quest mid-escort re-targets the follow to
+themselves (there is no "is already being escorted" gate yet), and the `NearestPlayer` fail
+target has no range cap — if the escorter runs far ahead when the escortee dies, the fail can
+attribute to whichever player happens to be nearest in the instance (harmless unless that
+player also carries the quest).
 </pattern>
 
 <pattern name="multi_item_turn_in">
