@@ -47,7 +47,7 @@ namespace mmo
 		// Remove all expired delays
 		for (auto it = m_delays.begin(); it != m_delays.end();)
 		{
-			if (!(*it)->IsRunning())
+			if (!it->countdown->IsRunning())
 			{
 				it = m_delays.erase(it);
 			}
@@ -217,6 +217,15 @@ namespace mmo
 						break;
 					}
 
+					// The continuation captures the context by value, including its raw
+					// WorldInstance pointer. Bind the delay to that instance's id so it can
+					// be cancelled if the instance is destroyed before the timer fires.
+					WorldInstance* boundWorld = context.world;
+					if (!boundWorld && context.owner)
+					{
+						boundWorld = context.owner->GetWorldInstance();
+					}
+
 					// Save delay
 					auto delayCountdown = std::make_unique<Countdown>(m_timers);
 					delayCountdown->ended.connect([&entry, i, this, context, weakOwner]()
@@ -233,7 +242,15 @@ namespace mmo
 							ExecuteTrigger(entry, context, i + 1, true);
 						});
 					delayCountdown->SetEnd(GetAsyncTimeMs() + timeMS);
-					m_delays.emplace_back(std::move(delayCountdown));
+
+					DelayedTrigger delayedTrigger;
+					delayedTrigger.countdown = std::move(delayCountdown);
+					if (boundWorld)
+					{
+						delayedTrigger.boundToWorld = true;
+						delayedTrigger.worldInstanceId = boundWorld->GetId();
+					}
+					m_delays.emplace_back(std::move(delayedTrigger));
 
 					// Skip the other actions for now
 					return;
@@ -1137,6 +1154,26 @@ namespace mmo
 		}
 
 		return action.texts(index);
+	}
+
+	void TriggerHandler::OnWorldInstanceDestroyed(const InstanceId instanceId)
+	{
+		// Regression note: TriggerHandler outlives world instances (it is program-scoped, while
+		// non-persistent dungeon instances are destroyed at runtime). A delayed continuation
+		// firing after its instance was gone dereferenced the stale context.world pointer during
+		// named-target resolution / GetPlayersInWorld — same crash class as the dangling-owner
+		// bug fixed in 16b6d894. Dropping the countdowns here cancels their pending timers.
+		for (auto it = m_delays.begin(); it != m_delays.end();)
+		{
+			if (it->boundToWorld && it->worldInstanceId == instanceId)
+			{
+				it = m_delays.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
 	}
 
 	WorldInstance* TriggerHandler::GetWorldInstance(GameObjectS* owner) const

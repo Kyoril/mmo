@@ -179,6 +179,13 @@ namespace mmo
 			}
 		};
 
+		// Delayed trigger continuations capture a raw pointer to their world instance; cancel
+		// them when that instance is destroyed so they can't fire against a stale pointer.
+		worldInstanceManager.instanceDestroyed += [&triggerHandler](const InstanceId id)
+		{
+			triggerHandler.OnWorldInstanceDestroyed(id);
+		};
+
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Game service setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
