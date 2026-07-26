@@ -2,7 +2,8 @@
 """Weekly content integrity audit.
 
 Round-trips every quest, item, NPC and spell through its authoring skill's
-export + validate scripts (catching broken references and invalid data), then
+export + validate scripts (catching broken references and invalid data), checks
+the quest chain graph for cycles and dangling links (questchain domain), then
 runs the XP coverage audit (tools/xp_audit.py, threshold 120%). Writes a JSON
 report to tools/gate/reports/ and exits non-zero if anything failed.
 
@@ -90,14 +91,84 @@ def audit_xp() -> dict:
     return {"passed": code == 0, "output_tail": output[-2000:]}
 
 
+QUEST_FLAG_AUTO_REWARDED = 0x0020
+
+
+def check_quest_chain_graph(quests: dict) -> list[dict]:
+    """Pure graph check over {quest id -> QuestEntry}; returns a failure list.
+
+    Catches data states the runtime cannot recover from:
+    - prevquestid cycles: GetQuestStatus recurses through prevquestid, so a cycle
+      would overflow the server stack the first time any member is evaluated.
+    - nextquestid cycles: every member waits for another member to be rewarded
+      first, permanently locking the whole group.
+    - dangling prevquestid/nextquestid/nextchainquestid references.
+    - AutoRewarded quests offering choice rewards (runtime silently falls back to
+      manual turn-in, which is almost never the design intent).
+    """
+    failures = []
+
+    def check_ref(quest_id: int, field: str, target: int) -> None:
+        if target > 0 and target not in quests:
+            failures.append({"id": quest_id, "stage": field,
+                             "output": f"{field} references unknown quest {target}"})
+
+    for entry in quests.values():
+        check_ref(entry.id, "prevquestid", entry.prevquestid)
+        check_ref(entry.id, "nextquestid", entry.nextquestid)
+        check_ref(entry.id, "nextchainquestid", entry.nextchainquestid)
+
+        if (entry.flags & QUEST_FLAG_AUTO_REWARDED) and len(entry.rewarditemschoice) > 0:
+            failures.append({"id": entry.id, "stage": "autorewarded",
+                             "output": "AutoRewarded quest offers choice rewards - "
+                                       "runtime falls back to manual turn-in"})
+
+    def find_cycles(edge_field: str) -> None:
+        # Each quest has at most one outgoing edge per field, so following the chain
+        # from every start node and watching for revisits finds all cycles.
+        reported = set()
+        for start in quests:
+            path, position = [], {}
+            node = start
+            while node in quests and node not in position:
+                position[node] = len(path)
+                path.append(node)
+                node = getattr(quests[node], edge_field)
+            if node in position:
+                cycle_nodes = path[position[node]:]
+                key = tuple(sorted(cycle_nodes))
+                if key not in reported:
+                    reported.add(key)
+                    chain = " -> ".join(str(q) for q in cycle_nodes + [node])
+                    failures.append({"id": cycle_nodes[0], "stage": f"{edge_field}-cycle",
+                                     "output": f"{edge_field} cycle locks these quests forever: {chain}"})
+
+    find_cycles("prevquestid")
+    find_cycles("nextquestid")
+
+    return failures
+
+
+def audit_quest_chains() -> dict:
+    """Whole-catalog quest chain graph checks (single pass, not per-entity)."""
+    msg = proto_modules()["quests"].Quests()
+    msg.ParseFromString((DATA / "quests.data").read_bytes())
+    quests = {entry.id: entry for entry in msg.entry}
+
+    failures = check_quest_chain_graph(quests)
+
+    print(f"[questchain] checked {len(quests)}, failures {len(failures)}")
+    return {"checked": len(quests), "failures": failures}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--domain", choices=[*DOMAINS, "xp"], action="append",
-                        help="restrict to specific domain(s); default: all four + xp")
+    parser.add_argument("--domain", choices=[*DOMAINS, "questchain", "xp"], action="append",
+                        help="restrict to specific domain(s); default: all four + questchain + xp")
     parser.add_argument("--limit", type=int, help="max entities per domain (smoke test)")
     args = parser.parse_args()
 
-    selected = args.domain or [*DOMAINS, "xp"]
+    selected = args.domain or [*DOMAINS, "questchain", "xp"]
     report = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "limit": args.limit,
@@ -108,7 +179,12 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="mmo_content_audit_") as tmp:
         tmp_dir = Path(tmp)
         for name in selected:
-            result = audit_xp() if name == "xp" else audit_domain(name, args.limit, tmp_dir)
+            if name == "xp":
+                result = audit_xp()
+            elif name == "questchain":
+                result = audit_quest_chains()
+            else:
+                result = audit_domain(name, args.limit, tmp_dir)
             report["domains"][name] = result
             failed = (not result["passed"]) if name == "xp" else bool(result["failures"])
             if failed:
