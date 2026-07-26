@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game_server/trigger_handler.h"
+#include "game/game.h"
 #include "shared/proto_data/triggers.pb.h"
 
 #include <list>
@@ -36,6 +37,13 @@ namespace mmo
 		/// @param actionOffset The offset for the action to execute (default is 0).
 		/// @param ignoreProbability Whether to ignore probability checks (default is false).
 		void ExecuteTrigger(const proto::TriggerEntry& entry, TriggerContext context, uint32 actionOffset = 0, bool ignoreProbability = false) override;
+
+		/// Cancels all pending delayed trigger continuations bound to the given world instance.
+		/// Must be called while the instance is being destroyed (e.g. from the instanceDestroyed
+		/// signal): the continuations capture a raw WorldInstance* in their TriggerContext, so
+		/// letting them fire afterwards would dereference a stale pointer.
+		/// @param instanceId Id of the world instance being destroyed.
+		void OnWorldInstanceDestroyed(InstanceId instanceId);
 
 	private:
 		/// Retrieves action data from a trigger action.
@@ -260,10 +268,20 @@ namespace mmo
 		bool CheckOwnerAliveFlag(const proto::TriggerEntry& entry, const GameObjectS* owner);
 
 	private:
+		/// A pending delayed trigger continuation together with the world instance it is bound to,
+		/// so it can be cancelled when that instance is destroyed before the timer fires.
+		struct DelayedTrigger
+		{
+			std::unique_ptr<Countdown> countdown; ///< Timer driving the delayed continuation.
+			bool boundToWorld = false; ///< Whether worldInstanceId is set.
+			InstanceId worldInstanceId{}; ///< Id of the world instance the captured context refers to.
+		};
+
+	private:
 		proto::Project& m_project; ///< Reference to the project containing static game data.
 		PlayerManager& m_playerManager; ///< Reference to the player manager.
 		TimerQueue& m_timers; ///< Reference to the timer queue.
-		std::list<std::unique_ptr<Countdown>> m_delays; ///< List of countdown timers for delayed actions.
+		std::list<DelayedTrigger> m_delays; ///< Pending delayed trigger continuations.
 	};
 	
 }
