@@ -1342,6 +1342,13 @@ namespace mmo
 			return;
 		}
 
+		// Validate that the trigger belongs to the map the player is currently on
+		if (!m_worldInstance || trigger->map() != m_worldInstance->GetMapId())
+		{
+			ELOG("Client sent area trigger id " << triggerId << " which is not on the player's current map!");
+			return;
+		}
+
 		// Validate that the player is actually in the trigger area
 		const Vector3 playerPosition = m_character->GetPosition();
 		if (!IsPointInTrigger(*trigger, playerPosition))
@@ -1377,6 +1384,13 @@ namespace mmo
 		if (!trigger)
 		{
 			ELOG("Client sent area trigger left id " << triggerId << " which does not exist!");
+			return;
+		}
+
+		// Validate that the trigger belongs to the map the player is currently on
+		if (!m_worldInstance || trigger->map() != m_worldInstance->GetMapId())
+		{
+			ELOG("Client sent area trigger left id " << triggerId << " which is not on the player's current map!");
 			return;
 		}
 
