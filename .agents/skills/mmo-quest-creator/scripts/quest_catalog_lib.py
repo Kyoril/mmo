@@ -76,6 +76,19 @@ TRIGGER_ACTION_NAMES = {
     21: "Despawn",
     22: "Teleport",
     23: "Emote",
+    24: "SetEncounterState",
+    25: "SummonCreature",
+    26: "Taunt",
+    27: "ModifyThreat",
+    28: "ResetThreat",
+    29: "ApplyAura",
+    30: "RemoveAura",
+    31: "SetInstanceVariable",
+    32: "BroadcastMessage",
+    33: "QuestExplorationCredit",
+    34: "QuestFailQuest",
+    35: "SetFollowTarget",
+    36: "ClearFollowTarget",
 }
 
 TRIGGER_TARGET_NAMES = {
@@ -86,6 +99,10 @@ TRIGGER_TARGET_NAMES = {
     4: "NamedWorldObject",
     5: "NamedCreature",
     6: "TriggeringUnit",
+    7: "RandomPlayer",
+    8: "NearestPlayer",
+    9: "HighestThreat",
+    10: "AllPlayers",
 }
 
 
@@ -290,11 +307,14 @@ def collect_related_triggers(quest, catalogs: dict[str, object]) -> tuple[list[i
                         direct_trigger_ids.append(trigger_id)
                         seen_direct.add(trigger_id)
 
+    # Quest-scoped actions: QuestEventOrExploration (17), QuestExplorationCredit (33)
+    # and QuestFailQuest (34) all carry the quest id in data[0].
+    quest_scoped_actions = (17, 33, 34)
     for trigger in catalogs["triggers"].entry:
         trigger_matches = False
         for action in trigger.actions:
             action_type = action.action if action.HasField("action") else 0
-            if action_type == 17 and action.data and action.data[0] == quest.id:
+            if action_type in quest_scoped_actions and action.data and action.data[0] == quest.id:
                 trigger_matches = True
                 break
         if not trigger_matches:

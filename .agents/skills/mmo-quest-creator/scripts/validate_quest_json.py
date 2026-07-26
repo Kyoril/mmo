@@ -125,8 +125,8 @@ def validate_document(doc: dict, project_root: Path) -> tuple[list[str], list[st
         add_error(errors, "quest.flags must not combine Daily and Weekly on the same quest")
     if (quest_message.flags & 0x0200) and ((quest_message.flags & 0x0040) or (quest_message.flags & 0x0080)):
         add_warning(warnings, "quest.flags combines Repeatable with Daily or Weekly; Daily/Weekly already imply repeatability and usually make the plain Repeatable bit redundant")
-    if quest_message.flags & 0x0020:
-        add_warning(warnings, "quest uses AutoRewarded, but the normal quest runtime still does not auto-turn-in completed quests purely from that flag")
+    if (quest_message.flags & 0x0020) and len(quest_message.rewarditemschoice) > 0:
+        add_error(errors, "quest combines AutoRewarded with choice rewards; the runtime ignores the flag and falls back to manual turn-in")
     if (quest_message.flags & 0x0001) and quest_message.timelimit == 0:
         add_warning(warnings, "quest uses StayAlive without a timer; confirm that death-based failure alone is intended")
 
@@ -197,7 +197,11 @@ def validate_document(doc: dict, project_root: Path) -> tuple[list[str], list[st
     if not providers.get("unit_ids", []) and not providers.get("object_ids", []):
         add_warning(warnings, "quest has no providers in the document; after apply it may become unreachable unless wired elsewhere")
     if not enders.get("unit_ids", []) and not enders.get("object_ids", []):
-        add_warning(warnings, "quest has no enders in the document; after apply it may become impossible to turn in without custom reward handling")
+        if quest_message.flags & 0x0020:
+            if quest_message.rewarditems:
+                add_warning(warnings, "AutoRewarded quest grants reward items but has no ender; a full-bags player cannot turn in manually and is stuck until relog retries the auto-reward")
+        else:
+            add_warning(warnings, "quest has no enders in the document; after apply it may become impossible to turn in without custom reward handling")
     if quest_message.timelimit > 0 and not enders.get("unit_ids", []) and not enders.get("object_ids", []):
         add_warning(warnings, "timed quest has no ender wiring; remember that timed quests can now expire after objectives are complete but before reward")
 
@@ -227,7 +231,9 @@ def validate_document(doc: dict, project_root: Path) -> tuple[list[str], list[st
                 attached_trigger_ids.add(trigger_message.id)
                 for action_index, action in enumerate(trigger_message.actions):
                     action_type = action.action if action.HasField("action") else 0
-                    if action_type == 17 and action.data and action.data[0] == quest_message.id:
+                    # QuestEventOrExploration (17) and QuestExplorationCredit (33) both complete
+                    # the exploration objective of the quest.
+                    if action_type in (17, 33) and action.data and action.data[0] == quest_message.id:
                         completion_trigger_found = True
                     if action_type == 16 and action.data and action.data[0] not in unit_ids:
                         add_error(errors, f"attached_triggers[{index}].actions[{action_index}] grants quest kill credit for unknown unit {action.data[0]}")
@@ -282,7 +288,7 @@ def validate_document(doc: dict, project_root: Path) -> tuple[list[str], list[st
                             break
                     if linked_trigger:
                         for action in linked_trigger.get("actions", []):
-                            if action.get("action") == 17 and isinstance(action.get("data"), list) and action["data"] and action["data"][0] == quest_message.id:
+                            if action.get("action") in (17, 33) and isinstance(action.get("data"), list) and action["data"] and action["data"][0] == quest_message.id:
                                 completion_trigger_found = True
 
     if quest_message.flags & 0x0100 and not completion_trigger_found:

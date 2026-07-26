@@ -221,16 +221,18 @@ namespace mmo
 					auto delayCountdown = std::make_unique<Countdown>(m_timers);
 					delayCountdown->ended.connect([&entry, i, this, context, weakOwner]()
 						{
-							GameObjectS* oldOwner = context.owner;
-
-							auto strongOwner = weakOwner.lock();
-							if (context.owner != nullptr && strongOwner == nullptr)
+							// The owner may have been destroyed while the delay was pending (e.g.
+							// a player-owned reward trigger whose player logged out). The stored
+							// raw owner pointer is dangling then and must not be passed on —
+							// ExecuteTrigger calls shared_from_this() on it.
+							TriggerContext continuationContext = context;
+							if (continuationContext.owner != nullptr && weakOwner.lock() == nullptr)
 							{
-								WLOG("Owner no longer exists, so the executing trigger might fail.");
-								oldOwner = nullptr;
+								WLOG("Trigger owner no longer exists; continuing delayed trigger without an owner.");
+								continuationContext.owner = nullptr;
 							}
 
-							ExecuteTrigger(entry, context, i + 1, true);
+							ExecuteTrigger(entry, continuationContext, i + 1, true);
 						});
 					delayCountdown->SetEnd(GetAsyncTimeMs() + timeMS);
 					m_delays.emplace_back(std::move(delayCountdown));
