@@ -46,9 +46,12 @@ built in THIS engine:
     escortee fires `QuestFailQuest` so the quest fails when the NPC dies.
     Build (escort, follow-driven): fire `SetFollowTarget` from the `OnQuestAccept`/gossip trigger
     so the NPC walks WITH the player instead of leading; complete via an area trigger at the
-    destination (`QuestExplorationCredit`) and `ClearFollowTarget`; same `OnKilled` →
-    `QuestFailQuest` fail wiring. Use follow-driven escorts for "take me to X" flows and
-    route-driven ones for "protect me while I walk my path" flows.
+    destination (`QuestExplorationCredit`) and release the escortee from the quest's
+    `rewardtriggers` (`ClearFollowTarget` + `Despawn` on the named spawn — never from the area
+    trigger itself, which fires for every passerby); same `OnKilled` → `QuestFailQuest` fail
+    wiring. Live example: quest `56` (see quest-authoring-patterns.md). Use follow-driven escorts
+    for "take me to X" flows and route-driven ones for "protect me while I walk my path" flows.
+    Spawn the escortee outside ambient aggro range — the danger belongs on the route.
     Build (rescue captives): each captive is a gossip NPC whose `OnGossipAction` trigger fires
     `QuestKillCredit` for a hidden credit unit, then plays a walk-off + despawn sequence.
 11. **Summon boss by ritual** — use an item/object at a location, boss spawns, kill it.

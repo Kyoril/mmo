@@ -70,7 +70,10 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 Actions:
 `TargetUnit(g)`, `FaceUnit(g)`, `CastSpell(spellId [, g]) -> bool` (faces the target
 automatically), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
-`MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing), `SendChat(msg)`
+`MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing), `SendChat(msg)`,
+`SendAreaTrigger(areaTriggerId)` (reports area-trigger entry — the real client
+detects the overlap locally, the headless client reports it explicitly; the
+server validates the player's position, so walk inside the area first)
 
 GM commands (server must run with dev commands; the test account has GM level 3):
 `GM.AddItem(itemId, count)`, `GM.LearnSpell(spellId)`, `GM.LevelUp(levels)`,

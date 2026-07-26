@@ -76,6 +76,19 @@ TRIGGER_ACTION_NAMES = {
     21: "Despawn",
     22: "Teleport",
     23: "Emote",
+    24: "SetEncounterState",
+    25: "SummonCreature",
+    26: "Taunt",
+    27: "ModifyThreat",
+    28: "ResetThreat",
+    29: "ApplyAura",
+    30: "RemoveAura",
+    31: "SetInstanceVariable",
+    32: "BroadcastMessage",
+    33: "QuestExplorationCredit",
+    34: "QuestFailQuest",
+    35: "SetFollowTarget",
+    36: "ClearFollowTarget",
 }
 
 TRIGGER_TARGET_NAMES = {
@@ -86,6 +99,10 @@ TRIGGER_TARGET_NAMES = {
     4: "NamedWorldObject",
     5: "NamedCreature",
     6: "TriggeringUnit",
+    7: "RandomPlayer",
+    8: "NearestPlayer",
+    9: "HighestThreat",
+    10: "AllPlayers",
 }
 
 

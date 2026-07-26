@@ -42,6 +42,29 @@ Quest `8` and quest `22` use display-text-only objectives and depend on triggers
 Quest `20` demonstrates region discovery by linking an area trigger to a trigger row that completes the quest.
 </pattern>
 
+<pattern name="escort_follow_quest">
+Quest `56` `Out of the Barrowfield` is the canonical follow-driven escort:
+
+- the escortee (unit `80`, named spawn `Barrowfield - Surveyor Wick Farrow`) is itself the
+  questgiver; quest flags combine `Exploration` + `AutoRewarded`, with one text-only
+  requirement row for the log line
+- an `OnQuestAccept` trigger on the escortee fires `Say` + `SetFollowTarget`, so the NPC
+  follows the accepting player
+- an area trigger at the destination fires `QuestExplorationCredit` for the triggering
+  player only (safe for passersby — it is a no-op without the quest)
+- the quest's `rewardtriggers` handle the goodbye: `Say` + `ClearFollowTarget` + `Delay` +
+  `Despawn` on the named spawn (reward triggers run with the rewarded player as context,
+  so they never fire for uninvolved players)
+- an `OnKilled` trigger on the escortee fires `QuestFailQuest` targeting `NearestPlayer`
+
+Placement rules learned the hard way: spawn the escortee OUTSIDE ambient aggro range of
+nearby hostiles (roughly 25+ units), or wandering mobs kill it on a respawn loop with no
+player involved. The danger belongs on the escort ROUTE, not at the pickup point.
+
+Known limitation: a second player accepting the quest mid-escort re-targets the follow to
+themselves (there is no "is already being escorted" gate yet).
+</pattern>
+
 <pattern name="multi_item_turn_in">
 Quest `19` demonstrates the current multi-objective item turn-in pattern:
 
@@ -115,15 +138,19 @@ Do not stop after creating `QuestEntry`. A quest without providers or enders is 
 Do not set `Exploration` and assume the engine will detect discovery automatically. Wire an area trigger or a scripted completion trigger.
 </pitfall>
 
-<pitfall name="object_counter_assumption">
-Do not design a "click this object five times" quest unless you also provide a spell-cast or explicit trigger path that actually increments or completes it.
+<pitfall name="object_counter_spellcast_mixup">
+Object-use counters are native (`objectid + objectcount`, `spellcast` 0 — credited on plain use). But a requirement WITH a `spellcast` id is only credited by casting that spell on the object; plain use does nothing for it. Pick the shape that matches the design.
 </pitfall>
 
 <pitfall name="unused_starttriggers">
 Do not put important start behavior into `starttriggers` and assume it will fire. Use provider unit triggers on `OnQuestAccept` instead.
 </pitfall>
 
-<pitfall name="auto_reward_assumption">
-Do not author a quest as if `AutoRewarded` guarantees automatic turn-in. Verify the runtime path or add explicit custom handling.
+<pitfall name="auto_reward_choice_items">
+Do not combine `AutoRewarded` with choice rewards — the runtime ignores the flag and falls back to manual turn-in (the validator rejects this combination). For auto-rewarded quests granting fixed reward ITEMS, still wire an ender NPC so a full-bags player is not stuck until the login-time retry.
+</pitfall>
+
+<pitfall name="escortee_in_aggro_range">
+Do not spawn an escort NPC within ambient aggro range of hostile spawns. It will be killed by wandering mobs on a respawn loop with no player involved, and its death trigger will fire pointlessly.
 </pitfall>
 </anti_patterns>

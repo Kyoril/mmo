@@ -500,6 +500,24 @@ namespace mmo
 			}
 		}
 
+		void luaSendAreaTrigger(const uint32 areaTriggerId)
+		{
+			// The real client detects area-trigger overlap locally and notifies the server, which
+			// validates the reported position before executing the linked trigger. The headless
+			// e2e client has no overlap detection, so scenarios walk into the area and send the
+			// notification explicitly — the server-side position validation still applies.
+			g_runtime->session->GetRealm().sendSinglePacket([areaTriggerId](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::client_realm_packet::AreaTriggerTriggered);
+					packet << io::write<uint32>(areaTriggerId);
+					packet.Finish();
+				});
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("SendAreaTrigger", { { "area_trigger_id", areaTriggerId } });
+			}
+		}
+
 		void luaStartAttack(const std::string& guid)
 		{
 			g_runtime->session->GetContext().StartAutoAttack(guidFromString(guid));
@@ -787,6 +805,7 @@ namespace mmo
 				luabind::def_lambda("StartAttack", &luaStartAttack),
 				luabind::def_lambda("StopAttack", &luaStopAttack),
 				luabind::def_lambda("MoveToImpl", &luaMoveTo),
+				luabind::def_lambda("SendAreaTrigger", &luaSendAreaTrigger),
 				luabind::def_lambda("SendChat", &luaSendChat),
 				luabind::def_lambda("DoEmote", &luaDoEmote),
 				luabind::def_lambda("CyclePose", &luaCyclePose),
