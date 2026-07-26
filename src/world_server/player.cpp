@@ -1343,7 +1343,12 @@ namespace mmo
 		}
 
 		// Validate that the trigger belongs to the map the player is currently on
-		if (!m_worldInstance || trigger->map() != m_worldInstance->GetMapId())
+		if (!m_worldInstance)
+		{
+			ELOG("Client sent area trigger id " << triggerId << " but is not in a world instance!");
+			return;
+		}
+		if (trigger->map() != m_worldInstance->GetMapId())
 		{
 			ELOG("Client sent area trigger id " << triggerId << " which is not on the player's current map!");
 			return;
@@ -1388,7 +1393,12 @@ namespace mmo
 		}
 
 		// Validate that the trigger belongs to the map the player is currently on
-		if (!m_worldInstance || trigger->map() != m_worldInstance->GetMapId())
+		if (!m_worldInstance)
+		{
+			ELOG("Client sent area trigger left id " << triggerId << " but is not in a world instance!");
+			return;
+		}
+		if (trigger->map() != m_worldInstance->GetMapId())
 		{
 			ELOG("Client sent area trigger left id " << triggerId << " which is not on the player's current map!");
 			return;
