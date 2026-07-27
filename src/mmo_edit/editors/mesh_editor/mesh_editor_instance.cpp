@@ -464,10 +464,10 @@ namespace mmo
 			DrawAnimations(animationsId);
 			DrawAnimationTimelineWindow(timelineId);
 		}
-		else
-		{
-			DrawCollision(collisionId);
-		}
+
+		// Collision is available for skeletal meshes too (e.g. doors): the tree is built
+		// from the bind pose, which by convention is the collidable rest state.
+		DrawCollision(collisionId);
 		
 		// Draw viewport
 		DrawViewport(viewportId);
@@ -1459,6 +1459,13 @@ namespace mmo
 
 			ImGui::Separator();
 
+			if (m_entity && m_entity->HasSkeleton())
+			{
+				ImGui::TextWrapped("Skeletal mesh: collision is built from the bind pose. "
+					"Author the bind pose as the collidable rest state (e.g. doors closed).");
+				ImGui::Separator();
+			}
+
 			if (ImGui::Button("Clear"))
 			{
 				m_mesh->GetCollisionTree().Clear();
@@ -1470,40 +1477,64 @@ namespace mmo
 			{
 				m_mesh->GetCollisionTree().Clear();
 
-				// Gather all vertex data
-				if (m_mesh->sharedVertexData == nullptr)
-				{
-					std::vector<Vector3> vertices;
-					std::vector<uint32> indices;
-					std::vector<uint16> faceSubMeshes;
+				// Gather all vertex data. Skinned/skeletal meshes keep their (bind pose)
+				// vertices in the mesh's shared vertex data, referenced by every submesh;
+				// static meshes usually use per-submesh vertex data. Both are supported —
+				// the shared pool is gathered once and reused by all submeshes that
+				// reference it.
+				std::vector<Vector3> vertices;
+				std::vector<uint32> indices;
+				std::vector<uint16> faceSubMeshes;
 
-					for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
+				uint32 sharedVertexOffset = 0;
+				bool sharedVerticesGathered = false;
+
+				for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
+				{
+					if (!m_includedSubMeshes.contains(i))
 					{
-						if (!m_includedSubMeshes.contains(i))
+						continue;
+					}
+
+					SubMesh& sub = m_mesh->GetSubMesh(i);
+
+					uint32 vertexOffset = 0;
+					if (sub.useSharedVertices)
+					{
+						if (!m_mesh->sharedVertexData)
 						{
 							continue;
 						}
 
-						SubMesh& sub = m_mesh->GetSubMesh(i);
+						if (!sharedVerticesGathered)
+						{
+							sharedVertexOffset = static_cast<uint32>(vertices.size());
+							vertices.reserve(vertices.size() + m_mesh->sharedVertexData->vertexCount);
+							ReadVertexDataPositions(*m_mesh->sharedVertexData, vertices);
+							sharedVerticesGathered = true;
+						}
 
-						const uint32 vertexOffset = vertices.size();
+						vertexOffset = sharedVertexOffset;
+					}
+					else
+					{
+						vertexOffset = static_cast<uint32>(vertices.size());
 						vertices.reserve(vertices.size() + sub.vertexData->vertexCount);
-						indices.reserve(indices.size() + sub.indexData->indexCount);
-
 						ReadVertexDataPositions(*sub.vertexData, vertices);
-
-						const size_t indexCountBefore = indices.size();
-						ReadIndexData(*sub.indexData, vertexOffset, indices);
-
-						// Remember the source submesh of every gathered face so surface
-						// types can be resolved from the hit submesh's material.
-						const size_t facesAdded = (indices.size() - indexCountBefore) / 3;
-						faceSubMeshes.insert(faceSubMeshes.end(), facesAdded, i);
 					}
 
-					m_mesh->GetCollisionTree().Clear();
-					m_mesh->GetCollisionTree().Build(vertices, indices, faceSubMeshes);
+					indices.reserve(indices.size() + sub.indexData->indexCount);
+
+					const size_t indexCountBefore = indices.size();
+					ReadIndexData(*sub.indexData, vertexOffset, indices);
+
+					// Remember the source submesh of every gathered face so surface
+					// types can be resolved from the hit submesh's material.
+					const size_t facesAdded = (indices.size() - indexCountBefore) / 3;
+					faceSubMeshes.insert(faceSubMeshes.end(), facesAdded, i);
 				}
+
+				m_mesh->GetCollisionTree().Build(vertices, indices, faceSubMeshes);
 			}
 
 			static const char* s_noMaterial = "(No Material)";
