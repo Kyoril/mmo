@@ -414,6 +414,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &BotRealmConnector::OnUpdateObject);
 		RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnCompressedUpdateObject);
 		RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &BotRealmConnector::OnDestroyObjects);
+		RegisterPacketHandler(game::realm_client_packet::DebugLineOfSightResult, *this, &BotRealmConnector::OnDebugLineOfSightResult);
 		RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
 
 		// Movement packets - these contain position updates for other units
@@ -1189,9 +1190,9 @@ namespace mmo
 			{
 				UnitDespawned(guid);
 			}
-			else
+			else if (!m_objectManager.RemoveItem(guid))
 			{
-				m_objectManager.RemoveItem(guid);
+				m_objectManager.RemoveWorldObject(guid);
 			}
 		}
 
@@ -1344,6 +1345,49 @@ namespace mmo
 			item.stackCount = fieldMap.GetFieldValue<uint32>(object_fields::StackCount);
 			item.ownerGuid = fieldMap.GetFieldValue<uint64>(object_fields::ItemOwner);
 			m_objectManager.AddOrUpdateItem(item);
+			return true;
+		}
+
+		// Track world objects (chests, doors, ...) so scenarios can find and interact with them.
+		if (typeId == ObjectTypeId::Object)
+		{
+			const BotWorldObjectState* existing = m_objectManager.GetWorldObject(guid);
+			if (!creation && !existing)
+			{
+				// A values-update for an object we never saw created would produce a
+				// phantom entry with entry id 0 — ignore it.
+				return true;
+			}
+
+			BotWorldObjectState objectState;
+			if (existing)
+			{
+				objectState = *existing;
+			}
+			objectState.guid = guid;
+
+			if (creation)
+			{
+				objectState.entry = fieldMap.GetFieldValue<uint32>(object_fields::Entry);
+				objectState.type = fieldMap.GetFieldValue<uint32>(object_fields::ObjectTypeId);
+				objectState.state = fieldMap.GetFieldValue<uint32>(object_fields::State);
+				objectState.position = movementInfo.position;
+			}
+			else
+			{
+				// Only merge fields that actually changed — State 0 (closed) is meaningful, so
+				// the zero-ignore merge used for items would lose door closings.
+				if (fieldMap.IsFieldMarkedAsChanged(object_fields::Entry))
+				{
+					objectState.entry = fieldMap.GetFieldValue<uint32>(object_fields::Entry);
+				}
+				if (fieldMap.IsFieldMarkedAsChanged(object_fields::State))
+				{
+					objectState.state = fieldMap.GetFieldValue<uint32>(object_fields::State);
+				}
+			}
+
+			m_objectManager.AddOrUpdateWorldObject(objectState);
 			return true;
 		}
 
@@ -1962,6 +2006,40 @@ namespace mmo
 			packet << io::write<uint64>(guid);
 			packet.Finish();
 			});
+	}
+
+	void BotRealmConnector::CheatCreateObject(const uint32 entry, const uint32 state)
+	{
+		sendSinglePacket([entry, state](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatCreateObject);
+			packet << io::write<uint32>(entry) << io::write<uint32>(state);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatCheckLineOfSight(const uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatCheckLineOfSight);
+			packet << io::write<uint64>(targetGuid);
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnDebugLineOfSightResult(game::IncomingPacket& packet)
+	{
+		uint8 hasLos = 0;
+		if (!(packet >> io::read<uint8>(hasLos)))
+		{
+			ELOG("Failed to read DebugLineOfSightResult packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// The from/to/hit vectors that follow are only needed for the in-game visualizer — skip them.
+		m_lastLosResult = (hasLos != 0);
+		++m_losResultCounter;
+
+		return PacketParseResult::Pass;
 	}
 
 	void BotRealmConnector::CheatLearnSpell(const uint32 spellId)

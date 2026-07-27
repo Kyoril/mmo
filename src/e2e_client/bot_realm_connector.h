@@ -129,6 +129,10 @@ namespace mmo
 		bool m_isAutoAttacking { false };
 		uint64 m_autoAttackTargetGuid { 0 };
 
+		// Line of sight debug check state (dev command responses)
+		uint32 m_losResultCounter { 0 };
+		bool m_lastLosResult { false };
+
 	public:
 		/// A list of character views.
 		std::vector<CharacterView> m_characterViews;
@@ -273,6 +277,21 @@ namespace mmo
 		/// GAME MASTER only. Destroys the monster with the given guid.
 		void CheatDestroyMonster(uint64 guid);
 
+		/// GAME MASTER only. Spawns a temporary world object (e.g. a door) at the player's
+		/// position with the given initial state (doors: 0 = closed, 1 = open).
+		void CheatCreateObject(uint32 entry, uint32 state);
+
+		/// GAME MASTER only. Requests a server-side line of sight check from the player to the
+		/// object with the given guid. The result arrives asynchronously — poll GetLosResultCounter
+		/// for a change and then read GetLastLosResult.
+		void CheatCheckLineOfSight(uint64 targetGuid);
+
+		/// Returns how many DebugLineOfSightResult packets have been received so far.
+		uint32 GetLosResultCounter() const { return m_losResultCounter; }
+
+		/// Returns the result of the most recent line of sight check (true = clear).
+		bool GetLastLosResult() const { return m_lastLosResult; }
+
 		/// GAME MASTER only. Learns the given spell.
 		void CheatLearnSpell(uint32 spellId);
 
@@ -367,6 +386,8 @@ namespace mmo
 		PacketParseResult HandleObjectUpdate(io::Reader& reader);
 
 		PacketParseResult OnDestroyObjects(game::IncomingPacket& packet);
+
+		PacketParseResult OnDebugLineOfSightResult(game::IncomingPacket& packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
 

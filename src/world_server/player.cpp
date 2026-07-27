@@ -761,6 +761,9 @@ namespace mmo
 		case game::client_realm_packet::CheatCreateMonster:
 			OnCheatCreateMonster(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatCreateObject:
+			OnCheatCreateObject(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::CheatDestroyMonster:
 			OnCheatDestroyMonster(opCode, buffer.size(), reader);
 			break;

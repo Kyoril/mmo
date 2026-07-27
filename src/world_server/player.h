@@ -614,6 +614,13 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatCreateMonster(uint16 opCode, uint32 size, io::Reader& contentReader) const;
 
+		/// Handles the client's request to spawn a temporary world object (e.g. a door) at the player's
+		/// position, facing the player's direction. The object will not respawn or persist on restart.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatCreateObject(uint16 opCode, uint32 size, io::Reader& contentReader) const;
+
 		/// Handles the client's request to destroy a monster. This will remove the monster from the world. Temporary monsters will be removed entirely, static monsters will respawn
 		///	if they are configured to do so in the game files.
 		///	@param opCode The op code of the packet.

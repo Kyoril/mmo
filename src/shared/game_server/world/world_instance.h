@@ -16,6 +16,7 @@
 #include "world_object_spawner.h"
 #include "base/id_generator.h"
 #include "base/countdown.h"
+#include "math/matrix4.h"
 #include "shared/proto_data/maps.pb.h"
 #include "shared/proto_data/trigger_helper.h"
 
@@ -63,6 +64,20 @@ namespace mmo
 		/// @brief Returns true if server-side water data is loaded for this map. When false, swim
 		/// validation is skipped (the server trusts the client) rather than rejecting all swimming.
 		virtual bool IsWaterDataAvailable() const = 0;
+
+		/// @brief Registers dynamic (toggleable) collision geometry, e.g. a door mesh.
+		/// @param meshPath Path of the mesh asset whose COLL chunk provides the collision tree.
+		/// @param transform The local → world transform of the instance.
+		/// @param enabled Whether the instance initially blocks line of sight.
+		/// @return Opaque handle for later removal/toggling, or 0 when dynamic collision is
+		/// unsupported by this map data or the mesh has no collision tree.
+		virtual uint64 AddDynamicCollision(const String& meshPath, const Matrix4& transform, bool enabled) { return 0; }
+
+		/// @brief Removes dynamic collision geometry. Handle 0 and unknown handles are a safe no-op.
+		virtual void RemoveDynamicCollision(uint64 handle) {}
+
+		/// @brief Enables or disables dynamic collision geometry. Handle 0 and unknown handles are a safe no-op.
+		virtual void SetDynamicCollisionEnabled(uint64 handle, bool enabled) {}
 	};
 
 	class SimpleMapData final : public MapData
@@ -127,10 +142,17 @@ namespace mmo
 
 		bool IsWaterDataAvailable() const override;
 
+		uint64 AddDynamicCollision(const String& meshPath, const Matrix4& transform, bool enabled) override;
+
+		void RemoveDynamicCollision(uint64 handle) override;
+
+		void SetDynamicCollisionEnabled(uint64 handle, bool enabled) override;
+
 	private:
 		std::shared_ptr<nav::Map> m_map;
-		/// Optional geometry-based collision map for accurate wall/object LOS.
-		/// Null when no world file was found or loading failed; nav mesh LOS is used as fallback.
+		/// Geometry-based collision map for accurate wall/object LOS. Always present so dynamic
+		/// collision (e.g. doors) works even on maps without static world geometry; nav mesh LOS
+		/// is used as fallback only when the pointer is null (allocation-free maps).
 		std::unique_ptr<ServerCollisionMap> m_collisionMap;
 		/// Optional terrain water data for swim validation. Null when the map has no water.
 		std::unique_ptr<ServerWaterMap> m_waterMap;
@@ -232,6 +254,13 @@ namespace mmo
 		/// Removes the reference to a creature that was created using CreateTemporaryCreature. The creature needs to be despawned before this call.
 		void DestroyTemporaryCreature(uint64 guid);
 
+		/// Creates a temporary world object that the world instance will also keep a strong reference to. The object
+		/// will not be spawned and thus needs to be spawned using the AddGameObject method.
+		std::shared_ptr<GameWorldObjectS> CreateTemporaryObject(const proto::ObjectEntry& entry, const Vector3& position);
+
+		/// Removes the reference to an object that was created using CreateTemporaryObject. The object needs to be despawned before this call.
+		void DestroyTemporaryObject(uint64 guid);
+
 		bool IsDungeon() const { return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_DUNGEON; }
 
 		bool IsRaid() const { return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_RAID; }
@@ -331,6 +360,13 @@ namespace mmo
 		/// (Re)schedules the next firing of an instance OnTimer timer based on its interval data.
 		void ScheduleInstanceTimer(Countdown& countdown, const proto::TriggerEntry& entry);
 
+		/// Registers a door's mesh as dynamic collision so closed doors block line of sight.
+		/// The instance is toggled on state changes and removed again on despawn.
+		void RegisterDoorCollision(GameWorldObjectS& object);
+
+		/// Removes the dynamic collision registered for the given door, if any.
+		void UnregisterDoorCollision(uint64 guid);
+
 	private:
 		Universe& m_universe;
 		IdGenerator<uint64>& m_objectIdGenerator;
@@ -357,6 +393,7 @@ namespace mmo
 		GameTime m_lastTimeUpdateBroadcast { 0 };
 
 		std::map<uint64, std::shared_ptr<GameCreatureS>> m_temporaryCreatures;
+		std::map<uint64, std::shared_ptr<GameWorldObjectS>> m_temporaryObjects;
 		ITriggerHandler& m_triggerHandler;
 
 		typedef std::unordered_map<uint64, GameObjectS*> GameObjectsByGuid;
@@ -384,5 +421,13 @@ namespace mmo
 
 		/// Number of players currently in this instance (tracked for wipe detection).
 		uint32 m_playerCount{ 0 };
+
+		/// Dynamic collision bookkeeping for spawned doors (key = object guid).
+		struct DoorCollision
+		{
+			uint64 handle { 0 };
+			scoped_connection stateChanged;
+		};
+		std::unordered_map<uint64, DoorCollision> m_doorCollisions;
 	};
 }

@@ -368,6 +368,10 @@ namespace mmo
 				/// Dev command: increase the selected player's active class level. Payload: uint8 levels. Requires MMO_WITH_DEV_COMMANDS.
 				CheatClassLevelUp,
 
+				/// Dev command: spawn a temporary world object (e.g. a door) at the player's position.
+				/// Payload: uint32 objectEntry, uint32 state. Requires MMO_WITH_DEV_COMMANDS.
+				CheatCreateObject,
+
 				/// Counter constant
 				Count_,
 			};

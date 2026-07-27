@@ -29,13 +29,8 @@ namespace mmo
 	// AddInstance — compute world AABB and inverse transform, then store.
 	// ---------------------------------------------------------------------------
 
-	void ServerCollisionMap::AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform)
+	CollisionInstance ServerCollisionMap::MakeInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform)
 	{
-		if (!tree || tree->IsEmpty())
-		{
-			return;
-		}
-
 		CollisionInstance inst;
 		inst.tree        = std::move(tree);
 		inst.transform   = transform;
@@ -45,7 +40,72 @@ namespace mmo
 		inst.worldBounds = inst.tree->GetBoundingBox();
 		inst.worldBounds.Transform(transform);
 
-		m_instances.push_back(std::move(inst));
+		return inst;
+	}
+
+	void ServerCollisionMap::AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform)
+	{
+		if (!tree || tree->IsEmpty())
+		{
+			return;
+		}
+
+		m_instances.push_back(MakeInstance(std::move(tree), transform));
+	}
+
+	// ---------------------------------------------------------------------------
+	// Dynamic instances — toggleable collision for spawned world objects (doors).
+	// Single-thread contract: the world server runs its io_service single threaded
+	// (maxNetworkThreads = 0), so mutation and LoS queries never race.
+	// ---------------------------------------------------------------------------
+
+	uint64 ServerCollisionMap::AddDynamicInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const bool enabled)
+	{
+		if (!tree || tree->IsEmpty())
+		{
+			return 0;
+		}
+
+		DynamicInstance dyn;
+		dyn.instance = MakeInstance(std::move(tree), transform);
+		dyn.enabled = enabled;
+
+		const uint64 handle = m_nextDynamicHandle++;
+		m_dynamicInstances.emplace(handle, std::move(dyn));
+
+		return handle;
+	}
+
+	uint64 ServerCollisionMap::AddDynamicInstanceFromMesh(const std::string& meshPath, const Matrix4& transform, const bool enabled)
+	{
+		auto it = m_meshTreeCache.find(meshPath);
+		if (it == m_meshTreeCache.end())
+		{
+			it = m_meshTreeCache.emplace(meshPath, LoadMeshTree(meshPath)).first;
+		}
+
+		if (!it->second || it->second->IsEmpty())
+		{
+			return 0;
+		}
+
+		return AddDynamicInstance(it->second, transform, enabled);
+	}
+
+	void ServerCollisionMap::RemoveDynamicInstance(const uint64 handle)
+	{
+		// Only drops this instance — the AABBTree is shared per mesh path and may still be
+		// referenced by other instances and the cache.
+		m_dynamicInstances.erase(handle);
+	}
+
+	void ServerCollisionMap::SetDynamicInstanceEnabled(const uint64 handle, const bool enabled)
+	{
+		const auto it = m_dynamicInstances.find(handle);
+		if (it != m_dynamicInstances.end())
+		{
+			it->second.enabled = enabled;
+		}
 	}
 
 	// ---------------------------------------------------------------------------
@@ -388,22 +448,16 @@ namespace mmo
 	// Ray testing
 	// ---------------------------------------------------------------------------
 
-	bool ServerCollisionMap::LineOfSight(const Vector3& from, const Vector3& to) const
+	namespace
 	{
-		if (m_instances.empty())
-		{
-			return true;
-		}
-
-		const Ray worldRay(from, to);
-
-		for (const auto& inst : m_instances)
+		/// Tests a single collision instance for any intersection with the given world ray.
+		bool instanceBlocksRay(const CollisionInstance& inst, const Ray& worldRay, const Vector3& from, const Vector3& to)
 		{
 			// Fast world-AABB rejection.
 			const auto [aabbHit, aabbT] = worldRay.IntersectsAABB(inst.worldBounds);
 			if (!aabbHit || aabbT > worldRay.GetLength())
 			{
-				continue;
+				return false;
 			}
 
 			// Transform ray to local (mesh) space.
@@ -412,41 +466,22 @@ namespace mmo
 
 			if (localFrom == localTo)
 			{
-				continue;
+				return false;
 			}
 
 			Ray localRay(localFrom, localTo);
-			if (inst.tree->IntersectRay(localRay, nullptr,
-				static_cast<RaycastFlags>(raycast_flags::EarlyExit | raycast_flags::IgnoreBackface)))
-			{
-				return false; // blocked
-			}
+			return inst.tree->IntersectRay(localRay, nullptr,
+				static_cast<RaycastFlags>(raycast_flags::EarlyExit | raycast_flags::IgnoreBackface));
 		}
 
-		return true;
-	}
-
-	bool ServerCollisionMap::LineOfSightEx(const Vector3& from, const Vector3& to, Vector3& hitPoint) const
-	{
-		hitPoint = to;
-
-		if (m_instances.empty())
-		{
-			return true;
-		}
-
-		const Ray worldRay(from, to);
-		const float worldLen = worldRay.GetLength();
-
-		float closestWorldT = 1.0f;
-		bool blocked = false;
-
-		for (const auto& inst : m_instances)
+		/// Tests a single collision instance and tracks the closest world-space hit.
+		void intersectInstanceEx(const CollisionInstance& inst, const Ray& worldRay, const Vector3& from,
+			const Vector3& to, const float worldLen, float& closestWorldT, Vector3& hitPoint, bool& blocked)
 		{
 			const auto [aabbHit, aabbT] = worldRay.IntersectsAABB(inst.worldBounds);
 			if (!aabbHit || aabbT > worldLen * closestWorldT)
 			{
-				continue;
+				return;
 			}
 
 			const Vector3 localFrom = inst.invTransform * from;
@@ -454,14 +489,14 @@ namespace mmo
 
 			if (localFrom == localTo)
 			{
-				continue;
+				return;
 			}
 
 			Ray localRay(localFrom, localTo);
 			if (!inst.tree->IntersectRay(localRay, nullptr,
 				static_cast<RaycastFlags>(raycast_flags::IgnoreBackface)))
 			{
-				continue;
+				return;
 			}
 
 			// Reconstruct world-space hit point via the forward transform.
@@ -476,6 +511,63 @@ namespace mmo
 				closestWorldT = worldT;
 				hitPoint = worldHit;
 				blocked = true;
+			}
+		}
+	}
+
+	bool ServerCollisionMap::LineOfSight(const Vector3& from, const Vector3& to) const
+	{
+		if (m_instances.empty() && m_dynamicInstances.empty())
+		{
+			return true;
+		}
+
+		const Ray worldRay(from, to);
+
+		for (const auto& inst : m_instances)
+		{
+			if (instanceBlocksRay(inst, worldRay, from, to))
+			{
+				return false; // blocked
+			}
+		}
+
+		for (const auto& [handle, dyn] : m_dynamicInstances)
+		{
+			if (dyn.enabled && instanceBlocksRay(dyn.instance, worldRay, from, to))
+			{
+				return false; // blocked
+			}
+		}
+
+		return true;
+	}
+
+	bool ServerCollisionMap::LineOfSightEx(const Vector3& from, const Vector3& to, Vector3& hitPoint) const
+	{
+		hitPoint = to;
+
+		if (m_instances.empty() && m_dynamicInstances.empty())
+		{
+			return true;
+		}
+
+		const Ray worldRay(from, to);
+		const float worldLen = worldRay.GetLength();
+
+		float closestWorldT = 1.0f;
+		bool blocked = false;
+
+		for (const auto& inst : m_instances)
+		{
+			intersectInstanceEx(inst, worldRay, from, to, worldLen, closestWorldT, hitPoint, blocked);
+		}
+
+		for (const auto& [handle, dyn] : m_dynamicInstances)
+		{
+			if (dyn.enabled)
+			{
+				intersectInstanceEx(dyn.instance, worldRay, from, to, worldLen, closestWorldT, hitPoint, blocked);
 			}
 		}
 

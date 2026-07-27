@@ -3241,13 +3241,10 @@ namespace mmo
 			{
 				if (effect.type() == spell_effects::OpenLock)
 				{
-					// If the object has no lock type (always-open sentinel), return the first OpenLock spell found.
-					if (objectLockTypeId == 0)
-					{
-						return spell;
-					}
-
-					// Match by lock type ID stored in miscvaluea.
+					// Symmetric lock matching (mirrors the server's HandleOpenLock): the spell's
+					// lock type in miscvaluea must equal the object's lock type, with 0 meaning
+					// "generic open spell" / "unlocked object". A lock-specific spell (e.g. the
+					// instant door opener) must never be picked for unlocked chests.
 					if (static_cast<uint32>(effect.miscvaluea()) == objectLockTypeId)
 					{
 						return spell;

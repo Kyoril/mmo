@@ -416,7 +416,9 @@ namespace mmo
 		const uint32 newState = GetActionData(action, 0);
 		for (auto& obj : spawner->getSpawnedObjects())
 		{
-			obj->Set<uint32>(object_fields::State, newState);
+			// Route through the state choke point so door collision stays in sync and
+			// auto close is armed, exactly like player-driven state changes.
+			obj->SetObjectState(newState);
 		}
 
 		DLOG("TRIGGER_ACTION_SET_WORLD_OBJECT_STATE: Set state to " << newState << " for spawner '" << action.targetname() << "'");

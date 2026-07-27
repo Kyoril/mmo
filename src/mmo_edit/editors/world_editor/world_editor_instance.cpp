@@ -2978,10 +2978,34 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				selectable.GetEntry().set_maxcount(maxCount);
 			}
 
-			uint32 state = selectable.GetEntry().state();
-			if (ImGui::InputScalar("State", ImGuiDataType_U32, &state))
+			// Doors get a readable Closed/Open selector — note the proto default is 1 (open),
+			// so doors placed with defaults would spawn open unless set to Closed here.
+			if (selectedObject && selectedObject->type() == game_world_object_type::Door)
 			{
-				selectable.GetEntry().set_state(state);
+				const uint32 state = selectable.GetEntry().state();
+				const char* statePreview = (state == 0) ? "Closed" : "Open";
+				if (ImGui::BeginCombo("State", statePreview))
+				{
+					if (ImGui::Selectable("Closed", state == 0))
+					{
+						selectable.GetEntry().set_state(0);
+					}
+					if (ImGui::Selectable("Open", state != 0))
+					{
+						selectable.GetEntry().set_state(1);
+					}
+					ImGui::EndCombo();
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Initial door state on spawn. Closed doors block movement and line of sight.");
+			}
+			else
+			{
+				uint32 state = selectable.GetEntry().state();
+				if (ImGui::InputScalar("State", ImGuiDataType_U32, &state))
+				{
+					selectable.GetEntry().set_state(state);
+				}
 			}
 
 			// Allow editing animation progress

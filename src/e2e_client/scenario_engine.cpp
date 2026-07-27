@@ -687,6 +687,105 @@ namespace mmo
 			}
 		}
 
+		std::string luaGmCreateObject(const uint32 entry, const uint32 state)
+		{
+			BotObjectManager& objects = g_runtime->session->GetRealm().GetObjectManager();
+
+			// Remember the previously known first match (if any) so the newly spawned object can
+			// be told apart. Scenarios are expected to spawn at most one object per entry.
+			const BotWorldObjectState* existing = objects.FindWorldObjectByEntry(entry);
+			const uint64 existingGuid = existing ? existing->guid : 0;
+
+			g_runtime->session->GetRealm().CheatCreateObject(entry, state);
+
+			const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+			while (std::chrono::steady_clock::now() < until)
+			{
+				const BotWorldObjectState* spawned = objects.FindWorldObjectByEntry(entry);
+				if (spawned && spawned->guid != existingGuid)
+				{
+					const std::string guidStr = guidToString(spawned->guid);
+					if (g_runtime->transcript)
+					{
+						g_runtime->transcript->Action("GM.CreateObject", { { "entry", entry }, { "state", state }, { "guid", guidStr } });
+					}
+					return guidStr;
+				}
+
+				pumpChecked();
+			}
+
+			abortScenario(e2e_exit_code::ScenarioFailed,
+				"GM.CreateObject: object with entry " + std::to_string(entry) + " did not spawn within 15s");
+		}
+
+		std::string luaFindObjectByEntry(const uint32 entry)
+		{
+			const BotWorldObjectState* object = g_runtime->session->GetRealm().GetObjectManager().FindWorldObjectByEntry(entry);
+			if (!object)
+			{
+				return "";
+			}
+
+			return guidToString(object->guid);
+		}
+
+		uint32 luaGetObjectState(const std::string& guidStr)
+		{
+			const BotWorldObjectState* object = g_runtime->session->GetRealm().GetObjectManager().GetWorldObject(guidFromString(guidStr));
+			if (!object)
+			{
+				abortScenario(e2e_exit_code::ScenarioFailed, "GetObjectState: unknown object guid " + guidStr);
+			}
+
+			return object->state;
+		}
+
+		bool luaGmCheckLoS(const std::string& guidStr)
+		{
+			BotRealmConnector& realm = g_runtime->session->GetRealm();
+
+			const uint32 previousCounter = realm.GetLosResultCounter();
+			realm.CheatCheckLineOfSight(guidFromString(guidStr));
+
+			const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+			while (std::chrono::steady_clock::now() < until)
+			{
+				if (realm.GetLosResultCounter() != previousCounter)
+				{
+					const bool result = realm.GetLastLosResult();
+					if (g_runtime->transcript)
+					{
+						g_runtime->transcript->Action("GM.CheckLoS", { { "guid", guidStr }, { "clear", result } });
+					}
+					return result;
+				}
+
+				pumpChecked();
+			}
+
+			abortScenario(e2e_exit_code::ScenarioFailed, "GM.CheckLoS: no line of sight result received within 10s");
+		}
+
+		bool luaCastSpellOnObject(const uint32 spellId, const std::string& targetGuidStr)
+		{
+			const uint64 targetGuid = guidFromString(targetGuidStr);
+
+			SpellTargetMap targetMap{};
+			targetMap.SetTargetMap(spell_cast_target_flags::Object);
+			targetMap.SetObjectTarget(targetGuid);
+
+			const bool queued = g_runtime->session->GetContext().CastSpell(spellId, targetMap);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("CastSpellOnObject", {
+					{ "spell_id", spellId },
+					{ "target", targetGuidStr },
+					{ "queued", queued } });
+			}
+			return queued;
+		}
+
 		void luaGmKillTarget()
 		{
 			g_runtime->session->GetRealm().CheatKill();
@@ -796,11 +895,14 @@ namespace mmo
 				luabind::def_lambda("LastCastResult", &luaLastCastResult),
 				luabind::def_lambda("FindUnitByEntryImpl", &luaFindUnitByEntry),
 				luabind::def_lambda("FindUnitByNameImpl", &luaFindUnitByName),
+				luabind::def_lambda("FindObjectByEntryImpl", &luaFindObjectByEntry),
+				luabind::def_lambda("GetObjectState", &luaGetObjectState),
 
 				// Actions
 				luabind::def_lambda("TargetUnit", &luaTargetUnit),
 				luabind::def_lambda("FaceUnit", &luaFaceUnit),
 				luabind::def_lambda("CastSpellImpl", &luaCastSpell),
+				luabind::def_lambda("CastSpellOnObject", &luaCastSpellOnObject),
 				luabind::def_lambda("CancelCast", &luaCancelCast),
 				luabind::def_lambda("StartAttack", &luaStartAttack),
 				luabind::def_lambda("StopAttack", &luaStopAttack),
@@ -819,6 +921,8 @@ namespace mmo
 				luabind::def_lambda("GM_GiveMoney", &luaGmGiveMoney),
 				luabind::def_lambda("GM_CreateMonster", &luaGmCreateMonster),
 				luabind::def_lambda("GM_DestroyMonster", &luaGmDestroyMonster),
+				luabind::def_lambda("GM_CreateObject", &luaGmCreateObject),
+				luabind::def_lambda("GM_CheckLoS", &luaGmCheckLoS),
 				luabind::def_lambda("GM_KillTarget", &luaGmKillTarget),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
@@ -851,6 +955,12 @@ namespace mmo
 				return guid
 			end
 
+			function FindObjectByEntry(entry)
+				local guid = FindObjectByEntryImpl(entry)
+				if guid == "" then return nil end
+				return guid
+			end
+
 			GM = {
 				AddItem = GM_AddItem,
 				LearnSpell = GM_LearnSpell,
@@ -860,6 +970,9 @@ namespace mmo
 				GiveMoney = GM_GiveMoney,
 				CreateMonster = GM_CreateMonster,
 				DestroyMonster = GM_DestroyMonster,
+				CreateObject = function(entry, state) return GM_CreateObject(entry, state or 0) end,
+				DestroyObject = GM_DestroyMonster,
+				CheckLoS = GM_CheckLoS,
 				KillTarget = GM_KillTarget,
 				Worldport = GM_WorldPort,
 				SetSpeed = GM_SetSpeed,

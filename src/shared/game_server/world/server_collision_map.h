@@ -8,7 +8,10 @@
 #include "math/matrix4.h"
 #include "math/vector3.h"
 
+#include <map>
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace mmo
@@ -36,12 +39,17 @@ namespace mmo
 	class ServerCollisionMap final : public NonCopyable
 	{
 	public:
+		/// @brief Creates an empty collision map without any static geometry. Dynamic
+		/// instances can still be added — used by maps without static world geometry
+		/// and by unit tests.
+		ServerCollisionMap() = default;
+
 		/// @brief Loads all collision instances for the given world.
 		/// @param mapName The map directory name (same as proto::MapEntry::directory()).
 		explicit ServerCollisionMap(const std::string& mapName);
 		~ServerCollisionMap() override = default;
 
-		/// @brief Returns true when at least one collision instance was loaded.
+		/// @brief Returns true when at least one static collision instance was loaded.
 		[[nodiscard]] bool IsLoaded() const { return !m_instances.empty(); }
 
 		/// @brief Returns true when the line from @p from to @p to is unobstructed.
@@ -51,6 +59,29 @@ namespace mmo
 		/// @brief Like LineOfSight but also reports the closest obstruction position.
 		/// @param hitPoint Set to the first hit when returning false, otherwise equals @p to.
 		[[nodiscard]] bool LineOfSightEx(const Vector3& from, const Vector3& to, Vector3& hitPoint) const;
+
+	public:
+		/// @brief Registers a dynamic (toggleable) collision instance from an already loaded tree.
+		///
+		/// NOTE: Dynamic instances are not thread safe by design — the world server runs its
+		/// io_service single threaded, so all mutation and all LoS queries happen on the same
+		/// thread. Revisit this if the world server ever goes multi threaded.
+		/// @param tree The local-space collision tree (shared, not copied).
+		/// @param transform The local → world transform of the instance.
+		/// @param enabled Whether the instance initially blocks rays.
+		/// @return Handle for later removal/toggling, or 0 if the tree is null or empty.
+		uint64 AddDynamicInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, bool enabled);
+
+		/// @brief Like AddDynamicInstance but resolves the tree from a mesh file's COLL chunk.
+		/// Trees are cached per mesh path, so despawn/respawn cycles reuse them.
+		/// @return Handle for later removal/toggling, or 0 if the mesh has no collision tree.
+		uint64 AddDynamicInstanceFromMesh(const std::string& meshPath, const Matrix4& transform, bool enabled);
+
+		/// @brief Removes a dynamic collision instance. Unknown handles are a safe no-op.
+		void RemoveDynamicInstance(uint64 handle);
+
+		/// @brief Enables or disables a dynamic collision instance. Unknown handles are a safe no-op.
+		void SetDynamicInstanceEnabled(uint64 handle, bool enabled);
 
 	private:
 		/// Loads just the COLL chunk from a .mesh file into a shared AABBTree.
@@ -65,7 +96,24 @@ namespace mmo
 
 		void AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform);
 
+		/// Builds a CollisionInstance (world bounds + inverse transform) from a tree and transform.
+		static CollisionInstance MakeInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform);
+
+	private:
+		/// @brief A toggleable collision instance for spawned world objects (e.g. doors).
+		struct DynamicInstance
+		{
+			CollisionInstance instance;
+			bool enabled { true };
+		};
+
 	private:
 		std::vector<CollisionInstance> m_instances;
+		std::map<uint64, DynamicInstance> m_dynamicInstances;
+		uint64 m_nextDynamicHandle { 1 };
+
+		/// Per-mesh-path tree cache for dynamic instances (static loading uses local caches).
+		/// Also caches load failures as nullptr so missing meshes aren't re-read from disk.
+		std::unordered_map<std::string, std::shared_ptr<AABBTree>> m_meshTreeCache;
 	};
 }
