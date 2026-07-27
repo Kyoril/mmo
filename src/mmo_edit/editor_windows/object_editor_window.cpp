@@ -9,6 +9,7 @@
 
 #include "assets/asset_registry.h"
 #include "game/object_type_id.h"
+#include "game/world_object_flags.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -111,6 +112,12 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 
+			CHECKBOX_FLAG_PROP(flags, "Not Interactable (trigger-only)", world_object_flags::NotInteractable);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(?)");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Players can never use this object; it only reacts to triggers\n(e.g. boss doors opened via SetWorldObjectState).");
+
 			// Migrate the legacy single loot table assignment into the new loot table list so existing
 			// objects keep their loot as a one-element list.
 			if (currentEntry.objectlootentries_size() == 0 && currentEntry.has_objectlootentry())
@@ -139,8 +146,9 @@ namespace mmo
 			}
 			else
 			{
-				// Ensure data[] has at least 2 slots so we can always read/write data[0] and data[1].
-				while (currentEntry.data_size() < 2)
+				// Ensure data[] has enough slots: data[0]/data[1] for locks, data[2] for the
+				// door auto close time.
+				while (currentEntry.data_size() < (isDoor ? 3 : 2))
 					currentEntry.add_data(0);
 
 				// data[0] — default (active) lock type
@@ -208,6 +216,19 @@ namespace mmo
 					ImGui::TextDisabled("(?)");
 					if (ImGui::IsItemHovered())
 						ImGui::SetTooltip("After the first successful unlock, the door's active lock type\nchanges to this value. Set to None to keep the original lock type.");
+
+					// data[2] — auto close time in milliseconds
+					{
+						uint32 autoCloseMs = currentEntry.data(2);
+						if (ImGui::InputScalar("Auto Close Time (ms)##data2", ImGuiDataType_U32, &autoCloseMs, nullptr, nullptr))
+						{
+							currentEntry.mutable_data()->Set(2, autoCloseMs);
+						}
+						ImGui::SameLine();
+						ImGui::TextDisabled("(?)");
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Time in milliseconds after opening before the door closes itself.\n0 = stays open until closed by a player or trigger.");
+					}
 				}
 			}
 		}

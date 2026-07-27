@@ -7,6 +7,8 @@
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/objects/game_object_s.h"
 #include "game_server/objects/game_player_s.h"
+#include "game_server/objects/game_world_object_s.h"
+#include "math/quaternion.h"
 #include "game_server/world/world_instance.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
@@ -31,6 +33,43 @@ namespace mmo
 		// Spawn a new creature
 		ASSERT(m_worldInstance);
 		const auto spawned = m_worldInstance->CreateTemporaryCreature(*creatureEntry, m_character->GetPosition(), 0.0f, 50.0f);
+		spawned->ClearFieldChanges();
+		m_worldInstance->AddGameObject(*spawned);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatCreateObject(uint16 opCode, uint32 size, io::Reader& contentReader) const
+	{
+		uint32 entry, state;
+		if (!(contentReader >> io::read<uint32>(entry) >> io::read<uint32>(state)))
+		{
+			ELOG("Missing entry id or state to create a world object");
+			return;
+		}
+
+		const auto* objectEntry = m_project.objects.getById(entry);
+		if (!objectEntry)
+		{
+			ELOG("Unable to create object: Unknown object entry " << entry);
+			return;
+		}
+
+		DLOG("Creating world object with entry " << entry << " and state " << state);
+
+		ASSERT(m_worldInstance);
+		const auto spawned = m_worldInstance->CreateTemporaryObject(*objectEntry, m_character->GetPosition());
+
+		// Face the same direction as the spawning player (rotation lives in the fields, not
+		// in the movement info).
+		const Quaternion rotation(m_character->GetFacing(), Vector3::UnitY);
+		spawned->Set<float>(object_fields::Scale, objectEntry->scale() > 0.0f ? objectEntry->scale() : 1.0f);
+		spawned->Set<float>(object_fields::RotationW, rotation.w);
+		spawned->Set<float>(object_fields::RotationX, rotation.x);
+		spawned->Set<float>(object_fields::RotationY, rotation.y);
+		spawned->Set<float>(object_fields::RotationZ, rotation.z);
+		spawned->Set<uint32>(object_fields::State, state);
+
 		spawned->ClearFieldChanges();
 		m_worldInstance->AddGameObject(*spawned);
 	}

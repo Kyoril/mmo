@@ -3,6 +3,8 @@
 #include "game_world_object_s.h"
 
 #include "game_player_s.h"
+#include "game_server/world/world_instance.h"
+#include "game_server/world/universe.h"
 #include "shared/proto_data/objects.pb.h"
 #include "shared/proto_data/triggers.pb.h"
 #include "game/quest.h"
@@ -23,6 +25,10 @@ namespace mmo
 		Set<uint32>(object_fields::ObjectDisplayId, m_entry.displayid());
 		Set<uint32>(object_fields::ObjectTypeId, static_cast<uint32>(m_entry.type()));
 
+		// Apply entry-level flags (e.g. NotInteractable for trigger-only doors). SetRequiredQuest
+		// below ORs the RequiresQuest flag on top of these.
+		Set<uint32>(object_fields::ObjectFlags, m_entry.flags());
+
 		// Apply quest requirement from proto data
 		if (m_entry.has_requiredquest() && m_entry.requiredquest() != 0)
 		{
@@ -38,6 +44,12 @@ namespace mmo
 		// Check if object is disabled by server
 		const uint32 flags = Get<uint32>(object_fields::ObjectFlags);
 		if (flags & world_object_flags::Disabled)
+		{
+			return false;
+		}
+
+		// Trigger-only objects (e.g. boss doors) can never be used by players directly.
+		if (flags & world_object_flags::NotInteractable)
 		{
 			return false;
 		}
@@ -181,23 +193,9 @@ namespace mmo
 			break;
 
 		case GameWorldObjectType::Door:
-			{
-				// Toggle door open/closed using the State field (0=closed, 1=open)
-				// Set<>() auto-broadcasts the change to all nearby players via AddObjectUpdate()
-				const uint32 currentState = Get<uint32>(object_fields::State);
-				const bool isOpen = (currentState == 1u);
-
-				if (isOpen)
-				{
-					// Close the door
-					Set<uint32>(object_fields::State, 0u);
-				}
-				else
-				{
-					// Open the door
-					Set<uint32>(object_fields::State, 1u);
-				}
-			}
+			// Toggle door open/closed (0=closed, 1=open) through the state choke point, which
+			// broadcasts the field change, keeps door collision in sync and arms auto close.
+			SetObjectState(IsOpen() ? 0u : 1u);
 			break;
 
 		case GameWorldObjectType::Mailbox:
@@ -226,6 +224,56 @@ namespace mmo
 		{
 			Despawn();
 		}
+	}
+
+	uint32 GameWorldObjectS::GetAutoCloseTimeMs() const
+	{
+		if (IsDoor() && m_entry.data_size() > 2)
+		{
+			return static_cast<uint32>(m_entry.data(2));
+		}
+
+		return 0u;
+	}
+
+	void GameWorldObjectS::SetObjectState(const uint32 state)
+	{
+		if (Get<uint32>(object_fields::State) == state)
+		{
+			return;
+		}
+
+		// Set<>() auto-broadcasts the change to all nearby players via AddObjectUpdate()
+		Set<uint32>(object_fields::State, state);
+
+		if (IsDoor())
+		{
+			const uint32 autoCloseMs = GetAutoCloseTimeMs();
+			if (state != 0 && autoCloseMs > 0 && m_worldInstance)
+			{
+				if (!m_autoCloseCountdown)
+				{
+					m_autoCloseCountdown = std::make_unique<Countdown>(m_worldInstance->GetUniverse().GetTimers());
+					m_autoCloseEnded = m_autoCloseCountdown->ended.connect([this]()
+					{
+						// The door may have been closed manually or removed from the world
+						// while the timer was pending.
+						if (m_worldInstance && IsOpen())
+						{
+							SetObjectState(0u);
+						}
+					});
+				}
+
+				m_autoCloseCountdown->SetEnd(GetAsyncTimeMs() + autoCloseMs);
+			}
+			else if (state == 0 && m_autoCloseCountdown)
+			{
+				m_autoCloseCountdown->Cancel();
+			}
+		}
+
+		stateChanged(*this, state);
 	}
 
 	uint32 GameWorldObjectS::GetPostUnlockLockType() const

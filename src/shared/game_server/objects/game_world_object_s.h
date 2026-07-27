@@ -3,6 +3,8 @@
 #pragma once
 
 #include "game_object_s.h"
+#include "base/countdown.h"
+#include "game/world_object_flags.h"
 #include "game_server/loot_instance.h"
 #include "shared/proto_data/trigger_helper.h"
 
@@ -11,31 +13,6 @@ namespace mmo
 	namespace proto
 	{
 		class TriggerEntry;
-	}
-
-	namespace world_object_flags
-	{
-		enum Type : uint32
-		{
-			/// No special flags.
-			None = 0x00,
-			/// Object can only be used when a specific quest is active.
-			RequiresQuest = 0x01,
-			/// Object is temporarily disabled (e.g., by server script).
-			Disabled = 0x02,
-		};
-	}
-
-	/// @brief Per-player dynamic flags computed by server.
-	namespace dynamic_world_object_flags
-	{
-		enum Type : uint32
-		{
-			/// No special flags.
-			None = 0x00,
-			/// Object can be interacted with by this player.
-			Interactable = 0x01,
-		};
 	}
 
 	class GameWorldObjectS : public GameObjectS
@@ -51,6 +28,24 @@ namespace mmo
 
 	public:
 		GameWorldObjectType GetType() const { return static_cast<GameWorldObjectType>(Get<uint32>(object_fields::ObjectTypeId)); }
+
+		/// @brief Returns true if this world object is a door.
+		bool IsDoor() const { return GetType() == GameWorldObjectType::Door; }
+
+		/// @brief Returns true if the object's State field is non-zero (doors: open).
+		bool IsOpen() const { return Get<uint32>(object_fields::State) != 0; }
+
+		/// @brief Returns the auto close time in milliseconds (data[2], doors only, 0 = never).
+		uint32 GetAutoCloseTimeMs() const;
+
+		/// @brief Single choke point for State changes (player use, triggers, auto close).
+		/// Broadcasts the field change and fires stateChanged so the world instance can keep
+		/// dynamic door collision in sync. No-op when the state doesn't actually change.
+		/// @param state The new state value (doors: 0 = closed, 1 = open).
+		void SetObjectState(uint32 state);
+
+		/// Fired after the State field changed through SetObjectState.
+		signal<void(GameWorldObjectS&, uint32)> stateChanged;
 
 		/// @brief Returns the lock type to apply after a one-time unlock succeeds.
 		/// @return data[1] cast to uint32 if this is a Door with data_size > 1, otherwise 0.
@@ -120,6 +115,11 @@ namespace mmo
 
 		/// @brief Per-spawn additional trigger id. 0 = only the base ObjectEntry.triggers apply.
 		uint32 m_triggerIdOverride = 0;
+
+		/// @brief Auto close timer for doors, lazily created on first opening (needs the world
+		/// instance for the timer queue, which is only available once spawned).
+		std::unique_ptr<Countdown> m_autoCloseCountdown;
+		scoped_connection m_autoCloseEnded;
 
 	public:
 		/// @brief Sets a per-spawn loot entry override for this world object.

@@ -77,18 +77,18 @@ namespace mmo
 		DLOG("Loading nav map pages...");
 		m_map->LoadAllPages();
 
-		// Attempt to load world geometry for accurate 3D LOS. Falls back to nav mesh LOS
-		// if no world file is found (e.g. simple outdoor-only maps).
-		auto collisionMap = std::make_unique<ServerCollisionMap>(mapEntry.directory());
-		if (collisionMap->IsLoaded())
+		// Load world geometry for accurate 3D LOS. The collision map is kept even when no
+		// static geometry was found, so dynamic collision (e.g. doors) can still block LOS;
+		// the empty-map early-out keeps queries cheap in that case.
+		m_collisionMap = std::make_unique<ServerCollisionMap>(mapEntry.directory());
+		if (m_collisionMap->IsLoaded())
 		{
-			m_collisionMap = std::move(collisionMap);
 			DLOG("NavMapData: using geometry-based LOS for map '" << mapEntry.directory() << "'");
 		}
 		else
 		{
-			WLOG("NavMapData: geometry collision unavailable for map '"
-				<< mapEntry.directory() << "' — all IsInLineOfSight calls will return true (unblocked)");
+			WLOG("NavMapData: no static collision geometry for map '"
+				<< mapEntry.directory() << "' — only dynamic objects (e.g. doors) will block IsInLineOfSight");
 		}
 
 		// Load terrain water data for swim validation. Optional — null when the map has no water.
@@ -130,6 +130,32 @@ namespace mmo
 		// Lower the reported hit point back to ground level for consistent world-space display.
 		hitPoint -= eyeOffset;
 		return result;
+	}
+
+	uint64 NavMapData::AddDynamicCollision(const String& meshPath, const Matrix4& transform, const bool enabled)
+	{
+		if (!m_collisionMap)
+		{
+			return 0;
+		}
+
+		return m_collisionMap->AddDynamicInstanceFromMesh(meshPath, transform, enabled);
+	}
+
+	void NavMapData::RemoveDynamicCollision(const uint64 handle)
+	{
+		if (m_collisionMap && handle != 0)
+		{
+			m_collisionMap->RemoveDynamicInstance(handle);
+		}
+	}
+
+	void NavMapData::SetDynamicCollisionEnabled(const uint64 handle, const bool enabled)
+	{
+		if (m_collisionMap && handle != 0)
+		{
+			m_collisionMap->SetDynamicInstanceEnabled(handle, enabled);
+		}
 	}
 
 	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const
@@ -378,6 +404,12 @@ namespace mmo
 		worldObject->objectTrigger.connect([this](const proto::TriggerEntry& trigger, GameWorldObjectS& owner, GameUnitS* triggeringUnit) {
 			m_triggerHandler.ExecuteTrigger(trigger, TriggerContext(&owner, triggeringUnit), 0);
 			});
+
+		// Closed doors block line of sight — register their mesh as dynamic collision.
+		if (worldObject->IsDoor())
+		{
+			RegisterDoorCollision(*worldObject);
+		}
 	}
 
 	if (added.GetTypeId() == ObjectTypeId::Player)
@@ -403,6 +435,8 @@ namespace mmo
 			m_unitFinder->RemoveUnit(*removedUnit);
 			m_stealthedUnits.erase(removedUnit);
 		}
+
+		UnregisterDoorCollision(remove.GetGuid());
 
 		const auto it = m_objectsByGuid.find(remove.GetGuid());
 		if (it == m_objectsByGuid.end())
@@ -572,6 +606,75 @@ namespace mmo
 		return it->second;
 	}
 
+	void WorldInstance::RegisterDoorCollision(GameWorldObjectS& object)
+	{
+		if (!m_mapData)
+		{
+			return;
+		}
+
+		const uint32 displayId = object.Get<uint32>(object_fields::ObjectDisplayId);
+		const auto* display = m_project.objectDisplays.getById(displayId);
+		if (!display || display->filename().empty())
+		{
+			WLOG("Door object " << log_hex_digit(object.GetGuid()) << " has no object display with a mesh "
+				"file (display id " << displayId << ") — the door will not block line of sight");
+			return;
+		}
+
+		// Build the same world transform the client uses for the display entity: the scene node
+		// carries position, the rotation fields and uniform scale, and the entity hangs under a
+		// child node with a fixed +90° yaw offset (see GameObjectC::SetupSceneObjects).
+		const Quaternion rotation(
+			object.Get<float>(object_fields::RotationW),
+			object.Get<float>(object_fields::RotationX),
+			object.Get<float>(object_fields::RotationY),
+			object.Get<float>(object_fields::RotationZ));
+		const Quaternion entityYawOffset(Degree(90), Vector3::UnitY);
+
+		float scale = object.Get<float>(object_fields::Scale);
+		if (scale <= 0.0f)
+		{
+			scale = 1.0f;
+		}
+
+		Matrix4 transform;
+		transform.MakeTransform(object.GetPosition(), Vector3(scale, scale, scale), rotation * entityYawOffset);
+
+		const uint64 handle = m_mapData->AddDynamicCollision(display->filename(), transform, !object.IsOpen());
+		if (handle == 0)
+		{
+			WLOG("Door object " << log_hex_digit(object.GetGuid()) << " mesh '" << display->filename()
+				<< "' has no collision tree — the door will not block line of sight");
+			return;
+		}
+
+		DoorCollision& door = m_doorCollisions[object.GetGuid()];
+		door.handle = handle;
+		door.stateChanged = object.stateChanged.connect([this, handle](GameWorldObjectS&, const uint32 newState)
+		{
+			// Closed (state 0) doors block line of sight.
+			m_mapData->SetDynamicCollisionEnabled(handle, newState == 0);
+		});
+	}
+
+	void WorldInstance::UnregisterDoorCollision(const uint64 guid)
+	{
+		const auto it = m_doorCollisions.find(guid);
+		if (it == m_doorCollisions.end())
+		{
+			return;
+		}
+
+		if (m_mapData)
+		{
+			m_mapData->RemoveDynamicCollision(it->second.handle);
+		}
+
+		// Erasing also drops the scoped stateChanged connection.
+		m_doorCollisions.erase(it);
+	}
+
 	VisibilityGrid& WorldInstance::GetGrid() const
 	{
 		ASSERT(m_visibilityGrid);
@@ -647,6 +750,31 @@ namespace mmo
 		}
 
 		m_temporaryCreatures.erase(it);
+	}
+
+	std::shared_ptr<GameWorldObjectS> WorldInstance::CreateTemporaryObject(const proto::ObjectEntry& entry, const Vector3& position)
+	{
+		auto object = SpawnWorldObject(entry, position);
+		m_temporaryObjects[object->GetGuid()] = object;
+
+		object->destroy = [this](const GameObjectS& gameObjectS)
+			{
+				DestroyTemporaryObject(gameObjectS.GetGuid());
+			};
+
+		return object;
+	}
+
+	void WorldInstance::DestroyTemporaryObject(const uint64 guid)
+	{
+		const auto it = m_temporaryObjects.find(guid);
+		if (it == m_temporaryObjects.end())
+		{
+			ELOG("Could not find temporary object with guid " << log_hex_digit(guid));
+			return;
+		}
+
+		m_temporaryObjects.erase(it);
 	}
 
 	void WorldInstance::UpdateObject(GameObjectS& object) const

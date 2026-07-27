@@ -10,6 +10,7 @@
 #include "scene_graph/mesh_manager.h"
 #include "game_player_c.h"
 #include "game/quest.h"
+#include "scene_graph/animation_state.h"
 #include "scene_graph/particle_emitter.h"
 #include "scene_graph/particle_emitter_serializer.h"
 #include "assets/asset_registry.h"
@@ -89,6 +90,9 @@ namespace mmo
 
 			// Apply spark emitter for the initial (complete) update.
 			UpdateSparkEmitter((Get<uint32>(object_fields::DynamicObjectFlags) & dynamic_world_object_flags::Interactable) != 0);
+
+			// Snap doors to their initial pose (the creation block always carries the full State).
+			ApplyDoorState(false);
 		}
 		else
 		{
@@ -116,6 +120,12 @@ namespace mmo
 			if (m_fieldMap.IsFieldMarkedAsChanged(object_fields::DynamicObjectFlags))
 			{
 				UpdateSparkEmitter((Get<uint32>(object_fields::DynamicObjectFlags) & dynamic_world_object_flags::Interactable) != 0);
+			}
+
+			// React to door state changes (open/close) with animation.
+			if (m_fieldMap.IsFieldMarkedAsChanged(object_fields::State))
+			{
+				ApplyDoorState(true);
 			}
 		}
 
@@ -188,8 +198,91 @@ namespace mmo
 		}
 		else
 		{
-			// Just update the mesh
+			// Just update the mesh. This resets all animation states, so the door pose has to
+			// be re-applied below.
+			m_doorAnimState = nullptr;
 			m_entity->SetMesh(MeshManager::Get().Load(meshFile));
+		}
+
+		// (Re)apply the door pose and collision to the new mesh without animating.
+		ApplyDoorState(false);
+	}
+
+	void GameWorldObjectC::Update(const float deltaTime)
+	{
+		GameObjectC::Update(deltaTime);
+
+		if (m_doorAnimState)
+		{
+			m_doorAnimState->AddTime(deltaTime);
+
+			if (m_doorAnimState->HasEnded())
+			{
+				// Keep the state enabled so the final pose is held; just stop advancing it.
+				m_doorAnimState = nullptr;
+			}
+		}
+	}
+
+	void GameWorldObjectC::ApplyDoorState(const bool animate)
+	{
+		if (GetType() != GameWorldObjectType::Door || !m_entity)
+		{
+			return;
+		}
+
+		const bool open = Get<uint32>(object_fields::State) != 0;
+
+		// Collision is edge-triggered on the state change: off the instant opening starts (so
+		// players never bump into an opening door), back on the instant closing starts. This
+		// matches the server's line of sight blocking convention.
+		m_entity->SetCollisionEnabled(!open);
+
+		// Door meshes are authored closed at bind pose and ship an "Open" (and ideally "Close")
+		// clip. Without a skeleton or clips the door simply snaps (no visual change for closed).
+		static const String s_openAnimName = "Open";
+		static const String s_closeAnimName = "Close";
+
+		m_doorAnimState = nullptr;
+
+		AnimationState* openState = m_entity->HasAnimationState(s_openAnimName) ? m_entity->GetAnimationState(s_openAnimName) : nullptr;
+		AnimationState* closeState = m_entity->HasAnimationState(s_closeAnimName) ? m_entity->GetAnimationState(s_closeAnimName) : nullptr;
+
+		AnimationState* targetState = open ? openState : closeState;
+		if (!open && !closeState)
+		{
+			// No dedicated "Close" clip: disabling all clips returns the mesh to bind pose,
+			// which is the closed pose by authoring convention.
+			targetState = nullptr;
+		}
+
+		if (openState && openState != targetState)
+		{
+			openState->SetEnabled(false);
+		}
+		if (closeState && closeState != targetState)
+		{
+			closeState->SetEnabled(false);
+		}
+
+		if (!targetState)
+		{
+			return;
+		}
+
+		targetState->SetLoop(false);
+		targetState->SetWeight(1.0f);
+		targetState->SetEnabled(true);
+
+		if (animate)
+		{
+			targetState->SetTimePosition(0.0f);
+			m_doorAnimState = targetState;
+		}
+		else
+		{
+			// Snap to the settled pose (end of the clip).
+			targetState->SetTimePosition(targetState->GetLength());
 		}
 	}
 

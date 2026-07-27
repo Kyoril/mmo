@@ -2,6 +2,7 @@
 
 #include "game_object_c.h"
 #include "game_world_object_c_type_base.h"
+#include "game/world_object_flags.h"
 
 namespace mmo
 {
@@ -10,32 +11,7 @@ namespace mmo
 	class GamePlayerC;
 	class ParticleSystem;
 	class SceneNode;
-
-	/// @brief Object flags for world objects (stored in ObjectFlags field).
-	namespace world_object_flags
-	{
-		enum Type : uint32
-		{
-			/// No special flags.
-			None = 0x00,
-			/// Object can only be used when a specific quest is active.
-			RequiresQuest = 0x01,
-			/// Object is temporarily disabled (e.g., by server script).
-			Disabled = 0x02,
-		};
-	}
-
-	/// @brief Per-player dynamic flags computed by server.
-	namespace dynamic_world_object_flags
-	{
-		enum Type : uint32
-		{
-			/// No special flags.
-			None = 0x00,
-			/// Object can be interacted with by this player.
-			Interactable = 0x01,
-		};
-	}
+	class AnimationState;
 
 	class GameWorldObjectC : public GameObjectC
 	{
@@ -46,6 +22,9 @@ namespace mmo
 		void InitializeFieldMap() override;
 
 		void Deserialize(io::Reader& reader, bool complete) override;
+
+		/// @brief Advances the door open/close animation, if one is playing.
+		void Update(float deltaTime) override;
 
 		/// @copydoc GameObjectC::GetName
 		const String& GetName() const override;
@@ -88,6 +67,13 @@ namespace mmo
 		/// @param active If true, creates and plays the emitter; if false, destroys it.
 		void UpdateSparkEmitter(bool active);
 
+		/// @brief Applies the door's visual and collision state from the State field. No-op for
+		/// non-door objects. Collision is disabled the instant opening starts and re-enabled the
+		/// instant closing starts, matching the server's edge-triggered line of sight blocking.
+		/// @param animate true to play the Open/Close clip, false to snap to the settled pose
+		/// (initial spawn, mesh swap).
+		void ApplyDoorState(bool animate);
+
 	protected:
 		NetClient& m_netDriver;
 		const ObjectInfo* m_entry = nullptr;
@@ -96,5 +82,8 @@ namespace mmo
 	private:
 		ParticleSystem* m_sparkEmitter = nullptr;
 		SceneNode* m_sparkEmitterNode = nullptr;
+
+		/// @brief Currently advancing door animation state (owned by the entity), if any.
+		AnimationState* m_doorAnimState = nullptr;
 	};
 }

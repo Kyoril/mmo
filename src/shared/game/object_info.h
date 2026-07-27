@@ -21,19 +21,16 @@ namespace mmo
 
 		union
 		{
+			/// Door data layout (matches server-side ObjectEntry.data usage).
 			struct
 			{
-				uint32 startOpen;
+				/// Lock type id required to open the door (0 = no lock).
 				uint32 lockId;
+				/// Lock type id applied after a successful unlock (0 = unchanged).
+				uint32 postUnlockLockId;
+				/// Time in milliseconds after opening before the door closes itself (0 = never).
 				uint32 autoCloseTime;
 			} door;
-
-			struct
-			{
-				uint32 startOpen;
-				uint32 lockId;
-				uint32 autoCloseTime;
-			} button;
 
 			struct
 			{

@@ -139,7 +139,15 @@ namespace mmo
 
 		bool TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const override;
 
-		bool IsCollidable() const override { return m_mesh && !m_mesh->GetCollisionTree().IsEmpty(); }
+		/// @brief Enables or disables this entity's collision without touching its query flags
+		/// (query flags also drive mouse picking, which must stay unaffected). Used e.g. by
+		/// doors, whose collision is only active while they are closed.
+		void SetCollisionEnabled(const bool enabled) { m_collisionEnabled = enabled; }
+
+		/// @brief Returns whether collision is enabled for this entity (see SetCollisionEnabled).
+		bool IsCollisionEnabled() const { return m_collisionEnabled; }
+
+		bool IsCollidable() const override { return m_collisionEnabled && m_mesh && !m_mesh->GetCollisionTree().IsEmpty(); }
 
 		bool TestRayCollision(const Ray& ray, CollisionResult& result) const override;
 
@@ -151,8 +159,11 @@ namespace mmo
 		
 		/// @brief Cached world-space bounding box for entities with transforms
 		mutable AABB m_worldBounds{};
-		
+
 		/// @brief Flag to track if world bounds need recalculation
 		mutable bool m_worldBoundsDirty{ true };
+
+		/// @brief Whether this entity's mesh collision tree participates in collision queries.
+		bool m_collisionEnabled{ true };
 	};
 }

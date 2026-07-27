@@ -20,6 +20,18 @@ namespace mmo
 		uint64 ownerGuid { 0 };
 	};
 
+	/// @brief Lightweight state of a world object (chest, door, ...) known to the bot.
+	struct BotWorldObjectState final
+	{
+		uint64 guid { 0 };
+		uint32 entry { 0 };
+		/// The game_world_object_type value (Chest, Door, Mailbox, QuestObject).
+		uint32 type { 0 };
+		/// The object's State field (doors: 0 = closed, 1 = open).
+		uint32 state { 0 };
+		Vector3 position;
+	};
+
 	/// @brief Manages all known units in the bot's awareness.
 	///
 	/// This class acts as the central registry for all units (players and creatures)
@@ -258,6 +270,29 @@ namespace mmo
 		uint32 GetItemCountByEntry(uint32 entry) const;
 
 		// ============================================================
+		// World Object Tracking
+		// ============================================================
+
+		/// @brief Adds a new world object or updates an existing one.
+		/// @param object The world object state to add or update.
+		void AddOrUpdateWorldObject(const BotWorldObjectState& object);
+
+		/// @brief Removes a world object by GUID.
+		/// @param guid The GUID of the world object to remove.
+		/// @return True if the world object was found and removed.
+		bool RemoveWorldObject(uint64 guid);
+
+		/// @brief Gets a world object by GUID.
+		/// @param guid The GUID to look up.
+		/// @return Pointer to the world object state, or nullptr if not found.
+		const BotWorldObjectState* GetWorldObject(uint64 guid) const;
+
+		/// @brief Finds the first known world object with the given entry id.
+		/// @param entry The object entry id.
+		/// @return Pointer to the world object state, or nullptr if none is known.
+		const BotWorldObjectState* FindWorldObjectByEntry(uint32 entry) const;
+
+		// ============================================================
 		// Iteration
 		// ============================================================
 
@@ -309,6 +344,9 @@ namespace mmo
 
 		/// @brief Map of GUIDs to known item/container objects.
 		std::unordered_map<uint64, BotItemState> m_items;
+
+		/// @brief Map of GUIDs to known world objects (chests, doors, ...).
+		std::unordered_map<uint64, BotWorldObjectState> m_worldObjects;
 
 		/// @brief The GUID of the bot's own character.
 		uint64 m_selfGuid = 0;

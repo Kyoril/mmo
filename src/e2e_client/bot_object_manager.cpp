@@ -72,6 +72,7 @@ namespace mmo
 		}
 
 		m_units.clear();
+		m_worldObjects.clear();
 	}
 
 	const BotUnit* BotObjectManager::GetUnit(const uint64 guid) const
@@ -515,6 +516,40 @@ namespace mmo
 			}
 		}
 		return count;
+	}
+
+	void BotObjectManager::AddOrUpdateWorldObject(const BotWorldObjectState& object)
+	{
+		m_worldObjects[object.guid] = object;
+	}
+
+	bool BotObjectManager::RemoveWorldObject(const uint64 guid)
+	{
+		return m_worldObjects.erase(guid) > 0;
+	}
+
+	const BotWorldObjectState* BotObjectManager::GetWorldObject(const uint64 guid) const
+	{
+		const auto it = m_worldObjects.find(guid);
+		if (it != m_worldObjects.end())
+		{
+			return &it->second;
+		}
+
+		return nullptr;
+	}
+
+	const BotWorldObjectState* BotObjectManager::FindWorldObjectByEntry(const uint32 entry) const
+	{
+		for (const auto& [guid, object] : m_worldObjects)
+		{
+			if (object.entry == entry)
+			{
+				return &object;
+			}
+		}
+
+		return nullptr;
 	}
 
 }
