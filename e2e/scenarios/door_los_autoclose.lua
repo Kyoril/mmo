@@ -3,14 +3,16 @@
 -- restores it.
 --
 -- Uses: "E2E Test Door" (object entry 12, type Door, display 7 = a 6x4 m wall
--- mesh with a baked collision tree, data = [no lock, no post-unlock lock, 5000ms
--- auto close]) and the generic "Open" spell (39, OpenLock, lock 0, 5s cast).
+-- mesh with a baked collision tree, data = [Door lock type 3, no post-unlock lock,
+-- 5000ms auto close]) and the instant "Open Door" spell (235, OpenLock vs lock
+-- type 3, level-1 class spell for every class — doors open without a cast bar,
+-- unlike the generic 5s "Open" spell 39 used for chests).
 -- The Training Dummy (40) on the far side is the LoS probe target — LoS is always
 -- checked against the dummy, never the door itself, since the door's own geometry
 -- occludes its center.
 
 local DOOR = 12
-local OPEN = 39
+local OPEN_DOOR = 235
 local TRAINING_DUMMY = 40
 
 -- Hostile-free flat spot near the default character spawn (the same area the combat
@@ -24,9 +26,10 @@ local X, Y, Z = 312, 5.33, 552
 
 local me = Me()
 
-GM.LearnSpell(OPEN)
-Assert(WaitUntil(function() return HasSpell(OPEN) end, 10000, "Open learned"),
-	"player should know the Open spell after GM.LearnSpell")
+-- Open Door is a level-1 class spell, so a fresh character should already know it —
+-- assert that instead of GM-learning it, so the class-grant data stays regression-tested.
+Assert(WaitUntil(function() return HasSpell(OPEN_DOOR) end, 10000, "Open Door known"),
+	"every class should know the Open Door spell from level 1")
 
 -- Spawn the door (closed) at the anchor point.
 GM.Worldport(0, X, Y, Z, 0)
@@ -45,9 +48,9 @@ Assert(not GM.CheckLoS(dummy), "closed door should block line of sight to the du
 
 -- Move into interaction range and open the door through the OpenLock spell path.
 GM.Worldport(0, X + 3, Y, Z, 0)
-Assert(CastSpellOnObject(OPEN, door), "Open cast request should be accepted")
-Assert(WaitUntil(function() return GetObjectState(door) == 1 end, 15000, "door opened"),
-	"door state should replicate as open after the Open cast (cast time 5s), cast result: "
+Assert(CastSpellOnObject(OPEN_DOOR, door), "Open Door cast request should be accepted")
+Assert(WaitUntil(function() return GetObjectState(door) == 1 end, 10000, "door opened"),
+	"door state should replicate as open after the instant Open Door cast, cast result: "
 	.. LastCastResult() .. ", hp: " .. GetHealth(me))
 
 Assert(GM.CheckLoS(dummy), "open door should not block line of sight to the dummy")

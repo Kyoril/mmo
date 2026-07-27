@@ -550,8 +550,11 @@ namespace mmo
 			{
 				if (targetObject->IsWorldObject())
 				{
+					// Symmetric lock matching: a lock-specific spell only opens objects with that
+					// lock type, and unlocked objects (lock 0) only accept the generic open spell
+					// (miscvaluea 0). Otherwise e.g. the instant door spell could open chests.
 					const uint32 objectLockTypeId = targetObject->AsObject().Get<uint32>(object_fields::LockEntry);
-					if (objectLockTypeId != 0 && objectLockTypeId != spellLockTypeId)
+					if (objectLockTypeId != spellLockTypeId)
 					{
 						WLOG("OpenLock: lock type mismatch — spell requires " << spellLockTypeId << ", object has " << objectLockTypeId);
 						continue;
