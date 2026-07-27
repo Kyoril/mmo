@@ -1477,9 +1477,9 @@ namespace mmo
 			{
 				m_mesh->GetCollisionTree().Clear();
 
-				// Gather all vertex data. Skinned/skeletal meshes keep their (bind pose)
+				// Gather all vertex data. Skinned/skeletal meshes may keep their (bind pose)
 				// vertices in the mesh's shared vertex data, referenced by every submesh;
-				// static meshes usually use per-submesh vertex data. Both are supported —
+				// static meshes usually use per-submesh vertex data. Both are supported:
 				// the shared pool is gathered once and reused by all submeshes that
 				// reference it.
 				std::vector<Vector3> vertices;
@@ -1497,6 +1497,11 @@ namespace mmo
 					}
 
 					SubMesh& sub = m_mesh->GetSubMesh(i);
+
+					if (!sub.indexData)
+					{
+						continue;
+					}
 
 					uint32 vertexOffset = 0;
 					if (sub.useSharedVertices)
@@ -1518,6 +1523,11 @@ namespace mmo
 					}
 					else
 					{
+						if (!sub.vertexData)
+						{
+							continue;
+						}
+
 						vertexOffset = static_cast<uint32>(vertices.size());
 						vertices.reserve(vertices.size() + sub.vertexData->vertexCount);
 						ReadVertexDataPositions(*sub.vertexData, vertices);
@@ -1534,7 +1544,12 @@ namespace mmo
 					faceSubMeshes.insert(faceSubMeshes.end(), facesAdded, i);
 				}
 
-				m_mesh->GetCollisionTree().Build(vertices, indices, faceSubMeshes);
+				// Building from an empty gather (nothing included) would still allocate a
+				// node pool, making the tree serialize as non-empty bogus collision.
+				if (!indices.empty())
+				{
+					m_mesh->GetCollisionTree().Build(vertices, indices, faceSubMeshes);
+				}
 			}
 
 			static const char* s_noMaterial = "(No Material)";

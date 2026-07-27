@@ -2,8 +2,10 @@
 -- the OpenLock spell path clears the block, and the door's auto close timer
 -- restores it.
 --
--- Uses: "E2E Test Door" (object entry 12, type Door, display 7 = a 6x4 m wall
--- mesh with a baked collision tree, data = [Door lock type 3, no post-unlock lock,
+-- Uses: "E2E Test Door" (object entry 12, type Door, display 8 "E2E Test Wall" =
+-- a 6x4 m wall mesh with a baked collision tree — a dedicated fixture display so
+-- the suite never depends on work-in-progress door art,
+-- data = [Door lock type 3, no post-unlock lock,
 -- 5000ms auto close]) and the instant "Open Door" spell (235, OpenLock vs lock
 -- type 3, level-1 class spell for every class — doors open without a cast bar,
 -- unlike the generic 5s "Open" spell 39 used for chests).
