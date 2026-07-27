@@ -29,16 +29,19 @@ Sleep(500)
 
 GM.AcceptQuest(56)
 
-local xpBefore = GetXp()
-local moneyBefore = GetMoney()
-local levelBefore = GetLevel(me)
-
 -- Teleport to the palisade approach (outside the radius-12 arrival trigger at
 -- (-436, -1, 262)) and walk in. Area triggers are detected client-side in the
 -- real game; the headless client reports the entry explicitly and the server
 -- validates the position before executing the linked trigger.
 GM.Worldport(0, -436, -1, 244, 0)
 Assert(MoveTo(-436, -1, 262, 30000), "player should reach the Barrowfront Camp arrival point")
+
+-- Snapshot right before the trigger so a late-replicating quest-48 reward
+-- can't false-fail the no-auto-reward check below.
+local xpBefore = GetXp()
+local moneyBefore = GetMoney()
+local levelBefore = GetLevel(me)
+
 SendAreaTrigger(7)
 
 -- Negative check: arrival must complete the quest but must NOT auto-reward it.
@@ -49,7 +52,7 @@ Assert(GetXp() == xpBefore and GetMoney() == moneyBefore and GetLevel(me) == lev
 
 -- Manual turn-in rewards the quest. GM.TurnInQuest requires the quest to be
 -- objective-complete, so a missing exploration credit fails here too.
--- Snapshot immediately before turn-in (see e2e README on turn-in waits).
+-- Snapshot immediately before turn-in so only its reward satisfies the wait.
 xpBefore = GetXp()
 moneyBefore = GetMoney()
 levelBefore = GetLevel(me)
