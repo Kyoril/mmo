@@ -2109,6 +2109,12 @@ namespace mmo
 		}
 		else
 		{
+			// Empty slots must not start a drag operation
+			if (!GetItemFromSlot("player", slot))
+			{
+				return;
+			}
+
 			// Pick up the item from the slot
 			g_cursor.SetItem(slot);
 
