@@ -8,7 +8,8 @@
 --   * chain gating: 56 requires 48 rewarded (prevquestid),
 --   * area-trigger arrival: entering the Barrowfront Camp trigger fires
 --     QuestExplorationCredit for the triggering player only,
---   * AutoRewarded: the completed quest rewards itself without any turn-in.
+--   * manual turn-in: since the 2026-07-26 data change the quest is NOT
+--     AutoRewarded — arrival completes it, but the reward requires a turn-in.
 --
 -- The follow movement itself needs a real questgiver accept (the OnQuestAccept
 -- trigger on the escortee) and is not exercised here — GM.AcceptQuest bypasses
@@ -28,8 +29,6 @@ Sleep(500)
 
 GM.AcceptQuest(56)
 
--- Snapshot before arrival: the wait below must only be satisfied by the
--- auto-reward of quest 56 (1300 xp, 300 copper).
 local xpBefore = GetXp()
 local moneyBefore = GetMoney()
 local levelBefore = GetLevel(me)
@@ -42,14 +41,28 @@ GM.Worldport(0, -436, -1, 244, 0)
 Assert(MoveTo(-436, -1, 262, 30000), "player should reach the Barrowfront Camp arrival point")
 SendAreaTrigger(7)
 
+-- Negative check: arrival must complete the quest but must NOT auto-reward it.
+Sleep(3000)
+Assert(GetXp() == xpBefore and GetMoney() == moneyBefore and GetLevel(me) == levelBefore,
+	"quest 56 must not auto-reward on arrival (manual turn-in design; xp "
+	.. tostring(GetXp()) .. ", money " .. tostring(GetMoney()) .. ")")
+
+-- Manual turn-in rewards the quest. GM.TurnInQuest requires the quest to be
+-- objective-complete, so a missing exploration credit fails here too.
+-- Snapshot immediately before turn-in (see e2e README on turn-in waits).
+xpBefore = GetXp()
+moneyBefore = GetMoney()
+levelBefore = GetLevel(me)
+GM.TurnInQuest(56, 0)
+
 local ok = WaitUntil(function()
 	if GetXp() ~= xpBefore then return true end
 	if GetMoney() ~= moneyBefore then return true end
 	if GetLevel(me) > levelBefore then return true end
 	return false
-end, 15000, "escort quest auto-reward")
-Assert(ok, "quest 56 should auto-reward on entering the arrival trigger (xp "
+end, 15000, "escort quest turn-in reward")
+Assert(ok, "quest 56 should reward on manual turn-in after the arrival trigger completed it (xp "
 	.. tostring(GetXp()) .. ", money " .. tostring(GetMoney()) .. ")")
 
-Log("Escort quest auto-rewarded on arrival (xp " .. xpBefore .. " -> " .. GetXp()
+Log("Escort quest completed on arrival and rewarded on turn-in (xp " .. xpBefore .. " -> " .. GetXp()
 	.. ", money " .. moneyBefore .. " -> " .. GetMoney() .. ")")
