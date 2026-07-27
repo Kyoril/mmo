@@ -91,7 +91,9 @@ namespace mmo
 			// Apply spark emitter for the initial (complete) update.
 			UpdateSparkEmitter((Get<uint32>(object_fields::DynamicObjectFlags) & dynamic_world_object_flags::Interactable) != 0);
 
-			// Snap doors to their initial pose (the creation block always carries the full State).
+			// Snap doors to their initial pose (the creation block always carries the full
+			// State). At this point m_entity is still the placeholder cube — the real display
+			// mesh resolves asynchronously and OnDisplayIdChanged re-applies the state then.
 			ApplyDoorState(false);
 		}
 		else

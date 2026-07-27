@@ -87,7 +87,7 @@ namespace mmo
 
 		DLOG("Destroying monster with guid " << log_hex_digit(guid));
 
-		// Find creature with guid
+		// Find creature (or world object) with guid
 		GameObjectS* object = m_worldInstance->FindObjectByGuid(guid);
 		if (object == nullptr)
 		{
@@ -95,9 +95,11 @@ namespace mmo
 			return;
 		}
 
-		if (object->GetTypeId() != ObjectTypeId::Unit)
+		// World objects (e.g. temporary doors from CheatCreateObject) are accepted too so
+		// e2e scenarios can clean up after themselves.
+		if (object->GetTypeId() != ObjectTypeId::Unit && object->GetTypeId() != ObjectTypeId::Object)
 		{
-			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature");
+			ELOG("Object with guid " << log_hex_digit(guid) << " is not a creature or world object");
 			return;
 		}
 

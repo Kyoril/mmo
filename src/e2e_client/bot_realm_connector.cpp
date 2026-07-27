@@ -1351,8 +1351,16 @@ namespace mmo
 		// Track world objects (chests, doors, ...) so scenarios can find and interact with them.
 		if (typeId == ObjectTypeId::Object)
 		{
+			const BotWorldObjectState* existing = m_objectManager.GetWorldObject(guid);
+			if (!creation && !existing)
+			{
+				// A values-update for an object we never saw created would produce a
+				// phantom entry with entry id 0 — ignore it.
+				return true;
+			}
+
 			BotWorldObjectState objectState;
-			if (const BotWorldObjectState* existing = m_objectManager.GetWorldObject(guid))
+			if (existing)
 			{
 				objectState = *existing;
 			}

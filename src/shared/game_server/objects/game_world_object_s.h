@@ -44,6 +44,15 @@ namespace mmo
 		/// @param state The new state value (doors: 0 = closed, 1 = open).
 		void SetObjectState(uint32 state);
 
+		/// @brief Arms the auto close timer if this is an open door with an auto close time.
+		/// Called when a door enters the world already open — spawn-time state is written
+		/// directly to the field map, so SetObjectState never sees that transition.
+		void ArmAutoCloseIfOpen();
+
+		/// @brief Cancels a pending auto close on despawn (the object might be kept alive
+		/// by outside references after removal from the world).
+		void OnDespawn() override;
+
 		/// Fired after the State field changed through SetObjectState.
 		signal<void(GameWorldObjectS&, uint32)> stateChanged;
 

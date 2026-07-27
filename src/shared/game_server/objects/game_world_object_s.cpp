@@ -248,32 +248,59 @@ namespace mmo
 
 		if (IsDoor())
 		{
-			const uint32 autoCloseMs = GetAutoCloseTimeMs();
-			if (state != 0 && autoCloseMs > 0 && m_worldInstance)
+			if (state != 0)
 			{
-				if (!m_autoCloseCountdown)
-				{
-					m_autoCloseCountdown = std::make_unique<Countdown>(m_worldInstance->GetUniverse().GetTimers());
-					m_autoCloseEnded = m_autoCloseCountdown->ended.connect([this]()
-					{
-						// The door may have been closed manually or removed from the world
-						// while the timer was pending.
-						if (m_worldInstance && IsOpen())
-						{
-							SetObjectState(0u);
-						}
-					});
-				}
-
-				m_autoCloseCountdown->SetEnd(GetAsyncTimeMs() + autoCloseMs);
+				ArmAutoCloseIfOpen();
 			}
-			else if (state == 0 && m_autoCloseCountdown)
+			else if (m_autoCloseCountdown)
 			{
 				m_autoCloseCountdown->Cancel();
 			}
 		}
 
 		stateChanged(*this, state);
+	}
+
+	void GameWorldObjectS::ArmAutoCloseIfOpen()
+	{
+		if (!IsDoor() || !IsOpen() || !m_worldInstance)
+		{
+			return;
+		}
+
+		const uint32 autoCloseMs = GetAutoCloseTimeMs();
+		if (autoCloseMs == 0)
+		{
+			return;
+		}
+
+		if (!m_autoCloseCountdown)
+		{
+			m_autoCloseCountdown = std::make_unique<Countdown>(m_worldInstance->GetUniverse().GetTimers());
+			m_autoCloseEnded = m_autoCloseCountdown->ended.connect([this]()
+			{
+				// The door may have been closed manually while the timer was pending; a
+				// despawned door has its countdown cancelled in OnDespawn.
+				if (IsOpen())
+				{
+					SetObjectState(0u);
+				}
+			});
+		}
+
+		m_autoCloseCountdown->SetEnd(GetAsyncTimeMs() + autoCloseMs);
+	}
+
+	void GameWorldObjectS::OnDespawn()
+	{
+		// The object may be kept alive by outside references after removal from the world —
+		// make sure a pending auto close can't fire on a despawned door.
+		if (m_autoCloseCountdown)
+		{
+			m_autoCloseCountdown->Cancel();
+		}
+
+		GameObjectS::OnDespawn();
 	}
 
 	uint32 GameWorldObjectS::GetPostUnlockLockType() const

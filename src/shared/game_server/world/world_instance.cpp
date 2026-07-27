@@ -409,6 +409,10 @@ namespace mmo
 		if (worldObject->IsDoor())
 		{
 			RegisterDoorCollision(*worldObject);
+
+			// Spawn-time state is written directly to the field map (never through
+			// SetObjectState), so doors entering the world open must arm auto close here.
+			worldObject->ArmAutoCloseIfOpen();
 		}
 	}
 
@@ -612,6 +616,9 @@ namespace mmo
 		{
 			return;
 		}
+
+		// Guard against double registration (would leak the previous collision handle).
+		UnregisterDoorCollision(object.GetGuid());
 
 		const uint32 displayId = object.Get<uint32>(object_fields::ObjectDisplayId);
 		const auto* display = m_project.objectDisplays.getById(displayId);

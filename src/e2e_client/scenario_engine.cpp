@@ -971,6 +971,7 @@ namespace mmo
 				CreateMonster = GM_CreateMonster,
 				DestroyMonster = GM_DestroyMonster,
 				CreateObject = function(entry, state) return GM_CreateObject(entry, state or 0) end,
+				DestroyObject = GM_DestroyMonster,
 				CheckLoS = GM_CheckLoS,
 				KillTarget = GM_KillTarget,
 				Worldport = GM_WorldPort,
