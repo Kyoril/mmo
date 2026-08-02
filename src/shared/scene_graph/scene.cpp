@@ -790,37 +790,67 @@ namespace mmo
 		{
 			PROFILE_SCOPE("ShadowCasters: queue build");
 
+			// Mirror RenderQueue::ProcessVisibleObject's per-camera state (LOD / rendering-disabled)
+			// so shadow visibility matches the previous per-cascade Scene::Render path exactly.
+			// This must stay on the main thread: SetCurrentCamera emits the objectRendering signal.
 			for (MovableObject* caster : casters)
 			{
-				// Mirror RenderQueue::ProcessVisibleObject's per-camera state (LOD / rendering-disabled)
-				// so shadow visibility matches the previous per-cascade Scene::Render path exactly.
 				caster->SetCurrentCamera(cascadeCamera);
+			}
 
-				if (!caster->IsVisible() || !caster->IsCastingShadows())
+			// Prime the cascade camera's lazily rebuilt frustum planes with a non-null box
+			// (a null box early-outs before the rebuild), so the parallel filter below only
+			// performs const reads on the camera.
+			(void)cascadeCamera.IsVisible(AABB(Vector3::Zero, Vector3::UnitScale));
+
+			// Pure-math visibility filter on workers. World bounds were derived during
+			// GatherShadowCasters this frame and nothing moves scene nodes mid-render, so the
+			// non-deriving read is both current and mutation-free; every caster appears once,
+			// so the per-caster flag writes are disjoint.
+			std::vector<uint8> casterVisible(casters.size(), 0);
+			TaskSystem::Get().ParallelFor(casters.size(), 32,
+				[&casters, &casterVisible, &cascadeCamera, minCasterWorldRadius](const size_t begin, const size_t end)
+			{
+				for (size_t i = begin; i < end; ++i)
 				{
-					continue;
-				}
+					const MovableObject* caster = casters[i];
 
-				const AABB& worldBounds = caster->GetWorldBoundingBox(true);
-
-				// Sub-texel small-object culling: a caster smaller than the cascade's world texel size
-				// produces a shadow under one shadow-map texel, i.e. invisible. Skipping it is free.
-				if (minCasterWorldRadius > 0.0f)
-				{
-					const Vector3 extents = worldBounds.GetExtents();
-					const float worldRadius = std::max(extents.x, std::max(extents.y, extents.z));
-					if (worldRadius < minCasterWorldRadius)
+					if (!caster->IsVisible() || !caster->IsCastingShadows())
 					{
 						continue;
 					}
-				}
 
-				if (!cascadeCamera.IsVisible(worldBounds))
+					const AABB& worldBounds = caster->GetWorldBoundingBox(false);
+
+					// Sub-texel small-object culling: a caster smaller than the cascade's world texel
+					// size produces a shadow under one shadow-map texel, i.e. invisible. Skipping it is free.
+					if (minCasterWorldRadius > 0.0f)
+					{
+						const Vector3 extents = worldBounds.GetExtents();
+						const float worldRadius = std::max(extents.x, std::max(extents.y, extents.z));
+						if (worldRadius < minCasterWorldRadius)
+						{
+							continue;
+						}
+					}
+
+					if (!cascadeCamera.IsVisible(worldBounds))
+					{
+						continue;
+					}
+
+					casterVisible[i] = 1;
+				}
+			});
+
+			// Queue population mutates the shared render queue (and defers skinned entities to
+			// the batched animation pass) — main thread only.
+			for (size_t i = 0; i < casters.size(); ++i)
+			{
+				if (casterVisible[i])
 				{
-					continue;
+					casters[i]->PopulateRenderQueue(queue);
 				}
-
-				caster->PopulateRenderQueue(queue);
 			}
 		}
 
