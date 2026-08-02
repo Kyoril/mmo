@@ -22,10 +22,13 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	target_sources(unit_tests PRIVATE
 		${CMAKE_CURRENT_SOURCE_DIR}/../shared/game_client/sound_entry_player.cpp
 	)
-	target_link_libraries(unit_tests client_data)
+	# The camera frustum tests need scene_graph and the null graphics device,
+	# which are only part of client/editor builds.
+	target_link_libraries(unit_tests client_data scene_graph graphics_null tex tex_v1_0)
 else()
 	set_source_files_properties(
 		${CMAKE_CURRENT_SOURCE_DIR}/test_crossfading_sound_loop.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_camera_frustum.cpp
 		PROPERTIES HEADER_FILE_ONLY TRUE
 	)
 endif()
