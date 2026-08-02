@@ -738,7 +738,8 @@ namespace mmo
 				strm << std::left << std::setw(30) << "Metric"
 					<< std::right << std::setw(10) << "Time(ms)"
 					<< std::setw(8) << "Avg"
-					<< std::setw(8) << "Calls";
+					<< std::setw(8) << "Calls"
+					<< "  " << std::left << std::setw(12) << "Thread";
 				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, Color(0.8f, 0.8f, 0.8f));
 				yOffset += lineHeight;
 			}
@@ -771,14 +772,15 @@ namespace mmo
 				const int clampedBar = std::min(barLength, 20);
 				std::string bar(clampedBar, '#');
 
-				// Format: MetricName              Time    Avg   Calls  |####|
+				// Format: MetricName              Time    Avg   Calls  Thread  |####|
 				std::ostringstream strm;
 				strm << std::fixed << std::setprecision(2);
 				strm << std::left << std::setw(30) << m.name
 					<< std::right << std::setw(8) << m.totalTimeMs
 					<< std::setw(8) << avgTime
 					<< std::setw(6) << m.callCount
-					<< "  |" << std::left << std::setw(20) << bar << "|";
+					<< "  " << std::left << std::setw(12) << (m.threadName.size() > 12 ? m.threadName.substr(0, 12) : m.threadName)
+					<< "|" << std::left << std::setw(20) << bar << "|";
 
 				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, metricColor);
 				yOffset += lineHeight;

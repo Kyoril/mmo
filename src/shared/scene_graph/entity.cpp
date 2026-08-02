@@ -7,6 +7,7 @@
 #include "scene_graph/scene_node.h"
 #include "skeleton_instance.h"
 #include "tag_point.h"
+#include "base/profiler.h"
 #include "math/capsule.h"
 #include "math/collision.h"
 
@@ -230,6 +231,8 @@ namespace mmo
 	
 	void Entity::UpdateAnimations()
 	{
+		PROFILE_SCOPE("Entity::UpdateAnimations");
+
 		ASSERT(m_skeleton);
 		ASSERT(m_animationStates);
 

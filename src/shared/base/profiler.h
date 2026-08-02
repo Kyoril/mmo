@@ -1,11 +1,14 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <deque>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <chrono>
 
 #include "non_copyable.h"
 #include "typedefs.h"
@@ -24,6 +27,10 @@ namespace mmo
 	{
 		/// Identifier for the metric, e.g., "Physics Update", "Render Pass".
 		std::string name;
+
+		/// Name of the thread that reported this metric. "Multiple" if more than
+		/// one thread contributed to the same metric within a frame.
+		std::string threadName;
 
 		/// Time spent in this activity (accumulated over the frame).
 		double totalTimeMs = 0.0;
@@ -55,6 +62,12 @@ namespace mmo
 	};
 
 	/// @brief Singleton profiler that collects per-frame timing metrics.
+	///
+	/// Threading contract: AddTime (and therefore PROFILE_SCOPE) may be called from any
+	/// thread — each thread accumulates into its own buffer, so the hot path takes only an
+	/// uncontended per-thread lock. BeginFrame, EndFrame and all getters must be called from
+	/// the main thread only; EndFrame merges all per-thread buffers into the frame's metrics.
+	/// Worker scopes are attributed to the frame in which they *end*.
 	class Profiler
 	{
 	public:
@@ -63,23 +76,27 @@ namespace mmo
 
 		/// @brief Enables or disables profiling.
 		/// @param enabled Whether profiling is enabled.
-		void SetEnabled(bool enabled) { m_enabled = enabled; }
+		void SetEnabled(const bool enabled) { m_enabled.store(enabled, std::memory_order_relaxed); }
 
 		/// @brief Returns whether profiling is currently enabled.
-		[[nodiscard]] bool IsEnabled() const { return m_enabled; }
+		[[nodiscard]] bool IsEnabled() const { return m_enabled.load(std::memory_order_relaxed); }
 
-		/// @brief Call once at the start of each frame to reset per-frame metrics.
+		/// @brief Assigns a display name to the calling thread for metric attribution.
+		/// @param name The thread name, e.g. "Main" or "mmo_worker_0".
+		void SetCurrentThreadName(std::string name);
+
+		/// @brief Call once at the start of each frame to reset per-frame metrics. Main thread only.
 		void BeginFrame();
 
-		/// @brief Call once at the end of each frame to finalize and sort metrics.
+		/// @brief Call once at the end of each frame to merge, finalize and sort metrics. Main thread only.
 		void EndFrame();
 
-		/// @brief Adds measured time for a named metric.
+		/// @brief Adds measured time for a named metric. Safe to call from any thread.
 		/// @param metricName The name of the metric to add time to.
 		/// @param timeMs The time in milliseconds to add.
 		void AddTime(const std::string& metricName, double timeMs);
 
-		/// @brief Retrieves the sorted list of metrics from the last completed frame.
+		/// @brief Retrieves the sorted list of metrics from the last completed frame. Main thread only.
 		[[nodiscard]] const std::vector<PerformanceMetric>& GetMetrics() const { return m_metrics; }
 
 		/// @brief Returns the real frame time in milliseconds for the last completed frame.
@@ -102,17 +119,60 @@ namespace mmo
 		[[nodiscard]] double GetAverageFPS() const;
 
 	private:
-		/// Internal per-frame accumulation map.
-		std::unordered_map<std::string, PerformanceMetric> m_metricsMap;
+		/// @brief Per-frame accumulation of a single metric on a single thread.
+		struct MetricAccumulator
+		{
+			double totalTimeMs = 0.0;
+			uint64 callCount = 0;
+		};
 
-		/// Sorted metrics from the last completed frame.
+		/// @brief Accumulation buffer owned by one thread.
+		///
+		/// The owning thread holds a shared_ptr through a thread_local slot; the profiler
+		/// holds a second one in m_threadBuffers. A use_count of 1 during EndFrame therefore
+		/// means the owning thread has exited and the buffer can be pruned.
+		struct ThreadBuffer
+		{
+			/// Guards metrics and threadName. Uncontended except during EndFrame's merge.
+			std::mutex mutex;
+
+			/// Display name of the owning thread.
+			std::string threadName;
+
+			/// Per-frame metric accumulation of the owning thread.
+			std::unordered_map<std::string, MetricAccumulator> metrics;
+		};
+
+		/// @brief Rolling history entry for a metric, persisted across frames.
+		struct MetricHistory
+		{
+			std::deque<FrameData> history;
+
+			/// Frame counter value when this metric last reported data (for pruning).
+			uint64 lastSeenFrame = 0;
+		};
+
+		/// @brief Returns (and lazily registers) the calling thread's accumulation buffer.
+		ThreadBuffer& GetThreadBuffer();
+
+	private:
+		/// Guards m_threadBuffers.
+		std::mutex m_threadBuffersMutex;
+
+		/// All registered per-thread buffers.
+		std::vector<std::shared_ptr<ThreadBuffer>> m_threadBuffers;
+
+		/// Sorted metrics from the last completed frame. Main thread only.
 		std::vector<PerformanceMetric> m_metrics;
 
-		/// Start times for named metrics (unused currently, reserved for Start/Stop API).
-		std::unordered_map<std::string, double> m_startTimes;
+		/// Persistent per-metric rolling history. Main thread only.
+		std::unordered_map<std::string, MetricHistory> m_metricHistory;
+
+		/// Monotonic frame counter for history pruning.
+		uint64 m_frameCounter = 0;
 
 		/// Whether profiling is enabled.
-		bool m_enabled = false;
+		std::atomic<bool> m_enabled = false;
 
 		/// Timestamp when BeginFrame was called.
 		std::chrono::high_resolution_clock::time_point m_frameStartTime;
