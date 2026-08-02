@@ -5,6 +5,7 @@
 #include "game_item_c.h"
 #include "unit_handle.h"
 #include "base/macros.h"
+#include "base/profiler.h"
 #include "client_data/project.h"
 #include "mmo_client/party_unit_handle.h"
 #include "mmo_client/systems/party_info.h"
@@ -45,6 +46,8 @@ namespace mmo
 
 	void ObjectMgr::UpdateObjects(float deltaTime)
 	{
+		PROFILE_SCOPE("ObjectMgr::UpdateObjects");
+
 		for (const auto& [guid, object] : ms_objectyByGuid)
 		{
 			object->Update(deltaTime);

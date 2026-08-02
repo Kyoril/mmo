@@ -16,6 +16,8 @@
 #include "light.h"
 #include "base/macros.h"
 #include "base/profiler.h"
+#include "base/task_system.h"
+#include "octree_scene.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
@@ -319,41 +321,18 @@ namespace mmo
 		// so only particles, ribbon trails, and other transparent renderables are drawn.
 		if (!m_frozen && !m_forwardTransparentOnly && !m_reuseRenderQueue)
 		{
-			// Particle emitters and ribbon trails are *simulation*, not just rendering: each
-			// Update() advances the system and re-sorts/re-uploads its GPU buffers. It must run
-			// exactly once per frame — during the primary opaque queue-build pass — and never during
-			// the shadow cascade passes (which would otherwise re-simulate and re-sort every emitter
-			// up to NUM_SHADOW_CASCADES extra times each frame). A shadow cascade pass is a
-			// ShadowMap-typed pass that is not the main-view depth pre-pass.
+			// Particle emitters and ribbon trails are *simulation*, not rendering — the game
+			// update drives them via UpdateSimulation() once per frame (see WorldState::OnIdle).
+			// For scenes whose owner does not call it (editor previews, login screen), fall back
+			// to running it inline during the primary opaque queue-build pass, and never during
+			// the shadow cascade passes (which would otherwise re-simulate and re-sort every
+			// emitter up to NUM_SHADOW_CASCADES extra times each frame). A shadow cascade pass
+			// is a ShadowMap-typed pass that is not the main-view depth pre-pass.
 			const bool isShadowCascadePass = (shaderType == PixelShaderType::ShadowMap) && !m_depthPrepass;
-			if (!isShadowCascadePass)
+			if (!isShadowCascadePass && !m_simulationExternallyDriven)
 			{
-				PROFILE_SCOPE("ParticleEmitters::Update");
-
-				// Compute a single shared deltaTime for all particle systems this frame.
-				const auto particleNow = std::chrono::high_resolution_clock::now();
-				float particleDelta = 0.0f;
-				if (m_particleTimerInitialized)
-				{
-					particleDelta = std::chrono::duration_cast<std::chrono::microseconds>(
-						particleNow - m_lastParticleUpdate).count() / 1000000.0f;
-				}
-				m_lastParticleUpdate = particleNow;
-				m_particleTimerInitialized = true;
-
-				for (auto& [name, emitter] : m_particleEmitters)
-				{
-					// Systems flagged for manual update (e.g. the particle editor) advance themselves.
-					if (emitter->IsAutoUpdate())
-					{
-						emitter->Update(particleDelta);
-					}
-				}
-
-				for (auto& [name, trail] : m_ribbonTrails)
-				{
-					trail->Update();
-				}
+				const bool externallyDriven = false;
+				UpdateSimulationImpl(externallyDriven);
 			}
 
 			PrepareRenderQueue();
@@ -414,6 +393,67 @@ namespace mmo
 		PROFILE_SCOPE("UpdateSceneGraph");
 
 		GetRootSceneNode().Update(true, false);
+	}
+
+	void Scene::UpdateSimulation()
+	{
+		const bool externallyDriven = true;
+		UpdateSimulationImpl(externallyDriven);
+	}
+
+	void Scene::UpdateSimulationImpl(const bool externallyDriven)
+	{
+		PROFILE_SCOPE("ParticleEmitters::Update");
+
+		m_simulationExternallyDriven |= externallyDriven;
+
+		// Compute a single shared deltaTime for all particle systems this frame.
+		const auto particleNow = std::chrono::high_resolution_clock::now();
+		float particleDelta = 0.0f;
+		if (m_particleTimerInitialized)
+		{
+			particleDelta = std::chrono::duration_cast<std::chrono::microseconds>(
+				particleNow - m_lastParticleUpdate).count() / 1000000.0f;
+		}
+		m_lastParticleUpdate = particleNow;
+		m_particleTimerInitialized = true;
+
+		// Three-step fork-join: cache node/camera state (main), integrate all systems
+		// (workers via ParallelFor — serial when the TaskSystem is uninitialized, e.g. in
+		// the editor), then rebuild GPU buffers (main). Systems flagged for manual update
+		// (e.g. the particle editor) advance themselves and are skipped here.
+		std::vector<ParticleSystem*> systems;
+		systems.reserve(m_particleEmitters.size());
+		for (auto& [name, emitter] : m_particleEmitters)
+		{
+			if (emitter->IsAutoUpdate())
+			{
+				systems.push_back(emitter.get());
+			}
+		}
+
+		for (ParticleSystem* system : systems)
+		{
+			system->PrepareSimulation(particleDelta);
+		}
+
+		TaskSystem::Get().ParallelFor(systems.size(), 1, [&systems](const size_t begin, const size_t end)
+		{
+			for (size_t i = begin; i < end; ++i)
+			{
+				systems[i]->RunSimulation();
+			}
+		});
+
+		for (ParticleSystem* system : systems)
+		{
+			system->UploadGpuBuffers();
+		}
+
+		for (auto& [name, trail] : m_ribbonTrails)
+		{
+			trail->Update();
+		}
 	}
 
 	MaterialPtr Scene::GetDefaultMaterial()
@@ -573,9 +613,71 @@ namespace mmo
 		return (distanceFactor + rangeFactor + intensityFactor) * withinRangeBonus;
 	}
 
+	void Scene::QueueAnimationUpdate(Entity& entity)
+	{
+		// Duplicate submissions must not evaluate the same SkeletonInstance concurrently.
+		if (entity.TryMarkQueuedForAnimationUpdate())
+		{
+			m_pendingAnimationUpdates.push_back(&entity);
+		}
+	}
+
+	void Scene::ProcessPendingAnimationUpdates()
+	{
+		if (m_pendingAnimationUpdates.empty())
+		{
+			return;
+		}
+
+		PROFILE_SCOPE("Scene::AnimationUpdates");
+
+		// Main-thread pre-pass: primes the shared animation caches (keyframe index maps,
+		// splines, base keyframes) and creates/sizes each entity's bone matrix buffer.
+		for (Entity* entity : m_pendingAnimationUpdates)
+		{
+			entity->PrepareAnimationSampling();
+		}
+
+		// Pose evaluation is per-entity independent (each entity owns its SkeletonInstance)
+		// and pure CPU after the pre-pass.
+		auto& entities = m_pendingAnimationUpdates;
+		TaskSystem::Get().ParallelFor(entities.size(), 1, [&entities](const size_t begin, const size_t end)
+		{
+			for (size_t i = begin; i < end; ++i)
+			{
+				entities[i]->ComputeBoneMatrices();
+			}
+		});
+
+		// Opt-in race detector (flip in the debugger): serially re-evaluates every pose and
+		// compares bit-for-bit with the parallel result. The math is deterministic, so any
+		// mismatch means a data race in the worker path.
+		static volatile bool s_verifyParallelBoneEval = false;
+		if (s_verifyParallelBoneEval)
+		{
+			for (Entity* entity : m_pendingAnimationUpdates)
+			{
+				ASSERT(entity->VerifySerialBoneMatrices());
+			}
+		}
+
+		// GPU constant buffer uploads must stay on the main thread.
+		for (Entity* entity : m_pendingAnimationUpdates)
+		{
+			entity->UploadBoneMatrices();
+			entity->ClearQueuedForAnimationUpdate();
+		}
+
+		m_pendingAnimationUpdates.clear();
+	}
+
 	void Scene::RenderVisibleObjects()
 	{
 		PROFILE_SCOPE("RenderVisibleObjects");
+
+		// Compute bone matrices for every skinned entity queued during this pass's queue
+		// build, in parallel, before any draw call needs them.
+		ProcessPendingAnimationUpdates();
 
 		m_renderQueue->SortByMaterial();
 
@@ -689,37 +791,69 @@ namespace mmo
 		{
 			PROFILE_SCOPE("ShadowCasters: queue build");
 
+			// Mirror RenderQueue::ProcessVisibleObject's per-camera state (LOD / rendering-disabled)
+			// so shadow visibility matches the previous per-cascade Scene::Render path exactly.
+			// This must stay on the main thread: SetCurrentCamera emits the objectRendering signal.
 			for (MovableObject* caster : casters)
 			{
-				// Mirror RenderQueue::ProcessVisibleObject's per-camera state (LOD / rendering-disabled)
-				// so shadow visibility matches the previous per-cascade Scene::Render path exactly.
 				caster->SetCurrentCamera(cascadeCamera);
+			}
 
-				if (!caster->IsVisible() || !caster->IsCastingShadows())
+			// Snapshot the cascade frustum on the main thread: Camera::IsVisible is NOT a
+			// const read (its recalc latch never clears, so it rewrites the view/projection
+			// matrices on every call), which makes it unusable from workers.
+			// CachedFrustumPlanes::IsVisible replicates its semantics against an immutable copy.
+			const CachedFrustumPlanes cachedFrustum(cascadeCamera);
+
+			// Pure-math visibility filter on workers. World bounds were derived during
+			// GatherShadowCasters this frame; the only mid-render movers are tag-point
+			// attachments updated by the serial animation path, whose one-frame-stale bounds
+			// are acceptable for shadow culling. Every caster appears once, so the per-caster
+			// flag writes are disjoint.
+			std::vector<uint8> casterVisible(casters.size(), 0);
+			TaskSystem::Get().ParallelFor(casters.size(), 32,
+				[&casters, &casterVisible, &cachedFrustum, minCasterWorldRadius](const size_t begin, const size_t end)
+			{
+				for (size_t i = begin; i < end; ++i)
 				{
-					continue;
-				}
+					const MovableObject* caster = casters[i];
 
-				const AABB& worldBounds = caster->GetWorldBoundingBox(true);
-
-				// Sub-texel small-object culling: a caster smaller than the cascade's world texel size
-				// produces a shadow under one shadow-map texel, i.e. invisible. Skipping it is free.
-				if (minCasterWorldRadius > 0.0f)
-				{
-					const Vector3 extents = worldBounds.GetExtents();
-					const float worldRadius = std::max(extents.x, std::max(extents.y, extents.z));
-					if (worldRadius < minCasterWorldRadius)
+					if (!caster->IsVisible() || !caster->IsCastingShadows())
 					{
 						continue;
 					}
-				}
 
-				if (!cascadeCamera.IsVisible(worldBounds))
+					const AABB& worldBounds = caster->GetWorldBoundingBox(false);
+
+					// Sub-texel small-object culling: a caster smaller than the cascade's world texel
+					// size produces a shadow under one shadow-map texel, i.e. invisible. Skipping it is free.
+					if (minCasterWorldRadius > 0.0f)
+					{
+						const Vector3 extents = worldBounds.GetExtents();
+						const float worldRadius = std::max(extents.x, std::max(extents.y, extents.z));
+						if (worldRadius < minCasterWorldRadius)
+						{
+							continue;
+						}
+					}
+
+					if (!cachedFrustum.IsVisible(worldBounds))
+					{
+						continue;
+					}
+
+					casterVisible[i] = 1;
+				}
+			});
+
+			// Queue population mutates the shared render queue (and defers skinned entities to
+			// the batched animation pass) — main thread only.
+			for (size_t i = 0; i < casters.size(); ++i)
+			{
+				if (casterVisible[i])
 				{
-					continue;
+					casters[i]->PopulateRenderQueue(queue);
 				}
-
-				caster->PopulateRenderQueue(queue);
 			}
 		}
 
@@ -918,6 +1052,10 @@ namespace mmo
 		ASSERT(m_entities.find(entityName) == m_entities.end());
 
 		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
+
+		// The entity must know its scene so PopulateRenderQueue can defer bone-matrix
+		// evaluation to the scene's batched parallel pass.
+		entityIt->second->SetScene(this);
 
 		return entityIt->second.get();
 	}

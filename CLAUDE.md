@@ -213,6 +213,14 @@ From `copilot-instructions.md` and `cmake/mmo_options.cmake` — enforced projec
 - **Copyright header:** `// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.` on every source file.
 - **Namespace:** Root is `mmo`; enum pseudo-namespaces use the pattern `namespace unit_state { enum Type { ... }; }`.
 
+## Client Threading
+
+The client uses a fork-join worker pool (`src/shared/base/task_system.h`) — "parallel
+islands inside a single-threaded frame". Worker code must never touch `signal<>`, Lua,
+`GraphicsDevice`, or resource managers; logging is safe (buffered off-main). See
+[docs/threading.md](docs/threading.md) before adding any threaded code. Servers stay
+single-threaded; the TaskSystem is never initialized there.
+
 ## Error Handling
 
 No exceptions (`SIMPLE_NO_EXCEPTIONS`). Use these macros from `src/shared/base/macros.h`:

@@ -253,6 +253,11 @@ namespace mmo
 		return nullptr != b.get();
 	}
 
+	// THREADING RULE: ref_count (the default policy of ref_counted / intrusive_ptr users)
+	// is non-atomic. Any type whose intrusive_ptr instances can be copied or released on
+	// more than one thread — e.g. objects captured in TaskSystem jobs — must use
+	// ref_count_atomic instead. Do not blanket-convert: the atomic policy costs a
+	// contended cache line on every copy, and most engine types are main-thread-only.
 	struct ref_count
 	{
 		unsigned long addref()

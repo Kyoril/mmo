@@ -4,6 +4,7 @@
 #include "camera.h"
 #include "scene.h"
 #include "scene_node.h"
+#include "base/profiler.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
@@ -152,6 +153,8 @@ namespace mmo
 
 	void Foliage::Update(Camera& camera)
 	{
+		PROFILE_SCOPE("Foliage::Update");
+
 		if (!m_visible || m_layers.empty())
 		{
 			return;

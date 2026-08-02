@@ -3,14 +3,17 @@
 #include "entity.h"
 
 #include "animation_state.h"
+#include "scene_graph/scene.h"
 #include "scene_graph/render_queue.h"
 #include "scene_graph/scene_node.h"
 #include "skeleton_instance.h"
 #include "tag_point.h"
+#include "base/profiler.h"
 #include "math/capsule.h"
 #include "math/collision.h"
 
 #include <algorithm>
+#include <cstring>
 
 #include "math/ray.h"
 
@@ -141,7 +144,22 @@ namespace mmo
 
 		if (HasSkeleton())
 		{
-			UpdateAnimations();
+			// Defer bone-matrix evaluation to the scene's batched pass (parallel across all
+			// skinned entities queued this render pass). Entities with bone attachments stay
+			// on the synchronous main-thread path: updating their tag points touches the
+			// shared scene graph (parent scene node reads, NotifyMoved signals), which is not
+			// worker-safe. Same for entities that are not part of a scene.
+			if (Scene* scene = GetScene(); scene != nullptr && m_childObjects.empty())
+			{
+				if (NeedsAnimationUpdate())
+				{
+					scene->QueueAnimationUpdate(*this);
+				}
+			}
+			else
+			{
+				UpdateAnimations();
+			}
 
 			for (const auto& childIt : m_childObjects)
 			{
@@ -228,37 +246,85 @@ namespace mmo
 		}
 	}
 	
-	void Entity::UpdateAnimations()
+	bool Entity::NeedsAnimationUpdate() const
+	{
+		if (!m_skeleton || !m_animationStates)
+		{
+			return false;
+		}
+
+		const uint64 currentAnimationFrame = m_animationStates->GetDirtyFrameNumber();
+		return m_lastAnimationUpdateFrame != currentAnimationFrame || m_animationsNeedUpdate;
+	}
+
+	void Entity::PrepareAnimationSampling()
 	{
 		ASSERT(m_skeleton);
 		ASSERT(m_animationStates);
 
-		// Check if animations have been updated this frame already
-		const uint64 currentAnimationFrame = m_animationStates->GetDirtyFrameNumber();
-		if (m_lastAnimationUpdateFrame == currentAnimationFrame && !m_animationsNeedUpdate)
-		{
-			// Animations are already up to date for this frame
-			return;
-		}
+		// Animations are shared between entities using the same skeleton — build their lazy
+		// sampling caches here on the main thread so ComputeBoneMatrices only reads them.
+		m_skeleton->PrepareAnimationsForSampling(*m_animationStates);
 
-		// Apply animation states
-		m_skeleton->SetAnimationState(*m_animationStates);
-
-		const uint16 numBones = m_skeleton->GetNumBones();
-		const size_t requiredSize = static_cast<size_t>(numBones);
-
+		const size_t requiredSize = static_cast<size_t>(m_skeleton->GetNumBones());
 		if (m_boneMatrices.size() != requiredSize)
 		{
 			m_boneMatrices.resize(requiredSize, Matrix4::Identity);
 			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * requiredSize, m_boneMatrices.data());
 		}
+	}
 
+	void Entity::ComputeBoneMatrices()
+	{
+		PROFILE_SCOPE("Entity::ComputeBoneMatrices");
+
+		ASSERT(m_skeleton);
+		ASSERT(m_animationStates);
+
+		// Apply animation states to the per-entity skeleton instance and evaluate the pose.
+		m_skeleton->SetAnimationState(*m_animationStates);
 		m_skeleton->GetBoneMatrices(m_boneMatrices.data());
-		m_boneMatrixBuffer->Update(m_boneMatrices.data());
 
 		// Update cache information
-		m_lastAnimationUpdateFrame = currentAnimationFrame;
+		m_lastAnimationUpdateFrame = m_animationStates->GetDirtyFrameNumber();
 		m_animationsNeedUpdate = false;
+	}
+
+	void Entity::UploadBoneMatrices()
+	{
+		if (m_boneMatrixBuffer)
+		{
+			m_boneMatrixBuffer->Update(m_boneMatrices.data());
+		}
+	}
+
+	bool Entity::VerifySerialBoneMatrices()
+	{
+		const std::vector<Matrix4> parallelResult = m_boneMatrices;
+		ComputeBoneMatrices();
+
+		return parallelResult.size() == m_boneMatrices.size() &&
+			(parallelResult.empty() ||
+				std::memcmp(parallelResult.data(), m_boneMatrices.data(),
+					parallelResult.size() * sizeof(Matrix4)) == 0);
+	}
+
+	void Entity::UpdateAnimations()
+	{
+		PROFILE_SCOPE("Entity::UpdateAnimations");
+
+		ASSERT(m_skeleton);
+		ASSERT(m_animationStates);
+
+		if (!NeedsAnimationUpdate())
+		{
+			// Animations are already up to date for this frame
+			return;
+		}
+
+		PrepareAnimationSampling();
+		ComputeBoneMatrices();
+		UploadBoneMatrices();
 	}
 
 	void Entity::AttachObjectImpl(MovableObject& pMovable, TagPoint& pAttachingPoint)

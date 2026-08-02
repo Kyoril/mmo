@@ -18,7 +18,7 @@ namespace mmo
 	{ \
 		::std::basic_ostringstream<char> MMO_LOG_FORMATTER_NAME; \
 		MMO_LOG_FORMATTER_NAME << message; \
-		::mmo::g_DefaultLog.signal()( \
+		::mmo::g_DefaultLog.Emit( \
 		                                ::mmo::LogEntry(level, \
 		                                        MMO_LOG_FORMATTER_NAME.str(), \
 		                                        ::std::chrono::system_clock::now() \

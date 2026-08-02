@@ -38,6 +38,7 @@ namespace mmo
 		m_lastParentOrientation = quaternion;
 		m_lastParentOrientation.Normalize();
 		m_viewInvalid = true;
+		InvalidateView();
 	}
 
 	Ray Camera::GetCameraToViewportRay(float viewportX, float viewportY, float maxDistance) const
@@ -213,7 +214,10 @@ namespace mmo
 
 	void Camera::UpdateFrustum() const
 	{
-		if (!IsFrustumOutOfDate())
+		// The view matrix is rebuilt here as well, so a stale view (e.g. the parent
+		// node moved without an explicit invalidation) must also trigger an update.
+		const bool viewOutOfDate = !m_customViewMatrix && IsViewOutOfDate();
+		if (!IsFrustumOutOfDate() && !viewOutOfDate)
 		{
 			return;
 		}
@@ -230,16 +234,22 @@ namespace mmo
 				// Use orthographic projection
 				const float halfWidth = GetOrthoWindowWidth() * 0.5f;
 				const float halfHeight = GetOrthoWindowHeight() * 0.5f;
-				m_projMatrix =					
+				m_projMatrix =
 					GraphicsDevice::Get().MakeOrthographicMatrix(-halfWidth, halfHeight, halfWidth, -halfHeight, m_nearDist, m_farDist);
 			}
 		}
-		
+
 		if (!m_customViewMatrix)
 		{
 			m_viewMatrix = MakeViewMatrix(GetDerivedPosition(), GetDerivedOrientation());
+			m_recalcView = false;
 		}
-		
+
+		// Both matrices changed, so everything derived from them is stale now.
+		m_recalcFrustumPlanes = true;
+		m_recalcWorldSpaceCorners = true;
+
+		m_recalcFrustum = false;
 		m_viewInvalid = false;
 	}
 

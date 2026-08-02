@@ -942,6 +942,7 @@ namespace mmo
 	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
 		PROFILE_BEGIN_FRAME();
+		PROFILE_SCOPE("WorldState::OnIdle");
 
 		if (m_debugPathVisualizer)
 		{
@@ -953,11 +954,14 @@ namespace mmo
 			m_worldPingVisualizer->Update(deltaSeconds, m_playerController->GetCamera());
 		}
 
-		for (size_t i = 0; i < 20; ++i)
 		{
-			if (!m_dispatcher.poll_one())
+			PROFILE_SCOPE("OnIdle::StreamingDispatch");
+			for (size_t i = 0; i < 20; ++i)
 			{
-				break;
+				if (!m_dispatcher.poll_one())
+				{
+					break;
+				}
 			}
 		}
 
@@ -993,6 +997,8 @@ namespace mmo
 		// Update minimap
 		if (const auto &controlled = m_playerController->GetControlledUnit())
 		{
+			PROFILE_SCOPE("OnIdle::Minimap");
+
 			m_minimap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
 
 			// Gather visible party member positions for minimap dots
@@ -1134,7 +1140,16 @@ namespace mmo
 
 		if (m_playerController)
 		{
+			PROFILE_SCOPE("OnIdle::Nameplates");
 			m_nameplateManager.Update(deltaSeconds, m_playerController->GetCamera());
+		}
+
+		// Advance render-independent simulation (particles, ribbon trails) here instead of
+		// inside Scene::Render, so the work runs exactly once per frame and can use the
+		// TaskSystem worker pool.
+		if (m_scene)
+		{
+			m_scene->UpdateSimulation();
 		}
 	}
 
@@ -1146,16 +1161,19 @@ namespace mmo
 
 	void WorldState::OnPaint()
 	{
-		FrameManager::Get().Draw();
-
-		// Draw world text frames
-		for (const auto &textFrame : m_worldTextFrames)
 		{
-			textFrame->Render();
-		}
+			PROFILE_SCOPE("WorldState::OnPaint");
+			FrameManager::Get().Draw();
 
-		// Chat bubbles are NOT drawn here: they live in the frame tree under the WorldFrame
-		// (see m_chatBubbleLayer) so they render above the 3D world but beneath the rest of the UI.
+			// Draw world text frames
+			for (const auto &textFrame : m_worldTextFrames)
+			{
+				textFrame->Render();
+			}
+
+			// Chat bubbles are NOT drawn here: they live in the frame tree under the WorldFrame
+			// (see m_chatBubbleLayer) so they render above the 3D world but beneath the rest of the UI.
+		}
 
 		PROFILE_END_FRAME();
 	}

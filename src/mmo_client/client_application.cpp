@@ -1,6 +1,7 @@
 #include "client_application.h"
 
 #include "assets/asset_registry.h"
+#include "base/task_system.h"
 #include "base/timer_queue.h"
 #include "char_creation/char_create_info.h"
 #include "char_creation/char_select.h"
@@ -130,6 +131,10 @@ namespace mmo
 					printLogEntry(GetClientContext().logFile, entry, g_DefaultFileLogOptions);
 				});
 		}
+
+		// Start the worker pool for fork-join parallel work (particles, animation, ...).
+		// Must happen on the main thread before any system that uses ParallelFor.
+		TaskSystem::Get().Initialize();
 
 		EventLoop::Initialize();
 		Console::Initialize("Config/Config.cfg");
@@ -327,6 +332,13 @@ namespace mmo
 		Console::Destroy();
 		EventLoop::Destroy();
 		AssetRegistry::Destroy();
+
+		// Stop the worker pool after all systems that might still hold parallel work are gone.
+		TaskSystem::Get().Shutdown();
+
+		// Emit anything background threads logged after the last frame's flush, while the
+		// log file connection is still alive.
+		g_DefaultLog.FlushBuffered();
 
 		context.logConnection.disconnect();
 		context.logFile.close();

@@ -3,6 +3,7 @@
 #include "structured_buffer_d3d11.h"
 
 #include "base/macros.h"
+#include "base/thread_checks.h"
 
 namespace mmo
 {
@@ -71,6 +72,9 @@ namespace mmo
 
 	void StructuredBufferD3D11::Update(const void* data, const size_t elementCount)
 	{
+		// Maps the immediate context — main-thread-only (see docs/threading.md).
+		ASSERT_MAIN_THREAD();
+
 		ASSERT(elementCount <= m_elementCount);
 		ASSERT(data != nullptr);
 

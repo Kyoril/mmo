@@ -4,6 +4,7 @@
 
 #include "base/clock.h"
 #include "graphics/graphics_device.h"
+#include "log/default_log.h"
 
 
 namespace mmo
@@ -44,6 +45,10 @@ namespace mmo
 			auto currentTime = GetAsyncTimeMs();
 			auto timePassed = static_cast<float>((currentTime - lastIdle) / 1000.0);
 			lastIdle = currentTime;
+
+			// Emit log entries buffered by worker/streaming threads (the log signal itself
+			// is main-thread-only, see Log::Emit).
+			g_DefaultLog.FlushBuffered();
 
 			Idle(timePassed, currentTime);
 

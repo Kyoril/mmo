@@ -118,6 +118,12 @@ namespace mmo
 
 		virtual void SetAnimationState(const AnimationStateSet& animSet);
 
+		/// @brief Primes the lazy sampling caches of every enabled animation in the set.
+		///        Must run on the main thread before SetAnimationState may be called from a
+		///        TaskSystem worker — animations are shared across entities using the same
+		///        skeleton (see Animation::PrepareForSampling).
+		virtual void PrepareAnimationsForSampling(const AnimationStateSet& animSet);
+
 		void RemoveAnimation(const String& name) override;
 
 	public:

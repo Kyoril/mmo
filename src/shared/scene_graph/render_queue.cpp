@@ -4,6 +4,8 @@
 
 #include "movable_object.h"
 #include "camera.h"
+#include "base/profiler.h"
+#include "base/task_system.h"
 #include <algorithm>
 
 namespace mmo
@@ -132,14 +134,6 @@ namespace mmo
 		it->second->AddRenderable(renderable);
 	}
 
-	void RenderQueueGroup::SortByMaterial(size_t minRenderablesForSorting)
-	{
-		for (const auto& [priority, group] : m_priorityGroups)
-		{
-			group->SortSolidsByMaterial(minRenderablesForSorting);
-		}
-	}
-
 	RenderQueue::RenderQueue()
 		: m_defaultGroup(Main)
 		, m_defaultRenderablePriority(100)
@@ -223,9 +217,27 @@ namespace mmo
 
 	void RenderQueue::SortByMaterial(size_t minRenderablesForSorting)
 	{
+		PROFILE_SCOPE("RenderQueue::Sort");
+
+		// Every priority group's collection sorts independently, so fan the sorts out across
+		// the worker pool. The comparator only reads stored material pointers (SubEntity,
+		// terrain tiles, particles all return plain members), which makes it worker-safe.
+		std::vector<RenderPriorityGroup*> priorityGroups;
 		for (const auto& [groupId, group] : m_groups)
 		{
-			group->SortByMaterial(minRenderablesForSorting);
+			for (const auto& [priority, priorityGroup] : *group)
+			{
+				priorityGroups.push_back(priorityGroup.get());
+			}
 		}
+
+		TaskSystem::Get().ParallelFor(priorityGroups.size(), 1,
+			[&priorityGroups, minRenderablesForSorting](const size_t begin, const size_t end)
+			{
+				for (size_t i = begin; i < end; ++i)
+				{
+					priorityGroups[i]->SortSolidsByMaterial(minRenderablesForSorting);
+				}
+			});
 	}
 }

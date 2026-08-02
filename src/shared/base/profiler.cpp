@@ -1,6 +1,9 @@
 
 #include "profiler.h"
 
+#include <sstream>
+#include <thread>
+
 namespace mmo
 {
 	Profiler& Profiler::GetInstance()
@@ -9,11 +12,51 @@ namespace mmo
 		return instance;
 	}
 
+	Profiler::ThreadBuffer& Profiler::GetThreadBuffer()
+	{
+		// Owning reference of the calling thread; released automatically on thread exit,
+		// which drops the buffer's use_count to 1 so EndFrame can prune it.
+		static thread_local std::shared_ptr<ThreadBuffer> t_buffer;
+
+		if (!t_buffer)
+		{
+			t_buffer = std::make_shared<ThreadBuffer>();
+
+			std::ostringstream name;
+			name << "Thread " << std::this_thread::get_id();
+			t_buffer->threadName = name.str();
+
+			std::scoped_lock lock{ m_threadBuffersMutex };
+			m_threadBuffers.push_back(t_buffer);
+		}
+
+		return *t_buffer;
+	}
+
+	void Profiler::SetCurrentThreadName(std::string name)
+	{
+		ThreadBuffer& buffer = GetThreadBuffer();
+
+		std::scoped_lock lock{ buffer.mutex };
+		buffer.threadName = std::move(name);
+	}
+
 	void Profiler::BeginFrame()
 	{
-		if (!m_enabled)
+		if (!IsEnabled())
 		{
 			return;
+		}
+
+		// The main thread is the one driving frames — name its buffer accordingly
+		// unless it was named explicitly already.
+		{
+			ThreadBuffer& buffer = GetThreadBuffer();
+			std::scoped_lock lock{ buffer.mutex };
+			if (buffer.threadName.compare(0, 7, "Thread ") == 0)
+			{
+				buffer.threadName = "Main";
+			}
 		}
 
 		const auto now = std::chrono::high_resolution_clock::now();
@@ -40,12 +83,11 @@ namespace mmo
 
 		m_frameStartTime = now;
 		m_frameStartValid = true;
-		m_metricsMap.clear();
 	}
 
 	void Profiler::EndFrame()
 	{
-		if (!m_enabled)
+		if (!IsEnabled())
 		{
 			return;
 		}
@@ -58,19 +100,90 @@ namespace mmo
 			m_cpuFrameTimeMs = std::chrono::duration<double, std::milli>(now - m_frameStartTime).count();
 		}
 
-		// Transfer the data from the map into a vector, updating history
-		m_metrics.clear();
-		m_metrics.reserve(m_metricsMap.size());
-		for (auto& [name, metric] : m_metricsMap)
+		++m_frameCounter;
+
+		// Merge all per-thread buffers into a single per-metric view for this frame.
+		struct MergedMetric
 		{
-			// Push this frame's data into the metric's history
-			metric.history.push_back(FrameData{ metric.totalTimeMs, static_cast<int>(metric.callCount) });
-			while (metric.history.size() > PerformanceMetric::MaxHistorySize)
+			double totalTimeMs = 0.0;
+			uint64 callCount = 0;
+			std::string threadName;
+			bool multipleThreads = false;
+		};
+		std::unordered_map<std::string, MergedMetric> merged;
+
+		{
+			std::scoped_lock buffersLock{ m_threadBuffersMutex };
+
+			for (auto it = m_threadBuffers.begin(); it != m_threadBuffers.end();)
 			{
-				metric.history.pop_front();
+				const auto& buffer = *it;
+
+				{
+					std::scoped_lock bufferLock{ buffer->mutex };
+					for (auto& [name, accumulator] : buffer->metrics)
+					{
+						MergedMetric& target = merged[name];
+						target.totalTimeMs += accumulator.totalTimeMs;
+						target.callCount += accumulator.callCount;
+						if (target.threadName.empty())
+						{
+							target.threadName = buffer->threadName;
+						}
+						else if (target.threadName != buffer->threadName)
+						{
+							target.multipleThreads = true;
+						}
+					}
+					buffer->metrics.clear();
+				}
+
+				// A use_count of 1 means the owning thread has exited — prune the buffer.
+				if (it->use_count() == 1)
+				{
+					it = m_threadBuffers.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+
+		// Build the sorted metric list, maintaining the persistent rolling history.
+		m_metrics.clear();
+		m_metrics.reserve(merged.size());
+		for (auto& [name, data] : merged)
+		{
+			MetricHistory& history = m_metricHistory[name];
+			history.lastSeenFrame = m_frameCounter;
+			history.history.push_back(FrameData{ data.totalTimeMs, static_cast<int>(data.callCount) });
+			while (history.history.size() > PerformanceMetric::MaxHistorySize)
+			{
+				history.history.pop_front();
 			}
 
-			m_metrics.push_back(metric);
+			PerformanceMetric metric;
+			metric.name = name;
+			metric.threadName = data.multipleThreads ? "Multiple" : data.threadName;
+			metric.totalTimeMs = data.totalTimeMs;
+			metric.callCount = data.callCount;
+			metric.history = history.history;
+			m_metrics.push_back(std::move(metric));
+		}
+
+		// Drop history for metrics that stopped reporting (e.g. after leaving a game state)
+		// so dynamically named scopes can't grow the map without bound.
+		for (auto it = m_metricHistory.begin(); it != m_metricHistory.end();)
+		{
+			if (m_frameCounter - it->second.lastSeenFrame > PerformanceMetric::MaxHistorySize)
+			{
+				it = m_metricHistory.erase(it);
+			}
+			else
+			{
+				++it;
+			}
 		}
 
 		// Sort metrics by total time descending (most expensive first)
@@ -81,17 +194,19 @@ namespace mmo
 			});
 	}
 
-	void Profiler::AddTime(const std::string& metricName, double timeMs)
+	void Profiler::AddTime(const std::string& metricName, const double timeMs)
 	{
-		if (!m_enabled)
+		if (!IsEnabled())
 		{
 			return;
 		}
 
-		auto& metric = m_metricsMap[metricName];
-		metric.name = metricName;
-		metric.totalTimeMs += timeMs;
-		metric.callCount++;
+		ThreadBuffer& buffer = GetThreadBuffer();
+
+		std::scoped_lock lock{ buffer.mutex };
+		MetricAccumulator& accumulator = buffer.metrics[metricName];
+		accumulator.totalTimeMs += timeMs;
+		accumulator.callCount++;
 	}
 
 	double Profiler::GetAverageFrameTimeMs() const

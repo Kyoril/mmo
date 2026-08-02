@@ -128,6 +128,11 @@ namespace mmo
 
 		void KeyFrameDataChanged() const override;
 
+		/// @brief Builds the interpolation splines now if they are stale. Called from
+		///        Animation::PrepareForSampling so concurrent GetInterpolatedKeyFrame calls
+		///        (TaskSystem workers) never hit the lazy build path.
+		void PrepareSplines() const;
+
 		virtual std::shared_ptr<TransformKeyFrame> GetNodeKeyFrame(uint16 index) const;
 
 		bool HasNonZeroKeyFrames() const override;

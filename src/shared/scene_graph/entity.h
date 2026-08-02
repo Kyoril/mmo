@@ -75,11 +75,47 @@ namespace mmo
 		void DetachObjectFromBone(const MovableObject& obj);
 
 		void DetachAllObjectsFromBone();
+	public:
+		/// @brief True when the bone matrices are stale for the current animation-state frame.
+		///        Frame-based caching ensures animations are only computed once per frame even
+		///        though rendering runs multiple passes (shadow cascades, depth pre-pass, ...).
+		[[nodiscard]] bool NeedsAnimationUpdate() const;
+
+		/// @brief Main-thread step: primes the shared animation sampling caches and (re)creates
+		///        the bone-matrix constant buffer. Must run before ComputeBoneMatrices.
+		void PrepareAnimationSampling();
+
+		/// @brief Evaluates the skeleton pose into the bone matrix array. Pure CPU — safe on a
+		///        TaskSystem worker once PrepareAnimationSampling ran (see docs/threading.md).
+		void ComputeBoneMatrices();
+
+		/// @brief Main-thread step: uploads the computed bone matrices to the GPU.
+		void UploadBoneMatrices();
+
+		/// @brief Marks this entity as queued for the scene's batched animation pass.
+		/// @return false if it was already queued (duplicate submissions must not run the
+		///         same SkeletonInstance on two workers concurrently).
+		bool TryMarkQueuedForAnimationUpdate()
+		{
+			if (m_queuedForAnimationUpdate)
+			{
+				return false;
+			}
+			m_queuedForAnimationUpdate = true;
+			return true;
+		}
+
+		/// @brief Clears the queued mark after the batched animation pass processed this entity.
+		void ClearQueuedForAnimationUpdate() { m_queuedForAnimationUpdate = false; }
+
+		/// @brief Debug helper: re-evaluates the pose serially and compares it with the bone
+		///        matrices currently stored (the parallel result). Deterministic math must
+		///        match bit-for-bit; a mismatch indicates a data race in the parallel path.
+		[[nodiscard]] bool VerifySerialBoneMatrices();
+
 	protected:
-		/// @brief Updates skeletal animations and bone matrices.
-		/// This method is optimized to avoid redundant updates when called multiple times
-		/// per frame (e.g., during shadow map and deferred rendering passes).
-		/// Uses frame-based caching to ensure animations are only computed once per frame.
+		/// @brief Updates skeletal animations and bone matrices synchronously (prepare +
+		///        compute + upload). Kept for callers outside the scene's batched pass.
 		void UpdateAnimations();
 
 		void AttachObjectImpl(MovableObject& pMovable, TagPoint& pAttachingPoint);
@@ -114,6 +150,9 @@ namespace mmo
 		
 		/// @brief Cached flag to check if animations need updating this frame
 		mutable bool m_animationsNeedUpdate{ true };
+
+		/// True while this entity sits in the scene's pending animation update batch.
+		bool m_queuedForAnimationUpdate{ false };
 
 	public:
 

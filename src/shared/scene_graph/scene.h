@@ -371,6 +371,16 @@ namespace mmo
 		/// Renders the current scene by using a specific camera as the origin.
 		void Render(Camera& camera, PixelShaderType shaderType);
 
+		/// @brief Advances per-frame simulation work that is independent of any render pass:
+		///        particle emitters and ribbon trails. Particle integration runs in parallel on
+		///        the TaskSystem (serial when uninitialized, e.g. in the editor); GPU buffer
+		///        rebuilds happen on the calling (main) thread after the join.
+		///
+		/// Call once per frame from the game update (WorldState::OnIdle does this). Scenes whose
+		/// owner never calls it keep working: Render() falls back to running it inline during the
+		/// primary queue-build pass, exactly like the old in-render simulation did.
+		void UpdateSimulation();
+
 		/// @brief Controls whether a Forward-type Scene::Render call should skip opaque
 		/// render queue groups (< Transparent). Used by the deferred renderer to avoid
 		/// re-rendering opaque geometry in the transparent pass.
@@ -390,6 +400,21 @@ namespace mmo
 
 		void UpdateSceneGraph();
 
+		/// @brief Called by Entity::PopulateRenderQueue to defer skeletal bone-matrix evaluation.
+		///        All entities queued during a pass are computed in parallel (TaskSystem) right
+		///        before that pass renders, then their bone matrices upload on the main thread.
+		void QueueAnimationUpdate(Entity& entity);
+
+	private:
+		/// @brief Shared body of UpdateSimulation(); Render()'s inline fallback passes false so
+		///        the scene keeps falling back until the owner actually drives simulation itself.
+		void UpdateSimulationImpl(bool externallyDriven);
+
+		/// @brief Fork-join processing of the entities queued via QueueAnimationUpdate:
+		///        prime caches (main) → compute bone matrices (workers) → upload (main).
+		void ProcessPendingAnimationUpdates();
+
+	public:
 		void RenderSingleObject(Renderable& renderable, uint32 groupId);
 
 		/// @brief Gathers every shadow-casting movable object whose world bounding box intersects the
@@ -650,6 +675,10 @@ namespace mmo
 		typedef std::map<String, std::unique_ptr<ParticleEmitter>> ParticleEmitterMap;
 		ParticleEmitterMap m_particleEmitters;
 
+		/// Skinned entities whose bone matrices are stale, queued during the current render
+		/// pass's queue build and processed as one parallel batch before the pass renders.
+		std::vector<Entity*> m_pendingAnimationUpdates;
+
 		/// Wall-clock timestamp of the previous particle-system update, used to compute a single
 		/// shared deltaTime for all emitters per frame (avoids per-emitter timing drift).
 		std::chrono::high_resolution_clock::time_point m_lastParticleUpdate;
@@ -694,6 +723,10 @@ namespace mmo
 		bool m_forwardTransparentOnly = false;
 		bool m_reuseRenderQueue = false;
 		bool m_depthPrepass = false;
+
+		/// Set once the owner drives UpdateSimulation() externally (per frame from the game
+		/// update); Render() then no longer runs the simulation fallback inline.
+		bool m_simulationExternallyDriven = false;
 
 		Vector3 m_ambientColor = Vector3(0.04f, 0.035f, 0.03f);
 
