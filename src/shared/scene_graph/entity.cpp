@@ -13,6 +13,7 @@
 #include "math/collision.h"
 
 #include <algorithm>
+#include <cstring>
 
 #include "math/ray.h"
 
@@ -144,9 +145,11 @@ namespace mmo
 		if (HasSkeleton())
 		{
 			// Defer bone-matrix evaluation to the scene's batched pass (parallel across all
-			// skinned entities queued this render pass); fall back to the synchronous path
-			// for entities that are not part of a scene.
-			if (Scene* scene = GetScene(); scene != nullptr)
+			// skinned entities queued this render pass). Entities with bone attachments stay
+			// on the synchronous main-thread path: updating their tag points touches the
+			// shared scene graph (parent scene node reads, NotifyMoved signals), which is not
+			// worker-safe. Same for entities that are not part of a scene.
+			if (Scene* scene = GetScene(); scene != nullptr && m_childObjects.empty())
 			{
 				if (NeedsAnimationUpdate())
 				{
@@ -293,6 +296,17 @@ namespace mmo
 		{
 			m_boneMatrixBuffer->Update(m_boneMatrices.data());
 		}
+	}
+
+	bool Entity::VerifySerialBoneMatrices()
+	{
+		const std::vector<Matrix4> parallelResult = m_boneMatrices;
+		ComputeBoneMatrices();
+
+		return parallelResult.size() == m_boneMatrices.size() &&
+			(parallelResult.empty() ||
+				std::memcmp(parallelResult.data(), m_boneMatrices.data(),
+					parallelResult.size() * sizeof(Matrix4)) == 0);
 	}
 
 	void Entity::UpdateAnimations()

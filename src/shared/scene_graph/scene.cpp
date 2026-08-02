@@ -614,7 +614,11 @@ namespace mmo
 
 	void Scene::QueueAnimationUpdate(Entity& entity)
 	{
-		m_pendingAnimationUpdates.push_back(&entity);
+		// Duplicate submissions must not evaluate the same SkeletonInstance concurrently.
+		if (entity.TryMarkQueuedForAnimationUpdate())
+		{
+			m_pendingAnimationUpdates.push_back(&entity);
+		}
 	}
 
 	void Scene::ProcessPendingAnimationUpdates()
@@ -644,10 +648,23 @@ namespace mmo
 			}
 		});
 
+		// Opt-in race detector (flip in the debugger): serially re-evaluates every pose and
+		// compares bit-for-bit with the parallel result. The math is deterministic, so any
+		// mismatch means a data race in the worker path.
+		static volatile bool s_verifyParallelBoneEval = false;
+		if (s_verifyParallelBoneEval)
+		{
+			for (Entity* entity : m_pendingAnimationUpdates)
+			{
+				ASSERT(entity->VerifySerialBoneMatrices());
+			}
+		}
+
 		// GPU constant buffer uploads must stay on the main thread.
 		for (Entity* entity : m_pendingAnimationUpdates)
 		{
 			entity->UploadBoneMatrices();
+			entity->ClearQueuedForAnimationUpdate();
 		}
 
 		m_pendingAnimationUpdates.clear();

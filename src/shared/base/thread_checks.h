@@ -13,9 +13,9 @@ namespace mmo
 	/// Implemented in task_system.cpp; declared here so widely included headers (signal.h)
 	/// can assert thread affinity without pulling in the full task system.
 	bool IsMainThread();
-
-	/// @brief Asserts that the current thread is the main thread (Debug only, inert until
-	///        TaskSystem::Initialize was called). Used to enforce main-thread-only contracts
-	///        on signals, GraphicsDevice and resource managers.
-#define ASSERT_MAIN_THREAD() ASSERT(::mmo::IsMainThread())
 }
+
+/// @brief Asserts that the current thread is the main thread (Debug only, inert until
+///        TaskSystem::Initialize was called). Used to enforce main-thread-only contracts
+///        on signals, GraphicsDevice and resource managers.
+#define ASSERT_MAIN_THREAD() ASSERT(::mmo::IsMainThread())

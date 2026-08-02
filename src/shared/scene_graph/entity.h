@@ -92,6 +92,27 @@ namespace mmo
 		/// @brief Main-thread step: uploads the computed bone matrices to the GPU.
 		void UploadBoneMatrices();
 
+		/// @brief Marks this entity as queued for the scene's batched animation pass.
+		/// @return false if it was already queued (duplicate submissions must not run the
+		///         same SkeletonInstance on two workers concurrently).
+		bool TryMarkQueuedForAnimationUpdate()
+		{
+			if (m_queuedForAnimationUpdate)
+			{
+				return false;
+			}
+			m_queuedForAnimationUpdate = true;
+			return true;
+		}
+
+		/// @brief Clears the queued mark after the batched animation pass processed this entity.
+		void ClearQueuedForAnimationUpdate() { m_queuedForAnimationUpdate = false; }
+
+		/// @brief Debug helper: re-evaluates the pose serially and compares it with the bone
+		///        matrices currently stored (the parallel result). Deterministic math must
+		///        match bit-for-bit; a mismatch indicates a data race in the parallel path.
+		[[nodiscard]] bool VerifySerialBoneMatrices();
+
 	protected:
 		/// @brief Updates skeletal animations and bone matrices synchronously (prepare +
 		///        compute + upload). Kept for callers outside the scene's batched pass.
@@ -129,6 +150,9 @@ namespace mmo
 		
 		/// @brief Cached flag to check if animations need updating this frame
 		mutable bool m_animationsNeedUpdate{ true };
+
+		/// True while this entity sits in the scene's pending animation update batch.
+		bool m_queuedForAnimationUpdate{ false };
 
 	public:
 

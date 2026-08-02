@@ -39,6 +39,14 @@ namespace mmo
 
 		void NeedUpdate(bool forceParentUpdate = false) override;
 
+		/// @brief Bones (and tag points) are pose-evaluated on TaskSystem workers, and the
+		///        Node::updated signal is main-thread-only by contract (see docs/threading.md).
+		///        No subscriber observes bone updates, so skip the emission entirely.
+		void UpdateFromParent() const override
+		{
+			UpdateFromParentImpl();
+		}
+
 	protected:
 		Node* CreateChildImpl() override;
 

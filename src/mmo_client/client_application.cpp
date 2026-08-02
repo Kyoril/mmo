@@ -336,6 +336,10 @@ namespace mmo
 		// Stop the worker pool after all systems that might still hold parallel work are gone.
 		TaskSystem::Get().Shutdown();
 
+		// Emit anything background threads logged after the last frame's flush, while the
+		// log file connection is still alive.
+		g_DefaultLog.FlushBuffered();
+
 		context.logConnection.disconnect();
 		context.logFile.close();
 		context.timerService.stop();
