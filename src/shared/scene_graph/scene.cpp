@@ -319,41 +319,18 @@ namespace mmo
 		// so only particles, ribbon trails, and other transparent renderables are drawn.
 		if (!m_frozen && !m_forwardTransparentOnly && !m_reuseRenderQueue)
 		{
-			// Particle emitters and ribbon trails are *simulation*, not just rendering: each
-			// Update() advances the system and re-sorts/re-uploads its GPU buffers. It must run
-			// exactly once per frame — during the primary opaque queue-build pass — and never during
-			// the shadow cascade passes (which would otherwise re-simulate and re-sort every emitter
-			// up to NUM_SHADOW_CASCADES extra times each frame). A shadow cascade pass is a
-			// ShadowMap-typed pass that is not the main-view depth pre-pass.
+			// Particle emitters and ribbon trails are *simulation*, not rendering — the game
+			// update drives them via UpdateSimulation() once per frame (see WorldState::OnIdle).
+			// For scenes whose owner does not call it (editor previews, login screen), fall back
+			// to running it inline during the primary opaque queue-build pass, and never during
+			// the shadow cascade passes (which would otherwise re-simulate and re-sort every
+			// emitter up to NUM_SHADOW_CASCADES extra times each frame). A shadow cascade pass
+			// is a ShadowMap-typed pass that is not the main-view depth pre-pass.
 			const bool isShadowCascadePass = (shaderType == PixelShaderType::ShadowMap) && !m_depthPrepass;
-			if (!isShadowCascadePass)
+			if (!isShadowCascadePass && !m_simulationExternallyDriven)
 			{
-				PROFILE_SCOPE("ParticleEmitters::Update");
-
-				// Compute a single shared deltaTime for all particle systems this frame.
-				const auto particleNow = std::chrono::high_resolution_clock::now();
-				float particleDelta = 0.0f;
-				if (m_particleTimerInitialized)
-				{
-					particleDelta = std::chrono::duration_cast<std::chrono::microseconds>(
-						particleNow - m_lastParticleUpdate).count() / 1000000.0f;
-				}
-				m_lastParticleUpdate = particleNow;
-				m_particleTimerInitialized = true;
-
-				for (auto& [name, emitter] : m_particleEmitters)
-				{
-					// Systems flagged for manual update (e.g. the particle editor) advance themselves.
-					if (emitter->IsAutoUpdate())
-					{
-						emitter->Update(particleDelta);
-					}
-				}
-
-				for (auto& [name, trail] : m_ribbonTrails)
-				{
-					trail->Update();
-				}
+				const bool externallyDriven = false;
+				UpdateSimulationImpl(externallyDriven);
 			}
 
 			PrepareRenderQueue();
@@ -414,6 +391,44 @@ namespace mmo
 		PROFILE_SCOPE("UpdateSceneGraph");
 
 		GetRootSceneNode().Update(true, false);
+	}
+
+	void Scene::UpdateSimulation()
+	{
+		const bool externallyDriven = true;
+		UpdateSimulationImpl(externallyDriven);
+	}
+
+	void Scene::UpdateSimulationImpl(const bool externallyDriven)
+	{
+		PROFILE_SCOPE("ParticleEmitters::Update");
+
+		m_simulationExternallyDriven |= externallyDriven;
+
+		// Compute a single shared deltaTime for all particle systems this frame.
+		const auto particleNow = std::chrono::high_resolution_clock::now();
+		float particleDelta = 0.0f;
+		if (m_particleTimerInitialized)
+		{
+			particleDelta = std::chrono::duration_cast<std::chrono::microseconds>(
+				particleNow - m_lastParticleUpdate).count() / 1000000.0f;
+		}
+		m_lastParticleUpdate = particleNow;
+		m_particleTimerInitialized = true;
+
+		for (auto& [name, emitter] : m_particleEmitters)
+		{
+			// Systems flagged for manual update (e.g. the particle editor) advance themselves.
+			if (emitter->IsAutoUpdate())
+			{
+				emitter->Update(particleDelta);
+			}
+		}
+
+		for (auto& [name, trail] : m_ribbonTrails)
+		{
+			trail->Update();
+		}
 	}
 
 	MaterialPtr Scene::GetDefaultMaterial()

@@ -1143,6 +1143,14 @@ namespace mmo
 			PROFILE_SCOPE("OnIdle::Nameplates");
 			m_nameplateManager.Update(deltaSeconds, m_playerController->GetCamera());
 		}
+
+		// Advance render-independent simulation (particles, ribbon trails) here instead of
+		// inside Scene::Render, so the work runs exactly once per frame and can use the
+		// TaskSystem worker pool.
+		if (m_scene)
+		{
+			m_scene->UpdateSimulation();
+		}
 	}
 
 	bool WorldState::OnMouseWheel(const int32 delta)

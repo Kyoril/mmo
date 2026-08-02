@@ -371,6 +371,16 @@ namespace mmo
 		/// Renders the current scene by using a specific camera as the origin.
 		void Render(Camera& camera, PixelShaderType shaderType);
 
+		/// @brief Advances per-frame simulation work that is independent of any render pass:
+		///        particle emitters and ribbon trails. Particle integration runs in parallel on
+		///        the TaskSystem (serial when uninitialized, e.g. in the editor); GPU buffer
+		///        rebuilds happen on the calling (main) thread after the join.
+		///
+		/// Call once per frame from the game update (WorldState::OnIdle does this). Scenes whose
+		/// owner never calls it keep working: Render() falls back to running it inline during the
+		/// primary queue-build pass, exactly like the old in-render simulation did.
+		void UpdateSimulation();
+
 		/// @brief Controls whether a Forward-type Scene::Render call should skip opaque
 		/// render queue groups (< Transparent). Used by the deferred renderer to avoid
 		/// re-rendering opaque geometry in the transparent pass.
@@ -390,6 +400,12 @@ namespace mmo
 
 		void UpdateSceneGraph();
 
+	private:
+		/// @brief Shared body of UpdateSimulation(); Render()'s inline fallback passes false so
+		///        the scene keeps falling back until the owner actually drives simulation itself.
+		void UpdateSimulationImpl(bool externallyDriven);
+
+	public:
 		void RenderSingleObject(Renderable& renderable, uint32 groupId);
 
 		/// @brief Gathers every shadow-casting movable object whose world bounding box intersects the
@@ -694,6 +710,10 @@ namespace mmo
 		bool m_forwardTransparentOnly = false;
 		bool m_reuseRenderQueue = false;
 		bool m_depthPrepass = false;
+
+		/// Set once the owner drives UpdateSimulation() externally (per frame from the game
+		/// update); Render() then no longer runs the simulation fallback inline.
+		bool m_simulationExternallyDriven = false;
 
 		Vector3 m_ambientColor = Vector3(0.04f, 0.035f, 0.03f);
 
