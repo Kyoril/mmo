@@ -570,6 +570,27 @@ namespace mmo
 		m_animationController->Update(ctx);
 	}
 
+	void GameUnitC::AdvanceAnimationTimes(const float deltaTime)
+	{
+		if (m_animationController)
+		{
+			m_animationController->AdvanceClipTimes(deltaTime);
+		}
+	}
+
+	void GameUnitC::FlushDeferredAnimationNotifies() const
+	{
+		if (!m_entity)
+		{
+			return;
+		}
+
+		if (AnimationStateSet* animationStates = m_entity->GetAllAnimationStates())
+		{
+			animationStates->FlushDeferredNotifies();
+		}
+	}
+
 	void GameUnitC::ApplyMovementInfo(const MovementInfo &movementInfo)
 	{
 		m_movementInfo = movementInfo;

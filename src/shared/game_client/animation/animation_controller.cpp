@@ -287,14 +287,22 @@ namespace mmo
 		}
 
 		m_locomotion.ApplyWeights(ctx.deltaTime, m_action.LocomotionVisibility(), fadeDuration);
+	}
 
-		// Advance clip times last so newly enabled clips start at their reset positions.
-		m_locomotion.AdvanceTime(ctx.deltaTime);
+	void AnimationController::AdvanceClipTimes(const float deltaTime)
+	{
+		if (!m_entity)
+		{
+			return;
+		}
+
+		// Runs after Update() so newly enabled clips start at their reset positions.
+		m_locomotion.AdvanceTime(deltaTime);
 		if (AnimationState* action = m_action.GetCurrent(); action && action->IsEnabled())
 		{
-			action->AddTime(ctx.deltaTime);
+			action->AddTime(deltaTime);
 		}
-		m_face.AdvanceTime(ctx.deltaTime);
+		m_face.AdvanceTime(deltaTime);
 	}
 
 	bool AnimationController::PlayActionInternal(AnimationState* state, const bool suppressIfBusy, const bool isPoseTransition)

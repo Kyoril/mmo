@@ -6,6 +6,8 @@
 #include "unit_handle.h"
 #include "base/macros.h"
 #include "base/profiler.h"
+#include "base/task_system.h"
+#include "scene_graph/animation_state.h"
 #include "client_data/project.h"
 #include "mmo_client/party_unit_handle.h"
 #include "mmo_client/systems/party_info.h"
@@ -51,6 +53,39 @@ namespace mmo
 		for (const auto& [guid, object] : ms_objectyByGuid)
 		{
 			object->Update(deltaTime);
+		}
+
+		// Snapshot all units (shared_ptr so a notify handler removing objects below
+		// cannot leave dangling pointers behind).
+		std::vector<std::shared_ptr<GameObjectC>> units;
+		units.reserve(ms_objectyByGuid.size());
+		for (const auto& [guid, object] : ms_objectyByGuid)
+		{
+			if (object->IsUnit())
+			{
+				units.push_back(object);
+			}
+		}
+
+		{
+			PROFILE_SCOPE("ObjectMgr::AdvanceAnimations");
+
+			// Clip-time advance is pure per-unit CPU work; notify signals collected on
+			// workers are emitted on the main thread right after the join.
+			AnimationState::SetNotifyDeferralEnabled(true);
+			TaskSystem::Get().ParallelFor(units.size(), 4, [&units, deltaTime](const size_t begin, const size_t end)
+			{
+				for (size_t i = begin; i < end; ++i)
+				{
+					units[i]->AsUnit().AdvanceAnimationTimes(deltaTime);
+				}
+			});
+			AnimationState::SetNotifyDeferralEnabled(false);
+		}
+
+		for (const auto& unit : units)
+		{
+			unit->AsUnit().FlushDeferredAnimationNotifies();
 		}
 	}
 

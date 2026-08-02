@@ -144,6 +144,15 @@ namespace mmo
 		/// @brief Builds the per-frame animation input snapshot and runs the animation controller.
 		void UpdateAnimation(float deltaTime, bool isDead);
 
+		/// @brief Advances the time position of all active animation clips. Runs after
+		///	Update() for all units, on a worker thread with notify deferral active
+		///	(see ObjectMgr::UpdateObjects) — must stay free of signal/Lua/render work.
+		void AdvanceAnimationTimes(float deltaTime);
+
+		/// @brief Emits the animation notifies collected while AdvanceAnimationTimes ran
+		///	with notify deferral active. Main thread only.
+		void FlushDeferredAnimationNotifies() const;
+
 		virtual void ApplyMovementInfo(const MovementInfo &movementInfo);
 
 		/// @brief Enqueues a movement snapshot for a remote player into the buffered queue.
