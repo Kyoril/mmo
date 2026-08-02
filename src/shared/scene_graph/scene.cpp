@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/profiler.h"
 #include "base/task_system.h"
+#include "octree_scene.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
@@ -798,18 +799,20 @@ namespace mmo
 				caster->SetCurrentCamera(cascadeCamera);
 			}
 
-			// Prime the cascade camera's lazily rebuilt frustum planes with a non-null box
-			// (a null box early-outs before the rebuild), so the parallel filter below only
-			// performs const reads on the camera.
-			(void)cascadeCamera.IsVisible(AABB(Vector3::Zero, Vector3::UnitScale));
+			// Snapshot the cascade frustum on the main thread: Camera::IsVisible is NOT a
+			// const read (its recalc latch never clears, so it rewrites the view/projection
+			// matrices on every call), which makes it unusable from workers.
+			// CachedFrustumPlanes::IsVisible replicates its semantics against an immutable copy.
+			const CachedFrustumPlanes cachedFrustum(cascadeCamera);
 
 			// Pure-math visibility filter on workers. World bounds were derived during
-			// GatherShadowCasters this frame and nothing moves scene nodes mid-render, so the
-			// non-deriving read is both current and mutation-free; every caster appears once,
-			// so the per-caster flag writes are disjoint.
+			// GatherShadowCasters this frame; the only mid-render movers are tag-point
+			// attachments updated by the serial animation path, whose one-frame-stale bounds
+			// are acceptable for shadow culling. Every caster appears once, so the per-caster
+			// flag writes are disjoint.
 			std::vector<uint8> casterVisible(casters.size(), 0);
 			TaskSystem::Get().ParallelFor(casters.size(), 32,
-				[&casters, &casterVisible, &cascadeCamera, minCasterWorldRadius](const size_t begin, const size_t end)
+				[&casters, &casterVisible, &cachedFrustum, minCasterWorldRadius](const size_t begin, const size_t end)
 			{
 				for (size_t i = begin; i < end; ++i)
 				{
@@ -834,7 +837,7 @@ namespace mmo
 						}
 					}
 
-					if (!cascadeCamera.IsVisible(worldBounds))
+					if (!cachedFrustum.IsVisible(worldBounds))
 					{
 						continue;
 					}

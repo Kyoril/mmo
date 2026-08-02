@@ -156,11 +156,6 @@ namespace mmo
 
 		void AddRenderable(Renderable& renderable, uint16 priority);
 
-		/// @brief Sorts all renderables in all priority groups by material to reduce GPU state changes.
-		/// Only sorts collections that have more than minRenderablesForSorting items.
-		/// @param minRenderablesForSorting The minimum number of renderables before sorting is applied (default: 8)
-		void SortByMaterial(size_t minRenderablesForSorting = 8);
-
 		uint32 GetGroupId() const { return m_groupId; }
 
 		PriorityMap::iterator begin() { return m_priorityGroups.begin(); }

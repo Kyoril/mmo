@@ -134,14 +134,6 @@ namespace mmo
 		it->second->AddRenderable(renderable);
 	}
 
-	void RenderQueueGroup::SortByMaterial(size_t minRenderablesForSorting)
-	{
-		for (const auto& [priority, group] : m_priorityGroups)
-		{
-			group->SortSolidsByMaterial(minRenderablesForSorting);
-		}
-	}
-
 	RenderQueue::RenderQueue()
 		: m_defaultGroup(Main)
 		, m_defaultRenderablePriority(100)
