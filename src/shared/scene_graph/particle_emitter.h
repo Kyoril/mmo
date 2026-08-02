@@ -230,6 +230,10 @@ namespace mmo
 		/// @brief Sorts particles back-to-front relative to the camera (for alpha blending).
 		void SortParticles(std::vector<Particle>& particles, const Camera& camera) const;
 
+		/// @brief Camera-position overload used from TaskSystem workers, where touching the
+		///        Camera (lazy scene-node caches) would not be thread-safe.
+		void SortParticles(std::vector<Particle>& particles, const Vector3& cameraPos) const;
+
 		[[nodiscard]] bool IsReady() const { return m_vertexData != nullptr && m_vertexData->vertexCount > 0; }
 
 	private:
@@ -316,6 +320,16 @@ namespace mmo
 		/// @param camera Camera used for sorting and billboard orientation (may be null).
 		void Update(float deltaTime, const Matrix4& systemWorld, const Vector3& systemWorldPos,
 			const Vector3& systemVelocity, const Camera* camera);
+
+		/// @brief Simulation-only part of Update (spawning, integration, translucency sort).
+		///        Pure CPU — safe on a TaskSystem worker.
+		/// @param sortCameraPos World-space camera position for translucency sorting, or null
+		///        when no camera is available (head-less warm-up: sorting is skipped).
+		void UpdateSimulation(float deltaTime, const Matrix4& systemWorld, const Vector3& systemWorldPos,
+			const Vector3& systemVelocity, const Vector3* sortCameraPos);
+
+		/// @brief Rebuilds the GPU buffers from the current particle state. Main thread only.
+		void UploadGpuBuffers(const Camera& camera);
 
 		void Reset();
 		void Play() { m_emitting = true; }
@@ -414,10 +428,26 @@ namespace mmo
 
 	public:
 		/// @brief Advances all emitters. Called once per frame by the scene.
+		/// @remark Equivalent to PrepareSimulation + RunSimulation + UploadGpuBuffers in sequence;
+		///         kept for callers that drive a system manually (particle editor).
 		void Update(float deltaTime);
 
 		/// @brief Self-timed overload kept for callers that don't have a frame delta.
 		void Update();
+
+		// --- Split update used by Scene::UpdateSimulation for parallel execution ---
+
+		/// @brief Main-thread step: caches the parent node transform, system velocity and camera
+		///        data used by the following RunSimulation call. Touches lazy scene-node caches,
+		///        so it must not run concurrently with other scene access.
+		void PrepareSimulation(float deltaTime);
+
+		/// @brief Advances all emitters using the state cached by PrepareSimulation. Pure CPU —
+		///        safe to run on a TaskSystem worker (no GPU, no signals, no scene-node access).
+		void RunSimulation();
+
+		/// @brief Main-thread step: rebuilds the emitters' GPU buffers from the simulated state.
+		void UploadGpuBuffers();
 
 		// --- Multi-emitter API ---
 		void SetSystemParameters(const ParticleSystemParameters& params);
@@ -467,6 +497,14 @@ namespace mmo
 		std::chrono::high_resolution_clock::time_point m_lastUpdateTime;
 		Vector3 m_lastWorldPos { Vector3::Zero };
 		bool m_hasLastWorldPos { false };
+
+		// --- State cached by PrepareSimulation for the worker-side RunSimulation ---
+		float m_cachedDelta { 0.0f };
+		Matrix4 m_cachedWorldMatrix { Matrix4::Identity };
+		Vector3 m_cachedWorldPos { Vector3::Zero };
+		Vector3 m_cachedSystemVelocity { Vector3::Zero };
+		Camera* m_cachedCamera { nullptr };
+		Vector3 m_cachedSortCameraPos { Vector3::Zero };
 
 		static const String TYPE_NAME;
 	};

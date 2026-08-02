@@ -16,6 +16,7 @@
 #include "light.h"
 #include "base/macros.h"
 #include "base/profiler.h"
+#include "base/task_system.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
@@ -416,13 +417,36 @@ namespace mmo
 		m_lastParticleUpdate = particleNow;
 		m_particleTimerInitialized = true;
 
+		// Three-step fork-join: cache node/camera state (main), integrate all systems
+		// (workers via ParallelFor — serial when the TaskSystem is uninitialized, e.g. in
+		// the editor), then rebuild GPU buffers (main). Systems flagged for manual update
+		// (e.g. the particle editor) advance themselves and are skipped here.
+		std::vector<ParticleSystem*> systems;
+		systems.reserve(m_particleEmitters.size());
 		for (auto& [name, emitter] : m_particleEmitters)
 		{
-			// Systems flagged for manual update (e.g. the particle editor) advance themselves.
 			if (emitter->IsAutoUpdate())
 			{
-				emitter->Update(particleDelta);
+				systems.push_back(emitter.get());
 			}
+		}
+
+		for (ParticleSystem* system : systems)
+		{
+			system->PrepareSimulation(particleDelta);
+		}
+
+		TaskSystem::Get().ParallelFor(systems.size(), 1, [&systems](const size_t begin, const size_t end)
+		{
+			for (size_t i = begin; i < end; ++i)
+			{
+				systems[i]->RunSimulation();
+			}
+		});
+
+		for (ParticleSystem* system : systems)
+		{
+			system->UploadGpuBuffers();
 		}
 
 		for (auto& [name, trail] : m_ribbonTrails)

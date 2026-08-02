@@ -33,6 +33,15 @@ namespace mmo
 
 	namespace
 	{
+		/// Particle spawning runs on TaskSystem workers; the global RandomGenerator is a plain
+		/// mt19937 and must not be shared across threads. Each thread gets its own generator —
+		/// particle randomness carries no determinism requirement.
+		RandomnessGenerator& ParticleRng()
+		{
+			static thread_local RandomnessGenerator generator{ std::random_device{}() };
+			return generator;
+		}
+
 		float RandomRange(float minValue, float maxValue)
 		{
 			if (maxValue <= minValue)
@@ -41,7 +50,7 @@ namespace mmo
 			}
 
 			std::uniform_real_distribution<float> dist(minValue, maxValue);
-			return dist(RandomGenerator);
+			return dist(ParticleRng());
 		}
 
 		Vector3 RandomRange(const Vector3& minValue, const Vector3& maxValue)
@@ -330,12 +339,16 @@ namespace mmo
 
 	void ParticleRenderable::SortParticles(std::vector<Particle>& particles, const Camera& camera) const
 	{
+		SortParticles(particles, camera.GetDerivedPosition());
+	}
+
+	void ParticleRenderable::SortParticles(std::vector<Particle>& particles, const Vector3& cameraPos) const
+	{
 		if (particles.empty())
 		{
 			return;
 		}
 
-		const Vector3 cameraPos = camera.GetDerivedPosition();
 		const Matrix4& bake = m_parent.GetWorldTransform();
 
 		std::sort(particles.begin(), particles.end(),
@@ -913,6 +926,25 @@ namespace mmo
 	void EmitterInstance::Update(float deltaTime, const Matrix4& systemWorld, const Vector3& systemWorldPos,
 		const Vector3& systemVelocity, const Camera* camera)
 	{
+		Vector3 sortCameraPos;
+		const Vector3* sortCameraPosPtr = nullptr;
+		if (camera)
+		{
+			sortCameraPos = camera->GetDerivedPosition();
+			sortCameraPosPtr = &sortCameraPos;
+		}
+
+		UpdateSimulation(deltaTime, systemWorld, systemWorldPos, systemVelocity, sortCameraPosPtr);
+
+		if (camera)
+		{
+			UploadGpuBuffers(*camera);
+		}
+	}
+
+	void EmitterInstance::UpdateSimulation(float deltaTime, const Matrix4& systemWorld, const Vector3& systemWorldPos,
+		const Vector3& systemVelocity, const Vector3* sortCameraPos)
+	{
 		if (!m_parameters.enabled)
 		{
 			m_particles.clear();
@@ -988,22 +1020,34 @@ namespace mmo
 		UpdateParticles(deltaTime);
 		UpdateBoundingBox();
 
-		// Only (re)build GPU buffers when a camera is available (skipped during head-less warm-up).
-		// RebuildBuffers safely clears the buffers when the particle list is empty.
-		if (camera)
+		// Sorting only needs the camera position, so it can run here on a worker; the GPU
+		// buffer rebuild needs the full camera and the immediate context and therefore lives
+		// in UploadGpuBuffers (main thread, after the join). Skipped without a camera
+		// (head-less warm-up).
+		if (sortCameraPos && !IsMeshMode())
 		{
-			if (IsMeshMode())
+			if (!m_particles.empty() && m_material && m_material->IsTranslucent())
 			{
-				RebuildInstanceBuffer(*camera);
+				m_renderable->SortParticles(m_particles, *sortCameraPos);
 			}
-			else
-			{
-				if (!m_particles.empty() && m_material && m_material->IsTranslucent())
-				{
-					m_renderable->SortParticles(m_particles, *camera);
-				}
-				m_renderable->RebuildBuffers(m_particles, *camera);
-			}
+		}
+	}
+
+	void EmitterInstance::UploadGpuBuffers(const Camera& camera)
+	{
+		if (!m_parameters.enabled)
+		{
+			return;
+		}
+
+		// RebuildBuffers safely clears the buffers when the particle list is empty.
+		if (IsMeshMode())
+		{
+			RebuildInstanceBuffer(camera);
+		}
+		else
+		{
+			m_renderable->RebuildBuffers(m_particles, camera);
 		}
 	}
 
@@ -1205,33 +1249,62 @@ namespace mmo
 
 	void ParticleSystem::Update(float deltaTime)
 	{
-		// Clamp to avoid huge jumps (debugger pauses, hitches).
-		const float dt = std::min(std::max(deltaTime, 0.0f), 0.1f);
+		PrepareSimulation(deltaTime);
+		RunSimulation();
+		UploadGpuBuffers();
+	}
 
-		Matrix4 worldMatrix = Matrix4::Identity;
-		Vector3 worldPos = Vector3::Zero;
+	void ParticleSystem::PrepareSimulation(float deltaTime)
+	{
+		// Clamp to avoid huge jumps (debugger pauses, hitches).
+		m_cachedDelta = std::min(std::max(deltaTime, 0.0f), 0.1f);
+
+		m_cachedWorldMatrix = Matrix4::Identity;
+		m_cachedWorldPos = Vector3::Zero;
 		if (m_parentNode)
 		{
-			worldMatrix = m_parentNode->GetFullTransform();
-			worldPos = m_parentNode->GetDerivedPosition();
+			m_cachedWorldMatrix = m_parentNode->GetFullTransform();
+			m_cachedWorldPos = m_parentNode->GetDerivedPosition();
 		}
 
-		Vector3 systemVelocity = Vector3::Zero;
-		if (m_hasLastWorldPos && dt > 1e-5f)
+		m_cachedSystemVelocity = Vector3::Zero;
+		if (m_hasLastWorldPos && m_cachedDelta > 1e-5f)
 		{
-			systemVelocity = (worldPos - m_lastWorldPos) / dt;
+			m_cachedSystemVelocity = (m_cachedWorldPos - m_lastWorldPos) / m_cachedDelta;
 		}
-		m_lastWorldPos = worldPos;
+		m_lastWorldPos = m_cachedWorldPos;
 		m_hasLastWorldPos = true;
 
-		Camera* camera = m_scene ? m_scene->GetCamera(0) : nullptr;
+		// Resolving the camera position here primes the camera node's lazy caches on the main
+		// thread, so RunSimulation never touches scene nodes from a worker.
+		m_cachedCamera = m_scene ? m_scene->GetCamera(0) : nullptr;
+		m_cachedSortCameraPos = m_cachedCamera ? m_cachedCamera->GetDerivedPosition() : Vector3::Zero;
+	}
+
+	void ParticleSystem::RunSimulation()
+	{
+		const Vector3* sortCameraPos = m_cachedCamera ? &m_cachedSortCameraPos : nullptr;
 
 		for (auto& emitter : m_emitters)
 		{
-			emitter->Update(dt, worldMatrix, worldPos, systemVelocity, camera);
+			emitter->UpdateSimulation(m_cachedDelta, m_cachedWorldMatrix, m_cachedWorldPos,
+				m_cachedSystemVelocity, sortCameraPos);
 		}
 
 		UpdateBoundingBox();
+	}
+
+	void ParticleSystem::UploadGpuBuffers()
+	{
+		if (!m_cachedCamera)
+		{
+			return;
+		}
+
+		for (auto& emitter : m_emitters)
+		{
+			emitter->UploadGpuBuffers(*m_cachedCamera);
+		}
 	}
 
 	void ParticleSystem::Update()
