@@ -2,6 +2,7 @@
 
 #include "vertex_buffer_d3d11.h"
 #include "base/macros.h"
+#include "base/thread_checks.h"
 
 
 namespace mmo
@@ -36,6 +37,9 @@ namespace mmo
 
 	void * VertexBufferD3D11::Map(const LockOptions lock)
 	{
+		// Maps the immediate context — main-thread-only (see docs/threading.md).
+		ASSERT_MAIN_THREAD();
+
 		ID3D11DeviceContext& context = m_device;
 
 		D3D11_MAPPED_SUBRESOURCE sub;

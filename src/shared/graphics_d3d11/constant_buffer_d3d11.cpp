@@ -1,6 +1,8 @@
 
 #include "constant_buffer_d3d11.h"
 
+#include "base/thread_checks.h"
+
 namespace mmo
 {
 	ConstantBufferD3D11::ConstantBufferD3D11(ID3D11Device& device, ID3D11DeviceContext& context, size_t size, const void* initialData)
@@ -69,6 +71,9 @@ namespace mmo
 
 	void ConstantBufferD3D11::Update(void* data)
 	{
+		// Maps the immediate context — main-thread-only (see docs/threading.md).
+		ASSERT_MAIN_THREAD();
+
         D3D11_MAPPED_SUBRESOURCE mappedResource;
         HRESULT hr = m_context.Map(m_buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
         if (SUCCEEDED(hr))

@@ -2,6 +2,7 @@
 
 #include "graphics_device_d3d11.h"
 
+#include "base/thread_checks.h"
 #include "constant_buffer_d3d11.h"
 #include "occlusion_query_d3d11.h"
 #include "structured_buffer_d3d11.h"
@@ -1344,6 +1345,10 @@ namespace mmo
 	void GraphicsDeviceD3D11::Render(const RenderOperation& operation)
 	{
 		PROFILE_SCOPE("D3D11::Render");
+
+		// The immediate context is main-thread-only; worker jobs must stage CPU data
+		// and leave GPU uploads/draws to the main thread (see docs/threading.md).
+		ASSERT_MAIN_THREAD();
 
 		GraphicsDevice::Render(operation);
 

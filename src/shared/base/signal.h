@@ -22,8 +22,15 @@
 //  intrusive_ptr.h:	mmo::intrusive_ptr<T,RefCount> class
 //  stable_list.h:		mmo::stable_list<T> class
 // Also, all classes defined have been moved to the mmo namespace. All occurrences
-// of assert have also been replaced by the custom ASSERT macro of this project, 
+// of assert have also been replaced by the custom ASSERT macro of this project,
 // which is defined in macros.h of the base library.
+//
+// THREADING CONTRACT: signals are main-thread-only. connect, disconnect and emission
+// use an unsynchronized intrusive list with non-atomic reference counts; calling any
+// of them concurrently — including emitting from a TaskSystem worker — is a data race.
+// Emission asserts thread affinity in Debug builds (inert in processes that never call
+// TaskSystem::Initialize). Worker code that needs to notify the main thread must post
+// a completion instead (see docs/threading.md).
 
 #pragma once
 
@@ -31,6 +38,7 @@
 #include "optional.h"
 #include "error.h"
 #include "stable_list.h"
+#include "thread_checks.h"
 
 #include <memory>
 #include <functional>
@@ -583,6 +591,8 @@ namespace mmo
 
         connection connect(slot_type slot, bool first = false)
         {
+            // Signals are main-thread-only by contract (see file header).
+            ASSERT_MAIN_THREAD();
             ASSERT(slot != nullptr);
 
             detail::connection_base* base = make_link(
@@ -654,6 +664,9 @@ namespace mmo
         template <class ValueCollector = Collector>
         auto invoke(Args const&... args) const -> decltype(ValueCollector{}.result())
         {
+            // Signals are main-thread-only by contract (see file header).
+            ASSERT_MAIN_THREAD();
+
 #ifndef SIMPLE_NO_EXCEPTIONS
             bool error{ false };
 #endif
