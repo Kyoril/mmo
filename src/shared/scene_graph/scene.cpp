@@ -1020,6 +1020,10 @@ namespace mmo
 
 		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
 
+		// The entity must know its scene so PopulateRenderQueue can defer bone-matrix
+		// evaluation to the scene's batched parallel pass.
+		entityIt->second->SetScene(this);
+
 		return entityIt->second.get();
 	}
 
