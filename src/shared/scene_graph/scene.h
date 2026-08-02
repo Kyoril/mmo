@@ -400,10 +400,19 @@ namespace mmo
 
 		void UpdateSceneGraph();
 
+		/// @brief Called by Entity::PopulateRenderQueue to defer skeletal bone-matrix evaluation.
+		///        All entities queued during a pass are computed in parallel (TaskSystem) right
+		///        before that pass renders, then their bone matrices upload on the main thread.
+		void QueueAnimationUpdate(Entity& entity);
+
 	private:
 		/// @brief Shared body of UpdateSimulation(); Render()'s inline fallback passes false so
 		///        the scene keeps falling back until the owner actually drives simulation itself.
 		void UpdateSimulationImpl(bool externallyDriven);
+
+		/// @brief Fork-join processing of the entities queued via QueueAnimationUpdate:
+		///        prime caches (main) → compute bone matrices (workers) → upload (main).
+		void ProcessPendingAnimationUpdates();
 
 	public:
 		void RenderSingleObject(Renderable& renderable, uint32 groupId);
@@ -665,6 +674,10 @@ namespace mmo
 
 		typedef std::map<String, std::unique_ptr<ParticleEmitter>> ParticleEmitterMap;
 		ParticleEmitterMap m_particleEmitters;
+
+		/// Skinned entities whose bone matrices are stale, queued during the current render
+		/// pass's queue build and processed as one parallel batch before the pass renders.
+		std::vector<Entity*> m_pendingAnimationUpdates;
 
 		/// Wall-clock timestamp of the previous particle-system update, used to compute a single
 		/// shared deltaTime for all emitters per frame (avoids per-emitter timing drift).

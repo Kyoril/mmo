@@ -253,6 +253,18 @@ namespace mmo
 		}
 	}
 
+	void Skeleton::PrepareAnimationsForSampling(const AnimationStateSet& animSet)
+	{
+		for (auto& animState : animSet.GetEnabledAnimationStates())
+		{
+			const LinkedSkeletonAnimationSource* linked = nullptr;
+			if (Animation* anim = GetAnimationImpl(animState->GetAnimationName(), &linked))
+			{
+				anim->PrepareForSampling();
+			}
+		}
+	}
+
 	bool Skeleton::HasAnimation(const String& name) const
 	{
 		return GetAnimationImpl(name) != nullptr;

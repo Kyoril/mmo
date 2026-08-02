@@ -75,11 +75,26 @@ namespace mmo
 		void DetachObjectFromBone(const MovableObject& obj);
 
 		void DetachAllObjectsFromBone();
+	public:
+		/// @brief True when the bone matrices are stale for the current animation-state frame.
+		///        Frame-based caching ensures animations are only computed once per frame even
+		///        though rendering runs multiple passes (shadow cascades, depth pre-pass, ...).
+		[[nodiscard]] bool NeedsAnimationUpdate() const;
+
+		/// @brief Main-thread step: primes the shared animation sampling caches and (re)creates
+		///        the bone-matrix constant buffer. Must run before ComputeBoneMatrices.
+		void PrepareAnimationSampling();
+
+		/// @brief Evaluates the skeleton pose into the bone matrix array. Pure CPU — safe on a
+		///        TaskSystem worker once PrepareAnimationSampling ran (see docs/threading.md).
+		void ComputeBoneMatrices();
+
+		/// @brief Main-thread step: uploads the computed bone matrices to the GPU.
+		void UploadBoneMatrices();
+
 	protected:
-		/// @brief Updates skeletal animations and bone matrices.
-		/// This method is optimized to avoid redundant updates when called multiple times
-		/// per frame (e.g., during shadow map and deferred rendering passes).
-		/// Uses frame-based caching to ensure animations are only computed once per frame.
+		/// @brief Updates skeletal animations and bone matrices synchronously (prepare +
+		///        compute + upload). Kept for callers outside the scene's batched pass.
 		void UpdateAnimations();
 
 		void AttachObjectImpl(MovableObject& pMovable, TagPoint& pAttachingPoint);

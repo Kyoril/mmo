@@ -203,6 +203,24 @@ namespace mmo
 		}
 	}
 
+	void Animation::PrepareForSampling()
+	{
+		ApplyBaseKeyFrame();
+
+		if (m_keyFrameTimesDirty)
+		{
+			BuildKeyFrameTimeList();
+		}
+
+		if (m_interpolationMode == InterpolationMode::Spline)
+		{
+			for (const auto& nodeTrack : m_nodeTrackList | std::views::values)
+			{
+				nodeTrack->PrepareSplines();
+			}
+		}
+	}
+
 	void Animation::DestroyNodeTrack(const uint16 handle)
 	{
 		if (const auto it = m_nodeTrackList.find(handle); it != m_nodeTrackList.end())

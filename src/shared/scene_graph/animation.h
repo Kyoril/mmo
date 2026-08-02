@@ -116,6 +116,15 @@ namespace mmo
 
 		void ApplyBaseKeyFrame();
 
+		/// @brief Eagerly builds every lazy sampling cache (base keyframe re-base, keyframe
+		///        time list / index maps, interpolation splines when in Spline mode).
+		///
+		/// Animations are shared between all entities using the same skeleton, and Apply()
+		/// builds these caches lazily from const methods. Calling this on the main thread
+		/// first makes concurrent Apply() calls from TaskSystem workers read-only on the
+		/// shared animation data (see docs/threading.md).
+		void PrepareForSampling();
+
 		void NotifyContainer(AnimationContainer* container) { m_container = container; }
 
 		AnimationContainer* GetContainer() const { return m_container; }

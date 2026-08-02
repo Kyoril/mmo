@@ -3,6 +3,7 @@
 #include "entity.h"
 
 #include "animation_state.h"
+#include "scene_graph/scene.h"
 #include "scene_graph/render_queue.h"
 #include "scene_graph/scene_node.h"
 #include "skeleton_instance.h"
@@ -142,7 +143,20 @@ namespace mmo
 
 		if (HasSkeleton())
 		{
-			UpdateAnimations();
+			// Defer bone-matrix evaluation to the scene's batched pass (parallel across all
+			// skinned entities queued this render pass); fall back to the synchronous path
+			// for entities that are not part of a scene.
+			if (Scene* scene = GetScene(); scene != nullptr)
+			{
+				if (NeedsAnimationUpdate())
+				{
+					scene->QueueAnimationUpdate(*this);
+				}
+			}
+			else
+			{
+				UpdateAnimations();
+			}
 
 			for (const auto& childIt : m_childObjects)
 			{
@@ -229,6 +243,58 @@ namespace mmo
 		}
 	}
 	
+	bool Entity::NeedsAnimationUpdate() const
+	{
+		if (!m_skeleton || !m_animationStates)
+		{
+			return false;
+		}
+
+		const uint64 currentAnimationFrame = m_animationStates->GetDirtyFrameNumber();
+		return m_lastAnimationUpdateFrame != currentAnimationFrame || m_animationsNeedUpdate;
+	}
+
+	void Entity::PrepareAnimationSampling()
+	{
+		ASSERT(m_skeleton);
+		ASSERT(m_animationStates);
+
+		// Animations are shared between entities using the same skeleton — build their lazy
+		// sampling caches here on the main thread so ComputeBoneMatrices only reads them.
+		m_skeleton->PrepareAnimationsForSampling(*m_animationStates);
+
+		const size_t requiredSize = static_cast<size_t>(m_skeleton->GetNumBones());
+		if (m_boneMatrices.size() != requiredSize)
+		{
+			m_boneMatrices.resize(requiredSize, Matrix4::Identity);
+			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * requiredSize, m_boneMatrices.data());
+		}
+	}
+
+	void Entity::ComputeBoneMatrices()
+	{
+		PROFILE_SCOPE("Entity::ComputeBoneMatrices");
+
+		ASSERT(m_skeleton);
+		ASSERT(m_animationStates);
+
+		// Apply animation states to the per-entity skeleton instance and evaluate the pose.
+		m_skeleton->SetAnimationState(*m_animationStates);
+		m_skeleton->GetBoneMatrices(m_boneMatrices.data());
+
+		// Update cache information
+		m_lastAnimationUpdateFrame = m_animationStates->GetDirtyFrameNumber();
+		m_animationsNeedUpdate = false;
+	}
+
+	void Entity::UploadBoneMatrices()
+	{
+		if (m_boneMatrixBuffer)
+		{
+			m_boneMatrixBuffer->Update(m_boneMatrices.data());
+		}
+	}
+
 	void Entity::UpdateAnimations()
 	{
 		PROFILE_SCOPE("Entity::UpdateAnimations");
@@ -236,32 +302,15 @@ namespace mmo
 		ASSERT(m_skeleton);
 		ASSERT(m_animationStates);
 
-		// Check if animations have been updated this frame already
-		const uint64 currentAnimationFrame = m_animationStates->GetDirtyFrameNumber();
-		if (m_lastAnimationUpdateFrame == currentAnimationFrame && !m_animationsNeedUpdate)
+		if (!NeedsAnimationUpdate())
 		{
 			// Animations are already up to date for this frame
 			return;
 		}
 
-		// Apply animation states
-		m_skeleton->SetAnimationState(*m_animationStates);
-
-		const uint16 numBones = m_skeleton->GetNumBones();
-		const size_t requiredSize = static_cast<size_t>(numBones);
-
-		if (m_boneMatrices.size() != requiredSize)
-		{
-			m_boneMatrices.resize(requiredSize, Matrix4::Identity);
-			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * requiredSize, m_boneMatrices.data());
-		}
-
-		m_skeleton->GetBoneMatrices(m_boneMatrices.data());
-		m_boneMatrixBuffer->Update(m_boneMatrices.data());
-
-		// Update cache information
-		m_lastAnimationUpdateFrame = currentAnimationFrame;
-		m_animationsNeedUpdate = false;
+		PrepareAnimationSampling();
+		ComputeBoneMatrices();
+		UploadBoneMatrices();
 	}
 
 	void Entity::AttachObjectImpl(MovableObject& pMovable, TagPoint& pAttachingPoint)

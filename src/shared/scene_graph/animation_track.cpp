@@ -345,6 +345,14 @@ namespace mmo
 		m_splineBuildNeeded = true;
 	}
 
+	void NodeAnimationTrack::PrepareSplines() const
+	{
+		if (m_splineBuildNeeded)
+		{
+			BuildInterpolationSplines();
+		}
+	}
+
 	std::shared_ptr<TransformKeyFrame> NodeAnimationTrack::GetNodeKeyFrame(const uint16 index) const
 	{
 		return std::static_pointer_cast<TransformKeyFrame>(GetKeyFrame(index));

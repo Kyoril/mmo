@@ -612,9 +612,54 @@ namespace mmo
 		return (distanceFactor + rangeFactor + intensityFactor) * withinRangeBonus;
 	}
 
+	void Scene::QueueAnimationUpdate(Entity& entity)
+	{
+		m_pendingAnimationUpdates.push_back(&entity);
+	}
+
+	void Scene::ProcessPendingAnimationUpdates()
+	{
+		if (m_pendingAnimationUpdates.empty())
+		{
+			return;
+		}
+
+		PROFILE_SCOPE("Scene::AnimationUpdates");
+
+		// Main-thread pre-pass: primes the shared animation caches (keyframe index maps,
+		// splines, base keyframes) and creates/sizes each entity's bone matrix buffer.
+		for (Entity* entity : m_pendingAnimationUpdates)
+		{
+			entity->PrepareAnimationSampling();
+		}
+
+		// Pose evaluation is per-entity independent (each entity owns its SkeletonInstance)
+		// and pure CPU after the pre-pass.
+		auto& entities = m_pendingAnimationUpdates;
+		TaskSystem::Get().ParallelFor(entities.size(), 1, [&entities](const size_t begin, const size_t end)
+		{
+			for (size_t i = begin; i < end; ++i)
+			{
+				entities[i]->ComputeBoneMatrices();
+			}
+		});
+
+		// GPU constant buffer uploads must stay on the main thread.
+		for (Entity* entity : m_pendingAnimationUpdates)
+		{
+			entity->UploadBoneMatrices();
+		}
+
+		m_pendingAnimationUpdates.clear();
+	}
+
 	void Scene::RenderVisibleObjects()
 	{
 		PROFILE_SCOPE("RenderVisibleObjects");
+
+		// Compute bone matrices for every skinned entity queued during this pass's queue
+		// build, in parallel, before any draw call needs them.
+		ProcessPendingAnimationUpdates();
 
 		m_renderQueue->SortByMaterial();
 
