@@ -21,6 +21,7 @@
 #include "object_mgr.h"
 #include "unit_movement.h"
 #include "base/clock.h"
+#include "base/profiler.h"
 #include "client_data/project.h"
 #include "frame_ui/font_mgr.h"
 #include "game/aura.h"
@@ -572,6 +573,10 @@ namespace mmo
 
 	void GameUnitC::AdvanceAnimationTimes(const float deltaTime)
 	{
+		// Scope inside the worker body so the perf HUD thread column proves the
+		// parallel path actually engages ("Multiple" instead of "Main").
+		PROFILE_SCOPE("GameUnitC::AdvanceAnimationTimes");
+
 		if (m_animationController)
 		{
 			m_animationController->AdvanceClipTimes(deltaTime);
