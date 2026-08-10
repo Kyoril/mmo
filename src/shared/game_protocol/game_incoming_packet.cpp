@@ -2,6 +2,9 @@
 
 #include "game_incoming_packet.h"
 
+// For MaxIncomingPacketSize, which lives with the other protocol constants.
+#include "game_protocol.h"
+
 #include <limits>
 
 #include "base/macros.h"
@@ -24,6 +27,13 @@ namespace mmo
 				>> io::read<uint16>(packet.m_id)
 				>> io::read<uint32>(packet.m_size))
 			{
+				if (packet.m_size > MaxIncomingPacketSize)
+				{
+					// See auth::IncomingPacket::Start — an announced size beyond the ceiling can
+					// never become a valid packet, so it must not be reported as still arriving.
+					return receive_state::Malformed;
+				}
+
 				std::size_t size = source.getRest();
 				if (size < packet.m_size)
 				{

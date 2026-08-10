@@ -70,6 +70,10 @@ namespace mmo
 
 		constexpr uint32 ProtocolVersion = 0x00000006;
 
+		/// Largest payload, in bytes, that a single incoming game packet may announce.
+		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
+		constexpr uint32 MaxIncomingPacketSize = 16 * 1024 * 1024;
+
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Realm section
 
