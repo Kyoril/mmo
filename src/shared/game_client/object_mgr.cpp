@@ -5,13 +5,34 @@
 #include "game_item_c.h"
 #include "unit_handle.h"
 #include "base/macros.h"
+#include "base/non_copyable.h"
 #include "base/profiler.h"
+#include "base/task_system.h"
+#include "scene_graph/animation_state.h"
 #include "client_data/project.h"
 #include "mmo_client/party_unit_handle.h"
 #include "mmo_client/systems/party_info.h"
 
 namespace mmo
 {
+	namespace
+	{
+		/// RAII toggle for the animation notify deferral window: guarantees deferral is
+		/// disabled again on every path out of the parallel clip advance.
+		struct NotifyDeferralScope final : NonCopyable
+		{
+			NotifyDeferralScope()
+			{
+				AnimationState::SetNotifyDeferralEnabled(true);
+			}
+
+			~NotifyDeferralScope() override
+			{
+				AnimationState::SetNotifyDeferralEnabled(false);
+			}
+		};
+	}
+
 	std::map<uint64, std::shared_ptr<GameObjectC>> ObjectMgr::ms_objectyByGuid;
 	uint64 ObjectMgr::ms_activePlayerGuid = 0;
 	uint64 ObjectMgr::ms_selectedObjectGuid = 0;
@@ -51,6 +72,38 @@ namespace mmo
 		for (const auto& [guid, object] : ms_objectyByGuid)
 		{
 			object->Update(deltaTime);
+		}
+
+		// Snapshot all units (shared_ptr so a notify handler removing objects below
+		// cannot leave dangling pointers behind).
+		std::vector<std::shared_ptr<GameObjectC>> units;
+		units.reserve(ms_objectyByGuid.size());
+		for (const auto& [guid, object] : ms_objectyByGuid)
+		{
+			if (object->IsUnit())
+			{
+				units.push_back(object);
+			}
+		}
+
+		{
+			PROFILE_SCOPE("ObjectMgr::AdvanceAnimations");
+
+			// Clip-time advance is pure per-unit CPU work; notify signals collected on
+			// workers are emitted on the main thread right after the join.
+			const NotifyDeferralScope deferralScope;
+			TaskSystem::Get().ParallelFor(units.size(), 4, [&units, deltaTime](const size_t begin, const size_t end)
+			{
+				for (size_t i = begin; i < end; ++i)
+				{
+					units[i]->AsUnit().AdvanceAnimationTimes(deltaTime);
+				}
+			});
+		}
+
+		for (const auto& unit : units)
+		{
+			unit->AsUnit().FlushDeferredAnimationNotifies();
 		}
 	}
 

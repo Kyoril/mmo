@@ -45,6 +45,26 @@ namespace mmo
 		}
 
 	public:
+		/// Enables or disables notify-emission deferral for ALL animation states.
+		///
+		/// While enabled, crossing a notify during SetTimePosition/AddTime collects the
+		/// notify instead of emitting the notifyTriggered signal (signals are main-thread-only,
+		/// see docs/threading.md). This lets clip times advance on worker threads; the main
+		/// thread then delivers the collected notifies via AnimationStateSet::FlushDeferredNotifies().
+		///
+		/// Must only be toggled from the main thread around a fork-join region. While deferral
+		/// is active, each AnimationStateSet (and all of its states) must only be advanced by
+		/// a single thread.
+		static void SetNotifyDeferralEnabled(bool enabled);
+
+		/// Returns whether notify-emission deferral is currently active.
+		[[nodiscard]] static bool IsNotifyDeferralEnabled();
+
+		/// Emits and clears all notifies collected while deferral was active.
+		/// Must be called from the main thread with deferral disabled.
+		void FlushDeferredNotifies();
+
+	public:
         [[nodiscard]] const String& GetAnimationName() const { return m_animationName; }
 
         [[nodiscard]] float GetTimePosition() const { return m_timePos; }
@@ -125,6 +145,11 @@ namespace mmo
 		float m_lastTimePos{ 0.0f };
 		/// Indices of notifies that have been triggered in current animation loop
 		std::vector<size_t> m_triggeredNotifies;
+		/// Notifies collected while deferral was active, waiting for the main-thread flush.
+		std::vector<const AnimationNotify*> m_pendingNotifies;
+
+		/// While true, notify crossings are collected instead of emitted (see SetNotifyDeferralEnabled).
+		static bool s_deferNotifies;
 	};
 
     // A map of animation states
@@ -165,9 +190,22 @@ namespace mmo
 
         [[nodiscard]] const EnabledAnimationStateList& GetEnabledAnimationStates() const { return m_enabledAnimationStates; }
 
+        /// Registers a state that collected its first deferred notify. Called by
+        /// AnimationState while notify deferral is active (single thread per set).
+        void RegisterPendingNotifyState(AnimationState* state);
+
+        /// Emits and clears all notifies its states collected while deferral was active.
+        /// Must be called from the main thread with deferral disabled. Handlers may
+        /// remove states from this set mid-flush (removed states are skipped), but must
+        /// not destroy the set itself — callers who allow that must pin its lifetime
+        /// (see GameUnitC::FlushDeferredAnimationNotifies).
+        void FlushDeferredNotifies();
+
     protected:
         unsigned long m_dirtyFrameNumber;
         AnimationStateMap m_animationStates;
         EnabledAnimationStateList m_enabledAnimationStates;
+        /// States with collected deferred notifies, waiting for FlushDeferredNotifies().
+        std::vector<AnimationState*> m_pendingNotifyStates;
 	};
 }

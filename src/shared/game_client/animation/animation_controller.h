@@ -51,8 +51,17 @@ namespace mmo
 		void NotifyMeshChanged();
 
 		/// @brief Per-frame update: evaluates the layer stack from the given context and
-		///	advances all animation weights and time positions. The single entry point.
+		///	advances all animation weights. Clip time positions are advanced separately by
+		///	AdvanceClipTimes() after all controllers were updated.
 		void Update(const AnimationContext& ctx);
+
+		/// @brief Advances the time position of all active clips. Must run after Update()
+		///	so newly enabled clips start at their reset positions.
+		///
+		///	Pure CPU work on controller-owned state: safe to run on a worker thread while
+		///	AnimationState notify deferral is active (see AnimationState::SetNotifyDeferralEnabled),
+		///	as long as no other thread touches this controller's entity.
+		void AdvanceClipTimes(float deltaTime);
 
 	public:
 		// Action layer (one-shot animations)

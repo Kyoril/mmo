@@ -21,6 +21,7 @@
 #include "object_mgr.h"
 #include "unit_movement.h"
 #include "base/clock.h"
+#include "base/profiler.h"
 #include "client_data/project.h"
 #include "frame_ui/font_mgr.h"
 #include "game/aura.h"
@@ -568,6 +569,36 @@ namespace mmo
 		ctx.dead = isDead;
 
 		m_animationController->Update(ctx);
+	}
+
+	void GameUnitC::AdvanceAnimationTimes(const float deltaTime)
+	{
+		// Scope inside the worker body so the perf HUD thread column proves the
+		// parallel path actually engages ("Multiple" instead of "Main").
+		PROFILE_SCOPE("GameUnitC::AdvanceAnimationTimes");
+
+		if (m_animationController)
+		{
+			m_animationController->AdvanceClipTimes(deltaTime);
+		}
+	}
+
+	void GameUnitC::FlushDeferredAnimationNotifies() const
+	{
+		if (!m_entity)
+		{
+			return;
+		}
+
+		// Pin the set so a notify handler swapping this unit's mesh mid-flush cannot
+		// destroy it under us. Notifies collected for a set that was already replaced
+		// by an earlier handler in this flush loop are dropped — before the parallel
+		// advance they fired inline during Update and were always delivered, but a
+		// mesh swap invalidates them anyway.
+		if (const std::shared_ptr<AnimationStateSet> animationStates = m_entity->GetAllAnimationStatesShared())
+		{
+			animationStates->FlushDeferredNotifies();
+		}
 	}
 
 	void GameUnitC::ApplyMovementInfo(const MovementInfo &movementInfo)

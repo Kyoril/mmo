@@ -51,6 +51,10 @@ namespace mmo
 
 		AnimationStateSet* GetAllAnimationStates() const;
 
+		/// @brief Returns the animation state set as a shared_ptr so callers can pin its
+		///	lifetime across code that might replace it (e.g. a mesh swap mid-iteration).
+		std::shared_ptr<AnimationStateSet> GetAllAnimationStatesShared() const { return m_animationStates; }
+
 		void SetMesh(MeshPtr mesh);
 
 		ICollidable* GetCollidable() override { return this; }

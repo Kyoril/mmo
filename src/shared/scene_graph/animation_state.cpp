@@ -1,5 +1,8 @@
 #include "animation_state.h"
 #include "animation.h"
+#include "animation_notify.h"
+
+#include "base/thread_checks.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,6 +10,21 @@
 
 namespace mmo
 {
+	bool AnimationState::s_deferNotifies = false;
+
+	void AnimationState::SetNotifyDeferralEnabled(const bool enabled)
+	{
+		// Toggling is a phase transition of the frame and must happen on the main
+		// thread while no worker is advancing animation states.
+		ASSERT_MAIN_THREAD();
+		s_deferNotifies = enabled;
+	}
+
+	bool AnimationState::IsNotifyDeferralEnabled()
+	{
+		return s_deferNotifies;
+	}
+
 	AnimationState::AnimationState(String name, AnimationStateSet& parent, const float timePos, const float length, const float weight, const bool enabled)
 		: m_blendMask(nullptr)
 		, m_animationName(std::move(name))
@@ -123,7 +141,20 @@ namespace mmo
 
 				if (shouldTrigger)
 				{
-					notifyTriggered(*notify, m_animationName, *this);
+					if (s_deferNotifies)
+					{
+						// Worker-thread phase: signals are main-thread-only, so collect the
+						// notify for the main-thread flush instead of emitting it here.
+						if (m_pendingNotifies.empty())
+						{
+							m_parent->RegisterPendingNotifyState(this);
+						}
+						m_pendingNotifies.push_back(notify.get());
+					}
+					else
+					{
+						notifyTriggered(*notify, m_animationName, *this);
+					}
 					m_triggeredNotifies.push_back(i);
 				}
 			}
@@ -157,6 +188,27 @@ namespace mmo
 	void AnimationState::AddTime(const float offset)
 	{
 		SetTimePosition(m_timePos + (offset * m_playRate));
+	}
+
+	void AnimationState::FlushDeferredNotifies()
+	{
+		ASSERT_MAIN_THREAD();
+		ASSERT(!s_deferNotifies);
+
+		if (m_pendingNotifies.empty())
+		{
+			return;
+		}
+
+		// Swap first so a handler that advances this state again cannot invalidate
+		// the list we are iterating.
+		std::vector<const AnimationNotify*> pending;
+		pending.swap(m_pendingNotifies);
+
+		for (const AnimationNotify* notify : pending)
+		{
+			notifyTriggered(*notify, m_animationName, *this);
+		}
 	}
 
 	void AnimationState::SetEnabled(const bool enabled)
@@ -314,6 +366,7 @@ namespace mmo
 		if (i != m_animationStates.end())
 		{
 			m_enabledAnimationStates.remove(i->second.get());
+			std::erase(m_pendingNotifyStates, i->second.get());
 			m_animationStates.erase(i);
 		}
 	}
@@ -322,6 +375,7 @@ namespace mmo
 	{
 		m_animationStates.clear();
 		m_enabledAnimationStates.clear();
+		m_pendingNotifyStates.clear();
 	}
 
 	void AnimationStateSet::CopyMatchingState(AnimationStateSet* target) const
@@ -351,6 +405,38 @@ namespace mmo
 	void AnimationStateSet::NotifyDirty()
 	{
 		++m_dirtyFrameNumber;
+	}
+
+	void AnimationStateSet::RegisterPendingNotifyState(AnimationState* state)
+	{
+		m_pendingNotifyStates.push_back(state);
+	}
+
+	void AnimationStateSet::FlushDeferredNotifies()
+	{
+		ASSERT_MAIN_THREAD();
+
+		if (m_pendingNotifyStates.empty())
+		{
+			return;
+		}
+
+		// Swap first so notify handlers cannot reallocate the list we are iterating.
+		std::vector<AnimationState*> states;
+		states.swap(m_pendingNotifyStates);
+
+		for (AnimationState* state : states)
+		{
+			// A handler for an earlier state may have removed this state from the set —
+			// RemoveAnimationState only cleans the member list, not this swapped-out
+			// copy, so verify the state still exists before touching it.
+			const bool stillPresent = std::any_of(m_animationStates.begin(), m_animationStates.end(),
+				[state](const auto& entry) { return entry.second.get() == state; });
+			if (stillPresent)
+			{
+				state->FlushDeferredNotifies();
+			}
+		}
 	}
 
 	void AnimationStateSet::NotifyAnimationStateEnabled(AnimationState* target, bool enabled)

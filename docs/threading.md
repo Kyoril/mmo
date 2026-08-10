@@ -37,7 +37,10 @@ work. It must **never** touch:
 
 1. **`signal<>`** — connect, disconnect and emission are main-thread-only (unsynchronized
    intrusive list, non-atomic refcounts). Emission asserts thread affinity in Debug.
-   To notify the main thread, post a completion (see "Completions" below).
+   To notify the main thread, post a completion (see "Completions" below) or collect
+   events on the worker and emit after the join — the pattern the parallel clip advance
+   uses (`AnimationState::SetNotifyDeferralEnabled` +
+   `AnimationStateSet::FlushDeferredNotifies`, driven by `ObjectMgr::UpdateObjects`).
 2. **`GraphicsDevice` / GPU resources** — the D3D11 immediate context is main-thread-only
    (`Render`, buffer `Map`/`Update` assert this). Workers stage CPU data; the main thread
    uploads after the join.
