@@ -421,15 +421,21 @@ namespace mmo
 			return;
 		}
 
-		// Swap first so notify handlers that trigger new deferrals (they should not,
-		// deferral is disabled during the flush) or remove states cannot invalidate
-		// the list we are iterating.
+		// Swap first so notify handlers cannot reallocate the list we are iterating.
 		std::vector<AnimationState*> states;
 		states.swap(m_pendingNotifyStates);
 
 		for (AnimationState* state : states)
 		{
-			state->FlushDeferredNotifies();
+			// A handler for an earlier state may have removed this state from the set —
+			// RemoveAnimationState only cleans the member list, not this swapped-out
+			// copy, so verify the state still exists before touching it.
+			const bool stillPresent = std::any_of(m_animationStates.begin(), m_animationStates.end(),
+				[state](const auto& entry) { return entry.second.get() == state; });
+			if (stillPresent)
+			{
+				state->FlushDeferredNotifies();
+			}
 		}
 	}
 

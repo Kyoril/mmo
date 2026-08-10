@@ -29,6 +29,7 @@ else()
 	set_source_files_properties(
 		${CMAKE_CURRENT_SOURCE_DIR}/test_crossfading_sound_loop.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_camera_frustum.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_animation_notify_deferral.cpp
 		PROPERTIES HEADER_FILE_ONLY TRUE
 	)
 endif()

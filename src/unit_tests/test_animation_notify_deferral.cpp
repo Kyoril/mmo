@@ -93,6 +93,69 @@ TEST_CASE("Deferred notifies do not re-trigger on later advances", "[animation_n
 	CHECK(fixture.triggered.size() == 1);
 }
 
+TEST_CASE("Removing a pending state before the flush drops its notifies safely", "[animation_notify]")
+{
+	NotifyTestFixture fixture(0.5f);
+
+	AnimationState::SetNotifyDeferralEnabled(true);
+	fixture.state->AddTime(0.6f);
+	AnimationState::SetNotifyDeferralEnabled(false);
+
+	fixture.stateSet.RemoveAnimationState("Attack");
+
+	// The removed state's collected notifies must be dropped, not emitted from
+	// a destroyed state.
+	fixture.stateSet.FlushDeferredNotifies();
+	CHECK(fixture.triggered.empty());
+}
+
+TEST_CASE("A handler removing another pending state during the flush skips it safely", "[animation_notify]")
+{
+	Animation animationA{ "AttackA", 1.0f };
+	Animation animationB{ "AttackB", 1.0f };
+
+	auto notifyA = std::make_unique<FootstepNotify>();
+	notifyA->SetTime(0.5f);
+	animationA.AddNotify(std::move(notifyA));
+
+	auto notifyB = std::make_unique<FootstepNotify>();
+	notifyB->SetTime(0.5f);
+	animationB.AddNotify(std::move(notifyB));
+
+	AnimationStateSet stateSet;
+	AnimationState* stateA = stateSet.CreateAnimationState("AttackA", 0.0f, 1.0f, 1.0f, true);
+	stateA->SetAnimation(&animationA);
+	AnimationState* stateB = stateSet.CreateAnimationState("AttackB", 0.0f, 1.0f, 1.0f, true);
+	stateB->SetAnimation(&animationB);
+
+	std::vector<String> triggered;
+	const scoped_connection connectionA{ stateA->notifyTriggered.connect(
+		[&triggered, &stateSet](const AnimationNotify&, const String& animationName, const AnimationState&)
+		{
+			triggered.push_back(animationName);
+
+			// Destroys stateB while the flush loop still holds a pointer to it.
+			stateSet.RemoveAnimationState("AttackB");
+		}) };
+	const scoped_connection connectionB{ stateB->notifyTriggered.connect(
+		[&triggered](const AnimationNotify&, const String& animationName, const AnimationState&)
+		{
+			triggered.push_back(animationName);
+		}) };
+
+	AnimationState::SetNotifyDeferralEnabled(true);
+	stateA->AddTime(0.6f);
+	stateB->AddTime(0.6f);
+	AnimationState::SetNotifyDeferralEnabled(false);
+
+	stateSet.FlushDeferredNotifies();
+
+	// Only stateA's notify may fire: its handler destroyed stateB, so the flush
+	// must skip the destroyed state instead of touching freed memory.
+	REQUIRE(triggered.size() == 1);
+	CHECK(triggered[0] == "AttackA");
+}
+
 TEST_CASE("Looping across a notify defers one emission per crossing", "[animation_notify]")
 {
 	NotifyTestFixture fixture(0.5f);

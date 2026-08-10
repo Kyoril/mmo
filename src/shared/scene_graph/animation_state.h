@@ -195,7 +195,10 @@ namespace mmo
         void RegisterPendingNotifyState(AnimationState* state);
 
         /// Emits and clears all notifies its states collected while deferral was active.
-        /// Must be called from the main thread with deferral disabled.
+        /// Must be called from the main thread with deferral disabled. Handlers may
+        /// remove states from this set mid-flush (removed states are skipped), but must
+        /// not destroy the set itself — callers who allow that must pin its lifetime
+        /// (see GameUnitC::FlushDeferredAnimationNotifies).
         void FlushDeferredNotifies();
 
     protected:

@@ -590,7 +590,12 @@ namespace mmo
 			return;
 		}
 
-		if (AnimationStateSet* animationStates = m_entity->GetAllAnimationStates())
+		// Pin the set so a notify handler swapping this unit's mesh mid-flush cannot
+		// destroy it under us. Notifies collected for a set that was already replaced
+		// by an earlier handler in this flush loop are dropped — before the parallel
+		// advance they fired inline during Update and were always delivered, but a
+		// mesh swap invalidates them anyway.
+		if (const std::shared_ptr<AnimationStateSet> animationStates = m_entity->GetAllAnimationStatesShared())
 		{
 			animationStates->FlushDeferredNotifies();
 		}
