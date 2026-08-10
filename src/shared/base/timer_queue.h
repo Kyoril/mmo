@@ -37,6 +37,17 @@ namespace mmo
 		/// @param time The timestamp at which the event shoud expire.
 		void AddEvent(const EventCallback& callback, GameTime time);
 
+		/// Cancels the pending timer and drops every queued event.
+		///
+		/// Needed at shutdown: an armed timer is outstanding io_service work, so a shutdown that
+		/// waits for the service to drain would otherwise wait until the last queued event's
+		/// deadline -- a minute or more for the player-count sampler. Note that Countdown::Cancel
+		/// does NOT do this: it only invalidates its own callback and leaves the timer armed.
+		///
+		/// Events added after this are ignored, so a callback that reschedules itself cannot
+		/// resurrect the queue mid-shutdown.
+		void Stop();
+
 		template<class T, class Type, class Result, class... Args>
 		void AddEvent(const GameTime time, T& instance, Result(Type::*method), Args&&... args)
 		{
@@ -79,6 +90,9 @@ namespace mmo
 		Timer m_timer;
 		std::optional<GameTime> m_timerTime;
 		Queue m_queue;
+
+		/// Set by Stop(). Keeps AddEvent from re-arming the timer during shutdown.
+		bool m_stopped = false;
 
 	private:
 		void Update(const asio::system_error &error);

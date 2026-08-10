@@ -46,6 +46,10 @@ namespace mmo
 		///	is also hosting the given instance id.
 		std::shared_ptr<World> GetIdealWorldNode(MapId mapId, InstanceId instanceId);
 
+		/// Disconnects every managed world node. Used at shutdown. See
+		/// PlayerManager::DisconnectAll for why this is a direct call.
+		void DisconnectAll();
+
 		/// Gets a world node by instance id.
 		std::shared_ptr<World> GetWorldByInstanceId(InstanceId instanceId);
 

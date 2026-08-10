@@ -66,6 +66,9 @@ namespace mmo
 		/// Gets the connection class used to send packets to the world node client.
 		Client &GetConnection() const { assert(m_connection); return *m_connection; }
 
+		/// Closes this world node's connection. Called on the io thread at shutdown.
+		void Disconnect();
+
 		/// Gets the world manager which manages all connected world instances.
 		WorldManager &GetManager() const { return m_manager; }
 

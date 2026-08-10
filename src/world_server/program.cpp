@@ -28,6 +28,7 @@
 
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
+#include "network/shutdown_signals.h"
 #include "game_server/world/universe.h"
 #include "proto_data/project.h"
 #include "assets/asset_registry.h"
@@ -212,10 +213,51 @@ namespace mmo
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Graceful shutdown
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		// Declared before the handler that captures it, so the handler can cancel its own wait.
+		std::unique_ptr<asio::signal_set> shutdownSignals;
+		shutdownSignals = InstallShutdownHandler(ioService,
+			[&realmConnector, &worldInstanceManager, &shutdownSignals, &timerQueue, &timer, &dbWork]()
+		{
+			ILOG("Shutdown signal received - stopping cleanly");
+
+			// Both queues hold an armed asio timer on the io_service, which is outstanding work.
+			// The reconnect delay lives in one of them, so stopping them is also what keeps the
+			// world node from dialling the realm back up mid-shutdown.
+			timerQueue.Stop();
+			timer.Stop();
+
+			// The world tick re-arms itself every 30ms, so it never stops being outstanding work
+			// on its own. This is the one that kept the node alive after everything else was shut.
+			worldInstanceManager.Stop();
+
+			// This node has no acceptor of its own; its only link is upstream to the realm. Closing
+			// it also stops the reconnect loop, which would otherwise dial back in mid-shutdown.
+			if (realmConnector)
+			{
+				realmConnector->Shutdown();
+			}
+
+			// The pending async_wait on the signal set is itself outstanding io_service work.
+			// Left armed, the service would never run dry and ioService.run() would never return.
+			if (shutdownSignals)
+			{
+				asio::error_code error;
+				shutdownSignals->cancel(error);
+			}
+
+			// Releasing the database work guard lets the db thread finish its queue and exit.
+			dbWork.reset();
+		});
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Launch worker threads
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// Create worker threads to process networking asynchronously (may be 0 as well)
+		// Single-threaded on purpose. Cross-session access in this server goes through raw
+		// pointers taken from the managers, which is only sound while one thread runs all of it.
 		const auto maxNetworkThreads = 0u;
 		ILOG("Running with " << maxNetworkThreads + 1 << " network threads");
 
@@ -240,9 +282,12 @@ namespace mmo
 			thread.join();
 		}
 
-		// Terminate the database worker and wait for pending database operations to finish
+		// Terminate the database worker and wait for pending database operations to finish.
+		// Already released by the shutdown handler on the signal path; harmless to repeat.
 		dbWork.reset();
 		dbThread.join();
+
+		ILOG("World server stopped cleanly");
 
 		return 0;
 	}

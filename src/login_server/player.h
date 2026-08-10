@@ -95,11 +95,14 @@ namespace mmo
 		std::string m_address;					// IP address in string format
 		std::string m_accountName;				// Account name in uppercase letters
 		auth::AuthLocale m_locale;				// Client language
-		uint8 m_version1;						// Major version: X.0.0.00000
-		uint8 m_version2;						// Minor version: 0.X.0.00000
-		uint8 m_version3;						// Patch version: 0.0.X.00000
-		uint16 m_build;							// Build version: 0.0.0.XXXXX
-		uint64 m_accountId;						// Account ID
+		// Initialized because a session can be logged, kicked or torn down before the logon
+		// challenge ever fills these in -- Kick() reads m_accountId unconditionally, which was an
+		// uninitialized read that surfaced as a garbage account id in the shutdown logs.
+		uint8 m_version1 = 0;					// Major version: X.0.0.00000
+		uint8 m_version2 = 0;					// Minor version: 0.X.0.00000
+		uint8 m_version3 = 0;					// Patch version: 0.0.X.00000
+		uint16 m_build = 0;						// Build version: 0.0.0.XXXXX
+		uint64 m_accountId = 0;					// Account ID
 		std::set<uint32> m_accountFeatureIds;	// Active account feature ids (loaded after login; used for realm visibility)
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;

@@ -2,6 +2,8 @@
 
 #include "player_manager.h"
 #include "player.h"
+
+#include <vector>
 #include "player_group.h"
 #include "motd_manager.h"
 
@@ -158,6 +160,22 @@ namespace mmo
 	const String& PlayerManager::GetMessageOfTheDay() const
 	{
 		return m_motdManager.GetMessageOfTheDay();
+	}
+
+	void PlayerManager::DisconnectAll()
+	{
+		// Copy the list out under the lock first: Kick() removes the player from this manager,
+		// which takes the same mutex.
+		std::vector<std::shared_ptr<Player>> players;
+		{
+			std::scoped_lock playerLock{ m_playerMutex };
+			players.assign(m_players.begin(), m_players.end());
+		}
+
+		for (const auto& player : players)
+		{
+			player->Kick();
+		}
 	}
 
 	void PlayerManager::ForEachPlayer(std::function<void(Player&)> callback) const

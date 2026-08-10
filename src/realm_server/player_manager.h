@@ -64,6 +64,14 @@ namespace mmo
 		/// Execute a function for each connected player.
 		void ForEachPlayer(std::function<void(Player&)> callback) const;
 
+		/// Disconnects every managed player. Used at shutdown so clients see a closed connection
+		/// rather than a socket that simply stops answering.
+		///
+		/// Unlike the login server's equivalent this calls Kick() directly: the realm server runs
+		/// all io work on one thread (see maxNetworkThreads in program.cpp), so the shutdown
+		/// handler is already on the thread that owns every connection.
+		void DisconnectAll();
+
 		/// Broadcasts the Message of the Day to all connected players.
 		void BroadcastMessageOfTheDay(const String& motd);
 

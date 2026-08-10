@@ -55,6 +55,10 @@ namespace mmo
 		/// Number of connected players, authenticated or not.
 		size_t GetPlayerCount();
 
+		/// Disconnects every managed player. Used at shutdown so peers see a closed connection
+		/// rather than a socket that simply stops answering. Safe to call from any thread.
+		void DisconnectAll();
+
 	private:
 
 		Players m_players;

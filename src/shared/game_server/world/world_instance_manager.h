@@ -57,6 +57,13 @@ namespace mmo
 		/// @param instanceId The id of the instance to destroy.
 		void DestroyInstance(InstanceId instanceId);
 
+		/// Stops the world update tick.
+		///
+		/// The tick re-arms itself every 30ms, so it is permanently outstanding io_context work.
+		/// A shutdown that waits for the context to drain never finishes while it is running --
+		/// this is what ends it.
+		void Stop();
+
 	private:
 		void OnUpdate();
 
@@ -75,6 +82,9 @@ namespace mmo
 
 		typedef std::vector<std::unique_ptr<WorldInstance>> WorldInstances;
 		asio::high_resolution_timer m_updateTimer;
+
+		/// Set by Stop(). Keeps ScheduleNextUpdate from re-arming the tick during shutdown.
+		bool m_stopped = false;
 
 		WorldInstances m_worldInstances;
 

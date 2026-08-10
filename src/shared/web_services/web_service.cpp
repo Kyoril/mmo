@@ -29,6 +29,24 @@ namespace mmo
 		{
 		}
 
+		void WebService::Stop()
+		{
+			m_server.Stop();
+
+			// Copied first: closing a client calls back into clientDisconnected, which erases from
+			// m_clients and would invalidate an iterator walking it.
+			const Clients clients = m_clients;
+			for (const auto &client : clients)
+			{
+				if (client)
+				{
+					client->getConnection().close();
+				}
+			}
+
+			m_clients.clear();
+		}
+
 		void WebService::clientDisconnected(WebClient &client)
 		{
 			for (Clients::iterator i = m_clients.begin(); i != m_clients.end(); ++i)

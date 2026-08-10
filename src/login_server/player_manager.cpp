@@ -3,6 +3,7 @@
 #include "player_manager.h"
 #include "player.h"
 #include "binary_io/string_sink.h"
+#include <vector>
 #include <cassert>
 
 namespace mmo
@@ -104,6 +105,24 @@ namespace mmo
 		// that asked for the kick -- the REST ban handler, above all -- and Kick() may only run
 		// on the connection's strand.
 		player->PostKick();
+	}
+
+	void PlayerManager::DisconnectAll()
+	{
+		// Copy the list out under the lock first: the kick removes the player from this manager,
+		// which takes the same mutex.
+		std::vector<std::shared_ptr<Player>> players;
+		{
+			std::scoped_lock playerLock{ m_playerMutex };
+			players.assign(m_players.begin(), m_players.end());
+		}
+
+		for (const auto& player : players)
+		{
+			// Posted, because this is called from the shutdown handler, which asio may run on
+			// either io thread.
+			player->PostKick();
+		}
 	}
 
 	size_t PlayerManager::GetPlayerCount()

@@ -27,6 +27,7 @@
 #include "base/constants.h"
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
+#include "network/shutdown_signals.h"
 
 #include "deps/cxxopts/cxxopts.hpp"
 
@@ -244,8 +245,9 @@ namespace mmo
 			connection->startReceiving();
 		};
 
-		// Keep realm busy
-		asio::io_context::work work{ ioService };
+		// Keeps the io_service alive while the realm has no outstanding io of its own. Held by
+		// pointer so the shutdown handler can release it -- a stack object could not be.
+		auto ioWork = std::make_shared<asio::io_context::work>(ioService);
 
 		// Load all guilds
 		GuildMgr guildMgr{ asyncGuildDb, playerManager };
@@ -358,10 +360,60 @@ namespace mmo
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Graceful shutdown
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		// Declared before the handler that captures it, so the handler can cancel its own wait.
+		std::unique_ptr<asio::signal_set> shutdownSignals;
+		shutdownSignals = InstallShutdownHandler(ioService,
+			[&worldServer, &playerServer, &webService, &playerManager, &worldManager,
+			 &shutdownSignals, &timerQueue, &dbTimerQueue, &ioWork, &dbWork]()
+		{
+			ILOG("Shutdown signal received - stopping cleanly");
+
+			// Stop taking new work first, so nothing arrives while the rest winds down. The web
+			// service counts: its acceptor holds a pending async_accept that would otherwise keep
+			// the io_service busy forever.
+			playerServer->Stop();
+			worldServer->Stop();
+			if (webService)
+			{
+				webService->Stop();
+			}
+
+			// Both queues hold an armed asio timer, which is outstanding work on whichever service
+			// they were built over -- so the db queue has to be stopped too, or the database
+			// thread never returns from run() no matter what the work guard does.
+			timerQueue.Stop();
+			dbTimerQueue.Stop();
+
+			// Then close what is already connected.
+			playerManager.DisconnectAll();
+			worldManager.DisconnectAll();
+
+			// The pending async_wait on the signal set is itself outstanding io_service work.
+			// Left armed, the service would never run dry and ioService.run() would never return.
+			if (shutdownSignals)
+			{
+				asio::error_code error;
+				shutdownSignals->cancel(error);
+			}
+
+			// Releasing the work guards is what lets both services drain and their run() calls
+			// return. Note this is the ONLY thing that winds them down: ioService.stop() would
+			// discard the closes above instead of running them.
+			ioWork.reset();
+			dbWork.reset();
+		});
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Launch worker threads
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// Create worker threads to process networking asynchronously (may be 0 as well)
+		// Single-threaded on purpose. Cross-session access throughout this server (player groups,
+		// guilds, chat channels, friends) goes through raw Player pointers taken from the
+		// managers, which is only sound while one thread runs all of it. See the threading note
+		// on PlayerManager before changing this.
 		const auto maxNetworkThreads = 0u;
 		ILOG("Running with " << maxNetworkThreads + 1 << " network threads");
 
@@ -386,9 +438,12 @@ namespace mmo
 			thread.join();
 		}
 
-		// Terminate the database worker and wait for pending database operations to finish
+		// Terminate the database worker and wait for pending database operations to finish.
+		// Already released by the shutdown handler on the signal path; harmless to repeat.
 		dbWork.reset();
 		dbThread.join();
+
+		ILOG("Realm server stopped cleanly");
 
 		return 0;
 	}
