@@ -8,6 +8,9 @@
 #include "catch.hpp"
 
 #include "network/connection.h"
+#include "network/server.h"
+#include "network/shutdown_signals.h"
+#include "base/signal.h"
 #include "auth_protocol/auth_protocol.h"
 #include "auth_protocol/auth_connection.h"
 #include "binary_io/writer.h"
@@ -16,6 +19,7 @@
 #include "asio/ip/tcp.hpp"
 #include "asio/write.hpp"
 
+#include <csignal>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -284,4 +288,121 @@ TEST_CASE("ConnectionPostKeepsConnectionAlive", "[network_connection]")
 
 	CHECK(PumpUntil(ioService, [&ran]() { return ran; }));
 	CHECK(weak.expired());
+}
+
+// Stop() must close the listening socket, so a later connect is refused rather than queued.
+// Without it there is no way to stop accepting during shutdown, and a server would keep taking
+// new connections while it tears itself down.
+TEST_CASE("ServerStopsAcceptingAfterStop", "[network_connection]")
+{
+	asio::io_service ioService;
+
+	// Bind an ephemeral port by hand first so the test knows which port to probe, then release
+	// it so the Server under test can take it.
+	uint16 boundPort = 0;
+	{
+		asio::ip::tcp::acceptor probe(ioService,
+			asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 0));
+		boundPort = probe.local_endpoint().port();
+	}
+
+	uint32 acceptedCount = 0;
+	{
+		Server<TestConnection> server(ioService, boundPort,
+			[&ioService](asio::io_service&) { return TestConnection::create(ioService, nullptr); });
+
+		const scoped_connection connected{ server.connected().connect(
+			[&acceptedCount](const std::shared_ptr<TestConnection>&) { ++acceptedCount; }) };
+
+		server.startAccept();
+		server.Stop();
+
+		asio::ip::tcp::socket probe(ioService);
+		bool connectFinished = false;
+		asio::error_code connectError;
+		probe.async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), boundPort),
+			[&connectFinished, &connectError](const asio::error_code& error)
+		{
+			connectError = error;
+			connectFinished = true;
+		});
+
+		CHECK(PumpUntil(ioService, [&connectFinished]() { return connectFinished; }));
+		CHECK(connectError);
+	}
+
+	CHECK(acceptedCount == 0);
+}
+
+// The listener must survive a transient accept failure. Returning without re-arming -- which is
+// what the accept handler used to do on any error -- means one EMFILE under a connect storm
+// stops the tier from ever accepting again, while it keeps running and looks healthy.
+TEST_CASE("ServerKeepsAcceptingAfterTheFirstConnection", "[network_connection]")
+{
+	asio::io_service ioService;
+
+	uint16 boundPort = 0;
+	{
+		asio::ip::tcp::acceptor probe(ioService,
+			asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 0));
+		boundPort = probe.local_endpoint().port();
+	}
+
+	Server<TestConnection> server(ioService, boundPort,
+		[&ioService](asio::io_service&) { return TestConnection::create(ioService, nullptr); });
+
+	uint32 acceptedCount = 0;
+	const scoped_connection connected{ server.connected().connect(
+		[&acceptedCount](const std::shared_ptr<TestConnection>&) { ++acceptedCount; }) };
+
+	server.startAccept();
+
+	std::vector<std::shared_ptr<asio::ip::tcp::socket>> clients;
+	for (int index = 0; index < 3; ++index)
+	{
+		auto client = std::make_shared<asio::ip::tcp::socket>(ioService);
+		client->async_connect(asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), boundPort),
+			[](const asio::error_code&) {});
+		clients.push_back(std::move(client));
+	}
+
+	CHECK(PumpUntil(ioService, [&acceptedCount]() { return acceptedCount >= 3; }));
+	CHECK(acceptedCount == 3);
+
+	server.Stop();
+}
+
+// The shutdown handler must fire when the signal arrives, and its wait must be cancellable.
+//
+// The second half is the subtle one: a pending async_wait counts as outstanding io_service work,
+// so a shutdown sequence that releases its work guards and waits for the service to drain will
+// hang forever if the signal wait is left armed. Every program.cpp shutdown path depends on it.
+TEST_CASE("ShutdownHandlerFiresAndCanBeCancelled", "[network_connection]")
+{
+	SECTION("raising the signal runs the handler")
+	{
+		asio::io_service ioService;
+		bool handled = false;
+		auto signals = InstallShutdownHandler(ioService, [&handled]() { handled = true; });
+
+		std::raise(SIGINT);
+
+		CHECK(PumpUntil(ioService, [&handled]() { return handled; }));
+	}
+
+	SECTION("cancelling lets the service drain")
+	{
+		asio::io_service ioService;
+		bool handled = false;
+		auto signals = InstallShutdownHandler(ioService, [&handled]() { handled = true; });
+
+		asio::error_code error;
+		signals->cancel(error);
+		CHECK_FALSE(error);
+
+		// run() returns only because the cancelled wait is no longer outstanding work. If this
+		// hangs, every server's shutdown would hang the same way.
+		ioService.run();
+		CHECK_FALSE(handled);
+	}
 }
