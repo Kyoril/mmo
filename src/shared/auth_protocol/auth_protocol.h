@@ -18,6 +18,16 @@ namespace mmo
 
 		constexpr uint32 ProtocolVersion = 0x00000003;
 
+		/// Largest payload, in bytes, that a single incoming auth packet may announce.
+		///
+		/// The size field is read straight off the wire before any of it is trusted, so without
+		/// a ceiling a peer can announce an arbitrary length and the receiving connection will
+		/// buffer indefinitely waiting for a body that never arrives. The value is deliberately
+		/// far above any packet this protocol actually carries: it is a garbage filter, not a
+		/// tuning knob. Per-connection tightening is done with
+		/// AbstractConnection::SetMaxReceiveBufferSize.
+		constexpr uint32 MaxIncomingPacketSize = 16 * 1024 * 1024;
+
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Login section
 

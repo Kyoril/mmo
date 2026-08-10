@@ -52,13 +52,27 @@ namespace mmo
 		RegisterPacketHandler(auth::realm_login_packet::LogonChallenge, *this, &Realm::HandleLogonChallenge);
 	}
 
+	void Realm::PostDestroy()
+	{
+		// m_connection is assigned once in the constructor and never reassigned -- Destroy()
+		// closes it rather than releasing it -- which is what makes reading it from another
+		// thread safe.
+		auto self = shared_from_this();
+		m_connection->Post([self]() { self->Destroy(); });
+	}
+
 	void Realm::Destroy()
 	{
 		m_pingTimeoutCountdown.Cancel();
 		m_authenticated = false;
 
 		m_connection->resetListener();
-		m_connection.reset();
+
+		// close(), not reset(). Dropping the shared_ptr leaves the connection alive -- the
+		// outstanding async_read holds its own reference -- so the socket stayed open with a null
+		// listener and the realm never saw a disconnect. Keeping the pointer for the object's
+		// lifetime is also what lets NotifyAccountBanned read it from another thread.
+		m_connection->close();
 
 		m_manager.RealmDisconnected(*this);
 	}
@@ -172,6 +186,7 @@ namespace mmo
 		{
 			if (auto strongThis = weakThis.lock())
 			{
+				std::scoped_lock lock{ strongThis->m_requirementsMutex };
 				strongThis->m_requirements = std::move(requirements);
 			}
 		};
@@ -181,6 +196,11 @@ namespace mmo
 
 	bool Realm::IsVisibleTo(const std::set<uint32>& accountFeatures) const
 	{
+		// Locked because ReloadRequirements replaces this vector from the database result
+		// dispatcher, which runs on whichever io thread picks it up, while this is read from a
+		// player's strand while building the realm list.
+		std::scoped_lock lock{ m_requirementsMutex };
+
 		for (const auto& requirement : m_requirements)
 		{
 			if (requirement.requireVisibility && accountFeatures.find(requirement.featureId) == accountFeatures.end())
@@ -194,6 +214,9 @@ namespace mmo
 
 	bool Realm::CanLoginWith(const std::set<uint32>& accountFeatures) const
 	{
+		// See IsVisibleTo.
+		std::scoped_lock lock{ m_requirementsMutex };
+
 		for (const auto& requirement : m_requirements)
 		{
 			// Logging in requires both login- and visibility-gated features.
@@ -220,12 +243,19 @@ namespace mmo
 			return;
 		}
 
-		// Send response packet to the realm server
-		m_connection->sendSinglePacket([accountId](auth::OutgoingPacket& packet) {
-			packet.Start(auth::login_realm_packet::AccountBanned);
-			packet << io::write<uint64>(accountId);
-			packet.Finish();
-			});
+		// Posted, not sent directly. This is reached from RealmManager::NotifyAccountBanned,
+		// which the REST ban handler calls on whichever io thread served the request, while this
+		// connection's own handlers run on its strand -- and sendSinglePacket touches the send
+		// buffer that flush() and the write completion handler also touch.
+		auto self = shared_from_this();
+		m_connection->Post([self, accountId]()
+		{
+			self->m_connection->sendSinglePacket([accountId](auth::OutgoingPacket& packet) {
+				packet.Start(auth::login_realm_packet::AccountBanned);
+				packet << io::write<uint64>(accountId);
+				packet.Finish();
+				});
+		});
 	}
 
 	void Realm::RegisterPacketHandler(uint8 opCode, PacketHandler && handler)

@@ -3,6 +3,7 @@
 #include "player_manager.h"
 #include "player.h"
 #include "binary_io/string_sink.h"
+#include <vector>
 #include <cassert>
 
 namespace mmo
@@ -48,7 +49,7 @@ namespace mmo
 		m_players.push_back(std::move(added));
 	}
 
-	Player * PlayerManager::GetPlayerByAccountName(const String &accountName)
+	std::shared_ptr<Player> PlayerManager::GetPlayerByAccountName(const String &accountName)
 	{
 		std::scoped_lock playerLock{ m_playerMutex };
 
@@ -63,13 +64,13 @@ namespace mmo
 
 		if (p != m_players.end())
 		{
-			return (*p).get();
+			return *p;
 		}
 
 		return nullptr;
 	}
 
-	Player * PlayerManager::GetPlayerByAccountID(uint64 accountId)
+	std::shared_ptr<Player> PlayerManager::GetPlayerByAccountID(uint64 accountId)
 	{
 		std::scoped_lock playerLock{ m_playerMutex };
 
@@ -84,7 +85,7 @@ namespace mmo
 
 		if (p != m_players.end())
 		{
-			return (*p).get();
+			return *p;
 		}
 
 		return nullptr;
@@ -92,31 +93,41 @@ namespace mmo
 
 	void PlayerManager::KickPlayerByAccountId(uint64 accountId)
 	{
-		std::shared_ptr<Player> player;
+		// The lookup takes and releases the mutex itself, and PostKick takes no lock at all, so
+		// the deadlock this function used to guard against by hand cannot arise.
+		const auto player = GetPlayerByAccountID(accountId);
+		if (!player)
+		{
+			return;
+		}
 
-		// We do finding the player in a scope so that we only lock the m_playerMutex as long as we really need to.
-		// After we found the player, we release it because kicking the player will also try to remove him from the list
-		// of players, which also tries to lock the mutex which would result in a deadlock.
+		// Posted rather than called directly: this runs on whichever thread served the request
+		// that asked for the kick -- the REST ban handler, above all -- and Kick() may only run
+		// on the connection's strand.
+		player->PostKick();
+	}
+
+	void PlayerManager::DisconnectAll()
+	{
+		// Copy the list out under the lock first: the kick removes the player from this manager,
+		// which takes the same mutex.
+		std::vector<std::shared_ptr<Player>> players;
 		{
 			std::scoped_lock playerLock{ m_playerMutex };
-
-			const auto p = std::find_if(
-				m_players.begin(),
-				m_players.end(),
-				[&accountId](const std::shared_ptr<Player>& p)
-				{
-					return (p->IsAuthenticated() && accountId == p->GetAccountId());
-				});
-
-			if (p != m_players.end())
-			{
-				player = *p;
-			}
+			players.assign(m_players.begin(), m_players.end());
 		}
 
-		if (player)
+		for (const auto& player : players)
 		{
-			player->Kick();
+			// Posted, because this is called from the shutdown handler, which asio may run on
+			// either io thread.
+			player->PostKick();
 		}
+	}
+
+	size_t PlayerManager::GetPlayerCount()
+	{
+		std::scoped_lock playerLock{ m_playerMutex };
+		return m_players.size();
 	}
 }

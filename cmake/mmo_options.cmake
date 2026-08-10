@@ -52,6 +52,12 @@ option(MMO_BUILD_TESTS "If checked, will try to test programs." ON)
 # If enabled, disables MSVC iterator debugging in debug builds for better performance
 option(MMO_DISABLE_ITERATOR_DEBUG "If checked, disables MSVC iterator debugging in debug builds." ON)
 
+# MSVC has no thread sanitizer, so a data race cannot be proven absent on this toolchain.
+# AddressSanitizer does not detect races either -- but it does detect what these races
+# manifest as, which is use-after-free and heap corruption. Used together with the
+# [.stress] tests. See docs/testing-servers.md.
+option(MMO_ENABLE_ASAN "Build with AddressSanitizer. Use a separate build directory." OFF)
+
 # If enabled, unit tests will be built.
 set(MMO_SRP6_N "894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7" CACHE STRING "Hex representation of a prime number for srp6a calculations.")
 set(MMO_SRP6_g "07" CACHE STRING "Hex representation of a prime number for srp6a calculations.")

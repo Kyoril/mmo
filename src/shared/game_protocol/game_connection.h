@@ -91,7 +91,18 @@ namespace mmo
 			{
 				return m_sendBuffer;
 			}
-			
+
+			void SetMaxReceiveBufferSize(std::size_t size) override
+			{
+				m_maxReceiveBufferSize = size;
+			}
+
+			void Post(std::function<void()> work) override
+			{
+				auto self = this->shared_from_this();
+				asio::post(m_strand, [self, work = std::move(work)]() { work(); });
+			}
+
 			void startReceiving() override
 			{
 				m_isClosedOnParsing = false;
@@ -182,6 +193,10 @@ namespace mmo
 			bool m_isClosedOnParsing;
 			size_t m_decryptedUntil;
 			bool m_isReceiving;
+			/// Defaults to the protocol ceiling (game::MaxIncomingPacketSize, 16 MiB). Named as a
+			/// literal rather than by including the protocol header, matching Connection.
+			std::size_t m_maxReceiveBufferSize = 16 * 1024 * 1024;
+
 			asio::strand<asio::any_io_executor> m_strand;
 
 		private:
@@ -351,6 +366,37 @@ namespace mmo
 					}
 				}
 
+				// Whatever is left is a single incomplete packet. If that alone is over the cap
+				// it can only grow further, so there is nothing to wait for. See
+				// Connection::parsePackets for the attack this closes.
+				if (m_received.size() > m_maxReceiveBufferSize)
+				{
+					ELOG("Peer exceeded the maximum receive buffer size (" << m_received.size()
+						<< " > " << m_maxReceiveBufferSize << " bytes) - dropping connection");
+
+					if (m_listener)
+					{
+						m_listener->connectionMalformedPacket();
+						m_listener = nullptr;
+					}
+
+					m_received.clear();
+					m_decryptedUntil = 0;
+
+					// close(), not reset(): releasing the socket while a write is still in flight
+					// leaves that write's completion handler to route into Disconnected(), which
+					// would then be looking at a socket that no longer exists. Closing keeps the
+					// pointer valid for whatever handlers are still queued. (Disconnected() also
+					// null-checks now, but that is the backstop, not the design.)
+					if (m_socket && m_socket->is_open())
+					{
+						asio::error_code error;
+						m_socket->close(error);
+					}
+
+					return;
+				}
+
 				BeginReceive();
 			}
 
@@ -362,7 +408,11 @@ namespace mmo
 					m_listener = nullptr;
 				}
 
-				if (m_socket->is_open())
+				// Null-checked, matching IsConnected(). Several teardown paths in this class
+				// release m_socket outright, and any handler still in flight when that happens --
+				// a write completing with an error, above all -- lands here afterwards. Without
+				// the check that is a null dereference on a path a peer can provoke.
+				if (m_socket && m_socket->is_open())
 				{
 					asio::error_code error;
 					m_socket->shutdown(asio::ip::tcp::socket::shutdown_both, error);

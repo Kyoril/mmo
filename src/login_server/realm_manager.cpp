@@ -2,6 +2,8 @@
 
 #include "realm_manager.h"
 #include "realm.h"
+
+#include <vector>
 #include "binary_io/string_sink.h"
 #include <cassert>
 
@@ -84,6 +86,25 @@ namespace mmo
 		}
 
 		return nullptr;
+	}
+
+	void RealmManager::DisconnectAll()
+	{
+		// Copy out under the lock: Destroy() removes the realm from this manager, which takes the
+		// same mutex.
+		std::vector<std::shared_ptr<Realm>> realms;
+		{
+			std::scoped_lock scopedLock{ m_realmsMutex };
+			realms.assign(m_realms.begin(), m_realms.end());
+		}
+
+		for (const auto& realm : realms)
+		{
+			// Posted for the same reason as PlayerManager::DisconnectAll: Destroy() tears down
+			// state the connection's own handlers touch, and the shutdown handler may run on
+			// either io thread.
+			realm->PostDestroy();
+		}
 	}
 
 	void RealmManager::NotifyAccountBanned(uint64 accountId)

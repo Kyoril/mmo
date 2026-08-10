@@ -185,7 +185,20 @@ namespace mmo
 
 	void WorldInstanceManager::ScheduleNextUpdate()
 	{
+		if (m_stopped)
+		{
+			return;
+		}
+
 		m_updateTimer.expires_from_now(std::chrono::milliseconds(30));
 		m_updateTimer.async_wait([this](const asio::error_code& error) { if (!error) OnUpdate(); });
+	}
+
+	void WorldInstanceManager::Stop()
+	{
+		m_stopped = true;
+
+		asio::error_code error;
+		m_updateTimer.cancel(error);
 	}
 }

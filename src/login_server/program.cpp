@@ -32,6 +32,7 @@
 
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
+#include "network/shutdown_signals.h"
 
 namespace mmo
 {
@@ -155,7 +156,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createRealm = [&realmManager, &asyncDatabase, &timerQueue](std::shared_ptr<Realm::Client> connection)
+		const auto createRealm = [&realmManager, &asyncDatabase, &timerQueue, &config](std::shared_ptr<Realm::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -166,6 +167,14 @@ namespace mmo
 			catch (const asio::system_error &error)
 			{
 				ELOG(error.what());
+				return;
+			}
+
+			if (realmManager.HasCapacityBeenReached())
+			{
+				WLOG("Rejecting realm connection from " << address << ": the configured capacity of "
+					<< config.maxRealms << " has been reached");
+				connection->close();
 				return;
 			}
 
@@ -201,7 +210,7 @@ namespace mmo
 		}
 		
 		// Careful: Called by multiple threads!
-		const auto createPlayer = [&playerManager, &realmManager, &asyncDatabase](std::shared_ptr<Player::Client> connection)
+		const auto createPlayer = [&playerManager, &realmManager, &asyncDatabase, &config](std::shared_ptr<Player::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -214,6 +223,20 @@ namespace mmo
 				ELOG(error.what());
 				return;
 			}
+
+			if (playerManager.HasPlayerCapacityBeenReached())
+			{
+				WLOG("Rejecting player connection from " << address << ": the configured capacity of "
+					<< config.maxPlayers << " has been reached");
+				connection->close();
+				return;
+			}
+
+			// Client connections are anonymous and reachable from the internet, so they get a far
+			// tighter bound than the 16 MiB protocol ceiling. The largest packet a login client
+			// sends is the logon proof at ~52 bytes; 64 KiB leaves several orders of magnitude of
+			// headroom while making the buffer irrelevant as an attack surface.
+			connection->SetMaxReceiveBufferSize(64 * 1024);
 
 			auto player = std::make_shared<Player>(playerManager, realmManager, asyncDatabase, connection, address.to_string());
 			ILOG("Incoming player connection from " << address);
@@ -274,6 +297,53 @@ namespace mmo
 		playerCountSampleCountdown.SetEnd(GetAsyncTimeMs() + constants::OneMinute);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Graceful shutdown
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		// Declared before the handler that captures it, so the handler can cancel its own wait.
+		std::unique_ptr<asio::signal_set> shutdownSignals;
+		shutdownSignals = InstallShutdownHandler(ioService,
+			[&realmServer, &playerServer, &webService, &playerManager, &realmManager,
+			 &shutdownSignals, &timerQueue, &dbWork]()
+		{
+			ILOG("Shutdown signal received - stopping cleanly");
+
+			// Stop taking new work first, so nothing arrives while the rest winds down. The web
+			// service counts: its acceptor holds a pending async_accept that would otherwise keep
+			// the io_service busy forever.
+			playerServer->Stop();
+			realmServer->Stop();
+			if (webService)
+			{
+				webService->Stop();
+			}
+
+			// Cancelling the countdown is not enough -- that only invalidates its callback and
+			// leaves the queue's timer armed, which is itself outstanding work. Stopping the whole
+			// queue is what actually lets the service drain.
+			timerQueue.Stop();
+
+			// Then close what is already connected. These post to each connection's own strand,
+			// so they run as the io_service keeps dispatching -- which is exactly why the service
+			// must be allowed to drain rather than be stopped.
+			playerManager.DisconnectAll();
+			realmManager.DisconnectAll();
+
+			// The pending async_wait on the signal set is itself outstanding io_service work.
+			// Left armed, the service would never run dry and ioService.run() would never return.
+			if (shutdownSignals)
+			{
+				asio::error_code error;
+				shutdownSignals->cancel(error);
+			}
+
+			// Releasing the database work guard lets the db thread finish its queue and exit.
+			// Note this is the ONLY thing that winds these services down: ioService.stop() would
+			// discard the closes just posted above instead of running them.
+			dbWork.reset();
+		});
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Launch worker threads
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -302,9 +372,12 @@ namespace mmo
 			thread.join();
 		}
 
-		// Terminate the database worker and wait for pending database operations to finish
+		// Terminate the database worker and wait for pending database operations to finish.
+		// Already released by the shutdown handler on the signal path; harmless to repeat.
 		dbWork.reset();
 		dbThread.join();
+
+		ILOG("Login server stopped cleanly");
 
 		return 0;
 	}

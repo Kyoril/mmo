@@ -45,7 +45,17 @@ namespace mmo
 			const std::string &address);
 
 		/// Disconnects the player if still connected.
+		///
+		/// May only be called on the connection's strand. Callers on any other thread must use
+		/// PostKick instead.
 		void Kick();
+
+		/// Requests a kick from any thread. The kick itself runs on the connection's strand.
+		///
+		/// Kick() tears down state that the connection's own handlers also touch, so calling it
+		/// directly is only safe from the strand. Callers that are not on it -- the REST ban
+		/// handler, above all -- must come through here.
+		void PostKick();
 
 		/// Gets the player connection class used to send packets to the client.
 		inline Client &GetConnection() { assert(m_connection); return *m_connection; }
@@ -53,7 +63,9 @@ namespace mmo
 		inline PlayerManager &GetManager() const { return m_manager; }
 		/// Determines whether the player is authentificated.
 		/// @returns true if the player is authentificated.
-		inline bool IsAuthenticated() const { return false;/* (getSession() != nullptr);*/ }
+		/// Determines whether the player has completed the SRP6 exchange.
+		/// @returns true if a session key has been negotiated.
+		inline bool IsAuthenticated() const { return !m_sessionKey.isZero(); }
 		/// Gets the account name the player is logged in with.
 		inline const std::string &GetAccountName() const { return m_accountName; }
 		/// Gets the account id the player is logged in with.
@@ -83,11 +95,14 @@ namespace mmo
 		std::string m_address;					// IP address in string format
 		std::string m_accountName;				// Account name in uppercase letters
 		auth::AuthLocale m_locale;				// Client language
-		uint8 m_version1;						// Major version: X.0.0.00000
-		uint8 m_version2;						// Minor version: 0.X.0.00000
-		uint8 m_version3;						// Patch version: 0.0.X.00000
-		uint16 m_build;							// Build version: 0.0.0.XXXXX
-		uint64 m_accountId;						// Account ID
+		// Initialized because a session can be logged, kicked or torn down before the logon
+		// challenge ever fills these in -- Kick() reads m_accountId unconditionally, which was an
+		// uninitialized read that surfaced as a garbage account id in the shutdown logs.
+		uint8 m_version1 = 0;					// Major version: X.0.0.00000
+		uint8 m_version2 = 0;					// Minor version: 0.X.0.00000
+		uint8 m_version3 = 0;					// Patch version: 0.0.X.00000
+		uint16 m_build = 0;						// Build version: 0.0.0.XXXXX
+		uint64 m_accountId = 0;					// Account ID
 		std::set<uint32> m_accountFeatureIds;	// Active account feature ids (loaded after login; used for realm visibility)
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;

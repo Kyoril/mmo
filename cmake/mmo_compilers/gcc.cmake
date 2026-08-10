@@ -20,3 +20,9 @@ endif()
 
 # Zlib is required for GCC builds
 find_package(ZLIB REQUIRED)
+
+if (MMO_ENABLE_ASAN)
+	message(STATUS "AddressSanitizer enabled")
+	add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+	add_link_options(-fsanitize=address)
+endif()

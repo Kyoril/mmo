@@ -70,3 +70,22 @@ TEST_CASE("GamePacketCheck", "[game_protocol]")
 	CHECK(tmpFloat == floatTest);
 	CHECK(tmpString == testString);
 }
+
+// See AuthPacketRejectsOversizedPayload — the encrypted client link needs the same ceiling.
+TEST_CASE("GamePacketRejectsOversizedPayload", "[game_protocol]")
+{
+	std::vector<char> buffer;
+
+	const uint16 opCode = static_cast<uint16>(game::client_realm_packet::ChatMessage);
+	const char* const opCodeBytes = reinterpret_cast<const char*>(&opCode);
+	buffer.insert(buffer.end(), opCodeBytes, opCodeBytes + sizeof(opCode));
+
+	const uint32 announcedSize = game::MaxIncomingPacketSize + 1;
+	const char* const announcedBytes = reinterpret_cast<const char*>(&announcedSize);
+	buffer.insert(buffer.end(), announcedBytes, announcedBytes + sizeof(announcedSize));
+
+	io::MemorySource src{ buffer };
+	game::IncomingPacket packet;
+
+	CHECK(game::IncomingPacket::Start(packet, src) == ReceiveState::Malformed);
+}

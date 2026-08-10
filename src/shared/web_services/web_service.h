@@ -24,6 +24,13 @@ namespace mmo
 			~WebService();
 
 			void clientDisconnected(WebClient &client);
+
+			/// Stops accepting new HTTP connections and closes the ones already open.
+			///
+			/// The acceptor holds a pending async_accept for the whole life of the service, which
+			/// is outstanding io_service work -- so without this a shutdown that waits for the
+			/// service to drain never finishes, no matter what else has been closed.
+			void Stop();
 			asio::io_service &getIOService() const;
 
 			virtual WebClientPtr createClient(std::shared_ptr<Client> connection) = 0;

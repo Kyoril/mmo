@@ -19,8 +19,27 @@ namespace mmo
 
 	void TimerQueue::AddEvent(const EventCallback& callback, GameTime time)
 	{
+		if (m_stopped)
+		{
+			return;
+		}
+
 		m_queue.emplace(callback, time);
 		SetTimer();
+	}
+
+	void TimerQueue::Stop()
+	{
+		m_stopped = true;
+
+		asio::error_code error;
+		m_timer.cancel(error);
+		m_timerTime.reset();
+
+		// Dropped rather than run: these are periodic bookkeeping events, and running them while
+		// the services are winding down would queue database work that has nowhere to go.
+		Queue empty;
+		m_queue.swap(empty);
 	}
 
 	void TimerQueue::Update(const asio::system_error &error)

@@ -47,12 +47,21 @@ namespace mmo
 		RegisterPacketHandler(auth::world_realm_packet::LogonChallenge, *this, &World::OnLogonChallenge);
 	}
 
+	void World::Disconnect()
+	{
+		Destroy();
+	}
+
 	void World::Destroy()
 	{
 		destroyed(*this);
 
 		m_connection->resetListener();
-		m_connection.reset();
+
+		// close(), not reset(). Dropping the shared_ptr leaves the connection alive -- the
+		// outstanding async_read holds its own reference -- so the socket stayed open with a null
+		// listener and the world node never saw a disconnect.
+		m_connection->close();
 
 		m_manager.WorldDisconnected(*this);
 	}

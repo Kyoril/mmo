@@ -259,8 +259,23 @@ namespace mmo
 		QueueReconnect();
 	}
 
+	void RealmConnector::Shutdown()
+	{
+		m_shuttingDown = true;
+		m_willReconnect = false;
+
+		resetListener();
+		close();
+	}
+
 	void RealmConnector::QueueReconnect()
 	{
+		// Nothing to reconnect to during shutdown -- see Shutdown().
+		if (m_shuttingDown)
+		{
+			return;
+		}
+
 		// Prevent double timer
 		if (m_willReconnect)
 		{
@@ -276,6 +291,14 @@ namespace mmo
 		// Termination callback
 		const auto reconnect = [this]() {
 			m_willReconnect = false;
+
+			// Re-checked here as well as above: the timer event cannot be cancelled once queued,
+			// so shutdown between queueing and firing has to be caught at the point of use.
+			if (m_shuttingDown)
+			{
+				return;
+			}
+
 			connect(m_realmAddress, m_realmPort, *this, m_ioService);
 		};
 

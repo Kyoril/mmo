@@ -14,6 +14,9 @@ namespace mmo
 	class World;
 
 	/// Manages all connected world nodes.
+	///
+	/// **Threading:** single-threaded, exactly as PlayerManager -- see the note there before
+	/// changing the realm server's thread count.
 	class WorldManager final : public NonCopyable
 	{
 	public:
@@ -45,6 +48,10 @@ namespace mmo
 		/// Tries to find a world node which is capable of hosting the given map id and, if provided,
 		///	is also hosting the given instance id.
 		std::shared_ptr<World> GetIdealWorldNode(MapId mapId, InstanceId instanceId);
+
+		/// Disconnects every managed world node. Used at shutdown. See
+		/// PlayerManager::DisconnectAll for why this is a direct call.
+		void DisconnectAll();
 
 		/// Gets a world node by instance id.
 		std::shared_ptr<World> GetWorldByInstanceId(InstanceId instanceId);

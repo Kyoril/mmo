@@ -53,6 +53,14 @@ namespace mmo
 		/// Sends a login request to the realm in order to authenticate this world node.
 		bool Login(const std::string& serverAddress, uint16 port, const std::string& worldName, std::string password);
 
+		/// Closes the link to the realm and stops the reconnect loop.
+		///
+		/// Needed at shutdown: without the flag, the pending reconnect fires five seconds later
+		/// and dials the realm back up while the process is trying to exit, which both keeps the
+		/// io_service from ever running dry and makes the realm see a node that reconnects only
+		/// to vanish.
+		void Shutdown();
+
 		/// Updates the list of map ids that can be hosted by this world node and if connected, propagates this
 		///	list to the realm server.
 		///	@param mapIds Set of map ids that can be hosted.
@@ -225,6 +233,9 @@ namespace mmo
 		/// realm server (termination is logical since we have to guess for wrong credentials, which can only be
 		/// fixed after a server restart anyway).
 		bool m_willReconnect;
+
+		/// Set by Shutdown(). Suppresses any further reconnect attempt.
+		bool m_shuttingDown = false;
 
 		std::vector<uint32> m_hostedMapIds;
 

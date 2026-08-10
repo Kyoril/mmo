@@ -3,6 +3,8 @@
 #include "world_manager.h"
 #include "world.h"
 
+#include <vector>
+
 #include "base/macros.h"
 
 #include <cassert>
@@ -79,6 +81,22 @@ namespace mmo
 		}
 
 		return *mapIt;
+	}
+
+	void WorldManager::DisconnectAll()
+	{
+		// Copy out under the lock: Disconnect() removes the world from this manager, which takes
+		// the same mutex.
+		std::vector<std::shared_ptr<World>> worlds;
+		{
+			std::scoped_lock scopedLock{ m_worldsMutex };
+			worlds.assign(m_worlds.begin(), m_worlds.end());
+		}
+
+		for (const auto& world : worlds)
+		{
+			world->Disconnect();
+		}
 	}
 
 	std::shared_ptr<World> WorldManager::GetWorldByInstanceId(InstanceId instanceId)

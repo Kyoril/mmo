@@ -70,3 +70,39 @@ TEST_CASE("AuthPacketCheck", "[auth_protocol]")
 	CHECK(tmpFloat == floatTest);
 	CHECK(tmpString == testString);
 }
+
+// A peer that announces a payload larger than the protocol ceiling must be reported as
+// malformed immediately. Returning Incomplete here is what let a 5-byte header pin the
+// receiving connection into buffering until it ran out of memory.
+TEST_CASE("AuthPacketRejectsOversizedPayload", "[auth_protocol]")
+{
+	std::vector<char> buffer;
+	buffer.push_back(static_cast<char>(auth::client_login_packet::LogonChallenge));
+
+	const uint32 announcedSize = auth::MaxIncomingPacketSize + 1;
+	const char* const announcedBytes = reinterpret_cast<const char*>(&announcedSize);
+	buffer.insert(buffer.end(), announcedBytes, announcedBytes + sizeof(announcedSize));
+
+	io::MemorySource src{ buffer };
+	auth::IncomingPacket packet;
+
+	CHECK(auth::IncomingPacket::Start(packet, src) == ReceiveState::Malformed);
+}
+
+// The largest legal packet must still be accepted, so the ceiling cannot silently become a
+// functional limit if a payload ever grows towards it.
+TEST_CASE("AuthPacketAcceptsMaximumSizeAnnouncement", "[auth_protocol]")
+{
+	std::vector<char> buffer;
+	buffer.push_back(static_cast<char>(auth::client_login_packet::LogonChallenge));
+
+	const uint32 announcedSize = auth::MaxIncomingPacketSize;
+	const char* const announcedBytes = reinterpret_cast<const char*>(&announcedSize);
+	buffer.insert(buffer.end(), announcedBytes, announcedBytes + sizeof(announcedSize));
+
+	io::MemorySource src{ buffer };
+	auth::IncomingPacket packet;
+
+	// Incomplete, not Malformed: the size is legal, the body simply has not arrived.
+	CHECK(auth::IncomingPacket::Start(packet, src) == ReceiveState::Incomplete);
+}

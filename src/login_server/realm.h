@@ -40,6 +40,14 @@ namespace mmo
 			const std::string &address,
 			TimerQueue& timerQueue);
 
+		/// Requests a disconnect from any thread. The teardown itself runs on the connection's
+		/// strand.
+		///
+		/// Destroy() tears down state that the connection's own handlers also touch, so it may
+		/// only run on the strand. Callers that are not on it -- the shutdown handler, above all
+		/// -- must come through here.
+		void PostDestroy();
+
 		/// Gets the player connection class used to send packets to the client.
 		inline Client &GetConnection() { assert(m_connection); return *m_connection; }
 		/// Gets the player manager which manages all connected players.
@@ -104,6 +112,11 @@ namespace mmo
 		uint32 m_authProtocol;
 		uint32 m_gameProtocol;
 		std::vector<RealmFeatureRequirement> m_requirements;	// Cached feature requirements for this realm (loaded after auth)
+
+		/// Guards m_requirements, which is replaced from the database result dispatcher and read
+		/// while building a player's realm list -- on the login server those are different io
+		/// threads. Mutable so the const accessors can take it.
+		mutable std::mutex m_requirementsMutex;
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 

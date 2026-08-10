@@ -53,6 +53,9 @@ namespace mmo
 		/// them from the database. Does nothing if the realm is not currently connected.
 		void NotifyRealmRequirementsChanged(uint32 realmId);
 
+		/// Disconnects every managed realm link. Used at shutdown. Safe to call from any thread.
+		void DisconnectAll();
+
 		/// Executes a function callback for each realm.
 		template<class Functor>
 		void ForEachRealm(Functor f)
