@@ -5,6 +5,11 @@ lib/
 # Also ignore build directories used on windows and unix-platforms
 /win/
 build/
+# Sanitizer build tree (see docs/testing-servers.md). Kept separate from build/ because the
+# instrumented objects must not be mixed with the ordinary ones.
+build-asan/
+bin-asan/
+lib-asan/
 
 # Ignore fbx files
 deps/fbx/

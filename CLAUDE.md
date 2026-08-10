@@ -218,8 +218,25 @@ From `copilot-instructions.md` and `cmake/mmo_options.cmake` — enforced projec
 The client uses a fork-join worker pool (`src/shared/base/task_system.h`) — "parallel
 islands inside a single-threaded frame". Worker code must never touch `signal<>`, Lua,
 `GraphicsDevice`, or resource managers; logging is safe (buffered off-main). See
-[docs/threading.md](docs/threading.md) before adding any threaded code. Servers stay
-single-threaded; the TaskSystem is never initialized there.
+[docs/threading.md](docs/threading.md) before adding any threaded code.
+
+## Server Threading
+
+Servers never initialize the TaskSystem. Beyond that the tiers differ, and the difference
+matters:
+
+- **Login server** — two io threads. Anything reaching across sessions must hop onto the
+  target's strand via `AbstractConnection::Post`. Session lookups return `shared_ptr`, never
+  raw pointers: the manager's mutex protects the list, not the lifetime of what comes out of it.
+- **Realm and world servers** — single-threaded io, and they *depend* on it. Cross-session
+  access uses raw `Player*` taken from the managers in ~30 places. Raising either tier's thread
+  count requires doing the login server's `shared_ptr` + `Post` work there first.
+- **Database** — one connection per tier behind one worker thread. Call sites rely on the
+  implicit FIFO ordering that gives.
+
+Anything owning an asio timer, acceptor, or work guard needs a `Stop()` wired into its tier's
+shutdown handler, or the process will not exit. Verify with `python tools/shutdown_check.py`.
+See [docs/testing-servers.md](docs/testing-servers.md).
 
 ## Error Handling
 

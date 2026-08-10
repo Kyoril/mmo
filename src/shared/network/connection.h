@@ -210,7 +210,12 @@ namespace mmo
 				return;
 			}
 
-			m_sending = m_sendBuffer;
+			// swap, not assign: assigning copies every queued byte, which on a broadcast path is a
+			// copy per packet per recipient. The early return above establishes that m_sending is
+			// empty, so after the swap m_sendBuffer holds that already-empty buffer -- and keeps
+			// its capacity, so the next flush does not reallocate. (EncryptedConnection::flush has
+			// always moved here rather than copied; this brings the two in line.)
+			m_sending.swap(m_sendBuffer);
 			m_sendBuffer.clear();
 
 			assert(m_sendBuffer.empty());

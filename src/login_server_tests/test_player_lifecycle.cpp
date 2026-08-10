@@ -16,8 +16,11 @@
 #include "asio/ip/tcp.hpp"
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <memory>
+#include <thread>
+#include <vector>
 
 namespace mmo
 {
@@ -191,6 +194,58 @@ namespace mmo
 		addPlayer();
 		CHECK(playerManager.HasPlayerCapacityBeenReached());
 		CHECK(playerManager.GetPlayerCount() == 3);
+	}
+
+	// Hammers the exact pattern the REST ban handler produces: one thread looking sessions up
+	// and posting kicks while the io threads dispatch the connection handlers.
+	//
+	// This cannot prove the absence of a race -- MSVC has no thread sanitizer. What it does is
+	// give the failure a chance to happen under AddressSanitizer (-DMMO_ENABLE_ASAN=ON), where
+	// the use-after-free that the old raw-pointer lookup allowed shows up as a report rather
+	// than as silence. Tagged [.stress] so it is skipped unless asked for by name.
+	TEST_CASE("ConcurrentKickIsSafe", "[player_lifecycle][.stress]")
+	{
+		asio::io_service ioService;
+		PlayerManager playerManager{ 256 };
+		RealmManager realmManager{ 16 };
+		DiscardingDatabase database;
+
+		std::vector<std::shared_ptr<Player>> players;
+		for (int index = 0; index < 64; ++index)
+		{
+			auto connection = auth::Connection::create(ioService, nullptr);
+			auto player = std::make_shared<Player>(playerManager, realmManager, database.async,
+				connection, "127.0.0.1");
+			playerManager.AddPlayer(player);
+			players.push_back(std::move(player));
+		}
+
+		std::atomic<bool> running{ true };
+		std::thread kicker([&playerManager, &running]()
+		{
+			while (running)
+			{
+				for (uint64 accountId = 0; accountId < 64; ++accountId)
+				{
+					playerManager.KickPlayerByAccountId(accountId);
+				}
+			}
+		});
+
+		for (int pass = 0; pass < 200; ++pass)
+		{
+			ioService.run_for(std::chrono::milliseconds(1));
+			ioService.restart();
+		}
+
+		running = false;
+		kicker.join();
+
+		// Drain whatever the kicker posted before the fixture goes out of scope.
+		ioService.restart();
+		ioService.run();
+
+		SUCCEED("no crash under concurrent lookup and kick");
 	}
 
 	// The manager must hand out an owning reference. Its mutex protects the list, not the

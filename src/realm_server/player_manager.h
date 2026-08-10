@@ -17,6 +17,17 @@ namespace mmo
 	class MOTDManager;
 
 	/// Manages all connected players.
+	///
+	/// **Threading:** the realm server runs its io work on a single thread (see
+	/// maxNetworkThreads in program.cpp), and this class is written for that. The mutex below
+	/// guards the list against the database worker thread touching it; it does **not** make a
+	/// returned Player* safe to hold. A raw pointer taken from here is valid only until the
+	/// current handler returns, because the lifetime it points at is owned by this list.
+	///
+	/// Raising the realm server's thread count therefore requires converting these lookups to
+	/// shared_ptr and routing cross-session calls through AbstractConnection::Post first -- the
+	/// same change the login server received. Do not raise it without that. See
+	/// docs/testing-servers.md.
 	class PlayerManager final : public NonCopyable
 	{
 	public:

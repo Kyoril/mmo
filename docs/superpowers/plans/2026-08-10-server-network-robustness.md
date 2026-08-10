@@ -1917,3 +1917,60 @@ Before considering the branch done:
 - [ ] `cmake --build build --config Debug` (full, client included) succeeds — the shared network layer is client code too.
 - [ ] A soak: bring the E2E stack up, run `tools/e2e/e2e_run.ps1` three times back to back without tearing down between runs, and confirm no growth in the servers' working set and no errors in `logs/*.log`.
 - [ ] `/gate` then `/ship`.
+
+---
+
+## Execution Log — What Actually Differed
+
+Recorded after the fact, because several of these are the sort of thing the next person will
+otherwise rediscover the hard way.
+
+**Task ordering changed.** `AbstractConnection::Post` was implemented *before* reviving the
+session lookup, not after. Reviving `IsAuthenticated` is what makes `KickPlayerByAccountId`
+reachable at all, so doing it first would have left one commit in the branch containing a live
+cross-thread use-after-free. Task 4 and Task 8 landed together for the same reason.
+
+**A crash was introduced and caught.** The Task 3 receive-buffer guard originally copied the
+existing `m_socket.reset()` teardown idiom in `EncryptedConnection`. That made a latent bug
+reachable: `Disconnected()` dereferenced `m_socket` unchecked, so an in-flight write completing
+after a buffer-overrun drop faulted. On the realm's client-facing port that is remotely
+triggerable — it would have traded a memory DoS for a crash DoS. Confirmed as an access
+violation by `GameConnectionSurvivesOverrunWithWriteInFlight`, then fixed two ways (close
+rather than release; null-check as backstop). Neither the unit suite nor 14/14 E2E caught it;
+re-reading the diff did.
+
+**The first reproduction attempt passed.** Tearing down from inside the read handler leaves no
+read outstanding to fault. Reaching the actual hazard required a *write* in flight. A test that
+passes is not evidence until you know which interleaving it exercises.
+
+**Graceful shutdown needed far more than a signal handler.** Task 7 assumed installing the
+handler and closing connections was the work. It was not: three objects held outstanding io
+work that kept every service alive regardless — `web::WebService`'s acceptor,
+`TimerQueue`'s armed timer (note `Countdown::Cancel()` does *not* cancel it), and
+`WorldInstanceManager`'s self-rearming 30ms tick. Plus the realm server's `dbTimerQueue`, on
+the database service. All found by `tools/shutdown_check.py`, none by reasoning.
+
+**The plan wrote off automating the shutdown check. That was wrong.** It concluded that because
+the E2E harness cannot signal its servers, manual Ctrl+C was the ceiling. The harness limitation
+is real; the conclusion was not. Python's `subprocess` exposes `CREATE_NEW_PROCESS_GROUP`, which
+allows targeting one process with `CTRL_BREAK_EVENT` without touching the parent console. That
+tool found three bugs the unit test could not, because the unit test verifies the handler in
+isolation and knows nothing about what else in a real program holds work.
+
+**Two extra login-server races were found en route**, both the same shape as the kick:
+`Realm::NotifyAccountBanned` wrote the send buffer from the REST thread, and `m_requirements`
+was replaced by the database result dispatcher while read from a player's strand.
+
+**The ASan build collided with the normal one.** Output goes to the source tree, so `bin/` and
+`lib/` were shared between build directories; mixing instrumented and uninstrumented objects
+produced `LNK2038: mismatch detected for 'annotate_string'`. Fixed by suffixing the sanitizer
+tree's output directories rather than documenting the hazard.
+
+**Dropped deliberately:** the `ban_disconnects_session.lua` E2E scenario. The login-server
+session exists only between auth and realm-list, so a scenario would race the handoff to catch
+it — flaky, and mostly re-testing REST plumbing that `test_http_handlers.cpp` already covers.
+The two lifecycle unit tests cover the mechanism and were verified to fail without the fix.
+
+**Environmental:** the machine's pagefile (10 GB, fully saturated) cannot support MSVC's default
+parallelism on this solution; builds need `-- /m:4`. A failed build leaves orphaned `cl.exe`
+processes that must be cleared before retrying.

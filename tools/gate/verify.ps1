@@ -1,4 +1,4 @@
-# Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿# Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
 # Local quality gate: build -> unit tests -> E2E. Writes tools/gate/last_report.json
 # and exits 0 only if every step passed. /ship refuses to merge into develop without
@@ -11,7 +11,7 @@
 [CmdletBinding()]
 param(
 	[switch]$SkipE2E,
-	[string[]]$Targets = @("login_server", "realm_server", "world_server", "e2e_client", "unit_tests", "game_server_unit_tests", "login_server_tests")
+	[string[]]$Targets = @("login_server", "realm_server", "world_server", "e2e_client", "unit_tests", "game_server_unit_tests", "login_server_tests", "realm_server_tests")
 )
 
 $ErrorActionPreference = "Stop"
@@ -93,7 +93,7 @@ try
 
 	if ($ok)
 	{
-		foreach ($test in @("unit_tests", "game_server_unit_tests", "login_server_tests"))
+		foreach ($test in @("unit_tests", "game_server_unit_tests", "login_server_tests", "realm_server_tests"))
 		{
 			if (-not (Invoke-GateStep -Name $test -Exe (Join-Path $repoRoot ("bin\Debug\{0}.exe" -f $test))))
 			{

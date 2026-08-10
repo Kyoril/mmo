@@ -14,6 +14,9 @@ namespace mmo
 	class World;
 
 	/// Manages all connected world nodes.
+	///
+	/// **Threading:** single-threaded, exactly as PlayerManager -- see the note there before
+	/// changing the realm server's thread count.
 	class WorldManager final : public NonCopyable
 	{
 	public:

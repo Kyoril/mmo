@@ -406,3 +406,55 @@ TEST_CASE("ShutdownHandlerFiresAndCanBeCancelled", "[network_connection]")
 		CHECK_FALSE(handled);
 	}
 }
+
+// Many packets sent back to back must all arrive, in order.
+//
+// This is the regression guard for the buffer handoff in flush(): getting it wrong loses or
+// duplicates queued bytes, and nothing else in the suite sends enough traffic to notice. It is a
+// characterisation test -- it must pass both before and after that change.
+TEST_CASE("ConnectionDeliversManyPacketsInOrder", "[network_connection]")
+{
+	asio::io_service ioService;
+	RecordingListener serverListener;
+	RecordingListener clientListener;
+	ConnectedPair pair = MakeConnectedPair(ioService, serverListener, clientListener);
+
+	// Alternating opcodes so the assertion catches reordering, not just loss.
+	const std::size_t packetCount = 200;
+	for (std::size_t index = 0; index < packetCount; ++index)
+	{
+		const uint8 opCode = (index % 2 == 0)
+			? auth::client_login_packet::LogonChallenge
+			: auth::client_login_packet::LogonProof;
+
+		pair.client->sendSinglePacket([index, opCode](auth::OutgoingPacket& packet)
+		{
+			packet.Start(opCode);
+			packet << io::write<uint32>(static_cast<uint32>(index));
+			packet.Finish();
+		});
+	}
+
+	CHECK(PumpUntil(ioService, [&serverListener, packetCount]()
+	{
+		return serverListener.receivedOpCodes.size() >= packetCount;
+	}));
+
+	REQUIRE(serverListener.receivedOpCodes.size() == packetCount);
+	CHECK(serverListener.malformedCount == 0);
+
+	bool orderHeld = true;
+	for (std::size_t index = 0; index < packetCount; ++index)
+	{
+		const uint8 expected = (index % 2 == 0)
+			? auth::client_login_packet::LogonChallenge
+			: auth::client_login_packet::LogonProof;
+		if (serverListener.receivedOpCodes[index] != expected)
+		{
+			orderHeld = false;
+			break;
+		}
+	}
+
+	CHECK(orderHeld);
+}

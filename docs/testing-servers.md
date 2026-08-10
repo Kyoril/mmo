@@ -60,10 +60,39 @@ because it drives console control events.
 toolchain. What is available:
 
 - Stress tests tagged `[.stress]`, which Catch2 skips by default. Run with
-  `bin/Debug/login_server_tests.exe "[.stress]"`.
+  `bin-asan/Debug/login_server_tests.exe "[.stress]"` (or `bin/Debug/...` for an uninstrumented
+  run).
 - AddressSanitizer, via `-DMMO_ENABLE_ASAN=ON` in a separate build directory. ASan does not
   detect races, but it does detect what these races *manifest* as — use-after-free and heap
   corruption.
+
+Running the sanitized suite:
+
+```bash
+cmake -S . -B build-asan -DMMO_BUILD_CLIENT=OFF -DMMO_WITH_DEV_COMMANDS=ON -DMMO_ENABLE_ASAN=ON
+```
+
+```bash
+cmake --build build-asan --config Debug -t login_server_tests realm_server_tests game_server_unit_tests -- /m:4
+```
+
+Two traps:
+
+- **The ASan runtime must be on `PATH`**, or every test exits with `0xC0000135`
+  (`STATUS_DLL_NOT_FOUND`) and *no* diagnostic explaining why. Add
+  `%VCToolsInstallDir%\bin\Hostx64\x64` (the directory holding
+  `clang_rt.asan_dynamic-x86_64.dll`) before running. Usefully, this doubles as proof the
+  binary really is instrumented: if it runs without that DLL, ASan is not linked in and a
+  "clean" result means nothing.
+- **The sanitized tree writes to `bin-asan/` and `lib-asan/`**, not `bin/` and `lib/`. Output
+  goes into the source tree rather than the build tree, so without that split an ASan build
+  overwrites the ordinary binaries *and static libraries* — and the next normal build then
+  fails with `LNK2038: mismatch detected for 'annotate_string'`, which reads like a code error
+  rather than the build collision it is. If you ever see that, delete `lib/<config>` and
+  `bin/<config>` and rebuild.
+
+Do not build `unit_tests` with `MMO_BUILD_CLIENT=OFF`: it links `graphics_d3d11`
+unconditionally on Windows and will fail to link.
 
 Treat the combination as evidence, not proof. The strongest tool remains reading the diff and
 asking, for every teardown path: **what operations are still in flight when this runs, and what

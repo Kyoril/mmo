@@ -1,6 +1,11 @@
 # This file, when included, does some config options for Microsoft Visual Studio.
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
+# Suffixed for sanitizer builds -- see mmo_compiler_settings.cmake for why.
+if (MMO_ENABLE_ASAN)
+	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin-asan)
+else()
+	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
+endif()
 
 # Make sure Visual Studio 2017 or newer is used
 if (MSVC_VERSION LESS 1910)
@@ -35,3 +40,12 @@ add_definitions("/D_CRT_SECURE_NO_WARNINGS /D_SCL_SECURE_NO_WARNINGS /wd4267 /wd
 add_definitions("-DNOMINMAX")
 
 #add_compile_options(/EHs- /GR-)
+
+# AddressSanitizer. Incompatible with incremental linking and with edit-and-continue debug
+# info, so both are turned off when it is on.
+if (MMO_ENABLE_ASAN)
+	message(STATUS "AddressSanitizer enabled")
+	add_compile_options(/fsanitize=address)
+	string(REPLACE "/ZI" "/Zi" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+	add_link_options(/INCREMENTAL:NO)
+endif()
