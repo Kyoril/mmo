@@ -17,6 +17,7 @@
 #include <functional>
 #include <cassert>
 #include <asio/bind_executor.hpp>
+#include <asio/post.hpp>
 
 #include "log/default_log_levels.h"
 
@@ -81,6 +82,16 @@ namespace mmo
 		/// link legitimately carries -- a value below it turns ordinary traffic into a
 		/// disconnect.
 		virtual void SetMaxReceiveBufferSize(std::size_t size) = 0;
+
+		/// Runs `work` on this connection's strand, keeping the connection alive until it does.
+		/// Safe to call from any thread.
+		///
+		/// This is how code that does not own this connection -- another connection's handler,
+		/// or a web request handler on a different io thread -- reaches this connection's state
+		/// without racing the handlers asio dispatches on the strand. Without it the only
+		/// options are a lock around every member or an unsynchronised write, and the second is
+		/// what this codebase had.
+		virtual void Post(std::function<void()> work) = 0;
 
 	public:
 		template<class F>
@@ -160,6 +171,12 @@ namespace mmo
 		void SetMaxReceiveBufferSize(std::size_t size) override
 		{
 			m_maxReceiveBufferSize = size;
+		}
+
+		void Post(std::function<void()> work) override
+		{
+			auto self = this->shared_from_this();
+			asio::post(m_strand, [self, work = std::move(work)]() { work(); });
 		}
 
 		void startReceiving() override

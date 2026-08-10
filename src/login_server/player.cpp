@@ -41,10 +41,27 @@ namespace mmo
 		destroy();
 	}
 
+	void Player::PostKick()
+	{
+		// m_connection is assigned once in the constructor and never reassigned -- destroy()
+		// closes it rather than releasing it -- which is what makes reading it from another
+		// thread safe.
+		auto self = shared_from_this();
+		m_connection->Post([self]() { self->Kick(); });
+	}
+
 	void Player::destroy()
 	{
+		// Must run on the connection's strand: it tears down state that the connection's own
+		// handlers touch. PlayerManager::KickPlayerByAccountId posts here rather than calling
+		// directly for exactly that reason.
 		m_connection->resetListener();
-		m_connection.reset();
+
+		// close(), not reset(). Dropping the shared_ptr leaves the connection alive -- the
+		// outstanding async_read holds its own reference -- so the socket stayed open with a
+		// null listener and the peer never saw a disconnect. Keeping the pointer for the
+		// object's lifetime is also what lets PostKick read it from another thread.
+		m_connection->close();
 
 		m_manager.PlayerDisconnected(*this);
 	}

@@ -40,13 +40,20 @@ namespace mmo
 		void AddPlayer(std::shared_ptr<Player> added);
 
 		/// Gets a player by his account name.
-		Player *GetPlayerByAccountName(const String &accountName);
+		///
+		/// Returns an owning reference rather than a raw pointer: the mutex below protects the
+		/// list, not the lifetime of what is taken out of it, so a caller on another thread
+		/// could otherwise be left holding a pointer to a session that has since disconnected.
+		std::shared_ptr<Player> GetPlayerByAccountName(const String &accountName);
 
-		/// Gets a player by account id.
-		Player *GetPlayerByAccountID(uint64 accountId);
+		/// Gets a player by account id. See GetPlayerByAccountName for why this owns.
+		std::shared_ptr<Player> GetPlayerByAccountID(uint64 accountId);
 
-		/// Kicks a player by account id if connected.
+		/// Kicks a player by account id if connected. Safe to call from any thread.
 		void KickPlayerByAccountId(uint64 accountId);
+
+		/// Number of connected players, authenticated or not.
+		size_t GetPlayerCount();
 
 	private:
 

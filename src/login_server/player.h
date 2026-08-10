@@ -45,7 +45,17 @@ namespace mmo
 			const std::string &address);
 
 		/// Disconnects the player if still connected.
+		///
+		/// May only be called on the connection's strand. Callers on any other thread must use
+		/// PostKick instead.
 		void Kick();
+
+		/// Requests a kick from any thread. The kick itself runs on the connection's strand.
+		///
+		/// Kick() tears down state that the connection's own handlers also touch, so calling it
+		/// directly is only safe from the strand. Callers that are not on it -- the REST ban
+		/// handler, above all -- must come through here.
+		void PostKick();
 
 		/// Gets the player connection class used to send packets to the client.
 		inline Client &GetConnection() { assert(m_connection); return *m_connection; }
@@ -53,7 +63,9 @@ namespace mmo
 		inline PlayerManager &GetManager() const { return m_manager; }
 		/// Determines whether the player is authentificated.
 		/// @returns true if the player is authentificated.
-		inline bool IsAuthenticated() const { return false;/* (getSession() != nullptr);*/ }
+		/// Determines whether the player has completed the SRP6 exchange.
+		/// @returns true if a session key has been negotiated.
+		inline bool IsAuthenticated() const { return !m_sessionKey.isZero(); }
 		/// Gets the account name the player is logged in with.
 		inline const std::string &GetAccountName() const { return m_accountName; }
 		/// Gets the account id the player is logged in with.

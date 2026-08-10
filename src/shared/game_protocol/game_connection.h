@@ -97,6 +97,12 @@ namespace mmo
 				m_maxReceiveBufferSize = size;
 			}
 
+			void Post(std::function<void()> work) override
+			{
+				auto self = this->shared_from_this();
+				asio::post(m_strand, [self, work = std::move(work)]() { work(); });
+			}
+
 			void startReceiving() override
 			{
 				m_isClosedOnParsing = false;
@@ -376,7 +382,17 @@ namespace mmo
 
 					m_received.clear();
 					m_decryptedUntil = 0;
-					m_socket.reset();
+
+					// close(), not reset(): releasing the socket while a write is still in flight
+					// leaves that write's completion handler to route into Disconnected(), which
+					// would then be looking at a socket that no longer exists. Closing keeps the
+					// pointer valid for whatever handlers are still queued. (Disconnected() also
+					// null-checks now, but that is the backstop, not the design.)
+					if (m_socket && m_socket->is_open())
+					{
+						asio::error_code error;
+						m_socket->close(error);
+					}
 
 					return;
 				}
@@ -392,7 +408,11 @@ namespace mmo
 					m_listener = nullptr;
 				}
 
-				if (m_socket->is_open())
+				// Null-checked, matching IsConnected(). Several teardown paths in this class
+				// release m_socket outright, and any handler still in flight when that happens --
+				// a write completing with an error, above all -- lands here afterwards. Without
+				// the check that is a null dereference on a path a peer can provoke.
+				if (m_socket && m_socket->is_open())
 				{
 					asio::error_code error;
 					m_socket->shutdown(asio::ip::tcp::socket::shutdown_both, error);

@@ -242,3 +242,46 @@ TEST_CASE("ConnectionAcceptsPacketBelowReceiveBufferCap", "[network_connection]"
 
 	CHECK(serverListener.malformedCount == 0);
 }
+
+// Work handed to Post must run on the connection's strand, not on the calling thread.
+//
+// This is what code that does not own a connection -- another session's handler, or a web
+// request handler on a different io thread -- uses to reach it. Running synchronously would
+// defeat the point: the caller would be touching connection state concurrently with the
+// handlers asio dispatches on the strand.
+TEST_CASE("ConnectionPostDefersWorkToTheStrand", "[network_connection]")
+{
+	asio::io_service ioService;
+	RecordingListener listener;
+	auto connection = TestConnection::create(ioService, &listener);
+
+	bool ran = false;
+	connection->Post([&ran]() { ran = true; });
+
+	// Not yet: nothing has pumped the service.
+	CHECK_FALSE(ran);
+
+	CHECK(PumpUntil(ioService, [&ran]() { return ran; }));
+}
+
+// Post must keep the connection alive until the work runs, so a caller that drops its last
+// reference in between does not leave the handler pointing at a destroyed object.
+TEST_CASE("ConnectionPostKeepsConnectionAlive", "[network_connection]")
+{
+	asio::io_service ioService;
+	RecordingListener listener;
+
+	std::weak_ptr<TestConnection> weak;
+	bool ran = false;
+	{
+		auto connection = TestConnection::create(ioService, &listener);
+		weak = connection;
+		connection->Post([&ran]() { ran = true; });
+	}
+
+	// The local shared_ptr is gone, but the posted work still holds one.
+	CHECK_FALSE(weak.expired());
+
+	CHECK(PumpUntil(ioService, [&ran]() { return ran; }));
+	CHECK(weak.expired());
+}
