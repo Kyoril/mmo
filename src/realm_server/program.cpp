@@ -214,7 +214,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue](std::shared_ptr<World::Client> connection)
+		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue, &config](std::shared_ptr<World::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -225,6 +225,14 @@ namespace mmo
 			catch (const asio::system_error& error)
 			{
 				ELOG(error.what());
+				return;
+			}
+
+			if (worldManager.HasCapacityBeenReached())
+			{
+				WLOG("Rejecting world node connection from " << address << ": the configured capacity of "
+					<< config.maxWorlds << " has been reached");
+				connection->close();
 				return;
 			}
 
@@ -295,7 +303,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector, &project, &timerQueue, &groupIdGenerator, &guildMgr, &friendMgr, &channelMgr](std::shared_ptr<Player::Client> connection)
+		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector, &project, &timerQueue, &groupIdGenerator, &guildMgr, &friendMgr, &channelMgr, &config](std::shared_ptr<Player::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -306,6 +314,14 @@ namespace mmo
 			catch (const asio::system_error &error)
 			{
 				ELOG(error.what());
+				return;
+			}
+
+			if (playerManager.HasPlayerCapacityBeenReached())
+			{
+				WLOG("Rejecting player connection from " << address << ": the configured capacity of "
+					<< config.maxPlayers << " has been reached");
+				connection->close();
 				return;
 			}
 

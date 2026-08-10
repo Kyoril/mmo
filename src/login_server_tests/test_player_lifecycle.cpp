@@ -159,6 +159,40 @@ namespace mmo
 		}));
 	}
 
+	// The capacity limit is what stops an unbounded number of sessions being accepted. It
+	// existed as a method with no callers anywhere in the tree, so the configured maximum had
+	// no effect whatsoever -- a server would keep accepting until it ran out of descriptors.
+	//
+	// Checked at the boundary rather than at one arbitrary count, because an off-by-one here
+	// either rejects a legitimate last slot or admits one past the limit.
+	TEST_CASE("PlayerManagerReportsCapacityAtTheBoundary", "[player_lifecycle]")
+	{
+		asio::io_service ioService;
+		PlayerManager playerManager{ 3 };
+		RealmManager realmManager{ 16 };
+		DiscardingDatabase database;
+
+		const auto addPlayer = [&]()
+		{
+			auto connection = auth::Connection::create(ioService, nullptr);
+			playerManager.AddPlayer(std::make_shared<Player>(playerManager, realmManager,
+				database.async, connection, "127.0.0.1"));
+		};
+
+		CHECK_FALSE(playerManager.HasPlayerCapacityBeenReached());
+
+		addPlayer();
+		CHECK_FALSE(playerManager.HasPlayerCapacityBeenReached());
+
+		addPlayer();
+		CHECK_FALSE(playerManager.HasPlayerCapacityBeenReached());
+
+		// The third fills the last slot: at capacity, not over it.
+		addPlayer();
+		CHECK(playerManager.HasPlayerCapacityBeenReached());
+		CHECK(playerManager.GetPlayerCount() == 3);
+	}
+
 	// The manager must hand out an owning reference. Its mutex protects the list, not the
 	// lifetime of what comes out of it, so a raw pointer returned to another thread could
 	// outlive the session it names.
