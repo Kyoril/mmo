@@ -72,6 +72,16 @@ namespace mmo
 		virtual void close() = 0;
 		virtual Buffer& getSendBuffer() = 0;
 
+		/// Sets how many bytes may accumulate in the receive buffer before the peer is dropped
+		/// as malformed.
+		///
+		/// The buffer holds whatever has arrived but not yet formed a complete packet, so it is
+		/// exactly the quantity a peer controls: announce a large body, send most of it, stall.
+		/// Bounding it is what makes that harmless. Set this well above the largest packet the
+		/// link legitimately carries -- a value below it turns ordinary traffic into a
+		/// disconnect.
+		virtual void SetMaxReceiveBufferSize(std::size_t size) = 0;
+
 	public:
 		template<class F>
 		void sendSinglePacket(F generator, bool autoFlush = true)
@@ -145,6 +155,11 @@ namespace mmo
 		Buffer &getSendBuffer() override
 		{
 			return m_sendBuffer;
+		}
+
+		void SetMaxReceiveBufferSize(std::size_t size) override
+		{
+			m_maxReceiveBufferSize = size;
 		}
 
 		void startReceiving() override
@@ -261,6 +276,13 @@ namespace mmo
 		bool m_isClosedOnParsing;
 		bool m_isClosedOnSend;
 		bool m_isReceiving;
+
+		/// Defaults to the protocol ceiling (see auth::MaxIncomingPacketSize /
+		/// game::MaxIncomingPacketSize, both 16 MiB). Named here as a literal rather than by
+		/// including a protocol header, which would invert the dependency: the protocols
+		/// include this file, not the other way round.
+		std::size_t m_maxReceiveBufferSize = 16 * 1024 * 1024;
+
 		asio::strand<asio::any_io_executor> m_strand;
 
 		void beginSend()
@@ -444,6 +466,32 @@ namespace mmo
 				m_received.erase(
 					m_received.begin(),
 					m_received.begin() + static_cast<std::ptrdiff_t>(parsedUntil));
+			}
+
+			// Whatever is left is a single incomplete packet. If that alone is over the cap it
+			// can only grow further, so there is nothing to wait for. Without this a peer can
+			// announce a legal body size, send most of it and stall, holding the buffer open --
+			// repeated across connections that is memory the server never gets back.
+			if (m_received.size() > m_maxReceiveBufferSize)
+			{
+				ELOG("Peer exceeded the maximum receive buffer size (" << m_received.size()
+					<< " > " << m_maxReceiveBufferSize << " bytes) - dropping connection");
+
+				if (m_listener)
+				{
+					m_listener->connectionMalformedPacket();
+					m_listener = nullptr;
+				}
+
+				m_received.clear();
+
+				if (m_socket && m_socket->is_open())
+				{
+					asio::error_code error;
+					m_socket->close(error);
+				}
+
+				return;
 			}
 
 			beginReceive();

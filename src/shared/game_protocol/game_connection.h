@@ -91,7 +91,12 @@ namespace mmo
 			{
 				return m_sendBuffer;
 			}
-			
+
+			void SetMaxReceiveBufferSize(std::size_t size) override
+			{
+				m_maxReceiveBufferSize = size;
+			}
+
 			void startReceiving() override
 			{
 				m_isClosedOnParsing = false;
@@ -182,6 +187,10 @@ namespace mmo
 			bool m_isClosedOnParsing;
 			size_t m_decryptedUntil;
 			bool m_isReceiving;
+			/// Defaults to the protocol ceiling (game::MaxIncomingPacketSize, 16 MiB). Named as a
+			/// literal rather than by including the protocol header, matching Connection.
+			std::size_t m_maxReceiveBufferSize = 16 * 1024 * 1024;
+
 			asio::strand<asio::any_io_executor> m_strand;
 
 		private:
@@ -349,6 +358,27 @@ namespace mmo
 					{
 						m_decryptedUntil -= parsedUntil;
 					}
+				}
+
+				// Whatever is left is a single incomplete packet. If that alone is over the cap
+				// it can only grow further, so there is nothing to wait for. See
+				// Connection::parsePackets for the attack this closes.
+				if (m_received.size() > m_maxReceiveBufferSize)
+				{
+					ELOG("Peer exceeded the maximum receive buffer size (" << m_received.size()
+						<< " > " << m_maxReceiveBufferSize << " bytes) - dropping connection");
+
+					if (m_listener)
+					{
+						m_listener->connectionMalformedPacket();
+						m_listener = nullptr;
+					}
+
+					m_received.clear();
+					m_decryptedUntil = 0;
+					m_socket.reset();
+
+					return;
 				}
 
 				BeginReceive();

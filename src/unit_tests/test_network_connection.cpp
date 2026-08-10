@@ -183,3 +183,62 @@ TEST_CASE("ConnectionParsesTwoPacketsFromOneSegment", "[network_connection]")
 	CHECK(serverListener.receivedOpCodes[0] == auth::client_login_packet::LogonChallenge);
 	CHECK(serverListener.receivedOpCodes[1] == auth::client_login_packet::LogonProof);
 }
+
+// A peer that announces a legal size and then never finishes the body must not be able to
+// grow the receive buffer without limit. Before the cap, m_received grew until the process ran
+// out of memory -- a remote denial of service costing the attacker one open socket.
+TEST_CASE("ConnectionDropsPeerThatExceedsReceiveBufferCap", "[network_connection]")
+{
+	asio::io_service ioService;
+	RecordingListener serverListener;
+	RecordingListener clientListener;
+	ConnectedPair pair = MakeConnectedPair(ioService, serverListener, clientListener);
+
+	pair.server->SetMaxReceiveBufferSize(64 * 1024);
+
+	// A header announcing a body well under the protocol ceiling -- so the Task 1 check passes
+	// -- followed by more filler than the cap allows. The body is never completed.
+	std::vector<char> garbage;
+	garbage.push_back(static_cast<char>(auth::client_login_packet::LogonChallenge));
+
+	const uint32 announcedSize = 1024 * 1024;
+	const char* const announcedBytes = reinterpret_cast<const char*>(&announcedSize);
+	garbage.insert(garbage.end(), announcedBytes, announcedBytes + sizeof(announcedSize));
+	garbage.resize(garbage.size() + 96 * 1024, 'x');
+
+	asio::error_code writeError;
+	asio::write(pair.client->getSocket(), asio::buffer(garbage), writeError);
+
+	CHECK(PumpUntil(ioService, [&serverListener]()
+	{
+		return serverListener.malformedCount > 0;
+	}));
+
+	// The half-delivered packet must never reach a handler.
+	CHECK(serverListener.receivedOpCodes.empty());
+}
+
+// The cap must not fire on ordinary traffic that happens to arrive in many small segments.
+TEST_CASE("ConnectionAcceptsPacketBelowReceiveBufferCap", "[network_connection]")
+{
+	asio::io_service ioService;
+	RecordingListener serverListener;
+	RecordingListener clientListener;
+	ConnectedPair pair = MakeConnectedPair(ioService, serverListener, clientListener);
+
+	pair.server->SetMaxReceiveBufferSize(64 * 1024);
+
+	pair.client->sendSinglePacket([](auth::OutgoingPacket& packet)
+	{
+		packet.Start(auth::client_login_packet::LogonChallenge);
+		packet << io::write_dynamic_range<uint16>(std::string(32 * 1024, 'a'));
+		packet.Finish();
+	});
+
+	CHECK(PumpUntil(ioService, [&serverListener]()
+	{
+		return !serverListener.receivedOpCodes.empty();
+	}));
+
+	CHECK(serverListener.malformedCount == 0);
+}

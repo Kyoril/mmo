@@ -309,6 +309,10 @@ namespace mmo
 				return;
 			}
 
+			// See the login server: the largest client->realm packet is a chat message, so
+			// 64 KiB is generous. Server<->server links keep the 16 MiB default.
+			connection->SetMaxReceiveBufferSize(64 * 1024);
+
 			auto player = std::make_shared<Player>(timerQueue, playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string(), project, groupIdGenerator, guildMgr, friendMgr, channelMgr);
 			ILOG("Incoming player connection from " << address);
 			playerManager.AddPlayer(std::move(player));

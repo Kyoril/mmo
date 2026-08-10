@@ -215,6 +215,12 @@ namespace mmo
 				return;
 			}
 
+			// Client connections are anonymous and reachable from the internet, so they get a far
+			// tighter bound than the 16 MiB protocol ceiling. The largest packet a login client
+			// sends is the logon proof at ~52 bytes; 64 KiB leaves several orders of magnitude of
+			// headroom while making the buffer irrelevant as an attack surface.
+			connection->SetMaxReceiveBufferSize(64 * 1024);
+
 			auto player = std::make_shared<Player>(playerManager, realmManager, asyncDatabase, connection, address.to_string());
 			ILOG("Incoming player connection from " << address);
 			playerManager.AddPlayer(std::move(player));
