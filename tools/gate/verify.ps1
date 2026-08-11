@@ -94,6 +94,14 @@ try
 	# peers get rejected instead of silently misparsing each other?
 	$ok = Invoke-GateStep -Name "protocol" -Exe "python" -Arguments @("tools/protocol_version_check.py")
 
+	# After the check, not before: when the manifest is simply stale the step above says so
+	# in one clear line, and that is the common case. These tests are here for the case that
+	# check cannot report on -- the checker itself quietly breaking and passing everything.
+	if ($ok)
+	{
+		$ok = Invoke-GateStep -Name "protocol_tests" -Exe "python" -Arguments @("tools/tests/test_protocol_version_check.py")
+	}
+
 	if ($ok)
 	{
 		$ok = Invoke-GateStep -Name "build" -Exe "cmake" -Arguments (@("--build", "build", "--config", "Debug", "-t") + $Targets)

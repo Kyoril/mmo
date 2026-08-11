@@ -34,9 +34,13 @@ MANIFEST_REL = "src/shared/protocol_fingerprint.json"
 
 # Calls that put bytes on, or take bytes off, a packet. Anything matching these in a diff
 # is a candidate payload change.
-SERIALIZATION_CALL = re.compile(
-	r"io::(write|read)(_dynamic_range|_range|_container|_limited_string|_packed_guid)?\s*[<(]"
-	r"|packet\.Start\s*\(")
+#
+# Deliberately open-ended on both halves. Enumerating the io:: helpers by name missed
+# read_string, write_string and read_until; matching only the receiver named `packet` missed
+# every `outPacket.Start(...)`, which is what the reject paths and most server-side senders
+# actually use. An advisory that silently reports nothing is worse than one that occasionally
+# reports too much.
+SERIALIZATION_CALL = re.compile(r"io::(write|read)\w*\s*[<(]|\w+\.Start\s*\(")
 
 # Files whose protocol content is already covered by the hard check. Flagging them here
 # would just duplicate a failure the gate has already produced.
@@ -77,7 +81,13 @@ def collect_payload_edits(base):
 		if header:
 			current = header.group(1)
 			continue
-		if current is None or line.startswith("+++") or line.startswith("---"):
+		# A deleted file's header is '+++ /dev/null', which does not match above. Without
+		# clearing here, its removed lines would be counted against whichever file happened
+		# to come before it in the diff.
+		if line.startswith("+++"):
+			current = None
+			continue
+		if current is None or line.startswith("---"):
 			continue
 		if any(current.startswith(prefix) for prefix in COVERED_PREFIXES):
 			continue

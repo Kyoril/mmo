@@ -119,6 +119,17 @@ namespace mmo
 			>> io::read<uint32>(m_gameProtocol)
 			>> io::read_container<uint8>(m_worldName)))
 		{
+			// The overwhelmingly likely cause, so say it rather than making the operator guess.
+			// A world server built before the protocol version fields were added sends eight
+			// fewer bytes, and its world name is consumed as the two version values; the name
+			// length byte then lands past the end of the payload and this read fails. Only a
+			// world name of roughly forty characters or more would survive to be rejected as a
+			// version mismatch below, so this branch -- not that one -- is where an outdated
+			// world node actually ends up.
+			WLOG("Malformed logon challenge from a world node at " << m_address
+				<< ". A world server that predates auth protocol version " << auth::ProtocolVersion
+				<< " does not send the protocol version fields and fails here."
+				<< " Rebuild the world and realm servers from the same revision.");
 			return PacketParseResult::Disconnect;
 		}
 
@@ -129,20 +140,25 @@ namespace mmo
 		// three: the realm and world exchange auth packets directly AND proxy game packets
 		// through each other, so both protocols have to match, and a mismatch showed up only as
 		// a misparsed packet somewhere downstream of a successful handshake.
-		//
-		// A world server built before this check does not send these two fields, so its world
-		// name lands where the versions are expected and the values come out as nonsense. That
-		// is the correct outcome -- it is genuinely incompatible -- and it is reported as a
-		// version mismatch rather than as a malformed packet.
 		if (m_authProtocol != auth::ProtocolVersion || m_gameProtocol != game::ProtocolVersion)
 		{
 			const bool authMismatch = m_authProtocol != auth::ProtocolVersion;
+
+			// Both are reported when both differ. Reporting only the first would have the
+			// operator rebuild, reconnect, and meet the second one on the next attempt.
+			if (authMismatch)
+			{
+				WLOG("World node " << m_worldName << " uses auth protocol version " << m_authProtocol
+					<< ", this realm server speaks " << auth::ProtocolVersion << " - rejecting");
+			}
+			if (m_gameProtocol != game::ProtocolVersion)
+			{
+				WLOG("World node " << m_worldName << " uses game protocol version " << m_gameProtocol
+					<< ", this realm server speaks " << game::ProtocolVersion << " - rejecting");
+			}
+
 			const uint32 reported = authMismatch ? m_authProtocol : m_gameProtocol;
 			const uint32 expected = authMismatch ? auth::ProtocolVersion : game::ProtocolVersion;
-
-			WLOG("World node " << m_worldName << " uses " << (authMismatch ? "auth" : "game")
-				<< " protocol version " << reported << ", this realm server speaks " << expected
-				<< " - rejecting");
 
 			// Answers the challenge it asked for: the world node is waiting on a LogonChallenge
 			// response and would not recognise anything else.

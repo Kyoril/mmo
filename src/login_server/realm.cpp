@@ -327,12 +327,22 @@ namespace mmo
 		if (m_authProtocol != auth::ProtocolVersion || m_gameProtocol != game::ProtocolVersion)
 		{
 			const bool authMismatch = m_authProtocol != auth::ProtocolVersion;
+
+			// Both are reported when both differ. Reporting only the first would have the
+			// operator rebuild, reconnect, and meet the second one on the next attempt.
+			if (authMismatch)
+			{
+				WLOG("Realm " << m_realmName << " uses auth protocol version " << m_authProtocol
+					<< ", this login server speaks " << auth::ProtocolVersion << " - rejecting");
+			}
+			if (m_gameProtocol != game::ProtocolVersion)
+			{
+				WLOG("Realm " << m_realmName << " uses game protocol version " << m_gameProtocol
+					<< ", this login server speaks " << game::ProtocolVersion << " - rejecting");
+			}
+
 			const uint32 reported = authMismatch ? m_authProtocol : m_gameProtocol;
 			const uint32 expected = authMismatch ? auth::ProtocolVersion : game::ProtocolVersion;
-
-			WLOG("Realm " << m_realmName << " uses " << (authMismatch ? "auth" : "game")
-				<< " protocol version " << reported << ", this login server speaks " << expected
-				<< " - rejecting");
 
 			// Answers the challenge it asked for, not a proof: the realm is still waiting for a
 			// LogonChallenge response and would not recognise anything else.
