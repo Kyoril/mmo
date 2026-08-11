@@ -3,6 +3,8 @@
 #pragma once
 
 #include "log/log_exception.h"
+#include "base/database_pool.h"
+#include "base/typedefs.h"
 
 #include <functional>
 #include <exception>
@@ -61,90 +63,114 @@ namespace mmo
 	}
 
 	/// Helper class for async database operations.
+	///
 	/// @tparam TDatabase The database interface type. Member-function pointers passed to
-	///         asyncRequest must be members of this type.
+	///         asyncRequest must be members of this type or one of its bases.
+	///
+	/// Requests are handed to a dispatcher along with an ordering key rather than being bound to
+	/// one database instance, because the instance is chosen by the pool from that key. See
+	/// DatabasePool for why ordering is keyed rather than free.
 	template <class TDatabase>
 	class AsyncDatabaseT
 	{
 	public:
-		typedef std::function<void(const std::function<void()> &)> ActionDispatcher;
+		/// Queues work onto the connection that `key` maps to.
+		using WorkDispatcher = std::function<void(uint64 key, std::function<void(TDatabase&)>)>;
 
-		/// Initializes this class by assigning a database and worker callbacks.
-		///
-		/// @param database        The database instance to invoke requests on.
-		/// @param asyncWorker     Queues work onto the database worker thread.
+		/// Queues a result callback back onto the io thread.
+		using ResultDispatcher = std::function<void(std::function<void()>)>;
+
+		/// @param asyncWorker      Queues work onto a database connection, chosen by key.
 		/// @param resultDispatcher Queues result callbacks back onto the main/IO thread.
-		explicit AsyncDatabaseT(TDatabase &database,
-			ActionDispatcher asyncWorker,
-			ActionDispatcher resultDispatcher)
-			: m_database(database)
-			, m_asyncWorker(std::move(asyncWorker))
+		explicit AsyncDatabaseT(WorkDispatcher asyncWorker, ResultDispatcher resultDispatcher)
+			: m_asyncWorker(std::move(asyncWorker))
 			, m_resultDispatcher(std::move(resultDispatcher))
 		{
 		}
 
 	public:
-		/// Fire-and-forget: calls a void member function with one argument on the DB thread.
-		/// TBase allows passing method pointers from a base class of TDatabase.
+		/// Fire-and-forget call with one argument, on the global ordering key.
+		///
+		/// Unkeyed, so it runs on slot 0 -- exactly where every request went when there was one
+		/// connection. Prefer asyncRequestKeyed for anything scoped to a character or account.
 		template <class TBase, class A0, class B0_>
 		void asyncRequest(void(TBase::*method)(A0), B0_ &&b0)
 		{
-			auto request = std::bind(method, static_cast<TBase*>(&m_database), std::forward<B0_>(b0));
-			auto processor = [request]() -> void {
+			asyncRequestKeyed(database_key::Global, method, std::forward<B0_>(b0));
+		}
+
+		/// Fire-and-forget call with one argument, ordered against `key`.
+		template <class TBase, class A0, class B0_>
+		void asyncRequestKeyed(uint64 key, void(TBase::*method)(A0), B0_ &&b0)
+		{
+			auto argument = std::forward<B0_>(b0);
+			m_asyncWorker(key, [method, argument](TDatabase& database)
+			{
 				try
 				{
-					request();
+					(static_cast<TBase&>(database).*method)(argument);
 				}
 				catch (const std::exception& ex)
 				{
 					defaultLogException(ex);
 				}
-			};
-			m_asyncWorker(processor);
+			});
 		}
 
-		/// Calls a returning member function with arguments on the DB thread; invokes handler on the main thread.
-		/// TBase allows passing method pointers from a base class of TDatabase.
+		/// Calls a returning member function; invokes handler on the io thread. Global key.
 		template <class ResultHandler, class TBase, class Result, class... A0, class... Args>
-		void asyncRequest(ResultHandler &&handler, Result(TBase::*method)(A0...), Args&&... b0)
+		void asyncRequest(ResultHandler &&handler, Result(TBase::*method)(A0...), Args&&... args)
 		{
-			auto request = std::bind(method, static_cast<TBase*>(&m_database), std::forward<Args>(b0)...);
-			auto resultDispatcher = m_resultDispatcher;
-			auto processor = [resultDispatcher, request, handler]() -> void
-			{
-				detail::RequestProcessor<Result> proc;
-				proc(resultDispatcher, request, handler);
-			};
-			m_asyncWorker(processor);
+			asyncRequestKeyed(database_key::Global, std::forward<ResultHandler>(handler), method,
+				std::forward<Args>(args)...);
 		}
 
-		/// Calls an arbitrary callable (lambda / bound function) on the DB thread; invokes handler on the main thread.
+		/// Calls a returning member function, ordered against `key`.
+		///
+		/// Two calls sharing a key run in the order they were made, which is what lets a write
+		/// be followed by a read of the same row.
+		template <class ResultHandler, class TBase, class Result, class... A0, class... Args>
+		void asyncRequestKeyed(uint64 key, ResultHandler handler, Result(TBase::*method)(A0...), Args... args)
+		{
+			auto resultDispatcher = m_resultDispatcher;
+			m_asyncWorker(key, [handler, resultDispatcher, method, args...](TDatabase& database)
+			{
+				detail::RequestProcessor<Result> processor;
+				processor(resultDispatcher,
+					[&database, method, &args...]() { return (static_cast<TBase&>(database).*method)(args...); },
+					handler);
+			});
+		}
+
+		/// Calls an arbitrary callable against the database. Global key.
 		template <class Result, class ResultHandler, class RequestFunction>
 		void asyncRequest(RequestFunction &&request, ResultHandler &&handler)
 		{
-			auto resultDispatcher = m_resultDispatcher;
-			auto processor = [this, resultDispatcher, request, handler]() -> void
-			{
-				detail::RequestProcessor<Result> proc;
-				auto boundRequest = std::bind(request, &m_database);
-				proc(resultDispatcher, boundRequest, handler);
-			};
-			m_asyncWorker(std::move(processor));
+			asyncRequestKeyed<Result>(database_key::Global, std::forward<RequestFunction>(request),
+				std::forward<ResultHandler>(handler));
 		}
 
-		/// Returns the underlying database reference.
-		TDatabase& GetDatabase() const { return m_database; }
+		/// Calls an arbitrary callable against the database, ordered against `key`.
+		template <class Result, class ResultHandler, class RequestFunction>
+		void asyncRequestKeyed(uint64 key, RequestFunction request, ResultHandler handler)
+		{
+			auto resultDispatcher = m_resultDispatcher;
+			m_asyncWorker(key, [request, handler, resultDispatcher](TDatabase& database)
+			{
+				detail::RequestProcessor<Result> processor;
+				processor(resultDispatcher, [&database, request]() { return request(&database); }, handler);
+			});
+		}
 
-		/// Returns the async worker dispatcher (for constructing narrower wrappers).
-		const ActionDispatcher& GetAsyncWorker() const { return m_asyncWorker; }
+		/// Returns the work dispatcher (for constructing narrower wrappers).
+		[[nodiscard]] const WorkDispatcher& GetAsyncWorker() const { return m_asyncWorker; }
 
 		/// Returns the result dispatcher (for constructing narrower wrappers).
-		const ActionDispatcher& GetResultDispatcher() const { return m_resultDispatcher; }
+		[[nodiscard]] const ResultDispatcher& GetResultDispatcher() const { return m_resultDispatcher; }
 
 	private:
-		TDatabase &m_database;
-		const ActionDispatcher m_asyncWorker;
-		const ActionDispatcher m_resultDispatcher;
+		const WorkDispatcher m_asyncWorker;
+		const ResultDispatcher m_resultDispatcher;
 	};
 
 }
