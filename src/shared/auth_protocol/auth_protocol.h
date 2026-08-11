@@ -16,7 +16,7 @@ namespace mmo
 			typedef auth::OutgoingPacket OutgoingPacket;
 		};
 
-		constexpr uint32 ProtocolVersion = 0x00000003;
+		constexpr uint32 ProtocolVersion = 0x00000004;
 
 		/// Largest payload, in bytes, that a single incoming auth packet may announce.
 		///
@@ -68,6 +68,10 @@ namespace mmo
 				/// Pushed by the login server right after a successful LogonProof. Contains the list of
 				/// active account feature keys (entitlements) granted to the account.
 				AccountFeatures		= 0x05,
+				/// Pushed to a session that is about to be dropped, so the client can tell the player
+				/// why instead of showing a generic connection error. Sent immediately before the
+				/// socket is closed. Payload: uint8 reason (see session_kick_reason).
+				AccountKicked		= 0x06,
 			};
 		}
 
@@ -90,8 +94,10 @@ namespace mmo
 				/// the list of active account feature keys (entitlements) so the realm/world can query them.
 				ClientAuthSessionResponse = 0x02,
 
-				/// Notifies the realm that an account has been banned, which allows the realm to close the connection to the player client.
-				AccountBanned = 0x03,
+				/// Tells the realm to drop every session belonging to an account, and why. The realm
+				/// forwards the reason to the affected clients before closing their connections.
+				/// Payload: uint64 accountId, uint8 reason (see session_kick_reason).
+				KickAccount = 0x03,
 
 				Pong = 0x04
 			};
@@ -319,6 +325,30 @@ namespace mmo
 		}
 
 		typedef world_left_reason::Type WorldLeftReason;
+
+		/// Enumerates why a server terminated an account's session.
+		///
+		/// Shared by three links -- login->realm, login->client and realm->client -- so it lives
+		/// here rather than in either protocol's own opcode list, the same way world_left_reason
+		/// is shared by the realm<->world link. Values are wire values: append, never renumber.
+		namespace session_kick_reason
+		{
+			enum Type
+			{
+				/// The account was signed in from somewhere else and this session was displaced.
+				LoggedInElsewhere = 0,
+
+				/// The account was banned or suspended while this session was live.
+				AccountBanned = 1,
+
+				/// Counter constant. Receivers validate against this rather than against the last
+				/// named reason, so adding one does not mean remembering to widen four bounds
+				/// checks spread across three tiers.
+				Count_
+			};
+		}
+
+		typedef session_kick_reason::Type SessionKickReason;
 
 		inline io::Reader& operator>>(io::Reader& reader, AuthLocale& out_locale)
 		{

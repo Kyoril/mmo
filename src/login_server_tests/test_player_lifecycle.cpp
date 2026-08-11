@@ -214,6 +214,11 @@ namespace mmo
 			auto connection = auth::Connection::create(ioService, nullptr);
 			auto player = std::make_shared<Player>(playerManager, realmManager, database.async,
 				connection, "127.0.0.1");
+
+			// Without this the sessions are unauthenticated, the lookup below matches nothing and
+			// the kicker thread posts no kicks at all -- the test exercised the mutex and nothing
+			// else, which is precisely the use-after-free path it was written to stress.
+			player->SetAuthenticatedForTest(static_cast<uint64>(index));
 			playerManager.AddPlayer(player);
 			players.push_back(std::move(player));
 		}
@@ -225,7 +230,7 @@ namespace mmo
 			{
 				for (uint64 accountId = 0; accountId < 64; ++accountId)
 				{
-					playerManager.KickPlayerByAccountId(accountId);
+					playerManager.KickPlayerByAccountId(accountId, auth::session_kick_reason::AccountBanned);
 				}
 			}
 		});
@@ -244,6 +249,182 @@ namespace mmo
 		ioService.run();
 
 		SUCCEED("no crash under concurrent lookup and kick");
+	}
+
+	// Displacing an account's other sessions must ignore sessions that have not authenticated.
+	//
+	// Every session starts life with account id 0 and stays there until the logon challenge
+	// resolves, so a displacement that matched on the account id alone would treat every
+	// half-connected client as a duplicate login of account 0 and drop them all. The
+	// IsAuthenticated() filter is the only thing standing between this feature and mass
+	// disconnects of clients that are still typing their password.
+	TEST_CASE("DisplacementSkipsUnauthenticatedSessions", "[player_lifecycle]")
+	{
+		asio::io_service ioService;
+		PlayerManager playerManager{ 16 };
+		RealmManager realmManager{ 16 };
+		DiscardingDatabase database;
+
+		std::vector<std::shared_ptr<Player>> players;
+		for (int index = 0; index < 3; ++index)
+		{
+			auto connection = auth::Connection::create(ioService, nullptr);
+			auto player = std::make_shared<Player>(playerManager, realmManager, database.async,
+				connection, "127.0.0.1");
+			playerManager.AddPlayer(player);
+			players.push_back(std::move(player));
+		}
+
+		REQUIRE(playerManager.GetPlayerCount() == 3);
+
+		// Account 0 is what every one of them reports until it authenticates.
+		playerManager.KickOtherSessionsForAccount(0, *players.front(),
+			auth::session_kick_reason::LoggedInElsewhere);
+
+		// Kicks are posted, so pump before concluding that none happened.
+		for (int pass = 0; pass < 20; ++pass)
+		{
+			ioService.run_for(std::chrono::milliseconds(1));
+			ioService.restart();
+		}
+
+		CHECK(playerManager.GetPlayerCount() == 3);
+	}
+
+	// The point of the feature: a login displaces every other session of that account, and only
+	// of that account. Getting either half wrong is severe in opposite directions -- too narrow
+	// leaves a stolen account playable, too broad disconnects bystanders.
+	TEST_CASE("DisplacementKicksOtherSessionsOfTheSameAccountOnly", "[player_lifecycle]")
+	{
+		asio::io_service ioService;
+		PlayerManager playerManager{ 16 };
+		RealmManager realmManager{ 16 };
+		DiscardingDatabase database;
+
+		const auto addPlayer = [&](const uint64 accountId)
+		{
+			auto connection = auth::Connection::create(ioService, nullptr);
+			auto player = std::make_shared<Player>(playerManager, realmManager, database.async,
+				connection, "127.0.0.1");
+			player->SetAuthenticatedForTest(accountId);
+			playerManager.AddPlayer(player);
+			return player;
+		};
+
+		const auto newSession = addPlayer(7);
+		const auto olderSession = addPlayer(7);
+		const auto secondOlderSession = addPlayer(7);
+		const auto unrelatedSession = addPlayer(8);
+
+		REQUIRE(playerManager.GetPlayerCount() == 4);
+
+		playerManager.KickOtherSessionsForAccount(7, *newSession,
+			auth::session_kick_reason::LoggedInElsewhere);
+
+		// Both older sessions of account 7 go; the caller and account 8 stay.
+		REQUIRE(pumpUntil(ioService, [&playerManager]()
+		{
+			return playerManager.GetPlayerCount() == 2;
+		}));
+
+		CHECK(playerManager.GetPlayerByAccountID(7) == newSession);
+		CHECK(playerManager.GetPlayerByAccountID(8) == unrelatedSession);
+	}
+
+	// Kicking by account must take every session, not the first one it finds. The ban path is
+	// the one that matters: a banned account with a session left behind is still playing.
+	TEST_CASE("KickByAccountIdKicksEverySessionOfThatAccount", "[player_lifecycle]")
+	{
+		asio::io_service ioService;
+		PlayerManager playerManager{ 16 };
+		RealmManager realmManager{ 16 };
+		DiscardingDatabase database;
+
+		for (int index = 0; index < 3; ++index)
+		{
+			auto connection = auth::Connection::create(ioService, nullptr);
+			auto player = std::make_shared<Player>(playerManager, realmManager, database.async,
+				connection, "127.0.0.1");
+			player->SetAuthenticatedForTest(42);
+			playerManager.AddPlayer(player);
+		}
+
+		REQUIRE(playerManager.GetPlayerCount() == 3);
+
+		playerManager.KickPlayerByAccountId(42, auth::session_kick_reason::AccountBanned);
+
+		CHECK(pumpUntil(ioService, [&playerManager]()
+		{
+			return playerManager.GetPlayerCount() == 0;
+		}));
+	}
+
+	// Displacing an account that holds only the session doing the displacing must do nothing.
+	// This is the common case -- almost every login -- so a mistake here would be felt by
+	// everyone, not by the rare player with two clients open.
+	TEST_CASE("DisplacementIsANoOpForASingleSession", "[player_lifecycle]")
+	{
+		asio::io_service ioService;
+		LoopbackPair pair = makeLoopbackPair(ioService);
+
+		PlayerManager playerManager{ 16 };
+		RealmManager realmManager{ 16 };
+		DiscardingDatabase database;
+
+		auto player = std::make_shared<Player>(playerManager, realmManager, database.async,
+			pair.server, "127.0.0.1");
+		player->SetAuthenticatedForTest(11);
+		playerManager.AddPlayer(player);
+		pair.server->startReceiving();
+
+		playerManager.KickOtherSessionsForAccount(11, *player,
+			auth::session_kick_reason::LoggedInElsewhere);
+
+		for (int pass = 0; pass < 20; ++pass)
+		{
+			ioService.run_for(std::chrono::milliseconds(1));
+			ioService.restart();
+		}
+
+		CHECK(playerManager.GetPlayerCount() == 1);
+	}
+
+	// Two kicks landing on the same session must not tear it down twice. The manager's erase is
+	// guarded only by an assert, so under NDEBUG a second teardown runs off the end of the list.
+	// Reachable in ordinary operation now: two logins close together each post a kick at the
+	// same victim before either has run.
+	TEST_CASE("DoubleKickTearsTheSessionDownOnce", "[player_lifecycle]")
+	{
+		asio::io_service ioService;
+		LoopbackPair pair = makeLoopbackPair(ioService);
+
+		PlayerManager playerManager{ 16 };
+		RealmManager realmManager{ 16 };
+		DiscardingDatabase database;
+
+		auto player = std::make_shared<Player>(playerManager, realmManager, database.async,
+			pair.server, "127.0.0.1");
+		player->SetAuthenticatedForTest(5);
+		playerManager.AddPlayer(player);
+		pair.server->startReceiving();
+
+		player->PostKick(auth::session_kick_reason::LoggedInElsewhere);
+		player->PostKick(auth::session_kick_reason::LoggedInElsewhere);
+
+		CHECK(pumpUntil(ioService, [&playerManager]()
+		{
+			return playerManager.GetPlayerCount() == 0;
+		}));
+
+		// Drain the second kick: without the guard in destroy() this is where the list is
+		// corrupted.
+		for (int pass = 0; pass < 20; ++pass)
+		{
+			ioService.run_for(std::chrono::milliseconds(1));
+			ioService.restart();
+		}
+
+		CHECK(playerManager.GetPlayerCount() == 0);
 	}
 
 	// The manager must hand out an owning reference. Its mutex protects the list, not the

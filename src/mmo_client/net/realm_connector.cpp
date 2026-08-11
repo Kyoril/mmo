@@ -111,6 +111,27 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult RealmConnector::OnKickReason(game::IncomingPacket& packet)
+	{
+		uint8 reason = 0;
+		if (!(packet >> io::read<uint8>(reason)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (reason >= auth::session_kick_reason::Count_)
+		{
+			// A newer server may know reasons this build does not. The disconnect that follows is
+			// what matters; without a reason we can recognise, the generic message is shown.
+			WLOG("Realm sent unknown session kick reason " << static_cast<uint16>(reason));
+			return PacketParseResult::Pass;
+		}
+
+		m_kickReason = static_cast<auth::SessionKickReason>(reason);
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult RealmConnector::OnAuthSessionResponse(game::IncomingPacket & packet)
 	{
 		// No longer accept these packets from here on!
@@ -283,12 +304,19 @@ namespace mmo
 			// Reset server seed
 			m_serverSeed = 0;
 
+			// A reason left over from a previous session must not be shown for this one.
+			m_kickReason.reset();
+
 			// Generate a new client seed
 			std::uniform_int_distribution<uint32> dist;
 			m_clientSeed = dist(RandomGenerator);
 
 			// Accept LogonChallenge packets from here on
 			RegisterPacketHandler(game::realm_client_packet::AuthChallenge, *this, &RealmConnector::OnAuthChallenge);
+
+			// The realm may terminate the session at any point from here on -- including before we
+			// finish authenticating -- so this handler is registered for the whole connection.
+			RegisterPacketHandler(game::realm_client_packet::KickReason, *this, &RealmConnector::OnKickReason);
 		}
 		else
 		{

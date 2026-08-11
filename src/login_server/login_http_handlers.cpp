@@ -399,8 +399,8 @@ namespace mmo
 			jsonResponse["status"] = "SUCCESS";
 			SendJsonResponse(response, jsonResponse);
 
-			m_realmManager.NotifyAccountBanned(account->id);
-			m_playerManager.KickPlayerByAccountId(account->id);
+			m_realmManager.NotifyAccountKicked(account->id, auth::session_kick_reason::AccountBanned);
+			m_playerManager.KickPlayerByAccountId(account->id, auth::session_kick_reason::AccountBanned);
 		}
 		catch (...)
 		{

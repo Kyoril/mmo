@@ -10,7 +10,7 @@ namespace mmo
 {
     // ---- Player stubs ----
 
-    void Player::Kick() {}
+    void Player::Kick(std::optional<auth::SessionKickReason>) {}
 
     void Player::SendAuthChallenge() {}
 

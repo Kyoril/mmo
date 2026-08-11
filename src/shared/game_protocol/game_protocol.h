@@ -68,7 +68,7 @@ namespace mmo
 
 		constexpr uint32 MAX_FRIENDS = 50;
 
-		constexpr uint32 ProtocolVersion = 0x00000006;
+		constexpr uint32 ProtocolVersion = 0x00000007;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -726,6 +726,11 @@ namespace mmo
 
 				/// Sent to the client when it unlocks a new emote. Payload: uint32 emoteId.
 				EmoteLearned,
+
+				/// Sent immediately before the realm closes a session it is terminating, so the
+				/// client can tell the player why rather than showing a generic connection error.
+				/// Payload: uint8 reason (mmo::auth::session_kick_reason).
+				KickReason,
 
 				/// Counter constant
 				Count_,

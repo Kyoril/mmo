@@ -16,6 +16,7 @@
 #include <cassert>
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <vector>
 #include <set>
 
@@ -74,7 +75,11 @@ namespace mmo
 			FriendMgr &friendMgr,
 			ChannelMgr &channelMgr);
 		/// Disconnects the player if still connected.
-		void Kick();
+		///
+		/// @param reason Sent to the client before the connection closes so it can tell the player
+		///	       why. Omit for teardowns that need no explanation (shutdown), where the client
+		///	       showing a plain connection error is the honest outcome.
+		void Kick(std::optional<auth::SessionKickReason> reason = std::nullopt);
 
 		/// Gets the player connection class used to send packets to the client.
 		Client &GetConnection()
@@ -433,6 +438,8 @@ namespace mmo
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
 		uint8 m_gmLevel = 0; // GM level of the player account (0: normal player, 1+: GM levels)
+		/// Whether this session has already been torn down. See Destroy().
+		bool m_destroyed = false;
 		std::vector<std::string> m_accountFeatures; // Active account feature keys (entitlements) granted to the account
 		ActionButtons m_actionButtons;
 		bool m_pendingButtons = false;

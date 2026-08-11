@@ -304,6 +304,15 @@ namespace mmo
 					return;
 				}
 
+				// A scenario that provokes the disconnect on purpose records it and carries on
+				// checking; only an unexpected one is a failure.
+				if (m_disconnectExpected)
+				{
+					ILOG("Realm connection lost (expected by the scenario).");
+					m_disconnected = true;
+					return;
+				}
+
 				ELOG("Realm connection lost.");
 				Fail(e2e_exit_code::Disconnected);
 			});

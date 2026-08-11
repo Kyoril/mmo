@@ -349,7 +349,7 @@ namespace mmo
 
 				// Register required packet handlers
 				RegisterPacketHandler(auth::login_realm_packet::ClientAuthSessionResponse, *this, &LoginConnector::OnClientAuthSessionResponse);
-				RegisterPacketHandler(auth::login_realm_packet::AccountBanned, *this, &LoginConnector::OnAccountBanned);
+				RegisterPacketHandler(auth::login_realm_packet::KickAccount, *this, &LoginConnector::OnKickAccount);
 				RegisterPacketHandler(auth::login_realm_packet::Pong, *this, &LoginConnector::OnPong);
 
 				QueueNextPing();
@@ -477,16 +477,28 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult LoginConnector::OnAccountBanned(auth::IncomingPacket& packet)
+	PacketParseResult LoginConnector::OnKickAccount(auth::IncomingPacket& packet)
 	{
 		uint64 accountId = 0;
-		if (!(packet >> io::read<uint64>(accountId)))
+		uint8 reason = 0;
+		if (!(packet >> io::read<uint64>(accountId) >> io::read<uint8>(reason)))
 		{
-			ELOG("Failed to read AccountBanned packet from login server!");
+			ELOG("Failed to read KickAccount packet from login server!");
 			return PacketParseResult::Disconnect;
 		}
 
-		m_playerManager.KickPlayerByAccountId(accountId);
+		if (reason >= auth::session_kick_reason::Count_)
+		{
+			// A newer login server may know reasons this build does not. Kicking on an unknown
+			// reason is still correct -- the login server has decided the session must go -- so
+			// only the explanation is dropped, and the client falls back to its generic message.
+			WLOG("Login server sent unknown session kick reason " << static_cast<uint16>(reason)
+				<< " for account " << accountId << "; kicking without a reason");
+			m_playerManager.KickPlayerByAccountId(accountId);
+			return PacketParseResult::Pass;
+		}
+
+		m_playerManager.KickPlayerByAccountId(accountId, static_cast<auth::SessionKickReason>(reason));
 
 		return PacketParseResult::Pass;
 	}

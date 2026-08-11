@@ -118,8 +118,15 @@ namespace mmo
 			std::uniform_int_distribution<uint32> dist;
 			m_clientSeed = dist(RandomGenerator);
 
+			// A reason left over from a previous session must not be reported for this one.
+			m_kickReason.reset();
+
 			// Accept LogonChallenge packets from here on
 			RegisterPacketHandler(game::realm_client_packet::AuthChallenge, *this, &BotRealmConnector::OnAuthChallenge);
+
+			// The realm may terminate the session at any point from here on, including before we
+			// finish authenticating.
+			RegisterPacketHandler(game::realm_client_packet::KickReason, *this, &BotRealmConnector::OnKickReason);
 		}
 		else
 		{
@@ -499,6 +506,26 @@ namespace mmo
 			});
 
 		ILOG("[Realm] Handshaking...");
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnKickReason(game::IncomingPacket& packet)
+	{
+		uint8 reason = 0;
+		if (!(packet >> io::read<uint8>(reason)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (reason >= auth::session_kick_reason::Count_)
+		{
+			WLOG("Realm sent unknown session kick reason " << static_cast<uint16>(reason));
+			return PacketParseResult::Pass;
+		}
+
+		m_kickReason = static_cast<auth::SessionKickReason>(reason);
+		ILOG("Realm terminated this session, reason code " << static_cast<uint16>(reason));
+
 		return PacketParseResult::Pass;
 	}
 

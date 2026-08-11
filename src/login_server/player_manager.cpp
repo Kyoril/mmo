@@ -3,6 +3,7 @@
 #include "player_manager.h"
 #include "player.h"
 #include "binary_io/string_sink.h"
+#include "log/default_log_levels.h"
 #include <vector>
 #include <cassert>
 
@@ -91,20 +92,58 @@ namespace mmo
 		return nullptr;
 	}
 
-	void PlayerManager::KickPlayerByAccountId(uint64 accountId)
+	void PlayerManager::KickPlayerByAccountId(const uint64 accountId, const std::optional<auth::SessionKickReason> reason)
 	{
-		// The lookup takes and releases the mutex itself, and PostKick takes no lock at all, so
-		// the deadlock this function used to guard against by hand cannot arise.
-		const auto player = GetPlayerByAccountID(accountId);
-		if (!player)
+		// Every session of the account, not just the first match. An account is not supposed to
+		// hold more than one once duplicate-login displacement is in play, but the ban path is
+		// exactly where "not supposed to" is not good enough: leaving a session behind would leave
+		// a banned account playing.
+		for (const auto& player : CollectSessionsForAccount(accountId, nullptr))
 		{
-			return;
+			// Posted rather than called directly: this runs on whichever thread served the request
+			// that asked for the kick -- the REST ban handler, above all -- and Kick() may only run
+			// on the connection's strand.
+			player->PostKick(reason);
+		}
+	}
+
+	void PlayerManager::KickOtherSessionsForAccount(const uint64 accountId, const Player& except, const auth::SessionKickReason reason)
+	{
+		for (const auto& player : CollectSessionsForAccount(accountId, &except))
+		{
+			ILOG("Displacing an older session of account " << accountId << " because it was logged in again");
+
+			// Posted: the login server runs two io threads, so the session being displaced almost
+			// never belongs to the strand this call is running on.
+			player->PostKick(reason);
+		}
+	}
+
+	std::vector<std::shared_ptr<Player>> PlayerManager::CollectSessionsForAccount(const uint64 accountId, const Player* except)
+	{
+		// Collected under the lock and kicked outside it: a kick removes the player from this
+		// manager, which takes the same mutex.
+		std::vector<std::shared_ptr<Player>> sessions;
+
+		std::scoped_lock playerLock{ m_playerMutex };
+
+		for (const auto& player : m_players)
+		{
+			// An unauthenticated session has no session key and cannot act on the account, so it
+			// is not a session of it -- only a challenge that was never completed. Skipping those
+			// is not a nicety: every session reports account id 0 until its challenge resolves, so
+			// without this a kick for account 0 would drop every client still logging in.
+			if (player.get() == except ||
+				!player->IsAuthenticated() ||
+				player->GetAccountId() != accountId)
+			{
+				continue;
+			}
+
+			sessions.push_back(player);
 		}
 
-		// Posted rather than called directly: this runs on whichever thread served the request
-		// that asked for the kick -- the REST ban handler, above all -- and Kick() may only run
-		// on the connection's strand.
-		player->PostKick();
+		return sessions;
 	}
 
 	void PlayerManager::DisconnectAll()

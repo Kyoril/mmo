@@ -8,6 +8,7 @@
 #include "motd_manager.h"
 
 #include "binary_io/string_sink.h"
+#include "log/default_log_levels.h"
 
 #include <cassert>
 
@@ -66,33 +67,58 @@ namespace mmo
 		added->SendAuthChallenge();
 	}
 
-	void PlayerManager::KickPlayerByAccountId(uint64 accountId)
+	void PlayerManager::KickPlayerByAccountId(const uint64 accountId, const std::optional<auth::SessionKickReason> reason)
 	{
-		std::shared_ptr<Player> player;
-
-		// We do finding the player in a scope so that we only lock the m_playerMutex as long as we really need to.
-		// After we found the player, we release it because kicking the player will also try to remove him from the list
-		// of players, which also tries to lock the mutex which would result in a deadlock.
+		// Every session of the account goes, not just the first match. An account is not supposed
+		// to hold more than one, but if it somehow does -- sessions that predate the login server
+		// learning about this account, say -- then leaving the extras behind would defeat the point
+		// of the kick.
+		//
+		// Collected in a scope so that the mutex is held only as long as it is really needed: the
+		// kick removes the player from this manager, which takes the same mutex.
+		std::vector<std::shared_ptr<Player>> players;
 		{
 			std::scoped_lock playerLock{ m_playerMutex };
 
-			const auto p = std::find_if(
-					m_players.begin(),
-					m_players.end(),
-					[&accountId](const std::shared_ptr<Player>& p)
-					{
-						return (p->IsAuthenticated() && accountId == p->GetAccountId());
-					});
-
-			if (p != m_players.end())
+			for (const auto& player : m_players)
 			{
-				player = *p;
+				if (player->IsAuthenticated() && accountId == player->GetAccountId())
+				{
+					players.push_back(player);
+				}
 			}
 		}
 
-		if (player)
+		for (const auto& player : players)
 		{
-			player->Kick();
+			player->Kick(reason);
+		}
+	}
+
+	void PlayerManager::KickOtherSessionsForAccount(const uint64 accountId, const Player& except, const auth::SessionKickReason reason)
+	{
+		std::vector<std::shared_ptr<Player>> displaced;
+		{
+			std::scoped_lock playerLock{ m_playerMutex };
+
+			for (const auto& player : m_players)
+			{
+				if (player.get() == &except ||
+					!player->IsAuthenticated() ||
+					player->GetAccountId() != accountId)
+				{
+					continue;
+				}
+
+				displaced.push_back(player);
+			}
+		}
+
+		for (const auto& player : displaced)
+		{
+			ILOG("Displacing older session of account " << player->GetAccountName()
+				<< " (" << accountId << ") because it authenticated again on this realm");
+			player->Kick(reason);
 		}
 	}
 

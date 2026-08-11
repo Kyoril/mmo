@@ -11,6 +11,7 @@
 #include "base/big_number.h"
 #include "auth_protocol/srp_server.h"
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <functional>
@@ -48,14 +49,18 @@ namespace mmo
 		///
 		/// May only be called on the connection's strand. Callers on any other thread must use
 		/// PostKick instead.
-		void Kick();
+		///
+		/// @param reason Sent to the client before the connection closes so it can tell the player
+		///	       why. Omit for teardowns that need no explanation (shutdown), where the client
+		///	       showing a plain connection error is the honest outcome.
+		void Kick(std::optional<auth::SessionKickReason> reason = std::nullopt);
 
 		/// Requests a kick from any thread. The kick itself runs on the connection's strand.
 		///
 		/// Kick() tears down state that the connection's own handlers also touch, so calling it
 		/// directly is only safe from the strand. Callers that are not on it -- the REST ban
-		/// handler, above all -- must come through here.
-		void PostKick();
+		/// handler and the duplicate-login displacement, above all -- must come through here.
+		void PostKick(std::optional<auth::SessionKickReason> reason = std::nullopt);
 
 		/// Gets the player connection class used to send packets to the client.
 		inline Client &GetConnection() { assert(m_connection); return *m_connection; }
@@ -65,15 +70,34 @@ namespace mmo
 		/// @returns true if the player is authentificated.
 		/// Determines whether the player has completed the SRP6 exchange.
 		/// @returns true if a session key has been negotiated.
-		inline bool IsAuthenticated() const { return !m_sessionKey.isZero(); }
+		///
+		/// Deliberately not derived from m_sessionKey. This is read from other io threads while
+		/// scanning the session list for an account, and BigNumber wraps an OpenSSL BIGNUM whose
+		/// internals are being written on this session's own strand at the very moment a login
+		/// completes -- reading it across threads is a race on the library's allocation, not on a
+		/// scalar. A flag published once, after the key is in place, is safe to read from anywhere.
+		inline bool IsAuthenticated() const { return m_authenticated.load(std::memory_order_acquire); }
 		/// Gets the account name the player is logged in with.
 		inline const std::string &GetAccountName() const { return m_accountName; }
-		/// Gets the account id the player is logged in with.
-		inline uint64 GetAccountId() const { return m_accountId; }
+		/// Gets the account id the player is logged in with. Read from other io threads, hence
+		/// atomic: see IsAuthenticated.
+		inline uint64 GetAccountId() const { return m_accountId.load(std::memory_order_relaxed); }
 		/// Returns the client locale.
 		inline const auth::AuthLocale &getLocale() const { return m_locale; }
 
 	public:
+		/// Marks this session as belonging to an account, without running the SRP exchange.
+		///
+		/// Exists for tests only. Everything that selects sessions by account -- displacement, the
+		/// ban kick -- keys off IsAuthenticated() and GetAccountId(), and both are otherwise only
+		/// reachable by driving a full logon challenge and proof against a database. Without this
+		/// the tests could assert that nothing happens and never that the right thing does.
+		void SetAuthenticatedForTest(const uint64 accountId)
+		{
+			m_accountId.store(accountId, std::memory_order_relaxed);
+			m_authenticated.store(true, std::memory_order_release);
+		}
+
 		/// Registers a packet handler.
 		void RegisterPacketHandler(uint8 opCode, PacketHandler &&handler);
 		/// Syntactic sugar implementation of RegisterPacketHandler to avoid having to use std::bind.
@@ -102,13 +126,20 @@ namespace mmo
 		uint8 m_version2 = 0;					// Minor version: 0.X.0.00000
 		uint8 m_version3 = 0;					// Patch version: 0.0.X.00000
 		uint16 m_build = 0;						// Build version: 0.0.0.XXXXX
-		uint64 m_accountId = 0;					// Account ID
+		std::atomic<uint64> m_accountId{ 0 };	// Account ID (read cross-thread, see GetAccountId)
+		// Published once the session key is in place. See IsAuthenticated for why this exists
+		// rather than a check on m_sessionKey.
+		std::atomic<bool> m_authenticated{ false };
 		std::set<uint32> m_accountFeatureIds;	// Active account feature ids (loaded after login; used for realm visibility)
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 
 		uint32 m_authProtocol = 0;
 		uint32 m_gameProtocol = 0;
+
+		/// Whether this session has already been torn down. Only ever touched on the connection's
+		/// strand. See destroy() for why a second teardown is reachable.
+		bool m_destroyed = false;
 
 	private:
 		BigNumber m_sessionKey;
@@ -134,6 +165,10 @@ namespace mmo
 
 	private:
 		void SendAuthProof(auth::AuthResult result);
+		/// Tells the client why its session is about to be terminated. Must be sent before the
+		/// connection is closed; the connection defers the actual shutdown until the write
+		/// completes, so the client receives this ahead of the disconnect.
+		void SendKickNotice(auth::SessionKickReason reason);
 		void SendRealmList();
 		/// Sends the active account feature keys (entitlements) to the client.
 		void SendAccountFeatures(const std::vector<std::string>& featureKeys);

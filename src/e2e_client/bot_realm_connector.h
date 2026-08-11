@@ -6,6 +6,7 @@
 #include "mmo_client/realm_data.h"
 
 #include "game_protocol/game_connector.h"
+#include "auth_protocol/auth_protocol.h"
 #include "base/big_number.h"
 #include "base/signal.h"
 #include "game/character_view.h"
@@ -18,6 +19,8 @@
 #include "binary_io/reader.h"
 
 #include "asio/io_service.hpp"
+
+#include <optional>
 
 namespace mmo
 {
@@ -117,6 +120,9 @@ namespace mmo
 		MovementInfo m_movementInfo;
 		std::string m_lastSpellStateIssue;
 
+		/// Reason the realm gave for terminating this session, if any.
+		std::optional<auth::SessionKickReason> m_kickReason;
+
 		// Party state
 		std::vector<BotPartyMember> m_partyMembers;
 		uint64 m_partyLeaderGuid { 0 };
@@ -142,6 +148,9 @@ namespace mmo
 
 		/// Accept unhandled packets without disconnecting.
 		PacketParseResult HandleIncomingPacket(game::IncomingPacket& packet) override;
+
+		/// Why the realm terminated this session, if it said so before closing the connection.
+		[[nodiscard]] std::optional<auth::SessionKickReason> GetKickReason() const { return m_kickReason; }
 
 	public:
 		// ~ Begin IConnectorListener
@@ -344,6 +353,8 @@ namespace mmo
 		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
 
 		PacketParseResult OnAuthSessionResponse(game::IncomingPacket& packet);
+
+		PacketParseResult OnKickReason(game::IncomingPacket& packet);
 
 		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
 

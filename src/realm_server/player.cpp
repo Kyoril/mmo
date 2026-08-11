@@ -55,14 +55,36 @@ namespace mmo
 		m_connection->setListener(*this);
 	}
 
-	void Player::Kick()
+	void Player::Kick(const std::optional<auth::SessionKickReason> reason)
 	{
 		DLOG("Kicking player with account " << GetAccountName() << " (" << GetAccountId() << ")");
+
+		// Sent before Destroy(): the connection defers its shutdown while a write is in flight, so
+		// this reaches the client ahead of the disconnect rather than racing it.
+		if (reason && m_connection)
+		{
+			m_connection->sendSinglePacket([reason](game::OutgoingPacket& packet) {
+				packet.Start(game::realm_client_packet::KickReason);
+				packet << io::write<uint8>(*reason);
+				packet.Finish();
+			});
+		}
+
 		Destroy();
 	}
 
 	void Player::Destroy()
 	{
+		// Everything below assumes it runs once: m_connection is released at the end, so a second
+		// pass would dereference a null pointer, and the guild/friend/group notifications would go
+		// out twice. The kick paths that reach here have multiplied with duplicate-login
+		// displacement, so the guard is no longer a theoretical one.
+		if (m_destroyed)
+		{
+			return;
+		}
+		m_destroyed = true;
+
 		// Save action bar (under the class it currently belongs to)
 		SaveActionButtonsIfPending();
 
@@ -261,6 +283,16 @@ namespace mmo
 					strongThis->m_accountId = accountId;
 					strongThis->m_gmLevel = gmLevel;
 					strongThis->m_accountFeatures = features;
+
+					// An account may hold only one session on this realm. The login server
+					// broadcasts a kick when an account logs in again, but this local check is
+					// what covers the two cases the broadcast cannot: this realm having been
+					// disconnected from the login server when it went out, and this session
+					// arriving before it does. Done before InitializeSession so the displaced
+					// session is gone by the time this one is usable.
+					strongThis->m_manager.KickOtherSessionsForAccount(accountId, *strongThis,
+						auth::session_kick_reason::LoggedInElsewhere);
+
 					strongThis->InitializeSession(sessionKey);
 				}
 				else
