@@ -38,12 +38,13 @@ namespace mmo
 		/// as unapplied and both try to apply it.
 		bool ApplyMigrations();
 
-	private:
-		/// Schedules the next keep-alive ping to the database.
 		/// Pings the connection so the server does not drop it as idle.
 		///
 		/// Called only from this connection's own pool thread -- see DatabasePool::KeepAlive.
 		bool KeepAlive();
+
+	private:
+		/// Schedules the next keep-alive ping to the database.
 
 	public:
 		/// @copydoc IDatabase::GetCharacterViewsByAccountId
