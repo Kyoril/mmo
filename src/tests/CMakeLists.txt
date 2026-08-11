@@ -22,6 +22,8 @@ add_subdirectory(realm_server_tests)
 add_subdirectory(simple_file_format_tests)
 add_subdirectory(terrain_io_tests)
 add_subdirectory(terrain_tests)
+add_subdirectory(virtual_dir_tests)
+add_subdirectory(xml_handler_tests)
 
 # Suites that need a graphics device and cannot run on the headless server build.
 if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
