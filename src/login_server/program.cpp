@@ -33,6 +33,7 @@
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
 #include "network/shutdown_signals.h"
+#include "base/database_pool.h"
 
 namespace mmo
 {
@@ -63,12 +64,6 @@ namespace mmo
 	{
 		// This is the main ioService object
 		asio::io_service ioService;
-
-		// The database service object and keep-alive object
-		asio::io_service dbService;
-
-		// Keep the database service alive / busy until this object is alive
-		auto dbWork = std::make_shared<asio::io_context::work>(dbService);
 
 		TimerQueue timerQueue(ioService);
 
@@ -116,26 +111,49 @@ namespace mmo
 		// Database setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		const auto async = [&dbService](Action action) { dbService.post(std::move(action)); };
-		const auto sync = [&ioService](Action action) { ioService.post(std::move(action)); };
+		auto databasePool = DatabasePool<MySQLDatabase>::Create(config.mysqlPoolSize,
+			[&config](std::size_t index) -> std::unique_ptr<MySQLDatabase>
+			{
+				auto database = std::make_unique<MySQLDatabase>(mysql::DatabaseInfo{
+					config.mysqlHost,
+					config.mysqlPort,
+					config.mysqlUser,
+					config.mysqlPassword,
+					config.mysqlDatabase,
+					config.mysqlUpdatePath
+				});
 
-		auto database = std::make_unique<MySQLDatabase>(mysql::DatabaseInfo{
-			config.mysqlHost,
-			config.mysqlPort,
-			config.mysqlUser,
-			config.mysqlPassword,
-			config.mysqlDatabase,
-			config.mysqlUpdatePath
-		}, timerQueue, async);
-		if (!database->Load())
+				if (!database->Connect())
+				{
+					return nullptr;
+				}
+
+				// Only the first connection migrates. Running the update scripts from several
+				// connections at once races on the history table.
+				if (index == 0 && !database->ApplyMigrations())
+				{
+					return nullptr;
+				}
+
+				return database;
+			},
+			[](MySQLDatabase& database) { database.KeepAlive(); });
+
+		if (!databasePool)
 		{
 			ELOG("Could not load the database");
 			return 1;
 		}
 
-		AsyncDatabase asyncDatabase{ *database, async, sync };
+		const auto sync = [&ioService](std::function<void()> action) { ioService.post(std::move(action)); };
+		const auto async = [&databasePool](uint64 key, std::function<void(IDatabase&)> work)
+		{
+			databasePool->Dispatch(key, [work = std::move(work)](MySQLDatabase& database) { work(database); });
+		};
 
-		ILOG("Database loaded successfully");
+		AsyncDatabase asyncDatabase{ async, sync };
+
+		ILOG("Database ready with " << databasePool->Size() << " connection(s)");
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the realm service
@@ -262,7 +280,10 @@ namespace mmo
 			config.webPassword,
 			playerManager,
 			realmManager,
-			*database
+			// Slot 0. The REST handlers call this synchronously on an io thread while a pool
+			// thread uses the same instance; both take m_databaseMutex, exactly as the io
+			// thread and the db thread did before, so this is no worse off than it was.
+			databasePool->Primary()
 			);
 		
 
@@ -304,7 +325,7 @@ namespace mmo
 		std::unique_ptr<asio::signal_set> shutdownSignals;
 		shutdownSignals = InstallShutdownHandler(ioService,
 			[&realmServer, &playerServer, &webService, &playerManager, &realmManager,
-			 &shutdownSignals, &timerQueue, &dbWork]()
+			 &shutdownSignals, &timerQueue, &databasePool]()
 		{
 			ILOG("Shutdown signal received - stopping cleanly");
 
@@ -337,10 +358,13 @@ namespace mmo
 				shutdownSignals->cancel(error);
 			}
 
-			// Releasing the database work guard lets the db thread finish its queue and exit.
-			// Note this is the ONLY thing that winds these services down: ioService.stop() would
-			// discard the closes just posted above instead of running them.
-			dbWork.reset();
+			// Stopped last, so nothing can still be queueing database work. The pool drains
+			// rather than discards: what is queued at this point is character and account
+			// writes, and dropping those loses player data.
+			if (databasePool)
+			{
+				databasePool->Stop();
+			}
 		});
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -360,9 +384,6 @@ namespace mmo
 			});
 		}
 
-		// Run the database service thread
-		std::thread dbThread{ [&dbService]() { dbService.run(); } };
-
 		// Also run the io service on the main thread as well
 		ioService.run();
 
@@ -372,10 +393,9 @@ namespace mmo
 			thread.join();
 		}
 
-		// Terminate the database worker and wait for pending database operations to finish.
-		// Already released by the shutdown handler on the signal path; harmless to repeat.
-		dbWork.reset();
-		dbThread.join();
+		// Already stopped by the shutdown handler on the signal path; Stop() is idempotent and
+		// this covers the paths that exit without a signal.
+		databasePool->Stop();
 
 		ILOG("Login server stopped cleanly");
 

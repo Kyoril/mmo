@@ -11,18 +11,28 @@ using namespace mmo;
 
 namespace
 {
-    void syncDispatch(const std::function<void()>& action) { action(); }
+    /// Runs database work inline against `database`, and results inline too.
+    ///
+    /// The pool is not involved here: these tests assert on manager behaviour, not on routing,
+    /// so the ordering key is ignored and the work is handed the mock directly.
+    template <class TInterface>
+    typename mmo::AsyncDatabaseT<TInterface>::WorkDispatcher inlineWorker(TInterface& database)
+    {
+        return [&database](mmo::uint64, std::function<void(TInterface&)> work) { work(database); };
+    }
+
+    void syncResult(std::function<void()> action) { action(); }
 
     /// Minimal test fixture: creates a MOTDManager + PlayerManager with sync dispatching.
     struct FriendMgrFixture
     {
         MockMOTDDatabase motdDb;
-        AsyncMOTDDatabase asyncMotdDb{ motdDb, syncDispatch, syncDispatch };
+        AsyncMOTDDatabase asyncMotdDb{ inlineWorker<IMOTDDatabase>(motdDb), syncResult };
         MOTDManager motdMgr{ asyncMotdDb };
         PlayerManager playerMgr{ 100, motdMgr };
 
         MockFriendDatabase mockDb;
-        AsyncFriendDatabase asyncFriendDb{ mockDb, syncDispatch, syncDispatch };
+        AsyncFriendDatabase asyncFriendDb{ inlineWorker<IFriendDatabase>(mockDb), syncResult };
         FriendMgr mgr{ asyncFriendDb, playerMgr };
     };
 }
@@ -30,12 +40,12 @@ namespace
 TEST_CASE("FriendMgr IsLoaded is false before LoadAllFriendships completes", "[friend_mgr]")
 {
     MockFriendDatabase mockDb;
-    AsyncFriendDatabase asyncDb{ mockDb,
-        [](const std::function<void()>&) { /* defer */ },
-        [](const std::function<void()>&) { /* defer */ } };
+    AsyncFriendDatabase asyncDb{
+        [](uint64, std::function<void(IFriendDatabase&)>) { /* defer */ },
+        [](std::function<void()>) { /* defer */ } };
 
     MockMOTDDatabase motdDb;
-    AsyncMOTDDatabase asyncMotdDb{ motdDb, syncDispatch, syncDispatch };
+    AsyncMOTDDatabase asyncMotdDb{ inlineWorker<IMOTDDatabase>(motdDb), syncResult };
     MOTDManager motdMgr{ asyncMotdDb };
     PlayerManager playerMgr{ 100, motdMgr };
 

@@ -28,6 +28,7 @@
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
 #include "network/shutdown_signals.h"
+#include "base/database_pool.h"
 
 #include "deps/cxxopts/cxxopts.hpp"
 
@@ -51,6 +52,14 @@ namespace mmo
 
 	namespace
 	{
+		/// Carries an interface type into makeWorker, which cannot take an explicit template
+		/// argument because it is a lambda.
+		template <class T>
+		struct InterfaceTag
+		{
+			using type = T;
+		};
+
 		static std::string generateLogFileName(const std::string &prefix)
 		{
 			std::ostringstream logFileNameStrm;
@@ -77,14 +86,6 @@ namespace mmo
 
 		// This is the main timer queue
 		TimerQueue timerQueue{ ioService };
-
-		// The database service object and keep-alive object
-		asio::io_service dbService;
-
-		// Keep the database service alive / busy until this object is alive
-		auto dbWork = std::make_shared<asio::io_context::work>(dbService);
-
-		TimerQueue dbTimerQueue(dbService);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Load config file
@@ -137,29 +138,62 @@ namespace mmo
 		// Database setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		auto database = std::make_unique<MySQLDatabase>(mmo::mysql::DatabaseInfo{
-			config.mysqlHost,
-			config.mysqlPort,
-			config.mysqlUser,
-			config.mysqlPassword,
-			config.mysqlDatabase,
-			config.mysqlUpdatePath
-			}, project, dbTimerQueue);
-		if (!database->Load())
+		auto databasePool = DatabasePool<MySQLDatabase>::Create(config.mysqlPoolSize,
+			[&config, &project](std::size_t index) -> std::unique_ptr<MySQLDatabase>
+			{
+				auto database = std::make_unique<MySQLDatabase>(mmo::mysql::DatabaseInfo{
+					config.mysqlHost,
+					config.mysqlPort,
+					config.mysqlUser,
+					config.mysqlPassword,
+					config.mysqlDatabase,
+					config.mysqlUpdatePath
+					}, project);
+
+				if (!database->Connect())
+				{
+					return nullptr;
+				}
+
+				// Only the first connection migrates. Running the update scripts from several
+				// connections at once races on the history table.
+				if (index == 0 && !database->ApplyMigrations())
+				{
+					return nullptr;
+				}
+
+				return database;
+			},
+			[](MySQLDatabase& database) { database.KeepAlive(); });
+
+		if (!databasePool)
 		{
 			ELOG("Could not load the database");
 			return 1;
 		}
 
-		const auto async = [&dbService](Action action) { dbService.post(std::move(action)); };
-		const auto sync = [&ioService](Action action) { ioService.post(std::move(action)); };
-		AsyncDatabase asyncDatabase{ *database, async, sync };
+		ILOG("Database ready with " << databasePool->Size() << " connection(s)");
+
+		const auto sync = [&ioService](std::function<void()> action) { ioService.post(std::move(action)); };
+
+		// One adaptor per narrow interface. MySQLDatabase implements all of them, so each adaptor
+		// is a static upcast performed on whichever pool thread the key routed to.
+		const auto makeWorker = [&databasePool](auto interfaceTag)
+		{
+			using TInterface = typename decltype(interfaceTag)::type;
+			return [&databasePool](uint64 key, std::function<void(TInterface&)> work)
+			{
+				databasePool->Dispatch(key, [work = std::move(work)](MySQLDatabase& database) { work(database); });
+			};
+		};
+
+		AsyncDatabase asyncDatabase{ makeWorker(InterfaceTag<IDatabase>{}), sync };
 
 		// Narrow async wrappers — each subsystem gets only the interface it needs.
-		AsyncGuildDatabase  asyncGuildDb{ *database, async, sync };
-		AsyncFriendDatabase asyncFriendDb{ *database, async, sync };
-		AsyncMOTDDatabase   asyncMotdDb{ *database, async, sync };
-		AsyncChatChannelDatabase asyncChatChannelDb{ *database, async, sync };
+		AsyncGuildDatabase  asyncGuildDb{ makeWorker(InterfaceTag<IGuildDatabase>{}), sync };
+		AsyncFriendDatabase asyncFriendDb{ makeWorker(InterfaceTag<IFriendDatabase>{}), sync };
+		AsyncMOTDDatabase   asyncMotdDb{ makeWorker(InterfaceTag<IMOTDDatabase>{}), sync };
+		AsyncChatChannelDatabase asyncChatChannelDb{ makeWorker(InterfaceTag<IChatChannelDatabase>{}), sync };
 
 		IdGenerator<uint64> groupIdGenerator{ 1 };
 
@@ -179,12 +213,12 @@ namespace mmo
 		// Restore groups
 		const auto startTime = GetAsyncTimeMs();
 		ILOG("Loading player groups...");
-		if (auto groupIds = database->ListGroups())
+		if (auto groupIds = databasePool->Primary().ListGroups())
 		{
 			for (auto& groupId : *groupIds)
 			{
 				// Create a new group
-				auto group = std::make_shared<PlayerGroup>(groupId, playerManager, AsyncGroupDatabase{ *database, async, sync }, timerQueue);
+				auto group = std::make_shared<PlayerGroup>(groupId, playerManager, AsyncGroupDatabase{ makeWorker(InterfaceTag<IGroupDatabase>{}), sync }, timerQueue);
 				group->Preload();
 
 				// Notify the generator about the new group id to avoid overlaps
@@ -263,10 +297,13 @@ namespace mmo
 
 		
 
-		// Wait for all guilds to load
+		// Wait for all guilds to load.
+		//
+		// Only the io service is pumped now: the query itself runs on a pool thread, and its
+		// result comes back through the sync dispatcher, which posts here. run_one() blocks until
+		// that arrives rather than spinning.
 		while (!guildMgr.GuildsLoaded())
 		{
-			dbService.run_one();
 			ioService.run_one();
 		}
 
@@ -354,7 +391,10 @@ namespace mmo
 			config.webPort,
 			config.webPassword,
 			playerManager,
-			*database,
+			// Slot 0. The REST handlers call this synchronously on the io thread while a pool
+			// thread uses the same instance; both take m_databaseMutex, exactly as the io thread
+			// and the db thread did before.
+			databasePool->Primary(),
 			*motdManager
 		);
 
@@ -367,7 +407,7 @@ namespace mmo
 		std::unique_ptr<asio::signal_set> shutdownSignals;
 		shutdownSignals = InstallShutdownHandler(ioService,
 			[&worldServer, &playerServer, &webService, &playerManager, &worldManager,
-			 &shutdownSignals, &timerQueue, &dbTimerQueue, &ioWork, &dbWork]()
+			 &shutdownSignals, &timerQueue, &ioWork, &databasePool]()
 		{
 			ILOG("Shutdown signal received - stopping cleanly");
 
@@ -381,11 +421,9 @@ namespace mmo
 				webService->Stop();
 			}
 
-			// Both queues hold an armed asio timer, which is outstanding work on whichever service
-			// they were built over -- so the db queue has to be stopped too, or the database
-			// thread never returns from run() no matter what the work guard does.
+			// An armed timer is outstanding io_service work, so the queue has to be stopped or
+			// the service never runs dry.
 			timerQueue.Stop();
-			dbTimerQueue.Stop();
 
 			// Then close what is already connected.
 			playerManager.DisconnectAll();
@@ -399,11 +437,17 @@ namespace mmo
 				shutdownSignals->cancel(error);
 			}
 
-			// Releasing the work guards is what lets both services drain and their run() calls
-			// return. Note this is the ONLY thing that winds them down: ioService.stop() would
-			// discard the closes above instead of running them.
+			// Releasing the work guard is what lets the service drain and run() return. Note this
+			// is the ONLY thing that winds it down: ioService.stop() would discard the closes
+			// above instead of running them.
 			ioWork.reset();
-			dbWork.reset();
+
+			// Stopped last, so nothing can still be queueing database work. The pool drains
+			// rather than discards: what is queued at this point is character writes.
+			if (databasePool)
+			{
+				databasePool->Stop();
+			}
 		});
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -426,9 +470,6 @@ namespace mmo
 			});
 		}
 
-		// Run the database service thread
-		std::thread dbThread{ [&dbService]() { dbService.run(); } };
-
 		// Also run the io service on the main thread as well
 		ioService.run();
 
@@ -438,10 +479,9 @@ namespace mmo
 			thread.join();
 		}
 
-		// Terminate the database worker and wait for pending database operations to finish.
-		// Already released by the shutdown handler on the signal path; harmless to repeat.
-		dbWork.reset();
-		dbThread.join();
+		// Already stopped by the shutdown handler on the signal path; Stop() is idempotent and
+		// this covers the paths that exit without a signal.
+		databasePool->Stop();
 
 		ILOG("Realm server stopped cleanly");
 

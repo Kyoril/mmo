@@ -24,25 +24,25 @@
 
 namespace mmo
 {
-	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project, TimerQueue& timerQueue)
+	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project)
 		: m_project(project)
 		, m_connectionInfo(std::move(connectionInfo))
-		, m_timerQueue(timerQueue)
-		, m_pingCountdown(m_timerQueue)
 	{
-		m_pingConnection = m_pingCountdown.ended += [this]()
-			{
-				std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
-				if (!m_connection.KeepAlive())
-				{
-					ELOG("MySQL Connection PING failed");
-				}
-
-				SetNextPingTimer();
-			};
 	}
 
-	bool MySQLDatabase::Load()
+	bool MySQLDatabase::KeepAlive()
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+		if (!m_connection.KeepAlive())
+		{
+			ELOG("MySQL ping failed: " << m_connection.GetErrorMessage());
+			return false;
+		}
+
+		return true;
+	}
+
+	bool MySQLDatabase::Connect()
 	{
 		if (!m_connection.Connect(m_connectionInfo, true))
 		{
@@ -52,6 +52,17 @@ namespace mmo
 		}
 		ILOG("Connected to MySQL at " << m_connectionInfo.host << ":" << m_connectionInfo.port);
 
+		return true;
+	}
+
+	/// Retained so single-connection callers keep one entry point.
+	bool MySQLDatabase::Load()
+	{
+		return Connect() && ApplyMigrations();
+	}
+
+	bool MySQLDatabase::ApplyMigrations()
+	{
 		// Apply all updates
 		ILOG("Checking for database updates...");
 
@@ -125,16 +136,9 @@ namespace mmo
 			return false;
 		}
 
-		SetNextPingTimer();
-
 		ILOG("Database is ready!");
 
 		return true;
-	}
-
-	void MySQLDatabase::SetNextPingTimer() const
-	{
-		m_pingCountdown.SetEnd(GetAsyncTimeMs() + 30000);
 	}
 
 	std::optional<std::vector<CharacterView>> MySQLDatabase::GetCharacterViewsByAccountId(uint64 accountId)

@@ -43,16 +43,14 @@ namespace mmo
 
 		/// An AsyncDatabase whose dispatchers drop everything.
 		///
-		/// Player stores AsyncDatabase& and only uses it from packet handlers, none of which
-		/// these lifecycle tests drive. A real object over a MockDatabase is used rather than a
-		/// reference bound from a null pointer, which would be undefined behaviour even though
-		/// nothing dereferences it.
+		/// Player stores AsyncDatabase& and only uses it from packet handlers, none of which these
+		/// lifecycle tests drive. Since requests are now handed to a dispatcher rather than bound
+		/// to an instance, dropping them needs no database object at all.
 		struct DiscardingDatabase
 		{
-			MockDatabase mock;
-			AsyncDatabase async{ mock,
-				[](const std::function<void()>&) {},
-				[](const std::function<void()>&) {} };
+			AsyncDatabase async{
+				[](uint64, std::function<void(IDatabase&)>) {},
+				[](std::function<void()>) {} };
 		};
 
 		/// A connected loopback pair. `server` is the side a Player is built around; `peer` is

@@ -99,6 +99,27 @@ asking, for every teardown path: **what operations are still in flight when this
 do their completion handlers touch?** That question is what caught a null dereference in
 `EncryptedConnection` teardown that a green unit suite and 14/14 E2E scenarios both missed.
 
+## Database ordering
+
+Database work is routed to a connection by an **ordering key** (`DatabasePool::Dispatch`). Two
+operations sharing a key run in the order they were queued; two with different keys may run
+concurrently and in any order. Both the login and realm tiers default to four connections.
+
+**When adding a database call, key it on the entity it touches** — character id, account id,
+guild id, group id — using `asyncRequestKeyed`. Leave only genuinely server-wide operations
+unkeyed. A call left unkeyed while its neighbours are keyed lands on a different connection and
+can reorder against them; the failure looks like data that silently reverts, most likely noticed
+as a player's action bar resetting after a class switch.
+
+No E2E scenario covers action-bar persistence. The guard is `DatabasePoolPreservesOrderPerKey`
+in `src/unit_tests/test_database_pool.cpp`, which makes the first operation slow on purpose so a
+reordering pool cannot pass it. That test was verified to fail against round-robin routing before
+being trusted.
+
+Name-based lookups (`GetCharacterIdByName`, `GetAccountDataByName`) stay unkeyed because no id
+exists yet. They are sequenced before whatever uses their result, so they cannot reorder against
+it.
+
 ## Threading contract per tier
 
 - **Login server** — two io threads (`maxNetworkThreads = 1` plus the main thread). Anything
@@ -108,9 +129,9 @@ do their completion handlers touch?** That question is what caught a null derefe
 - **Realm and world servers** — single-threaded io, and they depend on it. Cross-session access
   goes through raw `Player*` taken from the managers in roughly thirty places. Raising either
   tier's thread count requires doing the login server's `shared_ptr` + `Post` work there first.
-- **Database** — one connection per tier behind one worker thread. Call sites rely on the
-  implicit FIFO ordering that gives (for example `SetCharacterActionButtons` followed by
-  `GetActionButtons` on class change). A connection pool must preserve per-entity ordering.
+- **Database** — a `DatabasePool` per tier: N connections, each with its own thread and queue,
+  addressed by an ordering key. The world server has no database at all. See "Database ordering"
+  above before adding a call.
 
 ## Verifying a fix actually fixes something
 

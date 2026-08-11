@@ -423,7 +423,7 @@ namespace mmo
 							}
 						};
 
-						strongThis->m_database.asyncRequest(std::move(featureHandler), &IDatabase::GetActiveAccountFeatures, strongThis->m_accountId);
+						strongThis->m_database.asyncRequestKeyed(strongThis->m_accountId, std::move(featureHandler), &IDatabase::GetActiveAccountFeatures, strongThis->m_accountId);
 					}
 					else
 					{
@@ -433,7 +433,7 @@ namespace mmo
 			};
 
 			// Store session key in account database
-			m_database.asyncRequest<void>(
+			m_database.asyncRequestKeyed<void>(m_accountId, 
 				std::bind(&IDatabase::PlayerLogin, std::placeholders::_1, m_accountId, srpResult->K.asHexStr(), m_address),
 				std::move(handler));
 
@@ -454,7 +454,7 @@ namespace mmo
 		};
 
 		// Store session key in account database
-		m_database.asyncRequest<void>(
+		m_database.asyncRequestKeyed<void>(m_accountId, 
 			[this, address = std::cref(m_address)](auto&& database) { database->PlayerLoginFailed(m_accountId, address); },
 			std::move(loginFailedDbHandler));
 

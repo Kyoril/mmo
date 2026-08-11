@@ -22,15 +22,30 @@ namespace mmo
 		/// @param dbWorker Dispatcher that posts work onto the database worker thread. The keep-alive
 		///        ping is routed through this so that every access to the MySQL connection happens on
 		///        a single thread (the timer that triggers the ping fires on the IO thread).
-		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo, TimerQueue& timerQueue, WorkerDispatcher dbWorker);
+		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo);
 		~MySQLDatabase() override = default;
 
-		/// Tries to establish a connection to the MySQL server.
+		/// Opens the connection and applies any pending schema migrations.
+		/// Equivalent to Connect() followed by ApplyMigrations().
 		bool Load();
+
+		/// Opens the connection without touching the schema.
+		bool Connect();
+
+		/// Applies pending schema migrations.
+		///
+		/// Must run on exactly ONE connection. Running the update scripts from several
+		/// connections at once races on the history table: two of them see the same migration
+		/// as unapplied and both try to apply it.
+		bool ApplyMigrations();
+
+		/// Pings the connection so the server does not drop it as idle.
+		///
+		/// Called only from this connection's own pool thread -- see DatabasePool::KeepAlive.
+		bool KeepAlive();
 
 	private:
 		/// Schedules the next keep-alive ping to the database.
-		void SetNextPingTimer() const;
 
 	public:
 		std::optional<AccountData> GetAccountDataByName(std::string name) override;
@@ -100,10 +115,6 @@ namespace mmo
 	private:
 		mysql::DatabaseInfo m_connectionInfo;
 		mysql::Connection m_connection;
-		TimerQueue& m_timerQueue;
-		WorkerDispatcher m_dbWorker;
-		Countdown m_pingCountdown;
-		scoped_connection m_pingConnection;
 		/// Serializes every access to the single MySQL connection. The connection is shared between
 		/// the database worker thread (async requests) and the IO threads (synchronous web-API
 		/// handlers), and a MYSQL handle must never be touched from two threads at once. Recursive

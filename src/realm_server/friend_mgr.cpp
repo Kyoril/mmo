@@ -70,7 +70,7 @@ namespace mmo
             }
         };
 
-        m_asyncDatabase.asyncRequest(std::move(admirerHandler), &IFriendDatabase::GetCharactersWithFriend, characterGuid);
+        m_asyncDatabase.asyncRequestKeyed(characterGuid, std::move(admirerHandler), &IFriendDatabase::GetCharactersWithFriend, characterGuid);
     }
 
     bool FriendMgr::CanAddFriend(uint64 characterId) const
@@ -124,6 +124,6 @@ namespace mmo
             callback(*friends);
         };
 
-        m_asyncDatabase.asyncRequest(std::move(handler), &IFriendDatabase::LoadFriendList, characterId);
+        m_asyncDatabase.asyncRequestKeyed(characterId, std::move(handler), &IFriendDatabase::LoadFriendList, characterId);
     }
 }

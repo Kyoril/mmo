@@ -1,4 +1,4 @@
-# Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿# Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
 # Brings up an isolated E2E test stack (login + realm + world server) on dedicated ports
 # with throwaway databases, ready for e2e_client scenario runs.
@@ -84,6 +84,7 @@ mysqlDatabase =
 	password = "$($mysqlCred.Password)"
 	database = "$($s.LoginDb)"
 	updatePath = "$loginUpdates"
+	poolSize = 4
 )
 
 webServer =
@@ -125,6 +126,7 @@ mysqlDatabase =
 	password = "$($mysqlCred.Password)"
 	database = "$($s.RealmDb)"
 	updatePath = "$realmUpdates"
+	poolSize = 4
 )
 
 realmConfig =

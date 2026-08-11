@@ -11,7 +11,17 @@ namespace
 {
     /// Synchronous dispatcher: runs the action immediately on the calling thread.
     /// This lets tests verify database interactions without real async infrastructure.
-    void syncDispatch(const std::function<void()>& action) { action(); }
+    /// Runs database work inline against `database`, and results inline too.
+    ///
+    /// The pool is not involved here: these tests assert on manager behaviour, not on routing,
+    /// so the ordering key is ignored and the work is handed the mock directly.
+    template <class TInterface>
+    typename mmo::AsyncDatabaseT<TInterface>::WorkDispatcher inlineWorker(TInterface& database)
+    {
+        return [&database](mmo::uint64, std::function<void(TInterface&)> work) { work(database); };
+    }
+
+    void syncResult(std::function<void()> action) { action(); }
 }
 
 TEST_CASE("MOTDManager returns default MOTD before database responds", "[motd]")
@@ -20,9 +30,9 @@ TEST_CASE("MOTDManager returns default MOTD before database responds", "[motd]")
     mockDb.motdToReturn = std::nullopt; // simulate no DB value yet
 
     // Use a no-op async worker so the load request is queued but not executed
-    AsyncMOTDDatabase asyncDb{ mockDb,
-        [](const std::function<void()>&) { /* drop the request */ },
-        [](const std::function<void()>&) { /* drop results  */ } };
+    AsyncMOTDDatabase asyncDb{
+        [](uint64, std::function<void(IMOTDDatabase&)>) { /* drop the request */ },
+        [](std::function<void()>) { /* drop results  */ } };
 
     MOTDManager mgr{ asyncDb };
 
@@ -36,7 +46,7 @@ TEST_CASE("MOTDManager updates MOTD when database returns a value", "[motd]")
     mockDb.motdToReturn = String("Hello, adventurers!");
 
     // Synchronous dispatcher executes work inline so results arrive before assertions
-    AsyncMOTDDatabase asyncDb{ mockDb, syncDispatch, syncDispatch };
+    AsyncMOTDDatabase asyncDb{ inlineWorker<IMOTDDatabase>(mockDb), syncResult };
 
     MOTDManager mgr{ asyncDb };
 
@@ -48,7 +58,7 @@ TEST_CASE("MOTDManager SetMessageOfTheDay persists to database", "[motd]")
     MockMOTDDatabase mockDb;
     mockDb.motdToReturn = std::nullopt;
 
-    AsyncMOTDDatabase asyncDb{ mockDb, syncDispatch, syncDispatch };
+    AsyncMOTDDatabase asyncDb{ inlineWorker<IMOTDDatabase>(mockDb), syncResult };
 
     MOTDManager mgr{ asyncDb };
 
@@ -64,7 +74,7 @@ TEST_CASE("MOTDManager fires motdChanged signal when MOTD is updated", "[motd]")
     MockMOTDDatabase mockDb;
     mockDb.motdToReturn = std::nullopt;
 
-    AsyncMOTDDatabase asyncDb{ mockDb, syncDispatch, syncDispatch };
+    AsyncMOTDDatabase asyncDb{ inlineWorker<IMOTDDatabase>(mockDb), syncResult };
 
     MOTDManager mgr{ asyncDb };
 

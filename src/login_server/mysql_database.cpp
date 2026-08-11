@@ -12,31 +12,24 @@
 
 namespace mmo
 {
-	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, TimerQueue& timerQueue, WorkerDispatcher dbWorker)
+	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo)
 		: m_connectionInfo(std::move(connectionInfo))
-		, m_timerQueue(timerQueue)
-		, m_dbWorker(std::move(dbWorker))
-		, m_pingCountdown(timerQueue)
 	{
-		m_pingConnection = m_pingCountdown.ended += [this]()
-			{
-				// The ping timer fires on the IO thread, but the MySQL connection is otherwise only
-				// ever touched on the database worker thread. Run the keep-alive there too so the two
-				// never race (which would surface as "Lost connection to MySQL server during query").
-				m_dbWorker([this]()
-					{
-						std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
-						if (!m_connection.KeepAlive())
-						{
-							ELOG("MySQL ping failed: " << m_connection.GetErrorMessage());
-						}
-					});
-
-				SetNextPingTimer();
-			};
 	}
 
-	bool MySQLDatabase::Load()
+	bool MySQLDatabase::KeepAlive()
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+		if (!m_connection.KeepAlive())
+		{
+			ELOG("MySQL ping failed: " << m_connection.GetErrorMessage());
+			return false;
+		}
+
+		return true;
+	}
+
+	bool MySQLDatabase::Connect()
 	{
 		if (!m_connection.Connect(m_connectionInfo, true))
 		{
@@ -46,6 +39,17 @@ namespace mmo
 		}
 		ILOG("Connected to MySQL at " << m_connectionInfo.host << ":" << m_connectionInfo.port);
 
+		return true;
+	}
+
+	/// Retained so single-connection callers keep one entry point.
+	bool MySQLDatabase::Load()
+	{
+		return Connect() && ApplyMigrations();
+	}
+
+	bool MySQLDatabase::ApplyMigrations()
+	{
 		// Apply all updates
 		ILOG("Checking for database updates...");
 
@@ -121,17 +125,9 @@ namespace mmo
 			return false;
 		}
 
-		SetNextPingTimer();
-
 		ILOG("Database is ready!");
 
 		return true;
-	}
-
-	void MySQLDatabase::SetNextPingTimer() const
-	{
-		// Ping every 30 seconds
-		m_pingCountdown.SetEnd(GetAsyncTimeMs() + 30000);
 	}
 
 	std::optional<AccountData> MySQLDatabase::GetAccountDataByName(std::string name)

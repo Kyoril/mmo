@@ -340,7 +340,7 @@ namespace mmo
 				<< m_build;
 
 			// Store session key in account database
-			m_database.asyncRequest<void>(
+			m_database.asyncRequestKeyed<void>(m_worldId, 
 				[this, sessionKey = K.asHexStr(), capture1 = versionBuilder.str()](auto&& database)
 				{
 					database->WorldLogin(m_worldId, sessionKey, m_address, capture1);
@@ -779,7 +779,7 @@ namespace mmo
 		
 		// NOTE: Inventory is persisted separately via SaveInventoryItems/DeleteInventoryItems
 		
-		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, mapId, player.GetMovementInfo().position,
+		m_database.asyncRequestKeyed(characterGuid, std::move(handler), &IDatabase::UpdateCharacter, characterGuid, mapId, player.GetMovementInfo().position,
 			player.GetMovementInfo().facing, player.Get<uint32>(object_fields::Level),
 			player.Get<uint32>(object_fields::Xp), 
 			player.Get<uint32>(object_fields::Health), 
@@ -803,7 +803,7 @@ namespace mmo
 			);
 
 		// Persist auras (remaining-duration based) exactly as received.
-		m_database.asyncRequest([characterGuid](bool result)
+		m_database.asyncRequestKeyed(characterGuid, [characterGuid](bool result)
 			{
 				if (!result)
 				{
@@ -821,7 +821,7 @@ namespace mmo
 			cooldownEnds.emplace_back(cooldown.spellId, nowSeconds + (cooldown.remainingMs + 999) / 1000);
 		}
 
-		m_database.asyncRequest([characterGuid](bool result)
+		m_database.asyncRequestKeyed(characterGuid, [characterGuid](bool result)
 			{
 				if (!result)
 				{
@@ -860,7 +860,7 @@ namespace mmo
 				WLOG("Failed to persist quest data for character " << log_hex_digit(characterGuid));
 			}
 		};
-		m_database.asyncRequest(std::move(handler), &IDatabase::SetQuestData, characterGuid, questId, questData);
+		m_database.asyncRequestKeyed(characterGuid, std::move(handler), &IDatabase::SetQuestData, characterGuid, questId, questData);
 
 		return PacketParseResult::Pass;
 	}
@@ -1009,7 +1009,7 @@ namespace mmo
 
 		// Call database to save items asynchronously
 		// CRITICAL: Pass items by value (copy) to ensure they persist through async operation
-		m_database.asyncRequest(std::move(sendResult), &IDatabase::SaveInventoryItems, characterGuid, items);
+		m_database.asyncRequestKeyed(characterGuid, std::move(sendResult), &IDatabase::SaveInventoryItems, characterGuid, items);
 
 		return PacketParseResult::Pass;
 	}
@@ -1044,7 +1044,7 @@ namespace mmo
 			});
 		};
 
-		m_database.asyncRequest(std::move(sendResult), &IDatabase::CreateMail, draft);
+		m_database.asyncRequestKeyed(draft.senderGuid, std::move(sendResult), &IDatabase::CreateMail, draft);
 		return PacketParseResult::Pass;
 	}
 
@@ -1082,7 +1082,7 @@ namespace mmo
 			});
 		};
 
-		m_database.asyncRequest(std::move(sendResult), &IDatabase::TakeMailMoney, characterGuid, mailId);
+		m_database.asyncRequestKeyed(characterGuid, std::move(sendResult), &IDatabase::TakeMailMoney, characterGuid, mailId);
 		return PacketParseResult::Pass;
 	}
 
@@ -1113,7 +1113,7 @@ namespace mmo
 			});
 		};
 
-		m_database.asyncRequest(std::move(sendResult), &IDatabase::TakeMailItem, characterGuid, mailId, attachmentId);
+		m_database.asyncRequestKeyed(characterGuid, std::move(sendResult), &IDatabase::TakeMailItem, characterGuid, mailId, attachmentId);
 		return PacketParseResult::Pass;
 	}
 
@@ -1188,7 +1188,7 @@ namespace mmo
 
 		// Call database to delete items asynchronously
 		// CRITICAL: Pass slots by value (copy) to ensure they persist through async operation
-		m_database.asyncRequest(std::move(sendResult), &IDatabase::DeleteInventoryItems, characterGuid, slots);
+		m_database.asyncRequestKeyed(characterGuid, std::move(sendResult), &IDatabase::DeleteInventoryItems, characterGuid, slots);
 
 		return PacketParseResult::Pass;
 	}

@@ -159,7 +159,7 @@ namespace mmo
 
 		// Execute
 		ASSERT(m_accountId != 0);
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterViewsByAccountId, m_accountId);
+		m_database.asyncRequestKeyed(m_accountId, std::move(handler), &IDatabase::GetCharacterViewsByAccountId, m_accountId);
 	}
 
 	void Player::OnGroupLoaded(PlayerGroup &group)
@@ -322,7 +322,7 @@ namespace mmo
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, guid, m_accountId);
+		m_database.asyncRequestKeyed(guid, std::move(handler), &IDatabase::CharacterEnterWorld, guid, m_accountId);
 
 		return PacketParseResult::Pass;
 	}
@@ -667,7 +667,7 @@ namespace mmo
 
 		// Each spell which isn't a passive should (for now) be placed on the action bar
 		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << " (Race: " << raceEntry->id() << "; Class: " << classInstance->id() << "; Gender: " << (uint16)gender << ")...");
-		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, gender, race, characterClass, position, rotation,
+		m_database.asyncRequestKeyed(this->m_accountId, std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, gender, race, characterClass, position, rotation,
 								spellIds, mana, rage, energy, actionButtons, configuration, items);
 
 		return PacketParseResult::Pass;
@@ -719,7 +719,7 @@ namespace mmo
 		};
 
 		DLOG("Deleting character 0x" << std::hex << charGuid << " from account 0x" << std::hex << m_accountId << "...");
-		m_database.asyncRequest<void>([charGuid](auto &&database)
+		m_database.asyncRequestKeyed<void>(charGuid, [charGuid](auto &&database)
 									  { database->DeleteCharacter(charGuid); }, std::move(handler));
 
 		return PacketParseResult::Pass;
@@ -989,7 +989,7 @@ namespace mmo
 		}
 
 		// Store in database
-		m_database.asyncRequest([](bool) {}, &IDatabase::ChatMessage, m_characterData->characterId, static_cast<uint16>(chatType), message);
+		m_database.asyncRequestKeyed(m_characterData->characterId, [](bool) {}, &IDatabase::ChatMessage, m_characterData->characterId, static_cast<uint16>(chatType), message);
 
 		return PacketParseResult::Pass;
 	}
@@ -1039,7 +1039,7 @@ namespace mmo
 							packet.Finish(); });
 				}
 			};
-			m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterNameById, guid);
+			m_database.asyncRequestKeyed(guid, std::move(handler), &IDatabase::GetCharacterNameById, guid);
 		}
 
 		return PacketParseResult::Pass;
@@ -1246,7 +1246,14 @@ namespace mmo
 		if (!m_group)
 		{
 			// Not yet in a group - create a new one!
-			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, AsyncGroupDatabase{ m_database.GetDatabase(), m_database.GetAsyncWorker(), m_database.GetResultDispatcher() }, m_timerQueue);
+			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, AsyncGroupDatabase{
+					// Adapts the full-interface dispatcher to the narrow one. IDatabase derives
+					// from IGroupDatabase, so this is a static upcast on the pool thread.
+					[worker = m_database.GetAsyncWorker()](uint64 key, std::function<void(IGroupDatabase&)> work)
+					{
+						worker(key, [work = std::move(work)](IDatabase& database) { work(database); });
+					},
+					m_database.GetResultDispatcher() }, m_timerQueue);
 			m_group->Create(m_characterData->characterId, m_characterData->name);
 			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
 		}
@@ -1636,7 +1643,7 @@ namespace mmo
 			strongThis->SendChannelList();
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::LoadCharacterChannelStates, characterId);
+		m_database.asyncRequestKeyed(characterId, std::move(handler), &IDatabase::LoadCharacterChannelStates, characterId);
 	}
 
 	void Player::SendChannelList()
@@ -1672,7 +1679,7 @@ namespace mmo
 
 		if (persist)
 		{
-			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterChannelState, m_characterData->characterId, channelId, static_cast<uint8>(1));
+			m_database.asyncRequestKeyed(m_characterData->characterId, [](bool) {}, &IDatabase::SetCharacterChannelState, m_characterData->characterId, channelId, static_cast<uint8>(1));
 		}
 
 		const String name = channel.GetName();
@@ -1700,7 +1707,7 @@ namespace mmo
 
 		if (persist)
 		{
-			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterChannelState, m_characterData->characterId, channelId, static_cast<uint8>(0));
+			m_database.asyncRequestKeyed(m_characterData->characterId, [](bool) {}, &IDatabase::SetCharacterChannelState, m_characterData->characterId, channelId, static_cast<uint8>(0));
 		}
 
 		const String name = channel.GetName();
@@ -1804,7 +1811,7 @@ namespace mmo
 			// Channel no longer exists in game data but the player still had it: drop the
 			// stale membership and persist the leave so it doesn't reappear.
 			m_chatChannels.erase(channelId);
-			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterChannelState, m_characterData->characterId, channelId, static_cast<uint8>(0));
+			m_database.asyncRequestKeyed(m_characterData->characterId, [](bool) {}, &IDatabase::SetCharacterChannelState, m_characterData->characterId, channelId, static_cast<uint8>(0));
 			return PacketParseResult::Pass;
 		}
 
@@ -1907,7 +1914,7 @@ namespace mmo
 				}
 			};
 
-			m_database.asyncRequest(std::move(addFriendHandler), &IDatabase::AddFriend, myGuid, targetGuid);
+			m_database.asyncRequestKeyed(myGuid, std::move(addFriendHandler), &IDatabase::AddFriend, myGuid, targetGuid);
 		}
 		else
 		{
@@ -1991,7 +1998,7 @@ namespace mmo
 					}
 				};
 
-				m_database.asyncRequest(std::move(addFriendHandler), &IDatabase::AddFriend, myGuid, targetGuid);
+				m_database.asyncRequestKeyed(myGuid, std::move(addFriendHandler), &IDatabase::AddFriend, myGuid, targetGuid);
 			};
 
 			m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterIdByName, targetName);
@@ -2050,7 +2057,7 @@ namespace mmo
 			ILOG("Friendship established between " << myGuid << " and " << inviterGuid);
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::AddFriend, myGuid, inviterGuid);
+		m_database.asyncRequestKeyed(myGuid, std::move(handler), &IDatabase::AddFriend, myGuid, inviterGuid);
 
 		// Clear pending invite
 		m_pendingFriendInvite = 0;
@@ -2151,7 +2158,7 @@ namespace mmo
 			ILOG("Friendship removed between " << myGuid << " and " << friendGuid);
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::RemoveFriend, myGuid, friendGuid);
+		m_database.asyncRequestKeyed(myGuid, std::move(handler), &IDatabase::RemoveFriend, myGuid, friendGuid);
 	}
 
 	void Player::SendFriendListUpdate()
@@ -2233,7 +2240,7 @@ namespace mmo
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetMailList, GetCharacterGuid());
+		m_database.asyncRequestKeyed(GetCharacterGuid(), std::move(handler), &IDatabase::GetMailList, GetCharacterGuid());
 		return PacketParseResult::Pass;
 	}
 
@@ -2259,11 +2266,11 @@ namespace mmo
 					}
 				};
 
-				strongThis->m_database.asyncRequest(std::move(listHandler), &IDatabase::GetMailList, strongThis->GetCharacterGuid());
+				strongThis->m_database.asyncRequestKeyed(strongThis->GetCharacterGuid(), std::move(listHandler), &IDatabase::GetMailList, strongThis->GetCharacterGuid());
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::DeleteMail, GetCharacterGuid(), mailId);
+		m_database.asyncRequestKeyed(GetCharacterGuid(), std::move(handler), &IDatabase::DeleteMail, GetCharacterGuid(), mailId);
 		return PacketParseResult::Pass;
 	}
 
@@ -2275,7 +2282,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		m_database.asyncRequest([](bool) {}, &IDatabase::MarkMailRead, GetCharacterGuid(), mailId);
+		m_database.asyncRequestKeyed(GetCharacterGuid(), [](bool) {}, &IDatabase::MarkMailRead, GetCharacterGuid(), mailId);
 		return PacketParseResult::Pass;
 	}
 
@@ -2310,7 +2317,7 @@ namespace mmo
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetUnreadMailCount, GetCharacterGuid());
+		m_database.asyncRequestKeyed(GetCharacterGuid(), std::move(handler), &IDatabase::GetUnreadMailCount, GetCharacterGuid());
 	}
 
 #ifdef MMO_WITH_DEV_COMMANDS
@@ -3297,7 +3304,7 @@ namespace mmo
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId, m_actionButtonClassId);
+		m_database.asyncRequestKeyed(m_characterData->characterId, std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId, m_actionButtonClassId);
 	}
 
 	void Player::OnWorldChanged(const std::shared_ptr<World> &world, const InstanceId instanceId)
@@ -3870,7 +3877,7 @@ namespace mmo
 	{
 		if (m_characterData && m_pendingButtons)
 		{
-			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtonClassId, m_actionButtons);
+			m_database.asyncRequestKeyed(m_characterData->characterId, [](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtonClassId, m_actionButtons);
 			m_pendingButtons = false;
 		}
 	}
@@ -3898,7 +3905,7 @@ namespace mmo
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId, newClassId);
+		m_database.asyncRequestKeyed(m_characterData->characterId, std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId, newClassId);
 	}
 
 	ActionButtons Player::BuildDefaultActionButtons(const uint32 classId) const
@@ -3959,7 +3966,7 @@ namespace mmo
 		// subsequent SwitchActionBarClass load (queued after this write on the DB thread) picks up the
 		// seeded layout and sends it to the client.
 		const ActionButtons defaults = BuildDefaultActionButtons(classId);
-		m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, classId, defaults);
+		m_database.asyncRequestKeyed(m_characterData->characterId, [](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, classId, defaults);
 	}
 
 	void Player::FetchCharacterLocationAsync(CharacterLocationAsyncCallback &&callback)
@@ -4667,7 +4674,7 @@ namespace mmo
 				ELOG("Failed to persist guild MOTD");
 			}
 		};
-		m_database.asyncRequest(std::move(dbHandler), &IDatabase::SetGuildMotd, m_characterData->guildId, motd);
+		m_database.asyncRequestKeyed(m_characterData->guildId, std::move(dbHandler), &IDatabase::SetGuildMotd, m_characterData->guildId, motd);
 
 		return PacketParseResult::Pass;
 	}
@@ -4740,7 +4747,7 @@ namespace mmo
 		};
 
 		// Request character data to check guild membership
-		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
+		m_database.asyncRequestKeyed(charGuid, std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
 	}
 
 	void Player::HandleCharacterGroupOnDelete(uint64 charGuid)
@@ -4789,7 +4796,7 @@ namespace mmo
 
 			// Group is not in memory (all members offline). Load from DB to determine
 			// whether the deleted character was the leader, then update the DB directly.
-			strongThis->m_database.asyncRequest(
+			strongThis->m_database.asyncRequestKeyed(groupId, 
 				[weakThis2 = std::weak_ptr(strongThis), charGuid, groupId](const std::optional<GroupData> &groupData)
 				{
 					const auto s = weakThis2.lock();
@@ -4805,7 +4812,7 @@ namespace mmo
 					{
 						// The deleted character was the leader — disband the whole group.
 						DLOG("Deleted character " << charGuid << " was leader of offline group " << groupId << " — disbanding.");
-						s->m_database.asyncRequest<void>(
+						s->m_database.asyncRequestKeyed<void>(groupId, 
 							[groupId](auto &&db) { db->DisbandGroup(groupId); },
 							[groupId](bool ok)
 							{
@@ -4816,7 +4823,7 @@ namespace mmo
 					{
 						// Regular member — just remove from group.
 						DLOG("Removing deleted character " << charGuid << " from offline group " << groupId);
-						s->m_database.asyncRequest<void>(
+						s->m_database.asyncRequestKeyed<void>(groupId, 
 							[groupId, charGuid](auto &&db) { db->RemoveGroupMember(groupId, charGuid); },
 							[groupId, charGuid](bool ok)
 							{
@@ -4828,7 +4835,7 @@ namespace mmo
 		};
 
 		// Request character data to get their groupId
-		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
+		m_database.asyncRequestKeyed(charGuid, std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
 	}
 
 	void Player::HandleCharacterFriendsOnDelete(uint64 charGuid)
@@ -4855,7 +4862,7 @@ namespace mmo
 			// Remove the friendship from the database for each friend
 			for (const uint64 friendId : friendIds)
 			{
-				strongThis->m_database.asyncRequest<void>([charGuid, friendId](auto &&database)
+				strongThis->m_database.asyncRequestKeyed<void>(charGuid, [charGuid, friendId](auto &&database)
 														  { database->RemoveFriend(friendId, charGuid); },
 														  [charGuid, friendId](const bool success)
 														  {
@@ -4879,6 +4886,6 @@ namespace mmo
 		};
 
 		// Get all characters who have this character as a friend
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharactersWithFriend, charGuid);
+		m_database.asyncRequestKeyed(charGuid, std::move(handler), &IDatabase::GetCharactersWithFriend, charGuid);
 	}
 }

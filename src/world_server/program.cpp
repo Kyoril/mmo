@@ -67,12 +67,6 @@ namespace mmo
 		// This is the main timer queue
 		TimerQueue timerQueue{ ioService };
 
-		// The database service object and keep-alive object
-		asio::io_service dbService;
-
-		// Keep the database service alive / busy until this object is alive
-		auto dbWork = std::make_shared<asio::io_context::work>(dbService);
-
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Load config file
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -219,7 +213,7 @@ namespace mmo
 		// Declared before the handler that captures it, so the handler can cancel its own wait.
 		std::unique_ptr<asio::signal_set> shutdownSignals;
 		shutdownSignals = InstallShutdownHandler(ioService,
-			[&realmConnector, &worldInstanceManager, &shutdownSignals, &timerQueue, &timer, &dbWork]()
+			[&realmConnector, &worldInstanceManager, &shutdownSignals, &timerQueue, &timer]()
 		{
 			ILOG("Shutdown signal received - stopping cleanly");
 
@@ -247,9 +241,6 @@ namespace mmo
 				asio::error_code error;
 				shutdownSignals->cancel(error);
 			}
-
-			// Releasing the database work guard lets the db thread finish its queue and exit.
-			dbWork.reset();
 		});
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -270,9 +261,6 @@ namespace mmo
 			});
 		}
 
-		// Run the database service thread
-		std::thread dbThread{ [&dbService]() { dbService.run(); } };
-
 		// Also run the io service on the main thread as well
 		ioService.run();
 
@@ -281,11 +269,6 @@ namespace mmo
 		{
 			thread.join();
 		}
-
-		// Terminate the database worker and wait for pending database operations to finish.
-		// Already released by the shutdown handler on the signal path; harmless to repeat.
-		dbWork.reset();
-		dbThread.join();
 
 		ILOG("World server stopped cleanly");
 
