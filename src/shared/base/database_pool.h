@@ -7,7 +7,9 @@
 #include "base/typedefs.h"
 
 #include "asio/io_service.hpp"
+#include "asio/steady_timer.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -54,6 +56,14 @@ namespace mmo
 		/// Creates the instance for one slot. Returning nullptr fails the whole pool.
 		using Factory = std::function<std::unique_ptr<TDatabase>(std::size_t index)>;
 
+		/// Called periodically on each slot's own thread to keep its connection from being
+		/// dropped by the server's idle timeout. Empty disables keep-alive entirely.
+		///
+		/// It must run on the slot's own thread: a ping issued from anywhere else races that
+		/// connection's queries, which MySQL reports as "Lost connection to MySQL server during
+		/// query" -- a message that sends you looking for a network fault that is not there.
+		using KeepAlive = std::function<void(TDatabase&)>;
+
 	public:
 		/// Opens `size` connections, or returns nullptr if any of them fails.
 		///
@@ -65,7 +75,9 @@ namespace mmo
 		///
 		/// The factory is called with index 0 first and in order, so a caller can do one-time work
 		/// -- applying schema migrations -- while building slot 0.
-		[[nodiscard]] static std::unique_ptr<DatabasePool> Create(std::size_t size, const Factory& factory)
+		[[nodiscard]] static std::unique_ptr<DatabasePool> Create(std::size_t size, const Factory& factory,
+			KeepAlive keepAlive = KeepAlive(),
+			std::chrono::seconds keepAliveInterval = std::chrono::seconds(30))
 		{
 			const std::size_t count = size == 0 ? 1 : size;
 
@@ -94,6 +106,15 @@ namespace mmo
 			{
 				Slot* const raw = slot.get();
 				raw->thread = std::thread([raw]() { raw->service.run(); });
+			}
+
+			if (keepAlive)
+			{
+				for (auto& slot : pool->m_slots)
+				{
+					slot->pingTimer = std::make_unique<asio::steady_timer>(slot->service);
+					SchedulePing(slot.get(), keepAlive, keepAliveInterval);
+				}
 			}
 
 			return pool;
@@ -130,6 +151,17 @@ namespace mmo
 			}
 
 			m_stopped = true;
+
+			// Cancelled before the work guards are released, or the pool never runs dry: an armed
+			// keep-alive timer is outstanding work just like anything else.
+			for (auto& slot : m_slots)
+			{
+				if (slot->pingTimer)
+				{
+					asio::error_code error;
+					slot->pingTimer->cancel(error);
+				}
+			}
 
 			// Releasing the work guard lets run() return once the queue is empty, rather than
 			// stopping the service, which would discard whatever is still queued.
@@ -169,8 +201,27 @@ namespace mmo
 			std::unique_ptr<TDatabase> database;
 			asio::io_service service;
 			std::optional<asio::io_service::work> work;
+			std::unique_ptr<asio::steady_timer> pingTimer;
 			std::thread thread;
 		};
+
+		/// Re-arms the keep-alive on the slot's own service, so the ping runs on the same thread
+		/// as that connection's queries and cannot race them.
+		static void SchedulePing(Slot* slot, KeepAlive keepAlive, std::chrono::seconds interval)
+		{
+			slot->pingTimer->expires_after(interval);
+			slot->pingTimer->async_wait([slot, keepAlive, interval](const asio::error_code& error)
+			{
+				if (error)
+				{
+					// Cancelled during shutdown.
+					return;
+				}
+
+				keepAlive(*slot->database);
+				SchedulePing(slot, keepAlive, interval);
+			});
+		}
 
 		std::vector<std::unique_ptr<Slot>> m_slots;
 		bool m_stopped = false;

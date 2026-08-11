@@ -22,14 +22,17 @@ namespace mmo
 	{
 	public:
 		/// Creates a MySQL database instance for the realm server.
-		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project, TimerQueue& timerQueue);
+		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo, const proto::Project& project);
 
 		/// Tries to establish a connection to the MySQL server.
 		bool Load();
 
 	private:
 		/// Schedules the next keep-alive ping to the database.
-		void SetNextPingTimer() const;
+		/// Pings the connection so the server does not drop it as idle.
+		///
+		/// Called only from this connection's own pool thread -- see DatabasePool::KeepAlive.
+		bool KeepAlive();
 
 	public:
 		/// @copydoc IDatabase::GetCharacterViewsByAccountId
@@ -200,9 +203,6 @@ namespace mmo
 		const proto::Project& m_project;
 		mysql::DatabaseInfo m_connectionInfo;
 		mysql::Connection m_connection;
-		TimerQueue& m_timerQueue;
-		Countdown m_pingCountdown;
-		scoped_connection m_pingConnection;
 		/// Serializes every access to the single MySQL connection. The connection is shared between
 		/// the database worker thread (async requests) and the IO threads (synchronous web-API
 		/// handlers, e.g. CreateWorld), and a MYSQL handle must never be touched from two threads at

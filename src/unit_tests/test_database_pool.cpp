@@ -190,3 +190,39 @@ TEST_CASE("DatabasePoolTreatsZeroSizeAsOne", "[database_pool]")
 	CHECK(pool->Size() == 1);
 	pool->Stop();
 }
+
+// Every connection needs its own keep-alive, on its own thread. A ping issued from anywhere
+// else races the queries on that connection, which MySQL reports as the memorable and
+// completely misleading "Lost connection to MySQL server during query".
+TEST_CASE("DatabasePoolPingsEverySlotOnItsOwnThread", "[database_pool]")
+{
+	std::mutex mutex;
+	std::vector<std::size_t> pinged;
+	std::vector<std::thread::id> pingThreads;
+
+	auto pool = DatabasePool<FakeDatabase>::Create(3,
+		[](std::size_t index) { return std::make_unique<FakeDatabase>(index); },
+		[&mutex, &pinged, &pingThreads](FakeDatabase& database)
+		{
+			const std::lock_guard lock(mutex);
+			pinged.push_back(database.index);
+			pingThreads.push_back(std::this_thread::get_id());
+		},
+		std::chrono::seconds(1));
+	REQUIRE(pool != nullptr);
+
+	// Long enough for one interval to elapse on every slot.
+	std::this_thread::sleep_for(std::chrono::milliseconds(1400));
+	pool->Stop();
+
+	std::vector<std::size_t> seen = pinged;
+	std::sort(seen.begin(), seen.end());
+	seen.erase(std::unique(seen.begin(), seen.end()), seen.end());
+	CHECK(seen.size() == 3);
+
+	// Each ping ran on a distinct thread -- its own slot's.
+	std::vector<std::thread::id> threads = pingThreads;
+	std::sort(threads.begin(), threads.end());
+	threads.erase(std::unique(threads.begin(), threads.end()), threads.end());
+	CHECK(threads.size() == 3);
+}
