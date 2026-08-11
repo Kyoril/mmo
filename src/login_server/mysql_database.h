@@ -25,8 +25,19 @@ namespace mmo
 		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo);
 		~MySQLDatabase() override = default;
 
-		/// Tries to establish a connection to the MySQL server.
+		/// Opens the connection and applies any pending schema migrations.
+		/// Equivalent to Connect() followed by ApplyMigrations().
 		bool Load();
+
+		/// Opens the connection without touching the schema.
+		bool Connect();
+
+		/// Applies pending schema migrations.
+		///
+		/// Must run on exactly ONE connection. Running the update scripts from several
+		/// connections at once races on the history table: two of them see the same migration
+		/// as unapplied and both try to apply it.
+		bool ApplyMigrations();
 
 	private:
 		/// Schedules the next keep-alive ping to the database.

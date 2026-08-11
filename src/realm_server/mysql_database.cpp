@@ -42,7 +42,7 @@ namespace mmo
 		return true;
 	}
 
-	bool MySQLDatabase::Load()
+	bool MySQLDatabase::Connect()
 	{
 		if (!m_connection.Connect(m_connectionInfo, true))
 		{
@@ -52,6 +52,17 @@ namespace mmo
 		}
 		ILOG("Connected to MySQL at " << m_connectionInfo.host << ":" << m_connectionInfo.port);
 
+		return true;
+	}
+
+	/// Retained so single-connection callers keep one entry point.
+	bool MySQLDatabase::Load()
+	{
+		return Connect() && ApplyMigrations();
+	}
+
+	bool MySQLDatabase::ApplyMigrations()
+	{
 		// Apply all updates
 		ILOG("Checking for database updates...");
 
