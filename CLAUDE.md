@@ -105,12 +105,25 @@ cmake --build build -t <targetname>           # build a specific target, e.g. wo
 Binaries go to `bin/`, libraries to `lib/`.
 
 ### Run Tests
+
+Tests live in `src/tests/<library>_tests/`, one executable per library. Build them all with
+the `all_tests` target and run them with CTest:
+
 ```bash
-# From repo root after build:
-./bin/unit_tests                   # shared library tests
-./bin/game_server_unit_tests       # game server logic tests
-./bin/login_server_tests           # login server tests
+cmake --build build --config Debug -t all_tests
+cd build && ctest -C Debug --output-on-failure
 ```
+
+Individual suites are still ordinary executables in `bin/` (`bin/Debug/` on Windows), so
+`./bin/math_tests "[aabb_tree]"` works for narrowing down a single failure.
+
+**Adding a suite** costs one folder. Create `src/tests/<library>_tests/`, add a
+`CMakeLists.txt` whose only content is `mmo_add_test(<library>_tests <libs...>)`, and add
+one `add_subdirectory` line to `src/tests/CMakeLists.txt`. The macro globs the directory
+recursively, links Catch2's shared main, and registers the suite with CTest and with
+`all_tests` — the gate and CI pick it up with no further edits. Suites needing a graphics
+device go inside the `MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR` guard; everything else must
+keep building on the headless Linux server build.
 
 ### End-to-End Gameplay Tests (Windows)
 

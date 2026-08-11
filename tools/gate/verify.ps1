@@ -11,7 +11,9 @@
 [CmdletBinding()]
 param(
 	[switch]$SkipE2E,
-	[string[]]$Targets = @("login_server", "realm_server", "world_server", "e2e_client", "unit_tests", "game_server_unit_tests", "login_server_tests", "realm_server_tests")
+	# all_tests is an aggregate that every mmo_add_test() suite adds itself to, so a new
+	# test suite never needs an edit here.
+	[string[]]$Targets = @("login_server", "realm_server", "world_server", "e2e_client", "all_tests")
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,7 +30,10 @@ function Invoke-GateStep
 	param(
 		[string]$Name,
 		[string]$Exe,
-		[string[]]$Arguments = @()
+		[string[]]$Arguments = @(),
+		# ctest has to run from the build directory. Its --test-dir flag would avoid this
+		# but needs CMake 3.20, and the project floor is 3.12.
+		[string]$WorkingDirectory
 	)
 
 	$log = Join-Path $script:logDir ($Name + ".log")
@@ -41,13 +46,24 @@ function Invoke-GateStep
 		# under 'Continue'. Scoped narrowly and restored immediately after.
 		$previousEap = $ErrorActionPreference
 		$ErrorActionPreference = "Continue"
+		$pushed = $false
 		try
 		{
+			if ($WorkingDirectory)
+			{
+				Push-Location $WorkingDirectory
+				$pushed = $true
+			}
+
 			# Out-Host keeps the command output off the pipeline so the function returns ONLY the boolean.
 			& $Exe @Arguments 2>&1 | Tee-Object -FilePath $log | Out-Host
 		}
 		finally
 		{
+			if ($pushed)
+			{
+				Pop-Location
+			}
 			$ErrorActionPreference = $previousEap
 		}
 		$exit = $LASTEXITCODE
@@ -109,14 +125,10 @@ try
 
 	if ($ok)
 	{
-		foreach ($test in @("unit_tests", "game_server_unit_tests", "login_server_tests", "realm_server_tests"))
-		{
-			if (-not (Invoke-GateStep -Name $test -Exe (Join-Path $repoRoot ("bin\Debug\{0}.exe" -f $test))))
-			{
-				$ok = $false
-				break
-			}
-		}
+		# One ctest run covers every suite mmo_add_test() registered, so a new suite needs no
+		# edit here. --output-on-failure names the failing suite and prints its output into
+		# tools/gate/logs/tests.log.
+		$ok = Invoke-GateStep -Name "tests" -Exe "ctest" -Arguments @("-C", "Debug", "--output-on-failure") -WorkingDirectory (Join-Path $repoRoot "build")
 	}
 
 	if ($ok -and -not $SkipE2E)
