@@ -70,16 +70,19 @@ namespace mmo
 	{
 		ASSERT(chunkHeader == *FoliageInstanceChunk);
 
-		if (m_meshNames.empty())
-		{
-			ELOG("No foliage mesh names known, can't read instances before mesh chunk!");
-			return false;
-		}
-
 		uint32 instanceCount = 0;
 		if (!(reader >> io::read<uint32>(instanceCount)))
 		{
 			ELOG("Failed to read foliage instance count, unexpected end of file!");
+			return false;
+		}
+
+		// Checked after the count, not before it: a page with no foliage serializes an empty
+		// mesh name table, and rejecting that made a file the serializer itself produces
+		// unreadable. Only records that actually have to resolve a name need the table.
+		if (instanceCount > 0 && m_meshNames.empty())
+		{
+			ELOG("No foliage mesh names known, can't read instances before mesh chunk!");
 			return false;
 		}
 
