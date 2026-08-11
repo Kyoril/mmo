@@ -16,10 +16,17 @@ Run the local quality gate for the current branch, then review the branch diff.
    scenario's transcript tail from `e2e/runtime/logs/<scenario>.jsonl`. Exception: if the
    `e2e` step has `"log": null` and `exit_code` -1, E2E never ran because
    `MMO_E2E_MYSQL_PASSWORD` is not set — report exactly that instead of hunting for logs.
+   A failing `protocol` step means the wire format changed without a version bump; its log
+   names the constant and the exact command to run, so quote that and do not guess a fix.
    Summarize the failure and STOP — no review, no merge.
-3. **If the gate is GREEN** and the current branch is not `develop`: dispatch a code
-   review of `git diff develop...HEAD` using the superpowers:requesting-code-review
-   skill with base `develop`. (On `develop` itself there is nothing to review — skip.)
+3. **If the gate is GREEN** and the current branch is not `develop`:
+   a. Run `python tools/gate/serialization_warning.py`. It is advisory and always exits 0;
+      it prints nothing when the branch changed no packet serialization. If it does print,
+      pass its output to the reviewer in step (b) and ask specifically whether any of the
+      listed edits change a packet's wire format without a protocol version bump.
+   b. Dispatch a code review of `git diff develop...HEAD` using the
+      superpowers:requesting-code-review skill with base `develop`.
+   (On `develop` itself there is nothing to review — skip both.)
 4. Final summary: a small table of gate steps (name, result, duration from the report),
    then the review findings that need action, if any. Recommend fixes for serious
    findings before shipping.

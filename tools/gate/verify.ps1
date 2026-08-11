@@ -1,6 +1,6 @@
 ﻿# Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
-# Local quality gate: build -> unit tests -> E2E. Writes tools/gate/last_report.json
+# Local quality gate: protocol version check -> build -> unit tests -> E2E. Writes tools/gate/last_report.json
 # and exits 0 only if every step passed. /ship refuses to merge into develop without
 # a green, fresh (HEAD-matching), non-E2E-skipped report.
 #
@@ -89,7 +89,15 @@ $commit = (& git -C $repoRoot rev-parse HEAD)
 Push-Location $repoRoot
 try
 {
-	$ok = Invoke-GateStep -Name "build" -Exe "cmake" -Arguments (@("--build", "build", "--config", "Debug", "-t") + $Targets)
+	# First, and before the build, because it costs milliseconds and answers a question the
+	# build cannot: did the wire format change without the version bump that makes incompatible
+	# peers get rejected instead of silently misparsing each other?
+	$ok = Invoke-GateStep -Name "protocol" -Exe "python" -Arguments @("tools/protocol_version_check.py")
+
+	if ($ok)
+	{
+		$ok = Invoke-GateStep -Name "build" -Exe "cmake" -Arguments (@("--build", "build", "--config", "Debug", "-t") + $Targets)
+	}
 
 	if ($ok)
 	{

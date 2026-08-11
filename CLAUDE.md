@@ -42,6 +42,21 @@ The following systems are fully implemented and should not be suggested as futur
   (htex MCP config) does not follow git worktrees, so parallel worktree sessions run
   without it.
 
+## Network Protocol Changes
+
+Any change to what goes on the wire — an opcode added, removed, renumbered or reordered, a
+packet payload changed, framing or the game cipher touched — requires bumping
+`mmo::auth::ProtocolVersion` and/or `mmo::game::ProtocolVersion`, then running:
+
+```bash
+python tools/protocol_version_check.py --update
+```
+
+Without the bump, incompatible peers are not rejected — they authenticate and then misparse
+each other. `tools/protocol_version_check.py` runs as the first step of the gate and fails
+on changes it can see; it cannot see a payload change inside a handler, so that case still
+needs judgement. Record the bump in [docs/protocol_versions.md](docs/protocol_versions.md).
+
 ## Build Commands
 
 ### Prerequisites
