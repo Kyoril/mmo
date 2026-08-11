@@ -7,6 +7,7 @@
 #include <vector>
 #include <functional>
 #include <optional>
+#include <cstring>
 
 namespace mmo
 {
