@@ -273,37 +273,38 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (m_authProtocol != auth::ProtocolVersion)
+		// The client reports both protocol versions. The auth one guards this connection; the
+		// game one is for the link it will have with a realm, which never sees this handshake
+		// and cannot check it. That value used to be read and then ignored -- and nothing
+		// downstream looked at it either, since the realm's AuthSession packet does not carry
+		// it -- so a client with stale game packets logged in fine and came apart later, at a
+		// character list or a movement update, with nothing in any log connecting the two.
+		// This is the only point on the client's path where the mismatch is visible.
+		if (m_authProtocol != auth::ProtocolVersion || m_gameProtocol != game::ProtocolVersion)
 		{
-			WLOG("Client " << m_address << " uses invalid auth protocol version " << m_authProtocol);
+			const bool authMismatch = m_authProtocol != auth::ProtocolVersion;
 
-			// Send packet with result
-			const uint32 authVersion = m_authProtocol;
-			m_connection->sendSinglePacket([authVersion](auth::OutgoingPacket& packet) {
+			// Both are reported when both differ, rather than sending the player away to
+			// update once and meet the second complaint on the next attempt.
+			if (authMismatch)
+			{
+				WLOG("Client " << m_address << " uses auth protocol version " << m_authProtocol
+					<< ", this login server speaks " << auth::ProtocolVersion << " - rejecting");
+			}
+			if (m_gameProtocol != game::ProtocolVersion)
+			{
+				WLOG("Client " << m_address << " uses game protocol version " << m_gameProtocol
+					<< ", this login server speaks " << game::ProtocolVersion << " - rejecting");
+			}
+
+			const uint32 reported = authMismatch ? m_authProtocol : m_gameProtocol;
+			const uint32 expected = authMismatch ? auth::ProtocolVersion : game::ProtocolVersion;
+
+			const auth::AuthResult versionResult = reported < expected ?
+				auth::auth_result::FailVersionUpdate : auth::auth_result::FailVersionInvalid;
+			m_connection->sendSinglePacket([versionResult](auth::OutgoingPacket& packet) {
 				packet.Start(auth::login_client_packet::LogonChallenge);
-				packet << io::write<uint8>(authVersion < auth::ProtocolVersion ? auth::auth_result::FailVersionUpdate : auth::auth_result::FailVersionInvalid);
-				packet.Finish();
-				});
-
-			return PacketParseResult::Pass;
-		}
-
-		// The client also reports the version of the game protocol -- the one it will speak to a
-		// realm, not to us. That value was read and then ignored, and nothing downstream looks at
-		// it either: the realm's AuthSession packet does not carry it, and by then the client is
-		// already past authentication. So a client with stale game packets used to log in fine and
-		// come apart later, at a character list or a movement update, with nothing in any log
-		// connecting the two. This is the only point on the client's path where the mismatch is
-		// visible, which is what makes it the right place to reject it.
-		if (m_gameProtocol != game::ProtocolVersion)
-		{
-			WLOG("Client " << m_address << " uses game protocol version " << m_gameProtocol
-				<< ", this login server speaks " << game::ProtocolVersion << " - rejecting");
-
-			const uint32 gameVersion = m_gameProtocol;
-			m_connection->sendSinglePacket([gameVersion](auth::OutgoingPacket& packet) {
-				packet.Start(auth::login_client_packet::LogonChallenge);
-				packet << io::write<uint8>(gameVersion < game::ProtocolVersion ? auth::auth_result::FailVersionUpdate : auth::auth_result::FailVersionInvalid);
+				packet << io::write<uint8>(versionResult);
 				packet.Finish();
 				});
 

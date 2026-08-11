@@ -76,18 +76,22 @@ def collect_payload_edits(base):
 
 	edits = {}
 	current = None
+	after_old_header = False		# previous line was the '--- a/...' half of a file header
+
 	for line in diff.splitlines():
-		header = DIFF_FILE_HEADER.match(line)
-		if header:
-			current = header.group(1)
+		# Only a line directly following the '--- ' half is a real file header. An ADDED
+		# source line that happens to begin with '+++' looks identical otherwise, and would
+		# silently discard the rest of that file's hunk.
+		if after_old_header and line.startswith("+++ "):
+			after_old_header = False
+			header = DIFF_FILE_HEADER.match(line)
+			# A deleted file's header is '+++ /dev/null' and matches nothing; clearing
+			# `current` keeps its removed lines off whichever file preceded it in the diff.
+			current = header.group(1) if header else None
 			continue
-		# A deleted file's header is '+++ /dev/null', which does not match above. Without
-		# clearing here, its removed lines would be counted against whichever file happened
-		# to come before it in the diff.
-		if line.startswith("+++"):
-			current = None
-			continue
-		if current is None or line.startswith("---"):
+
+		after_old_header = line.startswith("--- ")
+		if after_old_header or current is None:
 			continue
 		if any(current.startswith(prefix) for prefix in COVERED_PREFIXES):
 			continue

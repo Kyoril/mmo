@@ -51,10 +51,13 @@ MANIFEST_PATH = os.path.join(REPO_ROOT, "src", "shared", "protocol_fingerprint.j
 # wire format, and the only way out would be a flag that bypasses the version check -- which
 # would then be the obvious way around it for everyone else too.
 #
-# When this differs from the manifest, --update re-records without demanding a version bump,
-# because the recorded fingerprint was produced by a different algorithm and comparing the two
-# means nothing. Bumping it is a visible edit to this file, so it cannot be used quietly.
-FINGERPRINT_FORMAT = 2
+# When this differs from the manifest, the recorded fingerprints were produced by a different
+# algorithm and comparing them means nothing -- so re-recording cannot demand a version bump.
+# That path requires --migrate, and reports every protocol it re-records without one. It has
+# to be a flag: the comparison reads _format out of the generated manifest, so anyone editing
+# that one digit would otherwise get a silent free pass -- quieter than the manifest deletion
+# --seed exists to prevent.
+FINGERPRINT_FORMAT = 3
 
 # The files whose content defines what goes on the wire, per protocol. The version constant
 # lives in the first entry of each list.
@@ -87,6 +90,15 @@ PROTOCOLS = {
 			"src/shared/game/object_type_id.h",
 			"src/shared/game/field_map.h",
 			"src/shared/game/movement_info.h",
+
+			# Structures that travel whole inside a packet, each defined together with its
+			# own serializer. They are wire format definitions in exactly the way
+			# movement_info.h is; the fact that a couple keep their operators in a .cpp is
+			# an implementation detail, not a reason to leave them unguarded.
+			"src/shared/game/character_view.h",
+			"src/shared/game/character_view.cpp",
+			"src/shared/game/mail.h",
+			"src/shared/game/game.h",
 
 			"src/shared/game_protocol/game_protocol.h",
 			"src/shared/game_protocol/game_protocol.cpp",
@@ -179,6 +191,35 @@ def sha256(text):
 	return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
+
+
+def split_members(body):
+	"""Splits an enum body on commas that separate enumerators.
+
+	Not `body.split(",")`: commas also appear inside macro arguments and parenthesised
+	expressions (`VISIBLE_ITEM_FIELDS(1, TalentPoints)`, `Slot_1 + (36 * 2)`), and splitting
+	on those shreds one declaration into several bogus ones.
+	"""
+	members = []
+	current = []
+	depth = 0
+
+	for char in body:
+		if char in "([":
+			depth += 1
+		elif char in ")]":
+			depth -= 1
+		elif char == "," and depth <= 0:
+			members.append("".join(current))
+			current = []
+			continue
+		current.append(char)
+
+	members.append("".join(current))
+	return members
+
+
 def parse_enumerators(body):
 	"""Resolves every enumerator's value, mirroring how the compiler assigns implicit ones.
 
@@ -199,7 +240,7 @@ def parse_enumerators(body):
 	anchor = None		# last unresolvable value, for relative numbering
 	offset = 0
 
-	for member in body.split(","):
+	for member in split_members(body):
 		member = member.strip()
 		if not member:
 			continue
@@ -207,6 +248,19 @@ def parse_enumerators(body):
 		name, sep, raw = member.partition("=")
 		name = name.strip()
 		if not name:
+			continue
+
+		if not IDENTIFIER.fullmatch(name):
+			# A macro invocation rather than an enumerator -- object_fields uses
+			# VISIBLE_ITEM_FIELDS(1, TalentPoints) to declare nineteen fields at a time.
+			# How many enumerators it expands to is unknowable from here, so everything
+			# after it is numbered relative to the expansion instead of pretending to a
+			# value. Recording it as an opaque marker keeps a change to the macro visible
+			# in the delta; splitting it into fake enumerators, as an earlier version did,
+			# put names like 'PlayerFields::1)' in the manifest and hid the real fields.
+			entries.append(("<expands %s>" % (name,), "?"))
+			anchor = "after %s" % (name,)
+			offset = 0
 			continue
 
 		if sep:
@@ -233,7 +287,10 @@ def parse_enumerators(body):
 
 
 NAMESPACE_DECL = re.compile(r"namespace\s+(\w+)\s*\{")
-ENUM_DECL = re.compile(r"enum\s+(?:class\s+)?(\w+)\s*(?::\s*[\w:]+\s*)?\{")
+# The name is optional: `enum { A = 1 };` and `enum : uint8 { A = 1 };` are legal and just as
+# wire-relevant. Requiring a name would drop them silently -- the same shape of failure as the
+# regex this scanner replaced.
+ENUM_DECL = re.compile(r"enum\s+(?:class\s+)?(\w*)\s*(?::\s*[\w:]+\s*)?\{")
 
 
 def extract_symbols(protocol, text):
@@ -274,19 +331,27 @@ def extract_symbols(protocol, text):
 					# `enum Type` is the project's pseudo-namespace idiom and adds nothing to
 					# the name; any other enum name is meaningful and must be kept, or the two
 					# enums inside object_fields would collide.
-					scope = namespaces[-1][0] if namespaces else ""
-
 					# An enum sitting directly in `namespace mmo` or in the protocol's own
 					# namespace gets no scope prefix from it -- the protocol key already says
 					# that, and 'auth::auth::AuthLocale' helps nobody.
-					if scope in ("mmo", protocol):
-						scope = ""
+					enclosing = namespaces[-1][0] if namespaces else ""
+					if enclosing in ("mmo", protocol):
+						enclosing = ""
 
-					if match.group(1) != "Type":
-						scope = "%s::%s" % (scope, match.group(1)) if scope else match.group(1)
+					# `enum Type` is the project's pseudo-namespace idiom and adds nothing to
+					# the name; any other name is meaningful and must be kept, or the enums
+					# sharing the object_fields namespace would collide. Assembled from the
+					# non-empty parts so nothing ever emits 'auth::::A'.
+					enum_name = match.group(1)
+					parts = [protocol, enclosing]
+					if enum_name and enum_name != "Type":
+						parts.append(enum_name)
+					elif not enum_name:
+						parts.append("<anonymous>")
+					prefix = "::".join(part for part in parts if part)
 
 					for name, value in parse_enumerators(stripped[match.end():end]):
-						symbols.append("%s::%s::%s = %s" % (protocol, scope, name, value))
+						symbols.append("%s::%s = %s" % (prefix, name, value))
 
 					# Both of the enum's braces are consumed here, so `depth` is untouched.
 					i = end + 1
@@ -435,9 +500,13 @@ def check(current, manifest):
 		return ["the manifest was recorded by a different version of this checker "
 			"(format %s, this is %d).\n"
 			"  The fingerprints are not comparable, so nothing can be concluded about\n"
-			"  whether the wire format changed. Re-record:\n"
-			"    python tools/protocol_version_check.py --update"
-			% (manifest.get("_format"), FINGERPRINT_FORMAT)]
+			"  whether the wire format changed.\n"
+			"  If you changed FINGERPRINT_FORMAT in tools/protocol_version_check.py:\n"
+			"    python tools/protocol_version_check.py --update --migrate\n"
+			"  If you did not, the manifest has been edited by hand -- restore it:\n"
+			"    git checkout -- %s"
+			% (manifest.get("_format"), FINGERPRINT_FORMAT,
+				os.path.relpath(MANIFEST_PATH, REPO_ROOT).replace("\\", "/"))]
 
 	for protocol in sorted(current):
 		now = current[protocol]
@@ -490,6 +559,8 @@ def main():
 		help="re-record the fingerprints after a deliberate version bump")
 	parser.add_argument("--seed", action="store_true",
 		help="with --update, allow writing a manifest that does not exist yet")
+	parser.add_argument("--migrate", action="store_true",
+		help="with --update, re-record after FINGERPRINT_FORMAT changed in this script")
 	args = parser.parse_args()
 
 	current = snapshot()
@@ -507,28 +578,54 @@ def main():
 			print("forgotten one. To create the very first one, pass --seed.")
 			return 1
 
-		# A format change means the recorded fingerprints were produced by a different
-		# algorithm, so "the fingerprint changed" carries no information about the wire
-		# format and there is nothing to refuse on.
-		if manifest is not None and manifest.get("_format") == FINGERPRINT_FORMAT:
-			# --update must not become a way to make the check go away. Re-recording a
-			# changed surface under an unchanged version is exactly the mistake this tool
-			# exists to prevent, so it is the one thing --update refuses to do.
-			refused = []
+		stale_format = manifest is not None and manifest.get("_format") != FINGERPRINT_FORMAT
+
+		# --update must not become a way to make the check go away. Re-recording a changed
+		# surface under an unchanged version is exactly the mistake this tool exists to
+		# prevent, so it is the one thing --update refuses to do.
+		unbumped = []
+		if manifest is not None:
 			for protocol in sorted(current):
 				recorded = manifest.get(protocol)
 				if recorded is None:
 					continue
 				if (recorded.get("fingerprint") != current[protocol]["fingerprint"]
 						and recorded.get("version") == current[protocol]["version"]):
-					refused.append("  %s: %s is still %d" % (
+					unbumped.append("  %s: %s is still %d" % (
 						protocol, PROTOCOLS[protocol]["constant"], current[protocol]["version"]))
 
-			if refused:
-				print("Refusing to re-record: the wire surface changed with no version bump.")
-				print("\n".join(refused))
-				print("\nBump the version constant first, then run --update again.")
+		if stale_format:
+			# The recorded fingerprints came from a different algorithm, so they cannot say
+			# whether the wire format moved -- the refusal above has nothing to stand on.
+			# That makes this the weakest point in the tool, and _format is read from the
+			# GENERATED manifest, so it must not be enough on its own to get here.
+			if not args.migrate:
+				print("The manifest was recorded with fingerprint format %s; this script is at %d."
+					% (manifest.get("_format"), FINGERPRINT_FORMAT))
+				print("")
+				print("Re-recording across a format change cannot verify that the wire format")
+				print("did not also move, so it is not something --update will do on its own.")
+				print("If you changed FINGERPRINT_FORMAT in this script, pass --migrate.")
+				print("If you did not, restore the manifest instead:")
+				print("  git checkout -- %s"
+					% (os.path.relpath(MANIFEST_PATH, REPO_ROOT).replace("\\", "/"),))
 				return 1
+
+			if unbumped:
+				# Not fatal -- across a format change this is expected and usually harmless --
+				# but it is the exact combination the tool exists to catch, so it is never
+				# allowed to pass silently.
+				print("WARNING: migrating the fingerprint format, and re-recording these")
+				print("         protocols whose surface changed with no version bump:")
+				print("\n".join(unbumped))
+				print("         Confirm that is a consequence of the format change and not a")
+				print("         wire format change riding along with it.")
+				print("")
+		elif unbumped:
+			print("Refusing to re-record: the wire surface changed with no version bump.")
+			print("\n".join(unbumped))
+			print("\nBump the version constant first, then run --update again.")
+			return 1
 
 		write_manifest(current)
 		print("Recorded protocol fingerprints in %s"

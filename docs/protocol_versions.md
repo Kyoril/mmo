@@ -41,20 +41,28 @@ python tools/protocol_version_check.py --update
 | `tools/gate/serialization_warning.py` | `io::read`/`io::write` edits on a branch with no version bump — **advisory** | the review step of `/gate` |
 | Handshake checks | an actual mismatched peer, at runtime | login, realm and world servers (see below) |
 
-The fingerprint covers the files that *define* the wire format. For the game protocol that
-deliberately includes the field layer — `object_type_id.h` (`object_fields`), `field_map.h`
-and `movement_info.h` — because `FieldMap` indices go out in every `UpdateObject` and
-`object_fields::UnitFields` is numbered implicitly, so adding a unit stat in the middle
-renumbers every field after it. That is ordinary gameplay work that does not look like a
-protocol edit, and it is the most likely wire break in this codebase.
+### What the fingerprint does and does not cover
 
-What the fingerprint still cannot see is a payload change made inside a handler — a field
-added to a packet body in some `.cpp` across the three tiers. That is what the advisory
-exists for, and why the constants still carry a note telling you to think.
+It covers files that define a wire structure **together with its serializer**, or that define
+the indices and framing those structures travel in. For the game protocol that deliberately
+includes the field layer — `object_type_id.h` (`object_fields`), `field_map.h`,
+`movement_info.h` — plus the standalone payload structures `character_view.{h,cpp}`,
+`mail.h` and `game.h`. The field layer matters most: `FieldMap` indices go out in every
+`UpdateObject` and `object_fields::UnitFields` is numbered implicitly, so adding a unit stat
+in the middle renumbers every field after it. That is ordinary gameplay work that looks
+nothing like a protocol edit, and it is the likeliest wire break in this codebase.
 
-If you change the tracked file set or the normalization in the checker, bump
-`FINGERPRINT_FORMAT` in it. Old fingerprints then compare as "incomparable" rather than as a
-wire change, which is what lets `--update` re-record without a spurious version bump.
+What it does **not** cover is a payload assembled inline in a packet handler — an
+`io::write<uint32>` added next to the others in a `Player::` or `World::` method, of which
+there are hundreds across the three tiers. Fingerprinting that would mean fingerprinting most
+of the server code, and the resulting false-positive rate would make the check worthless. That
+gap is the advisory's job, and it is why the constants still carry a note telling you to
+think. If you add a new *structure* with its own serializer, add its file to `PROTOCOLS`.
+
+If you change the tracked file set or the normalization, bump `FINGERPRINT_FORMAT` in the
+checker and re-record with `--update --migrate`. Old fingerprints then compare as
+"incomparable" rather than as a wire change, which avoids a spurious version bump — the
+migration prints which protocols it re-recorded without one, so the two cannot be confused.
 
 ## Where a mismatch is caught at runtime
 

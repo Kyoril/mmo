@@ -309,6 +309,12 @@ namespace mmo
 			>> io::read<uint32>(m_gameProtocol)
 			>> io::read_container<uint8>(m_realmName)))
 		{
+			// Same reasoning as the world node's challenge in realm_server/world.cpp: a peer
+			// that is short of the fields this read expects fails here rather than reaching
+			// the version comparison below, and a bare Disconnect would tell nobody why.
+			WLOG("Malformed logon challenge from a realm at " << m_address
+				<< " - it may have been built against an older auth protocol than "
+				<< auth::ProtocolVersion);
 			return PacketParseResult::Disconnect;
 		}
 
