@@ -84,7 +84,7 @@ mysqlDatabase =
 	password = "$($mysqlCred.Password)"
 	database = "$($s.LoginDb)"
 	updatePath = "$loginUpdates"
-	poolSize = 1
+	poolSize = 4
 )
 
 webServer =
@@ -126,7 +126,7 @@ mysqlDatabase =
 	password = "$($mysqlCred.Password)"
 	database = "$($s.RealmDb)"
 	updatePath = "$realmUpdates"
-	poolSize = 1
+	poolSize = 4
 )
 
 realmConfig =

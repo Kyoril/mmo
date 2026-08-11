@@ -34,10 +34,12 @@ namespace mmo
 		String mysqlDatabase;
 		/// Number of database connections to open.
 		///
-		/// Defaults to 1, which reproduces the single-connection behaviour exactly. Raise it only
-		/// once every call site touching a given entity supplies an ordering key -- a keyed and an
-		/// unkeyed operation on the same row land on different connections and can reorder. See
-		/// docs/superpowers/plans/2026-08-10-database-connection-pool.md.
+		/// Work is routed to a connection by an ordering key, so operations on the same character
+		/// or account keep their order while unrelated entities run in parallel.
+		///
+		/// A new database call must supply that key (asyncRequestKeyed) if it touches an entity.
+		/// Leaving one unkeyed while its neighbours are keyed puts it on a different connection,
+		/// where it can reorder against them. See docs/testing-servers.md.
 		size_t mysqlPoolSize;
 
 		/// Path to where update files in the form of "YYYYMMDD_INDEX.sql" are stored.

@@ -36,7 +36,7 @@ namespace mmo
 		, mysqlUser("mmo")
 		, mysqlPassword("")
 		, mysqlDatabase("mmo_realm_01")
-		, mysqlPoolSize(1)
+		, mysqlPoolSize(4)
 		, mysqlUpdatePath("updates/realm")
 		, isLogActive(true)
 		, logFileName("logs/realm_01")

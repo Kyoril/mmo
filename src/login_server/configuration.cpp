@@ -27,7 +27,7 @@ namespace mmo
 		, mysqlUser("mmo")
 		, mysqlPassword("")
 		, mysqlDatabase("mmo_login")
-		, mysqlPoolSize(1)
+		, mysqlPoolSize(4)
 		, mysqlUpdatePath("updates/login")
 		, isLogActive(true)
 		, logFileName("logs/login")
