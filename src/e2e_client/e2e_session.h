@@ -14,6 +14,7 @@
 #include "asio/io_service.hpp"
 
 #include <memory>
+#include <optional>
 
 namespace mmo
 {
@@ -53,6 +54,17 @@ namespace mmo
 
 		void Shutdown();
 
+		/// Tells the session that losing the realm connection is the expected outcome, so that it
+		/// is recorded rather than failing the scenario. Used by scenarios that deliberately
+		/// provoke a disconnect, such as the duplicate-login check.
+		void ExpectDisconnect() { m_disconnectExpected = true; }
+
+		/// Whether the realm connection has been lost after ExpectDisconnect was called.
+		[[nodiscard]] bool IsDisconnected() const { return m_disconnected; }
+
+		/// Why the realm terminated this session, if it said so before closing the connection.
+		[[nodiscard]] std::optional<auth::SessionKickReason> GetKickReason() const { return m_realm->GetKickReason(); }
+
 		BotContext& GetContext() { return *m_context; }
 		BotRealmConnector& GetRealm() { return *m_realm; }
 		BotMovementController& GetMovementController() { return m_movementController; }
@@ -78,6 +90,8 @@ namespace mmo
 		bool m_worldReady { false };
 		bool m_realmConnectionAttempted { false };
 		bool m_shuttingDown { false };
+		bool m_disconnectExpected { false };
+		bool m_disconnected { false };
 		e2e_exit_code::Type m_exitCode { e2e_exit_code::Success };
 	};
 }

@@ -59,6 +59,14 @@ Control:
 | `Fail(msg)` | Fails immediately |
 | `WaitUntil(fn [, timeoutMs [, desc]]) -> bool` | Polls `fn` while pumping; default 10s |
 
+Session (for scenarios that deliberately provoke a disconnect):
+| Function | Notes |
+|---|---|
+| `ExpectDisconnect()` | Losing the realm connection stops being a failure. Arm it **before** the disconnect can happen |
+| `IsDisconnected() -> bool` | True once the realm connection has been lost |
+| `LastKickReason() -> string` | `"none"` \| `"logged_in_elsewhere"` \| `"banned"` |
+| `LoginElsewhere([timeoutMs]) -> bool` | Opens a second login-server session on the same account and waits for it to authenticate; default 15s |
+
 Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `Me()`, `UnitExists(g)`, `GetHealth(g)`, `GetMaxHealth(g)`, `GetLevel(g)`, `GetPower(g)`,
 `GetMaxPower(g)`, `IsAlive(g)`, `GetName(g)`, `GetPosX/Y/Z(g)`, `GetDistance(a, b)`,
@@ -98,6 +106,10 @@ equipment)
 
 ### Gotchas
 
+- `LoginElsewhere` stops at the login server on purpose: the duplicate-login displacement
+  fires as soon as `LogonProof` succeeds, so picking a realm and a character would only make
+  the scenario slower. It also means the second session never enters the world — don't reach
+  for it as a way to get a second character in play.
 - `GM.CreateMonster` spawns the monster **at the player's position**. Spells with an
   in-front requirement can never validate at zero distance — step aside first with
   `GM.Worldport` (see `spell_cast_smoke.lua`).

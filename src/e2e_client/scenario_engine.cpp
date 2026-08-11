@@ -2,6 +2,7 @@
 
 #include "scenario_engine.h"
 #include "scenario_transcript.h"
+#include "secondary_login_session.h"
 
 #include "base/clock.h"
 #include "game/spell.h"
@@ -17,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -35,6 +37,11 @@ namespace mmo
 			e2e_exit_code::Type abortCode { e2e_exit_code::ScenarioFailed };
 			bool aborted { false };
 			uint64 selectedTarget { 0 };
+
+			/// A second session on the same account, created by LoginElsewhere. Kept alive for the
+			/// rest of the scenario so its connection is not torn down while the first session is
+			/// still being observed.
+			std::unique_ptr<SecondaryLoginSession> secondSession;
 		};
 
 		ScenarioRuntime* g_runtime = nullptr;
@@ -57,6 +64,13 @@ namespace mmo
 		{
 			E2eSession& session = *g_runtime->session;
 			session.Pump();
+
+			// Keep the second session's io service moving too, so its connection stays healthy for
+			// as long as the scenario runs rather than going silent the moment it authenticated.
+			if (g_runtime->secondSession)
+			{
+				g_runtime->secondSession->Pump();
+			}
 
 			if (session.IsStopRequested())
 			{
@@ -157,6 +171,81 @@ namespace mmo
 			{
 				pumpChecked();
 			}
+		}
+
+		void luaExpectDisconnect()
+		{
+			g_runtime->session->ExpectDisconnect();
+		}
+
+		bool luaIsDisconnected()
+		{
+			return g_runtime->session->IsDisconnected();
+		}
+
+		std::string luaLastKickReason()
+		{
+			const auto reason = g_runtime->session->GetKickReason();
+			if (!reason)
+			{
+				return "none";
+			}
+
+			switch (*reason)
+			{
+			case auth::session_kick_reason::LoggedInElsewhere:
+				return "logged_in_elsewhere";
+			case auth::session_kick_reason::AccountBanned:
+				return "banned";
+			}
+
+			return "unknown";
+		}
+
+		/// Opens a second login-server session on the same account and waits for it to authenticate.
+		/// That is the point at which the server displaces older sessions, so nothing further (realm
+		/// selection, character entry) is needed to provoke the kick.
+		bool luaLoginElsewhere(const uint32 timeoutMs)
+		{
+			if (g_runtime->secondSession)
+			{
+				abortScenario(e2e_exit_code::ScenarioFailed, "LoginElsewhere: a second session is already open");
+			}
+
+			const BotConfig& config = g_runtime->session->GetConfig();
+			g_runtime->secondSession = std::make_unique<SecondaryLoginSession>(
+				config.loginHost, config.loginPort, config.username, config.password);
+			g_runtime->secondSession->Start();
+
+			const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+			while (std::chrono::steady_clock::now() < until)
+			{
+				if (g_runtime->secondSession->IsAuthenticated())
+				{
+					if (g_runtime->transcript)
+					{
+						g_runtime->transcript->Event("login_elsewhere", { { "result", "authenticated" } });
+					}
+					return true;
+				}
+
+				if (g_runtime->secondSession->HasFailed())
+				{
+					if (g_runtime->transcript)
+					{
+						g_runtime->transcript->Event("login_elsewhere", { { "result", "rejected" } });
+					}
+					return false;
+				}
+
+				pumpChecked();
+			}
+
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Event("login_elsewhere", { { "result", "timeout" } });
+			}
+			return false;
 		}
 
 		void luaAssert(const bool condition, const std::string& message)
@@ -866,6 +955,10 @@ namespace mmo
 				luabind::def_lambda("AssertImpl", &luaAssert),
 				luabind::def_lambda("Fail", &luaFail),
 				luabind::def_lambda("WaitUntilImpl", &luaWaitUntil),
+				luabind::def_lambda("ExpectDisconnect", &luaExpectDisconnect),
+				luabind::def_lambda("IsDisconnected", &luaIsDisconnected),
+				luabind::def_lambda("LastKickReason", &luaLastKickReason),
+				luabind::def_lambda("LoginElsewhereImpl", &luaLoginElsewhere),
 
 				// Queries
 				luabind::def_lambda("Me", &luaMe),
@@ -942,6 +1035,7 @@ namespace mmo
 			function WaitUntil(fn, timeoutMs, desc) return WaitUntilImpl(fn, timeoutMs or 10000, desc or "condition") end
 			function CastSpell(spellId, target) return CastSpellImpl(spellId, target or "") end
 			function MoveTo(x, y, z, timeoutMs) return MoveToImpl(x, y, z, timeoutMs or 30000) end
+			function LoginElsewhere(timeoutMs) return LoginElsewhereImpl(timeoutMs or 15000) end
 
 			function FindUnitByEntry(entry)
 				local guid = FindUnitByEntryImpl(entry)

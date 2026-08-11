@@ -246,6 +246,46 @@ namespace mmo
 		SUCCEED("no crash under concurrent lookup and kick");
 	}
 
+	// Displacing an account's other sessions must ignore sessions that have not authenticated.
+	//
+	// Every session starts life with account id 0 and stays there until the logon challenge
+	// resolves, so a displacement that matched on the account id alone would treat every
+	// half-connected client as a duplicate login of account 0 and drop them all. The
+	// IsAuthenticated() filter is the only thing standing between this feature and mass
+	// disconnects of clients that are still typing their password.
+	TEST_CASE("DisplacementSkipsUnauthenticatedSessions", "[player_lifecycle]")
+	{
+		asio::io_service ioService;
+		PlayerManager playerManager{ 16 };
+		RealmManager realmManager{ 16 };
+		DiscardingDatabase database;
+
+		std::vector<std::shared_ptr<Player>> players;
+		for (int index = 0; index < 3; ++index)
+		{
+			auto connection = auth::Connection::create(ioService, nullptr);
+			auto player = std::make_shared<Player>(playerManager, realmManager, database.async,
+				connection, "127.0.0.1");
+			playerManager.AddPlayer(player);
+			players.push_back(std::move(player));
+		}
+
+		REQUIRE(playerManager.GetPlayerCount() == 3);
+
+		// Account 0 is what every one of them reports until it authenticates.
+		playerManager.KickOtherSessionsForAccount(0, *players.front(),
+			auth::session_kick_reason::LoggedInElsewhere);
+
+		// Kicks are posted, so pump before concluding that none happened.
+		for (int pass = 0; pass < 20; ++pass)
+		{
+			ioService.run_for(std::chrono::milliseconds(1));
+			ioService.restart();
+		}
+
+		CHECK(playerManager.GetPlayerCount() == 3);
+	}
+
 	// The manager must hand out an owning reference. Its mutex protects the list, not the
 	// lifetime of what comes out of it, so a raw pointer returned to another thread could
 	// outlive the session it names.
