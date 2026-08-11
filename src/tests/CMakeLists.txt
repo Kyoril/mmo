@@ -24,6 +24,7 @@ add_subdirectory(realm_server_tests)
 add_subdirectory(simple_file_format_tests)
 add_subdirectory(terrain_io_tests)
 add_subdirectory(terrain_tests)
+add_subdirectory(updater_tests)
 add_subdirectory(virtual_dir_tests)
 add_subdirectory(xml_handler_tests)
 
