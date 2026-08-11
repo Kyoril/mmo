@@ -191,7 +191,7 @@ namespace mmo
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetRealmFeatureRequirements, m_realmId);
+		m_database.asyncRequestKeyed(m_realmId, std::move(handler), &IDatabase::GetRealmFeatureRequirements, m_realmId);
 	}
 
 	bool Realm::IsVisibleTo(const std::set<uint32>& accountFeatures) const
@@ -520,7 +520,7 @@ namespace mmo
 				<< m_build;
 
 			// Store session key in account database
-			m_database.asyncRequest<void>(
+			m_database.asyncRequestKeyed<void>(m_realmId, 
 				std::bind(&IDatabase::RealmLogin, std::placeholders::_1, m_realmId, K.asHexStr(), m_address, versionBuilder.str()),
 				std::move(handler));
 
