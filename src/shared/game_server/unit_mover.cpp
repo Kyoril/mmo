@@ -2,6 +2,7 @@
 
 #include "unit_mover.h"
 #include "game/circle.h"
+#include "game_server/movement_timing.h"
 #include "game_server/objects/game_unit_s.h"
 #include "game_server/world/world_instance.h"
 #include "game_server/world/universe.h"
@@ -171,6 +172,15 @@ namespace mmo
 			return false;
 		}
 
+		// A unit that cannot move must not be given a movement path at all. Building one
+		// anyway would produce an arrival time equal to the start time, which the arrival
+		// countdown reads as "already there" and answers by relocating the unit onto its
+		// destination - a snare of 100% would teleport instead of stopping the unit.
+		if (customSpeed <= 0.0f)
+		{
+			return false;
+		}
+
 		// Get current location
 		m_customSpeed = true;
 		auto currentLoc = GetCurrentLocation();
@@ -249,13 +259,10 @@ namespace mmo
 			}
 		}
 
-		GameTime moveTime = m_moveStart;
+		const std::vector<GameTime> arrivalTimes = BuildPathTimestamps(m_moveStart, currentLoc, path, customSpeed);
 		for (uint32 i = 0; i < path.size(); ++i)
 		{
-			const float dist =
-				(i == 0) ? ((path[i] - currentLoc).GetLength()) : (path[i] - path[i - 1]).GetLength();
-			moveTime += (dist / customSpeed) * constants::OneSecond;
-			m_path.AddPosition(moveTime, path[i]);
+			m_path.AddPosition(arrivalTimes[i], path[i]);
 		}
 
 		// Use new values
@@ -263,7 +270,7 @@ namespace mmo
 		m_target = path.back();
 
 		// Calculate time of arrival
-		m_moveEnd = moveTime;
+		m_moveEnd = arrivalTimes.back();
 
 		auto movementInfo = moved.GetMovementInfo();
 		movementInfo.movementFlags &= movement_flags::WalkMode;
@@ -372,6 +379,13 @@ namespace mmo
 		const MovementType moveType = m_unit.GetMovementMode() == unit_movement_mode::Walk ? movement_type::Walk : movement_type::Run;
 		const float speed = m_unit.GetSpeed(moveType);
 
+		// See MoveTo: a non-positive speed must refuse the movement, not schedule an
+		// instant arrival at the destination.
+		if (speed <= 0.0f)
+		{
+			return false;
+		}
+
 		// Concatenate navmesh paths for all segments: currentLoc → wp[0] → wp[1] → … → wp[N]
 		std::vector<Vector3> fullPath;
 		Vector3 segmentStart = currentLoc;
@@ -430,18 +444,14 @@ namespace mmo
 
 		// Build timing across the full concatenated path
 		m_moveStart = GetAsyncTimeMs();
-		GameTime moveTime = m_moveStart;
+		const std::vector<GameTime> arrivalTimes = BuildPathTimestamps(m_moveStart, currentLoc, fullPath, speed);
 		for (uint32 i = 0; i < fullPath.size(); ++i)
 		{
-			const float dist = (i == 0)
-				? (fullPath[i] - currentLoc).GetLength()
-				: (fullPath[i] - fullPath[i - 1]).GetLength();
-			moveTime += static_cast<GameTime>((dist / speed) * constants::OneSecond);
-			m_path.AddPosition(moveTime, fullPath[i]);
+			m_path.AddPosition(arrivalTimes[i], fullPath[i]);
 		}
 
 		m_target = fullPath.back();
-		m_moveEnd = moveTime;
+		m_moveEnd = arrivalTimes.back();
 
 		auto movementInfo = moved.GetMovementInfo();
 		movementInfo.movementFlags &= movement_flags::WalkMode;

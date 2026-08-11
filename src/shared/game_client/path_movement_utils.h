@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "base/typedefs.h"
 #include "math/vector3.h"
 
 #include <vector>
@@ -57,6 +58,84 @@ namespace mmo
 
 		return waypoints.back();
 	}
+	/// Lower bound on the speed a movement path may imply, as a factor of the unit's own
+	/// run speed. A patrol route walked at walk speed sits around 0.35 of run speed, so
+	/// this only rejects speeds that are effectively zero.
+	constexpr float MinPathSpeedFactor = 0.01f;
+
+	/// Upper bound on the speed a movement path may imply, as a factor of the unit's own
+	/// run speed. The charge spell, the fastest server driven movement, sits around 5.
+	constexpr float MaxPathSpeedFactor = 20.0f;
+
+	/// Derives the speed at which a server-driven movement path has to be followed from
+	/// the duration the server announced for it.
+	///
+	/// The announced duration is only trusted while it implies a plausible speed. A
+	/// degenerate duration derives a speed that is either absurdly high, which makes the
+	/// unit visually teleport to the destination, or effectively zero - and a near-zero
+	/// speed is unrecoverable: the travelled distance never grows, so neither the arrival
+	/// check nor the overshoot failsafe in the path update can ever complete the path, and
+	/// a locally controlled player stays frozen under server movement control until relog.
+	/// The bound is expressed relative to the unit's own run speed rather than as an
+	/// absolute duration, because a single path may legitimately cover anything from a
+	/// charge of a few hundred milliseconds to a patrol route of several minutes.
+	///
+	/// @param pathTotalLength Total length of the movement path in world units.
+	/// @param moveTime Duration the server announced for the whole path, in milliseconds.
+	/// @param runSpeed The unit's own run speed, used as the reference and as the fallback.
+	/// @param outDurationRejected Set to true when the announced duration was discarded.
+	/// @return The speed to follow the path with; runSpeed if the duration is not usable.
+	inline float DerivePathMoveSpeed(
+		const float pathTotalLength,
+		const GameTime moveTime,
+		const float runSpeed,
+		bool* outDurationRejected = nullptr)
+	{
+		if (outDurationRejected)
+		{
+			*outDurationRejected = false;
+		}
+
+		// Nothing was announced (or there is no path to speak of): not a rejection, there
+		// is simply nothing to derive a speed from.
+		if (moveTime == 0 || pathTotalLength <= 0.0f)
+		{
+			return runSpeed;
+		}
+
+		const float impliedSpeed = pathTotalLength / (static_cast<float>(moveTime) / 1000.0f);
+		if (!(impliedSpeed > 0.0f))
+		{
+			if (outDurationRejected)
+			{
+				*outDurationRejected = true;
+			}
+
+			return runSpeed;
+		}
+
+		// Without a usable reference speed there is nothing to validate against, so the
+		// announced duration is taken at face value - it still beats falling back to a
+		// run speed that is itself zero, which would freeze the unit outright.
+		if (runSpeed <= 0.0f)
+		{
+			return impliedSpeed;
+		}
+
+		if (impliedSpeed < runSpeed * MinPathSpeedFactor ||
+			impliedSpeed > runSpeed * MaxPathSpeedFactor)
+		{
+			if (outDurationRejected)
+			{
+				*outDurationRejected = true;
+			}
+
+			return runSpeed;
+		}
+
+		return impliedSpeed;
+	}
+
 	/// Decides whether a unit that follows a server-driven movement path has arrived at
 	/// the final destination and may therefore complete the path.
 	/// @param traveledPathDistance Distance the unit should have covered so far (movement speed * elapsed time).

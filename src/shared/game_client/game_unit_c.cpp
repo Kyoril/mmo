@@ -1663,9 +1663,15 @@ namespace mmo
 			currentPos = segmentEnd;
 		}
 
-		if (moveTime > 0 && m_pathTotalLength > 0.0f)
+		// Only follow the announced duration while it implies a plausible speed; see
+		// DerivePathMoveSpeed for why an unchecked duration can teleport or freeze the unit.
+		bool durationRejected = false;
+		m_pathMoveSpeed = DerivePathMoveSpeed(
+			m_pathTotalLength, moveTime, GetSpeed(movement_type::Run), &durationRejected);
+		if (durationRejected)
 		{
-			m_pathMoveSpeed = m_pathTotalLength / (static_cast<float>(moveTime) / 1000.0f);
+			WLOG("Received implausible movement path duration of " << moveTime << "ms for a path of "
+				<< m_pathTotalLength << " units, falling back to run speed");
 		}
 
 		// All units use time-based direct positioning while following a path - including the
