@@ -67,8 +67,9 @@ holes the broadcast cannot:
 
 A single reason enum lives in `auth_protocol.h`, alongside `auth::world_left_reason`,
 which is already the precedent for a cross-tier enum shared by more than one protocol
-library. `game_protocol` gains a link dependency on `auth_protocol` (header-only enum use,
-no cycle: `auth_protocol` does not depend on `game_protocol`).
+library. No CMake change is needed: `game_protocol.h` only documents the reason values, and
+every consumer that actually reads them (realm server, client) already links both protocol
+libraries.
 
 ```cpp
 namespace mmo::auth::session_kick_reason

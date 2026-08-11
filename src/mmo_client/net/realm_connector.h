@@ -5,6 +5,7 @@
 #include "mmo_client/realm_data.h"
 
 #include "game_protocol/game_connector.h"
+#include "auth_protocol/auth_protocol.h"
 #include "base/big_number.h"
 #include "base/signal.h"
 #include "game/character_view.h"
@@ -16,6 +17,7 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "math/vector3.h"
 
+#include <optional>
 #include <unordered_set>
 
 
@@ -41,6 +43,15 @@ namespace mmo
 
 		signal<void(uint32, Vector3, float)> VerifyNewWorld;
 
+	public:
+		/// Why the realm terminated this session, if it told us before closing the connection.
+		///
+		/// Deliberately not a signal: the reason packet arrives immediately before the disconnect,
+		/// and making the state transition hang off two independent events invites showing the
+		/// wrong screen if they interleave unexpectedly. Disconnected stays the single trigger and
+		/// consumers read the reason from here when it fires.
+		[[nodiscard]] std::optional<auth::SessionKickReason> GetKickReason() const { return m_kickReason; }
+
 	private:
 		// Internal io service
 		asio::io_service& m_ioService;
@@ -56,6 +67,9 @@ namespace mmo
 		/// Set while a pending connection attempt should be discarded once it resolves (user cancelled).
 		bool m_cancelled = false;
 
+		/// Reason the realm gave for terminating this session, if any. Cleared on each new connect.
+		std::optional<auth::SessionKickReason> m_kickReason;
+
 	public:
 		/// Initializes a new instance of the RealmConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
@@ -69,6 +83,11 @@ namespace mmo
 		/// Handles the AuthSessionResponse packet which is sent after we sent the AuthChallenge response to the server.
 		///	@param packet The packet to parse.
 		PacketParseResult OnAuthSessionResponse(game::IncomingPacket& packet);
+
+		/// Handles the KickReason packet, sent by the realm immediately before it closes a session
+		/// it is terminating.
+		///	@param packet The packet to parse.
+		PacketParseResult OnKickReason(game::IncomingPacket& packet);
 
 		/// Handles the CharEnum packet.
 		///	@param packet The packet to parse.

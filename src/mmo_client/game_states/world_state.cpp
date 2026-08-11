@@ -1771,11 +1771,25 @@ namespace mmo
 
 	void WorldState::OnRealmDisconnected()
 	{
+		// The realm tells us why before closing the connection when it terminated the session
+		// deliberately -- most commonly because the account was signed in somewhere else. Read it
+		// before the state change, and hand it to the login screen so it can show that message
+		// instead of a generic "connection lost".
+		const auto kickReason = m_realmConnector.GetKickReason();
+
 		// Trigger the lua event
-		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
+		if (kickReason)
+		{
+			FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED", static_cast<int32>(*kickReason));
+		}
+		else
+		{
+			FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
+		}
 
 		// Go back to login state, flagging why we left
 		LoginState::s_returnReason = LoginReturnReason::RealmDisconnected;
+		LoginState::s_kickReason = kickReason;
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 	}
 

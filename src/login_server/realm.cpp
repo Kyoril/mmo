@@ -236,23 +236,24 @@ namespace mmo
 		m_pingTimeoutCountdown.SetEnd(GetAsyncTimeMs() + constants::OneMinute);
 	}
 
-	void Realm::NotifyAccountBanned(uint64 accountId)
+	void Realm::NotifyAccountKicked(uint64 accountId, const auth::SessionKickReason reason)
 	{
 		if (!IsAuthentificated())
 		{
 			return;
 		}
 
-		// Posted, not sent directly. This is reached from RealmManager::NotifyAccountBanned,
-		// which the REST ban handler calls on whichever io thread served the request, while this
-		// connection's own handlers run on its strand -- and sendSinglePacket touches the send
-		// buffer that flush() and the write completion handler also touch.
+		// Posted, not sent directly. This is reached from RealmManager::NotifyAccountKicked, which
+		// the REST ban handler and the duplicate-login displacement call on whichever io thread
+		// served the request, while this connection's own handlers run on its strand -- and
+		// sendSinglePacket touches the send buffer that flush() and the write completion handler
+		// also touch.
 		auto self = shared_from_this();
-		m_connection->Post([self, accountId]()
+		m_connection->Post([self, accountId, reason]()
 		{
-			self->m_connection->sendSinglePacket([accountId](auth::OutgoingPacket& packet) {
-				packet.Start(auth::login_realm_packet::AccountBanned);
-				packet << io::write<uint64>(accountId);
+			self->m_connection->sendSinglePacket([accountId, reason](auth::OutgoingPacket& packet) {
+				packet.Start(auth::login_realm_packet::KickAccount);
+				packet << io::write<uint64>(accountId) << io::write<uint8>(reason);
 				packet.Finish();
 				});
 		});

@@ -4,9 +4,11 @@
 
 #include "base/typedefs.h"
 #include "base/non_copyable.h"
+#include "auth_protocol/auth_protocol.h"
 #include <memory>
 #include <mutex>
 #include <list>
+#include <optional>
 
 namespace mmo
 {
@@ -50,7 +52,19 @@ namespace mmo
 		std::shared_ptr<Player> GetPlayerByAccountID(uint64 accountId);
 
 		/// Kicks a player by account id if connected. Safe to call from any thread.
-		void KickPlayerByAccountId(uint64 accountId);
+		/// @param reason Forwarded to the client so it can explain the disconnect. Omit where the
+		///	       disconnect needs no explanation, such as the reconnect forced by a GM level change.
+		void KickPlayerByAccountId(uint64 accountId, std::optional<auth::SessionKickReason> reason = std::nullopt);
+
+		/// Kicks every session of an account except one. Used to enforce a single live session per
+		/// account: the session that just authenticated stays, all older ones are displaced.
+		///
+		/// Safe to call from any thread; each kick is posted to its own connection's strand.
+		///
+		/// @param accountId The account whose other sessions are to be displaced.
+		/// @param except The session to keep -- normally the caller, which has just authenticated.
+		/// @param reason Forwarded to each displaced client so it can explain the disconnect.
+		void KickOtherSessionsForAccount(uint64 accountId, const Player& except, auth::SessionKickReason reason);
 
 		/// Number of connected players, authenticated or not.
 		size_t GetPlayerCount();

@@ -27,6 +27,7 @@ namespace mmo
 
 	const std::string LoginState::Name = "login";
 	LoginReturnReason LoginState::s_returnReason = LoginReturnReason::NormalLogout;
+	std::optional<auth::SessionKickReason> LoginState::s_kickReason;
 	
 	/// This command will try to connect to the login server and make a login attempt using the
 	/// first parameter as username and the other parameters as password.
@@ -78,6 +79,7 @@ namespace mmo
 		// Register for signals of the login connector instance
 		m_loginConnections += m_loginConnector.AuthenticationResult.connect(*this, &LoginState::OnAuthenticationResult);
 		m_loginConnections += m_loginConnector.RealmListUpdated.connect(*this, &LoginState::OnRealmListUpdated);
+		m_loginConnections += m_loginConnector.Kicked.connect(*this, &LoginState::OnAccountKicked);
 
 		// Register for signals of the realm connector instance
 		m_loginConnections += m_realmConnector.AuthenticationResult.connect(*this, &LoginState::OnRealmAuthenticationResult);
@@ -110,12 +112,22 @@ namespace mmo
 		}
 		else if (s_returnReason == LoginReturnReason::RealmDisconnected)
 		{
-			// Realm dropped while in-world — land on login screen and show an error.
-			FrameManager::Get().TriggerLuaEvent("GLUE_REALM_DISCONNECTED");
+			// Realm dropped while in-world — land on login screen and show an error. When the
+			// server said why (an account signed in elsewhere, say), the reason is passed on so
+			// the player gets that message instead of the generic one.
+			if (s_kickReason)
+			{
+				FrameManager::Get().TriggerLuaEvent("GLUE_REALM_DISCONNECTED", static_cast<int32>(*s_kickReason));
+			}
+			else
+			{
+				FrameManager::Get().TriggerLuaEvent("GLUE_REALM_DISCONNECTED");
+			}
 		}
 
 		// Reset reason so subsequent re-entries default to no error.
 		s_returnReason = LoginReturnReason::NormalLogout;
+		s_kickReason.reset();
 
 		// Play background music: a SoundEntry id can be configured through the LoginMusicSound
 		// cvar; if unset or unresolvable, fall back to the built-in default so the login screen
@@ -208,9 +220,22 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	void LoginState::OnAccountKicked(const auth::SessionKickReason reason)
+	{
+		FrameManager::Get().TriggerLuaEvent("ACCOUNT_KICKED", static_cast<int32>(reason));
+	}
+
 	void LoginState::OnRealmDisconnected()
 	{
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CharCreateResponse);
+
+		// The realm tells us why before closing the connection when it terminated the session
+		// deliberately. Nothing to pass on for an ordinary drop.
+		if (const auto kickReason = m_realmConnector.GetKickReason())
+		{
+			FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED", static_cast<int32>(*kickReason));
+			return;
+		}
 
 		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
 	}

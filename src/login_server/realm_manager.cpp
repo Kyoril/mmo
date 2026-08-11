@@ -107,13 +107,13 @@ namespace mmo
 		}
 	}
 
-	void RealmManager::NotifyAccountBanned(uint64 accountId)
+	void RealmManager::NotifyAccountKicked(uint64 accountId, const auth::SessionKickReason reason)
 	{
 		std::scoped_lock scopedLock{ m_realmsMutex };
 
 		for (const auto& realm : m_realms)
 		{
-			realm->NotifyAccountBanned(accountId);
+			realm->NotifyAccountKicked(accountId, reason);
 		}
 	}
 

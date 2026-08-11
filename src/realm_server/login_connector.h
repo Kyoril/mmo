@@ -155,8 +155,9 @@ namespace mmo
 		// Handles the ClientAuthSessionResponse packet from the login server.
 		PacketParseResult OnClientAuthSessionResponse(auth::IncomingPacket &packet);
 
-		// Handles the ClientAuthSessionResponse packet from the login server.
-		PacketParseResult OnAccountBanned(auth::IncomingPacket& packet);
+		// Handles the KickAccount packet from the login server, which drops every session
+		// belonging to an account and tells the affected clients why.
+		PacketParseResult OnKickAccount(auth::IncomingPacket& packet);
 
 		// Handles the Pong packet from the login server.
 		PacketParseResult OnPong(auth::IncomingPacket& packet);

@@ -6,9 +6,11 @@
 #include "base/non_copyable.h"
 #include "base/signal.h"
 #include "game/game.h"
+#include "auth_protocol/auth_protocol.h"
 #include <memory>
 #include <mutex>
 #include <list>
+#include <optional>
 #include <functional>
 
 namespace mmo
@@ -58,7 +60,20 @@ namespace mmo
 		void AddPlayer(std::shared_ptr<Player> added);
 
 		/// Kicks a player by account id if connected.
-		void KickPlayerByAccountId(uint64 accountId);
+		/// @param reason Forwarded to the client so it can explain the disconnect.
+		void KickPlayerByAccountId(uint64 accountId, std::optional<auth::SessionKickReason> reason = std::nullopt);
+
+		/// Kicks every session of an account except one.
+		///
+		/// The login server already broadcasts a kick when an account logs in again, so this is a
+		/// local backstop for the two cases that broadcast cannot cover: this realm being
+		/// disconnected from the login server when the broadcast went out, and a new session
+		/// authenticating here before the broadcast arrives.
+		///
+		/// @param accountId The account whose other sessions are to be displaced.
+		/// @param except The session to keep -- the one that has just authenticated.
+		/// @param reason Forwarded to each displaced client so it can explain the disconnect.
+		void KickOtherSessionsForAccount(uint64 accountId, const Player& except, auth::SessionKickReason reason);
 
 		/// Gets a player by his account name.
 		Player *GetPlayerByAccountName(const String &accountName);

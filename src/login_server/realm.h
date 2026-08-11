@@ -69,8 +69,9 @@ namespace mmo
 		inline uint32 GetPlayerCount() const { return m_playerCount; }
 
 	public:
-		/// Notifies this realm that an account has been banned.
-		void NotifyAccountBanned(uint64 accountId);
+		/// Tells this realm to drop every session belonging to an account, and why. Does nothing if
+		/// the realm has not authenticated yet.
+		void NotifyAccountKicked(uint64 accountId, auth::SessionKickReason reason);
 
 		/// Reloads this realm's feature requirements from the database (asynchronously).
 		void ReloadRequirements();

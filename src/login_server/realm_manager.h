@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "base/non_copyable.h"
+#include "auth_protocol/auth_protocol.h"
 #include <memory>
 #include <mutex>
 #include <list>
@@ -46,8 +47,8 @@ namespace mmo
 		/// Gets a realm by id.
 		Realm *GetRealmByID(uint32 id);
 
-		/// Notifies all realms that an account has been banned.
-		void NotifyAccountBanned(uint64 accountId);
+		/// Tells every connected realm to drop all sessions belonging to an account, and why.
+		void NotifyAccountKicked(uint64 accountId, auth::SessionKickReason reason);
 
 		/// Notifies a connected realm that its feature requirements changed, prompting it to reload
 		/// them from the database. Does nothing if the realm is not currently connected.

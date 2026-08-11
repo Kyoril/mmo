@@ -3,6 +3,7 @@
 #include "player_manager.h"
 #include "player.h"
 #include "binary_io/string_sink.h"
+#include "log/default_log_levels.h"
 #include <vector>
 #include <cassert>
 
@@ -91,7 +92,7 @@ namespace mmo
 		return nullptr;
 	}
 
-	void PlayerManager::KickPlayerByAccountId(uint64 accountId)
+	void PlayerManager::KickPlayerByAccountId(const uint64 accountId, const std::optional<auth::SessionKickReason> reason)
 	{
 		// The lookup takes and releases the mutex itself, and PostKick takes no lock at all, so
 		// the deadlock this function used to guard against by hand cannot arise.
@@ -104,7 +105,41 @@ namespace mmo
 		// Posted rather than called directly: this runs on whichever thread served the request
 		// that asked for the kick -- the REST ban handler, above all -- and Kick() may only run
 		// on the connection's strand.
-		player->PostKick();
+		player->PostKick(reason);
+	}
+
+	void PlayerManager::KickOtherSessionsForAccount(const uint64 accountId, const Player& except, const auth::SessionKickReason reason)
+	{
+		// Collect under the lock, kick outside it. GetPlayerByAccountID cannot serve here: it
+		// returns the first match, which may well be the session we are meant to keep.
+		std::vector<std::shared_ptr<Player>> displaced;
+		{
+			std::scoped_lock playerLock{ m_playerMutex };
+
+			for (const auto& player : m_players)
+			{
+				// An unauthenticated session has no session key and cannot act on the account, so
+				// it is not a duplicate login -- only a challenge that was never completed.
+				if (player.get() == &except ||
+					!player->IsAuthenticated() ||
+					player->GetAccountId() != accountId)
+				{
+					continue;
+				}
+
+				displaced.push_back(player);
+			}
+		}
+
+		for (const auto& player : displaced)
+		{
+			ILOG("Displacing older session of account " << player->GetAccountName()
+				<< " (" << accountId << ") because it was logged in again");
+
+			// Posted: the login server runs two io threads, so the session being displaced almost
+			// never belongs to the strand this call is running on.
+			player->PostKick(reason);
+		}
 	}
 
 	void PlayerManager::DisconnectAll()

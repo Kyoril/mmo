@@ -16,6 +16,7 @@
 #include <cassert>
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <vector>
 #include <set>
 
@@ -74,7 +75,11 @@ namespace mmo
 			FriendMgr &friendMgr,
 			ChannelMgr &channelMgr);
 		/// Disconnects the player if still connected.
-		void Kick();
+		///
+		/// @param reason Sent to the client before the connection closes so it can tell the player
+		///	       why. Omit for teardowns that need no explanation (shutdown), where the client
+		///	       showing a plain connection error is the honest outcome.
+		void Kick(std::optional<auth::SessionKickReason> reason = std::nullopt);
 
 		/// Gets the player connection class used to send packets to the client.
 		Client &GetConnection()

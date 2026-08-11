@@ -55,9 +55,21 @@ namespace mmo
 		m_connection->setListener(*this);
 	}
 
-	void Player::Kick()
+	void Player::Kick(const std::optional<auth::SessionKickReason> reason)
 	{
 		DLOG("Kicking player with account " << GetAccountName() << " (" << GetAccountId() << ")");
+
+		// Sent before Destroy(): the connection defers its shutdown while a write is in flight, so
+		// this reaches the client ahead of the disconnect rather than racing it.
+		if (reason && m_connection)
+		{
+			m_connection->sendSinglePacket([reason](game::OutgoingPacket& packet) {
+				packet.Start(game::realm_client_packet::KickReason);
+				packet << io::write<uint8>(*reason);
+				packet.Finish();
+			});
+		}
+
 		Destroy();
 	}
 
@@ -261,6 +273,16 @@ namespace mmo
 					strongThis->m_accountId = accountId;
 					strongThis->m_gmLevel = gmLevel;
 					strongThis->m_accountFeatures = features;
+
+					// An account may hold only one session on this realm. The login server
+					// broadcasts a kick when an account logs in again, but this local check is
+					// what covers the two cases the broadcast cannot: this realm having been
+					// disconnected from the login server when it went out, and this session
+					// arriving before it does. Done before InitializeSession so the displaced
+					// session is gone by the time this one is usable.
+					strongThis->m_manager.KickOtherSessionsForAccount(accountId, *strongThis,
+						auth::session_kick_reason::LoggedInElsewhere);
+
 					strongThis->InitializeSession(sessionKey);
 				}
 				else

@@ -48,14 +48,18 @@ namespace mmo
 		///
 		/// May only be called on the connection's strand. Callers on any other thread must use
 		/// PostKick instead.
-		void Kick();
+		///
+		/// @param reason Sent to the client before the connection closes so it can tell the player
+		///	       why. Omit for teardowns that need no explanation (shutdown), where the client
+		///	       showing a plain connection error is the honest outcome.
+		void Kick(std::optional<auth::SessionKickReason> reason = std::nullopt);
 
 		/// Requests a kick from any thread. The kick itself runs on the connection's strand.
 		///
 		/// Kick() tears down state that the connection's own handlers also touch, so calling it
 		/// directly is only safe from the strand. Callers that are not on it -- the REST ban
-		/// handler, above all -- must come through here.
-		void PostKick();
+		/// handler and the duplicate-login displacement, above all -- must come through here.
+		void PostKick(std::optional<auth::SessionKickReason> reason = std::nullopt);
 
 		/// Gets the player connection class used to send packets to the client.
 		inline Client &GetConnection() { assert(m_connection); return *m_connection; }
@@ -134,6 +138,10 @@ namespace mmo
 
 	private:
 		void SendAuthProof(auth::AuthResult result);
+		/// Tells the client why its session is about to be terminated. Must be sent before the
+		/// connection is closed; the connection defers the actual shutdown until the write
+		/// completes, so the client receives this ahead of the disconnect.
+		void SendKickNotice(auth::SessionKickReason reason);
 		void SendRealmList();
 		/// Sends the active account feature keys (entitlements) to the client.
 		void SendAccountFeatures(const std::vector<std::string>& featureKeys);

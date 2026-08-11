@@ -35,6 +35,12 @@ namespace mmo
 		/// Signal that is fired when the client received the active account feature keys (entitlements).
 		signal<void()> AccountFeaturesUpdated;
 
+		/// Signal that is fired when the login server terminated this session and said why -- most
+		/// commonly because the account was signed in somewhere else. The disconnect follows
+		/// immediately; this exists so the player is told the reason rather than just seeing the
+		/// connection drop.
+		signal<void(auth::SessionKickReason)> Kicked;
+
 	private:
 		// Internal io service
 		asio::io_service& m_ioService;
@@ -120,6 +126,10 @@ namespace mmo
 
 		/// Handles the AccountFeatures packet from the login server.
 		PacketParseResult OnAccountFeatures(auth::IncomingPacket &packet);
+
+		/// Handles the AccountKicked packet, sent by the login server immediately before it closes
+		/// a session it is terminating.
+		PacketParseResult OnAccountKicked(auth::IncomingPacket &packet);
 
 	public:
 		/// Tries to connect to the default login server. After a connection has been established,

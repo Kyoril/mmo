@@ -13,6 +13,8 @@
 #include "base/signal.h"
 #include "frame_ui/frame_mgr.h"
 
+#include <optional>
+
 namespace mmo
 {
 	class TimerQueue;
@@ -48,6 +50,10 @@ namespace mmo
 		/// Set this before transitioning to LoginState so OnEnter knows why we came back.
 		static LoginReturnReason s_returnReason;
 
+		/// Set alongside s_returnReason when the server told us why it dropped the session, so the
+		/// login screen can show that instead of a generic connection error.
+		static std::optional<auth::SessionKickReason> s_kickReason;
+
 	public:
 		// Inherited via IGameState
 		void OnEnter() override;
@@ -75,8 +81,12 @@ namespace mmo
 		/// 
 		PacketParseResult OnCharCreationResponse(game::IncomingPacket& packet);
 
-		// 
+		//
 		void OnRealmDisconnected();
+
+		/// Called when the login server terminated this session, telling the player why before the
+		/// connection drops.
+		void OnAccountKicked(auth::SessionKickReason reason);
 
 
 		void QueueRealmListRequestTimer();

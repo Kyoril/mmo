@@ -48,6 +48,10 @@ namespace mmo
 			// Register for default packet handlers
 			RegisterPacketHandler(auth::login_client_packet::LogonChallenge, *this, &LoginConnector::OnLogonChallenge);
 
+			// The login server may terminate this session at any point once the account is known,
+			// so this handler stays registered for the whole connection.
+			RegisterPacketHandler(auth::login_client_packet::AccountKicked, *this, &LoginConnector::OnAccountKicked);
+
 			// Resolve the client locale from the "locale" console variable so the server
 			// knows which language to serve. Falls back to enUS for unknown/unset values.
 			const auto* localeCVar = ConsoleVarMgr::FindConsoleVar("locale");
@@ -353,6 +357,27 @@ namespace mmo
 		RealmListUpdated();
 
 		// Continue
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult LoginConnector::OnAccountKicked(auth::IncomingPacket & packet)
+	{
+		uint8 reason = 0;
+		if (!(packet >> io::read<uint8>(reason)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (reason > auth::session_kick_reason::AccountBanned)
+		{
+			// A newer server may know reasons this build does not. The disconnect that follows is
+			// what matters; without a reason we can recognise there is nothing useful to show.
+			WLOG("Login server sent unknown session kick reason " << static_cast<uint16>(reason));
+			return PacketParseResult::Pass;
+		}
+
+		Kicked(static_cast<auth::SessionKickReason>(reason));
+
 		return PacketParseResult::Pass;
 	}
 

@@ -35,19 +35,27 @@ namespace mmo
 		RegisterPacketHandler(auth::client_login_packet::ReconnectChallenge, *this, &Player::HandleLogonChallenge);
 	}
 
-	void Player::Kick()
+	void Player::Kick(const std::optional<auth::SessionKickReason> reason)
 	{
 		DLOG("Kicking player with account " << m_accountName << " (" << m_accountId << ")");
+
+		// Sent before destroy(): the connection defers its shutdown while a write is in flight,
+		// so this reaches the client ahead of the disconnect rather than racing it.
+		if (reason)
+		{
+			SendKickNotice(*reason);
+		}
+
 		destroy();
 	}
 
-	void Player::PostKick()
+	void Player::PostKick(const std::optional<auth::SessionKickReason> reason)
 	{
 		// m_connection is assigned once in the constructor and never reassigned -- destroy()
 		// closes it rather than releasing it -- which is what makes reading it from another
 		// thread safe.
 		auto self = shared_from_this();
-		m_connection->Post([self]() { self->Kick(); });
+		m_connection->Post([self, reason]() { self->Kick(reason); });
 	}
 
 	void Player::destroy()
@@ -119,6 +127,15 @@ namespace mmo
 				packet << io::write_range(this->m_m2.begin(), this->m_m2.end());
 			}
 
+			packet.Finish();
+		});
+	}
+
+	void Player::SendKickNotice(const auth::SessionKickReason reason)
+	{
+		m_connection->sendSinglePacket([reason](auth::OutgoingPacket& packet) {
+			packet.Start(auth::login_client_packet::AccountKicked);
+			packet << io::write<uint8>(reason);
 			packet.Finish();
 		});
 	}
@@ -393,6 +410,16 @@ namespace mmo
 						// Add log entry about successful login as the hashes do indeed mach (and thus, so
 						// do the passwords)
 						ILOG("User " << strongThis->m_accountName << " successfully authenticated");
+
+						// An account may hold only one live session. This runs here, after
+						// PlayerLogin has rotated the account's session key, because that is the
+						// point at which this session is unambiguously the winner: any older
+						// session's key is now stale, so it could not enter a realm even if the
+						// kick below were somehow missed.
+						strongThis->m_manager.KickOtherSessionsForAccount(strongThis->m_accountId, *strongThis,
+							auth::session_kick_reason::LoggedInElsewhere);
+						strongThis->m_realmManager.NotifyAccountKicked(strongThis->m_accountId,
+							auth::session_kick_reason::LoggedInElsewhere);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
