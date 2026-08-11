@@ -71,7 +71,7 @@ namespace mmo
 		// close(), not reset(). Dropping the shared_ptr leaves the connection alive -- the
 		// outstanding async_read holds its own reference -- so the socket stayed open with a null
 		// listener and the realm never saw a disconnect. Keeping the pointer for the object's
-		// lifetime is also what lets NotifyAccountBanned read it from another thread.
+		// lifetime is also what lets NotifyAccountKicked read it from another thread.
 		m_connection->close();
 
 		m_manager.RealmDisconnected(*this);
