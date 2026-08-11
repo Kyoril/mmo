@@ -36,6 +36,7 @@ namespace mmo
 		, mysqlUser("mmo")
 		, mysqlPassword("")
 		, mysqlDatabase("mmo_realm_01")
+		, mysqlPoolSize(1)
 		, mysqlUpdatePath("updates/realm")
 		, isLogActive(true)
 		, logFileName("logs/realm_01")
@@ -108,6 +109,7 @@ namespace mmo
 				mysqlPassword = mysqlDatabaseTable->getString("password", mysqlPassword);
 				mysqlDatabase = mysqlDatabaseTable->getString("database", mysqlDatabase);
 				mysqlUpdatePath = mysqlDatabaseTable->getString("updatePath", mysqlUpdatePath);
+				mysqlPoolSize = static_cast<size_t>(mysqlDatabaseTable->getInteger("poolSize", static_cast<int>(mysqlPoolSize)));
 			}
 
 			if (const Table *const realmConfig = global.getTable("realmConfig"))
@@ -201,6 +203,7 @@ namespace mmo
 			mysqlDatabaseTable.addKey("password", mysqlPassword);
 			mysqlDatabaseTable.addKey("database", mysqlDatabase);
 			mysqlDatabaseTable.addKey("updatePath", mysqlUpdatePath);
+			mysqlDatabaseTable.addKey("poolSize", static_cast<int>(mysqlPoolSize));
 			mysqlDatabaseTable.Finish();
 		}
 

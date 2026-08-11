@@ -1246,7 +1246,14 @@ namespace mmo
 		if (!m_group)
 		{
 			// Not yet in a group - create a new one!
-			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, AsyncGroupDatabase{ m_database.GetDatabase(), m_database.GetAsyncWorker(), m_database.GetResultDispatcher() }, m_timerQueue);
+			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, AsyncGroupDatabase{
+					// Adapts the full-interface dispatcher to the narrow one. IDatabase derives
+					// from IGroupDatabase, so this is a static upcast on the pool thread.
+					[worker = m_database.GetAsyncWorker()](uint64 key, std::function<void(IGroupDatabase&)> work)
+					{
+						worker(key, [work = std::move(work)](IDatabase& database) { work(database); });
+					},
+					m_database.GetResultDispatcher() }, m_timerQueue);
 			m_group->Create(m_characterData->characterId, m_characterData->name);
 			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
 		}

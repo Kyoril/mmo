@@ -7,6 +7,9 @@
 #include "base/typedefs.h"
 
 #include <functional>
+#include <memory>
+#include <tuple>
+#include <type_traits>
 #include <exception>
 
 namespace mmo
@@ -103,12 +106,19 @@ namespace mmo
 		template <class TBase, class A0, class B0_>
 		void asyncRequestKeyed(uint64 key, void(TBase::*method)(A0), B0_ &&b0)
 		{
-			auto argument = std::forward<B0_>(b0);
-			m_asyncWorker(key, [method, argument](TDatabase& database)
+			// Direct-initialised into a tuple rather than captured by value. Some argument types
+			// here -- AvatarConfiguration, for one -- declare an *explicit* copy constructor, and
+			// a by-value lambda capture is copy-initialisation, which explicit forbids. The old
+			// std::bind path direct-initialised its stored arguments and so never hit this. The
+			// failure is memorable: "cannot convert from 'AvatarConfiguration' to
+			// 'AvatarConfiguration'".
+			auto arguments = std::make_shared<std::tuple<std::decay_t<B0_>>>(std::forward<B0_>(b0));
+
+			m_asyncWorker(key, [method, arguments](TDatabase& database)
 			{
 				try
 				{
-					(static_cast<TBase&>(database).*method)(argument);
+					(static_cast<TBase&>(database).*method)(std::get<0>(*arguments));
 				}
 				catch (const std::exception& ex)
 				{
@@ -130,14 +140,27 @@ namespace mmo
 		/// Two calls sharing a key run in the order they were made, which is what lets a write
 		/// be followed by a read of the same row.
 		template <class ResultHandler, class TBase, class Result, class... A0, class... Args>
-		void asyncRequestKeyed(uint64 key, ResultHandler handler, Result(TBase::*method)(A0...), Args... args)
+		void asyncRequestKeyed(uint64 key, ResultHandler handler, Result(TBase::*method)(A0...), Args&&... args)
 		{
 			auto resultDispatcher = m_resultDispatcher;
-			m_asyncWorker(key, [handler, resultDispatcher, method, args...](TDatabase& database)
+
+			// See the fire-and-forget overload above for why this is a directly-initialised tuple
+			// rather than a by-value capture pack.
+			auto arguments = std::make_shared<std::tuple<std::decay_t<Args>...>>(std::forward<Args>(args)...);
+
+			m_asyncWorker(key, [handler, resultDispatcher, method, arguments](TDatabase& database)
 			{
 				detail::RequestProcessor<Result> processor;
 				processor(resultDispatcher,
-					[&database, method, &args...]() { return (static_cast<TBase&>(database).*method)(args...); },
+					[&database, method, &arguments]()
+					{
+						return std::apply(
+							[&database, method](auto&... unpacked)
+							{
+								return (static_cast<TBase&>(database).*method)(unpacked...);
+							},
+							*arguments);
+					},
 					handler);
 			});
 		}

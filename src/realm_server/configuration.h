@@ -32,6 +32,13 @@ namespace mmo
 		String mysqlPassword;
 		/// The mysql database to be used.
 		String mysqlDatabase;
+		/// Number of database connections to open.
+		///
+		/// Defaults to 1, which reproduces the single-connection behaviour exactly. Raise it only
+		/// once every call site touching a given entity supplies an ordering key -- a keyed and an
+		/// unkeyed operation on the same row land on different connections and can reorder. See
+		/// docs/superpowers/plans/2026-08-10-database-connection-pool.md.
+		size_t mysqlPoolSize;
 		/// Path to where update files in the form of "YYYYMMDD_INDEX.sql" are stored.
 		String mysqlUpdatePath;
 

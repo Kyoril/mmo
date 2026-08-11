@@ -14,7 +14,17 @@ using namespace mmo;
 
 namespace
 {
-    void syncDispatch(const std::function<void()>& action) { action(); }
+    /// Runs database work inline against `database`, and results inline too.
+    ///
+    /// The pool is not involved here: these tests assert on manager behaviour, not on routing,
+    /// so the ordering key is ignored and the work is handed the mock directly.
+    template <class TInterface>
+    typename mmo::AsyncDatabaseT<TInterface>::WorkDispatcher inlineWorker(TInterface& database)
+    {
+        return [&database](mmo::uint64, std::function<void(TInterface&)> work) { work(database); };
+    }
+
+    void syncResult(std::function<void()> action) { action(); }
 
     struct PlayerGroupFixture
     {
@@ -22,7 +32,7 @@ namespace
         TimerQueue timerQueue{ io };
 
         MockMOTDDatabase motdDb;
-        AsyncMOTDDatabase asyncMotdDb{ motdDb, syncDispatch, syncDispatch };
+        AsyncMOTDDatabase asyncMotdDb{ inlineWorker<IMOTDDatabase>(motdDb), syncResult };
         MOTDManager motdMgr{ asyncMotdDb };
         PlayerManager playerMgr{ 100, motdMgr };
 
@@ -32,7 +42,7 @@ namespace
         {
             return std::make_shared<PlayerGroup>(
                 id, playerMgr,
-                AsyncGroupDatabase{ groupDb, syncDispatch, syncDispatch },
+                AsyncGroupDatabase{ inlineWorker<IGroupDatabase>(groupDb), syncResult },
                 timerQueue);
         }
     };
