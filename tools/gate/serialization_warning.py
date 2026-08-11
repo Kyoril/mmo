@@ -34,9 +34,13 @@ MANIFEST_REL = "src/shared/protocol_fingerprint.json"
 
 # Calls that put bytes on, or take bytes off, a packet. Anything matching these in a diff
 # is a candidate payload change.
-SERIALIZATION_CALL = re.compile(
-	r"io::(write|read)(_dynamic_range|_range|_container|_limited_string|_packed_guid)?\s*[<(]"
-	r"|packet\.Start\s*\(")
+#
+# Deliberately open-ended on both halves. Enumerating the io:: helpers by name missed
+# read_string, write_string and read_until; matching only the receiver named `packet` missed
+# every `outPacket.Start(...)`, which is what the reject paths and most server-side senders
+# actually use. An advisory that silently reports nothing is worse than one that occasionally
+# reports too much.
+SERIALIZATION_CALL = re.compile(r"io::(write|read)\w*\s*[<(]|\w+\.Start\s*\(")
 
 # Files whose protocol content is already covered by the hard check. Flagging them here
 # would just duplicate a failure the gate has already produced.
@@ -72,12 +76,22 @@ def collect_payload_edits(base):
 
 	edits = {}
 	current = None
+	after_old_header = False		# previous line was the '--- a/...' half of a file header
+
 	for line in diff.splitlines():
-		header = DIFF_FILE_HEADER.match(line)
-		if header:
-			current = header.group(1)
+		# Only a line directly following the '--- ' half is a real file header. An ADDED
+		# source line that happens to begin with '+++' looks identical otherwise, and would
+		# silently discard the rest of that file's hunk.
+		if after_old_header and line.startswith("+++ "):
+			after_old_header = False
+			header = DIFF_FILE_HEADER.match(line)
+			# A deleted file's header is '+++ /dev/null' and matches nothing; clearing
+			# `current` keeps its removed lines off whichever file preceded it in the diff.
+			current = header.group(1) if header else None
 			continue
-		if current is None or line.startswith("+++") or line.startswith("---"):
+
+		after_old_header = line.startswith("--- ")
+		if after_old_header or current is None:
 			continue
 		if any(current.startswith(prefix) for prefix in COVERED_PREFIXES):
 			continue

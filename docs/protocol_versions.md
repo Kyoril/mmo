@@ -36,13 +36,33 @@ python tools/protocol_version_check.py --update
 
 | Layer | Catches | Where |
 |---|---|---|
-| `tools/protocol_version_check.py` | opcode/enum changes, framing, cipher — **hard failure** | first step of `tools/gate/verify.ps1`, and CI on push to `develop` |
+| `tools/protocol_version_check.py` | opcode/enum changes, **field indices**, framing, cipher — **hard failure** | first step of `tools/gate/verify.ps1`, and CI on push to `develop` |
+| `tools/tests/test_protocol_version_check.py` | the checker itself silently breaking | second step of the gate |
 | `tools/gate/serialization_warning.py` | `io::read`/`io::write` edits on a branch with no version bump — **advisory** | the review step of `/gate` |
 | Handshake checks | an actual mismatched peer, at runtime | login, realm and world servers (see below) |
 
-The first tool fingerprints the files that define the protocol, so it cannot see a payload
-change made inside a handler — that is what the advisory exists for, and why the constants
-still carry a note telling you to think.
+### What the fingerprint does and does not cover
+
+It covers files that define a wire structure **together with its serializer**, or that define
+the indices and framing those structures travel in. For the game protocol that deliberately
+includes the field layer — `object_type_id.h` (`object_fields`), `field_map.h`,
+`movement_info.h` — plus the standalone payload structures `character_view.{h,cpp}`,
+`mail.h` and `game.h`. The field layer matters most: `FieldMap` indices go out in every
+`UpdateObject` and `object_fields::UnitFields` is numbered implicitly, so adding a unit stat
+in the middle renumbers every field after it. That is ordinary gameplay work that looks
+nothing like a protocol edit, and it is the likeliest wire break in this codebase.
+
+What it does **not** cover is a payload assembled inline in a packet handler — an
+`io::write<uint32>` added next to the others in a `Player::` or `World::` method, of which
+there are hundreds across the three tiers. Fingerprinting that would mean fingerprinting most
+of the server code, and the resulting false-positive rate would make the check worthless. That
+gap is the advisory's job, and it is why the constants still carry a note telling you to
+think. If you add a new *structure* with its own serializer, add its file to `PROTOCOLS`.
+
+If you change the tracked file set or the normalization, bump `FINGERPRINT_FORMAT` in the
+checker and re-record with `--update --migrate`. Old fingerprints then compare as
+"incomparable" rather than as a wire change, which avoids a spurious version bump — the
+migration prints which protocols it re-recorded without one, so the two cannot be confused.
 
 ## Where a mismatch is caught at runtime
 
@@ -53,15 +73,25 @@ still carry a note telling you to think.
 | world → realm | auth + game | [world.cpp](../src/realm_server/world.cpp) `OnLogonChallenge` |
 | client → realm | *nothing* | — |
 
-The client never presents a protocol version to the realm; that link carries no version
-field at all. It does not need one: a client cannot reach a realm without a session the
-login server issued, and the login server has already checked both of its versions by then.
-The realm's own game protocol version is checked when it registers with the login server, so
-both ends of the client↔realm link have been verified by a third party before they ever
+The client never presents a *protocol* version to the realm. Its `AuthSession` packet does
+carry the client build number ([player.cpp](../src/realm_server/player.cpp) `OnAuthSession`),
+but that check only warns in debug and is compiled out entirely in release, so it enforces
+nothing. The link does not need its own version: a client cannot reach a realm without a
+session the login server issued, and the login server has already checked both of the
+client's versions by then. The realm's own game protocol version is checked when it registers
+with the login server, so both ends have been verified by a third party before they ever
 speak.
 
 Rejections are reported as `FailVersionUpdate` when the peer is older and
 `FailVersionInvalid` when it is newer.
+
+### Deployment consequence
+
+Because the login server validates `game::ProtocolVersion` — for clients and for realms —
+**bumping either constant means rebuilding and redeploying all three tiers together.** A
+login server left on an older build will reject every realm and every client. There is no
+staged-upgrade path, which suits `compose.yml` deploying the three as a unit. `game` moves
+more often than `auth`, so this is the constant that will usually force the redeploy.
 
 ## Version history
 

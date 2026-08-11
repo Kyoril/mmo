@@ -43,6 +43,22 @@ import sys
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST_PATH = os.path.join(REPO_ROOT, "src", "shared", "protocol_fingerprint.json")
 
+# Version of the fingerprinting scheme itself -- NOT of any protocol.
+#
+# BUMP THIS whenever a change to this script makes fingerprints incomparable with previously
+# recorded ones: a file added to or removed from PROTOCOLS, a change to normalize() or to the
+# order files are combined in. Without it, changing the tool looks exactly like changing the
+# wire format, and the only way out would be a flag that bypasses the version check -- which
+# would then be the obvious way around it for everyone else too.
+#
+# When this differs from the manifest, the recorded fingerprints were produced by a different
+# algorithm and comparing them means nothing -- so re-recording cannot demand a version bump.
+# That path requires --migrate, and reports every protocol it re-records without one. It has
+# to be a flag: the comparison reads _format out of the generated manifest, so anyone editing
+# that one digit would otherwise get a silent free pass -- quieter than the manifest deletion
+# --seed exists to prevent.
+FINGERPRINT_FORMAT = 3
+
 # The files whose content defines what goes on the wire, per protocol. The version constant
 # lives in the first entry of each list.
 #
@@ -52,6 +68,7 @@ MANIFEST_PATH = os.path.join(REPO_ROOT, "src", "shared", "protocol_fingerprint.j
 PROTOCOLS = {
 	"auth": {
 		"constant": "mmo::auth::ProtocolVersion",
+		"version_file": "src/shared/auth_protocol/auth_protocol.h",
 		"files": [
 			"src/shared/auth_protocol/auth_protocol.h",
 			"src/shared/auth_protocol/auth_protocol.cpp",
@@ -63,7 +80,26 @@ PROTOCOLS = {
 	},
 	"game": {
 		"constant": "mmo::game::ProtocolVersion",
+		"version_file": "src/shared/game_protocol/game_protocol.h",
 		"files": [
+			# The field layer is as much a wire format as the opcode list, and a more fragile
+			# one. FieldMap indices go out in every UpdateObject, object_fields::UnitFields is
+			# numbered implicitly from ObjectFieldCount, and adding a unit stat is ordinary
+			# gameplay work -- so inserting a field renumbers every field after it and breaks
+			# every object update, from a change that looks nothing like a protocol edit.
+			"src/shared/game/object_type_id.h",
+			"src/shared/game/field_map.h",
+			"src/shared/game/movement_info.h",
+
+			# Structures that travel whole inside a packet, each defined together with its
+			# own serializer. They are wire format definitions in exactly the way
+			# movement_info.h is; the fact that a couple keep their operators in a .cpp is
+			# an implementation detail, not a reason to leave them unguarded.
+			"src/shared/game/character_view.h",
+			"src/shared/game/character_view.cpp",
+			"src/shared/game/mail.h",
+			"src/shared/game/game.h",
+
 			"src/shared/game_protocol/game_protocol.h",
 			"src/shared/game_protocol/game_protocol.cpp",
 			"src/shared/game_protocol/game_incoming_packet.h",
@@ -155,53 +191,106 @@ def sha256(text):
 	return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def parse_enum_value(raw, previous):
-	"""Resolves one enumerator's value, mirroring how the compiler assigns implicit ones.
+IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
 
-	Implicit values are the reason this matters: several opcode lists stop numbering part
-	way through (realm_world_packet does exactly that), so inserting an entry in the middle
-	silently renumbers everything after it. That is a breaking change that looks like an
-	addition in a diff, and it is the kind this check exists to catch.
+
+def split_members(body):
+	"""Splits an enum body on commas that separate enumerators.
+
+	Not `body.split(",")`: commas also appear inside macro arguments and parenthesised
+	expressions (`VISIBLE_ITEM_FIELDS(1, TalentPoints)`, `Slot_1 + (36 * 2)`), and splitting
+	on those shreds one declaration into several bogus ones.
 	"""
-	if raw is None:
-		if isinstance(previous, int):
-			return previous + 1
-		return "<implicit after %s>" % (previous,)
+	members = []
+	current = []
+	depth = 0
 
-	raw = raw.strip()
-	try:
-		return int(raw, 0)
-	except ValueError:
-		# Not a plain literal (an expression, or a reference to another constant). Keep the
-		# text verbatim: it still compares deterministically, which is all that is needed.
-		return raw
+	for char in body:
+		if char in "([":
+			depth += 1
+		elif char in ")]":
+			depth -= 1
+		elif char == "," and depth <= 0:
+			members.append("".join(current))
+			current = []
+			continue
+		current.append(char)
+
+	members.append("".join(current))
+	return members
 
 
 def parse_enumerators(body):
+	"""Resolves every enumerator's value, mirroring how the compiler assigns implicit ones.
+
+	Implicit values are the reason this matters. Several enums stop numbering part way
+	through -- realm_world_packet does, and object_fields::UnitFields is numbered entirely
+	implicitly from ObjectFieldCount -- so inserting an entry in the middle silently
+	renumbers everything after it. That is a breaking change that reads as an addition in a
+	diff, and it is exactly the kind this check exists to catch.
+
+	Where an enumerator is initialised with an expression rather than a literal
+	(`ObjectFieldCount = Owner + 2`), the value cannot be resolved to a number. It is kept
+	as text and subsequent implicit values are expressed relative to it -- 'ObjectFieldCount',
+	'ObjectFieldCount+1', 'ObjectFieldCount+2'. Still deterministic, still shifts as a block
+	when something is inserted, which is all the comparison needs.
+	"""
 	entries = []
-	previous = -1
-	for member in body.split(","):
+	previous = -1		# last resolved numeric value
+	anchor = None		# last unresolvable value, for relative numbering
+	offset = 0
+
+	for member in split_members(body):
 		member = member.strip()
 		if not member:
 			continue
-		if "=" in member:
-			name, _, raw = member.partition("=")
-			value = parse_enum_value(raw, previous)
-		else:
-			name = member
-			value = parse_enum_value(None, previous)
+
+		name, sep, raw = member.partition("=")
 		name = name.strip()
 		if not name:
 			continue
+
+		if not IDENTIFIER.fullmatch(name):
+			# A macro invocation rather than an enumerator -- object_fields uses
+			# VISIBLE_ITEM_FIELDS(1, TalentPoints) to declare nineteen fields at a time.
+			# How many enumerators it expands to is unknowable from here, so everything
+			# after it is numbered relative to the expansion instead of pretending to a
+			# value. Recording it as an opaque marker keeps a change to the macro visible
+			# in the delta; splitting it into fake enumerators, as an earlier version did,
+			# put names like 'PlayerFields::1)' in the manifest and hid the real fields.
+			entries.append(("<expands %s>" % (name,), "?"))
+			anchor = "after %s" % (name,)
+			offset = 0
+			continue
+
+		if sep:
+			raw = raw.strip()
+			try:
+				value = int(raw, 0)
+				previous = value
+				anchor = None
+			except ValueError:
+				# An expression or a reference to another constant.
+				value = raw
+				anchor = raw
+				offset = 0
+		elif anchor is not None:
+			offset += 1
+			value = "%s+%d" % (anchor, offset)
+		else:
+			previous += 1
+			value = previous
+
 		entries.append((name, value))
-		previous = value
+
 	return entries
 
 
-NAMESPACE_ENUM = re.compile(
-	r"namespace\s+(\w+)\s*\{\s*enum\s+Type\s*\{([^{}]*?)\}\s*;", re.DOTALL)
-ENUM_CLASS = re.compile(
-	r"enum\s+class\s+(\w+)\s*(?::\s*[\w:]+\s*)?\{([^{}]*?)\}\s*;", re.DOTALL)
+NAMESPACE_DECL = re.compile(r"namespace\s+(\w+)\s*\{")
+# The name is optional: `enum { A = 1 };` and `enum : uint8 { A = 1 };` are legal and just as
+# wire-relevant. Requiring a name would drop them silently -- the same shape of failure as the
+# regex this scanner replaced.
+ENUM_DECL = re.compile(r"enum\s+(?:class\s+)?(\w*)\s*(?::\s*[\w:]+\s*)?\{")
 
 
 def extract_symbols(protocol, text):
@@ -214,15 +303,68 @@ def extract_symbols(protocol, text):
 	stripped = strip_comments(text)
 	symbols = []
 
-	for match in NAMESPACE_ENUM.finditer(stripped):
-		scope = match.group(1)
-		for name, value in parse_enumerators(match.group(2)):
-			symbols.append("%s::%s::%s = %s" % (protocol, scope, name, value))
+	# Walked rather than pattern-matched. A single regex anchored on `namespace X { enum ...`
+	# only ever sees the FIRST enum in a namespace, which silently dropped
+	# object_fields::UnitFields -- the most breakage-prone enum in the codebase -- while
+	# still reporting a plausible-looking symbol list.
+	namespaces = []		# (name, brace depth at which it opened)
+	depth = 0
+	i = 0
+	length = len(stripped)
 
-	for match in ENUM_CLASS.finditer(stripped):
-		scope = match.group(1)
-		for name, value in parse_enumerators(match.group(2)):
-			symbols.append("%s::%s::%s = %s" % (protocol, scope, name, value))
+	while i < length:
+		char = stripped[i]
+
+		# Only two keywords can start something interesting; skip the regex otherwise.
+		if char == "n":
+			match = NAMESPACE_DECL.match(stripped, i)
+			if match:
+				depth += 1
+				namespaces.append((match.group(1), depth))
+				i = match.end()
+				continue
+		elif char == "e":
+			match = ENUM_DECL.match(stripped, i)
+			if match:
+				end = stripped.find("}", match.end())
+				if end != -1:
+					# `enum Type` is the project's pseudo-namespace idiom and adds nothing to
+					# the name; any other enum name is meaningful and must be kept, or the two
+					# enums inside object_fields would collide.
+					# An enum sitting directly in `namespace mmo` or in the protocol's own
+					# namespace gets no scope prefix from it -- the protocol key already says
+					# that, and 'auth::auth::AuthLocale' helps nobody.
+					enclosing = namespaces[-1][0] if namespaces else ""
+					if enclosing in ("mmo", protocol):
+						enclosing = ""
+
+					# `enum Type` is the project's pseudo-namespace idiom and adds nothing to
+					# the name; any other name is meaningful and must be kept, or the enums
+					# sharing the object_fields namespace would collide. Assembled from the
+					# non-empty parts so nothing ever emits 'auth::::A'.
+					enum_name = match.group(1)
+					parts = [protocol, enclosing]
+					if enum_name and enum_name != "Type":
+						parts.append(enum_name)
+					elif not enum_name:
+						parts.append("<anonymous>")
+					prefix = "::".join(part for part in parts if part)
+
+					for name, value in parse_enumerators(stripped[match.end():end]):
+						symbols.append("%s::%s = %s" % (prefix, name, value))
+
+					# Both of the enum's braces are consumed here, so `depth` is untouched.
+					i = end + 1
+					continue
+
+		if char == "{":
+			depth += 1
+		elif char == "}":
+			depth -= 1
+			while namespaces and namespaces[-1][1] > depth:
+				namespaces.pop()
+
+		i += 1
 
 	return sorted(symbols)
 
@@ -246,7 +388,10 @@ def snapshot():
 		symbols = []
 		combined = []
 
-		for rel_path in spec["files"]:
+		# Sorted so the combined hash does not depend on the order entries happen to be
+		# listed in, and so adding a file in the middle of the list is not mistaken for a
+		# surface change on its own.
+		for rel_path in sorted(spec["files"]):
 			text = read_source(rel_path)
 			if text is None:
 				raise SystemExit(
@@ -254,7 +399,7 @@ def snapshot():
 					"       If it was renamed or removed, update PROTOCOLS in %s."
 					% (rel_path, os.path.relpath(__file__, REPO_ROOT)))
 
-			if version is None:
+			if rel_path == spec["version_file"]:
 				version = read_version(rel_path, text)
 
 			normalized = normalize(text)
@@ -275,7 +420,17 @@ def load_manifest():
 	if not os.path.isfile(MANIFEST_PATH):
 		return None
 	with open(MANIFEST_PATH, "r", encoding="utf-8-sig") as handle:
-		return json.load(handle)
+		try:
+			return json.load(handle)
+		except ValueError as error:
+			# A traceback out of here would be reported by the gate as a wire format
+			# violation, which is the wrong thing to go looking for.
+			raise SystemExit(
+				"ERROR: %s is not valid JSON (%s).\n"
+				"       It is generated, so the fix is to restore it from git:\n"
+				"         git checkout -- %s"
+				% (os.path.relpath(MANIFEST_PATH, REPO_ROOT).replace("\\", "/"), error,
+					os.path.relpath(MANIFEST_PATH, REPO_ROOT).replace("\\", "/")))
 
 
 def write_manifest(current):
@@ -286,6 +441,7 @@ def write_manifest(current):
 			"the surface without bumping the version fails the gate instead of shipping.",
 			"After a deliberate bump: python tools/protocol_version_check.py --update",
 		],
+		"_format": FINGERPRINT_FORMAT,
 	}
 	for protocol in sorted(current):
 		payload[protocol] = current[protocol]
@@ -339,11 +495,24 @@ def check(current, manifest):
 	"""Returns a list of human-readable problems; empty means everything lines up."""
 	problems = []
 
+	if manifest is not None and manifest.get("_format") != FINGERPRINT_FORMAT:
+		# Every per-protocol comparison below would be meaningless, so report only this.
+		return ["the manifest was recorded by a different version of this checker "
+			"(format %s, this is %d).\n"
+			"  The fingerprints are not comparable, so nothing can be concluded about\n"
+			"  whether the wire format changed.\n"
+			"  If you changed FINGERPRINT_FORMAT in tools/protocol_version_check.py:\n"
+			"    python tools/protocol_version_check.py --update --migrate\n"
+			"  If you did not, the manifest has been edited by hand -- restore it:\n"
+			"    git checkout -- %s"
+			% (manifest.get("_format"), FINGERPRINT_FORMAT,
+				os.path.relpath(MANIFEST_PATH, REPO_ROOT).replace("\\", "/"))]
+
 	for protocol in sorted(current):
 		now = current[protocol]
 		recorded = (manifest or {}).get(protocol)
 		constant = PROTOCOLS[protocol]["constant"]
-		version_file = PROTOCOLS[protocol]["files"][0]
+		version_file = PROTOCOLS[protocol]["version_file"]
 
 		if recorded is None:
 			problems.append(
@@ -388,31 +557,75 @@ def main():
 	parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
 	parser.add_argument("--update", action="store_true",
 		help="re-record the fingerprints after a deliberate version bump")
+	parser.add_argument("--seed", action="store_true",
+		help="with --update, allow writing a manifest that does not exist yet")
+	parser.add_argument("--migrate", action="store_true",
+		help="with --update, re-record after FINGERPRINT_FORMAT changed in this script")
 	args = parser.parse_args()
 
 	current = snapshot()
 	manifest = load_manifest()
 
 	if args.update:
+		# Without this, deleting the manifest would be a way around the refusal below --
+		# --update would see nothing recorded, have nothing to compare, and happily write a
+		# changed surface under an unchanged version.
+		if manifest is None and not args.seed:
+			print("There is no manifest at %s."
+				% (os.path.relpath(MANIFEST_PATH, REPO_ROOT).replace("\\", "/"),))
+			print("If it was deleted, restore it (git checkout -- <path>) rather than")
+			print("re-recording: a fresh manifest cannot tell a deliberate bump from a")
+			print("forgotten one. To create the very first one, pass --seed.")
+			return 1
+
+		stale_format = manifest is not None and manifest.get("_format") != FINGERPRINT_FORMAT
+
+		# --update must not become a way to make the check go away. Re-recording a changed
+		# surface under an unchanged version is exactly the mistake this tool exists to
+		# prevent, so it is the one thing --update refuses to do.
+		unbumped = []
 		if manifest is not None:
-			# --update must not become a way to make the check go away. Re-recording a
-			# changed surface under an unchanged version is exactly the mistake this tool
-			# exists to prevent, so it is the one thing --update refuses to do.
-			refused = []
 			for protocol in sorted(current):
 				recorded = manifest.get(protocol)
 				if recorded is None:
 					continue
 				if (recorded.get("fingerprint") != current[protocol]["fingerprint"]
 						and recorded.get("version") == current[protocol]["version"]):
-					refused.append("  %s: %s is still %d" % (
+					unbumped.append("  %s: %s is still %d" % (
 						protocol, PROTOCOLS[protocol]["constant"], current[protocol]["version"]))
 
-			if refused:
-				print("Refusing to re-record: the wire surface changed with no version bump.")
-				print("\n".join(refused))
-				print("\nBump the version constant first, then run --update again.")
+		if stale_format:
+			# The recorded fingerprints came from a different algorithm, so they cannot say
+			# whether the wire format moved -- the refusal above has nothing to stand on.
+			# That makes this the weakest point in the tool, and _format is read from the
+			# GENERATED manifest, so it must not be enough on its own to get here.
+			if not args.migrate:
+				print("The manifest was recorded with fingerprint format %s; this script is at %d."
+					% (manifest.get("_format"), FINGERPRINT_FORMAT))
+				print("")
+				print("Re-recording across a format change cannot verify that the wire format")
+				print("did not also move, so it is not something --update will do on its own.")
+				print("If you changed FINGERPRINT_FORMAT in this script, pass --migrate.")
+				print("If you did not, restore the manifest instead:")
+				print("  git checkout -- %s"
+					% (os.path.relpath(MANIFEST_PATH, REPO_ROOT).replace("\\", "/"),))
 				return 1
+
+			if unbumped:
+				# Not fatal -- across a format change this is expected and usually harmless --
+				# but it is the exact combination the tool exists to catch, so it is never
+				# allowed to pass silently.
+				print("WARNING: migrating the fingerprint format, and re-recording these")
+				print("         protocols whose surface changed with no version bump:")
+				print("\n".join(unbumped))
+				print("         Confirm that is a consequence of the format change and not a")
+				print("         wire format change riding along with it.")
+				print("")
+		elif unbumped:
+			print("Refusing to re-record: the wire surface changed with no version bump.")
+			print("\n".join(unbumped))
+			print("\nBump the version constant first, then run --update again.")
+			return 1
 
 		write_manifest(current)
 		print("Recorded protocol fingerprints in %s"

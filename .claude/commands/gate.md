@@ -16,8 +16,11 @@ Run the local quality gate for the current branch, then review the branch diff.
    scenario's transcript tail from `e2e/runtime/logs/<scenario>.jsonl`. Exception: if the
    `e2e` step has `"log": null` and `exit_code` -1, E2E never ran because
    `MMO_E2E_MYSQL_PASSWORD` is not set — report exactly that instead of hunting for logs.
-   A failing `protocol` step means the wire format changed without a version bump; its log
-   names the constant and the exact command to run, so quote that and do not guess a fix.
+   A failing `protocol` step usually means the wire format changed without a version bump;
+   its log names the constant and the exact command to run, so quote that rather than
+   guessing a fix. It can also fail because the manifest is corrupt or `python` is not on
+   PATH, so read the log rather than assuming. A failing `protocol_tests` step means the
+   checker itself is broken — its verdict cannot be trusted until that is fixed.
    Summarize the failure and STOP — no review, no merge.
 3. **If the gate is GREEN** and the current branch is not `develop`:
    a. Run `python tools/gate/serialization_warning.py`. It is advisory and always exits 0;
