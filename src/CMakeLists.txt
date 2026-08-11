@@ -37,6 +37,8 @@ if (MMO_BUILD_TOOLS)
 endif()
 
 if (MMO_BUILD_TESTS)
+	add_subdirectory(tests)
+
 	add_subdirectory(unit_tests)
 	add_subdirectory(game_server_unit_tests)
 	add_subdirectory(login_server_tests)

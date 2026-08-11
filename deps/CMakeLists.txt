@@ -4,6 +4,10 @@ add_subdirectory(lua)
 add_subdirectory(luabind_noboost)
 add_subdirectory(expat)
 
+if (MMO_BUILD_TESTS)
+	add_subdirectory(catch)
+endif()
+
 if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_LAUNCHER)
 	add_subdirectory(freetype)
 endif()

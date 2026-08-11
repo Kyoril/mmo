@@ -88,6 +88,19 @@ add_definitions("-DDT_POLYREF64")
 add_definitions("-DXML_STATIC")
 add_definitions("-DUUID_SYSTEM_GENERATOR")
 
+# Enabled here rather than per test directory, which is where the call used to live. Once
+# every suite is a one-line mmo_add_test() call there is nowhere else for it to go, and
+# testing no longer depends on which subdirectory happens to be added first.
+if (MMO_BUILD_TESTS)
+	enable_testing()
+
+	# Aggregate target so the whole suite can be built with one target name. mmo_add_test()
+	# adds every test executable to it, which is what keeps the gate and CI free of a
+	# hand-maintained list.
+	add_custom_target(all_tests)
+	set_property(TARGET all_tests PROPERTY FOLDER "tests")
+endif()
+
 # Add source directory
 add_subdirectory(deps)
 

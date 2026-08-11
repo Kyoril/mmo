@@ -105,10 +105,11 @@ at `cmake/mmo_external_dependencies.cmake:129` with a target, and removes the ne
 **`all_tests`** — a custom target that every `mmo_add_test` call adds itself to as a
 dependency. One build target covers the whole suite.
 
-**`enable_testing()` moves to the root `CMakeLists.txt`.** This fixes a live bug:
-`enable_testing()` is currently called inside each test subdirectory, so `ctest` invoked
-from `build/` discovers nothing. That is why the gate shells out to the test executables
-directly. Moving the call to the root is a prerequisite for the CTest switch below.
+**`enable_testing()` moves to the root `CMakeLists.txt`.** It is currently called inside
+each test subdirectory. That does work — verified: `ctest -N` from `build/` lists all five
+suites either way — so this is tidiness, not a bug fix. It becomes *necessary* at stage 2,
+when each suite's `CMakeLists.txt` collapses to a single `mmo_add_test()` line and there is
+nowhere left for a per-directory call to live.
 
 ### Target map
 

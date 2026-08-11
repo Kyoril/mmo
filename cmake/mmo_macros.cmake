@@ -324,6 +324,59 @@ macro(add_gui_exe_recurse name)
     endif()
 endmacro()
 
+# mmo_add_test(<name> [<library>...])
+#
+# Declares a test executable built from every source file in the current directory, linked
+# against Catch2's shared main plus the given libraries. Registers it with CTest and with
+# the all_tests aggregate target, so a new suite costs one folder and one call.
+#
+# Sources are gathered recursively, which is what lets a suite keep its fixtures in a
+# test_helpers/ subdirectory.
+function(mmo_add_test name)
+	file(GLOB_RECURSE sources
+		CONFIGURE_DEPENDS
+		"${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/*.c"
+	)
+	file(GLOB_RECURSE headers
+		CONFIGURE_DEPENDS
+		"${CMAKE_CURRENT_SOURCE_DIR}/*.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
+	)
+
+	# An empty suite links, runs and reports success without executing a single assertion.
+	# That is the one failure mode a green build cannot show you, so refuse it outright.
+	if (NOT sources)
+		message(FATAL_ERROR "mmo_add_test(${name}): no source files in ${CMAKE_CURRENT_SOURCE_DIR}")
+	endif()
+
+	add_executable(${name} ${headers} ${sources})
+	mmo_deploy_runtime_dependencies(${name})
+
+	target_include_directories(${name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+	target_link_libraries(${name} catch_main ${ARGN})
+
+	source_group(
+		TREE "${CMAKE_CURRENT_SOURCE_DIR}"
+		PREFIX "src"
+		FILES ${headers} ${sources}
+	)
+	set_property(TARGET ${name} PROPERTY FOLDER "tests")
+
+	if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+		target_link_libraries(${name} stdc++fs)
+	endif()
+
+	add_test(NAME ${name} COMMAND ${name})
+
+	# A hung test has to fail the run rather than block it forever.
+	set_tests_properties(${name} PROPERTIES TIMEOUT 120)
+
+	if (TARGET all_tests)
+		add_dependencies(all_tests ${name})
+	endif()
+endfunction()
+
 MACRO(ADD_PRECOMPILED_HEADER _targetName _input)
 	GET_FILENAME_COMPONENT(_name ${_input} NAME)
 	get_filename_component(_name_no_ext ${_name} NAME_WE)
