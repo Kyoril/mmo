@@ -176,6 +176,73 @@ TEST_CASE("GameConnectionSurvivesDroppingAnOverrunningPeer", "[game_connection]"
 	SUCCEED("connection tore down without dereferencing a released socket");
 }
 
+// A connection object outlives the session it carried: the client keeps one RealmConnector for
+// the whole process and reconnects through it. Session-scoped state must therefore be cleared
+// when the next session starts, and the packet cipher above all -- it is installed mid-session,
+// and a stale one turns the next session's first (plaintext) packet into garbage.
+//
+// The symptom is not a decryption error, which nothing would report. It is "Received a malformed
+// packet" immediately after connecting, before a single packet has been handled.
+TEST_CASE("GameConnectionClearsTheCipherWhenANewSessionStarts", "[game_connection]")
+{
+	asio::io_service ioService;
+	GameRecordingListener serverListener;
+	GameRecordingListener clientListener;
+	GameConnectedPair pair = MakeGameConnectedPair(ioService, serverListener, clientListener);
+
+	// Mid-session: a session key is negotiated and the cipher goes live.
+	std::vector<uint8> key(20, 0x42);
+	pair.client->GetCrypt().SetKey(key.data(), key.size());
+	pair.client->GetCrypt().Init();
+	REQUIRE(pair.client->GetCrypt().IsInitialized());
+
+	// The session ends and the same object is used for the next one.
+	pair.client->startReceiving();
+
+	CHECK_FALSE(pair.client->GetCrypt().IsInitialized());
+}
+
+// Reaching close() after the connection has already released its socket must not fault.
+//
+// Dropping a malformed peer releases the socket outright, but the object stays alive and
+// reachable -- the UI can still call close() from a cancel button, and a state teardown will
+// call it unconditionally. IsConnected() and Disconnected() both null-check the socket for this
+// reason; close() must too.
+TEST_CASE("GameConnectionCloseAfterMalformedDropDoesNotFault", "[game_connection]")
+{
+	asio::io_service ioService;
+	GameRecordingListener serverListener;
+	GameRecordingListener clientListener;
+	GameConnectedPair pair = MakeGameConnectedPair(ioService, serverListener, clientListener);
+
+	// A header announcing a body beyond the protocol ceiling is the deterministic way into the
+	// malformed-parse branch -- the branch that releases the socket. (An announced size *under*
+	// the ceiling is merely "incomplete" and would instead trip the receive-buffer cap, which
+	// tears down along a different path that keeps the socket.)
+	std::vector<char> garbage;
+
+	const uint16 opCode = static_cast<uint16>(game::client_realm_packet::ChatMessage);
+	const char* const opCodeBytes = reinterpret_cast<const char*>(&opCode);
+	garbage.insert(garbage.end(), opCodeBytes, opCodeBytes + sizeof(opCode));
+
+	const uint32 announcedSize = game::MaxIncomingPacketSize + 1;
+	const char* const announcedBytes = reinterpret_cast<const char*>(&announcedSize);
+	garbage.insert(garbage.end(), announcedBytes, announcedBytes + sizeof(announcedSize));
+
+	asio::error_code writeError;
+	asio::write(pair.client->getSocket(), asio::buffer(garbage), writeError);
+
+	REQUIRE(PumpGameUntil(ioService, [&serverListener]()
+	{
+		return serverListener.malformedCount > 0;
+	}));
+
+	// The socket is gone but the object is not. This is the call that faulted.
+	pair.server->close();
+
+	SUCCEED("close() tolerated a released socket");
+}
+
 // The same drop, but with a write in flight.
 //
 // This is the ordering that actually reaches the hazard: the overrun tears the connection down

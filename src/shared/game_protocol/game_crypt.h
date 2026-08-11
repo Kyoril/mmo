@@ -26,6 +26,15 @@ namespace mmo
 			~Crypt();
 
 			void Init();
+
+			/// Returns the cipher to its freshly-constructed state, discarding the session key.
+			///
+			/// A connection object can outlive the session it carried -- the client keeps one
+			/// connector for the whole process and reconnects through it -- and the next session
+			/// starts in plaintext. Without this it would try to decrypt that plaintext with the
+			/// previous session's key.
+			void Reset();
+
 			void SetKey(uint8 *key, size_t length);
 			void DecryptReceive(uint8 *data, size_t length);
 			void EncryptSend(uint8 *data, size_t length);

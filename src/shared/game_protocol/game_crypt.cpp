@@ -30,6 +30,13 @@ namespace mmo
 			m_initialized = true;
 		}
 
+		void Crypt::Reset()
+		{
+			m_key.clear();
+			m_send_i = m_send_j = m_recv_i = m_recv_j = 0;
+			m_initialized = false;
+		}
+
 		void Crypt::DecryptReceive(uint8 *data, size_t length)
 		{
 			if (!m_initialized) {
