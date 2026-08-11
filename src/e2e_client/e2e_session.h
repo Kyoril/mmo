@@ -65,6 +65,16 @@ namespace mmo
 		/// Why the realm terminated this session, if it said so before closing the connection.
 		[[nodiscard]] std::optional<auth::SessionKickReason> GetKickReason() const { return m_realm->GetKickReason(); }
 
+		/// Runs the whole login -> realm -> character -> world flow again over the same connector
+		/// objects, exactly as the game client does when a displaced player logs back in.
+		///
+		/// Reusing the connectors is the point: they carry session state that has to be cleared
+		/// for the new session, and a fresh object would not test that. Call after the previous
+		/// session has ended.
+		///
+		/// @return Success once the character is back in the world.
+		e2e_exit_code::Type Reconnect(uint32 timeoutSeconds);
+
 		BotContext& GetContext() { return *m_context; }
 		BotRealmConnector& GetRealm() { return *m_realm; }
 		BotMovementController& GetMovementController() { return m_movementController; }

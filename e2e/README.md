@@ -66,6 +66,7 @@ Session (for scenarios that deliberately provoke a disconnect):
 | `IsDisconnected() -> bool` | True once the realm connection has been lost |
 | `LastKickReason() -> string` | `"none"` \| `"logged_in_elsewhere"` \| `"banned"` |
 | `LoginElsewhere([timeoutMs]) -> bool` | Opens a second login-server session on the same account and waits for it to authenticate; default 15s |
+| `Reconnect([timeoutMs]) -> bool` | Logs back in and returns to the world over the **same** connectors; default 30s |
 
 Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `Me()`, `UnitExists(g)`, `GetHealth(g)`, `GetMaxHealth(g)`, `GetLevel(g)`, `GetPower(g)`,
@@ -106,6 +107,13 @@ equipment)
 
 ### Gotchas
 
+- `Reconnect` deliberately reuses the existing connector objects rather than building fresh
+  ones, because that is what the game client does — it keeps one connector for the whole
+  process. Session state left installed on a connector (the packet cipher, above all) is
+  invisible to any test that reconnects with a new object. A stale cipher surfaces as
+  "Received a malformed packet" the instant the realm answers, never as a decryption error.
+- `Reconnect` clears any `ExpectDisconnect()` the scenario armed: the new session is a fresh
+  one, so a drop after it fails the run again unless you arm it a second time.
 - `LoginElsewhere` stops at the login server on purpose: the duplicate-login displacement
   fires as soon as `LogonProof` succeeds, so picking a realm and a character would only make
   the scenario slower. It also means the second session never enters the world — don't reach

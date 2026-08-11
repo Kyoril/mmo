@@ -60,6 +60,29 @@ namespace mmo
 		return true;
 	}
 
+	e2e_exit_code::Type E2eSession::Reconnect(const uint32 timeoutSeconds)
+	{
+		ILOG("Reconnecting the session for account " << m_config.username);
+
+		// Everything the previous session left behind. The objects it saw are gone -- the world
+		// will send fresh spawns -- and the flags that mark "we are in" have to fall back or the
+		// signal handlers below will short-circuit.
+		m_realm->GetObjectManager().Clear();
+		m_context->SetWorldReady(false);
+		m_worldReady = false;
+		m_realmConnectionAttempted = false;
+		m_disconnected = false;
+
+		// A reconnect is a fresh session: whatever tolerance the scenario armed for the previous
+		// disconnect does not carry over, so a drop from here on fails the run again unless the
+		// scenario asks for it a second time.
+		m_disconnectExpected = false;
+
+		m_login->Connect(m_config.username, m_config.password);
+
+		return WaitForWorld(timeoutSeconds);
+	}
+
 	e2e_exit_code::Type E2eSession::WaitForWorld(const uint32 timeoutSeconds)
 	{
 		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);

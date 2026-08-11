@@ -202,6 +202,30 @@ namespace mmo
 			return "unknown";
 		}
 
+		/// Logs the session back in and returns to the world, over the same connector objects the
+		/// previous session used. That reuse is the point: it is what the game client does, and it
+		/// is where session state that was not cleared shows up.
+		bool luaReconnect(const uint32 timeoutMs)
+		{
+			const uint32 timeoutSeconds = (timeoutMs + 999) / 1000;
+			const e2e_exit_code::Type result = g_runtime->session->Reconnect(timeoutSeconds);
+
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Event("reconnect", { { "result",
+					result == e2e_exit_code::Success ? "in_world" : "failed" } });
+			}
+
+			// Reconnecting resets the session's stop flag expectations but a genuine setup failure
+			// still has to end the run rather than leave the scenario querying a dead session.
+			if (g_runtime->session->IsStopRequested())
+			{
+				abortScenario(e2e_exit_code::Disconnected, "connection was lost while reconnecting");
+			}
+
+			return result == e2e_exit_code::Success;
+		}
+
 		/// Opens a second login-server session on the same account and waits for it to authenticate.
 		/// That is the point at which the server displaces older sessions, so nothing further (realm
 		/// selection, character entry) is needed to provoke the kick.
@@ -959,6 +983,7 @@ namespace mmo
 				luabind::def_lambda("IsDisconnected", &luaIsDisconnected),
 				luabind::def_lambda("LastKickReason", &luaLastKickReason),
 				luabind::def_lambda("LoginElsewhereImpl", &luaLoginElsewhere),
+				luabind::def_lambda("ReconnectImpl", &luaReconnect),
 
 				// Queries
 				luabind::def_lambda("Me", &luaMe),
@@ -1036,6 +1061,7 @@ namespace mmo
 			function CastSpell(spellId, target) return CastSpellImpl(spellId, target or "") end
 			function MoveTo(x, y, z, timeoutMs) return MoveToImpl(x, y, z, timeoutMs or 30000) end
 			function LoginElsewhere(timeoutMs) return LoginElsewhereImpl(timeoutMs or 15000) end
+			function Reconnect(timeoutMs) return ReconnectImpl(timeoutMs or 30000) end
 
 			function FindUnitByEntry(entry)
 				local guid = FindUnitByEntryImpl(entry)
