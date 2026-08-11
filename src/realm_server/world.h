@@ -155,6 +155,8 @@ namespace mmo
 		uint8 m_version2;
 		uint8 m_version3;
 		uint16 m_build;
+		uint32 m_authProtocol = 0;
+		uint32 m_gameProtocol = 0;
 		BigNumber m_sessionKey;
 		BigNumber m_s, m_v;
 		BigNumber m_b, m_B;

@@ -68,6 +68,19 @@ namespace mmo
 
 		constexpr uint32 MAX_FRIENDS = 50;
 
+		/// Version of the game protocol this binary speaks.
+		///
+		/// Unlike auth::ProtocolVersion this one is not exchanged on the link that uses it: the
+		/// client<->realm connection never carries it. It is presented to the login server during
+		/// the auth handshake instead, by both the client and the realm, and the login server
+		/// rejects a mismatch before either is allowed any further. The realm<->world link, which
+		/// proxies game packets, checks it directly at its own handshake.
+		///
+		/// BUMP THIS whenever the wire format changes -- see the note on auth::ProtocolVersion,
+		/// which applies here in full.
+		///
+		/// After bumping: python tools/protocol_version_check.py --update
+		/// See docs/protocol_versions.md for what each version changed.
 		constexpr uint32 ProtocolVersion = 0x00000007;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.

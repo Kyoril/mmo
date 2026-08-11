@@ -11,6 +11,11 @@
 #include "base/weak_ptr_function.h"
 #include "log/default_log_levels.h"
 
+// For game::ProtocolVersion only. The login server never speaks the game protocol itself, but
+// it is the one place a client presents its game protocol version, so it is the only place the
+// mismatch can be caught before the client is handed a realm to talk to.
+#include "game_protocol/game_protocol.h"
+
 #include <algorithm>
 #include <functional>
 
@@ -277,6 +282,28 @@ namespace mmo
 			m_connection->sendSinglePacket([authVersion](auth::OutgoingPacket& packet) {
 				packet.Start(auth::login_client_packet::LogonChallenge);
 				packet << io::write<uint8>(authVersion < auth::ProtocolVersion ? auth::auth_result::FailVersionUpdate : auth::auth_result::FailVersionInvalid);
+				packet.Finish();
+				});
+
+			return PacketParseResult::Pass;
+		}
+
+		// The client also reports the version of the game protocol -- the one it will speak to a
+		// realm, not to us. That value was read and then ignored, and nothing downstream looks at
+		// it either: the realm's AuthSession packet does not carry it, and by then the client is
+		// already past authentication. So a client with stale game packets used to log in fine and
+		// come apart later, at a character list or a movement update, with nothing in any log
+		// connecting the two. This is the only point on the client's path where the mismatch is
+		// visible, which is what makes it the right place to reject it.
+		if (m_gameProtocol != game::ProtocolVersion)
+		{
+			WLOG("Client " << m_address << " uses game protocol version " << m_gameProtocol
+				<< ", this login server speaks " << game::ProtocolVersion << " - rejecting");
+
+			const uint32 gameVersion = m_gameProtocol;
+			m_connection->sendSinglePacket([gameVersion](auth::OutgoingPacket& packet) {
+				packet.Start(auth::login_client_packet::LogonChallenge);
+				packet << io::write<uint8>(gameVersion < game::ProtocolVersion ? auth::auth_result::FailVersionUpdate : auth::auth_result::FailVersionInvalid);
 				packet.Finish();
 				});
 

@@ -19,6 +19,7 @@
 #include "base/constants.h"
 #include "base/utilities.h"
 #include "game/game.h"
+#include "game_protocol/game_protocol.h"
 #include "game_protocol/game_outgoing_packet.h"
 #include "game_server/objects/game_player_s.h"
 #include "proto_data/project.h"
@@ -114,6 +115,8 @@ namespace mmo
 			>> io::read<uint8>(m_version2)
 			>> io::read<uint8>(m_version3)
 			>> io::read<uint16>(m_build)
+			>> io::read<uint32>(m_authProtocol)
+			>> io::read<uint32>(m_gameProtocol)
 			>> io::read_container<uint8>(m_worldName)))
 		{
 			return PacketParseResult::Disconnect;
@@ -121,6 +124,38 @@ namespace mmo
 
 		// Write the login attempt to the logs
 		ILOG("Received logon challenge for world " << m_worldName << "...");
+
+		// Until now this link negotiated no version at all, which made it the weakest of the
+		// three: the realm and world exchange auth packets directly AND proxy game packets
+		// through each other, so both protocols have to match, and a mismatch showed up only as
+		// a misparsed packet somewhere downstream of a successful handshake.
+		//
+		// A world server built before this check does not send these two fields, so its world
+		// name lands where the versions are expected and the values come out as nonsense. That
+		// is the correct outcome -- it is genuinely incompatible -- and it is reported as a
+		// version mismatch rather than as a malformed packet.
+		if (m_authProtocol != auth::ProtocolVersion || m_gameProtocol != game::ProtocolVersion)
+		{
+			const bool authMismatch = m_authProtocol != auth::ProtocolVersion;
+			const uint32 reported = authMismatch ? m_authProtocol : m_gameProtocol;
+			const uint32 expected = authMismatch ? auth::ProtocolVersion : game::ProtocolVersion;
+
+			WLOG("World node " << m_worldName << " uses " << (authMismatch ? "auth" : "game")
+				<< " protocol version " << reported << ", this realm server speaks " << expected
+				<< " - rejecting");
+
+			// Answers the challenge it asked for: the world node is waiting on a LogonChallenge
+			// response and would not recognise anything else.
+			const auth::AuthResult versionResult = reported < expected ?
+				auth::auth_result::FailVersionUpdate : auth::auth_result::FailVersionInvalid;
+			m_connection->sendSinglePacket([versionResult](auth::OutgoingPacket& outPacket) {
+				outPacket.Start(auth::realm_world_packet::LogonChallenge);
+				outPacket << io::write<uint8>(versionResult);
+				outPacket.Finish();
+			});
+
+			return PacketParseResult::Disconnect;
+		}
 
 		// RequestHandler
 		std::weak_ptr weakThis{ shared_from_this() };

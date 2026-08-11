@@ -16,7 +16,22 @@ namespace mmo
 			typedef auth::OutgoingPacket OutgoingPacket;
 		};
 
-		constexpr uint32 ProtocolVersion = 0x00000004;
+		/// Version of the auth protocol this binary speaks. Peers that disagree are rejected at
+		/// the handshake on all three links that use it: client<->login, login<->realm and
+		/// realm<->world.
+		///
+		/// BUMP THIS whenever the wire format changes -- a new or renumbered opcode, a changed
+		/// packet payload, anything a peer built against the old format would misread. Without a
+		/// bump the mismatch is not caught, and an incompatible peer authenticates successfully
+		/// and then misparses everything after it.
+		///
+		/// tools/protocol_version_check.py enforces the bump for changes it can see (opcodes,
+		/// framing, cipher) and runs as the first step of the local gate. It cannot see a changed
+		/// payload inside a handler, so that case is still yours to remember.
+		///
+		/// After bumping: python tools/protocol_version_check.py --update
+		/// See docs/protocol_versions.md for what each version changed.
+		constexpr uint32 ProtocolVersion = 0x00000005;
 
 		/// Largest payload, in bytes, that a single incoming auth packet may announce.
 		///

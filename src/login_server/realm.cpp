@@ -9,6 +9,9 @@
 #include "base/weak_ptr_function.h"
 #include "log/default_log_levels.h"
 
+// For game::ProtocolVersion only -- see the equivalent include in player.cpp.
+#include "game_protocol/game_protocol.h"
+
 #include <algorithm>
 #include <iomanip>
 #include <functional>
@@ -312,18 +315,28 @@ namespace mmo
 		// Write the login attempt to the logs
 		ILOG("Received logon challenge for realm " << m_realmName << "...");
 
-		// The realm reports its protocol version and until now nothing looked at it, so a realm
-		// built against a different revision of the login<->realm packets would authenticate and
-		// then silently misread them -- KickAccount, for one, grew a reason byte. Refusing the
+		// The realm reports its protocol versions and until now nothing looked at either, so a
+		// realm built against a different revision of the login<->realm packets would authenticate
+		// and then silently misread them -- KickAccount, for one, grew a reason byte. Refusing the
 		// handshake turns that into one clear line in the log instead.
-		if (m_authProtocol != auth::ProtocolVersion)
+		//
+		// The game protocol version is checked here too, even though this link never carries a
+		// game packet. The login server is what hands clients a realm to connect to, and it is the
+		// only party that sees both sides' game protocol version -- so it is the only one that can
+		// tell that a realm is about to be given sessions it cannot actually serve.
+		if (m_authProtocol != auth::ProtocolVersion || m_gameProtocol != game::ProtocolVersion)
 		{
-			WLOG("Realm " << m_realmName << " uses auth protocol version " << m_authProtocol
-				<< ", this login server speaks " << auth::ProtocolVersion << " - rejecting");
+			const bool authMismatch = m_authProtocol != auth::ProtocolVersion;
+			const uint32 reported = authMismatch ? m_authProtocol : m_gameProtocol;
+			const uint32 expected = authMismatch ? auth::ProtocolVersion : game::ProtocolVersion;
+
+			WLOG("Realm " << m_realmName << " uses " << (authMismatch ? "auth" : "game")
+				<< " protocol version " << reported << ", this login server speaks " << expected
+				<< " - rejecting");
 
 			// Answers the challenge it asked for, not a proof: the realm is still waiting for a
 			// LogonChallenge response and would not recognise anything else.
-			const auth::AuthResult versionResult = m_authProtocol < auth::ProtocolVersion ?
+			const auth::AuthResult versionResult = reported < expected ?
 				auth::auth_result::FailVersionUpdate : auth::auth_result::FailVersionInvalid;
 			m_connection->sendSinglePacket([versionResult](auth::OutgoingPacket& outPacket) {
 				outPacket.Start(auth::login_realm_packet::LogonChallenge);

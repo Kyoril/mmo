@@ -254,6 +254,18 @@ namespace mmo
 
 	void RealmConnector::OnLoginError(auth::AuthResult result)
 	{
+		// A version mismatch is worth spelling out. It is not a misconfiguration the operator can
+		// fix by editing anything -- the two binaries were built from different revisions of the
+		// protocol -- and the reconnect loop below would otherwise repeat a bare hex code forever.
+		if (result == auth::auth_result::FailVersionUpdate || result == auth::auth_result::FailVersionInvalid)
+		{
+			ELOG("[Realm Server] This world server speaks auth protocol " << auth::ProtocolVersion
+				<< " / game protocol " << game::ProtocolVersion << ", which the realm server rejected."
+				<< " Rebuild the world and realm servers from the same revision.");
+			QueueReconnect();
+			return;
+		}
+
 		// Output error code in chat before terminating the application
 		ELOG("[Realm Server] Could not authenticate world at realm server. Error code 0x" << std::hex << static_cast<uint16>(result));
 		QueueReconnect();
@@ -1188,13 +1200,18 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 					// Initialize packet using the op code
 					packet.Start(auth::world_realm_packet::LogonChallenge);
 
-					// Write the actual packet content
+					// Write the actual packet content. Laid out exactly like the realm's own
+					// challenge to the login server, protocol versions included: this link carries
+					// both auth packets (the handshake, instance routing) and proxied game packets,
+					// so a disagreement about either one breaks it.
 					const size_t contentStart = packet.Sink().Position();
 					packet
 						<< io::write<uint8>(mmo::Major)	// Version
 						<< io::write<uint8>(mmo::Minor)
 						<< io::write<uint8>(mmo::Build)
 						<< io::write<uint16>(mmo::Revision)
+						<< io::write<uint32>(auth::ProtocolVersion)
+						<< io::write<uint32>(game::ProtocolVersion)
 						<< io::write_dynamic_range<uint8>(m_authName);
 
 					// Finish packet and send it
