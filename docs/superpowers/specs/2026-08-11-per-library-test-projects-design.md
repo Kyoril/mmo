@@ -1,7 +1,8 @@
 # Per-Library Test Projects
 
 **Date:** 2026-08-11
-**Status:** Approved, ready for planning
+**Status:** Implemented. See *Implementation notes* at the end for what the work turned up
+that this design did not anticipate.
 
 ## Problem
 
@@ -276,11 +277,75 @@ Every stage leaves the build green and every existing test passing.
 | 5 | The seven new suites plus the `hpak` additions, one commit per library. |
 | 6 | `/gate`, then `/ship`. |
 
-## Open question, resolved during implementation
+## Implementation notes
 
-`src/unit_tests/test_terrain.cpp` includes `scene_graph/material_manager.h` and
-`scene_graph/scene.h`, yet it compiles into today's headless `unit_tests`, which links
-neither `scene_graph` nor `terrain`. Either the test uses only declarations that never
-require the symbols at link time, or Linux CI has been getting lucky. Stage 3 determines
-which and places the file in `terrain_tests` or in the gated `scene_graph_tests`
-accordingly. This is a placement detail, not a design decision.
+What the work turned up that this design did not anticipate.
+
+**The `enable_testing()` claim was wrong.** The original draft called the per-directory
+`enable_testing()` calls a live bug that stopped `ctest` discovering anything. Verified
+empirically: `ctest -N` from `build/` lists all five suites with or without the root call.
+The move is tidiness plus a stage-2 prerequisite, and the design text above has been
+corrected.
+
+**`test_terrain.cpp` is dead code.** The open question is resolved: the file is wrapped in
+`#if false` in its entirety — three test cases that have never compiled, which is why it
+linked without `scene_graph` or `terrain`. It stays in `terrain_tests` with a note in that
+suite's `CMakeLists.txt` rather than being quietly deleted. Enabling it needs a `Scene` and
+a `MaterialManager`, so it would have to move to a gated suite first. **Open for the
+maintainer:** enable it or delete it.
+
+**`movement_tests` did not have a plain Catch main.** Its `main.cpp` brought up the null
+`GraphicsDevice` before `Catch::Session().run()` and tore it down after, because `Scene`'s
+constructor calls `GraphicsDevice::Get()`. Deleting it made the suite hang rather than
+fail. That setup is now a Catch listener (`graphics_device_listener.cpp`) with the same
+run-start/run-end ordering, so the suite still shares `catch_main`. Two Catch2 v2 details
+cost a build each and are recorded in that file: listener interfaces need
+`CATCH_CONFIG_EXTERNAL_INTERFACES` defined before `catch.hpp`, and `CATCH_REGISTER_LISTENER`
+token-pastes its argument into an identifier, so it cannot take a namespace-qualified type.
+
+**Four libraries had to widen their build gate.** The design assumed every library a suite
+needs is built whenever `MMO_BUILD_TESTS` is on. Not so:
+
+- `updater` was built only for `MMO_BUILD_LAUNCHER OR MMO_BUILD_TOOLS`.
+- `xml_handler`, `tex` and `tex_v1_0` were built only for `MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR`,
+  despite none of them needing a graphics device.
+
+All four now also build under `MMO_BUILD_TESTS`, matching the pattern `hpak` already used.
+Consequence: the Linux CI build compiles these four for the first time. All are plain
+portable C++ with no platform branches, and the headless configuration was verified (see
+below), but this is the same class of risk as the CI change in § Gate and CI.
+
+**One real bug found, in `game_common`.** `WorldFoliageSerializer::Write` emits an empty
+`FMSH` chunk when there are no instances, and `WorldFoliageLoader` rejected any `FINS`
+chunk arriving with an empty mesh name table — so the serializer produced a `.hfol` its own
+loader refused. Clearing every tree from a page and saving made that page fail to load.
+Fixed in its own commit ahead of the suite that found it: the guard moved after the record
+count and now only fires when there is at least one record that has to resolve a name.
+
+**`paging` was clean.** The suspected unsigned underflow at the grid origin is properly
+guarded by the existing `max(center, radius) - radius` clamp. The tests pin it so a
+simplification cannot reintroduce the wrap.
+
+**Two behaviours are documented rather than changed**, because fixing them is a judgement
+call for the maintainer, not a test-suite decision:
+
+- `XmlAttributes::GetValueAsInt` / `GetValueAsFloat` `ASSERT` on input that fails to parse
+  at all, aborting a debug build instead of returning the caller's default —
+  inconsistent with `GetValueAsBool`, which falls back gracefully. Not exercised by the
+  suite; noted in the test file and in `xml_handler_tests/CMakeLists.txt`.
+- `IncomingRequest` header lookup is case sensitive (a client sending `content-length` is
+  not found by a lookup for `Content-Length`), while the `Content-Length` probe itself is
+  case insensitive.
+
+## Verification performed
+
+- **Stage 3 count gate:** 656 test cases across the 21 post-split suites, exactly matching
+  the pre-split baseline of 656 (`unit_tests` 419, `game_server_unit_tests` 183,
+  `login_server_tests` 17, `realm_server_tests` 13, `movement_tests` 24). Nothing dropped.
+- **Full build, client on:** 28 suites, `ctest` 28/28 green. 773 test cases total, up
+  from the 656 the tree started with.
+- **Headless build** (`MMO_BUILD_CLIENT=OFF`, editor/tools/launcher off): configures,
+  builds `all_tests`, and runs 26/26 green — `movement_tests` and `scene_graph_tests`
+  correctly excluded. This is the check that the widened library gates hold, though it is
+  still MSVC rather than GCC.
+- **Gate:** `tools/gate/verify.ps1 -SkipE2E` GREEN through the new `ctest` step.
