@@ -125,9 +125,8 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/luabind_noboost")
 # Catch
 # ===============================================================================
 
-if (MMO_BUILD_TESTS)
-	include_directories("${CMAKE_CURRENT_SOURCE_DIR}/deps/catch/")
-endif()
+# The include directory now travels with the catch2 target declared in deps/catch, which
+# mmo_add_test() picks up via catch_main. Nothing needs it globally.
 
 
 # ===============================================================================
