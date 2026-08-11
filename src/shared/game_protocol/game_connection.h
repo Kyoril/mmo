@@ -112,6 +112,19 @@ namespace mmo
 				m_isParsingIncomingData = false;
 				m_received.clear();
 
+				// This object can outlive the session it carried: the game client keeps a single
+				// connector for the whole process and reconnects through it, which is now an
+				// ordinary thing to do -- a displaced player lands on the login screen and logs
+				// straight back in. Session-scoped decode state must not survive into the next
+				// session. The cipher above all: it is installed mid-session, the next session
+				// begins in plaintext, and a stale key silently turns that first packet into
+				// garbage, which surfaces as "malformed packet" the instant the client connects.
+				//
+				// The send buffers are deliberately NOT cleared here. Connectors send their first
+				// packet from connectionEstablished, which runs before this.
+				m_crypt.Reset();
+				m_decryptedUntil = 0;
+
 				asio::ip::tcp::no_delay Option(true);
 				m_socket->lowest_layer().set_option(Option);
 				BeginReceive();
@@ -167,7 +180,12 @@ namespace mmo
 				}
 
 				m_isClosedOnParsing = true;
-				if (m_socket->is_open())
+
+				// Null-checked, matching IsConnected() and Disconnected(). Dropping a malformed
+				// peer releases the socket outright while this object stays alive and reachable --
+				// the UI can still call close() from a cancel button, and state teardown calls it
+				// unconditionally. Without the check that is a null dereference.
+				if (m_socket && m_socket->is_open())
 				{
 					m_socket->close();
 
