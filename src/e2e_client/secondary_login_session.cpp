@@ -14,8 +14,6 @@ namespace mmo
 	{
 		m_login->AuthenticationResult.connect([this](const auth::AuthResult result)
 			{
-				m_result = result;
-
 				if (result != auth::auth_result::Success)
 				{
 					ELOG("Second session failed to authenticate at the login server, code " << static_cast<int32>(result));
@@ -43,5 +41,10 @@ namespace mmo
 	{
 		m_login->close();
 		m_io.poll();
+	}
+
+	SecondaryLoginSession::~SecondaryLoginSession()
+	{
+		Shutdown();
 	}
 }

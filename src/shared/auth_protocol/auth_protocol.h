@@ -340,6 +340,11 @@ namespace mmo
 
 				/// The account was banned or suspended while this session was live.
 				AccountBanned = 1,
+
+				/// Counter constant. Receivers validate against this rather than against the last
+				/// named reason, so adding one does not mean remembering to widen four bounds
+				/// checks spread across three tiers.
+				Count_
 			};
 		}
 

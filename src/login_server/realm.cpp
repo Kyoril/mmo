@@ -248,6 +248,12 @@ namespace mmo
 		// served the request, while this connection's own handlers run on its strand -- and
 		// sendSinglePacket touches the send buffer that flush() and the write completion handler
 		// also touch.
+		//
+		// Posting to this strand is also what keeps a displaced account from taking its
+		// replacement down with it. This packet and the ClientAuthSessionResponse that later
+		// admits the new session travel the same connection in the order they were queued, so a
+		// realm can never admit the new session first and then apply a kick meant for the old
+		// ones. Splitting the broadcast onto its own channel would quietly break that.
 		auto self = shared_from_this();
 		m_connection->Post([self, accountId, reason]()
 		{
@@ -305,7 +311,29 @@ namespace mmo
 
 		// Write the login attempt to the logs
 		ILOG("Received logon challenge for realm " << m_realmName << "...");
-		
+
+		// The realm reports its protocol version and until now nothing looked at it, so a realm
+		// built against a different revision of the login<->realm packets would authenticate and
+		// then silently misread them -- KickAccount, for one, grew a reason byte. Refusing the
+		// handshake turns that into one clear line in the log instead.
+		if (m_authProtocol != auth::ProtocolVersion)
+		{
+			WLOG("Realm " << m_realmName << " uses auth protocol version " << m_authProtocol
+				<< ", this login server speaks " << auth::ProtocolVersion << " - rejecting");
+
+			// Answers the challenge it asked for, not a proof: the realm is still waiting for a
+			// LogonChallenge response and would not recognise anything else.
+			const auth::AuthResult versionResult = m_authProtocol < auth::ProtocolVersion ?
+				auth::auth_result::FailVersionUpdate : auth::auth_result::FailVersionInvalid;
+			m_connection->sendSinglePacket([versionResult](auth::OutgoingPacket& outPacket) {
+				outPacket.Start(auth::login_realm_packet::LogonChallenge);
+				outPacket << io::write<uint8>(versionResult);
+				outPacket.Finish();
+			});
+
+			return PacketParseResult::Disconnect;
+		}
+
 		// RequestHandler
 		std::weak_ptr<Realm> weakThis{ shared_from_this() };
 		auto handler = [weakThis](std::optional<RealmAuthData> result) {

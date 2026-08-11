@@ -9,6 +9,7 @@
 #include <mutex>
 #include <list>
 #include <optional>
+#include <vector>
 
 namespace mmo
 {
@@ -72,6 +73,12 @@ namespace mmo
 		/// Disconnects every managed player. Used at shutdown so peers see a closed connection
 		/// rather than a socket that simply stops answering. Safe to call from any thread.
 		void DisconnectAll();
+
+	private:
+
+		/// Collects owning references to every authenticated session of an account.
+		/// @param except Optionally one session to leave out, such as the caller.
+		std::vector<std::shared_ptr<Player>> CollectSessionsForAccount(uint64 accountId, const Player* except);
 
 	private:
 

@@ -40,10 +40,11 @@ namespace mmo
 		/// Whether the login server rejected this session, so callers can stop waiting.
 		[[nodiscard]] bool HasFailed() const { return m_failed; }
 
-		/// The auth result the login server returned, valid once IsAuthenticated or HasFailed.
-		[[nodiscard]] auth::AuthResult GetResult() const { return m_result; }
-
+		/// Closes the connection. Called from the destructor so a scenario cannot leave the socket
+		/// open behind it.
 		void Shutdown();
+
+		~SecondaryLoginSession();
 
 	private:
 		asio::io_service m_io;
@@ -52,6 +53,5 @@ namespace mmo
 		std::string m_password;
 		bool m_authenticated { false };
 		bool m_failed { false };
-		auth::AuthResult m_result { auth::auth_result::Success };
 	};
 }

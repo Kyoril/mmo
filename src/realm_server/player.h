@@ -438,6 +438,8 @@ namespace mmo
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
 		uint8 m_gmLevel = 0; // GM level of the player account (0: normal player, 1+: GM levels)
+		/// Whether this session has already been torn down. See Destroy().
+		bool m_destroyed = false;
 		std::vector<std::string> m_accountFeatures; // Active account feature keys (entitlements) granted to the account
 		ActionButtons m_actionButtons;
 		bool m_pendingButtons = false;

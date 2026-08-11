@@ -487,7 +487,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (reason > auth::session_kick_reason::AccountBanned)
+		if (reason >= auth::session_kick_reason::Count_)
 		{
 			// A newer login server may know reasons this build does not. Kicking on an unknown
 			// reason is still correct -- the login server has decided the session must go -- so

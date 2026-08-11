@@ -119,7 +119,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (reason > auth::session_kick_reason::AccountBanned)
+		if (reason >= auth::session_kick_reason::Count_)
 		{
 			// A newer server may know reasons this build does not. The disconnect that follows is
 			// what matters; without a reason we can recognise, the generic message is shown.

@@ -517,7 +517,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (reason > auth::session_kick_reason::AccountBanned)
+		if (reason >= auth::session_kick_reason::Count_)
 		{
 			WLOG("Realm sent unknown session kick reason " << static_cast<uint16>(reason));
 			return PacketParseResult::Pass;

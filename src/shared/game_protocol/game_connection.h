@@ -36,6 +36,7 @@ namespace mmo
 				, m_listener(Listener_)
 				, m_isParsingIncomingData(false)
 				, m_isClosedOnParsing(false)
+				, m_isClosedOnSend(false)
 				, m_decryptedUntil(0)
 				, m_isReceiving(false)
 				, m_strand(m_socket->get_executor())
@@ -106,6 +107,7 @@ namespace mmo
 			void startReceiving() override
 			{
 				m_isClosedOnParsing = false;
+				m_isClosedOnSend = false;
 				m_isReceiving = false;
 				m_isParsingIncomingData = false;
 				m_received.clear();
@@ -142,19 +144,34 @@ namespace mmo
 			
 			void close() override
 			{
+				// A write already handed to asio must be allowed to finish. Closing the socket out
+				// from under it drops whatever had not yet reached the kernel buffer, which is
+				// exactly the case for anything sent immediately before a teardown -- a session
+				// kick reason, above all. The send completion closes for us instead.
+				//
+				// This mirrors mmo::Connection::close(); the two implement the same contract and
+				// callers cannot tell which one they hold.
+				if (!m_sending.empty())
+				{
+					m_isClosedOnSend = true;
+				}
+
 				if (m_isParsingIncomingData)
 				{
 					m_isClosedOnParsing = true;
 				}
-				else
-				{
-					m_isClosedOnParsing = true;
-					if (m_socket->is_open())
-					{
-						m_socket->close();
 
-						m_received.clear();
-					}
+				if (m_isClosedOnSend || m_isClosedOnParsing)
+				{
+					return;
+				}
+
+				m_isClosedOnParsing = true;
+				if (m_socket->is_open())
+				{
+					m_socket->close();
+
+					m_received.clear();
 				}
 			}
 
@@ -191,6 +208,9 @@ namespace mmo
 			ReceiveBuffer m_receiving;
 			bool m_isParsingIncomingData;
 			bool m_isClosedOnParsing;
+			/// Set when close() was called while a write was still in flight. The send completion
+			/// performs the teardown instead, so the last packet is not cut off.
+			bool m_isClosedOnSend;
 			size_t m_decryptedUntil;
 			bool m_isReceiving;
 			/// Defaults to the protocol ceiling (game::MaxIncomingPacketSize, 16 MiB). Named as a
@@ -226,6 +246,14 @@ namespace mmo
 
 				m_sending.clear();
 				flush();
+
+				// A close() that arrived while this write was in flight was deferred to here, so
+				// that the bytes reached the peer first.
+				if (m_isClosedOnSend && m_sending.empty())
+				{
+					Disconnected();
+					m_sendBuffer.clear();
+				}
 			}
 
 			void BeginReceive()

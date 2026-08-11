@@ -75,6 +75,16 @@ namespace mmo
 
 	void Player::Destroy()
 	{
+		// Everything below assumes it runs once: m_connection is released at the end, so a second
+		// pass would dereference a null pointer, and the guild/friend/group notifications would go
+		// out twice. The kick paths that reach here have multiplied with duplicate-login
+		// displacement, so the guard is no longer a theoretical one.
+		if (m_destroyed)
+		{
+			return;
+		}
+		m_destroyed = true;
+
 		// Save action bar (under the class it currently belongs to)
 		SaveActionButtonsIfPending();
 
