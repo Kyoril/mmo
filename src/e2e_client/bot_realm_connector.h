@@ -334,6 +334,9 @@ namespace mmo
 		/// GAME MASTER only. Instantly kills the selected unit.
 		void CheatKill();
 
+		/// GAME MASTER only. Toggles damage immunity on the sender's character.
+		void CheatGodmode(bool enable);
+
 		/// GAME MASTER only. Accepts the given quest without a questgiver interaction.
 		void CheatAcceptQuest(uint32 questId);
 

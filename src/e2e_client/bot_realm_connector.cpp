@@ -2170,6 +2170,15 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::CheatGodmode(const bool enable)
+	{
+		sendSinglePacket([enable](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatGodmode);
+			packet << io::write<uint8>(enable ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
 	void BotRealmConnector::CheatAcceptQuest(const uint32 questId)
 	{
 		sendSinglePacket([questId](game::OutgoingPacket& packet) {

@@ -884,6 +884,13 @@ namespace mmo
 		bool IsAlive() const noexcept { return GetHealth() > 0; } /// Starts the regeneration countdown.
 		void StartRegeneration() const;
 
+		/// @brief Enables or disables damage immunity (developer/test cheat).
+		/// @param enable True to make this unit immune to all incoming damage.
+		void SetGodmode(bool enable) { m_godmode = enable; }
+
+		/// @brief Whether this unit currently ignores all incoming damage.
+		bool IsGodmode() const { return m_godmode; }
+
 		/// Stops the regeneration countdown.
 		void StopRegeneration() const;
 
@@ -1686,6 +1693,9 @@ public:
 		// of going through the client-ack round-trip — the client can't ack packets for a unit it
 		// hasn't spawned yet and would be kicked by the ack-timeout anti-cheat check.
 		bool m_restoringAuras = false;
+		// Developer/test cheat: when true, Damage() absorbs everything without touching
+		// health, threat or procs. Only ever set by the dev-command handler.
+		bool m_godmode = false;
 		// Maps base spell id → the previous target that had a SingleTargetPerCaster aura from our caster.
 		// Key: casterGuid*100000 + baseSpellId would be complex; instead keyed by (casterGuid ^ spellBaseId).
 		// Actually keyed by spellId → weak_ptr<GameUnitS> of previous target for SingleTargetPerCaster eviction.
