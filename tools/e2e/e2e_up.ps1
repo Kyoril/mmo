@@ -4,7 +4,7 @@
 # with throwaway databases, ready for e2e_client scenario runs.
 #
 # Usage:
-#   powershell -File tools/e2e/e2e_up.ps1 [-BuildConfig Debug|RelWithDebInfo|Release] [-HostedMaps "0"]
+#   powershell -File tools/e2e/e2e_up.ps1 [-BuildConfig Debug|RelWithDebInfo|Release] [-HostedMaps "0,1"]
 #
 # Requirements:
 #   - Servers built with -DMMO_WITH_DEV_COMMANDS=ON (GM cheat commands)
@@ -14,7 +14,10 @@
 param(
 	[ValidateSet("Debug", "RelWithDebInfo", "Release")]
 	[string]$BuildConfig = "Debug",
-	[string]$HostedMaps = "0"
+	# Map 0 is the open-world dev map; map 1 is the crypt dungeon (Sevrin Wax
+	# encounter). Both are hosted by default so the full scenario suite can
+	# exercise dungeon content without every caller having to know that.
+	[string]$HostedMaps = "0,1"
 )
 
 $ErrorActionPreference = "Stop"
