@@ -189,12 +189,12 @@ Next free trigger id is 29 (current max 28).
 | 30 | Sevrin Wax - Rite of Rising (Phase 2) | `OnHealthDroppedBelow 65` | `AbortOnOwnerDeath` | See sequence below |
 | 31 | Sevrin Wax - Unhallowed (Phase 3) | `OnHealthDroppedBelow 30` | `AbortOnOwnerDeath` | See sequence below |
 | 32 | Sevrin Wax - Husk Wave (Left) | `OnTimer 25000,32000` | `OnlyInCombat` | Condition phase >= 1: Say; summon 82 at left arch, attack-nearest |
-| 33 | Sevrin Wax - Husk Wave (Right) | `OnTimer 25000,32000` | `OnlyInCombat` | Condition phase >= 2: summon 82 at right arch, attack-nearest |
+| 33 | Sevrin Wax - Husk Wave (Right) | `OnTimer 25000,32000` | `OnlyInCombat` | Condition phase >= 2: summon 82 at right arch, attack-nearest. Because the phase variable is set as the Rite *begins*, the second arch opens with the Rite rather than 8s after it |
 | 34 | Sevrin Wax - Coffin Call | `OnTimer 30000,40000` | `OnlyInCombat` | Condition phase >= 1: Yell; `ModifyThreat(RandomPlayer, +100000)` |
 | 35 | Sevrin Wax - On Killed | `OnKilled` | — | Yell; `SetEncounterState(1, Done)`; bossAlive=0; phase=0 |
 | 36 | Sevrin Wax - On Reset | `OnReset` | — | phase=0; bossAlive=1; `SetEncounterState(1, NotStarted)` |
-| 37 | Crypt - Encounter Wipe | `OnAllPlayersDead` | — | Yell via `NamedCreature`; `SetEncounterState(1, Fail)` |
-| 38 | Choirbound Acolyte - Raise Husk | `OnTimer 12000` | — | Emote; summon 82 at own position, attack-nearest, despawn 120s |
+| 37 | Crypt - Encounter Wipe | `OnAllPlayersDead` | — | Yell via `NamedCreature`; `SetEncounterState(1, Fail)`; bossAlive=0 so trigger 39 clears the adds a wipe left behind |
+| 38 | Choirbound Acolyte - Raise Husk | `OnTimer 15000` | — | Condition bossAlive == 1: summon 82 at (-15, 1, 0), attack-nearest, despawn 120s |
 | 39 | Boss Add - Cleanup | `OnTimer 10000` | — | Condition bossAlive == 0: `Despawn` on `OwningObject` |
 | 40 | Choirbound Acolyte - On Spawn | `OnSpawn` | — | Say / Emote flavour as the singing starts |
 
@@ -215,12 +215,12 @@ takes 90% less damage during the channel, so combat could plausibly drop and abo
 chain, leaving the damage-reduction aura applied.
 
 1. `BroadcastMessage` (raid warning): "Sevrin Wax begins the Rite of Rising!"
-2. `Yell`: "Sing with me! SING!"
-3. `CancelCast`
-4. `StopAutoAttack`
-5. `SetCombatMovement 0`
-6. `ApplyAura 240` on `OwningObject`
-7. `Emote` (channel)
+2. `SetInstanceVariable 1001 = 2` — **set at the start of the chain, not the end**
+3. `Yell`: "Sing with me! SING!"
+4. `CancelCast`
+5. `StopAutoAttack`
+6. `SetCombatMovement 0`
+7. `ApplyAura 240` on `OwningObject`
 8. `SummonCreature 83` at left arch — attack-nearest **0**, despawn 300s
 9. `SummonCreature 83` at right arch — attack-nearest **0**, despawn 300s
 10. `Delay 3000`
@@ -228,18 +228,38 @@ chain, leaving the damage-reduction aura applied.
 12. `Delay 5000`
 13. `RemoveAura 240` on `OwningObject`
 14. `SetCombatMovement 1`
-15. `SetInstanceVariable 1001 = 2`
-16. `Yell`: "Now. Now you hear the choir."
+15. `Yell`: "Now. Now you hear the choir."
 
 Channel window ≈ 8s.
+
+### Why the phase variable is set at the start of the chain
+
+`OnHealthDroppedBelow` fires for every threshold a single damage event crosses. One
+very large hit taking the boss from above 65% to below 30% fires triggers 30 **and**
+31, and both chains then run concurrently.
+
+If each chain set its phase variable at the *end*, the shorter phase 3 chain (6s) would
+finish first and set phase 3, and then the longer phase 2 chain (8s) would overwrite it
+back to 2 — leaving the boss enraged but reporting phase 2. Setting the variable at the
+start makes the later-firing trigger win, which is the correct outcome.
+
+The rest of a double-crossing is benign: the aura is applied twice and `RemoveAura`
+clears all stacks, so the first removal ends it and the second is a no-op, and
+`SetCombatMovement 1` is idempotent. Gating trigger 31 on `phase >= 2` was rejected as a
+fix — during a double-crossing, phase 2 is not yet set when 31 fires, so phase 3 would
+be skipped entirely and the boss would never enrage.
+
+At 2670 HP this needs a single ~940-damage hit, so it is not reachable in normal play.
+It is reachable in a test with an over-levelled character, which is why the E2E scenario
+below deliberately does not over-level.
 
 ### Unhallowed sequence (trigger 31)
 
 Same flags and the same open/close structure, with a ~6s channel:
-raid warning; yell; `CancelCast`; `StopAutoAttack`; `SetCombatMovement 0`;
-`ApplyAura 240`; summon 83 at both arches; summon 82 at apse and at left arch;
-`Delay 6000`; `RemoveAura 240`; `SetCombatMovement 1`; `ApplyAura 241` (permanent
-enrage); `SetInstanceVariable 1001 = 3`.
+raid warning; `SetInstanceVariable 1001 = 3` (again first, for the reason above); yell;
+`CancelCast`; `StopAutoAttack`; `SetCombatMovement 0`; `ApplyAura 240`; summon 83 at
+both arches; summon 82 at apse and at left arch; `Delay 6000`; `RemoveAura 240`;
+`SetCombatMovement 1`; `ApplyAura 241` (permanent enrage).
 
 ## Encounter flow
 
@@ -253,10 +273,17 @@ Light pressure that teaches the room.
 damage and channels for ~8s. A Choirbound Acolyte appears in each aisle and a husk
 claws out of the apse behind him. Husk waves now use both arches.
 
-The acolytes are the mechanic. Each summons a husk every 12s **for as long as it
+The acolytes are the mechanic. Each raises a husk every 15s **for as long as it
 lives**, and they are summoned without auto-aggro so they stay in the aisles. Players
 must leave the boss and kill them or drown in husks. An acolyte's death *is* the state
 change — nothing is counted, so the mechanic cannot desync.
+
+The husks rise at (-15, 1, 0), mid-nave, rather than at the acolyte that raised them.
+That is forced by `SummonCreature`: explicit coordinates require at least four data
+values, so summoning at the caster's own position would leave no room for the despawn
+timer or the auto-aggro flag, and the husks would then neither expire nor attack. Rising
+mid-nave also reads better — the dead claw up where the fight is, rather than trekking in
+from a side room.
 
 **Phase 3 (30%) — Unhallowed.** Second, shorter Rite; two more acolytes and two husks;
 then a permanent Unhallowed Fervor on himself.
