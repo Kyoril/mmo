@@ -171,9 +171,11 @@ goes. The Visual Studio solution ends with roughly 28 projects under the `tests`
 
 ### What the split fixes
 
-- The `set_source_files_properties(... HEADER_FILE_ONLY TRUE)` exclusion block disappears.
-  Files that need render dependencies live in a gated target instead of being silently
-  dropped from compilation.
+- The `set_source_files_properties(... HEADER_FILE_ONLY TRUE)` exclusion shrinks from three
+  files inside a 54-file monolith to one file in the 8-file `game_client_tests`
+  (`test_crossfading_sound_loop.cpp`, which needs `client_data`). Everything else that
+  needs render dependencies moved to a gated target instead of being silently dropped
+  from compilation.
 - The "compile this shared `.cpp` directly" workaround survives — it is the mechanism that
   keeps `text_wrap`, `float_curve` and the remote-movement code under headless test
   coverage on Linux CI — but it is now scoped to three small targets whose `CMakeLists.txt`
@@ -336,6 +338,27 @@ call for the maintainer, not a test-suite decision:
 - `IncomingRequest` header lookup is case sensitive (a client sending `content-length` is
   not found by a lookup for `Content-Length`), while the `Content-Length` probe itself is
   case insensitive.
+
+**Three smaller deviations from this document,** recorded for accuracy:
+
+- The *New coverage* table promised a `tex::loadPreHeader` test for an unknown `VersionId`.
+  No such test exists, because `tex/pre_header_load.cpp` does not validate the version at
+  all — it reads the field and returns. The spec was wrong, not the implementation. This is
+  a latent issue worth its own ticket: an `.htex` written by a future v2 writer would be
+  silently misread as v1 rather than rejected.
+- `.claude/settings.json` did not simply replace the three per-binary allowances with
+  `Bash(ctest:*)`; it generalised them to `Bash(./bin/Debug/*_tests.exe:*)` and added
+  `Bash(ctest:*)` alongside. Individual suites remain runnable for narrowing a single
+  failure, which `CLAUDE.md` still documents, so the allowance is still wanted.
+- `docs/testing-servers.md` was missing from the "Also updated" list and needed the same
+  treatment — it carried an ASan build command naming the now-renamed
+  `game_server_unit_tests` target.
+
+**Review findings applied after the first green gate:** a dangling reference in two
+`tex_tests` cases (`tex::v1_0::HeaderSaver` holds `const Header&`, so a `MakeHeader()`
+temporary died before `finish()` read it — UB that happened to pass on MSVC and would have
+run on GCC for the first time via the CI change), plus the `testing-servers.md` staleness
+above and several minor cleanups.
 
 ## Verification performed
 

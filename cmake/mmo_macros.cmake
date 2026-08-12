@@ -331,7 +331,9 @@ endmacro()
 # the all_tests aggregate target, so a new suite costs one folder and one call.
 #
 # Sources are gathered recursively, which is what lets a suite keep its fixtures in a
-# test_helpers/ subdirectory.
+# test_helpers/ subdirectory. That also means one folder is one suite: do not nest a
+# suite inside another. Note also that, unlike add_exe_recurse, this does not filter
+# win/ or macos/ subdirectories -- no suite has needed platform-specific sources yet.
 function(mmo_add_test name)
 	file(GLOB_RECURSE sources
 		CONFIGURE_DEPENDS

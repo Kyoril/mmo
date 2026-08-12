@@ -13,12 +13,6 @@ using namespace mmo::net::http;
 
 namespace
 {
-	struct ParseResult
-	{
-		ReceiveState state = receive_state::Incomplete;
-		IncomingRequest request;
-	};
-
 	/// Feeds a raw request through IncomingRequest::Start. The buffer is kept alive by the
 	/// caller's string, which MemorySource only borrows.
 	ReceiveState Parse(const std::string& raw, IncomingRequest& request)

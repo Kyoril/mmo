@@ -51,7 +51,7 @@ function Invoke-GateStep
 		{
 			if ($WorkingDirectory)
 			{
-				Push-Location $WorkingDirectory
+				Push-Location $WorkingDirectory -ErrorAction Stop
 				$pushed = $true
 			}
 

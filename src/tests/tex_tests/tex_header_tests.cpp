@@ -192,10 +192,14 @@ TEST_CASE("tex v1.0 finish rewrites mip offsets settled after the header was wri
 
 TEST_CASE("tex v1.0 header has a fixed on-disk size", "[tex][header]")
 {
+	const v1_0::Header header = MakeHeader();
+
 	std::vector<char> buffer;
 	{
 		io::VectorSink sink(buffer);
-		v1_0::HeaderSaver saver(sink, MakeHeader());
+		// Named local, not a temporary: HeaderSaver keeps a reference to the header and
+		// reads it again in finish().
+		v1_0::HeaderSaver saver(sink, header);
 		saver.finish();
 	}
 
@@ -247,10 +251,12 @@ TEST_CASE("tex v1.0 header round-trips every pixel format", "[tex][header]")
 
 TEST_CASE("tex v1.0 header rejects a truncated mip table", "[tex][header]")
 {
+	const v1_0::Header header = MakeHeader();
+
 	std::vector<char> buffer;
 	{
 		io::VectorSink sink(buffer);
-		v1_0::HeaderSaver saver(sink, MakeHeader());
+		v1_0::HeaderSaver saver(sink, header);
 		saver.finish();
 	}
 
