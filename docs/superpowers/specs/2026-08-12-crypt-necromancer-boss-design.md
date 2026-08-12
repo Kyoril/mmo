@@ -316,9 +316,18 @@ No grey-quality items are used anywhere in the table.
    `respawn = true`, `respawndelay = 300000`, `isactive = true`.
    The name is required so trigger 37 can reach him via `NamedCreature`.
 
-   `rotation = 0.0` is intended to face him east (+x), down the nave toward the
-   entrance. The existing map 1 guard spawns sit at rotation ≈ ±π facing -x, which is
-   what that inference rests on — confirm visually and correct if he faces the apse.
+   `rotation = 0.0` faces him east (+x), down the nave toward the entrance. **Confirmed
+   from source rather than inferred:** `CreatureSpawner` passes `UnitSpawnEntry.rotation`
+   through as the creature's facing, and `GameObjectS::GetForwardVector()`
+   (`game_object_s.cpp:179-186`) returns `Vector3(cos(facing), 0, -sin(facing))`, which at
+   facing 0 is `(1, 0, 0)` — +x. Players enter at x=+5, the boss stands at x=-24, so +x is
+   toward them.
+
+   Unrelated latent inconsistency noticed while checking this: the degenerate-bearing
+   fallback at `creature_ai_combat_state.cpp:1681` builds its direction as
+   `(cos, 0, +sin)`, opposite in z to `GetForwardVector`'s `(cos, 0, -sin)`. Both agree at
+   facing 0, so it does not affect this encounter, but one of the two is wrong for any
+   other angle.
 3. `instance_triggers` gains trigger 37.
 
 The boss is 29 units from the player entry point at (5, 1, 0). Confirm during testing
