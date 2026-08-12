@@ -10,28 +10,14 @@ import tempfile
 from pathlib import Path
 
 
-PROTO_FILES = [
-    "src/shared/proto_data/spells.proto",
-    "src/shared/proto_data/items.proto",
-    "src/shared/proto_data/classes.proto",
-    "src/shared/proto_data/races.proto",
-    "src/shared/proto_data/trainers.proto",
-    "src/shared/proto_data/talents.proto",
-    "src/shared/proto_data/talent_tabs.proto",
-    "src/shared/proto_data/spell_categories.proto",
-    "src/shared/proto_data/spell_visualizations.proto",
-    "src/shared/proto_data/proficiencies.proto",
-    "src/shared/proto_data/skills.proto",
-    "src/shared/proto_data/aura_stacking_categories.proto",
-    "src/shared/proto_data/item_classes.proto",
-    "src/shared/proto_data/item_subclasses.proto",
-]
-
-
 def find_project_root(explicit: str | None = None) -> Path:
     if explicit:
         return Path(explicit).resolve()
     return Path(__file__).resolve().parents[4]
+
+
+def find_proto_dir(project_root: Path) -> Path:
+    return project_root / "src" / "shared" / "proto_data"
 
 
 def find_protoc(project_root: Path) -> Path:
@@ -47,15 +33,17 @@ def find_protoc(project_root: Path) -> Path:
 
 
 def compile_proto_modules(project_root: Path) -> Path:
+    proto_dir = find_proto_dir(project_root)
     protoc = find_protoc(project_root)
     out_dir = Path(tempfile.mkdtemp(prefix="mmo_spell_proto_"))
+    proto_files = sorted(path.name for path in proto_dir.glob("*.proto"))
     command = [
         str(protoc),
-        f"-I{project_root / 'src'}",
+        f"-I{proto_dir}",
         f"--python_out={out_dir}",
+        *proto_files,
     ]
-    command.extend(str(project_root / path) for path in PROTO_FILES)
-    subprocess.run(command, check=True)
+    subprocess.run(command, check=True, cwd=proto_dir)
     if str(out_dir) not in sys.path:
         sys.path.insert(0, str(out_dir))
     return out_dir
@@ -64,19 +52,19 @@ def compile_proto_modules(project_root: Path) -> Path:
 def load_modules(project_root: Path) -> dict[str, object]:
     compile_proto_modules(project_root)
     module_names = {
-        "spells": "shared.proto_data.spells_pb2",
-        "items": "shared.proto_data.items_pb2",
-        "classes": "shared.proto_data.classes_pb2",
-        "races": "shared.proto_data.races_pb2",
-        "trainers": "shared.proto_data.trainers_pb2",
-        "talents": "shared.proto_data.talents_pb2",
-        "talent_tabs": "shared.proto_data.talent_tabs_pb2",
-        "spell_categories": "shared.proto_data.spell_categories_pb2",
-        "spell_visualizations": "shared.proto_data.spell_visualizations_pb2",
-        "proficiencies": "shared.proto_data.proficiencies_pb2",
-        "skills": "shared.proto_data.skills_pb2",
-        "aura_stacking_categories": "shared.proto_data.aura_stacking_categories_pb2",
-        "item_classes": "shared.proto_data.item_classes_pb2",
-        "item_subclasses": "shared.proto_data.item_subclasses_pb2",
+        "spells": "spells_pb2",
+        "items": "items_pb2",
+        "classes": "classes_pb2",
+        "races": "races_pb2",
+        "trainers": "trainers_pb2",
+        "talents": "talents_pb2",
+        "talent_tabs": "talent_tabs_pb2",
+        "spell_categories": "spell_categories_pb2",
+        "spell_visualizations": "spell_visualizations_pb2",
+        "proficiencies": "proficiencies_pb2",
+        "skills": "skills_pb2",
+        "aura_stacking_categories": "aura_stacking_categories_pb2",
+        "item_classes": "item_classes_pb2",
+        "item_subclasses": "item_subclasses_pb2",
     }
     return {key: importlib.import_module(name) for key, name in module_names.items()}
