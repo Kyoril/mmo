@@ -1,7 +1,9 @@
 # Sevrin Wax, the Coffinwright — data-only dungeon boss
 
 Date: 2026-08-12
-Status: approved design, not yet implemented
+Status: **implemented** (2026-08-12). All encounter data is applied and reviewed.
+Two items remain open and are tracked at the end of this document: automated E2E coverage
+of the phase transitions, and the manual play pass.
 
 ## Goal
 
@@ -374,3 +376,72 @@ matching how existing units are authored (locale 1 = de, 2 = en, 3 = fr, 4 = ru)
   increment action is added later, an acolyte-specific taunt becomes cheap.
 - **Mark-and-punish mechanics**, blocked by `RandomPlayer` re-resolving per action.
   A `LastResolvedTarget` action target would unlock a whole class of boss mechanics.
+
+
+## Implementation outcome (2026-08-12)
+
+Everything in this spec is applied and independently reviewed. Tuning values were not
+changed during implementation — the computed health figures came out exactly as predicted
+(2670 / 390 / 237), verified by hand from the class tables rather than from the authoring
+script.
+
+Two design assumptions were **confirmed from source** during implementation rather than
+left to the play pass:
+
+- **Boss facing.** `rotation = 0.0` does face him east down the nave. See the map-changes
+  section above.
+- **Melee combat behaviour.** `DetermineCombatBehavior` resolves unit 81 to Melee. The
+  four rotation spells split 2 ranged / 2 melee once the range-fallback chain is applied:
+  236 and 237 carry an explicit `maxrange` of 30; 239 has `maxrange` 0 and falls back to
+  its own `rangetype` 6 (7.0 units); 238 has `maxrange` 0 *and* no `rangetype`, so it falls
+  to `GetMeleeReach() + 2` (4.5). The ranged/melee cutoff is `meleeReach + 5` = 7.5, and
+  Caster requires ranged **>** melee, so 2 vs 2 resolves to Melee. Spell 37 (Dodge) is
+  filtered out entirely as a passive and never counts.
+
+### Open item 1 — automated coverage of the phase transitions
+
+Writing the E2E scenario exposed two harness gaps and one engine defect. The gaps are
+fixed and committed:
+
+- `tools/e2e/e2e_up.ps1` defaulted `-HostedMaps` to `"0"`, so the E2E world server never
+  hosted map 1 and no creature on it could spawn.
+- `CheatGodmode` (added for this work) was missing from the realm server's cheat proxy and
+  GM-level gate, so the packet never reached the world server.
+- The E2E bot never handled `CreatureMove`, so its cached position for any creature that
+  moved after spawning stayed frozen at the spawn point.
+
+The engine defect is not fixed and is out of scope here: **every spell-based auto-attack
+swing arms the swing timer twice**, and a player's auto-attack can then stop permanently.
+`ExecuteAutoAttackSwing`'s spell branch calls `TriggerNextAutoAttack()`, and
+`OnSpellCastEnded` calls it again for the same swing because the countdown has already set
+`m_running = false` before invoking its `ended` signal. A diagnostic counted 1,269
+superseded timer callbacks in a single fight. It is self-correcting almost always, because
+`Countdown`'s generation counter lets the later `SetEnd` win — but `Cancel()` bumps the
+same counter without scheduling anything, so an unlucky interleaving leaves the timer dead.
+
+This reproduced in four of four runs, freezing the fight at the phase-2 transition. It is
+tracked as its own task. **Note this is not only a test problem:** the double-arming is
+driven by the class having a `mainhand_auto_attack_spell`, not by anything test-specific,
+so extended fights may be unreliable in real play too. This encounter is simply the first
+content long enough to expose it.
+
+Until that is fixed, the encounter has no automated coverage of its phase transitions. The
+supporting harness work (godmode, map hosting, creature-move tracking) is in place, so the
+scenario becomes writable as soon as the timer defect is resolved.
+
+### Open item 2 — the manual play pass
+
+Still worth doing for the things neither data review nor a scripted client can judge: that
+the 8s Rite reads as a distinct moment, that the husks arriving mid-nave looks right, and
+that the fight length feels reasonable at 2670 HP. Expect to hit the auto-attack defect
+above during any long fight.
+
+### A design consequence worth recording
+
+`ModDamageTakenPct` — the aura behind Rite of Rising — is applied only in
+`spell_effects.cpp`. Plain melee auto-attack calls `victim->Damage(...)` directly and
+**bypasses it**. So the Rite's 90% damage reduction applies to spells and weapon abilities
+but *not* to auto-attacks: against a melee attacker the channel is far less protective than
+this spec assumed. The fight still works, but if the Rite should blunt melee too, it needs
+`DamageImmunity` (which is checked inside `Damage()`, though it is school-scoped) or a fix
+to where the multiplier is applied.
