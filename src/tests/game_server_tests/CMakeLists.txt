@@ -1,0 +1,17 @@
+mmo_add_test(game_server_tests
+	base
+	base64
+	log
+	simple_file_format_hdrs
+	binary_io_hdrs
+	network_hdrs
+	sql_wrapper
+	mysql_wrapper
+	auth_protocol
+	game_protocol
+	hpak
+	hpak_v1_0
+	math
+	game
+	game_server
+	${OPENSSL_LIBRARIES})

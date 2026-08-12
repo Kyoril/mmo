@@ -1,0 +1,10 @@
+mmo_add_test(game_tests
+	base
+	log
+	math
+	game
+	game_server
+	binary_io_hdrs
+	network_hdrs
+	proto_data
+	${OPENSSL_LIBRARIES})

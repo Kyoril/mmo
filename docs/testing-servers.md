@@ -8,8 +8,9 @@ were invisible to every layer that existed at the time.
 
 | Layer | Command | Covers |
 |---|---|---|
-| Unit | `bin/Debug/unit_tests.exe` | Protocol framing, socket-level `Connection` / `EncryptedConnection` behaviour, the acceptor, the shutdown-signal helper |
-| Unit (per tier) | `bin/Debug/login_server_tests.exe`, `game_server_unit_tests.exe`, `realm_server_tests.exe` | Session lifecycle, HTTP handlers, groups, friends, MOTD, game-server logic |
+| Unit (all) | `cd build && ctest -C Debug --output-on-failure` | Every suite under `src/tests/`; build them with the `all_tests` target |
+| Unit (network) | `bin/Debug/network_tests.exe`, `game_protocol_tests.exe` | Protocol framing, socket-level `Connection` / `EncryptedConnection` behaviour, the acceptor, the shutdown-signal helper |
+| Unit (per tier) | `bin/Debug/login_server_tests.exe`, `game_server_tests.exe`, `realm_server_tests.exe` | Session lifecycle, HTTP handlers, groups, friends, MOTD, game-server logic |
 | E2E | `powershell -File tools/e2e/e2e_run.ps1` | Real login → realm → world stack driven by a scripted client |
 | Shutdown | `python tools/shutdown_check.py` | Each tier exits cleanly on a stop signal |
 | Gate | `powershell -File tools/gate/verify.ps1` | Build + all unit suites + E2E |
@@ -20,7 +21,8 @@ owns an asio timer, acceptor, or work guard.
 
 ## Socket-level tests
 
-`src/unit_tests/test_network_connection.cpp` and `test_game_connection.cpp` drive a real
+`src/tests/network_tests/test_network_connection.cpp` and
+`src/tests/game_protocol_tests/test_game_connection.cpp` drive a real
 `io_service` over loopback rather than mocking asio. That is deliberate: buffer growth, close
 ordering and strand dispatch are all properties of *how the connection drives asio*, and a mock
 would only assert that the code calls what the mock expects.
@@ -73,7 +75,7 @@ cmake -S . -B build-asan -DMMO_BUILD_CLIENT=OFF -DMMO_WITH_DEV_COMMANDS=ON -DMMO
 ```
 
 ```bash
-cmake --build build-asan --config Debug -t login_server_tests realm_server_tests game_server_unit_tests -- /m:4
+cmake --build build-asan --config Debug -t login_server_tests realm_server_tests game_server_tests -- /m:4
 ```
 
 Two traps:
@@ -112,7 +114,7 @@ can reorder against them; the failure looks like data that silently reverts, mos
 as a player's action bar resetting after a class switch.
 
 No E2E scenario covers action-bar persistence. The guard is `DatabasePoolPreservesOrderPerKey`
-in `src/unit_tests/test_database_pool.cpp`, which makes the first operation slow on purpose so a
+in `src/tests/base_tests/test_database_pool.cpp`, which makes the first operation slow on purpose so a
 reordering pool cannot pass it. That test was verified to fail against round-robin routing before
 being trusted.
 

@@ -1,0 +1,3 @@
+mmo_add_test(simple_file_format_tests
+	base
+	simple_file_format_hdrs)

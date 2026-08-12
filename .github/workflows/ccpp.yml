@@ -31,6 +31,9 @@ jobs:
     - name: make
       run: cd build && make
       
-    - name: unit tests
-      run: cd bin && ./unit_tests
+    # ctest runs every suite mmo_add_test() registered, so adding a test suite needs no
+    # edit here. This also starts running the server suites, which were built but never
+    # executed on Linux before.
+    - name: tests
+      run: cd build && ctest --output-on-failure
       

@@ -245,8 +245,7 @@ A custom MMO game engine and server ecosystem built in C++17, featuring distribu
 - `src/world_server/main.cpp` → `Program::run()` → world server
 - `src/mmo_client/` → client application (platform-specific: `win/`, `macos/`)
 - `src/mmo_edit/mmo_edit.cpp` → editor application
-- `src/unit_tests/main.cpp` → Catch2 test runner
-- `src/game_server_unit_tests/main.cpp` → Catch2 game server test runner
+- `src/tests/<library>_tests/` → Catch2 suite per library; `deps/catch/catch_main.cpp` supplies main()
 - `src/hpak_tool/` → archive packer tool
 - `src/nav_builder/` → navigation mesh builder tool
 - `src/update_compiler/` → update package compiler
