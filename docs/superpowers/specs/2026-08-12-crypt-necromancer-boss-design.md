@@ -95,7 +95,7 @@ Next free unit id is 81 (current max 80).
 | `damagePerLevel` | 1.2 | Matches Barrow-King Morthas |
 | `meleeattacktime` | 2000 | |
 | `regeneration` | 3 | Project default |
-| `rank` | elite | |
+| `rank` | *(not set)* | `UnitEntry.rank` is read nowhere in the engine — verified by grep across `game_server`, `game_client` and `mmo_client`. Setting it would be decoration; left unset until something consumes it |
 | `minlevelxp` / `maxlevelxp` | 520 / 520 | Scaled up from the 450 that both level-10 bosses give; confirm with `tools/xp_audit.py` |
 | `unitlootentries` | [28] | New loot table |
 | `triggers` | [29, 30, 31, 32, 33, 34, 35, 36] | See trigger table |
