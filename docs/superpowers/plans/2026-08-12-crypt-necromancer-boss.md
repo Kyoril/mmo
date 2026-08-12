@@ -6,7 +6,7 @@
 
 **Architecture:** Seven new spells, twelve new triggers, three new units, one loot table, and one map edit. Phase state lives in world-instance variables because `SetPhase` needs a combat script the boss deliberately does not have. Scripted moments are `Delay` chains on `OnAggro`/`OnHealthDroppedBelow`; recurring ones are `OnTimer` triggers.
 
-**Tech Stack:** Binary protobuf data under `data/editor/data/`, authored via the JSON draft → validate → apply scripts in `.claude/skills/mmo-{npc,spell}-designer/scripts/`. One new applier script for triggers and map encounters, which no existing tool can write. Lua E2E scenario under `e2e/scenarios/`.
+**Tech Stack:** Binary protobuf data under `data/editor/data/`, authored via the JSON draft → validate → apply scripts in `.agents/skills/mmo-{npc,spell}-designer/scripts/`. One new applier script for triggers and map encounters, which no existing tool can write. Lua E2E scenario under `e2e/scenarios/`.
 
 **Design spec:** [2026-08-12-crypt-necromancer-boss-design.md](../specs/2026-08-12-crypt-necromancer-boss-design.md). Read it before starting — it records the fourteen engine constraints this design is built around, each with a file:line source.
 
@@ -58,12 +58,12 @@ Scratch directory for JSON drafts: `generated/encounters/` (create it; it is a b
 No existing tool can write `triggers.data` on its own. `apply_quest_json.py` supports an `attached_triggers` list but hard-requires `doc["quest"]` (`apply_quest_json.py:85`), and nothing writes `MapEntry.encounters` or `instance_triggers` at all. This task adds that tool, with tests, before any data is authored.
 
 **Files:**
-- Create: `.claude/skills/mmo-npc-designer/scripts/apply_encounter_json.py`
+- Create: `.agents/skills/mmo-npc-designer/scripts/apply_encounter_json.py`
 - Create: `tools/tests/test_apply_encounter_json.py`
 
 **Interfaces:**
-- Consumes: `npc_catalog_lib.find_project_root`, `load_catalog_bundle`, `parse_message_dict` (all already exported by `.claude/skills/mmo-npc-designer/scripts/npc_catalog_lib.py`).
-- Produces: a CLI — `python .claude/skills/mmo-npc-designer/scripts/apply_encounter_json.py <path> --project-root H:/mmo [--backup] [--dry-run]`, and three module-level functions the test drives directly: `replace_or_append_by_id(container, message) -> str`, `apply_encounter(map_entry, encounter_message) -> str`, `apply_instance_triggers(map_entry, trigger_ids) -> str`.
+- Consumes: `npc_catalog_lib.find_project_root`, `load_catalog_bundle`, `parse_message_dict` (all already exported by `.agents/skills/mmo-npc-designer/scripts/npc_catalog_lib.py`).
+- Produces: a CLI — `python .agents/skills/mmo-npc-designer/scripts/apply_encounter_json.py <path> --project-root H:/mmo [--backup] [--dry-run]`, and three module-level functions the test drives directly: `replace_or_append_by_id(container, message) -> str`, `apply_encounter(map_entry, encounter_message) -> str`, `apply_instance_triggers(map_entry, trigger_ids) -> str`.
 
 Input document shape:
 
@@ -91,7 +91,7 @@ Create `tools/tests/test_apply_encounter_json.py`:
 #!/usr/bin/env python3
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-"""Tests for .claude/skills/mmo-npc-designer/scripts/apply_encounter_json.py.
+"""Tests for .agents/skills/mmo-npc-designer/scripts/apply_encounter_json.py.
 
 This applier is the only way trigger rows and map encounter slots reach the binary
 project data. Its failure modes are quiet: appending a duplicate id instead of updating
@@ -191,7 +191,7 @@ Expected: FAIL — `FileNotFoundError` or `ModuleNotFoundError` for `apply_encou
 
 - [ ] **Step 4: Write the applier**
 
-Create `.claude/skills/mmo-npc-designer/scripts/apply_encounter_json.py`:
+Create `.agents/skills/mmo-npc-designer/scripts/apply_encounter_json.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -330,7 +330,7 @@ Expected: PASS — `OK` with 7 tests run.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add .claude/skills/mmo-npc-designer/scripts/apply_encounter_json.py tools/tests/test_apply_encounter_json.py
+git add .agents/skills/mmo-npc-designer/scripts/apply_encounter_json.py tools/tests/test_apply_encounter_json.py
 git commit -m "feat(tools): add an applier for trigger rows and map encounter slots"
 ```
 
@@ -350,7 +350,7 @@ git commit -m "feat(tools): add an applier for trigger rows and map encounter sl
 - [ ] **Step 1: Confirm 236–242 are free**
 
 ```bash
-python .claude/skills/mmo-spell-designer/scripts/inspect_spell_catalog.py --project-root H:/mmo --section spells --limit 1000 | python -c "import sys,json; ids={s['id'] for s in json.load(sys.stdin)['spells']}; print('max', max(ids)); print('collisions', sorted(ids & set(range(236,243))))"
+python .agents/skills/mmo-spell-designer/scripts/inspect_spell_catalog.py --project-root H:/mmo --section spells --limit 1000 | python -c "import sys,json; ids={s['id'] for s in json.load(sys.stdin)['spells']}; print('max', max(ids)); print('collisions', sorted(ids & set(range(236,243))))"
 ```
 
 Expected: `max 235` and `collisions []`. If anything collides, stop and renumber consistently across this plan.
@@ -703,7 +703,7 @@ Expected: `max 235` and `collisions []`. If anything collides, stop and renumber
 - [ ] **Step 4: Validate all seven drafts**
 
 ```bash
-for f in generated/encounters/spell_2*.json; do echo "== $f"; python .claude/skills/mmo-spell-designer/scripts/validate_spell_json.py "$f" --project-root H:/mmo || exit 1; done
+for f in generated/encounters/spell_2*.json; do echo "== $f"; python .agents/skills/mmo-spell-designer/scripts/validate_spell_json.py "$f" --project-root H:/mmo || exit 1; done
 ```
 
 Expected: each prints `OK` (or validates with no `ERROR:` lines). Fix any reported error before continuing — do not apply a failing draft.
@@ -711,7 +711,7 @@ Expected: each prints `OK` (or validates with no `ERROR:` lines). Fix any report
 - [ ] **Step 5: Apply all seven**
 
 ```bash
-for f in generated/encounters/spell_2*.json; do python .claude/skills/mmo-spell-designer/scripts/apply_spell_json.py "$f" --project-root H:/mmo --backup || exit 1; done
+for f in generated/encounters/spell_2*.json; do python .agents/skills/mmo-spell-designer/scripts/apply_spell_json.py "$f" --project-root H:/mmo --backup || exit 1; done
 ```
 
 - [ ] **Step 6: Mirror to the client database**
@@ -725,7 +725,7 @@ cp data/editor/data/spells.data data/client/ClientDB/spells.data
 - [ ] **Step 7: Verify the applied spells read back**
 
 ```bash
-python .claude/skills/mmo-spell-designer/scripts/inspect_spell_catalog.py --project-root H:/mmo --spell-id 240 --pretty
+python .agents/skills/mmo-spell-designer/scripts/inspect_spell_catalog.py --project-root H:/mmo --spell-id 240 --pretty
 ```
 
 Expected: `Rite of Rising`, one effect of type 6 with `aura: 24` and `basepoints: -90`, `cost` absent or 0, `duration: 12000`.
@@ -760,7 +760,7 @@ Applied before the units, because `validate_npc_json.py:151-153` rejects a unit 
 ```bash
 python -c "
 import sys; from pathlib import Path
-sys.path.insert(0, '.claude/skills/mmo-npc-designer/scripts')
+sys.path.insert(0, '.agents/skills/mmo-npc-designer/scripts')
 from proto_runtime import load_modules
 m = load_modules(Path('H:/mmo'))
 t = m['triggers'].Triggers(); t.ParseFromString(Path('data/editor/data/triggers.data').read_bytes())
@@ -1041,7 +1041,7 @@ interval before weakening the husks.
 - [ ] **Step 3: Apply the triggers**
 
 ```bash
-python .claude/skills/mmo-npc-designer/scripts/apply_encounter_json.py generated/encounters/triggers_sevrin_wax.json --project-root H:/mmo --backup
+python .agents/skills/mmo-npc-designer/scripts/apply_encounter_json.py generated/encounters/triggers_sevrin_wax.json --project-root H:/mmo --backup
 ```
 
 Expected: twelve `OK: trigger NN: created` lines.
@@ -1051,7 +1051,7 @@ Expected: twelve `OK: trigger NN: created` lines.
 ```bash
 python -c "
 import sys; from pathlib import Path
-sys.path.insert(0, '.claude/skills/mmo-npc-designer/scripts')
+sys.path.insert(0, '.agents/skills/mmo-npc-designer/scripts')
 from proto_runtime import load_modules
 m = load_modules(Path('H:/mmo'))
 t = m['triggers'].Triggers(); t.ParseFromString(Path('data/editor/data/triggers.data').read_bytes())
@@ -1267,7 +1267,7 @@ Loot group 1 holds the four crypt blues at `dropchance: 0.0`. A group whose weig
 - [ ] **Step 4: Validate all three drafts**
 
 ```bash
-for f in generated/encounters/unit_8*.json; do echo "== $f"; python .claude/skills/mmo-npc-designer/scripts/validate_npc_json.py "$f" --project-root H:/mmo || exit 1; done
+for f in generated/encounters/unit_8*.json; do echo "== $f"; python .agents/skills/mmo-npc-designer/scripts/validate_npc_json.py "$f" --project-root H:/mmo || exit 1; done
 ```
 
 Expected: no `ERROR:` lines. If `unit.triggers contains unknown trigger NN` appears, Task 3 did not apply — go back and finish it.
@@ -1275,15 +1275,15 @@ Expected: no `ERROR:` lines. If `unit.triggers contains unknown trigger NN` appe
 - [ ] **Step 5: Apply all three (without spawns — Task 5 handles placement)**
 
 ```bash
-python .claude/skills/mmo-npc-designer/scripts/apply_npc_json.py generated/encounters/unit_82_wax_sealed_husk.json --project-root H:/mmo --backup
-python .claude/skills/mmo-npc-designer/scripts/apply_npc_json.py generated/encounters/unit_83_choirbound_acolyte.json --project-root H:/mmo --backup
-python .claude/skills/mmo-npc-designer/scripts/apply_npc_json.py generated/encounters/unit_81_sevrin_wax.json --project-root H:/mmo --backup
+python .agents/skills/mmo-npc-designer/scripts/apply_npc_json.py generated/encounters/unit_82_wax_sealed_husk.json --project-root H:/mmo --backup
+python .agents/skills/mmo-npc-designer/scripts/apply_npc_json.py generated/encounters/unit_83_choirbound_acolyte.json --project-root H:/mmo --backup
+python .agents/skills/mmo-npc-designer/scripts/apply_npc_json.py generated/encounters/unit_81_sevrin_wax.json --project-root H:/mmo --backup
 ```
 
 - [ ] **Step 6: Verify the computed stats match the spec**
 
 ```bash
-python .claude/skills/mmo-npc-designer/scripts/inspect_npc_catalog.py --project-root H:/mmo --unit-id 81 --pretty
+python .agents/skills/mmo-npc-designer/scripts/inspect_npc_catalog.py --project-root H:/mmo --unit-id 81 --pretty
 ```
 
 Expected: `Sevrin Wax, the Coffinwright`, faction template name `Undead Dungeon`, unit class name `Dungeon Boss`, `loot_entry_name` resolving to the new table, and the four creature spells plus Dodge.
@@ -1293,7 +1293,7 @@ Then confirm the derived health, which the spec predicts as 2670 / 390 / 237:
 ```bash
 python -c "
 import sys; from pathlib import Path
-sys.path.insert(0, '.claude/skills/mmo-npc-designer/scripts')
+sys.path.insert(0, '.agents/skills/mmo-npc-designer/scripts')
 from proto_runtime import load_modules
 m = load_modules(Path('H:/mmo'))
 D = Path('data/editor/data')
@@ -1321,7 +1321,7 @@ Expected: `81 ... HP 2670`, `82 ... HP 390`, `83 ... HP 237`. A mismatch means a
 ```bash
 python -c "
 import sys; from pathlib import Path
-sys.path.insert(0, '.claude/skills/mmo-npc-designer/scripts')
+sys.path.insert(0, '.agents/skills/mmo-npc-designer/scripts')
 from proto_runtime import load_modules
 m = load_modules(Path('H:/mmo'))
 l = m['unit_loot'].UnitLoot(); l.ParseFromString(Path('data/editor/data/unit_loot.data').read_bytes())
@@ -1374,7 +1374,7 @@ git -C data/editor commit -m "Add Sevrin Wax, his two add types, and his loot ta
 - [ ] **Step 2: Apply it**
 
 ```bash
-python .claude/skills/mmo-npc-designer/scripts/apply_encounter_json.py generated/encounters/map1_sevrin_wax.json --project-root H:/mmo --backup
+python .agents/skills/mmo-npc-designer/scripts/apply_encounter_json.py generated/encounters/map1_sevrin_wax.json --project-root H:/mmo --backup
 ```
 
 Expected: `OK: encounter 1 on map 1: created` and `OK: instance triggers on map 1: added 37`.
@@ -1413,8 +1413,8 @@ Both the legacy positional fields and `locations` are set: the proto marks `posi
 - [ ] **Step 4: Re-validate and apply with spawns**
 
 ```bash
-python .claude/skills/mmo-npc-designer/scripts/validate_npc_json.py generated/encounters/unit_81_sevrin_wax.json --project-root H:/mmo
-python .claude/skills/mmo-npc-designer/scripts/apply_npc_json.py generated/encounters/unit_81_sevrin_wax.json --project-root H:/mmo --apply-spawns --backup
+python .agents/skills/mmo-npc-designer/scripts/validate_npc_json.py generated/encounters/unit_81_sevrin_wax.json --project-root H:/mmo
+python .agents/skills/mmo-npc-designer/scripts/apply_npc_json.py generated/encounters/unit_81_sevrin_wax.json --project-root H:/mmo --apply-spawns --backup
 ```
 
 Expected: `spawn on map 1: created`.
@@ -1432,7 +1432,7 @@ cp data/editor/data/maps.data data/client/ClientDB/maps.data
 ```bash
 python -c "
 import sys; from pathlib import Path
-sys.path.insert(0, '.claude/skills/mmo-npc-designer/scripts')
+sys.path.insert(0, '.agents/skills/mmo-npc-designer/scripts')
 from proto_runtime import load_modules
 m = load_modules(Path('H:/mmo'))
 mm = m['maps'].Maps(); mm.ParseFromString(Path('data/editor/data/maps.data').read_bytes())
@@ -1699,3 +1699,16 @@ Run `/gate`. It runs the protocol check, a Debug build, the unit tests and the f
 **Every apply script takes `--backup`.** It writes `<file>.data.bak` beside the original. Several `.bak` files already exist in `data/editor/data/` from previous sessions; do not commit new ones.
 
 **If a step fails partway through a task**, the `.data` files are already partially written. Restore from the `.bak` file for that step, fix the draft, and re-apply — the appliers are id-keyed and idempotent, so re-running a corrected draft updates in place rather than duplicating.
+
+---
+
+## Correction log (found during execution)
+
+- **Skill script paths are `.agents/skills/…`, not `.claude/skills/…`.** `.gitignore:67`
+  ignores `.claude/*` with only four files force-tracked; the tracked home for these
+  scripts is `.agents/skills/`, which is also what the skill's own documentation uses.
+  The two trees are byte-identical mirrors on disk, so commands work from either path,
+  but only the `.agents/` copy is committed. All paths in this plan were rewritten.
+- **The Task 1 test code as originally written had a bug:** it called
+  `load_modules(REPO_ROOT)` with a `str`, but `load_modules` does `project_root / "src"`,
+  which raises `TypeError` on a string. Fixed by wrapping in `Path(...)`.
