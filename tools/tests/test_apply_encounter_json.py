@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-"""Tests for .claude/skills/mmo-npc-designer/scripts/apply_encounter_json.py.
+"""Tests for .agents/skills/mmo-npc-designer/scripts/apply_encounter_json.py.
+
+Note the path: .agents/ is the git-tracked home for these scripts. A .claude/skills/
+mirror also exists on some machines but is gitignored (.gitignore:67), so pointing this
+test at it would make the whole suite die on import in a fresh clone or a git worktree.
 
 This applier is the only way trigger rows and map encounter slots reach the binary
 project data. Its failure modes are quiet: appending a duplicate id instead of updating
@@ -29,7 +33,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SCRIPTS_DIR = os.path.join(REPO_ROOT, ".claude", "skills", "mmo-npc-designer", "scripts")
+SCRIPTS_DIR = os.path.join(REPO_ROOT, ".agents", "skills", "mmo-npc-designer", "scripts")
 MODULE_PATH = os.path.join(SCRIPTS_DIR, "apply_encounter_json.py")
 
 sys.path.insert(0, SCRIPTS_DIR)

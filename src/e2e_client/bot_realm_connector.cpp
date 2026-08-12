@@ -1604,9 +1604,16 @@ namespace mmo
 	PacketParseResult BotRealmConnector::OnCreatureMove(game::IncomingPacket& packet)
 	{
 		// Wire format written by unit_mover.cpp's WriteCreatureMove: guid, old position (unused
-		// here), start/end time (unused - no interpolation), a point count, the destination
-		// (always present when pointCount > 0), an optional facing, the movement mode, then
-		// any intermediate waypoints (skipped - we only care about where the unit ends up).
+		// here), start/end time (unused - no interpolation), a point count, the destination,
+		// an optional facing, the movement mode, then any intermediate waypoints (skipped - we
+		// only care about where the unit ends up).
+		//
+		// The destination is written unconditionally, and pointCount is path.size() - 1, so a
+		// single-point path arrives as pointCount == 0 *with* a destination. That is exactly
+		// what UnitMover::StopMovement sends to announce where a creature actually stopped
+		// after being interrupted mid-path, so returning early on pointCount == 0 would skip
+		// the one update that matters most and leave the cached position at a destination the
+		// creature never reached.
 		uint64 guid = 0;
 		float oldX = 0.0f, oldY = 0.0f, oldZ = 0.0f;
 		GameTime startTime = 0, endTime = 0;
@@ -1620,12 +1627,6 @@ namespace mmo
 		{
 			ELOG("Failed to parse CreatureMove header");
 			return PacketParseResult::Disconnect;
-		}
-
-		if (pointCount == 0)
-		{
-			// No destination was written (empty path) - nothing to update.
-			return PacketParseResult::Pass;
 		}
 
 		float destX = 0.0f, destY = 0.0f, destZ = 0.0f;

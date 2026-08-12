@@ -47,7 +47,9 @@ These were verified against the current code, not assumed. Each one shaped a dec
 | `texts_loc` is honoured by `Say`, `Yell`, `Emote` **and** `BroadcastMessage` | `trigger_handler.cpp:322,354,385,1669` | All player-facing encounter text is localizable |
 | `spells.data` exists in both `data/editor/data/` and `data/client/ClientDB/` | `data/client/ClientDB/project.txt` | New spells need a dual write or the client cannot render them |
 
-No wire format changes, so **no `ProtocolVersion` bump** is required.
+No wire format changes in the encounter data itself, so the data work needed no
+`ProtocolVersion` bump. The harness work added later did: see the outcome section at the
+end of this document, where a `CheatGodmode` opcode took the game protocol from 7 to 8.
 
 ## The room
 

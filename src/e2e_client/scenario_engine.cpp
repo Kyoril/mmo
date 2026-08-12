@@ -1051,7 +1051,7 @@ namespace mmo
 				luabind::def_lambda("GM_CreateObject", &luaGmCreateObject),
 				luabind::def_lambda("GM_CheckLoS", &luaGmCheckLoS),
 				luabind::def_lambda("GM_KillTarget", &luaGmKillTarget),
-			luabind::def_lambda("GM_Godmode", &luaGmGodmode),
+				luabind::def_lambda("GM_Godmode", &luaGmGodmode),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
 				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
