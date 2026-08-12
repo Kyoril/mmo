@@ -12,7 +12,12 @@
 
 ## Global Constraints
 
-- **Branch:** all work happens on `feature/crypt-necromancer-boss`. Never push to origin. Merge to `develop` only via `/gate` then `/ship`.
+- **Branch:** main-repo work happens on `feature/crypt-necromancer-boss`. Never push to origin. Merge to `develop` only via `/gate` then `/ship`.
+- **`data/editor` and `data/client` are separate git submodules**, not directories of this repo (`data/editor` → `mmo-editor-data`, `data/client` → `mmo-data`). Both sit on `master` and were clean at the start of this work. This has three consequences:
+  - Every data commit runs **inside** the submodule: `git -C data/editor commit …`, `git -C data/client commit …`. A `git add data/editor/...` from the main repo does not stage the file contents — at best it stages a pointer bump, which reviews as an opaque one-line `Subproject commit` change.
+  - **Stage only the exact files you touched.** Never `git add -A` or `git add .` in either submodule.
+  - The main repo's submodule pointers are bumped **once**, in Task 7, matching this repo's convention (`git log`: "Update data/client and data/editor submodule refs (…)"). Do not bump them per task.
+- **Review packages for data tasks are generated inside the submodule.** For Tasks 2–5 the controller runs `review-package` with the submodule as the working directory, because a main-repo diff would show nothing but a pointer.
 - **Project root is `H:\mmo`.** Pass `--project-root H:/mmo` (forward slashes) to every skill script. The skill docs say `F:\mmo` — that is wrong for this checkout, and backslashes fail to resolve in the Bash tool.
 - **Every new spell must be `cost: 0`.** Creature spell casts pay power cost (`single_cast_state.cpp:695-725`) and unit class 3 has a 50 mana pool.
 - **Every new spell must be `classmask: 0`** — these are creature abilities, not class spells.
@@ -728,8 +733,10 @@ Expected: `Rite of Rising`, one effect of type 6 with `aura: 24` and `basepoints
 - [ ] **Step 8: Commit**
 
 ```bash
-git add data/editor/data/spells.data data/client/ClientDB/spells.data
-git commit -m "feat(data): add the seven Sevrin Wax encounter spells"
+git -C data/editor add data/spells.data
+git -C data/editor commit -m "Add the seven Sevrin Wax encounter spells"
+git -C data/client add ClientDB/spells.data
+git -C data/client commit -m "Export Sevrin Wax encounter spells to ClientDB"
 ```
 
 ---
@@ -1061,8 +1068,8 @@ The `1002 = 0` on trigger 37 is what makes adds clean themselves up after a **wi
 - [ ] **Step 5: Commit**
 
 ```bash
-git add data/editor/data/triggers.data
-git commit -m "feat(data): add the Sevrin Wax encounter triggers"
+git -C data/editor add data/triggers.data
+git -C data/editor commit -m "Add the Sevrin Wax encounter triggers"
 ```
 
 ---
@@ -1330,8 +1337,8 @@ Expected: group 0 lists items 116–119 all at `0.0` (the equal-chance pool, so 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add data/editor/data/units.data data/editor/data/unit_loot.data
-git commit -m "feat(data): add Sevrin Wax, his two add types, and his loot table"
+git -C data/editor add data/units.data data/unit_loot.data
+git -C data/editor commit -m "Add Sevrin Wax, his two add types, and his loot table"
 ```
 
 ---
@@ -1444,8 +1451,10 @@ Expected: `encounters [(1, 'Sevrin Wax, the Coffinwright')]`, `instance_triggers
 - [ ] **Step 7: Commit**
 
 ```bash
-git add data/editor/data/maps.data data/client/ClientDB/maps.data
-git commit -m "feat(data): place Sevrin Wax in the crypt and register his encounter slot"
+git -C data/editor add data/maps.data
+git -C data/editor commit -m "Place Sevrin Wax in the crypt and register his encounter slot"
+git -C data/client add ClientDB/maps.data
+git -C data/client commit -m "Export map 1 encounter slot and boss spawn to ClientDB"
 ```
 
 ---
@@ -1649,7 +1658,26 @@ Launch the client and verify the four things data cannot assert. Record the outc
 3. **The Rite reads as a distinct moment** — the raid warning lands, he visibly stops, and the acolytes are findable in the aisles.
 4. **Fight length is reasonable** at 2670 HP. Adjust `eliteStatMultiplier` if not.
 
-- [ ] **Step 6: Update the spec status and commit**
+- [ ] **Step 6: Bump the data submodule pointers in the main repo**
+
+Tasks 2–5 committed inside the submodules; the main repo still points at the pre-encounter commits. Bump both now, in one commit, matching this repo's convention:
+
+```bash
+git -C data/editor log --oneline -1
+git -C data/client log --oneline -1
+git add data/editor data/client
+git commit -m "Update data submodule refs (Sevrin Wax crypt boss: spells, triggers, units, loot, spawn)"
+```
+
+Verify the pointers now match the submodule heads:
+
+```bash
+git submodule status data/editor data/client
+```
+
+Expected: both lines start with a space (in sync), not `+` (pointer differs from checkout).
+
+- [ ] **Step 7: Update the spec status and commit**
 
 Change the spec's `Status:` line from `approved design, not yet implemented` to `implemented` and note any tuning value that changed during the play pass.
 
@@ -1658,7 +1686,7 @@ git add docs/superpowers/specs/2026-08-12-crypt-necromancer-boss-design.md
 git commit -m "docs(spec): record the implemented Sevrin Wax tuning values"
 ```
 
-- [ ] **Step 7: Run the gate**
+- [ ] **Step 8: Run the gate**
 
 Run `/gate`. It runs the protocol check, a Debug build, the unit tests and the full E2E suite, then reviews the branch diff. Do not merge without a green, HEAD-matching report; `/ship` refuses otherwise.
 
