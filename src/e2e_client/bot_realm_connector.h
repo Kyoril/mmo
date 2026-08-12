@@ -408,6 +408,12 @@ namespace mmo
 		/// @brief Handles movement packets from other units.
 		PacketParseResult OnMovementPacket(game::IncomingPacket& packet);
 
+		/// @brief Handles AI-driven spline movement (CreatureMove) from NPCs. The bot does not
+		/// interpolate the spline - it jumps the tracked unit straight to the announced
+		/// destination so later position/facing queries (FaceUnit, GetPosX/Y/Z) reflect where a
+		/// moving creature ends up instead of staying frozen at its spawn position.
+		PacketParseResult OnCreatureMove(game::IncomingPacket& packet);
+
 		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
 		PacketParseResult OnLearnedSpell(game::IncomingPacket& packet);
 		PacketParseResult OnUnlearnedSpell(game::IncomingPacket& packet);
