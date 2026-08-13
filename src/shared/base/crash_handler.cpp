@@ -4,6 +4,8 @@
 
 #include "crash_report.h"
 
+#include "log/default_log_levels.h"
+
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -352,6 +354,7 @@ namespace mmo
 #	ifdef _WIN32
 		if (IsDebuggerPresent())
 		{
+			ILOG("Crash handler not installed: a debugger is attached and keeps first chance");
 			return;
 		}
 #	endif
@@ -371,5 +374,8 @@ namespace mmo
 		sigaction(SIGILL, &action, nullptr);
 		sigaction(SIGABRT, &action, nullptr);
 #endif
+
+		ILOG("Crash handler installed, reports will be written to "
+			<< std::filesystem::absolute(g_config.outputDirectory).string());
 	}
 }
