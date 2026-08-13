@@ -5,6 +5,8 @@
 #include <limits>
 
 #include "game_server/ai/creature_ai_combat_state.h"
+#include "game_server/ai/creature_spell_cooldown.h"
+#include "base/utilities.h"
 #include "game_server/world/world_instance.h"
 #include "game_server/ai/creature_ai.h"
 #include "game_server/ai/creature_combat_script.h"
@@ -1240,7 +1242,8 @@ namespace mmo
 				maxRange = controlled.GetMeleeReach() + 2.0f;
 			}
 			
-			m_availableSpells.emplace_back(spell, minRange, maxRange, spellEntry.priority());
+			m_availableSpells.emplace_back(spell, minRange, maxRange, spellEntry.priority(),
+				spellEntry.mincooldown(), spellEntry.maxcooldown());
 		}
 	}
 
@@ -1428,28 +1431,53 @@ namespace mmo
 		targetMap.SetUnitTarget(target.GetGuid());
 
 		const auto castResult = controlled.CastSpell(targetMap, *spellEntry, castTime);
+		const bool castOkay = (castResult == spell_cast_result::CastOkay);
 
-		if (castResult == spell_cast_result::CastOkay)
+		// The cooldown is applied whether or not the cast worked. A spell that fails validation
+		// used to leave its cooldown untouched, so it was immediately eligible again — and since
+		// nothing else paces a failed cast (no cast time elapses), the AI retried it as fast as
+		// the event loop allowed and burned a core. ResolveCreatureSpellCooldown enforces a floor
+		// on the failure path so this cannot happen again for any spell or any failure reason.
+		//
+		// This is also the first time the authored mincooldown/maxcooldown are honoured at all:
+		// they are set throughout units.data but were never read, leaving every creature ability
+		// paced only by its cast time.
 		{
 			const auto currentTime = GetAsyncTimeMs();
 
 			for (auto& creatureSpell : m_availableSpells)
 			{
-				if (creatureSpell.spell == spellEntry)
+				if (creatureSpell.spell != spellEntry)
 				{
-					creatureSpell.lastCastTime = currentTime;
-					creatureSpell.cooldownEnd = currentTime + cooldown;
-					break;
+					continue;
 				}
+
+				const auto cooldownRange = ResolveCreatureSpellCooldown(
+					creatureSpell.minCooldown, creatureSpell.maxCooldown, cooldown, !castOkay);
+
+				GameTime cooldownMs = cooldownRange.min;
+				if (cooldownRange.max > cooldownRange.min)
+				{
+					std::uniform_int_distribution<GameTime> distribution(cooldownRange.min, cooldownRange.max);
+					cooldownMs = distribution(randomGenerator);
+				}
+
+				creatureSpell.lastCastTime = currentTime;
+				creatureSpell.cooldownEnd = currentTime + cooldownMs;
+				creatureSpell.canCast = (cooldownMs == 0);
+				break;
 			}
 
-			if (castTime > 0)
+			if (castOkay && castTime > 0)
 			{
 				m_lastSpellCastTime = currentTime;
 				m_castingTimeoutEnd = currentTime + castTime + 1000;
 				controlled.StopAttack();
 			}
+		}
 
+		if (castOkay)
+		{
 			return true;
 		}
 

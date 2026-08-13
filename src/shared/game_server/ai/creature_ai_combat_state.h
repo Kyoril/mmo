@@ -65,14 +65,23 @@ namespace mmo
 			uint32 priority;
 			bool canCast;
 
+			/// `mincooldown` from the creature's spell entry, 0 when unspecified.
+			uint32 minCooldown;
+
+			/// `maxcooldown` from the creature's spell entry, 0 when unspecified.
+			uint32 maxCooldown;
+
 			/**
 			 * @brief Constructs a new creature spell entry.
 			 * @param spellEntry The spell entry.
 			 * @param minRange Minimum casting range.
 			 * @param maxRange Maximum casting range.
 			 * @param priority Spell priority (higher = more important).
+			 * @param minCooldown Lower bound of the authored cooldown, 0 if unspecified.
+			 * @param maxCooldown Upper bound of the authored cooldown, 0 if unspecified.
 			 */
-			explicit CreatureSpell(const proto::SpellEntry* spellEntry, float minRange = 0.0f, float maxRange = 30.0f, uint32 priority = 100)
+			explicit CreatureSpell(const proto::SpellEntry* spellEntry, float minRange = 0.0f, float maxRange = 30.0f, uint32 priority = 100,
+				uint32 minCooldown = 0, uint32 maxCooldown = 0)
 				: spell(spellEntry)
 				, lastCastTime(0)
 				, cooldownEnd(0)
@@ -80,6 +89,8 @@ namespace mmo
 				, maxRange(maxRange)
 				, priority(priority)
 				, canCast(true)
+				, minCooldown(minCooldown)
+				, maxCooldown(maxCooldown)
 			{
 			}
 		};
