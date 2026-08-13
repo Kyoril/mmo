@@ -83,6 +83,15 @@ namespace mmo
 		m_castState->StopCast(reason, interruptCooldown);
 	}
 
+	void SpellCast::AbandonCast()
+	{
+		ASSERT(m_castState);
+		m_castState->AbandonCast();
+
+		// Back to idle so nothing can reach the abandoned state through this cast any more.
+		m_castState = std::make_shared<NoCastState>();
+	}
+
 	void SpellCast::OnUserStartsMoving()
 	{
 		ASSERT(m_castState);

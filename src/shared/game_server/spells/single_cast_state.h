@@ -51,6 +51,8 @@ namespace mmo
 
 		void StopCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) override;
 
+		void AbandonCast() override;
+
 		void OnUserStartsMoving() override;
 
 		void FinishChanneling() override;

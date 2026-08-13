@@ -309,6 +309,29 @@ namespace mmo
 		m_cast.SetState(std::make_shared<NoCastState>());
 	}
 
+	void SingleCastState::AbandonCast()
+	{
+		// Releasing m_selfHold may drop the last reference to this state, so keep it alive until
+		// the method returns.
+		auto strongThis = shared_from_this();
+
+		m_hasFinished = true;
+
+		// Suppress any later NotifyCastEnded: the ended signal would run handlers belonging to a
+		// caster that is on its way out.
+		m_endNotified = true;
+
+		m_countdown.Cancel();
+		m_impactCountdown.Cancel();
+
+		// These are subscriptions to the *target*, owned by this state rather than by the caster,
+		// and they are what let an abandoned cast be reached again long after its caster died.
+		m_onTargetDied.disconnect();
+		m_onTargetRemoved.disconnect();
+
+		m_selfHold.reset();
+	}
+
 	void SingleCastState::OnUserStartsMoving()
 	{
 		if (m_hasFinished)
