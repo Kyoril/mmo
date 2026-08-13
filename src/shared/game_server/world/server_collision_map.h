@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace mmo
@@ -69,10 +70,13 @@ namespace mmo
 		/// io_service single threaded, so all mutation and all LoS queries happen on the same
 		/// thread. Revisit this if the world server ever goes multi threaded.
 		/// @param tree The local-space collision tree (shared, not copied).
-		/// @param transform The local → world transform of the instance.
+		/// @param transform The local → world transform of the instance. Must be invertible.
 		/// @param enabled Whether the instance initially blocks rays.
-		/// @return Handle for later removal/toggling, or 0 if the tree is null or empty.
-		uint64 AddDynamicInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, bool enabled);
+		/// @param debugName Name of the source asset, used in the log message when the instance is rejected.
+		/// @return Handle for later removal/toggling, or 0 if the tree is null or empty, or if the
+		///	        transform is not invertible.
+		uint64 AddDynamicInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, bool enabled,
+			const std::string& debugName = "<unnamed>");
 
 		/// @brief Like AddDynamicInstance but resolves the tree from a mesh file's COLL chunk.
 		/// Trees are cached per mesh path, so despawn/respawn cycles reuse them.
@@ -96,10 +100,21 @@ namespace mmo
 		void LoadWorldModelInstances(const std::string& hwmoPath,
 		                             const Matrix4& instanceTransform);
 
-		void AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform);
+		/// @return False when the instance was not registered, either because the tree is null or
+		///         empty or because MakeInstance rejected the transform.
+		bool AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName);
 
 		/// Builds a CollisionInstance (world bounds + inverse transform) from a tree and transform.
-		static CollisionInstance MakeInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform);
+		/// @param debugName Name of the source asset, used in the log message on rejection.
+		/// @param outInstance Receives the instance. Only written when this returns true.
+		/// @return False when the transform is not affine, not finite, or not invertible, in which
+		///         case the caller must not register the instance — see the implementation for why
+		///         a bad inverse is worse than a missing instance.
+		bool MakeInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform,
+			const std::string& debugName, CollisionInstance& outInstance);
+
+		/// Logs a rejected transform once per asset — see m_warnedTransforms.
+		void WarnRejectedTransform(const std::string& debugName, const char* reason);
 
 	private:
 		/// @brief A toggleable collision instance for spawned world objects (e.g. doors).
@@ -117,5 +132,10 @@ namespace mmo
 		/// Per-mesh-path tree cache for dynamic instances (static loading uses local caches).
 		/// Also caches load failures as nullptr so missing meshes aren't re-read from disk.
 		std::unordered_map<std::string, std::shared_ptr<AABBTree>> m_meshTreeCache;
+
+		/// Assets already warned about in MakeInstance. One bad brush stroke can place hundreds of
+		/// foliage instances of the same mesh, and every one of them would otherwise log — so each
+		/// offending asset is named once per map.
+		std::unordered_set<std::string> m_warnedTransforms;
 	};
 }

@@ -197,6 +197,70 @@ TEST_CASE("ServerCollisionMap - degenerate threshold is 1 cm and does not swallo
 	REQUIRE(hitPoint.z == Approx(0.0f).margin(0.001f));
 }
 
+TEST_CASE("ServerCollisionMap - degenerate transform is rejected instead of corrupting queries", "[server_collision_map]")
+{
+	// A zero component in the authored scale makes the transform singular, so its inverse
+	// would be filled with inf/NaN. Every ray transformed into that instance's local space
+	// would come out NaN, and NaN comparisons silently slip past the degeneracy guards —
+	// the instance would then block or not block at random. Such instances must never be
+	// registered in the first place.
+	ServerCollisionMap map;
+
+	// A well-formed wall well off the query line, so the queries below cannot take the
+	// "no instances at all" early-out and have to build a ray and walk the instance list.
+	Matrix4 offToTheSide;
+	offToTheSide.MakeTransform(Vector3(10.0f, 0.0f, 0.0f), Vector3::UnitScale, Quaternion::Identity);
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), offToTheSide, true) != 0);
+
+	Matrix4 flattenedZ;
+	flattenedZ.MakeTransform(Vector3::Zero, Vector3(1.0f, 1.0f, 0.0f), Quaternion::Identity);
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), flattenedZ, true) == 0);
+
+	Matrix4 flattenedX;
+	flattenedX.MakeTransform(Vector3::Zero, Vector3(0.0f, 1.0f, 1.0f), Quaternion(Degree(30), Vector3::UnitY));
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), flattenedX, true) == 0);
+
+	Matrix4 collapsed;
+	collapsed.MakeTransform(Vector3(1.0f, 2.0f, 3.0f), Vector3::Zero, Quaternion::Identity);
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), collapsed, true) == 0);
+
+	// None of the three was registered, so the traversal only sees the wall off to the side
+	// and answers normally instead of returning a NaN-poisoned verdict.
+	REQUIRE(map.LineOfSight(frontPos, backPos));
+
+	Vector3 hitPoint;
+	REQUIRE(map.LineOfSightEx(frontPos, backPos, hitPoint));
+	REQUIRE(hitPoint.x == Approx(backPos.x).margin(0.001f));
+	REQUIRE(hitPoint.y == Approx(backPos.y).margin(0.001f));
+	REQUIRE(hitPoint.z == Approx(backPos.z).margin(0.001f));
+
+	// A well-formed instance added afterwards still works — rejection is per instance.
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), Matrix4::Identity, true) != 0);
+	REQUIRE_FALSE(map.LineOfSight(frontPos, backPos));
+	REQUIRE_FALSE(map.LineOfSightEx(frontPos, backPos, hitPoint));
+	REQUIRE(hitPoint.z == Approx(0.0f).margin(0.001f));
+}
+
+TEST_CASE("ServerCollisionMap - tiny but invertible scales are still accepted", "[server_collision_map]")
+{
+	// The rejection above must key on invertibility, not on "small" — a legitimately
+	// shrunken prop still has to collide.
+	ServerCollisionMap map;
+
+	Matrix4 shrunk;
+	shrunk.MakeTransform(Vector3::Zero, Vector3(0.01f, 0.01f, 0.01f), Quaternion::Identity);
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), shrunk, true) != 0);
+
+	// The wall is now 2 cm across, so a ray through the origin still crosses it.
+	REQUIRE_FALSE(map.LineOfSight(frontPos, backPos));
+
+	// Four more orders of magnitude down the determinant is 1e-12, and still invertible.
+	// This pins the criterion against anyone later swapping it for a scale-magnitude epsilon.
+	Matrix4 minuscule;
+	minuscule.MakeTransform(Vector3::Zero, Vector3(0.0001f, 0.0001f, 0.0001f), Quaternion::Identity);
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), minuscule, true) != 0);
+}
+
 TEST_CASE("ServerCollisionMap - instances sharing one tree are independent", "[server_collision_map]")
 {
 	ServerCollisionMap map;

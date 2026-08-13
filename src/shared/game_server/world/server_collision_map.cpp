@@ -29,28 +29,71 @@ namespace mmo
 	// AddInstance — compute world AABB and inverse transform, then store.
 	// ---------------------------------------------------------------------------
 
-	CollisionInstance ServerCollisionMap::MakeInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform)
+	bool ServerCollisionMap::MakeInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform,
+		const std::string& debugName, CollisionInstance& outInstance)
 	{
-		CollisionInstance inst;
-		inst.tree        = std::move(tree);
-		inst.transform   = transform;
-		inst.invTransform = transform.InverseAffine();
+		// A transform with a zero component in its authored scale is singular, and InverseAffine
+		// divides by the determinant without a singularity check — so the inverse comes out full
+		// of inf/NaN. Every ray transformed into this instance's local space would then be NaN,
+		// and because NaN compares false against everything (including itself) it slips past both
+		// the degenerate-segment guards and Ray's own assert. The instance would block or pass
+		// rays at random, with no crash and no log line. Dropping it is the honest failure.
+		//
+		// The criterion is finiteness of the inverse, not the magnitude of the scale: a
+		// legitimately shrunken prop has a tiny determinant but a perfectly usable inverse, and
+		// must still collide. That leaves extreme non-uniform scales (one axis near zero while
+		// the others are astronomically large) as the one degenerate shape this accepts — no
+		// authoring path can produce them.
+		if (!transform.IsAffine() || !transform.IsFinite())
+		{
+			WarnRejectedTransform(debugName, "the transform is not affine or not finite");
+			return false;
+		}
+
+		const Matrix4 invTransform = transform.InverseAffine();
+		if (!invTransform.IsFinite())
+		{
+			WarnRejectedTransform(debugName, "the transform is not invertible (is a scale component zero?)");
+			return false;
+		}
+
+		outInstance.tree         = std::move(tree);
+		outInstance.transform    = transform;
+		outInstance.invTransform = invTransform;
 
 		// Compute world-space AABB by transforming the local AABB.
-		inst.worldBounds = inst.tree->GetBoundingBox();
-		inst.worldBounds.Transform(transform);
+		outInstance.worldBounds = outInstance.tree->GetBoundingBox();
+		outInstance.worldBounds.Transform(transform);
 
-		return inst;
+		return true;
 	}
 
-	void ServerCollisionMap::AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform)
+	void ServerCollisionMap::WarnRejectedTransform(const std::string& debugName, const char* reason)
 	{
-		if (!tree || tree->IsEmpty())
+		if (!m_warnedTransforms.insert(debugName).second)
 		{
 			return;
 		}
 
-		m_instances.push_back(MakeInstance(std::move(tree), transform));
+		WLOG("ServerCollisionMap: ignoring collision instances of '" << debugName << "' because "
+			<< reason << " — they would corrupt line of sight instead of blocking it");
+	}
+
+	bool ServerCollisionMap::AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName)
+	{
+		if (!tree || tree->IsEmpty())
+		{
+			return false;
+		}
+
+		CollisionInstance inst;
+		if (!MakeInstance(std::move(tree), transform, debugName, inst))
+		{
+			return false;
+		}
+
+		m_instances.push_back(std::move(inst));
+		return true;
 	}
 
 	// ---------------------------------------------------------------------------
@@ -59,7 +102,8 @@ namespace mmo
 	// (maxNetworkThreads = 0), so mutation and LoS queries never race.
 	// ---------------------------------------------------------------------------
 
-	uint64 ServerCollisionMap::AddDynamicInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const bool enabled)
+	uint64 ServerCollisionMap::AddDynamicInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const bool enabled,
+		const std::string& debugName)
 	{
 		if (!tree || tree->IsEmpty())
 		{
@@ -67,7 +111,11 @@ namespace mmo
 		}
 
 		DynamicInstance dyn;
-		dyn.instance = MakeInstance(std::move(tree), transform);
+		if (!MakeInstance(std::move(tree), transform, debugName, dyn.instance))
+		{
+			return 0;
+		}
+
 		dyn.enabled = enabled;
 
 		const uint64 handle = m_nextDynamicHandle++;
@@ -89,7 +137,7 @@ namespace mmo
 			return 0;
 		}
 
-		return AddDynamicInstance(it->second, transform, enabled);
+		return AddDynamicInstance(it->second, transform, enabled, meshPath);
 	}
 
 	void ServerCollisionMap::RemoveDynamicInstance(const uint64 handle)
@@ -267,7 +315,7 @@ namespace mmo
 								Vector3(sx, sy, sz),
 								Quaternion(rw, rx, ry, rz));
 
-							AddInstance(it->second, instanceTransform * meshRefTransform);
+							AddInstance(it->second, instanceTransform * meshRefTransform, meshPath);
 						}
 					}
 					else
@@ -360,8 +408,10 @@ namespace mmo
 					continue;
 				}
 
-				++meshWithCollision;
-				AddInstance(it->second, instanceTransform);
+				if (AddInstance(it->second, instanceTransform, placement.meshName))
+				{
+					++meshWithCollision;
+				}
 			}
 		}
 
@@ -418,8 +468,10 @@ namespace mmo
 				Matrix4 instanceTransform;
 				instanceTransform.MakeTransform(instance.position, instance.scale, instance.rotation);
 
-				++foliageWithCollision;
-				AddInstance(it->second, instanceTransform);
+				if (AddInstance(it->second, instanceTransform, instance.meshName))
+				{
+					++foliageWithCollision;
+				}
 			}
 		}
 
