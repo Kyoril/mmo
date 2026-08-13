@@ -79,7 +79,7 @@ namespace mmo
 			return NormalizeFacing(fallback);
 		}
 
-		return NormalizeFacing(Radian(std::atan2(-direction.z, direction.x)));
+		return NormalizeFacing(DirectionToFacing(direction));
 	}
 
 	float SmallestAngleDelta(const Radian& a, const Radian& b)
@@ -125,10 +125,7 @@ namespace mmo
 		}
 
 		const Radian normalizedFacing = NormalizeFacing(anchorFacing);
-		const Vector3 fallbackBehind(
-			-std::cos(normalizedFacing.GetValueRadians()),
-			0.0f,
-			std::sin(normalizedFacing.GetValueRadians()));
+		const Vector3 fallbackBehind = -FacingToDirection(normalizedFacing);
 		const Vector3 offsetDirection = SafeNormalizePlanar(
 			selfPosition - anchorPosition,
 			anchorHasFacing ? fallbackBehind : Vector3::UnitZ);

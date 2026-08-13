@@ -17,6 +17,49 @@ namespace mmo
 		return std::fabs(b - a) <= tolerance;
 	}
 
+	Vector3 FacingToDirection(const Radian& facing)
+	{
+		const float yaw = facing.GetValueRadians();
+
+		// Rotating +X around +Y by the yaw angle maps (1, 0, 0) to (cos, 0, -sin).
+		return Vector3(std::cos(yaw), 0.0f, -std::sin(yaw));
+	}
+
+	Radian DirectionToFacing(const float deltaX, const float deltaZ)
+	{
+		if (deltaX == 0.0f && deltaZ == 0.0f)
+		{
+			return Radian(0.0f);
+		}
+
+		return Radian(std::atan2(-deltaZ, deltaX));
+	}
+
+	Radian DirectionToFacing(const Vector3& direction)
+	{
+		return DirectionToFacing(direction.x, direction.z);
+	}
+
+	Radian NormalizeFacingPositive(const Radian& facing)
+	{
+		const float twoPi = 2.0f * Pi;
+
+		float value = std::fmod(facing.GetValueRadians(), twoPi);
+		if (value < 0.0f)
+		{
+			value += twoPi;
+
+			// A tiny negative input rounds up to exactly twoPi in single precision, which would
+			// escape the half open range this function promises.
+			if (value >= twoPi)
+			{
+				value = 0.0f;
+			}
+		}
+
+		return Radian(value);
+	}
+
 	Matrix4 MakeViewMatrix(const Vector3& position, const Quaternion& orientation)
 	{
 		// View matrix is:

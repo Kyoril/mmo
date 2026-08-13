@@ -17,6 +17,7 @@
 #include "math/vector3.h"
 #include "math/angle.h"
 #include "math/degree.h"
+#include "math/math_utils.h"
 
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
@@ -217,13 +218,8 @@ namespace mmo
 		Radian GetAngle(const float x, const float z) const
 		{
 			const auto& position = GetPosition();
-			const float dx = x - position.x;
-			const float dz = z - position.z;
 
-			float ang = ::atan2(-dz, dx);
-
-			ang = (ang >= 0) ? ang : 2 * Pi + ang;
-			return Radian(ang);
+			return NormalizeFacingPositive(DirectionToFacing(x - position.x, z - position.z));
 		}
 
 		/// Returns true if this object acts as a quest giver and provides the given quest.

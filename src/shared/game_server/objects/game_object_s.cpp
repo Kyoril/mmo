@@ -5,6 +5,7 @@
 
 #include "base/clock.h"
 #include "binary_io/vector_sink.h"
+#include "math/math_utils.h"
 
 #include <cmath>
 
@@ -178,11 +179,7 @@ namespace mmo
 
 	Vector3 GameObjectS::GetForwardVector() const
 	{
-		const float facing = GetFacing().GetValueRadians();
-		const float cosYaw = cos(facing);
-		const float sinYaw = sin(facing);
-
-		return Vector3(cosYaw, 0.0f, -sinYaw).NormalizedCopy();
+		return FacingToDirection(GetFacing());
 	}
 
 	bool GameObjectS::IsInArc(const GameObjectS& other, const Radian& arc) const

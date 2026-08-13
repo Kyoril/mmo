@@ -5,6 +5,7 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/scene_node.h"
 #include "game/object_type_id.h"
+#include "math/math_utils.h"
 
 #include <memory>
 
@@ -163,17 +164,7 @@ namespace mmo
 
 		[[nodiscard]] Radian GetAngle(const float fromX, const float fromZ, const float toX, const float toZ) const
 		{
-			const float dx = toX - fromX;
-			const float dz = toZ - fromZ;
-
-			float ang = ::atan2(-dz, dx);
-
-			if (ang < 0)
-			{
-				ang += 2 * Pi;
-			}
-
-			return Radian(ang);
+			return NormalizeFacingPositive(DirectionToFacing(toX - fromX, toZ - fromZ));
 		}
 
 		bool IsWithinRange(GameObjectC& other, float range) const;

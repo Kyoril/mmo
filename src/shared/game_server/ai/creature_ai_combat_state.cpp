@@ -1677,8 +1677,7 @@ namespace mmo
 		{
 			// Degenerate: we are virtually on top of the target. Fall back to our own facing so we
 			// pick a deterministic, stable direction instead of producing a NaN bearing.
-			const float facing = controlled.GetFacing().GetValueRadians();
-			bearing = Vector3(std::cos(facing), 0.0f, std::sin(facing));
+			bearing = FacingToDirection(controlled.GetFacing());
 		}
 
 		Vector3 formationPos;
