@@ -450,6 +450,18 @@ namespace mmo
 
 	namespace
 	{
+		/// Squared length below which a line of sight segment is considered degenerate.
+		/// Matches the threshold used by nav::Map::LineOfSightEx (1 cm).
+		constexpr float s_minLosSegmentLengthSq = 0.0001f;
+
+		/// A segment this short has no meaningful direction to normalize, and no geometry can
+		/// fit between its two ends — so the two points always see each other. Two units standing
+		/// on the exact same spot (e.g. an add summoned at its summoner's position) hit this.
+		bool isDegenerateSegment(const Vector3& from, const Vector3& to)
+		{
+			return (to - from).GetSquaredLength() < s_minLosSegmentLengthSq;
+		}
+
 		/// Tests a single collision instance for any intersection with the given world ray.
 		bool instanceBlocksRay(const CollisionInstance& inst, const Ray& worldRay, const Vector3& from, const Vector3& to)
 		{
@@ -522,6 +534,11 @@ namespace mmo
 			return true;
 		}
 
+		if (isDegenerateSegment(from, to))
+		{
+			return true;
+		}
+
 		const Ray worldRay(from, to);
 
 		for (const auto& inst : m_instances)
@@ -548,6 +565,11 @@ namespace mmo
 		hitPoint = to;
 
 		if (m_instances.empty() && m_dynamicInstances.empty())
+		{
+			return true;
+		}
+
+		if (isDegenerateSegment(from, to))
 		{
 			return true;
 		}

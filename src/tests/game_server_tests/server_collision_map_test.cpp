@@ -147,6 +147,56 @@ TEST_CASE("ServerCollisionMap - LineOfSightEx reports hit point on the wall plan
 	REQUIRE(clearHit.z == Approx(backPos.z).margin(0.001f));
 }
 
+TEST_CASE("ServerCollisionMap - identical positions are trivially in sight", "[server_collision_map]")
+{
+	ServerCollisionMap map;
+
+	// The wall is present so the query cannot take the "no instances" early-out and has to
+	// build a ray. Two units standing on the exact same spot can always see each other, and
+	// a zero-length ray has no direction to normalize.
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), Matrix4::Identity, true) != 0);
+
+	const Vector3 onTheWall(0.0f, 0.0f, 0.0f);
+	REQUIRE(map.LineOfSight(frontPos, frontPos));
+	REQUIRE(map.LineOfSight(onTheWall, onTheWall));
+
+	Vector3 hitPoint;
+	REQUIRE(map.LineOfSightEx(frontPos, frontPos, hitPoint));
+	REQUIRE(hitPoint.x == Approx(frontPos.x).margin(0.001f));
+	REQUIRE(hitPoint.y == Approx(frontPos.y).margin(0.001f));
+	REQUIRE(hitPoint.z == Approx(frontPos.z).margin(0.001f));
+
+	// Sub-millimeter separations are degenerate for the same reason.
+	REQUIRE(map.LineOfSight(frontPos, frontPos + Vector3(0.0f, 0.0f, 0.00001f)));
+	REQUIRE(map.LineOfSightEx(frontPos, frontPos + Vector3(0.00001f, 0.0f, 0.0f), hitPoint));
+}
+
+TEST_CASE("ServerCollisionMap - degenerate threshold is 1 cm and does not swallow real geometry", "[server_collision_map]")
+{
+	// Pins the threshold from both sides using segments that straddle the wall plane at z = 0.
+	// Without the upper case, shrinking the threshold to near-zero would go unnoticed; without
+	// the lower case, growing it to a meter would.
+	ServerCollisionMap map;
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), Matrix4::Identity, true) != 0);
+
+	// 9 mm apart, straddling the wall: below the threshold, so reported as in sight.
+	const Vector3 nearFront(0.0f, 0.0f, 0.0045f);
+	const Vector3 nearBack(0.0f, 0.0f, -0.0045f);
+	REQUIRE(map.LineOfSight(nearFront, nearBack));
+
+	Vector3 hitPoint;
+	REQUIRE(map.LineOfSightEx(nearFront, nearBack, hitPoint));
+	REQUIRE(hitPoint.z == Approx(nearBack.z).margin(0.0001f));
+
+	// 2 cm apart, straddling the same wall: above the threshold, so actually traced and blocked.
+	const Vector3 farFront(0.0f, 0.0f, 0.01f);
+	const Vector3 farBack(0.0f, 0.0f, -0.01f);
+	REQUIRE_FALSE(map.LineOfSight(farFront, farBack));
+
+	REQUIRE_FALSE(map.LineOfSightEx(farFront, farBack, hitPoint));
+	REQUIRE(hitPoint.z == Approx(0.0f).margin(0.001f));
+}
+
 TEST_CASE("ServerCollisionMap - instances sharing one tree are independent", "[server_collision_map]")
 {
 	ServerCollisionMap map;

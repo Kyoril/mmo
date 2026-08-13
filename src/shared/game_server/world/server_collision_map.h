@@ -53,11 +53,13 @@ namespace mmo
 		[[nodiscard]] bool IsLoaded() const { return !m_instances.empty(); }
 
 		/// @brief Returns true when the line from @p from to @p to is unobstructed.
-		/// Both points should already be at eye height.
+		/// Both points should already be at eye height. Points less than 1 cm apart are
+		/// degenerate and always report true — no geometry fits between them.
 		[[nodiscard]] bool LineOfSight(const Vector3& from, const Vector3& to) const;
 
 		/// @brief Like LineOfSight but also reports the closest obstruction position.
 		/// @param hitPoint Set to the first hit when returning false, otherwise equals @p to.
+		/// Degenerate queries (see LineOfSight) return true with @p hitPoint set to @p to.
 		[[nodiscard]] bool LineOfSightEx(const Vector3& from, const Vector3& to, Vector3& hitPoint) const;
 
 	public:
