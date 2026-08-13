@@ -455,7 +455,7 @@ namespace mmo
 		constexpr float s_minLosSegmentLengthSq = 0.0001f;
 
 		/// A segment this short has no meaningful direction to normalize, and no geometry can
-		/// fit between its two ends - so the two points always see each other. Two units standing
+		/// fit between its two ends — so the two points always see each other. Two units standing
 		/// on the exact same spot (e.g. an add summoned at its summoner's position) hit this.
 		bool isDegenerateSegment(const Vector3& from, const Vector3& to)
 		{
