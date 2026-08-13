@@ -166,6 +166,55 @@ TEST_CASE("GetIncomingDamageTakenMultiplier applies a positive ModDamageTakenPct
 	CHECK(victim->GetIncomingDamageTakenMultiplier(nullptr, spell_dmg_class::Melee) == Approx(1.5f));
 }
 
+// Regression guard for the call site in AuraEffect::HandlePeriodicDamage(): a DoT tick must
+// be mitigated by ModDamageTakenPct like every other damage source. Unlike an auto-attack
+// swing this is fully deterministic — periodic ticks involve no combat-table roll — so the
+// resulting health is an exact number.
+TEST_CASE("Periodic damage ticks are reduced by a ModDamageTakenPct aura", "[damage_taken]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto victim = MakeDamageTakenUnit(project, timers);
+	victim->Set<uint32>(object_fields::MaxHealth, 1000, false);
+	victim->Set<uint32>(object_fields::Health, 1000, false);
+
+	// Shield of Faith's shape: -50% damage taken, every damage class.
+	const proto::SpellEntry shield = MakeDamageTakenSpell(56, /*percent=*/-50, spell_dmg_class::None);
+	auto shieldContainer = ApplyDamageTakenAura(*victim, shield, /*casterId=*/victim->GetGuid());
+	REQUIRE(victim->HasAuraSpellFromCaster(56, victim->GetGuid()));
+
+	// A magic DoT dealing 100 per tick, with exactly one tick.
+	proto::SpellEntry dot;
+	dot.add_attributes(0);
+	dot.add_attributes(0);
+	dot.set_id(300);
+	dot.set_baseid(300);
+	dot.set_rank(1);
+	dot.set_dmgclass(spell_dmg_class::Magic);
+
+	auto* dotEffect = dot.add_effects();
+	dotEffect->set_type(spell_effects::ApplyAura);
+	dotEffect->set_aura(static_cast<uint32>(aura_type::PeriodicDamage));
+	dotEffect->set_basepoints(100);
+	dotEffect->set_amplitude(100);
+	dotEffect->set_targeta(spell_effect_targets::TargetEnemy);
+
+	auto dotContainer = std::make_shared<AuraContainer>(*victim, /*casterId=*/0, dot, /*duration=*/100, /*itemGuid=*/0);
+	dotContainer->AddAuraEffect(dot.effects(0), /*basePoints=*/100);
+	{
+		auto handle = dotContainer;
+		victim->ApplyAura(std::move(handle));
+	}
+
+	// Drive the timer queue until the tick has fired and the auras have expired.
+	io.run();
+
+	// 100 raw damage halved to 50 — not the unmitigated 100.
+	CHECK(victim->Get<uint32>(object_fields::Health) == 950u);
+}
+
 // Mark Weakness (spell 169) is a hostile-target aura, so it only applies to damage from the
 // unit that cast it. Every damage call site must therefore pass the real attacker: a caller
 // passing nullptr silently disables the aura instead of applying it.

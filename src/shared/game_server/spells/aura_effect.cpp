@@ -531,6 +531,18 @@ namespace mmo
 			damage = static_cast<int32>(static_cast<float>(damage) * caster->GetModifierValue(unit_mods::Damage, unit_mod_type::TotalPct));
 		}
 
+		// Apply the victim's incoming damage taken modifiers (ModDamageTakenPct auras), using the
+		// damage class of the spell that applied this aura. This has to happen before the log
+		// packet is built so the client's floating combat text matches the health it will see,
+		// and before the threat and proc values below are derived from the same number.
+		if (damage > 0)
+		{
+			damage = static_cast<int32>(static_cast<float>(damage) *
+				strongContainer->GetOwner().GetIncomingDamageTakenMultiplier(
+					strongContainer->GetCaster(),
+					static_cast<SpellDmgClass>(strongContainer->GetSpell().dmgclass())));
+		}
+
 		// Apply damage bonus from casters spell power
 
 		// Send event to all subscribers in sight

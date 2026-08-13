@@ -468,24 +468,39 @@ changes are Shield of Faith (spell 56, -20%, all damage classes) and Mark Weakne
 The outgoing side was never affected: `ModDamageDonePct` routes through `unit_mods::Damage`,
 which the legacy path already applied.
 
-### Known remaining gap — periodic damage
+### Periodic damage — fixed in the same pass
 
-`AuraEffect::HandlePeriodicDamage` (`aura_effect.cpp:558`) calls `Damage(...)` directly and
-is now the only damage source that ignores `ModDamageTakenPct`. A -90% Rite or a -20%
-Shield of Faith does nothing against a DoT tick. Closing it means scaling `damage` before
-the `PeriodicAuraLog` packet is built so the client's floating text matches, which is why it
-was left out of the auto-attack fix rather than bolted on. Recorded here so the aura's
-contract — "applies to every damage source except periodic ticks" — is written down rather
-than discovered.
+`AuraEffect::HandlePeriodicDamage` was the last damage source that ignored
+`ModDamageTakenPct`: a -90% Rite or a -20% Shield of Faith did nothing against a DoT tick.
+It now applies the multiplier using the DoT spell's own `dmgclass`, placed *before* the
+`PeriodicAuraLog` packet is built so the client's floating combat text matches the health
+the player actually loses, and before the threat and proc values are derived from the same
+number.
 
-### Known remaining gap — no regression test on the fixed call site
+With this and the auto-attack fix, every damage source honours the aura except the two that
+deliberately do not — environmental damage (`spell_effects.cpp:196`, a percentage of max HP)
+and fall damage (`world_server/player.cpp:2250`).
 
-`incoming_damage_taken_test.cpp` pins `GetIncomingDamageTakenMultiplier`'s contract
-(dmgclass filtering, the zero clamp, positive and negative percents) but not the call site:
-deleting the fix leaves all five tests green. A unit test is impractical because
-`RollMeleeOutcomeAgainst` draws from the header-static `randomGenerator`, but an E2E
-scenario is deterministic if the aura is -100%: every outcome — crit, glancing, crushing,
-normal — multiplies to zero, so "player health unchanged after N creature swings" holds
-regardless of the roll. That needs a -100% `ModDamageTakenPct` test spell the E2E character
-can be given; `melee_auto_attack.lua` and `self_buff_aura.lua` are the two halves of the
-pattern.
+### Damage sources and the taken-multiplier
+
+| Site | Applies `ModDamageTakenPct`? |
+|---|---|
+| `spell_effects.cpp:151` school damage | yes |
+| `spell_effects.cpp:1342` weapon auto-attack (spell path — all players) | yes |
+| `spell_effects.cpp:1471` weapon ability | yes |
+| `game_unit_s.cpp` legacy auto-attack (all creatures) | yes, as of this change |
+| `aura_effect.cpp` periodic / DoT tick | yes, as of this change |
+| `spell_effects.cpp:196` environmental | no — by design, % of max HP |
+| `world_server/player.cpp:2250` fall damage | no — by design |
+
+### Known remaining gap — no regression test on the auto-attack call site
+
+`incoming_damage_taken_test.cpp` covers the periodic call site directly (the test fails with
+900 instead of 950 if the fix is removed), but for the melee swing it only pins
+`GetIncomingDamageTakenMultiplier`'s contract — deleting the auto-attack fix leaves every
+test green. A unit test is impractical there because `RollMeleeOutcomeAgainst` draws from
+the header-static `randomGenerator`, but an E2E scenario is deterministic if the aura is
+-100%: every outcome — crit, glancing, crushing, normal — multiplies to zero, so "player
+health unchanged after N creature swings" holds regardless of the roll. That needs a -100%
+`ModDamageTakenPct` test spell the E2E character can be given; `melee_auto_attack.lua` and
+`self_buff_aura.lua` are the two halves of the pattern.
