@@ -8,6 +8,7 @@
 #include "base/macros.h"
 
 #include <utility>
+#include <cmath>
 #include <cstring>
 
 #include "matrix3.h"
@@ -497,6 +498,25 @@ namespace mmo
 		bool IsAffine() const
 		{
 			return m[3][0] == 0 && m[3][1] == 0 && m[3][2] == 0 && m[3][3] == 1;
+		}
+
+		/// @brief Returns true when every component is a finite number (neither NaN nor infinite).
+		///
+		/// Worth checking on anything derived from authored data or from a division: InverseAffine
+		/// and Inverse divide by the determinant without a singularity check, so a degenerate input
+		/// produces a matrix full of NaN. NaN compares false against every value including itself,
+		/// so it defeats equality guards downstream instead of tripping them.
+		bool IsFinite() const
+		{
+			for (size_t i = 0; i < 16; ++i)
+			{
+				if (!std::isfinite(_m[i]))
+				{
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		Matrix4 InverseAffine() const;

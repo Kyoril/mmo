@@ -29,28 +29,54 @@ namespace mmo
 	// AddInstance — compute world AABB and inverse transform, then store.
 	// ---------------------------------------------------------------------------
 
-	CollisionInstance ServerCollisionMap::MakeInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform)
+	bool ServerCollisionMap::MakeInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform,
+		const std::string& debugName, CollisionInstance& outInstance)
 	{
-		CollisionInstance inst;
-		inst.tree        = std::move(tree);
-		inst.transform   = transform;
-		inst.invTransform = transform.InverseAffine();
+		// A transform with a zero component in its authored scale is singular, and InverseAffine
+		// divides by the determinant without a singularity check — so the inverse comes out full
+		// of inf/NaN. Every ray transformed into this instance's local space would then be NaN,
+		// and because NaN compares false against everything (including itself) it slips past both
+		// the degenerate-segment guards and Ray's own assert. The instance would block or pass
+		// rays at random, with no crash and no log line. Dropping it is the honest failure.
+		if (!transform.IsAffine() || !transform.IsFinite())
+		{
+			WLOG("ServerCollisionMap: ignoring collision instance with a non-affine or non-finite transform: " << debugName);
+			return false;
+		}
+
+		const Matrix4 invTransform = transform.InverseAffine();
+		if (!invTransform.IsFinite())
+		{
+			WLOG("ServerCollisionMap: ignoring collision instance with a non-invertible transform "
+				"(is a scale component zero?): " << debugName);
+			return false;
+		}
+
+		outInstance.tree         = std::move(tree);
+		outInstance.transform    = transform;
+		outInstance.invTransform = invTransform;
 
 		// Compute world-space AABB by transforming the local AABB.
-		inst.worldBounds = inst.tree->GetBoundingBox();
-		inst.worldBounds.Transform(transform);
+		outInstance.worldBounds = outInstance.tree->GetBoundingBox();
+		outInstance.worldBounds.Transform(transform);
 
-		return inst;
+		return true;
 	}
 
-	void ServerCollisionMap::AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform)
+	void ServerCollisionMap::AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName)
 	{
 		if (!tree || tree->IsEmpty())
 		{
 			return;
 		}
 
-		m_instances.push_back(MakeInstance(std::move(tree), transform));
+		CollisionInstance inst;
+		if (!MakeInstance(std::move(tree), transform, debugName, inst))
+		{
+			return;
+		}
+
+		m_instances.push_back(std::move(inst));
 	}
 
 	// ---------------------------------------------------------------------------
@@ -59,7 +85,8 @@ namespace mmo
 	// (maxNetworkThreads = 0), so mutation and LoS queries never race.
 	// ---------------------------------------------------------------------------
 
-	uint64 ServerCollisionMap::AddDynamicInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const bool enabled)
+	uint64 ServerCollisionMap::AddDynamicInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const bool enabled,
+		const std::string& debugName)
 	{
 		if (!tree || tree->IsEmpty())
 		{
@@ -67,7 +94,11 @@ namespace mmo
 		}
 
 		DynamicInstance dyn;
-		dyn.instance = MakeInstance(std::move(tree), transform);
+		if (!MakeInstance(std::move(tree), transform, debugName, dyn.instance))
+		{
+			return 0;
+		}
+
 		dyn.enabled = enabled;
 
 		const uint64 handle = m_nextDynamicHandle++;
@@ -89,7 +120,7 @@ namespace mmo
 			return 0;
 		}
 
-		return AddDynamicInstance(it->second, transform, enabled);
+		return AddDynamicInstance(it->second, transform, enabled, meshPath);
 	}
 
 	void ServerCollisionMap::RemoveDynamicInstance(const uint64 handle)
@@ -267,7 +298,7 @@ namespace mmo
 								Vector3(sx, sy, sz),
 								Quaternion(rw, rx, ry, rz));
 
-							AddInstance(it->second, instanceTransform * meshRefTransform);
+							AddInstance(it->second, instanceTransform * meshRefTransform, meshPath);
 						}
 					}
 					else
@@ -361,7 +392,7 @@ namespace mmo
 				}
 
 				++meshWithCollision;
-				AddInstance(it->second, instanceTransform);
+				AddInstance(it->second, instanceTransform, placement.meshName);
 			}
 		}
 
@@ -419,7 +450,7 @@ namespace mmo
 				instanceTransform.MakeTransform(instance.position, instance.scale, instance.rotation);
 
 				++foliageWithCollision;
-				AddInstance(it->second, instanceTransform);
+				AddInstance(it->second, instanceTransform, instance.meshName);
 			}
 		}
 
