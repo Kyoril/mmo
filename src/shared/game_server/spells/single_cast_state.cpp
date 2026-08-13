@@ -58,7 +58,12 @@ namespace mmo
 
 		if (!Validate())
 		{
-			ELOG("Validation failed");
+			// Name the caster and the spell: a creature whose rotation keeps failing validation
+			// logs this on every cooldown, and a bare "Validation failed" gives no way to tell
+			// which unit or which spell is responsible.
+			auto& executer = m_cast.GetExecuter();
+			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
+				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
 			m_hasFinished = true;
 			NotifyCastEnded(false);
 			return;

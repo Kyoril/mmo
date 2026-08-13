@@ -30,6 +30,7 @@
 #include <mutex>
 #include <thread>
 
+#include "base/crash_handler.h"
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
 #include "network/shutdown_signals.h"
@@ -99,6 +100,28 @@ namespace mmo
 					printLogEntry(m_logFile, entry, logOptions);
 				});
 			}
+		}
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Crash handler
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		// Installed once the log file exists so the handler can flush it. Without that flush the tail
+		// of the log covering the crash is lost whenever log buffering is enabled, which is exactly
+		// the part needed to understand the crash.
+		{
+			CrashHandlerConfig crashConfig;
+			crashConfig.applicationName = "login_server";
+			crashConfig.outputDirectory = std::filesystem::path(config.logFileName).parent_path();
+			crashConfig.onCrash = [this](std::vector<std::string>& /*details*/)
+			{
+				if (m_logFile.is_open())
+				{
+					m_logFile.flush();
+				}
+			};
+
+			InstallCrashHandler(std::move(crashConfig));
 		}
 
 		// Display version infos
