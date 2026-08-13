@@ -438,6 +438,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveJump, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveFallLand, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnCreatureMove);
 
 		// Spell/state packets
 		RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &BotRealmConnector::OnInitialSpells);
@@ -460,7 +461,6 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnIgnoredPacket);
-		RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::CastFailed, *this, &BotRealmConnector::OnIgnoredPacket);
 
 		// Combat packet handlers
@@ -1601,6 +1601,94 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult BotRealmConnector::OnCreatureMove(game::IncomingPacket& packet)
+	{
+		// Wire format written by unit_mover.cpp's WriteCreatureMove: guid, old position (unused
+		// here), start/end time (unused - no interpolation), a point count, the destination,
+		// an optional facing, the movement mode, then any intermediate waypoints (skipped - we
+		// only care about where the unit ends up).
+		//
+		// The destination is written unconditionally, and pointCount is path.size() - 1, so a
+		// single-point path arrives as pointCount == 0 *with* a destination. That is exactly
+		// what UnitMover::StopMovement sends to announce where a creature actually stopped
+		// after being interrupted mid-path, so returning early on pointCount == 0 would skip
+		// the one update that matters most and leave the cached position at a destination the
+		// creature never reached.
+		uint64 guid = 0;
+		float oldX = 0.0f, oldY = 0.0f, oldZ = 0.0f;
+		GameTime startTime = 0, endTime = 0;
+		uint32 pointCount = 0;
+
+		if (!(packet
+			>> io::read_packed_guid(guid)
+			>> io::read<float>(oldX) >> io::read<float>(oldY) >> io::read<float>(oldZ)
+			>> io::read<GameTime>(startTime) >> io::read<GameTime>(endTime)
+			>> io::read<uint32>(pointCount)))
+		{
+			ELOG("Failed to parse CreatureMove header");
+			return PacketParseResult::Disconnect;
+		}
+
+		float destX = 0.0f, destY = 0.0f, destZ = 0.0f;
+		if (!(packet >> io::read<float>(destX) >> io::read<float>(destY) >> io::read<float>(destZ)))
+		{
+			ELOG("Failed to parse CreatureMove destination");
+			return PacketParseResult::Disconnect;
+		}
+
+		uint8 hasFacing = 0;
+		if (!(packet >> io::read<uint8>(hasFacing)))
+		{
+			ELOG("Failed to parse CreatureMove facing flag");
+			return PacketParseResult::Disconnect;
+		}
+
+		float facing = 0.0f;
+		if (hasFacing != 0 && !(packet >> io::read<float>(facing)))
+		{
+			ELOG("Failed to parse CreatureMove facing value");
+			return PacketParseResult::Disconnect;
+		}
+
+		uint8 movementMode = 0;
+		if (!(packet >> io::read<uint8>(movementMode)))
+		{
+			ELOG("Failed to parse CreatureMove movement mode");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Intermediate waypoints (pointCount - 1 of them, 3 floats each) are on the wire but not
+		// needed for a coarse "final destination" approximation - skip past them.
+		for (uint32 i = 0; i + 1 < pointCount; ++i)
+		{
+			float x = 0.0f, y = 0.0f, z = 0.0f;
+			if (!(packet >> io::read<float>(x) >> io::read<float>(y) >> io::read<float>(z)))
+			{
+				ELOG("Failed to parse CreatureMove intermediate waypoint");
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		BotUnit* unit = m_objectManager.GetUnitMutable(guid);
+		if (!unit)
+		{
+			// Unit not yet known - this can happen if movement arrives before spawn.
+			return PacketParseResult::Pass;
+		}
+
+		MovementInfo info = unit->GetMovementInfo();
+		info.position = Vector3(destX, destY, destZ);
+		if (hasFacing != 0)
+		{
+			info.facing = Radian(facing);
+		}
+		unit->SetMovementInfo(info);
+
+		UnitUpdated(*unit);
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult BotRealmConnector::OnInitialSpells(game::IncomingPacket& packet)
 	{
 		BotUnit* self = GetSelfMutable();
@@ -2166,6 +2254,15 @@ namespace mmo
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatKill);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatGodmode(const bool enable)
+	{
+		sendSinglePacket([enable](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatGodmode);
+			packet << io::write<uint8>(enable ? 1 : 0);
 			packet.Finish();
 			});
 	}

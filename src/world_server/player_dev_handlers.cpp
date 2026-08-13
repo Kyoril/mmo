@@ -643,6 +643,26 @@ namespace mmo
 #endif
 
 #if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatGodmode(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 enable = 0;
+		if (!(contentReader >> io::read<uint8>(enable)))
+		{
+			ELOG("Failed to read CheatGodmode packet!");
+			return;
+		}
+
+		if (!m_character)
+		{
+			return;
+		}
+
+		DLOG("GM godmode " << (enable ? "enabled" : "disabled") << " on character " << log_hex_digit(m_character->GetGuid()));
+		m_character->SetGodmode(enable != 0);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
 	void Player::OnCheatCheckLineOfSight(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 targetGuid = 0;
