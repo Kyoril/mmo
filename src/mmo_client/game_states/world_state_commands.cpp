@@ -479,5 +479,20 @@ namespace mmo
 	{
 		m_realmConnector.ReviveTarget();
 	}
+
+	void WorldState::Command_Godmode(const std::string &cmd, const std::string &args) const
+	{
+		// No argument toggles on, which is what you want when testing a long fight. An explicit
+		// "0"/"off"/"false" turns it back off so the same session can verify that damage resumes.
+		bool enable = true;
+		if (!args.empty())
+		{
+			const String value = args.substr(0, args.find_first_of(" \t"));
+			enable = !(value == "0" || value == "off" || value == "false");
+		}
+
+		m_realmConnector.CheatGodmode(enable);
+		ILOG("Godmode " << (enable ? "enabled" : "disabled"));
+	}
 #endif
 }
