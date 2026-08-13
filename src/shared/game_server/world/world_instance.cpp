@@ -652,7 +652,7 @@ namespace mmo
 		if (handle == 0)
 		{
 			WLOG("Door object " << log_hex_digit(object.GetGuid()) << " mesh '" << display->filename()
-				<< "' has no collision tree — the door will not block line of sight");
+				<< "' registered no collision — the door will not block line of sight");
 			return;
 		}
 

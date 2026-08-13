@@ -206,6 +206,12 @@ TEST_CASE("ServerCollisionMap - degenerate transform is rejected instead of corr
 	// registered in the first place.
 	ServerCollisionMap map;
 
+	// A well-formed wall well off the query line, so the queries below cannot take the
+	// "no instances at all" early-out and have to build a ray and walk the instance list.
+	Matrix4 offToTheSide;
+	offToTheSide.MakeTransform(Vector3(10.0f, 0.0f, 0.0f), Vector3::UnitScale, Quaternion::Identity);
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), offToTheSide, true) != 0);
+
 	Matrix4 flattenedZ;
 	flattenedZ.MakeTransform(Vector3::Zero, Vector3(1.0f, 1.0f, 0.0f), Quaternion::Identity);
 	REQUIRE(map.AddDynamicInstance(buildWallTree(), flattenedZ, true) == 0);
@@ -218,7 +224,8 @@ TEST_CASE("ServerCollisionMap - degenerate transform is rejected instead of corr
 	collapsed.MakeTransform(Vector3(1.0f, 2.0f, 3.0f), Vector3::Zero, Quaternion::Identity);
 	REQUIRE(map.AddDynamicInstance(buildWallTree(), collapsed, true) == 0);
 
-	// Nothing was registered, so line of sight queries answer normally.
+	// None of the three was registered, so the traversal only sees the wall off to the side
+	// and answers normally instead of returning a NaN-poisoned verdict.
 	REQUIRE(map.LineOfSight(frontPos, backPos));
 
 	Vector3 hitPoint;
@@ -246,6 +253,12 @@ TEST_CASE("ServerCollisionMap - tiny but invertible scales are still accepted", 
 
 	// The wall is now 2 cm across, so a ray through the origin still crosses it.
 	REQUIRE_FALSE(map.LineOfSight(frontPos, backPos));
+
+	// Four more orders of magnitude down the determinant is 1e-12, and still invertible.
+	// This pins the criterion against anyone later swapping it for a scale-magnitude epsilon.
+	Matrix4 minuscule;
+	minuscule.MakeTransform(Vector3::Zero, Vector3(0.0001f, 0.0001f, 0.0001f), Quaternion::Identity);
+	REQUIRE(map.AddDynamicInstance(buildWallTree(), minuscule, true) != 0);
 }
 
 TEST_CASE("ServerCollisionMap - instances sharing one tree are independent", "[server_collision_map]")

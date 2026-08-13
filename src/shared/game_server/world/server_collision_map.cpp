@@ -38,17 +38,22 @@ namespace mmo
 		// and because NaN compares false against everything (including itself) it slips past both
 		// the degenerate-segment guards and Ray's own assert. The instance would block or pass
 		// rays at random, with no crash and no log line. Dropping it is the honest failure.
+		//
+		// The criterion is finiteness of the inverse, not the magnitude of the scale: a
+		// legitimately shrunken prop has a tiny determinant but a perfectly usable inverse, and
+		// must still collide. That leaves extreme non-uniform scales (one axis near zero while
+		// the others are astronomically large) as the one degenerate shape this accepts — no
+		// authoring path can produce them.
 		if (!transform.IsAffine() || !transform.IsFinite())
 		{
-			WLOG("ServerCollisionMap: ignoring collision instance with a non-affine or non-finite transform: " << debugName);
+			WarnRejectedTransform(debugName, "the transform is not affine or not finite");
 			return false;
 		}
 
 		const Matrix4 invTransform = transform.InverseAffine();
 		if (!invTransform.IsFinite())
 		{
-			WLOG("ServerCollisionMap: ignoring collision instance with a non-invertible transform "
-				"(is a scale component zero?): " << debugName);
+			WarnRejectedTransform(debugName, "the transform is not invertible (is a scale component zero?)");
 			return false;
 		}
 
@@ -63,20 +68,32 @@ namespace mmo
 		return true;
 	}
 
-	void ServerCollisionMap::AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName)
+	void ServerCollisionMap::WarnRejectedTransform(const std::string& debugName, const char* reason)
+	{
+		if (!m_warnedTransforms.insert(debugName).second)
+		{
+			return;
+		}
+
+		WLOG("ServerCollisionMap: ignoring collision instances of '" << debugName << "' because "
+			<< reason << " — they would corrupt line of sight instead of blocking it");
+	}
+
+	bool ServerCollisionMap::AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName)
 	{
 		if (!tree || tree->IsEmpty())
 		{
-			return;
+			return false;
 		}
 
 		CollisionInstance inst;
 		if (!MakeInstance(std::move(tree), transform, debugName, inst))
 		{
-			return;
+			return false;
 		}
 
 		m_instances.push_back(std::move(inst));
+		return true;
 	}
 
 	// ---------------------------------------------------------------------------
@@ -391,8 +408,10 @@ namespace mmo
 					continue;
 				}
 
-				++meshWithCollision;
-				AddInstance(it->second, instanceTransform, placement.meshName);
+				if (AddInstance(it->second, instanceTransform, placement.meshName))
+				{
+					++meshWithCollision;
+				}
 			}
 		}
 
@@ -449,8 +468,10 @@ namespace mmo
 				Matrix4 instanceTransform;
 				instanceTransform.MakeTransform(instance.position, instance.scale, instance.rotation);
 
-				++foliageWithCollision;
-				AddInstance(it->second, instanceTransform, instance.meshName);
+				if (AddInstance(it->second, instanceTransform, instance.meshName))
+				{
+					++foliageWithCollision;
+				}
 			}
 		}
 
