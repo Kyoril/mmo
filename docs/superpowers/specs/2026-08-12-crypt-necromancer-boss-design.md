@@ -43,7 +43,7 @@ These were verified against the current code, not assumed. Each one shaped a dec
 | A trigger that aborts mid-chain never calls `NotifyTriggerEnded` | `trigger_handler.cpp:194-197` | `OnlyOneInstance` is not used on any abort-prone chain, or it would latch permanently |
 | `CreatureSpawner::SetState(false)` stops respawn but does not despawn live creatures | `creature_spawner.cpp:179-195` | Adds are summons with an explicit despawn path, not spawner-driven |
 | Summons outlive their summoner | `trigger_handler.cpp:1443-1460` | Cleanup is explicit: a `bossAlive` instance variable plus a self-despawn timer on each add |
-| `ModDamageTakenPct` clamps the multiplier at 0 | `game_unit_s.cpp:3584` | A -100 aura is safe, but -90 is chosen for failure tolerance (see Rite of Rising) |
+| `ModDamageTakenPct` clamps the multiplier at 0 | `GetIncomingDamageTakenMultiplier`, `game_unit_s.cpp:3594` | A -100 aura is safe, but -90 is chosen for failure tolerance (see Rite of Rising) |
 | `texts_loc` is honoured by `Say`, `Yell`, `Emote` **and** `BroadcastMessage` | `trigger_handler.cpp:322,354,385,1669` | All player-facing encounter text is localizable |
 | `spells.data` exists in both `data/editor/data/` and `data/client/ClientDB/` | `data/client/ClientDB/project.txt` | New spells need a dual write or the client cannot render them |
 
@@ -165,8 +165,8 @@ rather than shipped as written:
 ### Why Rite of Rising is -90% and not immunity
 
 A hard immunity (`DamageImmunity`, aura 35) is school-scoped, so it would not stop
-physical damage. `ModDamageTakenPct` at -100 would work and clamps safely at
-`game_unit_s.cpp:3584`, but -90 is chosen instead: it makes the channel a strong
+physical damage. `ModDamageTakenPct` at -100 would work and clamps safely at the end of
+`GetIncomingDamageTakenMultiplier` (`game_unit_s.cpp:3594`), but -90 is chosen instead: it makes the channel a strong
 incentive rather than a wall, and if `RemoveAura` were ever missed the boss would still
 be killable instead of soft-locking the instance. The aura's own 12s duration is a
 second safety net.
@@ -438,12 +438,78 @@ the 8s Rite reads as a distinct moment, that the husks arriving mid-nave looks r
 that the fight length feels reasonable at 2670 HP. Expect to hit the auto-attack defect
 above during any long fight.
 
-### A design consequence worth recording
+### An earlier note here was wrong — the Rite always did blunt player melee
 
-`ModDamageTakenPct` — the aura behind Rite of Rising — is applied only in
-`spell_effects.cpp`. Plain melee auto-attack calls `victim->Damage(...)` directly and
-**bypasses it**. So the Rite's 90% damage reduction applies to spells and weapon abilities
-but *not* to auto-attacks: against a melee attacker the channel is far less protective than
-this spec assumed. The fight still works, but if the Rite should blunt melee too, it needs
-`DamageImmunity` (which is checked inside `Damage()`, though it is school-scoped) or a fix
-to where the multiplier is applied.
+A previous revision of this section claimed `ModDamageTakenPct` was bypassed by melee
+auto-attacks, making the Rite less protective than designed. That is **not** true for
+players, and the encounter never had the problem.
+
+`GameUnitS::ExecuteAutoAttackSwing()` has two branches, chosen by `GetAutoAttackSpell()`:
+
+| Attacker | Source of the auto-attack spell | Branch |
+|---|---|---|
+| Player | `classes.data` → `mainhand_auto_attack_spell`; all five classes set **153** (`Attack`, a `WeaponDamage` effect) | spell path — applies the multiplier at `spell_effects.cpp:1335` |
+| Creature | `units.data` → `auto_attack_spell`; **0 of 78** units set it | legacy hardcoded fallback |
+
+Since every player class routes through spell 153, player swings have always gone through
+the spell path, where the multiplier is applied. Rite of Rising's -90% has been fully
+effective against melee players since it shipped. No phase-2 retune is needed and there is
+nothing to watch for in the manual play pass on this account.
+
+What *was* broken is the mirror case: the legacy fallback — which is what every creature in
+the game uses — called `victim->Damage(...)` without the multiplier, so `ModDamageTakenPct`
+auras on a *player* did nothing against mob auto-attacks. Fixed by applying
+`GetIncomingDamageTakenMultiplier(attacker, Melee)` after armor reduction and before
+absorption, matching the spell path line-for-line. The two shipped player-facing auras this
+changes are Shield of Faith (spell 56, -20%, all damage classes) and Mark Weakness
+(spell 169, +10%, `dmgclass = Melee`) — mob melee against a Shield of Faith target is now
+20% weaker than it was.
+
+The outgoing side was never affected: `ModDamageDonePct` routes through `unit_mods::Damage`,
+which the legacy path already applied.
+
+### Periodic damage — fixed in the same pass
+
+`AuraEffect::HandlePeriodicDamage` was the last damage source that ignored
+`ModDamageTakenPct`: a -90% Rite or a -20% Shield of Faith did nothing against a DoT tick.
+It now applies the multiplier using the DoT spell's own `dmgclass`, placed *before* the
+`PeriodicAuraLog` packet is built so the client's floating combat text matches the health
+the player actually loses, and before the threat and proc values are derived from the same
+number.
+
+With this and the auto-attack fix, every call site of `GameUnitS::Damage()` honours the aura
+except the two that deliberately do not — environmental damage (`spell_effects.cpp:196`, a
+percentage of max HP) and fall damage (`world_server/player.cpp:2250`).
+
+That is a narrower statement than "every way a unit can lose health", and the difference
+matters to anyone designing around a large reduction. Health can also be zeroed without
+going through `Damage()` at all, and none of these paths consult the aura, immunity, or
+godmode: the **`InstantKill` spell effect** (`spell_effects.cpp:89` → `Kill()`), health-cost
+spell casting (`single_cast_state.cpp:713`), the out-of-world kill
+(`game_player_s.cpp:3379`), the GM cheat kill (`player_dev_handlers.cpp:602`), and
+`SetHealthPercent` as used by combat scripts (`creature_combat_script.cpp:229-235`).
+`InstantKill` is the one to remember: a -100% Rite would not protect against it.
+
+### Damage sources and the taken-multiplier
+
+| Site | Applies `ModDamageTakenPct`? |
+|---|---|
+| `spell_effects.cpp:151` school damage | yes |
+| `spell_effects.cpp:1342` weapon auto-attack (spell path — all players) | yes |
+| `spell_effects.cpp:1471` weapon ability | yes |
+| `game_unit_s.cpp` legacy auto-attack (all creatures) | yes, as of this change |
+| `aura_effect.cpp` periodic / DoT tick | yes, as of this change |
+| `spell_effects.cpp:196` environmental | no — by design, % of max HP |
+| `world_server/player.cpp:2250` fall damage | no — by design |
+
+### Known remaining gap — no regression test on the auto-attack call site
+
+`incoming_damage_taken_test.cpp` covers the periodic call site directly (the test fails with
+900 instead of 950 if the fix is removed), but for the melee swing it only pins
+`GetIncomingDamageTakenMultiplier`'s contract — deleting the auto-attack fix leaves every
+test green. A unit test is impractical there because `RollMeleeOutcomeAgainst` draws from
+the header-static `randomGenerator`, but an E2E scenario is deterministic if the aura is
+-100%: every outcome — crit, glancing, crushing, normal — multiplies to zero, so "player
+health unchanged after N creature swings" holds regardless of the roll. That needs a -100%
+`ModDamageTakenPct` test spell the E2E character can be given; `melee_auto_attack.lua` and
+`self_buff_aura.lua` are the two halves of the pattern.

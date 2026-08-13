@@ -531,6 +531,23 @@ namespace mmo
 			damage = static_cast<int32>(static_cast<float>(damage) * caster->GetModifierValue(unit_mods::Damage, unit_mod_type::TotalPct));
 		}
 
+		// The caster modifiers above can drive the value negative, which would wrap when passed to
+		// Damage()'s uint32 parameter and read as an instant kill. HandlePeriodicHeal clamps for
+		// the same reason.
+		damage = std::max(damage, 0);
+
+		// Apply the victim's incoming damage taken modifiers (ModDamageTakenPct auras), using the
+		// damage class of the spell that applied this aura. This has to happen before the log
+		// packet is built so the client's floating combat text matches the health it will see,
+		// and before the threat and proc values below are derived from the same number.
+		if (damage > 0)
+		{
+			damage = static_cast<int32>(static_cast<float>(damage) *
+				strongContainer->GetOwner().GetIncomingDamageTakenMultiplier(
+					strongContainer->GetCaster(),
+					static_cast<SpellDmgClass>(strongContainer->GetSpell().dmgclass())));
+		}
+
 		// Apply damage bonus from casters spell power
 
 		// Send event to all subscribers in sight
@@ -563,7 +580,15 @@ namespace mmo
 				float threat = static_cast<float>(damage) * m_container.GetSpell().threat_multiplier();
 				m_container.GetCaster()->ApplySpellMod(spell_mod_op::Threat, m_container.GetSpellId(), threat);
 				strongContainer->GetOwner().threatened(*m_container.GetCaster(), threat);
-			}	
+			}
+		}
+		else if (m_container.GetCaster())
+		{
+			// A tick that landed for no health loss - fully mitigated by a ModDamageTakenPct aura,
+			// truncated to zero, or negated by immunity - must still put its caster on the victim's
+			// threat list, exactly as a swing that deals no damage does in ExecuteAutoAttackSwing().
+			// Without this a DoT could tick indefinitely while its caster stayed untargeted.
+			strongContainer->GetOwner().threatened(*m_container.GetCaster(), 0.0f);
 		}
 		
 		// Trigger proc events for periodic damage
