@@ -438,20 +438,54 @@ the 8s Rite reads as a distinct moment, that the husks arriving mid-nave looks r
 that the fight length feels reasonable at 2670 HP. Expect to hit the auto-attack defect
 above during any long fight.
 
-### A design consequence worth recording — resolved
+### An earlier note here was wrong — the Rite always did blunt player melee
 
-`ModDamageTakenPct` — the aura behind Rite of Rising — used to be applied only in
-`spell_effects.cpp`. `GameUnitS::ExecuteAutoAttackSwing()` has two branches: units with a
-configured auto-attack spell route through `CastSpell` and hence through the weapon damage
-effect, which *does* apply the multiplier; the legacy hardcoded fallback called
-`victim->Damage(...)` directly and **bypassed it**. Which branch a unit took depended only
-on whether an auto-attack spell was configured for it, so the two paths disagreed.
+A previous revision of this section claimed `ModDamageTakenPct` was bypassed by melee
+auto-attacks, making the Rite less protective than designed. That is **not** true for
+players, and the encounter never had the problem.
 
-Fixed: the legacy path now applies `GetIncomingDamageTakenMultiplier(attacker, Melee)`
-after armor reduction and before absorption, matching `spell_effects.cpp:1335`
-line-for-line. The Rite's 90% reduction now blunts auto-attacks as this spec originally
-assumed, which lengthens phase 2 for a melee group — worth watching in the manual play
-pass at 2670 HP.
+`GameUnitS::ExecuteAutoAttackSwing()` has two branches, chosen by `GetAutoAttackSpell()`:
+
+| Attacker | Source of the auto-attack spell | Branch |
+|---|---|---|
+| Player | `classes.data` → `mainhand_auto_attack_spell`; all five classes set **153** (`Attack`, a `WeaponDamage` effect) | spell path — applies the multiplier at `spell_effects.cpp:1335` |
+| Creature | `units.data` → `auto_attack_spell`; **0 of 78** units set it | legacy hardcoded fallback |
+
+Since every player class routes through spell 153, player swings have always gone through
+the spell path, where the multiplier is applied. Rite of Rising's -90% has been fully
+effective against melee players since it shipped. No phase-2 retune is needed and there is
+nothing to watch for in the manual play pass on this account.
+
+What *was* broken is the mirror case: the legacy fallback — which is what every creature in
+the game uses — called `victim->Damage(...)` without the multiplier, so `ModDamageTakenPct`
+auras on a *player* did nothing against mob auto-attacks. Fixed by applying
+`GetIncomingDamageTakenMultiplier(attacker, Melee)` after armor reduction and before
+absorption, matching the spell path line-for-line. The two shipped player-facing auras this
+changes are Shield of Faith (spell 56, -20%, all damage classes) and Mark Weakness
+(spell 169, +10%, `dmgclass = Melee`) — mob melee against a Shield of Faith target is now
+20% weaker than it was.
 
 The outgoing side was never affected: `ModDamageDonePct` routes through `unit_mods::Damage`,
 which the legacy path already applied.
+
+### Known remaining gap — periodic damage
+
+`AuraEffect::HandlePeriodicDamage` (`aura_effect.cpp:558`) calls `Damage(...)` directly and
+is now the only damage source that ignores `ModDamageTakenPct`. A -90% Rite or a -20%
+Shield of Faith does nothing against a DoT tick. Closing it means scaling `damage` before
+the `PeriodicAuraLog` packet is built so the client's floating text matches, which is why it
+was left out of the auto-attack fix rather than bolted on. Recorded here so the aura's
+contract — "applies to every damage source except periodic ticks" — is written down rather
+than discovered.
+
+### Known remaining gap — no regression test on the fixed call site
+
+`incoming_damage_taken_test.cpp` pins `GetIncomingDamageTakenMultiplier`'s contract
+(dmgclass filtering, the zero clamp, positive and negative percents) but not the call site:
+deleting the fix leaves all five tests green. A unit test is impractical because
+`RollMeleeOutcomeAgainst` draws from the header-static `randomGenerator`, but an E2E
+scenario is deterministic if the aura is -100%: every outcome — crit, glancing, crushing,
+normal — multiplies to zero, so "player health unchanged after N creature swings" holds
+regardless of the roll. That needs a -100% `ModDamageTakenPct` test spell the E2E character
+can be given; `melee_auto_attack.lua` and `self_buff_aura.lua` are the two halves of the
+pattern.

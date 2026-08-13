@@ -49,9 +49,12 @@ namespace
 		return unit;
 	}
 
-	/// Build a self-buff spell carrying a single ModDamageTakenPct effect, shaped like
-	/// Rite of Rising (spell 240): targets the caster, no damage class restriction.
-	proto::SpellEntry MakeDamageTakenSpell(uint32 id, int32 percent, uint32 dmgClass)
+	/// Build a spell carrying a single ModDamageTakenPct effect. Defaults to the shape of
+	/// Rite of Rising (spell 240): a self-buff on the caster with no damage class
+	/// restriction. Pass targetA = TargetEnemy for the Mark Weakness shape (spell 169),
+	/// which makes the aura caster-scoped via AuraContainer::IsHostileTargetAura().
+	proto::SpellEntry MakeDamageTakenSpell(uint32 id, int32 percent, uint32 dmgClass,
+		uint32 targetA = spell_effect_targets::Caster)
 	{
 		proto::SpellEntry spell;
 		spell.add_attributes(0);
@@ -65,12 +68,12 @@ namespace
 		effect->set_type(spell_effects::ApplyAura);
 		effect->set_aura(static_cast<uint32>(aura_type::ModDamageTakenPct));
 		effect->set_basepoints(percent);
-		effect->set_targeta(spell_effect_targets::Caster);
+		effect->set_targeta(targetA);
 		return spell;
 	}
 
 	/// Apply the spell's single aura effect to the unit and return the live container.
-	std::shared_ptr<AuraContainer> ApplyDamageTakenAura(GameUnitS& unit, TimerQueue& timers,
+	std::shared_ptr<AuraContainer> ApplyDamageTakenAura(GameUnitS& unit,
 		const proto::SpellEntry& spell, uint64 casterId)
 	{
 		auto container = std::make_shared<AuraContainer>(unit, casterId, spell, /*duration=*/12000, /*itemGuid=*/0);
@@ -108,7 +111,7 @@ TEST_CASE("GetIncomingDamageTakenMultiplier applies an unrestricted ModDamageTak
 
 	// -90% damage taken, no dmgclass set → applies to every damage class.
 	const proto::SpellEntry spell = MakeDamageTakenSpell(240, /*percent=*/-90, spell_dmg_class::None);
-	auto container = ApplyDamageTakenAura(*victim, timers, spell, /*casterId=*/victim->GetGuid());
+	auto container = ApplyDamageTakenAura(*victim, spell, /*casterId=*/victim->GetGuid());
 	REQUIRE(victim->HasAuraSpellFromCaster(240, victim->GetGuid()));
 
 	CHECK(victim->GetIncomingDamageTakenMultiplier(nullptr, spell_dmg_class::Melee) == Approx(0.1f));
@@ -125,7 +128,7 @@ TEST_CASE("GetIncomingDamageTakenMultiplier ignores a ModDamageTakenPct aura res
 
 	// dmgclass = Magic → the aura must not touch melee damage.
 	const proto::SpellEntry spell = MakeDamageTakenSpell(241, /*percent=*/-90, spell_dmg_class::Magic);
-	auto container = ApplyDamageTakenAura(*victim, timers, spell, /*casterId=*/victim->GetGuid());
+	auto container = ApplyDamageTakenAura(*victim, spell, /*casterId=*/victim->GetGuid());
 	REQUIRE(victim->HasAuraSpellFromCaster(241, victim->GetGuid()));
 
 	CHECK(victim->GetIncomingDamageTakenMultiplier(nullptr, spell_dmg_class::Melee) == Approx(1.0f));
@@ -142,7 +145,7 @@ TEST_CASE("GetIncomingDamageTakenMultiplier clamps at zero and never inverts dam
 
 	// A basepoints value beyond -100 must clamp to 0, not produce healing.
 	const proto::SpellEntry spell = MakeDamageTakenSpell(242, /*percent=*/-150, spell_dmg_class::None);
-	auto container = ApplyDamageTakenAura(*victim, timers, spell, /*casterId=*/victim->GetGuid());
+	auto container = ApplyDamageTakenAura(*victim, spell, /*casterId=*/victim->GetGuid());
 	REQUIRE(victim->HasAuraSpellFromCaster(242, victim->GetGuid()));
 
 	CHECK(victim->GetIncomingDamageTakenMultiplier(nullptr, spell_dmg_class::Melee) == Approx(0.0f));
@@ -157,8 +160,41 @@ TEST_CASE("GetIncomingDamageTakenMultiplier applies a positive ModDamageTakenPct
 	auto victim = MakeDamageTakenUnit(project, timers);
 
 	const proto::SpellEntry spell = MakeDamageTakenSpell(243, /*percent=*/+50, spell_dmg_class::None);
-	auto container = ApplyDamageTakenAura(*victim, timers, spell, /*casterId=*/victim->GetGuid());
+	auto container = ApplyDamageTakenAura(*victim, spell, /*casterId=*/victim->GetGuid());
 	REQUIRE(victim->HasAuraSpellFromCaster(243, victim->GetGuid()));
 
 	CHECK(victim->GetIncomingDamageTakenMultiplier(nullptr, spell_dmg_class::Melee) == Approx(1.5f));
+}
+
+// Mark Weakness (spell 169) is a hostile-target aura, so it only applies to damage from the
+// unit that cast it. Every damage call site must therefore pass the real attacker: a caller
+// passing nullptr silently disables the aura instead of applying it.
+TEST_CASE("GetIncomingDamageTakenMultiplier applies a hostile-target aura only to its own caster's damage", "[damage_taken]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto victim = MakeDamageTakenUnit(project, timers);
+	auto caster = MakeDamageTakenUnit(project, timers);
+	auto bystander = MakeDamageTakenUnit(project, timers);
+
+	// MakeDamageTakenUnit leaves the guid at 0, so give the two attackers distinct ones.
+	caster->Set<uint64>(object_fields::Guid, 0x10, false);
+	bystander->Set<uint64>(object_fields::Guid, 0x20, false);
+	REQUIRE(caster->GetGuid() != bystander->GetGuid());
+
+	// +10% melee damage taken, applied by an enemy — the Mark Weakness shape.
+	const proto::SpellEntry spell = MakeDamageTakenSpell(169, /*percent=*/+10, spell_dmg_class::Melee,
+		spell_effect_targets::TargetEnemy);
+	auto container = ApplyDamageTakenAura(*victim, spell, /*casterId=*/caster->GetGuid());
+	REQUIRE(victim->HasAuraSpellFromCaster(169, caster->GetGuid()));
+	REQUIRE(container->IsHostileTargetAura());
+
+	// The caster's own melee damage is amplified...
+	CHECK(victim->GetIncomingDamageTakenMultiplier(caster.get(), spell_dmg_class::Melee) == Approx(1.1f));
+
+	// ...but nobody else's is, and an unknown attacker must not benefit either.
+	CHECK(victim->GetIncomingDamageTakenMultiplier(bystander.get(), spell_dmg_class::Melee) == Approx(1.0f));
+	CHECK(victim->GetIncomingDamageTakenMultiplier(nullptr, spell_dmg_class::Melee) == Approx(1.0f));
 }
