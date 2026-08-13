@@ -7,11 +7,6 @@
 #include <algorithm>
 #include <cmath>
 
-namespace
-{
-	const float kTwoPi = mmo::Pi * 2.0f;
-}
-
 namespace mmo
 {
 	bool IsFiniteVector(const Vector3& value)
@@ -56,35 +51,20 @@ namespace mmo
 		return planar;
 	}
 
-	Radian NormalizeFacing(const Radian& facing)
-	{
-		float value = std::fmod(facing.GetValueRadians(), kTwoPi);
-		if (value <= -Pi)
-		{
-			value += kTwoPi;
-		}
-		else if (value > Pi)
-		{
-			value -= kTwoPi;
-		}
-
-		return Radian(value);
-	}
-
 	Radian ComputeFacingTo(const Vector3& from, const Vector3& to, const Radian& fallback)
 	{
 		const Vector3 direction = FlattenToGround(to - from);
 		if (direction.GetSquaredLength() <= 1e-6f)
 		{
-			return NormalizeFacing(fallback);
+			return NormalizeFacingSigned(fallback);
 		}
 
-		return NormalizeFacing(DirectionToFacing(direction));
+		return NormalizeFacingSigned(DirectionToFacing(direction));
 	}
 
 	float SmallestAngleDelta(const Radian& a, const Radian& b)
 	{
-		const float delta = NormalizeFacing(a - b).GetValueRadians();
+		const float delta = NormalizeFacingSigned(a - b).GetValueRadians();
 		return std::fabs(delta);
 	}
 
@@ -124,7 +104,7 @@ namespace mmo
 			return anchorPosition;
 		}
 
-		const Radian normalizedFacing = NormalizeFacing(anchorFacing);
+		const Radian normalizedFacing = NormalizeFacingSigned(anchorFacing);
 		const Vector3 fallbackBehind = -FacingToDirection(normalizedFacing);
 		const Vector3 offsetDirection = SafeNormalizePlanar(
 			selfPosition - anchorPosition,

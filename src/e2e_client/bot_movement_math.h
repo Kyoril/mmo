@@ -15,7 +15,8 @@ namespace mmo
 	[[nodiscard]] float PlanarDistanceSquared(const Vector3& a, const Vector3& b);
 	[[nodiscard]] float PlanarDistance(const Vector3& a, const Vector3& b);
 	[[nodiscard]] Vector3 SafeNormalizePlanar(const Vector3& value, const Vector3& fallback = Vector3::UnitZ);
-	[[nodiscard]] Radian NormalizeFacing(const Radian& facing);
+	// Facing normalization lives in math/math_utils.h as NormalizeFacingSigned, so the bot and
+	// the engine cannot disagree about what a facing means.
 	[[nodiscard]] Radian ComputeFacingTo(const Vector3& from, const Vector3& to, const Radian& fallback = Radian(0.0f));
 	[[nodiscard]] float SmallestAngleDelta(const Radian& a, const Radian& b);
 	[[nodiscard]] bool IsDegenerateSegment(const Vector3& start, const Vector3& end, float epsilon = 1e-3f);

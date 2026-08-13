@@ -56,6 +56,13 @@ namespace mmo
 	/// @return Equivalent facing angle in [0, 2 * Pi).
 	Radian NormalizeFacingPositive(const Radian& facing);
 
+	/// Wraps a facing angle into the (-Pi, Pi] range, which is the range DirectionToFacing
+	/// returns and the one to use when comparing two facings or taking an angular difference.
+	/// Exactly -Pi folds up to +Pi so a half turn has a single representation.
+	/// @param facing Facing angle to wrap.
+	/// @return Equivalent facing angle in (-Pi, Pi].
+	Radian NormalizeFacingSigned(const Radian& facing);
+
 	template<class T>
 	T Interpolate(T min, T max, float t)
 	{

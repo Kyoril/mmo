@@ -60,6 +60,24 @@ namespace mmo
 		return Radian(value);
 	}
 
+	Radian NormalizeFacingSigned(const Radian& facing)
+	{
+		const float twoPi = 2.0f * Pi;
+
+		// fmod lands in (-twoPi, twoPi), so a single correction is always enough.
+		float value = std::fmod(facing.GetValueRadians(), twoPi);
+		if (value <= -Pi)
+		{
+			value += twoPi;
+		}
+		else if (value > Pi)
+		{
+			value -= twoPi;
+		}
+
+		return Radian(value);
+	}
+
 	Matrix4 MakeViewMatrix(const Vector3& position, const Quaternion& orientation)
 	{
 		// View matrix is:

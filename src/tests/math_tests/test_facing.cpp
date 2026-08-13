@@ -116,6 +116,77 @@ TEST_CASE("NormalizedFacingStaysBelowTwoPiForTinyNegativeInputs", "[facing]")
 	}
 }
 
+// The signed variant is the range DirectionToFacing already returns, so it must be a no-op
+// on any value that came out of there.
+TEST_CASE("NormalizedSignedFacingWrapsIntoMinusPiToPi", "[facing]")
+{
+	CHECK(std::fabs(NormalizeFacingSigned(Radian(0.0f)).GetValueRadians() - 0.0f) <= facingTolerance);
+	CHECK(std::fabs(NormalizeFacingSigned(Radian(1.0f)).GetValueRadians() - 1.0f) <= facingTolerance);
+	CHECK(std::fabs(NormalizeFacingSigned(Radian(-1.0f)).GetValueRadians() + 1.0f) <= facingTolerance);
+
+	// Beyond half a turn the value must come back as the equivalent negative angle.
+	CHECK(std::fabs(NormalizeFacingSigned(Radian(Pi * 1.5f)).GetValueRadians() + Pi * 0.5f) <= facingTolerance);
+	CHECK(std::fabs(NormalizeFacingSigned(Radian(-Pi * 1.5f)).GetValueRadians() - Pi * 0.5f) <= facingTolerance);
+
+	// Multiple turns must collapse to the same place as a single one. Deliberately kept away
+	// from the +-Pi fold, where a sub-ulp difference in the input legitimately flips the sign
+	// of the answer.
+	CHECK(std::fabs(NormalizeFacingSigned(Radian(Pi * 4.0f + 1.0f)).GetValueRadians() - 1.0f) <= facingTolerance);
+	CHECK(std::fabs(NormalizeFacingSigned(Radian(-Pi * 4.0f - 1.0f)).GetValueRadians() + 1.0f) <= facingTolerance);
+}
+
+// The range is half open at the negative end: exactly -Pi is folded up to +Pi so that a half
+// turn has one canonical representation. This is the boundary the e2e bot's local copy chose,
+// and it must survive being moved into the shared helper.
+TEST_CASE("NormalizedSignedFacingFoldsNegativePiToPositivePi", "[facing]")
+{
+	CHECK(std::fabs(NormalizeFacingSigned(Radian(-Pi)).GetValueRadians() - Pi) <= facingTolerance);
+	CHECK(std::fabs(NormalizeFacingSigned(Radian(Pi)).GetValueRadians() - Pi) <= facingTolerance);
+
+	// A half turn reached after several revolutions is a knife edge: Pi * 3.0f is not exactly
+	// three half turns in float, so the result may legitimately come back as either -Pi or +Pi.
+	// What must hold is that it is still a half turn and still points the same way.
+	const float wrapped[] = { -Pi * 3.0f, Pi * 3.0f, Pi * 5.0f };
+	for (const float input : wrapped)
+	{
+		const Radian result = NormalizeFacingSigned(Radian(input));
+
+		CHECK(std::fabs(std::fabs(result.GetValueRadians()) - Pi) <= facingTolerance);
+		CheckVectorNearlyEqual(FacingToDirection(result), FacingToDirection(Radian(input)));
+	}
+}
+
+TEST_CASE("NormalizedSignedFacingIsIdempotentOnDirectionToFacingOutput", "[facing]")
+{
+	const float facings[] = { 0.0f, 0.7f, -0.7f, 2.5f, -2.5f, 3.0f, -3.0f };
+
+	for (const float facing : facings)
+	{
+		const Radian direct = DirectionToFacing(FacingToDirection(Radian(facing)));
+		const Radian normalized = NormalizeFacingSigned(direct);
+
+		CHECK(std::fabs(normalized.GetValueRadians() - direct.GetValueRadians()) <= facingTolerance);
+	}
+}
+
+// Both normalizers must name the same physical angle, just in different ranges.
+TEST_CASE("SignedAndPositiveFacingNormalizersAgreeModuloTwoPi", "[facing]")
+{
+	const float inputs[] = { 0.3f, -0.3f, 2.0f, -2.0f, 5.0f, -5.0f, 9.0f, -9.0f };
+
+	for (const float input : inputs)
+	{
+		const float signedValue = NormalizeFacingSigned(Radian(input)).GetValueRadians();
+		const float positiveValue = NormalizeFacingPositive(Radian(input)).GetValueRadians();
+
+		// The two directions they describe are what actually has to match.
+		const Vector3 fromSigned = FacingToDirection(Radian(signedValue));
+		const Vector3 fromPositive = FacingToDirection(Radian(positiveValue));
+
+		CheckVectorNearlyEqual(fromSigned, fromPositive);
+	}
+}
+
 TEST_CASE("DirectionToFacingReturnsZeroForZeroLengthInput", "[facing]")
 {
 	CHECK(DirectionToFacing(0.0f, 0.0f).GetValueRadians() == 0.0f);
