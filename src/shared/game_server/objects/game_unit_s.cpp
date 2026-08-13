@@ -892,6 +892,15 @@ namespace mmo
 
 	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS *instigator, DamageType damageType)
 	{
+		// Developer/test cheat: absorb everything without touching health, threat or procs.
+		// Placed at the top of Damage() deliberately: this is the single choke point every
+		// damage source funnels through (auto-attacks, periodic auras, spell effects), so one
+		// check here covers them all regardless of school or damage type.
+		if (m_godmode)
+		{
+			return 0;
+		}
+
 		uint32 health = Get<uint32>(object_fields::Health);
 		if (health < 1)
 		{

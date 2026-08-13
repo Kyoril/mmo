@@ -103,7 +103,10 @@ character first, so the kill grants real kill xp and quest kill credit),
 `GM.SetSpeed(multiplier)`, `GM.AcceptQuest(questId)` (no questgiver needed),
 `GM.TurnInQuest(questId [, rewardChoice])` (quest must be objective-complete; no
 quest ender needed), `GM.ClearInventory()` (destroys all backpack items, keeps
-equipment)
+equipment), `GM.Godmode(enable)` (toggles damage immunity on the GM character;
+school-agnostic, covers auto-attacks, periodic auras and spell effects alike —
+use to survive content the level-10 test character otherwise cannot, and disable
+it again before asserting anything about the fight's actual outcome)
 
 ### Gotchas
 

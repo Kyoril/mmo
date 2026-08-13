@@ -334,6 +334,9 @@ namespace mmo
 		/// GAME MASTER only. Instantly kills the selected unit.
 		void CheatKill();
 
+		/// GAME MASTER only. Toggles damage immunity on the sender's character.
+		void CheatGodmode(bool enable);
+
 		/// GAME MASTER only. Accepts the given quest without a questgiver interaction.
 		void CheatAcceptQuest(uint32 questId);
 
@@ -404,6 +407,12 @@ namespace mmo
 
 		/// @brief Handles movement packets from other units.
 		PacketParseResult OnMovementPacket(game::IncomingPacket& packet);
+
+		/// @brief Handles AI-driven spline movement (CreatureMove) from NPCs. The bot does not
+		/// interpolate the spline - it jumps the tracked unit straight to the announced
+		/// destination so later position/facing queries (FaceUnit, GetPosX/Y/Z) reflect where a
+		/// moving creature ends up instead of staying frozen at its spawn position.
+		PacketParseResult OnCreatureMove(game::IncomingPacket& packet);
 
 		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
 		PacketParseResult OnLearnedSpell(game::IncomingPacket& packet);

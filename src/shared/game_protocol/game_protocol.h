@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000007;
+		constexpr uint32 ProtocolVersion = 0x00000008;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -388,6 +388,11 @@ namespace mmo
 				/// Dev command: spawn a temporary world object (e.g. a door) at the player's position.
 				/// Payload: uint32 objectEntry, uint32 state. Requires MMO_WITH_DEV_COMMANDS.
 				CheatCreateObject,
+
+				/// GAME MASTER. Toggles damage immunity on the sender's character. Payload: uint8 (0/1).
+				/// Test-harness lever: the E2E client is capped at level 10 and cannot otherwise
+				/// survive dungeon-boss content long enough to exercise it.
+				CheatGodmode, // GAME MASTER
 
 				/// Counter constant
 				Count_,

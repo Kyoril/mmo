@@ -5,7 +5,7 @@ Two constants describe what a binary can say on the wire:
 | Constant | Defined in | Current |
 |---|---|---|
 | `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 5 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 7 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 8 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -114,6 +114,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 8 | 2026-08-12 | GM godmode cheat opcode for the E2E harness |
 | 7 | 2026-08-11 | Duplicate login prevention (`1c87e67d`) |
 | 6 | 2026-07-13 | Emote support (`e2b85c29`) |
 | 5 | 2026-05-28 | Disabled races and classes (`b797e170`) |

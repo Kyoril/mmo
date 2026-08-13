@@ -638,6 +638,15 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::CheatGodmode(bool enable)
+	{
+		sendSinglePacket([enable](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatGodmode);
+			packet << io::write<uint8>(enable ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::CastSpell(uint32 spellId, const SpellTargetMap& targetMap)
 	{
 		sendSinglePacket([spellId, &targetMap](game::OutgoingPacket& packet) {

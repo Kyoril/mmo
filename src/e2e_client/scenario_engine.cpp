@@ -908,6 +908,15 @@ namespace mmo
 			}
 		}
 
+		void luaGmGodmode(const bool enable)
+		{
+			g_runtime->session->GetRealm().CheatGodmode(enable);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action(enable ? "GM.Godmode(true)" : "GM.Godmode(false)");
+			}
+		}
+
 		void luaGmWorldPort(const uint32 mapId, const float x, const float y, const float z, const float facing)
 		{
 			E2eSession& session = *g_runtime->session;
@@ -1042,6 +1051,7 @@ namespace mmo
 				luabind::def_lambda("GM_CreateObject", &luaGmCreateObject),
 				luabind::def_lambda("GM_CheckLoS", &luaGmCheckLoS),
 				luabind::def_lambda("GM_KillTarget", &luaGmKillTarget),
+				luabind::def_lambda("GM_Godmode", &luaGmGodmode),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
 				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
@@ -1094,6 +1104,7 @@ namespace mmo
 				DestroyObject = GM_DestroyMonster,
 				CheckLoS = GM_CheckLoS,
 				KillTarget = GM_KillTarget,
+				Godmode = GM_Godmode,
 				Worldport = GM_WorldPort,
 				SetSpeed = GM_SetSpeed,
 				AcceptQuest = GM_AcceptQuest,

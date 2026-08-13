@@ -321,6 +321,10 @@ namespace mmo
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Revives a dead unit at its current position without teleporting to a bind point.
 		void ReviveTarget();
 
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Toggles damage immunity on the controlled character.
+		/// @param enable True to become immune to all incoming damage, false to restore normal damage.
+		void CheatGodmode(bool enable);
+
 		/// Sends a packet to the server to cast a specific spell. The controlled character must know the spell. This method can not be used to
 		///	cast spells from items. Instead, use the UseItem method for this instead.
 		///	@param spellId The id of the spell to cast.

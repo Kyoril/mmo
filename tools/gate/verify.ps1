@@ -118,6 +118,16 @@ try
 		$ok = Invoke-GateStep -Name "protocol_tests" -Exe "python" -Arguments @("tools/tests/test_protocol_version_check.py")
 	}
 
+	# Discovery rather than a list of filenames: a tool test that nobody runs rots silently,
+	# and the one thing worse than an untested tool is a tool with tests that stopped being
+	# true. This re-runs the protocol tests above as part of the sweep, which costs
+	# milliseconds and keeps the step free of exclusions. Named separately so a failure here
+	# does not read as the protocol checker itself being broken.
+	if ($ok)
+	{
+		$ok = Invoke-GateStep -Name "tool_tests" -Exe "python" -Arguments @("-m", "unittest", "discover", "-s", "tools/tests", "-p", "test_*.py")
+	}
+
 	if ($ok)
 	{
 		$ok = Invoke-GateStep -Name "build" -Exe "cmake" -Arguments (@("--build", "build", "--config", "Debug", "-t") + $Targets)
