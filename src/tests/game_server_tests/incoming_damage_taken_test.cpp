@@ -13,6 +13,7 @@
 #include "catch.hpp"
 
 #include <memory>
+#include <vector>
 
 using namespace mmo;
 
@@ -73,16 +74,58 @@ namespace
 	}
 
 	/// Apply the spell's single aura effect to the unit and return the live container.
+	///
+	/// `duration` matters for any test that drives the timer queue with io_service::run():
+	/// AuraContainer::SetApplied arms an expiration event immediately, and run() cannot return
+	/// until every queued event has fired. A 12s aura therefore costs 12s of real wall clock
+	/// even when the test only needs a 100ms tick, so such tests pass a short duration.
 	std::shared_ptr<AuraContainer> ApplyDamageTakenAura(GameUnitS& unit,
-		const proto::SpellEntry& spell, uint64 casterId)
+		const proto::SpellEntry& spell, uint64 casterId, GameTime duration = 12000)
 	{
-		auto container = std::make_shared<AuraContainer>(unit, casterId, spell, /*duration=*/12000, /*itemGuid=*/0);
+		auto container = std::make_shared<AuraContainer>(unit, casterId, spell, duration, /*itemGuid=*/0);
 		container->AddAuraEffect(spell.effects(0), spell.effects(0).basepoints());
 		{
 			auto handle = container;
 			unit.ApplyAura(std::move(handle));
 		}
 		return container;
+	}
+
+	/// Apply a magic DoT dealing `basePoints` in exactly one tick, then drive the timer queue
+	/// until it has fired. Deterministic: periodic ticks involve no combat-table roll, and the
+	/// tick fires either from its own countdown or from the container's expiry handler, never
+	/// twice (AuraEffect::OnTick guards on m_tickCount >= m_totalTicks).
+	void RunSingleMagicDotTick(asio::io_service& io, GameUnitS& victim, int32 basePoints = 100)
+	{
+		// AuraContainer stores the SpellEntry by reference, so the entry must outlive every
+		// container built from it. A function local would dangle the moment this helper returns,
+		// so the entries are kept alive for the lifetime of the test binary.
+		static std::vector<std::unique_ptr<proto::SpellEntry>> keepAlive;
+		keepAlive.push_back(std::make_unique<proto::SpellEntry>());
+		proto::SpellEntry& dot = *keepAlive.back();
+
+		dot.add_attributes(0);
+		dot.add_attributes(0);
+		dot.set_id(300);
+		dot.set_baseid(300);
+		dot.set_rank(1);
+		dot.set_dmgclass(spell_dmg_class::Magic);
+
+		auto* dotEffect = dot.add_effects();
+		dotEffect->set_type(spell_effects::ApplyAura);
+		dotEffect->set_aura(static_cast<uint32>(aura_type::PeriodicDamage));
+		dotEffect->set_basepoints(basePoints);
+		dotEffect->set_amplitude(100);
+		dotEffect->set_targeta(spell_effect_targets::TargetEnemy);
+
+		auto dotContainer = std::make_shared<AuraContainer>(victim, /*casterId=*/0, dot, /*duration=*/100, /*itemGuid=*/0);
+		dotContainer->AddAuraEffect(dot.effects(0), basePoints);
+		{
+			auto handle = dotContainer;
+			victim.ApplyAura(std::move(handle));
+		}
+
+		io.run();
 	}
 }
 
@@ -180,39 +223,60 @@ TEST_CASE("Periodic damage ticks are reduced by a ModDamageTakenPct aura", "[dam
 	victim->Set<uint32>(object_fields::MaxHealth, 1000, false);
 	victim->Set<uint32>(object_fields::Health, 1000, false);
 
-	// Shield of Faith's shape: -50% damage taken, every damage class.
+	// Shield of Faith's shape: -50% damage taken, every damage class. Kept just long enough to
+	// outlive the single tick below — see ApplyDamageTakenAura's note on io.run() and duration.
 	const proto::SpellEntry shield = MakeDamageTakenSpell(56, /*percent=*/-50, spell_dmg_class::None);
-	auto shieldContainer = ApplyDamageTakenAura(*victim, shield, /*casterId=*/victim->GetGuid());
+	auto shieldContainer = ApplyDamageTakenAura(*victim, shield, /*casterId=*/victim->GetGuid(), /*duration=*/300);
 	REQUIRE(victim->HasAuraSpellFromCaster(56, victim->GetGuid()));
 
-	// A magic DoT dealing 100 per tick, with exactly one tick.
-	proto::SpellEntry dot;
-	dot.add_attributes(0);
-	dot.add_attributes(0);
-	dot.set_id(300);
-	dot.set_baseid(300);
-	dot.set_rank(1);
-	dot.set_dmgclass(spell_dmg_class::Magic);
-
-	auto* dotEffect = dot.add_effects();
-	dotEffect->set_type(spell_effects::ApplyAura);
-	dotEffect->set_aura(static_cast<uint32>(aura_type::PeriodicDamage));
-	dotEffect->set_basepoints(100);
-	dotEffect->set_amplitude(100);
-	dotEffect->set_targeta(spell_effect_targets::TargetEnemy);
-
-	auto dotContainer = std::make_shared<AuraContainer>(*victim, /*casterId=*/0, dot, /*duration=*/100, /*itemGuid=*/0);
-	dotContainer->AddAuraEffect(dot.effects(0), /*basePoints=*/100);
-	{
-		auto handle = dotContainer;
-		victim->ApplyAura(std::move(handle));
-	}
-
-	// Drive the timer queue until the tick has fired and the auras have expired.
-	io.run();
+	RunSingleMagicDotTick(io, *victim);
 
 	// 100 raw damage halved to 50 — not the unmitigated 100.
 	CHECK(victim->Get<uint32>(object_fields::Health) == 950u);
+}
+
+// HandlePeriodicDamage passes the DoT spell's own dmgclass to GetIncomingDamageTakenMultiplier.
+// These two cases pin that: with a hardcoded class (or None) in the call, one of them breaks.
+TEST_CASE("Periodic damage honours a ModDamageTakenPct aura matching the DoT's damage class", "[damage_taken]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto victim = MakeDamageTakenUnit(project, timers);
+	victim->Set<uint32>(object_fields::MaxHealth, 1000, false);
+	victim->Set<uint32>(object_fields::Health, 1000, false);
+
+	// Aura restricted to Magic, DoT is Magic → applies.
+	const proto::SpellEntry shield = MakeDamageTakenSpell(57, /*percent=*/-50, spell_dmg_class::Magic);
+	ApplyDamageTakenAura(*victim, shield, /*casterId=*/victim->GetGuid(), /*duration=*/300);
+	REQUIRE(victim->HasAuraSpellFromCaster(57, victim->GetGuid()));
+
+	RunSingleMagicDotTick(io, *victim);
+
+	CHECK(victim->Get<uint32>(object_fields::Health) == 950u);
+}
+
+TEST_CASE("Periodic damage ignores a ModDamageTakenPct aura restricted to another damage class", "[damage_taken]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto victim = MakeDamageTakenUnit(project, timers);
+	victim->Set<uint32>(object_fields::MaxHealth, 1000, false);
+	victim->Set<uint32>(object_fields::Health, 1000, false);
+
+	// Mark Weakness's damage class: Melee. The DoT is Magic, so the aura must not touch it —
+	// this is what fails if the call site hardcodes Melee instead of reading the DoT's dmgclass.
+	const proto::SpellEntry mark = MakeDamageTakenSpell(169, /*percent=*/-50, spell_dmg_class::Melee);
+	ApplyDamageTakenAura(*victim, mark, /*casterId=*/victim->GetGuid(), /*duration=*/300);
+	REQUIRE(victim->HasAuraSpellFromCaster(169, victim->GetGuid()));
+
+	RunSingleMagicDotTick(io, *victim);
+
+	// Full 100 damage — the melee-scoped aura does not apply to a magic DoT.
+	CHECK(victim->Get<uint32>(object_fields::Health) == 900u);
 }
 
 // Mark Weakness (spell 169) is a hostile-target aura, so it only applies to damage from the

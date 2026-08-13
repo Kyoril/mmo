@@ -43,7 +43,7 @@ These were verified against the current code, not assumed. Each one shaped a dec
 | A trigger that aborts mid-chain never calls `NotifyTriggerEnded` | `trigger_handler.cpp:194-197` | `OnlyOneInstance` is not used on any abort-prone chain, or it would latch permanently |
 | `CreatureSpawner::SetState(false)` stops respawn but does not despawn live creatures | `creature_spawner.cpp:179-195` | Adds are summons with an explicit despawn path, not spawner-driven |
 | Summons outlive their summoner | `trigger_handler.cpp:1443-1460` | Cleanup is explicit: a `bossAlive` instance variable plus a self-despawn timer on each add |
-| `ModDamageTakenPct` clamps the multiplier at 0 | `game_unit_s.cpp:3584` | A -100 aura is safe, but -90 is chosen for failure tolerance (see Rite of Rising) |
+| `ModDamageTakenPct` clamps the multiplier at 0 | `GetIncomingDamageTakenMultiplier`, `game_unit_s.cpp:3594` | A -100 aura is safe, but -90 is chosen for failure tolerance (see Rite of Rising) |
 | `texts_loc` is honoured by `Say`, `Yell`, `Emote` **and** `BroadcastMessage` | `trigger_handler.cpp:322,354,385,1669` | All player-facing encounter text is localizable |
 | `spells.data` exists in both `data/editor/data/` and `data/client/ClientDB/` | `data/client/ClientDB/project.txt` | New spells need a dual write or the client cannot render them |
 
@@ -165,8 +165,8 @@ rather than shipped as written:
 ### Why Rite of Rising is -90% and not immunity
 
 A hard immunity (`DamageImmunity`, aura 35) is school-scoped, so it would not stop
-physical damage. `ModDamageTakenPct` at -100 would work and clamps safely at
-`game_unit_s.cpp:3584`, but -90 is chosen instead: it makes the channel a strong
+physical damage. `ModDamageTakenPct` at -100 would work and clamps safely at the end of
+`GetIncomingDamageTakenMultiplier` (`game_unit_s.cpp:3594`), but -90 is chosen instead: it makes the channel a strong
 incentive rather than a wall, and if `RemoveAura` were ever missed the boss would still
 be killable instead of soft-locking the instance. The aura's own 12s duration is a
 second safety net.
@@ -477,9 +477,18 @@ It now applies the multiplier using the DoT spell's own `dmgclass`, placed *befo
 the player actually loses, and before the threat and proc values are derived from the same
 number.
 
-With this and the auto-attack fix, every damage source honours the aura except the two that
-deliberately do not — environmental damage (`spell_effects.cpp:196`, a percentage of max HP)
-and fall damage (`world_server/player.cpp:2250`).
+With this and the auto-attack fix, every call site of `GameUnitS::Damage()` honours the aura
+except the two that deliberately do not — environmental damage (`spell_effects.cpp:196`, a
+percentage of max HP) and fall damage (`world_server/player.cpp:2250`).
+
+That is a narrower statement than "every way a unit can lose health", and the difference
+matters to anyone designing around a large reduction. Health can also be zeroed without
+going through `Damage()` at all, and none of these paths consult the aura, immunity, or
+godmode: the **`InstantKill` spell effect** (`spell_effects.cpp:89` → `Kill()`), health-cost
+spell casting (`single_cast_state.cpp:713`), the out-of-world kill
+(`game_player_s.cpp:3379`), the GM cheat kill (`player_dev_handlers.cpp:602`), and
+`SetHealthPercent` as used by combat scripts (`creature_combat_script.cpp:229-235`).
+`InstantKill` is the one to remember: a -100% Rite would not protect against it.
 
 ### Damage sources and the taken-multiplier
 
