@@ -1752,6 +1752,7 @@ namespace mmo
 		Console::UnregisterCommand("morph");
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
+		Console::UnregisterCommand("godmode");
 #endif
 
 		m_tradeClient.Shutdown();
