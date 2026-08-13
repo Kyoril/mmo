@@ -4,6 +4,7 @@
 
 #include "shared/client_data/proto_client/area_triggers.pb.h"
 #include "log/default_log_levels.h"
+#include "math/math_utils.h"
 
 #include <cmath>
 
@@ -101,15 +102,19 @@ namespace mmo
 		// Transform point to box local space
 		Vector3 localPoint = point - center;
 
-		// Apply inverse rotation if box is oriented
+		// Project onto the box axes if the box is oriented. The orientation is a facing, so the
+		// box local axes are FacingToDirection(orientation) and its perpendicular. Deriving them
+		// from the shared helper keeps this in step with the engine wide facing convention.
+		//
+		// NOTE: an identical copy of this lives in world_server/player.cpp. Both must agree or
+		// the client would predict trigger entry the server never confirms.
 		if (std::abs(orientation) > 1e-6f)
 		{
-			const float cosAngle = std::cos(-orientation);
-			const float sinAngle = std::sin(-orientation);
+			const Vector3 axisX = FacingToDirection(Radian(orientation));
+			const Vector3 axisZ(-axisX.z, 0.0f, axisX.x);
 
-			// Rotate around Y axis (assuming orientation is yaw)
-			const float rotatedX = localPoint.x * cosAngle - localPoint.z * sinAngle;
-			const float rotatedZ = localPoint.x * sinAngle + localPoint.z * cosAngle;
+			const float rotatedX = localPoint.x * axisX.x + localPoint.z * axisX.z;
+			const float rotatedZ = localPoint.x * axisZ.x + localPoint.z * axisZ.z;
 
 			localPoint.x = rotatedX;
 			localPoint.z = rotatedZ;

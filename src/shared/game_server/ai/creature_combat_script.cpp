@@ -425,7 +425,8 @@ namespace mmo
 		// "Behind" is defined as within a 90-degree cone behind the creature
 		// (135 to 225 degrees from facing direction)
 		constexpr float behindAngle = 3.14159f; // Pi = directly behind
-		constexpr float behindTolerance = 1.5708f; // Pi/2 = 90 degree cone
+		// Bounds the deviation from "directly behind" on both sides, so this is a 180 degree cone.
+		constexpr float behindTolerance = 1.5708f;
 
 		GameUnitS* bestBehind = nullptr;
 		float closestAngleDiff = behindTolerance;
@@ -438,9 +439,8 @@ namespace mmo
 			}
 
 			const auto& targetPos = target->GetPosition();
-			const float dx = targetPos.x - creaturePos.x;
-			const float dz = targetPos.z - creaturePos.z;
-			const float angleToTarget = std::atan2(dz, dx);
+			const float angleToTarget = DirectionToFacing(
+				targetPos.x - creaturePos.x, targetPos.z - creaturePos.z).GetValueRadians();
 
 			// Angle difference from "directly behind"
 			float angleDiff = std::abs(angleToTarget - creatureFacing - behindAngle);

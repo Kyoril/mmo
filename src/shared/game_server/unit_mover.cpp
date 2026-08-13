@@ -509,10 +509,8 @@ namespace mmo
 
 		// Update current location
 		auto currentLoc = GetCurrentLocation();
-		const float dx = m_target.x - currentLoc.x;
-		const float dy = m_target.z - currentLoc.z;
-		float o = ::atan2(dy, dx);
-		o = (o >= 0) ? o : 2 * 3.1415927f + o;
+		const Radian o = NormalizeFacingPositive(
+			DirectionToFacing(m_target.x - currentLoc.x, m_target.z - currentLoc.z));
 
 		// Cancel timers before relocate, in order to prevent stack overflow (because isMoving()
 		// simply checks if m_moveReached is running)
@@ -526,7 +524,7 @@ namespace mmo
 
 		// Update with grid notification
 		auto& moved = GetMoved();
-		moved.Relocate(currentLoc, Radian(o));
+		moved.Relocate(currentLoc, o);
 
 		// Send movement packet
 		TileIndex2D tile;
