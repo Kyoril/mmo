@@ -33,7 +33,12 @@ namespace mmo
 
 	public:
 		/// @brief Adds a collidable instance with the given world transform.
-		void AddInstance(const Matrix4& worldTransform);
+		/// @param worldTransform The local-to-world transform of the instance. Must be affine and
+		///        invertible; authored data with a zero scale component is not.
+		/// @return False when the instance was rejected because its transform cannot be inverted,
+		///         in which case it is not registered — see the implementation for why a NaN
+		///         inverse is worse than a missing instance.
+		bool AddInstance(const Matrix4& worldTransform);
 
 		/// @brief Recomputes the aggregate bounding box/radius after all instances were added.
 		void Finalize();
@@ -68,11 +73,16 @@ namespace mmo
 			AABB worldBounds;           ///< World-space AABB of the mesh bounds (broad-phase reject).
 		};
 
+		/// @brief Logs a one-off warning naming this proxy and why its instances were rejected.
+		void WarnRejectedTransform(const char* reason);
+
 		static String s_movableType;
 
 		MeshPtr m_mesh;
 		std::vector<Instance> m_instances;
 		AABB m_bounds;
 		float m_boundingRadius = 0.0f;
+		/// Set once the first instance was rejected, so one batch of bad data logs one line.
+		bool m_warnedRejectedTransform = false;
 	};
 }

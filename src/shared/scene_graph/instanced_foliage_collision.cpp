@@ -2,6 +2,7 @@
 
 #include "instanced_foliage_collision.h"
 
+#include "log/default_log_levels.h"
 #include "math/collision.h"
 #include "math/capsule.h"
 #include "math/ray.h"
@@ -25,11 +26,40 @@ namespace mmo
 		return s_movableType;
 	}
 
-	void InstancedFoliageCollision::AddInstance(const Matrix4& worldTransform)
+	bool InstancedFoliageCollision::AddInstance(const Matrix4& worldTransform)
 	{
+		// A zero component in the authored .hfol scale makes this transform singular, and neither
+		// inverse routine has a singularity check — the result comes out full of inf/NaN. Storing
+		// that is worse than dropping the instance: every ray transformed into the instance's local
+		// space becomes NaN, and because NaN compares false against everything (including itself)
+		// the instance quietly stops colliding instead of announcing the bad data. Dropping it is
+		// the honest failure, and it matches what the world server does with the same content.
+		//
+		// The criterion is finiteness of the inverse, not the magnitude of the scale: a legitimately
+		// shrunken prop has a tiny determinant but a perfectly usable inverse, and must still
+		// collide. That leaves extreme non-uniform scales (one axis near zero while the others are
+		// astronomically large) as the one degenerate shape this accepts — no authoring path can
+		// produce them.
+		if (!worldTransform.IsAffine() || !worldTransform.IsFinite())
+		{
+			WarnRejectedTransform("it is not affine or not finite");
+			return false;
+		}
+
+		// InverseAffine rather than Inverse: for an affine transform the two agree, but Inverse
+		// asserts on a zero determinant before it returns, so on the non-Windows client the assert
+		// would fire before the check below ever ran. Worse, that assert compares the determinant
+		// against zero with a FLT_EPSILON tolerance, which a valid 1/1000th-scale prop trips.
+		const Matrix4 invWorldTransform = worldTransform.InverseAffine();
+		if (!invWorldTransform.IsFinite())
+		{
+			WarnRejectedTransform("it is not invertible (is a scale component zero?)");
+			return false;
+		}
+
 		Instance instance;
 		instance.worldTransform = worldTransform;
-		instance.invWorldTransform = worldTransform.Inverse();
+		instance.invWorldTransform = invWorldTransform;
 
 		// Precompute a world-space AABB for cheap broad-phase rejection during queries.
 		AABB bounds = m_mesh ? m_mesh->GetBounds() : AABB();
@@ -37,6 +67,23 @@ namespace mmo
 		instance.worldBounds = bounds;
 
 		m_instances.emplace_back(instance);
+		return true;
+	}
+
+	void InstancedFoliageCollision::WarnRejectedTransform(const char* reason)
+	{
+		// A cell can hold hundreds of instances of one mesh, and bad authored data tends to affect
+		// all of them at once, so warn once per proxy. The object name carries both the mesh name
+		// and the cell coordinates, which is what an artist needs to find the offending placement.
+		if (m_warnedRejectedTransform)
+		{
+			return;
+		}
+
+		m_warnedRejectedTransform = true;
+
+		WLOG("InstancedFoliageCollision: ignoring foliage instances of '" << GetName() << "' because "
+			<< reason << " - they would corrupt collision queries instead of blocking them");
 	}
 
 	void InstancedFoliageCollision::Finalize()
