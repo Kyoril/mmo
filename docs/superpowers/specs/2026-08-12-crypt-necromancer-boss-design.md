@@ -438,12 +438,20 @@ the 8s Rite reads as a distinct moment, that the husks arriving mid-nave looks r
 that the fight length feels reasonable at 2670 HP. Expect to hit the auto-attack defect
 above during any long fight.
 
-### A design consequence worth recording
+### A design consequence worth recording — resolved
 
-`ModDamageTakenPct` — the aura behind Rite of Rising — is applied only in
-`spell_effects.cpp`. Plain melee auto-attack calls `victim->Damage(...)` directly and
-**bypasses it**. So the Rite's 90% damage reduction applies to spells and weapon abilities
-but *not* to auto-attacks: against a melee attacker the channel is far less protective than
-this spec assumed. The fight still works, but if the Rite should blunt melee too, it needs
-`DamageImmunity` (which is checked inside `Damage()`, though it is school-scoped) or a fix
-to where the multiplier is applied.
+`ModDamageTakenPct` — the aura behind Rite of Rising — used to be applied only in
+`spell_effects.cpp`. `GameUnitS::ExecuteAutoAttackSwing()` has two branches: units with a
+configured auto-attack spell route through `CastSpell` and hence through the weapon damage
+effect, which *does* apply the multiplier; the legacy hardcoded fallback called
+`victim->Damage(...)` directly and **bypassed it**. Which branch a unit took depended only
+on whether an auto-attack spell was configured for it, so the two paths disagreed.
+
+Fixed: the legacy path now applies `GetIncomingDamageTakenMultiplier(attacker, Melee)`
+after armor reduction and before absorption, matching `spell_effects.cpp:1335`
+line-for-line. The Rite's 90% reduction now blunts auto-attacks as this spec originally
+assumed, which lengthens phase 2 for a melee group — worth watching in the manual play
+pass at 2670 HP.
+
+The outgoing side was never affected: `ModDamageDonePct` routes through `unit_mods::Damage`,
+which the legacy path already applied.

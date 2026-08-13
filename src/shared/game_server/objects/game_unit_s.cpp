@@ -3928,6 +3928,15 @@ namespace mmo
 			totalDamage = victim->CalculateArmorReducedDamage(GetLevel(), totalDamage);
 		}
 
+		// Apply incoming damage taken modifiers (ModDamageTakenPct auras). This mirrors the
+		// weapon damage spell effect so that both auto-attack paths — the configured
+		// auto-attack spell above and this legacy fallback — treat such auras identically.
+		if (hit && totalDamage > 0)
+		{
+			totalDamage = static_cast<uint32>(static_cast<float>(totalDamage) *
+				victim->GetIncomingDamageTakenMultiplier(this, spell_dmg_class::Melee));
+		}
+
 		// Apply damage absorb effects
 		uint32 absorbedDamage = 0;
 		// TODO: Implement damage absorption from auras
