@@ -807,6 +807,13 @@ namespace mmo
 	 */
 	void CreatureAICombatState::ChooseNextAction()
 	{
+		// Several calls below can re-enter this state and end combat, and CreatureAI::SetState
+		// destroys the outgoing state synchronously — m_state is its only owner. Without this
+		// hold the rest of the frame, including m_nextActionCountdown, runs on freed memory.
+		// Keeping a reference makes the object outlive the frame; IsActive() (cleared by
+		// CreatureAIState::OnLeave) is what tells us we have been detached and must stop.
+		const auto selfHold = shared_from_this();
+
 		GameCreatureS& controlled = GetControlled();
 
 		// If we're currently casting a spell, wait for it to complete
@@ -864,6 +871,13 @@ namespace mmo
 
 			// Script returned false — fall through to default AI below.
 			// UpdateVictim is needed for the default AI path.
+
+			// A script action may have ended combat, which detaches this state. Anything below
+			// would be operating on a state the AI no longer owns.
+			if (!IsActive())
+			{
+				return;
+			}
 		}
 
 		// Fear suppression: CC controller drives movement; suppress all attacks.
@@ -899,6 +913,16 @@ namespace mmo
 
 		// Determine our current victim (also starts auto-attack on new targets)
 		UpdateVictim();
+
+		// UpdateVictim drops a victim it can no longer see (stealth, invisibility) through
+		// RemoveThreat, and RemoveThreat re-enters ChooseNextAction when that was the last
+		// threatener — which reaches GetAI().Reset() and detaches this state. Combat is already
+		// over by the time we get back here; continuing would re-arm the action countdown of a
+		// state nothing owns any more.
+		if (!IsActive())
+		{
+			return;
+		}
 
 		// Check if we should reset due to no valid targets
 		GameUnitS* victim = controlled.GetVictim();
