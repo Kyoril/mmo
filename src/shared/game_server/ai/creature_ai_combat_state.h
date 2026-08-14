@@ -65,11 +65,13 @@ namespace mmo
 			uint32 priority;
 			bool canCast;
 
-			/// `mincooldown` from the creature's spell entry, 0 when unspecified.
-			uint32 minCooldown;
+			/// `mincooldown` from the creature's spell entry. Kept as the authored int32 because
+			/// units.proto defaults it to -1; narrowing to unsigned here turned "unspecified" into
+			/// a fifty day cooldown on 109 of the 114 authored creature spells.
+			int32 minCooldown;
 
-			/// `maxcooldown` from the creature's spell entry, 0 when unspecified.
-			uint32 maxCooldown;
+			/// `maxcooldown` from the same entry, negative when unspecified.
+			int32 maxCooldown;
 
 			/**
 			 * @brief Constructs a new creature spell entry.
@@ -77,11 +79,11 @@ namespace mmo
 			 * @param minRange Minimum casting range.
 			 * @param maxRange Maximum casting range.
 			 * @param priority Spell priority (higher = more important).
-			 * @param minCooldown Lower bound of the authored cooldown, 0 if unspecified.
-			 * @param maxCooldown Upper bound of the authored cooldown, 0 if unspecified.
+			 * @param minCooldown Lower bound of the authored cooldown, negative if unspecified.
+			 * @param maxCooldown Upper bound of the authored cooldown, negative if unspecified.
 			 */
 			explicit CreatureSpell(const proto::SpellEntry* spellEntry, float minRange = 0.0f, float maxRange = 30.0f, uint32 priority = 100,
-				uint32 minCooldown = 0, uint32 maxCooldown = 0)
+				int32 minCooldown = -1, int32 maxCooldown = -1)
 				: spell(spellEntry)
 				, lastCastTime(0)
 				, cooldownEnd(0)
@@ -359,6 +361,18 @@ namespace mmo
 		 * @return True if spell casting was initiated successfully.
 		 */
 		bool CastSpell(const CreatureSpell& spell, GameUnitS& target);
+
+		/// Puts a creature spell on cooldown, honouring the authored mincooldown/maxcooldown and
+		/// falling back to the spell's own cooldown.
+		/// @param spellEntry The spell that was attempted.
+		/// @param spellCooldownMs The spell's own cooldown, used when the creature authors none.
+		/// @param castFailed Whether the attempt failed, which applies the retry floor.
+		void ApplySpellCooldown(const proto::SpellEntry& spellEntry, uint32 spellCooldownMs, bool castFailed);
+
+		/// Extends a creature spell's cooldown so it is not retried before the given delay.
+		/// @param spellEntry The spell to hold off.
+		/// @param minimumCooldownMs Minimum time from now before the spell may be attempted again.
+		void RaiseSpellCooldownToAtLeast(const proto::SpellEntry& spellEntry, GameTime minimumCooldownMs);
 
 		/**
 		 * @brief Updates spell cooldowns and availability.

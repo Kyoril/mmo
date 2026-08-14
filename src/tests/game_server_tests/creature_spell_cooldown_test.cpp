@@ -60,3 +60,40 @@ TEST_CASE("A failed cast keeps an authored cooldown that already exceeds the flo
 	REQUIRE(range.min == 4000);
 	REQUIRE(range.max == 6000);
 }
+
+TEST_CASE("Unset creature cooldowns fall back to the spell's own cooldown", "[creature_spell_cooldown]")
+{
+	// units.proto declares mincooldown/maxcooldown as int32 with default -1, and 109 of the 114
+	// authored creature spells leave them unset. Treating -1 as a huge unsigned value would put
+	// almost every creature ability on a 49 day cooldown.
+	const auto range = ResolveCreatureSpellCooldown(-1, -1, 12000, false);
+
+	REQUIRE(range.min == 12000);
+	REQUIRE(range.max == 12000);
+}
+
+TEST_CASE("An unset maximum does not widen an authored minimum", "[creature_spell_cooldown]")
+{
+	const auto range = ResolveCreatureSpellCooldown(4000, -1, 0, false);
+
+	REQUIRE(range.min == 4000);
+	REQUIRE(range.max == 4000);
+}
+
+TEST_CASE("An unset minimum with an authored maximum spans from zero", "[creature_spell_cooldown]")
+{
+	// Only maxcooldown authored is unusual but legal; the spell's own cooldown is not a sensible
+	// lower bound for it, so the range simply starts at zero.
+	const auto range = ResolveCreatureSpellCooldown(-1, 6000, 12000, false);
+
+	REQUIRE(range.min == 0);
+	REQUIRE(range.max == 6000);
+}
+
+TEST_CASE("Unset creature cooldowns still honour the failure floor", "[creature_spell_cooldown]")
+{
+	const auto range = ResolveCreatureSpellCooldown(-1, -1, 0, true);
+
+	REQUIRE(range.min >= FailedCastRetryCooldownMs);
+	REQUIRE(range.max >= FailedCastRetryCooldownMs);
+}

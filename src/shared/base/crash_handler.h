@@ -42,4 +42,11 @@ namespace mmo
 	/// @param config Handler configuration. Calling this more than once replaces the previous
 	///        configuration.
 	void InstallCrashHandler(CrashHandlerConfig config);
+
+	/// Clears the crash callback installed by @ref InstallCrashHandler.
+	///
+	/// The callback captures the object that installed it, so it has to be dropped before that
+	/// object goes away — otherwise a fault during shutdown runs a hook over destroyed state. The
+	/// handler itself stays installed and keeps reporting; it simply stops calling back.
+	void UninstallCrashHandler();
 }

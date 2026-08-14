@@ -30,7 +30,7 @@
 #include <mutex>
 #include <thread>
 
-#include "base/crash_handler.h"
+#include "base/server_crash_handler.h"
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
 #include "network/shutdown_signals.h"
@@ -106,23 +106,9 @@ namespace mmo
 		// Crash handler
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
-		// Installed once the log file exists so the handler can flush it. Without that flush the tail
-		// of the log covering the crash is lost whenever log buffering is enabled, which is exactly
-		// the part needed to understand the crash.
-		{
-			CrashHandlerConfig crashConfig;
-			crashConfig.applicationName = "login_server";
-			crashConfig.outputDirectory = std::filesystem::path(config.logFileName).parent_path();
-			crashConfig.onCrash = [this](std::vector<std::string>& /*details*/)
-			{
-				if (m_logFile.is_open())
-				{
-					m_logFile.flush();
-				}
-			};
-
-			InstallCrashHandler(std::move(crashConfig));
-		}
+		// Installed once the log file exists so the handler can flush it, and torn down when this
+		// scope ends so the flush callback never outlives the stream it captured.
+		const ServerCrashHandlerScope crashHandlerScope{ "login_server", config.logFileName, m_logFile };
 
 		// Display version infos
 		ILOG("Version " << Major << "." << Minor << "." << Build << "." << Revision << " (Commit: " << GitCommit << ")");

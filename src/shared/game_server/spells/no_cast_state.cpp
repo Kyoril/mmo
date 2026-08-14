@@ -11,7 +11,7 @@ namespace mmo
 	SpellCastResult NoCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell,
 		const SpellTargetMap& target, GameTime castTime, bool doReplacePreviousCast, uint64 itemGuid)
 	{
-		CastSpell(
+		return CastSpell(
 			cast,
 			spell,
 			target,
@@ -19,8 +19,6 @@ namespace mmo
 			itemGuid,
 			false
 		);
-
-		return spell_cast_result::CastOkay;
 	}
 
 	void NoCastState::StopCast(SpellInterruptFlags reason, GameTime interruptCooldown)

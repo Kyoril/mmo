@@ -26,14 +26,15 @@ namespace mmo
 
 	/// Resolves how long a creature must wait before attempting a spell again.
 	///
-	/// @param entryMinCooldownMs `mincooldown` from the creature's `creaturespells` entry, 0 if unset.
-	/// @param entryMaxCooldownMs `maxcooldown` from the same entry, 0 if unset.
+	/// @param entryMinCooldownMs `mincooldown` from the creature's `creaturespells` entry. This is
+	///        an int32 defaulting to -1 in units.proto, and any negative value means "not authored".
+	/// @param entryMaxCooldownMs `maxcooldown` from the same entry, negative when not authored.
 	/// @param spellCooldownMs The spell's own cooldown, used when the creature entry specifies none.
 	/// @param castFailed True when the cast attempt did not succeed, which applies the retry floor.
 	/// @returns The range to roll the actual cooldown from.
 	CreatureSpellCooldownRange ResolveCreatureSpellCooldown(
-		uint32 entryMinCooldownMs,
-		uint32 entryMaxCooldownMs,
+		int32 entryMinCooldownMs,
+		int32 entryMaxCooldownMs,
 		uint32 spellCooldownMs,
 		bool castFailed);
 }

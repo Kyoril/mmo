@@ -10,11 +10,16 @@
 
 namespace mmo
 {
-	void CastSpell(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, GameTime castTime, uint64 itemGuid, bool isProc)
+	SpellCastResult CastSpell(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, GameTime castTime, uint64 itemGuid, bool isProc)
 	{
 		auto newState = std::make_shared<SingleCastState>(cast, spell, target, castTime, isProc, itemGuid);
 
+		// SetState activates the state, which is where validation runs. The state stays owned by
+		// the cast afterwards even when validation rejected it, so reading its result here is safe.
+		SingleCastState* activated = newState.get();
 		cast.SetState(std::move(newState));
+
+		return activated->GetActivationResult();
 	}
 
 	SpellCast::SpellCast(TimerQueue& timer, GameUnitS& executor)

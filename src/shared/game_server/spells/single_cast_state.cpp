@@ -64,6 +64,7 @@ namespace mmo
 			auto& executer = m_cast.GetExecuter();
 			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
 				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
+			m_activationResult = spell_cast_result::FailedError;
 			m_hasFinished = true;
 			NotifyCastEnded(false);
 			return;
@@ -245,15 +246,13 @@ namespace mmo
 
 		FinishChanneling();
 
-		CastSpell(
+		return CastSpell(
 			cast,
 			spell,
 			target,
 			castTime,
 			itemGuid,
 			false);
-
-		return spell_cast_result::CastOkay;
 	}
 
 	void SingleCastState::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown)

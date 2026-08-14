@@ -49,7 +49,11 @@ namespace mmo
 		virtual const proto::SpellEntry* GetSpell() const = 0;
 	};
 
-	void CastSpell(
+	/// Creates and activates a cast state for the given spell.
+	/// @returns CastOkay when the cast actually started. A spell that fails validation reports
+	///          its failure here rather than pretending to have started - callers rely on this to
+	///          tell a real cast from one that died during activation.
+	SpellCastResult CastSpell(
 		SpellCast& cast,
 		const proto::SpellEntry& spell,
 		const SpellTargetMap& target,

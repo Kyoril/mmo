@@ -289,10 +289,31 @@ namespace mmo
 			m_script->OnSpellCastEnded(succeeded);
 		}
 		
-		// Schedule next action immediately after spell cast ends
+		// Schedule the next action on the next tick rather than calling straight into
+		// ChooseNextAction. This signal can fire from *inside* CastSpell when a cast fails
+		// validation, so calling directly re-enters an action frame that has not finished setting
+		// the spell up yet — the recursion that let one creature attempt the same spell tens of
+		// thousands of times. Posting matches what OnEnter already does and bounds the AI to one
+		// action per tick regardless of why a cast ended.
 		if (m_entered)
 		{
-			ChooseNextAction();
+			auto* worldInstance = GetControlled().GetWorldInstance();
+			if (worldInstance)
+			{
+				std::weak_ptr weakThis = std::static_pointer_cast<CreatureAICombatState>(shared_from_this());
+				worldInstance->GetUniverse().Post([weakThis]()
+					{
+						if (const auto strongThis = weakThis.lock())
+						{
+							// The state may have been left in the meantime; ChooseNextAction is
+							// only meaningful while it is still the AI's active state.
+							if (strongThis->IsActive())
+							{
+								strongThis->ChooseNextAction();
+							}
+						}
+					});
+			}
 		}
 	}
 	void CreatureAICombatState::AddThreat(GameUnitS& threatener, float amount)
@@ -1430,54 +1451,30 @@ namespace mmo
 		targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 		targetMap.SetUnitTarget(target.GetGuid());
 
-		const auto castResult = controlled.CastSpell(targetMap, *spellEntry, castTime);
-		const bool castOkay = (castResult == spell_cast_result::CastOkay);
-
-		// The cooldown is applied whether or not the cast worked. A spell that fails validation
-		// used to leave its cooldown untouched, so it was immediately eligible again — and since
-		// nothing else paces a failed cast (no cast time elapses), the AI retried it as fast as
-		// the event loop allowed and burned a core. ResolveCreatureSpellCooldown enforces a floor
-		// on the failure path so this cannot happen again for any spell or any failure reason.
+		// Put the spell on cooldown BEFORE casting it. controlled.CastSpell can re-enter this AI
+		// synchronously — a cast that fails validation notifies the cast ended, which runs
+		// ChooseNextAction again from inside this very call — and a spell still showing as
+		// available in that nested frame is what produced the 42,584-retry storm. Recording the
+		// cooldown afterwards was too late to break that.
 		//
 		// This is also the first time the authored mincooldown/maxcooldown are honoured at all:
 		// they are set throughout units.data but were never read, leaving every creature ability
 		// paced only by its cast time.
+		ApplySpellCooldown(*spellEntry, cooldown, false);
+
+		const auto castResult = controlled.CastSpell(targetMap, *spellEntry, castTime);
+		const bool castOkay = (castResult == spell_cast_result::CastOkay);
+
+		if (castOkay)
 		{
-			const auto currentTime = GetAsyncTimeMs();
-
-			for (auto& creatureSpell : m_availableSpells)
+			if (castTime > 0)
 			{
-				if (creatureSpell.spell != spellEntry)
-				{
-					continue;
-				}
-
-				const auto cooldownRange = ResolveCreatureSpellCooldown(
-					creatureSpell.minCooldown, creatureSpell.maxCooldown, cooldown, !castOkay);
-
-				GameTime cooldownMs = cooldownRange.min;
-				if (cooldownRange.max > cooldownRange.min)
-				{
-					std::uniform_int_distribution<GameTime> distribution(cooldownRange.min, cooldownRange.max);
-					cooldownMs = distribution(randomGenerator);
-				}
-
-				creatureSpell.lastCastTime = currentTime;
-				creatureSpell.cooldownEnd = currentTime + cooldownMs;
-				creatureSpell.canCast = (cooldownMs == 0);
-				break;
-			}
-
-			if (castOkay && castTime > 0)
-			{
+				const auto currentTime = GetAsyncTimeMs();
 				m_lastSpellCastTime = currentTime;
 				m_castingTimeoutEnd = currentTime + castTime + 1000;
 				controlled.StopAttack();
 			}
-		}
 
-		if (castOkay)
-		{
 			return true;
 		}
 
@@ -1487,6 +1484,12 @@ namespace mmo
 			m_isCasting = false;
 		}
 
+		// Now that the failure is known, make sure the spell is held off for at least the retry
+		// floor. The pre-cast cooldown above may have been zero: neither the spell nor the creature
+		// entry is guaranteed to author one, and a failing ability with no cooldown anywhere is
+		// exactly the case that can consume the server.
+		RaiseSpellCooldownToAtLeast(*spellEntry, FailedCastRetryCooldownMs);
+
 		if (castResult == spell_cast_result::FailedLineOfSight)
 		{
 			m_losBlocked = true;
@@ -1494,6 +1497,52 @@ namespace mmo
 		}
 
 		return false;
+	}
+
+	void CreatureAICombatState::ApplySpellCooldown(const proto::SpellEntry& spellEntry, const uint32 spellCooldownMs, const bool castFailed)
+	{
+		for (auto& creatureSpell : m_availableSpells)
+		{
+			if (creatureSpell.spell != &spellEntry)
+			{
+				continue;
+			}
+
+			const auto cooldownRange = ResolveCreatureSpellCooldown(
+				creatureSpell.minCooldown, creatureSpell.maxCooldown, spellCooldownMs, castFailed);
+
+			GameTime cooldownMs = cooldownRange.min;
+			if (cooldownRange.max > cooldownRange.min)
+			{
+				std::uniform_int_distribution<GameTime> distribution(cooldownRange.min, cooldownRange.max);
+				cooldownMs = distribution(randomGenerator);
+			}
+
+			const auto currentTime = GetAsyncTimeMs();
+			creatureSpell.lastCastTime = currentTime;
+			creatureSpell.cooldownEnd = currentTime + cooldownMs;
+			creatureSpell.canCast = (cooldownMs == 0);
+			return;
+		}
+	}
+
+	void CreatureAICombatState::RaiseSpellCooldownToAtLeast(const proto::SpellEntry& spellEntry, const GameTime minimumCooldownMs)
+	{
+		for (auto& creatureSpell : m_availableSpells)
+		{
+			if (creatureSpell.spell != &spellEntry)
+			{
+				continue;
+			}
+
+			const auto earliest = GetAsyncTimeMs() + minimumCooldownMs;
+			if (creatureSpell.cooldownEnd < earliest)
+			{
+				creatureSpell.cooldownEnd = earliest;
+				creatureSpell.canCast = false;
+			}
+			return;
+		}
 	}
 
 	/**

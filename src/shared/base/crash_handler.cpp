@@ -7,6 +7,8 @@
 #include "log/default_log_levels.h"
 
 #include <algorithm>
+#include <atomic>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -19,6 +21,7 @@
 #	pragma comment(lib, "dbghelp.lib")
 #else
 #	include <csignal>
+#	include <dlfcn.h>
 #	include <execinfo.h>
 #	include <unistd.h>
 #endif
@@ -27,12 +30,26 @@ namespace mmo
 {
 	namespace
 	{
-		/// The active configuration. A raw global rather than something with a destructor: it has to
-		/// stay readable from a signal handler after static destruction has begun.
-		CrashHandlerConfig g_config;
+		/// The active configuration, deliberately leaked. CrashHandlerConfig owns a string, a path
+		/// and a std::function, so a plain global would be destroyed during static destruction —
+		/// and a fault in a later static destructor would then read freed storage from inside the
+		/// handler. Never destroying it is the point.
+		CrashHandlerConfig& Config()
+		{
+			static CrashHandlerConfig* config = new CrashHandlerConfig();
+			return *config;
+		}
 
-		/// Guards against a crash inside the crash handler turning into an infinite loop.
-		volatile bool g_handling = false;
+		/// Guards against a crash inside the crash handler turning into an infinite loop. Atomic
+		/// rather than volatile because the login server runs two io threads and both could fault
+		/// at once, and DbgHelp is not thread safe.
+		std::atomic<bool> g_handling { false };
+
+		/// @returns True if this thread won the race to handle the crash.
+		bool ClaimCrashHandling()
+		{
+			return !g_handling.exchange(true);
+		}
 
 		std::tm LocalTimeNow()
 		{
@@ -50,19 +67,19 @@ namespace mmo
 		/// because the log file is already being torn down at this point.
 		void FinishReport(CrashReport& report)
 		{
-			if (g_config.onCrash)
+			if (Config().onCrash)
 			{
-				g_config.onCrash(report.details);
+				Config().onCrash(report.details);
 			}
 
 			const std::filesystem::path written =
-				WriteCrashReport(g_config.outputDirectory, report, LocalTimeNow());
+				WriteCrashReport(Config().outputDirectory, report, LocalTimeNow());
 
 			if (written.empty())
 			{
 				std::cerr << "\n=== " << report.applicationName << " CRASHED ===\n"
 					<< report.reason << "\n"
-					<< "Could not write a crash report to " << g_config.outputDirectory.string() << "\n"
+					<< "Could not write a crash report to " << Config().outputDirectory.string() << "\n"
 					<< FormatCrashReport(report) << std::endl;
 				return;
 			}
@@ -138,8 +155,10 @@ namespace mmo
 			const HANDLE process = GetCurrentProcess();
 			const HANDLE thread = GetCurrentThread();
 
-			SymInitialize(process, nullptr, TRUE);
+			// Options first: SymInitialize with fInvadeProcess enumerates modules immediately, and
+			// line information is only loaded for them if SYMOPT_LOAD_LINES is already set.
 			SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+			SymInitialize(process, nullptr, TRUE);
 
 			STACKFRAME64 stack = {};
 			stack.AddrPC.Offset = context->Rip;
@@ -150,7 +169,8 @@ namespace mmo
 			stack.AddrStack.Mode = AddrModeFlat;
 
 			constexpr int MaxSymbolName = 256;
-			uint8_t symbolBuffer[sizeof(SYMBOL_INFO) + MaxSymbolName] = {};
+			// SYMBOL_INFO contains ULONG64 members, so the backing storage has to be aligned for it.
+			alignas(SYMBOL_INFO) uint8_t symbolBuffer[sizeof(SYMBOL_INFO) + MaxSymbolName] = {};
 			SYMBOL_INFO* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
 			symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
 			symbol->MaxNameLen = MaxSymbolName;
@@ -238,14 +258,13 @@ namespace mmo
 
 		LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* exceptionInfo)
 		{
-			if (g_handling)
+			if (!ClaimCrashHandling())
 			{
 				return EXCEPTION_EXECUTE_HANDLER;
 			}
-			g_handling = true;
 
 			CrashReport report;
-			report.applicationName = g_config.applicationName;
+			report.applicationName = Config().applicationName;
 
 			const DWORD code = exceptionInfo->ExceptionRecord->ExceptionCode;
 
@@ -285,6 +304,26 @@ namespace mmo
 
 			return EXCEPTION_EXECUTE_HANDLER;
 		}
+
+		/// abort() - which is where a failed ASSERT ends up - never reaches the unhandled exception
+		/// filter, so it needs its own hook. The context is captured here rather than handed to us.
+		void OnAbortSignal(int)
+		{
+			if (!ClaimCrashHandling())
+			{
+				return;
+			}
+
+			CrashReport report;
+			report.applicationName = Config().applicationName;
+			report.reason = "Aborted (SIGABRT) - usually a failed assertion";
+
+			CONTEXT context = {};
+			RtlCaptureContext(&context);
+			CaptureStack(&context, report);
+
+			FinishReport(report);
+		}
 #else
 		const char* DescribeSignal(const int signalNumber)
 		{
@@ -301,11 +340,10 @@ namespace mmo
 
 		void OnFatalSignal(int signalNumber)
 		{
-			if (g_handling)
+			if (!ClaimCrashHandling())
 			{
 				_exit(EXIT_FAILURE);
 			}
-			g_handling = true;
 
 			// Capturing the addresses is async-signal-safe. Everything after this point is not:
 			// building and writing the report allocates, which can deadlock if the crash happened
@@ -316,30 +354,58 @@ namespace mmo
 			backtrace_symbols_fd(addresses, frameCount, STDERR_FILENO);
 
 			CrashReport report;
-			report.applicationName = g_config.applicationName;
+			report.applicationName = Config().applicationName;
 
 			std::ostringstream reason;
 			reason << "Fatal signal: " << signalNumber << " " << DescribeSignal(signalNumber);
 			report.reason = reason.str();
 
-			char** symbols = backtrace_symbols(addresses, frameCount);
+			// Resolve each frame to its module and offset within it. Without this the report would
+			// carry only absolute addresses, which are meaningless once the binary is position
+			// independent — and tools/symbolicate_crash.ps1 drops any frame lacking module+RVA.
+			std::vector<const void*> seenModuleBases;
 			for (int i = 0; i < frameCount; ++i)
 			{
 				CrashFrame frame;
-				frame.address = reinterpret_cast<uint64_t>(addresses[i]);
-				if (symbols != nullptr && symbols[i] != nullptr)
+				frame.address = reinterpret_cast<uint64>(addresses[i]);
+
+				Dl_info info = {};
+				if (dladdr(addresses[i], &info) != 0 && info.dli_fname != nullptr)
 				{
-					frame.symbolName = symbols[i];
+					const std::string path = info.dli_fname;
+					const auto slash = path.find_last_of('/');
+					frame.moduleName = (slash == std::string::npos) ? path : path.substr(slash + 1);
+					frame.moduleRva = reinterpret_cast<uint64>(addresses[i]) - reinterpret_cast<uint64>(info.dli_fbase);
+
+					if (info.dli_sname != nullptr)
+					{
+						frame.symbolName = info.dli_sname;
+					}
+
+					if (std::find(seenModuleBases.begin(), seenModuleBases.end(), info.dli_fbase) == seenModuleBases.end())
+					{
+						seenModuleBases.push_back(info.dli_fbase);
+
+						CrashModule crashModule;
+						crashModule.name = frame.moduleName;
+						crashModule.base = reinterpret_cast<uint64>(info.dli_fbase);
+						// ELF gives no cheap image size or build id here; the module line still
+						// carries the base, which is what makes the RVAs meaningful.
+						crashModule.size = 0;
+						crashModule.pdbName = frame.moduleName;
+						crashModule.pdbId = "elf";
+						report.modules.push_back(std::move(crashModule));
+					}
 				}
+
 				report.frames.push_back(std::move(frame));
 			}
-			free(symbols);
 
 			FinishReport(report);
 
 			// Restore the default disposition and re-raise so the exit status still reports the
 			// signal and any core dump is produced as configured.
-			signal(signalNumber, SIG_DFL);
+			::signal(signalNumber, SIG_DFL);
 			raise(signalNumber);
 		}
 #endif
@@ -347,7 +413,14 @@ namespace mmo
 
 	void InstallCrashHandler(CrashHandlerConfig config)
 	{
-		g_config = std::move(config);
+		// A bare log file name has no parent path, which would make create_directories fail
+		// silently and drop the report in whatever the working directory happens to be.
+		if (config.outputDirectory.empty())
+		{
+			config.outputDirectory = "logs";
+		}
+
+		Config() = std::move(config);
 
 #ifdef _DEBUG
 		// Leave first chance to the debugger when one is attached.
@@ -362,11 +435,26 @@ namespace mmo
 
 #ifdef _WIN32
 		SetUnhandledExceptionFilter(OnUnhandledException);
+
+		// A failed ASSERT calls abort(), which bypasses the filter above entirely. Route it here
+		// and stop the CRT popping a modal dialog, which would hang a headless server rather than
+		// letting it die with a report.
+		::signal(SIGABRT, OnAbortSignal);
+		_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #else
+		// A stack overflow raises SIGSEGV with no usable stack left, so the handler has to run on
+		// its own. Without this the one crash class the AI recursion produces cannot be reported.
+		static char alternateStack[SIGSTKSZ < 65536 ? 65536 : SIGSTKSZ];
+		stack_t signalStack = {};
+		signalStack.ss_sp = alternateStack;
+		signalStack.ss_size = sizeof(alternateStack);
+		signalStack.ss_flags = 0;
+		sigaltstack(&signalStack, nullptr);
+
 		struct sigaction action = {};
 		action.sa_handler = OnFatalSignal;
 		sigemptyset(&action.sa_mask);
-		action.sa_flags = SA_RESTART;
+		action.sa_flags = SA_RESTART | SA_ONSTACK;
 
 		sigaction(SIGSEGV, &action, nullptr);
 		sigaction(SIGBUS, &action, nullptr);
@@ -376,6 +464,13 @@ namespace mmo
 #endif
 
 		ILOG("Crash handler installed, reports will be written to "
-			<< std::filesystem::absolute(g_config.outputDirectory).string());
+			<< std::filesystem::absolute(Config().outputDirectory).string());
+	}
+
+	void UninstallCrashHandler()
+	{
+		// The onCrash hook captures the owning application object. Once that is going away the hook
+		// must go with it, or a fault during shutdown would flush a destroyed log stream.
+		Config().onCrash = nullptr;
 	}
 }
