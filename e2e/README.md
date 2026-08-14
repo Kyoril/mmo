@@ -127,6 +127,12 @@ it again before asserting anything about the fight's actual outcome)
   fires as soon as `LogonProof` succeeds, so picking a realm and a character would only make
   the scenario slower. It also means the second session never enters the world — don't reach
   for it as a way to get a second character in play.
+- `GM.Godmode` does **not survive a cross-map teleport**. Porting to another map spawns the
+  character into a new world instance (the world log shows a second "wants to join world")
+  and the flag is lost with the old one. Re-arm it after the final `GM.Worldport`, or the
+  character dies to whatever it was sent to fight. That death is easy to misread: it drops
+  the character from every threat list, and a creature whose threat list empties resets to
+  full health — so the visible symptom is "the boss keeps resetting", not "I died".
 - `GM.CreateMonster` spawns the monster **at the player's position**. Spells with an
   in-front requirement can never validate at zero distance — step aside first with
   `GM.Worldport` (see `spell_cast_smoke.lua`).
