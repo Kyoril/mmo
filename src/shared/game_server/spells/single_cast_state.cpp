@@ -58,7 +58,13 @@ namespace mmo
 
 		if (!Validate())
 		{
-			ELOG("Validation failed");
+			// Name the caster and the spell: a creature whose rotation keeps failing validation
+			// logs this on every cooldown, and a bare "Validation failed" gives no way to tell
+			// which unit or which spell is responsible.
+			auto& executer = m_cast.GetExecuter();
+			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
+				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
+			m_activationResult = spell_cast_result::FailedError;
 			m_hasFinished = true;
 			NotifyCastEnded(false);
 			return;
@@ -240,15 +246,13 @@ namespace mmo
 
 		FinishChanneling();
 
-		CastSpell(
+		return CastSpell(
 			cast,
 			spell,
 			target,
 			castTime,
 			itemGuid,
 			false);
-
-		return spell_cast_result::CastOkay;
 	}
 
 	void SingleCastState::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown)
@@ -302,6 +306,29 @@ namespace mmo
 		// which may drop the last external reference to this SingleCastState.
 		auto strongThis = shared_from_this();
 		m_cast.SetState(std::make_shared<NoCastState>());
+	}
+
+	void SingleCastState::AbandonCast()
+	{
+		// Releasing m_selfHold may drop the last reference to this state, so keep it alive until
+		// the method returns.
+		auto strongThis = shared_from_this();
+
+		m_hasFinished = true;
+
+		// Suppress any later NotifyCastEnded: the ended signal would run handlers belonging to a
+		// caster that is on its way out.
+		m_endNotified = true;
+
+		m_countdown.Cancel();
+		m_impactCountdown.Cancel();
+
+		// These are subscriptions to the *target*, owned by this state rather than by the caster,
+		// and they are what let an abandoned cast be reached again long after its caster died.
+		m_onTargetDied.disconnect();
+		m_onTargetRemoved.disconnect();
+
+		m_selfHold.reset();
 	}
 
 	void SingleCastState::OnUserStartsMoving()

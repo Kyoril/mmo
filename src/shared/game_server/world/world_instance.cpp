@@ -465,6 +465,13 @@ namespace mmo
 		// No need for visibility updates for item objects
 		if (!remove.IsItem() && !remove.IsContainer())
 		{
+			// The despawn hook is what releases state that must not outlive the object — auras, and
+			// any spell cast in progress. It therefore runs unconditionally, before the tile work:
+			// it used to live inside the successful-tile branch, so an object whose position could
+			// not be resolved to a grid cell was destroyed with its cast still armed, which is the
+			// exact use-after-free the hook exists to prevent.
+			remove.OnDespawn();
+
 			TileIndex2D gridIndex;
 			if (!m_visibilityGrid->GetTilePosition(remove.GetPosition(), gridIndex[0], gridIndex[1]))
 			{
@@ -480,7 +487,6 @@ namespace mmo
 				else
 				{
 					tile->GetGameObjects().remove(&remove);
-					remove.OnDespawn();
 
 					ForEachTileInSight(
 						*m_visibilityGrid,

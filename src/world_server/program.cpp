@@ -26,6 +26,7 @@
 #include <vector>
 #include <thread>
 
+#include "base/server_crash_handler.h"
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
 #include "network/shutdown_signals.h"
@@ -107,6 +108,14 @@ namespace mmo
 					});
 			}
 		}
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Crash handler
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		// Installed once the log file exists so the handler can flush it, and torn down when this
+		// scope ends so the flush callback never outlives the stream it captured.
+		const ServerCrashHandlerScope crashHandlerScope{ "world_server", config.logFileName, m_logFile };
 
 		// Display version infos
 		ILOG("Version " << Major << "." << Minor << "." << Build << "." << Revision << " (Commit: " << GitCommit << ")");

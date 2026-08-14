@@ -51,11 +51,16 @@ namespace mmo
 
 		void StopCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) override;
 
+		void AbandonCast() override;
+
 		void OnUserStartsMoving() override;
 
 		void FinishChanneling() override;
 
 		const proto::SpellEntry* GetSpell() const override { return &m_spell; }
+
+		/// @returns The result of Activate(): CastOkay unless the cast failed validation.
+		SpellCastResult GetActivationResult() const { return m_activationResult; }
 
 	private:
 		bool Validate();
@@ -152,6 +157,8 @@ namespace mmo
 		bool m_globalCooldownTriggered { false };
 		GameTime m_appliedGlobalCooldownMs { 0 };
 		bool m_endNotified { false };
+		/// Result of Activate(). CastOkay unless validation rejected the cast.
+		SpellCastResult m_activationResult { spell_cast_result::CastOkay };
 		std::shared_ptr<SingleCastState> m_selfHold;
 
 		void SendEndCast(SpellCastResult result);

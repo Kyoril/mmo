@@ -49,6 +49,25 @@ namespace mmo
 		return spell_cast_result::FailedSpellInProgress;
 	}
 
+	void ChannelingCastState::AbandonCast()
+	{
+		// Same teardown as SingleCastState::AbandonCast, and needed for the same reason: this state
+		// keeps itself alive, owns a running channel countdown and subscriptions to the target, and
+		// reaches its caster through a raw SpellCast&. Without this a unit destroyed mid-channel
+		// leaves an armed state that dereferences the dead caster when the channel would have ended.
+		auto strongThis = shared_from_this();
+
+		m_hasFinished = true;
+		m_endNotified = true;
+
+		m_countdown.Cancel();
+
+		m_onTargetDied.disconnect();
+		m_onTargetRemoved.disconnect();
+
+		m_selfHold.reset();
+	}
+
 	void ChannelingCastState::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown)
 	{
 		if (m_hasFinished)

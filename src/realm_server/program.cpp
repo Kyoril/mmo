@@ -25,6 +25,7 @@
 #include "game_protocol/game_protocol.h"
 #include "game_protocol/game_server.h"
 #include "base/constants.h"
+#include "base/server_crash_handler.h"
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
 #include "network/shutdown_signals.h"
@@ -120,6 +121,14 @@ namespace mmo
 				});
 			}
 		}
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Crash handler
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		// Installed once the log file exists so the handler can flush it, and torn down when this
+		// scope ends so the flush callback never outlives the stream it captured.
+		const ServerCrashHandlerScope crashHandlerScope{ "realm_server", config.logFileName, m_logFile };
 
 		// Display version infos
 		ILOG("Version " << Major << "." << Minor << "." << Build << "." << Revision << " (Commit: " << GitCommit << ")");

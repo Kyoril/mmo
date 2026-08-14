@@ -367,6 +367,15 @@ namespace mmo
 
 	void GameUnitS::OnDespawn()
 	{
+		// A cast must never outlive the unit performing it. SingleCastState keeps itself alive
+		// through m_selfHold and reaches its caster through a raw SpellCast&, and it owns its own
+		// subscriptions - the cast-time countdown and the target's despawned signal. Destroying a
+		// unit mid-cast therefore left a live state pointing at freed memory, and it went on to
+		// dereference the dead caster from whichever of those fired first: the countdown ending, or
+		// the target leaving the world. Tearing the cast down here happens while the unit is still
+		// fully alive, which drops m_selfHold and every subscription with it.
+		m_spellCast->AbandonCast();
+
 		// Capture persistable auras before clearing them: the despawn fires the despawned signal
 		// (via GameObjectS::OnDespawn) which is what triggers a character save, by which point the
 		// live aura list would otherwise already be empty.
