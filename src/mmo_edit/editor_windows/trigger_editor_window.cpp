@@ -1198,6 +1198,389 @@ namespace mmo
 
 			ImGui::PopStyleVar();
 		}
+
+		// === Condition editing ===
+		//
+		// A TriggerCondition is a small tree: `type` says whether the two sides are compared or
+		// combined logically, and each side can itself be another condition. The editor used to
+		// model none of that — it never wrote `type`, never rendered a nested condition, and showed
+		// one as a plain integer 0. Typing in that box called set_leftlong, which clears the oneof
+		// and takes the whole subtree with it while `type` stayed AndCondition, silently degrading
+		// an authored "A and B" gate into "B alone" with nothing logged.
+
+		/// One entry of the trigger-function picker.
+		struct TriggerFunctionInfo
+		{
+			/// Enum value written to the condition.
+			proto::TriggerFunction value;
+
+			/// Name shown in the picker.
+			const char* name;
+
+			/// Label for the function's single data argument, or nullptr when it takes none.
+			const char* dataLabel;
+		};
+
+		/// Every function a condition can call, in one place. The left- and right-hand pickers used
+		/// to carry their own copy of this list behind a hardcoded count, which is how
+		/// LivingCreatureCount ended up authorable on neither side.
+		const TriggerFunctionInfo s_triggerFunctions[] = {
+			{ proto::Phase,               "Phase",               nullptr },
+			{ proto::Health,              "Health",              nullptr },
+			{ proto::HealthPct,           "HealthPct",           nullptr },
+			{ proto::Mana,                "Mana",                nullptr },
+			{ proto::ManaPct,             "ManaPct",             nullptr },
+			{ proto::IsInCombat,          "IsInCombat",          nullptr },
+			{ proto::EncounterState,      "EncounterState",      "Slot" },
+			{ proto::PlayerCount,         "PlayerCount",         nullptr },
+			{ proto::TargetHealthPct,     "TargetHealthPct",     nullptr },
+			{ proto::HasAura,             "HasAura",             "Spell" },
+			{ proto::RandomValue,         "RandomValue",         "Max" },
+			{ proto::InstanceVariable,    "InstanceVariable",    "Key" },
+			{ proto::LivingCreatureCount, "LivingCreatureCount", "Unit Entry" },
+		};
+
+		// The guard that keeps this from drifting again: adding a TriggerFunction without listing it
+		// here means it cannot be authored, which is exactly the bug this table replaces.
+		static_assert(std::size(s_triggerFunctions) == proto::TriggerFunction_ARRAYSIZE,
+			"s_triggerFunctions must list every TriggerFunction");
+
+		/// Labels for TriggerConditionType, in enum order.
+		const char* s_conditionTypeNames[] = {
+			"Compare (Bool)", "Compare (Integer)", "Compare (Float)", "Compare (String)",
+			"All of (And)", "Any of (Or)"
+		};
+
+		static_assert(std::size(s_conditionTypeNames) == proto::TriggerConditionType_ARRAYSIZE,
+			"s_conditionTypeNames size mismatch");
+
+		/// Which member of a condition's value oneof is currently set.
+		enum class ConditionValueKind
+		{
+			/// Nothing set. Comparisons read this as 0; And/Or read a missing side as pass/fail.
+			Unset,
+			Integer,
+			Float,
+			Function,
+			Condition,
+			/// Set, but the world server has no evaluation for it. Shown read-only so it survives.
+			String
+		};
+
+		/// Which half of a condition is being edited.
+		enum class ConditionSide { Left, Right };
+
+		// Protobuf generates a separate method per field, so the two sides need this dispatch. It is
+		// deliberately mechanical and kept apart from the UI below, which stays single-copy.
+
+		ConditionValueKind GetValueKind(const proto::TriggerCondition& c, const ConditionSide side)
+		{
+			if (side == ConditionSide::Left)
+			{
+				if (c.has_leftlong())      return ConditionValueKind::Integer;
+				if (c.has_leftfloat())     return ConditionValueKind::Float;
+				if (c.has_leftfunction())  return ConditionValueKind::Function;
+				if (c.has_leftcondition()) return ConditionValueKind::Condition;
+				if (c.has_leftstring())    return ConditionValueKind::String;
+				return ConditionValueKind::Unset;
+			}
+
+			if (c.has_rightlong())      return ConditionValueKind::Integer;
+			if (c.has_rightfloat())     return ConditionValueKind::Float;
+			if (c.has_rightfunction())  return ConditionValueKind::Function;
+			if (c.has_rightcondition()) return ConditionValueKind::Condition;
+			if (c.has_rightstring())    return ConditionValueKind::String;
+			return ConditionValueKind::Unset;
+		}
+
+		void ClearValue(proto::TriggerCondition& c, const ConditionSide side)
+		{
+			if (side == ConditionSide::Left)
+			{
+				c.clear_leftlong();
+				c.clear_leftfloat();
+				c.clear_leftstring();
+				c.clear_leftfunction();
+				c.clear_leftcondition();
+				c.clear_leftfunctiondata();
+				return;
+			}
+
+			c.clear_rightlong();
+			c.clear_rightfloat();
+			c.clear_rightstring();
+			c.clear_rightfunction();
+			c.clear_rightcondition();
+			c.clear_rightfunctiondata();
+		}
+
+		int64 GetLongValue(const proto::TriggerCondition& c, const ConditionSide side)
+		{
+			return side == ConditionSide::Left ? c.leftlong() : c.rightlong();
+		}
+
+		void SetLongValue(proto::TriggerCondition& c, const ConditionSide side, const int64 value)
+		{
+			if (side == ConditionSide::Left) c.set_leftlong(value); else c.set_rightlong(value);
+		}
+
+		float GetFloatValue(const proto::TriggerCondition& c, const ConditionSide side)
+		{
+			return side == ConditionSide::Left ? c.leftfloat() : c.rightfloat();
+		}
+
+		void SetFloatValue(proto::TriggerCondition& c, const ConditionSide side, const float value)
+		{
+			if (side == ConditionSide::Left) c.set_leftfloat(value); else c.set_rightfloat(value);
+		}
+
+		const String& GetStringValue(const proto::TriggerCondition& c, const ConditionSide side)
+		{
+			return side == ConditionSide::Left ? c.leftstring() : c.rightstring();
+		}
+
+		proto::TriggerFunction GetFunctionValue(const proto::TriggerCondition& c, const ConditionSide side)
+		{
+			return side == ConditionSide::Left ? c.leftfunction() : c.rightfunction();
+		}
+
+		void SetFunctionValue(proto::TriggerCondition& c, const ConditionSide side, const proto::TriggerFunction value)
+		{
+			if (side == ConditionSide::Left) c.set_leftfunction(value); else c.set_rightfunction(value);
+		}
+
+		int GetFunctionDataSize(const proto::TriggerCondition& c, const ConditionSide side)
+		{
+			return side == ConditionSide::Left ? c.leftfunctiondata_size() : c.rightfunctiondata_size();
+		}
+
+		int64 GetFunctionData(const proto::TriggerCondition& c, const ConditionSide side, const int index)
+		{
+			return side == ConditionSide::Left ? c.leftfunctiondata(index) : c.rightfunctiondata(index);
+		}
+
+		void SetFunctionData(proto::TriggerCondition& c, const ConditionSide side, const int index, const int64 value)
+		{
+			if (side == ConditionSide::Left) c.set_leftfunctiondata(index, value); else c.set_rightfunctiondata(index, value);
+		}
+
+		void AddFunctionData(proto::TriggerCondition& c, const ConditionSide side, const int64 value)
+		{
+			if (side == ConditionSide::Left) c.add_leftfunctiondata(value); else c.add_rightfunctiondata(value);
+		}
+
+		proto::TriggerCondition* GetMutableSubCondition(proto::TriggerCondition& c, const ConditionSide side)
+		{
+			return side == ConditionSide::Left ? c.mutable_leftcondition() : c.mutable_rightcondition();
+		}
+
+		/// How deep the editor will render nested conditions. Deeper subtrees are left untouched
+		/// rather than hidden behind widgets that could overwrite them.
+		constexpr int s_maxConditionDepth = 4;
+
+		void DrawTriggerCondition(proto::TriggerCondition& condition, int depth);
+		void DrawConditionValue(proto::TriggerCondition& condition, ConditionSide side, int depth, bool isLogical);
+
+		/// Draws the value picker for one side of a condition.
+		/// @param isLogical True when the parent combines the two sides with And/Or rather than
+		///        comparing them, which changes what an unset side means.
+		void DrawConditionValue(proto::TriggerCondition& condition, const ConditionSide side, const int depth,
+			const bool isLogical)
+		{
+			const bool left = (side == ConditionSide::Left);
+			ImGui::PushID(left ? "LeftValue" : "RightValue");
+
+			ImGui::Text(left ? "Left Value:" : "Right Value:");
+
+			const ConditionValueKind kind = GetValueKind(condition, side);
+
+			// A string value has no server-side evaluation, so there is no widget that could write
+			// one. It is still shown rather than silently reinterpreted as an integer.
+			if (kind == ConditionValueKind::String)
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f),
+					"String \"%s\" - the world server does not evaluate string values.",
+					GetStringValue(condition, side).c_str());
+				if (DrawDangerButton("Clear Value", ImVec2(120, 0)))
+				{
+					ClearValue(condition, side);
+				}
+				ImGui::PopID();
+				return;
+			}
+
+			static const char* s_valueKinds[] = { "Unset", "Integer", "Float", "Function", "Condition" };
+			int kindIndex = static_cast<int>(kind);
+
+			ImGui::SetNextItemWidth(130);
+			if (ImGui::Combo("##Kind", &kindIndex, s_valueKinds, static_cast<int>(std::size(s_valueKinds))))
+			{
+				// Switching kinds is the one place a subtree is legitimately discarded, and it takes
+				// a deliberate change of the picker to get here.
+				ClearValue(condition, side);
+				switch (static_cast<ConditionValueKind>(kindIndex))
+				{
+				case ConditionValueKind::Integer:   SetLongValue(condition, side, 0); break;
+				case ConditionValueKind::Float:     SetFloatValue(condition, side, 0.0f); break;
+				case ConditionValueKind::Function:  SetFunctionValue(condition, side, proto::Phase); break;
+				case ConditionValueKind::Condition: GetMutableSubCondition(condition, side)->set_operator_(proto::Equal); break;
+				default: break;
+				}
+			}
+
+			switch (static_cast<ConditionValueKind>(kindIndex))
+			{
+			case ConditionValueKind::Unset:
+				ImGui::SameLine();
+				ImGui::TextDisabled(isLogical ? "(this side is skipped)" : "(counts as 0)");
+				break;
+
+			case ConditionValueKind::Integer:
+			{
+				ImGui::SameLine();
+				int64 value = GetLongValue(condition, side);
+				ImGui::SetNextItemWidth(120);
+				if (ImGui::InputScalar("##Int", ImGuiDataType_S64, &value))
+				{
+					SetLongValue(condition, side, value);
+				}
+				break;
+			}
+
+			case ConditionValueKind::Float:
+			{
+				ImGui::SameLine();
+				float value = GetFloatValue(condition, side);
+				ImGui::SetNextItemWidth(120);
+				if (ImGui::InputFloat("##Float", &value))
+				{
+					SetFloatValue(condition, side, value);
+				}
+				break;
+			}
+
+			case ConditionValueKind::Function:
+			{
+				ImGui::SameLine();
+
+				const proto::TriggerFunction current = GetFunctionValue(condition, side);
+				int funcIndex = 0;
+				for (int i = 0; i < static_cast<int>(std::size(s_triggerFunctions)); ++i)
+				{
+					if (s_triggerFunctions[i].value == current)
+					{
+						funcIndex = i;
+						break;
+					}
+				}
+
+				const char* funcNames[std::size(s_triggerFunctions)] = {};
+				for (size_t i = 0; i < std::size(s_triggerFunctions); ++i)
+				{
+					funcNames[i] = s_triggerFunctions[i].name;
+				}
+
+				ImGui::SetNextItemWidth(180);
+				if (ImGui::Combo("##Func", &funcIndex, funcNames, static_cast<int>(std::size(funcNames))))
+				{
+					SetFunctionValue(condition, side, s_triggerFunctions[funcIndex].value);
+				}
+
+				if (const char* dataLabel = s_triggerFunctions[funcIndex].dataLabel)
+				{
+					ImGui::SameLine();
+					int64 funcData = GetFunctionDataSize(condition, side) > 0 ? GetFunctionData(condition, side, 0) : 0;
+					ImGui::SetNextItemWidth(90);
+					if (ImGui::InputScalar(dataLabel, ImGuiDataType_S64, &funcData))
+					{
+						if (GetFunctionDataSize(condition, side) > 0)
+						{
+							SetFunctionData(condition, side, 0, funcData);
+						}
+						else
+						{
+							AddFunctionData(condition, side, funcData);
+						}
+					}
+				}
+				break;
+			}
+
+			case ConditionValueKind::Condition:
+			{
+				if (depth + 1 > s_maxConditionDepth)
+				{
+					ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f),
+						"Nested condition is deeper than the editor shows; it is left unchanged.");
+					break;
+				}
+
+				ImGui::Indent();
+				ImGui::Separator();
+				ImGui::BeginGroup();
+				DrawTriggerCondition(*GetMutableSubCondition(condition, side), depth + 1);
+				ImGui::EndGroup();
+				ImGui::Separator();
+				ImGui::Unindent();
+				break;
+			}
+
+			default:
+				break;
+			}
+
+			ImGui::PopID();
+		}
+
+		/// Draws one condition, recursing into nested conditions.
+		void DrawTriggerCondition(proto::TriggerCondition& condition, const int depth)
+		{
+			ImGui::PushID(&condition);
+
+			int typeIndex = static_cast<int>(condition.type());
+			ImGui::SetNextItemWidth(180);
+			if (ImGui::Combo("Type##CondType", &typeIndex, s_conditionTypeNames,
+				static_cast<int>(std::size(s_conditionTypeNames))))
+			{
+				condition.set_type(static_cast<proto::TriggerConditionType>(typeIndex));
+			}
+
+			const bool isLogical = (condition.type() == proto::AndCondition || condition.type() == proto::OrCondition);
+
+			if (isLogical)
+			{
+				ImGui::TextWrapped("Both sides are evaluated as conditions in their own right; the operator is not used.");
+
+				// The world server's fallbacks for a missing side are deliberate but easy to author
+				// by accident, so they are stated where the mistake is made.
+				for (const ConditionSide side : { ConditionSide::Left, ConditionSide::Right })
+				{
+					if (GetValueKind(condition, side) != ConditionValueKind::Condition)
+					{
+						ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "%s side is not a condition: it %s.",
+							side == ConditionSide::Left ? "Left" : "Right",
+							condition.type() == proto::AndCondition ? "counts as passed" : "counts as failed");
+					}
+				}
+			}
+			else
+			{
+				static const char* s_operators[] = { "==", "!=", ">", ">=", "<", "<=" };
+				int opValue = condition.operator_();
+				ImGui::SetNextItemWidth(80);
+				if (ImGui::Combo("Operator##CondOp", &opValue, s_operators, static_cast<int>(std::size(s_operators))))
+				{
+					condition.set_operator_(static_cast<proto::TriggerComparisonOperator>(opValue));
+				}
+			}
+
+			ImGui::Spacing();
+			DrawConditionValue(condition, ConditionSide::Left, depth, isLogical);
+			ImGui::Spacing();
+			DrawConditionValue(condition, ConditionSide::Right, depth, isLogical);
+
+			ImGui::PopID();
+		}
 	}
 
 	TriggerEditorWindow::TriggerEditorWindow(const String& name, proto::Project& project, EditorHost& host)
@@ -1383,169 +1766,11 @@ namespace mmo
 
 			if (hasCondition)
 			{
-				auto* cond = currentEntry.mutable_condition();
-
 				ImGui::Spacing();
 				ImGui::Separator();
 				ImGui::Spacing();
 
-				static const char* s_operators[] = { "==", "!=", ">", ">=", "<", "<=" };
-				int opVal = cond->operator_();
-				ImGui::SetNextItemWidth(80);
-				if (ImGui::Combo("##CondOp", &opVal, s_operators, 6))
-				{
-					cond->set_operator_(static_cast<proto::TriggerComparisonOperator>(opVal));
-				}
-				ImGui::SameLine();
-				ImGui::Text("Operator");
-
-				ImGui::Spacing();
-
-				ImGui::Text("Left Value:");
-
-				static const char* s_condValueTypes[] = { "Integer", "Float", "Function" };
-
-				int leftType = 0;
-				if (cond->has_leftfloat())    leftType = 1;
-				if (cond->has_leftfunction()) leftType = 2;
-
-				ImGui::SetNextItemWidth(130);
-				if (ImGui::Combo("##LeftType", &leftType, s_condValueTypes, 3))
-				{
-					cond->clear_leftlong();
-					cond->clear_leftfloat();
-					cond->clear_leftfunction();
-					if (leftType == 0)      cond->set_leftlong(0);
-					else if (leftType == 1) cond->set_leftfloat(0.0f);
-					else if (leftType == 2) cond->set_leftfunction(proto::Phase);
-				}
-
-				ImGui::SameLine();
-				if (leftType == 0)
-				{
-					int64_t v = cond->has_leftlong() ? cond->leftlong() : 0;
-					ImGui::SetNextItemWidth(120);
-					if (ImGui::InputScalar("##LeftInt", ImGuiDataType_S64, &v))
-					{
-						cond->set_leftlong(v);
-					}
-				}
-				else if (leftType == 1)
-				{
-					float v = cond->has_leftfloat() ? cond->leftfloat() : 0.0f;
-					ImGui::SetNextItemWidth(120);
-					if (ImGui::InputFloat("##LeftFloat", &v))
-					{
-						cond->set_leftfloat(v);
-					}
-				}
-				else if (leftType == 2)
-				{
-					static const char* s_funcNames[] = {
-						"Phase", "Health", "HealthPct", "Mana", "ManaPct", "IsInCombat", "EncounterState",
-						"PlayerCount", "TargetHealthPct", "HasAura", "RandomValue", "InstanceVariable"
-					};
-					constexpr int s_funcNameCount = 12;
-					int funcVal = cond->has_leftfunction() ? cond->leftfunction() : 0;
-					ImGui::SetNextItemWidth(160);
-					if (ImGui::Combo("##LeftFunc", &funcVal, s_funcNames, s_funcNameCount))
-					{
-						cond->set_leftfunction(static_cast<proto::TriggerFunction>(funcVal));
-					}
-
-					// Functions that take a data argument expose an extra input.
-					if (funcVal == proto::EncounterState || funcVal == proto::HasAura ||
-						funcVal == proto::InstanceVariable || funcVal == proto::RandomValue)
-					{
-						ImGui::SameLine();
-						const char* dataLabel =
-							(funcVal == proto::EncounterState) ? "Slot##LeftFuncData" :
-							(funcVal == proto::HasAura) ? "Spell##LeftFuncData" :
-							(funcVal == proto::InstanceVariable) ? "Key##LeftFuncData" : "Max##LeftFuncData";
-						int64_t funcData = cond->leftfunctiondata_size() > 0 ? cond->leftfunctiondata(0) : 0;
-						ImGui::SetNextItemWidth(80);
-						if (ImGui::InputScalar(dataLabel, ImGuiDataType_S64, &funcData))
-						{
-							if (cond->leftfunctiondata_size() > 0)
-								cond->set_leftfunctiondata(0, funcData);
-							else
-								cond->add_leftfunctiondata(funcData);
-						}
-					}
-				}
-
-				ImGui::Spacing();
-
-				ImGui::Text("Right Value:");
-
-				int rightType = 0;
-				if (cond->has_rightfloat())    rightType = 1;
-				if (cond->has_rightfunction()) rightType = 2;
-
-				ImGui::SetNextItemWidth(130);
-				if (ImGui::Combo("##RightType", &rightType, s_condValueTypes, 3))
-				{
-					cond->clear_rightlong();
-					cond->clear_rightfloat();
-					cond->clear_rightfunction();
-					if (rightType == 0)      cond->set_rightlong(0);
-					else if (rightType == 1) cond->set_rightfloat(0.0f);
-					else if (rightType == 2) cond->set_rightfunction(proto::Phase);
-				}
-
-				ImGui::SameLine();
-				if (rightType == 0)
-				{
-					int64_t v = cond->has_rightlong() ? cond->rightlong() : 0;
-					ImGui::SetNextItemWidth(120);
-					if (ImGui::InputScalar("##RightInt", ImGuiDataType_S64, &v))
-					{
-						cond->set_rightlong(v);
-					}
-				}
-				else if (rightType == 1)
-				{
-					float v = cond->has_rightfloat() ? cond->rightfloat() : 0.0f;
-					ImGui::SetNextItemWidth(120);
-					if (ImGui::InputFloat("##RightFloat", &v))
-					{
-						cond->set_rightfloat(v);
-					}
-				}
-				else if (rightType == 2)
-				{
-					static const char* s_funcNames[] = {
-						"Phase", "Health", "HealthPct", "Mana", "ManaPct", "IsInCombat", "EncounterState",
-						"PlayerCount", "TargetHealthPct", "HasAura", "RandomValue", "InstanceVariable"
-					};
-					constexpr int s_funcNameCount = 12;
-					int funcVal = cond->has_rightfunction() ? cond->rightfunction() : 0;
-					ImGui::SetNextItemWidth(160);
-					if (ImGui::Combo("##RightFunc", &funcVal, s_funcNames, s_funcNameCount))
-					{
-						cond->set_rightfunction(static_cast<proto::TriggerFunction>(funcVal));
-					}
-
-					// Functions that take a data argument expose an extra input.
-					if (funcVal == proto::EncounterState || funcVal == proto::HasAura ||
-						funcVal == proto::InstanceVariable || funcVal == proto::RandomValue)
-					{
-						ImGui::SameLine();
-						const char* dataLabel =
-							(funcVal == proto::EncounterState) ? "Slot##RightFuncData" :
-							(funcVal == proto::HasAura) ? "Spell##RightFuncData" :
-							(funcVal == proto::InstanceVariable) ? "Key##RightFuncData" : "Max##RightFuncData";
-						int64_t slotId = cond->rightfunctiondata_size() > 0 ? cond->rightfunctiondata(0) : 0;
-						ImGui::SetNextItemWidth(80);
-						if (ImGui::InputScalar(dataLabel, ImGuiDataType_S64, &slotId))
-						{
-							if (cond->rightfunctiondata_size() > 0)
-								cond->set_rightfunctiondata(0, slotId);
-							else
-								cond->add_rightfunctiondata(slotId);
-						}
-					}
-				}
+				DrawTriggerCondition(*currentEntry.mutable_condition(), 0);
 			}
 
 			ImGui::PopStyleVar(2);
