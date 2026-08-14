@@ -188,6 +188,11 @@ namespace mmo
 		{
 			ID3D11DeviceContext& context = m_device;
 			context.IASetInputLayout(instancedCacheIt->second.Get());
+			// Keep the device's "currently bound layout" cache honest. Bind() early-outs when the
+			// layout it wants already matches this field, so leaving it stale here would let a
+			// non-instanced draw that follows an instanced one skip its rebind and inherit the
+			// instanced layout.
+			m_device.m_lastInputLayout = instancedCacheIt->second.Get();
 			return;
 		}
 
@@ -255,6 +260,7 @@ namespace mmo
 		{
 			ID3D11DeviceContext& context = m_device;
 			context.IASetInputLayout(inputLayout.Get());
+			m_device.m_lastInputLayout = inputLayout.Get();
 
 			// Cache the instanced input layout for reuse
 			m_instancedLayoutCache[&boundVertexProgram] = std::move(inputLayout);

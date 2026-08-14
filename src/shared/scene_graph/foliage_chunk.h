@@ -3,6 +3,7 @@
 #pragma once
 
 #include "foliage_layer.h"
+#include "mesh_instance_data.h"
 #include "renderable.h"
 #include "movable_object.h"
 #include "graphics/vertex_buffer.h"
@@ -21,21 +22,11 @@ namespace mmo
 	class GraphicsDevice;
 	class RenderQueue;
 
-	/// @brief Represents a single foliage instance's transform data for GPU instancing.
-	/// @details This structure is uploaded to the GPU as per-instance data. The layout matches the
-	///          shared instanced vertex-shader input: a world matrix at TEXCOORD8-11 followed by a
-	///          per-instance tint at TEXCOORD12. Foliage leaves the tint white (no visual change),
-	///          while particle mesh emitters drive it from color-over-life.
-	struct FoliageInstanceData
-	{
-		/// @brief World transform matrix for this instance (4x4 = 64 bytes).
-		Matrix4 worldMatrix;
-
-		/// @brief Per-instance tint (RGBA). Defaults to opaque white so foliage renders unchanged.
-		Vector4 color { 1.0f, 1.0f, 1.0f, 1.0f };
-	};
-
-	static_assert(sizeof(FoliageInstanceData) == 80, "FoliageInstanceData size mismatch");
+	/// @brief Per-instance transform data for a foliage instance.
+	/// @details Foliage uses the engine-wide instance layout unchanged; see MeshInstanceData for what
+	///          the layout is and why it is fixed. Kept as an alias so existing foliage and particle
+	///          code keeps reading naturally.
+	using FoliageInstanceData = MeshInstanceData;
 
 	/// @brief A chunk of terrain that contains batched foliage instances.
 	/// @details Each chunk manages a spatial region and renders all foliage instances

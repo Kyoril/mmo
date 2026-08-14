@@ -3,10 +3,15 @@
 #pragma once
 
 #include "world_model.h"
+#include "instanced_mesh_collision.h"
 #include "movable_object.h"
+#include "world_model_batch.h"
+#include "world_model_batch_builder.h"
 #include "math/plane.h"
 
+#include <map>
 #include <memory>
+#include <set>
 #include <vector>
 
 namespace mmo
@@ -101,6 +106,24 @@ namespace mmo
         /// @param scene The scene to destroy objects in.
         void Destroy(Scene& scene);
 
+        /// @brief Enables hardware-instanced batching of this instance's geometry.
+        /// @details Modular world models repeat the same module mesh many times per room. With
+        ///          batching on, every placement sharing a room, mesh, submesh and material is drawn
+        ///          in one instanced draw call instead of one per placement, and collision moves to
+        ///          dedicated proxies. Placements that cannot be batched (skinned meshes, meshes
+        ///          without index data, materials with no compiled instanced shader variant, and
+        ///          meshes placed only once) keep the ordinary per-entity path.
+        ///
+        ///          Off by default so both editors keep the per-entity path: the world editor picks
+        ///          world models by hitting a child entity, and the transform gizmo needs those
+        ///          entities to exist.
+        /// @param enable Whether to batch. Must be set before the instance is attached to a scene
+        ///        node - geometry is created on first attach, and this has no effect afterwards.
+        void SetBatchingEnabled(const bool enable) { m_batchingEnabled = enable; }
+
+        /// @brief Gets whether hardware-instanced batching is enabled. @see SetBatchingEnabled
+        [[nodiscard]] bool IsBatchingEnabled() const { return m_batchingEnabled; }
+
     public:
         // MovableObject overrides
         
@@ -121,6 +144,12 @@ namespace mmo
 
         /// @copydoc MovableObject::NotifyAttachmentChanged
         void NotifyAttachmentChanged(Node* parent, bool isTagPoint = false) override;
+
+        /// @copydoc MovableObject::NotifyMoved
+        /// @details Batched instance matrices are world-space, so they have to be rebuilt whenever
+        ///          the placement transform changes. This only flags them; the rebuild happens in
+        ///          RefreshBatchTransforms during the next culling update.
+        void NotifyMoved() override;
 
         /// @brief Updates portal culling visibility for all child entities.
         /// This should be called before the scene's FindVisibleObjects to ensure
@@ -148,10 +177,157 @@ namespace mmo
             std::vector<int32>& visibleGroups,
             int32 recursionDepth) const;
 
+        /// @brief One instanced draw call plus the data needed to rebuild its world matrices.
+        struct BatchEntry
+        {
+            WorldModelBatchPtr batch;
+
+            /// @brief Node the batch hangs off. Always identity - see WorldModelBatch.
+            SceneNode* node { nullptr };
+
+            /// @brief Placements relative to the world model, composed against the placement node's
+            ///        derived transform by ComposeWorldTransform.
+            std::vector<WorldModelPlacementInput> placements;
+
+            /// @brief Room this batch belongs to, or WorldModelNoGroup when it is never culled.
+            size_t groupIndex { WorldModelNoGroup };
+        };
+
+        /// @brief Collision geometry for placements whose entities were replaced by a batch.
+        struct CollisionEntry
+        {
+            /// @brief The collision proxy. Never gated by portal visibility.
+            std::shared_ptr<InstancedMeshCollision> collision;
+
+            /// @brief Node the proxy hangs off. Always identity, like the batch nodes.
+            SceneNode* node { nullptr };
+
+            /// @brief Mesh whose collision tree every instance shares.
+            MeshPtr mesh;
+
+            /// @brief Material override used to resolve surface types, or null for the mesh's own.
+            MaterialPtr materialOverride;
+
+            /// @brief Placements relative to the world model.
+            std::vector<WorldModelPlacementInput> placements;
+        };
+
         /// @brief Creates the renderable geometry for a group.
         /// @param groupIndex The group index to create geometry for.
         /// @param scene The scene to create entities in.
         void CreateGroupGeometry(size_t groupIndex, Scene& scene);
+
+        /// @brief Creates one scene node plus entity for a single mesh reference.
+        /// @details The per-placement path, shared by unbatched rendering and by placements that
+        ///          batching had to demote.
+        /// @param groupIndex Index of the group the reference belongs to.
+        /// @param refIndex Index of the reference within that group.
+        /// @param scene The scene to create the entity in.
+        void CreateMeshRefEntity(size_t groupIndex, size_t refIndex, Scene& scene);
+
+        /// @brief Builds instanced batches, demoted entities and collision proxies for all groups.
+        /// @param scene The scene to create objects in.
+        void BuildBatchedGeometry(Scene& scene);
+
+        /// @brief Rebuilds and re-uploads instance matrices when the placement transform changed.
+        /// @details Cheap no-op unless something marked the batches dirty. Must run on the main
+        ///          thread, and never from PrepareRenderOperation or PreRender: Scene::RenderSingleObject
+        ///          captures the render operation before PreRender runs, so touching GPU buffers there
+        ///          would hand the draw a buffer that no longer matches.
+        void RefreshBatchTransforms();
+
+        /// @brief Destroys all batches and collision proxies.
+        /// @param scene The scene to destroy objects in (can be null).
+        void ClearBatches(Scene* scene);
+
+        /// @brief Finds the innermost group containing a point in world model local space.
+        /// @param localPoint The point to test, in world model local space.
+        /// @return The group index, or -1 when the point lies in no group.
+        [[nodiscard]] int32 FindGroupContaining(const Vector3& localPoint) const;
+
+        /// @brief Whether a group is currently visible according to the last portal culling pass.
+        [[nodiscard]] bool IsGroupVisible(int32 groupIndex) const;
+
+        /// @brief Whether a mesh may be drawn through the instanced path at all.
+        /// @param mesh The mesh to test.
+        /// @return True when every submesh can be instanced.
+        static bool CanBatchMesh(const Mesh& mesh);
+
+        /// @brief Whether a material has a compiled instanced vertex shader variant.
+        /// @details Without one the device warns once and draws nothing at all, so this is checked
+        ///          up front and the affected placements fall back to entities.
+        /// @param material The material to test.
+        /// @return True when the material can be used for an instanced draw.
+        static bool MaterialSupportsInstancing(const MaterialPtr& material);
+
+        /// @brief Builds the mesh-facts lookup the bucketer uses, backed by the mesh manager.
+        [[nodiscard]] WorldModelMeshLookup MakeMeshLookup();
+
+        /// @brief Creates m_batchRootNode if it does not exist yet.
+        /// @param scene The scene to create the node in.
+        void EnsureBatchRootNode(Scene& scene);
+
+        /// @brief Creates one batch renderable for a bucket and appends it to the given list.
+        /// @param scene The scene to create the batch in.
+        /// @param bucket The bucket to realize.
+        /// @param target The list to append the resulting entry to.
+        /// @return True when a batch was created; false when the bucket must fall back to per-placement
+        ///         renderables and be excluded from the collision pass.
+        bool CreateBatch(Scene& scene, const WorldModelBucket& bucket, std::vector<BatchEntry>& target);
+
+        /// @brief Creates one collision proxy per mesh and material override across all buckets.
+        /// @param scene The scene to create the proxies in.
+        /// @param buckets The buckets whose placements need collision.
+        /// @param target The list to append the resulting proxies to.
+        void BuildCollisionProxies(Scene& scene, const std::vector<WorldModelBucket>& buckets, std::vector<CollisionEntry>& target);
+
+        /// @brief Rebuilds the world transforms of one collision proxy list.
+        /// @param entries The proxies to rebuild.
+        /// @param parentPosition Derived position of the placement node.
+        /// @param parentOrientation Derived orientation of the placement node.
+        /// @param parentScale Derived scale of the placement node.
+        void RefreshCollisionProxies(
+            std::vector<CollisionEntry>& entries,
+            const Vector3& parentPosition,
+            const Quaternion& parentOrientation,
+            const Vector3& parentScale);
+
+        /// @brief Gets the placement node's derived transform, or identity when unattached.
+        /// @param outPosition Receives the derived position.
+        /// @param outOrientation Receives the derived orientation.
+        /// @param outScale Receives the derived scale.
+        void GetPlacementTransform(Vector3& outPosition, Quaternion& outOrientation, Vector3& outScale) const;
+
+        /// @brief Destroys one collision proxy list.
+        /// @param entries The proxies to destroy.
+        /// @param scene The scene to destroy nodes in (can be null).
+        void DestroyCollisionProxies(std::vector<CollisionEntry>& entries, Scene* scene);
+
+        /// @brief Destroys one batch list.
+        /// @param entries The batches to destroy.
+        /// @param scene The scene to destroy nodes in (can be null).
+        void DestroyBatches(std::vector<BatchEntry>& entries, Scene* scene);
+
+        /// @brief Logs a one-off warning that a material cannot be instanced.
+        /// @param materialName Name of the offending material.
+        void WarnMissingInstancedVariant(const String& materialName);
+
+        /// @brief Smallest number of placements worth turning into an instanced draw.
+        /// @details One instanced draw of one instance is still one draw call, so a lone placement
+        ///          gains nothing while costing an instance buffer, a dependency on the material's
+        ///          instanced shader variant, and a collision proxy that has to reproduce what the
+        ///          entity gave for free. Deliberately a constant rather than a cvar.
+        static constexpr size_t kMinInstancesPerBatch = 2;
+
+        /// @brief Mesh facts cache backing MakeMeshLookup for the lifetime of one build.
+        std::map<String, WorldModelMeshFacts> m_meshFactsCache;
+
+        /// @brief Source of unique collision proxy names across both proxy lists.
+        size_t m_collisionProxyCounter { 0 };
+
+        /// @brief Source of unique batch names across both batch lists. Shared rather than per-list,
+        ///        so a mesh-ref batch and a doodad batch cannot end up with the same name.
+        size_t m_batchNameCounter { 0 };
 
         /// @brief Creates doodad entities for the current doodad set.
         /// @param scene The scene to create entities in.
@@ -202,8 +378,35 @@ namespace mmo
         {
             Entity* entity { nullptr };
             SceneNode* node { nullptr };
+
+            /// @brief Index of the room this doodad sits in, or -1 for "in no room".
+            /// @details Derived by point-in-group testing at load time. WorldModelGroup::GetDoodadRefs()
+            ///          exists but is never populated by the serializer or the editor, so it cannot be
+            ///          used for this.
+            int32 groupIndex { -1 };
         };
         std::vector<DoodadInstance> m_doodadInstances;
+
+        std::vector<BatchEntry> m_batches;
+        std::vector<BatchEntry> m_doodadBatches;
+        std::vector<CollisionEntry> m_collisionProxies;
+
+        /// @brief Collision for batched doodads. Separate from m_collisionProxies because changing
+        ///        the active doodad set rebuilds the doodads only, and must not disturb the mesh
+        ///        references' collision.
+        std::vector<CollisionEntry> m_doodadCollisionProxies;
+
+        /// @brief Parent of every batch and collision node. Never given a transform, because both
+        ///        store world-space data that the scene graph must not transform a second time.
+        SceneNode* m_batchRootNode { nullptr };
+
+        bool m_batchingEnabled { false };
+        bool m_batchesDirty { true };
+        Matrix4 m_lastBatchTransform { Matrix4::Identity };
+
+        /// @brief Materials already reported as lacking an instanced variant, so the warning is
+        ///        logged once per material rather than once per batch.
+        std::set<String> m_warnedInstancingMaterials;
 
         // Light instances
         struct LightInstance

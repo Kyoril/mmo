@@ -12,24 +12,34 @@
 
 namespace mmo
 {
-	/// @brief Collision proxy for a batch of authored foliage instances that share a single mesh.
-	/// @details Instanced foliage is rendered with a hardware-instanced FoliageChunk per (cell, mesh,
-	///          submesh), which is great for rendering but carries no per-instance collision geometry.
-	///          This lightweight, non-rendered MovableObject sits alongside the render chunks in a cell
-	///          and exposes the mesh's collision tree for every collidable instance of one mesh, so that
-	///          the regular scene AABB queries used by movement and the camera pick foliage up just like
+	/// @brief Collision proxy for a batch of hardware-instanced placements that share a single mesh.
+	/// @details Instanced rendering draws many placements of one submesh in a single draw call, which is
+	///          great for rendering but carries no per-instance collision geometry. This lightweight,
+	///          non-rendered MovableObject sits alongside the render batches and exposes the mesh's
+	///          collision tree for every collidable instance of one mesh, so that the regular scene AABB
+	///          queries used by movement, the camera and picking pick those placements up just like
 	///          static mesh entities.
+	///
+	///          Used by both instanced foliage (one proxy per cell and mesh) and world model instances
+	///          (one proxy per room and mesh).
 	///
 	///          Performance: every instance keeps a precomputed world-space AABB so that capsule/ray
 	///          tests cheaply reject the (typically many) instances that are nowhere near the query
 	///          before traversing the (relatively expensive) per-instance collision tree.
-	class InstancedFoliageCollision final : public MovableObject, public ICollidable
+	class InstancedMeshCollision final : public MovableObject, public ICollidable
 	{
 	public:
 		/// @brief Creates a collision proxy for a single mesh.
 		/// @param name Unique name for the movable object.
 		/// @param mesh The mesh whose collision tree is shared by all instances added here.
-		InstancedFoliageCollision(const String& name, MeshPtr mesh);
+		InstancedMeshCollision(const String& name, MeshPtr mesh);
+
+	public:
+		/// @brief Overrides the material used to resolve surface types for every instance.
+		/// @details Mirrors Entity::SetMaterial, which replaces the material of *all* submeshes.
+		///          Leave unset to resolve per hit face through the mesh's own submesh materials.
+		/// @param material The overriding material, or nullptr to use the mesh's own materials.
+		void SetMaterialOverride(MaterialPtr material) { m_materialOverride = std::move(material); }
 
 	public:
 		/// @brief Adds a collidable instance with the given world transform.
@@ -39,6 +49,12 @@ namespace mmo
 		///         in which case it is not registered — see the implementation for why a NaN
 		///         inverse is worse than a missing instance.
 		bool AddInstance(const Matrix4& worldTransform);
+
+		/// @brief Removes every instance so the proxy can be refilled in place.
+		/// @details Lets an owner whose placement transform changed re-push its instances instead of
+		///          destroying and recreating the proxy (which would also detach and re-attach it
+		///          from its scene node).
+		void ClearInstances();
 
 		/// @brief Recomputes the aggregate bounding box/radius after all instances were added.
 		void Finalize();
@@ -64,6 +80,13 @@ namespace mmo
 			return !m_instances.empty() && m_mesh && !m_mesh->GetCollisionTree().IsEmpty();
 		}
 
+		/// @copydoc ICollidable::GetSurfaceTypeAt
+		/// @details Resolves exactly like Entity::GetSurfaceTypeAt: the hit face maps to its source
+		///          submesh through the collision tree, and that submesh's material carries the
+		///          surface type. Without this the footstep surface query would fall back to 0 for
+		///          every instanced placement.
+		[[nodiscard]] uint32 GetSurfaceTypeAt(const CollisionResult& hit) const override;
+
 	private:
 		/// @brief A single collidable placement of the shared mesh.
 		struct Instance
@@ -79,6 +102,8 @@ namespace mmo
 		static String s_movableType;
 
 		MeshPtr m_mesh;
+		/// Optional material that overrides every submesh material when resolving surface types.
+		MaterialPtr m_materialOverride;
 		std::vector<Instance> m_instances;
 		AABB m_bounds;
 		float m_boundingRadius = 0.0f;

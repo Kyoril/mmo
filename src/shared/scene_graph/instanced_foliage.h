@@ -4,7 +4,7 @@
 
 #include "foliage_chunk.h"
 #include "foliage_layer.h"
-#include "instanced_foliage_collision.h"
+#include "instanced_mesh_collision.h"
 #include "mesh.h"
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
@@ -195,7 +195,7 @@ namespace mmo
 
 		struct CollisionEntry
 		{
-			std::shared_ptr<InstancedFoliageCollision> collision;
+			std::shared_ptr<InstancedMeshCollision> collision;
 			SceneNode* node = nullptr;
 		};
 

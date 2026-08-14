@@ -243,6 +243,17 @@ namespace mmo
 		auto worldModelInstance = std::make_unique<WorldModelInstance>(instanceName, worldModel);
 		worldModelInstance->SetQueryFlags(1 | (1 << 6));
 
+		// Hardware-instanced world model geometry (draw-call batching). Client-only: both editors
+		// keep the per-entity path, because the world editor picks world models by hitting a child
+		// entity and its transform gizmo needs those entities to exist.
+		//
+		// Must be set before the node attach below - geometry is created on first attach.
+		if (const ConsoleVar* batchVar = ConsoleVarMgr::RegisterConsoleVar("gxWorldModelBatching",
+			"Whether world model geometry is rendered with hardware instancing instead of one draw call per mesh reference. Takes effect for world models loaded afterwards.", "1"))
+		{
+			worldModelInstance->SetBatchingEnabled(batchVar->GetBoolValue());
+		}
+
 		// Create scene node
 		SceneNode* node = m_rootNode.CreateChildSceneNode();
 		node->SetPosition(position);
