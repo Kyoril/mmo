@@ -362,6 +362,13 @@ namespace mmo
 		 */
 		bool CastSpell(const CreatureSpell& spell, GameUnitS& target);
 
+		/// Turns the controlled creature towards a target, unless crowd control prevents it.
+		///
+		/// A creature in combat should always be facing what it is acting on, so that a spell with
+		/// an in-front requirement can never fail on facing alone.
+		/// @param target The unit to face.
+		void FaceTarget(const GameUnitS& target);
+
 		/// Puts a creature spell on cooldown, honouring the authored mincooldown/maxcooldown and
 		/// falling back to the spell's own cooldown.
 		/// @param spellEntry The spell that was attempted.

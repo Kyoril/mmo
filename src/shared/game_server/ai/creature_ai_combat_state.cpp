@@ -6,6 +6,7 @@
 
 #include "game_server/ai/creature_ai_combat_state.h"
 #include "game_server/ai/creature_spell_cooldown.h"
+#include "game_server/ai/creature_facing.h"
 #include "base/utilities.h"
 #include "game_server/world/world_instance.h"
 #include "game_server/ai/creature_ai.h"
@@ -928,7 +929,7 @@ namespace mmo
 			UpdateVictim();
 			if (const GameUnitS* rootedVictim = controlled.GetVictim())
 			{
-				controlled.SetFacing(controlled.GetAngle(*rootedVictim));
+				FaceTarget(*rootedVictim);
 			}
 			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
 			return;
@@ -964,7 +965,7 @@ namespace mmo
 		}
 
 		// Face the victim on the server side (no network update needed; client renders creature facing automatically)
-		controlled.SetFacing(controlled.GetAngle(*victim));
+		FaceTarget(*victim);
 
 		// Update spell cooldowns
 		UpdateSpellCooldowns();
@@ -1447,6 +1448,12 @@ namespace mmo
 			m_movementState.Reset();
 		}
 
+		// Face the target before casting. Spells routinely carry an in-front requirement, and a
+		// creature that is not looking at what it is casting on simply throws the cast away — which
+		// is what filled the log with validation failures for the crypt acolytes. Casts driven by a
+		// combat script go through here too, so this covers them as well as the default rotation.
+		FaceTarget(target);
+
 		SpellTargetMap targetMap;
 		targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 		targetMap.SetUnitTarget(target.GetGuid());
@@ -1497,6 +1504,17 @@ namespace mmo
 		}
 
 		return false;
+	}
+
+	void CreatureAICombatState::FaceTarget(const GameUnitS& target)
+	{
+		auto& controlled = GetControlled();
+		if (!CanTurnToFaceTarget(controlled))
+		{
+			return;
+		}
+
+		controlled.SetFacing(controlled.GetAngle(target));
 	}
 
 	void CreatureAICombatState::ApplySpellCooldown(const proto::SpellEntry& spellEntry, const uint32 spellCooldownMs, const bool castFailed)
