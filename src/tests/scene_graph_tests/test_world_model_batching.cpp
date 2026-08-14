@@ -10,6 +10,7 @@
 #include "math/vector4.h"
 #include "scene_graph/world_model_batch_builder.h"
 
+#include <cmath>
 #include <map>
 #include <vector>
 
@@ -297,6 +298,72 @@ TEST_CASE("Placement order within a bucket is preserved", "[world_model_batching
 	REQUIRE(buckets[0].placements[0].sourceIndex == 10);
 	REQUIRE(buckets[0].placements[1].sourceIndex == 20);
 	REQUIRE(buckets[0].placements[2].sourceIndex == 30);
+}
+
+TEST_CASE("Composed world transform matches the scene graph under a uniform parent", "[world_model_batching]")
+{
+	// The baseline: with a uniform parent scale, composing component-wise and multiplying the two
+	// matrices agree, so a batch and an entity land in exactly the same place.
+	WorldModelPlacementInput placement;
+	placement.position = Vector3(3.0f, 4.0f, 5.0f);
+	placement.rotation = Quaternion(Degree(35.0f), Vector3::UnitY);
+	placement.scale = Vector3(2.0f, 2.0f, 2.0f);
+
+	const Vector3 parentPosition(10.0f, 0.0f, -7.0f);
+	const Quaternion parentOrientation(Degree(90.0f), Vector3::UnitY);
+	const Vector3 parentScale(3.0f, 3.0f, 3.0f);
+
+	Matrix4 parentMatrix;
+	parentMatrix.MakeTransform(parentPosition, parentScale, parentOrientation);
+	Matrix4 localMatrix;
+	localMatrix.MakeTransform(placement.position, placement.scale, placement.rotation);
+
+	const Matrix4 composed = ComposeWorldTransform(parentPosition, parentOrientation, parentScale, placement);
+	const Matrix4 multiplied = parentMatrix * localMatrix;
+
+	const Vector3 probe(1.0f, 2.0f, 3.0f);
+	const Vector3 a = composed * probe;
+	const Vector3 b = multiplied * probe;
+
+	REQUIRE(a.x == Approx(b.x).margin(0.001f));
+	REQUIRE(a.y == Approx(b.y).margin(0.001f));
+	REQUIRE(a.z == Approx(b.z).margin(0.001f));
+}
+
+TEST_CASE("Composed world transform follows the scene graph under a non-uniform parent", "[world_model_batching]")
+{
+	// The case that motivates ComposeWorldTransform. Node::UpdateFromParentImpl multiplies scales
+	// element-wise and orientations as quaternions; a plain matrix product shears instead once the
+	// parent scale is non-uniform and the child is rotated. A batch built the matrix way would then
+	// no longer line up with the neighbouring placements that batching demoted to entities.
+	WorldModelPlacementInput placement;
+	placement.position = Vector3(3.0f, 0.0f, 0.0f);
+	placement.rotation = Quaternion(Degree(45.0f), Vector3::UnitY);
+	placement.scale = Vector3::UnitScale;
+
+	const Vector3 parentPosition = Vector3::Zero;
+	const Quaternion parentOrientation = Quaternion::Identity;
+	const Vector3 parentScale(4.0f, 1.0f, 1.0f);   // non-uniform
+
+	const Matrix4 composed = ComposeWorldTransform(parentPosition, parentOrientation, parentScale, placement);
+
+	// Position still follows the scene graph rule: parentOrientation * (parentScale * localPos).
+	const Vector3 origin = composed * Vector3::Zero;
+	REQUIRE(origin.x == Approx(12.0f).margin(0.001f));
+	REQUIRE(origin.y == Approx(0.0f).margin(0.001f));
+	REQUIRE(origin.z == Approx(0.0f).margin(0.001f));
+
+	// And it differs from the naive matrix product, which is the whole point.
+	Matrix4 parentMatrix;
+	parentMatrix.MakeTransform(parentPosition, parentScale, parentOrientation);
+	Matrix4 localMatrix;
+	localMatrix.MakeTransform(placement.position, placement.scale, placement.rotation);
+	const Matrix4 multiplied = parentMatrix * localMatrix;
+
+	const Vector3 probe(0.0f, 0.0f, 1.0f);
+	const Vector3 a = composed * probe;
+	const Vector3 b = multiplied * probe;
+	REQUIRE(std::abs(a.x - b.x) + std::abs(a.y - b.y) + std::abs(a.z - b.z) > 0.01f);
 }
 
 TEST_CASE("A null mesh lookup demotes everything instead of crashing", "[world_model_batching]")

@@ -4,6 +4,8 @@
 
 #include "base/typedefs.h"
 #include "math/matrix4.h"
+#include "math/quaternion.h"
+#include "math/vector3.h"
 #include "math/vector4.h"
 
 #include <functional>
@@ -32,12 +34,34 @@ namespace mmo
 		/// @brief Material override path, or empty to use the submesh's own material.
 		String materialOverride;
 
-		/// @brief Transform relative to the world model, before the placement transform is applied.
-		Matrix4 localTransform { Matrix4::Identity };
+		/// @brief Position relative to the world model.
+		Vector3 position { 0.0f, 0.0f, 0.0f };
 
-		/// @brief Per-instance tint. White leaves the mesh unchanged.
-		Vector4 tint { 1.0f, 1.0f, 1.0f, 1.0f };
+		/// @brief Rotation relative to the world model.
+		Quaternion rotation { Quaternion::Identity };
+
+		/// @brief Scale relative to the world model.
+		Vector3 scale { 1.0f, 1.0f, 1.0f };
 	};
+
+	/// @brief Composes a placement's world transform under a world model's placement transform.
+	/// @details Deliberately mirrors Node::UpdateFromParentImpl component by component rather than
+	///          multiplying the two matrices. The scene graph concatenates a parent and child by
+	///          multiplying their scales element-wise and their orientations as quaternions, which
+	///          only agrees with a matrix product when the parent scale is uniform or the child is
+	///          unrotated. Getting this wrong would shear every rotated module of a non-uniformly
+	///          scaled world model, and - worse - shear only the batched ones, so batched modules
+	///          would no longer line up with the neighbours that batching demoted to entities.
+	/// @param parentPosition Derived position of the world model's placement node.
+	/// @param parentOrientation Derived orientation of the world model's placement node.
+	/// @param parentScale Derived scale of the world model's placement node.
+	/// @param placement The placement to transform.
+	/// @return The placement's world transform.
+	Matrix4 ComposeWorldTransform(
+		const Vector3& parentPosition,
+		const Quaternion& parentOrientation,
+		const Vector3& parentScale,
+		const WorldModelPlacementInput& placement);
 
 	/// @brief Identifies one instanced draw call.
 	/// @details Room is part of the key because portal culling toggles visibility per room; batching
@@ -47,18 +71,29 @@ namespace mmo
 	///          draw with a non-overridden one.
 	struct WorldModelBatchKey
 	{
+		/// @brief Room the placements belong to, or WorldModelNoGroup.
 		size_t groupIndex { WorldModelNoGroup };
+
+		/// @brief Path of the shared mesh asset.
 		String meshPath;
+
+		/// @brief Submesh of that mesh this draw call covers.
 		uint16 submeshIndex { 0 };
+
+		/// @brief Material override path, or empty for the submesh's own material.
 		String materialOverride;
 
+		/// @brief Orders keys so bucket output is deterministic across runs.
 		bool operator<(const WorldModelBatchKey& other) const;
 	};
 
 	/// @brief A set of placements that can be drawn with one DrawIndexedInstanced.
 	struct WorldModelBucket
 	{
+		/// @brief What this bucket draws.
 		WorldModelBatchKey key;
+
+		/// @brief The placements to draw, in input order.
 		std::vector<WorldModelPlacementInput> placements;
 	};
 

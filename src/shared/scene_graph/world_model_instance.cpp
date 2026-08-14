@@ -20,32 +20,12 @@
 
 namespace mmo
 {
-    namespace
-    {
-        /// @brief Converts a doodad's packed colour into a per-instance tint.
-        /// @details WorldModelDoodad::color is documented BGRA, but the only writer in the editor
-        ///          emits 0xFFFFFFFF, which is identical under every channel order - so the real
-        ///          order is not observable from current content. Decoded as 0xAARRGGBB to match how
-        ///          WorldModelLight::color is decoded in CreateLights. Revisit if tinted doodads are
-        ///          ever authored.
-        ///
-        ///          Zero is treated as "unset" rather than transparent black: the per-entity path
-        ///          ignores this field entirely today, so an unset value must not suddenly multiply
-        ///          a dungeon's props down to nothing.
-        Vector4 DoodadTint(const uint32 color)
-        {
-            if (color == 0 || color == 0xFFFFFFFF)
-            {
-                return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-            }
-
-            return Vector4(
-                static_cast<float>((color >> 16) & 0xFF) / 255.0f,
-                static_cast<float>((color >> 8) & 0xFF) / 255.0f,
-                static_cast<float>((color >> 0) & 0xFF) / 255.0f,
-                static_cast<float>((color >> 24) & 0xFF) / 255.0f);
-        }
-    }
+    // Note on WorldModelDoodad::color: it is deliberately NOT applied as a per-instance tint here.
+    // The per-entity path has never read it, the only writer in the editor emits 0xFFFFFFFF (which
+    // is identical under every channel order, so the documented BGRA layout is unverifiable from
+    // content), and applying it only on the batched path would make two identical props render
+    // differently depending on whether batching happened to demote one of them. Settle the channel
+    // order against the exporter first, then apply it on both paths at once.
 
     // PortalFrustum implementation
 
@@ -252,6 +232,15 @@ namespace mmo
             {
                 scene = &sceneNode->GetScene();
             }
+        }
+
+        // Fall back to the scene this instance was registered with. Teardown only destroys nodes when
+        // it has a scene, so without this an instance destroyed after being detached would orphan its
+        // batch root and every batch and collision node under it - and unlike the per-placement nodes,
+        // that root is one extra leaked node per world model instance.
+        if (!scene)
+        {
+            scene = m_scene;
         }
 
         // Unregister from scene before destruction
@@ -541,7 +530,11 @@ namespace mmo
         {
             if (entry.batch)
             {
-                entry.batch->SetVisible(IsGroupVisible(static_cast<int32>(entry.groupIndex)));
+                // Same NoGroup guard as the doodad batches below. Mesh references always carry a real
+                // group index today, but without this a NoGroup batch would cast to -1 and become
+                // permanently invisible rather than permanently visible.
+                entry.batch->SetVisible(entry.groupIndex == WorldModelNoGroup ||
+                    IsGroupVisible(static_cast<int32>(entry.groupIndex)));
             }
         }
 
@@ -973,54 +966,55 @@ namespace mmo
             "Recompile/resave the material to enable batching.");
     }
 
-    void WorldModelInstance::CreateBatch(Scene& scene, const WorldModelBucket& bucket, std::vector<BatchEntry>& target)
+    bool WorldModelInstance::CreateBatch(Scene& scene, const WorldModelBucket& bucket, std::vector<BatchEntry>& target)
     {
         const MeshPtr mesh = MeshManager::Get().Load(bucket.key.meshPath);
-        if (!mesh || mesh->GetSubMeshCount() <= bucket.key.submeshIndex)
-        {
-            return;
-        }
-
         MaterialPtr material;
-        if (!bucket.key.materialOverride.empty())
+
+        if (mesh && mesh->GetSubMeshCount() > bucket.key.submeshIndex)
         {
-            material = MaterialManager::Get().Load(bucket.key.materialOverride);
-        }
-        if (!material)
-        {
-            material = mesh->GetSubMesh(bucket.key.submeshIndex).GetMaterial();
+            if (!bucket.key.materialOverride.empty())
+            {
+                material = MaterialManager::Get().Load(bucket.key.materialOverride);
+            }
+            if (!material)
+            {
+                material = mesh->GetSubMesh(bucket.key.submeshIndex).GetMaterial();
+            }
         }
 
-        if (!material)
+        if (!mesh || !material)
         {
-            return;
+            // Reported, never silent: the caller drops this bucket from the collision pass too.
+            // Bailing out quietly would leave the bucket with a collision proxy but no geometry -
+            // invisible yet solid, which is the worst outcome this feature can produce.
+            ELOG("World model '" << m_name << "': cannot batch '" << bucket.key.meshPath << "' submesh "
+                << bucket.key.submeshIndex << " (" << (mesh ? "no material" : "mesh failed to load")
+                << ") - falling back to one renderable per placement");
+            return false;
         }
 
-        const String batchName = m_name + "_batch" + std::to_string(target.size()) +
+        const String batchName = m_name + "_batch" + std::to_string(m_batchNameCounter++) +
             "_g" + std::to_string(static_cast<int64>(bucket.key.groupIndex)) +
             "_s" + std::to_string(bucket.key.submeshIndex);
 
         BatchEntry entry;
         entry.batch = std::make_shared<WorldModelBatch>(batchName, mesh, bucket.key.submeshIndex, material);
         entry.groupIndex = bucket.key.groupIndex;
-        entry.localTransforms.reserve(bucket.placements.size());
-        entry.tints.reserve(bucket.placements.size());
-
-        for (const auto& placement : bucket.placements)
-        {
-            entry.localTransforms.push_back(placement.localTransform);
-            entry.tints.push_back(placement.tint);
-        }
+        entry.placements = bucket.placements;
 
         // Upload before attaching, so the node's bounds are computed from real instance bounds the
         // first time round rather than from an empty batch. RefreshBatchTransforms re-uploads later
         // if the placement transform ever changes.
-        const Matrix4 parentTransform = m_parentNode ? m_parentNode->GetFullTransform() : Matrix4::Identity;
-        for (size_t i = 0; i < entry.localTransforms.size(); ++i)
+        Vector3 parentPosition;
+        Quaternion parentOrientation;
+        Vector3 parentScale;
+        GetPlacementTransform(parentPosition, parentOrientation, parentScale);
+
+        for (const auto& placement : entry.placements)
         {
             MeshInstanceData instance;
-            instance.worldMatrix = parentTransform * entry.localTransforms[i];
-            instance.color = entry.tints[i];
+            instance.worldMatrix = ComposeWorldTransform(parentPosition, parentOrientation, parentScale, placement);
             entry.batch->AddInstance(instance);
         }
         entry.batch->UploadInstances(GraphicsDevice::Get());
@@ -1033,6 +1027,7 @@ namespace mmo
         entry.batch->SetQueryFlags(0);
 
         target.push_back(std::move(entry));
+        return true;
     }
 
     void WorldModelInstance::BuildCollisionProxies(Scene& scene, const std::vector<WorldModelBucket>& buckets, std::vector<CollisionEntry>& target)
@@ -1073,10 +1068,7 @@ namespace mmo
             }
 
             auto& proxy = target[it->second];
-            for (const auto& placement : bucket.placements)
-            {
-                proxy.localTransforms.push_back(placement.localTransform);
-            }
+            proxy.placements.insert(proxy.placements.end(), bucket.placements.begin(), bucket.placements.end());
         }
 
         for (size_t i = 0; i < target.size(); ++i)
@@ -1101,37 +1093,33 @@ namespace mmo
         }
     }
 
-    void WorldModelInstance::RefreshCollisionProxies(std::vector<CollisionEntry>& entries, const Matrix4& parentTransform)
+    void WorldModelInstance::RefreshCollisionProxies(
+        std::vector<CollisionEntry>& entries,
+        const Vector3& parentPosition,
+        const Quaternion& parentOrientation,
+        const Vector3& parentScale)
     {
         for (auto& entry : entries)
         {
-            if (!entry.node)
+            if (!entry.node || !entry.collision)
             {
                 continue;
             }
 
-            // InstancedMeshCollision accumulates instances and has no way to clear them, so it is
-            // rebuilt from scratch. This only runs when the world model actually moves, which for
-            // placed world models is never after load.
-            const String name = entry.collision ? entry.collision->GetName() : m_name + "_collision";
-
-            if (entry.collision)
+            entry.collision->ClearInstances();
+            for (const auto& placement : entry.placements)
             {
-                entry.node->DetachObject(*entry.collision);
-            }
-
-            entry.collision = std::make_shared<InstancedMeshCollision>(name, entry.mesh);
-            entry.collision->SetMaterialOverride(entry.materialOverride);
-            entry.collision->SetQueryFlags(GetQueryFlags());
-
-            for (const auto& localTransform : entry.localTransforms)
-            {
-                entry.collision->AddInstance(parentTransform * localTransform);
+                entry.collision->AddInstance(
+                    ComposeWorldTransform(parentPosition, parentOrientation, parentScale, placement));
             }
             entry.collision->Finalize();
 
-            entry.node->AttachObject(*entry.collision);
-            entry.collision->SetScene(m_scene);
+            // The proxy is attached with no instances (and therefore null bounds), and
+            // OctreeNode::UpdateBounds only inserts a node into the octree once its world AABB is
+            // non-null. Without this the proxy would not enter the octree until some later node
+            // update, leaving freshly streamed dungeon geometry non-collidable for a frame or two -
+            // long enough to fall through a floor.
+            entry.node->UpdateBounds();
         }
     }
 
@@ -1149,9 +1137,14 @@ namespace mmo
             return;
         }
 
+        Vector3 parentPosition;
+        Quaternion parentOrientation;
+        Vector3 parentScale;
+        GetPlacementTransform(parentPosition, parentOrientation, parentScale);
+
         auto& device = GraphicsDevice::Get();
 
-        const auto rebuild = [&device, &parentTransform](std::vector<BatchEntry>& entries)
+        const auto rebuild = [&](std::vector<BatchEntry>& entries)
         {
             for (auto& entry : entries)
             {
@@ -1161,11 +1154,10 @@ namespace mmo
                 }
 
                 entry.batch->ClearInstances();
-                for (size_t i = 0; i < entry.localTransforms.size(); ++i)
+                for (const auto& placement : entry.placements)
                 {
                     MeshInstanceData instance;
-                    instance.worldMatrix = parentTransform * entry.localTransforms[i];
-                    instance.color = entry.tints[i];
+                    instance.worldMatrix = ComposeWorldTransform(parentPosition, parentOrientation, parentScale, placement);
                     entry.batch->AddInstance(instance);
                 }
 
@@ -1183,11 +1175,26 @@ namespace mmo
         rebuild(m_batches);
         rebuild(m_doodadBatches);
 
-        RefreshCollisionProxies(m_collisionProxies, parentTransform);
-        RefreshCollisionProxies(m_doodadCollisionProxies, parentTransform);
+        RefreshCollisionProxies(m_collisionProxies, parentPosition, parentOrientation, parentScale);
+        RefreshCollisionProxies(m_doodadCollisionProxies, parentPosition, parentOrientation, parentScale);
 
         m_lastBatchTransform = parentTransform;
         m_batchesDirty = false;
+    }
+
+    void WorldModelInstance::GetPlacementTransform(Vector3& outPosition, Quaternion& outOrientation, Vector3& outScale) const
+    {
+        if (m_parentNode)
+        {
+            outPosition = m_parentNode->GetDerivedPosition();
+            outOrientation = m_parentNode->GetDerivedOrientation();
+            outScale = m_parentNode->GetDerivedScale();
+            return;
+        }
+
+        outPosition = Vector3::Zero;
+        outOrientation = Quaternion::Identity;
+        outScale = Vector3::UnitScale;
     }
 
     void WorldModelInstance::DestroyBatches(std::vector<BatchEntry>& entries, Scene* scene)
@@ -1325,6 +1332,24 @@ namespace mmo
             return -1;
         }
 
+        // Only trust the assignment when the author actually defined the rooms' shapes. Without
+        // containment volumes, WorldModelGroup::ContainsPoint falls back to the group's AABB, and a
+        // modular dungeon's room AABBs overlap freely - so a prop's pivot can easily land inside a
+        // neighbouring room's box and the smallest-volume tiebreak would then hide it whenever the
+        // player is in the room it visually belongs to. Doodads were never culled at all before this,
+        // so a wrong assignment is a pure regression; returning "no room" keeps them always visible.
+        bool anyContainmentVolumes = false;
+        for (size_t i = 0; i < m_worldModel->GetGroupCount() && !anyContainmentVolumes; ++i)
+        {
+            const auto* group = m_worldModel->GetGroup(i);
+            anyContainmentVolumes = group && !group->GetContainmentVolumes().empty();
+        }
+
+        if (!anyContainmentVolumes)
+        {
+            return -1;
+        }
+
         // If several groups contain the point, prefer the one with the smallest bounding box, i.e.
         // the most specific room. Same rule DetermineCurrentGroup applies to the camera.
         int32 bestGroupIndex = -1;
@@ -1399,7 +1424,9 @@ namespace mmo
                 placement.sourceIndex = refIndex;
                 placement.meshPath = meshRef.meshPath;
                 placement.materialOverride = meshRef.materialOverride;
-                placement.localTransform.MakeTransform(meshRef.position, meshRef.scale, meshRef.rotation);
+                placement.position = meshRef.position;
+                placement.rotation = meshRef.rotation;
+                placement.scale = meshRef.scale;
 
                 // An override replaces the material of every submesh, so it alone decides whether
                 // this placement can be instanced. Checked here rather than in the bucketer, which
@@ -1422,9 +1449,24 @@ namespace mmo
 
         EnsureBatchRootNode(scene);
 
+        std::vector<WorldModelBucket> realizedBuckets;
+        realizedBuckets.reserve(buckets.size());
+
         for (const auto& bucket : buckets)
         {
-            CreateBatch(scene, bucket, m_batches);
+            if (CreateBatch(scene, bucket, m_batches))
+            {
+                realizedBuckets.push_back(bucket);
+            }
+            else if (bucket.key.submeshIndex == 0)
+            {
+                // Only submesh 0 falls back, because the entity path draws every submesh of a mesh
+                // together - one entity per placement, not one per submesh.
+                for (const auto& placement : bucket.placements)
+                {
+                    CreateMeshRefEntity(placement.groupIndex, placement.sourceIndex, scene);
+                }
+            }
         }
 
         // Everything batching could not take renders exactly as it did before.
@@ -1437,9 +1479,9 @@ namespace mmo
             CreateMeshRefEntity(placement.groupIndex, placement.sourceIndex, scene);
         }
 
-        // Collision for batched placements only: demoted ones still have their entity, which carries
-        // its own collision, and adding a proxy for them too would report every hit twice.
-        BuildCollisionProxies(scene, buckets, m_collisionProxies);
+        // Collision for actually-batched placements only: demoted ones still have their entity, which
+        // carries its own collision, and adding a proxy for them too would report every hit twice.
+        BuildCollisionProxies(scene, realizedBuckets, m_collisionProxies);
 
         m_batchesDirty = true;
     }
@@ -1500,11 +1542,9 @@ namespace mmo
                 placement.groupIndex = groupIndex < 0 ? WorldModelNoGroup : static_cast<size_t>(groupIndex);
                 placement.sourceIndex = doodadIndex;
                 placement.meshPath = doodadNames[doodad.nameIndex];
-                placement.localTransform.MakeTransform(
-                    doodad.position,
-                    Vector3(doodad.scale, doodad.scale, doodad.scale),
-                    doodad.rotation);
-                placement.tint = DoodadTint(doodad.color);
+                placement.position = doodad.position;
+                placement.rotation = doodad.rotation;
+                placement.scale = Vector3(doodad.scale, doodad.scale, doodad.scale);
 
                 placements.push_back(std::move(placement));
             }
@@ -1518,12 +1558,25 @@ namespace mmo
             BuildWorldModelBuckets(placements, MakeMeshLookup(), kMinInstancesPerBatch, buckets, unbatched);
 
             EnsureBatchRootNode(scene);
+
+            std::vector<WorldModelBucket> realizedBuckets;
+            realizedBuckets.reserve(buckets.size());
+
             for (const auto& bucket : buckets)
             {
-                CreateBatch(scene, bucket, m_doodadBatches);
+                if (CreateBatch(scene, bucket, m_doodadBatches))
+                {
+                    realizedBuckets.push_back(bucket);
+                }
+                else if (bucket.key.submeshIndex == 0)
+                {
+                    // Fall back to the per-doodad entity path rather than leaving this bucket with a
+                    // collision proxy and no geometry.
+                    unbatched.insert(unbatched.end(), bucket.placements.begin(), bucket.placements.end());
+                }
             }
 
-            BuildCollisionProxies(scene, buckets, m_doodadCollisionProxies);
+            BuildCollisionProxies(scene, realizedBuckets, m_doodadCollisionProxies);
             m_batchesDirty = true;
         }
         else

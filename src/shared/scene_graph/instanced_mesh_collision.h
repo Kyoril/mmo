@@ -50,6 +50,12 @@ namespace mmo
 		///         inverse is worse than a missing instance.
 		bool AddInstance(const Matrix4& worldTransform);
 
+		/// @brief Removes every instance so the proxy can be refilled in place.
+		/// @details Lets an owner whose placement transform changed re-push its instances instead of
+		///          destroying and recreating the proxy (which would also detach and re-attach it
+		///          from its scene node).
+		void ClearInstances();
+
 		/// @brief Recomputes the aggregate bounding box/radius after all instances were added.
 		void Finalize();
 

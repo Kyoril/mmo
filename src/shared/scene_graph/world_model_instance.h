@@ -9,6 +9,7 @@
 #include "world_model_batch_builder.h"
 #include "math/plane.h"
 
+#include <map>
 #include <memory>
 #include <set>
 #include <vector>
@@ -184,11 +185,9 @@ namespace mmo
             /// @brief Node the batch hangs off. Always identity - see WorldModelBatch.
             SceneNode* node { nullptr };
 
-            /// @brief Transforms relative to the world model; world = parent transform * this.
-            std::vector<Matrix4> localTransforms;
-
-            /// @brief Per-instance tints, parallel to localTransforms.
-            std::vector<Vector4> tints;
+            /// @brief Placements relative to the world model, composed against the placement node's
+            ///        derived transform by ComposeWorldTransform.
+            std::vector<WorldModelPlacementInput> placements;
 
             /// @brief Room this batch belongs to, or WorldModelNoGroup when it is never culled.
             size_t groupIndex { WorldModelNoGroup };
@@ -197,11 +196,20 @@ namespace mmo
         /// @brief Collision geometry for placements whose entities were replaced by a batch.
         struct CollisionEntry
         {
+            /// @brief The collision proxy. Never gated by portal visibility.
             std::shared_ptr<InstancedMeshCollision> collision;
+
+            /// @brief Node the proxy hangs off. Always identity, like the batch nodes.
             SceneNode* node { nullptr };
+
+            /// @brief Mesh whose collision tree every instance shares.
             MeshPtr mesh;
+
+            /// @brief Material override used to resolve surface types, or null for the mesh's own.
             MaterialPtr materialOverride;
-            std::vector<Matrix4> localTransforms;
+
+            /// @brief Placements relative to the world model.
+            std::vector<WorldModelPlacementInput> placements;
         };
 
         /// @brief Creates the renderable geometry for a group.
@@ -263,7 +271,9 @@ namespace mmo
         /// @param scene The scene to create the batch in.
         /// @param bucket The bucket to realize.
         /// @param target The list to append the resulting entry to.
-        void CreateBatch(Scene& scene, const WorldModelBucket& bucket, std::vector<BatchEntry>& target);
+        /// @return True when a batch was created; false when the bucket must fall back to per-placement
+        ///         renderables and be excluded from the collision pass.
+        bool CreateBatch(Scene& scene, const WorldModelBucket& bucket, std::vector<BatchEntry>& target);
 
         /// @brief Creates one collision proxy per mesh and material override across all buckets.
         /// @param scene The scene to create the proxies in.
@@ -273,8 +283,20 @@ namespace mmo
 
         /// @brief Rebuilds the world transforms of one collision proxy list.
         /// @param entries The proxies to rebuild.
-        /// @param parentTransform The current placement transform.
-        void RefreshCollisionProxies(std::vector<CollisionEntry>& entries, const Matrix4& parentTransform);
+        /// @param parentPosition Derived position of the placement node.
+        /// @param parentOrientation Derived orientation of the placement node.
+        /// @param parentScale Derived scale of the placement node.
+        void RefreshCollisionProxies(
+            std::vector<CollisionEntry>& entries,
+            const Vector3& parentPosition,
+            const Quaternion& parentOrientation,
+            const Vector3& parentScale);
+
+        /// @brief Gets the placement node's derived transform, or identity when unattached.
+        /// @param outPosition Receives the derived position.
+        /// @param outOrientation Receives the derived orientation.
+        /// @param outScale Receives the derived scale.
+        void GetPlacementTransform(Vector3& outPosition, Quaternion& outOrientation, Vector3& outScale) const;
 
         /// @brief Destroys one collision proxy list.
         /// @param entries The proxies to destroy.
@@ -284,7 +306,7 @@ namespace mmo
         /// @brief Destroys one batch list.
         /// @param entries The batches to destroy.
         /// @param scene The scene to destroy nodes in (can be null).
-        static void DestroyBatches(std::vector<BatchEntry>& entries, Scene* scene);
+        void DestroyBatches(std::vector<BatchEntry>& entries, Scene* scene);
 
         /// @brief Logs a one-off warning that a material cannot be instanced.
         /// @param materialName Name of the offending material.
@@ -302,6 +324,10 @@ namespace mmo
 
         /// @brief Source of unique collision proxy names across both proxy lists.
         size_t m_collisionProxyCounter { 0 };
+
+        /// @brief Source of unique batch names across both batch lists. Shared rather than per-list,
+        ///        so a mesh-ref batch and a doodad batch cannot end up with the same name.
+        size_t m_batchNameCounter { 0 };
 
         /// @brief Creates doodad entities for the current doodad set.
         /// @param scene The scene to create entities in.

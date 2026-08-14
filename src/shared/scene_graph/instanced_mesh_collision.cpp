@@ -88,6 +88,13 @@ namespace mmo
 			<< reason << " - they would corrupt collision queries instead of blocking them");
 	}
 
+	void InstancedMeshCollision::ClearInstances()
+	{
+		m_instances.clear();
+		m_bounds = AABB(Vector3::Zero, Vector3::Zero);
+		m_boundingRadius = 0.0f;
+	}
+
 	void InstancedMeshCollision::Finalize()
 	{
 		if (m_instances.empty())

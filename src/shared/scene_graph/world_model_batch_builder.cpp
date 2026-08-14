@@ -8,6 +8,21 @@
 
 namespace mmo
 {
+	Matrix4 ComposeWorldTransform(
+		const Vector3& parentPosition,
+		const Quaternion& parentOrientation,
+		const Vector3& parentScale,
+		const WorldModelPlacementInput& placement)
+	{
+		const Quaternion derivedOrientation = parentOrientation * placement.rotation;
+		const Vector3 derivedScale = parentScale * placement.scale;
+		const Vector3 derivedPosition = parentPosition + parentOrientation * (parentScale * placement.position);
+
+		Matrix4 result;
+		result.MakeTransform(derivedPosition, derivedScale, derivedOrientation);
+		return result;
+	}
+
 	bool WorldModelBatchKey::operator<(const WorldModelBatchKey& other) const
 	{
 		if (groupIndex != other.groupIndex)

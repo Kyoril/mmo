@@ -78,7 +78,7 @@ namespace mmo
 		// Bounds are the union of the mesh bounds under every instance transform, in world space.
 		// All eight corners are transformed because an instance may be rotated or non-uniformly
 		// scaled, in which case transforming just min/max would not bound the result.
-		const AABB& meshBounds = m_mesh ? m_mesh->GetBounds() : AABB();
+		const AABB meshBounds = m_mesh ? m_mesh->GetBounds() : AABB();
 
 		Vector3 minBounds(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
 		Vector3 maxBounds(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
