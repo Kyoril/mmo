@@ -89,6 +89,11 @@ namespace mmo
 				<< "Crash report written to " << written.string() << "\n"
 				<< "Symbolicate it with: powershell -File tools/symbolicate_crash.ps1 -CrashFile \""
 				<< written.string() << "\"" << std::endl;
+
+			if (Config().onReportWritten)
+			{
+				Config().onReportWritten(written);
+			}
 		}
 
 #ifdef _WIN32
