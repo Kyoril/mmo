@@ -2267,11 +2267,13 @@ namespace mmo
 			});
 	}
 
-	void BotRealmConnector::CheatSetInstanceVariable(const uint32 key, const int32 value)
+	void BotRealmConnector::CheatSetInstanceVariable(const uint32 key, const int64 value)
 	{
 		sendSinglePacket([key, value](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatSetInstanceVariable);
-			packet << io::write<uint32>(key) << io::write<int32>(value);
+			// int64 to match WorldInstance's storage; a 32-bit field here would silently truncate
+			// any value a trigger condition could legitimately hold.
+			packet << io::write<uint32>(key) << io::write<int64>(value);
 			packet.Finish();
 			});
 	}

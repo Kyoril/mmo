@@ -114,6 +114,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 10 | 2026-08-14 | Widen the set-instance-variable cheat's value to int64, matching `WorldInstance`'s storage |
 | 9 | 2026-08-14 | GM set-instance-variable cheat opcode for the E2E harness |
 | 8 | 2026-08-12 | GM godmode cheat opcode for the E2E harness |
 | 7 | 2026-08-11 | Duplicate login prevention (`1c87e67d`) |

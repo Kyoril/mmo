@@ -666,8 +666,8 @@ namespace mmo
 	void Player::OnCheatSetInstanceVariable(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint32 key = 0;
-		int32 value = 0;
-		if (!(contentReader >> io::read<uint32>(key) >> io::read<int32>(value)))
+		int64 value = 0;
+		if (!(contentReader >> io::read<uint32>(key) >> io::read<int64>(value)))
 		{
 			ELOG("Failed to read CheatSetInstanceVariable packet!");
 			return;
