@@ -569,13 +569,23 @@ namespace mmo
 			targetMap.SetUnitTarget(target->GetGuid());
 		}
 		
-		auto& casterUnit = *reinterpret_cast<GameUnitS*>(caster);
+		auto& casterUnit = caster->AsUnit();
 
 		// Face the target, for the same reason the AI does before its own casts: an in-front
 		// requirement on the spell is checked against where the caster is actually looking, and a
-		// scripted cast that fails that check is thrown away silently. Triggers reach CastSpell
-		// directly rather than through CreatureAICombatState, so the rule has to be applied here too.
-		if (target->IsUnit() && CanTurnToFaceTarget(casterUnit))
+		// cast that fails that check is thrown away silently. Triggers reach CastSpell directly
+		// rather than through CreatureAICombatState, so the rule does not otherwise reach them.
+		//
+		// Only when the caster is already fighting this target, though. SetFacing writes the
+		// movement info without sending anything (unlike Relocate), and only CreatureAIResetState
+		// puts the spawn orientation back, so turning a unit that is not in combat rotates it
+		// server-side for the rest of the process with no client ever told. That would hit every
+		// trigger cast in the current data: the five innkeeper/trainer "Bind Player" triggers and
+		// "Trainer - Reset Talent" all cast at the triggering player from a stationary NPC, and
+		// "Low Health - Enrage 30%" targets the caster itself, where GetAngle would return 0 and
+		// snap it to face north. A creature fighting its victim is re-faced by its AI anyway, so
+		// this only closes the window where a scripted cast lands before the next swing does.
+		if (target->IsUnit() && casterUnit.GetVictim() == &target->AsUnit() && CanTurnToFaceTarget(casterUnit))
 		{
 			casterUnit.SetFacing(casterUnit.GetAngle(*target));
 		}
@@ -1874,9 +1884,11 @@ namespace mmo
 				static std::set<const proto::TriggerCondition*> warnedConditions;
 				if (warnedConditions.insert(&condition).second)
 				{
+					const char* missing =
+						(!condition.has_leftcondition() && !condition.has_rightcondition()) ? "both sides" :
+						(!condition.has_leftcondition()) ? "its left side" : "its right side";
 					WLOG("EvaluateCondition: " << (condition.type() == proto::AndCondition ? "And" : "Or")
-						<< " condition is missing its " << (condition.has_leftcondition() ? "right" : "left")
-						<< " side; that side is treated as "
+						<< " condition is missing " << missing << "; that is treated as "
 						<< (condition.type() == proto::AndCondition ? "passed" : "failed"));
 				}
 			}

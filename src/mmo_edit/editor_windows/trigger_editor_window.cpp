@@ -1217,27 +1217,33 @@ namespace mmo
 			/// Name shown in the picker.
 			const char* name;
 
-			/// Label for the function's single data argument, or nullptr when it takes none.
+			/// Label for the function's data argument, or nullptr when it takes none.
 			const char* dataLabel;
+
+			/// Labels for the two-argument form, for the one function that has one. RandomValue
+			/// reads a lone value as the maximum but a pair as [min, max], so a stored pair has to
+			/// be edited as a pair — labelling index 0 "Max" is how a range like [10, 50] silently
+			/// became [60, 50] when someone typed the maximum they wanted.
+			const char* pairLabels[2];
 		};
 
 		/// Every function a condition can call, in one place. The left- and right-hand pickers used
 		/// to carry their own copy of this list behind a hardcoded count, which is how
 		/// LivingCreatureCount ended up authorable on neither side.
 		const TriggerFunctionInfo s_triggerFunctions[] = {
-			{ proto::Phase,               "Phase",               nullptr },
-			{ proto::Health,              "Health",              nullptr },
-			{ proto::HealthPct,           "HealthPct",           nullptr },
-			{ proto::Mana,                "Mana",                nullptr },
-			{ proto::ManaPct,             "ManaPct",             nullptr },
-			{ proto::IsInCombat,          "IsInCombat",          nullptr },
-			{ proto::EncounterState,      "EncounterState",      "Slot" },
-			{ proto::PlayerCount,         "PlayerCount",         nullptr },
-			{ proto::TargetHealthPct,     "TargetHealthPct",     nullptr },
-			{ proto::HasAura,             "HasAura",             "Spell" },
-			{ proto::RandomValue,         "RandomValue",         "Max" },
-			{ proto::InstanceVariable,    "InstanceVariable",    "Key" },
-			{ proto::LivingCreatureCount, "LivingCreatureCount", "Unit Entry" },
+			{ proto::Phase,               "Phase",               nullptr,      { nullptr, nullptr } },
+			{ proto::Health,              "Health",              nullptr,      { nullptr, nullptr } },
+			{ proto::HealthPct,           "HealthPct",           nullptr,      { nullptr, nullptr } },
+			{ proto::Mana,                "Mana",                nullptr,      { nullptr, nullptr } },
+			{ proto::ManaPct,             "ManaPct",             nullptr,      { nullptr, nullptr } },
+			{ proto::IsInCombat,          "IsInCombat",          nullptr,      { nullptr, nullptr } },
+			{ proto::EncounterState,      "EncounterState",      "Slot",       { nullptr, nullptr } },
+			{ proto::PlayerCount,         "PlayerCount",         nullptr,      { nullptr, nullptr } },
+			{ proto::TargetHealthPct,     "TargetHealthPct",     nullptr,      { nullptr, nullptr } },
+			{ proto::HasAura,             "HasAura",             "Spell",      { nullptr, nullptr } },
+			{ proto::RandomValue,         "RandomValue",         "Max",        { "Min", "Max" } },
+			{ proto::InstanceVariable,    "InstanceVariable",    "Key",        { nullptr, nullptr } },
+			{ proto::LivingCreatureCount, "LivingCreatureCount", "Unit Entry", { nullptr, nullptr } },
 		};
 
 		// The guard that keeps this from drifting again: adding a TriggerFunction without listing it
@@ -1369,6 +1375,11 @@ namespace mmo
 			if (side == ConditionSide::Left) c.add_leftfunctiondata(value); else c.add_rightfunctiondata(value);
 		}
 
+		void ClearFunctionData(proto::TriggerCondition& c, const ConditionSide side)
+		{
+			if (side == ConditionSide::Left) c.clear_leftfunctiondata(); else c.clear_rightfunctiondata();
+		}
+
 		proto::TriggerCondition* GetMutableSubCondition(proto::TriggerCondition& c, const ConditionSide side)
 		{
 			return side == ConditionSide::Left ? c.mutable_leftcondition() : c.mutable_rightcondition();
@@ -1410,10 +1421,19 @@ namespace mmo
 			}
 
 			static const char* s_valueKinds[] = { "Unset", "Integer", "Float", "Function", "Condition" };
+
+			// Nesting one level deeper than the editor renders would create a condition it then
+			// refuses to show — an empty comparison that evaluates 0 == 0, so the side silently
+			// always passes. Drop the option rather than offer a choice that cannot be finished.
+			// A subtree that is already there still has to display as "Condition", so the option is
+			// only withheld when picking it would create one.
+			const bool allowNesting = (depth + 1 <= s_maxConditionDepth) || (kind == ConditionValueKind::Condition);
+			const int kindCount = static_cast<int>(std::size(s_valueKinds)) - (allowNesting ? 0 : 1);
+
 			int kindIndex = static_cast<int>(kind);
 
 			ImGui::SetNextItemWidth(130);
-			if (ImGui::Combo("##Kind", &kindIndex, s_valueKinds, static_cast<int>(std::size(s_valueKinds))))
+			if (ImGui::Combo("##Kind", &kindIndex, s_valueKinds, kindCount))
 			{
 				// Switching kinds is the one place a subtree is legitimately discarded, and it takes
 				// a deliberate change of the picker to get here.
@@ -1483,23 +1503,43 @@ namespace mmo
 				ImGui::SetNextItemWidth(180);
 				if (ImGui::Combo("##Func", &funcIndex, funcNames, static_cast<int>(std::size(funcNames))))
 				{
-					SetFunctionValue(condition, side, s_triggerFunctions[funcIndex].value);
+					const TriggerFunctionInfo& picked = s_triggerFunctions[funcIndex];
+					SetFunctionValue(condition, side, picked.value);
+
+					// The previous function's argument means nothing to the new one — leaving it
+					// would silently reinterpret a spell id as an instance-variable key. Seed the
+					// new function's argument instead, so what the box shows is what is stored:
+					// an argument left implicit is read as 0 by the server but written as nothing.
+					ClearFunctionData(condition, side);
+					if (picked.dataLabel != nullptr)
+					{
+						AddFunctionData(condition, side, 0);
+					}
 				}
 
-				if (const char* dataLabel = s_triggerFunctions[funcIndex].dataLabel)
+				const TriggerFunctionInfo& func = s_triggerFunctions[funcIndex];
+				if (func.dataLabel != nullptr)
 				{
-					ImGui::SameLine();
-					int64 funcData = GetFunctionDataSize(condition, side) > 0 ? GetFunctionData(condition, side, 0) : 0;
-					ImGui::SetNextItemWidth(90);
-					if (ImGui::InputScalar(dataLabel, ImGuiDataType_S64, &funcData))
+					// A stored pair is edited as a pair; everything else takes the single label.
+					// See the note on TriggerFunctionInfo::pairLabels.
+					const bool isPair = (GetFunctionDataSize(condition, side) >= 2) && (func.pairLabels[0] != nullptr);
+					const int argCount = isPair ? 2 : 1;
+
+					for (int arg = 0; arg < argCount; ++arg)
 					{
-						if (GetFunctionDataSize(condition, side) > 0)
+						ImGui::SameLine();
+						int64 funcData = GetFunctionDataSize(condition, side) > arg ? GetFunctionData(condition, side, arg) : 0;
+						ImGui::SetNextItemWidth(90);
+						if (ImGui::InputScalar(isPair ? func.pairLabels[arg] : func.dataLabel, ImGuiDataType_S64, &funcData))
 						{
-							SetFunctionData(condition, side, 0, funcData);
-						}
-						else
-						{
-							AddFunctionData(condition, side, funcData);
+							if (GetFunctionDataSize(condition, side) > arg)
+							{
+								SetFunctionData(condition, side, arg, funcData);
+							}
+							else
+							{
+								AddFunctionData(condition, side, funcData);
+							}
 						}
 					}
 				}

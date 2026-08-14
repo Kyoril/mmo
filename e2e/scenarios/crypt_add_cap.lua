@@ -34,12 +34,15 @@ local SAMPLE_MS = 2000
 
 GM.Godmode(true)
 
--- Where every scenario starts and is expected to leave the character. Restoring this at the end is
--- also what keeps the arrival assertion below honest: without it a re-run would begin already
--- standing in the crypt and the check would pass without the worldport having done anything.
 local SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z = 0, 292.267, 5.33, 552.571
 
-Assert(GetPosX(Me()) > 0, "scenario should start at the default spawn, not in the crypt")
+-- Start from the default spawn rather than asserting we are already there. The harness retries a
+-- scenario that times out, and a retry that began mid-crypt would make the arrival check below
+-- pass without the worldport having moved anything - while a hard assertion in its place would
+-- report "wrong starting position" for what was really a timeout on the first attempt.
+GM.Worldport(SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z, 0)
+Assert(WaitUntil(function() return GetPosX(Me()) > 0 end, 30000, "at the spawn point"),
+	"player should start from the default spawn")
 
 -- Trigger 38 summons husks at a fixed point mid-nave in the crypt, not next to whichever acolyte
 -- raised them. The scenario has to stand there: units the client is never told about cannot be
@@ -102,11 +105,15 @@ for i = 1, #acolytes do
 	GM.DestroyMonster(acolytes[i])
 end
 
--- Leave the character on the default map at the default spawn. Later scenarios move relative to
--- wherever it stands, and one left inside a dungeon instance on map 1 would strand all of them.
-GM.Godmode(false)
+-- Leave the character on the default map at the default spawn. This scenario owns its character, so
+-- nothing else is stranded by a bad exit, but the harness retries a timed-out scenario against the
+-- same world - and the retry's opening worldport is what that restore is for.
+--
+-- Teleport out before dropping godmode: trigger 39 despawns the husks asynchronously once the
+-- encounter flag clears, and until it does there is a pack of adds standing on the character.
 GM.Worldport(SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z, 0)
 Assert(WaitUntil(function() return GetPosX(Me()) > 0 end, 30000, "returned to the spawn point"),
 	"player should be back at the default spawn")
+GM.Godmode(false)
 
 Assert(not IsDisconnected(), "world server should still be alive")
