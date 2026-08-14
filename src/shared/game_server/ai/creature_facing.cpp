@@ -1,6 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "creature_facing.h"
+#include "game_server/ai/creature_facing.h"
 
 #include "game_server/objects/game_unit_s.h"
 

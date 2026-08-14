@@ -34,6 +34,13 @@ local SAMPLE_MS = 2000
 
 GM.Godmode(true)
 
+-- Where every scenario starts and is expected to leave the character. Restoring this at the end is
+-- also what keeps the arrival assertion below honest: without it a re-run would begin already
+-- standing in the crypt and the check would pass without the worldport having done anything.
+local SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z = 0, 292.267, 5.33, 552.571
+
+Assert(GetPosX(Me()) > 0, "scenario should start at the default spawn, not in the crypt")
+
 -- Trigger 38 summons husks at a fixed point mid-nave in the crypt, not next to whichever acolyte
 -- raised them. The scenario has to stand there: units the client is never told about cannot be
 -- counted, and a test that cannot see the adds would pass no matter how many were spawned.
@@ -94,5 +101,12 @@ GM.SetInstanceVariable(BOSS_ALIVE_VAR, 0)
 for i = 1, #acolytes do
 	GM.DestroyMonster(acolytes[i])
 end
+
+-- Leave the character on the default map at the default spawn. Later scenarios move relative to
+-- wherever it stands, and one left inside a dungeon instance on map 1 would strand all of them.
+GM.Godmode(false)
+GM.Worldport(SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z, 0)
+Assert(WaitUntil(function() return GetPosX(Me()) > 0 end, 30000, "returned to the spawn point"),
+	"player should be back at the default spawn")
 
 Assert(not IsDisconnected(), "world server should still be alive")

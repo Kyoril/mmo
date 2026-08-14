@@ -711,6 +711,12 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatGodmode(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to set an instance-scoped variable in the player's world
+		///	instance, which trigger conditions can then read back through the InstanceVariable
+		///	function. Used by the E2E harness to put an encounter into a given state directly.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatSetInstanceVariable(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to accept a quest without any questgiver interaction or proximity check.

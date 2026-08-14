@@ -337,7 +337,12 @@ namespace mmo
 		/// GAME MASTER only. Toggles damage immunity on the sender's character.
 		void CheatGodmode(bool enable);
 
-		void CheatSetInstanceVariable(uint32 key, int32 value);
+		/// GAME MASTER only. Sets an instance-scoped variable in the world instance the character is
+		///	in, so a scenario can put an encounter into a given state without having to reach it
+		///	through gameplay.
+		///	@param key The variable key, matching the one an InstanceVariable condition reads.
+		///	@param value The value to assign.
+		void CheatSetInstanceVariable(uint32 key, int64 value);
 
 		/// GAME MASTER only. Accepts the given quest without a questgiver interaction.
 		void CheatAcceptQuest(uint32 questId);

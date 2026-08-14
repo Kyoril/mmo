@@ -934,7 +934,7 @@ namespace mmo
 			}
 		}
 
-		void luaGmSetInstanceVariable(const uint32 key, const int32 value)
+		void luaGmSetInstanceVariable(const uint32 key, const int64 value)
 		{
 			g_runtime->session->GetRealm().CheatSetInstanceVariable(key, value);
 			if (g_runtime->transcript)
