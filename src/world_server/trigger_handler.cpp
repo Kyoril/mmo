@@ -1805,6 +1805,40 @@ namespace mmo
 			return world ? static_cast<double>(world->GetInstanceVariable(key)) : 0.0;
 		}
 
+		case proto::LivingCreatureCount:
+		{
+			const uint32 entryId = funcData.size() > 0 ? static_cast<uint32>(funcData[0]) : 0;
+			if (entryId == 0)
+			{
+				WLOG("LivingCreatureCount: no unit entry id given, treating as 0");
+				return 0.0;
+			}
+
+			auto* world = GetWorldInstance(context);
+			if (!world)
+			{
+				return 0.0;
+			}
+
+			// Counted from the world every time it is asked. A tally kept in an instance variable
+			// would drift, because SetInstanceVariable can only assign absolute values and there is
+			// no hook that reliably fires for every way a summon can leave.
+			uint32 livingCount = 0;
+			world->ForEachObject([entryId, &livingCount](const GameObjectS& object)
+				{
+					const auto* creature = dynamic_cast<const GameCreatureS*>(&object);
+					if (creature != nullptr && creature->IsAlive() && creature->GetEntry().id() == entryId)
+					{
+						++livingCount;
+					}
+
+					// Keep going; we want the total, not the first match.
+					return true;
+				});
+
+			return static_cast<double>(livingCount);
+		}
+
 		default:
 			WLOG("EvaluateTriggerFunction: Unknown function " << func);
 			return 0.0;
@@ -1813,6 +1847,21 @@ namespace mmo
 
 	bool TriggerHandler::EvaluateCondition(const proto::TriggerCondition& condition, TriggerContext& context)
 	{
+		// Logical combinations short-circuit and never touch `operator`: both sides are conditions
+		// in their own right, not values to compare. TriggerConditionType has always declared these
+		// but nothing carried the choice, so a trigger could only ever be gated on one thing.
+		if (condition.type() == proto::AndCondition)
+		{
+			return (!condition.has_leftcondition() || EvaluateCondition(condition.leftcondition(), context))
+				&& (!condition.has_rightcondition() || EvaluateCondition(condition.rightcondition(), context));
+		}
+
+		if (condition.type() == proto::OrCondition)
+		{
+			return (condition.has_leftcondition() && EvaluateCondition(condition.leftcondition(), context))
+				|| (condition.has_rightcondition() && EvaluateCondition(condition.rightcondition(), context));
+		}
+
 		double leftVal  = 0.0;
 		double rightVal = 0.0;
 
