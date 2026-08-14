@@ -6,6 +6,7 @@
 #include "game_server/emote_utils.h"
 #include "game_server/world/each_tile_in_sight.h"
 #include "game_server/objects/game_player_s.h"
+#include "base/assign_on_exit.h"
 #include "base/utilities.h"
 #include "base/localization.h"
 #include "binary_io/vector_sink.h"
@@ -3382,13 +3383,24 @@ namespace mmo
 	{
 		finishedCasting(succeeded);
 
-		if (std::shared_ptr<GameUnitS> victim = m_victim.lock())
+		// A configured auto-attack spell is instant, so this runs nested inside the swing that
+		// cast it. That swing owns its own bookkeeping: it stamped its hand on entry and arms the
+		// next swing on the way out. Doing any of it here as well arms the countdown a second
+		// time for a single swing, leaving a superseded timer event behind on every swing.
+		if (m_resolvingAutoAttackSwing)
 		{
-			m_lastMainHand = m_lastOffHand = GetAsyncTimeMs();
-			if (!m_attackSwingCountdown.IsRunning())
-			{
-				TriggerNextAutoAttack();
-			}
+			return;
+		}
+
+		// A regular cast that finished while we still have a victim should resume auto-attacking
+		// if nothing is scheduled. Note this deliberately does NOT stamp m_lastMainHand /
+		// m_lastOffHand: casting a spell must not push the swing timer back, and stamping both
+		// hands from one cast also let an off-hand swing delay the main hand. TriggerNextAutoAttack
+		// already clamps to now, so a long-idle timer swings immediately and a recent one waits
+		// out only the remainder of its interval.
+		if (m_victim.lock() && !m_attackSwingCountdown.IsRunning())
+		{
+			TriggerNextAutoAttack();
 		}
 	}
 
@@ -3806,21 +3818,35 @@ namespace mmo
 			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 			targetMap.SetUnitTarget(victim->GetGuid());
 
-			// Auto-attack spells are always instant and treated as procs (no resource cost, no cooldown check)
-			CastSpell(targetMap, *autoAttackSpell, 0, true);
+			// Auto-attack spells are always instant and treated as procs (no resource cost, no cooldown check).
+			// The cast completes synchronously, so OnSpellCastEnded runs before CastSpell returns; the
+			// flag tells it to leave this swing's timer bookkeeping alone.
+			{
+				AssignOnExit<bool> resetResolvingFlag{ m_resolvingAutoAttackSwing, false };
+				m_resolvingAutoAttackSwing = true;
+				CastSpell(targetMap, *autoAttackSpell, 0, true);
+			}
 
 			if (!isOffhand)
 			{
 				OnAttackSwingEvent(AttackSwingEvent::Success);
 			}
 
-			if (isOffhand)
+			// The cast can end the fight outright -- a killing blow runs StopAttack, which cancels
+			// both swing countdowns and clears the victim. That cancel cannot defend itself here:
+			// the countdown clears m_running before raising `ended`, so Countdown::Cancel sees a
+			// stopped timer and does nothing. Re-arming regardless would resurrect the swing that
+			// was just stopped, so only schedule the next one while we still have a victim.
+			if (!m_victim.expired())
 			{
-				TriggerNextOffhandAttack();
-			}
-			else
-			{
-				TriggerNextAutoAttack();
+				if (isOffhand)
+				{
+					TriggerNextOffhandAttack();
+				}
+				else
+				{
+					TriggerNextAutoAttack();
+				}
 			}
 			return;
 		}
@@ -3998,14 +4024,18 @@ namespace mmo
 			OnAttackSwingEvent(AttackSwingEvent::Success);
 		}
 
-		// Reschedule the swing timer for the hand that just swung.
-		if (isOffhand)
+		// Reschedule the swing timer for the hand that just swung, unless the blow ended the
+		// fight -- see the matching guard in the auto-attack-spell branch above.
+		if (!m_victim.expired())
 		{
-			TriggerNextOffhandAttack();
-		}
-		else
-		{
-			TriggerNextAutoAttack();
+			if (isOffhand)
+			{
+				TriggerNextOffhandAttack();
+			}
+			else
+			{
+				TriggerNextAutoAttack();
+			}
 		}
 
 		// Trigger proc events

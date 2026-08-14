@@ -1666,6 +1666,11 @@ public:
 		GameTime m_lastMainHand = 0, m_lastOffHand = 0;
 		/// Weapon hand whose auto-attack swing is currently being resolved (used by spell effects).
 		WeaponAttack m_currentAutoAttackType = weapon_attack::BaseAttack;
+		/// True while ExecuteAutoAttackSwing is casting a configured auto-attack spell. Such a
+		/// spell is instant, so OnSpellCastEnded runs nested inside the swing; that swing already
+		/// stamped its own hand and arms the next swing itself, so the nested call must not do
+		/// either. Without this the countdown is armed twice for a single swing.
+		bool m_resolvingAutoAttackSwing = false;
 		Countdown m_regenCountdown;
 		GameTime m_lastManaUse = 0;
 
