@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000008;
+		constexpr uint32 ProtocolVersion = 0x00000009;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -393,6 +393,13 @@ namespace mmo
 				/// Test-harness lever: the E2E client is capped at level 10 and cannot otherwise
 				/// survive dungeon-boss content long enough to exercise it.
 				CheatGodmode, // GAME MASTER
+
+				/// GAME MASTER. Sets an instance-scoped variable on the sender's world instance.
+				/// Payload: uint32 key, int32 value.
+				/// Test-harness lever: encounter triggers gate on instance variables that are only
+				/// set by the encounter itself, so without this a scenario cannot reach any of that
+				/// logic without first winning a pull it has no business depending on.
+				CheatSetInstanceVariable, // GAME MASTER
 
 				/// Counter constant
 				Count_,

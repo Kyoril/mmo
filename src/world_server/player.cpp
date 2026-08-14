@@ -810,6 +810,9 @@ namespace mmo
 		case game::client_realm_packet::CheatGodmode:
 			OnCheatGodmode(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatSetInstanceVariable:
+			OnCheatSetInstanceVariable(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::CheatAcceptQuest:
 			OnCheatAcceptQuest(opCode, buffer.size(), reader);
 			break;

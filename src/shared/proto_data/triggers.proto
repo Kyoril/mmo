@@ -41,6 +41,14 @@ enum TriggerFunction {
 	RandomValue = 10;
 	// Value of an instance-scoped variable. FunctionData: <VARIABLE-KEY>. Returns 0 if unset.
 	InstanceVariable = 11;
+	// Number of living creatures of a given entry currently in the world instance.
+	// FunctionData: <UNIT-ENTRY-ID>. Returns 0 when the entry is missing or none are alive.
+	//
+	// This is read from the world rather than counted into a variable on purpose: instance
+	// variables can only be assigned absolute values, so any counter maintained by hand drifts the
+	// moment a summon dies, despawns or is missed. Asking the world how many are actually alive
+	// cannot desync, which is what makes it usable for capping adds.
+	LivingCreatureCount = 12;
 }
 
 enum TriggerConditionType {
@@ -73,6 +81,11 @@ message TriggerCondition {
 
 	repeated int64 leftfunctiondata = 12;
 	repeated int64 rightfunctiondata = 13;
+
+	// How the two sides are combined. Comparisons (the default) apply `operator` to the two
+	// values; AndCondition / OrCondition instead treat both sides as conditions and combine their
+	// truth values, which is the only way to gate a trigger on more than one thing.
+	optional TriggerConditionType type = 14 [default = IntegerComparison];
 }
 
 message TriggerAction {

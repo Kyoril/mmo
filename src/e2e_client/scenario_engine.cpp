@@ -537,6 +537,32 @@ namespace mmo
 			return result;
 		}
 
+		/// Counts creatures of a given entry the client currently knows about.
+		///
+		/// FindUnitByEntry only ever yields one guid, which makes "how many of these are up?"
+		/// unaskable from a scenario - and that is exactly the question an add cap needs answered.
+		/// Only units the client has been told about are counted, so a scenario has to be standing
+		/// somewhere they are visible from.
+		uint32 luaCountUnitsByEntry(const uint32 entry, const bool aliveOnly)
+		{
+			uint32 count = 0;
+			g_runtime->session->GetContext().GetObjectManager().ForEachCreature([&count, entry, aliveOnly](const BotUnit& unit)
+				{
+					if (unit.GetEntry() != entry)
+					{
+						return;
+					}
+
+					if (aliveOnly && !unit.IsAlive())
+					{
+						return;
+					}
+
+					++count;
+				});
+			return count;
+		}
+
 		std::string luaFindUnitByName(const std::string& name)
 		{
 			std::string result;
@@ -908,6 +934,15 @@ namespace mmo
 			}
 		}
 
+		void luaGmSetInstanceVariable(const uint32 key, const int32 value)
+		{
+			g_runtime->session->GetRealm().CheatSetInstanceVariable(key, value);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.SetInstanceVariable(" + std::to_string(key) + ", " + std::to_string(value) + ")");
+			}
+		}
+
 		void luaGmGodmode(const bool enable)
 		{
 			g_runtime->session->GetRealm().CheatGodmode(enable);
@@ -1022,6 +1057,7 @@ namespace mmo
 				luabind::def_lambda("LastCastResult", &luaLastCastResult),
 				luabind::def_lambda("FindUnitByEntryImpl", &luaFindUnitByEntry),
 				luabind::def_lambda("FindUnitByNameImpl", &luaFindUnitByName),
+				luabind::def_lambda("CountUnitsByEntryImpl", &luaCountUnitsByEntry),
 				luabind::def_lambda("FindObjectByEntryImpl", &luaFindObjectByEntry),
 				luabind::def_lambda("GetObjectState", &luaGetObjectState),
 
@@ -1052,6 +1088,7 @@ namespace mmo
 				luabind::def_lambda("GM_CheckLoS", &luaGmCheckLoS),
 				luabind::def_lambda("GM_KillTarget", &luaGmKillTarget),
 				luabind::def_lambda("GM_Godmode", &luaGmGodmode),
+				luabind::def_lambda("GM_SetInstanceVariable", &luaGmSetInstanceVariable),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
 				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
@@ -1077,6 +1114,10 @@ namespace mmo
 				local guid = FindUnitByEntryImpl(entry)
 				if guid == "" then return nil end
 				return guid
+			end
+
+			function CountUnitsByEntry(entry, includeDead)
+				return CountUnitsByEntryImpl(entry, not includeDead)
 			end
 
 			function FindUnitByName(name)
@@ -1105,6 +1146,7 @@ namespace mmo
 				CheckLoS = GM_CheckLoS,
 				KillTarget = GM_KillTarget,
 				Godmode = GM_Godmode,
+				SetInstanceVariable = GM_SetInstanceVariable,
 				Worldport = GM_WorldPort,
 				SetSpeed = GM_SetSpeed,
 				AcceptQuest = GM_AcceptQuest,

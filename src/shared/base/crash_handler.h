@@ -28,6 +28,12 @@ namespace mmo
 		/// The process is already dying when this runs: do the minimum and do not allocate
 		/// more than necessary.
 		std::function<void(std::vector<std::string>& details)> onCrash;
+
+		/// Invoked after the report has been written, with the path it was written to.
+		///
+		/// This is where an application hands the report on to something else — the game client
+		/// uses it to launch its uploader. Not called when the report could not be written.
+		std::function<void(const std::filesystem::path& reportPath)> onReportWritten;
 	};
 
 	/// Installs a process-wide handler that writes a crash report when the process dies from an

@@ -663,6 +663,28 @@ namespace mmo
 #endif
 
 #if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatSetInstanceVariable(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 key = 0;
+		int32 value = 0;
+		if (!(contentReader >> io::read<uint32>(key) >> io::read<int32>(value)))
+		{
+			ELOG("Failed to read CheatSetInstanceVariable packet!");
+			return;
+		}
+
+		if (!m_worldInstance)
+		{
+			ELOG("CheatSetInstanceVariable: player is not in a world instance");
+			return;
+		}
+
+		DLOG("GM set instance variable " << key << " = " << value);
+		m_worldInstance->SetInstanceVariable(key, value);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
 	void Player::OnCheatCheckLineOfSight(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 targetGuid = 0;
