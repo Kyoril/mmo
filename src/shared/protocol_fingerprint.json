@@ -124,8 +124,8 @@
 		]
 	},
 	"game": {
-		"version": 8,
-		"fingerprint": "sha256:f02f6a427bd7af2ababfb51bf5a5d973cd213afb18dca03017483be608ec2a44",
+		"version": 9,
+		"fingerprint": "sha256:f59d1ff8de10072b2ab848e664a0b8f9280a9c9f2eb4ad66acd30840d9eea75e",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -141,7 +141,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:3049795af06429f6b207de8f95706c55d72a0811611c01dad5ae3be94893dd65"
+			"src/shared/game_protocol/game_protocol.h": "sha256:2e823e5dfc26e83ce79242916bd990309354e5d52beeccd1abd118072057608c"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -214,12 +214,13 @@
 			"game::client_realm_packet::CheatMorph = 133",
 			"game::client_realm_packet::CheatRecharge = 30",
 			"game::client_realm_packet::CheatRevive = 135",
+			"game::client_realm_packet::CheatSetInstanceVariable = 161",
 			"game::client_realm_packet::CheatSpeed = 80",
 			"game::client_realm_packet::CheatSummon = 81",
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 161",
+			"game::client_realm_packet::Count_ = 162",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",

@@ -337,6 +337,8 @@ namespace mmo
 		/// GAME MASTER only. Toggles damage immunity on the sender's character.
 		void CheatGodmode(bool enable);
 
+		void CheatSetInstanceVariable(uint32 key, int32 value);
+
 		/// GAME MASTER only. Accepts the given quest without a questgiver interaction.
 		void CheatAcceptQuest(uint32 questId);
 
