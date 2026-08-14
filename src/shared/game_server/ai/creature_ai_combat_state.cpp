@@ -1450,8 +1450,9 @@ namespace mmo
 
 		// Face the target before casting. Spells routinely carry an in-front requirement, and a
 		// creature that is not looking at what it is casting on simply throws the cast away — which
-		// is what filled the log with validation failures for the crypt acolytes. Casts driven by a
-		// combat script go through here too, so this covers them as well as the default rotation.
+		// is what filled the log with validation failures for the crypt acolytes. This covers the
+		// default rotation and combat scripts, which both route their casts through here. Casts
+		// issued by a trigger action do not: those face their target in TriggerHandler::HandleCastSpell.
 		FaceTarget(target);
 
 		SpellTargetMap targetMap;

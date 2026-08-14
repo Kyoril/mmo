@@ -3,6 +3,7 @@
 
 #include "vector_sink.h"
 #include "base/utilities.h"
+#include "game_server/ai/creature_facing.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/objects/game_world_object_s.h"
 #include "game_server/world/universe.h"
@@ -14,6 +15,7 @@
 #include "player.h"
 
 #include <limits>
+#include <set>
 
 namespace mmo
 {
@@ -567,8 +569,19 @@ namespace mmo
 			targetMap.SetUnitTarget(target->GetGuid());
 		}
 		
+		auto& casterUnit = *reinterpret_cast<GameUnitS*>(caster);
+
+		// Face the target, for the same reason the AI does before its own casts: an in-front
+		// requirement on the spell is checked against where the caster is actually looking, and a
+		// scripted cast that fails that check is thrown away silently. Triggers reach CastSpell
+		// directly rather than through CreatureAICombatState, so the rule has to be applied here too.
+		if (target->IsUnit() && CanTurnToFaceTarget(casterUnit))
+		{
+			casterUnit.SetFacing(casterUnit.GetAngle(*target));
+		}
+
 		// Triggers are server-authoritative, so bypass the "unit knows spell" check.
-		reinterpret_cast<GameUnitS*>(caster)->CastSpell(std::move(targetMap), *spell, spell->casttime(), false, 0, true);
+		casterUnit.CastSpell(std::move(targetMap), *spell, spell->casttime(), false, 0, true);
 	}
 
 	void TriggerHandler::HandleMoveTo(const proto::TriggerAction& action, TriggerContext& context)
@@ -1850,14 +1863,30 @@ namespace mmo
 		// Logical combinations short-circuit and never touch `operator`: both sides are conditions
 		// in their own right, not values to compare. TriggerConditionType has always declared these
 		// but nothing carried the choice, so a trigger could only ever be gated on one thing.
-		if (condition.type() == proto::AndCondition)
+		if (condition.type() == proto::AndCondition || condition.type() == proto::OrCondition)
 		{
-			return (!condition.has_leftcondition() || EvaluateCondition(condition.leftcondition(), context))
-				&& (!condition.has_rightcondition() || EvaluateCondition(condition.rightcondition(), context));
-		}
+			// A side that is not a condition is silently ignored by the combination below, which is
+			// how an authored "A and B" gate can decay into "B alone" without anything to show for
+			// it. Warn once per malformed condition — the project outlives the process, so the
+			// address is a stable key, and repeating this on every evaluation would drown the log.
+			if (!condition.has_leftcondition() || !condition.has_rightcondition())
+			{
+				static std::set<const proto::TriggerCondition*> warnedConditions;
+				if (warnedConditions.insert(&condition).second)
+				{
+					WLOG("EvaluateCondition: " << (condition.type() == proto::AndCondition ? "And" : "Or")
+						<< " condition is missing its " << (condition.has_leftcondition() ? "right" : "left")
+						<< " side; that side is treated as "
+						<< (condition.type() == proto::AndCondition ? "passed" : "failed"));
+				}
+			}
 
-		if (condition.type() == proto::OrCondition)
-		{
+			if (condition.type() == proto::AndCondition)
+			{
+				return (!condition.has_leftcondition() || EvaluateCondition(condition.leftcondition(), context))
+					&& (!condition.has_rightcondition() || EvaluateCondition(condition.rightcondition(), context));
+			}
+
 			return (condition.has_leftcondition() && EvaluateCondition(condition.leftcondition(), context))
 				|| (condition.has_rightcondition() && EvaluateCondition(condition.rightcondition(), context));
 		}
