@@ -537,6 +537,8 @@ namespace mmo
 		void Command_Revive(const std::string &cmd, const std::string &args) const;
 
 		void Command_Godmode(const std::string &cmd, const std::string &args) const;
+
+		void Command_Damage(const std::string &cmd, const std::string &args) const;
 #endif
 
 	private:

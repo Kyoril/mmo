@@ -943,6 +943,15 @@ namespace mmo
 			}
 		}
 
+		void luaGmDamageTarget(const uint32 amount)
+		{
+			g_runtime->session->GetRealm().CheatDamage(amount);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.DamageTarget(" + std::to_string(amount) + ")");
+			}
+		}
+
 		void luaGmGodmode(const bool enable)
 		{
 			g_runtime->session->GetRealm().CheatGodmode(enable);
@@ -1089,6 +1098,7 @@ namespace mmo
 				luabind::def_lambda("GM_KillTarget", &luaGmKillTarget),
 				luabind::def_lambda("GM_Godmode", &luaGmGodmode),
 				luabind::def_lambda("GM_SetInstanceVariable", &luaGmSetInstanceVariable),
+				luabind::def_lambda("GM_DamageTarget", &luaGmDamageTarget),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
 				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
@@ -1147,6 +1157,7 @@ namespace mmo
 				KillTarget = GM_KillTarget,
 				Godmode = GM_Godmode,
 				SetInstanceVariable = GM_SetInstanceVariable,
+				DamageTarget = GM_DamageTarget,
 				Worldport = GM_WorldPort,
 				SetSpeed = GM_SetSpeed,
 				AcceptQuest = GM_AcceptQuest,

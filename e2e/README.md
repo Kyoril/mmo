@@ -103,7 +103,13 @@ character first, so the kill grants real kill xp and quest kill credit),
 `GM.SetSpeed(multiplier)`, `GM.AcceptQuest(questId)` (no questgiver needed),
 `GM.TurnInQuest(questId [, rewardChoice])` (quest must be objective-complete; no
 quest ender needed), `GM.ClearInventory()` (destroys all backpack items, keeps
-equipment), `GM.Godmode(enable)` (toggles damage immunity on the GM character;
+equipment), `GM.DamageTarget(amount)` (deals raw damage to the current target through the
+normal damage path, so `OnHealthDroppedBelow` triggers, threat and death handling
+all run — use it to walk a boss across its phase thresholds instead of depending
+on the test character's damage output, which cannot chew through an elite's
+health pool quickly or reliably; also tags the creature like `GM.KillTarget`),
+`GM.SetInstanceVariable(key, value)`,
+`GM.Godmode(enable)` (toggles damage immunity on the GM character;
 school-agnostic, covers auto-attacks, periodic auras and spell effects alike —
 use to survive content the level-10 test character otherwise cannot, and disable
 it again before asserting anything about the fight's actual outcome)

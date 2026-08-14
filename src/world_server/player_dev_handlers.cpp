@@ -604,6 +604,70 @@ namespace mmo
 #endif
 
 #if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatDamage(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 amount = 0;
+		if (!(contentReader >> io::read<uint32>(amount)))
+		{
+			ELOG("Failed to read CheatDamage packet!");
+			return;
+		}
+
+		if (amount == 0)
+		{
+			return;
+		}
+
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(targetGuid);
+		if (!object)
+		{
+			ELOG("CheatDamage: target not found in world");
+			return;
+		}
+
+		GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+		if (!unit)
+		{
+			ELOG("CheatDamage: target is not a unit");
+			return;
+		}
+
+		if (!unit->IsAlive())
+		{
+			ELOG("CheatDamage: target is already dead");
+			return;
+		}
+
+		// Tag untagged creatures for the GM character, matching CheatKill: a boss whittled down
+		// this way should still award its kill to the character that did it.
+		if (GameCreatureS* creature = dynamic_cast<GameCreatureS*>(unit); creature != nullptr && !creature->IsTagged())
+		{
+			creature->AddLootRecipient(m_character->GetGuid());
+		}
+
+		DLOG("GM damage " << amount << " on unit " << log_hex_digit(targetGuid));
+
+		// Deliberately routed through the normal damage path rather than writing the health field,
+		// so health-threshold triggers and death handling run exactly as they would in a real fight.
+		const uint32 dealt = unit->Damage(amount, static_cast<uint32>(DamageSchool::Physical), m_character.get(), damage_type::PhysicalAbility);
+
+		// Damage() does not raise threat on its own -- every caller does it, so this one must too.
+		// Without it a boss aggroes on the first hit and then resets seconds later with an empty
+		// threat list, healing back to full and undoing whatever the scenario was setting up.
+		if (unit->IsAlive())
+		{
+			unit->threatened(*m_character, static_cast<float>(dealt));
+		}
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
 	void Player::OnCheatRevive(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);

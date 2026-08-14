@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000000A;
+		constexpr uint32 ProtocolVersion = 0x0000000B;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -400,6 +400,14 @@ namespace mmo
 				/// set by the encounter itself, so without this a scenario cannot reach any of that
 				/// logic without first winning a pull it has no business depending on.
 				CheatSetInstanceVariable, // GAME MASTER
+
+				/// GAME MASTER. Deals raw damage to the sender's current target (or to the sender
+				/// when nothing is targeted). Payload: uint32 amount.
+				/// Test-harness lever: boss phases are gated on health percentage, and a level-10
+				/// test character cannot chew through an elite's health pool quickly or reliably
+				/// enough to cross those thresholds. Damage is dealt through the normal path, so
+				/// OnHealthDroppedBelow triggers fire exactly as they would in a real fight.
+				CheatDamage, // GAME MASTER
 
 				/// Counter constant
 				Count_,

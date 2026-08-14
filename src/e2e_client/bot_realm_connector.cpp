@@ -2278,6 +2278,15 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::CheatDamage(const uint32 amount)
+	{
+		sendSinglePacket([amount](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatDamage);
+			packet << io::write<uint32>(amount);
+			packet.Finish();
+			});
+	}
+
 	void BotRealmConnector::CheatAcceptQuest(const uint32 questId)
 	{
 		sendSinglePacket([questId](game::OutgoingPacket& packet) {
