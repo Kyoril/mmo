@@ -1,6 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "instanced_foliage_collision.h"
+#include "instanced_mesh_collision.h"
 
 #include "log/default_log_levels.h"
 #include "math/collision.h"
@@ -13,22 +13,23 @@
 
 namespace mmo
 {
-	String InstancedFoliageCollision::s_movableType = "InstancedFoliageCollision";
+	String InstancedMeshCollision::s_movableType = "InstancedMeshCollision";
 
-	InstancedFoliageCollision::InstancedFoliageCollision(const String& name, MeshPtr mesh)
+	InstancedMeshCollision::InstancedMeshCollision(const String& name, MeshPtr mesh)
 		: MovableObject(name)
 		, m_mesh(std::move(mesh))
 	{
 	}
 
-	const String& InstancedFoliageCollision::GetMovableType() const
+	const String& InstancedMeshCollision::GetMovableType() const
 	{
 		return s_movableType;
 	}
 
-	bool InstancedFoliageCollision::AddInstance(const Matrix4& worldTransform)
+	bool InstancedMeshCollision::AddInstance(const Matrix4& worldTransform)
 	{
-		// A zero component in the authored .hfol scale makes this transform singular, and neither
+		// A zero component in the authored scale (.hfol foliage, .hwmo mesh refs) makes this transform
+		// singular, and neither
 		// inverse routine has a singularity check — the result comes out full of inf/NaN. Storing
 		// that is worse than dropping the instance: every ray transformed into the instance's local
 		// space becomes NaN, and because NaN compares false against everything (including itself)
@@ -70,11 +71,12 @@ namespace mmo
 		return true;
 	}
 
-	void InstancedFoliageCollision::WarnRejectedTransform(const char* reason)
+	void InstancedMeshCollision::WarnRejectedTransform(const char* reason)
 	{
-		// A cell can hold hundreds of instances of one mesh, and bad authored data tends to affect
-		// all of them at once, so warn once per proxy. The object name carries both the mesh name
-		// and the cell coordinates, which is what an artist needs to find the offending placement.
+		// One proxy can hold hundreds of instances of a single mesh, and bad authored data tends to
+		// affect all of them at once, so warn once per proxy. The object name carries the mesh name
+		// plus where the batch came from (cell coordinates or room), which is what an artist needs
+		// to find the offending placement.
 		if (m_warnedRejectedTransform)
 		{
 			return;
@@ -82,11 +84,11 @@ namespace mmo
 
 		m_warnedRejectedTransform = true;
 
-		WLOG("InstancedFoliageCollision: ignoring foliage instances of '" << GetName() << "' because "
+		WLOG("InstancedMeshCollision: ignoring instances of '" << GetName() << "' because "
 			<< reason << " - they would corrupt collision queries instead of blocking them");
 	}
 
-	void InstancedFoliageCollision::Finalize()
+	void InstancedMeshCollision::Finalize()
 	{
 		if (m_instances.empty())
 		{
@@ -112,7 +114,7 @@ namespace mmo
 		m_boundingRadius = (maxBounds - minBounds).GetLength() * 0.5f;
 	}
 
-	bool InstancedFoliageCollision::TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const
+	bool InstancedMeshCollision::TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const
 	{
 		if (!m_mesh)
 		{
@@ -239,7 +241,7 @@ namespace mmo
 		return foundCollision;
 	}
 
-	bool InstancedFoliageCollision::TestRayCollision(const Ray& ray, CollisionResult& result) const
+	bool InstancedMeshCollision::TestRayCollision(const Ray& ray, CollisionResult& result) const
 	{
 		if (!m_mesh)
 		{
@@ -288,6 +290,9 @@ namespace mmo
 			float closestLocalDistance = std::numeric_limits<float>::max();
 			Vector3 localHitPoint;
 			Vector3 localHitNormal;
+			// Tracked so the hit can be resolved back to a submesh, and from there to a surface
+			// type, exactly like Entity::TestRayCollision does.
+			int32 closestFaceIndex = -1;
 			bool instanceHit = false;
 
 			while (stackCount > 0 && stackCount < maxStackSize)
@@ -337,6 +342,7 @@ namespace mmo
 							Vector3 normal = (v1 - v0).Cross(v2 - v0);
 							normal.Normalize();
 							localHitNormal = normal;
+							closestFaceIndex = static_cast<int32>(faceIndex);
 							instanceHit = true;
 						}
 					}
@@ -371,10 +377,48 @@ namespace mmo
 				result.contactNormal = worldNormal;
 				result.penetrationDepth = std::sqrt(worldDistanceSq);
 				result.distance = result.penetrationDepth;
+				result.faceIndex = closestFaceIndex;
 				foundCollision = true;
 			}
 		}
 
 		return foundCollision;
+	}
+
+	uint32 InstancedMeshCollision::GetSurfaceTypeAt(const CollisionResult& hit) const
+	{
+		if (!m_mesh)
+		{
+			return 0;
+		}
+
+		// A material override replaces the material of every submesh (that is what
+		// Entity::SetMaterial does), so the hit face does not need resolving at all.
+		if (m_materialOverride)
+		{
+			return m_materialOverride->GetSurfaceTypeId();
+		}
+
+		// Map the hit face to its source submesh. Legacy collision trees have no mapping;
+		// fall back to the first submesh so single-material meshes still resolve correctly.
+		uint16 subMeshIndex = 0;
+		const auto& faceSubMeshes = m_mesh->GetCollisionTree().GetFaceSubMeshes();
+		if (hit.faceIndex >= 0 && static_cast<size_t>(hit.faceIndex) < faceSubMeshes.size())
+		{
+			subMeshIndex = faceSubMeshes[hit.faceIndex];
+		}
+
+		if (subMeshIndex >= m_mesh->GetSubMeshCount())
+		{
+			subMeshIndex = 0;
+		}
+
+		if (m_mesh->GetSubMeshCount() == 0)
+		{
+			return 0;
+		}
+
+		const MaterialPtr& material = m_mesh->GetSubMesh(subMeshIndex).GetMaterial();
+		return material ? material->GetSurfaceTypeId() : 0;
 	}
 }

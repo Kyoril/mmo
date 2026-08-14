@@ -338,7 +338,7 @@ namespace mmo
 				chunk->SetVisible(m_visible && cell.visibleByDistance);
 
 				// Render chunks carry no collision geometry of their own - collision is provided by a
-				// dedicated InstancedFoliageCollision proxy (built below). Exclude render chunks from
+				// dedicated InstancedMeshCollision proxy (built below). Exclude render chunks from
 				// scene queries entirely so movement/camera queries don't waste time on them.
 				chunk->SetQueryFlags(0);
 
@@ -350,7 +350,7 @@ namespace mmo
 			// per submesh, and only meshes that actually have a collision tree get one.
 			if (!mesh->GetCollisionTree().IsEmpty())
 			{
-				auto collision = std::make_shared<InstancedFoliageCollision>(
+				auto collision = std::make_shared<InstancedMeshCollision>(
 					"FoliageCollision_" + meshName + "_" + std::to_string(coord.x) + "_" + std::to_string(coord.z),
 					mesh);
 

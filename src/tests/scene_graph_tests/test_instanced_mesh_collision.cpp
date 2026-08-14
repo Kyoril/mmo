@@ -10,7 +10,7 @@
 #include "math/quaternion.h"
 #include "math/ray.h"
 #include "math/vector3.h"
-#include "scene_graph/instanced_foliage_collision.h"
+#include "scene_graph/instanced_mesh_collision.h"
 #include "scene_graph/mesh.h"
 
 #include <cmath>
@@ -69,9 +69,9 @@ namespace
 // instance, because NaN compares false against everything and so silently corrupts every ray
 // transformed into that instance's local space rather than announcing itself.
 
-TEST_CASE("InstancedFoliageCollision rejects an instance whose transform is not invertible", "[instanced_foliage_collision]")
+TEST_CASE("InstancedMeshCollision rejects an instance whose transform is not invertible", "[instanced_mesh_collision]")
 {
-	InstancedFoliageCollision collision("DegenerateScaleFoliage", MakeCollidableCubeMesh());
+	InstancedMeshCollision collision("DegenerateScaleFoliage", MakeCollidableCubeMesh());
 
 	// One flattened axis is enough to make the transform singular.
 	collision.AddInstance(MakeFoliageTransform(Vector3(1.0f, 1.0f, 0.0f)));
@@ -82,12 +82,12 @@ TEST_CASE("InstancedFoliageCollision rejects an instance whose transform is not 
 	REQUIRE_FALSE(collision.IsCollidable());
 }
 
-TEST_CASE("InstancedFoliageCollision keeps legitimately shrunken instances", "[instanced_foliage_collision]")
+TEST_CASE("InstancedMeshCollision keeps legitimately shrunken instances", "[instanced_mesh_collision]")
 {
 	// The criterion is invertibility, not the magnitude of the scale. A prop authored at 1/1000th
 	// size has a determinant of 1e-9 — far below the FLT_EPSILON tolerance any determinant-vs-zero
 	// test would use — yet it inverts cleanly and must still collide.
-	InstancedFoliageCollision collision("TinyScaleFoliage", MakeCollidableCubeMesh());
+	InstancedMeshCollision collision("TinyScaleFoliage", MakeCollidableCubeMesh());
 	collision.AddInstance(MakeFoliageTransform(Vector3(0.001f, 0.001f, 0.001f)));
 	collision.Finalize();
 
@@ -104,10 +104,10 @@ TEST_CASE("InstancedFoliageCollision keeps legitimately shrunken instances", "[i
 	REQUIRE(std::isfinite(result.distance));
 }
 
-TEST_CASE("InstancedFoliageCollision skips degenerate instances without dropping their neighbours", "[instanced_foliage_collision]")
+TEST_CASE("InstancedMeshCollision skips degenerate instances without dropping their neighbours", "[instanced_mesh_collision]")
 {
 	// A single bad instance in a cell must not cost the cell its other foliage.
-	InstancedFoliageCollision collision("MixedScaleFoliage", MakeCollidableCubeMesh());
+	InstancedMeshCollision collision("MixedScaleFoliage", MakeCollidableCubeMesh());
 	collision.AddInstance(MakeFoliageTransform(Vector3(1.0f, 0.0f, 1.0f)));
 	collision.AddInstance(MakeFoliageTransform(Vector3(1.0f, 1.0f, 1.0f)));
 	collision.Finalize();
