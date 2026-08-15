@@ -39,8 +39,28 @@ local function FightWingBoss(entry, label, x, y, z, thresholdPct)
 
 	local maxHealth = GetMaxHealth(boss)
 	Assert(maxHealth > 0, label .. ": max health should be known before the pull")
+
+	-- GetMaxHealth can resolve before the current-health field has arrived, which reads as 0 and is
+	-- indistinguishable from a corpse. Wait for the field rather than trusting the first sample.
+	Assert(WaitUntil(function() return GetHealth(boss) > 0 end, 30000, label .. " health field arrives"),
+		label .. ": current health never replicated (max was " .. maxHealth .. ")")
+
+	-- The dungeon instance stays warm between scenarios (it only unloads after 15 idle minutes),
+	-- so this boss may still be damaged, or mid-reset, from whatever ran before. Wait for the
+	-- reset to restore it instead of assuming a fresh spawn -- otherwise the threshold arithmetic
+	-- below starts from the wrong health and fails with "already below N%".
+	Assert(WaitUntil(function() return GetHealth(boss) >= maxHealth end, 60000, label .. " at full health"),
+		label .. " should be at full health before the pull (warm instance left it at "
+			.. GetHealth(boss) .. " of " .. maxHealth .. ")")
+
 	Assert(not HasAura(boss, GRAVE_FRENZY), label .. " should not be frenzied before the pull")
 	Log(string.format("%s is up with %d health", label, maxHealth))
+
+	-- Land clear of the boss so its fields replicate before it aggroes, then walk in. Teleporting
+	-- into melee range instead makes it pull on arrival, and the current-health field then never
+	-- catches up -- which reads as a corpse.
+	Assert(MoveTo(GetPosX(boss), GetPosY(boss), GetPosZ(boss), 25000) or GetDistance(Me(), boss) <= 5.0,
+		label .. ": should be able to walk into melee range")
 
 	TargetUnit(boss)
 	FaceUnit(boss)
@@ -82,10 +102,10 @@ end
 
 -- North wing. Ossuar is a melee bruiser; his timer trigger throws threat at a random player, which
 -- needs no assertion here beyond the fight staying alive through it.
-FightWingBoss(OSSUAR, "Ossuar", -19, 1, 10, 50)
+FightWingBoss(OSSUAR, "Ossuar", -16, 1, 4, 50)
 
 -- South wing. Vell raises husks on a timer while she lives; they must be gone once she is not.
-FightWingBoss(VELL, "Choirmistress Vell", -12, 1, -32, 40)
+FightWingBoss(VELL, "Choirmistress Vell", -12, 1, -26, 40)
 
 Assert(WaitUntil(function() return CountUnitsByEntry(WAX_SEALED_HUSK) == 0 end, 25000, "husks despawn"),
 	"Vell's husks should not outlive her")
