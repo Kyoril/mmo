@@ -854,7 +854,13 @@ namespace mmo
 				}
 				// Always connect ended signal so finishedCasting fires regardless of
 				// whether auto-attack was running (first-pull cast fix).
-				m_spellCast->ended.connect(this, &GameUnitS::OnSpellCastEnded);
+				//
+				// m_spellCast lives as long as the unit does, and its `ended` signal keeps every
+				// subscriber it is given. Held in a scoped_connection so re-connecting on the next
+				// cast replaces this one instead of stacking a second: connecting bare here leaked
+				// one permanent subscriber per cast, and OnSpellCastEnded was then invoked once per
+				// spell the unit had ever cast.
+				m_castEndedConnection = m_spellCast->ended.connect(this, &GameUnitS::OnSpellCastEnded);
 			}
 			else if (m_attackSwingCountdown.IsRunning())
 			{
@@ -3392,14 +3398,27 @@ namespace mmo
 			return;
 		}
 
-		// A regular cast that finished while we still have a victim should resume auto-attacking
-		// if nothing is scheduled. Note this deliberately does NOT stamp m_lastMainHand /
-		// m_lastOffHand: casting a spell must not push the swing timer back, and stamping both
-		// hands from one cast also let an off-hand swing delay the main hand. TriggerNextAutoAttack
-		// already clamps to now, so a long-idle timer swings immediately and a recent one waits
-		// out only the remainder of its interval.
-		if (m_victim.lock() && !m_attackSwingCountdown.IsRunning())
+		// Casting resets the swing timer: a cast occupies the attacker, so the next swing lands a
+		// full interval after the cast ends rather than resuming part-way through the interval it
+		// was in. Only a real cast does this -- the guard above keeps an auto-attack swing from
+		// resetting the hand it did not swing with, which is what used to let the off-hand delay
+		// the main hand.
+		//
+		// The re-arm is unconditional on purpose. Stamping alone would not move an already-running
+		// countdown -- it keeps the end time it was given -- so the reset would silently do nothing
+		// on the instant-cast path, which reaches here precisely because the timer is still running.
+		if (m_victim.lock())
 		{
+			m_lastMainHand = GetAsyncTimeMs();
+
+			// The off-hand is reset by dropping its countdown rather than by stamping m_lastOffHand.
+			// RefreshOffhandSwingTimer -- which TriggerNextAutoAttack calls -- leaves a running
+			// off-hand timer at its current phase and re-seeds a stopped one half a swing out of
+			// phase with the main hand. Cancelling here is what makes the reset reach the off-hand,
+			// and going through the re-seed keeps the two hands off the same tick, which stamping
+			// both to the same instant would undo.
+			m_offhandSwingCountdown.Cancel();
+
 			TriggerNextAutoAttack();
 		}
 	}

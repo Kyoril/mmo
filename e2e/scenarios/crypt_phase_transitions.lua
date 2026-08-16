@@ -15,6 +15,10 @@
 -- gated on percentages -- so the scenario needs to land on a chosen side of a threshold, not
 -- grind towards it. The cheat routes through the normal damage path, so the triggers see exactly
 -- what a real fight would produce.
+--
+-- Note what this does and does not prove. It asserts the boss is killable and that both phase
+-- chains fire, which is the point. It does not assert auto-attacks keep landing: every damage step
+-- after the pull comes from the cheat, so a swing timer that died mid-fight would not fail this.
 
 local SEVRIN_WAX = 81
 local WAX_SEALED_HUSK = 82

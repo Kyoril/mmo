@@ -451,6 +451,19 @@ Two corrections to the account above, both established from source rather than i
   above. Both the spell and legacy branches then re-armed unconditionally, resurrecting the
   swing that had just been stopped. They now only reschedule while a victim remains.
 
+**Casting still resets the swing timer, deliberately.** The first cut of the fix removed the
+`m_lastMainHand = m_lastOffHand = now` stamp from `OnSpellCastEnded` on the grounds that a cast
+should not push the swing back. That is a balance decision, not a bug, and the call is to keep the
+original behaviour: a cast occupies the attacker, so the next swing lands a full interval after the
+cast ends. It is now restored explicitly, with two corrections. The re-arm is unconditional --
+stamping alone cannot move a countdown that is already running, which is exactly the instant-cast
+case. And the off-hand is reset by cancelling its countdown rather than by stamping it, so
+`RefreshOffhandSwingTimer` re-seeds it half a swing out of phase instead of both hands landing on
+the same tick. Only real casts do this; the auto-attack swing path is excluded by the
+`m_resolvingAutoAttackSwing` guard, which is what stops an off-hand swing from delaying the main
+hand. **Worth watching in the manual play pass:** cast-weave rhythm on a caster, and that a
+dual-wielder's hands stay out of phase after casting.
+
 Writing the scenario also turned up a harness trap worth knowing before the next encounter
 test: **`GM.Godmode` does not survive a cross-map teleport.** Porting to map 1 spawns the
 character into a new world instance and the flag is lost with the old one. The character
