@@ -1679,10 +1679,14 @@ namespace mmo
 					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
 					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
 
-					// Calculate inner vertex position
+					// Calculate inner vertex position. The inner vertex is stored and deformed
+					// independently of its corners, so it has to be read rather than averaged —
+					// averaging tests a surface the tile never renders.
 					const float centerX = (x1 + x2) * 0.5f;
 					const float centerZ = (z1 + z2) * 0.5f;
-					const float centerHeight = (h00 + h10 + h01 + h11) * 0.25f;
+					const float centerHeight = m_page.GetInnerHeightAt(
+						m_tileX * constants::InnerVerticesPerTileSide + i,
+						m_tileY * constants::InnerVerticesPerTileSide + j);
 
 					// Define vertices
 					const Vector3 vTL(x1, h00, z1);

@@ -52,7 +52,12 @@ the second reason precision collapses as the camera pulls back.
 ### 3. `Terrain::GetAt` dereferences a possibly-null page
 
 `GetAt` calls `GetPage(pageX, pageY)` and immediately dereferences the result with no null
-or `IsPrepared` check. Any raycast that reaches a non-resident page crashes the editor.
+check. `GetPageAndLocalVertex` clamps the page index to 63, which stays inside the page grid
+only while the terrain is the full 64 pages wide, as both the editor and the client
+construct it today. On any smaller terrain a valid vertex index resolves to a page past the
+end and `GetPage` returns null. Latent rather than live, but the new traversal walks the
+whole grid, so the trap is worth removing. (Residency is already handled: `Page::GetHeightAt`
+returns 0 when the page is not prepared.)
 
 ### 4. The editor keeps painting at a stale position
 
@@ -164,7 +169,7 @@ Callers are unchanged: `entity_edit_mode`, `foliage_edit_mode`, `selection_rayca
 
 ### 3. `Terrain::GetAt` null guard
 
-Return `0.0f` when `GetPage` yields null or an unprepared page, instead of dereferencing.
+Return `0.0f` when `GetPage` yields null instead of dereferencing.
 
 ### 4. `Tile::RayIntersects` centre height
 

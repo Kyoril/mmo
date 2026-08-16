@@ -152,6 +152,16 @@ namespace mmo
 		void SetBrushPosition(const Vector3& position);
 
 	private:
+		/// Applies the active brush operation once at a single world position.
+		/// @param position World position to apply the brush at.
+		/// @param innerRadius Radius of the brush's full-strength core.
+		/// @param outerRadius Radius at which the brush falls off to nothing.
+		/// @param factor Direction multiplier: -1 while shift inverts the operation.
+		/// @param deltaSeconds Time slice this application accounts for. Stroke interpolation
+		///        divides the frame's delta across its substeps, so time-integrated operations
+		///        keep their total strength while only their coverage becomes continuous.
+		void ApplyBrushAt(const Vector3& position, float innerRadius, float outerRadius, float factor, float deltaSeconds);
+
 		void UpdateBrushOverlay();
 
 		/// Rebuilds the area-ID overlay that colours terrain tiles by their assigned zone.
@@ -297,6 +307,14 @@ namespace mmo
 		bool                m_brushMaskPreviewInvert = false; ///< Invert state baked into the preview.
 
 		Vector3 m_brushPosition{};
+
+		/// World position the brush was last applied at. Together with m_strokeActive this
+		/// turns a per-frame point application into a continuous stroke.
+		Vector3 m_lastStrokePosition{};
+
+		/// True once a stroke has applied at least once, so there is a segment to interpolate
+		/// along. Cleared whenever the stroke is interrupted or ends.
+		bool m_strokeActive = false;
 
 		uint32 m_selectedArea = 0;
 

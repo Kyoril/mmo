@@ -9,6 +9,7 @@
 
 #include "math/noise.h"
 #include "page.h"
+#include "terrain_raycast.h"
 #include "tile.h"
 #include "game/constants.h"
 #include "log/default_log_levels.h"
@@ -107,13 +108,19 @@ namespace mmo
 			GetPageAndLocalVertex(x, pageX, localVertexX);
 			GetPageAndLocalVertex(z, pageY, localVertexY);
 
-			// Retrieve the page at (pageX, pageY)
-			Page *page = GetPage(pageX, pageY); // Implement GetPage accordingly
+			// GetPageAndLocalVertex clamps the page index to 63, which only stays inside the
+			// page grid while the terrain is the full 64 pages wide. On a smaller terrain a
+			// valid vertex index resolves to a page past the end, so this must not be
+			// dereferenced blind. Page::GetHeightAt already handles a page that exists but is
+			// not resident.
+			Page *page = GetPage(pageX, pageY);
+			if (!page)
+			{
+				return 0.0f;
+			}
 
 			// Retrieve the height at the local vertex within the page
-			float height = page->GetHeightAt(localVertexX, localVertexY);
-
-			return height;
+			return page->GetHeightAt(localVertexX, localVertexY);
 		}
 
 		float Terrain::GetSlopeAt(uint32 x, uint32 z)
@@ -593,276 +600,76 @@ namespace mmo
 
 		std::pair<bool, Terrain::RayIntersectsResult> Terrain::RayIntersects(const Ray &ray)
 		{
-			float closestHit = std::numeric_limits<float>::max();
-			Vector3 hitPoint = Vector3::Zero;
-			Page *hitPage = nullptr;
+			// Cells per page side on the outer-vertex grid (128).
+			constexpr int32 cellsPerPage = static_cast<int32>(constants::OuterVerticesPerPageSide) - 1;
 
-			// First do a broad phase - find which pages the ray potentially intersects
-			std::vector<std::pair<Page *, float>> potentialPages;
-			potentialPages.reserve(16); // Reserve space for some pages to avoid reallocation
+			raycast::GridParams params;
+			params.cellSize = static_cast<float>(constants::PageSize / static_cast<double>(cellsPerPage));
+			params.cellCountX = static_cast<int32>(m_width) * cellsPerPage;
+			params.cellCountZ = static_cast<int32>(m_height) * cellsPerPage;
+			GetGlobalVertexWorldPosition(0, 0, &params.originX, &params.originZ);
 
-			for (unsigned int x = 0; x < m_width; x++)
+			// The walk crosses long runs of cells belonging to the same page, so the page
+			// lookup is cached and the residency check happens before any height is fetched.
+			Page *cachedPage = nullptr;
+			int32 cachedPageX = -1;
+			int32 cachedPageZ = -1;
+
+			const auto sampler = [&](const int32 cellX, const int32 cellZ, raycast::CellHeights &out)
 			{
-				for (unsigned int y = 0; y < m_height; y++)
+				const int32 pageX = cellX / cellsPerPage;
+				const int32 pageZ = cellZ / cellsPerPage;
+
+				if (pageX != cachedPageX || pageZ != cachedPageZ)
 				{
-					// Get page
-					Page *page = m_pages(x, y).get();
-					if (!page || !page->IsPrepared())
-					{
-						continue;
-					}
-
-					// Get axis aligned box of that page
-					const AABB &box = page->GetBoundingBox();
-
-					// Check if the ray hits the box
-					std::pair<bool, float> boxHit = ray.IntersectsAABB(box);
-					if (boxHit.first)
-					{
-						// Store the page and distance for sorting
-						potentialPages.emplace_back(page, boxHit.second);
-					}
+					cachedPageX = pageX;
+					cachedPageZ = pageZ;
+					cachedPage = GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
 				}
-			}
 
-			// Early out if no pages hit
-			if (potentialPages.empty())
+				if (!cachedPage || !cachedPage->IsPrepared())
+				{
+					return false;
+				}
+
+				// Corner heights come from the global outer grid, which already resolves the
+				// vertices shared across a page seam.
+				out.corners[0] = GetHeightAt(static_cast<uint32>(cellX), static_cast<uint32>(cellZ));
+				out.corners[1] = GetHeightAt(static_cast<uint32>(cellX + 1), static_cast<uint32>(cellZ));
+				out.corners[2] = GetHeightAt(static_cast<uint32>(cellX), static_cast<uint32>(cellZ + 1));
+				out.corners[3] = GetHeightAt(static_cast<uint32>(cellX + 1), static_cast<uint32>(cellZ + 1));
+
+				// The inner vertex is stored and deformed independently of its corners, so it
+				// has to be read rather than averaged: averaging picks a surface the renderer
+				// never draws.
+				out.inner = cachedPage->GetInnerHeightAt(
+					static_cast<size_t>(cellX - pageX * cellsPerPage),
+					static_cast<size_t>(cellZ - pageZ * cellsPerPage));
+
+				return true;
+			};
+
+			const raycast::Result hit = raycast::RaycastHeightGrid(ray, params, sampler);
+			if (!hit.hit)
 			{
 				return std::make_pair(false, RayIntersectsResult(nullptr, Vector3::Zero));
 			}
 
-			// Sort pages by distance from ray origin
-			std::sort(potentialPages.begin(), potentialPages.end(),
-					  [](const auto &a, const auto &b)
-					  { return a.second < b.second; });
+			// The hit cell identifies its page and tile exactly, so no world-position round
+			// trip is needed to resolve them.
+			constexpr int32 cellsPerTile = static_cast<int32>(constants::OuterVerticesPerTileSide) - 1;
+			static_assert(cellsPerTile * static_cast<int32>(constants::TilesPerPage) == cellsPerPage,
+				"Tile and page cell counts must agree on the outer-vertex grid");
 
-			// Detailed check phase - check triangles in pages ordered by distance
-			for (const auto &[page, distance] : potentialPages)
+			Tile *tile = nullptr;
+			if (Page *page = GetPage(static_cast<uint32>(hit.cellX / cellsPerPage), static_cast<uint32>(hit.cellZ / cellsPerPage)))
 			{
-				// Skip if we already found a hit closer than this page's bounding box
-				if (distance > closestHit)
-				{
-					continue;
-				}
-
-				// Get the page coordinates
-				unsigned int pageX = 0, pageY = 0;
-				for (unsigned int x = 0; x < m_width; x++)
-				{
-					for (unsigned int y = 0; y < m_height; y++)
-					{
-						if (m_pages(x, y).get() == page)
-						{
-							pageX = x;
-							pageY = y;
-							break;
-						}
-					}
-				}
-
-				// Performance optimization: Only check every 4th vertex for initial pass
-				// Then refine around potential hits
-				static constexpr int coarse_step = 4;
-				bool potentialHit = false;
-				float coarseHitT = std::numeric_limits<float>::max();
-				unsigned int coarseHitX = 0, coarseHitZ = 0;
-
-				// Coarse pass - check every 4th cell (outer grid)
-				for (unsigned int vx = 0; vx < constants::OuterVerticesPerPageSide - 1; vx += coarse_step)
-				{
-					for (unsigned int vz = 0; vz < constants::OuterVerticesPerPageSide - 1; vz += coarse_step)
-					{
-						// Ensure we don't go out of bounds
-						if (vx + coarse_step >= constants::OuterVerticesPerPageSide || vz + coarse_step >= constants::OuterVerticesPerPageSide)
-							continue;
-
-						// Get the four corners of this quad
-						const uint32 globalVx = pageX * (constants::OuterVerticesPerPageSide - 1) + vx;
-						const uint32 globalVz = pageY * (constants::OuterVerticesPerPageSide - 1) + vz;
-
-						// Get world positions for the quad vertices
-						float wx1, wz1, wx2, wz2;
-						GetGlobalVertexWorldPosition(globalVx, globalVz, &wx1, &wz1);
-						GetGlobalVertexWorldPosition(globalVx + coarse_step, globalVz + coarse_step, &wx2, &wz2);
-
-						// Get heights for the four corners
-						const float h1 = GetHeightAt(globalVx, globalVz);
-						const float h2 = GetHeightAt(globalVx + coarse_step, globalVz);
-						const float h3 = GetHeightAt(globalVx, globalVz + coarse_step);
-						const float h4 = GetHeightAt(globalVx + coarse_step, globalVz + coarse_step);
-
-						// Create the four corner vertices and center inner vertex
-						const Vector3 vTL(wx1, h1, wz1);
-						const Vector3 vTR(wx2, h2, wz1);
-						const Vector3 vBL(wx1, h3, wz2);
-						const Vector3 vBR(wx2, h4, wz2);
-						const Vector3 vC((wx1 + wx2) * 0.5f, (h1 + h2 + h3 + h4) * 0.25f, (wz1 + wz2) * 0.5f);
-
-						// Check four triangles around the center
-						float tTmp;
-						Vector3 ip;
-						// Top
-						if (RayTriangleIntersection(ray, vC, vTR, vTL, tTmp, ip))
-						{
-							if (tTmp < coarseHitT)
-							{
-								coarseHitT = tTmp;
-								coarseHitX = vx;
-								coarseHitZ = vz;
-								potentialHit = true;
-							}
-						}
-						// Right
-						if (RayTriangleIntersection(ray, vC, vBR, vTR, tTmp, ip))
-						{
-							if (tTmp < coarseHitT)
-							{
-								coarseHitT = tTmp;
-								coarseHitX = vx;
-								coarseHitZ = vz;
-								potentialHit = true;
-							}
-						}
-						// Bottom
-						if (RayTriangleIntersection(ray, vC, vBL, vBR, tTmp, ip))
-						{
-							if (tTmp < coarseHitT)
-							{
-								coarseHitT = tTmp;
-								coarseHitX = vx;
-								coarseHitZ = vz;
-								potentialHit = true;
-							}
-						}
-						// Left
-						if (RayTriangleIntersection(ray, vC, vTL, vBL, tTmp, ip))
-						{
-							if (tTmp < coarseHitT)
-							{
-								coarseHitT = tTmp;
-								coarseHitX = vx;
-								coarseHitZ = vz;
-								potentialHit = true;
-							}
-						}
-					}
-				}
-
-				// If we found a potential hit in the coarse pass, refine it
-				if (potentialHit)
-				{
-					// Define the refinement area
-					unsigned int startX = (coarseHitX > coarse_step) ? (coarseHitX - coarse_step) : 0;
-					unsigned int startZ = (coarseHitZ > coarse_step) ? (coarseHitZ - coarse_step) : 0;
-					unsigned int endX = std::min(coarseHitX + coarse_step, constants::OuterVerticesPerPageSide - 2);
-					unsigned int endZ = std::min(coarseHitZ + coarse_step, constants::OuterVerticesPerPageSide - 2);
-
-					// Detailed pass - check every vertex in the refined area
-					for (unsigned int vx = startX; vx <= endX; vx++)
-					{
-						for (unsigned int vz = startZ; vz <= endZ; vz++)
-						{
-							// Get the four corners of this quad
-							const uint32 globalVx = pageX * (constants::OuterVerticesPerPageSide - 1) + vx;
-							const uint32 globalVz = pageY * (constants::OuterVerticesPerPageSide - 1) + vz;
-
-							// Get world positions for the quad vertices
-							float wx1, wz1, wx2, wz2;
-							GetGlobalVertexWorldPosition(globalVx, globalVz, &wx1, &wz1);
-							GetGlobalVertexWorldPosition(globalVx + 1, globalVz + 1, &wx2, &wz2);
-
-							// Get heights for the four corners
-							const float h1 = GetHeightAt(globalVx, globalVz);
-							const float h2 = GetHeightAt(globalVx + 1, globalVz);
-							const float h3 = GetHeightAt(globalVx, globalVz + 1);
-							const float h4 = GetHeightAt(globalVx + 1, globalVz + 1);
-
-							// Create the four corner vertices and center inner vertex
-							const Vector3 vTL(wx1, h1, wz1);
-							const Vector3 vTR(wx2, h2, wz1);
-							const Vector3 vBL(wx1, h3, wz2);
-							const Vector3 vBR(wx2, h4, wz2);
-							const Vector3 vC((wx1 + wx2) * 0.5f, (h1 + h2 + h3 + h4) * 0.25f, (wz1 + wz2) * 0.5f);
-
-							// Check four triangles around the center
-							Vector3 ip1;
-							if (float t1; RayTriangleIntersection(ray, vC, vTR, vTL, t1, ip1))
-							{
-								if (t1 < closestHit)
-								{
-									closestHit = t1;
-									hitPoint = ip1;
-									hitPage = page;
-								}
-							}
-
-							float t2;
-							Vector3 ip2;
-							if (RayTriangleIntersection(ray, vC, vBR, vTR, t2, ip2))
-							{
-								if (t2 < closestHit)
-								{
-									closestHit = t2;
-									hitPoint = ip2;
-									hitPage = page;
-								}
-							}
-
-							float t3;
-							Vector3 ip3;
-							if (RayTriangleIntersection(ray, vC, vBL, vBR, t3, ip3))
-							{
-								if (t3 < closestHit)
-								{
-									closestHit = t3;
-									hitPoint = ip3;
-									hitPage = page;
-								}
-							}
-
-							float t4;
-							Vector3 ip4;
-							if (RayTriangleIntersection(ray, vC, vTL, vBL, t4, ip4))
-							{
-								if (t4 < closestHit)
-								{
-									closestHit = t4;
-									hitPoint = ip4;
-									hitPage = page;
-								}
-							}
-						}
-					}
-
-					// Early out if we found a hit in this page
-					if (hitPage == page)
-					{
-						break;
-					}
-				}
+				tile = page->GetTile(
+					(hit.cellX % cellsPerPage) / cellsPerTile,
+					(hit.cellZ % cellsPerPage) / cellsPerTile);
 			}
 
-			if (hitPoint != Vector3::Zero)
-			{
-				Tile *tile = nullptr;
-				if (hitPage)
-				{
-					int32 globalTileX, globalTileY;
-					if (GetTileIndexByWorldPosition(hitPoint, globalTileX, globalTileY))
-					{
-						int32 localTileX, localTileY;
-						if (GetLocalTileIndexByGlobalTileIndex(globalTileX, globalTileY, localTileX, localTileY))
-						{
-							tile = hitPage->GetTile(localTileX, localTileY);
-						}
-					}
-				}
-
-				return std::make_pair(true, RayIntersectsResult(tile, hitPoint));
-			}
-
-			// We didn't hit anything
-			return std::make_pair(false, RayIntersectsResult(nullptr, Vector3::Zero));
+			return std::make_pair(true, RayIntersectsResult(tile, hit.position));
 		}
 
 		void Terrain::GetTerrainVertex(const float x, const float z, uint32 &vertexX, uint32 &vertexZ)
