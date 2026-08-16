@@ -92,6 +92,19 @@ namespace mmo
 		Count_
 	};
 
+	/// Enumerates the possible vertex shading modes.
+	enum class TerrainVertexShadingMode : ::uint8
+	{
+		/// Paint the selected colour with the brush.
+		Paint,
+
+		/// Replace every vertex colour of the page under the cursor with the selected colour.
+		Fill,
+
+		/// The total number of vertex shading modes. Always the last element!
+		Count_
+	};
+
 	/// Enumerates the possible terrain hole modes.
 	enum class TerrainHoleMode : ::uint8
 	{
@@ -123,7 +136,7 @@ namespace mmo
 
 		void OnMouseHold(float deltaSeconds) override;
 
-		void OnStrokeInterrupted() override { m_strokeActive = false; }
+		void OnStrokeInterrupted() override { m_strokeActive = false; m_pendingStrokePoints.clear(); }
 
 		void OnMouseMoved(float x, float y) override;
 
@@ -148,6 +161,10 @@ namespace mmo
 
 		[[nodiscard]] TerrainPaintMode GetPaintMode() const { return m_paintMode; }
 
+		void SetVertexShadingMode(const TerrainVertexShadingMode mode) { m_vertexShadingMode = mode; }
+
+		[[nodiscard]] TerrainVertexShadingMode GetVertexShadingMode() const { return m_vertexShadingMode; }
+
 		void SetHoleMode(const TerrainHoleMode mode) { m_holeMode = mode; }
 
 		[[nodiscard]] TerrainHoleMode GetHoleMode() const { return m_holeMode; }
@@ -161,8 +178,11 @@ namespace mmo
 		/// @param innerRadius Radius of the brush's full-strength core.
 		/// @param outerRadius Radius at which the brush falls off to nothing.
 		/// @param factor Direction multiplier: -1 while shift inverts the operation.
-		/// @param deltaSeconds The frame's time slice, for operations that integrate over it.
-		void ApplyBrushStroke(const terrain::BrushStroke& stroke, float innerRadius, float outerRadius, float factor, float deltaSeconds);
+		/// @param strength How much of one full brush pass this application contributes. The
+		///        caller derives it from distance covered, so a stroke deposits the same amount
+		///        per unit of length whatever the cursor speed or frame rate; a stationary brush
+		///        passes the frame's time slice instead.
+		void ApplyBrushStroke(const terrain::BrushStroke& stroke, float innerRadius, float outerRadius, float factor, float strength);
 
 		/// Number of overlapping stamps needed to cover a stroke, for the operations that cannot
 		/// be swept: a brush mask is anchored to one footprint, and area IDs are set per tile.
@@ -287,6 +307,8 @@ namespace mmo
 
 		TerrainHoleMode m_holeMode = TerrainHoleMode::Add;
 
+		TerrainVertexShadingMode m_vertexShadingMode = TerrainVertexShadingMode::Paint;
+
 		float m_deformFlattenHeight = 0.0f;
 
 		float m_terrainBrushSize = 0.5f;
@@ -324,6 +346,11 @@ namespace mmo
 		/// True once a stroke has applied at least once, so there is a segment to interpolate
 		/// along. Cleared whenever the stroke is interrupted or ends.
 		bool m_strokeActive = false;
+
+		/// Brush positions seen since the last application. Pointer events usually arrive
+		/// several times per frame, so collecting them keeps a fast curve a curve instead of
+		/// the single chord a per-frame sample would reduce it to.
+		std::vector<Vector3> m_pendingStrokePoints;
 
 		uint32 m_selectedArea = 0;
 

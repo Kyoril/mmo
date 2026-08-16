@@ -1072,6 +1072,42 @@ namespace mmo
 					SetColorAt(vx, vy, color); });
 		}
 
+		bool Terrain::FillPageColor(const Vector3 &position, const uint32 color) const
+		{
+			int32 pageX, pageZ;
+			if (!GetPageIndexByWorldPosition(position, pageX, pageZ))
+			{
+				return false;
+			}
+
+			Page *page = GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
+			if (!page || !page->IsPrepared())
+			{
+				return false;
+			}
+
+			for (uint32 z = 0; z < constants::OuterVerticesPerPageSide; ++z)
+			{
+				for (uint32 x = 0; x < constants::OuterVerticesPerPageSide; ++x)
+				{
+					page->SetColorAt(x, z, color);
+				}
+			}
+
+			// Inner vertices carry their own colour and are rendered from it, so a fill that
+			// skipped them would leave the painted centre of every cell behind.
+			for (uint32 z = 0; z < constants::InnerVerticesPerPageSide; ++z)
+			{
+				for (uint32 x = 0; x < constants::InnerVerticesPerPageSide; ++x)
+				{
+					page->SetInnerColorAt(x, z, color);
+				}
+			}
+
+			page->UpdateTiles(0, 0, constants::OuterVerticesPerPageSide - 1, constants::OuterVerticesPerPageSide - 1);
+			return true;
+		}
+
 		void Terrain::SetHeightAt(const int x, const int y, const float height) const
 		{
 			// Determine page

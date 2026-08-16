@@ -438,6 +438,17 @@ namespace mmo
 			/// @return The wireframe material.
 			[[nodiscard]] const MaterialPtr &GetWireframeMaterial() const { return m_wireframeMaterial; }
 
+			/// @brief Replaces every vertex colour of one page with a single colour.
+			///
+			/// Both the outer and the inner vertex grids are filled, so the page ends up flat in
+			/// colour. Vertices on a page seam exist once per page, so filling one page leaves a
+			/// hard colour edge against an unfilled neighbour — which is what filling a single
+			/// page means.
+			/// @param position World position identifying the page to fill.
+			/// @param color The colour to apply, in the same packed form as GetColorAt returns.
+			/// @return True if a resident page was found and filled.
+			bool FillPageColor(const Vector3& position, uint32 color) const;
+
 			/// @brief Add or remove terrain holes in a circular brush area
 			/// @param brushCenterX World X position of brush center
 			/// @param brushCenterZ World Z position of brush center

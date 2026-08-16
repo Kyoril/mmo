@@ -62,6 +62,42 @@ namespace mmo
 			[[nodiscard]] float MaxX() const { return std::max(fromX, toX); }
 			[[nodiscard]] float MinZ() const { return std::min(fromZ, toZ); }
 			[[nodiscard]] float MaxZ() const { return std::max(fromZ, toZ); }
+
+			/// @brief Length of the swept segment in the XZ plane.
+			[[nodiscard]] float Length() const
+			{
+				const float segX = toX - fromX;
+				const float segZ = toZ - fromZ;
+				return std::sqrt(segX * segX + segZ * segZ);
+			}
 		};
+
+		/// @brief How much of one full brush pass a swept segment of this length contributes.
+		///
+		/// A time-driven brush deposits an amount proportional to the frame's duration over
+		/// whatever the cursor happened to cover, so what lands per unit of length is
+		/// proportional to 1/speed and also rides on however long the frame took: slow patches of
+		/// a drag get many overlapping deposits and go dark, fast patches get one thin pass, and
+		/// uneven frame times mottle the rest.
+		///
+		/// Driving it by distance instead removes all three. Any point has 2 * radius worth of
+		/// path within reach of it, so weighting each segment by its share of that length makes
+		/// the contributions sum to exactly 1 for a single pass of the brush — however the path
+		/// happens to be chopped up by frames or pointer events. The cap covers a segment longer
+		/// than the brush itself, which is still only one pass over the points beneath it.
+		///
+		/// @param segmentLength Length of the segment being applied.
+		/// @param outerRadius Radius at which the brush falls off to nothing.
+		/// @return Fraction of a full pass, in [0, 1].
+		[[nodiscard]] inline float StrokePassFraction(const float segmentLength, const float outerRadius)
+		{
+			const float passLength = 2.0f * outerRadius;
+			if (passLength <= 0.0f || segmentLength <= 0.0f)
+			{
+				return 0.0f;
+			}
+
+			return std::min(segmentLength, passLength) / passLength;
+		}
 	}
 }
