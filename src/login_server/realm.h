@@ -99,8 +99,11 @@ namespace mmo
 
 	private:
 		RealmManager &m_manager;
-		AsyncDatabase &m_database;
 		std::shared_ptr<Client> m_connection;
+		/// This session's view of the database. Held by value rather than by reference because it
+		/// is not the server's shared instance: its results are bound to this connection's strand.
+		/// See MakeStrandBoundDatabase. Declared after m_connection, which it is built from.
+		AsyncDatabase m_database;
 		std::string m_address;					// IP address of the realm server in string format
 		std::string m_realmName;				// Realm name
 		std::string m_realmListAddress;			// Address of the realm server which will appear in the realm list
