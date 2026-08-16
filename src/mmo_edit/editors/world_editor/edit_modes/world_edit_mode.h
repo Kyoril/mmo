@@ -133,6 +133,12 @@ namespace mmo
 
 		virtual void OnMouseHold(float deltaSeconds) {}
 
+		/// @brief Called on any frame where OnMouseHold is not called, so a mode that treats a
+		///        held drag as a continuous stroke can tell a pause apart from a fast movement.
+		///        Without it, leaving the viewport mid-drag and re-entering elsewhere looks
+		///        identical to the cursor having travelled between the two points.
+		virtual void OnStrokeInterrupted() {}
+
 		virtual void OnMouseWheel(float delta) {}
 
 		virtual bool SupportsViewportDrop() const { return false; }

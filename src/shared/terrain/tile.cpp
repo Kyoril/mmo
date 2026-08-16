@@ -1542,14 +1542,22 @@ namespace mmo
 					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
 					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
 
-					// Calculate inner vertex position (center of quad)
+					// Calculate inner vertex position (center of quad). Like the ray path, the
+					// inner vertex is stored and deformed independently of its corners, so it
+					// is read rather than averaged — otherwise the capsule collides with a
+					// surface the tile never renders.
 					const float centerX = (x1 + x2) * 0.5f;
 					const float centerZ = (z1 + z2) * 0.5f;
-					const float centerHeight = (h00 + h10 + h01 + h11) * 0.25f;
+					const float centerHeight = m_page.GetInnerHeightAt(
+						m_tileX * constants::InnerVerticesPerTileSide + static_cast<size_t>(i),
+						m_tileY * constants::InnerVerticesPerTileSide + static_cast<size_t>(j));
 
-					// Create bounding box for this cell
-					const float minHeight = std::min(std::min(h00, h10), std::min(h01, h11));
-					const float maxHeight = std::max(std::max(h00, h10), std::max(h01, h11));
+					// Create bounding box for this cell. It has to span the inner vertex too: a
+					// sculpted spike or pit at the centre reaches past every corner, and a box
+					// built from the corners alone would cull the cell before its triangles are
+					// ever tested.
+					const float minHeight = std::min(std::min(std::min(h00, h10), std::min(h01, h11)), centerHeight);
+					const float maxHeight = std::max(std::max(std::max(h00, h10), std::max(h01, h11)), centerHeight);
 					const AABB cellBounds(Vector3(x1, minHeight, z1), Vector3(x2, maxHeight, z2));
 
 					// Skip if capsule doesn't intersect with this cell's bounds

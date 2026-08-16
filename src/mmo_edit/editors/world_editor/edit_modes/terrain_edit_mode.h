@@ -122,6 +122,8 @@ namespace mmo
 
 		void OnMouseHold(float deltaSeconds) override;
 
+		void OnStrokeInterrupted() override { m_strokeActive = false; }
+
 		void OnMouseMoved(float x, float y) override;
 
 		void OnMouseUp(float x, float y) override;
@@ -160,7 +162,9 @@ namespace mmo
 		/// @param deltaSeconds Time slice this application accounts for. Stroke interpolation
 		///        divides the frame's delta across its substeps, so time-integrated operations
 		///        keep their total strength while only their coverage becomes continuous.
-		void ApplyBrushAt(const Vector3& position, float innerRadius, float outerRadius, float factor, float deltaSeconds);
+		/// @param stepScale Reciprocal of the substep count. Operations that apply a fixed
+		///        displacement instead of integrating over deltaSeconds scale by this instead.
+		void ApplyBrushAt(const Vector3& position, float innerRadius, float outerRadius, float factor, float deltaSeconds, float stepScale);
 
 		void UpdateBrushOverlay();
 

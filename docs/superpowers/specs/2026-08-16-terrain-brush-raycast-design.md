@@ -152,44 +152,83 @@ this header as a free function so the header has no dependency on `Terrain`.
 
 ### 2. `Terrain::RayIntersects` becomes an adapter
 
-The entire coarse/refine block is deleted, along with the page broad phase and its
-`O(width * height)` reverse search for a page's own index. The sampler subsumes both:
+The entire coarse/refine block is deleted, along with its `O(width * height)` reverse search
+for a page's own index. The sampler subsumes the page broad phase:
 
-- It caches the last page pointer, since 128 consecutive cells along an axis share one page.
-- It rejects non-resident or unprepared pages before fetching any height.
+- It caches the resolved page, since 128 consecutive cells along an axis share one.
+- On each page change it evaluates residency *and* `ray.IntersectsAABB(page bounding box)`,
+  so a page the ray misses rejects all 128 of its cells without a single height fetch. This
+  keeps the broad phase the old implementation ran up front, just folded into the walk.
+- Heights are read **page-local** (`Page::GetHeightAt` with local indices), not through the
+  global vertex grid. A page stores 129 vertices per side, so a cell's far corners at local
+  index + 1 still land inside it. Going through the global grid would instead resolve a seam
+  vertex to the *next* page, which returns 0 when that page is not resident and presents the
+  walk with a cliff down to y=0 that is not there. Page-local reads are also what the
+  renderer does, so the surface tested is the surface drawn.
 - It reads the fan centre from `GetInnerHeightAt`, so picking matches rendering.
-- Corner heights come from `GetHeightAt` on global indices, which already resolves the
-  vertices shared across a page seam.
 
 `hitPoint != Vector3::Zero` as a success test is replaced by the explicit result flag. The
-existing tile lookup for the returned `RayIntersectsResult` is kept.
+page and tile of the hit are derived from the hit cell index rather than from a world-position
+round trip, guarded by a `static_assert` that the tile and page cell counts agree.
 
 Callers are unchanged: `entity_edit_mode`, `foliage_edit_mode`, `selection_raycaster` and
 `world_editor_instance` all keep the same signature and all benefit.
+
+**Behaviour change — ray length is now honoured.** The old `RayTriangleIntersection` checked
+only `t > epsilon` and ignored the ray's length entirely, so picking had unlimited reach. The
+walk clips to `ray.GetLength()`, which is more correct but would make a shallow pick from a
+far camera newly miss on the editor's 10000-unit picking rays. The two brushes that are
+painted from arbitrary camera distances — terrain (`WorldEditorInstance::OnTerrainMouseMoved`)
+and foliage — therefore cast 50000 units, spanning the world diagonal. The click-to-place
+tools keep their 10000.
 
 ### 3. `Terrain::GetAt` null guard
 
 Return `0.0f` when `GetPage` yields null instead of dereferencing.
 
-### 4. `Tile::RayIntersects` centre height
+### 4. Tile collision centre height
 
-Use the stored inner vertex height instead of the corner average, so client-side collision
-agrees with what is drawn. Same one-line class of fix as the picking path.
+Both `Tile::TestRayCollision` and `Tile::TestCapsuleCollision` use the stored inner vertex
+height instead of the corner average, so client-side collision agrees with what is drawn.
+Fixing only the ray path would have been worse than fixing neither: the capsule path is the
+one that actually carries the player, and leaving it averaging would put the client's two
+collision paths in disagreement with each other.
+
+The capsule path additionally builds its per-cell rejection box from the four corners only. A
+sculpted spike or pit at the inner vertex reaches past every corner, so that box culls the
+cell before its triangles are tested; the box now spans the inner vertex too.
 
 ### 5. Editor stroke stability (`TerrainEditMode`)
 
 - `OnMouseHold` returns early when `!m_brushPositionValid`, so a missed ray pauses the
   stroke rather than deforming the stale position for another frame.
 - Stroke interpolation. Track the previously applied position. When the brush has moved
-  further than `min(cellSize, outerRadius * 0.25)` since the last application, subdivide the
-  segment (capped at 32 substeps) and apply along it.
-  - Time-integrated operations (Sculpt, Smooth, Noise, Paint, VertexShading) divide
-    `power * deltaSeconds` across the substeps, so total applied strength is unchanged and
-    only the coverage becomes continuous.
+  further than `max(cellSize * 0.5, outerRadius * 0.25)` since the last application,
+  subdivide the segment (capped at 16 substeps) and apply along it. Spacing is driven by the
+  brush radius, which is what decides whether consecutive footprints overlap; the cell-size
+  floor only stops a tiny brush from asking for more substeps than the grid can resolve. A
+  large brush therefore gets large spacing and few substeps, which matters because every
+  application rebuilds the tile meshes under its footprint.
+  - Operations that integrate over the frame delta (Sculpt, Smooth, Flatten, Paint,
+    VertexShading) divide `power * deltaSeconds` across the substeps, so total applied
+    strength is unchanged and only the coverage becomes continuous.
+  - **Noise does not integrate over the frame delta** — `Terrain::ApplyNoise` applies a fixed
+    `amplitude * fBm(worldPos)` displacement, and `fBm` is deterministic per position, so
+    dividing the time slice would not restrain it and a fast drag would apply it once per
+    substep at full strength. Its *amplitude* is scaled by `1 / substeps` instead. This is
+    the one place the substep count has to reach an operation's strength rather than its time
+    slice, and getting it wrong destroys authored terrain with no undo path.
   - Set-style operations (Holes, Area) apply their full effect at each substep, since they
     are idempotent. This also closes the gaps left by fast hole painting.
+  - The two modifier-held sampling operations (ctrl-Flatten's height picker, alt-Area's
+    eyedropper) run once per frame outside the substep loop; they are not strokes.
   - The tracked position resets on mouse up and when a stroke begins, so the first frame of
     a stroke applies a single step.
+- `WorldEditMode::OnStrokeInterrupted`, called by `WorldEditorInstance` on any frame where it
+  does not call `OnMouseHold`. Leaving the viewport with the button held stops `OnMouseHold`
+  without firing `OnMouseUp`, so re-entering elsewhere would otherwise look identical to the
+  cursor having dragged between the two points, and the interpolation would sculpt a line the
+  user never travelled.
 
 ### 6. Tests
 
@@ -197,20 +236,38 @@ New `src/tests/terrain_tests/test_terrain_raycast.cpp`, headless, driving
 `RaycastHeightGrid` over a synthetic height grid:
 
 - Sub-cell precision: the hit point lies on the analytic fan surface.
-- An inner vertex displaced off the corner average is hit at its real height (regression for
-  root cause 2).
+- An inner vertex displaced off the corner average is hit at its real height, both raised and
+  depressed (regression for root cause 2).
 - A ridge pattern that a 4x4 corner proxy would miss is hit (regression for root cause 1).
 - A hit in the final cell strip of the grid (regression for the dropped edge band).
 - Front-to-back ordering: a ray crossing a near ridge and a far one hits the near ridge.
 - Grazing rays at ~85 degrees from far away resolve to the correct cell.
+- Traversal in -X and in -Z, and along Z with `dir.x == 0`. These cover the other half of the
+  DDA seeding, which picks a cell's lower border rather than its upper one when the step is
+  negative, and the axis-parallel sentinel path.
+- A grid with a large negative origin (~-17066, as the real terrain has), so the
+  world-to-grid conversion is exercised with a real offset rather than 0.
+- A hit from below, since sculpting can put the camera under an overhanging lip.
 - Cells the sampler rejects are passed through rather than terminating the walk.
 - The ray's length is respected: a surface beyond it is not hit.
-- Miss cases: ray above all terrain, ray pointing away, ray outside the grid.
+- Each crossed cell is visited exactly once (a revisited cell means a stuck traversal).
+- Miss cases: ray above all terrain, ray pointing away, ray outside the grid, empty grid.
 
 ## Out of Scope
 
 - **Hole awareness in picking.** The renderer and collision skip holes; the picking raycast
   does not, so the brush can still pick a surface through a hole. Deliberately deferred.
+- **The nav mesh builder's fabricated centre vertices.** `nav_build/map.cpp` averages the four
+  corners the same way the collision paths did. Correcting it is not a code-only change: every
+  map's nav mesh would have to be rebuilt, so it needs to be scheduled as its own piece of
+  work. Until then the server's nav mesh can disagree with client collision wherever inner
+  vertices were sculpted independently — which `Deform` and `ApplyNoise` do, while `Smooth`,
+  `Flatten` and the Coons patch re-derive them.
+- **Batching tile rebuilds across substeps.** Each brush application ends in `UpdateTiles`
+  over its footprint, so a 16-substep frame rebuilds the same tiles 16 times. The radius-based
+  spacing keeps this bounded — a large brush gets few substeps — but a proper fix would thread
+  an `updateTiles = false` flag through the public brush operations and issue one rebuild over
+  the union bounds. That changes several public signatures and is left for later.
 - Any change to how the brush overlay is drawn.
 - The GPU readback picking path (approach C).
 

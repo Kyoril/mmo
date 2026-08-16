@@ -609,11 +609,15 @@ namespace mmo
 			params.cellCountZ = static_cast<int32>(m_height) * cellsPerPage;
 			GetGlobalVertexWorldPosition(0, 0, &params.originX, &params.originZ);
 
-			// The walk crosses long runs of cells belonging to the same page, so the page
-			// lookup is cached and the residency check happens before any height is fetched.
+			// The walk crosses long runs of cells belonging to the same page (128 of them per
+			// axis), so the page is resolved once per run rather than once per cell. Both the
+			// residency test and the page's bounding box are evaluated at that point, which
+			// restores the broad phase the old implementation did up front: a page the ray
+			// misses entirely rejects all 128 of its cells without a single height fetch.
 			Page *cachedPage = nullptr;
 			int32 cachedPageX = -1;
 			int32 cachedPageZ = -1;
+			bool cachedPageUsable = false;
 
 			const auto sampler = [&](const int32 cellX, const int32 cellZ, raycast::CellHeights &out)
 			{
@@ -625,26 +629,33 @@ namespace mmo
 					cachedPageX = pageX;
 					cachedPageZ = pageZ;
 					cachedPage = GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
+					cachedPageUsable = cachedPage && cachedPage->IsPrepared() &&
+						ray.IntersectsAABB(cachedPage->GetBoundingBox()).first;
 				}
 
-				if (!cachedPage || !cachedPage->IsPrepared())
+				if (!cachedPageUsable)
 				{
 					return false;
 				}
 
-				// Corner heights come from the global outer grid, which already resolves the
-				// vertices shared across a page seam.
-				out.corners[0] = GetHeightAt(static_cast<uint32>(cellX), static_cast<uint32>(cellZ));
-				out.corners[1] = GetHeightAt(static_cast<uint32>(cellX + 1), static_cast<uint32>(cellZ));
-				out.corners[2] = GetHeightAt(static_cast<uint32>(cellX), static_cast<uint32>(cellZ + 1));
-				out.corners[3] = GetHeightAt(static_cast<uint32>(cellX + 1), static_cast<uint32>(cellZ + 1));
+				// Read page-local rather than through the global vertex grid. A page stores
+				// 129 vertices per side, so a cell's far corners at local index + 1 still land
+				// inside this page. Going through the global grid would instead resolve a seam
+				// vertex to the *next* page, which returns 0 when that page is not resident and
+				// presents the walk with a cliff down to y=0 that is not there. It is also what
+				// the renderer does, so the surface tested is the surface drawn.
+				const size_t localX = static_cast<size_t>(cellX - pageX * cellsPerPage);
+				const size_t localZ = static_cast<size_t>(cellZ - pageZ * cellsPerPage);
+
+				out.corners[0] = cachedPage->GetHeightAt(localX, localZ);
+				out.corners[1] = cachedPage->GetHeightAt(localX + 1, localZ);
+				out.corners[2] = cachedPage->GetHeightAt(localX, localZ + 1);
+				out.corners[3] = cachedPage->GetHeightAt(localX + 1, localZ + 1);
 
 				// The inner vertex is stored and deformed independently of its corners, so it
 				// has to be read rather than averaged: averaging picks a surface the renderer
 				// never draws.
-				out.inner = cachedPage->GetInnerHeightAt(
-					static_cast<size_t>(cellX - pageX * cellsPerPage),
-					static_cast<size_t>(cellZ - pageZ * cellsPerPage));
+				out.inner = cachedPage->GetInnerHeightAt(localX, localZ);
 
 				return true;
 			};
@@ -1805,43 +1816,13 @@ namespace mmo
 
 		bool Terrain::RayTriangleIntersection(const Ray &ray, const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, float &t, Vector3 &intersectionPoint)
 		{
-			constexpr float epsilon = 1e-6f;
-
-			Vector3 edge1 = v1 - v0;
-			Vector3 edge2 = v2 - v0;
-			Vector3 h = ray.GetDirection().Cross(edge2);
-			float a = edge1.Dot(h);
-
-			if (std::abs(a) < epsilon)
-			{
-				return false; // Ray is parallel to triangle
-			}
-
-			const float f = 1.0f / a;
-			const Vector3 s = ray.origin - v0;
-			const float u = f * s.Dot(h);
-
-			if (u < 0.0f || u > 1.0f)
+			if (!raycast::IntersectsTriangle(ray, v0, v1, v2, t))
 			{
 				return false;
 			}
 
-			const Vector3 q = s.Cross(edge1);
-
-			if (const float v = f * ray.GetDirection().Dot(q); v < 0.0f || u + v > 1.0f)
-				return false;
-
-			// At this stage, we can compute t to find out where the intersection point is on the line
-			t = f * edge2.Dot(q);
-
-			if (t > epsilon) // Ray intersection
-			{
-				intersectionPoint = ray.origin + ray.GetDirection() * t;
-				return true;
-			}
-
-			// Line intersection but not a ray intersection
-			return false;
+			intersectionPoint = ray.origin + ray.GetDirection() * t;
+			return true;
 		}
 
 		bool Terrain::IsHoleAt(const float x, const float z) const

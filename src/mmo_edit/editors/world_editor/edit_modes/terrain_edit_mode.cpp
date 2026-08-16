@@ -1257,13 +1257,28 @@ namespace mmo
 			return;
 		}
 
+		// Area's alt modifier is an eyedropper, likewise not a stroke.
+		if (m_type == TerrainEditType::Area && ImGui::GetIO().KeyAlt)
+		{
+			m_selectedArea = m_terrain.GetArea(m_brushPosition);
+			m_lastStrokePosition = m_brushPosition;
+			m_strokeActive = true;
+			return;
+		}
+
 		// The brush is applied once per frame at a single point. From a high camera a small
 		// pointer movement covers a large world distance, so one application per frame lays
 		// down spaced blobs instead of a stroke. Walk the segment covered since the last
 		// application, spacing the substeps closely enough that their footprints overlap.
+		//
+		// Spacing is driven by the brush radius, which is what determines whether consecutive
+		// footprints overlap; the cell-size floor only stops a tiny brush from asking for more
+		// substeps than the terrain grid can resolve. A large brush therefore gets a large
+		// spacing and few substeps, which matters because each application rebuilds the tile
+		// meshes under its footprint.
 		constexpr float cellSize = static_cast<float>(
 			terrain::constants::PageSize / static_cast<double>(terrain::constants::OuterVerticesPerPageSide - 1));
-		constexpr uint32 maxStrokeSteps = 32;
+		constexpr uint32 maxStrokeSteps = 16;
 
 		uint32 stepCount = 1;
 		if (m_strokeActive)
@@ -1271,7 +1286,7 @@ namespace mmo
 			const float deltaX = m_brushPosition.x - m_lastStrokePosition.x;
 			const float deltaZ = m_brushPosition.z - m_lastStrokePosition.z;
 			const float travelled = std::sqrt(deltaX * deltaX + deltaZ * deltaZ);
-			const float spacing = std::max(0.01f, std::min(cellSize, outerRadius * 0.25f));
+			const float spacing = std::max(cellSize * 0.5f, outerRadius * 0.25f);
 
 			if (travelled > spacing)
 			{
@@ -1279,27 +1294,30 @@ namespace mmo
 			}
 		}
 
-		// Time-integrated operations divide the frame's delta across the substeps, so the
-		// total strength applied this frame is unchanged and only the coverage improves.
-		const float stepDeltaSeconds = deltaSeconds / static_cast<float>(stepCount);
+		// Time-integrated operations divide the frame's delta across the substeps, so the total
+		// strength applied this frame is unchanged and only the coverage improves. Operations
+		// that ignore the frame delta and apply a fixed displacement get stepScale for the same
+		// reason — without it, a stroke would apply them once per substep at full strength.
+		const float stepScale = 1.0f / static_cast<float>(stepCount);
+		const float stepDeltaSeconds = deltaSeconds * stepScale;
 
 		for (uint32 step = 1; step <= stepCount; ++step)
 		{
 			Vector3 position = m_brushPosition;
-			if (m_strokeActive && stepCount > 1)
+			if (stepCount > 1)
 			{
-				const float t = static_cast<float>(step) / static_cast<float>(stepCount);
+				const float t = static_cast<float>(step) * stepScale;
 				position = m_lastStrokePosition + (m_brushPosition - m_lastStrokePosition) * t;
 			}
 
-			ApplyBrushAt(position, innerRadius, outerRadius, factor, stepDeltaSeconds);
+			ApplyBrushAt(position, innerRadius, outerRadius, factor, stepDeltaSeconds, stepScale);
 		}
 
 		m_lastStrokePosition = m_brushPosition;
 		m_strokeActive = true;
 	}
 
-	void TerrainEditMode::ApplyBrushAt(const Vector3& position, const float innerRadius, const float outerRadius, const float factor, const float deltaSeconds)
+	void TerrainEditMode::ApplyBrushAt(const Vector3& position, const float innerRadius, const float outerRadius, const float factor, const float deltaSeconds, const float stepScale)
 	{
 		if (m_type == TerrainEditType::Deform)
 		{
@@ -1322,8 +1340,11 @@ namespace mmo
 			} break;
 			case TerrainDeformMode::Noise:
 			{
+				// ApplyNoise displaces by a fixed amplitude rather than integrating over the
+				// frame delta, so the amplitude — not the time slice — is what has to be split
+				// across a stroke's substeps.
 				m_terrain.ApplyNoise(position.x, position.z,
-					innerRadius, outerRadius, m_noiseAmplitude * factor, m_noiseFrequency,
+					innerRadius, outerRadius, m_noiseAmplitude * factor * stepScale, m_noiseFrequency,
 					m_noiseOctaves, m_noisePersistence);
 			} break;
 			case TerrainDeformMode::Stamp:
@@ -1349,17 +1370,10 @@ namespace mmo
 		}
 		else if (m_type == TerrainEditType::Area)
 		{
-			if (ImGui::GetIO().KeyAlt)
-			{
-				// Alt held: eyedropper — pick the area ID of the tile under the cursor.
-				m_selectedArea = m_terrain.GetArea(position);
-			}
-			else
-			{
-				// Set-style operation: idempotent, so each substep applies in full.
-				m_terrain.SetArea(position, m_selectedArea);
-				m_areaOverlayDirty = true; // overlay will be refreshed on mouse-up
-			}
+			// Set-style operation: idempotent, so each substep applies in full. The alt-held
+			// eyedropper is handled once per frame in OnMouseHold, not here.
+			m_terrain.SetArea(position, m_selectedArea);
+			m_areaOverlayDirty = true; // overlay will be refreshed on mouse-up
 		}
 		else if (m_type == TerrainEditType::VertexShading)
 		{
