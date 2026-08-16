@@ -5,10 +5,12 @@
 #include "base/macros.h"
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
+#include "log/default_log_levels.h"
 
 #include "asio/io_service.hpp"
 #include "asio/steady_timer.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <functional>
@@ -130,27 +132,47 @@ namespace mmo
 		///
 		/// Two calls with the same key run in the order they were made. Calls with different keys
 		/// may run concurrently and in any order.
+		///
+		/// After Stop() the work is dropped and a warning logged, because there is no longer a
+		/// thread that could run it. Callers waiting on a result never get one -- which is the
+		/// honest outcome, and the reason the drop is not silent.
 		void Dispatch(uint64 key, Work work)
 		{
 			ASSERT(!m_slots.empty());
+
+			if (m_stopped)
+			{
+				WLOG("Database work for key " << key << " arrived after the pool was stopped and has been dropped");
+				return;
+			}
 
 			Slot* const slot = m_slots[key % m_slots.size()].get();
 			slot->service.post([slot, work = std::move(work)]() { work(*slot->database); });
 		}
 
-		/// Runs everything already queued, then closes the connections.
+		/// Runs everything already queued, then shuts the connections' threads down.
 		///
 		/// Drains rather than discards: queued work at this point is character saves and similar,
 		/// and dropping it loses player data. Safe to call more than once, and from any thread
 		/// except a pool thread -- that would join a thread to itself.
+		///
+		/// The slots themselves are kept until the pool is destroyed rather than released here,
+		/// which is what makes a Dispatch racing this harmless. The stopped flag alone would not:
+		/// a caller can read it as false and reach the routing arithmetic after this returns, so
+		/// releasing the slots would leave that caller dividing by a zero slot count. Keeping them
+		/// means the worst case is a post to a service whose run() has already returned -- a
+		/// handler that is never executed and is discarded when the service is destroyed. The
+		/// connections close at destruction, a scope later; both servers destroy the pool as soon
+		/// as their io service returns.
 		void Stop()
 		{
-			if (m_stopped)
+			// Exchanged rather than checked and then set: the shutdown handler and the destructor
+			// both call this, and on the login server they can be on different threads. A plain
+			// check lets both past it and into join(), which is undefined on one thread object.
+			if (m_stopped.exchange(true))
 			{
 				return;
 			}
-
-			m_stopped = true;
 
 			// Cancelled before the work guards are released, or the pool never runs dry: an armed
 			// keep-alive timer is outstanding work just like anything else.
@@ -177,11 +199,9 @@ namespace mmo
 					slot->thread.join();
 				}
 			}
-
-			m_slots.clear();
 		}
 
-		/// Number of open connections.
+		/// Number of connections the pool was opened with. Unchanged by Stop().
 		[[nodiscard]] std::size_t Size() const { return m_slots.size(); }
 
 		/// Slot 0's connection, for startup work performed inline before any Dispatch.
@@ -223,7 +243,12 @@ namespace mmo
 			});
 		}
 
+		/// Filled by Create() before any thread exists and never modified afterwards -- not even by
+		/// Stop() -- so concurrent readers need no synchronisation of their own.
 		std::vector<std::unique_ptr<Slot>> m_slots;
-		bool m_stopped = false;
+
+		/// Atomic because Dispatch reads it from any thread while Stop writes it from whichever
+		/// thread handled the shutdown signal.
+		std::atomic<bool> m_stopped{ false };
 	};
 }
