@@ -461,6 +461,12 @@ namespace mmo
 			if (m_editMode)
 				m_editMode->OnMouseHold(deltaTimeSeconds);
 		}
+		else if (m_editMode)
+		{
+			// The button may still be held while the cursor is outside the viewport. Tell the
+			// mode so it does not treat the re-entry point as the far end of a continuous drag.
+			m_editMode->OnStrokeInterrupted();
+		}
 
 		const auto pos = GetPagePositionFromCamera();
 		m_memoryPointOfView->UpdateCenter(pos);
@@ -1063,7 +1069,12 @@ namespace mmo
 
 	void WorldEditorInstance::OnTerrainMouseMoved(const float viewportX, const float viewportY)
 	{
-		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
+		// Long enough to span the world diagonal (64 pages of 533 units, so ~48k corner to
+		// corner). The terrain raycast honours the ray's length, and a shallow pick from a far
+		// camera — exactly when brush precision matters most — easily outruns a shorter ray.
+		constexpr float pickRayLength = 50000.0f;
+
+		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, pickRayLength);
 
 		m_selection.Clear();
 		m_debugBoundingBox->Clear();

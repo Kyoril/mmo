@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -9,6 +9,7 @@
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
 #include "graphics/texture.h"
+#include "terrain/brush_stroke.h"
 #include "terrain/terrain_region_snapshot.h"
 #include "editors/world_editor/terrain_undo_stack.h"
 
@@ -122,6 +123,8 @@ namespace mmo
 
 		void OnMouseHold(float deltaSeconds) override;
 
+		void OnStrokeInterrupted() override { m_strokeActive = false; }
+
 		void OnMouseMoved(float x, float y) override;
 
 		void OnMouseUp(float x, float y) override;
@@ -152,6 +155,22 @@ namespace mmo
 		void SetBrushPosition(const Vector3& position);
 
 	private:
+		/// Applies the active brush operation once, swept along a stroke.
+		/// @param stroke Segment the cursor covered since the last application. Zero-length for a
+		///        stationary brush, which makes the swept footprint a plain circle.
+		/// @param innerRadius Radius of the brush's full-strength core.
+		/// @param outerRadius Radius at which the brush falls off to nothing.
+		/// @param factor Direction multiplier: -1 while shift inverts the operation.
+		/// @param deltaSeconds The frame's time slice, for operations that integrate over it.
+		void ApplyBrushStroke(const terrain::BrushStroke& stroke, float innerRadius, float outerRadius, float factor, float deltaSeconds);
+
+		/// Number of overlapping stamps needed to cover a stroke, for the operations that cannot
+		/// be swept: a brush mask is anchored to one footprint, and area IDs are set per tile.
+		/// @param stroke The stroke to cover.
+		/// @param spacing Distance between consecutive stamps.
+		/// @return At least 1, capped so a very fast movement cannot stall the frame.
+		static uint32 StampCountForStroke(const terrain::BrushStroke& stroke, float spacing);
+
 		void UpdateBrushOverlay();
 
 		/// Rebuilds the area-ID overlay that colours terrain tiles by their assigned zone.
@@ -297,6 +316,14 @@ namespace mmo
 		bool                m_brushMaskPreviewInvert = false; ///< Invert state baked into the preview.
 
 		Vector3 m_brushPosition{};
+
+		/// World position the brush was last applied at. Together with m_strokeActive this
+		/// turns a per-frame point application into a continuous stroke.
+		Vector3 m_lastStrokePosition{};
+
+		/// True once a stroke has applied at least once, so there is a segment to interpolate
+		/// along. Cleared whenever the stroke is interrupted or ends.
+		bool m_strokeActive = false;
 
 		uint32 m_selectedArea = 0;
 

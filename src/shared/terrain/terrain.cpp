@@ -9,6 +9,7 @@
 
 #include "math/noise.h"
 #include "page.h"
+#include "terrain_raycast.h"
 #include "tile.h"
 #include "game/constants.h"
 #include "log/default_log_levels.h"
@@ -107,13 +108,19 @@ namespace mmo
 			GetPageAndLocalVertex(x, pageX, localVertexX);
 			GetPageAndLocalVertex(z, pageY, localVertexY);
 
-			// Retrieve the page at (pageX, pageY)
-			Page *page = GetPage(pageX, pageY); // Implement GetPage accordingly
+			// GetPageAndLocalVertex clamps the page index to 63, which only stays inside the
+			// page grid while the terrain is the full 64 pages wide. On a smaller terrain a
+			// valid vertex index resolves to a page past the end, so this must not be
+			// dereferenced blind. Page::GetHeightAt already handles a page that exists but is
+			// not resident.
+			Page *page = GetPage(pageX, pageY);
+			if (!page)
+			{
+				return 0.0f;
+			}
 
 			// Retrieve the height at the local vertex within the page
-			float height = page->GetHeightAt(localVertexX, localVertexY);
-
-			return height;
+			return page->GetHeightAt(localVertexX, localVertexY);
 		}
 
 		float Terrain::GetSlopeAt(uint32 x, uint32 z)
@@ -593,276 +600,87 @@ namespace mmo
 
 		std::pair<bool, Terrain::RayIntersectsResult> Terrain::RayIntersects(const Ray &ray)
 		{
-			float closestHit = std::numeric_limits<float>::max();
-			Vector3 hitPoint = Vector3::Zero;
-			Page *hitPage = nullptr;
+			// Cells per page side on the outer-vertex grid (128).
+			constexpr int32 cellsPerPage = static_cast<int32>(constants::OuterVerticesPerPageSide) - 1;
 
-			// First do a broad phase - find which pages the ray potentially intersects
-			std::vector<std::pair<Page *, float>> potentialPages;
-			potentialPages.reserve(16); // Reserve space for some pages to avoid reallocation
+			raycast::GridParams params;
+			params.cellSize = static_cast<float>(constants::PageSize / static_cast<double>(cellsPerPage));
+			params.cellCountX = static_cast<int32>(m_width) * cellsPerPage;
+			params.cellCountZ = static_cast<int32>(m_height) * cellsPerPage;
+			GetGlobalVertexWorldPosition(0, 0, &params.originX, &params.originZ);
 
-			for (unsigned int x = 0; x < m_width; x++)
+			// The walk crosses long runs of cells belonging to the same page (128 of them per
+			// axis), so the page is resolved once per run rather than once per cell. Both the
+			// residency test and the page's bounding box are evaluated at that point, which
+			// restores the broad phase the old implementation did up front: a page the ray
+			// misses entirely rejects all 128 of its cells without a single height fetch.
+			Page *cachedPage = nullptr;
+			int32 cachedPageX = -1;
+			int32 cachedPageZ = -1;
+			bool cachedPageUsable = false;
+
+			const auto sampler = [&](const int32 cellX, const int32 cellZ, raycast::CellHeights &out)
 			{
-				for (unsigned int y = 0; y < m_height; y++)
+				const int32 pageX = cellX / cellsPerPage;
+				const int32 pageZ = cellZ / cellsPerPage;
+
+				if (pageX != cachedPageX || pageZ != cachedPageZ)
 				{
-					// Get page
-					Page *page = m_pages(x, y).get();
-					if (!page || !page->IsPrepared())
-					{
-						continue;
-					}
-
-					// Get axis aligned box of that page
-					const AABB &box = page->GetBoundingBox();
-
-					// Check if the ray hits the box
-					std::pair<bool, float> boxHit = ray.IntersectsAABB(box);
-					if (boxHit.first)
-					{
-						// Store the page and distance for sorting
-						potentialPages.emplace_back(page, boxHit.second);
-					}
+					cachedPageX = pageX;
+					cachedPageZ = pageZ;
+					cachedPage = GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
+					cachedPageUsable = cachedPage && cachedPage->IsPrepared() &&
+						ray.IntersectsAABB(cachedPage->GetBoundingBox()).first;
 				}
-			}
 
-			// Early out if no pages hit
-			if (potentialPages.empty())
+				if (!cachedPageUsable)
+				{
+					return false;
+				}
+
+				// Read page-local rather than through the global vertex grid. A page stores
+				// 129 vertices per side, so a cell's far corners at local index + 1 still land
+				// inside this page. Going through the global grid would instead resolve a seam
+				// vertex to the *next* page, which returns 0 when that page is not resident and
+				// presents the walk with a cliff down to y=0 that is not there. It is also what
+				// the renderer does, so the surface tested is the surface drawn.
+				const size_t localX = static_cast<size_t>(cellX - pageX * cellsPerPage);
+				const size_t localZ = static_cast<size_t>(cellZ - pageZ * cellsPerPage);
+
+				out.corners[0] = cachedPage->GetHeightAt(localX, localZ);
+				out.corners[1] = cachedPage->GetHeightAt(localX + 1, localZ);
+				out.corners[2] = cachedPage->GetHeightAt(localX, localZ + 1);
+				out.corners[3] = cachedPage->GetHeightAt(localX + 1, localZ + 1);
+
+				// The inner vertex is stored and deformed independently of its corners, so it
+				// has to be read rather than averaged: averaging picks a surface the renderer
+				// never draws.
+				out.inner = cachedPage->GetInnerHeightAt(localX, localZ);
+
+				return true;
+			};
+
+			const raycast::Result hit = raycast::RaycastHeightGrid(ray, params, sampler);
+			if (!hit.hit)
 			{
 				return std::make_pair(false, RayIntersectsResult(nullptr, Vector3::Zero));
 			}
 
-			// Sort pages by distance from ray origin
-			std::sort(potentialPages.begin(), potentialPages.end(),
-					  [](const auto &a, const auto &b)
-					  { return a.second < b.second; });
+			// The hit cell identifies its page and tile exactly, so no world-position round
+			// trip is needed to resolve them.
+			constexpr int32 cellsPerTile = static_cast<int32>(constants::OuterVerticesPerTileSide) - 1;
+			static_assert(cellsPerTile * static_cast<int32>(constants::TilesPerPage) == cellsPerPage,
+				"Tile and page cell counts must agree on the outer-vertex grid");
 
-			// Detailed check phase - check triangles in pages ordered by distance
-			for (const auto &[page, distance] : potentialPages)
+			Tile *tile = nullptr;
+			if (Page *page = GetPage(static_cast<uint32>(hit.cellX / cellsPerPage), static_cast<uint32>(hit.cellZ / cellsPerPage)))
 			{
-				// Skip if we already found a hit closer than this page's bounding box
-				if (distance > closestHit)
-				{
-					continue;
-				}
-
-				// Get the page coordinates
-				unsigned int pageX = 0, pageY = 0;
-				for (unsigned int x = 0; x < m_width; x++)
-				{
-					for (unsigned int y = 0; y < m_height; y++)
-					{
-						if (m_pages(x, y).get() == page)
-						{
-							pageX = x;
-							pageY = y;
-							break;
-						}
-					}
-				}
-
-				// Performance optimization: Only check every 4th vertex for initial pass
-				// Then refine around potential hits
-				static constexpr int coarse_step = 4;
-				bool potentialHit = false;
-				float coarseHitT = std::numeric_limits<float>::max();
-				unsigned int coarseHitX = 0, coarseHitZ = 0;
-
-				// Coarse pass - check every 4th cell (outer grid)
-				for (unsigned int vx = 0; vx < constants::OuterVerticesPerPageSide - 1; vx += coarse_step)
-				{
-					for (unsigned int vz = 0; vz < constants::OuterVerticesPerPageSide - 1; vz += coarse_step)
-					{
-						// Ensure we don't go out of bounds
-						if (vx + coarse_step >= constants::OuterVerticesPerPageSide || vz + coarse_step >= constants::OuterVerticesPerPageSide)
-							continue;
-
-						// Get the four corners of this quad
-						const uint32 globalVx = pageX * (constants::OuterVerticesPerPageSide - 1) + vx;
-						const uint32 globalVz = pageY * (constants::OuterVerticesPerPageSide - 1) + vz;
-
-						// Get world positions for the quad vertices
-						float wx1, wz1, wx2, wz2;
-						GetGlobalVertexWorldPosition(globalVx, globalVz, &wx1, &wz1);
-						GetGlobalVertexWorldPosition(globalVx + coarse_step, globalVz + coarse_step, &wx2, &wz2);
-
-						// Get heights for the four corners
-						const float h1 = GetHeightAt(globalVx, globalVz);
-						const float h2 = GetHeightAt(globalVx + coarse_step, globalVz);
-						const float h3 = GetHeightAt(globalVx, globalVz + coarse_step);
-						const float h4 = GetHeightAt(globalVx + coarse_step, globalVz + coarse_step);
-
-						// Create the four corner vertices and center inner vertex
-						const Vector3 vTL(wx1, h1, wz1);
-						const Vector3 vTR(wx2, h2, wz1);
-						const Vector3 vBL(wx1, h3, wz2);
-						const Vector3 vBR(wx2, h4, wz2);
-						const Vector3 vC((wx1 + wx2) * 0.5f, (h1 + h2 + h3 + h4) * 0.25f, (wz1 + wz2) * 0.5f);
-
-						// Check four triangles around the center
-						float tTmp;
-						Vector3 ip;
-						// Top
-						if (RayTriangleIntersection(ray, vC, vTR, vTL, tTmp, ip))
-						{
-							if (tTmp < coarseHitT)
-							{
-								coarseHitT = tTmp;
-								coarseHitX = vx;
-								coarseHitZ = vz;
-								potentialHit = true;
-							}
-						}
-						// Right
-						if (RayTriangleIntersection(ray, vC, vBR, vTR, tTmp, ip))
-						{
-							if (tTmp < coarseHitT)
-							{
-								coarseHitT = tTmp;
-								coarseHitX = vx;
-								coarseHitZ = vz;
-								potentialHit = true;
-							}
-						}
-						// Bottom
-						if (RayTriangleIntersection(ray, vC, vBL, vBR, tTmp, ip))
-						{
-							if (tTmp < coarseHitT)
-							{
-								coarseHitT = tTmp;
-								coarseHitX = vx;
-								coarseHitZ = vz;
-								potentialHit = true;
-							}
-						}
-						// Left
-						if (RayTriangleIntersection(ray, vC, vTL, vBL, tTmp, ip))
-						{
-							if (tTmp < coarseHitT)
-							{
-								coarseHitT = tTmp;
-								coarseHitX = vx;
-								coarseHitZ = vz;
-								potentialHit = true;
-							}
-						}
-					}
-				}
-
-				// If we found a potential hit in the coarse pass, refine it
-				if (potentialHit)
-				{
-					// Define the refinement area
-					unsigned int startX = (coarseHitX > coarse_step) ? (coarseHitX - coarse_step) : 0;
-					unsigned int startZ = (coarseHitZ > coarse_step) ? (coarseHitZ - coarse_step) : 0;
-					unsigned int endX = std::min(coarseHitX + coarse_step, constants::OuterVerticesPerPageSide - 2);
-					unsigned int endZ = std::min(coarseHitZ + coarse_step, constants::OuterVerticesPerPageSide - 2);
-
-					// Detailed pass - check every vertex in the refined area
-					for (unsigned int vx = startX; vx <= endX; vx++)
-					{
-						for (unsigned int vz = startZ; vz <= endZ; vz++)
-						{
-							// Get the four corners of this quad
-							const uint32 globalVx = pageX * (constants::OuterVerticesPerPageSide - 1) + vx;
-							const uint32 globalVz = pageY * (constants::OuterVerticesPerPageSide - 1) + vz;
-
-							// Get world positions for the quad vertices
-							float wx1, wz1, wx2, wz2;
-							GetGlobalVertexWorldPosition(globalVx, globalVz, &wx1, &wz1);
-							GetGlobalVertexWorldPosition(globalVx + 1, globalVz + 1, &wx2, &wz2);
-
-							// Get heights for the four corners
-							const float h1 = GetHeightAt(globalVx, globalVz);
-							const float h2 = GetHeightAt(globalVx + 1, globalVz);
-							const float h3 = GetHeightAt(globalVx, globalVz + 1);
-							const float h4 = GetHeightAt(globalVx + 1, globalVz + 1);
-
-							// Create the four corner vertices and center inner vertex
-							const Vector3 vTL(wx1, h1, wz1);
-							const Vector3 vTR(wx2, h2, wz1);
-							const Vector3 vBL(wx1, h3, wz2);
-							const Vector3 vBR(wx2, h4, wz2);
-							const Vector3 vC((wx1 + wx2) * 0.5f, (h1 + h2 + h3 + h4) * 0.25f, (wz1 + wz2) * 0.5f);
-
-							// Check four triangles around the center
-							Vector3 ip1;
-							if (float t1; RayTriangleIntersection(ray, vC, vTR, vTL, t1, ip1))
-							{
-								if (t1 < closestHit)
-								{
-									closestHit = t1;
-									hitPoint = ip1;
-									hitPage = page;
-								}
-							}
-
-							float t2;
-							Vector3 ip2;
-							if (RayTriangleIntersection(ray, vC, vBR, vTR, t2, ip2))
-							{
-								if (t2 < closestHit)
-								{
-									closestHit = t2;
-									hitPoint = ip2;
-									hitPage = page;
-								}
-							}
-
-							float t3;
-							Vector3 ip3;
-							if (RayTriangleIntersection(ray, vC, vBL, vBR, t3, ip3))
-							{
-								if (t3 < closestHit)
-								{
-									closestHit = t3;
-									hitPoint = ip3;
-									hitPage = page;
-								}
-							}
-
-							float t4;
-							Vector3 ip4;
-							if (RayTriangleIntersection(ray, vC, vTL, vBL, t4, ip4))
-							{
-								if (t4 < closestHit)
-								{
-									closestHit = t4;
-									hitPoint = ip4;
-									hitPage = page;
-								}
-							}
-						}
-					}
-
-					// Early out if we found a hit in this page
-					if (hitPage == page)
-					{
-						break;
-					}
-				}
+				tile = page->GetTile(
+					(hit.cellX % cellsPerPage) / cellsPerTile,
+					(hit.cellZ % cellsPerPage) / cellsPerTile);
 			}
 
-			if (hitPoint != Vector3::Zero)
-			{
-				Tile *tile = nullptr;
-				if (hitPage)
-				{
-					int32 globalTileX, globalTileY;
-					if (GetTileIndexByWorldPosition(hitPoint, globalTileX, globalTileY))
-					{
-						int32 localTileX, localTileY;
-						if (GetLocalTileIndexByGlobalTileIndex(globalTileX, globalTileY, localTileX, localTileY))
-						{
-							tile = hitPage->GetTile(localTileX, localTileY);
-						}
-					}
-				}
-
-				return std::make_pair(true, RayIntersectsResult(tile, hitPoint));
-			}
-
-			// We didn't hit anything
-			return std::make_pair(false, RayIntersectsResult(nullptr, Vector3::Zero));
+			return std::make_pair(true, RayIntersectsResult(tile, hit.position));
 		}
 
 		void Terrain::GetTerrainVertex(const float x, const float z, uint32 &vertexX, uint32 &vertexZ)
@@ -917,9 +735,9 @@ namespace mmo
 			return factor;
 		}
 
-		void Terrain::Deform(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
+		void Terrain::Deform(const BrushStroke &stroke, const float innerRadius, const float outerRadius, float power)
 		{
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power](const int32 vx, const int32 vy, const float factor)
 							   {
 					if (vx >= 0 && vy >= 0)
 					{
@@ -948,9 +766,9 @@ namespace mmo
 					} });
 		}
 
-		void Terrain::ApplyNoise(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float amplitude, const float frequency, const int octaves, const float persistence)
+		void Terrain::ApplyNoise(const BrushStroke &stroke, const float innerRadius, const float outerRadius, const float amplitude, const float frequency, const int octaves, const float persistence)
 		{
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, amplitude, frequency, octaves, persistence](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, amplitude, frequency, octaves, persistence](const int32 vx, const int32 vy, const float factor)
 							   {
 				if (vx >= 0 && vy >= 0)
 				{
@@ -1009,7 +827,8 @@ namespace mmo
 				return 1.0f;
 			};
 
-			TerrainVertexBrush(brushCenterX, brushCenterZ, outerRadius, outerRadius, true, constantIntensity,
+			// A stamp is anchored to one footprint by its mask, so it is never swept.
+			TerrainVertexBrush(BrushStroke::At(brushCenterX, brushCenterZ), outerRadius, outerRadius, true, constantIntensity,
 				[&](const int32 vx, const int32 vy, const float)
 				{
 					float worldX = 0.0f, worldZ = 0.0f;
@@ -1052,12 +871,12 @@ namespace mmo
 				});
 		}
 
-		void Terrain::Smooth(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
+		void Terrain::Smooth(const BrushStroke &stroke, const float innerRadius, const float outerRadius, float power)
 		{
 			// First collect average height value
 			float sumHeight = 0.0f;
 			uint32 heightCount = 0;
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, false, &GetBrushIntensityLinear, [this, &sumHeight, &heightCount](const int32 vx, const int32 vy, float)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, false, &GetBrushIntensityLinear, [this, &sumHeight, &heightCount](const int32 vx, const int32 vy, float)
 							   {
 					if (vx >= 0 && vy >= 0)
 					{
@@ -1093,7 +912,7 @@ namespace mmo
 
 			if (heightCount == 0) return;
 			const float avgHeight = sumHeight / static_cast<float>(heightCount);
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, avgHeight, power](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, avgHeight, power](const int32 vx, const int32 vy, const float factor)
 							   {
 					if (vx >= 0 && vy >= 0)
 					{
@@ -1124,7 +943,7 @@ namespace mmo
 					} });
 		}
 
-		void Terrain::Flatten(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, float targetHeight)
+		void Terrain::Flatten(const BrushStroke &stroke, const float innerRadius, const float outerRadius, float power, float targetHeight)
 		{
 			// Track affected area bounds for inner vertex and tile updates
 			int minX = std::numeric_limits<int>::max();
@@ -1133,7 +952,7 @@ namespace mmo
 			int maxZ = std::numeric_limits<int>::min();
 
 			// Only modify outer vertices; inner vertices will be interpolated afterward
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power, &minX, &minZ, &maxX, &maxZ](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power, &minX, &minZ, &maxX, &maxZ](const int32 vx, const int32 vy, const float factor)
 							   {
 								   if (vx >= 0 && vy >= 0)
 								   {
@@ -1168,15 +987,15 @@ namespace mmo
 			}
 		}
 
-		void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power, const BrushMaskSampler* maskSampler)
+		void Terrain::Paint(const uint8 layer, const BrushStroke &stroke, const float innerRadius, const float outerRadius, const float power, const BrushMaskSampler* maskSampler)
 		{
 			// Footprint origin and inverse extent for mapping pixel world positions to mask UVs.
 			const float maskExtent = outerRadius * 2.0f;
 			const float invMaskExtent = maskExtent > 0.0f ? 1.0f / maskExtent : 0.0f;
-			const float maskOriginX = brushCenterX - outerRadius;
-			const float maskOriginZ = brushCenterZ - outerRadius;
+			const float maskOriginX = stroke.toX - outerRadius;
+			const float maskOriginZ = stroke.toZ - outerRadius;
 
-			TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [&](const int32 vx, const int32 vy, const float radialFactor)
+			TerrainPixelBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [&](const int32 vx, const int32 vy, const float radialFactor)
 							  {
 					float factor = radialFactor;
 
@@ -1224,14 +1043,14 @@ namespace mmo
 			}
 		}
 
-		void Terrain::Color(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, const uint32 color)
+		void Terrain::Color(const BrushStroke &stroke, const float innerRadius, const float outerRadius, float power, const uint32 color)
 		{
 			Vector3 i;
 			i.x = ((color >> 0) & 0xFF) / 255.0f;
 			i.y = ((color >> 8) & 0xFF) / 255.0f;
 			i.z = ((color >> 16) & 0xFF) / 255.0f;
 
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power, i](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power, i](const int32 vx, const int32 vy, const float factor)
 							   {
 					const uint32 c = GetColorAt(vx, vy);
 
@@ -1998,43 +1817,13 @@ namespace mmo
 
 		bool Terrain::RayTriangleIntersection(const Ray &ray, const Vector3 &v0, const Vector3 &v1, const Vector3 &v2, float &t, Vector3 &intersectionPoint)
 		{
-			constexpr float epsilon = 1e-6f;
-
-			Vector3 edge1 = v1 - v0;
-			Vector3 edge2 = v2 - v0;
-			Vector3 h = ray.GetDirection().Cross(edge2);
-			float a = edge1.Dot(h);
-
-			if (std::abs(a) < epsilon)
-			{
-				return false; // Ray is parallel to triangle
-			}
-
-			const float f = 1.0f / a;
-			const Vector3 s = ray.origin - v0;
-			const float u = f * s.Dot(h);
-
-			if (u < 0.0f || u > 1.0f)
+			if (!raycast::IntersectsTriangle(ray, v0, v1, v2, t))
 			{
 				return false;
 			}
 
-			const Vector3 q = s.Cross(edge1);
-
-			if (const float v = f * ray.GetDirection().Dot(q); v < 0.0f || u + v > 1.0f)
-				return false;
-
-			// At this stage, we can compute t to find out where the intersection point is on the line
-			t = f * edge2.Dot(q);
-
-			if (t > epsilon) // Ray intersection
-			{
-				intersectionPoint = ray.origin + ray.GetDirection() * t;
-				return true;
-			}
-
-			// Line intersection but not a ray intersection
-			return false;
+			intersectionPoint = ray.origin + ray.GetDirection() * t;
+			return true;
 		}
 
 		bool Terrain::IsHoleAt(const float x, const float z) const
@@ -2080,17 +1869,17 @@ namespace mmo
 			return page->IsHole(tileX, tileZ, innerX, innerZ);
 		}
 
-		void Terrain::PaintHoles(float brushCenterX, float brushCenterZ, float radius, bool addHole)
+		void Terrain::PaintHoles(const BrushStroke &stroke, float radius, bool addHole)
 		{
 			// Convert brush center from world space to page coordinates
 			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
 			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
 
 			// Calculate affected pages
-			const float minX = brushCenterX - radius;
-			const float maxX = brushCenterX + radius;
-			const float minZ = brushCenterZ - radius;
-			const float maxZ = brushCenterZ + radius;
+			const float minX = stroke.MinX() - radius;
+			const float maxX = stroke.MaxX() + radius;
+			const float minZ = stroke.MinZ() - radius;
+			const float maxZ = stroke.MaxZ() + radius;
 
 			const int32 minPageX = std::max(0, static_cast<int32>(std::floor((minX + halfTerrainWidth) / constants::PageSize)));
 			const int32 maxPageX = std::min(static_cast<int32>(m_width) - 1, static_cast<int32>(std::floor((maxX + halfTerrainWidth) / constants::PageSize)));
@@ -2127,12 +1916,8 @@ namespace mmo
 									const float worldX = (globalInnerX + 0.5f) * scale - halfTerrainWidth;
 									const float worldZ = (globalInnerZ + 0.5f) * scale - halfTerrainHeight;
 
-									// Check if this inner vertex is within the brush radius
-									const float dx = worldX - brushCenterX;
-									const float dz = worldZ - brushCenterZ;
-									const float distSq = dx * dx + dz * dz;
-
-									if (distSq <= radius * radius)
+									// Check if this inner vertex is within the swept brush footprint
+									if (stroke.DistanceTo(worldX, worldZ) <= radius)
 									{
 										// Mark or unmark this vertex as a hole
 										page->SetHole(tileX, tileY, innerX, innerY, addHole);

@@ -96,7 +96,9 @@ namespace mmo
 			return false;
 		}
 
-		const Ray ray = m_camera.GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
+		// Spans the world diagonal: the terrain raycast honours the ray's length, and this is a
+		// brush painted from arbitrary camera distances.
+		const Ray ray = m_camera.GetCameraToViewportRay(viewportX, viewportY, 50000.0f);
 		const auto hitResult = m_terrain->RayIntersects(ray);
 		if (!hitResult.first)
 		{

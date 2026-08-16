@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "terrain_edit_mode.h"
 #include "water_edit_mode.h"
@@ -1176,6 +1176,10 @@ namespace mmo
 	void TerrainEditMode::OnMouseDown(float x, float y)
 	{
 		WorldEditMode::OnMouseDown(x, y);
+
+		// A fresh stroke has no previous position to interpolate from.
+		m_strokeActive = false;
+
 		if (m_type == TerrainEditType::Water && m_waterEditMode)
 		{
 			m_waterEditMode->OnMouseDown(x, y);
@@ -1229,86 +1233,162 @@ namespace mmo
 			return;
 		}
 
+		// A missed raycast leaves m_brushPosition holding whatever the cursor last hit.
+		// Applying anyway keeps hammering that stale spot for as long as the pointer is off
+		// the terrain, which is the other half of what made strokes tear.
+		if (!m_brushPositionValid)
+		{
+			m_strokeActive = false;
+			return;
+		}
+
 		const float factor = ImGui::IsKeyDown(ImGuiKey_LeftShift) ? -1.0f : 1.0f;
 
 		const float outerRadius = m_terrainBrushSize;
 		const float innerRadius = std::max(0.05f, m_terrainBrushSize * m_terrainBrushHardness);
 
+		// Flatten's ctrl modifier samples a reference height rather than painting, so it is
+		// not part of a stroke.
+		if (m_type == TerrainEditType::Deform && m_deformMode == TerrainDeformMode::Flatten && ImGui::IsKeyDown(ImGuiKey_LeftControl))
+		{
+			m_deformFlattenHeight = m_terrain.GetSmoothHeightAt(m_brushPosition.x, m_brushPosition.z);
+			m_lastStrokePosition = m_brushPosition;
+			m_strokeActive = true;
+			return;
+		}
+
+		// Area's alt modifier is an eyedropper, likewise not a stroke.
+		if (m_type == TerrainEditType::Area && ImGui::GetIO().KeyAlt)
+		{
+			m_selectedArea = m_terrain.GetArea(m_brushPosition);
+			m_lastStrokePosition = m_brushPosition;
+			m_strokeActive = true;
+			return;
+		}
+
+		// The brush is swept along the segment the cursor covered since the last application
+		// rather than stamped at a single point. A brush stamped once per frame lays down separate
+		// blobs the moment the cursor moves further than its own diameter between frames, which a
+		// far camera makes trivial: a few pixels of pointer movement then span a large distance in
+		// world space. One swept application per frame is gap-free at any speed, and costs the
+		// swept area rather than the area of every sample along it.
+		const terrain::BrushStroke stroke = m_strokeActive
+			? terrain::BrushStroke{ m_lastStrokePosition.x, m_lastStrokePosition.z, m_brushPosition.x, m_brushPosition.z }
+			: terrain::BrushStroke::At(m_brushPosition.x, m_brushPosition.z);
+
+		ApplyBrushStroke(stroke, innerRadius, outerRadius, factor, deltaSeconds);
+
+		m_lastStrokePosition = m_brushPosition;
+		m_strokeActive = true;
+	}
+
+	uint32 TerrainEditMode::StampCountForStroke(const terrain::BrushStroke& stroke, const float spacing)
+	{
+		// A very fast movement from a far camera can cover thousands of world units in a frame,
+		// so this is capped. Unlike the swept operations, these two cannot cover such a segment
+		// without cost proportional to its length, and a stalled frame makes the next segment
+		// longer still.
+		constexpr uint32 maxStamps = 64;
+
+		const float deltaX = stroke.toX - stroke.fromX;
+		const float deltaZ = stroke.toZ - stroke.fromZ;
+		const float length = std::sqrt(deltaX * deltaX + deltaZ * deltaZ);
+
+		if (length <= spacing || spacing <= 0.0f)
+		{
+			return 1;
+		}
+
+		return std::min(static_cast<uint32>(length / spacing) + 1, maxStamps);
+	}
+
+	void TerrainEditMode::ApplyBrushStroke(const terrain::BrushStroke& stroke, const float innerRadius, const float outerRadius, const float factor, const float deltaSeconds)
+	{
 		if (m_type == TerrainEditType::Deform)
 		{
-			if (m_deformMode == TerrainDeformMode::Flatten && ImGui::IsKeyDown(ImGuiKey_LeftControl))
+			switch (m_deformMode)
 			{
-				m_deformFlattenHeight = m_terrain.GetSmoothHeightAt(m_brushPosition.x, m_brushPosition.z);
-			}
-			else
+			case TerrainDeformMode::Sculpt:
 			{
-				switch (m_deformMode)
-				{
-				case TerrainDeformMode::Sculpt:
-				{
-					m_terrain.Deform(m_brushPosition.x, m_brushPosition.z,
-						innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds);
-				} break;
-				case TerrainDeformMode::Smooth:
-				{
-					m_terrain.Smooth(m_brushPosition.x, m_brushPosition.z,
-						innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds);
-				} break;
-				case TerrainDeformMode::Flatten:
-				{
-					m_terrain.Flatten(m_brushPosition.x, m_brushPosition.z,
-						innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds, m_deformFlattenHeight);
-				} break;
-				case TerrainDeformMode::Noise:
-				{
-					m_terrain.ApplyNoise(m_brushPosition.x, m_brushPosition.z,
-						innerRadius, outerRadius, m_noiseAmplitude * factor, m_noiseFrequency,
-						m_noiseOctaves, m_noisePersistence);
-				} break;
-				case TerrainDeformMode::Stamp:
-				{
-					// One stamp per click — applied in OnMouseDown.
-				} break;
-				}
+				m_terrain.Deform(stroke, innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds);
+			} break;
+			case TerrainDeformMode::Smooth:
+			{
+				m_terrain.Smooth(stroke, innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds);
+			} break;
+			case TerrainDeformMode::Flatten:
+			{
+				m_terrain.Flatten(stroke, innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds, m_deformFlattenHeight);
+			} break;
+			case TerrainDeformMode::Noise:
+			{
+				// ApplyNoise displaces by a fixed amplitude instead of integrating over the frame
+				// delta, so sweeping it is what keeps a stroke from applying it repeatedly at full
+				// strength. fBm is deterministic per world position, so overlapping applications
+				// accumulate rather than cancel.
+				m_terrain.ApplyNoise(stroke, innerRadius, outerRadius, m_noiseAmplitude * factor, m_noiseFrequency,
+					m_noiseOctaves, m_noisePersistence);
+			} break;
+			case TerrainDeformMode::Stamp:
+			{
+				// One stamp per click — applied in OnMouseDown.
+			} break;
 			}
 		}
 		else if (m_type == TerrainEditType::Paint)
 		{
 			if (m_useBrushMask && !m_brushMaskData.empty())
 			{
+				// A mask is a stamp: its UVs are anchored on one footprint, so it cannot be swept
+				// without smearing the pattern. Step along the segment instead, spacing the stamps
+				// closely enough that they overlap.
 				const terrain::BrushMaskSampler sampler =
 					[this](const float u, const float v) { return SampleBrushMask(u, v); };
-				m_terrain.Paint(m_terrainPaintLayer, m_brushPosition.x, m_brushPosition.z,
-					innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds, &sampler);
+
+				const uint32 stampCount = StampCountForStroke(stroke, outerRadius);
+				const float stampScale = 1.0f / static_cast<float>(stampCount);
+
+				for (uint32 stamp = 1; stamp <= stampCount; ++stamp)
+				{
+					const float t = static_cast<float>(stamp) * stampScale;
+					const float x = stroke.fromX + (stroke.toX - stroke.fromX) * t;
+					const float z = stroke.fromZ + (stroke.toZ - stroke.fromZ) * t;
+
+					m_terrain.Paint(m_terrainPaintLayer, terrain::BrushStroke::At(x, z),
+						innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds * stampScale, &sampler);
+				}
 			}
 			else
 			{
-				m_terrain.Paint(m_terrainPaintLayer, m_brushPosition.x, m_brushPosition.z,
+				m_terrain.Paint(m_terrainPaintLayer, stroke,
 					innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds);
 			}
 		}
 		else if (m_type == TerrainEditType::Area)
 		{
-			if (ImGui::GetIO().KeyAlt)
+			// Area IDs are set per tile rather than through a falloff brush, so the segment is
+			// walked at tile resolution. The alt-held eyedropper is handled in OnMouseHold.
+			const uint32 stampCount = StampCountForStroke(stroke, static_cast<float>(terrain::constants::TileSize) * 0.5f);
+
+			for (uint32 stamp = 0; stamp <= stampCount; ++stamp)
 			{
-				// Alt held: eyedropper — pick the area ID of the tile under the cursor.
-				m_selectedArea = m_terrain.GetArea(m_brushPosition);
+				const float t = static_cast<float>(stamp) / static_cast<float>(stampCount);
+				m_terrain.SetArea(Vector3(
+					stroke.fromX + (stroke.toX - stroke.fromX) * t,
+					0.0f,
+					stroke.fromZ + (stroke.toZ - stroke.fromZ) * t), m_selectedArea);
 			}
-			else
-			{
-				m_terrain.SetArea(m_brushPosition, m_selectedArea);
-				m_areaOverlayDirty = true; // overlay will be refreshed on mouse-up
-			}
+
+			m_areaOverlayDirty = true; // overlay will be refreshed on mouse-up
 		}
 		else if (m_type == TerrainEditType::VertexShading)
 		{
-			m_terrain.Color(m_brushPosition.x, m_brushPosition.z,
-				innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds, m_selectedColor);
+			m_terrain.Color(stroke, innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds, m_selectedColor);
 		}
 		else if (m_type == TerrainEditType::Holes)
 		{
 			const bool addHole = (m_holeMode == TerrainHoleMode::Add);
-			m_terrain.PaintHoles(m_brushPosition.x, m_brushPosition.z, outerRadius, addHole);
+			m_terrain.PaintHoles(stroke, outerRadius, addHole);
 		}
 	}
 
@@ -1334,6 +1414,8 @@ namespace mmo
 	void TerrainEditMode::OnMouseUp(float x, float y)
 	{
 		WorldEditMode::OnMouseUp(x, y);
+
+		m_strokeActive = false;
 
 		if (m_type == TerrainEditType::Water)
 		{
