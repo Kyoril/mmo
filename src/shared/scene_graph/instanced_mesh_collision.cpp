@@ -93,6 +93,9 @@ namespace mmo
 		m_instances.clear();
 		m_bounds = AABB(Vector3::Zero, Vector3::Zero);
 		m_boundingRadius = 0.0f;
+
+		// See Finalize() - the cached world bounding box is derived from these bounds.
+		NotifyMoved();
 	}
 
 	void InstancedMeshCollision::Finalize()
@@ -101,6 +104,7 @@ namespace mmo
 		{
 			m_bounds = AABB(Vector3::Zero, Vector3::Zero);
 			m_boundingRadius = 0.0f;
+			NotifyMoved();
 			return;
 		}
 
@@ -119,6 +123,14 @@ namespace mmo
 
 		m_bounds = AABB(minBounds, maxBounds);
 		m_boundingRadius = (maxBounds - minBounds).GetLength() * 0.5f;
+
+		// MovableObject caches the world bounding box that AABB/ray scene queries filter on, and only
+		// recomputes it when the object reports having moved. A world model proxy is attached to its
+		// node while still empty and only filled on the first frame, by which time the scene graph
+		// update has already derived - and cached - a degenerate box at the origin. Without this the
+		// proxy keeps that box forever, so every collision query rejects it in the broad phase and the
+		// batched dungeon geometry is walked straight through. Mirrors WorldModelBatch::UploadInstances.
+		NotifyMoved();
 	}
 
 	bool InstancedMeshCollision::TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const

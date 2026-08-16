@@ -104,6 +104,29 @@ TEST_CASE("InstancedMeshCollision keeps legitimately shrunken instances", "[inst
 	REQUIRE(std::isfinite(result.distance));
 }
 
+TEST_CASE("InstancedMeshCollision refreshes its cached world bounding box after being filled", "[instanced_mesh_collision]")
+{
+	// A world model proxy is attached to its scene node while still empty and only filled on the
+	// first frame. MovableObject caches the world bounding box that every AABB/ray scene query
+	// filters on, and only recomputes it when the object reports having moved - so the scene graph
+	// update that runs in between must not be able to freeze a degenerate box at the origin.
+	InstancedMeshCollision collision("EmptyThenFilledProxy", MakeCollidableCubeMesh());
+
+	// Stands in for that scene graph update deriving (and caching) the empty proxy's bounds.
+	REQUIRE(collision.GetWorldBoundingBox(true).GetSize().GetSquaredLength() == Approx(0.0f));
+
+	Matrix4 transform;
+	transform.MakeTransform(Vector3(50.0f, 0.0f, 50.0f), Vector3::UnitScale, Quaternion::Identity);
+	collision.AddInstance(transform);
+	collision.Finalize();
+
+	const AABB& worldBounds = collision.GetWorldBoundingBox(true);
+	REQUIRE(worldBounds.min.x == Approx(49.0f));
+	REQUIRE(worldBounds.max.x == Approx(51.0f));
+	REQUIRE(worldBounds.min.z == Approx(49.0f));
+	REQUIRE(worldBounds.max.z == Approx(51.0f));
+}
+
 TEST_CASE("InstancedMeshCollision skips degenerate instances without dropping their neighbours", "[instanced_mesh_collision]")
 {
 	// A single bad instance in a cell must not cost the cell its other foliage.
