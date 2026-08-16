@@ -114,6 +114,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 11 | 2026-08-14 | GM damage cheat opcode: walks a boss across its health-gated phase thresholds without depending on the test character's damage output |
 | 10 | 2026-08-14 | Widen the set-instance-variable cheat's value to int64, matching `WorldInstance`'s storage |
 | 9 | 2026-08-14 | GM set-instance-variable cheat opcode for the E2E harness |
 | 8 | 2026-08-12 | GM godmode cheat opcode for the E2E harness |

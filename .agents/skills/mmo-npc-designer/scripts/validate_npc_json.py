@@ -235,8 +235,8 @@ def validate_document(doc: dict, project_root: Path) -> list[str]:
                     continue
                 action_type = option.get("action_type", 0)
                 condition_id = option.get("conditionId", 0)
-                if not is_number(action_type) or not 0 <= action_type <= 4:
-                    add_error(errors, f"gossip_menus[{menu_index}].options[{option_index}].action_type must be in range 0..4")
+                if not is_number(action_type) or not 0 <= action_type <= 5:
+                    add_error(errors, f"gossip_menus[{menu_index}].options[{option_index}].action_type must be in range 0..5")
                 if condition_id and condition_id not in indexes["conditions"]:
                     add_error(errors, f"gossip_menus[{menu_index}].options[{option_index}].conditionId {condition_id} is not present in project data")
                 if action_type == 3:

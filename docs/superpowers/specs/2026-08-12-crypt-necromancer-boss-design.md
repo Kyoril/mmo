@@ -431,6 +431,47 @@ Until that is fixed, the encounter has no automated coverage of its phase transi
 supporting harness work (godmode, map hosting, creature-move tracking) is in place, so the
 scenario becomes writable as soon as the timer defect is resolved.
 
+#### Resolved 2026-08-14 — `e2e/scenarios/crypt_phase_transitions.lua`
+
+The timer defect is fixed (`c1b629c5`) and the scenario is written and green: it pulls the
+boss, crosses 65% and asserts the Rite is applied **and removed**, crosses 30% and asserts
+Unhallowed Fervor is applied and persists, kills him, and asserts the summons despawn. The
+whole fight runs about 48s, which is the length that used to expose the double-arming.
+
+Two corrections to the account above, both established from source rather than inferred:
+
+- The **`Cancel()` theory was wrong.** `Countdown::Cancel` no-ops while `m_running` is
+  false, and `m_running` is false only inside `ended` — but a re-arm issued later in the
+  same handler chain wins regardless of whether the cancel bumped the generation, so the
+  ordering the note describes cannot strand the timer. The double-arming was real and
+  wasteful; the "unlucky interleaving leaves the timer dead" mechanism was not.
+- There was a **second, compounding defect** in the same function, and it is the one that
+  actually stranded auto-attack. A killing blow runs `StopAttack`, which cancels both swing
+  countdowns — and that cancel cannot defend itself from inside a swing, for the reason
+  above. Both the spell and legacy branches then re-armed unconditionally, resurrecting the
+  swing that had just been stopped. They now only reschedule while a victim remains.
+
+**Casting still resets the swing timer, deliberately.** The first cut of the fix removed the
+`m_lastMainHand = m_lastOffHand = now` stamp from `OnSpellCastEnded` on the grounds that a cast
+should not push the swing back. That is a balance decision, not a bug, and the call is to keep the
+original behaviour: a cast occupies the attacker, so the next swing lands a full interval after the
+cast ends. It is now restored explicitly, with two corrections. The re-arm is unconditional --
+stamping alone cannot move a countdown that is already running, which is exactly the instant-cast
+case. And the off-hand is reset by cancelling its countdown rather than by stamping it, so
+`RefreshOffhandSwingTimer` re-seeds it half a swing out of phase instead of both hands landing on
+the same tick. Only real casts do this; the auto-attack swing path is excluded by the
+`m_resolvingAutoAttackSwing` guard, which is what stops an off-hand swing from delaying the main
+hand. **Worth watching in the manual play pass:** cast-weave rhythm on a caster, and that a
+dual-wielder's hands stay out of phase after casting.
+
+Writing the scenario also turned up a harness trap worth knowing before the next encounter
+test: **`GM.Godmode` does not survive a cross-map teleport.** Porting to map 1 spawns the
+character into a new world instance and the flag is lost with the old one. The character
+then dies to the boss within seconds, and its death drops it from the threat list — a
+creature whose threat list empties resets to full health, so the symptom presents as "the
+boss keeps resetting", not "I died". Re-arm godmode after the final worldport. Documented
+in `e2e/README.md`.
+
 ### Open item 2 — the manual play pass
 
 Still worth doing for the things neither data review nor a scripted client can judge: that

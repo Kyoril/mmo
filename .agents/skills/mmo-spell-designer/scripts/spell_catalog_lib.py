@@ -110,6 +110,7 @@ AURA_TYPE_NAMES = {
     34: "ModDisorient",
     35: "DamageImmunity",
     36: "ModDodgeChance",
+    37: "ModStealth",
 }
 
 SPELL_ATTRIBUTE_FLAGS_0 = {

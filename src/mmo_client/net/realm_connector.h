@@ -325,6 +325,10 @@ namespace mmo
 		/// @param enable True to become immune to all incoming damage, false to restore normal damage.
 		void CheatGodmode(bool enable);
 
+		/// GAME MASTER only. Deals raw damage to the current target through the normal damage
+		///	path, so health-threshold triggers fire exactly as they would in a real fight.
+		void CheatDamage(uint32 amount);
+
 		/// Sends a packet to the server to cast a specific spell. The controlled character must know the spell. This method can not be used to
 		///	cast spells from items. Instead, use the UseItem method for this instead.
 		///	@param spellId The id of the spell to cast.

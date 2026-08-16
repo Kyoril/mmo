@@ -1330,6 +1330,14 @@ public:
 		/// Stops attacking the current victim.
 		void StopAttack();
 
+		/// Timestamp at which the next main-hand auto-attack swing is scheduled.
+		/// @returns The scheduled swing time; meaningless unless IsAttackSwingArmed().
+		[[nodiscard]] GameTime GetNextAttackSwingTime() const { return m_attackSwingCountdown.GetEnd(); }
+
+		/// Whether a main-hand auto-attack swing is currently scheduled.
+		/// @returns True while the swing countdown is running.
+		[[nodiscard]] bool IsAttackSwingArmed() const { return m_attackSwingCountdown.IsRunning(); }
+
 		/// Gets the auto-attack spell for the given weapon hand.
 		/// Returns nullptr if no auto-attack spell is configured (legacy behavior).
 		/// Override in subclasses to provide class-specific auto-attack spells.
@@ -1666,6 +1674,11 @@ public:
 		GameTime m_lastMainHand = 0, m_lastOffHand = 0;
 		/// Weapon hand whose auto-attack swing is currently being resolved (used by spell effects).
 		WeaponAttack m_currentAutoAttackType = weapon_attack::BaseAttack;
+		/// True while ExecuteAutoAttackSwing is casting a configured auto-attack spell. Such a
+		/// spell is instant, so OnSpellCastEnded runs nested inside the swing; that swing already
+		/// stamped its own hand and arms the next swing itself, so the nested call must not do
+		/// either. Without this the countdown is armed twice for a single swing.
+		bool m_resolvingAutoAttackSwing = false;
 		Countdown m_regenCountdown;
 		GameTime m_lastManaUse = 0;
 
@@ -1673,6 +1686,11 @@ public:
 
 		std::unordered_set<const proto::SpellEntry *> m_spells;
 		std::unique_ptr<SpellCast> m_spellCast;
+		/// Subscription to m_spellCast's `ended` signal, re-established on each cast. Scoped so a
+		/// new cast replaces the previous subscription rather than adding to it -- the signal and
+		/// the SpellCast both live as long as this unit, so a bare connect would accumulate one
+		/// subscriber per cast for the unit's entire lifetime.
+		scoped_connection m_castEndedConnection;
 
 		std::map<uint32, GameTime> m_spellCooldowns;
 		std::map<uint32, GameTime> m_spellCategoryCooldowns;

@@ -494,5 +494,23 @@ namespace mmo
 		m_realmConnector.CheatGodmode(enable);
 		ILOG("Godmode " << (enable ? "enabled" : "disabled"));
 	}
+
+	void WorldState::Command_Damage(const std::string &cmd, const std::string &args) const
+	{
+		if (args.empty())
+		{
+			ELOG("Usage: damage <amount>");
+			return;
+		}
+
+		const int32 amount = std::atoi(args.c_str());
+		if (amount <= 0)
+		{
+			ELOG("Damage amount must be a positive number");
+			return;
+		}
+
+		m_realmConnector.CheatDamage(static_cast<uint32>(amount));
+	}
 #endif
 }

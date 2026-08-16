@@ -344,6 +344,12 @@ namespace mmo
 		///	@param value The value to assign.
 		void CheatSetInstanceVariable(uint32 key, int64 value);
 
+		/// GAME MASTER only. Deals raw damage to the currently selected unit, through the normal
+		///	damage path so health-threshold triggers fire. Lets a scenario walk a boss across its
+		///	phase thresholds without depending on the test character's damage output.
+		///	@param amount The amount of damage to deal.
+		void CheatDamage(uint32 amount);
+
 		/// GAME MASTER only. Accepts the given quest without a questgiver interaction.
 		void CheatAcceptQuest(uint32 questId);
 
