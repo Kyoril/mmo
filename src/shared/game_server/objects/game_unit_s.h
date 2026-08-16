@@ -1179,11 +1179,15 @@ namespace mmo
 		///        packet is broadcast to everyone.
 		virtual void DoLocalChatMessage(ChatType type, const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
 
-	private:
+	protected:
 		/// Sets the current victim of the unit.
 		/// @param victim The new victim.
 		void SetVictim(const std::shared_ptr<GameUnitS> &victim);
 
+		/// Triggers the next main-hand auto attack swing.
+		void TriggerNextAutoAttack();
+
+	private:
 		/// Called when the current victim is killed.
 		/// @param killer The unit that killed the victim.
 		void VictimKilled(GameUnitS *killer);
@@ -1506,9 +1510,15 @@ public:
 		/// @param spell The spell entry that was unlearned.
 		virtual void OnSpellUnlearned(const proto::SpellEntry &spell) {}
 
-		/// Called when a spell cast ends.
+		/// Called when a spell cast ends. Invoked for every cast, from the single lifetime-scoped
+		/// subscription to SpellCast::ended taken in the constructor.
 		/// @param succeeded Whether the spell cast succeeded.
 		virtual void OnSpellCastEnded(bool succeeded);
+
+		/// Pauses auto-attack for the duration of a cast that occupies the attacker. The stopped
+		/// swing countdown is also how OnSpellCastEnded recognises such a cast afterwards, which is
+		/// why only casts with a cast time go through here.
+		void StopSwingForCast();
 
 		/// Called when the unit regenerates.
 		virtual void OnRegeneration();
@@ -1612,9 +1622,6 @@ public:
 		/// Called when the despawn timer expires.
 		void OnDespawnTimer();
 
-		/// Triggers the next main-hand auto attack swing.
-		void TriggerNextAutoAttack();
-
 		/// Triggers the next off-hand auto attack swing (dual wield only).
 		void TriggerNextOffhandAttack();
 
@@ -1686,10 +1693,10 @@ public:
 
 		std::unordered_set<const proto::SpellEntry *> m_spells;
 		std::unique_ptr<SpellCast> m_spellCast;
-		/// Subscription to m_spellCast's `ended` signal, re-established on each cast. Scoped so a
-		/// new cast replaces the previous subscription rather than adding to it -- the signal and
-		/// the SpellCast both live as long as this unit, so a bare connect would accumulate one
-		/// subscriber per cast for the unit's entire lifetime.
+		/// Subscription to m_spellCast's `ended` signal. Taken once in the constructor and held for
+		/// the unit's lifetime: `ended` is raised for every cast, so one subscription is all that is
+		/// needed and any second delivery route is a duplicate. Declared after m_spellCast so it
+		/// disconnects before the signal it points at is destroyed.
 		scoped_connection m_castEndedConnection;
 
 		std::map<uint32, GameTime> m_spellCooldowns;

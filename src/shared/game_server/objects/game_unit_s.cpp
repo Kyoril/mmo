@@ -75,6 +75,13 @@ namespace mmo
 		// Create spell caster
 		m_spellCast = std::make_unique<SpellCast>(m_timers, *this);
 
+		// Subscribe to cast completion once, for the unit's lifetime. m_spellCast is created here and
+		// never replaced, and its `ended` signal is raised for every cast -- an instant one
+		// synchronously from inside StartCast. Subscribing per cast instead left the subscription
+		// alive after the cast that made it, so every later instant cast was delivered twice: once
+		// through that stale subscription, and once through a manual call on the instant path.
+		m_castEndedConnection = m_spellCast->ended.connect(this, &GameUnitS::OnSpellCastEnded);
+
 		m_regenCountdown.ended.connect(this, &GameUnitS::OnRegeneration);
 		m_despawnCountdown.ended.connect(this, &GameUnitS::OnDespawnTimer);
 		m_attackSwingCountdown.ended.connect(this, &GameUnitS::OnAttackSwing);
@@ -843,30 +850,16 @@ namespace mmo
 			// the cast state via RemoveCastInterruptAuras(). See that method for details.
 		}
 
-		if (r == spell_cast_result::CastOkay)
+		// Only a cast that takes time occupies the attacker. Stopping the swing here is both the
+		// pause itself and the marker OnSpellCastEnded reads afterwards to tell such a cast apart
+		// from an instant one, which must leave the swing rhythm alone.
+		//
+		// Nothing is wired up for the cast ending: the constructor already subscribed to
+		// SpellCast::ended, which fires for every cast. An instant cast has in fact already been
+		// through OnSpellCastEnded by this point -- StartCast resolves it synchronously.
+		if (r == spell_cast_result::CastOkay && castTimeMs > 0)
 		{
-			if (castTimeMs > 0)
-			{
-				// Pause auto-attack while casting if it was running
-				if (m_attackSwingCountdown.IsRunning())
-				{
-					m_attackSwingCountdown.Cancel();
-				}
-				// Always connect ended signal so finishedCasting fires regardless of
-				// whether auto-attack was running (first-pull cast fix).
-				//
-				// m_spellCast lives as long as the unit does, and its `ended` signal keeps every
-				// subscriber it is given. Held in a scoped_connection so re-connecting on the next
-				// cast replaces this one instead of stacking a second: connecting bare here leaked
-				// one permanent subscriber per cast, and OnSpellCastEnded was then invoked once per
-				// spell the unit had ever cast.
-				m_castEndedConnection = m_spellCast->ended.connect(this, &GameUnitS::OnSpellCastEnded);
-			}
-			else if (m_attackSwingCountdown.IsRunning())
-			{
-				// Instant cast: resume auto-attack
-				OnSpellCastEnded(true);
-			}
+			StopSwingForCast();
 		}
 
 		return r;
@@ -3393,20 +3386,26 @@ namespace mmo
 		// cast it. That swing owns its own bookkeeping: it stamped its hand on entry and arms the
 		// next swing on the way out. Doing any of it here as well arms the countdown a second
 		// time for a single swing, leaving a superseded timer event behind on every swing.
+		//
+		// It is also what keeps the countdown check below honest: Countdown clears m_running before
+		// raising `ended`, so from inside a swing the swing countdown reports itself stopped and
+		// would be mistaken for a cast that had paused it.
 		if (m_resolvingAutoAttackSwing)
 		{
 			return;
 		}
 
-		// Casting resets the swing timer: a cast occupies the attacker, so the next swing lands a
-		// full interval after the cast ends rather than resuming part-way through the interval it
-		// was in. Only a real cast does this -- the guard above keeps an auto-attack swing from
-		// resetting the hand it did not swing with, which is what used to let the off-hand delay
-		// the main hand.
-		//
-		// The re-arm is unconditional on purpose. Stamping alone would not move an already-running
-		// countdown -- it keeps the end time it was given -- so the reset would silently do nothing
-		// on the instant-cast path, which reaches here precisely because the timer is still running.
+		// A cast that occupied the attacker resets the swing timer: the next swing lands a full
+		// interval after the cast ends rather than resuming part-way through the interval it was
+		// in. A still-running countdown means this cast did no such thing -- CastSpell stops the
+		// countdown only for a cast with a cast time -- so there is nothing to resume and nothing
+		// to reset. An instant ability must not push the swing back: a rotation firing instants
+		// faster than the swing interval would otherwise never land an auto-attack at all.
+		if (m_attackSwingCountdown.IsRunning())
+		{
+			return;
+		}
+
 		if (m_victim.lock())
 		{
 			m_lastMainHand = GetAsyncTimeMs();
@@ -3421,6 +3420,12 @@ namespace mmo
 
 			TriggerNextAutoAttack();
 		}
+	}
+
+	void GameUnitS::StopSwingForCast()
+	{
+		// Cancel() already no-ops on a stopped countdown, including from inside its own `ended`.
+		m_attackSwingCountdown.Cancel();
 	}
 
 	void GameUnitS::OnRegeneration()
