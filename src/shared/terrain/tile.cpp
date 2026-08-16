@@ -414,14 +414,10 @@ namespace mmo
 					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					// Interpolate color from surrounding vertices
-					const uint32 c00 = m_page.GetColorAt(globalX, globalZ);
-					const uint32 c10 = m_page.GetColorAt(globalX + 1, globalZ);
-					const uint32 c01 = m_page.GetColorAt(globalX, globalZ + 1);
-					const uint32 c11 = m_page.GetColorAt(globalX + 1, globalZ + 1);
-					const Color col00(c00), col10(c10), col01(c01), col11(c11);
-					const Color avgColor = (col00 + col10 + col01 + col11) * 0.25f;
-					vert->color = avgColor.GetABGR();
+					// Read the stored inner vertex colour. Like its height, it is painted
+					// independently of the surrounding corners, so averaging them would discard
+					// every vertex-shading stroke that landed on an inner vertex.
+					vert->color = Color(m_page.GetInnerColorAt(pageLocalInnerX, pageLocalInnerZ)).GetABGR();
 
 					vert->u = (static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
 					vert->v = (static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
@@ -548,14 +544,9 @@ namespace mmo
 					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					// Interpolate color from surrounding vertices
-					const uint32 c00 = page.GetColorAt(globalX, globalZ);
-					const uint32 c10 = page.GetColorAt(globalX + 1, globalZ);
-					const uint32 c01 = page.GetColorAt(globalX, globalZ + 1);
-					const uint32 c11 = page.GetColorAt(globalX + 1, globalZ + 1);
-					const Color col00(c00), col10(c10), col01(c01), col11(c11);
-					const Color avgColor = (col00 + col10 + col01 + col11) * 0.25f;
-					vert->color = avgColor.GetABGR();
+					// Read the stored inner vertex colour, for the same reason as the build path
+					// above: it is painted independently of the surrounding corners.
+					vert->color = Color(page.GetInnerColorAt(pageLocalInnerX, pageLocalInnerZ)).GetABGR();
 
 					vert->u = ((static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide)) * uvScale + uBias;
 					vert->v = ((static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide)) * uvScale + vBias;

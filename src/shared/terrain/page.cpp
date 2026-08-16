@@ -204,18 +204,35 @@ namespace mmo
 							Vector3 n11 = CalculateNormalAt(ox + 1, oz + 1);
 							Vector3 avg = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
 							m_innerNormals[i + j * newSide] = EncodeNormalSNorm8(avg.x, avg.y, avg.z);
+						}
+					}
 
-							// Average vertex colors
-							const Color c00(GetColorAt(ox, oz));
-							const Color c10(GetColorAt(ox + 1, oz));
-							const Color c01(GetColorAt(ox, oz + 1));
-							const Color c11(GetColorAt(ox + 1, oz + 1));
+					// Mark as changed so the derived inner data is persisted on the next save
+					m_changed = true;
+				}
+
+				// Inner vertex colours are derived on their own flag, not the heightmap's. The
+				// two chunks are independent and both optional, so a page can carry inner heights
+				// while predating the inner-shading chunk. Since the mesh now reads these rather
+				// than averaging the corners, leaving them at their 0xffffffff default would
+				// render white dots across any page whose outer vertices were painted.
+				if (!m_innerColorsFromFile)
+				{
+					const uint32 newSide = constants::InnerVerticesPerPageSide;
+					for (uint32 j = 0; j < newSide; ++j)
+					{
+						for (uint32 i = 0; i < newSide; ++i)
+						{
+							const Color c00(GetColorAt(i, j));
+							const Color c10(GetColorAt(i + 1, j));
+							const Color c01(GetColorAt(i, j + 1));
+							const Color c11(GetColorAt(i + 1, j + 1));
 							const Color avgColor = (c00 + c10 + c01 + c11) * 0.25f;
 							m_innerColors[i + j * newSide] = avgColor.GetARGB();
 						}
 					}
 
-					// Mark as changed so the derived inner data is persisted on the next save
+					// Mark as changed so the derived inner colours are persisted on the next save
 					m_changed = true;
 				}
 			}
@@ -1076,7 +1093,9 @@ namespace mmo
 
 		bool Page::ReadMCISChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
-			return reader >> io::read_range(m_innerColors);
+			const bool ok = reader >> io::read_range(m_innerColors);
+			if (ok) m_innerColorsFromFile = true;
+			return ok;
 		}
 
 		bool Page::ReadMCHLChunk(io::Reader &reader, uint32 header, uint32 size)
