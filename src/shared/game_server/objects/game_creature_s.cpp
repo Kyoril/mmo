@@ -601,8 +601,8 @@ namespace mmo
 		// Calculate base stats with level scaling
 		const auto& base = unitClass->levelbasevalues(level - 1);
 		const uint32 baseStamina = static_cast<uint32>(base.stamina() * eliteMultiplier);
-		const uint32 baseStrength = static_cast<uint32>(base.stamina() * eliteMultiplier);
-		const uint32 baseAgility = static_cast<uint32>(base.stamina() * eliteMultiplier);
+		const uint32 baseStrength = static_cast<uint32>(base.strength() * eliteMultiplier);
+		const uint32 baseAgility = static_cast<uint32>(base.agility() * eliteMultiplier);
 		const uint32 baseIntellect = static_cast<uint32>(base.intellect() * eliteMultiplier);
 		const uint32 baseSpirit = static_cast<uint32>(base.spirit() * eliteMultiplier);
 		SetModifierValue(GetUnitModByStat(0), unit_mod_type::BaseValue, baseStamina);
