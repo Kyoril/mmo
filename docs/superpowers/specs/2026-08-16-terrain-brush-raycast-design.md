@@ -59,6 +59,18 @@ end and `GetPage` returns null. Latent rather than live, but the new traversal w
 whole grid, so the trap is worth removing. (Residency is already handled: `Page::GetHeightAt`
 returns 0 when the page is not prepared.)
 
+### 3b. Every viewport pick is offset by the window's title bar
+
+`ViewportPanel::Draw` renders the 3-D image at `GetWindowPos() + GetWindowContentRegionMin()`,
+but `HandleViewportInteractions` stored `m_lastContentRectMin = GetWindowPos()`. Every picking
+ray in the world editor is built as
+`(mousePos - m_lastContentRectMin) / m_lastAvailViewportSize`, so all of them were offset by
+the content-region inset — the title bar plus padding, roughly 27 px vertically.
+
+This is a constant screen-space error, so it reads as slight mis-aiming up close and as a
+large world-space error from a far camera, where those same pixels cover far more ground. It
+affected terrain, foliage, entity, spawn and area-trigger picking alike.
+
 ### 4. The editor keeps painting at a stale position
 
 `TerrainEditMode::OnMouseHold` applies the brush at `m_brushPosition` every frame without
@@ -70,6 +82,12 @@ good position instead of pausing.
 The brush is applied once per frame at a single point. A fast drag, or any drag from a far
 camera where a small mouse movement covers a large world distance, leaves spaced blobs
 rather than a continuous stroke.
+
+Substepping — stamping the brush N times along the segment — only moves the problem: N has to
+be capped, because every application rebuilds the tile meshes or coverage under its footprint,
+and any fixed cap breaks above some cursor speed. From a far camera a frame can cover hundreds
+of world units, so a capped substep count paints a short streak and then a gap, which is what
+the aliased stroke in the reported screenshot actually is.
 
 ## Approaches Considered
 
@@ -198,37 +216,54 @@ The capsule path additionally builds its per-cell rejection box from the four co
 sculpted spike or pit at the inner vertex reaches past every corner, so that box culls the
 cell before its triangles are tested; the box now spans the inner vertex too.
 
-### 5. Editor stroke stability (`TerrainEditMode`)
+### 5. Editor stroke stability
 
-- `OnMouseHold` returns early when `!m_brushPositionValid`, so a missed ray pauses the
-  stroke rather than deforming the stale position for another frame.
-- Stroke interpolation. Track the previously applied position. When the brush has moved
-  further than `max(cellSize * 0.5, outerRadius * 0.25)` since the last application,
-  subdivide the segment (capped at 16 substeps) and apply along it. Spacing is driven by the
-  brush radius, which is what decides whether consecutive footprints overlap; the cell-size
-  floor only stops a tiny brush from asking for more substeps than the grid can resolve. A
-  large brush therefore gets large spacing and few substeps, which matters because every
-  application rebuilds the tile meshes under its footprint.
-  - Operations that integrate over the frame delta (Sculpt, Smooth, Flatten, Paint,
-    VertexShading) divide `power * deltaSeconds` across the substeps, so total applied
-    strength is unchanged and only the coverage becomes continuous.
-  - **Noise does not integrate over the frame delta** — `Terrain::ApplyNoise` applies a fixed
-    `amplitude * fBm(worldPos)` displacement, and `fBm` is deterministic per position, so
-    dividing the time slice would not restrain it and a fast drag would apply it once per
-    substep at full strength. Its *amplitude* is scaled by `1 / substeps` instead. This is
-    the one place the substep count has to reach an operation's strength rather than its time
-    slice, and getting it wrong destroys authored terrain with no undo path.
-  - Set-style operations (Holes, Area) apply their full effect at each substep, since they
-    are idempotent. This also closes the gaps left by fast hole painting.
-  - The two modifier-held sampling operations (ctrl-Flatten's height picker, alt-Area's
-    eyedropper) run once per frame outside the substep loop; they are not strokes.
-  - The tracked position resets on mouse up and when a stroke begins, so the first frame of
-    a stroke applies a single step.
+**The viewport picking origin.** `m_lastContentRectMin` becomes
+`GetWindowPos() + GetWindowContentRegionMin()`, matching where `Draw` places the image. This
+alone removes the constant aiming offset from every viewport raycast in the world editor.
+
+**A swept brush instead of a stamped one.** `BrushStroke` (new
+`src/shared/terrain/brush_stroke.h`, header-only, float math only) describes a footprint swept
+from one world position to another, with `DistanceTo` returning the distance to the segment
+rather than to a point. `TerrainVertexBrush` and `TerrainPixelBrush` take a stroke, derive
+their index range from the segment's bounds expanded by the outer radius, and weigh each
+vertex or pixel by its distance to the segment. A stationary brush is the degenerate
+zero-length case, for which the swept distance is identical to the old radial distance, so
+every non-stroke caller — `Stamp`, the region operations, the water tools — is unaffected.
+
+The public operations `Deform`, `Smooth`, `Flatten`, `ApplyNoise`, `Paint`, `Color` and
+`PaintHoles` take a `BrushStroke` in place of a brush centre. `TerrainEditMode::OnMouseHold`
+builds one stroke per frame from the previous applied position to the current brush position
+and applies each operation exactly once. Coverage is then gap-free at any cursor speed, the
+cost is the swept area rather than the area of every sample along it, and each frame issues a
+single tile update.
+
+Two operations cannot be swept and keep a capped stamp walk instead:
+
+- **Masked painting.** A brush mask anchors its UVs to one footprint, so sweeping it would
+  smear the pattern along the stroke rather than repeating it. Its stamps divide the frame's
+  strength between them.
+- **Area IDs**, which are set per tile rather than through a falloff, so the segment is walked
+  at half-tile spacing.
+
+Note the strength semantics this settles: a swept application deposits a full frame's worth of
+`power * deltaSeconds` along the whole segment, so a stroke has the same strength however fast
+it is drawn. The substep approach divided that strength between the substeps, which made a fast
+drag deposit a fainter line — the opposite of what a paint tool should do.
+
+**The remaining stroke-state fixes:**
+
+- `OnMouseHold` returns early when `!m_brushPositionValid`, so a missed ray pauses the stroke
+  rather than deforming the stale position for another frame.
 - `WorldEditMode::OnStrokeInterrupted`, called by `WorldEditorInstance` on any frame where it
   does not call `OnMouseHold`. Leaving the viewport with the button held stops `OnMouseHold`
   without firing `OnMouseUp`, so re-entering elsewhere would otherwise look identical to the
-  cursor having dragged between the two points, and the interpolation would sculpt a line the
-  user never travelled.
+  cursor having dragged between the two points, and the sweep would paint a line the user
+  never travelled.
+- The two modifier-held sampling operations (ctrl-Flatten's height picker, alt-Area's
+  eyedropper) run once per frame outside the stroke path; they are not strokes.
+- The tracked position resets on mouse up and when a stroke begins, so the first frame of a
+  stroke sweeps a zero-length segment.
 
 ### 6. Tests
 

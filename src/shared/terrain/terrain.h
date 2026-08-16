@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -11,6 +11,7 @@
 
 #include "graphics/material.h"
 
+#include "brush_stroke.h"
 #include "constants.h"
 #include "terrain_region_snapshot.h"
 
@@ -299,7 +300,7 @@ namespace mmo
 			/// @param innerRadius The inner radius of the brush where full effect is applied.
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param power The strength of the deformation effect.
-			void Deform(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power);
+			void Deform(const BrushStroke& stroke, float innerRadius, float outerRadius, float power);
 
 			/// @brief Smooths the terrain height in a brush area.
 			/// @param brushCenterX World X position of the brush center.
@@ -307,7 +308,7 @@ namespace mmo
 			/// @param innerRadius The inner radius of the brush where full effect is applied.
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param power The strength of the smoothing effect.
-			void Smooth(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power);
+			void Smooth(const BrushStroke& stroke, float innerRadius, float outerRadius, float power);
 
 			/// @brief Flattens the terrain to a target height in a brush area.
 			/// @param brushCenterX World X position of the brush center.
@@ -316,7 +317,7 @@ namespace mmo
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param power The strength of the flattening effect.
 			/// @param targetHeight The target height to flatten to.
-			void Flatten(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float targetHeight);
+			void Flatten(const BrushStroke& stroke, float innerRadius, float outerRadius, float power, float targetHeight);
 
 			/// @brief Applies Perlin noise-based height displacement in a brush area.
 			/// @param brushCenterX World X position of the brush center.
@@ -327,7 +328,7 @@ namespace mmo
 			/// @param frequency Spatial frequency of the noise pattern.
 			/// @param octaves Number of fBm octave layers.
 			/// @param persistence Amplitude multiplier per octave (e.g. 0.5).
-			void ApplyNoise(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float amplitude, float frequency, int octaves, float persistence);
+			void ApplyNoise(const BrushStroke& stroke, float innerRadius, float outerRadius, float amplitude, float frequency, int octaves, float persistence);
 
 			/// @brief Applies a single height stamp: every vertex inside the brush circle gets
 			///        heights += maskSampler(u, v) * heightScale, where (u, v) span the square
@@ -344,7 +345,7 @@ namespace mmo
 			/// @param power The strength of the painting effect.
 			/// @param maskSampler Optional brush mask. When non-null, its return value modulates the
 			///        radial brush falloff per pixel, letting an imported image act as a paint stencil.
-			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, const BrushMaskSampler* maskSampler = nullptr);
+			void Paint(uint8 layer, const BrushStroke& stroke, float innerRadius, float outerRadius, float power, const BrushMaskSampler* maskSampler = nullptr);
 
 			/// @brief Colors the terrain vertices in a brush area.
 			/// @param brushCenterX World X position of the brush center.
@@ -353,7 +354,7 @@ namespace mmo
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param power The strength of the coloring effect.
 			/// @param color The color to apply as a packed uint32 value.
-			void Color(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, uint32 color);
+			void Color(const BrushStroke& stroke, float innerRadius, float outerRadius, float power, uint32 color);
 
 			/// @brief Gets the inner (cell-center) vertex height at global inner indices.
 			/// @param ix Global inner vertex X index in [0, width * (OuterVerticesPerPageSide-1) - 1].
@@ -442,7 +443,7 @@ namespace mmo
 			/// @param brushCenterZ World Z position of brush center
 			/// @param radius Radius of the brush
 			/// @param addHole True to add holes, false to remove holes
-			void PaintHoles(float brushCenterX, float brushCenterZ, float radius, bool addHole);
+			void PaintHoles(const BrushStroke& stroke, float radius, bool addHole);
 
 			/// @brief Check if a world position is over a terrain hole
 			/// @param x World X position
@@ -540,17 +541,16 @@ namespace mmo
 			/// @brief Applies a brush operation to terrain vertices.
 			/// @tparam GetBrushIntensity Functor type for calculating brush intensity.
 			/// @tparam VertexFunction Functor type for applying vertex modifications.
-			/// @param brushCenterX World X position of the brush center.
-			/// @param brushCenterZ World Z position of the brush center.
+			/// @param stroke The swept footprint. Use BrushStroke::At for a stationary brush.
 			/// @param innerRadius The inner radius of the brush where full effect is applied.
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param updateTiles True to update tiles after applying the brush.
 			/// @param getBrushIntensity Functor that calculates brush intensity based on distance.
 			/// @param vertexFunction Functor that modifies vertices.
 			template <typename GetBrushIntensity, typename VertexFunction>
-			void TerrainVertexBrush(const float brushCenterX, const float brushCenterZ, float innerRadius, float outerRadius, bool updateTiles, const GetBrushIntensity &getBrushIntensity, const VertexFunction &vertexFunction)
+			void TerrainVertexBrush(const BrushStroke &stroke, float innerRadius, float outerRadius, bool updateTiles, const GetBrushIntensity &getBrushIntensity, const VertexFunction &vertexFunction)
 			{
-				// Convert brush center from world space to *global* vertex indices
+				// Convert the stroke's bounds from world space to *global* vertex indices
 				// We'll do it by shifting the range so that x=0 => left edge of the terrain
 				// and x = m_width*(OuterVerticesPerPageSide-1)*scale => right edge.
 
@@ -560,18 +560,20 @@ namespace mmo
 				// scale = pageSize / (OuterVerticesPerPageSide - 1)
 				constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
 
-				// Move brush center from [-halfTerrain, +halfTerrain] into [0, totalWidthInVertices]
-				float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
-				float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
+				// Move the stroke's bounds from [-halfTerrain, +halfTerrain] into [0, totalWidthInVertices]
+				const float globalMinX = (stroke.MinX() + halfTerrainWidth) / scale;
+				const float globalMaxX = (stroke.MaxX() + halfTerrainWidth) / scale;
+				const float globalMinZ = (stroke.MinZ() + halfTerrainHeight) / scale;
+				const float globalMaxZ = (stroke.MaxZ() + halfTerrainHeight) / scale;
 
 				// Compute min/max vertex indices in global index space (floor, ceil, clamp)
-				int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
-				int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
+				int minVertX = static_cast<int>(std::floor(globalMinX - (outerRadius / scale)));
+				int maxVertX = static_cast<int>(std::ceil(globalMaxX + (outerRadius / scale)));
 				minVertX = std::max(0, minVertX);
 				maxVertX = std::min<int>(maxVertX, m_width * (constants::OuterVerticesPerPageSide - 1));
 
-				int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
-				int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
+				int minVertZ = static_cast<int>(std::floor(globalMinZ - (outerRadius / scale)));
+				int maxVertZ = static_cast<int>(std::ceil(globalMaxZ + (outerRadius / scale)));
 				minVertZ = std::max(0, minVertZ);
 				maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
 
@@ -584,10 +586,8 @@ namespace mmo
 						float worldX, worldZ;
 						GetGlobalVertexWorldPosition(vx, vz, &worldX, &worldZ);
 
-						// Compute distance from brush center
-						float dx = worldX - brushCenterX;
-						float dz = worldZ - brushCenterZ;
-						float dist = sqrt(dx * dx + dz * dz);
+						// Compute distance to the swept brush footprint
+						const float dist = stroke.DistanceTo(worldX, worldZ);
 
 						// Determine if this vertex is within the brush area
 						if (dist <= outerRadius)
@@ -623,10 +623,8 @@ namespace mmo
 						float worldX = (v0x + v1x + v2x + v3x) * 0.25f;
 						float worldZ = (v0z + v1z + v2z + v3z) * 0.25f;
 
-						// Compute distance from brush center
-						float dx = worldX - brushCenterX;
-						float dz = worldZ - brushCenterZ;
-						float dist = sqrt(dx * dx + dz * dz);
+						// Compute distance to the swept brush footprint
+						const float dist = stroke.DistanceTo(worldX, worldZ);
 
 						// Determine if this inner vertex is within the brush area
 						if (dist <= outerRadius)
@@ -653,17 +651,16 @@ namespace mmo
 			/// @brief Applies a brush operation to terrain pixels.
 			/// @tparam GetBrushIntensity Functor type for calculating brush intensity.
 			/// @tparam PixelFunction Functor type for applying pixel modifications.
-			/// @param brushCenterX World X position of the brush center.
-			/// @param brushCenterZ World Z position of the brush center.
+			/// @param stroke The swept footprint. Use BrushStroke::At for a stationary brush.
 			/// @param innerRadius The inner radius of the brush where full effect is applied.
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param updateTiles True to update tiles after applying the brush.
 			/// @param getBrushIntensity Functor that calculates brush intensity based on distance.
 			/// @param pixelFunction Functor that modifies pixels.
 			template <typename GetBrushIntensity, typename PixelFunction>
-			void TerrainPixelBrush(const float brushCenterX, const float brushCenterZ, float innerRadius, float outerRadius, bool updateTiles, const GetBrushIntensity &getBrushIntensity, const PixelFunction &pixelFunction)
+			void TerrainPixelBrush(const BrushStroke &stroke, float innerRadius, float outerRadius, bool updateTiles, const GetBrushIntensity &getBrushIntensity, const PixelFunction &pixelFunction)
 			{
-				// Convert brush center from world space to *global* vertex indices
+				// Convert the stroke's bounds from world space to *global* vertex indices
 				// We'll do it by shifting the range so that x=0 => left edge of the terrain
 				// and x = m_width*(PixelsPerPage-1)*scale => right edge.
 
@@ -673,18 +670,20 @@ namespace mmo
 				// scale = pageSize / (PixelsPerPage - 1)
 				constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::PixelsPerPage - 1));
 
-				// Move brush center from [-halfTerrain, +halfTerrain] into [0, totalWidthInVertices]
-				float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
-				float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
+				// Move the stroke's bounds from [-halfTerrain, +halfTerrain] into [0, totalWidthInVertices]
+				const float globalMinX = (stroke.MinX() + halfTerrainWidth) / scale;
+				const float globalMaxX = (stroke.MaxX() + halfTerrainWidth) / scale;
+				const float globalMinZ = (stroke.MinZ() + halfTerrainHeight) / scale;
+				const float globalMaxZ = (stroke.MaxZ() + halfTerrainHeight) / scale;
 
 				// Compute min/max vertex indices in global index space (floor, ceil, clamp)
-				int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
-				int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
+				int minVertX = static_cast<int>(std::floor(globalMinX - (outerRadius / scale)));
+				int maxVertX = static_cast<int>(std::ceil(globalMaxX + (outerRadius / scale)));
 				minVertX = std::max(0, minVertX);
 				maxVertX = std::min<int>(maxVertX, m_width * (constants::PixelsPerPage - 1));
 
-				int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
-				int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
+				int minVertZ = static_cast<int>(std::floor(globalMinZ - (outerRadius / scale)));
+				int maxVertZ = static_cast<int>(std::ceil(globalMaxZ + (outerRadius / scale)));
 				minVertZ = std::max(0, minVertZ);
 				maxVertZ = std::min<int>(maxVertZ, m_height * (constants::PixelsPerPage - 1));
 
@@ -697,10 +696,8 @@ namespace mmo
 						float worldX, worldZ;
 						GetGlobalPixelWorldPosition(vx, vz, &worldX, &worldZ);
 
-						// Compute distance from brush center
-						float dx = worldX - brushCenterX;
-						float dz = worldZ - brushCenterZ;
-						float dist = sqrt(dx * dx + dz * dz);
+						// Compute distance to the swept brush footprint
+						const float dist = stroke.DistanceTo(worldX, worldZ);
 
 						// Determine if this vertex is within the brush area
 						if (dist <= outerRadius)

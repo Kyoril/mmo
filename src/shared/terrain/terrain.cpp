@@ -735,9 +735,9 @@ namespace mmo
 			return factor;
 		}
 
-		void Terrain::Deform(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
+		void Terrain::Deform(const BrushStroke &stroke, const float innerRadius, const float outerRadius, float power)
 		{
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power](const int32 vx, const int32 vy, const float factor)
 							   {
 					if (vx >= 0 && vy >= 0)
 					{
@@ -766,9 +766,9 @@ namespace mmo
 					} });
 		}
 
-		void Terrain::ApplyNoise(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float amplitude, const float frequency, const int octaves, const float persistence)
+		void Terrain::ApplyNoise(const BrushStroke &stroke, const float innerRadius, const float outerRadius, const float amplitude, const float frequency, const int octaves, const float persistence)
 		{
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, amplitude, frequency, octaves, persistence](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, amplitude, frequency, octaves, persistence](const int32 vx, const int32 vy, const float factor)
 							   {
 				if (vx >= 0 && vy >= 0)
 				{
@@ -827,7 +827,8 @@ namespace mmo
 				return 1.0f;
 			};
 
-			TerrainVertexBrush(brushCenterX, brushCenterZ, outerRadius, outerRadius, true, constantIntensity,
+			// A stamp is anchored to one footprint by its mask, so it is never swept.
+			TerrainVertexBrush(BrushStroke::At(brushCenterX, brushCenterZ), outerRadius, outerRadius, true, constantIntensity,
 				[&](const int32 vx, const int32 vy, const float)
 				{
 					float worldX = 0.0f, worldZ = 0.0f;
@@ -870,12 +871,12 @@ namespace mmo
 				});
 		}
 
-		void Terrain::Smooth(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
+		void Terrain::Smooth(const BrushStroke &stroke, const float innerRadius, const float outerRadius, float power)
 		{
 			// First collect average height value
 			float sumHeight = 0.0f;
 			uint32 heightCount = 0;
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, false, &GetBrushIntensityLinear, [this, &sumHeight, &heightCount](const int32 vx, const int32 vy, float)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, false, &GetBrushIntensityLinear, [this, &sumHeight, &heightCount](const int32 vx, const int32 vy, float)
 							   {
 					if (vx >= 0 && vy >= 0)
 					{
@@ -911,7 +912,7 @@ namespace mmo
 
 			if (heightCount == 0) return;
 			const float avgHeight = sumHeight / static_cast<float>(heightCount);
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, avgHeight, power](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, avgHeight, power](const int32 vx, const int32 vy, const float factor)
 							   {
 					if (vx >= 0 && vy >= 0)
 					{
@@ -942,7 +943,7 @@ namespace mmo
 					} });
 		}
 
-		void Terrain::Flatten(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, float targetHeight)
+		void Terrain::Flatten(const BrushStroke &stroke, const float innerRadius, const float outerRadius, float power, float targetHeight)
 		{
 			// Track affected area bounds for inner vertex and tile updates
 			int minX = std::numeric_limits<int>::max();
@@ -951,7 +952,7 @@ namespace mmo
 			int maxZ = std::numeric_limits<int>::min();
 
 			// Only modify outer vertices; inner vertices will be interpolated afterward
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power, &minX, &minZ, &maxX, &maxZ](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power, &minX, &minZ, &maxX, &maxZ](const int32 vx, const int32 vy, const float factor)
 							   {
 								   if (vx >= 0 && vy >= 0)
 								   {
@@ -986,15 +987,15 @@ namespace mmo
 			}
 		}
 
-		void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power, const BrushMaskSampler* maskSampler)
+		void Terrain::Paint(const uint8 layer, const BrushStroke &stroke, const float innerRadius, const float outerRadius, const float power, const BrushMaskSampler* maskSampler)
 		{
 			// Footprint origin and inverse extent for mapping pixel world positions to mask UVs.
 			const float maskExtent = outerRadius * 2.0f;
 			const float invMaskExtent = maskExtent > 0.0f ? 1.0f / maskExtent : 0.0f;
-			const float maskOriginX = brushCenterX - outerRadius;
-			const float maskOriginZ = brushCenterZ - outerRadius;
+			const float maskOriginX = stroke.toX - outerRadius;
+			const float maskOriginZ = stroke.toZ - outerRadius;
 
-			TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [&](const int32 vx, const int32 vy, const float radialFactor)
+			TerrainPixelBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [&](const int32 vx, const int32 vy, const float radialFactor)
 							  {
 					float factor = radialFactor;
 
@@ -1042,14 +1043,14 @@ namespace mmo
 			}
 		}
 
-		void Terrain::Color(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, const uint32 color)
+		void Terrain::Color(const BrushStroke &stroke, const float innerRadius, const float outerRadius, float power, const uint32 color)
 		{
 			Vector3 i;
 			i.x = ((color >> 0) & 0xFF) / 255.0f;
 			i.y = ((color >> 8) & 0xFF) / 255.0f;
 			i.z = ((color >> 16) & 0xFF) / 255.0f;
 
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power, i](const int32 vx, const int32 vy, const float factor)
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power, i](const int32 vx, const int32 vy, const float factor)
 							   {
 					const uint32 c = GetColorAt(vx, vy);
 
@@ -1868,17 +1869,17 @@ namespace mmo
 			return page->IsHole(tileX, tileZ, innerX, innerZ);
 		}
 
-		void Terrain::PaintHoles(float brushCenterX, float brushCenterZ, float radius, bool addHole)
+		void Terrain::PaintHoles(const BrushStroke &stroke, float radius, bool addHole)
 		{
 			// Convert brush center from world space to page coordinates
 			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
 			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
 
 			// Calculate affected pages
-			const float minX = brushCenterX - radius;
-			const float maxX = brushCenterX + radius;
-			const float minZ = brushCenterZ - radius;
-			const float maxZ = brushCenterZ + radius;
+			const float minX = stroke.MinX() - radius;
+			const float maxX = stroke.MaxX() + radius;
+			const float minZ = stroke.MinZ() - radius;
+			const float maxZ = stroke.MaxZ() + radius;
 
 			const int32 minPageX = std::max(0, static_cast<int32>(std::floor((minX + halfTerrainWidth) / constants::PageSize)));
 			const int32 maxPageX = std::min(static_cast<int32>(m_width) - 1, static_cast<int32>(std::floor((maxX + halfTerrainWidth) / constants::PageSize)));
@@ -1915,12 +1916,8 @@ namespace mmo
 									const float worldX = (globalInnerX + 0.5f) * scale - halfTerrainWidth;
 									const float worldZ = (globalInnerZ + 0.5f) * scale - halfTerrainHeight;
 
-									// Check if this inner vertex is within the brush radius
-									const float dx = worldX - brushCenterX;
-									const float dz = worldZ - brushCenterZ;
-									const float distSq = dx * dx + dz * dz;
-
-									if (distSq <= radius * radius)
+									// Check if this inner vertex is within the swept brush footprint
+									if (stroke.DistanceTo(worldX, worldZ) <= radius)
 									{
 										// Mark or unmark this vertex as a hole
 										page->SetHole(tileX, tileY, innerX, innerY, addHole);

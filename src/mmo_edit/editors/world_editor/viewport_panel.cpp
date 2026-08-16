@@ -140,8 +140,16 @@ namespace mmo
             m_rightButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Right);
 
             const auto mousePos = ImGui::GetMousePos();
-            const auto contentRectMin = ImGui::GetWindowPos();
-            m_lastContentRectMin = contentRectMin;
+
+            // Picking rays are built from (mousePos - m_lastContentRectMin) / m_lastAvailViewportSize,
+            // so this has to be the top-left of the *image* — window position plus the content
+            // region offset, matching where Draw() places it — not the window position. Using the
+            // window position offsets every viewport raycast by the title bar and padding, which
+            // reads as a small aiming error up close and as a large one from a far camera, where
+            // those same pixels cover far more world space.
+            const auto contentRegionMin = ImGui::GetWindowContentRegionMin();
+            const auto windowPos = ImGui::GetWindowPos();
+            m_lastContentRectMin = ImVec2(windowPos.x + contentRegionMin.x, windowPos.y + contentRegionMin.y);
 
             if (ImGui::IsKeyPressed(ImGuiKey_Delete))
             {

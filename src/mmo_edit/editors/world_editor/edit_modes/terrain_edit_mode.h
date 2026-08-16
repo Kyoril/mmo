@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -9,6 +9,7 @@
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
 #include "graphics/texture.h"
+#include "terrain/brush_stroke.h"
 #include "terrain/terrain_region_snapshot.h"
 #include "editors/world_editor/terrain_undo_stack.h"
 
@@ -154,17 +155,21 @@ namespace mmo
 		void SetBrushPosition(const Vector3& position);
 
 	private:
-		/// Applies the active brush operation once at a single world position.
-		/// @param position World position to apply the brush at.
+		/// Applies the active brush operation once, swept along a stroke.
+		/// @param stroke Segment the cursor covered since the last application. Zero-length for a
+		///        stationary brush, which makes the swept footprint a plain circle.
 		/// @param innerRadius Radius of the brush's full-strength core.
 		/// @param outerRadius Radius at which the brush falls off to nothing.
 		/// @param factor Direction multiplier: -1 while shift inverts the operation.
-		/// @param deltaSeconds Time slice this application accounts for. Stroke interpolation
-		///        divides the frame's delta across its substeps, so time-integrated operations
-		///        keep their total strength while only their coverage becomes continuous.
-		/// @param stepScale Reciprocal of the substep count. Operations that apply a fixed
-		///        displacement instead of integrating over deltaSeconds scale by this instead.
-		void ApplyBrushAt(const Vector3& position, float innerRadius, float outerRadius, float factor, float deltaSeconds, float stepScale);
+		/// @param deltaSeconds The frame's time slice, for operations that integrate over it.
+		void ApplyBrushStroke(const terrain::BrushStroke& stroke, float innerRadius, float outerRadius, float factor, float deltaSeconds);
+
+		/// Number of overlapping stamps needed to cover a stroke, for the operations that cannot
+		/// be swept: a brush mask is anchored to one footprint, and area IDs are set per tile.
+		/// @param stroke The stroke to cover.
+		/// @param spacing Distance between consecutive stamps.
+		/// @return At least 1, capped so a very fast movement cannot stall the frame.
+		static uint32 StampCountForStroke(const terrain::BrushStroke& stroke, float spacing);
 
 		void UpdateBrushOverlay();
 
