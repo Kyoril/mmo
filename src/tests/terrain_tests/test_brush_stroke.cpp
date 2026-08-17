@@ -78,6 +78,80 @@ TEST_CASE("BrushStroke_Covers_Whole_Segment_Within_Radius", "[brush_stroke]")
 	}
 }
 
+TEST_CASE("StrokePassFraction_Sums_To_One_Pass_However_The_Path_Is_Chopped", "[brush_stroke]")
+{
+	// The invariant the whole distance-driven model rests on: a point has 2 * radius worth of
+	// path within reach of it, and however that path is split by frames or pointer events, the
+	// contributions must add up to exactly one pass. Otherwise a stroke's darkness depends on
+	// the frame rate and the cursor speed, which is what produced blotchy lines.
+	constexpr float radius = 12.0f;
+	constexpr float passLength = 2.0f * radius;
+
+	for (const int32 pieces : { 1, 2, 3, 5, 8, 17, 64 })
+	{
+		const float pieceLength = passLength / static_cast<float>(pieces);
+
+		float total = 0.0f;
+		for (int32 i = 0; i < pieces; ++i)
+		{
+			total += StrokePassFraction(pieceLength, radius);
+		}
+
+		CHECK(total == Approx(1.0f).margin(1e-4f));
+	}
+}
+
+TEST_CASE("StrokePassFraction_Caps_At_One_Full_Pass", "[brush_stroke]")
+{
+	constexpr float radius = 10.0f;
+
+	// A segment longer than the brush is still only one pass over the points beneath it.
+	CHECK(StrokePassFraction(20.0f, radius) == Approx(1.0f));
+	CHECK(StrokePassFraction(500.0f, radius) == Approx(1.0f));
+	CHECK(StrokePassFraction(50000.0f, radius) == Approx(1.0f));
+
+	// Partial segments scale linearly.
+	CHECK(StrokePassFraction(10.0f, radius) == Approx(0.5f));
+	CHECK(StrokePassFraction(5.0f, radius) == Approx(0.25f));
+}
+
+TEST_CASE("StrokePassFraction_Degenerate_Inputs", "[brush_stroke]")
+{
+	// A stationary brush contributes nothing through the distance term; the caller falls back
+	// to the time-driven amount instead.
+	CHECK(StrokePassFraction(0.0f, 10.0f) == Approx(0.0f));
+	CHECK(StrokePassFraction(-1.0f, 10.0f) == Approx(0.0f));
+
+	// A degenerate radius must not divide by zero.
+	CHECK(StrokePassFraction(5.0f, 0.0f) == Approx(0.0f));
+	CHECK(StrokePassFraction(5.0f, -3.0f) == Approx(0.0f));
+}
+
+TEST_CASE("StrokePassFraction_Is_Speed_Independent", "[brush_stroke]")
+{
+	// Two cursors covering the same distance, one in a single frame and one in twenty, must
+	// deposit the same total.
+	constexpr float radius = 16.0f;
+	constexpr float distance = 2.0f * radius;
+
+	const float fast = StrokePassFraction(distance, radius);
+
+	float slow = 0.0f;
+	for (int32 i = 0; i < 20; ++i)
+	{
+		slow += StrokePassFraction(distance / 20.0f, radius);
+	}
+
+	CHECK(slow == Approx(fast).margin(1e-4f));
+}
+
+TEST_CASE("BrushStroke_Length_Matches_Segment", "[brush_stroke]")
+{
+	CHECK(BrushStroke::At(5.0f, 5.0f).Length() == Approx(0.0f));
+	CHECK((BrushStroke{ 0.0f, 0.0f, 3.0f, 4.0f }).Length() == Approx(5.0f));
+	CHECK((BrushStroke{ 3.0f, 4.0f, 0.0f, 0.0f }).Length() == Approx(5.0f));
+}
+
 TEST_CASE("BrushStroke_Bounds_Span_Both_Ends", "[brush_stroke]")
 {
 	// The brush templates derive their index range from these, so a wrong ordering would

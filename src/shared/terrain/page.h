@@ -332,6 +332,7 @@ namespace mmo
 			bool m_changed{false};
 			bool m_unloadRequested = false;
 			bool m_innerHeightmapFromFile = false; ///< True if inner heights were loaded from the IVCM chunk (not derived).
+			bool m_innerColorsFromFile = false;   ///< True if inner colours were loaded from the inner shading chunk (not derived).
 			AABB m_boundingBox;
 
 			/// @brief Linear cursor into the tile grid used by Load() to create one tile per call.
