@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "bot_movement_math.h"
+
 #include "base/signal.h"
 #include "base/typedefs.h"
 #include "game/movement_info.h"
@@ -37,37 +39,6 @@ namespace mmo
 		GameTime nonProgressTimeoutMs { 3000 };
 	};
 
-	struct BotMovementRuntimeState final
-	{
-		Vector3 velocity { Vector3::Zero };
-		Vector3 lastProgressPosition { Vector3::Zero };
-		GameTime lastProgressTime { 0 };
-		GameTime lastSimulationTime { 0 };
-		GameTime lastHeartbeatTime { 0 };
-		bool hasLastProgressPosition { false };
-		bool isMoving { false };
-	};
-
-	struct BotLowLevelMovementInput final
-	{
-		MovementInfo movement;
-		BotMovementRuntimeState runtime;
-		Vector3 steeringTarget { Vector3::Zero };
-		GameTime now { 0 };
-		float maxSpeed { 7.0f };
-		float maxAcceleration { 40.48f };
-		float acceptanceRadius { 0.75f };
-	};
-
-	struct BotLowLevelMovementOutput final
-	{
-		MovementInfo movement;
-		BotMovementRuntimeState runtime;
-		bool reachedSteeringTarget { false };
-		bool moved { false };
-		float distanceToSteeringTarget { 0.0f };
-	};
-
 	struct BotMovementEvent final
 	{
 		BotMovementStatus status { BotMovementStatus::Idle };
@@ -78,8 +49,6 @@ namespace mmo
 		std::size_t waypointIndex { 0 };
 		std::size_t pathPointCount { 0 };
 	};
-
-	[[nodiscard]] BotLowLevelMovementOutput AdvanceBotLowLevelMovement(const BotLowLevelMovementInput& input);
 
 	class BotMovementController final
 	{
@@ -105,7 +74,6 @@ namespace mmo
 
 	private:
 		[[nodiscard]] bool PlanPath(BotContext& context, const Vector3& target, float acceptanceRadius);
-		[[nodiscard]] Vector3 ResolveSteeringTarget() const;
 		[[nodiscard]] float ResolveRunSpeed(const BotContext& context) const;
 		[[nodiscard]] BotMovementEvent BuildEvent(BotContext& context, BotMovementStatus status, std::string reason) const;
 		void EmitUnreachable(BotContext& context, std::string reason);
