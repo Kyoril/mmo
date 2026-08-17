@@ -170,6 +170,60 @@ TEST_CASE("DatabasePoolStopIsIdempotent", "[database_pool]")
 	SUCCEED("second Stop() did not hang or crash");
 }
 
+// Work that arrives after Stop() has to be refused, not routed.
+//
+// The shutdown handlers call Stop() on an io thread while the other one may still be running a
+// timer callback that ends in a database request -- the login server's player-count sampler is
+// exactly that shape. Routing is `key % Size()`, so a pool that has released its slots computes
+// `key % 0`: an integer division by zero, which is a crash rather than an assertion in a release
+// build, at the one moment an operator is least able to diagnose it.
+TEST_CASE("DatabasePoolRefusesDispatchAfterStop", "[database_pool]")
+{
+	auto pool = MakePool(4);
+	REQUIRE(pool != nullptr);
+
+	std::atomic<int> ran{ 0 };
+
+	pool->Stop();
+	pool->Dispatch(12345, [&ran](FakeDatabase&) { ++ran; });
+
+	// Dropped, not queued: there is no thread left to run it, and pretending otherwise would
+	// leave the caller waiting for a result that can never arrive.
+	CHECK(ran.load() == 0);
+}
+
+// The same thing from the direction it actually happens: one thread shutting the pool down while
+// another is still dispatching. A flag checked before the routing arithmetic narrows this window
+// but does not close it, so what makes it safe is that Stop() leaves the slots in place.
+TEST_CASE("DatabasePoolSurvivesDispatchRacingStop", "[database_pool]")
+{
+	auto pool = MakePool(4);
+	REQUIRE(pool != nullptr);
+
+	std::atomic<bool> dispatching{ true };
+	std::atomic<int> dispatched{ 0 };
+
+	std::thread dispatcher([&pool, &dispatching, &dispatched]()
+	{
+		while (dispatching.load())
+		{
+			pool->Dispatch(dispatched.load(), [](FakeDatabase&) {});
+			++dispatched;
+		}
+	});
+
+	// Long enough that the dispatcher is well inside its loop when the stop lands.
+	std::this_thread::sleep_for(std::chrono::milliseconds(20));
+	pool->Stop();
+	std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+	dispatching = false;
+	dispatcher.join();
+
+	CHECK(dispatched.load() > 0);
+	SUCCEED("dispatching across a concurrent Stop() neither crashed nor deadlocked");
+}
+
 // A pool that cannot open all its connections must fail loudly at startup rather than work
 // under light load and fail once traffic reaches the connections that were never opened.
 TEST_CASE("DatabasePoolCreateFailsIfAnyConnectionFails", "[database_pool]")
