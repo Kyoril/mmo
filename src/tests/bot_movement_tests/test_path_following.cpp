@@ -1,25 +1,30 @@
-// Copyright (C) 2019 - 2026, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "catch.hpp"
 
+#include "bot_movement_controller.h"
 #include "bot_movement_math.h"
 
 #include <vector>
 
 using namespace mmo;
 
-// Mirrors the defaults in BotMovementSettings.
 namespace
 {
-	constexpr float waypointAcceptanceRadius = 0.75f;
-	constexpr float turnSmoothingThresholdRadians = 0.524f;
-	constexpr float turnSmoothingDistance = 0.5f;
-	constexpr float maxAcceleration = 40.48f;
-	constexpr float runSpeed = 7.0f;
+	// Taken from the follower's own defaults rather than copied: retuning the smoothing distance
+	// or the acceptance radius must not leave these tests passing against numbers the production
+	// code stopped using - the band this suite is about is exactly as wide as those two.
+	constexpr BotMovementSettings settings {};
+
+	constexpr float waypointAcceptanceRadius = settings.waypointAcceptanceRadius;
+	constexpr float turnSmoothingThresholdRadians = settings.turnSmoothingThresholdRadians;
+	constexpr float turnSmoothingDistance = settings.turnSmoothingDistance;
+	constexpr float maxAcceleration = settings.maxAcceleration;
+	constexpr float runSpeed = settings.fallbackRunSpeed;
 
 	// The non-progress watchdog in BotMovementController::Update.
-	constexpr float progressDistanceEpsilon = 0.15f;
-	constexpr GameTime nonProgressTimeoutMs = 3000;
+	constexpr float progressDistanceEpsilon = settings.progressDistanceEpsilon;
+	constexpr GameTime nonProgressTimeoutMs = settings.nonProgressTimeoutMs;
 
 	/// The nav mesh path the crypt_wing_bosses scenario walks: from where the scenario ports in
 	/// (-16, 1, 4) to Ossuar at (-19, 1, 14) on map 1. Captured from a real run; it turns through
@@ -42,7 +47,7 @@ namespace
 	struct FollowSimulation final
 	{
 		bool stalled { false };
-		bool reachedEnd { false };
+		bool pathExhausted { false };
 		Vector3 stallPosition { Vector3::Zero };
 		std::size_t stallWaypointIndex { 0 };
 	};
@@ -50,6 +55,11 @@ namespace
 	/// Walks a bot along `path` the way BotMovementController::Update does - resolve the waypoint
 	/// and steering target, then integrate one tick - and reports whether the bot ever went as
 	/// still as the controller's non-progress watchdog requires to give up.
+	///
+	/// Only the part of Update that can stall is modelled. Left out deliberately: the goal
+	/// acceptance check that ends a real MoveTo (so running the path out here is `pathExhausted`,
+	/// not "arrived"), the opening tick that only sends MoveStartForward, and the runtime guards
+	/// on the watchdog. None of them can move the bot, which is what a stall is about.
 	FollowSimulation SimulateFollow(const std::vector<Vector3>& path, const GameTime tickMs)
 	{
 		FollowSimulation result;
@@ -77,7 +87,7 @@ namespace
 			waypointIndex = follow.waypointIndex;
 			if (follow.exhausted)
 			{
-				result.reachedEnd = true;
+				result.pathExhausted = true;
 				return result;
 			}
 
@@ -150,7 +160,92 @@ TEST_CASE("path following: the crypt approach never stalls, whatever the tick ra
 		INFO("tick " << tickMs << " ms, stalled at waypoint " << simulation.stallWaypointIndex
 			<< " (" << simulation.stallPosition.x << ", " << simulation.stallPosition.z << ")");
 		CHECK_FALSE(simulation.stalled);
-		CHECK(simulation.reachedEnd);
+		CHECK(simulation.pathExhausted);
+	}
+}
+
+TEST_CASE("path following: the resolved steering target is never one the bot stands on", "[bot][path]")
+{
+	// The invariant the fix rests on, stated directly: whatever AdvanceBotPathFollowing hands back
+	// for a live path is out of acceptance range, so AdvanceBotLowLevelMovement cannot take its
+	// "already there" early return - which is the branch that stops the bot dead. Walk the whole
+	// crypt path and check it at every position the bot passes through.
+	const std::vector<Vector3> path = CryptApproachPath();
+
+	BotLowLevelMovementInput input;
+	input.movement.position = path.front();
+	input.maxSpeed = runSpeed;
+	input.maxAcceleration = maxAcceleration;
+	input.acceptanceRadius = waypointAcceptanceRadius;
+
+	std::size_t waypointIndex = 1;
+	GameTime now = 0;
+	bool exhausted = false;
+	while (now < 60000 && !exhausted)
+	{
+		now += 8;
+
+		const BotPathFollowState follow = AdvanceBotPathFollowing(
+			path, waypointIndex, input.movement.position,
+			waypointAcceptanceRadius, turnSmoothingThresholdRadians, turnSmoothingDistance);
+		waypointIndex = follow.waypointIndex;
+		exhausted = follow.exhausted;
+		if (exhausted)
+		{
+			break;
+		}
+
+		INFO("at (" << input.movement.position.x << ", " << input.movement.position.z
+			<< ") heading for waypoint " << waypointIndex);
+		REQUIRE(PlanarDistance(input.movement.position, follow.steeringTarget) > waypointAcceptanceRadius);
+
+		input.steeringTarget = follow.steeringTarget;
+		input.now = now;
+
+		const BotLowLevelMovementOutput output = AdvanceBotLowLevelMovement(input);
+		REQUIRE_FALSE(output.runtime.velocity == Vector3::Zero);
+
+		input.movement = output.movement;
+		input.runtime = output.runtime;
+	}
+
+	CHECK(exhausted);
+}
+
+TEST_CASE("path following: disabled smoothing reduces to the plain waypoint test", "[bot][path]")
+{
+	// With no trim there is no band, and the acceptance point is the waypoint itself - the
+	// behaviour the follower had before corner smoothing existed.
+	const std::vector<Vector3> path = CryptApproachPath();
+	const Vector3 nearWaypoint(-12.5007f, 1.0591f, 4.0f);	// 0.6875 short of path[2]
+
+	const BotPathFollowState follow = AdvanceBotPathFollowing(
+		path, 2, nearWaypoint, waypointAcceptanceRadius, turnSmoothingThresholdRadians, 0.0f);
+
+	CHECK(follow.waypointIndex == 3);
+}
+
+TEST_CASE("path following: degenerate inputs report exhaustion instead of indexing off the end", "[bot][path]")
+{
+	const Vector3 position(1.0f, 2.0f, 3.0f);
+
+	SECTION("empty path")
+	{
+		const BotPathFollowState follow = AdvanceBotPathFollowing(
+			{}, 0, position, waypointAcceptanceRadius, turnSmoothingThresholdRadians, turnSmoothingDistance);
+
+		CHECK(follow.exhausted);
+		CHECK(follow.waypointIndex == 0);
+	}
+
+	SECTION("index past the end")
+	{
+		const std::vector<Vector3> path = { Vector3::Zero, Vector3(0.0f, 0.0f, 5.0f) };
+
+		const BotPathFollowState follow = AdvanceBotPathFollowing(
+			path, 7, position, waypointAcceptanceRadius, turnSmoothingThresholdRadians, turnSmoothingDistance);
+
+		CHECK(follow.exhausted);
 	}
 }
 

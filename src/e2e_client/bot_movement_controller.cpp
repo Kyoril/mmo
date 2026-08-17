@@ -7,6 +7,7 @@
 #include "bot_nav_service.h"
 #include "bot_unit.h"
 
+#include "base/macros.h"
 #include "game/movement_type.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
@@ -86,7 +87,10 @@ namespace mmo
 			m_settings.turnSmoothingThresholdRadians,
 			m_settings.turnSmoothingDistance);
 
-		while (m_nextWaypointIndex < follow.waypointIndex)
+		// Bounded by the live path as well as by the resolved index: WaypointAdvanced is a public
+		// signal, and a subscriber is free to call Stop() or MoveTo() and leave m_path empty
+		// underneath us.
+		while (m_nextWaypointIndex < follow.waypointIndex && m_nextWaypointIndex < m_path.size())
 		{
 			++m_nextWaypointIndex;
 			WaypointAdvanced(BuildEvent(context, m_status, "waypoint_reached"));
@@ -105,6 +109,9 @@ namespace mmo
 			&& now - m_runtime.lastProgressTime >= m_settings.nonProgressTimeoutMs
 			&& PlanarDistance(m_runtime.lastProgressPosition, movement.position) < m_settings.progressDistanceEpsilon)
 		{
+			// Guaranteed by the exhaustion check above, and the log below relies on it.
+			ASSERT(m_nextWaypointIndex < m_path.size());
+
 			// A stall says nothing about where it happened, which is what any investigation needs
 			// first - so spell the geometry out while the state is still around.
 			WLOG("Bot movement stalled at (" << movement.position.x << ", " << movement.position.y << ", " << movement.position.z

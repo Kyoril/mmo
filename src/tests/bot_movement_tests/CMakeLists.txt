@@ -1,7 +1,7 @@
 mmo_add_test(bot_movement_tests
 	base
-	log
-	math)
+	math
+	binary_io_hdrs)
 
 # The bot's movement math lives in the e2e_client executable, so its sources are compiled
 # into this suite directly rather than linked from a library.

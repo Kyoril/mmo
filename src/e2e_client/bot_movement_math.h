@@ -41,6 +41,8 @@ namespace mmo
 		/// @brief Index of the waypoint being headed for; equals the point count once the path is used up.
 		std::size_t waypointIndex { 0 };
 		/// @brief The point to steer at: the waypoint, pulled back along the incoming segment on turns.
+		///        Meaningless when @ref exhausted is set - it is then a point the bot already stands
+		///        on, and must not be fed to AdvanceBotLowLevelMovement.
 		Vector3 steeringTarget { Vector3::Zero };
 		/// @brief True once every waypoint has been passed.
 		bool exhausted { false };
@@ -54,6 +56,9 @@ namespace mmo
 	/// the two with different points leaves a band as wide as the corner trim in which the bot has
 	/// stopped on its steering target while the waypoint does not yet count as reached - and path
 	/// following deadlocks there, because nothing in that state can ever change.
+	///
+	/// The trade is that a waypoint is now passed from up to acceptanceRadius + trim behind it,
+	/// so corners are cut by that much more than the smoothing alone would cut them.
 	/// @param points The path to follow.
 	/// @param waypointIndex The waypoint currently being headed for.
 	/// @param position The bot's current position.
