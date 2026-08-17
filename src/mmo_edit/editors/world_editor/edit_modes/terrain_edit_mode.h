@@ -178,11 +178,19 @@ namespace mmo
 		/// @param innerRadius Radius of the brush's full-strength core.
 		/// @param outerRadius Radius at which the brush falls off to nothing.
 		/// @param factor Direction multiplier: -1 while shift inverts the operation.
-		/// @param strength How much of one full brush pass this application contributes. The
-		///        caller derives it from distance covered, so a stroke deposits the same amount
-		///        per unit of length whatever the cursor speed or frame rate; a stationary brush
-		///        passes the frame's time slice instead.
-		void ApplyBrushStroke(const terrain::BrushStroke& stroke, float innerRadius, float outerRadius, float factor, float strength);
+		/// @param deltaSeconds Duration of the frame this application covers. The rate at which
+		///        the accumulating operations work, so dwell time controls how much they deposit.
+		/// @param passFraction How much of one full brush pass this application contributes,
+		///        derived from the distance covered, so the saturating operations deposit the same
+		///        amount per unit of length whatever the cursor speed or frame rate.
+		///
+		/// Which of the two an operation is driven by depends on whether it converges. Painting
+		/// and vertex shading blend toward a target, so overlapping applications saturate and a
+		/// normalised pass is what keeps a stroke from blotching. The deform operations do not:
+		/// sculpt and noise add without bound, and smooth and flatten interpolate by a coefficient
+		/// that overshoots its target above 1. Those are driven by time, which is also the control
+		/// an artist expects from them — dwell longer, deform more.
+		void ApplyBrushStroke(const terrain::BrushStroke& stroke, float innerRadius, float outerRadius, float factor, float deltaSeconds, float passFraction);
 
 		/// Number of overlapping stamps needed to cover a stroke, for the operations that cannot
 		/// be swept: a brush mask is anchored to one footprint, and area IDs are set per tile.

@@ -1292,11 +1292,13 @@ namespace mmo
 		}
 
 		// The brush is swept along the path the cursor covered since the last application rather
-		// than stamped at a point, so coverage is gap-free at any speed.
+		// than stamped at a point, so coverage is gap-free at any speed. That is independent of
+		// how hard the brush works over that path, which ApplyBrushStroke picks per operation from
+		// the two quantities passed here — see its documentation for why they differ.
 		//
-		// Strength is driven by distance, not by time. A time-driven brush deposits
-		// power * deltaSeconds over whatever the cursor happened to cover that frame, so the
-		// amount laid down per unit of length is proportional to 1/speed and also rides on
+		// For the saturating operations, strength is driven by distance. A time-driven brush
+		// deposits power * deltaSeconds over whatever the cursor happened to cover that frame, so
+		// the amount laid down per unit of length is proportional to 1/speed and also rides on
 		// however long the frame took. Slow patches of a drag get many overlapping deposits and
 		// go dark, fast patches get one thin pass, and uneven frame times mottle the rest — the
 		// blotchy line this replaces.
@@ -1308,9 +1310,10 @@ namespace mmo
 		// is still only one pass over the points beneath it.
 		if (!m_strokeActive)
 		{
-			// First frame of a stroke: nothing to sweep from yet.
+			// First frame of a stroke: nothing to sweep from yet, so this is the stationary case
+			// and the distance-driven operations fall back to the time slice as they do below.
 			ApplyBrushStroke(terrain::BrushStroke::At(m_brushPosition.x, m_brushPosition.z),
-				innerRadius, outerRadius, factor, deltaSeconds);
+				innerRadius, outerRadius, factor, deltaSeconds, deltaSeconds);
 
 			m_pendingStrokePoints.clear();
 			m_lastStrokePosition = m_brushPosition;
@@ -1324,6 +1327,18 @@ namespace mmo
 		Vector3 from = m_lastStrokePosition;
 		float travelled = 0.0f;
 
+		// The frame's time slice is shared out over the segments it covered, so the operations
+		// driven by time deposit one frame's worth however many pointer positions were queued.
+		float pendingLength = 0.0f;
+		{
+			Vector3 previous = m_lastStrokePosition;
+			for (const Vector3& to : m_pendingStrokePoints)
+			{
+				pendingLength += terrain::BrushStroke{ previous.x, previous.z, to.x, to.z }.Length();
+				previous = to;
+			}
+		}
+
 		for (const Vector3& to : m_pendingStrokePoints)
 		{
 			const terrain::BrushStroke segment{ from.x, from.z, to.x, to.z };
@@ -1335,18 +1350,20 @@ namespace mmo
 
 			travelled += length;
 			ApplyBrushStroke(segment, innerRadius, outerRadius, factor,
+				deltaSeconds * (length / pendingLength),
 				terrain::StrokePassFraction(length, outerRadius));
 
 			from = to;
 		}
 
 		// A stationary brush still has to keep working — holding still over a spot should dig it
-		// deeper. With no movement the distance term is zero, so fall back to the time-driven
-		// amount, which is exactly what this did before for a brush that is not moving.
+		// deeper. With no movement the distance term is zero, so the distance-driven operations
+		// fall back to the time-driven amount, which is exactly what they did before for a brush
+		// that is not moving.
 		if (travelled <= 0.0f)
 		{
 			ApplyBrushStroke(terrain::BrushStroke::At(m_brushPosition.x, m_brushPosition.z),
-				innerRadius, outerRadius, factor, deltaSeconds);
+				innerRadius, outerRadius, factor, deltaSeconds, deltaSeconds);
 		}
 
 		m_pendingStrokePoints.clear();
@@ -1374,10 +1391,19 @@ namespace mmo
 		return std::min(static_cast<uint32>(length / spacing) + 1, maxStamps);
 	}
 
-	void TerrainEditMode::ApplyBrushStroke(const terrain::BrushStroke& stroke, const float innerRadius, const float outerRadius, const float factor, const float strength)
+	void TerrainEditMode::ApplyBrushStroke(const terrain::BrushStroke& stroke, const float innerRadius, const float outerRadius, const float factor, const float deltaSeconds, const float passFraction)
 	{
 		if (m_type == TerrainEditType::Deform)
 		{
+			// Deform is driven by time, not by distance. None of these operations converge the way
+			// painting does, so a normalised pass is the wrong quantity for all four of them:
+			// sculpt and noise add without bound, which makes one flick of the cursor deposit as
+			// much as a full second of dwell, and smooth and flatten interpolate toward a target by
+			// factor * power, which above 1 overshoots straight through it and inverts the terrain
+			// it was meant to settle. Dwell time is also the control an artist expects here — how
+			// long the brush sits over a spot is how far it moves.
+			const float strength = deltaSeconds;
+
 			switch (m_deformMode)
 			{
 			case TerrainDeformMode::Sculpt:
@@ -1395,9 +1421,8 @@ namespace mmo
 			case TerrainDeformMode::Noise:
 			{
 				// ApplyNoise displaces by a fixed amplitude instead of integrating over the frame
-				// delta, so sweeping it is what keeps a stroke from applying it repeatedly at full
-				// strength. fBm is deterministic per world position, so overlapping applications
-				// accumulate rather than cancel.
+				// delta, so the caller has to do the integrating. fBm is deterministic per world
+				// position, so overlapping applications accumulate rather than cancel.
 				m_terrain.ApplyNoise(stroke, innerRadius, outerRadius, m_noiseAmplitude * factor * strength, m_noiseFrequency,
 					m_noiseOctaves, m_noisePersistence);
 			} break;
@@ -1409,6 +1434,10 @@ namespace mmo
 		}
 		else if (m_type == TerrainEditType::Paint)
 		{
+			// Painting blends coverage toward a target, so overlapping applications saturate and
+			// the distance-driven pass is what keeps a stroke even at any cursor speed.
+			const float strength = passFraction;
+
 			if (m_useBrushMask && !m_brushMaskData.empty())
 			{
 				// A mask is a stamp: its UVs are anchored on one footprint, so it cannot be swept
@@ -1455,7 +1484,8 @@ namespace mmo
 		}
 		else if (m_type == TerrainEditType::VertexShading)
 		{
-			m_terrain.Color(stroke, innerRadius, outerRadius, m_terrainBrushPower * factor * strength, m_selectedColor);
+			// Vertex colour blends toward the selected colour, so it saturates like painting does.
+			m_terrain.Color(stroke, innerRadius, outerRadius, m_terrainBrushPower * factor * passFraction, m_selectedColor);
 		}
 		else if (m_type == TerrainEditType::Holes)
 		{
