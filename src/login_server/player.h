@@ -3,6 +3,7 @@
 #pragma once
 
 #include "player_manager.h"
+#include "database.h"
 
 #include "base/non_copyable.h"
 #include "auth_protocol/auth_protocol.h"
@@ -23,7 +24,6 @@
 
 namespace mmo
 {
-	class AsyncDatabase;
 	class RealmManager;
 
 
@@ -114,8 +114,11 @@ namespace mmo
 	private:
 		PlayerManager &m_manager;
 		RealmManager &m_realmManager;
-		AsyncDatabase &m_database;
 		std::shared_ptr<Client> m_connection;
+		/// This session's view of the database. Held by value rather than by reference because it
+		/// is not the server's shared instance: its results are bound to this connection's strand.
+		/// See MakeStrandBoundDatabase. Declared after m_connection, which it is built from.
+		AsyncDatabase m_database;
 		std::string m_address;					// IP address in string format
 		std::string m_accountName;				// Account name in uppercase letters
 		auth::AuthLocale m_locale;				// Client language

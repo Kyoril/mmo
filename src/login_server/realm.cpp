@@ -2,6 +2,7 @@
 
 #include "realm.h"
 #include "database.h"
+#include "strand_bound_database.h"
 
 #include "base/constants.h"
 #include "base/sha1.h"
@@ -26,8 +27,8 @@ namespace mmo
 		const String & address,
 		TimerQueue& timerQueue)
 		: m_manager(realmManager)
-		, m_database(database)
 		, m_connection(std::move(connection))
+		, m_database(MakeStrandBoundDatabase(database, m_connection))
 		, m_address(address)
 		, m_authenticated(false)
 		, m_pingTimeoutCountdown(timerQueue)

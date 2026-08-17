@@ -5,6 +5,7 @@
 #include "realm_manager.h"
 #include "player_manager.h"
 #include "realm.h"
+#include "strand_bound_database.h"
 
 #include "base/constants.h"
 #include "base/sha1.h"
@@ -29,8 +30,8 @@ namespace mmo
 		const String & address)
 		: m_manager(playerManager)
 		, m_realmManager(realmManager)
-		, m_database(database)
 		, m_connection(std::move(connection))
+		, m_database(MakeStrandBoundDatabase(database, m_connection))
 		, m_address(address)
 	{
 		m_connection->setListener(*this);
