@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <csignal>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -449,12 +450,19 @@ namespace mmo
 #else
 		// A stack overflow raises SIGSEGV with no usable stack left, so the handler has to run on
 		// its own. Without this the one crash class the AI recursion produces cannot be reported.
-		static char alternateStack[SIGSTKSZ < 65536 ? 65536 : SIGSTKSZ];
+		// The size is a fixed constant rather than SIGSTKSZ: since glibc 2.34 that macro expands to
+		// a sysconf() call, which cannot size an array. 256 KiB clears the runtime minimum on every
+		// platform we build for, including AArch64 where SVE inflates it.
+		alignas(alignof(std::max_align_t)) static char alternateStack[256 * 1024];
 		stack_t signalStack = {};
 		signalStack.ss_sp = alternateStack;
 		signalStack.ss_size = sizeof(alternateStack);
 		signalStack.ss_flags = 0;
-		sigaltstack(&signalStack, nullptr);
+		if (sigaltstack(&signalStack, nullptr) != 0)
+		{
+			// Only costs the stack overflow report, so carry on with the remaining handlers.
+			WLOG("Failed to install alternate signal stack, stack overflows will not be reported");
+		}
 
 		struct sigaction action = {};
 		action.sa_handler = OnFatalSignal;
