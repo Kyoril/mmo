@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -37,6 +38,12 @@ namespace mmo
 			e2e_exit_code::Type abortCode { e2e_exit_code::ScenarioFailed };
 			bool aborted { false };
 			uint64 selectedTarget { 0 };
+
+			/// Resolved auto-attack swings by our character, keyed by victim guid. A swing counts
+			/// whether or not it dealt damage: the server resolves a dodge or a miss into the same
+			/// AttackerStateUpdate as a hit, and swing cadence is what scenarios need to measure.
+			/// Health is not a substitute -- a creature can heal between swings.
+			std::map<uint64, uint32> meleeSwings;
 
 			/// A second session on the same account, created by LoginElsewhere. Kept alive for the
 			/// rest of the scenario so its connection is not torn down while the first session is
@@ -96,6 +103,23 @@ namespace mmo
 				return 0;
 			}
 			return std::strtoull(guid.c_str(), nullptr, 0);
+		}
+
+		/// Names an attack swing event for the transcript. The server volunteers the reason a
+		/// swing did not connect, but a scenario only ever sees the consequence -- health that
+		/// stops dropping -- so an unrecorded swing error reads as a broken swing timer.
+		const char* attackSwingEventName(const AttackSwingEvent event)
+		{
+			switch (event)
+			{
+			case attack_swing_event::NotStanding: return "not_standing";
+			case attack_swing_event::OutOfRange: return "out_of_range";
+			case attack_swing_event::CantAttack: return "cant_attack";
+			case attack_swing_event::WrongFacing: return "wrong_facing";
+			case attack_swing_event::TargetDead: return "target_dead";
+			case attack_swing_event::Success: return "success";
+			default: return "unknown";
+			}
 		}
 
 		const BotUnit* findUnit(const std::string& guidStr)
@@ -365,6 +389,15 @@ namespace mmo
 		{
 			const BotUnit* unit = findUnit(guid);
 			return unit && !unit->IsDead();
+		}
+
+		/// Counts auto-attack swings our character has resolved against `guid`, damaging or not.
+		/// Cadence is the only honest measure of the swing timer: health can be dodged away, and a
+		/// creature that goes untouched for long enough resets its encounter and heals back up.
+		int32 luaMeleeSwingCount(const std::string& guid)
+		{
+			const auto it = g_runtime->meleeSwings.find(guidFromString(guid));
+			return it == g_runtime->meleeSwings.end() ? 0 : static_cast<int32>(it->second);
 		}
 
 		std::string luaGetName(const std::string& guid)
@@ -1047,6 +1080,7 @@ namespace mmo
 				luabind::def_lambda("GetPower", &luaGetPower),
 				luabind::def_lambda("GetMaxPower", &luaGetMaxPower),
 				luabind::def_lambda("IsAlive", &luaIsAlive),
+				luabind::def_lambda("MeleeSwingCount", &luaMeleeSwingCount),
 				luabind::def_lambda("GetName", &luaGetName),
 				luabind::def_lambda("GetPosX", &luaGetPosX),
 				luabind::def_lambda("GetPosY", &luaGetPosY),
@@ -1188,6 +1222,41 @@ namespace mmo
 		runtime.transcript = &transcript;
 		runtime.deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
 		g_runtime = &runtime;
+
+		// Combat feedback the server sends unprompted. Without this the only trace a failing swing
+		// leaves in a transcript is health that stops dropping, which is indistinguishable from a
+		// swing timer that never re-arms -- the two have very different causes.
+		BotRealmConnector& realm = session.GetRealm();
+		const scoped_connection swingErrorRecorder { realm.AttackSwingError.connect(
+			[&transcript](const AttackSwingEvent event)
+			{
+				transcript.Event("attack_swing_error", { { "reason", attackSwingEventName(event) } });
+			}) };
+		const scoped_connection attackStartedRecorder { realm.AttackStarted.connect(
+			[&transcript](const uint64 attacker, const uint64 victim)
+			{
+				transcript.Event("attack_started",
+					{ { "attacker", guidToString(attacker) }, { "victim", guidToString(victim) } });
+			}) };
+		const scoped_connection attackStoppedRecorder { realm.AttackStopped.connect(
+			[&transcript](const uint64 attacker)
+			{
+				transcript.Event("attack_stopped", { { "attacker", guidToString(attacker) } });
+			}) };
+		const scoped_connection attackHitRecorder { realm.AttackHit.connect(
+			[&transcript, &runtime, &realm](const uint64 attacker, const uint64 victim,
+				const uint32 damage, const uint32 hitInfo, const uint32 victimState)
+			{
+				// Read live rather than captured: Reconnect() re-selects the character mid-scenario.
+				if (attacker == realm.GetSelectedGuid())
+				{
+					++runtime.meleeSwings[victim];
+				}
+
+				transcript.Event("attack_hit",
+					{ { "attacker", guidToString(attacker) }, { "victim", guidToString(victim) },
+					  { "damage", damage }, { "hit_info", hitInfo }, { "victim_state", victimState } });
+			}) };
 
 		lua_State* state = luaL_newstate();
 		luaL_openlibs(state);
