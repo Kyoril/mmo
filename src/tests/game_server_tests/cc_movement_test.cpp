@@ -98,6 +98,16 @@ namespace
 		{
 			unit->SetNetUnitWatcher(&watcher);
 		}
+
+		~CCMovementPlayerFixture()
+		{
+			// The watcher is a member of this derived struct, so it is destroyed
+			// BEFORE the base fixture's unit. ~GameUnitS clears the aura list, and
+			// removing a movement-affecting aura notifies the watcher — which would
+			// be a call into a destroyed object (a pure-virtual call under gcc).
+			// Detach it while it is still alive.
+			unit->SetNetUnitWatcher(nullptr);
+		}
 	};
 }
 
