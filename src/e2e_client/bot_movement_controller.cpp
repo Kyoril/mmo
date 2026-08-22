@@ -7,12 +7,11 @@
 #include "bot_nav_service.h"
 #include "bot_unit.h"
 
+#include "base/macros.h"
 #include "game/movement_type.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 
-#include <algorithm>
-#include <cmath>
 #include <sstream>
 #include <utility>
 
@@ -20,92 +19,10 @@ namespace mmo
 {
 	namespace
 	{
-		Vector3 MoveTowards(const Vector3& current, const Vector3& target, const float maxDistance)
-		{
-			Vector3 delta = target - current;
-			const float distance = delta.GetLength();
-			if (distance <= 1e-5f || distance <= maxDistance)
-			{
-				return target;
-			}
-
-			return current + (delta / distance) * maxDistance;
-		}
-
-		Vector3 ComputePlanarStepTarget(const Vector3& current, const Vector3& target, const float stepDistance)
-		{
-			const float planarDistance = PlanarDistance(current, target);
-			if (planarDistance <= 1e-5f || planarDistance <= stepDistance)
-			{
-				return target;
-			}
-
-			const float t = stepDistance / planarDistance;
-			return Vector3(
-				current.x + (target.x - current.x) * t,
-				current.y + (target.y - current.y) * t,
-				current.z + (target.z - current.z) * t);
-		}
-
 		std::size_t FindInitialWaypointIndex(const std::vector<Vector3>& path)
 		{
 			return path.size() > 1 ? 1u : 0u;
 		}
-	}
-
-	BotLowLevelMovementOutput AdvanceBotLowLevelMovement(const BotLowLevelMovementInput& input)
-	{
-		BotLowLevelMovementOutput output;
-		output.movement = input.movement;
-		output.runtime = input.runtime;
-
-		output.distanceToSteeringTarget = PlanarDistance(input.movement.position, input.steeringTarget);
-		if (output.distanceToSteeringTarget <= input.acceptanceRadius)
-		{
-			output.runtime.velocity = Vector3::Zero;
-			output.reachedSteeringTarget = true;
-			return output;
-		}
-
-		const GameTime elapsedMs = input.now >= input.runtime.lastSimulationTime
-			? input.now - input.runtime.lastSimulationTime
-			: 0;
-		if (elapsedMs == 0)
-		{
-			return output;
-		}
-
-		const float deltaSeconds = static_cast<float>(elapsedMs) / 1000.0f;
-		const Vector3 direction = SafeNormalizePlanar(input.steeringTarget - input.movement.position);
-		const Vector3 desiredVelocity = direction * std::max(0.0f, input.maxSpeed);
-		const float maxVelocityDelta = std::max(0.0f, input.maxAcceleration) * deltaSeconds;
-		output.runtime.velocity = MoveTowards(output.runtime.velocity, desiredVelocity, maxVelocityDelta);
-
-		const float speed = FlattenToGround(output.runtime.velocity).GetLength();
-		if (speed <= 1e-5f)
-		{
-			output.runtime.lastSimulationTime = input.now;
-			return output;
-		}
-
-		const float maxStepDistance = speed * deltaSeconds;
-		const Vector3 newPosition = ComputePlanarStepTarget(input.movement.position, input.steeringTarget, maxStepDistance);
-		output.moved = PlanarDistanceSquared(input.movement.position, newPosition) > 1e-6f;
-		output.movement.position = newPosition;
-		output.movement.facing = ComputeFacingTo(input.movement.position, input.steeringTarget, input.movement.facing);
-		output.movement.timestamp = input.now;
-		output.runtime.lastSimulationTime = input.now;
-
-		if (output.moved)
-		{
-			output.runtime.lastProgressPosition = output.movement.position;
-			output.runtime.lastProgressTime = input.now;
-			output.runtime.hasLastProgressPosition = true;
-		}
-
-		output.distanceToSteeringTarget = PlanarDistance(output.movement.position, input.steeringTarget);
-		output.reachedSteeringTarget = output.distanceToSteeringTarget <= input.acceptanceRadius;
-		return output;
 	}
 
 	BotMovementController::BotMovementController(BotMovementSettings settings)
@@ -160,14 +77,26 @@ namespace mmo
 			return m_status;
 		}
 
-		while (m_nextWaypointIndex < m_path.size()
-			&& PlanarDistance(movement.position, m_path[m_nextWaypointIndex]) <= m_settings.waypointAcceptanceRadius)
+		// Resolving the waypoint and the point to steer at together keeps the two in step: the
+		// steering target the bot stops on is the same point that decides the waypoint is reached.
+		const BotPathFollowState follow = AdvanceBotPathFollowing(
+			m_path,
+			m_nextWaypointIndex,
+			movement.position,
+			m_settings.waypointAcceptanceRadius,
+			m_settings.turnSmoothingThresholdRadians,
+			m_settings.turnSmoothingDistance);
+
+		// Bounded by the live path as well as by the resolved index: WaypointAdvanced is a public
+		// signal, and a subscriber is free to call Stop() or MoveTo() and leave m_path empty
+		// underneath us.
+		while (m_nextWaypointIndex < follow.waypointIndex && m_nextWaypointIndex < m_path.size())
 		{
 			++m_nextWaypointIndex;
 			WaypointAdvanced(BuildEvent(context, m_status, "waypoint_reached"));
 		}
 
-		if (m_nextWaypointIndex >= m_path.size())
+		if (follow.exhausted)
 		{
 			EmitUnreachable(context, "path_exhausted");
 			return m_status;
@@ -180,13 +109,25 @@ namespace mmo
 			&& now - m_runtime.lastProgressTime >= m_settings.nonProgressTimeoutMs
 			&& PlanarDistance(m_runtime.lastProgressPosition, movement.position) < m_settings.progressDistanceEpsilon)
 		{
+			// Guaranteed by the exhaustion check above, and the log below relies on it.
+			ASSERT(m_nextWaypointIndex < m_path.size());
+
+			// A stall says nothing about where it happened, which is what any investigation needs
+			// first - so spell the geometry out while the state is still around.
+			WLOG("Bot movement stalled at (" << movement.position.x << ", " << movement.position.y << ", " << movement.position.z
+				<< ") heading for waypoint " << m_nextWaypointIndex << " of " << m_path.size()
+				<< " at (" << m_path[m_nextWaypointIndex].x << ", " << m_path[m_nextWaypointIndex].y << ", " << m_path[m_nextWaypointIndex].z
+				<< "), steering at (" << follow.steeringTarget.x << ", " << follow.steeringTarget.y << ", " << follow.steeringTarget.z
+				<< "), distance " << PlanarDistance(movement.position, follow.steeringTarget)
+				<< " with acceptance radius " << m_settings.waypointAcceptanceRadius);
+
 			SetStatus(BotMovementStatus::Stuck, "non_progress");
 			TargetUnreachable(BuildEvent(context, m_status, m_lastReason));
 			StopLowLevel(context, m_lastReason, true);
 			return m_status;
 		}
 
-		const Vector3 steeringTarget = ResolveSteeringTarget();
+		const Vector3 steeringTarget = follow.steeringTarget;
 		movement.facing = ComputeFacingTo(movement.position, steeringTarget, movement.facing);
 
 		if (!m_runtime.isMoving && !context.IsMoving())
@@ -303,20 +244,6 @@ namespace mmo
 		m_mapId = mapId;
 		m_nextWaypointIndex = FindInitialWaypointIndex(m_path);
 		return true;
-	}
-
-	Vector3 BotMovementController::ResolveSteeringTarget() const
-	{
-		if (m_path.empty())
-		{
-			return m_target;
-		}
-
-		return ComputeSmoothedPathTarget(
-			m_path,
-			m_nextWaypointIndex,
-			m_settings.turnSmoothingThresholdRadians,
-			m_settings.turnSmoothingDistance);
 	}
 
 	float BotMovementController::ResolveRunSpeed(const BotContext& context) const

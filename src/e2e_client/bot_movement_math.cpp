@@ -9,6 +9,36 @@
 
 namespace mmo
 {
+	namespace
+	{
+		Vector3 MoveTowards(const Vector3& current, const Vector3& target, const float maxDistance)
+		{
+			Vector3 delta = target - current;
+			const float distance = delta.GetLength();
+			if (distance <= 1e-5f || distance <= maxDistance)
+			{
+				return target;
+			}
+
+			return current + (delta / distance) * maxDistance;
+		}
+
+		Vector3 ComputePlanarStepTarget(const Vector3& current, const Vector3& target, const float stepDistance)
+		{
+			const float planarDistance = PlanarDistance(current, target);
+			if (planarDistance <= 1e-5f || planarDistance <= stepDistance)
+			{
+				return target;
+			}
+
+			const float t = stepDistance / planarDistance;
+			return Vector3(
+				current.x + (target.x - current.x) * t,
+				current.y + (target.y - current.y) * t,
+				current.z + (target.z - current.z) * t);
+		}
+	}
+
 	bool IsFiniteVector(const Vector3& value)
 	{
 		return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
@@ -156,5 +186,89 @@ namespace mmo
 		const float easedTurn = EaseInOutCubic(normalizedTurn);
 		const float trimDistance = maxTrimDistance * easedTurn;
 		return TrimSegmentEnd(previous, current, trimDistance);
+	}
+
+	BotPathFollowState AdvanceBotPathFollowing(
+		const std::vector<Vector3>& points,
+		const std::size_t waypointIndex,
+		const Vector3& position,
+		const float acceptanceRadius,
+		const float turnThresholdRadians,
+		const float maxTrimDistance)
+	{
+		BotPathFollowState state;
+		state.waypointIndex = waypointIndex;
+
+		while (state.waypointIndex < points.size())
+		{
+			const Vector3 steeringTarget = ComputeSmoothedPathTarget(
+				points, state.waypointIndex, turnThresholdRadians, maxTrimDistance);
+			if (PlanarDistance(position, steeringTarget) > acceptanceRadius)
+			{
+				state.steeringTarget = steeringTarget;
+				return state;
+			}
+
+			++state.waypointIndex;
+		}
+
+		state.exhausted = true;
+		state.steeringTarget = points.empty() ? position : points.back();
+		return state;
+	}
+
+	BotLowLevelMovementOutput AdvanceBotLowLevelMovement(const BotLowLevelMovementInput& input)
+	{
+		BotLowLevelMovementOutput output;
+		output.movement = input.movement;
+		output.runtime = input.runtime;
+
+		output.distanceToSteeringTarget = PlanarDistance(input.movement.position, input.steeringTarget);
+		if (output.distanceToSteeringTarget <= input.acceptanceRadius)
+		{
+			output.runtime.velocity = Vector3::Zero;
+			output.reachedSteeringTarget = true;
+			return output;
+		}
+
+		const GameTime elapsedMs = input.now >= input.runtime.lastSimulationTime
+			? input.now - input.runtime.lastSimulationTime
+			: 0;
+		if (elapsedMs == 0)
+		{
+			return output;
+		}
+
+		const float deltaSeconds = static_cast<float>(elapsedMs) / 1000.0f;
+		const Vector3 direction = SafeNormalizePlanar(input.steeringTarget - input.movement.position);
+		const Vector3 desiredVelocity = direction * std::max(0.0f, input.maxSpeed);
+		const float maxVelocityDelta = std::max(0.0f, input.maxAcceleration) * deltaSeconds;
+		output.runtime.velocity = MoveTowards(output.runtime.velocity, desiredVelocity, maxVelocityDelta);
+
+		const float speed = FlattenToGround(output.runtime.velocity).GetLength();
+		if (speed <= 1e-5f)
+		{
+			output.runtime.lastSimulationTime = input.now;
+			return output;
+		}
+
+		const float maxStepDistance = speed * deltaSeconds;
+		const Vector3 newPosition = ComputePlanarStepTarget(input.movement.position, input.steeringTarget, maxStepDistance);
+		output.moved = PlanarDistanceSquared(input.movement.position, newPosition) > 1e-6f;
+		output.movement.position = newPosition;
+		output.movement.facing = ComputeFacingTo(input.movement.position, input.steeringTarget, input.movement.facing);
+		output.movement.timestamp = input.now;
+		output.runtime.lastSimulationTime = input.now;
+
+		if (output.moved)
+		{
+			output.runtime.lastProgressPosition = output.movement.position;
+			output.runtime.lastProgressTime = input.now;
+			output.runtime.hasLastProgressPosition = true;
+		}
+
+		output.distanceToSteeringTarget = PlanarDistance(output.movement.position, input.steeringTarget);
+		output.reachedSteeringTarget = output.distanceToSteeringTarget <= input.acceptanceRadius;
+		return output;
 	}
 }

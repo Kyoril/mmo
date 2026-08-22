@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "base/typedefs.h"
+#include "game/movement_info.h"
 #include "math/radian.h"
 #include "math/vector3.h"
 
@@ -32,4 +34,83 @@ namespace mmo
 		std::size_t currentIndex,
 		float turnThresholdRadians,
 		float maxTrimDistance);
+
+	/// @brief Which waypoint the bot is heading for, and the exact point it steers at.
+	struct BotPathFollowState final
+	{
+		/// @brief Index of the waypoint being headed for; equals the point count once the path is used up.
+		std::size_t waypointIndex { 0 };
+		/// @brief The point to steer at: the waypoint, pulled back along the incoming segment on turns.
+		///        Meaningless when @ref exhausted is set - it is then a point the bot already stands
+		///        on, and must not be fed to AdvanceBotLowLevelMovement.
+		Vector3 steeringTarget { Vector3::Zero };
+		/// @brief True once every waypoint has been passed.
+		bool exhausted { false };
+	};
+
+	/// @brief Picks the waypoint to head for from where the bot currently stands, skipping the ones
+	///        it is already standing on.
+	///
+	/// Acceptance is measured against the smoothed steering target, not against the raw waypoint,
+	/// because the steering target is the point the bot actually steers at and stops on. Measuring
+	/// the two with different points leaves a band as wide as the corner trim in which the bot has
+	/// stopped on its steering target while the waypoint does not yet count as reached - and path
+	/// following deadlocks there, because nothing in that state can ever change.
+	///
+	/// The trade is that a waypoint is now passed from up to acceptanceRadius + trim behind it,
+	/// so corners are cut by that much more than the smoothing alone would cut them.
+	/// @param points The path to follow.
+	/// @param waypointIndex The waypoint currently being headed for.
+	/// @param position The bot's current position.
+	/// @param acceptanceRadius Planar distance at which a steering target counts as reached.
+	/// @param turnThresholdRadians Turn deviation below which a corner is not smoothed.
+	/// @param maxTrimDistance How far a corner may be cut short at most.
+	/// @return The waypoint to head for and the point to steer at.
+	[[nodiscard]] BotPathFollowState AdvanceBotPathFollowing(
+		const std::vector<Vector3>& points,
+		std::size_t waypointIndex,
+		const Vector3& position,
+		float acceptanceRadius,
+		float turnThresholdRadians,
+		float maxTrimDistance);
+
+	/// @brief Per-tick state the low level movement simulation carries between ticks.
+	struct BotMovementRuntimeState final
+	{
+		Vector3 velocity { Vector3::Zero };
+		Vector3 lastProgressPosition { Vector3::Zero };
+		GameTime lastProgressTime { 0 };
+		GameTime lastSimulationTime { 0 };
+		GameTime lastHeartbeatTime { 0 };
+		bool hasLastProgressPosition { false };
+		bool isMoving { false };
+	};
+
+	/// @brief Input of a single low level movement tick.
+	struct BotLowLevelMovementInput final
+	{
+		MovementInfo movement;
+		BotMovementRuntimeState runtime;
+		Vector3 steeringTarget { Vector3::Zero };
+		GameTime now { 0 };
+		float maxSpeed { 7.0f };
+		float maxAcceleration { 40.48f };
+		float acceptanceRadius { 0.75f };
+	};
+
+	/// @brief Result of a single low level movement tick.
+	struct BotLowLevelMovementOutput final
+	{
+		MovementInfo movement;
+		BotMovementRuntimeState runtime;
+		bool reachedSteeringTarget { false };
+		bool moved { false };
+		float distanceToSteeringTarget { 0.0f };
+	};
+
+	/// @brief Accelerates the bot towards its steering target and integrates one tick of movement.
+	///
+	/// Standing on the steering target stops the bot dead, so callers must make sure the steering
+	/// target they pass is one the bot is not already standing on - see AdvanceBotPathFollowing.
+	[[nodiscard]] BotLowLevelMovementOutput AdvanceBotLowLevelMovement(const BotLowLevelMovementInput& input);
 }
