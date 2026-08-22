@@ -13,7 +13,9 @@
 
 #include "brush_stroke.h"
 #include "constants.h"
+#include "flatten_plane.h"
 #include "terrain_region_snapshot.h"
+
 
 namespace mmo
 {
@@ -324,14 +326,24 @@ namespace mmo
 			/// @param power The strength of the smoothing effect.
 			void Smooth(const BrushStroke& stroke, float innerRadius, float outerRadius, float power);
 
-			/// @brief Flattens the terrain to a target height in a brush area.
-			/// @param brushCenterX World X position of the brush center.
-			/// @param brushCenterZ World Z position of the brush center.
+			/// @brief Drives the terrain in a brush area toward a reference plane.
+			///
+			/// The plane replaces the single target height this used to take. A level plane
+			/// behaves exactly as that did; a sloped one produces a ramp in the same stroke,
+			/// because every vertex resolves against the plane's height at its own position
+			/// rather than against one shared number.
+			///
+			/// @param stroke The swept brush footprint.
 			/// @param innerRadius The inner radius of the brush where full effect is applied.
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param power The strength of the flattening effect.
-			/// @param targetHeight The target height to flatten to.
-			void Flatten(const BrushStroke& stroke, float innerRadius, float outerRadius, float power, float targetHeight);
+			/// @param plane The reference plane to drive the terrain toward.
+			/// @param mode Whether the brush may only raise, only lower, or do both.
+			/// @param hard True to land on the plane in a single pass at full brush strength
+			///             instead of easing toward it over the time the brush dwells.
+			void Flatten(const BrushStroke& stroke, float innerRadius, float outerRadius, float power,
+				const FlattenPlane& plane, flatten_mode::Type mode, bool hard);
+
 
 			/// @brief Applies Perlin noise-based height displacement in a brush area.
 			/// @param brushCenterX World X position of the brush center.

@@ -72,6 +72,22 @@ namespace mmo
 			bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera) override;
 			// ~ End Renderable
 
+			/// @brief Quadrant coordinate of this batch within its page (0 or 1).
+			[[nodiscard]] uint32 GetQuadX() const { return m_quadX; }
+
+			/// @copydoc GetQuadX
+			[[nodiscard]] uint32 GetQuadY() const { return m_quadY; }
+
+			/// @brief Rebuilds the merged geometry after the member tiles' heights changed.
+			///
+			/// The merged vertex buffer is a snapshot of the members taken when the batch was
+			/// built, so a deform that goes through Page::UpdateTiles leaves both the geometry and
+			/// the bounds behind. Only the editor deforms loaded terrain, and it does so outside
+			/// the render pass, but the previous vertex data is retired rather than destroyed for
+			/// the same reason the index data is â€” a render operation may still point at it.
+			void NotifyTilesChanged();
+
+
 		private:
 			/// @brief Builds the merged vertex buffer from the member tiles, remapping UVs into
 			///        quadrant splat-map space, and computes the batch bounds.
@@ -95,7 +111,13 @@ namespace mmo
 
 			std::unique_ptr<VertexData> m_vertexData;
 			VertexBufferPtr m_vertexBuffer;
+
+			/// Previous vertex data, kept alive for one rebuild generation for the same reason as
+			/// m_retiredIndexData below.
+			std::unique_ptr<VertexData> m_retiredVertexData;
+
 			std::unique_ptr<IndexData> m_indexData;
+
 
 			/// Previous index data, kept alive for one rebuild generation: the render operation
 			/// captures the index-data pointer before PreRender (where rebuilds happen) runs.

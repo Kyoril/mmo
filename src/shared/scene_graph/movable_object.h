@@ -146,6 +146,19 @@ namespace mmo
 
 		[[nodiscard]] virtual const AABB& GetWorldBoundingBox(bool derive = false) const;
 
+		/// @brief Discards the cached world bounding box so the next derive recomputes it.
+		///
+		/// The world box is derived once and then cached, and for an object that never moves
+		/// nothing else invalidates it. A subclass whose *local* bounds change in place -- terrain
+		/// tiles rewriting their heights, for one -- has to say so here, or it keeps being culled
+		/// against the box it had when it was first rendered. Call this rather than assigning to
+		/// m_worldAABBDirty directly: a member of that name declared in a subclass silently shadows
+		/// the base one, and the assignment then goes nowhere.
+		void InvalidateWorldBounds() const
+		{
+			m_worldAABBDirty = true;
+		}
+
 		void SetRenderQueueGroup(uint8 queueId);
 
 		void SetRenderQueueGroupAndPriority(uint8 queueId, uint16 priority);

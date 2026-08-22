@@ -126,6 +126,20 @@ namespace mmo
 			m_vertexDotsNode->AttachObject(*m_vertexDots);
 		}
 
+		// Flatten's reference plane preview: a translucent disc the size of the brush.
+		m_flattenPlaneOverlay = m_worldEditor.CreateManualRenderObject("TerrainFlattenPlane");
+		if (m_flattenPlaneOverlay)
+		{
+			m_flattenPlaneOverlay->SetCastShadows(false);
+			m_flattenPlaneOverlay->SetQueryFlags(0);
+		}
+
+		m_flattenPlaneOverlayNode = m_worldEditor.CreateChildSceneNode();
+		if (m_flattenPlaneOverlayNode && m_flattenPlaneOverlay)
+		{
+			m_flattenPlaneOverlayNode->AttachObject(*m_flattenPlaneOverlay);
+		}
+
 		// Area-ID overlay: coloured tile outlines shown in Area edit mode.
 		m_areaOverlay = m_worldEditor.CreateManualRenderObject("TerrainAreaOverlay");
 		if (m_areaOverlay)
@@ -179,11 +193,22 @@ namespace mmo
 			m_worldEditor.DestroyManualRenderObject(*m_vertexDots);
 			m_vertexDots = nullptr;
 		}
+		if (m_flattenPlaneOverlay)
+		{
+			m_worldEditor.DestroyManualRenderObject(*m_flattenPlaneOverlay);
+			m_flattenPlaneOverlay = nullptr;
+		}
+		if (m_flattenPlaneOverlayNode)
+		{
+			m_worldEditor.DestroySceneNode(*m_flattenPlaneOverlayNode);
+			m_flattenPlaneOverlayNode = nullptr;
+		}
 		if (m_vertexDotsNode)
 		{
 			m_worldEditor.DestroySceneNode(*m_vertexDotsNode);
 			m_vertexDotsNode = nullptr;
 		}
+
 		if (m_areaOverlay)
 		{
 			m_worldEditor.DestroyManualRenderObject(*m_areaOverlay);
@@ -768,6 +793,223 @@ namespace mmo
 		m_terrain.Stamp(m_brushPosition.x, m_brushPosition.z, radius, strength, sampler);
 	}
 
+	void TerrainEditMode::PickFlattenPlanePoint(const bool asSlopePoint)
+	{
+		if (!m_brushPositionValid)
+		{
+			return;
+		}
+
+		// Take the height from the interpolated surface rather than from the raycast hit. The hit
+		// lands wherever the ray met a triangle, which on a coarse slope can sit a little off the
+		// surface the vertices actually describe, and a reference plane picked slightly wrong is
+		// then baked into every stroke that follows.
+		Vector3 point = m_brushPosition;
+		point.y = m_terrain.GetSmoothHeightAt(point.x, point.z);
+
+		if (asSlopePoint)
+		{
+			m_flattenPlane = terrain::FlattenPlane::FromTwoPoints(m_flattenPlane.anchor, point);
+		}
+		else
+		{
+			m_flattenPlane.anchor = point;
+		}
+
+		UpdateFlattenPlaneOverlay();
+	}
+
+	void TerrainEditMode::DrawFlattenDetails()
+	{
+		static const char* s_flattenModeStrings[] = {
+			"Raise and Lower",
+			"Raise Only",
+			"Lower Only"
+		};
+
+		static_assert(std::size(s_flattenModeStrings) == static_cast<uint32>(terrain::flatten_mode::Count_),
+			"There needs to be one string per enum value to display!");
+
+		ImGui::Separator();
+		ImGui::Text("Reference Plane");
+
+		if (ImGui::DragFloat("Height", &m_flattenPlane.anchor.y, 0.05f, -10000.0f, 10000.0f, "%.2f"))
+		{
+			UpdateFlattenPlaneOverlay();
+		}
+
+		if (ImGui::SliderFloat("Slope", &m_flattenPlane.slopeDegrees, 0.0f, terrain::MaxFlattenSlopeDegrees, "%.1f deg"))
+		{
+			UpdateFlattenPlaneOverlay();
+		}
+
+		if (ImGui::SliderFloat("Direction", &m_flattenPlane.azimuthDegrees, 0.0f, 360.0f, "%.0f deg"))
+		{
+			UpdateFlattenPlaneOverlay();
+		}
+
+		ImGui::TextDisabled("Anchored at %.1f, %.1f", m_flattenPlane.anchor.x, m_flattenPlane.anchor.z);
+
+		// Lift the slope straight off the ground under the cursor, which is how a new ramp is
+		// matched to the hillside it has to continue.
+		ImGui::BeginDisabled(!m_brushPositionValid);
+		if (ImGui::Button("Pick Slope From Surface"))
+		{
+			Vector3 anchor = m_brushPosition;
+			anchor.y = m_terrain.GetSmoothHeightAt(anchor.x, anchor.z);
+			m_flattenPlane = terrain::FlattenPlane::FromNormal(anchor,
+				m_terrain.GetSmoothNormalAt(anchor.x, anchor.z));
+			UpdateFlattenPlaneOverlay();
+		}
+		ImGui::EndDisabled();
+
+		ImGui::SameLine();
+
+		// Point the descent away from the viewer, so a ramp built while flying along it runs
+		// downhill into the screen rather than off to one side.
+		if (ImGui::Button("Face Camera"))
+		{
+			const Vector3 direction = m_camera.GetDerivedDirection();
+			if (direction.x != 0.0f || direction.z != 0.0f)
+			{
+				m_flattenPlane.azimuthDegrees = terrain::FlattenPlane::NormalizeAzimuth(
+					std::atan2(direction.x, direction.z) * Rad2Deg);
+				UpdateFlattenPlaneOverlay();
+			}
+		}
+
+		ImGui::SameLine();
+
+		if (ImGui::Button("Level"))
+		{
+			m_flattenPlane.slopeDegrees = 0.0f;
+			UpdateFlattenPlaneOverlay();
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::BeginCombo("Apply To", s_flattenModeStrings[static_cast<uint32>(m_flattenMode)]))
+		{
+			for (uint32 i = 0; i < static_cast<uint32>(terrain::flatten_mode::Count_); ++i)
+			{
+				ImGui::PushID(i);
+				if (ImGui::Selectable(s_flattenModeStrings[i], i == static_cast<uint32>(m_flattenMode)))
+				{
+					m_flattenMode = static_cast<terrain::flatten_mode::Type>(i);
+
+					// The disc is tinted by mode, so the preview has to follow the choice.
+					UpdateFlattenPlaneOverlay();
+				}
+
+				ImGui::PopID();
+			}
+
+			ImGui::EndCombo();
+		}
+
+		if (m_flattenMode == terrain::flatten_mode::RaiseOnly)
+		{
+			ImGui::TextDisabled("Terrain already above the plane keeps its height.");
+		}
+		else if (m_flattenMode == terrain::flatten_mode::LowerOnly)
+		{
+			ImGui::TextDisabled("Terrain already below the plane keeps its height.");
+		}
+
+		ImGui::Checkbox("Snap to plane", &m_flattenHard);
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Land on the plane exactly in one pass instead of easing toward it "
+				"the longer the brush dwells. The falloff band between the inner and outer radius "
+				"still blends, and keeps tightening for as long as the brush sits on it, so dwell "
+				"time controls how sharp the edge of the flattened area ends up.");
+		}
+
+		ImGui::Separator();
+		ImGui::TextDisabled("Ctrl+Click: pin the plane here");
+		ImGui::TextDisabled("Ctrl+Shift+Click: tilt it through a second point");
+	}
+
+	void TerrainEditMode::UpdateFlattenPlaneOverlay()
+	{
+		if (!m_flattenPlaneOverlay)
+		{
+			return;
+		}
+
+		m_flattenPlaneOverlay->Clear();
+
+		const bool showPlane = m_type == TerrainEditType::Deform
+			&& m_deformMode == TerrainDeformMode::Flatten
+			&& m_brushPositionValid;
+
+		if (!showPlane)
+		{
+			return;
+		}
+
+		if (m_flattenPlaneOverlayNode)
+		{
+			m_flattenPlaneOverlayNode->SetPosition(Vector3::Zero);
+		}
+
+		// The disc matches the brush footprint, so what it covers is what a stroke would resolve
+		// against the plane. Its height comes from the plane rather than the terrain, which is the
+		// whole point: the gap between the disc and the ground under it is the change waiting to
+		// be made.
+		const float radius = m_terrainBrushSize;
+		const float centerX = m_brushPosition.x;
+		const float centerZ = m_brushPosition.z;
+
+		MaterialPtr mat = MaterialManager::Get().Load("Models/Engine/AxisPlaneHighlight.hmat");
+		if (!mat)
+		{
+			return;
+		}
+
+		auto triOp = m_flattenPlaneOverlay->AddTriangleListOperation(mat);
+
+		constexpr int kSegments = 48;
+		constexpr float k2Pi = 6.28318530718f;
+
+		// A raise-only plane is tinted green and a lower-only one red, so the gate that decides
+		// which half of the terrain a stroke can touch is readable without looking at the panel.
+		// ARGB, matching the other editor overlays.
+		uint32 planeColor = 0x60FFC864u;   // amber: moves terrain either way
+		if (m_flattenMode == terrain::flatten_mode::RaiseOnly)
+		{
+			planeColor = 0x6064FF64u;      // green: only lifts
+		}
+		else if (m_flattenMode == terrain::flatten_mode::LowerOnly)
+		{
+			planeColor = 0x60FF6464u;      // red: only cuts
+		}
+
+		auto planePoint = [this](const float x, const float z)
+		{
+			return Vector3(x, m_flattenPlane.HeightAt(x, z), z);
+		};
+
+		const Vector3 center = planePoint(centerX, centerZ);
+
+		for (int i = 0; i < kSegments; ++i)
+		{
+			const float a1 = (static_cast<float>(i) / kSegments) * k2Pi;
+			const float a2 = (static_cast<float>(i + 1) / kSegments) * k2Pi;
+
+			const Vector3 p1 = planePoint(centerX + radius * std::cos(a1), centerZ + radius * std::sin(a1));
+			const Vector3 p2 = planePoint(centerX + radius * std::cos(a2), centerZ + radius * std::sin(a2));
+
+			// Both windings: the plane is looked at from below as often as from above, and a
+			// single-sided fan would simply vanish whenever the camera drops under it.
+			auto& front = triOp->AddTriangle(center, p1, p2);
+			front.SetColor(planeColor);
+
+			auto& back = triOp->AddTriangle(center, p2, p1);
+			back.SetColor(planeColor);
+		}
+	}
+
 	void TerrainEditMode::DrawRegionDetails()
 	{
 		if (HasRegionSelection())
@@ -966,11 +1208,19 @@ namespace mmo
 					{
 						m_deformMode = static_cast<TerrainDeformMode>(i);
 						m_worldEditor.ClearSelection();
+
+						// Leaving Flatten has to take its plane preview with it.
+						UpdateFlattenPlaneOverlay();
 					}
 					ImGui::PopID();
 				}
 
 				ImGui::EndCombo();
+			}
+
+			if (m_deformMode == TerrainDeformMode::Flatten)
+			{
+				DrawFlattenDetails();
 			}
 
 			if (m_deformMode == TerrainDeformMode::Stamp)
@@ -1216,11 +1466,23 @@ namespace mmo
 			return;
 		}
 
+		// Flatten's plane pickers. Ctrl re-pins the plane under the cursor and Ctrl+Shift tilts it
+		// through a second point. Both are one-shot on the click rather than being re-sampled for
+		// as long as the button is held: re-pinning every frame would drag the anchor along with
+		// the cursor, which for a tilted plane means the ramp never stays where it was put.
+		if (m_type == TerrainEditType::Deform && m_deformMode == TerrainDeformMode::Flatten
+			&& ImGui::GetIO().KeyCtrl && m_brushPositionValid)
+		{
+			PickFlattenPlanePoint(ImGui::GetIO().KeyShift);
+			return;
+		}
+
 		if (m_type == TerrainEditType::Deform && m_deformMode == TerrainDeformMode::Stamp && m_brushPositionValid)
 		{
 			ApplyStamp();
 			return;
 		}
+
 
 		// One page per click, like Stamp — a fill is not a stroke, and repeating it every frame
 		// while the button is held would be pure waste.
@@ -1272,15 +1534,16 @@ namespace mmo
 		const float outerRadius = m_terrainBrushSize;
 		const float innerRadius = std::max(0.05f, m_terrainBrushSize * m_terrainBrushHardness);
 
-		// Flatten's ctrl modifier samples a reference height rather than painting, so it is
-		// not part of a stroke.
-		if (m_type == TerrainEditType::Deform && m_deformMode == TerrainDeformMode::Flatten && ImGui::IsKeyDown(ImGuiKey_LeftControl))
+		// Flatten's ctrl modifier pins the reference plane rather than painting with it. The pick
+		// itself happened on the click in OnMouseDown; holding must not paint and must not start a
+		// stroke, or releasing ctrl mid-drag would flatten everything the cursor passed over.
+		if (m_type == TerrainEditType::Deform && m_deformMode == TerrainDeformMode::Flatten && ImGui::GetIO().KeyCtrl)
 		{
-			m_deformFlattenHeight = m_terrain.GetSmoothHeightAt(m_brushPosition.x, m_brushPosition.z);
-			m_lastStrokePosition = m_brushPosition;
-			m_strokeActive = true;
+			m_strokeActive = false;
+			m_pendingStrokePoints.clear();
 			return;
 		}
+
 
 		// Area's alt modifier is an eyedropper, likewise not a stroke.
 		if (m_type == TerrainEditType::Area && ImGui::GetIO().KeyAlt)
@@ -1416,8 +1679,13 @@ namespace mmo
 			} break;
 			case TerrainDeformMode::Flatten:
 			{
-				m_terrain.Flatten(stroke, innerRadius, outerRadius, m_terrainBrushPower * factor * strength, m_deformFlattenHeight);
+				// Shift inverts the other deform modes, but a flatten has nothing to invert: the
+				// plane is the target from either side. Passing the negated factor through would
+				// drive the terrain away from the plane instead, so the magnitude is used.
+				m_terrain.Flatten(stroke, innerRadius, outerRadius,
+					m_terrainBrushPower * std::abs(factor) * strength, m_flattenPlane, m_flattenMode, m_flattenHard);
 			} break;
+
 			case TerrainDeformMode::Noise:
 			{
 				// ApplyNoise displaces by a fixed amplitude instead of integrating over the frame
@@ -1614,7 +1882,12 @@ namespace mmo
 			m_vertexDots->Clear();
 		}
 
+		// Self-guarding: it clears itself in every mode but Flatten, so it belongs above the
+		// early-outs below rather than after them.
+		UpdateFlattenPlaneOverlay();
+
 		// Water sub-mode uses its own brush circle; hide terrain overlay.
+
 		if (m_type == TerrainEditType::Water)
 		{
 			return;
