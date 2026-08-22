@@ -833,7 +833,10 @@ namespace mmo
 		ImGui::Separator();
 		ImGui::Text("Reference Plane");
 
-		ImGui::DragFloat("Height", &m_flattenPlane.anchor.y, 0.05f, -10000.0f, 10000.0f, "%.2f");
+		if (ImGui::DragFloat("Height", &m_flattenPlane.anchor.y, 0.05f, -10000.0f, 10000.0f, "%.2f"))
+		{
+			UpdateFlattenPlaneOverlay();
+		}
 
 		if (ImGui::SliderFloat("Slope", &m_flattenPlane.slopeDegrees, 0.0f, terrain::MaxFlattenSlopeDegrees, "%.1f deg"))
 		{
@@ -917,8 +920,9 @@ namespace mmo
 		if (ImGui::IsItemHovered())
 		{
 			ImGui::SetTooltip("Land on the plane exactly in one pass instead of easing toward it "
-				"the longer the brush dwells. Only the falloff band between the inner and outer "
-				"radius still blends.");
+				"the longer the brush dwells. The falloff band between the inner and outer radius "
+				"still blends, and keeps tightening for as long as the brush sits on it, so dwell "
+				"time controls how sharp the edge of the flattened area ends up.");
 		}
 
 		ImGui::Separator();

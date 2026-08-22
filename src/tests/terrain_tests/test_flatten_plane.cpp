@@ -14,7 +14,9 @@ using namespace mmo::terrain;
 
 TEST_CASE("A level plane reports its anchor height everywhere", "[flatten_plane]")
 {
-	const FlattenPlane plane = FlattenPlane::Level(42.0f);
+	// The default-constructed plane is level, which is the classic flatten target.
+	FlattenPlane plane;
+	plane.anchor = Vector3(0.0f, 42.0f, 0.0f);
 
 	CHECK(plane.slopeDegrees == Approx(0.0f));
 	CHECK(plane.HeightAt(0.0f, 0.0f) == Approx(42.0f));
@@ -172,6 +174,25 @@ TEST_CASE("Hard flattening lands on the plane in one pass at full strength", "[f
 
 	// In the falloff band it blends by weight alone.
 	CHECK(FlattenVertexHeight(0.0f, 10.0f, 0.25f, 999.0f, flatten_mode::Both, true) == Approx(2.5f));
+}
+
+TEST_CASE("Hard flattening keeps tightening the falloff band while the brush dwells", "[flatten_plane]")
+{
+	// Only the core settles in one pass. The band blends again from wherever the previous
+	// application left it, so dwelling sharpens the rim rather than holding a fixed shoulder.
+	// This is the documented contract: a passing stroke leaves a soft edge, a long one a hard one.
+	float height = 0.0f;
+	const float afterOnePass = FlattenVertexHeight(height, 10.0f, 0.25f, 1.0f, flatten_mode::Both, true);
+	CHECK(afterOnePass == Approx(2.5f));
+
+	height = afterOnePass;
+	for (int i = 0; i < 63; ++i)
+	{
+		height = FlattenVertexHeight(height, 10.0f, 0.25f, 1.0f, flatten_mode::Both, true);
+	}
+
+	CHECK(height > afterOnePass);
+	CHECK(height == Approx(10.0f).margin(0.01f));
 }
 
 TEST_CASE("Soft flattening eases toward the plane and never overshoots it", "[flatten_plane]")

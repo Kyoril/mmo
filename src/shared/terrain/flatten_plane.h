@@ -62,14 +62,6 @@ namespace mmo
 			/// toward +Z; increasing values rotate toward +X.
 			float azimuthDegrees{ 0.0f };
 
-			/// @brief Builds a level plane at a single world height, the classic flatten target.
-			/// @param height The world height of the plane.
-			/// @return A plane with no slope, anchored on the Y axis at the given height.
-			[[nodiscard]] static FlattenPlane Level(const float height)
-			{
-				return FlattenPlane{ Vector3(0.0f, height, 0.0f), 0.0f, 0.0f };
-			}
-
 			/// @brief The height of the plane above a world XZ position.
 			/// @param x World X position.
 			/// @param z World Z position.
@@ -206,9 +198,14 @@ namespace mmo
 		/// Soft flattening eases toward the plane, so dwelling longer converges on it and the
 		/// falloff band never quite arrives -- which is what blends a ramp into the ground around
 		/// it. Hard flattening drops the easing wherever the brush is at full strength, so the core
-		/// of the footprint lands exactly on the plane in a single pass and only the falloff band
-		/// blends. That is the difference between a ramp that sits in the landscape and a road or a
+		/// of the footprint lands exactly on the plane in a single pass instead of creeping toward
+		/// it. That is the difference between a ramp that sits in the landscape and a road or a
 		/// building pad that has to be genuinely flat.
+		///
+		/// Only the core is settled in one pass. The falloff band still blends by weight, and
+		/// because each application blends again from wherever the last one left it, a brush held
+		/// still goes on tightening the edge. Dwelling is therefore how hard the transition ends
+		/// up being: a passing stroke leaves a soft shoulder, a long one leaves a sharp rim.
 		///
 		/// @param currentHeight The vertex's current height.
 		/// @param targetHeight The plane's height above that vertex.
@@ -228,8 +225,9 @@ namespace mmo
 			if (hard)
 			{
 				// Inside the inner radius the falloff weight saturates at 1 and the vertex is set
-				// outright; the band outside it blends by weight alone, independent of dwell time,
-				// so that holding the brush still cannot creep the edge toward the plane.
+				// outright. The band outside it blends by weight rather than by dwell, so a single
+				// pass leaves a proper shoulder -- though repeated passes over the same band still
+				// close on the plane, which is what lets a dwell sharpen the rim deliberately.
 				const float weight = std::min(std::max(factor, 0.0f), 1.0f);
 				return currentHeight + (targetHeight - currentHeight) * weight;
 			}
