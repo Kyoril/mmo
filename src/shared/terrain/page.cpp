@@ -782,11 +782,30 @@ namespace mmo
 
 			if (!normalsOnly)
 			{
+				// A merged batch renders a snapshot of its member tiles taken when it was built, so
+				// the batches covering the touched tiles have to re-take theirs. At most four exist
+				// per page and only the overlapping ones are rebuilt, so a brush stroke confined to
+				// one quadrant does not pay for the other three.
+				for (const auto& batch : m_batches)
+				{
+					const unsigned int quadMinTileX = batch->GetQuadX() * TerrainBatch::TilesPerBatchSide;
+					const unsigned int quadMinTileZ = batch->GetQuadY() * TerrainBatch::TilesPerBatchSide;
+					const unsigned int quadMaxTileX = quadMinTileX + TerrainBatch::TilesPerBatchSide - 1;
+					const unsigned int quadMaxTileZ = quadMinTileZ + TerrainBatch::TilesPerBatchSide - 1;
+
+					if (fromTileX <= quadMaxTileX && toTileX >= quadMinTileX &&
+						fromTileZ <= quadMaxTileZ && toTileZ >= quadMinTileZ)
+					{
+						batch->NotifyTilesChanged();
+					}
+				}
+
 				UpdateBoundingBox();
 			}
 		}
 
 		void Page::UpdateTileCoverage(const int fromX, const int fromZ, const int toX, const int toZ)
+
 		{
 			if (!m_loaded)
 			{

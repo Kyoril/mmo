@@ -10,7 +10,9 @@
 #include "scene_graph/scene_node.h"
 #include "graphics/texture.h"
 #include "terrain/brush_stroke.h"
+#include "terrain/flatten_plane.h"
 #include "terrain/terrain_region_snapshot.h"
+
 #include "editors/world_editor/terrain_undo_stack.h"
 
 #include <vector>
@@ -268,6 +270,20 @@ namespace mmo
 		/// Applies one stamp at the current brush position (mouse-down driven, undoable).
 		void ApplyStamp();
 
+		/// Re-pins the Flatten reference plane from the surface under the cursor.
+		/// @param asSlopePoint False to move the anchor, keeping the current tilt. True to keep
+		///        the anchor and tilt the plane so it also runs through this second point, which
+		///        is how a ramp is drawn from one end of it to the other.
+		void PickFlattenPlanePoint(bool asSlopePoint);
+
+		/// Flatten-specific section of the details panel: the plane, its pickers, and the
+		/// raise/lower and hard/soft options.
+		void DrawFlattenDetails();
+
+		/// Rebuilds the translucent disc showing where the flatten plane sits under the cursor.
+		void UpdateFlattenPlaneOverlay();
+
+
 		/// Shared brush-mask import/invert/rotation/preview controls (used by Paint and Stamp).
 		void DrawBrushMaskControls();
 
@@ -317,7 +333,16 @@ namespace mmo
 
 		TerrainVertexShadingMode m_vertexShadingMode = TerrainVertexShadingMode::Paint;
 
-		float m_deformFlattenHeight = 0.0f;
+		/// The reference surface the Flatten brush drives terrain toward. A slope of zero makes
+		/// it the plain target height this replaced.
+		terrain::FlattenPlane m_flattenPlane;
+
+		/// Whether Flatten may only raise, only lower, or move terrain either way.
+		terrain::flatten_mode::Type m_flattenMode = terrain::flatten_mode::Both;
+
+		/// True to land on the plane in one pass at full brush strength rather than easing.
+		bool m_flattenHard = false;
+
 
 		float m_terrainBrushSize = 0.5f;
 
@@ -369,6 +394,12 @@ namespace mmo
 		ManualRenderObject* m_vertexDots = nullptr;
 		SceneNode*          m_vertexDotsNode = nullptr;
 		bool                m_brushPositionValid = false;
+
+		// Translucent preview of the Flatten reference plane, drawn as a disc the size of the
+		// brush at the height the plane has under the cursor.
+		ManualRenderObject* m_flattenPlaneOverlay = nullptr;
+		SceneNode*          m_flattenPlaneOverlayNode = nullptr;
+
 
 		// Area-ID tile overlay — coloured outlines for each assigned terrain tile.
 		ManualRenderObject* m_areaOverlay = nullptr;

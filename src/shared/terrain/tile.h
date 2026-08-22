@@ -261,8 +261,7 @@ namespace mmo
 			float m_boundingRadius { 0.0f };
 			Vector3 m_center;
 
-			bool m_worldAABBDirty { true };
-			
+
 			/// @brief LRU cache for LOD index data combinations.
 			/// 
 			/// The key encodes the local tile LOD and the LOD of its four neighbors as:

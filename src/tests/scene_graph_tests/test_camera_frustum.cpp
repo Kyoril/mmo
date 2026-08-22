@@ -3,6 +3,7 @@
 #include "catch.hpp"
 
 #include "graphics/graphics_device.h"
+#include "null_device.h"
 #include "math/math_utils.h"
 #include "math/sphere.h"
 #include "math/degree.h"
@@ -12,16 +13,7 @@
 
 using namespace mmo;
 
-namespace
-{
-	/// The graphics device is a process-wide singleton, so it is created once and
-	/// shared by all test cases in this translation unit.
-	GraphicsDevice& EnsureNullDevice()
-	{
-		static GraphicsDevice& device = GraphicsDevice::CreateNull(GraphicsDeviceDesc());
-		return device;
-	}
-}
+using mmo::test::EnsureNullDevice;
 
 // These tests pin down the camera's lazy-evaluation contract: every setter that
 // affects the projection or view matrix must invalidate the cached state, so that

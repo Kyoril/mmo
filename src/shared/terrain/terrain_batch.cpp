@@ -127,9 +127,25 @@ namespace mmo
 			return Renderable::PreRender(scene, graphicsDevice, camera);
 		}
 
+		void TerrainBatch::NotifyTilesChanged()
+		{
+			// PrepareRenderOperation captures the vertex-data pointer, so hand the outgoing
+			// generation to the retire slot instead of dropping it here. The slot is released on
+			// the next rebuild, long after any draw that could still reference it.
+			m_retiredVertexData = std::move(m_vertexData);
+
+			// Recomputes m_bounds and m_boundingRadius from the members' now-current bounds.
+			BuildVertexBuffer();
+
+			// Same trap the tiles have: nothing else invalidates a cached world box for an object
+			// that never moves, so without this the batch is culled against its old height range.
+			InvalidateWorldBounds();
+		}
+
 		void TerrainBatch::BuildVertexBuffer()
 		{
 			m_vertexData = std::make_unique<VertexData>();
+
 			m_vertexData->vertexStart = 0;
 			m_vertexData->vertexCount = static_cast<uint32>(m_tiles.size()) * constants::VerticesPerTile;
 

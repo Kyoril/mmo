@@ -943,51 +943,63 @@ namespace mmo
 					} });
 		}
 
-		void Terrain::Flatten(const BrushStroke &stroke, const float innerRadius, const float outerRadius, float power, float targetHeight)
+		void Terrain::Flatten(const BrushStroke &stroke, const float innerRadius, const float outerRadius, const float power,
+			const FlattenPlane &plane, const flatten_mode::Type mode, const bool hard)
 		{
-			// Track affected area bounds for inner vertex and tile updates
-			int minX = std::numeric_limits<int>::max();
-			int minZ = std::numeric_limits<int>::max();
-			int maxX = std::numeric_limits<int>::min();
-			int maxZ = std::numeric_limits<int>::min();
+			// Inner vertices are flattened directly rather than re-interpolated from the corners
+			// around them once the corners have moved, which is what this used to do. Interpolation
+			// cannot honour the raise/lower gate: a peak stored on an inner vertex would be dragged
+			// down to the average of its four flattened corners even in raise-only mode, quietly
+			// destroying the detail the mode exists to protect. Against a plane the two agree
+			// anyway wherever the gate does not bite, because a plane is linear and interpolating
+			// between two points on it lands back on it.
+			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear,
+				[this, &plane, power, mode, hard](const int32 vx, const int32 vy, const float factor)
+				{
+					if (vx >= 0 && vy >= 0)
+					{
+						// Outer vertex.
+						float worldX = 0.0f, worldZ = 0.0f;
+						GetGlobalVertexWorldPosition(vx, vy, &worldX, &worldZ);
 
-			// Only modify outer vertices; inner vertices will be interpolated afterward
-			TerrainVertexBrush(stroke, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power, &minX, &minZ, &maxX, &maxZ](const int32 vx, const int32 vy, const float factor)
-							   {
-								   if (vx >= 0 && vy >= 0)
-								   {
-									   // Outer vertex
-									   const float height = GetHeightAt(vx, vy);
-									   float delta = height - targetHeight;
-									   delta *= factor * power;
-									   SetHeightAt(vx, vy, height - delta);
+						const float height = GetHeightAt(vx, vy);
+						const float target = plane.HeightAt(worldX, worldZ);
+						const float newHeight = FlattenVertexHeight(height, target, factor, power, mode, hard);
 
-									   // Track bounds
-									   minX = std::min(minX, vx);
-									   minZ = std::min(minZ, vy);
-									   maxX = std::max(maxX, vx);
-									   maxZ = std::max(maxZ, vy);
-								   }
-								   // Skip inner vertices - they will be updated via interpolation
-							   });
+						if (newHeight != height)
+						{
+							SetHeightAt(vx, vy, newHeight);
+						}
+					}
+					else
+					{
+						// Inner vertex (encoded as negative indices).
+						const int32 ix = -vx - 1;
+						const int32 iz = -vy - 1;
 
-			// Update inner vertices by interpolating from modified outer vertices
-			if (minX <= maxX && minZ <= maxZ)
-			{
-				// Inner vertices exist between outer vertices, so update range [minX, maxX-1] x [minZ, maxZ-1]
-				const int innerMinX = std::max(0, minX - 1);
-				const int innerMinZ = std::max(0, minZ - 1);
-				const int innerMaxX = maxX;
-				const int innerMaxZ = maxZ;
+						// Its world position is the centre of the quad its four corners form.
+						float v0x, v0z, v1x, v1z, v2x, v2z, v3x, v3z;
+						GetGlobalVertexWorldPosition(ix, iz, &v0x, &v0z);
+						GetGlobalVertexWorldPosition(ix + 1, iz, &v1x, &v1z);
+						GetGlobalVertexWorldPosition(ix, iz + 1, &v2x, &v2z);
+						GetGlobalVertexWorldPosition(ix + 1, iz + 1, &v3x, &v3z);
+						const float worldX = (v0x + v1x + v2x + v3x) * 0.25f;
+						const float worldZ = (v0z + v1z + v2z + v3z) * 0.25f;
 
-				UpdateInnerVertices(innerMinX, innerMinZ, innerMaxX, innerMaxZ);
+						const float height = GetInnerHeightAt(ix, iz);
+						const float target = plane.HeightAt(worldX, worldZ);
+						const float newHeight = FlattenVertexHeight(height, target, factor, power, mode, hard);
 
-				// Update tiles affected by the height changes
-				UpdateTiles(minX, minZ, maxX, maxZ);
-			}
+						if (newHeight != height)
+						{
+							SetInnerHeightAt(ix, iz, newHeight);
+						}
+					}
+				});
 		}
 
-		void Terrain::Paint(const uint8 layer, const BrushStroke &stroke, const float innerRadius, const float outerRadius, const float power, const BrushMaskSampler* maskSampler)
+		void Terrain::Paint(const uint8 layer,
+ const BrushStroke &stroke, const float innerRadius, const float outerRadius, const float power, const BrushMaskSampler* maskSampler)
 		{
 			// Footprint origin and inverse extent for mapping pixel world positions to mask UVs.
 			const float maskExtent = outerRadius * 2.0f;

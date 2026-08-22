@@ -435,7 +435,12 @@ namespace mmo
 			m_bounds.max.y = maxHeight;
 			m_center = m_bounds.GetCenter();
 			m_boundingRadius = (m_bounds.max - m_center).GetLength();
-			m_worldAABBDirty = true;
+
+			// The tile never moves, so nothing else will ever invalidate the cached world box.
+			// Without this the tile keeps being frustum-culled against the bounds it had when it
+			// was first rendered, and a large enough height change makes it vanish.
+			InvalidateWorldBounds();
+
 
 		// Regenerate index data in case holes have changed
 		m_lodIndexCache.Clear();
