@@ -163,6 +163,16 @@ namespace mmo
 					   { return c == '\\' ? '/' : c; });
 		m_terrain->SetBaseFileName(baseFileName);
 
+		// Let the grid lie on the ground instead of cutting through it. The grid lives in
+		// scene_graph, which the terrain is built on top of, so it cannot reach the terrain
+		// itself -- this instance owns both and is the one place that can join them. Reading
+		// m_terrain inside the call rather than capturing it keeps this correct even though the
+		// grid was constructed first and m_hasTerrain is only known once the map has loaded.
+		m_worldGrid->SetHeightProvider([this](const float x, const float z, float& outHeight)
+			{
+				return m_hasTerrain && m_terrain && m_terrain->TryGetSmoothHeightAt(x, z, outHeight);
+			});
+
 		// Authored foliage (trees) is rendered through hardware-instanced cells, exactly like the
 		// game client, so the editor can preview the world WYSIWYG. Trees are authored map content
 		// (placed via the foliage edit mode) and are therefore always visible.
@@ -202,6 +212,7 @@ namespace mmo
 		// Create world settings panel
 		m_worldSettingsPanel = std::make_unique<WorldSettingsPanel>(
 			*m_terrain,
+			*m_worldGrid,
 			m_hasTerrain,
 			m_editMode,
 			m_terrainEditMode.get(),
@@ -571,6 +582,14 @@ namespace mmo
 			m_transformWidget->SetUseLocalTransform(!m_transformWidget->IsUsingLocalTransform());
 		}
 
+		// The terrain wireframe is a view toggle you reach for constantly while sculpting, and
+		// digging it out of the world settings panel every time is the kind of friction that stops
+		// you using it at all.
+		if (ImGui::IsKeyPressed(ImGuiKey_G, false) && m_hasTerrain && m_terrain)
+		{
+			m_terrain->SetWireframeVisible(!m_terrain->IsWireframeVisible());
+		}
+
 		// Hotkeys to change active edit mode
 		if (ImGui::IsKeyDown(ImGuiKey_F1))
 		{
@@ -686,6 +705,15 @@ namespace mmo
 			if (m_editMode)
 			{
 				m_editMode->OnMouseUp((mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+
+				// A deform stroke moves the very ground a draping grid is lying on, and the grid
+				// bakes those heights into its geometry. Re-read them once the stroke ends rather
+				// than during it: a rebuild samples the surface tens of thousands of times, which
+				// is not something to do on every frame of a drag.
+				if (m_editMode == m_terrainEditMode.get() && m_worldGrid->IsFollowingTerrain())
+				{
+					m_worldGrid->InvalidateHeights();
+				}
 			}
 
 			// TODO: Move this into the edit modes handling of OnMouseUp

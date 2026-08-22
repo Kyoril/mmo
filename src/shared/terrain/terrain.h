@@ -120,8 +120,22 @@ namespace mmo
 			/// @brief Gets the smoothly interpolated height at a world position.
 			/// @param x World X coordinate.
 			/// @param z World Z coordinate.
-			/// @return The interpolated height value.
+			/// @return The interpolated height value, or zero where there is no surface.
 			float GetSmoothHeightAt(float x, float z);
+
+			/// @brief Gets the smoothly interpolated height at a world position, reporting whether
+			///        there is a surface there at all.
+			///
+			/// GetSmoothHeightAt answers zero both for genuinely flat ground at sea level and for
+			/// a position off the map or over a page that has not streamed in. A caller that
+			/// places something on the surface has to tell those apart, or it drops whatever it is
+			/// placing to zero wherever the terrain simply is not resident yet.
+			///
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @param outHeight Receives the interpolated height when there is a surface.
+			/// @return True if a prepared page covers that position.
+			bool TryGetSmoothHeightAt(float x, float z, float& outHeight);
 
 			/// @brief Gets the position vector at a specific coordinate.
 			/// @param x The X coordinate.
