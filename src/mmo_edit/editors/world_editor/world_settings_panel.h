@@ -14,6 +14,7 @@ namespace mmo
     }
 
     class WorldEditMode;
+    class WorldGrid;
 
     /// @brief Manages the world settings panel UI.
     /// Displays world-level configuration such as terrain settings, default materials,
@@ -23,6 +24,7 @@ namespace mmo
     public:
         /// @brief Constructs the world settings panel.
         /// @param terrain Reference to the terrain system.
+        /// @param worldGrid The editor's world grid, whose terrain-following options live here.
         /// @param hasTerrain Reference to the terrain enabled flag.
         /// @param currentEditMode Pointer to current edit mode (used to check terrain mode).
         /// @param terrainEditMode Pointer to terrain edit mode for comparison.
@@ -33,6 +35,7 @@ namespace mmo
         /// @param setWaterVisibleCallback Callback invoked when the water visibility toggle changes.
         explicit WorldSettingsPanel(
             terrain::Terrain &terrain,
+            WorldGrid &worldGrid,
             bool &hasTerrain,
             WorldEditMode *&currentEditMode,
             WorldEditMode *terrainEditMode,
@@ -51,6 +54,7 @@ namespace mmo
 
     private:
         terrain::Terrain &m_terrain;
+        WorldGrid &m_worldGrid;
         bool &m_hasTerrain;
         WorldEditMode *&m_currentEditMode;
         WorldEditMode *m_terrainEditMode;

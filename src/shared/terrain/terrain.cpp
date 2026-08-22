@@ -280,6 +280,27 @@ namespace mmo
 			return value;
 		}
 
+		bool Terrain::TryGetSmoothHeightAt(const float x, const float z, float& outHeight)
+		{
+			int32 pageX, pageY;
+			if (!GetPageIndexByWorldPosition(Vector3(x, 0.0f, z), pageX, pageY))
+			{
+				return false;
+			}
+
+			const Page* page = GetPage(pageX, pageY);
+			if (!page || !page->IsPrepared())
+			{
+				return false;
+			}
+
+			outHeight = page->GetSmoothHeightAt(
+				fmod(x + constants::PageSize * pageX, terrain::constants::PageSize),
+				fmod(z + constants::PageSize * pageY, terrain::constants::PageSize));
+
+			return true;
+		}
+
 		float Terrain::GetLayerValueAt(const float x, const float z, const uint8 layer) const
 		{
 			if (layer > 3)
