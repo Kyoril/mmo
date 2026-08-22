@@ -26,6 +26,8 @@ namespace mmo
         std::function<void(bool)> setWaterVisibleCallback)
         : m_terrain(terrain), m_worldGrid(worldGrid), m_hasTerrain(hasTerrain), m_currentEditMode(currentEditMode), m_terrainEditMode(terrainEditMode), m_setEditModeCallback(std::move(setEditModeCallback)), m_showFoliage(showFoliage), m_showWater(showWater), m_setFoliageVisibleCallback(std::move(setFoliageVisibleCallback)), m_setWaterVisibleCallback(std::move(setWaterVisibleCallback))
     {
+        // Enabled by default
+        m_worldGrid.SetFollowTerrain(true);
     }
 
     void WorldSettingsPanel::Draw(const String &id)
