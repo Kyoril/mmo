@@ -229,6 +229,7 @@ TEST_CASE("A grid built over terrain that had not streamed in retries by itself"
 	grid.Update(Vector3::Zero);
 
 	REQUIRE_FALSE(provider.samples.empty());
+	CHECK(grid.GetMissingSampleCount() > 0);
 
 	// Nothing announces a page arriving, so a grid that came out flat because the ground was not
 	// resident would stay flat until the camera happened to cross into another cell. It retries
@@ -243,8 +244,69 @@ TEST_CASE("A grid built over terrain that had not streamed in retries by itself"
 	grid.InvalidateHeights();
 	grid.Update(Vector3::Zero);
 	REQUIRE_FALSE(provider.samples.empty());
+	CHECK(grid.GetMissingSampleCount() == 0);
 
 	provider.samples.clear();
 	grid.Update(Vector3::Zero);
 	CHECK(provider.samples.empty());
+}
+
+TEST_CASE("A hidden grid does not sample the surface at all", "[world_grid]")
+{
+	EnsureNullDevice();
+
+	Scene scene;
+	WorldGrid grid(scene, "GridHidden");
+
+	RecordingProvider provider;
+	grid.SetHeightProvider(provider.Bind());
+	grid.SetFollowTerrain(true);
+
+	// The editor starts with the grid hidden, and the callback this arrives through fires before
+	// the render queue checks visibility -- so a hidden grid would otherwise pay the full cost of
+	// building geometry that is never drawn.
+	grid.SetVisible(false);
+	grid.Update(Vector3::Zero);
+	CHECK(provider.samples.empty());
+
+	// Showing it again picks the work back up.
+	grid.SetVisible(true);
+	grid.Update(Vector3::Zero);
+	CHECK_FALSE(provider.samples.empty());
+}
+
+TEST_CASE("The retry stops once it stops resolving more of the surface", "[world_grid]")
+{
+	EnsureNullDevice();
+
+	Scene scene;
+	WorldGrid grid(scene, "GridRetryGivesUp");
+
+	// The grid is wider than the ring of pages the editor keeps resident, so its far corners sit
+	// over ground that will never load from where the camera is. Answering for nothing models
+	// that: the count never falls, and a retry keyed only on "something is missing" would rebuild
+	// once a second for the rest of the session.
+	RecordingProvider provider;
+	provider.answer = false;
+	grid.SetHeightProvider(provider.Bind());
+	grid.SetFollowTerrain(true);
+	grid.Update(Vector3::Zero);
+
+	REQUIRE(grid.GetMissingSampleCount() > 0);
+
+	// The first retry is allowed: the grid cannot know yet whether the terrain is still arriving.
+	grid.InvalidateHeights();
+	provider.samples.clear();
+	grid.Update(Vector3::Zero);
+	REQUIRE_FALSE(provider.samples.empty());
+
+	// That build resolved no more than the one before it, so there is nothing to come back for.
+	// Anything that really changes still invalidates the grid the normal way.
+	provider.samples.clear();
+	grid.Update(Vector3::Zero);
+	CHECK(provider.samples.empty());
+
+	grid.InvalidateHeights();
+	grid.Update(Vector3::Zero);
+	CHECK_FALSE(provider.samples.empty());
 }

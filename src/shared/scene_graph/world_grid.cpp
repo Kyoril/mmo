@@ -139,7 +139,7 @@ namespace mmo
 		{
 			// No surface here. Leaving the point at the grid's own height keeps the line
 			// continuous into whatever comes next instead of dropping it to zero.
-			m_hadMissingSamples = true;
+			++m_missingSampleCount;
 			return local;
 		}
 
@@ -230,12 +230,28 @@ namespace mmo
 
 	void WorldGrid::Update(const Vector3& cameraPosition)
 	{
+		// Nothing to do for a grid nobody can see, and this is not a rare case: the editor starts
+		// with the grid hidden. The signal that lands here fires from SetCurrentCamera, which
+		// RenderQueue::ProcessVisibleObject calls before it checks visibility, so without this the
+		// hidden grid would go on sampling terrain tens of thousands of times to build geometry
+		// that is never drawn. The work is picked up on the first frame it is shown again.
+		if (!IsVisible())
+		{
+			return;
+		}
+
 		UpdatePosition(cameraPosition);
 
 		// A build that could not resolve every position was reading terrain that had not finished
-		// streaming, and nothing will announce its arrival. Retrying on a timer costs one rebuild
-		// a second until the ground is all there, and then stops on its own.
-		if (m_followTerrain && m_hadMissingSamples && !m_invalidated &&
+		// streaming, and nothing announces its arrival, so the grid comes back for it.
+		//
+		// Only while that is actually getting somewhere, though. The grid is wider than the ring
+		// of pages the editor keeps resident, so its far corners sit over ground that will never
+		// load from where the camera is standing -- and a retry keyed purely on "something is
+		// missing" would then rebuild once a second forever. Retrying only while the count of
+		// unresolved samples is still falling stops on its own once the terrain has given up what
+		// it has, and starts again by itself the moment anything really changes.
+		if (m_followTerrain && m_hadMissingSamples && m_missingSamplesFalling && !m_invalidated &&
 			GetAsyncTimeMs() - m_builtTime >= MissingSampleRetryMs)
 		{
 			m_invalidated = true;
@@ -243,8 +259,14 @@ namespace mmo
 
 		if (m_invalidated)
 		{
-			m_hadMissingSamples = false;
+			const uint32 previousMissing = m_missingSampleCount;
+			const bool hadPreviousBuild = m_built;
+
+			m_missingSampleCount = 0;
 			SetupGrid();
+
+			m_hadMissingSamples = m_missingSampleCount > 0;
+			m_missingSamplesFalling = !hadPreviousBuild || m_missingSampleCount < previousMissing;
 			m_invalidated = false;
 		}
 	}

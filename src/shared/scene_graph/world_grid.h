@@ -194,9 +194,17 @@ namespace mmo
 		Vector3 m_builtAt { 0.0f, 0.0f, 0.0f };
 		bool m_built { false };
 
-		/// True when the last build hit a position the provider could not answer for. Terrain
-		/// streams in, so that is usually a temporary state, and the grid retries until it is
-		/// gone rather than leaving a flat patch where a page arrived a moment too late.
+		/// Positions the last build could not resolve. Terrain streams in, so a non-zero count is
+		/// often temporary, and the grid comes back for it rather than leaving a flat patch where
+		/// a page arrived a moment too late.
+		uint32 m_missingSampleCount { 0 };
+
+		/// Whether the last build resolved more than the one before it. The grid reaches past the
+		/// pages the editor keeps resident, so some of it is permanently unresolvable from where
+		/// the camera stands; without this the retry below would never stop.
+		bool m_missingSamplesFalling { false };
+
+		/// True when the last build left anything unresolved.
 		bool m_hadMissingSamples { false };
 
 		/// When the current geometry was built, for pacing those retries.
@@ -206,5 +214,10 @@ namespace mmo
 		/// costs thousands of terrain lookups, so retrying every frame would be far worse than
 		/// the flat patch it is fixing.
 		static constexpr GameTime MissingSampleRetryMs = 1000;
+
+	public:
+		/// @brief Positions the most recent build could not resolve to a surface. Exposed so a
+		///        test can tell "the terrain is still streaming" from "this is as good as it gets".
+		[[nodiscard]] uint32 GetMissingSampleCount() const { return m_missingSampleCount; }
 	};
 }
