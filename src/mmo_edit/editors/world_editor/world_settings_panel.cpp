@@ -71,7 +71,7 @@ namespace mmo
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Toggle with G while the viewport has focus.");
+                    ImGui::SetTooltip("Toggle with G, except while typing in a field.");
                 }
 
                 // The world grid is a flat plane by default and simply intersects any ground that
