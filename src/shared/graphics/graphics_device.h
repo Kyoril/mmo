@@ -164,6 +164,12 @@ namespace mmo
 		/// is no graphics device at the time.
 		static GraphicsDevice& Get();
 
+		/// @brief Determines whether a graphics device has been created.
+		/// @remarks Get() asserts when there is none, so anything that may run before device
+		///          creation or after Destroy() has to ask first.
+		/// @returns true if Get() is safe to call.
+		[[nodiscard]] static bool HasInstance();
+
 		/// Destroys the current graphics device object if there is one.
 		static void Destroy();
 

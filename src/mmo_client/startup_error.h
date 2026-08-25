@@ -15,5 +15,6 @@ namespace mmo
 	///          nobody can act on, so they are logged and shown to the player instead, together
 	///          with the one thing the player can do about it.
 	/// @param details A description of what exactly went wrong, shown above the generic advice.
-	void ShowStartupError(const std::string& details);
+	/// @param title Caption of the dialog.
+	void ShowStartupError(const std::string& details, const std::string& title = "Cannot start the game");
 }

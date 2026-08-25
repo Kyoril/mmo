@@ -4,6 +4,8 @@
 
 #include "platform.h"
 
+#include "graphics/graphics_device.h"
+#include "graphics/render_window.h"
 #include "log/default_log_levels.h"
 
 #include <filesystem>
@@ -23,14 +25,34 @@ namespace mmo
 
 			return error ? std::string(ClientConfigFilePath) : absolutePath.string();
 		}
+
+		/// Gets the render window out of the way so the error dialog is actually visible.
+		/// @remarks Startup can fail after the graphics device was created, and on Windows the
+		///          device may hold the display exclusively. A message box raised over an exclusive
+		///          fullscreen surface can end up behind it, leaving the player with a black screen
+		///          and a game that looks hung.
+		void HideRenderWindow()
+		{
+			if (!GraphicsDevice::HasInstance())
+			{
+				return;
+			}
+
+			if (const RenderWindowPtr window = GraphicsDevice::Get().GetAutoCreatedWindow())
+			{
+				window->Hide();
+			}
+		}
 	}
 
 	/// @copydoc ShowStartupError
-	void ShowStartupError(const std::string& details)
+	void ShowStartupError(const std::string& details, const std::string& title)
 	{
 		ELOG(details);
 
-		Platform::ShowErrorDialog("Game data not found",
+		HideRenderWindow();
+
+		Platform::ShowErrorDialog(title,
 			details + "\n\n"
 			"The game cannot start without its data. If you did not move the game data on purpose, "
 			"deleting this file resets the data path to its default and usually fixes the problem:\n\n"

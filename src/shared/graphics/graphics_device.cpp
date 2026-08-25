@@ -84,6 +84,11 @@ namespace mmo
 		return *s_currentDevice;
 	}
 
+	bool GraphicsDevice::HasInstance()
+	{
+		return s_currentDevice != nullptr;
+	}
+
 	void GraphicsDevice::Destroy()
 	{
 		s_currentDevice.reset();

@@ -92,6 +92,9 @@ namespace mmo
 		/// directory apart from an existing but unrelated one.
 		constexpr const char* ConsoleFontAssetPath = "Fonts/consola.ttf";
 
+		/// Caption for the failures that come from the configured data path itself.
+		constexpr const char* DataPathErrorTitle = "Game data not found";
+
 		/// Checks that the configured data path can actually be used as the game data directory.
 		/// @param dataPath The configured data path, absolute or relative to the working directory.
 		/// @param out_absolutePath Receives the resolved path on success.
@@ -101,7 +104,7 @@ namespace mmo
 		{
 			if (Trim(dataPath).empty())
 			{
-				ShowStartupError("No game data directory is configured (the dataPath setting is empty).");
+				ShowStartupError("No game data directory is configured (the dataPath setting is empty).", DataPathErrorTitle);
 				return false;
 			}
 
@@ -109,7 +112,7 @@ namespace mmo
 			out_absolutePath = std::filesystem::absolute(dataPath, error);
 			if (error)
 			{
-				ShowStartupError("The configured game data directory is not a usable path:\n\n" + dataPath);
+				ShowStartupError("The configured game data directory is not a usable path:\n\n" + dataPath, DataPathErrorTitle);
 				return false;
 			}
 
@@ -118,7 +121,7 @@ namespace mmo
 			// wrong path into an empty but existing one and hide the actual problem.
 			if (!std::filesystem::is_directory(out_absolutePath, error))
 			{
-				ShowStartupError("The configured game data directory does not exist:\n\n" + out_absolutePath.string());
+				ShowStartupError("The configured game data directory does not exist:\n\n" + out_absolutePath.string(), DataPathErrorTitle);
 				return false;
 			}
 
@@ -298,7 +301,7 @@ namespace mmo
 		if (!AssetRegistry::HasFile(ConsoleFontAssetPath))
 		{
 			ShowStartupError("The configured game data directory does not contain any game data:\n\n"
-				+ absoluteDataPath.string());
+				+ absoluteDataPath.string(), DataPathErrorTitle);
 			return false;
 		}
 
