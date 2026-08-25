@@ -130,34 +130,103 @@ namespace mmo
 	template< typename T, size_t N >
 	size_t countof(const T(&)[N]) { return N; }
 
-	static void TokenizeString(std::string str, std::vector<std::string>& out_tokens)
+	/// Splits a string into whitespace separated tokens.
+	/// @remarks A token may be wrapped in double quotes to keep whitespace inside it, which is how
+	///          values containing spaces (a data path below "C:\Program Files" for example) survive
+	///          a round trip through a config file. A doubled quote inside a quoted token ("") is
+	///          read as a single literal quote. Use QuoteConfigValue to produce that encoding.
+	/// @param str The string to split.
+	/// @param out_tokens Receives the tokens found in str. Empty tokens are only emitted for
+	///                   explicitly quoted empty values ("").
+	static void TokenizeString(const std::string& str, std::vector<std::string>& out_tokens)
 	{
 		std::string token;
 
-		for (size_t i = 0; i < str.length(); i++) 
-		{
-			char c = str[i];
+		// Whether the current token contained a quoted section. Such a token is emitted even when
+		// it is empty so that an explicit "" round trips as an empty value instead of vanishing.
+		bool quoted = false;
 
-			if (c == ' ' || c == '\t') 
+		for (size_t i = 0; i < str.length(); i++)
+		{
+			const char c = str[i];
+
+			if (c == ' ' || c == '\t')
 			{
-				out_tokens.emplace_back(std::move(token));
+				if (!token.empty() || quoted)
+				{
+					out_tokens.emplace_back(std::move(token));
+					token.clear();
+					quoted = false;
+				}
 			}
-			else if (c == '\"') 
+			else if (c == '\"')
 			{
+				quoted = true;
 				i++;
 
-				while (str[i] != '\"') { token.push_back(str[i]); i++; }
+				while (i < str.length())
+				{
+					if (str[i] == '\"')
+					{
+						// A doubled quote inside a quoted section is a literal quote character.
+						if (i + 1 < str.length() && str[i + 1] == '\"')
+						{
+							token.push_back('\"');
+							i += 2;
+							continue;
+						}
+
+						break;
+					}
+
+					token.push_back(str[i]);
+					i++;
+				}
+
+				// i now refers to the closing quote, or to the end of the string if the quote was
+				// never closed. Either way, the loop increment moves us past it.
 			}
-			else 
+			else
 			{
-				token.push_back(str[i]);
+				token.push_back(c);
 			}
 		}
 
-		if (!token.empty())
+		if (!token.empty() || quoted)
 		{
 			out_tokens.emplace_back(std::move(token));
 		}
+	}
+
+	/// Encodes a value so that TokenizeString reads it back as a single token.
+	/// @remarks Values that contain neither whitespace nor quotes are returned unchanged to keep
+	///          config files readable. Everything else is wrapped in double quotes, with embedded
+	///          quotes doubled.
+	/// @param value The raw value to encode.
+	/// @returns The value, quoted and escaped if it needs to be.
+	static inline std::string QuoteConfigValue(const std::string& value)
+	{
+		if (!value.empty() && value.find_first_of(" \t\"") == std::string::npos)
+		{
+			return value;
+		}
+
+		std::string result;
+		result.reserve(value.length() + 2);
+
+		result.push_back('\"');
+		for (const char c : value)
+		{
+			if (c == '\"')
+			{
+				result.push_back('\"');
+			}
+
+			result.push_back(c);
+		}
+		result.push_back('\"');
+
+		return result;
 	}
 	
 	namespace detail

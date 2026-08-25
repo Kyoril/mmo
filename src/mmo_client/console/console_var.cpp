@@ -49,26 +49,46 @@ namespace mmo
 	{
 		void ConsoleCommand_Set(const std::string & cmd, const std::string & args)
 		{
-			// Split argument string
-			std::vector<std::string> arguments;
-			TokenizeString(args, arguments);
+			// Split off the cvar name. Everything behind it is the value, which is a single string
+			// no matter what it contains, so it is deliberately not tokenized any further.
+			const auto nameStart = args.find_first_not_of(" \t");
+			const auto nameEnd = (nameStart == std::string::npos) ? std::string::npos : args.find_first_of(" \t", nameStart);
+
+			const std::string name = (nameStart == std::string::npos) ? std::string() : args.substr(nameStart, nameEnd - nameStart);
+			const std::string rawValue = (nameEnd == std::string::npos) ? std::string() : Trim(args.substr(nameEnd + 1));
 
 			// Check for argument count and eventually print an error string into the console
-			if (arguments.size() < 2)
+			if (name.empty() || rawValue.empty())
 			{
 				ELOG("Invalid number of arguments provided! Usage: set [cvar_name] [value]");
 				return;
 			}
 
-			// Set the respective cvar value if the cvar already exists, or create a new cvar if it doesn't exist yet
-			ConsoleVar* var = ConsoleVarMgr::FindConsoleVar(arguments[0]);
-			if (var != nullptr)
+			std::string value;
+			if (rawValue.front() == '\"')
 			{
-				var->Set(arguments[1]);
+				// Quoted values are how anything containing whitespace is written, so let the
+				// tokenizer strip the quotes and unescape the contents.
+				std::vector<std::string> tokens;
+				TokenizeString(rawValue, tokens);
+				value = tokens.empty() ? std::string() : std::move(tokens.front());
 			}
 			else
 			{
-				ConsoleVarMgr::RegisterConsoleVar(arguments[0], "", arguments[1]);
+				// Config files written before values were quoted store paths with spaces unquoted.
+				// Take the remainder verbatim rather than truncating it at the first space.
+				value = rawValue;
+			}
+
+			// Set the respective cvar value if the cvar already exists, or create a new cvar if it doesn't exist yet
+			ConsoleVar* var = ConsoleVarMgr::FindConsoleVar(name);
+			if (var != nullptr)
+			{
+				var->Set(std::move(value));
+			}
+			else
+			{
+				ConsoleVarMgr::RegisterConsoleVar(name, "", std::move(value));
 			}
 		}
 
@@ -129,7 +149,10 @@ namespace mmo
 
 			for(auto& pair : s_consoleVars)
 			{
-				configFile << "set " << pair.second.GetName() << " " << pair.second.GetStringValue() << "\n";
+				// Values are quoted where needed so that the tokenizer reads them back as a single
+				// token. Without this, anything containing whitespace (a data path below
+				// "C:\Program Files" for example) would be truncated at the first space on load.
+				configFile << "set " << pair.second.GetName() << " " << QuoteConfigValue(pair.second.GetStringValue()) << "\n";
 			}
 
 			configFile.flush();

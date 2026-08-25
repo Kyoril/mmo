@@ -68,6 +68,11 @@ namespace mmo
 		}
 	}
 
+	TaskSystem::~TaskSystem()
+	{
+		Shutdown();
+	}
+
 	void TaskSystem::Shutdown()
 	{
 		if (!IsInitialized())

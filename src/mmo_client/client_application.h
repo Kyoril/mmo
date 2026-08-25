@@ -65,6 +65,14 @@ namespace mmo
 		/// @return True on success.
 		bool InitializeUiAndEnterState(ClientContext& context);
 
+		/// @brief Tears down whatever a failed Start() managed to bring up.
+		/// @remarks Startup can stop at any of its stages, so this only touches services that are
+		///          safe to stop half-initialized. It exists because the worker pool and the
+		///          network runtime own threads: leaving those running turns an orderly "cannot
+		///          start" into a crash report at process exit.
+		/// @param context Shared client context.
+		void AbortStart(ClientContext& context);
+
 		/// @brief Shuts down gameplay and network systems gracefully.
 		/// @param context Shared client context.
 		void ShutdownSystems(ClientContext& context);

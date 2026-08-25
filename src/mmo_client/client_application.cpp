@@ -74,6 +74,7 @@ namespace mmo
 			!InitializeRuntimeServices(context, loginConnector, realmConnector) ||
 			!LoadProjectAndCache(context, *realmConnector))
 		{
+			AbortStart(context);
 			return false;
 		}
 
@@ -81,6 +82,7 @@ namespace mmo
 		InitializeStatesAndScripts(context, *loginConnector, *realmConnector);
 		if (!InitializeUiAndEnterState(context))
 		{
+			AbortStart(context);
 			return false;
 		}
 
@@ -137,7 +139,11 @@ namespace mmo
 		TaskSystem::Get().Initialize();
 
 		EventLoop::Initialize();
-		Console::Initialize("Config/Config.cfg");
+		if (!Console::Initialize("Config/Config.cfg"))
+		{
+			return false;
+		}
+
 		return true;
 	}
 
@@ -264,6 +270,32 @@ namespace mmo
 		}
 
 		return true;
+	}
+
+	/// @copydoc ClientApplication::AbortStart
+	void ClientApplication::AbortStart(ClientContext& context)
+	{
+		context.timerConnection.disconnect();
+
+		if (context.runtime)
+		{
+			context.runtime->Shutdown();
+			context.runtime.reset();
+		}
+
+		// Both of these are no-ops when the stage that would have set them up never ran.
+		EventLoop::Destroy();
+		AssetRegistry::Destroy();
+
+		TaskSystem::Get().Shutdown();
+
+		g_DefaultLog.FlushBuffered();
+		context.logConnection.disconnect();
+		context.logFile.close();
+		context.timerService.stop();
+		context.timerService.reset();
+
+		ResetContext(context);
 	}
 
 	/// @copydoc ClientApplication::ShutdownSystems

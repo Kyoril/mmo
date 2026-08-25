@@ -53,7 +53,10 @@ namespace mmo
 
 	public:
 		/// Initializes the console system.
-		static void Initialize(const String& configFile);
+		/// @param configFile Path of the config script that is executed to apply saved settings.
+		/// @returns true on success. false if the client cannot start, in which case the reason has
+		///          already been reported to the player.
+		static bool Initialize(const String& configFile);
 		/// Destroys the console system.
 		static void Destroy();
 
