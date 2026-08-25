@@ -39,6 +39,7 @@
 #include "systems/mail_client.h"
 #include "ui/minimap.h"
 #include "frame_ui/frame_mgr.h"
+#include "startup_error.h"
 
 #include <filesystem>
 
@@ -139,7 +140,7 @@ namespace mmo
 		TaskSystem::Get().Initialize();
 
 		EventLoop::Initialize();
-		if (!Console::Initialize("Config/Config.cfg"))
+		if (!Console::Initialize(ClientConfigFilePath))
 		{
 			return false;
 		}
@@ -187,7 +188,10 @@ namespace mmo
 	{
 		if (!context.project->load("ClientDB"))
 		{
-			ELOG("Failed to load project files!");
+			// Same reasoning as the data path checks in Console::Initialize: a damaged or
+			// incomplete install is nothing the player can report usefully, but it is something
+			// they can fix, so tell them instead of exiting without a word.
+			ShowStartupError("The game data could not be loaded. The installation appears to be incomplete or damaged.");
 			return false;
 		}
 
@@ -199,7 +203,7 @@ namespace mmo
 		context.clientCache = std::make_unique<ClientCache>(realmConnector);
 		if (!context.clientCache->Load())
 		{
-			ELOG("Failed to load the client cache!");
+			ShowStartupError("The client cache could not be loaded.");
 			return false;
 		}
 
@@ -276,6 +280,18 @@ namespace mmo
 	void ClientApplication::AbortStart(ClientContext& context)
 	{
 		context.timerConnection.disconnect();
+		GameStateMgr::Get().RemoveAllGameStates();
+
+		// The shutdown helpers all guard on the pointers they touch, so they cope with a stage
+		// that never ran. Two things from the normal path are deliberately left out:
+		//
+		//  - the client cache is not saved. A start that failed may have failed *while* loading
+		//    the cache, and writing that half-read state back would destroy the good file.
+		//  - Console::Destroy() is not called. Console::Initialize can bail out before the screen
+		//    and its layers exist, and Destroy() would hand a default constructed layer iterator
+		//    to Screen::RemoveLayer.
+		ShutdownGameplaySystems(context);
+		ShutdownUiSystems(context);
 
 		if (context.runtime)
 		{
@@ -390,14 +406,28 @@ namespace mmo
 		context.partyInfo.reset();
 		context.guildClient.reset();
 		context.friendClient.reset();
+		context.channelClient.reset();
 		context.charCreateInfo.reset();
 		context.charSelect.reset();
 		context.discord.reset();
 		context.clientCache.reset();
 		context.timerQueue.reset();
 		context.gameTime.reset();
+
+		// The sound entry player holds references to the audio system and to the project's sound
+		// data, and three statics hold a raw pointer to it. Drop all of that before the things it
+		// points at go away, or a later shutdown step walks into freed memory.
+		GameUnitC::SetSoundEntryPlayer(nullptr);
+		CastErrorVoice::Get().Initialize(nullptr, nullptr);
+		UnitGossipVoice::Get().Initialize(nullptr, nullptr, nullptr);
+		context.soundEntryPlayer.reset();
+
 		context.project.reset();
 		context.uiRuntime.reset();
+
+		// Owns cvar subscriptions that apply volume changes to the audio system, so it has to go
+		// first (see the note on the member declaration).
+		context.audioSettings.reset();
 		context.audio.reset();
 	}
 }

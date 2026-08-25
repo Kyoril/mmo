@@ -6,6 +6,7 @@
 #include "event_loop.h"
 #include "platform.h"
 #include "screen.h"
+#include "startup_error.h"
 
 #include "base/assign_on_exit.h"
 #include "frame_ui/font_mgr.h"
@@ -89,48 +90,35 @@ namespace mmo
 
 		/// An asset the client cannot boot without. Used as the marker that tells a real game data
 		/// directory apart from an existing but unrelated one.
-		const std::string ConsoleFontAssetPath = "Fonts/consola.ttf";
-
-		/// Tells the player that the game data could not be loaded and points them at the config
-		/// file, which is the one thing they can fix themselves.
-		/// @param details A description of what exactly is wrong with the configured data path.
-		void ReportDataPathError(const std::string& details)
-		{
-			ELOG(details);
-
-			Platform::ShowErrorDialog("Game data not found",
-				details + "\n\n"
-				"The game cannot start without its data. If you did not move the game data on "
-				"purpose, deleting the file Config\\Config.cfg next to the game executable resets "
-				"the data path to its default and usually fixes this.");
-		}
+		constexpr const char* ConsoleFontAssetPath = "Fonts/consola.ttf";
 
 		/// Checks that the configured data path can actually be used as the game data directory.
 		/// @param dataPath The configured data path, absolute or relative to the working directory.
+		/// @param out_absolutePath Receives the resolved path on success.
 		/// @returns true if the path refers to an existing directory, false otherwise. On failure,
 		///          the player has already been told what is wrong.
-		bool ValidateDataPath(const std::string& dataPath)
+		bool ValidateDataPath(const std::string& dataPath, std::filesystem::path& out_absolutePath)
 		{
 			if (Trim(dataPath).empty())
 			{
-				ReportDataPathError("No game data directory is configured (the dataPath setting is empty).");
+				ShowStartupError("No game data directory is configured (the dataPath setting is empty).");
 				return false;
 			}
 
 			std::error_code error;
-			const std::filesystem::path absolutePath = std::filesystem::absolute(dataPath, error);
+			out_absolutePath = std::filesystem::absolute(dataPath, error);
 			if (error)
 			{
-				ReportDataPathError("The configured game data directory is not a usable path:\n\n" + dataPath);
+				ShowStartupError("The configured game data directory is not a usable path:\n\n" + dataPath);
 				return false;
 			}
 
 			// Note that this has to happen before the asset registry is initialized: the file
 			// system archive creates its root directory when it is missing, which would turn a
 			// wrong path into an empty but existing one and hide the actual problem.
-			if (!std::filesystem::is_directory(absolutePath, error))
+			if (!std::filesystem::is_directory(out_absolutePath, error))
 			{
-				ReportDataPathError("The configured game data directory does not exist:\n\n" + absolutePath.string());
+				ShowStartupError("The configured game data directory does not exist:\n\n" + out_absolutePath.string());
 				return false;
 			}
 
@@ -284,7 +272,8 @@ namespace mmo
 		// A missing or wrong data path is a configuration problem, not a defect, so it has to be
 		// reported to the player instead of being left to blow up somewhere further down in asset
 		// loading where it would produce a crash report that nobody can act on.
-		if (!ValidateDataPath(s_dataPathCVar->GetStringValue()))
+		std::filesystem::path absoluteDataPath;
+		if (!ValidateDataPath(s_dataPathCVar->GetStringValue(), absoluteDataPath))
 		{
 			return false;
 		}
@@ -308,8 +297,8 @@ namespace mmo
 		// check for an asset the client cannot boot without before we start relying on any.
 		if (!AssetRegistry::HasFile(ConsoleFontAssetPath))
 		{
-			ReportDataPathError("The configured game data directory does not contain any game data:\n\n"
-				+ std::filesystem::absolute(s_dataPathCVar->GetStringValue()).string());
+			ShowStartupError("The configured game data directory does not contain any game data:\n\n"
+				+ absoluteDataPath.string());
 			return false;
 		}
 
