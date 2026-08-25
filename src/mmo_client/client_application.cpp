@@ -203,7 +203,11 @@ namespace mmo
 		context.clientCache = std::make_unique<ClientCache>(realmConnector);
 		if (!context.clientCache->Load())
 		{
-			ShowStartupError("The client cache could not be loaded.");
+			// Deleting the config file would not help here, so say what actually does: the cache
+			// lives in the game data directory and the client rebuilds it from the server.
+			ShowStartupError("The client cache could not be loaded.", "Cannot start the game",
+				"Deleting the Cache folder in your game data directory usually fixes this. "
+				"The game rebuilds it while you play.");
 			return false;
 		}
 

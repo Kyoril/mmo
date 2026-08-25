@@ -43,19 +43,24 @@ namespace mmo
 				window->Hide();
 			}
 		}
+
+		/// Builds the advice for a data path problem, which is the only kind of failure the config
+		/// file can actually be blamed for.
+		std::string GetDefaultAdvice()
+		{
+			return "The game cannot start without its data. If you did not move the game data on "
+				"purpose, deleting this file resets the data path to its default and usually fixes "
+				"the problem:\n\n" + GetDisplayConfigFilePath();
+		}
 	}
 
 	/// @copydoc ShowStartupError
-	void ShowStartupError(const std::string& details, const std::string& title)
+	void ShowStartupError(const std::string& details, const std::string& title, const std::string& advice)
 	{
 		ELOG(details);
 
 		HideRenderWindow();
 
-		Platform::ShowErrorDialog(title,
-			details + "\n\n"
-			"The game cannot start without its data. If you did not move the game data on purpose, "
-			"deleting this file resets the data path to its default and usually fixes the problem:\n\n"
-			+ GetDisplayConfigFilePath());
+		Platform::ShowErrorDialog(title, details + "\n\n" + (advice.empty() ? GetDefaultAdvice() : advice));
 	}
 }
