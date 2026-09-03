@@ -96,6 +96,8 @@ namespace mmo
 		void ElementOnSpacePressedEnd();
 		void ElementOnEscapePressedStart(const XmlAttributes& attributes);
 		void ElementOnEscapePressedEnd();
+		void ElementOnTextChangedStart(const XmlAttributes& attributes);
+		void ElementOnTextChangedEnd();
 		void ElementOnShowStart(const XmlAttributes& attributes);
 		void ElementOnShowEnd();
 		void ElementOnHideStart(const XmlAttributes& attributes);

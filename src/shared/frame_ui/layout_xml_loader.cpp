@@ -67,6 +67,7 @@ namespace mmo
 	static const std::string OnEnterPressedElement("OnEnterPressed");
 	static const std::string OnSpacePressedElement("OnSpacePressed");
 	static const std::string OnEscapePressedElement("OnEscapePressed");
+	static const std::string OnTextChangedElement("OnTextChanged");
 	static const std::string OnShowElement("OnShow");
 	static const std::string OnHideElement("OnHide");
 	static const std::string OnEnterElement("OnEnter");
@@ -303,6 +304,10 @@ namespace mmo
 			{
 				ElementOnEscapePressedStart(attributes);
 			}
+			else if (element == OnTextChangedElement)
+			{
+				ElementOnTextChangedStart(attributes);
+			}
 			else if (element == AnimationsElement)
 			{
 				ElementAnimationsStart(attributes);
@@ -457,6 +462,10 @@ namespace mmo
 			else if (element == OnEscapePressedElement)
 			{
 				ElementOnEscapePressedEnd();
+			}
+			else if (element == OnTextChangedElement)
+			{
+				ElementOnTextChangedEnd();
 			}
 			else if (element == OnShowElement)
 			{
@@ -1465,6 +1474,26 @@ namespace mmo
 			{
 				const luabind::object onEscapePressed = FrameManager::Get().CompileFunction(frame->GetName() + ":OnEscapePressed", script);
 				frame->SetOnEscapePressed(onEscapePressed);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnTextChangedStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnTextChangedElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnTextChangedEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onTextChanged = FrameManager::Get().CompileFunction(frame->GetName() + ":OnTextChanged", script);
+				frame->SetOnTextChanged(onTextChanged);
 			});
 	}
 
