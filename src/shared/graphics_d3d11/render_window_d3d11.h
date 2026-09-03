@@ -35,6 +35,8 @@ namespace mmo
 
 		// ~Begin RenderWindow
 		virtual void SetTitle(const std::string& title) final override;
+
+		virtual void Hide() final override;
 		// ~End RenderWindow
 
 	private:

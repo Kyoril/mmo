@@ -3,6 +3,7 @@
 #include "console_var.h"
 #include "console_commands.h"
 #include "console.h"
+#include "startup_error.h"
 
 #include "base/utilities.h"		// For StrCaseICmp comparator
 #include "log/default_log_levels.h"
@@ -49,26 +50,25 @@ namespace mmo
 	{
 		void ConsoleCommand_Set(const std::string & cmd, const std::string & args)
 		{
-			// Split argument string
-			std::vector<std::string> arguments;
-			TokenizeString(args, arguments);
+			std::string name;
+			std::string value;
 
 			// Check for argument count and eventually print an error string into the console
-			if (arguments.size() < 2)
+			if (!ParseConfigAssignment(args, name, value))
 			{
 				ELOG("Invalid number of arguments provided! Usage: set [cvar_name] [value]");
 				return;
 			}
 
 			// Set the respective cvar value if the cvar already exists, or create a new cvar if it doesn't exist yet
-			ConsoleVar* var = ConsoleVarMgr::FindConsoleVar(arguments[0]);
+			ConsoleVar* var = ConsoleVarMgr::FindConsoleVar(name);
 			if (var != nullptr)
 			{
-				var->Set(arguments[1]);
+				var->Set(std::move(value));
 			}
 			else
 			{
-				ConsoleVarMgr::RegisterConsoleVar(arguments[0], "", arguments[1]);
+				ConsoleVarMgr::RegisterConsoleVar(name, "", std::move(value));
 			}
 		}
 
@@ -120,7 +120,7 @@ namespace mmo
 
 		void ConsoleCommand_SaveConfig(const std::string& cmd, const std::string& args)
 		{
-			std::fstream configFile("Config/Config.cfg", std::ios::out);
+			std::fstream configFile(ClientConfigFilePath, std::ios::out);
 			if (!configFile)
 			{
 				ELOG("Unable to save config file!");
@@ -129,7 +129,21 @@ namespace mmo
 
 			for(auto& pair : s_consoleVars)
 			{
-				configFile << "set " << pair.second.GetName() << " " << pair.second.GetStringValue() << "\n";
+				const std::string& value = pair.second.GetStringValue();
+
+				// A line break cannot be encoded on a line of its own file. Writing one anyway
+				// would split the value across lines, and everything behind the break would be
+				// executed as a console command on the next launch.
+				if (!IsWritableConfigValue(value))
+				{
+					WLOG("Skipping cvar \"" << pair.second.GetName() << "\" while saving the config: its value contains a line break.");
+					continue;
+				}
+
+				// Values are quoted where needed so that the tokenizer reads them back as a single
+				// token. Without this, anything containing whitespace (a data path below
+				// "C:\Program Files" for example) would be truncated at the first space on load.
+				configFile << "set " << pair.second.GetName() << " " << QuoteConfigValue(value) << "\n";
 			}
 
 			configFile.flush();

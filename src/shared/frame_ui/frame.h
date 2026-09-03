@@ -440,6 +440,10 @@ namespace mmo
 
 		void SetOnHide(const luabind::object& func) { m_onHide = func; }
 
+		/// Sets the lua handler which is invoked whenever this frame's text changes,
+		/// including in-place edits made by the user in a TextField.
+		void SetOnTextChanged(const luabind::object& func) { m_onTextChanged = func; }
+
 		void SetOnDrag(const luabind::object& func);
 
 		void SetOnDrop(const luabind::object& func) { m_onDrop = func; }
@@ -657,6 +661,8 @@ namespace mmo
 		luabind::object m_onEnter;
 
 		luabind::object m_onLeave;
+
+		luabind::object m_onTextChanged;
 
 		luabind::object m_onClick;
 

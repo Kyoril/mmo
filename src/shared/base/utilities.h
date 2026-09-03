@@ -130,34 +130,168 @@ namespace mmo
 	template< typename T, size_t N >
 	size_t countof(const T(&)[N]) { return N; }
 
-	static void TokenizeString(std::string str, std::vector<std::string>& out_tokens)
+	/// Splits a string into whitespace separated tokens.
+	/// @remarks A token may be wrapped in double quotes to keep whitespace inside it, which is how
+	///          values containing spaces (a data path below "C:\Program Files" for example) survive
+	///          a round trip through a config file. A doubled quote inside a quoted token ("") is
+	///          read as a single literal quote. Use QuoteConfigValue to produce that encoding.
+	/// @param str The string to split.
+	/// @param out_tokens Receives the tokens found in str. Empty tokens are only emitted for
+	///                   explicitly quoted empty values ("").
+	static inline void TokenizeString(const std::string& str, std::vector<std::string>& out_tokens)
 	{
 		std::string token;
 
-		for (size_t i = 0; i < str.length(); i++) 
-		{
-			char c = str[i];
+		// Whether the current token contained a quoted section. Such a token is emitted even when
+		// it is empty so that an explicit "" round trips as an empty value instead of vanishing.
+		bool quoted = false;
 
-			if (c == ' ' || c == '\t') 
+		for (size_t i = 0; i < str.length(); i++)
+		{
+			const char c = str[i];
+
+			if (c == ' ' || c == '\t')
 			{
-				out_tokens.emplace_back(std::move(token));
+				if (!token.empty() || quoted)
+				{
+					out_tokens.emplace_back(std::move(token));
+					token.clear();
+					quoted = false;
+				}
 			}
-			else if (c == '\"') 
+			else if (c == '\"')
 			{
+				quoted = true;
 				i++;
 
-				while (str[i] != '\"') { token.push_back(str[i]); i++; }
+				while (i < str.length())
+				{
+					if (str[i] == '\"')
+					{
+						// A doubled quote inside a quoted section is a literal quote character.
+						if (i + 1 < str.length() && str[i + 1] == '\"')
+						{
+							token.push_back('\"');
+							i += 2;
+							continue;
+						}
+
+						break;
+					}
+
+					token.push_back(str[i]);
+					i++;
+				}
+
+				// i now refers to the closing quote, or to the end of the string if the quote was
+				// never closed. Either way, the loop increment moves us past it.
 			}
-			else 
+			else
 			{
-				token.push_back(str[i]);
+				token.push_back(c);
 			}
 		}
 
-		if (!token.empty())
+		if (!token.empty() || quoted)
 		{
 			out_tokens.emplace_back(std::move(token));
 		}
+	}
+
+	/// Determines whether a value can be written to a line based config file at all.
+	/// @remarks A line break cannot be encoded by quoting, because the reader splits the file into
+	///          lines before it ever sees a quote. Everything behind the break would be read as a
+	///          separate command, so such a value has to be rejected rather than mangled.
+	/// @param value The raw value to test.
+	/// @returns true if the value survives a write/read round trip.
+	static inline bool IsWritableConfigValue(const std::string& value)
+	{
+		return value.find_first_of("\r\n") == std::string::npos;
+	}
+
+	/// Encodes a value so that TokenizeString reads it back as a single token.
+	/// @remarks Values that contain neither whitespace nor quotes are returned unchanged to keep
+	///          config files readable. Everything else is wrapped in double quotes, with embedded
+	///          quotes doubled. Note that quoting cannot rescue a value containing a line break —
+	///          check IsWritableConfigValue before writing one to a line based config file.
+	/// @param value The raw value to encode.
+	/// @returns The value, quoted and escaped if it needs to be.
+	static inline std::string QuoteConfigValue(const std::string& value)
+	{
+		// Any whitespace has to trigger quoting, not just space and tab: the reader trims each
+		// value with Trim(), which strips everything std::isspace accepts.
+		const bool needsQuotes = value.empty() ||
+			std::any_of(value.begin(), value.end(), [](const unsigned char c)
+				{
+					return c == '\"' || std::isspace(c) != 0;
+				});
+
+		if (!needsQuotes)
+		{
+			return value;
+		}
+
+		std::string result;
+		result.reserve(value.length() + 2);
+
+		result.push_back('\"');
+		for (const char c : value)
+		{
+			if (c == '\"')
+			{
+				result.push_back('\"');
+			}
+
+			result.push_back(c);
+		}
+		result.push_back('\"');
+
+		return result;
+	}
+
+	/// Splits a "<name> <value>" config assignment into its two halves.
+	/// @remarks The value is everything behind the name: it is a single string no matter what it
+	///          contains, so it is deliberately not tokenized. A quoted value is unquoted through
+	///          TokenizeString, an unquoted one is taken verbatim so that config files written
+	///          before values were quoted keep loading.
+	/// @param args The argument string, without the leading command name.
+	/// @param out_name Receives the name.
+	/// @param out_value Receives the value.
+	/// @returns true if both a name and a value were present.
+	static inline bool ParseConfigAssignment(const std::string& args, std::string& out_name, std::string& out_value)
+	{
+		const auto nameStart = args.find_first_not_of(" \t");
+		if (nameStart == std::string::npos)
+		{
+			return false;
+		}
+
+		const auto nameEnd = args.find_first_of(" \t", nameStart);
+		if (nameEnd == std::string::npos)
+		{
+			return false;
+		}
+
+		const std::string rawValue = Trim(args.substr(nameEnd + 1));
+		if (rawValue.empty())
+		{
+			return false;
+		}
+
+		out_name = args.substr(nameStart, nameEnd - nameStart);
+
+		if (rawValue.front() == '\"')
+		{
+			std::vector<std::string> tokens;
+			TokenizeString(rawValue, tokens);
+			out_value = tokens.empty() ? std::string() : std::move(tokens.front());
+		}
+		else
+		{
+			out_value = rawValue;
+		}
+
+		return true;
 	}
 	
 	namespace detail

@@ -95,4 +95,9 @@ namespace mmo
 	{
 		return { GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
 	}
+
+	void PlatformWin::ShowErrorDialog(const std::string& title, const std::string& message)
+	{
+		MessageBoxA(nullptr, message.c_str(), title.c_str(), MB_OK | MB_ICONERROR | MB_TASKMODAL);
+	}
 }

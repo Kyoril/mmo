@@ -6,6 +6,7 @@
 #include "event_loop.h"
 #include "platform.h"
 #include "screen.h"
+#include "startup_error.h"
 
 #include "base/assign_on_exit.h"
 #include "frame_ui/font_mgr.h"
@@ -86,6 +87,46 @@ namespace mmo
 	namespace
 	{
 		ConsoleVar* s_dataPathCVar = nullptr;
+
+		/// An asset the client cannot boot without. Used as the marker that tells a real game data
+		/// directory apart from an existing but unrelated one.
+		constexpr const char* ConsoleFontAssetPath = "Fonts/consola.ttf";
+
+		/// Caption for the failures that come from the configured data path itself.
+		constexpr const char* DataPathErrorTitle = "Game data not found";
+
+		/// Checks that the configured data path can actually be used as the game data directory.
+		/// @param dataPath The configured data path, absolute or relative to the working directory.
+		/// @param out_absolutePath Receives the resolved path on success.
+		/// @returns true if the path refers to an existing directory, false otherwise. On failure,
+		///          the player has already been told what is wrong.
+		bool ValidateDataPath(const std::string& dataPath, std::filesystem::path& out_absolutePath)
+		{
+			if (Trim(dataPath).empty())
+			{
+				ShowStartupError("No game data directory is configured (the dataPath setting is empty).", DataPathErrorTitle);
+				return false;
+			}
+
+			std::error_code error;
+			out_absolutePath = std::filesystem::absolute(dataPath, error);
+			if (error)
+			{
+				ShowStartupError("The configured game data directory is not a usable path:\n\n" + dataPath, DataPathErrorTitle);
+				return false;
+			}
+
+			// Note that this has to happen before the asset registry is initialized: the file
+			// system archive creates its root directory when it is missing, which would turn a
+			// wrong path into an empty but existing one and hide the actual problem.
+			if (!std::filesystem::is_directory(out_absolutePath, error))
+			{
+				ShowStartupError("The configured game data directory does not exist:\n\n" + out_absolutePath.string(), DataPathErrorTitle);
+				return false;
+			}
+
+			return true;
+		}
 	}
 
 	// Graphics CVar stuff
@@ -201,7 +242,7 @@ namespace mmo
 	
 	// Console implementation
 
-	void Console::Initialize(const String& configFile)
+	bool Console::Initialize(const String& configFile)
 	{
 		RegisterCommand("ver", console_commands::ConsoleCommand_Ver, ConsoleCommandCategory::Default, "Displays the client version.");
 		RegisterCommand("run", console_commands::ConsoleCommand_Run, ConsoleCommandCategory::Default, "Runs a console script.");
@@ -212,7 +253,11 @@ namespace mmo
 
 		ConsoleVarMgr::Initialize();
 		
-		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", (std::filesystem::current_path() / "Data").string());
+		// The default is deliberately relative so that it stays relative when the config is saved.
+		// It is resolved against the working directory when the asset registry is initialized. A
+		// player who wants the data elsewhere sets an absolute path explicitly, and that absolute
+		// path is then theirs to keep working.
+		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", "Data");
 		s_lastRealmVar = ConsoleVarMgr::RegisterConsoleVar("lastRealm", "Id of the last realm connected to.", "-1");
 		
 		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
@@ -227,6 +272,15 @@ namespace mmo
 		const auto localeArchive = "Locales/Locale_" + localeCVar->GetStringValue();
 		ILOG("Locale: " << localeCVar->GetStringValue());
 
+		// A missing or wrong data path is a configuration problem, not a defect, so it has to be
+		// reported to the player instead of being left to blow up somewhere further down in asset
+		// loading where it would produce a crash report that nobody can act on.
+		std::filesystem::path absoluteDataPath;
+		if (!ValidateDataPath(s_dataPathCVar->GetStringValue(), absoluteDataPath))
+		{
+			return false;
+		}
+
 		AssetRegistry::Initialize(s_dataPathCVar->GetStringValue(),
 			{
 				"Misc.hpak",
@@ -240,8 +294,17 @@ namespace mmo
 				"Particles.hpak",
 				localeArchive,
 				localeArchive + ".hpak",
-			});	
-		
+			});
+
+		// The data path exists but might still point at something that isn't game data at all, so
+		// check for an asset the client cannot boot without before we start relying on any.
+		if (!AssetRegistry::HasFile(ConsoleFontAssetPath))
+		{
+			ShowStartupError("The configured game data directory does not contain any game data:\n\n"
+				+ absoluteDataPath.string(), DataPathErrorTitle);
+			return false;
+		}
+
 		const GraphicsApi defaultApi =
 #if PLATFORM_WINDOWS
 			GraphicsApi::D3D11;
@@ -341,7 +404,7 @@ namespace mmo
 		const uint16 indices[] = { 0, 1, 2, 2, 3, 0 };
 		s_consoleIndBuf = device.CreateIndexBuffer(6, IndexBufferSize::Index_16, BufferUsage::DynamicWriteOnlyDiscardable, indices);
 		
-		s_consoleFont = FontManager::Get().CreateOrRetrieve("Fonts/consola.ttf", 16.0f, 0.0f);
+		s_consoleFont = FontManager::Get().CreateOrRetrieve(ConsoleFontAssetPath, 16.0f, 0.0f);
 		
 		s_consoleTextGeom = std::make_unique<GeometryBuffer>();
 		s_perfTextGeom = std::make_unique<GeometryBuffer>();
@@ -388,6 +451,8 @@ namespace mmo
 			EventLoop::KeyChar.connect(&Console::KeyChar, true),
 			EventLoop::KeyUp.connect(&Console::KeyUp, true),
 		};
+
+		return true;
 	}
 	
 	void Console::Destroy()

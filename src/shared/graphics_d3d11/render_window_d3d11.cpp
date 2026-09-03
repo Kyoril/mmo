@@ -163,6 +163,24 @@ namespace mmo
 		::SetWindowTextA(m_handle, title.c_str());
 	}
 
+	void RenderWindowD3D11::Hide()
+	{
+		// Leaving fullscreen has to happen through the swap chain rather than by hiding the
+		// window: while DXGI holds the output exclusively it also owns the display mode, and
+		// anything drawn by someone else ends up behind the fullscreen surface.
+		if (m_swapChain)
+		{
+			m_swapChain->SetFullscreenState(FALSE, nullptr);
+			m_fullScreen = false;
+			m_prevFullScreenState = false;
+		}
+
+		if (m_handle)
+		{
+			::ShowWindow(m_handle, SW_HIDE);
+		}
+	}
+
 	void RenderWindowD3D11::EnsureWindowClassCreated()
 	{
 		static bool s_windowClassCreated = false;

@@ -95,4 +95,14 @@ namespace mmo
         NSRect frame = [[NSScreen mainScreen] frame];
         return { static_cast<int>(frame.size.width), static_cast<int>(frame.size.height) };
     }
+
+    void PlatformOsX::ShowErrorDialog(const std::string& title, const std::string& message)
+    {
+        NSAlert* alert = [[NSAlert alloc] init];
+        [alert setAlertStyle:NSAlertStyleCritical];
+        [alert setMessageText:[NSString stringWithUTF8String:title.c_str()]];
+        [alert setInformativeText:[NSString stringWithUTF8String:message.c_str()]];
+        [alert addButtonWithTitle:@"OK"];
+        [alert runModal];
+    }
 }

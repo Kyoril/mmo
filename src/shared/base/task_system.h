@@ -89,6 +89,13 @@ namespace mmo
 		/// @brief Stops all workers after draining queued jobs. Must be called from the main thread.
 		void Shutdown();
 
+		/// @brief Stops the worker pool if it is still running.
+		/// @remarks Shutdown() is the intended way to stop the pool, but the instance is a function
+		///          local static and therefore outlives any startup path that bails out before
+		///          reaching it. Destroying joinable threads terminates the process, which would
+		///          turn an orderly "cannot start" into a crash report.
+		~TaskSystem();
+
 		/// @brief Returns whether the worker pool is running.
 		[[nodiscard]] bool IsInitialized() const { return !m_workers.empty(); }
 

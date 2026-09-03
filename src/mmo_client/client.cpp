@@ -67,11 +67,15 @@ namespace mmo
 		// TODO: Do something with command line arguments
 
 		ClientApplication app;
-		if (app.Start())
+		if (!app.Start())
 		{
-			EventLoop::Run();
-			app.Stop();
+			// The reason has already been logged, and reported to the player where it is something
+			// they can act on. Report the failure to whatever launched us as well.
+			return 1;
 		}
+
+		EventLoop::Run();
+		app.Stop();
 
 		return 0;
 	}

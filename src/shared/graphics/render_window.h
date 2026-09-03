@@ -25,6 +25,13 @@ namespace mmo
 
 	public:
 		virtual void SetTitle(const std::string& title) = 0;
+
+		/// @brief Takes the window off the screen, giving the display back to the desktop.
+		/// @remarks Needed before anything else may show UI of its own: a backend running in
+		///          exclusive fullscreen owns the output, so a message box raised over it can
+		///          end up invisible behind the fullscreen surface. Backends that never take
+		///          the display exclusively do not need to do anything here.
+		virtual void Hide() {}
 	};
 
 	typedef std::shared_ptr<RenderWindow> RenderWindowPtr;
