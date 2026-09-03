@@ -65,6 +65,7 @@ namespace mmo
 		other.m_onEscapePressed = m_onEscapePressed;
 		other.m_onEnter = m_onEnter;
 		other.m_onLeave = m_onLeave;
+		other.m_onTextChanged = m_onTextChanged;
 		other.m_onShow = m_onShow;
 		other.m_onHide = m_onHide;
 		other.m_onClick = m_onClick;
@@ -1647,6 +1648,20 @@ namespace mmo
 
 		// Invoke the signal
 		TextChanged();
+
+		// Notify the lua handler, if any. Note that a handler which changes this frame's text
+		// again will re-enter this method, so handlers have to guard against that themselves.
+		if (m_onTextChanged.is_valid() && luabind::type(m_onTextChanged) == LUA_TFUNCTION)
+		{
+			try
+			{
+				m_onTextChanged(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling " << m_name << ":OnTextChanged: " << e.what());
+			}
+		}
 	}
 
 	void Frame::OnClippedByParentChanged(const Property& property)

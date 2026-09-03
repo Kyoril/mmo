@@ -28,7 +28,7 @@
 #include <luabind/detail/class_rep.hpp>
 #include <luabind/detail/instance_holder.hpp>
 #include <luabind/detail/ref.hpp>
-#include <type_traits>	// std::aligned_storage
+#include <cstddef>		// std::byte, std::max_align_t
 #include <cstdlib>
 
 namespace luabind {
@@ -70,9 +70,13 @@ namespace luabind {
 					m_instance->release();
 			}
 
+			// Instance holders up to this size are constructed inside m_instance_buffer instead of
+			// on the heap. Must always match the buffer's actual size - see the member below.
+			static constexpr std::size_t instance_buffer_size = 32;
+
 			void* allocate(std::size_t size)
 			{
-				if(size <= 32) {
+				if(size <= instance_buffer_size) {
 					return &m_instance_buffer;
 				}
 				else {
@@ -96,7 +100,13 @@ namespace luabind {
 			void operator=(object_rep const&) = delete;
 
 			instance_holder* m_instance;
-			alignas(uint32_t) std::byte m_instance_buffer[sizeof(uint32_t)];
+			// [Custom] This has to stay as large as instance_buffer_size, which allocate() hands it
+			// out for. Replacing the original std::aligned_storage<32>::type with a 4 byte array (in
+			// "Fixed deprecation warnings from c++23") made every holder of 5..32 bytes overwrite the
+			// members below it: a 32 byte value_holder (e.g. a 4 float Rect returned by value) put
+			// float bits into m_dependency_ref, so unref'ing it from a GC finalizer dereferenced a
+			// garbage lua_State.
+			alignas(std::max_align_t) std::byte m_instance_buffer[instance_buffer_size];
 			class_rep* m_classrep; // the class information about this object's type
 			detail::lua_reference m_dependency_ref; // reference to lua table holding dependency references
 		};
