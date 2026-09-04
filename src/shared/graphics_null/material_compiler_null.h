@@ -43,6 +43,12 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddClamp
 		ExpressionIndex AddClamp(ExpressionIndex base, ExpressionIndex min, ExpressionIndex max) override;
 		
+		/// @copydoc MaterialCompiler::AddMax
+		ExpressionIndex AddMax(ExpressionIndex first, ExpressionIndex second) override;
+		
+		/// @copydoc MaterialCompiler::AddMin
+		ExpressionIndex AddMin(ExpressionIndex first, ExpressionIndex second) override;
+		
 		/// @copydoc MaterialCompiler::AddOneMinus
 		ExpressionIndex AddOneMinus(ExpressionIndex input) override;
 		

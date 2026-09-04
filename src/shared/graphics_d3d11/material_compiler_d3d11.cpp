@@ -290,6 +290,56 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddMax(const ExpressionIndex first, const ExpressionIndex second)
+	{
+		if (first == IndexNone)
+		{
+			WLOG("Missing first parameter for maximum");
+			return IndexNone;
+		}
+
+		if (second == IndexNone)
+		{
+			WLOG("Missing second parameter for maximum");
+			return IndexNone;
+		}
+
+		const ExpressionType firstType = GetExpressionType(first);
+		const ExpressionType secondType = GetExpressionType(second);
+
+		std::ostringstream outputStream;
+		outputStream << "max(expr_" << first << ", expr_" << second << ")";
+		outputStream.flush();
+
+		// Like multiplication, the widest operand wins: max(float, float4) is a float4.
+		return AddExpression(outputStream.str(), std::max(firstType, secondType));
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddMin(const ExpressionIndex first, const ExpressionIndex second)
+	{
+		if (first == IndexNone)
+		{
+			WLOG("Missing first parameter for minimum");
+			return IndexNone;
+		}
+
+		if (second == IndexNone)
+		{
+			WLOG("Missing second parameter for minimum");
+			return IndexNone;
+		}
+
+		const ExpressionType firstType = GetExpressionType(first);
+		const ExpressionType secondType = GetExpressionType(second);
+
+		std::ostringstream outputStream;
+		outputStream << "min(expr_" << first << ", expr_" << second << ")";
+		outputStream.flush();
+
+		// Like multiplication, the widest operand wins: max(float, float4) is a float4.
+		return AddExpression(outputStream.str(), std::max(firstType, secondType));
+	}
+
 	ExpressionIndex MaterialCompilerD3D11::AddOneMinus(const ExpressionIndex input)
 	{
 		if (input == IndexNone)

@@ -18,6 +18,8 @@ namespace mmo
 			AddNode::GetStaticTypeInfo(),
 			ConstVectorNode::GetStaticTypeInfo(),
 			ClampNode::GetStaticTypeInfo(),
+			MaxNode::GetStaticTypeInfo(),
+			MinNode::GetStaticTypeInfo(),
 			DotNode::GetStaticTypeInfo(),
 			OneMinusNode::GetStaticTypeInfo(),
 			PowerNode::GetStaticTypeInfo(),
