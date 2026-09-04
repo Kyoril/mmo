@@ -39,6 +39,28 @@ namespace mmo
 		m_propConnections += AddProperty("DropEnabled").Changed.connect(this, &Frame::OnDropEnabledPropertyChanged);
 	}
 
+	void Frame::CopyScriptHandlers(Frame& other) const
+	{
+		other.m_onLoad = m_onLoad;
+		other.m_onUpdate = m_onUpdate;
+		other.m_onEnterPressed = m_onEnterPressed;
+		other.m_onTabPressed = m_onTabPressed;
+		other.m_onSpacePressed = m_onSpacePressed;
+		other.m_onEscapePressed = m_onEscapePressed;
+		other.m_onEnter = m_onEnter;
+		other.m_onLeave = m_onLeave;
+		other.m_onTextChanged = m_onTextChanged;
+		other.m_onShow = m_onShow;
+		other.m_onHide = m_onHide;
+		other.m_onClick = m_onClick;
+		other.m_onDrag = m_onDrag;
+		other.m_onDrop = m_onDrop;
+		other.m_onMouseDown = m_onMouseDown;
+		other.m_onMouseUp = m_onMouseUp;
+		other.m_onMouseMove = m_onMouseMove;
+		other.m_onMouseWheel = m_onMouseWheel;
+	}
+
 	void Frame::Copy(Frame & other)
 	{
 		if (m_renderer)
@@ -54,28 +76,12 @@ namespace mmo
 		other.m_pixelSize = m_pixelSize;
 		other.m_position = m_position;
 		other.m_text = m_text;
-		other.m_onLoad = m_onLoad;
-		other.m_onUpdate = m_onUpdate;
 		other.m_needsLayout = true;
 		other.m_needsRedraw = true;
 		other.m_textHeightCacheValid = false;
-		other.m_onEnterPressed = m_onEnterPressed;
-		other.m_onTabPressed = m_onTabPressed;
-		other.m_onSpacePressed = m_onSpacePressed;
-		other.m_onEscapePressed = m_onEscapePressed;
-		other.m_onEnter = m_onEnter;
-		other.m_onLeave = m_onLeave;
-		other.m_onTextChanged = m_onTextChanged;
-		other.m_onShow = m_onShow;
-		other.m_onHide = m_onHide;
-		other.m_onClick = m_onClick;
-		other.m_onDrag = m_onDrag;
 
-		other.m_onDrop = m_onDrop;
-		other.m_onMouseDown = m_onMouseDown;
-		other.m_onMouseUp = m_onMouseUp;
-		other.m_onMouseMove = m_onMouseMove;
-		other.m_onMouseWheel = m_onMouseWheel;
+		CopyScriptHandlers(other);
+
 		other.m_id = m_id;
 		other.m_focusable = m_focusable;
 		other.m_clickable = m_clickable;

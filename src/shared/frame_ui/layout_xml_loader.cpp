@@ -67,6 +67,7 @@ namespace mmo
 	static const std::string OnEnterPressedElement("OnEnterPressed");
 	static const std::string OnSpacePressedElement("OnSpacePressed");
 	static const std::string OnEscapePressedElement("OnEscapePressed");
+	static const std::string OnTextChangedElement("OnTextChanged");
 	static const std::string OnShowElement("OnShow");
 	static const std::string OnHideElement("OnHide");
 	static const std::string OnEnterElement("OnEnter");
@@ -303,6 +304,10 @@ namespace mmo
 			{
 				ElementOnEscapePressedStart(attributes);
 			}
+			else if (element == OnTextChangedElement)
+			{
+				ElementOnTextChangedStart(attributes);
+			}
 			else if (element == AnimationsElement)
 			{
 				ElementAnimationsStart(attributes);
@@ -458,6 +463,10 @@ namespace mmo
 			{
 				ElementOnEscapePressedEnd();
 			}
+			else if (element == OnTextChangedElement)
+			{
+				ElementOnTextChangedEnd();
+			}
 			else if (element == OnShowElement)
 			{
 				ElementOnShowEnd();
@@ -578,6 +587,16 @@ namespace mmo
 		if (templateFrame)
 		{
 			templateFrame->Copy(*frame);
+
+			// Script handlers are compiled only once the whole file has been parsed, so a template
+			// declared in this same file has none of its own yet and the copy above picked up
+			// nothing. Repeat the handler copy after compilation. This is queued before the new
+			// frame's own <Scripts> blocks, so anything it declares itself still wins, and for a
+			// template from an already loaded file it simply copies the same handlers again.
+			m_scriptFunctions.push_back([templateFrame, frame]()
+				{
+					templateFrame->CopyScriptHandlers(*frame);
+				});
 		}
 
 		frame->SetId(id);
@@ -1465,6 +1484,26 @@ namespace mmo
 			{
 				const luabind::object onEscapePressed = FrameManager::Get().CompileFunction(frame->GetName() + ":OnEscapePressed", script);
 				frame->SetOnEscapePressed(onEscapePressed);
+			});
+	}
+
+	void LayoutXmlLoader::ElementOnTextChangedStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnTextChangedElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnTextChangedEnd()
+	{
+		String script = m_text;
+		FramePtr frame = m_frames.top();
+		m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onTextChanged = FrameManager::Get().CompileFunction(frame->GetName() + ":OnTextChanged", script);
+				frame->SetOnTextChanged(onTextChanged);
 			});
 	}
 
