@@ -209,6 +209,27 @@ namespace mmo
 			}
 		}
 
+		/// @brief Gets the parent material's layer binding.
+		/// @details Unlike foliage and surface types, layer bindings are deliberately NOT
+		///          overridable per instance, and there is no MBND chunk in the .hmi format. A
+		///          binding names shader parameters that exist only because the parent's
+		///          compiled graph declared them, and an instance cannot add or rename a
+		///          parameter (AddScalarParameter is a no-op by design). An instance-level
+		///          binding could therefore only ever point at something the parent already has,
+		///          i.e. it could only ever be wrong. Please do not "fix" this asymmetry.
+		[[nodiscard]] const MaterialLayerBinding& GetLayerBinding(const uint8 layer) const override
+		{
+			static const MaterialLayerBinding s_empty{};
+			return m_parent ? m_parent->GetLayerBinding(layer) : s_empty;
+		}
+
+		/// @copydoc MaterialInterface::GetLayerBlendSharpnessParam
+		[[nodiscard]] const String& GetLayerBlendSharpnessParam() const override
+		{
+			static const String s_empty{};
+			return m_parent ? m_parent->GetLayerBlendSharpnessParam() : s_empty;
+		}
+
 	private:
 		String m_name;
 		MaterialPtr m_parent;
