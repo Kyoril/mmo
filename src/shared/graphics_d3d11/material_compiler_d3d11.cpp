@@ -999,6 +999,21 @@ namespace mmo
 		const auto& textureParams = m_textureParameters;
 		if (!textureParams.empty())
 		{
+			// texparamN is declared without an explicit register, so fxc assigns t0, t1, ... in
+			// declaration order. Overrunning into the reserved scene color/depth registers does
+			// not fail to compile: the deferred renderer binds and unbinds those slots every
+			// frame, so the overflowing textures silently read as black at draw time. That is
+			// almost impossible to diagnose from the image, so say so loudly here.
+			if (textureParams.size() > kMaxMaterialTextureParameters)
+			{
+				ELOG("Material declares " << textureParams.size() << " texture parameters, but only "
+					<< kMaxMaterialTextureParameters << " fit before the reserved scene color (t"
+					<< kSceneColorTextureSlot << ") and scene depth (t" << kSceneDepthTextureSlot
+					<< ") registers. The last " << (textureParams.size() - kMaxMaterialTextureParameters)
+					<< " will be unbound at draw time and sample black. Reduce the count - note that "
+					<< "sampling one texture parameter at several UVs costs only a single slot.");
+			}
+
 			for (size_t i = 0; i < textureParams.size(); ++i)
 			{
 				m_material->AddTextureParameter(textureParams[i].name, textureParams[i].texture);
@@ -1015,7 +1030,7 @@ namespace mmo
 			// The engine binds this before drawing translucent objects.
 			m_pixelShaderStream
 				<< "// Scene depth texture (G-buffer normal alpha)\n"
-				<< "Texture2D sceneDepthTex : register(t15);\n\n";
+				<< "Texture2D sceneDepthTex : register(t" << kSceneDepthTextureSlot << ");\n\n";
 		}
 
 		if (m_needsSceneColor)
@@ -1024,7 +1039,7 @@ namespace mmo
 			// The engine binds this before drawing translucent objects (used for refraction).
 			m_pixelShaderStream
 				<< "// Scene color texture (lit opaque scene captured before translucent pass)\n"
-				<< "Texture2D sceneColorTex : register(t14);\n\n";
+				<< "Texture2D sceneColorTex : register(t" << kSceneColorTextureSlot << ");\n\n";
 		}
 
 		if (m_lit && type != PixelShaderType::UI)

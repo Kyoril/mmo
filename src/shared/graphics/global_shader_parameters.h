@@ -49,6 +49,25 @@ namespace mmo
 	///        per-material scalar/vector buffers at b2/b3).
 	constexpr uint32 kGlobalShaderParametersPsSlot = 13;
 
+	/// @brief Reserved pixel shader texture register holding the lit opaque scene color copy,
+	///        used for refraction by translucent materials.
+	constexpr uint32 kSceneColorTextureSlot = 14;
+
+	/// @brief Reserved pixel shader texture register holding the opaque scene's linear depth
+	///        (the G-buffer normal RT, whose alpha channel carries it).
+	constexpr uint32 kSceneDepthTextureSlot = 15;
+
+	/// @brief Maximum number of texture parameters a material may declare.
+	///
+	/// Generated shaders declare `Texture2D texparamN;` without an explicit register, so fxc
+	/// assigns them t0, t1, ... in declaration order. The two slots above are reserved, and the
+	/// deferred renderer binds them (and then unbinds them) every frame, so a material that
+	/// declares more than this many texture parameters has its last ones silently overwritten
+	/// at draw time - the textures simply read as black with no error anywhere. Note that the
+	/// material compiler deduplicates texture parameters by NAME, so sampling one texture at
+	/// several different UVs costs a single register.
+	constexpr uint32 kMaxMaterialTextureParameters = kSceneColorTextureSlot;
+
 	/// @brief Canonical asset path of the project-wide global shader parameter registry.
 	constexpr const char* GlobalShaderParametersAssetPath = "Config/GlobalShaderParameters.hgsp";
 
