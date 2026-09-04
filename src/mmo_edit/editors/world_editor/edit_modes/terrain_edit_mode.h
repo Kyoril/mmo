@@ -287,6 +287,24 @@ namespace mmo
 		/// Shared brush-mask import/invert/rotation/preview controls (used by Paint and Stamp).
 		void DrawBrushMaskControls();
 
+		/// @brief Draws the per-layer texture, scale and height blend controls of the terrain
+		///        material under the cursor, when that material declares layer bindings.
+		void DrawLayerPropertiesSection();
+
+		/// @brief Resolves which material the layer property controls should edit.
+		/// @details Prefers the material of the tile the brush is over, falling back to the
+		///          terrain's default material. Returns null when neither is available.
+		[[nodiscard]] MaterialPtr ResolveLayerPropertyMaterial() const;
+
+		/// @brief Writes a scalar parameter to a material AND to every loaded tile instance
+		///        parented to it, which is what makes the change visible immediately.
+		/// @details Each tile owns a private MaterialInstance whose parameters were copied
+		///          from the parent at construction, so writing the parent alone changes
+		///          nothing on screen. RefreshParametersFromBase cannot be used here: it
+		///          re-copies the parent list but then restores the instance's own value by
+		///          name, which would keep the stale value.
+		void ApplyLayerScalarParameter(const MaterialPtr& material, const String& parameterName, float value);
+
 	private:
 		/// State machine for the Region edit type.
 		enum class RegionEditState : uint8

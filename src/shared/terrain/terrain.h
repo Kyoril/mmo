@@ -169,6 +169,15 @@ namespace mmo
 			/// @return Pointer to the page, or nullptr if not found.
 			[[nodiscard]] Page *GetPage(uint32 x, uint32 z) const;
 
+			/// @brief Invokes a callback for every tile of every currently loaded page.
+			/// @details Pages that are not loaded are skipped, so the set of visited tiles
+			///          changes as the world streams. Used by the editor to push a material
+			///          parameter edit onto every tile instance sharing that material: each
+			///          tile owns a private MaterialInstance whose parameters were COPIED from
+			///          the parent, so editing the parent alone changes nothing on screen.
+			/// @param callback Invoked once per loaded tile.
+			void ForEachLoadedTile(const std::function<void(Tile&)>& callback);
+
 			/// @brief Converts a world position to page indices.
 			/// @param position The world position.
 			/// @param x Output parameter for the page X index.
