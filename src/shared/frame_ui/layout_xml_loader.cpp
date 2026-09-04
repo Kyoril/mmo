@@ -587,6 +587,16 @@ namespace mmo
 		if (templateFrame)
 		{
 			templateFrame->Copy(*frame);
+
+			// Script handlers are compiled only once the whole file has been parsed, so a template
+			// declared in this same file has none of its own yet and the copy above picked up
+			// nothing. Repeat the handler copy after compilation. This is queued before the new
+			// frame's own <Scripts> blocks, so anything it declares itself still wins, and for a
+			// template from an already loaded file it simply copies the same handlers again.
+			m_scriptFunctions.push_back([templateFrame, frame]()
+				{
+					templateFrame->CopyScriptHandlers(*frame);
+				});
 		}
 
 		frame->SetId(id);

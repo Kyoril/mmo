@@ -103,6 +103,14 @@ namespace mmo
 		/// Called to copy this frame's properties over to another frame.
 		virtual void Copy(Frame& other);
 
+		/// Copies just the script handlers of this frame onto another one.
+		/// @remarks Split out of Copy because a frame inheriting from a template declared in the
+		///          same layout file is created before that template's handlers have been
+		///          compiled: the layout loader defers script compilation until the file has been
+		///          parsed. The loader therefore repeats this step once the handlers exist.
+		/// @param other The frame that receives this frame's handlers.
+		void CopyScriptHandlers(Frame& other) const;
+
 	public:
 		/// Adds a property definition to this frame.
 		Property& AddProperty(const std::string& name, std::string defaultValue = "");
