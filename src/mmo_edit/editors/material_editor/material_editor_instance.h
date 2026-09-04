@@ -98,6 +98,17 @@ namespace mmo
 
 		/// @brief Draws the surface type authoring section in the details panel.
 		void DrawSurfaceTypeSection();
+
+		/// @brief Draws the terrain layer parameter binding section in the details panel.
+		void DrawTerrainLayersSection();
+
+		/// @brief Draws a combo box picking one of the material's parameter names.
+		/// @param label Widget label.
+		/// @param current The currently bound parameter name, empty for none.
+		/// @param names The candidate parameter names to offer.
+		/// @param onChange Invoked with the newly picked name (empty when "(none)" is picked).
+		static void DrawParameterCombo(const char* label, const String& current, const std::vector<String>& names,
+			const std::function<void(const String&)>& onChange);
 		void DrawVariableSelector(NamedVariableGetNode* node);
 		void DrawFunctionInputDefaultValue(MaterialFunctionInputNode* node);
 		void DrawSamplerTypeEditor(PropertyBase* prop);

@@ -956,6 +956,7 @@ namespace mmo
 			{
 				DrawFoliageSection();
 				DrawSurfaceTypeSection();
+				DrawTerrainLayersSection();
 			}
 
 			ImGui::PopStyleVar(2);
@@ -1108,6 +1109,114 @@ namespace mmo
 				{
 					m_material->SetLayerSurfaceTypeId(layer, id);
 				});
+		}
+
+		ImGui::PopID();
+	}
+
+	void MaterialEditorInstance::DrawParameterCombo(const char* label, const String& current, const std::vector<String>& names,
+		const std::function<void(const String&)>& onChange)
+	{
+		// Parameter names are always picked from the material's own compiled parameter list,
+		// never typed. A binding that names a parameter the graph does not declare would be
+		// silently inert, and a typo is impossible to spot in a shader.
+		static const char* s_none = "(none)";
+
+		if (ImGui::BeginCombo(label, current.empty() ? s_none : current.c_str()))
+		{
+			if (ImGui::Selectable(s_none, current.empty()))
+			{
+				onChange(String());
+			}
+
+			for (const String& name : names)
+			{
+				ImGui::PushID(name.c_str());
+				if (ImGui::Selectable(name.c_str(), name == current))
+				{
+					onChange(name);
+				}
+				ImGui::PopID();
+			}
+
+			ImGui::EndCombo();
+		}
+	}
+
+	void MaterialEditorInstance::DrawTerrainLayersSection()
+	{
+		if (!ImGui::CollapsingHeader("Terrain Layers"))
+		{
+			return;
+		}
+
+		ImGui::PushID("TerrainLayersSection");
+
+		ImGui::TextWrapped("Declares which of this material's parameters drive each terrain splat layer. "
+			"The world editor's terrain paint tool uses this to offer per-layer texture, scale and height "
+			"blend controls. Leave a field empty to hide that control. This stores parameter names only, "
+			"never values.");
+
+		std::vector<String> scalarNames;
+		scalarNames.reserve(m_material->GetScalarParameters().size());
+		for (const auto& param : m_material->GetScalarParameters())
+		{
+			scalarNames.push_back(param.name);
+		}
+
+		std::vector<String> textureNames;
+		textureNames.reserve(m_material->GetTextureParameters().size());
+		for (const auto& param : m_material->GetTextureParameters())
+		{
+			textureNames.push_back(param.name);
+		}
+
+		auto& bindings = m_material->GetLayerBindings();
+		for (uint8 layer = 0; layer < MaterialLayerBindingCount; ++layer)
+		{
+			MaterialLayerBinding& binding = bindings[layer];
+
+			const String header = binding.displayName.empty()
+				? "Layer " + std::to_string(layer + 1)
+				: "Layer " + std::to_string(layer + 1) + " - " + binding.displayName;
+
+			ImGui::PushID(layer);
+			if (ImGui::TreeNode(header.c_str()))
+			{
+				char displayName[128];
+				std::snprintf(displayName, sizeof(displayName), "%s", binding.displayName.c_str());
+				if (ImGui::InputText("Display Name", displayName, sizeof(displayName)))
+				{
+					binding.displayName = displayName;
+				}
+
+				DrawParameterCombo("Base Color", binding.albedoTextureParam, textureNames,
+					[&binding](const String& name) { binding.albedoTextureParam = name; });
+				DrawParameterCombo("Normal Map", binding.normalTextureParam, textureNames,
+					[&binding](const String& name) { binding.normalTextureParam = name; });
+				DrawParameterCombo("UV Scale", binding.scaleScalarParam, scalarNames,
+					[&binding](const String& name) { binding.scaleScalarParam = name; });
+				DrawParameterCombo("Height Map", binding.heightTextureParam, textureNames,
+					[&binding](const String& name) { binding.heightTextureParam = name; });
+				DrawParameterCombo("Height Scale", binding.heightScaleParam, scalarNames,
+					[&binding](const String& name) { binding.heightScaleParam = name; });
+				DrawParameterCombo("Height Offset", binding.heightOffsetParam, scalarNames,
+					[&binding](const String& name) { binding.heightOffsetParam = name; });
+
+				ImGui::TreePop();
+			}
+			ImGui::PopID();
+		}
+
+		ImGui::Separator();
+		DrawParameterCombo("Blend Sharpness", m_material->GetLayerBlendSharpnessParam(), scalarNames,
+			[this](const String& name) { m_material->SetLayerBlendSharpnessParam(name); });
+		ImGui::SameLine();
+		ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Hardness of the height based layer transition.\n"
+				"0 reproduces the plain coverage blend exactly; 1 is a fully sharpened transition.");
 		}
 
 		ImGui::PopID();

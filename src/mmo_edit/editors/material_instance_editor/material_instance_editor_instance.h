@@ -60,6 +60,9 @@ namespace mmo
 		/// @brief Draws the parent material section.
 		void DrawParentMaterialSection();
 
+		/// @brief Draws the inherited terrain layer bindings, read only.
+		void DrawTerrainLayersSection();
+
 		/// @brief Draws the scalar parameters section.
 		void DrawScalarParametersSection();
 
