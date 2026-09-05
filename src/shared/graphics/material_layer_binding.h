@@ -42,12 +42,10 @@ namespace mmo
 		String scaleScalarParam;
 
 		/// @brief Name of the texture parameter holding this layer's height map.
-		/// @details Layers commonly SHARE one packed texture and take a channel of it each,
-		///          because a material may declare at most kMaxMaterialTextureParameters
-		///          textures before it runs into the reserved scene colour and depth
-		///          registers. Four separate height maps rarely fit; four channels of one
-		///          always do, and the compiler charges a single register for a texture
-		///          parameter no matter how many UVs it is sampled at.
+		/// @details Usually a dedicated grayscale texture per layer. If a material ever runs up
+		///          against kMaxMaterialTextureParameters, note that layers can instead share
+		///          one packed texture and take a channel each: the compiler charges a single
+		///          register for a texture parameter however many UVs it is sampled at.
 		String heightTextureParam;
 
 		/// @brief Name of the scalar parameter scaling this layer's height contribution.
