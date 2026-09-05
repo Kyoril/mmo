@@ -22,6 +22,15 @@ screenshot comparison. Run it after anyone edits the terrain material's graph.
 
 The maths itself is pinned separately by src/tests/terrain_tests/test_terrain_layer_blend.cpp
 against src/shared/terrain/terrain_layer_blend.h; this script only checks the wiring.
+
+Known blind spots, so nobody reads a pass as more than it is:
+  - MaskNode forwards its input and ignores which channel is selected, so a wrong channel
+    mask is invisible here.
+  - DivideNode returns 0.0 on a zero divisor rather than producing NaN like the shader, so
+    division hazards are invisible here too.
+  - Evaluation is in Python doubles. At neutral settings both sides evaluate the identical
+    expression tree with no rounding, so exact equality is meaningful; it would not catch a
+    float-precision-only divergence in a non-neutral configuration.
 """
 import argparse
 import json

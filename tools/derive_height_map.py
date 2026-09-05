@@ -55,10 +55,18 @@ def derive(image, blur_radius: int, size: int):
     from PIL import Image, ImageFilter
 
     if size and (image.width > size or image.height > size):
-        image = image.resize((size, size), Image.LANCZOS)
+        # Clamp the LONGEST side and keep the aspect ratio; forcing a square would distort the
+        # height map relative to the albedo it was derived from.
+        scale = size / float(max(image.width, image.height))
+        image = image.resize((max(1, round(image.width * scale)),
+                              max(1, round(image.height * scale))), Image.LANCZOS)
 
-    # Rec. 709 luminance.
-    grey = image.convert("L")
+    # Rec. 709 luminance, to match the editor's import-time derivation exactly. PIL's
+    # convert("L") is Rec. 601, which would make the two paths disagree on the same source.
+    grey = image.convert("RGB", matrix=(
+        0.2126, 0.7152, 0.0722, 0,
+        0.2126, 0.7152, 0.0722, 0,
+        0.2126, 0.7152, 0.0722, 0)).getchannel(0)
 
     # Two box passes approximate a Gaussian and stay cheap; the terrain samples this tiling,
     # so edges wrapping rather than clamping would be marginally better, but at these radii

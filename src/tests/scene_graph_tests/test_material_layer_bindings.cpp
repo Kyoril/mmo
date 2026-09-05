@@ -250,3 +250,42 @@ TEST_CASE("Syncing an unchanged parent leaves the instance alone", "[material_la
 	REQUIRE(instance.GetScalarParameters()[0].value == Approx(9.0f));
 }
 
+// The live terrain chain is three deep: a per-tile MaterialInstance wraps the world's .hmi,
+// which wraps the .hmat. Only the tile instance is ever rendered, so the .hmi never gets an
+// Apply of its own. A sync that did not walk up would re-derive the leaf from the stale
+// middle and then stamp the new root revision on it, marking it permanently "current"
+// against a list it never actually read.
+TEST_CASE("A three level instance chain syncs through the middle", "[material_layer_binding]")
+{
+	const auto root = std::make_shared<Material>("Root");
+	root->AddTextureParameter("Albedo", "albedo.htex");
+	root->AddTextureParameter("Normal", "normal.htex");
+
+	const auto middle = std::make_shared<MaterialInstance>("Middle", root);
+	middle->SetTextureParameter("Albedo", "middle_override.htex");
+
+	MaterialInstance leaf{ "Leaf", middle };
+	REQUIRE(leaf.GetTextureParameters().size() == 2);
+
+	// Recompile the root with a parameter inserted ahead of the existing ones. Nothing touches
+	// the middle instance - it is only ever a parent.
+	root->ClearParameters();
+	root->AddTextureParameter("Height", "height.htex");
+	root->AddTextureParameter("Albedo", "albedo.htex");
+	root->AddTextureParameter("Normal", "normal.htex");
+
+	leaf.SyncParametersIfStale();
+
+	const auto& params = leaf.GetTextureParameters();
+	REQUIRE(params.size() == 3);
+	REQUIRE(params[0].name == "Height");
+	REQUIRE(params[1].name == "Albedo");
+	REQUIRE(params[2].name == "Normal");
+
+	// The middle instance's override has to survive being pulled through two levels.
+	REQUIRE(params[1].texture == "middle_override.htex");
+
+	// And the middle itself must now be current, not left behind.
+	REQUIRE(middle->GetTextureParameters().size() == 3);
+}
+

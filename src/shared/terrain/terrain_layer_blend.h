@@ -29,8 +29,9 @@ namespace mmo::terrain
 	/// @brief Blends four normalized terrain coverage weights using per-layer height maps.
 	/// @details This is the reference implementation of the blend the terrain material graph
 	///          performs in the pixel shader. It exists so the maths can be tested without a
-	///          GPU, and so the node wiring in TerrainHeightBlend.hmf has an executable
-	///          specification to match.
+	///          GPU, and so the node wiring in Models/Terrain/Oakenshire_BoarTerrain.hmat has
+	///          an executable specification to match. tools/terrain_blend_check.py verifies the
+	///          shipped graph against the same property.
 	///
 	///          The shape follows the blend WoW introduced in Legion, with one addition. Their
 	///          formula is
@@ -49,6 +50,12 @@ namespace mmo::terrain
 	///          coverage-weight normalize the shader did before height blending existed - which
 	///          is what lets the shipped terrain material be upgraded in place with no visual
 	///          change. At sharpness 1 it reproduces the original formula.
+	///          NOTE one deliberate divergence from the graph: this guards the final divide
+	///          against a zero sum, the shader does not. Where every layer's contribution is
+	///          zero this returns zeros and the shader produces NaN. That is pre-existing -
+	///          the plain normalize it replaced divided by the same unguarded sum - so it is
+	///          not a regression, but do not read this helper as proof the shader is safe
+	///          there. Adding a Max(sum, epsilon) node to the graph would close it for good.
 	/// @param weights Normalized coverage weights, expected to sum to 1.
 	/// @param params Per-layer height parameters and the transition hardness.
 	/// @return The blended weights, summing to 1.

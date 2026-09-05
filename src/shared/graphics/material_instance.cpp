@@ -44,6 +44,10 @@ namespace mmo
 		// Update parent
 		m_parent = parent;
 
+		// Make sure the parent is itself current before copying its list, or this instance
+		// inherits a stale one and records the new revision against it.
+		m_parent->SyncParametersIfStale();
+
 		// Take parent parameter default values
 		m_scalarParameters.clear();
 		m_scalarParameters.reserve(m_parent->GetScalarParameters().size());

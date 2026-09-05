@@ -9,10 +9,11 @@
 using namespace mmo;
 using namespace mmo::terrain;
 
-// These tests are the executable specification for TerrainHeightBlend.hmf. The material
-// function's node wiring has to reproduce them, and in particular the first two are the
-// reason the shipped terrain material can be rewired to route its coverage weights through
-// the blend without changing a single pixel.
+// These tests are the executable specification for the blend built into
+// Models/Terrain/Oakenshire_BoarTerrain.hmat. The graph's node wiring has to reproduce them,
+// and in particular the first two are the reason that material could be rewired to route its
+// coverage weights through the blend without changing a single pixel.
+// tools/terrain_blend_check.py checks the shipped graph against the same property.
 
 namespace
 {
@@ -169,9 +170,13 @@ TEST_CASE("Blend output always sums to one and stays non-negative", "[terrain_la
 	}
 }
 
-TEST_CASE("An all-zero blend does not divide by zero", "[terrain_layer_blend]")
+TEST_CASE("The CPU helper guards its divide where the shader does not", "[terrain_layer_blend]")
 {
 	// Reachable when every layer's height offset is zero, e.g. a half-authored material.
+	// This pins the HELPER's behaviour only: the graph divides unguarded and produces NaN
+	// here. That is pre-existing rather than a regression - the plain normalize this replaced
+	// divided by the same unguarded sum - but this test must not be read as evidence that the
+	// shader is safe in that case. See the note on BlendLayerWeights.
 	LayerBlendParams params;
 	params.heightOffset = { { 0.0f, 0.0f, 0.0f, 0.0f } };
 

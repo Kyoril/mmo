@@ -1103,6 +1103,15 @@ namespace mmo
 
 		material->SetScalarParameter(parameterName, value);
 
+		// TerrainBatch owns its own MaterialInstance per quadrant, which ForEachLoadedTile does
+		// not reach, so with batching on the edit lands in the asset but not on screen. The
+		// editor never enables batching today; warn rather than silently doing half the job.
+		if (m_terrain.IsBatchRenderingEnabled())
+		{
+			WLOG("Terrain batching is enabled: layer parameter edits will not preview until the "
+				"terrain is reloaded.");
+		}
+
 		// Every tile holds a MaterialInstance whose parameter list was COPIED from the parent
 		// when it was created, so the write above is invisible until each instance is updated
 		// too. Only tiles parented to this exact material are touched.
@@ -1123,6 +1132,7 @@ namespace mmo
 	void TerrainEditMode::DrawLayerPropertiesSection()
 	{
 		static const char* s_fallbackLayerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
+		static const MaterialLayerBinding s_noBinding{};
 
 		const MaterialPtr material = ResolveLayerPropertyMaterial();
 
@@ -1137,7 +1147,7 @@ namespace mmo
 		// bindings at all.
 		for (uint8 layer = 0; layer < MaterialLayerBindingCount; ++layer)
 		{
-			const MaterialLayerBinding& binding = material ? material->GetLayerBinding(layer) : MaterialLayerBinding{};
+			const MaterialLayerBinding& binding = material ? material->GetLayerBinding(layer) : s_noBinding;
 			const String label = binding.displayName.empty()
 				? String(s_fallbackLayerNames[layer])
 				: binding.displayName + " (" + s_fallbackLayerNames[layer] + ")";
@@ -1175,8 +1185,7 @@ namespace mmo
 						float magnitude = std::fabs(scale);
 						if (ImGui::SliderFloat("Texture Size", &magnitude, 1.0f, 200.0f, "%.1f units", ImGuiSliderFlags_Logarithmic))
 						{
-							const float signedValue = scale < 0.0f ? -magnitude : magnitude;
-							ApplyLayerScalarParameter(material, binding.scaleScalarParam, signedValue);
+							ApplyLayerScalarParameter(material, binding.scaleScalarParam, std::copysign(magnitude, scale));
 						}
 					}
 				}

@@ -234,12 +234,18 @@ namespace mmo
 		/// @details Cheap: an integer compare in the common case. Called before the instance
 		///          binds anything, because binding a stale list against a freshly compiled
 		///          shader puts every resource past the first change into the wrong register.
-		void SyncParametersIfStale()
+		void SyncParametersIfStale() override
 		{
 			if (!m_parent)
 			{
 				return;
 			}
+
+			// Walk up first. Only the leaf of an instance chain is rendered, so an intermediate
+			// instance never gets an Apply of its own and would stay stale forever; re-deriving
+			// from it would then copy the old list while stamping the new revision, which is
+			// exactly the failure this guards against.
+			m_parent->SyncParametersIfStale();
 
 			const uint32 revision = m_parent->GetParameterRevision();
 			if (revision == m_syncedParameterRevision)

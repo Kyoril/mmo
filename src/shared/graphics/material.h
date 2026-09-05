@@ -213,6 +213,14 @@ namespace mmo
 		///          the first change lands in the wrong register. Instances compare this
 		///          against the revision they last synced and re-derive when it moves.
 		[[nodiscard]] virtual uint32 GetParameterRevision() const { return 0; }
+
+		/// @brief Re-derives this material's parameter list from its own parent if that parent
+		///        has been recompiled since. A no-op for a base material, which has no parent.
+		/// @details Instance chains can be more than two deep - a terrain tile wraps the world's
+		///          .hmi, which in turn wraps the .hmat - and only the leaf is ever rendered.
+		///          Syncing must therefore walk up, or a leaf re-derives from a stale middle and
+		///          then marks itself current against the root it never actually read.
+		virtual void SyncParametersIfStale() {}
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
