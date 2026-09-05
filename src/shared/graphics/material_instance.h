@@ -223,6 +223,34 @@ namespace mmo
 			return m_parent ? m_parent->GetLayerBinding(layer) : s_empty;
 		}
 
+		/// @copydoc MaterialInterface::GetParameterRevision
+		[[nodiscard]] uint32 GetParameterRevision() const override
+		{
+			return m_parent ? m_parent->GetParameterRevision() : 0;
+		}
+
+		/// @brief Re-derives the parameter list from the parent if the parent has been
+		///        recompiled with a different set of parameters since this instance copied it.
+		/// @details Cheap: an integer compare in the common case. Called before the instance
+		///          binds anything, because binding a stale list against a freshly compiled
+		///          shader puts every resource past the first change into the wrong register.
+		void SyncParametersIfStale()
+		{
+			if (!m_parent)
+			{
+				return;
+			}
+
+			const uint32 revision = m_parent->GetParameterRevision();
+			if (revision == m_syncedParameterRevision)
+			{
+				return;
+			}
+
+			RefreshParametersFromBase();
+			m_syncedParameterRevision = revision;
+		}
+
 		/// @copydoc MaterialInterface::GetLayerBlendSharpnessParam
 		[[nodiscard]] const String& GetLayerBlendSharpnessParam() const override
 		{
@@ -257,6 +285,9 @@ namespace mmo
 		uint32 m_surfaceTypeId = 0;
 		std::array<uint32, 4> m_layerSurfaceTypeIds{};
 		bool m_overrideSurfaceTypes = false;
+
+		/// Parent parameter revision this instance's list was derived from.
+		uint32 m_syncedParameterRevision { 0 };
 
 		bool m_bufferLayoutDirty[3]{ true, true, true };
 		bool m_bufferDataDirty[3]{ true, true, true };

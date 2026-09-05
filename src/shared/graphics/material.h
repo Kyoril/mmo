@@ -203,6 +203,16 @@ namespace mmo
 			static const String s_empty{};
 			return s_empty;
 		}
+
+		/// @brief Gets a counter that changes whenever this material's parameter LIST changes,
+		///        i.e. a parameter is added or the list is cleared and rebuilt by a recompile.
+		/// @details Instances copy the parameter list from their parent, and the generated
+		///          shader binds textures by list position. If a material is recompiled with a
+		///          different parameter list while instances of it are alive, those instances
+		///          keep binding the old list against the new shader, and every resource past
+		///          the first change lands in the wrong register. Instances compare this
+		///          against the revision they last synced and re-derive when it moves.
+		[[nodiscard]] virtual uint32 GetParameterRevision() const { return 0; }
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
@@ -389,6 +399,9 @@ namespace mmo
 			}
 		}
 
+		/// @copydoc MaterialInterface::GetParameterRevision
+		[[nodiscard]] uint32 GetParameterRevision() const override { return m_parameterRevision; }
+
 		/// @copydoc MaterialInterface::GetLayerBinding
 		[[nodiscard]] const MaterialLayerBinding& GetLayerBinding(const uint8 layer) const override
 		{
@@ -444,6 +457,9 @@ namespace mmo
 		std::vector<ScalarParameterValue> m_scalarParameters;
 		std::vector<VectorParameterValue> m_vectorParameters;
 		std::vector<TextureParameterValue> m_textureParameters;
+
+		/// Bumped whenever the parameter list changes shape. See GetParameterRevision.
+		uint32 m_parameterRevision { 0 };
 
 		bool m_bufferLayoutDirty[3] { true, true, true };
 		bool m_bufferDataDirty[3] { true, true, true };

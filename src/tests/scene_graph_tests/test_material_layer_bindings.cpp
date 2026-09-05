@@ -197,3 +197,56 @@ TEST_CASE("A material instance cannot introduce parameters its parent lacks", "[
 	REQUIRE(instance.GetScalarParameters().size() == 1);
 	REQUIRE(instance.GetScalarParameters()[0].name == "A");
 }
+
+// Saving a material in the editor recompiles it, which rebuilds its parameter list. Any
+// MaterialInstance already alive still holds the list it copied when it was created, and the
+// generated shader binds textures by LIST POSITION - so an instance binding a stale list
+// against a freshly compiled shader puts every resource past the first change into the wrong
+// register. That produced a terrain rendering corruption that looked like broken lighting.
+// Instances now notice via the parent's parameter revision and re-derive.
+TEST_CASE("An instance picks up parameters added to its parent after creation", "[material_layer_binding]")
+{
+	const auto parent = std::make_shared<Material>("Parent");
+	parent->AddTextureParameter("Albedo", "albedo.htex");
+	parent->AddTextureParameter("Normal", "normal.htex");
+
+	MaterialInstance instance{ "Instance", parent };
+	instance.SetTextureParameter("Albedo", "override.htex");
+	REQUIRE(instance.GetTextureParameters().size() == 2);
+
+	// Simulate a recompile that inserts a new parameter ahead of the existing ones, which is
+	// what adding a texture early in the graph does.
+	parent->ClearParameters();
+	parent->AddTextureParameter("Height", "height.htex");
+	parent->AddTextureParameter("Albedo", "albedo.htex");
+	parent->AddTextureParameter("Normal", "normal.htex");
+
+	instance.SyncParametersIfStale();
+
+	const auto& params = instance.GetTextureParameters();
+	REQUIRE(params.size() == 3);
+
+	// Order must follow the parent, because that is the order the shader binds by.
+	REQUIRE(params[0].name == "Height");
+	REQUIRE(params[1].name == "Albedo");
+	REQUIRE(params[2].name == "Normal");
+
+	// And the instance's own override must survive the re-derive.
+	REQUIRE(params[1].texture == "override.htex");
+}
+
+TEST_CASE("Syncing an unchanged parent leaves the instance alone", "[material_layer_binding]")
+{
+	const auto parent = std::make_shared<Material>("Parent");
+	parent->AddScalarParameter("A", 1.0f);
+
+	MaterialInstance instance{ "Instance", parent };
+	instance.SetScalarParameter("A", 9.0f);
+
+	instance.SyncParametersIfStale();
+	instance.SyncParametersIfStale();
+
+	REQUIRE(instance.GetScalarParameters().size() == 1);
+	REQUIRE(instance.GetScalarParameters()[0].value == Approx(9.0f));
+}
+
