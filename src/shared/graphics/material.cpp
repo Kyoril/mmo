@@ -160,6 +160,7 @@ namespace mmo
 		m_vectorParameters.clear();
 		m_textureParameters.clear();
 		m_textureParamTextures.clear();
+		++m_parameterRevision;
 	}
 
 	void Material::AddScalarParameter(std::string_view name, float defaultValue)
@@ -172,6 +173,7 @@ namespace mmo
 
 		m_scalarParameters.emplace_back(String(name), defaultValue);
 		m_bufferLayoutDirty[(uint8)MaterialParameterType::Scalar] = true;
+		++m_parameterRevision;
 	}
 
 	void Material::SetScalarParameter(std::string_view name, float value)
@@ -211,6 +213,7 @@ namespace mmo
 
 		m_vectorParameters.emplace_back(String(name), defaultValue);
 		m_bufferLayoutDirty[(uint8)MaterialParameterType::Vector] = true;
+		++m_parameterRevision;
 	}
 
 	void Material::SetVectorParameter(std::string_view name, const Vector4& value)
@@ -252,6 +255,7 @@ namespace mmo
 		m_textureParameters.emplace_back(String(name), defaultValue);
 
 		m_bufferLayoutDirty[(uint8)MaterialParameterType::Texture] = true;
+		++m_parameterRevision;
 	}
 
 	void Material::SetTextureParameter(std::string_view name, const String& value)

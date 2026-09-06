@@ -21,6 +21,7 @@ namespace mmo
 	static const ChunkMagic MaterialTextureParamChunk = MakeChunkMagic('RAPT');
 	static const ChunkMagic MaterialFoliageChunk = MakeChunkMagic('LOFM');
 	static const ChunkMagic MaterialSurfaceTypeChunk = MakeChunkMagic('FRSM');
+	static const ChunkMagic MaterialLayerBindingChunk = MakeChunkMagic('DNBM');
 
 	MaterialDeserializer::MaterialDeserializer(Material& material)
 		: ChunkReader(true)
@@ -79,6 +80,11 @@ namespace mmo
 				if (version >= material_version::Version_0_7)
 				{
 					AddChunkHandler(*MaterialSurfaceTypeChunk, false, *this, &MaterialDeserializer::ReadMaterialSurfaceTypeChunk);
+				}
+
+				if (version >= material_version::Version_0_8)
+				{
+					AddChunkHandler(*MaterialLayerBindingChunk, false, *this, &MaterialDeserializer::ReadMaterialLayerBindingChunk);
 				}
 			}
 			else
@@ -591,9 +597,50 @@ namespace mmo
 		return reader;
 	}
 
+	bool MaterialDeserializer::ReadMaterialLayerBindingChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		// The layer count is stored rather than assumed so a future material with more than
+		// four splat layers can be read by this build; anything past what Material can hold is
+		// parsed and discarded so the chunk is still consumed exactly.
+		uint8 layerCount = 0;
+		reader >> io::read<uint8>(layerCount);
+
+		for (uint8 layer = 0; layer < layerCount; ++layer)
+		{
+			MaterialLayerBinding binding;
+			reader
+				>> io::read_container<uint16>(binding.displayName)
+				>> io::read_container<uint16>(binding.albedoTextureParam)
+				>> io::read_container<uint16>(binding.normalTextureParam)
+				>> io::read_container<uint16>(binding.scaleScalarParam)
+				>> io::read_container<uint16>(binding.heightTextureParam)
+				>> io::read_container<uint16>(binding.heightScaleParam)
+				>> io::read_container<uint16>(binding.heightOffsetParam);
+
+			if (layer < MaterialLayerBindingCount)
+			{
+				m_material.SetLayerBinding(layer, std::move(binding));
+			}
+		}
+
+		String sharpnessParam;
+		reader >> io::read_container<uint16>(sharpnessParam);
+		m_material.SetLayerBlendSharpnessParam(std::move(sharpnessParam));
+
+		return reader;
+	}
+
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
-		version = material_version::Version_0_7;
+		// Layer bindings are the only thing that forces v0.8, so a material which does not use
+		// them keeps writing v0.7 and stays byte-identical when re-saved.
+		bool hasLayerBindings = !material.GetLayerBlendSharpnessParam().empty();
+		for (uint8 layer = 0; layer < MaterialLayerBindingCount && !hasLayerBindings; ++layer)
+		{
+			hasLayerBindings = !material.GetLayerBinding(layer).IsEmpty();
+		}
+
+		version = hasLayerBindings ? material_version::Version_0_8 : material_version::Version_0_7;
 
 		// File version chunk
 		{
@@ -806,6 +853,29 @@ namespace mmo
 			}
 
 			surfaceTypeChunkWriter.Finish();
+		}
+
+		// Layer binding chunk (v0.8+). Only written when the material declares any binding.
+		if (hasLayerBindings)
+		{
+			ChunkWriter layerBindingChunkWriter { MaterialLayerBindingChunk, writer };
+			writer << io::write<uint8>(MaterialLayerBindingCount);
+
+			for (uint8 layer = 0; layer < MaterialLayerBindingCount; ++layer)
+			{
+				const MaterialLayerBinding& binding = material.GetLayerBinding(layer);
+				writer
+					<< io::write_dynamic_range<uint16>(binding.displayName)
+					<< io::write_dynamic_range<uint16>(binding.albedoTextureParam)
+					<< io::write_dynamic_range<uint16>(binding.normalTextureParam)
+					<< io::write_dynamic_range<uint16>(binding.scaleScalarParam)
+					<< io::write_dynamic_range<uint16>(binding.heightTextureParam)
+					<< io::write_dynamic_range<uint16>(binding.heightScaleParam)
+					<< io::write_dynamic_range<uint16>(binding.heightOffsetParam);
+			}
+
+			writer << io::write_dynamic_range<uint16>(material.GetLayerBlendSharpnessParam());
+			layerBindingChunkWriter.Finish();
 		}
 	}
 }

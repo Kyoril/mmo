@@ -106,11 +106,26 @@ namespace mmo
 		/// @return true on success, false otherwise.
 		bool CreateTextureAsset(const Path& name, const Path& assetPath, TextureData& data) const;
 
+		/// @brief Derives a height map from a color image by blurring its luminance.
+		/// @details Produces a starting point for terrain height blending so authoring is not
+		///          blocked on hand-painted height maps. Luminance is a rough stand-in for
+		///          height - it reads mortar lines and gaps as low and highlights as high,
+		///          which is usually the right sense for a tiling ground texture, but an artist
+		///          will want to replace it wherever it guesses wrong.
+		/// @param rawData Source RGBA pixel data.
+		/// @param width Image width.
+		/// @param height Image height.
+		/// @param blurRadius Radius of the smoothing passes, in texels. 0 disables smoothing.
+		/// @return RGBA data whose red channel holds the derived height.
+		static std::vector<uint8> DeriveHeightData(const std::vector<uint8>& rawData, int32 width, int32 height, int32 blurRadius);
+
 	private:
 		std::vector<Path> m_filesToImport;
 		Path m_importAssetPath;
 		bool m_showImportFileDialog = false;
 		bool m_useCompression = false;
 		TextureUsage m_textureUsage = TextureUsage::Color;
+		bool m_generateHeightMap = false;
+		int32 m_heightBlurRadius = 2;
 	};
 }

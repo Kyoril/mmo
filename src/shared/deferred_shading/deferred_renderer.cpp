@@ -6,6 +6,7 @@
 #include "contact_shadow_pass.h"
 
 #include "frame_ui/rect.h"
+#include "graphics/global_shader_parameters.h"
 #include "graphics/graphics_device.h"
 #include "graphics/shader_compiler.h"
 #include "graphics/structured_buffer.h"
@@ -446,18 +447,18 @@ namespace mmo
             // GBuffer pass: output.normal = float4(N * 0.5 + 0.5, linearDepth)). It is not bound as
             // a render target during the forward pass, so sampling it here is hazard-free.
             // Materials declare this as Texture2D sceneDepthTex : register(t15).
-            m_gBuffer.GetNormalRT().Bind(ShaderType::PixelShader, 15);
+            m_gBuffer.GetNormalRT().Bind(ShaderType::PixelShader, kSceneDepthTextureSlot);
 
             // Expose the lit scene color copy for refraction (Texture2D sceneColorTex : register(t14)).
-            m_sceneColorCopy->Bind(ShaderType::PixelShader, 14);
+            m_sceneColorCopy->Bind(ShaderType::PixelShader, kSceneColorTextureSlot);
         }
         scene.SetForwardTransparentOnly(true);
         scene.Render(camera, PixelShaderType::Forward);
         scene.SetForwardTransparentOnly(false);
 
         // Release the scene SRVs so they do not collide with render targets bound in next frame.
-        m_device.BindTexture(nullptr, ShaderType::PixelShader, 14);
-        m_device.BindTexture(nullptr, ShaderType::PixelShader, 15);
+        m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneColorTextureSlot);
+        m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneDepthTextureSlot);
 
 #ifdef _WIN32
         if (m_gpuTimingActiveThisFrame)

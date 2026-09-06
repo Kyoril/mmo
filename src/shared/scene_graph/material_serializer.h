@@ -39,6 +39,12 @@ namespace mmo
 			/// Version 0.7: adds an optional MSRF chunk carrying the material's surface type
 			/// id and four per-splat-layer surface type ids.
 			Version_0_7 = 0x0700,
+
+			/// Version 0.8: adds an optional MBND chunk carrying per-splat-layer shader
+			/// parameter bindings (which parameter names drive a terrain layer's albedo,
+			/// normal, UV scale and height blending) plus the name of the material's height
+			/// blend hardness parameter. Names only, no values.
+			Version_0_8 = 0x0800,
 		};
 	}
 
@@ -111,6 +117,9 @@ namespace mmo
 
 		/// @brief Reads the v0.7 surface type chunk (MSRF).
 		bool ReadMaterialSurfaceTypeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @brief Reads the v0.8 terrain layer parameter binding chunk (MBND).
+		bool ReadMaterialLayerBindingChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	private:
 		Material& m_material;

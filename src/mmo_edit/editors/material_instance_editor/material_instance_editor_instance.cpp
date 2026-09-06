@@ -261,6 +261,11 @@ namespace mmo
 
 			ImGui::Spacing();
 
+			// Terrain Layer Bindings Section (inherited from the base material)
+			DrawTerrainLayersSection();
+
+			ImGui::Spacing();
+
 			// Scalar Parameters Section
 			DrawScalarParametersSection();
 
@@ -447,6 +452,50 @@ namespace mmo
 
 			ImGui::PopID();
 		}
+	}
+
+	void MaterialInstanceEditorInstance::DrawTerrainLayersSection()
+	{
+		if (!ImGui::CollapsingHeader("Terrain Layers"))
+		{
+			return;
+		}
+
+		ImGui::PushID("TerrainLayersSection");
+		ImGui::Indent();
+
+		ImGui::TextWrapped("Terrain layer bindings are inherited from the base material and cannot be "
+			"overridden here: they name parameters that only exist because the base material's graph "
+			"declares them. Edit them in the material editor. The parameter VALUES below are yours to "
+			"override as usual.");
+
+		ImGui::BeginDisabled();
+
+		for (uint8 layer = 0; layer < MaterialLayerBindingCount; ++layer)
+		{
+			const MaterialLayerBinding& binding = m_material->GetLayerBinding(layer);
+			const String label = binding.displayName.empty()
+				? "Layer " + std::to_string(layer + 1)
+				: "Layer " + std::to_string(layer + 1) + " - " + binding.displayName;
+
+			if (binding.IsEmpty())
+			{
+				ImGui::TextDisabled("%s: not declared", label.c_str());
+				continue;
+			}
+
+			ImGui::TextDisabled("%s", label.c_str());
+			ImGui::Indent();
+			ImGui::TextDisabled("Base Color: %s", binding.albedoTextureParam.c_str());
+			ImGui::TextDisabled("UV Scale: %s", binding.scaleScalarParam.c_str());
+			ImGui::TextDisabled("Height Map: %s", binding.heightTextureParam.c_str());
+			ImGui::Unindent();
+		}
+
+		ImGui::EndDisabled();
+
+		ImGui::Unindent();
+		ImGui::PopID();
 	}
 
 	void MaterialInstanceEditorInstance::DrawScalarParametersSection()

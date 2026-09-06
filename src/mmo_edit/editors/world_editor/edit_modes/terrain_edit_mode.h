@@ -287,6 +287,37 @@ namespace mmo
 		/// Shared brush-mask import/invert/rotation/preview controls (used by Paint and Stamp).
 		void DrawBrushMaskControls();
 
+		/// @brief Draws the per-layer texture, scale and height blend controls of the terrain
+		///        material under the cursor, when that material declares layer bindings.
+		/// @details Deliberately minimal for a first cut. Not implemented, in rough order of
+		///          usefulness: a thumbnail for the layer's albedo (needs a PreviewProviderManager
+		///          threaded into WorldEditor, which is also why the tile material picker has
+		///          none), dropping a .htex onto the viewport to assign it (needs
+		///          SupportsViewportDrop), a "create instance override" path plus a confirmation
+		///          before editing a .hmat directly, and a dirty marker with an explicit save
+		///          rather than the standing warning text.
+		void DrawLayerPropertiesSection();
+
+		/// @brief Resolves which material the layer property controls should edit.
+		/// @details Prefers the material of the tile the brush is over, falling back to the
+		///          terrain's default material. Returns null when neither is available.
+		///
+		///          Note this tracks the BRUSH, not a selection, so the edit target follows the
+		///          cursor around the viewport. That is safe during a drag - the panel does not
+		///          move the brush, and only TerrainEditMode::OnMouseMoved updates it - but it
+		///          does mean the "Editing <name>" label can change between interactions. Latch
+		///          it on first edit if that ever becomes confusing.
+		[[nodiscard]] MaterialPtr ResolveLayerPropertyMaterial() const;
+
+		/// @brief Writes a scalar parameter to a material AND to every loaded tile instance
+		///        parented to it, which is what makes the change visible immediately.
+		/// @details Each tile owns a private MaterialInstance whose parameters were copied
+		///          from the parent at construction, so writing the parent alone changes
+		///          nothing on screen. RefreshParametersFromBase cannot be used here: it
+		///          re-copies the parent list but then restores the instance's own value by
+		///          name, which would keep the stale value.
+		void ApplyLayerScalarParameter(const MaterialPtr& material, const String& parameterName, float value);
+
 	private:
 		/// State machine for the Region edit type.
 		enum class RegionEditState : uint8

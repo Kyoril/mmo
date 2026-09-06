@@ -209,6 +209,61 @@ namespace mmo
 			}
 		}
 
+		/// @brief Gets the parent material's layer binding.
+		/// @details Unlike foliage and surface types, layer bindings are deliberately NOT
+		///          overridable per instance, and there is no MBND chunk in the .hmi format. A
+		///          binding names shader parameters that exist only because the parent's
+		///          compiled graph declared them, and an instance cannot add or rename a
+		///          parameter (AddScalarParameter is a no-op by design). An instance-level
+		///          binding could therefore only ever point at something the parent already has,
+		///          i.e. it could only ever be wrong. Please do not "fix" this asymmetry.
+		[[nodiscard]] const MaterialLayerBinding& GetLayerBinding(const uint8 layer) const override
+		{
+			static const MaterialLayerBinding s_empty{};
+			return m_parent ? m_parent->GetLayerBinding(layer) : s_empty;
+		}
+
+		/// @copydoc MaterialInterface::GetParameterRevision
+		[[nodiscard]] uint32 GetParameterRevision() const override
+		{
+			return m_parent ? m_parent->GetParameterRevision() : 0;
+		}
+
+		/// @brief Re-derives the parameter list from the parent if the parent has been
+		///        recompiled with a different set of parameters since this instance copied it.
+		/// @details Cheap: an integer compare in the common case. Called before the instance
+		///          binds anything, because binding a stale list against a freshly compiled
+		///          shader puts every resource past the first change into the wrong register.
+		void SyncParametersIfStale() override
+		{
+			if (!m_parent)
+			{
+				return;
+			}
+
+			// Walk up first. Only the leaf of an instance chain is rendered, so an intermediate
+			// instance never gets an Apply of its own and would stay stale forever; re-deriving
+			// from it would then copy the old list while stamping the new revision, which is
+			// exactly the failure this guards against.
+			m_parent->SyncParametersIfStale();
+
+			const uint32 revision = m_parent->GetParameterRevision();
+			if (revision == m_syncedParameterRevision)
+			{
+				return;
+			}
+
+			RefreshParametersFromBase();
+			m_syncedParameterRevision = revision;
+		}
+
+		/// @copydoc MaterialInterface::GetLayerBlendSharpnessParam
+		[[nodiscard]] const String& GetLayerBlendSharpnessParam() const override
+		{
+			static const String s_empty{};
+			return m_parent ? m_parent->GetLayerBlendSharpnessParam() : s_empty;
+		}
+
 	private:
 		String m_name;
 		MaterialPtr m_parent;
@@ -236,6 +291,9 @@ namespace mmo
 		uint32 m_surfaceTypeId = 0;
 		std::array<uint32, 4> m_layerSurfaceTypeIds{};
 		bool m_overrideSurfaceTypes = false;
+
+		/// Parent parameter revision this instance's list was derived from.
+		uint32 m_syncedParameterRevision { 0 };
 
 		bool m_bufferLayoutDirty[3]{ true, true, true };
 		bool m_bufferDataDirty[3]{ true, true, true };

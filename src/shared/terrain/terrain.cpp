@@ -400,6 +400,32 @@ namespace mmo
 			return page->GetTile(tileX, tileY);
 		}
 
+		void Terrain::ForEachLoadedTile(const std::function<void(Tile&)>& callback)
+		{
+			for (uint32 pageZ = 0; pageZ < m_height; ++pageZ)
+			{
+				for (uint32 pageX = 0; pageX < m_width; ++pageX)
+				{
+					Page* page = GetPage(pageX, pageZ);
+					if (!page || !page->IsLoaded())
+					{
+						continue;
+					}
+
+					for (uint32 tileY = 0; tileY < constants::TilesPerPage; ++tileY)
+					{
+						for (uint32 tileX = 0; tileX < constants::TilesPerPage; ++tileX)
+						{
+							if (Tile* tile = page->GetTile(tileX, tileY))
+							{
+								callback(*tile);
+							}
+						}
+					}
+				}
+			}
+		}
+
 		Page *Terrain::GetPage(const uint32 x, const uint32 z) const
 		{
 			if (x >= m_width || z >= m_height)

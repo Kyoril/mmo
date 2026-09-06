@@ -81,6 +81,30 @@ namespace mmo
 			ImGui::Separator();
 			ImGui::Spacing();
 
+			// Height map derivation only makes sense for color source art.
+			if (m_textureUsage == TextureUsage::Color)
+			{
+				ImGui::Checkbox("Also generate a height map", &m_generateHeightMap);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(?)");
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Writes a second grayscale asset named <texture>_h, derived from the\n"
+						"blurred luminance of this image. Terrain materials use it to let one layer\n"
+						"poke through another instead of cross-fading. It is a starting point, not a\n"
+						"substitute for a hand-authored height map.");
+				}
+
+				if (m_generateHeightMap)
+				{
+					ImGui::SliderInt("Height blur radius", &m_heightBlurRadius, 0, 16, "%d texels");
+				}
+
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+			}
+
 			// Compression toggle
 			ImGui::Checkbox("Apply compression", &m_useCompression);
 			if (m_useCompression)
@@ -155,12 +179,115 @@ namespace mmo
 			{
 				ELOG("Failed to import asset " << fileToImport);
 				succeeded = false;
+				continue;
+			}
+
+			if (m_generateHeightMap && m_textureUsage == TextureUsage::Color)
+			{
+				const std::vector<uint8> heightRaw = DeriveHeightData(rawData, width, height, m_heightBlurRadius);
+
+				// Reuse the grayscale conversion path rather than duplicating the R8/BC4 logic.
+				TextureData heightData;
+				const TextureUsage previousUsage = m_textureUsage;
+				m_textureUsage = TextureUsage::Grayscale;
+				const bool converted = ConvertData(heightRaw, width, height, 4, heightData);
+				m_textureUsage = previousUsage;
+
+				const Path heightName = name.string() + "_h";
+				if (!converted || !CreateTextureAsset(heightName, m_importAssetPath, heightData))
+				{
+					ELOG("Failed to generate height map for asset " << fileToImport);
+					succeeded = false;
+				}
 			}
 		}
 
 		m_filesToImport.clear();
 
 		return succeeded;
+	}
+
+	std::vector<uint8> TextureImport::DeriveHeightData(const std::vector<uint8>& rawData, const int32 width, const int32 height, const int32 blurRadius)
+	{
+		const size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
+
+		// Rec. 709 luminance. The source is sRGB encoded and this does not linearize it, which
+		// is deliberate: a perceptual response is a better guess at "how high does this look"
+		// than a photometric one, and the result is art direction rather than measurement.
+		std::vector<float> luminance(pixelCount);
+		for (size_t i = 0; i < pixelCount; ++i)
+		{
+			luminance[i] = 0.2126f * rawData[i * 4 + 0]
+				+ 0.7152f * rawData[i * 4 + 1]
+				+ 0.0722f * rawData[i * 4 + 2];
+		}
+
+		// Two separable box passes approximate a Gaussian closely enough here and stay O(n) in
+		// the radius. Edges clamp, matching how the texture is sampled.
+		if (blurRadius > 0)
+		{
+			std::vector<float> scratch(pixelCount);
+			const float inverseWindow = 1.0f / static_cast<float>(blurRadius * 2 + 1);
+
+			for (int32 pass = 0; pass < 2; ++pass)
+			{
+				for (int32 y = 0; y < height; ++y)
+				{
+					for (int32 x = 0; x < width; ++x)
+					{
+						float sum = 0.0f;
+						for (int32 offset = -blurRadius; offset <= blurRadius; ++offset)
+						{
+							const int32 sampleX = std::clamp(x + offset, 0, width - 1);
+							sum += luminance[static_cast<size_t>(y) * width + sampleX];
+						}
+						scratch[static_cast<size_t>(y) * width + x] = sum * inverseWindow;
+					}
+				}
+
+				for (int32 y = 0; y < height; ++y)
+				{
+					for (int32 x = 0; x < width; ++x)
+					{
+						float sum = 0.0f;
+						for (int32 offset = -blurRadius; offset <= blurRadius; ++offset)
+						{
+							const int32 sampleY = std::clamp(y + offset, 0, height - 1);
+							sum += scratch[static_cast<size_t>(sampleY) * width + x];
+						}
+						luminance[static_cast<size_t>(y) * width + x] = sum * inverseWindow;
+					}
+				}
+			}
+		}
+
+		// Stretch to the full 0-255 range: a low contrast albedo would otherwise produce a
+		// height map too flat to separate anything.
+		float minimum = luminance.empty() ? 0.0f : luminance[0];
+		float maximum = minimum;
+		for (const float value : luminance)
+		{
+			minimum = std::min(minimum, value);
+			maximum = std::max(maximum, value);
+		}
+
+		const float range = maximum - minimum;
+		const float inverseRange = range > 0.0f ? 1.0f / range : 0.0f;
+
+		std::vector<uint8> result(pixelCount * 4, 255);
+		for (size_t i = 0; i < pixelCount; ++i)
+		{
+			const float normalized = (luminance[i] - minimum) * inverseRange;
+			const auto value = static_cast<uint8>(std::clamp(normalized * 255.0f + 0.5f, 0.0f, 255.0f));
+
+			// The grayscale conversion path reads the red channel; fill the rest so the buffer
+			// is also usable as a plain preview.
+			result[i * 4 + 0] = value;
+			result[i * 4 + 1] = value;
+			result[i * 4 + 2] = value;
+		}
+
+		return result;
 	}
 
 	bool TextureImport::ReadTextureData(const Path& filename, int32& width, int32& height, int32& numChannels, std::vector<uint8>& rawData) const

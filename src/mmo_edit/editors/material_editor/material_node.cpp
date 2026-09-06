@@ -1150,6 +1150,66 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex MaxNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex firstExpression = IndexNone;
+			if (m_input1.IsLinked())
+			{
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
+			}
+			else
+			{
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]), ExpressionType::Float_1);
+			}
+
+			ExpressionIndex secondExpression = IndexNone;
+			if (m_input2.IsLinked())
+			{
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
+			}
+			else
+			{
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]), ExpressionType::Float_1);
+			}
+
+			m_compiledExpressionId = compiler.AddMax(firstExpression, secondExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex MinNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex firstExpression = IndexNone;
+			if (m_input1.IsLinked())
+			{
+				firstExpression = m_input1.GetLink()->GetNode()->Compile(compiler, m_input1.GetLink());
+			}
+			else
+			{
+				firstExpression = compiler.AddExpression(std::to_string(m_values[0]), ExpressionType::Float_1);
+			}
+
+			ExpressionIndex secondExpression = IndexNone;
+			if (m_input2.IsLinked())
+			{
+				secondExpression = m_input2.GetLink()->GetNode()->Compile(compiler, m_input2.GetLink());
+			}
+			else
+			{
+				secondExpression = compiler.AddExpression(std::to_string(m_values[1]), ExpressionType::Float_1);
+			}
+
+			m_compiledExpressionId = compiler.AddMin(firstExpression, secondExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ExpressionIndex MaskNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)

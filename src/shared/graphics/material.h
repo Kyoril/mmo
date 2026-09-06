@@ -16,6 +16,7 @@
 
 #include "constant_buffer.h"
 #include "material_foliage.h"
+#include "material_layer_binding.h"
 #include "math/vector3.h"
 #include "math/vector4.h"
 
@@ -185,6 +186,41 @@ namespace mmo
 		///        the base surface type). Only meaningful for terrain splatting materials.
 		/// @param layer The splat layer index (0-3).
 		[[nodiscard]] virtual uint32 GetLayerSurfaceTypeId(uint8 layer) const { return 0; }
+
+		/// @brief Gets the parameter binding of a terrain splatting layer. Only meaningful for
+		///        terrain splatting materials; everything else returns an empty binding.
+		/// @param layer The splat layer index (0-3).
+		[[nodiscard]] virtual const MaterialLayerBinding& GetLayerBinding(uint8 layer) const
+		{
+			static const MaterialLayerBinding s_empty{};
+			return s_empty;
+		}
+
+		/// @brief Gets the name of the scalar parameter controlling terrain height blend
+		///        hardness, or an empty string when the material does not expose one.
+		[[nodiscard]] virtual const String& GetLayerBlendSharpnessParam() const
+		{
+			static const String s_empty{};
+			return s_empty;
+		}
+
+		/// @brief Gets a counter that changes whenever this material's parameter LIST changes,
+		///        i.e. a parameter is added or the list is cleared and rebuilt by a recompile.
+		/// @details Instances copy the parameter list from their parent, and the generated
+		///          shader binds textures by list position. If a material is recompiled with a
+		///          different parameter list while instances of it are alive, those instances
+		///          keep binding the old list against the new shader, and every resource past
+		///          the first change lands in the wrong register. Instances compare this
+		///          against the revision they last synced and re-derive when it moves.
+		[[nodiscard]] virtual uint32 GetParameterRevision() const { return 0; }
+
+		/// @brief Re-derives this material's parameter list from its own parent if that parent
+		///        has been recompiled since. A no-op for a base material, which has no parent.
+		/// @details Instance chains can be more than two deep - a terrain tile wraps the world's
+		///          .hmi, which in turn wraps the .hmat - and only the leaf is ever rendered.
+		///          Syncing must therefore walk up, or a leaf re-derives from a stale middle and
+		///          then marks itself current against the root it never actually read.
+		virtual void SyncParametersIfStale() {}
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
@@ -371,6 +407,35 @@ namespace mmo
 			}
 		}
 
+		/// @copydoc MaterialInterface::GetParameterRevision
+		[[nodiscard]] uint32 GetParameterRevision() const override { return m_parameterRevision; }
+
+		/// @copydoc MaterialInterface::GetLayerBinding
+		[[nodiscard]] const MaterialLayerBinding& GetLayerBinding(const uint8 layer) const override
+		{
+			static const MaterialLayerBinding s_empty{};
+			return layer < m_layerBindings.size() ? m_layerBindings[layer] : s_empty;
+		}
+
+		/// @brief Sets the parameter binding of a terrain splatting layer.
+		void SetLayerBinding(const uint8 layer, MaterialLayerBinding binding)
+		{
+			if (layer < m_layerBindings.size())
+			{
+				m_layerBindings[layer] = std::move(binding);
+			}
+		}
+
+		/// @brief Gets mutable access to the whole binding table, for the material editor.
+		[[nodiscard]] std::array<MaterialLayerBinding, MaterialLayerBindingCount>& GetLayerBindings() { return m_layerBindings; }
+
+		/// @brief Gets the name of the scalar parameter controlling terrain height blend
+		///        hardness, or an empty string when the material does not expose one.
+		[[nodiscard]] const String& GetLayerBlendSharpnessParam() const override { return m_layerBlendSharpnessParam; }
+
+		/// @brief Sets the name of the terrain height blend hardness scalar parameter.
+		void SetLayerBlendSharpnessParam(String name) { m_layerBlendSharpnessParam = std::move(name); }
+
 	private:
 		String m_name;
 		bool m_twoSided { false };
@@ -401,6 +466,9 @@ namespace mmo
 		std::vector<VectorParameterValue> m_vectorParameters;
 		std::vector<TextureParameterValue> m_textureParameters;
 
+		/// Bumped whenever the parameter list changes shape. See GetParameterRevision.
+		uint32 m_parameterRevision { 0 };
+
 		bool m_bufferLayoutDirty[3] { true, true, true };
 		bool m_bufferDataDirty[3] { true, true, true };
 		ConstantBufferPtr m_parameterBuffers[3]{ nullptr, nullptr, nullptr };
@@ -413,6 +481,11 @@ namespace mmo
 		/// splatting materials (serialized via the MSRF chunk, v0.7+).
 		uint32 m_surfaceTypeId = 0;
 		std::array<uint32, 4> m_layerSurfaceTypeIds{};
+
+		/// Per-splat-layer shader parameter bindings and the name of the height blend hardness
+		/// parameter (serialized via the MBND chunk, v0.8+). Names only, never values.
+		std::array<MaterialLayerBinding, MaterialLayerBindingCount> m_layerBindings{};
+		String m_layerBlendSharpnessParam;
 	};
 
 	typedef std::shared_ptr<MaterialInterface> MaterialPtr;

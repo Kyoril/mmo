@@ -12,6 +12,9 @@
 
 #include "frame_ui/color.h"
 #include "scene_graph/material_manager.h"
+#include "graphics/material.h"
+#include "graphics/material_instance.h"
+#include "terrain/tile.h"
 #include "math/vector3.h"
 #include "math/vector4.h"
 #include "math/matrix4.h"
@@ -1069,6 +1072,190 @@ namespace mmo
 		ImGui::EndDisabled();
 	}
 
+	MaterialPtr TerrainEditMode::ResolveLayerPropertyMaterial() const
+	{
+		// Prefer whatever the brush is over, so hovering a differently textured region swaps the
+		// panel to that region's material without needing a separate selection step.
+		if (m_brushPositionValid)
+		{
+			int32 tileX = 0, tileY = 0;
+			if (m_terrain.GetTileIndexByWorldPosition(m_brushPosition, tileX, tileY))
+			{
+				if (terrain::Tile* tile = m_terrain.GetTile(tileX, tileY))
+				{
+					if (MaterialPtr material = tile->GetBaseMaterial())
+					{
+						return material;
+					}
+				}
+			}
+		}
+
+		return m_terrain.GetDefaultMaterial();
+	}
+
+	void TerrainEditMode::ApplyLayerScalarParameter(const MaterialPtr& material, const String& parameterName, const float value)
+	{
+		if (!material || parameterName.empty())
+		{
+			return;
+		}
+
+		material->SetScalarParameter(parameterName, value);
+
+		// TerrainBatch owns its own MaterialInstance per quadrant, which ForEachLoadedTile does
+		// not reach, so with batching on the edit lands in the asset but not on screen. The
+		// editor never enables batching today; warn rather than silently doing half the job.
+		if (m_terrain.IsBatchRenderingEnabled())
+		{
+			WLOG("Terrain batching is enabled: layer parameter edits will not preview until the "
+				"terrain is reloaded.");
+		}
+
+		// Every tile holds a MaterialInstance whose parameter list was COPIED from the parent
+		// when it was created, so the write above is invisible until each instance is updated
+		// too. Only tiles parented to this exact material are touched.
+		m_terrain.ForEachLoadedTile([&material, &parameterName, value](terrain::Tile& tile)
+			{
+				if (tile.GetBaseMaterial() != material)
+				{
+					return;
+				}
+
+				if (const MaterialPtr instance = tile.GetMaterial())
+				{
+					instance->SetScalarParameter(parameterName, value);
+				}
+			});
+	}
+
+	void TerrainEditMode::DrawLayerPropertiesSection()
+	{
+		static const char* s_fallbackLayerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
+		static const MaterialLayerBinding s_noBinding{};
+
+		const MaterialPtr material = ResolveLayerPropertyMaterial();
+
+		bool hasBindings = false;
+		for (uint8 layer = 0; layer < MaterialLayerBindingCount && material; ++layer)
+		{
+			hasBindings = hasBindings || !material->GetLayerBinding(layer).IsEmpty();
+		}
+
+		// Layer selection is the one thing that must work regardless: it is the whole of what
+		// this panel did before, and painting has to stay possible on materials that declare no
+		// bindings at all.
+		for (uint8 layer = 0; layer < MaterialLayerBindingCount; ++layer)
+		{
+			const MaterialLayerBinding& binding = material ? material->GetLayerBinding(layer) : s_noBinding;
+			const String label = binding.displayName.empty()
+				? String(s_fallbackLayerNames[layer])
+				: binding.displayName + " (" + s_fallbackLayerNames[layer] + ")";
+
+			ImGui::PushID(layer);
+			if (ImGui::RadioButton(label.c_str(), m_terrainPaintLayer == layer))
+			{
+				m_terrainPaintLayer = layer;
+			}
+
+			// Only the selected layer expands, so the panel stays the size of the old combo
+			// until someone actually wants to tune something.
+			if (hasBindings && m_terrainPaintLayer == layer && !binding.IsEmpty())
+			{
+				ImGui::Indent();
+
+				if (!binding.albedoTextureParam.empty())
+				{
+					String texture;
+					if (material->GetTextureParameter(binding.albedoTextureParam, texture))
+					{
+						ImGui::TextDisabled("%s", texture.c_str());
+					}
+				}
+
+				if (!binding.scaleScalarParam.empty())
+				{
+					float scale = 0.0f;
+					if (material->GetScalarParameter(binding.scaleScalarParam, scale))
+					{
+						// The shipped materials store these NEGATIVE, and the shader divides
+						// world position by the value, so the magnitude is "world units per
+						// texture repeat". Edit the magnitude and put the sign back, or the
+						// first drag mirrors the layer's UVs.
+						float magnitude = std::fabs(scale);
+						if (ImGui::SliderFloat("Texture Size", &magnitude, 1.0f, 200.0f, "%.1f units", ImGuiSliderFlags_Logarithmic))
+						{
+							ApplyLayerScalarParameter(material, binding.scaleScalarParam, std::copysign(magnitude, scale));
+						}
+					}
+				}
+
+				if (!binding.heightScaleParam.empty())
+				{
+					float heightScale = 0.0f;
+					if (material->GetScalarParameter(binding.heightScaleParam, heightScale))
+					{
+						if (ImGui::SliderFloat("Height Scale", &heightScale, 0.0f, 1.0f))
+						{
+							ApplyLayerScalarParameter(material, binding.heightScaleParam, heightScale);
+						}
+					}
+				}
+
+				if (!binding.heightOffsetParam.empty())
+				{
+					float heightOffset = 0.0f;
+					if (material->GetScalarParameter(binding.heightOffsetParam, heightOffset))
+					{
+						if (ImGui::SliderFloat("Height Offset", &heightOffset, 0.0f, 2.0f))
+						{
+							ApplyLayerScalarParameter(material, binding.heightOffsetParam, heightOffset);
+						}
+					}
+				}
+
+				ImGui::Unindent();
+			}
+			ImGui::PopID();
+		}
+
+		if (!material)
+		{
+			return;
+		}
+
+		if (!hasBindings)
+		{
+			ImGui::Spacing();
+			const std::string_view materialName = material->GetName();
+			ImGui::TextDisabled("%.*s declares no terrain layer bindings.", static_cast<int>(materialName.size()), materialName.data());
+			ImGui::TextWrapped("Open it in the material editor and fill in the Terrain Layers section to "
+				"get per-layer texture, scale and height blend controls here.");
+			return;
+		}
+
+		const String& sharpnessParam = material->GetLayerBlendSharpnessParam();
+		if (!sharpnessParam.empty())
+		{
+			float sharpness = 0.0f;
+			if (material->GetScalarParameter(sharpnessParam, sharpness))
+			{
+				ImGui::Spacing();
+				if (ImGui::SliderFloat("Blend Sharpness", &sharpness, 0.0f, 1.0f))
+				{
+					ApplyLayerScalarParameter(material, sharpnessParam, sharpness);
+				}
+			}
+		}
+
+		ImGui::Spacing();
+		const std::string_view editedName = material->GetName();
+		ImGui::TextDisabled("Editing %.*s", static_cast<int>(editedName.size()), editedName.data());
+		ImGui::TextWrapped("These are properties of the material, not of the tile under the cursor: "
+			"changing them affects every tile in every world that uses it. They are not undoable, "
+			"and are only persisted when the material is saved in the material editor.");
+	}
+
 	void TerrainEditMode::DrawBrushMaskControls()
 	{
 		// --- Brush mask (stencil/pattern painting) ---
@@ -1302,23 +1489,7 @@ namespace mmo
 		}
 		else if (m_type == TerrainEditType::Paint)
 		{
-			static const char* s_layerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
-
-			if (ImGui::BeginCombo("Layer", s_layerNames[m_terrainPaintLayer]))
-			{
-				for (uint32 i = 0; i < std::size(s_layerNames); ++i)
-				{
-					ImGui::PushID(i);
-					if (ImGui::Selectable(s_layerNames[i], i == m_terrainPaintLayer))
-					{
-						m_terrainPaintLayer = i;
-					}
-					ImGui::PopID();
-				}
-
-				ImGui::EndCombo();
-			}
-
+			DrawLayerPropertiesSection();
 			DrawBrushMaskControls();
 		}
 		else if (m_type == TerrainEditType::Holes)

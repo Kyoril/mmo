@@ -232,7 +232,19 @@ namespace mmo
 		/// @param max The max value expression for the clamp.
 		/// @return Index of the clamp expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddClamp(ExpressionIndex value, ExpressionIndex min, ExpressionIndex max) = 0;
-		
+
+		/// @brief Adds a component wise maximum expression.
+		/// @param first The first expression of the maximum (left side).
+		/// @param second The second expression of the maximum (right side).
+		/// @return Index of the maximum expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddMax(ExpressionIndex first, ExpressionIndex second) = 0;
+
+		/// @brief Adds a component wise minimum expression.
+		/// @param first The first expression of the minimum (left side).
+		/// @param second The second expression of the minimum (right side).
+		/// @return Index of the minimum expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddMin(ExpressionIndex first, ExpressionIndex second) = 0;
+
 		/// @brief Adds a clamp expression.
 		/// @param input The expression whose values should be subtracted from one.
 		/// @return Index of the one minus expression or IndexNone in case of an error.

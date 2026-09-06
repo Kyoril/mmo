@@ -1533,6 +1533,74 @@ namespace mmo
 	    Pin* m_OutputPins[1] = { &m_output };
 	};
 	
+	/// @brief A node which returns the component wise maximum of two expressions.
+	class MaxNode final : public GraphNode
+	{
+	public:
+	    MAT_NODE(MaxNode, "Max")
+
+	    MaxNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
+
+	private:
+		float m_values[2] = { 0.0f, 0.0f };
+		FloatProperty m_valueProperties[2] = { FloatProperty("Value 1", m_values[0]), FloatProperty("Value 2", m_values[1]) };
+
+	    MaterialPin m_input1 = { this, "A" };
+		MaterialPin m_input2 = { this, "B" };
+		
+	    MaterialPin m_output = { this };
+
+		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
+	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+	
+	/// @brief A node which returns the component wise minimum of two expressions.
+	class MinNode final : public GraphNode
+	{
+	public:
+	    MAT_NODE(MinNode, "Min")
+
+	    MinNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+		
+	    std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		
+	    std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+		
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	    std::span<PropertyBase*> GetProperties() override { return  m_properties; }
+
+	private:
+		float m_values[2] = { 0.0f, 0.0f };
+		FloatProperty m_valueProperties[2] = { FloatProperty("Value 1", m_values[0]), FloatProperty("Value 2", m_values[1]) };
+
+	    MaterialPin m_input1 = { this, "A" };
+		MaterialPin m_input2 = { this, "B" };
+		
+	    MaterialPin m_output = { this };
+
+		PropertyBase* m_properties[2] = { &m_valueProperties[0], &m_valueProperties[1] };
+	    Pin* m_inputPins[2] = { &m_input1, &m_input2 };
+	    Pin* m_OutputPins[1] = { &m_output };
+	};
+	
 	/// @brief A node which applies a mask to the RGBA output of an expression and builds a new expression from it.
 	class MaskNode final : public GraphNode
 	{

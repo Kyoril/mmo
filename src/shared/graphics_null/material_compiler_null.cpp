@@ -57,6 +57,16 @@ namespace mmo
 		return IndexNone;
 	}
 	
+	ExpressionIndex MaterialCompilerNull::AddMax(ExpressionIndex first, ExpressionIndex second)
+	{
+		return IndexNone;
+	}
+	
+	ExpressionIndex MaterialCompilerNull::AddMin(ExpressionIndex first, ExpressionIndex second)
+	{
+		return IndexNone;
+	}
+	
 	ExpressionIndex MaterialCompilerNull::AddOneMinus(ExpressionIndex input)
 	{
 		return IndexNone;

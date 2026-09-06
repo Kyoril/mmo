@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "graphics/global_shader_parameters.h"
 #include "graphics/graphics_device.h"
 #include "base/typedefs.h"
 
@@ -324,7 +325,10 @@ namespace mmo
 
 		HCURSOR m_hardwareCursor = nullptr;
 
-		Texture* m_textureSlots[16]{ };
+		/// Cache of the currently bound pixel shader textures, indexed by register. Must stay
+		/// large enough to cover the reserved scene colour/depth registers; BindTexture asserts
+		/// on the bound.
+		Texture* m_textureSlots[kSceneDepthTextureSlot + 1]{ };
 
 		/// Currently bound vertex shader (for caching to avoid redundant VSSetShader calls).
 		ShaderBase* m_currentVertexShader { nullptr };

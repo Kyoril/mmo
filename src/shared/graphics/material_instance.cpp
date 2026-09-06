@@ -44,6 +44,10 @@ namespace mmo
 		// Update parent
 		m_parent = parent;
 
+		// Make sure the parent is itself current before copying its list, or this instance
+		// inherits a stale one and records the new revision against it.
+		m_parent->SyncParametersIfStale();
+
 		// Take parent parameter default values
 		m_scalarParameters.clear();
 		m_scalarParameters.reserve(m_parent->GetScalarParameters().size());
@@ -72,6 +76,8 @@ namespace mmo
 			m_bufferDataDirty[2] = true;
 			m_bufferLayoutDirty[2] = true;
 		}
+
+		m_syncedParameterRevision = m_parent->GetParameterRevision();
 
 		// Refresh base values from parent material if this is the first reference to a parent material
 		if (!hadParent)
@@ -152,6 +158,12 @@ namespace mmo
 
 	void MaterialInstance::Apply(GraphicsDevice& device, MaterialDomain domain, PixelShaderType pixelShaderType)
 	{
+		// The parent may have been recompiled with a different parameter list since this
+		// instance copied it - saving a material in the editor does exactly that. The shader
+		// binds textures by list position, so binding the old list against the new shader puts
+		// every resource past the first change into the wrong register.
+		SyncParametersIfStale();
+
 		switch (domain)
 		{
 		case MaterialDomain::UserInterface:
