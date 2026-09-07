@@ -1338,7 +1338,8 @@ def write(system, filename):
 python -c "
 import sys; sys.path.insert(0,'tools/particle_gen/recipes')
 import warrior_common as w
-s = w.ParticleSystem(emitters=[w.spark_burst('t', 12, 5.0, w.SPARK)])
+s = w.ParticleSystem(emitters=[w.spark_burst('t', 12, 5.0, w.ARC_EMBER),
+                               w.energy_swirl('s', 14, 0.5, w.ARC_VIOLET)])
 w.write(s, '_scratch.hpar')
 "
 python tools/particle_gen/inspect_hpar.py data/client/Particles/Warrior/_scratch.hpar --check --one-shot
