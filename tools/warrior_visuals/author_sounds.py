@@ -10,9 +10,11 @@ replaces the same ids rather than appending duplicates.
 """
 
 import argparse
+import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
@@ -21,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / ".agents/skills/mmo-spell-designer/scripts"))
 from proto_runtime import find_protoc  # noqa: E402
 
+OUT = ROOT / "generated/warrior_visuals"
 SOUND_DIR = "Sound/Spells/Warrior/"
 
 # id, name, files, pitch_min, pitch_max, volume
@@ -83,8 +86,10 @@ def upsert(dataset):
         if target is None:
             target = dataset.entry.add()
         populate(target, spec)
-    assert len({e.id for e in dataset.entry}) == len(dataset.entry), "duplicate sound ids"
-    assert dataset.IsInitialized()
+    if len({e.id for e in dataset.entry}) != len(dataset.entry):
+        raise SystemExit("duplicate sound ids")
+    if not dataset.IsInitialized():
+        raise SystemExit("sounds dataset is missing required fields after upsert")
 
 
 def main():
@@ -95,7 +100,8 @@ def main():
     for spec in ENTRIES:
         for f in spec[2]:
             path = ROOT / "data/client" / SOUND_DIR / f
-            assert path.is_file(), f"missing sound file: {path}"
+            if not path.is_file():
+                raise SystemExit(f"missing sound file: {path}")
 
     targets = [
         (ROOT / "data/editor/data/sounds.data",
@@ -104,14 +110,30 @@ def main():
          load_type(ROOT / "src/shared/client_data", "sounds.proto", "mmo.proto_client.Sounds")),
     ]
 
+    # Parse and validate every dataset before writing any of them, so a failure on the
+    # second dataset can never leave the first one written and the two data submodules
+    # diverged with no backup and no rollback.
+    datasets = []
     for path, message_type in targets:
         dataset = message_type.FromString(path.read_bytes())
         upsert(dataset)
-        if args.apply:
-            path.write_bytes(dataset.SerializeToString())
+        datasets.append(dataset)
 
-    action = "wrote" if args.apply else "validated"
-    print(f"{action} {len(ENTRIES)} warrior sound entries (ids 21-33) in both datasets")
+    if not args.apply:
+        print(f"validated {len(ENTRIES)} warrior sound entries (ids 21-33) in both datasets")
+        return
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    backup = OUT / ("backup_sounds_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
+    backup.mkdir()
+    for index, (path, _) in enumerate(targets):
+        shutil.copy2(path, backup / f"{index}_{path.name}")
+
+    for (path, _), dataset in zip(targets, datasets):
+        path.write_bytes(dataset.SerializeToString())
+
+    print(f"wrote {len(ENTRIES)} warrior sound entries (ids 21-33) to both datasets. "
+          f"Backup: {backup}")
 
 
 if __name__ == "__main__":

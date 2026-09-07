@@ -8,16 +8,11 @@ These spawn on the caster. The three cooldowns that grant the warrior something 
 Bloodrush, Last Stand -- carry the warm accent; the two debuff shouts sit cold and
 desaturated so the two groups never read as the same effect.
 
-Two tuning notes that are not obvious from ``warrior_common`` alone and were discovered while
-retuning this file against rendered previews:
+One tuning note that is not obvious from ``warrior_common`` alone and was discovered while
+retuning this file against rendered previews (see ``spark_burst``'s docstring for the
+underlying engine behaviour -- every directional spark emitter below zeroes
+``min_start_speed``/``max_start_speed`` after construction for exactly that reason):
 
-* ``spark_burst`` always adds a ``direction * speed`` term on top of whatever
-  ``min_velocity``/``max_velocity`` box a recipe assigns afterwards, because the spawn shape
-  is a full sphere and ``direction`` is the (omnidirectional) spawn offset normalized. When a
-  recipe overrides the velocity box to bias a burst toward one side, that omnidirectional
-  term fights the bias and the burst reads as a symmetric ball instead of a directional sweep.
-  Any spark emitter that needs real directionality also zeroes ``min_start_speed`` /
-  ``max_start_speed`` after construction so the velocity box is the only thing steering it.
 * ``ground_ring``'s size and colour curves both run over the particle's full normalized
   lifetime, but independently: size grows linearly to the end value over 100% of life while
   alpha peaks at 15% and fades linearly back to zero by 100%. For a ring whose end size is
@@ -44,7 +39,13 @@ def _fast_ring(ring, growth_frac=0.35, growth_hold=0.75, hold_alpha_frac=0.7):
     it finishes expanding. Below that ratio, the default ground_ring curves are fine. This is
     a judgement threshold observed from contact sheets, not a hard engine limit."""
     # Extract colour and peak alpha from the ring's existing color curve (built by ground_ring).
-    # Key 1 of the curve carries the peak: colour is RGB ([:3]), peak alpha is [3].
+    # Key 1 of the curve carries the peak: colour is RGB ([:3]), peak alpha is [3]. This
+    # silently depends on ground_ring (a different module) keeping key 1 as the alpha peak --
+    # assert the key count so a future change to ground_ring's curve shape fails loudly here
+    # instead of quietly picking the wrong colour.
+    assert len(ring.color_over_lifetime) == 3, (
+        f"{ring.name}: expected ground_ring's 3-key colour curve (fade-in, peak, fade-out); "
+        f"got {len(ring.color_over_lifetime)} keys -- update the key-1 assumption above")
     peak_color = ring.color_over_lifetime[1].color
     colour = peak_color[:3]
     alpha = peak_color[3]

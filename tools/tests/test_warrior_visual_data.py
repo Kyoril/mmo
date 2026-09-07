@@ -8,6 +8,8 @@ the engine renders opaque. Skips rather than fails when protoc or the data submo
 unavailable, so a partial checkout does not break the gate.
 """
 
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -64,7 +66,10 @@ class WarriorVisualDataTests(unittest.TestCase):
             raise unittest.SkipTest("data/editor submodule is not checked out")
         try:
             cls.visuals, cls.sounds = _load()
-        except Exception as exc:  # protoc missing, protobuf missing
+        except (ImportError, FileNotFoundError, subprocess.CalledProcessError) as exc:
+            # Missing protoc, missing protobuf, or an uninitialised submodule -- environment
+            # problems the gate should skip past. A corrupt .data file must NOT land here:
+            # this suite exists to catch exactly that, so it has to fail, not skip.
             raise unittest.SkipTest(f"cannot load proto data: {exc}")
 
         cls.kits = [(v.name, kit)
@@ -115,6 +120,31 @@ class WarriorVisualDataTests(unittest.TestCase):
     def test_no_kit_loops(self):
         for name, kit in self.kits:
             self.assertFalse(kit.loop, f"{name}: a looping kit never self-terminates")
+
+    def test_particle_files_pass_the_hpar_validator(self):
+        # "Hand-packed .hpar bytes bypassing the validator" was one of the four original
+        # defects this branch exists to fix, and until now nothing automated ran the
+        # validator -- inspect_hpar.check() -- against the shipped warrior effects at all.
+        # It catches what a preview screenshot cannot: an emitter-level loop flag (distinct
+        # from the kit's own loop flag checked above -- an emitter that loops never reports
+        # finished and leaks its owning scene node), burst spawn demand that exceeds
+        # max_particles, a colour curve that does not fade to alpha 0, and a material that
+        # is missing, non-translucent, or has depth-write on.
+        sys.path.insert(0, str(ROOT / "tools/particle_gen"))
+        import inspect_hpar
+
+        data_root = str(ROOT / "data/client")
+        checked = set()
+        for name, kit in self.kits:
+            for particle in kit.particles:
+                if particle in checked:
+                    continue
+                checked.add(particle)
+                path = ROOT / "data/client" / particle
+                with contextlib.redirect_stdout(io.StringIO()):
+                    problems = inspect_hpar.check(str(path), one_shot=True, data_root=data_root)
+                self.assertEqual(problems, [],
+                                 f"{name}: {particle} failed hpar validation: {problems}")
 
     def test_every_particle_uses_a_translucent_material(self):
         # Particles/Additive.hmat is typed Unlit, so the engine renders it opaque and every

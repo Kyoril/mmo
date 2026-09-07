@@ -9,7 +9,7 @@ Python tooling for the client's `.hpar` particle systems
 | `inspect_hpar.py` | dump an effect as text, or as an editable Python recipe (`--as-recipe`) |
 | `preview.py` | CPU-simulate an effect and render a contact sheet PNG |
 | `make_sprites.py` | generate the soft glow/beam/ring sprites and import them as DXT5 `.htex` |
-| `recipes/` | one script per authored effect; each writes its `.hpar` |
+| `recipes/` | mostly one script per authored effect, each writing its own `.hpar`; some scripts write several related effects (e.g. `warrior_abilities.py` writes seven), and shared helper modules such as `warrior_common.py` write nothing themselves |
 
 Requires `numpy` and `Pillow` (already needed by `tools/terrain_gen`).
 

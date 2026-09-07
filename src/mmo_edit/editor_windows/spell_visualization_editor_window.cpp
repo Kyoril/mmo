@@ -1238,7 +1238,7 @@ namespace mmo
 			const char* boneName = kit.has_attach_bone() && !kit.attach_bone().empty() ? kit.attach_bone().c_str() : "root";
 			ImGui::TextDisabled("(%s @ %s | %d snd, %d pfx%s%s%s)",
 				scopeName, boneName,
-				kit.sounds_size(), kit.particles_size(),
+				kit.sounds_size() + kit.sound_ids_size(), kit.particles_size(),
 				kit.has_light() ? " +light" : "",
 				kit.has_ribbon_trail() ? " +ribbon" : "",
 				kit.has_mesh_name() && !kit.mesh_name().empty() ? " +mesh" : "");

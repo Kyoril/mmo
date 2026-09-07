@@ -2,8 +2,10 @@
 """
 Author the warrior spell visualization kits (entries 26-39).
 
-Writes both the editor dataset and the client ClientDB copy. Only visualization entries and
-each spell's visualization_id are touched; all other spell data is asserted unchanged.
+Writes both the editor dataset and the client ClientDB copy. Only ``spell_visualizations.data``
+is touched, in both trees; ``spells.data`` is never opened or written by this script, so each
+spell's own ``visualization_id`` must already point at the ids authored here (see ``mapping``
+below, which exists to check that link, not to change it).
 
     python tools/warrior_visuals/author_visuals.py            # validate only
     python tools/warrior_visuals/author_visuals.py --apply    # write both datasets
@@ -40,6 +42,13 @@ PARTICLE_DIR = "Particles/Warrior/"
 
 # Event ids: 3 = CAST_SUCCEEDED, 4 = IMPACT, 5 = AURA_APPLIED.
 CAST, IMPACT, AURA = "3", "4", "5"
+
+
+def _require(condition, message):
+    """Like assert, but survives ``python -O`` -- these guards gate writing game data, so
+    they must not disappear when assertions are stripped."""
+    if not condition:
+        raise SystemExit(message)
 
 
 def anim(name):
@@ -128,22 +137,22 @@ def validate(dataset, sound_ids):
             continue
         for event, kit_list in vis.kits_by_event.items():
             for kit in kit_list.kits:
-                assert not kit.loop, f"{vis.name}: one-shot kits must not loop"
-                assert not kit.HasField("duration_ms"), (
+                _require(not kit.loop, f"{vis.name}: one-shot kits must not loop")
+                _require(not kit.HasField("duration_ms"),
                     f"{vis.name}: duration_ms time-warps the clip; leave it unset")
-                assert not (kit.sounds and kit.sound_ids), (
+                _require(not (kit.sounds and kit.sound_ids),
                     f"{vis.name}: a kit sets sounds or sound_ids, never both")
-                assert not kit.sounds, f"{vis.name}: warrior kits use sound_ids"
+                _require(not kit.sounds, f"{vis.name}: warrior kits use sound_ids")
                 for sound_id in kit.sound_ids:
-                    assert sound_id in sound_ids, f"{vis.name}: unknown sound id {sound_id}"
+                    _require(sound_id in sound_ids, f"{vis.name}: unknown sound id {sound_id}")
                 for particle in kit.particles:
                     path = ROOT / "data/client" / particle
-                    assert path.is_file(), f"{vis.name}: missing particle {particle}"
+                    _require(path.is_file(), f"{vis.name}: missing particle {particle}")
                 if event == 3:
-                    assert kit.scope == 0, "CastSucceeded has no target list"
+                    _require(kit.scope == 0, "CastSucceeded has no target list")
     ids = [v.id for v in dataset.entry]
-    assert len(ids) == len(set(ids)), "duplicate visualization ids"
-    assert dataset.IsInitialized()
+    _require(len(ids) == len(set(ids)), "duplicate visualization ids")
+    _require(dataset.IsInitialized(), "visualizations dataset is missing required fields")
 
 
 def upsert(dataset, drafts):
@@ -153,7 +162,7 @@ def upsert(dataset, drafts):
         if target is None:
             target = dataset.entry.add()
         else:
-            assert target.id == draft["id"], (
+            _require(target.id == draft["id"],
                 f"{draft['name']} already exists with id {target.id}, expected {draft['id']}")
             target.Clear()
         json_format.ParseDict(draft, target)
@@ -184,9 +193,24 @@ def main():
             next_id += 1
         drafts.append({"id": vis_id, "name": name, "kits_by_event": events})
         for spell_id in spell_ids:
-            assert by_id[spell_id].name == suffix or suffix == "Strike", (
-                spell_id, by_id[spell_id].name, suffix)
+            _require(by_id[spell_id].name == suffix or suffix == "Strike",
+                f"spell {spell_id} is named {by_id[spell_id].name!r}, expected {suffix!r}")
             mapping[spell_id] = vis_id
+
+    # This script never writes spells.data -- each spell's own visualization_id has to
+    # already point at the id authored here. `mapping` exists to check that the link still
+    # resolves, not to change it: a mismatch means spells.data and spell_visualizations.data
+    # have drifted apart, most likely because a spell's visualization_id was edited (or a
+    # new visualization id assigned) without updating the other side.
+    for spell_id, vis_id in mapping.items():
+        spell = by_id[spell_id]
+        _require(spell.HasField("visualization_id"),
+            f"spell {spell_id} ({spell.name}) has no visualization_id set; "
+            f"expected it to point at visualization {vis_id}")
+        _require(spell.visualization_id == vis_id,
+            f"spell {spell_id} ({spell.name}) points at visualization "
+            f"{spell.visualization_id}, not the {vis_id} authored here for {spell.name!r} -- "
+            f"spells.data and spell_visualizations.data have drifted")
 
     editor_visuals = type(visuals)()
     editor_visuals.CopyFrom(visuals)

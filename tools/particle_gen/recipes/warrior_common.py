@@ -44,7 +44,8 @@ STAR = "Particles/Particle_Star.hmi"     # four-point star
 
 # Palette. Every hue is pushed well past its realistic value: with no additive blending,
 # a saturated colour at low alpha is the only way to read as energy rather than as matter.
-# Each effect pairs a HOT core with a SATURATED body and a DARK fade.
+# Each effect pairs a HOT core with a SATURATED body; the exit is the alpha curve falling to
+# zero (technique 4 above), not a third darker colour.
 HOT = (1.00, 0.98, 0.90)          # near-white core, every energy effect starts here
 ARC_STEEL = (0.78, 0.92, 1.00)    # cold enchanted-blade energy
 ARC_GOLD = (1.00, 0.84, 0.38)     # heroic / rally
@@ -54,9 +55,12 @@ ARC_BLOOD = (0.82, 0.10, 0.14)    # stylized wound energy, brighter than real bl
 ARC_VIOLET = (0.60, 0.34, 0.95)   # dread / debuff magic
 ARC_AZURE = (0.42, 0.70, 1.00)    # protective barrier
 DUST = (0.62, 0.56, 0.46)         # ground contact only; lifted so it reads under energy
-DUST_DARK = (0.40, 0.35, 0.30)
 
-OUT_DIR = os.path.join("data", "client", "Particles", "Warrior")
+# Anchored to the repo root rather than left cwd-relative: run from anywhere but the repo
+# root and a relative path here silently creates a stray data/client/Particles/Warrior tree
+# instead of writing the real one.
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+OUT_DIR = os.path.join(ROOT, "data", "client", "Particles", "Warrior")
 
 
 def rgba(rgb, a):
@@ -69,6 +73,16 @@ def spark_burst(name, count, speed, colour, size=0.10, lifetime=0.45,
 
     ``spread`` biases the velocity box: 1.0 is omnidirectional, smaller values tighten the
     cone so the spray reads as directional.
+
+    ``min_start_speed``/``max_start_speed`` (set here from ``speed``) are not just a
+    magnitude on top of the velocity box -- the engine (``particle_emitter.cpp``) computes
+    ``localVel = RandomRange(minVelocity, maxVelocity) + spawnDir * startSpeed``, and
+    ``spawnDir`` is the omnidirectional spawn-offset direction from a sphere shape. That
+    term fights any directional bias a caller applies to ``min_velocity``/``max_velocity``
+    afterwards and makes an intended directional spray render as a symmetric ball. Callers
+    that override the velocity box for directionality must also zero
+    ``min_start_speed``/``max_start_speed`` after construction, or the omnidirectional term
+    wins.
     """
     return Emitter(
         name=name,

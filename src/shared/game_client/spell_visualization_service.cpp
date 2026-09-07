@@ -442,7 +442,7 @@ namespace mmo
         {
             const float durationSeconds = static_cast<float>(kit.duration_ms()) / 1000.0f;
             const float animLength = animState->GetLength();
-            if (animLength > 0.0f)
+            if (animLength > 0.0f && durationSeconds > 0.0f)
             {
                 // Adjust playback speed to match desired duration
                 const float playRate = animLength / durationSeconds;
