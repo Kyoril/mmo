@@ -265,7 +265,7 @@ namespace mmo
         // Catalog-backed sounds. Preferred over the legacy file-path list: SoundEntryPlayer
         // applies the entry's category, 3D distances, volume, pitch variance and shuffle-bag
         // file selection. A kit sets one or the other, never both.
-        if (m_soundEntryPlayer && kit.sound_ids_size() > 0)
+        if (m_soundEntryPlayer && m_audioPlayer && kit.sound_ids_size() > 0)
         {
             const Vector3 actorPosition = actor.GetPosition();
             const bool isLooped = kit.has_loop() && kit.loop();
