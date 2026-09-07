@@ -26,14 +26,16 @@ import postprocess
 def fetch_and_process(url: str, out_path: str, target_dbfs: float) -> dict:
     """Download one generated clip, postprocess it, and write it as a game-ready WAV."""
     tmp_path = out_path + ".download"
-    with urllib.request.urlopen(url) as response:
-        with open(tmp_path, "wb") as handle:
-            handle.write(response.read())
+    # Create output directories before attempting to download
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
 
     try:
+        with urllib.request.urlopen(url) as response:
+            with open(tmp_path, "wb") as handle:
+                handle.write(response.read())
+
         raw = postprocess.decode_to_mono(tmp_path)
         processed = postprocess.process(raw, postprocess.RATE, target_dbfs=target_dbfs)
-        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
         postprocess.write_wav(out_path, processed)
     finally:
         if os.path.exists(tmp_path):
