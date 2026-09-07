@@ -23,8 +23,9 @@ Everything here is built around four techniques that *do* survive alpha-only ble
 3. **Motion carries the magic.** Orbital swirl, expanding rings, stretched beams and
    spinning star sprites all read as arcane and cost nothing the renderer cannot do. Shape
    is free; glow is not.
-4. **Hue shift over life.** Hot core -> saturated body -> dark fade sells energy
-   dissipating, which is the read that a static bright blob cannot give.
+4. **Hue shift over life.** Hot near-white core -> saturated body, with the exit handled by
+   alpha falling to zero rather than by a third darker colour. That two-colour shift plus
+   the alpha fade sells energy dissipating, which a static bright blob cannot give.
 """
 
 import os
@@ -149,7 +150,12 @@ def dust_cloud(name, count, spread, colour, alpha=0.30, size=0.5, lifetime=0.8, 
 
 
 def soft_flash(name, size, colour, alpha=0.5, lifetime=0.12):
-    """One brief soft blob at the origin. Gives an impact an onset instead of a fade-in."""
+    """One brief soft blob at the origin. Gives an impact an onset instead of a fade-in.
+
+    The default alpha sits above the 0.2-0.45 volumetric budget for the same reason a spark
+    does: this is a single short-lived particle, so nothing accumulates against it. The
+    budget exists for layers that overlap each other, not for one blob lasting 0.12s.
+    """
     return Emitter(
         name=name,
         simulation_space=hpar.SIM_WORLD,
