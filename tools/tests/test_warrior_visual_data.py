@@ -16,6 +16,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# Instances the engine actually renders translucent. Particles/Additive.hmat above all is
+# typed Unlit, which the engine renders opaque -- that single mistake turned every particle
+# in the original warrior pass into a hard occluding rectangle.
+SAFE_PARTICLE_MATERIALS = {
+    "Particles/Particle_Beam.hmi",
+    "Particles/Particle_Glow.hmi",
+    "Particles/Particle_Ring.hmi",
+    "Particles/Particle_Star.hmi",
+}
+
 
 def _load():
     from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
@@ -105,6 +115,25 @@ class WarriorVisualDataTests(unittest.TestCase):
     def test_no_kit_loops(self):
         for name, kit in self.kits:
             self.assertFalse(kit.loop, f"{name}: a looping kit never self-terminates")
+
+    def test_every_particle_uses_a_translucent_material(self):
+        # Particles/Additive.hmat is typed Unlit, so the engine renders it opaque and every
+        # particle becomes a hard occluding rectangle -- the mistake that broke all ten
+        # original warrior effects. Every emitter in every particle a warrior kit references
+        # must use one of the four known-translucent material instances.
+        sys.path.insert(0, str(ROOT / "tools/particle_gen"))
+        import hpar
+
+        for name, kit in self.kits:
+            for particle in kit.particles:
+                path = ROOT / "data/client" / particle
+                system = hpar.load(str(path))
+                for emitter in system.emitters:
+                    self.assertIn(
+                        emitter.material_name, SAFE_PARTICLE_MATERIALS,
+                        f"{name}: emitter {emitter.name!r} in {particle} uses "
+                        f"{emitter.material_name!r}, which is not a known-translucent "
+                        f"particle material")
 
 
 if __name__ == "__main__":

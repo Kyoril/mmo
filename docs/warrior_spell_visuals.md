@@ -45,7 +45,7 @@ Format: mono PCM16, 44.1 kHz; 0.28–0.85 seconds; peak amplitudes 0.29–0.46, 
 
 Listen to `generated/warrior_visuals/sound_preview.wav`. Playback order, with half-second gaps: Strike, Rend, Execute, Skullbash, Shield Slam, Cleave, Charge, Shockwave, Battlecry, Bloodrush, Provoke, Demoralizing Shout, Last Stand.
 
-`tools/warrior_visuals/build_assets.py` regenerates all ten HPAR files, thirteen WAVs and the listening reel. It requires NumPy and has no dependency on the separate, pre-existing `tools/particle_gen/` work. The HPAR writer matches the current version-2 engine serializer. Existing particle materials are reused.
+The ten HPAR files are regenerated from `tools/particle_gen/recipes/warrior_abilities.py` and `tools/particle_gen/recipes/warrior_impacts.py` (shared tuning helpers live in `tools/particle_gen/recipes/warrior_common.py`); the thirteen WAVs come from `tools/sfx_gen/recipes/warrior.py`. `tools/warrior_visuals/build_assets.py` has been deleted -- these recipes are the current pipeline. The HPAR writer matches the current version-2 engine serializer. Existing particle materials are reused.
 
 ## Sound acquisition and generation plan
 
@@ -98,7 +98,7 @@ Two supporting runtime changes are included in `spell_visualization_service.cpp`
 
 Reopen the editor before saving catalogs so an already-open editor does not write stale data over the changes. Restart the newly built client to reload ClientDB. The editor and client assets are separate Git submodules; retain their modifications as well as the root scripts/documentation/runtime change when committing. No commits or server deployment were made.
 
-For iteration, run `python tools/warrior_visuals/build_assets.py`, then `python tools/warrior_visuals/author_visuals.py` to produce inspectable drafts. `--apply` validates and installs them with backups under `generated/warrior_visuals/backup_*`. Generated drafts, backups and the listening reel are local ignored outputs; the durable authoring sources are in `tools/warrior_visuals/` and installed assets are in the data submodules. Do not restore an entire backup over newer unrelated work; copy only the intended visualization references/entries.
+For iteration, regenerate effects with `python tools/particle_gen/recipes/warrior_abilities.py` and `python tools/particle_gen/recipes/warrior_impacts.py`; regenerate audio through the `tools/sfx_gen/` pipeline (ElevenLabs MCP generation + `tools/sfx_gen/fetch.py` postprocessing, per `tools/sfx_gen/README.md`), using `tools/sfx_gen/recipes/warrior.py` as the prompt table. Then run `python tools/warrior_visuals/author_visuals.py` to produce inspectable drafts. `--apply` validates and installs them with backups under `generated/warrior_visuals/backup_*`. Generated drafts, backups and the listening reel are local ignored outputs; the durable authoring sources are in `tools/particle_gen/recipes/`, `tools/sfx_gen/recipes/` and `tools/warrior_visuals/`, and installed assets are in the data submodules. Do not restore an entire backup over newer unrelated work; copy only the intended visualization references/entries.
 
 ### Focused in-game acceptance route
 

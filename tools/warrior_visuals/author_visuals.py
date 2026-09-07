@@ -206,16 +206,17 @@ def main():
 
     paths = [ROOT / "data/editor/data/spell_visualizations.data",
              ROOT / "data/client/ClientDB/spell_visualizations.data"]
+
+    client_visuals = client_visuals_type.FromString(paths[1].read_bytes())
+    upsert(client_visuals, drafts)
+    validate(client_visuals, sound_ids)
+
     backup = OUT / ("backup_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
     backup.mkdir()
     for index, path in enumerate(paths):
         shutil.copy2(path, backup / f"{index}_{path.name}")
 
     paths[0].write_bytes(editor_visuals.SerializeToString())
-
-    client_visuals = client_visuals_type.FromString(paths[1].read_bytes())
-    upsert(client_visuals, drafts)
-    validate(client_visuals, sound_ids)
     paths[1].write_bytes(client_visuals.SerializeToString())
 
     print(f"wrote {len(drafts)} visualizations to both datasets. Backup: {backup}")
