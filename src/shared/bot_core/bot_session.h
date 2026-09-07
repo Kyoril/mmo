@@ -7,6 +7,7 @@
 #include "bot_movement_controller.h"
 #include "bot_nav_service.h"
 #include "bot_realm_connector.h"
+#include "bot_exit_code.h"
 #include "bot_startup_types.h"
 
 #include "base/typedefs.h"
@@ -18,38 +19,42 @@
 
 namespace mmo
 {
-	/// Exit codes of the e2e_client, kept stable so that agents and scripts can rely on them.
-	namespace e2e_exit_code
-	{
-		enum Type
-		{
-			Success = 0,
-			ScenarioFailed = 1,
-			SetupFailed = 2,
-			Timeout = 3,
-			Disconnected = 4,
-		};
-	}
-
 	/// Headless client session: login -> realm -> character -> enter world, then hand
-	/// control to the caller-provided world loop (smoke test or Lua scenario).
-	class E2eSession final
+	/// control to the caller-provided world loop (smoke test, Lua scenario or bot AI).
+	///
+	/// The session does not own its io service or its navigation service, so that a swarm host
+	/// can run many sessions on one io service and one shared set of navigation meshes. See
+	/// bot_core/README.md for why sharing the navigation service is mandatory rather than an
+	/// optimisation.
+	class BotSession final
 	{
 	public:
-		explicit E2eSession(BotConfig config);
+		/// @param io The io service every connector of this session runs on. Must outlive the session.
+		/// @param navService Navigation service shared with every other session in this process.
+		/// @param config Account, realm and character configuration of this bot.
+		BotSession(asio::io_service& io, std::shared_ptr<BotNavService> navService, BotConfig config);
 
 		/// Starts the async login flow. Returns false on immediately detectable config errors.
 		bool Start();
 
 		/// Pumps the io service until the character is in the world or the timeout elapses.
-		e2e_exit_code::Type WaitForWorld(uint32 timeoutSeconds);
+		bot_exit_code::Type WaitForWorld(uint32 timeoutSeconds);
 
 		/// Keeps the session alive for the given duration, verifying the connection survives
 		/// (time sync responses, spawn handling). Used by --smoke.
-		e2e_exit_code::Type RunSmoke(uint32 seconds);
+		bot_exit_code::Type RunSmoke(uint32 seconds);
 
-		/// Runs one io service iteration followed by a short sleep. The single pump primitive
-		/// every blocking scenario call is built on.
+		/// Advances everything this session simulates on its own, most importantly path
+		/// following. Called once per frame by the host; never polls the io service and never
+		/// sleeps, so that a host driving many sessions pays for one poll and one sleep in total.
+		void Update();
+
+		/// Polls the io service, advances this session and sleeps for a short while. The single
+		/// pump primitive every blocking scenario call is built on.
+		///
+		/// Only valid for a host running exactly one session: the sleep is per call, so a swarm
+		/// pumping N sessions this way would take N sleeps per frame. Swarm hosts poll the io
+		/// service themselves and call Update instead.
 		void Pump();
 
 		void Shutdown();
@@ -82,7 +87,7 @@ namespace mmo
 		/// session has ended.
 		///
 		/// @return Success once the character is back in the world.
-		e2e_exit_code::Type Reconnect(uint32 timeoutSeconds);
+		bot_exit_code::Type Reconnect(uint32 timeoutSeconds);
 
 		BotContext& GetContext() { return *m_context; }
 		BotRealmConnector& GetRealm() { return *m_realm; }
@@ -91,15 +96,15 @@ namespace mmo
 		const BotConfig& GetConfig() const { return m_config; }
 		bool IsWorldReady() const { return m_worldReady; }
 		bool IsStopRequested() const { return m_stopRequested; }
-		e2e_exit_code::Type GetExitCode() const { return m_exitCode; }
+		bot_exit_code::Type GetExitCode() const { return m_exitCode; }
 
 	private:
-		void Fail(e2e_exit_code::Type code);
+		void Fail(bot_exit_code::Type code);
 		void BindSignals();
 
 	private:
 		BotConfig m_config;
-		asio::io_service m_io;
+		asio::io_service& m_io;
 		std::shared_ptr<BotLoginConnector> m_login;
 		std::shared_ptr<BotRealmConnector> m_realm;
 		std::shared_ptr<BotNavService> m_navService;
@@ -111,6 +116,6 @@ namespace mmo
 		bool m_shuttingDown { false };
 		bool m_disconnectExpected { false };
 		bool m_disconnected { false };
-		e2e_exit_code::Type m_exitCode { e2e_exit_code::Success };
+		bot_exit_code::Type m_exitCode { bot_exit_code::Success };
 	};
 }

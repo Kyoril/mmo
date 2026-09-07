@@ -1,9 +1,10 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "e2e_session.h"
+#include "bot_session.h"
 
 #include "bot_startup_selection.h"
 
+#include "base/macros.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 
@@ -37,18 +38,33 @@ namespace mmo
 		}
 	}
 
-	E2eSession::E2eSession(BotConfig config)
+	BotSession::BotSession(asio::io_service& io, std::shared_ptr<BotNavService> navService, BotConfig config)
 		: m_config(std::move(config))
-		, m_io()
+		, m_io(io)
 		, m_login(std::make_shared<BotLoginConnector>(m_io, m_config.loginHost, m_config.loginPort))
 		, m_realm(std::make_shared<BotRealmConnector>(m_io))
-		, m_navService(std::make_shared<BotNavService>())
+		, m_navService(std::move(navService))
 		, m_context(std::make_shared<BotContext>(m_realm, m_config, m_navService))
 	{
+		ASSERT(m_navService);
 		BindSignals();
 	}
 
-	bool E2eSession::Start()
+	void BotSession::Update()
+	{
+		if (!m_worldReady)
+		{
+			return;
+		}
+
+		// Path following is the only thing a session advances on its own. Doing it here rather
+		// than inside the blocking MoveTo call is what lets a bot keep walking while its owner is
+		// doing something else - an AI deciding on its next action, or a scenario waiting on a
+		// condition.
+		static_cast<void>(m_movementController.Update(*m_context));
+	}
+
+	bool BotSession::Start()
 	{
 		if (m_config.username.empty() || m_config.password.empty())
 		{
@@ -60,7 +76,7 @@ namespace mmo
 		return true;
 	}
 
-	e2e_exit_code::Type E2eSession::Reconnect(const uint32 timeoutSeconds)
+	bot_exit_code::Type BotSession::Reconnect(const uint32 timeoutSeconds)
 	{
 		ILOG("Reconnecting the session for account " << m_config.username);
 
@@ -83,7 +99,7 @@ namespace mmo
 		return WaitForWorld(timeoutSeconds);
 	}
 
-	e2e_exit_code::Type E2eSession::WaitForWorld(const uint32 timeoutSeconds)
+	bot_exit_code::Type BotSession::WaitForWorld(const uint32 timeoutSeconds)
 	{
 		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
 		while (!m_worldReady)
@@ -95,22 +111,22 @@ namespace mmo
 			if (std::chrono::steady_clock::now() >= deadline)
 			{
 				ELOG("Timed out after " << timeoutSeconds << "s waiting to enter the world");
-				return e2e_exit_code::Timeout;
+				return bot_exit_code::Timeout;
 			}
 
 			Pump();
 		}
 
-		return e2e_exit_code::Success;
+		return bot_exit_code::Success;
 	}
 
-	e2e_exit_code::Type E2eSession::RunSmoke(const uint32 seconds)
+	bot_exit_code::Type BotSession::RunSmoke(const uint32 seconds)
 	{
 		const BotUnit* self = m_realm->GetObjectManager().GetSelf();
 		if (!self)
 		{
 			ELOG("Entered world but self unit was never spawned");
-			return e2e_exit_code::SetupFailed;
+			return bot_exit_code::SetupFailed;
 		}
 
 		ILOG("Smoke: self guid=0x" << std::hex << self->GetGuid() << std::dec
@@ -130,16 +146,17 @@ namespace mmo
 		}
 
 		ILOG("Smoke: session survived " << seconds << "s - success");
-		return e2e_exit_code::Success;
+		return bot_exit_code::Success;
 	}
 
-	void E2eSession::Pump()
+	void BotSession::Pump()
 	{
 		m_io.poll();
+		Update();
 		std::this_thread::sleep_for(10ms);
 	}
 
-	void E2eSession::Shutdown()
+	void BotSession::Shutdown()
 	{
 		m_shuttingDown = true;
 		m_realm->close();
@@ -147,20 +164,20 @@ namespace mmo
 		m_io.poll();
 	}
 
-	void E2eSession::Fail(const e2e_exit_code::Type code)
+	void BotSession::Fail(const bot_exit_code::Type code)
 	{
 		m_exitCode = code;
 		m_stopRequested = true;
 	}
 
-	void E2eSession::BindSignals()
+	void BotSession::BindSignals()
 	{
 		m_login->AuthenticationResult.connect([this](auth::AuthResult result)
 			{
 				if (result != auth::auth_result::Success)
 				{
 					ELOG("Authentication at login server failed with code " << static_cast<int32>(result));
-					Fail(e2e_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed);
 					return;
 				}
 
@@ -180,7 +197,7 @@ namespace mmo
 				if (realms.empty())
 				{
 					ELOG("No realms available.");
-					Fail(e2e_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed);
 					return;
 				}
 
@@ -200,7 +217,7 @@ namespace mmo
 				if (!chosenRealm)
 				{
 					ELOG("Realm '" << m_config.realmName << "' not found in realm list.");
-					Fail(e2e_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed);
 					return;
 				}
 
@@ -214,7 +231,7 @@ namespace mmo
 				if (result != auth::auth_result::Success)
 				{
 					ELOG("Realm authentication failed with code " << static_cast<int32>(result));
-					Fail(e2e_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed);
 					return;
 				}
 
@@ -242,7 +259,7 @@ namespace mmo
 					if (!resolution.resolvedIndex.has_value() || *resolution.resolvedIndex >= views.size())
 					{
 						ELOG("Character resolution returned an invalid index");
-						Fail(e2e_exit_code::SetupFailed);
+						Fail(bot_exit_code::SetupFailed);
 						return;
 					}
 
@@ -258,7 +275,7 @@ namespace mmo
 					if (resolution.selector.empty())
 					{
 						ELOG("No character name configured for character creation");
-						Fail(e2e_exit_code::SetupFailed);
+						Fail(bot_exit_code::SetupFailed);
 						return;
 					}
 
@@ -273,7 +290,7 @@ namespace mmo
 				case StartupCharacterResolutionKind::NeedsPrompt:
 				case StartupCharacterResolutionKind::NotFound:
 					ELOG("Character \"" << m_config.characterName << "\" not found and character creation is disabled");
-					Fail(e2e_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed);
 					return;
 				}
 			});
@@ -283,7 +300,7 @@ namespace mmo
 				if (result != game::char_create_result::Unknown)
 				{
 					ELOG("Character creation failed with result " << static_cast<int32>(result));
-					Fail(e2e_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed);
 					return;
 				}
 
@@ -294,7 +311,7 @@ namespace mmo
 		m_realm->EnterWorldFailed.connect([this](game::player_login_response::Type reason)
 			{
 				ELOG("Enter world failed, reason code " << static_cast<int32>(reason));
-				Fail(e2e_exit_code::SetupFailed);
+				Fail(bot_exit_code::SetupFailed);
 			});
 
 		m_realm->VerifyNewWorld.connect([this](uint32 mapId, Vector3 position, float facing)
@@ -337,7 +354,7 @@ namespace mmo
 				}
 
 				ELOG("Realm connection lost.");
-				Fail(e2e_exit_code::Disconnected);
+				Fail(bot_exit_code::Disconnected);
 			});
 	}
 }

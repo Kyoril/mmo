@@ -38,6 +38,8 @@ endif()
 
 if (MMO_BUILD_TESTS)
 	add_subdirectory(tests)
+endif()
 
+if (MMO_BUILD_BOTS)
 	add_subdirectory(e2e_client)
 endif()

@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "e2e_session.h"
+#include "bot_core/bot_session.h"
 
 #include "base/typedefs.h"
 
@@ -10,7 +10,7 @@
 
 namespace mmo
 {
-	/// Executes a Lua scenario script against a running E2eSession.
+	/// Executes a Lua scenario script against a running BotSession.
 	///
 	/// The script runs on the main thread; every blocking API call (WaitUntil, Sleep,
 	/// MoveTo, GM.CreateMonster) pumps the session's io service in a deadline loop, so
@@ -24,8 +24,8 @@ namespace mmo
 		/// @param timeoutSeconds Watchdog: the scenario fails with Timeout if it runs longer.
 		/// @param transcriptPath JSONL transcript output path (empty to disable).
 		/// @return The process exit code for this scenario run.
-		static e2e_exit_code::Type Run(
-			E2eSession& session,
+		static bot_exit_code::Type Run(
+			BotSession& session,
 			const std::string& scriptPath,
 			uint32 timeoutSeconds,
 			const std::string& transcriptPath);

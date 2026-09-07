@@ -3,6 +3,7 @@
 #include "bot_nav_service.h"
 
 #include "assets/asset_registry.h"
+#include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "nav_mesh/map.h"
 
@@ -32,9 +33,22 @@ namespace mmo
 		}
 	}
 
+	namespace
+	{
+		/// Number of live navigation services in this process. AssetRegistry is a class of
+		/// statics, so a second service would initialize it a second time and the first
+		/// destruction would pull it out from under everyone still using it. A swarm therefore
+		/// shares one service across all of its sessions; this counter makes that structural
+		/// rather than a convention.
+		int32 g_navServiceInstanceCount = 0;
+	}
+
 	BotNavService::BotNavService(fs::path repoRoot)
 		: m_repoRoot(std::move(repoRoot))
 	{
+		ASSERT(g_navServiceInstanceCount == 0 && "Only one BotNavService may exist per process");
+		++g_navServiceInstanceCount;
+
 		static_cast<void>(Initialize());
 	}
 
@@ -45,6 +59,8 @@ namespace mmo
 		{
 			AssetRegistry::Destroy();
 		}
+
+		--g_navServiceInstanceCount;
 	}
 
 	bool BotNavService::Initialize()

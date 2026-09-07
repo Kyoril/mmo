@@ -2,7 +2,7 @@
 
 #include "scenario_engine.h"
 #include "scenario_transcript.h"
-#include "secondary_login_session.h"
+#include "bot_core/secondary_login_session.h"
 
 #include "base/clock.h"
 #include "game/spell.h"
@@ -32,10 +32,10 @@ namespace mmo
 		/// single-threaded and runs one scenario per process, so a single global is fine.
 		struct ScenarioRuntime final
 		{
-			E2eSession* session { nullptr };
+			BotSession* session { nullptr };
 			ScenarioTranscript* transcript { nullptr };
 			std::chrono::steady_clock::time_point deadline;
-			e2e_exit_code::Type abortCode { e2e_exit_code::ScenarioFailed };
+			bot_exit_code::Type abortCode { bot_exit_code::ScenarioFailed };
 			bool aborted { false };
 			uint64 selectedTarget { 0 };
 
@@ -55,7 +55,7 @@ namespace mmo
 
 		/// Aborts the running scenario: records the exit code, then throws so luabind
 		/// converts this into a Lua error that unwinds to the engine's pcall.
-		[[noreturn]] void abortScenario(const e2e_exit_code::Type code, const std::string& message)
+		[[noreturn]] void abortScenario(const bot_exit_code::Type code, const std::string& message)
 		{
 			g_runtime->abortCode = code;
 			g_runtime->aborted = true;
@@ -69,7 +69,7 @@ namespace mmo
 		/// One pump step that also enforces the global watchdog and connection health.
 		void pumpChecked()
 		{
-			E2eSession& session = *g_runtime->session;
+			BotSession& session = *g_runtime->session;
 			session.Pump();
 
 			// Keep the second session's io service moving too, so its connection stays healthy for
@@ -81,11 +81,11 @@ namespace mmo
 
 			if (session.IsStopRequested())
 			{
-				abortScenario(e2e_exit_code::Disconnected, "connection to the server was lost");
+				abortScenario(bot_exit_code::Disconnected, "connection to the server was lost");
 			}
 			if (std::chrono::steady_clock::now() >= g_runtime->deadline)
 			{
-				abortScenario(e2e_exit_code::Timeout, "scenario watchdog timeout exceeded");
+				abortScenario(bot_exit_code::Timeout, "scenario watchdog timeout exceeded");
 			}
 		}
 
@@ -256,22 +256,22 @@ namespace mmo
 		bool luaReconnect(const uint32 timeoutMs)
 		{
 			const uint32 timeoutSeconds = (timeoutMs + 999) / 1000;
-			const e2e_exit_code::Type result = g_runtime->session->Reconnect(timeoutSeconds);
+			const bot_exit_code::Type result = g_runtime->session->Reconnect(timeoutSeconds);
 
 			if (g_runtime->transcript)
 			{
 				g_runtime->transcript->Event("reconnect", { { "result",
-					result == e2e_exit_code::Success ? "in_world" : "failed" } });
+					result == bot_exit_code::Success ? "in_world" : "failed" } });
 			}
 
 			// Reconnecting resets the session's stop flag expectations but a genuine setup failure
 			// still has to end the run rather than leave the scenario querying a dead session.
 			if (g_runtime->session->IsStopRequested())
 			{
-				abortScenario(e2e_exit_code::Disconnected, "connection was lost while reconnecting");
+				abortScenario(bot_exit_code::Disconnected, "connection was lost while reconnecting");
 			}
 
-			return result == e2e_exit_code::Success;
+			return result == bot_exit_code::Success;
 		}
 
 		/// Opens a second login-server session on the same account and waits for it to authenticate.
@@ -281,7 +281,7 @@ namespace mmo
 		{
 			if (g_runtime->secondSession)
 			{
-				abortScenario(e2e_exit_code::ScenarioFailed, "LoginElsewhere: a second session is already open");
+				abortScenario(bot_exit_code::ScenarioFailed, "LoginElsewhere: a second session is already open");
 			}
 
 			const BotConfig& config = g_runtime->session->GetConfig();
@@ -324,7 +324,7 @@ namespace mmo
 		{
 			if (!condition)
 			{
-				abortScenario(e2e_exit_code::ScenarioFailed, "Assert failed: " + message);
+				abortScenario(bot_exit_code::ScenarioFailed, "Assert failed: " + message);
 			}
 
 			if (g_runtime->transcript)
@@ -335,14 +335,14 @@ namespace mmo
 
 		void luaFail(const std::string& message)
 		{
-			abortScenario(e2e_exit_code::ScenarioFailed, "Fail: " + message);
+			abortScenario(bot_exit_code::ScenarioFailed, "Fail: " + message);
 		}
 
 		bool luaWaitUntil(luabind::object predicate, const uint32 timeoutMs, const std::string& description)
 		{
 			if (luabind::type(predicate) != LUA_TFUNCTION)
 			{
-				abortScenario(e2e_exit_code::ScenarioFailed, "WaitUntil: first argument must be a function");
+				abortScenario(bot_exit_code::ScenarioFailed, "WaitUntil: first argument must be a function");
 			}
 
 			const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
@@ -734,7 +734,7 @@ namespace mmo
 
 		bool luaMoveTo(const float x, const float y, const float z, const uint32 timeoutMs)
 		{
-			E2eSession& session = *g_runtime->session;
+			BotSession& session = *g_runtime->session;
 			BotMovementController& controller = session.GetMovementController();
 			BotContext& context = session.GetContext();
 
@@ -761,7 +761,8 @@ namespace mmo
 					return false;
 				}
 
-				controller.Update(context);
+				// Path following is advanced by BotSession::Update, which pumpChecked drives via
+				// Pump. Doing it here as well would step the controller twice per frame.
 				pumpChecked();
 			}
 
@@ -870,7 +871,7 @@ namespace mmo
 				pumpChecked();
 			}
 
-			abortScenario(e2e_exit_code::ScenarioFailed,
+			abortScenario(bot_exit_code::ScenarioFailed,
 				"GM.CreateMonster: monster with entry " + std::to_string(entry) + " did not spawn within 15s");
 		}
 
@@ -911,7 +912,7 @@ namespace mmo
 				pumpChecked();
 			}
 
-			abortScenario(e2e_exit_code::ScenarioFailed,
+			abortScenario(bot_exit_code::ScenarioFailed,
 				"GM.CreateObject: object with entry " + std::to_string(entry) + " did not spawn within 15s");
 		}
 
@@ -931,7 +932,7 @@ namespace mmo
 			const BotWorldObjectState* object = g_runtime->session->GetRealm().GetObjectManager().GetWorldObject(guidFromString(guidStr));
 			if (!object)
 			{
-				abortScenario(e2e_exit_code::ScenarioFailed, "GetObjectState: unknown object guid " + guidStr);
+				abortScenario(bot_exit_code::ScenarioFailed, "GetObjectState: unknown object guid " + guidStr);
 			}
 
 			return object->state;
@@ -960,7 +961,7 @@ namespace mmo
 				pumpChecked();
 			}
 
-			abortScenario(e2e_exit_code::ScenarioFailed, "GM.CheckLoS: no line of sight result received within 10s");
+			abortScenario(bot_exit_code::ScenarioFailed, "GM.CheckLoS: no line of sight result received within 10s");
 		}
 
 		bool luaCastSpellOnObject(const uint32 spellId, const std::string& targetGuidStr)
@@ -1020,7 +1021,7 @@ namespace mmo
 
 		void luaGmWorldPort(const uint32 mapId, const float x, const float y, const float z, const float facing)
 		{
-			E2eSession& session = *g_runtime->session;
+			BotSession& session = *g_runtime->session;
 			session.GetRealm().CheatWorldPort(mapId, Vector3(x, y, z), facing);
 
 			// Same-map teleports arrive as a MoveTeleport packet the connector acks. Wait for
@@ -1236,8 +1237,8 @@ namespace mmo
 		}
 	}
 
-	e2e_exit_code::Type ScenarioEngine::Run(
-		E2eSession& session,
+	bot_exit_code::Type ScenarioEngine::Run(
+		BotSession& session,
 		const std::string& scriptPath,
 		const uint32 timeoutSeconds,
 		const std::string& transcriptPath)
@@ -1291,14 +1292,14 @@ namespace mmo
 		luabind::open(state);
 		registerScenarioApi(state);
 
-		e2e_exit_code::Type result = e2e_exit_code::Success;
+		bot_exit_code::Type result = bot_exit_code::Success;
 
 		if (luaL_dostring(state, s_scenarioPrelude) != LUA_OK)
 		{
 			ELOG("Scenario prelude failed: " << lua_tostring(state, -1));
 			lua_close(state);
 			g_runtime = nullptr;
-			return e2e_exit_code::SetupFailed;
+			return bot_exit_code::SetupFailed;
 		}
 
 		ILOG("Running scenario " << scenarioName << " (" << scriptPath << ")");
@@ -1309,16 +1310,16 @@ namespace mmo
 		if (luaL_loadfile(state, scriptPath.c_str()) != LUA_OK)
 		{
 			ELOG("Failed to load scenario script: " << lua_tostring(state, -1));
-			transcript.ScenarioEnd(e2e_exit_code::SetupFailed, "load_failed");
+			transcript.ScenarioEnd(bot_exit_code::SetupFailed, "load_failed");
 			lua_close(state);
 			g_runtime = nullptr;
-			return e2e_exit_code::SetupFailed;
+			return bot_exit_code::SetupFailed;
 		}
 
 		if (lua_pcall(state, 0, 0, tracebackIndex) != LUA_OK)
 		{
 			const char* errorMessage = lua_tostring(state, -1);
-			result = runtime.aborted ? runtime.abortCode : e2e_exit_code::ScenarioFailed;
+			result = runtime.aborted ? runtime.abortCode : bot_exit_code::ScenarioFailed;
 			ELOG("Scenario " << scenarioName << " FAILED (exit " << static_cast<int>(result) << "): "
 				<< (errorMessage ? errorMessage : "unknown error"));
 			transcript.Event("error", { { "message", errorMessage ? errorMessage : "unknown error" } });
@@ -1328,9 +1329,9 @@ namespace mmo
 			ILOG("Scenario " << scenarioName << " PASSED");
 		}
 
-		const char* outcome = (result == e2e_exit_code::Success) ? "passed"
-			: (result == e2e_exit_code::Timeout) ? "timeout"
-			: (result == e2e_exit_code::Disconnected) ? "disconnected"
+		const char* outcome = (result == bot_exit_code::Success) ? "passed"
+			: (result == bot_exit_code::Timeout) ? "timeout"
+			: (result == bot_exit_code::Disconnected) ? "disconnected"
 			: "failed";
 		transcript.ScenarioEnd(result, outcome);
 
