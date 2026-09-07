@@ -883,6 +883,59 @@ namespace mmo
 				ImGui::TreePop();
 			}
 
+			// --- Sound entries ---
+			ImGui::Spacing();
+			if (ImGui::TreeNode("Sound Entries"))
+			{
+				if (ImGui::Button("Add Sound Entry"))
+				{
+					kit.add_sound_ids(0);
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("?##soundIds"))
+				{
+					ImGui::SetTooltip("Catalog entries from sounds.data. Preferred over raw file\n"
+						"paths: entries carry category, 3D distances, volume and pitch\n"
+						"variance, and multi-file entries shuffle between takes.\n"
+						"A kit uses these or the file paths above, never both.");
+				}
+
+				std::vector<int> soundIdsToRemove;
+
+				for (int i = 0; i < kit.sound_ids_size(); ++i)
+				{
+					ImGui::PushID(i);
+
+					int soundId = static_cast<int>(kit.sound_ids(i));
+					char soundIdLabel[32];
+					snprintf(soundIdLabel, sizeof(soundIdLabel), "Entry %d", i);
+
+					if (ImGui::InputInt(soundIdLabel, &soundId))
+					{
+						kit.set_sound_ids(i, static_cast<uint32>(std::max(0, soundId)));
+					}
+
+					ImGui::SameLine();
+					const auto* soundEntry = m_project.sounds.getById(kit.sound_ids(i));
+					ImGui::TextUnformatted(soundEntry ? soundEntry->name().c_str() : "<unknown id>");
+
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Remove"))
+					{
+						soundIdsToRemove.push_back(i);
+					}
+
+					ImGui::PopID();
+				}
+
+				for (auto it = soundIdsToRemove.rbegin(); it != soundIdsToRemove.rend(); ++it)
+				{
+					kit.mutable_sound_ids()->erase(kit.mutable_sound_ids()->begin() + *it);
+				}
+
+				ImGui::TreePop();
+			}
+
 			// --- Particles ---
 			ImGui::Spacing();
 			if (ImGui::TreeNode("Particles"))
