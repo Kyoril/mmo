@@ -213,6 +213,20 @@ namespace mmo
 		auto nowGameTime = nowTime % constants::OneDay;
 		m_gameTime.SetTime(nowGameTime);
 
+		// Resolve the map's trigger ids once. The map entry never changes for the lifetime of an
+		// instance, so this index never needs invalidating.
+		for (const uint32 triggerId : m_mapEntry->instance_triggers())
+		{
+			if (const auto* triggerEntry = m_project.triggers.getById(triggerId))
+			{
+				m_instanceTriggers.Add(*triggerEntry);
+			}
+			else
+			{
+				WLOG("Map " << m_mapId << " references unknown instance trigger " << triggerId);
+			}
+		}
+
 		m_mapData = std::make_unique<NavMapData>(*m_mapEntry);
 
 		// Add object spawners
@@ -953,14 +967,13 @@ namespace mmo
 			return;
 		}
 
-		for (const uint32 triggerId : m_mapEntry->instance_triggers())
+		// The map names its triggers by id, so the un-indexed form cost a getById map lookup per
+		// trigger per raise plus a walk of that trigger's events, for every event -- including the
+		// ones nothing listens for. m_instanceTriggers resolves the ids once at construction and
+		// buckets them by event, making this an array index.
+		const auto& candidates = m_instanceTriggers.Get(eventType);
+		for (const auto* triggerEntry : candidates)
 		{
-			const auto* triggerEntry = m_project.triggers.getById(triggerId);
-			if (!triggerEntry)
-			{
-				continue;
-			}
-
 			for (const auto& triggerEvent : triggerEntry->newevents())
 			{
 				if (triggerEvent.type() != eventType)
@@ -969,24 +982,8 @@ namespace mmo
 				}
 
 				// For events with filter data (e.g. OnEncounterStateChanged), only fire when the
-				// event's configured data matches the supplied data. A zero/absent filter matches all.
-				bool dataMatches = true;
-				for (int i = 0; i < triggerEvent.data_size(); ++i)
-				{
-					const uint32 filter = triggerEvent.data(i);
-					if (filter == 0)
-					{
-						continue; // Wildcard for this slot
-					}
-
-					if (i >= static_cast<int>(eventData.size()) || eventData[i] != filter)
-					{
-						dataMatches = false;
-						break;
-					}
-				}
-
-				if (!dataMatches)
+				// event's configured data matches the supplied data.
+				if (!proto::TriggerEventDataMatches(triggerEvent, eventData))
 				{
 					continue;
 				}

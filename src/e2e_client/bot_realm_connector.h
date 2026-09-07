@@ -123,6 +123,15 @@ namespace mmo
 		/// Reason the realm gave for terminating this session, if any.
 		std::optional<auth::SessionKickReason> m_kickReason;
 
+		/// Last spell visualization the server told us to play, if any.
+		struct SpellVisual
+		{
+			uint64 targetGuid { 0 };
+			uint32 visualizationId { 0 };
+			uint8 visualEvent { 0 };
+		};
+		std::optional<SpellVisual> m_lastSpellVisual;
+
 		// Party state
 		std::vector<BotPartyMember> m_partyMembers;
 		uint64 m_partyLeaderGuid { 0 };
@@ -151,6 +160,20 @@ namespace mmo
 
 		/// Why the realm terminated this session, if it said so before closing the connection.
 		[[nodiscard]] std::optional<auth::SessionKickReason> GetKickReason() const { return m_kickReason; }
+
+		/// Visualization id of the most recent PlaySpellVisual the server sent, or 0 for none.
+		/// A spell visual has no gameplay side effect to assert on, so a scenario observes the
+		/// packet itself.
+		[[nodiscard]] uint32 GetLastSpellVisualId() const { return m_lastSpellVisual ? m_lastSpellVisual->visualizationId : 0; }
+
+		/// Guid the last observed spell visual played on, or 0 for none.
+		[[nodiscard]] uint64 GetLastSpellVisualTarget() const { return m_lastSpellVisual ? m_lastSpellVisual->targetGuid : 0; }
+
+		/// Visualization event of the last observed spell visual, or 255 for none.
+		[[nodiscard]] uint8 GetLastSpellVisualEvent() const { return m_lastSpellVisual ? m_lastSpellVisual->visualEvent : 255; }
+
+		/// Forgets the last observed spell visual, so a scenario can wait for the next one.
+		void ClearLastSpellVisual() { m_lastSpellVisual.reset(); }
 
 	public:
 		// ~ Begin IConnectorListener
@@ -371,6 +394,8 @@ namespace mmo
 		PacketParseResult OnAuthSessionResponse(game::IncomingPacket& packet);
 
 		PacketParseResult OnKickReason(game::IncomingPacket& packet);
+
+		PacketParseResult OnPlaySpellVisual(game::IncomingPacket& packet);
 
 		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
 

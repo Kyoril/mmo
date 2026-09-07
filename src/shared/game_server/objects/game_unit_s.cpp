@@ -1827,6 +1827,25 @@ namespace mmo
 			});
 	}
 
+	void GameUnitS::NotifyPlaySpellVisual(const uint32 visualizationId, const uint8 visualEvent)
+	{
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::PlaySpellVisual);
+		packet
+			<< io::write_packed_guid(GetGuid())
+			<< io::write<uint32>(visualizationId)
+			<< io::write<uint8>(visualEvent);
+		packet.Finish();
+
+		ForEachSubscriberInSight(
+			[&packet, &buffer](TileSubscriber& subscriber)
+			{
+				subscriber.SendPacket(packet, buffer);
+			});
+	}
+
 	void GameUnitS::NotifyRootChanged()
 	{
 		const bool wasRooted = IsRooted();

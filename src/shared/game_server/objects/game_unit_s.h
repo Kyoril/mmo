@@ -1077,6 +1077,13 @@ namespace mmo
 		/// @param emoteId Id of the emote entry to play.
 		void NotifyEmote(uint32 emoteId);
 
+		/// Broadcasts a spell visualization played on this unit to all subscribers in sight
+		/// (including the unit itself, when it is a player).
+		/// @param visualizationId Id of the SpellVisualization entry to play.
+		/// @param visualEvent Which event of the visualization to fire (proto SpellVisualEvent;
+		///        4 = IMPACT is the usual choice for a one-shot).
+		void NotifyPlaySpellVisual(uint32 visualizationId, uint8 visualEvent);
+
 		void NotifyRootChanged();
 
 		void NotifyStunChanged();

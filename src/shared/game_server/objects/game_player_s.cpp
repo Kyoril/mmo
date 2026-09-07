@@ -13,6 +13,7 @@
 #include "game_server/world/universe.h"
 #include "base/utilities.h"
 #include "proto_data/project.h"
+#include "proto_data/trigger_event_filter.h"
 #include "game/emote_defs.h"
 #include "game/item.h"
 #include "game/spell.h"
@@ -86,12 +87,40 @@ namespace mmo
 
 	void GamePlayerS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32> &data, GameUnitS *triggeringUnit)
 	{
-		// TODO
+		// Player characters have no template entry to carry a trigger list the way creatures
+		// (UnitEntry.triggers) and objects (ObjectEntry.triggers) do, so a player trigger is found
+		// by its PlayerTrigger flag. Project keeps those pre-bucketed by event, so this is one
+		// array index and then a walk of a bucket that is empty for every event nothing listens
+		// for -- which is the case for almost every raise.
+		const auto& candidates = GetProject().GetPlayerTriggers(e);
+		if (candidates.empty())
+		{
+			return;
+		}
+
+		for (const auto* triggerEntry : candidates)
+		{
+			for (const auto& triggerEvent : triggerEntry->newevents())
+			{
+				if (triggerEvent.type() != e)
+				{
+					continue;
+				}
+
+				if (proto::TriggerEventDataMatches(triggerEvent, data))
+				{
+					// At most once per raise, even when the trigger lists several events of this
+					// type (how "at level 10 or level 20" is expressed).
+					unitTrigger(std::cref(*triggerEntry), std::ref(*this), triggeringUnit);
+					break;
+				}
+			}
+		}
 	}
 
 	void GamePlayerS::RaiseTrigger(trigger_event::Type e, GameUnitS *triggeringUnit)
 	{
-		// TODO
+		RaiseTrigger(e, {}, triggeringUnit);
 	}
 
 	void GamePlayerS::OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated)
@@ -2223,6 +2252,12 @@ namespace mmo
 
 			currentXp -= GetNextLevelXp();
 			SetLevel(GetLevel() + 1);
+
+			// Raised here rather than inside SetLevel: SetLevel is also how a character's stored
+			// level is restored when it enters the world, and firing there would replay the
+			// level-up effects on every login. Raised after SetLevel so a trigger reads the
+			// post-level-up state.
+			RaiseTrigger(trigger_event::OnPlayerLevelUp, { GetLevel() }, this);
 		}
 
 		// A single grant can overshoot the last level up; cap the leftover below the next-level requirement.

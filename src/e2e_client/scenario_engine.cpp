@@ -226,6 +226,30 @@ namespace mmo
 			return "unknown";
 		}
 
+		/// A spell visual has no gameplay side effect, so scenarios assert on the packet: this
+		/// returns the visualization id of the last PlaySpellVisual the server sent, or 0.
+		uint32 luaLastSpellVisualId()
+		{
+			return g_runtime->session->GetLastSpellVisualId();
+		}
+
+		/// Guid the last observed spell visual played on, formatted like every other guid query.
+		std::string luaLastSpellVisualTarget()
+		{
+			return guidToString(g_runtime->session->GetLastSpellVisualTarget());
+		}
+
+		/// Which visualization event the last observed spell visual fired (4 = IMPACT), or 255.
+		uint32 luaLastSpellVisualEvent()
+		{
+			return g_runtime->session->GetLastSpellVisualEvent();
+		}
+
+		void luaClearLastSpellVisual()
+		{
+			g_runtime->session->ClearLastSpellVisual();
+		}
+
 		/// Logs the session back in and returns to the world, over the same connector objects the
 		/// previous session used. That reuse is the point: it is what the game client does, and it
 		/// is where session state that was not cleared shows up.
@@ -1068,6 +1092,10 @@ namespace mmo
 				luabind::def_lambda("ExpectDisconnect", &luaExpectDisconnect),
 				luabind::def_lambda("IsDisconnected", &luaIsDisconnected),
 				luabind::def_lambda("LastKickReason", &luaLastKickReason),
+				luabind::def_lambda("LastSpellVisualId", &luaLastSpellVisualId),
+				luabind::def_lambda("LastSpellVisualTarget", &luaLastSpellVisualTarget),
+				luabind::def_lambda("LastSpellVisualEvent", &luaLastSpellVisualEvent),
+				luabind::def_lambda("ClearLastSpellVisual", &luaClearLastSpellVisual),
 				luabind::def_lambda("LoginElsewhereImpl", &luaLoginElsewhere),
 				luabind::def_lambda("ReconnectImpl", &luaReconnect),
 

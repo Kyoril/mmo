@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <fstream>
+#include <vector>
 
 #include "project_loader.h"
 #include "project_saver.h"
@@ -26,6 +29,8 @@
 #include "shared/proto_data/vendors.pb.h"
 #include "shared/proto_data/trainers.pb.h"
 #include "shared/proto_data/triggers.pb.h"
+#include "shared/proto_data/trigger_helper.h"
+#include "shared/proto_data/trigger_event_index.h"
 #include "shared/proto_data/zones.pb.h"
 #include "shared/proto_data/quests.pb.h"
 #include "shared/proto_data/items.pb.h"
@@ -198,7 +203,43 @@ namespace mmo
 			/// Combat settings containing all configurable combat formula parameters.
 			CombatSettings combatSettings;
 
+		public:
+
+			/// @brief Triggers flagged trigger_flags::PlayerTrigger, bucketed by the event they
+			///	       listen for.
+			///
+			/// Player characters have no template entry to carry a trigger list, so a player
+			/// trigger is found by flag rather than by lookup. Scanning the whole trigger table on
+			/// every raise costs O(triggers x events) per player per event, which is exactly the
+			/// wrong shape once either the table or the number of player-raised events grows. This
+			/// index turns a raise into one array index plus a walk of the (usually empty) bucket.
+			///
+			/// Rebuilt by load() and save(). Anything that mutates the trigger manager directly -
+			/// only the editor does - must call RebuildPlayerTriggerIndex() afterwards.
+			/// @param eventType The event being raised.
+			/// @return Triggers listening for that event; empty for the common case.
+			[[nodiscard]] const std::vector<const TriggerEntry*>& GetPlayerTriggers(const trigger_event::Type eventType) const
+			{
+				return m_playerTriggers.Get(eventType);
+			}
+
+			/// @brief Rebuilds the player trigger index from the current trigger table.
+			void RebuildPlayerTriggerIndex()
+			{
+				m_playerTriggers.Clear();
+
+				for (const auto& entry : triggers.getTemplates().entry())
+				{
+					if ((entry.flags() & trigger_flags::PlayerTrigger) != 0)
+					{
+						m_playerTriggers.Add(entry);
+					}
+				}
+			}
+
 		private:
+
+			TriggerEventIndex m_playerTriggers;
 
 			String m_lastPath;
 
@@ -304,6 +345,8 @@ namespace mmo
 				// Load combat settings (optional singleton file - uses defaults if missing)
 				LoadCombatSettings(realmDataPath);
 
+				RebuildPlayerTriggerIndex();
+
 				auto loadEnd = GetAsyncTimeMs();
 				ILOG("Loading finished in " << (loadEnd - loadStart) << "ms");
 
@@ -385,6 +428,9 @@ namespace mmo
 
 				// Save combat settings
 				SaveCombatSettings(realmDataPath);
+
+				// The editor is the only thing that edits triggers, and saving is how it commits.
+				RebuildPlayerTriggerIndex();
 
 				auto saveEnd = GetAsyncTimeMs();
 				ILOG("Saving finished in " << (saveEnd - saveStart) << "ms");

@@ -10,6 +10,7 @@
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 #include "shared/proto_data/triggers.pb.h"
+#include "shared/proto_data/spell_visualizations.pb.h"
 #include "proto_data/trigger_helper.h"
 #include "player_manager.h"
 #include "player.h"
@@ -145,6 +146,7 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(QuestFailQuest)
 				MMO_HANDLE_TRIGGER_ACTION(SetFollowTarget)
 				MMO_HANDLE_TRIGGER_ACTION(ClearFollowTarget)
+				MMO_HANDLE_TRIGGER_ACTION(PlaySpellVisual)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -947,6 +949,44 @@ namespace mmo
 		}
 
 		creature->ClearFollowedUnit();
+	}
+
+	void TriggerHandler::HandlePlaySpellVisual(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_PLAY_SPELL_VISUAL: No target found, action will be ignored");
+			return;
+		}
+
+		const int32 visualizationId = GetActionData(action, 0);
+		if (visualizationId <= 0)
+		{
+			ELOG("TRIGGER_ACTION_PLAY_SPELL_VISUAL: Missing or invalid visualization id");
+			return;
+		}
+
+		// The event defaults to IMPACT, which is the one-shot slot every non-spell visual should
+		// use: the cast/aura events expect a matching lifecycle event to clean up after them, and
+		// nothing raises those for a visual played this way.
+		const int32 visualEvent = action.data_size() > 1
+			? GetActionData(action, 1)
+			: static_cast<int32>(proto::IMPACT);
+		if (visualEvent < 0 || visualEvent > static_cast<int32>(proto::AURA_IDLE))
+		{
+			ELOG("TRIGGER_ACTION_PLAY_SPELL_VISUAL: Event " << visualEvent << " out of range");
+			return;
+		}
+
+		auto* unit = dynamic_cast<GameUnitS*>(target);
+		if (!unit)
+		{
+			WLOG("TRIGGER_ACTION_PLAY_SPELL_VISUAL: Needs a unit target - action ignored");
+			return;
+		}
+
+		unit->NotifyPlaySpellVisual(static_cast<uint32>(visualizationId), static_cast<uint8>(visualEvent));
 	}
 
 	void TriggerHandler::HandleSetVariable(const proto::TriggerAction& action, TriggerContext& context)

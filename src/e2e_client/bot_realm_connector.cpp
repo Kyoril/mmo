@@ -120,6 +120,7 @@ namespace mmo
 
 			// A reason left over from a previous session must not be reported for this one.
 			m_kickReason.reset();
+			m_lastSpellVisual.reset();
 
 			// Accept LogonChallenge packets from here on
 			RegisterPacketHandler(game::realm_client_packet::AuthChallenge, *this, &BotRealmConnector::OnAuthChallenge);
@@ -127,6 +128,7 @@ namespace mmo
 			// The realm may terminate the session at any point from here on, including before we
 			// finish authenticating.
 			RegisterPacketHandler(game::realm_client_packet::KickReason, *this, &BotRealmConnector::OnKickReason);
+			RegisterPacketHandler(game::realm_client_packet::PlaySpellVisual, *this, &BotRealmConnector::OnPlaySpellVisual);
 		}
 		else
 		{
@@ -526,6 +528,21 @@ namespace mmo
 		m_kickReason = static_cast<auth::SessionKickReason>(reason);
 		ILOG("Realm terminated this session, reason code " << static_cast<uint16>(reason));
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPlaySpellVisual(game::IncomingPacket& packet)
+	{
+		SpellVisual visual;
+		if (!(packet
+			>> io::read_packed_guid(visual.targetGuid)
+			>> io::read<uint32>(visual.visualizationId)
+			>> io::read<uint8>(visual.visualEvent)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_lastSpellVisual = visual;
 		return PacketParseResult::Pass;
 	}
 

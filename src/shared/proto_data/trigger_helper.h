@@ -14,6 +14,11 @@ namespace mmo
 			OnlyInCombat		= 0x0002,
 			/// Only one trigger of this type should be running concurrently.
 			OnlyOneInstance		= 0x0004,
+			/// Trigger is evaluated for every player character. Player characters have no entry of
+			/// their own to carry a trigger list (unlike creatures and objects), so this flag is
+			/// what makes a trigger global to all players. Only meaningful together with a
+			/// player-raised event such as OnPlayerLevelUp.
+			PlayerTrigger		= 0x0008,
 
 			/// Used for automatic enumeration.
 			Count_				= 2
@@ -102,6 +107,10 @@ namespace mmo
 			/// Executed when an encounter slot of the instance changes state.
 			/// Data: [<ENCOUNTER-SLOT-ID>],[<NEW-STATE:0-3>]; When given, only fires for that slot/state.
 			OnEncounterStateChanged,
+			/// Executed on a player character right after it gained a level. Requires the
+			/// PlayerTrigger flag, since players carry no trigger list of their own.
+			/// Data: [<LEVEL>]; When given, only fires on reaching exactly that level.
+			OnPlayerLevelUp,
 
 			Invalid,
 			Count_ = Invalid
@@ -245,6 +254,12 @@ namespace mmo
 			/// configured idle movement.
 			/// Targets: UNIT; Data: NONE; Texts: NONE;
 			ClearFollowTarget = 36,
+
+			/// Plays a spell visualization on the target unit for every client that can see it.
+			/// The visualization is played by id, so it needs no spell of its own -- this is how
+			/// non-spell events (level up, quest completion) get a spell-quality visual.
+			/// Targets: UNIT; Data: <VISUALIZATION-ID>, [<EVENT:0-8, default 4 = IMPACT>]; Texts: NONE;
+			PlaySpellVisual = 37,
 
 			Invalid,
 			Count_ = Invalid

@@ -1607,6 +1607,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UnitVisibilityList, *this, &WorldState::OnUnitVisibilityList);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::StealthDetected, *this, &WorldState::OnStealthDetected);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PlaySoundById, *this, &WorldState::OnPlaySoundById);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PlaySpellVisual, *this, &WorldState::OnPlaySpellVisual);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
@@ -2603,6 +2604,41 @@ namespace mmo
 		{
 			m_soundEntryPlayer.PlayEntry(soundId);
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnPlaySpellVisual(game::IncomingPacket &packet)
+	{
+		uint64 targetGuid;
+		uint32 visualizationId;
+		uint8 visualEvent;
+		if (!(packet
+			>> io::read_packed_guid(targetGuid)
+			>> io::read<uint32>(visualizationId)
+			>> io::read<uint8>(visualEvent)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// An out-of-range event is a data problem (a trigger authored with a bad event value), not
+		// a malformed packet, so it is logged and dropped rather than treated as protocol desync.
+		if (visualEvent > static_cast<uint8>(SpellVisualizationService::Event::AuraIdle))
+		{
+			WLOG("Received PlaySpellVisual with out of range event " << static_cast<uint16>(visualEvent));
+			return PacketParseResult::Pass;
+		}
+
+		// A unit we cannot see is not an error: the server broadcasts to everyone subscribed to the
+		// tile, and our own visibility may lag behind (stealth, range, a despawn in flight).
+		const auto unit = ObjectMgr::Get<GameUnitC>(targetGuid);
+		if (!unit)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		SpellVisualizationService::Get().ApplyById(
+			static_cast<SpellVisualizationService::Event>(visualEvent), visualizationId, unit.get(), {});
 
 		return PacketParseResult::Pass;
 	}
@@ -4264,6 +4300,10 @@ namespace mmo
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_UP", newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints);
 
+		// The level-up visual is NOT played here. It is data-driven: the server raises
+		// OnPlayerLevelUp on the player, a trigger with the PlayerTrigger flag reacts with a
+		// PlaySpellVisual action, and that reaches us as a PlaySpellVisual packet -- which also
+		// gets it in front of everyone standing nearby, unlike this packet.
 		return PacketParseResult::Pass;
 	}
 
