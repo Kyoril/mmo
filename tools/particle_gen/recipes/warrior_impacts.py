@@ -23,11 +23,11 @@ def steel_impact():
     every warrior swing and on eight creature types -- so the arcane read has to come from
     three cheap emitters, not from volume."""
     return ParticleSystem(emitters=[
-        wc.spark_burst("Arc Sparks", count=14, speed=5.0, colour=wc.ARC_STEEL,
-                       size=0.08, lifetime=0.32, gravity=-8.0, drag=1.8, spread=1.1),
-        wc.soft_flash("Arc Flash", size=0.32, colour=wc.HOT, alpha=0.45, lifetime=0.10),
-        wc.ground_ring("Arc Pulse", start_size=0.22, end_size=0.75, colour=wc.ARC_STEEL,
-                       alpha=0.30, lifetime=0.28),
+        wc.spark_burst("Arc Sparks", count=22, speed=5.5, colour=wc.ARC_STEEL,
+                       size=0.13, lifetime=0.42, gravity=-8.0, drag=1.8, spread=1.1),
+        wc.soft_flash("Arc Flash", size=0.55, colour=wc.HOT, alpha=0.55, lifetime=0.12),
+        wc.ground_ring("Arc Pulse", start_size=0.40, end_size=1.35, colour=wc.ARC_STEEL,
+                       alpha=0.42, lifetime=0.35),
     ])
 
 
@@ -53,15 +53,15 @@ def blood_impact():
     motes arc down under gravity while a darker energy haze lingers where the cut was. The
     previous version used a smoke material and read as a dark cloud."""
     return ParticleSystem(emitters=[
-        wc.spark_burst("Wound Spray", count=20, speed=3.6, colour=wc.ARC_BLOOD,
-                       size=0.09, lifetime=0.50, gravity=-13.0, drag=0.4, spread=0.85),
-        wc.soft_flash("Wound Flash", size=0.28, colour=wc.ARC_CRIMSON, alpha=0.40,
-                      lifetime=0.10),
-        wc.energy_swirl("Wound Arc", count=12, radius=0.20, colour=wc.ARC_BLOOD,
-                        hot=wc.ARC_CRIMSON, alpha=0.32, size=0.09, lifetime=0.55,
+        wc.spark_burst("Wound Spray", count=28, speed=4.0, colour=wc.ARC_CRIMSON,
+                       size=0.13, lifetime=0.65, gravity=-13.0, drag=0.4, spread=1.0),
+        wc.soft_flash("Wound Flash", size=0.50, colour=wc.ARC_CRIMSON, alpha=0.45,
+                      lifetime=0.12),
+        wc.energy_swirl("Wound Arc", count=15, radius=0.25, colour=wc.ARC_BLOOD,
+                        hot=wc.ARC_CRIMSON, alpha=0.36, size=0.13, lifetime=0.60,
                         orbital=2.4, rise=0.3),
-        wc.dust_cloud("Wound Haze", count=8, spread=0.32, colour=wc.ARC_BLOOD,
-                      alpha=0.20, size=0.20, lifetime=0.42, rise=0.12),
+        wc.dust_cloud("Wound Haze", count=10, spread=0.36, colour=wc.ARC_BLOOD,
+                      alpha=0.32, size=0.40, lifetime=0.55, rise=0.12),
     ])
 
 
