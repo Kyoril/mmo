@@ -65,6 +65,15 @@ namespace mmo
 		/// Why the realm terminated this session, if it said so before closing the connection.
 		[[nodiscard]] std::optional<auth::SessionKickReason> GetKickReason() const { return m_realm->GetKickReason(); }
 
+		/// The most recent spell visualization the server told this client to play (0 = none).
+		[[nodiscard]] uint32 GetLastSpellVisualId() const { return m_realm->GetLastSpellVisualId(); }
+
+		[[nodiscard]] uint64 GetLastSpellVisualTarget() const { return m_realm->GetLastSpellVisualTarget(); }
+
+		[[nodiscard]] uint8 GetLastSpellVisualEvent() const { return m_realm->GetLastSpellVisualEvent(); }
+
+		void ClearLastSpellVisual() const { m_realm->ClearLastSpellVisual(); }
+
 		/// Runs the whole login -> realm -> character -> world flow again over the same connector
 		/// objects, exactly as the game client does when a displaced player logs back in.
 		///

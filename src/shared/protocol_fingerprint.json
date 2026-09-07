@@ -124,8 +124,8 @@
 		]
 	},
 	"game": {
-		"version": 11,
-		"fingerprint": "sha256:9d692c5f25566dc8af3191822bc65a99b4e61ef9fdff39b80a9a01a4deba7a3c",
+		"version": 12,
+		"fingerprint": "sha256:b9ac6f2b39a66d0e6029988bc1473ba751acddf89d6e93e2a8feb4a772da731b",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -141,7 +141,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:13e6b29f361cfda2b99c7d0c07cf5dba1a839e9b67df8fa52fe8117a2724b460"
+			"src/shared/game_protocol/game_protocol.h": "sha256:3f9cc9842fbbf02cf28697924c5b1e6b95277be472951743bc2b8db0af51dd6a"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -565,7 +565,7 @@
 			"game::realm_client_packet::ChatMessage = 23",
 			"game::realm_client_packet::ClassXpUpdate = 168",
 			"game::realm_client_packet::CompressedUpdateObject = 9",
-			"game::realm_client_packet::Count_ = 175",
+			"game::realm_client_packet::Count_ = 176",
 			"game::realm_client_packet::CreatureMove = 38",
 			"game::realm_client_packet::CreatureQueryResult = 42",
 			"game::realm_client_packet::DebugLineOfSightResult = 149",
@@ -670,6 +670,7 @@
 			"game::realm_client_packet::PartyPing = 142",
 			"game::realm_client_packet::PeriodicAuraLog = 77",
 			"game::realm_client_packet::PlaySoundById = 169",
+			"game::realm_client_packet::PlaySpellVisual = 175",
 			"game::realm_client_packet::QuestAbandoned = 96",
 			"game::realm_client_packet::QuestAccepted = 95",
 			"game::realm_client_packet::QuestGiverOfferReward = 86",

@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000000B;
+		constexpr uint32 ProtocolVersion = 0x0000000C;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -764,6 +764,14 @@ namespace mmo
 				/// client can tell the player why rather than showing a generic connection error.
 				/// Payload: uint8 reason (mmo::auth::session_kick_reason).
 				KickReason,
+
+				/// Sent to every client that can see a unit, to play a spell visualization on it by
+				/// id. Unlike the visuals driven by SpellStart / SpellGo this one carries no spell:
+				/// it is how non-spell events (level up, quest completion) get a spell-quality
+				/// visual, and it is what the PlaySpellVisual trigger action emits.
+				/// Payload: packed uint64 targetGuid, uint32 visualizationId, uint8 event
+				/// (SpellVisualEvent; 4 = IMPACT is the usual one-shot).
+				PlaySpellVisual,
 
 				/// Counter constant
 				Count_,

@@ -62,6 +62,18 @@ namespace mmo
         /// \param targets Optional targets for TARGET scope kits (may be empty).
         void Apply(Event event, const proto_client::SpellEntry& spell, GameUnitC* caster, const std::vector<GameUnitC*>& targets);
 
+        /// \brief Apply visualization kits for an event of a visualization referenced directly by id.
+        ///
+        /// Used for visuals that belong to no spell -- level up, quest completion and anything else
+        /// the server plays through the PlaySpellVisual packet. Prefer the Impact event for these:
+        /// the cast and aura events expect a matching lifecycle event to tear their effects down,
+        /// and nothing raises those for a visual played this way.
+        /// \param event The lifecycle event.
+        /// \param visualizationId Id of the SpellVisualization entry to play.
+        /// \param actor The unit the visualization plays on (CASTER-scoped kits).
+        /// \param targets Optional targets for TARGET scope kits (may be empty).
+        void ApplyById(Event event, uint32 visualizationId, GameUnitC* actor, const std::vector<GameUnitC*>& targets);
+
         /// \brief Initializes the visualization service with a project reference and audio player.
         /// \param project The loaded client project containing the spell visualization dataset.
         /// \param audioPlayer Audio player interface for sound playback (optional, may be null).
@@ -91,6 +103,16 @@ namespace mmo
         SpellVisualizationService& operator=(const SpellVisualizationService&) = delete;
 
     private:
+        /// \brief Shared core of Apply and ApplyById.
+        /// \param spellId Key the resulting effects, tints and animations are tracked under. Real
+        ///        spell id for Apply, SyntheticSpellId() for ApplyById.
+        void ApplyVisualization(Event event, const proto_client::SpellVisualization& visualization,
+                                uint32 spellId, GameUnitC* caster, const std::vector<GameUnitC*>& targets);
+
+        /// \brief Tracking key for a visualization with no spell behind it. The high bit is set so
+        ///        it can never collide with a real spell id.
+        static uint32 SyntheticSpellId(uint32 visualizationId);
+
         void ApplyKitToActor(const proto_client::SpellVisualization& vis,
                              const proto_client::SpellKit& kit,
                              GameUnitC& actor,

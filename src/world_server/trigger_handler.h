@@ -238,6 +238,9 @@ namespace mmo
 		/// Handles clearing a creature's follow target.
 		void HandleClearFollowTarget(const proto::TriggerAction& action, TriggerContext& context);
 
+		/// Plays a spell visualization on the target unit for everyone who can see it.
+		void HandlePlaySpellVisual(const proto::TriggerAction& action, TriggerContext& context);
+
 		/// Collects all alive players currently in the given world instance.
 		/// @param world The world instance to enumerate. May be nullptr.
 		/// @return Vector of alive player units (possibly empty).

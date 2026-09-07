@@ -19,6 +19,7 @@
 #include "math/matrix4.h"
 #include "shared/proto_data/maps.pb.h"
 #include "shared/proto_data/trigger_helper.h"
+#include "shared/proto_data/trigger_event_index.h"
 
 #include "nav_mesh/map.h"
 
@@ -377,6 +378,10 @@ namespace mmo
 		std::unique_ptr<MapData> m_mapData{nullptr};
 		const proto::Project& m_project;
 		const proto::MapEntry* m_mapEntry{nullptr};
+
+		/// The map's instance_triggers, resolved once and bucketed by event type so firing an
+		/// instance trigger event is an array index rather than a lookup per trigger.
+		proto::TriggerEventIndex m_instanceTriggers;
 		volatile bool m_updating { false };
 		std::unordered_set<GameObjectS*> m_objectUpdates;
 		std::unordered_set<GameObjectS*> m_queuedObjectUpdates;

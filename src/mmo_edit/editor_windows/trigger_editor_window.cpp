@@ -80,7 +80,8 @@ namespace mmo
 		"Instance - On Player Leave Instance",
 		"Unit/Instance - On Timer (periodic)",
 		"Unit - On Summoned Unit Died",
-		"Instance - On Encounter State Changed"
+		"Instance - On Encounter State Changed",
+		"Player - On Level Up"
 	};
 
 	static_assert(std::size(s_eventTypeNames) == trigger_event::Count_, "s_eventTypeNames size mismatch");
@@ -197,6 +198,9 @@ namespace mmo
 						break;
 					case trigger_event::OnEncounterStateChanged:
 						ImGui::Text("Encounter state changed (slot %d, state %d; 0 = any)", GetTriggerEventData(event, 0), GetTriggerEventData(event, 1));
+						break;
+					case trigger_event::OnPlayerLevelUp:
+						ImGui::Text("Player gained a level (level %d; 0 = any)", GetTriggerEventData(event, 0));
 						break;
 					}
 				}
@@ -463,7 +467,8 @@ namespace mmo
 				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote",
 				"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
 				"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
-				"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget"
+				"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget",
+				"PlaySpellVisual"
 			};
 
 			// Select the trigger action type.
@@ -1772,8 +1777,13 @@ namespace mmo
 			DrawHelpMarker("Trigger only fires during combat");
 
 			CHECKBOX_FLAG_PROP(flags, "Only One Instance", trigger_flags::OnlyOneInstance);
+
 			ImGui::SameLine();
 			DrawHelpMarker("Only one instance of this trigger can run simultaneously");
+
+			CHECKBOX_FLAG_PROP(flags, "Player Trigger", trigger_flags::PlayerTrigger);
+			ImGui::SameLine();
+			DrawHelpMarker("Evaluate this trigger for every player character. Players have no entry to carry a trigger list, so this flag is what makes a trigger global to all of them. Needed for player events such as On Level Up.");
 
 			ImGui::PopStyleVar(2);
 			ImGui::Unindent();
@@ -1918,7 +1928,11 @@ namespace mmo
 					"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
 					"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
 					"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-					"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote"
+					"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote",
+					"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
+					"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
+					"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget",
+					"PlaySpellVisual"
 				};
 
 				const char* actionTypeName = (action.action() >= 0 && action.action() < static_cast<int>(std::size(s_actionTypeNames)))

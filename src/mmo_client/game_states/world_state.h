@@ -358,6 +358,8 @@ namespace mmo
 
 		PacketParseResult OnPlaySoundById(game::IncomingPacket &packet);
 
+		PacketParseResult OnPlaySpellVisual(game::IncomingPacket &packet);
+
 		/// Plays a stealth alert sound (or the default sound when the file name is empty)
 		/// as a 3D sound at the given world position.
 		void PlayStealthAlertSound(const String &soundFile, const Vector3 &position);

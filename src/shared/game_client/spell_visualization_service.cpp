@@ -102,6 +102,42 @@ namespace mmo
             return;
         }
 
+        ApplyVisualization(event, *vis, spell.id(), caster, targets);
+    }
+
+    void SpellVisualizationService::ApplyById(Event event, const uint32 visualizationId, GameUnitC* actor,
+        const std::vector<GameUnitC*>& targets)
+    {
+        if (m_project == nullptr)
+        {
+            WLOG("SpellVisualizationService not initialized with a project; skipping visualization application.");
+            return;
+        }
+
+        const auto* vis = m_project->spellVisualizations.getById(visualizationId);
+        if (vis == nullptr)
+        {
+            WLOG("SpellVisualizationService: visualization id " << visualizationId << " not found");
+            return;
+        }
+
+        // Effects are tracked per (actor, spellId), but a visualization played by id has no spell.
+        // The high bit is set so the synthetic key can never collide with a real spell id, which
+        // keeps a visual played this way from cancelling the effects of an actual spell on the
+        // same unit.
+        ApplyVisualization(event, *vis, SyntheticSpellId(visualizationId), actor, targets);
+    }
+
+    uint32 SpellVisualizationService::SyntheticSpellId(const uint32 visualizationId)
+    {
+        return 0x80000000u | visualizationId;
+    }
+
+    void SpellVisualizationService::ApplyVisualization(Event event, const proto_client::SpellVisualization& visualization,
+        const uint32 spellId, GameUnitC* caster, const std::vector<GameUnitC*>& targets)
+    {
+        const auto* vis = &visualization;
+
         const uint32 key = ToProtoEventValue(event);
         const auto& eventMap = vis->kits_by_event();
         const auto it = eventMap.find(key);
@@ -117,7 +153,7 @@ namespace mmo
 
             const uint64 casterGuid = caster->GetGuid();
             auto animIt = m_activeSpellAnimations.find(casterGuid);
-            if (animIt != m_activeSpellAnimations.end() && animIt->second.spellId == spell.id())
+            if (animIt != m_activeSpellAnimations.end() && animIt->second.spellId == spellId)
             {
                 // Cancel the one-shot animation properly through GameUnitC
                 // This ensures proper state management and prevents T-pose
@@ -133,10 +169,10 @@ namespace mmo
             FadeOutLoopedSoundForActor(caster->GetGuid());
             
             // Remove tints for this spell on the caster
-            RemoveTintFromActor(*caster, spell.id());
+            RemoveTintFromActor(*caster, spellId);
 
             // Clean up visual effects (particles, lights, ribbon trails)
-            CleanupEffectsForActor(casterGuid, spell.id());
+            CleanupEffectsForActor(casterGuid, spellId);
         }
         
         if (!hasKits)
@@ -166,7 +202,7 @@ namespace mmo
                     PendingKit pending;
                     pending.kit = kit;
                     pending.actorGuid = unit->GetGuid();
-                    pending.spellId = spell.id();
+                    pending.spellId = spellId;
                     pending.visualizationId = vis->id();
                     pending.instantEvent = isInstantEvent;
                     pending.remainingSeconds = kit.delay_ms() / 1000.0f;
@@ -174,7 +210,7 @@ namespace mmo
                     return;
                 }
 
-                ApplyKitToActor(*vis, kit, *unit, spell.id(), isInstantEvent);
+                ApplyKitToActor(*vis, kit, *unit, spellId, isInstantEvent);
             };
 
             if (scope == proto_client::CASTER)
@@ -260,20 +296,11 @@ namespace mmo
                         m_audioPlayer->PlaySound3D(soundIdx, &channel, actorPosition, 5.0f, 30.0f);
                         if (channel != InvalidChannel)
                         {
-                            // Start at zero volume for fade-in
+                            // Preserve the authored transient of short one-shot impacts.
                             if (IChannelInstance* channelInstance = m_audioPlayer->GetChannelInstance(channel))
                             {
-                                channelInstance->SetVolume(0.0f);
+                                channelInstance->SetVolume(1.0f);
                             }
-
-                            // Track for fade-in
-                            FadingSound fadingSound;
-                            fadingSound.channel = channel;
-                            fadingSound.currentVolume = 0.0f;
-                            fadingSound.targetVolume = 1.0f;
-                            fadingSound.fadeSpeed = 3.0f; // Fade in over ~0.33 seconds
-                            fadingSound.markedForRemoval = false;
-                            m_fadingSounds.push_back(fadingSound);
                         }
                     }
                 }
@@ -419,6 +446,52 @@ namespace mmo
 
             it = m_pendingKits.erase(it);
         }
+
+		// One-shot impacts on targets do not receive a caster completion event.
+		// Retire their finished emitters here so repeated hits cannot accumulate them.
+		for (auto effectIt = m_activeEffects.begin(); effectIt != m_activeEffects.end(); )
+		{
+			const auto actor = ObjectMgr::Get<GameUnitC>(effectIt->actorGuid);
+			if (!actor)
+			{
+				++effectIt;
+				continue;
+			}
+
+			Scene& scene = actor->GetScene();
+			for (auto particleIt = effectIt->particles.begin(); particleIt != effectIt->particles.end(); )
+			{
+				if ((*particleIt)->IsFinished())
+				{
+					auto* node = (*particleIt)->GetParentSceneNode();
+					scene.DestroyParticleEmitter(**particleIt);
+					particleIt = effectIt->particles.erase(particleIt);
+					const auto nodeIt = std::find(effectIt->effectNodes.begin(), effectIt->effectNodes.end(), node);
+					if (nodeIt != effectIt->effectNodes.end())
+					{
+						scene.DestroySceneNode(**nodeIt);
+						effectIt->effectNodes.erase(nodeIt);
+					}
+				}
+				else
+				{
+					++particleIt;
+				}
+			}
+
+			if (effectIt->particles.empty() && effectIt->lights.empty() && effectIt->ribbonTrails.empty())
+			{
+				for (auto* node : effectIt->effectNodes)
+				{
+					scene.DestroySceneNode(*node);
+				}
+				effectIt = m_activeEffects.erase(effectIt);
+			}
+			else
+			{
+				++effectIt;
+			}
+		}
 
         if (!m_audioPlayer)
         {
