@@ -2083,8 +2083,10 @@ cd data/client && git add ClientDB/spell_visualizations.data && git commit -m "R
 ### Task 12: Retire the old placeholder sounds and run the gate
 
 **Files:**
-- Delete: `data/client/Sound/Spells/Warrior/{Battlecry,Bloodrush,Charge,Cleave,DemoralizingShout,Execute,LastStand,Provoke,Rend,ShieldSlam,Shockwave,Skullbash,Strike}.wav` (the pre-rebuild files, only those now unreferenced)
+- Delete: `data/client/Sound/Spells/Warrior/Strike.wav` — and only whatever else Step 1 actually reports
 - Modify: `data/client` and `data/editor` submodule pointers in the superproject
+
+**Critical:** Task 3 wrote `Rend.wav`, `Execute.wav`, `Skullbash.wav`, `ShieldSlam.wav`, `Cleave.wav`, `Charge.wav`, `Shockwave.wav`, `Battlecry.wav`, `Bloodrush.wav`, `Provoke.wav`, `DemoralizingShout.wav` and `LastStand.wav` **in place**, replacing the placeholder content under the same filenames. Those files are live and referenced. Deleting them would destroy the freshly generated audio. The only name genuinely orphaned by the rebuild is `Strike.wav`, superseded by the three-file `Strike01/02/03` shuffle bag. Derive the list from Step 1's output; never from the pre-rebuild file listing.
 
 **Interfaces:**
 - Consumes: everything above.
@@ -2126,15 +2128,28 @@ Expected output lists the old placeholder files plus `AbilityStrike03.wav` and `
 
 - [ ] **Step 2: Delete only the superseded placeholders**
 
-Remove every name the previous step listed **except** `AbilityStrike03.wav` and `AbilityStrike04.wav`:
+Step 1 should report exactly three unreferenced names: `Strike.wav`, `AbilityStrike03.wav`, `AbilityStrike04.wav`. The two `AbilityStrike*` files stay — the user asked for them to be left alone. So the removal is one file:
 
 ```bash
-cd data/client/Sound/Spells/Warrior
-git rm Battlecry.wav Bloodrush.wav Charge.wav Cleave.wav DemoralizingShout.wav Execute.wav LastStand.wav Provoke.wav Rend.wav ShieldSlam.wav Shockwave.wav Skullbash.wav Strike.wav
-cd ../../../../..
+git -C data/client rm Sound/Spells/Warrior/Strike.wav
 ```
 
-Adjust the list to match Step 1's actual output — a name that Task 3 reused (for example if `Rend.wav` was overwritten rather than replaced by a new name) must not be deleted.
+If Step 1 reports any name **not** in that expected set of three, stop and investigate rather than deleting it: an unexpected entry means a kit lost its sound reference somewhere in Tasks 7 or 11, and the fix is to restore the reference, not to delete the file.
+
+- [ ] **Step 2a: Confirm the generated audio survived**
+
+```bash
+python -c "
+import wave, glob, os
+files = sorted(glob.glob('data/client/Sound/Spells/Warrior/*.wav'))
+for f in files:
+    w = wave.open(f); p = w.getparams(); w.close()
+    print(os.path.basename(f), p.nchannels, p.framerate, p.sampwidth*8, round(p.nframes/p.framerate,2))
+print(len(files), 'files')
+"
+```
+
+Expected: 17 files — the 15 generated ones (all `1 44100 16`) plus the two untouched `AbilityStrike*` files at `2 48000 16`. If a generated file is missing, it was deleted in error; recover it with `git -C data/client checkout HEAD -- <path>`.
 
 - [ ] **Step 3: Verify nothing references a missing file**
 
