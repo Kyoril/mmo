@@ -3,6 +3,7 @@
 #include "spell_visualization_service.h"
 #include "game_unit_c.h"
 #include "object_mgr.h"
+#include "sound_entry_player.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/animation_state.h"
 #include "scene_graph/scene.h"
@@ -26,10 +27,13 @@ namespace mmo
         return instance;
     }
 
-    void SpellVisualizationService::Initialize(const proto_client::Project& project, IAudio* audioPlayer)
+    void SpellVisualizationService::Initialize(const proto_client::Project& project,
+                                               IAudio* audioPlayer,
+                                               SoundEntryPlayer* soundEntryPlayer)
     {
         m_project = &project;
         m_audioPlayer = audioPlayer;
+        m_soundEntryPlayer = soundEntryPlayer;
     }
 
     uint32 SpellVisualizationService::ToProtoEventValue(Event e)
@@ -258,8 +262,54 @@ namespace mmo
         // Apply animation if specified
         ApplyAnimationToActor(kit, actor, spellId);
 
+        // Catalog-backed sounds. Preferred over the legacy file-path list: SoundEntryPlayer
+        // applies the entry's category, 3D distances, volume, pitch variance and shuffle-bag
+        // file selection. A kit sets one or the other, never both.
+        if (m_soundEntryPlayer && kit.sound_ids_size() > 0)
+        {
+            const Vector3 actorPosition = actor.GetPosition();
+            const bool isLooped = kit.has_loop() && kit.loop();
+
+            for (const uint32 soundId : kit.sound_ids())
+            {
+                if (isLooped)
+                {
+                    const uint64 guid = actor.GetGuid();
+
+                    // Only one looped sound per actor at a time, matching the legacy path.
+                    FadeOutLoopedSoundForActor(guid);
+
+                    const ChannelIndex channel = m_soundEntryPlayer->PlayEntry(soundId, actorPosition);
+                    if (channel == InvalidChannel)
+                    {
+                        continue;
+                    }
+
+                    // Start silent so Update can fade the loop in.
+                    if (IChannelInstance* channelInstance = m_audioPlayer->GetChannelInstance(channel))
+                    {
+                        channelInstance->SetVolume(0.0f);
+                    }
+
+                    LoopedSoundHandle loopHandle;
+                    loopHandle.audioHandle = channel;
+                    loopHandle.spellId = vis.id();
+                    loopHandle.event = Event::Casting;
+                    loopHandle.currentVolume = 0.0f;
+                    loopHandle.targetVolume = m_soundEntryPlayer->GetEntryVolume(soundId);
+                    loopHandle.fadeSpeed = 3.0f;
+                    m_loopedSounds[guid] = loopHandle;
+                }
+                else
+                {
+                    // PlayEntry already applied the entry's volume and pitch; leave the
+                    // channel alone so the authored transient survives.
+                    m_soundEntryPlayer->PlayEntry(soundId, actorPosition);
+                }
+            }
+        }
         // Play sounds using the audio interface
-        if (m_audioPlayer && kit.sounds_size() > 0)
+        else if (m_audioPlayer && kit.sounds_size() > 0)
         {
             const bool isLooped = kit.has_loop() && kit.loop();
             const Vector3 actorPosition = actor.GetPosition();

@@ -330,7 +330,7 @@ namespace mmo
 		ObjectMgr::Initialize(m_project, m_partyInfo);
 
 		// Initialize spell visualization service with direct audio access
-		SpellVisualizationService::Get().Initialize(m_project, &m_audio);
+		SpellVisualizationService::Get().Initialize(m_project, &m_audio, &m_soundEntryPlayer);
 
 		SetupWorldScene();
 
