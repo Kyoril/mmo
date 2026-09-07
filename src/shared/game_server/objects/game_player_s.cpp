@@ -13,6 +13,7 @@
 #include "game_server/world/universe.h"
 #include "base/utilities.h"
 #include "proto_data/project.h"
+#include "proto_data/trigger_event_filter.h"
 #include "game/emote_defs.h"
 #include "game/item.h"
 #include "game/spell.h"
@@ -106,27 +107,10 @@ namespace mmo
 					continue;
 				}
 
-				// Event data acts as a filter: a configured non-zero value must match the value
-				// supplied by the raiser at the same index. Zero is a wildcard, so a trigger with
-				// no data at all fires for every occurrence of the event.
-				bool dataMatches = true;
-				for (int i = 0; i < triggerEvent.data_size(); ++i)
+				if (proto::TriggerEventDataMatches(triggerEvent, data))
 				{
-					const uint32 filter = triggerEvent.data(i);
-					if (filter == 0)
-					{
-						continue;
-					}
-
-					if (i >= static_cast<int>(data.size()) || data[i] != filter)
-					{
-						dataMatches = false;
-						break;
-					}
-				}
-
-				if (dataMatches)
-				{
+					// At most once per raise, even when the trigger lists several events of this
+					// type (how "at level 10 or level 20" is expressed).
 					unitTrigger(std::cref(*triggerEntry), std::ref(*this), triggeringUnit);
 					break;
 				}

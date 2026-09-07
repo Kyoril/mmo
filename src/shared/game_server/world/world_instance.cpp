@@ -982,24 +982,8 @@ namespace mmo
 				}
 
 				// For events with filter data (e.g. OnEncounterStateChanged), only fire when the
-				// event's configured data matches the supplied data. A zero/absent filter matches all.
-				bool dataMatches = true;
-				for (int i = 0; i < triggerEvent.data_size(); ++i)
-				{
-					const uint32 filter = triggerEvent.data(i);
-					if (filter == 0)
-					{
-						continue; // Wildcard for this slot
-					}
-
-					if (i >= static_cast<int>(eventData.size()) || eventData[i] != filter)
-					{
-						dataMatches = false;
-						break;
-					}
-				}
-
-				if (!dataMatches)
+				// event's configured data matches the supplied data.
+				if (!proto::TriggerEventDataMatches(triggerEvent, eventData))
 				{
 					continue;
 				}

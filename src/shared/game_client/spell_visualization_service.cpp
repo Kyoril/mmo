@@ -133,6 +133,11 @@ namespace mmo
         return 0x80000000u | visualizationId;
     }
 
+    bool SpellVisualizationService::IsSyntheticSpellId(const uint32 spellId)
+    {
+        return (spellId & 0x80000000u) != 0;
+    }
+
     void SpellVisualizationService::ApplyVisualization(Event event, const proto_client::SpellVisualization& visualization,
         const uint32 spellId, GameUnitC* caster, const std::vector<GameUnitC*>& targets)
     {
@@ -235,6 +240,21 @@ namespace mmo
                                                      uint32 spellId,
                                                      bool instantEvent)
     {
+        // A visualization played by id (level up and friends) has no spell behind it, so nothing
+        // will ever raise the lifecycle event that tears these down: a tint would stay on the
+        // actor for the rest of the session, a ribbon trail would keep its effect record alive
+        // for ever, and a looping sound or locked loop animation would never be released. Skip
+        // them and say so, rather than leaking silently.
+        const bool selfTerminatingOnly = IsSyntheticSpellId(spellId);
+        const bool kitLoops = kit.has_loop() && kit.loop();
+
+        if (selfTerminatingOnly && kitLoops)
+        {
+            WLOG("Spell visualization " << vis.id() << " is played by id but has a looping kit;"
+                " looping kits are skipped because nothing can stop them. Use a one-shot kit.");
+            return;
+        }
+
         // Apply animation if specified
         ApplyAnimationToActor(kit, actor, spellId);
 
@@ -308,7 +328,15 @@ namespace mmo
         }
 
         // Apply tint to the actor
-        ApplyTintToActor(kit, actor, spellId);
+        if (selfTerminatingOnly && kit.has_tint())
+        {
+            WLOG("Spell visualization " << vis.id() << " is played by id; its tint is skipped"
+                " because nothing would ever remove it.");
+        }
+        else
+        {
+            ApplyTintToActor(kit, actor, spellId);
+        }
 
         // Spawn particle emitters
         ApplyParticlesToActor(kit, actor, spellId);
@@ -317,7 +345,15 @@ namespace mmo
         ApplyLightToActor(kit, actor, spellId, instantEvent);
 
         // Spawn ribbon trail
-        ApplyRibbonTrailToActor(kit, actor, spellId);
+        if (selfTerminatingOnly && kit.has_ribbon_trail())
+        {
+            WLOG("Spell visualization " << vis.id() << " is played by id; its ribbon trail is"
+                " skipped because nothing would ever destroy it.");
+        }
+        else
+        {
+            ApplyRibbonTrailToActor(kit, actor, spellId);
+        }
     }
 
     void SpellVisualizationService::ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)

@@ -113,6 +113,10 @@ namespace mmo
         ///        it can never collide with a real spell id.
         static uint32 SyntheticSpellId(uint32 visualizationId);
 
+        /// \brief Whether a tracking key came from SyntheticSpellId, i.e. the effect belongs to a
+        ///        visualization played by id and will never receive a lifecycle event.
+        static bool IsSyntheticSpellId(uint32 spellId);
+
         void ApplyKitToActor(const proto_client::SpellVisualization& vis,
                              const proto_client::SpellKit& kit,
                              GameUnitC& actor,

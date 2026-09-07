@@ -20,6 +20,7 @@
 #include "shared/proto_data/maps.pb.h"
 #include "shared/proto_data/trigger_helper.h"
 #include "shared/proto_data/trigger_event_index.h"
+#include "shared/proto_data/trigger_event_filter.h"
 
 #include "nav_mesh/map.h"
 

@@ -241,10 +241,6 @@ namespace mmo
 
 			TriggerEventIndex m_playerTriggers;
 
-		public:
-
-		private:
-
 			String m_lastPath;
 
 		public:

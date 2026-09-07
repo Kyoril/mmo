@@ -86,6 +86,23 @@ namespace mmo
 
 	static_assert(std::size(s_eventTypeNames) == trigger_event::Count_, "s_eventTypeNames size mismatch");
 
+	/// Human-readable names for the trigger actions, indexed by trigger_actions::Type. One
+	/// definition on purpose: this used to be two local copies that silently drifted apart, so the
+	/// action summary listed everything past Emote as "Unknown".
+	static const char* s_actionTypeNames[] = {
+		"Trigger", "Say", "Yell", "SetWorldObjectState", "SetSpawnState",
+		"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
+		"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
+		"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
+		"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote",
+		"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
+		"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
+		"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget",
+		"PlaySpellVisual"
+	};
+
+	static_assert(std::size(s_actionTypeNames) == trigger_actions::Count_, "s_actionTypeNames size mismatch");
+
 	namespace
 	{
 		int32 GetTriggerEventData(const proto::TriggerEvent& e, uint32 i)
@@ -457,19 +474,6 @@ namespace mmo
 		void DrawTriggerAction(proto::TriggerAction& action, int actionIndex, proto::TriggerEntry& currentEntry)
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
-
-			// List of human-readable names for the trigger actions.
-			static const char* s_actionTypeNames[] = {
-				"Trigger", "Say", "Yell", "SetWorldObjectState", "SetSpawnState",
-				"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
-				"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
-				"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote",
-				"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
-				"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
-				"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget",
-				"PlaySpellVisual"
-			};
 
 			// Select the trigger action type.
 			int currentActionType = action.action();
@@ -1182,6 +1186,16 @@ namespace mmo
 				case trigger_actions::ClearFollowTarget:
 				{
 					ImGui::TextDisabled("Stops the creature target from following and resumes its normal idle movement.");
+					break;
+				}
+				case trigger_actions::PlaySpellVisual:
+				{
+					// Data: <VISUALIZATION-ID>, [<EVENT>]
+					DrawActionDataInt(action, 0, "##SpellVisualizationId", "Visualization ID");
+					DrawActionDataInt(action, 1, "##SpellVisualEvent", "Event (0-8, 4 = Impact)");
+					ImGui::TextDisabled("Plays a spell visualization on the unit target for every client that can see it.");
+					ImGui::TextDisabled("Use Impact (4): the cast and aura events expect a matching lifecycle event to");
+					ImGui::TextDisabled("clean up after them, and nothing raises those for a visual played this way.");
 					break;
 				}
 				default:
@@ -1922,18 +1936,6 @@ namespace mmo
 
 				ImGui::PushID(idx);
 
-				// Get action type name
-				static const char* s_actionTypeNames[] = {
-					"Trigger", "Say", "Yell", "SetWorldObjectState", "SetSpawnState",
-					"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
-					"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
-					"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-					"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote",
-					"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
-					"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
-					"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget",
-					"PlaySpellVisual"
-				};
 
 				const char* actionTypeName = (action.action() >= 0 && action.action() < static_cast<int>(std::size(s_actionTypeNames)))
 					? s_actionTypeNames[action.action()]

@@ -72,7 +72,7 @@ namespace mmo
 
 		[[nodiscard]] uint8 GetLastSpellVisualEvent() const { return m_realm->GetLastSpellVisualEvent(); }
 
-		void ClearLastSpellVisual() const { m_realm->ClearLastSpellVisual(); }
+		void ClearLastSpellVisual() { m_realm->ClearLastSpellVisual(); }
 
 		/// Runs the whole login -> realm -> character -> world flow again over the same connector
 		/// objects, exactly as the game client does when a displaced player logs back in.
