@@ -146,6 +146,13 @@ message SpellKit
 	// Delay in milliseconds before this kit fires after its event was triggered.
 	// Allows staggering multiple kits within the same event.
 	optional uint32 delay_ms = 12 [default = 0];
+
+	// Sound catalog entries (sounds.data) to play for this kit. Preferred over the legacy
+	// `sounds` file-path list: entries carry category, 3D distances, volume and pitch
+	// variance, and multi-file entries are picked shuffle-bag style.
+	// A kit sets `sounds` or `sound_ids`, never both -- when this is non-empty the legacy
+	// list on the same kit is ignored.
+	repeated uint32 sound_ids = 13;
 }
 
 // List of kits for a specific event
