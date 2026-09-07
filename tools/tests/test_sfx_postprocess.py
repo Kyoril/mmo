@@ -72,6 +72,26 @@ class FadeTests(unittest.TestCase):
         # The middle is untouched.
         self.assertAlmostEqual(float(out[500]), 1.0, places=6)
 
+    def test_short_clip_not_over_attenuated(self):
+        # When fade_in + fade_out > clip length, the ramps should be clamped
+        # proportionally so they don't overlap and cause parabolic dip.
+        rate = 1000
+        # At 1000 Hz, fade_in_ms=50 => 50 samples, fade_out_ms=50 => 50 samples.
+        # Total 100 samples needed, but clip is only 10 samples.
+        # Without the fix, both ramps multiply together, creating ~0.25 peak.
+        # With the fix, the ramps scale proportionally and peak should be ~1.0.
+        clip = np.ones(10, dtype=np.float32)
+
+        out = postprocess.apply_fades(clip, rate, fade_in_ms=50.0, fade_out_ms=50.0)
+
+        # Envelope should start at 0 and end at 0.
+        self.assertAlmostEqual(float(out[0]), 0.0, places=5)
+        self.assertAlmostEqual(float(out[-1]), 0.0, places=5)
+        # The peak should be meaningfully higher than 0.25 (the old parabolic product).
+        # With correct proportional scaling, the peak should be near 1.0.
+        peak = float(np.max(np.abs(out)))
+        self.assertGreater(peak, 0.8)
+
 
 class ProcessTests(unittest.TestCase):
     def test_quiet_clip_with_long_tail_becomes_short_and_loud(self):

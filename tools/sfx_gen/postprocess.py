@@ -56,11 +56,22 @@ def apply_fades(samples: np.ndarray, sample_rate: int, fade_in_ms: float = 2.0,
 
     out = samples.astype(np.float32, copy=True)
 
-    fade_in = min(int(sample_rate * fade_in_ms / 1000.0), len(out))
+    fade_in = int(sample_rate * fade_in_ms / 1000.0)
+    fade_out = int(sample_rate * fade_out_ms / 1000.0)
+
+    # If the two ramps would overlap, clamp them proportionally so together they span
+    # at most the whole clip. This prevents multiplicative parabolic dips on short clips.
+    total_fade = fade_in + fade_out
+    if total_fade > len(out):
+        scale = len(out) / total_fade
+        fade_in = int(fade_in * scale)
+        fade_out = int(fade_out * scale)
+
+    fade_in = min(fade_in, len(out))
     if fade_in > 1:
         out[:fade_in] *= np.linspace(0.0, 1.0, fade_in, dtype=np.float32)
 
-    fade_out = min(int(sample_rate * fade_out_ms / 1000.0), len(out))
+    fade_out = min(fade_out, len(out))
     if fade_out > 1:
         out[-fade_out:] *= np.linspace(1.0, 0.0, fade_out, dtype=np.float32)
 
