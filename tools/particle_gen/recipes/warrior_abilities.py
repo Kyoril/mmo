@@ -36,10 +36,19 @@ import warrior_common as wc
 from warrior_common import ParticleSystem, rgba
 
 
-def _fast_ring(ring, colour, alpha, growth_frac=0.35, growth_hold=0.75, hold_alpha_frac=0.7):
+def _fast_ring(ring, growth_frac=0.35, growth_hold=0.75, hold_alpha_frac=0.7):
     """Override a ground_ring's size/colour curves so most of the expansion happens while
-    the ring is still bright, instead of the size and alpha curves fading independently."""
-    start = ring.min_start_size
+    the ring is still bright, instead of the size and alpha curves fading independently.
+
+    Use for rings whose size ratio is roughly 4x or greater, where the ring has faded before
+    it finishes expanding. Below that ratio, the default ground_ring curves are fine. This is
+    a judgement threshold observed from contact sheets, not a hard engine limit."""
+    # Extract colour and peak alpha from the ring's existing color curve (built by ground_ring).
+    # Key 1 of the curve carries the peak: colour is RGB ([:3]), peak alpha is [3].
+    peak_color = ring.color_over_lifetime[1].color
+    colour = peak_color[:3]
+    alpha = peak_color[3]
+
     end_ratio = ring.size_over_life[-1].value
     ring.size_over_life = wc.float_curve(
         (0.0, 1.0),
@@ -115,10 +124,10 @@ def shockwave_dust():
     outward.shape_extents = (0.5, 0.0, 0.0)
     ring = wc.ground_ring("Shock Ring", start_size=0.8, end_size=7.5, colour=wc.ARC_GOLD,
                           alpha=0.44, lifetime=0.70)
-    _fast_ring(ring, wc.ARC_GOLD, 0.44, growth_frac=0.30, growth_hold=0.8, hold_alpha_frac=0.65)
+    _fast_ring(ring, growth_frac=0.30, growth_hold=0.8, hold_alpha_frac=0.65)
     ring_inner = wc.ground_ring("Shock Ring Inner", start_size=0.5, end_size=3.6, colour=wc.HOT,
                                 alpha=0.36, lifetime=0.50)
-    _fast_ring(ring_inner, wc.HOT, 0.36, growth_frac=0.30, growth_hold=0.8, hold_alpha_frac=0.6)
+    _fast_ring(ring_inner, growth_frac=0.30, growth_hold=0.8, hold_alpha_frac=0.6)
     return ParticleSystem(emitters=[
         ring,
         ring_inner,
@@ -145,7 +154,7 @@ def rally_burst():
                             alpha=0.38, size=0.19, lifetime=0.85, orbital=3.6, rise=3.0)
     ring = wc.ground_ring("Rally Ring", start_size=0.7, end_size=2.8, colour=wc.ARC_GOLD,
                           alpha=0.38, lifetime=0.55)
-    _fast_ring(ring, wc.ARC_GOLD, 0.38, growth_frac=0.35, growth_hold=0.8, hold_alpha_frac=0.65)
+    _fast_ring(ring, growth_frac=0.35, growth_hold=0.8, hold_alpha_frac=0.65)
     motes = wc.dust_cloud("Rally Motes", count=20, spread=0.7, colour=wc.ARC_GOLD,
                           alpha=0.36, size=0.26, lifetime=1.10, rise=1.6)
     motes.material_name = wc.STAR
@@ -197,7 +206,7 @@ def dread_burst():
     sink.gravity = (0.0, -0.6, 0.0)   # dread settles rather than rising
     ring = wc.ground_ring("Dread Ring", start_size=0.7, end_size=4.8, colour=wc.ARC_VIOLET,
                           alpha=0.38, lifetime=0.65)
-    _fast_ring(ring, wc.ARC_VIOLET, 0.38, growth_frac=0.32, growth_hold=0.8, hold_alpha_frac=0.65)
+    _fast_ring(ring, growth_frac=0.32, growth_hold=0.8, hold_alpha_frac=0.65)
     return ParticleSystem(emitters=[
         ring,
         pressure,
