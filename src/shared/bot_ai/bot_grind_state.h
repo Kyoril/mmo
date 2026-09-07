@@ -37,6 +37,19 @@ namespace mmo
 		/// Spot index -> time the blacklist entry expires.
 		std::unordered_map<std::size_t, GameTime> blacklist;
 
+		/// Units the navigation mesh could not get us to, and when to forget that.
+		///
+		/// A creature stays attackable whether or not there is a path to it, so without this a bot
+		/// that picks an unreachable target keeps picking the same one - it is, after all, still
+		/// the nearest thing it could attack.
+		std::unordered_map<uint64, GameTime> unreachableUnits;
+
+		/// The target the current run of failed approaches is against, and how many there have
+		/// been. Reset whenever the target changes, so one bad path does not condemn a target the
+		/// bot simply had not finished walking to.
+		uint64 approachFailureTarget { 0 };
+		uint32 approachFailures { 0 };
+
 		/// Kills credited to this bot since it entered the world. Telemetry, and the signal that
 		/// a grind spot is actually productive.
 		uint32 kills { 0 };
@@ -63,6 +76,36 @@ namespace mmo
 		{
 			const auto it = blacklist.find(index);
 			return it != blacklist.end() && it->second > nowMs;
+		}
+
+		void MarkUnreachable(const uint64 guid, const GameTime nowMs, const GameTime durationMs)
+		{
+			unreachableUnits[guid] = nowMs + durationMs;
+		}
+
+		[[nodiscard]] bool IsUnreachable(const uint64 guid, const GameTime nowMs) const
+		{
+			const auto it = unreachableUnits.find(guid);
+			return it != unreachableUnits.end() && it->second > nowMs;
+		}
+
+		/// Records an approach that failed to find a path.
+		/// @return Consecutive failures against this target, including this one.
+		uint32 NoteApproachFailure(const uint64 guid)
+		{
+			if (approachFailureTarget != guid)
+			{
+				approachFailureTarget = guid;
+				approachFailures = 0;
+			}
+
+			return ++approachFailures;
+		}
+
+		void ClearApproachFailures()
+		{
+			approachFailureTarget = 0;
+			approachFailures = 0;
 		}
 	};
 }

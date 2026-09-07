@@ -16,7 +16,7 @@ namespace mmo
 		constexpr float DefaultScanRange = 40.0f;
 	}
 
-	void BotPerception::Refresh(const BotContext& world)
+	void BotPerception::Refresh(const BotContext& world, const BotGrindState& grind, const GameTime nowMs)
 	{
 		*this = BotPerception{};
 
@@ -59,7 +59,14 @@ namespace mmo
 			}
 		}
 
-		if (const BotUnit* attackable = world.GetNearestAttackable(DefaultScanRange))
+		const BotUnit* attackable = world.GetNearestAttackableExcept(
+			[&grind, nowMs](const BotUnit& unit)
+			{
+				return grind.IsUnreachable(unit.GetGuid(), nowMs);
+			},
+			DefaultScanRange);
+
+		if (attackable)
 		{
 			nearestAttackableGuid = attackable->GetGuid();
 			nearestAttackableDistance = PlanarDistance(position, attackable->GetPosition());

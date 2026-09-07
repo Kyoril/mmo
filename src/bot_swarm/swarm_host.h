@@ -91,6 +91,7 @@ namespace mmo
 			std::vector<scoped_connection> connections;
 
 			bool loginStarted { false };
+			bool failureReported { false };
 			bool wasInWorld { false };
 			bool levelApplied { false };
 			uint32 lastKnownLevel { 0 };

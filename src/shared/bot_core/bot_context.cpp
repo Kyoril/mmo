@@ -383,6 +383,12 @@ namespace mmo
 
 	const BotUnit* BotContext::GetNearestAttackable(float maxRange) const
 	{
+		return GetNearestAttackableExcept({}, maxRange);
+	}
+
+	const BotUnit* BotContext::GetNearestAttackableExcept(const std::function<bool(const BotUnit&)>& exclude,
+		const float maxRange) const
+	{
 		if (!m_realmConnector)
 		{
 			return nullptr;
@@ -397,7 +403,8 @@ namespace mmo
 
 		const Vector3 selfPosition = GetPosition();
 		const float maxRangeSquared = maxRange * maxRange;
-		return objectManager.GetNearestUnit(selfPosition, [self, selfPosition, maxRangeSquared](const BotUnit& unit)
+		return objectManager.GetNearestUnit(selfPosition,
+			[self, selfPosition, maxRangeSquared, &exclude](const BotUnit& unit)
 			{
 				if (unit.GetGuid() == self->GetGuid() || !unit.IsAlive())
 				{
@@ -405,6 +412,11 @@ namespace mmo
 				}
 
 				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return false;
+				}
+
+				if (exclude && exclude(unit))
 				{
 					return false;
 				}

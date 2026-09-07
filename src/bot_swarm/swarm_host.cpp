@@ -325,6 +325,20 @@ namespace mmo
 
 		bot.session->Update();
 
+		// A session that has given up says so through its exit code and nothing else. Without this
+		// a bot that never reaches the world just quietly does not appear in the count, and the
+		// run reports "4 of 5 entered the world" with no way to find out why.
+		if (bot.session->IsStopRequested() && !bot.failureReported)
+		{
+			bot.failureReported = true;
+			++m_telemetry.GetCounters().errors;
+			m_telemetry.Event(bot.roster.index, "error",
+				{ { "message", "session stopped before entering the world" },
+				  { "exit_code", static_cast<int32>(bot.session->GetExitCode()) },
+				  { "account", bot.roster.account },
+				  { "character", bot.roster.characterName } });
+		}
+
 		const bool inWorld = bot.session->IsWorldReady();
 		if (inWorld && !bot.wasInWorld)
 		{

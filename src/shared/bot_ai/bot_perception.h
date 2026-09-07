@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "bot_grind_state.h"
+
 #include "base/typedefs.h"
 #include "math/vector3.h"
 
@@ -70,6 +72,10 @@ namespace mmo
 		[[nodiscard]] bool IsInCombat() const { return attackerCount > 0 || autoAttacking; }
 
 		/// Reads the current world state out of the session's context.
-		void Refresh(const BotContext& world);
+		///
+		/// The grind state is needed because "nearest attackable" has to mean "nearest attackable
+		/// we have not already established we cannot reach" - otherwise the bot keeps being told
+		/// about the same unreachable creature and picks it again every tick.
+		void Refresh(const BotContext& world, const BotGrindState& grind, GameTime nowMs);
 	};
 }

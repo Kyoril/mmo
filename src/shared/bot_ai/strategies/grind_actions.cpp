@@ -6,6 +6,7 @@
 #include "bot_ai/bot_ai_context.h"
 #include "bot_ai/bot_ai_registry.h"
 #include "bot_ai/bot_relevance.h"
+#include "bot_ai/bot_rotation.h"
 #include "bot_ai/grind_spot_index.h"
 #include "bot_core/bot_context.h"
 #include "bot_core/bot_movement_controller.h"
@@ -14,6 +15,8 @@
 #include "bot_core/bot_session.h"
 #include "bot_core/bot_unit.h"
 
+#include "game/spell.h"
+#include "game/spell_target_map.h"
 #include "log/default_log_levels.h"
 
 #include <algorithm>
@@ -235,6 +238,7 @@ namespace mmo
 			{
 				const BotPerception& perception = context.GetPerception();
 				BotContext& world = session.GetContext();
+				BotGrindState& grind = context.GetGrindState();
 
 				const BotUnit* target = world.GetUnit(perception.targetGuid);
 				if (!target)
@@ -242,7 +246,39 @@ namespace mmo
 					return false;
 				}
 
+				// Getting into melee range is the only thing that proves the approach worked, so it is
+				// the only thing that clears the failure count. Clearing it whenever a path was
+				// successfully planned would reset the counter every tick and the bot would never give
+				// up on anything.
+				if (perception.targetDistance <= BotMeleeRange)
+				{
+					grind.ClearApproachFailures();
+					return true;
+				}
+
 				BotMovementController& mover = session.GetMovementController();
+
+				// Two ways an approach fails, and only one of them is MoveTo returning false. The
+				// other is a path that plans fine and then runs out before arriving - a target on a
+				// ledge, or across a gap in the mesh. Both have to count, or the bot spends its whole
+				// life re-planning a route that never gets there.
+				const bool movementFailed = mover.GetStatus() == BotMovementStatus::Unreachable
+					|| mover.GetStatus() == BotMovementStatus::Stuck;
+
+				if (movementFailed
+					&& grind.NoteApproachFailure(perception.targetGuid) >= BotApproachFailureLimit)
+				{
+					// A creature that cannot be reached is still the nearest thing the bot could
+					// attack, so nothing about the world will make it stop choosing this one.
+					grind.MarkUnreachable(perception.targetGuid, context.GetNow(), BotUnreachableUnitMs);
+					grind.ClearApproachFailures();
+
+					// Dropping the selection is what lets the target triggers fire again.
+					world.GetRealmConnector()->SetSelection(0);
+					world.StopAutoAttack();
+					return false;
+				}
+
 				const Vector3 targetPosition = target->GetPosition();
 
 				if (mover.IsActive())
@@ -254,8 +290,56 @@ namespace mmo
 					}
 				}
 
-				return mover.MoveTo(world, targetPosition, BotMeleeRange);
+				if (mover.MoveTo(world, targetPosition, BotMeleeRange))
+				{
+					return true;
+				}
+
+				if (grind.NoteApproachFailure(perception.targetGuid) >= BotApproachFailureLimit)
+				{
+					grind.MarkUnreachable(perception.targetGuid, context.GetNow(), BotUnreachableUnitMs);
+					grind.ClearApproachFailures();
+					world.GetRealmConnector()->SetSelection(0);
+					world.StopAutoAttack();
+				}
+
+				return false;
 			});
+
+		add(registry, "cast_rotation_spell", [](BotAiContext& context, BotSession& session)
+			{
+				const BotPerception& perception = context.GetPerception();
+				if (perception.targetGuid == 0 || !context.CanStartCast())
+				{
+					return false;
+				}
+
+				BotContext& world = session.GetContext();
+				const BotRotationSpell* spell = context.GetRotation().SelectSpellEntry(world, perception.targetDistance);
+				if (!spell)
+				{
+					return false;
+				}
+
+				// Damage spells are rejected server-side if the caster is not facing the target, so
+				// turning is part of casting rather than a separate action that might not run first.
+				world.FaceUnit(perception.targetGuid);
+
+				SpellTargetMap targetMap;
+				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+				targetMap.SetUnitTarget(perception.targetGuid);
+
+				if (!world.CastSpell(spell->spellId, targetMap))
+				{
+					return false;
+				}
+
+				// A cast that is under way blocks the next one for the longer of the global cooldown
+				// and its own cast time. Sending the packet only queues it, and the send says nothing
+				// about whether the server will accept it, so this is the only brake there is.
+				context.SetNextCastTime(context.GetNow() + std::max<GameTime>(BotGlobalCooldownMs, spell->castTimeMs));
+				return true;
+			}).alternatives = { { "auto_attack", bot_relevance::Normal } };
 
 		add(registry, "face_target", [](BotAiContext& context, BotSession& session)
 			{
@@ -266,6 +350,11 @@ namespace mmo
 				}
 
 				session.GetContext().FaceUnit(guid);
+
+				// The correction has been sent; keeping the error would make this fire on every tick
+				// of its window and starve the actual fight. If the facing is still wrong the server
+				// says so again on the next swing.
+				context.ClearSwingError();
 				return true;
 			});
 
@@ -289,7 +378,11 @@ namespace mmo
 
 				world.StartAutoAttack(perception.targetGuid);
 				return true;
-			}).prerequisites = { { "face_target", bot_relevance::Normal } };
+			});
+		// Deliberately no face_target prerequisite. A prerequisite only runs when IsPossible says
+		// no, and the bot cannot tell whether the server considers it to be facing its target -
+		// that is precisely what the swing_wrong_facing trigger is for. A prerequisite here would
+		// look like it handled facing while never once running.
 
 		// ------------------------------------------------------------------
 		// Staying alive

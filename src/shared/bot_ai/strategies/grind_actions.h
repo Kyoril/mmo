@@ -34,6 +34,20 @@ namespace mmo
 	/// it are almost certainly just respawning.
 	constexpr GameTime BotGrindBarrenBlacklistMs = 60000;
 
+	/// Consecutive failed approaches before the bot gives up on a target. More than one because
+	/// a single failure can be a transient - the target moved through a doorway as the query ran -
+	/// and giving up instantly would make a bot abandon perfectly good fights.
+	constexpr uint32 BotApproachFailureLimit = 3;
+
+	/// How long a target the navigation mesh could not reach is left alone. It stays attackable
+	/// the whole time, which is exactly why it has to be remembered.
+	constexpr GameTime BotUnreachableUnitMs = 120000;
+
+	/// Global cooldown the bot assumes between casts. The server owns the real one and does not
+	/// tell the client what it is, so the bot models it: without a model it would cast on every
+	/// tick and have almost all of them refused.
+	constexpr GameTime BotGlobalCooldownMs = 1500;
+
 	/// Registers every action the grind strategy names.
 	void RegisterGrindActions(BotAiRegistry& registry);
 }

@@ -3,7 +3,10 @@
 #include "bot_brain.h"
 
 #include "bot_ai_registry.h"
+#include "base/clock.h"
+
 #include "bot_core/bot_context.h"
+#include "bot_core/bot_realm_connector.h"
 #include "bot_core/bot_session.h"
 #include "bot_core/bot_unit.h"
 
@@ -38,6 +41,16 @@ namespace mmo
 		m_engines.StateChanged.connect([this](const BotAiState from, const BotAiState to)
 			{
 				StateChanged(from, to);
+			});
+
+		// The server tells the bot exactly why a swing was refused. That is far better information
+		// than the bot could work out for itself - it cannot see its own facing as the server
+		// computes it, nor the reach the server uses - so the reaction is driven by the error
+		// rather than by prediction.
+		m_swingErrorConnection = session.GetRealm().AttackSwingError.connect(
+			[this](const AttackSwingEvent event)
+			{
+				m_context.NoteSwingError(event, GetAsyncTimeMs());
 			});
 	}
 
@@ -113,6 +126,7 @@ namespace mmo
 
 		// One read of the world per decision, shared by every trigger and action that follows.
 		m_context.RefreshPerception();
+		m_context.RefreshRotation();
 
 		DetectKill();
 

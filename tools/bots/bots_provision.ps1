@@ -41,6 +41,7 @@ Write-Host "Provisioning $Count bot accounts at $loginRest ..."
 
 $created = 0
 $existing = 0
+$gmFailures = 0
 
 for ($i = 0; $i -lt $Count; $i++)
 {
@@ -74,9 +75,22 @@ for ($i = 0; $i -lt $Count; $i++)
 
 	if ($GmLevel -gt 0)
 	{
-		Invoke-RestForm -Url "$loginRest/gm-level" -User $s.WebUser -Password $s.WebPassword `
-			-Form @{ account_name = $account; gm_level = $GmLevel } | Out-Null
+		try
+		{
+			Invoke-RestForm -Url "$loginRest/gm-level" -User $s.WebUser -Password $s.WebPassword `
+				-Form @{ account_name = $account; gm_level = $GmLevel } | Out-Null
+		}
+		catch
+		{
+			# The endpoint is not idempotent: re-applying a level an account already has comes back
+			# as an internal error, indistinguishable here from a real failure. Warning rather than
+			# throwing keeps a re-run from dying on the first existing account, and an account that
+			# genuinely lacks the privilege shows up immediately anyway - its bot stays at level 1,
+			# because the level cheat is refused.
+			$gmFailures++
+			Write-Warning "GM level for ${account} refused (already set, or a real failure): $($_.Exception.Message)"
+		}
 	}
 }
 
-Write-Host "Done: $created created, $existing already existed, GM level $GmLevel applied."
+Write-Host "Done: $created created, $existing already existed, $gmFailures GM level calls refused."

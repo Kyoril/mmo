@@ -3,6 +3,7 @@
 #include "grind_triggers.h"
 
 #include "bot_ai/bot_ai_context.h"
+#include "bot_core/bot_session.h"
 #include "bot_ai/bot_ai_registry.h"
 #include "grind_actions.h"
 
@@ -90,6 +91,42 @@ namespace mmo
 				// this the bot re-selects the nearest creature every tick, which restarts the swing
 				// timer each time - it swings forever and never lands a blow.
 				return !hasLiveTarget(perception);
+			});
+
+		add(registry, "swing_wrong_facing", [](BotAiContext& context)
+			{
+				return hasLiveTarget(context.GetPerception())
+					&& context.HasRecentSwingError(attack_swing_event::WrongFacing);
+			});
+
+		add(registry, "swing_out_of_range", [](BotAiContext& context)
+			{
+				return hasLiveTarget(context.GetPerception())
+					&& context.HasRecentSwingError(attack_swing_event::OutOfRange);
+			});
+
+		add(registry, "rotation_spell_ready", [](BotAiContext& context)
+			{
+				const BotPerception& perception = context.GetPerception();
+				if (!hasLiveTarget(perception) || !perception.alive)
+				{
+					return false;
+				}
+
+				if (context.GetRotation().IsEmpty() || !context.CanStartCast())
+				{
+					return false;
+				}
+
+				BotSession* session = context.GetSession();
+				if (!session)
+				{
+					return false;
+				}
+
+				// Asking the rotation rather than guessing: whether anything is castable depends on
+				// cooldowns, power and range together, and the rotation is where all three are known.
+				return context.GetRotation().SelectSpell(session->GetContext(), perception.targetDistance) != 0;
 			});
 
 		add(registry, "needs_rest", [](BotAiContext& context)

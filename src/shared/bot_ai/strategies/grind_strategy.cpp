@@ -58,6 +58,7 @@ namespace mmo
 				{ "attackable_nearby", { { "select_target", bot_relevance::Normal } } },
 				{ "target_out_of_melee", { { "approach_target", bot_relevance::Move } } },
 				{ "target_in_melee", { { "auto_attack", bot_relevance::Normal } } },
+				{ "rotation_spell_ready", { { "cast_rotation_spell", bot_relevance::Normal + 2 } } },
 			});
 
 		// In combat. Approaching outranks swinging because a swing out of range is a wasted
@@ -68,6 +69,15 @@ namespace mmo
 				{ "no_target", { { "select_target", bot_relevance::High } } },
 				{ "target_out_of_melee", { { "approach_target", bot_relevance::Move } } },
 				{ "target_in_melee", { { "auto_attack", bot_relevance::Normal } } },
+
+				// The server refused a swing and said why. Correcting outranks everything else in a
+				// fight, because until it is corrected every further swing is refused too.
+				{ "swing_wrong_facing", { { "face_target", bot_relevance::Interrupt } } },
+				{ "swing_out_of_range", { { "approach_target", bot_relevance::Interrupt } } },
+
+				// Above both, and above the move that would close the distance: a spell that reaches
+				// the target is worth more than walking closer to hit it with a stick.
+				{ "rotation_spell_ready", { { "cast_rotation_spell", bot_relevance::Move + 2 } } },
 			});
 
 		// Dead. Nothing else applies, which is why this is its own engine rather than a

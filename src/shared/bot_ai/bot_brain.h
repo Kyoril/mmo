@@ -86,5 +86,6 @@ namespace mmo
 		GameTime m_nextDecisionMs { 0 };
 		GameTime m_decisionOffsetMs { 0 };
 		uint64 m_lastLiveTargetGuid { 0 };
+		scoped_connection m_swingErrorConnection;
 	};
 }
