@@ -3,6 +3,7 @@
 #include "bot_perception.h"
 
 #include "bot_core/bot_context.h"
+#include "bot_core/bot_movement_math.h"
 #include "bot_core/bot_unit.h"
 
 namespace mmo
@@ -32,12 +33,18 @@ namespace mmo
 
 		valid = true;
 		selfGuid = self->GetGuid();
-		position = self->GetPosition();
+		// Deliberately not self->GetPosition(). The server never echoes a client its own
+		// movement, so the position on the replicated unit is wherever the bot spawned; the live
+		// one is the client's own simulation, which is also what the movement controller steers
+		// by. Reading the stale one makes a bot that has walked to its target still believe it is
+		// standing where it logged in.
+		position = world.GetPosition();
 		level = self->GetLevel();
 		mapId = world.GetCurrentMapId();
 		alive = self->IsAlive();
-		healthPercent = self->GetHealthPercent();
-		powerPercent = world.GetSelfPowerPercent();
+		healthFraction = self->GetHealthPercent();
+		powerFraction = world.GetSelfPowerPercent();
+		hasPower = world.GetSelfMaxPower() > 0;
 		moving = world.IsMoving();
 		autoAttacking = world.IsAutoAttacking();
 
@@ -48,14 +55,14 @@ namespace mmo
 			{
 				targetExists = true;
 				targetAlive = target->IsAlive();
-				targetDistance = world.GetDistanceToUnit(targetGuid);
+				targetDistance = PlanarDistance(position, target->GetPosition());
 			}
 		}
 
 		if (const BotUnit* attackable = world.GetNearestAttackable(DefaultScanRange))
 		{
 			nearestAttackableGuid = attackable->GetGuid();
-			nearestAttackableDistance = world.GetDistanceToUnit(nearestAttackableGuid);
+			nearestAttackableDistance = PlanarDistance(position, attackable->GetPosition());
 		}
 
 		attackerCount = static_cast<uint32>(world.GetUnitsTargetingSelf(DefaultScanRange).size());

@@ -67,6 +67,10 @@ namespace mmo
 		[[nodiscard]] const std::string& GetLastReason() const noexcept { return m_lastReason; }
 		[[nodiscard]] const std::vector<Vector3>& GetPath() const noexcept { return m_path; }
 
+		/// Where the current path is headed. Only meaningful while the controller is active;
+		/// callers use it to decide whether a new destination is worth re-pathing for.
+		[[nodiscard]] const Vector3& GetTarget() const noexcept { return m_target; }
+
 		bool MoveTo(BotContext& context, const Vector3& target, float acceptanceRadius = -1.0f);
 		BotMovementStatus Update(BotContext& context);
 		void Stop(BotContext& context, std::string reason = "stopped");

@@ -32,14 +32,30 @@ namespace mmo
 		uint32 mapId { 0 };
 
 		bool alive { false };
-		float healthPercent { 0.0f };
-		float powerPercent { 0.0f };
+
+		/// Health and power as fractions in [0, 1], not percentages. BotUnit calls them percents
+		/// but returns fractions; naming them honestly here is cheaper than being wrong by a
+		/// factor of a hundred somewhere downstream.
+		float healthFraction { 0.0f };
+		float powerFraction { 0.0f };
+
+		/// False for a class with no power pool at all. Without this, an empty pool and a
+		/// non-existent one look identical, and a bot that can never fill the one it does not
+		/// have rests forever.
+		bool hasPower { false };
+
 		bool moving { false };
 
 		/// The unit we have selected, if it still exists.
 		uint64 targetGuid { 0 };
 		bool targetExists { false };
 		bool targetAlive { false };
+
+		/// Distances here ignore height, because that is the measure BotMovementController uses to
+		/// decide it has arrived. Mixing the two is a live lock, not a rounding error: a target a
+		/// little above or below the bot reads as out of melee range in 3D and as arrived in plan,
+		/// so the bot walks to it, is instantly told it is there, decides it is not, and walks
+		/// again - forever, never swinging.
 		float targetDistance { 0.0f };
 
 		/// Nearest creature we could attack, whether or not it is our current target.

@@ -49,10 +49,20 @@ namespace mmo
 	{
 	public:
 		/// Reads every spawn out of the project and keeps the ones worth grinding.
+		///
 		/// @param project Loaded proto project.
-		/// @param playerFactionTemplate Faction template the bots belong to. Spawns not hostile
-		///        to it are dropped, using the same rule the server applies.
+		/// @param playerFactionTemplate Faction template the bots belong to. Spawns not hostile to
+		///        it are dropped, using the same rule the server applies. Pass 0 when the bots have
+		///        no faction template - a dataset that does not populate them - and the faction
+		///        filter is skipped entirely rather than rejecting everything.
+		///
+		/// Skipping is the right degradation rather than a shortcut: the runtime target picker
+		/// ignores faction too and attacks any creature without NPC flags, so an index that kept
+		/// nothing would send bots nowhere while they remained perfectly willing to fight.
 		void Build(const proto::Project& project, uint32 playerFactionTemplate);
+
+		/// Whether the last Build applied the faction filter.
+		[[nodiscard]] bool WasFactionFiltered() const { return m_factionFiltered; }
 
 		[[nodiscard]] const std::vector<GrindSpot>& GetSpots() const { return m_spots; }
 		[[nodiscard]] std::size_t GetSpotCount() const { return m_spots.size(); }
@@ -72,6 +82,7 @@ namespace mmo
 		/// Spot indices bucketed by map, so a query never looks at another map.
 		std::unordered_map<uint32, std::vector<std::size_t>> m_spotsByMap;
 		std::vector<GrindSpot> m_spots;
+		bool m_factionFiltered { false };
 	};
 
 	/// Whether a unit of the attacker faction template counts the defender one as an enemy.

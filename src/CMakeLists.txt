@@ -42,4 +42,5 @@ endif()
 
 if (MMO_BUILD_BOTS)
 	add_subdirectory(e2e_client)
+	add_subdirectory(bot_swarm)
 endif()

@@ -6,6 +6,7 @@
 #include "proto_data/project.h"
 
 #include <algorithm>
+#include <string>
 
 namespace mmo
 {
@@ -65,6 +66,8 @@ namespace mmo
 	{
 		m_spots.clear();
 		m_spotsByMap.clear();
+		m_factionFiltered = playerFactionTemplate != 0
+			&& project.factionTemplates.getById(playerFactionTemplate) != nullptr;
 
 		const auto& maps = project.maps.getTemplates();
 		for (int mapIndex = 0; mapIndex < maps.entry_size(); ++mapIndex)
@@ -102,7 +105,7 @@ namespace mmo
 					continue;
 				}
 
-				if (!IsFactionHostile(project, playerFactionTemplate, unit->factiontemplate()))
+				if (m_factionFiltered && !IsFactionHostile(project, playerFactionTemplate, unit->factiontemplate()))
 				{
 					continue;
 				}
@@ -121,7 +124,10 @@ namespace mmo
 			}
 		}
 
-		ILOG("Grind spot index built: " << m_spots.size() << " spots across " << m_spotsByMap.size() << " maps");
+		ILOG("Grind spot index built: " << m_spots.size() << " spots across " << m_spotsByMap.size() << " maps"
+			<< (m_factionFiltered
+				? " (hostile to faction template " + std::to_string(playerFactionTemplate) + ")"
+				: " (no faction filter: the bots have no usable faction template)"));
 	}
 
 	std::vector<std::size_t> GrindSpotIndex::FindCandidates(

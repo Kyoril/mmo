@@ -25,6 +25,15 @@ namespace mmo
 		/// Set once we are close enough to the spot for the object manager to have the creatures.
 		bool arrived { false };
 
+		/// When the bot arrived. A spawn point in the data says nothing about what is alive right
+		/// now, so a bot has to be able to notice that it walked somewhere for nothing.
+		GameTime arrivedMs { 0 };
+
+		/// Whether the bot is currently recovering. Held across ticks so that resting runs from
+		/// the low threshold all the way back up to the rested one, instead of stopping the moment
+		/// the bot is one hit point better off than it was.
+		bool resting { false };
+
 		/// Spot index -> time the blacklist entry expires.
 		std::unordered_map<std::size_t, GameTime> blacklist;
 
@@ -41,6 +50,7 @@ namespace mmo
 			spotIndex = npos;
 			spotPosition = Vector3::Zero;
 			arrived = false;
+			arrivedMs = 0;
 		}
 
 		/// Marks a spot as not worth trying again until nowMs + durationMs.

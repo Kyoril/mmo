@@ -282,6 +282,11 @@ namespace mmo
 		/// Stops auto-attack.
 		void SendAttackStop();
 
+		/// Releases the corpse and revives at the bind point, the same way a player does after
+		/// dying. Deliberately not the GM revive cheat: the point of a bot is to walk the paths a
+		/// player walks, and the release path is where the interesting server work happens.
+		void SendReviveRequest();
+
 		/// Sends a spell cast request using the standard spell target map contract.
 		/// @return True if the request was queued locally, false if it was rejected before send.
 		bool SendCastSpell(uint32 spellId, const SpellTargetMap& targetMap, bool autoFlush = true);
