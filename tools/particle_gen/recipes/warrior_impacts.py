@@ -6,7 +6,9 @@ Weapon impact effects. Run from the repo root::
 
 These spawn on the *target*, attached to a bone, at the moment the server reports a hit.
 Scale reference: a player capsule is ~1.8 units tall, so a 0.10 particle is a fist-sized
-spark and a 0.8 ring covers a torso.
+spark. The ground rings here settle around 1.35-1.4 units at full expansion -- wider than a
+torso, because a ring that only covers the body reads as a smudge rather than as an impact
+spreading outward. Tune against the ``--figure`` silhouette, not against this number.
 """
 
 import os
