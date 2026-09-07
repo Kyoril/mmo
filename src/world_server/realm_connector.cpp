@@ -768,6 +768,25 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		player->SetAccountFeatures(std::move(accountFeatures));
 		player->SetLocale(playerLocale);
 		player->SetFallDamageConfig(m_fallDamageMinHeight, m_fallDamageLethalHeight);
+
+		// A join can arrive for a character that is still registered here. The realm kicks the old
+		// session and admits the new one, and the leave and join packets that result are not
+		// ordered against each other - a player who reconnects quickly enough overtakes their own
+		// logout. The new session wins, so the stale one is torn down rather than asserted on.
+		//
+		// Letting it through was fatal both ways round. PlayerManager::AddPlayer asserts the guid
+		// is absent, so a debug server aborted outright; without the assert its emplace keeps the
+		// existing entry and silently drops the new player, which then dies unregistered - taking
+		// with it the WorldInstance registration that GameUnitS::OnDespawn needs in order to
+		// abandon an in-flight cast, and the cast-time countdown later fires into freed memory.
+		// Both crashes were found by the bot swarm within minutes of it running.
+		if (const auto stale = m_playerManager.GetPlayerByCharacterGuid(characterData.characterId))
+		{
+			WLOG("Character " << log_hex_digit(characterData.characterId) << " joined while a previous "
+				"session was still registered; removing the stale session first");
+			m_playerManager.RemovePlayer(stale);
+		}
+
 		m_playerManager.AddPlayer(player);
 
 		// Set up inventory persistence (World Server)

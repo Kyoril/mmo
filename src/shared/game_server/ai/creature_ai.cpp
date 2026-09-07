@@ -65,7 +65,11 @@ namespace mmo
 			});
 		m_onDamaged = m_controlled.takenDamage.connect([this](GameUnitS* attacker, uint32 school, DamageType damageType)
 			{
-				if (attacker) 
+				// m_state is null once the creature has despawned - OnDespawned clears it - and this
+				// signal can still arrive afterwards, because a swing already in flight resolves
+				// against the unit after it has gone. Found by the bot swarm, which kills things fast
+				// enough for the two to overlap.
+				if (attacker && m_state)
 				{
 					m_state->OnDamage(*attacker);
 				}
