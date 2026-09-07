@@ -1105,13 +1105,14 @@ Ten effects share a palette and three recurring shapes. Factoring them out keeps
 **Interfaces:**
 - Consumes: `hpar.Emitter`, `hpar.Burst`, `hpar.ParticleSystem`, `hpar.float_curve`, `hpar.color_curve`, `hpar.save`.
 - Produces:
-  - Palette tuples: `STEEL`, `SPARK`, `BLOOD`, `BLOOD_DARK`, `DUST`, `DUST_DARK`, `RAGE`, `RAGE_DEEP`, `DREAD`, `GUARD`
+  - Palette tuples: `HOT`, `ARC_STEEL`, `ARC_GOLD`, `ARC_EMBER`, `ARC_CRIMSON`, `ARC_BLOOD`, `ARC_VIOLET`, `ARC_AZURE`, `DUST`, `DUST_DARK`
   - Material constants: `BEAM`, `GLOW`, `RING`, `STAR`
   - `rgba(rgb, a) -> tuple`
   - `spark_burst(name, count, speed, colour, size=0.10, lifetime=0.45, gravity=-9.0, drag=1.6, spread=1.0) -> Emitter`
   - `ground_ring(name, start_size, end_size, colour, alpha=0.35, lifetime=0.5, delay=0.0) -> Emitter`
   - `dust_cloud(name, count, spread, colour, alpha=0.30, size=0.5, lifetime=0.8, rise=0.4) -> Emitter`
   - `soft_flash(name, size, colour, alpha=0.5, lifetime=0.12) -> Emitter`
+  - `energy_swirl(name, count, radius, colour, hot=HOT, alpha=0.38, size=0.16, lifetime=0.65, orbital=3.2, rise=1.4) -> Emitter`
   - `write(system, filename) -> None` writing to `data/client/Particles/Warrior/<filename>`
 
 - [ ] **Step 1: Write the module**
@@ -1123,17 +1124,29 @@ Create `tools/particle_gen/recipes/warrior_common.py`:
 """
 Shared palette and emitter building blocks for the warrior ability effects.
 
-Art direction is grounded physicality -- dust, grit, sparks, blood and steel -- with a
-restrained warm accent reserved for the rage and shout cooldowns so the big buttons read as
-empowered at a glance.
+Art direction is **stylized high fantasy**, matching the ability audio: physical weapon
+impacts fused with arcane energy, in the register of a AAA fantasy MMO.
 
-Two engine constraints shape every number in here:
+Two engine constraints shape every number in here, and the second one is why this file
+looks the way it does:
 
-* There is **no additive blending and no bloom**. Overlapping particles do not accumulate
-  toward white, so volumetric layers stay at peak alpha 0.2-0.4 and density carries the
-  brightness. A stack of high-alpha particles composites to a solid wall, not to a glow.
 * ``Particles/Additive.hmat`` is typed ``Unlit``, which makes the engine render it with
   opaque blending -- hard occluding rectangles. Only the ``.hmi`` instances below are safe.
+* There is **no additive blending and no bloom**. This is the hard part of a stylized
+  brief: overlapping particles do not accumulate toward white, so the usual way of drawing
+  magic -- a few bright, high-alpha sprites -- composites into flat coloured cardboard.
+
+Everything here is built around four techniques that *do* survive alpha-only blending:
+
+1. **Density over alpha.** Many particles at peak alpha 0.2-0.45, never few at 0.8+. The
+   apparent brightness comes from overlap count, not from any single particle.
+2. **Saturated hue at low alpha.** A 0.25-alpha saturated violet reads as energy; the same
+   colour at 0.9 reads as plastic.
+3. **Motion carries the magic.** Orbital swirl, expanding rings, stretched beams and
+   spinning star sprites all read as arcane and cost nothing the renderer cannot do. Shape
+   is free; glow is not.
+4. **Hue shift over life.** Hot core -> saturated body -> dark fade sells energy
+   dissipating, which is the read that a static bright blob cannot give.
 """
 
 import os
@@ -1150,19 +1163,19 @@ GLOW = "Particles/Particle_Glow.hmi"     # soft radial blob
 RING = "Particles/Particle_Ring.hmi"     # hollow ring, for ground shockwaves
 STAR = "Particles/Particle_Star.hmi"     # four-point star
 
-# Palette. Impacts are steel and spark; wounds are blood; movement is dust; the cooldowns
-# carry the warm accent, and the debuff shouts deliberately sit cold and desaturated
-# against them.
-STEEL = (0.92, 0.94, 1.00)
-SPARK = (1.00, 0.78, 0.38)
-BLOOD = (0.55, 0.05, 0.03)
-BLOOD_DARK = (0.28, 0.02, 0.02)
-DUST = (0.52, 0.45, 0.34)
-DUST_DARK = (0.34, 0.29, 0.22)
-RAGE = (1.00, 0.42, 0.18)
-RAGE_DEEP = (0.72, 0.12, 0.06)
-DREAD = (0.30, 0.26, 0.32)
-GUARD = (0.62, 0.72, 0.88)
+# Palette. Every hue is pushed well past its realistic value: with no additive blending,
+# a saturated colour at low alpha is the only way to read as energy rather than as matter.
+# Each effect pairs a HOT core with a SATURATED body and a DARK fade.
+HOT = (1.00, 0.98, 0.90)          # near-white core, every energy effect starts here
+ARC_STEEL = (0.78, 0.92, 1.00)    # cold enchanted-blade energy
+ARC_GOLD = (1.00, 0.84, 0.38)     # heroic / rally
+ARC_EMBER = (1.00, 0.55, 0.15)    # embers and sparks
+ARC_CRIMSON = (1.00, 0.28, 0.20)  # rage energy
+ARC_BLOOD = (0.82, 0.10, 0.14)    # stylized wound energy, brighter than real blood
+ARC_VIOLET = (0.60, 0.34, 0.95)   # dread / debuff magic
+ARC_AZURE = (0.42, 0.70, 1.00)    # protective barrier
+DUST = (0.62, 0.56, 0.46)         # ground contact only; lifted so it reads under energy
+DUST_DARK = (0.40, 0.35, 0.30)
 
 OUT_DIR = os.path.join("data", "client", "Particles", "Warrior")
 
@@ -1279,6 +1292,38 @@ def soft_flash(name, size, colour, alpha=0.5, lifetime=0.12):
     )
 
 
+def energy_swirl(name, count, radius, colour, hot=HOT, alpha=0.38, size=0.16,
+                 lifetime=0.65, orbital=3.2, rise=1.4):
+    """Orbiting stretched motes -- the main "this is magic" primitive.
+
+    Orbital motion is what sells arcane energy in a renderer that cannot glow: the eye reads
+    the spiral, not the brightness. Colour runs hot core -> saturated body -> dark fade so
+    the swirl looks like energy dissipating rather than confetti falling.
+    """
+    return Emitter(
+        name=name,
+        simulation_space=hpar.SIM_LOCAL,     # swirl follows the actor
+        loop=False, duration=0.30,
+        spawn_rate=0.0, max_particles=count + 10,
+        bursts=[Burst(0.0, count // 2), Burst(0.12, count - count // 2)],
+        shape=hpar.SHAPE_SPHERE, shape_extents=(radius, 0.0, 0.0),
+        min_lifetime=lifetime * 0.6, max_lifetime=lifetime,
+        min_velocity=(-0.25, rise * 0.4, -0.25), max_velocity=(0.25, rise, 0.25),
+        min_start_size=size * 0.55, max_start_size=size,
+        min_start_rotation=0.0, max_start_rotation=3.14,
+        min_angular_velocity=-2.2, max_angular_velocity=2.2,
+        gravity=(0.0, 0.2, 0.0), drag=0.6, orbital_speed=orbital,
+        render_mode=hpar.RENDER_STRETCHED, length_scale=4.0,
+        material_name=BEAM,
+        size_over_life=float_curve((0.0, 0.4), (0.3, 1.0), (1.0, 0.15)),
+        color_over_lifetime=color_curve(
+            (0.00, rgba(hot, 0.0)),
+            (0.15, rgba(hot, alpha)),
+            (0.60, rgba(colour, alpha * 0.8)),
+            (1.00, rgba(colour, 0.0))),
+    )
+
+
 def write(system, filename):
     path = os.path.join(OUT_DIR, filename)
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -1349,40 +1394,49 @@ from warrior_common import ParticleSystem
 
 
 def steel_impact():
-    """Sword on mail. The cheapest effect in the set by design: it fires on every warrior
-    swing and on eight creature types, so two emitters and ~20 particles is the budget."""
+    """Enchanted blade on armour. The cheapest effect in the set by design -- it fires on
+    every warrior swing and on eight creature types -- so the arcane read has to come from
+    three cheap emitters, not from volume."""
     return ParticleSystem(emitters=[
-        wc.spark_burst("Steel Sparks", count=16, speed=6.0, colour=wc.SPARK,
-                       size=0.09, lifetime=0.34, gravity=-9.0, drag=1.8, spread=1.1),
-        wc.soft_flash("Steel Flash", size=0.45, colour=wc.STEEL, alpha=0.45, lifetime=0.10),
+        wc.spark_burst("Arc Sparks", count=18, speed=6.5, colour=wc.ARC_STEEL,
+                       size=0.09, lifetime=0.34, gravity=-8.0, drag=1.8, spread=1.1),
+        wc.soft_flash("Arc Flash", size=0.50, colour=wc.HOT, alpha=0.45, lifetime=0.10),
+        wc.ground_ring("Arc Pulse", start_size=0.35, end_size=1.3, colour=wc.ARC_STEEL,
+                       alpha=0.30, lifetime=0.30),
     ])
 
 
 def heavy_impact():
-    """Execute and Shield Slam. Same language as SteelImpact, but with real weight behind
-    it: a wider spark fan, a dust puff kicked loose, and a ground ring to sell the force."""
+    """Execute and Shield Slam. The same language with real force behind it: a wider spark
+    fan, an energy swirl thrown off the hit, kicked-up dust for ground contact, and a fast
+    expanding ring."""
     return ParticleSystem(emitters=[
-        wc.spark_burst("Heavy Sparks", count=30, speed=8.5, colour=wc.SPARK,
-                       size=0.13, lifetime=0.48, gravity=-10.0, drag=1.4, spread=1.5),
-        wc.soft_flash("Heavy Flash", size=0.75, colour=wc.STEEL, alpha=0.55, lifetime=0.14),
+        wc.spark_burst("Heavy Sparks", count=34, speed=9.0, colour=wc.ARC_EMBER,
+                       size=0.13, lifetime=0.48, gravity=-9.0, drag=1.4, spread=1.5),
+        wc.soft_flash("Heavy Flash", size=0.85, colour=wc.HOT, alpha=0.55, lifetime=0.14),
+        wc.energy_swirl("Heavy Arc", count=20, radius=0.45, colour=wc.ARC_GOLD,
+                        alpha=0.34, size=0.18, lifetime=0.55, orbital=4.0, rise=1.0),
         wc.dust_cloud("Heavy Dust", count=14, spread=1.1, colour=wc.DUST,
-                      alpha=0.26, size=0.55, lifetime=0.70, rise=0.5),
-        wc.ground_ring("Heavy Ring", start_size=0.5, end_size=2.0, colour=wc.DUST,
-                       alpha=0.30, lifetime=0.45),
+                      alpha=0.24, size=0.55, lifetime=0.70, rise=0.5),
+        wc.ground_ring("Heavy Ring", start_size=0.5, end_size=2.4, colour=wc.ARC_GOLD,
+                       alpha=0.34, lifetime=0.45),
     ])
 
 
 def blood_impact():
-    """Rend and Crippling Strike. Droplets arc down hard under gravity with very little
-    drag, so it reads as spray rather than as smoke -- the previous version used a smoke
-    material and looked like a dark cloud."""
+    """Rend and Crippling Strike. Stylized wound energy rather than gore: bright crimson
+    motes arc down under gravity while a darker energy haze lingers where the cut was. The
+    previous version used a smoke material and read as a dark cloud."""
     return ParticleSystem(emitters=[
-        wc.spark_burst("Blood Spray", count=22, speed=4.5, colour=wc.BLOOD,
-                       size=0.11, lifetime=0.55, gravity=-14.0, drag=0.4, spread=0.9),
-        wc.spark_burst("Heavy Droplets", count=7, speed=2.6, colour=wc.BLOOD_DARK,
-                       size=0.17, lifetime=0.70, gravity=-16.0, drag=0.2, spread=0.5),
-        wc.dust_cloud("Blood Mist", count=9, spread=0.5, colour=wc.BLOOD_DARK,
-                      alpha=0.22, size=0.30, lifetime=0.45, rise=0.2),
+        wc.spark_burst("Wound Spray", count=24, speed=4.8, colour=wc.ARC_BLOOD,
+                       size=0.11, lifetime=0.55, gravity=-13.0, drag=0.4, spread=0.9),
+        wc.soft_flash("Wound Flash", size=0.40, colour=wc.ARC_CRIMSON, alpha=0.40,
+                      lifetime=0.10),
+        wc.energy_swirl("Wound Arc", count=14, radius=0.30, colour=wc.ARC_BLOOD,
+                        hot=wc.ARC_CRIMSON, alpha=0.32, size=0.13, lifetime=0.60,
+                        orbital=2.4, rise=0.5),
+        wc.dust_cloud("Wound Haze", count=9, spread=0.5, colour=wc.ARC_BLOOD,
+                      alpha=0.20, size=0.30, lifetime=0.45, rise=0.2),
     ])
 
 
@@ -1473,116 +1527,140 @@ from warrior_common import ParticleSystem
 
 
 def cleave_burst():
-    """A wide arc carved to the character's right. The velocity box is deliberately
-    asymmetric -- that is what turns an omnidirectional burst into a directional sweep."""
-    sweep = wc.spark_burst("Cleave Arc", count=26, speed=7.0, colour=wc.STEEL,
-                           size=0.12, lifetime=0.40, gravity=-4.0, drag=2.0, spread=1.0)
-    sweep.min_velocity = (0.2, -0.2, -1.6)
-    sweep.max_velocity = (2.6, 0.6, 1.6)
+    """A crescent energy wave carved to the character's right. The velocity box is
+    deliberately asymmetric -- that is what turns an omnidirectional burst into a
+    directional sweep, and the shape is what reads as an arcane blade wave."""
+    sweep = wc.spark_burst("Cleave Wave", count=32, speed=7.5, colour=wc.ARC_STEEL,
+                           size=0.13, lifetime=0.42, gravity=-3.0, drag=2.0, spread=1.0)
+    sweep.min_velocity = (0.2, -0.2, -1.8)
+    sweep.max_velocity = (2.8, 0.7, 1.8)
     sweep.shape_extents = (0.30, 0.0, 0.0)
+    trail = wc.energy_swirl("Cleave Trail", count=18, radius=0.9, colour=wc.ARC_GOLD,
+                            alpha=0.32, size=0.17, lifetime=0.50, orbital=1.2, rise=0.4)
     return ParticleSystem(emitters=[
         sweep,
+        trail,
         wc.dust_cloud("Cleave Wake", count=10, spread=1.0, colour=wc.DUST,
-                      alpha=0.20, size=0.45, lifetime=0.45, rise=0.3),
+                      alpha=0.18, size=0.45, lifetime=0.45, rise=0.3),
     ])
 
 
 def charge_dust():
-    """Kicked-up ground dust behind a sprinting armoured body. Staggered rings stamp the
-    path; the dust drifts backward, opposite the direction of travel."""
-    wake = wc.dust_cloud("Charge Wake", count=20, spread=0.9, colour=wc.DUST,
-                         alpha=0.28, size=0.60, lifetime=0.85, rise=0.6)
+    """An energy trail dragged behind a sprinting armoured body, with staggered ground
+    rings stamping the path. The wake drifts backward, opposite the travel direction."""
+    wake = wc.dust_cloud("Charge Wake", count=22, spread=0.9, colour=wc.DUST,
+                         alpha=0.26, size=0.60, lifetime=0.85, rise=0.6)
     wake.min_velocity = (-0.8, 0.1, -2.4)
     wake.max_velocity = (0.8, 0.9, -0.4)
+    streaks = wc.spark_burst("Charge Streaks", count=24, speed=5.5, colour=wc.ARC_EMBER,
+                             size=0.12, lifetime=0.55, gravity=-2.0, drag=1.2, spread=0.7)
+    streaks.min_velocity = (-0.5, 0.2, -2.6)
+    streaks.max_velocity = (0.5, 1.4, -0.6)
     return ParticleSystem(emitters=[
+        streaks,
         wake,
-        wc.ground_ring("Charge Ring A", start_size=0.6, end_size=1.8, colour=wc.DUST,
-                       alpha=0.26, lifetime=0.50),
-        wc.ground_ring("Charge Ring B", start_size=0.6, end_size=1.8, colour=wc.DUST,
-                       alpha=0.22, lifetime=0.50, delay=0.22),
+        wc.ground_ring("Charge Ring A", start_size=0.6, end_size=2.0, colour=wc.ARC_EMBER,
+                       alpha=0.30, lifetime=0.50),
+        wc.ground_ring("Charge Ring B", start_size=0.6, end_size=2.0, colour=wc.ARC_GOLD,
+                       alpha=0.24, lifetime=0.50, delay=0.22),
     ])
 
 
 def shockwave_dust():
-    """The signature effect. A ground ring racing outward is what makes this read as a
-    shockwave; the previous version had no ring at all and looked like a dark dust cloud."""
+    """The signature effect. Two ground rings racing outward at different speeds are what
+    make this read as a shockwave; the previous version had no ring at all and looked like
+    a dark dust cloud. Energy rings lead, dust follows underneath."""
     outward = wc.dust_cloud("Shock Wall", count=34, spread=2.6, colour=wc.DUST,
-                            alpha=0.26, size=0.85, lifetime=0.85, rise=0.5)
+                            alpha=0.24, size=0.85, lifetime=0.85, rise=0.5)
     outward.shape_extents = (0.5, 0.0, 0.0)
     return ParticleSystem(emitters=[
-        wc.ground_ring("Shock Ring", start_size=0.8, end_size=7.0, colour=wc.DUST,
+        wc.ground_ring("Shock Ring", start_size=0.8, end_size=7.5, colour=wc.ARC_GOLD,
                        alpha=0.42, lifetime=0.70),
-        wc.ground_ring("Shock Ring Inner", start_size=0.5, end_size=3.4, colour=wc.DUST_DARK,
-                       alpha=0.30, lifetime=0.55),
+        wc.ground_ring("Shock Ring Inner", start_size=0.5, end_size=3.6, colour=wc.HOT,
+                       alpha=0.34, lifetime=0.50),
         outward,
-        wc.spark_burst("Shock Grit", count=22, speed=5.0, colour=wc.DUST_DARK,
-                       size=0.10, lifetime=0.70, gravity=-11.0, drag=1.0, spread=1.8),
+        wc.spark_burst("Shock Grit", count=26, speed=5.5, colour=wc.ARC_EMBER,
+                       size=0.11, lifetime=0.70, gravity=-10.0, drag=1.0, spread=1.8),
+        wc.soft_flash("Shock Core", size=1.1, colour=wc.HOT, alpha=0.45, lifetime=0.16),
     ])
 
 
 def rally_burst():
-    """Battlecry. Warm accent: an upward flare with a ground pulse and motes that outlive
-    it, so the effect trails off instead of cutting."""
-    flare = wc.spark_burst("Rally Flare", count=26, speed=4.0, colour=wc.RAGE,
+    """Battlecry. A golden heroic bloom: an upward flare, an orbiting swirl around the
+    caster, a ground pulse, and star motes that outlive everything so it trails off
+    instead of cutting."""
+    flare = wc.spark_burst("Rally Flare", count=30, speed=4.2, colour=wc.ARC_GOLD,
                            size=0.14, lifetime=0.70, gravity=1.2, drag=1.0, spread=0.7)
-    flare.min_velocity = (-0.6, 1.6, -0.6)
-    flare.max_velocity = (0.6, 4.2, 0.6)
-    motes = wc.dust_cloud("Rally Motes", count=16, spread=0.7, colour=wc.RAGE,
+    flare.min_velocity = (-0.6, 1.8, -0.6)
+    flare.max_velocity = (0.6, 4.4, 0.6)
+    motes = wc.dust_cloud("Rally Motes", count=18, spread=0.7, colour=wc.ARC_GOLD,
                           alpha=0.34, size=0.22, lifetime=1.10, rise=1.4)
     motes.material_name = wc.STAR
     motes.gravity = (0.0, 0.5, 0.0)
     return ParticleSystem(emitters=[
         flare,
-        wc.ground_ring("Rally Ring", start_size=0.7, end_size=2.6, colour=wc.RAGE,
-                       alpha=0.34, lifetime=0.55),
+        wc.energy_swirl("Rally Swirl", count=22, radius=0.55, colour=wc.ARC_GOLD,
+                        alpha=0.36, size=0.18, lifetime=0.80, orbital=3.6, rise=1.8),
+        wc.ground_ring("Rally Ring", start_size=0.7, end_size=2.8, colour=wc.ARC_GOLD,
+                       alpha=0.36, lifetime=0.55),
         motes,
     ])
 
 
 def rage_burst():
-    """Bloodrush. Warm accent held tight to the body -- this is an internal surge, not an
-    outward blast, so nothing travels far."""
-    embers = wc.spark_burst("Rage Embers", count=20, speed=2.6, colour=wc.RAGE_DEEP,
+    """Bloodrush. A crimson vortex held tight to the body -- an internal surge, not an
+    outward blast, so nothing travels far and the swirl radius stays small."""
+    embers = wc.spark_burst("Rage Embers", count=22, speed=2.8, colour=wc.ARC_EMBER,
                             size=0.11, lifetime=0.80, gravity=0.9, drag=1.4, spread=0.5)
-    embers.min_velocity = (-0.4, 0.8, -0.4)
-    embers.max_velocity = (0.4, 2.6, 0.4)
+    embers.min_velocity = (-0.4, 0.9, -0.4)
+    embers.max_velocity = (0.4, 2.8, 0.4)
     return ParticleSystem(emitters=[
-        wc.dust_cloud("Rage Aura", count=18, spread=0.55, colour=wc.RAGE_DEEP,
-                      alpha=0.30, size=0.50, lifetime=0.75, rise=1.0),
+        wc.energy_swirl("Rage Vortex", count=26, radius=0.40, colour=wc.ARC_CRIMSON,
+                        alpha=0.40, size=0.17, lifetime=0.75, orbital=5.0, rise=1.6),
         embers,
-        wc.ground_ring("Rage Ring", start_size=0.5, end_size=1.6, colour=wc.RAGE_DEEP,
-                       alpha=0.28, lifetime=0.50),
+        wc.dust_cloud("Rage Aura", count=16, spread=0.55, colour=wc.ARC_CRIMSON,
+                      alpha=0.26, size=0.50, lifetime=0.75, rise=1.0),
+        wc.ground_ring("Rage Ring", start_size=0.5, end_size=1.8, colour=wc.ARC_CRIMSON,
+                       alpha=0.30, lifetime=0.50),
     ])
 
 
 def dread_burst():
-    """Provoke and Demoralizing Shout. Cold, desaturated and low to the ground -- the
-    deliberate opposite of the warm rally pair, so a debuff never reads as a buff."""
-    pressure = wc.dust_cloud("Dread Pressure", count=26, spread=2.0, colour=wc.DREAD,
-                             alpha=0.30, size=0.75, lifetime=0.80, rise=0.25)
+    """Provoke and Demoralizing Shout. Violet debuff magic pressing outward and low to the
+    ground -- deliberately the opposite hue and the opposite motion from the rising golden
+    rally pair, so a debuff can never be mistaken for a buff."""
+    pressure = wc.dust_cloud("Dread Pressure", count=28, spread=2.0, colour=wc.ARC_VIOLET,
+                             alpha=0.30, size=0.75, lifetime=0.80, rise=0.20)
     pressure.shape_extents = (0.4, 0.0, 0.0)
+    sink = wc.energy_swirl("Dread Coil", count=18, radius=0.8, colour=wc.ARC_VIOLET,
+                           hot=wc.ARC_VIOLET, alpha=0.30, size=0.15, lifetime=0.70,
+                           orbital=-2.6, rise=0.2)
+    sink.gravity = (0.0, -0.6, 0.0)   # dread settles rather than rising
     return ParticleSystem(emitters=[
-        wc.ground_ring("Dread Ring", start_size=0.7, end_size=4.4, colour=wc.DREAD,
-                       alpha=0.34, lifetime=0.65),
+        wc.ground_ring("Dread Ring", start_size=0.7, end_size=4.8, colour=wc.ARC_VIOLET,
+                       alpha=0.36, lifetime=0.65),
         pressure,
-        wc.spark_burst("Dread Grit", count=14, speed=3.4, colour=wc.DREAD,
-                       size=0.09, lifetime=0.60, gravity=-8.0, drag=1.6, spread=1.4),
+        sink,
+        wc.spark_burst("Dread Grit", count=14, speed=3.4, colour=wc.ARC_VIOLET,
+                       size=0.09, lifetime=0.60, gravity=-7.0, drag=1.6, spread=1.4),
     ])
 
 
 def guard_burst():
-    """Last Stand. A steel-blue shell that expands and settles -- defensive, not explosive,
-    so the particles slow down rather than fly apart."""
-    shell = wc.spark_burst("Guard Shell", count=22, speed=3.0, colour=wc.GUARD,
+    """Last Stand. An azure barrier igniting around the warrior: a shell that expands and
+    settles rather than exploding, so the particles slow down instead of flying apart."""
+    shell = wc.spark_burst("Guard Shell", count=26, speed=3.2, colour=wc.ARC_AZURE,
                            size=0.13, lifetime=0.70, gravity=0.4, drag=3.0, spread=0.9)
     shell.min_velocity = (-0.9, 0.4, -0.9)
-    shell.max_velocity = (0.9, 2.4, 0.9)
+    shell.max_velocity = (0.9, 2.6, 0.9)
     return ParticleSystem(emitters=[
         shell,
-        wc.ground_ring("Guard Ring", start_size=0.9, end_size=2.2, colour=wc.GUARD,
-                       alpha=0.36, lifetime=0.60),
-        wc.dust_cloud("Guard Haze", count=14, spread=0.7, colour=wc.GUARD,
-                      alpha=0.24, size=0.55, lifetime=0.80, rise=0.5),
+        wc.energy_swirl("Guard Weave", count=20, radius=0.60, colour=wc.ARC_AZURE,
+                        alpha=0.34, size=0.16, lifetime=0.85, orbital=2.8, rise=0.9),
+        wc.ground_ring("Guard Ring", start_size=0.9, end_size=2.4, colour=wc.ARC_AZURE,
+                       alpha=0.38, lifetime=0.60),
+        wc.dust_cloud("Guard Haze", count=14, spread=0.7, colour=wc.ARC_AZURE,
+                      alpha=0.22, size=0.55, lifetime=0.80, rise=0.5),
     ])
 
 
