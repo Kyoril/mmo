@@ -53,6 +53,9 @@ namespace mmo
 
 		uint32 GetMapId() const { return m_mapId; }
 
+		/// Gets the static client game data project this object was created from.
+		[[nodiscard]] const proto_client::Project& GetProject() const { return m_project; }
+
 		GameUnitC& AsUnit();
 
 		const GameUnitC& AsUnit() const;

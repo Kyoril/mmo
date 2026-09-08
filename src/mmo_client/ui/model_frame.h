@@ -70,8 +70,10 @@ namespace mmo
 		Camera* GetCamera() const { return m_camera; }
 
 	protected:
-		/// This method is called whenever the ModelFile property is changed.
-		void OnModelFileChanged(const Property& prop);
+		/// This method is called whenever the ModelFile property is changed. Overriding classes
+		/// which keep state bound to the current entity (e.g. attached item meshes) must release
+		/// it before calling the base implementation, which destroys the entity.
+		virtual void OnModelFileChanged(const Property& prop);
 
 		void OnYawChanged(const Property& prop);
 
