@@ -38,6 +38,13 @@ message VoiceLineSet {
 	// fails due to missing power of that type. Falls back to the generic
 	// FailedNoPower entry in cast_error_sounds when the power type is not mapped.
 	map<uint32, uint32> no_power_sounds = 2;
+
+	// Maps an attack swing event value (see attack_swing_event in game/auto_attack.h:
+	// NotStanding=0, OutOfRange=1, CantAttack=2, WrongFacing=3, TargetDead=4) to the
+	// SoundEntry id of the voice line played when an auto attack swing fails that way.
+	// Kept separate from cast_error_sounds because the two enums are unrelated and
+	// their values overlap.
+	map<uint32, uint32> attack_error_sounds = 3;
 }
 
 // NOTE: Keep the shared fields of this message in sync with src/shared/client_data/races.proto!

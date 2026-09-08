@@ -4,6 +4,7 @@
 
 #include "base/clock.h"
 #include "game/gender.h"
+#include "game/auto_attack.h"
 #include "game/spell.h"
 #include "game_client/sound_entry_player.h"
 
@@ -32,7 +33,57 @@ namespace mmo
 				return spell_cast_result::FailedNotReady;
 			}
 
+			if (errorKey == "SPELL_CAST_FAILED_BAD_TARGETS" ||
+				errorKey == "SPELL_CAST_FAILED_TARGET_FRIENDLY")
+			{
+				// TARGET_FRIENDLY is a client-only refinement of the same mistake -- the player
+				// aimed a hostile spell at something it can never work on.
+				return spell_cast_result::FailedBadTargets;
+			}
+
+			if (errorKey == "SPELL_CAST_FAILED_CASTER_DEAD")
+			{
+				return spell_cast_result::FailedCasterDead;
+			}
+
+			if (errorKey == "SPELL_CAST_FAILED_UNIT_NOT_INFRONT")
+			{
+				return spell_cast_result::FailedUnitNotInfront;
+			}
+
 			return spell_cast_result::CastOkay;
+		}
+
+		/// Maps an attack swing error event name back to its attack_swing_event value.
+		/// Returns attack_swing_event::Unknown for events which support no voice line.
+		uint32 GetAttackEventFromErrorEvent(const std::string& errorEvent)
+		{
+			if (errorEvent == "ATTACK_SWING_CANT_ATTACK")
+			{
+				return attack_swing_event::CantAttack;
+			}
+
+			if (errorEvent == "ATTACK_SWING_TARGET_DEAD")
+			{
+				return attack_swing_event::TargetDead;
+			}
+
+			if (errorEvent == "ATTACK_SWING_WRONG_FACING")
+			{
+				return attack_swing_event::WrongFacing;
+			}
+
+			if (errorEvent == "ATTACK_SWING_OUT_OF_RANGE")
+			{
+				return attack_swing_event::OutOfRange;
+			}
+
+			if (errorEvent == "ATTACK_SWING_NOT_STANDING")
+			{
+				return attack_swing_event::NotStanding;
+			}
+
+			return attack_swing_event::Unknown;
 		}
 
 		/// Extracts the power type from a refined no-power error key
@@ -96,7 +147,27 @@ namespace mmo
 			return;
 		}
 
-		const uint32 soundId = ResolveSoundId(castResult, GetPowerTypeFromErrorKey(errorKey));
+		PlayThrottled(ResolveSoundId(castResult, GetPowerTypeFromErrorKey(errorKey)));
+	}
+
+	void CastErrorVoice::OnAttackSwingError(const std::string& errorEvent)
+	{
+		if (!m_player || !m_races)
+		{
+			return;
+		}
+
+		const uint32 attackEvent = GetAttackEventFromErrorEvent(errorEvent);
+		if (attackEvent == attack_swing_event::Unknown)
+		{
+			return;
+		}
+
+		PlayThrottled(ResolveAttackSoundId(attackEvent));
+	}
+
+	void CastErrorVoice::PlayThrottled(const uint32 soundId)
+	{
 		if (soundId == 0)
 		{
 			return;
@@ -105,6 +176,8 @@ namespace mmo
 		// Don't stack voice lines when errors are spammed: block until the previous line
 		// has most likely finished playing. Time based on purpose - channels are recycled,
 		// so a stored channel index could no longer belong to the voice line.
+		// Cast errors and attack swing errors share one window: an out-of-range auto attack
+		// re-fires its error on a timer, and the two would otherwise talk over each other.
 		const GameTime now = GetAsyncTimeMs();
 		if (now < m_blockedUntil)
 		{
@@ -120,24 +193,47 @@ namespace mmo
 		m_blockedUntil = now + static_cast<GameTime>(m_player->GetEntryLength(soundId) * 1000.0f) + extraGapMs;
 	}
 
-	uint32 CastErrorVoice::ResolveSoundId(const uint32 castResult, const int32 powerType) const
+	const proto_client::VoiceLineSet* CastErrorVoice::GetVoiceSet() const
 	{
 		const proto_client::RaceEntry* race = m_races->getById(m_raceId);
 		if (!race)
 		{
+			return nullptr;
+		}
+
+		if (m_gender == Female && race->has_female_voice())
+		{
+			return &race->female_voice();
+		}
+
+		if (m_gender == Male && race->has_male_voice())
+		{
+			return &race->male_voice();
+		}
+
+		return nullptr;
+	}
+
+	uint32 CastErrorVoice::ResolveAttackSoundId(const uint32 attackEvent) const
+	{
+		const proto_client::VoiceLineSet* voiceSet = GetVoiceSet();
+		if (!voiceSet)
+		{
 			return 0;
 		}
 
-		const proto_client::VoiceLineSet* voiceSet = nullptr;
-		if (m_gender == Female && race->has_female_voice())
+		const auto it = voiceSet->attack_error_sounds().find(attackEvent);
+		if (it == voiceSet->attack_error_sounds().end())
 		{
-			voiceSet = &race->female_voice();
-		}
-		else if (m_gender == Male && race->has_male_voice())
-		{
-			voiceSet = &race->male_voice();
+			return 0;
 		}
 
+		return it->second;
+	}
+
+	uint32 CastErrorVoice::ResolveSoundId(const uint32 castResult, const int32 powerType) const
+	{
+		const proto_client::VoiceLineSet* voiceSet = GetVoiceSet();
 		if (!voiceSet)
 		{
 			return 0;

@@ -8,6 +8,7 @@
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "game/auto_attack.h"
 #include "game/spell.h"
 #include "log/default_log_levels.h"
 #include "math/constants.h"
@@ -424,11 +425,20 @@ namespace mmo
 				const char* label;
 			};
 
+			struct AttackErrorVoiceLine
+			{
+				uint32 attackEvent;
+				const char* label;
+			};
+
 			// Values must match spell_cast_result in game/spell.h.
 			static const CastErrorVoiceLine s_castErrorVoiceLines[] = {
 				{ spell_cast_result::FailedOutOfRange, "Out of Range" },
 				{ spell_cast_result::FailedNoPower, "Not Enough Power (Generic Fallback)" },
 				{ spell_cast_result::FailedNotReady, "Not Ready (Cooldown)" },
+				{ spell_cast_result::FailedBadTargets, "Invalid Target" },
+				{ spell_cast_result::FailedCasterDead, "Caster Is Dead" },
+				{ spell_cast_result::FailedUnitNotInfront, "Target Not In Front" },
 			};
 
 			// Values must match power_type in game/spell.h.
@@ -436,6 +446,15 @@ namespace mmo
 				{ power_type::Mana, "No Mana" },
 				{ power_type::Rage, "No Rage" },
 				{ power_type::Energy, "No Energy" },
+			};
+
+			// Values must match attack_swing_event in game/auto_attack.h.
+			static const AttackErrorVoiceLine s_attackErrorVoiceLines[] = {
+				{ attack_swing_event::CantAttack, "Swing: Can't Attack That" },
+				{ attack_swing_event::TargetDead, "Swing: Target Is Dead" },
+				{ attack_swing_event::WrongFacing, "Swing: Wrong Facing" },
+				{ attack_swing_event::OutOfRange, "Swing: Out of Range" },
+				{ attack_swing_event::NotStanding, "Swing: Moving" },
 			};
 
 			const auto drawGenderVoiceLines = [this](const char* genderLabel, proto::VoiceLineSet* voiceSet)
@@ -511,6 +530,13 @@ namespace mmo
 				for (const auto& voiceLine : s_noPowerVoiceLines)
 				{
 					drawVoiceLineCombo(voiceLine.label, voiceSet->mutable_no_power_sounds(), voiceLine.powerType);
+				}
+
+				ImGui::Spacing();
+				ImGui::TextDisabled("Auto attack swing errors use their own event values, not spell cast results.");
+				for (const auto& voiceLine : s_attackErrorVoiceLines)
+				{
+					drawVoiceLineCombo(voiceLine.label, voiceSet->mutable_attack_error_sounds(), voiceLine.attackEvent);
 				}
 
 				ImGui::PopID();
