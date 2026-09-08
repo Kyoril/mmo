@@ -23,6 +23,7 @@ namespace mmo
     class Light;
     class RibbonTrail;
     class SceneNode;
+    class SoundEntryPlayer;
 
     namespace proto_client
     {
@@ -74,10 +75,14 @@ namespace mmo
         /// \param targets Optional targets for TARGET scope kits (may be empty).
         void ApplyById(Event event, uint32 visualizationId, GameUnitC* actor, const std::vector<GameUnitC*>& targets);
 
-        /// \brief Initializes the visualization service with a project reference and audio player.
+        /// \brief Initializes the visualization service with a project reference, audio player
+        ///        and sound entry player.
         /// \param project The loaded client project containing the spell visualization dataset.
         /// \param audioPlayer Audio player interface for sound playback (optional, may be null).
-        void Initialize(const proto_client::Project& project, IAudio* audioPlayer);
+        /// \param soundEntryPlayer Resolves kit sound_ids against the sounds.data catalog. May
+        ///        be nullptr, in which case kits using sound_ids stay silent.
+        void Initialize(const proto_client::Project& project, IAudio* audioPlayer,
+                        SoundEntryPlayer* soundEntryPlayer);
 
         /// \brief Stop any looped sound currently playing for an actor (e.g., on cancel/success/death).
         void StopLoopedSoundForActor(uint64 actorGuid);
@@ -195,6 +200,7 @@ namespace mmo
         /// \brief Pointer to the loaded client project for dataset lookups. Set via Initialize.
         const proto_client::Project* m_project { nullptr };
         IAudio* m_audioPlayer { nullptr }; // not owned
+        SoundEntryPlayer* m_soundEntryPlayer { nullptr }; // not owned
 
         /// \brief Map actor guid -> looped sound handle for proper cleanup on cancel/success/aura removal.
         mutable std::map<uint64, LoopedSoundHandle> m_loopedSounds;

@@ -135,7 +135,8 @@ def _material_type(material_name, data_root):
 
     path = os.path.join(data_root, (material_name or "").replace("/", os.sep))
     try:
-        data = open(path, "rb").read()
+        with open(path, "rb") as handle:
+            data = handle.read()
     except OSError:
         return None, None
     pos = 0
@@ -155,7 +156,8 @@ def check(path: str, one_shot: bool, data_root: str):
     """Report the mistakes that are invisible in a preview. Returns a list of problems."""
     import struct
 
-    data = open(path, "rb").read()
+    with open(path, "rb") as handle:
+        data = handle.read()
     problems = []
 
     # Chunk table must consume the file exactly -- the engine seeks to each declared chunk
