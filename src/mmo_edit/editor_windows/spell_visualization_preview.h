@@ -157,6 +157,23 @@ namespace mmo
 		/// @brief Starts the projectile flight using EditorProjectileManager.
 		void StartProjectile();
 
+		/// @brief Whether the current visualization actually configures a projectile.
+		/// @return true if any projectile visual is present.
+		/// @remark Melee abilities configure none. For those, StartProjectile spawns nothing
+		///         and OnProjectileImpact never fires, so the impact event has to be driven
+		///         from the caster animation instead of from a projectile landing.
+		[[nodiscard]] bool HasProjectileVisual() const;
+
+		/// @brief Advances the running sequence to the impact event.
+		/// @remark No-op unless a sequence is active and still on CastSucceeded, which is what
+		///         keeps impact from firing twice when several triggers race.
+		void AdvanceToImpact();
+
+		/// @brief Drives the CastSucceeded -> Impact transition for both cast sequence modes.
+		/// @remark Melee and projectile abilities reach impact by different routes; this holds
+		///         both so the two state machines cannot drift apart.
+		void UpdateCastSucceededToImpact();
+
 		/// @brief Updates the cast sequence state machine.
 		void UpdateCastSequence();
 

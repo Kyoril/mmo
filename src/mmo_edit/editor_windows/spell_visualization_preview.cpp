@@ -966,25 +966,105 @@ namespace mmo
 		}
 
 		// When projectile hits, trigger the impact event
-		if (m_castSequenceActive && m_currentSequenceEvent == PreviewEvent::CastSucceeded)
+		AdvanceToImpact();
+	}
+
+	void SpellVisualizationPreview::UpdateCastSucceededToImpact()
+	{
+		if (!HasProjectileVisual())
 		{
-			// Transition to impact event
-			m_currentSequenceEvent = PreviewEvent::Impact;
-			m_sequenceTimer = 0.0f;
-			TriggerEvent(PreviewEvent::Impact);
+			// Melee ability: nothing flies, so impact is the moment the weapon connects. A
+			// SpellGo notify marks that frame exactly and fires impact from OnAnimationNotify;
+			// this is the fallback for clips carrying no notify, at the end of the animation.
+			// Late, but tied to the animation rather than to the flat 4 s wait this replaces --
+			// which left a 0.97 s swing sitting three more seconds before its target particles
+			// appeared.
+			//
+			// Keyed off the animation state, NOT m_hasCastSucceededAnimation: that flag also
+			// requires the clip to differ from the previous one, so it is false on every loop
+			// iteration and impact would fire instantly from the second pass onward. A kit with
+			// no animation leaves the caster on looping Idle, correctly read as nothing to wait
+			// for.
+			const bool waitingOnAnimation = m_casterAnimState
+				&& !m_casterAnimState->IsLoop()
+				&& !m_casterAnimState->HasEnded();
+
+			if (!waitingOnAnimation)
+			{
+				AdvanceToImpact();
+			}
+
+			return;
 		}
+
+		// Projectile spell: wait for the SpellGo notify to launch, falling back to the end of
+		// the caster animation if the clip carries no notify.
+		if (!m_projectileSpawned && m_waitingForSpellGo && m_hasCastSucceededAnimation)
+		{
+			if (m_casterAnimState && m_casterAnimState->HasEnded())
+			{
+				StartProjectile();
+				m_projectileSpawned = true;
+				m_waitingForSpellGo = false;
+			}
+		}
+
+		// Impact normally comes from OnProjectileImpact when the projectile lands. This is the
+		// safety net for a projectile that never reports a hit, so the sequence cannot wedge.
+		if (m_projectileSpawned && m_sequenceTimer >= 4.0f)
+		{
+			AdvanceToImpact();
+		}
+	}
+
+	bool SpellVisualizationPreview::HasProjectileVisual() const
+	{
+		if (!m_currentVisualization)
+		{
+			return false;
+		}
+
+		return m_currentVisualization->projectiles_size() > 0 || m_currentVisualization->has_projectile();
+	}
+
+	void SpellVisualizationPreview::AdvanceToImpact()
+	{
+		if (!m_castSequenceActive || m_currentSequenceEvent != PreviewEvent::CastSucceeded)
+		{
+			return;
+		}
+
+		m_currentSequenceEvent = PreviewEvent::Impact;
+		m_sequenceTimer = 0.0f;
+		TriggerEvent(PreviewEvent::Impact);
 	}
 
 	void SpellVisualizationPreview::OnAnimationNotify(const AnimationNotify& notify, const String& animName, const AnimationState& state)
 	{
-		// Only handle SpellGo notifies when we're waiting for one
-		if (notify.GetType() == AnimationNotifyType::SpellGo && m_waitingForSpellGo && !m_projectileSpawned)
+		if (notify.GetType() != AnimationNotifyType::SpellGo)
 		{
-			// SpellGo notify triggered - spawn the projectile now
-			StartProjectile();
-			m_projectileSpawned = true;
-			m_waitingForSpellGo = false;
+			return;
 		}
+
+		if (HasProjectileVisual())
+		{
+			// Projectile spell: the notify marks the frame the projectile leaves the caster.
+			// Impact follows later, when the projectile actually lands.
+			if (m_waitingForSpellGo && !m_projectileSpawned)
+			{
+				StartProjectile();
+				m_projectileSpawned = true;
+				m_waitingForSpellGo = false;
+			}
+
+			return;
+		}
+
+		// Melee ability: nothing flies, so the notify marks the frame the weapon connects and
+		// is therefore the impact itself. Without a notify the sequence falls back to the end
+		// of the caster animation (see UpdateCastSequence), which is late but never stuck.
+		m_waitingForSpellGo = false;
+		AdvanceToImpact();
 	}
 
 	void SpellVisualizationPreview::ConnectAnimationNotifySignals(Entity* entity)
@@ -1056,26 +1136,7 @@ namespace mmo
 			break;
 
 		case PreviewEvent::CastSucceeded:
-			// Wait for SpellGo animation notify to spawn projectile
-			// Fallback: if animation ends without SpellGo notify, spawn anyway
-			if (!m_projectileSpawned && m_waitingForSpellGo && m_hasCastSucceededAnimation)
-			{
-				// Check if the caster animation has ended (fallback trigger)
-				if (m_casterAnimState && m_casterAnimState->HasEnded())
-				{
-					StartProjectile();
-					m_projectileSpawned = true;
-					m_waitingForSpellGo = false;
-				}
-			}
-
-			// Give some time for projectile to travel, then auto-transition to impact
-			if (m_projectileSpawned && m_sequenceTimer >= 4.0f)
-			{
-				m_currentSequenceEvent = PreviewEvent::Impact;
-				m_sequenceTimer = 0.0f;
-				TriggerEvent(PreviewEvent::Impact);
-			}
+			UpdateCastSucceededToImpact();
 			break;
 
 		case PreviewEvent::Impact:
@@ -1106,24 +1167,7 @@ namespace mmo
 		switch (m_currentSequenceEvent)
 		{
 		case PreviewEvent::CastSucceeded:
-			// Wait for SpellGo animation notify to spawn projectile
-			if (!m_projectileSpawned && m_waitingForSpellGo && m_hasCastSucceededAnimation)
-			{
-				if (m_casterAnimState && m_casterAnimState->HasEnded())
-				{
-					StartProjectile();
-					m_projectileSpawned = true;
-					m_waitingForSpellGo = false;
-				}
-			}
-
-			// Give time for projectile to travel, then auto-transition to impact
-			if (m_projectileSpawned && m_sequenceTimer >= 4.0f)
-			{
-				m_currentSequenceEvent = PreviewEvent::Impact;
-				m_sequenceTimer = 0.0f;
-				TriggerEvent(PreviewEvent::Impact);
-			}
+			UpdateCastSucceededToImpact();
 			break;
 
 		case PreviewEvent::Impact:
