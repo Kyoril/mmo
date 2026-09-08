@@ -98,6 +98,16 @@ namespace mmo
 
 			bool loginStarted { false };
 			bool failureReported { false };
+
+			/// When to try bringing this bot back, and how many times we already have. A population
+			/// meant to run for days cannot lose a bot permanently to one dropped connection.
+			/// When this bot must have reached the world by, or be considered failed. Zero once it
+			/// is in. A login that neither succeeds nor fails leaves a session that is not in the
+			/// world and not stopped either, which nothing else here would ever notice.
+			GameTime worldEntryDeadlineMs { 0 };
+
+			GameTime reconnectAtMs { 0 };
+			uint32 reconnectAttempts { 0 };
 			bool wasInWorld { false };
 			bool levelApplied { false };
 			uint32 lastKnownLevel { 0 };
@@ -116,6 +126,12 @@ namespace mmo
 		/// Builds the spawn index the first time a bot is in the world to say what faction it is.
 		void EnsureGrindSpots(const Bot& bot);
 		void CheckWatchdog(Bot& bot, GameTime nowMs);
+
+		/// Arms the next reconnect attempt, backing off further with each one.
+		void ScheduleReconnect(Bot& bot, GameTime nowMs);
+
+		/// Brings a bot back once its scheduled time arrives.
+		void ServiceReconnect(Bot& bot, GameTime nowMs);
 
 	private:
 		SwarmSettings m_settings;

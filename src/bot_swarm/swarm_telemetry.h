@@ -32,6 +32,12 @@ namespace mmo
 		/// counted separately - and dying triggers one whenever the bind point is on another map,
 		/// so without this a bot that dies and comes back looks exactly like a bot that logged out.
 		uint32 worldTransfers { 0 };
+
+		/// Times a bot was brought back after losing its connection. Counted separately from
+		/// disconnects: a run where every drop was recovered is a different story from one where
+		/// the population quietly drained away, and the disconnect count alone cannot tell them
+		/// apart.
+		uint32 reconnects { 0 };
 		uint32 errors { 0 };
 
 		/// Landed swings and the damage they did. A swarm that swings a great deal and deals no

@@ -28,6 +28,18 @@ namespace mmo
 
 		/// How far the bot has to move for the watchdog to count it as progress.
 		constexpr float WatchdogProgressDistance = 5.0f;
+
+		/// Backoff before bringing a dropped bot back, doubling per attempt up to the cap. A
+		/// population meant to run for days would otherwise drain away one disconnect at a time,
+		/// and reconnecting instantly would hammer a server that is down for a reason.
+		constexpr GameTime ReconnectBaseDelayMs = 5000;
+		constexpr GameTime ReconnectMaxDelayMs = 60000;
+		constexpr uint32 ReconnectMaxBackoffSteps = 4;
+
+		/// How long a bot may take to get from starting a login to being in the world. Generous:
+		/// character creation on first login plus a busy realm is several seconds, and the cost of
+		/// being wrong is a needless reconnect rather than a lost bot.
+		constexpr GameTime WorldEntryTimeoutMs = 60000;
 	}
 
 	SwarmHost::SwarmHost(SwarmSettings settings)
@@ -243,6 +255,7 @@ namespace mmo
 		m_nextLoginMs = nowMs + m_settings.loginRampMs;
 
 		bot.loginStarted = true;
+		bot.worldEntryDeadlineMs = nowMs + WorldEntryTimeoutMs;
 		++m_telemetry.GetCounters().loginsAttempted;
 		m_telemetry.Event(bot.roster.index, "login",
 			{ { "account", bot.roster.account }, { "character", bot.roster.characterName } });
@@ -291,6 +304,7 @@ namespace mmo
 
 	void SwarmHost::OnEnteredWorld(Bot& bot)
 	{
+		bot.worldEntryDeadlineMs = 0;
 		++m_telemetry.GetCounters().enteredWorld;
 		m_telemetry.Event(bot.roster.index, "enter_world",
 			{ { "character", bot.roster.characterName }, { "level", bot.roster.targetLevel } });
@@ -305,6 +319,37 @@ namespace mmo
 			bot.session->GetRealm().CheatLevelUp(static_cast<uint8>(std::min<uint32>(levels, 255)));
 			bot.levelApplied = true;
 		}
+	}
+
+	void SwarmHost::ScheduleReconnect(Bot& bot, const GameTime nowMs)
+	{
+		const uint32 step = std::min(bot.reconnectAttempts, ReconnectMaxBackoffSteps);
+		const GameTime delay = std::min(ReconnectMaxDelayMs, ReconnectBaseDelayMs << step);
+		bot.reconnectAtMs = nowMs + delay;
+	}
+
+	void SwarmHost::ServiceReconnect(Bot& bot, const GameTime nowMs)
+	{
+		if (bot.reconnectAtMs == 0 || nowMs < bot.reconnectAtMs)
+		{
+			return;
+		}
+
+		bot.reconnectAtMs = 0;
+		++bot.reconnectAttempts;
+		++m_telemetry.GetCounters().reconnects;
+
+		// Cleared so that a failure after this attempt is reported as its own event rather than
+		// being swallowed as already-known.
+		bot.failureReported = false;
+
+		m_telemetry.Event(bot.roster.index, "reconnect",
+			{ { "attempt", bot.reconnectAttempts }, { "account", bot.roster.account } });
+
+		// Deliberately the non-blocking form. Reconnect() pumps and sleeps until the character is
+		// back, which in a host driving many sessions would stall every other bot for the duration.
+		bot.session->BeginReconnect();
+		bot.worldEntryDeadlineMs = nowMs + WorldEntryTimeoutMs;
 	}
 
 	void SwarmHost::CheckWatchdog(Bot& bot, const GameTime nowMs)
@@ -361,7 +406,28 @@ namespace mmo
 				  { "exit_code", static_cast<int32>(bot.session->GetExitCode()) },
 				  { "account", bot.roster.account },
 				  { "character", bot.roster.characterName } });
+
+			ScheduleReconnect(bot, nowMs);
 		}
+
+		// A session that neither reaches the world nor gives up is the one failure mode nothing
+		// else here can see: IsStopRequested stays false, IsWorldReady stays false, and the bot
+		// simply never appears again. It has to be timed out explicitly.
+		if (!bot.session->IsWorldReady()
+			&& bot.worldEntryDeadlineMs != 0
+			&& nowMs >= bot.worldEntryDeadlineMs)
+		{
+			bot.worldEntryDeadlineMs = 0;
+			++m_telemetry.GetCounters().errors;
+			m_telemetry.Event(bot.roster.index, "error",
+				{ { "message", "did not reach the world within the deadline" },
+				  { "account", bot.roster.account },
+				  { "character", bot.roster.characterName } });
+
+			ScheduleReconnect(bot, nowMs);
+		}
+
+		ServiceReconnect(bot, nowMs);
 
 		const bool inWorld = bot.session->IsWorldReady();
 		if (inWorld && !bot.wasInWorld)

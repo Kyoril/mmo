@@ -76,7 +76,7 @@ namespace mmo
 		return true;
 	}
 
-	bot_exit_code::Type BotSession::Reconnect(const uint32 timeoutSeconds)
+	void BotSession::BeginReconnect()
 	{
 		ILOG("Reconnecting the session for account " << m_config.username);
 
@@ -94,8 +94,19 @@ namespace mmo
 		// scenario asks for it a second time.
 		m_disconnectExpected = false;
 
-		m_login->Connect(m_config.username, m_config.password);
+		// And a previous failure must not outlive it either. Fail() latched an exit code and the
+		// stop flag, and every caller treats those as terminal - without clearing them a session
+		// that reconnects after a dropped connection would be considered dead the moment it came
+		// back.
+		m_stopRequested = false;
+		m_exitCode = bot_exit_code::Success;
 
+		m_login->Connect(m_config.username, m_config.password);
+	}
+
+	bot_exit_code::Type BotSession::Reconnect(const uint32 timeoutSeconds)
+	{
+		BeginReconnect();
 		return WaitForWorld(timeoutSeconds);
 	}
 

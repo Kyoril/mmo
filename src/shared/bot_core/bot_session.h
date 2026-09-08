@@ -89,6 +89,13 @@ namespace mmo
 		/// @return Success once the character is back in the world.
 		bot_exit_code::Type Reconnect(uint32 timeoutSeconds);
 
+		/// Starts the same flow without waiting for it. A host that drives many sessions cannot
+		/// afford to block in one of them - Reconnect pumps and sleeps until the character is back,
+		/// which would stall every other bot in the process for the duration.
+		///
+		/// The caller watches IsWorldReady() afterwards, exactly as it does for the first login.
+		void BeginReconnect();
+
 		BotContext& GetContext() { return *m_context; }
 		BotRealmConnector& GetRealm() { return *m_realm; }
 		BotMovementController& GetMovementController() { return m_movementController; }

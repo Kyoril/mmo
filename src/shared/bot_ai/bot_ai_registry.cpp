@@ -3,6 +3,7 @@
 #include "bot_ai_registry.h"
 
 #include "base/macros.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -12,12 +13,31 @@ namespace mmo
 		void insertDefinition(std::unordered_map<std::string, std::unique_ptr<T>>& target, std::unique_ptr<T> value)
 		{
 			ASSERT(value);
+			if (!value)
+			{
+				return;
+			}
 
 			const std::string name = value->GetName();
 			ASSERT(!name.empty());
+			if (name.empty())
+			{
+				ELOG("Refusing to register a bot AI definition with no name");
+				return;
+			}
 
-			// A duplicate registration is always a mistake: the loser would silently never run.
+			// A duplicate registration is always a mistake: one of the two would never run. The
+			// assert catches it in a debug build, but a swarm runs Release, where ASSERT compiles
+			// away - and the old code then fell through to an overwrite, so the FIRST registration
+			// silently never ran, which is the opposite of what its comment claimed. Keep the first
+			// and say so, loudly: deterministic and visible beats silent either way.
 			ASSERT(target.find(name) == target.end());
+			if (target.find(name) != target.end())
+			{
+				ELOG("Duplicate bot AI definition '" << name << "' - keeping the one registered first");
+				return;
+			}
+
 			target[name] = std::move(value);
 		}
 
