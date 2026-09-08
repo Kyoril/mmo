@@ -232,3 +232,83 @@ animation art and is out of scope here.
 | Final `delay_ms` beat cannot be judged offline | Values derived from measured clip lengths; flagged for an in-game pass |
 | No shield-bash / ground-slam animation exists | Documented as an art gap; best-effort mapping called out |
 | `Additive.hmat` remains broken for other effects | Out of scope. `ResetTalents.hpar` and `FrostImpact.hpar` still use it; noted, not fixed here |
+
+---
+
+## Branch status at merge (2026-09-08)
+
+Every signal this work is responsible for is green:
+
+| Check | Result |
+|---|---|
+| `protocol` / `protocol_tests` | pass — no `ProtocolVersion` bump required |
+| `build` (client + editor) | pass |
+| unit tests | 29 suites pass |
+| `tools/tests` | 72 pass (43 before this branch) |
+| all 10 warrior particle effects | **0 problems** from `inspect_hpar.py --check --one-shot` |
+| editor vs client datasets | content-identical for `spell_visualizations.data` and `sounds.data` |
+
+**The gate is nonetheless RED on its `e2e` step, for a pre-existing defect this branch did
+not introduce.** Merged deliberately, with that understood.
+
+### The failure
+
+```
+Assertion failed: m_players.find(player->GetCharacterGuid()) == m_players.end()
+  src/world_server/player_manager.cpp:10
+  reached via RealmConnector::OnPlayerCharacterJoin  (realm_connector.cpp:774)
+```
+
+The realm sends a character-join for a character already registered on the world node. The
+world server aborts; the realm then reports "No world node available" and every remaining
+scenario fails.
+
+The E2E suite passed **24/24** earlier on this branch (at `87e56584`), so the race is
+intermittent rather than constant.
+
+### Why it is not this branch
+
+- `git diff --name-only develop...HEAD` touches **zero** server-tier files.
+- `src/world_server/player_manager.cpp` was last modified **2022-01-09**.
+- The only server-visible change here is one added optional proto field
+  (`SpellKit.sound_ids`), which cannot affect session lifecycle.
+- The older crash reports on the dev machine (2026-08-13) are a *different* bug — an access
+  violation in `SingleCastState::OnCastFinished`.
+
+Not proven: that it reproduces on `develop`. That test (checkout + rebuild + E2E) was
+offered and deliberately skipped.
+
+### The cascade, and how to avoid chasing it
+
+When the world server aborts, teardown leaves `login_server` and `realm_server` orphaned and
+`pids.json` is already gone — so `tools/e2e/e2e_down.ps1` cannot clean them. Those orphans
+then hold the e2e ports and the *next* run fails at startup with
+`Could not bind on tcp port 16279/16280`, producing a completely different failure
+signature. Five consecutive runs failed five different ways for this reason.
+
+Before any gate run, clear processes holding **13724, 16279, 16280, 18090, 18092, 18129**.
+Never touch anything on the dev ports 3724, 6279, 6280, 8090, 8092, 8130.
+
+### Diagnostic traps hit while investigating
+
+- `tools/gate/last_report.json` and `e2e/runtime/logs/summary.json` are written **with a
+  BOM**; `json.load()` fails unless given `encoding='utf-8-sig'`.
+- The per-scenario `.jsonl` transcripts are **not rewritten when the client dies early**, so
+  they go stale and appear to show a passing run that never happened. Check mtimes. The live
+  signals are `<scenario>.out.log` and `e2e/runtime/<tier>/logs/*.log`.
+- `<tier>_server.out.err.log` carries the assertion text; `<tier>_server.out.log` carries the
+  run log. Both are empty in the ordinary case.
+
+### Deferred follow-ups
+
+- `_fast_ring` lives in `warrior_abilities.py` but qualifies for use in `warrior_impacts.py`
+  too: "Heavy Ring" has a 4.67× size ratio, above its own documented ≥4× threshold. Moving it
+  to `warrior_common.py` and applying it there changes `.hpar` bytes and needs a fresh visual
+  pass.
+- `AbilityStrike03.wav` / `AbilityStrike04.wav` are unreferenced but retained at the user's
+  explicit request.
+- Shield Slam (`UnarmedAttack01`) and Shockwave (`CastRelease`) are best-effort animation
+  mappings: the `HumanMale` rig has 21 clips and neither a shield-bash nor a ground-slam.
+  Fixing properly needs new animation art.
+- `preview.py` stamps every particle as a soft disc rather than its real sprite, so a ring's
+  hollow-ness is unverifiable offline and wants an in-game look.
