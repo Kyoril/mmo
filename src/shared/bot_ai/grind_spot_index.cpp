@@ -24,6 +24,44 @@ namespace mmo
 		}
 	}
 
+	bool IsFactionFriendly(
+		const proto::Project& project,
+		const uint32 attackerFactionTemplate,
+		const uint32 defenderFactionTemplate)
+	{
+		const proto::FactionTemplateEntry* attacker = project.factionTemplates.getById(attackerFactionTemplate);
+		const proto::FactionTemplateEntry* defender = project.factionTemplates.getById(defenderFactionTemplate);
+
+		if (!attacker || !defender)
+		{
+			return false;
+		}
+
+		if (attacker == defender || attacker->faction() == defender->faction())
+		{
+			return true;
+		}
+
+		// Enemies win over friends, exactly as the server orders these two checks.
+		for (int i = 0; i < attacker->enemies_size(); ++i)
+		{
+			if (attacker->enemies(i) == defender->faction())
+			{
+				return false;
+			}
+		}
+
+		for (int i = 0; i < attacker->friends_size(); ++i)
+		{
+			if (attacker->friends(i) == defender->faction())
+			{
+				return true;
+			}
+		}
+
+		return (attacker->friendmask() & defender->selfmask()) != 0;
+	}
+
 	bool IsFactionHostile(
 		const proto::Project& project,
 		const uint32 attackerFactionTemplate,

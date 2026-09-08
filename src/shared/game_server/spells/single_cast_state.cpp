@@ -479,6 +479,19 @@ namespace mmo
 	{
 		if (unitTarget != nullptr)
 		{
+			// A spell that reduces a unit's health may only be aimed at something the caster is not
+			// friendly with. Nothing checked this before: StartAttack refuses to swing at a friendly
+			// unit, and the target resolver filters by hostility when it picks targets itself, but a
+			// directly named unit target went through unexamined. Players and bots alike could burn
+			// down their own faction's guards, who took the damage without ever entering combat.
+			if (unitTarget != &m_cast.GetExecuter()
+				&& proto::SpellIsHarmful(m_spell)
+				&& m_cast.GetExecuter().UnitIsFriendly(*unitTarget))
+			{
+				SendEndCast(spell_cast_result::FailedBadTargets);
+				return false;
+			}
+
 			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
 			{
 				SendEndCast(spell_cast_result::FailedUnitNotInfront);

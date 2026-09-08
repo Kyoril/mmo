@@ -85,6 +85,17 @@ namespace mmo
 		bool m_factionFiltered { false };
 	};
 
+	/// Whether the two faction templates are friendly with one another.
+	///
+	/// Mirrors GameUnitS::UnitIsFriendly, and exists for the same reason IsFactionHostile does:
+	/// the bot decides what to attack, and it must reach the same answer the server will. Without
+	/// it the bot only knows not to attack units carrying an NPC flag, which says nothing about a
+	/// town guard - so bots picked fights with their own faction's guards, who cannot fight back.
+	[[nodiscard]] bool IsFactionFriendly(
+		const proto::Project& project,
+		uint32 attackerFactionTemplate,
+		uint32 defenderFactionTemplate);
+
 	/// Whether a unit of the attacker faction template counts the defender one as an enemy.
 	/// Mirrors GameUnitS::UnitIsEnemy so that the spots a bot travels to are the ones it will
 	/// actually be willing to fight when it gets there.

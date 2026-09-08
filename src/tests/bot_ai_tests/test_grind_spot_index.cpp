@@ -208,3 +208,46 @@ TEST_CASE("An explicit friend entry outranks the enemy mask", "[bot_ai][grind]")
 	CHECK_FALSE(IsFactionHostile(data.project, 50, FriendlyFactionTemplate));
 	CHECK(IsFactionHostile(data.project, 50, HostileFactionTemplate));
 }
+
+TEST_CASE("Friendliness follows the same rule the server applies", "[bot_ai][grind]")
+{
+    TestProject data;
+
+    // The case that sent bots after town guards: the player faction template lists the guards'
+    // faction as a friend, and nothing but that list says so - every mask in this data is zero.
+    auto* guardTemplate = data.project.factionTemplates.add(60);
+    guardTemplate->set_name("guards");
+    guardTemplate->set_flags(0);
+    guardTemplate->set_faction(60);
+
+    auto* playerTemplate = data.project.factionTemplates.getById(PlayerFactionTemplate);
+    REQUIRE(playerTemplate != nullptr);
+    const_cast<proto::FactionTemplateEntry*>(playerTemplate)->add_friends(60);
+
+    CHECK(IsFactionFriendly(data.project, PlayerFactionTemplate, 60));
+    CHECK_FALSE(IsFactionHostile(data.project, PlayerFactionTemplate, 60));
+
+    // Same faction is friendly without needing to be listed.
+    CHECK(IsFactionFriendly(data.project, PlayerFactionTemplate, PlayerFactionTemplate));
+
+    // An enemy is not a friend, and an unknown template is neither.
+    CHECK_FALSE(IsFactionFriendly(data.project, PlayerFactionTemplate, HostileFactionTemplate));
+    CHECK_FALSE(IsFactionFriendly(data.project, PlayerFactionTemplate, 9999));
+}
+
+TEST_CASE("An enemy entry outranks a friend entry for friendliness too", "[bot_ai][grind]")
+{
+    TestProject data;
+
+    auto* confused = data.project.factionTemplates.add(70);
+    confused->set_name("confused");
+    confused->set_flags(0);
+    confused->set_faction(70);
+    confused->add_enemies(HostileFaction);
+    confused->add_friends(HostileFaction);
+
+    // The server checks enemies before friends, so a faction listed as both is an enemy. The bot
+    // has to agree, or it would refuse to attack something the server is happy to let it hit.
+    CHECK_FALSE(IsFactionFriendly(data.project, 70, HostileFactionTemplate));
+    CHECK(IsFactionHostile(data.project, 70, HostileFactionTemplate));
+}

@@ -3,7 +3,11 @@
 #include "bot_perception.h"
 
 #include "bot_core/bot_context.h"
+#include "bot_ai/grind_spot_index.h"
 #include "bot_core/bot_movement_math.h"
+#include "bot_core/bot_nav_service.h"
+
+#include "proto_data/project.h"
 #include "bot_core/bot_unit.h"
 
 namespace mmo
@@ -59,10 +63,23 @@ namespace mmo
 			}
 		}
 
+		// BotUnit::IsAttackableBy only rejects units carrying an NPC flag, which says nothing about
+		// a town guard: guards have no flags and are perfectly attackable by that rule. The server
+		// refuses the attack, so a bot that picks one stands there swinging at something that will
+		// never fight back. Applying the server's own faction rule here keeps the two in agreement.
+		const proto::Project* project = world.GetNavService() ? world.GetNavService()->GetProject() : nullptr;
+		const uint32 selfFactionTemplate = self->GetFactionTemplate();
+
 		const BotUnit* attackable = world.GetNearestAttackableExcept(
-			[&grind, nowMs](const BotUnit& unit)
+			[&grind, nowMs, project, selfFactionTemplate](const BotUnit& unit)
 			{
-				return grind.IsUnreachable(unit.GetGuid(), nowMs);
+				if (grind.IsUnreachable(unit.GetGuid(), nowMs))
+				{
+					return true;
+				}
+
+				return project != nullptr
+					&& IsFactionFriendly(*project, selfFactionTemplate, unit.GetFactionTemplate());
 			},
 			DefaultScanRange);
 
