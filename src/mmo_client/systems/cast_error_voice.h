@@ -41,6 +41,11 @@ namespace mmo
 		/// @param errorKey The cast error localization key (e.g. "SPELL_CAST_FAILED_OUT_OF_RANGE").
 		void OnCastError(const std::string& errorKey);
 
+		/// @brief Notifies the service about a failed auto attack swing, playing a voice line
+		/// if one is configured for the active character and the throttle window has passed.
+		/// @param errorEvent The attack swing error event name (e.g. "ATTACK_SWING_TARGET_DEAD").
+		void OnAttackSwingError(const std::string& errorEvent);
+
 	private:
 		CastErrorVoice() = default;
 
@@ -48,6 +53,16 @@ namespace mmo
 		/// For no-power errors, a voice line specific to the missing power type
 		/// (power_type value, Invalid_ = unknown) takes precedence over the generic one.
 		[[nodiscard]] uint32 ResolveSoundId(uint32 castResult, int32 powerType) const;
+
+		/// @brief Resolves the SoundEntry id configured for the given attack swing event value.
+		[[nodiscard]] uint32 ResolveAttackSoundId(uint32 attackEvent) const;
+
+		/// @brief Plays a resolved voice line unless the throttle window is still open.
+		void PlayThrottled(uint32 soundId);
+
+		/// @brief Returns the VoiceLineSet of the active character, or nullptr when the race
+		/// or gender has none configured.
+		[[nodiscard]] const proto_client::VoiceLineSet* GetVoiceSet() const;
 
 	private:
 		SoundEntryPlayer* m_player = nullptr;

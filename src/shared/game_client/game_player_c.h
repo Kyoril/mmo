@@ -2,16 +2,18 @@
 
 #include "game_object_c.h"
 #include "game_unit_c.h"
+#include "item_display_applier.h"
+#include "game/item.h"
 #include "game/movement_info.h"
 #include "scene_graph/manual_render_object.h"
+
+#include <array>
 
 namespace mmo
 {
 	namespace proto_client
 	{
 		class ClassEntry;
-		class ItemDisplayVariant;
-		class ItemDisplayBoneAttachment;
 	}
 
 	struct GuildInfo;
@@ -146,6 +148,17 @@ namespace mmo
 		/// Returns the unlocked (non-default) emote ids.
 		[[nodiscard]] const std::set<uint32>& GetKnownEmoteIds() const { return m_knownEmoteIds; }
 
+	public:
+		/// Fired whenever the equipment visuals of this player changed: the set of equipped items
+		/// was replaced, or the display data of one of them arrived and was applied. UI model
+		/// frames listen to this to mirror the in-world appearance of the character.
+		signal<void()> equipmentVisualsChanged;
+
+		/// Item display ids of the currently equipped, visible items, indexed by equipment slot
+		/// (see player_equipment_slots). A zero entry means the slot is empty or the item data of
+		/// that slot has not arrived from the server yet.
+		[[nodiscard]] const std::array<uint32, player_equipment_slots::Count_>& GetEquipmentDisplayIds() const { return m_equipmentDisplayIds; }
+
 	protected:
 		virtual void SetupSceneObjects() override;
 
@@ -168,13 +181,6 @@ namespace mmo
 		/// Re-attaches all weapon attachments to their drawn or sheathed bone based on the current
 		/// weapon-drawn state.
 		void RefreshWeaponAttachmentBones();
-
-		/// Selects the bone attachment to use for a variant given the current draw state, falling
-		/// back to the default attachment when a state-specific one is not defined.
-		static const proto_client::ItemDisplayBoneAttachment* SelectBoneAttachment(const proto_client::ItemDisplayVariant& variant, bool drawn);
-
-		/// Applies a bone attachment's offset, rotation and scale to a tag point.
-		static void ApplyBoneTransform(TagPoint* tagPoint, const proto_client::ItemDisplayBoneAttachment& bone);
 
 		/// Register footstep notification handlers for all animations
 		void RegisterFootstepHandlers();
@@ -209,16 +215,10 @@ namespace mmo
 		/// Unlocked (non-default) emote ids, replicated via InitialEmotes / EmoteLearned.
 		std::set<uint32> m_knownEmoteIds;
 
-		struct ItemAttachment
-		{
-			Entity* entity{ nullptr };
-			TagPoint* attachment{ nullptr };
-			/// The display variant this attachment was created from. Used to re-resolve the
-			/// correct bone (drawn vs. sheathed) when the combat state changes.
-			const proto_client::ItemDisplayVariant* variant{ nullptr };
-		};
+		ItemDisplayAttachmentMap m_itemAttachments;
 
-		std::unordered_map<uint32, ItemAttachment> m_itemAttachments;
+		/// Item display ids of the currently equipped, visible items, indexed by equipment slot.
+		std::array<uint32, player_equipment_slots::Count_> m_equipmentDisplayIds{};
 
 		scoped_connection m_unitFlagsChangedHandler;
 

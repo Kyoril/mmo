@@ -5111,6 +5111,7 @@ namespace mmo
 		}
 
 		FrameManager::Get().TriggerLuaEvent("ATTACK_SWING_ERROR", errorEvent);
+		CastErrorVoice::Get().OnAttackSwingError(errorEvent);
 
 		// Terminal errors: stop auto attack and don't re-queue the error timer.
 		// OutOfRange/WrongFacing/NotStanding keep looping so auto attack resumes
