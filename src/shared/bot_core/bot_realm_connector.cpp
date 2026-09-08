@@ -2012,6 +2012,15 @@ namespace mmo
 		// Note: m_isAutoAttacking will be set to false when we receive AttackStop from server
 	}
 
+	void BotRealmConnector::SendReviveRequest()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::ReviveRequest);
+				packet.Finish();
+			});
+	}
+
 	// ============================================================
 	// Combat Packet Handlers
 	// ============================================================

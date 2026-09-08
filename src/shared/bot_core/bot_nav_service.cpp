@@ -3,6 +3,7 @@
 #include "bot_nav_service.h"
 
 #include "assets/asset_registry.h"
+#include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "nav_mesh/map.h"
 
@@ -32,9 +33,36 @@ namespace mmo
 		}
 	}
 
+	namespace
+	{
+		/// Number of live navigation services in this process. AssetRegistry is a class of
+		/// statics, so a second service would initialize it a second time and the first
+		/// destruction would pull it out from under everyone still using it. A swarm therefore
+		/// shares one service across all of its sessions; this counter makes that structural
+		/// rather than a convention.
+		int32 g_navServiceInstanceCount = 0;
+	}
+
 	BotNavService::BotNavService(fs::path repoRoot)
 		: m_repoRoot(std::move(repoRoot))
 	{
+		// ASSERT compiles away in Release, which is what a swarm runs, so a second instance has to
+		// be survivable rather than merely forbidden. It refuses to touch the shared registry: this
+		// one ends up with no navigation data and fails every path query, which is loud and local,
+		// where initializing twice would corrupt the registry underneath the instance that works.
+		ASSERT(g_navServiceInstanceCount == 0 && "Only one BotNavService may exist per process");
+
+		if (g_navServiceInstanceCount > 0)
+		{
+			ELOG("A BotNavService already exists in this process. AssetRegistry is a class of statics,"
+				" so this one will not initialize it and will not resolve any path. Share the first"
+				" instance instead - see src/shared/bot_core/README.md.");
+			++g_navServiceInstanceCount;
+			return;
+		}
+
+		++g_navServiceInstanceCount;
+
 		static_cast<void>(Initialize());
 	}
 
@@ -45,6 +73,8 @@ namespace mmo
 		{
 			AssetRegistry::Destroy();
 		}
+
+		--g_navServiceInstanceCount;
 	}
 
 	bool BotNavService::Initialize()

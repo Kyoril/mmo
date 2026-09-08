@@ -1,0 +1,124 @@
+<#
+.SYNOPSIS
+	Creates the accounts a bot swarm logs in with.
+
+.DESCRIPTION
+	Registration goes through the login server's REST API rather than through SQL, deliberately:
+	SQL would bypass exactly the realm-side validation the swarm exists to put under load, and it
+	would duplicate schema knowledge in a script that has no business knowing it.
+
+	The script is idempotent. Account names are derived from the bot index, so running it again
+	over an existing population re-registers the same names and the login server rejects the
+	duplicates - which is a no-op, not an error.
+
+	Characters are NOT created here. The swarm creates them over the real CreateCharacter packet
+	on first login, which is a code path worth exercising every run.
+
+	Defaults target the e2e stack. Point -LoginRest at the dev login server to populate that one
+	instead; the two use different ports and different databases, so they never collide.
+
+.EXAMPLE
+	powershell -File tools/bots/bots_provision.ps1 -Count 20
+
+.EXAMPLE
+	# Against a local dev stack, whose REST credentials default to mmo-web/test.
+	powershell -File tools/bots/bots_provision.ps1 -Count 20 `
+		-LoginRest http://127.0.0.1:8090 -WebUser mmo-web -WebPassword test
+#>
+[CmdletBinding()]
+param(
+	[int]$Count = 10,
+
+	# Base URL of the login server's REST API. Defaults to the e2e stack.
+	[string]$LoginRest,
+	[string]$WebUser,
+	[string]$WebPassword,
+
+	# These two must match what bot_swarm uses, or it will log in with accounts that were never
+	# created. Both sides default to the same values; override them together or not at all.
+	[string]$Prefix = "swarm",
+	[string]$Password = "swarmpass",
+
+	# GM level the bot accounts get. Level 3 is what lets the swarm cheat bots to their rolled
+	# level on login; pass 0 for a swarm that has to earn every level the hard way, and pass
+	# --no-level-roll to bot_swarm to match.
+	[int]$GmLevel = 3
+)
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Import-Module (Join-Path $repoRoot "tools/e2e/e2e_common.psm1") -Force
+
+# Only for the e2e defaults. Get-E2eSettings reads no credentials and needs no environment, so
+# importing it costs nothing when the target is the dev stack.
+$s = Get-E2eSettings
+if (-not $LoginRest) { $LoginRest = "http://127.0.0.1:$($s.LoginWebPort)" }
+if (-not $WebUser) { $WebUser = $s.WebUser }
+if (-not $WebPassword) { $WebPassword = $s.WebPassword }
+
+Write-Host "Provisioning $Count bot accounts ('${Prefix}0'..'${Prefix}$($Count - 1)') at $LoginRest ..."
+
+$created = 0
+$existing = 0
+$gmFailures = 0
+
+for ($i = 0; $i -lt $Count; $i++)
+{
+	$account = "$Prefix$i"
+
+	try
+	{
+		Invoke-RestForm -Url "$LoginRest/create-account" -User $WebUser -Password $WebPassword `
+			-Form @{ id = $account; password = $Password } | Out-Null
+		$created++
+	}
+	catch
+	{
+		# An account that is already there is the expected outcome of a second run. Anything else
+		# is worth stopping for.
+		$status = $null
+		if ($_.Exception.PSObject.Properties.Name -contains "Response" -and $null -ne $_.Exception.Response)
+		{
+			$status = [int]$_.Exception.Response.StatusCode
+		}
+
+		if ($status -eq 400 -or $status -eq 409)
+		{
+			$existing++
+		}
+		else
+		{
+			throw "Failed to create account ${account} at ${LoginRest}: $($_.Exception.Message)"
+		}
+	}
+
+	if ($GmLevel -gt 0)
+	{
+		try
+		{
+			Invoke-RestForm -Url "$LoginRest/gm-level" -User $WebUser -Password $WebPassword `
+				-Form @{ account_name = $account; gm_level = $GmLevel } | Out-Null
+		}
+		catch
+		{
+			# The endpoint is not idempotent: re-applying a level an account already has comes back
+			# as an internal error, indistinguishable here from a real failure. Warning rather than
+			# throwing keeps a re-run from dying on the first existing account, and an account that
+			# genuinely lacks the privilege shows up immediately anyway - its bot stays at level 1,
+			# because the level cheat is refused.
+			$gmFailures++
+			Write-Warning "GM level for ${account} refused (already set, or a real failure): $($_.Exception.Message)"
+		}
+	}
+}
+
+Write-Host "Done: $created created, $existing already existed, $gmFailures GM level calls refused."
+
+if ($Prefix -ne "swarm" -or $Password -ne "swarmpass")
+{
+	Write-Host ""
+	Write-Warning ("bot_swarm defaults to swarm/swarmpass. Run it with " +
+		"--account-prefix $Prefix --account-password $Password or it will try accounts that do not exist.")
+}

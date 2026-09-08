@@ -2,6 +2,8 @@
 
 #include "bot_movement_controller.h"
 
+#include <cmath>
+
 #include "bot_context.h"
 #include "bot_movement_math.h"
 #include "bot_nav_service.h"
@@ -17,6 +19,30 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// How close the bot has to be, horizontally, to treat itself as standing at its target and
+		/// skip the navigation query. Small on purpose: this is "I am here", not "near enough".
+		constexpr float StandingOnTargetPlanarDistance = 1.0f;
+
+		/// And how little height may separate them. Without this the check cannot tell a target at
+		/// arm's length from one on the floor below.
+		constexpr float StandingOnTargetHeightDifference = 2.0f;
+
+		/// How far a straight line may be drawn when the navigation query fails outright.
+		///
+		/// The query legitimately fails for destinations that are near but slightly off the mesh -
+		/// a creature standing on the lip of a piece of geometry, most often. Refusing to move at
+		/// all in that case leaves a bot standing just outside its own reach, swinging at nothing,
+		/// which is what happened to the crypt encounters when this fallback was first removed.
+		///
+		/// Short and level is what makes it safe. The bug this replaced allowed a fifteen yard
+		/// unpathed walk through the wall of a house because the distance was measured without
+		/// height; a few yards on the same level cannot cross a wall.
+		constexpr float ShortMoveFallbackPlanarDistance = 5.0f;
+		constexpr float ShortMoveFallbackHeightDifference = 2.0f;
+	}
+
 	namespace
 	{
 		std::size_t FindInitialWaypointIndex(const std::vector<Vector3>& path)
@@ -206,7 +232,16 @@ namespace mmo
 		}
 
 		const Vector3 start = context.GetPosition();
-		if (PlanarDistance(start, target) <= acceptanceRadius)
+
+		// Skipping the navigation query is a claim that the bot is already standing at the target,
+		// so it is measured against being there - not against whatever tolerance the caller asked
+		// for. Gating it on acceptanceRadius meant a 15 yard arrival radius licensed a 15 yard walk
+		// with no navigation mesh consulted at all, and because the test ignored height, a creature
+		// directly below a floor counted as within it. Bots walked through the wall of a house to
+		// reach the rats in its cellar, and the server let them: player movement is
+		// client-authoritative, so nothing downstream was going to object.
+		if (PlanarDistance(start, target) <= StandingOnTargetPlanarDistance
+			&& std::abs(start.y - target.y) <= StandingOnTargetHeightDifference)
 		{
 			m_path = { start, target };
 			m_target = target;
@@ -235,6 +270,16 @@ namespace mmo
 		const BotPathResult result = navService->FindPath(mapId, start, target);
 		if (!result.success)
 		{
+			if (PlanarDistance(start, target) <= ShortMoveFallbackPlanarDistance
+				&& std::abs(start.y - target.y) <= ShortMoveFallbackHeightDifference)
+			{
+				m_path = { start, target };
+				m_target = target;
+				m_mapId = mapId;
+				m_nextWaypointIndex = FindInitialWaypointIndex(m_path);
+				return true;
+			}
+
 			SetStatus(BotMovementStatus::Unreachable, result.reason.empty() ? "invalid_path" : result.reason);
 			return false;
 		}

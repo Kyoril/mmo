@@ -224,6 +224,16 @@ namespace mmo
 		/// @return Pointer to the nearest attackable creature, or nullptr if none.
 		const BotUnit* GetNearestAttackable(float maxRange = 40.0f) const;
 
+		/// Gets the nearest attackable creature the caller is still interested in.
+		///
+		/// The exclusion exists because "attackable" and "worth attacking" are different
+		/// questions: a creature the navigation mesh cannot reach stays attackable forever, and
+		/// without a way to skip it the caller locks onto it and never looks at anything else.
+		/// @param exclude Returns true for units to ignore.
+		/// @param maxRange Maximum search range.
+		const BotUnit* GetNearestAttackableExcept(const std::function<bool(const BotUnit&)>& exclude,
+			float maxRange = 40.0f) const;
+
 		/// Gets the nearest friendly unit to the bot (excluding self).
 		/// @param maxRange Maximum search range (default 40 yards).
 		/// @return Pointer to the nearest friendly, or nullptr if none.

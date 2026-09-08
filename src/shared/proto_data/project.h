@@ -125,6 +125,13 @@ namespace mmo
 		/// Determines whether a spell entry has a certain spell effect.
 		bool SpellHasEffect(const proto::SpellEntry& spell, mmo::SpellEffect type);
 
+		/// Whether a spell does something its target would object to - anything that reduces its
+		/// health. Used to decide which spells may only be aimed at an enemy.
+		///
+		/// Deliberately keyed on the effects rather than on the spell's positive flag, which is
+		/// unset on plenty of beneficial spells and would make this reject heals and buffs.
+		bool SpellIsHarmful(const proto::SpellEntry& spell);
+
 		/// This class contains contains all the static game data like item templates.
 		class Project final
 		{

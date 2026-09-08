@@ -1,6 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "e2e_session.h"
+#include "bot_core/bot_session.h"
 #include "scenario_engine.h"
 
 #include "base/typedefs.h"
@@ -96,7 +96,7 @@ int main(int argc, char** argv)
 		if (results.count("help") > 0)
 		{
 			std::cout << options.help() << '\n';
-			return e2e_exit_code::Success;
+			return bot_exit_code::Success;
 		}
 
 		configPath = results["config"].as<std::string>();
@@ -122,20 +122,20 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "Failed to parse command line: " << e.what() << '\n';
 		std::cerr << options.help() << '\n';
-		return e2e_exit_code::SetupFailed;
+		return bot_exit_code::SetupFailed;
 	}
 
 	if (!smokeMode && scriptPath.empty())
 	{
 		std::cerr << "Nothing to do: pass --smoke or --script <scenario.lua>\n";
 		std::cerr << options.help() << '\n';
-		return e2e_exit_code::SetupFailed;
+		return bot_exit_code::SetupFailed;
 	}
 
 	if (!scriptPath.empty() && !fs::exists(scriptPath))
 	{
 		ELOG("Scenario script not found: " << scriptPath);
-		return e2e_exit_code::SetupFailed;
+		return bot_exit_code::SetupFailed;
 	}
 
 	// Defaults tuned for the e2e stack; everything can be overridden via the config file.
@@ -150,7 +150,7 @@ int main(int argc, char** argv)
 
 	if (!LoadE2eConfig(configPath, config))
 	{
-		return e2e_exit_code::SetupFailed;
+		return bot_exit_code::SetupFailed;
 	}
 
 	if (!characterOverride.empty())
@@ -163,14 +163,20 @@ int main(int argc, char** argv)
 		config.characterClass = static_cast<uint8>(classOverride);
 	}
 
-	E2eSession session(std::move(config));
+	// The scenario client runs exactly one bot, but the session no longer owns the io service or
+	// the navigation meshes -- the swarm host shares both across many sessions, so they are
+	// created by the host in either case.
+	asio::io_service io;
+	auto navService = std::make_shared<BotNavService>();
+
+	BotSession session(io, std::move(navService), std::move(config));
 	if (!session.Start())
 	{
-		return e2e_exit_code::SetupFailed;
+		return bot_exit_code::SetupFailed;
 	}
 
-	e2e_exit_code::Type result = session.WaitForWorld(connectTimeout);
-	if (result == e2e_exit_code::Success)
+	bot_exit_code::Type result = session.WaitForWorld(connectTimeout);
+	if (result == bot_exit_code::Success)
 	{
 		if (smokeMode)
 		{
