@@ -53,6 +53,12 @@ namespace mmo
 		/// it off to watch bots level the hard way.
 		bool applyLevelRoll { true };
 
+		/// Account names are this prefix plus the bot index, and every bot shares one password.
+		/// They have to match whatever tools/bots/bots_provision.ps1 registered, so both sides take
+		/// them as options rather than hardcoding the same two strings in two places.
+		std::string accountPrefix { "swarm" };
+		std::string accountPassword { "swarmpass" };
+
 		std::string rosterPath;
 		std::string telemetryPath;
 		std::string repoRoot;

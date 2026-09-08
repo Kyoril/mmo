@@ -76,7 +76,8 @@ namespace mmo
 		// others were provisioned against - and those accounts still exist on the login server.
 		if (m_roster.size() < m_settings.botCount)
 		{
-			const std::vector<BotRosterEntry> full = BuildRoster(m_settings.botCount, "swarm", "swarmpass",
+			const std::vector<BotRosterEntry> full = BuildRoster(m_settings.botCount,
+				m_settings.accountPrefix, m_settings.accountPassword,
 				m_settings.minLevel, m_settings.maxLevel, 1);
 
 			for (std::size_t index = m_roster.size(); index < full.size(); ++index)

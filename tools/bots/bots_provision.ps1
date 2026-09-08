@@ -14,17 +14,34 @@
 	Characters are NOT created here. The swarm creates them over the real CreateCharacter packet
 	on first login, which is a code path worth exercising every run.
 
+	Defaults target the e2e stack. Point -LoginRest at the dev login server to populate that one
+	instead; the two use different ports and different databases, so they never collide.
+
 .EXAMPLE
 	powershell -File tools/bots/bots_provision.ps1 -Count 20
+
+.EXAMPLE
+	# Against a local dev stack, whose REST credentials default to mmo-web/test.
+	powershell -File tools/bots/bots_provision.ps1 -Count 20 `
+		-LoginRest http://127.0.0.1:8090 -WebUser mmo-web -WebPassword test
 #>
 [CmdletBinding()]
 param(
 	[int]$Count = 10,
+
+	# Base URL of the login server's REST API. Defaults to the e2e stack.
+	[string]$LoginRest,
+	[string]$WebUser,
+	[string]$WebPassword,
+
+	# These two must match what bot_swarm uses, or it will log in with accounts that were never
+	# created. Both sides default to the same values; override them together or not at all.
 	[string]$Prefix = "swarm",
 	[string]$Password = "swarmpass",
 
 	# GM level the bot accounts get. Level 3 is what lets the swarm cheat bots to their rolled
-	# level on login; pass 0 for a swarm that has to earn every level the hard way.
+	# level on login; pass 0 for a swarm that has to earn every level the hard way, and pass
+	# --no-level-roll to bot_swarm to match.
 	[int]$GmLevel = 3
 )
 
@@ -34,10 +51,14 @@ Set-StrictMode -Version Latest
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Import-Module (Join-Path $repoRoot "tools/e2e/e2e_common.psm1") -Force
 
+# Only for the e2e defaults. Get-E2eSettings reads no credentials and needs no environment, so
+# importing it costs nothing when the target is the dev stack.
 $s = Get-E2eSettings
-$loginRest = "http://127.0.0.1:$($s.LoginWebPort)"
+if (-not $LoginRest) { $LoginRest = "http://127.0.0.1:$($s.LoginWebPort)" }
+if (-not $WebUser) { $WebUser = $s.WebUser }
+if (-not $WebPassword) { $WebPassword = $s.WebPassword }
 
-Write-Host "Provisioning $Count bot accounts at $loginRest ..."
+Write-Host "Provisioning $Count bot accounts ('${Prefix}0'..'${Prefix}$($Count - 1)') at $LoginRest ..."
 
 $created = 0
 $existing = 0
@@ -49,7 +70,7 @@ for ($i = 0; $i -lt $Count; $i++)
 
 	try
 	{
-		Invoke-RestForm -Url "$loginRest/create-account" -User $s.WebUser -Password $s.WebPassword `
+		Invoke-RestForm -Url "$LoginRest/create-account" -User $WebUser -Password $WebPassword `
 			-Form @{ id = $account; password = $Password } | Out-Null
 		$created++
 	}
@@ -69,7 +90,7 @@ for ($i = 0; $i -lt $Count; $i++)
 		}
 		else
 		{
-			throw "Failed to create account ${account}: $($_.Exception.Message)"
+			throw "Failed to create account ${account} at ${LoginRest}: $($_.Exception.Message)"
 		}
 	}
 
@@ -77,7 +98,7 @@ for ($i = 0; $i -lt $Count; $i++)
 	{
 		try
 		{
-			Invoke-RestForm -Url "$loginRest/gm-level" -User $s.WebUser -Password $s.WebPassword `
+			Invoke-RestForm -Url "$LoginRest/gm-level" -User $WebUser -Password $WebPassword `
 				-Form @{ account_name = $account; gm_level = $GmLevel } | Out-Null
 		}
 		catch
@@ -94,3 +115,10 @@ for ($i = 0; $i -lt $Count; $i++)
 }
 
 Write-Host "Done: $created created, $existing already existed, $gmFailures GM level calls refused."
+
+if ($Prefix -ne "swarm" -or $Password -ne "swarmpass")
+{
+	Write-Host ""
+	Write-Warning ("bot_swarm defaults to swarm/swarmpass. Run it with " +
+		"--account-prefix $Prefix --account-password $Password or it will try accounts that do not exist.")
+}

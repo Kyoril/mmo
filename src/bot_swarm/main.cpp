@@ -87,6 +87,10 @@ int main(int argc, char** argv)
 		("duration", "Seconds to run for; 0 runs until interrupted", cxxopts::value<uint32>()->default_value("0"))
 		("tick-ms", "Host frame length in milliseconds", cxxopts::value<uint32>()->default_value("50"))
 		("login-ramp-ms", "Delay between successive bot logins", cxxopts::value<uint32>()->default_value("250"))
+		("account-prefix", "Account name prefix; must match what the accounts were provisioned as",
+			cxxopts::value<std::string>()->default_value("swarm"))
+		("account-password", "Password shared by every bot account",
+			cxxopts::value<std::string>()->default_value("swarmpass"))
 		("min-level", "Lowest level a bot is rolled at", cxxopts::value<uint32>()->default_value("1"))
 		("max-level", "Highest level a bot is rolled at", cxxopts::value<uint32>()->default_value("10"))
 		("faction-template", "Faction template the bots belong to; 0 reads it off the first bot", cxxopts::value<uint32>()->default_value("0"))
@@ -109,6 +113,8 @@ int main(int argc, char** argv)
 	settings.durationSeconds = result["duration"].as<uint32>();
 	settings.tickMs = result["tick-ms"].as<uint32>();
 	settings.loginRampMs = result["login-ramp-ms"].as<uint32>();
+	settings.accountPrefix = result["account-prefix"].as<std::string>();
+	settings.accountPassword = result["account-password"].as<std::string>();
 	settings.minLevel = result["min-level"].as<uint32>();
 	settings.maxLevel = result["max-level"].as<uint32>();
 	settings.playerFactionTemplate = result["faction-template"].as<uint32>();
