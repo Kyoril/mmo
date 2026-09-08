@@ -49,7 +49,11 @@ NPC = voice_lines.NPC
 #
 # (id, name, [files], is_3d)
 SOUND_ENTRIES = [
-    # -- existing player banks, topped up with the new takes ------------------
+    # -- player banks -------------------------------------------------------
+    # The male banks are entirely Liam (see recipes/voice_lines.py): the takes that
+    # shipped before were a different, younger voice than Brian, and the two cannot
+    # share a shuffle bag. Two oddly-named legacy files ("HumanMale_Cooldown.wav",
+    # "Humanmale_OutOfMana_02.wav") were retired in favour of _01/_02 naming.
     (3, "Human Female - Voice - Out Of Mana", [
         PF + "HumanFemale_OutOfMana.mp3",
         PF + "HumanFemale_OutOfMana_02.wav",
@@ -64,7 +68,7 @@ SOUND_ENTRIES = [
         PF + "HumanFemale_Cooldown_03.wav"], False),
     (8, "Human Male - Voice - Out Of Mana", [
         PM + "HumanMale_OutOfMana_01.wav",
-        PM + "Humanmale_OutOfMana_02.wav",
+        PM + "HumanMale_OutOfMana_02.wav",
         PM + "HumanMale_OutOfMana_03.wav"], False),
     (10, "Human Male - Voice - Out Of Rage", [
         PM + "HumanMale_OutOfRage_01.wav",
@@ -75,7 +79,7 @@ SOUND_ENTRIES = [
         PM + "HumanMale_OutOfEnergy_02.wav",
         PM + "HumanMale_OutOfEnergy_03.wav"], False),
     (12, "Human Male - Voice - Cooldown", [
-        PM + "HumanMale_Cooldown.wav",
+        PM + "HumanMale_Cooldown_01.wav",
         PM + "HumanMale_Cooldown_02.wav",
         PM + "HumanMale_Cooldown_03.wav"], False),
     (13, "Human Male - Voice - Out Of Range", [

@@ -8,9 +8,14 @@ resolves ``Voice/...`` against it (never ``Locales/Locale_enUS/Voice/...``).
 
 Casting notes:
 
-* ``brian`` / ``laura`` were already used for the human male / female lines that shipped
-  before this table existed; new lines for those banks must keep the same voice or the
-  shuffle bag will swap timbre mid-session.
+* ``laura`` was already used for the human female lines that shipped before this table
+  existed; new lines for that bank must keep the same voice or the shuffle bag will swap
+  timbre mid-session.
+* ``liam`` voices the male PLAYER character. The lines that shipped before this table were
+  cast from a younger, more energetic voice than ``brian`` -- Brian was a wrong guess, and
+  a bank that mixes the two swaps timbre mid-shuffle. Every male player line is Liam.
+* ``brian`` stays on the male NPC townsfolk bank. That is a different character from the
+  player, so the two voices are meant to differ.
 * ``clarissa`` and ``elira`` are deliberately *different* voices. Both NPCs own a display
   model of their own (model_data 14 and 16), so they can carry an individual voice without
   bleeding into the generic human-female crowd.
@@ -28,6 +33,7 @@ TARGET_DBFS = -4.0
 
 VOICES = {
     "brian": "nPczCjzI2devNBz1zQrb",       # premade "Brian - Deep, Resonant and Comforting"
+    "liam": "TX3LPaxmHKxFdv7VOQHJ",        # premade "Liam - Energetic, Social Media Creator"
     "laura": "FGY2WhTYpPnrIDTdsKH5",       # premade "Laura - Enthusiast, Quirky Attitude"
     "clarissa": "Xb7hH8MSUJpSbSDYk0k2",    # premade "Alice - Clear, Engaging Educator"
     "elira": "ZEt85AU1ui8Rr8FxNslW",       # "Alice - Young British Woman"
@@ -42,27 +48,37 @@ NPC = "Voice/Npc/"
 # (locale relative path, voice key, spoken line)
 CLIPS = [
     # ---------------------------------------------------------------- player, male
-    # Topping up banks that already exist but only had one or two takes.
-    (PLAYER_MALE + "HumanMale_OutOfMana_03.wav", "brian", "I have no mana left."),
-    (PLAYER_MALE + "HumanMale_OutOfRage_03.wav", "brian", "I need more rage!"),
-    (PLAYER_MALE + "HumanMale_OutOfEnergy_03.wav", "brian", "I'm spent."),
-    (PLAYER_MALE + "HumanMale_Cooldown_02.wav", "brian", "Not yet!"),
-    (PLAYER_MALE + "HumanMale_Cooldown_03.wav", "brian", "Give it a moment."),
-    (PLAYER_MALE + "HumanMale_OutOfRange_03.wav", "brian", "I need to get closer."),
-    (PLAYER_MALE + "HumanMale_CantAttack_02.wav", "brian", "I won't fight that."),
-    (PLAYER_MALE + "HumanMale_CantAttack_03.wav", "brian", "That is no enemy of mine."),
-    # New error banks.
-    (PLAYER_MALE + "HumanMale_TargetDead_01.wav", "brian", "It's already dead."),
-    (PLAYER_MALE + "HumanMale_TargetDead_02.wav", "brian", "That one is finished."),
-    (PLAYER_MALE + "HumanMale_TargetDead_03.wav", "brian", "Dead already."),
-    (PLAYER_MALE + "HumanMale_WrongFacing_01.wav", "brian", "I have to face it!"),
-    (PLAYER_MALE + "HumanMale_WrongFacing_02.wav", "brian", "It's behind me!"),
-    (PLAYER_MALE + "HumanMale_WrongFacing_03.wav", "brian", "I can't see it!"),
-    (PLAYER_MALE + "HumanMale_BadTarget_01.wav", "brian", "Not on that."),
-    (PLAYER_MALE + "HumanMale_BadTarget_02.wav", "brian", "Wrong target."),
-    (PLAYER_MALE + "HumanMale_BadTarget_03.wav", "brian", "That won't work here."),
-    (PLAYER_MALE + "HumanMale_CasterDead_01.wav", "brian", "Not while I'm dead."),
-    (PLAYER_MALE + "HumanMale_CasterDead_02.wav", "brian", "I can do nothing... like this."),
+    # Every line is Liam, including the slots that shipped in the original (unidentified)
+    # voice -- _01/_02 here replace those takes rather than sitting next to them.
+    (PLAYER_MALE + "HumanMale_OutOfMana_01.wav", "liam", "Not enough mana!"),
+    (PLAYER_MALE + "HumanMale_OutOfMana_02.wav", "liam", "I'm out of mana."),
+    (PLAYER_MALE + "HumanMale_OutOfMana_03.wav", "liam", "I have no mana left."),
+    (PLAYER_MALE + "HumanMale_OutOfRage_01.wav", "liam", "Not enough rage!"),
+    (PLAYER_MALE + "HumanMale_OutOfRage_02.wav", "liam", "My rage is spent."),
+    (PLAYER_MALE + "HumanMale_OutOfRage_03.wav", "liam", "I need more rage!"),
+    (PLAYER_MALE + "HumanMale_OutOfEnergy_01.wav", "liam", "Not enough energy!"),
+    (PLAYER_MALE + "HumanMale_OutOfEnergy_02.wav", "liam", "I need a moment to recover."),
+    (PLAYER_MALE + "HumanMale_OutOfEnergy_03.wav", "liam", "I'm spent."),
+    (PLAYER_MALE + "HumanMale_Cooldown_01.wav", "liam", "That's not ready yet."),
+    (PLAYER_MALE + "HumanMale_Cooldown_02.wav", "liam", "Not yet!"),
+    (PLAYER_MALE + "HumanMale_Cooldown_03.wav", "liam", "Give it a moment."),
+    (PLAYER_MALE + "HumanMale_OutOfRange_01.wav", "liam", "I'm too far away."),
+    (PLAYER_MALE + "HumanMale_OutOfRange_02.wav", "liam", "That's out of my reach."),
+    (PLAYER_MALE + "HumanMale_OutOfRange_03.wav", "liam", "I need to get closer."),
+    (PLAYER_MALE + "HumanMale_CantAttack_01.wav", "liam", "I can't attack that."),
+    (PLAYER_MALE + "HumanMale_CantAttack_02.wav", "liam", "I won't fight that."),
+    (PLAYER_MALE + "HumanMale_CantAttack_03.wav", "liam", "That is no enemy of mine."),
+    (PLAYER_MALE + "HumanMale_TargetDead_01.wav", "liam", "It's already dead."),
+    (PLAYER_MALE + "HumanMale_TargetDead_02.wav", "liam", "That one is finished."),
+    (PLAYER_MALE + "HumanMale_TargetDead_03.wav", "liam", "Dead already."),
+    (PLAYER_MALE + "HumanMale_WrongFacing_01.wav", "liam", "I have to face it!"),
+    (PLAYER_MALE + "HumanMale_WrongFacing_02.wav", "liam", "It's behind me!"),
+    (PLAYER_MALE + "HumanMale_WrongFacing_03.wav", "liam", "I can't see it!"),
+    (PLAYER_MALE + "HumanMale_BadTarget_01.wav", "liam", "Not on that."),
+    (PLAYER_MALE + "HumanMale_BadTarget_02.wav", "liam", "Wrong target."),
+    (PLAYER_MALE + "HumanMale_BadTarget_03.wav", "liam", "That won't work here."),
+    (PLAYER_MALE + "HumanMale_CasterDead_01.wav", "liam", "Not while I'm dead."),
+    (PLAYER_MALE + "HumanMale_CasterDead_02.wav", "liam", "I can do nothing... like this."),
 
     # -------------------------------------------------------------- player, female
     # The female bank shipped with one file per error and no rage or energy lines at all.
