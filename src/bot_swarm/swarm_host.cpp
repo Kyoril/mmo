@@ -8,6 +8,8 @@
 #include "bot_core/bot_unit.h"
 
 #include "base/clock.h"
+
+#include "asio/executor_work_guard.hpp"
 #include "log/default_log_levels.h"
 
 #include <algorithm>
@@ -349,8 +351,13 @@ namespace mmo
 		{
 			bot.failureReported = true;
 			++m_telemetry.GetCounters().errors;
+			// The message has to say which it was: a bot that never got in and a bot that was
+			// dropped after playing for ten minutes are entirely different problems, and reporting
+			// both as the former sends the reader looking in the wrong place.
 			m_telemetry.Event(bot.roster.index, "error",
-				{ { "message", "session stopped before entering the world" },
+				{ { "message", bot.wasInWorld
+					? "session stopped after entering the world"
+					: "session stopped before entering the world" },
 				  { "exit_code", static_cast<int32>(bot.session->GetExitCode()) },
 				  { "account", bot.roster.account },
 				  { "character", bot.roster.characterName } });
@@ -404,6 +411,15 @@ namespace mmo
 			? startMs + static_cast<GameTime>(m_settings.durationSeconds) * 1000
 			: 0;
 
+		// Without this the very first poll finds no outstanding work - no bot has logged in yet -
+		// and asio's scheduler::poll answers that by calling stop() on itself. Nothing here restarts
+		// it, so the io service stays latched stopped for the life of the process. The IOCP backend
+		// dispatches completions anyway, which is why this survives on Windows; the POSIX scheduler
+		// returns immediately from do_poll_one while stopped, so the swarm would never run a single
+		// handler on the Linux build - where MMO_BUILD_BOTS is on by default.
+		auto workGuard = std::make_unique<asio::executor_work_guard<asio::io_service::executor_type>>(
+			asio::make_work_guard(m_io));
+
 		ILOG("Swarm running: " << m_bots.size() << " bots, tick " << m_settings.tickMs << "ms");
 
 		while (!m_stopRequested)
@@ -450,6 +466,10 @@ namespace mmo
 				bot->session->Shutdown();
 			}
 		}
+
+		// Released so the drain below can finish: with the guard held, work never reaches zero and
+		// the loop would have nothing to tell it the sockets are done.
+		workGuard.reset();
 
 		// Give the sockets a moment to actually close. A swarm that drops its connections without
 		// a word leaves the realm holding sessions it still believes are live, and the next run

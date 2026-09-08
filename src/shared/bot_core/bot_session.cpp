@@ -354,6 +354,15 @@ namespace mmo
 				}
 
 				ELOG("Realm connection lost.");
+
+				// Fail only records the exit code, so without this the session goes on reporting that
+				// it is in the world for the rest of its life. Everything downstream believes it: the
+				// swarm never counts the disconnect, keeps the bot in its online tally, and goes on
+				// ticking a brain that pushes packets into a closed socket - and the swarm report's
+				// "no unexpected disconnects" check passes because the counter it reads can never move.
+				m_context->SetWorldReady(false);
+				m_worldReady = false;
+
 				Fail(bot_exit_code::Disconnected);
 			});
 	}

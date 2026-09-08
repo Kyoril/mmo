@@ -69,7 +69,10 @@ namespace mmo
 		// packet and a swing error, and breaking off outranks both.
 		addStrategy(registry, "grind_combat",
 			{
-				{ "low_health", { { "rest", bot_relevance::Emergency } } },
+				// Deliberately no rest here. Recovery happens out of combat, through needs_rest in the
+				// world strategy; a bot that stops fighting while it is being hit just dies more
+				// slowly. If a real escape is ever wanted it has to move away first, not sheathe.
+
 				{ "no_target", { { "select_target", bot_relevance::High } } },
 				{ "target_out_of_melee", { { "approach_target", bot_relevance::Move } } },
 				{ "target_in_melee", { { "auto_attack", bot_relevance::Normal } } },

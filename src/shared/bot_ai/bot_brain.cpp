@@ -83,10 +83,15 @@ namespace mmo
 		if (m_lastLiveTargetGuid != 0)
 		{
 			// Ask about the unit itself rather than about the current target, so that switching
-			// targets is not mistaken for a kill. A unit that is gone counts: the bot cannot tell
-			// a despawned corpse from one it never saw fall, and does not need to.
+			// targets is not mistaken for a kill. Only a corpse counts. A unit that is simply gone from the object manager left our
+			// sight or despawned - most often because the bot walked away from it - and counting
+			// that inflates the one number the swarm report passes or fails the run on.
 			const BotUnit* previous = world.GetUnit(m_lastLiveTargetGuid);
-			if (!previous || !previous->IsAlive())
+			if (!previous)
+			{
+				m_lastLiveTargetGuid = 0;
+			}
+			else if (!previous->IsAlive())
 			{
 				++m_context.GetGrindState().kills;
 				TargetKilled(m_lastLiveTargetGuid);

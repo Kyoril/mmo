@@ -51,6 +51,33 @@ Assert(GetHealth(guard) == guardHealth,
 	"the guard should not have lost health (was " .. guardHealth .. ", now " .. GetHealth(guard) .. ")")
 
 Log("Friendly guard refused the spell: " .. LastCastResult())
+
+-- A damage-over-time must be refused at a friendly target too. Judging a spell harmful by its
+-- effect type alone misses these: the same ApplyAura effect carries a heal-over-time and a
+-- damage-over-time, and it is the aura it applies that decides which.
+local dotSpell = nil
+for _, candidate in ipairs({ 5, 6, 11 }) do
+	if HasSpell(candidate) then dotSpell = candidate end
+end
+
+if dotSpell ~= nil then
+	local guard2 = GM.CreateMonster(GUARD)
+	GM.Worldport(0, GetPosX(me) + 8, GetPosY(me), GetPosZ(me), 0)
+	Assert(WaitUntil(function() return GetDistance(me, guard2) > 5 end, 10000, "stepped away"),
+		"player should be clear of the second guard")
+
+	local before = GetHealth(guard2)
+	TargetUnit(guard2)
+	CastSpell(dotSpell, guard2)
+	Sleep(2000)
+	Assert(GetHealth(guard2) == before,
+		"a damage-over-time should not land on a friendly guard either")
+	Log("Damage-over-time also refused")
+	GM.DestroyMonster(guard2)
+else
+	Log("No damage-over-time spell known; skipping that half")
+end
+
 GM.DestroyMonster(guard)
 
 -- The same spell must still work on something that is a legitimate target, or this scenario

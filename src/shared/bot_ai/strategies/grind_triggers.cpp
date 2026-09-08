@@ -162,13 +162,6 @@ namespace mmo
 				return grind.resting;
 			});
 
-		add(registry, "low_health", [](BotAiContext& context)
-			{
-				const BotPerception& perception = context.GetPerception();
-				return perception.valid && perception.alive
-					&& perception.healthFraction < context.GetPersonality().restHealthFraction;
-			});
-
 		add(registry, "no_grind_spot", [](BotAiContext& context)
 			{
 				return context.GetPerception().valid && !context.GetGrindState().HasSpot();
