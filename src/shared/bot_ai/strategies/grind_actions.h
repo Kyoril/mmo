@@ -34,6 +34,12 @@ namespace mmo
 	/// it are almost certainly just respawning.
 	constexpr GameTime BotGrindBarrenBlacklistMs = 60000;
 
+	/// How close the bot has to get to its chosen spot beside a creature. Tight on purpose: the
+	/// spot is already offset from the creature, so a loose tolerance here stacks on top of that
+	/// offset and can leave the bot standing outside melee range believing it has arrived.
+	/// combatOffset (at most 1.8) plus this must stay under BotMeleeRange.
+	constexpr float BotCombatStandAcceptance = 0.8f;
+
 	/// Consecutive failed approaches before the bot gives up on a target. More than one because
 	/// a single failure can be a transient - the target moved through a doorway as the query ran -
 	/// and giving up instantly would make a bot abandon perfectly good fights.

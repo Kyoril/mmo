@@ -3,6 +3,7 @@
 #include "grind_triggers.h"
 
 #include "bot_ai/bot_ai_context.h"
+#include "bot_ai/bot_personality.h"
 #include "bot_core/bot_session.h"
 #include "bot_ai/bot_ai_registry.h"
 #include "grind_actions.h"
@@ -145,21 +146,27 @@ namespace mmo
 
 				BotGrindState& grind = context.GetGrindState();
 
+				// Per bot, so that a group does not all break off and all re-engage on the same
+				// tick. A cautious bot leaves the fight early and comes back topped up; a reckless
+				// one keeps swinging.
+				const BotPersonality& personality = context.GetPersonality();
+
 				if (grind.resting)
 				{
 					// Keep going until fully recovered, not until merely out of danger.
-					grind.resting = !(perception.healthFraction >= BotRestedHealthFraction && powerRested);
+					grind.resting = !(perception.healthFraction >= personality.restedHealthFraction && powerRested);
 					return grind.resting;
 				}
 
-				grind.resting = perception.healthFraction < BotRestHealthFraction || powerLow;
+				grind.resting = perception.healthFraction < personality.restHealthFraction || powerLow;
 				return grind.resting;
 			});
 
 		add(registry, "low_health", [](BotAiContext& context)
 			{
 				const BotPerception& perception = context.GetPerception();
-				return perception.valid && perception.alive && perception.healthFraction < BotRestHealthFraction;
+				return perception.valid && perception.alive
+					&& perception.healthFraction < context.GetPersonality().restHealthFraction;
 			});
 
 		add(registry, "no_grind_spot", [](BotAiContext& context)

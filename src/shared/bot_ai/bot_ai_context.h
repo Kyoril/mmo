@@ -3,6 +3,7 @@
 #pragma once
 
 #include "bot_grind_state.h"
+#include "bot_personality.h"
 #include "bot_perception.h"
 #include "bot_rotation.h"
 
@@ -57,6 +58,9 @@ namespace mmo
 		/// Rolls a uniform integer in [minValue, maxValue].
 		[[nodiscard]] uint32 RollRange(uint32 minValue, uint32 maxValue);
 
+		/// The traits that make this bot behave unlike its neighbours. Fixed for its lifetime.
+		[[nodiscard]] const BotPersonality& GetPersonality() const { return m_personality; }
+
 		[[nodiscard]] BotRotation& GetRotation() { return m_rotation; }
 		[[nodiscard]] const BotRotation& GetRotation() const { return m_rotation; }
 
@@ -109,6 +113,7 @@ namespace mmo
 		uint32 m_botIndex { 0 };
 		BotPerception m_perception;
 		BotGrindState m_grindState;
+		BotPersonality m_personality;
 		BotRotation m_rotation;
 		const GrindSpotIndex* m_grindSpots { nullptr };
 		std::mt19937 m_random;

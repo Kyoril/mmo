@@ -5,6 +5,7 @@
 
 #include "bot_ai/bot_ai_context.h"
 #include "bot_ai/bot_ai_registry.h"
+#include "bot_ai/bot_personality.h"
 #include "bot_ai/bot_relevance.h"
 #include "bot_ai/bot_rotation.h"
 #include "bot_ai/grind_spot_index.h"
@@ -20,6 +21,7 @@
 #include "log/default_log_levels.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -113,16 +115,18 @@ namespace mmo
 					? perception.level - BotGrindLevelsBelow
 					: 1;
 
+				const BotPersonality& personality = context.GetPersonality();
+
 				const std::vector<std::size_t> candidates = index->FindCandidates(
 					perception.mapId,
 					perception.position,
 					minLevel,
 					perception.level + BotGrindLevelsAbove,
-					BotGrindSearchRadius,
-					BotGrindCandidateChoices * 4);
+					BotGrindSearchRadius * personality.searchRadiusScale,
+					personality.candidateChoices * 4);
 
 				std::vector<std::size_t> usable;
-				usable.reserve(BotGrindCandidateChoices);
+				usable.reserve(personality.candidateChoices);
 				for (const std::size_t candidate : candidates)
 				{
 					if (context.GetGrindState().IsBlacklisted(candidate, context.GetNow()))
@@ -131,7 +135,7 @@ namespace mmo
 					}
 
 					usable.push_back(candidate);
-					if (usable.size() >= BotGrindCandidateChoices)
+					if (usable.size() >= personality.candidateChoices)
 					{
 						break;
 					}
@@ -148,7 +152,11 @@ namespace mmo
 
 				BotGrindState& grind = context.GetGrindState();
 				grind.spotIndex = chosen;
-				grind.spotPosition = index->GetSpot(chosen).position;
+
+				// Offset from the spawn point, not onto it. Every bot working a spot would otherwise
+				// walk to the identical coordinate and stand inside the others already there.
+				grind.spotPosition = OffsetAround(index->GetSpot(chosen).position,
+					personality.approachAngle, personality.spotOffset);
 				grind.arrived = false;
 				return true;
 			});
@@ -176,7 +184,9 @@ namespace mmo
 				// little above or below the bot reads as far away in 3D and as arrived in plan, so
 				// the bot re-paths, is instantly told it has arrived, decides it has not, and
 				// re-paths again - forever, without ever moving.
-				if (PlanarDistance(world.GetPosition(), grind.spotPosition) <= BotGrindSpotArrivalRange)
+				const Vector3 selfPosition = world.GetPosition();
+				if (PlanarDistance(selfPosition, grind.spotPosition) <= BotGrindSpotArrivalRange
+					&& std::abs(selfPosition.y - grind.spotPosition.y) <= BotGrindSpotArrivalHeight)
 				{
 					if (!grind.arrived)
 					{
@@ -196,8 +206,17 @@ namespace mmo
 
 				if (!mover.MoveTo(world, grind.spotPosition, BotGrindSpotArrivalRange))
 				{
-					abandonSpot(context, "no_path");
-					return false;
+					// The bot's own offset from the spawn may be somewhere it cannot stand. Try the
+					// spawn point itself before writing the spot off entirely.
+					const GrindSpotIndex* index = context.GetGrindSpots();
+					const bool reachedExactSpot = index
+						&& mover.MoveTo(world, index->GetSpot(grind.spotIndex).position, BotGrindSpotArrivalRange);
+
+					if (!reachedExactSpot)
+					{
+						abandonSpot(context, "no_path");
+						return false;
+					}
 				}
 
 				return true;
@@ -281,15 +300,30 @@ namespace mmo
 
 				const Vector3 targetPosition = target->GetPosition();
 
+				// Each bot stands at its own angle around the creature instead of walking onto its
+				// exact position. Without this a group attacking one thing converges on a single
+				// coordinate and ends up occupying the same space as a stack of characters.
+				const BotPersonality& personality = context.GetPersonality();
+				const Vector3 standPosition = OffsetAround(targetPosition,
+					personality.approachAngle, personality.combatOffset);
+
 				if (mover.IsActive())
 				{
 					// Chasing something that has barely moved does not justify a new path.
-					if ((mover.GetTarget() - targetPosition).GetLength() < RepathThreshold)
+					if ((mover.GetTarget() - standPosition).GetLength() < RepathThreshold)
 					{
 						return true;
 					}
 				}
 
+				if (mover.MoveTo(world, standPosition, BotCombatStandAcceptance))
+				{
+					return true;
+				}
+
+				// The chosen spot may be inside a wall or off the navigation mesh. Spreading out is a
+				// preference, not a reason to give up on a fight, so fall back to the creature itself
+				// before counting this as a failed approach.
 				if (mover.MoveTo(world, targetPosition, BotMeleeRange))
 				{
 					return true;

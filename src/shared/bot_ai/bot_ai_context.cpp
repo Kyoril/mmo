@@ -17,6 +17,7 @@ namespace mmo
 		// reproducible: the same bot makes the same choices across restarts, so a swarm run can
 		// be replayed. The mix keeps neighbouring indices from producing correlated streams.
 		, m_random(0x9e3779b9u ^ (botIndex * 2654435761u))
+		, m_personality(BotPersonality::FromSeed(0x9e3779b9u ^ (botIndex * 2654435761u)))
 	{
 	}
 

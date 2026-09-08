@@ -20,6 +20,12 @@ namespace mmo
 	/// the object manager already knows about the creatures when the bot arrives.
 	constexpr float BotGrindSpotArrivalRange = 15.0f;
 
+	/// And how much height may separate the bot from the spot while still counting as arrived.
+	/// The arrival test is horizontal, so without this a spawn in a cellar counts as reached from
+	/// the floor above it - the bot stops travelling, decides it is there, and then tries to walk
+	/// to creatures on the other side of a floor.
+	constexpr float BotGrindSpotArrivalHeight = 5.0f;
+
 	/// Health and power are fractions in [0, 1] throughout, matching BotPerception.
 	///
 	/// Two thresholds rather than one, because a single one makes a bot flicker: it would stop
