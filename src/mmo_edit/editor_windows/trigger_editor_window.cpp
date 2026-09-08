@@ -1,16 +1,22 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "trigger_editor_window.h"
+#include "game/object_type_id.h"
 #include "game_server/spells/spell_cast.h"
 #include "graphics/texture_mgr.h"
 #include "proto_data/trigger_helper.h"
+#include "proto_entry_picker.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 #include "imgui_node_editor.h"
 
+#include <algorithm>
 #include <iomanip>
+#include <map>
+#include <set>
 #include <sstream>
+#include <vector>
 
 #include "editor_imgui_helpers.h"
 
@@ -103,14 +109,187 @@ namespace mmo
 
 	static_assert(std::size(s_actionTypeNames) == trigger_actions::Count_, "s_actionTypeNames size mismatch");
 
+	// === Named values for the integer data fields ===
+	//
+	// Every table below stands in for an enum the proto stores as a plain int. They are indexed by
+	// the stored value, so the order is the enum's order and not a display order; the static_asserts
+	// are what keeps them from drifting the way the action-name list once did.
+
+	/// Names for proto::SpellVisualEvent, in enum order.
+	static const char* s_spellVisualEventNames[] = {
+		"Start Cast", "Cancel Cast", "Casting", "Cast Succeeded", "Impact",
+		"Aura Applied", "Aura Removed", "Aura Tick", "Aura Idle"
+	};
+
+	static_assert(std::size(s_spellVisualEventNames) == proto::SpellVisualEvent_ARRAYSIZE,
+		"s_spellVisualEventNames size mismatch");
+
+	/// Names for trigger_spell_cast_target::Type, in enum order.
+	static const char* s_spellCastTargetNames[] = {
+		"Caster", "Current Target", "Triggering Unit"
+	};
+
+	static_assert(std::size(s_spellCastTargetNames) == trigger_spell_cast_target::Count_,
+		"s_spellCastTargetNames size mismatch");
+
+	/// Names for unit_stand_state::Type, in enum order.
+	static const char* s_standStateNames[] = {
+		"Stand", "Sit", "Sleep", "Dead", "Kneel"
+	};
+
+	static_assert(std::size(s_standStateNames) == unit_stand_state::Count_,
+		"s_standStateNames size mismatch");
+
+	/// Values of a world object's State field. Doors are the only consumer today, where the field
+	/// drives both the visual state and the dynamic line-of-sight collision.
+	static const char* s_worldObjectStateNames[] = {
+		"Closed / Inactive", "Open / Active"
+	};
+
+	/// Virtual equipment slots, matching object_fields::VirtualItem0..2.
+	static const char* s_virtualEquipmentSlotNames[] = {
+		"Main Hand", "Off Hand", "Ranged"
+	};
+
+	/// Names for encounter_state::Type, in enum order. Used by the SetEncounterState action, which
+	/// writes a real state and therefore can write NotStarted.
+	static const char* s_encounterStateNames[] = {
+		"Not Started", "In Progress", "Done", "Fail"
+	};
+
+	/// Encounter states as an event *filter*. Trigger event data uses zero as a wildcard
+	/// (see proto::TriggerEventDataMatches), so slot 0 reads "any state" here and NotStarted is
+	/// not expressible as a filter.
+	static const char* s_encounterStateFilterNames[] = {
+		"Any", "In Progress", "Done", "Fail"
+	};
+
+	static_assert(std::size(s_encounterStateFilterNames) == std::size(s_encounterStateNames),
+		"encounter state filter names must cover the same range as the state names");
+
+
 	namespace
 	{
-		int32 GetTriggerEventData(const proto::TriggerEvent& e, uint32 i)
+		// Sets action.data[index] = value, growing the repeated field with zeros as needed.
+		void SetActionDataValue(proto::TriggerAction& action, int index, int value)
 		{
-			if (static_cast<int>(i) >= e.data_size())
-				return 0;
+			while (action.data_size() <= index)
+			{
+				action.add_data(0);
+			}
+			action.set_data(index, value);
+		}
 
-			return e.data(i);
+		// Reads action.data[index], treating a value that was never written as zero. That is what
+		// the world server's GetActionData does, so the editor must agree with it.
+		int GetActionDataValue(const proto::TriggerAction& action, int index)
+		{
+			return (action.data_size() > index) ? action.data(index) : 0;
+		}
+
+		// Sets event.data[index] = value, growing the repeated field with zeros as needed.
+		//
+		// Every event case used to inline "if (size > i) set else add", which appends to the wrong
+		// slot whenever an earlier index was never written - editing only the max of an OnTimer
+		// range wrote the max into the interval.
+		void SetEventDataValue(proto::TriggerEvent& event, int index, int value)
+		{
+			while (event.data_size() <= index)
+			{
+				event.add_data(0);
+			}
+			event.set_data(index, value);
+		}
+
+		int GetEventDataValue(const proto::TriggerEvent& event, int index)
+		{
+			return (event.data_size() > index) ? event.data(index) : 0;
+		}
+
+		// Draws an InputInt control bound to action.data[index].
+		void DrawActionDataInt(proto::TriggerAction& action, int index, const char* id, const char* label,
+			float width = 150.0f, const char* tooltip = nullptr)
+		{
+			int value = GetActionDataValue(action, index);
+			ImGui::SetNextItemWidth(width);
+			if (ImGui::InputInt(id, &value))
+			{
+				SetActionDataValue(action, index, value);
+			}
+			ImGui::SameLine();
+			ImGui::Text("%s", label);
+
+			if (tooltip != nullptr)
+			{
+				ImGui::SameLine();
+				DrawHelpMarker(tooltip);
+			}
+		}
+
+		// Draws a named-value combo bound to action.data[index].
+		void DrawActionDataEnum(proto::TriggerAction& action, int index, const char* id, const char* label,
+			const char* const* names, int count, const char* tooltip = nullptr)
+		{
+			int value = GetActionDataValue(action, index);
+			if (DrawEnumCombo(id, label, value, names, count, tooltip))
+			{
+				SetActionDataValue(action, index, value);
+			}
+		}
+
+		// Draws a by-name entry picker bound to action.data[index].
+		template <class Manager>
+		void DrawActionDataPicker(proto::TriggerAction& action, int index, const char* id, const char* label,
+			const Manager& manager, const char* tooltip = nullptr)
+		{
+			int value = GetActionDataValue(action, index);
+			if (DrawEntryPicker(id, label, value, manager, tooltip))
+			{
+				SetActionDataValue(action, index, value);
+			}
+		}
+
+		// Draws an InputInt control bound to event.data[index].
+		void DrawEventDataInt(proto::TriggerEvent& event, int index, const char* id, const char* label,
+			float width = 150.0f, const char* tooltip = nullptr)
+		{
+			int value = GetEventDataValue(event, index);
+			ImGui::SetNextItemWidth(width);
+			if (ImGui::InputInt(id, &value))
+			{
+				SetEventDataValue(event, index, value);
+			}
+			ImGui::SameLine();
+			ImGui::Text("%s", label);
+
+			if (tooltip != nullptr)
+			{
+				ImGui::SameLine();
+				DrawHelpMarker(tooltip);
+			}
+		}
+
+		// Draws a named-value combo bound to event.data[index].
+		void DrawEventDataEnum(proto::TriggerEvent& event, int index, const char* id, const char* label,
+			const char* const* names, int count, const char* tooltip = nullptr)
+		{
+			int value = GetEventDataValue(event, index);
+			if (DrawEnumCombo(id, label, value, names, count, tooltip))
+			{
+				SetEventDataValue(event, index, value);
+			}
+		}
+
+		// Draws a by-name entry picker bound to event.data[index].
+		template <class Manager>
+		void DrawEventDataPicker(proto::TriggerEvent& event, int index, const char* id, const char* label,
+			const Manager& manager, const char* tooltip = nullptr)
+		{
+			int value = GetEventDataValue(event, index);
+			if (DrawEntryPicker(id, label, value, manager, tooltip))
+			{
+				SetEventDataValue(event, index, value);
+			}
 		}
 
 		void DrawTriggerEvents(proto::TriggerEntry& currentEntry)
@@ -168,28 +347,28 @@ namespace mmo
 						ImGui::Text("Player interacted with owner");
 						break;
 					case trigger_event::OnHealthDroppedBelow:
-						ImGui::Text("Owning units health dropped below %d", GetTriggerEventData(event, 0));
+						ImGui::Text("Owning units health dropped below %d", GetEventDataValue(event, 0));
 						break;
 					case trigger_event::OnReachedTriggeredTarget:
 						ImGui::Text("Owning unit reached triggered movement target");
 						break;
 					case trigger_event::OnSpellHit:
-						ImGui::Text("Owning unit was hit by spell %d", GetTriggerEventData(event, 0));
+						ImGui::Text("Owning unit was hit by spell %d", GetEventDataValue(event, 0));
 						break;
 					case trigger_event::OnSpellAuraRemoved:
-						ImGui::Text("Owning unit lost aura of spell %d", GetTriggerEventData(event, 0));
+						ImGui::Text("Owning unit lost aura of spell %d", GetEventDataValue(event, 0));
 						break;
 					case trigger_event::OnEmote:
-						ImGui::Text("Owning unit was targeted by emote %d", GetTriggerEventData(event, 0));
+						ImGui::Text("Owning unit was targeted by emote %d", GetEventDataValue(event, 0));
 						break;
 					case trigger_event::OnSpellCast:
-						ImGui::Text("Owning unit successfully casted spell %d", GetTriggerEventData(event, 0));
+						ImGui::Text("Owning unit successfully casted spell %d", GetEventDataValue(event, 0));
 						break;
 					case trigger_event::OnGossipAction:
-						ImGui::Text("Player chose gossip menu %d's action %d", GetTriggerEventData(event, 0), GetTriggerEventData(event, 1));
+						ImGui::Text("Player chose gossip menu %d's action %d", GetEventDataValue(event, 0), GetEventDataValue(event, 1));
 						break;
 					case trigger_event::OnQuestAccept:
-						ImGui::Text("Player accepted quest %d", GetTriggerEventData(event, 0));
+						ImGui::Text("Player accepted quest %d", GetEventDataValue(event, 0));
 						break;
 					case trigger_event::OnAllPlayersDead:
 						ImGui::Text("All players in instance are dead (wipe)");
@@ -201,23 +380,23 @@ namespace mmo
 						ImGui::Text("A player left the instance");
 						break;
 					case trigger_event::OnTimer:
-						if (GetTriggerEventData(event, 1) > 0)
+						if (GetEventDataValue(event, 1) > 0)
 						{
-							ImGui::Text("Every %d-%d ms (periodic)", GetTriggerEventData(event, 0), GetTriggerEventData(event, 1));
+							ImGui::Text("Every %d-%d ms (periodic)", GetEventDataValue(event, 0), GetEventDataValue(event, 1));
 						}
 						else
 						{
-							ImGui::Text("Every %d ms (periodic)", GetTriggerEventData(event, 0));
+							ImGui::Text("Every %d ms (periodic)", GetEventDataValue(event, 0));
 						}
 						break;
 					case trigger_event::OnSummonedUnitDied:
 						ImGui::Text("A creature summoned by the owner died");
 						break;
 					case trigger_event::OnEncounterStateChanged:
-						ImGui::Text("Encounter state changed (slot %d, state %d; 0 = any)", GetTriggerEventData(event, 0), GetTriggerEventData(event, 1));
+						ImGui::Text("Encounter state changed (slot %d, state %d; 0 = any)", GetEventDataValue(event, 0), GetEventDataValue(event, 1));
 						break;
 					case trigger_event::OnPlayerLevelUp:
-						ImGui::Text("Player gained a level (level %d; 0 = any)", GetTriggerEventData(event, 0));
+						ImGui::Text("Player gained a level (level %d; 0 = any)", GetEventDataValue(event, 0));
 						break;
 					}
 				}
@@ -230,7 +409,8 @@ namespace mmo
 
 		// Draws a single trigger event in the editor.
 		// Assumes that 'event' is a mutable reference from your proto TriggerEvent message.
-		void DrawTriggerEvent(proto::TriggerEvent& event, int eventIndex, proto::TriggerEntry& currentEntry)
+		void DrawTriggerEvent(proto::TriggerEvent& event, int eventIndex, proto::TriggerEntry& currentEntry,
+			const proto::Project& project)
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
 
@@ -263,10 +443,7 @@ namespace mmo
 						healthPercentage = 0;
 					if (healthPercentage > 100)
 						healthPercentage = 100;
-					if (event.data_size() > 0)
-						event.set_data(0, healthPercentage);
-					else
-						event.add_data(healthPercentage);
+					SetEventDataValue(event, 0, healthPercentage);
 				}
 				ImGui::SameLine();
 				ImGui::Text("Health Percentage (%)");
@@ -274,17 +451,7 @@ namespace mmo
 			}
 			case trigger_event::OnQuestAccept:
 			{
-				int questId = (event.data_size() > 0) ? event.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##QuestId", &questId))
-				{
-					if (event.data_size() > 0)
-						event.set_data(0, questId);
-					else
-						event.add_data(questId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Quest ID");
+				DrawEventDataPicker(event, 0, "##QuestId", "Quest", project.quests);
 				break;
 			}
 			case trigger_event::OnAllPlayersDead:
@@ -297,29 +464,9 @@ namespace mmo
 			case trigger_event::OnGossipAction:
 			{
 				// This event requires a Menu ID and Action ID.
-				int menuId = (event.data_size() > 0) ? event.data(0) : 0;
-				int actionId = (event.data_size() > 1) ? event.data(1) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##MenuId", &menuId))
-				{
-					if (event.data_size() > 0)
-						event.set_data(0, menuId);
-					else
-						event.add_data(menuId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Gossip Menu ID");
-				
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##ActionId", &actionId))
-				{
-					if (event.data_size() > 1)
-						event.set_data(1, actionId);
-					else
-						event.add_data(actionId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Action ID");
+				DrawEventDataPicker(event, 0, "##MenuId", "Gossip Menu", project.gossipMenus);
+				DrawEventDataInt(event, 1, "##ActionId", "Action ID", 150.0f,
+					"Index of the action inside the gossip menu. Creature gossip events are matched exactly rather than through the usual zero-is-a-wildcard rule, so 0 means the first action here.");
 				break;
 			}
 			case trigger_event::OnSpellHit:
@@ -327,64 +474,34 @@ namespace mmo
 			case trigger_event::OnSpellCast:
 			{
 				// These events require a Spell ID.
-				int spellId = (event.data_size() > 0) ? event.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##SpellId", &spellId))
-				{
-					if (event.data_size() > 0)
-						event.set_data(0, spellId);
-					else
-						event.add_data(spellId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Spell ID");
+				DrawEventDataPicker(event, 0, "##SpellId", "Spell", project.spells);
 				break;
 			}
 			case trigger_event::OnEmote:
 			{
 				// This event requires an Emote ID.
-				int emoteId = (event.data_size() > 0) ? event.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##EmoteId", &emoteId))
-				{
-					if (event.data_size() > 0)
-						event.set_data(0, emoteId);
-					else
-						event.add_data(emoteId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Emote ID");
+				DrawEventDataPicker(event, 0, "##EmoteId", "Emote", project.emotes);
 				break;
 			}
 				case trigger_event::OnTimer:
 				{
 					// Data: <INTERVAL-MS>[, <INTERVAL-MAX-MS>]
-					int intervalMin = (event.data_size() > 0) ? event.data(0) : 0;
+					int intervalMin = GetEventDataValue(event, 0);
 					ImGui::SetNextItemWidth(150);
 					if (ImGui::InputInt("##TimerIntervalMin", &intervalMin))
 					{
 						if (intervalMin < 0) intervalMin = 0;
-						if (event.data_size() > 0)
-							event.set_data(0, intervalMin);
-						else
-							event.add_data(intervalMin);
+						SetEventDataValue(event, 0, intervalMin);
 					}
 					ImGui::SameLine();
 					ImGui::Text("Interval (ms)");
 
-					int intervalMax = (event.data_size() > 1) ? event.data(1) : 0;
+					int intervalMax = GetEventDataValue(event, 1);
 					ImGui::SetNextItemWidth(150);
 					if (ImGui::InputInt("##TimerIntervalMax", &intervalMax))
 					{
 						if (intervalMax < 0) intervalMax = 0;
-						if (event.data_size() > 1)
-							event.set_data(1, intervalMax);
-						else
-						{
-							if (event.data_size() == 0)
-								event.add_data(0);
-							event.add_data(intervalMax);
-						}
+						SetEventDataValue(event, 1, intervalMax);
 					}
 					ImGui::SameLine();
 					ImGui::Text("Max Interval (ms, 0 = fixed)");
@@ -394,35 +511,26 @@ namespace mmo
 				case trigger_event::OnEncounterStateChanged:
 				{
 					// Data: [<SLOT-ID>], [<STATE>] - 0 acts as a wildcard.
-					int slotId = (event.data_size() > 0) ? event.data(0) : 0;
+					int slotId = GetEventDataValue(event, 0);
 					ImGui::SetNextItemWidth(150);
 					if (ImGui::InputInt("##EncStateChangedSlot", &slotId))
 					{
 						if (slotId < 0) slotId = 0;
-						if (event.data_size() > 0)
-							event.set_data(0, slotId);
-						else
-							event.add_data(slotId);
+						SetEventDataValue(event, 0, slotId);
 					}
 					ImGui::SameLine();
 					ImGui::Text("Encounter Slot (0 = any)");
 
-					int stateVal = (event.data_size() > 1) ? event.data(1) : 0;
-					ImGui::SetNextItemWidth(150);
-					if (ImGui::InputInt("##EncStateChangedState", &stateVal))
-					{
-						if (stateVal < 0) stateVal = 0;
-						if (event.data_size() > 1)
-							event.set_data(1, stateVal);
-						else
-						{
-							if (event.data_size() == 0)
-								event.add_data(0);
-							event.add_data(stateVal);
-						}
-					}
-					ImGui::SameLine();
-					ImGui::Text("State (0 = any, 1=InProgress, 2=Done, 3=Fail)");
+					DrawEventDataEnum(event, 1, "##EncStateChangedState", "State",
+						s_encounterStateFilterNames, static_cast<int>(std::size(s_encounterStateFilterNames)),
+						"Event data treats 0 as a wildcard, so 'Not Started' cannot be filtered on here - a trigger that needs it has to test the EncounterState condition function instead.");
+					break;
+				}
+				case trigger_event::OnPlayerLevelUp:
+				{
+					// Data: [<LEVEL>]; zero is the usual event-data wildcard.
+					DrawEventDataInt(event, 0, "##LevelUpLevel", "Level (0 = any)", 150.0f,
+						"Requires the trigger's 'Player Trigger' flag, since players carry no trigger list of their own.");
 					break;
 				}
 			default:
@@ -446,32 +554,10 @@ namespace mmo
 			ImGui::PopStyleVar();
 		}
 
-		// Sets action.data[index] = value, growing the repeated field with zeros as needed.
-		void SetActionDataValue(proto::TriggerAction& action, int index, int value)
-		{
-			while (action.data_size() <= index)
-			{
-				action.add_data(0);
-			}
-			action.set_data(index, value);
-		}
-
-		// Draws an InputInt control bound to action.data[index].
-		void DrawActionDataInt(proto::TriggerAction& action, int index, const char* id, const char* label, float width = 150.0f)
-		{
-			int value = (action.data_size() > index) ? action.data(index) : 0;
-			ImGui::SetNextItemWidth(width);
-			if (ImGui::InputInt(id, &value))
-			{
-				SetActionDataValue(action, index, value);
-			}
-			ImGui::SameLine();
-			ImGui::Text("%s", label);
-		}
-
 		// Draws a single trigger action in the editor.
 		// Assumes that 'action' is a mutable reference from your proto TriggerAction message.
-		void DrawTriggerAction(proto::TriggerAction& action, int actionIndex, proto::TriggerEntry& currentEntry)
+		void DrawTriggerAction(proto::TriggerAction& action, int actionIndex, proto::TriggerEntry& currentEntry,
+			const proto::Project& project)
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
 
@@ -574,50 +660,24 @@ namespace mmo
 			case trigger_actions::Trigger:
 			{
 				// Data: <TRIGGER-ID>
-				int triggerId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##TriggerId", &triggerId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, triggerId);
-					else
-						action.add_data(triggerId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Trigger ID");
+				DrawActionDataPicker(action, 0, "##TriggerId", "Trigger", project.triggers,
+					"The trigger to execute. These are the links the Chain View draws.");
 				break;
 			}
 			case trigger_actions::Say:
 			case trigger_actions::Yell:
 			{
 				// Data: <SOUND-ID>, <LANGUAGE>; Texts: <TEXT>
-				int soundId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##SoundId", &soundId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, soundId);
-					else
-						action.add_data(soundId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Sound ID");
+				DrawActionDataPicker(action, 0, "##SoundId", "Sound", project.sounds,
+					"Played alongside the chat line for every player who can hear it.");
 
-				int language = (action.data_size() > 1) ? action.data(1) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##Language", &language))
-				{
-					if (action.data_size() > 1)
-						action.set_data(1, language);
-					else {
-						// Ensure the first value is present.
-						if (action.data_size() == 0)
-							action.add_data(0);
-						action.add_data(language);
-					}
-				}
+				// data[1] is still written so authored values survive a round trip, but the world
+				// server's HandleSay / HandleYell never read it - there is no per-language chat.
+				ImGui::BeginDisabled(true);
+				DrawActionDataInt(action, 1, "##Language", "Language");
+				ImGui::EndDisabled();
 				ImGui::SameLine();
-				ImGui::Text("Language");
+				DrawHelpMarker("Not implemented: the world server ignores this value. It is kept so existing data is not silently discarded.");
 
 				std::string text = (action.texts_size() > 0) ? action.texts(0) : "";
 				ImGui::SetNextItemWidth(-1);
@@ -635,17 +695,9 @@ namespace mmo
 			case trigger_actions::SetWorldObjectState:
 			{
 				// Data: <NEW-STATE>
-				int newState = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##NewState", &newState))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, newState);
-					else
-						action.add_data(newState);
-				}
-				ImGui::SameLine();
-				ImGui::Text("New State");
+				DrawActionDataEnum(action, 0, "##NewState", "New State",
+					s_worldObjectStateNames, static_cast<int>(std::size(s_worldObjectStateNames)),
+					"Doors also update their dynamic line-of-sight collision when this changes.");
 				break;
 			}
 			case trigger_actions::SetSpawnState:
@@ -669,29 +721,10 @@ namespace mmo
 			case trigger_actions::CastSpell:
 			{
 				// Data: <SPELL-ID>, <TARGET>
-				int spellId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##SpellId", &spellId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, spellId);
-					else
-						action.add_data(spellId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Spell ID");
-
-				int target = (action.data_size() > 1) ? action.data(1) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##CastTarget", &target))
-				{
-					if (action.data_size() > 1)
-						action.set_data(1, target);
-					else
-						action.add_data(target);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Cast Target");
+				DrawActionDataPicker(action, 0, "##SpellId", "Spell", project.spells);
+				DrawActionDataEnum(action, 1, "##CastTarget", "Cast Target",
+					s_spellCastTargetNames, static_cast<int>(std::size(s_spellCastTargetNames)),
+					"Who the spell is aimed at, resolved relative to the caster picked above. The cast fails outright if this target cannot be resolved.");
 				break;
 			}
 			case trigger_actions::Delay:
@@ -745,21 +778,7 @@ namespace mmo
 			}
 			case trigger_actions::Teleport:
 			{
-				uint32 mapId = 0;
-				if (action.data_size() > 0)
-				{
-					mapId = static_cast<uint32>(action.data(0));
-				}
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##MapId", reinterpret_cast<int*>(&mapId)))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, mapId);
-					else
-						action.add_data(mapId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Map ID");
+				DrawActionDataPicker(action, 0, "##MapId", "Map", project.maps);
 
 				// Data: <Map>, <X>, <Y>, <Z>, <Facing>
 				float pos[3] = { 0.0f, 0.0f, 0.0f };
@@ -826,48 +845,21 @@ namespace mmo
 			case trigger_actions::SetStandState:
 			{
 				// Data: <STAND-STATE>
-				int standState = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##StandState", &standState))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, standState);
-					else
-						action.add_data(standState);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Stand State");
+				DrawActionDataEnum(action, 0, "##StandState", "Stand State",
+					s_standStateNames, static_cast<int>(std::size(s_standStateNames)));
 				break;
 			}
 			case trigger_actions::SetVirtualEquipmentSlot:
 			{
-				// Data: <SLOT:0-2>, <ITEM-ENTRY>
-				int slot = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(100);
-				if (ImGui::InputInt("##EquipSlot", &slot))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, slot);
-					else
-						action.add_data(slot);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Slot (0-2)");
+				// Data: <SLOT:0-2>, <ITEM-DISPLAY-ID>
+				DrawActionDataEnum(action, 0, "##EquipSlot", "Slot",
+					s_virtualEquipmentSlotNames, static_cast<int>(std::size(s_virtualEquipmentSlotNames)));
 
-				int itemEntry = (action.data_size() > 1) ? action.data(1) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##ItemEntry", &itemEntry))
-				{
-					if (action.data_size() > 1)
-						action.set_data(1, itemEntry);
-					else {
-						if (action.data_size() == 0)
-							action.add_data(0);
-						action.add_data(itemEntry);
-					}
-				}
-				ImGui::SameLine();
-				ImGui::Text("Item Entry");
+				// The world server writes this straight into object_fields::VirtualItem0..2, which
+				// hold display ids. The field was labelled "Item Entry" here, which is a different
+				// id space entirely.
+				DrawActionDataPicker(action, 1, "##ItemDisplayId", "Item Display", project.itemDisplays,
+					"Display id, not an item entry: the value goes directly into the unit's VirtualItem field.");
 				break;
 			}
 			case trigger_actions::SetPhase:
@@ -889,95 +881,27 @@ namespace mmo
 			case trigger_actions::SetSpellCooldown:
 			{
 				// Data: <SPELL-ID>, <TIME-MS>
-				int spellId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##CooldownSpellId", &spellId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, spellId);
-					else
-						action.add_data(spellId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Spell ID");
-
-				int timeMs = (action.data_size() > 1) ? action.data(1) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##CooldownTimeMs", &timeMs))
-				{
-					if (action.data_size() > 1)
-						action.set_data(1, timeMs);
-					else {
-						if (action.data_size() == 0)
-							action.add_data(0);
-						action.add_data(timeMs);
-					}
-				}
-				ImGui::SameLine();
-				ImGui::Text("Cooldown Duration (ms)");
+				DrawActionDataPicker(action, 0, "##CooldownSpellId", "Spell", project.spells);
+				DrawActionDataInt(action, 1, "##CooldownTimeMs", "Cooldown Duration (ms)");
 				break;
 			}
 			case trigger_actions::QuestKillCredit:
 			{
 				// Data: <CREATURE-ENTRY-ID>
-				int creatureEntryId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##CreatureEntryId", &creatureEntryId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, creatureEntryId);
-					else
-						action.add_data(creatureEntryId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Creature Entry ID");
+				DrawActionDataPicker(action, 0, "##CreatureEntryId", "Creature", project.units);
 				break;
 			}
 			case trigger_actions::QuestEventOrExploration:
 			{
 				// Data: <QUEST-ID>
-				int questId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##QuestEventId", &questId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, questId);
-					else
-						action.add_data(questId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Quest ID");
+				DrawActionDataPicker(action, 0, "##QuestEventId", "Quest", project.quests);
 				break;
 			}
 			case trigger_actions::SetVariable:
 			{
 				// Data: <VARIABLE-ID>, [<NUMERIC-VALUE>]; Texts: [<STRING_VALUE>]
-				int variableId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##VarId", &variableId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, variableId);
-					else
-						action.add_data(variableId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Variable ID");
-
-				int numericValue = (action.data_size() > 1) ? action.data(1) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##NumVal", &numericValue))
-				{
-					if (action.data_size() > 1)
-						action.set_data(1, numericValue);
-					else {
-						if (action.data_size() == 0)
-							action.add_data(0);
-						action.add_data(numericValue);
-					}
-				}
-				ImGui::SameLine();
-				ImGui::Text("Numeric Value");
+				DrawActionDataPicker(action, 0, "##VarId", "Variable", project.variables);
+				DrawActionDataInt(action, 1, "##NumVal", "Numeric Value");
 
 				std::string strValue = (action.texts_size() > 0) ? action.texts(0) : "";
 				ImGui::SetNextItemWidth(300);
@@ -1000,18 +924,9 @@ namespace mmo
 			}
 			case trigger_actions::SetMount:
 			{
-				// Data: <MOUNT-ID>
-				int mountId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##MountId", &mountId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, mountId);
-					else
-						action.add_data(mountId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Mount ID");
+				// Data: <MOUNT-DISPLAY-ID>; written straight to object_fields::MountDisplayId.
+				DrawActionDataPicker(action, 0, "##MountId", "Mount Display", project.models,
+					"Model display id, not a mount item or spell. Zero dismounts the unit.");
 				break;
 			}
 			case trigger_actions::Despawn:
@@ -1023,17 +938,7 @@ namespace mmo
 			case trigger_actions::Emote:
 			{
 				// Data: <SOUND-ID>; Texts: <TEXT>
-				int soundId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##SoundId", &soundId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, soundId);
-					else
-						action.add_data(soundId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Sound ID");
+				DrawActionDataPicker(action, 0, "##SoundId", "Sound", project.sounds);
 
 				std::string text = (action.texts_size() > 0) ? action.texts(0) : "";
 				ImGui::SetNextItemWidth(-1);
@@ -1050,48 +955,15 @@ namespace mmo
 			}
 			case trigger_actions::SetEncounterState:
 			{
-				int slotId = (action.data_size() > 0) ? action.data(0) : 0;
-				ImGui::SetNextItemWidth(150);
-				if (ImGui::InputInt("##EncounterSlotId", &slotId))
-				{
-					if (action.data_size() > 0)
-						action.set_data(0, slotId);
-					else
-						action.add_data(slotId);
-				}
-				ImGui::SameLine();
-				ImGui::Text("Encounter Slot ID");
-
-				static const char* s_encounterStateNames[] = {
-					"Not Started (0)",
-					"In Progress (1)",
-					"Done (2)",
-					"Fail (3)"
-				};
-
-				int stateVal = (action.data_size() > 1) ? action.data(1) : 0;
-				if (stateVal < 0) stateVal = 0;
-				if (stateVal > 3) stateVal = 3;
-				ImGui::SetNextItemWidth(200);
-				if (ImGui::Combo("##EncounterState", &stateVal, s_encounterStateNames, 4))
-				{
-					if (action.data_size() > 1)
-						action.set_data(1, stateVal);
-					else
-					{
-						if (action.data_size() == 0)
-							action.add_data(0);
-						action.add_data(stateVal);
-					}
-				}
-				ImGui::SameLine();
-				ImGui::Text("New State");
+				DrawActionDataInt(action, 0, "##EncounterSlotId", "Encounter Slot ID");
+				DrawActionDataEnum(action, 1, "##EncounterState", "New State",
+					s_encounterStateNames, static_cast<int>(std::size(s_encounterStateNames)));
 				break;
 			}
 							case trigger_actions::SummonCreature:
 				{
 					// Data: <CREATURE-ENTRY>, [<X>,<Y>,<Z>], [<DESPAWN-MS>], [<ATTACK-NEAREST:0/1>]
-					DrawActionDataInt(action, 0, "##SummonEntry", "Creature Entry");
+					DrawActionDataPicker(action, 0, "##SummonEntry", "Creature", project.units);
 					ImGui::TextDisabled("Leave X/Y/Z at 0 to spawn at the owner/target position.");
 					DrawActionDataInt(action, 1, "##SummonX", "X");
 					DrawActionDataInt(action, 2, "##SummonY", "Y");
@@ -1126,7 +998,7 @@ namespace mmo
 				case trigger_actions::RemoveAura:
 				{
 					// Data: <SPELL-ID>
-					DrawActionDataInt(action, 0, "##AuraSpellId", "Spell ID");
+					DrawActionDataPicker(action, 0, "##AuraSpellId", "Spell", project.spells);
 					if (currentActionType == trigger_actions::ApplyAura)
 					{
 						ImGui::TextDisabled("Instantly applies the spell's auras to the target (no cast time/cost).");
@@ -1159,20 +1031,23 @@ namespace mmo
 					}
 					ImGui::SameLine();
 					ImGui::Text("Message");
-					ImGui::TextDisabled("Sent as a system message to every player in the instance.");
+					ImGui::TextDisabled("Sent as a system message to every player in the instance,");
+					ImGui::TextDisabled("resolved into each recipient's own client locale.");
+					ImGui::TextDisabled("The documented raid-warning message type is not implemented;");
+					ImGui::TextDisabled("every message goes out as ChatType::System.");
 					break;
 				}
 				case trigger_actions::QuestExplorationCredit:
 				{
 					// Data: <QUEST-ID>
-					DrawActionDataInt(action, 0, "##ExploreQuestId", "Quest ID");
+					DrawActionDataPicker(action, 0, "##ExploreQuestId", "Quest", project.quests);
 					ImGui::TextDisabled("Marks the exploration/event objective of the quest as done for the player target without completing its other objectives.");
 					break;
 				}
 				case trigger_actions::QuestFailQuest:
 				{
 					// Data: <QUEST-ID>
-					DrawActionDataInt(action, 0, "##FailQuestId", "Quest ID");
+					DrawActionDataPicker(action, 0, "##FailQuestId", "Quest", project.quests);
 					ImGui::TextDisabled("Fails the quest for the player target if it is in their quest log (e.g. escort npc died).");
 					break;
 				}
@@ -1191,11 +1066,21 @@ namespace mmo
 				case trigger_actions::PlaySpellVisual:
 				{
 					// Data: <VISUALIZATION-ID>, [<EVENT>]
-					DrawActionDataInt(action, 0, "##SpellVisualizationId", "Visualization ID");
-					DrawActionDataInt(action, 1, "##SpellVisualEvent", "Event (0-8, 4 = Impact)");
+					DrawActionDataPicker(action, 0, "##SpellVisualizationId", "Visualization", project.spellVisualizations);
+					// Unlike every other action data field, an absent value here does not mean zero:
+					// the world server substitutes IMPACT. Showing 'Start Cast' for unset data
+					// would name an event that is not the one that plays, so the effective default
+					// is displayed instead - and only written once the author picks a value.
+					int visualEvent = (action.data_size() > 1)
+						? action.data(1)
+						: static_cast<int>(proto::IMPACT);
+					if (DrawEnumCombo("##SpellVisualEvent", "Event", visualEvent,
+						s_spellVisualEventNames, static_cast<int>(std::size(s_spellVisualEventNames)),
+						"Use Impact: the cast and aura events expect a matching lifecycle event to clean up after them, and nothing raises those for a visual played this way."))
+					{
+						SetActionDataValue(action, 1, visualEvent);
+					}
 					ImGui::TextDisabled("Plays a spell visualization on the unit target for every client that can see it.");
-					ImGui::TextDisabled("Use Impact (4): the cast and aura events expect a matching lifecycle event to");
-					ImGui::TextDisabled("clean up after them, and nothing raises those for a visual played this way.");
 					break;
 				}
 				default:
@@ -1721,15 +1606,19 @@ namespace mmo
 			m_showChainView = !m_showChainView;
 		}
 
-		ImGui::Separator();
-		ImGui::Spacing();
+		ImGui::SameLine();
+		DrawHelpMarker("Chain View shows the selected trigger together with every trigger it calls and every trigger that calls it. Double-click a node to edit that trigger.");
 
-		// When Chain View is active, render the node graph and return early.
+		// When Chain View is active, render the node graph and return early. It draws its own
+		// toolbar, so the separator the edit view opens with would only eat vertical space.
 		if (m_showChainView)
 		{
-			DrawChainView(m_manager.getTemplates());
+			DrawChainView(currentEntry);
 			return;
 		}
+
+		ImGui::Separator();
+		ImGui::Spacing();
 
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -1867,7 +1756,7 @@ namespace mmo
 					ImGui::PushID(i);
 
 					ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.4f, 0.4f, 0.5f, 0.5f));
-					DrawTriggerEvent(*event, i, currentEntry);
+					DrawTriggerEvent(*event, i, currentEntry, m_project);
 					ImGui::PopStyleColor();
 
 					ImGui::Spacing();
@@ -1996,7 +1885,7 @@ namespace mmo
 				DrawSectionHeader("Action Properties");
 
 				ImGui::PushID(currentAction);
-				DrawTriggerAction(*action, currentAction, currentEntry);
+				DrawTriggerAction(*action, currentAction, currentEntry, m_project);
 				ImGui::PopID();
 			}
 			else
@@ -2044,7 +1933,303 @@ namespace mmo
 		}
 	}
 
-	void TriggerEditorWindow::DrawChainView(const proto::Triggers& triggers)
+	namespace
+	{
+		/// Node editor object ids. Nodes are keyed by trigger id so a node can be found again after
+		/// a relayout; pins live in disjoint ranges above every plausible trigger id so the three
+		/// id spaces cannot alias. Links use a running counter, because the old
+		/// "(source << 16) | target" scheme collided whenever a trigger called the same trigger
+		/// twice and truncated any trigger id above 65535.
+		constexpr uint64 s_chainInputPinBase = 0x1000000000ull;
+		constexpr uint64 s_chainOutputPinBase = 0x2000000000ull;
+		constexpr uint64 s_chainLinkBase = 0x3000000000ull;
+
+		ax::NodeEditor::PinId ChainInputPin(const uint32 triggerId)
+		{
+			return ax::NodeEditor::PinId(s_chainInputPinBase + triggerId);
+		}
+
+		ax::NodeEditor::PinId ChainOutputPin(const uint32 triggerId)
+		{
+			return ax::NodeEditor::PinId(s_chainOutputPinBase + triggerId);
+		}
+
+		/// Trigger ids this trigger's actions chain to, in action order and without duplicates.
+		std::vector<uint32> GetChainedTriggerIds(const proto::TriggerEntry& trigger)
+		{
+			std::vector<uint32> result;
+
+			for (const auto& action : trigger.actions())
+			{
+				if (action.action() != trigger_actions::Trigger || action.data_size() == 0)
+				{
+					continue;
+				}
+
+				const uint32 targetId = static_cast<uint32>(action.data(0));
+				if (targetId == 0 || targetId == trigger.id())
+				{
+					continue;
+				}
+
+				if (std::find(result.begin(), result.end(), targetId) == result.end())
+				{
+					result.push_back(targetId);
+				}
+			}
+
+			return result;
+		}
+
+		/// Everything that can make a trigger run, formatted for the node tooltip. A trigger that
+		/// nothing owns never runs at all, which is otherwise invisible in this editor - but a
+		/// warning like that is worse than none unless it knows every place an owner can be
+		/// declared, and they are spread across six messages: creature and object entries, map
+		/// instance trigger lists, per-spawn overrides on a map's unit and object spawns, the
+		/// enter/exit hooks on area triggers, and a quest's start / fail / reward trigger lists.
+		void DrawChainOwners(const proto::Project& project, const uint32 triggerId)
+		{
+			bool any = false;
+
+			for (const auto& unit : project.units.getTemplates().entry())
+			{
+				for (const uint32 id : unit.triggers())
+				{
+					if (id == triggerId)
+					{
+						ImGui::BulletText("Creature: %s (%u)", unit.name().c_str(), unit.id());
+						any = true;
+						break;
+					}
+				}
+			}
+
+			for (const auto& object : project.objects.getTemplates().entry())
+			{
+				for (const uint32 id : object.triggers())
+				{
+					if (id == triggerId)
+					{
+						ImGui::BulletText("Object: %s (%u)", object.name().c_str(), object.id());
+						any = true;
+						break;
+					}
+				}
+			}
+
+			for (const auto& map : project.maps.getTemplates().entry())
+			{
+				for (const uint32 id : map.instance_triggers())
+				{
+					if (id == triggerId)
+					{
+						ImGui::BulletText("Instance: %s (%u)", map.name().c_str(), map.id());
+						any = true;
+						break;
+					}
+				}
+
+				for (const auto& spawn : map.unitspawns())
+				{
+					for (const uint32 id : spawn.additional_trigger_ids())
+					{
+						if (id == triggerId)
+						{
+							ImGui::BulletText("Creature spawn '%s' on %s (%u)",
+								spawn.name().c_str(), map.name().c_str(), map.id());
+							any = true;
+							break;
+						}
+					}
+				}
+
+				for (const auto& spawn : map.objectspawns())
+				{
+					if (spawn.trigger_id() == triggerId)
+					{
+						ImGui::BulletText("Object spawn '%s' on %s (%u)",
+							spawn.name().c_str(), map.name().c_str(), map.id());
+						any = true;
+					}
+				}
+			}
+
+			for (const auto& areaTrigger : project.areaTriggers.getTemplates().entry())
+			{
+				if (areaTrigger.on_enter_trigger() == triggerId)
+				{
+					ImGui::BulletText("Area trigger (on enter): %s (%u)",
+						areaTrigger.name().c_str(), areaTrigger.id());
+					any = true;
+				}
+
+				if (areaTrigger.on_exit_trigger() == triggerId)
+				{
+					ImGui::BulletText("Area trigger (on exit): %s (%u)",
+						areaTrigger.name().c_str(), areaTrigger.id());
+					any = true;
+				}
+			}
+
+			for (const auto& quest : project.quests.getTemplates().entry())
+			{
+				struct QuestTriggerList
+				{
+					const char* label;
+					const google::protobuf::RepeatedField<google::protobuf::uint32>* ids;
+				};
+
+				const QuestTriggerList lists[] = {
+					{ "start",  &quest.starttriggers() },
+					{ "fail",   &quest.failtriggers() },
+					{ "reward", &quest.rewardtriggers() },
+				};
+
+				for (const auto& list : lists)
+				{
+					for (const uint32 id : *list.ids)
+					{
+						if (id == triggerId)
+						{
+							ImGui::BulletText("Quest (%s): %s (%u)", list.label,
+								quest.name().c_str(), quest.id());
+							any = true;
+							break;
+						}
+					}
+				}
+			}
+
+			if (!any)
+			{
+				// A player trigger is global to every player and therefore legitimately ownerless,
+				// so it must not be reported as dead content.
+				if ((project.triggers.getById(triggerId) != nullptr) &&
+					(project.triggers.getById(triggerId)->flags() & trigger_flags::PlayerTrigger) != 0)
+				{
+					ImGui::BulletText("Every player (Player Trigger flag)");
+				}
+				else
+				{
+					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
+						"Nothing owns this trigger, so it never runs.");
+				}
+			}
+		}
+	}
+
+	std::vector<uint32> TriggerEditorWindow::CollectChain(const uint32 rootTriggerId) const
+	{
+		// Both adjacency directions are built in a single pass over the project first. Chasing
+		// callers by rescanning every trigger for each node visited instead would put a scan of
+		// the whole project inside the walk, and this runs every frame to notice edits.
+		std::map<uint32, std::vector<uint32>> callees;
+		std::map<uint32, std::vector<uint32>> callers;
+
+		for (const auto& trigger : m_manager.getTemplates().entry())
+		{
+			for (const uint32 target : GetChainedTriggerIds(trigger))
+			{
+				callees[trigger.id()].push_back(target);
+				callers[target].push_back(trigger.id());
+			}
+		}
+
+		// Walk both directions from the selected trigger: what it calls, and what calls it. The
+		// old view drew every trigger in the project, which is what made it unreadable.
+		std::set<uint32> visited{ rootTriggerId };
+		std::vector<uint32> pending{ rootTriggerId };
+
+		while (!pending.empty())
+		{
+			const uint32 current = pending.back();
+			pending.pop_back();
+
+			const std::map<uint32, std::vector<uint32>>* const neighbourSets[] = { &callees, &callers };
+			for (const auto* neighbours : neighbourSets)
+			{
+				const auto it = neighbours->find(current);
+				if (it == neighbours->end())
+				{
+					continue;
+				}
+
+				for (const uint32 neighbour : it->second)
+				{
+					if (visited.insert(neighbour).second)
+					{
+						pending.push_back(neighbour);
+					}
+				}
+			}
+		}
+
+		// Sorted, so the caller can compare one frame's chain against the last one's.
+		return std::vector<uint32>(visited.begin(), visited.end());
+	}
+
+	void TriggerEditorWindow::LayoutChain(const std::vector<uint32>& chain)
+	{
+		if (chain.empty())
+		{
+			return;
+		}
+
+		// Column per node: the longest path from any node with no incoming edge inside the chain.
+		// Relaxed at most chain.size() times so a cycle terminates instead of spinning.
+		std::map<uint32, int> column;
+		for (const uint32 id : chain)
+		{
+			column[id] = 0;
+		}
+
+		for (size_t pass = 0; pass < chain.size(); ++pass)
+		{
+			bool changed = false;
+
+			for (const uint32 id : chain)
+			{
+				const auto* trigger = m_manager.getById(id);
+				if (trigger == nullptr)
+				{
+					continue;
+				}
+
+				for (const uint32 target : GetChainedTriggerIds(*trigger))
+				{
+					const auto it = column.find(target);
+					if (it != column.end() && it->second < column[id] + 1)
+					{
+						it->second = column[id] + 1;
+						changed = true;
+					}
+				}
+			}
+
+			if (!changed)
+			{
+				break;
+			}
+		}
+
+		// Stack the nodes of each column, ordered by trigger id so the layout is stable across
+		// relayouts rather than reshuffling on every edit.
+		std::map<int, int> rowInColumn;
+
+		constexpr float columnPitch = 340.0f;
+		constexpr float rowPitch = 130.0f;
+
+		for (const uint32 id : chain)
+		{
+			const int col = column[id];
+			const int row = rowInColumn[col]++;
+
+			ax::NodeEditor::SetNodePosition(ax::NodeEditor::NodeId(id),
+				ImVec2(col * columnPitch, row * rowPitch));
+		}
+	}
+
+	void TriggerEditorWindow::DrawChainView(const proto::TriggerEntry& selectedEntry)
 	{
 		// Lazy-create the editor context on first use.
 		if (!m_nodeEditorCtx)
@@ -2054,77 +2239,205 @@ namespace mmo
 			m_nodeEditorCtx = ax::NodeEditor::CreateEditor(&config);
 		}
 
+		const std::vector<uint32> chain = CollectChain(selectedEntry.id());
+
+		// Relayout only when the chain's membership actually changed, so a node the user dragged
+		// stays where they put it while they keep editing the same chain.
+		const bool chainChanged = (chain != m_chainCache);
+		if (chainChanged)
+		{
+			m_chainCache = chain;
+			m_relayoutChain = true;
+		}
+
+		if (DrawNeutralButton("Re-layout"))
+		{
+			m_relayoutChain = true;
+		}
+
+		ImGui::SameLine();
+		if (chain.size() <= 1)
+		{
+			ImGui::TextDisabled("'%s' neither calls another trigger nor is called by one.",
+				selectedEntry.name().c_str());
+		}
+		else
+		{
+			ImGui::TextDisabled("%d triggers in this chain. Double-click a node to edit it.",
+				static_cast<int>(chain.size()));
+		}
+
 		ax::NodeEditor::SetCurrentEditor(m_nodeEditorCtx);
 		ax::NodeEditor::Begin("TriggerChain", ImVec2(0.0f, 0.0f));
 
-		// Draw one node per TriggerEntry.
-		for (int i = 0; i < triggers.entry_size(); ++i)
+		// Width of a node's content column. Fixed, because the runaway node widths came from
+		// letting a long trigger name size the node.
+		constexpr float contentWidth = 240.0f;
+
+		// The editor resolves hover from the previous frame's node geometry, so this is stable for
+		// the whole node pass. ImGui::IsItemHovered() after EndNode() would test the node's inner
+		// group instead, which is not the shape the user is pointing at.
+		const ax::NodeEditor::NodeId hoveredNode = ax::NodeEditor::GetHoveredNode();
+
+		for (const uint32 triggerId : chain)
 		{
-			const auto& trigger = triggers.entry(i);
-			const ax::NodeEditor::NodeId nodeId(trigger.id());
+			const auto* trigger = m_manager.getById(triggerId);
+			if (trigger == nullptr)
+			{
+				continue;
+			}
+
+			const bool isSelected = (triggerId == selectedEntry.id());
+			const ax::NodeEditor::NodeId nodeId(triggerId);
+
+			if (isSelected)
+			{
+				ax::NodeEditor::PushStyleColor(ax::NodeEditor::StyleColor_NodeBorder, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+				ax::NodeEditor::PushStyleVar(ax::NodeEditor::StyleVar_NodeBorderWidth, 3.0f);
+			}
 
 			ax::NodeEditor::BeginNode(nodeId);
 
-			ImGui::Text("[%u] %s", trigger.id(), trigger.name().c_str());
-			ImGui::Dummy(ImVec2(160.0f, 0.0f)); // Enforce minimum node width.
-
-			// Stats row: event and action counts.
-			ImGui::TextDisabled("%d event(s)  %d action(s)",
-				trigger.newevents_size(), trigger.actions_size());
-
-			// Input pin (left) and output pin (right).
-			const ax::NodeEditor::PinId inputPin(trigger.id() * 3 + 1);
-			const ax::NodeEditor::PinId outputPin(trigger.id() * 3 + 2);
-
-			ax::NodeEditor::BeginPin(inputPin, ax::NodeEditor::PinKind::Input);
-			ImGui::Text(">");
+			// Three groups side by side: input pin, content, output pin. The previous version
+			// positioned the output pin with SetCursorPosX(GetNodeSize().x - 24), mixing a
+			// node-space width into a window-space cursor, which pushed the pin far to the right
+			// and grew the node to contain it every frame.
+			ImGui::BeginGroup();
+			ax::NodeEditor::BeginPin(ChainInputPin(triggerId), ax::NodeEditor::PinKind::Input);
+			ImGui::TextUnformatted(">");
 			ax::NodeEditor::EndPin();
+			ImGui::EndGroup();
 
 			ImGui::SameLine();
-			ImGui::SetCursorPosX(ax::NodeEditor::GetNodeSize(nodeId).x - 24.0f);
 
-			ax::NodeEditor::BeginPin(outputPin, ax::NodeEditor::PinKind::Output);
-			ImGui::Text(">");
+			ImGui::BeginGroup();
+			{
+				// Reserve the content width first so every node in the graph is the same width
+				// regardless of how long its name is.
+				ImGui::Dummy(ImVec2(contentWidth, 0.0f));
+
+				const String title = "#" + std::to_string(triggerId) + " " + trigger->name();
+				ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + contentWidth);
+				ImGui::TextUnformatted(title.c_str());
+				ImGui::PopTextWrapPos();
+
+				ImGui::TextDisabled("%d event(s), %d action(s)",
+					trigger->newevents_size(), trigger->actions_size());
+
+				if (trigger->has_condition())
+				{
+					ImGui::TextDisabled("conditional");
+				}
+
+				if (trigger->probability() < 100)
+				{
+					ImGui::TextDisabled("%u%% chance", trigger->probability());
+				}
+			}
+			ImGui::EndGroup();
+
+			ImGui::SameLine();
+
+			ImGui::BeginGroup();
+			ax::NodeEditor::BeginPin(ChainOutputPin(triggerId), ax::NodeEditor::PinKind::Output);
+			ImGui::TextUnformatted(">");
 			ax::NodeEditor::EndPin();
+			ImGui::EndGroup();
 
 			ax::NodeEditor::EndNode();
-		}
 
-		// Draw directed edges for Trigger actions (trigger_actions::Trigger == 0).
-		// Target trigger ID is stored in action.data(0).
-		for (int i = 0; i < triggers.entry_size(); ++i)
-		{
-			const auto& trigger = triggers.entry(i);
-
-			for (int j = 0; j < trigger.actions_size(); ++j)
+			if (isSelected)
 			{
-				const auto& action = trigger.actions(j);
+				ax::NodeEditor::PopStyleVar();
+				ax::NodeEditor::PopStyleColor();
+			}
 
-				if (action.action() == trigger_actions::Trigger && action.data_size() > 0)
+			// Tooltips have to leave the node editor's canvas coordinate space first.
+			if (hoveredNode == nodeId)
+			{
+				ax::NodeEditor::Suspend();
+				ImGui::BeginTooltip();
+
+				ImGui::Text("#%u %s", triggerId, trigger->name().c_str());
+				ImGui::Separator();
+
+				ImGui::TextDisabled("Events");
+				if (trigger->newevents_size() == 0)
 				{
-					const uint32 targetId = static_cast<uint32>(action.data(0));
-
-					if (targetId != 0)
-					{
-						const uint32 linkId = (trigger.id() << 16) | (targetId & 0xFFFFu);
-
-						ax::NodeEditor::Link(
-							ax::NodeEditor::LinkId(linkId),
-							ax::NodeEditor::PinId(trigger.id() * 3 + 2),  // source output pin
-							ax::NodeEditor::PinId(targetId * 3 + 1)        // target input pin
-						);
-					}
+					ImGui::BulletText("(none - this trigger only runs when another one calls it)");
 				}
+				for (const auto& event : trigger->newevents())
+				{
+					const char* name = (event.type() < std::size(s_eventTypeNames))
+						? s_eventTypeNames[event.type()] : "Unknown";
+					ImGui::BulletText("%s", name);
+				}
+
+				ImGui::Spacing();
+				ImGui::TextDisabled("Actions");
+				if (trigger->actions_size() == 0)
+				{
+					ImGui::BulletText("(none)");
+				}
+				for (const auto& action : trigger->actions())
+				{
+					const char* name = (action.action() < std::size(s_actionTypeNames))
+						? s_actionTypeNames[action.action()] : "Unknown";
+					ImGui::BulletText("%s", name);
+				}
+
+				ImGui::Spacing();
+				ImGui::TextDisabled("Owned by");
+				DrawChainOwners(m_project, triggerId);
+
+				ImGui::EndTooltip();
+				ax::NodeEditor::Resume();
 			}
 		}
 
-		// Detect node selection and queue a switch back to Edit mode.
+		// Edges, drawn only between nodes that are part of the chain.
+		uint64 linkId = s_chainLinkBase;
+		for (const uint32 triggerId : chain)
 		{
-			ax::NodeEditor::NodeId selectedNode;
-
-			if (ax::NodeEditor::GetSelectedNodes(&selectedNode, 1) > 0)
+			const auto* trigger = m_manager.getById(triggerId);
+			if (trigger == nullptr)
 			{
-				m_jumpToTriggerId = static_cast<uint32>(selectedNode.Get());
+				continue;
+			}
+
+			for (const uint32 target : GetChainedTriggerIds(*trigger))
+			{
+				if (!std::binary_search(chain.begin(), chain.end(), target))
+				{
+					continue;
+				}
+
+				ax::NodeEditor::Link(ax::NodeEditor::LinkId(linkId++),
+					ChainOutputPin(triggerId), ChainInputPin(target));
+			}
+		}
+
+		// Positions have to be applied while the nodes exist, and only take effect once the node
+		// has been measured, so this runs after the node pass rather than before it.
+		if (m_relayoutChain)
+		{
+			LayoutChain(chain);
+			ax::NodeEditor::NavigateToContent(0.0f);
+			m_relayoutChain = false;
+		}
+
+		// Double-click to edit. Selection used to trigger this, which meant a node could not be
+		// selected - and therefore not dragged - without leaving the view.
+		if (const ax::NodeEditor::NodeId doubleClicked = ax::NodeEditor::GetDoubleClickedNode())
+		{
+			const uint32 clickedId = static_cast<uint32>(doubleClicked.Get());
+			if (clickedId != selectedEntry.id())
+			{
+				m_jumpToTriggerId = clickedId;
+			}
+			else
+			{
+				m_showChainView = false;
 			}
 		}
 
