@@ -8,6 +8,7 @@
 #include "graphics/texture_mgr.h"
 #include "base/macros.h"
 
+#include <sstream>
 #include <utility>
 
 #include "frame_mgr.h"
@@ -35,6 +36,49 @@ namespace mmo
 		m_tint = tint;
 	}
 
+	void BorderComponent::SetTintPropertyName(std::string propertyName)
+	{
+		m_tintPropertyConnection.disconnect();
+
+		m_tintPropertyName = std::move(propertyName);
+		if (m_tintPropertyName.empty())
+		{
+			return;
+		}
+
+		auto* observedProperty = m_frame->GetProperty(m_tintPropertyName);
+		if (observedProperty == nullptr)
+		{
+			WLOG("Unknown property name for frame " << m_frame->GetName() << ": " << m_tintPropertyName);
+			return;
+		}
+
+		auto handler = [&](const Property& changedProperty)
+			{
+				argb_t argb;
+
+				std::stringstream colorStream;
+				colorStream.str(changedProperty.GetValue());
+				colorStream.clear();
+				colorStream >> std::hex >> argb;
+				SetTint(Color(argb));
+
+				m_frame->Invalidate(false);
+			};
+
+		m_tintPropertyConnection = observedProperty->Changed += handler;
+
+		// Trigger the handler once to pick up the property's current value
+		handler(*observedProperty);
+	}
+
+	void BorderComponent::OnFrameChanged()
+	{
+		FrameComponent::OnFrameChanged();
+
+		SetTintPropertyName(m_tintPropertyName);
+	}
+
 	std::unique_ptr<FrameComponent> BorderComponent::Copy() const
 	{
 		ASSERT(m_frame);
@@ -44,6 +88,7 @@ namespace mmo
 		copy->m_borderInset = m_borderInset;
 		copy->m_borderSizeRect = m_borderSizeRect;
 		copy->m_tint = m_tint;
+		copy->m_tintPropertyName = m_tintPropertyName;
 		return copy;
 	}
 
