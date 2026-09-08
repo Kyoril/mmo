@@ -167,6 +167,23 @@ namespace mmo
 	static_assert(std::size(s_encounterStateFilterNames) == std::size(s_encounterStateNames),
 		"encounter state filter names must cover the same range as the state names");
 
+	/// Names for trigger_action_target::Type, in enum order.
+	static const char* s_actionTargetStrings[] = {
+		"None",
+		"Owning Object",
+		"Owning Unit Victim",
+		"Random unit",
+		"Named World Object",
+		"Named Creature",
+		"Triggering Unit",
+		"Random Player",
+		"Nearest Player",
+		"Highest Threat (Tank)",
+		"All Players"
+	};
+
+	static_assert(std::size(s_actionTargetStrings) == trigger_action_target::Count_, "s_actionTargetStrings size mismatch");
+
 
 	namespace
 	{
@@ -292,119 +309,217 @@ namespace mmo
 			}
 		}
 
-		void DrawTriggerEvents(proto::TriggerEntry& currentEntry)
+		/// One-line summary of what raises an event, for the blueprint node body and any other
+		/// place a compact description is wanted. This used to be a switch inside a table renderer
+		/// that nothing called; the descriptions are the part worth keeping.
+		String DescribeEvent(const proto::TriggerEvent& event)
 		{
-			// Table with 2 columns: "Handle" and "Name"
-			const ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders
-				| ImGuiTableFlags_RowBg
-				| ImGuiTableFlags_ScrollY
-				| ImGuiTableFlags_Resizable;
-			ImGui::BeginChild("TriggerEventsChild", ImVec2(0, 150), true);
-			if (ImGui::BeginTable("TriggerEventsTable", 1, tableFlags))
+			char buffer[256];
+
+			switch (event.type())
 			{
-				ImGui::TableSetupScrollFreeze(0, 1);
-				ImGui::TableSetupColumn("Trigger", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				for (const auto& event : currentEntry.newevents())
+			case trigger_event::OnAggro:
+				return "Owning unit enters combat";
+			case trigger_event::OnAttackSwing:
+				return "Owning unit executes auto attack swing";
+			case trigger_event::OnDamaged:
+				return "Owning unit received damage";
+			case trigger_event::OnDespawn:
+				return "Owner despawned";
+			case trigger_event::OnHealed:
+				return "Owning unit received heal";
+			case trigger_event::OnKill:
+				return "Owning unit killed someone";
+			case trigger_event::OnKilled:
+				return "Owning unit was killed";
+			case trigger_event::OnSpawn:
+				return "Owner spawned";
+			case trigger_event::OnReset:
+				return "Owning unit resets";
+			case trigger_event::OnReachedHome:
+				return "Owning unit reached home after reset";
+			case trigger_event::OnInteraction:
+				return "Player interacted with owner";
+			case trigger_event::OnHealthDroppedBelow:
+				snprintf(buffer, sizeof(buffer), "Health dropped below %d%%", GetEventDataValue(event, 0));
+				return buffer;
+			case trigger_event::OnReachedTriggeredTarget:
+				return "Reached triggered movement target";
+			case trigger_event::OnSpellHit:
+				snprintf(buffer, sizeof(buffer), "Hit by spell %d", GetEventDataValue(event, 0));
+				return buffer;
+			case trigger_event::OnSpellAuraRemoved:
+				snprintf(buffer, sizeof(buffer), "Lost aura of spell %d", GetEventDataValue(event, 0));
+				return buffer;
+			case trigger_event::OnEmote:
+				snprintf(buffer, sizeof(buffer), "Targeted by emote %d", GetEventDataValue(event, 0));
+				return buffer;
+			case trigger_event::OnSpellCast:
+				snprintf(buffer, sizeof(buffer), "Successfully cast spell %d", GetEventDataValue(event, 0));
+				return buffer;
+			case trigger_event::OnGossipAction:
+				snprintf(buffer, sizeof(buffer), "Gossip menu %d, action %d",
+					GetEventDataValue(event, 0), GetEventDataValue(event, 1));
+				return buffer;
+			case trigger_event::OnQuestAccept:
+				snprintf(buffer, sizeof(buffer), "Player accepted quest %d", GetEventDataValue(event, 0));
+				return buffer;
+			case trigger_event::OnAllPlayersDead:
+				return "All players in instance are dead (wipe)";
+			case trigger_event::OnPlayerEnterInstance:
+				return "A player entered the instance";
+			case trigger_event::OnPlayerLeaveInstance:
+				return "A player left the instance";
+			case trigger_event::OnTimer:
+				if (GetEventDataValue(event, 1) > 0)
 				{
-					ImGui::TableNextRow();
-					ImGui::TableSetColumnIndex(0);
+					snprintf(buffer, sizeof(buffer), "Every %d-%d ms",
+						GetEventDataValue(event, 0), GetEventDataValue(event, 1));
+				}
+				else
+				{
+					snprintf(buffer, sizeof(buffer), "Every %d ms", GetEventDataValue(event, 0));
+				}
+				return buffer;
+			case trigger_event::OnSummonedUnitDied:
+				return "A summoned creature died";
+			case trigger_event::OnEncounterStateChanged:
+				snprintf(buffer, sizeof(buffer), "Encounter slot %d -> state %d (0 = any)",
+					GetEventDataValue(event, 0), GetEventDataValue(event, 1));
+				return buffer;
+			case trigger_event::OnPlayerLevelUp:
+				if (GetEventDataValue(event, 0) > 0)
+				{
+					snprintf(buffer, sizeof(buffer), "Player reached level %d", GetEventDataValue(event, 0));
+					return buffer;
+				}
+				return "Player gained any level";
+			default:
+				return "";
+			}
+		}
 
-					switch (event.type())
-					{
-					case trigger_event::OnAggro:
-						ImGui::Text("Owning unit enters combat");
-						break;
-					case trigger_event::OnAttackSwing:
-						ImGui::Text("Owning unit executes auto attack swing");
-						break;
-					case trigger_event::OnDamaged:
-						ImGui::Text("Owning unit received damage");
-						break;
-					case trigger_event::OnDespawn:
-						ImGui::Text("Owner despawned");
-						break;
-					case trigger_event::OnHealed:
-						ImGui::Text("Owning unit received heal");
-						break;
-					case trigger_event::OnKill:
-						ImGui::Text("Owning unit killed someone");
-						break;
-					case trigger_event::OnKilled:
-						ImGui::Text("Owning unit was killed");
-						break;
-					case trigger_event::OnSpawn:
-						ImGui::Text("Owner spawned");
-						break;
-					case trigger_event::OnReset:
-						ImGui::Text("Owning unit resets");
-						break;
-					case trigger_event::OnReachedHome:
-						ImGui::Text("Owning unit reached home after reset");
-						break;
-					case trigger_event::OnInteraction:
-						ImGui::Text("Player interacted with owner");
-						break;
-					case trigger_event::OnHealthDroppedBelow:
-						ImGui::Text("Owning units health dropped below %d", GetEventDataValue(event, 0));
-						break;
-					case trigger_event::OnReachedTriggeredTarget:
-						ImGui::Text("Owning unit reached triggered movement target");
-						break;
-					case trigger_event::OnSpellHit:
-						ImGui::Text("Owning unit was hit by spell %d", GetEventDataValue(event, 0));
-						break;
-					case trigger_event::OnSpellAuraRemoved:
-						ImGui::Text("Owning unit lost aura of spell %d", GetEventDataValue(event, 0));
-						break;
-					case trigger_event::OnEmote:
-						ImGui::Text("Owning unit was targeted by emote %d", GetEventDataValue(event, 0));
-						break;
-					case trigger_event::OnSpellCast:
-						ImGui::Text("Owning unit successfully casted spell %d", GetEventDataValue(event, 0));
-						break;
-					case trigger_event::OnGossipAction:
-						ImGui::Text("Player chose gossip menu %d's action %d", GetEventDataValue(event, 0), GetEventDataValue(event, 1));
-						break;
-					case trigger_event::OnQuestAccept:
-						ImGui::Text("Player accepted quest %d", GetEventDataValue(event, 0));
-						break;
-					case trigger_event::OnAllPlayersDead:
-						ImGui::Text("All players in instance are dead (wipe)");
-						break;
-					case trigger_event::OnPlayerEnterInstance:
-						ImGui::Text("A player entered the instance");
-						break;
-					case trigger_event::OnPlayerLeaveInstance:
-						ImGui::Text("A player left the instance");
-						break;
-					case trigger_event::OnTimer:
-						if (GetEventDataValue(event, 1) > 0)
-						{
-							ImGui::Text("Every %d-%d ms (periodic)", GetEventDataValue(event, 0), GetEventDataValue(event, 1));
-						}
-						else
-						{
-							ImGui::Text("Every %d ms (periodic)", GetEventDataValue(event, 0));
-						}
-						break;
-					case trigger_event::OnSummonedUnitDied:
-						ImGui::Text("A creature summoned by the owner died");
-						break;
-					case trigger_event::OnEncounterStateChanged:
-						ImGui::Text("Encounter state changed (slot %d, state %d; 0 = any)", GetEventDataValue(event, 0), GetEventDataValue(event, 1));
-						break;
-					case trigger_event::OnPlayerLevelUp:
-						ImGui::Text("Player gained a level (level %d; 0 = any)", GetEventDataValue(event, 0));
-						break;
-					}
+		/// Resolves an entry's name for a node summary, falling back to the bare id so a dangling
+		/// reference reads as a broken link rather than as an empty node.
+		template <class Manager>
+		String DescribeEntryRef(const Manager& manager, const int id)
+		{
+			if (id == 0)
+			{
+				return "none";
+			}
+
+			const auto* entry = manager.getById(static_cast<uint32>(id));
+			if (entry == nullptr)
+			{
+				return "<missing #" + std::to_string(id) + ">";
+			}
+
+			return entry->name();
+		}
+
+		/// One-line summary of what an action does, shown in its blueprint node under the action
+		/// name. Only the field that identifies the action is summarised - the rest is what the
+		/// details panel is for.
+		String DescribeAction(const proto::Project& project, const proto::TriggerAction& action)
+		{
+			char buffer[256];
+
+			const auto quoteText = [&action]() -> String
+			{
+				if (action.texts_size() == 0 || action.texts(0).empty())
+				{
+					return "(no text)";
 				}
 
-				ImGui::EndTable();
-			}
-			ImGui::EndChild();
+				String text = action.texts(0);
+				if (text.size() > 40)
+				{
+					text = text.substr(0, 37) + "...";
+				}
 
+				return "\"" + text + "\"";
+			};
+
+			switch (action.action())
+			{
+			case trigger_actions::Trigger:
+				return "-> " + DescribeEntryRef(project.triggers, GetActionDataValue(action, 0));
+			case trigger_actions::Say:
+			case trigger_actions::Yell:
+			case trigger_actions::Emote:
+			case trigger_actions::BroadcastMessage:
+				return quoteText();
+			case trigger_actions::CastSpell:
+			case trigger_actions::ApplyAura:
+			case trigger_actions::RemoveAura:
+			case trigger_actions::SetSpellCooldown:
+				return DescribeEntryRef(project.spells, GetActionDataValue(action, 0));
+			case trigger_actions::SummonCreature:
+			case trigger_actions::QuestKillCredit:
+				return DescribeEntryRef(project.units, GetActionDataValue(action, 0));
+			case trigger_actions::QuestEventOrExploration:
+			case trigger_actions::QuestExplorationCredit:
+			case trigger_actions::QuestFailQuest:
+				return DescribeEntryRef(project.quests, GetActionDataValue(action, 0));
+			case trigger_actions::Teleport:
+				return DescribeEntryRef(project.maps, GetActionDataValue(action, 0));
+			case trigger_actions::PlaySpellVisual:
+				return DescribeEntryRef(project.spellVisualizations, GetActionDataValue(action, 0));
+			case trigger_actions::SetVariable:
+				return DescribeEntryRef(project.variables, GetActionDataValue(action, 0));
+			case trigger_actions::Delay:
+				snprintf(buffer, sizeof(buffer), "%d ms", GetActionDataValue(action, 0));
+				return buffer;
+			case trigger_actions::SetPhase:
+				snprintf(buffer, sizeof(buffer), "phase %d", GetActionDataValue(action, 0));
+				return buffer;
+			case trigger_actions::SetEncounterState:
+			{
+				const int state = GetActionDataValue(action, 1);
+				snprintf(buffer, sizeof(buffer), "slot %d -> %s", GetActionDataValue(action, 0),
+					(state >= 0 && state < static_cast<int>(std::size(s_encounterStateNames)))
+						? s_encounterStateNames[state] : "?");
+				return buffer;
+			}
+			case trigger_actions::SetInstanceVariable:
+				snprintf(buffer, sizeof(buffer), "key %d = %d",
+					GetActionDataValue(action, 0), GetActionDataValue(action, 1));
+				return buffer;
+			case trigger_actions::MoveTo:
+				snprintf(buffer, sizeof(buffer), "to %d, %d, %d", GetActionDataValue(action, 0),
+					GetActionDataValue(action, 1), GetActionDataValue(action, 2));
+				return buffer;
+			default:
+				break;
+			}
+
+			// Everything else is best identified by who it acts on.
+			const int target = static_cast<int>(action.target());
+			if (target > 0 && target < static_cast<int>(trigger_action_target::Count_))
+			{
+				return String("on ") + s_actionTargetStrings[target];
+			}
+
+			return "";
+		}
+
+		/// Whether an action suspends the rest of the sequence rather than running straight into
+		/// the next one. Both cases re-enter ExecuteTrigger later with an action offset, so the
+		/// link leaving these nodes is a resumption rather than a plain hand-off.
+		bool ActionSuspendsSequence(const proto::TriggerAction& action)
+		{
+			if (action.action() == trigger_actions::Delay)
+			{
+				return GetActionDataValue(action, 0) > 0;
+			}
+
+			if (action.action() == trigger_actions::MoveTo)
+			{
+				return GetActionDataValue(action, 3) != 0;
+			}
+
+			return false;
 		}
 
 		// Draws a single trigger event in the editor.
@@ -590,22 +705,6 @@ namespace mmo
 				auto* nextAction = currentEntry.mutable_actions(actionIndex + 1);
 				std::swap(*nextAction, action);
 			}
-
-			static const char* s_actionTargetStrings[] = {
-				"None",
-				"Owning Object",
-				"Owning Unit Victim",
-				"Random unit",
-				"Named World Object",
-				"Named Creature",
-				"Triggering Unit",
-				"Random Player",
-				"Nearest Player",
-				"Highest Threat (Tank)",
-				"All Players"
-			};
-
-			static_assert(std::size(s_actionTargetStrings) == trigger_action_target::Count_, "s_actionTargetStrings size mismatch");
 
 			// For demonstration, we show the target selection for all actions except "Trigger" and "Delay".
 			if (currentActionType != trigger_actions::Trigger && currentActionType != trigger_actions::Delay)
@@ -1591,29 +1690,34 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
-		// Handle a pending node-click jump (set by DrawChainView last frame).
+		// Handle a pending jump queued by a double-clicked Trigger action node last frame. The
+		// view is deliberately not switched: following a chain hand-off should land in the same
+		// kind of view the author was already reading.
 		if (m_jumpToTriggerId != 0)
 		{
-			m_showChainView = false;
 			SelectEntryById(m_jumpToTriggerId);
 			m_jumpToTriggerId = 0;
+			m_blueprintSelection = { BlueprintNodeKind::None, -1 };
+			m_relayoutBlueprint = true;
 			return;
 		}
 
-		// Chain View / Edit View toggle button.
-		if (ImGui::Button(m_showChainView ? "Edit View" : "Chain View"))
+		// Blueprint / Form view toggle.
+		if (ImGui::Button(m_showBlueprintView ? "Form View" : "Blueprint View"))
 		{
-			m_showChainView = !m_showChainView;
+			m_showBlueprintView = !m_showBlueprintView;
 		}
 
 		ImGui::SameLine();
-		DrawHelpMarker("Chain View shows the selected trigger together with every trigger it calls and every trigger that calls it. Double-click a node to edit that trigger.");
+		DrawHelpMarker("Blueprint View lays the trigger out as a graph: red event nodes feed the "
+			"blue action chain, and the details panel edits whichever node is selected. Form View "
+			"is the same data as lists, which is still the faster way to reorder a long action list.");
 
-		// When Chain View is active, render the node graph and return early. It draws its own
-		// toolbar, so the separator the edit view opens with would only eat vertical space.
-		if (m_showChainView)
+		// The blueprint draws its own header and owns the full remaining region, so the separator
+		// the form view opens with would only eat vertical space.
+		if (m_showBlueprintView)
 		{
-			DrawChainView(currentEntry);
+			DrawBlueprintView(currentEntry);
 			return;
 		}
 
@@ -1935,301 +2039,434 @@ namespace mmo
 
 	namespace
 	{
-		/// Node editor object ids. Nodes are keyed by trigger id so a node can be found again after
-		/// a relayout; pins live in disjoint ranges above every plausible trigger id so the three
-		/// id spaces cannot alias. Links use a running counter, because the old
-		/// "(source << 16) | target" scheme collided whenever a trigger called the same trigger
-		/// twice and truncated any trigger id above 65535.
-		constexpr uint64 s_chainInputPinBase = 0x1000000000ull;
-		constexpr uint64 s_chainOutputPinBase = 0x2000000000ull;
-		constexpr uint64 s_chainLinkBase = 0x3000000000ull;
+		// Node editor object ids. Events and actions are addressed by index within the selected
+		// trigger, so the three id spaces are kept apart by base offset rather than by hashing
+		// something that could collide.
+		constexpr uint64 s_eventNodeBase = 0x0001'0000ull;
+		constexpr uint64 s_actionNodeBase = 0x0002'0000ull;
+		constexpr uint64 s_eventOutPinBase = 0x0010'0000ull;
+		constexpr uint64 s_actionInPinBase = 0x0020'0000ull;
+		constexpr uint64 s_actionOutPinBase = 0x0030'0000ull;
+		constexpr uint64 s_linkBase = 0x0100'0000ull;
 
-		ax::NodeEditor::PinId ChainInputPin(const uint32 triggerId)
+		ax::NodeEditor::NodeId EventNodeId(const int index)
 		{
-			return ax::NodeEditor::PinId(s_chainInputPinBase + triggerId);
+			return ax::NodeEditor::NodeId(s_eventNodeBase + static_cast<uint64>(index));
 		}
 
-		ax::NodeEditor::PinId ChainOutputPin(const uint32 triggerId)
+		ax::NodeEditor::NodeId ActionNodeId(const int index)
 		{
-			return ax::NodeEditor::PinId(s_chainOutputPinBase + triggerId);
+			return ax::NodeEditor::NodeId(s_actionNodeBase + static_cast<uint64>(index));
 		}
 
-		/// Trigger ids this trigger's actions chain to, in action order and without duplicates.
-		std::vector<uint32> GetChainedTriggerIds(const proto::TriggerEntry& trigger)
+		ax::NodeEditor::PinId EventOutPin(const int index)
 		{
-			std::vector<uint32> result;
-
-			for (const auto& action : trigger.actions())
-			{
-				if (action.action() != trigger_actions::Trigger || action.data_size() == 0)
-				{
-					continue;
-				}
-
-				const uint32 targetId = static_cast<uint32>(action.data(0));
-				if (targetId == 0 || targetId == trigger.id())
-				{
-					continue;
-				}
-
-				if (std::find(result.begin(), result.end(), targetId) == result.end())
-				{
-					result.push_back(targetId);
-				}
-			}
-
-			return result;
+			return ax::NodeEditor::PinId(s_eventOutPinBase + static_cast<uint64>(index));
 		}
 
-		/// Everything that can make a trigger run, formatted for the node tooltip. A trigger that
-		/// nothing owns never runs at all, which is otherwise invisible in this editor - but a
-		/// warning like that is worse than none unless it knows every place an owner can be
-		/// declared, and they are spread across six messages: creature and object entries, map
-		/// instance trigger lists, per-spawn overrides on a map's unit and object spawns, the
-		/// enter/exit hooks on area triggers, and a quest's start / fail / reward trigger lists.
-		void DrawChainOwners(const proto::Project& project, const uint32 triggerId)
+		ax::NodeEditor::PinId ActionInPin(const int index)
 		{
-			bool any = false;
+			return ax::NodeEditor::PinId(s_actionInPinBase + static_cast<uint64>(index));
+		}
 
-			for (const auto& unit : project.units.getTemplates().entry())
+		ax::NodeEditor::PinId ActionOutPin(const int index)
+		{
+			return ax::NodeEditor::PinId(s_actionOutPinBase + static_cast<uint64>(index));
+		}
+
+		/// Turns a node id back into what it stands for. Returns kind None for anything that is
+		/// not a node of the current graph, which is what a stale selection looks like after the
+		/// selected trigger changed.
+		BlueprintNodeRef DecodeNodeId(const ax::NodeEditor::NodeId nodeId)
+		{
+			const uint64 raw = nodeId.Get();
+
+			if (raw >= s_actionNodeBase && raw < s_actionNodeBase + 0x1'0000ull)
 			{
-				for (const uint32 id : unit.triggers())
-				{
-					if (id == triggerId)
-					{
-						ImGui::BulletText("Creature: %s (%u)", unit.name().c_str(), unit.id());
-						any = true;
-						break;
-					}
-				}
+				return { BlueprintNodeKind::Action, static_cast<int>(raw - s_actionNodeBase) };
 			}
 
-			for (const auto& object : project.objects.getTemplates().entry())
+			if (raw >= s_eventNodeBase && raw < s_eventNodeBase + 0x1'0000ull)
 			{
-				for (const uint32 id : object.triggers())
-				{
-					if (id == triggerId)
-					{
-						ImGui::BulletText("Object: %s (%u)", object.name().c_str(), object.id());
-						any = true;
-						break;
-					}
-				}
+				return { BlueprintNodeKind::Event, static_cast<int>(raw - s_eventNodeBase) };
 			}
 
-			for (const auto& map : project.maps.getTemplates().entry())
+			return { BlueprintNodeKind::None, -1 };
+		}
+
+		// Node colours. Events are the red entry points, actions the blue body, and an action that
+		// hands off to another trigger gets its own colour because it leaves this graph.
+		const ImVec4 s_eventNodeColor(0.42f, 0.13f, 0.15f, 1.0f);
+		const ImVec4 s_actionNodeColor(0.13f, 0.22f, 0.38f, 1.0f);
+		const ImVec4 s_chainActionNodeColor(0.28f, 0.16f, 0.38f, 1.0f);
+		const ImVec4 s_flowLinkColor(0.55f, 0.65f, 0.85f, 1.0f);
+		const ImVec4 s_suspendLinkColor(0.90f, 0.65f, 0.25f, 1.0f);
+	}
+
+	void TriggerEditorWindow::DrawBlueprintCanvas(proto::TriggerEntry& currentEntry)
+	{
+		const int eventCount = currentEntry.newevents_size();
+		const int actionCount = currentEntry.actions_size();
+
+		// --- Nodes: events in a left column, actions in one row to their right. ---
+		for (int i = 0; i < eventCount; ++i)
+		{
+			const auto& event = currentEntry.newevents(i);
+
+			ax::NodeEditor::PushStyleColor(ax::NodeEditor::StyleColor_NodeBg, s_eventNodeColor);
+			ax::NodeEditor::BeginNode(EventNodeId(i));
+
+			ImGui::BeginGroup();
 			{
-				for (const uint32 id : map.instance_triggers())
-				{
-					if (id == triggerId)
-					{
-						ImGui::BulletText("Instance: %s (%u)", map.name().c_str(), map.id());
-						any = true;
-						break;
-					}
-				}
+				ImGui::Dummy(ImVec2(s_blueprintEventWidth, 0.0f));
 
-				for (const auto& spawn : map.unitspawns())
-				{
-					for (const uint32 id : spawn.additional_trigger_ids())
-					{
-						if (id == triggerId)
-						{
-							ImGui::BulletText("Creature spawn '%s' on %s (%u)",
-								spawn.name().c_str(), map.name().c_str(), map.id());
-							any = true;
-							break;
-						}
-					}
-				}
+				const char* typeName = (event.type() < std::size(s_eventTypeNames))
+					? s_eventTypeNames[event.type()] : "Unknown Event";
+				ImGui::TextUnformatted(typeName);
 
-				for (const auto& spawn : map.objectspawns())
+				const String summary = DescribeEvent(event);
+				if (!summary.empty())
 				{
-					if (spawn.trigger_id() == triggerId)
-					{
-						ImGui::BulletText("Object spawn '%s' on %s (%u)",
-							spawn.name().c_str(), map.name().c_str(), map.id());
-						any = true;
-					}
+					ImGui::TextDisabled("%s", summary.c_str());
 				}
 			}
+			ImGui::EndGroup();
 
-			for (const auto& areaTrigger : project.areaTriggers.getTemplates().entry())
+			ImGui::SameLine();
+
+			// Events have an output only: the data model gives them nowhere to be wired from.
+			ImGui::BeginGroup();
+			ax::NodeEditor::BeginPin(EventOutPin(i), ax::NodeEditor::PinKind::Output);
+			ImGui::TextUnformatted(">");
+			ax::NodeEditor::EndPin();
+			ImGui::EndGroup();
+
+			ax::NodeEditor::EndNode();
+			ax::NodeEditor::PopStyleColor();
+		}
+
+		for (int i = 0; i < actionCount; ++i)
+		{
+			const auto& action = currentEntry.actions(i);
+			const bool isChainAction = (action.action() == trigger_actions::Trigger);
+
+			ax::NodeEditor::PushStyleColor(ax::NodeEditor::StyleColor_NodeBg,
+				isChainAction ? s_chainActionNodeColor : s_actionNodeColor);
+			ax::NodeEditor::BeginNode(ActionNodeId(i));
+
+			ImGui::BeginGroup();
+			ax::NodeEditor::BeginPin(ActionInPin(i), ax::NodeEditor::PinKind::Input);
+			ImGui::TextUnformatted(">");
+			ax::NodeEditor::EndPin();
+			ImGui::EndGroup();
+
+			ImGui::SameLine();
+
+			ImGui::BeginGroup();
 			{
-				if (areaTrigger.on_enter_trigger() == triggerId)
+				ImGui::Dummy(ImVec2(s_blueprintActionWidth, 0.0f));
+
+				const char* typeName = (action.action() < std::size(s_actionTypeNames))
+					? s_actionTypeNames[action.action()] : "Unknown Action";
+				ImGui::Text("%d. %s", i, typeName);
+
+				const String summary = DescribeAction(m_project, action);
+				if (!summary.empty())
 				{
-					ImGui::BulletText("Area trigger (on enter): %s (%u)",
-						areaTrigger.name().c_str(), areaTrigger.id());
-					any = true;
+					ImGui::TextDisabled("%s", summary.c_str());
 				}
 
-				if (areaTrigger.on_exit_trigger() == triggerId)
+				if (ActionSuspendsSequence(action))
 				{
-					ImGui::BulletText("Area trigger (on exit): %s (%u)",
-						areaTrigger.name().c_str(), areaTrigger.id());
-					any = true;
+					ImGui::TextColored(s_suspendLinkColor, "waits before continuing");
+				}
+
+				if (isChainAction)
+				{
+					ImGui::TextDisabled("double-click to open");
 				}
 			}
+			ImGui::EndGroup();
 
-			for (const auto& quest : project.quests.getTemplates().entry())
+			ImGui::SameLine();
+
+			ImGui::BeginGroup();
+			ax::NodeEditor::BeginPin(ActionOutPin(i), ax::NodeEditor::PinKind::Output);
+			ImGui::TextUnformatted(">");
+			ax::NodeEditor::EndPin();
+			ImGui::EndGroup();
+
+			ax::NodeEditor::EndNode();
+			ax::NodeEditor::PopStyleColor();
+		}
+
+		// --- Links. Every one of these is derived from the data, never authored: each event runs
+		// the trigger from action 0, and the actions run in list order. ---
+		uint64 linkId = s_linkBase;
+
+		if (actionCount > 0)
+		{
+			for (int i = 0; i < eventCount; ++i)
 			{
-				struct QuestTriggerList
-				{
-					const char* label;
-					const google::protobuf::RepeatedField<google::protobuf::uint32>* ids;
-				};
+				ax::NodeEditor::Link(ax::NodeEditor::LinkId(linkId++),
+					EventOutPin(i), ActionInPin(0), s_flowLinkColor, 2.0f);
+			}
+		}
 
-				const QuestTriggerList lists[] = {
-					{ "start",  &quest.starttriggers() },
-					{ "fail",   &quest.failtriggers() },
-					{ "reward", &quest.rewardtriggers() },
-				};
+		for (int i = 0; i + 1 < actionCount; ++i)
+		{
+			const bool suspends = ActionSuspendsSequence(currentEntry.actions(i));
+			ax::NodeEditor::Link(ax::NodeEditor::LinkId(linkId++),
+				ActionOutPin(i), ActionInPin(i + 1),
+				suspends ? s_suspendLinkColor : s_flowLinkColor, suspends ? 3.0f : 2.0f);
+		}
+	}
 
-				for (const auto& list : lists)
+	void TriggerEditorWindow::LayoutBlueprint(const proto::TriggerEntry& currentEntry)
+	{
+		// The topology is fixed, so the layout can be too: events stack in a column on the left,
+		// actions run left to right in list order at a height that clears the event column.
+		const int eventCount = currentEntry.newevents_size();
+		const int actionCount = currentEntry.actions_size();
+
+		constexpr float eventRowPitch = 110.0f;
+		constexpr float actionColumnPitch = 300.0f;
+		constexpr float actionRowY = 40.0f;
+		constexpr float actionStartX = 360.0f;
+
+		for (int i = 0; i < eventCount; ++i)
+		{
+			ax::NodeEditor::SetNodePosition(EventNodeId(i), ImVec2(0.0f, i * eventRowPitch));
+		}
+
+		for (int i = 0; i < actionCount; ++i)
+		{
+			ax::NodeEditor::SetNodePosition(ActionNodeId(i),
+				ImVec2(actionStartX + i * actionColumnPitch, actionRowY));
+		}
+	}
+
+	void TriggerEditorWindow::DrawBlueprintContextMenus(proto::TriggerEntry& currentEntry)
+	{
+		// Popups must be opened and drawn outside the canvas coordinate space.
+		ax::NodeEditor::Suspend();
+
+		ax::NodeEditor::NodeId contextNodeId;
+		if (ax::NodeEditor::ShowNodeContextMenu(&contextNodeId))
+		{
+			m_blueprintContextNode = DecodeNodeId(contextNodeId);
+			ImGui::OpenPopup("BlueprintNodeContext");
+		}
+		else if (ax::NodeEditor::ShowBackgroundContextMenu())
+		{
+			m_blueprintContextNode = { BlueprintNodeKind::None, -1 };
+			ImGui::OpenPopup("BlueprintBackgroundContext");
+		}
+
+		if (ImGui::BeginPopup("BlueprintNodeContext"))
+		{
+			const BlueprintNodeRef node = m_blueprintContextNode;
+
+			if (node.kind == BlueprintNodeKind::Event && node.index < currentEntry.newevents_size())
+			{
+				ImGui::TextDisabled("Event %d", node.index);
+				ImGui::Separator();
+
+				if (ImGui::MenuItem("Delete Event"))
 				{
-					for (const uint32 id : *list.ids)
+					currentEntry.mutable_newevents()->DeleteSubrange(node.index, 1);
+					m_blueprintSelection = { BlueprintNodeKind::None, -1 };
+					m_relayoutBlueprint = true;
+				}
+			}
+			else if (node.kind == BlueprintNodeKind::Action && node.index < currentEntry.actions_size())
+			{
+				ImGui::TextDisabled("Action %d", node.index);
+				ImGui::Separator();
+
+				// Order is the whole of the model here, so moving a node is the only structural
+				// edit the graph can offer. Dragging one somewhere else would mean nothing.
+				if (ImGui::MenuItem("Move Earlier", nullptr, false, node.index > 0))
+				{
+					currentEntry.mutable_actions()->SwapElements(node.index, node.index - 1);
+					m_blueprintPendingSelect = { BlueprintNodeKind::Action, node.index - 1 };
+					m_relayoutBlueprint = true;
+				}
+
+				if (ImGui::MenuItem("Move Later", nullptr, false, node.index + 1 < currentEntry.actions_size()))
+				{
+					currentEntry.mutable_actions()->SwapElements(node.index, node.index + 1);
+					m_blueprintPendingSelect = { BlueprintNodeKind::Action, node.index + 1 };
+					m_relayoutBlueprint = true;
+				}
+
+				ImGui::Separator();
+
+				if (ImGui::MenuItem("Delete Action"))
+				{
+					currentEntry.mutable_actions()->DeleteSubrange(node.index, 1);
+					m_blueprintSelection = { BlueprintNodeKind::None, -1 };
+					m_relayoutBlueprint = true;
+				}
+			}
+			else
+			{
+				ImGui::TextDisabled("(node no longer exists)");
+			}
+
+			ImGui::EndPopup();
+		}
+
+		if (ImGui::BeginPopup("BlueprintBackgroundContext"))
+		{
+			if (ImGui::BeginMenu("Add Event"))
+			{
+				for (int i = 0; i < static_cast<int>(std::size(s_eventTypeNames)); ++i)
+				{
+					if (ImGui::MenuItem(s_eventTypeNames[i]))
 					{
-						if (id == triggerId)
-						{
-							ImGui::BulletText("Quest (%s): %s (%u)", list.label,
-								quest.name().c_str(), quest.id());
-							any = true;
-							break;
-						}
+						currentEntry.add_newevents()->set_type(static_cast<uint32>(i));
+						m_blueprintPendingSelect = { BlueprintNodeKind::Event, currentEntry.newevents_size() - 1 };
+						m_relayoutBlueprint = true;
 					}
 				}
+
+				ImGui::EndMenu();
 			}
 
-			if (!any)
+			if (ImGui::BeginMenu("Add Action"))
 			{
-				// A player trigger is global to every player and therefore legitimately ownerless,
-				// so it must not be reported as dead content.
-				if ((project.triggers.getById(triggerId) != nullptr) &&
-					(project.triggers.getById(triggerId)->flags() & trigger_flags::PlayerTrigger) != 0)
+				for (int i = 0; i < static_cast<int>(std::size(s_actionTypeNames)); ++i)
 				{
-					ImGui::BulletText("Every player (Player Trigger flag)");
+					if (ImGui::MenuItem(s_actionTypeNames[i]))
+					{
+						// Appended, because that is the only position the list has a name for.
+						// Use Move Earlier on the new node to place it.
+						auto* newAction = currentEntry.add_actions();
+						newAction->set_action(static_cast<uint32>(i));
+						newAction->set_target(trigger_action_target::OwningObject);
+						m_blueprintPendingSelect = { BlueprintNodeKind::Action, currentEntry.actions_size() - 1 };
+						m_relayoutBlueprint = true;
+					}
+				}
+
+				ImGui::EndMenu();
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Re-layout"))
+			{
+				m_relayoutBlueprint = true;
+			}
+
+			ImGui::EndPopup();
+		}
+
+		ax::NodeEditor::Resume();
+	}
+
+	void TriggerEditorWindow::DrawBlueprintDetails(proto::TriggerEntry& currentEntry)
+	{
+		// A node can disappear under the selection - a delete from the context menu, or an edit in
+		// the form view - so the index is re-checked here rather than trusted from last frame.
+		BlueprintNodeRef selection = m_blueprintSelection;
+		if ((selection.kind == BlueprintNodeKind::Event && selection.index >= currentEntry.newevents_size()) ||
+			(selection.kind == BlueprintNodeKind::Action && selection.index >= currentEntry.actions_size()))
+		{
+			selection = { BlueprintNodeKind::None, -1 };
+			m_blueprintSelection = selection;
+		}
+
+		switch (selection.kind)
+		{
+		case BlueprintNodeKind::Event:
+			DrawSectionHeader("Event Properties");
+			ImGui::PushID(selection.index);
+			DrawTriggerEvent(*currentEntry.mutable_newevents(selection.index), selection.index,
+				currentEntry, m_project);
+			ImGui::PopID();
+			break;
+
+		case BlueprintNodeKind::Action:
+			DrawSectionHeader("Action Properties");
+			ImGui::PushID(selection.index);
+			DrawTriggerAction(*currentEntry.mutable_actions(selection.index), selection.index,
+				currentEntry, m_project);
+			ImGui::PopID();
+			break;
+
+		default:
+			// Nothing selected: the trigger's own properties are not nodes, so this is where they
+			// live.
+			DrawSectionHeader("Trigger Properties");
+
+			ImGui::SetNextItemWidth(-1.0f);
+			ImGui::InputText("##BlueprintTriggerName", currentEntry.mutable_name());
+			ImGui::TextDisabled("Name (id %u)", currentEntry.id());
+
+			ImGui::Spacing();
+
+			uint32 probability = currentEntry.probability();
+			ImGui::SetNextItemWidth(120.0f);
+			if (ImGui::InputScalar("##BlueprintProbability", ImGuiDataType_U32, &probability))
+			{
+				currentEntry.set_probability(std::min<uint32>(probability, 100u));
+			}
+			ImGui::SameLine();
+			ImGui::Text("Probability (%%)");
+
+			ImGui::Spacing();
+			DrawSectionHeader("Flags");
+
+			const struct { const char* label; uint32 bit; const char* help; } flagRows[] = {
+				{ "Cancel On Owner Death", trigger_flags::AbortOnOwnerDeath, "Stop the trigger as soon as the owner dies." },
+				{ "Only In Combat", trigger_flags::OnlyInCombat, "Only run while the owner is in combat; aborts when combat ends." },
+				{ "Only One Instance", trigger_flags::OnlyOneInstance, "Refuse to start while a run of this trigger is still going." },
+				{ "Player Trigger", trigger_flags::PlayerTrigger, "Evaluate for every player. Players carry no trigger list, so this is what makes a trigger global to them - needed for player events such as On Level Up." },
+			};
+
+			for (const auto& row : flagRows)
+			{
+				bool set = (currentEntry.flags() & row.bit) != 0;
+				if (ImGui::Checkbox(row.label, &set))
+				{
+					currentEntry.set_flags(set
+						? (currentEntry.flags() | row.bit)
+						: (currentEntry.flags() & ~row.bit));
+				}
+
+				ImGui::SameLine();
+				DrawHelpMarker(row.help);
+			}
+
+			ImGui::Spacing();
+			DrawSectionHeader("Condition");
+			ImGui::TextWrapped("Checked after the probability roll and before the first action.");
+
+			bool hasCondition = currentEntry.has_condition();
+			if (ImGui::Checkbox("Enable Condition##BlueprintCond", &hasCondition))
+			{
+				if (hasCondition)
+				{
+					currentEntry.mutable_condition()->set_operator_(proto::Equal);
 				}
 				else
 				{
-					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
-						"Nothing owns this trigger, so it never runs.");
+					currentEntry.clear_condition();
 				}
 			}
+
+			if (hasCondition)
+			{
+				ImGui::Spacing();
+				DrawTriggerCondition(*currentEntry.mutable_condition(), 0);
+			}
+			break;
 		}
 	}
 
-	std::vector<uint32> TriggerEditorWindow::CollectChain(const uint32 rootTriggerId) const
-	{
-		// Both adjacency directions are built in a single pass over the project first. Chasing
-		// callers by rescanning every trigger for each node visited instead would put a scan of
-		// the whole project inside the walk, and this runs every frame to notice edits.
-		std::map<uint32, std::vector<uint32>> callees;
-		std::map<uint32, std::vector<uint32>> callers;
-
-		for (const auto& trigger : m_manager.getTemplates().entry())
-		{
-			for (const uint32 target : GetChainedTriggerIds(trigger))
-			{
-				callees[trigger.id()].push_back(target);
-				callers[target].push_back(trigger.id());
-			}
-		}
-
-		// Walk both directions from the selected trigger: what it calls, and what calls it. The
-		// old view drew every trigger in the project, which is what made it unreadable.
-		std::set<uint32> visited{ rootTriggerId };
-		std::vector<uint32> pending{ rootTriggerId };
-
-		while (!pending.empty())
-		{
-			const uint32 current = pending.back();
-			pending.pop_back();
-
-			const std::map<uint32, std::vector<uint32>>* const neighbourSets[] = { &callees, &callers };
-			for (const auto* neighbours : neighbourSets)
-			{
-				const auto it = neighbours->find(current);
-				if (it == neighbours->end())
-				{
-					continue;
-				}
-
-				for (const uint32 neighbour : it->second)
-				{
-					if (visited.insert(neighbour).second)
-					{
-						pending.push_back(neighbour);
-					}
-				}
-			}
-		}
-
-		// Sorted, so the caller can compare one frame's chain against the last one's.
-		return std::vector<uint32>(visited.begin(), visited.end());
-	}
-
-	void TriggerEditorWindow::LayoutChain(const std::vector<uint32>& chain)
-	{
-		if (chain.empty())
-		{
-			return;
-		}
-
-		// Column per node: the longest path from any node with no incoming edge inside the chain.
-		// Relaxed at most chain.size() times so a cycle terminates instead of spinning.
-		std::map<uint32, int> column;
-		for (const uint32 id : chain)
-		{
-			column[id] = 0;
-		}
-
-		for (size_t pass = 0; pass < chain.size(); ++pass)
-		{
-			bool changed = false;
-
-			for (const uint32 id : chain)
-			{
-				const auto* trigger = m_manager.getById(id);
-				if (trigger == nullptr)
-				{
-					continue;
-				}
-
-				for (const uint32 target : GetChainedTriggerIds(*trigger))
-				{
-					const auto it = column.find(target);
-					if (it != column.end() && it->second < column[id] + 1)
-					{
-						it->second = column[id] + 1;
-						changed = true;
-					}
-				}
-			}
-
-			if (!changed)
-			{
-				break;
-			}
-		}
-
-		// Stack the nodes of each column, ordered by trigger id so the layout is stable across
-		// relayouts rather than reshuffling on every edit.
-		std::map<int, int> rowInColumn;
-
-		constexpr float columnPitch = 340.0f;
-		constexpr float rowPitch = 130.0f;
-
-		for (const uint32 id : chain)
-		{
-			const int col = column[id];
-			const int row = rowInColumn[col]++;
-
-			ax::NodeEditor::SetNodePosition(ax::NodeEditor::NodeId(id),
-				ImVec2(col * columnPitch, row * rowPitch));
-		}
-	}
-
-	void TriggerEditorWindow::DrawChainView(const proto::TriggerEntry& selectedEntry)
+	void TriggerEditorWindow::DrawBlueprintView(proto::TriggerEntry& currentEntry)
 	{
 		// Lazy-create the editor context on first use.
 		if (!m_nodeEditorCtx)
@@ -2239,209 +2476,164 @@ namespace mmo
 			m_nodeEditorCtx = ax::NodeEditor::CreateEditor(&config);
 		}
 
-		const std::vector<uint32> chain = CollectChain(selectedEntry.id());
-
-		// Relayout only when the chain's membership actually changed, so a node the user dragged
-		// stays where they put it while they keep editing the same chain.
-		const bool chainChanged = (chain != m_chainCache);
-		if (chainChanged)
+		// The graph's shape is a function of the trigger and its counts, so a relayout is due
+		// whenever any of those change. Between relayouts a dragged node stays where it was put.
+		const BlueprintShape shape{ currentEntry.id(), currentEntry.newevents_size(), currentEntry.actions_size() };
+		if (!(shape == m_blueprintShape))
 		{
-			m_chainCache = chain;
-			m_relayoutChain = true;
+			m_blueprintShape = shape;
+			m_relayoutBlueprint = true;
 		}
 
-		if (DrawNeutralButton("Re-layout"))
+		if (currentEntry.newevents_size() == 0)
 		{
-			m_relayoutChain = true;
+			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f),
+				"No events: this trigger only runs when another trigger's Trigger action calls it.");
 		}
 
-		ImGui::SameLine();
-		if (chain.size() <= 1)
+		if (currentEntry.actions_size() == 0)
 		{
-			ImGui::TextDisabled("'%s' neither calls another trigger nor is called by one.",
-				selectedEntry.name().c_str());
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
+				"No actions: this trigger does nothing. Right-click the canvas to add one.");
 		}
-		else
-		{
-			ImGui::TextDisabled("%d triggers in this chain. Double-click a node to edit it.",
-				static_cast<int>(chain.size()));
-		}
+
+		ImGui::TextDisabled("Right-click the canvas to add nodes, a node to reorder or delete it. "
+			"Links follow the data and cannot be drawn by hand.");
+
+		const float detailsWidth = std::min(s_blueprintDetailsWidth,
+			std::max(300.0f, ImGui::GetContentRegionAvail().x - 320.0f));
+		const float canvasWidth = ImGui::GetContentRegionAvail().x - detailsWidth - ImGui::GetStyle().ItemSpacing.x;
 
 		ax::NodeEditor::SetCurrentEditor(m_nodeEditorCtx);
-		ax::NodeEditor::Begin("TriggerChain", ImVec2(0.0f, 0.0f));
+		ax::NodeEditor::Begin("TriggerBlueprint", ImVec2(canvasWidth, 0.0f));
 
-		// Width of a node's content column. Fixed, because the runaway node widths came from
-		// letting a long trigger name size the node.
-		constexpr float contentWidth = 240.0f;
+		DrawBlueprintCanvas(currentEntry);
 
-		// The editor resolves hover from the previous frame's node geometry, so this is stable for
-		// the whole node pass. ImGui::IsItemHovered() after EndNode() would test the node's inner
-		// group instead, which is not the shape the user is pointing at.
-		const ax::NodeEditor::NodeId hoveredNode = ax::NodeEditor::GetHoveredNode();
-
-		for (const uint32 triggerId : chain)
+		// A node added through the context menu does not exist in the editor until the frame after
+		// the edit, so selecting it has to wait until here rather than happening at the click.
+		if (m_blueprintPendingSelect.kind != BlueprintNodeKind::None)
 		{
-			const auto* trigger = m_manager.getById(triggerId);
-			if (trigger == nullptr)
+			const BlueprintNodeRef pending = m_blueprintPendingSelect;
+			m_blueprintPendingSelect = { BlueprintNodeKind::None, -1 };
+
+			const bool stillThere =
+				(pending.kind == BlueprintNodeKind::Event && pending.index < currentEntry.newevents_size()) ||
+				(pending.kind == BlueprintNodeKind::Action && pending.index < currentEntry.actions_size());
+
+			if (stillThere)
 			{
-				continue;
+				ax::NodeEditor::ClearSelection();
+				ax::NodeEditor::SelectNode(pending.kind == BlueprintNodeKind::Event
+					? EventNodeId(pending.index)
+					: ActionNodeId(pending.index));
+				m_blueprintSelection = pending;
 			}
+		}
 
-			const bool isSelected = (triggerId == selectedEntry.id());
-			const ax::NodeEditor::NodeId nodeId(triggerId);
+		// Positions are applied after the nodes exist so the editor has measured them.
+		if (m_relayoutBlueprint)
+		{
+			LayoutBlueprint(currentEntry);
+			ax::NodeEditor::NavigateToContent(0.0f);
+			m_relayoutBlueprint = false;
+		}
 
-			if (isSelected)
+		// Link editing is refused rather than ignored: every link here is implied by the data, so
+		// there is nothing a dragged link could store. Saying so beats a canvas that silently
+		// swallows the gesture.
+		if (ax::NodeEditor::BeginCreate())
+		{
+			ax::NodeEditor::PinId startPin, endPin;
+			if (ax::NodeEditor::QueryNewLink(&startPin, &endPin))
 			{
-				ax::NodeEditor::PushStyleColor(ax::NodeEditor::StyleColor_NodeBorder, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
-				ax::NodeEditor::PushStyleVar(ax::NodeEditor::StyleVar_NodeBorderWidth, 3.0f);
-			}
+				ax::NodeEditor::RejectNewItem(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), 2.0f);
 
-			ax::NodeEditor::BeginNode(nodeId);
-
-			// Three groups side by side: input pin, content, output pin. The previous version
-			// positioned the output pin with SetCursorPosX(GetNodeSize().x - 24), mixing a
-			// node-space width into a window-space cursor, which pushed the pin far to the right
-			// and grew the node to contain it every frame.
-			ImGui::BeginGroup();
-			ax::NodeEditor::BeginPin(ChainInputPin(triggerId), ax::NodeEditor::PinKind::Input);
-			ImGui::TextUnformatted(">");
-			ax::NodeEditor::EndPin();
-			ImGui::EndGroup();
-
-			ImGui::SameLine();
-
-			ImGui::BeginGroup();
-			{
-				// Reserve the content width first so every node in the graph is the same width
-				// regardless of how long its name is.
-				ImGui::Dummy(ImVec2(contentWidth, 0.0f));
-
-				const String title = "#" + std::to_string(triggerId) + " " + trigger->name();
-				ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + contentWidth);
-				ImGui::TextUnformatted(title.c_str());
-				ImGui::PopTextWrapPos();
-
-				ImGui::TextDisabled("%d event(s), %d action(s)",
-					trigger->newevents_size(), trigger->actions_size());
-
-				if (trigger->has_condition())
-				{
-					ImGui::TextDisabled("conditional");
-				}
-
-				if (trigger->probability() < 100)
-				{
-					ImGui::TextDisabled("%u%% chance", trigger->probability());
-				}
-			}
-			ImGui::EndGroup();
-
-			ImGui::SameLine();
-
-			ImGui::BeginGroup();
-			ax::NodeEditor::BeginPin(ChainOutputPin(triggerId), ax::NodeEditor::PinKind::Output);
-			ImGui::TextUnformatted(">");
-			ax::NodeEditor::EndPin();
-			ImGui::EndGroup();
-
-			ax::NodeEditor::EndNode();
-
-			if (isSelected)
-			{
-				ax::NodeEditor::PopStyleVar();
-				ax::NodeEditor::PopStyleColor();
-			}
-
-			// Tooltips have to leave the node editor's canvas coordinate space first.
-			if (hoveredNode == nodeId)
-			{
 				ax::NodeEditor::Suspend();
-				ImGui::BeginTooltip();
-
-				ImGui::Text("#%u %s", triggerId, trigger->name().c_str());
-				ImGui::Separator();
-
-				ImGui::TextDisabled("Events");
-				if (trigger->newevents_size() == 0)
-				{
-					ImGui::BulletText("(none - this trigger only runs when another one calls it)");
-				}
-				for (const auto& event : trigger->newevents())
-				{
-					const char* name = (event.type() < std::size(s_eventTypeNames))
-						? s_eventTypeNames[event.type()] : "Unknown";
-					ImGui::BulletText("%s", name);
-				}
-
-				ImGui::Spacing();
-				ImGui::TextDisabled("Actions");
-				if (trigger->actions_size() == 0)
-				{
-					ImGui::BulletText("(none)");
-				}
-				for (const auto& action : trigger->actions())
-				{
-					const char* name = (action.action() < std::size(s_actionTypeNames))
-						? s_actionTypeNames[action.action()] : "Unknown";
-					ImGui::BulletText("%s", name);
-				}
-
-				ImGui::Spacing();
-				ImGui::TextDisabled("Owned by");
-				DrawChainOwners(m_project, triggerId);
-
-				ImGui::EndTooltip();
+				ImGui::SetTooltip("Links cannot be drawn: every event starts the trigger at action 0,\n"
+					"and actions always run in list order. Right-click a node to reorder it.");
 				ax::NodeEditor::Resume();
 			}
 		}
+		ax::NodeEditor::EndCreate();
 
-		// Edges, drawn only between nodes that are part of the chain.
-		uint64 linkId = s_chainLinkBase;
-		for (const uint32 triggerId : chain)
+		// Deleting a link is likewise meaningless; deleting a node is a real edit, and is applied
+		// after the canvas closes so the repeated field is not resized mid-frame.
+		BlueprintNodeRef pendingDelete{ BlueprintNodeKind::None, -1 };
+		if (ax::NodeEditor::BeginDelete())
 		{
-			const auto* trigger = m_manager.getById(triggerId);
-			if (trigger == nullptr)
+			ax::NodeEditor::LinkId deletedLink;
+			while (ax::NodeEditor::QueryDeletedLink(&deletedLink))
 			{
-				continue;
+				ax::NodeEditor::RejectDeletedItem();
 			}
 
-			for (const uint32 target : GetChainedTriggerIds(*trigger))
+			ax::NodeEditor::NodeId deletedNode;
+			while (ax::NodeEditor::QueryDeletedNode(&deletedNode))
 			{
-				if (!std::binary_search(chain.begin(), chain.end(), target))
+				if (ax::NodeEditor::AcceptDeletedItem())
 				{
-					continue;
+					pendingDelete = DecodeNodeId(deletedNode);
 				}
+			}
+		}
+		ax::NodeEditor::EndDelete();
 
-				ax::NodeEditor::Link(ax::NodeEditor::LinkId(linkId++),
-					ChainOutputPin(triggerId), ChainInputPin(target));
+		// Selection drives the details panel.
+		{
+			ax::NodeEditor::NodeId selectedNode;
+			if (ax::NodeEditor::GetSelectedNodes(&selectedNode, 1) > 0)
+			{
+				m_blueprintSelection = DecodeNodeId(selectedNode);
+			}
+			else if (ax::NodeEditor::GetSelectedObjectCount() == 0)
+			{
+				// Clicking empty canvas deselects, which is what puts the trigger's own
+				// properties back in the details panel.
+				m_blueprintSelection = { BlueprintNodeKind::None, -1 };
 			}
 		}
 
-		// Positions have to be applied while the nodes exist, and only take effect once the node
-		// has been measured, so this runs after the node pass rather than before it.
-		if (m_relayoutChain)
-		{
-			LayoutChain(chain);
-			ax::NodeEditor::NavigateToContent(0.0f);
-			m_relayoutChain = false;
-		}
-
-		// Double-click to edit. Selection used to trigger this, which meant a node could not be
-		// selected - and therefore not dragged - without leaving the view.
+		// Double-clicking a Trigger action follows the chain to the trigger it calls.
 		if (const ax::NodeEditor::NodeId doubleClicked = ax::NodeEditor::GetDoubleClickedNode())
 		{
-			const uint32 clickedId = static_cast<uint32>(doubleClicked.Get());
-			if (clickedId != selectedEntry.id())
+			const BlueprintNodeRef node = DecodeNodeId(doubleClicked);
+			if (node.kind == BlueprintNodeKind::Action && node.index < currentEntry.actions_size())
 			{
-				m_jumpToTriggerId = clickedId;
-			}
-			else
-			{
-				m_showChainView = false;
+				const auto& action = currentEntry.actions(node.index);
+				if (action.action() == trigger_actions::Trigger)
+				{
+					const uint32 targetId = static_cast<uint32>(GetActionDataValue(action, 0));
+					if (targetId != 0 && m_manager.getById(targetId) != nullptr)
+					{
+						m_jumpToTriggerId = targetId;
+					}
+				}
 			}
 		}
+
+		DrawBlueprintContextMenus(currentEntry);
 
 		ax::NodeEditor::End();
 		ax::NodeEditor::SetCurrentEditor(nullptr);
+
+		// Applied out here: DeleteSubrange invalidates the indices the canvas was drawn from.
+		if (pendingDelete.kind == BlueprintNodeKind::Event && pendingDelete.index < currentEntry.newevents_size())
+		{
+			currentEntry.mutable_newevents()->DeleteSubrange(pendingDelete.index, 1);
+			m_blueprintSelection = { BlueprintNodeKind::None, -1 };
+			m_relayoutBlueprint = true;
+		}
+		else if (pendingDelete.kind == BlueprintNodeKind::Action && pendingDelete.index < currentEntry.actions_size())
+		{
+			currentEntry.mutable_actions()->DeleteSubrange(pendingDelete.index, 1);
+			m_blueprintSelection = { BlueprintNodeKind::None, -1 };
+			m_relayoutBlueprint = true;
+		}
+
+		ImGui::SameLine();
+
+		ImGui::BeginChild("BlueprintDetails", ImVec2(detailsWidth, 0.0f), true);
+		DrawBlueprintDetails(currentEntry);
+		ImGui::EndChild();
 	}
 }
