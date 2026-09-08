@@ -54,6 +54,21 @@ namespace mmo
 	/// tick and have almost all of them refused.
 	constexpr GameTime BotGlobalCooldownMs = 1500;
 
+	/// How far a bot drifts when it has nothing better to do, and how close it has to get.
+	///
+	/// Idling exists because a bot with nothing to do used to stand perfectly still - most often
+	/// for the full barren-spot timeout after walking somewhere and finding nothing alive. That
+	/// was 5% of all bot time in a measured run, and it is the thing that looks broken to anyone
+	/// watching. Drifting also helps: a bot that moves may find something the spot did not have.
+	constexpr float BotWanderMinRadius = 6.0f;
+	constexpr float BotWanderMaxRadius = 12.0f;
+	constexpr float BotWanderAcceptance = 2.0f;
+
+	/// How long the bot waits before asking to be revived again. One request is enough; the
+	/// server answers when it answers, and repeating it every tick teleports the corpse to the
+	/// bind point over and over.
+	constexpr GameTime BotReviveRetryMs = 3000;
+
 	/// Registers every action the grind strategy names.
 	void RegisterGrindActions(BotAiRegistry& registry);
 }

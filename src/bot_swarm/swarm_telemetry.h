@@ -26,6 +26,12 @@ namespace mmo
 		uint32 levelUps { 0 };
 		uint32 stuckEvents { 0 };
 		uint32 disconnects { 0 };
+
+		/// Times a bot was handed from one world node to another. A transfer takes the bot out of
+		/// the world for a moment, which is indistinguishable from a disconnect unless it is
+		/// counted separately - and dying triggers one whenever the bind point is on another map,
+		/// so without this a bot that dies and comes back looks exactly like a bot that logged out.
+		uint32 worldTransfers { 0 };
 		uint32 errors { 0 };
 
 		/// Landed swings and the damage they did. A swarm that swings a great deal and deals no

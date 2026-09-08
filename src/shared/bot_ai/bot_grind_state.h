@@ -50,6 +50,9 @@ namespace mmo
 		uint64 approachFailureTarget { 0 };
 		uint32 approachFailures { 0 };
 
+		/// When this bot last asked to be revived, so it asks once rather than every tick.
+		GameTime reviveRequestedMs { 0 };
+
 		/// Kills credited to this bot since it entered the world. Telemetry, and the signal that
 		/// a grind spot is actually productive.
 		uint32 kills { 0 };

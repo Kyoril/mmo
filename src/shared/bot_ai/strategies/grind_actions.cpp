@@ -441,8 +441,54 @@ namespace mmo
 				return true;
 			});
 
+		add(registry, "wander", [](BotAiContext& context, BotSession& session)
+			{
+				const BotPerception& perception = context.GetPerception();
+				if (!perception.valid || !perception.alive)
+				{
+					return false;
+				}
+
+				BotMovementController& mover = session.GetMovementController();
+				if (mover.IsActive())
+				{
+					// Already drifting somewhere. Consuming the tick keeps the bot from re-rolling a
+					// new destination every fifth of a second and never arriving at any of them.
+					return true;
+				}
+
+				BotContext& world = session.GetContext();
+				const BotGrindState& grind = context.GetGrindState();
+
+				// Drift around the spot the bot came here for, not around wherever it happens to be
+				// standing. Wandering off is what a bot with no destination does; a bot working a spawn
+				// that is briefly empty wants to still be in range of it when something comes back, and
+				// drifting away cost about fifteen percent of the kill rate when this centred on self.
+				const Vector3 center = grind.HasSpot() ? grind.spotPosition : world.GetPosition();
+
+				const float angle = static_cast<float>(context.RollRange(0, 359)) * 0.0174533f;
+				const float radius = BotWanderMinRadius
+					+ static_cast<float>(context.RollRange(0, static_cast<uint32>(BotWanderMaxRadius - BotWanderMinRadius)));
+
+				// A destination off the navigation mesh simply fails and a different one is rolled on
+				// the next tick, which is the whole error handling this needs.
+				return mover.MoveTo(world, OffsetAround(center, angle, radius), BotWanderAcceptance);
+			});
+
 		add(registry, "revive", [](BotAiContext& context, BotSession& session)
 			{
+				BotGrindState& grind = context.GetGrindState();
+
+				// Ask once and wait. Repeating the request every tick makes the server run its whole
+				// revive path again each time - including a teleport to the bind point, which is a
+				// hand-off to another world node when the bind map is not the one the bot died on.
+				if (grind.reviveRequestedMs != 0
+					&& context.GetNow() - grind.reviveRequestedMs < BotReviveRetryMs)
+				{
+					return true;
+				}
+
+				grind.reviveRequestedMs = context.GetNow();
 				session.GetContext().GetRealmConnector()->SendReviveRequest();
 
 				// Whatever the bot was doing before it died is not worth resuming: it lost the

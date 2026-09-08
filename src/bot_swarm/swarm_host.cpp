@@ -167,6 +167,22 @@ namespace mmo
 				m_telemetry.Event(index, "kill", { { "target", guid } });
 			}));
 
+		bot.connections.emplace_back(bot.session->GetRealm().VerifyNewWorld.connect(
+			[this, index, botPtr = &bot](const uint32 mapId, const Vector3& position, const float facing)
+			{
+				// The same signal announces the first entry into the world and every later hand-off
+				// between world nodes. Only the later ones are transfers; wasInWorld still reflects
+				// the previous frame here, because the packet arrives before the bot is updated.
+				if (!botPtr->wasInWorld)
+				{
+					return;
+				}
+
+				++m_telemetry.GetCounters().worldTransfers;
+				m_telemetry.Event(index, "world_change",
+					{ { "map", mapId }, { "x", position.x }, { "y", position.y }, { "z", position.z } });
+			}));
+
 		bot.connections.emplace_back(bot.session->GetRealm().AttackHit.connect(
 			[this, index](const uint64 attacker, const uint64 victim, const uint32 damage,
 				const uint32 hitInfo, const uint32 victimState)

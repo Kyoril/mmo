@@ -62,6 +62,7 @@ namespace mmo
 		json["level_ups"] = counters.levelUps;
 		json["stuck_events"] = counters.stuckEvents;
 		json["disconnects"] = counters.disconnects;
+		json["world_transfers"] = counters.worldTransfers;
 		json["errors"] = counters.errors;
 		json["swings"] = counters.swings;
 		json["damage_dealt"] = counters.damageDealt;

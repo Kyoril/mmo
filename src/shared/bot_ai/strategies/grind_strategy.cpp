@@ -59,7 +59,11 @@ namespace mmo
 				{ "target_out_of_melee", { { "approach_target", bot_relevance::Move } } },
 				{ "target_in_melee", { { "auto_attack", bot_relevance::Normal } } },
 				{ "rotation_spell_ready", { { "cast_rotation_spell", bot_relevance::Normal + 2 } } },
-			});
+			},
+			// A default action, so it runs only when every trigger above has declined. That is what
+			// the Idle band is for, and it is what stops a bot standing perfectly still for the eight
+			// seconds it takes to give up on a spot with nothing alive on it.
+			{ { "wander", bot_relevance::Idle } });
 
 		// In combat. Approaching outranks swinging because a swing out of range is a wasted
 		// packet and a swing error, and breaking off outranks both.
