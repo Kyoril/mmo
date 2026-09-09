@@ -1,6 +1,8 @@
 syntax = "proto2";
 package mmo.proto_client;
 
+import "combat_sounds.proto";
+
 message ItemSubclassEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -20,6 +22,29 @@ message ItemSubclassEntry {
 	// weapon of this subclass (e.g. "SwordAttackOffhand01"). One is chosen at random per off-hand
 	// swing. Empty falls back to the main-hand attackanimation list, then the unarmed attack.
 	repeated string offhand_attackanimation = 7;
+	// SoundEntry id for the swing whoosh played when an auto attack with a weapon of this
+	// subclass starts. 0 = fall back to the attacker model's natural weapon swing.
+	optional uint32 swing_sound = 8;
+
+	// Impact sounds by struck material (SurfaceType id). A row with target_material 0 is
+	// the fallback used when no row matches. Empty = fall back to the attacker's model.
+	repeated ImpactSound impact_sounds = 9;
+
+	// SoundEntry id layered on top of the impact sound on a critical hit. 0 = none.
+	optional uint32 crit_layer_sound = 10;
+
+	// SoundEntry id played when a swing with this weapon misses or is dodged. 0 = none.
+	optional uint32 miss_sound = 11;
+
+	// SoundEntry id played when a weapon of this subclass parries an incoming swing.
+	optional uint32 parry_sound = 12;
+
+	// SoundEntry id played when a shield of this subclass blocks an incoming swing.
+	optional uint32 block_sound = 13;
+
+	// Armor subclasses only: SurfaceType id describing what this armor sounds like when
+	// struck. Overrides the wearer's body material. 0 = no override.
+	optional uint32 hit_material = 14;
 }
 
 message ItemSubclasses {
