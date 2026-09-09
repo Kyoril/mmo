@@ -1133,6 +1133,137 @@ namespace mmo
 				ImGui::EndTable();
 			}
 		}
+
+		static const char* s_outfitAnyRace = "<Any Race>";
+		static const char* s_outfitAnyGender = "<Any>";
+		static const char* s_outfitGenders[] = { "Male", "Female" };
+		static const char* s_outfitDisplayNone = "<None>";
+
+		if (const auto section = ScopedEditorSection("Character Creation Outfits", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Cosmetic only: item displays shown on the character creation preview. Grants nothing in game and is unrelated to the race's initial items.");
+
+			if (DrawSuccessButton("Add Outfit", ImVec2(-1, 0)))
+			{
+				auto* newOutfit = currentEntry.add_outfits();
+				newOutfit->set_race(-1);
+				newOutfit->set_gender(-1);
+			}
+
+			for (int index = 0; index < currentEntry.outfits_size(); ++index)
+			{
+				auto* outfit = currentEntry.mutable_outfits(index);
+
+				ImGui::PushID(index);
+				ImGui::Separator();
+
+				const auto* raceEntry = outfit->race() >= 0 ? m_project.races.getById(outfit->race()) : nullptr;
+				if (ImGui::BeginCombo("Race", raceEntry != nullptr ? raceEntry->name().c_str() : s_outfitAnyRace, ImGuiComboFlags_None))
+				{
+					if (ImGui::Selectable(s_outfitAnyRace, outfit->race() < 0))
+					{
+						outfit->set_race(-1);
+					}
+
+					for (int i = 0; i < m_project.races.count(); ++i)
+					{
+						ImGui::PushID(i);
+						const auto& race = m_project.races.getTemplates().entry(i);
+						const bool item_selected = static_cast<int32>(race.id()) == outfit->race();
+						if (ImGui::Selectable(race.name().c_str(), item_selected))
+						{
+							outfit->set_race(static_cast<int32>(race.id()));
+						}
+						if (item_selected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+
+				const int32 gender = outfit->gender();
+				const char* genderLabel = (gender == 0 || gender == 1) ? s_outfitGenders[gender] : s_outfitAnyGender;
+				if (ImGui::BeginCombo("Gender", genderLabel, ImGuiComboFlags_None))
+				{
+					if (ImGui::Selectable(s_outfitAnyGender, gender < 0))
+					{
+						outfit->set_gender(-1);
+					}
+					if (ImGui::Selectable(s_outfitGenders[0], gender == 0))
+					{
+						outfit->set_gender(0);
+					}
+					if (ImGui::Selectable(s_outfitGenders[1], gender == 1))
+					{
+						outfit->set_gender(1);
+					}
+
+					ImGui::EndCombo();
+				}
+
+				String animation = outfit->animation();
+				if (ImGui::InputText("Ready Animation", &animation))
+				{
+					outfit->set_animation(animation);
+				}
+				ImGui::SameLine();
+				DrawHelpMarker("Animation state played while the outfit is shown, for example 1HReady, 2HReady or 2HLReady. Leave empty to keep the idle pose.");
+
+				if (DrawSuccessButton("Add Item Display", ImVec2(-1, 0)))
+				{
+					outfit->add_item_displays(0);
+				}
+
+				for (int displayIndex = 0; displayIndex < outfit->item_displays_size(); ++displayIndex)
+				{
+					ImGui::PushID(displayIndex);
+
+					const uint32 displayId = outfit->item_displays(displayIndex);
+					const auto* displayEntry = m_project.itemDisplays.getById(displayId);
+					if (ImGui::BeginCombo("##itemDisplay", displayEntry != nullptr ? displayEntry->name().c_str() : s_outfitDisplayNone, ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.itemDisplays.count(); ++i)
+						{
+							ImGui::PushID(i);
+							const auto& display = m_project.itemDisplays.getTemplates().entry(i);
+							const bool item_selected = display.id() == displayId;
+							if (ImGui::Selectable(display.name().c_str(), item_selected))
+							{
+								outfit->set_item_displays(displayIndex, display.id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::SameLine();
+
+					if (DrawDangerButton("Remove"))
+					{
+						outfit->mutable_item_displays()->erase(outfit->mutable_item_displays()->begin() + displayIndex);
+						displayIndex--;
+					}
+
+					ImGui::PopID();
+				}
+
+				if (DrawDangerButton("Remove Outfit"))
+				{
+					currentEntry.mutable_outfits()->erase(currentEntry.mutable_outfits()->begin() + index);
+					index--;
+				}
+
+				ImGui::PopID();
+			}
+		}
 	}
 
 	void ClassEditorWindow::OnNewEntry(proto::TemplateManager<proto::Classes, proto::ClassEntry>::EntryType& entry)
