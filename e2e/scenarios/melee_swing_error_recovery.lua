@@ -41,13 +41,20 @@ Assert(WaitUntil(function() return SwingRecoveryCount() > 0 end, 5000, "swing er
 	"a landing swing must clear the out-of-range error (swings resolved: "
 		.. MeleeSwingCount(dummy) .. ", recoveries: " .. SwingRecoveryCount() .. ")")
 
--- And it has to say it once, not once per swing: the repeat is the client's job.
-local errorsAfterRecovery = SwingErrorCount()
+-- And it has to say it once, not once per swing: the repeat is the client's job. Measured as a
+-- steady state rather than an exact count -- the port back into reach can land a swing before the
+-- facing correction arrives, which legitimately costs one extra error/recovery pair.
+local errorsAtSteady = SwingErrorCount()
+local recoveriesAtSteady = SwingRecoveryCount()
+local swingsAtSteady = MeleeSwingCount(dummy)
 Sleep(3000)
-Assert(SwingErrorCount() == errorsAfterRecovery,
+
+Assert(MeleeSwingCount(dummy) > swingsAtSteady,
+	"the fight should still be landing swings, or the checks below prove nothing")
+Assert(SwingErrorCount() == errorsAtSteady,
 	"a fight that keeps landing must not report further swing errors")
-Assert(SwingRecoveryCount() == 1,
-	"the recovery is a transition and must be reported once, was " .. SwingRecoveryCount())
+Assert(SwingRecoveryCount() == recoveriesAtSteady,
+	"the recovery is a transition, not one report per landing swing")
 
 StopAttack()
 GM.DestroyMonster(dummy)

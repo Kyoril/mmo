@@ -505,6 +505,12 @@ namespace mmo
 		m_chatBubbleLayer.reset();
 		m_nameplateManager.Clear();
 
+		// The swing error repeat timer re-arms itself and lives on the application timer queue,
+		// which outlives the world: left running, it would keep firing ATTACK_SWING_ERROR and its
+		// voice line on the character screen and into the next world entered.
+		m_lastAttackSwingEvent = AttackSwingEvent::Unknown;
+		CancelAttackSwingErrorTimer();
+
 		// Each entry holds a raw Camera* into the PlayerController destroyed above; an
 		// unexpired frame left in here (e.g. on a quick logout/re-enter) would dangle and
 		// crash the next time OnIdle updates it.

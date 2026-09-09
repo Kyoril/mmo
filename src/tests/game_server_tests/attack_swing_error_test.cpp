@@ -9,6 +9,12 @@
 // The state lives on GameUnitS so it resets with the attack it belongs to; these tests pin the
 // three properties the client relies on: transitions are reported, repeats are not, and starting
 // or stopping an attack forgets the previous state.
+//
+// SCAFFOLDING LIMIT: the hook is driven directly rather than by resolving real swings, and the
+// rule that only the main hand reports (the isOffhand guards in ExecuteAutoAttackSwing) is
+// therefore not covered here. Reaching it needs a WorldInstance no suite in game_server_tests
+// builds -- the same limit auto_attack_swing_timer_test.cpp documents. The E2E scenario
+// melee_swing_error_recovery.lua covers the path end to end against a real server.
 
 #include "catch.hpp"
 
@@ -141,33 +147,36 @@ TEST_CASE_METHOD(SwingErrorFixture, "Landing swings after the recovery stay sile
 	CHECK(watcher.events.size() == 2);
 }
 
+TEST_CASE_METHOD(SwingErrorFixture, "An error that comes back after a recovery is reported again", "[swing_error]")
+{
+	// The return leg of the same journey: walking back out of range has to speak up again. An
+	// implementation that reported the recovery by forgetting the state instead of recording it
+	// would pass every test above and still fail this one.
+	const auto attacker = MakeWatchedUnit(1);
+
+	attacker->RaiseSwingEvent(attack_swing_event::OutOfRange);
+	attacker->RaiseSwingEvent(attack_swing_event::Success);
+	attacker->RaiseSwingEvent(attack_swing_event::OutOfRange);
+
+	REQUIRE(watcher.events.size() == 3);
+	CHECK(watcher.events[2] == attack_swing_event::OutOfRange);
+}
+
 TEST_CASE_METHOD(SwingErrorFixture, "Stopping the attack forgets the last swing outcome", "[swing_error]")
 {
 	// Without this, a player who breaks off an out-of-range attack and starts it again -- still out
 	// of range -- is told nothing at all, because the remembered state still says "out of range".
+	// The events are not cleared in between on purpose: the count also pins that the reset itself
+	// puts nothing on the wire, since attack_swing_event::Unknown has no message for the client.
 	const auto attacker = MakeWatchedUnit(1);
 
 	attacker->RaiseSwingEvent(attack_swing_event::OutOfRange);
 	attacker->StopAttack();
-	watcher.events.clear();
-
 	attacker->RaiseSwingEvent(attack_swing_event::OutOfRange);
 
-	REQUIRE(watcher.events.size() == 1);
+	REQUIRE(watcher.events.size() == 2);
 	CHECK(watcher.events[0] == attack_swing_event::OutOfRange);
-}
-
-TEST_CASE_METHOD(SwingErrorFixture, "The reset itself is never sent to the client", "[swing_error]")
-{
-	// Unknown is the internal "no swing state" value. It exists so the next real outcome counts as
-	// a transition; the client has no message for it, and would print "UNKNOWN" if it got one.
-	const auto attacker = MakeWatchedUnit(1);
-
-	attacker->RaiseSwingEvent(attack_swing_event::OutOfRange);
-	attacker->StopAttack();
-
-	REQUIRE(watcher.events.size() == 1);
-	CHECK(watcher.events[0] == attack_swing_event::OutOfRange);
+	CHECK(watcher.events[1] == attack_swing_event::OutOfRange);
 }
 
 TEST_CASE_METHOD(SwingErrorFixture, "Switching victim forgets the last swing outcome", "[swing_error]")
@@ -179,10 +188,8 @@ TEST_CASE_METHOD(SwingErrorFixture, "Switching victim forgets the last swing out
 
 	attacker->RaiseSwingEvent(attack_swing_event::OutOfRange);
 	attacker->SetVictim(secondVictim);
-	watcher.events.clear();
-
 	attacker->RaiseSwingEvent(attack_swing_event::OutOfRange);
 
-	REQUIRE(watcher.events.size() == 1);
-	CHECK(watcher.events[0] == attack_swing_event::OutOfRange);
+	REQUIRE(watcher.events.size() == 2);
+	CHECK(watcher.events[1] == attack_swing_event::OutOfRange);
 }
