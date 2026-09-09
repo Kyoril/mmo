@@ -962,7 +962,10 @@ namespace mmo
 		std::vector<PersistentCooldownData> GetPersistentCooldowns() const;
 
 		/// Re-applies a set of persisted auras (as produced by GetPersistentAuras). Auras whose
-		/// spell can no longer be resolved are skipped.
+		/// spell can no longer be resolved are skipped, as are auras that require the owner to
+		/// remain seated (NotSeated in their interrupt flags) if the owner is not seated right
+		/// now - the stand state itself is never persisted, so such an aura would otherwise be
+		/// restored with no way to ever lose it.
 		/// @param auras The persisted auras to restore.
 		void RestorePersistentAuras(const std::vector<PersistentAuraData>& auras);
 

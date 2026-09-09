@@ -1542,6 +1542,23 @@ namespace mmo
 				continue;
 			}
 
+			// The stand state is not part of the persisted character data - it always resets to
+			// Stand on login (see Initialize()) regardless of how the character was left sitting
+			// or kneeling. An aura that requires the owner to stay seated (NotSeated in its
+			// interrupt flags, e.g. the Resting buff, Food, Drink) would therefore be restored
+			// with no way to ever lose it: standing up next produces no Sit->Stand transition, so
+			// RemoveAurasByInterrupt(NotSeated) never fires. Rather than restore a permanent
+			// buff the character never earned, drop such auras here whenever the owner isn't
+			// currently seated. This is deliberately done at the restore site, not the save
+			// site: the save has no way to know what the stand state will be on the next login,
+			// and a future feature that does persist stand state would then work correctly here
+			// with no further change.
+			if ((spell->aurainterruptflags() & spell_aura_interrupt_flags::NotSeated) != 0 &&
+				!IsSitting())
+			{
+				continue;
+			}
+
 			// The container must keep the spell's full base duration (RefreshAura extends by and
 			// caps at it on re-cast); only the first application is shortened to the persisted
 			// remaining time.
