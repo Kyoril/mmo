@@ -165,6 +165,32 @@ namespace mmo
 			single(m_bindings.Get(proto_client::ANIM_SLOT_DEATH));
 			m_idleSeconds = 0.0f;
 		}
+		else if (ctx.looting)
+		{
+			// Ahead of the pose lock so looting while seated kneels and returns to sitting
+			// afterwards. The clip does not loop, so AnimationState clamps it at its length
+			// and it holds its last frame for as long as the loot window stays open.
+			AnimationState* lootClip = m_bindings.Get(proto_client::ANIM_SLOT_LOOT);
+			if (lootClip)
+			{
+				if (!m_lootPoseActive)
+				{
+					lootClip->SetLoop(false);
+					lootClip->SetPlayRate(1.0f);
+					lootClip->SetTimePosition(0.0f);
+
+					// Finishing an Open cast on a chest fires the 1.37s UseEnd one-shot at the
+					// same instant the loot window opens. Without this the character stands up
+					// out of the chest and only then kneels.
+					m_action.FastForwardCurrent();
+					m_lootPoseActive = true;
+				}
+
+				single(lootClip);
+			}
+
+			m_idleSeconds = 0.0f;
+		}
 		else if (AnimationState* lock = m_pose.GetLock())
 		{
 			single(lock);
@@ -238,6 +264,11 @@ namespace mmo
 				}
 			}
 			single(idle);
+		}
+
+		if (!ctx.looting)
+		{
+			m_lootPoseActive = false;
 		}
 
 		m_locomotion.SetDesired(clips, clipCount);

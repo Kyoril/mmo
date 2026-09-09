@@ -114,6 +114,10 @@ namespace mmo
 			case proto_client::ANIM_SLOT_DEATH:
 			case proto_client::ANIM_SLOT_HIT:
 			case proto_client::ANIM_SLOT_ATTACK:
+			// The Loot clip is a one-shot kneel whose last frame is held for the duration of
+			// the loot window; a binding rebuild (weapon draw, combat, stealth, water) must
+			// never re-enable looping on it, or the pose starts cycling instead of holding.
+			case proto_client::ANIM_SLOT_LOOT:
 				return false;
 			default:
 				return true;

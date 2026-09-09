@@ -183,5 +183,9 @@ namespace mmo
 
 		/// Seconds the unit has been standing still; drives the special idle transition.
 		float m_idleSeconds{0.0f};
+
+		/// True while the loot pose owns the body. Used to detect the entry frame, where the
+		/// clip is rewound and any playing one-shot is fast-forwarded out of the way.
+		bool m_lootPoseActive{false};
 	};
 }

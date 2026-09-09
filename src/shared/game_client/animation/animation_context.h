@@ -60,5 +60,11 @@ namespace mmo
 
 		/// True when the unit is dead (health or stand state).
 		bool dead{false};
+
+		/// True while the unit kneels in the loot pose: the replicated Looting unit flag is
+		/// set AND the unit is standing still on the ground. The movement half is tested
+		/// locally rather than waiting for the server to clear the flag, so the pose drops
+		/// on the frame the player starts moving instead of a round trip later.
+		bool looting{false};
 	};
 }
