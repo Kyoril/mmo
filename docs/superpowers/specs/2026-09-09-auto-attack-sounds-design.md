@@ -228,10 +228,11 @@ victim's position.
 ### Voice throttle
 
 One gate per unit shared by both effort and pain voices, so a unit never talks over itself.
-After a line plays, the next is blocked until `max(voice_min_interval_ms, clipLength + 250ms)`
-— the same pattern `CastErrorVoice` uses. Chance rolls use a client-side RNG; all of this runs
-on the main thread (packet handler and animation notify), so no thread-local RNG concerns
-apply.
+After a line plays, the next is blocked until `voice_min_interval_ms` if the model authors a
+non-zero value, or `clipLength + 250ms` derived from the played clip's length when it is left
+at its 0 default — the same pattern `CastErrorVoice` uses. Chance rolls use a client-side RNG;
+all of this runs on the main thread (packet handler and animation notify), so no thread-local
+RNG concerns apply.
 
 ## Editor
 

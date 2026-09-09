@@ -192,6 +192,32 @@ TEST_CASE("A unit does not talk over itself inside the throttle window", "[comba
 	CHECK(fixture.Played("attack_voice.wav"));
 }
 
+TEST_CASE("An unauthored voice throttle derives its block duration from the clip length", "[combat_sound_player]")
+{
+	PlayerFixture fixture;
+	fixture.project.models.getById(kModelHuman)->mutable_combat_sounds()->set_voice_min_interval_ms(0);
+	fixture.audio.soundLength = 2.0f;   // 2000ms clip + the 250ms tail = 2250ms
+
+	CombatSoundPlayer player(fixture.project, fixture.soundPlayer);
+	player.SetRollProvider([] { return 0u; });   // always passes the chance roll
+
+	GameTime now = 0;
+	player.SetClock([&now] { return now; });
+
+	player.PlaySwing(MakeAttacker(), 1, Vector3::Zero, false);
+	REQUIRE(fixture.Played("attack_voice.wav"));
+
+	fixture.audio.playedFiles.clear();
+
+	now = 2249;   // just short of the derived 2250ms block
+	player.PlaySwing(MakeAttacker(), 1, Vector3::Zero, false);
+	CHECK_FALSE(fixture.Played("attack_voice.wav"));
+
+	now = 2250;
+	player.PlaySwing(MakeAttacker(), 1, Vector3::Zero, false);
+	CHECK(fixture.Played("attack_voice.wav"));
+}
+
 TEST_CASE("The attacker and the victim are gated independently", "[combat_sound_player]")
 {
 	PlayerFixture fixture;

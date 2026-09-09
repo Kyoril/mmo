@@ -4014,16 +4014,18 @@ namespace mmo
 		const bool offhandSwing = (hitInfo & hit_info::LeftSwing) != 0;
 		const bool isCriticalSwing = (hitInfo & hit_info::CriticalHit) != 0;
 		bool attackAnimationStarted = false;
+		CombatSoundAttacker attackerContext;
 		if (attacker)
 		{
 			// LeftSwing marks an off-hand (dual wield) swing so the dedicated off-hand attack
 			// animation is played instead of the main-hand one.
 			attackAnimationStarted = attacker->NotifyAttackSwingEvent(offhandSwing);
 
+			attackerContext = makeCombatAttacker(*attacker, offhandSwing);
+
 			// The swing itself is audible right away; everything that depends on the weapon
 			// connecting is queued on the SwingHit notify further down.
-			m_combatSoundPlayer.PlaySwing(makeCombatAttacker(*attacker, offhandSwing),
-				attackerGuid, attacker->GetPosition(), isCriticalSwing);
+			m_combatSoundPlayer.PlaySwing(attackerContext, attackerGuid, attacker->GetPosition(), isCriticalSwing);
 		}
 
 		std::shared_ptr<GameUnitC> attacked = ObjectMgr::Get<GameUnitC>(attackedGuid);
@@ -4070,7 +4072,7 @@ namespace mmo
 			}
 
 			auto soundCallback = [this,
-				attackerContext = makeCombatAttacker(*attacker, offhandSwing),
+				attackerContext,
 				victimContext = makeCombatVictim(*attacked),
 				outcome, attackedGuid, victimPos = attacked->GetPosition()]()
 			{
@@ -4611,6 +4613,9 @@ namespace mmo
 		// Remove all objects at once
 		m_playerController->SetControlledUnit(nullptr);
 		ObjectMgr::RemoveAllObjects();
+
+		// Voice throttle gates are keyed by guid, which are meaningless in the new world
+		m_combatSoundPlayer.Clear();
 
 		// Clear pings — they belong to the old map
 		m_activePings.clear();

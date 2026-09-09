@@ -58,6 +58,9 @@ namespace mmo
 		/// File names behind every played sound index, in order.
 		std::vector<String> playedFiles;
 
+		/// Length in seconds reported by GetSoundLength for every sound index.
+		float soundLength = 0.0f;
+
 		void Create() override
 		{
 		}
@@ -135,7 +138,7 @@ namespace mmo
 
 		float GetSoundLength(SoundIndex) override
 		{
-			return 0.0f;
+			return soundLength;
 		}
 
 		ISoundInstance* GetSoundInstance(SoundIndex) override
