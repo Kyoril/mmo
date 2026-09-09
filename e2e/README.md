@@ -81,6 +81,7 @@ one error, and the swing that lands again reports one recovery),
 `FindUnitByEntry(entry) -> g|nil`, `FindUnitByName(name) -> g|nil`,
 `FindObjectByEntry(entry) -> g|nil` (world objects: chests, doors, ...),
 `GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open),
+`GetUnitFlags(g)` (the unit's replicated Flags field),
 `MeleeSwingCount(g)` (auto-attack swings the server resolved against `g`, hit or miss),
 `IsAutoAttacking()` (own character; set by the broadcast `AttackStart`/`AttackStop`
 packets rather than by the requests we send, so it reports what the server acknowledged),
@@ -92,6 +93,8 @@ Actions:
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
 the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 `MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing), `SendChat(msg)`,
+`LootUnit(g)` (opens the loot window on a corpse or world object; the character must
+be within loot range), `ReleaseLoot(g)` (closes it),
 `DoEmote(emoteId)` (emote 4 = Sit, a pose emote that toggles: performing it again
 stands the character up), `CyclePose()`,
 `SendAreaTrigger(areaTriggerId)` (reports area-trigger entry — the real client

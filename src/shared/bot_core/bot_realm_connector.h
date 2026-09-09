@@ -367,6 +367,14 @@ namespace mmo
 		/// GAME MASTER only. Instantly kills the selected unit.
 		void CheatKill();
 
+		/// @brief Requests the loot window for a corpse or world object.
+		/// @param lootObjectGuid Guid of the unit or object to loot.
+		void Loot(uint64 lootObjectGuid);
+
+		/// @brief Closes the loot window for a corpse or world object.
+		/// @param lootObjectGuid Guid of the unit or object being looted.
+		void LootRelease(uint64 lootObjectGuid);
+
 		/// GAME MASTER only. Toggles damage immunity on the sender's character.
 		void CheatGodmode(bool enable);
 

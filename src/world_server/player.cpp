@@ -55,6 +55,10 @@ namespace mmo
 			m_character->spawned.connect(*this, &Player::OnSpawned),
 			m_character->despawned.connect(*this, &Player::OnDespawned),
 
+			// Death signal - closes any open loot dialog so a death mid-loot never leaves
+			// the character kneeling in the loot pose after reviving.
+			m_character->killed.connect(*this, &Player::OnKilled),
+
 			// Movement signals
 			m_character->tileChangePending.connect(*this, &Player::OnTileChangePending),
 
@@ -1599,6 +1603,17 @@ namespace mmo
 		tile.GetWatchers().remove(this);
 	}
 
+	void Player::OnKilled(GameUnitS* killer)
+	{
+		// Fires exactly once per death (GameUnitS::Damage only reaches OnKilled on the health
+		// transition to 0, and further damage on an already-dead unit returns early). Close the
+		// loot dialog right here rather than in OnReviveRequest: CloseLootDialog also sends
+		// LootReleaseResponse, so it clears both the Looting unit flag and the client's loot
+		// frame, and doing it at death (not at release) avoids the window between death and
+		// release where the character would otherwise still show as looting.
+		CloseLootDialog();
+	}
+
 	void Player::OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile)
 	{
 		ASSERT(m_worldInstance);
@@ -2577,6 +2592,16 @@ namespace mmo
 			m_lastPositionPacketTimestamp = info.timestamp;
 			m_lastPositionPacketPos = info.position;
 			m_lastPositionPacketFlags = info.movementFlags;
+		}
+
+		// Moving out of the loot pose closes the window: the client kneels for as long as the
+		// Looting flag is set, so a character that walks away while it is still set would slide
+		// across the floor mid-kneel. Tested on the movement flags rather than the op code so a
+		// heartbeat or a fall cancels it too; turning in place deliberately does not, since the
+		// character stays planted and a mouse-look must not cost anyone their loot.
+		if (m_loot && info.IsChangingPosition())
+		{
+			CloseLootDialog();
 		}
 
 		m_character->ApplyMovementInfo(info);

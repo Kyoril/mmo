@@ -252,6 +252,11 @@ namespace mmo
 
 		void OnDespawned(GameObjectS& object);
 
+		/// @brief Executed when the character dies. Closes any open loot dialog immediately -
+		/// otherwise a player who dies while looting stays kneeling in the loot pose after
+		/// reviving, since nothing else clears the Looting unit flag.
+		void OnKilled(GameUnitS* killer);
+
 		void OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile);
 
 		void SpawnTileObjects(VisibilityTile& tile);
