@@ -1,5 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+#include "test_unit_factory.h"
+
 #include "game_server/spells/aura_effect.h"
 #include "game_server/spells/aura_container.h"
 #include "game_server/objects/game_player_s.h"
@@ -15,52 +17,7 @@
 #include <memory>
 
 using namespace mmo;
-
-namespace
-{
-	/// Helper: build a minimal shared GamePlayerS with a class entry set up
-	/// so RefreshStats() / SetLevel() work without asserting.
-	std::shared_ptr<GamePlayerS> MakeUnit(proto::Project& project, TimerQueue& timers, uint32 level = 1)
-	{
-		auto* cls = project.classes.getById(1);
-		if (!cls)
-		{
-			cls = project.classes.add(1);
-			if (cls)
-			{
-				cls->set_powertype(proto::ClassEntry_PowerType_MANA);
-				for (uint32 i = 0; i < level + 1; ++i)
-				{
-					auto* lbv = cls->add_levelbasevalues();
-					lbv->set_health(100);
-					lbv->set_mana(100);
-					lbv->set_stamina(10);
-					lbv->set_strength(10);
-					lbv->set_agility(10);
-					lbv->set_intellect(10);
-					lbv->set_spirit(10);
-				}
-			}
-		}
-		auto unit = std::make_shared<GamePlayerS>(project, timers);
-		unit->Initialize();
-		if (cls) { unit->SetClass(*cls); }
-		unit->SetLevel(level);
-		return unit;
-	}
-
-	/// Build a minimal proto::SpellEntry with enough attribute slots that
-	/// AuraEffect::HandlePeriodicBase() can safely call spell.attributes(0).
-	proto::SpellEntry MakeSpell()
-	{
-		proto::SpellEntry spell;
-		// HandlePeriodicBase reads attributes(0) — add two attribute fields
-		// (attributes_a and attributes_b) to avoid repeated-field OOB.
-		spell.add_attributes(0); // attributes_a = 0
-		spell.add_attributes(0); // attributes_b = 0
-		return spell;
-	}
-}
+using namespace mmo::test;
 
 // ---------------------------------------------------------------------------
 // Construction / accessor tests

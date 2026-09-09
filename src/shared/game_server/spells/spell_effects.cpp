@@ -1444,6 +1444,14 @@ namespace mmo
 
 				executer.ApplySpellMod(spell_mod_op::CritChance, spell.id(), critChance);
 
+				// The target's own vulnerability (ModCritChanceTaken).
+				//
+				// The plain SchoolDamage effects do not roll for crit at all yet (they carry a
+				// "TODO: Do real calculation including crit chance" instead), so this and the
+				// melee attack table are the only two places a crit-taken bonus can apply. When
+				// spell crit is implemented, it needs this line too.
+				critChance += unitTarget.GetCritChanceTakenBonus();
+
 				bool isCrit = false;
 				if (critDistribution(randomGenerator) < critChance)
 				{

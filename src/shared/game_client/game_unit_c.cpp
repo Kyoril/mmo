@@ -568,6 +568,16 @@ namespace mmo
 		ctx.stealthed = HasStealthAura();
 		ctx.dead = isDead;
 
+		// The Looting unit flag is server-authoritative and clears a round trip after the
+		// player starts moving, so the local movement test is what actually keeps a looting
+		// character from sliding across the floor in a kneel. Recomputed every frame, so
+		// there is no cached state to drift. A server-controlled path move (e.g. Charge) also
+		// has to suppress the pose: SetMovementPath deliberately clears PositionChanging and
+		// every directional flag for the duration of the path, so IsChangingPosition() alone
+		// would miss it and the unit would glide across the floor frozen in the kneel.
+		ctx.looting = (Get<uint32>(object_fields::Flags) & unit_flags::Looting) != 0 &&
+			!m_movementInfo.IsChangingPosition() && !ctx.pathMoving && !ctx.swimming && !ctx.airborne;
+
 		m_animationController->Update(ctx);
 	}
 

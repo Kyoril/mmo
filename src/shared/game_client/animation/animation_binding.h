@@ -61,7 +61,7 @@ namespace mmo
 	class SlotBindingTable final
 	{
 	public:
-		static constexpr uint32 SlotCount = proto_client::ANIM_SLOT_SPECIAL_IDLE + 1;
+		static constexpr uint32 SlotCount = proto_client::ANIM_SLOT_LOOT + 1;
 
 	public:
 		/// @brief Re-resolves all slots against the given entity's animation state set.

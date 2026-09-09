@@ -31,6 +31,7 @@ namespace mmo
 			uint32 remainingMs { 0 };
 			uint64 casterGuid { 0 };
 			std::vector<int32> basePoints;
+			uint8 stackCount { 1 };
 		};
 
 		struct CooldownState final

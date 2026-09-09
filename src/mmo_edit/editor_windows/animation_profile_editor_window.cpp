@@ -29,9 +29,10 @@ namespace mmo
 			"Death",
 			"Hit",
 			"Attack",
-			"Special Idle"
+			"Special Idle",
+			"Loot"
 		};
-		static_assert(std::size(s_animationSlotNames) == proto::ANIM_SLOT_SPECIAL_IDLE + 1,
+		static_assert(std::size(s_animationSlotNames) == proto::ANIM_SLOT_LOOT + 1,
 			"Animation slot name table out of sync");
 
 		const char* const s_animationConditionNames[] = {

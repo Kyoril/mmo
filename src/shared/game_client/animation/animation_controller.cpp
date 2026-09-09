@@ -51,6 +51,7 @@ namespace mmo
 		m_pose.Reset();
 		m_face.Reset();
 		m_bindings.Invalidate();
+		m_lootPoseActive = false;
 		m_bindingsDirty = true;
 	}
 
@@ -165,6 +166,31 @@ namespace mmo
 			single(m_bindings.Get(proto_client::ANIM_SLOT_DEATH));
 			m_idleSeconds = 0.0f;
 		}
+		else if (ctx.looting)
+		{
+			// Ahead of the pose lock so looting while seated kneels and returns to sitting
+			// afterwards. The clip does not loop, so AnimationState clamps it at its length
+			// and it holds its last frame for as long as the loot window stays open.
+			AnimationState* lootClip = m_bindings.Get(proto_client::ANIM_SLOT_LOOT);
+			if (lootClip)
+			{
+				if (!m_lootPoseActive)
+				{
+					lootClip->SetLoop(false);
+					lootClip->SetTimePosition(0.0f);
+
+					// Finishing an Open cast on a chest fires the 1.37s UseEnd one-shot at the
+					// same instant the loot window opens. Without this the character stands up
+					// out of the chest and only then kneels.
+					m_action.FastForwardCurrent();
+					m_lootPoseActive = true;
+				}
+
+				single(lootClip);
+			}
+
+			m_idleSeconds = 0.0f;
+		}
 		else if (AnimationState* lock = m_pose.GetLock())
 		{
 			single(lock);
@@ -239,6 +265,12 @@ namespace mmo
 			}
 			single(idle);
 		}
+
+		// Honest single assignment rather than a one-way reset: a unit that is both dead and
+		// still flagged Looting (e.g. killed while a loot window is open) must also drop the
+		// flag here, or the pose is later re-entered without its SetTimePosition(0.0f) rewind.
+		// Also false when the clip fails to resolve, since no pose was actually entered.
+		m_lootPoseActive = ctx.looting && m_bindings.Get(proto_client::ANIM_SLOT_LOOT) != nullptr;
 
 		m_locomotion.SetDesired(clips, clipCount);
 	}

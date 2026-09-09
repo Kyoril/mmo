@@ -1967,6 +1967,12 @@ namespace mmo
 				return PacketParseResult::Pass;
 			}
 
+			if (!(packet >> io::read<uint8>(aura.stackCount)))
+			{
+				UpdateSpellStateIssue("aura_update_parse_failed");
+				return PacketParseResult::Pass;
+			}
+
 			auras.push_back(std::move(aura));
 		}
 
@@ -2288,6 +2294,24 @@ namespace mmo
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatKill);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::Loot(const uint64 lootObjectGuid)
+	{
+		sendSinglePacket([lootObjectGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::Loot);
+			packet << io::write<uint64>(lootObjectGuid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::LootRelease(const uint64 lootObjectGuid)
+	{
+		sendSinglePacket([lootObjectGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LootRelease);
+			packet << io::write<uint64>(lootObjectGuid);
 			packet.Finish();
 			});
 	}
