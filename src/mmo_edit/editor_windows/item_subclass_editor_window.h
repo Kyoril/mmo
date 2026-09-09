@@ -4,6 +4,8 @@
 
 #include "base/non_copyable.h"
 
+#include <imgui.h>
+
 #include "editor_entry_window_base.h"
 
 #include "editor_host.h"
@@ -38,5 +40,14 @@ namespace mmo
 
 	private:
 		EditorHost& m_host;
+
+		ImGuiTextFilter m_swingSoundFilter;
+		ImGuiTextFilter m_critSoundFilter;
+		ImGuiTextFilter m_missSoundFilter;
+		ImGuiTextFilter m_parrySoundFilter;
+		ImGuiTextFilter m_blockSoundFilter;
+		ImGuiTextFilter m_hitMaterialFilter;
+		ImGuiTextFilter m_impactSoundFilter;
+		ImGuiTextFilter m_impactMaterialFilter;
 	};
 }

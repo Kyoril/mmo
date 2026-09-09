@@ -8,6 +8,9 @@
 
 #include "log/default_log_levels.h"
 
+#include "sound_entry_combo.h"
+#include "surface_type_combo.h"
+
 namespace mmo
 {
 	ItemSubclassEditorWindow::ItemSubclassEditorWindow(const String& name, proto::Project& project, EditorHost& host)
@@ -170,6 +173,72 @@ namespace mmo
 			if (ImGui::Button("Add Off-Hand Attack Animation"))
 			{
 				currentEntry.add_offhand_attackanimation();
+			}
+		}
+
+		if (const auto section = ScopedEditorSection("Combat Sounds", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Auto attack audio. Weapon subclasses fill the swing / impact / crit / miss\nfields, shields fill Block Sound, armor subclasses fill Hit Material.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Swing Sound", currentEntry.swing_sound(), m_swingSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_swing_sound(id); });
+			ImGui::TextDisabled("Whoosh played when a swing with this weapon starts. Empty = the attacker model's natural weapon swing.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Crit Layer Sound", currentEntry.crit_layer_sound(), m_critSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_crit_layer_sound(id); });
+			ImGui::TextDisabled("Played on top of the impact sound on a critical hit.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Miss Sound", currentEntry.miss_sound(), m_missSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_miss_sound(id); });
+			ImGui::TextDisabled("Whiff played when a swing with this weapon misses or is dodged.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Parry Sound", currentEntry.parry_sound(), m_parrySoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_parry_sound(id); });
+			ImGui::TextDisabled("Played when a weapon of this subclass parries an incoming swing.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Block Sound", currentEntry.block_sound(), m_blockSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_block_sound(id); });
+			ImGui::TextDisabled("Shield subclasses: played when a shield of this subclass blocks a swing.");
+
+			DrawSurfaceTypeCombo(m_project.surfaceTypes, "Hit Material", currentEntry.hit_material(), m_hitMaterialFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_hit_material(id); });
+			ImGui::TextDisabled("Armor subclasses: what this armor sounds like when struck. Overrides the wearer's body material.");
+
+			ImGui::Separator();
+			ImGui::TextDisabled("Impact sounds by struck material. A row with material \"(Any)\" is the fallback\nused when no other row matches.");
+
+			int removeImpactIndex = -1;
+			for (int i = 0; i < currentEntry.impact_sounds_size(); ++i)
+			{
+				ImGui::PushID(2000 + i);
+
+				auto* impact = currentEntry.mutable_impact_sounds(i);
+
+				DrawSurfaceTypeCombo(m_project.surfaceTypes, "##impactmaterial", impact->target_material(), m_impactMaterialFilter,
+					[impact](const uint32 id) { impact->set_target_material(id); }, "(Any)");
+
+				ImGui::SameLine();
+
+				DrawSoundEntryCombo(m_project.sounds, "##impactsound", impact->sound(), m_impactSoundFilter,
+					[impact](const uint32 id) { impact->set_sound(id); });
+
+				ImGui::SameLine();
+				if (ImGui::Button("Remove"))
+				{
+					removeImpactIndex = i;
+				}
+
+				ImGui::PopID();
+			}
+
+			if (removeImpactIndex >= 0)
+			{
+				currentEntry.mutable_impact_sounds()->DeleteSubrange(removeImpactIndex, 1);
+			}
+
+			if (ImGui::Button("Add Impact Sound"))
+			{
+				currentEntry.add_impact_sounds();
 			}
 		}
 	}

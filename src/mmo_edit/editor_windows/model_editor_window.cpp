@@ -3,6 +3,7 @@
 #include "model_editor_window.h"
 #include "editor_imgui_helpers.h"
 #include "sound_entry_combo.h"
+#include "surface_type_combo.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -760,6 +761,115 @@ namespace mmo
 			DrawSoundEntryCombo(m_project.sounds, "Goodbye Sound", currentEntry.goodbye_sound_id(), m_goodbyeSoundFilter,
 				[&currentEntry](const uint32 id) { currentEntry.set_goodbye_sound_id(id); });
 			ImGui::TextDisabled("Voice line played when the player closes this NPC's dialog without opening another one.");
+		}
+
+		if (const auto section = ScopedEditorSection("Combat Sounds", ImGuiTreeNodeFlags_None))
+		{
+			auto* combatSounds = currentEntry.mutable_combat_sounds();
+
+			// Each sub-group gets its own id scope: an ImGui widget carrying the same label
+			// as its enclosing header swallows clicks.
+			ImGui::PushID("natural_weapon");
+			ImGui::TextDisabled("Natural weapon - used for creatures and for unarmed players wearing this model.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Natural Swing Sound", combatSounds->swing_sound(), m_naturalSwingSoundFilter,
+				[combatSounds](const uint32 id) { combatSounds->set_swing_sound(id); });
+
+			DrawSoundEntryCombo(m_project.sounds, "Natural Crit Layer Sound", combatSounds->crit_layer_sound(), m_naturalCritSoundFilter,
+				[combatSounds](const uint32 id) { combatSounds->set_crit_layer_sound(id); });
+
+			DrawSoundEntryCombo(m_project.sounds, "Natural Miss Sound", combatSounds->miss_sound(), m_naturalMissSoundFilter,
+				[combatSounds](const uint32 id) { combatSounds->set_miss_sound(id); });
+
+			ImGui::TextDisabled("Impact sounds by struck material. A row with material \"(Any)\" is the fallback.");
+
+			int removeImpactIndex = -1;
+			for (int i = 0; i < combatSounds->impact_sounds_size(); ++i)
+			{
+				ImGui::PushID(i);
+
+				auto* impact = combatSounds->mutable_impact_sounds(i);
+
+				DrawSurfaceTypeCombo(m_project.surfaceTypes, "##impactmaterial", impact->target_material(), m_naturalImpactMaterialFilter,
+					[impact](const uint32 id) { impact->set_target_material(id); }, "(Any)");
+
+				ImGui::SameLine();
+
+				DrawSoundEntryCombo(m_project.sounds, "##impactsound", impact->sound(), m_naturalImpactSoundFilter,
+					[impact](const uint32 id) { impact->set_sound(id); });
+
+				ImGui::SameLine();
+				if (ImGui::Button("Remove"))
+				{
+					removeImpactIndex = i;
+				}
+
+				ImGui::PopID();
+			}
+
+			if (removeImpactIndex >= 0)
+			{
+				combatSounds->mutable_impact_sounds()->DeleteSubrange(removeImpactIndex, 1);
+			}
+
+			if (ImGui::Button("Add Natural Impact Sound"))
+			{
+				combatSounds->add_impact_sounds();
+			}
+			ImGui::PopID();
+
+			ImGui::Separator();
+
+			ImGui::PushID("body_material");
+			DrawSurfaceTypeCombo(m_project.surfaceTypes, "Body Material", combatSounds->hit_material(), m_bodyMaterialFilter,
+				[combatSounds](const uint32 id) { combatSounds->set_hit_material(id); });
+			ImGui::TextDisabled("What this body sounds like when struck. Worn chest armor overrides it.");
+			ImGui::PopID();
+
+			ImGui::Separator();
+
+			ImGui::PushID("voice");
+			ImGui::TextDisabled("Combat voice. Chance is rolled per event; a unit never talks over itself.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Attack Voice", combatSounds->attack_voice_sound(), m_attackVoiceFilter,
+				[combatSounds](const uint32 id) { combatSounds->set_attack_voice_sound(id); });
+			int attackVoiceChance = static_cast<int>(combatSounds->attack_voice_chance());
+			if (ImGui::SliderInt("Attack Voice Chance", &attackVoiceChance, 0, 100))
+			{
+				combatSounds->set_attack_voice_chance(static_cast<uint32>(attackVoiceChance));
+			}
+
+			DrawSoundEntryCombo(m_project.sounds, "Attack Crit Voice", combatSounds->attack_crit_voice_sound(), m_attackCritVoiceFilter,
+				[combatSounds](const uint32 id) { combatSounds->set_attack_crit_voice_sound(id); });
+			int attackCritVoiceChance = static_cast<int>(combatSounds->attack_crit_voice_chance());
+			if (ImGui::SliderInt("Attack Crit Voice Chance", &attackCritVoiceChance, 0, 100))
+			{
+				combatSounds->set_attack_crit_voice_chance(static_cast<uint32>(attackCritVoiceChance));
+			}
+
+			DrawSoundEntryCombo(m_project.sounds, "Hit Voice", combatSounds->hit_voice_sound(), m_hitVoiceFilter,
+				[combatSounds](const uint32 id) { combatSounds->set_hit_voice_sound(id); });
+			int hitVoiceChance = static_cast<int>(combatSounds->hit_voice_chance());
+			if (ImGui::SliderInt("Hit Voice Chance", &hitVoiceChance, 0, 100))
+			{
+				combatSounds->set_hit_voice_chance(static_cast<uint32>(hitVoiceChance));
+			}
+
+			DrawSoundEntryCombo(m_project.sounds, "Crit Hit Voice", combatSounds->crit_hit_voice_sound(), m_critHitVoiceFilter,
+				[combatSounds](const uint32 id) { combatSounds->set_crit_hit_voice_sound(id); });
+			int critHitVoiceChance = static_cast<int>(combatSounds->crit_hit_voice_chance());
+			if (ImGui::SliderInt("Crit Hit Voice Chance", &critHitVoiceChance, 0, 100))
+			{
+				combatSounds->set_crit_hit_voice_chance(static_cast<uint32>(critHitVoiceChance));
+			}
+
+			int voiceInterval = static_cast<int>(combatSounds->voice_min_interval_ms());
+			if (ImGui::InputInt("Voice Min Interval (ms)", &voiceInterval))
+			{
+				combatSounds->set_voice_min_interval_ms(static_cast<uint32>(std::max(0, voiceInterval)));
+			}
+			ImGui::TextDisabled("Minimum silence between two voice lines. 0 = derive it from the clip's length.");
+			ImGui::PopID();
 		}
 	}
 
