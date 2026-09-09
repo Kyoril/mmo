@@ -35,11 +35,16 @@ Most of the machinery is in place and is not rebuilt here:
 1. No trigger event fires on a stand state change.
 2. No aura type modifies regeneration by a percentage, and none modifies the chance of
    *being* critically hit.
-3. Nothing ever puts a player into `Sit` as a result of a spell, and
-   `src/world_server/player.cpp` force-stands the caster on **every** client-initiated cast,
-   ignoring the `CastableWhileSitting` attribute that Drink already carries. Food and Drink
-   auras are therefore always applied while standing, and `NotSeated` — which only fires on a
-   transition *into* `Stand` — never fires for them. The seated requirement is dead data.
+3. Nothing ever puts a player into `Sit` as a result of a spell or an item. Eating and
+   drinking work perfectly well standing up, so the `NotSeated` flag on those spells — which
+   only fires on a transition *into* `Stand` — never has a seated state to break out of. The
+   seated requirement is dead data.
+
+   Two separate call sites are involved, and they behave differently today. `Player::OnSpellCast`
+   force-stands the caster on **every** cast, ignoring the `CastableWhileSitting` attribute
+   that Drink already carries — a latent bug, though not the one that matters here, since
+   players never learn Drink and cast it directly. `Player::OnUseItem`, which is how food and
+   drink are actually consumed, does not touch the stand state at all.
 
 ## Design
 
@@ -58,6 +63,14 @@ OnPlayerStandStateChanged,
 
 Stand state values come from `unit_stand_state::Type`: 0 Stand, 1 Sit, 2 Sleep, 3 Dead,
 4 Kneel.
+
+Trigger event data treats zero as a wildcard (`proto::TriggerEventDataMatches`), so `Stand`
+cannot be filtered on — an unfiltered trigger fires on every change including standing up.
+This is the same limitation `OnEncounterStateChanged` has with `NotStarted`, and the editor
+presents it the same way, with a filter list whose first entry reads "Any".
+
+Standing up while seated already removes `NotSeated` auras, so a "player stood up" trigger is
+not needed for this feature.
 
 **Raise site.** `GameUnitS::SetStandState` is currently an inline function in
 `game_unit_s.h`. It moves into `game_unit_s.cpp` and, after writing the field and running the
@@ -112,12 +125,17 @@ on both apply and misapply. Nothing iterates auras at read time.
 
 Read sites, one arithmetic operation each:
 
-- `GameUnitS::RegenerateHealth()` — scales `m_healthRegenPerTick` by
-  `1.0f + m_healthRegenPctBonus / 100.0f`.
-- `GameUnitS::RegeneratePower()` — scales the computed amount for that power type by
-  `1.0f + m_powerRegenPctBonus[powerType] / 100.0f`, **only when the amount is positive**.
+- `GameUnitS::RegenerateHealth()` — uses `GetEffectiveHealthRegenPerTick()`, which scales
+  `m_healthRegenPerTick` by `1.0f + m_healthRegenPctBonus / 100.0f`.
+- `GameUnitS::RegeneratePower()` — passes its computed amount through
+  `GetEffectivePowerRegenPerTick(powerType, amount)`, which scales by
+  `1.0f + m_powerRegenPctBonus[powerType] / 100.0f` **only when the amount is positive**.
   Rage is a decay (`amount -= 3`); scaling it would make a "+50% rage regen" buff drain rage
   faster.
+
+  Both are public const helpers rather than inline arithmetic. `RegenerateHealth` and
+  `RegeneratePower` are protected and `GamePlayerS` is `final`, so a test cannot reach them
+  through a subclass; putting the arithmetic in a public helper is what makes it testable.
 - `GameUnitS::CriticalHitChance(victim, attackType)` — adds `victim`'s crit-taken bonus
   before the existing clamp. This one site covers the entire melee attack table.
 - The weapon-damage spell crit roll in `spell_effects.cpp` — adds the target's crit-taken
@@ -143,15 +161,28 @@ against `aura_type::Count_` enforces this.
 
 New attribute `spell_attributes_b::SitsCaster = 1 << 10` in `src/shared/game/spell.h`.
 
-The unconditional force-stand in the spell cast handler in `src/world_server/player.cpp`
-becomes:
+The stand-state decision moves into one private helper on `Player`, because two call sites
+need it and they need it slightly differently:
 
-- if the spell has `SitsCaster` and the caster is alive and not already seated, set the stand
-  state to `Sit`;
-- otherwise, stand the caster up **unless** the spell has `CastableWhileSitting`.
+```cpp
+/// Updates the caster's stand state for a client-initiated cast of `spell`.
+/// @param standUpByDefault When true, a spell that neither seats the caster nor is castable
+///        while seated stands the caster up.
+void UpdateStandStateForCast(const proto::SpellEntry& spell, bool standUpByDefault);
+```
 
-The second half fixes an existing bug on its own: Drink already carries
-`CastableWhileSitting` and was being stood up anyway.
+- `SitsCaster` seats a living caster who is not already seated;
+- otherwise, if `standUpByDefault`, stand the caster up unless the spell is
+  `CastableWhileSitting`.
+
+`Player::OnSpellCast` passes `true`, replacing its current unconditional force-stand — which
+also fixes the latent `CastableWhileSitting` bug. `Player::OnUseItem` passes `false` and
+calls it per OnUse spell before casting: using an item has never stood a character up, and
+this change is not the place to start.
+
+The helper deliberately lives in the world server rather than in `GameUnitS::CastSpell`. Only
+client-initiated casts should move the caster; a server-side cast must not, or the trigger's
+own Resting cast would stand the player straight back up and cancel the buff it just applied.
 
 Data changes: Food (spell 143) and Drink (spells 59 and 60) gain `SitsCaster`; Food
 additionally gains the `CastableWhileSitting` it lacks. Their `aurainterruptflags` already
@@ -222,18 +253,25 @@ existing protobuf fields, and `client_data/spells.proto` already mirrors `attrib
 
 **End to end (`e2e/scenarios/sitting_rest_buff.lua`).**
 
-The harness cannot sit today, so the scenario needs two additions to the e2e client: a
-`Sit()` / `Stand()` action (sending the pose emote the real client sends) and a
-`GetStandState(g)` query. Both are documented in `e2e/README.md`.
+The harness already has everything needed: `DoEmote(emoteId)` (emote 4 is Sit, known by
+default) and `GetStandState(g)`, both used by `emote_smoke.lua`. Neither is listed in
+`e2e/README.md`, which is fixed as part of this work. No e2e client C++ changes.
 
 The scenario asserts, in order:
 
 1. sit → the resting aura is present;
 2. move → the aura is gone and the character is standing;
 3. sit again → the aura is back;
-4. stand → the aura is gone;
-5. use food → the character is seated and has both the food aura and the resting aura;
+4. `/sit` again to stand → the aura is gone;
+5. cast Drink → the character is seated and has both the drink aura and the resting aura;
 6. move → both auras are gone.
+
+Step 5 goes through `Player::OnSpellCast` rather than through item use, because the harness
+has no `UseItem` binding: `BotItemState` records no bag or slot, so sending a `UseItem`
+packet would first need inventory slot tracking in the bot, and a GM shortcut would need a
+new opcode and a protocol version bump. The item path calls the same
+`UpdateStandStateForCast` helper one line later, so what is left unverified by the suite is a
+single call site, checked by inspection.
 
 ## Out of scope
 
