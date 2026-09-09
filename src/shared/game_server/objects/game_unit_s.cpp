@@ -3800,7 +3800,11 @@ namespace mmo
 
 		if (!IsAlive())
 		{
-			SetVictim(nullptr);
+			// Stop rather than just dropping the victim, for the same reason as the dead-victim
+			// branch below: both halves of the attack state go together. A unit that dies has
+			// already been stopped by OnKilled, so this is the defensive path -- but it is the
+			// last one that could clear one half and leave the other.
+			StopAttack();
 			return;
 		}
 
@@ -3829,18 +3833,20 @@ namespace mmo
 		if (!victim->IsAlive())
 		{
 			// The main-hand swing drives the client-facing swing-error UI; the off-hand stays silent
-			// to avoid duplicate error messages.
+			// to avoid duplicate error messages, and the stop rides along inside the same guard so the
+			// client always gets the reason before the acknowledgement. (An off-hand swing that gets
+			// here first therefore leaves the state alone; the next main-hand swing settles it.)
 			if (!isOffhand)
 			{
 				OnAttackSwingEvent(AttackSwingEvent::TargetDead);
 
-				// Stop rather than just dropping the victim: clearing m_victim alone leaves
-				// unit_flags::Attacking set with nothing behind it -- the flag the client reads as
-				// IsWeaponDrawn() -- and sends no AttackStop, which is the client's only
-				// acknowledgement. Nothing would clear it afterwards either, since SetVictim(nullptr)
-				// disconnects the victim signals that VictimDespawned would otherwise arrive on.
-				// A player could paper over it by toggling attack off; a creature has no client to
-				// do that for it.
+				// Both halves of the attack state are cleared together: the victim, and the replicated
+				// unit_flags::Attacking that the client reads as IsWeaponDrawn(). Dropping the victim
+				// alone stranded that flag with nothing behind it and sent no AttackStop, which is the
+				// client's only acknowledgement -- and nothing cleared it afterwards, because
+				// SetVictim(nullptr) disconnects the very signals VictimDespawned would arrive on.
+				// A player could paper over it by toggling attack off; a creature has no client to do
+				// that for it.
 				StopAttack();
 			}
 			return;

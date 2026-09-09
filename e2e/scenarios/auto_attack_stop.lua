@@ -103,15 +103,22 @@ Assert(WaitUntil(function() return not IsAlive(corpse) end, 10000, "idle dummy d
 	"an idle training dummy should die to GM.KillTarget -- its combat script only protects it once"
 		.. " the encounter has started")
 
-StartAttack(corpse)
-
 -- The accept and the stop land inside a tick or two of each other -- the opening swing arms
 -- immediately, measured at ~15ms -- so IsAutoAttacking() has no true window wide enough to wait
 -- on. The swing error is the durable witness instead: TargetDead can only come from a swing the
 -- server accepted and resolved against this corpse, so it rules out the assertion below passing
 -- merely because the attack was refused outright.
-Assert(WaitUntil(function() return LastSwingError() == "target_dead" end, 8000,
-		"server reports the dead target"),
+--
+-- The count is checked alongside the name because LastSwingError() is sticky for the life of the
+-- scenario. Nothing above can leave a target_dead behind today -- the dummy in the first phase
+-- cannot die -- but that is luck, not construction, and a phase added in between would silently
+-- turn this witness into a no-op.
+local errorsBeforeCorpse = SwingErrorCount()
+StartAttack(corpse)
+
+Assert(WaitUntil(function()
+			return SwingErrorCount() > errorsBeforeCorpse and LastSwingError() == "target_dead"
+		end, 8000, "server reports the dead target"),
 	"the server should accept an attack on a corpse -- StartAttack never checks aliveness -- and "
 		.. "report TargetDead on the swing that follows")
 

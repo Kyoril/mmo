@@ -151,3 +151,57 @@ TEST_CASE_METHOD(SwingTimerFixture, "A unit with no victim reports no scheduled 
 	CHECK_FALSE(attacker->IsAttackSwingArmed());
 	CHECK_FALSE(attacker->IsAttacking());
 }
+
+// The two branches below are about a different invariant than the timer ownership above: a swing
+// that cannot connect must clear *both* halves of the attack state. The victim pointer is the
+// server's half; unit_flags::Attacking is the replicated half, and the client mirrors it as
+// IsWeaponDrawn(). Clearing one and leaving the other stranded the flag with nothing behind it,
+// and no AttackStop went out to tell the client otherwise.
+//
+// The flag is set by hand here because StartAttack, which is what sets it in production, routes
+// through SetTarget and needs the WorldInstance this suite has none of -- BeginAttacking stands in
+// for the rest of it. Everything the swing then touches is safe without one:
+// ForEachSubscriberInSight returns early, and OnAttackSwingEvent no-ops without a net watcher.
+
+TEST_CASE_METHOD(SwingTimerFixture, "A swing at a dead victim clears both halves of the attack state", "[swing_timer][attack_state]")
+{
+	// Reachable in production by attacking something already dead: a victim that dies *under* you
+	// raises `killed`, and every attacker's VictimKilled runs StopAttack, but StartAttack checks
+	// visibility and friendliness and never aliveness.
+	const auto attacker = MakeUnit(1);
+	const auto victim = MakeUnit(2);
+	attacker->Set<uint32>(object_fields::Health, 100);
+	victim->Set<uint32>(object_fields::Health, 0);
+	REQUIRE(attacker->IsAlive());
+	REQUIRE_FALSE(victim->IsAlive());
+
+	attacker->BeginAttacking(victim);
+	attacker->AddFlag<uint32>(object_fields::Flags, unit_flags::Attacking);
+
+	attacker->OnAttackSwing();
+
+	CHECK(attacker->GetVictim() == nullptr);
+	CHECK((attacker->Get<uint32>(object_fields::Flags) & unit_flags::Attacking) == 0);
+}
+
+TEST_CASE_METHOD(SwingTimerFixture, "A swing by a dead attacker clears both halves of the attack state", "[swing_timer][attack_state]")
+{
+	// The same rule for the other participant. This branch is defensive -- a unit that dies runs
+	// StopAttack through OnKilled, so a swing should not reach it with the flag still set -- but it
+	// is the last place in the function that could clear one half without the other, and a guard in
+	// Player::OnAttackStop reasons about there being no such place.
+	const auto attacker = MakeUnit(1);
+	const auto victim = MakeUnit(2);
+	attacker->Set<uint32>(object_fields::Health, 0);
+	victim->Set<uint32>(object_fields::Health, 100);
+	REQUIRE_FALSE(attacker->IsAlive());
+	REQUIRE(victim->IsAlive());
+
+	attacker->BeginAttacking(victim);
+	attacker->AddFlag<uint32>(object_fields::Flags, unit_flags::Attacking);
+
+	attacker->OnAttackSwing();
+
+	CHECK(attacker->GetVictim() == nullptr);
+	CHECK((attacker->Get<uint32>(object_fields::Flags) & unit_flags::Attacking) == 0);
+}
