@@ -835,39 +835,25 @@ namespace mmo
 			return 0;
 		}
 
-		uint32 resolveMiss(const proto_client::ItemSubclassManager& subclasses,
-			const proto_client::ModelDataManager& models, const CombatSoundAttacker& attacker)
+		/// Reads one sound id off the attacker's weapon subclass, falling back to the same
+		/// slot on the attacker model's natural weapon when the weapon has none authored.
+		/// The accessor is a generic lambda because it is applied to two unrelated proto
+		/// message types that happen to carry identically named fields.
+		template<typename TAccessor>
+		uint32 resolveWeaponSound(const proto_client::ItemSubclassManager& subclasses,
+			const proto_client::ModelDataManager& models, const CombatSoundAttacker& attacker, TAccessor accessor)
 		{
 			if (const auto* subclass = subclasses.getById(attacker.weaponSubclass))
 			{
-				if (subclass->miss_sound() != 0)
+				if (const uint32 sound = accessor(*subclass))
 				{
-					return subclass->miss_sound();
+					return sound;
 				}
 			}
 
 			if (const auto* modelSounds = findModelSounds(models, attacker.displayId))
 			{
-				return modelSounds->miss_sound();
-			}
-
-			return 0;
-		}
-
-		uint32 resolveCritLayer(const proto_client::ItemSubclassManager& subclasses,
-			const proto_client::ModelDataManager& models, const CombatSoundAttacker& attacker)
-		{
-			if (const auto* subclass = subclasses.getById(attacker.weaponSubclass))
-			{
-				if (subclass->crit_layer_sound() != 0)
-				{
-					return subclass->crit_layer_sound();
-				}
-			}
-
-			if (const auto* modelSounds = findModelSounds(models, attacker.displayId))
-			{
-				return modelSounds->crit_layer_sound();
+				return accessor(*modelSounds);
 			}
 
 			return 0;
@@ -898,20 +884,8 @@ namespace mmo
 		uint32 ResolveSwingSound(const proto_client::ItemSubclassManager& subclasses,
 			const proto_client::ModelDataManager& models, const CombatSoundAttacker& attacker)
 		{
-			if (const auto* subclass = subclasses.getById(attacker.weaponSubclass))
-			{
-				if (subclass->swing_sound() != 0)
-				{
-					return subclass->swing_sound();
-				}
-			}
-
-			if (const auto* modelSounds = findModelSounds(models, attacker.displayId))
-			{
-				return modelSounds->swing_sound();
-			}
-
-			return 0;
+			return resolveWeaponSound(subclasses, models, attacker,
+				[](const auto& source) { return source.swing_sound(); });
 		}
 
 		ResolvedSwingSounds ResolveSwingSounds(const proto_client::ItemSubclassManager& subclasses,
@@ -927,13 +901,15 @@ namespace mmo
 
 				if (outcome.crit)
 				{
-					resolved.critLayerSound = resolveCritLayer(subclasses, models, attacker);
+					resolved.critLayerSound = resolveWeaponSound(subclasses, models, attacker,
+						[](const auto& source) { return source.crit_layer_sound(); });
 				}
 			}
 
 			if (outcome.miss)
 			{
-				resolved.missSound = resolveMiss(subclasses, models, attacker);
+				resolved.missSound = resolveWeaponSound(subclasses, models, attacker,
+					[](const auto& source) { return source.miss_sound(); });
 			}
 
 			if (outcome.parry)
@@ -947,7 +923,8 @@ namespace mmo
 
 				if (resolved.parrySound == 0)
 				{
-					resolved.parrySound = resolveMiss(subclasses, models, attacker);
+					resolved.parrySound = resolveWeaponSound(subclasses, models, attacker,
+						[](const auto& source) { return source.miss_sound(); });
 				}
 			}
 
@@ -1255,7 +1232,9 @@ git commit -m "feat: per-unit combat voice throttle"
 **Files:**
 - Create: `src/shared/game_client/combat_sound_player.h`
 - Create: `src/shared/game_client/combat_sound_player.cpp`
+- Create: `src/tests/game_client_tests/fake_audio.h` (shared `IAudio` test double)
 - Create: `src/tests/game_client_tests/test_combat_sound_player.cpp`
+- Modify: `src/tests/game_client_tests/test_crossfading_sound_loop.cpp` (use the shared double)
 - Modify: `src/tests/game_client_tests/CMakeLists.txt`
 
 **Interfaces:**
@@ -1268,21 +1247,249 @@ git commit -m "feat: per-unit combat voice throttle"
   - `void SetClock(std::function<GameTime()>)`
   - `void Clear()`
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Extract the shared audio test double**
 
-Create `src/tests/game_client_tests/test_combat_sound_player.cpp`. The `FakeAudio` / `FakeChannelInstance` doubles are copied from `test_crossfading_sound_loop.cpp` rather than shared — Catch2 suites in this repo keep their doubles local, and the two fakes record different things.
+`test_crossfading_sound_loop.cpp` already carries an `IAudio` double. Rather than copying it, lift it into a shared header that records both what the existing suite needs (started and stopped channels) and what the new tests need (played file names).
+
+Create `src/tests/game_client_tests/fake_audio.h`:
+
+```cpp
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
+#pragma once
+
+#include <map>
+#include <set>
+#include <vector>
+
+#include "audio/audio.h"
+
+namespace mmo
+{
+	/// @brief Fake channel instance which simply records the pitch and volume set on it.
+	class FakeChannelInstance final : public IChannelInstance
+	{
+	public:
+		void Clear() override
+		{
+		}
+
+		void SetPitch(const float value) override
+		{
+			m_pitch = value;
+		}
+
+		float GetPitch() const override
+		{
+			return m_pitch;
+		}
+
+		void SetVolume(const float volume) override
+		{
+			m_volume = volume;
+		}
+
+		float GetVolume() const override
+		{
+			return m_volume;
+		}
+
+	private:
+		float m_pitch = 1.0f;
+		float m_volume = 1.0f;
+	};
+
+	/// @brief Headless IAudio double: hands out incrementing sound / channel indices and
+	///	records which channels were started and stopped, and which files were played.
+	class FakeAudio final : public IAudio
+	{
+	public:
+		/// Channels handed out by PlaySound / PlaySound3D, in order.
+		std::vector<ChannelIndex> startedChannels;
+
+		/// Channels passed to StopSound.
+		std::set<ChannelIndex> stoppedChannels;
+
+		/// File names behind every played sound index, in order.
+		std::vector<String> playedFiles;
+
+		void Create() override
+		{
+		}
+
+		void Destroy() override
+		{
+		}
+
+		void Update(const Vector3&, float) override
+		{
+		}
+
+		SoundIndex CreateSound(const String& fileName) override
+		{
+			const SoundIndex index = m_nextSound++;
+			m_files[index] = fileName;
+			return index;
+		}
+
+		SoundIndex CreateStream(const String& fileName) override
+		{
+			return CreateSound(fileName);
+		}
+
+		SoundIndex CreateLoopedSound(const String& fileName) override
+		{
+			return CreateSound(fileName);
+		}
+
+		SoundIndex CreateLoopedStream(const String& fileName) override
+		{
+			return CreateSound(fileName);
+		}
+
+		SoundIndex CreateSound(const String& fileName, SoundType) override
+		{
+			return CreateSound(fileName);
+		}
+
+		void PlaySound(const SoundIndex sound, ChannelIndex* channelIndex, float, SoundCategory) override
+		{
+			Start(sound, channelIndex);
+		}
+
+		void PlaySound3D(const SoundIndex sound, ChannelIndex* channelIndex, const Vector3&, float, float, float, SoundCategory) override
+		{
+			Start(sound, channelIndex);
+		}
+
+		void StopSound(ChannelIndex* channelIndex) override
+		{
+			if (channelIndex && *channelIndex != InvalidChannel)
+			{
+				stoppedChannels.insert(*channelIndex);
+				*channelIndex = InvalidChannel;
+			}
+		}
+
+		void StopAllSounds() override
+		{
+		}
+
+		SoundIndex FindSound(const String&, SoundType) override
+		{
+			return InvalidSound;
+		}
+
+		void Set3DMinMaxDistance(ChannelIndex, float, float) override
+		{
+		}
+
+		void Set3DPosition(ChannelIndex, const Vector3&) override
+		{
+		}
+
+		float GetSoundLength(SoundIndex) override
+		{
+			return 0.0f;
+		}
+
+		ISoundInstance* GetSoundInstance(SoundIndex) override
+		{
+			return nullptr;
+		}
+
+		IChannelInstance* GetChannelInstance(const ChannelIndex channel) override
+		{
+			return &m_channels[channel];
+		}
+
+		void SetMasterVolume(float) override
+		{
+		}
+
+		void SetMasterMuted(bool) override
+		{
+		}
+
+		void SetCategoryVolume(SoundCategory, float) override
+		{
+		}
+
+		void SetCategoryMuted(SoundCategory, bool) override
+		{
+		}
+
+		/// @brief Gets the volume last set on the given channel.
+		float GetChannelVolume(const ChannelIndex channel)
+		{
+			return m_channels[channel].GetVolume();
+		}
+
+		/// @brief Whether a sound created from the given file was played at least once.
+		bool PlayedFile(const String& fileName) const
+		{
+			return std::find(playedFiles.begin(), playedFiles.end(), fileName) != playedFiles.end();
+		}
+
+	private:
+		void Start(const SoundIndex sound, ChannelIndex* channelIndex)
+		{
+			const auto it = m_files.find(sound);
+			playedFiles.push_back(it == m_files.end() ? String() : it->second);
+
+			const ChannelIndex channel = m_nextChannel++;
+			startedChannels.push_back(channel);
+
+			if (channelIndex)
+			{
+				*channelIndex = channel;
+			}
+		}
+
+	private:
+		SoundIndex m_nextSound = 0;
+		ChannelIndex m_nextChannel = 0;
+		std::map<SoundIndex, String> m_files;
+		std::map<ChannelIndex, FakeChannelInstance> m_channels;
+	};
+}
+```
+
+Add `#include <algorithm>` to that header's include block if `std::find` does not resolve.
+
+- [ ] **Step 2: Point the existing suite at the shared double**
+
+In `src/tests/game_client_tests/test_crossfading_sound_loop.cpp`, delete the local `FakeChannelInstance` and `FakeAudio` class definitions from its anonymous namespace (they run from the `/// Fake channel instance which simply records the volume set on it.` comment through the closing `};` of `FakeAudio`), and add above the anonymous namespace:
+
+```cpp
+#include "fake_audio.h"
+```
+
+The remaining helpers in that file (`addLoopedEntry` and friends) stay where they are. The shared double is a superset of the old one — same member names, same behaviour — so no test body changes.
+
+- [ ] **Step 3: Run the existing suite to prove the extraction is behaviour-neutral**
+
+Run:
+
+```bash
+cmake --build build --config Debug -t game_client_tests && ./bin/Debug/game_client_tests.exe "[crossfading_sound_loop]"
+```
+
+Expected: PASS, exactly as before the extraction. If the tag name does not match, run the suite with no filter — every pre-existing case must still pass.
+
+- [ ] **Step 4: Write the failing tests**
+
+Create `src/tests/game_client_tests/test_combat_sound_player.cpp`, using the shared double from Step 1.
 
 ```cpp
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "catch.hpp"
 
+#include "fake_audio.h"
+
 #include "game_client/combat_sound_player.h"
 #include "game_client/sound_entry_player.h"
-
-#include <algorithm>
-#include <map>
-#include <vector>
 
 using namespace mmo;
 
@@ -1296,91 +1503,6 @@ namespace
 	constexpr uint32 kSoundCritLayer = 502;
 	constexpr uint32 kSoundAttackVoice = 700;
 	constexpr uint32 kSoundHitVoice = 702;
-
-	class FakeChannelInstance final : public IChannelInstance
-	{
-	public:
-		void Clear() override {}
-		void SetPitch(const float value) override { m_pitch = value; }
-		float GetPitch() const override { return m_pitch; }
-		void SetVolume(const float volume) override { m_volume = volume; }
-		float GetVolume() const override { return m_volume; }
-
-	private:
-		float m_pitch = 1.0f;
-		float m_volume = 1.0f;
-	};
-
-	/// Headless IAudio double recording which sound files were played, in order.
-	/// The override set mirrors src/shared/audio/audio.h exactly - note that PlaySound
-	/// returns void and writes the channel through its out parameter.
-	class FakeAudio final : public IAudio
-	{
-	public:
-		std::vector<String> playedFiles;
-
-		void Create() override {}
-		void Destroy() override {}
-		void Update(const Vector3&, float) override {}
-
-		SoundIndex CreateSound(const String& fileName) override
-		{
-			const SoundIndex index = m_nextSound++;
-			m_files[index] = fileName;
-			return index;
-		}
-
-		SoundIndex CreateStream(const String& fileName) override { return CreateSound(fileName); }
-		SoundIndex CreateLoopedSound(const String& fileName) override { return CreateSound(fileName); }
-		SoundIndex CreateLoopedStream(const String& fileName) override { return CreateSound(fileName); }
-		SoundIndex CreateSound(const String& fileName, SoundType) override { return CreateSound(fileName); }
-
-		void PlaySound(const SoundIndex sound, ChannelIndex* channelIndex, float, SoundCategory) override
-		{
-			Record(sound);
-
-			if (channelIndex)
-			{
-				*channelIndex = m_nextChannel++;
-			}
-		}
-
-		void PlaySound3D(const SoundIndex sound, ChannelIndex* channelIndex, const Vector3&, float, float, float, SoundCategory) override
-		{
-			Record(sound);
-
-			if (channelIndex)
-			{
-				*channelIndex = m_nextChannel++;
-			}
-		}
-
-		void StopSound(ChannelIndex*) override {}
-		void StopAllSounds() override {}
-		SoundIndex FindSound(const String&, SoundType) override { return InvalidSound; }
-		void Set3DMinMaxDistance(ChannelIndex, float, float) override {}
-		void Set3DPosition(ChannelIndex, const Vector3&) override {}
-		float GetSoundLength(SoundIndex) override { return 0.0f; }
-		ISoundInstance* GetSoundInstance(SoundIndex) override { return nullptr; }
-		IChannelInstance* GetChannelInstance(const ChannelIndex channel) override { return &m_channels[channel]; }
-		void SetMasterVolume(float) override {}
-		void SetMasterMuted(bool) override {}
-		void SetCategoryVolume(SoundCategory, float) override {}
-		void SetCategoryMuted(SoundCategory, bool) override {}
-
-	private:
-		void Record(const SoundIndex sound)
-		{
-			const auto it = m_files.find(sound);
-			playedFiles.push_back(it == m_files.end() ? String() : it->second);
-		}
-
-	private:
-		SoundIndex m_nextSound = 0;
-		ChannelIndex m_nextChannel = 0;
-		std::map<SoundIndex, String> m_files;
-		std::map<ChannelIndex, FakeChannelInstance> m_channels;
-	};
 
 	/// Project slice plus doubles, wired the way the client wires them.
 	struct PlayerFixture
@@ -1426,7 +1548,7 @@ namespace
 
 		bool Played(const String& file) const
 		{
-			return std::find(audio.playedFiles.begin(), audio.playedFiles.end(), file) != audio.playedFiles.end();
+			return audio.PlayedFile(file);
 		}
 	};
 
@@ -1575,7 +1697,7 @@ TEST_CASE("The attacker and the victim are gated independently", "[combat_sound_
 }
 ```
 
-- [ ] **Step 2: Wire the new sources into the test suite**
+- [ ] **Step 5: Wire the new sources into the test suite**
 
 In `src/tests/game_client_tests/CMakeLists.txt`, add `combat_sound_player.cpp` to `target_sources` and `test_combat_sound_player.cpp` to the `else()` branch's property list. The block becomes:
 
@@ -1599,7 +1721,7 @@ else()
 endif()
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [ ] **Step 6: Run the tests to verify they fail**
 
 Run:
 
@@ -1611,7 +1733,7 @@ Expected: FAIL at compile time with `Cannot open include file: 'game_client/comb
 
 The `FakeAudio` override set above was written against `src/shared/audio/audio.h` as it stands. If it fails with "cannot instantiate abstract class", the interface has gained a method since — open that header, add the missing override with an empty body returning a default, and re-run.
 
-- [ ] **Step 4: Write the header**
+- [ ] **Step 7: Write the header**
 
 Create `src/shared/game_client/combat_sound_player.h`:
 
@@ -1686,7 +1808,7 @@ namespace mmo
 }
 ```
 
-- [ ] **Step 5: Write the implementation**
+- [ ] **Step 8: Write the implementation**
 
 Create `src/shared/game_client/combat_sound_player.cpp`:
 
@@ -1815,7 +1937,7 @@ namespace mmo
 }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [ ] **Step 9: Run the tests to verify they pass**
 
 Run:
 
@@ -1825,7 +1947,7 @@ cmake --build build --config Debug -t game_client_tests && ./bin/Debug/game_clie
 
 Expected: PASS, 8 test cases, `All tests passed`.
 
-- [ ] **Step 7: Run the whole suite**
+- [ ] **Step 10: Run the whole suite**
 
 Run:
 
@@ -1835,10 +1957,10 @@ Run:
 
 Expected: `All tests passed` — the pre-existing cases must still pass.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
-git add src/shared/game_client/combat_sound_player.h src/shared/game_client/combat_sound_player.cpp src/tests/game_client_tests/test_combat_sound_player.cpp src/tests/game_client_tests/CMakeLists.txt
+git add src/shared/game_client/combat_sound_player.h src/shared/game_client/combat_sound_player.cpp src/tests/game_client_tests/fake_audio.h src/tests/game_client_tests/test_combat_sound_player.cpp src/tests/game_client_tests/test_crossfading_sound_loop.cpp src/tests/game_client_tests/CMakeLists.txt
 git commit -m "feat: combat sound player with voice chance and throttle"
 ```
 
