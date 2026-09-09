@@ -2759,10 +2759,12 @@ namespace mmo
 		// This is not a rate limit -- a client alternating swing and stop still gets two
 		// broadcasts per round trip -- it just keeps a repeated stop from being one.
 		//
-		// The Attacking flag is checked alongside the victim because a swing that finds its
-		// target dead clears the victim without stopping the attack, leaving the flag set. The
-		// client still needs the AttackStop packet in that state: it is what clears the swing
-		// error the client keeps replaying, and what lowers the weapons again.
+		// Both halves of the state are checked, not just the victim: the Attacking flag is the
+		// replicated half, the one the client mirrors as IsWeaponDrawn(), so "is the server
+		// attacking" is only answered by looking at both. They should never disagree -- every
+		// path that clears the victim now goes through StopAttack, and
+		// e2e/scenarios/auto_attack_stop.lua keeps the one that used to not (a swing finding its
+		// target already dead) honest -- so this is belt and braces rather than a live case.
 		//
 		// The check belongs here rather than inside GameUnitS::StopAttack: StartAttack calls
 		// StopAttack to reject a friendly target, with neither victim nor flag set, and needs
