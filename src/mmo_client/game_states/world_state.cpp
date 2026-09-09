@@ -505,6 +505,12 @@ namespace mmo
 		m_chatBubbleLayer.reset();
 		m_nameplateManager.Clear();
 
+		// The swing error repeat timer re-arms itself and lives on the application timer queue,
+		// which outlives the world: left running, it would keep firing ATTACK_SWING_ERROR and its
+		// voice line on the character screen and into the next world entered.
+		m_lastAttackSwingEvent = AttackSwingEvent::Unknown;
+		CancelAttackSwingErrorTimer();
+
 		// Each entry holds a raw Camera* into the PlayerController destroyed above; an
 		// unexpired frame left in here (e.g. on a quick logout/re-enter) would dangle and
 		// crash the next time OnIdle updates it.
@@ -3798,6 +3804,7 @@ namespace mmo
 				m_playerController->GetControlledUnit()->NotifyAttackStopped();
 
 				m_lastAttackSwingEvent = AttackSwingEvent::Unknown;
+				CancelAttackSwingErrorTimer();
 				FrameManager::Get().TriggerLuaEvent("PLAYER_ATTACK_STOP");
 			}
 		}
@@ -3815,6 +3822,9 @@ namespace mmo
 		}
 
 		m_lastAttackSwingEvent = attackSwingError;
+
+		// A new outcome supersedes the repeat loop of the previous one, whatever it was.
+		CancelAttackSwingErrorTimer();
 		OnAttackSwingErrorTimer();
 
 		return PacketParseResult::Pass;
@@ -5085,7 +5095,9 @@ namespace mmo
 
 	void WorldState::OnAttackSwingErrorTimer()
 	{
-		// Do we need to continue showing the last attack swing error event?
+		// Do we need to continue showing the last attack swing error event? Success is the server
+		// telling us the swing landed again -- the repeat stops here rather than talking over the
+		// attack that is now going through.
 		if (m_lastAttackSwingEvent == attack_swing_event::Success ||
 			m_lastAttackSwingEvent == attack_swing_event::Unknown)
 		{
@@ -5139,8 +5151,17 @@ namespace mmo
 
 	void WorldState::EnqueueNextAttackSwingTimer()
 	{
-		m_timers.AddEvent([this]()
-						  { OnAttackSwingErrorTimer(); }, GetAsyncTimeMs() + 500);
+		const uint32 generation = ++m_attackSwingErrorGeneration;
+		m_timers.AddEvent([this, generation]()
+						  {
+							  if (generation != m_attackSwingErrorGeneration)
+							  {
+								  // Superseded by a newer event; that one owns the repeat now.
+								  return;
+							  }
+
+							  OnAttackSwingErrorTimer();
+						  }, GetAsyncTimeMs() + 500);
 	}
 
 	void WorldState::OnItemPushCallback(const ItemInfo &itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount)
