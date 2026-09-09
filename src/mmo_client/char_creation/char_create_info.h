@@ -5,6 +5,7 @@
 #include "base/non_copyable.h"
 #include "frame_ui/frame.h"
 #include "game/character_customization/customizable_avatar_definition.h"
+#include "game_client/item_display_applier.h"
 #include "ui/model_frame.h"
 
 struct lua_State;
@@ -15,6 +16,7 @@ namespace mmo
 
 	namespace proto_client
 	{
+		class CharacterOutfit;
 		class ModelDataEntry;
 		class Project;
 	}
@@ -45,6 +47,13 @@ namespace mmo
 		[[nodiscard]] int32 GetSelectedClass() const;
 
 		[[nodiscard]] int32 GetSelectedGender() const;
+
+		/// Shows or hides the cosmetic creation outfit. Hiding rebuilds the preview model, which
+		///	restores body parts the outfit's item displays had hidden.
+		void SetOutfitVisible(bool visible);
+
+		/// Returns whether the cosmetic creation outfit is currently shown.
+		[[nodiscard]] bool IsOutfitVisible() const { return m_outfitVisible; }
 
 		const std::vector<String>& GetPropertyNames() const { return m_propertyNameCache; }
 
@@ -92,6 +101,17 @@ namespace mmo
 
 		void ApplyCustomizations();
 
+		/// Returns the outfit which should currently be shown, or nullptr when the outfit is
+		///	hidden or no outfit of the selected class matches the selected race and gender.
+		[[nodiscard]] const proto_client::CharacterOutfit* FindOutfit() const;
+
+		/// Attaches and applies every item display of the current outfit to the preview entity.
+		///	Does nothing when the outfit is hidden or no outfit matches.
+		void ApplyOutfit();
+
+		/// Detaches and destroys every item mesh attached to the preview entity.
+		void ClearItemAttachments();
+
 	public:
 		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
 		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
@@ -121,5 +141,11 @@ namespace mmo
 		scoped_connection m_frameConnection;
 
 		std::vector<String> m_propertyNameCache;
+
+		ItemDisplayAttachmentMap m_itemAttachments;
+
+		bool m_outfitVisible = true;
+
+		String m_defaultAnimation;
 	};
 }

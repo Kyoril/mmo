@@ -11,6 +11,11 @@
 
 #include "luabind_lambda.h"
 
+#include "client_data/character_outfit.h"
+#include "shared/client_data/proto_client/classes.pb.h"
+#include "shared/client_data/proto_client/item_display.pb.h"
+#include "scene_graph/entity.h"
+
 namespace mmo
 {
 	CharCreateInfo::CharCreateInfo(const proto_client::Project& project, RealmConnector& realmConnector)
@@ -79,9 +84,17 @@ namespace mmo
 	{
 		m_frameConnection.disconnect();
 
+		// Entity pointers in m_itemAttachments belong to the previous frame's scene and are now
+		// dangling. Drop them before adopting the new frame.
+		m_itemAttachments.clear();
+
 		const auto modelFrame = dynamic_cast<ModelFrame*>(frame);
 		m_characterCreationFrame = modelFrame;
-				
+
+		// The frame's configured animation is the idle pose to fall back to whenever no outfit
+		// names a stance of its own.
+		m_defaultAnimation = modelFrame ? modelFrame->GetAnimation() : String();
+
 		m_modelChanged = true;
 	}
 
@@ -119,6 +132,10 @@ namespace mmo
 		}
 
 		m_selectedClass = classId;
+
+		// The model itself does not change, but the outfit does, so the preview has to be
+		// rebuilt. m_modelChanged stays false so the player's customization choices survive.
+		RefreshModel();
 	}
 
 	void CharCreateInfo::SetSelectedGender(int32 gender)
@@ -315,7 +332,7 @@ namespace mmo
 	{
 		m_propertyNameCache.clear();
 
-		if (!m_modelChanged || !m_characterCreationFrame)
+		if (!m_characterCreationFrame)
 		{
 			return;
 		}
@@ -334,17 +351,38 @@ namespace mmo
 			return;
 		}
 
+		// Only a model change invalidates the avatar configuration. Switching class rebuilds the
+		// entity as well, but has to keep the player's customization choices.
+		const bool resetCustomization = m_modelChanged;
+
+		// Entity pointers in m_itemAttachments refer to the entity we are about to destroy.
+		ClearItemAttachments();
+
+		// Force entity recreation so sub entity visibility and material overrides are reset to
+		// their defaults. Without this, body parts hidden by a previous outfit's item displays
+		// would stay hidden.
+		m_characterCreationFrame->SetModelFile("");
+
+		// The model frame binds its animation state while the model file is applied, so the
+		// stance has to be chosen before the entity is created.
+		const proto_client::CharacterOutfit* outfit = FindOutfit();
+		m_characterCreationFrame->SetAnimation(outfit && !outfit->animation().empty() ? outfit->animation() : m_defaultAnimation);
+
 		m_selectedModel = model;
 		if ((m_selectedModel->flags() & model_data_flags::IsCustomizable) == 0)
 		{
 			// Simple model, no customizations
+			m_avatarDefinition.reset();
 			m_characterCreationFrame->SetModelFile(m_selectedModel->filename());
 		}
 		else
 		{
-			// Reset avatar configuration
-			m_configuration.chosenOptionPerGroup.clear();
-			m_configuration.scalarValues.clear();
+			if (resetCustomization)
+			{
+				// Reset avatar configuration
+				m_configuration.chosenOptionPerGroup.clear();
+				m_configuration.scalarValues.clear();
+			}
 
 			// Load avatar definition
 			m_avatarDefinition = AvatarDefinitionManager::Get().Load(model->filename());
@@ -355,7 +393,11 @@ namespace mmo
 				for (const auto& property : *m_avatarDefinition)
 				{
 					m_propertyNameCache.push_back(property->GetName());
-					CycleCustomizationProperty(property->GetName(), true, false);
+
+					if (resetCustomization)
+					{
+						CycleCustomizationProperty(property->GetName(), true, false);
+					}
 				}
 			}
 		}
@@ -366,15 +408,85 @@ namespace mmo
 
 	void CharCreateInfo::ApplyCustomizations()
 	{
-		if (!m_avatarDefinition)
+		if (m_avatarDefinition)
+		{
+			for (const auto& property : *m_avatarDefinition)
+			{
+				property->Apply(*this, m_configuration);
+			}
+		}
+
+		// Visibility set properties rewrite the visibility of every sub entity carrying their
+		// tag, which would undo the body parts the outfit's item displays hide. Re-applying the
+		// outfit afterwards is what keeps armor covering the body.
+		ApplyOutfit();
+	}
+
+	const proto_client::CharacterOutfit* CharCreateInfo::FindOutfit() const
+	{
+		if (!m_outfitVisible)
+		{
+			return nullptr;
+		}
+
+		const proto_client::ClassEntry* classEntry = m_project.classes.getById(m_selectedClass);
+		if (!classEntry)
+		{
+			return nullptr;
+		}
+
+		return proto_client::SelectCharacterOutfit(*classEntry, m_selectedRace, m_selectedGender);
+	}
+
+	void CharCreateInfo::ApplyOutfit()
+	{
+		if (!m_characterCreationFrame || !m_selectedModel)
 		{
 			return;
 		}
 
-		for (const auto& property : *m_avatarDefinition)
+		Entity* entity = m_characterCreationFrame->GetEntity();
+		if (!entity)
 		{
-			property->Apply(*this, m_configuration);
+			return;
 		}
+
+		const proto_client::CharacterOutfit* outfit = FindOutfit();
+		if (!outfit)
+		{
+			return;
+		}
+
+		for (const uint32 displayId : outfit->item_displays())
+		{
+			if (displayId == 0)
+			{
+				continue;
+			}
+
+			const proto_client::ItemDisplayEntry* displayData = m_project.itemDisplays.getById(displayId);
+			if (!displayData)
+			{
+				WLOG("Character creation outfit references unknown item display " << displayId << "!");
+				continue;
+			}
+
+			// The creation preview is a hero shot, so weapons go into the hands rather than into
+			// their sheath.
+			ApplyItemDisplay(m_characterCreationFrame->GetScene(), *entity, m_selectedModel->id(), displayId, *displayData, true, m_itemAttachments);
+		}
+	}
+
+	void CharCreateInfo::ClearItemAttachments()
+	{
+		Entity* entity = m_characterCreationFrame ? m_characterCreationFrame->GetEntity() : nullptr;
+		if (!entity)
+		{
+			m_itemAttachments.clear();
+			return;
+		}
+
+		ClearItemDisplayAttachments(m_characterCreationFrame->GetScene(), *entity, m_itemAttachments);
 	}
 
 	void CharCreateInfo::Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration)
