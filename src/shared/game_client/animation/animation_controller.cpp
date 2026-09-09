@@ -51,6 +51,7 @@ namespace mmo
 		m_pose.Reset();
 		m_face.Reset();
 		m_bindings.Invalidate();
+		m_lootPoseActive = false;
 		m_bindingsDirty = true;
 	}
 
@@ -176,7 +177,6 @@ namespace mmo
 				if (!m_lootPoseActive)
 				{
 					lootClip->SetLoop(false);
-					lootClip->SetPlayRate(1.0f);
 					lootClip->SetTimePosition(0.0f);
 
 					// Finishing an Open cast on a chest fires the 1.37s UseEnd one-shot at the
