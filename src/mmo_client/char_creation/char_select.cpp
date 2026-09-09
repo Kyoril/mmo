@@ -91,9 +91,8 @@ namespace mmo
 				if (entity)
 				{
 					const auto& equipDisplayIds = view.GetEquipmentDisplayIds();
-					for (size_t slot = 0; slot < equipDisplayIds.size(); ++slot)
+					for (const uint32 displayId : equipDisplayIds)
 					{
-						const uint32 displayId = equipDisplayIds[slot];
 						if (displayId == 0)
 						{
 							continue;
@@ -105,100 +104,8 @@ namespace mmo
 							continue;
 						}
 
-						for (const auto& variant : displayData->variants())
-						{
-							if (variant.model() != 0 && variant.model() != view.GetDisplayId())
-							{
-								continue;
-							}
-
-							for (const auto& subEntityName : variant.hidden_by_name())
-							{
-								if (SubEntity* sub = entity->GetSubEntity(subEntityName))
-								{
-									sub->SetVisible(false);
-								}
-							}
-
-							for (const auto& tag : variant.hidden_by_tag())
-							{
-								for (uint16 j = 0; j < entity->GetNumSubEntities(); ++j)
-								{
-									SubMesh& subMesh = entity->GetMesh()->GetSubMesh(j);
-									if (subMesh.HasTag(tag))
-									{
-										if (SubEntity* sub = entity->GetSubEntity(j))
-										{
-											sub->SetVisible(false);
-										}
-									}
-								}
-							}
-
-							for (const auto& subEntityName : variant.shown_by_name())
-							{
-								if (SubEntity* sub = entity->GetSubEntity(subEntityName))
-								{
-									sub->SetVisible(true);
-								}
-							}
-
-							for (const auto& tag : variant.shown_by_tag())
-							{
-								for (uint16 j = 0; j < entity->GetNumSubEntities(); ++j)
-								{
-									SubMesh& subMesh = entity->GetMesh()->GetSubMesh(j);
-									if (subMesh.HasTag(tag))
-									{
-										if (SubEntity* sub = entity->GetSubEntity(j))
-										{
-											sub->SetVisible(true);
-										}
-									}
-								}
-							}
-
-							for (const auto& [subEntityName, materialName] : variant.material_overrides())
-							{
-								if (SubEntity* sub = entity->GetSubEntity(subEntityName))
-								{
-									if (const MaterialPtr mat = MaterialManager::Get().Load(materialName))
-									{
-										sub->SetMaterial(mat);
-									}
-								}
-							}
-
-							if (!m_itemAttachments.contains(displayId) && variant.has_mesh() && !variant.mesh().empty())
-							{
-								const auto skeleton = entity->GetSkeleton();
-								if (skeleton && skeleton->HasBone(variant.attached_bone_default().bone_name()))
-								{
-									ItemAttachment attachment;
-									attachment.entity = m_modelFrame->GetScene().CreateEntity(
-										"Preview_ITEM_" + std::to_string(displayId), variant.mesh());
-									attachment.attachment = entity->AttachObjectToBone(
-										variant.attached_bone_default().bone_name(), *attachment.entity);
-									if (attachment.attachment)
-									{
-										attachment.attachment->SetPosition(Vector3(
-											variant.attached_bone_default().offset_x(),
-											variant.attached_bone_default().offset_y(),
-											variant.attached_bone_default().offset_z()));
-										attachment.attachment->SetOrientation(Quaternion(
-											variant.attached_bone_default().rotation_w(),
-											variant.attached_bone_default().rotation_x(),
-											variant.attached_bone_default().rotation_y(),
-											variant.attached_bone_default().rotation_z()));
-										attachment.attachment->SetScale(Vector3(
-											variant.attached_bone_default().scale_x(),
-											variant.attached_bone_default().scale_y(),
-											variant.attached_bone_default().scale_z()));
-									}
-									m_itemAttachments[displayId] = attachment;
-								}
-							}
-						}
+						// Characters are shown out of combat here, so weapons use their sheathed bone.
+						ApplyItemDisplay(m_modelFrame->GetScene(), *entity, view.GetDisplayId(), displayId, *displayData, false, m_itemAttachments);
 					}
 				}
 			}
@@ -207,33 +114,14 @@ namespace mmo
 
 	void CharSelect::ClearItemAttachments()
 	{
-		if (m_itemAttachments.empty())
-		{
-			return;
-		}
-
-		if (!m_modelFrame)
+		Entity* entity = m_modelFrame ? m_modelFrame->GetEntity() : nullptr;
+		if (!entity)
 		{
 			m_itemAttachments.clear();
 			return;
 		}
 
-		Entity* entity = m_modelFrame->GetEntity();
-
-		for (auto& [displayId, attachment] : m_itemAttachments)
-		{
-			if (entity && attachment.entity)
-			{
-				entity->DetachObjectFromBone(*attachment.entity);
-			}
-			if (attachment.entity)
-			{
-				m_modelFrame->GetScene().DestroyEntity(*attachment.entity);
-				attachment.entity = nullptr;
-			}
-		}
-
-		m_itemAttachments.clear();
+		ClearItemDisplayAttachments(m_modelFrame->GetScene(), *entity, m_itemAttachments);
 	}
 
 	int32 CharSelect::GetNumCharacters() const

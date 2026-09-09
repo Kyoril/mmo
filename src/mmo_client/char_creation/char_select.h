@@ -3,6 +3,7 @@
 #include "base/non_copyable.h"
 #include "game/character_view.h"
 #include "game/character_customization/customizable_avatar_definition.h"
+#include "game_client/item_display_applier.h"
 
 #include <unordered_map>
 
@@ -56,13 +57,6 @@ namespace mmo
 		void ClearItemAttachments();
 
 	private:
-		struct ItemAttachment
-		{
-			Entity* entity{ nullptr };
-			TagPoint* attachment{ nullptr };
-		};
-
-	private:
 		const proto_client::Project& m_project;
 
 		RealmConnector& m_realmConnector;
@@ -71,6 +65,6 @@ namespace mmo
 
 		int32 m_selectedCharacter = -1;
 
-		std::unordered_map<uint32, ItemAttachment> m_itemAttachments;
+		ItemDisplayAttachmentMap m_itemAttachments;
 	};
 }

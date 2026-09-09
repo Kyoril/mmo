@@ -114,6 +114,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 13 | 2026-09-09 | `AttackSwingError` now also carries `attack_swing_event::Success`, telling the client a swing landed again so it stops repeating the previous error message and voice line |
 | 12 | 2026-09-07 | `PlaySpellVisual` server opcode: plays a SpellVisualization on a unit by id for every client in sight, so non-spell events (level up) can drive spell-quality visuals |
 | 11 | 2026-08-14 | GM damage cheat opcode: walks a boss across its health-gated phase thresholds without depending on the test character's damage output |
 | 10 | 2026-08-14 | Widen the set-instance-variable cheat's value to int64, matching `WorldInstance`'s storage |

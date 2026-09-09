@@ -2378,6 +2378,10 @@ namespace mmo
 	{
 		m_victimSignals.disconnect();
 
+		// The remembered swing outcome describes a swing against the previous victim, so the first
+		// swing against this one has to be reported again even if it fails the same way.
+		OnAttackSwingEvent(attack_swing_event::Unknown);
+
 		m_victim = victim;
 
 		if (victim)
@@ -3541,8 +3545,23 @@ namespace mmo
 		Set<int32>(object_fields::Mana + static_cast<uint8>(powerType), power);
 	}
 
-	void GameUnitS::OnAttackSwingEvent(const AttackSwingEvent attackSwingEvent) const
+	void GameUnitS::OnAttackSwingEvent(const AttackSwingEvent attackSwingEvent)
 	{
+		// Only transitions are reported: a swing that keeps failing for the same reason retries
+		// every attack_swing_error_delay_ms, and the client repeats the message on its own.
+		if (m_lastAttackSwingEvent == attackSwingEvent)
+		{
+			return;
+		}
+
+		m_lastAttackSwingEvent = attackSwingEvent;
+
+		// The reset value only exists to make the next real outcome count as a transition.
+		if (attackSwingEvent == attack_swing_event::Unknown)
+		{
+			return;
+		}
+
 		if (!m_netUnitWatcher)
 		{
 			return;
@@ -3781,7 +3800,7 @@ namespace mmo
 
 		if (!IsAlive())
 		{
-			m_victim.reset();
+			SetVictim(nullptr);
 			return;
 		}
 
@@ -3814,7 +3833,7 @@ namespace mmo
 			if (!isOffhand)
 			{
 				OnAttackSwingEvent(AttackSwingEvent::TargetDead);
-				m_victim.reset();
+				SetVictim(nullptr);
 			}
 			return;
 		}
@@ -3851,6 +3870,15 @@ namespace mmo
 		// connect. Remove any auras that are interrupted by attacking (e.g. "removed when attacking").
 		RemoveAurasByInterrupt(spell_aura_interrupt_flags::Attack);
 
+		// Tell the client the swing landed, clearing any error it is still repeating. Reported
+		// here rather than after the hit resolves: a killing blow runs StopAttack, which forgets
+		// the swing state, and reporting afterwards would then look like a fresh transition and
+		// put one stray packet on the wire per kill. Only the main hand drives the swing-error UI.
+		if (!isOffhand)
+		{
+			OnAttackSwingEvent(AttackSwingEvent::Success);
+		}
+
 		// Check if we have a configured auto-attack spell to use instead of the legacy hardcoded combat
 		const proto::SpellEntry* autoAttackSpell = GetAutoAttackSpell(attackType);
 		if (autoAttackSpell)
@@ -3868,11 +3896,6 @@ namespace mmo
 				AssignOnExit<bool> resetResolvingFlag{ m_resolvingAutoAttackSwing, false };
 				m_resolvingAutoAttackSwing = true;
 				CastSpell(targetMap, *autoAttackSpell, 0, true);
-			}
-
-			if (!isOffhand)
-			{
-				OnAttackSwingEvent(AttackSwingEvent::Success);
 			}
 
 			// The cast can end the fight outright -- a killing blow runs StopAttack, which cancels
@@ -4058,13 +4081,6 @@ namespace mmo
 				settings.rage_conversion_constant();
 			const float addRage = (static_cast<float>(totalDamage) / rageConversion) * settings.rage_damage_factor();
 			AddPower(power_type::Rage, addRage);
-		}
-
-		// In case of success, we also want to trigger an event to potentially reset error states from
-		// previous attempts. Only the main-hand drives the client-facing swing-error UI.
-		if (!isOffhand)
-		{
-			OnAttackSwingEvent(AttackSwingEvent::Success);
 		}
 
 		// Reschedule the swing timer for the hand that just swung, unless the blow ended the

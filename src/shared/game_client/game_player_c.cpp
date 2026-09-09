@@ -103,12 +103,14 @@ namespace mmo
 		{
 			static constexpr size_t kVisFields = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
 			bool isEquipped = false;
-			for (uint16 i = 0; i < 19; ++i)
+			for (uint16 i = 0; i < player_equipment_slots::Count_; ++i)
 			{
 				if (Get<uint32>(object_fields::VisibleItem1_0 + i * kVisFields) == static_cast<uint32>(data.id))
 				{
+					// Remember the resolved display id per slot so UI model frames can mirror the
+					// character's appearance without going through the item cache themselves.
+					m_equipmentDisplayIds[i] = data.displayId;
 					isEquipped = true;
-					break;
 				}
 			}
 			if (!isEquipped)
@@ -168,113 +170,14 @@ namespace mmo
 		}
 
 		const auto* displayData = m_project.itemDisplays.getById(data.displayId);
-		if (!displayData)
+		if (!displayData || !m_entity)
 		{
 			return;
 		}
 
-		for (const auto& variant : displayData->variants())
-		{
-			// Does this variant affect us?
-			if (variant.model() != 0 && variant.model() != Get<uint32>(object_fields::DisplayId))
-			{
-				continue;
-			}
+		ApplyItemDisplay(m_scene, *m_entity, Get<uint32>(object_fields::DisplayId), data.displayId, *displayData, IsWeaponDrawn(), m_itemAttachments);
 
-			// It does affect us!
-			for (const auto& subEntity : variant.hidden_by_name())
-			{
-				auto* sub = m_entity->GetSubEntity(subEntity);
-				if (!sub)
-				{
-					//ELOG("Could not find sub entity " << subEntity << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
-					continue;
-				}
-
-				sub->SetVisible(false);
-			}
-
-			for (const auto& subEntity : variant.hidden_by_tag())
-			{
-				for (uint16 j = 0; j < m_entity->GetNumSubEntities(); ++j)
-				{
-					SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(j);
-					if (subMesh.HasTag(subEntity))
-					{
-						SubEntity* subEntity = m_entity->GetSubEntity(j);
-						ASSERT(subEntity);
-						subEntity->SetVisible(false);
-					}
-				}
-			}
-
-			// Now show all entities by name
-			for (const auto& subEntity : variant.shown_by_name())
-			{
-				auto* sub = m_entity->GetSubEntity(subEntity);
-				if (!sub)
-				{
-					//ELOG("Could not find sub entity " << subEntity << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
-					continue;
-				}
-				sub->SetVisible(true);
-			}
-
-			// Now show all entities by tag
-			for (const auto& subEntity : variant.shown_by_tag())
-			{
-				for (uint16 j = 0; j < m_entity->GetNumSubEntities(); ++j)
-				{
-					SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(j);
-					if (subMesh.HasTag(subEntity))
-					{
-						SubEntity* subEntity = m_entity->GetSubEntity(j);
-						ASSERT(subEntity);
-						subEntity->SetVisible(true);
-					}
-				}
-			}
-
-			// Apply sub entity material overrides
-			for (const auto& materialOverride : variant.material_overrides())
-			{
-				auto* sub = m_entity->GetSubEntity(materialOverride.first);
-				if (!sub)
-				{
-					//ELOG("Could not find sub entity " << materialOverride.first << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
-					continue;
-				}
-
-				auto mat = MaterialManager::Get().Load(materialOverride.second);
-				if (!mat)
-				{
-					//ELOG("Could not load material " << materialOverride.second << " while trying to apply item display id " << displayData->name() << " to mesh " << m_entity->GetMesh()->GetName());
-					continue;
-				}
-
-				sub->SetMaterial(mat);
-			}
-
-			// Do we already have that item display applied?
-			if (!m_itemAttachments.contains(data.displayId))
-			{
-				if (variant.has_mesh() && !variant.mesh().empty())
-				{
-					// Pick the bone for the current draw state (drawn while in combat, sheathed
-					// otherwise). Weapons define both; armor only defines the default bone.
-					const auto* bone = SelectBoneAttachment(variant, IsWeaponDrawn());
-					if (bone && m_entity->GetSkeleton()->HasBone(bone->bone_name()))
-					{
-						ItemAttachment attachment;
-						attachment.variant = &variant;
-						attachment.entity = m_scene.CreateEntity(m_entity->GetName() + "_ITEM_" + std::to_string(data.displayId), variant.mesh());
-						attachment.attachment = m_entity->AttachObjectToBone(bone->bone_name(), *attachment.entity);
-						ApplyBoneTransform(attachment.attachment, *bone);
-						m_itemAttachments[data.displayId] = attachment;
-					}
-				}
-			}
-		}
+		equipmentVisualsChanged();
 	}
 
 	void GamePlayerC::NotifyGuildInfo(const GuildInfo* guild)
@@ -386,60 +289,13 @@ namespace mmo
 
 	void GamePlayerC::ClearAllAttachments()
 	{
-		for (const auto& attachment : m_itemAttachments)
+		if (!m_entity)
 		{
-			if (attachment.second.entity)
-			{
-				const String entityName = attachment.second.entity->GetName();
-				m_entity->DetachObjectFromBone(entityName);
-				m_scene.DestroyEntity(*attachment.second.entity);
-			}
-		}
-
-		m_itemAttachments.clear();
-	}
-
-	const proto_client::ItemDisplayBoneAttachment* GamePlayerC::SelectBoneAttachment(const proto_client::ItemDisplayVariant& variant, const bool drawn)
-	{
-		if (drawn && variant.has_attached_bone_drawn())
-		{
-			return &variant.attached_bone_drawn();
-		}
-
-		if (!drawn && variant.has_attached_bone_sheath())
-		{
-			return &variant.attached_bone_sheath();
-		}
-
-		if (variant.has_attached_bone_default())
-		{
-			return &variant.attached_bone_default();
-		}
-
-		// No default defined: use whichever state-specific bone exists so the item still attaches.
-		if (variant.has_attached_bone_drawn())
-		{
-			return &variant.attached_bone_drawn();
-		}
-
-		if (variant.has_attached_bone_sheath())
-		{
-			return &variant.attached_bone_sheath();
-		}
-
-		return nullptr;
-	}
-
-	void GamePlayerC::ApplyBoneTransform(TagPoint* tagPoint, const proto_client::ItemDisplayBoneAttachment& bone)
-	{
-		if (!tagPoint)
-		{
+			m_itemAttachments.clear();
 			return;
 		}
 
-		tagPoint->SetPosition(Vector3(bone.offset_x(), bone.offset_y(), bone.offset_z()));
-		tagPoint->SetOrientation(Quaternion(bone.rotation_w(), bone.rotation_x(), bone.rotation_y(), bone.rotation_z()));
-		tagPoint->SetScale(Vector3(bone.scale_x(), bone.scale_y(), bone.scale_z()));
+		ClearItemDisplayAttachments(m_scene, *m_entity, m_itemAttachments);
 	}
 
 	void GamePlayerC::OnUnitFlagsChanged(uint64)
@@ -461,30 +317,7 @@ namespace mmo
 			return;
 		}
 
-		for (auto& [displayId, attachment] : m_itemAttachments)
-		{
-			if (!attachment.variant || !attachment.entity)
-			{
-				continue;
-			}
-
-			// Only items that define a drawn or sheathed bone (i.e. weapons) move between states.
-			if (!attachment.variant->has_attached_bone_drawn() && !attachment.variant->has_attached_bone_sheath())
-			{
-				continue;
-			}
-
-			const auto* bone = SelectBoneAttachment(*attachment.variant, m_weaponsDrawn);
-			if (!bone || !m_entity->GetSkeleton()->HasBone(bone->bone_name()))
-			{
-				continue;
-			}
-
-			// Re-attach the existing entity to the bone for the new draw state.
-			m_entity->DetachObjectFromBone(attachment.entity->GetName());
-			attachment.attachment = m_entity->AttachObjectToBone(bone->bone_name(), *attachment.entity);
-			ApplyBoneTransform(attachment.attachment, *bone);
-		}
+		RefreshItemDisplayAttachmentBones(*m_entity, m_itemAttachments, m_weaponsDrawn);
 	}
 
 	void GamePlayerC::OnEquipmentChanged(uint64)
@@ -499,6 +332,7 @@ namespace mmo
 		m_entity->ResetSubEntities();
 
 		ClearAllAttachments();
+		m_equipmentDisplayIds.fill(0);
 
 		// Capture the current draw state as the baseline; attachments are (re)created against it as
 		// their item data arrives, so a later flag flip is detected correctly.
@@ -521,7 +355,7 @@ namespace mmo
 
 		static constexpr size_t visibleItemFields = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
 
-		for (uint16 i = 0; i < 19; ++i)
+		for (uint16 i = 0; i < player_equipment_slots::Count_; ++i)
 		{
 			const uint32 itemEntry = Get<uint32>(object_fields::VisibleItem1_0 + i * visibleItemFields);
 			if (itemEntry == 0)
@@ -531,6 +365,10 @@ namespace mmo
 
 			m_netDriver.GetItemData(itemEntry, std::static_pointer_cast<GamePlayerC>(shared_from_this()));
 		}
+
+		// Notify listeners about the (now empty) equipment visuals; each item re-applies and
+		// notifies again once its display data arrives.
+		equipmentVisualsChanged();
 	}
 
 	void GamePlayerC::RegisterFootstepHandlers()

@@ -161,7 +161,7 @@ namespace mmo
 			/// Targets: UNIT; Data: <STAND-STATE>; Texts: NONE;
 			SetStandState = 12,
 			/// Updates the target units virtual equipment slot.
-			/// Targets: UNIT; Data: <SLOT:0-2>, <ITEM-ENTRY>; Texts: NONE;
+			/// Targets: UNIT; Data: <SLOT:0-2>, <ITEM-DISPLAY-ID>; Texts: NONE;
 			SetVirtualEquipmentSlot = 13,
 			/// Updates the target creatures AI combat phase.
 			/// Targets: UNIT; Data: <PHASE>; Texts: NONE;
@@ -182,7 +182,7 @@ namespace mmo
 			/// Targets: UNIT; Data: NONE; Texts: NONE;
 			Dismount = 19,
 			/// Sets the mount display id of a unit and makes it enter the mounted state.
-			/// Targets: UNIT; Data: <MOUNT-ID>; Texts: NONE;
+			/// Targets: UNIT; Data: <MOUNT-DISPLAY-ID>; Texts: NONE;
 			SetMount = 20,
 			/// Despawns an object by removing it from the world.
 			/// Targets: UNIT; Data: NONE; Texts: NONE;
@@ -229,8 +229,11 @@ namespace mmo
 			/// Targets: NONE; Data: <VARIABLE-KEY>, <VALUE>; Texts: NONE;
 			SetInstanceVariable = 31,
 
-			/// Broadcasts a system/raid-warning style message to all players in the instance.
-			/// Targets: NONE; Data: [<MESSAGE-TYPE:0=system,1=raid-warning>]; Texts: <MESSAGE>;
+			/// Broadcasts a system message to all players in the instance, resolved into each
+			/// recipient's own client locale.
+			/// Targets: NONE; Data: NONE; Texts: <MESSAGE>;
+			/// @note A raid-warning message type was once documented here as data[0], but no
+			///       handler ever read it - every message is sent as ChatType::System.
 			BroadcastMessage = 32,
 
 			/// Marks the exploration/event objective of an active quest as completed for a player

@@ -45,6 +45,15 @@ namespace mmo
 			/// Health is not a substitute -- a creature can heal between swings.
 			std::map<uint64, uint32> meleeSwings;
 
+			/// The last auto-attack swing error the server reported, and how many times it has
+			/// told us swings started landing again. The server reports swing outcomes as
+			/// transitions, so a scenario that provokes an error and then removes its cause reads
+			/// the recovery count to tell "the error was cleared" from "the error is simply still
+			/// being repeated by the client".
+			AttackSwingEvent lastSwingError { attack_swing_event::Unknown };
+			uint32 swingErrors { 0 };
+			uint32 swingRecoveries { 0 };
+
 			/// A second session on the same account, created by LoginElsewhere. Kept alive for the
 			/// rest of the scenario so its connection is not torn down while the first session is
 			/// still being observed.
@@ -422,6 +431,23 @@ namespace mmo
 		{
 			const auto it = g_runtime->meleeSwings.find(guidFromString(guid));
 			return it == g_runtime->meleeSwings.end() ? 0 : static_cast<int32>(it->second);
+		}
+
+		/// Name of the last swing error the server reported ("out_of_range", ...), or "none".
+		std::string luaLastSwingError()
+		{
+			return g_runtime->swingErrors == 0 ? std::string("none")
+				: std::string(attackSwingEventName(g_runtime->lastSwingError));
+		}
+
+		int32 luaSwingErrorCount()
+		{
+			return static_cast<int32>(g_runtime->swingErrors);
+		}
+
+		int32 luaSwingRecoveryCount()
+		{
+			return static_cast<int32>(g_runtime->swingRecoveries);
 		}
 
 		std::string luaGetName(const std::string& guid)
@@ -1127,6 +1153,9 @@ namespace mmo
 				luabind::def_lambda("GetSitPoseEmote", &luaGetSitPoseEmote),
 				luabind::def_lambda("GetSleepPoseEmote", &luaGetSleepPoseEmote),
 				luabind::def_lambda("LastCastResult", &luaLastCastResult),
+				luabind::def_lambda("LastSwingError", &luaLastSwingError),
+				luabind::def_lambda("SwingErrorCount", &luaSwingErrorCount),
+				luabind::def_lambda("SwingRecoveryCount", &luaSwingRecoveryCount),
 				luabind::def_lambda("FindUnitByEntryImpl", &luaFindUnitByEntry),
 				luabind::def_lambda("FindUnitByNameImpl", &luaFindUnitByName),
 				luabind::def_lambda("CountUnitsByEntryImpl", &luaCountUnitsByEntry),
@@ -1257,9 +1286,20 @@ namespace mmo
 		// swing timer that never re-arms -- the two have very different causes.
 		BotRealmConnector& realm = session.GetRealm();
 		const scoped_connection swingErrorRecorder { realm.AttackSwingError.connect(
-			[&transcript](const AttackSwingEvent event)
+			[&transcript, &runtime](const AttackSwingEvent event)
 			{
+				runtime.lastSwingError = event;
+				++runtime.swingErrors;
 				transcript.Event("attack_swing_error", { { "reason", attackSwingEventName(event) } });
+			}) };
+		const scoped_connection swingRecoveredRecorder { realm.AttackSwingRecovered.connect(
+			[&transcript, &runtime]()
+			{
+				++runtime.swingRecoveries;
+				// The counterpart of the above: swings are landing again. A scenario that walks
+				// out of range and back needs this to tell "the error stopped" from "the error was
+				// never cleared and is simply still being repeated".
+				transcript.Event("attack_swing_recovered", {});
 			}) };
 		const scoped_connection attackStartedRecorder { realm.AttackStarted.connect(
 			[&transcript](const uint64 attacker, const uint64 victim)
