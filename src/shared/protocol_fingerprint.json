@@ -124,7 +124,7 @@
 		]
 	},
 	"game": {
-		"version": 12,
+		"version": 13,
 		"fingerprint": "sha256:b9ac6f2b39a66d0e6029988bc1473ba751acddf89d6e93e2a8feb4a772da731b",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",

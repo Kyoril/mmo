@@ -2378,6 +2378,10 @@ namespace mmo
 	{
 		m_victimSignals.disconnect();
 
+		// The remembered swing outcome describes a swing against the previous victim, so the first
+		// swing against this one has to be reported again even if it fails the same way.
+		OnAttackSwingEvent(attack_swing_event::Unknown);
+
 		m_victim = victim;
 
 		if (victim)
@@ -3541,8 +3545,23 @@ namespace mmo
 		Set<int32>(object_fields::Mana + static_cast<uint8>(powerType), power);
 	}
 
-	void GameUnitS::OnAttackSwingEvent(const AttackSwingEvent attackSwingEvent) const
+	void GameUnitS::OnAttackSwingEvent(const AttackSwingEvent attackSwingEvent)
 	{
+		// Only transitions are reported: a swing that keeps failing for the same reason retries
+		// every attack_swing_error_delay_ms, and the client repeats the message on its own.
+		if (m_lastAttackSwingEvent == attackSwingEvent)
+		{
+			return;
+		}
+
+		m_lastAttackSwingEvent = attackSwingEvent;
+
+		// The reset value only exists to make the next real outcome count as a transition.
+		if (attackSwingEvent == attack_swing_event::Unknown)
+		{
+			return;
+		}
+
 		if (!m_netUnitWatcher)
 		{
 			return;

@@ -3664,21 +3664,9 @@ namespace mmo
 
 	void Player::OnAttackSwingEvent(AttackSwingEvent attackSwingEvent)
 	{
-		if (m_lastAttackSwingEvent == attackSwingEvent)
-		{
-			return;
-		}
-
-		m_lastAttackSwingEvent = attackSwingEvent;
-
-		// Nothing to do here in these cases
-		if (m_lastAttackSwingEvent == attack_swing_event::Success ||
-			m_lastAttackSwingEvent == attack_swing_event::Unknown)
-		{
-			return;
-		}
-
-		// Notify the client about the attack swing error event
+		// GameUnitS reports transitions only, so every event that arrives here is news for the
+		// client -- including attack_swing_event::Success, which is what clears the error it is
+		// currently repeating.
 		SendPacket([attackSwingEvent](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::AttackSwingError);

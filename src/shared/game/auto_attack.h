@@ -23,10 +23,12 @@ namespace mmo
 			/// The target is dead and thus can not be attacked.
 			TargetDead = 4,
 
-			/// Successful auto attack swing. This code is never sent to the client.
+			/// Successful auto attack swing. Sent to the client when a swing lands again after a
+			/// failure, so it stops repeating the error message and voice line for that failure.
 			Success = 0xFFFFFFFE,
 
-			/// Unknown attack swing error. This code is never sent to the client.
+			/// No swing outcome known yet. Server-internal reset value so the next real outcome
+			/// counts as a change; never sent to the client.
 			Unknown = 0xFFFFFFFF
 		};
 	}

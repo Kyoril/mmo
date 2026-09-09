@@ -2078,7 +2078,15 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		AttackSwingError(error);
+		// Success is the server saying the previous error no longer applies, not another error.
+		if (error == attack_swing_event::Success)
+		{
+			AttackSwingRecovered();
+		}
+		else
+		{
+			AttackSwingError(error);
+		}
 
 		return PacketParseResult::Pass;
 	}
