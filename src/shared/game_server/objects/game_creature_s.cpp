@@ -794,6 +794,10 @@ namespace mmo
 			Set<uint32>(object_fields::PowerType, gamePowerType);
 		}
 
+		// Rebuilt from scratch on every refresh: the spirit term is conditional, so without
+		// this reset the flat term below would be added again on every call.
+		m_manaRegenPerTick = 0.0f;
+
 		if (unitClass->spiritpermanaregen() != 0.0f)
 		{
 			m_manaRegenPerTick = (static_cast<float>(Get<uint32>(object_fields::StatSpirit)) / unitClass->spiritpermanaregen());

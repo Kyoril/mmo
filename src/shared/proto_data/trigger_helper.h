@@ -111,6 +111,15 @@ namespace mmo
 			/// PlayerTrigger flag, since players carry no trigger list of their own.
 			/// Data: [<LEVEL>]; When given, only fires on reaching exactly that level.
 			OnPlayerLevelUp,
+			/// Executed on a player character right after its stand state changed. Requires the
+			/// PlayerTrigger flag, since players carry no trigger list of their own.
+			/// Data: [<STAND-STATE>]; When given, only fires on entering exactly that state.
+			///
+			/// Event data treats zero as a wildcard (see proto::TriggerEventDataMatches), so
+			/// Stand (0) cannot be filtered on - an unfiltered trigger fires on every change,
+			/// standing up included. Nothing needs to filter on standing up: auras flagged
+			/// NotSeated are already removed by SetStandState itself.
+			OnPlayerStandStateChanged,
 
 			Invalid,
 			Count_ = Invalid

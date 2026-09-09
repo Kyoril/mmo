@@ -719,6 +719,14 @@ namespace mmo
 							<< io::write<uint8>(result);
 						packet.Finish(); });
 			}
+			else
+			{
+				// Food and drink seat the character. Using an item has never stood a character up,
+				// so this path only ever seats - it never stands anyone up. Only apply this once the
+				// cast actually succeeded, otherwise a rejected cast (out of range, silenced, on
+				// cooldown, ...) would seat the character for no reason.
+				SeatCasterForCast(*spellEntry);
+			}
 		}
 	}
 }
