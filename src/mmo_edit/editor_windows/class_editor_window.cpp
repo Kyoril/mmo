@@ -7,6 +7,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 #include <array>
 #include <algorithm>
+#include <cctype>
 #include <limits>
 #include <cstdio>
 
@@ -1261,10 +1262,37 @@ namespace mmo
 
 					if (ImGui::BeginCombo("##itemDisplay", displayPreview, ImGuiComboFlags_None))
 					{
+						const bool comboAppearing = ImGui::IsWindowAppearing();
+						if (comboAppearing)
+						{
+							m_itemDisplayFilter.clear();
+							ImGui::SetKeyboardFocusHere();
+						}
+
+						ImGui::InputText("##itemDisplayFilter", &m_itemDisplayFilter);
+
 						for (int i = 0; i < m_project.itemDisplays.count(); ++i)
 						{
-							ImGui::PushID(i);
 							const auto& display = m_project.itemDisplays.getTemplates().entry(i);
+
+							if (!m_itemDisplayFilter.empty())
+							{
+								const String& name = display.name();
+								const auto matchIt = std::search(
+									name.begin(), name.end(),
+									m_itemDisplayFilter.begin(), m_itemDisplayFilter.end(),
+									[](const unsigned char lhs, const unsigned char rhs)
+									{
+										return std::tolower(lhs) == std::tolower(rhs);
+									});
+
+								if (matchIt == name.end())
+								{
+									continue;
+								}
+							}
+
+							ImGui::PushID(i);
 							const bool item_selected = display.id() == displayId;
 							if (ImGui::Selectable(display.name().c_str(), item_selected))
 							{

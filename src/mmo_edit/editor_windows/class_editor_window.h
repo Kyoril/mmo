@@ -35,5 +35,8 @@ namespace mmo
 	private:
 		EditorHost& m_host;
 		proto::Project& m_project;
+
+		/// Case-insensitive substring filter typed into the outfit item display picker combo. Cleared whenever that combo is opened.
+		String m_itemDisplayFilter;
 	};
 }
