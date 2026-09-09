@@ -938,6 +938,30 @@ namespace mmo
 			return object->state;
 		}
 
+		int64 luaGetUnitFlags(const std::string& guidStr)
+		{
+			const BotUnit* unit = findUnit(guidStr);
+			return unit ? static_cast<int64>(unit->GetUnitFlags()) : -1;
+		}
+
+		void luaLootUnit(const std::string& guidStr)
+		{
+			g_runtime->session->GetRealm().Loot(guidFromString(guidStr));
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("LootUnit", { { "guid", guidStr } });
+			}
+		}
+
+		void luaReleaseLoot(const std::string& guidStr)
+		{
+			g_runtime->session->GetRealm().LootRelease(guidFromString(guidStr));
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("ReleaseLoot", { { "guid", guidStr } });
+			}
+		}
+
 		bool luaGmCheckLoS(const std::string& guidStr)
 		{
 			BotRealmConnector& realm = g_runtime->session->GetRealm();
@@ -1132,6 +1156,9 @@ namespace mmo
 				luabind::def_lambda("CountUnitsByEntryImpl", &luaCountUnitsByEntry),
 				luabind::def_lambda("FindObjectByEntryImpl", &luaFindObjectByEntry),
 				luabind::def_lambda("GetObjectState", &luaGetObjectState),
+				luabind::def_lambda("GetUnitFlags", &luaGetUnitFlags),
+				luabind::def_lambda("LootUnit", &luaLootUnit),
+				luabind::def_lambda("ReleaseLoot", &luaReleaseLoot),
 
 				// Actions
 				luabind::def_lambda("TargetUnit", &luaTargetUnit),

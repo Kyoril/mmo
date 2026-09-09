@@ -2284,6 +2284,24 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::Loot(const uint64 lootObjectGuid)
+	{
+		sendSinglePacket([lootObjectGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::Loot);
+			packet << io::write<uint64>(lootObjectGuid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::LootRelease(const uint64 lootObjectGuid)
+	{
+		sendSinglePacket([lootObjectGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LootRelease);
+			packet << io::write<uint64>(lootObjectGuid);
+			packet.Finish();
+			});
+	}
+
 	void BotRealmConnector::CheatGodmode(const bool enable)
 	{
 		sendSinglePacket([enable](game::OutgoingPacket& packet) {

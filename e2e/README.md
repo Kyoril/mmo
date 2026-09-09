@@ -76,13 +76,16 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`),
 `FindUnitByEntry(entry) -> g|nil`, `FindUnitByName(name) -> g|nil`,
 `FindObjectByEntry(entry) -> g|nil` (world objects: chests, doors, ...),
-`GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open)
+`GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open),
+`GetUnitFlags(g)` (the unit's replicated Flags field)
 
 Actions:
 `TargetUnit(g)`, `FaceUnit(g)`, `CastSpell(spellId [, g]) -> bool` (faces the target
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
 the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 `MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing), `SendChat(msg)`,
+`LootUnit(g)` (opens the loot window on a corpse or world object; the character must
+be within loot range), `ReleaseLoot(g)` (closes it),
 `SendAreaTrigger(areaTriggerId)` (reports area-trigger entry — the real client
 detects the overlap locally, the headless client reports it explicitly; the
 server validates the player's position, so walk inside the area first)
