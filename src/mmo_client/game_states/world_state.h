@@ -552,6 +552,11 @@ namespace mmo
 
 		void EnqueueNextAttackSwingTimer();
 
+		/// Invalidates the pending attack swing error repeat timer, if any. The timer queue has no
+		/// cancel, so pending events carry the generation they were queued with and drop themselves
+		/// once it no longer matches.
+		void CancelAttackSwingErrorTimer() { ++m_attackSwingErrorGeneration; }
+
 		void OnItemPushCallback(const ItemInfo &itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount);
 
 	public:
@@ -633,7 +638,14 @@ namespace mmo
 		std::vector<std::unique_ptr<PendingProjectile>> m_pendingProjectiles;
 
 		TimerQueue &m_timers;
+		/// The attack swing outcome the server last reported. The error message and voice line for
+		/// it are repeated on a timer until a different outcome arrives -- including
+		/// AttackSwingEvent::Success, which is how a swing that started landing again stops them.
 		AttackSwingEvent m_lastAttackSwingEvent{AttackSwingEvent::Unknown};
+
+		/// Generation of the repeat timer above; bumped to invalidate a pending one so at most a
+		/// single repeat loop is ever alive.
+		uint32 m_attackSwingErrorGeneration{0};
 
 		Bindings m_bindings;
 

@@ -52,6 +52,14 @@ namespace mmo
 			{
 				m_context.NoteSwingError(event, GetAsyncTimeMs());
 			});
+
+		// ...and just as precisely when the swing started landing again, so the bot stops reacting
+		// to a problem it already walked out of.
+		m_swingRecoveredConnection = session.GetRealm().AttackSwingRecovered.connect(
+			[this]()
+			{
+				m_context.ClearSwingError();
+			});
 	}
 
 	void BotBrain::SetGrindSpots(const GrindSpotIndex* spots)
