@@ -49,14 +49,14 @@ def find_protoc(repo_root: Path) -> Path:
 
 def load_classes_module(repo_root: Path):
     proto_dir = repo_root / "src" / "shared" / "proto_data"
-    out_dir = Path(tempfile.mkdtemp(prefix="mmo_outfits_proto_"))
-    subprocess.run(
-        [str(find_protoc(repo_root)), f"-I{proto_dir}", f"--python_out={out_dir}", "classes.proto"],
-        check=True,
-        cwd=proto_dir,
-    )
-    sys.path.insert(0, str(out_dir))
-    return importlib.import_module("classes_pb2")
+    with tempfile.TemporaryDirectory(prefix="mmo_outfits_proto_") as out_dir:
+        subprocess.run(
+            [str(find_protoc(repo_root)), f"-I{proto_dir}", f"--python_out={out_dir}", "classes.proto"],
+            check=True,
+            cwd=proto_dir,
+        )
+        sys.path.insert(0, str(out_dir))
+        return importlib.import_module("classes_pb2")
 
 
 def apply(path: Path, classes_pb2, dry_run: bool) -> None:
@@ -92,13 +92,14 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
-    classes_pb2 = load_classes_module(repo_root)
-
-    for relative in DATA_FILES:
-        path = repo_root / relative
+    paths = [repo_root / relative for relative in DATA_FILES]
+    for path in paths:
         if not path.is_file():
             raise SystemExit(f"{path} not found. Did you initialise the data submodules?")
 
+    classes_pb2 = load_classes_module(repo_root)
+
+    for path in paths:
         apply(path, classes_pb2, args.dry_run)
 
 
