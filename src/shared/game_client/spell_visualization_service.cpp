@@ -429,7 +429,10 @@ namespace mmo
         AnimationState* animState = entity->GetAnimationState(animName);
         if (!animState)
         {
-            WLOG("Animation '" << animName << "' not found on entity");
+            // A rig legitimately lacking a clip is not an error: the orc skeletons carry
+            // none of the Use* clips the Open visualizations name, and a shared
+            // visualization has to degrade quietly rather than log once per cast.
+            DLOG("Animation '" << animName << "' not found on entity");
             return;
         }
 
