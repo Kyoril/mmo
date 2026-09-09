@@ -71,6 +71,12 @@ namespace mmo
 	void ModelFrame::SetAnimation(const std::string& animation)
 	{
 		m_animation = animation;
+
+		// The animation state is normally bound while the model file is applied. Rebinding here
+		// as well means a caller which changes the animation of a model that is already loaded
+		// gets what it asked for instead of silently keeping the previous animation.
+		RebindAnimationState();
+
 		Invalidate(false);
 	}
 
@@ -142,16 +148,7 @@ namespace mmo
 			m_entity = m_scene.CreateEntity("Preview", m_mesh);
 			m_entityNode->AttachObject(*m_entity);
 
-			if (!GetAnimation().empty())
-			{
-				m_animationState = m_entity->GetAnimationState(GetAnimation());
-				if (m_animationState)
-				{
-					m_animationState->SetWeight(1.0f);
-					m_animationState->SetLoop(true);
-					m_animationState->SetEnabled(true);
-				}
-			}
+			RebindAnimationState();
 		}
 
 		// Invalidate the frame
@@ -179,6 +176,28 @@ namespace mmo
 		m_offset.y = std::atof(GetProperty("OffsetY")->GetValue().c_str());
 		m_offset.z = std::atof(GetProperty("OffsetZ")->GetValue().c_str());
 		Invalidate(false);
+	}
+
+	void ModelFrame::RebindAnimationState()
+	{
+		if (m_animationState)
+		{
+			m_animationState->SetEnabled(false);
+			m_animationState = nullptr;
+		}
+
+		if (!m_entity || m_animation.empty())
+		{
+			return;
+		}
+
+		m_animationState = m_entity->GetAnimationState(m_animation);
+		if (m_animationState)
+		{
+			m_animationState->SetWeight(1.0f);
+			m_animationState->SetLoop(true);
+			m_animationState->SetEnabled(true);
+		}
 	}
 
 	void ModelFrame::OnAutoRenderChanged(const Property& prop)

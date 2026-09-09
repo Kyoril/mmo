@@ -47,6 +47,10 @@ namespace mmo
 
 		float GetYaw() const { return m_yaw.GetValueDegrees(); }
 
+		/// Sets the name of the skeleton animation to play. Also rebinds the animation state of
+		///	an entity which already exists, so the new animation takes effect right away instead
+		///	of only the next time the model file changes.
+		/// @param animation Name of the animation state, or an empty string to play none.
 		void SetAnimation(const std::string& animation);
 
 		const std::string& GetAnimation() const { return m_animation; }
@@ -84,6 +88,11 @@ namespace mmo
 		void OnOffsetChanged(const Property& prop);
 
 		void OnAutoRenderChanged(const Property& prop);
+
+		/// Binds m_animationState to the animation named by m_animation on the current entity,
+		///	disabling whatever was bound before. Leaves m_animationState at nullptr when there is
+		///	no entity, no animation name, or the entity's skeleton does not provide that name.
+		void RebindAnimationState();
 
 	protected:
 		/// Contains a list of all property connections.

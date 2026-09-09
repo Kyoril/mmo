@@ -420,7 +420,46 @@ namespace mmo
 		}
 
 		m_modelChanged = false;
+
+		// The entity only exists now, so this is the first point at which the chosen stance can
+		// be checked against what the model's skeleton actually provides.
+		EnsureAnimationSupported();
+
 		ApplyCustomizations();
+	}
+
+	void CharCreateInfo::EnsureAnimationSupported()
+	{
+		if (!m_characterCreationFrame)
+		{
+			return;
+		}
+
+		const Entity* entity = m_characterCreationFrame->GetEntity();
+		if (!entity)
+		{
+			return;
+		}
+
+		const String& animation = m_characterCreationFrame->GetAnimation();
+		if (animation.empty() || animation == m_defaultAnimation)
+		{
+			// Nothing to fall back to, or the fallback is already in use.
+			return;
+		}
+
+		if (entity->HasAnimationState(animation))
+		{
+			return;
+		}
+
+		WLOG("Character creation outfit animation '" << animation << "' is missing from model '"
+			<< (m_selectedModel ? m_selectedModel->filename() : String()) << "', falling back to '"
+			<< m_defaultAnimation << "'!");
+
+		// SetAnimation rebinds the animation state of the live entity, so the fallback actually
+		// plays instead of only being remembered for the next model change.
+		m_characterCreationFrame->SetAnimation(m_defaultAnimation);
 	}
 
 	void CharCreateInfo::ApplyCustomizations()

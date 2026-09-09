@@ -112,6 +112,12 @@ namespace mmo
 		/// Detaches and destroys every item mesh attached to the preview entity.
 		void ClearItemAttachments();
 
+		/// Falls back to the default idle animation when the outfit named a stance the preview
+		///	model's skeleton does not provide. Without this the entity would have no enabled
+		///	animation state at all and would sit in its bind pose (a T-pose). Must be called
+		///	after the model file has been applied, because only then does the entity exist.
+		void EnsureAnimationSupported();
+
 	public:
 		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
 		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
