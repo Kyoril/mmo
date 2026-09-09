@@ -2408,6 +2408,13 @@ namespace mmo
 			Set<uint32>(object_fields::Mana, maxMana);
 		}
 
+		// Both accumulators are rebuilt from scratch on every refresh. The spirit term is
+		// conditional, so without an unconditional reset the flat term below would be added
+		// again on every call - and RefreshStats runs on login, on level up and on every
+		// stat or equipment change.
+		m_healthRegenPerTick = 0.0f;
+		m_manaRegenPerTick = 0.0f;
+
 		if (m_classEntry->spiritperhealthregen() != 0.0f)
 		{
 			m_healthRegenPerTick = (static_cast<float>(Get<uint32>(object_fields::StatSpirit)) / m_classEntry->spiritperhealthregen());
