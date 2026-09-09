@@ -700,6 +700,10 @@ namespace mmo
 				continue;
 			}
 
+			// Food and drink seat the character. Using an item has never stood a character up,
+			// so this path only ever seats - it never stands anyone up.
+			UpdateStandStateForCast(*spellEntry, /*standUpByDefault=*/false);
+
 			// Cast the spell
 			uint64 time = spellEntry->casttime();
 			SpellCastResult result = m_character->CastSpell(targetMap, *spellEntry, time, false, itemGuid);

@@ -419,6 +419,11 @@ namespace mmo
 			/// Stealth). Use for utility spells that should be castable without breaking such auras
 			/// (e.g. a Sprint buff cast while stealthed).
 			NotBreakCastInterruptAuras = 1 << 9,
+
+			/// A client-initiated cast of this spell seats the caster (stand state Sit) instead
+			/// of standing them up. Used by food and drink, whose auras carry the NotSeated
+			/// interrupt flag and so need a seated state to break out of.
+			SitsCaster = 1 << 10,
 		};
 	}
 

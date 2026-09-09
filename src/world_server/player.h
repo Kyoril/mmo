@@ -814,7 +814,19 @@ namespace mmo
 		
 		/// Gets the current session duration in seconds
 		uint32 GetCurrentSessionDuration() const;
-		
+
+		/// Updates the caster's stand state for a client-initiated cast of a spell.
+		///
+		/// This deliberately lives here and not in GameUnitS::CastSpell: only a cast the player
+		/// asked for should move them. A server-side cast must not, or the trigger that casts
+		/// the resting buff on a player who just sat down would stand them straight back up and
+		/// cancel the aura it had just applied.
+		///	@param spell The spell being cast.
+		///	@param standUpByDefault When true, a spell that neither seats the caster nor is
+		///	castable while seated stands the caster up. The spell-cast path passes true; the
+		///	item-use path passes false, because using an item has never stood a character up.
+		void UpdateStandStateForCast(const proto::SpellEntry& spell, bool standUpByDefault);
+
 	public:
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) override;
 

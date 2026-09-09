@@ -1463,6 +1463,15 @@ namespace mmo
 						"spells like Sprint that should be usable without breaking such auras.");
 				}
 
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Seats The Caster", spell_attributes_b::SitsCaster);
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("A client-initiated cast of this spell seats the caster (stand state Sit)\n"
+						"instead of standing them up. Used by food and drink, whose auras carry the\n"
+						"'Not Seated' interrupt flag and so need a seated state to break out of.");
+				}
+
 				ImGui::EndTable();
 			}
 
