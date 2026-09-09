@@ -450,6 +450,14 @@ namespace mmo
 			return static_cast<int32>(g_runtime->swingRecoveries);
 		}
 
+		/// Whether the server currently has us auto-attacking. This mirrors the real client: the
+		/// state is driven purely by the broadcast AttackStart/AttackStop packets, never by the
+		/// requests we send, so it answers "did the server acknowledge?" rather than "did we ask?".
+		bool luaIsAutoAttacking()
+		{
+			return g_runtime->session->GetContext().IsAutoAttacking();
+		}
+
 		std::string luaGetName(const std::string& guid)
 		{
 			const BotUnit* unit = findUnit(guid);
@@ -1136,6 +1144,7 @@ namespace mmo
 				luabind::def_lambda("GetMaxPower", &luaGetMaxPower),
 				luabind::def_lambda("IsAlive", &luaIsAlive),
 				luabind::def_lambda("MeleeSwingCount", &luaMeleeSwingCount),
+				luabind::def_lambda("IsAutoAttacking", &luaIsAutoAttacking),
 				luabind::def_lambda("GetName", &luaGetName),
 				luabind::def_lambda("GetPosX", &luaGetPosX),
 				luabind::def_lambda("GetPosY", &luaGetPosY),
