@@ -77,15 +77,20 @@ Log("No swings resolved in " .. SETTLE_MS .. "ms after the stop request, dummy a
 
 GM.DestroyMonster(dummy)
 
--- Second half: the same request in the one state where the server has no victim but still counts
--- as attacking. GameUnitS::TriggerNextAutoAttack answers a swing whose target is already dead
--- with AttackSwingEvent::TargetDead and a bare m_victim.reset() -- no StopAttack -- so the
--- Attacking unit flag stays set and the weapons stay drawn. Killing your own victim does not
--- reach it (GameUnitS::VictimKilled runs StopAttack); starting an attack on something already
--- dead does, because StartAttack checks visibility and friendliness but never aliveness.
+-- Second half: a swing that finds its target already dead must stop the attack, not just drop
+-- the victim. GameUnitS::ExecuteAutoAttackSwing used to answer that case with
+-- AttackSwingEvent::TargetDead and a bare SetVictim(nullptr), which left unit_flags::Attacking
+-- set behind it -- the flag the client reads as IsWeaponDrawn() -- and sent no AttackStop, the
+-- packet that is the client's only acknowledgement. Nothing cleared it afterwards either: since
+-- SetVictim(nullptr) disconnects the victim signals, not even the corpse despawning would.
 --
--- This is the branch that costs the handler its second condition, so it is the branch that has
--- to be pinned: a guard narrowed to "is there a victim" passes everything above and fails here.
+-- No StopAttack() is sent here on purpose. A player could paper over the state by toggling attack
+-- off, which is what this phase used to assert; a creature cannot, because there is no client
+-- behind it to send the request. So the property under test is that the server stops on its own.
+--
+-- The state is reachable only by attacking something already dead: GameUnitS::OnKilled fires the
+-- killed signal, so every attacker of a unit that dies under them runs StopAttack, but
+-- StartAttack checks visibility and friendliness and never aliveness.
 --
 -- A second dummy rather than the one above, and killed before it ever fights: TrainingDummy-
 -- CombatScript is instantiated on combat entry and protects the dummy from dying, so only an
@@ -98,23 +103,31 @@ Assert(WaitUntil(function() return not IsAlive(corpse) end, 10000, "idle dummy d
 	"an idle training dummy should die to GM.KillTarget -- its combat script only protects it once"
 		.. " the encounter has started")
 
+-- The accept and the stop land inside a tick or two of each other -- the opening swing arms
+-- immediately, measured at ~15ms -- so IsAutoAttacking() has no true window wide enough to wait
+-- on. The swing error is the durable witness instead: TargetDead can only come from a swing the
+-- server accepted and resolved against this corpse, so it rules out the assertion below passing
+-- merely because the attack was refused outright.
+--
+-- The count is checked alongside the name because LastSwingError() is sticky for the life of the
+-- scenario. Nothing above can leave a target_dead behind today -- the dummy in the first phase
+-- cannot die -- but that is luck, not construction, and a phase added in between would silently
+-- turn this witness into a no-op.
+local errorsBeforeCorpse = SwingErrorCount()
 StartAttack(corpse)
-Assert(WaitUntil(function() return IsAutoAttacking() end, 5000, "corpse attack starts"),
-	"the server accepts an attack on a corpse -- StartAttack never checks aliveness -- so it should"
-		.. " acknowledge this one")
 
--- Let the first swing resolve into TargetDead and clear the victim server-side. The opening swing
--- arms immediately (measured at ~15ms), so this wait is already generous; without it the victim
--- might still be set and the assertion below would pass on the other branch of the guard.
-Sleep(3000)
-
-StopAttack()
+Assert(WaitUntil(function()
+			return SwingErrorCount() > errorsBeforeCorpse and LastSwingError() == "target_dead"
+		end, 8000, "server reports the dead target"),
+	"the server should accept an attack on a corpse -- StartAttack never checks aliveness -- and "
+		.. "report TargetDead on the swing that follows")
 
 Assert(WaitUntil(function() return not IsAutoAttacking() end, 4000,
-		"server broadcasts AttackStop for the corpse"),
-	"a player left attacking a corpse still has the Attacking flag set and no victim, and the stop "
-		.. "request must still be answered -- otherwise the weapons never come down")
+		"server stops the attack on the dead target by itself"),
+	"the swing that finds its target dead must stop the attack and broadcast AttackStop without "
+		.. "being asked -- a creature has no client to ask on its behalf, so anything left set here "
+		.. "stays set")
 
-Log("Stop request acknowledged with no victim set, only the Attacking flag")
+Log("Server stopped the attack on the corpse by itself")
 
 GM.DestroyMonster(corpse)

@@ -2759,10 +2759,17 @@ namespace mmo
 		// This is not a rate limit -- a client alternating swing and stop still gets two
 		// broadcasts per round trip -- it just keeps a repeated stop from being one.
 		//
-		// The Attacking flag is checked alongside the victim because a swing that finds its
-		// target dead clears the victim without stopping the attack, leaving the flag set. The
-		// client still needs the AttackStop packet in that state: it is what clears the swing
-		// error the client keeps replaying, and what lowers the weapons again.
+		// This drops a request the server has nothing to do with, and that is not hypothetical:
+		// a swing at a corpse makes the server report TargetDead and stop by itself, and the
+		// client answers that error by sending a stop of its own. Without this the redundant
+		// request would put a second AttackStop in front of everyone in sight, every time.
+		//
+		// Both halves of the state are checked, not just the victim: the Attacking flag is the
+		// replicated half, the one the client mirrors as IsWeaponDrawn(), so "is the server
+		// attacking" is only answered by looking at both. They are kept in step -- every path
+		// that clears the victim goes through StopAttack, pinned by the [attack_state] cases in
+		// src/tests/game_server_tests/auto_attack_swing_timer_test.cpp -- so the flag half is
+		// belt and braces. The victim half is not.
 		//
 		// The check belongs here rather than inside GameUnitS::StopAttack: StartAttack calls
 		// StopAttack to reject a friendly target, with neither victim nor flag set, and needs
