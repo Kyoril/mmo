@@ -148,6 +148,7 @@ namespace mmo
 		/// Returns the unlocked (non-default) emote ids.
 		[[nodiscard]] const std::set<uint32>& GetKnownEmoteIds() const { return m_knownEmoteIds; }
 
+
 	public:
 		/// Fired whenever the equipment visuals of this player changed: the set of equipped items
 		/// was replaced, or the display data of one of them arrived and was applied. UI model
@@ -158,6 +159,19 @@ namespace mmo
 		/// (see player_equipment_slots). A zero entry means the slot is empty or the item data of
 		/// that slot has not arrived from the server yet.
 		[[nodiscard]] const std::array<uint32, player_equipment_slots::Count_>& GetEquipmentDisplayIds() const { return m_equipmentDisplayIds; }
+
+	public:
+		/// @copydoc GameUnitC::GetWeaponItemSubclass
+		[[nodiscard]] uint32 GetWeaponItemSubclass(bool offhand) const override
+		{
+			return offhand ? m_offHandSubclass : m_mainHandSubclass;
+		}
+
+		/// @copydoc GameUnitC::GetChestItemSubclass
+		[[nodiscard]] uint32 GetChestItemSubclass() const override
+		{
+			return m_chestSubclass;
+		}
 
 	protected:
 		virtual void SetupSceneObjects() override;
@@ -193,7 +207,14 @@ namespace mmo
 		void PlayLegacyFootstepSound();
 
 	private:
+		/// Item subclass of the equipped main hand weapon. 0 = unarmed.
+		uint32 m_mainHandSubclass = 0;
 
+		/// Item subclass of the equipped off hand weapon or shield. 0 = empty.
+		uint32 m_offHandSubclass = 0;
+
+		/// Item subclass of the equipped chest armor. 0 = none.
+		uint32 m_chestSubclass = 0;
 
 	protected:
 		String m_name;

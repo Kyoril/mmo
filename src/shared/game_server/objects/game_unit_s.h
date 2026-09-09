@@ -1544,9 +1544,19 @@ public:
 		virtual void AddPower(PowerType powerType, int32 amount);
 
 	protected:
-		/// Called when an attack swing event occurs.
+		/// Called with the outcome of every auto attack swing this unit resolves.
+		///
+		/// The client is told about *transitions* only and repeats the resulting message on its
+		/// own until it hears a different outcome -- an out-of-range swing retries several times
+		/// a second, and every retry must not become a packet. That makes reporting the return to
+		/// a landing swing (attack_swing_event::Success) part of the contract: without it the
+		/// client keeps showing the stale error, and playing its voice line, straight through the
+		/// attacks that follow.
+		///
+		/// attack_swing_event::Unknown is the internal "no swing state" value used to forget the
+		/// last outcome; it is never handed to the watcher.
 		/// @param attackSwingEvent The attack swing event.
-		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) const;
+		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent);
 
 	public:
 		/// Gets the maximum base points for a specific aura type.
@@ -1693,6 +1703,10 @@ public:
 		/// stamped its own hand and arms the next swing itself, so the nested call must not do
 		/// either. Without this the countdown is armed twice for a single swing.
 		bool m_resolvingAutoAttackSwing = false;
+		/// Outcome of the last resolved auto attack swing, so only changes are reported. Reset
+		/// whenever the victim changes -- the remembered outcome describes a swing against the
+		/// previous one.
+		AttackSwingEvent m_lastAttackSwingEvent = attack_swing_event::Unknown;
 		Countdown m_regenCountdown;
 		GameTime m_lastManaUse = 0;
 
