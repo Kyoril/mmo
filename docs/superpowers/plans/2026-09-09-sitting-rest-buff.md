@@ -59,6 +59,8 @@ Referenced by several tasks; they are decided here so no task has to invent one.
 - Modify `src/shared/game_server/spells/spell_effects.cpp` — weapon-damage spell crit read site.
 - Modify `src/mmo_edit/editor_windows/spell_editor_window.cpp` — three names in `s_auraTypeNames`.
 - Modify `.agents/skills/mmo-spell-designer/scripts/spell_catalog_lib.py` — three entries in `AURA_TYPE_NAMES` (the data-authoring validator rejects unknown aura ids, so Task 4 cannot run without this).
+- Create `src/tests/game_server_tests/test_unit_factory.h` — one `MakeUnit` / `MakeSpell` shared by both aura suites.
+- Modify `src/tests/game_server_tests/aura_effect_test.cpp` — use the shared factory instead of its own copies.
 - Create `src/tests/game_server_tests/unit_aura_scalars_test.cpp` — the new coverage.
 
 **Task 3 — sit on cast**
@@ -396,6 +398,8 @@ MSG
 - Modify: `src/shared/game_server/spells/spell_effects.cpp`
 - Modify: `src/mmo_edit/editor_windows/spell_editor_window.cpp`
 - Modify: `.agents/skills/mmo-spell-designer/scripts/spell_catalog_lib.py`
+- Test: `src/tests/game_server_tests/test_unit_factory.h` (create)
+- Test: `src/tests/game_server_tests/aura_effect_test.cpp` (use the shared factory)
 - Test: `src/tests/game_server_tests/unit_aura_scalars_test.cpp` (create)
 
 **Interfaces:**
@@ -409,36 +413,41 @@ MSG
   - `int32 GetEffectivePowerRegenPerTick(PowerType powerType, int32 amount) const`
   - and aura types `ModHealthRegenPercent` (38), `ModPowerRegenPercent` (39), `ModCritChanceTaken` (40), consumed by Task 4's spell data.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Extract the shared test unit factory**
 
-Create `src/tests/game_server_tests/unit_aura_scalars_test.cpp`:
+`aura_effect_test.cpp` already has file-local `MakeUnit` and `MakeSpell` helpers, and the new
+suite needs the same two. Rather than a second copy that would immediately diverge (the new
+suite needs non-zero regeneration values), lift them into a shared header.
+
+Create `src/tests/game_server_tests/test_unit_factory.h`:
 
 ```cpp
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "game_server/spells/aura_effect.h"
-#include "game_server/spells/aura_container.h"
+#pragma once
+
 #include "game_server/objects/game_player_s.h"
-#include "game/aura.h"
-#include "game/spell.h"
 #include "base/timer_queue.h"
 #include "shared/proto_data/project.h"
 #include "shared/proto_data/spells.pb.h"
 #include "shared/proto_data/classes.pb.h"
-#include "asio/io_service.hpp"
-
-#include "catch.hpp"
 
 #include <memory>
 
-using namespace mmo;
-
-namespace
+namespace mmo::test
 {
-	/// Minimal shared GamePlayerS with a class entry, so RefreshStats()/SetLevel() work.
-	/// Mirrors the helper in aura_effect_test.cpp - GamePlayerS is final, so a test cannot
-	/// reach the protected regeneration members through a subclass.
-	std::shared_ptr<GamePlayerS> MakeUnit(proto::Project& project, TimerQueue& timers, uint32 level = 1)
+	/// Builds a minimal GamePlayerS with a class entry set up so RefreshStats() and SetLevel()
+	/// work without asserting.
+	///
+	/// GamePlayerS is final, so a test cannot reach its protected regeneration members through
+	/// a subclass - suites that need to observe regeneration go through the public effective-
+	/// value helpers on a unit built here.
+	/// @param project The project the unit belongs to. Gains a class entry with id 1 if it has
+	///	none yet.
+	/// @param timers The timer queue the unit's countdowns run on.
+	/// @param level The level to bring the unit to.
+	/// @return The constructed player.
+	inline std::shared_ptr<GamePlayerS> MakeUnit(proto::Project& project, TimerQueue& timers, const uint32 level = 1)
 	{
 		auto* cls = project.classes.getById(1);
 		if (!cls)
@@ -448,8 +457,9 @@ namespace
 			{
 				cls->set_powertype(proto::ClassEntry_PowerType_MANA);
 
-				// Non-zero flat regeneration, so the percentage helpers have something to
-				// scale. With both at zero every regeneration assertion would be 0 == 0.
+				// Non-zero flat regeneration, so percentage modifiers have something to scale.
+				// With both at zero, every regeneration assertion would read 0 == 0 and pass
+				// no matter what the modifier did.
 				cls->set_healthregenpertick(10.0f);
 				cls->set_basemanaregenpertick(20.0f);
 
@@ -477,15 +487,54 @@ namespace
 		return unit;
 	}
 
-	/// A spell with two attribute slots, which AuraEffect handlers read unguarded.
-	proto::SpellEntry MakeSpell()
+	/// Builds a minimal spell with both attribute slots present, which the aura effect handlers
+	/// read unguarded.
+	/// @return The constructed spell entry.
+	inline proto::SpellEntry MakeSpell()
 	{
 		proto::SpellEntry spell;
-		spell.add_attributes(0);
-		spell.add_attributes(0);
+		spell.add_attributes(0);	// attributes_a
+		spell.add_attributes(0);	// attributes_b
 		return spell;
 	}
 }
+```
+
+Then in `src/tests/game_server_tests/aura_effect_test.cpp`, delete its whole anonymous
+namespace containing `MakeUnit` and `MakeSpell`, add `#include "test_unit_factory.h"` to its
+include block, and add `using namespace mmo::test;` next to the existing `using namespace mmo;`
+so the call sites in that file need no other change.
+
+- [ ] **Step 2: Verify the extraction changed no behaviour**
+
+```bash
+cmake --build build --config Debug -t game_server_tests && ./bin/Debug/game_server_tests "[aura_effect]"
+```
+
+Expected: PASS, exactly as before the extraction. `MakeUnit` now sets two regeneration fields
+it did not set before; if any `[aura_effect]` assertion depends on those being zero, stop and
+report it rather than weakening the new factory.
+
+- [ ] **Step 3: Write the failing test**
+
+Create `src/tests/game_server_tests/unit_aura_scalars_test.cpp`:
+
+```cpp
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
+#include "test_unit_factory.h"
+
+#include "game_server/spells/aura_effect.h"
+#include "game_server/spells/aura_container.h"
+#include "game/aura.h"
+#include "game/spell.h"
+#include "game/item.h"
+#include "asio/io_service.hpp"
+
+#include "catch.hpp"
+
+using namespace mmo;
+using namespace mmo::test;
 
 TEST_CASE("ModHealthRegenPercent accumulates and unwinds exactly", "[aura_scalars]")
 {
@@ -622,7 +671,7 @@ TEST_CASE("An out-of-range power type on a regen aura is rejected, not written p
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 4: Run the test to verify it fails**
 
 The `mmo_add_test` macro globs the directory, so no CMake edit is needed for the new file.
 
@@ -633,7 +682,7 @@ cmake --build build --config Debug -t game_server_tests
 Expected: FAILS to compile — `ModHealthRegenPercent` is not a member of `mmo::aura_type`,
 `GetEffectiveHealthRegenPerTick` is not a member of `GameUnitS`, and so on.
 
-- [ ] **Step 3: Append the three aura types**
+- [ ] **Step 5: Append the three aura types**
 
 In `src/shared/game/aura.h`, replace the marker line and its surroundings:
 
@@ -671,7 +720,7 @@ with:
 			Count_,
 ```
 
-- [ ] **Step 4: Add the cached scalars and their accessors**
+- [ ] **Step 6: Add the cached scalars and their accessors**
 
 In `src/shared/game_server/objects/game_unit_s.h`, immediately after the existing
 `ModifyDodgeChanceBonus` declaration (around line 1301), add:
@@ -751,7 +800,7 @@ line 1760), add:
 If `<array>` is not already included by `game_unit_s.h`, add `#include <array>` to its
 include block.
 
-- [ ] **Step 5: Use the helpers at the regeneration read sites**
+- [ ] **Step 7: Use the helpers at the regeneration read sites**
 
 In `src/shared/game_server/objects/game_unit_s.cpp`, in `RegenerateHealth()`, change:
 
@@ -777,7 +826,7 @@ to:
 		AddPower(powerType, GetEffectivePowerRegenPerTick(powerType, amount));
 ```
 
-- [ ] **Step 6: Use the crit-taken bonus in the melee crit read site**
+- [ ] **Step 8: Use the crit-taken bonus in the melee crit read site**
 
 In `src/shared/game_server/objects/game_unit_s.cpp`, in `CriticalHitChance`, change:
 
@@ -804,7 +853,7 @@ to:
 		return std::max(0.0f, std::min(critChance, 100.0f));
 ```
 
-- [ ] **Step 7: Use the crit-taken bonus in the weapon-damage spell crit read site**
+- [ ] **Step 9: Use the crit-taken bonus in the weapon-damage spell crit read site**
 
 In `src/shared/game_server/spells/spell_effects.cpp`, around line 1441, change:
 
@@ -834,7 +883,7 @@ to:
 				critChance += unitTarget.GetCritChanceTakenBonus();
 ```
 
-- [ ] **Step 8: Declare the three aura handlers**
+- [ ] **Step 10: Declare the three aura handlers**
 
 In `src/shared/game_server/spells/aura_effect.h`, immediately after
 `void HandleModDodgeChance(bool apply) const;`, add:
@@ -847,7 +896,7 @@ In `src/shared/game_server/spells/aura_effect.h`, immediately after
 		void HandleModCritChanceTaken(bool apply) const;
 ```
 
-- [ ] **Step 9: Define them and register them in the dispatch table**
+- [ ] **Step 11: Define them and register them in the dispatch table**
 
 In `src/shared/game_server/spells/aura_effect.cpp`, immediately after
 `AuraEffect::HandleModDodgeChance`, add:
@@ -889,7 +938,7 @@ And in the `kHandlers` table, immediately after the `ModDodgeChance` entry, add:
 			{ AuraType::ModCritChanceTaken,    [](AuraEffect& self, bool apply){ self.HandleModCritChanceTaken(apply); } },
 ```
 
-- [ ] **Step 10: Run the test to verify it passes**
+- [ ] **Step 12: Run the test to verify it passes**
 
 ```bash
 cmake --build build --config Debug -t game_server_tests && ./bin/Debug/game_server_tests "[aura_scalars]"
@@ -900,7 +949,7 @@ Expected: PASS, all `[aura_scalars]` assertions green. If
 the level-1 test units are already at cap — raise their level in `MakeUnit` until they are
 not, rather than weakening the assertion.
 
-- [ ] **Step 11: Run the whole suite**
+- [ ] **Step 13: Run the whole suite**
 
 ```bash
 cmake --build build --config Debug -t all_tests
@@ -914,7 +963,7 @@ cd build && ctest -C Debug --output-on-failure
 
 Expected: all suites pass.
 
-- [ ] **Step 12: Add the editor aura names**
+- [ ] **Step 14: Add the editor aura names**
 
 In `src/mmo_edit/editor_windows/spell_editor_window.cpp`, in `s_auraTypeNames`, change the
 last entry `"ModStealth"` to `"ModStealth",` and add after it:
@@ -927,7 +976,7 @@ last entry `"ModStealth"` to `"ModStealth",` and add after it:
 
 The `static_assert` against `aura_type::Count_` below will pass again.
 
-- [ ] **Step 13: Teach the data-authoring validator the new aura types**
+- [ ] **Step 15: Teach the data-authoring validator the new aura types**
 
 In `.agents/skills/mmo-spell-designer/scripts/spell_catalog_lib.py`, in `AURA_TYPE_NAMES`,
 after the `37: "ModStealth",` line add:
@@ -941,7 +990,7 @@ after the `37: "ModStealth",` line add:
 Without this, `validate_spell_json.py` rejects the Resting spell in Task 4 with
 "aura 38 is not a known aura enum", and `apply_spell_json.py` refuses to run.
 
-- [ ] **Step 14: Build the editor**
+- [ ] **Step 16: Build the editor**
 
 ```bash
 cmake --build build --config Debug -t mmo_edit
@@ -949,10 +998,10 @@ cmake --build build --config Debug -t mmo_edit
 
 Expected: succeeds.
 
-- [ ] **Step 15: Commit**
+- [ ] **Step 17: Commit**
 
 ```bash
-git add src/shared/game/aura.h src/shared/game_server/objects/game_unit_s.h src/shared/game_server/objects/game_unit_s.cpp src/shared/game_server/spells/aura_effect.h src/shared/game_server/spells/aura_effect.cpp src/shared/game_server/spells/spell_effects.cpp src/mmo_edit/editor_windows/spell_editor_window.cpp .agents/skills/mmo-spell-designer/scripts/spell_catalog_lib.py src/tests/game_server_tests/unit_aura_scalars_test.cpp
+git add src/shared/game/aura.h src/shared/game_server/objects/game_unit_s.h src/shared/game_server/objects/game_unit_s.cpp src/shared/game_server/spells/aura_effect.h src/shared/game_server/spells/aura_effect.cpp src/shared/game_server/spells/spell_effects.cpp src/mmo_edit/editor_windows/spell_editor_window.cpp .agents/skills/mmo-spell-designer/scripts/spell_catalog_lib.py src/tests/game_server_tests/test_unit_factory.h src/tests/game_server_tests/aura_effect_test.cpp src/tests/game_server_tests/unit_aura_scalars_test.cpp
 git commit -m "$(cat <<'MSG'
 feat(spells): regeneration-percent and crit-taken auras backed by cached scalars
 
@@ -1285,7 +1334,7 @@ python .agents/skills/mmo-spell-designer/scripts/validate_spell_json.py "<scratc
 ```
 
 Expected: exits 0 with no errors. An "aura 38 is not a known aura enum" error means Task 2
-Step 13 was skipped.
+Step 15 was skipped.
 
 - [ ] **Step 4: Apply the draft**
 
