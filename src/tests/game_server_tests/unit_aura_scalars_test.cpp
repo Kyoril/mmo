@@ -57,11 +57,17 @@ TEST_CASE("RefreshStats does not accumulate flat regeneration across repeated ca
 	const float healthRegenAfterConstruction = unit->GetEffectiveHealthRegenPerTick();
 	CHECK(healthRegenAfterConstruction == Approx(10.0f));
 
+	const float manaRegenAfterConstruction = unit->GetManaRegenPerTick();
+	CHECK(manaRegenAfterConstruction == Approx(20.0f));
+
 	// A further stat refresh - same level, so nothing should actually change.
 	unit->SetLevel(5);
 
 	CHECK(unit->GetEffectiveHealthRegenPerTick() == Approx(healthRegenAfterConstruction));
 	CHECK(unit->GetEffectiveHealthRegenPerTick() == Approx(10.0f));
+
+	CHECK(unit->GetManaRegenPerTick() == Approx(manaRegenAfterConstruction));
+	CHECK(unit->GetManaRegenPerTick() == Approx(20.0f));
 }
 
 TEST_CASE("ModPowerRegenPercent scales only the power type it names", "[aura_scalars]")

@@ -1341,6 +1341,16 @@ public:
 			return m_healthRegenPerTick * (1.0f + m_healthRegenPctBonus / 100.0f);
 		}
 
+		/// Gets the raw mana regenerated per tick before aura percentage modifiers (those are
+		///	applied per-tick in RegeneratePower() via GetEffectivePowerRegenPerTick() instead of
+		///	being baked into this accumulator).
+		///	@remark This exists as a public helper rather than as inline arithmetic so it can be
+		///	tested: the regeneration members are protected and GamePlayerS is final.
+		[[nodiscard]] float GetManaRegenPerTick() const
+		{
+			return m_manaRegenPerTick;
+		}
+
 		/// Applies the aura percentage modifier for a power type to a per-tick amount.
 		///	@param powerType The power type being regenerated.
 		///	@param amount The unmodified amount for this tick.
