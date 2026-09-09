@@ -505,6 +505,11 @@ namespace mmo
 		m_chatBubbleLayer.reset();
 		m_nameplateManager.Clear();
 
+		// Each entry holds a raw Camera* into the PlayerController destroyed above; an
+		// unexpired frame left in here (e.g. on a quick logout/re-enter) would dangle and
+		// crash the next time OnIdle updates it.
+		m_worldTextFrames.clear();
+
 		// Reset the logo frame ui
 		FrameManager::Get().ResetTopFrame();
 		WorldFrame::ClearCurrentWorldFrame();
