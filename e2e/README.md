@@ -76,7 +76,10 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`),
 `FindUnitByEntry(entry) -> g|nil`, `FindUnitByName(name) -> g|nil`,
 `FindObjectByEntry(entry) -> g|nil` (world objects: chests, doors, ...),
-`GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open)
+`GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open),
+`MeleeSwingCount(g)` (auto-attack swings the server resolved against `g`, hit or miss),
+`IsAutoAttacking()` (own character; set by the broadcast `AttackStart`/`AttackStop`
+packets rather than by the requests we send, so it reports what the server acknowledged)
 
 Actions:
 `TargetUnit(g)`, `FaceUnit(g)`, `CastSpell(spellId [, g]) -> bool` (faces the target

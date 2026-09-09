@@ -2753,6 +2753,22 @@ namespace mmo
 			ELOG("Failed to read client timestamp for attack stop");
 			return;
 		}
+
+		// StopAttack broadcasts to every subscriber in sight, so only run it when there is
+		// something to stop: unlike StartAttack, which drops a repeated request before it
+		// broadcasts, this opcode carries no state a client could not spam.
+		//
+		// The Attacking flag is checked alongside the victim because a swing that finds its
+		// target dead clears the victim without stopping the attack, leaving the flag set. The
+		// client still needs the AttackStop packet in that state: it is what clears the swing
+		// error the client keeps replaying, and what lowers the weapons again.
+		if (!m_character->IsAttacking() &&
+			(m_character->Get<uint32>(object_fields::Flags) & unit_flags::Attacking) == 0)
+		{
+			return;
+		}
+
+		m_character->StopAttack();
 	}
 
 	void Player::OnReviveRequest(uint16 opCode, uint32 size, io::Reader& contentReader)
