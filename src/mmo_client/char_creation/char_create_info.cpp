@@ -35,6 +35,8 @@ namespace mmo
 			luabind::def_lambda("GetCharacterRace", [this]() { return GetSelectedRace(); }),
 			luabind::def_lambda("GetCharacterGender", [this]() { return GetSelectedGender(); }),
 			luabind::def_lambda("GetCharacterClass", [this]() { return GetSelectedClass(); }),
+			luabind::def_lambda("SetCharCreateOutfitVisible", [this](bool visible) { SetOutfitVisible(visible); }),
+			luabind::def_lambda("IsCharCreateOutfitVisible", [this]() { return IsOutfitVisible(); }),
 			luabind::def_lambda("ResetCharCustomize", [this]() { ResetCharacterCreation(); }),
 			luabind::def_lambda("GetCustomizationValue", [this](const String& name) { return GetCustomizationValue(name); }),
 			luabind::def_lambda("CycleCustomizationProperty", [this](const String& property, bool forward) { CycleCustomizationProperty(property, forward, true); }),
@@ -153,6 +155,21 @@ namespace mmo
 
 		m_selectedGender = gender;
 		m_modelChanged = true;
+		RefreshModel();
+	}
+
+	void CharCreateInfo::SetOutfitVisible(const bool visible)
+	{
+		if (m_outfitVisible == visible)
+		{
+			return;
+		}
+
+		m_outfitVisible = visible;
+
+		// Item displays hide body parts by sub entity name and by tag, and nothing restores those
+		// on its own, so the preview model has to be rebuilt. m_modelChanged stays false, which
+		// keeps the player's customization choices.
 		RefreshModel();
 	}
 
