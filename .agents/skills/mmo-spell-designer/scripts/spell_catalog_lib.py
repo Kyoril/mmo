@@ -111,6 +111,9 @@ AURA_TYPE_NAMES = {
     35: "DamageImmunity",
     36: "ModDodgeChance",
     37: "ModStealth",
+    38: "ModHealthRegenPercent",
+    39: "ModPowerRegenPercent",
+    40: "ModCritChanceTaken",
 }
 
 SPELL_ATTRIBUTE_FLAGS_0 = {

@@ -2483,6 +2483,11 @@ namespace mmo
 		critChance += GetTotalSpellMods(spell_mod_type::Flat, spell_mod_op::CritChance, 0);
 		critChance *= (1.0f + GetTotalSpellMods(spell_mod_type::Pct, spell_mod_op::CritChance, 0) / 100.0f);
 
+		// The victim's own vulnerability (ModCritChanceTaken), added after the attacker's
+		// percentage modifiers so a sitting target is not made *more* vulnerable by the
+		// attacker's crit talents. This single site covers the whole melee attack table.
+		critChance += victim.GetCritChanceTakenBonus();
+
 		return std::max(0.0f, std::min(critChance, 100.0f));
 	}
 
@@ -3503,7 +3508,7 @@ namespace mmo
 		const uint32 maxHealth = GetMaxHealth();
 		uint32 health = GetHealth();
 
-		health += m_healthRegenPerTick;
+		health += GetEffectiveHealthRegenPerTick();
 		if (health > maxHealth)
 			health = maxHealth;
 
@@ -3544,7 +3549,7 @@ namespace mmo
 			break;
 		}
 
-		AddPower(powerType, amount);
+		AddPower(powerType, GetEffectivePowerRegenPerTick(powerType, amount));
 	}
 
 	void GameUnitS::AddPower(PowerType powerType, int32 amount)

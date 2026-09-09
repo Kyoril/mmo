@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
 #include <set>
 #include <unordered_map>
@@ -1300,6 +1301,62 @@ public:
 		///	@param apply true to add the bonus, false to remove it again.
 		void ModifyDodgeChanceBonus(float amount, bool apply) { m_dodgeChanceBonus += apply ? amount : -amount; }
 
+		/// Adds or removes a percentage bonus to this unit's health regeneration per tick,
+		///	driven by the ModHealthRegenPercent aura.
+		///	@param amount The bonus in percent (e.g. 50.0f for +50%).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyHealthRegenPercentBonus(float amount, bool apply) { m_healthRegenPctBonus += apply ? amount : -amount; }
+
+		/// Adds or removes a percentage bonus to this unit's regeneration of one power type,
+		///	driven by the ModPowerRegenPercent aura.
+		///	@param powerType The power type the bonus applies to.
+		///	@param amount The bonus in percent (e.g. 50.0f for +50%).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyPowerRegenPercentBonus(const PowerType powerType, const float amount, const bool apply)
+		{
+			if (static_cast<uint8>(powerType) >= static_cast<uint8>(power_type::Count_))
+			{
+				return;
+			}
+
+			m_powerRegenPctBonus[static_cast<uint8>(powerType)] += apply ? amount : -amount;
+		}
+
+		/// Adds or removes a flat percentage-point bonus to every attacker's chance to
+		///	critically hit this unit, driven by the ModCritChanceTaken aura.
+		///	@param amount The bonus in percentage points (e.g. 100.0f to guarantee crits).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyCritChanceTakenBonus(float amount, bool apply) { m_critChanceTakenBonus += apply ? amount : -amount; }
+
+		/// Gets the accumulated bonus in percentage points to any attacker's chance to
+		///	critically hit this unit.
+		[[nodiscard]] float GetCritChanceTakenBonus() const { return m_critChanceTakenBonus; }
+
+		/// Gets the health regenerated per tick after aura percentage modifiers.
+		///	@remark This exists as a public helper rather than as inline arithmetic in
+		///	RegenerateHealth so it can be tested: the regeneration members are protected and
+		///	GamePlayerS is final.
+		[[nodiscard]] float GetEffectiveHealthRegenPerTick() const
+		{
+			return m_healthRegenPerTick * (1.0f + m_healthRegenPctBonus / 100.0f);
+		}
+
+		/// Applies the aura percentage modifier for a power type to a per-tick amount.
+		///	@param powerType The power type being regenerated.
+		///	@param amount The unmodified amount for this tick.
+		///	@return The modified amount. Non-positive amounts are returned unchanged: rage
+		///	regenerates by decaying, and scaling that would make a regeneration bonus drain it.
+		[[nodiscard]] int32 GetEffectivePowerRegenPerTick(const PowerType powerType, const int32 amount) const
+		{
+			if (amount <= 0 || static_cast<uint8>(powerType) >= static_cast<uint8>(power_type::Count_))
+			{
+				return amount;
+			}
+
+			return static_cast<int32>(static_cast<float>(amount)
+				* (1.0f + m_powerRegenPctBonus[static_cast<uint8>(powerType)] / 100.0f));
+		}
+
 		/// Returns true if the unit can critically block attacks (unlocked via a CriticalBlock spell effect).
 		bool CanCriticalBlock() const { return (m_combatCapabilities & combat_capabilities::CanCriticalBlock) != 0; }
 
@@ -1751,6 +1808,15 @@ public:
 
 		/// Accumulated flat dodge chance bonus in percent from auras (ModDodgeChance).
 		float m_dodgeChanceBonus = 0.0f;
+
+		/// Accumulated health regeneration bonus in percent from auras (ModHealthRegenPercent).
+		float m_healthRegenPctBonus = 0.0f;
+
+		/// Accumulated regeneration bonus in percent per power type (ModPowerRegenPercent).
+		std::array<float, power_type::Count_> m_powerRegenPctBonus{};
+
+		/// Accumulated bonus in percentage points to any attacker's chance to crit this unit.
+		float m_critChanceTakenBonus = 0.0f;
 
 		std::map<uint8, float> m_baseSpeeds;
 

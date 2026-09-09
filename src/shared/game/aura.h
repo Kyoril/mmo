@@ -138,6 +138,22 @@ namespace mmo
 			/// This is a separate system from ModVisibility (true invisibility).
 			ModStealth            = 37,
 
+			/// Increases the owner's health regeneration per tick by a percentage. The aura's
+			/// base points are the percentage (50 = +50%). Accumulated into a cached scalar on
+			/// apply and misapply, so the regeneration tick costs one multiply and never walks
+			/// the aura list.
+			ModHealthRegenPercent = 38,
+
+			/// Increases the owner's regeneration of one power type by a percentage. The
+			/// effect's miscvaluea selects the power type (power_type::Type) and the base
+			/// points are the percentage. Only positive regeneration is scaled: rage
+			/// regenerates by decaying, and scaling that would drain it faster.
+			ModPowerRegenPercent  = 39,
+
+			/// Increases every attacker's chance to critically hit this unit. The aura's base
+			/// points are flat percentage points (100 = every landed attack crits).
+			ModCritChanceTaken    = 40,
+
 			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,

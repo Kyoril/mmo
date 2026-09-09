@@ -243,7 +243,10 @@ namespace mmo
 		"ModDisorient",
 		"DamageImmunity",
 		"ModDodgeChance",
-		"ModStealth"
+		"ModStealth",
+		"ModHealthRegenPercent",
+		"ModPowerRegenPercent",
+		"ModCritChanceTaken"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
