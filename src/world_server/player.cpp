@@ -55,6 +55,10 @@ namespace mmo
 			m_character->spawned.connect(*this, &Player::OnSpawned),
 			m_character->despawned.connect(*this, &Player::OnDespawned),
 
+			// Death signal - closes any open loot dialog so a death mid-loot never leaves
+			// the character kneeling in the loot pose after reviving.
+			m_character->killed.connect(*this, &Player::OnKilled),
+
 			// Movement signals
 			m_character->tileChangePending.connect(*this, &Player::OnTileChangePending),
 
@@ -1597,6 +1601,17 @@ namespace mmo
 		TileIndex2D tileIndex = GetTileIndex();
 		VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(tileIndex);
 		tile.GetWatchers().remove(this);
+	}
+
+	void Player::OnKilled(GameUnitS* killer)
+	{
+		// Fires exactly once per death (GameUnitS::Damage only reaches OnKilled on the health
+		// transition to 0, and further damage on an already-dead unit returns early). Close the
+		// loot dialog right here rather than in OnReviveRequest: CloseLootDialog also sends
+		// LootReleaseResponse, so it clears both the Looting unit flag and the client's loot
+		// frame, and doing it at death (not at release) avoids the window between death and
+		// release where the character would otherwise still show as looting.
+		CloseLootDialog();
 	}
 
 	void Player::OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile)

@@ -137,9 +137,12 @@ class OpenSpellVisualDataTests(unittest.TestCase):
                              f"visualization {vis_id}: duration_ms time-warps the clip")
 
     def test_editor_and_client_datasets_agree(self):
-        editor = {vis.id: vis.SerializeToString()
+        # kits_by_event is a protobuf map field, so its serialization order is unspecified;
+        # deterministic=True sorts map keys before serializing so this comparison doesn't
+        # depend on insertion order happening to match between the editor and ClientDB copies.
+        editor = {vis.id: vis.SerializeToString(deterministic=True)
                   for vis in self.visuals.entry if vis.id in OPEN_VISUALIZATION_IDS}
-        client = {vis.id: vis.SerializeToString()
+        client = {vis.id: vis.SerializeToString(deterministic=True)
                   for vis in self.client_visuals.entry if vis.id in OPEN_VISUALIZATION_IDS}
         self.assertEqual(editor.keys(), client.keys(),
                          "editor and ClientDB hold different Open visualization ids")
