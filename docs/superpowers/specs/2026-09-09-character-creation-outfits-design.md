@@ -190,11 +190,13 @@ case those races fall back to a weapon-only outfit. The actual coverage is audit
 ## Testing
 
 - `SelectCharacterOutfit` lives in `src/shared/client_data/character_outfit.h` / `.cpp` —
-  pure protobuf, no graphics — so it builds and tests on the headless Linux server build. A
-  new `src/tests/client_data_tests/` suite (one `mmo_add_test(client_data_tests client_data)`
-  line plus one `add_subdirectory` in `src/tests/CMakeLists.txt`) covers: no outfits, a
-  race-agnostic fallback, an exact race+gender match beating a race-only match beating the
-  fallback, mismatched entries being skipped, and first-wins tie-breaking.
+  pure protobuf, no graphics. Its suite still has to sit inside the client-or-editor guard in
+  `src/tests/CMakeLists.txt`, because `client_data` itself is only added in
+  `src/shared/CMakeLists.txt` when the client or the editor is built. A new
+  `src/tests/client_data_tests/` suite (one `mmo_add_test(client_data_tests client_data base log)`
+  line plus one `add_subdirectory`) covers: no outfits, a race-agnostic fallback, an exact
+  race+gender match beating a race-only match beating the fallback, mismatched entries being
+  skipped, and first-wins tie-breaking.
 - Visual verification in the real client (see the `client-visual-verification` memory):
   cycle race/class/gender and confirm the outfit swaps, the ready stance plays, the toggle
   strips and restores gear, and customization cycling does not un-hide covered body parts.
