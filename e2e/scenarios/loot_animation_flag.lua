@@ -24,6 +24,8 @@ end
 local startX, startY, startZ = GetPosX(Me()), GetPosY(Me()), GetPosZ(Me())
 
 local wolf = GM.CreateMonster(FOREST_WOLF)
+-- Declared out here so the cleanup below can destroy it even if the body fails first.
+local second = nil
 
 -- Wrap the scenario body in pcall so cleanup always runs, even on assertion failure.
 local success, errorMsg = pcall(function()
@@ -57,15 +59,27 @@ local success, errorMsg = pcall(function()
 
 	Log("Looting flag cleared by movement")
 
-	-- 3. An explicit release clears it too. Walk back into loot range first.
-	Assert(MoveTo(x, y, z, 15000), "character should be able to return to the corpse")
+	-- 3. An explicit release clears it too. This needs a SECOND corpse, not the first one
+	-- again: a group whose drop chances do not cover the whole 0..100 roll can produce an
+	-- empty loot instance, and CloseLootDialog deliberately clears an empty instance so the
+	-- corpse stops being flagged lootable. Re-looting the same corpse is therefore a coin
+	-- flip. Opening the FIRST loot is always safe, because the instance is created whenever
+	-- the creature has a loot entry at all, empty or not.
+	second = GM.CreateMonster(FOREST_WOLF)
+	Assert(IsAlive(second), "second wolf should spawn alive")
 
-	LootUnit(wolf)
+	TargetUnit(second)
+	GM.KillTarget()
+
+	Assert(WaitUntil(function() return not IsAlive(second) end, 10000, "second wolf dies"),
+		"second wolf should be dead after GM.KillTarget")
+
+	LootUnit(second)
 	Assert(WaitUntil(function() return hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
 		"looter is flagged again"),
-		"unit_flags::Looting should be set again on the second loot")
+		"unit_flags::Looting should be set on the second corpse's loot")
 
-	ReleaseLoot(wolf)
+	ReleaseLoot(second)
 	Assert(WaitUntil(function() return not hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
 		"release clears looting"),
 		"releasing the loot window should clear unit_flags::Looting")
@@ -75,6 +89,9 @@ end)
 
 -- Always clean up, regardless of whether the scenario body succeeded or failed.
 GM.DestroyMonster(wolf)
+if second then
+	GM.DestroyMonster(second)
+end
 MoveTo(startX, startY, startZ, 15000)
 
 -- If the scenario body failed, re-raise the error so the scenario still fails.
