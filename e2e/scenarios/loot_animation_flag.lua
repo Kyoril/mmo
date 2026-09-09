@@ -20,50 +20,64 @@ local function hasFlag(guid, flag)
 	return math.floor(flags / flag) % 2 == 1
 end
 
+-- Save the character's starting position before the scenario body runs.
+local startX, startY, startZ = GetPosX(Me()), GetPosY(Me()), GetPosZ(Me())
+
 local wolf = GM.CreateMonster(FOREST_WOLF)
-Assert(IsAlive(wolf), "wolf should spawn alive")
 
-TargetUnit(wolf)
-GM.KillTarget()
+-- Wrap the scenario body in pcall so cleanup always runs, even on assertion failure.
+local success, errorMsg = pcall(function()
+	Assert(IsAlive(wolf), "wolf should spawn alive")
 
-Assert(WaitUntil(function() return not IsAlive(wolf) end, 10000, "wolf dies"),
-	"wolf should be dead after GM.KillTarget")
+	TargetUnit(wolf)
+	GM.KillTarget()
 
-Assert(WaitUntil(function() return hasFlag(wolf, UNIT_FLAG_LOOTABLE) end, 10000,
-	"corpse becomes lootable"),
-	"the corpse should carry unit_flags::Lootable after the kill")
+	Assert(WaitUntil(function() return not IsAlive(wolf) end, 10000, "wolf dies"),
+		"wolf should be dead after GM.KillTarget")
 
--- 1. Opening the loot window flags the looter.
-LootUnit(wolf)
-Assert(WaitUntil(function() return hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
-	"looter is flagged"),
-	"unit_flags::Looting should be set on the character while the loot window is open")
+	Assert(WaitUntil(function() return hasFlag(wolf, UNIT_FLAG_LOOTABLE) end, 10000,
+		"corpse becomes lootable"),
+		"the corpse should carry unit_flags::Lootable after the kill")
 
-Log("Looting flag set after LootUnit")
+	-- 1. Opening the loot window flags the looter.
+	LootUnit(wolf)
+	Assert(WaitUntil(function() return hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
+		"looter is flagged"),
+		"unit_flags::Looting should be set on the character while the loot window is open")
 
--- 2. Moving cancels it. Step a couple of units away from where the corpse is.
-local x, y, z = GetPosX(Me()), GetPosY(Me()), GetPosZ(Me())
-Assert(MoveTo(x + 3.0, y, z, 15000), "character should be able to step away from the corpse")
+	Log("Looting flag set after LootUnit")
 
-Assert(WaitUntil(function() return not hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
-	"movement cancels looting"),
-	"moving should close the loot window and clear unit_flags::Looting")
+	-- 2. Moving cancels it. Step a couple of units away from where the corpse is.
+	local x, y, z = GetPosX(Me()), GetPosY(Me()), GetPosZ(Me())
+	Assert(MoveTo(x + 3.0, y, z, 15000), "character should be able to step away from the corpse")
 
-Log("Looting flag cleared by movement")
+	Assert(WaitUntil(function() return not hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
+		"movement cancels looting"),
+		"moving should close the loot window and clear unit_flags::Looting")
 
--- 3. An explicit release clears it too. Walk back into loot range first.
-Assert(MoveTo(x, y, z, 15000), "character should be able to return to the corpse")
+	Log("Looting flag cleared by movement")
 
-LootUnit(wolf)
-Assert(WaitUntil(function() return hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
-	"looter is flagged again"),
-	"unit_flags::Looting should be set again on the second loot")
+	-- 3. An explicit release clears it too. Walk back into loot range first.
+	Assert(MoveTo(x, y, z, 15000), "character should be able to return to the corpse")
 
-ReleaseLoot(wolf)
-Assert(WaitUntil(function() return not hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
-	"release clears looting"),
-	"releasing the loot window should clear unit_flags::Looting")
+	LootUnit(wolf)
+	Assert(WaitUntil(function() return hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
+		"looter is flagged again"),
+		"unit_flags::Looting should be set again on the second loot")
 
-Log("Looting flag cleared by explicit release")
+	ReleaseLoot(wolf)
+	Assert(WaitUntil(function() return not hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
+		"release clears looting"),
+		"releasing the loot window should clear unit_flags::Looting")
 
+	Log("Looting flag cleared by explicit release")
+end)
+
+-- Always clean up, regardless of whether the scenario body succeeded or failed.
 GM.DestroyMonster(wolf)
+MoveTo(startX, startY, startZ, 15000)
+
+-- If the scenario body failed, re-raise the error so the scenario still fails.
+if not success then
+	error(errorMsg)
+end
