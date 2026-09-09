@@ -34,8 +34,10 @@ add_subdirectory(updater_tests)
 add_subdirectory(virtual_dir_tests)
 add_subdirectory(xml_handler_tests)
 
-# Suites that need a graphics device and cannot run on the headless server build.
+# Suites which need a graphics device, or a library that is only built alongside the client
+# or the editor, and so cannot run on the headless server build.
 if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
+	add_subdirectory(client_data_tests)
 	add_subdirectory(movement_tests)
 	add_subdirectory(scene_graph_tests)
 endif()

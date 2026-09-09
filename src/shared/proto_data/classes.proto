@@ -49,6 +49,31 @@ message ArmorStatSource {
 	required float factor = 2;
 }
 
+// A cosmetic outfit shown on the character creation preview so a freshly created character
+// is not displayed naked. This is purely client-side eye candy: it grants nothing and is
+// unrelated to the actual starting equipment (see races.proto: initialItems). Item display
+// ids are used rather than item ids because the client knows display data from ClientDB,
+// while item data is owned by the world server and unavailable during character creation.
+// NOTE: field numbers of this message and of the outfits field below are shared with the
+// client subset schema in src/shared/client_data/classes.proto - keep them in sync.
+message CharacterOutfit {
+	// Race id this outfit applies to, or -1 for any race. Race ids are 0-based, so 0 is a
+	// real race and cannot serve as the wildcard.
+	optional int32 race = 1 [default = -1];
+
+	// Gender this outfit applies to (0 = male, 1 = female), or -1 for any gender.
+	optional int32 gender = 2 [default = -1];
+
+	// Item display ids applied to the preview model, in order. Armor and weapons alike.
+	repeated uint32 item_displays = 3;
+
+	// Skeleton animation state played while the outfit is shown, e.g. "1HReady", "2HReady"
+	// or "2HLReady". Empty keeps the model frame's configured idle animation. This has to be
+	// named explicitly because in-world the ready clip comes from the equipped weapon's item
+	// subclass, which the character creation screen cannot resolve.
+	optional string animation = 4;
+}
+
 message ClassEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -113,6 +138,9 @@ message ClassEntry {
 	// shared with the client subset schema in src/shared/client_data/classes.proto — keep them in
 	// sync when adding fields.
 	repeated ClassLevelEntry classlevels = 27;
+
+	// Cosmetic character creation preview outfits (see CharacterOutfit).
+	repeated CharacterOutfit outfits = 28;
 }
 
 message Classes {

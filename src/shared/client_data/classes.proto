@@ -38,6 +38,23 @@ message ArmorStatSource {
 	required float factor = 2;
 }
 
+// Client subset of the server schema. NOTE: Keep this message and the outfits field number
+// in sync with src/shared/proto_data/classes.proto!
+message CharacterOutfit {
+	// Race id this outfit applies to, or -1 for any race.
+	optional int32 race = 1 [default = -1];
+
+	// Gender this outfit applies to (0 = male, 1 = female), or -1 for any gender.
+	optional int32 gender = 2 [default = -1];
+
+	// Item display ids applied to the preview model, in order. Armor and weapons alike.
+	repeated uint32 item_displays = 3;
+
+	// Skeleton animation state played while the outfit is shown, e.g. "1HReady".
+	// Empty keeps the model frame's configured idle animation.
+	optional string animation = 4;
+}
+
 message ClassEntry {
 	required uint32 id = 1;
 	
@@ -74,6 +91,9 @@ message ClassEntry {
 	// NOTE: field 27 is used by the server-side schema (proto_data/classes.proto: classlevels).
 	// Do not reuse it here for a different field; class-level progression reaches the client via
 	// the KnownClasses packet instead of ClientDB.
+
+	// Cosmetic character creation preview outfits (see CharacterOutfit).
+	repeated CharacterOutfit outfits = 28;
 }
 
 message Classes {
