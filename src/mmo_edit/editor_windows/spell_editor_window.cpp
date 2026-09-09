@@ -243,7 +243,10 @@ namespace mmo
 		"ModDisorient",
 		"DamageImmunity",
 		"ModDodgeChance",
-		"ModStealth"
+		"ModStealth",
+		"ModHealthRegenPercent",
+		"ModPowerRegenPercent",
+		"ModCritChanceTaken"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
@@ -1458,6 +1461,15 @@ namespace mmo
 					ImGui::SetTooltip("Casting this spell will not remove any of the caster's auras that are\n"
 						"flagged with the 'Casting Spell' aura interrupt (e.g. Stealth). Use for utility\n"
 						"spells like Sprint that should be usable without breaking such auras.");
+				}
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Seats The Caster", spell_attributes_b::SitsCaster);
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("A client-initiated cast of this spell seats the caster (stand state Sit)\n"
+						"instead of standing them up. Used by food and drink, whose auras carry the\n"
+						"'Not Seated' interrupt flag and so need a seated state to break out of.");
 				}
 
 				ImGui::EndTable();

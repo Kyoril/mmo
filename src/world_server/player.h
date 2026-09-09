@@ -814,7 +814,32 @@ namespace mmo
 		
 		/// Gets the current session duration in seconds
 		uint32 GetCurrentSessionDuration() const;
-		
+
+		/// Stands the caster up ahead of a client-initiated spell cast, unless the spell seats
+		/// the caster or is explicitly castable while seated.
+		///
+		/// This deliberately lives here and not in GameUnitS::CastSpell: only a cast the player
+		/// asked for should move them. A server-side cast must not, or the trigger that casts
+		/// the resting buff on a player who just sat down would stand them straight back up and
+		/// cancel the aura it had just applied.
+		///
+		/// Called before the cast itself (the spell-cast path only - using an item has never
+		/// stood a character up), because standing up is independent of whether the cast
+		/// eventually succeeds.
+		///	@param spell The spell about to be cast.
+		void StandUpForCast(const proto::SpellEntry& spell);
+
+		/// Seats the caster if the given spell carries the SitsCaster attribute.
+		///
+		/// This deliberately lives here and not in GameUnitS::CastSpell, for the same reason as
+		/// StandUpForCast above. Unlike standing up, seating the caster must only happen once
+		/// the cast has actually succeeded: a rejected cast (out of range, silenced, in combat,
+		/// on cooldown, ...) must not leave the character seated - and, in the Resting-buff case,
+		/// exposed to +100% crit-taken - for no reason. Call this after
+		/// spell_cast_result::CastOkay on both the spell-cast and item-use paths.
+		///	@param spell The spell that was just cast successfully.
+		void SeatCasterForCast(const proto::SpellEntry& spell);
+
 	public:
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) override;
 

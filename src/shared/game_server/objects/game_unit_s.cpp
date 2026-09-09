@@ -373,6 +373,28 @@ namespace mmo
 		WLOG("RaiseTrigger not implemented for unit " << log_hex_digit(GetGuid()));
 	}
 
+	void GameUnitS::SetStandState(const unit_stand_state::Type standState)
+	{
+		const unit_stand_state::Type previous = GetStandState();
+		Set<uint32>(object_fields::StandState, standState);
+
+		// Standing up interrupts auras flagged to break when the unit is no longer seated.
+		if (previous != unit_stand_state::Stand && standState == unit_stand_state::Stand)
+		{
+			RemoveAurasByInterrupt(spell_aura_interrupt_flags::NotSeated);
+		}
+
+		// Only players raise this: the base RaiseTrigger logs "not implemented", so raising it
+		// for every creature spawned with a stand state would be pure log noise. The changed
+		// check also keeps the constructor's SetStandState(Stand) - which writes the value the
+		// field already holds - from raising anything during object creation.
+		if (previous != standState && IsPlayer() && GetWorldInstance() != nullptr)
+		{
+			RaiseTrigger(trigger_event::OnPlayerStandStateChanged,
+				{ static_cast<uint32>(standState) }, this);
+		}
+	}
+
 	void GameUnitS::OnDespawn()
 	{
 		// A cast must never outlive the unit performing it. SingleCastState keeps itself alive
@@ -1520,6 +1542,23 @@ namespace mmo
 				continue;
 			}
 
+			// The stand state is not part of the persisted character data - it always resets to
+			// Stand on login (see Initialize()) regardless of how the character was left sitting
+			// or kneeling. An aura that requires the owner to stay seated (NotSeated in its
+			// interrupt flags, e.g. the Resting buff, Food, Drink) would therefore be restored
+			// with no way to ever lose it: standing up next produces no Sit->Stand transition, so
+			// RemoveAurasByInterrupt(NotSeated) never fires. Rather than restore a permanent
+			// buff the character never earned, drop such auras here whenever the owner isn't
+			// currently seated. This is deliberately done at the restore site, not the save
+			// site: the save has no way to know what the stand state will be on the next login,
+			// and a future feature that does persist stand state would then work correctly here
+			// with no further change.
+			if ((spell->aurainterruptflags() & spell_aura_interrupt_flags::NotSeated) != 0 &&
+				!IsSitting())
+			{
+				continue;
+			}
+
 			// The container must keep the spell's full base duration (RefreshAura extends by and
 			// caps at it on re-cast); only the first application is shortened to the persisted
 			// remaining time.
@@ -2464,6 +2503,11 @@ namespace mmo
 		// Apply crit chance modifiers from talents/buffs
 		critChance += GetTotalSpellMods(spell_mod_type::Flat, spell_mod_op::CritChance, 0);
 		critChance *= (1.0f + GetTotalSpellMods(spell_mod_type::Pct, spell_mod_op::CritChance, 0) / 100.0f);
+
+		// The victim's own vulnerability (ModCritChanceTaken), added after the attacker's
+		// percentage modifiers so a sitting target is not made *more* vulnerable by the
+		// attacker's crit talents. This single site covers the whole melee attack table.
+		critChance += victim.GetCritChanceTakenBonus();
 
 		return std::max(0.0f, std::min(critChance, 100.0f));
 	}
@@ -3485,7 +3529,7 @@ namespace mmo
 		const uint32 maxHealth = GetMaxHealth();
 		uint32 health = GetHealth();
 
-		health += m_healthRegenPerTick;
+		health += GetEffectiveHealthRegenPerTick();
 		if (health > maxHealth)
 			health = maxHealth;
 
@@ -3526,7 +3570,7 @@ namespace mmo
 			break;
 		}
 
-		AddPower(powerType, amount);
+		AddPower(powerType, GetEffectivePowerRegenPerTick(powerType, amount));
 	}
 
 	void GameUnitS::AddPower(PowerType powerType, int32 amount)

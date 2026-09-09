@@ -117,6 +117,12 @@ namespace mmo
 
 		void HandleModDodgeChance(bool apply) const;
 
+		void HandleModHealthRegenPercent(bool apply) const;
+
+		void HandleModPowerRegenPercent(bool apply) const;
+
+		void HandleModCritChanceTaken(bool apply) const;
+
 	private:
 		void HandlePeriodicDamage() const;
 

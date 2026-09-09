@@ -2622,6 +2622,57 @@ namespace mmo
 		});
 	}
 
+	void Player::StandUpForCast(const proto::SpellEntry& spell)
+	{
+		if (!m_character->IsAlive())
+		{
+			return;
+		}
+
+		// attributes(1) is optional in the data, unlike attributes(0).
+		const uint32 attributesB = spell.attributes_size() >= 2 ? spell.attributes(1) : 0;
+
+		// A spell that seats the caster is handled by SeatCasterForCast once the cast actually
+		// succeeds - it must never stand the caster up here.
+		if ((attributesB & spell_attributes_b::SitsCaster) != 0)
+		{
+			return;
+		}
+
+		// A spell explicitly castable while seated leaves the caster where they are. Without
+		// this check every cast stood the caster up, which made the attribute a no-op.
+		if ((spell.attributes(0) & spell_attributes::CastableWhileSitting) != 0)
+		{
+			return;
+		}
+
+		if (m_character->GetStandState() != unit_stand_state::Stand)
+		{
+			m_character->SetStandState(unit_stand_state::Stand);
+		}
+	}
+
+	void Player::SeatCasterForCast(const proto::SpellEntry& spell)
+	{
+		if (!m_character->IsAlive())
+		{
+			return;
+		}
+
+		// attributes(1) is optional in the data, unlike attributes(0).
+		const uint32 attributesB = spell.attributes_size() >= 2 ? spell.attributes(1) : 0;
+
+		if ((attributesB & spell_attributes_b::SitsCaster) == 0)
+		{
+			return;
+		}
+
+		if (!m_character->IsSitting())
+		{
+			m_character->SetStandState(unit_stand_state::Sit);
+		}
+	}
+
 	void Player::OnSpellCast(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		// Read spell cast packet
@@ -2652,11 +2703,9 @@ namespace mmo
 		int64 castTime = spell->casttime();
 		const uint64 casterId = m_character->GetGuid();
 
-		// Casting a spell stands the character up.
-		if (m_character->IsAlive() && m_character->GetStandState() != unit_stand_state::Stand)
-		{
-			m_character->SetStandState(unit_stand_state::Stand);
-		}
+		// Casting a spell normally stands the character up - unless the spell seats them, or
+		// may be cast while seated. This must happen before the cast regardless of outcome.
+		StandUpForCast(*spell);
 
 		// Spell cast logic
 		auto result = m_character->CastSpell(targetMap, *spell, castTime);
@@ -2672,6 +2721,14 @@ namespace mmo
 					<< io::write<uint8>(result);
 				packet.Finish();
 			});
+		}
+		else
+		{
+			// Only a spell that actually cast may seat the caster. A rejected cast (out of
+			// range, silenced, in combat, on cooldown, ...) must not leave the character seated
+			// for no reason - e.g. Drink is NotInCombat, and a caster left seated by a refused
+			// cast would carry +100% crit-taken into the very fight that refused it.
+			SeatCasterForCast(*spell);
 		}
 	}
 

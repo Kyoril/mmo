@@ -4,6 +4,7 @@
 
 #include "shared/proto_data/trigger_event_filter.h"
 #include "shared/proto_data/trigger_helper.h"
+#include "game/object_type_id.h"
 
 using namespace mmo;
 
@@ -92,4 +93,27 @@ TEST_CASE("Level filter behaves as the level-up trigger relies on", "[trigger_fi
 		CHECK(proto::TriggerEventDataMatches(anyLevel, { level }));
 		CHECK(proto::TriggerEventDataMatches(levelTen, { level }) == (level == 10));
 	}
+}
+
+TEST_CASE("Stand state filter behaves as the sit trigger relies on", "[trigger_filter]")
+{
+	// Event data uses zero as a wildcard, so an unfiltered stand-state trigger fires on
+	// every change and "Stand" (0) is not expressible as a filter. Sit is 1.
+	const auto anyState = MakeEvent({});
+	const auto onlySit = MakeEvent({ static_cast<uint32>(unit_stand_state::Sit) });
+
+	for (uint32 state = 0; state < static_cast<uint32>(unit_stand_state::Count_); ++state)
+	{
+		CHECK(proto::TriggerEventDataMatches(anyState, { state }));
+		CHECK(proto::TriggerEventDataMatches(onlySit, { state })
+			== (state == static_cast<uint32>(unit_stand_state::Sit)));
+	}
+}
+
+TEST_CASE("The stand state event has a value the data files can reference", "[trigger_filter]")
+{
+	// triggers.data stores the event type as a raw integer, so this value is frozen. Task 4
+	// authors a trigger with event type 26; if this ever changes, that data breaks silently.
+	CHECK(static_cast<uint32>(trigger_event::OnPlayerStandStateChanged) == 26);
+	CHECK(trigger_event::OnPlayerStandStateChanged < trigger_event::Count_);
 }

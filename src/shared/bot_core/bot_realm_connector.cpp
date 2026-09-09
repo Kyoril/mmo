@@ -1967,6 +1967,12 @@ namespace mmo
 				return PacketParseResult::Pass;
 			}
 
+			if (!(packet >> io::read<uint8>(aura.stackCount)))
+			{
+				UpdateSpellStateIssue("aura_update_parse_failed");
+				return PacketParseResult::Pass;
+			}
+
 			auras.push_back(std::move(aura));
 		}
 

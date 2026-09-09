@@ -75,6 +75,9 @@ namespace mmo
 			{ AuraType::ModStealth,            [](AuraEffect& self, bool apply){ self.HandleModStealth(apply); } },
 			{ AuraType::DamageImmunity,        [](AuraEffect& self, bool apply){ self.HandleDamageImmunity(apply); } },
 			{ AuraType::ModDodgeChance,        [](AuraEffect& self, bool apply){ self.HandleModDodgeChance(apply); } },
+			{ AuraType::ModHealthRegenPercent, [](AuraEffect& self, bool apply){ self.HandleModHealthRegenPercent(apply); } },
+			{ AuraType::ModPowerRegenPercent,  [](AuraEffect& self, bool apply){ self.HandleModPowerRegenPercent(apply); } },
+			{ AuraType::ModCritChanceTaken,    [](AuraEffect& self, bool apply){ self.HandleModCritChanceTaken(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -510,6 +513,33 @@ namespace mmo
 	{
 		// Base points are treated as a flat percentage bonus to the owner's dodge chance.
 		m_container.GetOwner().ModifyDodgeChanceBonus(static_cast<float>(GetBasePoints()), apply);
+	}
+
+	void AuraEffect::HandleModHealthRegenPercent(const bool apply) const
+	{
+		// Base points are the percentage bonus applied to health regenerated per tick.
+		m_container.GetOwner().ModifyHealthRegenPercentBonus(static_cast<float>(GetBasePoints()), apply);
+	}
+
+	void AuraEffect::HandleModPowerRegenPercent(const bool apply) const
+	{
+		const int32 powerType = GetEffect().miscvaluea();
+
+		if (powerType < 0 || powerType >= static_cast<int32>(power_type::Count_))
+		{
+			ELOG("AURA_TYPE_MOD_POWER_REGEN_PERCENT: Invalid power type " << powerType);
+			return;
+		}
+
+		// Base points are the percentage bonus applied to that power's regeneration per tick.
+		m_container.GetOwner().ModifyPowerRegenPercentBonus(
+			static_cast<PowerType>(powerType), static_cast<float>(GetBasePoints()), apply);
+	}
+
+	void AuraEffect::HandleModCritChanceTaken(const bool apply) const
+	{
+		// Base points are flat percentage points added to any attacker's crit chance.
+		m_container.GetOwner().ModifyCritChanceTakenBonus(static_cast<float>(GetBasePoints()), apply);
 	}
 
 	void AuraEffect::HandlePeriodicDamage() const

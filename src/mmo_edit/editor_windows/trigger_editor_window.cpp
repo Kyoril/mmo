@@ -87,7 +87,8 @@ namespace mmo
 		"Unit/Instance - On Timer (periodic)",
 		"Unit - On Summoned Unit Died",
 		"Instance - On Encounter State Changed",
-		"Player - On Level Up"
+		"Player - On Level Up",
+		"Player - On Stand State Changed"
 	};
 
 	static_assert(std::size(s_eventTypeNames) == trigger_event::Count_, "s_eventTypeNames size mismatch");
@@ -139,6 +140,16 @@ namespace mmo
 
 	static_assert(std::size(s_standStateNames) == unit_stand_state::Count_,
 		"s_standStateNames size mismatch");
+
+	/// Stand states as an event *filter*. Trigger event data uses zero as a wildcard
+	/// (see proto::TriggerEventDataMatches), so slot 0 reads "any state" here and Stand is
+	/// not expressible as a filter.
+	static const char* s_standStateFilterNames[] = {
+		"Any", "Sit", "Sleep", "Dead", "Kneel"
+	};
+
+	static_assert(std::size(s_standStateFilterNames) == std::size(s_standStateNames),
+		"stand state filter names must cover the same range as the stand state names");
 
 	/// Values of a world object's State field. Doors are the only consumer today, where the field
 	/// drives both the visual state and the dynamic line-of-sight collision.
@@ -394,6 +405,14 @@ namespace mmo
 					return buffer;
 				}
 				return "Player gained any level";
+			case trigger_event::OnPlayerStandStateChanged:
+				if (const int standState = GetEventDataValue(event, 0); standState > 0)
+				{
+					snprintf(buffer, sizeof(buffer), "Player entered stand state %s",
+						standState < static_cast<int>(std::size(s_standStateNames)) ? s_standStateNames[standState] : "?");
+					return buffer;
+				}
+				return "Player changed stand state";
 			default:
 				return "";
 			}
@@ -645,6 +664,15 @@ namespace mmo
 				{
 					// Data: [<LEVEL>]; zero is the usual event-data wildcard.
 					DrawEventDataInt(event, 0, "##LevelUpLevel", "Level (0 = any)", 150.0f,
+						"Requires the trigger's 'Player Trigger' flag, since players carry no trigger list of their own.");
+					break;
+				}
+				case trigger_event::OnPlayerStandStateChanged:
+				{
+					// Data: [<STAND-STATE>]; zero is the usual event-data wildcard, so "Stand"
+					// cannot be filtered on and reads as "Any" here.
+					DrawEventDataEnum(event, 0, "##StandStateChangedState", "Stand State",
+						s_standStateFilterNames, static_cast<int>(std::size(s_standStateFilterNames)),
 						"Requires the trigger's 'Player Trigger' flag, since players carry no trigger list of their own.");
 					break;
 				}

@@ -111,6 +111,9 @@ AURA_TYPE_NAMES = {
     35: "DamageImmunity",
     36: "ModDodgeChance",
     37: "ModStealth",
+    38: "ModHealthRegenPercent",
+    39: "ModPowerRegenPercent",
+    40: "ModCritChanceTaken",
 }
 
 SPELL_ATTRIBUTE_FLAGS_0 = {
@@ -157,6 +160,9 @@ SPELL_ATTRIBUTE_FLAGS_1 = {
     1 << 5: "UsableWhileFeared",
     1 << 6: "UsableWhileSleeping",
     1 << 7: "IgnoreLineOfSight",
+    1 << 8: "CanOnlyTargetPlayers",
+    1 << 9: "NotBreakCastInterruptAuras",
+    1 << 10: "SitsCaster",
 }
 
 ITEM_TRIGGER_NAMES = {

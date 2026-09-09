@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
 #include <set>
 #include <unordered_map>
@@ -961,7 +962,10 @@ namespace mmo
 		std::vector<PersistentCooldownData> GetPersistentCooldowns() const;
 
 		/// Re-applies a set of persisted auras (as produced by GetPersistentAuras). Auras whose
-		/// spell can no longer be resolved are skipped.
+		/// spell can no longer be resolved are skipped, as are auras that require the owner to
+		/// remain seated (NotSeated in their interrupt flags) if the owner is not seated right
+		/// now - the stand state itself is never persisted, so such an aura would otherwise be
+		/// restored with no way to ever lose it.
 		/// @param auras The persisted auras to restore.
 		void RestorePersistentAuras(const std::vector<PersistentAuraData>& auras);
 
@@ -1300,6 +1304,72 @@ public:
 		///	@param apply true to add the bonus, false to remove it again.
 		void ModifyDodgeChanceBonus(float amount, bool apply) { m_dodgeChanceBonus += apply ? amount : -amount; }
 
+		/// Adds or removes a percentage bonus to this unit's health regeneration per tick,
+		///	driven by the ModHealthRegenPercent aura.
+		///	@param amount The bonus in percent (e.g. 50.0f for +50%).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyHealthRegenPercentBonus(float amount, bool apply) { m_healthRegenPctBonus += apply ? amount : -amount; }
+
+		/// Adds or removes a percentage bonus to this unit's regeneration of one power type,
+		///	driven by the ModPowerRegenPercent aura.
+		///	@param powerType The power type the bonus applies to.
+		///	@param amount The bonus in percent (e.g. 50.0f for +50%).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyPowerRegenPercentBonus(const PowerType powerType, const float amount, const bool apply)
+		{
+			if (static_cast<uint8>(powerType) >= static_cast<uint8>(power_type::Count_))
+			{
+				return;
+			}
+
+			m_powerRegenPctBonus[static_cast<uint8>(powerType)] += apply ? amount : -amount;
+		}
+
+		/// Adds or removes a flat percentage-point bonus to every attacker's chance to
+		///	critically hit this unit, driven by the ModCritChanceTaken aura.
+		///	@param amount The bonus in percentage points (e.g. 100.0f to guarantee crits).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyCritChanceTakenBonus(float amount, bool apply) { m_critChanceTakenBonus += apply ? amount : -amount; }
+
+		/// Gets the accumulated bonus in percentage points to any attacker's chance to
+		///	critically hit this unit.
+		[[nodiscard]] float GetCritChanceTakenBonus() const { return m_critChanceTakenBonus; }
+
+		/// Gets the health regenerated per tick after aura percentage modifiers.
+		///	@remark This exists as a public helper rather than as inline arithmetic in
+		///	RegenerateHealth so it can be tested: the regeneration members are protected and
+		///	GamePlayerS is final.
+		[[nodiscard]] float GetEffectiveHealthRegenPerTick() const
+		{
+			return m_healthRegenPerTick * (1.0f + m_healthRegenPctBonus / 100.0f);
+		}
+
+		/// Gets the raw mana regenerated per tick before aura percentage modifiers (those are
+		///	applied per-tick in RegeneratePower() via GetEffectivePowerRegenPerTick() instead of
+		///	being baked into this accumulator).
+		///	@remark This exists as a public helper rather than as inline arithmetic so it can be
+		///	tested: the regeneration members are protected and GamePlayerS is final.
+		[[nodiscard]] float GetManaRegenPerTick() const
+		{
+			return m_manaRegenPerTick;
+		}
+
+		/// Applies the aura percentage modifier for a power type to a per-tick amount.
+		///	@param powerType The power type being regenerated.
+		///	@param amount The unmodified amount for this tick.
+		///	@return The modified amount. Non-positive amounts are returned unchanged: rage
+		///	regenerates by decaying, and scaling that would make a regeneration bonus drain it.
+		[[nodiscard]] int32 GetEffectivePowerRegenPerTick(const PowerType powerType, const int32 amount) const
+		{
+			if (amount <= 0 || static_cast<uint8>(powerType) >= static_cast<uint8>(power_type::Count_))
+			{
+				return amount;
+			}
+
+			return static_cast<int32>(static_cast<float>(amount)
+				* (1.0f + m_powerRegenPctBonus[static_cast<uint8>(powerType)] / 100.0f));
+		}
+
 		/// Returns true if the unit can critically block attacks (unlocked via a CriticalBlock spell effect).
 		bool CanCriticalBlock() const { return (m_combatCapabilities & combat_capabilities::CanCriticalBlock) != 0; }
 
@@ -1595,18 +1665,11 @@ public:
 		void StopCCMovement();
 
 		/// Sets the stand state of the unit.
+		///
+		/// Standing up removes auras flagged NotSeated, and a player whose stand state actually
+		/// changed raises OnPlayerStandStateChanged.
 		/// @param standState The new stand state.
-		void SetStandState(const unit_stand_state::Type standState)
-		{
-			const unit_stand_state::Type previous = GetStandState();
-			Set<uint32>(object_fields::StandState, standState);
-
-			// Standing up interrupts auras flagged to break when the unit is no longer seated.
-			if (previous != unit_stand_state::Stand && standState == unit_stand_state::Stand)
-			{
-				RemoveAurasByInterrupt(spell_aura_interrupt_flags::NotSeated);
-			}
-		}
+		void SetStandState(unit_stand_state::Type standState);
 
 		/// Gets the stand state of the unit.
 		/// @returns The stand state as a unit_stand_state::Type enum.
@@ -1772,6 +1835,15 @@ public:
 
 		/// Accumulated flat dodge chance bonus in percent from auras (ModDodgeChance).
 		float m_dodgeChanceBonus = 0.0f;
+
+		/// Accumulated health regeneration bonus in percent from auras (ModHealthRegenPercent).
+		float m_healthRegenPctBonus = 0.0f;
+
+		/// Accumulated regeneration bonus in percent per power type (ModPowerRegenPercent).
+		std::array<float, power_type::Count_> m_powerRegenPctBonus{};
+
+		/// Accumulated bonus in percentage points to any attacker's chance to crit this unit.
+		float m_critChanceTakenBonus = 0.0f;
 
 		std::map<uint8, float> m_baseSpeeds;
 
