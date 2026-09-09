@@ -1158,7 +1158,25 @@ namespace mmo
 				ImGui::Separator();
 
 				const auto* raceEntry = outfit->race() >= 0 ? m_project.races.getById(outfit->race()) : nullptr;
-				if (ImGui::BeginCombo("Race", raceEntry != nullptr ? raceEntry->name().c_str() : s_outfitAnyRace, ImGuiComboFlags_None))
+
+				// A race id which no longer resolves must not look like a deliberate wildcard.
+				char unknownRaceLabel[64] = {};
+				if (raceEntry == nullptr && outfit->race() >= 0)
+				{
+					std::snprintf(unknownRaceLabel, sizeof(unknownRaceLabel), "Unknown race %d", outfit->race());
+				}
+
+				const char* racePreview = s_outfitAnyRace;
+				if (raceEntry != nullptr)
+				{
+					racePreview = raceEntry->name().c_str();
+				}
+				else if (outfit->race() >= 0)
+				{
+					racePreview = unknownRaceLabel;
+				}
+
+				if (ImGui::BeginCombo("Race", racePreview, ImGuiComboFlags_None))
 				{
 					if (ImGui::Selectable(s_outfitAnyRace, outfit->race() < 0))
 					{
