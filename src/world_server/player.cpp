@@ -2755,13 +2755,18 @@ namespace mmo
 		}
 
 		// StopAttack broadcasts to every subscriber in sight, so only run it when there is
-		// something to stop: unlike StartAttack, which drops a repeated request before it
-		// broadcasts, this opcode carries no state a client could not spam.
+		// something to stop, the way StartAttack drops a repeated request before broadcasting.
+		// This is not a rate limit -- a client alternating swing and stop still gets two
+		// broadcasts per round trip -- it just keeps a repeated stop from being one.
 		//
 		// The Attacking flag is checked alongside the victim because a swing that finds its
 		// target dead clears the victim without stopping the attack, leaving the flag set. The
 		// client still needs the AttackStop packet in that state: it is what clears the swing
 		// error the client keeps replaying, and what lowers the weapons again.
+		//
+		// The check belongs here rather than inside GameUnitS::StopAttack: StartAttack calls
+		// StopAttack to reject a friendly target, with neither victim nor flag set, and needs
+		// the broadcast to go out as the NACK for the client's optimistically set victim.
 		if (!m_character->IsAttacking() &&
 			(m_character->Get<uint32>(object_fields::Flags) & unit_flags::Attacking) == 0)
 		{

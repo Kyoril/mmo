@@ -76,3 +76,45 @@ Log("No swings resolved in " .. SETTLE_MS .. "ms after the stop request, dummy a
 	.. GetHealth(dummy) .. " health")
 
 GM.DestroyMonster(dummy)
+
+-- Second half: the same request in the one state where the server has no victim but still counts
+-- as attacking. GameUnitS::TriggerNextAutoAttack answers a swing whose target is already dead
+-- with AttackSwingEvent::TargetDead and a bare m_victim.reset() -- no StopAttack -- so the
+-- Attacking unit flag stays set and the weapons stay drawn. Killing your own victim does not
+-- reach it (GameUnitS::VictimKilled runs StopAttack); starting an attack on something already
+-- dead does, because StartAttack checks visibility and friendliness but never aliveness.
+--
+-- This is the branch that costs the handler its second condition, so it is the branch that has
+-- to be pinned: a guard narrowed to "is there a victim" passes everything above and fails here.
+--
+-- A second dummy rather than the one above, and killed before it ever fights: TrainingDummy-
+-- CombatScript is instantiated on combat entry and protects the dummy from dying, so only an
+-- idle one can be killed. The Guard (entry 4) cannot stand in for it -- it is friendly to the
+-- test character, and StartAttack answers a friendly target by stopping instead of starting.
+local corpse = GM.CreateMonster(TRAINING_DUMMY)
+TargetUnit(corpse)
+GM.KillTarget()
+Assert(WaitUntil(function() return not IsAlive(corpse) end, 10000, "idle dummy dies"),
+	"an idle training dummy should die to GM.KillTarget -- its combat script only protects it once"
+		.. " the encounter has started")
+
+StartAttack(corpse)
+Assert(WaitUntil(function() return IsAutoAttacking() end, 5000, "corpse attack starts"),
+	"the server accepts an attack on a corpse -- StartAttack never checks aliveness -- so it should"
+		.. " acknowledge this one")
+
+-- Let the first swing resolve into TargetDead and clear the victim server-side. The opening swing
+-- arms immediately (measured at ~15ms), so this wait is already generous; without it the victim
+-- might still be set and the assertion below would pass on the other branch of the guard.
+Sleep(3000)
+
+StopAttack()
+
+Assert(WaitUntil(function() return not IsAutoAttacking() end, 4000,
+		"server broadcasts AttackStop for the corpse"),
+	"a player left attacking a corpse still has the Attacking flag set and no victim, and the stop "
+		.. "request must still be answered -- otherwise the weapons never come down")
+
+Log("Stop request acknowledged with no victim set, only the Attacking flag")
+
+GM.DestroyMonster(corpse)
