@@ -135,6 +135,10 @@ namespace mmo
 				SetWeaponAttackAnimations(attackAnimations);
 				SetWeaponReadyAnimation(readyAnimation);
 
+				// Remember the subclass itself: the auto attack sound resolution needs it
+				// on every swing, not just when the equipment changes.
+				m_mainHandSubclass = data.itemSubclass;
+
 				// Classify the main-hand weapon so the animation controller can pick
 				// weapon-specific combat idle override sets from the animation profile.
 				m_weaponClass = data.inventoryType == inventory_type::TwoHandedWeapon
@@ -152,6 +156,14 @@ namespace mmo
 					offhandAttackAnimations.assign(subclass->offhand_attackanimation().begin(), subclass->offhand_attackanimation().end());
 				}
 				SetOffhandWeaponAttackAnimations(offhandAttackAnimations);
+				m_offHandSubclass = data.itemSubclass;
+			}
+
+			// The chest slot decides what the wearer sounds like when struck.
+			const uint32 chestEntry = Get<uint32>(object_fields::VisibleItem1_0 + player_equipment_slots::Chest * kVisFields);
+			if (chestEntry == static_cast<uint32>(data.id))
+			{
+				m_chestSubclass = data.itemSubclass;
 			}
 		}
 
@@ -496,6 +508,9 @@ namespace mmo
 		// ready animations once their item data arrives via NotifyItemData.
 		SetWeaponAttackAnimations({});
 		SetOffhandWeaponAttackAnimations({});
+		m_mainHandSubclass = 0;
+		m_offHandSubclass = 0;
+		m_chestSubclass = 0;
 		SetWeaponReadyAnimation(String());
 		m_weaponClass = anim_weapon_class::Unarmed;
 

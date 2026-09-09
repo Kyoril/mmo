@@ -671,6 +671,16 @@ namespace mmo
 		///        If no one-shot is currently playing the callback fires immediately.
 		void QueueSwingHitCallback(std::function<void()> callback);
 
+		/// @brief Gets the item subclass id of the weapon in the given hand, used to resolve
+		///	auto attack sounds. Units without equipment (creatures) report 0, which makes the
+		///	sound resolution fall back to the unit model's natural weapon.
+		/// @param offhand True for the off-hand slot, false for the main hand.
+		[[nodiscard]] virtual uint32 GetWeaponItemSubclass(bool offhand) const { return 0; }
+
+		/// @brief Gets the item subclass id of the equipped chest armor, which decides what
+		///	this unit sounds like when struck. 0 = fall back to the model's body material.
+		[[nodiscard]] virtual uint32 GetChestItemSubclass() const { return 0; }
+
 		/// @brief Sets the animation states used for main-hand auto attacks based on the equipped weapon.
 		///	@param animNames Names of the skeleton animation states to choose from. One is picked at
 		///	random per swing. Names not present on the current mesh are ignored; when none remain,
