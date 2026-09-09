@@ -700,10 +700,6 @@ namespace mmo
 				continue;
 			}
 
-			// Food and drink seat the character. Using an item has never stood a character up,
-			// so this path only ever seats - it never stands anyone up.
-			UpdateStandStateForCast(*spellEntry, /*standUpByDefault=*/false);
-
 			// Cast the spell
 			uint64 time = spellEntry->casttime();
 			SpellCastResult result = m_character->CastSpell(targetMap, *spellEntry, time, false, itemGuid);
@@ -722,6 +718,14 @@ namespace mmo
 							<< io::write<GameTime>(GetAsyncTimeMs())
 							<< io::write<uint8>(result);
 						packet.Finish(); });
+			}
+			else
+			{
+				// Food and drink seat the character. Using an item has never stood a character up,
+				// so this path only ever seats - it never stands anyone up. Only apply this once the
+				// cast actually succeeded, otherwise a rejected cast (out of range, silenced, on
+				// cooldown, ...) would seat the character for no reason.
+				UpdateStandStateForCast(*spellEntry, /*standUpByDefault=*/false);
 			}
 		}
 	}

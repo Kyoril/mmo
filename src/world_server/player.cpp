@@ -2634,7 +2634,7 @@ namespace mmo
 
 		if ((attributesB & spell_attributes_b::SitsCaster) != 0)
 		{
-			if (m_character->GetStandState() != unit_stand_state::Sit)
+			if (!m_character->IsSitting())
 			{
 				m_character->SetStandState(unit_stand_state::Sit);
 			}
