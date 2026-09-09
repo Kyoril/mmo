@@ -41,6 +41,7 @@
 
 #include "game_client/net_client.h"
 #include "game_client/sound_entry_player.h"
+#include "game_client/combat_sound_player.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
 
@@ -676,6 +677,8 @@ namespace mmo
 		PartyInfo &m_partyInfo;
 
 		SoundEntryPlayer &m_soundEntryPlayer;
+		/// Plays auto attack audio resolved from the equipped weapon and the victim's material.
+		CombatSoundPlayer m_combatSoundPlayer;
 		/// Crossfading zone background music slot, driven by ZoneEntry::music_sound.
 		CrossfadingSoundLoop m_zoneMusic;
 		/// Crossfading zone ambience slot, driven by ZoneEntry::ambience_sound.
