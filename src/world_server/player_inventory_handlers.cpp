@@ -725,7 +725,7 @@ namespace mmo
 				// so this path only ever seats - it never stands anyone up. Only apply this once the
 				// cast actually succeeded, otherwise a rejected cast (out of range, silenced, on
 				// cooldown, ...) would seat the character for no reason.
-				UpdateStandStateForCast(*spellEntry, /*standUpByDefault=*/false);
+				SeatCasterForCast(*spellEntry);
 			}
 		}
 	}
