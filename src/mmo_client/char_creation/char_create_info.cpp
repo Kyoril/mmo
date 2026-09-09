@@ -380,8 +380,9 @@ namespace mmo
 		// would stay hidden.
 		m_characterCreationFrame->SetModelFile("");
 
-		// The model frame binds its animation state while the model file is applied, so the
-		// stance has to be chosen before the entity is created.
+		// The stance is chosen first so the animation state is bound as the entity is created.
+		// SetAnimation also rebinds a live entity's animation state, so this order is a
+		// preference, not a requirement.
 		const proto_client::CharacterOutfit* outfit = FindOutfit();
 		m_characterCreationFrame->SetAnimation(outfit && !outfit->animation().empty() ? outfit->animation() : m_defaultAnimation);
 

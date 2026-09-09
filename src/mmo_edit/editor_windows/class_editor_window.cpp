@@ -1241,7 +1241,25 @@ namespace mmo
 
 					const uint32 displayId = outfit->item_displays(displayIndex);
 					const auto* displayEntry = m_project.itemDisplays.getById(displayId);
-					if (ImGui::BeginCombo("##itemDisplay", displayEntry != nullptr ? displayEntry->name().c_str() : s_outfitDisplayNone, ImGuiComboFlags_None))
+
+					// A display id which no longer resolves must not look like a deliberate empty slot.
+					char unknownDisplayLabel[64] = {};
+					if (displayEntry == nullptr && displayId != 0)
+					{
+						std::snprintf(unknownDisplayLabel, sizeof(unknownDisplayLabel), "Unknown display %u", displayId);
+					}
+
+					const char* displayPreview = s_outfitDisplayNone;
+					if (displayEntry != nullptr)
+					{
+						displayPreview = displayEntry->name().c_str();
+					}
+					else if (displayId != 0)
+					{
+						displayPreview = unknownDisplayLabel;
+					}
+
+					if (ImGui::BeginCombo("##itemDisplay", displayPreview, ImGuiComboFlags_None))
 					{
 						for (int i = 0; i < m_project.itemDisplays.count(); ++i)
 						{
