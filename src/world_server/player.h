@@ -904,7 +904,6 @@ namespace mmo
 		LocaleIndex m_locale = LocaleIndex::enUS;	// Client locale, used to serve localized game data
 		scoped_connection_container m_characterConnections;
 		const proto::Project& m_project;
-		AttackSwingEvent m_lastAttackSwingEvent{ attack_swing_event::Unknown };
 		std::shared_ptr<LootInstance> m_loot{ nullptr };
 		std::shared_ptr<GameObjectS> m_lootSource{ nullptr };
 

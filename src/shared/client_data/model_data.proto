@@ -1,6 +1,8 @@
 syntax = "proto2";
 package mmo.proto_client;
 
+import "combat_sounds.proto";
+
 // NOTE: Keep this file in sync with src/shared/proto_data/model_data.proto!
 // The client reads the exported binary data with this mirrored schema,
 // so every field number in here has to match the mirror exactly.
@@ -28,6 +30,11 @@ message ModelDataEntry {
 	// i.e. without another dialog of the same NPC opening right after.
 	// 0 = no goodbye sound (default).
 	optional uint32 goodbye_sound_id = 9 [default = 0];
+
+	// Combat audio for units using this display model: natural weapon sounds for
+	// creatures and unarmed players, the body's hit material, and the combat voice
+	// (attacker effort and victim pain reacts).
+	optional CombatSounds combat_sounds = 10;
 }
 
 message ModelDatas {

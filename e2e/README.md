@@ -74,10 +74,17 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `HasAura(g, spellId)`, `HasSpell(spellId)`, `GetItemCount(itemId)`, `GetMoney()`,
 `GetXp()`, `GetNextLevelXp()` (own character only),
 `LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`),
+`LastSwingError()` (`"none" | "out_of_range" | "wrong_facing" | "target_dead" | ...`),
+`SwingErrorCount()`, `SwingRecoveryCount()` (swing outcomes are reported by the server as
+*transitions*, so these count changes, not swings: an attack that stays out of range reports
+one error, and the swing that lands again reports one recovery),
 `FindUnitByEntry(entry) -> g|nil`, `FindUnitByName(name) -> g|nil`,
 `FindObjectByEntry(entry) -> g|nil` (world objects: chests, doors, ...),
 `GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open),
-`GetUnitFlags(g)` (the unit's replicated Flags field)
+`GetUnitFlags(g)` (the unit's replicated Flags field),
+`MeleeSwingCount(g)` (auto-attack swings the server resolved against `g`, hit or miss),
+`IsAutoAttacking()` (own character; set by the broadcast `AttackStart`/`AttackStop`
+packets rather than by the requests we send, so it reports what the server acknowledged)
 
 Actions:
 `TargetUnit(g)`, `FaceUnit(g)`, `CastSpell(spellId [, g]) -> bool` (faces the target

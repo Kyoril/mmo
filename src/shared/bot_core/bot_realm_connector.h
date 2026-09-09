@@ -88,8 +88,13 @@ namespace mmo
 		signal<void(uint64)> AttackStopped;
 
 		/// @brief Emitted when an attack swing error occurs.
-		/// @param error The error code (see attack_swing_event).
+		/// @param error The error code (see attack_swing_event). Never attack_swing_event::Success
+		///		-- the return to landing swings is reported by AttackSwingRecovered instead.
 		signal<void(AttackSwingEvent)> AttackSwingError;
+
+		/// @brief Emitted when swings start landing again after an AttackSwingError. The server
+		///		reports swing outcomes as transitions, so this arrives exactly once per recovery.
+		signal<void()> AttackSwingRecovered;
 
 		/// @brief Emitted when an attack hit occurs (attacker state update).
 		/// @param attackerGuid The GUID of the attacker.

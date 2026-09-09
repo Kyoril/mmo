@@ -1,0 +1,48 @@
+syntax = "proto2";
+package mmo.proto;
+
+// NOTE: Keep this file in sync with src/shared/client_data/combat_sounds.proto!
+// The client reads the exported binary data with the mirrored proto_client schema,
+// so every field number in here has to match the mirror exactly.
+
+// One impact sound for a specific target material.
+// target_material 0 = fallback used for any material.
+message ImpactSound
+{
+	// SurfaceType id of the material being struck. 0 = any (default row).
+	optional uint32 target_material = 1;
+
+	// SoundEntry id played on impact against that material.
+	optional uint32 sound = 2;
+}
+
+// Per-model combat audio: natural-weapon sounds, body material, and combat voice.
+message CombatSounds
+{
+	// Natural weapon (creature claw/bite, unarmed player). Used when the swinging hand
+	// holds no weapon, and as the fallback when the weapon subclass has no sound.
+	optional uint32 swing_sound = 1;
+	repeated ImpactSound impact_sounds = 2;
+	optional uint32 crit_layer_sound = 3;
+	optional uint32 miss_sound = 4;
+
+	// SurfaceType id describing what this body sounds like when struck, unless worn
+	// armor overrides it.
+	optional uint32 hit_material = 5;
+
+	// Attacker effort voice, rolled per swing.
+	optional uint32 attack_voice_sound = 6;
+	optional uint32 attack_voice_chance = 7 [default = 0];
+	optional uint32 attack_crit_voice_sound = 8;
+	optional uint32 attack_crit_voice_chance = 9 [default = 100];
+
+	// Victim pain react, rolled per landed hit.
+	optional uint32 hit_voice_sound = 10;
+	optional uint32 hit_voice_chance = 11 [default = 100];
+	optional uint32 crit_hit_voice_sound = 12;
+	optional uint32 crit_hit_voice_chance = 13 [default = 100];
+
+	// Minimum gap between two voice lines from the same unit, in milliseconds.
+	// 0 = derive the gap from the played clip's length.
+	optional uint32 voice_min_interval_ms = 14;
+}

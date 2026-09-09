@@ -2778,6 +2778,34 @@ namespace mmo
 			ELOG("Failed to read client timestamp for attack stop");
 			return;
 		}
+
+		// StopAttack broadcasts to every subscriber in sight, so only run it when there is
+		// something to stop, the way StartAttack drops a repeated request before broadcasting.
+		// This is not a rate limit -- a client alternating swing and stop still gets two
+		// broadcasts per round trip -- it just keeps a repeated stop from being one.
+		//
+		// This drops a request the server has nothing to do with, and that is not hypothetical:
+		// a swing at a corpse makes the server report TargetDead and stop by itself, and the
+		// client answers that error by sending a stop of its own. Without this the redundant
+		// request would put a second AttackStop in front of everyone in sight, every time.
+		//
+		// Both halves of the state are checked, not just the victim: the Attacking flag is the
+		// replicated half, the one the client mirrors as IsWeaponDrawn(), so "is the server
+		// attacking" is only answered by looking at both. They are kept in step -- every path
+		// that clears the victim goes through StopAttack, pinned by the [attack_state] cases in
+		// src/tests/game_server_tests/auto_attack_swing_timer_test.cpp -- so the flag half is
+		// belt and braces. The victim half is not.
+		//
+		// The check belongs here rather than inside GameUnitS::StopAttack: StartAttack calls
+		// StopAttack to reject a friendly target, with neither victim nor flag set, and needs
+		// the broadcast to go out as the NACK for the client's optimistically set victim.
+		if (!m_character->IsAttacking() &&
+			(m_character->Get<uint32>(object_fields::Flags) & unit_flags::Attacking) == 0)
+		{
+			return;
+		}
+
+		m_character->StopAttack();
 	}
 
 	void Player::OnReviveRequest(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -3689,21 +3717,9 @@ namespace mmo
 
 	void Player::OnAttackSwingEvent(AttackSwingEvent attackSwingEvent)
 	{
-		if (m_lastAttackSwingEvent == attackSwingEvent)
-		{
-			return;
-		}
-
-		m_lastAttackSwingEvent = attackSwingEvent;
-
-		// Nothing to do here in these cases
-		if (m_lastAttackSwingEvent == attack_swing_event::Success ||
-			m_lastAttackSwingEvent == attack_swing_event::Unknown)
-		{
-			return;
-		}
-
-		// Notify the client about the attack swing error event
+		// GameUnitS reports transitions only, so every event that arrives here is news for the
+		// client -- including attack_swing_event::Success, which is what clears the error it is
+		// currently repeating.
 		SendPacket([attackSwingEvent](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::AttackSwingError);

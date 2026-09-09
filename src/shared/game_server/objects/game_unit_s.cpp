@@ -2378,6 +2378,10 @@ namespace mmo
 	{
 		m_victimSignals.disconnect();
 
+		// The remembered swing outcome describes a swing against the previous victim, so the first
+		// swing against this one has to be reported again even if it fails the same way.
+		OnAttackSwingEvent(attack_swing_event::Unknown);
+
 		m_victim = victim;
 
 		if (victim)
@@ -3541,8 +3545,23 @@ namespace mmo
 		Set<int32>(object_fields::Mana + static_cast<uint8>(powerType), power);
 	}
 
-	void GameUnitS::OnAttackSwingEvent(const AttackSwingEvent attackSwingEvent) const
+	void GameUnitS::OnAttackSwingEvent(const AttackSwingEvent attackSwingEvent)
 	{
+		// Only transitions are reported: a swing that keeps failing for the same reason retries
+		// every attack_swing_error_delay_ms, and the client repeats the message on its own.
+		if (m_lastAttackSwingEvent == attackSwingEvent)
+		{
+			return;
+		}
+
+		m_lastAttackSwingEvent = attackSwingEvent;
+
+		// The reset value only exists to make the next real outcome count as a transition.
+		if (attackSwingEvent == attack_swing_event::Unknown)
+		{
+			return;
+		}
+
 		if (!m_netUnitWatcher)
 		{
 			return;
@@ -3781,7 +3800,11 @@ namespace mmo
 
 		if (!IsAlive())
 		{
-			m_victim.reset();
+			// Stop rather than just dropping the victim, for the same reason as the dead-victim
+			// branch below: both halves of the attack state go together. A unit that dies has
+			// already been stopped by OnKilled, so this is the defensive path -- but it is the
+			// last one that could clear one half and leave the other.
+			StopAttack();
 			return;
 		}
 
@@ -3810,11 +3833,21 @@ namespace mmo
 		if (!victim->IsAlive())
 		{
 			// The main-hand swing drives the client-facing swing-error UI; the off-hand stays silent
-			// to avoid duplicate error messages.
+			// to avoid duplicate error messages, and the stop rides along inside the same guard so the
+			// client always gets the reason before the acknowledgement. (An off-hand swing that gets
+			// here first therefore leaves the state alone; the next main-hand swing settles it.)
 			if (!isOffhand)
 			{
 				OnAttackSwingEvent(AttackSwingEvent::TargetDead);
-				m_victim.reset();
+
+				// Both halves of the attack state are cleared together: the victim, and the replicated
+				// unit_flags::Attacking that the client reads as IsWeaponDrawn(). Dropping the victim
+				// alone stranded that flag with nothing behind it and sent no AttackStop, which is the
+				// client's only acknowledgement -- and nothing cleared it afterwards, because
+				// SetVictim(nullptr) disconnects the very signals VictimDespawned would arrive on.
+				// A player could paper over it by toggling attack off; a creature has no client to do
+				// that for it.
+				StopAttack();
 			}
 			return;
 		}
@@ -3851,6 +3884,15 @@ namespace mmo
 		// connect. Remove any auras that are interrupted by attacking (e.g. "removed when attacking").
 		RemoveAurasByInterrupt(spell_aura_interrupt_flags::Attack);
 
+		// Tell the client the swing landed, clearing any error it is still repeating. Reported
+		// here rather than after the hit resolves: a killing blow runs StopAttack, which forgets
+		// the swing state, and reporting afterwards would then look like a fresh transition and
+		// put one stray packet on the wire per kill. Only the main hand drives the swing-error UI.
+		if (!isOffhand)
+		{
+			OnAttackSwingEvent(AttackSwingEvent::Success);
+		}
+
 		// Check if we have a configured auto-attack spell to use instead of the legacy hardcoded combat
 		const proto::SpellEntry* autoAttackSpell = GetAutoAttackSpell(attackType);
 		if (autoAttackSpell)
@@ -3868,11 +3910,6 @@ namespace mmo
 				AssignOnExit<bool> resetResolvingFlag{ m_resolvingAutoAttackSwing, false };
 				m_resolvingAutoAttackSwing = true;
 				CastSpell(targetMap, *autoAttackSpell, 0, true);
-			}
-
-			if (!isOffhand)
-			{
-				OnAttackSwingEvent(AttackSwingEvent::Success);
 			}
 
 			// The cast can end the fight outright -- a killing blow runs StopAttack, which cancels
@@ -4058,13 +4095,6 @@ namespace mmo
 				settings.rage_conversion_constant();
 			const float addRage = (static_cast<float>(totalDamage) / rageConversion) * settings.rage_damage_factor();
 			AddPower(power_type::Rage, addRage);
-		}
-
-		// In case of success, we also want to trigger an event to potentially reset error states from
-		// previous attempts. Only the main-hand drives the client-facing swing-error UI.
-		if (!isOffhand)
-		{
-			OnAttackSwingEvent(AttackSwingEvent::Success);
 		}
 
 		// Reschedule the swing timer for the hand that just swung, unless the blow ended the
