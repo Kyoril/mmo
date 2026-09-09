@@ -47,6 +47,9 @@ namespace mmo
 			{ proto_client::ANIM_SLOT_DEATH, { "Death" } },
 			{ proto_client::ANIM_SLOT_HIT, { "Hit" } },
 			{ proto_client::ANIM_SLOT_ATTACK, { "UnarmedAttack01" } },
+			// No fallback candidate on purpose: a rig without a "Loot" clip must play its
+			// normal idle rather than freeze in some unrelated pose.
+			{ proto_client::ANIM_SLOT_LOOT, { "Loot" } },
 		};
 
 		constexpr BuiltinBinding builtinWalk[] = {

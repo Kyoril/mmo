@@ -26,6 +26,7 @@ enum AnimationSlot {
 	ANIM_SLOT_HIT = 14;
 	ANIM_SLOT_ATTACK = 15;
 	ANIM_SLOT_SPECIAL_IDLE = 16;
+	ANIM_SLOT_LOOT = 17;
 }
 
 // Conditions that activate an override clip set. When several overrides are active
