@@ -53,5 +53,15 @@ namespace mmo
 		ImGuiTextFilter m_gossipSoundFilter;
 		ImGuiTextFilter m_gossipPissedSoundFilter;
 		ImGuiTextFilter m_goodbyeSoundFilter;
+		ImGuiTextFilter m_naturalSwingSoundFilter;
+		ImGuiTextFilter m_naturalCritSoundFilter;
+		ImGuiTextFilter m_naturalMissSoundFilter;
+		ImGuiTextFilter m_naturalImpactSoundFilter;
+		ImGuiTextFilter m_naturalImpactMaterialFilter;
+		ImGuiTextFilter m_bodyMaterialFilter;
+		ImGuiTextFilter m_attackVoiceFilter;
+		ImGuiTextFilter m_attackCritVoiceFilter;
+		ImGuiTextFilter m_hitVoiceFilter;
+		ImGuiTextFilter m_critHitVoiceFilter;
 	};
 }

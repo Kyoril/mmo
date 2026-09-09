@@ -26,11 +26,17 @@ target_include_directories(game_client_tests PRIVATE
 if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	target_sources(game_client_tests PRIVATE
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/sound_entry_player.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/combat_sound_resolver.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/combat_voice_gate.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/combat_sound_player.cpp
 	)
 	target_link_libraries(game_client_tests client_data)
 else()
 	set_source_files_properties(
 		${CMAKE_CURRENT_SOURCE_DIR}/test_crossfading_sound_loop.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_sound_resolver.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_voice_gate.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_sound_player.cpp
 		PROPERTIES HEADER_FILE_ONLY TRUE
 	)
 endif()
