@@ -373,6 +373,28 @@ namespace mmo
 		WLOG("RaiseTrigger not implemented for unit " << log_hex_digit(GetGuid()));
 	}
 
+	void GameUnitS::SetStandState(const unit_stand_state::Type standState)
+	{
+		const unit_stand_state::Type previous = GetStandState();
+		Set<uint32>(object_fields::StandState, standState);
+
+		// Standing up interrupts auras flagged to break when the unit is no longer seated.
+		if (previous != unit_stand_state::Stand && standState == unit_stand_state::Stand)
+		{
+			RemoveAurasByInterrupt(spell_aura_interrupt_flags::NotSeated);
+		}
+
+		// Only players raise this: the base RaiseTrigger logs "not implemented", so raising it
+		// for every creature spawned with a stand state would be pure log noise. The changed
+		// check also keeps the constructor's SetStandState(Stand) - which writes the value the
+		// field already holds - from raising anything during object creation.
+		if (previous != standState && IsPlayer() && GetWorldInstance() != nullptr)
+		{
+			RaiseTrigger(trigger_event::OnPlayerStandStateChanged,
+				{ static_cast<uint32>(standState) }, this);
+		}
+	}
+
 	void GameUnitS::OnDespawn()
 	{
 		// A cast must never outlive the unit performing it. SingleCastState keeps itself alive

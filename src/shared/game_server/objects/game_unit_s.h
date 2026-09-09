@@ -1585,18 +1585,11 @@ public:
 		void StopCCMovement();
 
 		/// Sets the stand state of the unit.
+		///
+		/// Standing up removes auras flagged NotSeated, and a player whose stand state actually
+		/// changed raises OnPlayerStandStateChanged.
 		/// @param standState The new stand state.
-		void SetStandState(const unit_stand_state::Type standState)
-		{
-			const unit_stand_state::Type previous = GetStandState();
-			Set<uint32>(object_fields::StandState, standState);
-
-			// Standing up interrupts auras flagged to break when the unit is no longer seated.
-			if (previous != unit_stand_state::Stand && standState == unit_stand_state::Stand)
-			{
-				RemoveAurasByInterrupt(spell_aura_interrupt_flags::NotSeated);
-			}
-		}
+		void SetStandState(unit_stand_state::Type standState);
 
 		/// Gets the stand state of the unit.
 		/// @returns The stand state as a unit_stand_state::Type enum.
