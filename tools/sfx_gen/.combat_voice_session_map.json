@@ -1,0 +1,205 @@
+{
+  "Voice/Player/Human/Male/Combat/HumanMale_Effort_01.wav": {
+    "node_id": "yOQXJys2vHjnotZWrnGj",
+    "session_id": "DNJ130KZW1FqE0h4S78v",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_Effort_01.wav",
+    "voice_key": "liam",
+    "line": "Hyah!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_Effort_02.wav": {
+    "node_id": "zyjG7p1VDrI4aMmfJ59R",
+    "session_id": "U0nbeD55wumesi7skZzn",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_Effort_02.wav",
+    "voice_key": "liam",
+    "line": "Hah!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_Effort_03.wav": {
+    "node_id": "CbD7tHkaetFJhOUoJguA",
+    "session_id": "SGsDKhR6v4SWVKtm2ReM",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_Effort_03.wav",
+    "voice_key": "liam",
+    "line": "Hrrgh!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_Effort_04.wav": {
+    "node_id": "fmXtJBqy3i5pk5kCcGz4",
+    "session_id": "TyiWJhYOPRE0yW9z1Rsb",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_Effort_04.wav",
+    "voice_key": "liam",
+    "line": "Nngh!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_EffortCrit_01.wav": {
+    "node_id": "VwUtXtSOCN9ajS2k23xx",
+    "session_id": "77LAvvaXHCNDODwV44p2",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_EffortCrit_01.wav",
+    "voice_key": "liam",
+    "line": "Rrraaagh!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_EffortCrit_02.wav": {
+    "node_id": "QfCjdy5ywLWXhhtiWwNS",
+    "session_id": "EraS1CnxoYGx7rpDUwhF",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_EffortCrit_02.wav",
+    "voice_key": "liam",
+    "line": "Hraaah!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_EffortCrit_03.wav": {
+    "node_id": "e3ZlApuwEU60zGYzfTb6",
+    "session_id": "IMEmB2QOETFi9uY6gdbH",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_EffortCrit_03.wav",
+    "voice_key": "liam",
+    "line": "Take that!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_Pain_01.wav": {
+    "node_id": "OmvEHZGjUacU5U4rrV9l",
+    "session_id": "8WELrYRUnrjD2FzzpqCe",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_Pain_01.wav",
+    "voice_key": "liam",
+    "line": "Ugh!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_Pain_02.wav": {
+    "node_id": "62CbNLOTFcZSXaI4qFlX",
+    "session_id": "i7Bqfqw4HB1aJQNDfgq7",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_Pain_02.wav",
+    "voice_key": "liam",
+    "line": "Aagh!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_Pain_03.wav": {
+    "node_id": "aqLR7FoJEfpFEDNyi78x",
+    "session_id": "CG3pHe3kuXVohMmlLnbR",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_Pain_03.wav",
+    "voice_key": "liam",
+    "line": "Hrk!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_Pain_04.wav": {
+    "node_id": "mzzwpCrclRRs1XZIGhqp",
+    "session_id": "idpl6sCnqqP3dKGjLv4l",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_Pain_04.wav",
+    "voice_key": "liam",
+    "line": "Nngh!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_PainCrit_01.wav": {
+    "node_id": "LPIlyD2owIp3zML6msbT",
+    "session_id": "iZHXQFylCAlwWFympBaz",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_PainCrit_01.wav",
+    "voice_key": "liam",
+    "line": "Aaargh!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_PainCrit_02.wav": {
+    "node_id": "uhuqVuB5ZDeQHT1bdY83",
+    "session_id": "ORsENumpIUTTWG96iTXu",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_PainCrit_02.wav",
+    "voice_key": "liam",
+    "line": "Gaaah!"
+  },
+  "Voice/Player/Human/Male/Combat/HumanMale_PainCrit_03.wav": {
+    "node_id": "amWXUyqIanrk0xxdOYQ4",
+    "session_id": "TDeGPLnoUmXDFugRHs7b",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Male\\Combat\\HumanMale_PainCrit_03.wav",
+    "voice_key": "liam",
+    "line": "Hnnngh!"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_Effort_01.wav": {
+    "node_id": "GZ3Px2cBbxOHLP0of5O9",
+    "session_id": "pGFIum9xiMavdfUJvg1N",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_Effort_01.wav",
+    "voice_key": "laura",
+    "line": "Hyah!"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_Effort_02.wav": {
+    "node_id": "iioMbH9m4DlHbXcHW2Iv",
+    "session_id": "BigR3Qj1Pf7jKVkwUwSx",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_Effort_02.wav",
+    "voice_key": "laura",
+    "line": "Hah!"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_Effort_03.wav": {
+    "node_id": "htkCDUn66quwlQNjAaKa",
+    "session_id": "i1aERuqmfNkMoUqfNldU",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_Effort_03.wav",
+    "voice_key": "laura",
+    "line": "Hnngh!"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_Effort_04.wav": {
+    "node_id": "pPo1IUpZpmkNppjbdplb",
+    "session_id": "C4tQ75SKuT4QqyCU05oR",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_Effort_04.wav",
+    "voice_key": "laura",
+    "line": "Tsah!"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_EffortCrit_01.wav": {
+    "node_id": "78zvkJgMCMQ77WqpXwfb",
+    "session_id": "wUD5lFqhYCHnhTchaQb5",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_EffortCrit_01.wav",
+    "voice_key": "laura",
+    "line": "Yaaah!"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_EffortCrit_02.wav": {
+    "node_id": "vcw8oABBsXmWL0P86k4j",
+    "session_id": "7OeFm2XtYlvYYJhnItND",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_EffortCrit_02.wav",
+    "voice_key": "laura",
+    "line": "Hraaah!"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_EffortCrit_03.wav": {
+    "node_id": "dl1JV4gYlY8m6RDgbAwv",
+    "session_id": "MUnx1xpfksxcSdUzOcyJ",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_EffortCrit_03.wav",
+    "voice_key": "laura",
+    "line": "Take that!",
+    "note": "retried after concurrency-limit failure on first attempt"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_Pain_01.wav": {
+    "node_id": "bPYwm9m1GyVwR2Fbe2aj",
+    "session_id": "DpwHUhknH8wgb1ArSXge",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_Pain_01.wav",
+    "voice_key": "laura",
+    "line": "Ugh!"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_Pain_02.wav": {
+    "node_id": "WJNPrZcWtezw0qY7zYMN",
+    "session_id": "GQp0cbr9dQAMJ1jET00D",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_Pain_02.wav",
+    "voice_key": "laura",
+    "line": "Aah!",
+    "note": "succeeded on second retry (3rd attempt total) after concurrency-limit failures"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_Pain_03.wav": {
+    "node_id": "Rm8EPEAqE3TIYHdrHTpd",
+    "session_id": "Qx5VSGyQJPfEh64UGcxy",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_Pain_03.wav",
+    "voice_key": "laura",
+    "line": "Hnk!",
+    "note": "retried after concurrency-limit failure on first attempt"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_Pain_04.wav": {
+    "node_id": "aUSqAWVMcPMg3WYKL76z",
+    "session_id": "H6ZkxEjPMu9KQai6hPNV",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_Pain_04.wav",
+    "voice_key": "laura",
+    "line": "Nngh!",
+    "note": "retried after concurrency-limit failure on first attempt"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_PainCrit_01.wav": {
+    "node_id": "TUPBsL0AIzWbN3PYLD69",
+    "session_id": "hpMPZjck3jKIEH15aJTn",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_PainCrit_01.wav",
+    "voice_key": "laura",
+    "line": "Aaargh!",
+    "note": "retried after concurrency-limit failure on first attempt"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_PainCrit_02.wav": {
+    "node_id": "8TgDZSlfpZ3IeSw0KkLw",
+    "session_id": "QYk93kaf217059v93hgs",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_PainCrit_02.wav",
+    "voice_key": "laura",
+    "line": "Gaah!",
+    "note": "retried after concurrency-limit failure on first attempt"
+  },
+  "Voice/Player/Human/Female/Combat/HumanFemale_PainCrit_03.wav": {
+    "node_id": "BX2gIA54MjplEdAJY5HX",
+    "session_id": "i3rtRMVBzokNg2fveNMo",
+    "out_path": "H:\\mmo\\data\\client\\Locales\\Locale_enUS\\Voice\\Player\\Human\\Female\\Combat\\HumanFemale_PainCrit_03.wav",
+    "voice_key": "laura",
+    "line": "Hnnngh!",
+    "note": "succeeded on second retry (3rd attempt total) after concurrency-limit failures"
+  }
+}

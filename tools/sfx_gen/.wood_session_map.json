@@ -1,0 +1,48 @@
+{
+  "flow_id": "RhSTc5ZbcTOkC33ctxAB",
+  "flow_url": "https://elevenlabs.io/app/flows/RhSTc5ZbcTOkC33ctxAB",
+  "slots": {
+    "BladeWood01": {
+      "node_id": "0e4CkGMTaH36sJU2HbhM",
+      "session_id": "zs7RvplOunEyC1nU3H6G",
+      "out_path": "H:\mmo\data\client\Sound\Combat\Melee\BladeWood01.wav",
+      "target_dbfs": -3.5
+    },
+    "BladeWood02": {
+      "node_id": "6ingkaamDepnPsY7NKV5",
+      "session_id": "YZnvYROyK5iQjDYxIFli",
+      "out_path": "H:\mmo\data\client\Sound\Combat\Melee\BladeWood02.wav",
+      "target_dbfs": -3.5
+    },
+    "AxeWood01": {
+      "node_id": "gj44CXG0BH2gz8yHE2Qf",
+      "session_id": "qapWVpm6Gz5ItVdsXpRK",
+      "out_path": "H:\mmo\data\client\Sound\Combat\Melee\AxeWood01.wav",
+      "target_dbfs": -3.5
+    },
+    "AxeWood02": {
+      "node_id": "FClDlGu15Hai448mey4j",
+      "session_id": "tT0cUqfW3WLCPPtUDxfI",
+      "out_path": "H:\mmo\data\client\Sound\Combat\Melee\AxeWood02.wav",
+      "target_dbfs": -3.5
+    },
+    "BluntWood01": {
+      "node_id": "CN9oBRPNoFPmlhNlf038",
+      "session_id": "5Rf3u7dLBtEjjT83n1aQ",
+      "out_path": "H:\mmo\data\client\Sound\Combat\Melee\BluntWood01.wav",
+      "target_dbfs": -3.5
+    },
+    "BluntWood02": {
+      "node_id": "pB7S1FezUdzqueGMrvxJ",
+      "session_id": "WNDKZMLEu4WTdDkcSg92",
+      "out_path": "H:\mmo\data\client\Sound\Combat\Melee\BluntWood02.wav",
+      "target_dbfs": -3.5
+    },
+    "FistWood01": {
+      "node_id": "uQY1zJfdcrfJwEtJB1Vs",
+      "session_id": "W16dYxtgsfEezDmanPSL",
+      "out_path": "H:\mmo\data\client\Sound\Combat\Melee\FistWood01.wav",
+      "target_dbfs": -5.0
+    }
+  }
+}
