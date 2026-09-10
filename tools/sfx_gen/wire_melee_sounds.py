@@ -64,6 +64,51 @@ SOUND_ENTRIES = {
     73: ("Melee - Impact - Fist on Wood", ["FistWood01"]),
 }
 
+# --- Combat voice banks. Locale-relative paths: the client mounts the active locale root
+# and resolves "Voice/..." against it, so these never carry a Locales/ prefix. -------------
+_MALE = "Voice/Player/Human/Male/Combat/"
+_FEMALE = "Voice/Player/Human/Female/Combat/"
+
+VOICE_ENTRIES = {
+    74: ("Human Male - Combat - Effort",
+         [f"{_MALE}HumanMale_Effort_0{i}.wav" for i in (1, 2, 3, 4)]),
+    75: ("Human Male - Combat - Effort Crit",
+         [f"{_MALE}HumanMale_EffortCrit_0{i}.wav" for i in (1, 2, 3)]),
+    76: ("Human Male - Combat - Pain",
+         [f"{_MALE}HumanMale_Pain_0{i}.wav" for i in (1, 2, 3, 4)]),
+    77: ("Human Male - Combat - Pain Crit",
+         [f"{_MALE}HumanMale_PainCrit_0{i}.wav" for i in (1, 2, 3)]),
+    78: ("Human Female - Combat - Effort",
+         [f"{_FEMALE}HumanFemale_Effort_0{i}.wav" for i in (1, 2, 3, 4)]),
+    79: ("Human Female - Combat - Effort Crit",
+         [f"{_FEMALE}HumanFemale_EffortCrit_0{i}.wav" for i in (1, 2, 3)]),
+    80: ("Human Female - Combat - Pain",
+         [f"{_FEMALE}HumanFemale_Pain_0{i}.wav" for i in (1, 2, 3, 4)]),
+    81: ("Human Female - Combat - Pain Crit",
+         [f"{_FEMALE}HumanFemale_PainCrit_0{i}.wav" for i in (1, 2, 3)]),
+}
+
+# model id -> (effort, effort crit, pain, pain crit). Only the two human PLAYER models are
+# cast so far: Liam and Laura voice those characters. Orc and Undead players, NPC humans and
+# every creature have no bank yet and stay silent rather than borrowing the wrong voice --
+# an NPC townsman speaking with the player's voice is worse than an NPC who says nothing.
+MODEL_VOICES = {
+    8: (74, 75, 76, 77),    # PLAYER - Human Male
+    7: (78, 79, 80, 81),    # PLAYER - Human Female
+}
+
+# Play chances, in percent. An auto attack fires every 1.5-2.6s for the whole fight, so
+# these are deliberately low: the grunt is seasoning, not a metronome. Criticals are rare
+# enough to carry a much higher chance without wearing out.
+EFFORT_CHANCE = 18
+EFFORT_CRIT_CHANCE = 65
+PAIN_CHANCE = 30
+PAIN_CRIT_CHANCE = 80
+
+# Minimum silence between two lines from the same unit. Comfortably longer than the fastest
+# swing timer so a unit never talks over itself even at the chance ceiling.
+VOICE_MIN_INTERVAL_MS = 2500
+
 SWING_LIGHT, SWING_HEAVY, SWING_BLUNT, SWING_UNARMED = 55, 56, 57, 58
 BLADE_FLESH, BLADE_METAL = 59, 60
 AXE_FLESH, AXE_METAL = 61, 62
@@ -194,6 +239,26 @@ def main():
         entry.min_distance = 5.0
         entry.max_distance = 40.0
         print(f"    {sid:3} {name:34} ({len(slots)} files)")
+
+    # Voice banks differ from the impact sounds in two ways that matter: they belong to the
+    # Voice category so the voice volume slider governs them, and they get NO pitch scatter.
+    # Pitch-shifting a human voice reads as a processing artefact, not as variation.
+    for sid, (name, files) in VOICE_ENTRIES.items():
+        entry = upsert(sounds, sid)
+        entry.name = name
+        entry.ClearField("files")
+        for path in files:
+            entry.files.append(path)
+        entry.category = 4          # VOICE
+        entry.is_3d = True
+        entry.looped = False
+        entry.stream = False
+        entry.volume = 1.0
+        entry.pitch_min = 1.0
+        entry.pitch_max = 1.0
+        entry.min_distance = 5.0
+        entry.max_distance = 40.0
+        print(f"    {sid:3} {name:34} ({len(files)} files, voice)")
     write(sounds, "sounds", args.dry_run)
 
     print("item subclasses:")
@@ -232,7 +297,22 @@ def main():
         combat.crit_layer_sound = CRIT
         combat.miss_sound = MISS
         set_impacts(combat, FIST_FLESH, BLUNT_METAL, FIST_WOOD)
-        print(f"    {entry.id:3} {entry.name:32} material={combat.hit_material}")
+
+        voices = MODEL_VOICES.get(entry.id)
+        if voices:
+            effort, effort_crit, pain, pain_crit = voices
+            combat.attack_voice_sound = effort
+            combat.attack_voice_chance = EFFORT_CHANCE
+            combat.attack_crit_voice_sound = effort_crit
+            combat.attack_crit_voice_chance = EFFORT_CRIT_CHANCE
+            combat.hit_voice_sound = pain
+            combat.hit_voice_chance = PAIN_CHANCE
+            combat.crit_hit_voice_sound = pain_crit
+            combat.crit_hit_voice_chance = PAIN_CRIT_CHANCE
+            combat.voice_min_interval_ms = VOICE_MIN_INTERVAL_MS
+
+        voice_note = f" voice={voices[0]}-{voices[3]}" if voices else ""
+        print(f"    {entry.id:3} {entry.name:32} material={combat.hit_material}{voice_note}")
     write(models, "model_data", args.dry_run)
 
     print("\ndone.")
