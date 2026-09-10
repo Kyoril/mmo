@@ -58,6 +58,10 @@ SOUND_ENTRIES = {
     67: ("Melee - Miss", ["Miss01", "Miss02", "Miss03"]),
     68: ("Melee - Parry", ["Parry01", "Parry02"]),
     69: ("Melee - Block", ["Block01", "Block02"]),
+    70: ("Melee - Impact - Blade on Wood", ["BladeWood01", "BladeWood02"]),
+    71: ("Melee - Impact - Axe on Wood", ["AxeWood01", "AxeWood02"]),
+    72: ("Melee - Impact - Blunt on Wood", ["BluntWood01", "BluntWood02"]),
+    73: ("Melee - Impact - Fist on Wood", ["FistWood01"]),
 }
 
 SWING_LIGHT, SWING_HEAVY, SWING_BLUNT, SWING_UNARMED = 55, 56, 57, 58
@@ -65,18 +69,19 @@ BLADE_FLESH, BLADE_METAL = 59, 60
 AXE_FLESH, AXE_METAL = 61, 62
 BLUNT_FLESH, BLUNT_METAL = 63, 64
 FIST_FLESH, CRIT, MISS, PARRY, BLOCK = 65, 66, 67, 68, 69
+BLADE_WOOD, AXE_WOOD, BLUNT_WOOD, FIST_WOOD = 70, 71, 72, 73
 
 # --- Weapon subclasses -> which sound family they belong to -------------------------------
-# (subclass id, swing sound, flesh impact, metal impact)
+# (subclass id, swing sound, flesh impact, metal impact, wood impact)
 WEAPONS = [
-    (1, SWING_LIGHT, BLADE_FLESH, BLADE_METAL),   # One-Handed Sword
-    (2, SWING_HEAVY, BLADE_FLESH, BLADE_METAL),   # Two-Handed Sword
-    (3, SWING_BLUNT, BLUNT_FLESH, BLUNT_METAL),   # One-Handed Mace
-    (4, SWING_BLUNT, BLUNT_FLESH, BLUNT_METAL),   # Two-Handed Mace
-    (5, SWING_LIGHT, AXE_FLESH, AXE_METAL),       # One-Handed Axe
-    (6, SWING_HEAVY, AXE_FLESH, AXE_METAL),       # Two-Handed Axe
-    (7, SWING_LIGHT, BLADE_FLESH, BLADE_METAL),   # Dagger
-    (8, SWING_BLUNT, BLUNT_FLESH, BLUNT_METAL),   # Stave
+    (1, SWING_LIGHT, BLADE_FLESH, BLADE_METAL, BLADE_WOOD),   # One-Handed Sword
+    (2, SWING_HEAVY, BLADE_FLESH, BLADE_METAL, BLADE_WOOD),   # Two-Handed Sword
+    (3, SWING_BLUNT, BLUNT_FLESH, BLUNT_METAL, BLUNT_WOOD),   # One-Handed Mace
+    (4, SWING_BLUNT, BLUNT_FLESH, BLUNT_METAL, BLUNT_WOOD),   # Two-Handed Mace
+    (5, SWING_LIGHT, AXE_FLESH, AXE_METAL, AXE_WOOD),         # One-Handed Axe
+    (6, SWING_HEAVY, AXE_FLESH, AXE_METAL, AXE_WOOD),         # Two-Handed Axe
+    (7, SWING_LIGHT, BLADE_FLESH, BLADE_METAL, BLADE_WOOD),   # Dagger
+    (8, SWING_BLUNT, BLUNT_FLESH, BLUNT_METAL, BLUNT_WOOD),   # Stave
 ]
 
 SHIELD_SUBCLASS = 9
@@ -134,13 +139,20 @@ def upsert(container, entry_id):
     return entry
 
 
-def set_impacts(target, flesh_sound, metal_sound):
-    """Replaces the impact rows: a default (any material) row plus the metal rows."""
+def set_impacts(target, flesh_sound, metal_sound, wood_sound):
+    """Replaces the impact rows: a default (any material) row plus the material overrides.
+
+    Leather, Cloth and Bone deliberately have no row of their own and fall through to the
+    default flesh sound -- a padded or bony hit is close enough to flesh that a dedicated
+    recording would not earn its authoring cost, whereas metal and wood are unmistakably
+    different materials.
+    """
     target.ClearField("impact_sounds")
     for material, sound in (
         (0, flesh_sound),                       # default row, used when nothing matches
         (MATERIALS["Plate"], metal_sound),
         (MATERIALS["Mail"], metal_sound),
+        (WOOD, wood_sound),
     ):
         row = target.impact_sounds.add()
         row.target_material = material
@@ -186,14 +198,15 @@ def main():
 
     print("item subclasses:")
     subclasses = read(mods["item_subclasses"].ItemSubclasses, "item_subclasses")
-    for sub_id, swing, flesh, metal in WEAPONS:
+    for sub_id, swing, flesh, metal, wood in WEAPONS:
         entry = upsert(subclasses, sub_id)
         entry.swing_sound = swing
         entry.crit_layer_sound = CRIT
         entry.miss_sound = MISS
         entry.parry_sound = PARRY
-        set_impacts(entry, flesh, metal)
-        print(f"    {sub_id:3} {entry.name:22} swing={swing} impacts=flesh:{flesh}/metal:{metal}")
+        set_impacts(entry, flesh, metal, wood)
+        print(f"    {sub_id:3} {entry.name:22} swing={swing} "
+              f"impacts=flesh:{flesh}/metal:{metal}/wood:{wood}")
 
     shield = upsert(subclasses, SHIELD_SUBCLASS)
     shield.block_sound = BLOCK
@@ -218,7 +231,7 @@ def main():
         combat.swing_sound = SWING_UNARMED
         combat.crit_layer_sound = CRIT
         combat.miss_sound = MISS
-        set_impacts(combat, FIST_FLESH, BLUNT_METAL)
+        set_impacts(combat, FIST_FLESH, BLUNT_METAL, FIST_WOOD)
         print(f"    {entry.id:3} {entry.name:32} material={combat.hit_material}")
     write(models, "model_data", args.dry_run)
 

@@ -245,4 +245,40 @@ SOUNDS = {
         f"A strike caught flat on a shield. Layers: a heavy wooden impact, a muted metallic "
         f"rim clank, a dead thud body, a short low tail. Blunt and stopped. {_STYLE}",
         1.1, -3.5),
+    # ---- Impacts on wood: training dummies, practice posts, shield rims -------------------
+    # The training dummy is the first thing most players ever hit, so a wet flesh impact on a
+    # straw-and-timber mannequin is the single most noticeable wrong note in the set.
+    "BladeWood01": SoundSpec(
+        f"A sword blade biting into a wooden training dummy. Layers: a sharp splintering wood "
+        f"crack, a hollow timber body knock beneath it, a dry straw rustle, and a short low "
+        f"thump. Dry and woody, nothing wet. {_STYLE}",
+        1.0, -3.5),
+    "BladeWood02": SoundSpec(
+        f"A blade chopping into timber. Layers: a crisp wood split transient, a hollow post "
+        f"resonance, a faint straw shift, a low thud. Drier and higher-pitched than a cut into "
+        f"flesh. {_STYLE}",
+        1.0, -3.5),
+    "AxeWood01": SoundSpec(
+        f"An axe head sinking deep into a wooden post. Layers: a heavy splitting crack, a deep "
+        f"hollow timber boom, splintering fibres tearing, and a strong low thump. Deep and "
+        f"satisfying. {_STYLE}",
+        1.1, -3.5),
+    "AxeWood02": SoundSpec(
+        f"A large axe cleaving into a practice dummy. Layers: a loud wood split, a hollow body "
+        f"resonance, straw and splinters scattering, and a sub-bass thud. {_STYLE}",
+        1.1, -3.5),
+    "BluntWood01": SoundSpec(
+        f"An iron mace slamming into a wooden training dummy. Layers: a dull heavy timber thud, "
+        f"a hollow booming post resonance, a dry straw compression, and a deep sub-bass drop. "
+        f"No splintering, all weight. {_STYLE}",
+        1.1, -3.5),
+    "BluntWood02": SoundSpec(
+        f"A blunt weapon striking a wooden post. Layers: a muffled woody knock, a hollow "
+        f"resonant body, a faint creak from the frame, and a low thump. {_STYLE}",
+        1.0, -3.5),
+    "FistWood01": SoundSpec(
+        f"A bare fist striking a wooden training dummy. Layers: a dry knuckle knock on timber, "
+        f"a short hollow post resonance, a faint straw rustle, and a light low tap. Small and "
+        f"dry. {_STYLE}",
+        0.8, -5.0),
 }
