@@ -238,6 +238,9 @@ namespace mmo
 
 		void OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue);
 
+		/// @brief Called when the gxUnderwaterGodRays console variable changed.
+		void OnUnderwaterGodRaysChanged(ConsoleVar &var, const std::string &oldValue);
+
 		/// @brief Called when the gxSsao console variable changed.
 		void OnSsaoEnabledChanged(ConsoleVar &var, const std::string &oldValue);
 

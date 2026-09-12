@@ -135,6 +135,7 @@ namespace mmo
 		static ConsoleVar *s_ssaoDebugVar = nullptr;
 
 		static ConsoleVar *s_contactShadowsVar = nullptr;
+		static ConsoleVar *s_underwaterGodRaysVar = nullptr;
 		static ConsoleVar *s_contactShadowQualityVar = nullptr;
 		static ConsoleVar *s_contactShadowLengthVar = nullptr;
 		static ConsoleVar *s_contactShadowThicknessVar = nullptr;
@@ -1343,6 +1344,14 @@ namespace mmo
 	// complete type at the point unique_ptr's deleter is instantiated.
 	WorldState::~WorldState() = default;
 
+	void WorldState::OnUnderwaterGodRaysChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		if (m_waterVolume)
+		{
+			m_waterVolume->SetGodRaysEnabled(var.GetBoolValue());
+		}
+	}
+
 	DeferredRenderer* WorldState::GetWorldDeferredRenderer() const
 	{
 		const WorldFrame* worldFrame = WorldFrame::GetWorldFrame();
@@ -2054,6 +2063,9 @@ namespace mmo
 		s_contactShadowsVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadows", "Screen-space contact shadows for the sun. Adds the short, sharp shadows where objects meet surfaces that shadow maps are too coarse to resolve. 1 = on, 0 = off.", "1");
 		m_cvarChangedSignals += s_contactShadowsVar->Changed.connect(this, &WorldState::OnContactShadowsEnabledChanged);
 
+		s_underwaterGodRaysVar = ConsoleVarMgr::RegisterConsoleVar("gxUnderwaterGodRays", "Sun shafts while submerged. The most expensive part of the underwater effect; everything else stays on when this is off. 1 = on, 0 = off.", "1");
+		m_cvarChangedSignals += s_underwaterGodRaysVar->Changed.connect(this, &WorldState::OnUnderwaterGodRaysChanged);
+
 		s_contactShadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowQuality", "Contact shadow detail preset: 0 = Low (4 steps), 1 = Medium (8), 2 = High (16). Lower values improve performance.", "1");
 		m_cvarChangedSignals += s_contactShadowQualityVar->Changed.connect(this, &WorldState::OnContactShadowQualityChanged);
 
@@ -2178,6 +2190,7 @@ namespace mmo
 		OnSsaoParametersChanged(*s_ssaoRadiusVar, "");
 		OnSsaoDebugChanged(*s_ssaoDebugVar, "");
 		OnContactShadowsEnabledChanged(*s_contactShadowsVar, "");
+		OnUnderwaterGodRaysChanged(*s_underwaterGodRaysVar, "");
 		OnContactShadowQualityChanged(*s_contactShadowQualityVar, "");
 		OnContactShadowParametersChanged(*s_contactShadowLengthVar, "");
 		OnContactShadowDebugChanged(*s_contactShadowDebugVar, "");
