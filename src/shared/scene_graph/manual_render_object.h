@@ -301,6 +301,9 @@ namespace mmo
 				: m_points{ v1, v2, v3 }
 				, m_colors{ 0xffffffff, 0xffffffff, 0xffffffff }
 				, m_uvs{ {0.0f,0.0f}, {0.0f,0.0f}, {0.0f,0.0f} }
+				, m_normals{ Vector3::UnitY, Vector3::UnitY, Vector3::UnitY }
+				, m_binormals{ Vector3::UnitY, Vector3::UnitY, Vector3::UnitY }
+				, m_tangents{ Vector3::UnitY, Vector3::UnitY, Vector3::UnitY }
 			{
 			}
 
@@ -332,6 +335,37 @@ namespace mmo
 				m_uvs[index][1] = v;
 			}
 
+			/// Sets the vertex normal used to build the tangent basis for normal mapping.
+			///	@param index Vertex index (0-2).
+			///	@param normal The vertex normal. Should be normalized.
+			///	@remark Leave this at its default unless the operation's material samples a normal
+			///			map. The three basis vectors default to UnitY, which is degenerate, so a
+			///			material that does sample one must set all three.
+			void SetNormal(const uint8_t index, const Vector3& normal)
+			{
+				assert(index < 3 && "Index out of range!");
+				m_normals[index] = normal;
+			}
+
+			/// Sets the vertex binormal used to build the tangent basis for normal mapping.
+			///	@param index Vertex index (0-2).
+			///	@param binormal The vertex binormal. Should be normalized and perpendicular to both
+			///			the normal and the tangent.
+			void SetBinormal(const uint8_t index, const Vector3& binormal)
+			{
+				assert(index < 3 && "Index out of range!");
+				m_binormals[index] = binormal;
+			}
+
+			/// Sets the vertex tangent used to build the tangent basis for normal mapping.
+			///	@param index Vertex index (0-2).
+			///	@param tangent The vertex tangent. Should be normalized and perpendicular to the normal.
+			void SetTangent(const uint8_t index, const Vector3& tangent)
+			{
+				assert(index < 3 && "Index out of range!");
+				m_tangents[index] = tangent;
+			}
+
 			/// Gets the start position of the line.
 			[[nodiscard]] const Vector3& GetPosition(const uint8_t index) const { assert(index < 3); return m_points[index]; }
 
@@ -341,10 +375,22 @@ namespace mmo
 			/// Gets the UV coordinates for a vertex.
 			[[nodiscard]] const float* GetUV(const uint8_t index) const { assert(index < 3); return m_uvs[index]; }
 
+			/// Gets the vertex normal.
+			[[nodiscard]] const Vector3& GetNormal(const uint8_t index) const { assert(index < 3); return m_normals[index]; }
+
+			/// Gets the vertex binormal.
+			[[nodiscard]] const Vector3& GetBinormal(const uint8_t index) const { assert(index < 3); return m_binormals[index]; }
+
+			/// Gets the vertex tangent.
+			[[nodiscard]] const Vector3& GetTangent(const uint8_t index) const { assert(index < 3); return m_tangents[index]; }
+
 		private:
 			Vector3 m_points[3];
 			uint32 m_colors[3];
 			float m_uvs[3][2];
+			Vector3 m_normals[3];
+			Vector3 m_binormals[3];
+			Vector3 m_tangents[3];
 		};
 
 	public:
@@ -385,7 +431,11 @@ namespace mmo
 				for (uint8_t i = 0; i < 3; ++i)
 				{
 					const float* uv = triangle.GetUV(i);
-					const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, uv[0], uv[1] };
+					// Vertex layout is pos, color, normal, binormal, tangent, uv. All three basis
+					// vectors default to UnitY, so callers that never set them produce exactly the
+					// vertex data this operation produced before per-vertex bases existed.
+					const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i),
+						triangle.GetNormal(i), triangle.GetBinormal(i), triangle.GetTangent(i), uv[0], uv[1] };
 					vertices.emplace_back(v1);
 
 					if (firstVertex)
