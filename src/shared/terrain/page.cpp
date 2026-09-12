@@ -1632,6 +1632,16 @@ namespace mmo
 			ms_waterMaterialResolver = std::move(resolver);
 		}
 
+		String Page::ResolveWaterMaterial(const WaterType type)
+		{
+			if (!ms_waterMaterialResolver)
+			{
+				return String();
+			}
+
+			return ms_waterMaterialResolver(type);
+		}
+
 		void Page::SetWaterMaterialName(const String& name)
 		{
 			m_waterMaterialName = name;

@@ -1,12 +1,14 @@
 syntax = "proto2";
-package mmo.proto_client;
+package mmo.proto;
 
 // Per-liquid-type presentation settings.
 //
-// NOTE: Keep this file in sync with src/shared/proto_data/water_profiles.proto!
-// This is the client-side mirror of the authoring schema; every field number in here has to
-// match it exactly. Only the client consumes these values - the server resolves swimming from
-// its own water map - but authoring happens in mmo_edit, which works on the proto_data project.
+// NOTE: Keep this file in sync with src/shared/client_data/water_profiles.proto!
+// The client reads the exported binary data with the mirrored proto_client schema, so every
+// field number in here has to match the mirror exactly.
+//
+// Nothing on the server consumes these values; they exist here because mmo_edit authors the
+// proto_data project, and the client mirror is what ClientDB export produces.
 //
 // The id matches terrain::WaterType exactly (1 = Water, 2 = Ocean, 3 = Lava, 4 = Slime); a
 // unit test asserts that mapping so the two cannot silently drift. Field numbers are part of

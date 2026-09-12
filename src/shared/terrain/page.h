@@ -184,6 +184,15 @@ namespace mmo
 			///			injected rather than looked up here.
 			static void SetWaterMaterialResolver(std::function<String(WaterType)> resolver);
 
+			/// @brief Resolves a liquid type to its surface material asset name via the installed
+			///			resolver.
+			/// @param type The liquid type.
+			/// @return The material asset name, or an empty string when no resolver is installed or
+			///			no profile is authored for the type.
+			/// @remark Exposed so tools can display the material a liquid will actually use rather
+			///			than keeping a second copy of the lookup that could disagree with the mesh.
+			[[nodiscard]] static String ResolveWaterMaterial(WaterType type);
+
 			/// @brief Get the 8×8 water quad presence mask for a local tile.
 			/// Each bit qx + qz*8 is 1 if the corresponding water quad is present.
 			uint64 GetWaterQuadMask(uint32 localTileX, uint32 localTileY) const;
