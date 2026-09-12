@@ -33,6 +33,7 @@
 #include "shared/client_data/proto_client/sounds.pb.h"
 #include "shared/client_data/proto_client/surface_types.pb.h"
 #include "shared/client_data/proto_client/emotes.pb.h"
+#include "shared/client_data/proto_client/water_profiles.pb.h"
 
 namespace mmo
 {
@@ -63,6 +64,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::Sounds, mmo::proto_client::SoundEntry> SoundManager;
 		typedef TemplateManager<mmo::proto_client::SurfaceTypes, mmo::proto_client::SurfaceType> SurfaceTypeManager;
 		typedef TemplateManager<mmo::proto_client::Emotes, mmo::proto_client::EmoteEntry> EmoteManager;
+		typedef TemplateManager<mmo::proto_client::WaterProfiles, mmo::proto_client::WaterProfile> WaterProfileManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -109,6 +111,10 @@ namespace mmo
 
 			/// Emote catalog (animated emotes, poses and moods).
 			EmoteManager emotes;
+
+			/// Per-liquid-type presentation: surface material plus underwater fog, caustics and
+			/// audio settings. Entry ids are terrain::WaterType values.
+			WaterProfileManager waterProfiles;
 
 		private:
 
@@ -177,6 +183,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("sounds", sounds, true));
 				managers.push_back(ManagerEntry("surface_types", surfaceTypes, true));
 				managers.push_back(ManagerEntry("emotes", emotes, true));
+				managers.push_back(ManagerEntry("water_profiles", waterProfiles, true));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -231,6 +238,7 @@ namespace mmo
 				managers.emplace_back("sounds", "sounds", sounds);
 				managers.emplace_back("surface_types", "surface_types", surfaceTypes);
 				managers.emplace_back("emotes", "emotes", emotes);
+				managers.emplace_back("water_profiles", "water_profiles", waterProfiles);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{
