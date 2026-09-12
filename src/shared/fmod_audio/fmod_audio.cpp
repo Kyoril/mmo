@@ -770,6 +770,52 @@ namespace mmo
 		}
 	}
 
+	void FMODAudio::SetLowPassCutoff(float cutoffHz)
+	{
+		if (m_lowPassCutoffHz == cutoffHz)
+		{
+			return;
+		}
+
+		m_lowPassCutoffHz = cutoffHz;
+
+		if (!m_system || !m_masterGroup)
+		{
+			return;
+		}
+
+		// A cutoff of zero means "dry". Tear the DSP out rather than parking it at an inaudibly
+		// high cutoff, so time spent out of water costs no DSP processing at all.
+		if (cutoffHz <= 0.0f)
+		{
+			if (m_lowPassDsp)
+			{
+				m_masterGroup->removeDSP(m_lowPassDsp);
+				m_lowPassDsp->release();
+				m_lowPassDsp = nullptr;
+			}
+
+			return;
+		}
+
+		if (!m_lowPassDsp)
+		{
+			if (m_system->createDSPByType(FMOD_DSP_TYPE_LOWPASS, &m_lowPassDsp) != FMOD_OK || !m_lowPassDsp)
+			{
+				WLOG("Failed to create the underwater low-pass DSP; audio will not be muffled");
+				m_lowPassDsp = nullptr;
+				return;
+			}
+
+			m_masterGroup->addDSP(FMOD_CHANNELCONTROL_DSP_TAIL, m_lowPassDsp);
+		}
+
+		// FMOD's low-pass accepts 10Hz .. 22kHz; anything outside that range is rejected and the
+		// filter silently keeps its previous cutoff.
+		const float clamped = cutoffHz < 10.0f ? 10.0f : (cutoffHz > 22000.0f ? 22000.0f : cutoffHz);
+		m_lowPassDsp->setParameterFloat(FMOD_DSP_LOWPASS_CUTOFF, clamped);
+	}
+
 	void FMODAudio::IncrementNextSoundInstanceIndex()
 	{
 		m_nextSoundInstanceIndex++;

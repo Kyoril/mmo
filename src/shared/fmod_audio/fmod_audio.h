@@ -149,6 +149,8 @@ namespace mmo
 
 		void SetCategoryMuted(SoundCategory category, bool muted) override;
 
+		void SetLowPassCutoff(float cutoffHz) override;
+
 	private:
 
 		typedef std::deque<FMODSoundInstance> SoundInstanceVector;
@@ -162,6 +164,14 @@ namespace mmo
 
 		FMOD::ChannelGroup *m_masterGroup = nullptr;
 		FMOD::ChannelGroup *m_categoryGroups[static_cast<size_t>(SoundCategory::Count_)] = {};
+
+		/// Low-pass DSP on the master group, created lazily the first time a cutoff is requested
+		/// and removed again when the cutoff returns to zero, so dry playback runs through no
+		/// extra DSP at all.
+		FMOD::DSP *m_lowPassDsp = nullptr;
+
+		/// Last applied cutoff in Hz. 0 means no filter.
+		float m_lowPassCutoffHz = 0.0f;
 
 		float m_masterVolume = 1.0f;
 		bool m_masterMuted = false;

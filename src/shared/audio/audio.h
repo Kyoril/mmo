@@ -111,5 +111,13 @@ namespace mmo
 		virtual void SetCategoryVolume(SoundCategory category, float volume) = 0;
 		/// Mutes or unmutes a single sound category without touching any volume values.
 		virtual void SetCategoryMuted(SoundCategory category, bool muted) = 0;
+
+		/// Applies a low-pass filter across all sound output, used to muffle the world while the
+		/// player is submerged.
+		/// @param cutoffHz Cutoff frequency in Hz. Values at or below zero remove the filter
+		///        entirely rather than setting an inaudible cutoff, so the dry path costs nothing.
+		/// @remark Callers are expected to ramp this over a transition rather than switching it in
+		///         one step: an instant cutoff change is audible as a click.
+		virtual void SetLowPassCutoff(float cutoffHz) = 0;
 	};
 }

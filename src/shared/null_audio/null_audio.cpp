@@ -203,6 +203,10 @@ namespace mmo
 	{
 	}
 
+	void NullAudio::SetLowPassCutoff(float cutoffHz)
+	{
+	}
+
 	void NullAudio::IncrementNextSoundInstanceIndex()
 	{
 		SoundIndex oldVectorCapacity = m_soundInstanceVector.capacity();
