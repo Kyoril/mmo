@@ -336,5 +336,18 @@ namespace mmo
 
         GlobalShaderParameters::Get().SetVector("SkyHorizonColor", horizonColor);
         GlobalShaderParameters::Get().SetVector("SkyZenithColor", zenithColor);
+
+        // Direction pointing TOWARD the light source, matching the convention the forward camera
+        // constant buffer uses (Scene negates the raw light direction for the same reason).
+        // Materials reading this must not negate it again.
+        Vector3 towardSun = -lightDir;
+        towardSun.Normalize();
+        GlobalShaderParameters::Get().SetVector("SunDirection",
+            Vector4(towardSun.x, towardSun.y, towardSun.z, 0.0f));
+
+        // rgb is the blended sun/moon colour, a carries intensity, so a material can reconstruct
+        // the full contribution from a single parameter.
+        GlobalShaderParameters::Get().SetVector("SunColor",
+            Vector4(blendedColor.x, blendedColor.y, blendedColor.z, blendedIntensity));
     }
 }
