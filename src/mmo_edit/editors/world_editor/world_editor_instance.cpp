@@ -151,6 +151,20 @@ namespace mmo
 			}
 		};
 
+		// Let terrain pages resolve their surface material from the authored water profiles, so
+		// the editor viewport shows the same water the client will. A page carrying an explicit
+		// material name still overrides this.
+		terrain::Page::SetWaterMaterialResolver([this](const terrain::WaterType waterType) -> String
+			{
+				const auto* profile = m_editor.GetProject().waterProfiles.getById(static_cast<uint32>(waterType));
+				if (profile == nullptr || !profile->has_surface_material())
+				{
+					return String();
+				}
+
+				return profile->surface_material();
+			});
+
 		// Setup terrain
 		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
 		m_terrain->SetTileSceneQueryFlags(SceneQueryFlags_Tile);
