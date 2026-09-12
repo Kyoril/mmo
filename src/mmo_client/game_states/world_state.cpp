@@ -1016,6 +1016,10 @@ namespace mmo
 		m_zoneMusic.Update(deltaSeconds);
 		m_zoneAmbience.Update(deltaSeconds);
 
+		// Submersion state for the underwater post-process and the audio low-pass. Runs after the
+		// audio update so the cutoff it sets is not overwritten within the same frame.
+		UpdateWaterVolume(deltaSeconds);
+
 		// Only update when world loading is ready
 		if (m_worldLoaded && m_timeSyncResponseSent)
 		{
@@ -1290,6 +1294,138 @@ namespace mmo
 		}
 	}
 
+	/// Adapts the streamed client terrain to the water queries WaterVolumeSystem needs.
+	///
+	/// The terrain pointer is refreshed every frame rather than captured once, because the world
+	/// instance is torn down and rebuilt on every world change; a captured pointer would dangle
+	/// across a zone transition.
+	class WorldState::TerrainWaterQuery final : public IWaterQuery
+	{
+	public:
+		void SetTerrain(terrain::Terrain* terrain) { m_terrain = terrain; }
+
+		[[nodiscard]] bool HasWaterAt(const float x, const float z) const override
+		{
+			return m_terrain != nullptr && m_terrain->HasWaterAtWorldPos(x, z);
+		}
+
+		[[nodiscard]] float GetWaterHeightAt(const float x, const float z) const override
+		{
+			return m_terrain != nullptr ? m_terrain->GetWaterHeightAtWorldPos(x, z) : 0.0f;
+		}
+
+		[[nodiscard]] uint32 GetWaterTypeAt(const float x, const float z) const override
+		{
+			if (m_terrain == nullptr)
+			{
+				return 0u;
+			}
+
+			return static_cast<uint32>(m_terrain->GetWaterTypeAtWorldPos(x, z));
+		}
+
+	private:
+		terrain::Terrain* m_terrain{ nullptr };
+	};
+
+	namespace
+	{
+		/// Unpacks a 0xAARRGGBB colour into linear-ish float RGB for the underwater shader.
+		void UnpackColor(const uint32 packed, float(&outRgb)[3])
+		{
+			outRgb[0] = static_cast<float>((packed >> 16) & 0xFFu) / 255.0f;
+			outRgb[1] = static_cast<float>((packed >> 8) & 0xFFu) / 255.0f;
+			outRgb[2] = static_cast<float>(packed & 0xFFu) / 255.0f;
+		}
+	}
+
+	// Defined here rather than in the header so TerrainWaterQuery, declared just above, is a
+	// complete type at the point unique_ptr's deleter is instantiated.
+	WorldState::~WorldState() = default;
+
+	DeferredRenderer* WorldState::GetWorldDeferredRenderer() const
+	{
+		const WorldFrame* worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			return nullptr;
+		}
+
+		const WorldRenderer* renderer = reinterpret_cast<const WorldRenderer*>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			return nullptr;
+		}
+
+		return renderer->GetDeferredRenderer();
+	}
+
+	WaterProfileValues WorldState::ResolveWaterProfile(const uint32 waterType) const
+	{
+		WaterProfileValues values;
+
+		const auto* profile = m_project.waterProfiles.getById(waterType);
+		if (profile == nullptr)
+		{
+			// Left invalid on purpose: WaterVolumeSystem zeroes its parameters rather than
+			// inheriting whatever liquid resolved last.
+			return values;
+		}
+
+		values.valid = true;
+
+		if (profile->has_fog_color())
+		{
+			UnpackColor(profile->fog_color(), values.fogColor);
+		}
+
+		if (profile->has_absorption_color())
+		{
+			UnpackColor(profile->absorption_color(), values.absorptionColor);
+		}
+
+		values.fogDensity = profile->has_fog_density() ? profile->fog_density() : 0.0f;
+		values.causticsStrength = profile->has_caustics_strength() ? profile->caustics_strength() : 0.0f;
+		values.distortionStrength = profile->has_distortion_strength() ? profile->distortion_strength() : 0.0f;
+		values.audioLowPassHz = profile->has_audio_lowpass_hz() ? profile->audio_lowpass_hz() : 0.0f;
+
+		return values;
+	}
+
+	void WorldState::UpdateWaterVolume(const float deltaSeconds)
+	{
+		if (!m_waterVolume || !m_waterQuery || !m_playerController)
+		{
+			return;
+		}
+
+		// Re-point the adapter every frame: the world instance is rebuilt on every world change,
+		// so a pointer captured at setup would dangle across a zone transition.
+		m_waterQuery->SetTerrain(
+			(m_worldLoaded && m_worldInstance && m_worldInstance->HasTerrain())
+				? m_worldInstance->GetTerrain()
+				: nullptr);
+
+		const Vector3 cameraPosition = m_playerController->GetCamera().GetDerivedPosition();
+
+		// Without a controlled unit (loading, or between characters) the player reference falls
+		// back to the camera, which keeps the audio and screen states consistent rather than
+		// reporting the origin as the player's position.
+		const Vector3 playerPosition = m_playerController->GetControlledUnit()
+			? m_playerController->GetControlledUnit()->GetPosition()
+			: cameraPosition;
+
+		m_waterVolume->Update(cameraPosition.x, cameraPosition.y, cameraPosition.z,
+			playerPosition.x, playerPosition.y, playerPosition.z, deltaSeconds);
+
+		if (DeferredRenderer* deferred = GetWorldDeferredRenderer())
+		{
+			deferred->SetUnderwaterState(m_waterVolume->GetState());
+		}
+
+		m_audio.SetLowPassCutoff(m_waterVolume->GetAudioLowPassHz());
+	}
+
 	void WorldState::SetupWorldScene()
 	{
 		m_scene = std::make_unique<OctreeScene>();
@@ -1297,6 +1433,25 @@ namespace mmo
 
 		// Create sky component to manage the sky dome and day/night cycle
 		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
+
+		// Water. The query adapter is declared before the volume system so it outlives it.
+		m_waterQuery = std::make_unique<TerrainWaterQuery>();
+		m_waterVolume = std::make_unique<WaterVolumeSystem>(*m_waterQuery);
+		m_waterVolume->SetProfileResolver([this](const uint32 waterType) { return ResolveWaterProfile(waterType); });
+
+		// Let terrain pages resolve their surface material from the profile table. A page that
+		// carries an explicit material name still overrides this, so nothing already authored
+		// changes behaviour.
+		terrain::Page::SetWaterMaterialResolver([this](const terrain::WaterType waterType) -> String
+			{
+				const auto* profile = m_project.waterProfiles.getById(static_cast<uint32>(waterType));
+				if (profile == nullptr || !profile->has_surface_material())
+				{
+					return String();
+				}
+
+				return profile->surface_material();
+			});
 
 		m_rayQuery = std::move(m_scene->CreateRayQuery(Ray()));
 		m_rayQuery->SetSortByDistance(true);
