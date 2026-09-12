@@ -62,6 +62,7 @@ namespace mmo
 			ScreenPositionNode::GetStaticTypeInfo(),
 			SaturateNode::GetStaticTypeInfo(),
 			SceneColorNode::GetStaticTypeInfo(),
+			ScreenSpaceReflectionNode::GetStaticTypeInfo(),
 			NamedVariableSetNode::GetStaticTypeInfo(),
 			NamedVariableGetNode::GetStaticTypeInfo(),
 			TransformVectorNode::GetStaticTypeInfo()

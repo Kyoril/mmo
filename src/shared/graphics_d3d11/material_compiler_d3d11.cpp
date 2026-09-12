@@ -787,6 +787,51 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddScreenSpaceReflection(const ExpressionIndex worldNormal,
+		const ExpressionIndex maxDistance, const ExpressionIndex stepCount)
+	{
+		m_needsScreenSpaceReflection = true;
+		m_needsSceneColor = true;
+		m_needsSceneDepth = true;
+
+		std::ostringstream outputStream;
+		outputStream << "ComputeSSR(input.worldPos, ";
+
+		if (worldNormal != IndexNone)
+		{
+			outputStream << "normalize(expr_" << worldNormal << ".xyz)";
+		}
+		else
+		{
+			outputStream << "normalize(input.normal)";
+		}
+
+		outputStream << ", ";
+		if (maxDistance != IndexNone)
+		{
+			outputStream << "expr_" << maxDistance;
+		}
+		else
+		{
+			outputStream << "256.0f";
+		}
+
+		outputStream << ", ";
+		if (stepCount != IndexNone)
+		{
+			outputStream << "expr_" << stepCount;
+		}
+		else
+		{
+			outputStream << "24.0f";
+		}
+
+		outputStream << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_4);
+	}
+
 	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
 	{
 		m_pixelShaderStream.str("");
@@ -1040,6 +1085,75 @@ namespace mmo
 			m_pixelShaderStream
 				<< "// Scene color texture (lit opaque scene captured before translucent pass)\n"
 				<< "Texture2D sceneColorTex : register(t" << kSceneColorTextureSlot << ");\n\n";
+		}
+
+		if (m_needsScreenSpaceReflection)
+		{
+			// March the reflected ray through the opaque scene's depth buffer.
+			//
+			// The G-buffer stores RADIAL distance from the camera in the normal target's alpha
+			// (the G-buffer pass computes length(viewPos), and AddPixelDepth matches it), so the
+			// ray's own depth must be measured the same way. Comparing against view-space Z here
+			// instead would make hits skew progressively wrong toward the screen edges.
+			m_pixelShaderStream
+				<< "float4 ComputeSSR(float3 worldPos, float3 worldNormal, float maxDistance, float steps)\n"
+				<< "{\n"
+				<< "\tfloat3 toPixel = normalize(worldPos - cameraPos);\n"
+				<< "\tfloat3 reflectDir = reflect(toPixel, worldNormal);\n\n"
+				<< "\t// A ray heading back down into the surface can never reach anything the\n"
+				<< "\t// opaque pass recorded, so do not pay for the march.\n"
+				<< "\tif (reflectDir.y <= 0.001f)\n"
+				<< "\t{\n"
+				<< "\t\treturn float4(0.0f, 0.0f, 0.0f, 0.0f);\n"
+				<< "\t}\n\n"
+				<< "\tuint targetWidth;\n"
+				<< "\tuint targetHeight;\n"
+				<< "\tsceneDepthTex.GetDimensions(targetWidth, targetHeight);\n"
+				<< "\tfloat2 targetSize = float2((float)targetWidth, (float)targetHeight);\n\n"
+				<< "\tint marchSteps = (int)clamp(steps, 4.0f, 64.0f);\n"
+				<< "\tfloat stepLength = max(maxDistance, 0.001f) / (float)marchSteps;\n\n"
+				<< "\t[loop]\n"
+				<< "\tfor (int i = 1; i <= marchSteps; ++i)\n"
+				<< "\t{\n"
+				<< "\t\tfloat3 samplePos = worldPos + reflectDir * (stepLength * (float)i);\n"
+				<< "\t\tfloat4 sampleView = mul(float4(samplePos, 1.0f), matView);\n"
+				<< "\t\tfloat4 clipPos = mul(sampleView, matProj);\n"
+				<< "\t\tif (clipPos.w <= 0.0001f)\n"
+				<< "\t\t{\n"
+				<< "\t\t\tbreak;\n"
+				<< "\t\t}\n\n"
+				<< "\t\tfloat2 ndc = clipPos.xy / clipPos.w;\n"
+				<< "\t\tif (abs(ndc.x) > 1.0f || abs(ndc.y) > 1.0f)\n"
+				<< "\t\t{\n"
+				<< "\t\t\tbreak;\n"
+				<< "\t\t}\n\n"
+				<< "\t\tfloat2 uv = float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f);\n"
+				<< "\t\tint2 pixel = (int2)(uv * targetSize);\n"
+				<< "\t\tfloat sceneDistance = sceneDepthTex.Load(int3(pixel, 0)).a;\n\n"
+				<< "\t\t// Skip the sky and anything the opaque pass never wrote, which reads as a\n"
+				<< "\t\t// distance of zero and would otherwise count as an immediate hit.\n"
+				<< "\t\tif (sceneDistance <= 0.0001f)\n"
+				<< "\t\t{\n"
+				<< "\t\t\tcontinue;\n"
+				<< "\t\t}\n\n"
+				<< "\t\tfloat rayDistance = length(sampleView.xyz);\n"
+				<< "\t\tfloat delta = rayDistance - sceneDistance;\n\n"
+				<< "\t\t// A hit is the ray crossing behind recorded geometry. The thickness window\n"
+				<< "\t\t// stops a ray matching something far behind the first surface, which is what\n"
+				<< "\t\t// produces smeared reflections underneath thin geometry.\n"
+				<< "\t\tif (delta > 0.0f && delta < stepLength * 2.0f)\n"
+				<< "\t\t{\n"
+				<< "\t\t\tfloat3 hitColor = sceneColorTex.Load(int3(pixel, 0)).rgb;\n\n"
+				<< "\t\t\t// Fade towards the screen border so reflections do not pop as the\n"
+				<< "\t\t\t// geometry producing them crosses the viewport edge.\n"
+				<< "\t\t\tfloat2 edgeFade = smoothstep(0.0f, 0.15f, 1.0f - abs(ndc));\n"
+				<< "\t\t\tfloat mask = saturate(edgeFade.x * edgeFade.y);\n"
+				<< "\t\t\treturn float4(hitColor, mask);\n"
+				<< "\t\t}\n"
+				<< "\t}\n\n"
+				<< "\t// Miss. The caller supplies its own fallback - for water that is the sky.\n"
+				<< "\treturn float4(0.0f, 0.0f, 0.0f, 0.0f);\n"
+				<< "}\n\n";
 		}
 
 		if (m_lit && type != PixelShaderType::UI)

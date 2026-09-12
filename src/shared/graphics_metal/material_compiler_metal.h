@@ -94,6 +94,10 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddFresnel
 		ExpressionIndex AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal) override;
 
+		/// @copydoc MaterialCompiler::AddScreenSpaceReflection
+		ExpressionIndex AddScreenSpaceReflection(ExpressionIndex worldNormal,
+			ExpressionIndex maxDistance, ExpressionIndex stepCount) override;
+
         ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type) override;
 
         ExpressionIndex AddScalarParameterExpression(std::string_view name, float defaultValue) override;

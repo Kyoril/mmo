@@ -112,6 +112,10 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddSceneColor
 		ExpressionIndex AddSceneColor(ExpressionIndex screenOffset) override;
 
+		/// @copydoc MaterialCompiler::AddScreenSpaceReflection
+		ExpressionIndex AddScreenSpaceReflection(ExpressionIndex worldNormal,
+			ExpressionIndex maxDistance, ExpressionIndex stepCount) override;
+
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
 		void GenerateVertexShaderCode(VertexShaderType type) override;
