@@ -104,52 +104,68 @@ the editor without a rebuild.
 
 ## The ocean material
 
-`Worlds/Water_Ocean.hmat` is a thin master graph assembled from reusable material
-functions in `Worlds/Functions/`. A lake or lagoon later is a new `.hmat` reusing the
-same parts; per-zone variation is an `.hmi` instance with no graph edits.
+### Baseline: what `Water_Base.hmat` already does
 
-### Material functions
+`Worlds/Water_Base.hmat` is an existing 72-node translucent graph and already implements
+a large part of this design. Verified by `material_tool.py inspect` / `export-json`:
 
-- **`Ocean_Ripples.hmf`** — three `WaterNormal_01` samples panned at different scales,
-  speeds and directions, combined with the existing `BlendAngleCorrectedNormals.hmf`.
-  Strength fades with distance so the horizon does not alias into shimmer.
-- **`Ocean_DepthColumn.hmf`** — `SceneDepth` (t31) minus `PixelDepth` gives the water
-  column thickness in world units, the single value the rest of the graph keys off.
-  Outputs: raw thickness, a normalised shallow-to-deep ramp, and a Beer-Lambert
-  extinction colour (red extinguishes first, then green, leaving deep teal — this is the
-  chromatic depth tint).
-- **`Ocean_Refraction.hmf`** — `SceneColor` sampled at a screen offset driven by the
-  ripple normal, scaled by the depth ramp so the shoreline never bleeds sky onto the
-  sand. Tinted by the extinction term.
-- **`Ocean_Reflection.hmf`** — the `ScreenSpaceReflection` node, blended by its hit mask
-  into a sky colour built from `SkyHorizonColor` / `SkyZenithColor` along the reflection
-  vector. The fallback guarantees the grazing-angle horizon case is a sky gradient, never
-  a black hole.
-- **`Ocean_Foam.hmf`** — two layers. *Shore foam*: `Foam_01_C` masked to thin water,
-  banded on the column thickness, with a swash envelope so foam advances up the beach,
-  thins and retreats. *Whitecaps*: a tiling noise thresholded against the large-scale
-  swell normal for open-sea sparkle. Takes an optional `ShoreDistance` input defaulting
-  to the depth-derived value — the Phase 2 hook for a baked distance field, so filling it
-  in later needs no graph rework.
+- Root `MaterialNode` flags are already **Lit, two-sided, Translucent, depth-write off,
+  casts no shadows** — exactly what this design calls for.
+- `SceneDepthNode` + `PixelDepthNode` — depth fade already present.
+- `SceneColorNode` — refraction already present.
+- `FresnelNode` — already present.
+- `ReflectionVectorNode` + two `GlobalVectorParameterNode`s — sky reflection along the
+  reflection vector already present.
+- Four `PannerNode`s with `TimeNode` / `SineNode` / `CosineNode` — animated scrolling
+  normals already present.
+- Exposed parameters: `RefractionStrength`, `UnderwaterFogDepth`, `FoamWidth`,
+  `FoamSharpness`, `FoamTiling`, `FoamContrast`, `Specular`, `Roughness`, `Metallic`,
+  `EdgeFadeDistance`, `WaterColorShallow`, `WaterColorDeep`, `FoamColor`, and a `Normal`
+  texture parameter.
+- `Emissive Color` is **unconnected**; everything currently routes through `Base Color`.
 
-### Master graph
+This material has never looked right in practice because of the `ManualRenderObject`
+tangent-basis bug — its normal map input resolves to nonsense. Fixing that alone will
+change how it reads.
 
-- Material flags: **Lit**, **Translucent**, **two-sided**, depth write off, casts no
-  shadows.
-- `Normal` from ripples, so the engine's own sun specular and ambient light the water
-  consistently with the rest of the scene.
-- `Fresnel` blends refraction against reflection.
-- `Opacity` from the depth ramp combined with Fresnel.
-- View-dependent optics (refraction, SSR, sky) route through `Emissive` so the
-  already-lit scene colour is not lit a second time. Foam routes through `Base Color` so
-  it catches the sun. The exact Base Color / Emissive split is a tuning decision to
-  settle during visual iteration.
+### Therefore: extend, do not rebuild
 
-### Underside
+`Worlds/Water_Ocean.hmat` starts as a copy of `Water_Base.hmat` and is extended. This
+is a much smaller and lower-risk change than the from-scratch graph originally sketched,
+and it preserves the existing parameter names so any `.hmi` instances keep working.
 
-`RebuildWaterMesh` tags bottom-face vertices via vertex-colour alpha, so a `VertexColor`
-node switches the graph to a darker, silvery total-internal-reflection look when viewed
-from below. No `VFACE` plumbing needed.
+What gets added:
+
+1. **Screen-space reflection.** The new `ScreenSpaceReflection` node, blended by its hit
+   mask into the existing sky-colour reflection path, which becomes the fallback.
+2. **Sun glint.** Driven by the new `SunDirection` / `SunColor` globals.
+3. **Chromatic extinction.** The existing shallow-to-deep `Lerp` gains a Beer-Lambert
+   term so red extinguishes before green.
+4. **Shore swash.** The existing foam path gains a time-varying envelope so foam advances
+   up the beach, thins and retreats, plus an optional `ShoreDistance` input defaulting to
+   the depth-derived value (the Phase 2 hook for a baked distance field).
+5. **Whitecaps.** A tiling noise thresholded against the large-scale normal.
+6. **Underside shading.** A `VertexColorNode` alpha test switching to a darker, silvery
+   total-internal-reflection look for bottom-face triangles.
+7. **Emissive routing.** View-dependent optics (refraction, SSR, sky) move from
+   `Base Color` to the currently-unconnected `Emissive Color`, so already-lit scene
+   colour is not lit a second time. Foam stays on `Base Color` so it catches the sun.
+
+### Authoring workflow and its manual step
+
+`material_tool.py` can export a graph to JSON, validate it, and `apply-json` it back,
+rewriting only the `GRPH` chunk and preserving compiled shader chunks byte-for-byte. It
+has **no create command** — a new material must start from a copy of an existing one.
+
+Critically, the tool does not fabricate shader bytecode: after any graph write the
+material must be **opened and saved in `mmo_edit`** to recompile shaders and regenerate
+parameter tables. That is a GUI step that cannot be automated from this session, so every
+graph task ends with an explicit hand-off for that save, and no graph change can be
+visually verified before it happens.
+
+Reusable material functions in `Worlds/Functions/` are a refactor to do *after* the look
+is working, not before — splitting the graph up front would multiply the number of
+manual editor saves for no gain.
 
 ### New textures
 
