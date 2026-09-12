@@ -348,6 +348,12 @@ namespace mmo
 
 		bool IsFogEnabled() const { return m_fogEnabled; }
 
+		/// @brief Gets the seconds elapsed since the scene was created.
+		/// @remark This is the same value the forward camera constant buffer publishes as `time`
+		///			and the material graph's Time node reads, so screen-space passes animating
+		///			alongside materials stay in step with them.
+		[[nodiscard]] float GetElapsedTime() const { return m_elapsedTime; }
+
 		float GetFogStart() const { return m_fogStart; }
 
 		float GetFogEnd() const { return m_fogEnd; }

@@ -4,6 +4,7 @@
 #include "cascaded_shadow_camera_setup.h"
 #include "ssao_pass.h"
 #include "contact_shadow_pass.h"
+#include "post_process_pass.h"
 
 #include "frame_ui/rect.h"
 #include "graphics/global_shader_parameters.h"
@@ -136,6 +137,7 @@ namespace mmo
 
         m_ssaoPass = std::make_unique<SsaoPass>(m_device, width, height);
         m_contactShadowPass = std::make_unique<ContactShadowPass>(m_device, width, height);
+        m_postProcessPass = std::make_unique<PostProcessPass>(m_device, width, height);
 
 		// Create shadow maps for each cascade. Distant cascades cover a far larger world area per texel,
         // so they are rendered at a lower resolution (see GetCascadeShadowMapSize) — this cuts shadow
@@ -322,6 +324,7 @@ namespace mmo
 		m_sceneColorCopy->Resize(width, height);
         m_ssaoPass->Resize(width, height);
         m_contactShadowPass->Resize(width, height);
+        m_postProcessPass->Resize(width, height);
     }
 
     void DeferredRenderer::Render(Scene& scene, Camera& camera)
@@ -459,6 +462,52 @@ namespace mmo
         // Release the scene SRVs so they do not collide with render targets bound in next frame.
         m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneColorTextureSlot);
         m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneDepthTextureSlot);
+
+        // Screen-space post-processing over the finished frame. WouldRun is false whenever the
+        // camera is out of water, and then this does nothing, allocates nothing, and
+        // GetFinalRenderTarget() below hands back m_renderTexture exactly as it always did.
+        if (m_postProcessPass)
+        {
+            if (m_postProcessPass->WouldRun(m_underwaterState))
+            {
+                // Project the sun into screen space for the shafts. Without a sun the shafts have
+                // no origin, so push it off-screen and let the depth/brightness masks yield nothing.
+                float sunScreenU = -1.0f;
+                float sunScreenV = -1.0f;
+
+                if (m_shadowCastingDirectionalLight)
+                {
+                    const Vector3 towardSun = -m_shadowCastingDirectionalLight->GetDerivedDirection().NormalizedCopy();
+
+                    // A directional light has no position, so anchor it far along the toward-sun
+                    // direction from the camera.
+                    const Vector3 sunWorldPos = camera.GetDerivedPosition() + towardSun * 10000.0f;
+                    const Vector3 sunViewPos = camera.GetViewMatrix() * sunWorldPos;
+
+                    // Only project a sun that is actually in front of the camera. Matrix4's
+                    // operator* divides by w unconditionally, so a sun behind the viewer comes back
+                    // mirrored to a plausible-looking on-screen position and would cast shafts from
+                    // completely the wrong place. View space looks down -Z.
+                    if (sunViewPos.z < 0.0f)
+                    {
+                        const Vector3 sunClip = camera.GetProjectionMatrix() * sunViewPos;
+                        sunScreenU = sunClip.x * 0.5f + 0.5f;
+                        sunScreenV = 0.5f - sunClip.y * 0.5f;
+                    }
+                }
+
+                m_postProcessPass->Render(m_underwaterState, camera, *m_renderTexture,
+                    m_gBuffer.GetNormalRT(), *m_quadBuffer, *m_deferredLightVs,
+                    sunScreenU, sunScreenV, scene.GetElapsedTime());
+            }
+            else
+            {
+                // Not submerged: make sure a previously allocated output target is released so a
+                // long session out of water does not keep a full-resolution R16G16B16A16 target.
+                m_postProcessPass->Render(m_underwaterState, camera, *m_renderTexture,
+                    m_gBuffer.GetNormalRT(), *m_quadBuffer, *m_deferredLightVs, 0.0f, 0.0f, 0.0f);
+            }
+        }
 
 #ifdef _WIN32
         if (m_gpuTimingActiveThisFrame)
@@ -819,6 +868,16 @@ namespace mmo
 
     TexturePtr DeferredRenderer::GetFinalRenderTarget() const
     {
+        // Same predicate the Render path uses, so the decision to draw the post-process and the
+        // decision to hand out its result can never disagree and show a stale or empty texture.
+        if (m_postProcessPass && m_postProcessPass->WouldRun(m_underwaterState))
+        {
+            if (const TexturePtr processed = m_postProcessPass->GetResult())
+            {
+                return processed;
+            }
+        }
+
         return m_renderTexture;
     }
 
