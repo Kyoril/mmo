@@ -553,7 +553,18 @@ namespace mmo
 			/// @brief Returns true if there is water at the given world position.
 			/// @param x World X coordinate.
 			/// @param z World Z coordinate.
+			/// @remark Always prefer this over testing GetWaterHeightAtWorldPos against 0. The water
+			///			height grid is zero-initialised on every page, so a height of 0 does not
+			///			distinguish "surface at sea level" from "no water at all".
 			[[nodiscard]] bool HasWaterAtWorldPos(float x, float z) const;
+
+			/// @brief Gets the liquid type at a world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @return The liquid type of the tile containing the position, or WaterType::None when
+			///			the position lies outside the terrain, its page is not loaded, or the sub-quad
+			///			under it carries no water.
+			[[nodiscard]] WaterType GetWaterTypeAtWorldPos(float x, float z) const;
 
 			/// @brief Set the water material name for all pages within a circular brush area.
 			/// @param brushCenterX World X position of the brush center.
