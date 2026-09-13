@@ -1329,17 +1329,6 @@ namespace mmo
 		terrain::Terrain* m_terrain{ nullptr };
 	};
 
-	namespace
-	{
-		/// Unpacks a 0xAARRGGBB colour into linear-ish float RGB for the underwater shader.
-		void UnpackColor(const uint32 packed, float(&outRgb)[3])
-		{
-			outRgb[0] = static_cast<float>((packed >> 16) & 0xFFu) / 255.0f;
-			outRgb[1] = static_cast<float>((packed >> 8) & 0xFFu) / 255.0f;
-			outRgb[2] = static_cast<float>(packed & 0xFFu) / 255.0f;
-		}
-	}
-
 	// Defined here rather than in the header so TerrainWaterQuery, declared just above, is a
 	// complete type at the point unique_ptr's deleter is instantiated.
 	WorldState::~WorldState() = default;
@@ -1371,34 +1360,11 @@ namespace mmo
 
 	WaterProfileValues WorldState::ResolveWaterProfile(const uint32 waterType) const
 	{
-		WaterProfileValues values;
-
 		const auto* profile = m_project.waterProfiles.getById(waterType);
-		if (profile == nullptr)
-		{
-			// Left invalid on purpose: WaterVolumeSystem zeroes its parameters rather than
-			// inheriting whatever liquid resolved last.
-			return values;
-		}
 
-		values.valid = true;
-
-		if (profile->has_fog_color())
-		{
-			UnpackColor(profile->fog_color(), values.fogColor);
-		}
-
-		if (profile->has_absorption_color())
-		{
-			UnpackColor(profile->absorption_color(), values.absorptionColor);
-		}
-
-		values.fogDensity = profile->has_fog_density() ? profile->fog_density() : 0.0f;
-		values.causticsStrength = profile->has_caustics_strength() ? profile->caustics_strength() : 0.0f;
-		values.distortionStrength = profile->has_distortion_strength() ? profile->distortion_strength() : 0.0f;
-		values.audioLowPassHz = profile->has_audio_lowpass_hz() ? profile->audio_lowpass_hz() : 0.0f;
-
-		return values;
+		// An unauthored liquid stays invalid on purpose: WaterVolumeSystem zeroes its parameters
+		// rather than inheriting whatever liquid resolved last.
+		return profile != nullptr ? ToWaterProfileValues(*profile) : WaterProfileValues();
 	}
 
 	void WorldState::UpdateWaterVolume(const float deltaSeconds)
@@ -1430,6 +1396,23 @@ namespace mmo
 		if (DeferredRenderer* deferred = GetWorldDeferredRenderer())
 		{
 			deferred->SetUnderwaterState(m_waterVolume->GetState());
+
+			// The caustics texture follows the liquid driving the screen effect, which is held
+			// through the surfacing crossing, so the pattern fades out with the fog instead of
+			// vanishing on the frame the camera breaks the surface.
+			const uint32 screenWaterType = m_waterVolume->GetScreenWaterType();
+			const auto* profile = screenWaterType != 0 ? m_project.waterProfiles.getById(screenWaterType) : nullptr;
+			const String causticsTexture = (profile != nullptr && profile->has_caustics_texture())
+				? profile->caustics_texture()
+				: String();
+
+			PostProcessPass* pass = deferred->GetPostProcessPass();
+			if (pass != nullptr && (pass != m_underwaterCausticsPass || causticsTexture != m_underwaterCausticsTexture))
+			{
+				pass->SetCausticsTexture(causticsTexture.empty() ? nullptr : TextureManager::Get().CreateOrRetrieve(causticsTexture));
+				m_underwaterCausticsTexture = causticsTexture;
+				m_underwaterCausticsPass = pass;
+			}
 		}
 
 		m_audio.SetLowPassCutoff(m_waterVolume->GetAudioLowPassHz());

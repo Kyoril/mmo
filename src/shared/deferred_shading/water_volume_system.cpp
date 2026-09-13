@@ -38,7 +38,15 @@ namespace mmo
 		m_cameraWaterType = cameraSubmerged ? cameraType : 0;
 
 		m_state.active = cameraSubmerged;
-		m_state.surfaceHeight = cameraSurfaceHeight;
+
+		// Held while dry, so the surfacing crossing keeps measuring against the surface it just
+		// left. Leaving sideways - past the edge of a painted water area - would otherwise report a
+		// surface at y = 0 for the rest of the ramp and fog the frame against the wrong plane.
+		if (cameraSubmerged)
+		{
+			m_state.surfaceHeight = cameraSurfaceHeight;
+		}
+
 		m_state.submersionDepth = cameraSubmerged ? (cameraSurfaceHeight - cameraY) : 0.0f;
 		m_state.transitionPhase = m_settings.AdvanceTransition(m_state.transitionPhase, cameraSubmerged, deltaSeconds);
 		m_state.godRaysEnabled = m_godRaysEnabled;

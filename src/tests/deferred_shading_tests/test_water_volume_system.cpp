@@ -2,7 +2,9 @@
 
 #include "catch.hpp"
 
-#include "game_client/water_volume_system.h"
+#include "deferred_shading/water_volume_system.h"
+
+#include <optional>
 
 using namespace mmo;
 
@@ -290,4 +292,95 @@ TEST_CASE("WaterVolume_God_Ray_Toggle_Reaches_The_State", "[water_volume]")
 	system.Update(10.0f, -3.0f, 0.0f, 10.0f, -3.0f, 0.0f, 1.0f / 60.0f);
 
 	CHECK_FALSE(system.GetState().godRaysEnabled);
+}
+
+TEST_CASE("WaterVolume_Screen_Water_Type_Held_While_Surfacing", "[water_volume]")
+{
+	FakeWaterQuery query;
+	WaterVolumeSystem system(query);
+
+	Settle(system, -3.0f, -3.0f);
+	CHECK(system.GetScreenWaterType() == TypeOcean);
+
+	// One frame out of the water: the camera is dry, but the crossing is still fading the fog out,
+	// so whatever is presented with it - the caustics texture - must not have switched off yet.
+	system.Update(10.0f, 5.0f, 0.0f, 10.0f, 5.0f, 0.0f, 1.0f / 60.0f);
+	CHECK(system.GetCameraWaterType() == 0u);
+	CHECK(system.GetScreenWaterType() == TypeOcean);
+
+	Settle(system, 5.0f, 5.0f);
+	CHECK(system.GetScreenWaterType() == 0u);
+}
+
+TEST_CASE("WaterVolume_Surface_Height_Held_When_Leaving_The_Water_Sideways", "[water_volume]")
+{
+	// Swimming out past the edge of a painted water area whose surface sits at y = 12. For the rest
+	// of the crossing the pass must keep measuring against that surface, not against the y = 0 a
+	// position without water reports.
+	FakeWaterQuery query;
+	query.surfaceHeight = 12.0f;
+	WaterVolumeSystem system(query);
+
+	Settle(system, 8.0f, 8.0f);
+	CHECK(system.GetState().surfaceHeight == Approx(12.0f));
+
+	// x < 0 has no water at all.
+	system.Update(-10.0f, 8.0f, 0.0f, -10.0f, 8.0f, 0.0f, 1.0f / 60.0f);
+	CHECK_FALSE(system.GetState().active);
+	CHECK(system.GetState().transitionPhase > 0.0f);
+	CHECK(system.GetState().surfaceHeight == Approx(12.0f));
+}
+
+namespace
+{
+	/// Stands in for proto::WaterProfile and proto_client::WaterProfile: the same accessor names,
+	/// so ToWaterProfileValues is exercised without a protobuf dependency. An empty optional
+	/// behaves as an unset field, and like protobuf reads back as 0.
+	struct FakeProfile
+	{
+		std::optional<uint32> fogColor;
+		std::optional<float> fogDensity;
+		std::optional<uint32> absorptionColor;
+		std::optional<float> causticsStrength;
+		std::optional<float> distortionStrength;
+		std::optional<float> audioLowPassHz;
+
+		[[nodiscard]] bool has_fog_color() const { return fogColor.has_value(); }
+		[[nodiscard]] uint32 fog_color() const { return fogColor.value_or(0u); }
+		[[nodiscard]] bool has_fog_density() const { return fogDensity.has_value(); }
+		[[nodiscard]] float fog_density() const { return fogDensity.value_or(0.0f); }
+		[[nodiscard]] bool has_absorption_color() const { return absorptionColor.has_value(); }
+		[[nodiscard]] uint32 absorption_color() const { return absorptionColor.value_or(0u); }
+		[[nodiscard]] bool has_caustics_strength() const { return causticsStrength.has_value(); }
+		[[nodiscard]] float caustics_strength() const { return causticsStrength.value_or(0.0f); }
+		[[nodiscard]] bool has_distortion_strength() const { return distortionStrength.has_value(); }
+		[[nodiscard]] float distortion_strength() const { return distortionStrength.value_or(0.0f); }
+		[[nodiscard]] bool has_audio_lowpass_hz() const { return audioLowPassHz.has_value(); }
+		[[nodiscard]] float audio_lowpass_hz() const { return audioLowPassHz.value_or(0.0f); }
+	};
+}
+
+TEST_CASE("WaterProfile_Conversion_Unpacks_Colors_And_Zeroes_Unset_Fields", "[water_volume]")
+{
+	FakeProfile profile;
+	profile.fogColor = 0xFF0A4257u;
+	profile.fogDensity = 0.03f;
+	profile.causticsStrength = 0.5f;
+
+	const WaterProfileValues values = ToWaterProfileValues(profile);
+
+	CHECK(values.valid);
+
+	// Packed 0xAARRGGBB: red is the third byte from the right, blue the lowest.
+	CHECK(values.fogColor[0] == Approx(static_cast<float>(0x0A) / 255.0f));
+	CHECK(values.fogColor[1] == Approx(static_cast<float>(0x42) / 255.0f));
+	CHECK(values.fogColor[2] == Approx(static_cast<float>(0x57) / 255.0f));
+	CHECK(values.fogDensity == Approx(0.03f));
+	CHECK(values.causticsStrength == Approx(0.5f));
+
+	// Unset fields disable their effect.
+	CHECK(values.absorptionColor[0] == Approx(0.0f));
+	CHECK(values.absorptionColor[2] == Approx(0.0f));
+	CHECK(values.distortionStrength == Approx(0.0f));
+	CHECK(values.audioLowPassHz == Approx(0.0f));
 }

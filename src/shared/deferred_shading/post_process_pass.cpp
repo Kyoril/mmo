@@ -50,7 +50,7 @@ namespace mmo
 			float sunScreenU;
 			float sunScreenV;
 
-			float waterLineV;
+			float surfaceHeight;
 			float padding0;
 			float padding1;
 			float padding2;
@@ -154,11 +154,10 @@ namespace mmo
 		constants.sunScreenU = sunScreenU;
 		constants.sunScreenV = sunScreenV;
 
-		// The waterline. Projecting the surface plane per-frame is overkill for a camera that is
-		// either clearly under or clearly over for all but a few frames, so treat the whole frame
-		// as submerged and let the transition phase carry the crossing. A future refinement can
-		// project state.surfaceHeight into screen space here without touching the shader.
-		constants.waterLineV = 0.0f;
+		// The shader measures each view ray's path through the water against this plane, which is
+		// what keeps the surface overhead - and anything seen through it - from being fogged as if
+		// it lay at full scene depth.
+		constants.surfaceHeight = state.surfaceHeight;
 
 		m_underwaterBuffer->Update(&constants);
 

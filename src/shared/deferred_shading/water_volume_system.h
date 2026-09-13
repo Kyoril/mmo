@@ -9,11 +9,11 @@
 
 namespace mmo
 {
-	/// @brief Read-only access to the water surface the player is moving through.
+	/// @brief Read-only access to the water surface the camera and the player are moving through.
 	///
 	/// @remark WaterVolumeSystem takes this rather than a terrain::Terrain so it carries no
-	///			dependency on the terrain library, which lets game_client_tests compile it directly
-	///			on the headless build and lets the tests describe a coastline in three lines.
+	///			dependency on the terrain library, which lets deferred_shading_tests compile it
+	///			directly on the headless build and lets the tests describe a coastline in three lines.
 	class IWaterQuery
 	{
 	public:
@@ -48,6 +48,47 @@ namespace mmo
 		float audioLowPassHz{ 0.0f };
 	};
 
+	/// @brief Unpacks a 0xAARRGGBB colour, as water profiles store them, into float RGB in [0,1].
+	/// @param packed The packed colour. Alpha is ignored.
+	/// @param outRgb Receives red, green and blue.
+	inline void UnpackWaterProfileColor(const uint32 packed, float outRgb[3])
+	{
+		outRgb[0] = static_cast<float>((packed >> 16) & 0xFFu) / 255.0f;
+		outRgb[1] = static_cast<float>((packed >> 8) & 0xFFu) / 255.0f;
+		outRgb[2] = static_cast<float>(packed & 0xFFu) / 255.0f;
+	}
+
+	/// @brief Converts an authored water profile into the values WaterVolumeSystem consumes.
+	/// @tparam TProfile The editor's proto::WaterProfile or the client's proto_client::WaterProfile.
+	///			The two generated classes mirror each other field for field, so one template serves
+	///			the editor viewport and the client alike without this header depending on either
+	///			protobuf library - and the two can never disagree about what a profile means.
+	/// @param profile The authored profile.
+	/// @return Valid values. Every field the profile leaves unset resolves to 0, disabling that effect.
+	template <typename TProfile>
+	[[nodiscard]] WaterProfileValues ToWaterProfileValues(const TProfile& profile)
+	{
+		WaterProfileValues values;
+		values.valid = true;
+
+		if (profile.has_fog_color())
+		{
+			UnpackWaterProfileColor(profile.fog_color(), values.fogColor);
+		}
+
+		if (profile.has_absorption_color())
+		{
+			UnpackWaterProfileColor(profile.absorption_color(), values.absorptionColor);
+		}
+
+		values.fogDensity = profile.has_fog_density() ? profile.fog_density() : 0.0f;
+		values.causticsStrength = profile.has_caustics_strength() ? profile.caustics_strength() : 0.0f;
+		values.distortionStrength = profile.has_distortion_strength() ? profile.distortion_strength() : 0.0f;
+		values.audioLowPassHz = profile.has_audio_lowpass_hz() ? profile.audio_lowpass_hz() : 0.0f;
+
+		return values;
+	}
+
 	/// @brief Tracks whether the camera and the player are submerged, and produces the state the
 	///			underwater post-process pass and the audio low-pass consume.
 	///
@@ -57,7 +98,7 @@ namespace mmo
 	/// @remark The camera and the player are tracked separately on purpose. A third-person camera
 	///			routinely dips below the surface while the character is still walking on dry sand,
 	///			and the screen effect follows the camera while the audio and swim state follow the
-	///			character.
+	///			character. The world editor has no character and passes its camera for both.
 	class WaterVolumeSystem final
 	{
 	public:
@@ -107,6 +148,12 @@ namespace mmo
 
 		/// @brief The liquid type the camera is currently in, or 0 when dry.
 		[[nodiscard]] uint32 GetCameraWaterType() const { return m_cameraWaterType; }
+
+		/// @brief The liquid whose settings drive the screen effect, or 0 when there is none.
+		/// @remark Unlike GetCameraWaterType this stays set while the surfacing crossing unwinds.
+		///			Anything presented together with the screen effect - the caustics texture - has
+		///			to follow this one, or it drops out while the fog is still fading.
+		[[nodiscard]] uint32 GetScreenWaterType() const { return m_lastScreenWaterType; }
 
 	private:
 		/// @brief Returns true when the given point lies below a water surface, and writes that

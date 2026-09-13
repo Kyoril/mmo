@@ -33,6 +33,7 @@
 #include "graphics/sky_component.h"
 
 #include "deferred_shading/deferred_renderer.h"
+#include "deferred_shading/water_volume_system.h"
 #include "edit_modes/navigation_edit_mode.h"
 #include "edit_modes/sky_edit_mode.h"
 #include "edit_modes/area_trigger_edit_mode.h"
@@ -570,6 +571,20 @@ namespace mmo
 		uint32 m_worldFileVersion;
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
+
+		/// @brief Answers m_waterVolume's queries from m_terrain. Declared first so it outlives it.
+		std::unique_ptr<IWaterQuery> m_waterQuery;
+
+		/// @brief Drives the underwater post-process from the editor camera, so flying below a water
+		///		   surface previews what a diving player sees, from the same water profiles.
+		std::unique_ptr<WaterVolumeSystem> m_waterVolume;
+
+		/// @brief Asset name of the caustics texture last handed to the underwater pass.
+		String m_underwaterCausticsTexture;
+
+		/// @brief Recomputes camera submersion and pushes the underwater state and caustics texture
+		///		   to the renderer.
+		void UpdateUnderwaterPreview(float deltaSeconds);
 
 		std::unique_ptr<DetailsPanel> m_detailsPanel;
 		std::unique_ptr<WorldSettingsPanel> m_worldSettingsPanel;

@@ -44,6 +44,40 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Answers the water volume system's queries from the editor's terrain.
+		class EditorTerrainWaterQuery final : public IWaterQuery
+		{
+		public:
+			explicit EditorTerrainWaterQuery(const terrain::Terrain& terrain)
+				: m_terrain(terrain)
+			{
+			}
+
+			[[nodiscard]] bool HasWaterAt(const float x, const float z) const override
+			{
+				return m_terrain.HasWaterAtWorldPos(x, z);
+			}
+
+			[[nodiscard]] float GetWaterHeightAt(const float x, const float z) const override
+			{
+				return m_terrain.GetWaterHeightAtWorldPos(x, z);
+			}
+
+			[[nodiscard]] uint32 GetWaterTypeAt(const float x, const float z) const override
+			{
+				return static_cast<uint32>(m_terrain.GetWaterTypeAtWorldPos(x, z));
+			}
+
+		private:
+			const terrain::Terrain& m_terrain;
+		};
+	}
+}
+
+namespace mmo
+{
 	static const ChunkMagic versionChunk = MakeChunkMagic('MVER');
 	static const ChunkMagic meshChunk = MakeChunkMagic('MESH');
 	static const ChunkMagic entityChunk = MakeChunkMagic('MENT');
@@ -170,6 +204,17 @@ namespace mmo
 		m_terrain->SetTileSceneQueryFlags(SceneQueryFlags_Tile);
 		m_terrain->SetWireframeMaterial(MaterialManager::Get().Load("Editor/Wireframe.hmat"));
 		m_terrain->SetLodEnabled(false);
+
+		// Underwater preview. Flying the camera below a water surface shows the same post-process a
+		// diving player sees, resolved from the same water profiles, so tuning a profile needs no
+		// client. Resolved every frame, so profile edits show up live.
+		m_waterQuery = std::make_unique<EditorTerrainWaterQuery>(*m_terrain);
+		m_waterVolume = std::make_unique<WaterVolumeSystem>(*m_waterQuery);
+		m_waterVolume->SetProfileResolver([this](const uint32 waterType)
+			{
+				const auto* profile = m_editor.GetProject().waterProfiles.getById(waterType);
+				return profile != nullptr ? ToWaterProfileValues(*profile) : WaterProfileValues();
+			});
 
 		// Replace all \ with /
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Terrain").string();
@@ -496,6 +541,8 @@ namespace mmo
 		const auto pos = GetPagePositionFromCamera();
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
+
+		UpdateUnderwaterPreview(deltaTimeSeconds);
 
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f)
 			return;
@@ -2541,6 +2588,46 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		{
 			m_terrain->SetWaterVisible(effective);
 			m_waterVisibilityApplied = effective;
+		}
+	}
+
+	void WorldEditorInstance::UpdateUnderwaterPreview(const float deltaSeconds)
+	{
+		if (!m_waterVolume || !m_deferredRenderer || !m_camera)
+		{
+			return;
+		}
+
+		// With water hidden there is no surface to be under, and fog below an invisible surface
+		// would only read as a rendering bug.
+		if (!m_waterVisibilityApplied)
+		{
+			m_deferredRenderer->SetUnderwaterState(UnderwaterState());
+			return;
+		}
+
+		// The editor has no character, so the camera stands in for the player as well. Audio is
+		// deliberately left alone: the editor's audio device previews sounds, and muffling it while
+		// flying around under water would only get in the way.
+		const Vector3 cameraPosition = m_camera->GetDerivedPosition();
+		m_waterVolume->Update(cameraPosition.x, cameraPosition.y, cameraPosition.z,
+			cameraPosition.x, cameraPosition.y, cameraPosition.z, deltaSeconds);
+
+		m_deferredRenderer->SetUnderwaterState(m_waterVolume->GetState());
+
+		const uint32 screenWaterType = m_waterVolume->GetScreenWaterType();
+		const auto* profile = screenWaterType != 0 ? m_editor.GetProject().waterProfiles.getById(screenWaterType) : nullptr;
+		const String causticsTexture = (profile != nullptr && profile->has_caustics_texture())
+			? profile->caustics_texture()
+			: String();
+
+		if (causticsTexture != m_underwaterCausticsTexture)
+		{
+			if (PostProcessPass* pass = m_deferredRenderer->GetPostProcessPass())
+			{
+				pass->SetCausticsTexture(causticsTexture.empty() ? nullptr : TextureManager::Get().CreateOrRetrieve(causticsTexture));
+				m_underwaterCausticsTexture = causticsTexture;
+			}
 		}
 	}
 

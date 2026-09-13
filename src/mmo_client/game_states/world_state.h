@@ -42,7 +42,7 @@
 #include "game_client/net_client.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/combat_sound_player.h"
-#include "game_client/water_volume_system.h"
+#include "deferred_shading/water_volume_system.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
 
@@ -59,6 +59,7 @@ namespace mmo
 {
 	class IAudio;
 	class DeferredRenderer;
+	class PostProcessPass;
 }
 
 namespace mmo
@@ -631,6 +632,14 @@ namespace mmo
 		/// @brief Tracks whether the camera and the player are submerged, and drives the
 		///			underwater post-process and the audio low-pass.
 		std::unique_ptr<WaterVolumeSystem> m_waterVolume;
+
+		/// @brief Asset name of the caustics texture last handed to the underwater pass, so the
+		///			texture is only looked up again when the liquid in front of the camera changes.
+		String m_underwaterCausticsTexture;
+
+		/// @brief The pass m_underwaterCausticsTexture was handed to. Compared, never dereferenced:
+		///			a recreated world frame brings a new renderer whose pass has no texture yet.
+		const PostProcessPass* m_underwaterCausticsPass{ nullptr };
 
 		/// @brief Resolves a liquid type to its presentation settings from the water profile table.
 		/// @param waterType A terrain::WaterType value.

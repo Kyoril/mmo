@@ -6,16 +6,14 @@
 //
 // Four effects, each independently gated by a uniform so a disabled one costs a scalar branch:
 //
-//   1. Depth fog and colour tint. Beer-Lambert extinction on the G-Buffer's radial depth, tinted
-//      by the liquid's absorption colour. This is the effect that actually reads as "underwater";
-//      everything below is garnish on top of it.
+//   1. Depth fog and colour tint. Beer-Lambert extinction over the distance each view ray actually
+//      travels through water, tinted by the liquid's absorption colour. This is the effect that
+//      actually reads as "underwater"; everything below is garnish on top of it.
 //   2. Screen distortion. Two low-frequency warps at different rates, strongest just below the
 //      surface.
-//   3. Caustics. The caustics texture projected in world space, masked to upward-facing surfaces.
+//   3. Caustics. The caustics texture projected in world space, masked to upward-facing surfaces
+//      below the waterline.
 //   4. Sun shafts. A short radial blur from the sun's screen position, masked to shallow depths.
-//
-// Plus the surface crossing: when the camera plane straddles the waterline the treatment is
-// applied only below it, rather than snapping the whole frame.
 
 struct PS_INPUT
 {
@@ -30,7 +28,7 @@ Texture2D SceneTexture : register(t0);
 // G-Buffer normal target: rgb = worldNormal * 0.5 + 0.5, a = linear RADIAL depth (length(viewPos)).
 Texture2D NormalTexture : register(t1);
 
-// Tiling caustics texture. Sampled wrapped, unlike everything else in this shader.
+// Tiling caustics texture. Read through SampleWrappedRed, never through LinearSampler.
 Texture2D CausticsTexture : register(t2);
 
 SamplerState LinearSampler : register(s0);
@@ -61,9 +59,8 @@ cbuffer UnderwaterBuffer : register(b2)
     // Sun position in screen UV space. Off-screen values simply produce no shafts.
     float2 SunScreenPos;
 
-    // Screen-space V coordinate of the waterline while the camera straddles the surface.
-    // >= 1 means fully submerged and the whole frame is treated.
-    float WaterLineV;
+    // World Y of the water surface above the camera.
+    float SurfaceHeight;
     float3 UnderwaterPadding;
 };
 
@@ -85,16 +82,39 @@ float3 ReconstructViewPos(float2 uv, float radialDepth)
     return viewRay * radialDepth;
 }
 
+// Bilinear fetch of the red channel that wraps. The pass sets a clamped sampler, because every
+// other texture here is a screen-sized target, and a clamped lookup smears a tiling texture into
+// edge-texel streaks as soon as the UV leaves [0,1] - which for a world-space projection is
+// everywhere but one small patch of the map.
+float SampleWrappedRed(Texture2D tex, float2 uv)
+{
+    uint width;
+    uint height;
+    tex.GetDimensions(width, height);
+
+    int2 size = int2((int)width, (int)height);
+
+    // Wrap before scaling to texels, so a position far from the world origin does not cost the
+    // bilinear weights their precision.
+    float2 texel = frac(uv) * float2(size) - 0.5f;
+    float2 cell = floor(texel);
+    float2 blend = texel - cell;
+
+    // HLSL's % keeps the sign of the dividend, so fold the -1 cell back into range explicitly.
+    int2 p0 = ((int2)cell % size + size) % size;
+    int2 p1 = (p0 + 1) % size;
+
+    float s00 = tex.Load(int3(p0.x, p0.y, 0)).r;
+    float s10 = tex.Load(int3(p1.x, p0.y, 0)).r;
+    float s01 = tex.Load(int3(p0.x, p1.y, 0)).r;
+    float s11 = tex.Load(int3(p1.x, p1.y, 0)).r;
+
+    return lerp(lerp(s00, s10, blend.x), lerp(s01, s11, blend.x), blend.y);
+}
+
 float4 main(PS_INPUT input) : SV_TARGET
 {
     float2 uv = input.TexCoord;
-
-    // The surface crossing. Above the waterline the frame is left exactly as it came in, which is
-    // what makes a half-submerged camera read as half-submerged instead of snapping.
-    if (uv.y < WaterLineV)
-    {
-        return SceneTexture.SampleLevel(LinearSampler, uv, 0);
-    }
 
     // Everything scales by the crossing phase, so entering and leaving the water ramps.
     float strength = saturate(TransitionPhase);
@@ -118,11 +138,30 @@ float4 main(PS_INPUT input) : SV_TARGET
     float4 normalData = NormalTexture.SampleLevel(LinearSampler, distortedUv, 0);
     float sceneDepth = normalData.a;
 
-    // The sky, and anything else the opaque pass never wrote, reads as depth 0. Seen from
-    // underwater that is the brightest thing in frame and must still be fogged, so treat it as
-    // maximally distant rather than skipping it.
+    // The sky, and anything else the opaque pass never wrote, reads as depth 0.
     bool isSky = sceneDepth <= 0.0f;
-    float fogDistance = isSky ? 400.0f : sceneDepth;
+
+    // --- Water path length --------------------------------------------------------------
+    // Fog only the part of each view ray that is actually under water. Fogging by the full scene
+    // depth instead treats everything seen up through the surface - the sky, a tree on the shore -
+    // as if it lay hundreds of units deep, and the surface overhead turns into a flat wall of fog
+    // colour instead of a bright ceiling that fades out with distance.
+    float3 cameraPos = mul(float4(0.0f, 0.0f, 0.0f, 1.0f), matInvView).xyz;
+    float3 viewRay = ReconstructViewPos(distortedUv, 1.0f);
+    float3 rayDir = normalize(mul(float4(viewRay, 0.0f), matInvView).xyz);
+
+    // Sky seen sideways or downward never leaves the water, so it still has to fade out fully.
+    float sceneDistance = isSky ? 400.0f : sceneDepth;
+
+    // Clamped to the surface: while surfacing the camera is already above the water but the
+    // crossing is still ramping out, and measuring from above the surface would count air as water.
+    float eyeDepth = max(SurfaceHeight - cameraPos.y, 0.0f);
+
+    float fogDistance = sceneDistance;
+    if (rayDir.y > 0.0001f)
+    {
+        fogDistance = min(sceneDistance, eyeDepth / rayDir.y);
+    }
 
     // --- Caustics -----------------------------------------------------------------------
     // Projected in world space so the pattern sticks to the seabed instead of swimming with the
@@ -136,20 +175,24 @@ float4 main(PS_INPUT input) : SV_TARGET
         // Only surfaces facing up receive light focused through the surface above them.
         float upFacing = saturate(worldNormal.y);
 
-        // Caustics are formed by the surface, so they weaken as the seabed gets further from it.
-        float depthFade = saturate(1.0f - SubmersionDepth / 30.0f);
+        // Caustics are focused by the surface above the lit point, so they fade with that point's
+        // own depth - not the camera's - and do not exist at all above the waterline.
+        float pointDepth = SurfaceHeight - worldPos.y;
+        float depthFade = saturate(1.0f - pointDepth / 30.0f) * step(0.0f, pointDepth);
 
         float2 causticUv0 = worldPos.xz * 0.08f + float2(Time * 0.035f, Time * 0.021f);
         float2 causticUv1 = worldPos.xz * 0.13f - float2(Time * 0.026f, Time * 0.038f);
 
-        float caustic0 = CausticsTexture.SampleLevel(LinearSampler, causticUv0, 0).r;
-        float caustic1 = CausticsTexture.SampleLevel(LinearSampler, causticUv1, 0).r;
+        float caustic0 = SampleWrappedRed(CausticsTexture, causticUv0);
+        float caustic1 = SampleWrappedRed(CausticsTexture, causticUv1);
 
         // min() of two layers keeps the bright filaments thin and sharp; adding them would wash
         // the whole seabed out.
         float caustic = min(caustic0, caustic1);
 
-        color += caustic * CausticsStrength * upFacing * depthFade * strength;
+        // Scales the light already on the surface rather than adding a fixed amount, so the
+        // pattern follows the time of day and a seabed at night does not glow.
+        color *= 1.0f + caustic * CausticsStrength * 2.0f * upFacing * depthFade * strength;
     }
 
     // --- Fog and tint -------------------------------------------------------------------

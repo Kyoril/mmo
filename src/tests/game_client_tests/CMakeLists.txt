@@ -13,7 +13,6 @@ mmo_add_test(game_client_tests
 target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/remote_movement_queue.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/remote_movement_renderer.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/water_volume_system.cpp
 )
 
 # test_console_var.cpp reaches into the client executable's headers; it supplies its own
