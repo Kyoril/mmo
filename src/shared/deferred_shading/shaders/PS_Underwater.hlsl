@@ -151,14 +151,17 @@ float4 main(PS_INPUT input) : SV_TARGET
         distortedUv = clamp(distortedUv, InvScreenSize, 1.0f - InvScreenSize);
     }
 
-    float3 color = SceneTexture.SampleLevel(LinearSampler, distortedUv, 0).rgb;
-
-    // Point-fetched, never filtered. Depth does not interpolate across a silhouette: halfway between
-    // a tree 150 units away and the sky (stored as 0) is not an object 75 units away, and such an
-    // in-between value can land close enough to the camera to escape the fog almost entirely -
-    // a speckled bright outline around every tree and ridge on the horizon.
-    int2 depthPixel = clamp((int2)(distortedUv * ScreenSize), int2(0, 0), (int2)ScreenSize - 1);
-    float4 normalData = NormalTexture.Load(int3(depthPixel, 0));
+    // Colour and depth are both point-fetched from the same pixel, never filtered.
+    //  - Depth does not interpolate across a silhouette: halfway between a tree 150 units away and
+    //    the sky (stored as 0) is not an object 75 units away, and such an in-between value can
+    //    land close enough to the camera to escape the fog almost entirely.
+    //  - A filtered colour beside a point-fetched depth is just as wrong: the pixel on a
+    //    character's edge takes the character's near depth, and so almost no fog, while its colour
+    //    already blends in the bright surface overhead - a thin white outline around every
+    //    silhouette seen against the surface.
+    int2 scenePixel = clamp((int2)(distortedUv * ScreenSize), int2(0, 0), (int2)ScreenSize - 1);
+    float3 color = SceneTexture.Load(int3(scenePixel, 0)).rgb;
+    float4 normalData = NormalTexture.Load(int3(scenePixel, 0));
     float sceneDepth = normalData.a;
 
     // The sky, and anything else the opaque pass never wrote, reads as depth 0.
@@ -186,22 +189,10 @@ float4 main(PS_INPUT input) : SV_TARGET
         fogDistance = min(sceneDistance, eyeDepth / rayDir.y);
     }
 
-    // --- Snell's window -----------------------------------------------------------------
-    // Seen from below, the surface only lets through light arriving within the critical angle,
-    // about 48.6 degrees from vertical. Beyond it the surface is a mirror showing the water itself.
-    // Without this the shore, the trees and the horizon above the water stay visible at grazing
-    // angles as thin, heavily fogged strips: tinted bands across the upper half of the frame.
-    if (rayDir.y > 0.0001f && eyeDepth / rayDir.y < sceneDistance)
-    {
-        // cos(48.6 degrees) = 0.661. The smoothstep keeps the rim of the window soft.
-        float window = smoothstep(0.60f, 0.72f, rayDir.y);
-
-        // Stylized total internal reflection: the water's own colour, brightening toward the rim
-        // of the window so the ceiling reads as a gradient rather than a flat lid.
-        float3 internalReflection = FogColorAndDensity.rgb * lerp(0.75f, 1.15f, saturate(rayDir.y / 0.66f));
-
-        color = lerp(color, lerp(internalReflection, color, window), strength);
-    }
+    // What the surface itself looks like from below - the world above showing through it, darkened
+    // toward the water colour at grazing angles - is the water material's job, not this pass's.
+    // An earlier full-screen internal-reflection ceiling here hid everything above the water behind
+    // a flat lid, most visibly when swimming just under the surface.
 
     // --- Caustics -----------------------------------------------------------------------
     // Projected in world space so the pattern sticks to the seabed instead of swimming with the

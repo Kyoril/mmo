@@ -353,7 +353,25 @@ def build_graph(b, mode):
         sun_light = b.addn(b.mul(b.mul(b.out(sun_color, "RGB"), b.out(sun_color, "A")),
                                  b.sat(b.out(sun_dir, "G"))), constant=0.45)
         foam_lit = b.mul(b.vector("FoamColor", (0.92, 0.97, 1.0, 1.0)), sun_light)
-        final = b.lerp(water, foam_lit, foam_mask)
+        above_water = b.lerp(water, foam_lit, foam_mask)
+
+        # --- Underside --------------------------------------------------------------------------
+        # Seen from below, none of the above applies. There is no sky to reflect - and the Fresnel
+        # term saturates to full reflection there, which drew an opaque sky-coloured lid over the
+        # whole world above the water. There is no foam, and no water column behind the surface to
+        # tint: the underwater post-process already fogs the path through the water. So the
+        # underside shows the refracted world above, darkening toward the water colour only where
+        # the view meets the surface at a grazing angle.
+        b.next_column()
+        # From the camera to this surface pixel. Its Y is positive exactly when looking up at the
+        # surface from below, with no dependence on how the shader's V is oriented.
+        to_surface = b.add("NormalizeNode", ins={"m_input": b.sub(b.add("WorldPositionNode"), b.add("CameraPositionNode"))})
+        view_up = b.mask(to_surface, g=True)
+        below = b.sat(b.mul(view_up, constant=50.0))
+        grazing = b.add("OneMinusNode", ins={"m_input": b.sat(b.div(view_up, b.scalar("UndersideClearAngle", 0.35)))})
+        underside = b.lerp(refracted, b.vector("UndersideTint", (0.04, 0.22, 0.28, 1.0)),
+                           b.mul(grazing, b.scalar("UndersideReflection", 0.55)))
+        final = b.lerp(above_water, underside, below)
 
         root_inputs["Emissive Color"] = final
         root_inputs["Opacity"] = b.sat(b.div(thickness, b.scalar("EdgeFadeDistance", 0.5)))
