@@ -6221,7 +6221,7 @@ namespace mmo
 
 	void WorldState::OnAtmosphereParametersChanged(ConsoleVar &var, const std::string &oldValue)
 	{
-		// The scene is rebuilt on every world change, and SetupWorldScene re-applies these.
+		// Called from RegisterGameplayCommands and whenever a fog cvar changes. SetupWorldScene also calls this for a freshly created scene; there the cvars may not be registered yet, hence the null checks.
 		if (!m_scene || !s_fogDensityVar)
 		{
 			return;

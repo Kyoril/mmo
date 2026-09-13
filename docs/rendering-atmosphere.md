@@ -75,3 +75,5 @@ Missing or unreadable files fall back to built-in keys. The cvars are base value
 - Shafts need shadow-casting geometry and end at the 300 m shadow range.
 - Shafts are not drawn over forward surfaces (water, particles); those get closed-form fog only.
 - Point and spot lights do not scatter in the fog.
+- Bloom strength is gxBloomIntensity divided by the number of bloom levels, because every level adds its own copy of the light.
+- Debug views (gxAtmosphereDebug) are composited before bloom and tone mapping, so they appear tone-mapped; view 3 is black at gxAtmosphereQuality 0 (nothing is marched).
