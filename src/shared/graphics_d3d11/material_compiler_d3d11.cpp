@@ -803,7 +803,10 @@ namespace mmo
 		}
 		else
 		{
-			outputStream << "normalize(input.normal)";
+			// Not input.normal: expressions are shared by every pixel variant, and the unlit and UI
+			// variants carry no normal in VertexOut, so referencing it fails their compile. World up
+			// is the right default for what this node is for - reflections on flat water.
+			outputStream << "float3(0.0, 1.0, 0.0)";
 		}
 
 		outputStream << ", ";

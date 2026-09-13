@@ -379,7 +379,8 @@ namespace mmo
 		///         and the graph is expected to blend to a sky colour itself.
 		///
 		/// @param worldNormal The reflecting surface normal in world space (float3). Pass IndexNone
-		///        to use the interpolated vertex normal.
+		///        to reflect about world up, which suits flat water. (The vertex normal is not a
+		///        usable default: unlit and UI pixel variants do not carry one.)
 		/// @param maxDistance Maximum ray length in world units (float1). IndexNone means 256.
 		/// @param stepCount Number of march steps (float1), clamped to [4, 64]. IndexNone means 24.
 		/// @return Index of the reflection expression (float4: rgb = reflected colour,

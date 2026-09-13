@@ -2746,7 +2746,7 @@ namespace mmo
 		}
 
 	private:
-		/// @brief Reflecting surface normal in world space. Unconnected uses the vertex normal.
+		/// @brief Reflecting surface normal in world space. Unconnected reflects about world up.
 		MaterialPin m_normal = { this, "Normal" };
 
 		/// @brief Maximum ray length in world units. Unconnected uses 256.
