@@ -248,15 +248,29 @@ float4 main(PS_INPUT input) : SV_TARGET
 
     // --- Sun shafts ---------------------------------------------------------------------
     // A short radial blur from the sun toward this pixel, accumulating only the bright fragments
-    // the scene already has. Masked to shallow water, where light actually still penetrates.
+    // the scene already has. Masked to shallow water, where light actually still penetrates, and
+    // to a sun that is on or near the screen. The renderer parks a sun that is behind the camera
+    // at (-1, -1); blurring toward that point dragged every bright edge in the frame across the
+    // whole screen as stacks of parallel bands.
     if (GodRaysEnabled > 0.0f)
     {
         float shaftDepthFade = saturate(1.0f - SubmersionDepth / 25.0f);
-        if (shaftDepthFade > 0.0f)
+
+        // 1 while the sun is on screen, fading to 0 a quarter of a screen past the edge.
+        float2 sunOutside = max(abs(SunScreenPos - 0.5f) - 0.5f, 0.0f);
+        float sunOnScreen = saturate(1.0f - length(sunOutside) * 4.0f);
+
+        float shaftStrength = shaftDepthFade * sunOnScreen;
+        if (shaftStrength > 0.0f)
         {
             const int SampleCount = 16;
             float2 delta = (uv - SunScreenPos) / (float)SampleCount * 0.6f;
-            float2 sampleUv = uv;
+
+            // Every pixel starts its march at a different fraction of a step. With all taps on the
+            // same fixed offsets, each bright edge was copied SampleCount times at exactly those
+            // offsets - sharp parallel bands. Jittered, the copies smear into a continuous streak
+            // and the remaining noise is too fine to see.
+            float2 sampleUv = uv - delta * InterleavedGradientNoise(input.Position.xy);
             float decay = 1.0f;
             float3 shaft = float3(0.0f, 0.0f, 0.0f);
 
@@ -275,7 +289,7 @@ float4 main(PS_INPUT input) : SV_TARGET
             }
 
             shaft /= (float)SampleCount;
-            color += shaft * shaftDepthFade * strength * 1.5f;
+            color += shaft * shaftStrength * strength * 1.5f;
         }
     }
 
