@@ -774,14 +774,15 @@ namespace mmo
 
 		// Sample the captured opaque scene color at this pixel, optionally offset in screen pixels
 		// (used for refraction). Uses Load() so no sampler binding is required; the offset is added
-		// in pixel space before the integer cast.
+		// in pixel space before the integer cast. LoadSceneColor converts the sample back to the
+		// display-referred curve material graphs were authored against (see its definition).
 		std::ostringstream outputStream;
-		outputStream << "sceneColorTex.Load(int3((int2)(input.pos.xy";
+		outputStream << "LoadSceneColor((int2)(input.pos.xy";
 		if (screenOffset != IndexNone)
 		{
 			outputStream << " + expr_" << screenOffset << ".xy";
 		}
-		outputStream << "), 0)).rgb";
+		outputStream << "))";
 		outputStream.flush();
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
@@ -1134,6 +1135,16 @@ namespace mmo
 			m_pixelShaderStream
 				<< "// Scene color texture (lit opaque scene captured before translucent pass)\n"
 				<< "Texture2D sceneColorTex : register(t" << kSceneColorTextureSlot << ");\n\n";
+
+			// Material graphs were authored against a display-referred scene colour. Inside DeferredRenderer the
+			// captured scene is linear HDR (the TonemapPass runs last), so convert samples back to the curve the
+			// graphs expect. Standalone forward rendering (forwardOutputLinear = 0) passes the sample through.
+			m_pixelShaderStream
+				<< "float3 LoadSceneColor(int2 pixel)\n"
+				<< "{\n"
+				<< "\tfloat3 sceneColor = sceneColorTex.Load(int3(pixel, 0)).rgb;\n"
+				<< "\treturn forwardOutputLinear > 0.5 ? pow(ACESFilm(max(sceneColor, 0.0)), (1.0 / 2.2).xxx) : sceneColor;\n"
+				<< "}\n\n";
 		}
 
 		if (m_needsScreenSpaceReflection)
@@ -1254,7 +1265,7 @@ namespace mmo
 				<< "\n"
 				<< "\t\t\tif (hitDelta < thickness)\n"
 				<< "\t\t\t{\n"
-				<< "\t\t\t\tfloat3 hitColor = sceneColorTex.Load(int3(hitPixel, 0)).rgb;\n"
+				<< "\t\t\t\tfloat3 hitColor = LoadSceneColor(hitPixel);\n"
 				<< "\n"
 				<< "\t\t\t\t// Confidence instead of an all-or-nothing hit, so the blend toward the caller's\n"
 				<< "\t\t\t\t// fallback is soft:\n"
