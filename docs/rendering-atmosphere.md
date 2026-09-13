@@ -59,9 +59,9 @@ Missing or unreadable files fall back to built-in keys. The cvars are base value
 | `gxAtmosphereQuality` | 3 | 0 Off (height fog only), 1 Low, 2 Medium, 3 High, 4 Ultra |
 | `gxAtmosphereMarchDistance` | 200 | metres marched for shafts (≤ 300) |
 | `gxAtmosphereDebug` | 0 | 1 scattered light, 2 transmittance, 3 shaft shadow term |
-| `gxFogDensity` | 0.02 | extinction per metre at the base height |
+| `gxFogDensity` | 0.01 | extinction per metre at the base height |
 | `gxFogHeightFalloff` | 0.05 | falloff per metre of height |
-| `gxFogBaseHeight` | 0 | world Y of `gxFogDensity` |
+| `gxFogBaseHeight` | -10 | height of the base relative to the camera, in metres, where density equals `gxFogDensity` |
 | `gxFogAnisotropy` | 0.7 | sun glow tightness |
 | `gxShaftStrength` | 1.0 | sun scattering multiplier |
 | `gxBloomQuality` | 2 | 0 Off, 1 Low, 2 High |
@@ -71,7 +71,7 @@ Missing or unreadable files fall back to built-in keys. The cvars are base value
 
 ## Known limitations
 
-- `gxFogBaseHeight` is absolute; maps far from Y = 0 need per-area values (planned per-zone time of day).
+- The fog base follows the camera height until per-zone atmosphere data exists (planned per-zone time of day).
 - Shafts need shadow-casting geometry and end at the 300 m shadow range.
 - Shafts are not drawn over forward surfaces (water, particles); those get closed-form fog only.
 - Point and spot lights do not scatter in the fog.

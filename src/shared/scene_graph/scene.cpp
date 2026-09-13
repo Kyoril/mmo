@@ -1145,7 +1145,7 @@ namespace mmo
 		const auto now = std::chrono::steady_clock::now();
 		m_elapsedTime = std::chrono::duration<float>(now - m_startTime).count();
 
-		const AtmosphereConstants atmosphere = CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled);
+		const AtmosphereConstants atmosphere = CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled, camera.GetDerivedPosition().y);
 
 		PsCameraConstantBuffer buffer;
 		buffer.cameraPosition = camera.GetDerivedPosition();

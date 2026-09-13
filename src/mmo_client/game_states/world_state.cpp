@@ -2109,13 +2109,13 @@ namespace mmo
 		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Atmosphere debug view: 0 = off, 1 = scattered light only, 2 = transmittance, 3 = light shaft shadow term.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
-		s_fogDensityVar = ConsoleVarMgr::RegisterConsoleVar("gxFogDensity", "Height fog extinction per metre at gxFogBaseHeight. 0 disables the fog.", "0.02");
+		s_fogDensityVar = ConsoleVarMgr::RegisterConsoleVar("gxFogDensity", "Height fog extinction per metre at gxFogBaseHeight. 0 disables the fog.", "0.01");
 		m_cvarChangedSignals += s_fogDensityVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
 		s_fogHeightFalloffVar = ConsoleVarMgr::RegisterConsoleVar("gxFogHeightFalloff", "How quickly the fog thins with height, per metre. Higher values keep fog in valleys.", "0.05");
 		m_cvarChangedSignals += s_fogHeightFalloffVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
-		s_fogBaseHeightVar = ConsoleVarMgr::RegisterConsoleVar("gxFogBaseHeight", "World height (Y) at which the fog has density gxFogDensity.", "0");
+		s_fogBaseHeightVar = ConsoleVarMgr::RegisterConsoleVar("gxFogBaseHeight", "Height of the fog base relative to the camera, in metres (negative = below the camera). Fog density equals gxFogDensity there and thins with height above it.", "-10");
 		m_cvarChangedSignals += s_fogBaseHeightVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
 		s_fogAnisotropyVar = ConsoleVarMgr::RegisterConsoleVar("gxFogAnisotropy", "Forward scattering of sunlight in the fog (0 to 0.95). Higher values make a tighter, brighter glow around the sun.", "0.7");

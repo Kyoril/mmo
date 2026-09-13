@@ -165,10 +165,14 @@ namespace mmo
                     }
 
                     float baseHeight = atmosphere.baseHeight;
-                    if (ImGui::DragFloat("Fog Base Height", &baseHeight, 0.5f, -10000.0f, 10000.0f, "%.1f"))
+                    if (ImGui::DragFloat("Fog Base Offset", &baseHeight, 0.5f, -10000.0f, 10000.0f, "%.1f"))
                     {
                         atmosphere.SetBaseHeight(baseHeight);
                         atmosphereChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Fog base height relative to the camera (metres). Negative = below the camera.");
                     }
 
                     float anisotropy = atmosphere.anisotropy;

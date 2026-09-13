@@ -153,11 +153,13 @@ namespace mmo
         if (!fogColorLoaded)
         {
             m_fogColorCurve->Clear();
-            m_fogColorCurve->AddKey(0.0f, Vector4(0.02f, 0.04f, 0.08f, 1.5f));     // Night
-            m_fogColorCurve->AddKey(0.25f, Vector4(0.85f, 0.6f, 0.45f, 2.5f));     // Dawn
+            m_fogColorCurve->AddKey(0.0f, Vector4(0.02f, 0.04f, 0.08f, 1.2f));     // Night
+            m_fogColorCurve->AddKey(0.2f, Vector4(0.05f, 0.06f, 0.1f, 1.4f));      // Pre-dawn
+            m_fogColorCurve->AddKey(0.27f, Vector4(0.85f, 0.6f, 0.45f, 2.0f));     // Dawn
             m_fogColorCurve->AddKey(0.5f, Vector4(0.55f, 0.7f, 0.9f, 1.0f));       // Midday
-            m_fogColorCurve->AddKey(0.75f, Vector4(0.85f, 0.55f, 0.4f, 2.0f));     // Dusk
-            m_fogColorCurve->AddKey(1.0f, Vector4(0.02f, 0.04f, 0.08f, 1.5f));     // Night
+            m_fogColorCurve->AddKey(0.73f, Vector4(0.85f, 0.55f, 0.4f, 1.6f));     // Dusk
+            m_fogColorCurve->AddKey(0.8f, Vector4(0.05f, 0.06f, 0.1f, 1.3f));      // After dusk
+            m_fogColorCurve->AddKey(1.0f, Vector4(0.02f, 0.04f, 0.08f, 1.2f));     // Night
             m_fogColorCurve->CalculateTangents();
         }
 
@@ -178,9 +180,11 @@ namespace mmo
         {
             m_sunScatterCurve->Clear();
             m_sunScatterCurve->AddKey(0.0f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Night (moon)
-            m_sunScatterCurve->AddKey(0.25f, Vector4(1.0f, 0.7f, 0.4f, 1.0f));     // Dawn
+            m_sunScatterCurve->AddKey(0.2f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Pre-dawn
+            m_sunScatterCurve->AddKey(0.27f, Vector4(1.0f, 0.7f, 0.4f, 1.0f));     // Dawn
             m_sunScatterCurve->AddKey(0.5f, Vector4(1.0f, 0.97f, 0.92f, 0.35f));   // Midday
-            m_sunScatterCurve->AddKey(0.75f, Vector4(1.0f, 0.65f, 0.35f, 1.0f));   // Dusk
+            m_sunScatterCurve->AddKey(0.73f, Vector4(1.0f, 0.65f, 0.35f, 1.0f));   // Dusk
+            m_sunScatterCurve->AddKey(0.8f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // After dusk
             m_sunScatterCurve->AddKey(1.0f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Night (moon)
             m_sunScatterCurve->CalculateTangents();
         }

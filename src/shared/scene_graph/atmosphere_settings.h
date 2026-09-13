@@ -11,13 +11,16 @@ namespace mmo
 	struct AtmosphereParameters
 	{
 		/// @brief Extinction per metre at BaseHeight.
-		float density = 0.02f;
+		float density = 0.01f;
 
 		/// @brief Exponential falloff of the density per metre of height above BaseHeight.
 		float heightFalloff = 0.05f;
 
-		/// @brief World Y at which the density equals `density`.
-		float baseHeight = 0.0f;
+		/// @brief Height of the fog base, in metres, relative to the camera's world Y (negative =
+		/// below the camera). The density equals `density` at `cameraHeight + baseHeight`. Camera-relative
+		/// rather than an absolute world Y so maps whose terrain sits far from Y = 0 still get readable
+		/// fog until per-zone atmosphere data exists.
+		float baseHeight = -10.0f;
 
 		/// @brief Henyey-Greenstein g of the sun scattering lobe. Larger = tighter sun glow.
 		float anisotropy = 0.7f;
@@ -89,16 +92,21 @@ namespace mmo
 	/// @param parameters Base values from cvars or the editor.
 	/// @param timeOfDay Curve values for the current hour.
 	/// @param fogEnabled When false, density is zero, which makes every fog term vanish.
+	/// @param cameraHeight World Y of the camera this frame. `parameters.baseHeight` is an offset
+	/// from this, so the output `baseHeight` is `cameraHeight + parameters.baseHeight`. Until per-zone
+	/// atmosphere data exists, a camera-relative base keeps the fog readable on maps whose terrain is
+	/// far from Y = 0 — the fog still thins with height above the camera and thickens looking down
+	/// into valleys.
 	/// @return The values for the camera constant buffer. Curve overshoot never goes negative.
 	[[nodiscard]] inline AtmosphereConstants CombineAtmosphere(const AtmosphereParameters& parameters,
-		const AtmosphereTimeOfDay& timeOfDay, const bool fogEnabled)
+		const AtmosphereTimeOfDay& timeOfDay, const bool fogEnabled, const float cameraHeight)
 	{
 		const auto nonNegative = [](const float value) { return value < 0.0f ? 0.0f : value; };
 
 		AtmosphereConstants constants;
 		constants.density = fogEnabled ? parameters.density * nonNegative(timeOfDay.densityMultiplier) : 0.0f;
 		constants.heightFalloff = parameters.heightFalloff;
-		constants.baseHeight = parameters.baseHeight;
+		constants.baseHeight = cameraHeight + parameters.baseHeight;
 		constants.anisotropy = parameters.anisotropy;
 		constants.shaftStrength = parameters.shaftStrength * nonNegative(timeOfDay.shaftMultiplier);
 
