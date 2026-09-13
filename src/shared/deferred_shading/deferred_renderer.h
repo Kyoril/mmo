@@ -7,6 +7,7 @@
 #include "ssao_pass.h"
 #include "contact_shadow_pass.h"
 #include "post_process_pass.h"
+#include "tonemap_pass.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
@@ -233,6 +234,12 @@ namespace mmo
         /// @brief Enables or disables raw contact shadow debug visualization.
         void SetContactShadowDebugVisualization(bool enabled) { m_contactShadowPass->GetSettings().debugVisualization = enabled; }
 
+        /// @brief Sets the exposure applied before tone mapping. Clamped to [0.1, 8].
+        void SetExposure(float exposure) { m_tonemapPass->GetSettings().SetExposure(exposure); }
+
+        /// @brief Gets the exposure applied before tone mapping.
+        [[nodiscard]] float GetExposure() const { return m_tonemapPass->GetSettings().exposure; }
+
         /// @brief Gets the light rendering statistics from the last frame.
         /// @return Reference to the light render statistics.
         const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
@@ -325,6 +332,10 @@ namespace mmo
         /// @brief The screen-space post-process pass. Skipped entirely, and holding no render
         ///        target at all, while the camera is out of water.
         std::unique_ptr<PostProcessPass> m_postProcessPass;
+
+        /// @brief Final pass: bloom composite, exposure, ACES, gamma and dither. Everything before
+        ///        it works in linear HDR.
+        std::unique_ptr<TonemapPass> m_tonemapPass;
 
         /// @brief Underwater state for the current frame. Dry by default.
         UnderwaterState m_underwaterState;

@@ -56,7 +56,7 @@ namespace mmo
 		Vector3 sunDirection;	// World-space direction *toward* the sun (normalised)
 		float sunIntensity;
 		Vector3 sunColor;
-		float _forwardPad0;
+		float forwardOutputLinear;	// 1 = forward materials skip tone mapping (DeferredRenderer's forward pass)
 		Vector3 ambientColor;	// Scene ambient (matches deferred AmbientColor cbuffer)
 		float _forwardPad1;
 	};
@@ -1190,7 +1190,7 @@ namespace mmo
 		}
 
 		buffer.ambientColor   = m_ambientColor;
-		buffer._forwardPad0   = 0.0f;
+		buffer.forwardOutputLinear = m_forwardOutputLinear ? 1.0f : 0.0f;
 		buffer._forwardPad1   = 0.0f;
 
 		m_psCameraBuffer->Update(&buffer);

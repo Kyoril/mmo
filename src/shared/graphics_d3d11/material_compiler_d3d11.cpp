@@ -856,6 +856,19 @@ namespace mmo
 			<< "\treturn saturate((x*(a*x+b))/(x*(c*x+d)+e));\n"
 			<< "}\n\n";
 
+		// Exact inverse of ACESFilm followed by gamma. Unlit forward materials author display-referred
+		// colour; inside DeferredRenderer's forward pass they convert it to the linear value the
+		// TonemapPass will map back onto that same display colour.
+		m_pixelShaderStream
+			<< "float3 InverseACESFilm(float3 y) {\n"
+			<< "\tfloat a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;\n"
+			<< "\tfloat3 qa = y * c - a; float3 qb = y * d - b; float3 qc = y * e;\n"
+			<< "\treturn (-qb - sqrt(max(qb * qb - 4.0 * qa * qc, 0.0))) / (2.0 * qa);\n"
+			<< "}\n\n"
+			<< "float3 InverseTonemap(float3 displayColor) {\n"
+			<< "\treturn InverseACESFilm(pow(clamp(displayColor, 0.0, 0.999), 2.2));\n"
+			<< "}\n\n";
+
 		if (type == PixelShaderType::GBuffer)
 		{
 			m_pixelShaderStream
@@ -922,7 +935,7 @@ namespace mmo
 			<< "\tfloat3 sunDirection;	// World-space direction toward the sun (normalised)\n"
 			<< "\tfloat sunIntensity;\n"
 			<< "\tfloat3 sunColor;\n"
-			<< "\tfloat _forwardPad0;\n"
+			<< "\tfloat forwardOutputLinear;	// 1 inside DeferredRenderer's forward pass: output linear HDR\n"
 			<< "\tfloat3 ambientColor;\n"
 			<< "\tfloat _forwardPad1;\n"
 			<< "};\n\n";
@@ -1702,7 +1715,9 @@ namespace mmo
 					// graphs commonly wire the same value into BaseColor AND Emissive (for the
 					// deferred unlit path), which would double the colour and wash saturated tints
 					// out towards white. Emissive still contributes in the G-Buffer unlit path.
-					// No ACES/tonemap either: unlit colours are display-referred as authored.
+					// No ACES either: unlit colours are display-referred as authored, and inside
+					// DeferredRenderer they are inverse-tonemapped so the final TonemapPass reproduces
+					// them.
 					// Distance fog is applied in display space, with the fog colour pushed through
 					// the same ACES + gamma response the deferred scene uses so fully fogged unlit
 					// objects converge to the same horizon colour.
@@ -1711,7 +1726,8 @@ namespace mmo
 						<< "\tfloat fogDistance = length(input.worldPos - cameraPos);\n"
 						<< "\tfloat fogFactor = saturate((fogDistance - fogStart) / (fogEnd - fogStart));\n"
 						<< "\tfloat3 displayFogColor = pow(ACESFilm(fogColor), (1.0f/2.2f).xxx);\n"
-						<< "\tcolor = lerp(color, displayFogColor, fogFactor);\n";
+						<< "\tcolor = lerp(color, displayFogColor, fogFactor);\n"
+						<< "\tif (forwardOutputLinear > 0.5) { color = InverseTonemap(color); }\n";
 				}
 				else
 				{
@@ -1724,11 +1740,14 @@ namespace mmo
 						<< "\tfloat fogFactor = saturate((fogDistance - fogStart) / (fogEnd - fogStart));\n"
 						<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
 
-					// ACES Film tone mapping + gamma — identical to the deferred lighting pass so
-					// forward objects share the exact same response curve as the deferred scene.
+					// ACES + gamma only when rendering standalone. Inside DeferredRenderer the
+					// TonemapPass tone maps the whole frame, so the colour stays linear here.
 					m_pixelShaderStream
-						<< "\tcolor = ACESFilm(color);\n"
-						<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+						<< "\tif (forwardOutputLinear < 0.5)\n"
+						<< "\t{\n"
+						<< "\t\tcolor = ACESFilm(color);\n"
+						<< "\t\tcolor = pow(color, (1.0f/2.2f).xxx);\n"
+						<< "\t}\n";
 				}
 
 				m_pixelShaderStream

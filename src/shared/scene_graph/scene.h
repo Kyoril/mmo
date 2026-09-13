@@ -392,6 +392,15 @@ namespace mmo
 		/// re-rendering opaque geometry in the transparent pass.
 		void SetForwardTransparentOnly(bool value) { m_forwardTransparentOnly = value; }
 
+		/// @brief Makes forward materials write linear HDR instead of tone-mapped display colour.
+		/// @remark Only DeferredRenderer sets this, around its own forward pass, because its
+		///         TonemapPass tone maps the whole frame afterwards. Every standalone forward render
+		///         (editor previews, the client's model frames, the minimap baker) leaves it false.
+		void SetForwardOutputLinear(const bool linear) { m_forwardOutputLinear = linear; }
+
+		/// @brief Whether forward materials currently write linear HDR.
+		[[nodiscard]] bool IsForwardOutputLinear() const { return m_forwardOutputLinear; }
+
 		/// @brief When set, Render() reuses the render queue built by a previous pass this frame
 		/// instead of rebuilding it (running FindVisibleObjects / occlusion culling again). Used by
 		/// the deferred renderer's depth pre-pass: the pre-pass builds the queue once and the
@@ -727,6 +736,9 @@ namespace mmo
 		/// that opaque groups (already in the GBuffer) are not re-rendered.
 		/// Never set this in non-deferred contexts (editor, model viewer).
 		bool m_forwardTransparentOnly = false;
+
+		/// @brief See SetForwardOutputLinear.
+		bool m_forwardOutputLinear = false;
 		bool m_reuseRenderQueue = false;
 		bool m_depthPrepass = false;
 

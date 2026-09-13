@@ -138,6 +138,7 @@ namespace mmo
         m_ssaoPass = std::make_unique<SsaoPass>(m_device, width, height);
         m_contactShadowPass = std::make_unique<ContactShadowPass>(m_device, width, height);
         m_postProcessPass = std::make_unique<PostProcessPass>(m_device, width, height);
+        m_tonemapPass = std::make_unique<TonemapPass>(m_device, width, height);
 
 		// Create shadow maps for each cascade. Distant cascades cover a far larger world area per texel,
         // so they are rendered at a lower resolution (see GetCascadeShadowMapSize) — this cuts shadow
@@ -325,6 +326,7 @@ namespace mmo
         m_ssaoPass->Resize(width, height);
         m_contactShadowPass->Resize(width, height);
         m_postProcessPass->Resize(width, height);
+        m_tonemapPass->Resize(width, height);
     }
 
     void DeferredRenderer::Render(Scene& scene, Camera& camera)
@@ -456,16 +458,24 @@ namespace mmo
             m_sceneColorCopy->Bind(ShaderType::PixelShader, kSceneColorTextureSlot);
         }
         scene.SetForwardTransparentOnly(true);
+        // The forward pass renders into the linear HDR scene, so materials must leave tone mapping
+        // to the TonemapPass below.
+        scene.SetForwardOutputLinear(true);
         scene.Render(camera, PixelShaderType::Forward);
+        scene.SetForwardOutputLinear(false);
         scene.SetForwardTransparentOnly(false);
 
         // Release the scene SRVs so they do not collide with render targets bound in next frame.
         m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneColorTextureSlot);
         m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneDepthTextureSlot);
 
+        // Linear HDR -> display. The underwater post-process below still receives display-referred
+        // colour, so its thresholds and tuning are untouched.
+        m_tonemapPass->Render(*m_renderTexture, nullptr, 0.0f, *m_quadBuffer, *m_deferredLightVs);
+
         // Screen-space post-processing over the finished frame. WouldRun is false whenever the
         // camera is out of water, and then this does nothing, allocates nothing, and
-        // GetFinalRenderTarget() below hands back m_renderTexture exactly as it always did.
+        // GetFinalRenderTarget() below hands back the tonemap output exactly as it always did.
         if (m_postProcessPass)
         {
             if (m_postProcessPass->WouldRun(m_underwaterState))
@@ -496,7 +506,7 @@ namespace mmo
                     }
                 }
 
-                m_postProcessPass->Render(m_underwaterState, camera, *m_renderTexture,
+                m_postProcessPass->Render(m_underwaterState, camera, *m_tonemapPass->GetResult(),
                     m_gBuffer.GetNormalRT(), *m_quadBuffer, *m_deferredLightVs,
                     sunScreenU, sunScreenV, scene.GetElapsedTime());
             }
@@ -504,7 +514,7 @@ namespace mmo
             {
                 // Not submerged: make sure a previously allocated output target is released so a
                 // long session out of water does not keep a full-resolution R16G16B16A16 target.
-                m_postProcessPass->Render(m_underwaterState, camera, *m_renderTexture,
+                m_postProcessPass->Render(m_underwaterState, camera, *m_tonemapPass->GetResult(),
                     m_gBuffer.GetNormalRT(), *m_quadBuffer, *m_deferredLightVs, 0.0f, 0.0f, 0.0f);
             }
         }
@@ -878,7 +888,7 @@ namespace mmo
             }
         }
 
-        return m_renderTexture;
+        return m_tonemapPass->GetResult();
     }
 
     void DeferredRenderer::SetShadowMapSize(const uint16 size)

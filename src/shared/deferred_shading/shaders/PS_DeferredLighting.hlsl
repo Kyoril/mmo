@@ -582,12 +582,6 @@ float4 main(PS_INPUT input) : SV_TARGET
 	float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
     lighting = lerp(lighting, FogColor, fogFactor);
 
-    // Apply ACES tone mapping
-    lighting = ACESFilm(lighting);
-    
-    // Apply gamma correction
-    lighting = pow(lighting, 1.0 / 2.2);
-
     // SSAO debug visualization: show the raw AO term instead of the lit scene.
     if (SsaoDebugMode != 0)
     {
