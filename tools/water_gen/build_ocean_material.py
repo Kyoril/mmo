@@ -235,10 +235,22 @@ def build_graph(b, mode):
     layer_c = normal_layer("SwellTiling", 0.3, (0.006, -0.004), swell_strength)
 
     b.next_column()
-    slope = b.addn(b.addn(layer_a, layer_b), layer_c)
+    # Ripples fade toward a calmer surface with distance. Full-strength normals at grazing angles
+    # alias into sparkle and make every view-dependent term (glint, SSR, Fresnel) flicker.
+    view_distance = b.add("PixelDepthNode")
+    distance_t = b.sat(b.div(view_distance, b.scalar("NormalFadeDistance", 90.0)))
+    distance_factor = b.lerp(b.const(1.0), b.scalar("NormalFarStrength", 0.2), distance_t)
+    slope = b.mul(b.addn(b.addn(layer_a, layer_b), layer_c), distance_factor)
     tangent_normal = b.add("NormalizeNode", ins={"m_input": b.add("AppendNode", ins={"A": slope, "B": b.const(1.0)})})
     world_normal = b.add("NormalizeNode", ins={"m_input": b.add(
         "TransformVectorNode", {"Source Space": SPACE_TANGENT, "Target Space": SPACE_WORLD}, {"Vector": tangent_normal})})
+
+    # Reflections use a much flatter normal than lighting. With the full ripple normal, a small
+    # tilt swings the reflected ray between hitting the scene and missing into the sky, so
+    # neighbouring pixels flip between the two and the reflection shatters into hard fragments.
+    up = b.const_rgb((0.0, 1.0, 0.0, 1.0))
+    reflection_normal = b.add("NormalizeNode", ins={"m_input": b.lerp(
+        up, world_normal, b.scalar("ReflectionDistortion", 0.3))})
 
     # --- Water column ----------------------------------------------------------------------
     b.next_column()
@@ -254,7 +266,7 @@ def build_graph(b, mode):
     # --- Screen-space reflection --------------------------------------------------------------
     b.next_column()
     ssr = b.add("ScreenSpaceReflectionNode", ins={
-        "Normal": world_normal,
+        "Normal": reflection_normal,
         "Max Distance": b.scalar("SSRMaxDistance", 200.0),
         "Steps": b.scalar("SSRSteps", 32.0),
     })
@@ -291,13 +303,13 @@ def build_graph(b, mode):
 
         # --- Reflection -----------------------------------------------------------------------
         b.next_column()
-        reflection_vector = b.add("ReflectionVectorNode", ins={"Normal": world_normal})
+        reflection_vector = b.add("ReflectionVectorNode", ins={"Normal": reflection_normal})
         sky_t = b.add("PowerNode", ins={"Base": b.sat(b.mask(reflection_vector, g=True)), "Exp": b.const(0.6)})
         horizon = b.out(b.add("GlobalVectorParameterNode", {"Name": "SkyHorizonColor"}), "RGB")
         zenith = b.out(b.add("GlobalVectorParameterNode", {"Name": "SkyZenithColor"}), "RGB")
         sky = b.lerp(horizon, zenith, sky_t)
-        reflection = b.mul(b.lerp(sky, ssr_color, ssr_mask), b.scalar("ReflectionStrength", 0.9))
-        fresnel = b.add("FresnelNode", {"Exponent": 5.0, "Base Reflect Fraction": 0.02}, {"Normal": world_normal})
+        reflection = b.mul(b.lerp(sky, ssr_color, ssr_mask), b.scalar("ReflectionStrength", 0.75))
+        fresnel = b.add("FresnelNode", {"Exponent": 5.0, "Base Reflect Fraction": 0.02}, {"Normal": reflection_normal})
         water = b.lerp(body, reflection, fresnel)
 
         # --- Foam -----------------------------------------------------------------------------
@@ -319,8 +331,10 @@ def build_graph(b, mode):
         cap_tex = b.out(b.add("TextureParameterNode",
                               {"Name": "Foam", "Texture": "Textures/Foam_01_C.htex", "Sampler Type": 0},
                               {"UVs": cap_uv}), "R")
-        caps = b.mul(b.sat(b.mul(b.sub(cap_tex, b.scalar("WhitecapThreshold", 0.86)), constant=6.0)),
-                     b.scalar("WhitecapIntensity", 0.18))
+        # Whitecaps fade with distance too: perspective squashes them into white streaks.
+        caps = b.mul(b.mul(b.sat(b.mul(b.sub(cap_tex, b.scalar("WhitecapThreshold", 0.86)), constant=6.0)),
+                           b.scalar("WhitecapIntensity", 0.18)),
+                     b.add("OneMinusNode", ins={"m_input": distance_t}))
         foam_mask = b.sat(b.addn(shore_foam, caps))
 
         b.next_column()
@@ -333,7 +347,7 @@ def build_graph(b, mode):
 
         root_inputs["Emissive Color"] = final
         root_inputs["Opacity"] = b.sat(b.div(thickness, b.scalar("EdgeFadeDistance", 0.5)))
-        root_inputs["Roughness"] = b.scalar("Roughness", 0.05)
+        root_inputs["Roughness"] = b.scalar("Roughness", 0.12)
 
     b.next_column()
     root_inputs["Base Color"] = b.const_rgb((0.0, 0.0, 0.0, 1.0))
