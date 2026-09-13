@@ -253,3 +253,41 @@ has no rendering coverage; visual verification steps 1-4 are the acceptance chec
 
 - New `docs/rendering-atmosphere.md`: pass order, the linear-HDR contract, cvars, curves.
 - Refresh the graphics cvar list in `docs/console_commands.md`.
+
+## Implementation Notes (added during planning, 2026-09-13)
+
+These refine the approved design after reading the code; the plan
+(`docs/superpowers/plans/2026-09-13-volumetric-atmosphere.md`) follows them.
+
+1. **Standalone forward renderers keep tonemapping.** Eight call sites render
+   `PixelShaderType::Forward` straight into a target with no `DeferredRenderer` (editor mesh,
+   material, particle and item previews, the character editor, the minimap baker, and the
+   client's `ModelRenderer`). Forward materials therefore tonemap unless a new
+   `forwardOutputLinear` camera-buffer flag is set; only `DeferredRenderer` sets it, around its
+   own forward pass.
+2. **Regression guarantee, narrowed.** Opaque pixels match develop within dither noise.
+   Partially transparent forward surfaces (water edges, soft particles) now alpha-blend in linear
+   HDR instead of display space, so their edges can differ slightly. This is inherent to moving
+   the tonemap and is judged visually at checkpoint 1.
+3. **Fog parameters travel in the camera cbuffer (b1).** `fogStart`/`fogEnd`/`fogColor` and the
+   padding slots are repurposed (density, height falloff, tint, base height, anisotropy, output
+   mode) and one row is appended (sun scatter colour, shaft strength), because generated
+   forward materials can only see b1. Size goes from 160 to 176 bytes.
+4. **Fog radiance model.** `FogColor.hccv` rgb is the fog's ambient radiance (what fully fogged
+   geometry converges to when looking away from the sun); the old horizon-colour fog is its
+   default. Per step: `σ · (FogTint + SunScatterColor · SunColor · SunIntensity · ShaftStrength ·
+   Phase · shadow)` with the phase normalised so isotropic = 1. The existing ambient colour curve
+   is not used by the fog.
+5. **Composite target.** The atmosphere composite reads `m_renderTexture` and writes
+   `m_sceneColorCopy`; the existing single `CopyResource` runs in the opposite direction. No new
+   full-resolution target. Bloom is composited inside the TonemapPass shader.
+6. **Skip conditions.** The atmosphere and bloom passes run while `UnderwaterState::active` is
+   false (not the transition predicate, so fog returns as soon as the camera surfaces) and the
+   atmosphere pass only runs while `Scene::IsFogEnabled()`.
+7. **Editor exposure slider dropped.** `WorldSettingsPanel` has no renderer reference; exposure
+   stays a client option (`gxExposure`). The editor sliders cover the Scene atmosphere parameters.
+8. **Fallback shaft multipliers.** `SunScatter.hccv` defaults use 0.35 at noon and 1.0 at dawn and
+   dusk (not 0.8 / 1.6): with an unnormalised HG lobe at g = 0.7, looking straight at a noon sun
+   already multiplies the sun term by about 15.
+9. **Density exponent clamp.** Fog density is `Density · exp(min(−Falloff·(y − BaseHeight), 12))`
+   so rays reaching far below the base height cannot overflow half/single floats.
