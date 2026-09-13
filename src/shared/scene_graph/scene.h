@@ -10,6 +10,7 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "graphics/shader_types.h"
+#include "atmosphere_settings.h"
 
 #include "camera.h"
 #include "entity.h"
@@ -354,13 +355,17 @@ namespace mmo
 		///			alongside materials stay in step with them.
 		[[nodiscard]] float GetElapsedTime() const { return m_elapsedTime; }
 
-		float GetFogStart() const { return m_fogStart; }
+		/// @brief Sets the tunable base values of the height fog (cvars, editor sliders).
+		void SetAtmosphereParameters(const AtmosphereParameters& parameters) { m_atmosphereParameters = parameters; }
 
-		float GetFogEnd() const { return m_fogEnd; }
+		/// @brief Gets the tunable base values of the height fog.
+		[[nodiscard]] const AtmosphereParameters& GetAtmosphereParameters() const { return m_atmosphereParameters; }
 
-		void SetFogRange(float start, float end);
+		/// @brief Sets the time-of-day fog values. Written by SkyComponent every update.
+		void SetAtmosphereTimeOfDay(const AtmosphereTimeOfDay& timeOfDay) { m_atmosphereTimeOfDay = timeOfDay; }
 
-		void SetFogColor(const Vector3& color);
+		/// @brief Gets the time-of-day fog values.
+		[[nodiscard]] const AtmosphereTimeOfDay& GetAtmosphereTimeOfDay() const { return m_atmosphereTimeOfDay; }
 
 		const ConstantBufferPtr& GetCameraBuffer() const { return m_psCameraBuffer; }
 
@@ -723,11 +728,9 @@ namespace mmo
 
 		ConstantBufferPtr m_psCameraBuffer;
 
-		Vector3 m_fogColor = Vector3(0.447f, 0.638f, 1.0f);
+		AtmosphereParameters m_atmosphereParameters;
 
-		float m_fogStart = 185.0f;
-
-		float m_fogEnd = 265.0f;
+		AtmosphereTimeOfDay m_atmosphereTimeOfDay;
 
 		PixelShaderType m_pixelShaderType = PixelShaderType::Forward;
 

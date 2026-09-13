@@ -123,11 +123,6 @@ namespace mmo
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 
-		m_scene.SetFogRange(60.0f, 500.0f);
-
-		const Vector3 fogColor = Vector3(0.231f * 1.5f, 0.398f * 1.5f, 0.535f * 1.5f);
-		m_scene.SetFogColor(fogColor);
-
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(SceneQueryFlags_None);
 		m_worldGrid->SetVisible(false);
@@ -2059,8 +2054,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					}
 
 					// Render the scene (terrain and objects in this page)
-					m_scene.SetFogRange(10000.0f, 100000.0f);
+					// Minimap tiles are a top-down map, not a view through the atmosphere. (The old
+					// SetFogRange here was never undone and silently removed the viewport fog.)
+					const bool fogWasEnabled = m_scene.IsFogEnabled();
+					m_scene.SetFogEnabled(false);
 					m_scene.Render(*renderCam, PixelShaderType::Forward);
+					m_scene.SetFogEnabled(fogWasEnabled);
 					minimapRT->Update();
 
 					// Restore original render queue groups

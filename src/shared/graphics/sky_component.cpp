@@ -9,6 +9,7 @@
 #include "scene_graph/scene_node.h"
 #include "game/constants.h"
 #include "log/default_log_levels.h"
+#include "scene_graph/atmosphere_settings.h"
 
 namespace mmo
 {
@@ -132,6 +133,56 @@ namespace mmo
                 m_cloudColorCurve->AddKey(1.0f, Vector4(1.0f, 1.0f, 1.0f, 1.0f));    // Night
                 m_cloudColorCurve->CalculateTangents();
             }
+        }
+
+        // Unlike the curves above, these fall back to defaults when the file is missing too: an empty
+        // curve evaluates to zero, which would silently switch the fog and the shafts off.
+        m_fogColorCurve = std::make_unique<ColorCurve>();
+        bool fogColorLoaded = false;
+        if (const auto file = AssetRegistry::OpenFile("Models/FogColor.hccv"))
+        {
+            io::StreamSource stream(*file);
+            io::Reader reader(stream);
+            fogColorLoaded = m_fogColorCurve->Deserialize(reader);
+            if (!fogColorLoaded)
+            {
+                ELOG("Failed to load fog color curve");
+            }
+        }
+
+        if (!fogColorLoaded)
+        {
+            m_fogColorCurve->Clear();
+            m_fogColorCurve->AddKey(0.0f, Vector4(0.02f, 0.04f, 0.08f, 1.5f));     // Night
+            m_fogColorCurve->AddKey(0.25f, Vector4(0.85f, 0.6f, 0.45f, 2.5f));     // Dawn
+            m_fogColorCurve->AddKey(0.5f, Vector4(0.55f, 0.7f, 0.9f, 1.0f));       // Midday
+            m_fogColorCurve->AddKey(0.75f, Vector4(0.85f, 0.55f, 0.4f, 2.0f));     // Dusk
+            m_fogColorCurve->AddKey(1.0f, Vector4(0.02f, 0.04f, 0.08f, 1.5f));     // Night
+            m_fogColorCurve->CalculateTangents();
+        }
+
+        m_sunScatterCurve = std::make_unique<ColorCurve>();
+        bool sunScatterLoaded = false;
+        if (const auto file = AssetRegistry::OpenFile("Models/SunScatter.hccv"))
+        {
+            io::StreamSource stream(*file);
+            io::Reader reader(stream);
+            sunScatterLoaded = m_sunScatterCurve->Deserialize(reader);
+            if (!sunScatterLoaded)
+            {
+                ELOG("Failed to load sun scatter curve");
+            }
+        }
+
+        if (!sunScatterLoaded)
+        {
+            m_sunScatterCurve->Clear();
+            m_sunScatterCurve->AddKey(0.0f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Night (moon)
+            m_sunScatterCurve->AddKey(0.25f, Vector4(1.0f, 0.7f, 0.4f, 1.0f));     // Dawn
+            m_sunScatterCurve->AddKey(0.5f, Vector4(1.0f, 0.97f, 0.92f, 0.35f));   // Midday
+            m_sunScatterCurve->AddKey(0.75f, Vector4(1.0f, 0.65f, 0.35f, 1.0f));   // Dusk
+            m_sunScatterCurve->AddKey(1.0f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Night (moon)
+            m_sunScatterCurve->CalculateTangents();
         }
     }
 
@@ -325,8 +376,20 @@ namespace mmo
         m_skyMatInst->SetVectorParameter("ZenithColor", zenithColor);
         m_skyMatInst->SetVectorParameter("CloudColor", cloudColor);
         
-        // Update fog color based on horizon color
-        m_scene.SetFogColor(Vector3(horizonColor.x, horizonColor.y, horizonColor.z));
+        // Time-of-day fog values; the renderer multiplies them into the cvar/editor base values.
+        const Vector4 fogColorKey = m_fogColorCurve->Evaluate(normalizedTime);
+        const Vector4 sunScatterKey = m_sunScatterCurve->Evaluate(normalizedTime);
+
+        AtmosphereTimeOfDay timeOfDay;
+        timeOfDay.fogTint[0] = fogColorKey.x;
+        timeOfDay.fogTint[1] = fogColorKey.y;
+        timeOfDay.fogTint[2] = fogColorKey.z;
+        timeOfDay.densityMultiplier = fogColorKey.w;
+        timeOfDay.sunScatterColor[0] = sunScatterKey.x;
+        timeOfDay.sunScatterColor[1] = sunScatterKey.y;
+        timeOfDay.sunScatterColor[2] = sunScatterKey.z;
+        timeOfDay.shaftMultiplier = sunScatterKey.w;
+        m_scene.SetAtmosphereTimeOfDay(timeOfDay);
         m_scene.SetAmbientColor(Vector3(ambientColor.x, ambientColor.y, ambientColor.z));
 
         // Register the sun as the primary directional light so that forward-rendered

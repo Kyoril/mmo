@@ -165,6 +165,8 @@ namespace mmo
         std::unique_ptr<ColorCurve> m_zenithColorCurve;  ///< Zenith color curve over time
         std::unique_ptr<ColorCurve> m_ambientColorCurve;  ///< Ambient color curve over time
         std::unique_ptr<ColorCurve> m_cloudColorCurve;  ///< Cloud color curve over time
+        std::unique_ptr<ColorCurve> m_fogColorCurve;    ///< Fog tint (rgb) and density multiplier (a) over time
+        std::unique_ptr<ColorCurve> m_sunScatterCurve;  ///< Sun colour inside fog (rgb) and shaft multiplier (a) over time
 
         // Configuration values
         const float m_arcMin = -Pi / 2.0f;             ///< Sunrise/sunset horizon
