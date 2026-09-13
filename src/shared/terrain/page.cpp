@@ -828,6 +828,10 @@ namespace mmo
 				}
 
 				UpdateBoundingBox();
+
+				// The water mesh bakes the water depth over the terrain into its vertex colours for
+				// the shore foam, so reshaping the ground under water has to rebuild it too.
+				RebuildWaterMesh();
 			}
 		}
 
@@ -1719,15 +1723,6 @@ namespace mmo
 				// lit by their downward normal, which renders the water black.
 				const bool emitBottomFaces = water_mesh::ShouldEmitBottomFaces(material->IsTwoSided());
 
-				// Alpha carries the face tag the water graph reads to shade the underside
-				// differently. RGB is white: neither material actually samples it - the minimap
-				// material is opaque with a constant base colour, and the water material samples
-				// textures - so it is kept neutral rather than carrying a colour that would
-				// silently do nothing.
-				constexpr uint32 rgb = 0xFFFFFFu;
-				const uint32 topColor = (water_mesh::TopFaceVertexAlpha << 24) | rgb;
-				const uint32 bottomColor = (water_mesh::BottomFaceVertexAlpha << 24) | rgb;
-
 				for (const water_mesh::QuadRef& quad : batch.quads)
 				{
 					const uint32 pvx0 = quad.tileX * water_lookup::QuadsPerTileSide + quad.qx;
@@ -1737,6 +1732,21 @@ namespace mmo
 					const float yTR = m_waterVertexHeights[(pvx0 + 1) + pvz0      * pvSide];
 					const float yBL = m_waterVertexHeights[ pvx0      + (pvz0+1)  * pvSide];
 					const float yBR = m_waterVertexHeights[(pvx0 + 1) + (pvz0+1)  * pvSide];
+
+					// Vertex colour: alpha is the face tag the water graph shades the underside with,
+					// red is how deep the water is over the terrain at that corner. The water and
+					// terrain outer vertex grids coincide, so the terrain height is exact here. Shore
+					// foam keys off this rather than off screen-space depth, which could not tell a
+					// shoreline from a swimmer's body just under the surface.
+					const float tTL = GetHeightAt(pvx0,     pvz0);
+					const float tTR = GetHeightAt(pvx0 + 1, pvz0);
+					const float tBL = GetHeightAt(pvx0,     pvz0 + 1);
+					const float tBR = GetHeightAt(pvx0 + 1, pvz0 + 1);
+
+					const uint32 topTL = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yTL, tTL);
+					const uint32 topTR = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yTR, tTR);
+					const uint32 topBL = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yBL, tBL);
+					const uint32 topBR = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yBR, tBR);
 
 					const float lx1 = pvx0       * quadSize;
 					const float lz1 = pvz0       * quadSize;
@@ -1757,12 +1767,12 @@ namespace mmo
 					{
 						auto& t1 = op->AddTriangle(vTL, vBL, vTR);
 						t1.SetUV(0, u1, v1); t1.SetUV(1, u1, v2); t1.SetUV(2, u2, v1);
-						t1.SetColor(topColor);
+						t1.SetStartColor(0, topTL); t1.SetStartColor(1, topBL); t1.SetStartColor(2, topTR);
 						SetTopFaceBasis(t1);
 
 						auto& t2 = op->AddTriangle(vTR, vBL, vBR);
 						t2.SetUV(0, u2, v1); t2.SetUV(1, u1, v2); t2.SetUV(2, u2, v2);
-						t2.SetColor(topColor);
+						t2.SetStartColor(0, topTR); t2.SetStartColor(1, topBL); t2.SetStartColor(2, topBR);
 						SetTopFaceBasis(t2);
 					}
 
@@ -1770,14 +1780,19 @@ namespace mmo
 					// single-sided materials, which cull per face.
 					if (emitBottomFaces)
 					{
+						const uint32 bottomTL = water_mesh::MakeWaterVertexColor(water_mesh::BottomFaceVertexAlpha, yTL, tTL);
+						const uint32 bottomTR = water_mesh::MakeWaterVertexColor(water_mesh::BottomFaceVertexAlpha, yTR, tTR);
+						const uint32 bottomBL = water_mesh::MakeWaterVertexColor(water_mesh::BottomFaceVertexAlpha, yBL, tBL);
+						const uint32 bottomBR = water_mesh::MakeWaterVertexColor(water_mesh::BottomFaceVertexAlpha, yBR, tBR);
+
 						auto& t3 = op->AddTriangle(vTR, vBL, vTL);
 						t3.SetUV(0, u2, v1); t3.SetUV(1, u1, v2); t3.SetUV(2, u1, v1);
-						t3.SetColor(bottomColor);
+						t3.SetStartColor(0, bottomTR); t3.SetStartColor(1, bottomBL); t3.SetStartColor(2, bottomTL);
 						SetBottomFaceBasis(t3);
 
 						auto& t4 = op->AddTriangle(vBR, vBL, vTR);
 						t4.SetUV(0, u2, v2); t4.SetUV(1, u1, v2); t4.SetUV(2, u2, v1);
-						t4.SetColor(bottomColor);
+						t4.SetStartColor(0, bottomBR); t4.SetStartColor(1, bottomBL); t4.SetStartColor(2, bottomTR);
 						SetBottomFaceBasis(t4);
 					}
 				}

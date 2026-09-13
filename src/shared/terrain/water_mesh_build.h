@@ -47,6 +47,36 @@ namespace mmo
 			///			front-facing semantic through the material compiler and both backends.
 			constexpr uint32 BottomFaceVertexAlpha = 0x00u;
 
+			/// @brief The deepest water, in world units, a water vertex colour can represent.
+			/// @remark The water material decodes vertex colour red with this same range
+			///			(tools/water_gen/build_ocean_material.py); change both together.
+			constexpr float ShoreDepthEncodeRange = 8.0f;
+
+			/// @brief Packs how deep the water is over the terrain into one byte.
+			/// @param waterHeight World Y of the water surface at the vertex.
+			/// @param terrainHeight World Y of the terrain at the same vertex.
+			/// @return 0 for terrain at or above the surface (the shoreline itself), 255 for water at
+			///			least ShoreDepthEncodeRange deep.
+			/// @remark Shore foam used to key off the screen-space distance between the surface and
+			///			whatever the opaque pass drew behind it. That distance is equally small for a
+			///			character's body just under the surface, so every swimmer was wrapped in
+			///			shoreline foam. The terrain depth baked here only knows about the terrain.
+			[[nodiscard]] inline uint32 EncodeShoreDepth(const float waterHeight, const float terrainHeight)
+			{
+				const float depth = std::clamp(waterHeight - terrainHeight, 0.0f, ShoreDepthEncodeRange);
+				return static_cast<uint32>(depth / ShoreDepthEncodeRange * 255.0f + 0.5f);
+			}
+
+			/// @brief Builds a water vertex colour: the face tag in alpha, the shore depth in red.
+			/// @param faceAlpha TopFaceVertexAlpha or BottomFaceVertexAlpha.
+			/// @param waterHeight World Y of the water surface at the vertex.
+			/// @param terrainHeight World Y of the terrain at the same vertex.
+			/// @return The ARGB colour. Green and blue stay white; nothing reads them.
+			[[nodiscard]] inline uint32 MakeWaterVertexColor(const uint32 faceAlpha, const float waterHeight, const float terrainHeight)
+			{
+				return (faceAlpha << 24) | (EncodeShoreDepth(waterHeight, terrainHeight) << 16) | 0x0000FFFFu;
+			}
+
 			/// @brief Decides whether explicit reversed-winding (underside) triangles are emitted.
 			/// @param materialTwoSided Whether the batch's resolved material is two-sided.
 			/// @return False for a two-sided material, true otherwise.

@@ -325,7 +325,17 @@ def build_graph(b, mode):
         foam_tex = b.out(b.add("TextureParameterNode",
                                {"Name": "Foam", "Texture": "Textures/Foam_01_C.htex", "Sampler Type": 0},
                                {"UVs": foam_uv}), "R")
-        shore_foam = b.sat(b.mul(b.sub(b.addn(foam_tex, band), constant=1.0), b.scalar("FoamSharpness", 4.0)))
+        # Shore foam only where the terrain itself is shallow under the surface. The screen-space
+        # thickness above is just as small against a swimmer's body as against a beach, so on its
+        # own it wrapped every character in the water in shoreline foam. Each water vertex carries
+        # the water depth over the terrain in vertex colour red, encoded over 0..8 units: keep this
+        # constant equal to terrain::water_mesh::ShoreDepthEncodeRange.
+        shore_depth_encode_range = 8.0
+        shore_depth = b.mul(b.mask(b.add("VertexColorNode"), r=True), constant=shore_depth_encode_range)
+        shore_mask = b.add("OneMinusNode", ins={"m_input": b.sat(b.div(
+            b.sub(shore_depth, b.scalar("ShoreFoamDepth", 0.75)), b.scalar("ShoreFoamFade", 1.5)))})
+        shore_foam = b.mul(b.sat(b.mul(b.sub(b.addn(foam_tex, band), constant=1.0), b.scalar("FoamSharpness", 4.0))),
+                           shore_mask)
 
         cap_uv = b.panner(b.mul(uv0, b.scalar("WhitecapTiling", 0.25)), 0.004, 0.006)
         cap_tex = b.out(b.add("TextureParameterNode",
