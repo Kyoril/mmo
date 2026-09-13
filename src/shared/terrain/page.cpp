@@ -1714,6 +1714,11 @@ namespace mmo
 
 				auto op = m_waterRenderObject->AddTriangleListOperation(material);
 
+				// A two-sided material already renders the surface from below, and with culling off
+				// the explicit underside triangles would also draw over the top face from above -
+				// lit by their downward normal, which renders the water black.
+				const bool emitBottomFaces = water_mesh::ShouldEmitBottomFaces(material->IsTwoSided());
+
 				// Alpha carries the face tag the water graph reads to shade the underside
 				// differently. RGB is white: neither material actually samples it - the minimap
 				// material is opaque with a constant base colour, and the water material samples
@@ -1761,7 +1766,9 @@ namespace mmo
 						SetTopFaceBasis(t2);
 					}
 
-					// Bottom face (reversed winding so water is visible from below)
+					// Bottom face (reversed winding so water is visible from below). Only for
+					// single-sided materials, which cull per face.
+					if (emitBottomFaces)
 					{
 						auto& t3 = op->AddTriangle(vTR, vBL, vTL);
 						t3.SetUV(0, u2, v1); t3.SetUV(1, u1, v2); t3.SetUV(2, u1, v1);

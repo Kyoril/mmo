@@ -1259,6 +1259,17 @@ namespace mmo
 				<< "\tfloat3 T = normalize(input.tangent);\n"
 				<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
 		}
+		else
+		{
+			// Unlit and UI variants carry no normal, binormal or tangent in VertexOut, so there is
+			// no per-pixel basis to build. AddTransform still references TBN for tangent-space
+			// transforms, though, and every variant emits every expression - without this, any
+			// material using a Tangent-space Transform Vector node fails its UI compile, and an
+			// unlit one fails every variant. Treat tangent space as world space here: it is the only
+			// basis these variants can honestly offer.
+			m_pixelShaderStream
+				<< "\tstatic const float3x3 TBN = float3x3(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);\n";
+		}
 
 		for (size_t exprIndex = 0; exprIndex < m_expressions.size(); ++exprIndex)
 		{

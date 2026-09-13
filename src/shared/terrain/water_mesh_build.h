@@ -47,6 +47,21 @@ namespace mmo
 			///			front-facing semantic through the material compiler and both backends.
 			constexpr uint32 BottomFaceVertexAlpha = 0x00u;
 
+			/// @brief Decides whether explicit reversed-winding (underside) triangles are emitted.
+			/// @param materialTwoSided Whether the batch's resolved material is two-sided.
+			/// @return False for a two-sided material, true otherwise.
+			/// @remark A two-sided material disables culling, so underside triangles would also
+			///			rasterise when viewed from above: drawn after the top face, lit by their
+			///			downward normal, and blended over the lit surface - which renders the water
+			///			black. The material already covers both sides, so the geometry is redundant
+			///			and doubles translucent overdraw. A single-sided material culls per face, so
+			///			each winding is only visible from its own side and the underside triangles are
+			///			what make the surface visible from below.
+			[[nodiscard]] inline bool ShouldEmitBottomFaces(const bool materialTwoSided)
+			{
+				return !materialTwoSided;
+			}
+
 			/// @brief Groups every water-carrying sub-quad of a page by its tile's liquid type.
 			/// @param view The page's water arrays.
 			/// @return One batch per distinct liquid type actually present, ordered by ascending

@@ -159,6 +159,22 @@ TEST_CASE("WaterMeshBuild_Is_Deterministic_Across_Calls", "[water_mesh]")
 	}
 }
 
+TEST_CASE("WaterMeshBuild_Two_Sided_Material_Gets_No_Bottom_Faces", "[water_mesh]")
+{
+	// A two-sided material disables culling, so explicit reversed-winding triangles would also
+	// rasterise when viewed from ABOVE - drawn after the top face, lit with their downward
+	// normal, and blended over it. That is what turned the painted ocean black. The material
+	// already renders both sides, so the extra geometry must not be emitted.
+	CHECK_FALSE(ShouldEmitBottomFaces(true));
+}
+
+TEST_CASE("WaterMeshBuild_Single_Sided_Material_Gets_Bottom_Faces", "[water_mesh]")
+{
+	// A single-sided material culls per face, so each winding is only visible from its own side
+	// and the bottom faces are what make the surface visible from underwater.
+	CHECK(ShouldEmitBottomFaces(false));
+}
+
 TEST_CASE("WaterMeshBuild_Face_Alpha_Tags_Differ", "[water_mesh]")
 {
 	// The material graph keys the underside look off vertex colour alpha, so the two tags
