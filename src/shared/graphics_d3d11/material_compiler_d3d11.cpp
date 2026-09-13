@@ -948,7 +948,9 @@ namespace mmo
 			// Height fog, identical to AtmosphereCommon.hlsli (and atmosphere_math.h). Change all three
 			// together. Emitted after the cbuffer because the functions read its fields.
 			m_pixelShaderStream
-				<< "static const float FOG_MAX_DENSITY_EXPONENT = 12.0;\n\n"
+				// Fog below the base saturates at e^3 ~= 20x the base density instead of climbing
+				// toward opacity. Mirrored in AtmosphereCommon.hlsli and atmosphere_math.h.
+				<< "static const float FOG_MAX_DENSITY_EXPONENT = 3.0;\n\n"
 				<< "float FogDensityAt(float y) {\n"
 				<< "\treturn fogDensity * exp(min(-fogHeightFalloff * (y - fogBaseHeight), FOG_MAX_DENSITY_EXPONENT));\n"
 				<< "}\n\n"
@@ -1145,7 +1147,9 @@ namespace mmo
 				<< "\tfloat3 sceneColor = sceneColorTex.Load(int3(pixel, 0)).rgb;\n"
 				<< "\t// Lighting can leave NaN/Inf in the captured linear HDR scene (GGX 0/0, values above the\n"
 				<< "\t// RGBA16F range); sanitise before ACES so a material graph never turns NaN from this.\n"
-				<< "\tsceneColor = (any(isnan(sceneColor)) || any(isinf(sceneColor))) ? float3(0.0, 0.0, 0.0) : min(sceneColor, 1e4);\n"
+				<< "\t// FXC compiles without IEEE strictness, which folds isnan/isinf to a constant false, so\n"
+				<< "\t// the exponent bits are tested directly: NaN and Inf both set all exponent bits (0x7f800000).\n"
+				<< "\tsceneColor = (any((asuint(sceneColor) & 0x7fffffffu) >= 0x7f800000u)) ? float3(0.0, 0.0, 0.0) : min(sceneColor, 1e4);\n"
 				<< "\treturn forwardOutputLinear > 0.5 ? pow(ACESFilm(max(sceneColor, 0.0)), (1.0 / 2.2).xxx) : sceneColor;\n"
 				<< "}\n\n";
 		}

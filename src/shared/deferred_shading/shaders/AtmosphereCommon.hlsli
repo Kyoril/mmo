@@ -41,7 +41,10 @@ cbuffer CameraBuffer : register(b1)
     float ShaftStrength;
 };
 
-static const float FOG_MAX_DENSITY_EXPONENT = 12.0f;
+// Upper bound of the height-fog density exponent. Keeps rays that reach far below the base height
+// from overflowing floating point; fog below the base saturates at e^3 ~= 20x the base density
+// instead of climbing toward opacity. Mirrored in atmosphere_math.h and material_compiler_d3d11.cpp.
+static const float FOG_MAX_DENSITY_EXPONENT = 3.0f;
 
 // Extinction coefficient at world height y.
 float FogDensityAt(float y)

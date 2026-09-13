@@ -1021,6 +1021,13 @@ namespace mmo
 		if (m_playerController->GetRootNode())
 		{
 			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
+
+			// Anchor the fog reference height to the player rather than the orbit camera, so fog
+			// density at a fixed ground point stays stable as the camera zooms or pitches.
+			if (m_scene)
+			{
+				m_scene->SetAtmosphereReferenceHeight(m_playerController->GetRootNode()->GetPosition().y);
+			}
 		}
 
 		// Update audio component to simulate 3d audio correctly from the player position
@@ -2115,7 +2122,7 @@ namespace mmo
 		s_fogHeightFalloffVar = ConsoleVarMgr::RegisterConsoleVar("gxFogHeightFalloff", "How quickly the fog thins with height, per metre. Higher values keep fog in valleys.", "0.05");
 		m_cvarChangedSignals += s_fogHeightFalloffVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
-		s_fogBaseHeightVar = ConsoleVarMgr::RegisterConsoleVar("gxFogBaseHeight", "Height of the fog base relative to the camera, in metres (negative = below the camera). Fog density equals gxFogDensity there and thins with height above it.", "-10");
+		s_fogBaseHeightVar = ConsoleVarMgr::RegisterConsoleVar("gxFogBaseHeight", "Height of the fog base relative to the player, in metres (negative = below the player). Fog density equals gxFogDensity there and thins with height above it.", "-10");
 		m_cvarChangedSignals += s_fogBaseHeightVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
 		s_fogAnisotropyVar = ConsoleVarMgr::RegisterConsoleVar("gxFogAnisotropy", "Forward scattering of sunlight in the fog (0 to 0.95). Higher values make a tighter, brighter glow around the sun.", "0.7");
@@ -6221,7 +6228,9 @@ namespace mmo
 
 	void WorldState::OnAtmosphereParametersChanged(ConsoleVar &var, const std::string &oldValue)
 	{
-		// Called from RegisterGameplayCommands and whenever a fog cvar changes. SetupWorldScene also calls this for a freshly created scene; there the cvars may not be registered yet, hence the null checks.
+		// Called from RegisterGameplayCommands and whenever a fog cvar changes. SetupWorldScene
+		// also calls this for a freshly created scene; there the cvars may not be registered yet,
+		// hence the null checks.
 		if (!m_scene || !s_fogDensityVar)
 		{
 			return;

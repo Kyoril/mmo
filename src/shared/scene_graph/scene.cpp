@@ -1145,7 +1145,8 @@ namespace mmo
 		const auto now = std::chrono::steady_clock::now();
 		m_elapsedTime = std::chrono::duration<float>(now - m_startTime).count();
 
-		const AtmosphereConstants atmosphere = CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled, camera.GetDerivedPosition().y);
+		const float referenceHeight = m_atmosphereReferenceHeight.value_or(camera.GetDerivedPosition().y);
+		const AtmosphereConstants atmosphere = CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled, referenceHeight);
 
 		PsCameraConstantBuffer buffer;
 		buffer.cameraPosition = camera.GetDerivedPosition();
@@ -1189,6 +1190,13 @@ namespace mmo
 		buffer.shaftStrength = atmosphere.shaftStrength;
 
 		m_psCameraBuffer->Update(&buffer);
+	}
+
+	float Scene::GetCombinedFogDensity() const
+	{
+		// Reference height only shifts where the base sits, not the density at it, so any value
+		// (here 0) works for this query.
+		return CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled, 0.0f).density;
 	}
 
 	std::unique_ptr<SceneNode> Scene::CreateSceneNodeImpl()

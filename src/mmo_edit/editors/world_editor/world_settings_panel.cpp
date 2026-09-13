@@ -172,7 +172,7 @@ namespace mmo
                     }
                     if (ImGui::IsItemHovered())
                     {
-                        ImGui::SetTooltip("Fog base height relative to the camera (metres). Negative = below the camera.");
+                        ImGui::SetTooltip("Fog base height relative to the player (client) / camera pivot (editor). Negative = below it.");
                     }
 
                     float anisotropy = atmosphere.anisotropy;

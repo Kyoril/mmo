@@ -16,10 +16,11 @@ namespace mmo
 		/// @brief Exponential falloff of the density per metre of height above BaseHeight.
 		float heightFalloff = 0.05f;
 
-		/// @brief Height of the fog base, in metres, relative to the camera's world Y (negative =
-		/// below the camera). The density equals `density` at `cameraHeight + baseHeight`. Camera-relative
-		/// rather than an absolute world Y so maps whose terrain sits far from Y = 0 still get readable
-		/// fog until per-zone atmosphere data exists.
+		/// @brief Height of the fog base, in metres, as an offset from the reference height: the
+		/// controlled player's height in the client, the camera pivot in the editor, else the
+		/// camera (negative = below the reference height). The density equals `density` at
+		/// `referenceHeight + baseHeight`. Relative rather than an absolute world Y so maps whose
+		/// terrain sits far from Y = 0 still get readable fog until per-zone atmosphere data exists.
 		float baseHeight = -10.0f;
 
 		/// @brief Henyey-Greenstein g of the sun scattering lobe. Larger = tighter sun glow.
@@ -92,21 +93,22 @@ namespace mmo
 	/// @param parameters Base values from cvars or the editor.
 	/// @param timeOfDay Curve values for the current hour.
 	/// @param fogEnabled When false, density is zero, which makes every fog term vanish.
-	/// @param cameraHeight World Y of the camera this frame. `parameters.baseHeight` is an offset
-	/// from this, so the output `baseHeight` is `cameraHeight + parameters.baseHeight`. Until per-zone
-	/// atmosphere data exists, a camera-relative base keeps the fog readable on maps whose terrain is
-	/// far from Y = 0 — the fog still thins with height above the camera and thickens looking down
-	/// into valleys.
+	/// @param referenceHeight World Y the fog base height is measured from this frame: the
+	/// controlled player's height in the client, the camera pivot in the editor, else the camera.
+	/// `parameters.baseHeight` is an offset from this, so the output `baseHeight` is
+	/// `referenceHeight + parameters.baseHeight`. Until per-zone atmosphere data exists, a relative
+	/// base keeps the fog readable on maps whose terrain is far from Y = 0 — the fog still thins
+	/// with height above the reference point and thickens looking down into valleys.
 	/// @return The values for the camera constant buffer. Curve overshoot never goes negative.
 	[[nodiscard]] inline AtmosphereConstants CombineAtmosphere(const AtmosphereParameters& parameters,
-		const AtmosphereTimeOfDay& timeOfDay, const bool fogEnabled, const float cameraHeight)
+		const AtmosphereTimeOfDay& timeOfDay, const bool fogEnabled, const float referenceHeight)
 	{
 		const auto nonNegative = [](const float value) { return value < 0.0f ? 0.0f : value; };
 
 		AtmosphereConstants constants;
 		constants.density = fogEnabled ? parameters.density * nonNegative(timeOfDay.densityMultiplier) : 0.0f;
 		constants.heightFalloff = parameters.heightFalloff;
-		constants.baseHeight = cameraHeight + parameters.baseHeight;
+		constants.baseHeight = referenceHeight + parameters.baseHeight;
 		constants.anisotropy = parameters.anisotropy;
 		constants.shaftStrength = parameters.shaftStrength * nonNegative(timeOfDay.shaftMultiplier);
 

@@ -170,6 +170,8 @@ loaded in `SkyComponent::LoadColorCurves` with built-in fallbacks like the exist
 | `Models/FogColor.hccv` | fog scattering tint (cool blue night, warm peach dawn/dusk, pale day) | density multiplier (night 1.5, dawn 2.5, noon 1.0, dusk 2.0) |
 | `Models/SunScatter.hccv` | sun colour inside fog (golden at low sun, near-white at noon) | shaft strength multiplier (strongest at low sun) |
 
+(Curve alphas above superseded by Implementation Notes 10-11 — the fallback curves gained pre-dawn/after-dusk keys so nights are dark.)
+
 The ambient term uses the existing ambient colour curve.
 
 ### Cvars
@@ -180,9 +182,9 @@ in `WorldState` alongside the other `gx*` cvars; applied on load.
 | Cvar | Default | Meaning |
 |---|---|---|
 | `gxAtmosphereQuality` | 3 | 0-4 (Section 2) |
-| `gxFogDensity` | 0.02 | extinction per metre at base height |
+| `gxFogDensity` | 0.02 (superseded by Implementation Notes 10-11: default is now 0.01) | extinction per metre at base height |
 | `gxFogHeightFalloff` | 0.05 | exponential falloff per metre of height |
-| `gxFogBaseHeight` | 0 | world Y where density equals `gxFogDensity` |
+| `gxFogBaseHeight` | 0 (superseded by Implementation Notes 10-11: relative to the reference height, default -10) | world Y where density equals `gxFogDensity` |
 | `gxFogAnisotropy` | 0.7 | Henyey-Greenstein g |
 | `gxShaftStrength` | 1.0 | sun inscatter multiplier |
 | `gxAtmosphereMarchDistance` | 200 | metres, clamped to ≤ 300 |
@@ -194,8 +196,9 @@ in `WorldState` alongside the other `gx*` cvars; applied on load.
 
 Numeric defaults are starting points, tuned against the reference during verification.
 
-Known limitation: `gxFogBaseHeight` is absolute world Y; maps whose terrain sits far from
-Y = 0 need per-area values, delivered by the per-zone time-of-day follow-up.
+Known limitation (superseded by Implementation Notes 10-11): `gxFogBaseHeight` is absolute world Y;
+maps whose terrain sits far from Y = 0 need per-area values, delivered by the per-zone time-of-day
+follow-up.
 
 ### Editor
 
@@ -296,3 +299,8 @@ These refine the approved design after reading the code; the plan
    from the camera height (default −10 m), density default 0.01, and the fallback curves gained
    pre-dawn/after-dusk keys so nights are dark. No shader change: `Scene::RefreshCameraBuffer`
    adds the camera height before upload.
+11. Gate review (2026-09-14): fog base anchored to the controlled player's height in the client
+   and the camera pivot in the editor (camera fallback) to stop fog pumping with camera orbit;
+   density exponent clamp lowered 12 → 3 so fog below the base saturates (≈20×) instead of
+   turning overlooks opaque; NaN/Inf sanitising uses a bitwise test because FXC folds isnan
+   without IEEE strictness.

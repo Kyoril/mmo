@@ -41,7 +41,9 @@ float3 Sanitise(float3 c)
 {
     // Lighting can leave NaN/Inf in the linear HDR scene (GGX 0/0, values above the RGBA16F
     // range); ACES on Inf/NaN would otherwise turn the whole pixel NaN in the final image.
-    return (any(isnan(c)) || any(isinf(c))) ? float3(0.0f, 0.0f, 0.0f) : min(c, 1e4f);
+    // FXC compiles without IEEE strictness, which folds isnan/isinf to a constant false, so the
+    // exponent bits are tested directly instead: NaN and Inf both set all exponent bits (0x7f800000).
+    return (any((asuint(c) & 0x7fffffffu) >= 0x7f800000u)) ? float3(0.0f, 0.0f, 0.0f) : min(c, 1e4f);
 }
 
 float4 main(PS_INPUT input) : SV_TARGET

@@ -7,7 +7,8 @@ Design: [superpowers/specs/2026-09-13-volumetric-atmosphere-design.md](superpowe
 1. Cascaded shadow maps → G-Buffer → SSAO → contact shadows
 2. Lighting (`PS_DeferredLighting`) — **linear HDR**, no fog, no tonemap
 3. `AtmospherePass` — march (reduced resolution) → bilateral blur → composite into `m_sceneColorCopy`,
-   copied back into the scene target. Skipped while submerged or with `Scene::IsFogEnabled()` false.
+   copied back into the scene target. Skipped while submerged, with `Scene::IsFogEnabled()` false,
+   or when the combined fog density is zero (time-of-day can scale the base density to nothing).
 4. Forward pass — `Scene::SetForwardOutputLinear(true)`; materials apply the same height fog analytically
 5. `BloomPass` — 13-tap downsample chain, tent upsample chain. Skipped while submerged.
 6. `TonemapPass` — scene + bloom, exposure, ACES, gamma, dither
@@ -26,7 +27,14 @@ existing water materials keep their tuned look.
 
 ## Fog model
 
-Density `σ(y) = gxFogDensity · densityMultiplier · exp(min(−gxFogHeightFalloff · (y − gxFogBaseHeight), 12))`.
+Density `σ(y) = gxFogDensity · densityMultiplier · exp(min(−gxFogHeightFalloff · (y − gxFogBaseHeight), 3))`.
+The exponent clamp of 3 means fog below the base saturates at e³ ≈ 20× the base density instead of
+climbing toward opacity. `gxFogBaseHeight` is an offset from the fog reference height — the
+controlled player's height in the client (`Scene::SetAtmosphereReferenceHeight`, set every frame
+from `WorldState::OnIdle`), the camera orbit pivot in the editor, or the camera's own derived Y as a
+fallback (`Scene::RefreshCameraBuffer`) — rather than the camera height directly, so fog density at a
+fixed ground point no longer pumps as the orbit camera zooms or pitches.
+
 Per metre the fog scatters `σ · (FogTint + SunScatterColor · SunColor · SunIntensity · shaftStrength ·
 Phase(cosθ) · shadow)` toward the camera, with a Henyey-Greenstein lobe (g = gxFogAnisotropy) blended
 80/20 with isotropic. The first `gxAtmosphereMarchDistance` metres are marched through the shadow maps;
@@ -61,7 +69,7 @@ Missing or unreadable files fall back to built-in keys. The cvars are base value
 | `gxAtmosphereDebug` | 0 | 1 scattered light, 2 transmittance, 3 shaft shadow term |
 | `gxFogDensity` | 0.01 | extinction per metre at the base height |
 | `gxFogHeightFalloff` | 0.05 | falloff per metre of height |
-| `gxFogBaseHeight` | -10 | height of the base relative to the camera, in metres, where density equals `gxFogDensity` |
+| `gxFogBaseHeight` | -10 | height of the base relative to the player (client) / camera pivot (editor), in metres, where density equals `gxFogDensity` |
 | `gxFogAnisotropy` | 0.7 | sun glow tightness |
 | `gxShaftStrength` | 1.0 | sun scattering multiplier |
 | `gxBloomQuality` | 2 | 0 Off, 1 Low, 2 High |
@@ -71,7 +79,7 @@ Missing or unreadable files fall back to built-in keys. The cvars are base value
 
 ## Known limitations
 
-- The fog base follows the camera height until per-zone atmosphere data exists (planned per-zone time of day).
+- The fog base follows the player/camera-pivot reference height until per-zone atmosphere data exists (planned per-zone time of day).
 - Shafts need shadow-casting geometry and end at the 300 m shadow range.
 - Shafts are not drawn over forward surfaces (water, particles); those get closed-form fog only.
 - Point and spot lights do not scatter in the fog.

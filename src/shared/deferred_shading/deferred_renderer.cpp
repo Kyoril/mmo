@@ -457,7 +457,7 @@ namespace mmo
         // when the combined density is zero (time-of-day can scale the base density to nothing);
         // the copy then runs in its old direction.
         const bool runAtmosphere = scene.IsFogEnabled() && !m_underwaterState.active
-            && scene.GetAtmosphereParameters().density * scene.GetAtmosphereTimeOfDay().densityMultiplier > 0.0f;
+            && scene.GetCombinedFogDensity() > 0.0f;
         if (runAtmosphere)
         {
             m_atmospherePass->Render(camera, *m_renderTexture, m_gBuffer.GetNormalRT(), *m_sceneColorCopy,

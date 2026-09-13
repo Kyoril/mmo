@@ -12,8 +12,9 @@ namespace mmo::atmosphere
 	constexpr float MaxInvertibleDisplay = 0.999f;
 
 	/// @brief Upper bound of the height-fog density exponent. Keeps rays that reach far below the
-	///        base height from overflowing floating point.
-	constexpr float MaxDensityExponent = 12.0f;
+	///        base height from overflowing floating point; fog below the base saturates at
+	///        e^3 ≈ 20x the base density instead of climbing toward opacity.
+	constexpr float MaxDensityExponent = 3.0f;
 
 	/// @brief Display gamma used by the tonemap pass and the forward materials.
 	constexpr float Gamma = 2.2f;

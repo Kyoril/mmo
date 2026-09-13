@@ -88,7 +88,7 @@ float4 UpsampleMarch(int2 pixel, float pixelDistance)
         return nearest;
     }
 
-    return weightSum > 1e-4f ? sum / weightSum : nearest;
+    return sum / max(weightSum, 1e-6f);
 }
 
 float4 main(PS_INPUT input) : SV_TARGET

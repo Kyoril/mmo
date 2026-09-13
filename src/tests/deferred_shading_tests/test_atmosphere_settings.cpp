@@ -91,7 +91,7 @@ TEST_CASE("CombineAtmosphere never lets a curve overshoot make values negative",
 	REQUIRE(constants.sunScatterColor[2] == Approx(0.0f));
 }
 
-TEST_CASE("CombineAtmosphere places the fog base relative to the camera", "[atmosphere]")
+TEST_CASE("CombineAtmosphere places the fog base relative to the reference height", "[atmosphere]")
 {
 	AtmosphereParameters parameters;
 	parameters.baseHeight = -10.0f;
