@@ -988,6 +988,7 @@ namespace mmo
 			"sounds",
 			"surface_types",
 			"emotes",
+			"water_profiles",
 		};
 
 		const fs::path srcDir = m_config.projectPath;

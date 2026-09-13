@@ -49,6 +49,13 @@ namespace mmo
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 
+		/// The texture the frame's quad currently shows. The deferred renderer's final target is
+		/// not one fixed texture: it is the underwater post-process output while the camera is
+		/// submerged, and that target is created on the first dive and released after surfacing.
+		/// The quad has to be rebuilt whenever this changes, or the frame keeps showing a stale
+		/// texture - which is how the underwater effect rendered every frame and never appeared.
+		TexturePtr m_displayedTexture;
+
 		/// Internal (pre-upscale) render resolution the deferred renderer is currently sized to.
 		/// Driven by the gxRenderScale console variable; the result is upscaled to the frame size.
 		uint16 m_internalWidth = 0;

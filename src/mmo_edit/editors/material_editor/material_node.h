@@ -2706,6 +2706,71 @@ namespace mmo
 		Pin* m_outputPins[1] = { &m_output };
 	};
 
+	/// @brief A node that ray-marches the opaque scene to produce a screen-space reflection.
+	///
+	/// @remark The Hit Mask output is zero wherever the ray missed or left the screen; the node
+	///			never invents a fallback colour. For water this is the normal case rather than an
+	///			edge case - at the grazing angles an ocean is viewed from, the reflected ray leaves
+	///			the top of the screen almost immediately - so a graph using this node is expected
+	///			to lerp towards a sky colour using the mask.
+	class ScreenSpaceReflectionNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(ScreenSpaceReflectionNode, "Screen Space Reflection")
+
+		ScreenSpaceReflectionNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		/// @copydoc GraphNode::NotifyCompilationStarted
+		/// @remark Clears the two per-output caches alongside the base expression, otherwise a
+		///			second compile of the same graph would reuse expression indices belonging to
+		///			the previous compiler instance.
+		void NotifyCompilationStarted() override
+		{
+			GraphNode::NotifyCompilationStarted();
+			m_colorExpression = IndexNone;
+			m_hitMaskExpression = IndexNone;
+		}
+
+	private:
+		/// @brief Reflecting surface normal in world space. Unconnected reflects about world up.
+		MaterialPin m_normal = { this, "Normal" };
+
+		/// @brief Maximum ray length in world units. Unconnected uses 256.
+		MaterialPin m_maxDistance = { this, "Max Distance" };
+
+		/// @brief Number of march steps, clamped to [4, 64]. Unconnected uses 24.
+		MaterialPin m_steps = { this, "Steps" };
+
+		/// @brief Reflected scene colour (float3). Black where the ray missed.
+		MaterialPin m_color = { this, "Color" };
+
+		/// @brief Hit confidence in [0,1] (float1). Zero where the ray missed or left the screen.
+		MaterialPin m_hitMask = { this, "Hit Mask" };
+
+		/// @brief Cached mask expression for the Color output.
+		ExpressionIndex m_colorExpression { IndexNone };
+
+		/// @brief Cached mask expression for the Hit Mask output.
+		ExpressionIndex m_hitMaskExpression { IndexNone };
+
+		Pin* m_inputPins[3] = { &m_normal, &m_maxDistance, &m_steps };
+		Pin* m_outputPins[2] = { &m_color, &m_hitMask };
+	};
+
 	/// @brief A node that outputs the screen-space pixel coordinates of the current pixel.
 	class ScreenPositionNode final : public GraphNode
 	{

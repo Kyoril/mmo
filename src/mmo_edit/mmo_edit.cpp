@@ -65,6 +65,7 @@
 #include "editor_windows/animation_profile_editor_window.h"
 #include "editor_windows/talent_editor_window.h"
 #include "editor_windows/combat_settings_editor_window.h"
+#include "editor_windows/water_profile_editor_window.h"
 #include "editor_windows/data_navigator_window.h"
 
 #include "import/texture_import.h"
@@ -260,6 +261,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ZoneEditorWindow>("Zone Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SoundEditorWindow>("Sound Editor", project, mainWindow, editorAudio.get()));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SurfaceTypeEditorWindow>("Surface Type Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::WaterProfileEditorWindow>("Water Profile Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::GossipEditorWindow>("Gossip Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ConditionEditorWindow>("Condition Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VariableEditorWindow>("Variable Editor", project, mainWindow));

@@ -167,6 +167,14 @@ namespace mmo
 		{
 		}
 
+		void SetLowPassCutoff(const float cutoffHz) override
+		{
+			lowPassCutoffHz = cutoffHz;
+		}
+
+		/// @brief The low-pass cutoff last requested, in Hz. 0 means the audio is dry.
+		float lowPassCutoffHz = 0.0f;
+
 		/// @brief Gets the volume last set on the given channel.
 		float GetChannelVolume(const ChannelIndex channel)
 		{

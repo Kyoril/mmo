@@ -120,6 +120,10 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddSceneColor
 		ExpressionIndex AddSceneColor(ExpressionIndex screenOffset) override;
 
+		/// @copydoc MaterialCompiler::AddScreenSpaceReflection
+		ExpressionIndex AddScreenSpaceReflection(ExpressionIndex worldNormal,
+			ExpressionIndex maxDistance, ExpressionIndex stepCount) override;
+
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
 		void GenerateVertexShaderCode(VertexShaderType type) override;
@@ -147,5 +151,11 @@ namespace mmo
 	private:
 		bool m_needsSceneDepth { false };
 		bool m_needsSceneColor { false };
+
+		/// @brief Whether any expression needs the ComputeSSR helper emitted into the shader.
+		/// @remark Gating the helper keeps every material that does not use the node generating
+		///         byte-identical shader code, so adding this node cannot cause bytecode drift
+		///         across the whole project.
+		bool m_needsScreenSpaceReflection { false };
 	};
 }

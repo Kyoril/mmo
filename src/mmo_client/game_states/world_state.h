@@ -42,6 +42,7 @@
 #include "game_client/net_client.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/combat_sound_player.h"
+#include "deferred_shading/water_volume_system.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
 
@@ -57,6 +58,8 @@ namespace mmo
 namespace mmo
 {
 	class IAudio;
+	class DeferredRenderer;
+	class PostProcessPass;
 }
 
 namespace mmo
@@ -132,6 +135,11 @@ namespace mmo
 			ChannelClient &channelClient,
 			BankClient &bankClient,
 			MailClient &mailClient);
+
+		/// @brief Destroys the world state.
+		/// @remark Declared explicitly and defined in the .cpp because this class holds a
+		///			unique_ptr to TerrainWaterQuery, which is only a complete type there.
+		~WorldState() override;
 
 	public:
 		/// @brief The default name of the world state
@@ -230,6 +238,9 @@ namespace mmo
 		void OnShadowLightStepChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when the gxUnderwaterGodRays console variable changed.
+		void OnUnderwaterGodRaysChanged(ConsoleVar &var, const std::string &oldValue);
 
 		/// @brief Called when the gxSsao console variable changed.
 		void OnSsaoEnabledChanged(ConsoleVar &var, const std::string &oldValue);
@@ -609,6 +620,41 @@ namespace mmo
 
 		// Sky component for day/night cycle
 		std::unique_ptr<SkyComponent> m_skyComponent;
+
+		/// @brief Adapts the streamed client terrain to the queries WaterVolumeSystem needs.
+		///	@remark Defined in the .cpp so world_state.h does not have to pull in the terrain
+		///			library's headers just to hold a pointer.
+		class TerrainWaterQuery;
+
+		/// @brief Water surface source for m_waterVolume. Outlives it by declaration order.
+		std::unique_ptr<TerrainWaterQuery> m_waterQuery;
+
+		/// @brief Tracks whether the camera and the player are submerged, and drives the
+		///			underwater post-process and the audio low-pass.
+		std::unique_ptr<WaterVolumeSystem> m_waterVolume;
+
+		/// @brief Asset name of the caustics texture last handed to the underwater pass, so the
+		///			texture is only looked up again when the liquid in front of the camera changes.
+		String m_underwaterCausticsTexture;
+
+		/// @brief The pass m_underwaterCausticsTexture was handed to. Compared, never dereferenced:
+		///			a recreated world frame brings a new renderer whose pass has no texture yet.
+		const PostProcessPass* m_underwaterCausticsPass{ nullptr };
+
+		/// @brief Resolves a liquid type to its presentation settings from the water profile table.
+		/// @param waterType A terrain::WaterType value.
+		/// @return The settings, or an invalid WaterProfileValues when no profile is authored.
+		[[nodiscard]] WaterProfileValues ResolveWaterProfile(uint32 waterType) const;
+
+		/// @brief Recomputes submersion and pushes it to the renderer and the audio device.
+		void UpdateWaterVolume(float deltaSeconds);
+
+		/// @brief Gets the deferred renderer behind the world frame, or nullptr when the world
+		///			frame or its renderer does not exist yet.
+		/// @remark Quiet on failure, unlike the console-variable handlers that do the same lookup:
+		///			this runs every frame, including during load when the frame legitimately is not
+		///			there yet, and logging would flood.
+		[[nodiscard]] DeferredRenderer* GetWorldDeferredRenderer() const;
 
 		ICacheProvider &m_cache;
 

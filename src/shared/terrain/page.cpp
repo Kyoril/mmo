@@ -52,6 +52,33 @@ namespace mmo
 					static_cast<uint32>(val.y * 255) << 8 |
 					static_cast<uint32>(val.x * 255));
 			}
+
+			/// Applies the tangent basis for an upward-facing horizontal water quad.
+			/// @remark Water UVs run u along +X and v along +Z (they are derived from world
+			///			position), so the tangent frame is fixed for the whole surface.
+			void SetTopFaceBasis(ManualTriangleListOperation::Triangle& triangle)
+			{
+				for (uint8 i = 0; i < 3; ++i)
+				{
+					triangle.SetNormal(i, Vector3::UnitY);
+					triangle.SetTangent(i, Vector3::UnitX);
+					triangle.SetBinormal(i, Vector3::UnitZ);
+				}
+			}
+
+			/// Applies the tangent basis for a downward-facing horizontal water quad.
+			/// @remark Only the normal flips. The bottom face shares the top face's UV
+			///			parameterisation, so flipping the binormal too would mirror the ripple
+			///			slopes on the underside.
+			void SetBottomFaceBasis(ManualTriangleListOperation::Triangle& triangle)
+			{
+				for (uint8 i = 0; i < 3; ++i)
+				{
+					triangle.SetNormal(i, Vector3::NegativeUnitY);
+					triangle.SetTangent(i, Vector3::UnitX);
+					triangle.SetBinormal(i, Vector3::UnitZ);
+				}
+			}
 		}
 		Page::Page(Terrain &terrain, const int32 x, const int32 z)
 			: m_terrain(terrain), m_x(x), m_z(z), m_preparing(false), m_prepared(false), m_loaded(false)
@@ -801,6 +828,10 @@ namespace mmo
 				}
 
 				UpdateBoundingBox();
+
+				// The water mesh bakes the water depth over the terrain into its vertex colours for
+				// the shore foam, so reshaping the ground under water has to rebuild it too.
+				RebuildWaterMesh();
 			}
 		}
 
@@ -1598,6 +1629,23 @@ namespace mmo
 			m_changed = true;
 		}
 
+		std::function<String(WaterType)> Page::ms_waterMaterialResolver;
+
+		void Page::SetWaterMaterialResolver(std::function<String(WaterType)> resolver)
+		{
+			ms_waterMaterialResolver = std::move(resolver);
+		}
+
+		String Page::ResolveWaterMaterial(const WaterType type)
+		{
+			if (!ms_waterMaterialResolver)
+			{
+				return String();
+			}
+
+			return ms_waterMaterialResolver(type);
+		}
+
 		void Page::SetWaterMaterialName(const String& name)
 		{
 			m_waterMaterialName = name;
@@ -1613,52 +1661,18 @@ namespace mmo
 
 			m_waterRenderObject->Clear();
 
-			// Check if any tile has active water quads
-			bool hasWater = false;
-			for (const uint64 mask : m_waterQuadMasks)
-			{
-				if (mask != 0)
-				{
-					hasWater = true;
-					break;
-				}
-			}
-
-			if (!hasWater)
+			// One batch per distinct liquid type present, so a page spanning ocean and lake
+			// renders each with its own material. Empty pages and tiles whose quads were all
+			// erased yield no batches at all, which matters because ManualTriangleListOperation
+			// asserts if an operation is finished with no triangles.
+			const std::vector<water_mesh::TypeBatch> batches = water_mesh::BucketQuadsByType(GetWaterView());
+			if (batches.empty())
 			{
 				return;
 			}
-
-			// Resolve material. In minimap mode we deliberately ignore the assigned (translucent)
-			// water material: it samples the scene depth/refraction textures which are not bound
-			// during minimap generation and would render as garbage or fully transparent. Instead
-			// we use an opaque, unlit vertex-colour material so water shows up as a solid blue area.
-			MaterialPtr material;
-			if (m_minimapWaterMode)
-			{
-				material = MaterialManager::Get().Load("Editor/MinimapWater.hmat");
-			}
-			else if (!m_waterMaterialName.empty())
-			{
-				material = MaterialManager::Get().Load(m_waterMaterialName);
-			}
-			if (!material)
-			{
-				material = MaterialManager::Get().Load("Editor/Wireframe.hmat");
-			}
-
-			// Vertex colour applied to every water quad. The normal water material ignores this
-			// (it samples textures), but the minimap material renders it directly: opaque blue.
-			const uint32 waterColor = m_minimapWaterMode ? 0xFF3A6EA5u : 0xAAFFFFFFu;
-			if (!material)
-			{
-				return;
-			}
-
-			auto op = m_waterRenderObject->AddTriangleListOperation(material);
 
 			// Each outer vertex step in local page space: TileSize / 8 sub-quads per tile side
-			constexpr float quadSize = static_cast<float>(constants::TileSize) / 8.0f;
+			constexpr float quadSize = water_lookup::QuadSize;
 			constexpr uint32 pvSide = constants::OuterVerticesPerPageSide;
 
 			// World offset used only for UV tiling so texture is continuous across pages
@@ -1666,70 +1680,120 @@ namespace mmo
 			const float worldOffsetZ = static_cast<float>((m_z - 32) * constants::PageSize);
 			constexpr float uvScale = 1.0f / 16.0f;
 
-			for (uint32 tz = 0; tz < constants::TilesPerPage; ++tz)
+			for (const water_mesh::TypeBatch& batch : batches)
 			{
-				for (uint32 tx = 0; tx < constants::TilesPerPage; ++tx)
+				// Resolve material. In minimap mode we deliberately ignore the assigned (translucent)
+				// water material: it samples the scene depth/refraction textures which are not bound
+				// during minimap generation and would render as garbage or fully transparent. Instead
+				// we use an opaque, unlit vertex-colour material so water shows up as a solid blue area.
+				MaterialPtr material;
+				if (m_minimapWaterMode)
 				{
-					const uint64 mask = m_waterQuadMasks[tx + tz * constants::TilesPerPage];
-					if (mask == 0)
+					material = MaterialManager::Get().Load("Editor/MinimapWater.hmat");
+				}
+				else if (!m_waterMaterialName.empty())
+				{
+					// An explicit per-page override still wins over the profile table, so every
+					// page authored before water profiles existed renders exactly as it did.
+					material = MaterialManager::Get().Load(m_waterMaterialName);
+				}
+				else if (ms_waterMaterialResolver)
+				{
+					const String resolved = ms_waterMaterialResolver(batch.type);
+					if (!resolved.empty())
 					{
-						continue;
+						material = MaterialManager::Get().Load(resolved);
+					}
+				}
+
+				if (!material)
+				{
+					material = MaterialManager::Get().Load("Editor/Wireframe.hmat");
+				}
+
+				if (!material)
+				{
+					continue;
+				}
+
+				auto op = m_waterRenderObject->AddTriangleListOperation(material);
+
+				// A two-sided material already renders the surface from below, and with culling off
+				// the explicit underside triangles would also draw over the top face from above -
+				// lit by their downward normal, which renders the water black.
+				const bool emitBottomFaces = water_mesh::ShouldEmitBottomFaces(material->IsTwoSided());
+
+				for (const water_mesh::QuadRef& quad : batch.quads)
+				{
+					const uint32 pvx0 = quad.tileX * water_lookup::QuadsPerTileSide + quad.qx;
+					const uint32 pvz0 = quad.tileZ * water_lookup::QuadsPerTileSide + quad.qz;
+
+					const float yTL = m_waterVertexHeights[ pvx0      + pvz0      * pvSide];
+					const float yTR = m_waterVertexHeights[(pvx0 + 1) + pvz0      * pvSide];
+					const float yBL = m_waterVertexHeights[ pvx0      + (pvz0+1)  * pvSide];
+					const float yBR = m_waterVertexHeights[(pvx0 + 1) + (pvz0+1)  * pvSide];
+
+					// Vertex colour: alpha is the face tag the water graph shades the underside with,
+					// red is how deep the water is over the terrain at that corner. The water and
+					// terrain outer vertex grids coincide, so the terrain height is exact here. Shore
+					// foam keys off this rather than off screen-space depth, which could not tell a
+					// shoreline from a swimmer's body just under the surface.
+					const float tTL = GetHeightAt(pvx0,     pvz0);
+					const float tTR = GetHeightAt(pvx0 + 1, pvz0);
+					const float tBL = GetHeightAt(pvx0,     pvz0 + 1);
+					const float tBR = GetHeightAt(pvx0 + 1, pvz0 + 1);
+
+					const uint32 topTL = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yTL, tTL);
+					const uint32 topTR = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yTR, tTR);
+					const uint32 topBL = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yBL, tBL);
+					const uint32 topBR = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yBR, tBR);
+
+					const float lx1 = pvx0       * quadSize;
+					const float lz1 = pvz0       * quadSize;
+					const float lx2 = (pvx0 + 1) * quadSize;
+					const float lz2 = (pvz0 + 1) * quadSize;
+
+					const float u1 = (worldOffsetX + lx1) * uvScale;
+					const float u2 = (worldOffsetX + lx2) * uvScale;
+					const float v1 = (worldOffsetZ + lz1) * uvScale;
+					const float v2 = (worldOffsetZ + lz2) * uvScale;
+
+					const Vector3 vTL(lx1, yTL, lz1);
+					const Vector3 vTR(lx2, yTR, lz1);
+					const Vector3 vBR(lx2, yBR, lz2);
+					const Vector3 vBL(lx1, yBL, lz2);
+
+					// Top face (CCW winding = front-facing from above)
+					{
+						auto& t1 = op->AddTriangle(vTL, vBL, vTR);
+						t1.SetUV(0, u1, v1); t1.SetUV(1, u1, v2); t1.SetUV(2, u2, v1);
+						t1.SetStartColor(0, topTL); t1.SetStartColor(1, topBL); t1.SetStartColor(2, topTR);
+						SetTopFaceBasis(t1);
+
+						auto& t2 = op->AddTriangle(vTR, vBL, vBR);
+						t2.SetUV(0, u2, v1); t2.SetUV(1, u1, v2); t2.SetUV(2, u2, v2);
+						t2.SetStartColor(0, topTR); t2.SetStartColor(1, topBL); t2.SetStartColor(2, topBR);
+						SetTopFaceBasis(t2);
 					}
 
-					for (uint32 qz = 0; qz < 8; ++qz)
+					// Bottom face (reversed winding so water is visible from below). Only for
+					// single-sided materials, which cull per face.
+					if (emitBottomFaces)
 					{
-						for (uint32 qx = 0; qx < 8; ++qx)
-						{
-							if (!(mask & (1ULL << (qx + qz * 8))))
-							{
-								continue;
-							}
+						const uint32 bottomTL = water_mesh::MakeWaterVertexColor(water_mesh::BottomFaceVertexAlpha, yTL, tTL);
+						const uint32 bottomTR = water_mesh::MakeWaterVertexColor(water_mesh::BottomFaceVertexAlpha, yTR, tTR);
+						const uint32 bottomBL = water_mesh::MakeWaterVertexColor(water_mesh::BottomFaceVertexAlpha, yBL, tBL);
+						const uint32 bottomBR = water_mesh::MakeWaterVertexColor(water_mesh::BottomFaceVertexAlpha, yBR, tBR);
 
-							const uint32 pvx0 = tx * 8 + qx;
-							const uint32 pvz0 = tz * 8 + qz;
+						auto& t3 = op->AddTriangle(vTR, vBL, vTL);
+						t3.SetUV(0, u2, v1); t3.SetUV(1, u1, v2); t3.SetUV(2, u1, v1);
+						t3.SetStartColor(0, bottomTR); t3.SetStartColor(1, bottomBL); t3.SetStartColor(2, bottomTL);
+						SetBottomFaceBasis(t3);
 
-							const float yTL = m_waterVertexHeights[ pvx0      + pvz0      * pvSide];
-							const float yTR = m_waterVertexHeights[(pvx0 + 1) + pvz0      * pvSide];
-							const float yBL = m_waterVertexHeights[ pvx0      + (pvz0+1)  * pvSide];
-							const float yBR = m_waterVertexHeights[(pvx0 + 1) + (pvz0+1)  * pvSide];
-
-							const float lx1 = pvx0       * quadSize;
-							const float lz1 = pvz0       * quadSize;
-							const float lx2 = (pvx0 + 1) * quadSize;
-							const float lz2 = (pvz0 + 1) * quadSize;
-
-							const float u1 = (worldOffsetX + lx1) * uvScale;
-							const float u2 = (worldOffsetX + lx2) * uvScale;
-							const float v1 = (worldOffsetZ + lz1) * uvScale;
-							const float v2 = (worldOffsetZ + lz2) * uvScale;
-
-							const Vector3 vTL(lx1, yTL, lz1);
-							const Vector3 vTR(lx2, yTR, lz1);
-							const Vector3 vBR(lx2, yBR, lz2);
-							const Vector3 vBL(lx1, yBL, lz2);
-
-							// Top face (CCW winding = front-facing from above)
-							{
-								auto& t1 = op->AddTriangle(vTL, vBL, vTR);
-								t1.SetUV(0, u1, v1); t1.SetUV(1, u1, v2); t1.SetUV(2, u2, v1);
-								t1.SetColor(waterColor);
-
-								auto& t2 = op->AddTriangle(vTR, vBL, vBR);
-								t2.SetUV(0, u2, v1); t2.SetUV(1, u1, v2); t2.SetUV(2, u2, v2);
-								t2.SetColor(waterColor);
-							}
-
-							// Bottom face (reversed winding so water is visible from below)
-							{
-								auto& t3 = op->AddTriangle(vTR, vBL, vTL);
-								t3.SetUV(0, u2, v1); t3.SetUV(1, u1, v2); t3.SetUV(2, u1, v1);
-								t3.SetColor(waterColor);
-
-								auto& t4 = op->AddTriangle(vBR, vBL, vTR);
-								t4.SetUV(0, u2, v2); t4.SetUV(1, u1, v2); t4.SetUV(2, u2, v1);
-								t4.SetColor(waterColor);
-							}
-						}
+						auto& t4 = op->AddTriangle(vBR, vBL, vTR);
+						t4.SetUV(0, u2, v2); t4.SetUV(1, u1, v2); t4.SetUV(2, u2, v1);
+						t4.SetStartColor(0, bottomBR); t4.SetStartColor(1, bottomBL); t4.SetStartColor(2, bottomTR);
+						SetBottomFaceBasis(t4);
 					}
 				}
 			}

@@ -787,6 +787,54 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddScreenSpaceReflection(const ExpressionIndex worldNormal,
+		const ExpressionIndex maxDistance, const ExpressionIndex stepCount)
+	{
+		m_needsScreenSpaceReflection = true;
+		m_needsSceneColor = true;
+		m_needsSceneDepth = true;
+
+		std::ostringstream outputStream;
+		outputStream << "ComputeSSR(input.worldPos, ";
+
+		if (worldNormal != IndexNone)
+		{
+			outputStream << "normalize(expr_" << worldNormal << ".xyz)";
+		}
+		else
+		{
+			// Not input.normal: expressions are shared by every pixel variant, and the unlit and UI
+			// variants carry no normal in VertexOut, so referencing it fails their compile. World up
+			// is the right default for what this node is for - reflections on flat water.
+			outputStream << "float3(0.0, 1.0, 0.0)";
+		}
+
+		outputStream << ", ";
+		if (maxDistance != IndexNone)
+		{
+			outputStream << "expr_" << maxDistance;
+		}
+		else
+		{
+			outputStream << "256.0f";
+		}
+
+		outputStream << ", ";
+		if (stepCount != IndexNone)
+		{
+			outputStream << "expr_" << stepCount;
+		}
+		else
+		{
+			outputStream << "24.0f";
+		}
+
+		outputStream << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_4);
+	}
+
 	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
 	{
 		m_pixelShaderStream.str("");
@@ -1042,6 +1090,155 @@ namespace mmo
 				<< "Texture2D sceneColorTex : register(t" << kSceneColorTextureSlot << ");\n\n";
 		}
 
+		if (m_needsScreenSpaceReflection)
+		{
+			// Screen-space reflection helpers, emitted only for materials using the node so every
+			// other material keeps byte-identical shader code. See the comments inside the HLSL.
+			m_pixelShaderStream
+				<< "// Projects a world position to the scene targets. Returns false when the point is behind the\n"
+				<< "// camera or off screen. rayDistance is RADIAL distance from the camera, matching what the\n"
+				<< "// G-buffer stores (length(viewPos)); comparing against view-space Z instead would skew hits\n"
+				<< "// toward the screen edges.\n"
+				<< "bool SSRProject(float3 samplePos, float2 targetSize, out int2 pixel, out float2 ndc, out float rayDistance)\n"
+				<< "{\n"
+				<< "\tpixel = int2(0, 0);\n"
+				<< "\tndc = float2(0.0f, 0.0f);\n"
+				<< "\trayDistance = 0.0f;\n"
+				<< "\n"
+				<< "\tfloat4 sampleView = mul(float4(samplePos, 1.0f), matView);\n"
+				<< "\tfloat4 clipPos = mul(sampleView, matProj);\n"
+				<< "\tif (clipPos.w <= 0.0001f)\n"
+				<< "\t{\n"
+				<< "\t\treturn false;\n"
+				<< "\t}\n"
+				<< "\n"
+				<< "\tndc = clipPos.xy / clipPos.w;\n"
+				<< "\tif (abs(ndc.x) > 1.0f || abs(ndc.y) > 1.0f)\n"
+				<< "\t{\n"
+				<< "\t\treturn false;\n"
+				<< "\t}\n"
+				<< "\n"
+				<< "\tfloat2 uv = float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f);\n"
+				<< "\tpixel = (int2)(uv * targetSize);\n"
+				<< "\trayDistance = length(sampleView.xyz);\n"
+				<< "\treturn true;\n"
+				<< "}\n"
+				<< "\n"
+				<< "// Marches the reflected ray through the opaque scene. Returns rgb = reflected colour and\n"
+				<< "// a = confidence in [0,1]. A zero confidence is a miss; the caller blends to its own fallback.\n"
+				<< "float4 ComputeSSR(float3 worldPos, float3 worldNormal, float maxDistance, float steps)\n"
+				<< "{\n"
+				<< "\tfloat3 toPixel = normalize(worldPos - cameraPos);\n"
+				<< "\tfloat3 reflectDir = reflect(toPixel, worldNormal);\n"
+				<< "\n"
+				<< "\t// A ray heading back down into the surface can never reach anything the opaque pass\n"
+				<< "\t// recorded, so do not pay for the march.\n"
+				<< "\tif (reflectDir.y <= 0.001f)\n"
+				<< "\t{\n"
+				<< "\t\treturn float4(0.0f, 0.0f, 0.0f, 0.0f);\n"
+				<< "\t}\n"
+				<< "\n"
+				<< "\tuint targetWidth;\n"
+				<< "\tuint targetHeight;\n"
+				<< "\tsceneDepthTex.GetDimensions(targetWidth, targetHeight);\n"
+				<< "\tfloat2 targetSize = float2((float)targetWidth, (float)targetHeight);\n"
+				<< "\n"
+				<< "\tint marchSteps = (int)clamp(steps, 4.0f, 64.0f);\n"
+				<< "\tfloat safeMaxDistance = max(maxDistance, 0.001f);\n"
+				<< "\tfloat stepLength = safeMaxDistance / (float)marchSteps;\n"
+				<< "\n"
+				<< "\t// How far behind recorded geometry a ray may be and still count as touching it.\n"
+				<< "\tfloat thickness = stepLength * 1.5f;\n"
+				<< "\tfloat previousT = 0.0f;\n"
+				<< "\n"
+				<< "\t[loop]\n"
+				<< "\tfor (int i = 1; i <= marchSteps; ++i)\n"
+				<< "\t{\n"
+				<< "\t\tfloat t = stepLength * (float)i;\n"
+				<< "\n"
+				<< "\t\tint2 pixel;\n"
+				<< "\t\tfloat2 ndc;\n"
+				<< "\t\tfloat rayDistance;\n"
+				<< "\t\tif (!SSRProject(worldPos + reflectDir * t, targetSize, pixel, ndc, rayDistance))\n"
+				<< "\t\t{\n"
+				<< "\t\t\tbreak;\n"
+				<< "\t\t}\n"
+				<< "\n"
+				<< "\t\t// Depth 0 is sky or anything else the opaque pass never wrote; it cannot be hit.\n"
+				<< "\t\tfloat sceneDistance = sceneDepthTex.Load(int3(pixel, 0)).a;\n"
+				<< "\t\tif (sceneDistance > 0.0001f && rayDistance > sceneDistance)\n"
+				<< "\t\t{\n"
+				<< "\t\t\t// The ray crossed behind recorded geometry somewhere between the previous step and\n"
+				<< "\t\t\t// this one. Binary search that interval for the actual crossing: the coarse step alone\n"
+				<< "\t\t\t// lands up to a whole step late, which smears the reflection into vertical streaks and\n"
+				<< "\t\t\t// makes neighbouring pixels disagree about whether they hit at all.\n"
+				<< "\t\t\tfloat lo = previousT;\n"
+				<< "\t\t\tfloat hi = t;\n"
+				<< "\t\t\tint2 hitPixel = pixel;\n"
+				<< "\t\t\tfloat2 hitNdc = ndc;\n"
+				<< "\t\t\tfloat hitDelta = rayDistance - sceneDistance;\n"
+				<< "\n"
+				<< "\t\t\t[loop]\n"
+				<< "\t\t\tfor (int r = 0; r < 5; ++r)\n"
+				<< "\t\t\t{\n"
+				<< "\t\t\t\tfloat mid = 0.5f * (lo + hi);\n"
+				<< "\n"
+				<< "\t\t\t\tint2 midPixel;\n"
+				<< "\t\t\t\tfloat2 midNdc;\n"
+				<< "\t\t\t\tfloat midDistance;\n"
+				<< "\t\t\t\tif (!SSRProject(worldPos + reflectDir * mid, targetSize, midPixel, midNdc, midDistance))\n"
+				<< "\t\t\t\t{\n"
+				<< "\t\t\t\t\tlo = mid;\n"
+				<< "\t\t\t\t\tcontinue;\n"
+				<< "\t\t\t\t}\n"
+				<< "\n"
+				<< "\t\t\t\tfloat midScene = sceneDepthTex.Load(int3(midPixel, 0)).a;\n"
+				<< "\t\t\t\tif (midScene > 0.0001f && midDistance > midScene)\n"
+				<< "\t\t\t\t{\n"
+				<< "\t\t\t\t\thi = mid;\n"
+				<< "\t\t\t\t\thitPixel = midPixel;\n"
+				<< "\t\t\t\t\thitNdc = midNdc;\n"
+				<< "\t\t\t\t\thitDelta = midDistance - midScene;\n"
+				<< "\t\t\t\t}\n"
+				<< "\t\t\t\telse\n"
+				<< "\t\t\t\t{\n"
+				<< "\t\t\t\t\tlo = mid;\n"
+				<< "\t\t\t\t}\n"
+				<< "\t\t\t}\n"
+				<< "\n"
+				<< "\t\t\tif (hitDelta < thickness)\n"
+				<< "\t\t\t{\n"
+				<< "\t\t\t\tfloat3 hitColor = sceneColorTex.Load(int3(hitPixel, 0)).rgb;\n"
+				<< "\n"
+				<< "\t\t\t\t// Confidence instead of an all-or-nothing hit, so the blend toward the caller's\n"
+				<< "\t\t\t\t// fallback is soft:\n"
+				<< "\t\t\t\t//  - only a thin fade at the left/right edges; a wide one drops to the fallback\n"
+				<< "\t\t\t\t//    colour and paints a visible light column down the side of the screen,\n"
+				<< "\t\t\t\t//  - a wide fade toward the top edge, which is where reflected rays actually leave,\n"
+				<< "\t\t\t\t//  - hits far along the ray are trusted less,\n"
+				<< "\t\t\t\t//  - hits that only just fit inside the thickness window are trusted less.\n"
+				<< "\t\t\t\tfloat sideFade = smoothstep(0.0f, 0.05f, 1.0f - abs(hitNdc.x));\n"
+				<< "\t\t\t\tfloat topFade = smoothstep(0.0f, 0.25f, 1.0f - hitNdc.y);\n"
+				<< "\t\t\t\tfloat bottomFade = smoothstep(0.0f, 0.05f, 1.0f + hitNdc.y);\n"
+				<< "\t\t\t\tfloat distanceFade = 1.0f - smoothstep(0.6f, 1.0f, hi / safeMaxDistance);\n"
+				<< "\t\t\t\tfloat depthFit = 1.0f - saturate(hitDelta / thickness);\n"
+				<< "\n"
+				<< "\t\t\t\tfloat confidence = saturate(sideFade * topFade * bottomFade * distanceFade * (0.35f + 0.65f * depthFit));\n"
+				<< "\t\t\t\treturn float4(hitColor, confidence);\n"
+				<< "\t\t\t}\n"
+				<< "\n"
+				<< "\t\t\t// The ray passed further behind this geometry than its assumed thickness - thin\n"
+				<< "\t\t\t// foliage, a pole. Keep marching: it may still hit something further along.\n"
+				<< "\t\t}\n"
+				<< "\n"
+				<< "\t\tpreviousT = t;\n"
+				<< "\t}\n"
+				<< "\n"
+				<< "\treturn float4(0.0f, 0.0f, 0.0f, 0.0f);\n"
+				<< "}\n"
+				<< "\n";
+		}
+
 		if (m_lit && type != PixelShaderType::UI)
 		{
 			m_pixelShaderStream
@@ -1144,6 +1341,17 @@ namespace mmo
 				<< "\tfloat3 B = normalize(input.binormal);\n"
 				<< "\tfloat3 T = normalize(input.tangent);\n"
 				<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
+		}
+		else
+		{
+			// Unlit and UI variants carry no normal, binormal or tangent in VertexOut, so there is
+			// no per-pixel basis to build. AddTransform still references TBN for tangent-space
+			// transforms, though, and every variant emits every expression - without this, any
+			// material using a Tangent-space Transform Vector node fails its UI compile, and an
+			// unlit one fails every variant. Treat tangent space as world space here: it is the only
+			// basis these variants can honestly offer.
+			m_pixelShaderStream
+				<< "\tstatic const float3x3 TBN = float3x3(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);\n";
 		}
 
 		for (size_t exprIndex = 0; exprIndex < m_expressions.size(); ++exprIndex)

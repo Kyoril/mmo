@@ -14,6 +14,10 @@
 #include "base/chunk_reader.h"
 #include "base/chunk_writer.h"
 #include "scene_graph/mesh.h"
+#include "terrain/water_lookup.h"
+#include "terrain/water_mesh_build.h"
+
+#include <functional>
 
 namespace mmo
 {
@@ -158,6 +162,36 @@ namespace mmo
 			void SetArea(uint32 localTileX, uint32 localTileY, uint32 area);
 
 			SceneNode *GetSceneNode() const { return m_pageNode; }
+
+			/// @brief Gets a non-owning view of this page's water arrays for the pure lookup helpers.
+			/// @return The view. Its pointers are null while the page is unloaded, which the helpers
+			///			treat as "no water" rather than crashing.
+			[[nodiscard]] water_lookup::PageWaterView GetWaterView() const
+			{
+				if (m_waterQuadMasks.empty() || m_waterTypes.empty() || m_waterVertexHeights.empty())
+				{
+					return water_lookup::PageWaterView{};
+				}
+
+				return water_lookup::PageWaterView{ m_waterQuadMasks.data(), m_waterTypes.data(), m_waterVertexHeights.data() };
+			}
+
+			/// @brief Sets the callback resolving a liquid type to its surface material asset name.
+			/// @param resolver The callback. Pass an empty function to fall back to the page's own
+			///			water material name for every type.
+			/// @remark Installed once by the client or the editor from the water profile table. The
+			///			terrain library deliberately does not depend on client_data, so the mapping is
+			///			injected rather than looked up here.
+			static void SetWaterMaterialResolver(std::function<String(WaterType)> resolver);
+
+			/// @brief Resolves a liquid type to its surface material asset name via the installed
+			///			resolver.
+			/// @param type The liquid type.
+			/// @return The material asset name, or an empty string when no resolver is installed or
+			///			no profile is authored for the type.
+			/// @remark Exposed so tools can display the material a liquid will actually use rather
+			///			than keeping a second copy of the lookup that could disagree with the mesh.
+			[[nodiscard]] static String ResolveWaterMaterial(WaterType type);
 
 			/// @brief Get the 8×8 water quad presence mask for a local tile.
 			/// Each bit qx + qz*8 is 1 if the corresponding water quad is present.
@@ -312,6 +346,9 @@ namespace mmo
 			ManualRenderObject* m_waterRenderObject{nullptr};
 			/// When true, water is rebuilt with an opaque solid-colour material for minimap rendering.
 			bool m_minimapWaterMode{false};
+			/// Resolves a liquid type to a material asset name. May be empty, in which case water
+			/// falls back to the page's own material name.
+			static std::function<String(WaterType)> ms_waterMaterialResolver;
 
 			int32 m_x;
 			int32 m_z;

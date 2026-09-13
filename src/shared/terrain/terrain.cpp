@@ -2173,40 +2173,80 @@ namespace mmo
 			     + h11 * fx           * fz;
 		}
 
+		namespace
+		{
+			/// Resolves a world position to the page containing it and the sub-quad within that page.
+			/// Shared by the water presence and type queries so the addressing maths has one
+			/// implementation, and that implementation is the one terrain_tests covers.
+			struct WaterQuadHit
+			{
+				const Page* page{ nullptr };
+				water_lookup::QuadCoord quad;
+
+				[[nodiscard]] bool IsValid() const { return page != nullptr && quad.valid; }
+			};
+
+			WaterQuadHit ResolveWaterQuad(const Terrain& terrain, const float x, const float z)
+			{
+				WaterQuadHit hit;
+
+				const uint32 width = terrain.GetWidth();
+				const uint32 height = terrain.GetHeight();
+
+				const float halfW = static_cast<float>(width * constants::PageSize) * 0.5f;
+				const float halfH = static_cast<float>(height * constants::PageSize) * 0.5f;
+				const int32 pageX = static_cast<int32>(std::floor((x + halfW) / constants::PageSize));
+				const int32 pageZ = static_cast<int32>(std::floor((z + halfH) / constants::PageSize));
+				if (pageX < 0 || pageZ < 0 || pageX >= static_cast<int32>(width) || pageZ >= static_cast<int32>(height))
+				{
+					return hit;
+				}
+
+				const Page* page = terrain.GetPage(pageX, pageZ);
+				if (!page)
+				{
+					return hit;
+				}
+
+				const float pageOriginX = static_cast<float>((pageX - 32) * constants::PageSize);
+				const float pageOriginZ = static_cast<float>((pageZ - 32) * constants::PageSize);
+
+				hit.page = page;
+				hit.quad = water_lookup::QuadFromPageLocal(x - pageOriginX, z - pageOriginZ);
+				return hit;
+			}
+		}
+
 		bool Terrain::HasWaterAtWorldPos(float x, float z) const
 		{
-			const float halfW = static_cast<float>(m_width  * constants::PageSize) * 0.5f;
-			const float halfH = static_cast<float>(m_height * constants::PageSize) * 0.5f;
-			const int32 pageX = static_cast<int32>(std::floor((x + halfW) / constants::PageSize));
-			const int32 pageZ = static_cast<int32>(std::floor((z + halfH) / constants::PageSize));
-			if (pageX < 0 || pageZ < 0 || pageX >= static_cast<int32>(m_width) || pageZ >= static_cast<int32>(m_height))
-			{
-				return false;
-			}
-			const Page* page = GetPage(pageX, pageZ);
-			if (!page)
+			const WaterQuadHit hit = ResolveWaterQuad(*this, x, z);
+			if (!hit.IsValid())
 			{
 				return false;
 			}
 
-			const float pageOriginX = static_cast<float>((pageX - 32) * constants::PageSize);
-			const float pageOriginZ = static_cast<float>((pageZ - 32) * constants::PageSize);
-			const float tileSizeF   = static_cast<float>(constants::TileSize);
-			const float quadSizeF   = tileSizeF / 8.0f;
-			const auto  tileX = static_cast<uint32>((x - pageOriginX) / tileSizeF);
-			const auto  tileZ = static_cast<uint32>((z - pageOriginZ) / tileSizeF);
-			if (tileX >= constants::TilesPerPage || tileZ >= constants::TilesPerPage)
+			return water_lookup::HasWaterAtQuad(hit.page->GetWaterView(),
+				hit.quad.tileX, hit.quad.tileZ, hit.quad.qx, hit.quad.qz);
+		}
+
+		WaterType Terrain::GetWaterTypeAtWorldPos(float x, float z) const
+		{
+			const WaterQuadHit hit = ResolveWaterQuad(*this, x, z);
+			if (!hit.IsValid())
 			{
-				return false;
+				return WaterType::None;
 			}
 
-			const float tileLocalX = (x - pageOriginX) - tileX * tileSizeF;
-			const float tileLocalZ = (z - pageOriginZ) - tileZ * tileSizeF;
-			const uint32 qx = std::min(static_cast<uint32>(tileLocalX / quadSizeF), 7u);
-			const uint32 qz = std::min(static_cast<uint32>(tileLocalZ / quadSizeF), 7u);
+			const water_lookup::PageWaterView view = hit.page->GetWaterView();
 
-			const uint64 mask = page->GetWaterQuadMask(tileX, tileZ);
-			return (mask & (1ULL << (qx + qz * 8))) != 0;
+			// Presence is authoritative. A tile keeps its type byte after its quads have been
+			// erased, so reporting the type without this check would call dry ground "ocean".
+			if (!water_lookup::HasWaterAtQuad(view, hit.quad.tileX, hit.quad.tileZ, hit.quad.qx, hit.quad.qz))
+			{
+				return WaterType::None;
+			}
+
+			return water_lookup::TypeAtTile(view, hit.quad.tileX, hit.quad.tileZ);
 		}
 
 		void Terrain::FillWater(float brushCenterX, float brushCenterZ, float radius, float waterHeight, WaterType type)

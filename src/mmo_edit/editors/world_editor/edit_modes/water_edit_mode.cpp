@@ -119,7 +119,29 @@ namespace mmo
 
 			ImGui::Separator();
 			ImGui::Text("Water Material");
-			ImGui::InputText("##watermat", m_materialName, sizeof(m_materialName));
+
+			// Show what the selected liquid type resolves to through the water profile table, so
+			// it is clear before painting that leaving the override blank is the normal case.
+			const String resolved = terrain::Page::ResolveWaterMaterial(m_waterType);
+			if (resolved.empty())
+			{
+				ImGui::TextDisabled("From profile: <none authored>");
+			}
+			else
+			{
+				ImGui::TextDisabled("From profile: %s", resolved.c_str());
+			}
+
+			ImGui::InputText("Override##watermat", m_materialName, sizeof(m_materialName));
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::Text("Per-page material override. Leave blank to use the water profile's");
+				ImGui::Text("material for the selected liquid type. A page that has an override");
+				ImGui::Text("set uses it for every liquid type on that page.");
+				ImGui::EndTooltip();
+			}
+
 			if (ImGui::Button("Apply Material to Brush Area") && m_brushPositionValid)
 			{
 				m_terrain.SetWaterMaterial(m_brushPosition.x, m_brushPosition.z, m_brushRadius, m_materialName);

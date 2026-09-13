@@ -6,6 +6,7 @@
 #include "cascaded_shadow_camera_setup.h"
 #include "ssao_pass.h"
 #include "contact_shadow_pass.h"
+#include "post_process_pass.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
@@ -57,6 +58,19 @@ namespace mmo
         /// @brief Gets the final render target.
         /// @return The final render target.
         [[nodiscard]] TexturePtr GetFinalRenderTarget() const;
+
+        /// @brief Sets the underwater state used by the post-process pass for the next frame.
+        /// @param state The state, normally produced by the client's WaterVolumeSystem.
+        /// @remark Left at its default (dry) by every tool that does not track water, which is
+        ///         what keeps the post-process pass skipped and GetFinalRenderTarget() returning
+        ///         exactly the texture it always did.
+        void SetUnderwaterState(const UnderwaterState& state) { m_underwaterState = state; }
+
+        /// @brief Gets the underwater state currently driving the post-process pass.
+        [[nodiscard]] const UnderwaterState& GetUnderwaterState() const { return m_underwaterState; }
+
+        /// @brief Gets the post-process pass, for setting the caustics texture and tuning.
+        [[nodiscard]] PostProcessPass* GetPostProcessPass() const { return m_postProcessPass.get(); }
 
         Camera* GetShadowCamera() const
         {
@@ -307,6 +321,13 @@ namespace mmo
         /// @brief The screen-space contact shadow pass. Runs between the geometry and lighting
         ///        passes and produces the term the lighting pass multiplies into the sun's shadow.
         std::unique_ptr<ContactShadowPass> m_contactShadowPass;
+
+        /// @brief The screen-space post-process pass. Skipped entirely, and holding no render
+        ///        target at all, while the camera is out of water.
+        std::unique_ptr<PostProcessPass> m_postProcessPass;
+
+        /// @brief Underwater state for the current frame. Dry by default.
+        UnderwaterState m_underwaterState;
 
         /// @brief The light metadata constant buffer (contains light count and ambient color).
         ConstantBufferPtr m_lightMetadataBuffer;

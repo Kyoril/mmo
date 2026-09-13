@@ -365,6 +365,29 @@ namespace mmo
 		/// @return Index of the scene color expression (float3) or IndexNone in case of an error.
 		virtual ExpressionIndex AddSceneColor(ExpressionIndex screenOffset) = 0;
 
+		/// @brief Adds a screen-space reflection expression that ray-marches the opaque scene.
+		///
+		/// @details Uses the same two reserved textures as AddSceneDepth and AddSceneColor, which
+		///          the deferred renderer already binds for the whole forward pass, so no extra
+		///          render pass and no extra bindings are needed. The cost falls only on pixels
+		///          that actually evaluate the expression.
+		///
+		/// @remark The returned hit mask is zero wherever the ray left the screen or found no
+		///         intersection; the expression never invents a fallback colour. That matters for
+		///         water: at the grazing angles you view an ocean from, the reflected ray leaves
+		///         the top of the screen almost immediately, so the miss path is the common path
+		///         and the graph is expected to blend to a sky colour itself.
+		///
+		/// @param worldNormal The reflecting surface normal in world space (float3). Pass IndexNone
+		///        to reflect about world up, which suits flat water. (The vertex normal is not a
+		///        usable default: unlit and UI pixel variants do not carry one.)
+		/// @param maxDistance Maximum ray length in world units (float1). IndexNone means 256.
+		/// @param stepCount Number of march steps (float1), clamped to [4, 64]. IndexNone means 24.
+		/// @return Index of the reflection expression (float4: rgb = reflected colour,
+		///         a = hit mask in [0,1]) or IndexNone in case of an error.
+		virtual ExpressionIndex AddScreenSpaceReflection(ExpressionIndex worldNormal,
+			ExpressionIndex maxDistance, ExpressionIndex stepCount) = 0;
+
 	public:
 		void SetDepthTestEnabled(const bool enable) { m_depthTest = enable; }
 

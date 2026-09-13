@@ -2405,6 +2405,60 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	const uint32 ScreenSpaceReflectionNode::Color = ImColor(0.0f, 0.55f, 0.88f, 0.25f);
+
+	ExpressionIndex ScreenSpaceReflectionNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex normalExpression = IndexNone;
+			if (m_normal.IsLinked())
+			{
+				normalExpression = m_normal.GetLink()->GetNode()->Compile(compiler, m_normal.GetLink());
+			}
+
+			ExpressionIndex maxDistanceExpression = IndexNone;
+			if (m_maxDistance.IsLinked())
+			{
+				maxDistanceExpression = m_maxDistance.GetLink()->GetNode()->Compile(compiler, m_maxDistance.GetLink());
+			}
+
+			ExpressionIndex stepsExpression = IndexNone;
+			if (m_steps.IsLinked())
+			{
+				stepsExpression = m_steps.GetLink()->GetNode()->Compile(compiler, m_steps.GetLink());
+			}
+
+			m_compiledExpressionId = compiler.AddScreenSpaceReflection(
+				normalExpression, maxDistanceExpression, stepsExpression);
+		}
+
+		if (m_compiledExpressionId == IndexNone)
+		{
+			return IndexNone;
+		}
+
+		// One ray march feeds both outputs. Masking the cached float4 rather than calling
+		// AddScreenSpaceReflection again keeps the cost at a single march even when the graph
+		// consumes the colour and the hit mask separately, which is the expected usage.
+		if (outputPin == &m_hitMask)
+		{
+			if (m_hitMaskExpression == IndexNone)
+			{
+				m_hitMaskExpression = compiler.AddMask(m_compiledExpressionId, false, false, false, true);
+			}
+
+			return m_hitMaskExpression;
+		}
+
+		if (m_colorExpression == IndexNone)
+		{
+			m_colorExpression = compiler.AddMask(m_compiledExpressionId, true, true, true, false);
+		}
+
+		return m_colorExpression;
+	}
+
 	ExpressionIndex SceneColorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)

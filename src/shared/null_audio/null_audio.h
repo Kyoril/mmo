@@ -116,6 +116,8 @@ namespace mmo
 
 		void SetCategoryMuted(SoundCategory category, bool muted) override;
 
+		void SetLowPassCutoff(float cutoffHz) override;
+
 	private:
 
 		typedef std::vector<NullSoundInstance> SoundInstanceVector;

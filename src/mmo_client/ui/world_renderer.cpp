@@ -63,14 +63,33 @@ namespace mmo
 			m_internalHeight = internalHeight;
 		}
 
-		// If frame rect mismatches or buffer empty...
-		if (m_lastFrameRect != frameRect || m_frame->GetGeometryBuffer().GetBatchCount() == 0)
+		// Capture the old graphics state (including the render target)
+		gx.CaptureState();
+		gx.Reset();
+
+		if (m_camera)
+		{
+			m_camera->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
+			m_deferredRenderer->Render(m_worldScene, *m_camera);
+		}
+
+		// Restore state before drawing the frame's geometry buffer
+		GraphicsDevice::Get().RestoreState();
+
+		// Rebuild the quad after rendering, not before: only now does the deferred renderer know
+		// which texture holds this frame. The geometry buffer stores the texture pointer per batch,
+		// so a changed final target - diving in, surfacing, the post-process output being
+		// recreated - needs a rebuild just like a changed frame rect does.
+		const TexturePtr finalTexture = m_deferredRenderer->GetFinalRenderTarget();
+		if (m_lastFrameRect != frameRect
+			|| m_frame->GetGeometryBuffer().GetBatchCount() == 0
+			|| finalTexture != m_displayedTexture)
 		{
 			// Reset the buffer first
 			m_frame->GetGeometryBuffer().Reset();
 
 			// Populate the frame's geometry buffer
-			m_frame->GetGeometryBuffer().SetActiveTexture(m_deferredRenderer->GetFinalRenderTarget());
+			m_frame->GetGeometryBuffer().SetActiveTexture(finalTexture);
 			const Color color{ 1.0f, 1.0f, 1.0f };
 			const Rect dst{ 0.0f, 0.0f, frameRect.GetWidth(), frameRect.GetHeight() };
 			const GeometryBuffer::Vertex vertices[6]{
@@ -82,20 +101,10 @@ namespace mmo
 				{ { dst.left,	dst.top,		0.0f }, color, { 0.0f, 0.0f } }
 			};
 			m_frame->GetGeometryBuffer().AppendGeometry(vertices, 6);
+
+			m_displayedTexture = finalTexture;
 		}
 
-		// Capture the old graphics state (including the render target)
-		gx.CaptureState();
-		gx.Reset();
-
-		if (m_camera)
-		{
-			m_camera->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
-			m_deferredRenderer->Render(m_worldScene, *m_camera);
-		}
-		
-		// Restore state before drawing the frame's geometry buffer
-		GraphicsDevice::Get().RestoreState();
 		m_frame->GetGeometryBuffer().Draw();
 
 		// Apply frame rect

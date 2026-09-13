@@ -289,12 +289,31 @@ namespace mmo
 		return m_buffer;
 	}
 
+	void GlobalShaderParameters::EnsureEngineDefaults()
+	{
+		// DefineVector fails harmlessly when the name already exists, so anything the asset
+		// declared keeps its authored default and only genuinely missing entries are added.
+
+		// Published by SkyComponent every frame from the time-of-day colour curves.
+		DefineVector("SkyHorizonColor", Vector4(0.62f, 0.76f, 0.94f, 1.0f));
+		DefineVector("SkyZenithColor", Vector4(0.24f, 0.45f, 0.82f, 1.0f));
+
+		// Published by SkyComponent every frame. xyz points TOWARD the sun, matching the
+		// convention Scene's forward camera constant buffer uses, so materials must not negate
+		// it again. SunColor carries the blended sun/moon colour in rgb and intensity in a.
+		DefineVector("SunDirection", Vector4(0.0f, 1.0f, 0.0f, 0.0f));
+		DefineVector("SunColor", Vector4(1.0f, 0.95f, 0.9f, 1.0f));
+	}
+
 	bool GlobalShaderParameters::LoadFromAsset(const std::string_view assetPath)
 	{
 		const auto file = AssetRegistry::OpenFile(String(assetPath));
 		if (!file)
 		{
-			// Not an error - the registry simply starts out empty until one is authored.
+			// Not an error - the registry simply starts out empty until one is authored. The
+			// engine's own parameters still have to exist, or every material referencing one
+			// silently samples zero.
+			EnsureEngineDefaults();
 			return false;
 		}
 
@@ -305,8 +324,11 @@ namespace mmo
 		if (!deserializer.Read(reader))
 		{
 			ELOG("Failed to read global shader parameters from " << assetPath);
+			EnsureEngineDefaults();
 			return false;
 		}
+
+		EnsureEngineDefaults();
 
 		ILOG("Loaded " << m_parameters.size() << " global shader parameter(s) from " << assetPath);
 		return true;

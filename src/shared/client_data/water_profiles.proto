@@ -1,0 +1,48 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+// Per-liquid-type presentation settings.
+//
+// NOTE: Keep this file in sync with src/shared/proto_data/water_profiles.proto!
+// This is the client-side mirror of the authoring schema; every field number in here has to
+// match it exactly. Only the client consumes these values - the server resolves swimming from
+// its own water map - but authoring happens in mmo_edit, which works on the proto_data project.
+//
+// The id matches terrain::WaterType exactly (1 = Water, 2 = Ocean, 3 = Lava, 4 = Slime); a
+// unit test asserts that mapping so the two cannot silently drift. Field numbers are part of
+// the ClientDB contract and must never be reused or renumbered.
+message WaterProfile
+{
+	required uint32 id = 1;
+	required string name = 2;
+
+	// Surface material asset used for this liquid, e.g. "Worlds/Water_Ocean.hmat".
+	// A page's own water material name still overrides this when one is set.
+	optional string surface_material = 3;
+
+	// Underwater fog colour, packed 0xAARRGGBB.
+	optional uint32 fog_color = 4;
+
+	// Underwater fog density per world unit. Higher is murkier.
+	optional float fog_density = 5;
+
+	// Beer-Lambert absorption colour, packed 0xAARRGGBB, driving the depth tint.
+	optional uint32 absorption_color = 6;
+
+	// Strength of the projected caustics while submerged. 0 disables them.
+	optional float caustics_strength = 7;
+
+	// Caustics texture asset, e.g. "Textures/Caustics_01.htex".
+	optional string caustics_texture = 8;
+
+	// Low-pass filter cutoff in Hz applied to audio while submerged. 0 leaves audio dry.
+	optional float audio_lowpass_hz = 9;
+
+	// Screen distortion strength while submerged. 0 disables it.
+	optional float distortion_strength = 10;
+}
+
+message WaterProfiles
+{
+	repeated WaterProfile entry = 1;
+}

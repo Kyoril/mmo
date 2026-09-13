@@ -154,6 +154,20 @@ namespace mmo
 		/// @return true if the asset was found and read successfully.
 		bool LoadFromAsset(std::string_view assetPath);
 
+		/// @brief Defines the parameters engine subsystems publish into every frame, for any of
+		///        them the loaded asset did not already declare.
+		///
+		/// @remark SetScalar / SetVector are no-ops for an undefined name, and the material
+		///         compiler only emits a cbuffer slot for parameters that exist at compile time.
+		///         A material referencing an undefined global therefore samples zero with no
+		///         error anywhere - which for the water material means a black sky reflection
+		///         and no sun glint. Guaranteeing the definitions in code rather than relying on
+		///         an authored asset removes that whole failure mode.
+		///
+		/// @remark Called after the asset has been read, so an authored default always wins over
+		///         the engine's fallback.
+		void EnsureEngineDefaults();
+
 		/// @brief Saves the registry to an asset.
 		/// @return true on success.
 		bool SaveToAsset(std::string_view assetPath) const;

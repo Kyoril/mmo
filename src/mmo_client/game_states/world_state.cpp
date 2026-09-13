@@ -135,6 +135,7 @@ namespace mmo
 		static ConsoleVar *s_ssaoDebugVar = nullptr;
 
 		static ConsoleVar *s_contactShadowsVar = nullptr;
+		static ConsoleVar *s_underwaterGodRaysVar = nullptr;
 		static ConsoleVar *s_contactShadowQualityVar = nullptr;
 		static ConsoleVar *s_contactShadowLengthVar = nullptr;
 		static ConsoleVar *s_contactShadowThicknessVar = nullptr;
@@ -479,6 +480,10 @@ namespace mmo
 
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
+
+		// UpdateWaterVolume stops running once the world is left, so a low-pass applied while
+		// submerged would otherwise stay on the master bus through character select and login.
+		m_audio.SetLowPassCutoff(0.0f);
 
 		// Force a zone (and thus music/ambience) resolve on the next world enter.
 		m_lastZoneId = UINT32_MAX;
@@ -1016,6 +1021,10 @@ namespace mmo
 		m_zoneMusic.Update(deltaSeconds);
 		m_zoneAmbience.Update(deltaSeconds);
 
+		// Submersion state for the underwater post-process and the audio low-pass. Runs after the
+		// audio update so the cutoff it sets is not overwritten within the same frame.
+		UpdateWaterVolume(deltaSeconds);
+
 		// Only update when world loading is ready
 		if (m_worldLoaded && m_timeSyncResponseSent)
 		{
@@ -1290,6 +1299,134 @@ namespace mmo
 		}
 	}
 
+	/// Adapts the streamed client terrain to the water queries WaterVolumeSystem needs.
+	///
+	/// The terrain pointer is refreshed every frame rather than captured once, because the world
+	/// instance is torn down and rebuilt on every world change; a captured pointer would dangle
+	/// across a zone transition.
+	class WorldState::TerrainWaterQuery final : public IWaterQuery
+	{
+	public:
+		void SetTerrain(terrain::Terrain* terrain) { m_terrain = terrain; }
+
+		[[nodiscard]] bool HasWaterAt(const float x, const float z) const override
+		{
+			return m_terrain != nullptr && m_terrain->HasWaterAtWorldPos(x, z);
+		}
+
+		[[nodiscard]] float GetWaterHeightAt(const float x, const float z) const override
+		{
+			return m_terrain != nullptr ? m_terrain->GetWaterHeightAtWorldPos(x, z) : 0.0f;
+		}
+
+		[[nodiscard]] uint32 GetWaterTypeAt(const float x, const float z) const override
+		{
+			if (m_terrain == nullptr)
+			{
+				return 0u;
+			}
+
+			return static_cast<uint32>(m_terrain->GetWaterTypeAtWorldPos(x, z));
+		}
+
+	private:
+		terrain::Terrain* m_terrain{ nullptr };
+	};
+
+	// Defined here rather than in the header so TerrainWaterQuery, declared just above, is a
+	// complete type at the point unique_ptr's deleter is instantiated.
+	WorldState::~WorldState() = default;
+
+	void WorldState::OnUnderwaterGodRaysChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		if (m_waterVolume)
+		{
+			m_waterVolume->SetGodRaysEnabled(var.GetBoolValue());
+		}
+	}
+
+	DeferredRenderer* WorldState::GetWorldDeferredRenderer() const
+	{
+		const WorldFrame* worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			return nullptr;
+		}
+
+		const WorldRenderer* renderer = reinterpret_cast<const WorldRenderer*>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			return nullptr;
+		}
+
+		return renderer->GetDeferredRenderer();
+	}
+
+	WaterProfileValues WorldState::ResolveWaterProfile(const uint32 waterType) const
+	{
+		const auto* profile = m_project.waterProfiles.getById(waterType);
+
+		// An unauthored liquid stays invalid on purpose: WaterVolumeSystem zeroes its parameters
+		// rather than inheriting whatever liquid resolved last.
+		return profile != nullptr ? ToWaterProfileValues(*profile) : WaterProfileValues();
+	}
+
+	void WorldState::UpdateWaterVolume(const float deltaSeconds)
+	{
+		if (!m_waterVolume || !m_waterQuery || !m_playerController)
+		{
+			return;
+		}
+
+		// Re-point the adapter every frame: the world instance is rebuilt on every world change,
+		// so a pointer captured at setup would dangle across a zone transition.
+		m_waterQuery->SetTerrain(
+			(m_worldLoaded && m_worldInstance && m_worldInstance->HasTerrain())
+				? m_worldInstance->GetTerrain()
+				: nullptr);
+
+		const Vector3 cameraPosition = m_playerController->GetCamera().GetDerivedPosition();
+
+		// The player reference is the head, not the feet. A unit swimming at the surface floats with
+		// its feet well below it (SWIM_SURFACE_MARGIN in unit_movement.cpp), so judging submersion
+		// at the feet muffled the world whenever the player swam with their head above water.
+		constexpr float submersionReferenceHeight = 1.6f;
+
+		// Without a controlled unit (loading, or between characters) the player reference falls
+		// back to the camera, which keeps the audio and screen states consistent rather than
+		// reporting the origin as the player's position.
+		const Vector3 playerPosition = m_playerController->GetControlledUnit()
+			? m_playerController->GetControlledUnit()->GetPosition() + Vector3(0.0f, submersionReferenceHeight, 0.0f)
+			: cameraPosition;
+
+		m_waterVolume->Update(cameraPosition.x, cameraPosition.y, cameraPosition.z,
+			playerPosition.x, playerPosition.y, playerPosition.z, deltaSeconds);
+
+		if (DeferredRenderer* deferred = GetWorldDeferredRenderer())
+		{
+			deferred->SetUnderwaterState(m_waterVolume->GetState());
+
+			// The caustics texture follows the liquid driving the screen effect, which is held
+			// through the surfacing crossing, so the pattern fades out with the fog instead of
+			// vanishing on the frame the camera breaks the surface.
+			const uint32 screenWaterType = m_waterVolume->GetScreenWaterType();
+			const auto* profile = screenWaterType != 0 ? m_project.waterProfiles.getById(screenWaterType) : nullptr;
+			const String causticsTexture = (profile != nullptr && profile->has_caustics_texture())
+				? profile->caustics_texture()
+				: String();
+
+			PostProcessPass* pass = deferred->GetPostProcessPass();
+			if (pass != nullptr && (pass != m_underwaterCausticsPass || causticsTexture != m_underwaterCausticsTexture))
+			{
+				pass->SetCausticsTexture(causticsTexture.empty() ? nullptr : TextureManager::Get().CreateOrRetrieve(causticsTexture));
+				m_underwaterCausticsTexture = causticsTexture;
+				m_underwaterCausticsPass = pass;
+			}
+		}
+
+		m_audio.SetLowPassCutoff(m_waterVolume->GetAudioLowPassHz());
+	}
+
 	void WorldState::SetupWorldScene()
 	{
 		m_scene = std::make_unique<OctreeScene>();
@@ -1297,6 +1434,27 @@ namespace mmo
 
 		// Create sky component to manage the sky dome and day/night cycle
 		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
+
+		// Water. The query adapter is declared before the volume system so it outlives it.
+		m_waterQuery = std::make_unique<TerrainWaterQuery>();
+		m_waterVolume = std::make_unique<WaterVolumeSystem>(*m_waterQuery);
+		m_waterVolume->SetProfileResolver([this](const uint32 waterType) { return ResolveWaterProfile(waterType); });
+
+		// Let terrain pages resolve their surface material from the profile table. A page that
+		// carries an explicit material name still overrides this, so nothing already authored
+		// changes behaviour.
+		// The resolver is static and outlives any one state, so it captures the project it reads
+		// rather than this.
+		terrain::Page::SetWaterMaterialResolver([&project = m_project](const terrain::WaterType waterType) -> String
+			{
+				const auto* profile = project.waterProfiles.getById(static_cast<uint32>(waterType));
+				if (profile == nullptr || !profile->has_surface_material())
+				{
+					return String();
+				}
+
+				return profile->surface_material();
+			});
 
 		m_rayQuery = std::move(m_scene->CreateRayQuery(Ray()));
 		m_rayQuery->SetSortByDistance(true);
@@ -1899,6 +2057,9 @@ namespace mmo
 		s_contactShadowsVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadows", "Screen-space contact shadows for the sun. Adds the short, sharp shadows where objects meet surfaces that shadow maps are too coarse to resolve. 1 = on, 0 = off.", "1");
 		m_cvarChangedSignals += s_contactShadowsVar->Changed.connect(this, &WorldState::OnContactShadowsEnabledChanged);
 
+		s_underwaterGodRaysVar = ConsoleVarMgr::RegisterConsoleVar("gxUnderwaterGodRays", "Sun shafts while submerged. The most expensive part of the underwater effect; everything else stays on when this is off. 1 = on, 0 = off.", "1");
+		m_cvarChangedSignals += s_underwaterGodRaysVar->Changed.connect(this, &WorldState::OnUnderwaterGodRaysChanged);
+
 		s_contactShadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowQuality", "Contact shadow detail preset: 0 = Low (4 steps), 1 = Medium (8), 2 = High (16). Lower values improve performance.", "1");
 		m_cvarChangedSignals += s_contactShadowQualityVar->Changed.connect(this, &WorldState::OnContactShadowQualityChanged);
 
@@ -2023,6 +2184,7 @@ namespace mmo
 		OnSsaoParametersChanged(*s_ssaoRadiusVar, "");
 		OnSsaoDebugChanged(*s_ssaoDebugVar, "");
 		OnContactShadowsEnabledChanged(*s_contactShadowsVar, "");
+		OnUnderwaterGodRaysChanged(*s_underwaterGodRaysVar, "");
 		OnContactShadowQualityChanged(*s_contactShadowQualityVar, "");
 		OnContactShadowParametersChanged(*s_contactShadowLengthVar, "");
 		OnContactShadowDebugChanged(*s_contactShadowDebugVar, "");
