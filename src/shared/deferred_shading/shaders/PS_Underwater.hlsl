@@ -115,6 +115,21 @@ float SampleWrappedRed(Texture2D tex, float2 uv)
     return lerp(lerp(s00, s10, blend.x), lerp(s01, s11, blend.x), blend.y);
 }
 
+// Interleaved gradient noise (Jimenez 2014): a cheap per-pixel value in [0,1) with no visible
+// repeating pattern, well suited to dithering.
+float InterleavedGradientNoise(float2 pixel)
+{
+    return frac(52.9829189f * frac(dot(pixel, float2(0.06711056f, 0.00583715f))));
+}
+
+// Triangular-distributed noise in (-1, 1). Two uniform samples summed rather than one: a uniform
+// dither removes the steps but leaves the noise level varying with the value being dithered,
+// which itself reads as faint banding.
+float TriangularDither(float2 pixel)
+{
+    return InterleavedGradientNoise(pixel) + InterleavedGradientNoise(pixel + float2(5.588238f, 5.588238f)) - 1.0f;
+}
+
 float4 main(PS_INPUT input) : SV_TARGET
 {
     float2 uv = input.TexCoord;
@@ -263,6 +278,14 @@ float4 main(PS_INPUT input) : SV_TARGET
             color += shaft * shaftDepthFade * strength * 1.5f;
         }
     }
+
+    // --- Dither -------------------------------------------------------------------------
+    // Underwater the frame is dominated by broad, dark, low-contrast gradients: the ceiling beyond
+    // Snell's window and the fog toward the horizon. Rendered at 16 bits they are smooth, but the
+    // frame ends up on an 8-bit display, where such a gradient spans only a dozen steps per channel
+    // across hundreds of pixels - clearly visible bands, tinted because each channel steps on a
+    // different row. A triangular noise of one step breaks every edge into grain too fine to see.
+    color += TriangularDither(input.Position.xy) * (strength / 255.0f);
 
     return float4(color, 1.0f);
 }
