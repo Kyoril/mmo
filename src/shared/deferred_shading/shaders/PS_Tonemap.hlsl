@@ -37,12 +37,19 @@ float InterleavedGradientNoise(float2 position)
     return frac(52.9829189f * frac(dot(position, float2(0.06711056f, 0.00583715f))));
 }
 
+float3 Sanitise(float3 c)
+{
+    // Lighting can leave NaN/Inf in the linear HDR scene (GGX 0/0, values above the RGBA16F
+    // range); ACES on Inf/NaN would otherwise turn the whole pixel NaN in the final image.
+    return (any(isnan(c)) || any(isinf(c))) ? float3(0.0f, 0.0f, 0.0f) : min(c, 1e4f);
+}
+
 float4 main(PS_INPUT input) : SV_TARGET
 {
     float4 scene = SceneTexture.Load(int3(input.Position.xy, 0));
     float3 bloom = BloomTexture.SampleLevel(LinearSampler, input.TexCoord, 0).rgb;
 
-    float3 hdr = scene.rgb + bloom * BloomScale;
+    float3 hdr = min(Sanitise(scene.rgb) + Sanitise(bloom) * BloomScale, 1e4f);
     float3 color = pow(ACESFilm(hdr * Exposure), 1.0f / 2.2f);
 
     // Triangular noise in [-1, 1]: two uniform samples summed. Breaks the 8-bit banding the fog

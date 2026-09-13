@@ -160,6 +160,11 @@ namespace mmo
 
 		EnsureTargets();
 
+		// The forward pass earlier in the frame may leave alpha blending enabled (its last
+		// translucent material). Every downsample/upsample draw here is a full-screen quad that
+		// must overwrite its target outright.
+		m_device.SetBlendMode(BlendMode::Opaque);
+
 		m_device.SetDepthEnabled(false);
 		m_device.SetDepthWriteEnabled(false);
 		m_device.SetFillMode(FillMode::Solid);

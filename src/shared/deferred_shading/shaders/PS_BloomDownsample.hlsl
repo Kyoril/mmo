@@ -26,7 +26,13 @@ cbuffer BloomDownsampleBuffer : register(b2)
 
 float3 Tap(float2 uv)
 {
-    return SourceTexture.SampleLevel(LinearSampler, uv, 0).rgb;
+    float3 c = SourceTexture.SampleLevel(LinearSampler, uv, 0).rgb;
+
+    // The lighting pass can produce NaN (0/0 in the GGX term at roughness 0) or Inf (>65504 in
+    // RGBA16F). Bloom's downsample chain spreads a single such texel into a large blob, so it
+    // must be sanitised at the source rather than relying on the tonemapper's saturate.
+    c = (any(isnan(c)) || any(isinf(c))) ? float3(0.0f, 0.0f, 0.0f) : min(c, 1e4f);
+    return c;
 }
 
 float KarisWeight(float3 color)

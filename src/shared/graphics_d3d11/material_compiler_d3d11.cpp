@@ -1143,6 +1143,9 @@ namespace mmo
 				<< "float3 LoadSceneColor(int2 pixel)\n"
 				<< "{\n"
 				<< "\tfloat3 sceneColor = sceneColorTex.Load(int3(pixel, 0)).rgb;\n"
+				<< "\t// Lighting can leave NaN/Inf in the captured linear HDR scene (GGX 0/0, values above the\n"
+				<< "\t// RGBA16F range); sanitise before ACES so a material graph never turns NaN from this.\n"
+				<< "\tsceneColor = (any(isnan(sceneColor)) || any(isinf(sceneColor))) ? float3(0.0, 0.0, 0.0) : min(sceneColor, 1e4);\n"
 				<< "\treturn forwardOutputLinear > 0.5 ? pow(ACESFilm(max(sceneColor, 0.0)), (1.0 / 2.2).xxx) : sceneColor;\n"
 				<< "}\n\n";
 		}

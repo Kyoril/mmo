@@ -27,6 +27,8 @@ namespace mmo
 			float ditherStrength;
 			float padding0;
 		};
+
+		static_assert(sizeof(TonemapConstants) == 16, "TonemapConstants must match the HLSL layout");
 	}
 
 	TonemapPass::TonemapPass(GraphicsDevice& device, const uint32 width, const uint32 height)
@@ -70,6 +72,11 @@ namespace mmo
 
 		m_outputRT->Activate();
 		m_device.SetViewport(0, 0, static_cast<int32>(m_width), static_cast<int32>(m_height), 0.0f, 1.0f);
+
+		// The forward pass earlier in the frame may leave alpha blending enabled (its last
+		// translucent material). This pass writes a full-screen quad and must not blend with
+		// whatever was left in m_outputRT.
+		m_device.SetBlendMode(BlendMode::Opaque);
 
 		m_device.SetDepthEnabled(false);
 		m_device.SetDepthWriteEnabled(false);

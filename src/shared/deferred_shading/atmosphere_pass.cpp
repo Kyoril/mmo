@@ -142,6 +142,12 @@ namespace mmo
 		const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, ConstantBuffer& shadowBuffer,
 		ConstantBuffer& cameraBuffer, const std::function<void()>& bindShadowSampler, VertexBuffer& quad, ShaderBase& fullscreenVs)
 	{
+		// This pass runs before the forward pass in the frame, but blend state persists across
+		// frames: the previous frame's forward pass may have left alpha blending enabled. Both the
+		// march/blur and composite draws below are full-screen quads that must overwrite their
+		// targets outright.
+		m_device.SetBlendMode(BlendMode::Opaque);
+
 		const bool marchEnabled = m_settings.IsMarchEnabled();
 		if (marchEnabled)
 		{

@@ -79,6 +79,15 @@ float4 UpsampleMarch(int2 pixel, float pixelDistance)
         }
     }
 
+    // A depth weight never actually drops low enough for weightSum to hit the old 1e-4f guard, so
+    // the nearest-neighbour fallback below was dead: fall back explicitly once the best-matching
+    // neighbour's depth is still far off relative to the pixel's own distance.
+    float relativeDelta = bestDelta / max(pixelDistance, 1.0f);
+    if (relativeDelta > 0.1f)
+    {
+        return nearest;
+    }
+
     return weightSum > 1e-4f ? sum / weightSum : nearest;
 }
 

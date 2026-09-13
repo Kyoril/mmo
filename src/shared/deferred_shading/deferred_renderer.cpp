@@ -453,9 +453,11 @@ namespace mmo
         // Height fog and light shafts over the lit opaque scene. The composite reads m_renderTexture
         // and writes m_sceneColorCopy, which stays the refraction source; the single CopyResource
         // below then carries the fogged scene back into m_renderTexture for the forward pass.
-        // Skipped while submerged (the underwater pass has its own fog) or with fog turned off; the
-        // copy then runs in its old direction.
-        const bool runAtmosphere = scene.IsFogEnabled() && !m_underwaterState.active;
+        // Skipped while submerged (the underwater pass has its own fog), with fog turned off, or
+        // when the combined density is zero (time-of-day can scale the base density to nothing);
+        // the copy then runs in its old direction.
+        const bool runAtmosphere = scene.IsFogEnabled() && !m_underwaterState.active
+            && scene.GetAtmosphereParameters().density * scene.GetAtmosphereTimeOfDay().densityMultiplier > 0.0f;
         if (runAtmosphere)
         {
             m_atmospherePass->Render(camera, *m_renderTexture, m_gBuffer.GetNormalRT(), *m_sceneColorCopy,
