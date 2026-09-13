@@ -67,6 +67,8 @@ bin/Debug2/
 /src/shared/deferred_shading/shaders/PS_AtmosphereMarch.h
 /src/shared/deferred_shading/shaders/PS_AtmosphereBlur.h
 /src/shared/deferred_shading/shaders/PS_AtmosphereComposite.h
+/src/shared/deferred_shading/shaders/PS_BloomDownsample.h
+/src/shared/deferred_shading/shaders/PS_BloomUpsample.h
 *.local.json
 .claude/*
 !.claude/commands/

@@ -6,6 +6,7 @@
 #include "contact_shadow_pass.h"
 #include "post_process_pass.h"
 #include "atmosphere_pass.h"
+#include "bloom_pass.h"
 
 #include "frame_ui/rect.h"
 #include "graphics/global_shader_parameters.h"
@@ -149,6 +150,7 @@ namespace mmo
         m_ssaoPass = std::make_unique<SsaoPass>(m_device, width, height);
         m_contactShadowPass = std::make_unique<ContactShadowPass>(m_device, width, height);
         m_atmospherePass = std::make_unique<AtmospherePass>(m_device, width, height);
+        m_bloomPass = std::make_unique<BloomPass>(m_device, width, height);
         m_postProcessPass = std::make_unique<PostProcessPass>(m_device, width, height);
         m_tonemapPass = std::make_unique<TonemapPass>(m_device, width, height);
 
@@ -338,6 +340,7 @@ namespace mmo
         m_ssaoPass->Resize(width, height);
         m_contactShadowPass->Resize(width, height);
         m_atmospherePass->Resize(width, height);
+        m_bloomPass->Resize(width, height);
         m_postProcessPass->Resize(width, height);
         m_tonemapPass->Resize(width, height);
     }
@@ -504,7 +507,18 @@ namespace mmo
 
         // Linear HDR -> display. The underwater post-process below still receives display-referred
         // colour, so its thresholds and tuning are untouched.
-        m_tonemapPass->Render(*m_renderTexture, nullptr, 0.0f, *m_quadBuffer, *m_deferredLightVs);
+        // Bloom sits out while submerged: the underwater pass has its own shafts and a bright
+        // surface seen from below would otherwise bloom through the water fog.
+        TexturePtr bloom;
+        float bloomScale = 0.0f;
+        if (!m_underwaterState.active)
+        {
+            m_bloomPass->Render(*m_renderTexture, *m_quadBuffer, *m_deferredLightVs);
+            bloom = m_bloomPass->GetResult();
+            bloomScale = m_bloomPass->GetResultScale();
+        }
+
+        m_tonemapPass->Render(*m_renderTexture, bloom, bloomScale, *m_quadBuffer, *m_deferredLightVs);
 
         // Screen-space post-processing over the finished frame. WouldRun is false whenever the
         // camera is out of water, and then this does nothing, allocates nothing, and

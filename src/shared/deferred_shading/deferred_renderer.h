@@ -9,6 +9,7 @@
 #include "post_process_pass.h"
 #include "tonemap_pass.h"
 #include "atmosphere_pass.h"
+#include "bloom_pass.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
@@ -250,6 +251,15 @@ namespace mmo
         /// @brief Sets the atmosphere debug view: 0 off, 1 in-scatter, 2 transmittance, 3 march shadow term.
         void SetAtmosphereDebugMode(int mode) { m_atmospherePass->GetSettings().SetDebugMode(mode); }
 
+        /// @brief Applies the bloom quality preset: 0 Off, 1 Low, 2 High.
+        void SetBloomQuality(int level) { m_bloomPass->GetSettings().ApplyQualityLevel(level); }
+
+        /// @brief Sets the bloom intensity, clamped to [0, 1].
+        void SetBloomIntensity(float intensity) { m_bloomPass->GetSettings().SetIntensity(intensity); }
+
+        /// @brief Sets the bloom soft threshold (linear brightness), clamped to [0, 16].
+        void SetBloomThreshold(float threshold) { m_bloomPass->GetSettings().SetThreshold(threshold); }
+
         /// @brief Gets the light rendering statistics from the last frame.
         /// @return Reference to the light render statistics.
         const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
@@ -344,6 +354,9 @@ namespace mmo
 
         /// @brief Height fog and light shafts. Runs after lighting, before the forward pass.
         std::unique_ptr<AtmospherePass> m_atmospherePass;
+
+        /// @brief Bloom over the finished linear HDR scene, added by the TonemapPass.
+        std::unique_ptr<BloomPass> m_bloomPass;
 
         /// @brief The screen-space post-process pass. Skipped entirely, and holding no render
         ///        target at all, while the camera is out of water.
