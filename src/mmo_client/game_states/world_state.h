@@ -272,6 +272,18 @@ namespace mmo
 		/// @brief Called when the gxContactShadowDebug console variable changed.
 		void OnContactShadowDebugChanged(ConsoleVar &var, const std::string &oldValue);
 
+		/// @brief Called when gxFogDensity, gxFogHeightFalloff, gxFogBaseHeight, gxFogAnisotropy or gxShaftStrength changed.
+		void OnAtmosphereParametersChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when gxAtmosphereQuality, gxAtmosphereMarchDistance or gxAtmosphereDebug changed.
+		void OnAtmosphereRenderingChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when gxBloomQuality, gxBloomIntensity or gxBloomThreshold changed.
+		void OnBloomChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when gxExposure changed.
+		void OnExposureChanged(ConsoleVar &var, const std::string &oldValue);
+
 		void OnCombatVignetteChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue);

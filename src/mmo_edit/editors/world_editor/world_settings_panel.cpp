@@ -137,6 +137,62 @@ namespace mmo
                     m_terrain.GetScene().SetFogEnabled(showFog);
                 }
 
+                if (showFog)
+                {
+                    ImGui::Indent();
+
+                    // Base values; the sky's time-of-day curves (FogColor.hccv, SunScatter.hccv)
+                    // multiply density and shaft strength on top, exactly as in the client.
+                    AtmosphereParameters atmosphere = m_terrain.GetScene().GetAtmosphereParameters();
+                    bool atmosphereChanged = false;
+
+                    float density = atmosphere.density;
+                    if (ImGui::DragFloat("Fog Density", &density, 0.0005f, 0.0f, 1.0f, "%.4f"))
+                    {
+                        atmosphere.SetDensity(density);
+                        atmosphereChanged = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Extinction per metre at the base height (client cvar gxFogDensity).");
+                    }
+
+                    float falloff = atmosphere.heightFalloff;
+                    if (ImGui::DragFloat("Fog Height Falloff", &falloff, 0.001f, 0.0f, 1.0f, "%.3f"))
+                    {
+                        atmosphere.SetHeightFalloff(falloff);
+                        atmosphereChanged = true;
+                    }
+
+                    float baseHeight = atmosphere.baseHeight;
+                    if (ImGui::DragFloat("Fog Base Height", &baseHeight, 0.5f, -10000.0f, 10000.0f, "%.1f"))
+                    {
+                        atmosphere.SetBaseHeight(baseHeight);
+                        atmosphereChanged = true;
+                    }
+
+                    float anisotropy = atmosphere.anisotropy;
+                    if (ImGui::SliderFloat("Sun Glow Tightness", &anisotropy, 0.0f, 0.95f, "%.2f"))
+                    {
+                        atmosphere.SetAnisotropy(anisotropy);
+                        atmosphereChanged = true;
+                    }
+
+                    float shaftStrength = atmosphere.shaftStrength;
+                    if (ImGui::DragFloat("Light Shaft Strength", &shaftStrength, 0.01f, 0.0f, 16.0f, "%.2f"))
+                    {
+                        atmosphere.SetShaftStrength(shaftStrength);
+                        atmosphereChanged = true;
+                    }
+
+                    if (atmosphereChanged)
+                    {
+                        m_terrain.GetScene().SetAtmosphereParameters(atmosphere);
+                    }
+
+                    ImGui::Unindent();
+                }
+
                 // Foliage rendering (authored trees) — mirrors the in-game client appearance.
                 // Hidden by default since dense foliage makes terrain editing harder.
                 bool showFoliage = m_showFoliage;

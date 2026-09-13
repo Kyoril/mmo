@@ -143,6 +143,18 @@ namespace mmo
 		static ConsoleVar *s_contactShadowFadeVar = nullptr;
 		static ConsoleVar *s_contactShadowBiasVar = nullptr;
 		static ConsoleVar *s_contactShadowDebugVar = nullptr;
+		static ConsoleVar *s_atmosphereQualityVar = nullptr;
+		static ConsoleVar *s_fogDensityVar = nullptr;
+		static ConsoleVar *s_fogHeightFalloffVar = nullptr;
+		static ConsoleVar *s_fogBaseHeightVar = nullptr;
+		static ConsoleVar *s_fogAnisotropyVar = nullptr;
+		static ConsoleVar *s_shaftStrengthVar = nullptr;
+		static ConsoleVar *s_atmosphereMarchDistanceVar = nullptr;
+		static ConsoleVar *s_atmosphereDebugVar = nullptr;
+		static ConsoleVar *s_bloomQualityVar = nullptr;
+		static ConsoleVar *s_bloomIntensityVar = nullptr;
+		static ConsoleVar *s_bloomThresholdVar = nullptr;
+		static ConsoleVar *s_exposureVar = nullptr;
 
 		static ConsoleVar *s_renderScaleVar = nullptr;
 
@@ -1431,6 +1443,12 @@ namespace mmo
 	{
 		m_scene = std::make_unique<OctreeScene>();
 
+		// A fresh scene starts from AtmosphereParameters defaults; re-apply the player's cvars.
+		if (s_fogDensityVar)
+		{
+			OnAtmosphereParametersChanged(*s_fogDensityVar, "");
+		}
+
 		// Create sky component to manage the sky dome and day/night cycle
 		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
 
@@ -2080,6 +2098,44 @@ namespace mmo
 		s_contactShadowDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowDebug", "Visualize the raw contact shadow term instead of the lit scene. Healthy is near-white with thin dark bands at contacts. 1 = on, 0 = off.", "0");
 		m_cvarChangedSignals += s_contactShadowDebugVar->Changed.connect(this, &WorldState::OnContactShadowDebugChanged);
 
+		// Height fog, light shafts and bloom. Fog base values are multiplied by the time-of-day curves
+		// Models/FogColor.hccv and Models/SunScatter.hccv. All distances are metres.
+		s_atmosphereQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereQuality", "Light shaft quality: 0 = Off (height fog only), 1 = Low (quarter resolution, 12 steps), 2 = Medium (half, 24), 3 = High (half, 48), 4 = Ultra (full, 64).", "3");
+		m_cvarChangedSignals += s_atmosphereQualityVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+
+		s_atmosphereMarchDistanceVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereMarchDistance", "How many metres of each view ray are marched for light shafts (at most 300, the shadow range). Fog beyond uses a closed-form estimate.", "200");
+		m_cvarChangedSignals += s_atmosphereMarchDistanceVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+
+		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Atmosphere debug view: 0 = off, 1 = scattered light only, 2 = transmittance, 3 = light shaft shadow term.", "0");
+		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+
+		s_fogDensityVar = ConsoleVarMgr::RegisterConsoleVar("gxFogDensity", "Height fog extinction per metre at gxFogBaseHeight. 0 disables the fog.", "0.02");
+		m_cvarChangedSignals += s_fogDensityVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
+
+		s_fogHeightFalloffVar = ConsoleVarMgr::RegisterConsoleVar("gxFogHeightFalloff", "How quickly the fog thins with height, per metre. Higher values keep fog in valleys.", "0.05");
+		m_cvarChangedSignals += s_fogHeightFalloffVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
+
+		s_fogBaseHeightVar = ConsoleVarMgr::RegisterConsoleVar("gxFogBaseHeight", "World height (Y) at which the fog has density gxFogDensity.", "0");
+		m_cvarChangedSignals += s_fogBaseHeightVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
+
+		s_fogAnisotropyVar = ConsoleVarMgr::RegisterConsoleVar("gxFogAnisotropy", "Forward scattering of sunlight in the fog (0 to 0.95). Higher values make a tighter, brighter glow around the sun.", "0.7");
+		m_cvarChangedSignals += s_fogAnisotropyVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
+
+		s_shaftStrengthVar = ConsoleVarMgr::RegisterConsoleVar("gxShaftStrength", "Multiplier on sunlight scattered by the fog (light shafts and sun glow).", "1.0");
+		m_cvarChangedSignals += s_shaftStrengthVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
+
+		s_bloomQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxBloomQuality", "Bloom quality: 0 = Off, 1 = Low (quarter resolution, 4 levels), 2 = High (half resolution, 6 levels).", "2");
+		m_cvarChangedSignals += s_bloomQualityVar->Changed.connect(this, &WorldState::OnBloomChanged);
+
+		s_bloomIntensityVar = ConsoleVarMgr::RegisterConsoleVar("gxBloomIntensity", "Bloom strength, from 0 to 1.", "0.08");
+		m_cvarChangedSignals += s_bloomIntensityVar->Changed.connect(this, &WorldState::OnBloomChanged);
+
+		s_bloomThresholdVar = ConsoleVarMgr::RegisterConsoleVar("gxBloomThreshold", "Linear brightness above which light blooms (soft knee).", "0.8");
+		m_cvarChangedSignals += s_bloomThresholdVar->Changed.connect(this, &WorldState::OnBloomChanged);
+
+		s_exposureVar = ConsoleVarMgr::RegisterConsoleVar("gxExposure", "Scene brightness multiplier applied before tone mapping (0.1 to 8).", "1.0");
+		m_cvarChangedSignals += s_exposureVar->Changed.connect(this, &WorldState::OnExposureChanged);
+
 		// Distance (world units) beyond which authored instanced foliage (trees, bushes, rocks) is
 		// culled. Lower values cut the overdraw from dense forests. Read each frame in OnIdle, so no
 		// change handler is required. A very large value = unlimited (render everything).
@@ -2187,6 +2243,10 @@ namespace mmo
 		OnContactShadowQualityChanged(*s_contactShadowQualityVar, "");
 		OnContactShadowParametersChanged(*s_contactShadowLengthVar, "");
 		OnContactShadowDebugChanged(*s_contactShadowDebugVar, "");
+		OnAtmosphereParametersChanged(*s_fogDensityVar, "");
+		OnAtmosphereRenderingChanged(*s_atmosphereQualityVar, "");
+		OnBloomChanged(*s_bloomQualityVar, "");
+		OnExposureChanged(*s_exposureVar, "");
 	}
 
 	void WorldState::RemoveGameplayCommands()
@@ -2217,6 +2277,18 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowFade");
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowBias");
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowDebug");
+		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereMarchDistance");
+		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFogDensity");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFogHeightFalloff");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFogBaseHeight");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFogAnisotropy");
+		ConsoleVarMgr::UnregisterConsoleVar("gxShaftStrength");
+		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("gxBloomIntensity");
+		ConsoleVarMgr::UnregisterConsoleVar("gxBloomThreshold");
+		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
@@ -6145,6 +6217,57 @@ namespace mmo
 		const bool enabled = var.GetIntValue() != 0;
 		ILOG("Contact shadow debug visualization " << (enabled ? "enabled" : "disabled"));
 		deferred->SetContactShadowDebugVisualization(enabled);
+	}
+
+	void WorldState::OnAtmosphereParametersChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		// The scene is rebuilt on every world change, and SetupWorldScene re-applies these.
+		if (!m_scene || !s_fogDensityVar)
+		{
+			return;
+		}
+
+		AtmosphereParameters parameters = m_scene->GetAtmosphereParameters();
+		parameters.SetDensity(s_fogDensityVar->GetFloatValue());
+		parameters.SetHeightFalloff(s_fogHeightFalloffVar->GetFloatValue());
+		parameters.SetBaseHeight(s_fogBaseHeightVar->GetFloatValue());
+		parameters.SetAnisotropy(s_fogAnisotropyVar->GetFloatValue());
+		parameters.SetShaftStrength(s_shaftStrengthVar->GetFloatValue());
+		m_scene->SetAtmosphereParameters(parameters);
+	}
+
+	void WorldState::OnAtmosphereRenderingChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		DeferredRenderer* renderer = GetWorldDeferredRenderer();
+		if (!renderer || !s_atmosphereQualityVar)
+		{
+			return;
+		}
+
+		renderer->SetAtmosphereQuality(s_atmosphereQualityVar->GetIntValue());
+		renderer->SetAtmosphereMarchDistance(s_atmosphereMarchDistanceVar->GetFloatValue());
+		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
+	}
+
+	void WorldState::OnBloomChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		DeferredRenderer* renderer = GetWorldDeferredRenderer();
+		if (!renderer || !s_bloomQualityVar)
+		{
+			return;
+		}
+
+		renderer->SetBloomQuality(s_bloomQualityVar->GetIntValue());
+		renderer->SetBloomIntensity(s_bloomIntensityVar->GetFloatValue());
+		renderer->SetBloomThreshold(s_bloomThresholdVar->GetFloatValue());
+	}
+
+	void WorldState::OnExposureChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		if (DeferredRenderer* renderer = GetWorldDeferredRenderer())
+		{
+			renderer->SetExposure(var.GetFloatValue());
+		}
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)
