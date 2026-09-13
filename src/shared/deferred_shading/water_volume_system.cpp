@@ -116,6 +116,6 @@ namespace mmo
 			audioProfile = m_profileResolver(m_lastAudioWaterType);
 		}
 
-		m_audioLowPassHz = audioProfile.valid ? (audioProfile.audioLowPassHz * m_audioPhase) : 0.0f;
+		m_audioLowPassHz = audioProfile.valid ? LowPassCutoffForPhase(audioProfile.audioLowPassHz, m_audioPhase) : 0.0f;
 	}
 }

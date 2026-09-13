@@ -271,6 +271,19 @@ namespace mmo
 
 	void FMODAudio::Destroy()
 	{
+		// Release the underwater low-pass explicitly rather than leaving it attached to the master
+		// group for the system teardown to find.
+		if (m_lowPassDsp)
+		{
+			if (m_masterGroup)
+			{
+				m_masterGroup->removeDSP(m_lowPassDsp);
+			}
+
+			m_lowPassDsp->release();
+			m_lowPassDsp = nullptr;
+			m_lowPassCutoffHz = 0.0f;
+		}
 	}
 
 	void FMODAudio::Update(const Vector3& listenerPos, float time)

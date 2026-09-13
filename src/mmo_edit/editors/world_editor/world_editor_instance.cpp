@@ -188,9 +188,12 @@ namespace mmo
 		// Let terrain pages resolve their surface material from the authored water profiles, so
 		// the editor viewport shows the same water the client will. A page carrying an explicit
 		// material name still overrides this.
-		terrain::Page::SetWaterMaterialResolver([this](const terrain::WaterType waterType) -> String
+		// The resolver is static and shared by every open world editor, so it captures the project,
+		// which outlives them all, rather than this: with two worlds open, closing the one that
+		// installed it last would otherwise leave streaming pages calling into a destroyed instance.
+		terrain::Page::SetWaterMaterialResolver([&project = m_editor.GetProject()](const terrain::WaterType waterType) -> String
 			{
-				const auto* profile = m_editor.GetProject().waterProfiles.getById(static_cast<uint32>(waterType));
+				const auto* profile = project.waterProfiles.getById(static_cast<uint32>(waterType));
 				if (profile == nullptr || !profile->has_surface_material())
 				{
 					return String();

@@ -481,6 +481,10 @@ namespace mmo
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
 
+		// UpdateWaterVolume stops running once the world is left, so a low-pass applied while
+		// submerged would otherwise stay on the master bus through character select and login.
+		m_audio.SetLowPassCutoff(0.0f);
+
 		// Force a zone (and thus music/ambience) resolve on the next world enter.
 		m_lastZoneId = UINT32_MAX;
 
@@ -1383,11 +1387,16 @@ namespace mmo
 
 		const Vector3 cameraPosition = m_playerController->GetCamera().GetDerivedPosition();
 
+		// The player reference is the head, not the feet. A unit swimming at the surface floats with
+		// its feet well below it (SWIM_SURFACE_MARGIN in unit_movement.cpp), so judging submersion
+		// at the feet muffled the world whenever the player swam with their head above water.
+		constexpr float submersionReferenceHeight = 1.6f;
+
 		// Without a controlled unit (loading, or between characters) the player reference falls
 		// back to the camera, which keeps the audio and screen states consistent rather than
 		// reporting the origin as the player's position.
 		const Vector3 playerPosition = m_playerController->GetControlledUnit()
-			? m_playerController->GetControlledUnit()->GetPosition()
+			? m_playerController->GetControlledUnit()->GetPosition() + Vector3(0.0f, submersionReferenceHeight, 0.0f)
 			: cameraPosition;
 
 		m_waterVolume->Update(cameraPosition.x, cameraPosition.y, cameraPosition.z,
@@ -1434,9 +1443,11 @@ namespace mmo
 		// Let terrain pages resolve their surface material from the profile table. A page that
 		// carries an explicit material name still overrides this, so nothing already authored
 		// changes behaviour.
-		terrain::Page::SetWaterMaterialResolver([this](const terrain::WaterType waterType) -> String
+		// The resolver is static and outlives any one state, so it captures the project it reads
+		// rather than this.
+		terrain::Page::SetWaterMaterialResolver([&project = m_project](const terrain::WaterType waterType) -> String
 			{
-				const auto* profile = m_project.waterProfiles.getById(static_cast<uint32>(waterType));
+				const auto* profile = project.waterProfiles.getById(static_cast<uint32>(waterType));
 				if (profile == nullptr || !profile->has_surface_material())
 				{
 					return String();

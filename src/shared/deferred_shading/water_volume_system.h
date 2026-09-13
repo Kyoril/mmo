@@ -5,10 +5,42 @@
 #include "base/typedefs.h"
 #include "deferred_shading/underwater_settings.h"
 
+#include <algorithm>
+#include <cmath>
 #include <functional>
 
 namespace mmo
 {
+	/// @brief The cutoff, in Hz, the underwater audio crossing starts from and returns to: the top of
+	///			FMOD's low-pass range, where the filter is inaudible.
+	constexpr float DryLowPassCutoffHz = 22000.0f;
+
+	/// @brief The low-pass cutoff for a point in the audio crossing.
+	/// @param targetHz The liquid's submerged cutoff. 0 or less means the liquid does not muffle.
+	/// @param phase Crossing progress in [0,1]: 0 dry, 1 fully submerged.
+	/// @return 0 (no filter) when dry or when the liquid does not muffle. Otherwise a cutoff that
+	///			sweeps from DryLowPassCutoffHz down to targetHz on a logarithmic scale and never
+	///			goes below targetHz.
+	/// @remark Scaling the target by the phase instead started every dive at 0 Hz - clamped to
+	///			FMOD's 10 Hz floor, which is near silence - and ended every surfacing there too, just
+	///			before the filter was removed and the audio popped back to full range. The log scale
+	///			matches how a cutoff is heard: each octave of the sweep gets the same share of it.
+	[[nodiscard]] inline float LowPassCutoffForPhase(const float targetHz, const float phase)
+	{
+		if (phase <= 0.0f || targetHz <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		const float target = std::min(targetHz, DryLowPassCutoffHz);
+		if (phase >= 1.0f)
+		{
+			return target;
+		}
+
+		return DryLowPassCutoffHz * std::pow(target / DryLowPassCutoffHz, phase);
+	}
+
 	/// @brief Read-only access to the water surface the camera and the player are moving through.
 	///
 	/// @remark WaterVolumeSystem takes this rather than a terrain::Terrain so it carries no

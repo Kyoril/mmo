@@ -278,9 +278,58 @@ TEST_CASE("WaterVolume_Audio_Ramps_Independently_Of_The_Camera", "[water_volume]
 
 	CHECK_FALSE(system.GetState().active);
 	CHECK(system.GetState().transitionPhase == Approx(0.0f));
-	// Partway through the audio crossing after one frame.
-	CHECK(system.GetAudioLowPassHz() > 0.0f);
-	CHECK(system.GetAudioLowPassHz() < 900.0f);
+	// Partway through the audio crossing after one frame: the filter has only begun to close.
+	CHECK(system.GetAudioLowPassHz() > 900.0f);
+	CHECK(system.GetAudioLowPassHz() < DryLowPassCutoffHz);
+}
+
+TEST_CASE("WaterVolume_Audio_Crossing_Sweeps_Monotonically_Without_Undershooting", "[water_volume]")
+{
+	// Diving, the cutoff may only ever fall from open toward the target, never start closed and
+	// open up. Surfacing, it may only rise again, then switch off. Anything else is an audible dip
+	// or pop on every crossing.
+	FakeWaterQuery query;
+	WaterVolumeSystem system(query);
+	system.SetProfileResolver([](uint32) { return MakeOceanProfile(); });
+
+	float previous = DryLowPassCutoffHz;
+	for (int frame = 0; frame < 60; ++frame)
+	{
+		system.Update(10.0f, 5.0f, 0.0f, 10.0f, -3.0f, 0.0f, 1.0f / 60.0f);
+		const float cutoff = system.GetAudioLowPassHz();
+		CHECK(cutoff >= Approx(900.0f));
+		CHECK(cutoff <= previous + 0.01f);
+		previous = cutoff;
+	}
+	CHECK(previous == Approx(900.0f));
+
+	for (int frame = 0; frame < 60; ++frame)
+	{
+		system.Update(10.0f, 5.0f, 0.0f, 10.0f, 5.0f, 0.0f, 1.0f / 60.0f);
+		const float cutoff = system.GetAudioLowPassHz();
+		if (cutoff == 0.0f)
+		{
+			break;
+		}
+
+		CHECK(cutoff >= Approx(900.0f));
+		CHECK(cutoff >= previous - 0.01f);
+		previous = cutoff;
+	}
+	CHECK(system.GetAudioLowPassHz() == Approx(0.0f));
+}
+
+TEST_CASE("LowPassCutoffForPhase_Endpoints", "[water_volume]")
+{
+	CHECK(LowPassCutoffForPhase(900.0f, 0.0f) == Approx(0.0f));
+	CHECK(LowPassCutoffForPhase(0.0f, 0.5f) == Approx(0.0f));
+	CHECK(LowPassCutoffForPhase(900.0f, 1.0f) == Approx(900.0f));
+
+	// A tiny phase is still essentially open, so switching the filter off from there is silent.
+	CHECK(LowPassCutoffForPhase(900.0f, 0.001f) > 21000.0f);
+
+	// A target above the dry cutoff is clamped rather than sweeping upward.
+	CHECK(LowPassCutoffForPhase(40000.0f, 0.5f) == Approx(DryLowPassCutoffHz));
 }
 
 TEST_CASE("WaterVolume_God_Ray_Toggle_Reaches_The_State", "[water_volume]")
