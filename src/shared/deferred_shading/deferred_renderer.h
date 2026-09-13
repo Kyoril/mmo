@@ -475,9 +475,9 @@ namespace mmo
 #ifdef _WIN32
         // --- Per-pass GPU timing (only active while the profiler/perf overlay is enabled) ---
         // Timestamp points: 0 = start, 1 = after shadows, 2 = after G-Buffer, 3 = after SSAO,
-        // 4 = after lighting, 5 = after the forward/translucent pass (end). Differences give
-        // per-pass GPU time.
-        static constexpr uint32 GpuTimerPointCount = 7;
+        // 4 = after contact shadows, 5 = after lighting, 6 = after atmosphere, 7 = after forward,
+        // 8 = after bloom, 9 = after tonemap (end). Differences give per-pass GPU time.
+        static constexpr uint32 GpuTimerPointCount = 10;
         // Deep ring so we read results back several frames late and never stall the GPU, and so
         // that all timestamps in a frame have comfortably resolved before we poll them.
         static constexpr uint32 GpuTimerFrameCount = 6;

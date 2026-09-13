@@ -322,8 +322,11 @@ namespace mmo
                 emit("GPU: SSAO", 2, 3);
                 emit("GPU: ContactShadows", 3, 4);
                 emit("GPU: Lighting", 4, 5);
-                emit("GPU: Forward", 5, 6);
-                emit("GPU: Total (passes)", 0, 6);
+                emit("GPU: Atmosphere", 5, 6);
+                emit("GPU: Forward", 6, 7);
+                emit("GPU: Bloom", 7, 8);
+                emit("GPU: Tonemap", 8, 9);
+                emit("GPU: Total (passes)", 0, 9);
             }
         }
 
@@ -477,6 +480,10 @@ namespace mmo
         }
 #endif
 
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(6); } // after atmosphere
+#endif
+
         {
             RenderTexturePtr forwardColor = m_renderTexture;
             m_device.SetRenderTargetsWithDepthStencil(&forwardColor, 1, m_gBuffer.GetDepthRTPtr());
@@ -505,6 +512,10 @@ namespace mmo
         m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneColorTextureSlot);
         m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneDepthTextureSlot);
 
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(7); } // after forward
+#endif
+
         // Linear HDR -> display. The underwater post-process below still receives display-referred
         // colour, so its thresholds and tuning are untouched.
         // Bloom sits out while submerged: the underwater pass has its own shafts and a bright
@@ -518,7 +529,18 @@ namespace mmo
             bloomScale = m_bloomPass->GetResultScale();
         }
 
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(8); } // after bloom
+#endif
+
         m_tonemapPass->Render(*m_renderTexture, bloom, bloomScale, *m_quadBuffer, *m_deferredLightVs);
+
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame)
+        {
+            GpuTimerMark(9); // after tonemap
+        }
+#endif
 
         // Screen-space post-processing over the finished frame. WouldRun is false whenever the
         // camera is out of water, and then this does nothing, allocates nothing, and
@@ -569,7 +591,6 @@ namespace mmo
 #ifdef _WIN32
         if (m_gpuTimingActiveThisFrame)
         {
-            GpuTimerMark(6); // after forward/translucent pass (end of GPU frame work)
             GpuTimerEndAndCollect();
         }
 #endif
