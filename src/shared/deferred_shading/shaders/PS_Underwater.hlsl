@@ -100,9 +100,12 @@ float SampleWrappedRed(Texture2D tex, float2 uv)
     float2 cell = floor(texel);
     float2 blend = texel - cell;
 
-    // HLSL's % keeps the sign of the dividend, so fold the -1 cell back into range explicitly.
-    int2 p0 = ((int2)cell % size + size) % size;
-    int2 p1 = (p0 + 1) % size;
+    // After frac() the cell is always in [-1, size - 1], so a single fold at each end wraps it
+    // without integer modulus, which is slow on the GPU.
+    int2 p0 = (int2)cell;
+    p0 += size * (int2)(p0 < 0);
+    int2 p1 = p0 + 1;
+    p1 -= size * (int2)(p1 >= size);
 
     float s00 = tex.Load(int3(p0.x, p0.y, 0)).r;
     float s10 = tex.Load(int3(p1.x, p0.y, 0)).r;
@@ -135,7 +138,12 @@ float4 main(PS_INPUT input) : SV_TARGET
 
     float3 color = SceneTexture.SampleLevel(LinearSampler, distortedUv, 0).rgb;
 
-    float4 normalData = NormalTexture.SampleLevel(LinearSampler, distortedUv, 0);
+    // Point-fetched, never filtered. Depth does not interpolate across a silhouette: halfway between
+    // a tree 150 units away and the sky (stored as 0) is not an object 75 units away, and such an
+    // in-between value can land close enough to the camera to escape the fog almost entirely -
+    // a speckled bright outline around every tree and ridge on the horizon.
+    int2 depthPixel = clamp((int2)(distortedUv * ScreenSize), int2(0, 0), (int2)ScreenSize - 1);
+    float4 normalData = NormalTexture.Load(int3(depthPixel, 0));
     float sceneDepth = normalData.a;
 
     // The sky, and anything else the opaque pass never wrote, reads as depth 0.
@@ -161,6 +169,23 @@ float4 main(PS_INPUT input) : SV_TARGET
     if (rayDir.y > 0.0001f)
     {
         fogDistance = min(sceneDistance, eyeDepth / rayDir.y);
+    }
+
+    // --- Snell's window -----------------------------------------------------------------
+    // Seen from below, the surface only lets through light arriving within the critical angle,
+    // about 48.6 degrees from vertical. Beyond it the surface is a mirror showing the water itself.
+    // Without this the shore, the trees and the horizon above the water stay visible at grazing
+    // angles as thin, heavily fogged strips: tinted bands across the upper half of the frame.
+    if (rayDir.y > 0.0001f && eyeDepth / rayDir.y < sceneDistance)
+    {
+        // cos(48.6 degrees) = 0.661. The smoothstep keeps the rim of the window soft.
+        float window = smoothstep(0.60f, 0.72f, rayDir.y);
+
+        // Stylized total internal reflection: the water's own colour, brightening toward the rim
+        // of the window so the ceiling reads as a gradient rather than a flat lid.
+        float3 internalReflection = FogColorAndDensity.rgb * lerp(0.75f, 1.15f, saturate(rayDir.y / 0.66f));
+
+        color = lerp(color, lerp(internalReflection, color, window), strength);
     }
 
     // --- Caustics -----------------------------------------------------------------------
