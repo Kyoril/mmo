@@ -5,6 +5,7 @@
 #include "ssao_pass.h"
 #include "contact_shadow_pass.h"
 #include "post_process_pass.h"
+#include "atmosphere_pass.h"
 
 #include "frame_ui/rect.h"
 #include "graphics/global_shader_parameters.h"
@@ -87,6 +88,16 @@ namespace mmo
         buffer.contactShadowDebugMode = m_contactShadowPass->GetSettings().debugVisualization ? 1u : 0u;
     }
 
+    void DeferredRenderer::BindShadowSampler()
+    {
+#ifdef WIN32
+        GraphicsDeviceD3D11& d3ddev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
+        ID3D11DeviceContext& d3d11ctx = d3ddev;
+        ID3D11SamplerState* samplers[1] = { m_shadowSampler.Get() };
+        d3d11ctx.PSSetSamplers(1, 1, samplers);
+#endif
+    }
+
 	DeferredRenderer::DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height)
         : m_device(device)
 		, m_scene(scene)
@@ -137,6 +148,7 @@ namespace mmo
 
         m_ssaoPass = std::make_unique<SsaoPass>(m_device, width, height);
         m_contactShadowPass = std::make_unique<ContactShadowPass>(m_device, width, height);
+        m_atmospherePass = std::make_unique<AtmospherePass>(m_device, width, height);
         m_postProcessPass = std::make_unique<PostProcessPass>(m_device, width, height);
         m_tonemapPass = std::make_unique<TonemapPass>(m_device, width, height);
 
@@ -325,6 +337,7 @@ namespace mmo
 		m_sceneColorCopy->Resize(width, height);
         m_ssaoPass->Resize(width, height);
         m_contactShadowPass->Resize(width, height);
+        m_atmospherePass->Resize(width, height);
         m_postProcessPass->Resize(width, height);
         m_tonemapPass->Resize(width, height);
     }
@@ -431,13 +444,33 @@ namespace mmo
         // as uninitialized/stale garbage — producing broken refraction (e.g. a white wash).
         m_sceneColorCopy->ApplyPendingResize();
 
+        // Height fog and light shafts over the lit opaque scene. The composite reads m_renderTexture
+        // and writes m_sceneColorCopy, which stays the refraction source; the single CopyResource
+        // below then carries the fogged scene back into m_renderTexture for the forward pass.
+        // Skipped while submerged (the underwater pass has its own fog) or with fog turned off; the
+        // copy then runs in its old direction.
+        const bool runAtmosphere = scene.IsFogEnabled() && !m_underwaterState.active;
+        if (runAtmosphere)
+        {
+            m_atmospherePass->Render(camera, *m_renderTexture, m_gBuffer.GetNormalRT(), *m_sceneColorCopy,
+                m_cascadeShadowMaps, *m_shadowBuffer, *scene.GetCameraBuffer(),
+                [this]() { BindShadowSampler(); }, *m_quadBuffer, *m_deferredLightVs);
+        }
+
 #ifdef WIN32
         {
             GraphicsDeviceD3D11& d3dDev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
             ID3D11DeviceContext& d3dCtx = d3dDev;
-            auto* srcRt = static_cast<RenderTextureD3D11*>(m_renderTexture.get());
-            auto* dstRt = static_cast<RenderTextureD3D11*>(m_sceneColorCopy.get());
-            d3dCtx.CopyResource(dstRt->GetTex2D(), srcRt->GetTex2D());
+            auto* sceneRt = static_cast<RenderTextureD3D11*>(m_renderTexture.get());
+            auto* copyRt = static_cast<RenderTextureD3D11*>(m_sceneColorCopy.get());
+            if (runAtmosphere)
+            {
+                d3dCtx.CopyResource(sceneRt->GetTex2D(), copyRt->GetTex2D());
+            }
+            else
+            {
+                d3dCtx.CopyResource(copyRt->GetTex2D(), sceneRt->GetTex2D());
+            }
         }
 #endif
 
@@ -638,13 +671,8 @@ namespace mmo
         m_device.SetTextureAddressMode(TextureAddressMode::Clamp, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
         m_device.SetTextureFilter(TextureFilter::Trilinear);
 
-#ifdef WIN32
-        GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)GraphicsDevice::Get();
-        ID3D11DeviceContext& d3d11ctx = d3ddev;
-		ID3D11SamplerState* samplers[1] = { m_shadowSampler.Get() };
-        d3d11ctx.PSSetSamplers(1, 1, samplers);
-#endif
-        
+        BindShadowSampler();
+
         // Draw a full-screen quad
         m_device.Draw(6);
 

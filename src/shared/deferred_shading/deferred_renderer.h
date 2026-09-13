@@ -8,6 +8,7 @@
 #include "contact_shadow_pass.h"
 #include "post_process_pass.h"
 #include "tonemap_pass.h"
+#include "atmosphere_pass.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
@@ -240,6 +241,15 @@ namespace mmo
         /// @brief Gets the exposure applied before tone mapping.
         [[nodiscard]] float GetExposure() const { return m_tonemapPass->GetSettings().exposure; }
 
+        /// @brief Applies the atmosphere quality preset: 0 Off (closed-form fog only) ... 4 Ultra.
+        void SetAtmosphereQuality(int level) { m_atmospherePass->GetSettings().ApplyQualityLevel(level); }
+
+        /// @brief Sets how many metres of each view ray are shadow-marched (clamped to [0, 300]).
+        void SetAtmosphereMarchDistance(float distance) { m_atmospherePass->GetSettings().SetMarchDistance(distance); }
+
+        /// @brief Sets the atmosphere debug view: 0 off, 1 in-scatter, 2 transmittance, 3 march shadow term.
+        void SetAtmosphereDebugMode(int mode) { m_atmospherePass->GetSettings().SetDebugMode(mode); }
+
         /// @brief Gets the light rendering statistics from the last frame.
         /// @return Reference to the light render statistics.
         const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
@@ -276,6 +286,9 @@ namespace mmo
         /// @remark Callers are responsible only for the cascade-specific fields: the view-projection
         ///         matrices, the split distances, cascadeCount and cascadeBlendFactor.
         void FillShadowBufferCommonSettings(ShadowBuffer& buffer) const;
+
+        /// @brief Binds the cascade comparison sampler at pixel shader slot s1.
+        void BindShadowSampler();
 
         /// @brief Returns the shadow-map resolution to use for a given cascade index. Distant cascades
         ///        (index >= 2) render at half the base resolution (floored at 256) to cut shadow fill,
@@ -328,6 +341,9 @@ namespace mmo
         /// @brief The screen-space contact shadow pass. Runs between the geometry and lighting
         ///        passes and produces the term the lighting pass multiplies into the sun's shadow.
         std::unique_ptr<ContactShadowPass> m_contactShadowPass;
+
+        /// @brief Height fog and light shafts. Runs after lighting, before the forward pass.
+        std::unique_ptr<AtmospherePass> m_atmospherePass;
 
         /// @brief The screen-space post-process pass. Skipped entirely, and holding no render
         ///        target at all, while the camera is out of water.
