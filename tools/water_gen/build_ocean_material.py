@@ -244,7 +244,12 @@ def build_graph(b, mode):
     b.next_column()
     scene_depth = b.add("SceneDepthNode")
     pixel_depth = b.add("PixelDepthNode")
-    thickness = b.add("MaxNode", {"Value 2": 0.0}, {"A": b.sub(scene_depth, pixel_depth)})
+    # Where the opaque pass wrote nothing (sky seen past the water's edge, holes in the ground)
+    # scene depth reads 0. Treat that as very deep water rather than as shoreline, or every such
+    # pixel gets full shore foam.
+    has_scene = b.sat(b.mul(scene_depth, constant=1000.0))
+    scene_depth_fixed = b.lerp(b.const(10000.0), scene_depth, has_scene)
+    thickness = b.add("MaxNode", {"Value 2": 0.0}, {"A": b.sub(scene_depth_fixed, pixel_depth)})
 
     # --- Screen-space reflection --------------------------------------------------------------
     b.next_column()
@@ -272,15 +277,15 @@ def build_graph(b, mode):
         offset = b.mul(b.mul(b.mask(tangent_normal, r=True, g=True), refraction_strength), shallow_fade)
         refracted = b.out(b.add("SceneColorNode", ins={"UV Offset (px)": offset}), "Scene Color")
 
-        absorption = b.vector("AbsorptionRGB", (0.30, 0.075, 0.05, 1.0))
+        absorption = b.vector("AbsorptionRGB", (0.45, 0.16, 0.08, 1.0))
         exponent = b.mul(b.mul(absorption, thickness), constant=-1.0)
         euler = b.const_rgb((2.718282, 2.718282, 2.718282, 1.0))
         extinction = b.add("PowerNode", ins={"Base": euler, "Exp": exponent})
 
         b.next_column()
-        deep_t = b.sat(b.div(thickness, b.scalar("DeepDistance", 12.0)))
-        scatter = b.lerp(b.vector("ShallowColor", (0.10, 0.62, 0.58, 1.0)),
-                         b.vector("DeepColor", (0.01, 0.10, 0.20, 1.0)), deep_t)
+        deep_t = b.sat(b.div(thickness, b.scalar("DeepDistance", 8.0)))
+        scatter = b.lerp(b.vector("ShallowColor", (0.05, 0.40, 0.50, 1.0)),
+                         b.vector("DeepColor", (0.01, 0.06, 0.15, 1.0)), deep_t)
         body = b.addn(b.mul(refracted, extinction),
                       b.mul(scatter, b.add("OneMinusNode", ins={"m_input": extinction})))
 
@@ -310,12 +315,12 @@ def build_graph(b, mode):
                                {"UVs": foam_uv}), "R")
         shore_foam = b.sat(b.mul(b.sub(b.addn(foam_tex, band), constant=1.0), b.scalar("FoamSharpness", 4.0)))
 
-        cap_uv = b.panner(b.mul(uv0, b.scalar("WhitecapTiling", 0.4)), 0.004, 0.006)
+        cap_uv = b.panner(b.mul(uv0, b.scalar("WhitecapTiling", 0.25)), 0.004, 0.006)
         cap_tex = b.out(b.add("TextureParameterNode",
                               {"Name": "Foam", "Texture": "Textures/Foam_01_C.htex", "Sampler Type": 0},
                               {"UVs": cap_uv}), "R")
-        caps = b.mul(b.sat(b.mul(b.sub(cap_tex, b.scalar("WhitecapThreshold", 0.8)), constant=6.0)),
-                     b.scalar("WhitecapIntensity", 0.35))
+        caps = b.mul(b.sat(b.mul(b.sub(cap_tex, b.scalar("WhitecapThreshold", 0.86)), constant=6.0)),
+                     b.scalar("WhitecapIntensity", 0.18))
         foam_mask = b.sat(b.addn(shore_foam, caps))
 
         b.next_column()
