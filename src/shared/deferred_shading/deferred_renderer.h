@@ -8,12 +8,13 @@
 #include "contact_shadow_pass.h"
 #include "post_process_pass.h"
 #include "tonemap_pass.h"
-#include "atmosphere_pass.h"
+#include "volumetric_fog_pass.h"
 #include "bloom_pass.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
 #include "graphics/material.h"
+#include "graphics/sampler_state.h"
 #include "graphics/structured_buffer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/light.h"
@@ -242,14 +243,14 @@ namespace mmo
         /// @brief Gets the exposure applied before tone mapping.
         [[nodiscard]] float GetExposure() const { return m_tonemapPass->GetSettings().exposure; }
 
-        /// @brief Applies the atmosphere quality preset: 0 Off (closed-form fog only) ... 4 Ultra.
-        void SetAtmosphereQuality(int level) { m_atmospherePass->GetSettings().ApplyQualityLevel(level); }
+        /// @brief Applies the volumetric fog quality preset: 0 Off (closed-form fog only), 1 Low ... 4 Ultra.
+        void SetAtmosphereQuality(int level) { m_volumetricFogPass->GetSettings().ApplyQualityLevel(level); }
 
-        /// @brief Sets how many metres of each view ray are shadow-marched (clamped to [0, 300]).
-        void SetAtmosphereMarchDistance(float distance) { m_atmospherePass->GetSettings().SetMarchDistance(distance); }
+        /// @brief Sets the view depth the fog volume covers in metres (clamped to [50, 300]).
+        void SetVolumetricFogRange(float range) { m_volumetricFogPass->GetSettings().SetRange(range); }
 
-        /// @brief Sets the atmosphere debug view: 0 off, 1 in-scatter, 2 transmittance, 3 march shadow term.
-        void SetAtmosphereDebugMode(int mode) { m_atmospherePass->GetSettings().SetDebugMode(mode); }
+        /// @brief Sets the fog debug view: 0 off, 1 scattered light, 2 transmittance, 3 density.
+        void SetAtmosphereDebugMode(int mode) { m_volumetricFogPass->GetSettings().SetDebugMode(mode); }
 
         /// @brief Applies the bloom quality preset: 0 Off, 1 Low, 2 High.
         void SetBloomQuality(int level) { m_bloomPass->GetSettings().ApplyQualityLevel(level); }
@@ -352,8 +353,8 @@ namespace mmo
         ///        passes and produces the term the lighting pass multiplies into the sun's shadow.
         std::unique_ptr<ContactShadowPass> m_contactShadowPass;
 
-        /// @brief Height fog and light shafts. Runs after lighting, before the forward pass.
-        std::unique_ptr<AtmospherePass> m_atmospherePass;
+        /// @brief Froxel volumetric fog and light shafts. Runs after lighting, before the forward pass.
+        std::unique_ptr<VolumetricFogPass> m_volumetricFogPass;
 
         /// @brief Bloom over the finished linear HDR scene, added by the TonemapPass.
         std::unique_ptr<BloomPass> m_bloomPass;
@@ -405,10 +406,9 @@ namespace mmo
         /// @brief Shadow cameras for each cascade.
         std::array<Camera*, NUM_SHADOW_CASCADES> m_shadowCameras{};
 
-#ifdef _WIN32
-		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
-
-#endif
+        /// @brief Cascade comparison sampler (lighting pass s1, fog inject s1). Null on backends
+        ///        without explicit sampler objects.
+        SamplerStatePtr m_shadowSampler;
 
         /// @brief Cascaded shadow camera setup.
         std::shared_ptr<CascadedShadowCameraSetup> m_cascadedShadowSetup = nullptr;

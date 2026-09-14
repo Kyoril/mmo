@@ -277,7 +277,7 @@ namespace mmo
 		/// @brief Called when the gxContactShadowDebug console variable changed.
 		void OnContactShadowDebugChanged(ConsoleVar &var, const std::string &oldValue);
 
-		/// @brief Called when gxAtmosphereQuality, gxAtmosphereMarchDistance or gxAtmosphereDebug changed.
+		/// @brief Called when gxAtmosphereQuality, gxVolumetricFogRange or gxAtmosphereDebug changed.
 		void OnAtmosphereRenderingChanged(ConsoleVar &var, const std::string &oldValue);
 
 		/// @brief Called when gxBloomQuality changed.

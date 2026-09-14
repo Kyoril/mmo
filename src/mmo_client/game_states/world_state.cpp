@@ -144,7 +144,7 @@ namespace mmo
 		static ConsoleVar *s_contactShadowBiasVar = nullptr;
 		static ConsoleVar *s_contactShadowDebugVar = nullptr;
 		static ConsoleVar *s_atmosphereQualityVar = nullptr;
-		static ConsoleVar *s_atmosphereMarchDistanceVar = nullptr;
+		static ConsoleVar *s_volumetricFogRangeVar = nullptr;
 		static ConsoleVar *s_atmosphereDebugVar = nullptr;
 		static ConsoleVar *s_bloomQualityVar = nullptr;
 		static ConsoleVar *s_exposureVar = nullptr;
@@ -2144,13 +2144,13 @@ namespace mmo
 
 		// Height fog, light shafts and bloom quality. The look itself (fog, shafts, exposure, bloom
 		// strength) comes from the zone's environment profile.
-		s_atmosphereQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereQuality", "Light shaft quality: 0 = Off (height fog only), 1 = Low (quarter resolution, 12 steps), 2 = Medium (half, 24), 3 = High (half, 48), 4 = Ultra (full, 64).", "3");
+		s_atmosphereQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereQuality", "Volumetric fog quality: 0 = Off (smooth height fog only), 1 = Low (24 px cells, 32 slices), 2 = Medium (16 px, 48), 3 = High (12 px, 64), 4 = Ultra (8 px, 96).", "3");
 		m_cvarChangedSignals += s_atmosphereQualityVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
-		s_atmosphereMarchDistanceVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereMarchDistance", "How many metres of each view ray are marched for light shafts (at most 300, the shadow range). Fog beyond uses a closed-form estimate.", "200");
-		m_cvarChangedSignals += s_atmosphereMarchDistanceVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		s_volumetricFogRangeVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogRange", "How many metres in front of the camera the volumetric fog covers (50 to 300, the shadow range). Fog beyond uses a smooth closed-form estimate.", "200");
+		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
-		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Atmosphere debug view: 0 = off, 1 = scattered light only, 2 = transmittance, 3 = light shaft shadow term.", "0");
+		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
 		s_bloomQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxBloomQuality", "Bloom quality: 0 = Off, 1 = Low (quarter resolution, 4 levels), 2 = High (half resolution, 6 levels).", "2");
@@ -2298,7 +2298,7 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowBias");
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
-		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereMarchDistance");
+		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogRange");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
@@ -6246,7 +6246,7 @@ namespace mmo
 		}
 
 		renderer->SetAtmosphereQuality(s_atmosphereQualityVar->GetIntValue());
-		renderer->SetAtmosphereMarchDistance(s_atmosphereMarchDistanceVar->GetFloatValue());
+		renderer->SetVolumetricFogRange(s_volumetricFogRangeVar->GetFloatValue());
 		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
 	}
 

@@ -5,7 +5,7 @@
 #include "ssao_pass.h"
 #include "contact_shadow_pass.h"
 #include "post_process_pass.h"
-#include "atmosphere_pass.h"
+#include "volumetric_fog_pass.h"
 #include "bloom_pass.h"
 
 #include "frame_ui/rect.h"
@@ -91,12 +91,10 @@ namespace mmo
 
     void DeferredRenderer::BindShadowSampler()
     {
-#ifdef WIN32
-        GraphicsDeviceD3D11& d3ddev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
-        ID3D11DeviceContext& d3d11ctx = d3ddev;
-        ID3D11SamplerState* samplers[1] = { m_shadowSampler.Get() };
-        d3d11ctx.PSSetSamplers(1, 1, samplers);
-#endif
+        if (m_shadowSampler)
+        {
+            m_shadowSampler->Bind(ShaderType::PixelShader, 1);
+        }
     }
 
 	DeferredRenderer::DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height)
@@ -149,7 +147,7 @@ namespace mmo
 
         m_ssaoPass = std::make_unique<SsaoPass>(m_device, width, height);
         m_contactShadowPass = std::make_unique<ContactShadowPass>(m_device, width, height);
-        m_atmospherePass = std::make_unique<AtmospherePass>(m_device, width, height);
+        m_volumetricFogPass = std::make_unique<VolumetricFogPass>(m_device, width, height);
         m_bloomPass = std::make_unique<BloomPass>(m_device, width, height);
         m_postProcessPass = std::make_unique<PostProcessPass>(m_device, width, height);
         m_tonemapPass = std::make_unique<TonemapPass>(m_device, width, height);
@@ -178,31 +176,17 @@ namespace mmo
             m_shadowCameraNodes[i]->AttachObject(*m_shadowCameras[i]);
         }
 
-#ifdef WIN32        // TODO: Fix me: Move me to graphicsd3d11
-        D3D11_SAMPLER_DESC sampDesc = {};
-        // Using anisotropic filtering for better quality at oblique angles
-        sampDesc.Filter = D3D11_FILTER_COMPARISON_ANISOTROPIC;
-        // Use border addressing to avoid shadow edge artifacts
-        sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
-        sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
-        sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
-        sampDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;  // Shadow test: fragment depth < stored depth
-        // White border color to avoid darkening at edges
-        sampDesc.BorderColor[0] = 1.0f;
-        sampDesc.BorderColor[1] = 1.0f;
-        sampDesc.BorderColor[2] = 1.0f;
-        sampDesc.BorderColor[3] = 1.0f;
-        sampDesc.MinLOD = 0;
-        sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-        // Increase anisotropy level for better quality
-        sampDesc.MaxAnisotropy = 4;
-        sampDesc.MipLODBias = 0;
-
-		GraphicsDeviceD3D11& d3ddev = (GraphicsDeviceD3D11&)device;
-        ID3D11Device& d3d11dev = d3ddev;
-        d3d11dev.CreateSamplerState(&sampDesc, &m_shadowSampler);
-
-#endif
+        // Anisotropic comparison with a white border: shadow edges fade to lit instead of darkening.
+        SamplerDesc shadowSamplerDesc;
+        shadowSamplerDesc.filter = SamplerFilter::ComparisonAnisotropic;
+        shadowSamplerDesc.address = SamplerAddress::Border;
+        shadowSamplerDesc.comparison = SamplerComparison::LessEqual;
+        for (float& channel : shadowSamplerDesc.borderColor)
+        {
+            channel = 1.0f;
+        }
+        shadowSamplerDesc.maxAnisotropy = 4;
+        m_shadowSampler = m_device.CreateSamplerState(shadowSamplerDesc);
     }
 
     DeferredRenderer::~DeferredRenderer()
@@ -322,7 +306,7 @@ namespace mmo
                 emit("GPU: SSAO", 2, 3);
                 emit("GPU: ContactShadows", 3, 4);
                 emit("GPU: Lighting", 4, 5);
-                emit("GPU: Atmosphere", 5, 6);
+                emit("GPU: Volumetric fog", 5, 6);
                 emit("GPU: Forward", 6, 7);
                 emit("GPU: Bloom", 7, 8);
                 emit("GPU: Tonemap", 8, 9);
@@ -342,7 +326,7 @@ namespace mmo
 		m_sceneColorCopy->Resize(width, height);
         m_ssaoPass->Resize(width, height);
         m_contactShadowPass->Resize(width, height);
-        m_atmospherePass->Resize(width, height);
+        m_volumetricFogPass->Resize(width, height);
         m_bloomPass->Resize(width, height);
         m_postProcessPass->Resize(width, height);
         m_tonemapPass->Resize(width, height);
@@ -450,19 +434,22 @@ namespace mmo
         // as uninitialized/stale garbage — producing broken refraction (e.g. a white wash).
         m_sceneColorCopy->ApplyPendingResize();
 
-        // Height fog and light shafts over the lit opaque scene. The composite reads m_renderTexture
-        // and writes m_sceneColorCopy, which stays the refraction source; the single CopyResource
-        // below then carries the fogged scene back into m_renderTexture for the forward pass.
-        // Skipped while submerged (the underwater pass has its own fog), with fog turned off, or
-        // when the combined density is zero (time-of-day can scale the base density to nothing);
-        // the copy then runs in its old direction.
+        // Froxel volumetric fog over the lit opaque scene. The composite reads m_renderTexture and
+        // writes m_sceneColorCopy, which stays the refraction source; the single CopyResource below
+        // then carries the fogged scene back into m_renderTexture for the forward pass. Skipped while
+        // submerged (the underwater pass has its own fog), with fog turned off, when the combined
+        // density is zero, or without a shadow sampler; the copy then runs in its old direction and
+        // the fog history is discarded so it does not reproject a stale frame later.
         const bool runAtmosphere = scene.IsFogEnabled() && !m_underwaterState.active
-            && scene.GetCombinedFogDensity() > 0.0f;
+            && scene.GetCombinedFogDensity() > 0.0f && m_shadowSampler != nullptr;
         if (runAtmosphere)
         {
-            m_atmospherePass->Render(camera, *m_renderTexture, m_gBuffer.GetNormalRT(), *m_sceneColorCopy,
-                m_cascadeShadowMaps, *m_shadowBuffer, *scene.GetCameraBuffer(),
-                [this]() { BindShadowSampler(); }, *m_quadBuffer, *m_deferredLightVs);
+            m_volumetricFogPass->Render(camera, scene.GetWind(), *m_renderTexture, m_gBuffer.GetNormalRT(), *m_sceneColorCopy,
+                m_cascadeShadowMaps, *m_shadowBuffer, *scene.GetCameraBuffer(), *m_shadowSampler, *m_quadBuffer, *m_deferredLightVs);
+        }
+        else
+        {
+            m_volumetricFogPass->InvalidateHistory();
         }
 
 #ifdef WIN32
@@ -483,7 +470,7 @@ namespace mmo
 #endif
 
 #ifdef _WIN32
-        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(6); } // after atmosphere
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(6); } // after volumetric fog
 #endif
 
         {
