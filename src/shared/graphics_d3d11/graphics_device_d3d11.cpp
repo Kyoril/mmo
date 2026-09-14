@@ -681,6 +681,7 @@ namespace mmo
 		m_currentDepthStencilState = nullptr;
 		m_currentVertexShader = nullptr;
 		m_currentPixelShader = nullptr;
+		m_currentComputeShader = nullptr;
 		m_lastBoundMaterial = nullptr;
 
 		// Note: the frame batch count is deliberately NOT latched here. Reset() can run multiple times

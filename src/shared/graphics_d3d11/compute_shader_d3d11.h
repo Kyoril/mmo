@@ -12,6 +12,7 @@ namespace mmo
 	{
 	public:
 		ComputeShaderD3D11(GraphicsDeviceD3D11& device, const void* shaderCode, size_t shaderCodeSize);
+		~ComputeShaderD3D11() override = default;
 
 	public:
 		void Set() override;

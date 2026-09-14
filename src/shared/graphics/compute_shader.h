@@ -14,6 +14,7 @@ namespace mmo
 		~ComputeShader() override = default;
 
 	public:
+		/// @brief Always ShaderType::ComputeShader.
 		[[nodiscard]] ShaderType GetType() const override { return ShaderType::ComputeShader; }
 	};
 }

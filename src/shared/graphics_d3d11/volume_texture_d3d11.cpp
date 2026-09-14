@@ -8,7 +8,7 @@ namespace mmo
 {
 	namespace
 	{
-		DXGI_FORMAT ToDxgiFormat(const VolumeFormat format)
+		DXGI_FORMAT toDxgiFormat(const VolumeFormat format)
 		{
 			switch (format)
 			{
@@ -21,7 +21,7 @@ namespace mmo
 			return DXGI_FORMAT_UNKNOWN;
 		}
 
-		size_t BytesPerTexel(const VolumeFormat format)
+		size_t bytesPerTexel(const VolumeFormat format)
 		{
 			return format == VolumeFormat::R8 ? 1u : 8u;
 		}
@@ -39,7 +39,7 @@ namespace mmo
 		desc.Height = height;
 		desc.Depth = depth;
 		desc.MipLevels = 1;
-		desc.Format = ToDxgiFormat(format);
+		desc.Format = toDxgiFormat(format);
 		desc.Usage = D3D11_USAGE_DEFAULT;
 		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | (writable ? D3D11_BIND_UNORDERED_ACCESS : 0u);
 		VERIFY(SUCCEEDED(d3dDevice.CreateTexture3D(&desc, nullptr, &m_texture)));
@@ -100,10 +100,10 @@ namespace mmo
 	void VolumeTextureD3D11::Upload(const uint8* data, const size_t size)
 	{
 		ASSERT(data);
-		ASSERT(size == static_cast<size_t>(m_width) * m_height * m_depth * BytesPerTexel(m_format));
+		ASSERT(size == static_cast<size_t>(m_width) * m_height * m_depth * bytesPerTexel(m_format));
 
 		ID3D11DeviceContext& context = m_device;
-		const UINT rowPitch = static_cast<UINT>(m_width * BytesPerTexel(m_format));
+		const UINT rowPitch = static_cast<UINT>(m_width * bytesPerTexel(m_format));
 		const UINT slicePitch = rowPitch * m_height;
 		context.UpdateSubresource(m_texture.Get(), 0, nullptr, data, rowPitch, slicePitch);
 	}
