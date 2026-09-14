@@ -16,6 +16,7 @@
 #include "game/game_time_component.h"
 #include "graphics/sky_component.h"
 #include "scene_graph/environment_controller.h"
+#include "scene_graph/environment_profile_proto.h"
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
@@ -48,6 +49,7 @@
 #include "scene_graph/foliage.h"
 
 #include <map>
+#include <optional>
 #include <tuple>
 #include <vector>
 
@@ -310,6 +312,12 @@ namespace mmo
 		void OnPaint();
 
 		void CheckForZoneUpdate();
+
+		/// @brief Retargets the environment to the profile of a zone. Snaps on world enter and on
+		///        teleports (a move of more than 200 m within one update), fades otherwise.
+		/// @param zoneId The zone the controlled unit stands in (0 = none).
+		/// @param position The controlled unit's position.
+		void UpdateEnvironmentTarget(uint32 zoneId, const Vector3& position);
 
 	private:
 		// Setup stuff
@@ -615,6 +623,16 @@ namespace mmo
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		uint32 m_lastZoneId = UINT32_MAX;
+
+		/// Profile id the environment controller is currently targeting. UINT32_MAX = none yet.
+		uint32 m_environmentProfileId = UINT32_MAX;
+
+		/// True until the first zone lookup after entering a world, which snaps instead of fading.
+		bool m_environmentSnapPending = true;
+
+		/// Controlled unit position at the last environment update, for teleport detection.
+		std::optional<Vector3> m_lastEnvironmentPosition;
+
 		IdGenerator<uint64> m_objectIdGenerator{1};
 		IAudio &m_audio;
 
@@ -680,6 +698,10 @@ namespace mmo
 		ObjectGuid m_selectionRingTargetGuid{0};
 
 		const proto_client::Project &m_project;
+
+		/// Runtime environment profiles converted from ClientDB on first use. Declared after
+		/// m_project because it binds to m_project's table during construction.
+		EnvironmentProfileCache<proto_client::EnvironmentProfileManager> m_environmentProfiles{ m_project.environmentProfiles };
 
 		std::unique_ptr<ProjectileManager> m_projectileManager;
 

@@ -1249,7 +1249,16 @@ namespace mmo
 		}
 
 		const auto pos = unit->GetPosition();
-		const uint32 zoneId = m_worldInstance->GetTerrain()->GetArea(pos);
+		uint32 zoneId = 0;
+		if (!m_worldInstance->GetTerrain()->TryGetArea(pos, zoneId))
+		{
+			// The page under the player is still streaming in. Keep the current zone, music and
+			// environment rather than briefly treating the player as standing in no zone.
+			return;
+		}
+
+		UpdateEnvironmentTarget(zoneId, pos);
+
 		if (zoneId != m_lastZoneId)
 		{
 			m_lastZoneId = zoneId;
@@ -1312,6 +1321,30 @@ namespace mmo
 			m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
 			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
 		}
+	}
+
+	void WorldState::UpdateEnvironmentTarget(const uint32 zoneId, const Vector3& position)
+	{
+		constexpr float TeleportDistance = 200.0f;
+
+		bool immediate = m_environmentSnapPending;
+		if (m_lastEnvironmentPosition && (position - *m_lastEnvironmentPosition).GetSquaredLength() > TeleportDistance * TeleportDistance)
+		{
+			// A jump this large within one update is a teleport; fading across it would show the
+			// previous zone's mood at the destination.
+			immediate = true;
+		}
+		m_lastEnvironmentPosition = position;
+
+		const uint32 profileId = ResolveEnvironmentProfileId(m_project.zones, m_project.maps, zoneId, g_mapId);
+		if (profileId == m_environmentProfileId && !immediate)
+		{
+			return;
+		}
+
+		m_environmentProfileId = profileId;
+		m_environmentSnapPending = false;
+		m_environment.SetTarget(m_environmentProfiles.Get(profileId), immediate);
 	}
 
 	/// Adapts the streamed client terrain to the water queries WaterVolumeSystem needs.
@@ -1448,6 +1481,13 @@ namespace mmo
 
 		// Create sky component to manage the sky dome and day/night cycle
 		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
+
+		// Until the first zone lookup succeeds, show the map's default profile, then snap to the
+		// zone's profile on that first lookup instead of fading in from the map default.
+		m_environmentSnapPending = true;
+		m_lastEnvironmentPosition.reset();
+		m_environmentProfileId = ResolveEnvironmentProfileId(m_project.zones, m_project.maps, 0, g_mapId);
+		m_environment.SetTarget(m_environmentProfiles.Get(m_environmentProfileId), true);
 
 		// Water. The query adapter is declared before the volume system so it outlives it.
 		m_waterQuery = std::make_unique<TerrainWaterQuery>();

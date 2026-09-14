@@ -1850,6 +1850,27 @@ namespace mmo
 			return GetAreaForTile(tileX, tileY);
 		}
 
+		bool Terrain::TryGetArea(const Vector3 &position, uint32 &outArea) const
+		{
+			outArea = 0;
+
+			int32 tileX, tileY;
+			if (!GetTileIndexByWorldPosition(position, tileX, tileY))
+			{
+				// Outside the terrain there is nothing to stream in: a known "no area".
+				return true;
+			}
+
+			const Page *page = GetPage(static_cast<uint32>(tileX) / constants::TilesPerPage, static_cast<uint32>(tileY) / constants::TilesPerPage);
+			if (!page || !page->IsPrepared())
+			{
+				return false;
+			}
+
+			outArea = page->GetArea(static_cast<uint32>(tileX) % constants::TilesPerPage, static_cast<uint32>(tileY) % constants::TilesPerPage);
+			return true;
+		}
+
 		uint32 Terrain::GetAreaForTile(const uint32 globalTileX, const uint32 globalTileY) const
 		{
 			ASSERT(globalTileX < m_width * constants::TilesPerPage && globalTileY < m_height * constants::TilesPerPage);
