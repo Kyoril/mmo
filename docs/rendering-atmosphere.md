@@ -71,7 +71,7 @@ Missing or unreadable files fall back to built-in keys. The cvars are base value
 | `gxFogHeightFalloff` | 0.05 | falloff per metre of height |
 | `gxFogBaseHeight` | -10 | height of the base relative to the player (client) / camera pivot (editor), in metres, where density equals `gxFogDensity` |
 | `gxFogAnisotropy` | 0.7 | sun glow tightness |
-| `gxShaftStrength` | 2.0 | sun scattering multiplier |
+| `gxShaftStrength` | 1.25 | sun scattering multiplier |
 | `gxBloomQuality` | 2 | 0 Off, 1 Low, 2 High |
 | `gxBloomIntensity` | 0.08 | bloom weight |
 | `gxBloomThreshold` | 0.8 | soft-knee threshold (linear) |

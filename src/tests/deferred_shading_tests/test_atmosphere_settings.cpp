@@ -13,7 +13,7 @@ TEST_CASE("AtmosphereParameters defaults match the design spec", "[atmosphere]")
 	REQUIRE(parameters.heightFalloff == Approx(0.05f));
 	REQUIRE(parameters.baseHeight == Approx(-10.0f));
 	REQUIRE(parameters.anisotropy == Approx(0.7f));
-	REQUIRE(parameters.shaftStrength == Approx(2.0f));
+	REQUIRE(parameters.shaftStrength == Approx(1.25f));
 }
 
 TEST_CASE("AtmosphereParameters setters clamp to sane ranges", "[atmosphere]")

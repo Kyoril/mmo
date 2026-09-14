@@ -2128,7 +2128,7 @@ namespace mmo
 		s_fogAnisotropyVar = ConsoleVarMgr::RegisterConsoleVar("gxFogAnisotropy", "Forward scattering of sunlight in the fog (0 to 0.95). Higher values make a tighter, brighter glow around the sun.", "0.7");
 		m_cvarChangedSignals += s_fogAnisotropyVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
-		s_shaftStrengthVar = ConsoleVarMgr::RegisterConsoleVar("gxShaftStrength", "Multiplier on sunlight scattered by the fog (light shafts and sun glow).", "2.0");
+		s_shaftStrengthVar = ConsoleVarMgr::RegisterConsoleVar("gxShaftStrength", "Multiplier on sunlight scattered by the fog (light shafts and sun glow).", "1.25");
 		m_cvarChangedSignals += s_shaftStrengthVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
 		s_bloomQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxBloomQuality", "Bloom quality: 0 = Off, 1 = Low (quarter resolution, 4 levels), 2 = High (half resolution, 6 levels).", "2");

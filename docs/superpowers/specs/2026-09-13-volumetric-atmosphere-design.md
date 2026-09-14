@@ -306,5 +306,7 @@ These refine the approved design after reading the code; the plan
    without IEEE strictness.
 12. Density tuning (user feedback, 2026-09-14): fog read as far too dense in game (100 m ≈ 63 % fog
    at dawn). `gxFogDensity` 0.01 → 0.004; fallback density multipliers night 1.1, pre-dawn 1.2,
-   dawn 1.5, noon 1.0, dusk 1.3, after dusk 1.15; `gxShaftStrength` 1.0 → 2.0 because scattered
-   light scales with density and the shafts should stay readable in the thinner fog.
+   dawn 1.5, noon 1.0, dusk 1.3, after dusk 1.15; `gxShaftStrength` 1.0 → 1.25 because scattered
+   light scales with density and the shafts should stay readable in the thinner fog (2.0 was
+   tried and drove the shaft core to pure white). SunScatter fallback keys gained saturated
+   sunrise/sunset keys (0.23 / 0.77) so low-sun shafts read warm instead of grey-white.

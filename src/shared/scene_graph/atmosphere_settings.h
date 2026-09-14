@@ -27,9 +27,9 @@ namespace mmo
 		float anisotropy = 0.7f;
 
 		/// @brief Multiplier on the sun's in-scattered light (the shafts and the sun glow).
-		/// @remark Scattered light grows with density, so this is kept high enough that shafts stay
-		///         readable in the thin default fog.
-		float shaftStrength = 2.0f;
+		/// @remark Scattered light grows with density, so this stays above 1 to keep shafts readable
+		///         in the thin default fog, but low enough that the tonemapper keeps their tint.
+		float shaftStrength = 1.25f;
 
 		/// @brief Sets the base density, clamped to [0, 1].
 		void SetDensity(const float value) { density = Clamp(value, 0.0f, 1.0f); }

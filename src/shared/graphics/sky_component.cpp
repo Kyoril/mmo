@@ -179,12 +179,17 @@ namespace mmo
         if (!sunScatterLoaded)
         {
             m_sunScatterCurve->Clear();
+            // The sun rises from 0.20 and sets by 0.80 (SkyComponent transition window). Low-sun keys
+            // are strongly saturated on purpose: the shaft core is bright enough for ACES to push it
+            // toward white, so a pale tint would read as plain white light.
             m_sunScatterCurve->AddKey(0.0f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Night (moon)
-            m_sunScatterCurve->AddKey(0.2f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Pre-dawn
-            m_sunScatterCurve->AddKey(0.27f, Vector4(1.0f, 0.7f, 0.4f, 1.0f));     // Dawn
-            m_sunScatterCurve->AddKey(0.5f, Vector4(1.0f, 0.97f, 0.92f, 0.35f));   // Midday
-            m_sunScatterCurve->AddKey(0.73f, Vector4(1.0f, 0.65f, 0.35f, 1.0f));   // Dusk
-            m_sunScatterCurve->AddKey(0.8f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // After dusk
+            m_sunScatterCurve->AddKey(0.2f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Pre-dawn (moon)
+            m_sunScatterCurve->AddKey(0.23f, Vector4(1.0f, 0.42f, 0.18f, 0.8f));   // Sunrise
+            m_sunScatterCurve->AddKey(0.3f, Vector4(1.0f, 0.62f, 0.32f, 1.0f));    // Morning
+            m_sunScatterCurve->AddKey(0.5f, Vector4(1.0f, 0.93f, 0.8f, 0.35f));    // Midday
+            m_sunScatterCurve->AddKey(0.7f, Vector4(1.0f, 0.58f, 0.28f, 1.0f));    // Evening
+            m_sunScatterCurve->AddKey(0.77f, Vector4(1.0f, 0.4f, 0.16f, 0.8f));    // Sunset
+            m_sunScatterCurve->AddKey(0.8f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // After dusk (moon)
             m_sunScatterCurve->AddKey(1.0f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Night (moon)
             m_sunScatterCurve->CalculateTangents();
         }
