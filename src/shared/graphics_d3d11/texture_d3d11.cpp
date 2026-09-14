@@ -443,6 +443,9 @@ namespace mmo
 		case ShaderType::PixelShader:
 			context.PSSetShaderResources(slot, 1, &views);
 			break;
+		case ShaderType::ComputeShader:
+			context.CSSetShaderResources(slot, 1, &views);
+			break;
 		}
 
 		m_device.SetTextureAddressMode(GetTextureAddressModeU(), GetTextureAddressModeV(), GetTextureAddressModeW());

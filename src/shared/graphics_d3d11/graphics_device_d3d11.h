@@ -18,6 +18,7 @@ namespace mmo
 {
 	class VertexShaderD3D11;
 	class PixelShaderD3D11;
+	class ComputeShaderD3D11;
 	D3D11_MAP MapLockOptionsToD3D11(LockOptions options);
 
 	/// Reserved constant-buffer register for the per-view matrix block (view/proj + inverses), bound
@@ -30,6 +31,7 @@ namespace mmo
 	{
 		friend class VertexShaderD3D11;
 		friend class PixelShaderD3D11;
+		friend class ComputeShaderD3D11;
 		friend class VertexDeclarationD3D11;
 
 	public:
@@ -138,6 +140,14 @@ namespace mmo
 		void Render(const RenderOperation& operation) override;
 
 		OcclusionQueryPtr CreateOcclusionQuery() override;
+
+		VolumeTexturePtr CreateVolumeTexture(uint16 width, uint16 height, uint16 depth, VolumeFormat format, bool writable) override;
+
+		SamplerStatePtr CreateSamplerState(const SamplerDesc& desc) override;
+
+		void Dispatch(uint32 groupsX, uint32 groupsY, uint32 groupsZ) override;
+
+		void ClearComputeBindings() override;
 
 		void SetHardwareCursor(void* osCursorData) override;
 
@@ -335,6 +345,9 @@ namespace mmo
 
 		/// Currently bound pixel shader (for caching to avoid redundant PSSetShader calls).
 		ShaderBase* m_currentPixelShader { nullptr };
+
+		/// Currently bound compute shader (for caching to avoid redundant CSSetShader calls).
+		ShaderBase* m_currentComputeShader { nullptr };
 
 		/// Last bound material pointer. When consecutive draws use the same material,
 		/// we skip Material::Apply entirely since shaders/textures/state are already set.

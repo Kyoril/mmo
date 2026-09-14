@@ -16,6 +16,8 @@
 #include "shared/graphics/constant_buffer.h"
 #include "shared/graphics/structured_buffer.h"
 #include "shared/graphics/occlusion_query.h"
+#include "shared/graphics/volume_texture.h"
+#include "shared/graphics/sampler_state.h"
 
 #include <string>
 #include <utility>
@@ -230,6 +232,25 @@ namespace mmo
 		/// @brief Creates a GPU occlusion query object for visibility testing.
 		/// @return A unique pointer to the occlusion query, or nullptr if not supported.
 		virtual OcclusionQueryPtr CreateOcclusionQuery() { return nullptr; }
+
+		/// @brief Creates a 3D texture. Backends without volume texture support return nullptr.
+		/// @param width Width in texels.
+		/// @param height Height in texels.
+		/// @param depth Depth in texels.
+		/// @param format Texel format.
+		/// @param writable Whether compute shaders may write it (creates an unordered access view).
+		virtual VolumeTexturePtr CreateVolumeTexture(uint16 width, uint16 height, uint16 depth, VolumeFormat format, bool writable) { return nullptr; }
+
+		/// @brief Creates a sampler state. Backends without explicit sampler objects return nullptr.
+		virtual SamplerStatePtr CreateSamplerState(const SamplerDesc& desc) { return nullptr; }
+
+		/// @brief Runs the active compute shader over the given number of thread groups.
+		virtual void Dispatch(uint32 groupsX, uint32 groupsY, uint32 groupsZ) {}
+
+		/// @brief Unbinds every compute shader resource, unordered access view and the compute shader
+		///        itself. Call after each compute step whose output is read next, because a resource
+		///        cannot be bound for reading while it is still bound for writing.
+		virtual void ClearComputeBindings() {}
 
 		/// @brief Draws non-indexed primitives.
 		/// @param vertexCount Number of vertices to draw.

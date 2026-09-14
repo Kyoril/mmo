@@ -3,8 +3,11 @@
 #include "graphics_device_d3d11.h"
 
 #include "base/thread_checks.h"
+#include "compute_shader_d3d11.h"
 #include "constant_buffer_d3d11.h"
 #include "occlusion_query_d3d11.h"
+#include "sampler_state_d3d11.h"
+#include "volume_texture_d3d11.h"
 #include "structured_buffer_d3d11.h"
 #include "index_buffer_d3d11.h"
 #include "material_compiler_d3d11.h"
@@ -28,6 +31,7 @@
 #include <set>
 #include <string>
 #include <algorithm>
+#include <iterator>
 #include "luabind/operator.hpp"
 #include "math/radian.h"
 #include "scene_graph/render_operation.h"
@@ -805,6 +809,8 @@ namespace mmo
 			return std::make_unique<VertexShaderD3D11>(*this, shaderCode, shaderCodeSize);
 		case ShaderType::PixelShader:
 			return std::make_unique<PixelShaderD3D11>(*this, shaderCode, shaderCodeSize);
+		case ShaderType::ComputeShader:
+			return std::make_unique<ComputeShaderD3D11>(*this, shaderCode, shaderCodeSize);
 		default:
 			ASSERT(! "This shader type can't yet be created - implement it for D3D11!");
 		}
@@ -1537,6 +1543,32 @@ namespace mmo
 	OcclusionQueryPtr GraphicsDeviceD3D11::CreateOcclusionQuery()
 	{
 		return std::make_unique<OcclusionQueryD3D11>(*m_device.Get(), *m_immContext.Get());
+	}
+
+	VolumeTexturePtr GraphicsDeviceD3D11::CreateVolumeTexture(const uint16 width, const uint16 height, const uint16 depth, const VolumeFormat format, const bool writable)
+	{
+		return std::make_shared<VolumeTextureD3D11>(*this, width, height, depth, format, writable);
+	}
+
+	SamplerStatePtr GraphicsDeviceD3D11::CreateSamplerState(const SamplerDesc& desc)
+	{
+		return std::make_shared<SamplerStateD3D11>(*this, desc);
+	}
+
+	void GraphicsDeviceD3D11::Dispatch(const uint32 groupsX, const uint32 groupsY, const uint32 groupsZ)
+	{
+		ASSERT_MAIN_THREAD();
+		m_immContext->Dispatch(groupsX, groupsY, groupsZ);
+	}
+
+	void GraphicsDeviceD3D11::ClearComputeBindings()
+	{
+		ID3D11ShaderResourceView* nullViews[16] = {};
+		ID3D11UnorderedAccessView* nullUavs[8] = {};
+		m_immContext->CSSetShaderResources(0, static_cast<UINT>(std::size(nullViews)), nullViews);
+		m_immContext->CSSetUnorderedAccessViews(0, static_cast<UINT>(std::size(nullUavs)), nullUavs, nullptr);
+		m_immContext->CSSetShader(nullptr, nullptr, 0);
+		m_currentComputeShader = nullptr;
 	}
 
 	void GraphicsDeviceD3D11::SetHardwareCursor(void* osCursorData)
