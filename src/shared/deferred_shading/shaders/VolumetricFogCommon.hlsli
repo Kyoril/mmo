@@ -36,7 +36,7 @@ cbuffer VolumetricFogBuffer : register(b2)
 // View depth of a normalized slice coordinate, exponential between NearDistance and FarDistance.
 float SliceToDepth(float slice01)
 {
-    return NearDistance * pow(FarDistance / NearDistance, slice01);
+    return NearDistance * pow(abs(FarDistance / NearDistance), slice01);
 }
 
 // Normalized slice coordinate of a view depth: 0 at or before the near plane, above 1 past the far plane.

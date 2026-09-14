@@ -22,6 +22,7 @@ void main(uint3 id : SV_DispatchThreadID)
 
     float3 scattered = float3(0.0f, 0.0f, 0.0f);
     float transmittance = 1.0f;
+    float previousDepth = SliceToDepth(0.0f);
 
     [loop]
     for (uint z = 0; z < GridDepth; ++z)
@@ -29,12 +30,14 @@ void main(uint3 id : SV_DispatchThreadID)
         float4 cell = ScatteringVolume.Load(int4(id.xy, z, 0));
         float sigma = max(cell.a, 0.0f);
 
-        float thickness = (SliceToDepth(float(z + 1) / float(GridDepth)) - SliceToDepth(float(z) / float(GridDepth))) * pathScale;
+        float nextDepth = SliceToDepth(float(z + 1) / float(GridDepth));
+        float thickness = (nextDepth - previousDepth) * pathScale;
         float sliceTransmittance = exp(-sigma * thickness);
         float3 radiance = cell.rgb / max(sigma, 1e-6f);
 
         scattered += transmittance * radiance * (1.0f - sliceTransmittance);
         transmittance *= sliceTransmittance;
+        previousDepth = nextDepth;
 
         IntegratedOutput[uint3(id.xy, z)] = float4(scattered, transmittance);
     }

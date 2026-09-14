@@ -198,8 +198,10 @@ namespace mmo
 		const Vector3 cameraPosition = camera.GetDerivedPosition();
 		const Vector3 cameraForward = camera.GetDerivedDirection().NormalizedCopy();
 
+		const float clampedRange = std::max(m_settings.range, VolumetricFogSettings::MinRange);
+
 		const float resetDistance = VolumetricFogSettings::HistoryResetDistance;
-		if ((cameraPosition - m_prevCameraPosition).GetSquaredLength() > resetDistance * resetDistance || m_settings.range != m_prevRange)
+		if ((cameraPosition - m_prevCameraPosition).GetSquaredLength() > resetDistance * resetDistance || clampedRange != m_prevRange)
 		{
 			m_historyValid = false;
 		}
@@ -218,7 +220,7 @@ namespace mmo
 		constants.gridDepth = m_gridDepth;
 		constants.debugMode = m_settings.debugMode;
 		constants.nearDistance = VolumetricFogSettings::NearDistance;
-		constants.farDistance = m_settings.range;
+		constants.farDistance = clampedRange;
 		constants.noiseSize = wind.noiseSize;
 		constants.noiseAmount = wind.noiseAmount;
 		constants.windOffsetX = wind.noiseOffsetX;
@@ -281,6 +283,12 @@ namespace mmo
 		output.Activate();
 		m_device.SetViewport(0, 0, static_cast<int32>(m_width), static_cast<int32>(m_height), 0.0f, 1.0f);
 
+		// GraphicsDeviceD3D11::Draw() calls UpdateSamplerState(), which may rebind PS s0 from the device's
+		// legacy sampler cache; match that cache to the explicit LinearClamp sampler bound below so the two
+		// don't disagree at s0 after this pass runs.
+		m_device.SetTextureAddressMode(TextureAddressMode::Clamp, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
+		m_device.SetTextureFilter(TextureFilter::Bilinear);
+
 		sceneColor.Bind(ShaderType::PixelShader, 0);
 		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
 		if (volumeEnabled)
@@ -291,7 +299,8 @@ namespace mmo
 
 		m_compositePs->Set();
 
-		// Last, so no device state call above can replace the sampler.
+		// Bound last; matches the device state set above so the legacy sampler cache and this explicit
+		// sampler agree at s0.
 		if (m_linearClampSampler)
 		{
 			m_linearClampSampler->Bind(ShaderType::PixelShader, 0);
@@ -301,6 +310,8 @@ namespace mmo
 
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 0);
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 1);
+		m_device.BindTexture(nullptr, ShaderType::PixelShader, 2);
+		m_device.BindTexture(nullptr, ShaderType::PixelShader, 3);
 
 		// --- Frame bookkeeping ----------------------------------------------------------------
 		if (volumeEnabled)
@@ -312,7 +323,7 @@ namespace mmo
 		m_prevViewProj = viewProj;
 		m_prevCameraPosition = cameraPosition;
 		m_prevCameraForward = cameraForward;
-		m_prevRange = m_settings.range;
+		m_prevRange = clampedRange;
 		++m_frameIndex;
 	}
 }

@@ -6,11 +6,11 @@
 #include "volumetric_fog_settings.h"
 
 #include "base/non_copyable.h"
-#include "graphics/shader_base.h"
 #include "graphics/constant_buffer.h"
 #include "graphics/graphics_device.h"
 #include "graphics/render_texture.h"
 #include "graphics/sampler_state.h"
+#include "graphics/shader_base.h"
 #include "graphics/vertex_buffer.h"
 #include "graphics/volume_texture.h"
 #include "math/matrix4.h"
@@ -28,8 +28,9 @@ namespace mmo
 	///         shadowed sun light; temporal: reprojected history blend; integrate: front-to-back
 	///         accumulation), then a full-screen composite applies it and continues with the closed-form
 	///         fog beyond the grid. With the volume disabled (quality 0) only the closed form runs.
-	/// @remark Backend-neutral: it only uses GraphicsDevice abstractions. On backends without volume
-	///         textures or compute shaders the volume stays disabled.
+	/// @remark Uses only GraphicsDevice abstractions. The compute steps stay disabled on backends without
+	///         volume textures or compute shaders, and the composite pixel shader bytecode currently exists
+	///         only for D3D11 - the same seam as the other deferred passes.
 	class VolumetricFogPass final : public NonCopyable
 	{
 	public:
