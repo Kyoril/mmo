@@ -221,7 +221,7 @@ under the position is not yet loaded. Callers keep their current target on false
   - One collapsible header per day curve, drawn with `ColorCurveImGuiEditor`. Alpha is labelled per curve
     (intensity, density ×, shaft ×). Each has a "Reset to Default" button that clears the curve.
   - Sliders for the fixed values, with the same ranges as the `AtmosphereParameters` setters. Exposure is 0.1–8,
-    bloom intensity 0–1, bloom threshold 0–8, transition seconds 0–30.
+    bloom intensity 0–1, bloom threshold 0–16, transition seconds 0–30.
 - **Preview bar:**
   - A "Preview in world editors" toggle and a time-of-day slider with Dawn / Noon / Dusk / Midnight presets.
   - While preview is on, every open world editor snaps to this profile at the preview time. Turning it off

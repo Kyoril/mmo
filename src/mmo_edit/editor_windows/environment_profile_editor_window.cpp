@@ -293,9 +293,9 @@ namespace mmo
 			}
 
 			float bloomThreshold = entry.bloom_threshold();
-			if (ImGui::DragFloat("Bloom Threshold", &bloomThreshold, 0.01f, 0.0f, 8.0f, "%.2f"))
+			if (ImGui::DragFloat("Bloom Threshold", &bloomThreshold, 0.01f, 0.0f, 16.0f, "%.2f"))
 			{
-				entry.set_bloom_threshold(std::clamp(bloomThreshold, 0.0f, 8.0f));
+				entry.set_bloom_threshold(std::clamp(bloomThreshold, 0.0f, 16.0f));
 				changed = true;
 			}
 
