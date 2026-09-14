@@ -27,16 +27,16 @@ existing water materials keep their tuned look.
 
 ## Fog model
 
-Density `σ(y) = gxFogDensity · densityMultiplier · exp(min(−gxFogHeightFalloff · (y − gxFogBaseHeight), 3))`.
+Density `σ(y) = density · densityMultiplier · exp(min(−fog_height_falloff · (y − fog_base_height), 3))`.
 The exponent clamp of 3 means fog below the base saturates at e³ ≈ 20× the base density instead of
-climbing toward opacity. `gxFogBaseHeight` is an offset from the fog reference height — the
+climbing toward opacity. `fog_base_height` is an offset from the fog reference height — the
 controlled player's height in the client (`Scene::SetAtmosphereReferenceHeight`, set every frame
 from `WorldState::OnIdle`), the camera orbit pivot in the editor, or the camera's own derived Y as a
 fallback (`Scene::RefreshCameraBuffer`) — rather than the camera height directly, so fog density at a
 fixed ground point no longer pumps as the orbit camera zooms or pitches.
 
-Per metre the fog scatters `σ · (FogTint + SunScatterColor · SunColor · SunIntensity · shaftStrength ·
-Phase(cosθ) · shadow)` toward the camera, with a Henyey-Greenstein lobe (g = gxFogAnisotropy) blended
+Per metre the fog scatters `σ · (FogTint + SunScatterColor · SunColor · SunIntensity · shaft_strength ·
+Phase(cosθ) · shadow)` toward the camera, with a Henyey-Greenstein lobe (g = fog_anisotropy) blended
 80/20 with isotropic. The first `gxAtmosphereMarchDistance` metres are marched through the shadow maps;
 the rest of the ray uses the closed-form integral with the sun unshadowed.
 
@@ -48,17 +48,27 @@ The camera cbuffer (b1, 176 bytes) is declared three times as well: `PsCameraCon
 `scene.cpp`, `CameraBuffer` in `AtmosphereCommon.hlsli`, `CameraParameters` in the material compiler.
 Any change there requires **Tools → Rebuild All Materials** in the editor.
 
-## Time of day
+## Environment profiles
 
-`SkyComponent` evaluates two colour curves (editable in the colour curve editor) and writes
-`Scene::SetAtmosphereTimeOfDay`:
+The look comes from environment profiles (`environment_profiles` game-data table, edited in the
+editor's Environment Profile Editor). A profile has eight day curves and fixed values:
 
-| File | rgb | alpha |
+| Curve | rgb | alpha |
 |---|---|---|
-| `Models/FogColor.hccv` | fog ambient radiance | density multiplier |
-| `Models/SunScatter.hccv` | sun colour inside fog | shaft strength multiplier |
+| `sky_horizon`, `sky_zenith`, `clouds` | sky material colours | unused |
+| `ambient` | scene ambient | unused |
+| `sun`, `moon` | light colour | intensity |
+| `fog` | fog ambient radiance | density multiplier |
+| `sun_scatter` | sun colour inside fog | shaft multiplier |
 
-Missing or unreadable files fall back to built-in keys. The cvars are base values; the curves multiply them.
+Fixed values: fog density, height falloff, base height, anisotropy, shaft strength, exposure, bloom
+intensity, bloom threshold, transition seconds. An empty curve uses the built-in Default
+(`EnvironmentProfile::MakeDefault`), which reproduces the look from before profiles existed.
+
+A zone uses its own profile, else its parent's, else the map's default profile, else the built-in
+Default (`ResolveEnvironmentProfileId`). `EnvironmentController` fades to a new profile over that
+profile's transition time; `SkyComponent::ApplyEnvironment` pushes the result into the sky, the
+sun/moon light, the scene's atmosphere values and the global shader parameters every frame.
 
 ## Console variables
 
@@ -67,19 +77,11 @@ Missing or unreadable files fall back to built-in keys. The cvars are base value
 | `gxAtmosphereQuality` | 3 | 0 Off (height fog only), 1 Low, 2 Medium, 3 High, 4 Ultra |
 | `gxAtmosphereMarchDistance` | 200 | metres marched for shafts (≤ 300) |
 | `gxAtmosphereDebug` | 0 | 1 scattered light, 2 transmittance, 3 shaft shadow term |
-| `gxFogDensity` | 0.004 | extinction per metre at the base height |
-| `gxFogHeightFalloff` | 0.05 | falloff per metre of height |
-| `gxFogBaseHeight` | -10 | height of the base relative to the player (client) / camera pivot (editor), in metres, where density equals `gxFogDensity` |
-| `gxFogAnisotropy` | 0.7 | sun glow tightness |
-| `gxShaftStrength` | 1.25 | sun scattering multiplier |
 | `gxBloomQuality` | 2 | 0 Off, 1 Low, 2 High |
-| `gxBloomIntensity` | 0.08 | bloom weight |
-| `gxBloomThreshold` | 0.8 | soft-knee threshold (linear) |
-| `gxExposure` | 1.0 | brightness before tone mapping |
+| `gxExposure` | 1.0 | player brightness, multiplies the profile exposure |
 
 ## Known limitations
 
-- The fog base follows the player/camera-pivot reference height until per-zone atmosphere data exists (planned per-zone time of day).
 - Shafts need shadow-casting geometry and end at the 300 m shadow range. Terrain casts into the
   cascades (so nearby hills block shafts and shadow the ground), but mountains farther than 300 m
   cannot block the sun.

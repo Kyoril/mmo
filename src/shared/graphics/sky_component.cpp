@@ -1,10 +1,6 @@
 #include "sky_component.h"
 
 #include "global_shader_parameters.h"
-#include "assets/asset_registry.h"
-#include "binary_io/stream_source.h"
-#include "binary_io/reader.h"
-#include "graphics/color_curve.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/scene_node.h"
 #include "game/constants.h"
@@ -28,8 +24,9 @@ namespace mmo
             m_gameTime = m_ownedGameTime.get();
         }
 
-        // Load color curves for sky
-        LoadColorCurves();
+        // Start from the built-in Default so the first frame is never black, even before a caller
+        // applies its first environment state.
+        m_environment = EvaluateEnvironment(*EnvironmentProfile::GetDefault(), GetNormalizedTimeOfDay());
 
         // Create sky entity
         m_cloudsEntity = m_scene.CreateEntity("Clouds", "Models/SkySphere.hmsh");
@@ -63,138 +60,6 @@ namespace mmo
         // Scene will handle cleanup of entities and lights
     }
 
-    void SkyComponent::LoadColorCurves()
-    {
-        m_horizonColorCurve = std::make_unique<ColorCurve>();
-        if (const auto file = AssetRegistry::OpenFile("Models/HorizonColor.hccv"))
-        {
-            io::StreamSource stream(*file);
-            io::Reader reader(stream);
-            if (!m_horizonColorCurve->Deserialize(reader))
-            {
-                ELOG("Failed to load horizon color curve");
-                // Create default curve
-                m_horizonColorCurve->Clear();
-                m_horizonColorCurve->AddKey(0.0f, Vector4(0.02f, 0.05f, 0.1f, 1.0f));    // Night
-                m_horizonColorCurve->AddKey(0.25f, Vector4(0.9f, 0.6f, 0.4f, 1.0f));     // Dawn
-                m_horizonColorCurve->AddKey(0.5f, Vector4(0.5f, 0.7f, 1.0f, 1.0f));      // Midday
-                m_horizonColorCurve->AddKey(0.75f, Vector4(0.9f, 0.6f, 0.4f, 1.0f));     // Dusk
-                m_horizonColorCurve->AddKey(1.0f, Vector4(0.02f, 0.05f, 0.1f, 1.0f));    // Night
-                m_horizonColorCurve->CalculateTangents();
-            }
-        }
-
-        m_zenithColorCurve = std::make_unique<ColorCurve>();
-        if (const auto file = AssetRegistry::OpenFile("Models/ZenithColor.hccv"))
-        {
-            io::StreamSource stream(*file);
-            io::Reader reader(stream);
-            if (!m_zenithColorCurve->Deserialize(reader))
-            {
-                ELOG("Failed to load zenith color curve");
-                // Create default curve
-                m_zenithColorCurve->Clear();
-                m_zenithColorCurve->AddKey(0.0f, Vector4(0.01f, 0.03f, 0.08f, 1.0f));    // Night
-                m_zenithColorCurve->AddKey(0.25f, Vector4(0.3f, 0.4f, 0.8f, 1.0f));      // Dawn
-                m_zenithColorCurve->AddKey(0.5f, Vector4(0.1f, 0.3f, 0.9f, 1.0f));       // Midday
-                m_zenithColorCurve->AddKey(0.75f, Vector4(0.3f, 0.4f, 0.8f, 1.0f));      // Dusk
-                m_zenithColorCurve->AddKey(1.0f, Vector4(0.01f, 0.03f, 0.08f, 1.0f));    // Night
-                m_zenithColorCurve->CalculateTangents();
-            }
-        }
-
-		m_ambientColorCurve = std::make_unique<ColorCurve>();
-        if (const auto file = AssetRegistry::OpenFile("Models/AmbientColor.hccv"))
-        {
-            io::StreamSource stream(*file);
-            io::Reader reader(stream);
-            if (!m_ambientColorCurve->Deserialize(reader))
-            {
-                ELOG("Failed to load ambient color curve");
-                // Create default curve
-                m_ambientColorCurve->Clear();
-                m_ambientColorCurve->AddKey(0.0f, Vector4(0.01f, 0.03f, 0.08f, 1.0f));    // Night
-                m_ambientColorCurve->AddKey(1.0f, Vector4(0.01f, 0.03f, 0.08f, 1.0f));    // Night
-                m_ambientColorCurve->CalculateTangents();
-            }
-        }
-
-		m_cloudColorCurve = std::make_unique<ColorCurve>();
-        if (const auto file = AssetRegistry::OpenFile("Models/CloudColor.hccv"))
-        {
-            io::StreamSource stream(*file);
-            io::Reader reader(stream);
-            if (!m_cloudColorCurve->Deserialize(reader))
-            {
-                ELOG("Failed to load cloud color curve");
-                // Create default curve
-                m_cloudColorCurve->Clear();
-                m_cloudColorCurve->AddKey(0.0f, Vector4(1.0f, 1.0f, 1.0f, 1.0f));    // Night
-                m_cloudColorCurve->AddKey(1.0f, Vector4(1.0f, 1.0f, 1.0f, 1.0f));    // Night
-                m_cloudColorCurve->CalculateTangents();
-            }
-        }
-
-        // Unlike the curves above, these fall back to defaults when the file is missing too: an empty
-        // curve evaluates to zero, which would silently switch the fog and the shafts off.
-        m_fogColorCurve = std::make_unique<ColorCurve>();
-        bool fogColorLoaded = false;
-        if (const auto file = AssetRegistry::OpenFile("Models/FogColor.hccv"))
-        {
-            io::StreamSource stream(*file);
-            io::Reader reader(stream);
-            fogColorLoaded = m_fogColorCurve->Deserialize(reader);
-            if (!fogColorLoaded)
-            {
-                ELOG("Failed to load fog color curve");
-            }
-        }
-
-        if (!fogColorLoaded)
-        {
-            m_fogColorCurve->Clear();
-            m_fogColorCurve->AddKey(0.0f, Vector4(0.02f, 0.04f, 0.08f, 1.1f));     // Night
-            m_fogColorCurve->AddKey(0.2f, Vector4(0.05f, 0.06f, 0.1f, 1.2f));      // Pre-dawn
-            m_fogColorCurve->AddKey(0.27f, Vector4(0.85f, 0.6f, 0.45f, 1.5f));     // Dawn
-            m_fogColorCurve->AddKey(0.5f, Vector4(0.55f, 0.7f, 0.9f, 1.0f));       // Midday
-            m_fogColorCurve->AddKey(0.73f, Vector4(0.85f, 0.55f, 0.4f, 1.3f));     // Dusk
-            m_fogColorCurve->AddKey(0.8f, Vector4(0.05f, 0.06f, 0.1f, 1.15f));     // After dusk
-            m_fogColorCurve->AddKey(1.0f, Vector4(0.02f, 0.04f, 0.08f, 1.1f));     // Night
-            m_fogColorCurve->CalculateTangents();
-        }
-
-        m_sunScatterCurve = std::make_unique<ColorCurve>();
-        bool sunScatterLoaded = false;
-        if (const auto file = AssetRegistry::OpenFile("Models/SunScatter.hccv"))
-        {
-            io::StreamSource stream(*file);
-            io::Reader reader(stream);
-            sunScatterLoaded = m_sunScatterCurve->Deserialize(reader);
-            if (!sunScatterLoaded)
-            {
-                ELOG("Failed to load sun scatter curve");
-            }
-        }
-
-        if (!sunScatterLoaded)
-        {
-            m_sunScatterCurve->Clear();
-            // The sun rises from 0.20 and sets by 0.80 (SkyComponent transition window). Low-sun keys
-            // are strongly saturated on purpose: the shaft core is bright enough for ACES to push it
-            // toward white, so a pale tint would read as plain white light.
-            m_sunScatterCurve->AddKey(0.0f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Night (moon)
-            m_sunScatterCurve->AddKey(0.2f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Pre-dawn (moon)
-            m_sunScatterCurve->AddKey(0.23f, Vector4(1.0f, 0.42f, 0.18f, 0.8f));   // Sunrise
-            m_sunScatterCurve->AddKey(0.3f, Vector4(1.0f, 0.62f, 0.32f, 1.0f));    // Morning
-            m_sunScatterCurve->AddKey(0.5f, Vector4(1.0f, 0.93f, 0.8f, 0.35f));    // Midday
-            m_sunScatterCurve->AddKey(0.7f, Vector4(1.0f, 0.58f, 0.28f, 1.0f));    // Evening
-            m_sunScatterCurve->AddKey(0.77f, Vector4(1.0f, 0.4f, 0.16f, 0.8f));    // Sunset
-            m_sunScatterCurve->AddKey(0.8f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // After dusk (moon)
-            m_sunScatterCurve->AddKey(1.0f, Vector4(0.3f, 0.4f, 0.65f, 0.3f));     // Night (moon)
-            m_sunScatterCurve->CalculateTangents();
-        }
-    }
-
     void SkyComponent::Update(float deltaSeconds, GameTime timestamp)
     {
         // Update game time
@@ -205,9 +70,6 @@ namespace mmo
         {
             m_cloudsNode->Yaw(Radian(deltaSeconds * 0.0025f), TransformSpace::World);
         }
-        
-        // Update lighting based on time of day
-        UpdateLighting(GetNormalizedTimeOfDay());
     }
 
     void SkyComponent::SetPosition(const Vector3& position)
@@ -216,6 +78,12 @@ namespace mmo
         {
             m_cloudsNode->SetPosition(position);
         }
+    }
+
+    void SkyComponent::ApplyEnvironment(const EnvironmentState& state)
+    {
+        m_environment = state;
+        UpdateLighting(GetNormalizedTimeOfDay());
     }
 
     float SkyComponent::GetNormalizedTimeOfDay() const
@@ -357,15 +225,12 @@ namespace mmo
         
         Vector3 lightDir = Vector3(x, y, z).NormalizedCopy();
 
-        // Light color & intensity
-        Vector4 sunColor(1.0f, 0.95f, 0.9f, 1.0f);
-        float sunIntensity = 1.0f;
-
-        Vector4 moonColor(0.3f, 0.4f, 0.65f, 1.0f);
-        float moonIntensity = 0.12f;
+        // Light colour & intensity from the environment; the clock decides how much is sun vs moon.
+        const Vector4 sunColor(m_environment.sunColor.x, m_environment.sunColor.y, m_environment.sunColor.z, 1.0f);
+        const Vector4 moonColor(m_environment.moonColor.x, m_environment.moonColor.y, m_environment.moonColor.z, 1.0f);
 
         Vector4 blendedColor = sunColor * blendSun + moonColor * blendMoon;
-        float blendedIntensity = sunIntensity * blendSun + moonIntensity * blendMoon;
+        float blendedIntensity = m_environment.sunIntensity * blendSun + m_environment.moonIntensity * blendMoon;
 
         // Apply to shared light
         m_sunLight->SetDirection(lightDir);
@@ -376,30 +241,15 @@ namespace mmo
         m_skyMatInst->SetVectorParameter("LightDirection", Vector4(lightDir.x, lightDir.y, lightDir.z, 0.0f));
         m_skyMatInst->SetScalarParameter("SunHeight", blendMoon);
 
-        // Get colors from curves and apply to sky material
-        const Vector4 horizonColor = m_horizonColorCurve->Evaluate(normalizedTime);
-        const Vector4 zenithColor = m_zenithColorCurve->Evaluate(normalizedTime);
-		const Vector4 ambientColor = m_ambientColorCurve->Evaluate(normalizedTime);
-		const Vector4 cloudColor = m_cloudColorCurve->Evaluate(normalizedTime);
+        const Vector4& horizonColor = m_environment.skyHorizon;
+        const Vector4& zenithColor = m_environment.skyZenith;
         m_skyMatInst->SetVectorParameter("HorizonColor", horizonColor);
         m_skyMatInst->SetVectorParameter("ZenithColor", zenithColor);
-        m_skyMatInst->SetVectorParameter("CloudColor", cloudColor);
-        
-        // Time-of-day fog values; the renderer multiplies them into the cvar/editor base values.
-        const Vector4 fogColorKey = m_fogColorCurve->Evaluate(normalizedTime);
-        const Vector4 sunScatterKey = m_sunScatterCurve->Evaluate(normalizedTime);
+        m_skyMatInst->SetVectorParameter("CloudColor", m_environment.clouds);
 
-        AtmosphereTimeOfDay timeOfDay;
-        timeOfDay.fogTint[0] = fogColorKey.x;
-        timeOfDay.fogTint[1] = fogColorKey.y;
-        timeOfDay.fogTint[2] = fogColorKey.z;
-        timeOfDay.densityMultiplier = fogColorKey.w;
-        timeOfDay.sunScatterColor[0] = sunScatterKey.x;
-        timeOfDay.sunScatterColor[1] = sunScatterKey.y;
-        timeOfDay.sunScatterColor[2] = sunScatterKey.z;
-        timeOfDay.shaftMultiplier = sunScatterKey.w;
-        m_scene.SetAtmosphereTimeOfDay(timeOfDay);
-        m_scene.SetAmbientColor(Vector3(ambientColor.x, ambientColor.y, ambientColor.z));
+        m_scene.SetAtmosphereParameters(m_environment.atmosphere);
+        m_scene.SetAtmosphereTimeOfDay(m_environment.timeOfDay);
+        m_scene.SetAmbientColor(m_environment.ambient);
 
         // Register the sun as the primary directional light so that forward-rendered
         // translucent surfaces (water, glass …) pick up the correct sun direction and colour

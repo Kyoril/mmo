@@ -518,6 +518,7 @@ namespace mmo
 		{
 			m_skyComponent->SetPosition(m_camera->GetDerivedPosition());
 			m_skyComponent->Update(deltaTimeSeconds, 0);
+			UpdateEnvironment(deltaTimeSeconds);
 
 			// Anchor the fog reference height to the orbit pivot rather than the camera itself, so
 			// fog density at a fixed ground point stays stable as the camera zooms or pitches.
@@ -1306,6 +1307,20 @@ namespace mmo
 
 		// Okay so we build up a grid of references to unit spawns per tile so that we can only display
 		// spawn objects which are relevant to the currently loaded pages and not simply ALL spawns that exist in total!
+	}
+
+	void WorldEditorInstance::UpdateEnvironment(const float deltaSeconds)
+	{
+		m_environment.Update(deltaSeconds, m_skyComponent->GetNormalizedTimeOfDay());
+		m_skyComponent->ApplyEnvironment(m_environment.GetState());
+
+		if (DeferredRenderer* renderer = GetDeferredRenderer())
+		{
+			const EnvironmentState& state = m_environment.GetState();
+			renderer->SetExposure(state.exposure);
+			renderer->SetBloomIntensity(state.bloomIntensity);
+			renderer->SetBloomThreshold(state.bloomThreshold);
+		}
 	}
 
 	void WorldEditorInstance::AddUnitSpawn(proto::UnitSpawnEntry &spawn, bool select)

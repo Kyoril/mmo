@@ -31,6 +31,7 @@
 #include "edit_modes/entity_edit_mode.h"
 #include "scene_graph/octree_scene.h"
 #include "graphics/sky_component.h"
+#include "scene_graph/environment_controller.h"
 
 #include "deferred_shading/deferred_renderer.h"
 #include "deferred_shading/water_volume_system.h"
@@ -320,6 +321,9 @@ namespace mmo
 
 		void SetMapEntry(proto::MapEntry *entry);
 
+		/// @brief Advances the environment blend and applies it to the sky, lights and renderer.
+		void UpdateEnvironment(float deltaSeconds);
+
 	public:
 		/// @brief Creates a duplication callback for the given map entity.
 		/// The returned function, when invoked with the current selectable transform,
@@ -557,6 +561,9 @@ namespace mmo
 		std::unique_ptr<WaterEditMode> m_waterEditMode;
 		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
 		std::unique_ptr<SkyComponent> m_skyComponent;
+
+		/// Blends environment profiles for the viewport, exactly like the client.
+		EnvironmentController m_environment;
 		WorldEditMode *m_editMode{nullptr};
 
 		// Spawn edit mode

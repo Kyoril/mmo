@@ -15,6 +15,7 @@
 #include "base/signal.h"
 #include "game/game_time_component.h"
 #include "graphics/sky_component.h"
+#include "scene_graph/environment_controller.h"
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
@@ -272,17 +273,11 @@ namespace mmo
 		/// @brief Called when the gxContactShadowDebug console variable changed.
 		void OnContactShadowDebugChanged(ConsoleVar &var, const std::string &oldValue);
 
-		/// @brief Called when gxFogDensity, gxFogHeightFalloff, gxFogBaseHeight, gxFogAnisotropy or gxShaftStrength changed.
-		void OnAtmosphereParametersChanged(ConsoleVar &var, const std::string &oldValue);
-
 		/// @brief Called when gxAtmosphereQuality, gxAtmosphereMarchDistance or gxAtmosphereDebug changed.
 		void OnAtmosphereRenderingChanged(ConsoleVar &var, const std::string &oldValue);
 
-		/// @brief Called when gxBloomQuality, gxBloomIntensity or gxBloomThreshold changed.
+		/// @brief Called when gxBloomQuality changed.
 		void OnBloomChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when gxExposure changed.
-		void OnExposureChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnCombatVignetteChanged(ConsoleVar &var, const std::string &oldValue);
 
@@ -633,6 +628,9 @@ namespace mmo
 		// Sky component for day/night cycle
 		std::unique_ptr<SkyComponent> m_skyComponent;
 
+		/// Blends zone environment profiles and produces the per-frame lighting and mood.
+		EnvironmentController m_environment;
+
 		/// @brief Adapts the streamed client terrain to the queries WaterVolumeSystem needs.
 		///	@remark Defined in the .cpp so world_state.h does not have to pull in the terrain
 		///			library's headers just to hold a pointer.
@@ -667,6 +665,10 @@ namespace mmo
 		///			this runs every frame, including during load when the frame legitimately is not
 		///			there yet, and logging would flood.
 		[[nodiscard]] DeferredRenderer* GetWorldDeferredRenderer() const;
+
+		/// @brief Pushes the environment's exposure (times the player's gxExposure brightness) and
+		///        bloom values to the deferred renderer. Called every frame.
+		void ApplyEnvironmentToRenderer();
 
 		ICacheProvider &m_cache;
 
