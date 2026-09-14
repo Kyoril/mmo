@@ -107,6 +107,17 @@ namespace mmo
 		/// @brief Set once EnsureVolumes has logged a grid-volume allocation failure, so it only warns once.
 		bool m_volumeAllocationFailureLogged = false;
 
+		/// @brief Grid width EnsureVolumes last failed to allocate, or 0 if the last attempt succeeded (or
+		///        none has been made yet). Lets EnsureVolumes recognize an unchanged request and skip the
+		///        retry instead of hammering the driver with the same failing allocation every frame.
+		uint32 m_failedGridWidth = 0;
+
+		/// @brief Grid height EnsureVolumes last failed to allocate. See m_failedGridWidth.
+		uint32 m_failedGridHeight = 0;
+
+		/// @brief Grid depth EnsureVolumes last failed to allocate. See m_failedGridWidth.
+		uint32 m_failedGridDepth = 0;
+
 		Matrix4 m_prevViewProj;
 		Vector3 m_prevCameraPosition;
 		Vector3 m_prevCameraForward;

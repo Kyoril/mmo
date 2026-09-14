@@ -159,6 +159,22 @@ namespace mmo
 			return;
 		}
 
+		if (gridWidth == m_failedGridWidth && gridHeight == m_failedGridHeight && gridDepth == m_failedGridDepth)
+		{
+			// The exact same grid size already failed to allocate; retrying every frame under the same VRAM
+			// pressure that caused the failure would just repeat the driver hit for no gain. Render already
+			// treats a null m_injectVolume as "closed-form fog only", so leave it that way until the desired
+			// size actually changes (quality preset change or Resize).
+			return;
+		}
+
+		// Desired size differs from the last remembered failure (or there was none yet): allow a fresh
+		// attempt, and let a failure at this new size log again.
+		m_failedGridWidth = 0;
+		m_failedGridHeight = 0;
+		m_failedGridDepth = 0;
+		m_volumeAllocationFailureLogged = false;
+
 		const auto create = [this, gridWidth, gridHeight, gridDepth]()
 		{
 			return m_device.CreateVolumeTexture(static_cast<uint16>(gridWidth), static_cast<uint16>(gridHeight), static_cast<uint16>(gridDepth), VolumeFormat::RGBA16F, true);
@@ -179,6 +195,10 @@ namespace mmo
 					<< " RGBA16F grid volumes - falling back to closed-form fog only");
 				m_volumeAllocationFailureLogged = true;
 			}
+
+			m_failedGridWidth = gridWidth;
+			m_failedGridHeight = gridHeight;
+			m_failedGridDepth = gridDepth;
 
 			ReleaseVolumes();
 			return;
