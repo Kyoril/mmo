@@ -520,6 +520,12 @@ namespace mmo
 		/// @return Pointer to the active camera, or nullptr if not currently rendering.
 		Camera* GetActiveCamera() const { return m_activeCamera; }
 
+		/// @brief Whether the current render pass draws shadow casters into a shadow map with a
+		///        shadow camera (a ShadowMap-typed pass that is not the main-view depth pre-pass).
+		/// @remark Renderables whose per-frame state is tied to the main view (terrain LOD, GPU
+		///         occlusion queries) must not update it during such a pass.
+		[[nodiscard]] bool IsShadowCasterPass() const { return m_pixelShaderType == PixelShaderType::ShadowMap && !m_depthPrepass; }
+
 		MaterialPtr GetDefaultMaterial();
 
 		/// @brief Gets all lights in the scene.

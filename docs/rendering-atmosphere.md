@@ -80,7 +80,9 @@ Missing or unreadable files fall back to built-in keys. The cvars are base value
 ## Known limitations
 
 - The fog base follows the player/camera-pivot reference height until per-zone atmosphere data exists (planned per-zone time of day).
-- Shafts need shadow-casting geometry and end at the 300 m shadow range.
+- Shafts need shadow-casting geometry and end at the 300 m shadow range. Terrain casts into the
+  cascades (so nearby hills block shafts and shadow the ground), but mountains farther than 300 m
+  cannot block the sun.
 - Shafts are not drawn over forward surfaces (water, particles); those get closed-form fog only.
 - Point and spot lights do not scatter in the fog.
 - Bloom strength is gxBloomIntensity divided by the number of bloom levels, because every level adds its own copy of the light.

@@ -9,6 +9,7 @@
 #include "scene_graph/render_operation.h"
 #include "scene_graph/render_queue.h"
 #include "scene_graph/camera.h"
+#include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 
 namespace mmo
@@ -41,9 +42,9 @@ namespace mmo
 
 			m_lastStitchKeys.assign(m_tiles.size(), 0xffffffff);
 
-			// Terrain does not cast shadows (mirrors Tile). This also keeps the member tiles' LOD
-			// state from being driven by shadow-pass cameras.
-			SetCastShadows(false);
+			// Terrain casts into the shadow cascades (mirrors Tile). PreRender keeps shadow-pass
+			// cameras from driving the member tiles' LOD state.
+			SetCastShadows(true);
 
 			BuildVertexBuffer();
 
@@ -96,6 +97,19 @@ namespace mmo
 
 		bool TerrainBatch::PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
 		{
+			// Shadow cascades reuse the LOD the main view chose: a cascade camera must not re-drive it
+			// (index rebuilds every pass, and stitching that no longer matches the screen).
+			if (scene.IsShadowCasterPass())
+			{
+				if (m_indexDirty)
+				{
+					RebuildIndexBuffer();
+					m_indexDirty = false;
+				}
+
+				return Renderable::PreRender(scene, graphicsDevice, camera);
+			}
+
 			const bool lodEnabled = m_page.GetTerrain().IsLodEnabled();
 
 			// Drive the members' LOD state (excluded tiles no longer render themselves, so their

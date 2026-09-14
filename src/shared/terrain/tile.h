@@ -181,7 +181,13 @@ namespace mmo
 			/// @brief Excludes this tile from render-queue population without affecting scene
 			///        queries, collision or LOD state. Used when the tile's geometry is rendered
 			///        by a merged TerrainBatch instead of individually.
-			void SetExcludedFromRendering(const bool excluded) { m_excludedFromRendering = excluded; }
+			/// @remark An excluded tile also stops casting shadows: its batch casts instead, and leaving
+			///         the tile flagged would only add hundreds of no-op casters to every cascade gather.
+			void SetExcludedFromRendering(const bool excluded)
+			{
+				m_excludedFromRendering = excluded;
+				SetCastShadows(!excluded);
+			}
 
 			/// @brief Generates the triangle list for a tile at the given LOD / neighbor-stitching
 			///        configuration. Pure function of its inputs so it can be shared between the
