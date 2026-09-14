@@ -17,6 +17,7 @@
 #include "graphics/sky_component.h"
 #include "scene_graph/environment_controller.h"
 #include "scene_graph/environment_profile_proto.h"
+#include "scene_graph/environment_retarget.h"
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
@@ -318,6 +319,14 @@ namespace mmo
 		/// @param zoneId The zone the controlled unit stands in (0 = none).
 		/// @param position The controlled unit's position.
 		void UpdateEnvironmentTarget(uint32 zoneId, const Vector3& position);
+
+		/// @brief Resets environment targeting for a (re)loaded map: snaps immediately to the
+		///        map's default profile (zone 0) and arms the snap-on-next-lookup flag so the
+		///        first successful zone resolve after this snaps instead of fading.
+		/// @remark Called from SetupWorldScene (initial world enter) and from LoadMap after
+		///         g_mapId has been updated to the destination map, so a map transfer applies
+		///         the new map's default profile immediately instead of keeping the old zone's look.
+		void ResetEnvironmentForMap();
 
 	private:
 		// Setup stuff

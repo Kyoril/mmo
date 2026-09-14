@@ -1351,11 +1351,16 @@ namespace mmo
 				m_skyComponent->SetNormalizedTimeOfDay(m_timeOfDayBeforePreview);
 			}
 
+			const proto::MapEntry* map = m_spawnEditMode ? m_spawnEditMode->GetMapEntry() : nullptr;
+			const proto::Project& project = m_editor.GetProject();
+
+			// A map without terrain has no page to resolve an area from, so it never has a zone:
+			// treat the lookup as having succeeded with zone 0 rather than never retargeting.
 			uint32 zoneId = 0;
-			if (m_terrain && m_terrain->TryGetArea(m_cameraAnchor->GetDerivedPosition(), zoneId))
+			const bool haveZone = !m_hasTerrain || (m_terrain && m_terrain->TryGetArea(m_cameraAnchor->GetDerivedPosition(), zoneId));
+
+			if (haveZone)
 			{
-				const proto::MapEntry* map = m_spawnEditMode ? m_spawnEditMode->GetMapEntry() : nullptr;
-				const proto::Project& project = m_editor.GetProject();
 				const uint32 profileId = ResolveEnvironmentProfileId(project.zones, project.maps, zoneId, map ? map->id() : 0);
 
 				if (dataChanged || leftPreview || profileId != m_environmentProfileId)
@@ -1363,6 +1368,18 @@ namespace mmo
 					m_environmentProfileId = profileId;
 					m_environment.SetTarget(m_environmentProfiles->Get(profileId), dataChanged || leftPreview);
 				}
+			}
+			else if (dataChanged || leftPreview)
+			{
+				// The page under the camera is still streaming in: still retarget instead of
+				// leaving the preview profile applied. Fall back to the map default when no
+				// profile has been resolved for this map yet, otherwise keep the current one.
+				const uint32 profileId = (m_environmentProfileId == UINT32_MAX)
+					? ResolveEnvironmentProfileId(project.zones, project.maps, 0, map ? map->id() : 0)
+					: m_environmentProfileId;
+
+				m_environmentProfileId = profileId;
+				m_environment.SetTarget(m_environmentProfiles->Get(profileId), true);
 			}
 		}
 

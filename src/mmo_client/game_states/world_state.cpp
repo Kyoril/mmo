@@ -1245,6 +1245,9 @@ namespace mmo
 		ASSERT(m_worldInstance);
 		if (!m_worldInstance->HasTerrain())
 		{
+			// No terrain means no area to resolve: apply the map's default profile (zone 0)
+			// instead of leaving whatever zone's look was active before this map loaded.
+			UpdateEnvironmentTarget(0, unit->GetPosition());
 			return;
 		}
 
@@ -1325,15 +1328,7 @@ namespace mmo
 
 	void WorldState::UpdateEnvironmentTarget(const uint32 zoneId, const Vector3& position)
 	{
-		constexpr float teleportDistance = 200.0f;
-
-		bool immediate = m_environmentSnapPending;
-		if (m_lastEnvironmentPosition && (position - *m_lastEnvironmentPosition).GetSquaredLength() > teleportDistance * teleportDistance)
-		{
-			// A jump this large within one update is a teleport; fading across it would show the
-			// previous zone's mood at the destination.
-			immediate = true;
-		}
+		const bool immediate = ShouldSnapEnvironment(m_environmentSnapPending, m_lastEnvironmentPosition, position);
 		m_lastEnvironmentPosition = position;
 
 		const uint32 profileId = ResolveEnvironmentProfileId(m_project.zones, m_project.maps, zoneId, g_mapId);
@@ -1345,6 +1340,16 @@ namespace mmo
 		m_environmentProfileId = profileId;
 		m_environmentSnapPending = false;
 		m_environment.SetTarget(m_environmentProfiles.Get(profileId), immediate);
+	}
+
+	void WorldState::ResetEnvironmentForMap()
+	{
+		// Until the first zone lookup succeeds, show the map's default profile, then snap to the
+		// zone's profile on that first lookup instead of fading in from the map default.
+		m_environmentSnapPending = true;
+		m_lastEnvironmentPosition.reset();
+		m_environmentProfileId = ResolveEnvironmentProfileId(m_project.zones, m_project.maps, 0, g_mapId);
+		m_environment.SetTarget(m_environmentProfiles.Get(m_environmentProfileId), true);
 	}
 
 	/// Adapts the streamed client terrain to the water queries WaterVolumeSystem needs.
@@ -1482,12 +1487,7 @@ namespace mmo
 		// Create sky component to manage the sky dome and day/night cycle
 		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
 
-		// Until the first zone lookup succeeds, show the map's default profile, then snap to the
-		// zone's profile on that first lookup instead of fading in from the map default.
-		m_environmentSnapPending = true;
-		m_lastEnvironmentPosition.reset();
-		m_environmentProfileId = ResolveEnvironmentProfileId(m_project.zones, m_project.maps, 0, g_mapId);
-		m_environment.SetTarget(m_environmentProfiles.Get(m_environmentProfileId), true);
+		ResetEnvironmentForMap();
 
 		// Water. The query adapter is declared before the volume system so it outlives it.
 		m_waterQuery = std::make_unique<TerrainWaterQuery>();
@@ -5410,6 +5410,11 @@ namespace mmo
 		{
 			m_worldInstance->GetTerrain()->SetOcclusionCullingEnabled(s_terrainOcclusionCullingVar->GetIntValue() != 0);
 		}
+
+		// g_mapId already reflects the destination map (set by the caller before LoadMap runs, see
+		// OnEnter/OnNewWorld), so this applies the new map's default environment profile instead of
+		// leaving the previous map's zone look in place.
+		ResetEnvironmentForMap();
 
 		return true;
 	}

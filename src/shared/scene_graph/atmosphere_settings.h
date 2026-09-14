@@ -6,7 +6,8 @@
 
 namespace mmo
 {
-	/// @brief User-tunable base values of the height fog, set from cvars or the editor.
+	/// @brief User-tunable base values of the height fog, sourced from the active zone's
+	/// environment profile.
 	/// @remark Dependency-free so the headless deferred_shading_tests target can compile it.
 	struct AtmosphereParameters
 	{
@@ -20,7 +21,7 @@ namespace mmo
 		/// controlled player's height in the client, the camera pivot in the editor, else the
 		/// camera (negative = below the reference height). The density equals `density` at
 		/// `referenceHeight + baseHeight`. Relative rather than an absolute world Y so maps whose
-		/// terrain sits far from Y = 0 still get readable fog until per-zone atmosphere data exists.
+		/// terrain sits far from Y = 0 still get readable fog.
 		float baseHeight = -10.0f;
 
 		/// @brief Henyey-Greenstein g of the sun scattering lobe. Larger = tighter sun glow.
@@ -92,15 +93,15 @@ namespace mmo
 	};
 
 	/// @brief Combines base parameters with the time-of-day values.
-	/// @param parameters Base values from cvars or the editor.
+	/// @param parameters Base values from the active zone's environment profile.
 	/// @param timeOfDay Curve values for the current hour.
 	/// @param fogEnabled When false, density is zero, which makes every fog term vanish.
 	/// @param referenceHeight World Y the fog base height is measured from this frame: the
 	/// controlled player's height in the client, the camera pivot in the editor, else the camera.
 	/// `parameters.baseHeight` is an offset from this, so the output `baseHeight` is
-	/// `referenceHeight + parameters.baseHeight`. Until per-zone atmosphere data exists, a relative
-	/// base keeps the fog readable on maps whose terrain is far from Y = 0 — the fog still thins
-	/// with height above the reference point and thickens looking down into valleys.
+	/// `referenceHeight + parameters.baseHeight`. A relative base keeps the fog readable on maps
+	/// whose terrain is far from Y = 0 — the fog still thins with height above the reference point
+	/// and thickens looking down into valleys.
 	/// @return The values for the camera constant buffer. Curve overshoot never goes negative.
 	[[nodiscard]] inline AtmosphereConstants CombineAtmosphere(const AtmosphereParameters& parameters,
 		const AtmosphereTimeOfDay& timeOfDay, const bool fogEnabled, const float referenceHeight)
