@@ -112,6 +112,25 @@ TEST_CASE("Halton jitter starts at the radical inverse and stays in [0, 1)", "[v
 	CHECK(volumetric_fog::JitterForFrame(VolumetricFogSettings::JitterSequenceLength) == Approx(volumetric_fog::JitterForFrame(0)));
 }
 
+TEST_CASE("Integrated texel coordinate maps a slice's end to its texel centre", "[volumetric_fog]")
+{
+	constexpr uint32 sliceCount = 64;
+
+	for (const uint32 z : { 0u, 1u, 10u, 32u, 63u })
+	{
+		const float slice01 = static_cast<float>(z + 1) / static_cast<float>(sliceCount);
+		const float texelCentre = (static_cast<float>(z) + 0.5f) / static_cast<float>(sliceCount);
+		CHECK(volumetric_fog::IntegratedTexelCoordinate(slice01, sliceCount) == Approx(texelCentre));
+	}
+
+	// Clamps to [0, 1] both below the near plane and past the far plane.
+	CHECK(volumetric_fog::IntegratedTexelCoordinate(0.0f, sliceCount) == Approx(0.0f).margin(1e-6));
+	CHECK(volumetric_fog::IntegratedTexelCoordinate(2.0f, sliceCount) == Approx(1.0f));
+
+	// A zero slice count has no texels to address.
+	CHECK(volumetric_fog::IntegratedTexelCoordinate(0.5f, 0u) == Approx(0.0f));
+}
+
 TEST_CASE("Noise density factor keeps the average density", "[volumetric_fog]")
 {
 	CHECK(volumetric_fog::NoiseDensityFactor(0.3f, 0.0f) == Approx(1.0f));

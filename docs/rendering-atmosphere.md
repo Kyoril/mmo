@@ -14,7 +14,7 @@ Designs: [froxel volumetric fog](superpowers/specs/2026-09-14-froxel-volumetric-
      2. `CS_FogTemporal`: blend with last frame's grid, reprojected through the previous camera.
      3. `CS_FogIntegrate`: front-to-back accumulation.
    - **Composite:** `PS_FogComposite` applies the volume and continues with closed-form fog beyond it, then the result is copied back into the scene target.
-   - **Skipped** while submerged, with `Scene::IsFogEnabled()` false, or when the combined fog density is zero. The history is then discarded.
+   - **Skipped** while submerged, with `Scene::IsFogEnabled()` false, when the combined fog density is zero, or without a shadow sampler object. The history is then discarded.
 4. Forward pass — `Scene::SetForwardOutputLinear(true)`; materials apply the analytic height fog (no noise, no shafts)
 5. `BloomPass` — skipped while submerged
 6. `TonemapPass` — scene + bloom, exposure, ACES, gamma, dither
@@ -104,3 +104,4 @@ editor's Environment Profile Editor):
 - Point and spot lights do not scatter in the fog yet (planned: project B). Local fog volumes are planned as project C.
 - Bloom strength is the environment profile's bloom intensity divided by the number of bloom levels.
 - Debug views are composited before bloom and tone mapping, so they appear tone-mapped.
+- Debug view 3 (density) reads black at quality 0: there is no grid volume to sample, so `DensityVolume` is never bound.

@@ -811,7 +811,16 @@ namespace mmo
 		case ShaderType::PixelShader:
 			return std::make_unique<PixelShaderD3D11>(*this, shaderCode, shaderCodeSize);
 		case ShaderType::ComputeShader:
-			return std::make_unique<ComputeShaderD3D11>(*this, shaderCode, shaderCodeSize);
+		{
+			auto shader = std::make_unique<ComputeShaderD3D11>(*this, shaderCode, shaderCodeSize);
+			if (!shader->IsValid())
+			{
+				ELOG("Failed to create compute shader (" << shaderCodeSize << " bytes) - CreateComputeShader failed");
+				return nullptr;
+			}
+
+			return shader;
+		}
 		default:
 			ASSERT(! "This shader type can't yet be created - implement it for D3D11!");
 		}
@@ -1548,7 +1557,16 @@ namespace mmo
 
 	VolumeTexturePtr GraphicsDeviceD3D11::CreateVolumeTexture(const uint16 width, const uint16 height, const uint16 depth, const VolumeFormat format, const bool writable)
 	{
-		return std::make_shared<VolumeTextureD3D11>(*this, width, height, depth, format, writable);
+		auto texture = std::make_shared<VolumeTextureD3D11>(*this, width, height, depth, format, writable);
+		if (!texture->IsValid())
+		{
+			const char* formatName = format == VolumeFormat::R8 ? "R8" : "RGBA16F";
+			WLOG("Failed to create " << width << "x" << height << "x" << depth << " " << formatName
+				<< (writable ? " writable" : "") << " volume texture - CreateTexture3D/SRV/UAV failed");
+			return nullptr;
+		}
+
+		return texture;
 	}
 
 	SamplerStatePtr GraphicsDeviceD3D11::CreateSamplerState(const SamplerDesc& desc)

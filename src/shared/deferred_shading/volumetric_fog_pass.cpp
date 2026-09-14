@@ -4,6 +4,7 @@
 
 #include "fog_noise.h"
 
+#include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 
 // --- Shader bytecode seam ---------------------------------------------------------------
@@ -141,7 +142,6 @@ namespace mmo
 		m_injectVolume.reset();
 		m_historyVolumes[0].reset();
 		m_historyVolumes[1].reset();
-		m_integratedVolume.reset();
 		m_gridWidth = 0;
 		m_gridHeight = 0;
 		m_gridDepth = 0;
@@ -164,10 +164,29 @@ namespace mmo
 			return m_device.CreateVolumeTexture(static_cast<uint16>(gridWidth), static_cast<uint16>(gridHeight), static_cast<uint16>(gridDepth), VolumeFormat::RGBA16F, true);
 		};
 
-		m_injectVolume = create();
-		m_historyVolumes[0] = create();
-		m_historyVolumes[1] = create();
-		m_integratedVolume = create();
+		VolumeTexturePtr injectVolume = create();
+		VolumeTexturePtr historyVolume0 = create();
+		VolumeTexturePtr historyVolume1 = create();
+
+		if (!injectVolume || !historyVolume0 || !historyVolume1)
+		{
+			// Allocation failure (e.g. exhausted VRAM at a high quality preset): fall back to no volume
+			// rather than leaving a partially-populated set of volumes for Render to bind. Render treats
+			// a missing m_injectVolume as "disabled this frame" and runs the closed-form fog only.
+			if (!m_volumeAllocationFailureLogged)
+			{
+				WLOG("Volumetric fog: failed to allocate " << gridWidth << "x" << gridHeight << "x" << gridDepth
+					<< " RGBA16F grid volumes - falling back to closed-form fog only");
+				m_volumeAllocationFailureLogged = true;
+			}
+
+			ReleaseVolumes();
+			return;
+		}
+
+		m_injectVolume = std::move(injectVolume);
+		m_historyVolumes[0] = std::move(historyVolume0);
+		m_historyVolumes[1] = std::move(historyVolume1);
 
 		m_gridWidth = gridWidth;
 		m_gridHeight = gridHeight;
@@ -184,10 +203,13 @@ namespace mmo
 		// on; the composite must overwrite its target.
 		m_device.SetBlendMode(BlendMode::Opaque);
 
-		const bool volumeEnabled = m_settings.IsVolumeEnabled() && SupportsVolume();
+		bool volumeEnabled = m_settings.IsVolumeEnabled() && SupportsVolume();
 		if (volumeEnabled)
 		{
 			EnsureVolumes();
+			// EnsureVolumes releases the volumes and returns without them on allocation failure; treat
+			// that the same as the volume being disabled for this frame (closed-form fog only).
+			volumeEnabled = m_injectVolume != nullptr;
 		}
 		else if (m_injectVolume)
 		{
@@ -260,8 +282,11 @@ namespace mmo
 			m_device.ClearComputeBindings();
 
 			// --- Integrate --------------------------------------------------------------------
+			// m_injectVolume was only read by the temporal step above and is free by now, so the
+			// integrate step writes its front-to-back accumulation back into it instead of a fourth
+			// volume.
 			temporalTarget->Bind(ShaderType::ComputeShader, 0);
-			m_integratedVolume->BindWritable(0);
+			m_injectVolume->BindWritable(0);
 			m_integrateCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), 1);
 			m_device.ClearComputeBindings();
@@ -293,7 +318,8 @@ namespace mmo
 		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
 		if (volumeEnabled)
 		{
-			m_integratedVolume->Bind(ShaderType::PixelShader, 2);
+			// m_injectVolume holds this frame's integrated result (see the Integrate step above).
+			m_injectVolume->Bind(ShaderType::PixelShader, 2);
 			m_historyVolumes[m_historyIndex]->Bind(ShaderType::PixelShader, 3);
 		}
 
@@ -308,6 +334,9 @@ namespace mmo
 
 		m_device.Draw(6, 0);
 
+		// Cache hygiene only, not a hazard fix: this clears these slots from the device's texture bind
+		// cache. The next frame's lighting pass rebinds t2/t3 to its own targets before this pass's
+		// compute steps write these volumes again, so nothing downstream depends on the clear itself.
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 0);
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 1);
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 2);

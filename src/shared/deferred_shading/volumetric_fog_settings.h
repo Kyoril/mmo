@@ -165,5 +165,23 @@ namespace mmo
 		{
 			return std::max(0.0f, 1.0f + amount * (2.0f * noise - 1.0f));
 		}
+
+		/// @brief Texture-space z coordinate that samples the integrated volume at the end of the slice
+		///        containing slice01.
+		/// @param slice01 Normalized slice coordinate (see DepthToSlice), clamped internally to [0, 1].
+		/// @param sliceCount Number of depth slices in the grid (VolumetricFogSettings::sliceCount). 0 returns 0.
+		/// @remark Integrated texel z holds the accumulated value at the *end* of slice z, i.e. at slice
+		///         coordinate (z + 1) / sliceCount, one texel-width ahead of the usual texel-centre
+		///         convention SliceToDepth/DepthToSlice use. Mirrored by IntegratedTexelCoordinate in
+		///         VolumetricFogCommon.hlsli, used by PS_FogComposite.
+		[[nodiscard]] inline float IntegratedTexelCoordinate(const float slice01, const uint32 sliceCount)
+		{
+			if (sliceCount == 0)
+			{
+				return 0.0f;
+			}
+
+			return std::clamp((slice01 * static_cast<float>(sliceCount) - 0.5f) / static_cast<float>(sliceCount), 0.0f, 1.0f);
+		}
 	}
 }

@@ -56,6 +56,15 @@ float NoiseDensityFactor(float noise, float amount)
     return max(0.0f, 1.0f + amount * (2.0f * noise - 1.0f));
 }
 
+// Texture-space z coordinate sampling the integrated volume at the end of the slice containing slice01.
+// Integrated texel z holds the accumulated value at slice coordinate (z + 1) / GridDepth, one
+// texel-width ahead of the texel-centre convention SliceToDepth/DepthToSlice use. Mirrors
+// IntegratedTexelCoordinate in volumetric_fog_settings.h.
+float IntegratedTexelCoordinate(float slice01)
+{
+    return saturate((slice01 * float(GridDepth) - 0.5f) / float(GridDepth));
+}
+
 // World-space unit ray through a screen UV (y down).
 float3 FogWorldRay(float2 uv)
 {

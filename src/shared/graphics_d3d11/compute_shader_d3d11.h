@@ -17,6 +17,10 @@ namespace mmo
 	public:
 		void Set() override;
 
+		/// @brief Whether CreateComputeShader succeeded. GraphicsDeviceD3D11::CreateShader checks this
+		///        and returns nullptr instead of this half-constructed object on failure.
+		[[nodiscard]] bool IsValid() const noexcept { return m_shader != nullptr; }
+
 	private:
 		GraphicsDeviceD3D11& m_device;
 		ComPtr<ID3D11ComputeShader> m_shader;

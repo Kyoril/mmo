@@ -34,7 +34,9 @@ cbuffer ShadowBuffer : register(b3)
 RWTexture3D<float4> InjectOutput : register(u0);
 
 // One hardware-PCF tap in the cascade covering this distance. 1 = lit.
-float SampleSunVisibility(float3 worldPos, float distanceFromCamera)
+// viewDepth: distance along the camera's forward axis (not radial distance to the camera) - matches
+// how CascadeSplitDistances is built (the lighting shader also selects cascades by view depth).
+float SampleSunVisibility(float3 worldPos, float viewDepth)
 {
     if (CascadeCount == 0)
     {
@@ -44,7 +46,7 @@ float SampleSunVisibility(float3 worldPos, float distanceFromCamera)
     uint cascade = CascadeCount - 1;
     for (uint i = 0; i < CascadeCount; ++i)
     {
-        if (distanceFromCamera <= CascadeSplitDistances[i])
+        if (viewDepth <= CascadeSplitDistances[i])
         {
             cascade = i;
             break;
@@ -92,7 +94,7 @@ void main(uint3 id : SV_DispatchThreadID)
     float noise = NoiseVolume.SampleLevel(NoiseSampler, noiseUvw, 0.0f);
 
     float sigma = FogDensityAt(worldPos.y) * NoiseDensityFactor(noise, NoiseAmount);
-    float visibility = SampleSunVisibility(worldPos, length(worldPos - CameraPosition));
+    float visibility = SampleSunVisibility(worldPos, viewDepth);
     float3 radiance = FogSource(dot(ray, SunDirection), visibility);
 
     InjectOutput[id] = float4(radiance * sigma, sigma);

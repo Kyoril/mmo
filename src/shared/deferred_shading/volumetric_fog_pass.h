@@ -26,8 +26,10 @@ namespace mmo
 	/// @brief Froxel volumetric fog over the lit opaque scene.
 	/// @remark Three compute steps fill a camera-aligned 3D grid (inject: height fog x wind noise and
 	///         shadowed sun light; temporal: reprojected history blend; integrate: front-to-back
-	///         accumulation), then a full-screen composite applies it and continues with the closed-form
-	///         fog beyond the grid. With the volume disabled (quality 0) only the closed form runs.
+	///         accumulation, written back into the inject volume since its only reader - the temporal
+	///         step - has already run by then), then a full-screen composite applies it and continues
+	///         with the closed-form fog beyond the grid. With the volume disabled (quality 0), or if the
+	///         grid volumes failed to allocate, only the closed form runs.
 	/// @remark Uses only GraphicsDevice abstractions. The compute steps stay disabled on backends without
 	///         volume textures or compute shaders, and the composite pixel shader bytecode currently exists
 	///         only for D3D11 - the same seam as the other deferred passes.
@@ -90,14 +92,20 @@ namespace mmo
 		uint32 m_gridDepth = 0;
 
 		VolumeTexturePtr m_noiseVolume;
+
+		/// @brief Inject step's output. The temporal step is its only reader, so once that step has run
+		///        this frame the integrate step reuses it as its own output volume instead of a fourth
+		///        allocation.
 		VolumeTexturePtr m_injectVolume;
 		std::array<VolumeTexturePtr, 2> m_historyVolumes;
-		VolumeTexturePtr m_integratedVolume;
 
 		/// @brief Index into m_historyVolumes written this frame; the other one holds last frame.
 		uint32 m_historyIndex = 0;
 		bool m_historyValid = false;
 		uint64 m_frameIndex = 0;
+
+		/// @brief Set once EnsureVolumes has logged a grid-volume allocation failure, so it only warns once.
+		bool m_volumeAllocationFailureLogged = false;
 
 		Matrix4 m_prevViewProj;
 		Vector3 m_prevCameraPosition;

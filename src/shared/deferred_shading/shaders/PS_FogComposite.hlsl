@@ -40,8 +40,7 @@ float4 main(PS_INPUT input) : SV_TARGET
         float volumeDepth = min(viewDepth, FarDistance);
         slice = DepthToSlice(volumeDepth);
 
-        // Integrated texel z holds the value at the end of slice z, i.e. at slice coordinate (z + 1) / N.
-        float w = saturate((slice * float(GridDepth) - 0.5f) / float(GridDepth));
+        float w = IntegratedTexelCoordinate(slice);
         float4 integrated = IntegratedVolume.SampleLevel(LinearClampSampler, float3(input.TexCoord, w), 0.0f);
         volumeScattered = integrated.rgb;
         volumeTransmittance = integrated.a;

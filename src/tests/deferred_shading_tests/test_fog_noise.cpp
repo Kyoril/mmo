@@ -45,8 +45,10 @@ TEST_CASE("Fog noise spans the value range with a centred mean", "[volumetric_fo
 	CHECK(maximum == 255);
 
 	const double mean = sum / static_cast<double>(noise.size());
-	CHECK(mean >= 110.0);
-	CHECK(mean <= 145.0);
+	// The centring remap in GenerateFogNoise pivots each sample about the volume's own measured mean,
+	// so it lands close to but not exactly on 128 for any given seed (measured ~125.0 for this one).
+	CHECK(mean >= 124.0);
+	CHECK(mean <= 130.0);
 }
 
 TEST_CASE("Fog noise tiles seamlessly on every axis", "[volumetric_fog]")

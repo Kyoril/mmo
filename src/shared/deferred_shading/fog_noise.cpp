@@ -108,11 +108,39 @@ namespace mmo
 		// Fractal sums crowd around 0.5; stretching to the full range gives the fog visible gaps.
 		const float span = std::max(maximum - minimum, 1e-6f);
 
-		std::vector<uint8> texels(texelCount, 0);
+		std::vector<float> normalized(texelCount, 0.0f);
+		double normalizedSum = 0.0;
 		for (size_t i = 0; i < texelCount; ++i)
 		{
-			const float normalized = (values[i] - minimum) / span;
-			texels[i] = static_cast<uint8>(std::lround(std::clamp(normalized, 0.0f, 1.0f) * 255.0f));
+			normalized[i] = std::clamp((values[i] - minimum) / span, 0.0f, 1.0f);
+			normalizedSum += normalized[i];
+		}
+
+		// Min/max normalization still leaves the mean below 0.5 (a value-noise fractal sum skews low),
+		// so NoiseDensityFactor's average density comes out under 1 and the fog dims slightly at the
+		// grid's range. Remap piecewise around the measured mean m so it lands on 0.5 while keeping the
+		// endpoints (and therefore the full [0, 255] range) fixed.
+		const float mean = static_cast<float>(normalizedSum / static_cast<double>(texelCount));
+
+		std::vector<uint8> texels(texelCount, 0);
+		if (mean > 0.0f && mean < 1.0f)
+		{
+			for (size_t i = 0; i < texelCount; ++i)
+			{
+				const float value = normalized[i];
+				const float remapped = value <= mean
+					? value * 0.5f / mean
+					: 0.5f + (value - mean) * 0.5f / (1.0f - mean);
+				texels[i] = static_cast<uint8>(std::lround(std::clamp(remapped, 0.0f, 1.0f) * 255.0f));
+			}
+		}
+		else
+		{
+			// Degenerate mean (all-zero or all-one input): nothing to recentre, use the plain normalized value.
+			for (size_t i = 0; i < texelCount; ++i)
+			{
+				texels[i] = static_cast<uint8>(std::lround(normalized[i] * 255.0f));
+			}
 		}
 
 		return texels;

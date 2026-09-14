@@ -42,13 +42,22 @@ namespace mmo
 		desc.Format = toDxgiFormat(format);
 		desc.Usage = D3D11_USAGE_DEFAULT;
 		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | (writable ? D3D11_BIND_UNORDERED_ACCESS : 0u);
-		VERIFY(SUCCEEDED(d3dDevice.CreateTexture3D(&desc, nullptr, &m_texture)));
+		if (FAILED(d3dDevice.CreateTexture3D(&desc, nullptr, &m_texture)))
+		{
+			// Allocation failure (e.g. exhausted VRAM): leave m_valid false. The caller
+			// (GraphicsDeviceD3D11::CreateVolumeTexture) logs and returns nullptr instead of this
+			// half-constructed object.
+			return;
+		}
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = desc.Format;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
 		srvDesc.Texture3D.MipLevels = 1;
-		VERIFY(SUCCEEDED(d3dDevice.CreateShaderResourceView(m_texture.Get(), &srvDesc, &m_shaderView)));
+		if (FAILED(d3dDevice.CreateShaderResourceView(m_texture.Get(), &srvDesc, &m_shaderView)))
+		{
+			return;
+		}
 
 		if (writable)
 		{
@@ -58,8 +67,13 @@ namespace mmo
 			uavDesc.Texture3D.MipSlice = 0;
 			uavDesc.Texture3D.FirstWSlice = 0;
 			uavDesc.Texture3D.WSize = depth;
-			VERIFY(SUCCEEDED(d3dDevice.CreateUnorderedAccessView(m_texture.Get(), &uavDesc, &m_unorderedView)));
+			if (FAILED(d3dDevice.CreateUnorderedAccessView(m_texture.Get(), &uavDesc, &m_unorderedView)))
+			{
+				return;
+			}
 		}
+
+		m_valid = true;
 	}
 
 	void VolumeTextureD3D11::Bind(const ShaderType stage, const uint32 slot)
