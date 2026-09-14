@@ -38,7 +38,7 @@ namespace mmo
 			{ "Sun Scatter (Shafts)", "shaft multiplier", &proto::EnvironmentProfile::has_sun_scatter, &proto::EnvironmentProfile::sun_scatter, &proto::EnvironmentProfile::mutable_sun_scatter, &proto::EnvironmentProfile::clear_sun_scatter, &EnvironmentProfile::sunScatter },
 		} };
 
-		std::unique_ptr<ColorCurveImGuiEditor> MakeCurveEditor(const char* label, ColorCurve& curve)
+		std::unique_ptr<ColorCurveImGuiEditor> makeCurveEditor(const char* label, ColorCurve& curve)
 		{
 			auto editor = std::make_unique<ColorCurveImGuiEditor>(label, curve);
 			editor->SetShowAlpha(true);
@@ -86,6 +86,18 @@ namespace mmo
 		return true;
 	}
 
+	void EnvironmentProfileEditorWindow::OnEntryRemoved(const uint32 entryId)
+	{
+		EnvironmentPreview& preview = GetEnvironmentPreview();
+		if (preview.profileId && *preview.profileId == entryId)
+		{
+			preview.profileId.reset();
+			preview.NotifyChanged();
+		}
+
+		m_boundProfileId = 0;
+	}
+
 	void EnvironmentProfileEditorWindow::BindCurves(const proto::EnvironmentProfile& entry)
 	{
 		const EnvironmentProfile defaults = EnvironmentProfile::MakeDefault();
@@ -95,7 +107,7 @@ namespace mmo
 			const CurveSlot& slot = s_curveSlots[i];
 			m_curves[i] = defaults.*slot.defaultCurve;
 			LoadColorCurve((entry.*slot.get)(), m_curves[i]);
-			m_curveEditors[i] = MakeCurveEditor(slot.label, m_curves[i]);
+			m_curveEditors[i] = makeCurveEditor(slot.label, m_curves[i]);
 		}
 
 		m_boundProfileId = entry.id();
@@ -326,7 +338,7 @@ namespace mmo
 				{
 					(entry.*slot.clear)();
 					m_curves[i] = defaults.*slot.defaultCurve;
-					m_curveEditors[i] = MakeCurveEditor(slot.label, m_curves[i]);
+					m_curveEditors[i] = makeCurveEditor(slot.label, m_curves[i]);
 					GetEnvironmentPreview().NotifyChanged();
 				}
 				ImGui::EndDisabled();

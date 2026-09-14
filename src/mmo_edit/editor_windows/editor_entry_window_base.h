@@ -40,6 +40,10 @@ namespace mmo
 	protected:
 		virtual void OnNewEntry(proto::TemplateManager<T1, T2>::EntryType &entry) {}
 
+		/// @brief Called right after an entry has been removed via the "Remove Selected" button.
+		/// @param entryId The id of the entry that was just removed.
+		virtual void OnEntryRemoved(uint32 entryId) {}
+
 		virtual const String &EntryDisplayName(const T2 &entry) { return entry.name(); }
 
 		/// @brief Whether the window offers a Duplicate button for the selected entry.
@@ -131,7 +135,9 @@ namespace mmo
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
 				if (ImGui::Button("Remove Selected", ImVec2(-1, 0)))
 				{
-					m_manager.remove(m_manager.getTemplates().entry().at(m_currentItem).id());
+					const uint32 removedEntryId = m_manager.getTemplates().entry().at(m_currentItem).id();
+					m_manager.remove(removedEntryId);
+					OnEntryRemoved(removedEntryId);
 					m_currentItem = -1;
 				}
 				ImGui::PopStyleColor();

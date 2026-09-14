@@ -1326,6 +1326,11 @@ namespace mmo
 
 		if (preview.profileId)
 		{
+			if (!m_environmentPreviewActive)
+			{
+				m_timeOfDayBeforePreview = m_skyComponent->GetNormalizedTimeOfDay();
+			}
+
 			m_skyComponent->SetNormalizedTimeOfDay(preview.normalizedTime);
 
 			if (dataChanged || !m_environmentPreviewActive || m_environmentProfileId != *preview.profileId)
@@ -1340,6 +1345,11 @@ namespace mmo
 		{
 			const bool leftPreview = m_environmentPreviewActive;
 			m_environmentPreviewActive = false;
+
+			if (leftPreview)
+			{
+				m_skyComponent->SetNormalizedTimeOfDay(m_timeOfDayBeforePreview);
+			}
 
 			uint32 zoneId = 0;
 			if (m_terrain && m_terrain->TryGetArea(m_cameraAnchor->GetDerivedPosition(), zoneId))

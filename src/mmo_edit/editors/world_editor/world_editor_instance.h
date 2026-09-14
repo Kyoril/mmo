@@ -577,6 +577,9 @@ namespace mmo
 
 		/// Whether the last update showed the Environment Profile Editor's preview.
 		bool m_environmentPreviewActive = false;
+
+		/// Sky's normalized time of day captured just before preview took over; restored when preview ends.
+		float m_timeOfDayBeforePreview = 0.5f;
 		WorldEditMode *m_editMode{nullptr};
 
 		// Spawn edit mode

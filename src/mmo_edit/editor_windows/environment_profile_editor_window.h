@@ -39,6 +39,8 @@ namespace mmo
 
 		bool CanRemoveEntry(const proto::EnvironmentProfile& entry) const override;
 
+		void OnEntryRemoved(uint32 entryId) override;
+
 		/// @brief Rebuilds the curve copies and their widgets for the selected profile.
 		void BindCurves(const proto::EnvironmentProfile& entry);
 
