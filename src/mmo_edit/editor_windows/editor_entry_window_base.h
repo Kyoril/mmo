@@ -45,6 +45,10 @@ namespace mmo
 		/// @brief Whether the window offers a Duplicate button for the selected entry.
 		virtual bool SupportsDuplicate() const { return true; }
 
+		/// @brief Whether the selected entry may be removed. Windows override this to protect
+		///        entries that other data still references.
+		virtual bool CanRemoveEntry(const T2& entry) const { return true; }
+
 		/// @brief Duplicates the currently selected entry (deep copy with a new unique id) and selects the copy.
 		void DuplicateSelectedEntry()
 		{
@@ -122,7 +126,8 @@ namespace mmo
 					ImGui::EndDisabled();
 				}
 
-				ImGui::BeginDisabled(m_currentItem == -1 || m_currentItem >= static_cast<int>(m_manager.count()));
+				const bool hasSelection = m_currentItem != -1 && m_currentItem < static_cast<int>(m_manager.count());
+				ImGui::BeginDisabled(!hasSelection || !CanRemoveEntry(m_manager.getTemplates().entry().at(m_currentItem)));
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
 				if (ImGui::Button("Remove Selected", ImVec2(-1, 0)))
 				{

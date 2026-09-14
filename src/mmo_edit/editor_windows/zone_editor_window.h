@@ -37,5 +37,6 @@ namespace mmo
 		ImGuiTextFilter m_owningFactionFilter;
 		ImGuiTextFilter m_musicSoundFilter;
 		ImGuiTextFilter m_ambienceSoundFilter;
+		ImGuiTextFilter m_environmentFilter;
 	};
 }

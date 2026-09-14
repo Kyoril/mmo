@@ -8,6 +8,7 @@
 
 #include "editor_host.h"
 #include "editor_windows/asset_picker_widget.h"
+#include "environment_preview.h"
 #include "world_editor.h"
 #include "paging/world_page_loader.h"
 #include "assets/asset_registry.h"
@@ -248,6 +249,7 @@ namespace mmo
 		// Setup sky component for day/night cycle control
 		m_skyComponent = std::make_unique<SkyComponent>(m_scene);
 		m_skyComponent->SetTimeSpeed(0.0f); // Start with time paused in editor
+		m_environmentProfiles = std::make_unique<EnvironmentProfileCache<proto::EnvironmentProfileManager>>(m_editor.GetProject().environmentProfiles);
 
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
@@ -1311,6 +1313,49 @@ namespace mmo
 
 	void WorldEditorInstance::UpdateEnvironment(const float deltaSeconds)
 	{
+		EnvironmentPreview& preview = GetEnvironmentPreview();
+
+		// Any authored change reconverts profiles and snaps, so edits show up immediately.
+		bool dataChanged = false;
+		if (preview.revision != m_environmentRevision)
+		{
+			m_environmentRevision = preview.revision;
+			m_environmentProfiles->Clear();
+			dataChanged = true;
+		}
+
+		if (preview.profileId)
+		{
+			m_skyComponent->SetNormalizedTimeOfDay(preview.normalizedTime);
+
+			if (dataChanged || !m_environmentPreviewActive || m_environmentProfileId != *preview.profileId)
+			{
+				m_environmentProfileId = *preview.profileId;
+				m_environment.SetTarget(m_environmentProfiles->Get(m_environmentProfileId), true);
+			}
+
+			m_environmentPreviewActive = true;
+		}
+		else
+		{
+			const bool leftPreview = m_environmentPreviewActive;
+			m_environmentPreviewActive = false;
+
+			uint32 zoneId = 0;
+			if (m_terrain && m_terrain->TryGetArea(m_cameraAnchor->GetDerivedPosition(), zoneId))
+			{
+				const proto::MapEntry* map = m_spawnEditMode ? m_spawnEditMode->GetMapEntry() : nullptr;
+				const proto::Project& project = m_editor.GetProject();
+				const uint32 profileId = ResolveEnvironmentProfileId(project.zones, project.maps, zoneId, map ? map->id() : 0);
+
+				if (dataChanged || leftPreview || profileId != m_environmentProfileId)
+				{
+					m_environmentProfileId = profileId;
+					m_environment.SetTarget(m_environmentProfiles->Get(profileId), dataChanged || leftPreview);
+				}
+			}
+		}
+
 		m_environment.Update(deltaSeconds, m_skyComponent->GetNormalizedTimeOfDay());
 		m_skyComponent->ApplyEnvironment(m_environment.GetState());
 

@@ -32,6 +32,7 @@
 #include "scene_graph/octree_scene.h"
 #include "graphics/sky_component.h"
 #include "scene_graph/environment_controller.h"
+#include "scene_graph/environment_profile_proto.h"
 
 #include "deferred_shading/deferred_renderer.h"
 #include "deferred_shading/water_volume_system.h"
@@ -564,6 +565,18 @@ namespace mmo
 
 		/// Blends environment profiles for the viewport, exactly like the client.
 		EnvironmentController m_environment;
+
+		/// Runtime profiles converted from the project on first use; cleared on every preview revision.
+		std::unique_ptr<EnvironmentProfileCache<proto::EnvironmentProfileManager>> m_environmentProfiles;
+
+		/// Profile id the controller targets. UINT32_MAX = none yet.
+		uint32 m_environmentProfileId = UINT32_MAX;
+
+		/// Last EnvironmentPreview::revision this instance converted profiles for.
+		uint64 m_environmentRevision = 0;
+
+		/// Whether the last update showed the Environment Profile Editor's preview.
+		bool m_environmentPreviewActive = false;
 		WorldEditMode *m_editMode{nullptr};
 
 		// Spawn edit mode
