@@ -1221,7 +1221,9 @@ TEST_CASE("The blend list never exceeds its capacity", "[environment]")
 		CHECK(controller.GetBlendEntryCount() <= EnvironmentController::MaxBlendEntries);
 	}
 
-	float sum = 0.0f;
+	// The starting Default keeps the highest weight, so it is never the lowest-weight entry that
+	// gets evicted: include it in the sum.
+	float sum = controller.GetWeight(EnvironmentProfile::GetDefault().get());
 	for (const auto& profile : profiles)
 	{
 		sum += controller.GetWeight(profile.get());
