@@ -59,6 +59,8 @@ namespace mmo
 			m_entries.erase(lowest);
 			Normalize();
 		}
+
+		Evaluate();
 	}
 
 	void EnvironmentController::Update(const float deltaSeconds, const float normalizedTime)

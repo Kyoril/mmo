@@ -13,7 +13,7 @@ namespace
 {
 	/// A profile whose every curve is one constant colour and whose exposure is a marker value,
 	/// so a blended state reveals the weights that produced it.
-	std::shared_ptr<const EnvironmentProfile> MakeFlatProfile(const float value, const float transitionSeconds)
+	std::shared_ptr<const EnvironmentProfile> makeFlatProfile(const float value, const float transitionSeconds)
 	{
 		EnvironmentProfile profile = EnvironmentProfile::MakeDefault();
 		const ColorCurve flat = MakeEnvironmentCurve({ { 0.0f, Vector4(value, value, value, value) }, { 1.0f, Vector4(value, value, value, value) } });
@@ -30,7 +30,7 @@ namespace
 		return std::make_shared<const EnvironmentProfile>(std::move(profile));
 	}
 
-	float SumOfWeights(const EnvironmentController& controller, std::initializer_list<const EnvironmentProfile*> profiles)
+	float sumOfWeights(const EnvironmentController& controller, std::initializer_list<const EnvironmentProfile*> profiles)
 	{
 		float sum = 0.0f;
 		for (const EnvironmentProfile* profile : profiles)
@@ -43,7 +43,7 @@ namespace
 
 TEST_CASE("EvaluateEnvironment copies curve values and fixed values", "[environment]")
 {
-	const auto profile = MakeFlatProfile(0.25f, 3.0f);
+	const auto profile = makeFlatProfile(0.25f, 3.0f);
 	const EnvironmentState state = EvaluateEnvironment(*profile, 0.4f);
 
 	CHECK(state.skyHorizon.x == Approx(0.25f));
@@ -61,8 +61,8 @@ TEST_CASE("EvaluateEnvironment copies curve values and fixed values", "[environm
 
 TEST_CASE("LerpEnvironment returns the inputs at its endpoints", "[environment]")
 {
-	const EnvironmentState a = EvaluateEnvironment(*MakeFlatProfile(0.0f, 3.0f), 0.5f);
-	const EnvironmentState b = EvaluateEnvironment(*MakeFlatProfile(1.0f, 3.0f), 0.5f);
+	const EnvironmentState a = EvaluateEnvironment(*makeFlatProfile(0.0f, 3.0f), 0.5f);
+	const EnvironmentState b = EvaluateEnvironment(*makeFlatProfile(1.0f, 3.0f), 0.5f);
 
 	CHECK(LerpEnvironment(a, b, 0.0f).exposure == Approx(0.0f));
 	CHECK(LerpEnvironment(a, b, 1.0f).exposure == Approx(1.0f));
@@ -82,8 +82,8 @@ TEST_CASE("Controller starts on the Default profile", "[environment]")
 
 TEST_CASE("A fade takes the incoming profile's transition time and weights sum to one", "[environment]")
 {
-	const auto from = MakeFlatProfile(0.0f, 1.0f);
-	const auto to = MakeFlatProfile(1.0f, 2.0f);
+	const auto from = makeFlatProfile(0.0f, 1.0f);
+	const auto to = makeFlatProfile(1.0f, 2.0f);
 
 	EnvironmentController controller;
 	controller.SetTarget(from, true);
@@ -91,7 +91,7 @@ TEST_CASE("A fade takes the incoming profile's transition time and weights sum t
 
 	controller.Update(0.5f, 0.5f);
 	CHECK(controller.GetWeight(to.get()) == Approx(0.25f));
-	CHECK(SumOfWeights(controller, { from.get(), to.get() }) == Approx(1.0f));
+	CHECK(sumOfWeights(controller, { from.get(), to.get() }) == Approx(1.0f));
 	CHECK(controller.GetState().exposure == Approx(0.25f));
 
 	controller.Update(1.5f, 0.5f);
@@ -102,8 +102,8 @@ TEST_CASE("A fade takes the incoming profile's transition time and weights sum t
 
 TEST_CASE("Returning to a fading profile continues from its current weight", "[environment]")
 {
-	const auto a = MakeFlatProfile(0.0f, 4.0f);
-	const auto b = MakeFlatProfile(1.0f, 4.0f);
+	const auto a = makeFlatProfile(0.0f, 4.0f);
+	const auto b = makeFlatProfile(1.0f, 4.0f);
 
 	EnvironmentController controller;
 	controller.SetTarget(a, true);
@@ -116,13 +116,13 @@ TEST_CASE("Returning to a fading profile continues from its current weight", "[e
 
 	controller.Update(0.5f, 0.5f);
 	CHECK(controller.GetWeight(a.get()) == Approx(0.875f));
-	CHECK(SumOfWeights(controller, { a.get(), b.get() }) == Approx(1.0f));
+	CHECK(sumOfWeights(controller, { a.get(), b.get() }) == Approx(1.0f));
 }
 
 TEST_CASE("Setting the current target again changes nothing", "[environment]")
 {
-	const auto a = MakeFlatProfile(0.0f, 4.0f);
-	const auto b = MakeFlatProfile(1.0f, 4.0f);
+	const auto a = makeFlatProfile(0.0f, 4.0f);
+	const auto b = makeFlatProfile(1.0f, 4.0f);
 
 	EnvironmentController controller;
 	controller.SetTarget(a, true);
@@ -136,8 +136,8 @@ TEST_CASE("Setting the current target again changes nothing", "[environment]")
 
 TEST_CASE("Immediate and zero-length transitions snap", "[environment]")
 {
-	const auto a = MakeFlatProfile(0.0f, 4.0f);
-	const auto snap = MakeFlatProfile(1.0f, 0.0f);
+	const auto a = makeFlatProfile(0.0f, 4.0f);
+	const auto snap = makeFlatProfile(1.0f, 0.0f);
 
 	EnvironmentController controller;
 	controller.SetTarget(a, true);
@@ -155,7 +155,7 @@ TEST_CASE("The blend list never exceeds its capacity", "[environment]")
 	std::vector<std::shared_ptr<const EnvironmentProfile>> profiles;
 	for (int i = 0; i < 8; ++i)
 	{
-		profiles.push_back(MakeFlatProfile(static_cast<float>(i) / 8.0f, 10.0f));
+		profiles.push_back(makeFlatProfile(static_cast<float>(i) / 8.0f, 10.0f));
 		controller.SetTarget(profiles.back(), false);
 		controller.Update(0.5f, 0.5f);
 		CHECK(controller.GetBlendEntryCount() <= EnvironmentController::MaxBlendEntries);
@@ -173,10 +173,69 @@ TEST_CASE("The blend list never exceeds its capacity", "[environment]")
 
 TEST_CASE("A null target means the Default profile", "[environment]")
 {
-	const auto a = MakeFlatProfile(0.0f, 4.0f);
+	const auto a = makeFlatProfile(0.0f, 4.0f);
 
 	EnvironmentController controller;
 	controller.SetTarget(a, true);
 	controller.SetTarget(nullptr, true);
 	CHECK(controller.GetWeight(EnvironmentProfile::GetDefault().get()) == Approx(1.0f));
+}
+
+TEST_CASE("An evicting SetTarget refreshes the state without an Update", "[environment]")
+{
+	const auto a = makeFlatProfile(0.0f, 10.0f);
+	const auto b = makeFlatProfile(0.25f, 10.0f);
+	const auto c = makeFlatProfile(0.5f, 10.0f);
+	const auto d = makeFlatProfile(0.75f, 10.0f);
+	const auto e = makeFlatProfile(1.0f, 10.0f);
+
+	EnvironmentController controller;
+	controller.SetTarget(a, true);
+
+	controller.SetTarget(b, false);
+	controller.Update(2.0f, 0.5f);
+
+	controller.SetTarget(c, false);
+	controller.Update(2.0f, 0.5f);
+
+	controller.SetTarget(d, false);
+	controller.Update(2.0f, 0.5f);
+
+	// A 5th entry evicts the lowest-weight one. No Update follows: GetState() must already
+	// reflect the post-eviction, renormalized weights.
+	controller.SetTarget(e, false);
+
+	const float expected =
+		controller.GetWeight(a.get()) * a->exposure +
+		controller.GetWeight(b.get()) * b->exposure +
+		controller.GetWeight(c.get()) * c->exposure +
+		controller.GetWeight(d.get()) * d->exposure +
+		controller.GetWeight(e.get()) * e->exposure;
+
+	CHECK(controller.GetState().exposure == Approx(expected));
+}
+
+TEST_CASE("Every blended profile is evaluated at the current time during a fade", "[environment]")
+{
+	const ColorCurve curve = MakeEnvironmentCurve({ { 0.0f, Vector4(0.0f, 0.0f, 0.0f, 1.0f) }, { 1.0f, Vector4(1.0f, 1.0f, 1.0f, 1.0f) } });
+
+	EnvironmentProfile aProfile = EnvironmentProfile::MakeDefault();
+	aProfile.skyZenith = curve;
+	aProfile.transitionSeconds = 4.0f;
+	const auto a = std::make_shared<const EnvironmentProfile>(std::move(aProfile));
+
+	EnvironmentProfile bProfile = EnvironmentProfile::MakeDefault();
+	bProfile.skyZenith = curve;
+	bProfile.transitionSeconds = 4.0f;
+	const auto b = std::make_shared<const EnvironmentProfile>(std::move(bProfile));
+
+	EnvironmentController controller;
+	controller.SetTarget(a, true);
+	controller.SetTarget(b, false);
+
+	controller.Update(1.0f, 0.2f);
+	CHECK(controller.GetState().skyZenith.x == Approx(curve.Evaluate(0.2f).x));
+
+	controller.Update(1.0f, 0.8f);
+	CHECK(controller.GetState().skyZenith.x == Approx(curve.Evaluate(0.8f).x));
 }
