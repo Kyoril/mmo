@@ -295,3 +295,23 @@ This is controller-driven, and only while the user is away from the PC.
 - Foliage and particle wind.
 - Metal compute backend.
 - Occlusion beyond the 300 m CSM range.
+
+## Implementation Notes
+
+Implemented 2026-09-14 on `feature/volumetric-atmosphere`, commits 52ed80a5..332a1d7d. Plan: `docs/superpowers/plans/2026-09-14-froxel-volumetric-fog.md`.
+
+1. **Default fog density.** Lowered from 0.004 to 0.0015 before this project (commit 1e0cea64), because the user found the default "extremely foggy".
+2. **Gust formula.** `WindSimulation` uses one normalized gust noise `n ∈ [-1, 1]` for speed (`speed · (1 + gustiness · 0.6 · n)`) and one for direction (`±25° · gustiness · n`). The spec text mixed the two scales; this matches Section 3's prose ("up to ±25° · gustiness").
+3. **Shared-state fixes after review.**
+   - `GraphicsDeviceD3D11::Reset()` now also resets the cached compute shader.
+   - The fog composite sets the device's legacy address/filter state (Clamp/Bilinear) so it agrees with the explicit linear-clamp sampler. The legacy state matters because `Draw` rebinds PS s0 from it.
+   - The fog range is clamped when uploaded.
+   - `constant_buffer.h` includes `shader_base.h`.
+   - `GraphicsDeviceD3D11::BindTexture(nullptr, …)` only clears the device cache and does not unbind on the GPU. This is pre-existing behaviour.
+4. **How the look was checked.**
+   - **Console:** injected console input did not take effect in these runs, so debug views and the perf overlay were enabled by temporarily editing `bin/Debug/config/Config.cfg` (backed up and restored).
+   - **Time of day:** the world server's game clock is the UTC time of day, so the evening test ran at night. Daytime was checked with a temporary, uncommitted client override to 13:00 (reverted and rebuilt).
+   - **Results:** no black, NaN or white frames at night or at noon; thin haze with sun shafts through the trees at noon; the density debug view varies with depth and over time.
+   - **Wind drift:** subtle at noon with the default noise amount of 0.5.
+5. **Performance.** Not measured: the Debug perf overlay's GPU rows read 0.0. The budget (≤ 2 ms High, ≤ 0.7 ms Low) remains unverified.
+6. **VRAM.** The Ultra preset uses about 400 MB at 4K (four RGBA16F volumes of 480×270×96). High at 1080p uses about 30 MB.
