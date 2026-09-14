@@ -63,6 +63,7 @@
 #include "shared/proto_data/sounds.pb.h"
 #include "shared/proto_data/surface_types.pb.h"
 #include "shared/proto_data/water_profiles.pb.h"
+#include "shared/proto_data/environment_profiles.pb.h"
 
 namespace mmo
 {
@@ -119,6 +120,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Sounds, mmo::proto::SoundEntry> SoundManager;
 		typedef TemplateManager<mmo::proto::SurfaceTypes, mmo::proto::SurfaceType> SurfaceTypeManager;
 		typedef TemplateManager<mmo::proto::WaterProfiles, mmo::proto::WaterProfile> WaterProfileManager;
+		typedef TemplateManager<mmo::proto::EnvironmentProfiles, mmo::proto::EnvironmentProfile> EnvironmentProfileManager;
 
 		/// Gets the combat settings with all configurable combat formula parameters.
 		/// If no combat_settings file was loaded, defaults from the proto definition are used.
@@ -213,6 +215,10 @@ namespace mmo
 			/// audio settings. Entry ids are terrain::WaterType values. Authored here and consumed
 			/// only by the client, through the proto_client mirror.
 			WaterProfileManager waterProfiles;
+
+			/// Per-zone lighting and mood profiles. Authored here and consumed by the client and
+			/// the world editor viewport.
+			EnvironmentProfileManager environmentProfiles;
 
 			/// Combat settings containing all configurable combat formula parameters.
 			CombatSettings combatSettings;
@@ -346,6 +352,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("sounds", sounds, true));
 				managers.push_back(ManagerEntry("surface_types", surfaceTypes, true));
 				managers.push_back(ManagerEntry("water_profiles", waterProfiles, true));
+				managers.push_back(ManagerEntry("environment_profiles", environmentProfiles, true));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -435,6 +442,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("sounds", "sounds", sounds));
 				managers.push_back(ManagerEntry("surface_types", "surface_types", surfaceTypes));
 				managers.push_back(ManagerEntry("water_profiles", "water_profiles", waterProfiles));
+				managers.push_back(ManagerEntry("environment_profiles", "environment_profiles", environmentProfiles));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

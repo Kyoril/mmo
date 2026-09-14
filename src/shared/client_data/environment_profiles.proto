@@ -1,0 +1,70 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+// Per-zone lighting and mood: day-cycle curves plus fixed fog, shaft, exposure and bloom values.
+//
+// NOTE: Keep this file in sync with src/shared/proto_data/environment_profiles.proto!
+// The client reads the exported binary data with the mirrored proto_client schema, so every
+// field number in here has to match the mirror exactly. Field numbers are part of the ClientDB
+// contract and must never be reused or renumbered.
+//
+// Nothing on the server consumes these values; they exist here because mmo_edit authors the
+// proto_data project, and the client mirror is what ClientDB export produces.
+
+// One key of a colour curve over the normalized day (0 = midnight, 0.5 = noon).
+message ColorCurveKey
+{
+	required float time = 1;
+	required float r = 2;
+	required float g = 3;
+	required float b = 4;
+	optional float a = 5 [default = 1];
+
+	// Exactly 4 values when tangent_mode is 1 (user tangents); empty for auto tangents.
+	repeated float in_tangent = 6 [packed = true];
+	repeated float out_tangent = 7 [packed = true];
+
+	// ColorKey::tangentMode: 0 = auto, 1 = user.
+	optional uint32 tangent_mode = 8;
+}
+
+message ColorCurveData
+{
+	repeated ColorCurveKey key = 1;
+}
+
+message EnvironmentProfile
+{
+	required uint32 id = 1;
+	required string name = 2;
+
+	// Day curves. An empty curve means "use the built-in Default curve", never black.
+	optional ColorCurveData sky_horizon = 3;
+	optional ColorCurveData sky_zenith = 4;
+	optional ColorCurveData clouds = 5;
+	optional ColorCurveData ambient = 6;
+	optional ColorCurveData sun = 7;           // rgb colour, a intensity
+	optional ColorCurveData moon = 8;          // rgb colour, a intensity
+	optional ColorCurveData fog = 9;           // rgb fog tint, a density multiplier
+	optional ColorCurveData sun_scatter = 10;  // rgb shaft tint, a shaft multiplier
+
+	// Fixed values.
+	optional float fog_density = 11 [default = 0.004];
+	optional float fog_height_falloff = 12 [default = 0.05];
+	optional float fog_base_height = 13 [default = -10];
+	optional float fog_anisotropy = 14 [default = 0.7];
+	optional float shaft_strength = 15 [default = 1.25];
+	optional float exposure = 16 [default = 1];
+	optional float bloom_intensity = 17 [default = 0.08];
+	optional float bloom_threshold = 18 [default = 0.8];
+
+	// Fade time in seconds when blending INTO this profile. 0 snaps.
+	optional float transition_seconds = 19 [default = 3];
+
+	// Fields 20 and up are reserved for wind-driven volumetric fog.
+}
+
+message EnvironmentProfiles
+{
+	repeated EnvironmentProfile entry = 1;
+}

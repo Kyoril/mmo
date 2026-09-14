@@ -34,6 +34,7 @@
 #include "shared/client_data/proto_client/surface_types.pb.h"
 #include "shared/client_data/proto_client/emotes.pb.h"
 #include "shared/client_data/proto_client/water_profiles.pb.h"
+#include "shared/client_data/proto_client/environment_profiles.pb.h"
 
 namespace mmo
 {
@@ -65,6 +66,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::SurfaceTypes, mmo::proto_client::SurfaceType> SurfaceTypeManager;
 		typedef TemplateManager<mmo::proto_client::Emotes, mmo::proto_client::EmoteEntry> EmoteManager;
 		typedef TemplateManager<mmo::proto_client::WaterProfiles, mmo::proto_client::WaterProfile> WaterProfileManager;
+		typedef TemplateManager<mmo::proto_client::EnvironmentProfiles, mmo::proto_client::EnvironmentProfile> EnvironmentProfileManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -115,6 +117,9 @@ namespace mmo
 			/// Per-liquid-type presentation: surface material plus underwater fog, caustics and
 			/// audio settings. Entry ids are terrain::WaterType values.
 			WaterProfileManager waterProfiles;
+
+			/// Per-zone lighting and mood profiles (sky, sun/moon, fog, shafts, exposure, bloom).
+			EnvironmentProfileManager environmentProfiles;
 
 		private:
 
@@ -184,6 +189,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("surface_types", surfaceTypes, true));
 				managers.push_back(ManagerEntry("emotes", emotes, true));
 				managers.push_back(ManagerEntry("water_profiles", waterProfiles, true));
+				managers.push_back(ManagerEntry("environment_profiles", environmentProfiles, true));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -239,6 +245,7 @@ namespace mmo
 				managers.emplace_back("surface_types", "surface_types", surfaceTypes);
 				managers.emplace_back("emotes", "emotes", emotes);
 				managers.emplace_back("water_profiles", "water_profiles", waterProfiles);
+				managers.emplace_back("environment_profiles", "environment_profiles", environmentProfiles);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{
