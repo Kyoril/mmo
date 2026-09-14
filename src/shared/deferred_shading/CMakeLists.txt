@@ -7,11 +7,13 @@ target_link_libraries(deferred_shading graphics scene_graph)
 if (WIN32)
 	file(GLOB d3d11_vs_shaders "shaders/VS_*.hlsl")
 	file(GLOB d3d11_ps_shaders "shaders/PS_*.hlsl")
+	file(GLOB d3d11_cs_shaders "shaders/CS_*.hlsl")
 	file(GLOB d3d11_shader_includes "shaders/*.hlsli")
 
-	target_sources(deferred_shading PRIVATE ${d3d11_vs_shaders} ${d3d11_ps_shaders} ${d3d11_shader_includes})
+	target_sources(deferred_shading PRIVATE ${d3d11_vs_shaders} ${d3d11_ps_shaders} ${d3d11_cs_shaders} ${d3d11_shader_includes})
 	source_group(src\\shaders FILES ${d3d11_vs_shaders})
 	source_group(src\\shaders FILES ${d3d11_ps_shaders})
+	source_group(src\\shaders FILES ${d3d11_cs_shaders})
 	source_group(src\\shaders FILES ${d3d11_shader_includes})
 
 	# Include files are pulled in by #include only; MSBuild must not try to compile them.
@@ -21,6 +23,9 @@ if (WIN32)
 		VS_SHADER_OUTPUT_HEADER_FILE "${CMAKE_CURRENT_LIST_DIR}/shaders/%(Filename).h" VS_SHADER_OBJECT_FILE_NAME "$(IntDir)%(Filename).cso"
 		VS_SHADER_VARIABLE_NAME "g_%(Filename)")
 	set_source_files_properties( ${d3d11_ps_shaders} PROPERTIES VS_SHADER_TYPE Pixel VS_SHADER_MODEL 5.0 VS_SHADER_ENTRYPOINT main
+		VS_SHADER_OUTPUT_HEADER_FILE "${CMAKE_CURRENT_LIST_DIR}/shaders/%(Filename).h" VS_SHADER_OBJECT_FILE_NAME "$(IntDir)%(Filename).cso"
+		VS_SHADER_VARIABLE_NAME "g_%(Filename)")
+	set_source_files_properties( ${d3d11_cs_shaders} PROPERTIES VS_SHADER_TYPE Compute VS_SHADER_MODEL 5.0 VS_SHADER_ENTRYPOINT main
 		VS_SHADER_OUTPUT_HEADER_FILE "${CMAKE_CURRENT_LIST_DIR}/shaders/%(Filename).h" VS_SHADER_OBJECT_FILE_NAME "$(IntDir)%(Filename).cso"
 		VS_SHADER_VARIABLE_NAME "g_%(Filename)")
 endif()
