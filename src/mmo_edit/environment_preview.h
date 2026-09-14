@@ -9,7 +9,9 @@
 namespace mmo
 {
 	/// @brief What the Environment Profile Editor asks every open world editor to show.
-	/// @remark Main thread only. World editors poll it each frame.
+	/// @remark Main thread only. World editors poll it each frame. Backed by a process-wide
+	///         singleton (see GetEnvironmentPreview below), not owned by any one host, so there is
+	///         exactly one preview state per editor process.
 	struct EnvironmentPreview
 	{
 		/// @brief When set, world editors snap to this profile instead of the camera zone's.

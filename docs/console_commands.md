@@ -74,10 +74,10 @@ In addition to commands, the system also uses console variables (CVars) that con
 - `gxAtmosphereDebug` - Atmosphere debug view, 0-3 (default: 0)
 - `gxBloomQuality` - Bloom quality (default: 2)
 - `gxExposure` - Player brightness, multiplies the zone environment's exposure (default: 1.0)
+- `gxSsao*`, `gxContactShadow*`, `ShadowQuality`, `ShadowTextureSize` - see `WorldState::RegisterGameplayCommands`
 
 Fog density, height falloff, base height, anisotropy, shaft strength, exposure and bloom strength are
 authored per zone in environment profiles (editor: Environment Profile Editor), not cvars.
-- `gxSsao*`, `gxContactShadow*`, `ShadowQuality`, `ShadowTextureSize` - see `WorldState::RegisterGameplayCommands`
 
 See [rendering-atmosphere.md](rendering-atmosphere.md) for the fog model.
 

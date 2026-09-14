@@ -100,7 +100,7 @@ namespace mmo
 
 	void EnvironmentProfileEditorWindow::BindCurves(const proto::EnvironmentProfile& entry)
 	{
-		const EnvironmentProfile defaults = EnvironmentProfile::MakeDefault();
+		const EnvironmentProfile& defaults = *EnvironmentProfile::GetDefault();
 
 		for (size_t i = 0; i < CurveCount; ++i)
 		{
@@ -319,7 +319,7 @@ namespace mmo
 
 	void EnvironmentProfileEditorWindow::DrawCurves(proto::EnvironmentProfile& entry)
 	{
-		const EnvironmentProfile defaults = EnvironmentProfile::MakeDefault();
+		const EnvironmentProfile& defaults = *EnvironmentProfile::GetDefault();
 
 		for (size_t i = 0; i < CurveCount; ++i)
 		{
