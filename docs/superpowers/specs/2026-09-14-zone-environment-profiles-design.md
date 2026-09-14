@@ -290,3 +290,31 @@ The proto default values for fields 11–19 in both `proto_data` and `client_dat
 - Distance-based border blending.
 - Making the sun path window (0.20–0.80) or sun arc part of a profile.
 - Deleting the `Models/*.hccv` files.
+
+## Implementation Notes
+
+Implemented 2026-09-14 on `feature/volumetric-atmosphere` (commits c86511c0..9bee79aa).
+
+1. **Evaluator names.** The evaluator functions are `EvaluateEnvironment` / `LerpEnvironment`, not `Evaluate` / `Lerp`.
+2. **Default profile values.** The built-in Default is seeded from the key values of the four shipped `.hccv` files (Horizon, Zenith, Ambient, Cloud). Their stored tangents equal the auto-computed tangents exactly, so the Default evaluates the same as the old curve files, apart from values rounded to 4 decimals. Fog and SunScatter ship no files and use the former code fallbacks.
+3. **Controller behaviour.**
+   - `SetTarget` re-evaluates the state after every non-immediate change, so `GetState()` stays valid after an eviction.
+   - Lowest-weight eviction never drops the dominant profile. The capacity unit test therefore also counts the Default's weight.
+4. **Test coverage limits.**
+   - The default-parity test covers only the `client_data` proto copy. No executable may link both `proto_data` and `client_data`, because identical `.proto` file names collide in the protobuf descriptor pool.
+   - `TryGetArea` has no unit test, because `terrain_tests` is disabled.
+5. **Terrain lookup.** `TryGetArea` and `GetAreaForTile` share a private `TryGetAreaForTile` helper.
+6. **Map changes and terrain-less maps.**
+   - `WorldState::ResetEnvironmentForMap()` runs from `SetupWorldScene` and after every successful `LoadMap`, so a map transfer snaps to the new map.
+   - Maps without terrain resolve zone 0 and use the map's default profile.
+   - The world editor does the same, and also retargets when preview ends even if the zone lookup fails.
+   - These gaps were found in the final review.
+7. **Snap rule.** The client's snap rule is the pure function `ShouldSnapEnvironment` in `scene_graph/environment_retarget.h`, which has unit tests.
+8. **Editor windows.**
+   - `EditorEntryWindowBase` gained `CanRemoveEntry` and `OnEntryRemoved` hooks.
+   - Removing the previewed profile clears the preview.
+   - Turning preview off restores the editor's time of day from before preview.
+9. **Bloom Threshold range.** The editor slider covers 0–16, the engine's range. The user chose this over the originally specified 0–8.
+10. **Verification status at implementation time.**
+    - The client with an empty profile table enters the world and renders the Default look.
+    - Not yet checked (the user was using the machine): editor preview, zone border fade, teleport and dungeon-transfer snaps, and a preview-off check on a map without terrain.
