@@ -67,11 +67,11 @@ Missing or unreadable files fall back to built-in keys. The cvars are base value
 | `gxAtmosphereQuality` | 3 | 0 Off (height fog only), 1 Low, 2 Medium, 3 High, 4 Ultra |
 | `gxAtmosphereMarchDistance` | 200 | metres marched for shafts (≤ 300) |
 | `gxAtmosphereDebug` | 0 | 1 scattered light, 2 transmittance, 3 shaft shadow term |
-| `gxFogDensity` | 0.01 | extinction per metre at the base height |
+| `gxFogDensity` | 0.004 | extinction per metre at the base height |
 | `gxFogHeightFalloff` | 0.05 | falloff per metre of height |
 | `gxFogBaseHeight` | -10 | height of the base relative to the player (client) / camera pivot (editor), in metres, where density equals `gxFogDensity` |
 | `gxFogAnisotropy` | 0.7 | sun glow tightness |
-| `gxShaftStrength` | 1.0 | sun scattering multiplier |
+| `gxShaftStrength` | 2.0 | sun scattering multiplier |
 | `gxBloomQuality` | 2 | 0 Off, 1 Low, 2 High |
 | `gxBloomIntensity` | 0.08 | bloom weight |
 | `gxBloomThreshold` | 0.8 | soft-knee threshold (linear) |

@@ -72,8 +72,8 @@ In addition to commands, the system also uses console variables (CVars) that con
 - `gxAtmosphereQuality` - Fog and light shaft quality, 0 = Off … 4 = Ultra (default: 3)
 - `gxAtmosphereMarchDistance` - Metres marched for light shafts, at most 300 (default: 200)
 - `gxAtmosphereDebug` - Atmosphere debug view, 0-3 (default: 0)
-- `gxFogDensity` / `gxFogHeightFalloff` / `gxFogBaseHeight` - Height fog base values; `gxFogBaseHeight` is relative to the player (defaults: 0.01 / 0.05 / -10)
-- `gxFogAnisotropy` / `gxShaftStrength` - Sun glow tightness and sun scattering strength (defaults: 0.7 / 1.0)
+- `gxFogDensity` / `gxFogHeightFalloff` / `gxFogBaseHeight` - Height fog base values; `gxFogBaseHeight` is relative to the player (defaults: 0.004 / 0.05 / -10)
+- `gxFogAnisotropy` / `gxShaftStrength` - Sun glow tightness and sun scattering strength (defaults: 0.7 / 2.0)
 - `gxBloomQuality` / `gxBloomIntensity` / `gxBloomThreshold` - Bloom (defaults: 2 / 0.08 / 0.8)
 - `gxExposure` - Brightness before tone mapping (default: 1.0)
 - `gxSsao*`, `gxContactShadow*`, `ShadowQuality`, `ShadowTextureSize` - see `WorldState::RegisterGameplayCommands`

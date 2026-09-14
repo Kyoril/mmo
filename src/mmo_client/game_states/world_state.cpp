@@ -2116,7 +2116,7 @@ namespace mmo
 		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Atmosphere debug view: 0 = off, 1 = scattered light only, 2 = transmittance, 3 = light shaft shadow term.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
-		s_fogDensityVar = ConsoleVarMgr::RegisterConsoleVar("gxFogDensity", "Height fog extinction per metre at gxFogBaseHeight. 0 disables the fog.", "0.01");
+		s_fogDensityVar = ConsoleVarMgr::RegisterConsoleVar("gxFogDensity", "Height fog extinction per metre at gxFogBaseHeight. 0 disables the fog.", "0.004");
 		m_cvarChangedSignals += s_fogDensityVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
 		s_fogHeightFalloffVar = ConsoleVarMgr::RegisterConsoleVar("gxFogHeightFalloff", "How quickly the fog thins with height, per metre. Higher values keep fog in valleys.", "0.05");
@@ -2128,7 +2128,7 @@ namespace mmo
 		s_fogAnisotropyVar = ConsoleVarMgr::RegisterConsoleVar("gxFogAnisotropy", "Forward scattering of sunlight in the fog (0 to 0.95). Higher values make a tighter, brighter glow around the sun.", "0.7");
 		m_cvarChangedSignals += s_fogAnisotropyVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
-		s_shaftStrengthVar = ConsoleVarMgr::RegisterConsoleVar("gxShaftStrength", "Multiplier on sunlight scattered by the fog (light shafts and sun glow).", "1.0");
+		s_shaftStrengthVar = ConsoleVarMgr::RegisterConsoleVar("gxShaftStrength", "Multiplier on sunlight scattered by the fog (light shafts and sun glow).", "2.0");
 		m_cvarChangedSignals += s_shaftStrengthVar->Changed.connect(this, &WorldState::OnAtmosphereParametersChanged);
 
 		s_bloomQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxBloomQuality", "Bloom quality: 0 = Off, 1 = Low (quarter resolution, 4 levels), 2 = High (half resolution, 6 levels).", "2");

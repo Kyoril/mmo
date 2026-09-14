@@ -11,7 +11,7 @@ namespace mmo
 	struct AtmosphereParameters
 	{
 		/// @brief Extinction per metre at BaseHeight.
-		float density = 0.01f;
+		float density = 0.004f;
 
 		/// @brief Exponential falloff of the density per metre of height above BaseHeight.
 		float heightFalloff = 0.05f;
@@ -27,7 +27,9 @@ namespace mmo
 		float anisotropy = 0.7f;
 
 		/// @brief Multiplier on the sun's in-scattered light (the shafts and the sun glow).
-		float shaftStrength = 1.0f;
+		/// @remark Scattered light grows with density, so this is kept high enough that shafts stay
+		///         readable in the thin default fog.
+		float shaftStrength = 2.0f;
 
 		/// @brief Sets the base density, clamped to [0, 1].
 		void SetDensity(const float value) { density = Clamp(value, 0.0f, 1.0f); }
