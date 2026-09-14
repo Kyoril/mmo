@@ -1386,6 +1386,10 @@ namespace mmo
 		m_environment.Update(deltaSeconds, m_skyComponent->GetNormalizedTimeOfDay());
 		m_skyComponent->ApplyEnvironment(m_environment.GetState());
 
+		m_wind.Update(deltaSeconds, m_environment.GetState());
+		m_scene.SetWind(m_wind.GetState());
+		PublishWindShaderParameters(m_wind.GetState());
+
 		if (DeferredRenderer* renderer = GetDeferredRenderer())
 		{
 			const EnvironmentState& state = m_environment.GetState();

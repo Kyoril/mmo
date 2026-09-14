@@ -303,6 +303,10 @@ namespace mmo
 		// it again. SunColor carries the blended sun/moon colour in rgb and intensity in a.
 		DefineVector("SunDirection", Vector4(0.0f, 1.0f, 0.0f, 0.0f));
 		DefineVector("SunColor", Vector4(1.0f, 0.95f, 0.9f, 1.0f));
+
+		// Published by the host's WindSimulation every frame: xyz is the unit direction the wind blows
+		// toward (y = 0), w the current speed in m/s including gusts.
+		DefineVector("WindDirection", Vector4(0.70710678f, 0.0f, 0.70710678f, 0.0f));
 	}
 
 	bool GlobalShaderParameters::LoadFromAsset(const std::string_view assetPath)

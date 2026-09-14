@@ -16,6 +16,7 @@
 #include "game/game_time_component.h"
 #include "graphics/sky_component.h"
 #include "scene_graph/environment_controller.h"
+#include "scene_graph/wind_simulation.h"
 #include "scene_graph/environment_profile_proto.h"
 #include "scene_graph/environment_retarget.h"
 #include "game_client/game_object_c.h"
@@ -657,6 +658,9 @@ namespace mmo
 
 		/// Blends zone environment profiles and produces the per-frame lighting and mood.
 		EnvironmentController m_environment;
+
+		/// Gusting wind and fog noise scroll driven by the environment's wind settings.
+		WindSimulation m_wind;
 
 		/// @brief Adapts the streamed client terrain to the queries WaterVolumeSystem needs.
 		///	@remark Defined in the .cpp so world_state.h does not have to pull in the terrain

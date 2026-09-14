@@ -32,6 +32,7 @@
 #include "scene_graph/octree_scene.h"
 #include "graphics/sky_component.h"
 #include "scene_graph/environment_controller.h"
+#include "scene_graph/wind_simulation.h"
 #include "scene_graph/environment_profile_proto.h"
 
 #include "deferred_shading/deferred_renderer.h"
@@ -565,6 +566,10 @@ namespace mmo
 
 		/// Blends environment profiles for the viewport, exactly like the client.
 		EnvironmentController m_environment;
+
+		/// Gusting wind and fog noise scroll for the viewport. Advances with real frame time even while
+		/// the sky clock is paused, so drifting fog stays visible while authoring.
+		WindSimulation m_wind;
 
 		/// Runtime profiles converted from the project on first use; cleared on every preview revision.
 		std::unique_ptr<EnvironmentProfileCache<proto::EnvironmentProfileManager>> m_environmentProfiles;

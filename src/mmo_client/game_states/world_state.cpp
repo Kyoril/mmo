@@ -1013,6 +1013,13 @@ namespace mmo
 		m_skyComponent->ApplyEnvironment(m_environment.GetState());
 		ApplyEnvironmentToRenderer();
 
+		m_wind.Update(deltaSeconds, m_environment.GetState());
+		if (m_scene)
+		{
+			m_scene->SetWind(m_wind.GetState());
+		}
+		PublishWindShaderParameters(m_wind.GetState());
+
 		// Set the sky dome position to follow the player
 		if (m_playerController->GetRootNode())
 		{

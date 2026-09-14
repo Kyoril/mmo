@@ -11,6 +11,7 @@
 #include "base/typedefs.h"
 #include "graphics/shader_types.h"
 #include "atmosphere_settings.h"
+#include "scene_graph/wind_state.h"
 
 #include "camera.h"
 #include "entity.h"
@@ -381,6 +382,12 @@ namespace mmo
 
 		/// @brief Gets the fog reference height override, if one was set.
 		[[nodiscard]] std::optional<float> GetAtmosphereReferenceHeight() const { return m_atmosphereReferenceHeight; }
+
+		/// @brief Sets the wind of this frame. Written by the host's WindSimulation every update.
+		void SetWind(const WindState& wind) { m_wind = wind; }
+
+		/// @brief Gets the wind of this frame (read by the volumetric fog pass).
+		[[nodiscard]] const WindState& GetWind() const { return m_wind; }
 
 		/// @brief Computes the combined fog density CombineAtmosphere would produce from the current
 		///        atmosphere parameters and time-of-day values. Density does not depend on the
@@ -759,6 +766,9 @@ namespace mmo
 		AtmosphereParameters m_atmosphereParameters;
 
 		AtmosphereTimeOfDay m_atmosphereTimeOfDay;
+
+		/// @brief Wind of the current frame; see SetWind.
+		WindState m_wind;
 
 		/// @brief World Y override for the fog base height; see SetAtmosphereReferenceHeight.
 		std::optional<float> m_atmosphereReferenceHeight;
