@@ -61,7 +61,17 @@ message EnvironmentProfile
 	// Fade time in seconds when blending INTO this profile. 0 snaps.
 	optional float transition_seconds = 19 [default = 3];
 
-	// Fields 20 and up are reserved for wind-driven volumetric fog.
+	// Wind and fog noise (volumetric fog).
+	// Direction the wind blows toward, in degrees clockwise from north (+Z).
+	optional float wind_direction = 20 [default = 45];
+	// Wind speed in metres per second.
+	optional float wind_speed = 21 [default = 3];
+	// How strongly gusts vary speed and direction, 0..1.
+	optional float wind_gustiness = 22 [default = 0.3];
+	// 0 = smooth fog, 1 = very patchy fog.
+	optional float fog_noise_amount = 23 [default = 0.5];
+	// Metres per repeat of the noise pattern.
+	optional float fog_noise_size = 24 [default = 60];
 }
 
 message EnvironmentProfiles

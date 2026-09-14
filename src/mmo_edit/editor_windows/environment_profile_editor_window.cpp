@@ -145,6 +145,7 @@ namespace mmo
 
 		DrawPreviewBar(currentEntry);
 		DrawFixedValues(currentEntry);
+		DrawWind(currentEntry);
 		DrawCurves(currentEntry);
 	}
 
@@ -308,6 +309,66 @@ namespace mmo
 			if (ImGui::IsItemHovered())
 			{
 				ImGui::SetTooltip("How long the fade into this profile takes when a player crosses into its zone. 0 snaps.");
+			}
+
+			if (changed)
+			{
+				GetEnvironmentPreview().NotifyChanged();
+			}
+		}
+	}
+
+	void EnvironmentProfileEditorWindow::DrawWind(proto::EnvironmentProfile& entry)
+	{
+		if (const auto section = ScopedEditorSection("Wind & Noise", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			bool changed = false;
+
+			float direction = entry.wind_direction();
+			if (ImGui::SliderFloat("Wind Direction", &direction, 0.0f, 360.0f, "%.0f deg"))
+			{
+				entry.set_wind_direction(std::clamp(direction, 0.0f, 360.0f));
+				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Direction the wind blows toward, clockwise from north (+Z). 90 = toward +X.");
+			}
+
+			float speed = entry.wind_speed();
+			if (ImGui::DragFloat("Wind Speed", &speed, 0.05f, 0.0f, 30.0f, "%.1f m/s"))
+			{
+				entry.set_wind_speed(std::clamp(speed, 0.0f, 30.0f));
+				changed = true;
+			}
+
+			float gustiness = entry.wind_gustiness();
+			if (ImGui::SliderFloat("Gustiness", &gustiness, 0.0f, 1.0f, "%.2f"))
+			{
+				entry.set_wind_gustiness(gustiness);
+				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("How much gusts vary the wind speed (up to +/-60%%) and direction (up to +/-25 degrees).");
+			}
+
+			float noiseAmount = entry.fog_noise_amount();
+			if (ImGui::SliderFloat("Fog Noise Amount", &noiseAmount, 0.0f, 1.0f, "%.2f"))
+			{
+				entry.set_fog_noise_amount(noiseAmount);
+				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("0 = smooth fog, 1 = drifting banks with clear gaps. Average fog amount stays the same.");
+			}
+
+			float noiseSize = entry.fog_noise_size();
+			if (ImGui::DragFloat("Fog Noise Size", &noiseSize, 0.5f, 5.0f, 500.0f, "%.0f m"))
+			{
+				entry.set_fog_noise_size(std::clamp(noiseSize, 5.0f, 500.0f));
+				changed = true;
 			}
 
 			if (changed)

@@ -2,6 +2,8 @@
 
 #include "environment_state.h"
 
+#include <cmath>
+
 namespace mmo
 {
 	namespace
@@ -15,6 +17,13 @@ namespace mmo
 		{
 			return Vector3(value.x, value.y, value.z);
 		}
+	}
+
+	Vector3 WindDirectionFromDegrees(const float degrees)
+	{
+		constexpr float degreesToRadians = 3.14159265358979f / 180.0f;
+		const float radians = degrees * degreesToRadians;
+		return Vector3(std::sin(radians), 0.0f, std::cos(radians));
 	}
 
 	EnvironmentState EvaluateEnvironment(const EnvironmentProfile& profile, const float normalizedTime)
@@ -51,6 +60,12 @@ namespace mmo
 		state.bloomIntensity = profile.bloomIntensity;
 		state.bloomThreshold = profile.bloomThreshold;
 
+		state.windDirection = WindDirectionFromDegrees(profile.windDirectionDegrees);
+		state.windSpeed = profile.windSpeed;
+		state.windGustiness = profile.windGustiness;
+		state.fogNoiseAmount = profile.fogNoiseAmount;
+		state.fogNoiseSize = profile.fogNoiseSize;
+
 		return state;
 	}
 
@@ -85,6 +100,16 @@ namespace mmo
 		state.exposure = lerpFloat(a.exposure, b.exposure, t);
 		state.bloomIntensity = lerpFloat(a.bloomIntensity, b.bloomIntensity, t);
 		state.bloomThreshold = lerpFloat(a.bloomThreshold, b.bloomThreshold, t);
+
+		// Blend the direction as a vector so 350 -> 10 degrees passes through 0, not 180. Opposite
+		// winds cancel out; the incoming direction wins then.
+		const Vector3 blendedWind = a.windDirection * (1.0f - t) + b.windDirection * t;
+		const float windLength = blendedWind.GetLength();
+		state.windDirection = windLength < 1e-3f ? b.windDirection : blendedWind * (1.0f / windLength);
+		state.windSpeed = lerpFloat(a.windSpeed, b.windSpeed, t);
+		state.windGustiness = lerpFloat(a.windGustiness, b.windGustiness, t);
+		state.fogNoiseAmount = lerpFloat(a.fogNoiseAmount, b.fogNoiseAmount, t);
+		state.fogNoiseSize = lerpFloat(a.fogNoiseSize, b.fogNoiseSize, t);
 
 		return state;
 	}

@@ -50,6 +50,21 @@ namespace mmo
 
 		/// @brief Bloom threshold.
 		float bloomThreshold = 0.8f;
+
+		/// @brief Unit xz direction the wind blows toward (y = 0).
+		Vector3 windDirection{ 0.70710678f, 0.0f, 0.70710678f };
+
+		/// @brief Wind speed in m/s before gusts.
+		float windSpeed = 3.0f;
+
+		/// @brief Gust strength, [0, 1].
+		float windGustiness = 0.3f;
+
+		/// @brief Fog patchiness: 0 smooth, 1 very patchy.
+		float fogNoiseAmount = 0.5f;
+
+		/// @brief Metres per repeat of the fog noise.
+		float fogNoiseSize = 60.0f;
 	};
 
 	/// @brief Samples a profile at a time of day.
@@ -59,4 +74,7 @@ namespace mmo
 
 	/// @brief Component-wise linear blend. t = 0 returns a, t = 1 returns b.
 	[[nodiscard]] EnvironmentState LerpEnvironment(const EnvironmentState& a, const EnvironmentState& b, float t);
+
+	/// @brief Unit xz vector for a wind direction in degrees clockwise from +Z (0 = +Z, 90 = +X).
+	[[nodiscard]] Vector3 WindDirectionFromDegrees(float degrees);
 }

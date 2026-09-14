@@ -7,6 +7,7 @@
 #include "math/vector4.h"
 #include "scene_graph/atmosphere_settings.h"
 
+#include <cmath>
 #include <initializer_list>
 #include <memory>
 #include <utility>
@@ -17,6 +18,18 @@ namespace mmo
 	/// @param keys Keys over the normalized day, 0 = midnight, 0.5 = noon.
 	/// @return The curve. An empty list yields an empty curve.
 	[[nodiscard]] ColorCurve MakeEnvironmentCurve(std::initializer_list<std::pair<float, Vector4>> keys);
+
+	/// @brief Wraps an angle in degrees into [0, 360).
+	[[nodiscard]] inline float WrapDegrees360(const float degrees)
+	{
+		float wrapped = std::fmod(degrees, 360.0f);
+		if (wrapped < 0.0f)
+		{
+			wrapped += 360.0f;
+		}
+
+		return wrapped >= 360.0f ? 0.0f : wrapped;
+	}
 
 	/// @brief The lighting and mood of one zone over the day, ready to evaluate.
 	/// @remark Every curve is always populated: loading fills unauthored curves from the Default.
@@ -60,6 +73,21 @@ namespace mmo
 
 		/// @brief Seconds a fade INTO this profile takes. 0 snaps.
 		float transitionSeconds = 3.0f;
+
+		/// @brief Direction the wind blows toward, degrees clockwise from +Z, [0, 360).
+		float windDirectionDegrees = 45.0f;
+
+		/// @brief Wind speed in m/s, [0, 30].
+		float windSpeed = 3.0f;
+
+		/// @brief Gust strength, [0, 1].
+		float windGustiness = 0.3f;
+
+		/// @brief Fog patchiness: 0 smooth, 1 very patchy.
+		float fogNoiseAmount = 0.5f;
+
+		/// @brief Metres per repeat of the fog noise, [5, 500].
+		float fogNoiseSize = 60.0f;
 
 		/// @brief Builds the built-in Default: the look the world had before profiles existed.
 		[[nodiscard]] static EnvironmentProfile MakeDefault();

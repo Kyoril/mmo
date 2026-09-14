@@ -120,6 +120,12 @@ namespace mmo
 		result.bloomThreshold = std::clamp(profile.bloom_threshold(), 0.0f, 16.0f);
 		result.transitionSeconds = std::clamp(profile.transition_seconds(), 0.0f, 30.0f);
 
+		result.windDirectionDegrees = WrapDegrees360(profile.wind_direction());
+		result.windSpeed = std::clamp(profile.wind_speed(), 0.0f, 30.0f);
+		result.windGustiness = std::clamp(profile.wind_gustiness(), 0.0f, 1.0f);
+		result.fogNoiseAmount = std::clamp(profile.fog_noise_amount(), 0.0f, 1.0f);
+		result.fogNoiseSize = std::clamp(profile.fog_noise_size(), 5.0f, 500.0f);
+
 		return result;
 	}
 

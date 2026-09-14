@@ -50,6 +50,8 @@ namespace mmo
 
 		void DrawFixedValues(proto::EnvironmentProfile& entry);
 
+		void DrawWind(proto::EnvironmentProfile& entry);
+
 		void DrawReferences(const proto::EnvironmentProfile& entry);
 
 	public:
