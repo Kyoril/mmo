@@ -12,7 +12,7 @@ namespace mmo
 	struct AtmosphereParameters
 	{
 		/// @brief Extinction per metre at BaseHeight.
-		float density = 0.004f;
+		float density = 0.0015f;
 
 		/// @brief Exponential falloff of the density per metre of height above BaseHeight.
 		float heightFalloff = 0.05f;

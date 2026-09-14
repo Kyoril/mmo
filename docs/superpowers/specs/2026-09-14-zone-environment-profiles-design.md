@@ -67,7 +67,7 @@ message EnvironmentProfile
 	optional ColorCurveData sun_scatter = 10;  // rgb shaft tint, a shaft multiplier
 
 	// Fixed values.
-	optional float fog_density = 11 [default = 0.004];
+	optional float fog_density = 11 [default = 0.0015];
 	optional float fog_height_falloff = 12 [default = 0.05];
 	optional float fog_base_height = 13 [default = -10];
 	optional float fog_anisotropy = 14 [default = 0.7];

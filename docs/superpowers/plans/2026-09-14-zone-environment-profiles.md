@@ -22,7 +22,7 @@ Spec: [docs/superpowers/specs/2026-09-14-zone-environment-profiles-design.md](..
 - **Re-run CMake configure after adding files:** `scene_graph`, `proto_data`, `client_data` and the test suites glob their directories, so new files are only picked up after `cmake -S . -B build`.
 - **Protobuf descriptors:** no executable may link both `proto_data` and `client_data` (identical `.proto` file names collide in the protobuf descriptor pool). Tests that need generated types use `proto_client` only, via `client_data`.
 - Removed cvars: `gxFogDensity`, `gxFogHeightFalloff`, `gxFogBaseHeight`, `gxFogAnisotropy`, `gxShaftStrength`, `gxBloomIntensity`, `gxBloomThreshold`. `gxExposure` stays as the player Brightness multiplier (Options slider 0.5–2.0, default 1.0).
-- Profile defaults: fog_density 0.004, fog_height_falloff 0.05, fog_base_height -10, fog_anisotropy 0.7, shaft_strength 1.25, exposure 1, bloom_intensity 0.08, bloom_threshold 0.8, transition_seconds 3.
+- Profile defaults: fog_density 0.0015, fog_height_falloff 0.05, fog_base_height -10, fog_anisotropy 0.7, shaft_strength 1.25, exposure 1, bloom_intensity 0.08, bloom_threshold 0.8, transition_seconds 3.
 
 ## Build and test commands
 
@@ -249,7 +249,7 @@ message EnvironmentProfile
 	optional ColorCurveData sun_scatter = 10;  // rgb shaft tint, a shaft multiplier
 
 	// Fixed values.
-	optional float fog_density = 11 [default = 0.004];
+	optional float fog_density = 11 [default = 0.0015];
 	optional float fog_height_falloff = 12 [default = 0.05];
 	optional float fog_base_height = 13 [default = -10];
 	optional float fog_anisotropy = 14 [default = 0.7];

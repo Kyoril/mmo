@@ -309,4 +309,5 @@ These refine the approved design after reading the code; the plan
    dawn 1.5, noon 1.0, dusk 1.3, after dusk 1.15; `gxShaftStrength` 1.0 → 1.25 because scattered
    light scales with density and the shafts should stay readable in the thinner fog (2.0 was
    tried and drove the shaft core to pure white). SunScatter fallback keys gained saturated
-   sunrise/sunset keys (0.23 / 0.77) so low-sun shafts read warm instead of grey-white.
+   sunrise/sunset keys (0.23 / 0.77) so low-sun shafts read warm instead of grey-white. The
+   built-in default was lowered again, 0.004 → 0.0015, on 2026-09-14 (still too foggy in game).

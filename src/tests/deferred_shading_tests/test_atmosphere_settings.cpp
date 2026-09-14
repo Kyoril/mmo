@@ -9,7 +9,7 @@ using namespace mmo;
 TEST_CASE("AtmosphereParameters defaults match the design spec", "[atmosphere]")
 {
 	const AtmosphereParameters parameters;
-	REQUIRE(parameters.density == Approx(0.004f));
+	REQUIRE(parameters.density == Approx(0.0015f));
 	REQUIRE(parameters.heightFalloff == Approx(0.05f));
 	REQUIRE(parameters.baseHeight == Approx(-10.0f));
 	REQUIRE(parameters.anisotropy == Approx(0.7f));
