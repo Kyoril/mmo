@@ -1325,10 +1325,10 @@ namespace mmo
 
 	void WorldState::UpdateEnvironmentTarget(const uint32 zoneId, const Vector3& position)
 	{
-		constexpr float TeleportDistance = 200.0f;
+		constexpr float teleportDistance = 200.0f;
 
 		bool immediate = m_environmentSnapPending;
-		if (m_lastEnvironmentPosition && (position - *m_lastEnvironmentPosition).GetSquaredLength() > TeleportDistance * TeleportDistance)
+		if (m_lastEnvironmentPosition && (position - *m_lastEnvironmentPosition).GetSquaredLength() > teleportDistance * teleportDistance)
 		{
 			// A jump this large within one update is a teleport; fading across it would show the
 			// previous zone's mood at the destination.

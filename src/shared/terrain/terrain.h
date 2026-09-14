@@ -596,6 +596,13 @@ namespace mmo
 			void NotifyCameraPosition(const Vector3& pos);
 
 		private:
+			/// @brief Looks up the navigation area for a specific tile without falling back to 0.
+			/// @param globalTileX The global tile X index.
+			/// @param globalTileY The global tile Y index.
+			/// @param outArea Receives the area id; set to 0 up front and only updated on success.
+			/// @return False if the page owning the tile is null or not prepared yet, true otherwise.
+			[[nodiscard]] bool TryGetAreaForTile(uint32 globalTileX, uint32 globalTileY, uint32 &outArea) const;
+
 			/// @brief Updates tile coverage information in a specified region.
 			/// @param fromX The starting X coordinate.
 			/// @param fromZ The starting Z coordinate.
