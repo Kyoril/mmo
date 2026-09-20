@@ -857,19 +857,13 @@ namespace mmo
 			<< "\treturn saturate((x*(a*x+b))/(x*(c*x+d)+e));\n"
 			<< "}\n\n";
 
-		// Exact inverse of ACESFilm followed by gamma. Unlit forward materials author display-referred
-		// colour; inside DeferredRenderer's forward pass they convert it to the linear value the
-		// TonemapPass will map back onto that same display colour. That pass multiplies by its exposure
-		// before ACES, so the inverse divides by the same exposure (forwardExposure is 1 everywhere
-		// else, so standalone forward rendering is unaffected).
+		// Exact inverse of ACESFilm followed by gamma. The InverseTonemap wrapper that uses it reads the
+		// camera cbuffer, so it is emitted after that buffer below.
 		m_pixelShaderStream
 			<< "float3 InverseACESFilm(float3 y) {\n"
 			<< "\tfloat a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;\n"
 			<< "\tfloat3 qa = y * c - a; float3 qb = y * d - b; float3 qc = y * e;\n"
 			<< "\treturn (-qb - sqrt(max(qb * qb - 4.0 * qa * qc, 0.0))) / (2.0 * qa);\n"
-			<< "}\n\n"
-			<< "float3 InverseTonemap(float3 displayColor) {\n"
-			<< "\treturn InverseACESFilm(pow(clamp(displayColor, 0.0, 0.999), 2.2)) / max(forwardExposure, 1e-4);\n"
 			<< "}\n\n";
 
 		if (type == PixelShaderType::GBuffer)
@@ -944,6 +938,16 @@ namespace mmo
 			<< "\tfloat3 sunScatterColor;\n"
 			<< "\tfloat shaftStrength;\n"
 			<< "};\n\n";
+
+		// Unlit forward materials author display-referred colour; inside DeferredRenderer's forward pass
+		// they convert it to the linear value the TonemapPass will map back onto that same display
+		// colour. That pass multiplies by its exposure before ACES, so the inverse divides by the same
+		// exposure (forwardExposure is 1 outside that pass, so standalone forward rendering keeps its
+		// authored colour). Emitted after the cbuffer because it reads forwardExposure.
+		m_pixelShaderStream
+			<< "float3 InverseTonemap(float3 displayColor) {\n"
+			<< "\treturn InverseACESFilm(pow(clamp(displayColor, 0.0, 0.999), 2.2)) / max(forwardExposure, 1e-4);\n"
+			<< "}\n\n";
 
 		if (type == PixelShaderType::Forward)
 		{
