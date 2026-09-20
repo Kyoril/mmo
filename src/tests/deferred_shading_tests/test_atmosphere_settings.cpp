@@ -11,7 +11,7 @@ TEST_CASE("AtmosphereParameters defaults match the design spec", "[atmosphere]")
 	const AtmosphereParameters parameters;
 	REQUIRE(parameters.density == Approx(0.0015f));
 	REQUIRE(parameters.heightFalloff == Approx(0.05f));
-	REQUIRE(parameters.baseHeight == Approx(-10.0f));
+	REQUIRE(parameters.baseHeight == Approx(0.0f));
 	REQUIRE(parameters.anisotropy == Approx(0.7f));
 	REQUIRE(parameters.shaftStrength == Approx(1.25f));
 }
@@ -59,7 +59,7 @@ TEST_CASE("CombineAtmosphere multiplies base values by the time-of-day curve", "
 	timeOfDay.sunScatterColor[1] = 0.7f;
 	timeOfDay.sunScatterColor[2] = 0.4f;
 
-	const AtmosphereConstants constants = CombineAtmosphere(parameters, timeOfDay, true, 0.0f);
+	const AtmosphereConstants constants = CombineAtmosphere(parameters, timeOfDay, true);
 	REQUIRE(constants.density == Approx(0.05f));
 	REQUIRE(constants.shaftStrength == Approx(1.0f));
 	REQUIRE(constants.heightFalloff == Approx(parameters.heightFalloff));
@@ -72,7 +72,7 @@ TEST_CASE("CombineAtmosphere multiplies base values by the time-of-day curve", "
 
 TEST_CASE("CombineAtmosphere zeroes density when fog is disabled", "[atmosphere]")
 {
-	const AtmosphereConstants constants = CombineAtmosphere(AtmosphereParameters(), AtmosphereTimeOfDay(), false, 0.0f);
+	const AtmosphereConstants constants = CombineAtmosphere(AtmosphereParameters(), AtmosphereTimeOfDay(), false);
 	REQUIRE(constants.density == Approx(0.0f));
 }
 
@@ -84,21 +84,20 @@ TEST_CASE("CombineAtmosphere never lets a curve overshoot make values negative",
 	timeOfDay.fogTint[1] = -0.1f;
 	timeOfDay.sunScatterColor[2] = -0.3f;
 
-	const AtmosphereConstants constants = CombineAtmosphere(AtmosphereParameters(), timeOfDay, true, 0.0f);
+	const AtmosphereConstants constants = CombineAtmosphere(AtmosphereParameters(), timeOfDay, true);
 	REQUIRE(constants.density == Approx(0.0f));
 	REQUIRE(constants.shaftStrength == Approx(0.0f));
 	REQUIRE(constants.fogTint[1] == Approx(0.0f));
 	REQUIRE(constants.sunScatterColor[2] == Approx(0.0f));
 }
 
-TEST_CASE("CombineAtmosphere places the fog base relative to the reference height", "[atmosphere]")
+TEST_CASE("CombineAtmosphere keeps the fog base at its authored world height", "[atmosphere]")
 {
+	// The base is an absolute world Y, so a fog bank stays put: flying up leaves it below you.
 	AtmosphereParameters parameters;
-	parameters.baseHeight = -10.0f;
+	parameters.baseHeight = 240.0f;
+	REQUIRE(CombineAtmosphere(parameters, AtmosphereTimeOfDay(), true).baseHeight == Approx(240.0f));
 
-	const AtmosphereConstants low = CombineAtmosphere(parameters, AtmosphereTimeOfDay(), true, 250.0f);
-	REQUIRE(low.baseHeight == Approx(240.0f));
-
-	const AtmosphereConstants high = CombineAtmosphere(parameters, AtmosphereTimeOfDay(), true, -80.0f);
-	REQUIRE(high.baseHeight == Approx(-90.0f));
+	parameters.baseHeight = -90.0f;
+	REQUIRE(CombineAtmosphere(parameters, AtmosphereTimeOfDay(), true).baseHeight == Approx(-90.0f));
 }

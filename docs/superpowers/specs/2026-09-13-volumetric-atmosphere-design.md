@@ -294,7 +294,8 @@ These refine the approved design after reading the code; the plan
    already multiplies the sun term by about 15.
 9. **Density exponent clamp.** Fog density is `Density · exp(min(−Falloff·(y − BaseHeight), 12))`
    so rays reaching far below the base height cannot overflow half/single floats.
-10. Camera-relative fog base (in-game verification, 2026-09-13): absolute base height buried the
+10. Camera-relative fog base (in-game verification, 2026-09-13; **reverted 2026-09-20**, see the
+   froxel spec's note on the absolute base): absolute base height buried the
    test map (terrain far below Y = 0) in maximum-density fog. `gxFogBaseHeight` is now an offset
    from the camera height (default −10 m), density default 0.01, and the fallback curves gained
    pre-dawn/after-dusk keys so nights are dark. No shader change: `Scene::RefreshCameraBuffer`

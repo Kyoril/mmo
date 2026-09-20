@@ -58,8 +58,8 @@ Depth slices are spaced exponentially from 0.5 m, so cells near the camera are t
 ## Fog model
 
 **Density:**
-- Density `σ(y) = density · densityMultiplier · exp(min(−fog_height_falloff · (y − base), 3))`, with `base = reference height + fog_base_height`.
-- The reference height is the controlled player's height in the client and the camera pivot in the editor.
+- Density `σ(y) = density · densityMultiplier · exp(min(−fog_height_falloff · (y − base), 3))`, with `base = fog_base_height`.
+- `fog_base_height` is an absolute world Y, so a fog bank stays where it was authored: climb above it and it is below you. A zone whose terrain sits far from Y = 0 must author its own base, or it gets the saturated density (about 20×) that applies below the base.
 - Inside the grid, σ is multiplied by `max(0, 1 + fog_noise_amount · (2n − 1))`, where n samples a 64³ tiling noise volume (`fog_noise.cpp`) at `worldPos / fog_noise_size − windOffset`.
 - That factor averages 1, so the smooth fog beyond the grid matches the grid's brightness.
 

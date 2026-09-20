@@ -369,20 +369,6 @@ namespace mmo
 		/// @brief Gets the time-of-day fog values.
 		[[nodiscard]] const AtmosphereTimeOfDay& GetAtmosphereTimeOfDay() const { return m_atmosphereTimeOfDay; }
 
-		/// @brief Sets the world Y that the fog base height is measured from, overriding the
-		///        camera's own derived Y. The client sets this to the controlled player's height
-		///        each frame so fog density at a fixed ground point stays stable as the orbit
-		///        camera zooms or pitches; the editor sets it to the camera pivot for the same
-		///        reason. Cleared automatically only via ClearAtmosphereReferenceHeight.
-		/// @param height World Y to use as the fog reference height.
-		void SetAtmosphereReferenceHeight(const float height) { m_atmosphereReferenceHeight = height; }
-
-		/// @brief Clears the fog reference height override, falling back to the camera's derived Y.
-		void ClearAtmosphereReferenceHeight() { m_atmosphereReferenceHeight.reset(); }
-
-		/// @brief Gets the fog reference height override, if one was set.
-		[[nodiscard]] std::optional<float> GetAtmosphereReferenceHeight() const { return m_atmosphereReferenceHeight; }
-
 		/// @brief Sets the wind of this frame. Written by the host's WindSimulation every update.
 		void SetWind(const WindState& wind) { m_wind = wind; }
 
@@ -778,9 +764,6 @@ namespace mmo
 
 		/// @brief Wind of the current frame; see SetWind.
 		WindState m_wind;
-
-		/// @brief World Y override for the fog base height; see SetAtmosphereReferenceHeight.
-		std::optional<float> m_atmosphereReferenceHeight;
 
 		PixelShaderType m_pixelShaderType = PixelShaderType::Forward;
 

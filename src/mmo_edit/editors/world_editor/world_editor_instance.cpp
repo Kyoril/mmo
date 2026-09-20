@@ -521,10 +521,6 @@ namespace mmo
 			m_skyComponent->SetPosition(m_camera->GetDerivedPosition());
 			m_skyComponent->Update(deltaTimeSeconds, 0);
 			UpdateEnvironment(deltaTimeSeconds);
-
-			// Anchor the fog reference height to the orbit pivot rather than the camera itself, so
-			// fog density at a fixed ground point stays stable as the camera zooms or pitches.
-			m_scene.SetAtmosphereReferenceHeight(m_cameraAnchor->GetDerivedPosition().y);
 		}
 
 		m_cameraAnchor->Translate(m_cameraVelocity * deltaTimeSeconds, TransformSpace::Local);

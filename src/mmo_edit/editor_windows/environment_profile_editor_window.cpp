@@ -255,14 +255,14 @@ namespace mmo
 			}
 
 			float baseHeight = entry.fog_base_height();
-			if (ImGui::DragFloat("Fog Base Offset", &baseHeight, 0.5f, -10000.0f, 10000.0f, "%.1f"))
+			if (ImGui::DragFloat("Fog Base Height", &baseHeight, 0.5f, -10000.0f, 10000.0f, "%.1f"))
 			{
 				entry.set_fog_base_height(std::clamp(baseHeight, -10000.0f, 10000.0f));
 				changed = true;
 			}
 			if (ImGui::IsItemHovered())
 			{
-				ImGui::SetTooltip("Fog base height relative to the player (client) / camera pivot (editor). Negative = below it.");
+				ImGui::SetTooltip("World height at which the fog reaches its full density. It thins above this height, so flying above a low base leaves the fog below you.");
 			}
 
 			float anisotropy = entry.fog_anisotropy();

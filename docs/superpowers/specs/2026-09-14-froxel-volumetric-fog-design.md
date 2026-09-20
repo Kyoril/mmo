@@ -315,3 +315,16 @@ Implemented 2026-09-14 on `feature/volumetric-atmosphere`, commits 52ed80a5..332
    - **Wind drift:** subtle at noon with the default noise amount of 0.5.
 5. **Performance.** Not measured: the Debug perf overlay's GPU rows read 0.0. The budget (≤ 2 ms High, ≤ 0.7 ms Low) remains unverified.
 6. **VRAM.** The Ultra preset uses about 400 MB at 4K (four RGBA16F volumes of 480×270×96). High at 1080p uses about 30 MB.
+
+## Follow-up: absolute fog base height (2026-09-20)
+
+`fog_base_height` is a world Y again, and `Scene::SetAtmosphereReferenceHeight` is gone. The base no
+longer follows the player, so a zone can hold a fog bank at a fixed height and you can climb above it
+- the look that motivated the change (dense, uniform sea fog with the bank below flying height).
+
+The 2026-09-13 revert to a camera-relative base happened because an absolute base buried a test map
+whose terrain sat far below Y = 0 in maximum-density fog. Two things make the absolute base safe now:
+the density exponent clamp is 3 rather than 12, so fog below the base saturates at about 20x instead
+of turning opaque, and fog is authored per zone, so a zone whose terrain sits far from Y = 0 sets its
+own base. The default base is 0 (sea level); on the Demo world, whose ground sits near Y = 5, that is
+within a few metres of the old effective base.

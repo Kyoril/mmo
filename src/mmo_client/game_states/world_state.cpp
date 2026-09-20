@@ -1024,13 +1024,6 @@ namespace mmo
 		if (m_playerController->GetRootNode())
 		{
 			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
-
-			// Anchor the fog reference height to the player rather than the orbit camera, so fog
-			// density at a fixed ground point stays stable as the camera zooms or pitches.
-			if (m_scene)
-			{
-				m_scene->SetAtmosphereReferenceHeight(m_playerController->GetRootNode()->GetPosition().y);
-			}
 		}
 
 		// Update audio component to simulate 3d audio correctly from the player position
