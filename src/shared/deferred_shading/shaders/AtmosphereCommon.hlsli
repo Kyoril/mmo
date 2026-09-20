@@ -36,7 +36,7 @@ cbuffer CameraBuffer : register(b1)
     float3 SunColor;
     float ForwardOutputLinear;
     float3 CameraAmbientColor;
-    float _CameraPadding1;
+    float ForwardExposure;          // exposure the TonemapPass applies; 1 outside the forward pass
     float3 SunScatterColor;
     float ShaftStrength;
 };

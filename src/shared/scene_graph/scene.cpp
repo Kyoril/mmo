@@ -58,7 +58,7 @@ namespace mmo
 		Vector3 sunColor;
 		float forwardOutputLinear;	// 1 = forward materials skip tone mapping (DeferredRenderer's forward pass)
 		Vector3 ambientColor;
-		float _forwardPad1;
+		float forwardExposure;		// Exposure the TonemapPass will apply; 1 outside the deferred forward pass
 
 		// Sun light inside the fog.
 		Vector3 sunScatterColor;
@@ -1184,7 +1184,11 @@ namespace mmo
 
 		buffer.ambientColor   = m_ambientColor;
 		buffer.forwardOutputLinear = m_forwardOutputLinear ? 1.0f : 0.0f;
-		buffer._forwardPad1   = 0.0f;
+
+		// Unlit forward materials undo the tone map to reach the linear value the TonemapPass maps back
+		// onto their authored display colour, and scene-colour samples are tone mapped the same way.
+		// Both round trips need the exposure that pass will apply. Outside it, nothing scales the frame.
+		buffer.forwardExposure = m_forwardOutputLinear ? std::max(m_forwardExposure, 1e-4f) : 1.0f;
 
 		buffer.sunScatterColor = Vector3(atmosphere.sunScatterColor[0], atmosphere.sunScatterColor[1], atmosphere.sunScatterColor[2]);
 		buffer.shaftStrength = atmosphere.shaftStrength;

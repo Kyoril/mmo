@@ -435,6 +435,15 @@ namespace mmo
 		/// @brief Whether forward materials currently write linear HDR.
 		[[nodiscard]] bool IsForwardOutputLinear() const { return m_forwardOutputLinear; }
 
+		/// @brief Tells forward materials which exposure the tone mapping pass will apply.
+		/// @remark Only meaningful together with SetForwardOutputLinear: unlit materials and scene-colour
+		///         samples convert between display-referred and linear HDR, and that conversion is only
+		///         the inverse of the TonemapPass when it uses the same exposure.
+		void SetForwardExposure(const float exposure) { m_forwardExposure = exposure; }
+
+		/// @brief The exposure forward materials assume. See SetForwardExposure.
+		[[nodiscard]] float GetForwardExposure() const { return m_forwardExposure; }
+
 		/// @brief When set, Render() reuses the render queue built by a previous pass this frame
 		/// instead of rebuilding it (running FindVisibleObjects / occlusion culling again). Used by
 		/// the deferred renderer's depth pre-pass: the pre-pass builds the queue once and the
@@ -783,6 +792,9 @@ namespace mmo
 
 		/// @brief See SetForwardOutputLinear.
 		bool m_forwardOutputLinear = false;
+
+		/// @brief See SetForwardExposure.
+		float m_forwardExposure = 1.0f;
 		bool m_reuseRenderQueue = false;
 		bool m_depthPrepass = false;
 

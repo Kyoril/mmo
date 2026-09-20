@@ -491,8 +491,10 @@ namespace mmo
         }
         scene.SetForwardTransparentOnly(true);
         // The forward pass renders into the linear HDR scene, so materials must leave tone mapping
-        // to the TonemapPass below.
+        // to the TonemapPass below. Materials that convert between display colour and linear HDR
+        // (unlit effects, scene-colour samples) need that pass's exposure to invert it correctly.
         scene.SetForwardOutputLinear(true);
+        scene.SetForwardExposure(m_tonemapPass->GetSettings().exposure);
         scene.Render(camera, PixelShaderType::Forward);
         scene.SetForwardOutputLinear(false);
         scene.SetForwardTransparentOnly(false);

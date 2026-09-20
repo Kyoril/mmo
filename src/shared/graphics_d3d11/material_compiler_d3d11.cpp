@@ -859,7 +859,9 @@ namespace mmo
 
 		// Exact inverse of ACESFilm followed by gamma. Unlit forward materials author display-referred
 		// colour; inside DeferredRenderer's forward pass they convert it to the linear value the
-		// TonemapPass will map back onto that same display colour.
+		// TonemapPass will map back onto that same display colour. That pass multiplies by its exposure
+		// before ACES, so the inverse divides by the same exposure (forwardExposure is 1 everywhere
+		// else, so standalone forward rendering is unaffected).
 		m_pixelShaderStream
 			<< "float3 InverseACESFilm(float3 y) {\n"
 			<< "\tfloat a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;\n"
@@ -867,7 +869,7 @@ namespace mmo
 			<< "\treturn (-qb - sqrt(max(qb * qb - 4.0 * qa * qc, 0.0))) / (2.0 * qa);\n"
 			<< "}\n\n"
 			<< "float3 InverseTonemap(float3 displayColor) {\n"
-			<< "\treturn InverseACESFilm(pow(clamp(displayColor, 0.0, 0.999), 2.2));\n"
+			<< "\treturn InverseACESFilm(pow(clamp(displayColor, 0.0, 0.999), 2.2)) / max(forwardExposure, 1e-4);\n"
 			<< "}\n\n";
 
 		if (type == PixelShaderType::GBuffer)
@@ -938,7 +940,7 @@ namespace mmo
 			<< "\tfloat3 sunColor;\n"
 			<< "\tfloat forwardOutputLinear;	// 1 inside DeferredRenderer's forward pass: output linear HDR\n"
 			<< "\tfloat3 ambientColor;\n"
-			<< "\tfloat _forwardPad1;\n"
+			<< "\tfloat forwardExposure;\t// Exposure the TonemapPass applies; 1 outside its forward pass\n"
 			<< "\tfloat3 sunScatterColor;\n"
 			<< "\tfloat shaftStrength;\n"
 			<< "};\n\n";
@@ -1150,7 +1152,7 @@ namespace mmo
 				<< "\t// FXC compiles without IEEE strictness, which folds isnan/isinf to a constant false, so\n"
 				<< "\t// the exponent bits are tested directly: NaN and Inf both set all exponent bits (0x7f800000).\n"
 				<< "\tsceneColor = (any((asuint(sceneColor) & 0x7fffffffu) >= 0x7f800000u)) ? float3(0.0, 0.0, 0.0) : min(sceneColor, 1e4);\n"
-				<< "\treturn forwardOutputLinear > 0.5 ? pow(ACESFilm(max(sceneColor, 0.0)), (1.0 / 2.2).xxx) : sceneColor;\n"
+				<< "\treturn forwardOutputLinear > 0.5 ? pow(ACESFilm(max(sceneColor, 0.0) * max(forwardExposure, 1e-4)), (1.0 / 2.2).xxx) : sceneColor;\n"
 				<< "}\n\n";
 		}
 

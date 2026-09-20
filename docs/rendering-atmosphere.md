@@ -27,6 +27,12 @@ DeferredRenderer (editor previews, model frames, the minimap baker) keep tone ma
 because they never set `forwardOutputLinear`. Material graphs sampling Scene Color / SSR receive a
 display-referred sample through the generated `LoadSceneColor` helper.
 
+Both conversions - `InverseTonemap` for unlit forward materials and `LoadSceneColor` for scene-colour
+samples - are only the inverse of the TonemapPass when they use the same exposure, so the scene
+publishes it as `forwardExposure` in the camera constants (`Scene::SetForwardExposure`, set by
+DeferredRenderer around its forward pass; 1 everywhere else). Changing the generated shader code
+requires **Tools > Rebuild All Materials** in the editor.
+
 ## Froxel grid
 
 A camera-aligned 3D grid covers the screen and the first `gxVolumetricFogRange` metres of view depth.
