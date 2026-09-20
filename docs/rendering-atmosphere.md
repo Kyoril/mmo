@@ -83,7 +83,7 @@ editor's Environment Profile Editor):
 **Profile resolution:** a zone uses its own profile, else its parent's, else the map's default profile, else the built-in Default. `EnvironmentController` fades between profiles.
 
 **Wind:**
-- `WindSimulation` adds gusts (speed ±60% · gustiness, direction ±25° · gustiness) and integrates the noise offset in double precision.
+- `WindSimulation` adds gusts (speed ±60% · gustiness, direction ±25° · gustiness) and integrates the noise offset in double precision, in noise tiles rather than metres, so a profile blend that changes the noise size never jumps the pattern. The noise size itself steps at the midpoint of a blend instead of interpolating.
 - `Scene::SetWind` hands it to the fog pass.
 - The `WindDirection` global shader parameter (xyz direction, w speed) is published for future foliage and particle use.
 

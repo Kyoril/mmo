@@ -109,7 +109,10 @@ namespace mmo
 		state.windSpeed = lerpFloat(a.windSpeed, b.windSpeed, t);
 		state.windGustiness = lerpFloat(a.windGustiness, b.windGustiness, t);
 		state.fogNoiseAmount = lerpFloat(a.fogNoiseAmount, b.fogNoiseAmount, t);
-		state.fogNoiseSize = lerpFloat(a.fogNoiseSize, b.fogNoiseSize, t);
+		// The fog shader samples the noise at worldPos / fogNoiseSize, so a size that moves every frame
+		// rescales the lookup and sweeps the pattern across the world - many tiles per second far from
+		// the origin. The size therefore steps once, at the midpoint of the blend.
+		state.fogNoiseSize = t < 0.5f ? a.fogNoiseSize : b.fogNoiseSize;
 
 		return state;
 	}

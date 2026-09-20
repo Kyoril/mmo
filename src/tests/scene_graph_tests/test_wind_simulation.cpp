@@ -136,3 +136,30 @@ TEST_CASE("Reset clears the accumulated offset", "[wind]")
 	CHECK(simulation.GetState().noiseOffsetX == Approx(0.0f));
 	CHECK(simulation.GetState().noiseOffsetZ == Approx(0.0f));
 }
+
+TEST_CASE("Changing the noise size does not jump the noise offset", "[wind]")
+{
+	WindSimulation simulation;
+	constexpr float dt = 1.0f / 60.0f;
+
+	EnvironmentState wide = makeWind(90.0f, 3.13f, 0.0f);
+	wide.fogNoiseSize = 60.0f;
+
+	// An hour of play drifts several kilometres. Dividing that distance by the noise size would
+	// sweep the pattern across dozens of tiles the moment a zone blend changes the size.
+	for (int i = 0; i < 216000; ++i)
+	{
+		simulation.Update(dt, wide);
+	}
+
+	const float beforeX = simulation.GetState().noiseOffsetX;
+	const float beforeZ = simulation.GetState().noiseOffsetZ;
+
+	EnvironmentState narrow = wide;
+	narrow.fogNoiseSize = 40.0f;
+	simulation.Update(dt, narrow);
+
+	const float maxStep = 3.13f * dt / 40.0f + 1e-4f;
+	CHECK(std::abs(wrappedDelta(beforeX, simulation.GetState().noiseOffsetX)) <= maxStep);
+	CHECK(std::abs(wrappedDelta(beforeZ, simulation.GetState().noiseOffsetZ)) <= maxStep);
+}

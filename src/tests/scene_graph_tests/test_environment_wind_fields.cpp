@@ -111,3 +111,19 @@ TEST_CASE("Opposite winds fall back to the incoming direction", "[wind]")
 	const EnvironmentState half = LerpEnvironment(a, b, 0.5f);
 	CHECK(half.windDirection.z == Approx(-1.0f));
 }
+
+TEST_CASE("Fog noise size snaps to the dominant profile", "[wind]")
+{
+	EnvironmentState a;
+	EnvironmentState b;
+	a.fogNoiseSize = 60.0f;
+	b.fogNoiseSize = 40.0f;
+
+	// The shader samples the noise at worldPos / noiseSize, so a size that moves every frame
+	// rescales the lookup and sweeps the pattern across the world - far from the origin by many
+	// tiles per second. The size therefore steps once, at the midpoint of the blend.
+	CHECK(LerpEnvironment(a, b, 0.0f).fogNoiseSize == Approx(60.0f));
+	CHECK(LerpEnvironment(a, b, 0.25f).fogNoiseSize == Approx(60.0f));
+	CHECK(LerpEnvironment(a, b, 0.75f).fogNoiseSize == Approx(40.0f));
+	CHECK(LerpEnvironment(a, b, 1.0f).fogNoiseSize == Approx(40.0f));
+}

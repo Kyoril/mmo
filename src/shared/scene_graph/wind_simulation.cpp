@@ -60,24 +60,30 @@ namespace mmo
 		const Vector3& base = environment.windDirection;
 		const Vector3 direction(base.x * cosAngle + base.z * sinAngle, 0.0f, base.z * cosAngle - base.x * sinAngle);
 
-		m_offsetX += static_cast<double>(direction.x) * speed * deltaSeconds;
-		m_offsetZ += static_cast<double>(direction.z) * speed * deltaSeconds;
-
 		const float noiseSize = std::max(environment.fogNoiseSize, 5.0f);
+
+		// Accumulate in noise tiles, not in metres: dividing the total distance travelled by the
+		// current tile size would move the pattern by (distance / sizeA - distance / sizeB) tiles the
+		// moment a zone blend changes the size - dozens of tiles after an hour of play. Wrapping the
+		// accumulator every frame also keeps full precision in a long session.
+		m_offsetTilesX += static_cast<double>(direction.x) * speed * deltaSeconds / noiseSize;
+		m_offsetTilesZ += static_cast<double>(direction.z) * speed * deltaSeconds / noiseSize;
+		m_offsetTilesX -= std::floor(m_offsetTilesX);
+		m_offsetTilesZ -= std::floor(m_offsetTilesZ);
 
 		m_state.direction = direction;
 		m_state.speed = speed;
 		m_state.noiseSize = noiseSize;
 		m_state.noiseAmount = std::clamp(environment.fogNoiseAmount, 0.0f, 1.0f);
-		m_state.noiseOffsetX = wrap01(m_offsetX / noiseSize);
-		m_state.noiseOffsetZ = wrap01(m_offsetZ / noiseSize);
+		m_state.noiseOffsetX = wrap01(m_offsetTilesX);
+		m_state.noiseOffsetZ = wrap01(m_offsetTilesZ);
 	}
 
 	void WindSimulation::Reset()
 	{
 		m_time = 0.0;
-		m_offsetX = 0.0;
-		m_offsetZ = 0.0;
+		m_offsetTilesX = 0.0;
+		m_offsetTilesZ = 0.0;
 		m_state.noiseOffsetX = 0.0f;
 		m_state.noiseOffsetZ = 0.0f;
 	}

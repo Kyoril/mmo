@@ -218,9 +218,9 @@ public:
 - **Speed:** `speed · (1 + gustiness · g(t))`.
 - **Direction:** rotated by `±25° · gustiness · g(t + 17.3)`.
 - **Offset:**
-  - It accumulates in `double` metres as `∫ direction·speed dt`.
-  - The published offset per axis is `x − floor(x)` with `x = offsetMeters / noiseSize` (always in [0, 1), also for negative offsets). It is continuous when direction or speed changes and seamless because the noise tiles at 1.0.
-  - Noise-size blends during a fade may make the pattern swim briefly; that is accepted.
+  - It accumulates in `double` noise tiles as `∫ direction·speed / noiseSize dt`, wrapped to [0, 1) every frame (`x − floor(x)`, also correct for negative offsets). It is continuous when direction, speed or noise size changes, and seamless because the noise tiles at 1.0.
+  - Accumulating metres and dividing by the current noise size instead would move the pattern by `distance/sizeA − distance/sizeB` tiles whenever a blend changed the size — dozens of tiles after an hour of play.
+  - `fog_noise_size` therefore steps once, at the midpoint of a profile blend, instead of being interpolated: the shader samples at `worldPos / noiseSize`, so a continuously changing size rescales the lookup and sweeps the pattern far from the world origin.
 - **Scene:** the host (client `WorldState`, editor `WorldEditorInstance`) owns a `WindSimulation` next to its `EnvironmentController`. It updates it every frame after the environment and calls the new `Scene::SetWind(const WindState&)`. `Scene::GetWind()` is read by the fog pass.
 - **Global shader parameters:** `WindDirection` (xyz direction, w = speed) is published for later foliage and particle use.
 - **Editor with the sky paused:** the world editor advances wind with real frame time even when the sky clock is paused.

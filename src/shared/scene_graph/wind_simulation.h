@@ -12,8 +12,9 @@ namespace mmo
 	[[nodiscard]] float WindGustNoise(double time);
 
 	/// @brief Turns a zone's wind settings into gusting wind and a scrolling fog noise offset.
-	/// @remark Pure logic: no graphics. Main thread only. Time and offsets accumulate in doubles and only
-	///         wrapped values reach float math, so long sessions keep full precision.
+	/// @remark Pure logic: no graphics. Main thread only. Time accumulates in a double, and the noise
+	///         offset accumulates in wrapped noise tiles, so long sessions keep full precision and a
+	///         changing fog noise size never jumps the pattern.
 	class WindSimulation final
 	{
 	public:
@@ -37,8 +38,9 @@ namespace mmo
 
 	private:
 		double m_time = 0.0;
-		double m_offsetX = 0.0;
-		double m_offsetZ = 0.0;
+		/// Scroll offset in noise tiles, kept wrapped to [0, 1).
+		double m_offsetTilesX = 0.0;
+		double m_offsetTilesZ = 0.0;
 		WindState m_state;
 	};
 
