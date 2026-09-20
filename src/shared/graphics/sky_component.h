@@ -1,7 +1,7 @@
 #pragma once
 
 #include "base/typedefs.h"
-#include "graphics/color_curve.h"
+#include "scene_graph/environment_state.h"
 #include "game/game_time_component.h"
 #include "scene_graph/light.h"
 #include "scene_graph/scene.h"
@@ -34,8 +34,8 @@ namespace mmo
         ~SkyComponent();
 
         /**
-         * @brief Updates the sky and lighting based on current time.
-         * 
+         * @brief Advances the clock and rotates the clouds. Lighting is refreshed by ApplyEnvironment.
+         *
          * @param deltaSeconds The time passed since the last update
          * @param timestamp Current game timestamp
          */
@@ -43,10 +43,20 @@ namespace mmo
 
         /**
          * @brief Sets the position of the sky dome to follow the camera/player.
-         * 
+         *
          * @param position The new position for the sky dome
          */
         void SetPosition(const Vector3& position);
+
+        /**
+         * @brief Applies the lighting and mood for this frame and refreshes the lights.
+         *
+         * Called once per frame after Update, with the state from an EnvironmentController.
+         * The sun/moon direction and blend still come from this component's clock.
+         *
+         * @param state The blended environment state.
+         */
+        void ApplyEnvironment(const EnvironmentState& state);
 
         /**
          * @brief Gets the current normalized time of day (0.0-1.0).
@@ -138,11 +148,6 @@ namespace mmo
 
     private:
         /**
-         * @brief Loads the color curves from asset files.
-         */
-        void LoadColorCurves();
-
-        /**
          * @brief Updates all lighting based on the current time.
          * 
          * @param normalizedTime Normalized time of day (0.0-1.0)
@@ -161,10 +166,7 @@ namespace mmo
         Light* m_sunLight;                             ///< Sun directional light
         SceneNode* m_sunLightNode;                     ///< Sun light scene node
 
-        std::unique_ptr<ColorCurve> m_horizonColorCurve; ///< Horizon color curve over time
-        std::unique_ptr<ColorCurve> m_zenithColorCurve;  ///< Zenith color curve over time
-        std::unique_ptr<ColorCurve> m_ambientColorCurve;  ///< Ambient color curve over time
-        std::unique_ptr<ColorCurve> m_cloudColorCurve;  ///< Cloud color curve over time
+        EnvironmentState m_environment;                ///< Last applied environment state
 
         // Configuration values
         const float m_arcMin = -Pi / 2.0f;             ///< Sunrise/sunset horizon

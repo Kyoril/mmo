@@ -7,10 +7,14 @@
 #include "ssao_pass.h"
 #include "contact_shadow_pass.h"
 #include "post_process_pass.h"
+#include "tonemap_pass.h"
+#include "volumetric_fog_pass.h"
+#include "bloom_pass.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
 #include "graphics/material.h"
+#include "graphics/sampler_state.h"
 #include "graphics/structured_buffer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/light.h"
@@ -233,6 +237,30 @@ namespace mmo
         /// @brief Enables or disables raw contact shadow debug visualization.
         void SetContactShadowDebugVisualization(bool enabled) { m_contactShadowPass->GetSettings().debugVisualization = enabled; }
 
+        /// @brief Sets the exposure applied before tone mapping. Clamped to [0.1, 8].
+        void SetExposure(float exposure) { m_tonemapPass->GetSettings().SetExposure(exposure); }
+
+        /// @brief Gets the exposure applied before tone mapping.
+        [[nodiscard]] float GetExposure() const { return m_tonemapPass->GetSettings().exposure; }
+
+        /// @brief Applies the volumetric fog quality preset: 0 Off (closed-form fog only), 1 Low ... 4 Ultra.
+        void SetAtmosphereQuality(int level) { m_volumetricFogPass->GetSettings().ApplyQualityLevel(level); }
+
+        /// @brief Sets the view depth the fog volume covers in metres (clamped to [50, 300]).
+        void SetVolumetricFogRange(float range) { m_volumetricFogPass->GetSettings().SetRange(range); }
+
+        /// @brief Sets the fog debug view: 0 off, 1 scattered light, 2 transmittance, 3 density.
+        void SetAtmosphereDebugMode(int mode) { m_volumetricFogPass->GetSettings().SetDebugMode(mode); }
+
+        /// @brief Applies the bloom quality preset: 0 Off, 1 Low, 2 High.
+        void SetBloomQuality(int level) { m_bloomPass->GetSettings().ApplyQualityLevel(level); }
+
+        /// @brief Sets the bloom intensity, clamped to [0, 1].
+        void SetBloomIntensity(float intensity) { m_bloomPass->GetSettings().SetIntensity(intensity); }
+
+        /// @brief Sets the bloom soft threshold (linear brightness), clamped to [0, 16].
+        void SetBloomThreshold(float threshold) { m_bloomPass->GetSettings().SetThreshold(threshold); }
+
         /// @brief Gets the light rendering statistics from the last frame.
         /// @return Reference to the light render statistics.
         const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
@@ -269,6 +297,9 @@ namespace mmo
         /// @remark Callers are responsible only for the cascade-specific fields: the view-projection
         ///         matrices, the split distances, cascadeCount and cascadeBlendFactor.
         void FillShadowBufferCommonSettings(ShadowBuffer& buffer) const;
+
+        /// @brief Binds the cascade comparison sampler at pixel shader slot s1.
+        void BindShadowSampler();
 
         /// @brief Returns the shadow-map resolution to use for a given cascade index. Distant cascades
         ///        (index >= 2) render at half the base resolution (floored at 256) to cut shadow fill,
@@ -322,9 +353,19 @@ namespace mmo
         ///        passes and produces the term the lighting pass multiplies into the sun's shadow.
         std::unique_ptr<ContactShadowPass> m_contactShadowPass;
 
+        /// @brief Froxel volumetric fog and light shafts. Runs after lighting, before the forward pass.
+        std::unique_ptr<VolumetricFogPass> m_volumetricFogPass;
+
+        /// @brief Bloom over the finished linear HDR scene, added by the TonemapPass.
+        std::unique_ptr<BloomPass> m_bloomPass;
+
         /// @brief The screen-space post-process pass. Skipped entirely, and holding no render
         ///        target at all, while the camera is out of water.
         std::unique_ptr<PostProcessPass> m_postProcessPass;
+
+        /// @brief Final pass: bloom composite, exposure, ACES, gamma and dither. Everything before
+        ///        it works in linear HDR.
+        std::unique_ptr<TonemapPass> m_tonemapPass;
 
         /// @brief Underwater state for the current frame. Dry by default.
         UnderwaterState m_underwaterState;
@@ -365,10 +406,9 @@ namespace mmo
         /// @brief Shadow cameras for each cascade.
         std::array<Camera*, NUM_SHADOW_CASCADES> m_shadowCameras{};
 
-#ifdef _WIN32
-		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
-
-#endif
+        /// @brief Cascade comparison sampler (lighting pass s1, fog inject s1). Null on backends
+        ///        without explicit sampler objects.
+        SamplerStatePtr m_shadowSampler;
 
         /// @brief Cascaded shadow camera setup.
         std::shared_ptr<CascadedShadowCameraSetup> m_cascadedShadowSetup = nullptr;
@@ -435,9 +475,9 @@ namespace mmo
 #ifdef _WIN32
         // --- Per-pass GPU timing (only active while the profiler/perf overlay is enabled) ---
         // Timestamp points: 0 = start, 1 = after shadows, 2 = after G-Buffer, 3 = after SSAO,
-        // 4 = after lighting, 5 = after the forward/translucent pass (end). Differences give
-        // per-pass GPU time.
-        static constexpr uint32 GpuTimerPointCount = 7;
+        // 4 = after contact shadows, 5 = after lighting, 6 = after atmosphere, 7 = after forward,
+        // 8 = after bloom, 9 = after tonemap (end). Differences give per-pass GPU time.
+        static constexpr uint32 GpuTimerPointCount = 10;
         // Deep ring so we read results back several frames late and never stall the GPU, and so
         // that all timestamps in a frame have comfortably resolved before we poll them.
         static constexpr uint32 GpuTimerFrameCount = 6;

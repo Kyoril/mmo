@@ -774,14 +774,15 @@ namespace mmo
 
 		// Sample the captured opaque scene color at this pixel, optionally offset in screen pixels
 		// (used for refraction). Uses Load() so no sampler binding is required; the offset is added
-		// in pixel space before the integer cast.
+		// in pixel space before the integer cast. LoadSceneColor converts the sample back to the
+		// display-referred curve material graphs were authored against (see its definition).
 		std::ostringstream outputStream;
-		outputStream << "sceneColorTex.Load(int3((int2)(input.pos.xy";
+		outputStream << "LoadSceneColor((int2)(input.pos.xy";
 		if (screenOffset != IndexNone)
 		{
 			outputStream << " + expr_" << screenOffset << ".xy";
 		}
-		outputStream << "), 0)).rgb";
+		outputStream << "))";
 		outputStream.flush();
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
@@ -856,6 +857,15 @@ namespace mmo
 			<< "\treturn saturate((x*(a*x+b))/(x*(c*x+d)+e));\n"
 			<< "}\n\n";
 
+		// Exact inverse of ACESFilm followed by gamma. The InverseTonemap wrapper that uses it reads the
+		// camera cbuffer, so it is emitted after that buffer below.
+		m_pixelShaderStream
+			<< "float3 InverseACESFilm(float3 y) {\n"
+			<< "\tfloat a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;\n"
+			<< "\tfloat3 qa = y * c - a; float3 qb = y * d - b; float3 qc = y * e;\n"
+			<< "\treturn (-qb - sqrt(max(qb * qb - 4.0 * qa * qc, 0.0))) / (2.0 * qa);\n"
+			<< "}\n\n";
+
 		if (type == PixelShaderType::GBuffer)
 		{
 			m_pixelShaderStream
@@ -909,23 +919,68 @@ namespace mmo
 		m_pixelShaderStream
 			<< "cbuffer CameraParameters : register(b" << bufferRegister++ << ")\n"
 			<< "{\n"
+			// MUST stay field-for-field in sync with PsCameraConstantBuffer in scene.cpp.
 			<< "\tfloat3 cameraPos;	// Camera position in world space\n"
-			<< "\tfloat fogStart;	// Distance of fog start\n"
-			<< "\tfloat fogEnd;		// Distance of fog end\n"
-			<< "\tfloat3 fogColor;	// Fog color\n"
+			<< "\tfloat fogDensity;	// Height fog extinction per metre at fogBaseHeight; 0 = off\n"
+			<< "\tfloat fogHeightFalloff;\n"
+			<< "\tfloat3 fogTint;	// Ambient radiance of the fog\n"
 			<< "\trow_major matrix inverseCameraView;	// Inverse view matrix\n"
 			<< "\tfloat time;		// Time in seconds since game start\n"
-			<< "\tfloat3 _padding;	// Padding for alignment\n"
-			// Forward lighting rows – mirrors PsCameraConstantBuffer rows 7-9.
-			// Populated by Scene::RefreshCameraBuffer from the scene's primary
-			// directional light so translucent materials see real sky lighting.
+			<< "\tfloat fogBaseHeight;\n"
+			<< "\tfloat fogAnisotropy;\n"
+			<< "\tfloat _cameraPadding0;\n"
 			<< "\tfloat3 sunDirection;	// World-space direction toward the sun (normalised)\n"
 			<< "\tfloat sunIntensity;\n"
 			<< "\tfloat3 sunColor;\n"
-			<< "\tfloat _forwardPad0;\n"
+			<< "\tfloat forwardOutputLinear;	// 1 inside DeferredRenderer's forward pass: output linear HDR\n"
 			<< "\tfloat3 ambientColor;\n"
-			<< "\tfloat _forwardPad1;\n"
+			<< "\tfloat forwardExposure;\t// Exposure the TonemapPass applies; 1 outside its forward pass\n"
+			<< "\tfloat3 sunScatterColor;\n"
+			<< "\tfloat shaftStrength;\n"
 			<< "};\n\n";
+
+		// Unlit forward materials author display-referred colour; inside DeferredRenderer's forward pass
+		// they convert it to the linear value the TonemapPass will map back onto that same display
+		// colour. That pass multiplies by its exposure before ACES, so the inverse divides by the same
+		// exposure (forwardExposure is 1 outside that pass, so standalone forward rendering keeps its
+		// authored colour). Emitted after the cbuffer because it reads forwardExposure.
+		m_pixelShaderStream
+			<< "float3 InverseTonemap(float3 displayColor) {\n"
+			<< "\treturn InverseACESFilm(pow(clamp(displayColor, 0.0, 0.999), 2.2)) / max(forwardExposure, 1e-4);\n"
+			<< "}\n\n";
+
+		if (type == PixelShaderType::Forward)
+		{
+			// Height fog, identical to AtmosphereCommon.hlsli (and atmosphere_math.h). Change all three
+			// together. Emitted after the cbuffer because the functions read its fields.
+			m_pixelShaderStream
+				// Fog below the base saturates at e^3 ~= 20x the base density instead of climbing
+				// toward opacity. Mirrored in AtmosphereCommon.hlsli and atmosphere_math.h.
+				<< "static const float FOG_MAX_DENSITY_EXPONENT = 3.0;\n\n"
+				<< "float FogDensityAt(float y) {\n"
+				<< "\treturn fogDensity * exp(min(-fogHeightFalloff * (y - fogBaseHeight), FOG_MAX_DENSITY_EXPONENT));\n"
+				<< "}\n\n"
+				<< "float FogOpticalDepth(float originY, float dirY, float len) {\n"
+				<< "\tfloat sigmaStart = FogDensityAt(originY);\n"
+				<< "\tfloat sigmaEnd = FogDensityAt(originY + dirY * len);\n"
+				<< "\tfloat k = fogHeightFalloff * dirY * len;\n"
+				<< "\tif (abs(k) < 1e-3) { return len * 0.5 * (sigmaStart + sigmaEnd); }\n"
+				<< "\treturn len * (sigmaStart - sigmaEnd) / k;\n"
+				<< "}\n\n"
+				<< "float FogScatterPhase(float cosTheta) {\n"
+				<< "\tfloat g2 = fogAnisotropy * fogAnisotropy;\n"
+				<< "\tfloat hg = (1.0 - g2) / pow(max(1.0 + g2 - 2.0 * fogAnisotropy * cosTheta, 1e-4), 1.5);\n"
+				<< "\treturn lerp(1.0, hg, 0.8);\n"
+				<< "}\n\n"
+				<< "float3 ApplyHeightFog(float3 color, float3 worldPos) {\n"
+				<< "\tfloat3 toPixel = worldPos - cameraPos;\n"
+				<< "\tfloat dist = length(toPixel);\n"
+				<< "\tfloat3 dir = toPixel / max(dist, 1e-4);\n"
+				<< "\tfloat transmittance = exp(-FogOpticalDepth(cameraPos.y, dir.y, dist));\n"
+				<< "\tfloat3 source = fogTint + sunScatterColor * sunColor * sunIntensity * shaftStrength * FogScatterPhase(dot(dir, sunDirection));\n"
+				<< "\treturn color * transmittance + source * (1.0 - transmittance);\n"
+				<< "}\n\n";
+		}
 
 		// Global shader parameters - a single project-wide constant buffer shared by every material.
 		// It lives at a fixed reserved register (kGlobalShaderParametersPsSlot) so it never disturbs
@@ -1088,6 +1143,21 @@ namespace mmo
 			m_pixelShaderStream
 				<< "// Scene color texture (lit opaque scene captured before translucent pass)\n"
 				<< "Texture2D sceneColorTex : register(t" << kSceneColorTextureSlot << ");\n\n";
+
+			// Material graphs were authored against a display-referred scene colour. Inside DeferredRenderer the
+			// captured scene is linear HDR (the TonemapPass runs last), so convert samples back to the curve the
+			// graphs expect. Standalone forward rendering (forwardOutputLinear = 0) passes the sample through.
+			m_pixelShaderStream
+				<< "float3 LoadSceneColor(int2 pixel)\n"
+				<< "{\n"
+				<< "\tfloat3 sceneColor = sceneColorTex.Load(int3(pixel, 0)).rgb;\n"
+				<< "\t// Lighting can leave NaN/Inf in the captured linear HDR scene (GGX 0/0, values above the\n"
+				<< "\t// RGBA16F range); sanitise before ACES so a material graph never turns NaN from this.\n"
+				<< "\t// FXC compiles without IEEE strictness, which folds isnan/isinf to a constant false, so\n"
+				<< "\t// the exponent bits are tested directly: NaN and Inf both set all exponent bits (0x7f800000).\n"
+				<< "\tsceneColor = (any((asuint(sceneColor) & 0x7fffffffu) >= 0x7f800000u)) ? float3(0.0, 0.0, 0.0) : min(sceneColor, 1e4);\n"
+				<< "\treturn forwardOutputLinear > 0.5 ? pow(ACESFilm(max(sceneColor, 0.0) * max(forwardExposure, 1e-4)), (1.0 / 2.2).xxx) : sceneColor;\n"
+				<< "}\n\n";
 		}
 
 		if (m_needsScreenSpaceReflection)
@@ -1208,7 +1278,7 @@ namespace mmo
 				<< "\n"
 				<< "\t\t\tif (hitDelta < thickness)\n"
 				<< "\t\t\t{\n"
-				<< "\t\t\t\tfloat3 hitColor = sceneColorTex.Load(int3(hitPixel, 0)).rgb;\n"
+				<< "\t\t\t\tfloat3 hitColor = LoadSceneColor(hitPixel);\n"
 				<< "\n"
 				<< "\t\t\t\t// Confidence instead of an all-or-nothing hit, so the blend toward the caller's\n"
 				<< "\t\t\t\t// fallback is soft:\n"
@@ -1689,46 +1759,40 @@ namespace mmo
 			else
 			{
 				// Forward rendering output. Both lit and unlit materials converge here with a
-				// linear-space HDR `color`, so distance fog and tone mapping can be applied
+				// linear-space HDR `color`, so height fog and tone mapping can be applied
 				// uniformly and identically to the deferred lighting pass. This is what lets
 				// translucent surfaces (water, etc.) fog out to the exact same colour as the
 				// opaque scene behind them instead of standing out as un-fogged patches.
 				if (!m_lit)
 				{
-					// Unlit materials (glowing particles, FX sprites …) reproduce the legacy unlit
-					// forward output exactly: color = pow(baseColor, 2.2). The gamma boost deepens
-					// saturation (authored FX colours read as intended), and the Emissive pin is
-					// deliberately NOT added here — legacy unlit forward shaders ignored it, and FX
-					// graphs commonly wire the same value into BaseColor AND Emissive (for the
-					// deferred unlit path), which would double the colour and wash saturated tints
-					// out towards white. Emissive still contributes in the G-Buffer unlit path.
-					// No ACES/tonemap either: unlit colours are display-referred as authored.
-					// Distance fog is applied in display space, with the fog colour pushed through
-					// the same ACES + gamma response the deferred scene uses so fully fogged unlit
-					// objects converge to the same horizon colour.
+					// Unlit materials (glowing particles, FX sprites …) author display-referred colour:
+					// color = pow(baseColor, 2.2), and the Emissive pin is deliberately NOT added (FX
+					// graphs often wire the same value into BaseColor and Emissive for the deferred unlit
+					// path, which would double it). The colour is inverse-tonemapped to linear so the
+					// height fog composes with the scene, then tone-mapped back only when rendering
+					// standalone; inside DeferredRenderer the TonemapPass does that for the whole frame.
 					m_pixelShaderStream
-						<< "\tfloat3 color = pow(baseColor, 2.2);\n"
-						<< "\tfloat fogDistance = length(input.worldPos - cameraPos);\n"
-						<< "\tfloat fogFactor = saturate((fogDistance - fogStart) / (fogEnd - fogStart));\n"
-						<< "\tfloat3 displayFogColor = pow(ACESFilm(fogColor), (1.0f/2.2f).xxx);\n"
-						<< "\tcolor = lerp(color, displayFogColor, fogFactor);\n";
+						<< "\tfloat3 color = ApplyHeightFog(InverseTonemap(pow(baseColor, 2.2)), input.worldPos);\n"
+						<< "\tif (forwardOutputLinear < 0.5)\n"
+						<< "\t{\n"
+						<< "\t\tcolor = pow(ACESFilm(color), (1.0f/2.2f).xxx);\n"
+						<< "\t}\n";
 				}
 				else
 				{
-					// Distance fog in linear HDR space, *before* tone mapping + gamma — identical to
-					// the deferred lighting pass (PS_DeferredLighting). Applying fog here rather than
-					// after gamma makes forward fog converge to the same horizon colour as the
-					// deferred scene, so translucent objects integrate seamlessly into the fog.
+					// Height fog in linear HDR, identical to the deferred atmosphere composite, so
+					// translucent surfaces fog out to the same colour as the opaque scene behind them.
 					m_pixelShaderStream
-						<< "\tfloat fogDistance = length(input.worldPos - cameraPos);\n"
-						<< "\tfloat fogFactor = saturate((fogDistance - fogStart) / (fogEnd - fogStart));\n"
-						<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
+						<< "\tcolor = ApplyHeightFog(color, input.worldPos);\n";
 
-					// ACES Film tone mapping + gamma — identical to the deferred lighting pass so
-					// forward objects share the exact same response curve as the deferred scene.
+					// ACES + gamma only when rendering standalone. Inside DeferredRenderer the
+					// TonemapPass tone maps the whole frame, so the colour stays linear here.
 					m_pixelShaderStream
-						<< "\tcolor = ACESFilm(color);\n"
-						<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+						<< "\tif (forwardOutputLinear < 0.5)\n"
+						<< "\t{\n"
+						<< "\t\tcolor = ACESFilm(color);\n"
+						<< "\t\tcolor = pow(color, (1.0f/2.2f).xxx);\n"
+						<< "\t}\n";
 				}
 
 				m_pixelShaderStream

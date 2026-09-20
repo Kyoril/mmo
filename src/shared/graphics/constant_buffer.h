@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "buffer_base.h"
+#include "shader_base.h"
 #include "base/macros.h"
 
 namespace mmo

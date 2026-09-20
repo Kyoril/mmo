@@ -32,7 +32,10 @@ namespace mmo
 		{
 			SetRenderQueueGroup(TerrainGeometry);
 
-			SetCastShadows(false);
+			// Terrain casts into the sun's shadow cascades, so hills shadow the ground and block the
+			// atmosphere's light shafts. Cascade passes must not drive LOD or occlusion state; see
+			// Scene::IsShadowCasterPass in PopulateRenderQueue, PreRender and PostRender.
+			SetCastShadows(true);
 
 			// Calculate tile coordinates based on outer vertex spacing
 			m_tileX = m_startX / (constants::OuterVerticesPerTileSide - 1);
@@ -202,7 +205,11 @@ namespace mmo
 			//
 			// Additionally, tiles at LOD 0 (closest to the camera) are never culled
 			// because pops at close range are the most noticeable artefact.
-			if (m_page.GetTerrain().IsOcclusionCullingEnabled() && m_occlusionQuery)
+			// Occlusion is judged from the main camera. A tile hidden behind a hill can still cast a
+			// visible shadow, so shadow cascade passes queue it regardless and leave the state
+			// machine (and its pending GPU query result) untouched.
+			const bool shadowCasterPass = m_page.GetTerrain().GetScene().IsShadowCasterPass();
+			if (!shadowCasterPass && m_page.GetTerrain().IsOcclusionCullingEnabled() && m_occlusionQuery)
 			{
 				// Never occlude tiles at the closest LOD – pops are too visible.
 				const bool closeRange = (m_currentLod == 0);
@@ -271,6 +278,14 @@ namespace mmo
 
 		bool Tile::PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
 		{
+			// Shadow cascades draw the tile with the LOD the main view chose. Updating LOD from a
+			// cascade camera would thrash index buffers every pass, and an occlusion query issued here
+			// would measure the shadow map instead of the screen.
+			if (scene.IsShadowCasterPass())
+			{
+				return Renderable::PreRender(scene, graphicsDevice, camera);
+			}
+
 			if (m_page.GetTerrain().IsLodEnabled())
 			{
 				UpdateLOD(camera);
@@ -311,8 +326,8 @@ namespace mmo
 
 		void Tile::PostRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
 		{
-			// End occlusion query after the draw call
-			if (m_occlusionQuery && m_page.GetTerrain().IsOcclusionCullingEnabled())
+			// End occlusion query after the draw call (none was begun in a shadow cascade pass)
+			if (!scene.IsShadowCasterPass() && m_occlusionQuery && m_page.GetTerrain().IsOcclusionCullingEnabled())
 			{
 				m_occlusionQuery->End();
 			}

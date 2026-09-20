@@ -68,6 +68,9 @@ namespace mmo
 		case ShaderType::PixelShader:
 			context.PSSetShaderResources(slot, 1, &views);
 			break;
+		case ShaderType::ComputeShader:
+			context.CSSetShaderResources(slot, 1, &views);
+			break;
 		default:
 			throw std::runtime_error("Shader type not yet supported for binding!");
 		}
@@ -272,6 +275,9 @@ namespace mmo
 			break;
 		case ShaderType::PixelShader:
 			context.PSSetShaderResources(slot, 1, &views);
+			break;
+		case ShaderType::ComputeShader:
+			context.CSSetShaderResources(slot, 1, &views);
 			break;
 		default:
 			throw std::runtime_error("Shader type not yet supported for binding!");

@@ -10,6 +10,8 @@
 #include "math/degree.h"
 #include "math/radian.h"
 #include "editor_imgui_helpers.h"
+#include "environment_preview.h"
+#include "environment_profile_combo.h"
 
 namespace mmo
 {
@@ -151,6 +153,20 @@ namespace mmo
 			ImGui::PopStyleColor();
 			ImGui::SameLine();
 			DrawHelpMarker("Type of map instance (Global, Dungeon, Raid, etc.)");
+
+				ImGui::Spacing();
+				ImGui::Spacing();
+				DrawSectionHeader("Environment");
+
+				ImGui::SetNextItemWidth(260);
+				DrawEnvironmentProfileCombo(m_project.environmentProfiles, "##DefaultEnvironment", currentEntry.environment_profile(), m_environmentFilter,
+					[&currentEntry](const uint32 id)
+					{
+						currentEntry.set_environment_profile(id);
+						GetEnvironmentPreview().NotifyChanged();
+					}, "(built-in Default)");
+				ImGui::SameLine();
+				DrawHelpMarker("Environment profile used wherever no zone (or parent zone) sets one.");
 
 				ImGui::Spacing();
 				ImGui::Spacing();

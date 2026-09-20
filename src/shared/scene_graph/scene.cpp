@@ -40,26 +40,32 @@ namespace mmo
 
 	struct alignas(16) PsCameraConstantBuffer
 	{
-		// Row 0–6: camera, fog, matrices, time (112 bytes — must stay layout-stable)
+		// MUST stay field-for-field in sync with CameraBuffer in AtmosphereCommon.hlsli and the
+		// CameraParameters cbuffer emitted by MaterialCompilerD3D11.
 		Vector3 cameraPosition;
-		float fogStart;
-		float fogEnd;
-		Vector3 fogColor;
+		float fogDensity;			// 0 when fog is disabled
+		float fogHeightFalloff;
+		Vector3 fogTint;
 		Matrix4 inverseViewMatrix;
 		float time;
-		float _padding[3];
+		float fogBaseHeight;
+		float fogAnisotropy;
+		float _cameraPadding0;
 
-		// Row 7–9: forward lighting (48 bytes added)
-		// Populated from the scene's primary directional light so that forward-rendered
-		// translucent objects (water, glass …) react to the actual sky/sun rather than
-		// hardcoded values inside the generated pixel shader.
-		Vector3 sunDirection;	// World-space direction *toward* the sun (normalised)
+		// Forward lighting, populated from the scene's primary directional light.
+		Vector3 sunDirection;		// World-space direction *toward* the sun (normalised)
 		float sunIntensity;
 		Vector3 sunColor;
-		float _forwardPad0;
-		Vector3 ambientColor;	// Scene ambient (matches deferred AmbientColor cbuffer)
-		float _forwardPad1;
+		float forwardOutputLinear;	// 1 = forward materials skip tone mapping (DeferredRenderer's forward pass)
+		Vector3 ambientColor;
+		float forwardExposure;		// Exposure the TonemapPass will apply; 1 outside the deferred forward pass
+
+		// Sun light inside the fog.
+		Vector3 sunScatterColor;
+		float shaftStrength;
 	};
+
+	static_assert(sizeof(PsCameraConstantBuffer) == 176, "PsCameraConstantBuffer must match the 176-byte HLSL CameraBuffer layout");
 
 	Scene::Scene()
 	{
@@ -1133,38 +1139,24 @@ namespace mmo
 		return std::move(query);
 	}
 
-	void Scene::SetFogRange(float start, float end)
-	{
-		ASSERT(end >= start);
-
-		m_fogStart = start;
-		m_fogEnd = end;
-	}
-
-	void Scene::SetFogColor(const Vector3& color)
-	{
-		m_fogColor = color;
-	}
-
 	void Scene::RefreshCameraBuffer(const Camera& camera)
 	{
 		// Update elapsed time
 		const auto now = std::chrono::steady_clock::now();
 		m_elapsedTime = std::chrono::duration<float>(now - m_startTime).count();
 
+		const AtmosphereConstants atmosphere = CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled);
+
 		PsCameraConstantBuffer buffer;
 		buffer.cameraPosition = camera.GetDerivedPosition();
-
-		// TODO: This is a hack for now - we set fog start and end to a very high value when fog is disabled
-		buffer.fogStart = m_fogEnabled ? m_fogStart : 100000.0f;
-		buffer.fogEnd = m_fogEnabled ? m_fogEnd : 100000.0f;
-
-		buffer.fogColor = m_fogColor;
+		buffer.fogDensity = atmosphere.density;
+		buffer.fogHeightFalloff = atmosphere.heightFalloff;
+		buffer.fogTint = Vector3(atmosphere.fogTint[0], atmosphere.fogTint[1], atmosphere.fogTint[2]);
 		buffer.inverseViewMatrix = camera.GetViewMatrix().Inverse();
 		buffer.time = m_elapsedTime;
-		buffer._padding[0] = 0.0f;
-		buffer._padding[1] = 0.0f;
-		buffer._padding[2] = 0.0f;
+		buffer.fogBaseHeight = atmosphere.baseHeight;
+		buffer.fogAnisotropy = atmosphere.anisotropy;
+		buffer._cameraPadding0 = 0.0f;
 
 		// Forward lighting — populate from the primary directional light so that translucent
 		// forward-rendered objects (water, glass …) receive the real sky/sun lighting instead
@@ -1190,10 +1182,22 @@ namespace mmo
 		}
 
 		buffer.ambientColor   = m_ambientColor;
-		buffer._forwardPad0   = 0.0f;
-		buffer._forwardPad1   = 0.0f;
+		buffer.forwardOutputLinear = m_forwardOutputLinear ? 1.0f : 0.0f;
+
+		// Unlit forward materials undo the tone map to reach the linear value the TonemapPass maps back
+		// onto their authored display colour, and scene-colour samples are tone mapped the same way.
+		// Both round trips need the exposure that pass will apply. Outside it, nothing scales the frame.
+		buffer.forwardExposure = m_forwardOutputLinear ? std::max(m_forwardExposure, 1e-4f) : 1.0f;
+
+		buffer.sunScatterColor = Vector3(atmosphere.sunScatterColor[0], atmosphere.sunScatterColor[1], atmosphere.sunScatterColor[2]);
+		buffer.shaftStrength = atmosphere.shaftStrength;
 
 		m_psCameraBuffer->Update(&buffer);
+	}
+
+	float Scene::GetCombinedFogDensity() const
+	{
+		return CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled).density;
 	}
 
 	std::unique_ptr<SceneNode> Scene::CreateSceneNodeImpl()

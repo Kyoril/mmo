@@ -136,6 +136,10 @@ namespace mmo
                 {
                     m_terrain.GetScene().SetFogEnabled(showFog);
                 }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Fog, light shafts, exposure and bloom come from the environment profile of the zone under the camera.");
+                }
 
                 // Foliage rendering (authored trees) — mirrors the in-game client appearance.
                 // Hidden by default since dense foliage makes terrain editing harder.
@@ -168,13 +172,6 @@ namespace mmo
                 {
                     ImGui::SetTooltip("Show water surfaces. Water is always visible while editing water.");
                 }
-
-                // Fog fade range controls
-                float fogValues[2] = { m_terrain.GetScene().GetFogStart(), m_terrain.GetScene().GetFogEnd() };
-                if (ImGui::DragFloat2("Fog Fade Range", fogValues, 1.0f, 0.0f, fogValues[1] - 0.1f))
-                {
-                    m_terrain.GetScene().SetFogRange(fogValues[0], fogValues[1]);
-				}
 
                 ImGui::EndDisabled();
             }

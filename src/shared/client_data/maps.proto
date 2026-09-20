@@ -13,6 +13,8 @@ message MapEntry {
 		ARENA = 4;
 	}
 	optional MapInstanceType instancetype = 4 [default = GLOBAL];
+	// Environment profile used where no zone sets one. 0 = built-in Default.
+	optional uint32 environment_profile = 9;
 }
 
 message Maps {

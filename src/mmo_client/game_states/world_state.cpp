@@ -143,6 +143,11 @@ namespace mmo
 		static ConsoleVar *s_contactShadowFadeVar = nullptr;
 		static ConsoleVar *s_contactShadowBiasVar = nullptr;
 		static ConsoleVar *s_contactShadowDebugVar = nullptr;
+		static ConsoleVar *s_atmosphereQualityVar = nullptr;
+		static ConsoleVar *s_volumetricFogRangeVar = nullptr;
+		static ConsoleVar *s_atmosphereDebugVar = nullptr;
+		static ConsoleVar *s_bloomQualityVar = nullptr;
+		static ConsoleVar *s_exposureVar = nullptr;
 
 		static ConsoleVar *s_renderScaleVar = nullptr;
 
@@ -1002,8 +1007,18 @@ namespace mmo
 			}
 		}
 
-		// Update sky component (handles day/night cycle and lighting)
+		// Day/night clock, then the zone environment for the new hour, then the lights and sky.
 		m_skyComponent->Update(deltaSeconds, timestamp);
+		m_environment.Update(deltaSeconds, m_skyComponent->GetNormalizedTimeOfDay());
+		m_skyComponent->ApplyEnvironment(m_environment.GetState());
+		ApplyEnvironmentToRenderer();
+
+		m_wind.Update(deltaSeconds, m_environment.GetState());
+		if (m_scene)
+		{
+			m_scene->SetWind(m_wind.GetState());
+		}
+		PublishWindShaderParameters(m_wind.GetState());
 
 		// Set the sky dome position to follow the player
 		if (m_playerController->GetRootNode())
@@ -1230,11 +1245,23 @@ namespace mmo
 		ASSERT(m_worldInstance);
 		if (!m_worldInstance->HasTerrain())
 		{
+			// No terrain means no area to resolve: apply the map's default profile (zone 0)
+			// instead of leaving whatever zone's look was active before this map loaded.
+			UpdateEnvironmentTarget(0, unit->GetPosition());
 			return;
 		}
 
 		const auto pos = unit->GetPosition();
-		const uint32 zoneId = m_worldInstance->GetTerrain()->GetArea(pos);
+		uint32 zoneId = 0;
+		if (!m_worldInstance->GetTerrain()->TryGetArea(pos, zoneId))
+		{
+			// The page under the player is still streaming in. Keep the current zone, music and
+			// environment rather than briefly treating the player as standing in no zone.
+			return;
+		}
+
+		UpdateEnvironmentTarget(zoneId, pos);
+
 		if (zoneId != m_lastZoneId)
 		{
 			m_lastZoneId = zoneId;
@@ -1297,6 +1324,32 @@ namespace mmo
 			m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
 			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
 		}
+	}
+
+	void WorldState::UpdateEnvironmentTarget(const uint32 zoneId, const Vector3& position)
+	{
+		const bool immediate = ShouldSnapEnvironment(m_environmentSnapPending, m_lastEnvironmentPosition, position);
+		m_lastEnvironmentPosition = position;
+
+		const uint32 profileId = ResolveEnvironmentProfileId(m_project.zones, m_project.maps, zoneId, g_mapId);
+		if (profileId == m_environmentProfileId && !immediate)
+		{
+			return;
+		}
+
+		m_environmentProfileId = profileId;
+		m_environmentSnapPending = false;
+		m_environment.SetTarget(m_environmentProfiles.Get(profileId), immediate);
+	}
+
+	void WorldState::ResetEnvironmentForMap()
+	{
+		// Until the first zone lookup succeeds, show the map's default profile, then snap to the
+		// zone's profile on that first lookup instead of fading in from the map default.
+		m_environmentSnapPending = true;
+		m_lastEnvironmentPosition.reset();
+		m_environmentProfileId = ResolveEnvironmentProfileId(m_project.zones, m_project.maps, 0, g_mapId);
+		m_environment.SetTarget(m_environmentProfiles.Get(m_environmentProfileId), true);
 	}
 
 	/// Adapts the streamed client terrain to the water queries WaterVolumeSystem needs.
@@ -1430,10 +1483,11 @@ namespace mmo
 	void WorldState::SetupWorldScene()
 	{
 		m_scene = std::make_unique<OctreeScene>();
-		m_scene->SetFogRange(60.0f, 500.0f);
 
 		// Create sky component to manage the sky dome and day/night cycle
 		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
+
+		ResetEnvironmentForMap();
 
 		// Water. The query adapter is declared before the volume system so it outlives it.
 		m_waterQuery = std::make_unique<TerrainWaterQuery>();
@@ -2081,6 +2135,22 @@ namespace mmo
 		s_contactShadowDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowDebug", "Visualize the raw contact shadow term instead of the lit scene. Healthy is near-white with thin dark bands at contacts. 1 = on, 0 = off.", "0");
 		m_cvarChangedSignals += s_contactShadowDebugVar->Changed.connect(this, &WorldState::OnContactShadowDebugChanged);
 
+		// Height fog, light shafts and bloom quality. The look itself (fog, shafts, exposure, bloom
+		// strength) comes from the zone's environment profile.
+		s_atmosphereQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereQuality", "Volumetric fog quality: 0 = Off (smooth height fog only), 1 = Low (24 px cells, 32 slices), 2 = Medium (16 px, 48), 3 = High (12 px, 64), 4 = Ultra (8 px, 96).", "3");
+		m_cvarChangedSignals += s_atmosphereQualityVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+
+		s_volumetricFogRangeVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogRange", "How many metres in front of the camera the volumetric fog covers (50 to 300, the shadow range). Fog beyond uses a smooth closed-form estimate.", "200");
+		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+
+		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density.", "0");
+		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+
+		s_bloomQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxBloomQuality", "Bloom quality: 0 = Off, 1 = Low (quarter resolution, 4 levels), 2 = High (half resolution, 6 levels).", "2");
+		m_cvarChangedSignals += s_bloomQualityVar->Changed.connect(this, &WorldState::OnBloomChanged);
+
+		s_exposureVar = ConsoleVarMgr::RegisterConsoleVar("gxExposure", "Player brightness: multiplies the zone's environment exposure before tone mapping (0.5 to 2 in Options).", "1.0");
+
 		// Distance (world units) beyond which authored instanced foliage (trees, bushes, rocks) is
 		// culled. Lower values cut the overdraw from dense forests. Read each frame in OnIdle, so no
 		// change handler is required. A very large value = unlimited (render everything).
@@ -2188,6 +2258,8 @@ namespace mmo
 		OnContactShadowQualityChanged(*s_contactShadowQualityVar, "");
 		OnContactShadowParametersChanged(*s_contactShadowLengthVar, "");
 		OnContactShadowDebugChanged(*s_contactShadowDebugVar, "");
+		OnAtmosphereRenderingChanged(*s_atmosphereQualityVar, "");
+		OnBloomChanged(*s_bloomQualityVar, "");
 	}
 
 	void WorldState::RemoveGameplayCommands()
@@ -2218,6 +2290,11 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowFade");
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowBias");
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowDebug");
+		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogRange");
+		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
+		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
@@ -5334,6 +5411,11 @@ namespace mmo
 			m_worldInstance->GetTerrain()->SetOcclusionCullingEnabled(s_terrainOcclusionCullingVar->GetIntValue() != 0);
 		}
 
+		// g_mapId already reflects the destination map (set by the caller before LoadMap runs, see
+		// OnEnter/OnNewWorld), so this applies the new map's default environment profile instead of
+		// leaving the previous map's zone look in place.
+		ResetEnvironmentForMap();
+
 		return true;
 	}
 
@@ -6146,6 +6228,46 @@ namespace mmo
 		const bool enabled = var.GetIntValue() != 0;
 		ILOG("Contact shadow debug visualization " << (enabled ? "enabled" : "disabled"));
 		deferred->SetContactShadowDebugVisualization(enabled);
+	}
+
+	void WorldState::OnAtmosphereRenderingChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		DeferredRenderer* renderer = GetWorldDeferredRenderer();
+		if (!renderer || !s_atmosphereQualityVar)
+		{
+			return;
+		}
+
+		renderer->SetAtmosphereQuality(s_atmosphereQualityVar->GetIntValue());
+		renderer->SetVolumetricFogRange(s_volumetricFogRangeVar->GetFloatValue());
+		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
+	}
+
+	void WorldState::OnBloomChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		DeferredRenderer* renderer = GetWorldDeferredRenderer();
+		if (!renderer || !s_bloomQualityVar)
+		{
+			return;
+		}
+
+		renderer->SetBloomQuality(s_bloomQualityVar->GetIntValue());
+	}
+
+	void WorldState::ApplyEnvironmentToRenderer()
+	{
+		DeferredRenderer* renderer = GetWorldDeferredRenderer();
+		if (!renderer)
+		{
+			return;
+		}
+
+		const EnvironmentState& state = m_environment.GetState();
+		const float brightness = s_exposureVar ? s_exposureVar->GetFloatValue() : 1.0f;
+
+		renderer->SetExposure(state.exposure * brightness);
+		renderer->SetBloomIntensity(state.bloomIntensity);
+		renderer->SetBloomThreshold(state.bloomThreshold);
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)

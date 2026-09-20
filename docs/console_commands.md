@@ -68,6 +68,18 @@ In addition to commands, the system also uses console variables (CVars) that con
 - `gxWindow` - Whether the application will run in windowed mode (default: 1)
 - `gxVSync` - Whether the application will run with vsync enabled (default: 1)
 - `perf` - Toggles whether performance counters are visible (default: 0)
+- `gxRenderScale` - 3D render resolution scale, 0.25 to 1.0 (default: 1.0)
+- `gxAtmosphereQuality` - Volumetric fog quality 0–4 (default: 3)
+- `gxVolumetricFogRange` - Metres of view depth covered by the volumetric fog, 50–300 (default: 200)
+- `gxAtmosphereDebug` - Fog debug view: 1 scattered light, 2 transmittance, 3 density (default: 0)
+- `gxBloomQuality` - Bloom quality (default: 2)
+- `gxExposure` - Player brightness, multiplies the zone environment's exposure (default: 1.0)
+- `gxSsao*`, `gxContactShadow*`, `ShadowQuality`, `ShadowTextureSize` - see `WorldState::RegisterGameplayCommands`
+
+Fog density, height falloff, base height, anisotropy, shaft strength, exposure and bloom strength are
+authored per zone in environment profiles (editor: Environment Profile Editor), not cvars.
+
+See [rendering-atmosphere.md](rendering-atmosphere.md) for the fog model.
 
 ### Game Settings CVars
 - `dataPath` - The path of the client data directory

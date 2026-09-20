@@ -35,5 +35,8 @@ namespace mmo
 		MinimapGridView m_minimapGrid;
 		/// @brief The world name the minimap grid is currently bound to (used to detect entry changes).
 		String m_minimapWorld;
+
+		/// @brief Filter state of the default environment combo.
+		ImGuiTextFilter m_environmentFilter;
 	};
 }

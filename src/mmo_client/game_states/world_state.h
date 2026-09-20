@@ -15,6 +15,10 @@
 #include "base/signal.h"
 #include "game/game_time_component.h"
 #include "graphics/sky_component.h"
+#include "scene_graph/environment_controller.h"
+#include "scene_graph/wind_simulation.h"
+#include "scene_graph/environment_profile_proto.h"
+#include "scene_graph/environment_retarget.h"
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
@@ -47,6 +51,7 @@
 #include "scene_graph/foliage.h"
 
 #include <map>
+#include <optional>
 #include <tuple>
 #include <vector>
 
@@ -272,6 +277,12 @@ namespace mmo
 		/// @brief Called when the gxContactShadowDebug console variable changed.
 		void OnContactShadowDebugChanged(ConsoleVar &var, const std::string &oldValue);
 
+		/// @brief Called when gxAtmosphereQuality, gxVolumetricFogRange or gxAtmosphereDebug changed.
+		void OnAtmosphereRenderingChanged(ConsoleVar &var, const std::string &oldValue);
+
+		/// @brief Called when gxBloomQuality changed.
+		void OnBloomChanged(ConsoleVar &var, const std::string &oldValue);
+
 		void OnCombatVignetteChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue);
@@ -303,6 +314,20 @@ namespace mmo
 		void OnPaint();
 
 		void CheckForZoneUpdate();
+
+		/// @brief Retargets the environment to the profile of a zone. Snaps on world enter and on
+		///        teleports (a move of more than 200 m within one update), fades otherwise.
+		/// @param zoneId The zone the controlled unit stands in (0 = none).
+		/// @param position The controlled unit's position.
+		void UpdateEnvironmentTarget(uint32 zoneId, const Vector3& position);
+
+		/// @brief Resets environment targeting for a (re)loaded map: snaps immediately to the
+		///        map's default profile (zone 0) and arms the snap-on-next-lookup flag so the
+		///        first successful zone resolve after this snaps instead of fading.
+		/// @remark Called from SetupWorldScene (initial world enter) and from LoadMap after
+		///         g_mapId has been updated to the destination map, so a map transfer applies
+		///         the new map's default profile immediately instead of keeping the old zone's look.
+		void ResetEnvironmentForMap();
 
 	private:
 		// Setup stuff
@@ -608,6 +633,16 @@ namespace mmo
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		uint32 m_lastZoneId = UINT32_MAX;
+
+		/// Profile id the environment controller is currently targeting. UINT32_MAX = none yet.
+		uint32 m_environmentProfileId = UINT32_MAX;
+
+		/// True until the first zone lookup after entering a world, which snaps instead of fading.
+		bool m_environmentSnapPending = true;
+
+		/// Controlled unit position at the last environment update, for teleport detection.
+		std::optional<Vector3> m_lastEnvironmentPosition;
+
 		IdGenerator<uint64> m_objectIdGenerator{1};
 		IAudio &m_audio;
 
@@ -620,6 +655,12 @@ namespace mmo
 
 		// Sky component for day/night cycle
 		std::unique_ptr<SkyComponent> m_skyComponent;
+
+		/// Blends zone environment profiles and produces the per-frame lighting and mood.
+		EnvironmentController m_environment;
+
+		/// Gusting wind and fog noise scroll driven by the environment's wind settings.
+		WindSimulation m_wind;
 
 		/// @brief Adapts the streamed client terrain to the queries WaterVolumeSystem needs.
 		///	@remark Defined in the .cpp so world_state.h does not have to pull in the terrain
@@ -656,6 +697,10 @@ namespace mmo
 		///			there yet, and logging would flood.
 		[[nodiscard]] DeferredRenderer* GetWorldDeferredRenderer() const;
 
+		/// @brief Pushes the environment's exposure (times the player's gxExposure brightness) and
+		///        bloom values to the deferred renderer. Called every frame.
+		void ApplyEnvironmentToRenderer();
+
 		ICacheProvider &m_cache;
 
 		scoped_connection_container m_playerObservers;
@@ -666,6 +711,10 @@ namespace mmo
 		ObjectGuid m_selectionRingTargetGuid{0};
 
 		const proto_client::Project &m_project;
+
+		/// Runtime environment profiles converted from ClientDB on first use. Declared after
+		/// m_project because it binds to m_project's table during construction.
+		EnvironmentProfileCache<proto_client::EnvironmentProfileManager> m_environmentProfiles{ m_project.environmentProfiles };
 
 		std::unique_ptr<ProjectileManager> m_projectileManager;
 

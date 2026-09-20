@@ -1850,8 +1850,10 @@ namespace mmo
 			return GetAreaForTile(tileX, tileY);
 		}
 
-		uint32 Terrain::GetAreaForTile(const uint32 globalTileX, const uint32 globalTileY) const
+		bool Terrain::TryGetAreaForTile(const uint32 globalTileX, const uint32 globalTileY, uint32 &outArea) const
 		{
+			outArea = 0;
+
 			ASSERT(globalTileX < m_width * constants::TilesPerPage && globalTileY < m_height * constants::TilesPerPage);
 
 			// Determine page from tile
@@ -1861,11 +1863,33 @@ namespace mmo
 			const Page *page = GetPage(pageX, pageY);
 			if (!page || !page->IsPrepared())
 			{
-				return 0;
+				return false;
 			}
 
 			// Now lets get the actual tile area
-			return page->GetArea(globalTileX % constants::TilesPerPage, globalTileY % constants::TilesPerPage);
+			outArea = page->GetArea(globalTileX % constants::TilesPerPage, globalTileY % constants::TilesPerPage);
+			return true;
+		}
+
+		bool Terrain::TryGetArea(const Vector3 &position, uint32 &outArea) const
+		{
+			outArea = 0;
+
+			int32 tileX, tileY;
+			if (!GetTileIndexByWorldPosition(position, tileX, tileY))
+			{
+				// Outside the terrain there is nothing to stream in: a known "no area".
+				return true;
+			}
+
+			return TryGetAreaForTile(static_cast<uint32>(tileX), static_cast<uint32>(tileY), outArea);
+		}
+
+		uint32 Terrain::GetAreaForTile(const uint32 globalTileX, const uint32 globalTileY) const
+		{
+			uint32 area = 0;
+			(void)TryGetAreaForTile(globalTileX, globalTileY, area);
+			return area;
 		}
 
 		void Terrain::SetWireframeMaterial(const MaterialPtr &wireframeMaterial)

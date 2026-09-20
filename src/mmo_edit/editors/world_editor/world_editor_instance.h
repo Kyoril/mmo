@@ -31,6 +31,9 @@
 #include "edit_modes/entity_edit_mode.h"
 #include "scene_graph/octree_scene.h"
 #include "graphics/sky_component.h"
+#include "scene_graph/environment_controller.h"
+#include "scene_graph/wind_simulation.h"
+#include "scene_graph/environment_profile_proto.h"
 
 #include "deferred_shading/deferred_renderer.h"
 #include "deferred_shading/water_volume_system.h"
@@ -320,6 +323,9 @@ namespace mmo
 
 		void SetMapEntry(proto::MapEntry *entry);
 
+		/// @brief Advances the environment blend and applies it to the sky, lights and renderer.
+		void UpdateEnvironment(float deltaSeconds);
+
 	public:
 		/// @brief Creates a duplication callback for the given map entity.
 		/// The returned function, when invoked with the current selectable transform,
@@ -557,6 +563,28 @@ namespace mmo
 		std::unique_ptr<WaterEditMode> m_waterEditMode;
 		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
 		std::unique_ptr<SkyComponent> m_skyComponent;
+
+		/// Blends environment profiles for the viewport, exactly like the client.
+		EnvironmentController m_environment;
+
+		/// Gusting wind and fog noise scroll for the viewport. Advances with real frame time even while
+		/// the sky clock is paused, so drifting fog stays visible while authoring.
+		WindSimulation m_wind;
+
+		/// Runtime profiles converted from the project on first use; cleared on every preview revision.
+		std::unique_ptr<EnvironmentProfileCache<proto::EnvironmentProfileManager>> m_environmentProfiles;
+
+		/// Profile id the controller targets. UINT32_MAX = none yet.
+		uint32 m_environmentProfileId = UINT32_MAX;
+
+		/// Last EnvironmentPreview::revision this instance converted profiles for.
+		uint64 m_environmentRevision = 0;
+
+		/// Whether the last update showed the Environment Profile Editor's preview.
+		bool m_environmentPreviewActive = false;
+
+		/// Sky's normalized time of day captured just before preview took over; restored when preview ends.
+		float m_timeOfDayBeforePreview = 0.5f;
 		WorldEditMode *m_editMode{nullptr};
 
 		// Spawn edit mode

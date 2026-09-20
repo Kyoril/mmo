@@ -95,6 +95,8 @@ message MapEntry {
 	repeated ObjectSpawnEntry objectspawns = 6;
 	repeated EncounterEntry encounters        = 7;
 	repeated uint32         instance_triggers = 8;
+	// Environment profile used where no zone sets one. 0 = built-in Default.
+	optional uint32 environment_profile = 9;
 }
 
 message Maps {

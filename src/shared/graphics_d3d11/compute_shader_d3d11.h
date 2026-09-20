@@ -1,0 +1,28 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
+#pragma once
+
+#include "graphics/compute_shader.h"
+#include "graphics_device_d3d11.h"
+
+namespace mmo
+{
+	/// @brief Direct3D 11 implementation of a compute shader.
+	class ComputeShaderD3D11 final : public ComputeShader
+	{
+	public:
+		ComputeShaderD3D11(GraphicsDeviceD3D11& device, const void* shaderCode, size_t shaderCodeSize);
+		~ComputeShaderD3D11() override = default;
+
+	public:
+		void Set() override;
+
+		/// @brief Whether CreateComputeShader succeeded. GraphicsDeviceD3D11::CreateShader checks this
+		///        and returns nullptr instead of this half-constructed object on failure.
+		[[nodiscard]] bool IsValid() const noexcept { return m_shader != nullptr; }
+
+	private:
+		GraphicsDeviceD3D11& m_device;
+		ComPtr<ID3D11ComputeShader> m_shader;
+	};
+}

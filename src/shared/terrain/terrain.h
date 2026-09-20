@@ -459,6 +459,14 @@ namespace mmo
 			/// @return The area ID at the specified position.
 			[[nodiscard]] uint32 GetArea(const Vector3 &position) const;
 
+			/// @brief Gets the area at a world position, distinguishing "no area" from "not loaded".
+			/// @param position The world position.
+			/// @param outArea Receives the area id, 0 when none is painted or the position is
+			///        outside the terrain.
+			/// @return False while the page under the position is not prepared yet; callers should
+			///         keep their previous area instead of treating the position as area 0.
+			[[nodiscard]] bool TryGetArea(const Vector3 &position, uint32 &outArea) const;
+
 			/// @brief Gets the navigation area for a specific tile.
 			/// @param globalTileX The global tile X index.
 			/// @param globalTileY The global tile Y index.
@@ -588,6 +596,13 @@ namespace mmo
 			void NotifyCameraPosition(const Vector3& pos);
 
 		private:
+			/// @brief Looks up the navigation area for a specific tile without falling back to 0.
+			/// @param globalTileX The global tile X index.
+			/// @param globalTileY The global tile Y index.
+			/// @param outArea Receives the area id; set to 0 up front and only updated on success.
+			/// @return False if the page owning the tile is null or not prepared yet, true otherwise.
+			[[nodiscard]] bool TryGetAreaForTile(uint32 globalTileX, uint32 globalTileY, uint32 &outArea) const;
+
 			/// @brief Updates tile coverage information in a specified region.
 			/// @param fromX The starting X coordinate.
 			/// @param fromZ The starting Z coordinate.

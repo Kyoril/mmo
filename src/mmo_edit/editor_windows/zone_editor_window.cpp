@@ -2,6 +2,8 @@
 
 #include "zone_editor_window.h"
 #include "editor_imgui_helpers.h"
+#include "environment_preview.h"
+#include "environment_profile_combo.h"
 #include "sound_entry_combo.h"
 
 #include <imgui.h>
@@ -213,6 +215,17 @@ namespace mmo
 
 			CHECKBOX_BOOL_PROP(inherit_parent_audio, "Inherit parent zone audio");
 			ImGui::TextDisabled("When enabled, unset music/ambience fall back along the parent zone chain. Disable to force silence in this zone.");
+		}
+
+		if (const auto section = ScopedEditorSection("Environment", ImGuiTreeNodeFlags_None))
+		{
+			DrawEnvironmentProfileCombo(m_project.environmentProfiles, "Environment", currentEntry.environment_profile(), m_environmentFilter,
+				[&currentEntry](const uint32 id)
+				{
+					currentEntry.set_environment_profile(id);
+					GetEnvironmentPreview().NotifyChanged();
+				}, "(inherit)");
+			ImGui::TextDisabled("Unset zones use the parent zone's profile, then the map's default environment, then the built-in Default.");
 		}
 	}
 

@@ -8,6 +8,7 @@
 
 #include "editor_host.h"
 #include "editor_windows/asset_picker_widget.h"
+#include "environment_preview.h"
 #include "world_editor.h"
 #include "paging/world_page_loader.h"
 #include "assets/asset_registry.h"
@@ -122,11 +123,6 @@ namespace mmo
 		m_cameraAnchor->SetOrientation(Quaternion(Degree(-35.0f), Vector3::UnitX));
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
-
-		m_scene.SetFogRange(60.0f, 500.0f);
-
-		const Vector3 fogColor = Vector3(0.231f * 1.5f, 0.398f * 1.5f, 0.535f * 1.5f);
-		m_scene.SetFogColor(fogColor);
 
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(SceneQueryFlags_None);
@@ -253,6 +249,7 @@ namespace mmo
 		// Setup sky component for day/night cycle control
 		m_skyComponent = std::make_unique<SkyComponent>(m_scene);
 		m_skyComponent->SetTimeSpeed(0.0f); // Start with time paused in editor
+		m_environmentProfiles = std::make_unique<EnvironmentProfileCache<proto::EnvironmentProfileManager>>(m_editor.GetProject().environmentProfiles);
 
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
@@ -523,6 +520,7 @@ namespace mmo
 		{
 			m_skyComponent->SetPosition(m_camera->GetDerivedPosition());
 			m_skyComponent->Update(deltaTimeSeconds, 0);
+			UpdateEnvironment(deltaTimeSeconds);
 		}
 
 		m_cameraAnchor->Translate(m_cameraVelocity * deltaTimeSeconds, TransformSpace::Local);
@@ -1309,6 +1307,94 @@ namespace mmo
 		// spawn objects which are relevant to the currently loaded pages and not simply ALL spawns that exist in total!
 	}
 
+	void WorldEditorInstance::UpdateEnvironment(const float deltaSeconds)
+	{
+		EnvironmentPreview& preview = GetEnvironmentPreview();
+
+		// Any authored change reconverts profiles and snaps, so edits show up immediately.
+		bool dataChanged = false;
+		if (preview.revision != m_environmentRevision)
+		{
+			m_environmentRevision = preview.revision;
+			m_environmentProfiles->Clear();
+			dataChanged = true;
+		}
+
+		if (preview.profileId)
+		{
+			if (!m_environmentPreviewActive)
+			{
+				m_timeOfDayBeforePreview = m_skyComponent->GetNormalizedTimeOfDay();
+			}
+
+			m_skyComponent->SetNormalizedTimeOfDay(preview.normalizedTime);
+
+			if (dataChanged || !m_environmentPreviewActive || m_environmentProfileId != *preview.profileId)
+			{
+				m_environmentProfileId = *preview.profileId;
+				m_environment.SetTarget(m_environmentProfiles->Get(m_environmentProfileId), true);
+			}
+
+			m_environmentPreviewActive = true;
+		}
+		else
+		{
+			const bool leftPreview = m_environmentPreviewActive;
+			m_environmentPreviewActive = false;
+
+			if (leftPreview)
+			{
+				m_skyComponent->SetNormalizedTimeOfDay(m_timeOfDayBeforePreview);
+			}
+
+			const proto::MapEntry* map = m_spawnEditMode ? m_spawnEditMode->GetMapEntry() : nullptr;
+			const proto::Project& project = m_editor.GetProject();
+
+			// A map without terrain has no page to resolve an area from, so it never has a zone:
+			// treat the lookup as having succeeded with zone 0 rather than never retargeting.
+			uint32 zoneId = 0;
+			const bool haveZone = !m_hasTerrain || (m_terrain && m_terrain->TryGetArea(m_cameraAnchor->GetDerivedPosition(), zoneId));
+
+			if (haveZone)
+			{
+				const uint32 profileId = ResolveEnvironmentProfileId(project.zones, project.maps, zoneId, map ? map->id() : 0);
+
+				if (dataChanged || leftPreview || profileId != m_environmentProfileId)
+				{
+					m_environmentProfileId = profileId;
+					m_environment.SetTarget(m_environmentProfiles->Get(profileId), dataChanged || leftPreview);
+				}
+			}
+			else if (dataChanged || leftPreview)
+			{
+				// The page under the camera is still streaming in: still retarget instead of
+				// leaving the preview profile applied. Fall back to the map default when no
+				// profile has been resolved for this map yet, otherwise keep the current one.
+				const uint32 profileId = (m_environmentProfileId == UINT32_MAX)
+					? ResolveEnvironmentProfileId(project.zones, project.maps, 0, map ? map->id() : 0)
+					: m_environmentProfileId;
+
+				m_environmentProfileId = profileId;
+				m_environment.SetTarget(m_environmentProfiles->Get(profileId), true);
+			}
+		}
+
+		m_environment.Update(deltaSeconds, m_skyComponent->GetNormalizedTimeOfDay());
+		m_skyComponent->ApplyEnvironment(m_environment.GetState());
+
+		m_wind.Update(deltaSeconds, m_environment.GetState());
+		m_scene.SetWind(m_wind.GetState());
+		PublishWindShaderParameters(m_wind.GetState());
+
+		if (DeferredRenderer* renderer = GetDeferredRenderer())
+		{
+			const EnvironmentState& state = m_environment.GetState();
+			renderer->SetExposure(state.exposure);
+			renderer->SetBloomIntensity(state.bloomIntensity);
+			renderer->SetBloomThreshold(state.bloomThreshold);
+		}
+	}
+
 	void WorldEditorInstance::AddUnitSpawn(proto::UnitSpawnEntry &spawn, bool select)
 	{
 		const auto *unit = m_editor.GetProject().units.getById(spawn.unitentry());
@@ -2059,8 +2145,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					}
 
 					// Render the scene (terrain and objects in this page)
-					m_scene.SetFogRange(10000.0f, 100000.0f);
+					// Minimap tiles are a top-down map, not a view through the atmosphere. (The old
+					// SetFogRange here was never undone and silently removed the viewport fog.)
+					const bool fogWasEnabled = m_scene.IsFogEnabled();
+					m_scene.SetFogEnabled(false);
 					m_scene.Render(*renderCam, PixelShaderType::Forward);
+					m_scene.SetFogEnabled(fogWasEnabled);
 					minimapRT->Update();
 
 					// Restore original render queue groups

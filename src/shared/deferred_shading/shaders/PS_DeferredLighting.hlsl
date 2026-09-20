@@ -58,27 +58,7 @@ static const float2 POISSON_DISK[16] = {
 };
 
 
-// Per-view matrices (b12). Must match the layout uploaded by GraphicsDeviceD3D11 (see
-// kPerViewMatrixBufferSlot); the per-object world matrix at b0 is not needed in this pass.
-cbuffer ViewMatrices : register(b12)
-{
-    column_major matrix matView;
-    column_major matrix matProj;
-    column_major matrix matInvView;
-    column_major matrix InverseProjection;
-};
-
-// Camera constant buffer
-cbuffer CameraBuffer : register(b1)
-{
-    float3 CameraPosition;
-    float FogStart;
-    float FogEnd;
-    float3 FogColor;
-    column_major matrix InverseViewMatrix;
-    float Time;
-    float3 _CameraPadding;
-}
+#include "AtmosphereCommon.hlsli"
 
 // Light structure (matches StructuredBuffer element in C++)
 struct Light
@@ -174,17 +154,6 @@ float G_Smith(float NdotV, float NdotL, float roughness)
 {
     return G_SchlickGGX(NdotV, roughness) * G_SchlickGGX(NdotL, roughness);
 }
-
-float3 ACESFilm(float3 x)
-{
-    float a = 2.51;
-    float b = 0.03;
-    float c = 2.43;
-    float d = 0.59;
-    float e = 0.14;
-    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
-}
-
 
 // Calculates point light contribution
 float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 normal, float3 albedo, float metallic, float roughness, float specular)
@@ -577,17 +546,6 @@ float4 main(PS_INPUT input) : SV_TARGET
         lighting = lerp(lighting, lighting * cascadeDebugColor, 0.3);
     }
     
-    // Apply fog
-    float distanceToCamera = length(worldPos - CameraPosition);
-	float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
-    lighting = lerp(lighting, FogColor, fogFactor);
-
-    // Apply ACES tone mapping
-    lighting = ACESFilm(lighting);
-    
-    // Apply gamma correction
-    lighting = pow(lighting, 1.0 / 2.2);
-
     // SSAO debug visualization: show the raw AO term instead of the lit scene.
     if (SsaoDebugMode != 0)
     {

@@ -10,6 +10,8 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "graphics/shader_types.h"
+#include "atmosphere_settings.h"
+#include "scene_graph/wind_state.h"
 
 #include "camera.h"
 #include "entity.h"
@@ -23,6 +25,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "debug_geometry_interface.h"
@@ -354,13 +357,30 @@ namespace mmo
 		///			alongside materials stay in step with them.
 		[[nodiscard]] float GetElapsedTime() const { return m_elapsedTime; }
 
-		float GetFogStart() const { return m_fogStart; }
+		/// @brief Sets the tunable base values of the height fog (cvars, editor sliders).
+		void SetAtmosphereParameters(const AtmosphereParameters& parameters) { m_atmosphereParameters = parameters; }
 
-		float GetFogEnd() const { return m_fogEnd; }
+		/// @brief Gets the tunable base values of the height fog.
+		[[nodiscard]] const AtmosphereParameters& GetAtmosphereParameters() const { return m_atmosphereParameters; }
 
-		void SetFogRange(float start, float end);
+		/// @brief Sets the time-of-day fog values. Written by SkyComponent every update.
+		void SetAtmosphereTimeOfDay(const AtmosphereTimeOfDay& timeOfDay) { m_atmosphereTimeOfDay = timeOfDay; }
 
-		void SetFogColor(const Vector3& color);
+		/// @brief Gets the time-of-day fog values.
+		[[nodiscard]] const AtmosphereTimeOfDay& GetAtmosphereTimeOfDay() const { return m_atmosphereTimeOfDay; }
+
+		/// @brief Sets the wind of this frame. Written by the host's WindSimulation every update.
+		void SetWind(const WindState& wind) { m_wind = wind; }
+
+		/// @brief Gets the wind of this frame (read by the volumetric fog pass).
+		[[nodiscard]] const WindState& GetWind() const { return m_wind; }
+
+		/// @brief Computes the combined fog density CombineAtmosphere would produce from the current
+		///        atmosphere parameters and time-of-day values. Density does not depend on the
+		///        reference height, so this needs none.
+		/// @return The combined density (base density × time-of-day multiplier), or 0 when fog is
+		///         disabled.
+		[[nodiscard]] float GetCombinedFogDensity() const;
 
 		const ConstantBufferPtr& GetCameraBuffer() const { return m_psCameraBuffer; }
 
@@ -391,6 +411,24 @@ namespace mmo
 		/// render queue groups (< Transparent). Used by the deferred renderer to avoid
 		/// re-rendering opaque geometry in the transparent pass.
 		void SetForwardTransparentOnly(bool value) { m_forwardTransparentOnly = value; }
+
+		/// @brief Makes forward materials write linear HDR instead of tone-mapped display colour.
+		/// @remark Only DeferredRenderer sets this, around its own forward pass, because its
+		///         TonemapPass tone maps the whole frame afterwards. Every standalone forward render
+		///         (editor previews, the client's model frames, the minimap baker) leaves it false.
+		void SetForwardOutputLinear(const bool linear) { m_forwardOutputLinear = linear; }
+
+		/// @brief Whether forward materials currently write linear HDR.
+		[[nodiscard]] bool IsForwardOutputLinear() const { return m_forwardOutputLinear; }
+
+		/// @brief Tells forward materials which exposure the tone mapping pass will apply.
+		/// @remark Only meaningful together with SetForwardOutputLinear: unlit materials and scene-colour
+		///         samples convert between display-referred and linear HDR, and that conversion is only
+		///         the inverse of the TonemapPass when it uses the same exposure.
+		void SetForwardExposure(const float exposure) { m_forwardExposure = exposure; }
+
+		/// @brief The exposure forward materials assume. See SetForwardExposure.
+		[[nodiscard]] float GetForwardExposure() const { return m_forwardExposure; }
 
 		/// @brief When set, Render() reuses the render queue built by a previous pass this frame
 		/// instead of rebuilding it (running FindVisibleObjects / occlusion culling again). Used by
@@ -483,6 +521,12 @@ namespace mmo
 		/// @brief Gets the currently active camera being used for rendering.
 		/// @return Pointer to the active camera, or nullptr if not currently rendering.
 		Camera* GetActiveCamera() const { return m_activeCamera; }
+
+		/// @brief Whether the current render pass draws shadow casters into a shadow map with a
+		///        shadow camera (a ShadowMap-typed pass that is not the main-view depth pre-pass).
+		/// @remark Renderables whose per-frame state is tied to the main view (terrain LOD, GPU
+		///         occlusion queries) must not update it during such a pass.
+		[[nodiscard]] bool IsShadowCasterPass() const { return m_pixelShaderType == PixelShaderType::ShadowMap && !m_depthPrepass; }
 
 		MaterialPtr GetDefaultMaterial();
 
@@ -714,11 +758,12 @@ namespace mmo
 
 		ConstantBufferPtr m_psCameraBuffer;
 
-		Vector3 m_fogColor = Vector3(0.447f, 0.638f, 1.0f);
+		AtmosphereParameters m_atmosphereParameters;
 
-		float m_fogStart = 185.0f;
+		AtmosphereTimeOfDay m_atmosphereTimeOfDay;
 
-		float m_fogEnd = 265.0f;
+		/// @brief Wind of the current frame; see SetWind.
+		WindState m_wind;
 
 		PixelShaderType m_pixelShaderType = PixelShaderType::Forward;
 
@@ -727,6 +772,12 @@ namespace mmo
 		/// that opaque groups (already in the GBuffer) are not re-rendered.
 		/// Never set this in non-deferred contexts (editor, model viewer).
 		bool m_forwardTransparentOnly = false;
+
+		/// @brief See SetForwardOutputLinear.
+		bool m_forwardOutputLinear = false;
+
+		/// @brief See SetForwardExposure.
+		float m_forwardExposure = 1.0f;
 		bool m_reuseRenderQueue = false;
 		bool m_depthPrepass = false;
 
