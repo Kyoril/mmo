@@ -1764,6 +1764,13 @@ namespace mmo
                 light.SetRange(50.0f);
             }
 
+            if (sceneType == LightType::Spot)
+            {
+                light.SetOuterConeAngle(wmoLight.outerConeAngle);
+                light.SetInnerConeAngle(wmoLight.innerConeAngle);
+            }
+            light.SetFogScattering(wmoLight.fogScattering);
+
             // Attach light to node
             lightNode.AttachObject(light);
 

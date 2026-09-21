@@ -9,6 +9,7 @@
 #include "math/aabb.h"
 #include "math/plane.h"
 #include "scene_graph/portal.h"
+#include "light_math.h"
 
 #include <vector>
 #include <memory>
@@ -123,6 +124,15 @@ namespace mmo
         
         /// @brief Attenuation end distance.
         float attenuationEnd;
+
+        /// @brief Full inner cone angle in degrees (spot lights). Full strength inside.
+        float innerConeAngle = light_math::DefaultInnerConeAngle;
+
+        /// @brief Full outer cone angle in degrees (spot lights). No light outside.
+        float outerConeAngle = light_math::DefaultOuterConeAngle;
+
+        /// @brief Multiplier on this light's scattering into volumetric fog (0 = none).
+        float fogScattering = 1.0f;
     };
 
     /// @brief Represents fog settings within a world model.

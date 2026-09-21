@@ -35,7 +35,7 @@ namespace mmo
     {
         if (version == world_model_version::Latest)
         {
-            version = world_model_version::Version_2_0;
+            version = world_model_version::Version_2_1;
         }
 
         // Write version chunk
@@ -194,9 +194,11 @@ namespace mmo
 
         // Write lights (MOLT)
         {
+            const bool writeLightExtras = version >= world_model_version::Version_2_1;
+            const uint32 lightEntrySize = writeLightExtras ? 60 : 48;
             const uint32 lightCount = static_cast<uint32>(worldModel.GetLights().size());
-            const uint32 lightsSize = lightCount * 48 + 4;
-            
+            const uint32 lightsSize = lightCount * lightEntrySize + 4;
+
             writer
                 << io::write<uint32>(*LightsChunk)
                 << io::write<uint32>(lightsSize)
@@ -220,6 +222,14 @@ namespace mmo
                     << io::write<float>(light.rotation.w)
                     << io::write<float>(light.attenuationStart)
                     << io::write<float>(light.attenuationEnd);
+
+                if (writeLightExtras)
+                {
+                    writer
+                        << io::write<float>(light.innerConeAngle)
+                        << io::write<float>(light.outerConeAngle)
+                        << io::write<float>(light.fogScattering);
+                }
             }
         }
 
@@ -924,6 +934,14 @@ namespace mmo
                 >> io::read<float>(rotW)
                 >> io::read<float>(light.attenuationStart)
                 >> io::read<float>(light.attenuationEnd);
+
+            if (m_version >= world_model_version::Version_2_1)
+            {
+                reader
+                    >> io::read<float>(light.innerConeAngle)
+                    >> io::read<float>(light.outerConeAngle)
+                    >> io::read<float>(light.fogScattering);
+            }
 
             if (!reader)
             {
