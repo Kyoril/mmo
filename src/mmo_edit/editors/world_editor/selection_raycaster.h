@@ -23,6 +23,9 @@ namespace mmo
 
 	static constexpr uint32 SceneQueryFlags_AreaTriggers = 1 << 4;
 
+	/// @brief Used for local fog volume wireframes. Keeps them out of the entity and spawn queries.
+	static constexpr uint32 SceneQueryFlags_FogVolumes = 1 << 5;
+
 	class Camera;
     class RaySceneQuery;
     class Selection;

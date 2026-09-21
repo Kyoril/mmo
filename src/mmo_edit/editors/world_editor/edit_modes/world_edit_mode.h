@@ -121,6 +121,30 @@ namespace mmo
 
 		/// @brief Generates a fresh fog volume id (the current maximum id in use, plus one).
 		virtual uint32 GenerateFogVolumeId() = 0;
+
+		/// @brief Creates the editor wireframe for the fog volume with the given id.
+		/// @param volumeId Id of a volume in GetFogVolumes().
+		/// @param select Whether the volume becomes the active selection.
+		virtual void AddFogVolumeVisual(uint32 volumeId, bool select) = 0;
+
+		/// @brief Re-syncs a fog volume's wireframe (geometry, colour, position, yaw) with its data
+		///        and lets the transform widget follow if that volume is selected.
+		/// @param volumeId Id of a volume in GetFogVolumes().
+		virtual void RefreshFogVolumeVisual(uint32 volumeId) = 0;
+
+		/// @brief Destroys every fog volume wireframe. Clears the selection first.
+		virtual void RemoveAllFogVolumeVisuals() = 0;
+
+		/// @brief Makes the fog volume with the given id the active selection.
+		/// @param volumeId Id of a volume that has a visual.
+		virtual void SelectFogVolume(uint32 volumeId) = 0;
+
+		/// @brief Deletes a fog volume and its wireframe, and flags the fog volumes as changed.
+		/// @param volumeId Id of the volume to delete.
+		virtual void RemoveFogVolume(uint32 volumeId) = 0;
+
+		/// @brief Gets the id of the currently selected fog volume, or 0 if none is selected.
+		virtual uint32 GetSelectedFogVolumeId() const = 0;
 	};
 
 	class WorldEditMode : public NonCopyable
