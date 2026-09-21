@@ -18,6 +18,7 @@
 #include "net/realm_connector.h"
 #include "ui/world_frame.h"
 #include "ui/world_renderer.h"
+#include "deferred_shading/color_grading.h"
 
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
@@ -6269,6 +6270,12 @@ namespace mmo
 		renderer->SetBloomIntensity(state.bloomIntensity);
 		renderer->SetBloomThreshold(state.bloomThreshold);
 		renderer->SetFogLightScattering(state.lightScattering);
+
+		ColorGradingSettings grading;
+		grading.SetSaturation(state.saturation);
+		grading.SetContrast(state.contrast);
+		grading.SetColorFilter(state.colorFilter);
+		renderer->SetColorGrading(grading, state.colorLut, state.colorLutFrom, state.colorLutBlend);
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)

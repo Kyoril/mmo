@@ -2,6 +2,13 @@
 
 #include "tonemap_pass.h"
 
+#include "color_grading.h"
+#include "graphics/texture_mgr.h"
+#include "graphics/sampler_state.h"
+#include "log/default_log_levels.h"
+
+#include <map>
+
 // --- Shader bytecode seam ---------------------------------------------------------------
 // Mirrors the seam in ssao_pass.cpp; the deferred path is D3D11-only today.
 #ifdef _WIN32
@@ -25,10 +32,18 @@ namespace mmo
 			float exposure;
 			float bloomScale;
 			float ditherStrength;
-			float padding0;
+			float saturation;
+
+			float colorFilter[3];
+			float contrast;
+
+			float lutBlend;
+			float lutSize;
+			float lutFromSize;
+			float gradingPadding;
 		};
 
-		static_assert(sizeof(TonemapConstants) == 16, "TonemapConstants must match the HLSL layout");
+		static_assert(sizeof(TonemapConstants) == 48, "TonemapConstants must match the HLSL layout");
 	}
 
 	TonemapPass::TonemapPass(GraphicsDevice& device, const uint32 width, const uint32 height)
@@ -53,6 +68,12 @@ namespace mmo
 		uint32 blackPixel = 0xFF000000;
 		m_blackTexture->LoadRaw(&blackPixel, sizeof(blackPixel));
 		m_blackTexture->SetDebugName("TonemapNoBloom");
+
+		SamplerDesc lutSampler;
+		lutSampler.filter = SamplerFilter::Linear;
+		lutSampler.address = SamplerAddress::Clamp;
+		m_lutSampler = m_device.CreateSamplerState(lutSampler);
+		ASSERT(m_lutSampler);
 	}
 
 	void TonemapPass::Resize(const uint32 width, const uint32 height)
@@ -68,6 +89,18 @@ namespace mmo
 		constants.exposure = m_settings.exposure;
 		constants.bloomScale = bloom ? bloomScale : 0.0f;
 		constants.ditherStrength = m_settings.ditherStrength;
+
+		const ColorGradingSettings& grading = m_settings.grading;
+		constants.saturation = grading.saturation;
+		constants.colorFilter[0] = grading.colorFilter.x;
+		constants.colorFilter[1] = grading.colorFilter.y;
+		constants.colorFilter[2] = grading.colorFilter.z;
+		constants.contrast = grading.contrast;
+		constants.lutBlend = m_lutBlend;
+		constants.lutSize = m_lut ? static_cast<float>(m_lut->GetHeight()) : 0.0f;
+		constants.lutFromSize = m_lutFrom ? static_cast<float>(m_lutFrom->GetHeight()) : 0.0f;
+		constants.gradingPadding = 0.0f;
+
 		m_tonemapBuffer->Update(&constants);
 
 		m_outputRT->Activate();
@@ -87,6 +120,9 @@ namespace mmo
 
 		hdrScene.Bind(ShaderType::PixelShader, 0);
 		m_device.BindTexture(bloom ? bloom : m_blackTexture, ShaderType::PixelShader, 1);
+		m_device.BindTexture(m_lut ? m_lut : m_blackTexture, ShaderType::PixelShader, 2);
+		m_device.BindTexture(m_lutFrom ? m_lutFrom : m_blackTexture, ShaderType::PixelShader, 3);
+		m_lutSampler->Bind(ShaderType::PixelShader, 4);
 
 		m_device.SetVertexFormat(VertexFormat::PosColorTex1);
 		m_device.SetTopologyType(TopologyType::TriangleList);
@@ -99,5 +135,43 @@ namespace mmo
 
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 0);
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 1);
+		m_device.BindTexture(nullptr, ShaderType::PixelShader, 2);
+		m_device.BindTexture(nullptr, ShaderType::PixelShader, 3);
+	}
+
+	void TonemapPass::SetLuts(const String& lut, const String& lutFrom, const float blend)
+	{
+		m_lut = ResolveLut(lut);
+		m_lutFrom = ResolveLut(lutFrom);
+		m_lutBlend = std::clamp(blend, 0.0f, 1.0f);
+	}
+
+	TexturePtr TonemapPass::ResolveLut(const String& path)
+	{
+		if (path.empty())
+		{
+			return nullptr;
+		}
+
+		if (const auto it = m_lutCache.find(path); it != m_lutCache.end())
+		{
+			return it->second;
+		}
+
+		TexturePtr texture = TextureManager::Get().CreateOrRetrieve(path);
+		if (!texture)
+		{
+			WLOG("Colour grading LUT '" << path << "' could not be loaded; grading without it.");
+		}
+		else if (!color_grading::IsStripLut(texture->GetWidth(), texture->GetHeight()))
+		{
+			WLOG("Colour grading LUT '" << path << "' is " << texture->GetWidth() << "x" << texture->GetHeight()
+				<< ", expected a strip of N*N x N (256x16 or 1024x32); grading without it.");
+			texture = nullptr;
+		}
+
+		// Failures are cached too, so each bad path warns once.
+		m_lutCache[path] = texture;
+		return texture;
 	}
 }

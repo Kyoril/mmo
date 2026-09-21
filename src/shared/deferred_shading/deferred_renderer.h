@@ -243,6 +243,17 @@ namespace mmo
         /// @brief Gets the exposure applied before tone mapping.
         [[nodiscard]] float GetExposure() const { return m_tonemapPass->GetSettings().exposure; }
 
+        /// @brief Sets the colour grade applied after tone mapping.
+        /// @param settings Saturation, contrast and colour filter.
+        /// @param lut Target LUT texture path (empty = none).
+        /// @param lutFrom LUT being faded out (empty = none).
+        /// @param lutBlend Weight of lut; lutFrom gets 1 - lutBlend.
+        void SetColorGrading(const ColorGradingSettings& settings, const String& lut, const String& lutFrom, float lutBlend)
+        {
+            m_tonemapPass->GetSettings().grading = settings;
+            m_tonemapPass->SetLuts(lut, lutFrom, lutBlend);
+        }
+
         /// @brief Applies the volumetric fog quality preset: 0 Off (closed-form fog only), 1 Low ... 4 Ultra.
         void SetAtmosphereQuality(int level) { m_volumetricFogPass->GetSettings().ApplyQualityLevel(level); }
 

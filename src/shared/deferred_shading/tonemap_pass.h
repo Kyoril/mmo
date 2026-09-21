@@ -11,6 +11,9 @@
 #include "graphics/vertex_buffer.h"
 #include "graphics/shader_base.h"
 #include "graphics/texture.h"
+#include "graphics/sampler_state.h"
+
+#include <map>
 
 namespace mmo
 {
@@ -36,6 +39,12 @@ namespace mmo
 		/// @param fullscreenVs The pass-through fullscreen vertex shader.
 		void Render(RenderTexture& hdrScene, const TexturePtr& bloom, float bloomScale, VertexBuffer& quad, ShaderBase& fullscreenVs);
 
+		/// @brief Sets the zone LUTs for the next frames. Empty paths mean no LUT.
+		/// @param lut Target LUT texture path.
+		/// @param lutFrom LUT being faded out.
+		/// @param blend Weight of lut (lutFrom gets 1 - blend).
+		void SetLuts(const String& lut, const String& lutFrom, float blend);
+
 		/// @brief Gets the display-referred output.
 		[[nodiscard]] RenderTexturePtr GetResult() const { return m_outputRT; }
 
@@ -44,6 +53,10 @@ namespace mmo
 
 		/// @brief Gets the settings.
 		[[nodiscard]] const TonemapSettings& GetSettings() const { return m_settings; }
+
+	private:
+		/// @brief Loads a strip LUT once; empty, missing or wrongly sized textures resolve to nullptr (warned once).
+		TexturePtr ResolveLut(const String& path);
 
 	private:
 		GraphicsDevice& m_device;
@@ -61,5 +74,11 @@ namespace mmo
 		ConstantBufferPtr m_tonemapBuffer;
 
 		ShaderPtr m_tonemapPs;
+
+		std::map<String, TexturePtr> m_lutCache;
+		TexturePtr m_lut;
+		TexturePtr m_lutFrom;
+		float m_lutBlend = 1.0f;
+		SamplerStatePtr m_lutSampler;
 	};
 }

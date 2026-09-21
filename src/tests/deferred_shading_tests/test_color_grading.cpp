@@ -3,6 +3,7 @@
 #include "catch.hpp"
 
 #include "deferred_shading/color_grading.h"
+#include "deferred_shading/tonemap_settings.h"
 
 #include <algorithm>
 #include <cmath>
@@ -145,4 +146,12 @@ TEST_CASE("A neutral strip LUT maps colours to themselves", "[color_grading]")
 			}
 		}
 	}
+}
+
+TEST_CASE("Tonemap settings start with a neutral grade", "[color_grading]")
+{
+	const TonemapSettings settings;
+	CHECK(settings.grading.saturation == Approx(1.0f));
+	CHECK(settings.grading.contrast == Approx(1.0f));
+	CHECK(settings.grading.colorFilter.y == Approx(1.0f));
 }
