@@ -27,8 +27,9 @@ still have an effect even when a profile has no LUT.
 Because grading runs after gamma, it operates on display-referred (roughly perceptual) colour,
 which is what an artist sees when grading a screenshot in an ordinary image editor.
 
-Everything downstream of the tonemap pass - the underwater `PostProcessPass` and any unlit
-forward effect rendered with the scene - sees the graded image.
+Unlit forward effects render before the tonemap pass, into the HDR scene; they end up graded
+because the tonemap pass grades the whole frame. The underwater `PostProcessPass`, which does
+run downstream of the tonemap pass, also sees the graded image.
 
 ## Profile fields
 
@@ -63,6 +64,10 @@ the target profile's LUT, faded in over the highest-weight non-target profile's 
 (saturation, contrast, colour filter) blend linearly like every other profile curve instead.
 While crossing a zone border, both LUTs are sampled and the tonemap pass lerps between the two
 results by `LutBlend`.
+
+Only two LUTs ever blend at once. If a third zone is entered while a fade is still running, the
+weakest blending profile's LUT drops out immediately in favour of the new zone's, producing a
+small colour step, while the sliders (saturation, contrast, colour filter) stay continuous.
 
 ## Strip LUT format
 

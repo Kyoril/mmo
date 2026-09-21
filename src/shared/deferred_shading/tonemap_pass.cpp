@@ -122,7 +122,10 @@ namespace mmo
 		m_device.BindTexture(bloom ? bloom : m_blackTexture, ShaderType::PixelShader, 1);
 		m_device.BindTexture(m_lut ? m_lut : m_blackTexture, ShaderType::PixelShader, 2);
 		m_device.BindTexture(m_lutFrom ? m_lutFrom : m_blackTexture, ShaderType::PixelShader, 3);
-		m_lutSampler->Bind(ShaderType::PixelShader, 4);
+		if (m_lutSampler)
+		{
+			m_lutSampler->Bind(ShaderType::PixelShader, 4);
+		}
 
 		m_device.SetVertexFormat(VertexFormat::PosColorTex1);
 		m_device.SetTopologyType(TopologyType::TriangleList);
