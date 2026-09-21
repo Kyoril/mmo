@@ -133,6 +133,7 @@ namespace mmo
 				m_lightFadeInTime = lightConfig.fade_in_time();
 				m_light->SetIntensity(m_lightFadeInTime > 0.0f ? 0.0f : m_lightTargetIntensity);
 				m_light->SetRange(lightConfig.range());
+				m_light->SetFogScattering(lightConfig.fog_scattering());
 				m_node->AttachObject(*m_light);
 			}
 

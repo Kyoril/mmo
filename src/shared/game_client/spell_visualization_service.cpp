@@ -947,6 +947,7 @@ namespace mmo
             Light& light = scene.CreateLight(lightName, LightType::Point);
             light.SetColor(Vector4(lightConfig.r(), lightConfig.g(), lightConfig.b(), 1.0f));
             light.SetRange(lightConfig.range());
+            light.SetFogScattering(lightConfig.fog_scattering());
 
             // Start at 0 intensity if fading in, otherwise full intensity
             if (fadeInTime > 0.0f)

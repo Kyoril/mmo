@@ -114,6 +114,8 @@ namespace mmo
 		float lightIntensity = 1.0f;
 		/// @brief Light range.
 		float lightRange = 10.0f;
+		/// @brief Multiplier on the light's scattering into volumetric fog.
+		float lightFogScattering = 1.0f;
 		/// @brief Light fade-in time in seconds.
 		float lightFadeInTime = 0.3f;
 		/// @brief Light fade-out time in seconds (used on destroy).

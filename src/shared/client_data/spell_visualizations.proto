@@ -44,6 +44,8 @@ message PointLightConfig
 	optional float attenuation = 6 [default = 1.0];
 	optional float fade_in_time = 7 [default = 0.3];
 	optional float fade_out_time = 8 [default = 0.5];
+	// Multiplier on how strongly this light glows in volumetric fog (0 = none).
+	optional float fog_scattering = 9 [default = 1.0];
 }
 
 // Ribbon trail configuration for spell effects

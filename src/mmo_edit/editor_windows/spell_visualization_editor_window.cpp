@@ -1052,6 +1052,16 @@ namespace mmo
 						light->set_range(range);
 					}
 
+					float fogScattering = light->has_fog_scattering() ? light->fog_scattering() : 1.0f;
+					if (ImGui::DragFloat("Fog Scattering", &fogScattering, 0.05f, 0.0f, light_math::MaxFogScattering, "%.2f"))
+					{
+						light->set_fog_scattering(std::clamp(fogScattering, 0.0f, light_math::MaxFogScattering));
+					}
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::SetTooltip("How strongly this light glows in volumetric fog. 0 = no glow.");
+					}
+
 					float attenuation = light->has_attenuation() ? light->attenuation() : 1.0f;
 					if (ImGui::DragFloat("Attenuation", &attenuation, 0.1f, 0.0f, 5.0f))
 					{
@@ -1502,6 +1512,16 @@ namespace mmo
 				if (ImGui::DragFloat("Range", &range, 0.5f, 0.1f, 100.0f))
 				{
 					light->set_range(range);
+				}
+
+				float fogScattering = light->has_fog_scattering() ? light->fog_scattering() : 1.0f;
+				if (ImGui::DragFloat("Fog Scattering##proj", &fogScattering, 0.05f, 0.0f, light_math::MaxFogScattering, "%.2f"))
+				{
+					light->set_fog_scattering(std::clamp(fogScattering, 0.0f, light_math::MaxFogScattering));
+				}
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("How strongly this light glows in volumetric fog. 0 = no glow.");
 				}
 
 				float fadeIn = light->has_fade_in_time() ? light->fade_in_time() : 0.3f;
