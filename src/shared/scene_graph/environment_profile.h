@@ -89,6 +89,9 @@ namespace mmo
 		/// @brief Metres per repeat of the fog noise, [5, 500].
 		float fogNoiseSize = 60.0f;
 
+		/// @brief Multiplier on point and spot light scattering in the fog.
+		float lightScattering = 1.0f;
+
 		/// @brief Builds the built-in Default: the look the world had before profiles existed.
 		[[nodiscard]] static EnvironmentProfile MakeDefault();
 

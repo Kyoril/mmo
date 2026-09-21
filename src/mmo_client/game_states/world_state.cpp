@@ -6268,6 +6268,7 @@ namespace mmo
 		renderer->SetExposure(state.exposure * brightness);
 		renderer->SetBloomIntensity(state.bloomIntensity);
 		renderer->SetBloomThreshold(state.bloomThreshold);
+		renderer->SetFogLightScattering(state.lightScattering);
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)

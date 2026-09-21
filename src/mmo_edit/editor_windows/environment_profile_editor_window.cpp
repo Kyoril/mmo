@@ -265,6 +265,17 @@ namespace mmo
 				ImGui::SetTooltip("World height at which the fog reaches its full density. It thins above this height, so flying above a low base leaves the fog below you.");
 			}
 
+			float lightScattering = entry.light_scattering();
+			if (ImGui::DragFloat("Light Scattering", &lightScattering, 0.05f, 0.0f, 8.0f, "%.2f"))
+			{
+				entry.set_light_scattering(std::clamp(lightScattering, 0.0f, 8.0f));
+				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("How strongly lanterns, torches and spell lights glow in this zone's fog. 1 = default.");
+			}
+
 			float anisotropy = entry.fog_anisotropy();
 			if (ImGui::SliderFloat("Sun Glow Tightness", &anisotropy, 0.0f, 0.95f, "%.2f"))
 			{

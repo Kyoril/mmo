@@ -72,6 +72,8 @@ message EnvironmentProfile
 	optional float fog_noise_amount = 23 [default = 0.5];
 	// Metres per repeat of the noise pattern.
 	optional float fog_noise_size = 24 [default = 60];
+	// Multiplier on how strongly point and spot lights glow in the volumetric fog.
+	optional float light_scattering = 25 [default = 1];
 }
 
 message EnvironmentProfiles

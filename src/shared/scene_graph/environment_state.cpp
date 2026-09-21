@@ -65,6 +65,7 @@ namespace mmo
 		state.windGustiness = profile.windGustiness;
 		state.fogNoiseAmount = profile.fogNoiseAmount;
 		state.fogNoiseSize = profile.fogNoiseSize;
+		state.lightScattering = profile.lightScattering;
 
 		return state;
 	}
@@ -113,6 +114,7 @@ namespace mmo
 		// rescales the lookup and sweeps the pattern across the world - many tiles per second far from
 		// the origin. The size therefore steps once, at the midpoint of the blend.
 		state.fogNoiseSize = t < 0.5f ? a.fogNoiseSize : b.fogNoiseSize;
+		state.lightScattering = lerpFloat(a.lightScattering, b.lightScattering, t);
 
 		return state;
 	}

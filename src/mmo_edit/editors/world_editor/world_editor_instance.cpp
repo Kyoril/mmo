@@ -1392,6 +1392,7 @@ namespace mmo
 			renderer->SetExposure(state.exposure);
 			renderer->SetBloomIntensity(state.bloomIntensity);
 			renderer->SetBloomThreshold(state.bloomThreshold);
+			renderer->SetFogLightScattering(state.lightScattering);
 		}
 	}
 

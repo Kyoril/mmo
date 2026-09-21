@@ -95,7 +95,7 @@ editor's Environment Profile Editor):
 - fog: density, height falloff, base height, anisotropy
 - light: shaft strength, exposure, bloom intensity, bloom threshold
 - blending: transition seconds
-- wind and noise: wind direction (degrees clockwise from +Z, direction the wind blows toward), wind speed (m/s), gustiness, fog noise amount, fog noise size (metres)
+- wind and noise: wind direction (degrees clockwise from +Z, direction the wind blows toward), wind speed (m/s), gustiness, fog noise amount, fog noise size (metres), light scattering (zone multiplier on point/spot light scattering in the fog, `DeferredRenderer::SetFogLightScattering`, 0–8)
 
 **Profile resolution:** a zone uses its own profile, else its parent's, else the map's default profile, else the built-in Default. `EnvironmentController` fades between profiles.
 

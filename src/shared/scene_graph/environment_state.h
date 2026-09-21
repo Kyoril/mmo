@@ -65,6 +65,9 @@ namespace mmo
 
 		/// @brief Metres per repeat of the fog noise.
 		float fogNoiseSize = 60.0f;
+
+		/// @brief Multiplier on point and spot light scattering in the fog.
+		float lightScattering = 1.0f;
 	};
 
 	/// @brief Samples a profile at a time of day.
