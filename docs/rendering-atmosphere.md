@@ -65,6 +65,17 @@ Depth slices are spaced exponentially from 0.5 m, so cells near the camera are t
 
 **Scattered light:** per metre, the fog scatters `σ · (FogTint + SunScatterColor · SunColor · SunIntensity · shaft_strength · Phase(cosθ) · shadow)` toward the camera. Phase is Henyey-Greenstein (g = `fog_anisotropy`) blended 80/20 with isotropic.
 
+### Point and spot lights
+
+- Every point and spot light the deferred renderer gathers for the frame also scatters into the froxel fog; directional lights do not (the sun has its own term above).
+- Per metre a light adds `σ · Color · Intensity · attenuation · cone · fogScattering · light_scattering · Phase(cosθ)`, with θ between the view ray and the light's travel direction.
+- `fogScattering` is per light: world model lights author it in the editor, spells and projectiles carry `fog_scattering`. 0 keeps a light out of the fog entirely.
+- `light_scattering` is the zone multiplier from the environment profile (`DeferredRenderer::SetFogLightScattering`, clamped to 0–8).
+- Culling: `CS_FogInject` runs 8×8×8 thread groups. Each group culls the frame's lights once against its block's bounding sphere into a 64-entry group-shared list (`light_math::MaxLightsPerFogBlock`); a block reached by more lights drops the rest and shows red in debug view 4.
+- Attenuation and the spot cone are shared with the lighting pass through `shaders/LightCommon.hlsli`, which mirrors the unit-tested `scene_graph/light_math.h` (including `SpotConeIntersectsSphere`).
+- Lights are unshadowed in the fog: a light inside a building bleeds through its walls, so interior lights should use `fogScattering` 0.
+- The temporal blend smears fast-moving lights (projectiles) into short trails.
+
 **Formula copies:** the closed-form formulas exist three times and must change together: `shaders/AtmosphereCommon.hlsli`, the forward fog emitted by `MaterialCompilerD3D11`, and `deferred_shading/atmosphere_math.h`. The camera cbuffer (b1, 176 bytes) is declared three times as well; changing it requires **Tools → Rebuild All Materials**.
 
 ## Environment profiles and wind
@@ -99,7 +110,7 @@ editor's Environment Profile Editor):
 |---|---|---|
 | `gxAtmosphereQuality` | 3 | 0 Off, 1 Low, 2 Medium, 3 High, 4 Ultra (grid size) |
 | `gxVolumetricFogRange` | 200 | metres of view depth covered by the fog volume (50–300) |
-| `gxAtmosphereDebug` | 0 | 1 scattered light, 2 transmittance, 3 fog density |
+| `gxAtmosphereDebug` | 0 | 1 scattered light, 2 transmittance, 3 fog density, 4 lights per fog block |
 | `gxBloomQuality` | 2 | 0 Off, 1 Low, 2 High |
 | `gxExposure` | 1.0 | player brightness, multiplies the profile exposure |
 
@@ -107,7 +118,7 @@ editor's Environment Profile Editor):
 
 - Water, particles and glass get closed-form fog only: no noise, no shafts.
 - Shafts end at the 300 m shadow range; mountains farther away cannot block the sun.
-- Point and spot lights do not scatter in the fog yet (planned: project B). Local fog volumes are planned as project C.
+- Point and spot lights scatter without shadows (see above). Local fog volumes are planned as project C.
 - Bloom strength is the environment profile's bloom intensity divided by the number of bloom levels.
 - Debug views are composited before bloom and tone mapping, so they appear tone-mapped.
 - Debug view 3 (density) reads black at quality 0: there is no grid volume to sample, so `DensityVolume` is never bound.

@@ -11,6 +11,7 @@
 #include "graphics/render_texture.h"
 #include "graphics/sampler_state.h"
 #include "graphics/shader_base.h"
+#include "graphics/structured_buffer.h"
 #include "graphics/vertex_buffer.h"
 #include "graphics/volume_texture.h"
 #include "math/matrix4.h"
@@ -54,12 +55,15 @@ namespace mmo
 		/// @param cascadeShadowMaps The cascade depth maps.
 		/// @param shadowBuffer The ShadowBuffer cbuffer already filled for this frame.
 		/// @param cameraBuffer The scene camera cbuffer already refreshed for this camera.
+		/// @param lights The deferred renderer's light buffer (ShaderLight entries).
+		/// @param lightCount Number of valid entries in lights.
 		/// @param shadowSampler The cascade comparison sampler.
 		/// @param quad The fullscreen quad vertex buffer.
 		/// @param fullscreenVs The pass-through fullscreen vertex shader.
 		void Render(Camera& camera, const WindState& wind, RenderTexture& sceneColor, RenderTexture& gbufferNormalRT, RenderTexture& output,
 			const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, ConstantBuffer& shadowBuffer,
-			ConstantBuffer& cameraBuffer, SamplerState& shadowSampler, VertexBuffer& quad, ShaderBase& fullscreenVs);
+			ConstantBuffer& cameraBuffer, StructuredBuffer& lights, uint32 lightCount, SamplerState& shadowSampler, VertexBuffer& quad,
+			ShaderBase& fullscreenVs);
 
 		/// @brief Discards the temporal history, e.g. after a frame in which the pass did not run.
 		void InvalidateHistory() { m_historyValid = false; }

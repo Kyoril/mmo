@@ -71,9 +71,13 @@ namespace mmo
 			float windOffsetZ;
 			float skyDistance;
 			float volumeEnabled;
+
+			uint32 lightCount;
+			float lightScatterStrength;
+			float lightPadding[2];
 		};
 
-		static_assert(sizeof(VolumetricFogConstants) == 224, "VolumetricFogConstants must match the HLSL layout");
+		static_assert(sizeof(VolumetricFogConstants) == 240, "VolumetricFogConstants must match the HLSL layout");
 
 		uint32 groupCount(const uint32 cells)
 		{
@@ -217,7 +221,8 @@ namespace mmo
 
 	void VolumetricFogPass::Render(Camera& camera, const WindState& wind, RenderTexture& sceneColor, RenderTexture& gbufferNormalRT, RenderTexture& output,
 		const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, ConstantBuffer& shadowBuffer,
-		ConstantBuffer& cameraBuffer, SamplerState& shadowSampler, VertexBuffer& quad, ShaderBase& fullscreenVs)
+		ConstantBuffer& cameraBuffer, StructuredBuffer& lights, const uint32 lightCount, SamplerState& shadowSampler, VertexBuffer& quad,
+		ShaderBase& fullscreenVs)
 	{
 		// Blend state persists across frames and the previous forward pass may have left alpha blending
 		// on; the composite must overwrite its target.
@@ -269,6 +274,10 @@ namespace mmo
 		constants.windOffsetZ = wind.noiseOffsetZ;
 		constants.skyDistance = VolumetricFogSettings::SkyDistance;
 		constants.volumeEnabled = volumeEnabled ? 1.0f : 0.0f;
+		constants.lightCount = lightCount;
+		constants.lightScatterStrength = m_settings.lightScatterStrength;
+		constants.lightPadding[0] = 0.0f;
+		constants.lightPadding[1] = 0.0f;
 		m_fogBuffer->Update(&constants);
 
 		if (volumeEnabled)
@@ -285,6 +294,7 @@ namespace mmo
 			}
 			m_noiseSampler->Bind(ShaderType::ComputeShader, 0);
 			shadowSampler.Bind(ShaderType::ComputeShader, 1);
+			lights.BindToStage(ShaderType::ComputeShader, 9);
 			m_injectVolume->BindWritable(0);
 			m_injectCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), groupCount(m_gridDepth));

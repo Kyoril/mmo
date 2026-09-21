@@ -249,8 +249,11 @@ namespace mmo
         /// @brief Sets the view depth the fog volume covers in metres (clamped to [50, 300]).
         void SetVolumetricFogRange(float range) { m_volumetricFogPass->GetSettings().SetRange(range); }
 
-        /// @brief Sets the fog debug view: 0 off, 1 scattered light, 2 transmittance, 3 density.
+        /// @brief Sets the fog debug view: 0 off, 1 scattered light, 2 transmittance, 3 density, 4 lights per fog block.
         void SetAtmosphereDebugMode(int mode) { m_volumetricFogPass->GetSettings().SetDebugMode(mode); }
+
+        /// @brief Sets how strongly point and spot lights scatter in the volumetric fog, clamped to [0, 8].
+        void SetFogLightScattering(float strength) { m_volumetricFogPass->GetSettings().SetLightScatterStrength(strength); }
 
         /// @brief Applies the bloom quality preset: 0 Off, 1 Low, 2 High.
         void SetBloomQuality(int level) { m_bloomPass->GetSettings().ApplyQualityLevel(level); }

@@ -64,6 +64,9 @@ namespace mmo
 		case ShaderType::PixelShader:
 			m_context.PSSetShaderResources(slot, 1, srvs);
 			break;
+		case ShaderType::ComputeShader:
+			m_context.CSSetShaderResources(slot, 1, srvs);
+			break;
 		default:
 			ASSERT(!"Unsupported shader type for structured buffer binding");
 			break;

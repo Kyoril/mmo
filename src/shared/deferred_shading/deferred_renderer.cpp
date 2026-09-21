@@ -446,7 +446,8 @@ namespace mmo
         if (runAtmosphere)
         {
             m_volumetricFogPass->Render(camera, scene.GetWind(), *m_renderTexture, m_gBuffer.GetNormalRT(), *m_sceneColorCopy,
-                m_cascadeShadowMaps, *m_shadowBuffer, *scene.GetCameraBuffer(), *m_shadowSampler, *m_quadBuffer, *m_deferredLightVs);
+                m_cascadeShadowMaps, *m_shadowBuffer, *scene.GetCameraBuffer(), *m_lightStructuredBuffer,
+                static_cast<uint32>(m_shaderLights.size()), *m_shadowSampler, *m_quadBuffer, *m_deferredLightVs);
         }
         else
         {

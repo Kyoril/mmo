@@ -71,7 +71,7 @@ In addition to commands, the system also uses console variables (CVars) that con
 - `gxRenderScale` - 3D render resolution scale, 0.25 to 1.0 (default: 1.0)
 - `gxAtmosphereQuality` - Volumetric fog quality 0–4 (default: 3)
 - `gxVolumetricFogRange` - Metres of view depth covered by the volumetric fog, 50–300 (default: 200)
-- `gxAtmosphereDebug` - Fog debug view: 1 scattered light, 2 transmittance, 3 density (default: 0)
+- `gxAtmosphereDebug` - Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block (default: 0)
 - `gxBloomQuality` - Bloom quality (default: 2)
 - `gxExposure` - Player brightness, multiplies the zone environment's exposure (default: 1.0)
 - `gxSsao*`, `gxContactShadow*`, `ShadowQuality`, `ShadowTextureSize` - see `WorldState::RegisterGameplayCommands`

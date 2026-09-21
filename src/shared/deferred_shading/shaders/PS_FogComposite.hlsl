@@ -55,7 +55,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     float totalTransmittance = volumeTransmittance * tailTransmittance;
     float3 totalScattered = volumeScattered + tailScattered;
 
-    if (DebugMode == 1)
+    if (DebugMode == 1 || DebugMode == 4)
     {
         return float4(totalScattered, 1.0f);
     }

@@ -49,8 +49,11 @@ namespace mmo
 		/// @brief View depth covered by the grid in metres.
 		float range = 200.0f;
 
-		/// @brief 0 off, 1 scattered light, 2 transmittance, 3 density.
+		/// @brief 0 off, 1 scattered light, 2 transmittance, 3 density, 4 lights per fog block.
 		uint32 debugMode = 0;
+
+		/// @brief Multiplier on point and spot light scattering (the zone's light_scattering).
+		float lightScatterStrength = 1.0f;
 
 		/// @brief Applies a quality preset. Out-of-range values clamp.
 		void ApplyQualityLevel(int level)
@@ -89,10 +92,16 @@ namespace mmo
 			range = std::clamp(value, MinRange, MaxRange);
 		}
 
-		/// @brief Sets the debug view, clamped to [0, 3].
+		/// @brief Sets the debug view, clamped to [0, 4].
 		void SetDebugMode(const int mode)
 		{
-			debugMode = static_cast<uint32>(std::clamp(mode, 0, 3));
+			debugMode = static_cast<uint32>(std::clamp(mode, 0, 4));
+		}
+
+		/// @brief Sets the point and spot light scattering strength, clamped to [0, 8].
+		void SetLightScatterStrength(const float value)
+		{
+			lightScatterStrength = std::clamp(value, 0.0f, 8.0f);
 		}
 
 		/// @brief Whether the froxel volume runs at all.

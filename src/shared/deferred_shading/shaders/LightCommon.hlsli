@@ -44,4 +44,45 @@ float SpotFactor(Light light, float3 lightToPoint)
     return smoothstep(light.SpotCosOuter, light.SpotCosInner, dot(normalize(light.Direction), lightToPoint));
 }
 
+// Conservative spot cone vs sphere test: never false for a sphere containing a lit point of the cone.
+// direction must be normalized; cosHalfAngle is the outer cone cosine. Mirrors
+// light_math::SpotConeIntersectsSphere.
+bool SpotConeIntersectsSphere(float3 apex, float3 direction, float range, float cosHalfAngle, float3 center, float radius)
+{
+    float3 toCenter = center - apex;
+    float lengthSquared = dot(toCenter, toCenter);
+    float along = dot(toCenter, direction);
+    float sinHalfAngle = sqrt(saturate(1.0f - cosHalfAngle * cosHalfAngle));
+    float closest = cosHalfAngle * sqrt(max(lengthSquared - along * along, 0.0f)) - along * sinHalfAngle;
+
+    bool outsideAngle = closest > radius;
+    bool beyondRange = along > range + radius;
+    bool behindApex = along < -radius;
+    return !(outsideAngle || beyondRange || behindApex);
+}
+
+// Whether a point or spot light can reach any point of the sphere (xyz center, w radius) and
+// scatters into fog at all.
+bool LightReachesFogSphere(Light light, float4 sphere)
+{
+    if (light.Type == LIGHT_TYPE_DIRECTIONAL || light.FogScattering <= 0.0f)
+    {
+        return false;
+    }
+
+    float3 toCenter = sphere.xyz - light.Position;
+    float reach = light.Range + sphere.w;
+    if (dot(toCenter, toCenter) > reach * reach)
+    {
+        return false;
+    }
+
+    if (light.Type == LIGHT_TYPE_SPOT)
+    {
+        return SpotConeIntersectsSphere(light.Position, normalize(light.Direction), light.Range, light.SpotCosOuter, sphere.xyz, sphere.w);
+    }
+
+    return true;
+}
+
 #endif
