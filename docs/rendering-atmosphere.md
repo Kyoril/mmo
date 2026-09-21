@@ -17,7 +17,7 @@ Designs: [froxel volumetric fog](superpowers/specs/2026-09-14-froxel-volumetric-
    - **Skipped** while submerged, with `Scene::IsFogEnabled()` false, when the combined fog density is zero, or without a shadow sampler object. The history is then discarded.
 4. Forward pass — `Scene::SetForwardOutputLinear(true)`; materials apply the analytic height fog (no noise, no shafts)
 5. `BloomPass` — skipped while submerged
-6. `TonemapPass` — scene + bloom, exposure, ACES, gamma, dither
+6. `TonemapPass` — scene + bloom, exposure, ACES, gamma, colour grading (sliders then zone LUT cross-fade, see [docs/color-grading.md](color-grading.md)), dither
 7. `PostProcessPass` (underwater only)
 
 ## The linear-HDR contract
@@ -96,6 +96,7 @@ editor's Environment Profile Editor):
 - light: shaft strength, exposure, bloom intensity, bloom threshold
 - blending: transition seconds
 - wind and noise: wind direction (degrees clockwise from +Z, direction the wind blows toward), wind speed (m/s), gustiness, fog noise amount, fog noise size (metres)
+- colour grading (see [docs/color-grading.md](color-grading.md)): `color_lut` (strip LUT texture path, empty = none), `saturation`, `contrast`, `color_filter_r/g/b` (all [0, 2], default 1); applied in the TonemapPass after ACES and gamma, and cross-faded between zones like the other fixed values
 
 **Profile resolution:** a zone uses its own profile, else its parent's, else the map's default profile, else the built-in Default. `EnvironmentController` fades between profiles.
 
