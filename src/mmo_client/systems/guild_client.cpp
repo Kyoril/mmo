@@ -93,6 +93,7 @@ namespace mmo
 			luabind::def_lambda("CanGuildDemote", [this]() { return CanGuildDemote(); }),
 			luabind::def_lambda("CanGuildInvite", [this]() { return CanGuildInvite(); }),
 			luabind::def_lambda("CanGuildRemove", [this]() { return CanGuildRemove(); }),
+			luabind::def_lambda("CanGuildSetMOTD", [this]() { return CanGuildSetMOTD(); }),
 			luabind::def_lambda("GuildRoster", [this]() { GuildRoster(); }),
 			luabind::def_lambda("GetGuildName", [this]() { return GetGuildName().c_str(); }),
 			luabind::def_lambda("GetGuildMOTD", [this]() { return GetGuildMOTD().c_str(); })
@@ -291,6 +292,13 @@ namespace mmo
 		return false;
 	}
 
+	bool GuildClient::CanGuildSetMOTD() const
+	{
+		return IsInGuild() && m_guildRank >= 0
+			&& static_cast<size_t>(m_guildRank) < m_guildRankPermissions.size()
+			&& (m_guildRankPermissions[m_guildRank] & guild_rank_permissions::SetMotd) != 0;
+	}
+
 	const GuildMemberInfo* GuildClient::GetGuildMemberInfo(int32 index) const
 	{
 		if (!IsInGuild() || index < 0 || index >= GetNumGuildMembers())
@@ -312,6 +320,7 @@ namespace mmo
 		{
 			m_guildMembers.clear();
 			m_guildRankNames.clear();
+			m_guildRankPermissions.clear();
 			m_guildRank = -1;
 		}
 		m_guildId = guildId;
@@ -519,6 +528,7 @@ namespace mmo
 		}
 
 		m_guildRankNames.clear();
+		m_guildRankPermissions.clear();
 		for (uint32 i = 0; i < rankCount; ++i)
 		{
 			uint32 permissions;
@@ -528,6 +538,7 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 			m_guildRankNames.push_back(std::move(rankName));
+			m_guildRankPermissions.push_back(permissions);
 		}
 
 		m_guildMembers.resize(memberCount);

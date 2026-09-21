@@ -72,6 +72,9 @@ namespace mmo
 
 		bool CanGuildRemove() const;
 
+		/// Whether the current rank may edit the guild message of the day.
+		bool CanGuildSetMOTD() const;
+
 		const GuildMemberInfo* GetGuildMemberInfo(int32 index) const;
 
 		void GuildRoster();
@@ -116,6 +119,7 @@ namespace mmo
 
 		std::vector<GuildMemberInfo> m_guildMembers;
 		std::vector<String> m_guildRankNames;
+		std::vector<uint32> m_guildRankPermissions;
 
 		const proto_client::RaceManager& m_races;
 		const proto_client::ClassManager& m_classes;
