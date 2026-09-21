@@ -1,0 +1,91 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
+#include "catch.hpp"
+
+#include "deferred_shading/fog_volume_math.h"
+#include "deferred_shading/fog_volume_selection.h"
+
+#include <cmath>
+
+using namespace mmo;
+
+TEST_CASE("Fog volume time-of-day factor", "[fog_volume]")
+{
+	CHECK(fog_volume::TimeOfDayFactor(13.0f, 0.0f, 0.0f, 1.0f) == Approx(1.0f));   // always on
+	CHECK(fog_volume::TimeOfDayFactor(7.0f, 4.0f, 10.0f, 1.0f) == Approx(1.0f));
+	CHECK(fog_volume::TimeOfDayFactor(12.0f, 4.0f, 10.0f, 1.0f) == Approx(0.0f));
+	CHECK(fog_volume::TimeOfDayFactor(4.5f, 4.0f, 10.0f, 1.0f) == Approx(0.5f));   // fading in
+	CHECK(fog_volume::TimeOfDayFactor(9.75f, 4.0f, 10.0f, 1.0f) == Approx(0.25f)); // fading out
+	CHECK(fog_volume::TimeOfDayFactor(1.0f, 22.0f, 6.0f, 1.0f) == Approx(1.0f));   // across midnight
+	CHECK(fog_volume::TimeOfDayFactor(23.0f, 22.0f, 6.0f, 1.0f) == Approx(1.0f));
+	CHECK(fog_volume::TimeOfDayFactor(12.0f, 22.0f, 6.0f, 1.0f) == Approx(0.0f));
+	CHECK(fog_volume::TimeOfDayFactor(5.0f, 4.0f, 6.0f, 3.0f) == Approx(1.0f));    // fade clamped to half the window
+	CHECK(fog_volume::TimeOfDayFactor(7.0f, 4.0f, 10.0f, 0.0f) == Approx(1.0f));   // no fade
+}
+
+TEST_CASE("Fog volume shape distance honours yaw", "[fog_volume]")
+{
+	const Vector3 halfSize(10.0f, 2.0f, 4.0f);
+	const float yawSin = std::sin(3.14159265f * 0.5f);   // 90 degrees
+	const float yawCos = std::cos(3.14159265f * 0.5f);
+
+	// A point 8 m along world +Z lies along the box's local long axis after a 90 degree yaw.
+	const Vector3 local = fog_volume::ToLocal(Vector3(0.0f, 0.0f, 8.0f), Vector3(0.0f, 0.0f, 0.0f), yawSin, yawCos);
+	CHECK(std::abs(local.x) == Approx(8.0f).margin(1e-4));
+	CHECK(local.z == Approx(0.0f).margin(1e-4));
+	CHECK(fog_volume::ShapeDistance(0, local, halfSize) == Approx(0.8f).margin(1e-4));
+
+	CHECK(fog_volume::ShapeDistance(0, Vector3(5.0f, 1.0f, 2.0f), halfSize) == Approx(0.5f));
+	CHECK(fog_volume::ShapeDistance(1, Vector3(5.0f, 1.0f, 2.0f), halfSize) == Approx(std::sqrt(0.75f)));
+	CHECK(fog_volume::ShapeDistance(1, Vector3(10.0f, 0.0f, 0.0f), halfSize) == Approx(1.0f));
+}
+
+TEST_CASE("Fog volume edge fade and height factor", "[fog_volume]")
+{
+	CHECK(fog_volume::EdgeFade(0.0f, 0.3f) == Approx(1.0f));
+	CHECK(fog_volume::EdgeFade(0.7f, 0.3f) == Approx(1.0f));
+	CHECK(fog_volume::EdgeFade(1.0f, 0.3f) == Approx(0.0f));
+	CHECK(fog_volume::EdgeFade(0.85f, 0.3f) == Approx(0.5f));
+	CHECK(fog_volume::EdgeFade(0.99f, 0.0f) == Approx(1.0f));
+	CHECK(fog_volume::EdgeFade(1.0f, 0.0f) == Approx(0.0f));
+
+	const Vector3 halfSize(5.0f, 3.0f, 5.0f);
+	CHECK(fog_volume::HeightFactor(Vector3(0.0f, -3.0f, 0.0f), halfSize, 0.1f) == Approx(1.0f));
+	CHECK(fog_volume::HeightFactor(Vector3(0.0f, 0.0f, 0.0f), halfSize, 0.1f) == Approx(std::exp(-0.3f)));
+}
+
+TEST_CASE("Fog volume selection keeps active, near, visible volumes", "[fog_volume]")
+{
+	std::vector<FogVolume> volumes(4);
+	volumes[0].position = Vector3(10.0f, 0.0f, 0.0f);
+	volumes[1].position = Vector3(5.0f, 0.0f, 0.0f);
+	volumes[2].position = Vector3(1000.0f, 0.0f, 0.0f);                 // beyond range
+	volumes[3].position = Vector3(3.0f, 0.0f, 0.0f);
+	volumes[3].activeFrom = 4.0f;                                        // inactive at noon
+	volumes[3].activeTo = 10.0f;
+
+	const auto all = [](const Vector3&, float) { return true; };
+	const std::vector<FogVolumeInstance> selected = SelectFogVolumes(volumes, 12.0f, Vector3(0.0f, 0.0f, 0.0f), 200.0f, all);
+	REQUIRE(selected.size() == 2);
+	CHECK(selected[0].center.x == Approx(5.0f));   // nearest first
+	CHECK(selected[1].center.x == Approx(10.0f));
+	CHECK(selected[0].halfSize.x == Approx(10.0f));
+	CHECK(selected[0].density == Approx(0.02f));
+
+	const auto none = [](const Vector3&, float) { return false; };
+	CHECK(SelectFogVolumes(volumes, 12.0f, Vector3(0.0f, 0.0f, 0.0f), 200.0f, none).empty());
+}
+
+TEST_CASE("Fog volume selection caps at the per-frame limit", "[fog_volume]")
+{
+	std::vector<FogVolume> volumes(100);
+	for (size_t i = 0; i < volumes.size(); ++i)
+	{
+		volumes[i].position = Vector3(static_cast<float>(100 - i), 0.0f, 0.0f);
+	}
+
+	const auto all = [](const Vector3&, float) { return true; };
+	const std::vector<FogVolumeInstance> selected = SelectFogVolumes(volumes, 12.0f, Vector3(0.0f, 0.0f, 0.0f), 500.0f, all);
+	REQUIRE(selected.size() == fog_volume::MaxVolumesPerFrame);
+	CHECK(selected.front().center.x == Approx(1.0f));
+}
