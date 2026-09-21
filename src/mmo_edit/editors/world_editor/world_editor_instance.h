@@ -433,8 +433,18 @@ namespace mmo
 		uint32 GetSelectedFogVolumeId() const override;
 
 	private:
-		/// @brief Returns the selected fog volume selectable, or nullptr if the selection is something else.
+		/// @brief Returns the selected fog volume selectable, or nullptr if the selection is empty or its
+		///        last-added entry is not a fog volume. With a mixed selection (e.g. a fog volume plus a
+		///        map entity picked via ctrl-click in the scene outline) this only reports the fog volume
+		///        when it is the most recently added entry; use SelectionHasFogVolume() to check whether
+		///        a fog volume is present anywhere in the selection regardless of order.
 		SelectedFogVolume* GetSelectedFogVolume() const;
+
+		/// @brief True if the current selection contains a SelectedFogVolume anywhere (not just as the
+		///        last entry). When volumeId is non-null, only a fog volume with that id counts.
+		///        Used to guard against destroying a fog volume's visual while a SelectedFogVolume
+		///        referencing it is still part of a mixed selection.
+		bool SelectionHasFogVolume(const uint32* volumeId) const;
 
 		/// @brief Destroys the wireframe of one fog volume, if it has one.
 		void RemoveFogVolumeVisual(uint32 volumeId);

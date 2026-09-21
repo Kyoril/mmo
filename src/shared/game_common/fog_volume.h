@@ -13,7 +13,7 @@ namespace mmo
 	/// @brief The volumetric shape a fog volume is rendered as.
 	enum class FogVolumeShape : uint8
 	{
-		/// @brief An axis-aligned (yaw-rotated) box, extending +/- size on each axis from its centre.
+		/// @brief An axis-aligned (yaw-rotated) box, extending +/- size/2 on each axis from its centre.
 		Box = 0,
 
 		/// @brief An ellipsoid inscribed into the box described by position/size/yaw.
@@ -38,7 +38,9 @@ namespace mmo
 		/// @brief World-space centre of the volume.
 		Vector3 position;
 
-		/// @brief Half-extents of the volume along each local axis. Clamped to a minimum of 0.5 per axis.
+		/// @brief Full extents (box edge lengths / ellipsoid diameters) of the volume along each local
+		///        axis; the renderer halves this to get the box/ellipsoid half-size. Clamped to a
+		///        minimum of 0.5 per axis.
 		Vector3 size{ 20.0f, 6.0f, 20.0f };
 
 		/// @brief Rotation around the world-space Y axis, in degrees.

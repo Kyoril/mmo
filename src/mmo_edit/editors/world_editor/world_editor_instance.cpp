@@ -3859,8 +3859,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::RemoveAllFogVolumeVisuals()
 	{
-		// A selected fog volume references its node and render object, so drop it first.
-		if (GetSelectedFogVolume())
+		// A selected fog volume references its node and render object, so drop it first. Checked against
+		// the whole selection, not just the last entry: a ctrl-click in the scene outline can append a
+		// SelectedMapEntity onto a fog volume selection without clearing it, and destroying the visuals
+		// underneath a SelectedFogVolume that is still part of that mixed selection would leave it
+		// dangling (use-after-free on the next gizmo move/scale).
+		if (SelectionHasFogVolume(nullptr))
 		{
 			ClearSelection();
 		}
@@ -3923,8 +3927,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::RemoveFogVolume(const uint32 volumeId)
 	{
-		// The selectable references the visual about to be destroyed, so drop it first.
-		if (SelectedFogVolume* selected = GetSelectedFogVolume(); selected && selected->GetVolumeId() == volumeId)
+		// The selectable references the visual about to be destroyed, so drop it first. Checked against
+		// the whole selection (see SelectionHasFogVolume), not just the last entry, so a mixed selection
+		// containing this volume plus e.g. a scene-outline-picked map entity doesn't leave a dangling
+		// SelectedFogVolume behind.
+		if (SelectionHasFogVolume(&volumeId))
 		{
 			ClearSelection();
 		}
@@ -3960,6 +3967,24 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			return nullptr;
 		}
 
+		// Only the most recently added selection entry counts here; see the header doc comment for why
+		// a fog volume elsewhere in a mixed selection is intentionally not reported by this method.
 		return dynamic_cast<SelectedFogVolume*>(m_selection.GetSelectedObjects().back().get());
+	}
+
+	bool WorldEditorInstance::SelectionHasFogVolume(const uint32* volumeId) const
+	{
+		for (const auto& selectable : m_selection.GetSelectedObjects())
+		{
+			if (const auto* fogVolume = dynamic_cast<SelectedFogVolume*>(selectable.get()))
+			{
+				if (!volumeId || fogVolume->GetVolumeId() == *volumeId)
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 }
