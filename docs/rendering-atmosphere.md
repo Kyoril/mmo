@@ -92,10 +92,10 @@ editor's Environment Profile Editor):
 | `sun_scatter` | sun colour inside fog | shaft multiplier |
 
 **Fixed values:**
-- fog: density, height falloff, base height, anisotropy
+- fog: density, height falloff, base height, anisotropy, light scattering (zone multiplier on point/spot light scattering in the fog, `DeferredRenderer::SetFogLightScattering`, 0–8)
 - light: shaft strength, exposure, bloom intensity, bloom threshold
 - blending: transition seconds
-- wind and noise: wind direction (degrees clockwise from +Z, direction the wind blows toward), wind speed (m/s), gustiness, fog noise amount, fog noise size (metres), light scattering (zone multiplier on point/spot light scattering in the fog, `DeferredRenderer::SetFogLightScattering`, 0–8)
+- wind and noise: wind direction (degrees clockwise from +Z, direction the wind blows toward), wind speed (m/s), gustiness, fog noise amount, fog noise size (metres)
 
 **Profile resolution:** a zone uses its own profile, else its parent's, else the map's default profile, else the built-in Default. `EnvironmentController` fades between profiles.
 
@@ -122,3 +122,4 @@ editor's Environment Profile Editor):
 - Bloom strength is the environment profile's bloom intensity divided by the number of bloom levels.
 - Debug views are composited before bloom and tone mapping, so they appear tone-mapped.
 - Debug view 3 (density) reads black at quality 0: there is no grid volume to sample, so `DensityVolume` is never bound.
+- Debug view 4 (lights per fog block) shows only the analytic fog at quality 0: there is no froxel volume to cull lights into.

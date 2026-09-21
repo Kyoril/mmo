@@ -9,6 +9,7 @@
 #include "math/degree.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace mmo
 {
@@ -53,17 +54,32 @@ namespace mmo
 
 	void Light::SetInnerConeAngle(const float degrees)
 	{
+		if (!std::isfinite(degrees))
+		{
+			return;
+		}
+
 		m_innerConeAngle = std::clamp(degrees, light_math::MinConeAngle, m_outerConeAngle);
 	}
 
 	void Light::SetOuterConeAngle(const float degrees)
 	{
+		if (!std::isfinite(degrees))
+		{
+			return;
+		}
+
 		m_outerConeAngle = std::clamp(degrees, light_math::MinConeAngle, light_math::MaxConeAngle);
 		m_innerConeAngle = std::clamp(m_innerConeAngle, light_math::MinConeAngle, m_outerConeAngle);
 	}
 
 	void Light::SetFogScattering(const float value)
 	{
+		if (!std::isfinite(value))
+		{
+			return;
+		}
+
 		m_fogScattering = std::clamp(value, 0.0f, light_math::MaxFogScattering);
 	}
 

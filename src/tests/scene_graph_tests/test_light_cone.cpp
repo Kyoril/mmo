@@ -5,6 +5,8 @@
 #include "scene_graph/light.h"
 #include "scene_graph/light_math.h"
 
+#include <limits>
+
 using namespace mmo;
 
 TEST_CASE("Spot cone angles default to a usable cone", "[light]")
@@ -44,5 +46,24 @@ TEST_CASE("Fog scattering clamps to its range", "[light]")
 	light.SetFogScattering(20.0f);
 	CHECK(light.GetFogScattering() == Approx(light_math::MaxFogScattering));
 	light.SetFogScattering(2.5f);
+	CHECK(light.GetFogScattering() == Approx(2.5f));
+}
+
+TEST_CASE("Light setters ignore non-finite input", "[light]")
+{
+	Light light(LightType::Spot);
+
+	const float nan = std::numeric_limits<float>::quiet_NaN();
+
+	light.SetOuterConeAngle(45.0f);
+	light.SetOuterConeAngle(nan);
+	CHECK(light.GetOuterConeAngle() == Approx(45.0f));
+
+	light.SetInnerConeAngle(20.0f);
+	light.SetInnerConeAngle(nan);
+	CHECK(light.GetInnerConeAngle() == Approx(20.0f));
+
+	light.SetFogScattering(2.5f);
+	light.SetFogScattering(nan);
 	CHECK(light.GetFogScattering() == Approx(2.5f));
 }

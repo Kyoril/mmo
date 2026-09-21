@@ -767,6 +767,7 @@ namespace mmo
 			lightConfig->set_range(params.lightRange);
 			lightConfig->set_fade_in_time(params.lightFadeInTime);
 			lightConfig->set_fade_out_time(params.lightFadeOutTime);
+			lightConfig->set_fog_scattering(params.lightFogScattering);
 		}
 
 		// Populate ribbon trail config if present
