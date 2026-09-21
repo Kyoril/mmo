@@ -35,6 +35,7 @@ namespace mmo
 		m_propConnections += AddProperty("Font").Changed.connect(this, &Frame::OnFontPropertyChanged);
 		m_propConnections += AddProperty("Color").Changed.connect(this, &Frame::OnColorPropertyChanged);
 		m_propConnections += AddProperty("Clickable").Changed.connect(this, &Frame::OnClickablePropertyChanged);
+		m_propConnections += AddProperty("MousePassThrough", "false").Changed.connect(this, &Frame::OnMousePassThroughPropertyChanged);
 		m_propConnections += AddProperty("DragEnabled").Changed.connect(this, &Frame::OnDragEnabledPropertyChanged);
 		m_propConnections += AddProperty("DropEnabled").Changed.connect(this, &Frame::OnDropEnabledPropertyChanged);
 	}
@@ -85,6 +86,7 @@ namespace mmo
 		other.m_id = m_id;
 		other.m_focusable = m_focusable;
 		other.m_clickable = m_clickable;
+		other.m_mousePassThrough = m_mousePassThrough;
 		other.m_opacity = m_opacity;
 		other.m_dragEnabled = m_dragEnabled;
 		other.m_dropEnabled = m_dropEnabled;
@@ -741,6 +743,12 @@ namespace mmo
 		for (auto childIt = m_children.rbegin(); childIt != m_children.rend(); ++childIt)
 		{
 			const auto& child = *childIt;
+
+			// Decorative overlays must not obscure interactive siblings, including through children.
+			if (child->m_mousePassThrough)
+			{
+				continue;
+			}
 
 			// Check the rectangle
 			const Rect childRect = child->GetAbsoluteFrameRect();
@@ -1741,6 +1749,11 @@ namespace mmo
 	void Frame::OnClickablePropertyChanged(const Property& property)
 	{
 		m_clickable = property.GetBoolValue();
+	}
+
+	void Frame::OnMousePassThroughPropertyChanged(const Property& property)
+	{
+		m_mousePassThrough = property.GetBoolValue();
 	}
 
 	void Frame::OnDragEnabledPropertyChanged(const Property& property)
