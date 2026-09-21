@@ -82,6 +82,14 @@ namespace mmo
         }
 
         /**
+         * @brief Forgets the real-time reference of the last Update.
+         *
+         * Call this when updates were paused for a while (e.g. the client left the world): the next
+         * Update then only primes the reference instead of adding the whole pause to the clock.
+         */
+        void ResetUpdateReference() { m_lastUpdateTime = 0; }
+
+        /**
          * @brief Gets the current game time in milliseconds.
          *
          * While a transition is running this is the blended time between the time of day the

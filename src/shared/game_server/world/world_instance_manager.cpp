@@ -49,11 +49,11 @@ namespace mmo
 	void WorldInstanceManager::SetTimeOfDay(const GameTime timeOfDay, const uint32 transitionMs)
 	{
 		const GameTime target = timeOfDay % constants::OneDay;
-		m_timeOfDayOffset = (target + constants::OneDay - GetSystemTimeOfDay()) % constants::OneDay;
-
 		ILOG("Time of day set to " << FormatTimeOfDay(target) << " by the realm");
 
+		// Under the same lock CreateInstance holds while a new instance reads the offset
 		std::unique_lock lock{ m_worldInstanceMutex };
+		m_timeOfDayOffset = (target + constants::OneDay - GetSystemTimeOfDay()) % constants::OneDay;
 		for (const auto& instance : m_worldInstances)
 		{
 			instance->SetTimeOfDay(target, transitionMs);

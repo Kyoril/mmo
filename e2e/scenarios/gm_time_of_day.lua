@@ -22,9 +22,18 @@ Assert(startsWith(received, "03:00:0"), "world node should report the new time o
 received = GM.SetTimeOfDay("22:15", 2)
 Assert(startsWith(received, "22:15:0"), "world node should report the second time of day, got " .. received)
 
--- Reset goes back to the realm's UTC system clock. Which time that is depends on when the
--- suite runs, so only assert that the override is gone.
+-- Reset goes back to the realm's UTC system clock, which runs on this same machine.
 received = GM.ResetTimeOfDay(1)
-Assert(not startsWith(received, "22:15:0"), "reset should leave the overridden time of day, got " .. received)
+
+local function secondsOfDay(text)
+	local h, m, sec = string.match(text, "^(%d%d):(%d%d):(%d%d)$")
+	Assert(h ~= nil, "time of day should be formatted HH:MM:SS, got " .. text)
+	return tonumber(h) * 3600 + tonumber(m) * 60 + tonumber(sec)
+end
+
+local utcNow = os.time() % 86400
+local drift = math.abs(secondsOfDay(received) - utcNow)
+drift = math.min(drift, 86400 - drift)
+Assert(drift <= 10, "reset should return to the UTC system time (" .. os.date("!%H:%M:%S") .. "), got " .. received)
 
 Log("Time of day verified: set, changed with custom transition, reset to system time " .. received)

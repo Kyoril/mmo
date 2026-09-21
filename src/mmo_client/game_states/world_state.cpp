@@ -352,6 +352,9 @@ namespace mmo
 	{
 		LoadingScreen::Show();
 
+		// The game clock outlives the world state; it was not updated while we were out of the world
+		m_gameTime.ResetUpdateReference();
+
 		CombatVignette::Init();
 
 		ObjectMgr::Initialize(m_project, m_partyInfo);

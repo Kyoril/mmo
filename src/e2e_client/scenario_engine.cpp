@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <algorithm>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -1106,7 +1107,8 @@ namespace mmo
 
 		/// Waits for the GameTimeInfo a time of day change produces: the first one after
 		/// previousCounter that carries the requested transition. Periodic clock syncs, which carry
-		/// no transition, are skipped.
+		/// no transition, are skipped — so a scenario must not request a transition of 0, which a
+		/// periodic sync could satisfy.
 		std::string waitForTimeOfDayChange(const char* action, const uint32 previousCounter, const uint32 transitionMs)
 		{
 			BotRealmConnector& realm = g_runtime->session->GetRealm();
@@ -1143,18 +1145,23 @@ namespace mmo
 				abortScenario(bot_exit_code::ScenarioFailed, "GM.SetTimeOfDay: invalid time of day '" + timeText + "'");
 			}
 
+			// The realm caps the transition, and the change is recognized by the capped value
+			const uint32 transitionMs = std::min(transitionSeconds, MaxTimeOfDayTransitionMs / 1000) * 1000;
+
 			BotRealmConnector& realm = g_runtime->session->GetRealm();
 			const uint32 previousCounter = realm.GetGameTimeInfoCounter();
-			realm.CheatSetTimeOfDay(timeOfDay, transitionSeconds * 1000);
-			return waitForTimeOfDayChange("GM.SetTimeOfDay", previousCounter, transitionSeconds * 1000);
+			realm.CheatSetTimeOfDay(timeOfDay, transitionMs);
+			return waitForTimeOfDayChange("GM.SetTimeOfDay", previousCounter, transitionMs);
 		}
 
 		std::string luaGmResetTimeOfDay(const uint32 transitionSeconds)
 		{
+			const uint32 transitionMs = std::min(transitionSeconds, MaxTimeOfDayTransitionMs / 1000) * 1000;
+
 			BotRealmConnector& realm = g_runtime->session->GetRealm();
 			const uint32 previousCounter = realm.GetGameTimeInfoCounter();
-			realm.CheatResetTimeOfDay(transitionSeconds * 1000);
-			return waitForTimeOfDayChange("GM.ResetTimeOfDay", previousCounter, transitionSeconds * 1000);
+			realm.CheatResetTimeOfDay(transitionMs);
+			return waitForTimeOfDayChange("GM.ResetTimeOfDay", previousCounter, transitionMs);
 		}
 
 		void luaGmSetSpeed(const float speed)

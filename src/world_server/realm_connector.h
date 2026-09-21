@@ -176,6 +176,7 @@ namespace mmo
 		/// Handles the realm's response to a mail take item request.
 		PacketParseResult OnMailTakeItemResult(auth::IncomingPacket& packet);
 
+		/// Handles the realm-wide time of day sent by the realm after login and on every change.
 		PacketParseResult OnTimeOfDay(auth::IncomingPacket& packet);
 
 		/// Handles the result of an inventory operation (save/delete).

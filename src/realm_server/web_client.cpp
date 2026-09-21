@@ -289,11 +289,12 @@ namespace mmo
 		if (transitionIt != arguments.end() && !transitionIt->second.empty())
 		{
 			const std::string& text = transitionIt->second;
-			if (text.size() > 3 || !std::all_of(text.begin(), text.end(), [](const char c) { return c >= '0' && c <= '9'; }))
+			if (text.size() > 2 || !std::all_of(text.begin(), text.end(), [](const char c) { return c >= '0' && c <= '9'; })
+				|| std::stoul(text) * 1000 > MaxTimeOfDayTransitionMs)
 			{
 				response.setStatus(net::http::OutgoingAnswer::BadRequest);
 				jsonResponse["status"] = "INVALID_PARAMETER";
-				jsonResponse["message"] = "Parameter 'transition' must be a whole number of seconds";
+				jsonResponse["message"] = "Parameter 'transition' must be a whole number of seconds (0-60)";
 				SendJsonResponse(response, jsonResponse);
 				return;
 			}
