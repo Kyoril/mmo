@@ -38,6 +38,7 @@ add_subdirectory(xml_handler_tests)
 # or the editor, and so cannot run on the headless server build.
 if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	add_subdirectory(client_data_tests)
+	add_subdirectory(frame_ui_input_tests)
 	add_subdirectory(movement_tests)
 	add_subdirectory(scene_graph_tests)
 endif()

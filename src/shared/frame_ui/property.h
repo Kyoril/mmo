@@ -25,6 +25,10 @@ namespace mmo
 	public:
 		/// Sets the value of this property.
 		void Set(std::string value);
+		/// Sets the value of this property from a string literal.
+		/// @remark Without this overload a literal such as "false" converts to bool (a standard
+		///         pointer conversion beats the user-defined one to std::string) and sets "true".
+		void Set(const char* value);
 		void Set(bool value);
 		bool GetBoolValue() const;
 

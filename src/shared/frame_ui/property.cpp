@@ -22,6 +22,11 @@ namespace mmo
 		}
 	}
 
+	void Property::Set(const char* value)
+	{
+		Set(std::string(value != nullptr ? value : ""));
+	}
+
 	void Property::Set(bool value)
 	{
 		Set(std::string(value ? "true" : "false"));

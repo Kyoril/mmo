@@ -52,8 +52,10 @@ namespace mmo
 			{ 0.1029f, Vector4(0.0140f, 0.0140f, 0.0140f, 0.9973f) },
 			{ 0.1707f, Vector4(0.0237f, 0.0163f, 0.0094f, 1.0000f) },
 			{ 0.2159f, Vector4(0.0427f, 0.0345f, 0.0224f, 1.0000f) },
-			{ 0.3617f, Vector4(0.0319f, 0.0360f, 0.0427f, 0.9973f) },
-			{ 0.5003f, Vector4(0.0293f, 0.0412f, 0.0600f, 0.9990f) },
+			{ 0.3617f, Vector4(0.0330f, 0.0370f, 0.0430f, 0.9973f) },
+			// Daylight ambient lifted and de-blued a little: shadowed ground under the canopy read as
+			// murky blue-green next to the sunlit meadow.
+			{ 0.5003f, Vector4(0.0360f, 0.0455f, 0.0610f, 0.9990f) },
 			{ 1.0000f, Vector4(0.0157f, 0.0157f, 0.0157f, 0.9961f) },
 		});
 
@@ -70,15 +72,20 @@ namespace mmo
 		profile.sun = MakeEnvironmentCurve({ { 0.0f, Vector4(1.0f, 0.95f, 0.9f, 1.0f) }, { 1.0f, Vector4(1.0f, 0.95f, 0.9f, 1.0f) } });
 		profile.moon = MakeEnvironmentCurve({ { 0.0f, Vector4(0.3f, 0.4f, 0.65f, 0.12f) }, { 1.0f, Vector4(0.3f, 0.4f, 0.65f, 0.12f) } });
 
-		// rgb = fog ambient radiance, a = density multiplier.
+		// rgb = fog ambient radiance, a = density multiplier. The dawn and dusk keys stay well below
+		// the sky's own warmth: fog this bright washes the whole scene to flat sepia and hides the sky,
+		// and it only takes a hint of warmth for the haze to read as low sun. The neighbouring morning
+		// and afternoon keys pull the tint back to daylight quickly, so the warm cast stays an event.
 		profile.fog = MakeEnvironmentCurve({
-			{ 0.0f, Vector4(0.02f, 0.04f, 0.08f, 1.1f) },   // Night
-			{ 0.2f, Vector4(0.05f, 0.06f, 0.1f, 1.2f) },    // Pre-dawn
-			{ 0.27f, Vector4(0.85f, 0.6f, 0.45f, 1.5f) },   // Dawn
-			{ 0.5f, Vector4(0.55f, 0.7f, 0.9f, 1.0f) },     // Midday
-			{ 0.73f, Vector4(0.85f, 0.55f, 0.4f, 1.3f) },   // Dusk
-			{ 0.8f, Vector4(0.05f, 0.06f, 0.1f, 1.15f) },   // After dusk
-			{ 1.0f, Vector4(0.02f, 0.04f, 0.08f, 1.1f) },   // Night
+			{ 0.0f, Vector4(0.02f, 0.035f, 0.07f, 1.0f) },  // Night
+			{ 0.2f, Vector4(0.06f, 0.07f, 0.11f, 1.05f) },  // Pre-dawn
+			{ 0.27f, Vector4(0.6f, 0.45f, 0.36f, 1.15f) },  // Dawn
+			{ 0.35f, Vector4(0.58f, 0.65f, 0.8f, 1.0f) },   // Morning
+			{ 0.5f, Vector4(0.55f, 0.7f, 0.9f, 0.9f) },     // Midday
+			{ 0.65f, Vector4(0.58f, 0.65f, 0.8f, 1.0f) },   // Afternoon
+			{ 0.73f, Vector4(0.6f, 0.43f, 0.34f, 1.15f) },  // Dusk
+			{ 0.8f, Vector4(0.06f, 0.07f, 0.11f, 1.05f) },  // After dusk
+			{ 1.0f, Vector4(0.02f, 0.035f, 0.07f, 1.0f) },  // Night
 		});
 
 		// rgb = sun colour inside the fog, a = shaft multiplier. Low-sun keys are strongly saturated

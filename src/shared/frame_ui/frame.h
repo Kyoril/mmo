@@ -314,7 +314,7 @@ namespace mmo
 		/// Invalidates the frame, causing a complete redraw the next time it is rendered.
 		void Invalidate(bool includeLayout = true);
 
-		/// Tries to retrieve a child frame at the given position.
+		/// Tries to retrieve a child frame at the given position, skipping MousePassThrough subtrees.
 		Pointer GetChildFrameAt(const Point& position, bool allowDisabled = true);
 
 		/// Makes this frame capture input events.
@@ -578,6 +578,8 @@ namespace mmo
 
 		void OnClickablePropertyChanged(const Property& property);
 
+		void OnMousePassThroughPropertyChanged(const Property& property);
+
 		void OnDragEnabledPropertyChanged(const Property& property);
 
 		void OnDropEnabledPropertyChanged(const Property& property);
@@ -688,6 +690,9 @@ namespace mmo
 		int32 m_frameLevel{ 0 };
 
 		bool m_clickable = true;
+
+		/// Whether mouse hit testing skips this frame and all its children.
+		bool m_mousePassThrough = false;
 
 		bool m_dragEnabled = false;
 

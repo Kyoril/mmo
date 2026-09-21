@@ -37,11 +37,9 @@ TEST_CASE("Default environment reproduces the legacy sky curves at their keys", 
 	// Seeded from the shipped Models/*.hccv files.
 	CheckColor(profile.skyHorizon.Evaluate(0.2975f), Vector4(0.9964f, 0.6f, 0.2f, 1.0f));
 	CheckColor(profile.skyZenith.Evaluate(0.4321f), Vector4(0.0431f, 0.0863f, 0.2039f, 1.0f));
-	CheckColor(profile.ambient.Evaluate(0.5003f), Vector4(0.0293f, 0.0412f, 0.06f, 0.999f));
 	CheckColor(profile.clouds.Evaluate(0.5003f), Vector4(0.9479f, 0.9479f, 0.9479f, 1.0f));
 
 	// Seeded from the SkyComponent fallback keys (no files ship for these two).
-	CheckColor(profile.fog.Evaluate(0.5f), Vector4(0.55f, 0.7f, 0.9f, 1.0f));
 	CheckColor(profile.sunScatter.Evaluate(0.23f), Vector4(1.0f, 0.42f, 0.18f, 0.8f));
 
 	// Formerly hardcoded light colours, now constant curves.
@@ -54,6 +52,22 @@ TEST_CASE("Default environment reproduces the legacy sky curves at their keys", 
 	CHECK(profile.bloomIntensity == Approx(0.08f));
 	CHECK(profile.bloomThreshold == Approx(0.8f));
 	CHECK(profile.transitionSeconds == Approx(3.0f));
+}
+
+TEST_CASE("Default environment keeps its tuned fog and ambient keys", "[environment]")
+{
+	// These two curves deliberately left their legacy values behind: the .hccv ambient read murky
+	// blue-green in daylight shadow, and the fallback fog keys washed dawn and dusk to flat sepia.
+	const EnvironmentProfile profile = EnvironmentProfile::MakeDefault();
+
+	CheckColor(profile.ambient.Evaluate(0.5003f), Vector4(0.036f, 0.0455f, 0.061f, 0.999f));
+
+	// Midday fog: daylight tint at 0.9x density.
+	CheckColor(profile.fog.Evaluate(0.5f), Vector4(0.55f, 0.7f, 0.9f, 0.9f));
+
+	// Dawn and dusk stay warm but well below the sky's brightness, at a mild density multiplier.
+	CheckColor(profile.fog.Evaluate(0.27f), Vector4(0.6f, 0.45f, 0.36f, 1.15f));
+	CheckColor(profile.fog.Evaluate(0.73f), Vector4(0.6f, 0.43f, 0.34f, 1.15f));
 }
 
 TEST_CASE("Default environment is shared and never null", "[environment]")
