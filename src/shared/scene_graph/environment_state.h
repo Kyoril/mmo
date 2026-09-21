@@ -68,6 +68,24 @@ namespace mmo
 
 		/// @brief Multiplier on point and spot light scattering in the fog.
 		float lightScattering = 1.0f;
+
+		/// @brief Texture path of the target profile's LUT. Empty = no colour grading.
+		String colorLut;
+
+		/// @brief LUT being faded out: the strongest other blending profile's LUT, or empty.
+		String colorLutFrom;
+
+		/// @brief Weight of colorLut; colorLutFrom (when not empty) gets 1 - colorLutBlend.
+		float colorLutBlend = 1.0f;
+
+		/// @brief Saturation applied with the LUT: 0 = grey, 1 = unchanged.
+		float saturation = 1.0f;
+
+		/// @brief Contrast around mid-grey applied with the LUT, 1 = unchanged.
+		float contrast = 1.0f;
+
+		/// @brief Multiplies the graded colour, 1 = unchanged.
+		Vector3 colorFilter { 1.0f, 1.0f, 1.0f };
 	};
 
 	/// @brief Samples a profile at a time of day.

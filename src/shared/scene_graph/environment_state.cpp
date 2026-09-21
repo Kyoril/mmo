@@ -67,6 +67,13 @@ namespace mmo
 		state.fogNoiseSize = profile.fogNoiseSize;
 		state.lightScattering = profile.lightScattering;
 
+		state.colorLut = profile.colorLut;
+		state.colorLutFrom.clear();
+		state.colorLutBlend = 1.0f;
+		state.saturation = profile.saturation;
+		state.contrast = profile.contrast;
+		state.colorFilter = profile.colorFilter;
+
 		return state;
 	}
 
@@ -115,6 +122,16 @@ namespace mmo
 		// the origin. The size therefore steps once, at the midpoint of the blend.
 		state.fogNoiseSize = t < 0.5f ? a.fogNoiseSize : b.fogNoiseSize;
 		state.lightScattering = lerpFloat(a.lightScattering, b.lightScattering, t);
+
+		// LUTs cannot be averaged: this is a plain two-way blend, which is correct for a two-entry
+		// lerp. EnvironmentController::Evaluate overwrites these three with the target/strongest-other
+		// pair after folding every blended entry, since that fold is not a simple pairwise lerp.
+		state.colorLut = b.colorLut;
+		state.colorLutFrom = a.colorLut;
+		state.colorLutBlend = t;
+		state.saturation = lerpFloat(a.saturation, b.saturation, t);
+		state.contrast = lerpFloat(a.contrast, b.contrast, t);
+		state.colorFilter = a.colorFilter + (b.colorFilter - a.colorFilter) * t;
 
 		return state;
 	}

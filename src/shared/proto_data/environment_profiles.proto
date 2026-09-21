@@ -74,6 +74,18 @@ message EnvironmentProfile
 	optional float fog_noise_size = 24 [default = 60];
 	// Multiplier on how strongly point and spot lights glow in the volumetric fog.
 	optional float light_scattering = 25 [default = 1];
+
+	// Colour grading, applied after tone mapping; see docs/color-grading.md.
+	// Texture path of a strip LUT (256x16 or 1024x32, imported uncompressed). Empty = none.
+	optional string color_lut = 26;
+	// 0 = grey, 1 = unchanged.
+	optional float saturation = 27 [default = 1];
+	// Contrast around mid-grey, 1 = unchanged.
+	optional float contrast = 28 [default = 1];
+	// Multiplies the graded colour, 1 = unchanged.
+	optional float color_filter_r = 29 [default = 1];
+	optional float color_filter_g = 30 [default = 1];
+	optional float color_filter_b = 31 [default = 1];
 }
 
 message EnvironmentProfiles
