@@ -5,8 +5,11 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "base/filesystem.h"
+#include "game_common/fog_volume.h"
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
+
+#include <vector>
 
 // Forward-declare ImGui types so we don't drag imgui.h into every translation unit.
 struct ImDrawList;
@@ -108,6 +111,16 @@ namespace mmo
 		virtual terrain::Terrain* GetTerrain() const = 0;
 
 		virtual bool IsTransforming() const = 0;
+
+		/// @brief Gets the authored local fog volumes of the currently open map, for editing.
+		virtual std::vector<FogVolume>& GetFogVolumes() = 0;
+
+		/// @brief Marks the fog volume list as changed so the next Save() rewrites (or removes)
+		///        the map's `.hfog` file.
+		virtual void MarkFogVolumesChanged() = 0;
+
+		/// @brief Generates a fresh fog volume id (the current maximum id in use, plus one).
+		virtual uint32 GenerateFogVolumeId() = 0;
 	};
 
 	class WorldEditMode : public NonCopyable

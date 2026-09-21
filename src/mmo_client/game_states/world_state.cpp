@@ -34,6 +34,9 @@
 #include "systems/cooldown_manager.h"
 #include "game_client/object_mgr.h"
 #include "game_common/projectile_target.h"
+#include "game_common/world_fog_volumes.h"
+#include "deferred_shading/fog_volume_selection.h"
+#include "math/sphere.h"
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "systems/bank_client.h"
@@ -5400,6 +5403,22 @@ namespace mmo
 			return false;
 		}
 
+		// Local fog volumes are optional -- most maps have none, so a missing .hfog file is not an error.
+		m_fogVolumes.clear();
+		if (const std::unique_ptr<std::istream> fogStreamPtr = AssetRegistry::OpenFile(assetPath + ".hfog"))
+		{
+			io::StreamSource fogSource{*fogStreamPtr};
+			io::Reader fogReader{fogSource};
+
+			WorldFogVolumeDeserializer fogDeserializer{m_fogVolumes};
+			if (!fogDeserializer.Read(fogReader))
+			{
+				WLOG("Failed to read fog volumes from '" << assetPath << ".hfog', continuing without local fog volumes");
+				m_fogVolumes.clear();
+			}
+		}
+		DLOG("Loaded " << m_fogVolumes.size() << " local fog volume(s) for map " << assetPath);
+
 		// Minimap!
 		m_minimap.NotifyWorldChanged(map->directory());
 
@@ -6282,6 +6301,21 @@ namespace mmo
 		grading.SetContrast(state.contrast);
 		grading.SetColorFilter(state.colorFilter);
 		renderer->SetColorGrading(grading, state.colorLut, state.colorLutFrom, state.colorLutBlend);
+
+		// Selected fresh every frame (and pushed even when empty) so a map without any fog
+		// volumes -- or one whose volumes just faded out -- doesn't keep rendering the last
+		// frame's set.
+		if (m_playerController)
+		{
+			const Camera& camera = m_playerController->GetCamera();
+			const float hour = m_skyComponent->GetNormalizedTimeOfDay() * 24.0f;
+			renderer->SetFogVolumes(SelectFogVolumes(m_fogVolumes, hour, camera.GetDerivedPosition(), renderer->GetVolumetricFogRange(),
+				[&camera](const Vector3& center, const float radius) { return camera.IsVisible(Sphere(center, radius)); }));
+		}
+		else
+		{
+			renderer->SetFogVolumes({});
+		}
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)

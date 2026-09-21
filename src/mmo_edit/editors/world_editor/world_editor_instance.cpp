@@ -27,6 +27,9 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_common/world_entity_loader.h"
 #include "game_common/world_foliage.h"
+#include "game_common/world_fog_volumes.h"
+#include "deferred_shading/fog_volume_selection.h"
+#include "math/sphere.h"
 #include "graphics/graphics_device.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/instanced_foliage.h"
@@ -417,6 +420,28 @@ namespace mmo
 		}
 
 		ILOG("Successfully read world file!");
+
+		// Local fog volumes are optional -- most maps have none, so a missing .hfog file is not an error.
+		{
+			Path fogPath = m_assetPath;
+			fogPath.replace_extension(".hfog");
+			String fogFileName = fogPath.string();
+			std::transform(fogFileName.begin(), fogFileName.end(), fogFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+			if (std::unique_ptr<std::istream> fogStreamPtr = AssetRegistry::OpenFile(fogFileName))
+			{
+				io::StreamSource fogSource{*fogStreamPtr};
+				io::Reader fogReader{fogSource};
+
+				WorldFogVolumeDeserializer fogDeserializer{m_fogVolumes};
+				if (!fogDeserializer.Read(fogReader))
+				{
+					WLOG("Failed to read fog volumes from '" << fogFileName << "', continuing without local fog volumes");
+					m_fogVolumes.clear();
+				}
+			}
+			DLOG("Loaded " << m_fogVolumes.size() << " local fog volume(s) for map " << fogFileName);
+		}
 	}
 
 	WorldEditorInstance::~WorldEditorInstance()
@@ -1155,6 +1180,43 @@ namespace mmo
 			m_foliageEditMode->ClearDirtyPages();
 		}
 
+		// Save local fog volumes. One file for the whole map, rewritten in full when dirty
+		// (or deleted once the last volume is removed).
+		if (m_fogVolumesDirty)
+		{
+			Path fogPath = m_assetPath;
+			fogPath.replace_extension(".hfog");
+			String fogFileName = fogPath.string();
+			std::transform(fogFileName.begin(), fogFileName.end(), fogFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+			if (m_fogVolumes.empty())
+			{
+				if (AssetRegistry::HasFile(fogFileName))
+				{
+					AssetRegistry::RemoveFile(fogFileName);
+				}
+
+				m_fogVolumesDirty = false;
+			}
+			else
+			{
+				auto fogFilePtr = AssetRegistry::CreateNewFile(fogFileName);
+				if (!fogFilePtr)
+				{
+					ELOG("Failed to write fog volume file " << fogFileName);
+				}
+				else
+				{
+					io::StreamSink fogSink{*fogFilePtr};
+					io::Writer fogWriter{fogSink};
+					WorldFogVolumeSerializer::Write(fogWriter, m_fogVolumes);
+					fogSink.Flush();
+
+					m_fogVolumesDirty = false;
+				}
+			}
+		}
+
 		return true;
 	}
 
@@ -1400,6 +1462,20 @@ namespace mmo
 			grading.SetContrast(state.contrast);
 			grading.SetColorFilter(state.colorFilter);
 			renderer->SetColorGrading(grading, state.colorLut, state.colorLutFrom, state.colorLutBlend);
+
+			// Selected fresh every frame (and pushed even when empty) so a map without any fog
+			// volumes -- or one whose volumes just faded out -- doesn't keep rendering the last
+			// frame's set.
+			if (m_camera)
+			{
+				const float hour = m_skyComponent->GetNormalizedTimeOfDay() * 24.0f;
+				renderer->SetFogVolumes(SelectFogVolumes(m_fogVolumes, hour, m_camera->GetDerivedPosition(), renderer->GetVolumetricFogRange(),
+					[this](const Vector3& center, const float radius) { return m_camera->IsVisible(Sphere(center, radius)); }));
+			}
+			else
+			{
+				renderer->SetFogVolumes({});
+			}
 		}
 	}
 
@@ -3646,5 +3722,16 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	void WorldEditorInstance::DestroySceneNode(const SceneNode& node)
 	{
 		m_scene.DestroySceneNode(node);
+	}
+
+	uint32 WorldEditorInstance::GenerateFogVolumeId()
+	{
+		uint32 maxId = 0;
+		for (const FogVolume& volume : m_fogVolumes)
+		{
+			maxId = std::max(maxId, volume.id);
+		}
+
+		return maxId + 1;
 	}
 }

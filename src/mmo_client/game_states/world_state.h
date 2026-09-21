@@ -47,6 +47,7 @@
 #include "game_client/sound_entry_player.h"
 #include "game_client/combat_sound_player.h"
 #include "deferred_shading/water_volume_system.h"
+#include "game_common/fog_volume.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
 
@@ -663,6 +664,9 @@ namespace mmo
 
 		/// Gusting wind and fog noise scroll driven by the environment's wind settings.
 		WindSimulation m_wind;
+
+		/// @brief Authored local fog volumes for the currently loaded map, read from its `.hfog` file.
+		std::vector<FogVolume> m_fogVolumes;
 
 		/// @brief Adapts the streamed client terrain to the queries WaterVolumeSystem needs.
 		///	@remark Defined in the .cpp so world_state.h does not have to pull in the terrain

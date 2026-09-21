@@ -260,6 +260,9 @@ namespace mmo
         /// @brief Sets the view depth the fog volume covers in metres (clamped to [50, 300]).
         void SetVolumetricFogRange(float range) { m_volumetricFogPass->GetSettings().SetRange(range); }
 
+        /// @brief Gets the view depth the fog volume covers in metres.
+        [[nodiscard]] float GetVolumetricFogRange() const { return m_volumetricFogPass->GetSettings().range; }
+
         /// @brief Sets the fog debug view: 0 off, 1 scattered light, 2 transmittance, 3 density, 4 lights per fog block.
         void SetAtmosphereDebugMode(int mode) { m_volumetricFogPass->GetSettings().SetDebugMode(mode); }
 

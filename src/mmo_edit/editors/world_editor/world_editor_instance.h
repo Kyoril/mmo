@@ -409,6 +409,10 @@ namespace mmo
 		void DestroyManualRenderObject(const ManualRenderObject& obj) override;
 		void DestroySceneNode(const SceneNode& node) override;
 
+		std::vector<FogVolume>& GetFogVolumes() override { return m_fogVolumes; }
+		void MarkFogVolumesChanged() override { m_fogVolumesDirty = true; }
+		uint32 GenerateFogVolumeId() override;
+
 	private:
 		uint16 BuildPageIndex(uint8 x, uint8 y) const;
 
@@ -570,6 +574,12 @@ namespace mmo
 		/// Gusting wind and fog noise scroll for the viewport. Advances with real frame time even while
 		/// the sky clock is paused, so drifting fog stays visible while authoring.
 		WindSimulation m_wind;
+
+		/// @brief Authored local fog volumes for the currently open map, read from its `.hfog` file.
+		std::vector<FogVolume> m_fogVolumes;
+
+		/// @brief True when m_fogVolumes has unsaved changes; Save() rewrites (or removes) the `.hfog` file.
+		bool m_fogVolumesDirty = false;
 
 		/// Runtime profiles converted from the project on first use; cleared on every preview revision.
 		std::unique_ptr<EnvironmentProfileCache<proto::EnvironmentProfileManager>> m_environmentProfiles;
