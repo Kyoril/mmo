@@ -31,7 +31,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000005;
+		constexpr uint32 ProtocolVersion = 0x00000006;
 
 		/// Largest payload, in bytes, that a single incoming auth packet may announce.
 		///
@@ -181,6 +181,12 @@ namespace mmo
 
 				/// Sent as response to a MailTakeItem request. Payload: uint64 characterGuid, uint64 mailId, uint8 result, MailAttachment.
 				MailTakeItemResult,
+
+				/// Sets the realm-wide game time of day on the world node. Sent right after the world
+				/// node authenticated and whenever the time of day is changed on the realm.
+				/// Payload: uint64 timeOfDay (milliseconds since midnight), uint32 transitionMs (how long
+				/// clients blend towards the new time, 0 = instantly).
+				TimeOfDay,
 			};
 		}
 

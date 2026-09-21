@@ -1693,7 +1693,13 @@ namespace mmo
 																							 { return this->GetLootSlotInfo(slot, out_icon, out_text, out_count); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
 					   luabind::def<std::function<void(int32 &, int32 &)>>("GetGameTime", [this](int32 &out_hour, int32 &out_minute)
-																		   { out_hour = m_gameTime.GetHour(); out_minute = m_gameTime.GetMinute(); }, luabind::joined<luabind::pure_out_value<1>, luabind::pure_out_value<2>>()),
+																		   {
+																			   // The authoritative time, like GAME_TIME_UPDATED: clocks and chat timestamps
+																			   // show the real time of day, only the sky blends over during a transition.
+																			   const GameTime time = m_gameTime.GetTargetTime();
+																			   out_hour = static_cast<int32>(time / constants::OneHour);
+																			   out_minute = static_cast<int32>((time / constants::OneMinute) % 60);
+																		   }, luabind::joined<luabind::pure_out_value<1>, luabind::pure_out_value<2>>()),
 
 					   luabind::def<std::function<void()>>("ReviveMe", [this]()
 														   { m_realmConnector.SendReviveRequest(); }),

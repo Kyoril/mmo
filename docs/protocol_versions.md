@@ -4,8 +4,8 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 5 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 8 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 6 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 14 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -104,6 +104,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 6 | 2026-09-21 | Realm-wide time of day: `TimeOfDay` realm→world opcode (absolute time of day + client transition length) |
 | 5 | 2026-08-11 | The world→realm handshake carries both protocol versions, and the realm validates them (`1c87e67d`'s link was the last one negotiating nothing) |
 | 4 | 2026-08-11 | Duplicate login prevention: `AccountKicked` and `KickAccount` opcodes, `session_kick_reason` on the wire (`1c87e67d`) |
 | 3 | 2026-06-16 | Account and realm feature management: `AccountFeatures` opcode, feature list on `ClientAuthSessionResponse` (`cb0c54d0`) |
@@ -114,6 +115,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 14 | 2026-09-21 | Realm-wide time of day: `CheatSetTimeOfDay` GM opcode (handled by the realm), `GameTimeInfo` gains a trailing uint32 `transitionMs` so clients blend smoothly to a changed time |
 | 13 | 2026-09-09 | `AttackSwingError` now also carries `attack_swing_event::Success`, telling the client a swing landed again so it stops repeating the previous error message and voice line |
 | 12 | 2026-09-07 | `PlaySpellVisual` server opcode: plays a SpellVisualization on a unit by id for every client in sight, so non-spell events (level up) can drive spell-quality visuals |
 | 11 | 2026-08-14 | GM damage cheat opcode: walks a boss across its health-gated phase thresholds without depending on the test character's damage output |

@@ -656,6 +656,30 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::CheatSetTimeOfDay(const GameTime timeOfDay, const uint32 transitionMs)
+	{
+		sendSinglePacket([timeOfDay, transitionMs](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatSetTimeOfDay);
+			packet
+				<< io::write<uint8>(0)
+				<< io::write<uint32>(static_cast<uint32>(timeOfDay))
+				<< io::write<uint32>(transitionMs);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::CheatResetTimeOfDay(const uint32 transitionMs)
+	{
+		sendSinglePacket([transitionMs](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatSetTimeOfDay);
+			packet
+				<< io::write<uint8>(1)
+				<< io::write<uint32>(0)
+				<< io::write<uint32>(transitionMs);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::CastSpell(uint32 spellId, const SpellTargetMap& targetMap)
 	{
 		sendSinglePacket([spellId, &targetMap](game::OutgoingPacket& packet) {

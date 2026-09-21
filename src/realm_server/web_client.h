@@ -37,6 +37,13 @@ namespace mmo
 		/// Handles a Message of the Day update.
 		void handleSetMotd(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
+		/// GET /time-of-day: reports the realm-wide time of day, the system time and the override offset.
+		void handleGetTimeOfDay(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+
+		/// POST /time-of-day: sets the time of day ('time=HH:MM[:SS]') or returns to the system time
+		/// ('reset=1'), with an optional client transition length in seconds ('transition').
+		void handleSetTimeOfDay(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+
 	private:
 		WebService& m_service;
 	};

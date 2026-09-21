@@ -57,6 +57,19 @@ namespace mmo
 		/// @param instanceId The id of the instance to destroy.
 		void DestroyInstance(InstanceId instanceId);
 
+		/// Sets the game time of day of every hosted instance and of every instance created later.
+		///
+		/// The realm is the authority on the time of day; this is called whenever it tells this
+		/// world node what time it is. The time is kept as an offset to this machine's system time
+		/// of day, so it keeps running on its own afterwards.
+		/// @param timeOfDay Time of day in milliseconds since midnight.
+		/// @param transitionMs How long clients should blend towards the new time, 0 = instantly.
+		void SetTimeOfDay(GameTime timeOfDay, uint32 transitionMs);
+
+		/// Gets the current game time of day in milliseconds since midnight. Until the realm sends
+		/// a time of day, this is the system time of day.
+		[[nodiscard]] GameTime GetTimeOfDay() const;
+
 		/// Stops the world update tick.
 		///
 		/// The tick re-arms itself every 30ms, so it is permanently outstanding io_context work.
@@ -92,6 +105,9 @@ namespace mmo
 		std::mutex m_worldInstanceMutex;
 
 		ITriggerHandler& m_triggerHandler;
+
+		/// Offset from this machine's system time of day to the game time of day, in [0, one day).
+		GameTime m_timeOfDayOffset = 0;
 
 		/// Tracks when dungeon instances became empty (instanceId -> timestamp).
 		std::map<InstanceId, GameTime> m_emptyDungeonTimestamps;

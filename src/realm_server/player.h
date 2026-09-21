@@ -33,6 +33,7 @@ namespace mmo
 	class FriendMgr;
 	class ChannelMgr;
 	class ChatChannel;
+	class TimeOfDayManager;
 }
 
 namespace mmo
@@ -73,7 +74,8 @@ namespace mmo
 			IdGenerator<uint64> &groupIdGenerator,
 			GuildMgr &guildMgr,
 			FriendMgr &friendMgr,
-			ChannelMgr &channelMgr);
+			ChannelMgr &channelMgr,
+			TimeOfDayManager &timeOfDayManager);
 		/// Disconnects the player if still connected.
 		///
 		/// @param reason Sent to the client before the connection closes so it can tell the player
@@ -483,6 +485,7 @@ namespace mmo
 
 		// Chat channels
 		ChannelMgr &m_channelMgr;
+		TimeOfDayManager &m_timeOfDayManager;
 		/// Global ids of the chat channels this player is currently a member of.
 		std::set<uint32> m_chatChannels;
 
@@ -589,6 +592,7 @@ namespace mmo
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSummon(game::IncomingPacket &packet);
+		PacketParseResult OnCheatSetTimeOfDay(game::IncomingPacket &packet);
 		PacketParseResult OnGuildCreate(game::IncomingPacket &packet);
 #endif
 	};

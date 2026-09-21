@@ -1,0 +1,16 @@
+meta {
+  name: Get Time Of Day
+  type: http
+  seq: 6
+}
+
+get {
+  url: http://localhost:8092/time-of-day
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -8,6 +8,7 @@
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
 #include "log/default_log_levels.h"
+#include "game/time_of_day.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -511,6 +512,52 @@ namespace mmo
 		}
 
 		m_realmConnector.CheatDamage(static_cast<uint32>(amount));
+	}
+
+	void WorldState::Command_SetTime(const std::string &cmd, const std::string &args) const
+	{
+		std::istringstream stream(args);
+		std::string timeArg;
+		std::string transitionArg;
+		stream >> timeArg >> transitionArg;
+
+		if (timeArg.empty())
+		{
+			ILOG("Current time of day: " << FormatTimeOfDay(m_gameTime.GetTargetTime()));
+			ELOG("Usage: settime <HH:MM[:SS]> [transition seconds] | settime reset [transition seconds]");
+			return;
+		}
+
+		uint32 transitionMs = DefaultTimeOfDayTransitionMs;
+		if (!transitionArg.empty())
+		{
+			uint32 transitionSeconds = 0;
+			const auto [ptr, ec] = std::from_chars(transitionArg.data(), transitionArg.data() + transitionArg.size(), transitionSeconds);
+			if (ec != std::errc() || ptr != transitionArg.data() + transitionArg.size() || transitionSeconds > MaxTimeOfDayTransitionMs / 1000)
+			{
+				ELOG("Transition must be a whole number of seconds between 0 and " << MaxTimeOfDayTransitionMs / 1000);
+				return;
+			}
+
+			transitionMs = transitionSeconds * 1000;
+		}
+
+		if (timeArg == "reset")
+		{
+			m_realmConnector.CheatResetTimeOfDay(transitionMs);
+			ILOG("Resetting the time of day to the server's system time");
+			return;
+		}
+
+		GameTime timeOfDay = 0;
+		if (!ParseTimeOfDay(timeArg, timeOfDay))
+		{
+			ELOG("Invalid time of day '" << timeArg << "', expected a 24 hour time like 21:30 or 06:15:00");
+			return;
+		}
+
+		m_realmConnector.CheatSetTimeOfDay(timeOfDay, transitionMs);
+		ILOG("Setting the time of day to " << FormatTimeOfDay(timeOfDay));
 	}
 #endif
 }

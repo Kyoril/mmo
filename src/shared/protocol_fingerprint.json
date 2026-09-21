@@ -7,15 +7,15 @@
 	],
 	"_format": 3,
 	"auth": {
-		"version": 5,
-		"fingerprint": "sha256:f4659b3fde9467a2b37962755dbc2bc1fba489dd5cd5f2e21cc63c98b0be2c9e",
+		"version": 6,
+		"fingerprint": "sha256:61b1d0471ee01d78afb90cc4e253277d9ca9602c2379734c83693dc120085c75",
 		"files": {
 			"src/shared/auth_protocol/auth_incoming_packet.cpp": "sha256:0e23f09921b76939917c9f7e660deab2977ba79eaa03c9e7ea92e38764f7d5ff",
 			"src/shared/auth_protocol/auth_incoming_packet.h": "sha256:324112379d24eacb03fc3f2984a5180e741ddb95978d1c91616ce43fa68a0745",
 			"src/shared/auth_protocol/auth_outgoing_packet.cpp": "sha256:7003aee85725f5955505c74037f0bcdfb89fd4ebd647257d2edc9d4b06268ca1",
 			"src/shared/auth_protocol/auth_outgoing_packet.h": "sha256:eff0a023adf8133bf02c2df220b97cb364e7b91b82b45470da2cbec34307926c",
 			"src/shared/auth_protocol/auth_protocol.cpp": "sha256:3ae02697539b108be5892fb3288d1480749c9a720e5d4545e2efbfb5601de224",
-			"src/shared/auth_protocol/auth_protocol.h": "sha256:184a568533740c3f7ebed237b10bef83d5695fa2d57260ec77278e204364566d"
+			"src/shared/auth_protocol/auth_protocol.h": "sha256:f4260845b4cbc98a863c01a1e0bf3e8f09c004807f13e6cedac8c9794d9e1c20"
 		},
 		"symbols": [
 			"auth::AuthLocale::Default = 0",
@@ -94,6 +94,7 @@
 			"auth::realm_world_packet::PlayerGuildChanged = 9",
 			"auth::realm_world_packet::ProxyPacket = 4",
 			"auth::realm_world_packet::TeleportRequest = 7",
+			"auth::realm_world_packet::TimeOfDay = 15",
 			"auth::session_kick_reason::AccountBanned = 1",
 			"auth::session_kick_reason::Count_ = 2",
 			"auth::session_kick_reason::LoggedInElsewhere = 0",
@@ -124,8 +125,8 @@
 		]
 	},
 	"game": {
-		"version": 13,
-		"fingerprint": "sha256:b9ac6f2b39a66d0e6029988bc1473ba751acddf89d6e93e2a8feb4a772da731b",
+		"version": 14,
+		"fingerprint": "sha256:5ceb71cc0368203425f2dada93da156130a6b35de159c9f71908cd1ea9f7e746",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -141,7 +142,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:3f9cc9842fbbf02cf28697924c5b1e6b95277be472951743bc2b8db0af51dd6a"
+			"src/shared/game_protocol/game_protocol.h": "sha256:271a1d33c74421cd34691068c805e98f9b21ad9e5e20eb722e6dbac2b759d1ef"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -216,12 +217,13 @@
 			"game::client_realm_packet::CheatRecharge = 30",
 			"game::client_realm_packet::CheatRevive = 135",
 			"game::client_realm_packet::CheatSetInstanceVariable = 161",
+			"game::client_realm_packet::CheatSetTimeOfDay = 163",
 			"game::client_realm_packet::CheatSpeed = 80",
 			"game::client_realm_packet::CheatSummon = 81",
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 163",
+			"game::client_realm_packet::Count_ = 164",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",

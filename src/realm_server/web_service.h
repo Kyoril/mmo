@@ -12,6 +12,7 @@ namespace mmo
 	class PlayerManager;
 	struct IDatabase;
 	class MOTDManager;
+	class TimeOfDayManager;
 
 	class WebService 
 		: public web::WebService
@@ -25,7 +26,8 @@ namespace mmo
 		    String password,
 		    PlayerManager &playerManager,
 			IDatabase &database,
-			MOTDManager &motdManager
+			MOTDManager &motdManager,
+			TimeOfDayManager &timeOfDayManager
 		);
 
 		/// Gets the player manager.
@@ -34,6 +36,8 @@ namespace mmo
 		IDatabase &GetDatabase() const { return m_database; }
 		/// Gets the MOTD manager instance.
 		MOTDManager &GetMOTDManager() const { return m_motdManager; }
+		/// Gets the realm-wide time of day manager.
+		TimeOfDayManager &GetTimeOfDayManager() const { return m_timeOfDayManager; }
 		/// Returns the time this service started.
 		GameTime GetStartTime() const;
 		/// Gets the configured admin password.
@@ -47,6 +51,7 @@ namespace mmo
 		PlayerManager &m_playerManager;
 		IDatabase &m_database;
 		MOTDManager &m_motdManager;
+		TimeOfDayManager &m_timeOfDayManager;
 		const GameTime m_startTime;
 		const String m_password;
 	};

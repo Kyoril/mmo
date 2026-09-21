@@ -12,6 +12,7 @@
 #include "tiled_unit_finder.h"
 #include "tiled_unit_finder_tile.h"
 #include "log/default_log_levels.h"
+#include "game/time_of_day.h"
 
 namespace mmo
 {
@@ -43,6 +44,25 @@ namespace mmo
 		instanceCreated(createdInstance->GetId());
 
 		return *createdInstance;
+	}
+
+	void WorldInstanceManager::SetTimeOfDay(const GameTime timeOfDay, const uint32 transitionMs)
+	{
+		const GameTime target = timeOfDay % constants::OneDay;
+		ILOG("Time of day set to " << FormatTimeOfDay(target) << " by the realm");
+
+		// Under the same lock CreateInstance holds while a new instance reads the offset
+		std::unique_lock lock{ m_worldInstanceMutex };
+		m_timeOfDayOffset = (target + constants::OneDay - GetSystemTimeOfDay()) % constants::OneDay;
+		for (const auto& instance : m_worldInstances)
+		{
+			instance->SetTimeOfDay(target, transitionMs);
+		}
+	}
+
+	GameTime WorldInstanceManager::GetTimeOfDay() const
+	{
+		return (GetSystemTimeOfDay() + m_timeOfDayOffset) % constants::OneDay;
 	}
 
 	WorldInstance* WorldInstanceManager::GetInstanceById(InstanceId instanceId)

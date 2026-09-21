@@ -99,6 +99,18 @@ namespace mmo
 		}
 	}
 
+	void WorldManager::BroadcastTimeOfDay(const GameTime timeOfDay, const uint32 transitionMs)
+	{
+		std::scoped_lock scopedLock{ m_worldsMutex };
+		for (const auto& world : m_worlds)
+		{
+			if (world->IsAuthenticated())
+			{
+				world->SendTimeOfDay(timeOfDay, transitionMs);
+			}
+		}
+	}
+
 	std::shared_ptr<World> WorldManager::GetWorldByInstanceId(InstanceId instanceId)
 	{
 		const auto w = std::find_if(

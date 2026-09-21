@@ -11,12 +11,14 @@ namespace mmo
 	    String password,
 	    PlayerManager &playerManager,
 		IDatabase &database,
-		MOTDManager &motdManager
+		MOTDManager &motdManager,
+		TimeOfDayManager &timeOfDayManager
 	)
 		: web::WebService(service, port)
 		, m_playerManager(playerManager)
 		, m_database(database)
 		, m_motdManager(motdManager)
+		, m_timeOfDayManager(timeOfDayManager)
 		, m_startTime(GetAsyncTimeMs())
 		, m_password(std::move(password))
 	{

@@ -36,6 +36,7 @@ namespace mmo
 
 	class PlayerManager;
 	class AsyncDatabase;
+	class TimeOfDayManager;
 
 	/// Callback executed after a world join returned a result.
 	typedef std::function<void(InstanceId instanceId, bool success)> JoinWorldCallback;
@@ -61,7 +62,8 @@ namespace mmo
 			AsyncDatabase &database,
 			std::shared_ptr<Client> connection,
 			const std::string &address,
-			const proto::Project& project);
+			const proto::Project& project,
+			const TimeOfDayManager& timeOfDayManager);
 
 		/// Gets the connection class used to send packets to the world node client.
 		Client &GetConnection() const { assert(m_connection); return *m_connection; }
@@ -119,6 +121,11 @@ namespace mmo
 		/// Requests a teleport for the given character.
 		void SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing);
 
+		/// Tells the world node the realm-wide time of day.
+		/// @param timeOfDay Time of day in milliseconds since midnight.
+		/// @param transitionMs How long clients should blend towards the new time, 0 = instantly.
+		void SendTimeOfDay(GameTime timeOfDay, uint32 transitionMs) const;
+
 		/// Notifies the world node that a character's group changed.
 		/// @param characterId The character whose group changed.
 		/// @param groupId The new group id, or 0 if no group.
@@ -167,6 +174,7 @@ namespace mmo
 		std::mutex m_joinCallbackMutex;
 		std::map<uint64, JoinWorldCallback> m_joinCallbacks;
 		const proto::Project& m_project;
+		const TimeOfDayManager& m_timeOfDayManager;
 
 	private:
 		/// Closes the connection if still connected.

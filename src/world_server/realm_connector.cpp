@@ -529,6 +529,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::MailDraftResult, *this, &RealmConnector::OnMailDraftResult);
 				RegisterPacketHandler(auth::realm_world_packet::MailTakeMoneyResult, *this, &RealmConnector::OnMailTakeMoneyResult);
 				RegisterPacketHandler(auth::realm_world_packet::MailTakeItemResult, *this, &RealmConnector::OnMailTakeItemResult);
+				RegisterPacketHandler(auth::realm_world_packet::TimeOfDay, *this, &RealmConnector::OnTimeOfDay);
 				
 				PropagateHostedMapIds();
 			}
@@ -1115,6 +1116,20 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			player->OnMailTakeItemResult(mailId, result, attachment);
 		}
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnTimeOfDay(auth::IncomingPacket& packet)
+	{
+		uint64 timeOfDay = 0;
+		uint32 transitionMs = 0;
+		if (!(packet >> io::read<uint64>(timeOfDay) >> io::read<uint32>(transitionMs)))
+		{
+			ELOG("Failed to read TimeOfDay packet from realm");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_worldInstanceManager.SetTimeOfDay(timeOfDay, transitionMs);
 		return PacketParseResult::Pass;
 	}
 

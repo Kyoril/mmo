@@ -23,6 +23,8 @@
 #include "friend_mgr.h"
 #include "chat_channel_mgr.h"
 #include "player_group.h"
+#include "time_of_day_manager.h"
+#include "game/time_of_day.h"
 #include "base/utilities.h"
 #include "game/chat_type.h"
 #include "game/guild_info.h"
@@ -45,8 +47,9 @@ namespace mmo
 		IdGenerator<uint64> &groupIdGenerator,
 		GuildMgr &guildMgr,
 		FriendMgr &friendMgr,
-		ChannelMgr &channelMgr)
-		: m_timerQueue(timerQueue), m_manager(playerManager), m_worldManager(worldManager), m_loginConnector(loginConnector), m_database(database), m_project(project), m_groupIdGenerator(groupIdGenerator), m_connection(std::move(connection)), m_address(std::move(address)), m_accountId(0), m_guildMgr(guildMgr), m_friendMgr(friendMgr), m_channelMgr(channelMgr)
+		ChannelMgr &channelMgr,
+		TimeOfDayManager &timeOfDayManager)
+		: m_timerQueue(timerQueue), m_manager(playerManager), m_worldManager(worldManager), m_loginConnector(loginConnector), m_database(database), m_project(project), m_groupIdGenerator(groupIdGenerator), m_connection(std::move(connection)), m_address(std::move(address)), m_accountId(0), m_guildMgr(guildMgr), m_friendMgr(friendMgr), m_channelMgr(channelMgr), m_timeOfDayManager(timeOfDayManager)
 	{
 		// Generate random seed for packet header encryption & decryption
 		std::uniform_int_distribution<uint32> dist;
@@ -2421,6 +2424,42 @@ namespace mmo
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
+	PacketParseResult Player::OnCheatSetTimeOfDay(game::IncomingPacket &packet)
+	{
+		uint8 reset = 0;
+		uint32 timeOfDay = 0;
+		uint32 transitionMs = 0;
+		if (!(packet >> io::read<uint8>(reset) >> io::read<uint32>(timeOfDay) >> io::read<uint32>(transitionMs)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!HasGMLevel(1))
+		{
+			WLOG("Player " << m_characterData->name << " attempted to set the time of day without sufficient privileges");
+			return PacketParseResult::Pass;
+		}
+
+		if (reset != 0)
+		{
+			ILOG("Player " << m_characterData->name << " reset the time of day to the system time");
+			m_timeOfDayManager.Reset(transitionMs);
+			return PacketParseResult::Pass;
+		}
+
+		if (timeOfDay >= constants::OneDay)
+		{
+			WLOG("Player " << m_characterData->name << " sent an invalid time of day " << timeOfDay);
+			return PacketParseResult::Pass;
+		}
+
+		ILOG("Player " << m_characterData->name << " set the time of day to " << FormatTimeOfDay(timeOfDay));
+		m_timeOfDayManager.SetTimeOfDay(timeOfDay, transitionMs);
+		return PacketParseResult::Pass;
+	}
+#endif
+
+#ifdef MMO_WITH_DEV_COMMANDS
 	PacketParseResult Player::OnCheatSummon(game::IncomingPacket &packet)
 	{
 		// Require GM level 2 for teleport commands
@@ -3190,6 +3229,7 @@ namespace mmo
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
 			RegisterPacketHandler(game::client_realm_packet::CheatSummon, *this, &Player::OnCheatSummon);
+			RegisterPacketHandler(game::client_realm_packet::CheatSetTimeOfDay, *this, &Player::OnCheatSetTimeOfDay);
 			RegisterPacketHandler(game::client_realm_packet::GuildCreate, *this, &Player::OnGuildCreate);
 #endif
 		}
@@ -3223,6 +3263,7 @@ namespace mmo
 #if MMO_WITH_DEV_COMMANDS
 			ClearPacketHandler(game::client_realm_packet::CheatTeleportToPlayer);
 			ClearPacketHandler(game::client_realm_packet::CheatSummon);
+			ClearPacketHandler(game::client_realm_packet::CheatSetTimeOfDay);
 			ClearPacketHandler(game::client_realm_packet::GuildCreate);
 #endif
 		}

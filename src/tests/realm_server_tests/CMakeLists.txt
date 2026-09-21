@@ -20,6 +20,7 @@ target_sources(realm_server_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/motd_manager.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/friend_mgr.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/player_group.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/time_of_day_manager.cpp
 )
 
 target_include_directories(realm_server_tests PRIVATE

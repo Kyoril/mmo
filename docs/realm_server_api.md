@@ -85,6 +85,41 @@ Updates the Message of the Day (MOTD) that will be broadcasted to all players.
 }
 ```
 
+### Time of Day
+
+The realm is the authority on the game's time of day. By default it is the realm's UTC system
+time of day. A change is kept as an offset to the system clock — the clock keeps running from the
+new value — until it is changed again or the realm restarts. Every change is pushed to all world
+nodes, which retime their instances and tell every player, whose client blends the sky over to the
+new time. The in-game GM console command `settime <HH:MM[:SS]|reset> [transition seconds]`
+(GM level 1) does the same.
+
+#### GET /time-of-day
+
+**Response:**
+```json
+{
+  "time": "21:30:12",
+  "timeOfDayMs": 77412000,
+  "systemTime": "14:02:45",
+  "offsetMs": 26847000,
+  "overridden": true
+}
+```
+
+#### POST /time-of-day
+
+Sets the time of day, or returns it to the system time.
+
+**Request Parameters:**
+- `time`: The new time of day as `HH:MM` or `HH:MM:SS` (24 hour clock). Required unless `reset` is given.
+- `reset` (optional): `1` or `true` returns to the realm's system time; `time` is ignored.
+- `transition` (optional): How many seconds clients take to blend over to the new time (default 8, capped at 60).
+
+**Response Status Codes:**
+- `200 OK`: Time of day changed; the body is the new state as returned by `GET /time-of-day`, plus `"status": "SUCCESS"`
+- `400 Bad Request`: `MISSING_PARAMETER` or `INVALID_PARAMETER`
+
 ### World Management
 
 #### POST /create-world
@@ -120,6 +155,7 @@ Initiates a server shutdown sequence.
 ## Common Error Codes
 
 - `MISSING_PARAMETER`: A required parameter is missing from the request
+- `INVALID_PARAMETER`: A parameter has an invalid value
 - `WORLD_NAME_ALREADY_IN_USE`: The world name provided already exists
 - `INTERNAL_SERVER_ERROR`: An unexpected server error occurred
 
