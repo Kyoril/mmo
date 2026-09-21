@@ -4,9 +4,11 @@
 
 #include "scene_graph/world_model.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/light_math.h"
 
 #include <imgui.h>
 #include <cstring>
+#include <algorithm>
 
 namespace mmo
 {
@@ -409,6 +411,51 @@ namespace mmo
 			{
 				callbacks.onUpdateLightVisualizations();
 			}
+		}
+
+		// Spot cone
+		if (light.type == WorldModelLight::LightType::Spot)
+		{
+			if (ImGui::DragFloat("Outer Cone##light", &light.outerConeAngle, 0.5f, light_math::MinConeAngle, light_math::MaxConeAngle, "%.1f deg"))
+			{
+				light.outerConeAngle = std::clamp(light.outerConeAngle, light_math::MinConeAngle, light_math::MaxConeAngle);
+				light.innerConeAngle = std::min(light.innerConeAngle, light.outerConeAngle);
+				if (callbacks.onUpdateLightVisualizations)
+				{
+					callbacks.onUpdateLightVisualizations();
+				}
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Full cone angle outside which the spot light has no effect.");
+			}
+
+			if (ImGui::DragFloat("Inner Cone##light", &light.innerConeAngle, 0.5f, light_math::MinConeAngle, light.outerConeAngle, "%.1f deg"))
+			{
+				light.innerConeAngle = std::clamp(light.innerConeAngle, light_math::MinConeAngle, light.outerConeAngle);
+				if (callbacks.onUpdateLightVisualizations)
+				{
+					callbacks.onUpdateLightVisualizations();
+				}
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Full cone angle inside which the spot light is at full strength. It fades out towards the outer cone.");
+			}
+		}
+
+		// Fog scattering
+		if (ImGui::DragFloat("Fog Scattering##light", &light.fogScattering, 0.05f, 0.0f, light_math::MaxFogScattering, "%.2f"))
+		{
+			light.fogScattering = std::clamp(light.fogScattering, 0.0f, light_math::MaxFogScattering);
+			if (callbacks.onUpdateLightVisualizations)
+			{
+				callbacks.onUpdateLightVisualizations();
+			}
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("How strongly this light glows in volumetric fog. 0 = no glow (e.g. lights inside buildings).");
 		}
 
 		ImGui::Spacing();
