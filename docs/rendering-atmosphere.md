@@ -76,6 +76,20 @@ Depth slices are spaced exponentially from 0.5 m, so cells near the camera are t
 - Lights are unshadowed in the fog: a light inside a building bleeds through its walls, so interior lights should use `fogScattering` 0.
 - The temporal blend smears fast-moving lights (projectiles) into short trails.
 
+### Local fog volumes
+
+- Authored, client-only fog placed in the world editor: valley mist, swamp haze, a crypt's floor fog. Purely visual; the server never sees them.
+- **Shapes:** box or ellipsoid (inscribed into the box), with a centre, half-size per axis and a yaw around +Y.
+- **Fields:** density (peak, 0-1), colour (tint, 0-2 per channel), edge fade (fraction of the shape over which density fades to 0 with a smoothstep), height falloff (`exp(-falloff * height above the volume floor)`), active hours `from`/`to` plus fade hours (`from == to` is always on), noise amount and noise detail (1, 2 or 4 times the zone noise frequency; the pattern scrolls with the zone wind).
+- **Storage:** one `Worlds/<dir>/<dir>.hfog` chunked binary file per map (`game_common/world_fog_volumes.h`), sanitized on load.
+- **Per frame:** the renderer selects up to 64 volumes (`fog_volume::MaxVolumesPerFrame`) and scales their density by the time-of-day factor, then hands them to `DeferredRenderer::SetFogVolumes`. `VolumetricFogPass` uploads them as 80-byte `GpuFogVolume` records into a structured buffer bound at CS `t10`; `FogVolumeCount` in the fog cbuffer (256 bytes) says how many are valid.
+- **Culling:** each 8x8x8 inject group culls the frame's volumes against its block's bounding sphere (volume reach = length of the half-size) into a 16-entry group-shared list (`fog_volume::MaxVolumesPerBlock`), in the same parallel pass as the light culling. A block reached by more volumes drops the rest.
+- **Density and colour:** a froxel adds each volume's `density * edgeFade * heightFactor * noiseFactor` to the zone fog's sigma for extinction, and the same value times the volume colour for scattering: output rgb = `radiance * (sigma + sum(sigma_v * color_v))`, a = `sigma + sum(sigma_v)`.
+- **Lighting:** shared with the zone fog (fog ambient, shadowed sun, point and spot lights); the colour only tints what the volume scatters.
+- **Range:** volumes exist only inside the froxel grid (`gxVolumetricFogRange`). Beyond it and with the volume off (quality 0) only the closed-form zone fog remains, so a volume far away is invisible.
+- Debug view 3 (density) includes the volumes.
+- The math lives in `deferred_shading/fog_volume_math.h` (unit-tested) and is mirrored in `shaders/FogVolumeCommon.hlsli`; `GpuFogVolume` mirrors `struct FogVolume` there.
+
 **Formula copies:** the closed-form formulas exist three times and must change together: `shaders/AtmosphereCommon.hlsli`, the forward fog emitted by `MaterialCompilerD3D11`, and `deferred_shading/atmosphere_math.h`. The camera cbuffer (b1, 176 bytes) is declared three times as well; changing it requires **Tools → Rebuild All Materials**.
 
 ## Environment profiles and wind

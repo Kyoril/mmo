@@ -333,6 +333,11 @@ namespace mmo
         m_tonemapPass->Resize(width, height);
     }
 
+    void DeferredRenderer::SetFogVolumes(const std::vector<FogVolumeInstance>& volumes)
+    {
+        m_volumetricFogPass->SetFogVolumes(volumes);
+    }
+
     void DeferredRenderer::Render(Scene& scene, Camera& camera)
     {
         // Update the scene graph first to ensure all transforms are up-to-date

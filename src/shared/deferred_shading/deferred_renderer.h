@@ -266,6 +266,11 @@ namespace mmo
         /// @brief Sets how strongly point and spot lights scatter in the volumetric fog, clamped to [0, 8].
         void SetFogLightScattering(float strength) { m_volumetricFogPass->GetSettings().SetLightScatterStrength(strength); }
 
+        /// @brief Sets this frame's local fog volumes (already selected and time-of-day scaled). Call each
+        ///        frame; an empty vector clears them. Entries beyond fog_volume::MaxVolumesPerFrame are ignored.
+        /// @param volumes The selected fog volume instances.
+        void SetFogVolumes(const std::vector<FogVolumeInstance>& volumes);
+
         /// @brief Applies the bloom quality preset: 0 Off, 1 Low, 2 High.
         void SetBloomQuality(int level) { m_bloomPass->GetSettings().ApplyQualityLevel(level); }
 

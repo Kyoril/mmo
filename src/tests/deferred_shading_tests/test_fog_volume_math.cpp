@@ -89,3 +89,17 @@ TEST_CASE("Fog volume selection caps at the per-frame limit", "[fog_volume]")
 	REQUIRE(selected.size() == fog_volume::MaxVolumesPerFrame);
 	CHECK(selected.front().center.x == Approx(1.0f));
 }
+
+TEST_CASE("The GPU fog volume record is 80 bytes", "[fog_volume]")
+{
+	STATIC_REQUIRE(sizeof(fog_volume::GpuFogVolume) == 80);
+
+	FogVolumeInstance instance;
+	instance.center = Vector3(1.0f, 2.0f, 3.0f);
+	instance.density = 0.5f;
+	instance.shape = 1;
+	const fog_volume::GpuFogVolume gpu = fog_volume::ToGpu(instance);
+	CHECK(gpu.center[1] == Approx(2.0f));
+	CHECK(gpu.density == Approx(0.5f));
+	CHECK(gpu.shape == 1u);
+}

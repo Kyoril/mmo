@@ -146,4 +146,61 @@ namespace mmo::fog_volume
 	{
 		return std::exp(-heightFalloff * (local.y + halfSize.y));
 	}
+
+	/// @brief GPU layout of one fog volume. MUST match struct FogVolume in FogVolumeCommon.hlsli (80 bytes).
+	struct alignas(16) GpuFogVolume
+	{
+		/// @brief World-space centre of the volume.
+		float center[3];
+		/// @brief Peak density, already scaled by the time-of-day factor.
+		float density;
+		/// @brief Half-extents along each local axis.
+		float halfSize[3];
+		/// @brief Exponential density falloff with height above the volume's floor.
+		float heightFalloff;
+		/// @brief Scattering tint.
+		float color[3];
+		/// @brief Fraction of the shape over which density fades out towards the edge.
+		float edgeFade;
+		/// @brief Sine of the volume's yaw.
+		float yawSin;
+		/// @brief Cosine of the volume's yaw.
+		float yawCos;
+		/// @brief Strength of the density noise.
+		float noiseAmount;
+		/// @brief Noise frequency multiplier relative to the zone noise.
+		float noiseDetail;
+		/// @brief 0 box, 1 ellipsoid.
+		uint32 shape;
+		/// @brief Pads the record to a 16-byte multiple.
+		float padding[3];
+	};
+
+	static_assert(sizeof(GpuFogVolume) == 80, "GpuFogVolume must match struct FogVolume in FogVolumeCommon.hlsli");
+
+	/// @brief Converts a selected fog volume instance into its GPU record.
+	/// @param instance The instance to convert.
+	/// @return The GPU record, padding zeroed.
+	[[nodiscard]] inline GpuFogVolume ToGpu(const FogVolumeInstance& instance)
+	{
+		GpuFogVolume gpu{};
+		gpu.center[0] = instance.center.x;
+		gpu.center[1] = instance.center.y;
+		gpu.center[2] = instance.center.z;
+		gpu.density = instance.density;
+		gpu.halfSize[0] = instance.halfSize.x;
+		gpu.halfSize[1] = instance.halfSize.y;
+		gpu.halfSize[2] = instance.halfSize.z;
+		gpu.heightFalloff = instance.heightFalloff;
+		gpu.color[0] = instance.color.x;
+		gpu.color[1] = instance.color.y;
+		gpu.color[2] = instance.color.z;
+		gpu.edgeFade = instance.edgeFade;
+		gpu.yawSin = instance.yawSin;
+		gpu.yawCos = instance.yawCos;
+		gpu.noiseAmount = instance.noiseAmount;
+		gpu.noiseDetail = instance.noiseDetail;
+		gpu.shape = instance.shape;
+		return gpu;
+	}
 }
