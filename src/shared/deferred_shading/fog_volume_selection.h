@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <utility>
 #include <vector>
 
 namespace mmo
@@ -23,7 +24,11 @@ namespace mmo
 	/// @param isVisible Frustum/occlusion test for a volume's bounding sphere (centre, radius).
 	/// @return Instances for volumes whose time-of-day factor is greater than zero, whose
 	///         bounding sphere is within `range` of the camera and visible, sorted by ascending
-	///         distance to the camera and capped at fog_volume::MaxVolumesPerFrame. Each
+	///         distance to each volume's bounding sphere *surface* (`max(0, distance - radius)`,
+	///         ties broken by distance to the centre) and capped at fog_volume::MaxVolumesPerFrame.
+	///         Sorting by surface distance rather than centre distance keeps a large volume the
+	///         camera is standing inside (surface distance 0) from being pushed out of the cap by
+	///         smaller, nearer-centred volumes whose surface is actually farther away. Each
 	///         instance's density is the volume's density multiplied by its time-of-day factor.
 	[[nodiscard]] inline std::vector<FogVolumeInstance> SelectFogVolumes(
 		const std::vector<FogVolume>& volumes,
@@ -71,12 +76,23 @@ namespace mmo
 			instance.noiseDetail = static_cast<float>(volume.noiseDetail);
 			instance.shape = static_cast<uint32>(volume.shape);
 
-			candidates.emplace_back(distance, instance);
+			const float surfaceDistance = std::max(0.0f, distance - radius);
+			candidates.emplace_back(surfaceDistance, instance);
 		}
 
-		std::sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b)
+		std::sort(candidates.begin(), candidates.end(), [&cameraPosition](const auto& a, const auto& b)
 		{
-			return a.first < b.first;
+			if (a.first != b.first)
+			{
+				return a.first < b.first;
+			}
+
+			// Tie-break (most commonly both at surface distance 0, i.e. the camera is inside both
+			// volumes) by distance to the centre, so among equally-near volumes the most tightly
+			// enclosing one keeps sorting first.
+			const float centreDistanceA = (a.second.center - cameraPosition).GetLength();
+			const float centreDistanceB = (b.second.center - cameraPosition).GetLength();
+			return centreDistanceA < centreDistanceB;
 		});
 
 		if (candidates.size() > fog_volume::MaxVolumesPerFrame)

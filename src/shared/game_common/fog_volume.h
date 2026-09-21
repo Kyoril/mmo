@@ -70,7 +70,8 @@ namespace mmo
 		/// @brief Strength of the animated density noise. Clamped to [0, 1].
 		float noiseAmount = 0.4f;
 
-		/// @brief Noise octave/detail level. Must be one of 1, 2 or 4; any other value resets to 1.
+		/// @brief Noise frequency multiplier relative to the zone's fog_noise_size (1x/2x/4x finer).
+		///        Must be one of 1, 2 or 4; any other value resets to 1.
 		uint8 noiseDetail = 1;
 	};
 

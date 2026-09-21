@@ -5,6 +5,7 @@
 #include "game_common/fog_volume.h"
 #include "game_common/world_fog_volumes.h"
 
+#include "base/chunk_writer.h"
 #include "binary_io/memory_source.h"
 #include "binary_io/vector_sink.h"
 #include "binary_io/reader.h"
@@ -31,6 +32,77 @@ namespace
 		io::Reader reader{ source };
 		WorldFogVolumeDeserializer deserializer{ out };
 		return deserializer.Read(reader);
+	}
+
+	// Mirrors the private chunk magics in world_fog_volumes.cpp.
+	const ChunkMagic VersionChunkMagic = MakeChunkMagic('FGVR');
+
+	std::vector<char> writeVersionChunk(const uint32 version)
+	{
+		std::vector<char> buffer;
+		io::VectorSink sink{ buffer };
+		io::Writer writer{ sink };
+		ChunkWriter versionChunk(VersionChunkMagic, writer);
+		writer << io::write<uint32>(version);
+		versionChunk.Finish();
+		return buffer;
+	}
+
+	// An unused four-character magic that the deserializer never registers a handler for.
+	const ChunkMagic UnknownChunkMagic = MakeChunkMagic('ZZZZ');
+
+	std::vector<char> writeUnknownChunk()
+	{
+		std::vector<char> buffer;
+		io::VectorSink sink{ buffer };
+		io::Writer writer{ sink };
+		ChunkWriter unknownChunk(UnknownChunkMagic, writer);
+		writer << io::write<uint32>(0xDEADBEEFu) << io::write<uint8>(1) << io::write<uint8>(2) << io::write<uint8>(3);
+		unknownChunk.Finish();
+		return buffer;
+	}
+
+	// Mirrors the private volume-data chunk magic and record layout in world_fog_volumes.cpp, so a
+	// test can assemble a standalone FGVL chunk with other chunks spliced around it.
+	const ChunkMagic VolumeDataChunkMagic = MakeChunkMagic('FGVL');
+
+	std::vector<char> writeVolumeDataChunk(const std::vector<FogVolume>& volumes)
+	{
+		std::vector<char> buffer;
+		io::VectorSink sink{ buffer };
+		io::Writer writer{ sink };
+
+		ChunkWriter volumesChunk(VolumeDataChunkMagic, writer);
+		writer << io::write<uint32>(static_cast<uint32>(volumes.size()));
+
+		for (const auto& volume : volumes)
+		{
+			writer
+				<< io::write<uint32>(volume.id)
+				<< io::write_dynamic_range<uint16>(volume.name)
+				<< io::write<uint8>(static_cast<uint8>(volume.shape))
+				<< io::write<float>(volume.position.x)
+				<< io::write<float>(volume.position.y)
+				<< io::write<float>(volume.position.z)
+				<< io::write<float>(volume.size.x)
+				<< io::write<float>(volume.size.y)
+				<< io::write<float>(volume.size.z)
+				<< io::write<float>(volume.yaw)
+				<< io::write<float>(volume.density)
+				<< io::write<float>(volume.color.x)
+				<< io::write<float>(volume.color.y)
+				<< io::write<float>(volume.color.z)
+				<< io::write<float>(volume.edgeFade)
+				<< io::write<float>(volume.heightFalloff)
+				<< io::write<float>(volume.activeFrom)
+				<< io::write<float>(volume.activeTo)
+				<< io::write<float>(volume.fadeHours)
+				<< io::write<float>(volume.noiseAmount)
+				<< io::write<uint8>(volume.noiseDetail);
+		}
+
+		volumesChunk.Finish();
+		return buffer;
 	}
 }
 
@@ -117,4 +189,55 @@ TEST_CASE("An empty fog volume file reads back empty", "[fog_volumes]")
 	std::vector<FogVolume> loaded;
 	REQUIRE(readVolumes(writeVolumes({}), loaded));
 	CHECK(loaded.empty());
+}
+
+TEST_CASE("A fog volume file truncated mid-record reads back false without crashing", "[fog_volumes]")
+{
+	FogVolume first;
+	first.id = 1;
+	first.name = "First";
+
+	FogVolume second;
+	second.id = 2;
+	second.name = "Second";
+
+	std::vector<char> buffer = writeVolumes({ first, second });
+
+	// Cut the buffer off partway through the second volume's fixed-size fields (well after the
+	// count and the first, fully-written volume). The declared chunk size in the header still
+	// claims the full, untruncated payload, so the deserializer has to notice the source ran out
+	// of data rather than reading past the end of the buffer.
+	REQUIRE(buffer.size() > 10);
+	buffer.resize(buffer.size() - 10);
+
+	std::vector<FogVolume> loaded;
+	CHECK_FALSE(readVolumes(buffer, loaded));
+}
+
+TEST_CASE("A fog volume version newer than supported is rejected", "[fog_volumes]")
+{
+	const std::vector<char> buffer = writeVersionChunk(2);
+
+	std::vector<FogVolume> loaded;
+	CHECK_FALSE(readVolumes(buffer, loaded));
+	CHECK(loaded.empty());
+}
+
+TEST_CASE("An unknown chunk between the version and volume chunks is skipped", "[fog_volumes]")
+{
+	FogVolume volume;
+	volume.id = 42;
+	volume.name = "Skipped-chunk survivor";
+
+	std::vector<char> buffer = writeVersionChunk(fog_volume_version::Version_0_0_0_1);
+	const std::vector<char> unknownChunk = writeUnknownChunk();
+	buffer.insert(buffer.end(), unknownChunk.begin(), unknownChunk.end());
+	const std::vector<char> volumeChunk = writeVolumeDataChunk({ volume });
+	buffer.insert(buffer.end(), volumeChunk.begin(), volumeChunk.end());
+
+	std::vector<FogVolume> loaded;
+	REQUIRE(readVolumes(buffer, loaded));
+	REQUIRE(loaded.size() == 1);
+	CHECK(loaded[0].id == 42);
+	CHECK(loaded[0].name == "Skipped-chunk survivor");
 }

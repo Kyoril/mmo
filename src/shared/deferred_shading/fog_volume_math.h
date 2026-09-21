@@ -40,7 +40,7 @@ namespace mmo
 		/// @brief Strength of the animated density noise.
 		float noiseAmount = 0.0f;
 
-		/// @brief Noise octave/detail level.
+		/// @brief Noise frequency multiplier relative to the zone noise (1x/2x/4x finer).
 		float noiseDetail = 0.0f;
 
 		/// @brief The shape used to evaluate falloff inside this volume (see FogVolumeShape).

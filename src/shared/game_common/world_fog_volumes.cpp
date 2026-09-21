@@ -52,6 +52,30 @@ namespace mmo
 			return false;
 		}
 
+		// Lower bound on the on-disk size of a single record: every fixed-size field below, plus a
+		// zero-length name (just its uint16 length prefix, no character data). Any real record is at
+		// least this big, so this bounds how large volumeCount could legitimately be for a chunk of
+		// chunkSize bytes. Without this check, a corrupted count would size the reservation below from
+		// an attacker- or corruption-controlled value, aborting the (no-exceptions) build on an
+		// out-of-memory allocation before a single record is even read.
+		constexpr size_t idBytes = sizeof(uint32);
+		constexpr size_t nameLengthPrefixBytes = sizeof(uint16);
+		constexpr size_t shapeBytes = sizeof(uint8);
+		// position(3) + size(3) + yaw + density + color(3) + edgeFade + heightFalloff + activeFrom +
+		// activeTo + fadeHours + noiseAmount, in the exact order read below.
+		constexpr size_t floatFieldCount = 17;
+		constexpr size_t floatFieldBytes = floatFieldCount * sizeof(float);
+		constexpr size_t noiseDetailBytes = sizeof(uint8);
+		constexpr size_t minimumRecordSize = idBytes + nameLengthPrefixBytes + shapeBytes + floatFieldBytes + noiseDetailBytes;
+		static_assert(minimumRecordSize > 0);
+
+		if (volumeCount > chunkSize / minimumRecordSize)
+		{
+			ELOG("Fog volume chunk claims " << volumeCount << " volumes, which cannot fit in a "
+				<< chunkSize << " byte chunk (minimum " << minimumRecordSize << " bytes per volume) - rejecting corrupt file");
+			return false;
+		}
+
 		m_volumes.reserve(m_volumes.size() + volumeCount);
 
 		for (uint32 i = 0; i < volumeCount; ++i)

@@ -90,6 +90,48 @@ TEST_CASE("Fog volume selection caps at the per-frame limit", "[fog_volume]")
 	CHECK(selected.front().center.x == Approx(1.0f));
 }
 
+TEST_CASE("Fog volume selection keeps a large enclosing volume over farther small ones", "[fog_volume]")
+{
+	// A volume the camera stands inside has surface distance 0 no matter how far its centre is,
+	// so it must never be pushed out of the MaxVolumesPerFrame cap by volumes whose centre is
+	// nearer but whose surface is actually farther away. Regression test for sorting by distance
+	// to the bounding sphere surface rather than to the centre.
+	std::vector<FogVolume> volumes;
+	volumes.reserve(1 + fog_volume::MaxVolumesPerFrame);
+
+	FogVolume huge;
+	huge.position = Vector3(1000.0f, 0.0f, 0.0f);
+	huge.size = Vector3(3000.0f, 3000.0f, 3000.0f); // radius ~2598, camera at the origin is well inside.
+	volumes.push_back(huge);
+
+	for (uint32 i = 1; i <= fog_volume::MaxVolumesPerFrame; ++i)
+	{
+		FogVolume small;
+		small.position = Vector3(static_cast<float>(i), 0.0f, 0.0f); // nearer centre than the huge volume.
+		small.size = Vector3(0.1f, 0.1f, 0.1f);                      // radius ~0.087, camera stays outside.
+		volumes.push_back(small);
+	}
+
+	const auto all = [](const Vector3&, float) { return true; };
+	const std::vector<FogVolumeInstance> selected = SelectFogVolumes(volumes, 12.0f, Vector3(0.0f, 0.0f, 0.0f), 5000.0f, all);
+
+	REQUIRE(selected.size() == fog_volume::MaxVolumesPerFrame);
+
+	bool hugeVolumeKept = false;
+	for (const FogVolumeInstance& instance : selected)
+	{
+		if (instance.center.x == Approx(1000.0f))
+		{
+			hugeVolumeKept = true;
+		}
+	}
+	CHECK(hugeVolumeKept);
+
+	// Its surface distance (0, camera inside) beats every small volume's positive surface
+	// distance, so it also sorts first.
+	CHECK(selected.front().center.x == Approx(1000.0f));
+}
+
 TEST_CASE("The GPU fog volume record is 80 bytes", "[fog_volume]")
 {
 	STATIC_REQUIRE(sizeof(fog_volume::GpuFogVolume) == 80);

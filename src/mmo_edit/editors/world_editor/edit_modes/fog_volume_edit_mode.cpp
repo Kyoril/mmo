@@ -118,7 +118,7 @@ namespace mmo
 			return true;
 		}
 
-		/// Combo labels for FogVolume::noiseDetail (1, 2 or 4 octaves).
+		/// Combo labels for FogVolume::noiseDetail (1x, 2x or 4x the zone's noise frequency).
 		constexpr const char* s_noiseDetailLabels[] = { "1x", "2x", "4x" };
 		constexpr uint8 s_noiseDetailValues[] = { 1, 2, 4 };
 

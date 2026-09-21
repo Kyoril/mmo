@@ -104,7 +104,13 @@ namespace mmo
 		ASSERT(m_fogBuffer);
 
 		m_fogVolumeBuffer = m_device.CreateStructuredBuffer(sizeof(fog_volume::GpuFogVolume), fog_volume::MaxVolumesPerFrame, nullptr);
-		ASSERT(m_fogVolumeBuffer);
+		if (!m_fogVolumeBuffer)
+		{
+			// The null graphics device (used headlessly, e.g. in tests/tools) returns nullptr here.
+			// SetFogVolumes and Render already tolerate a null buffer by skipping the volume upload
+			// and binding, so this is not fatal - just fewer fog volumes rendered than requested.
+			WLOG("Failed to create fog volume structured buffer - local fog volumes will not be rendered");
+		}
 		m_gpuFogVolumes.reserve(fog_volume::MaxVolumesPerFrame);
 
 		m_compositePs = m_device.CreateShader(ShaderType::PixelShader, MMO_FOG_COMPOSITE_PS_BYTECODE, MMO_FOG_COMPOSITE_PS_SIZE);
