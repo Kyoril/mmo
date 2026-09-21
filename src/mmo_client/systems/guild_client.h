@@ -115,6 +115,7 @@ namespace mmo
 		int32 m_guildRank = -1;
 
 		std::vector<GuildMemberInfo> m_guildMembers;
+		std::vector<String> m_guildRankNames;
 
 		const proto_client::RaceManager& m_races;
 		const proto_client::ClassManager& m_classes;

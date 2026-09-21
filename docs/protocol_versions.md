@@ -5,7 +5,7 @@ Two constants describe what a binary can say on the wire:
 | Constant | Defined in | Current |
 |---|---|---|
 | `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 6 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 14 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 15 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -133,3 +133,9 @@ that are individually forgettable.
 Entries before version 5 (auth) and 7 (game) were reconstructed from `git log -S` on the
 constant, so they name the commit that introduced each value rather than a hand-written
 account of what changed. Add a row here as part of any future bump.
+
+### Game protocol 15
+
+Guild roster rank records now include the server-defined rank name after permissions.
+Clients use these names for member ranks and retain the actual rank count. Rebuild
+and restart the client and all three server tiers together.

@@ -432,7 +432,8 @@ namespace mmo
 
 		for (const auto& rank : m_ranks)
 		{
-			writer << io::write<uint32>(rank.permissions);
+			writer << io::write<uint32>(rank.permissions)
+				<< io::write_dynamic_range<uint8>(rank.name);
 		}
 
 		for (auto& member : m_members)

@@ -214,8 +214,7 @@ namespace mmo
 			return 0;
 		}
 
-		// TODO
-		return 0;
+		return static_cast<int32>(m_guildRankNames.size());
 	}
 
 	bool GuildClient::IsGuildLeader() const
@@ -309,6 +308,12 @@ namespace mmo
 
 	void GuildClient::NotifyGuildChanged(const uint64 guildId)
 	{
+		if (m_guildId != guildId)
+		{
+			m_guildMembers.clear();
+			m_guildRankNames.clear();
+			m_guildRank = -1;
+		}
 		m_guildId = guildId;
 
 		if (m_guildId != 0)
@@ -513,13 +518,16 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		m_guildRankNames.clear();
 		for (uint32 i = 0; i < rankCount; ++i)
 		{
 			uint32 permissions;
-			if (!(packet >> io::read<uint32>(permissions)))
+			String rankName;
+			if (!(packet >> io::read<uint32>(permissions) >> io::read_container<uint8>(rankName)))
 			{
 				return PacketParseResult::Disconnect;
 			}
+			m_guildRankNames.push_back(std::move(rankName));
 		}
 
 		m_guildMembers.resize(memberCount);
@@ -543,7 +551,12 @@ namespace mmo
 				m_guildRank = member.rankIndex;
 			}
 
-			member.rank = "UNKNOWN";
+			if (member.rankIndex >= m_guildRankNames.size())
+			{
+				ELOG("Guild roster contains an invalid rank index " << member.rankIndex);
+				return PacketParseResult::Disconnect;
+			}
+			member.rank = m_guildRankNames[member.rankIndex];
 
 			const proto_client::RaceEntry* race = m_races.getById(raceId);
 			member.raceName = race ? race->name() : "UNKNOWN";
