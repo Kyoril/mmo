@@ -59,20 +59,7 @@ static const float2 POISSON_DISK[16] = {
 
 
 #include "AtmosphereCommon.hlsli"
-
-// Light structure (matches StructuredBuffer element in C++)
-struct Light
-{
-    float3 Position;
-    float Range;
-    float3 Color;
-    float Intensity;
-    float3 Direction;
-    float SpotAngle;
-    uint Type;  // 0 = Point, 1 = Directional, 2 = Spot
-    uint ShadowMap;
-    float2 Padding;
-};
+#include "LightCommon.hlsli"
 
 // Light metadata constant buffer (small - just count and ambient color)
 cbuffer LightMetadata : register(b2)
@@ -173,7 +160,7 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
     float VdotH = max(dot(viewDir, halfway), 0.0);
     
     // Attenuation
-    float attenuation = pow(1.0 - saturate(distance / light.Range), 2.0);
+    float attenuation = LightAttenuation(distance, light.Range);
     
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
     float3 F = F_Schlick(F0, VdotH);
@@ -409,16 +396,13 @@ float3 CalculateSpotLight(Light light, float3 viewDir, float3 worldPos, float3 n
 
     lightDir = normalize(lightDir);
 
-    // Spot cone
-    float spotFactor = dot(lightDir, -normalize(light.Direction));
-    float spotCutoff = cos(radians(light.SpotAngle * 0.5));
-    if (spotFactor < spotCutoff)
+    // Spot cone. lightDir points from the surface to the light.
+    float spotAttenuation = SpotFactor(light, -lightDir);
+    if (spotAttenuation <= 0.0)
         return float3(0, 0, 0);
 
-    float spotAttenuation = smoothstep(spotCutoff, spotCutoff + 0.1, spotFactor);
-
     // Distance attenuation
-    float attenuation = pow(1.0 - saturate(distance / light.Range), 2.0) * spotAttenuation;
+    float attenuation = LightAttenuation(distance, light.Range) * spotAttenuation;
 
     // Cook-Torrance lighting
     float3 halfway = normalize(lightDir + viewDir);

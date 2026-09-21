@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "graphics/color_curve.h"
+#include "math/vector3.h"
 #include "math/vector4.h"
 #include "scene_graph/atmosphere_settings.h"
 
@@ -88,6 +89,21 @@ namespace mmo
 
 		/// @brief Metres per repeat of the fog noise, [5, 500].
 		float fogNoiseSize = 60.0f;
+
+		/// @brief Multiplier on point and spot light scattering in the fog.
+		float lightScattering = 1.0f;
+
+		/// @brief Texture path of a strip LUT applied after tone mapping. Empty = no LUT.
+		String colorLut;
+
+		/// @brief Saturation applied with the LUT: 0 = grey, 1 = unchanged.
+		float saturation = 1.0f;
+
+		/// @brief Contrast around mid-grey applied with the LUT, 1 = unchanged.
+		float contrast = 1.0f;
+
+		/// @brief Multiplies the graded colour, 1 = unchanged.
+		Vector3 colorFilter { 1.0f, 1.0f, 1.0f };
 
 		/// @brief Builds the built-in Default: the look the world had before profiles existed.
 		[[nodiscard]] static EnvironmentProfile MakeDefault();

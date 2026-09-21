@@ -2932,7 +2932,18 @@ namespace mmo
 		light.intensity = intensity;
 		light.attenuationStart = 0.0f;
 		light.attenuationEnd = 10.0f;
-		light.rotation = Quaternion::Identity;
+
+		// Spot lights shine along rotation * Vector3::UnitZ (see Light::Update). A fresh spot is
+		// most useful pointing straight down (like a hanging lamp), which under this engine's
+		// Y-up convention needs a +90 degree pitch around X: it rotates +Z into -Y.
+		if (type == WorldModelLight::LightType::Spot)
+		{
+			light.rotation = Quaternion(Degree(90.0f), Vector3::UnitX);
+		}
+		else
+		{
+			light.rotation = Quaternion::Identity;
+		}
 
 		auto& lights = m_worldModel->GetLights();
 		lights.push_back(light);
@@ -3380,6 +3391,12 @@ namespace mmo
 			vis.light->SetColor(lightColor);
 			vis.light->SetIntensity(lightData.intensity);
 			vis.light->SetRange(lightData.attenuationEnd);
+			if (lightData.type == WorldModelLight::LightType::Spot)
+			{
+				vis.light->SetOuterConeAngle(lightData.outerConeAngle);
+				vis.light->SetInnerConeAngle(lightData.innerConeAngle);
+			}
+			vis.light->SetFogScattering(lightData.fogScattering);
 
 			vis.node->AttachObject(*vis.light);
 
@@ -3489,18 +3506,20 @@ namespace mmo
 		}
 		else if (lightData.type == WorldModelLight::LightType::Spot)
 		{
-			// Spot light - draw outer cone
+			// Spot light - draw outer cone along the node's local +Z axis, matching the runtime
+			// direction (Light::Update derives direction as nodeOrientation * Vector3::UnitZ, and
+			// this renderable is attached to vis.node whose orientation is already lightData.rotation).
 			const float range = lightData.attenuationEnd;
-			const float outerAngle = 45.0f; // Default outer angle in degrees
+			const float outerAngle = lightData.outerConeAngle;
 			const float outerRadius = range * std::tan(outerAngle * 0.5f * 3.14159265f / 180.0f);
-			
+
 			auto lineOp = vis.rangeRenderable->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/WorldGrid.hmat"));
 
 			// Draw cone edges (4 lines from apex to base circle)
 			for (int i = 0; i < 4; ++i)
 			{
 				const float angle = (static_cast<float>(i) / 4) * 2.0f * 3.14159265f;
-				Vector3 basePoint(std::cos(angle) * outerRadius, std::sin(angle) * outerRadius, -range);
+				Vector3 basePoint(std::cos(angle) * outerRadius, std::sin(angle) * outerRadius, range);
 				auto& line = lineOp->AddLine(Vector3::Zero, basePoint);
 				line.SetColor(lightColor);
 			}
@@ -3510,8 +3529,8 @@ namespace mmo
 			{
 				const float angle1 = (static_cast<float>(i) / segments) * 2.0f * 3.14159265f;
 				const float angle2 = (static_cast<float>(i + 1) / segments) * 2.0f * 3.14159265f;
-				Vector3 p1(std::cos(angle1) * outerRadius, std::sin(angle1) * outerRadius, -range);
-				Vector3 p2(std::cos(angle2) * outerRadius, std::sin(angle2) * outerRadius, -range);
+				Vector3 p1(std::cos(angle1) * outerRadius, std::sin(angle1) * outerRadius, range);
+				Vector3 p2(std::cos(angle2) * outerRadius, std::sin(angle2) * outerRadius, range);
 				auto& line = lineOp->AddLine(p1, p2);
 				line.SetColor(lightColor);
 			}

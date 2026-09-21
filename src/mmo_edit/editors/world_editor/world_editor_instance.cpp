@@ -11,6 +11,7 @@
 #include "environment_preview.h"
 #include "world_editor.h"
 #include "paging/world_page_loader.h"
+#include "deferred_shading/color_grading.h"
 #include "assets/asset_registry.h"
 #include "editors/material_editor/node_editor/node_layout.h"
 #include "log/default_log_levels.h"
@@ -1392,6 +1393,13 @@ namespace mmo
 			renderer->SetExposure(state.exposure);
 			renderer->SetBloomIntensity(state.bloomIntensity);
 			renderer->SetBloomThreshold(state.bloomThreshold);
+			renderer->SetFogLightScattering(state.lightScattering);
+
+			ColorGradingSettings grading;
+			grading.SetSaturation(state.saturation);
+			grading.SetContrast(state.contrast);
+			grading.SetColorFilter(state.colorFilter);
+			renderer->SetColorGrading(grading, state.colorLut, state.colorLutFrom, state.colorLutBlend);
 		}
 	}
 

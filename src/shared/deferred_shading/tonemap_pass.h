@@ -11,6 +11,9 @@
 #include "graphics/vertex_buffer.h"
 #include "graphics/shader_base.h"
 #include "graphics/texture.h"
+#include "graphics/sampler_state.h"
+
+#include <map>
 
 namespace mmo
 {
@@ -36,6 +39,12 @@ namespace mmo
 		/// @param fullscreenVs The pass-through fullscreen vertex shader.
 		void Render(RenderTexture& hdrScene, const TexturePtr& bloom, float bloomScale, VertexBuffer& quad, ShaderBase& fullscreenVs);
 
+		/// @brief Sets the zone LUTs for the next frames. Empty paths mean no LUT.
+		/// @param lut Target LUT texture path.
+		/// @param lutFrom LUT being faded out.
+		/// @param blend Weight of lut (lutFrom gets 1 - blend).
+		void SetLuts(const String& lut, const String& lutFrom, float blend);
+
 		/// @brief Gets the display-referred output.
 		[[nodiscard]] RenderTexturePtr GetResult() const { return m_outputRT; }
 
@@ -46,6 +55,9 @@ namespace mmo
 		[[nodiscard]] const TonemapSettings& GetSettings() const { return m_settings; }
 
 	private:
+		/// @brief Loads a strip LUT once; empty, missing or wrongly sized textures resolve to nullptr (warned once).
+		TexturePtr ResolveLut(const String& path);
+
 		GraphicsDevice& m_device;
 
 		TonemapSettings m_settings;
@@ -55,11 +67,22 @@ namespace mmo
 
 		RenderTexturePtr m_outputRT;
 
-		/// @brief 1x1 black stand-in bound when there is no bloom.
+		/// @brief 1x1 black stand-in bound when there is no bloom, and also when a LUT slot (t2/t3) has no LUT to bind.
 		TexturePtr m_blackTexture;
 
 		ConstantBufferPtr m_tonemapBuffer;
 
 		ShaderPtr m_tonemapPs;
+
+		/// @brief Cache of loaded strip LUT textures, keyed by path, so repeated zone transitions don't reload.
+		std::map<String, TexturePtr> m_lutCache;
+		/// @brief Target LUT texture for the current blend (nullptr means no LUT).
+		TexturePtr m_lut;
+		/// @brief LUT being faded out during a zone cross-fade (nullptr means no LUT).
+		TexturePtr m_lutFrom;
+		/// @brief Weight of m_lut in the blend; m_lutFrom gets 1 - m_lutBlend.
+		float m_lutBlend = 1.0f;
+		/// @brief Sampler used to fetch the LUT textures; may be nullptr on backends where CreateSamplerState fails.
+		SamplerStatePtr m_lutSampler;
 	};
 }

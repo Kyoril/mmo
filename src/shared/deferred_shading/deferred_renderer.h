@@ -243,14 +243,28 @@ namespace mmo
         /// @brief Gets the exposure applied before tone mapping.
         [[nodiscard]] float GetExposure() const { return m_tonemapPass->GetSettings().exposure; }
 
+        /// @brief Sets the colour grade applied after tone mapping.
+        /// @param settings Saturation, contrast and colour filter.
+        /// @param lut Target LUT texture path (empty = none).
+        /// @param lutFrom LUT being faded out (empty = none).
+        /// @param lutBlend Weight of lut; lutFrom gets 1 - lutBlend.
+        void SetColorGrading(const ColorGradingSettings& settings, const String& lut, const String& lutFrom, float lutBlend)
+        {
+            m_tonemapPass->GetSettings().grading = settings;
+            m_tonemapPass->SetLuts(lut, lutFrom, lutBlend);
+        }
+
         /// @brief Applies the volumetric fog quality preset: 0 Off (closed-form fog only), 1 Low ... 4 Ultra.
         void SetAtmosphereQuality(int level) { m_volumetricFogPass->GetSettings().ApplyQualityLevel(level); }
 
         /// @brief Sets the view depth the fog volume covers in metres (clamped to [50, 300]).
         void SetVolumetricFogRange(float range) { m_volumetricFogPass->GetSettings().SetRange(range); }
 
-        /// @brief Sets the fog debug view: 0 off, 1 scattered light, 2 transmittance, 3 density.
+        /// @brief Sets the fog debug view: 0 off, 1 scattered light, 2 transmittance, 3 density, 4 lights per fog block.
         void SetAtmosphereDebugMode(int mode) { m_volumetricFogPass->GetSettings().SetDebugMode(mode); }
+
+        /// @brief Sets how strongly point and spot lights scatter in the volumetric fog, clamped to [0, 8].
+        void SetFogLightScattering(float strength) { m_volumetricFogPass->GetSettings().SetLightScatterStrength(strength); }
 
         /// @brief Applies the bloom quality preset: 0 Off, 1 Low, 2 High.
         void SetBloomQuality(int level) { m_bloomPass->GetSettings().ApplyQualityLevel(level); }
@@ -461,11 +475,14 @@ namespace mmo
             Vector3 color;
             float intensity;
             Vector3 direction;
-            float spotAngle;
-            uint32 type;  // 0 = Point, 1 = Directional, 2 = Spot
+            float spotCosOuter;   // cos(outer cone / 2); spot lights only
+            uint32 type;          // 0 = Point, 1 = Directional, 2 = Spot
             int32 shadowMap;
-            Vector2 padding;
+            float spotCosInner;   // cos(inner cone / 2), always above spotCosOuter; spot lights only
+            float fogScattering;  // Multiplier on scattering into volumetric fog
         };
+
+        static_assert(sizeof(ShaderLight) == 64, "ShaderLight must match struct Light in LightCommon.hlsli");
 
         /// @brief Reused scratch buffers for light gathering (see FindLights). Kept as members so their
         ///        capacity is retained between frames instead of allocating (and copying) every frame.

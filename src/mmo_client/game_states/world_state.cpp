@@ -18,6 +18,7 @@
 #include "net/realm_connector.h"
 #include "ui/world_frame.h"
 #include "ui/world_renderer.h"
+#include "deferred_shading/color_grading.h"
 
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
@@ -2143,7 +2144,7 @@ namespace mmo
 		s_volumetricFogRangeVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogRange", "How many metres in front of the camera the volumetric fog covers (50 to 300, the shadow range). Fog beyond uses a smooth closed-form estimate.", "200");
 		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
-		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density.", "0");
+		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
 		s_bloomQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxBloomQuality", "Bloom quality: 0 = Off, 1 = Low (quarter resolution, 4 levels), 2 = High (half resolution, 6 levels).", "2");
@@ -6268,6 +6269,13 @@ namespace mmo
 		renderer->SetExposure(state.exposure * brightness);
 		renderer->SetBloomIntensity(state.bloomIntensity);
 		renderer->SetBloomThreshold(state.bloomThreshold);
+		renderer->SetFogLightScattering(state.lightScattering);
+
+		ColorGradingSettings grading;
+		grading.SetSaturation(state.saturation);
+		grading.SetContrast(state.contrast);
+		grading.SetColorFilter(state.colorFilter);
+		renderer->SetColorGrading(grading, state.colorLut, state.colorLutFrom, state.colorLutBlend);
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)

@@ -67,7 +67,29 @@ TEST_CASE("Volumetric fog range and debug mode clamp", "[volumetric_fog]")
 	settings.SetDebugMode(-1);
 	CHECK(settings.debugMode == 0u);
 	settings.SetDebugMode(7);
-	CHECK(settings.debugMode == 3u);
+	CHECK(settings.debugMode == 4u);
+}
+
+TEST_CASE("Fog light scattering strength clamps to its range", "[volumetric_fog]")
+{
+	VolumetricFogSettings settings;
+	CHECK(settings.lightScatterStrength == Approx(1.0f));
+
+	settings.SetLightScatterStrength(-2.0f);
+	CHECK(settings.lightScatterStrength == Approx(0.0f));
+
+	settings.SetLightScatterStrength(20.0f);
+	CHECK(settings.lightScatterStrength == Approx(8.0f));
+
+	settings.SetLightScatterStrength(2.5f);
+	CHECK(settings.lightScatterStrength == Approx(2.5f));
+}
+
+TEST_CASE("Fog debug view 4 shows lights per block", "[volumetric_fog]")
+{
+	VolumetricFogSettings settings;
+	settings.SetDebugMode(4);
+	CHECK(settings.debugMode == 4u);
 }
 
 TEST_CASE("Slice and depth conversions are exact inverses and monotonic", "[volumetric_fog]")

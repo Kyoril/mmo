@@ -869,6 +869,7 @@ namespace mmo
 					1.0f);
 				params.lightIntensity = lightConfig.has_intensity() ? lightConfig.intensity() : 2.0f;
 				params.lightRange = lightConfig.has_range() ? lightConfig.range() : 8.0f;
+				params.lightFogScattering = lightConfig.fog_scattering();
 				params.lightFadeInTime = lightConfig.has_fade_in_time() ? lightConfig.fade_in_time() : 0.3f;
 				params.lightFadeOutTime = lightConfig.has_fade_out_time() ? lightConfig.fade_out_time() : 0.5f;
 			}
@@ -1817,6 +1818,7 @@ namespace mmo
 			Light& light = m_scene.CreateLight(lightName, LightType::Point);
 			light.SetColor(Vector4(lightConfig.r(), lightConfig.g(), lightConfig.b(), 1.0f));
 			light.SetRange(lightConfig.range());
+			light.SetFogScattering(lightConfig.fog_scattering());
 
 			// Set up fading
 			const float fadeInTime = lightConfig.fade_in_time();

@@ -15,6 +15,7 @@
 #include "graphics/structured_buffer.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/render_queue.h"
+#include "scene_graph/light_math.h"
 #include "log/default_log_levels.h"
 #include "base/profiler.h"
 
@@ -445,7 +446,8 @@ namespace mmo
         if (runAtmosphere)
         {
             m_volumetricFogPass->Render(camera, scene.GetWind(), *m_renderTexture, m_gBuffer.GetNormalRT(), *m_sceneColorCopy,
-                m_cascadeShadowMaps, *m_shadowBuffer, *scene.GetCameraBuffer(), *m_shadowSampler, *m_quadBuffer, *m_deferredLightVs);
+                m_cascadeShadowMaps, *m_shadowBuffer, *scene.GetCameraBuffer(), *m_lightStructuredBuffer,
+                static_cast<uint32>(m_shaderLights.size()), *m_shadowSampler, *m_quadBuffer, *m_deferredLightVs);
         }
         else
         {
@@ -727,9 +729,16 @@ namespace mmo
             shaderLight.intensity = visibleLight.intensity;
             shaderLight.range = visibleLight.range;
             shaderLight.direction = visibleLight.direction;
-            shaderLight.spotAngle = visibleLight.spotAngle;
             shaderLight.shadowMap = visibleLight.castsShadows ? 1 : 0;
-            shaderLight.padding = Vector2::Zero;
+            shaderLight.spotCosOuter = 0.0f;
+            shaderLight.spotCosInner = 0.0f;
+            if (visibleLight.type == LightType::Spot)
+            {
+                const light_math::SpotCosinePair cosines = light_math::SpotCosines(visibleLight.innerConeAngle, visibleLight.outerConeAngle);
+                shaderLight.spotCosOuter = cosines.outer;
+                shaderLight.spotCosInner = cosines.inner;
+            }
+            shaderLight.fogScattering = visibleLight.fogScattering;
 
             // Set light type
             switch (visibleLight.type)

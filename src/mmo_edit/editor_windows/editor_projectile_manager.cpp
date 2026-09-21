@@ -114,6 +114,7 @@ namespace mmo
 			m_light->SetColor(params.lightColor);
 			m_light->SetIntensity(params.lightFadeInTime > 0.0f ? 0.0f : params.lightIntensity);
 			m_light->SetRange(params.lightRange);
+			m_light->SetFogScattering(params.lightFogScattering);
 			m_node->AttachObject(*m_light);
 		}
 

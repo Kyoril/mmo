@@ -165,5 +165,20 @@ namespace mmo
 		{
 			m_state = EvaluateEnvironment(*m_entries.back().profile, m_normalizedTime);
 		}
+
+		// LUTs cannot be averaged: show the target's LUT faded in over the strongest other profile's.
+		const Entry& target = m_entries.back();
+		const Entry* strongestOther = nullptr;
+		for (size_t i = 0; i + 1 < m_entries.size(); ++i)
+		{
+			if (m_entries[i].weight > 0.0f && (strongestOther == nullptr || m_entries[i].weight > strongestOther->weight))
+			{
+				strongestOther = &m_entries[i];
+			}
+		}
+
+		m_state.colorLut = target.profile->colorLut;
+		m_state.colorLutFrom = strongestOther != nullptr ? strongestOther->profile->colorLut : String();
+		m_state.colorLutBlend = strongestOther != nullptr ? std::clamp(target.weight, 0.0f, 1.0f) : 1.0f;
 	}
 }

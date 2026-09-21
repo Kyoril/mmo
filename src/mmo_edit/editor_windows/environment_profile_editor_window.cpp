@@ -2,6 +2,7 @@
 
 #include "environment_profile_editor_window.h"
 
+#include "asset_picker_widget.h"
 #include "editor_imgui_helpers.h"
 #include "environment_preview.h"
 #include "scene_graph/environment_profile.h"
@@ -146,6 +147,7 @@ namespace mmo
 		DrawPreviewBar(currentEntry);
 		DrawFixedValues(currentEntry);
 		DrawWind(currentEntry);
+		DrawColorGrading(currentEntry);
 		DrawCurves(currentEntry);
 	}
 
@@ -265,6 +267,17 @@ namespace mmo
 				ImGui::SetTooltip("World height at which the fog reaches its full density. It thins above this height, so flying above a low base leaves the fog below you.");
 			}
 
+			float lightScattering = entry.light_scattering();
+			if (ImGui::DragFloat("Light Scattering", &lightScattering, 0.05f, 0.0f, 8.0f, "%.2f"))
+			{
+				entry.set_light_scattering(std::clamp(lightScattering, 0.0f, 8.0f));
+				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("How strongly lanterns, torches and spell lights glow in this zone's fog. 1 = default.");
+			}
+
 			float anisotropy = entry.fog_anisotropy();
 			if (ImGui::SliderFloat("Sun Glow Tightness", &anisotropy, 0.0f, 0.95f, "%.2f"))
 			{
@@ -368,6 +381,60 @@ namespace mmo
 			if (ImGui::DragFloat("Fog Noise Size", &noiseSize, 0.5f, 5.0f, 500.0f, "%.0f m"))
 			{
 				entry.set_fog_noise_size(std::clamp(noiseSize, 5.0f, 500.0f));
+				changed = true;
+			}
+
+			if (changed)
+			{
+				GetEnvironmentPreview().NotifyChanged();
+			}
+		}
+	}
+
+	void EnvironmentProfileEditorWindow::DrawColorGrading(proto::EnvironmentProfile& entry)
+	{
+		if (const auto section = ScopedEditorSection("Color Grading", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			bool changed = false;
+
+			String lut = entry.color_lut();
+			if (AssetPickerWidget::Draw("Color LUT", lut, asset_extensions::Textures))
+			{
+				if (lut.empty())
+				{
+					entry.clear_color_lut();
+				}
+				else
+				{
+					entry.set_color_lut(lut);
+				}
+				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Strip LUT (256x16 or 1024x32), imported with compression off. See docs/color-grading.md.");
+			}
+
+			float saturation = entry.saturation();
+			if (ImGui::SliderFloat("Saturation", &saturation, 0.0f, 2.0f, "%.2f"))
+			{
+				entry.set_saturation(std::clamp(saturation, 0.0f, 2.0f));
+				changed = true;
+			}
+
+			float contrast = entry.contrast();
+			if (ImGui::SliderFloat("Contrast", &contrast, 0.0f, 2.0f, "%.2f"))
+			{
+				entry.set_contrast(std::clamp(contrast, 0.0f, 2.0f));
+				changed = true;
+			}
+
+			float filter[3] = { entry.color_filter_r(), entry.color_filter_g(), entry.color_filter_b() };
+			if (ImGui::ColorEdit3("Color Filter", filter, ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float))
+			{
+				entry.set_color_filter_r(std::clamp(filter[0], 0.0f, 2.0f));
+				entry.set_color_filter_g(std::clamp(filter[1], 0.0f, 2.0f));
+				entry.set_color_filter_b(std::clamp(filter[2], 0.0f, 2.0f));
 				changed = true;
 			}
 

@@ -24,6 +24,9 @@ namespace mmo
             /// @brief Version 2.0 with explicit element counts.
             /// Each chunk writes element count explicitly instead of relying on chunk size.
             Version_2_0 = 0x0200,
+
+            /// @brief Version 2.1: lights store inner and outer cone angles and a fog scattering multiplier.
+            Version_2_1 = 0x0201,
         };
     }
 

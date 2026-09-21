@@ -125,6 +125,15 @@ namespace mmo
 		result.windGustiness = std::clamp(profile.wind_gustiness(), 0.0f, 1.0f);
 		result.fogNoiseAmount = std::clamp(profile.fog_noise_amount(), 0.0f, 1.0f);
 		result.fogNoiseSize = std::clamp(profile.fog_noise_size(), 5.0f, 500.0f);
+		result.lightScattering = std::clamp(profile.light_scattering(), 0.0f, 8.0f);
+
+		result.colorLut = profile.color_lut();
+		result.saturation = std::clamp(profile.saturation(), 0.0f, 2.0f);
+		result.contrast = std::clamp(profile.contrast(), 0.0f, 2.0f);
+		result.colorFilter = Vector3(
+			std::clamp(profile.color_filter_r(), 0.0f, 2.0f),
+			std::clamp(profile.color_filter_g(), 0.0f, 2.0f),
+			std::clamp(profile.color_filter_b(), 0.0f, 2.0f));
 
 		return result;
 	}

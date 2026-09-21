@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "color_grading.h"
 
 namespace mmo
 {
@@ -15,6 +16,9 @@ namespace mmo
 
 		/// @brief Dither amplitude in 8-bit steps (0.5 = ±half a step).
 		float ditherStrength = 0.5f;
+
+		/// @brief Parametric grade applied after gamma (saturation, contrast, colour filter).
+		ColorGradingSettings grading;
 
 		/// @brief Sets the exposure, clamped to [0.1, 8].
 		void SetExposure(const float value)

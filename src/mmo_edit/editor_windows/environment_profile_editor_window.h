@@ -52,6 +52,8 @@ namespace mmo
 
 		void DrawWind(proto::EnvironmentProfile& entry);
 
+		void DrawColorGrading(proto::EnvironmentProfile& entry);
+
 		void DrawReferences(const proto::EnvironmentProfile& entry);
 
 	public:

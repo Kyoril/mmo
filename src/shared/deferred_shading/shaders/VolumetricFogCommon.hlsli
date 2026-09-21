@@ -23,7 +23,7 @@ cbuffer VolumetricFogBuffer : register(b2)
     uint GridWidth;
     uint GridHeight;
     uint GridDepth;
-    uint DebugMode;             // 0 off, 1 scattered light, 2 transmittance, 3 density
+    uint DebugMode;             // 0 off, 1 scattered light, 2 transmittance, 3 density, 4 lights per fog block
     float NearDistance;
     float FarDistance;
     float NoiseSize;            // metres per noise tile
@@ -31,6 +31,9 @@ cbuffer VolumetricFogBuffer : register(b2)
     float2 WindOffset;          // accumulated wind scroll in noise tiles, wrapped to [0, 1)
     float SkyDistance;
     float VolumeEnabled;        // 0 when the froxel volume is off (analytic fog only)
+    uint LightCount;            // entries in the deferred renderer's light buffer (t9)
+    float LightScatterStrength; // zone multiplier on point and spot light scattering
+    float2 _LightPadding;
 };
 
 // View depth of a normalized slice coordinate, exponential between NearDistance and FarDistance.
