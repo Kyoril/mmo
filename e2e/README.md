@@ -115,6 +115,10 @@ side of a door, never the door itself, since its own geometry occludes its cente
 character first, so the kill grants real kill xp and quest kill credit),
 `GM.Worldport(map, x, y, z, facing)` (waits for the teleport),
 `GM.SetSpeed(multiplier)`, `GM.AcceptQuest(questId)` (no questgiver needed),
+`GM.SetTimeOfDay("HH:MM[:SS]" [, transitionSeconds]) -> "HH:MM:SS"` and
+`GM.ResetTimeOfDay([transitionSeconds]) -> "HH:MM:SS"` (change the realm-wide time of day,
+default transition 8s; wait for the resulting GameTimeInfo and return the time it carries —
+realm state that outlives the scenario, so always reset it before the scenario ends),
 `GM.TurnInQuest(questId [, rewardChoice])` (quest must be objective-complete; no
 quest ender needed), `GM.ClearInventory()` (destroys all backpack items, keeps
 equipment), `GM.DamageTarget(amount)` (deals raw damage to the current target through the

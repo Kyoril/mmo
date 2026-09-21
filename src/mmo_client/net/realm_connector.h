@@ -329,6 +329,15 @@ namespace mmo
 		///	path, so health-threshold triggers fire exactly as they would in a real fight.
 		void CheatDamage(uint32 amount);
 
+		/// GAME MASTER only. Changes the realm-wide time of day for every player on the realm.
+		/// @param timeOfDay The new time of day in milliseconds since midnight.
+		/// @param transitionMs How long clients blend towards the new time of day.
+		void CheatSetTimeOfDay(GameTime timeOfDay, uint32 transitionMs);
+
+		/// GAME MASTER only. Returns the realm-wide time of day to the realm's system time.
+		/// @param transitionMs How long clients blend towards the new time of day.
+		void CheatResetTimeOfDay(uint32 transitionMs);
+
 		/// Sends a packet to the server to cast a specific spell. The controlled character must know the spell. This method can not be used to
 		///	cast spells from items. Instead, use the UseItem method for this instead.
 		///	@param spellId The id of the spell to cast.

@@ -56,6 +56,11 @@ namespace mmo
 		/// Gets a world node by instance id.
 		std::shared_ptr<World> GetWorldByInstanceId(InstanceId instanceId);
 
+		/// Sends the realm-wide time of day to every authenticated world node.
+		/// @param timeOfDay Time of day in milliseconds since midnight.
+		/// @param transitionMs How long clients should blend towards the new time, 0 = instantly.
+		void BroadcastTimeOfDay(GameTime timeOfDay, uint32 transitionMs);
+
 	private:
 
 		Worlds m_worlds;

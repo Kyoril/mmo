@@ -1974,6 +1974,8 @@ namespace mmo
 								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
 		Console::RegisterCommand("damage", [this](const std::string &cmd, const std::string &args)
 								 { Command_Damage(cmd, args); }, ConsoleCommandCategory::Gm, "Deals the given amount of raw damage to your current target. Used to walk a boss to its next phase threshold.");
+		Console::RegisterCommand("settime", [this](const std::string &cmd, const std::string &args)
+								 { Command_SetTime(cmd, args); }, ConsoleCommandCategory::Gm, "Sets the realm-wide time of day for all players: 'settime <HH:MM[:SS]> [transition seconds]', or 'settime reset' to return to the server's system time.");
 #endif
 	}
 
@@ -2001,6 +2003,7 @@ namespace mmo
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
 		Console::UnregisterCommand("damage");
+		Console::UnregisterCommand("settime");
 #endif
 
 		m_tradeClient.Shutdown();
@@ -6451,25 +6454,34 @@ namespace mmo
 	{
 		GameTime gameTime;
 		float timeSpeed;
+		uint32 transitionMs;
 
-		if (!(packet >> io::read<uint64>(gameTime) >> io::read<float>(timeSpeed)))
+		if (!(packet >> io::read<uint64>(gameTime) >> io::read<float>(timeSpeed) >> io::read<uint32>(transitionMs)))
 		{
 			ELOG("Failed to read GameTimeInfo packet!");
 			return PacketParseResult::Disconnect;
 		}
 
-		// Update our game time component with server values
-		m_gameTime.SetTime(gameTime);
+		// Update our game time component with server values. A changed time of day blends the sky
+		// over; a plain sync only corrects the clock and lets a running blend finish. The sky reads
+		// the component every frame, so it follows either way.
 		m_gameTime.SetTimeSpeed(timeSpeed);
+		if (transitionMs > 0)
+		{
+			m_gameTime.TransitionTo(gameTime, transitionMs);
+		}
+		else
+		{
+			m_gameTime.SyncTime(gameTime);
+		}
 
-		// Setup sky component
-		m_skyComponent->SetNormalizedTimeOfDay(m_gameTime.GetNormalizedTimeOfDay());
-
-		// Trigger a Lua event to notify the UI about the time change
+		// Trigger a Lua event to notify the UI about the time change. Report the authoritative time,
+		// not the blended one, which still shows the old time at the start of a transition.
+		const GameTime targetTime = m_gameTime.GetTargetTime();
 		FrameManager::Get().TriggerLuaEvent("GAME_TIME_UPDATED",
-											m_gameTime.GetHour(),
-											m_gameTime.GetMinute(),
-											m_gameTime.GetSecond(),
+											static_cast<uint32>(targetTime / constants::OneHour),
+											static_cast<uint32>((targetTime / constants::OneMinute) % 60),
+											static_cast<uint32>((targetTime / constants::OneSecond) % 60),
 											m_gameTime.GetTimeSpeed());
 
 		return PacketParseResult::Pass;

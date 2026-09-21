@@ -37,6 +37,10 @@ namespace mmo
 		/// Handles a Message of the Day update.
 		void handleSetMotd(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
+		void handleGetTimeOfDay(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+
+		void handleSetTimeOfDay(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+
 	private:
 		WebService& m_service;
 	};

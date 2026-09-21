@@ -1,0 +1,21 @@
+meta {
+  name: Set Time Of Day
+  type: http
+  seq: 7
+}
+
+post {
+  url: http://localhost:8092/time-of-day
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  time: 21:30
+  transition: 8
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

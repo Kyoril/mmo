@@ -7,6 +7,7 @@
 #include "base/clock.h"
 #include "game/spell.h"
 #include "game/spell_target_map.h"
+#include "game/time_of_day.h"
 #include "log/default_log_levels.h"
 #include "mmo_client/luabind_lambda.h"
 
@@ -1103,6 +1104,59 @@ namespace mmo
 			}
 		}
 
+		/// Waits for the GameTimeInfo a time of day change produces: the first one after
+		/// previousCounter that carries the requested transition. Periodic clock syncs, which carry
+		/// no transition, are skipped.
+		std::string waitForTimeOfDayChange(const char* action, const uint32 previousCounter, const uint32 transitionMs)
+		{
+			BotRealmConnector& realm = g_runtime->session->GetRealm();
+
+			uint32 seenCounter = previousCounter;
+			const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+			while (std::chrono::steady_clock::now() < until)
+			{
+				if (realm.GetGameTimeInfoCounter() != seenCounter)
+				{
+					seenCounter = realm.GetGameTimeInfoCounter();
+					if (realm.GetLastGameTimeTransitionMs() == transitionMs)
+					{
+						const std::string received = FormatTimeOfDay(realm.GetLastGameTime());
+						if (g_runtime->transcript)
+						{
+							g_runtime->transcript->Action(action, { { "time", received }, { "transition_ms", transitionMs } });
+						}
+						return received;
+					}
+				}
+
+				pumpChecked();
+			}
+
+			abortScenario(bot_exit_code::ScenarioFailed, std::string(action) + ": no game time update received within 10s");
+		}
+
+		std::string luaGmSetTimeOfDay(const std::string& timeText, const uint32 transitionSeconds)
+		{
+			GameTime timeOfDay = 0;
+			if (!ParseTimeOfDay(timeText, timeOfDay))
+			{
+				abortScenario(bot_exit_code::ScenarioFailed, "GM.SetTimeOfDay: invalid time of day '" + timeText + "'");
+			}
+
+			BotRealmConnector& realm = g_runtime->session->GetRealm();
+			const uint32 previousCounter = realm.GetGameTimeInfoCounter();
+			realm.CheatSetTimeOfDay(timeOfDay, transitionSeconds * 1000);
+			return waitForTimeOfDayChange("GM.SetTimeOfDay", previousCounter, transitionSeconds * 1000);
+		}
+
+		std::string luaGmResetTimeOfDay(const uint32 transitionSeconds)
+		{
+			BotRealmConnector& realm = g_runtime->session->GetRealm();
+			const uint32 previousCounter = realm.GetGameTimeInfoCounter();
+			realm.CheatResetTimeOfDay(transitionSeconds * 1000);
+			return waitForTimeOfDayChange("GM.ResetTimeOfDay", previousCounter, transitionSeconds * 1000);
+		}
+
 		void luaGmSetSpeed(const float speed)
 		{
 			g_runtime->session->GetRealm().CheatSpeed(speed);
@@ -1229,6 +1283,8 @@ namespace mmo
 				luabind::def_lambda("GM_DamageTarget", &luaGmDamageTarget),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
+				luabind::def_lambda("GM_SetTimeOfDay", &luaGmSetTimeOfDay),
+				luabind::def_lambda("GM_ResetTimeOfDay", &luaGmResetTimeOfDay),
 				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
 				luabind::def_lambda("GM_TurnInQuest", &luaGmTurnInQuest),
 				luabind::def_lambda("GM_ClearInventory", &luaGmClearInventory)
@@ -1288,6 +1344,8 @@ namespace mmo
 				DamageTarget = GM_DamageTarget,
 				Worldport = GM_WorldPort,
 				SetSpeed = GM_SetSpeed,
+				SetTimeOfDay = function(timeText, transitionSeconds) return GM_SetTimeOfDay(timeText, transitionSeconds or 8) end,
+				ResetTimeOfDay = function(transitionSeconds) return GM_ResetTimeOfDay(transitionSeconds or 8) end,
 				AcceptQuest = GM_AcceptQuest,
 				TurnInQuest = function(questId, rewardChoice) GM_TurnInQuest(questId, rewardChoice or 0) end,
 				ClearInventory = GM_ClearInventory,

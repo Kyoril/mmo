@@ -307,7 +307,14 @@ namespace mmo
 		[[nodiscard]] bool HasPlayers() const;
 	
 		/// @brief Broadcasts the current game time to all players in the world.
-		void BroadcastGameTime();
+		/// @param transitionMs How long clients should blend towards the broadcast time. 0 is a
+		///        plain clock sync that never interrupts a blend already running on a client.
+		void BroadcastGameTime(uint32 transitionMs = 0);
+
+		/// @brief Changes the game time of day of this instance and tells every player in it.
+		/// @param timeOfDay Time of day in milliseconds since midnight.
+		/// @param transitionMs How long clients should blend towards the new time, 0 = instantly.
+		void SetTimeOfDay(GameTime timeOfDay, uint32 transitionMs);
 
 		/// Sets the state of a named encounter slot for this instance.
 		void SetEncounterState(uint32 slotId, uint32 state);

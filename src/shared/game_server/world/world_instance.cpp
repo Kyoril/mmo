@@ -205,13 +205,8 @@ namespace mmo
 			return;
 		}
 
-		// Get current time of day and apply game time
-		const std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-
-		// Game time is milliseconds, so calculate total milliseconds of now
-		auto nowTime = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-		auto nowGameTime = nowTime % constants::OneDay;
-		m_gameTime.SetTime(nowGameTime);
+		// Start at the realm-wide time of day this world node was told about
+		m_gameTime.SetTime(m_manager.GetTimeOfDay());
 
 		// Resolve the map's trigger ids once. The map entry never changes for the lifetime of an
 		// instance, so this index never needs invalidating.

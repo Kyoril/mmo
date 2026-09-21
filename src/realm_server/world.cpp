@@ -23,6 +23,7 @@
 #include "game_protocol/game_outgoing_packet.h"
 #include "game_server/objects/game_player_s.h"
 #include "proto_data/project.h"
+#include "time_of_day_manager.h"
 
 
 namespace mmo
@@ -34,7 +35,8 @@ namespace mmo
 		AsyncDatabase& database, 
 		std::shared_ptr<Client> connection, 
 		const String & address,
-		const proto::Project& project)
+		const proto::Project& project,
+		const TimeOfDayManager& timeOfDayManager)
 		: m_timerQueue(timerQueue)
 		, m_manager(worldManager)
 		, m_playerManager(playerManager)
@@ -42,6 +44,7 @@ namespace mmo
 		, m_connection(std::move(connection))
 		, m_address(address)
 		, m_project(project)
+		, m_timeOfDayManager(timeOfDayManager)
 	{
 		m_connection->setListener(*this);
 
@@ -370,6 +373,10 @@ namespace mmo
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
 						strongThis->SendAuthProof(auth::AuthResult::Success);
+
+						// The world node registers its handlers when it reads the proof, so this
+						// arrives right after, before any player could join an instance there.
+						strongThis->SendTimeOfDay(strongThis->m_timeOfDayManager.GetTimeOfDay(), 0);
 					}
 					else
 					{
@@ -427,6 +434,17 @@ namespace mmo
 				packet << io::write_range(this->m_m2.begin(), this->m_m2.end());
 			}
 
+			packet.Finish();
+		});
+	}
+
+	void World::SendTimeOfDay(const GameTime timeOfDay, const uint32 transitionMs) const
+	{
+		m_connection->sendSinglePacket([timeOfDay, transitionMs](auth::OutgoingPacket& packet) {
+			packet.Start(auth::realm_world_packet::TimeOfDay);
+			packet
+				<< io::write<uint64>(timeOfDay)
+				<< io::write<uint32>(transitionMs);
 			packet.Finish();
 		});
 	}

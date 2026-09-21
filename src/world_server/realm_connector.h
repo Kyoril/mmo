@@ -176,6 +176,8 @@ namespace mmo
 		/// Handles the realm's response to a mail take item request.
 		PacketParseResult OnMailTakeItemResult(auth::IncomingPacket& packet);
 
+		PacketParseResult OnTimeOfDay(auth::IncomingPacket& packet);
+
 		/// Handles the result of an inventory operation (save/delete).
 		/// @param packet Incoming packet containing operation result.
 		/// @returns Enum value which decides whether to continue the connection or destroy it.

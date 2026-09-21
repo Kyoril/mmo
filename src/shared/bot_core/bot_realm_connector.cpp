@@ -462,7 +462,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-		RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnGameTimeInfo);
 		RegisterPacketHandler(game::realm_client_packet::CastFailed, *this, &BotRealmConnector::OnIgnoredPacket);
 
 		// Combat packet handlers
@@ -2193,6 +2193,48 @@ namespace mmo
 		// The from/to/hit vectors that follow are only needed for the in-game visualizer — skip them.
 		m_lastLosResult = (hasLos != 0);
 		++m_losResultCounter;
+
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::CheatSetTimeOfDay(const GameTime timeOfDay, const uint32 transitionMs)
+	{
+		sendSinglePacket([timeOfDay, transitionMs](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatSetTimeOfDay);
+			packet
+				<< io::write<uint8>(0)
+				<< io::write<uint32>(static_cast<uint32>(timeOfDay))
+				<< io::write<uint32>(transitionMs);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatResetTimeOfDay(const uint32 transitionMs)
+	{
+		sendSinglePacket([transitionMs](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatSetTimeOfDay);
+			packet
+				<< io::write<uint8>(1)
+				<< io::write<uint32>(0)
+				<< io::write<uint32>(transitionMs);
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnGameTimeInfo(game::IncomingPacket& packet)
+	{
+		uint64 gameTime = 0;
+		float timeSpeed = 0.0f;
+		uint32 transitionMs = 0;
+		if (!(packet >> io::read<uint64>(gameTime) >> io::read<float>(timeSpeed) >> io::read<uint32>(transitionMs)))
+		{
+			ELOG("Failed to read GameTimeInfo packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_lastGameTime = gameTime;
+		m_lastGameTimeTransitionMs = transitionMs;
+		++m_gameTimeInfoCounter;
 
 		return PacketParseResult::Pass;
 	}

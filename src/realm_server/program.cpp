@@ -14,6 +14,7 @@
 #include "friend_mgr.h"
 #include "chat_channel_mgr.h"
 #include "motd_manager.h"
+#include "time_of_day_manager.h"
 
 #include "asio.hpp"
 
@@ -245,6 +246,14 @@ namespace mmo
 
 		WorldManager worldManager{ config.maxWorlds };
 
+		// Realm-wide time of day. Lives only in memory: a restart returns to the system time.
+		TimeOfDayManager timeOfDayManager;
+		const scoped_connection timeOfDayChanged{ timeOfDayManager.timeOfDayChanged.connect(
+			[&worldManager](const GameTime timeOfDay, const uint32 transitionMs)
+			{
+				worldManager.BroadcastTimeOfDay(timeOfDay, transitionMs);
+			}) };
+
 		// Create the world server
 		std::unique_ptr<auth::Server> worldServer;
 		try
@@ -258,7 +267,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue, &config](std::shared_ptr<World::Client> connection)
+		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue, &config, &timeOfDayManager](std::shared_ptr<World::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -280,7 +289,7 @@ namespace mmo
 				return;
 			}
 
-			auto world = std::make_shared<World>(timerQueue, worldManager, playerManager, asyncDatabase, connection, address.to_string(), project);
+			auto world = std::make_shared<World>(timerQueue, worldManager, playerManager, asyncDatabase, connection, address.to_string(), project, timeOfDayManager);
 			ILOG("Incoming world node connection from " << address);
 			worldManager.AddWorld(std::move(world));
 
@@ -351,7 +360,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector, &project, &timerQueue, &groupIdGenerator, &guildMgr, &friendMgr, &channelMgr, &config](std::shared_ptr<Player::Client> connection)
+		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector, &project, &timerQueue, &groupIdGenerator, &guildMgr, &friendMgr, &channelMgr, &config, &timeOfDayManager](std::shared_ptr<Player::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -377,7 +386,7 @@ namespace mmo
 			// 64 KiB is generous. Server<->server links keep the 16 MiB default.
 			connection->SetMaxReceiveBufferSize(64 * 1024);
 
-			auto player = std::make_shared<Player>(timerQueue, playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string(), project, groupIdGenerator, guildMgr, friendMgr, channelMgr);
+			auto player = std::make_shared<Player>(timerQueue, playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string(), project, groupIdGenerator, guildMgr, friendMgr, channelMgr, timeOfDayManager);
 			ILOG("Incoming player connection from " << address);
 			playerManager.AddPlayer(std::move(player));
 
@@ -404,7 +413,8 @@ namespace mmo
 			// thread uses the same instance; both take m_databaseMutex, exactly as the io thread
 			// and the db thread did before.
 			databasePool->Primary(),
-			*motdManager
+			*motdManager,
+			timeOfDayManager
 		);
 
 

@@ -2,6 +2,9 @@
 
 #include "base/typedefs.h"
 #include "base/clock.h"
+#include "game/time_of_day.h"
+
+#include <algorithm>
 #include <sstream>
 #include <iomanip>
 #include <string>
@@ -14,6 +17,11 @@ namespace mmo
      * 
      * This component tracks game time and provides utilities to convert between
      * real time and game time based on a configurable speed multiplier.
+     *
+     * It can also blend from its current time of day to a new one over a short real-time
+     * duration (TransitionTo). While such a transition runs, GetTime() and everything derived
+     * from it report the blended time, while GetTargetTime() reports the authoritative clock
+     * that is being blended towards.
      */
     class GameTimeComponent
     {
@@ -27,6 +35,9 @@ namespace mmo
             : m_gameTime(initialTime)
             , m_timeSpeed(timeSpeed)
             , m_lastUpdateTime(0)
+            , m_transitionDelta(0)
+            , m_transitionDurationMs(0)
+            , m_transitionElapsedMs(0)
         {
         }
 
@@ -53,6 +64,18 @@ namespace mmo
             
             // Ensure game time wraps around every 24 hours (day/night cycle)
             m_gameTime %= constants::OneDay;
+
+            // Advance a running transition in real time, independent of the time speed
+            if (m_transitionDurationMs > 0)
+            {
+                m_transitionElapsedMs += elapsedRealTime;
+                if (m_transitionElapsedMs >= m_transitionDurationMs)
+                {
+                    m_transitionDelta = 0;
+                    m_transitionDurationMs = 0;
+                    m_transitionElapsedMs = 0;
+                }
+            }
             
             // Update last update time
             m_lastUpdateTime = currentRealTime;
@@ -60,9 +83,39 @@ namespace mmo
 
         /**
          * @brief Gets the current game time in milliseconds.
+         *
+         * While a transition is running this is the blended time between the time of day the
+         * transition started from and the target time.
+         *
          * @return The current game time.
          */
-        [[nodiscard]] GameTime GetTime() const { return m_gameTime; }
+        [[nodiscard]] GameTime GetTime() const
+        {
+            if (m_transitionDurationMs == 0)
+            {
+                return m_gameTime;
+            }
+
+            // Smoothstep easing so the sun accelerates and settles instead of jerking into motion
+            const float t = std::min(1.0f, static_cast<float>(m_transitionElapsedMs) / static_cast<float>(m_transitionDurationMs));
+            const float eased = t * t * (3.0f - 2.0f * t);
+            const int64 remaining = static_cast<int64>(static_cast<double>(m_transitionDelta) * (1.0 - static_cast<double>(eased)));
+
+            const int64 day = static_cast<int64>(constants::OneDay);
+            const int64 blended = ((static_cast<int64>(m_gameTime) - remaining) % day + day) % day;
+            return static_cast<GameTime>(blended);
+        }
+
+        /**
+         * @brief Gets the authoritative game time in milliseconds, ignoring any running transition.
+         * @return The game time a running transition blends towards, or the current game time.
+         */
+        [[nodiscard]] GameTime GetTargetTime() const { return m_gameTime; }
+
+        /**
+         * @brief Determines whether a time of day transition is currently running.
+         */
+        [[nodiscard]] bool IsTransitioning() const { return m_transitionDurationMs > 0; }
 
         /**
          * @brief Gets the current time speed multiplier.
@@ -71,12 +124,55 @@ namespace mmo
         [[nodiscard]] float GetTimeSpeed() const { return m_timeSpeed; }
 
         /**
-         * @brief Sets the current game time.
+         * @brief Sets the current game time immediately, cancelling any running transition.
          * @param gameTime The new game time in milliseconds.
          */
         void SetTime(GameTime gameTime) 
         { 
             m_gameTime = gameTime % constants::OneDay; 
+            m_transitionDelta = 0;
+            m_transitionDurationMs = 0;
+            m_transitionElapsedMs = 0;
+        }
+
+        /**
+         * @brief Re-synchronizes the authoritative game time without disturbing a running transition.
+         *
+         * Use this for periodic clock corrections: a running transition keeps blending, it just
+         * lands on the corrected time.
+         *
+         * @param gameTime The authoritative game time in milliseconds.
+         */
+        void SyncTime(GameTime gameTime)
+        {
+            m_gameTime = gameTime % constants::OneDay;
+        }
+
+        /**
+         * @brief Blends smoothly from the currently reported time to a new game time.
+         *
+         * The authoritative time jumps to the new value right away (GetTargetTime), while GetTime
+         * travels the shorter way around the clock to it over the given real-time duration. A
+         * transition that is already running is continued from wherever it currently is.
+         *
+         * @param gameTime The new game time in milliseconds.
+         * @param durationMs Real-time duration of the blend in milliseconds. 0 sets the time immediately.
+         */
+        void TransitionTo(GameTime gameTime, GameTime durationMs)
+        {
+            const GameTime from = GetTime();
+            const GameTime to = gameTime % constants::OneDay;
+            const int64 delta = GetShortestTimeOfDayDelta(from, to);
+
+            SetTime(to);
+            if (durationMs == 0 || delta == 0)
+            {
+                return;
+            }
+
+            m_transitionDelta = delta;
+            m_transitionDurationMs = durationMs;
+            m_transitionElapsedMs = 0;
         }
 
         /**
@@ -91,7 +187,7 @@ namespace mmo
          */
         [[nodiscard]] uint32 GetHour() const
         {
-            return (m_gameTime / constants::OneHour) % 24;
+            return (GetTime() / constants::OneHour) % 24;
         }
 
         /**
@@ -100,7 +196,7 @@ namespace mmo
          */
         [[nodiscard]] uint32 GetMinute() const
         {
-            return (m_gameTime / constants::OneMinute) % 60;
+            return (GetTime() / constants::OneMinute) % 60;
         }
 
         /**
@@ -109,7 +205,7 @@ namespace mmo
          */
         [[nodiscard]] uint32 GetSecond() const
         {
-            return (m_gameTime / constants::OneSecond) % 60;
+            return (GetTime() / constants::OneSecond) % 60;
         }
 
         /**
@@ -137,12 +233,15 @@ namespace mmo
          */
         [[nodiscard]] float GetNormalizedTimeOfDay() const
         {
-            return static_cast<float>(m_gameTime) / static_cast<float>(constants::OneDay);
+            return static_cast<float>(GetTime()) / static_cast<float>(constants::OneDay);
         }
 
     private:
         GameTime m_gameTime;      ///< Current game time in milliseconds
         float m_timeSpeed;        ///< Game time speed multiplier
         GameTime m_lastUpdateTime; ///< Last real-time when game time was updated
+        int64 m_transitionDelta;          ///< Signed distance the running transition still covers at its start
+        GameTime m_transitionDurationMs;  ///< Real-time length of the running transition, 0 if none
+        GameTime m_transitionElapsedMs;   ///< Real time elapsed since the running transition started
     };
 }

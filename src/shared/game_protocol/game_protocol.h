@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000000D;
+		constexpr uint32 ProtocolVersion = 0x0000000E;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -409,6 +409,12 @@ namespace mmo
 				/// OnHealthDroppedBelow triggers fire exactly as they would in a real fight.
 				CheatDamage, // GAME MASTER
 
+				/// GAME MASTER. Handled by the realm server: changes the realm-wide time of day for
+				/// every world node and every connected client.
+				/// Payload: uint8 reset (1 = go back to the realm's system time, ignoring timeOfDay),
+				/// uint32 timeOfDay (milliseconds since midnight), uint32 transitionMs.
+				CheatSetTimeOfDay, // GAME MASTER
+
 				/// Counter constant
 				Count_,
 			};
@@ -615,7 +621,10 @@ namespace mmo
 				MoveFear,
 				MoveDisorient,
 
-				/// Game time notification packet sent to the client
+				/// Game time notification packet sent to the client.
+				/// Payload: uint64 gameTime (milliseconds since midnight), float timeSpeed,
+				/// uint32 transitionMs (how long the client blends from its current time to the new
+				/// one; 0 = periodic clock sync, which never interrupts a running blend).
 				GameTimeInfo,
 
 				SpellSuperceeded,

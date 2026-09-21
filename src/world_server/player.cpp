@@ -4271,7 +4271,8 @@ namespace mmo
 			packet.Start(game::realm_client_packet::GameTimeInfo);
 			packet
 				<< io::write<uint64>(gameTime.GetTime())
-				<< io::write<float>(gameTime.GetTimeSpeed());
+				<< io::write<float>(gameTime.GetTimeSpeed())
+				<< io::write<uint32>(0);
 			packet.Finish();
 		});
 		

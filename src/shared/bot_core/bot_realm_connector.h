@@ -153,6 +153,11 @@ namespace mmo
 		uint32 m_losResultCounter { 0 };
 		bool m_lastLosResult { false };
 
+		// Most recent GameTimeInfo from the server
+		uint32 m_gameTimeInfoCounter { 0 };
+		GameTime m_lastGameTime { 0 };
+		uint32 m_lastGameTimeTransitionMs { 0 };
+
 	public:
 		/// A list of character views.
 		std::vector<CharacterView> m_characterViews;
@@ -334,6 +339,22 @@ namespace mmo
 		/// Returns the result of the most recent line of sight check (true = clear).
 		bool GetLastLosResult() const { return m_lastLosResult; }
 
+		/// GAME MASTER only. Changes the realm-wide time of day. Every player on the realm, this
+		/// one included, then receives a GameTimeInfo with a non-zero transition.
+		void CheatSetTimeOfDay(GameTime timeOfDay, uint32 transitionMs);
+
+		/// GAME MASTER only. Returns the realm-wide time of day to the realm's system time.
+		void CheatResetTimeOfDay(uint32 transitionMs);
+
+		/// Returns how many GameTimeInfo packets have been received so far.
+		uint32 GetGameTimeInfoCounter() const { return m_gameTimeInfoCounter; }
+
+		/// Returns the time of day of the most recent GameTimeInfo, in milliseconds since midnight.
+		GameTime GetLastGameTime() const { return m_lastGameTime; }
+
+		/// Returns the transition length of the most recent GameTimeInfo (0 = plain clock sync).
+		uint32 GetLastGameTimeTransitionMs() const { return m_lastGameTimeTransitionMs; }
+
 		/// GAME MASTER only. Learns the given spell.
 		void CheatLearnSpell(uint32 spellId);
 
@@ -458,6 +479,8 @@ namespace mmo
 		PacketParseResult OnDestroyObjects(game::IncomingPacket& packet);
 
 		PacketParseResult OnDebugLineOfSightResult(game::IncomingPacket& packet);
+
+		PacketParseResult OnGameTimeInfo(game::IncomingPacket& packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
 

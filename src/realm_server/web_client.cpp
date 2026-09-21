@@ -4,11 +4,15 @@
 
 #include "database.h"
 #include "motd_manager.h"
+#include "time_of_day_manager.h"
 #include "web_service.h"
 #include "base/clock.h"
 #include "log/default_log_levels.h"
+#include "game/time_of_day.h"
 
 #include "nlohmann/json.hpp"
+
+#include <algorithm>
 
 using json = nlohmann::json;
 
@@ -20,6 +24,19 @@ namespace mmo
 		{
 			const std::string jsonStr = jsonObject.dump();
 			response.finishWithContent("application/json", jsonStr.data(), jsonStr.size());
+		}
+
+		json TimeOfDayToJson(const TimeOfDayManager& manager)
+		{
+			const GameTime timeOfDay = manager.GetTimeOfDay();
+
+			json jsonResponse;
+			jsonResponse["time"] = FormatTimeOfDay(timeOfDay);
+			jsonResponse["timeOfDayMs"] = timeOfDay;
+			jsonResponse["systemTime"] = FormatTimeOfDay(manager.GetSystemTimeOfDay());
+			jsonResponse["offsetMs"] = manager.GetOffset();
+			jsonResponse["overridden"] = manager.IsOverridden();
+			return jsonResponse;
 		}
 	}
 
@@ -55,6 +72,16 @@ namespace mmo
 		RegisterRoute(Type::Post, "/motd", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
 		{
 			handleSetMotd(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/time-of-day", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleGetTimeOfDay(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/time-of-day", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleSetTimeOfDay(req, response);
 		});
 	}
 
@@ -217,5 +244,75 @@ namespace mmo
 			jsonResponse["message"] = "Failed to update MOTD due to an exception";
 			SendJsonResponse(response, jsonResponse);
 		}
+	}
+
+	void WebClient::handleGetTimeOfDay(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		SendJsonResponse(response, TimeOfDayToJson(m_service.GetTimeOfDayManager()));
+	}
+
+	void WebClient::handleSetTimeOfDay(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto timeIt = arguments.find("time");
+		const auto resetIt = arguments.find("reset");
+		const auto transitionIt = arguments.find("transition");
+
+		json jsonResponse;
+
+		const bool reset = resetIt != arguments.end() && (resetIt->second == "1" || resetIt->second == "true");
+
+		GameTime timeOfDay = 0;
+		if (!reset)
+		{
+			if (timeIt == arguments.end() || timeIt->second.empty())
+			{
+				response.setStatus(net::http::OutgoingAnswer::BadRequest);
+				jsonResponse["status"] = "MISSING_PARAMETER";
+				jsonResponse["message"] = "Missing parameter 'time' (HH:MM[:SS]) or 'reset=1'";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			if (!ParseTimeOfDay(timeIt->second, timeOfDay))
+			{
+				response.setStatus(net::http::OutgoingAnswer::BadRequest);
+				jsonResponse["status"] = "INVALID_PARAMETER";
+				jsonResponse["message"] = "Parameter 'time' must be a 24 hour time of day formatted as HH:MM[:SS]";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+		}
+
+		// Transition length in seconds, optional
+		uint32 transitionMs = DefaultTimeOfDayTransitionMs;
+		if (transitionIt != arguments.end() && !transitionIt->second.empty())
+		{
+			const std::string& text = transitionIt->second;
+			if (text.size() > 3 || !std::all_of(text.begin(), text.end(), [](const char c) { return c >= '0' && c <= '9'; }))
+			{
+				response.setStatus(net::http::OutgoingAnswer::BadRequest);
+				jsonResponse["status"] = "INVALID_PARAMETER";
+				jsonResponse["message"] = "Parameter 'transition' must be a whole number of seconds";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			transitionMs = static_cast<uint32>(std::stoul(text)) * 1000;
+		}
+
+		TimeOfDayManager& manager = m_service.GetTimeOfDayManager();
+		if (reset)
+		{
+			manager.Reset(transitionMs);
+		}
+		else
+		{
+			manager.SetTimeOfDay(timeOfDay, transitionMs);
+		}
+
+		jsonResponse = TimeOfDayToJson(manager);
+		jsonResponse["status"] = "SUCCESS";
+		SendJsonResponse(response, jsonResponse);
 	}
 }

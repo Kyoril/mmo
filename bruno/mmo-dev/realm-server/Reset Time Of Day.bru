@@ -1,0 +1,20 @@
+meta {
+  name: Reset Time Of Day
+  type: http
+  seq: 8
+}
+
+post {
+  url: http://localhost:8092/time-of-day
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  reset: 1
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
