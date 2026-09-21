@@ -3,6 +3,7 @@
 #pragma once
 
 #include "movable_object.h"
+#include "light_math.h"
 #include "math/vector3.h"
 #include "math/vector4.h"
 
@@ -73,21 +74,26 @@ namespace mmo
 		/// @param range The new range of the light.
 		void SetRange(float range) { m_range = range; }
 
-		/// @brief Gets the inner cone angle of the spot light.
-		/// @return The inner cone angle of the spot light in radians.
+		/// @brief Gets the full inner cone angle of the spot light, in degrees. Inside it the light is at full strength.
 		[[nodiscard]] float GetInnerConeAngle() const { return m_innerConeAngle; }
 
-		/// @brief Sets the inner cone angle of the spot light.
-		/// @param angle The new inner cone angle of the spot light in radians.
-		void SetInnerConeAngle(float angle) { m_innerConeAngle = angle; }
+		/// @brief Sets the full inner cone angle of the spot light, in degrees.
+		/// @param degrees Clamped to [light_math::MinConeAngle, outer cone angle].
+		void SetInnerConeAngle(float degrees);
 
-		/// @brief Gets the outer cone angle of the spot light.
-		/// @return The outer cone angle of the spot light in radians.
+		/// @brief Gets the full outer cone angle of the spot light, in degrees. Outside it the light has no effect.
 		[[nodiscard]] float GetOuterConeAngle() const { return m_outerConeAngle; }
 
-		/// @brief Sets the outer cone angle of the spot light.
-		/// @param angle The new outer cone angle of the spot light in radians.
-		void SetOuterConeAngle(float angle) { m_outerConeAngle = angle; }
+		/// @brief Sets the full outer cone angle of the spot light, in degrees.
+		/// @param degrees Clamped to [light_math::MinConeAngle, light_math::MaxConeAngle]. Lowers the inner angle if it would exceed it.
+		void SetOuterConeAngle(float degrees);
+
+		/// @brief Gets the multiplier on this light's scattering into volumetric fog.
+		[[nodiscard]] float GetFogScattering() const { return m_fogScattering; }
+
+		/// @brief Sets the multiplier on this light's scattering into volumetric fog (0 = none).
+		/// @param value Clamped to [0, light_math::MaxFogScattering].
+		void SetFogScattering(float value);
 
 		const Vector3& GetPosition() const { return m_position; }
 
@@ -164,8 +170,9 @@ namespace mmo
 		Vector4 m_color { 1.0f, 1.0f, 1.0f, 1.0f };
 		float m_intensity { 1.0f };
 		float m_range { 10.0f };
-		float m_innerConeAngle { 0.0f };
-		float m_outerConeAngle { 0.0f };
+		float m_innerConeAngle { light_math::DefaultInnerConeAngle };
+		float m_outerConeAngle { light_math::DefaultOuterConeAngle };
+		float m_fogScattering { 1.0f };
 
 		Vector3 m_position{ Vector3::Zero };
 		Vector3 m_direction{ Vector3::UnitZ };

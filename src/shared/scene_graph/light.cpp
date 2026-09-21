@@ -8,6 +8,8 @@
 #include "math/radian.h"
 #include "math/degree.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	const String Light::LIGHT_TYPE_NAME = "Light";
@@ -47,6 +49,22 @@ namespace mmo
 
 			m_derivedTransformDirty = false;
 		}
+	}
+
+	void Light::SetInnerConeAngle(const float degrees)
+	{
+		m_innerConeAngle = std::clamp(degrees, light_math::MinConeAngle, m_outerConeAngle);
+	}
+
+	void Light::SetOuterConeAngle(const float degrees)
+	{
+		m_outerConeAngle = std::clamp(degrees, light_math::MinConeAngle, light_math::MaxConeAngle);
+		m_innerConeAngle = std::clamp(m_innerConeAngle, light_math::MinConeAngle, m_outerConeAngle);
+	}
+
+	void Light::SetFogScattering(const float value)
+	{
+		m_fogScattering = std::clamp(value, 0.0f, light_math::MaxFogScattering);
 	}
 
 	void Light::NotifyMoved()

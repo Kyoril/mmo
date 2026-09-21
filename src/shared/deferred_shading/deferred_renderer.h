@@ -461,11 +461,14 @@ namespace mmo
             Vector3 color;
             float intensity;
             Vector3 direction;
-            float spotAngle;
-            uint32 type;  // 0 = Point, 1 = Directional, 2 = Spot
+            float spotCosOuter;   // cos(outer cone / 2); spot lights only
+            uint32 type;          // 0 = Point, 1 = Directional, 2 = Spot
             int32 shadowMap;
-            Vector2 padding;
+            float spotCosInner;   // cos(inner cone / 2), always above spotCosOuter; spot lights only
+            float fogScattering;  // Multiplier on scattering into volumetric fog
         };
+
+        static_assert(sizeof(ShaderLight) == 64, "ShaderLight must match struct Light in LightCommon.hlsli");
 
         /// @brief Reused scratch buffers for light gathering (see FindLights). Kept as members so their
         ///        capacity is retained between frames instead of allocating (and copying) every frame.

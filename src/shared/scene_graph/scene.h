@@ -600,7 +600,9 @@ namespace mmo
 			Vector3 color;
 			float range = 0.0f;
 			float intensity = 1.0f;
-			float spotAngle = 0.0f;
+			float innerConeAngle = 0.0f;   // Full inner cone angle in degrees (spot lights)
+			float outerConeAngle = 0.0f;   // Full outer cone angle in degrees (spot lights)
+			float fogScattering = 1.0f;    // Multiplier on scattering into volumetric fog
 			LightType type = LightType::Point;
 			bool castsShadows = false;
 			float priority = 0.0f;  // Higher priority = more important light

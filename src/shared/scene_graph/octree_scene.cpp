@@ -309,6 +309,7 @@ namespace mmo
 			info.intensity = light->GetIntensity();
 			info.range = light->GetRange();
 			info.castsShadows = light->IsCastingShadows();
+			info.fogScattering = light->GetFogScattering();
 
 			// Handle different light types
 			if (info.type == LightType::Directional)
@@ -316,19 +317,20 @@ namespace mmo
 				// Directional lights are always visible (no position-based culling)
 				info.position = Vector3::Zero;
 				info.direction = light->GetDerivedDirection();
-				info.spotAngle = 0.0f;
+				info.innerConeAngle = 0.0f;
+				info.outerConeAngle = 0.0f;
 				info.priority = 1000.0f;  // Directional lights have highest priority
 				++m_lightRenderStats.directionalLights;
 			}
 			else
 			{
 				info.position = light->GetDerivedPosition();
-				
+
 				// Frustum culling for point and spot lights using cached planes
 				// Create a bounding box for the light's sphere of influence
 				const Vector3 halfExtent(info.range, info.range, info.range);
 				AABB lightBounds(info.position - halfExtent, info.position + halfExtent);
-				
+
 				if (!cachedPlanes.IsVisible(lightBounds))
 				{
 					continue;  // Light is outside the view frustum
@@ -337,13 +339,15 @@ namespace mmo
 				if (info.type == LightType::Point)
 				{
 					info.direction = Vector3(0.0f, -1.0f, 0.0f);  // Default direction for point lights
-					info.spotAngle = 0.0f;
+					info.innerConeAngle = 0.0f;
+					info.outerConeAngle = 0.0f;
 					++m_lightRenderStats.pointLights;
 				}
 				else // Spot light
 				{
 					info.direction = light->GetDerivedDirection();
-					info.spotAngle = light->GetOuterConeAngle();
+					info.innerConeAngle = light->GetInnerConeAngle();
+					info.outerConeAngle = light->GetOuterConeAngle();
 					++m_lightRenderStats.spotLights;
 				}
 
