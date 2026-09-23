@@ -40,6 +40,7 @@
 #include "edit_modes/navigation_edit_mode.h"
 #include "edit_modes/sky_edit_mode.h"
 #include "edit_modes/area_trigger_edit_mode.h"
+#include "edit_modes/fog_volume_edit_mode.h"
 #include "edit_modes/water_edit_mode.h"
 #include "edit_modes/foliage_edit_mode.h"
 #include "scene_graph/instanced_foliage.h"
@@ -283,6 +284,8 @@ namespace mmo
 		virtual void Visit(SelectedObjectSpawn &selectable) = 0;
 
 		virtual void Visit(SelectedAreaTrigger &selectable) = 0;
+
+		virtual void Visit(SelectedFogVolume &selectable) = 0;
 	};
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader, public IWorldEditor
@@ -348,6 +351,8 @@ namespace mmo
 
 		void Visit(SelectedAreaTrigger &selectable) override;
 
+		void Visit(SelectedFogVolume &selectable) override;
+
 	private:
 		bool ReadMVERChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
@@ -409,7 +414,46 @@ namespace mmo
 		void DestroyManualRenderObject(const ManualRenderObject& obj) override;
 		void DestroySceneNode(const SceneNode& node) override;
 
+		std::vector<FogVolume>& GetFogVolumes() override { return m_fogVolumes; }
+		void MarkFogVolumesChanged() override { m_fogVolumesDirty = true; }
+		uint32 GenerateFogVolumeId() override;
+
+		/// @brief Creates the wireframe scene node for one fog volume, drawn in local space on a node
+		///        placed at the volume's position with orientation Quaternion(Degree(yaw), UnitY).
+		void AddFogVolumeVisual(uint32 volumeId, bool select) override;
+
+		void RefreshFogVolumeVisual(uint32 volumeId) override;
+
+		void RemoveAllFogVolumeVisuals() override;
+
+		void SelectFogVolume(uint32 volumeId) override;
+
+		void RemoveFogVolume(uint32 volumeId) override;
+
+		uint32 GetSelectedFogVolumeId() const override;
+
 	private:
+		/// @brief Returns the selected fog volume selectable, or nullptr if the selection is empty or its
+		///        last-added entry is not a fog volume. With a mixed selection (e.g. a fog volume plus a
+		///        map entity picked via ctrl-click in the scene outline) this only reports the fog volume
+		///        when it is the most recently added entry; use SelectionHasFogVolume() to check whether
+		///        a fog volume is present anywhere in the selection regardless of order.
+		SelectedFogVolume* GetSelectedFogVolume() const;
+
+		/// @brief True if the current selection contains a SelectedFogVolume anywhere (not just as the
+		///        last entry). When volumeId is non-null, only a fog volume with that id counts.
+		///        Used to guard against destroying a fog volume's visual while a SelectedFogVolume
+		///        referencing it is still part of a mixed selection.
+		bool SelectionHasFogVolume(const uint32* volumeId) const;
+
+		/// @brief Destroys the wireframe of one fog volume, if it has one.
+		void RemoveFogVolumeVisual(uint32 volumeId);
+
+		/// @brief Destroys a fog volume's wireframe and erases it from m_fogVolumes, without touching the
+		///        selection. Used as the selectable's removal callback, which runs while the selection is
+		///        being iterated.
+		void EraseFogVolume(uint32 volumeId);
+
 		uint16 BuildPageIndex(uint8 x, uint8 y) const;
 
 		bool GetPageCoordinatesFromIndex(uint16 pageIndex, uint8 &x, uint8 &y) const;
@@ -534,6 +578,9 @@ namespace mmo
 		std::vector<ManualRenderObject *> m_areaTriggerRenderObjects;
 		std::map<proto::AreaTriggerEntry*, std::pair<SceneNode*, ManualRenderObject*>> m_areaTriggerMap;
 
+		/// @brief Wireframe scene node and render object per fog volume id, while the fog volume mode is active.
+		std::map<uint32, std::pair<SceneNode*, ManualRenderObject*>> m_fogVolumeVisuals;
+
 		Selection m_selection;
 		std::unique_ptr<TransformWidget> m_transformWidget;
 		std::unique_ptr<SelectionRaycaster> m_selectionRaycaster;
@@ -560,6 +607,7 @@ namespace mmo
 		std::unique_ptr<NavigationEditMode> m_navigationEditMode;
 		std::unique_ptr<SkyEditMode> m_skyEditMode;
 		std::unique_ptr<AreaTriggerEditMode> m_areaTriggerEditMode;
+		std::unique_ptr<FogVolumeEditMode> m_fogVolumeEditMode;
 		std::unique_ptr<WaterEditMode> m_waterEditMode;
 		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
 		std::unique_ptr<SkyComponent> m_skyComponent;
@@ -570,6 +618,12 @@ namespace mmo
 		/// Gusting wind and fog noise scroll for the viewport. Advances with real frame time even while
 		/// the sky clock is paused, so drifting fog stays visible while authoring.
 		WindSimulation m_wind;
+
+		/// @brief Authored local fog volumes for the currently open map, read from its `.hfog` file.
+		std::vector<FogVolume> m_fogVolumes;
+
+		/// @brief True when m_fogVolumes has unsaved changes; Save() rewrites (or removes) the `.hfog` file.
+		bool m_fogVolumesDirty = false;
 
 		/// Runtime profiles converted from the project on first use; cleared on every preview revision.
 		std::unique_ptr<EnvironmentProfileCache<proto::EnvironmentProfileManager>> m_environmentProfiles;

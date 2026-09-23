@@ -6,6 +6,10 @@
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/material_manager.h"
 #include "math/math_utils.h"
+#include "math/degree.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace mmo
 {
@@ -590,5 +594,270 @@ namespace mmo
 				lineListOp->AddLine(corners[i], corners[i + 4]);
 			}
 		}
+	}
+
+	void BuildFogVolumeWireframe(ManualRenderObject& renderObject, const FogVolume& volume)
+	{
+		renderObject.Clear();
+
+		const auto toChannel = [](const float value) -> uint32
+		{
+			return static_cast<uint32>(std::clamp(value, 0.0f, 1.0f) * 255.0f + 0.5f);
+		};
+
+		const uint32 color = 0xFF000000u | (toChannel(volume.color.x) << 16) | (toChannel(volume.color.y) << 8) | toChannel(volume.color.z);
+
+		auto lineListOp = renderObject.AddLineListOperation(MaterialManager::Get().Load("Editor/Wireframe.hmat"));
+
+		// FogVolume::size holds the full extents; the renderer works with half of it.
+		const Vector3 halfSize = volume.size * 0.5f;
+
+		if (volume.shape == FogVolumeShape::Ellipsoid)
+		{
+			constexpr int32 segments = 48;
+			for (int32 i = 0; i < segments; ++i)
+			{
+				const float a1 = static_cast<float>(i) / static_cast<float>(segments) * 2.0f * Pi;
+				const float a2 = static_cast<float>(i + 1) / static_cast<float>(segments) * 2.0f * Pi;
+				const float c1 = std::cos(a1);
+				const float s1 = std::sin(a1);
+				const float c2 = std::cos(a2);
+				const float s2 = std::sin(a2);
+
+				// XY plane
+				lineListOp->AddLine(Vector3(c1 * halfSize.x, s1 * halfSize.y, 0.0f), Vector3(c2 * halfSize.x, s2 * halfSize.y, 0.0f)).SetColor(color);
+
+				// YZ plane
+				lineListOp->AddLine(Vector3(0.0f, c1 * halfSize.y, s1 * halfSize.z), Vector3(0.0f, c2 * halfSize.y, s2 * halfSize.z)).SetColor(color);
+
+				// XZ plane
+				lineListOp->AddLine(Vector3(c1 * halfSize.x, 0.0f, s1 * halfSize.z), Vector3(c2 * halfSize.x, 0.0f, s2 * halfSize.z)).SetColor(color);
+			}
+		}
+		else
+		{
+			const float hx = halfSize.x;
+			const float hy = halfSize.y;
+			const float hz = halfSize.z;
+
+			const Vector3 corners[8] = {
+				Vector3(-hx, -hy, -hz), Vector3(hx, -hy, -hz),
+				Vector3(hx, -hy, hz), Vector3(-hx, -hy, hz),
+				Vector3(-hx, hy, -hz), Vector3(hx, hy, -hz),
+				Vector3(hx, hy, hz), Vector3(-hx, hy, hz)
+			};
+
+			for (int32 i = 0; i < 4; ++i)
+			{
+				// Bottom face, top face and the vertical edge joining them.
+				lineListOp->AddLine(corners[i], corners[(i + 1) % 4]).SetColor(color);
+				lineListOp->AddLine(corners[i + 4], corners[(i + 1) % 4 + 4]).SetColor(color);
+				lineListOp->AddLine(corners[i], corners[i + 4]).SetColor(color);
+			}
+		}
+	}
+
+	float WrapFogVolumeYaw(const float degrees)
+	{
+		if (!std::isfinite(degrees))
+		{
+			return 0.0f;
+		}
+
+		float wrapped = std::fmod(degrees, 360.0f);
+		if (wrapped < 0.0f)
+		{
+			wrapped += 360.0f;
+		}
+
+		return wrapped >= 360.0f ? 0.0f : wrapped;
+	}
+
+	float ExtractFogVolumeYawDegrees(const Quaternion& orientation)
+	{
+		// Quaternion(Degree(yaw), UnitY) * UnitX == (cos(yaw), 0, -sin(yaw)).
+		const Vector3 rotatedX = orientation * Vector3::UnitX;
+		if (std::abs(rotatedX.x) < 1.0e-6f && std::abs(rotatedX.z) < 1.0e-6f)
+		{
+			return 0.0f;
+		}
+
+		const float radians = std::atan2(-rotatedX.z, rotatedX.x);
+		return WrapFogVolumeYaw(radians * 180.0f / Pi);
+	}
+
+	SelectedFogVolume::SelectedFogVolume(const uint32 volumeId, std::vector<FogVolume>& volumes, IWorldEditor& worldEditor, SceneNode& node, ManualRenderObject& renderObject,
+		const std::function<void(Selectable&)>& duplication, const std::function<void(uint32)>& removal)
+		: m_volumeId(volumeId)
+		, m_volumes(volumes)
+		, m_worldEditor(worldEditor)
+		, m_node(node)
+		, m_renderObject(renderObject)
+		, m_duplication(duplication)
+		, m_removal(removal)
+	{
+	}
+
+	void SelectedFogVolume::Visit(SelectableVisitor& visitor)
+	{
+		visitor.Visit(*this);
+	}
+
+	void SelectedFogVolume::Duplicate()
+	{
+		if (m_duplication)
+		{
+			m_duplication(*this);
+		}
+	}
+
+	void SelectedFogVolume::Translate(const Vector3& delta)
+	{
+		FogVolume* volume = FindVolume();
+		if (!volume)
+		{
+			return;
+		}
+
+		volume->position += delta;
+		SanitizeFogVolume(*volume);
+		SyncNode(*volume);
+		m_worldEditor.MarkFogVolumesChanged();
+		positionChanged(*this);
+	}
+
+	void SelectedFogVolume::Rotate(const Quaternion& delta)
+	{
+		FogVolume* volume = FindVolume();
+		if (!volume)
+		{
+			return;
+		}
+
+		// Only the rotation about +Y is meaningful for a fog volume; pitch and roll are dropped.
+		float deltaYaw = ExtractFogVolumeYawDegrees(delta);
+		if (deltaYaw > 180.0f)
+		{
+			deltaYaw -= 360.0f;
+		}
+
+		volume->yaw = WrapFogVolumeYaw(volume->yaw + deltaYaw);
+		SyncNode(*volume);
+		m_worldEditor.MarkFogVolumesChanged();
+		rotationChanged(*this);
+	}
+
+	void SelectedFogVolume::Scale(const Vector3& delta)
+	{
+		FogVolume* volume = FindVolume();
+		if (!volume)
+		{
+			return;
+		}
+
+		volume->size = Vector3(
+			std::max(volume->size.x * delta.x, 0.5f),
+			std::max(volume->size.y * delta.y, 0.5f),
+			std::max(volume->size.z * delta.z, 0.5f));
+		SanitizeFogVolume(*volume);
+		BuildFogVolumeWireframe(m_renderObject, *volume);
+		m_worldEditor.MarkFogVolumesChanged();
+		scaleChanged(*this);
+	}
+
+	void SelectedFogVolume::Remove()
+	{
+		if (m_removal)
+		{
+			m_removal(m_volumeId);
+		}
+	}
+
+	void SelectedFogVolume::Deselect()
+	{
+		// The node and render object may already be destroyed at this point (Remove() runs first),
+		// so there is nothing to touch here.
+	}
+
+	void SelectedFogVolume::SetPosition(const Vector3& position) const
+	{
+		FogVolume* volume = FindVolume();
+		if (!volume)
+		{
+			return;
+		}
+
+		volume->position = position;
+		SanitizeFogVolume(*volume);
+		SyncNode(*volume);
+		m_worldEditor.MarkFogVolumesChanged();
+	}
+
+	void SelectedFogVolume::SetOrientation(const Quaternion& orientation) const
+	{
+		FogVolume* volume = FindVolume();
+		if (!volume)
+		{
+			return;
+		}
+
+		volume->yaw = ExtractFogVolumeYawDegrees(orientation);
+		SyncNode(*volume);
+		m_worldEditor.MarkFogVolumesChanged();
+	}
+
+	void SelectedFogVolume::SetScale(const Vector3& scale) const
+	{
+		FogVolume* volume = FindVolume();
+		if (!volume)
+		{
+			return;
+		}
+
+		volume->size = Vector3(std::max(scale.x, 0.5f), std::max(scale.y, 0.5f), std::max(scale.z, 0.5f));
+		SanitizeFogVolume(*volume);
+		BuildFogVolumeWireframe(m_renderObject, *volume);
+		m_worldEditor.MarkFogVolumesChanged();
+	}
+
+	Vector3 SelectedFogVolume::GetPosition() const
+	{
+		const FogVolume* volume = FindVolume();
+		return volume ? volume->position : Vector3::Zero;
+	}
+
+	Quaternion SelectedFogVolume::GetOrientation() const
+	{
+		const FogVolume* volume = FindVolume();
+		return volume ? Quaternion(Degree(volume->yaw), Vector3::UnitY) : Quaternion::Identity;
+	}
+
+	Vector3 SelectedFogVolume::GetScale() const
+	{
+		const FogVolume* volume = FindVolume();
+		return volume ? volume->size : Vector3(1.0f, 1.0f, 1.0f);
+	}
+
+	void SelectedFogVolume::NotifyTransformChanged()
+	{
+		positionChanged(*this);
+		rotationChanged(*this);
+		scaleChanged(*this);
+	}
+
+	FogVolume* SelectedFogVolume::FindVolume() const
+	{
+		const auto it = std::find_if(m_volumes.begin(), m_volumes.end(), [this](const FogVolume& volume)
+		{
+			return volume.id == m_volumeId;
+		});
+
+		return it != m_volumes.end() ? &*it : nullptr;
+	}
+
+	void SelectedFogVolume::SyncNode(const FogVolume& volume) const
+	{
+		m_node.SetPosition(volume.position);
+		m_node.SetOrientation(Quaternion(Degree(volume.yaw), Vector3::UnitY));
 	}
 }

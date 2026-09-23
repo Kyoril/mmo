@@ -27,6 +27,9 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_common/world_entity_loader.h"
 #include "game_common/world_foliage.h"
+#include "game_common/world_fog_volumes.h"
+#include "deferred_shading/fog_volume_selection.h"
+#include "math/sphere.h"
 #include "graphics/graphics_device.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/instanced_foliage.h"
@@ -374,6 +377,7 @@ namespace mmo
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_areaTriggerEditMode = std::make_unique<AreaTriggerEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().areaTriggers);
+		m_fogVolumeEditMode = std::make_unique<FogVolumeEditMode>(*this);
 		m_waterEditMode = std::make_unique<WaterEditMode>(*this, *m_terrain, *m_camera);
 		m_terrainEditMode->SetWaterEditMode(m_waterEditMode.get());
 
@@ -417,6 +421,28 @@ namespace mmo
 		}
 
 		ILOG("Successfully read world file!");
+
+		// Local fog volumes are optional -- most maps have none, so a missing .hfog file is not an error.
+		{
+			Path fogPath = m_assetPath;
+			fogPath.replace_extension(".hfog");
+			String fogFileName = fogPath.string();
+			std::transform(fogFileName.begin(), fogFileName.end(), fogFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+			if (std::unique_ptr<std::istream> fogStreamPtr = AssetRegistry::OpenFile(fogFileName))
+			{
+				io::StreamSource fogSource{*fogStreamPtr};
+				io::Reader fogReader{fogSource};
+
+				WorldFogVolumeDeserializer fogDeserializer{m_fogVolumes};
+				if (!fogDeserializer.Read(fogReader))
+				{
+					WLOG("Failed to read fog volumes from '" << fogFileName << "', continuing without local fog volumes");
+					m_fogVolumes.clear();
+				}
+			}
+			DLOG("Loaded " << m_fogVolumes.size() << " local fog volume(s) for map " << fogFileName);
+		}
 	}
 
 	WorldEditorInstance::~WorldEditorInstance()
@@ -583,6 +609,7 @@ namespace mmo
 			m_terrainEditMode.get(),
 			m_spawnEditMode.get(),
 			m_areaTriggerEditMode.get(),
+			m_fogVolumeEditMode.get(),
 			m_navigationEditMode.get(),
 			m_skyEditMode.get()};
 		m_detailsPanel->Draw(
@@ -801,6 +828,26 @@ namespace mmo
 						m_selectionRaycaster->PerformSpawnSelection(
 							(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
 							(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+					}
+				}
+			}
+			else if (m_editMode == m_fogVolumeEditMode.get())
+			{
+				if (!widgetWasActive)
+				{
+					// Fog volumes are picked analytically against their oriented box / ellipsoid rather
+					// than through the scene query: the query only knows the wireframe's world AABB,
+					// which for a rotated volume covers a lot of empty space.
+					const uint32 pickedId = m_fogVolumeEditMode->PickVolume(
+						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+					if (pickedId != 0)
+					{
+						SelectFogVolume(pickedId);
+					}
+					else
+					{
+						ClearSelection();
 					}
 				}
 			}
@@ -1155,6 +1202,43 @@ namespace mmo
 			m_foliageEditMode->ClearDirtyPages();
 		}
 
+		// Save local fog volumes. One file for the whole map, rewritten in full when dirty
+		// (or deleted once the last volume is removed).
+		if (m_fogVolumesDirty)
+		{
+			Path fogPath = m_assetPath;
+			fogPath.replace_extension(".hfog");
+			String fogFileName = fogPath.string();
+			std::transform(fogFileName.begin(), fogFileName.end(), fogFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+			if (m_fogVolumes.empty())
+			{
+				if (AssetRegistry::HasFile(fogFileName))
+				{
+					AssetRegistry::RemoveFile(fogFileName);
+				}
+
+				m_fogVolumesDirty = false;
+			}
+			else
+			{
+				auto fogFilePtr = AssetRegistry::CreateNewFile(fogFileName);
+				if (!fogFilePtr)
+				{
+					ELOG("Failed to write fog volume file " << fogFileName);
+				}
+				else
+				{
+					io::StreamSink fogSink{*fogFilePtr};
+					io::Writer fogWriter{fogSink};
+					WorldFogVolumeSerializer::Write(fogWriter, m_fogVolumes);
+					fogSink.Flush();
+
+					m_fogVolumesDirty = false;
+				}
+			}
+		}
+
 		return true;
 	}
 
@@ -1400,6 +1484,20 @@ namespace mmo
 			grading.SetContrast(state.contrast);
 			grading.SetColorFilter(state.colorFilter);
 			renderer->SetColorGrading(grading, state.colorLut, state.colorLutFrom, state.colorLutBlend);
+
+			// Selected fresh every frame (and pushed even when empty) so a map without any fog
+			// volumes -- or one whose volumes just faded out -- doesn't keep rendering the last
+			// frame's set.
+			if (m_camera)
+			{
+				const float hour = m_skyComponent->GetNormalizedTimeOfDay() * 24.0f;
+				renderer->SetFogVolumes(SelectFogVolumes(m_fogVolumes, hour, m_camera->GetDerivedPosition(), renderer->GetVolumetricFogRange(),
+					[this](const Vector3& center, const float radius) { return m_camera->IsVisible(Sphere(center, radius)); }));
+			}
+			else
+			{
+				renderer->SetFogVolumes({});
+			}
 		}
 	}
 
@@ -1679,6 +1777,7 @@ namespace mmo
 			void Visit(SelectedUnitSpawn& selectable) override { entry = &selectable.GetEntry(); }
 			void Visit(SelectedObjectSpawn& selectable) override { entry = &selectable.GetEntry(); }
 			void Visit(SelectedAreaTrigger&) override {}
+			void Visit(SelectedFogVolume&) override {}
 		} extractor;
 
 		m_selection.GetSelectedObjects().back()->Visit(extractor);
@@ -1996,6 +2095,15 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			if (ro) ro->SetVisible(false);
 		}
 
+		// Hide all fog volume wireframes
+		std::vector<std::pair<ManualRenderObject *, bool>> fogVolumeWasVisible;
+		fogVolumeWasVisible.reserve(m_fogVolumeVisuals.size());
+		for (const auto &[volumeId, visual] : m_fogVolumeVisuals)
+		{
+			fogVolumeWasVisible.emplace_back(visual.second, visual.second->IsVisible());
+			visual.second->SetVisible(false);
+		}
+
 		// Hide debug / preview entity (e.g. placement ghost)
 		const bool debugEntityWasVisible = m_debugEntity && m_debugEntity->IsVisible();
 		if (m_debugEntity) m_debugEntity->SetVisible(false);
@@ -2251,6 +2359,10 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			{
 				m_areaTriggerRenderObjects[i]->SetVisible(areaTriggerWasVisible[i]);
 			}
+		}
+		for (const auto &[renderObject, wasVisible] : fogVolumeWasVisible)
+		{
+			renderObject->SetVisible(wasVisible);
 		}
 		if (m_debugEntity) m_debugEntity->SetVisible(debugEntityWasVisible);
 		if (m_foliage) m_foliage->SetVisible(foliageWasVisible);
@@ -3279,6 +3391,15 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 	}
 
+	void WorldEditorInstance::Visit(SelectedFogVolume &selectable)
+	{
+		if (ImGui::CollapsingHeader("Fog Volume", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Text("Fog Volume #%u", selectable.GetVolumeId());
+			ImGui::TextDisabled("Edit its properties in the Fog Volumes mode panel above.");
+		}
+	}
+
 	void WorldEditorInstance::Visit(SelectedAreaTrigger &selectable)
 	{
 		if (ImGui::CollapsingHeader("Area Trigger", ImGuiTreeNodeFlags_DefaultOpen))
@@ -3646,5 +3767,224 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	void WorldEditorInstance::DestroySceneNode(const SceneNode& node)
 	{
 		m_scene.DestroySceneNode(node);
+	}
+
+	uint32 WorldEditorInstance::GenerateFogVolumeId()
+	{
+		uint32 maxId = 0;
+		for (const FogVolume& volume : m_fogVolumes)
+		{
+			maxId = std::max(maxId, volume.id);
+		}
+
+		return maxId + 1;
+	}
+
+	void WorldEditorInstance::AddFogVolumeVisual(const uint32 volumeId, const bool select)
+	{
+		const auto volumeIt = std::find_if(m_fogVolumes.begin(), m_fogVolumes.end(), [volumeId](const FogVolume& volume)
+		{
+			return volume.id == volumeId;
+		});
+		if (volumeIt == m_fogVolumes.end())
+		{
+			return;
+		}
+
+		// Never leave a second visual behind for the same volume.
+		RemoveFogVolumeVisual(volumeId);
+
+		ManualRenderObject* renderObject = m_scene.CreateManualRenderObject("FogVolume_" + std::to_string(volumeId));
+		renderObject->SetCastShadows(false);
+		renderObject->SetQueryFlags(SceneQueryFlags_FogVolumes);
+		BuildFogVolumeWireframe(*renderObject, *volumeIt);
+
+		// Same transform the renderer applies: world = Quaternion(Degree(yaw), UnitY) * local + position.
+		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(volumeIt->position);
+		node->SetOrientation(Quaternion(Degree(volumeIt->yaw), Vector3::UnitY));
+		node->AttachObject(*renderObject);
+
+		m_fogVolumeVisuals[volumeId] = { node, renderObject };
+
+		if (select)
+		{
+			SelectFogVolume(volumeId);
+		}
+	}
+
+	void WorldEditorInstance::RefreshFogVolumeVisual(const uint32 volumeId)
+	{
+		const auto visualIt = m_fogVolumeVisuals.find(volumeId);
+		if (visualIt == m_fogVolumeVisuals.end())
+		{
+			return;
+		}
+
+		const auto volumeIt = std::find_if(m_fogVolumes.begin(), m_fogVolumes.end(), [volumeId](const FogVolume& volume)
+		{
+			return volume.id == volumeId;
+		});
+		if (volumeIt == m_fogVolumes.end())
+		{
+			return;
+		}
+
+		auto [node, renderObject] = visualIt->second;
+		BuildFogVolumeWireframe(*renderObject, *volumeIt);
+		node->SetPosition(volumeIt->position);
+		node->SetOrientation(Quaternion(Degree(volumeIt->yaw), Vector3::UnitY));
+
+		// Let the transform widget follow edits made in the details panel.
+		if (SelectedFogVolume* selected = GetSelectedFogVolume(); selected && selected->GetVolumeId() == volumeId)
+		{
+			selected->NotifyTransformChanged();
+		}
+	}
+
+	void WorldEditorInstance::RemoveFogVolumeVisual(const uint32 volumeId)
+	{
+		const auto visualIt = m_fogVolumeVisuals.find(volumeId);
+		if (visualIt == m_fogVolumeVisuals.end())
+		{
+			return;
+		}
+
+		auto [node, renderObject] = visualIt->second;
+		m_scene.DestroyManualRenderObject(*renderObject);
+		m_scene.GetRootSceneNode().RemoveChild(*node);
+		m_scene.DestroySceneNode(*node);
+
+		m_fogVolumeVisuals.erase(visualIt);
+	}
+
+	void WorldEditorInstance::RemoveAllFogVolumeVisuals()
+	{
+		// A selected fog volume references its node and render object, so drop it first. Checked against
+		// the whole selection, not just the last entry: a ctrl-click in the scene outline can append a
+		// SelectedMapEntity onto a fog volume selection without clearing it, and destroying the visuals
+		// underneath a SelectedFogVolume that is still part of that mixed selection would leave it
+		// dangling (use-after-free on the next gizmo move/scale).
+		if (SelectionHasFogVolume(nullptr))
+		{
+			ClearSelection();
+		}
+
+		while (!m_fogVolumeVisuals.empty())
+		{
+			RemoveFogVolumeVisual(m_fogVolumeVisuals.begin()->first);
+		}
+	}
+
+	void WorldEditorInstance::SelectFogVolume(const uint32 volumeId)
+	{
+		const auto visualIt = m_fogVolumeVisuals.find(volumeId);
+		if (visualIt == m_fogVolumeVisuals.end())
+		{
+			return;
+		}
+
+		auto [node, renderObject] = visualIt->second;
+
+		m_selection.Clear();
+		m_debugBoundingBox->Clear();
+
+		// Runs from inside SelectedFogVolume::Remove() while the viewport iterates the selection, so it
+		// must not touch the selection; the caller clears it afterwards. SelectedFogVolume::Deselect()
+		// does not touch the destroyed node or render object.
+		auto removal = [this](const uint32 id)
+		{
+			EraseFogVolume(id);
+		};
+
+		auto duplication = [this](Selectable& selectable)
+		{
+			// Alt + transform: leave a copy of the volume behind at the current transform while the
+			// original keeps following the widget, like map entity duplication.
+			const auto* selected = dynamic_cast<SelectedFogVolume*>(&selectable);
+			if (!selected)
+			{
+				return;
+			}
+
+			const auto sourceIt = std::find_if(m_fogVolumes.begin(), m_fogVolumes.end(), [id = selected->GetVolumeId()](const FogVolume& volume)
+			{
+				return volume.id == id;
+			});
+			if (sourceIt == m_fogVolumes.end())
+			{
+				return;
+			}
+
+			FogVolume copy = *sourceIt;
+			copy.id = GenerateFogVolumeId();
+			m_fogVolumes.push_back(copy);
+			MarkFogVolumesChanged();
+			AddFogVolumeVisual(copy.id, false);
+		};
+
+		m_selection.AddSelectable(std::make_unique<SelectedFogVolume>(volumeId, m_fogVolumes, *this, *node, *renderObject, duplication, removal));
+	}
+
+	void WorldEditorInstance::RemoveFogVolume(const uint32 volumeId)
+	{
+		// The selectable references the visual about to be destroyed, so drop it first. Checked against
+		// the whole selection (see SelectionHasFogVolume), not just the last entry, so a mixed selection
+		// containing this volume plus e.g. a scene-outline-picked map entity doesn't leave a dangling
+		// SelectedFogVolume behind.
+		if (SelectionHasFogVolume(&volumeId))
+		{
+			ClearSelection();
+		}
+
+		EraseFogVolume(volumeId);
+	}
+
+	void WorldEditorInstance::EraseFogVolume(const uint32 volumeId)
+	{
+		RemoveFogVolumeVisual(volumeId);
+
+		const auto volumeIt = std::find_if(m_fogVolumes.begin(), m_fogVolumes.end(), [volumeId](const FogVolume& volume)
+		{
+			return volume.id == volumeId;
+		});
+		if (volumeIt != m_fogVolumes.end())
+		{
+			m_fogVolumes.erase(volumeIt);
+			MarkFogVolumesChanged();
+		}
+	}
+
+	uint32 WorldEditorInstance::GetSelectedFogVolumeId() const
+	{
+		const SelectedFogVolume* selected = GetSelectedFogVolume();
+		return selected ? selected->GetVolumeId() : 0;
+	}
+
+	SelectedFogVolume* WorldEditorInstance::GetSelectedFogVolume() const
+	{
+		if (m_selection.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		// Only the most recently added selection entry counts here; see the header doc comment for why
+		// a fog volume elsewhere in a mixed selection is intentionally not reported by this method.
+		return dynamic_cast<SelectedFogVolume*>(m_selection.GetSelectedObjects().back().get());
+	}
+
+	bool WorldEditorInstance::SelectionHasFogVolume(const uint32* volumeId) const
+	{
+		for (const auto& selectable : m_selection.GetSelectedObjects())
+		{
+			if (const auto* fogVolume = dynamic_cast<SelectedFogVolume*>(selectable.get()))
+			{
+				if (!volumeId || fogVolume->GetVolumeId() == *volumeId)
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 }

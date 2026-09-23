@@ -23,7 +23,7 @@ cbuffer VolumetricFogBuffer : register(b2)
     uint GridWidth;
     uint GridHeight;
     uint GridDepth;
-    uint DebugMode;             // 0 off, 1 scattered light, 2 transmittance, 3 density, 4 lights per fog block
+    uint DebugMode;             // 0 off, 1 scattered light, 2 transmittance, 3 density (zone fog + local volumes), 4 lights per fog block
     float NearDistance;
     float FarDistance;
     float NoiseSize;            // metres per noise tile
@@ -34,6 +34,8 @@ cbuffer VolumetricFogBuffer : register(b2)
     uint LightCount;            // entries in the deferred renderer's light buffer (t9)
     float LightScatterStrength; // zone multiplier on point and spot light scattering
     float2 _LightPadding;
+    uint FogVolumeCount;        // entries in the local fog volume buffer (t10)
+    float3 _FogVolumePadding;
 };
 
 // View depth of a normalized slice coordinate, exponential between NearDistance and FarDistance.

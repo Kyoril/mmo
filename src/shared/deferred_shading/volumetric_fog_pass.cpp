@@ -75,9 +75,12 @@ namespace mmo
 			uint32 lightCount;
 			float lightScatterStrength;
 			float lightPadding[2];
+
+			uint32 fogVolumeCount;
+			float fogVolumePadding[3];
 		};
 
-		static_assert(sizeof(VolumetricFogConstants) == 240, "VolumetricFogConstants must match the HLSL layout");
+		static_assert(sizeof(VolumetricFogConstants) == 256, "VolumetricFogConstants must match the HLSL layout");
 
 		uint32 groupCount(const uint32 cells)
 		{
@@ -99,6 +102,16 @@ namespace mmo
 	{
 		m_fogBuffer = m_device.CreateConstantBuffer(sizeof(VolumetricFogConstants), nullptr);
 		ASSERT(m_fogBuffer);
+
+		m_fogVolumeBuffer = m_device.CreateStructuredBuffer(sizeof(fog_volume::GpuFogVolume), fog_volume::MaxVolumesPerFrame, nullptr);
+		if (!m_fogVolumeBuffer)
+		{
+			// The null graphics device (used headlessly, e.g. in tests/tools) returns nullptr here.
+			// SetFogVolumes and Render already tolerate a null buffer by skipping the volume upload
+			// and binding, so this is not fatal - just fewer fog volumes rendered than requested.
+			WLOG("Failed to create fog volume structured buffer - local fog volumes will not be rendered");
+		}
+		m_gpuFogVolumes.reserve(fog_volume::MaxVolumesPerFrame);
 
 		m_compositePs = m_device.CreateShader(ShaderType::PixelShader, MMO_FOG_COMPOSITE_PS_BYTECODE, MMO_FOG_COMPOSITE_PS_SIZE);
 		ASSERT(m_compositePs);
@@ -134,6 +147,24 @@ namespace mmo
 		m_width = width;
 		m_height = height;
 		ReleaseVolumes();
+	}
+
+	void VolumetricFogPass::SetFogVolumes(const std::vector<FogVolumeInstance>& volumes)
+	{
+		const size_t count = std::min(volumes.size(), static_cast<size_t>(fog_volume::MaxVolumesPerFrame));
+
+		m_gpuFogVolumes.clear();
+		for (size_t i = 0; i < count; ++i)
+		{
+			m_gpuFogVolumes.push_back(fog_volume::ToGpu(volumes[i]));
+		}
+
+		m_fogVolumeCount = 0;
+		if (!m_gpuFogVolumes.empty() && m_fogVolumeBuffer)
+		{
+			m_fogVolumeBuffer->Update(m_gpuFogVolumes.data(), m_gpuFogVolumes.size());
+			m_fogVolumeCount = static_cast<uint32>(m_gpuFogVolumes.size());
+		}
 	}
 
 	bool VolumetricFogPass::SupportsVolume() const
@@ -278,6 +309,7 @@ namespace mmo
 		constants.lightScatterStrength = m_settings.lightScatterStrength;
 		constants.lightPadding[0] = 0.0f;
 		constants.lightPadding[1] = 0.0f;
+		constants.fogVolumeCount = m_fogVolumeCount;
 		m_fogBuffer->Update(&constants);
 
 		if (volumeEnabled)
@@ -295,6 +327,11 @@ namespace mmo
 			m_noiseSampler->Bind(ShaderType::ComputeShader, 0);
 			shadowSampler.Bind(ShaderType::ComputeShader, 1);
 			lights.BindToStage(ShaderType::ComputeShader, 9);
+			if (m_fogVolumeCount > 0)
+			{
+				// The inject shader only reads t10 while FogVolumeCount > 0.
+				m_fogVolumeBuffer->BindToStage(ShaderType::ComputeShader, 10);
+			}
 			m_injectVolume->BindWritable(0);
 			m_injectCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), groupCount(m_gridDepth));

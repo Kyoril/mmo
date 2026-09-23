@@ -3,6 +3,7 @@
 #pragma once
 
 #include "cascaded_shadow_camera_setup.h"
+#include "fog_volume_math.h"
 #include "volumetric_fog_settings.h"
 
 #include "base/non_copyable.h"
@@ -19,6 +20,7 @@
 #include "scene_graph/wind_state.h"
 
 #include <array>
+#include <vector>
 
 namespace mmo
 {
@@ -64,6 +66,11 @@ namespace mmo
 			const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, ConstantBuffer& shadowBuffer,
 			ConstantBuffer& cameraBuffer, StructuredBuffer& lights, uint32 lightCount, SamplerState& shadowSampler, VertexBuffer& quad,
 			ShaderBase& fullscreenVs);
+
+		/// @brief Sets this frame's local fog volumes. Call each frame; an empty vector clears them.
+		/// @param volumes The selected, time-of-day scaled instances. Entries beyond
+		///        fog_volume::MaxVolumesPerFrame are ignored.
+		void SetFogVolumes(const std::vector<FogVolumeInstance>& volumes);
 
 		/// @brief Discards the temporal history, e.g. after a frame in which the pass did not run.
 		void InvalidateHistory() { m_historyValid = false; }
@@ -128,6 +135,15 @@ namespace mmo
 		float m_prevRange = 0.0f;
 
 		ConstantBufferPtr m_fogBuffer;
+
+		/// @brief This frame's fog volumes (CS t10), fog_volume::MaxVolumesPerFrame entries.
+		StructuredBufferPtr m_fogVolumeBuffer;
+
+		/// @brief Staging copy of the GPU records uploaded to m_fogVolumeBuffer.
+		std::vector<fog_volume::GpuFogVolume> m_gpuFogVolumes;
+
+		/// @brief Number of valid entries in m_fogVolumeBuffer.
+		uint32 m_fogVolumeCount = 0;
 
 		ShaderPtr m_injectCs;
 		ShaderPtr m_temporalCs;

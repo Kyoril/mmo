@@ -2,14 +2,18 @@
 
 // Fills every froxel with this frame's fog: extinction from height fog times wind-scrolled noise, and
 // the light scattered toward the camera (fog ambient + shadowed sun + unshadowed point and spot
-// lights). Output rgb = radiance * sigma, a = sigma.
+// lights). Output rgb = radiance * sigmaScatter, a = sigmaTotal: sigmaTotal is the zone fog's sigma plus
+// every local fog volume's density at the froxel, sigmaScatter the same sum with each volume's density
+// tinted by its colour. Local volumes share the zone fog's lighting.
 //
-// Point and spot lights come from the deferred renderer's light buffer (t9). Each 8x8x8 thread group
-// culls the frame's lights once against its block's bounding sphere into a group-shared list, so a
-// froxel only evaluates the lights that can reach its block.
+// Point and spot lights come from the deferred renderer's light buffer (t9), local fog volumes from the
+// fog volume buffer (t10). Each 8x8x8 thread group culls the frame's lights and volumes once against its
+// block's bounding sphere into group-shared lists, so a froxel only evaluates the lights and volumes
+// that can reach its block.
 
 #include "VolumetricFogCommon.hlsli"
 #include "LightCommon.hlsli"
+#include "FogVolumeCommon.hlsli"
 
 static const uint NUM_SHADOW_CASCADES = 4;
 
@@ -39,13 +43,17 @@ cbuffer ShadowBuffer : register(b3)
 RWTexture3D<float4> InjectOutput : register(u0);
 
 StructuredBuffer<Light> Lights : register(t9);
+StructuredBuffer<FogVolume> FogVolumes : register(t10);
 
 static const uint FOG_GROUP_SIZE = 8;
 static const uint FOG_GROUP_THREADS = FOG_GROUP_SIZE * FOG_GROUP_SIZE * FOG_GROUP_SIZE;
 static const uint MAX_BLOCK_LIGHTS = 64; // mirrors light_math::MaxLightsPerFogBlock
+static const uint MAX_BLOCK_VOLUMES = 16; // mirrors fog_volume::MaxVolumesPerBlock
 
-groupshared uint s_blockLightHits;                 // lights that reach the block (may exceed the capacity)
-groupshared uint s_blockLights[MAX_BLOCK_LIGHTS];  // indices into Lights
+groupshared uint s_blockLightHits;                   // lights that reach the block (may exceed the capacity)
+groupshared uint s_blockLights[MAX_BLOCK_LIGHTS];    // indices into Lights
+groupshared uint s_blockVolumeHits;                  // fog volumes that reach the block (may exceed the capacity)
+groupshared uint s_blockVolumes[MAX_BLOCK_VOLUMES];  // indices into FogVolumes
 
 // One hardware-PCF tap in the cascade covering this distance. 1 = lit.
 // viewDepth: distance along the camera's forward axis (not radial distance to the camera) - matches
@@ -159,14 +167,38 @@ float3 BlockLightScattering(float3 worldPos, float3 ray, uint blockLightCount)
     return sum * LightScatterStrength;
 }
 
+// Adds this froxel's local fog volume density: sigma (extinction) and sigma * colour (scattering).
+void AccumulateFogVolumes(float3 worldPos, uint blockVolumeCount, inout float sigmaTotal, inout float3 sigmaScatter)
+{
+    for (uint i = 0; i < blockVolumeCount; ++i)
+    {
+        FogVolume volume = FogVolumes[s_blockVolumes[i]];
+        float3 local = FogVolumeToLocal(volume, worldPos);
+        float distance = FogVolumeShapeDistance(volume, local);
+        if (distance >= 1.0f)
+        {
+            continue;
+        }
+
+        float detail = volume.NoiseDetail;
+        float3 noiseUvw = float3(worldPos.x * detail / NoiseSize - WindOffset.x * detail, worldPos.y * detail / NoiseSize, worldPos.z * detail / NoiseSize - WindOffset.y * detail);
+        float noise = NoiseVolume.SampleLevel(NoiseSampler, noiseUvw, 0.0f);
+
+        float sigma = volume.Density * FogVolumeEdgeFade(distance, volume.EdgeFade) * FogVolumeHeightFactor(volume, local) * NoiseDensityFactor(noise, volume.NoiseAmount);
+        sigmaTotal += sigma;
+        sigmaScatter += sigma * volume.Color;
+    }
+}
+
 [numthreads(FOG_GROUP_SIZE, FOG_GROUP_SIZE, FOG_GROUP_SIZE)]
 void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint groupIndex : SV_GroupIndex)
 {
-    // 1. Cull the frame's lights against this block once, in parallel. Every thread of the group must
-    //    reach both barriers, so the grid bounds check comes after them.
+    // 1. Cull the frame's lights and fog volumes against this block once, in parallel. Every thread of
+    //    the group must reach both barriers, so the grid bounds check comes after them.
     if (groupIndex == 0)
     {
         s_blockLightHits = 0;
+        s_blockVolumeHits = 0;
     }
     GroupMemoryBarrierWithGroupSync();
 
@@ -180,6 +212,21 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
             if (slot < MAX_BLOCK_LIGHTS)
             {
                 s_blockLights[slot] = lightIndex;
+            }
+        }
+    }
+    for (uint volumeIndex = groupIndex; volumeIndex < FogVolumeCount; volumeIndex += FOG_GROUP_THREADS)
+    {
+        FogVolume volume = FogVolumes[volumeIndex];
+        float3 toCenter = volume.Center - blockSphere.xyz;
+        float reach = length(volume.HalfSize) + blockSphere.w;
+        if (dot(toCenter, toCenter) <= reach * reach)
+        {
+            uint slot;
+            InterlockedAdd(s_blockVolumeHits, 1, slot);
+            if (slot < MAX_BLOCK_VOLUMES)
+            {
+                s_blockVolumes[slot] = volumeIndex;
             }
         }
     }
@@ -225,5 +272,10 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
     float3 radiance = FogSource(dot(ray, SunDirection), visibility);
     radiance += BlockLightScattering(worldPos, ray, blockLightCount);
 
-    InjectOutput[id] = float4(radiance * sigma, sigma);
+    uint blockVolumeCount = min(s_blockVolumeHits, MAX_BLOCK_VOLUMES);
+    float sigmaTotal = sigma;
+    float3 sigmaScatter = sigma.xxx;
+    AccumulateFogVolumes(worldPos, blockVolumeCount, sigmaTotal, sigmaScatter);
+
+    InjectOutput[id] = float4(radiance * sigmaScatter, sigmaTotal);
 }
