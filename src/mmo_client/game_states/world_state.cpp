@@ -2393,43 +2393,46 @@ namespace mmo
 		ForEachPageInSquare(
 			worldSize, pagePos, 1, [this](const PagePosition &page)
 			{
-				terrain::Page* terrainPage = m_worldInstance->GetTerrain()->GetPage(page.x(), page.y());
-				if (terrainPage)
+				if (m_worldInstance->GetTerrain())
 				{
-					// This runs behind the loading screen and must finish synchronously. The page
-					// availability event may already have kicked an asynchronous preparation onto
-					// the streaming thread, whose FinalizePrepare is queued on m_dispatcher — so we
-					// cannot just spin on Load() (it requires the page to be prepared and the
-					// dispatcher would never be pumped: deadlock). Instead, either prepare the page
-					// synchronously ourselves, or pump the dispatcher until the in-flight async
-					// preparation completes.
-					while (!terrainPage->IsPrepared())
+					terrain::Page* terrainPage = m_worldInstance->GetTerrain()->GetPage(page.x(), page.y());
+					if (terrainPage)
 					{
-						if (terrainPage->BeginPrepare())
+						// This runs behind the loading screen and must finish synchronously. The page
+						// availability event may already have kicked an asynchronous preparation onto
+						// the streaming thread, whose FinalizePrepare is queued on m_dispatcher — so we
+						// cannot just spin on Load() (it requires the page to be prepared and the
+						// dispatcher would never be pumped: deadlock). Instead, either prepare the page
+						// synchronously ourselves, or pump the dispatcher until the in-flight async
+						// preparation completes.
+						while (!terrainPage->IsPrepared())
 						{
-							// No async preparation in flight — do it synchronously.
-							if (!terrainPage->PrepareParse())
+							if (terrainPage->BeginPrepare())
 							{
-								terrainPage->AbortPrepare();
+								// No async preparation in flight — do it synchronously.
+								if (!terrainPage->PrepareParse())
+								{
+									terrainPage->AbortPrepare();
+									break;
+								}
+
+								terrainPage->FinalizePrepare();
 								break;
 							}
 
-							terrainPage->FinalizePrepare();
-							break;
+							// An async preparation is in flight: pump the dispatcher so its queued
+							// FinalizePrepare can run, and give the worker thread time to finish.
+							m_dispatcher.poll_one();
+							std::this_thread::yield();
 						}
 
-						// An async preparation is in flight: pump the dispatcher so its queued
-						// FinalizePrepare can run, and give the worker thread time to finish.
-						m_dispatcher.poll_one();
-						std::this_thread::yield();
-					}
-
-					if (terrainPage->IsPrepared())
-					{
-						while (!terrainPage->Load());
+						if (terrainPage->IsPrepared())
+						{
+							while (!terrainPage->Load());
+						}
 					}
 				}
-
+				
 				m_worldInstance->LoadPageEntities(page.x(), page.y()); });
 
 		size_t dispatched = 0;
