@@ -95,7 +95,14 @@ namespace mmo
 	}
 
 	OctreeScene::~OctreeScene()
-		= default;
+	{
+		// Every OctreeNode unregisters itself from m_octree when it is destroyed. The scene nodes
+		// are owned by the base Scene, whose members die after ours, so leaving them to ~Scene
+		// would have each one walk an octant list after the octree was freed. Tear the scene
+		// down while the octree is still alive. Scene::Clear, not the override: that one would
+		// just build a fresh octree.
+		Scene::Clear();
+	}
 
 	void OctreeScene::Clear()
 	{
