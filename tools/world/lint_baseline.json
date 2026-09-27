@@ -1,0 +1,317 @@
+{
+  "version": 1,
+  "placement": [
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:44:-:-14:535",
+      "message": "7 x Young Forest Wolf around (2, 538) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:4:-:102:497",
+      "message": "8 x Guard around (99, 500) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:56:Mirewater - Mire Prowler 01:-296:206",
+      "message": "9 x Mirewater - Mire Prowler 01 around (-272, 239) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:57:Mirewater - Poacher 01:-386:268",
+      "message": "9 x Mirewater - Poacher 01 around (-364, 288) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:58:Barrowfront - Risen Laborer 01:-424:168",
+      "message": "9 x Barrowfront - Risen Laborer 01 around (-412, 202) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:59:Barrowfield - Barrow Skeleton 01:-494:188",
+      "message": "10 x Barrowfield - Barrow Skeleton 01 around (-474, 218) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:60:Barrowfield - Gravebound Cultist 01:-488:238",
+      "message": "6 x Barrowfield - Gravebound Cultist 01 around (-479, 251) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:66:Kingsroad - Roadside Marauder 01:-298:384",
+      "message": "10 x Kingsroad - Roadside Marauder 01 around (-278, 413) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:168:676",
+      "message": "Silverleaf Sprig at (168, 676): 0.5 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:320:725",
+      "message": "Silverleaf Sprig at (320, 725): 1.0 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:375:615",
+      "message": "Silverleaf Sprig at (375, 615): 1.0 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:379:615",
+      "message": "Silverleaf Sprig at (379, 615): 0.8 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:384:666",
+      "message": "Silverleaf Sprig at (384, 666): 2.5 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:7:-:-79:113",
+      "message": "Copper Vein at (-79, 113): 1.8 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:14:-:341:731",
+      "message": "Young Forest Boar at (341, 731): 1.9 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:14:-:405:689",
+      "message": "Young Forest Boar at (405, 689): 0.7 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:19:-:366:661",
+      "message": "Forest Boar at (366, 661): 1.5 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:19:-:396:648",
+      "message": "Forest Boar at (396, 648): 2.5 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:19:-:397:676",
+      "message": "Forest Boar at (397, 676): 2.5 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:41:ArmsmasterTheobald:53:-51",
+      "message": "ArmsmasterTheobald at (53, -51): 6.7 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:42:Fighter_01:38:-48",
+      "message": "Fighter_01 at (38, -48): 5.8 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:43:Sergeant Bram Halford:39:-45",
+      "message": "Sergeant Bram Halford at (39, -45): 5.9 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:5:-:-15:21",
+      "message": "Eliza Thorne at (-15, 21): 3.7 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:6:-:-10:21",
+      "message": "Garret Blackwood at (-10, 21): 4.0 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:7:-:-21:22",
+      "message": "Roland Stonehelm at (-21, 22): 3.2 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:8:-:20:22",
+      "message": "Derrick Longstride at (20, 22): 3.6 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:9:-:14:21",
+      "message": "Mariana Silkspun at (14, 21): 3.8 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "inside_footprint|object:0:1:-:384:666",
+      "message": "Silverleaf Sprig at (384, 666): inside the footprint of Models/FalwynPlains/Props/Furniture/SM_hc_Wagon_Big.hmsh"
+    },
+    {
+      "map": 0,
+      "key": "inside_footprint|unit:0:26:-:149:509",
+      "message": "Lina Groveroot at (149, 509): inside the footprint of Models/FalwynPlains/Props/Furniture/SM_hc_WagonDamaged.hmsh"
+    },
+    {
+      "map": 0,
+      "key": "level_band|unit:0:21:-:417:755",
+      "message": "Grimtusk, the Ironback at (417, 755) is level 5-5, outside the Forest Boar grounds band 1-4"
+    },
+    {
+      "map": 0,
+      "key": "level_band|unit:0:44:Briarwatch March - Young Wolf 04:-245:395",
+      "message": "Briarwatch March - Young Wolf 04 at (-245, 395) is level 3-4, outside the Kingsroad band 6-7"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|object:0:4:-:260:608",
+      "message": "Water Barrel at (260, 608): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:27:-:265:613",
+      "message": "Old Harbin at (265, 613): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:259:595",
+      "message": "Cellar Rat at (259, 595): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:261:599",
+      "message": "Cellar Rat at (261, 599): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:262:601",
+      "message": "Cellar Rat at (262, 601): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:265:609",
+      "message": "Cellar Rat at (265, 609): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:266:595",
+      "message": "Cellar Rat at (266, 595): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:267:599",
+      "message": "Cellar Rat at (267, 599): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "steep_slope|object:0:7:-:-79:113",
+      "message": "Copper Vein at (-79, 113): slope 48° exceeds 35°"
+    },
+    {
+      "map": 0,
+      "key": "steep_slope|unit:0:67:Briarwatch - Duskfang Stalker 01:-148:408",
+      "message": "Briarwatch - Duskfang Stalker 01 at (-148, 408): slope 38° exceeds 35°"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|object:2:11:-:10:4",
+      "message": "Mailbox at (10, 4): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|object:2:4:-:11:-7",
+      "message": "Water Barrel at (11, -7): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:40:-:1:18",
+      "message": "Training Dummy at (1, 18): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:40:-:3:18",
+      "message": "Training Dummy at (3, 18): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:40:-:5:18",
+      "message": "Training Dummy at (5, 18): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:4:-:5:-11",
+      "message": "Guard at (5, -11): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:4:-:8:-11",
+      "message": "Guard at (8, -11): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:54:-:9:9",
+      "message": "Griphook at (9, 9): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "inside_footprint|object:2:11:-:10:4",
+      "message": "Mailbox at (10, 4): inside the footprint of Models/Prototyping/Cube.hmsh"
+    },
+    {
+      "map": 2,
+      "key": "inside_footprint|object:2:4:-:11:-7",
+      "message": "Water Barrel at (11, -7): inside the footprint of Models/Prototyping/Cube.hmsh"
+    },
+    {
+      "map": 2,
+      "key": "inside_footprint|unit:2:4:-:5:-11",
+      "message": "Guard at (5, -11): inside the footprint of Models/Prototyping/Cube.hmsh"
+    },
+    {
+      "map": 2,
+      "key": "inside_footprint|unit:2:4:-:8:-11",
+      "message": "Guard at (8, -11): inside the footprint of Models/Prototyping/Cube.hmsh"
+    }
+  ],
+  "reachability": [
+    {
+      "map": 0,
+      "key": "no_turn_in|quest:56",
+      "message": "Quest 56 'Out of the Barrowfield' has no NPC or object that accepts the turn-in"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:19:req1",
+      "message": "Quest 19 'Foundations of Progress': nearest 'collect Foundation Stake' source is 250 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:24:req0",
+      "message": "Quest 24 'The Red Armbands': nearest 'collect Torn Bandit Armband' source is 266 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:27:req1",
+      "message": "Quest 27 'The Old King's Road': nearest 'kill Kingsroad Hexer' source is 255 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:35:req0",
+      "message": "Quest 35 'A Shepherd's Mercy': nearest 'kill Forest Wolf' source is 551 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:37:req0",
+      "message": "Quest 37 'Essence of the Wild': nearest 'kill Young Forest Wolf' source is 294 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:39:req0",
+      "message": "Quest 39 'Eyes on the Kingsroad': nearest 'kill Kingsroad Cutthroat' source is 590 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:55:req0",
+      "message": "Quest 55 'Tails for the Tally': nearest 'collect Bog Rat Tail' source is 358 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:9:req0",
+      "message": "Quest 9 'A Crate Too Far': nearest 'collect Lina's Lost Crate' source is 278 m from the quest giver (> 250 m)"
+    }
+  ]
+}

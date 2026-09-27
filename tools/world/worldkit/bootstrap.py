@@ -246,8 +246,7 @@ def bootstrap_atlas(data, map_entry, query) -> Atlas:
     objects = object_spawn_records(map_entry)
     levels = data.unit_levels()
     # People a hub is made of: quest givers and service NPCs (trainers, vendors, gossip).
-    giver_units = {uid for uid, unit in data.units.items()
-                   if len(unit.quests) or len(unit.end_quests) or unit.trainerentry or unit.vendorentry or len(unit.gossip_menus)}
+    giver_units = data.service_units()
     everything = units + objects
     content_centre = _centre([r.x for r in everything], [r.z for r in everything]) if everything else [0.0, 0.0]
 

@@ -118,6 +118,9 @@ class LintTests(unittest.TestCase):
 		self.assertIn(("outside_poi", "warning"), self.rules([outside], {7: (8, 9)}))
 		self.assertIn(("level_band", "warning"), self.rules([inside], {7: (2, 3)}))
 		self.assertIn(("level_band", "warning"), self.rules([outside], {7: (20, 21)}))  # zone band 5-10
+		# A level-10 trainer inside a level 8-9 camp is fine: bands describe what players fight.
+		service = lint_records([inside], self.query, {7: (10, 10)}, service_units={7})
+		self.assertEqual([v.rule for v in service], [])
 
 	def test_naming(self):
 		self.assertEqual([v.rule for v in naming_violations([rec(0, 0, name="Bog Rat")])], ["spawn_name"])

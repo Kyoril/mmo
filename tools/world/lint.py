@@ -55,7 +55,7 @@ def main(argv=None) -> int:
         names = entry_names(data)
         if "id" in unit and unit.get("name"):
             names[("unit", int(unit["id"]))] = unit["name"]
-        violations = lint_records(records, query, levels, names) + naming_violations(records)
+        violations = lint_records(records, query, levels, names, data.service_units()) + naming_violations(records)
     else:
         records, violations = lint_map(data, map_entry, query)
 

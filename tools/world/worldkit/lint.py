@@ -102,7 +102,9 @@ def lint_packs(records: list[SpawnRecord], names: Names | None = None) -> list[V
 
 
 def lint_levels(records: list[SpawnRecord], query: WorldQuery, unit_levels: dict[int, tuple[int, int]],
-                names: Names | None = None) -> list[Violation]:
+                names: Names | None = None, service_units: set[int] | frozenset[int] = frozenset()) -> list[Violation]:
+    """Place/level-band checks. Level bands describe what players fight, so service NPCs (quest
+    givers, trainers, vendors, gossip) are exempt from the level check."""
     atlas = query.atlas
     if atlas is None:
         return []
@@ -117,7 +119,7 @@ def lint_levels(records: list[SpawnRecord], query: WorldQuery, unit_levels: dict
             if poi is not None and not contains(poi, x, z):
                 found.append(Violation("outside_poi", "warning", record.key,
                                        f"{_label(record, names)} at ({x:.0f}, {z:.0f}) is named for '{poi['name']}' but stands outside it", x, z))
-        levels = unit_levels.get(record.entry)
+        levels = None if record.entry in service_units else unit_levels.get(record.entry)
         band = atlas.band_for(x, z, query.area_at(x, z)) if levels else None
         if band and (levels[1] < band[0] or levels[0] > band[1]):
             found.append(Violation("level_band", "warning", record.key,
@@ -142,15 +144,15 @@ def _sorted(violations: list[Violation]) -> list[Violation]:
 
 
 def lint_records(records: list[SpawnRecord], query: WorldQuery, unit_levels: dict[int, tuple[int, int]],
-                 names: Names | None = None) -> list[Violation]:
+                 names: Names | None = None, service_units: set[int] | frozenset[int] = frozenset()) -> list[Violation]:
     found: list[Violation] = []
     for record in records:
         found.extend(lint_placement(record, query, names))
     found.extend(lint_packs(records, names))
-    found.extend(lint_levels(records, query, unit_levels, names))
+    found.extend(lint_levels(records, query, unit_levels, names, service_units))
     return _sorted(found)
 
 
 def lint_map(game_data, map_entry, query: WorldQuery) -> tuple[list[SpawnRecord], list[Violation]]:
     records = unit_spawn_records(map_entry) + object_spawn_records(map_entry)
-    return records, lint_records(records, query, game_data.unit_levels(), entry_names(game_data))
+    return records, lint_records(records, query, game_data.unit_levels(), entry_names(game_data), game_data.service_units())

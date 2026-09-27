@@ -60,6 +60,11 @@ class GameData:
                 return entry
         return None
 
+    def service_units(self) -> set[int]:
+        """Units players talk to rather than fight: quest givers/enders, trainers, vendors, gossip NPCs."""
+        return {uid for uid, unit in self.units.items()
+                if len(unit.quests) or len(unit.end_quests) or unit.trainerentry or unit.vendorentry or len(unit.gossip_menus)}
+
     def unit_levels(self) -> dict[int, tuple[int, int]]:
         return {unit_id: (unit.minlevel, max(unit.minlevel, unit.maxlevel)) for unit_id, unit in self.units.items()}
 
