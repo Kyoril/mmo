@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+# Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
+"""Byte builders for synthetic world files used by the worldkit tests.
+
+They mirror the writers in src/shared/terrain_io/page_io.cpp (SavePage) and
+src/mmo_edit/editors/world_editor/world_editor_instance.cpp (.wobj save), so a parser test
+exercises the same layout the engine writes. Not a production writer.
+
+Importing this module also puts tools/world on sys.path so tests can `import worldkit`.
+"""
+
+import struct
+import sys
+from pathlib import Path
+
+import numpy as np
+
+REPO = Path(__file__).resolve().parents[2]
+if str(REPO / "tools" / "world") not in sys.path:
+	sys.path.insert(0, str(REPO / "tools" / "world"))
+
+PAGE_SIZE = struct.unpack("<f", struct.pack("<f", 33.33333))[0] * 16
+
+
+def chunk(magic: bytes, payload: bytes) -> bytes:
+	return magic + struct.pack("<I", len(payload)) + payload
+
+
+def str16(text: str) -> bytes:
+	raw = text.encode("utf-8")
+	return struct.pack("<H", len(raw)) + raw
+
+
+def str8(text: str) -> bytes:
+	raw = text.encode("utf-8")
+	return struct.pack("<B", len(raw)) + raw
+
+
+def tile_bytes(
+	outer=None, inner=None, areas=None, materials=None, layers=None,
+	holes=None, water=None, water_heights=None, version=2, extra_chunks=b"",
+) -> bytes:
+	"""Builds a .tile file. Arrays default to a flat page at height 0.
+
+	holes: dict {tile_index: uint64 mask}; water: dict {tile_index: (type, uint64 mask)}.
+	"""
+	parts = [chunk(b"MVER", struct.pack("<I", version))]
+	names = materials if materials is not None else [""] * 256
+	parts.append(chunk(b"MCMT", struct.pack("<H", len(names)) + b"".join(str16(n) for n in names)))
+	if version == 2:
+		o = np.zeros((129, 129), np.float32) if outer is None else np.asarray(outer, np.float32)
+		i = np.zeros((128, 128), np.float32) if inner is None else np.asarray(inner, np.float32)
+		parts.append(chunk(b"MCVT", o.astype("<f4").tobytes()))
+		parts.append(chunk(b"MCVI", i.astype("<f4").tobytes()))
+	else:
+		o = np.zeros((273, 273), np.float32) if outer is None else np.asarray(outer, np.float32)
+		parts.append(chunk(b"MCVT", o.astype("<f4").tobytes()))
+	parts.append(chunk(b"MCNM", b"\x00\x7f\x00" * (129 * 129)))
+	lay = np.full((1009, 1009), 0x000000FF, np.uint32) if layers is None else np.asarray(layers, np.uint32)
+	parts.append(chunk(b"MCLY", lay.astype("<u4").tobytes()))
+	if holes:
+		payload = struct.pack("<H", len(holes)) + b"".join(struct.pack("<HQ", k, v) for k, v in sorted(holes.items()))
+		parts.append(chunk(b"MHOL", payload))
+	if water:
+		wh = np.zeros((129, 129), np.float32) if water_heights is None else np.asarray(water_heights, np.float32)
+		payload = struct.pack("<H", len(water))
+		payload += b"".join(struct.pack("<HBQ", k, t, m) for k, (t, m) in sorted(water.items()))
+		payload += wh.astype("<f4").tobytes() + str16("")
+		parts.append(chunk(b"MCWQ", payload))
+	a = np.zeros((16, 16), np.uint32) if areas is None else np.asarray(areas, np.uint32)
+	parts.append(chunk(b"MCAR", a.astype("<u4").tobytes()))
+	return b"".join(parts) + extra_chunks
+
+
+def wobj_bytes(kind="mesh", version=3, unique_id=7, asset="Models/Test/Crate.hmsh",
+			   position=(1.0, 2.0, 3.0), rotation=(1.0, 0.0, 0.0, 0.0), scale=(1.0, 1.0, 1.0),
+			   name="Crate", category="Props", overrides=()) -> bytes:
+	body = struct.pack("<Q", unique_id) + str16(asset)
+	body += struct.pack("<3f", *position) + struct.pack("<4f", *rotation) + struct.pack("<3f", *scale)
+	if kind == "mesh":
+		body += struct.pack("<B", len(overrides)) + b"".join(struct.pack("<B", i) + str16(m) for i, m in overrides)
+		if version > 1:
+			body += str8(name) + str16(category)
+		magic = b"HSMW"
+	else:
+		if version >= 3:
+			body += str8(name) + str16(category)
+		magic = b"OMWW"
+	return chunk(b"REVW", struct.pack("<I", version)) + chunk(magic, body)
+
+
+def hwld_bytes(version=3, has_terrain=True, default_material="Models/Terrain/Default.hmi", meshes=("Models/A.hmsh",)) -> bytes:
+	parts = [chunk(b"REVM", struct.pack("<I", version))]
+	parts.append(chunk(b"TERR", struct.pack("<B", 1 if has_terrain else 0) + str16(default_material)))
+	parts.append(chunk(b"HSEM", b"".join(m.encode() + b"\x00" for m in meshes)))
+	return b"".join(parts)
+
+
+def make_world(repo: Path, directory: str, pages: dict, entities=(), default_material="Models/Terrain/Default.hmi") -> None:
+	"""Writes a synthetic world under <repo>/data/client/Worlds/<directory>/.
+
+	pages: {(page_x, page_z): tile_bytes kwargs}; entities: iterable of wobj_bytes kwargs.
+	"""
+	world = repo / "data" / "client" / "Worlds" / directory
+	terrain = world / directory / "Terrain"
+	terrain.mkdir(parents=True, exist_ok=True)
+	(world / f"{directory}.hwld").write_bytes(hwld_bytes(default_material=default_material))
+	for (page_x, page_z), kwargs in pages.items():
+		(terrain / f"{page_x}_{page_z}.tile").write_bytes(tile_bytes(**kwargs))
+	for index, kwargs in enumerate(entities):
+		x, _, z = kwargs.get("position", (1.0, 2.0, 3.0))
+		page_x = int(np.floor(x / PAGE_SIZE)) + 32
+		page_z = int(np.floor(z / PAGE_SIZE)) + 32
+		folder = world / directory / "Entities" / str((page_x << 8) | page_z)
+		folder.mkdir(parents=True, exist_ok=True)
+		(folder / f"{kwargs.get('unique_id', index + 1)}.wobj").write_bytes(wobj_bytes(**kwargs))
