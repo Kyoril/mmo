@@ -36,7 +36,7 @@ namespace mmo
 		/// Number of segments of a place's radius ring.
 		constexpr int s_ringSegments = 48;
 
-		const Json& EmptyArray()
+		const Json& emptyArray()
 		{
 			static const Json empty = Json::array();
 			return empty;
@@ -44,12 +44,12 @@ namespace mmo
 
 		/// The atlas stores every coordinate rounded to 0.1 (see worldkit/atlas.py), so an untouched
 		/// value survives a load/save cycle byte for byte.
-		double Round1(const double value)
+		double round1(const double value)
 		{
 			return std::round(value * 10.0) / 10.0;
 		}
 
-		ImU32 StatusColor(const Json& entry)
+		ImU32 statusColor(const Json& entry)
 		{
 			const String status = entry.value("status", String());
 			if (status == "canon")
@@ -65,7 +65,7 @@ namespace mmo
 			return IM_COL32(255, 165, 0, 255);
 		}
 
-		bool ReadPoint(const Json& value, float& outX, float& outZ)
+		bool readPoint(const Json& value, float& outX, float& outZ)
 		{
 			if (!value.is_array() || value.size() != 2 || !value[0].is_number() || !value[1].is_number())
 			{
@@ -77,12 +77,12 @@ namespace mmo
 			return true;
 		}
 
-		Json MakePoint(const float x, const float z)
+		Json makePoint(const float x, const float z)
 		{
-			return Json::array({ Round1(x), Round1(z) });
+			return Json::array({ round1(x), round1(z) });
 		}
 
-		bool EditText(Json& entry, const char* key, const char* label, const bool multiline, const bool required)
+		bool editText(Json& entry, const char* key, const char* label, const bool multiline, const bool required)
 		{
 			String value = entry.contains(key) && entry[key].is_string() ? entry[key].get<String>() : String();
 			const bool changed = multiline ? ImGui::InputTextMultiline(label, &value, ImVec2(-1.0f, 60.0f)) : ImGui::InputText(label, &value);
@@ -103,7 +103,7 @@ namespace mmo
 			return true;
 		}
 
-		bool EditLevels(Json& entry)
+		bool editLevels(Json& entry)
 		{
 			bool hasBand = entry.contains("levelMin") && entry.contains("levelMax") && entry["levelMin"].is_number() && entry["levelMax"].is_number();
 			bool changed = false;
@@ -138,7 +138,7 @@ namespace mmo
 			return changed;
 		}
 
-		bool DrawConfirmAndStatus(Json& entry)
+		bool drawConfirmAndStatus(Json& entry)
 		{
 			const String status = entry.value("status", String());
 			ImGui::Text("Status: %s", status.c_str());
@@ -163,6 +163,97 @@ namespace mmo
 			}
 
 			return false;
+		}
+
+		/// Checks the shape the editor relies on, so a hand-edited file cannot make nlohmann throw
+		/// later (value<String>() on a non-string field, operator[] on a non-array). The full schema
+		/// lives in tools/world/worldkit/atlas.py; this is the subset the editor touches.
+		bool validateAtlas(const Json& atlas, String& outProblem)
+		{
+			if (!atlas.is_object())
+			{
+				outProblem = "the top level is not an object";
+				return false;
+			}
+
+			static const char* const stringFields[] = { "id", "name", "kind", "status", "ask", "source", "description", "notes", "faction", "theme" };
+			static const char* const pointArrays[] = { "center" };
+			static const char* const pointLists[] = { "polygon", "points" };
+
+			for (const char* section : { "zones", "pois", "roads" })
+			{
+				if (!atlas.contains(section) || !atlas[section].is_array())
+				{
+					outProblem = String("'") + section + "' is missing or not an array";
+					return false;
+				}
+
+				const Json& entries = atlas[section];
+				for (size_t i = 0; i < entries.size(); ++i)
+				{
+					const Json& entry = entries[i];
+					const String where = String(section) + "[" + std::to_string(i) + "]";
+					if (!entry.is_object())
+					{
+						outProblem = where + " is not an object";
+						return false;
+					}
+
+					for (const char* key : stringFields)
+					{
+						if (entry.contains(key) && !entry[key].is_string())
+						{
+							outProblem = where + "." + key + " is not a string";
+							return false;
+						}
+					}
+
+					for (const char* key : { "radius", "levelMin", "levelMax", "areaId" })
+					{
+						if (entry.contains(key) && !entry[key].is_number())
+						{
+							outProblem = where + "." + key + " is not a number";
+							return false;
+						}
+					}
+
+					float x = 0.0f;
+					float z = 0.0f;
+					for (const char* key : pointArrays)
+					{
+						if (entry.contains(key) && !readPoint(entry[key], x, z))
+						{
+							outProblem = where + "." + key + " is not an [x, z] pair";
+							return false;
+						}
+					}
+
+					for (const char* key : pointLists)
+					{
+						if (!entry.contains(key))
+						{
+							continue;
+						}
+
+						if (!entry[key].is_array())
+						{
+							outProblem = where + "." + key + " is not an array";
+							return false;
+						}
+
+						for (const Json& point : entry[key])
+						{
+							if (!readPoint(point, x, z))
+							{
+								outProblem = where + "." + key + " contains something that is not an [x, z] pair";
+								return false;
+							}
+						}
+					}
+				}
+			}
+
+			return true;
 		}
 	}
 
@@ -193,11 +284,20 @@ namespace mmo
 		return (m_projectPath / ".." / ".." / "world" / "atlas" / ("map_" + std::to_string(mapId) + ".json")).lexically_normal();
 	}
 
+	std::filesystem::file_time_type AtlasEditMode::GetFileTime() const
+	{
+		std::error_code error;
+		const auto time = std::filesystem::last_write_time(GetAtlasPath(m_loadedMapId), error);
+		return error ? std::filesystem::file_time_type::min() : time;
+	}
+
 	bool AtlasEditMode::Load()
 	{
 		m_atlas = Json();
 		m_loadError.clear();
+		m_saveError.clear();
 		m_dirty = false;
+		m_confirmReload = false;
 		m_selected = Handle();
 		m_drag = Handle();
 
@@ -210,8 +310,8 @@ namespace mmo
 
 		m_loadedMapId = mapEntry->id();
 		const std::filesystem::path path = GetAtlasPath(m_loadedMapId);
-		std::ifstream file(path, std::ios::binary);
-		if (!file)
+		std::error_code error;
+		if (!std::filesystem::exists(path, error))
 		{
 			// No atlas yet: start an empty one, written on the first save.
 			m_atlas = Json::object();
@@ -220,27 +320,55 @@ namespace mmo
 			m_atlas["zones"] = Json::array();
 			m_atlas["pois"] = Json::array();
 			m_atlas["roads"] = Json::array();
+			m_loadedFileTime = std::filesystem::file_time_type::min();
 			return true;
 		}
 
-		const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-		m_atlas = Json::parse(text, nullptr, false);
-		if (m_atlas.is_discarded() || !m_atlas.is_object() || !m_atlas.contains("pois") || !m_atlas["pois"].is_array() ||
-			!m_atlas.contains("roads") || !m_atlas["roads"].is_array())
+		std::ifstream file(path, std::ios::binary);
+		if (!file)
 		{
-			m_atlas = Json();
-			m_loadError = "Could not read " + path.string() + ". Fix the file by hand; the editor will not overwrite it.";
+			m_loadError = "Could not open " + path.string() + " (locked?). Reload once it is readable; the editor will not overwrite it.";
 			ELOG(m_loadError);
 			return false;
 		}
 
+		const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+		m_atlas = Json::parse(text, nullptr, false);
+		String problem;
+		if (m_atlas.is_discarded())
+		{
+			problem = "it is not valid JSON";
+		}
+		else
+		{
+			validateAtlas(m_atlas, problem);
+		}
+
+		if (!problem.empty())
+		{
+			m_atlas = Json();
+			m_loadError = "Could not use " + path.string() + ": " + problem +
+				". Fix the file by hand (python tools/world/worldkit/atlas.py rules); the editor will not overwrite it.";
+			ELOG(m_loadError);
+			return false;
+		}
+
+		m_loadedFileTime = GetFileTime();
 		return true;
 	}
 
-	bool AtlasEditMode::Save()
+	bool AtlasEditMode::Save(const bool overwrite)
 	{
 		if (!m_loadError.empty() || !m_atlas.is_object())
 		{
+			return false;
+		}
+
+		// Agents and the tools/world scripts edit the same file as text. Never silently drop their
+		// changes: if the file moved on since it was loaded, make the user choose.
+		if (!overwrite && GetFileTime() != m_loadedFileTime)
+		{
+			m_saveError = "The atlas file changed on disk since it was loaded (an agent or script edited it).";
 			return false;
 		}
 
@@ -248,16 +376,37 @@ namespace mmo
 		std::error_code error;
 		std::filesystem::create_directories(path.parent_path(), error);
 
-		std::ofstream file(path, std::ios::binary | std::ios::trunc);
-		if (!file)
+		// Write next to the target and swap it in, so a failed write never leaves half a file behind.
+		std::filesystem::path temp = path;
+		temp += ".tmp";
 		{
-			ELOG("Failed to write atlas file " << path.string());
+			std::ofstream file(temp, std::ios::binary | std::ios::trunc);
+			if (!file)
+			{
+				ELOG("Failed to write atlas file " << temp.string());
+				return false;
+			}
+
+			// Same layout as worldkit/atlas.py dumps(): 2-space indent, raw UTF-8, trailing newline.
+			file << m_atlas.dump(2) << "\n";
+			if (!file)
+			{
+				ELOG("Failed to write atlas file " << temp.string());
+				return false;
+			}
+		}
+
+		std::filesystem::rename(temp, path, error);
+		if (error)
+		{
+			ELOG("Failed to replace atlas file " << path.string() << ": " << error.message());
+			std::filesystem::remove(temp, error);
 			return false;
 		}
 
-		// Same layout as worldkit/atlas.py dumps(): 2-space indent, raw UTF-8, trailing newline.
-		file << m_atlas.dump(2) << "\n";
 		m_dirty = false;
+		m_saveError.clear();
+		m_loadedFileTime = GetFileTime();
 		ILOG("Saved atlas " << path.string());
 		return true;
 	}
@@ -321,26 +470,26 @@ namespace mmo
 			Json& poi = m_atlas["pois"][handle.index];
 			float oldX = 0.0f;
 			float oldZ = 0.0f;
-			if (ReadPoint(poi.contains("center") ? poi["center"] : EmptyArray(), oldX, oldZ) && poi.contains("polygon") && poi["polygon"].is_array())
+			if (readPoint(poi.contains("center") ? poi["center"] : emptyArray(), oldX, oldZ) && poi.contains("polygon") && poi["polygon"].is_array())
 			{
 				for (Json& point : poi["polygon"])
 				{
 					float px = 0.0f;
 					float pz = 0.0f;
-					if (ReadPoint(point, px, pz))
+					if (readPoint(point, px, pz))
 					{
-						point = MakePoint(px + (worldX - oldX), pz + (worldZ - oldZ));
+						point = makePoint(px + (worldX - oldX), pz + (worldZ - oldZ));
 					}
 				}
 			}
 
-			poi["center"] = MakePoint(worldX, worldZ);
+			poi["center"] = makePoint(worldX, worldZ);
 			poi["source"] = "user";
 		}
 		else if (handle.type == HandleType::RoadPoint)
 		{
 			Json& road = m_atlas["roads"][handle.index];
-			road["points"][handle.pointIndex] = MakePoint(worldX, worldZ);
+			road["points"][handle.pointIndex] = makePoint(worldX, worldZ);
 			road["source"] = "user";
 		}
 
@@ -372,7 +521,7 @@ namespace mmo
 			base = "place";
 		}
 
-		const Json& pois = m_atlas.contains("pois") ? m_atlas["pois"] : EmptyArray();
+		const Json& pois = m_atlas.contains("pois") ? m_atlas["pois"] : emptyArray();
 		auto taken = [&pois](const String& id)
 		{
 			return std::any_of(pois.begin(), pois.end(), [&id](const Json& poi)
@@ -400,7 +549,7 @@ namespace mmo
 		poi["id"] = UniquePoiId(name);
 		poi["name"] = name;
 		poi["kind"] = kind;
-		poi["center"] = MakePoint(worldX, worldZ);
+		poi["center"] = makePoint(worldX, worldZ);
 		poi["radius"] = isNote ? 10.0 : 25.0;
 
 		// A place the user drops is their own decision, so it is canon (or a note) right away.
@@ -434,6 +583,22 @@ namespace mmo
 		const Handle picked = PickHandle(x, y);
 		m_selected = picked;
 		m_drag = picked;
+		m_dragOffsetX = 0.0f;
+		m_dragOffsetZ = 0.0f;
+
+		// Keep the grab point under the cursor: the pin is drawn above the ground, so the terrain point
+		// under the cursor is not exactly the handle's position.
+		Vector3 hit;
+		float handleX = 0.0f;
+		float handleZ = 0.0f;
+		const bool hasHandlePosition =
+			(picked.type == HandleType::Poi && readPoint(m_atlas["pois"][picked.index].contains("center") ? m_atlas["pois"][picked.index]["center"] : emptyArray(), handleX, handleZ)) ||
+			(picked.type == HandleType::RoadPoint && readPoint(m_atlas["roads"][picked.index]["points"][picked.pointIndex], handleX, handleZ));
+		if (hasHandlePosition && RaycastTerrain(x, y, hit))
+		{
+			m_dragOffsetX = handleX - hit.x;
+			m_dragOffsetZ = handleZ - hit.z;
+		}
 	}
 
 	void AtlasEditMode::OnMouseMoved(const float x, const float y)
@@ -446,7 +611,7 @@ namespace mmo
 		Vector3 hit;
 		if (RaycastTerrain(x, y, hit))
 		{
-			MoveHandle(m_drag, hit.x, hit.z);
+			MoveHandle(m_drag, hit.x + m_dragOffsetX, hit.z + m_dragOffsetZ);
 		}
 	}
 
@@ -490,13 +655,13 @@ namespace mmo
 
 		drawList->PushClipRect(viewportMin, ImVec2(viewportMin.x + viewportSize.x, viewportMin.y + viewportSize.y), true);
 
-		const Json& roads = m_atlas.contains("roads") ? m_atlas["roads"] : EmptyArray();
+		const Json& roads = m_atlas.contains("roads") ? m_atlas["roads"] : emptyArray();
 		for (size_t roadIndex = 0; roadIndex < roads.size(); ++roadIndex)
 		{
 			const Json& road = roads[roadIndex];
 			const bool selected = m_selected.type == HandleType::RoadPoint && m_selected.index == static_cast<int>(roadIndex);
-			const ImU32 color = selected ? IM_COL32(255, 255, 0, 255) : StatusColor(road);
-			const Json& points = road.contains("points") ? road["points"] : EmptyArray();
+			const ImU32 color = selected ? IM_COL32(255, 255, 0, 255) : statusColor(road);
+			const Json& points = road.contains("points") ? road["points"] : emptyArray();
 
 			ImVec2 previous;
 			bool hasPrevious = false;
@@ -505,7 +670,7 @@ namespace mmo
 				float x = 0.0f;
 				float z = 0.0f;
 				ImVec2 screen;
-				if (!ReadPoint(points[pointIndex], x, z) || !project(x, GroundHeight(x, z) + 0.5f, z, screen))
+				if (!readPoint(points[pointIndex], x, z) || !project(x, GroundHeight(x, z) + 0.5f, z, screen))
 				{
 					hasPrevious = false;
 					continue;
@@ -528,19 +693,19 @@ namespace mmo
 			}
 		}
 
-		const Json& pois = m_atlas.contains("pois") ? m_atlas["pois"] : EmptyArray();
+		const Json& pois = m_atlas.contains("pois") ? m_atlas["pois"] : emptyArray();
 		for (size_t poiIndex = 0; poiIndex < pois.size(); ++poiIndex)
 		{
 			const Json& poi = pois[poiIndex];
 			float cx = 0.0f;
 			float cz = 0.0f;
-			if (!ReadPoint(poi.contains("center") ? poi["center"] : EmptyArray(), cx, cz))
+			if (!readPoint(poi.contains("center") ? poi["center"] : emptyArray(), cx, cz))
 			{
 				continue;
 			}
 
 			const bool selected = m_selected.type == HandleType::Poi && m_selected.index == static_cast<int>(poiIndex);
-			const ImU32 color = selected ? IM_COL32(255, 255, 0, 255) : StatusColor(poi);
+			const ImU32 color = selected ? IM_COL32(255, 255, 0, 255) : statusColor(poi);
 
 			// Outline on the ground: a sampled circle for radius places, the polygon otherwise.
 			std::vector<ImVec2> outline;
@@ -566,7 +731,7 @@ namespace mmo
 					float x = 0.0f;
 					float z = 0.0f;
 					ImVec2 screen;
-					if (ReadPoint(point, x, z) && project(x, GroundHeight(x, z) + 0.3f, z, screen))
+					if (readPoint(point, x, z) && project(x, GroundHeight(x, z) + 0.3f, z, screen))
 					{
 						outline.push_back(screen);
 					}
@@ -608,7 +773,7 @@ namespace mmo
 	{
 		bool changed = false;
 		ImGui::TextDisabled("id: %s", poi.value("id", String()).c_str());
-		changed |= EditText(poi, "name", "Name", false, true);
+		changed |= editText(poi, "name", "Name", false, true);
 
 		const String kind = poi.value("kind", String());
 		int kindIndex = 0;
@@ -645,16 +810,16 @@ namespace mmo
 			float radius = poi["radius"].get<float>();
 			if (ImGui::DragFloat("Radius (m)", &radius, 0.5f, 1.0f, 2000.0f, "%.1f"))
 			{
-				poi["radius"] = Round1(radius);
+				poi["radius"] = round1(radius);
 				changed = true;
 			}
 		}
 
-		changed |= EditLevels(poi);
-		changed |= EditText(poi, "faction", "Faction", false, false);
-		changed |= EditText(poi, "description", "Description", true, false);
-		changed |= EditText(poi, "notes", "Notes", true, false);
-		changed |= DrawConfirmAndStatus(poi);
+		changed |= editLevels(poi);
+		changed |= editText(poi, "faction", "Faction", false, false);
+		changed |= editText(poi, "description", "Description", true, false);
+		changed |= editText(poi, "notes", "Notes", true, false);
+		changed |= drawConfirmAndStatus(poi);
 
 		if (ImGui::Button("Delete place"))
 		{
@@ -670,7 +835,7 @@ namespace mmo
 	{
 		bool changed = false;
 		ImGui::TextDisabled("id: %s", road.value("id", String()).c_str());
-		changed |= EditText(road, "name", "Name", false, true);
+		changed |= editText(road, "name", "Name", false, true);
 
 		if (!road.contains("points") || !road["points"].is_array())
 		{
@@ -686,14 +851,14 @@ namespace mmo
 			float z = 0.0f;
 			float px = 0.0f;
 			float pz = 0.0f;
-			ReadPoint(points.back(), x, z);
-			if (points.size() > 1 && ReadPoint(points[points.size() - 2], px, pz))
+			readPoint(points.back(), x, z);
+			if (points.size() > 1 && readPoint(points[points.size() - 2], px, pz))
 			{
-				points.push_back(MakePoint(x + (x - px) * 0.5f, z + (z - pz) * 0.5f));
+				points.push_back(makePoint(x + (x - px) * 0.5f, z + (z - pz) * 0.5f));
 			}
 			else
 			{
-				points.push_back(MakePoint(x + 20.0f, z));
+				points.push_back(makePoint(x + 20.0f, z));
 			}
 
 			changed = true;
@@ -706,8 +871,8 @@ namespace mmo
 			changed = true;
 		}
 
-		changed |= EditText(road, "notes", "Notes", true, false);
-		changed |= DrawConfirmAndStatus(road);
+		changed |= editText(road, "notes", "Notes", true, false);
+		changed |= drawConfirmAndStatus(road);
 
 		if (ImGui::Button("Delete road"))
 		{
@@ -748,12 +913,12 @@ namespace mmo
 					const String sectionName = section;
 					float x = 0.0f;
 					float z = 0.0f;
-					if (sectionName == "pois" && ReadPoint(entry.contains("center") ? entry["center"] : EmptyArray(), x, z))
+					if (sectionName == "pois" && readPoint(entry.contains("center") ? entry["center"] : emptyArray(), x, z))
 					{
 						m_selected = Handle{ HandleType::Poi, static_cast<int>(i), -1 };
 						m_worldEditor.FocusWorldPosition(Vector3(x, GroundHeight(x, z), z));
 					}
-					else if (sectionName == "roads" && entry.contains("points") && !entry["points"].empty() && ReadPoint(entry["points"][0], x, z))
+					else if (sectionName == "roads" && entry.contains("points") && !entry["points"].empty() && readPoint(entry["points"][0], x, z))
 					{
 						m_selected = Handle{ HandleType::RoadPoint, static_cast<int>(i), 0 };
 						m_worldEditor.FocusWorldPosition(Vector3(x, GroundHeight(x, z), z));
@@ -815,9 +980,49 @@ namespace mmo
 		}
 
 		ImGui::SameLine();
-		if (ImGui::Button("Reload"))
+		if (!m_confirmReload)
 		{
-			Load();
+			if (ImGui::Button("Reload"))
+			{
+				if (m_dirty)
+				{
+					m_confirmReload = true;
+				}
+				else
+				{
+					Load();
+				}
+			}
+		}
+		else
+		{
+			if (ImGui::Button("Discard my changes and reload"))
+			{
+				Load();
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Keep editing"))
+			{
+				m_confirmReload = false;
+			}
+		}
+
+		if (!m_saveError.empty())
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 80, 80, 255));
+			ImGui::TextWrapped("%s", m_saveError.c_str());
+			ImGui::PopStyleColor();
+			if (ImGui::Button("Overwrite with my version"))
+			{
+				Save(true);
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Discard mine, load theirs"))
+			{
+				Load();
+			}
 		}
 
 		if (ImGui::CollapsingHeader("Needs your input", ImGuiTreeNodeFlags_DefaultOpen))

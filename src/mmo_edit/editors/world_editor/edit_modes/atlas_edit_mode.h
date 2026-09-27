@@ -90,8 +90,14 @@ namespace mmo
 		/// @brief (Re)loads the atlas file of the current map. Returns false and sets m_loadError on failure.
 		bool Load();
 
-		/// @brief Writes the atlas file. Returns false if nothing was loaded or the write failed.
-		bool Save();
+		/// @brief Writes the atlas file. Refuses (and sets m_saveError) when the file changed on disk
+		///        since it was loaded, because agents edit the same file as text.
+		/// @param overwrite Write even if the file changed on disk (the user chose to keep their edits).
+		/// @return false if nothing was loaded, the file changed on disk, or the write failed.
+		bool Save(bool overwrite = false);
+
+		/// @brief Last write time of the current atlas file, or the minimum value if it does not exist.
+		[[nodiscard]] std::filesystem::file_time_type GetFileTime() const;
 
 		/// @brief Path of a map's atlas file.
 		[[nodiscard]] std::filesystem::path GetAtlasPath(uint32 mapId) const;
@@ -129,7 +135,12 @@ namespace mmo
 		nlohmann::ordered_json m_atlas;
 		uint32 m_loadedMapId = std::numeric_limits<uint32>::max();
 		String m_loadError;
+		String m_saveError;
+		std::filesystem::file_time_type m_loadedFileTime = std::filesystem::file_time_type::min();
 		bool m_dirty = false;
+		bool m_confirmReload = false;
+		float m_dragOffsetX = 0.0f;
+		float m_dragOffsetZ = 0.0f;
 		bool m_placing = false;
 		int m_placeKind = 0;
 		Handle m_selected;
