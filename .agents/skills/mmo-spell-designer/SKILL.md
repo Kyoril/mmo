@@ -1,6 +1,6 @@
 ---
 name: mmo-spell-designer
-description: Inspects, designs, validates, exports, and applies MMO spell data for F:\\mmo using the live protobuf project files. Use when creating a new spell, editing an existing spell, reviewing aura or proc behavior, checking race or class restrictions, or tracing spell dependencies such as items, visualizations, categories, proficiencies, and starting spell sources.
+description: Inspects, designs, validates, exports, and applies MMO spell data for this repository using the live protobuf project files. Use when creating a new spell, editing an existing spell, reviewing aura or proc behavior, checking race or class restrictions, or tracing spell dependencies such as items, visualizations, categories, proficiencies, and starting spell sources.
 ---
 
 <objective>

@@ -31,7 +31,7 @@ class SkillHygieneTests(unittest.TestCase):
 		offenders = []
 		for path in skill_text_files():
 			text = path.read_text(encoding="utf-8", errors="replace")
-			if re.search(r"F:[\\/]mmo", text):
+			if re.search(r"F:[\\/]+mmo", text):
 				offenders.append(str(path.relative_to(REPO)))
 		self.assertEqual(offenders, [], "skills must not hardcode F:\\mmo; derive the repo root instead")
 
