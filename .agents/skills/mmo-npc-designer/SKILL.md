@@ -17,6 +17,35 @@ When a creature needs new active abilities, passives, proc auras, or trainer-tau
 Default to the stat-based creature system unless the request is explicitly cloning legacy behavior. Most live units in this repository already use `useStatBasedSystem = true`.
 </essential_principles>
 
+<world_aware_design>
+Design against the real world, never in a vacuum. Before designing new content:
+
+1. Read `docs/world/bible.md`: identity and tone, the geography section of the target zone, named
+   characters, the naming guide and the creatures section. Reuse established characters and places; never
+   contradict an [E] statement, and ask the user about anything marked [?].
+2. Look up the target zone and places in `data/world/atlas/map_<id>.json`. Do not invent a location
+   that is not in the atlas. If the content needs a new place, add it to the atlas as a `placeholder`
+   POI with an `ask` for the user (source `agent`) and say so in the review packet. Only the user
+   promotes anything to `canon`.
+3. Render the area and look at it before choosing positions (north is up = -Z, as on the minimap):
+   `python tools/world/render_map.py --map 0 --zone "<Zone>" --dump-state generated/world/review/<slug>/before.json --out generated/world/review/<slug>/before.png`
+   For a single point use `cd tools/world; python -m worldkit query --map 0 --at X Z`
+   (height, slope, water, holes, terrain kind, nearby props, containing places, placeable).
+4. Place spawns like a level designer: packs of 3-6 scattered irregularly around a place's features
+   (never on a grid), a mix of stationary and random movement, a few patrols along roads, varied
+   respawn delays, spawn names `<Place> - <Unit name> NN` using the atlas place name. The validator
+   runs the world placement lint on every draft and fails on new placement errors (buried,
+   floating, deep water, cliffs, terrain edge); check drafts early with
+   `python tools/world/lint.py --map 0 --draft <draft.json>`.
+5. After applying, run `python tools/world/report.py --map 0` and `python tools/world/lint.py --map 0`
+   (no new errors allowed) and render the after-map with
+   `--diff generated/world/review/<slug>/before.json`. Hand the user a review packet in
+   `generated/world/review/<slug>/`: `README.md` (what changed and why, open questions), the
+   before/after images, and the report output.
+
+See `tools/world/README.md` for every world tool.
+</world_aware_design>
+
 <objective>
 Create or edit MMO creatures and NPCs as data instead of code. This skill is designed for the actual creature pipeline in this repository: `units.data` for the base unit row, `unit_loot.data` for drops, `vendors.data` and `trainers.data` for services, `gossip_menus.data` plus `conditions.data` and `triggers.data` for interaction logic, `maps.data` for spawns, and `faction_templates.data` for hostility and friendliness.
 

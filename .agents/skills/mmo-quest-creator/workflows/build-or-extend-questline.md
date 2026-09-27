@@ -7,6 +7,8 @@ Read these reference files now:
 </required_reading>
 
 <process>
+0. Follow SKILL.md <world_aware_design>: bible, atlas, before-render. Plan the questline on the map
+   (hub, objective places, flow arrows) and include that plan in the review packet before applying.
 1. Map the chain before editing:
    - entry quest
    - follow-up quests

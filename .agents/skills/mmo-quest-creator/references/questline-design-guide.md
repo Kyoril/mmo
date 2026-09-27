@@ -1,3 +1,6 @@
+> Structural background only (a WoW TBC case study). For Alestia's tone, names, places and rules,
+> `docs/world/bible.md` and the atlas win.
+
 <overview>
 Design guidance for building WoW-quality zones and questlines with this engine's quest system.
 Derived from an analysis of all 64 TBC Ghostlands quests (the reference zone for hub-driven

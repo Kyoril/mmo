@@ -146,6 +146,20 @@ class BaselineTests(unittest.TestCase):
 			self.assertEqual(json.loads(path.read_text())["version"], 1)
 
 
+class SkillCheckTests(unittest.TestCase):
+	def test_npc_draft_on_real_map(self):
+		from worldkit.skill_checks import npc_draft_findings
+		doc = {"unit": {"id": 999001, "name": "Test Rat", "minlevel": 5, "maxlevel": 6}, "spawns": [
+			{"map_id": 0, "spawn": {"unitentry": 999001, "name": "Bog Rat", "positionx": -330.0, "positiony": -500.0, "positionz": 230.0}}]}
+		errors, warnings = npc_draft_findings(doc)
+		self.assertTrue(any("below the ground" in e for e in errors), errors)
+		self.assertTrue(any("spawn name" in w for w in warnings), warnings)
+
+	def test_quest_draft_without_level_is_quiet(self):
+		from worldkit.skill_checks import quest_draft_warnings
+		self.assertEqual(quest_draft_warnings({"quest": {"id": 1}}), [])
+
+
 class GameDataTests(unittest.TestCase):
 	def test_loads_live_data(self):
 		data = load_game_data()
