@@ -155,6 +155,14 @@ class SkillCheckTests(unittest.TestCase):
 		self.assertTrue(any("below the ground" in e for e in errors), errors)
 		self.assertTrue(any("spawn name" in w for w in warnings), warnings)
 
+	def test_instance_maps_are_not_terrain_linted(self):
+		from worldkit.skill_checks import npc_draft_findings
+		doc = {"unit": {"id": 999002, "minlevel": 11, "maxlevel": 11}, "spawns": [
+			{"map_id": 1, "spawn": {"unitentry": 999002, "name": "Crypt - Test 01", "positionx": -24.0, "positiony": 0.0, "positionz": 0.0}}]}
+		errors, warnings = npc_draft_findings(doc)
+		self.assertEqual(errors, [])
+		self.assertTrue(any("instance map" in w for w in warnings), warnings)
+
 	def test_quest_draft_without_level_is_quiet(self):
 		from worldkit.skill_checks import quest_draft_warnings
 		self.assertEqual(quest_draft_warnings({"quest": {"id": 1}}), [])

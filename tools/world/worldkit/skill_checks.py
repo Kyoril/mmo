@@ -14,6 +14,7 @@ from .lint import entry_names, lint_records, naming_violations
 from .snapshot import NoTerrainError
 from .spawns import records_from_npc_draft, unit_spawn_records
 
+MAP_GLOBAL = 0            # proto MapEntry.MapInstanceType.GLOBAL
 _MAPS: dict[int, tuple] = {}
 
 
@@ -34,9 +35,14 @@ def npc_draft_findings(doc: dict) -> tuple[list[str], list[str]]:
     unit = doc.get("unit") or {}
     for map_id in sorted({r.map_id for r in records}):
         try:
-            data, _, query = _map(map_id)
+            data, map_entry, query = _map(map_id)
         except (NoTerrainError, SystemExit) as exc:
             warnings.append(f"world placement checks skipped for map {map_id}: {exc}")
+            continue
+        if map_entry.instancetype != MAP_GLOBAL:
+            # Instances (dungeons, raids, arenas) are world-model interiors: their floors are not the
+            # terrain, so terrain heights say nothing about a spawn there (same scope as the audit).
+            warnings.append(f"world placement checks skipped for map {map_id}: instance map (spawns stand on world-model floors)")
             continue
         levels = data.unit_levels()
         names = entry_names(data)
