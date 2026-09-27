@@ -73,6 +73,10 @@ namespace mmo
 		///        Does nothing if the selection is empty.
 		virtual void FocusSelection() = 0;
 
+		/// @brief Moves the camera to focus on a world position (e.g. a place picked from a list).
+		/// @param position The world position to focus.
+		virtual void FocusWorldPosition(const Vector3& position) = 0;
+
 		virtual void AddAreaTrigger(proto::AreaTriggerEntry& trigger, bool select) = 0;
 
 		virtual void RemoveAllAreaTriggers() = 0;

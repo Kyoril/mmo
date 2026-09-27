@@ -41,6 +41,7 @@
 #include "edit_modes/sky_edit_mode.h"
 #include "edit_modes/area_trigger_edit_mode.h"
 #include "edit_modes/fog_volume_edit_mode.h"
+#include "edit_modes/atlas_edit_mode.h"
 #include "edit_modes/water_edit_mode.h"
 #include "edit_modes/foliage_edit_mode.h"
 #include "scene_graph/instanced_foliage.h"
@@ -389,6 +390,9 @@ namespace mmo
 
 		void FocusSelection() override;
 
+		/// @copydoc IWorldEditor::FocusWorldPosition
+		void FocusWorldPosition(const Vector3& position) override;
+
 		void AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select = true) override;
 
 		void RemoveAllAreaTriggers() override;
@@ -608,6 +612,7 @@ namespace mmo
 		std::unique_ptr<SkyEditMode> m_skyEditMode;
 		std::unique_ptr<AreaTriggerEditMode> m_areaTriggerEditMode;
 		std::unique_ptr<FogVolumeEditMode> m_fogVolumeEditMode;
+		std::unique_ptr<AtlasEditMode> m_atlasEditMode;
 		std::unique_ptr<WaterEditMode> m_waterEditMode;
 		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
 		std::unique_ptr<SkyComponent> m_skyComponent;

@@ -378,6 +378,8 @@ namespace mmo
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_areaTriggerEditMode = std::make_unique<AreaTriggerEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().areaTriggers);
 		m_fogVolumeEditMode = std::make_unique<FogVolumeEditMode>(*this);
+		m_atlasEditMode = std::make_unique<AtlasEditMode>(*this, std::filesystem::path(m_editor.GetProject().getLastPath()),
+			[this]() -> const proto::MapEntry* { return m_mapEntry; });
 		m_waterEditMode = std::make_unique<WaterEditMode>(*this, *m_terrain, *m_camera);
 		m_terrainEditMode->SetWaterEditMode(m_waterEditMode.get());
 
@@ -610,6 +612,7 @@ namespace mmo
 			m_spawnEditMode.get(),
 			m_areaTriggerEditMode.get(),
 			m_fogVolumeEditMode.get(),
+			m_atlasEditMode.get(),
 			m_navigationEditMode.get(),
 			m_skyEditMode.get()};
 		m_detailsPanel->Draw(
@@ -874,7 +877,8 @@ namespace mmo
 			const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
 			// Skip camera rotation when the spawn editor is actively dragging a waypoint.
-			const bool isDraggingWaypoint = (m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsDraggingWaypoint());
+			const bool isDraggingWaypoint = (m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsDraggingWaypoint()) ||
+				(m_editMode == m_atlasEditMode.get() && m_atlasEditMode->IsDragging());
 
 			// TODO: Move this into edit modes handling of OnMouseMoved
 			if (m_rightButtonPressed || (m_leftButtonPressed && !isDraggingWaypoint && m_editMode != m_foliageEditMode.get() && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
@@ -1782,6 +1786,12 @@ namespace mmo
 
 		m_selection.GetSelectedObjects().back()->Visit(extractor);
 		return extractor.entry;
+	}
+
+	void WorldEditorInstance::FocusWorldPosition(const Vector3& position)
+	{
+		m_cameraAnchor->SetPosition(position);
+		m_cameraVelocity = Vector3::Zero;
 	}
 
 	void WorldEditorInstance::FocusSelection()
