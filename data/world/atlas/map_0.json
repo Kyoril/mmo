@@ -1,0 +1,535 @@
+{
+  "map": 0,
+  "version": 1,
+  "zones": [
+    {
+      "areaId": 1,
+      "name": "Falwyn Forest",
+      "levelMin": 7,
+      "levelMax": 10,
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 2,
+      "name": "Oakenshire",
+      "levelMin": 1,
+      "levelMax": 10,
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 8,
+      "name": "Briarwatch March",
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 9,
+      "name": "Thalrics Camp",
+      "levelMin": 4,
+      "levelMax": 7,
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 10,
+      "name": "Ruined Cottages",
+      "levelMin": 7,
+      "levelMax": 7,
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 11,
+      "name": "Ruined Watchtower",
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 12,
+      "name": "Deepwood Fringe",
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 13,
+      "name": "Marsh Edge",
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    }
+  ],
+  "pois": [
+    {
+      "id": "barrowfield",
+      "name": "Barrowfield",
+      "kind": "hub",
+      "center": [
+        -474.8,
+        227.1
+      ],
+      "radius": 85.0,
+      "areaId": 1,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "barrowfront",
+      "name": "Barrowfront",
+      "kind": "camp",
+      "center": [
+        -412.4,
+        201.6
+      ],
+      "radius": 50.0,
+      "areaId": 1,
+      "levelMin": 8,
+      "levelMax": 9,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "barrowfront_camp",
+      "name": "Barrowfront Camp",
+      "kind": "hub",
+      "center": [
+        -436.1,
+        267.0
+      ],
+      "radius": 25.0,
+      "areaId": 1,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "briarwatch",
+      "name": "Briarwatch",
+      "kind": "camp",
+      "center": [
+        -122.8,
+        435.0
+      ],
+      "radius": 50.0,
+      "areaId": 8,
+      "levelMin": 5,
+      "levelMax": 6,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "briarwatch_camp",
+      "name": "Briarwatch Camp",
+      "kind": "hub",
+      "center": [
+        -60.0,
+        517.7
+      ],
+      "radius": 30.0,
+      "areaId": 9,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "briarwatch_west_gate",
+      "name": "Briarwatch West Gate",
+      "kind": "hub",
+      "center": [
+        101.5,
+        500.5
+      ],
+      "radius": 20.0,
+      "areaId": 2,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "kingsroad",
+      "name": "Kingsroad",
+      "kind": "camp",
+      "center": [
+        -278.2,
+        412.8
+      ],
+      "radius": 45.0,
+      "areaId": 8,
+      "levelMin": 6,
+      "levelMax": 7,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "kingsroad_waypost",
+      "name": "Kingsroad Waypost",
+      "kind": "hub",
+      "center": [
+        -262.0,
+        405.0
+      ],
+      "radius": 20.0,
+      "areaId": 10,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "mirewater",
+      "name": "Mirewater",
+      "kind": "camp",
+      "center": [
+        -320.1,
+        247.9
+      ],
+      "radius": 95.0,
+      "areaId": 1,
+      "levelMin": 7,
+      "levelMax": 8,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "mirewater_camp",
+      "name": "Mirewater Camp",
+      "kind": "hub",
+      "center": [
+        -330.0,
+        230.0
+      ],
+      "radius": 20.0,
+      "areaId": 1,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "oakenshire_west_gate",
+      "name": "Oakenshire West Gate",
+      "kind": "hub",
+      "center": [
+        121.5,
+        509.5
+      ],
+      "radius": 20.0,
+      "areaId": 2,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "forest_camp",
+      "name": "Forest Camp",
+      "kind": "hub",
+      "center": [
+        301.5,
+        550.1
+      ],
+      "radius": 35.0,
+      "status": "placeholder",
+      "ask": "The camp where the human story begins (formal name not settled). Check position and radius, rename if you like, confirm. Anchored on: Farmer Haldor, Guard Emrik, Healer Mirenna.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "haven",
+      "name": "Haven",
+      "kind": "hub",
+      "center": [
+        45.8,
+        -48.2
+      ],
+      "radius": 30.0,
+      "status": "placeholder",
+      "ask": "Haven, the walled town (~level 10 hub). Drag this pin to where Haven is or should be built and confirm; the road from Oakenshire is meant to be 500-1000 m long. Anchored on: Armsmaster Theobald Kerrin, Sergeant Bram Halford. Also found elsewhere: Baldric Steelheart (338, 534).",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "dungeon_entrance",
+      "name": "Dungeon Entrance",
+      "kind": "dungeon_entrance",
+      "center": [
+        -46.3,
+        422.9
+      ],
+      "radius": 30.0,
+      "status": "placeholder",
+      "ask": "PARKED (position unknown). Where is the group dungeon beyond the forest line entered? Drag and confirm, or delete the pin if still undecided.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "oakenshire_hub",
+      "name": "Oakenshire hub",
+      "kind": "hub",
+      "center": [
+        341.8,
+        546.5
+      ],
+      "radius": 25.0,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "hub_near_lina_groveroot",
+      "name": "Hub near Lina Groveroot",
+      "kind": "hub",
+      "center": [
+        148.7,
+        509.4
+      ],
+      "radius": 25.0,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "hub_near_old_harbin",
+      "name": "Hub near Old Harbin",
+      "kind": "hub",
+      "center": [
+        265.2,
+        612.7
+      ],
+      "radius": 25.0,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "falwyn_forest_hub",
+      "name": "Falwyn Forest hub",
+      "kind": "hub",
+      "center": [
+        -2.6,
+        21.5
+      ],
+      "radius": 35.0,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "forest_bandit_grounds",
+      "name": "Forest Bandit grounds",
+      "kind": "camp",
+      "center": [
+        246.6,
+        750.5
+      ],
+      "radius": 70.0,
+      "levelMin": 1,
+      "levelMax": 4,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "young_forest_boar_grounds",
+      "name": "Young Forest Boar grounds",
+      "kind": "camp",
+      "center": [
+        232.6,
+        653.6
+      ],
+      "radius": 45.0,
+      "levelMin": 1,
+      "levelMax": 2,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "forest_boar_grounds",
+      "name": "Forest Boar grounds",
+      "kind": "camp",
+      "center": [
+        381.9,
+        711.5
+      ],
+      "radius": 60.0,
+      "levelMin": 1,
+      "levelMax": 4,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "forest_boar_grounds_378_647",
+      "name": "Forest Boar grounds (378, 647)",
+      "kind": "camp",
+      "center": [
+        378.2,
+        647.3
+      ],
+      "radius": 30.0,
+      "levelMin": 1,
+      "levelMax": 4,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "forest_bandit_grounds_101_137",
+      "name": "Forest Bandit grounds (-101, 137)",
+      "kind": "camp",
+      "center": [
+        -101.1,
+        137.3
+      ],
+      "radius": 60.0,
+      "levelMin": 3,
+      "levelMax": 4,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "young_forest_wolf_grounds",
+      "name": "Young Forest Wolf grounds",
+      "kind": "camp",
+      "center": [
+        2.3,
+        538.2
+      ],
+      "radius": 65.0,
+      "levelMin": 3,
+      "levelMax": 4,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "young_forest_wolf_grounds_12_458",
+      "name": "Young Forest Wolf grounds (12, 458)",
+      "kind": "camp",
+      "center": [
+        12.4,
+        458.4
+      ],
+      "radius": 50.0,
+      "levelMin": 3,
+      "levelMax": 4,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "forest_wolf_grounds",
+      "name": "Forest Wolf grounds",
+      "kind": "camp",
+      "center": [
+        -202.3,
+        337.3
+      ],
+      "radius": 80.0,
+      "levelMin": 3,
+      "levelMax": 8,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "kingsroad_cutthroat_grounds",
+      "name": "Kingsroad Cutthroat grounds",
+      "kind": "camp",
+      "center": [
+        -349.0,
+        371.0
+      ],
+      "radius": 40.0,
+      "levelMin": 6,
+      "levelMax": 7,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "props_near_93_538",
+      "name": "Props near (93, 538)",
+      "kind": "landmark",
+      "center": [
+        93.2,
+        537.6
+      ],
+      "radius": 35.0,
+      "status": "placeholder",
+      "ask": "What is this place? Name it, pick its kind and confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "props_near_98_465",
+      "name": "Props near (98, 465)",
+      "kind": "landmark",
+      "center": [
+        97.6,
+        465.0
+      ],
+      "radius": 40.0,
+      "status": "placeholder",
+      "ask": "What is this place? Name it, pick its kind and confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "props_near_226_543",
+      "name": "Props near (226, 543)",
+      "kind": "landmark",
+      "center": [
+        226.0,
+        543.2
+      ],
+      "radius": 70.0,
+      "status": "placeholder",
+      "ask": "What is this place? Name it, pick its kind and confirm.",
+      "source": "agent-bootstrap"
+    }
+  ],
+  "roads": [
+    {
+      "id": "westroad",
+      "name": "Westroad",
+      "points": [
+        [
+          341.8,
+          546.5
+        ],
+        [
+          41.8,
+          546.5
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Drag the start and end of the Westroad, add points where it bends, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "northroad",
+      "name": "Northroad",
+      "points": [
+        [
+          341.8,
+          546.5
+        ],
+        [
+          341.8,
+          846.5
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Drag the start and end of the Northroad, add points where it bends, then confirm.",
+      "source": "agent-bootstrap"
+    }
+  ]
+}
