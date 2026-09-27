@@ -60,6 +60,19 @@ class ReachabilityTests(unittest.TestCase):
 		self.assertIn(("auto_rewarded", "error"), self.rules(flags=0x20))
 		self.assertIn(("no_turn_in", "error"), self.rules(with_ender=False))
 
+	def test_trigger_activated_and_summoned_sources(self):
+		data, map_entry = build(target_active=False)
+		map_entry.unitspawns[1].name = "Marsh Ambusher 01"
+		trigger = data.modules["triggers"].TriggerEntry(id=1, name="Spawn ambush")
+		trigger.actions.add(action=4, targetname="Marsh Ambusher 01", data=[1])
+		data.triggers = {1: trigger}
+		self.assertEqual({f.rule for f in check_reachability(data, map_entry)}, set())
+		data, map_entry = build(target_active=False)
+		summon = data.modules["triggers"].TriggerEntry(id=2, name="Boss adds")
+		summon.actions.add(action=25, data=[2])
+		data.triggers = {2: summon}
+		self.assertEqual({f.rule for f in check_reachability(data, map_entry)}, set())
+
 	def test_quest_links(self):
 		data, map_entry = build()
 		self.assertEqual(quest_links(data, map_entry), [(10, (0.0, 0.0), (100.0, 0.0))])
