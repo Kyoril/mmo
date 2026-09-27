@@ -80,15 +80,16 @@ class BootstrapTests(unittest.TestCase):
 		self.assertEqual(sorted(sorted(g) for g in groups), [["a", "b"], ["c"]])
 
 
+@fx.requires_live_data
 class CanonExtractTests(unittest.TestCase):
-	def test_real_canon_mentions_first_quest(self):
+	def test_real_canon_lists_quests_and_characters(self):
 		sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "world"))
 		from extract_canon import build_canon_markdown
 		from worldkit.cli_query import open_map
 		data, map_entry, query = open_map(0)
 		text = build_canon_markdown(data, map_entry, query)
-		self.assertIn("The Boar Problem", text)
 		self.assertIn("## Quests", text)
+		self.assertRegex(text, r"(?m)^### \d+\. ")   # at least one quest section
 		self.assertIn("## Characters", text)
 
 

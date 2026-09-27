@@ -83,6 +83,8 @@ def main(argv=None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
 
+    if args.bbox and (args.bbox[2] <= args.bbox[0] or args.bbox[3] <= args.bbox[1]):
+        parser.error("--bbox needs X0 < X1 and Z0 < Z1")
     layers = frozenset(l.strip() for l in args.layers.split(",") if l.strip())
     unknown = layers - set(ALL_LAYERS)
     if unknown:

@@ -23,7 +23,7 @@ TILE_COUNT = TILES_PER_PAGE * TILES_PER_PAGE
 # Chunks the engine writes. Rendering-only chunks (normals, vertex colours) are recognised and
 # skipped. Anything else is an unknown format change and is rejected, never guessed around.
 _IGNORED = {b"MCNM", b"MCNI", b"MCVS", b"MCSI"}
-_KNOWN = {b"MVER", b"MCMT", b"MCVT", b"MCVI", b"MCLY", b"MCAR", b"MHOL", b"MCWQ"} | _IGNORED
+_KNOWN = {b"MVER", b"MCMT", b"MCVT", b"MCVI", b"MCLY", b"MCAR", b"MHOL", b"MCWQ", b"MLCW"} | _IGNORED
 
 
 @dataclass
@@ -110,7 +110,7 @@ def parse_tile(path: Path) -> TilePage:
 
     for magic, payload in chunks[1:]:
         if magic not in _KNOWN:
-            raise FormatError(f"{source}: unknown chunk {magic!r} (legacy MLCW water or a new engine chunk?)")
+            raise FormatError(f"{source}: unknown chunk {magic!r} (a new engine chunk? teach worldkit/formats/tile.py)")
         if magic in _IGNORED:
             continue
         cur = Cursor(payload, source, magic)
@@ -145,6 +145,24 @@ def parse_tile(path: Path) -> TilePage:
                 if tile_index >= TILE_COUNT:
                     raise FormatError(f"{source}: MHOL tile index {tile_index} out of range")
                 holes[tile_index // TILES_PER_PAGE, tile_index % TILES_PER_PAGE] = mask
+        elif magic == b"MLCW":
+            # Legacy water (Page::ReadMCWLChunk): per-tile flat height and type; the engine converts it
+            # to all 64 quads present with the tile's 9x9 water vertices at that height.
+            count = cur.u16()
+            for _ in range(count):
+                tile_index = cur.u16()
+                height = cur.f32()
+                kind = cur.u8()
+                if tile_index >= TILE_COUNT:
+                    raise FormatError(f"{source}: MLCW tile index {tile_index} out of range")
+                tz, tx = tile_index // TILES_PER_PAGE, tile_index % TILES_PER_PAGE
+                water_mask[tz, tx] = np.uint64(0xFFFFFFFFFFFFFFFF)
+                water_type[tz, tx] = kind
+                water_heights[tz * 8:tz * 8 + 9, tx * 8:tx * 8 + 9] = height
+            if cur.remaining():
+                cur.str16()
+            if not cur.done():
+                raise FormatError(f"{source}: MLCW has {cur.remaining()} trailing bytes")
         elif magic == b"MCWQ":
             count = cur.u16()
             for _ in range(count):

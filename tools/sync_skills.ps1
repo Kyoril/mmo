@@ -82,7 +82,7 @@ foreach ($skill in Get-ChildItem -LiteralPath $source -Directory)
 
 		$a = Get-NormalizedFiles $skill.FullName
 		$b = Get-NormalizedFiles $link
-		$diff = @(@($a.Keys) + @($b.Keys) | Sort-Object -Unique | Where-Object { $a[$_] -ne $b[$_] })
+		$diff = @(@($a.Keys) + @($b.Keys) | Sort-Object -Unique | Where-Object { $a[$_] -cne $b[$_] })
 		if ($diff.Count -gt 0 -and -not $Force)
 		{
 			Write-Host "REFUSING $($skill.Name): the .claude copy differs from the tracked source in:" -ForegroundColor Red

@@ -14,8 +14,10 @@ from .spawns import object_spawn_records, unit_spawn_records
 AUTO_REWARDED = 0x20
 DEFAULT_MAX_DISTANCE = 250.0
 # Trigger actions (src/shared/proto_data/trigger_helper.h) that bring creatures into the world.
-ACTION_SET_SPAWN_STATE = 4     # targetname = spawn name, data[0] = 1 activates the spawner
+ACTION_SET_SPAWN_STATE = 4     # targetname = spawn name, data[0] != 0 activates the spawner
 ACTION_SUMMON_CREATURE = 25    # data[0] = creature entry
+TARGET_NAMED_WORLD_OBJECT = 4  # trigger_action_target (trigger_helper.h)
+TARGET_NAMED_CREATURE = 5
 _SEVERITY_ORDER = {"error": 0, "warning": 1}
 
 
@@ -41,20 +43,26 @@ def _trigger_actions(data, action_type: int):
                 yield action
 
 
-def trigger_activated_spawn_names(data) -> set[str]:
-    """Names of spawners some trigger switches on (inactive in data, active during play)."""
-    return {action.targetname for action in _trigger_actions(data, ACTION_SET_SPAWN_STATE)
-            if action.targetname and len(action.data) and action.data[0] == 1}
+def trigger_activated_spawn_names(data) -> set[tuple[str, str]]:
+    """(kind, name) of spawners some trigger switches on (inactive in data, active during play).
+    Mirrors TriggerHandler::HandleSetSpawnState: any non-zero data[0] activates."""
+    kinds = {TARGET_NAMED_CREATURE: "unit", TARGET_NAMED_WORLD_OBJECT: "object"}
+    return {(kinds[action.target], action.targetname) for action in _trigger_actions(data, ACTION_SET_SPAWN_STATE)
+            if action.target in kinds and action.targetname and len(action.data) and action.data[0] != 0}
 
 
 def trigger_summoned_units(data) -> set[int]:
     return {action.data[0] for action in _trigger_actions(data, ACTION_SUMMON_CREATURE) if len(action.data)}
 
 
-def _active_positions(records, activated_names: frozenset[str] | set[str] = frozenset()) -> dict[int, list[tuple[float, float]]]:
+def _is_live(record, activated: set[tuple[str, str]] | frozenset = frozenset()) -> bool:
+    return record.active or (bool(record.name) and (record.kind, record.name) in activated)
+
+
+def _active_positions(records, activated: set[tuple[str, str]] | frozenset = frozenset()) -> dict[int, list[tuple[float, float]]]:
     positions: dict[int, list[tuple[float, float]]] = {}
     for record in records:
-        if record.active or (record.name and record.name in activated_names):
+        if _is_live(record, activated):
             positions.setdefault(record.entry, []).append((record.x, record.z))
     return positions
 
@@ -69,29 +77,30 @@ def _loot_ids_with_item(loot: dict, item_id: int) -> set[int]:
 
 
 def _unit_loot_ids(unit) -> set[int]:
-    """Loot tables of a creature: the repeated list plus the legacy single field (game_creature_s)."""
-    ids = set(unit.unitlootentries)
-    if unit.unitlootentry:
-        ids.add(unit.unitlootentry)
-    return ids
+    """Loot tables of a creature, as creature_ai_death_state.cpp picks them: the repeated list when
+    it is non-empty, otherwise the legacy single field."""
+    if len(unit.unitlootentries):
+        return set(unit.unitlootentries)
+    return {unit.unitlootentry} if unit.unitlootentry else set()
 
 
 def _object_loot_ids(obj) -> set[int]:
-    """Loot tables of a world object. Like the server (game_world_object_s.cpp), they index unit_loot."""
-    ids = set(obj.objectlootentries)
-    if obj.objectlootentry:
-        ids.add(obj.objectlootentry)
-    return ids
+    """Loot tables of a world object (game_world_object_s.cpp): the repeated list when non-empty,
+    otherwise the legacy single field. Like creature loot, they index unit_loot."""
+    if len(obj.objectlootentries):
+        return set(obj.objectlootentries)
+    return {obj.objectlootentry} if obj.objectlootentry else set()
 
 
 def quest_givers(data, map_entry) -> dict[int, list[tuple[float, float]]]:
     """quest id -> positions of active unit/object spawns on this map that offer it."""
     givers: dict[int, list[tuple[float, float]]] = {}
-    for entry, points in _active_positions(unit_spawn_records(map_entry)).items():
+    activated = trigger_activated_spawn_names(data)
+    for entry, points in _active_positions(unit_spawn_records(map_entry), activated).items():
         unit = data.units.get(entry)
         for quest_id in (unit.quests if unit is not None else []):
             givers.setdefault(quest_id, []).extend(points)
-    for entry, points in _active_positions(object_spawn_records(map_entry)).items():
+    for entry, points in _active_positions(object_spawn_records(map_entry), activated).items():
         obj = data.objects.get(entry)
         for quest_id in (obj.quests if obj is not None else []):
             givers.setdefault(quest_id, []).extend(points)
@@ -113,7 +122,10 @@ def objective_sources(data, map_entry, quest, requirement) -> list[tuple[float, 
     units = _active_positions(unit_spawn_records(map_entry), activated)
     objects = _active_positions(object_spawn_records(map_entry), activated)
     if requirement.creatureid:
-        return list(units.get(requirement.creatureid, []))
+        # Kill credit goes to the unit's killcredit entry when set (game_player_s.cpp).
+        credited = {uid for uid, unit in data.units.items()
+                    if (unit.killcredit or uid) == requirement.creatureid}
+        return [point for uid in credited for point in units.get(uid, [])]
     if requirement.objectid:
         return list(objects.get(requirement.objectid, []))
     if requirement.itemid:
@@ -125,7 +137,7 @@ def objective_sources(data, map_entry, quest, requirement) -> list[tuple[float, 
             if unit is not None and _unit_loot_ids(unit) & loot_ids:
                 sources.extend(points)
         for spawn in map_entry.objectspawns:
-            if not spawn.isactive:
+            if not (spawn.isactive or ("object", spawn.name) in activated):
                 continue
             obj = data.objects.get(spawn.objectentry)
             spawn_loot = {spawn.loot_entry} if spawn.loot_entry else (_object_loot_ids(obj) if obj is not None else set())
@@ -178,7 +190,8 @@ def check_reachability(data, map_entry, max_distance: float = DEFAULT_MAX_DISTAN
             if not sources and any(objective_sources(data, other, quest, requirement)
                                    for other in data.maps.values() if other.id != map_entry.id):
                 continue  # done on another map (e.g. a dungeon); distance is meaningless there
-            if not sources and requirement.creatureid and requirement.creatureid in summoned:
+            if not sources and requirement.creatureid and (requirement.creatureid in summoned or any(
+                    (unit.killcredit or uid) == requirement.creatureid for uid, unit in data.units.items() if uid in summoned)):
                 continue  # summoned by a trigger (boss adds, events); no fixed position to measure
             if not sources:
                 findings.append(Finding("no_active_source", "error", subject, f"{title}: '{label}' has no active source on map {map_entry.id}"))

@@ -130,6 +130,7 @@ class TerrainKindTests(unittest.TestCase):
 			self.assertEqual(len(layers), 4, material)
 
 
+@fx.requires_live_data
 class RealWorldTests(unittest.TestCase):
 	def test_development_world_builds(self):
 		snap = build_snapshot("Development")

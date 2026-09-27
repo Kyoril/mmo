@@ -12,11 +12,23 @@ Importing this module also puts tools/world on sys.path so tests can `import wor
 
 import struct
 import sys
+import unittest
 from pathlib import Path
 
-import numpy as np
+try:
+	import numpy as np
+	import PIL  # noqa: F401
+	import google.protobuf  # noqa: F401
+except ImportError as exc:  # the gate interpreter without tools/world/requirements.txt installed
+	raise unittest.SkipTest(f"worldkit tests need tools/world/requirements.txt ({exc})")
 
 REPO = Path(__file__).resolve().parents[2]
+LIVE_DATA = (REPO / "data" / "client" / "Worlds" / "Development").is_dir() and (REPO / "data" / "editor" / "data" / "units.data").is_file()
+
+
+def requires_live_data(test):
+	"""Skips tests that read the shipped world when the data submodules are not checked out."""
+	return unittest.skipUnless(LIVE_DATA, "data/client and data/editor submodules are not checked out")(test)
 if str(REPO / "tools" / "world") not in sys.path:
 	sys.path.insert(0, str(REPO / "tools" / "world"))
 
@@ -39,11 +51,12 @@ def str8(text: str) -> bytes:
 
 def tile_bytes(
 	outer=None, inner=None, areas=None, materials=None, layers=None,
-	holes=None, water=None, water_heights=None, version=2, extra_chunks=b"",
+	holes=None, water=None, water_heights=None, version=2, extra_chunks=b"", legacy_water=None,
 ) -> bytes:
 	"""Builds a .tile file. Arrays default to a flat page at height 0.
 
-	holes: dict {tile_index: uint64 mask}; water: dict {tile_index: (type, uint64 mask)}.
+	holes: dict {tile_index: uint64 mask}; water: dict {tile_index: (type, uint64 mask)};
+	legacy_water: dict {tile_index: (height, type)} written as the legacy MLCW chunk.
 	"""
 	parts = [chunk(b"MVER", struct.pack("<I", version))]
 	names = materials if materials is not None else [""] * 256
@@ -68,6 +81,10 @@ def tile_bytes(
 		payload += b"".join(struct.pack("<HBQ", k, t, m) for k, (t, m) in sorted(water.items()))
 		payload += wh.astype("<f4").tobytes() + str16("")
 		parts.append(chunk(b"MCWQ", payload))
+	if legacy_water:
+		payload = struct.pack("<H", len(legacy_water))
+		payload += b"".join(struct.pack("<HfB", k, h, t) for k, (h, t) in sorted(legacy_water.items()))
+		parts.append(chunk(b"MLCW", payload))
 	a = np.zeros((16, 16), np.uint32) if areas is None else np.asarray(areas, np.uint32)
 	parts.append(chunk(b"MCAR", a.astype("<u4").tobytes()))
 	return b"".join(parts) + extra_chunks

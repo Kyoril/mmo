@@ -35,8 +35,11 @@ def load_proto_modules(repo: Path = REPO) -> dict:
         scripts = str(skill_scripts(repo))
         if scripts not in sys.path:
             sys.path.insert(0, scripts)
-        from proto_runtime import compile_proto_modules
-        compile_proto_modules(repo)
+        # A skill script that imports worldkit has usually compiled the schemas already; each compile
+        # leaves a temp dir behind, so only compile when the generated modules are not importable.
+        if not all(module in sys.modules for module, _, _ in _CATALOGS.values()):
+            from proto_runtime import compile_proto_modules
+            compile_proto_modules(repo)
         _MODULES[key] = {name: importlib.import_module(module) for name, (module, _, _) in _CATALOGS.items()}
     return _MODULES[key]
 

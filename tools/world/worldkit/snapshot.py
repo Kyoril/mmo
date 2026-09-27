@@ -17,6 +17,7 @@ import numpy as np
 
 from .constants import CELL_SIZE, CELLS_PER_TILE, INNER_PER_PAGE, PAGE_SIZE, PIXELS_PER_PAGE, TILES_PER_PAGE, page_origin
 from .entities import load_entities
+from .formats.chunks import FormatError
 from .formats.hwld import WorldHeader, parse_hwld
 from .formats.tile import parse_tile
 from .formats.wobj import WorldEntity
@@ -100,7 +101,10 @@ def _expand_tiles(values: np.ndarray) -> np.ndarray:
 def _page_files(directory: str, repo: Path) -> list[tuple[Path, int, int]]:
     files = []
     for path in sorted(terrain_dir(directory, repo).glob("*.tile")):
-        page_x, page_z = (int(part) for part in path.stem.split("_", 1))
+        try:
+            page_x, page_z = (int(part) for part in path.stem.split("_", 1))
+        except ValueError as exc:
+            raise FormatError(f"{path}: terrain page file name must be '<page_x>_<page_z>.tile'") from exc
         files.append((path, page_x, page_z))
     return files
 
@@ -166,8 +170,18 @@ def build_snapshot(directory: str, repo: Path = REPO) -> WorldSnapshot:
                          load_entities(directory, repo))
 
 
+def _code_digest() -> str:
+    """Hash of the code that builds snapshots, so a parser fix invalidates old caches by itself."""
+    digest = hashlib.sha1()
+    package = Path(__file__).parent
+    for path in sorted([*package.joinpath("formats").glob("*.py"), package / "snapshot.py", package / "surface.py",
+                        package / "entities.py", package / "constants.py"]):
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 def _fingerprint(directory: str, repo: Path) -> str:
-    digest = hashlib.sha1(f"worldkit-snapshot-v{SNAPSHOT_VERSION}".encode())
+    digest = hashlib.sha1(f"worldkit-snapshot-v{SNAPSHOT_VERSION}-{_code_digest()}".encode())
     sources = sorted(terrain_dir(directory, repo).glob("*.tile")) + sorted(entities_dir(directory, repo).glob("*/*.wobj"))
     hwld = hwld_path(directory, repo)
     if hwld.is_file():

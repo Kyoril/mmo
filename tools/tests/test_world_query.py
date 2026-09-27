@@ -77,6 +77,7 @@ class QueryTests(unittest.TestCase):
 		self.assertEqual(info["entities"][0]["asset"], "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh")
 
 
+@fx.requires_live_data
 class DevelopmentConsistencyTests(unittest.TestCase):
 	"""The fan surface differs from the old bilinear-corner height only where inner vertices were
 	sculpted, so on the real world the two agree closely in the median."""

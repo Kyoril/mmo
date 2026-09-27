@@ -146,6 +146,7 @@ class BaselineTests(unittest.TestCase):
 			self.assertEqual(json.loads(path.read_text())["version"], 1)
 
 
+@world_fixtures.requires_live_data
 class SkillCheckTests(unittest.TestCase):
 	def test_npc_draft_on_real_map(self):
 		from worldkit.skill_checks import npc_draft_findings
@@ -168,6 +169,7 @@ class SkillCheckTests(unittest.TestCase):
 		self.assertEqual(quest_draft_warnings({"quest": {"id": 1}}), [])
 
 
+@world_fixtures.requires_live_data
 class GameDataTests(unittest.TestCase):
 	def test_loads_live_data(self):
 		data = load_game_data()

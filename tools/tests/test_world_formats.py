@@ -87,6 +87,16 @@ class TileParserTests(unittest.TestCase):
 		# inner vertex of the last cell in row 0 averages its corners: (0 + 10 + 0 + 0) / 4
 		self.assertAlmostEqual(float(page.inner[0, 127]), 2.5)
 
+	def test_legacy_water_is_converted_like_the_engine(self):
+		path = write(self.tmp, "32_32.tile", fx.tile_bytes(legacy_water={17: (4.5, 2)}))   # tile tx=1, tz=1
+		page = tile.parse_tile(path)
+		self.assertEqual(int(page.water_mask[1, 1]), 0xFFFFFFFFFFFFFFFF)
+		self.assertEqual(int(page.water_type[1, 1]), 2)
+		self.assertEqual(float(page.water_heights[8, 8]), 4.5)
+		self.assertEqual(float(page.water_heights[16, 16]), 4.5)
+		self.assertEqual(float(page.water_heights[17, 17]), 0.0)
+		self.assertEqual(int(page.water_cells().sum()), 64)
+
 	def test_unknown_chunk_is_rejected(self):
 		path = write(self.tmp, "32_32.tile", fx.tile_bytes(extra_chunks=fx.chunk(b"ZZZZ", b"")))
 		with self.assertRaises(FormatError):
@@ -149,6 +159,7 @@ class HwldParserTests(unittest.TestCase):
 		self.assertEqual(header.mesh_names, ["Models/A.hmsh", "Models/B.hmsh"])
 
 
+@fx.requires_live_data
 class ShippedWorldFilesTests(unittest.TestCase):
 	"""Every shipped world file must parse. This is the drift alarm for engine format changes."""
 

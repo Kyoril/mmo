@@ -44,6 +44,10 @@ def main(argv=None) -> int:
         print(f"skipped map {args.map}: {exc}")
         return 0
 
+    if map_entry.instancetype != 0:
+        print(f"skipped map {args.map}: instance map - spawns stand on world-model floors, which the terrain lint cannot see")
+        return 0
+
     if args.draft:
         doc = json.loads(args.draft.read_text(encoding="utf-8"))
         records = [r for r in records_from_npc_draft(doc) if r.map_id == args.map]
