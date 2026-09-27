@@ -75,6 +75,10 @@ namespace mmo
 
 	void Scene::Clear()
 	{
+		// Debug geometry owns a scene node and a manual render object and destroys them through
+		// the scene, so it has to go while both still exist.
+		m_debugGeometry.reset();
+
 		m_cameras.clear();
 		m_camVisibleObjectsMap.clear();
 		m_entities.clear();
