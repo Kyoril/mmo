@@ -24,6 +24,7 @@ _CATALOGS = {
     "items": ("items_pb2", "Items", "items.data"),
     "unit_loot": ("unit_loot_pb2", "UnitLoot", "unit_loot.data"),
     "object_loot": ("object_loot_pb2", "ObjectLoot", "object_loot.data"),
+    "triggers": ("triggers_pb2", "Triggers", "triggers.data"),
 }
 _MODULES: dict[str, dict] = {}
 
@@ -50,6 +51,7 @@ class GameData:
     items: dict
     unit_loot: dict
     object_loot: dict
+    triggers: dict = field(default_factory=dict)
     modules: dict = field(repr=False, default_factory=dict)
 
     def map_by_directory(self, directory: str):
