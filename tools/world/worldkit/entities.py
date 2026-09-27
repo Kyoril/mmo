@@ -15,9 +15,9 @@ from .formats.wobj import WorldEntity, parse_wobj
 from .paths import REPO, entities_dir
 
 # (substring of the lower-cased asset path, footprint radius in metres at scale 1). First match wins.
+# Building pieces (walls, arches, floors, towers) are deliberately absent: people stand under arches
+# and on floors, and a circle is a poor stand-in for a long thin wall. They count as structures.
 _FOOTPRINTS = (
-    ("/buildings/", 6.0),
-    ("fortress_", 6.0),
     ("tent", 3.0),
     ("wagon", 2.5),
     ("haystack", 1.5),
@@ -46,9 +46,9 @@ def _planar_scale(entity: WorldEntity) -> float:
 
 def footprint_radius(entity: WorldEntity) -> float:
     """Radius (m) around the entity origin in which a spawn would stand inside the mesh."""
-    if entity.kind == "wmo":
-        return 0.0
     asset = _asset(entity)
+    if entity.kind == "wmo" or "/buildings/" in asset:
+        return 0.0
     for needle, radius in _FOOTPRINTS:
         if needle in asset:
             return radius * _planar_scale(entity)

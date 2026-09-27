@@ -105,7 +105,8 @@ class FootprintTests(unittest.TestCase):
 		self.assertEqual(footprint_radius(self.entity("Models/X/Haven_001.hwmo", kind="wmo")), 0.0)
 		self.assertEqual(structure_radius(self.entity("Models/X/Haven_001.hwmo", kind="wmo")), 25.0)
 		self.assertEqual(footprint_radius(self.entity("Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh")), 3.0)
-		self.assertEqual(footprint_radius(self.entity("Models/FalwynPlains/Buildings/Fortress_Wall_01.hmsh", scale=(2.0, 1.0, 1.0))), 12.0)
+		self.assertEqual(footprint_radius(self.entity("Models/FalwynPlains/Props/Furniture/SM_hc_Wagon_Big.hmsh", scale=(2.0, 1.0, 1.0))), 5.0)
+		self.assertEqual(footprint_radius(self.entity("Models/FalwynPlains/Buildings/Fortress_Arch_01.hmsh")), 0.0)
 		self.assertEqual(structure_radius(self.entity("Models/FalwynPlains/Buildings/Floor_01.hmsh")), 8.0)
 		self.assertEqual(structure_radius(self.entity("Models/Trees/Tree_02.hmsh")), 0.0)
 
