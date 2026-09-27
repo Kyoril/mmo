@@ -6876,3 +6876,26 @@ Offer to `/ship` once the user has looked.
   - tolerance-based height consistency test (the fan surface is the correct surface; exact parity with the old bilinear output is impossible where inner vertices are sculpted);
   - new warnings do not fail the audit, only new errors do;
   - baseline file has sections per tool.
+
+---
+
+## Implementation notes (2026-09-27, recorded after execution)
+
+Where the implementation deliberately differs from the listings above, and why:
+
+- **North is −Z.** The client minimap (`src/mmo_client/ui/minimap.cpp`) puts smaller world Z at the top. Renders and the layer preview are therefore north-up with −Z at the top. The Task 12 listing's "image up = +Z" was wrong, and the Northroad stub points to −Z. Checking against the map showed that quests 29, 30, 44, 55 and 56 have north and south swapped in their text (recorded in the bible, section 12).
+- **Loot sources follow the server.** Creatures use `unitlootentries` plus the legacy `unitlootentry`. World objects draw from `unit_loot`: `object_loot.data` is empty and unused (`game_world_object_s.cpp`). Spawners switched on by `SetSpawnState` (action 4) and creatures summoned by `SummonCreature` (action 25) count as objective sources. Objectives on another map (dungeons) are accepted without a distance check.
+- **Lint refinements from real data:**
+  - A spawn over a terrain hole is the warning `over_hole`, and slope and height are skipped there: the hole's floor mesh is the ground (the Oakenshire Inn cellar).
+  - Building pieces (`/buildings/`) are structures, not blocking footprints.
+  - Level bands exempt service NPCs (quest givers and enders, trainers, vendors, gossip) through `GameData.service_units()`.
+  - Unnamed spawns are labelled with their unit or object name.
+- **Bootstrap refinements:**
+  - Spawn-name prefixes equal to a zone name are skipped.
+  - Scattered prefix groups are split into clusters.
+  - Known places anchor on the largest cluster of their NPCs, and the question names any anchors found elsewhere.
+  - Creature clusters are split until they fit a camp (≤ 90 m).
+  - Parked pins sit in the middle of the content.
+- **Renderer default framing** is the content extent (zoned terrain, props, spawns, places); `--full` shows every page.
+- **Terrain kinds:** layer 1 of `Oakenshire_Boars_Enhanced.hmi` is the path paint. It also covers the long western coastal strip, so "path" means trodden dirt. The user has not confirmed this yet.
+- **Baseline:** the Ossuar findings (q58, q61) are deliberately not baselined. The Ossuar spawn is inactive only in the uncommitted `data/editor` working copy.
