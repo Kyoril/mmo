@@ -125,7 +125,7 @@ def load_items(data_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--project-root", default="F:\\mmo")
+    parser.add_argument("--project-root", default=str(Path(__file__).resolve().parents[4]))
     parser.add_argument(
         "--section",
         choices=["all", "classes", "subclasses", "displays", "spells", "items"],

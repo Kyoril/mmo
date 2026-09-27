@@ -1,6 +1,6 @@
 ---
 name: mmo-item-designer
-description: Design balanced MMO game items, generate or edit live protobuf-backed item and item-display data in F:\mmo, and create matching imported HTEX item icons from generated 128x128 PNG art. Use whenever the user asks to create, design, edit, import, or generate any item, weapon, armor piece, shield, accessory, bag, consumable, potion, food, quest item, crafting material, ammunition, or other in-game equipment, including terse requests such as "make me a sword" or "I need a potion".
+description: Design balanced MMO game items, generate or edit live protobuf-backed item and item-display data in this repository, and create matching imported HTEX item icons from generated 128x128 PNG art. Use whenever the user asks to create, design, edit, import, or generate any item, weapon, armor piece, shield, accessory, bag, consumable, potion, food, quest item, crafting material, ammunition, or other in-game equipment, including terse requests such as "make me a sword" or "I need a potion".
 ---
 
 # MMO Item Designer
@@ -15,12 +15,12 @@ Create complete item concepts, JSON drafts when useful, live `items.data` / `ite
 2. Inspect the live project catalogs before selecting class, subclass, display, proficiency, or spell IDs:
 
 ```powershell
-python scripts/inspect_item_catalog.py --project-root F:\mmo --pretty
+python .agents/skills/mmo-item-designer/scripts/inspect_item_catalog.py --pretty
 ```
 
 Use `--section items`, `classes`, `subclasses`, `displays`, or `spells` to narrow output. Treat the repository data as authoritative because IDs may change.
 
-If `python` resolves to an unavailable Windows Store shim, call `codex_app.load_workspace_dependencies` and run the scripts with the returned Python executable.
+If `python` resolves to an unavailable Windows Store shim, run the scripts with `py -3.14` (or the workspace Python your harness provides) instead.
 
 3. Infer reasonable design details from a terse request. Ask a question only when a missing choice would materially change the requested identity or power budget.
 4. Match nearby existing items by type and level when balancing stats, armor, damage, delay, durability, prices, and stack size. Use the balance reference to fill gaps, but prefer live project data when it conflicts with a heuristic.
@@ -28,34 +28,34 @@ If `python` resolves to an unavailable Windows Store shim, call `codex_app.load_
 6. For edits to an existing item, export the closest live row first:
 
 ```powershell
-python scripts/export_item_json.py --project-root F:\mmo --item-id 62 --output F:\mmo\generated\items\rat_meat.json
+python .agents/skills/mmo-item-designer/scripts/export_item_json.py --item-id 62 --output generated\items\rat_meat.json
 ```
 
-7. Write one JSON draft per item under `F:\mmo\generated\items\` unless the user gives another path. Use a lowercase snake-case filename ending in `.json`. Include an optional top-level `item_display` object when the item needs a new or updated display row.
-8. Use the built-in `image_gen` tool to create one square icon proposal per item. Use the bundled reference icons as style references, not edit targets. The final shipped icon must come from `image_gen` output, not from a hand-drawn fallback, procedural placeholder, copied project icon, or any other substitute. Generate at the tool's supported square size, locate the emitted file under the default Codex generated-images directory when needed, then save and normalize it beside the JSON as `<item_name>_icon.png`:
+7. Write one JSON draft per item under `generated\items\` unless the user gives another path. Use a lowercase snake-case filename ending in `.json`. Include an optional top-level `item_display` object when the item needs a new or updated display row.
+8. Use the available image-generation tool (`image_gen` in Codex, the image-generation connector in Claude Code) to create one square icon proposal per item. Use the bundled reference icons as style references, not edit targets. The final shipped icon must come from image-generation output, not from a hand-drawn fallback, procedural placeholder, copied project icon, or any other substitute. Generate at the tool's supported square size, locate the emitted file in the tool's output location when needed, then save and normalize it beside the JSON as `<item_name>_icon.png`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/normalize_item_icon.ps1 -InputPath <generated-square-image> -OutputPath F:\mmo\generated\items\item_name_icon.png
+powershell -ExecutionPolicy Bypass -File .agents/skills/mmo-item-designer/scripts/normalize_item_icon.ps1 -InputPath <generated-square-image> -OutputPath generated\items\item_name_icon.png
 ```
 
 9. Validate every JSON file:
 
 ```powershell
-python scripts/validate_item_json.py F:\mmo\generated\items\item_name.json --project-root F:\mmo
+python .agents/skills/mmo-item-designer/scripts/validate_item_json.py generated\items\item_name.json
 ```
 
 10. Import every finalized PNG into `data/client/Interface/Icons/Items/` as an `.htex` asset using color compression appropriate for UI art. Do not use BC5 for color icons; BC5 is for normal maps. Prefer `DXT1/BC1` for fully opaque icons and `DXT5/BC3` when alpha is actually present:
 
 ```powershell
-python scripts/import_item_icon.py `
-  F:\mmo\generated\items\wolf_meat_icon.png `
-  F:\mmo\data\client\Interface\Icons\Items\wolf_meat_icon.htex
+python .agents/skills/mmo-item-designer/scripts/import_item_icon.py `
+  generated\items\wolf_meat_icon.png `
+  data\client\Interface\Icons\Items\wolf_meat_icon.htex
 ```
 
 11. Apply the validated draft back into live protobuf data so the item exists in the engine, not only as JSON. `apply_item_json.py` creates or updates the linked `ItemDisplayEntry` when the draft includes `item_display`:
 
 ```powershell
-python scripts/apply_item_json.py F:\mmo\generated\items\wolf_meat.json --project-root F:\mmo --backup
+python .agents/skills/mmo-item-designer/scripts/apply_item_json.py generated\items\wolf_meat.json --backup
 ```
 
 12. Verify the final icon dimensions, inspect the imported `.htex` metadata or preview when needed, then re-inspect the resulting item from live data to confirm the assigned item ID, `displayid`, and item-display icon path.
@@ -81,7 +81,7 @@ python scripts/apply_item_json.py F:\mmo\generated\items\wolf_meat.json --projec
 - Generate exactly one distinct icon proposal for each requested item unless the user asks for variants.
 - Keep JSON and icon basenames paired: `item_name.json` and `item_name_icon.png`.
 - Do not reuse an existing project icon as the generated proposal.
-- Do not substitute locally drawn, procedurally generated, or placeholder artwork when `image_gen` persistence is inconvenient. If the `image_gen` result cannot be located or saved correctly, stop and report the blocker instead of fabricating an inferior icon.
+- Do not substitute locally drawn, procedurally generated, or placeholder artwork when image-generation persistence is inconvenient. If the image-generation result cannot be located or saved correctly, stop and report the blocker instead of fabricating an inferior icon.
 - When importing icon assets, preserve the opaque 128x128 result from `normalize_item_icon.ps1` and write the final engine asset as `.htex` under `data/client/Interface/Icons/Items/`.
 - Prefer actual live protobuf application over stopping at a JSON draft unless the user explicitly asks for draft-only output.
 

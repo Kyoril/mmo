@@ -1,6 +1,6 @@
 ---
 name: mmo-quest-creator
-description: Inspects, designs, validates, exports, and applies MMO quest data for F:/mmo using the live protobuf project files. Use when creating or editing single quests, building or extending quest chains, wiring questgivers and turn-in NPCs, authoring exploration or scripted quest flows, balancing quest rewards, or fixing broken quest dependencies.
+description: Inspects, designs, validates, exports, and applies MMO quest data for this repository using the live protobuf project files. Use when creating or editing single quests, building or extending quest chains, wiring questgivers and turn-in NPCs, authoring exploration or scripted quest flows, balancing quest rewards, or fixing broken quest dependencies.
 ---
 
 <essential_principles>
@@ -31,25 +31,25 @@ It also supports the newer quest-system additions in this repository: timed ques
 Inspect a live quest and its dependencies first:
 
 ```powershell
-python .agents/skills/mmo-quest-creator/scripts/inspect_quest_catalog.py --project-root F:/mmo --quest-id 22 --pretty
+python .agents/skills/mmo-quest-creator/scripts/inspect_quest_catalog.py --quest-id 22 --pretty
 ```
 
 Clone an existing quest into an editable JSON draft:
 
 ```powershell
-python .agents/skills/mmo-quest-creator/scripts/export_quest_json.py --project-root F:/mmo --quest-id 22 --output F:/mmo/generated/quests/lessons_in_steel.json
+python .agents/skills/mmo-quest-creator/scripts/export_quest_json.py --quest-id 22 --output generated/quests/lessons_in_steel.json
 ```
 
 Validate the draft against live project data before applying it:
 
 ```powershell
-python .agents/skills/mmo-quest-creator/scripts/validate_quest_json.py F:/mmo/generated/quests/lessons_in_steel.json --project-root F:/mmo
+python .agents/skills/mmo-quest-creator/scripts/validate_quest_json.py generated/quests/lessons_in_steel.json
 ```
 
 Apply the validated draft back into quest, linkage, trigger, and area-trigger data with backups:
 
 ```powershell
-python .agents/skills/mmo-quest-creator/scripts/apply_quest_json.py F:/mmo/generated/quests/lessons_in_steel.json --project-root F:/mmo --backup
+python .agents/skills/mmo-quest-creator/scripts/apply_quest_json.py generated/quests/lessons_in_steel.json --backup
 ```
 </quick_start>
 
@@ -91,7 +91,7 @@ This skill is being used correctly when:
 - The agent inspected live quest, provider, turn-in, item, trigger, and area-trigger data before proposing IDs or flow changes.
 - The quest draft includes provider and ender wiring instead of assuming `quests.data` alone makes the quest available.
 - Exploration and scripted quests are backed by a real completion path that the current runtime executes.
-- The draft respects the current quest runtime constraints, especially the four-objective counter limit and the lack of native object-use counters.
+- The draft respects the current quest runtime constraints, especially the four-objective counter limit, and spell-cast-on-object requirements are credited only through the spell path.
 - Validation passes before any apply step.
 - Supporting NPC, item, and spell dependencies are confirmed from live project data or delegated to the dedicated skills.
 </success_criteria>

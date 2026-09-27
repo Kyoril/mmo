@@ -31,5 +31,5 @@ python tools/particle_gen/inspect_hpar.py data/client/Particles/LevelUp.hpar --c
 that files written before the trailing `mesh_name` field grow by the 2 bytes of an empty
 string. Legacy v1.0 files are read and upgraded to v2.0 on write.
 
-See the `particle-author` skill (`.claude/skills/particle-author/`) for the authoring
+See the `particle-author` skill (`.agents/skills/particle-author/`) for the authoring
 workflow, the field reference, effect recipes, and how effects get triggered in game.

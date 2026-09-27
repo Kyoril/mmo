@@ -5,7 +5,7 @@ description: Inspect, preview, describe, create, or modify this MMO project's HT
 
 # MMO Material Editor
 
-Use the live serializers and node declarations in `F:/mmo` as the source of truth. Do not infer binary layouts from filenames or modify asset bytes with ad hoc offsets.
+Use the live serializers and node declarations in this repository as the source of truth. Do not infer binary layouts from filenames or modify asset bytes with ad hoc offsets.
 
 ## Choose The Operation
 

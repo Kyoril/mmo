@@ -57,7 +57,7 @@ This makes exported drafts safe to edit and reapply without having to manually c
 <practical_guidance>
 - Export a live quest first whenever possible.
 - Keep only one quest per file.
-- Store drafts under `F:/mmo/generated/quests/` unless the user asked for another location.
+- Store drafts under `generated/quests/` unless the user asked for another location.
 - Use lowercase snake-case filenames ending in `.json`.
 - Prefer attached trigger or area-trigger rows only when the quest change also owns those rows. If a trigger is shared by many content rows, inspect it first before editing it in a quest draft.
 </practical_guidance>

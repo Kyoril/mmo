@@ -1,6 +1,6 @@
 ---
 name: mmo-npc-designer
-description: Inspects, designs, validates, exports, and applies MMO creature and NPC data for F:\mmo using the live protobuf project files. Use when creating or editing questgivers, vendors, trainers, civilians, hostile creatures, bosses, loot-bearing enemies, faction setups, gossip-driven NPCs, or creature map spawns.
+description: Inspects, designs, validates, exports, and applies MMO creature and NPC data for this repository using the live protobuf project files. Use when creating or editing questgivers, vendors, trainers, civilians, hostile creatures, bosses, loot-bearing enemies, faction setups, gossip-driven NPCs, or creature map spawns.
 ---
 
 <essential_principles>
@@ -27,38 +27,38 @@ The skill supports both major authoring modes in this project: interactable NPCs
 Inspect live NPC data and related catalogs first:
 
 ```powershell
-python .agents/skills/mmo-npc-designer/scripts/inspect_npc_catalog.py --project-root F:\mmo --unit-id 10 --pretty
+python .agents/skills/mmo-npc-designer/scripts/inspect_npc_catalog.py --unit-id 10 --pretty
 ```
 
 Clone an existing creature or NPC into an editable JSON draft:
 
 ```powershell
-python .agents/skills/mmo-npc-designer/scripts/export_npc_json.py --project-root F:\mmo --unit-id 10 --output F:\mmo\generated\npcs\warrior_trainer.json
+python .agents/skills/mmo-npc-designer/scripts/export_npc_json.py --unit-id 10 --output generated\npcs\warrior_trainer.json
 ```
 
 Validate the draft against live project data:
 
 ```powershell
-python .agents/skills/mmo-npc-designer/scripts/validate_npc_json.py F:\mmo\generated\npcs\warrior_trainer.json --project-root F:\mmo
+python .agents/skills/mmo-npc-designer/scripts/validate_npc_json.py generated\npcs\warrior_trainer.json
 ```
 
 Apply the validated draft back into project data:
 
 ```powershell
-python .agents/skills/mmo-npc-designer/scripts/apply_npc_json.py F:\mmo\generated\npcs\warrior_trainer.json --project-root F:\mmo --backup
+python .agents/skills/mmo-npc-designer/scripts/apply_npc_json.py generated\npcs\warrior_trainer.json --backup
 ```
 
 Apply spawn updates from the same JSON only when intended:
 
 ```powershell
-python .agents/skills/mmo-npc-designer/scripts/apply_npc_json.py F:\mmo\generated\npcs\warrior_trainer.json --project-root F:\mmo --apply-spawns --backup
+python .agents/skills/mmo-npc-designer/scripts/apply_npc_json.py generated\npcs\warrior_trainer.json --apply-spawns --backup
 ```
 
 Inspect terrain height and zone bindings before placing or moving spawns:
 
 ```powershell
-python .agents/skills/mmo-npc-designer/scripts/inspect_terrain.py --project-root F:\mmo --map-id 0 --world-x 150 --world-z 450 --pretty
-python .agents/skills/mmo-npc-designer/scripts/inspect_terrain.py --project-root F:\mmo --map-id 0 --zone-name Oakenshire --pretty
+python .agents/skills/mmo-npc-designer/scripts/inspect_terrain.py --map-id 0 --world-x 150 --world-z 450 --pretty
+python .agents/skills/mmo-npc-designer/scripts/inspect_terrain.py --map-id 0 --zone-name Oakenshire --pretty
 ```
 </quick_start>
 

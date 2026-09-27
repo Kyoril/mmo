@@ -133,7 +133,7 @@ def validate_document(doc, project_root) -> list[str]:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("path")
-    parser.add_argument("--project-root", default="F:\\mmo")
+    parser.add_argument("--project-root", default=str(Path(__file__).resolve().parents[4]))
     args = parser.parse_args()
 
     path = Path(args.path)

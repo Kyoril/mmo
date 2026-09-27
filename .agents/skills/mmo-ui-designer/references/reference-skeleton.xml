@@ -6,7 +6,7 @@
   anchors, a BorderComponent background + TextComponent caption, a CheckboxRenderer
   button with full Normal/Hovered/Pushed + *Checked state families, and inline scripts.
 -->
-<UiLayout xmlns="http://www.w3schools.com/Ui" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.w3schools.com/Ui.xsd file:///F:/mmo/data/client/Interface/Ui.xsd">
+<UiLayout xmlns="http://www.w3schools.com/Ui" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.w3schools.com/Ui.xsd ../../../../data/client/Interface/Ui.xsd">
     <Script file="ReferenceSkeleton.lua" />
 
     <!-- Top-level panel -->

@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-SKILLS = REPO / ".claude" / "skills"
+SKILLS = REPO / ".agents" / "skills"
 DATA = REPO / "data" / "editor" / "data"
 
 # domain -> (skill dir, export script, validate script, id flag, module key, message class, data file)
