@@ -55,10 +55,11 @@ class RenderTests(unittest.TestCase):
 		r, g, b = image.getpixel((int(px), int(py)))[:3]
 		self.assertGreater(b, r + 40)
 
-	def test_up_is_positive_z(self):
-		_, top = world_to_pixel(BBOX, 1.0, 0.0, 390.0)
-		_, bottom = world_to_pixel(BBOX, 1.0, 0.0, 10.0)
-		self.assertLess(top, bottom)
+	def test_north_is_up(self):
+		# The in-game minimap puts smaller world Z (north) at the top; review maps must agree.
+		_, north = world_to_pixel(BBOX, 1.0, 0.0, 10.0)
+		_, south = world_to_pixel(BBOX, 1.0, 0.0, 390.0)
+		self.assertLess(north, south)
 
 	def test_spawn_dot_drawn(self):
 		# Away from the quest arrow, which is drawn on top of spawns.

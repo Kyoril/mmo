@@ -1,6 +1,10 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 """Top-down map rendering for review packets: relief, water, roads, props, zones, named places,
-spawns, quest links, plus an optional before/after diff. Image right = +X, image up = +Z."""
+spawns, quest links, plus an optional before/after diff.
+
+Orientation matches the in-game minimap (src/mmo_client/ui/minimap.cpp): north is up, and north is
+*smaller* world Z. Image right = +X (east), image down = +Z (south).
+"""
 
 from __future__ import annotations
 
@@ -44,8 +48,8 @@ def _font(size: int):
 
 
 def world_to_pixel(bbox, scale: float, x: float, z: float) -> tuple[float, float]:
-    x0, _, _, z1 = bbox
-    return (x - x0) * scale, (z1 - z) * scale
+    x0, z0, _, _ = bbox
+    return (x - x0) * scale, (z - z0) * scale
 
 
 def level_color(level: int) -> tuple[int, int, int]:
@@ -60,10 +64,10 @@ def _hillshade(height: np.ndarray) -> np.ndarray:
     finite = np.isfinite(height)
     filled = np.where(finite, height, float(np.nanmean(height)) if finite.any() else 0.0)
     grad_z, grad_x = np.gradient(filled, CELL_SIZE)
-    # Rows are +z; the light comes from the image's upper left, i.e. from -x/+z.
+    # The light comes from the image's upper left: north-west, i.e. from -x/-z.
     normal = np.stack([-grad_x, np.ones_like(filled), -grad_z], axis=-1)
     normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
-    light = np.array([-1.0, 1.4, 1.0])
+    light = np.array([-1.0, 1.4, -1.0])
     light /= np.linalg.norm(light)
     return np.clip(normal @ light, 0.0, 1.0)
 
@@ -73,11 +77,11 @@ def _label(draw: ImageDraw.ImageDraw, xy, text: str, color, font) -> None:
 
 
 def _raster(snapshot, bbox, scale, width, height, options, kinds) -> np.ndarray:
-    x0, _, _, z1 = bbox
+    x0, z0, _, _ = bbox
     ox, oz = snapshot.origin
     rows, cols = snapshot.height.shape
     xs = x0 + (np.arange(width) + 0.5) / scale
-    zs = z1 - (np.arange(height) + 0.5) / scale
+    zs = z0 + (np.arange(height) + 0.5) / scale
     cx = np.floor((xs - ox) / CELL_SIZE).astype(np.int64)
     cz = np.floor((zs - oz) / CELL_SIZE).astype(np.int64)
     in_x = (cx >= 0) & (cx < cols)
@@ -117,7 +121,7 @@ def _legend(image: Image.Image, scale: float, options: RenderOptions, bbox) -> N
     if options.title:
         draw.text((left + 10, y), options.title, fill=(255, 255, 255), font=font)
         y += 22
-    draw.text((left + 10, y), "right = +X, up = +Z", fill=(200, 200, 200), font=small)
+    draw.text((left + 10, y), "north up (-Z), east right (+X)", fill=(200, 200, 200), font=small)
     y += 16
     draw.text((left + 10, y), f"x {bbox[0]:.0f}..{bbox[2]:.0f}  z {bbox[1]:.0f}..{bbox[3]:.0f}", fill=(200, 200, 200), font=small)
     y += 22

@@ -35,9 +35,9 @@ KNOWN_PLACES = (
      "ask": "Where is the group dungeon beyond the forest line entered? Drag and confirm, or delete the pin if still undecided."},
 )
 KNOWN_ROADS = (
-    {"name": "Westroad", "direction": (-1.0, 0.0),
+    {"name": "Westroad", "direction": (-1.0, 0.0),    # west is -X
      "ask": "Drag the start and end of the Westroad, add points where it bends, then confirm."},
-    {"name": "Northroad", "direction": (0.0, 1.0),
+    {"name": "Northroad", "direction": (0.0, -1.0),   # north is -Z (src/mmo_client/ui/minimap.cpp)
      "ask": "Drag the start and end of the Northroad, add points where it bends, then confirm."},
 )
 NAMED_MIN_RADIUS = 20.0

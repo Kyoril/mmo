@@ -25,8 +25,8 @@ def cmd_layers(args) -> int:
     panels = []
     for index in range(4):
         weights = ((page.layers >> np.uint32(8 * index)) & np.uint32(0xFF)).astype(np.uint8)
-        # Rows are +z; flip so +z points up like the map renderer.
-        panel = Image.fromarray(np.ascontiguousarray(weights[::-1, :])).convert("RGB").resize((504, 504))
+        # Rows are +z, i.e. north (-z) is the first row: the same north-up view as the minimap.
+        panel = Image.fromarray(np.ascontiguousarray(weights)).convert("RGB").resize((504, 504))
         ImageDraw.Draw(panel).text((8, 8), f"layer {index}", fill=(255, 0, 0))
         panels.append(panel)
     sheet = Image.new("RGB", (1008, 1008))
