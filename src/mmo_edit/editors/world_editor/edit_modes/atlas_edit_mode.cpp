@@ -304,7 +304,7 @@ namespace mmo
 		const proto::MapEntry* mapEntry = m_mapEntryProvider ? m_mapEntryProvider() : nullptr;
 		if (!mapEntry)
 		{
-			m_loadError = "Select the map in the World Settings panel first.";
+			m_loadError = "No map entry uses this world's directory, so there is no atlas to edit. Maps are matched by their directory name (Worlds/<name>/<name>.hwld).";
 			return false;
 		}
 

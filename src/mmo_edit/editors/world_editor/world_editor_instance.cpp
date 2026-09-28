@@ -379,7 +379,7 @@ namespace mmo
 		m_areaTriggerEditMode = std::make_unique<AreaTriggerEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().areaTriggers);
 		m_fogVolumeEditMode = std::make_unique<FogVolumeEditMode>(*this);
 		m_atlasEditMode = std::make_unique<AtlasEditMode>(*this, std::filesystem::path(m_editor.GetProject().getLastPath()),
-			[this]() -> const proto::MapEntry* { return m_mapEntry; });
+			[this]() -> const proto::MapEntry* { return m_spawnEditMode ? m_spawnEditMode->GetMapEntry() : nullptr; });
 		m_waterEditMode = std::make_unique<WaterEditMode>(*this, *m_terrain, *m_camera);
 		m_terrainEditMode->SetWaterEditMode(m_waterEditMode.get());
 
