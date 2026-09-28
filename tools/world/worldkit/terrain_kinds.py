@@ -16,6 +16,7 @@ import numpy as np
 
 KINDS = ("grass", "dirt", "path", "road", "rock", "sand", "mud", "forest_floor", "snow", "unknown")
 ROAD_KINDS = frozenset({"path", "road"})
+SUBMERGED_DEPTH = 0.5   # metres of water above which a painted cell is a riverbed, not a road
 DEFAULT_KINDS_PATH = Path(__file__).with_name("terrain_kinds.json")
 
 
@@ -28,7 +29,11 @@ class TerrainKinds:
         return layers[layer] if layers else "unknown"
 
     def road_mask(self, snapshot) -> np.ndarray:
-        """(Z, X) bool: cells whose dominant layer is a path or road."""
+        """(Z, X) bool: cells whose dominant layer is a path or road and that are not under water.
+
+        Riverbeds are often painted with the path layer (Development: the river at x -520), so a
+        submerged cell is never a road; a ford shallower than SUBMERGED_DEPTH still is.
+        """
         mask = np.zeros(snapshot.layer.shape, bool)
         for index in [-1, *range(len(snapshot.materials))]:
             layers = self.table.get(snapshot.material_name(index))
@@ -38,7 +43,7 @@ class TerrainKinds:
             for layer_index, kind in enumerate(layers):
                 if kind in ROAD_KINDS:
                     mask |= in_material & (snapshot.layer == layer_index)
-        return mask
+        return mask & ~(snapshot.water_depth > SUBMERGED_DEPTH)
 
 
 def load_kinds(path: Path = DEFAULT_KINDS_PATH) -> TerrainKinds:

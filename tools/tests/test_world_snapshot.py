@@ -123,6 +123,12 @@ class TerrainKindTests(unittest.TestCase):
 		mask = kinds.road_mask(snap)
 		self.assertTrue(mask[5, 200])   # page 33_32: material B, layer 1 dominant
 		self.assertFalse(mask[5, 5])    # page 32_32: default material, not in the table
+		# A painted riverbed under water is not a road; a ford a few centimetres deep still is.
+		snap.water_depth[5, 200] = 7.0
+		snap.water_depth[5, 201] = 0.2
+		mask = kinds.road_mask(snap)
+		self.assertFalse(mask[5, 200])
+		self.assertTrue(mask[5, 201])
 
 	def test_shipped_table_is_valid(self):
 		kinds = load_kinds()

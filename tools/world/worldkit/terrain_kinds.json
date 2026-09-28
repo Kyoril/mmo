@@ -1,5 +1,5 @@
 {
-  "_comment": "Per terrain material: kind of splat layers 0..3 (layer 0 = lowest byte of MCLY). Filled by looking at `python -m worldkit layers` previews. Kinds: grass dirt path road rock sand mud forest_floor snow unknown. Oakenshire_Boars_Enhanced (2026-09-27, from previews of pages 32_32/32_33/33_32): layer 0 = grass base everywhere; layer 1 = the connected winding path network and trampled camp ground (churned-dirt texture); layer 2 = noisy dirt patches inside trampled areas; layer 3 = rare grass-terrain accents. Awaiting user confirmation.",
+  "_comment": "Per terrain material: kind of splat layers 0..3 (layer 0 = lowest byte of MCLY). Filled by looking at `python -m worldkit layers` previews. Kinds: grass dirt path road rock sand mud forest_floor snow unknown. Oakenshire_Boars_Enhanced (2026-09-27, from previews of pages 32_32/32_33/33_32): layer 0 = grass base everywhere; layer 1 = the connected winding path network and trampled camp ground (churned-dirt texture); layer 2 = noisy dirt patches inside trampled areas; layer 3 = rare grass-terrain accents. Layer 1 also paints the riverbed of the river at x -520 (2026-09-28); road_mask ignores submerged cells, so that does not count as road. Awaiting user confirmation.",
   "materials": {
     "Models/Terrain/Oakenshire_Boars_Enhanced.hmi": ["grass", "path", "dirt", "grass"]
   }
