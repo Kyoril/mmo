@@ -228,7 +228,8 @@
       "areaId": 2,
       "status": "placeholder",
       "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "source": "agent-bootstrap",
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 1 - West Gate, the main exit towards Haven and the valley; the only gap in the mountain ring (the fortress towers stand at x 84-109)."
     },
     {
       "id": "forest_camp",
@@ -253,12 +254,12 @@
       ],
       "radius": 30.0,
       "status": "placeholder",
-      "ask": "Haven, the walled town (~level 10 hub). Drag this pin to where Haven is or should be built and confirm; the road from Oakenshire is meant to be 500-1000 m long. Anchored on: Armsmaster Theobald Kerrin, Sergeant Bram Halford. Also found elsewhere: Baldric Steelheart (338, 534).",
+      "ask": "CONFLICT: three sources place Haven differently. Here (north-west of Oakenshire) is where the buried Haven vendors and the Westwatch Training Yard stand; the layout sketch puts Haven south-west at the end of the river valley (pin 'Haven (south-west option)'); the continent sketch puts it south of Oakenshire. Keep one pin, delete the other, then confirm.",
       "source": "agent-bootstrap"
     },
     {
       "id": "dungeon_entrance",
-      "name": "Dungeon Entrance",
+      "name": "The Hollow Choir (ruined abbey)",
       "kind": "dungeon_entrance",
       "center": [
         103.4,
@@ -266,8 +267,9 @@
       ],
       "radius": 30.0,
       "status": "placeholder",
-      "ask": "PARKED (position unknown). Where is the group dungeon beyond the forest line entered? Drag and confirm, or delete the pin if still undecided.",
-      "source": "user"
+      "ask": "CONFLICT: q57 says the crypt stair is 'under the third mound' of the Barrowfield (about (-474, 227), 600 m west of this pin). Keep the abbey here and reword q57, move the abbey to the Barrowfield, or give the crypt two entrances? Then confirm.",
+      "source": "user",
+      "description": "Entrance to map 1. Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): a ruined abbey with a bell tower visible from far, on a side path north-west of Oakenshire, off the beaten path; an overgrown path leads up from the valley. Your pin sits on the plateau edge at 29 m, next to the prototype Cylinder marker at (107, 345)."
     },
     {
       "id": "oakenshire_hub",
@@ -494,6 +496,215 @@
       "status": "placeholder",
       "ask": "What is this place? Name it, pick its kind and confirm.",
       "source": "agent-bootstrap"
+    },
+    {
+      "id": "north_high_ridge",
+      "name": "North High Ridge",
+      "kind": "landmark",
+      "center": [
+        250.0,
+        445.0
+      ],
+      "radius": 90.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): steep, rocky, little paths, leads to hunting areas. Terrain: the ring's north crest, 60-78 m.",
+      "status": "placeholder",
+      "ask": "Right stretch of ridge? Where should the little paths up from the basin start? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "old_watchtower",
+      "name": "Old Watchtower",
+      "kind": "ruin",
+      "center": [
+        384.0,
+        468.0
+      ],
+      "radius": 25.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): ruined tower on the mountain ring around Oakenshire, good vantage point. Terrain: the ring's flat north-east summit, 83 m.",
+      "status": "placeholder",
+      "ask": "Name clash: zone 11 'Ruined Watchtower' is the Kingsroad bandit tower in the west. Keep both (rename one) or are they the same? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "high_ridge_hunting_grounds",
+      "name": "High Ridge hunting grounds",
+      "kind": "camp",
+      "center": [
+        250.0,
+        320.0
+      ],
+      "radius": 80.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): hunting areas and hunting camps beyond the North High Ridge. Terrain: the plateau north of the ring, about 45 m.",
+      "status": "placeholder",
+      "ask": "Level band, and what is hunted here (and by whom)? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "hidden_cave",
+      "name": "Hidden cave",
+      "kind": "landmark",
+      "center": [
+        416.0,
+        600.0
+      ],
+      "radius": 15.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): small cave on the mountain ring around Oakenshire (east), not obvious. Terrain: foot of the east cliff behind the town, 10 m.",
+      "status": "placeholder",
+      "ask": "Where does it lead (lair, smugglers, kobolds, mine)? Move it if it is too close to the town. Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "ring_waterfall",
+      "name": "Waterfall",
+      "kind": "landmark",
+      "center": [
+        380.0,
+        765.0
+      ],
+      "radius": 25.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): waterfall on the mountain ring around Oakenshire (south-east), good landmark, herb spawns. Terrain: the south-east cliff above the boar grounds. No water exists here yet.",
+      "status": "placeholder",
+      "ask": "Inside the basin (here) or on the ring's outer south-east face as on the sketch? Where should its stream run? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "south_ridge_quarry",
+      "name": "South Ridge quarry",
+      "kind": "resource",
+      "center": [
+        185.0,
+        800.0
+      ],
+      "radius": 45.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): South Ridge, rocky slopes, some lead to a quarry or mine. Terrain: foot of the south ridge, 25-35 m, right next to the Forest Bandit camp tents at (230-262, 762).",
+      "status": "placeholder",
+      "ask": "Is the bandit camp inside the old quarry (merge these) or is the quarry a separate, working place? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "forward_outpost",
+      "name": "Forward Outpost",
+      "kind": "camp",
+      "center": [
+        -620.0,
+        300.0
+      ],
+      "radius": 40.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 3 - Forward Outpost, north-west across the river from the Forest Road.",
+      "status": "placeholder",
+      "ask": "Is this Briarwatch Camp or Barrowfront Camp (then delete this pin), or a new camp on the west bank (drag and confirm)?",
+      "source": "agent"
+    },
+    {
+      "id": "old_stone_bridge",
+      "name": "Old Stone Bridge",
+      "kind": "landmark",
+      "center": [
+        -495.0,
+        355.0
+      ],
+      "radius": 25.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 4 - Old Stone Bridge. Terrain: where the painted road meets the river (7 m deep); today a house (HouseTest) and two piers stand here.",
+      "status": "placeholder",
+      "ask": "Is this the crossing? A stone bridge prop is needed (today there are only piers). Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "river_valley",
+      "name": "River Valley",
+      "kind": "landmark",
+      "center": [
+        -600.0,
+        650.0
+      ],
+      "radius": 170.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 5 - River Valley opens up; views get wider, terrain gets softer. Terrain: flat ground on both banks south of the bridge, no zone yet.",
+      "status": "placeholder",
+      "ask": "Name and level band of this stretch? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "farmlands_and_hamlets",
+      "name": "Farmlands and Hamlets",
+      "kind": "hub",
+      "center": [
+        -690.0,
+        560.0
+      ],
+      "radius": 110.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 6 - Farmlands & Hamlets in the valley. West of the river. Flat, empty ground today.",
+      "status": "placeholder",
+      "ask": "Hamlet name(s) and level band? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "crossroads_inn",
+      "name": "Crossroads Inn",
+      "kind": "hub",
+      "center": [
+        -720.0,
+        820.0
+      ],
+      "radius": 30.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 7 - Crossroads Inn on the Haven road. West of the river. Which roads cross here is open.",
+      "status": "placeholder",
+      "ask": "Which roads cross at the inn (the Northroad?), and its name? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "haven_southwest",
+      "name": "Haven (south-west option)",
+      "kind": "hub",
+      "center": [
+        -700.0,
+        980.0
+      ],
+      "radius": 120.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 9 - Haven, the major city, south-west at the end of the river valley, west of the river's lower course.",
+      "status": "placeholder",
+      "ask": "CONFLICT: see the 'Haven' pin. If Haven goes here, confirm this and delete the other; otherwise delete this one.",
+      "source": "agent"
+    },
+    {
+      "id": "the_river",
+      "name": "The river (unnamed)",
+      "kind": "landmark",
+      "center": [
+        -520.0,
+        500.0
+      ],
+      "radius": 40.0,
+      "description": "Terrain: a river 30-50 m wide and about 7 m deep running north-south at x -520 from z -450 to z 920, with a loop at its north end, a branch east at z 50 and a shallow ford (2 m) at z 150-200. The layout sketch has it west of Oakenshire, flowing south past Haven.",
+      "status": "placeholder",
+      "ask": "Name the river. Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "the_lake",
+      "name": "The lake (unnamed)",
+      "kind": "landmark",
+      "center": [
+        -850.0,
+        -95.0
+      ],
+      "radius": 190.0,
+      "description": "Terrain: a lake up to 23 m deep at x -1050..-650, z -270..80, north-west of everything else. On neither sketch.",
+      "status": "placeholder",
+      "ask": "Name it. What is it (a lake, a bay of the sea)? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "east_of_the_ring",
+      "name": "East of the ring: the wilds",
+      "kind": "note",
+      "center": [
+        650.0,
+        600.0
+      ],
+      "radius": 150.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp) (side view): east of the mountain ring lie wilder, more dangerous areas; west lie the civilized lands (valley, Haven). No terrain is sculpted here yet.",
+      "status": "note",
+      "source": "agent"
     }
   ],
   "roads": [
@@ -530,6 +741,92 @@
       "status": "placeholder",
       "ask": "Drag the start and end of the Northroad, add points where it bends, then confirm.",
       "source": "user"
+    },
+    {
+      "id": "old_kings_road",
+      "name": "Old King's Road (painted path)",
+      "points": [
+        [
+          100.0,
+          505.0
+        ],
+        [
+          40.0,
+          504.0
+        ],
+        [
+          -40.0,
+          492.0
+        ],
+        [
+          -90.0,
+          480.0
+        ],
+        [
+          -170.0,
+          468.0
+        ],
+        [
+          -245.0,
+          468.0
+        ],
+        [
+          -300.0,
+          432.0
+        ],
+        [
+          -390.0,
+          396.0
+        ],
+        [
+          -440.0,
+          372.0
+        ],
+        [
+          -495.0,
+          355.0
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Traced from the road paint, West Gate to the river. The layout sketch calls it the Forest Road, your notes the Westroad, the quests the Old King's Road. One road? Then keep one entry, rename it and confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "haven_road",
+      "name": "Haven Road",
+      "points": [
+        [
+          -495.0,
+          355.0
+        ],
+        [
+          -580.0,
+          370.0
+        ],
+        [
+          -660.0,
+          470.0
+        ],
+        [
+          -690.0,
+          560.0
+        ],
+        [
+          -705.0,
+          700.0
+        ],
+        [
+          -720.0,
+          820.0
+        ],
+        [
+          -705.0,
+          960.0
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Layout sketch: 8 - Haven Road (south-west), from the Old Stone Bridge down the valley past the farmlands and the Crossroads Inn to Haven. Only if Haven goes south-west. Drag the bends, then confirm.",
+      "source": "agent"
     }
   ]
 }

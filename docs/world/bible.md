@@ -1,9 +1,18 @@
-# Alestia Online — World Bible (v1)
+# Alestia Online — World Bible (v1.1)
 
-Version 1, 2026-09-27. Built from the user's setting notes
-([setting-notes-2026-09-27.md](setting-notes-2026-09-27.md)) and the content already in the game
-(`python tools/world/extract_canon.py --map 0`). Places are referenced by their atlas id in
-`data/world/atlas/map_0.json` (see `tools/world/README.md`).
+Version 1.1, 2026-09-28. Built from:
+
+- the user's setting notes ([setting-notes-2026-09-27.md](setting-notes-2026-09-27.md));
+- the user's **layout sketch** of Oakenshire and its surroundings
+  ([reference/oakenshire-layout-sketch.webp](reference/oakenshire-layout-sketch.webp));
+- the user's **continent sketch**, "Alestia — The Known Lands"
+  ([reference/alestia-known-lands.webp](reference/alestia-known-lands.webp));
+- the content already in the game (`python tools/world/extract_canon.py --map 0`) and the terrain itself.
+
+Places are referenced by their atlas id in `data/world/atlas/map_0.json` (see `tools/world/README.md`).
+The two sketches show **intent**, not a survey. Where a sketch and the terrain disagree about an
+exact position, the terrain and the atlas pins decide; where they disagree about what exists, section 12
+lists it.
 
 ## 1. How to use this bible
 
@@ -31,7 +40,31 @@ Rules for agents:
 
 ## 3. Geography
 
-The opening region is **Falwyn Forest** and its neighbour **Briarwatch March**, on map 0 (Development World). The playable area is roughly 1 km × 1.4 km (x −650..930, z −480..980). [C]
+The opening region is **Falwyn Forest** and its neighbour **Briarwatch March**, on map 0 (Development World). [C]
+
+- The spawns cover roughly 1 km × 1.4 km (x −650..930, z −480..980).
+- The sculpted terrain covers x −1090..1040, z −530..1600.
+- The terrain pages reach much further (x −2670..2130, z −3200..2130), but that land is flat and empty, at height 0. [C]
+
+### 3.0 The shape of the land (terrain and layout sketch)
+
+A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (regenerate it with `tools/world/render_map.py`).
+
+- **Oakenshire lies in a basin inside a ring of mountains.** [E] (layout sketch) The terrain has this ring. [C]
+  - The basin covers about x 90–420, z 440–840, with its floor at 0–20 m.
+  - The ring rises to 60–83 m, and the south-west massif to about 120 m.
+- **The ring's only gap faces west, and the West Gate stands in it** (the fortress towers at x 84–109). [E][C]
+  - The westward road is the main route to civilisation (Haven). [E]
+  - The ring makes Oakenshire feel protected but also isolated. [E]
+- **North of the ring** a plateau at about 45 m falls away to lower uplands (20–27 m) with cliff edges. [C] The sketch calls this the direction of the hunting areas. [E]
+- **A river runs north–south about 600 m west of the gate**, at x ≈ −520. [C]
+  - It is 30–50 m wide and about 7 m deep.
+  - It has a loop at its north end (z −450), a branch east at z 50, and a shallow ford (2 m) at z 150–200.
+  - Its riverbed is painted with the path splat layer; the tools ignore submerged cells when finding roads.
+  - The layout sketch has this river flowing south past Haven. [E] It has no name yet. [?]
+- **A lake** up to 23 m deep lies north-west of everything (x −1050..−650, z −270..80). It is on neither sketch, and its name and nature are open. [C][?]
+- **West of the river** the land is flat and empty, with no zone. [C] The layout sketch puts the river valley, farmlands, a crossroads inn and Haven there (section 3.11). [E]
+- **East of the ring** the land is flat and unsculpted. [C] The sketch calls the east "wilder, more dangerous areas" and the west "civilized lands". [E]
 
 ### 3.1 Falwyn Forest (zone 1)
 
@@ -43,6 +76,27 @@ The opening region is **Falwyn Forest** and its neighbour **Briarwatch March**, 
 
 - A settlement near a valley pass, connected by road to Haven. [E]
 - It was redesigned because the first version felt too small and too close to Haven. [E]
+- The sketch shows a palisaded village in the middle of the basin. Its only exit is the West Gate (atlas `oakenshire_west_gate`). [E]
+- **Around the ring** (layout sketch) [E]:
+
+  | Place | Sketch | Atlas pin |
+  |---|---|---|
+  | North High Ridge | Steep and rocky, with little paths; leads to the hunting areas | `north_high_ridge`, `high_ridge_hunting_grounds` |
+  | Old Watchtower | Ruined tower on the ring's north-east; good vantage point | `old_watchtower`, on the flat 83 m summit |
+  | Hidden cave entrance | Small cave on the east side, not obvious | `hidden_cave` |
+  | Waterfall | South-east; a good landmark, with herbs growing | `ring_waterfall`; no water exists there yet |
+  | South Ridge | Rocky slopes, some leading to a quarry or mine | `south_ridge_quarry`, beside the Forest Bandit tents |
+
+  All five pins are placeholders for you to confirm.
+- **Ring dressing** (layout sketch), to use when dressing any stretch of the ring [E]:
+  - rocky outcrops and cliffs;
+  - pines and dead trees;
+  - small caves and mine entrances;
+  - an abandoned watch post;
+  - hunting camps;
+  - herbalist and gathering spots;
+  - ruined stone walls and an old road;
+  - occasional waterfalls and streams.
 - In the game, Oakenshire is the first hub (levels 1–6). [C] It has:
   - a **Town Hall** whose ground floor holds the class trainers (q3, q4, q7, q23);
   - an **Inn** run by Old Harbin, with a rat-infested cellar (q10);
@@ -63,7 +117,9 @@ The opening region is **Falwyn Forest** and its neighbour **Briarwatch March**, 
   - Injured Guards stand "north east of Haven" near (−55, −45) (q8).
   - Haven's binder is Magister Calloran (u25), who is not spawned.
   - All of these NPCs are buried 3–7 m below the current terrain. [C]
-- Where Haven will be built is open. [?]
+- The layout sketch shows Haven as the **major city at the south-west end of the river valley**, reached by the Haven Road (section 3.11), with the river passing on its east side. [E] The atlas pin for that option is `haven_southwest`.
+- The continent sketch shows Haven just **south** of Oakenshire. [E]
+- Where Haven will be built is open. Three positions compete (section 12, item 15). [?]
 
 ### 3.4 Westwatch Training Yard
 
@@ -90,7 +146,10 @@ The opening region is **Falwyn Forest** and its neighbour **Briarwatch March**, 
 - Wayfarer Captain Aldric Vane holds a new **Kingsroad Waypost** on it, at about (−262, 405) (q41). [C]
 - Roadside Marauders prey on the wagon trains at night (q42). [C]
 - The road "belongs to the King" and its wagons carry the King's seal (q42, q43). [C] See section 4 on the King.
-- How this relates to the **Westroad** and **Northroad** named in the notes is open. [?] Those two are placeholder stubs from Oakenshire in the atlas. [E]
+- The road painted on the terrain runs from the West Gate west past Briarwatch Camp and the Kingsroad Waypost, then north-west to the river at (−495, 355). [C] A house and two piers stand at that crossing. The atlas traces it as `old_kings_road`.
+- The layout sketch calls the first stretch beyond the gate the **Forest Road**, and has it reach the river at the **Old Stone Bridge** (atlas `old_stone_bridge`). [E]
+- Whether the Forest Road, the notes' **Westroad** and the quests' **Old King's Road** are one road is open. [?]
+- You drew the Westroad west from the gate, and the Northroad north from about (−56, 408) towards (−24, 116), the old Haven site. [E] Where the Northroad leads is open. [?]
 
 ### 3.7 The Mirewater — atlas `mirewater`, `mirewater_camp`
 
@@ -116,11 +175,73 @@ The opening region is **Falwyn Forest** and its neighbour **Briarwatch March**, 
   - **Sevrin Wax, the Coffinwright** — "Warden of the Hollow Choir", who seals the dead in and returns to his workbench (q59, q60);
   - **Ossuar, the Bonebinder** — the north ossuary (q58);
   - **Choirmistress Vell** — the south wing, "Voice of the Second Verse" (q58). [C]
-- Where its entrance lies on the surface, and the lore behind it, are open. [?] The atlas has a parked `dungeon_entrance` pin.
+- **On the surface it is a ruined abbey with a bell tower that can be seen from far.** [E] (layout sketch)
+  - It stands on a side path north-west of Oakenshire, off the main road and easy to miss.
+  - An overgrown path leads up to it from the valley.
+- You placed its pin (`dungeon_entrance`) at (103, 346). That is on the western edge of the plateau north of the ring, at 29 m, next to a prototype Cylinder marker at (107, 345). [E]
+- The name fits an abbey: a choir is the part of an abbey church where the monks sang. [?]
+- q57 puts the stair "under the third mound" of the Barrowfield, about 600 m further west. Which one is right is open (section 12, item 16). [?]
+- The lore behind the abbey is open. [?]
 
-### 3.10 The wider world
+### 3.10 The wider world: Alestia, the Known Lands (continent sketch)
 
-- A possible expansion order was discussed: Heartlands → Northern Mountains → Far Coast → a foreign kingdom → an unknown continent. This is not established. [?]
+- The continent sketch is titled **"Alestia — The Known Lands"**. [E]
+  - Its legend reads: "A world of ancient realms, forged by light, shadow and time. From the high peaks of the North to the sunlit shores of the South, nations rise, empires fall, and legends endure."
+  - So Alestia names the world, or at least its known lands. The map shows one large landmass with islands. [E]
+- **Oakenshire and Haven lie near the centre of the landmass**, in green, wooded country crossed by rivers and roads. [E] Falwyn Forest is not labelled on it. [?]
+- The sketch's scale bar reads 0–200 miles, which makes the landmass roughly 1,400 miles across. The game compresses distance heavily: Oakenshire to Haven is about 60 miles on the sketch and 500–1,000 m in the game. How that compression works is open. [?]
+
+| Region | Position on the sketch (relative to Oakenshire) | Look |
+|---|---|---|
+| Whispering Woods | Just north | Dense forest |
+| Frostward Peaks | Far north | Snow-capped mountains |
+| Stonehelm Clans | North-east | Mountain realm |
+| Ironspine Wastes | North-east, below the Stonehelm mountains | Brown badlands |
+| Dawnbreak Plains | East | Open golden plains |
+| Emberreach | Far east, across the water | Volcanic land with a dark fortress |
+| The Blackmoors | South-east | Dark moorland |
+| Silvermere | South, below Haven | A town or city with a fortress |
+| Sands of Korash | Far south | Desert with a fortress city |
+| Greenvale Forest | South-west | Forest |
+| Valemarch | West | A realm with a fortress |
+| Westerfell | Far west | Hills with a fortress |
+| The Silver Sea | North-west | Sea |
+| The Shattered Sea | North-east | Sea |
+| The Trade Sea | South-east | Sea |
+| The Sunset Sea | South-west | Sea |
+
+All entries are [E] from the continent sketch.
+
+- The legend on the sketch distinguishes major cities, cities or towns, fortresses, points of interest, roads, rivers and borders. [E] Which markers are which is not readable at this size. [?]
+- A possible expansion order was discussed: Heartlands → Northern Mountains → Far Coast → a foreign kingdom → an unknown continent. This is not established. [?] On the continent sketch:
+  - the Heartlands would be the central lands around Oakenshire and Haven;
+  - the Northern Mountains would be the Frostward Peaks or the Stonehelm Clans;
+  - the unknown continent would lie beyond the four seas.
+  This mapping is a suggestion. [?]
+
+### 3.11 The river valley and the road to Haven (layout sketch) — atlas `old_stone_bridge`, `river_valley`, `farmlands_and_hamlets`, `crossroads_inn`, `haven_southwest`, road `haven_road`
+
+The sketch numbers the stops beyond the West Gate [E]:
+
+1. West Gate — Oakenshire
+2. Forest Road
+3. Forward Outpost, north-west across the river
+4. Old Stone Bridge
+5. River Valley, where the views get wider and the terrain softer
+6. Farmlands and Hamlets
+7. Crossroads Inn
+8. Haven Road (south-west)
+9. Haven (major city)
+
+On the map [C]:
+
+- Stops 1, 2 and 4 match what exists: the gate, the painted road and the river crossing.
+- Stops 5–9 fall on the flat, empty land west and south-west of the river, where nothing exists yet.
+- Stop 3 matches no existing camp west of the river. Briarwatch Camp (Thalric's work camp) and Barrowfront Camp (Osric's palisade, on the east bank) are the nearest candidates. [?]
+- Today the quest levels rise from the gate westward: Briarwatch March is 4–7, the Mirewater 7–8 and the Barrowfield 8–10.
+- The valley beyond the river would therefore be the natural ground for the approach to Haven, around levels 9–11. This is a suggestion. [?]
+
+The sketch's side view reads, from west to east: Haven, the valley, Oakenshire, the mountain ring. It is labelled "civilized lands ← main road through the valley → wilder, more dangerous areas". [E]
 
 ## 4. Peoples and factions
 
@@ -229,6 +350,10 @@ Derived from the names already in the game. [C]
 - **Named foes:** "<Name>, the <Epithet>" (Grimtusk, the Ironback; Ossuar, the Bonebinder; Sevrin Wax, the Coffinwright). Bosses carry a subname title: "Lord of the Sunken Barrow", "Keeper of the North Ossuary".
 - **Creature units:** plain descriptive names made of a place or age word plus a noun: Young Forest Boar, Kingsroad Cutthroat, Mire Prowler, Gravebound Cultist. No digits in unit names.
 - **Places:** English compounds built from landscape and settlement words (Oakenshire, Briarwatch, Barrowfield, Barrowfront, Mirewater, Deepwood, Westwatch, Kingsroad), and descriptive phrases ("Ruined Cottages", "the Old King's Road").
+  - The continent sketch uses the same style: Whispering Woods, Frostward Peaks, Ironspine Wastes, Dawnbreak Plains, Greenvale Forest, Silvermere, Valemarch, Westerfell, the Blackmoors.
+  - It also uses peoples' realms (Stonehelm Clans), one foreign-sounding name (the Sands of **Korash**), and one fiery name (Emberreach). [E]
+  - Local landmarks from the layout sketch are plain: Old Watchtower, Old Stone Bridge, Crossroads Inn, Forward Outpost, High Ridge.
+  - **Stonehelm** is both a realm (the Stonehelm Clans) and the family name of the Haven vendor Roland Stonehelm (Mail & Plate). A link or a coincidence? [?]
 - **Spawn names:** `<Place> - <Unit name> NN`, where the place is an atlas place name (for example `Mirewater - Bog Rat 03`). The linter warns about new spawns that break this.
 - **Items:** plain and physical (Torn Bandit Armband, Unbroken Wolf Fang, Reinforced Mortar Sack). Quest items are never grey quality.
 - **Avoid:** modern words, puns, real-world names and in-jokes (the unit "Gossip Tester" is a test NPC, not canon). Don't use mismatched direction words: check the map.
@@ -257,6 +382,7 @@ Derived from the names already in the game. [C]
 - A faster transport system without personal mounts is being considered. [E]
 - Roads, passes, mine carts, carts and wagons, and ships all came up. [E]
 - The Oakenshire–Haven road was sketched at 500–1,000 m. [E]
+- If Haven goes to the south-west option, the road from the Town Hall through the gate, over the bridge and down the valley is about 1.6 km (atlas `old_kings_road` plus `haven_road`), and the straight line is about 1.1 km. [C]
 - No route network, operators or fast-travel rules are established. [?]
 
 ## 12. Open questions and contradictions
@@ -265,10 +391,10 @@ Derived from the names already in the game. [C]
 
 | Topic | Question |
 |---|---|
-| World | Is Alestia the world, a continent, a kingdom, or only the game? |
+| World | Partly answered: the continent sketch calls Alestia "a world of ancient realms" and maps its Known Lands (section 3.10). Are there lands beyond them? |
 | History | What happened before the player arrives, and why does it matter now? |
 | Politics | Who governs Haven, Oakenshire and Falwyn Forest? (The game already speaks of a King: see below.) |
-| Geography | Where do the Westroad and Northroad lead, and how does the region connect to the wider world? |
+| Geography | Partly answered: the Forest Road runs west over the Old Stone Bridge to Haven (section 3.11). Where does the Northroad lead: north to the Whispering Woods? Where does the east (the "wilder areas") lead? |
 | Peoples | Which playable peoples exist, where are their homelands, and how do they relate to humans? |
 | Religion and magic | What do people believe, and where do cleric, mage and shadow magic come from? |
 | Conflict | What makes the bandits and kobolds more than local enemies? |
@@ -312,3 +438,30 @@ Derived from the names already in the game. [C]
 12. **Haven, Market, Mage Tower and Greystone Pass** are zone rows without terrain. About 95% of map 0's terrain has no zone at all.
 13. **The Haven vendors, the Westwatch Training Yard NPCs and the Injured Guards** around the origin stand 3–7 m below the terrain (`tools/world/lint.py`, baselined). They look like leftovers of a removed or never-placed Haven.
 14. **Ossuar's spawn** on map 1 is set inactive in the uncommitted `data/editor` working copy (active in the committed data). Nothing else spawns him, so q58 and q61 cannot be completed with the working copy.
+
+### From the two sketches (2026-09-28)
+
+15. **Where Haven is.** Three places compete:
+    - The data: the buried Haven vendors and the Westwatch Training Yard stand at about (0 to 50, −50 to 20), north-west of Oakenshire. You drew the Northroad towards that spot. Atlas `haven`.
+    - The layout sketch: south-west, at the end of the river valley. Atlas `haven_southwest`.
+    - The continent sketch: just south of Oakenshire.
+
+    Keep one pin. Then decide whether the Westwatch Training Yard moves with Haven.
+16. **The Hollow Choir's entrance.**
+    - Sketch and your pin: a ruined abbey on the plateau edge north-west of Oakenshire, at (103, 346).
+    - q57: "a stair under the third mound" of the Barrowfield, at about (−474, 227), 600 m west. The Barrowfront chaplain gives the whole dungeon chain (q57–q62).
+
+    Options: reword q57 and move the quest giver's reasons to the abbey; build the abbey on the Barrowfield instead; or give the crypt two entrances.
+17. **Which way is dangerous.**
+    - The sketch calls the west "civilized lands" and the east, beyond the ring, the "wilder, more dangerous areas".
+    - In the game, the west beyond the gate is a frontier being reclaimed (Briarwatch March, q25), and it holds the level 8–10 raised dead.
+
+    These fit together if the civilized lands begin across the river.
+18. **Two watchtowers.** The sketch's **Old Watchtower** (ruined, on the ring's north-east) and zone 11 **Ruined Watchtower** (the Kingsroad bandits' tower in the west) are different places with near-identical names. Rename one.
+19. **Where the farms are.**
+    - The game has farms in the basin south-east of town (q1, q5, q6).
+    - The sketch shows farmlands and hamlets in the river valley beyond the gate.
+
+    Both can be true: the basin farms feed Oakenshire, the valley farms feed Haven.
+20. **The South Ridge quarry and the bandit camp.** The Forest Bandit camp tents stand at the foot of the south ridge, exactly where the sketch draws the quarry buildings. Do the bandits hold the old quarry, or is the quarry a separate, working place?
+21. **The Forward Outpost** (sketch stop 3) matches no existing camp west of the river (section 3.11).
