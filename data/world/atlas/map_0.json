@@ -261,13 +261,13 @@
       "name": "Dungeon Entrance",
       "kind": "dungeon_entrance",
       "center": [
-        -46.3,
-        422.9
+        103.4,
+        345.8
       ],
       "radius": 30.0,
       "status": "placeholder",
       "ask": "PARKED (position unknown). Where is the group dungeon beyond the forest line entered? Drag and confirm, or delete the pin if still undecided.",
-      "source": "agent-bootstrap"
+      "source": "user"
     },
     {
       "id": "oakenshire_hub",
@@ -344,7 +344,7 @@
         232.6,
         653.6
       ],
-      "radius": 45.0,
+      "radius": 94.0,
       "levelMin": 1,
       "levelMax": 2,
       "status": "placeholder",
@@ -360,26 +360,26 @@
         711.5
       ],
       "radius": 60.0,
-      "levelMin": 1,
-      "levelMax": 4,
       "status": "placeholder",
       "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "source": "user",
+      "levelMin": 1,
+      "levelMax": 4
     },
     {
       "id": "forest_boar_grounds_378_647",
       "name": "Forest Boar grounds (378, 647)",
       "kind": "camp",
       "center": [
-        378.2,
-        647.3
+        357.4,
+        646.7
       ],
-      "radius": 30.0,
-      "levelMin": 1,
-      "levelMax": 4,
+      "radius": 41.5,
       "status": "placeholder",
       "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "source": "user",
+      "levelMin": 1,
+      "levelMax": 4
     },
     {
       "id": "forest_bandit_grounds_101_137",
@@ -502,34 +502,34 @@
       "name": "Westroad",
       "points": [
         [
-          341.8,
-          546.5
+          185.1,
+          504.8
         ],
         [
-          41.8,
-          546.5
+          15.3,
+          498.6
         ]
       ],
       "status": "placeholder",
       "ask": "Drag the start and end of the Westroad, add points where it bends, then confirm.",
-      "source": "agent-bootstrap"
+      "source": "user"
     },
     {
       "id": "northroad",
       "name": "Northroad",
       "points": [
         [
-          341.8,
-          546.5
+          -56.4,
+          408.0
         ],
         [
-          341.8,
-          246.5
+          -23.9,
+          116.5
         ]
       ],
       "status": "placeholder",
       "ask": "Drag the start and end of the Northroad, add points where it bends, then confirm.",
-      "source": "agent-bootstrap"
+      "source": "user"
     }
   ]
 }
