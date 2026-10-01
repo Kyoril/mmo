@@ -20,6 +20,7 @@ from .paths import REPO, material_scripts
 
 _NAME_PRIORITY = ("basecolor", "diffuse", "albedo", "albedo01", "texture", "color")
 _NAME_HINTS = ("basecolor", "albedo", "diffuse", "color")
+_PATH_SUFFIXES = ("_bc", "_d", "_basecolor", "_diffuse", "_albedo")   # base-colour naming in the texture file name
 _MAX_PARENTS = 8
 
 
@@ -67,6 +68,13 @@ def resolve_base_texture(material: str, client: Path, parse=None, exists=None) -
             return by_name[name]
     for name, texture in by_name.items():
         if texture and any(hint in name for hint in _NAME_HINTS):
+            return texture
+    for name, texture in by_name.items():
+        if texture and name.endswith("texture"):   # e.g. RockTexture
+            return texture
+    for texture in [*by_name.values(), *map(_norm, direct)]:
+        stem = Path(texture).stem.lower() if texture else ""
+        if stem.endswith(_PATH_SUFFIXES) or "basecolor" in stem:
             return texture
     return _norm(direct[0]) if direct else None
 

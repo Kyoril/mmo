@@ -50,6 +50,15 @@ class TagRules:
             bad = (set(rule.get("tags", [])) | set(rule.get("may_overlap", []))) - VOCABULARY
             if bad:
                 raise ValueError(f"asset tag rule {index}: tags {sorted(bad)} are not in the vocabulary")
+            if "footprint_scale" in rule:  # the prop lint's distance prefilter relies on footprints only ever shrinking
+                fs = rule["footprint_scale"]
+                if isinstance(fs, bool) or not isinstance(fs, (int, float)) or not 0 < fs <= 1:
+                    raise ValueError(f"asset tag rule {index}: footprint_scale must be a number in (0, 1], got {fs!r}")
+            if "scale" in rule:
+                sc = rule["scale"]
+                if (not isinstance(sc, (list, tuple)) or len(sc) != 2 or sc[0] > sc[1]
+                        or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in sc)):
+                    raise ValueError(f"asset tag rule {index}: scale must be [min, max] numbers with min <= max, got {sc!r}")
         self.rules = rules
 
     def for_asset(self, path: str) -> AssetTags:

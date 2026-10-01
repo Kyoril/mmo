@@ -22,8 +22,10 @@ def _read(path: Path) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def load_baseline(section: str, path: Path = BASELINE_PATH) -> dict[str, str]:
-    return {entry["key"]: entry["message"] for entry in _read(path).get(section, [])}
+def load_baseline(section: str, path: Path = BASELINE_PATH, map_id: int | None = None) -> dict[str, str]:
+    """Known violations of a section; with a map id only that map's entries, so one map's baseline never masks another's."""
+    return {entry["key"]: entry["message"] for entry in _read(path).get(section, [])
+            if map_id is None or entry.get("map") == map_id}
 
 
 def save_baseline(section: str, map_id: int, items, path: Path = BASELINE_PATH) -> int:

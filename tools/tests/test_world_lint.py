@@ -141,6 +141,9 @@ class BaselineTests(unittest.TestCase):
 			placement = load_baseline("placement", path)
 			self.assertEqual(set(placement), {"a|unit:0:1", "a|unit:2:1"})
 			self.assertEqual(set(load_baseline("reachability", path)), {"no_turn_in|quest:5"})
+			self.assertEqual(set(load_baseline("placement", path, map_id=2)), {"a|unit:2:1"})   # only that map's entries
+			self.assertEqual(set(load_baseline("placement", path, 0)), {"a|unit:0:1"})
+			self.assertEqual(load_baseline("placement", path, 7), {})
 			new, known = split([Item("a|unit:0:1"), Item("c|unit:0:9")], placement)
 			self.assertEqual(([i.key for i in new], [i.key for i in known]), (["c|unit:0:9"], ["a|unit:0:1"]))
 			self.assertEqual(json.loads(path.read_text())["version"], 1)

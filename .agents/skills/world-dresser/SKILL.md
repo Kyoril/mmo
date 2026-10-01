@@ -17,10 +17,10 @@ description: Dress confirmed world-atlas places with props and trees (quarries, 
 2. Look at the assets you will use:
    - `cd tools/world; python -m worldkit assets --sheets` writes contact sheets to `generated/world/assets/sheets/`; open the relevant ones.
    - `python -m worldkit assets --views <asset>` shows one asset from three sides.
-3. Pick or write a template in `tools/world/templates/` (see the template guide below). Keep away from neighbours with `--keep-away <poi>:<metres>`.
-4. Run `python tools/world/dress.py plan ...`, then open the previews in `generated/world/passes/<id>/`. North is -Z; the previews name the direction they look in.
+3. Pick or write a template in `tools/world/templates/` (see the template guide below). Keep away from neighbours with `--keep-away <poi>:<metres>`: it keeps items out of a circle of that place's RADIUS PLUS the metres, around its centre. To keep a gap measured from the neighbour's edge, use `:0` or a small value.
+4. Run `python tools/world/dress.py plan ...`. Pin centres are often on steep ground, so choose `--anchor <x> <z>` on suitable ground; every pilot site needed one. Then open the previews in `generated/world/passes/<id>/`. North is -Z; the previews name the direction they look in.
 5. Fix what looks wrong by editing `draft.json`: move, rotate, swap or delete an item. Then run `dress.py check <id>` and look again.
-6. Run `dress.py apply <id>`. When doing several passes, use `--skip-nav` and then one `dress.py check --nav <id> <id> ...` at the end.
+6. Run `dress.py apply <id>`. Every `apply` changes the world fingerprint, so the next draft must be re-checked before it can be applied. With several passes the sequence is: `dress.py check <id>`, then `dress.py apply <id> --skip-nav`, repeated per pass, then one `dress.py check --nav <id> <id> ...` at the end.
 7. Hand the user the packet: `dress.py packet-index --name <batch> <ids...>`. List the gaps, any "awaiting water" notes, and how to undo.
 </world_aware_design>
 

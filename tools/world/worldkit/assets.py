@@ -11,6 +11,7 @@ import dataclasses
 import hashlib
 import json
 import math
+import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -90,7 +91,7 @@ def _describe(path: Path, rel: str, client: Path) -> AssetInfo:
         model: WorldModelData = parse_hwmo(path)
         references = tuple(sorted({r.mesh.replace("\\", "/") for r in model.mesh_refs}))
         return AssetInfo(rel, kind, tuple(model.bounds_min), tuple(model.bounds_max), False, 0, (), (), references)
-    except (FormatError, OSError) as exc:
+    except (FormatError, OSError, ValueError) as exc:  # ValueError covers UnicodeDecodeError: one bad asset never aborts the catalog
         return AssetInfo(rel, kind, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), False, 0, (), (), (), error=str(exc))
 
 
@@ -110,7 +111,7 @@ def build_catalog(repo: Path = REPO, rebuild: bool = False) -> dict[str, AssetIn
             doc = json.loads(cache_file.read_text(encoding="utf-8"))
             if doc.get("digest") == digest:
                 cached = doc.get("assets", {})
-        except json.JSONDecodeError:
+        except ValueError:  # JSONDecodeError and UnicodeDecodeError: a damaged cache is just rebuilt
             cached = {}
     entries: dict[str, AssetInfo] = {}
     stamps: dict[str, str] = {}
@@ -130,7 +131,9 @@ def build_catalog(repo: Path = REPO, rebuild: bool = False) -> dict[str, AssetIn
             entries[rel] = replace(info, has_collision=collides)
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     payload = {rel: {"stamp": stamps[rel], "info": dataclasses.asdict(info)} for rel, info in entries.items()}
-    cache_file.write_text(json.dumps({"version": CATALOG_VERSION, "digest": digest, "assets": payload}), encoding="utf-8")
+    temp = cache_file.with_name(cache_file.name + ".tmp")
+    temp.write_text(json.dumps({"version": CATALOG_VERSION, "digest": digest, "assets": payload}), encoding="utf-8")
+    os.replace(temp, cache_file)  # atomic: a crash mid-write never leaves a half-written cache
     return entries
 
 

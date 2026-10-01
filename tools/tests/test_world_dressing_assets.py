@@ -10,6 +10,7 @@ import math
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -67,6 +68,30 @@ class MaterialTests(unittest.TestCase):
 		self.assertEqual(resolve_base_texture("Mat/Hinted.hmat", client, parse=parse, exists=exists), "Tex/G.htex")
 		self.assertIsNone(resolve_base_texture("Mat/Missing.hmi", client, parse=parse, exists=exists))
 
+	def test_texture_parameter_and_path_fallbacks(self):
+		materials = {
+			"Mat/Rock.hmat": {"parent": None, "textures": [], "texture_parameters": [
+				{"name": "Normal", "texture": "Tex/R_N.htex"}, {"name": "RockTexture", "texture": "Tex/R_Rock.htex"}]},
+			"Mat/Path.hmat": {"parent": None, "textures": [], "texture_parameters": [
+				{"name": "Normal", "texture": "Tex/P_N.htex"}, {"name": "Layer1", "texture": "Tex/P_BC.htex"}]},
+			"Mat/Direct.hmat": {"parent": None, "textures": ["Tex/Wall_BaseColor.htex"], "texture_parameters": []},
+			"Mat/Hint.hmat": {"parent": None, "textures": [], "texture_parameters": [
+				{"name": "Layer1", "texture": "Tex/X_BC.htex"}, {"name": "Grass_Albedo", "texture": "Tex/Hint.htex"}]},
+			"Mat/None.hmat": {"parent": None, "textures": [], "texture_parameters": [{"name": "Layer1", "texture": "Tex/Other.htex"}]},
+		}
+		client = Path("/c")
+		parse = lambda path, _: (materials[path.relative_to(client).as_posix()], [], b"")  # noqa: E731
+		exists = lambda path: path.relative_to(client).as_posix() in materials  # noqa: E731
+
+		def resolve(name):
+			return resolve_base_texture(name, client, parse=parse, exists=exists)
+
+		self.assertEqual(resolve("Mat/Rock.hmat"), "Tex/R_Rock.htex")      # parameter name ending in "texture"
+		self.assertEqual(resolve("Mat/Path.hmat"), "Tex/P_BC.htex")        # base-colour suffix in the texture path
+		self.assertEqual(resolve("Mat/Direct.hmat"), "Tex/Wall_BaseColor.htex")
+		self.assertEqual(resolve("Mat/Hint.hmat"), "Tex/Hint.htex")        # the existing name hints still come first
+		self.assertIsNone(resolve("Mat/None.hmat"))                        # nothing matches and nothing is sampled directly
+
 	def test_load_uncompressed_texture(self):
 		pixels = np.zeros((2, 2, 4), np.uint8)
 		pixels[0, 1] = (255, 0, 0, 255)
@@ -114,6 +139,14 @@ class TagRuleTests(unittest.TestCase):
 		with self.assertRaises(ValueError):
 			TagRules([{"match": "*", "colour": "red"}])
 
+	def test_footprint_scale_and_scale_are_validated(self):
+		for bad in ({"footprint_scale": 0}, {"footprint_scale": 1.5}, {"footprint_scale": -0.1}, {"footprint_scale": "0.2"},
+					{"scale": [1.0]}, {"scale": [1.0, 2.0, 3.0]}, {"scale": [2.0, 1.0]}, {"scale": ["a", "b"]}, {"scale": 1.5}):
+			with self.subTest(bad=bad), self.assertRaises(ValueError):
+				TagRules([{"match": "*", **bad}])
+		rules = TagRules([{"match": "*", "footprint_scale": 1, "scale": [0.8, 1.2]}, {"match": "T*", "footprint_scale": 0.15, "scale": [1, 1]}])
+		self.assertEqual(rules.for_asset("T.hmsh").footprint_scale, 0.15)
+
 	def test_shipped_rules_load(self):
 		self.assertTrue(load_tag_rules().rules)
 
@@ -142,6 +175,21 @@ class CatalogTests(unittest.TestCase):
 		path.write_bytes(fx.cube_hmsh(size=0.5, collision=False))   # different size, so the cache stamp changes
 		entry = build_catalog(self.repo)["Models/Test/Cube.hmsh"]
 		self.assertEqual((entry.size_class, entry.has_collision), ("small", False))
+
+	def test_damaged_cache_is_rebuilt_and_write_is_atomic(self):
+		build_catalog(self.repo)
+		cache = next(self.repo.rglob("catalog.json"))
+		self.assertEqual(list(cache.parent.glob("*.tmp")), [])
+		cache.write_bytes(b"\xff\xfe not json")   # invalid UTF-8 raises UnicodeDecodeError, a ValueError
+		self.assertIn("Models/Test/Cube.hmsh", build_catalog(self.repo))
+		cache.write_text("{broken", encoding="utf-8")
+		self.assertIn("Models/Test/Cube.hmsh", build_catalog(self.repo))
+
+	def test_undecodable_asset_does_not_abort_the_catalog(self):
+		with mock.patch("worldkit.assets.parse_hmsh", side_effect=UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad")):
+			catalog = build_catalog(self.repo, rebuild=True)
+		self.assertIsNotNone(catalog["Models/Test/Cube.hmsh"].error)
+		self.assertIn("Models/Test/Shed.hwmo", catalog)
 
 	def test_select(self):
 		catalog = build_catalog(self.repo)

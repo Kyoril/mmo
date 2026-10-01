@@ -7,6 +7,7 @@
 """
 
 import json
+import os
 import queue
 import subprocess
 import sys
@@ -17,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import world_fixtures as fx  # noqa: E402
 
-from worldkit.nav import NavError, NavQuery, Route, build_nav, load_routes, save_routes, walkability_violations  # noqa: E402
+from worldkit.nav import NavError, NavQuery, Route, build_nav, tool_exe, load_routes, save_routes, walkability_violations  # noqa: E402
 from worldkit.query import WorldQuery  # noqa: E402
 from worldkit.snapshot import build_snapshot  # noqa: E402
 from worldkit.spawns import SpawnRecord, spawn_key  # noqa: E402
@@ -196,6 +197,16 @@ class NavTests(unittest.TestCase):
 			(repo / "bin" / "Release" / "nav_builder").write_bytes(b"")
 			with self.assertRaisesRegex(NavError, "took too long"):
 				build_nav("W", repo / "out", repo=repo, runner=runner, timeout=5)
+
+	def test_tool_exe_finds_single_config_builds(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			repo = Path(tmp)
+			(repo / "bin").mkdir()
+			with self.assertRaises(NavError):
+				tool_exe("nav_query", repo)
+			path = repo / "bin" / ("nav_query.exe" if os.name == "nt" else "nav_query")
+			path.write_bytes(b"")
+			self.assertEqual(tool_exe("nav_query", repo), path)
 
 	def test_routes_file_round_trip(self):
 		with tempfile.TemporaryDirectory() as tmp:

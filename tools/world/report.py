@@ -43,7 +43,7 @@ def main(argv=None) -> int:
         print(f"baselined {count} reachability findings for map {args.map} in {args.baseline}")
         return 0
 
-    new, known = split(findings, load_baseline("reachability", args.baseline))
+    new, known = split(findings, load_baseline("reachability", args.baseline, args.map))
     summary = summarize(data, map_entry, query)
     new_errors = [f for f in new if f.severity == "error"]
     print(f"map {args.map} ({map_entry.name}): {len(new_errors)} new errors, {len(new) - len(new_errors)} new warnings, {len(known)} known")

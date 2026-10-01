@@ -68,7 +68,7 @@ def main(argv=None) -> int:
         print(f"baselined {count} placement violations for map {args.map} in {args.baseline}")
         return 0
 
-    new, known = split(violations, load_baseline("placement", args.baseline))
+    new, known = split(violations, load_baseline("placement", args.baseline, args.map))
     new_errors = [v for v in new if v.severity == "error"]
     new_warnings = [v for v in new if v.severity == "warning"]
     print(f"map {args.map} ({map_entry.name}): checked {len(records)} spawns, "

@@ -51,7 +51,7 @@ def main(argv=None) -> int:
         count = save_baseline("props", args.map, violations, args.baseline)
         print(f"baselined {count} prop findings for map {args.map} in {args.baseline}")
         return 0
-    new, known = split(violations, load_baseline("props", args.baseline))
+    new, known = split(violations, load_baseline("props", args.baseline, args.map))
     new_errors = [v for v in new if v.severity == "error"]
     new_warnings = [v for v in new if v.severity == "warning"]
     print(f"map {args.map} ({map_entry.name}): checked {len(existing)} props, {len(new_errors)} new errors, "

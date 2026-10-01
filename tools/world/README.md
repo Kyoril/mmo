@@ -26,6 +26,9 @@ The design is in `docs/superpowers/specs/2026-09-27-content-foundation-design.md
 | `.agents/skills/mmo-npc-designer/scripts/inspect_terrain.py` | The NPC skill's point and zone query, backed by worldkit. |
 | `python -m worldkit assets [--sheets] [--views ASSET] [--untagged]` | Asset catalog summary; contact sheets and 3-view pictures in `generated/world/assets/`. |
 | `python tools/world/dress.py plan/check/apply/undo/list ...` | Dressing passes: place a template on a confirmed atlas place, check it, write it, undo it. See the world-dresser skill. |
+| Dressing sequence | `check <id>` then `apply <id> --skip-nav`, repeated per pass (each `apply` changes the world fingerprint, so the next draft needs a fresh `check`), then one `check --nav <ids...>` at the end. |
+| `plan --keep-away POI:N` | Keeps items out of a circle of the place's radius plus N metres around its centre (use `:0` or small values to keep distance from the place's edge). |
+| `plan --anchor X Z` | Pin centres are often on steep ground, so choose an anchor on suitable ground; every pilot site needed one. |
 | `python tools/world/prop_lint.py --map 0` | Placement lint for every existing prop and tree, compared to the `props` baseline. |
 
 ## Files
@@ -44,6 +47,6 @@ The design is in `docs/superpowers/specs/2026-09-27-content-foundation-design.md
 | `generated/world/<World>/` | Snapshot cache (gitignored). It rebuilds itself when tiles or props change. |
 | `generated/world/review/<slug>/` | Review packets: `README.md` brief, before/after PNGs, `report.md`. |
 
-The weekly content audit (`tools/gate/content_audit.py`) runs the `placement`, `reachability`, and `props` domains via `prop_lint.py`. The quest and NPC validators call `worldkit.skill_checks`.
+The weekly content audit (`tools/gate/content_audit.py`) runs the `placement`, `reachability` and `props` domains (`lint.py`, `report.py` and `prop_lint.py` respectively; only `props` uses `prop_lint.py`). The quest and NPC validators call `worldkit.skill_checks`.
 
 **Tests:** `python -m unittest discover -s tools/tests -p "test_world_*.py"`

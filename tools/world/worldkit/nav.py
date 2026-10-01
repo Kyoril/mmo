@@ -35,11 +35,11 @@ class NavError(RuntimeError):
 
 def tool_exe(name: str, repo: Path = REPO) -> Path:
     suffix = ".exe" if os.name == "nt" else ""
-    for config in ("Release", "Debug"):
-        path = repo / "bin" / config / f"{name}{suffix}"
+    for folder in (repo / "bin" / "Release", repo / "bin" / "Debug", repo / "bin"):   # bin/ itself: single-config (Linux) builds
+        path = folder / f"{name}{suffix}"
         if path.is_file():
             return path
-    raise NavError(f"{name}{suffix} not found in bin/Release or bin/Debug: build it with MMO_BUILD_TOOLS=ON")
+    raise NavError(f"{name}{suffix} not found in bin/Release, bin/Debug or bin: build it with MMO_BUILD_TOOLS=ON")
 
 
 def scratch_nav_root(repo: Path = REPO) -> Path:

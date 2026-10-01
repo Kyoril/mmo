@@ -31,7 +31,6 @@ def npc_draft_findings(doc: dict) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
     if not records:
         return errors, warnings
-    baseline = load_baseline("placement")
     unit = doc.get("unit") or {}
     for map_id in sorted({r.map_id for r in records}):
         try:
@@ -51,6 +50,7 @@ def npc_draft_findings(doc: dict) -> tuple[list[str], list[str]]:
             levels[int(unit["id"])] = (lo, max(lo, int(unit.get("maxlevel", lo))))
         if "id" in unit and unit.get("name"):
             names[("unit", int(unit["id"]))] = unit["name"]
+        baseline = load_baseline("placement", map_id=map_id)
         map_records = [r for r in records if r.map_id == map_id]
         for violation in lint_records(map_records, query, levels, names, data.service_units()) + naming_violations(map_records):
             if violation.key in baseline:
