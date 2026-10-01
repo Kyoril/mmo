@@ -69,7 +69,15 @@ python preview.py --diff a.png b.png                          # prints max/mean 
 
 The metadata JSON sidecar (written by the generator, consumed by import) is:
 `{ "world", "pageRect": {x0,z0,x1,z1}, "minY", "maxY", "material" }` — pixel 0 maps to
-minY, pixel 65535 to maxY.
+minY, pixel 65535 to maxY. Optional keys:
+
+- `"waterLevel"`, `"waterMaterial"`, `"waterType"` (1 Water, 2 Ocean): see Water below.
+- `"zoneMap"`: a 16-bit PNG with one zone (area) id per terrain tile, sized (pages x · 16) × (pages z · 16). It is resolved relative to the meta file.
+- `"pages": [[x, z], ...]`: write only these pages of the rect. Use it for irregular areas such as a continent, so that open-sea pages are never created.
+- `"skipExistingPages": true`: never overwrite a page that already exists. Shape the new terrain down to the old pages' border heights so that the seams match.
+- `"fillExistingZones": true`: with skipExistingPages, also give the unzoned tiles of existing v2 pages their zone. This rewrites those pages.
+
+`tools/terrain_gen/alestia_blockout.py` uses all of them: it builds the whole map 0 continent from a sketch.
 
 ## Hard rules
 

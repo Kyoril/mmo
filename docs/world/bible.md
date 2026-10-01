@@ -44,7 +44,8 @@ The opening region is **Falwyn Forest** and its neighbour **Briarwatch March**, 
 
 - The spawns cover roughly 1 km × 1.4 km (x −650..930, z −480..980).
 - The sculpted terrain covers x −1090..1040, z −530..1600.
-- The terrain pages reach much further (x −2670..2130, z −3200..2130), but that land is flat and empty, at height 0. [C]
+- The original terrain pages reach much further (x −2670..2130, z −3200..2130), but that land is flat and empty, at height 0. [C]
+- Around them, a rough blockout of the whole continent now covers x −10670..17070, z −7470..11200 (section 3.12). [C]
 
 ### 3.0 The shape of the land (terrain and layout sketch)
 
@@ -192,7 +193,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - Its legend reads: "A world of ancient realms, forged by light, shadow and time. From the high peaks of the North to the sunlit shores of the South, nations rise, empires fall, and legends endure."
   - So Alestia names the world, or at least its known lands. The map shows one large landmass with islands. [E]
 - **Oakenshire and Haven lie near the centre of the landmass**, in green, wooded country crossed by rivers and roads. [E] Falwyn Forest is not labelled on it. [?]
-- The sketch's scale bar reads 0–200 miles, which makes the landmass roughly 1,400 miles across. The game compresses distance heavily: Oakenshire to Haven is about 60 miles on the sketch and 500–1,000 m in the game. How that compression works is open. [?]
+- The sketch's scale bar reads 0–200 miles, which makes the landmass roughly 1,400 miles across. The game compresses distance heavily: Oakenshire to Haven is about 60 miles on the sketch and 500–1,000 m in the game. How that compression works is open. [?] The map 0 blockout (section 3.12) uses about 17.7 m per sketch pixel, so the sketch's 200 miles become about 4.9 km.
 
 | Region | Position on the sketch (relative to Oakenshire) | Look |
 |---|---|---|
@@ -245,6 +246,35 @@ On the map [C]:
 - The valley beyond the river would therefore be the natural ground for the approach to Haven, around levels 9–11. This is a suggestion. [?]
 
 The sketch's side view reads, from west to east: Haven, the valley, Oakenshire, the mountain ring. It is labelled "civilized lands ← main road through the valley → wilder, more dangerous areas". [E]
+
+### 3.12 The continent blockout on map 0 (scale study, 2026-10-01)
+
+The continent sketch is laid over map 0 as a rough blockout, so that the size of the world can be judged in game. It is a scale study, not finished land: coastlines follow the sketch, heights follow a rough profile per region plus noise, there are no rivers, roads or textures, and the new land has no navmesh. [C]
+
+- **Anchor:** the sketch's Oakenshire pin sits on the Oakenshire town hall (atlas `oakenshire_hub`). [C]
+- **Scale:** about **17.7 m per sketch pixel**. The distance from Oakenshire to Haven on the sketch, compared with the canon Haven pin, implies 21.3 m. That would push Emberreach past the east edge of the 64 × 64 page grid (34 km), so the largest scale that still fits was used. [C]
+- **Size:** the page rect is 12,18 to 63,52: 52 × 35 pages, or 27.7 × 18.7 km. The landmass is about 26 × 17.5 km, roughly the size of a classic WoW continent. Walking across it at 7 m/s takes over an hour. [C]
+- **Pages:** 1,096 new land pages and 261 ocean pages, in a one-page ring around the land. The 66 existing pages were not touched. The new land falls smoothly to height 0 within 1.5 km of them, so the seams match. [C]
+- **Ocean:** ocean water (type 2, `Worlds/Water_Ocean.hmat`) at −0.5 m. The coast sits at +1.5 m; the sea floor falls to about −48 m. Open sea beyond the ring has no pages. [C]
+- **Heights:** the Frostward Peaks reach about 360 m; the heartland plains lie at 0–20 m. [C]
+- **The sketch's Haven** lands at about (625, 1607), about 1.45 km east of the canon Haven pin (−781, 1249). The canon pin wins; the blockout keeps Haven's zone at the pin. [C][?]
+- **Regenerate** with `py -3.14 tools/terrain_gen/alestia_blockout.py`. Review maps are written to `generated/terrain/alestia/`. [C]
+
+New zones (atlas placeholders; each is a top-level zone on map 0 with duelling allowed). The heartland around Oakenshire and Haven uses Falwyn Forest (zone 1). The new zones were painted onto the new pages only. The existing pages keep their zones. [C]
+
+| Zone | Id | | Zone | Id |
+|---|---|---|---|---|
+| Whispering Woods | 14 | | The Blackmoors | 20 |
+| Frostward Peaks | 15 | | Silvermere | 21 |
+| Stonehelm Clans | 16 | | Sands of Korash | 22 |
+| Ironspine Wastes | 17 | | Greenvale Forest | 23 |
+| Dawnbreak Plains | 18 | | Valemarch | 24 |
+| Emberreach | 19 | | Westerfell | 25 |
+
+Open [?]:
+- Is this the right scale? It is the largest that fits one map; a larger world would need Emberreach (or more) on a map of its own.
+- Should Emberreach, across the strait, be its own map?
+- Zone borders, level bands and themes are placeholders.
 
 ## 4. Peoples and factions
 

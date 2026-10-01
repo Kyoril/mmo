@@ -7,12 +7,15 @@
 #include "zone_meta.h"
 
 #include "assets/asset_registry.h"
+#include "binary_io/reader.h"
 #include "binary_io/stream_sink.h"
+#include "binary_io/stream_source.h"
 #include "binary_io/writer.h"
 #include "log/default_log_levels.h"
 #include "terrain_io/page_io.h"
 
 #include <algorithm>
+#include <set>
 
 namespace mmo
 {
@@ -21,6 +24,7 @@ namespace mmo
 		constexpr uint32 OuterSide = terrain::constants::OuterVerticesPerPageSide;	// 129
 		constexpr uint32 InnerSide = terrain::constants::InnerVerticesPerPageSide;	// 128
 		constexpr uint32 VerticesPerPageEdge = OuterSide - 1;						// 128
+		constexpr uint32 TilesPerPage = terrain::constants::TilesPerPage;			// 16
 
 		/// @brief Samples the heightmap image bilinearly at normalized zone coordinates.
 		float SampleHeight(const GrayImage16 &image, const ZoneMeta &meta, const double u, const double v)
@@ -42,6 +46,81 @@ namespace mmo
 
 			const double value = p00 * (1.0 - fx) * (1.0 - fz) + p10 * fx * (1.0 - fz) + p01 * (1.0 - fx) * fz + p11 * fx * fz;
 			return meta.minY + static_cast<float>(value / 65535.0) * (meta.maxY - meta.minY);
+		}
+
+		/// @brief Copies the zone ids of one page out of the zone map into a page's per-tile zone array.
+		///	@param onlyUnset When true, tiles that already carry a zone keep it.
+		///	@return Number of tiles whose zone changed.
+		uint32 ApplyZones(const GrayImage16 &zoneMap, const ZoneMeta &meta, const int32 pageX, const int32 pageZ, std::vector<uint32> &zones, const bool onlyUnset)
+		{
+			uint32 changed = 0;
+			for (uint32 tileZ = 0; tileZ < TilesPerPage; ++tileZ)
+			{
+				for (uint32 tileX = 0; tileX < TilesPerPage; ++tileX)
+				{
+					const uint32 mapX = static_cast<uint32>(pageX - meta.pageX0) * TilesPerPage + tileX;
+					const uint32 mapZ = static_cast<uint32>(pageZ - meta.pageZ0) * TilesPerPage + tileZ;
+					const uint32 zone = zoneMap.pixels[static_cast<size_t>(mapZ) * zoneMap.width + mapX];
+
+					uint32 &target = zones[tileX + tileZ * TilesPerPage];
+					if (zone == 0 || target == zone || (onlyUnset && target != 0))
+					{
+						continue;
+					}
+
+					target = zone;
+					++changed;
+				}
+			}
+
+			return changed;
+		}
+
+		bool WritePage(const String &filename, const terrain_io::PageData &page)
+		{
+			const auto file = AssetRegistry::CreateNewFile(filename);
+			if (!file)
+			{
+				ELOG("Failed to create terrain page file '" << filename << "'!");
+				return false;
+			}
+
+			io::StreamSink sink{ *file };
+			io::Writer writer{ sink };
+			if (!terrain_io::SavePage(writer, terrain_io::MakeView(page)))
+			{
+				ELOG("Failed to serialize terrain page '" << filename << "'!");
+				return false;
+			}
+
+			sink.Flush();
+			return true;
+		}
+
+		/// @brief Fills the unset zone ids of a page that already exists and is not overwritten.
+		///	@return false if the page could not be read or written.
+		bool FillZonesOfExistingPage(const String &filename, const GrayImage16 &zoneMap, const ZoneMeta &meta, const int32 pageX, const int32 pageZ, uint32 &changedTiles)
+		{
+			terrain_io::PageData page;
+			{
+				const auto file = AssetRegistry::OpenFile(filename);
+				if (!file)
+				{
+					ELOG("Failed to open existing terrain page '" << filename << "'!");
+					return false;
+				}
+
+				io::StreamSource source{ *file };
+				io::Reader reader{ source };
+				if (!terrain_io::LoadPage(reader, page))
+				{
+					ELOG("Failed to load existing terrain page '" << filename << "'!");
+					return false;
+				}
+			}
+
+			changedTiles = ApplyZones(zoneMap, meta, pageX, pageZ, page.zones, true);
+			return changedTiles == 0 || WritePage(filename, page);
 		}
 	}
 
@@ -99,6 +178,24 @@ namespace mmo
 		const uint32 gridWidth = pagesX * VerticesPerPageEdge + 1;
 		const uint32 gridHeight = pagesZ * VerticesPerPageEdge + 1;
 
+		GrayImage16 zoneMap;
+		if (!meta.zoneMap.empty())
+		{
+			if (!LoadGray16Png(meta.zoneMap, zoneMap))
+			{
+				return 1;
+			}
+
+			if (zoneMap.width != pagesX * TilesPerPage || zoneMap.height != pagesZ * TilesPerPage)
+			{
+				ELOG("Zone map is " << zoneMap.width << "x" << zoneMap.height << " but must hold one pixel per tile ("
+					<< pagesX * TilesPerPage << "x" << pagesZ * TilesPerPage << ")");
+				return 1;
+			}
+		}
+
+		const std::set<std::pair<int32, int32>> pageFilter(meta.pages.begin(), meta.pages.end());
+
 		if (image.width != gridWidth || image.height != gridHeight)
 		{
 			WLOG("Heightmap is " << image.width << "x" << image.height << " but the lossless resolution for this page rect is "
@@ -133,11 +230,32 @@ namespace mmo
 		}
 
 		uint32 savedPages = 0;
+		uint32 keptPages = 0;
+		uint32 zonedExistingTiles = 0;
 		terrain_io::PageData page;
 		for (int32 pageZ = meta.pageZ0; pageZ <= meta.pageZ1; ++pageZ)
 		{
 			for (int32 pageX = meta.pageX0; pageX <= meta.pageX1; ++pageX)
 			{
+				if (!pageFilter.empty() && !pageFilter.contains({ pageX, pageZ }))
+				{
+					continue;
+				}
+
+				const String filename = BuildPageFilename(meta.world, pageX, pageZ);
+				if (meta.skipExistingPages && AssetRegistry::HasFile(filename))
+				{
+					uint32 changedTiles = 0;
+					if (meta.fillExistingZones && !zoneMap.pixels.empty() && !FillZonesOfExistingPage(filename, zoneMap, meta, pageX, pageZ, changedTiles))
+					{
+						return 1;
+					}
+
+					zonedExistingTiles += changedTiles;
+					++keptPages;
+					continue;
+				}
+
 				page.Reset();
 
 				const uint32 baseX = static_cast<uint32>(pageX - meta.pageX0) * VerticesPerPageEdge;
@@ -220,7 +338,7 @@ namespace mmo
 							{
 								const uint32 tileIndex = tileX + tileZ * terrain::constants::TilesPerPage;
 								page.waterQuadMasks[tileIndex] = mask;
-								page.waterTypes[tileIndex] = 1;	// terrain::WaterType::Water
+								page.waterTypes[tileIndex] = meta.waterType;
 								pageHasWater = true;
 							}
 						}
@@ -236,28 +354,25 @@ namespace mmo
 					}
 				}
 
-				const String filename = BuildPageFilename(meta.world, pageX, pageZ);
-				const auto file = AssetRegistry::CreateNewFile(filename);
-				if (!file)
+				if (!zoneMap.pixels.empty())
 				{
-					ELOG("Failed to create terrain page file '" << filename << "'!");
+					ApplyZones(zoneMap, meta, pageX, pageZ, page.zones, false);
+				}
+
+				if (!WritePage(filename, page))
+				{
 					return 1;
 				}
 
-				io::StreamSink sink{ *file };
-				io::Writer writer{ sink };
-				if (!terrain_io::SavePage(writer, terrain_io::MakeView(page)))
-				{
-					ELOG("Failed to serialize terrain page '" << filename << "'!");
-					return 1;
-				}
-
-				sink.Flush();
 				++savedPages;
 			}
 		}
 
 		ILOG("Successfully wrote " << savedPages << " terrain pages");
+		if (keptPages > 0)
+		{
+			ILOG("Kept " << keptPages << " existing pages" << (meta.fillExistingZones ? " (zone ids filled in on " + std::to_string(zonedExistingTiles) + " of their unzoned tiles)" : String()));
+		}
 		ILOG("Note: if the world is currently open in the editor, close and reopen it to see the imported terrain");
 		return 0;
 	}

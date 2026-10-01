@@ -65,6 +65,102 @@
       "status": "placeholder",
       "ask": "Confirm the level band and write a one-line theme and description.",
       "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 14,
+      "name": "Whispering Woods",
+      "description": "Dense forest just north of Oakenshire (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 15,
+      "name": "Frostward Peaks",
+      "description": "Snow-capped mountains along the north coast (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 16,
+      "name": "Stonehelm Clans",
+      "description": "Mountain realm of the Stonehelm Clans, north-east (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 17,
+      "name": "Ironspine Wastes",
+      "description": "Brown badlands below the Stonehelm mountains (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 18,
+      "name": "Dawnbreak Plains",
+      "description": "Open golden plains east of the heartland (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 19,
+      "name": "Emberreach",
+      "description": "Volcanic land with a dark fortress, east across the strait (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 20,
+      "name": "The Blackmoors",
+      "description": "Dark moorland to the south-east (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 21,
+      "name": "Silvermere",
+      "description": "Town or city with a fortress south of Haven (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 22,
+      "name": "Sands of Korash",
+      "description": "Desert with a fortress city in the far south (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 23,
+      "name": "Greenvale Forest",
+      "description": "Forest to the south-west (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 24,
+      "name": "Valemarch",
+      "description": "A realm with a fortress to the west (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 25,
+      "name": "Westerfell",
+      "description": "Hills with a fortress in the far west (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
     }
   ],
   "pois": [
