@@ -62,7 +62,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - It has a loop at its north end (z −450), a branch east at z 50, and a shallow ford (2 m) at z 150–200.
   - Its riverbed is painted with the path splat layer; the tools ignore submerged cells when finding roads.
   - The layout sketch has this river flowing south past Haven. [E] It has no name yet. [?]
-- **A lake** up to 23 m deep lies north-west of everything (x −1050..−650, z −270..80). It is on neither sketch, and its name and nature are open. [C][?]
+- **A lake** up to 23 m deep lies north-west of everything (x −1050..−650, z −270..80). It is on neither sketch. The user removed its atlas pin (2026-10-01), so it is not a named place. Whether it stays in the terrain is open. [C][?]
 - **West of the river** the land is flat and empty, with no zone. [C] The layout sketch puts the river valley, farmlands, a crossroads inn and Haven there (section 3.11). [E]
 - **East of the ring** the land is flat and unsculpted. [C] The sketch calls the east "wilder, more dangerous areas" and the west "civilized lands". [E]
 
@@ -82,12 +82,11 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   | Place | Sketch | Atlas pin |
   |---|---|---|
   | North High Ridge | Steep and rocky, with little paths; leads to the hunting areas | `north_high_ridge`, `high_ridge_hunting_grounds` |
-  | Old Watchtower | Ruined tower on the ring's north-east; good vantage point | `old_watchtower`, on the flat 83 m summit |
-  | Hidden cave entrance | Small cave on the east side, not obvious | `hidden_cave` |
-  | Waterfall | South-east; a good landmark, with herbs growing | `ring_waterfall`; no water exists there yet |
-  | South Ridge | Rocky slopes, some leading to a quarry or mine | `south_ridge_quarry`, beside the Forest Bandit tents |
+  | Hidden cave entrance | Small cave on the east side, not obvious. **Kobolds live inside, perhaps with a hidden treasure chest.** [E] | `hidden_cave`, at the east cliff (421, 644) |
+  | Waterfall | South-east; a good landmark, with herbs growing | `ring_waterfall`, at (427, 763); no water exists there yet |
+  | South Ridge | Rocky slopes, some leading to a quarry or mine. **The quarry is separate from the bandit camp.** [E] | `south_ridge_quarry`, beside the Forest Bandit tents |
 
-  All five pins are placeholders for you to confirm.
+  All of these pins are canon (2026-10-01). The user dropped the sketch's Old Watchtower, so the only watchtower in the region is the Kingsroad bandits' Ruined Watchtower (zone 11). [E]
 - **Ring dressing** (layout sketch), to use when dressing any stretch of the ring [E]:
   - rocky outcrops and cliffs;
   - pines and dead trees;
@@ -106,7 +105,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - **Forest Camp** is where the human story begins, and the player starts there, not in a town. [E]
   - Its formal name is not settled. [E]
   - In the data, its NPCs (Farmer Haldor, Healer Mirenna, Guard Emrik, the binder Aralin the Kindling) stand at about (300, 550), just west of the Oakenshire trainers (`forest_camp`). [C]
-  - Whether Forest Camp is part of Oakenshire or a separate camp is open. [?]
+  - **Forest Camp is part of Oakenshire.** Its atlas pin is named "Oakenshire". [E] Quest texts may still say "camp" for the NPCs' corner of town.
 
 ### 3.3 Haven (zone 3; Market, zone 4, is its sub-zone) — atlas `haven` (placeholder)
 
@@ -117,9 +116,12 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - Injured Guards stand "north east of Haven" near (−55, −45) (q8).
   - Haven's binder is Magister Calloran (u25), who is not spawned.
   - All of these NPCs are buried 3–7 m below the current terrain. [C]
-- The layout sketch shows Haven as the **major city at the south-west end of the river valley**, reached by the Haven Road (section 3.11), with the river passing on its east side. [E] The atlas pin for that option is `haven_southwest`.
+- **Haven lies south-west of Oakenshire, at the end of the river valley.** [E] It is reached by the Haven Road (section 3.11), with the river passing on its east side.
+  - The atlas pin `haven` is canon at (−781, 1249), radius about 310 m: a big walled city on flat, empty ground with no zone yet.
+  - It is about 1.3 km from the Oakenshire Town Hall in a straight line.
 - The continent sketch shows Haven just **south** of Oakenshire. [E]
-- Where Haven will be built is open. Three positions compete (section 12, item 15). [?]
+- The buried Haven NPCs at the map origin are leftovers. They have to move to the new Haven, or be removed. [?]
+- The Westwatch Training Yard (q21: "not far from here") stands with them. Does it move into Haven, or stay near Oakenshire as a place of its own? [?]
 
 ### 3.4 Westwatch Training Yard
 
@@ -148,8 +150,8 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - The road "belongs to the King" and its wagons carry the King's seal (q42, q43). [C] See section 4 on the King.
 - The road painted on the terrain runs from the West Gate west past Briarwatch Camp and the Kingsroad Waypost, then north-west to the river at (−495, 355). [C] A house and two piers stand at that crossing. The atlas traces it as `old_kings_road`.
 - The layout sketch calls the first stretch beyond the gate the **Forest Road**, and has it reach the river at the **Old Stone Bridge** (atlas `old_stone_bridge`). [E]
-- Whether the Forest Road, the notes' **Westroad** and the quests' **Old King's Road** are one road is open. [?]
-- You drew the Westroad west from the gate, and the Northroad north from about (−56, 408) towards (−24, 116), the old Haven site. [E] Where the Northroad leads is open. [?]
+- **The Westroad is Oakenshire's road from the town through the West Gate** (atlas `westroad`). Beyond the gate it continues as **the Old King's Road** (atlas `old_kings_road`) to the river. Both are canon. [E] The sketch's "Forest Road" is that stretch beyond the gate.
+- The user drew the Northroad north from about (−56, 408) towards (−24, 116), the old Haven site. Where it leads now that Haven is in the south-west is open. [?]
 
 ### 3.7 The Mirewater — atlas `mirewater`, `mirewater_camp`
 
@@ -178,9 +180,9 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - **On the surface it is a ruined abbey with a bell tower that can be seen from far.** [E] (layout sketch)
   - It stands on a side path north-west of Oakenshire, off the main road and easy to miss.
   - An overgrown path leads up to it from the valley.
-- You placed its pin (`dungeon_entrance`) at (103, 346). That is on the western edge of the plateau north of the ring, at 29 m, next to a prototype Cylinder marker at (107, 345). [E]
+- **Its pin (`dungeon_entrance`) is canon at (103, 346).** That is the western edge of the plateau north of the ring, at 29 m, next to a prototype Cylinder marker at (107, 345). [E]
 - The name fits an abbey: a choir is the part of an abbey church where the monks sang. [?]
-- q57 puts the stair "under the third mound" of the Barrowfield, about 600 m further west. Which one is right is open (section 12, item 16). [?]
+- q57 still puts the stair "under the third mound" of the Barrowfield, about 600 m further west. The quest text has to be reconciled with the abbey (section 12, item 16). [?]
 - The lore behind the abbey is open. [?]
 
 ### 3.10 The wider world: Alestia, the Known Lands (continent sketch)
@@ -219,7 +221,7 @@ All entries are [E] from the continent sketch.
   - the unknown continent would lie beyond the four seas.
   This mapping is a suggestion. [?]
 
-### 3.11 The river valley and the road to Haven (layout sketch) — atlas `old_stone_bridge`, `river_valley`, `farmlands_and_hamlets`, `crossroads_inn`, `haven_southwest`, road `haven_road`
+### 3.11 The river valley and the road to Haven (layout sketch) — atlas `old_stone_bridge`, `river_valley`, `farmlands_and_hamlets`, `crossroads_inn`, `haven`, road `haven_road`
 
 The sketch numbers the stops beyond the West Gate [E]:
 
@@ -254,7 +256,10 @@ The sketch's side view reads, from west to east: Haven, the valley, Oakenshire, 
 - **Mirewater Poachers** buy plunder from the road bandits and move it through the reeds (q43). [C]
 - **The Mirewater Expedition** (Maren Duskvale, Surveyor Wick Farrow) charts the old causeways. [C]
 - **Gravespeakers** (Gravebound Cultists) sing the dead awake. Their numbers regrow ("They are not being recruited. They are being made." — q64). [C]
-- **Kobolds** are an established creature group of the region. [E] The only kobold units in the data are marked OBSOLETE and are not spawned (u2, u3). Their role and society are open. [?]
+- **Kobolds** are an established creature group of the region. [E]
+  - They live in the hidden cave in Oakenshire's ring (atlas `hidden_cave`), perhaps with a hidden treasure chest. [E]
+  - The only kobold units in the data are marked OBSOLETE and are not spawned (u2, u3).
+  - Their society is open. [?]
 
 ## 5. Named characters
 
@@ -352,7 +357,7 @@ Derived from the names already in the game. [C]
 - **Places:** English compounds built from landscape and settlement words (Oakenshire, Briarwatch, Barrowfield, Barrowfront, Mirewater, Deepwood, Westwatch, Kingsroad), and descriptive phrases ("Ruined Cottages", "the Old King's Road").
   - The continent sketch uses the same style: Whispering Woods, Frostward Peaks, Ironspine Wastes, Dawnbreak Plains, Greenvale Forest, Silvermere, Valemarch, Westerfell, the Blackmoors.
   - It also uses peoples' realms (Stonehelm Clans), one foreign-sounding name (the Sands of **Korash**), and one fiery name (Emberreach). [E]
-  - Local landmarks from the layout sketch are plain: Old Watchtower, Old Stone Bridge, Crossroads Inn, Forward Outpost, High Ridge.
+  - Local landmarks from the layout sketch are plain: Old Stone Bridge, Crossroads Inn, Forward Outpost, High Ridge.
   - **Stonehelm** is both a realm (the Stonehelm Clans) and the family name of the Haven vendor Roland Stonehelm (Mail & Plate). A link or a coincidence? [?]
 - **Spawn names:** `<Place> - <Unit name> NN`, where the place is an atlas place name (for example `Mirewater - Bog Rat 03`). The linter warns about new spawns that break this.
 - **Items:** plain and physical (Torn Bandit Armband, Unbroken Wolf Fang, Reinforced Mortar Sack). Quest items are never grey quality.
@@ -382,7 +387,7 @@ Derived from the names already in the game. [C]
 - A faster transport system without personal mounts is being considered. [E]
 - Roads, passes, mine carts, carts and wagons, and ships all came up. [E]
 - The Oakenshire–Haven road was sketched at 500–1,000 m. [E]
-- If Haven goes to the south-west option, the road from the Town Hall through the gate, over the bridge and down the valley is about 1.6 km (atlas `old_kings_road` plus `haven_road`), and the straight line is about 1.1 km. [C]
+- From the Town Hall through the gate, over the bridge and down the valley to Haven's edge, the road is about 1.6 km (atlas `westroad`, `old_kings_road`, `haven_road`). The straight line to Haven's centre is about 1.3 km. [C]
 - No route network, operators or fast-travel rules are established. [?]
 
 ## 12. Open questions and contradictions
@@ -413,11 +418,12 @@ Derived from the names already in the game. [C]
 3. **Forest Camp vs Oakenshire.**
    - Notes: the player starts in a small camp, not a town.
    - Game: Haldor, Mirenna and Emrik stand inside the Oakenshire zone, about 40 m from the Town Hall trainers.
+   - **Resolved 2026-10-01:** Forest Camp is part of Oakenshire (section 3.2). The notes' "small camp, not a town" is superseded.
 4. **The Light and the King.**
    - Notes: "the Light" and "the Crown" were only possible expressions.
    - Game: clerics serve the Light (q7, q8, q35, q36), Haldor swears "By the Light" (q6), and the road, wagons and seals belong to the King (q27, q42, q43). Promote them to [E], or rewrite those texts.
 5. **Shadowmancer or Acolyte?** Malrik is a "Shadowmancer Trainer", but his chain is "Path of the Acolyte" and the camp trainers are "Acolyte Trainer"s. Is "Acolyte" the rank of a shadowmancer student, or a different name for the class?
-6. **Kobolds** are established in the notes but absent from the game (the only kobold units are OBSOLETE).
+6. **Kobolds** are established in the notes but absent from the game (the only kobold units are OBSOLETE). Their home is now decided: the hidden cave in Oakenshire's ring (section 4). New kobold units are still needed.
 
 ### Errors in the game data found while building this bible
 
@@ -441,27 +447,30 @@ Derived from the names already in the game. [C]
 
 ### From the two sketches (2026-09-28)
 
-15. **Where Haven is.** Three places compete:
-    - The data: the buried Haven vendors and the Westwatch Training Yard stand at about (0 to 50, −50 to 20), north-west of Oakenshire. You drew the Northroad towards that spot. Atlas `haven`.
-    - The layout sketch: south-west, at the end of the river valley. Atlas `haven_southwest`.
-    - The continent sketch: just south of Oakenshire.
-
-    Keep one pin. Then decide whether the Westwatch Training Yard moves with Haven.
+15. **Where Haven is.** **Resolved 2026-10-01:** south-west, at (−781, 1249) (section 3.3).
+    Still open:
+    - the buried Haven NPCs at the origin have to move or go;
+    - does the Westwatch Training Yard move with Haven?
+    - where does the Northroad lead now?
+    - the continent sketch's "Haven just south of Oakenshire" is only approximate at that scale.
 16. **The Hollow Choir's entrance.**
-    - Sketch and your pin: a ruined abbey on the plateau edge north-west of Oakenshire, at (103, 346).
+    - Sketch and the user's pin: a ruined abbey on the plateau edge north-west of Oakenshire, at (103, 346).
     - q57: "a stair under the third mound" of the Barrowfield, at about (−474, 227), 600 m west. The Barrowfront chaplain gives the whole dungeon chain (q57–q62).
 
-    Options: reword q57 and move the quest giver's reasons to the abbey; build the abbey on the Barrowfield instead; or give the crypt two entrances.
+    **The abbey pin is canon (2026-10-01).** q57 (and the "beneath the Barrowfield" objective wording of q57–q62) still has to be reconciled. Options:
+    - reword q57 to send the player to the abbey;
+    - keep the Barrowfront chaplain as the chain's giver, with the abbey as the way in;
+    - give the crypt a second, collapsed entrance under the third mound.
 17. **Which way is dangerous.**
     - The sketch calls the west "civilized lands" and the east, beyond the ring, the "wilder, more dangerous areas".
     - In the game, the west beyond the gate is a frontier being reclaimed (Briarwatch March, q25), and it holds the level 8–10 raised dead.
 
     These fit together if the civilized lands begin across the river.
-18. **Two watchtowers.** The sketch's **Old Watchtower** (ruined, on the ring's north-east) and zone 11 **Ruined Watchtower** (the Kingsroad bandits' tower in the west) are different places with near-identical names. Rename one.
+18. **Two watchtowers.** **Resolved 2026-10-01:** the sketch's Old Watchtower was dropped; zone 11's Ruined Watchtower is the only one.
 19. **Where the farms are.**
     - The game has farms in the basin south-east of town (q1, q5, q6).
     - The sketch shows farmlands and hamlets in the river valley beyond the gate.
 
     Both can be true: the basin farms feed Oakenshire, the valley farms feed Haven.
-20. **The South Ridge quarry and the bandit camp.** The Forest Bandit camp tents stand at the foot of the south ridge, exactly where the sketch draws the quarry buildings. Do the bandits hold the old quarry, or is the quarry a separate, working place?
+20. **The South Ridge quarry and the bandit camp.** The Forest Bandit camp tents stand at the foot of the south ridge, exactly where the sketch draws the quarry buildings. Do the bandits hold the old quarry, or is the quarry a separate, working place? **Resolved 2026-10-01: separate.** Who works it is open.
 21. **The Forward Outpost** (sketch stop 3) matches no existing camp west of the river (section 3.11).
