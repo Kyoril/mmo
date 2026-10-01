@@ -53,6 +53,14 @@ class PropContext:
     spawns: list = field(default_factory=list)
     poi: dict | None = None
     roads: list = field(default_factory=list)      # atlas road point lists [[x, z], ...]
+    _tags: dict = field(default_factory=dict, init=False, repr=False)   # asset path -> AssetTags
+
+    def tags_for(self, asset: str):
+        """Tag rules resolved for an asset path, cached (resolution scans every rule and is pure)."""
+        tags = self._tags.get(asset)
+        if tags is None:
+            tags = self._tags[asset] = self.rules.for_asset(asset)
+        return tags
 
 
 def props_from_entities(entities) -> list[PlacedProp]:
@@ -91,6 +99,7 @@ def _quads_overlap(a: np.ndarray, b: np.ndarray) -> bool:
 
 
 def _inside_quad(point, quad: np.ndarray) -> bool:
+    """Point-in-convex-quad (boundary counts as inside); a degenerate (zero-area) quad contains nothing."""
     sign = None
     for i in range(4):
         edge = quad[(i + 1) % 4] - quad[i]
@@ -101,7 +110,7 @@ def _inside_quad(point, quad: np.ndarray) -> bool:
             sign = cross > 0
         elif (cross > 0) != sign:
             return False
-    return True
+    return sign is not None
 
 
 def _segment_distance(px, pz, ax, az, bx, bz) -> float:
@@ -127,7 +136,7 @@ def lint_prop(prop: PlacedProp, context: PropContext, others: list[PlacedProp]) 
         add("prop_unknown_asset", "error", "asset is not in the catalog or unreadable")
         return found
     q = context.query
-    tags = context.rules.for_asset(prop.asset)
+    tags = context.tags_for(prop.asset)
     corners = footprint_corners(prop, info, tags)
     quad = corners[:, [0, 2]]
     points = [(prop.x, prop.z)] + [(float(c[0]), float(c[2])) for c in corners]
@@ -161,17 +170,23 @@ def lint_prop(prop: PlacedProp, context: PropContext, others: list[PlacedProp]) 
         other_info = context.catalog.get(other.asset)
         if other_info is None or other_info.error:
             continue
-        other_tags = context.rules.for_asset(other.asset)
-        reach = radius + other_info.radius * other.scale * other_tags.footprint_scale
-        if math.hypot(other.x - prop.x, other.z - prop.z) > reach:
+        distance = math.hypot(other.x - prop.x, other.z - prop.z)
+        # Conservative bound without tags (footprint_scale only ever shrinks), so far-apart pairs never resolve tags.
+        if distance > info.radius * prop.scale + other_info.radius * other.scale:
+            continue
+        other_tags = context.tags_for(other.asset)
+        if distance > radius + other_info.radius * other.scale * other_tags.footprint_scale:
             continue
         if tags.tags & other_tags.may_overlap or other_tags.tags & tags.may_overlap:
             continue
         if _quads_overlap(quad, footprint_corners(other, other_info, other_tags)[:, [0, 2]]):
             add("prop_overlap", "error", f"overlaps {other.asset.rsplit('/', 1)[-1]} ({other.key})")
             break
+    quad_reach = max(math.hypot(float(px) - prop.x, float(pz) - prop.z) for px, pz in quad) + 1.0
     for record in context.spawns:
-        if record.active and _inside_quad((record.x, record.z), quad):
+        if not record.active or math.hypot(record.x - prop.x, record.z - prop.z) > quad_reach:
+            continue
+        if _inside_quad((record.x, record.z), quad):
             add("prop_on_spawn", "warning", f"covers the spawn point of {record.name or record.key}")
             break
     if context.poi is not None and not contains(context.poi, prop.x, prop.z):

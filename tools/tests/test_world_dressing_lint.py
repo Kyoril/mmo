@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -19,7 +20,7 @@ import world_fixtures as fx  # noqa: E402
 from worldkit.assets import build_catalog  # noqa: E402
 from worldkit.constants import CELL_SIZE, PIXEL_SIZE  # noqa: E402
 from worldkit.geometry import quat_from_yaw_tilt  # noqa: E402
-from worldkit.prop_lint import PlacedProp, PropContext, lint_props, lint_world_props, props_from_entities  # noqa: E402
+from worldkit.prop_lint import PlacedProp, PropContext, _inside_quad, lint_props, lint_world_props, props_from_entities  # noqa: E402
 from worldkit.query import WorldQuery  # noqa: E402
 from worldkit.snapshot import build_snapshot  # noqa: E402
 from worldkit.spawns import SpawnRecord, spawn_key  # noqa: E402
@@ -96,6 +97,12 @@ class PropLintTests(unittest.TestCase):
 		rocks = [prop(60.0, 60.0, asset="Models/Test/Rock.hmsh", key="a"), prop(60.5, 60.0, asset="Models/Test/Rock.hmsh", key="b")]
 		self.assertNotIn(("prop_overlap", "error"), self.rules(rocks))
 
+	def test_overlap_uses_the_rotated_footprint(self):
+		# The existing cube covers x 149..151; a neighbour 2.2 m away clears it unrotated (gap 0.2 m) but its
+		# 45 degree diamond reaches 1.41 m towards it and pokes in.
+		self.assertNotIn(("prop_overlap", "error"), self.rules([prop(152.2, 150.0)]))
+		self.assertIn(("prop_overlap", "error"), self.rules([prop(152.2, 150.0, yaw=45.0)]))
+
 	def test_roads(self):
 		self.assertIn(("prop_on_road", "error"), self.rules([prop(105.0, 300.0)]))
 		self.assertIn(("prop_on_road", "warning"), self.rules([prop(105.0, 300.0, collides=False)]))
@@ -113,6 +120,30 @@ class PropLintTests(unittest.TestCase):
 		grid = [prop(160.0 + i * 14.0, 200.0 + j * 14.0, key=f"g{i}{j}") for i in range(3) for j in range(3)]
 		self.assertIn(("prop_grid_pattern", "warning"), self.rules(grid))
 		self.assertIn(("prop_unknown_asset", "error"), self.rules([prop(50.0, 50.0, asset="Models/Nope.hmsh")]))
+
+	def test_on_spawn_edges(self):
+		self.assertIn(("prop_on_spawn", "warning"), self.rules([prop(60.0, 70.0)], spawns=[spawn(60.9, 70.0)]))
+		self.assertNotIn(("prop_on_spawn", "warning"), self.rules([prop(60.0, 70.0)], spawns=[spawn(61.2, 70.0)]))
+		self.assertNotIn(("prop_on_spawn", "warning"), self.rules([prop(60.0, 70.0)], spawns=[spawn(300.0, 400.0)]))
+
+	def test_degenerate_quad_contains_nothing(self):
+		flat = np.array([[5.0, 5.0], [5.0, 5.0], [5.0, 5.0], [5.0, 5.0]])
+		self.assertFalse(_inside_quad((5.0, 5.0), flat))
+		line = np.array([[0.0, 0.0], [2.0, 0.0], [2.0, 0.0], [0.0, 0.0]])
+		self.assertFalse(_inside_quad((1.0, 0.0), line))
+		square = np.array([[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]])
+		self.assertTrue(_inside_quad((1.0, 1.0), square))
+		self.assertFalse(_inside_quad((3.0, 1.0), square))
+
+	def test_tags_resolved_once_per_asset(self):
+		props = [prop(40.0 + i * 30.0, 40.0, key=f"c{i}") for i in range(4)]
+		props += [prop(40.0 + i * 30.0, 100.0, asset="Models/Test/Rock.hmsh", key=f"r{i}") for i in range(3)]
+		real = TagRules.for_asset
+		with mock.patch.object(TagRules, "for_asset", autospec=True, side_effect=real) as counter:
+			lint_props(props, self.context())
+		assets = {p.asset for p in props} | {p.asset for p in self.existing}
+		self.assertGreater(counter.call_count, 0)
+		self.assertLessEqual(counter.call_count, len(assets))
 
 	def test_world_lint_covers_existing_props(self):
 		violations = lint_world_props(self.context())
