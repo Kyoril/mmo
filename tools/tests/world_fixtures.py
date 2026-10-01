@@ -203,3 +203,14 @@ def make_world(repo: Path, directory: str, pages: dict, entities=(), default_mat
 		folder = world / directory / "Entities" / str((page_x << 8) | page_z)
 		folder.mkdir(parents=True, exist_ok=True)
 		(folder / f"{kwargs.get('unique_id', index + 1)}.wobj").write_bytes(wobj_bytes(**kwargs))
+
+
+def htex_rgba_bytes(pixels) -> bytes:
+	"""An uncompressed RGBA (format 1) .htex with one mip. pixels: (h, w, 4) uint8 array."""
+	pixels = np.asarray(pixels, np.uint8)
+	height, width = pixels.shape[:2]
+	offsets = [142] + [0] * 15
+	lengths = [width * height * 4] + [0] * 15
+	header = b"HTEX" + struct.pack("<IBBHH", 0x100, 1, 0, width, height)
+	header += struct.pack("<16I", *offsets) + struct.pack("<16I", *lengths)
+	return header + pixels.tobytes()
