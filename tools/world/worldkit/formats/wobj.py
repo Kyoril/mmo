@@ -1,5 +1,5 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
-"""Placed world entity (.wobj) parser, mirroring src/shared/game_common/world_entity_loader.cpp.
+"""Placed world entity (.wobj) parser and writer, mirroring src/shared/game_common/world_entity_loader.cpp and mmo_edit's Save.
 
 Layout: REVW (uint32 version 1..3), then exactly one of
   HSMW mesh:  u64 id, str16 mesh, 3f pos, 4f rot (w,x,y,z), 3f scale, u8 n + n*(u8 idx, str16 mat),
@@ -9,10 +9,15 @@ Layout: REVW (uint32 version 1..3), then exactly one of
 
 from __future__ import annotations
 
+import random
+import struct
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .chunks import Cursor, FormatError, iter_chunks
+from ..constants import entity_page_index
+from ..paths import REPO, entities_dir
+from .chunks import Cursor, FormatError, chunk_bytes, iter_chunks, str8_bytes, str16_bytes
 
 
 @dataclass(frozen=True)
@@ -62,3 +67,31 @@ def parse_wobj(path: Path) -> WorldEntity:
 
     return WorldEntity(unique_id, "mesh" if magic == b"HSMW" else "wmo", asset, position, rotation, scale,
                        name, category, tuple(overrides), source)
+
+
+def wobj_bytes(*, kind: str, unique_id: int, asset: str, position, rotation, scale, name: str = "",
+               category: str = "") -> bytes:
+    """A version-3 entity file exactly as mmo_edit writes it (no material overrides)."""
+    if kind not in ("mesh", "wmo"):
+        raise ValueError(f"unknown entity kind {kind!r}")
+    body = struct.pack("<Q", unique_id) + str16_bytes(asset)
+    body += struct.pack("<3f4f3f", *position, *rotation, *scale)
+    if kind == "mesh":
+        body += struct.pack("<B", 0)
+    body += str8_bytes(name) + str16_bytes(category)
+    return chunk_bytes(b"REVW", struct.pack("<I", 3)) + chunk_bytes(b"HSMW" if kind == "mesh" else b"OMWW", body)
+
+
+def entity_file(directory: str, unique_id: int, x: float, z: float, repo: Path = REPO) -> Path:
+    """Entities/<pageIndex>/<uniqueId>.wobj; the folder is the page of the entity's position."""
+    return entities_dir(directory, repo) / str(entity_page_index(x, z)) / f"{unique_id}.wobj"
+
+
+def new_unique_id(taken: set[int], rng: random.Random) -> int:
+    """mmo_edit's scheme (EntityFactory::GenerateUniqueId): 16 bits of the ms clock over 48 random bits.
+    The id is added to `taken`."""
+    while True:
+        value = ((int(time.time() * 1000) & 0xFFFF) << 48) | rng.getrandbits(48)
+        if value and value not in taken:
+            taken.add(value)
+            return value

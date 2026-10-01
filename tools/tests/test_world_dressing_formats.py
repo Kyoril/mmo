@@ -6,7 +6,9 @@
 	python tools/tests/test_world_dressing_formats.py
 """
 
+import random
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,6 +17,7 @@ import world_fixtures as fx  # noqa: E402
 
 from worldkit.formats.chunks import FormatError  # noqa: E402
 from worldkit.formats.hfol import FoliageInstance, append_instances, parse_hfol, remove_instances, write_hfol  # noqa: E402
+from worldkit.formats.wobj import entity_file, new_unique_id, parse_wobj, wobj_bytes  # noqa: E402
 from worldkit.paths import foliage_dir  # noqa: E402
 
 TREES = ["Models/Trees/A.hmsh", "Models/Trees/B.hmsh"]
@@ -74,6 +77,39 @@ class FoliageFormatTests(unittest.TestCase):
 			ff = parse_hfol(data, str(path))
 			if ff.version == 2:
 				self.assertEqual(write_hfol(ff), data, path.name)
+
+
+class EntityWriterTests(unittest.TestCase):
+	def test_mesh_round_trip(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			path = Path(tmp) / "1.wobj"
+			path.write_bytes(wobj_bytes(kind="mesh", unique_id=0xABCDEF0123, asset="Models/Desert/Rocks/R.hmsh",
+										position=(10.5, 2.25, -3.0), rotation=(0.9238795, 0.0, 0.3826834, 0.0),
+										scale=(1.2, 1.2, 1.2), category="dressing/quarry"))
+			entity = parse_wobj(path)
+		self.assertEqual((entity.kind, entity.unique_id, entity.asset, entity.category, entity.material_overrides),
+						 ("mesh", 0xABCDEF0123, "Models/Desert/Rocks/R.hmsh", "dressing/quarry", ()))
+		self.assertAlmostEqual(entity.rotation[2], 0.3826834, places=6)
+		self.assertAlmostEqual(entity.scale[0], 1.2, places=6)
+
+	def test_layout_matches_the_editor_writer_fixture(self):
+		for kind, asset in (("mesh", "Models/Test/Crate.hmsh"), ("wmo", "Models/Mine/Mine_01.hwmo")):
+			mine = wobj_bytes(kind=kind, unique_id=7, asset=asset, position=(1.0, 2.0, 3.0), rotation=(1.0, 0.0, 0.0, 0.0),
+							  scale=(1.0, 1.0, 1.0), name="Crate", category="Props")
+			self.assertEqual(mine, fx.wobj_bytes(kind=kind, unique_id=7, asset=asset, name="Crate", category="Props"), kind)
+
+	def test_entity_file_uses_the_editor_page_folders(self):
+		path = entity_file("W", 42, 100.0, 600.0, repo=Path("/r"))
+		self.assertEqual(path.name, "42.wobj")
+		self.assertEqual(path.parent.name, str((32 << 8) | 33))   # x 100 -> page 32, z 600 -> page 33
+
+	def test_unique_ids_are_fresh_and_nonzero(self):
+		taken = {1, 2}
+		rng = random.Random(3)
+		ids = {new_unique_id(taken, rng) for _ in range(200)}
+		self.assertEqual(len(ids), 200)
+		self.assertTrue(ids.isdisjoint({0, 1, 2}))
+		self.assertTrue(ids <= taken)
 
 
 if __name__ == "__main__":
