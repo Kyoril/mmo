@@ -24,7 +24,7 @@ from worldkit.materials import TextureCache, is_masked  # noqa: E402
 from worldkit.meshrender import Camera, DrawMesh, outline, render  # noqa: E402
 from worldkit.paths import client_root  # noqa: E402
 from worldkit import previews  # noqa: E402
-from worldkit.previews import _compass, asset_views, contact_sheet, site_meshes, site_previews, terrain_meshes  # noqa: E402
+from worldkit.previews import _compass, _occlusion, asset_views, choose_cameras, contact_sheet, site_meshes, site_previews, terrain_meshes  # noqa: E402
 from worldkit.query import WorldQuery  # noqa: E402
 from worldkit.snapshot import build_snapshot  # noqa: E402
 
@@ -243,6 +243,54 @@ class SitePreviewTests(unittest.TestCase):
 		self.assertEqual(len(cameras), 3)
 		for camera in cameras:
 			self.assertGreaterEqual(camera.eye[1], 32.0 - 1e-6)          # 30 m ground + 2 m clearance, not 0 + 0.9 * radius
+
+
+
+class CameraChoiceTests(unittest.TestCase):
+	class Wall:
+		"""Flat ground, with a 60 m wall of terrain everywhere east of x = 60 (the site is at x = 50)."""
+
+		@staticmethod
+		def height_at(x, z):
+			return 60.0 if x > 60.0 else 0.0
+
+	def test_no_chosen_camera_looks_through_the_wall(self):
+		cameras = choose_cameras(self.Wall(), (50.0, 50.0), 20.0, count=3)
+		self.assertEqual(len(cameras), 3)
+		for eye, target, label in cameras:
+			self.assertEqual(_occlusion(self.Wall(), eye, target), 0.0, label)
+			self.assertLessEqual(eye[0], 60.0)                                  # never behind or inside the wall
+
+	def test_labels_name_the_direction_looked_in_and_choice_is_deterministic(self):
+		first = choose_cameras(self.Wall(), (50.0, 50.0), 20.0, count=3)
+		self.assertEqual(first, choose_cameras(self.Wall(), (50.0, 50.0), 20.0, count=3))
+		for eye, target, label in first:
+			self.assertEqual(label, _compass(target[0] - eye[0], target[2] - eye[2]))
+
+	def test_cameras_keep_their_distance_from_each_other(self):
+		cameras = choose_cameras(self.Wall(), (50.0, 50.0), 20.0, count=3)
+		angles = sorted(math.degrees(math.atan2(eye[0] - 50.0, eye[2] - 50.0)) % 360.0 for eye, _, _ in cameras)
+		gaps = [b - a for a, b in zip(angles, angles[1:])] + [angles[0] + 360.0 - angles[-1]]
+		self.assertGreaterEqual(min(gaps), 60.0 - 1e-6)
+
+	def test_open_ground_keeps_an_even_spread(self):
+		class Flat:
+			@staticmethod
+			def height_at(x, z):
+				return 0.0
+		cameras = choose_cameras(Flat(), (0.0, 0.0), 10.0, count=3)
+		angles = sorted(round(math.degrees(math.atan2(eye[0], eye[2])) % 360.0) for eye, _, _ in cameras)
+		self.assertEqual(angles, [30, 150, 270])
+
+	def test_cameras_avoid_a_ridge_on_one_side(self):
+		class Ridge:
+			"""A 12 m rise starting 6 m east of the site."""
+			@staticmethod
+			def height_at(x, z):
+				return 12.0 if x > 56.0 else 0.0
+		cameras = choose_cameras(Ridge(), (50.0, 50.0), 20.0, count=3)
+		for eye, target, _ in cameras:
+			self.assertEqual(_occlusion(Ridge(), eye, target), 0.0)
 
 
 if __name__ == "__main__":

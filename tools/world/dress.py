@@ -18,7 +18,7 @@ apply, undo and publish-nav refuse while mmo_edit runs. data/client is never com
 from __future__ import annotations
 
 import argparse
-import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -38,18 +38,28 @@ def _summary(doc: dict) -> str:
 
 def _packet(session, doc) -> Path:
     images = pass_images(session, doc)
-    after = after_map(session, doc)
-    folder = write_packet(doc, images, REPO)
-    shutil.copyfile(after, folder / "after.png")
-    before = passes_dir(REPO) / doc["pass_id"] / "before.png"
-    if before.is_file():
-        shutil.copyfile(before, folder / "before.png")
-    return folder
+    after_map(session, doc)                                  # lands in the pass's working folder; the packet embeds it
+    return write_packet(doc, images, REPO)
+
+
+def _session(args, docs):
+    """A session on the map the passes were planned for. An explicit --map that disagrees is refused."""
+    maps = {doc["map"] for doc in docs}
+    if len(maps) != 1:
+        raise PassError(f"the passes are on different maps ({sorted(maps)}): check them separately")
+    map_id = maps.pop()
+    if args.map is not None and args.map != map_id:
+        raise PassError(f"{docs[0]['pass_id']} belongs to map {map_id}, not --map {args.map}")
+    session = open_session(map_id)
+    for doc in docs:
+        if doc["world"] != session.directory:
+            raise PassError(f"{doc['pass_id']} was planned for world {doc['world']!r}, but map {map_id} is {session.directory!r}")
+    return session
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--map", type=int, default=0)
+    parser.add_argument("--map", type=int, default=None, help="map id (plan, nav-baseline, publish-nav; default 0)")
     sub = parser.add_subparsers(dest="command", required=True)
     plan = sub.add_parser("plan")
     plan.add_argument("--poi", required=True)
@@ -86,39 +96,44 @@ def main(argv=None) -> int:
             return 0
         if args.command == "undo":
             doc = load_doc(args.pass_id)
+            if args.map is not None and args.map != doc["map"]:
+                raise PassError(f"{doc['pass_id']} belongs to map {doc['map']}, not --map {args.map}")
             report = undo_pass(doc, force=args.force)
             print(f"{doc['pass_id']}: {doc['status']}; removed {len(report.removed)}, kept (changed by you) {len(report.changed)}, "
                   f"already gone {len(report.missing)}")
             for item in report.changed:
                 print(f"  kept: {item}")
             return 0
+        map_id = args.map if args.map is not None else 0
         if args.command == "publish-nav":
             if not args.yes:
                 print("publish-nav rebuilds data/editor/nav (the real navmesh). Re-run with --yes when the user asked for it.")
                 return 1
             if editor_running():
                 raise PassError("close mmo_edit first")
-            session = open_session(args.map)
+            session = open_session(map_id)
             print(build_nav(session.directory, REPO / "data" / "editor", REPO))
             return 0
-        session = open_session(args.map)
-        if args.command == "plan":
-            doc = plan_pass(session, args.poi, args.template, args.seed, args.anchor, args.keep_away, args.allow_placeholder)
-            print(_summary(doc))
-            for gap in doc["gaps"]:
-                print(f"  gap: {gap['role']} ({gap['kind']}): placed {gap['placed']} of {gap['wanted']}")
-            print(f"draft and previews: {passes_dir() / doc['pass_id']}")
-        elif args.command == "check":
+        if args.command == "check":
             docs = [load_doc(p) for p in args.passes]
+            session = _session(args, docs)
             if args.nav:
-                nav_check(session, docs)
+                try:
+                    nav_check(session, docs)
+                except NavError:
+                    for doc in docs:                          # nav_check saved the unchecked ones; show where each stands
+                        print(_summary(doc))
+                    raise
                 for doc in docs:
                     print(_summary(doc), "->", _packet(session, doc))
             else:
                 for doc in docs:
                     print(_summary(check_pass(session, doc)))
         elif args.command == "apply":
-            doc = apply_pass(load_doc(args.pass_id))
+            doc = load_doc(args.pass_id)
+            session = _session(args, [doc])
+            doc = apply_pass(doc)
+            nav_error = None
             if args.skip_nav:
                 doc["status"] = "applied-unchecked"
                 save_doc(doc)
@@ -126,20 +141,36 @@ def main(argv=None) -> int:
                 try:
                     nav_check(session, [doc])
                 except NavError as exc:
-                    # the props are in the world: keep the pass reviewable instead of losing the packet
-                    print(f"warning: navmesh check failed ({exc}); pass kept as applied-unchecked", file=sys.stderr)
-            print(_summary(doc), "->", _packet(session, doc))
-        elif args.command == "nav-baseline":
-            nav_dir = build_nav(session.directory, scratch_nav_root(), REPO)
-            routes = load_routes()
-            with NavQuery(nav_dir, session.directory) as nav:
-                for route in routes:
-                    route.baseline_length = route_length(nav, session.query, route.points)
-                    print(f"{route.id}: {route.baseline_length}")
-            save_routes(routes)
+                    nav_error = exc                          # nav_check already saved the pass as applied-unchecked
+            print(_summary(doc), "->", _packet(session, doc))    # the props are in the world: always leave a reviewable packet
+            if nav_error is not None:
+                print(f"error: the props are placed but the navmesh check failed ({nav_error}); the pass is applied-unchecked. "
+                      f"Run `python tools/world/dress.py check --nav {doc['pass_id']}` once that is fixed, or "
+                      f"`python tools/world/dress.py undo {doc['pass_id']}`.", file=sys.stderr)
+                return 1
+        else:
+            session = open_session(map_id)
+            if args.command == "plan":
+                doc = plan_pass(session, args.poi, args.template, args.seed, args.anchor, args.keep_away, args.allow_placeholder)
+                print(_summary(doc))
+                for gap in doc["gaps"]:
+                    print(f"  gap: {gap['role']} ({gap['kind']}): placed {gap['placed']} of {gap['wanted']}")
+                print(f"draft and previews: {passes_dir() / doc['pass_id']}")
+            elif args.command == "nav-baseline":
+                nav_dir = build_nav(session.directory, scratch_nav_root(), REPO)
+                routes = load_routes()
+                with NavQuery(nav_dir, session.directory) as nav:
+                    for route in routes:
+                        route.baseline_length = route_length(nav, session.query, route.points)
+                        print(f"{route.id}: {route.baseline_length}")
+                save_routes(routes)
         return 0
     except (PassError, NavError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as exc:
+        detail = ((exc.stderr or "") + (exc.stdout or "")) if isinstance(exc.stderr, str) or isinstance(exc.stdout, str) else ""
+        print(f"error: {' '.join(map(str, exc.cmd))[:200]} failed (exit {exc.returncode}) {detail.strip()[-800:]}", file=sys.stderr)
         return 1
 
 

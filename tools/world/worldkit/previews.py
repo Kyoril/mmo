@@ -233,25 +233,75 @@ def site_meshes(query, catalog, geometry, textures, center, radius: float, entit
     return meshes, highlight
 
 
+_CANDIDATE_AZIMUTHS = 12
+_MARCH_STEP = 2.0
+_RAISED_EYE = 2.0                       # radii above the ground, the highest a camera is lifted to clear a slope
+
+
+def _occlusion(query, eye, target) -> float:
+    """Fraction of the eye-to-target line (sampled about every 2 m) that runs below the terrain surface."""
+    dx, dy, dz = target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]
+    steps = max(2, int(math.ceil(math.hypot(dx, dz) / _MARCH_STEP)))
+    hidden = 0
+    for k in range(1, steps):
+        t = k / steps
+        height = query.height_at(eye[0] + dx * t, eye[2] + dz * t)
+        if height is not None and height > eye[1] + dy * t:
+            hidden += 1
+    return hidden / (steps - 1)
+
+
+def _eye(query, cx: float, cz: float, azimuth: float, distance: float, height: float) -> tuple[float, float, float]:
+    x, z = cx + math.sin(azimuth) * distance, cz + math.cos(azimuth) * distance
+    ground = query.height_at(x, z)
+    return x, (height if ground is None else max(height, ground + _EYE_CLEARANCE)), z      # never under a hill
+
+
+def choose_cameras(query, center, radius: float, count: int = 3) -> list[tuple[tuple, tuple, str]]:
+    """(eye, target, label) per preview: the `count` best-seeing of 12 candidate azimuths, deterministic.
+
+    A candidate is scored by how much of its line of sight to the site runs through terrain; a candidate
+    that looks into a slope is lifted (up to two radii above the site) before it is judged. Chosen
+    cameras are at least 360 / (2 * count) degrees apart, ties prefer an even spread starting at 30 degrees.
+    """
+    cx, cz = center
+    ground = query.height_at(cx, cz) or 0.0
+    target = (cx, ground + 2.0, cz)
+    distance = radius * 1.7
+    candidates = []
+    for index in range(_CANDIDATE_AZIMUTHS):
+        degrees = 30.0 + index * 360.0 / _CANDIDATE_AZIMUTHS
+        azimuth = math.radians(degrees)
+        eye = _eye(query, cx, cz, azimuth, distance, ground + radius * 0.9)
+        hidden = _occlusion(query, eye, target)
+        if hidden > 0.0:
+            raised = _eye(query, cx, cz, azimuth, distance, ground + radius * _RAISED_EYE)
+            raised_hidden = _occlusion(query, raised, target)
+            if raised_hidden < hidden:
+                eye, hidden = raised, raised_hidden
+        ideal = min(abs((degrees - (30.0 + k * 360.0 / count) + 180.0) % 360.0 - 180.0) for k in range(count))
+        candidates.append((round(hidden, 1), ideal, index, degrees, eye))
+    chosen = []
+    for _, _, _, degrees, eye in sorted(candidates):
+        gap = 360.0 / (2 * count)
+        if all(abs((degrees - other + 180.0) % 360.0 - 180.0) >= gap - 1e-6 for other, _ in chosen):
+            chosen.append((degrees, eye))
+        if len(chosen) == count:
+            break
+    chosen.sort()                                                            # previews run clockwise from the first azimuth
+    return [(eye, target, _compass(cx - eye[0], cz - eye[2])) for _, eye in chosen]
+
+
 def site_previews(query, catalog, geometry, textures, center, radius: float, entities, instances, items,
                   count: int = 3, size=(960, 640)) -> list[tuple[str, Image.Image]]:
     """Perspective views around a site: terrain, existing props and trees, and the draft items outlined."""
-    cx, cz = center
-    ground = query.height_at(cx, cz) or 0.0
     meshes, highlight = site_meshes(query, catalog, geometry, textures, center, radius, entities, instances, items)
     out = []
-    for k in range(count):
-        azimuth = math.radians(30.0 + k * 360.0 / count)
-        eye_x, eye_z = cx + math.sin(azimuth) * radius * 1.7, cz + math.cos(azimuth) * radius * 1.7
-        eye_y = ground + radius * 0.9
-        eye_ground = query.height_at(eye_x, eye_z)
-        if eye_ground is not None:
-            eye_y = max(eye_y, eye_ground + _EYE_CLEARANCE)                  # never under a hill
-        eye = (eye_x, eye_y, eye_z)
-        camera = Camera(eye=eye, target=(cx, ground + 2.0, cz), width=size[0], height=size[1], fov_deg=50.0)
+    for k, (eye, target, direction) in enumerate(choose_cameras(query, center, radius, count)):
+        camera = Camera(eye=eye, target=target, width=size[0], height=size[1], fov_deg=50.0)
         rgb, ids = render(meshes, camera, background=(150, 180, 215))
         image = Image.fromarray(outline(rgb, ids, highlight))
-        label = f"preview {k + 1} - looking {_compass(cx - eye[0], cz - eye[2])}"
+        label = f"preview {k + 1} - looking {direction}"
         ImageDraw.Draw(image).text((8, 6), label, fill=(20, 20, 20), font=_font(14))
         out.append((label, image))
     return out

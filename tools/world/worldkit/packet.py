@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
-from .paths import REPO, review_dir
+from .dressing import _round
+from .paths import REPO, passes_dir, review_dir
 
 
 def _checks(lines: list[str], title: str, violations: list[dict]) -> None:
@@ -24,7 +26,15 @@ def write_packet(doc: dict, images: dict, repo: Path = REPO) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     for name, image in images.items():
         image.save(folder / name)
-    (folder / "manifest.json").write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (folder / "manifest.json").write_text(json.dumps(_round(doc), indent=2, ensure_ascii=False) + "\n", encoding="utf-8",
+                                          newline="\n")                           # same rounding as the stored manifest
+    # The map pictures live in the pass's working folder (dress.py renders them there); embed them first.
+    work = passes_dir(repo) / doc["pass_id"]
+    maps = []
+    for name in ("before.png", "after.png"):
+        if (work / name).is_file():
+            shutil.copyfile(work / name, folder / name)
+            maps.append(name)
     lines = [f"# Dressing pass {doc['pass_id']}", "",
              f"- Place: `{doc['poi']}`; template `{doc['template']}`; seed {doc['seed']}; status **{doc['status']}**",
              f"- Anchor ({doc['anchor'][0]:.1f}, {doc['anchor'][1]:.1f}); entry point ({doc['entry'][0]:.1f}, {doc['entry'][1]:.1f}). North is up (-Z).",
@@ -34,7 +44,7 @@ def write_packet(doc: dict, images: dict, repo: Path = REPO) -> Path:
         lines.append(f"> {note}")
     if doc.get("notes"):
         lines.append("")
-    pictures = sorted(images)
+    pictures = maps + sorted(name for name in images if name not in maps)
     if pictures:
         lines += ["## Pictures", ""] + [f"![{name}]({name})" for name in pictures] + [""]
     lines += ["## Items", "", "| # | Role | Asset | Position (x, y, z) | Yaw | Scale | Stored in |", "|---|---|---|---|---|---|---|"]

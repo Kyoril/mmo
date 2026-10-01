@@ -10,10 +10,10 @@ from pathlib import Path
 
 from .assets import GeometryCache, build_catalog
 from .atlas import Atlas
-from .dressing import PassError, new_draft, new_pass_id, save_doc, world_fingerprint
+from .dressing import APPLIED, PassError, new_draft, new_pass_id, save_doc, world_fingerprint
 from .foliage import all_instances, load_world_foliage
 from .materials import TextureCache
-from .nav import NavQuery, build_nav, load_routes, scratch_nav_root, walkability_violations
+from .nav import NavError, NavQuery, build_nav, load_routes, scratch_nav_root, walkability_violations
 from .paths import REPO, client_root, passes_dir, templates_dir, world_tools
 from .previews import site_previews
 from .prop_lint import PropContext, lint_props, props_from_entities, props_from_foliage
@@ -85,9 +85,13 @@ def _render_map(session: DressSession, doc: dict, name: str, extra: list[str]) -
     folder = passes_dir(session.repo) / doc["pass_id"]
     folder.mkdir(parents=True, exist_ok=True)
     out = folder / name
-    subprocess.run([sys.executable, str(world_tools(session.repo) / "render_map.py"), "--map", str(session.map_entry.id),
-                    "--poi", doc["poi"], "--margin", "60", "--out", str(out), *extra], check=True, cwd=str(world_tools(session.repo)),
-                   capture_output=True)
+    try:
+        subprocess.run([sys.executable, str(world_tools(session.repo) / "render_map.py"), "--map", str(session.map_entry.id),
+                        "--poi", doc["poi"], "--margin", "60", "--out", str(out), *extra], check=True,
+                       cwd=str(world_tools(session.repo)), capture_output=True, text=True, errors="replace")
+    except subprocess.CalledProcessError as exc:
+        detail = ((exc.stderr or "") + (exc.stdout or "")).strip()[-800:]
+        raise PassError(f"rendering {name} for {doc['pass_id']} failed (exit {exc.returncode}): {detail}") from exc
     return out
 
 
@@ -134,26 +138,43 @@ def check_pass(session: DressSession, doc: dict, render: bool = True) -> dict:
 
 
 def nav_check(session: DressSession, docs: list[dict], runner=None, nav_factory=None) -> None:
-    """One scratch navmesh build for all given applied passes, then their walkability checks."""
-    try:
-        nav_dir = build_nav(session.directory, scratch_nav_root(session.repo), session.repo, runner=runner or subprocess.run)
-    except Exception as exc:  # nav build failures must not lose the applied state
-        for doc in docs:
-            doc["status"] = "applied-unchecked"
+    """One scratch navmesh build for all given applied passes, then their walkability checks.
+
+    Any failure after the applied state is known leaves the not yet checked passes "applied-unchecked" with
+    nav.error set (a partially-undone pass keeps its status) and raises NavError; passes checked before the
+    failure keep their result.
+    """
+    for doc in docs:
+        if doc["status"] not in APPLIED:
+            raise PassError(f"pass {doc['pass_id']} is {doc['status']}; walkability is only checked for applied passes")
+    pending = list(docs)
+
+    def mark_unchecked(exc: Exception) -> NavError:
+        for doc in pending:
+            if doc["status"] != "partially-undone":
+                doc["status"] = "applied-unchecked"
             doc["nav"] = {"error": str(exc)[-500:]}
             save_doc(doc, session.repo)
-        raise
-    routes = load_routes()
-    factory = nav_factory or (lambda: NavQuery(nav_dir, session.directory, session.repo))
-    with factory() as nav:
-        for doc in docs:
-            poi = _poi(session, doc["poi"])
-            site = {"name": doc["poi"], "x": doc["entry"][0], "z": doc["entry"][1], "radius": float(poi.get("radius", 30.0))}
-            violations = walkability_violations(nav, session.query, routes, [site], session.spawns)
-            doc["checks"]["walkability"] = [v.to_dict() for v in violations]
-            doc["nav"] = {"path": nav_dir.relative_to(session.repo).as_posix()}
-            doc["status"] = "applied"
-            save_doc(doc, session.repo)
+        return exc if isinstance(exc, NavError) else NavError(str(exc))
+
+    try:
+        nav_dir = build_nav(session.directory, scratch_nav_root(session.repo), session.repo, runner=runner or subprocess.run)
+        routes = load_routes()
+        factory = nav_factory or (lambda: NavQuery(nav_dir, session.directory, session.repo))
+        with factory() as nav:
+            while pending:
+                doc = pending[0]
+                poi = _poi(session, doc["poi"])
+                site = {"name": doc["poi"], "x": doc["entry"][0], "z": doc["entry"][1], "radius": float(poi.get("radius", 30.0))}
+                violations = walkability_violations(nav, session.query, routes, [site], session.spawns)
+                doc["checks"]["walkability"] = [v.to_dict() for v in violations]
+                doc["nav"] = {"path": nav_dir.relative_to(session.repo).as_posix()}
+                if doc["status"] != "partially-undone":
+                    doc["status"] = "applied"
+                save_doc(doc, session.repo)
+                pending.pop(0)
+    except Exception as exc:  # a failed check must never lose the applied state or the pass that was already checked
+        raise mark_unchecked(exc) from exc
 
 
 def after_map(session: DressSession, doc: dict) -> Path:
