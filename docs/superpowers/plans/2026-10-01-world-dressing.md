@@ -5226,3 +5226,79 @@ git commit -m "docs: world dressing implementation notes"
 - `PlacedProp` fields are identical in Tasks 8, 9 and 12.
 - `Violation.to_dict()` is used for every stored check.
 - `unique_id` is stored as a `0x%016x` string everywhere.
+
+---
+
+## Implementation notes (Task 16 pilot, 2026-10-01)
+
+**Timings:**
+- **Asset catalog.** A full rebuild (`build_catalog(rebuild=True)`) of 578 assets takes 0.4 s with a warm file cache. The cached load takes 0.04 s. The catalog parses headers and chunks only, so the build-time risk in §11 did not materialise.
+- **Scratch navmesh.** One whole-world `nav_builder` run (Development, about 1,449 pages) takes 2 min 45 s to 3 min 15 s. A full `check --nav` for five passes takes about 4 min 50 s, because it adds the session load and the queries. Building a subset of pages was not needed.
+- **Planning.** A `plan` takes about 25-30 s, almost all of it previews (pure-Python renderer, 3 images plus `before.png`). Placement alone takes about 0.3 s. That made a throwaway "placement only" loop the efficient way to compare seeds and anchors.
+
+**Texture resolution.** `worldkit assets` reports 578 assets, 1 unreadable (`Models/Stump_03/Stump_03.hmsh`, a corrupt chunk), and 10 meshes without a resolved texture.
+
+**Deviations during execution:**
+1. **Anchors.** Every site used `--anchor`, because the pin centres sit on cliffs:
+
+   | Site | Anchor | Ground |
+   |---|---|---|
+   | Quarry | (191, 832) | A ridge bowl, 44 m |
+   | Cave | (409, 646) | The east cliff foot |
+   | Waterfall | (417, 761) | The inner corner of the cliffs, under the painted dirt streak |
+   | Hunting camp | (275, 360) | The 46 m plateau |
+   | Abbey | (107, 345) | The teleport |
+
+2. **Quarry keep-away.** `--keep-away forest_bandit_grounds:20` adds the bandit place's 58.5 m radius, so it keeps 78.5 m from the camp centre. That is about 63 m from the nearest tent, not the 20 m the spec means. Every spot flat enough for a tent lies inside that circle. The applied quarry is therefore the bowl version, without tent and fire. A valley-floor alternative, `20261001-south_ridge_quarry-2`, is planned with `:0` and not applied.
+3. **The brief's apply sequence does not work as written.** Each `apply` changes the world fingerprint, which includes `.wobj`/`.hfol` mtimes. So the next pass's `apply` refuses until `check` runs again. The pilot ran check, apply, check, apply and so on, which also re-lints each pass against the ones applied before it.
+4. **The editor guard crashed on German Windows.** `_default_probe` decodes `tasklist` output with cp1252. When no process is found, the localized "keine Aufgaben ... ausgeführt" message (cp850 0x81) raises in the reader thread, `stdout` is `None`, and `editor_running` raises an AttributeError. It fails safe (nothing is written) but blocks every apply and undo. The pilot ran apply and undo from PowerShell after `chcp 65001`. **Fix needed:** pass `errors="replace"` (or `encoding="oem"`) in the probe.
+5. **World prop lint versus pass lint.** `props_from_entities` marks every `.wobj` as colliding. Pass lint uses the catalog collision and `collides_override`. Two non-colliding Foundation_Column_01 pieces next to painted path were warnings in the pass but errors in `prop_lint`. They were moved off the path; this needed undo, re-plan, edit and re-apply. **Fix needed:** make the two lints agree.
+6. **`nav_builder` failed twice with 0xC0000374 (heap corruption).** This happened in 2 of 7 whole-world builds. Running it again with identical arguments succeeded. The pass status machinery handled the failure correctly: passes went to `applied-unchecked`, and a re-run of `check --nav` recovered.
+7. **Off-mesh spawn near the cave.** `spawn_off_mesh` flags the buried Forest Boar spawn `unit:0:19:-:396:648`, which is a known `height_delta` baseline finding (2.5 m below the ground). It was off the mesh before the pass. `walkability_violations` should test spawns at the terrain-snapped height, or skip spawns already baselined for height.
+8. **Grid-pattern warning lost.** One known prop finding disappeared: `prop_grid_pattern|grid:wobj:519`, the 18 town Fortress_Wall_01. The abbey added Fortress_Wall_01 pieces to the per-asset group, and the group is no longer grid-like. Grid detection is per asset across the whole world; it should be per area.
+9. **`against_cliff` searches the whole place radius.** On the 45 m quarry and 25 m waterfall pins, it scattered piles up to 40 m from the anchor and onto cliff tops. The pilot templates use ring rules instead. A `radius`/`radius_fraction` parameter for `against_cliff` would let templates use it again.
+10. **Preview framing is too wide.** Previews frame the whole place radius (80 m for the hunting grounds), so 1-3 m props are a few pixels. Framing on the item bounds would make the reviews more useful.
+11. **Undo byte identity (acceptance 4).** A throwaway hunting-camp pass with seed 99 wrote 9 `.wobj` files and 7 trees into `8224.hfol`. After undo, `fc /b` found no differences in all 5 `.hfol` files, and the entity listing is identical. The throwaway's draft, review folder and manifest were deleted.
+
+**Template tunings in the pilot:**
+- **Rocks.** Every rock role now uses the allow-list `Models/Stones/SM_stone_06.hmsh`, sized per role:
+
+  | Role size | `scale` | `sink` |
+  |---|---|---|
+  | Rubble | 0.12-0.25 | 0.1 |
+  | Medium | 0.3-0.5 | 0.4 |
+  | Large | 0.5-1.0 | 1.0 |
+
+  The desert rocks are the wrong biome, and the `rock` tag matched them.
+- **Trees.** The `tree` tag also matches the desert palms and windswept trees. Tree roles now allow-list forest trees:
+  - pines: `Models/Trees/SM_Tree_05`, `Models/FalwynPlains/Trees/Tree_04` and `Tree_05`;
+  - the waterfall template also allows `Models/Trees/Tree_01`.
+- **Quarry:**
+  - roles `rock_face` (new), `stone_piles` and `loose_stones`;
+  - tools (Anvil, WorkBench, Bucket), with crates, barrels and the fire hanging off the tools, so the camp does not depend on the tent;
+  - the cart is near the stone piles, and the tent is last;
+  - ring rules instead of `against_cliff`.
+- **Cave mouth:**
+  - frame rocks on a ring of 5-9 m. A ring of 3-6 m could never clear the 2.5 m gap plus the footprint of a large rock.
+  - rubble near the frame rocks;
+  - bushes allow-listed to Bush_01 and Shrub_02;
+  - an art-request note for a cave entrance.
+- **Waterfall basin:**
+  - rim on a ring of 5.5-9 m;
+  - cliff rocks on a ring of 7-13 m instead of `against_cliff`, which put them on the cliff top;
+  - herbs allow-listed (Flower_01, Shrub_Flower_01, Shrub_02, Grass_03).
+- **Hunting camp:**
+  - the fire is CampFire_A only, because the `fire` tag also matches braziers;
+  - new roles: log seats (SM_log_01), practice targets (SM_hc_Target_*) and an optional dead tree;
+  - pines on a ring of 10-22 m.
+- **Abbey surround:**
+  - walls are Fortress_Wall_01 and Fortress_Arch_01 at 0.4-0.6 scale;
+  - foundations are allow-listed;
+  - the bell tower is the stone Fortress_Tower_01, on a ring of 14-22 m. Building_Tower_01 has no collision and a max slope of 8°.
+  - new role: graves (SM_hc_Grave_B-E);
+  - an art-request note.
+- **Hand edits after `plan`:**
+  - **Quarry.** Two buckets and a barrel were removed. A Wagon_Small was added on the bowl's only level patch, an anvil was added, and one rock face was moved off a tree.
+  - **Waterfall.** A cliff-top rock and the herbs in the stream bed were removed, and herbs were added on the grass edge.
+  - **Abbey.** Two columns were moved off the painted path.
+  - In every case the gaps in the draft were updated by hand to match.
