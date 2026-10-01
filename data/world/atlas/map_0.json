@@ -147,14 +147,13 @@
       "name": "Briarwatch West Gate",
       "kind": "hub",
       "center": [
-        101.5,
-        500.5
+        85.9,
+        498.6
       ],
-      "radius": 20.0,
+      "radius": 20.5,
       "areaId": 2,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "kingsroad",
@@ -221,27 +220,25 @@
       "name": "Oakenshire West Gate",
       "kind": "hub",
       "center": [
-        121.5,
-        509.5
+        114.9,
+        500.5
       ],
-      "radius": 20.0,
+      "radius": 24.0,
       "areaId": 2,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap",
+      "status": "canon",
+      "source": "user",
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 1 - West Gate, the main exit towards Haven and the valley; the only gap in the mountain ring (the fortress towers stand at x 84-109)."
     },
     {
       "id": "forest_camp",
-      "name": "Forest Camp",
+      "name": "Oakenshire",
       "kind": "hub",
       "center": [
         301.5,
         550.1
       ],
       "radius": 35.0,
-      "status": "placeholder",
-      "ask": "The camp where the human story begins (formal name not settled). Check position and radius, rename if you like, confirm. Anchored on: Farmer Haldor, Guard Emrik, Healer Mirenna.",
+      "status": "canon",
       "source": "agent-bootstrap"
     },
     {
@@ -249,13 +246,12 @@
       "name": "Haven",
       "kind": "hub",
       "center": [
-        45.8,
-        -48.2
+        -780.6,
+        1249.1
       ],
-      "radius": 30.0,
-      "status": "placeholder",
-      "ask": "CONFLICT: three sources place Haven differently. Here (north-west of Oakenshire) is where the buried Haven vendors and the Westwatch Training Yard stand; the layout sketch puts Haven south-west at the end of the river valley (pin 'Haven (south-west option)'); the continent sketch puts it south of Oakenshire. Keep one pin, delete the other, then confirm.",
-      "source": "agent-bootstrap"
+      "radius": 311.5,
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "dungeon_entrance",
@@ -266,22 +262,20 @@
         345.8
       ],
       "radius": 30.0,
-      "status": "placeholder",
-      "ask": "CONFLICT: q57 says the crypt stair is 'under the third mound' of the Barrowfield (about (-474, 227), 600 m west of this pin). Keep the abbey here and reword q57, move the abbey to the Barrowfield, or give the crypt two entrances? Then confirm.",
+      "status": "canon",
       "source": "user",
       "description": "Entrance to map 1. Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): a ruined abbey with a bell tower visible from far, on a side path north-west of Oakenshire, off the beaten path; an overgrown path leads up from the valley. Your pin sits on the plateau edge at 29 m, next to the prototype Cylinder marker at (107, 345)."
     },
     {
       "id": "oakenshire_hub",
-      "name": "Oakenshire hub",
+      "name": "Oakenshire Town Hall",
       "kind": "hub",
       "center": [
         341.8,
         546.5
       ],
       "radius": 25.0,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "status": "canon",
       "source": "agent-bootstrap"
     },
     {
@@ -293,21 +287,19 @@
         509.4
       ],
       "radius": 25.0,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "status": "canon",
       "source": "agent-bootstrap"
     },
     {
       "id": "hub_near_old_harbin",
-      "name": "Hub near Old Harbin",
+      "name": "Oakenshire Inn",
       "kind": "hub",
       "center": [
         265.2,
         612.7
       ],
       "radius": 25.0,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "status": "canon",
       "source": "agent-bootstrap"
     },
     {
@@ -328,15 +320,14 @@
       "name": "Forest Bandit grounds",
       "kind": "camp",
       "center": [
-        246.6,
-        750.5
+        235.0,
+        757.7
       ],
-      "radius": 70.0,
+      "radius": 58.5,
       "levelMin": 1,
       "levelMax": 4,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "young_forest_boar_grounds",
@@ -349,8 +340,7 @@
       "radius": 94.0,
       "levelMin": 1,
       "levelMax": 2,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "status": "canon",
       "source": "agent-bootstrap"
     },
     {
@@ -362,8 +352,7 @@
         711.5
       ],
       "radius": 60.0,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "status": "canon",
       "source": "user",
       "levelMin": 1,
       "levelMax": 4
@@ -377,8 +366,7 @@
         646.7
       ],
       "radius": 41.5,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "status": "canon",
       "source": "user",
       "levelMin": 1,
       "levelMax": 4
@@ -394,8 +382,7 @@
       "radius": 60.0,
       "levelMin": 3,
       "levelMax": 4,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "status": "canon",
       "source": "agent-bootstrap"
     },
     {
@@ -403,30 +390,28 @@
       "name": "Young Forest Wolf grounds",
       "kind": "camp",
       "center": [
-        2.3,
-        538.2
+        3.9,
+        542.7
       ],
       "radius": 65.0,
       "levelMin": 3,
       "levelMax": 4,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "young_forest_wolf_grounds_12_458",
       "name": "Young Forest Wolf grounds (12, 458)",
       "kind": "camp",
       "center": [
-        12.4,
-        458.4
+        1.8,
+        439.9
       ],
-      "radius": 50.0,
+      "radius": 64.5,
       "levelMin": 3,
       "levelMax": 4,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "forest_wolf_grounds",
@@ -460,70 +445,52 @@
     },
     {
       "id": "props_near_93_538",
-      "name": "Props near (93, 538)",
+      "name": "Oakenshire Gate",
       "kind": "landmark",
       "center": [
-        93.2,
-        537.6
+        97.7,
+        531.2
       ],
-      "radius": 35.0,
-      "status": "placeholder",
-      "ask": "What is this place? Name it, pick its kind and confirm.",
-      "source": "agent-bootstrap"
+      "radius": 26.0,
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "props_near_98_465",
-      "name": "Props near (98, 465)",
+      "name": "Oakenshire Gate",
       "kind": "landmark",
       "center": [
-        97.6,
-        465.0
+        97.0,
+        468.5
       ],
-      "radius": 40.0,
-      "status": "placeholder",
-      "ask": "What is this place? Name it, pick its kind and confirm.",
-      "source": "agent-bootstrap"
+      "radius": 27.0,
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "props_near_226_543",
-      "name": "Props near (226, 543)",
+      "name": "Oakenshire House 01",
       "kind": "landmark",
       "center": [
-        226.0,
-        543.2
+        249.8,
+        535.9
       ],
-      "radius": 70.0,
-      "status": "placeholder",
-      "ask": "What is this place? Name it, pick its kind and confirm.",
-      "source": "agent-bootstrap"
+      "radius": 9.0,
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "north_high_ridge",
       "name": "North High Ridge",
       "kind": "landmark",
       "center": [
-        250.0,
-        445.0
+        238.0,
+        425.2
       ],
-      "radius": 90.0,
+      "radius": 60.5,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): steep, rocky, little paths, leads to hunting areas. Terrain: the ring's north crest, 60-78 m.",
-      "status": "placeholder",
-      "ask": "Right stretch of ridge? Where should the little paths up from the basin start? Then confirm.",
-      "source": "agent"
-    },
-    {
-      "id": "old_watchtower",
-      "name": "Old Watchtower",
-      "kind": "ruin",
-      "center": [
-        384.0,
-        468.0
-      ],
-      "radius": 25.0,
-      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): ruined tower on the mountain ring around Oakenshire, good vantage point. Terrain: the ring's flat north-east summit, 83 m.",
-      "status": "placeholder",
-      "ask": "Name clash: zone 11 'Ruined Watchtower' is the Kingsroad bandit tower in the west. Keep both (rename one) or are they the same? Then confirm.",
-      "source": "agent"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "high_ridge_hunting_grounds",
@@ -535,8 +502,7 @@
       ],
       "radius": 80.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): hunting areas and hunting camps beyond the North High Ridge. Terrain: the plateau north of the ring, about 45 m.",
-      "status": "placeholder",
-      "ask": "Level band, and what is hunted here (and by whom)? Then confirm.",
+      "status": "canon",
       "source": "agent"
     },
     {
@@ -544,28 +510,27 @@
       "name": "Hidden cave",
       "kind": "landmark",
       "center": [
-        416.0,
-        600.0
+        420.6,
+        643.7
       ],
       "radius": 15.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): small cave on the mountain ring around Oakenshire (east), not obvious. Terrain: foot of the east cliff behind the town, 10 m.",
-      "status": "placeholder",
-      "ask": "Where does it lead (lair, smugglers, kobolds, mine)? Move it if it is too close to the town. Then confirm.",
-      "source": "agent"
+      "status": "canon",
+      "source": "user",
+      "notes": "Hidden cave with kobolds inside, maybe a hidden treasure chest."
     },
     {
       "id": "ring_waterfall",
       "name": "Waterfall",
       "kind": "landmark",
       "center": [
-        380.0,
-        765.0
+        426.9,
+        762.6
       ],
       "radius": 25.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): waterfall on the mountain ring around Oakenshire (south-east), good landmark, herb spawns. Terrain: the south-east cliff above the boar grounds. No water exists here yet.",
-      "status": "placeholder",
-      "ask": "Inside the basin (here) or on the ring's outer south-east face as on the sketch? Where should its stream run? Then confirm.",
-      "source": "agent"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "south_ridge_quarry",
@@ -577,9 +542,9 @@
       ],
       "radius": 45.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): South Ridge, rocky slopes, some lead to a quarry or mine. Terrain: foot of the south ridge, 25-35 m, right next to the Forest Bandit camp tents at (230-262, 762).",
-      "status": "placeholder",
-      "ask": "Is the bandit camp inside the old quarry (merge these) or is the quarry a separate, working place? Then confirm.",
-      "source": "agent"
+      "status": "canon",
+      "source": "agent",
+      "notes": "Quarry is separate"
     },
     {
       "id": "forward_outpost",
@@ -652,20 +617,6 @@
       "source": "agent"
     },
     {
-      "id": "haven_southwest",
-      "name": "Haven (south-west option)",
-      "kind": "hub",
-      "center": [
-        -700.0,
-        980.0
-      ],
-      "radius": 120.0,
-      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 9 - Haven, the major city, south-west at the end of the river valley, west of the river's lower course.",
-      "status": "placeholder",
-      "ask": "CONFLICT: see the 'Haven' pin. If Haven goes here, confirm this and delete the other; otherwise delete this one.",
-      "source": "agent"
-    },
-    {
       "id": "the_river",
       "name": "The river (unnamed)",
       "kind": "landmark",
@@ -680,20 +631,6 @@
       "source": "agent"
     },
     {
-      "id": "the_lake",
-      "name": "The lake (unnamed)",
-      "kind": "landmark",
-      "center": [
-        -850.0,
-        -95.0
-      ],
-      "radius": 190.0,
-      "description": "Terrain: a lake up to 23 m deep at x -1050..-650, z -270..80, north-west of everything else. On neither sketch.",
-      "status": "placeholder",
-      "ask": "Name it. What is it (a lake, a bay of the sea)? Then confirm.",
-      "source": "agent"
-    },
-    {
       "id": "east_of_the_ring",
       "name": "East of the ring: the wilds",
       "kind": "note",
@@ -705,6 +642,18 @@
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp) (side view): east of the mountain ring lie wilder, more dangerous areas; west lie the civilized lands (valley, Haven). No terrain is sculpted here yet.",
       "status": "note",
       "source": "agent"
+    },
+    {
+      "id": "new_place",
+      "name": "Oakenshire House 02",
+      "kind": "hub",
+      "center": [
+        279.3,
+        530.4
+      ],
+      "radius": 7.5,
+      "status": "canon",
+      "source": "user"
     }
   ],
   "roads": [
@@ -713,16 +662,39 @@
       "name": "Westroad",
       "points": [
         [
-          185.1,
-          504.8
+          253.7,
+          568.8
         ],
         [
-          15.3,
-          498.6
+          231.2,
+          557.7
+        ],
+        [
+          204.5,
+          514.4
+        ],
+        [
+          125.2,
+          498.7
+        ],
+        [
+          122.9,
+          521.4
+        ],
+        [
+          97.2,
+          521.9
+        ],
+        [
+          96.4,
+          498.7
+        ],
+        [
+          75.4,
+          499.2
         ]
       ],
-      "status": "placeholder",
-      "ask": "Drag the start and end of the Westroad, add points where it bends, then confirm.",
+      "status": "canon",
       "source": "user"
     },
     {
@@ -747,28 +719,28 @@
       "name": "Old King's Road (painted path)",
       "points": [
         [
-          100.0,
-          505.0
+          74.9,
+          495.8
         ],
         [
-          40.0,
-          504.0
+          32.1,
+          499.0
         ],
         [
-          -40.0,
-          492.0
+          -50.5,
+          496.4
         ],
         [
-          -90.0,
-          480.0
+          -117.2,
+          469.1
         ],
         [
-          -170.0,
-          468.0
+          -170.9,
+          460.3
         ],
         [
-          -245.0,
-          468.0
+          -252.4,
+          467.1
         ],
         [
           -300.0,
@@ -787,9 +759,8 @@
           355.0
         ]
       ],
-      "status": "placeholder",
-      "ask": "Traced from the road paint, West Gate to the river. The layout sketch calls it the Forest Road, your notes the Westroad, the quests the Old King's Road. One road? Then keep one entry, rename it and confirm.",
-      "source": "agent"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "haven_road",
