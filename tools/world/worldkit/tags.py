@@ -21,8 +21,10 @@ VOCABULARY = frozenset({
     "rock", "cliff_rock", "rubble", "ruin", "wall", "tower", "building", "tent", "camp", "fire", "crate", "barrel",
     "cart", "tool", "fence", "light", "tree", "tree_dead", "bush", "plant", "herb", "mine", "bridge", "pier",
     "dungeon", "food", "furniture", "prototype",
+    "log", "banner",         # fallen timber, branches and stumps; flags and banners
+    "character", "marker",   # not scenery: characters, creatures, weapons; quest marks and gathering nodes
 })
-NEVER_PICK = frozenset({"prototype", "dungeon"})   # only when a query asks for them by tag or allow-list
+NEVER_PICK = frozenset({"prototype", "dungeon", "character", "marker"})   # only when a query asks for them by tag or allow-list
 _FIELDS = {"match", "tags", "scale", "align_to_slope", "max_slope", "sink", "may_overlap", "collides_override",
            "footprint_scale"}
 

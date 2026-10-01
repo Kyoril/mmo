@@ -151,6 +151,14 @@ class CatalogTests(unittest.TestCase):
 		self.assertEqual(select_assets(catalog, rules, tags=["rock"], exclude=["building"], size="large"), [])   # BigRock is a prototype
 		self.assertEqual(select_assets(catalog, rules, allow=["Models/Test/BigRock.hmsh"]), ["Models/Test/BigRock.hmsh"])
 
+	def test_characters_and_markers_are_never_picked_as_scenery(self):
+		catalog = build_catalog(self.repo)
+		rules = TagRules([{"match": "Models/Test/Cube*", "tags": ["rock", "character"]},
+						  {"match": "Models/Test/BigRock*", "tags": ["rock", "marker"]}])
+		self.assertEqual(select_assets(catalog, rules, tags=["rock"]), [])
+		self.assertEqual(select_assets(catalog, rules, tags=["rock", "character"]), ["Models/Test/Cube.hmsh"])
+		self.assertEqual(select_assets(catalog, rules, tags=["marker"]), ["Models/Test/BigRock.hmsh"])
+
 
 if __name__ == "__main__":
 	unittest.main()
