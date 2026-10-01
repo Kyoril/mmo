@@ -388,10 +388,12 @@
     "placement": [],
     "walkability": []
   },
-  "status": "applied",
+  "status": "undone",
   "created_files": [],
   "applied": "2026-10-01T20:20:43",
   "nav": {
     "path": "generated/world/nav"
-  }
+  },
+  "kept_after_undo": [],
+  "undone": "2026-10-01T21:09:01"
 }
