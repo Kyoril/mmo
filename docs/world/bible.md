@@ -168,11 +168,12 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - **Barrow Skeletons**: honed into weapons (q50);
   - **Gravebound Cultists** ("gravespeakers"): they sing the dead up with bone fetishes (q51, q52, q64).
 - They serve **Barrow-King Morthas**, a warlord buried under the greatest mound four centuries ago (q53). [C]
-- A stair under the third mound leads down into **The Hollow Choir** (map 1). [C]
+- The whispering under the mounds comes from **The Hollow Choir** (map 1), whose stair lies beneath the ruined abbey east of here (q57, section 3.9). [C]
 
 ### 3.9 The Hollow Choir (map 1, group dungeon)
 
-- A crypt under the Barrowfield (q57, q58). [C] It is the "dungeon beyond the forest line" planned for the opening slice. [E]
+- A crypt beneath a ruined abbey (q57, q58). [C] It is the "dungeon beyond the forest line" planned for the opening slice. [E]
+- Chaplain Osric Dawnmere at the Barrowfront Camp gives the whole chain (q57–q62) and sends the player east to the abbey: "under the old abbey on the high ground north of Oakenshire's west gate … The Hollow Choir, the old folk call it." (q57, "Whispers Under the Abbey") [C]
 - Its keepers:
   - **Sevrin Wax, the Coffinwright** — "Warden of the Hollow Choir", who seals the dead in and returns to his workbench (q59, q60);
   - **Ossuar, the Bonebinder** — the north ossuary (q58);
@@ -182,7 +183,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - An overgrown path leads up to it from the valley.
 - **Its pin (`dungeon_entrance`) is canon at (103, 346).** That is the western edge of the plateau north of the ring, at 29 m, next to a prototype Cylinder marker at (107, 345). [E]
 - The name fits an abbey: a choir is the part of an abbey church where the monks sang. [?]
-- q57 still puts the stair "under the third mound" of the Barrowfield, about 600 m further west. The quest text has to be reconciled with the abbey (section 12, item 16). [?]
+- q57 and q62 were reworded to match on 2026-10-01: the stair lies beneath the abbey's broken choir. [C]
 - The lore behind the abbey is open. [?]
 
 ### 3.10 The wider world: Alestia, the Known Lands (continent sketch)
@@ -457,10 +458,7 @@ Derived from the names already in the game. [C]
     - Sketch and the user's pin: a ruined abbey on the plateau edge north-west of Oakenshire, at (103, 346).
     - q57: "a stair under the third mound" of the Barrowfield, at about (−474, 227), 600 m west. The Barrowfront chaplain gives the whole dungeon chain (q57–q62).
 
-    **The abbey pin is canon (2026-10-01).** q57 (and the "beneath the Barrowfield" objective wording of q57–q62) still has to be reconciled. Options:
-    - reword q57 to send the player to the abbey;
-    - keep the Barrowfront chaplain as the chain's giver, with the abbey as the way in;
-    - give the crypt a second, collapsed entrance under the third mound.
+    **Resolved 2026-10-01:** the abbey is the only entrance. q57 ("Whispers Under the Abbey") and q62 were reworded in all four locales; the Barrowfront chaplain still gives the chain.
 17. **Which way is dangerous.**
     - The sketch calls the west "civilized lands" and the east, beyond the ring, the "wilder, more dangerous areas".
     - In the game, the west beyond the gate is a frontier being reclaimed (Briarwatch March, q25), and it holds the level 8–10 raised dead.
