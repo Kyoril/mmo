@@ -71,6 +71,35 @@ def resolve_base_texture(material: str, client: Path, parse=None, exists=None) -
     return _norm(direct[0]) if direct else None
 
 
+def is_masked(material: str, client: Path, parse=None, exists=None) -> bool:
+    """True when the material is alpha-tested ("Masked" material type, as the engine does for leaf cards).
+
+    The type is the ATTR chunk of the instance itself, or of the nearest parent that has one.
+    """
+    if parse is None:
+        material_tool, _ = _tools()
+        parse = material_tool.parse_material
+        errors = (material_tool.FormatError, ValueError, OSError, struct.error)
+    else:
+        errors = (ValueError, OSError, KeyError)
+    exists = exists or (lambda path: path.is_file())
+    current, seen = _norm(material), set()
+    while current and current not in seen and len(seen) < _MAX_PARENTS:
+        seen.add(current)
+        path = Path(client) / current
+        if not exists(path):
+            return False
+        try:
+            info, _, _ = parse(path, None)
+        except errors:
+            return False
+        attributes = info.get("attributes")
+        if attributes:
+            return attributes.get("material_type") == "Masked"
+        current = _norm(info.get("parent"))
+    return False
+
+
 def load_texture(texture: str, client: Path, max_size: int = 256) -> np.ndarray | None:
     path = Path(client) / texture
     if not path.is_file():
@@ -96,9 +125,15 @@ class TextureCache:
         self._max_size = max_size
         self._by_material: dict[str, np.ndarray | None] = {}
         self._by_texture: dict[str, np.ndarray | None] = {}
+        self._masked: dict[str, bool] = {}
 
     def texture_name(self, material: str) -> str | None:
         return resolve_base_texture(material, self._client)
+
+    def is_masked(self, material: str) -> bool:
+        if material not in self._masked:
+            self._masked[material] = is_masked(material, self._client)
+        return self._masked[material]
 
     def for_material(self, material: str) -> np.ndarray | None:
         if material not in self._by_material:

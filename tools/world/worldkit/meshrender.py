@@ -16,6 +16,7 @@ import numpy as np
 NEAR = 0.05
 LIGHT = np.array([-1.0, 1.6, -1.0]) / np.linalg.norm([-1.0, 1.6, -1.0])
 AMBIENT = 0.35
+ALPHA_CUTOFF = 128
 
 
 @dataclass
@@ -38,6 +39,7 @@ class DrawMesh:
     color: tuple[int, int, int] = (170, 170, 170)
     tri_colors: np.ndarray | None = None   # (m, 3) per-triangle colours (terrain)
     object_id: int = 0
+    alpha_test: bool = False               # drop texels with alpha < ALPHA_CUTOFF (Masked materials: leaf cards)
 
 
 def _basis(camera: Camera):
@@ -106,6 +108,7 @@ def render(meshes: list[DrawMesh], camera: Camera, background=(28, 28, 28)) -> t
             mask = inside & (z < depth[region])
             if not mask.any():
                 continue
+            texel = None
             if tex is not None and mesh.uvs is not None:
                 uv = np.asarray(mesh.uvs, float)
                 if ortho:
@@ -117,7 +120,13 @@ def render(meshes: list[DrawMesh], camera: Camera, background=(28, 28, 28)) -> t
                 th, tw = tex.shape[:2]
                 tx = np.clip((np.mod(u, 1.0) * tw).astype(np.int64), 0, tw - 1)
                 ty = np.clip((np.mod(v, 1.0) * th).astype(np.int64), 0, th - 1)
-                colour = tex[ty, tx, :3].astype(np.float32) * shade[k]
+                texel = tex[ty, tx]
+                if mesh.alpha_test:
+                    mask &= texel[..., 3] >= ALPHA_CUTOFF          # before any depth, colour or id write
+                    if not mask.any():
+                        continue
+            if texel is not None:
+                colour = texel[..., :3].astype(np.float32) * shade[k]
             else:
                 base = mesh.tri_colors[k] if mesh.tri_colors is not None else mesh.color
                 colour = np.broadcast_to(np.asarray(base, np.float32) * shade[k], mask.shape + (3,))

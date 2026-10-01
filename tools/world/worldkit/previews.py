@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from .assets import AssetInfo, GeometryCache
 from .geometry import quat_from_yaw_tilt, trs_matrix
 from .materials import TextureCache
-from .meshrender import Camera, DrawMesh, render
+from .meshrender import Camera, DrawMesh, outline, render
 
 _LABEL = (230, 230, 230)
 _MAX_WMO_DEPTH = 2
@@ -49,7 +49,8 @@ def asset_meshes(rel: str, catalog: dict[str, AssetInfo], geometry: GeometryCach
     if mesh is None:
         return []
     return [DrawMesh(_transform(sub.positions.astype(float), matrix), sub.indices.reshape(-1, 3), uvs=sub.uvs,
-                     texture=textures.for_material(sub.material), object_id=object_id)
+                     texture=textures.for_material(sub.material), object_id=object_id,
+                     alpha_test=textures.is_masked(sub.material))      # "Masked" material type = leaf cards etc.
             for sub in mesh.submeshes if len(sub.indices)]
 
 
@@ -144,6 +145,7 @@ _KIND_COLOURS = {"grass": (88, 130, 62), "forest_floor": (70, 105, 52), "path": 
 _WATER = (60, 110, 190)
 _FIRST_ITEM_ID = 1000
 _TERRAIN_STEP = 2.0
+_EYE_CLEARANCE = 2.0
 
 
 def _compass(dx: float, dz: float) -> str:
@@ -204,12 +206,13 @@ def _item_id(item: dict) -> int | None:
     return int(value, 16) if isinstance(value, str) else value
 
 
-def site_previews(query, catalog, geometry, textures, center, radius: float, entities, instances, items,
-                  count: int = 3, size=(960, 640)) -> list[tuple[str, Image.Image]]:
-    """Perspective views around a site: terrain, existing props and trees, and the draft items outlined."""
-    from .meshrender import outline
+def site_meshes(query, catalog, geometry, textures, center, radius: float, entities, instances,
+                items) -> tuple[list[DrawMesh], set[int]]:
+    """Everything a site preview draws, and the object ids of the draft items to outline.
+
+    Existing entities and foliage instances whose unique id an item already applied are left out.
+    """
     cx, cz = center
-    ground = query.height_at(cx, cz) or 0.0
     reach = radius * 1.4
     skip = {_item_id(i) for i in items if _item_id(i) is not None}
     meshes = terrain_meshes(query, cx, cz, reach)
@@ -227,10 +230,24 @@ def site_previews(query, catalog, geometry, textures, center, radius: float, ent
     for index, item in enumerate(items):
         meshes += asset_meshes(item["asset"], catalog, geometry, textures, item_matrix(item), object_id=_FIRST_ITEM_ID + index)
         highlight.add(_FIRST_ITEM_ID + index)
+    return meshes, highlight
+
+
+def site_previews(query, catalog, geometry, textures, center, radius: float, entities, instances, items,
+                  count: int = 3, size=(960, 640)) -> list[tuple[str, Image.Image]]:
+    """Perspective views around a site: terrain, existing props and trees, and the draft items outlined."""
+    cx, cz = center
+    ground = query.height_at(cx, cz) or 0.0
+    meshes, highlight = site_meshes(query, catalog, geometry, textures, center, radius, entities, instances, items)
     out = []
     for k in range(count):
         azimuth = math.radians(30.0 + k * 360.0 / count)
-        eye = (cx + math.sin(azimuth) * radius * 1.7, ground + radius * 0.9, cz + math.cos(azimuth) * radius * 1.7)
+        eye_x, eye_z = cx + math.sin(azimuth) * radius * 1.7, cz + math.cos(azimuth) * radius * 1.7
+        eye_y = ground + radius * 0.9
+        eye_ground = query.height_at(eye_x, eye_z)
+        if eye_ground is not None:
+            eye_y = max(eye_y, eye_ground + _EYE_CLEARANCE)                  # never under a hill
+        eye = (eye_x, eye_y, eye_z)
         camera = Camera(eye=eye, target=(cx, ground + 2.0, cz), width=size[0], height=size[1], fov_deg=50.0)
         rgb, ids = render(meshes, camera, background=(150, 180, 215))
         image = Image.fromarray(outline(rgb, ids, highlight))
