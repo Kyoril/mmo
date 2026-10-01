@@ -17,9 +17,11 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import world_fixtures as fx  # noqa: E402
 
+from worldkit.assets import build_catalog, select_assets  # noqa: E402
 from worldkit.geometry import quat_from_yaw_tilt, quat_to_matrix, trs_matrix, yaw_of_quat  # noqa: E402
 from worldkit.materials import load_texture, resolve_base_texture  # noqa: E402
 from worldkit.paths import client_root  # noqa: E402
+from worldkit.tags import TagRules, load_tag_rules  # noqa: E402
 
 
 class GeometryTests(unittest.TestCase):
@@ -81,6 +83,73 @@ class MaterialTests(unittest.TestCase):
 		image = load_texture(texture, client_root())
 		self.assertIsNotNone(image)
 		self.assertEqual(image.shape[2], 4)
+
+
+def asset_repo(tmp: str) -> Path:
+	repo = Path(tmp)
+	models = repo / "data" / "client" / "Models" / "Test"
+	models.mkdir(parents=True)
+	(models / "Cube.hmsh").write_bytes(fx.cube_hmsh())
+	(models / "BigRock.hmsh").write_bytes(fx.cube_hmsh(collision=False, size=2.5))
+	(models / "Shed.hwmo").write_bytes(fx.hwmo_bytes((-4.0, 0.0, -3.0), (4.0, 5.0, 3.0),
+		[("Models/Test/Cube.hmsh", (0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0), (1.0, 1.0, 1.0))]))
+	(models / "Broken.hmsh").write_bytes(b"MESH\x00\x01")
+	return repo
+
+
+class TagRuleTests(unittest.TestCase):
+	def test_later_rules_override_and_tags_accumulate(self):
+		rules = TagRules([
+			{"match": "Models/Desert/Rocks/*", "tags": ["rock"], "sink": 0.4, "max_slope": 90, "may_overlap": ["rock"]},
+			{"match": "*/SM_Rock_Cliff*", "tags": ["cliff_rock"], "sink": 0.8},
+		])
+		tags = rules.for_asset("Models/Desert/Rocks/SM_Rock_Cliff01.hmsh")
+		self.assertEqual(tags.tags, frozenset({"rock", "cliff_rock"}))
+		self.assertEqual((tags.sink, tags.max_slope, tags.may_overlap), (0.8, 90, frozenset({"rock"})))
+		self.assertEqual(rules.for_asset("Models/Other/X.hmsh").tags, frozenset())
+
+	def test_unknown_tags_and_fields_are_rejected(self):
+		with self.assertRaises(ValueError):
+			TagRules([{"match": "*", "tags": ["spaceship"]}])
+		with self.assertRaises(ValueError):
+			TagRules([{"match": "*", "colour": "red"}])
+
+	def test_shipped_rules_load(self):
+		self.assertTrue(load_tag_rules().rules)
+
+
+class CatalogTests(unittest.TestCase):
+	def setUp(self):
+		self._tmp = tempfile.TemporaryDirectory()
+		self.repo = asset_repo(self._tmp.name)
+
+	def tearDown(self):
+		self._tmp.cleanup()
+
+	def test_entries(self):
+		catalog = build_catalog(self.repo)
+		cube = catalog["Models/Test/Cube.hmsh"]
+		self.assertEqual((cube.kind, cube.has_collision, cube.submeshes, cube.size_class), ("mesh", True, 1, "medium"))
+		self.assertEqual((cube.height, cube.base_offset, cube.footprint), (2.0, 0.0, (-1.0, -1.0, 1.0, 1.0)))
+		self.assertEqual(catalog["Models/Test/BigRock.hmsh"].size_class, "large")
+		shed = catalog["Models/Test/Shed.hwmo"]
+		self.assertEqual((shed.kind, shed.references, shed.has_collision), ("wmo", ("Models/Test/Cube.hmsh",), True))
+		self.assertIsNotNone(catalog["Models/Test/Broken.hmsh"].error)
+
+	def test_cache_is_reused_and_invalidated(self):
+		build_catalog(self.repo)
+		path = self.repo / "data" / "client" / "Models" / "Test" / "Cube.hmsh"
+		path.write_bytes(fx.cube_hmsh(size=0.5, collision=False))   # different size, so the cache stamp changes
+		entry = build_catalog(self.repo)["Models/Test/Cube.hmsh"]
+		self.assertEqual((entry.size_class, entry.has_collision), ("small", False))
+
+	def test_select(self):
+		catalog = build_catalog(self.repo)
+		rules = TagRules([{"match": "Models/Test/*", "tags": ["rock"]}, {"match": "*/Shed*", "tags": ["building"]},
+						  {"match": "*/BigRock*", "tags": ["prototype"]}])
+		self.assertEqual(select_assets(catalog, rules, tags=["rock"], exclude=["building"]), ["Models/Test/Cube.hmsh"])
+		self.assertEqual(select_assets(catalog, rules, tags=["rock"], exclude=["building"], size="large"), [])   # BigRock is a prototype
+		self.assertEqual(select_assets(catalog, rules, allow=["Models/Test/BigRock.hmsh"]), ["Models/Test/BigRock.hmsh"])
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 
     python -m worldkit query --map 0 --at -262 405
     python -m worldkit layers --world Development --page 32_32 --out generated/world/layers_32_32.png
+    python -m worldkit assets [--rebuild] [--untagged]
 
 (Run from tools/world, or put tools/world on PYTHONPATH.)
 """
@@ -45,6 +46,24 @@ def cmd_query(args) -> int:
     return run_query(args)
 
 
+def cmd_assets(args) -> int:
+    from .assets import build_catalog
+    from .tags import load_tag_rules
+    catalog = build_catalog(rebuild=args.rebuild)
+    rules = load_tag_rules()
+    errors = [i for i in catalog.values() if i.error]
+    print(f"{len(catalog)} assets, {len(errors)} unreadable, "
+          f"{sum(1 for i in catalog.values() if i.has_collision)} with collision, "
+          f"{sum(1 for i in catalog.values() if i.kind == 'mesh' and not i.error and not any(i.textures))} meshes without a resolved texture")
+    for info in errors[:20]:
+        print(f"  unreadable: {info.path}: {info.error}")
+    if args.untagged:
+        for rel in sorted(catalog):
+            if not catalog[rel].error and not rules.for_asset(rel).tags:
+                print(f"  untagged: {rel}")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="worldkit")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -60,6 +79,11 @@ def main(argv=None) -> int:
     query.add_argument("--at", type=float, nargs=2, metavar=("X", "Z"), required=True)
     query.add_argument("--no-cache", action="store_true")
     query.set_defaults(func=cmd_query)
+
+    assets = sub.add_parser("assets", help="build the asset catalog and print a summary")
+    assets.add_argument("--rebuild", action="store_true", help="ignore the cache")
+    assets.add_argument("--untagged", action="store_true", help="list assets no tag rule matches")
+    assets.set_defaults(func=cmd_assets)
 
     args = parser.parse_args(argv)
     return args.func(args)
