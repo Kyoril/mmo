@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .constants import entity_page_index
+from .formats.chunks import FormatError
 from .foliage import page_foliage_path
 from .formats.hfol import FoliageInstance, append_instances, instance_hash, load_hfol, parse_hfol, remove_instances, write_hfol
 from .formats.wobj import entity_file, new_unique_id, wobj_bytes
@@ -129,6 +130,30 @@ def _make_dirs(directory: Path, made: list[Path]) -> None:
     made.extend(missing)
 
 
+def _roll_back(written: list[Path], originals: dict[Path, bytes | None], made_dirs: list[Path]) -> list[str]:
+    """Undoes a failed apply step by step; one failing step never skips the rest. Returns the steps that failed."""
+    failures: list[str] = []
+    for path in written:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            failures.append(f"could not remove {path}: {exc}")
+    for path, original in originals.items():
+        try:
+            if original is None:
+                path.unlink(missing_ok=True)
+            elif not path.is_file() or path.read_bytes() != original:
+                path.write_bytes(original)
+        except OSError as exc:
+            failures.append(f"could not restore {path}: {exc}")
+    for directory in made_dirs:
+        try:
+            directory.rmdir()
+        except OSError:
+            pass  # not empty or already gone: not ours to force
+    return failures
+
+
 def _instance(item: dict, unique_id: int) -> FoliageInstance:
     scale = float(item["scale"])
     return FoliageInstance(unique_id, item["asset"], tuple(item["position"]), item_rotation(item), (scale, scale, scale),
@@ -167,8 +192,8 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
                               position=item["position"], rotation=item_rotation(item), scale=(scale, scale, scale),
                               category=f"dressing/{doc['template']}")
             _make_dirs(path.parent, made_dirs)
+            written.append(path)  # recorded before the write so a partial write is unlinked by the rollback
             path.write_bytes(data)
-            written.append(path)
             item.update(unique_id=f"0x{unique_id:016x}", file=path.relative_to(client).as_posix(),
                         written_hash=hashlib.sha1(data).hexdigest())
         by_page: dict[int, list[dict]] = {}
@@ -179,33 +204,26 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
                 by_page.setdefault(entity_page_index(item["position"][0], item["position"][2]), []).append(item)
         for page, page_items in sorted(by_page.items()):
             path = page_foliage_path(doc["world"], page, repo)
-            originals[path] = path.read_bytes() if path.is_file() else None
+            original = path.read_bytes() if path.is_file() else None
             instances = []
             for item in page_items:
                 inst = _instance(item, new_unique_id(taken, rng))
                 instances.append(inst)
                 item.update(unique_id=f"0x{inst.unique_id:016x}", file=path.relative_to(client).as_posix(),
                             written_hash=instance_hash(inst))
+            new_bytes = write_hfol(append_instances(load_hfol(path), instances))
             _make_dirs(path.parent, made_dirs)
-            path.write_bytes(write_hfol(append_instances(load_hfol(path), instances)))
-            if originals[path] is None:
+            originals[path] = original  # recorded only when the write is next: a failure before it leaves the file untouched
+            path.write_bytes(new_bytes)
+            if original is None:
                 created.append(path.relative_to(client).as_posix())
     except Exception as exc:  # any failure must leave the world exactly as it was
-        for path in written:
-            path.unlink(missing_ok=True)
-        for path, original in originals.items():
-            if original is None:
-                path.unlink(missing_ok=True)
-            else:
-                path.write_bytes(original)
-        for directory in made_dirs:
-            try:
-                directory.rmdir()
-            except OSError:
-                pass
+        failures = _roll_back(written, originals, made_dirs)
         for item in doc["items"]:
             for key in ("unique_id", "file", "written_hash"):
                 item.pop(key, None)
+        if failures:
+            raise PassError(f"apply failed ({exc}) and the rollback was incomplete, check by hand: {'; '.join(failures)}") from exc
         raise exc if isinstance(exc, PassError) else PassError(f"apply failed and was rolled back: {exc}") from exc
     doc["created_files"] = created
     doc["status"] = "applied"
@@ -226,30 +244,48 @@ def undo_pass(doc: dict, repo: Path = REPO, force: bool = False, probe=None) -> 
         raise PassError(f"pass {doc['pass_id']} is {doc['status']}, nothing to undo")
     _guard_editor(probe)
     client = client_root(repo)
+    root = client.resolve()
     report = UndoReport()
     kept: list[str] = []
+
+    def contained(rel: str) -> Path | None:
+        """The resolved path when it stays inside the client data root, else None (never touched, even when forced)."""
+        path = (client / rel).resolve()
+        return path if path.is_relative_to(root) else None
+
+    # Plan everything first (reads and parses only), so a malformed file aborts before anything was deleted.
+    delete: list[Path] = []
     for item in doc["items"]:
         if item["store"] != "wobj" or "file" not in item:
             continue
-        path = client / item["file"]
-        if not path.exists():
+        path = contained(item["file"])
+        if path is None:
+            report.missing.append(f"{item['file']} (outside the client data folder, left alone)")
+        elif not path.exists():
             report.missing.append(item["file"])
         elif hashlib.sha1(path.read_bytes()).hexdigest() != item["written_hash"] and not force:
             report.changed.append(item["file"])
             kept.append(item["unique_id"])
         else:
-            path.unlink()
+            delete.append(path)
             report.removed.append(item["file"])
     by_file: dict[str, list[dict]] = {}
     for item in doc["items"]:
         if item["store"] == "hfol" and "file" in item:
             by_file.setdefault(item["file"], []).append(item)
+    rewrite: list[tuple[Path, bytes | None]] = []  # (path, new bytes), or unlink when the bytes are None
     for rel, file_items in sorted(by_file.items()):
-        path = client / rel
+        path = contained(rel)
+        if path is None:
+            report.missing += [f"{rel}#{i['unique_id']} (outside the client data folder, left alone)" for i in file_items]
+            continue
         if not path.is_file():
             report.missing += [f"{rel}#{i['unique_id']}" for i in file_items]
             continue
-        ff = parse_hfol(path.read_bytes(), str(path))
+        try:
+            ff = parse_hfol(path.read_bytes(), str(path))
+        except (FormatError, OSError) as exc:
+            raise PassError(f"undo aborted before changing anything: {exc}") from exc
         current = {i.unique_id: i for i in ff.instances}
         remove = set()
         for item in file_items:
@@ -265,9 +301,16 @@ def undo_pass(doc: dict, repo: Path = REPO, force: bool = False, probe=None) -> 
                 report.removed.append(label)
         result = remove_instances(ff, remove)
         if not result.instances and rel in doc.get("created_files", []):
+            rewrite.append((path, None))
+        elif remove:
+            rewrite.append((path, write_hfol(result)))
+    for path in delete:
+        path.unlink()
+    for path, data in rewrite:
+        if data is None:
             path.unlink()
         else:
-            path.write_bytes(write_hfol(result))
+            path.write_bytes(data)
     doc["status"] = "partially-undone" if kept else "undone"
     doc["kept_after_undo"] = kept
     doc["undone"] = datetime.now().isoformat(timespec="seconds")
