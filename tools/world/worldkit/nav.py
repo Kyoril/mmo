@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 import math
 import os
+import queue
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +25,8 @@ LONGER_FACTOR = 1.25
 DETOUR_FACTOR = 3.0
 SPAWN_OFF_MESH = 1.5
 _NETWORK_STEP = 10.0
+REQUEST_TIMEOUT = 30.0
+BUILD_TIMEOUT = 1800.0
 
 
 class NavError(RuntimeError):
@@ -42,36 +46,87 @@ def scratch_nav_root(repo: Path = REPO) -> Path:
     return repo / "generated" / "world"
 
 
-def build_nav(directory: str, out_root: Path, repo: Path = REPO, runner=subprocess.run) -> Path:
+def build_nav(directory: str, out_root: Path, repo: Path = REPO, runner=subprocess.run,
+              timeout: float = BUILD_TIMEOUT) -> Path:
     """Runs nav_builder for a whole world; outputs land in <out_root>/nav/<World>/ and <out_root>/nav/<World>.map."""
     exe = tool_exe("nav_builder", repo)
     out_root.mkdir(parents=True, exist_ok=True)
-    proc = runner([str(exe), "-d", str(client_root(repo)), "-w", directory, "-o", str(out_root)],
-                  capture_output=True, text=True)
+    try:
+        proc = runner([str(exe), "-d", str(client_root(repo)), "-w", directory, "-o", str(out_root)],
+                      capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise NavError(f"nav_builder took too long (over {timeout:g} s) for {directory}") from None
     if proc.returncode != 0:
         raise NavError(f"nav_builder failed ({proc.returncode}): {(proc.stdout + proc.stderr)[-1500:]}")
     return out_root / "nav"
 
 
 class NavQuery:
-    def __init__(self, nav_dir: Path, world: str, repo: Path = REPO, popen=subprocess.Popen, exe: Path | None = None):
+    """Client for the nav_query line protocol (one JSON request / one JSON answer per line).
+
+    Answers are read by a daemon thread so that a hung tool surfaces as a NavError after `timeout` seconds
+    instead of blocking forever (a plain readline cannot time out on a pipe on Windows).
+    """
+
+    def __init__(self, nav_dir: Path, world: str, repo: Path = REPO, popen=subprocess.Popen, exe: Path | None = None,
+                 timeout: float = REQUEST_TIMEOUT):
         exe = exe or tool_exe("nav_query", repo)
+        self._timeout = timeout
+        self._lines: queue.Queue = queue.Queue()
         self._proc = popen([str(exe), "--nav", str(nav_dir), "--world", world], stdin=subprocess.PIPE,
                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
-        ready = self._read()
-        if not ready.get("ready"):
-            raise NavError(f"nav_query did not start for {world} in {nav_dir}")
+        self._reader = threading.Thread(target=self._pump, args=(self._proc.stdout, self._lines), daemon=True)
+        self._reader.start()
+        try:
+            ready = self._read()
+            if not ready.get("ready"):
+                raise NavError(f"nav_query did not start for {world} in {nav_dir}")
+        except BaseException:
+            self._terminate()
+            raise
+
+    @staticmethod
+    def _pump(stream, lines: queue.Queue) -> None:
+        try:
+            while True:
+                line = stream.readline()
+                lines.put(line)
+                if not line:
+                    return
+        except (OSError, ValueError):
+            lines.put("")
+
+    def _exit_note(self) -> str:
+        try:
+            code = self._proc.wait(timeout=1)
+        except (subprocess.TimeoutExpired, OSError):
+            return ""
+        return f", exit code {code}" if code is not None else ""
 
     def _read(self) -> dict:
-        line = self._proc.stdout.readline()
+        try:
+            line = self._lines.get(timeout=self._timeout)
+        except queue.Empty:
+            self._terminate()
+            raise NavError(f"nav_query did not answer within {self._timeout:g} s") from None
         if not line:
-            raise NavError("nav_query exited (is the navmesh built?)")
-        return json.loads(line)
+            self._lines.put("")  # keep reporting the death on later reads instead of waiting for the timeout
+            raise NavError(f"nav_query exited (is the navmesh built?{self._exit_note()})")
+        try:
+            return json.loads(line)
+        except ValueError:
+            raise NavError(f"nav_query sent a malformed answer: {line.strip()[:200]}") from None
 
     def _ask(self, request: dict) -> dict:
-        self._proc.stdin.write(json.dumps(request) + "\n")
-        self._proc.stdin.flush()
-        return self._read()
+        try:
+            self._proc.stdin.write(json.dumps(request) + "\n")
+            self._proc.stdin.flush()
+        except (OSError, ValueError):
+            raise NavError(f"nav_query exited (is the navmesh built?{self._exit_note()})") from None
+        answer = self._read()
+        if "error" in answer:
+            raise NavError(str(answer["error"]))
+        return answer
 
     def path(self, a, b) -> float | None:
         answer = self._ask({"op": "path", "from": [float(v) for v in a], "to": [float(v) for v in b]})
@@ -81,9 +136,33 @@ class NavQuery:
         answer = self._ask({"op": "on_mesh", "at": [float(v) for v in point], "radius": radius})
         return float(answer["distance"]) if answer.get("ok") else None
 
+    def _terminate(self) -> None:
+        """Gets rid of the child no matter what state it is in; never raises."""
+        try:
+            self._proc.stdin.close()
+        except (OSError, ValueError):
+            pass
+        try:
+            self._proc.terminate()
+        except OSError:
+            pass
+        try:
+            self._proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self._proc.kill()
+            self._proc.wait()
+
     def close(self) -> None:
-        self._proc.stdin.close()
-        self._proc.wait(timeout=10)
+        try:
+            self._proc.stdin.close()
+        except (OSError, ValueError):
+            pass
+        try:
+            self._proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self._proc.kill()
+            self._proc.wait()
+        self._reader.join(timeout=2)
         self._proc.stdout.close()
 
     def __enter__(self):
@@ -142,15 +221,16 @@ def walkability_violations(nav, query, routes: list[Route], sites: list[dict], s
     for route in routes:
         length = route_length(nav, query, route.points)
         start = route.points[0]
-        if length is not None:
-            walkable.append(route)
         if length is None:
             found.append(Violation("route_broken", "error", f"route:{route.id}", f"{route.name}: no path any more", *start))
-        elif route.baseline_length and length > route.baseline_length * LONGER_FACTOR:
-            found.append(Violation("route_longer", "warning", f"route:{route.id}",
-                                   f"{route.name}: {length:.0f} m, was {route.baseline_length:.0f} m", *start))
+        else:
+            walkable.append(route)
+            if route.baseline_length and length > route.baseline_length * LONGER_FACTOR:
+                found.append(Violation("route_longer", "warning", f"route:{route.id}",
+                                       f"{route.name}: {length:.0f} m, was {route.baseline_length:.0f} m", *start))
     # A broken route is already reported above and would only anchor sites on the wrong side of the break.
     network = _network(walkable)
+    checked: set = set()  # a spawn inside two overlapping sites is checked and reported once
     for site in sites:
         sx, sz = site["x"], site["z"]
         if network:
@@ -162,7 +242,8 @@ def walkability_violations(nav, query, routes: list[Route], sites: list[dict], s
                 found.append(Violation("site_unreachable", "error", f"site:{site['name']}",
                                        f"{site['name']}: not reachable from the route network ({text})", sx, sz))
         for record in spawns:
-            if record.active and math.hypot(record.x - sx, record.z - sz) <= site["radius"]:
+            if record.active and record.key not in checked and math.hypot(record.x - sx, record.z - sz) <= site["radius"]:
+                checked.add(record.key)
                 distance = nav.on_mesh((record.x, record.y, record.z), 2.0)
                 if distance is None or distance > SPAWN_OFF_MESH:
                     found.append(Violation("spawn_off_mesh", "error", record.key,

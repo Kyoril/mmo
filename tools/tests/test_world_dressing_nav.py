@@ -7,6 +7,8 @@
 """
 
 import json
+import queue
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -15,23 +17,42 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import world_fixtures as fx  # noqa: E402
 
-from worldkit.nav import NavQuery, Route, load_routes, save_routes, walkability_violations  # noqa: E402
+from worldkit.nav import NavError, NavQuery, Route, build_nav, load_routes, save_routes, walkability_violations  # noqa: E402
 from worldkit.query import WorldQuery  # noqa: E402
 from worldkit.snapshot import build_snapshot  # noqa: E402
 from worldkit.spawns import SpawnRecord, spawn_key  # noqa: E402
 
 
 class FakeProcess:
-	"""Stands in for nav_query: answers from a function."""
+	"""Stands in for nav_query: answers from a function (returning None means "never answers").
 
-	def __init__(self, respond):
+	Answers go through a blocking queue like a real pipe, so a silent child blocks readline.
+	"""
+
+	def __init__(self, respond, ready=None, alive_for=None, die_on="read", exit_code=0, hang_on_wait=False):
 		self.respond = respond
-		self.lines = [json.dumps({"ready": True, "pages": 1}) + "\n"]
+		self.alive_for = alive_for      # answers served before the child "dies" (None: never)
+		self.die_on = die_on            # "read": the write works, the pipe then hits EOF; "write": the write raises
+		self.exit_code = exit_code
+		self.hang_on_wait = hang_on_wait
+		self.served = 0
+		self.terminated = False
+		self.killed = False
+		self.queue = queue.Queue()
+		self.queue.put(json.dumps({"ready": True, "pages": 1}) + "\n" if ready is None else ready)
 		outer = self
 
 		class In:
 			def write(self, text):
-				outer.lines.append(json.dumps(outer.respond(json.loads(text))) + "\n")
+				if outer.alive_for is not None and outer.served >= outer.alive_for:
+					if outer.die_on == "write":
+						raise BrokenPipeError("pipe closed")
+					outer.queue.put("")
+					return
+				answer = outer.respond(json.loads(text))
+				outer.served += 1
+				if answer is not None:
+					outer.queue.put(json.dumps(answer) + "\n")
 
 			def flush(self):
 				pass
@@ -41,7 +62,7 @@ class FakeProcess:
 
 		class Out:
 			def readline(self):
-				return outer.lines.pop(0) if outer.lines else ""
+				return outer.queue.get()
 
 			def close(self):
 				pass
@@ -49,7 +70,17 @@ class FakeProcess:
 		self.stdin, self.stdout = In(), Out()
 
 	def wait(self, timeout=None):
-		return 0
+		if self.hang_on_wait and not self.killed and not self.terminated:
+			raise subprocess.TimeoutExpired("nav_query", timeout)
+		return self.exit_code
+
+	def terminate(self):
+		self.terminated = True
+		self.queue.put("")
+
+	def kill(self):
+		self.killed = True
+		self.queue.put("")
 
 
 class FakeNav:
@@ -93,14 +124,78 @@ class NavTests(unittest.TestCase):
 				  Route("cut", "crosses the wall", [[400.0, 100.0], [600.0, 100.0]], None),
 				  Route("long", "got longer", [[100.0, 200.0], [150.0, 200.0]], 30.0)]
 		sites = [{"name": "near", "x": 120.0, "z": 120.0, "radius": 30.0},
-				 {"name": "behind_wall", "x": 520.0, "z": 300.0, "radius": 30.0}]
-		violations = walkability_violations(FakeNav(), self.query, routes, sites, [spawn(130.0, 125.0), spawn(-1.0, 1.0)])
+				 {"name": "behind_wall", "x": 520.0, "z": 300.0, "radius": 30.0},
+				 {"name": "origin", "x": 3.0, "z": 3.0, "radius": 10.0},
+				 {"name": "origin_too", "x": 0.0, "z": 0.0, "radius": 10.0}]
+		on_mesh, off_mesh = spawn(130.0, 125.0), spawn(-1.0, 1.0)
+		violations = walkability_violations(FakeNav(), self.query, routes, sites, [on_mesh, off_mesh])
 		found = {(v.rule, v.subject) for v in violations}
 		self.assertIn(("route_broken", "route:cut"), found)
 		self.assertIn(("route_longer", "route:long"), found)
 		self.assertIn(("site_unreachable", "site:behind_wall"), found)
 		self.assertNotIn(("site_unreachable", "site:near"), found)
 		self.assertNotIn("route:ok", {v.subject for v in violations})
+		self.assertIn(("spawn_off_mesh", off_mesh.key), found)
+		self.assertNotIn(("spawn_off_mesh", on_mesh.key), found)
+		# The off-mesh spawn lies inside two overlapping site radii but is reported once.
+		self.assertEqual(sum(1 for v in violations if v.subject == off_mesh.key), 1)
+
+	def test_error_answers_raise(self):
+		nav = NavQuery(Path("nav"), "W", popen=lambda *a, **k: FakeProcess(lambda r: {"ok": False, "error": "bad op"}), exe=Path("nav_query"))
+		with self.assertRaisesRegex(NavError, "bad op"):
+			nav.path((0, 0, 0), (1, 0, 1))
+		with self.assertRaisesRegex(NavError, "bad op"):
+			nav.on_mesh((0, 0, 0))
+		nav.close()
+
+	def test_failed_start_terminates_the_child(self):
+		for ready in (json.dumps({"ready": False}) + "\n", "this is not json\n", ""):
+			spawned = []
+
+			def popen(*a, _ready=ready, **k):
+				spawned.append(FakeProcess(lambda r: {"ok": True}, ready=_ready))
+				return spawned[0]
+
+			with self.assertRaises(NavError):
+				NavQuery(Path("nav"), "W", popen=popen, exe=Path("nav_query"))
+			self.assertTrue(spawned[0].terminated, repr(ready))
+
+	def test_dead_child_raises(self):
+		for mode in ("read", "write"):
+			proc = FakeProcess(lambda r: {"ok": True, "length": 1.0}, alive_for=1, die_on=mode, exit_code=3)
+			nav = NavQuery(Path("nav"), "W", popen=lambda *a, **k: proc, exe=Path("nav_query"))
+			self.assertEqual(nav.path((0, 0, 0), (1, 0, 1)), 1.0)
+			with self.assertRaisesRegex(NavError, "exit code 3"):
+				nav.path((0, 0, 0), (1, 0, 1))
+			with self.assertRaisesRegex(NavError, "exited"):
+				nav.on_mesh((0, 0, 0))
+			nav.close()
+
+	def test_silent_child_times_out(self):
+		proc = FakeProcess(lambda r: None)
+		nav = NavQuery(Path("nav"), "W", popen=lambda *a, **k: proc, exe=Path("nav_query"), timeout=0.2)
+		with self.assertRaisesRegex(NavError, "did not answer"):
+			nav.path((0, 0, 0), (1, 0, 1))
+		self.assertTrue(proc.terminated)
+
+	def test_close_kills_a_child_that_will_not_exit(self):
+		proc = FakeProcess(lambda r: {"ok": True}, hang_on_wait=True)
+		nav = NavQuery(Path("nav"), "W", popen=lambda *a, **k: proc, exe=Path("nav_query"))
+		nav.close()
+		self.assertTrue(proc.killed)
+
+	def test_build_nav_timeout(self):
+		def runner(cmd, **kwargs):
+			self.assertEqual(kwargs["timeout"], 5)
+			raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+
+		with tempfile.TemporaryDirectory() as tmp:
+			repo = Path(tmp)
+			(repo / "bin" / "Release").mkdir(parents=True)
+			(repo / "bin" / "Release" / "nav_builder.exe").write_bytes(b"")
+			(repo / "bin" / "Release" / "nav_builder").write_bytes(b"")
+			with self.assertRaisesRegex(NavError, "took too long"):
+				build_nav("W", repo / "out", repo=repo, runner=runner, timeout=5)
 
 	def test_routes_file_round_trip(self):
 		with tempfile.TemporaryDirectory() as tmp:
