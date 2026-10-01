@@ -3,7 +3,7 @@
 
     python -m worldkit query --map 0 --at -262 405
     python -m worldkit layers --world Development --page 32_32 --out generated/world/layers_32_32.png
-    python -m worldkit assets [--rebuild] [--untagged]
+    python -m worldkit assets [--rebuild] [--untagged] [--sheets] [--views ASSET [--out FILE]]
 
 (Run from tools/world, or put tools/world on PYTHONPATH.)
 """
@@ -61,6 +61,20 @@ def cmd_assets(args) -> int:
         for rel in sorted(catalog):
             if not catalog[rel].error and not rules.for_asset(rel).tags:
                 print(f"  untagged: {rel}")
+    if args.sheets or args.views:
+        from .assets import GeometryCache
+        from .materials import TextureCache
+        from .paths import assets_cache_dir, client_root
+        from .previews import asset_views, write_contact_sheets
+        geometry, textures = GeometryCache(), TextureCache(client_root())
+        if args.sheets:
+            paths = write_contact_sheets(catalog, geometry, textures, assets_cache_dir() / "sheets")
+            print(f"wrote {len(paths)} contact sheets to {assets_cache_dir() / 'sheets'}")
+        if args.views:
+            out = args.out or assets_cache_dir() / "views" / (Path(args.views).stem + ".png")
+            out.parent.mkdir(parents=True, exist_ok=True)
+            asset_views(args.views, catalog, geometry, textures).save(out)
+            print(f"wrote {out}")
     return 0
 
 
@@ -83,6 +97,9 @@ def main(argv=None) -> int:
     assets = sub.add_parser("assets", help="build the asset catalog and print a summary")
     assets.add_argument("--rebuild", action="store_true", help="ignore the cache")
     assets.add_argument("--untagged", action="store_true", help="list assets no tag rule matches")
+    assets.add_argument("--sheets", action="store_true", help="write contact sheets to generated/world/assets/sheets")
+    assets.add_argument("--views", metavar="ASSET", help="write front/side/top views of one asset")
+    assets.add_argument("--out", type=Path, help="output file for --views")
     assets.set_defaults(func=cmd_assets)
 
     args = parser.parse_args(argv)
