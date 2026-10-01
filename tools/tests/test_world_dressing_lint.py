@@ -7,7 +7,11 @@
 """
 
 import sys
+import contextlib
+import io
+import json
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -145,6 +149,22 @@ class PropLintTests(unittest.TestCase):
 		self.assertGreater(counter.call_count, 0)
 		self.assertLessEqual(counter.call_count, len(assets))
 
+	def test_world_lint_judges_wobj_collision_from_the_asset(self):
+		def entity(uid, asset):
+			return types.SimpleNamespace(unique_id=uid, asset=asset, position=(105.0, 0.0, 300.0), rotation=(1.0, 0.0, 0.0, 0.0),
+										 scale=(1.0, 1.0, 1.0))
+
+		def road_findings(asset, rules=RULES):
+			existing = props_from_entities([entity(1, asset)])
+			context = PropContext(self.query, self.catalog, rules, existing, [], None, [])
+			return {(v.rule, v.severity) for v in lint_world_props(context)}
+
+		self.assertIn(("prop_on_road", "error"), road_findings("Models/Test/Cube.hmsh"))
+		self.assertIn(("prop_on_road", "warning"), road_findings("Models/Test/Rock.hmsh"))  # no collision mesh: only a smell
+		self.assertNotIn(("prop_on_road", "error"), road_findings("Models/Test/Rock.hmsh"))
+		forced = TagRules([{"match": "models/test/rock*", "tags": ["rock"], "max_slope": 90, "sink": 0.4, "collides_override": True}])
+		self.assertIn(("prop_on_road", "error"), road_findings("Models/Test/Rock.hmsh", forced))
+
 	def test_world_lint_covers_existing_props(self):
 		violations = lint_world_props(self.context())
 		self.assertEqual([v for v in violations if v.severity == "error"], [])
@@ -152,10 +172,45 @@ class PropLintTests(unittest.TestCase):
 
 @fx.requires_live_data
 class PropLintCliTests(unittest.TestCase):
-	def test_shipped_world_is_clean_against_the_baseline(self):
+	"""The shipped world's findings change with the user's content, so these only check the CLI's structure."""
+
+	@classmethod
+	def setUpClass(cls):
 		sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "world"))
 		import prop_lint  # noqa: E402
-		self.assertEqual(prop_lint.main(["--map", "0"]), 0)
+		cls.prop_lint = prop_lint
+
+	def main(self, argv):
+		with contextlib.redirect_stdout(io.StringIO()):
+			return self.prop_lint.main(argv)
+
+	def test_shipped_world_run_is_structurally_sound(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			report = Path(tmp) / "report.json"
+			code = self.main(["--map", "0", "--json", str(report)])
+			self.assertIn(code, (0, 1))
+			doc = json.loads(report.read_text(encoding="utf-8"))
+		self.assertEqual({"known", "new_errors", "new_warnings"}, set(doc))
+		self.assertEqual(code == 1, bool(doc["new_errors"]))
+
+	def test_baseline_round_trip(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			baseline = Path(tmp) / "baseline.json"
+			args = ["--map", "0", "--baseline", str(baseline)]
+			self.assertEqual(self.main([*args, "--update-baseline"]), 0)
+			self.assertTrue(baseline.is_file())
+			self.assertEqual(self.main(args), 0)  # everything found is now known
+			self.assertIn("props", json.loads(baseline.read_text(encoding="utf-8")))
+
+	def test_empty_baseline_reports_nothing_as_known(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			baseline = Path(tmp) / "empty.json"
+			baseline.write_text('{"version": 1}', encoding="utf-8")
+			report = Path(tmp) / "report.json"
+			code = self.main(["--map", "0", "--baseline", str(baseline), "--json", str(report)])
+			doc = json.loads(report.read_text(encoding="utf-8"))
+		self.assertEqual(code == 1, bool(doc["new_errors"]))
+		self.assertEqual(doc["known"], 0)
 
 
 if __name__ == "__main__":

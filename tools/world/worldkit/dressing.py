@@ -96,10 +96,23 @@ def world_fingerprint(directory: str, repo: Path = REPO) -> str:
 
 
 def _default_probe() -> bool:
+    """Whether mmo_edit is running. Output is read as bytes (a localized tasklist is not valid UTF-8) and any
+    failure to find out raises: the guard fails closed, never reads "could not tell" as "not running"."""
     if os.name == "nt":
-        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq mmo_edit.exe", "/NH"], capture_output=True, text=True).stdout
-        return "mmo_edit.exe" in out.lower()
-    return subprocess.run(["pgrep", "-x", "mmo_edit"], capture_output=True).returncode == 0
+        cmd, exe = ["tasklist", "/FI", "IMAGENAME eq mmo_edit.exe", "/NH"], b"mmo_edit.exe"
+    else:
+        cmd, exe = ["pgrep", "-x", "mmo_edit"], None
+    try:
+        result = subprocess.run(cmd, capture_output=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise PassError(f"could not determine whether mmo_edit is running ({exc})") from exc
+    if exe is not None:
+        if result.returncode != 0:
+            raise PassError(f"could not determine whether mmo_edit is running (tasklist exited {result.returncode})")
+        return exe in (result.stdout or b"").lower()
+    if result.returncode > 1:  # pgrep: 0 = found, 1 = none found, anything else = it failed
+        raise PassError(f"could not determine whether mmo_edit is running (pgrep exited {result.returncode})")
+    return result.returncode == 0
 
 
 def editor_running(probe=None) -> bool:
@@ -175,6 +188,7 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
     originals: dict[Path, bytes | None] = {}
     created: list[str] = []
     made_dirs: list[Path] = []
+    previous = {key: doc.get(key) for key in ("status", "created_files", "applied")}
     try:
         for item in doc["items"]:
             if item["store"] != "wobj":
@@ -217,18 +231,27 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
             path.write_bytes(new_bytes)
             if original is None:
                 created.append(path.relative_to(client).as_posix())
-    except Exception as exc:  # any failure must leave the world exactly as it was
+        doc["created_files"] = created
+        doc["status"] = "applied"
+        doc["applied"] = datetime.now().isoformat(timespec="seconds")
+        for doc_path in _paths(doc["pass_id"], repo):  # the save is guarded too: a failing save rolls the world back
+            originals[doc_path] = doc_path.read_bytes() if doc_path.is_file() else None
+        save_doc(doc, repo)
+    except BaseException as exc:  # any failure, an interrupt included, must leave the world exactly as it was
         failures = _roll_back(written, originals, made_dirs)
         for item in doc["items"]:
             for key in ("unique_id", "file", "written_hash"):
                 item.pop(key, None)
+        for key, value in previous.items():
+            if value is None:
+                doc.pop(key, None)
+            else:
+                doc[key] = value
+        if not isinstance(exc, Exception):
+            raise  # KeyboardInterrupt and friends propagate unchanged, after the rollback
         if failures:
             raise PassError(f"apply failed ({exc}) and the rollback was incomplete, check by hand: {'; '.join(failures)}") from exc
         raise exc if isinstance(exc, PassError) else PassError(f"apply failed and was rolled back: {exc}") from exc
-    doc["created_files"] = created
-    doc["status"] = "applied"
-    doc["applied"] = datetime.now().isoformat(timespec="seconds")
-    save_doc(doc, repo)
     return doc
 
 

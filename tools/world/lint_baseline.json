@@ -685,8 +685,13 @@
     },
     {
       "map": 0,
-      "key": "prop_grid_pattern|grid:wobj:519",
-      "message": "18 x Fortress_Wall_01.hmsh are evenly spaced like a machine-made grid"
+      "key": "prop_on_road|hfol:12206448774685572467",
+      "message": "Flower_01.hmsh at (404.0, 757.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:12206611437370024568",
+      "message": "Flower_01.hmsh at (412.0, 761.0): stands on or next to a road"
     },
     {
       "map": 0,

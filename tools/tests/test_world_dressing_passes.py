@@ -9,6 +9,7 @@
 import hashlib
 import os
 import random
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -18,6 +19,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import world_fixtures as fx  # noqa: E402
 
+from worldkit import dressing  # noqa: E402
 from worldkit.dressing import PassError, apply_pass, load_doc, new_draft, new_pass_id, save_doc, undo_pass, world_fingerprint  # noqa: E402
 from worldkit.formats.wobj import entity_file, parse_wobj  # noqa: E402
 from worldkit.paths import foliage_dir, manifests_dir  # noqa: E402
@@ -196,6 +198,38 @@ class PassTests(unittest.TestCase):
 		left = list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj"))
 		self.assertEqual(left, stuck)  # only the one that could not be removed survives
 
+	def test_keyboard_interrupt_mid_write_rolls_back_and_propagates(self):
+		real = Path.write_bytes
+		draft = self.repo / "generated" / "world" / "passes" / self.doc["pass_id"] / "draft.json"
+		draft_before = draft.read_bytes()
+
+		def interrupted(path, data):
+			if path.suffix == ".hfol":
+				raise KeyboardInterrupt()
+			return real(path, data)
+
+		with mock.patch.object(Path, "write_bytes", interrupted):
+			with self.assertRaises(KeyboardInterrupt):
+				self.apply()
+		self.assertEqual(list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj")), [])
+		self.assertEqual(self.hfol.read_bytes(), self.original)
+		self.assertEqual(self.doc["status"], "planned")
+		self.assertNotIn("file", self.doc["items"][0])
+		self.assertEqual(draft.read_bytes(), draft_before)
+
+	def test_failing_save_after_the_writes_rolls_back(self):
+		draft = self.repo / "generated" / "world" / "passes" / self.doc["pass_id"] / "draft.json"
+		draft_before = draft.read_bytes()
+		with mock.patch.object(dressing, "save_doc", side_effect=OSError("disk full")):
+			with self.assertRaises(PassError) as ctx:
+				self.apply()
+		self.assertIn("rolled back", str(ctx.exception))
+		self.assertEqual(list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj")), [])
+		self.assertEqual(self.hfol.read_bytes(), self.original)
+		self.assertEqual(self.doc["status"], "planned")
+		self.assertEqual(draft.read_bytes(), draft_before)
+		self.assertFalse((manifests_dir(self.repo) / f"{self.doc['pass_id']}.json").exists())
+
 	def test_status_guards(self):
 		doc = self.apply()
 		with self.assertRaises(PassError):
@@ -238,6 +272,45 @@ class PassTests(unittest.TestCase):
 		report = undo_pass(doc, self.repo, probe=NOT_RUNNING)
 		self.assertEqual(len(report.missing), 2)
 		self.assertEqual(self.hfol.stat().st_mtime_ns, 1_000_000_000_000_000_000)
+
+
+class EditorProbeTests(unittest.TestCase):
+	"""_default_probe reads tasklist as bytes: German Windows prints cp850/cp1252, which is not valid UTF-8."""
+
+	def run_probe(self, stdout=b"", returncode=0, error=None):
+		result = subprocess.CompletedProcess(["tasklist"], returncode, stdout, b"")
+		with mock.patch.object(dressing.os, "name", "nt"):
+			with mock.patch.object(dressing.subprocess, "run", side_effect=error, return_value=result):
+				return dressing._default_probe()
+
+	def test_running_on_german_windows(self):
+		out = "mmo_edit.exe                 12345 Console    1    512.000 K\r\n".encode("cp850")
+		self.assertTrue(self.run_probe(out))
+
+	def test_not_running_on_german_windows(self):
+		out = "INFORMATION: Es sind keine Tasks mit den angegebenen Kriterien aktiv. üäö".encode("cp1252")
+		self.assertFalse(self.run_probe(out))
+		self.assertFalse(self.run_probe("Keine Aufgaben äöü".encode("cp850")))
+		self.assertRaises(UnicodeDecodeError, out.decode, "utf-8")  # the case that used to crash
+
+	def test_uppercase_image_name_matches(self):
+		self.assertTrue(self.run_probe(b"MMO_EDIT.EXE 1 Console"))
+
+	def test_fails_closed(self):
+		with self.assertRaises(PassError):
+			self.run_probe(b"", returncode=1)
+		with self.assertRaises(PassError):
+			self.run_probe(error=FileNotFoundError("tasklist"))
+
+	def test_pgrep_branch(self):
+		def run(code):
+			result = subprocess.CompletedProcess(["pgrep"], code, b"", b"")
+			with mock.patch.object(dressing.os, "name", "posix"), mock.patch.object(dressing.subprocess, "run", return_value=result):
+				return dressing._default_probe()
+		self.assertTrue(run(0))
+		self.assertFalse(run(1))
+		with self.assertRaises(PassError):
+			run(2)
 
 
 if __name__ == "__main__":

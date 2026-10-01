@@ -33,7 +33,7 @@ class PlacedProp:
     position: tuple[float, float, float]
     rotation: tuple[float, float, float, float]    # (w, x, y, z)
     scale: float
-    collides: bool
+    collides: bool | None = None                   # None: resolved from the tag rules / catalog by lint_prop (.wobj files)
 
     @property
     def x(self) -> float:
@@ -65,7 +65,7 @@ class PropContext:
 
 def props_from_entities(entities) -> list[PlacedProp]:
     return [PlacedProp(f"wobj:{e.unique_id}", e.asset.replace("\\", "/"), "wobj", e.position, e.rotation,
-                       max(abs(e.scale[0]), abs(e.scale[2])), True) for e in entities]
+                       max(abs(e.scale[0]), abs(e.scale[2])), None) for e in entities]
 
 
 def props_from_foliage(foliage: dict) -> list[PlacedProp]:
@@ -137,6 +137,10 @@ def lint_prop(prop: PlacedProp, context: PropContext, others: list[PlacedProp]) 
         return found
     q = context.query
     tags = context.tags_for(prop.asset)
+    # A .wobj has no collision flag of its own: judge it like the passes do (tag override, else the asset's own collision).
+    collides = prop.collides
+    if collides is None:
+        collides = tags.collides_override if tags.collides_override is not None else bool(info.has_collision)
     corners = footprint_corners(prop, info, tags)
     quad = corners[:, [0, 2]]
     points = [(prop.x, prop.z)] + [(float(c[0]), float(c[2])) for c in corners]
@@ -163,7 +167,7 @@ def lint_prop(prop: PlacedProp, context: PropContext, others: list[PlacedProp]) 
         _segment_distance(prop.x, prop.z, *road[i], *road[i + 1]) - radius < ROAD_CLEARANCE
         for road in context.roads for i in range(len(road) - 1))
     if near_road:
-        add("prop_on_road", "error" if prop.collides else "warning", "stands on or next to a road")
+        add("prop_on_road", "error" if collides else "warning", "stands on or next to a road")
     for other in others:
         if other.key == prop.key:
             continue
