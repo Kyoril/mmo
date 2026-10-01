@@ -1,0 +1,427 @@
+{
+  "version": 1,
+  "pass_id": "20261001-hidden_cave-1",
+  "map": 0,
+  "world": "Development",
+  "poi": "hidden_cave",
+  "template": "cave_mouth",
+  "seed": 1,
+  "anchor": [
+    409.0,
+    646.0
+  ],
+  "keep_away": [],
+  "entry": [
+    409.0,
+    646.0
+  ],
+  "created": "2026-10-01T19:53:30",
+  "world_fingerprint": "841572f94aa2bf6a97cae834c166073649f0ea9e",
+  "items": [
+    {
+      "role": "frame_rocks",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        412.45,
+        10.38,
+        640.22
+      ],
+      "yaw": 95.88,
+      "tilt": [
+        -3.76,
+        48.09
+      ],
+      "scale": 0.71,
+      "collides": true,
+      "unique_id": "0x2973e59b8b7abe07",
+      "file": "Worlds/Development/Development/Entities/8225/2986983434099539463.wobj",
+      "written_hash": "b996efd84f5a6a9cb43dfe3656cda3772ffa5a79"
+    },
+    {
+      "role": "frame_rocks",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        414.02,
+        11.95,
+        649.76
+      ],
+      "yaw": 194.91,
+      "tilt": [
+        6.35,
+        42.04
+      ],
+      "scale": 0.51,
+      "collides": true,
+      "unique_id": "0x2974b527cf4f34be",
+      "file": "Worlds/Development/Development/Entities/8225/2987211635439908030.wobj",
+      "written_hash": "5fcdc5e2b4f90fce948dd1bfe7157dc5496b8e8e"
+    },
+    {
+      "role": "cliff_rocks",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        411.94,
+        9.83,
+        638.45
+      ],
+      "yaw": 287.57,
+      "tilt": [
+        -1.35,
+        42.41
+      ],
+      "scale": 0.45,
+      "collides": true,
+      "unique_id": "0x29744281fb52200d",
+      "file": "Worlds/Development/Development/Entities/8225/2987085578888159245.wobj",
+      "written_hash": "e80e2459efa67e0a5d65f2f2b143743bdc46069d"
+    },
+    {
+      "role": "cliff_rocks",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        410.83,
+        9.07,
+        632.83
+      ],
+      "yaw": 289.7,
+      "tilt": [
+        3.4,
+        33.93
+      ],
+      "scale": 0.34,
+      "collides": true,
+      "unique_id": "0x297496c8869ddb4b",
+      "file": "Worlds/Development/Development/Entities/8225/2987178240849599307.wobj",
+      "written_hash": "d81fe85e48eca9b9724ba5b5bc2eb83a031c2c7d"
+    },
+    {
+      "role": "cliff_rocks",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        410.83,
+        10.19,
+        651.35
+      ],
+      "yaw": 321.55,
+      "tilt": [
+        4.71,
+        14.58
+      ],
+      "scale": 0.32,
+      "collides": true,
+      "unique_id": "0x2974126879e0c934",
+      "file": "Worlds/Development/Development/Entities/8225/2987032692784154932.wobj",
+      "written_hash": "a7679829594a73bb87ef499ebd0343f62a4f566e"
+    },
+    {
+      "role": "cliff_rocks",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        409.56,
+        8.05,
+        636.04
+      ],
+      "yaw": 279.31,
+      "tilt": [
+        -3.02,
+        29.62
+      ],
+      "scale": 0.37,
+      "collides": true,
+      "unique_id": "0x2975660b8961b680",
+      "file": "Worlds/Development/Development/Entities/8225/2987406127565747840.wobj",
+      "written_hash": "1ca0af94d0421050a04645b48179266e64cfa07b"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        407.5,
+        7.42,
+        640.15
+      ],
+      "yaw": 309.7,
+      "tilt": [
+        -9.0,
+        14.77
+      ],
+      "scale": 0.19,
+      "collides": true,
+      "unique_id": "0x29758a9329407598",
+      "file": "Worlds/Development/Development/Entities/8225/2987446292487107992.wobj",
+      "written_hash": "8484180c0386acaa712f034d305b8792ae0d2ae0"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        409.95,
+        8.76,
+        641.93
+      ],
+      "yaw": 96.94,
+      "tilt": [
+        -6.5,
+        30.59
+      ],
+      "scale": 0.18,
+      "collides": true,
+      "unique_id": "0x2975f4c92a1618af",
+      "file": "Worlds/Development/Development/Entities/8225/2987563072661887151.wobj",
+      "written_hash": "3eb29f5cea504168e8055c2438a77aa9d5a04ae1"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        411.67,
+        10.29,
+        648.65
+      ],
+      "yaw": 128.44,
+      "tilt": [
+        -0.71,
+        20.92
+      ],
+      "scale": 0.18,
+      "collides": true,
+      "unique_id": "0x297565a487da93ab",
+      "file": "Worlds/Development/Development/Entities/8225/2987405685158482859.wobj",
+      "written_hash": "e18e86df059d8d31c869aa3ebecdddbcae0bf813"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        417.64,
+        15.65,
+        649.8
+      ],
+      "yaw": 10.07,
+      "tilt": [
+        12.95,
+        54.23
+      ],
+      "scale": 0.18,
+      "collides": true,
+      "unique_id": "0x29769be78b7446ca",
+      "file": "Worlds/Development/Development/Entities/8225/2987746821586306762.wobj",
+      "written_hash": "b342f48fc2e3c2cee15e826643362155e9387be7"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        410.04,
+        8.43,
+        637.47
+      ],
+      "yaw": 287.44,
+      "tilt": [
+        -1.99,
+        33.9
+      ],
+      "scale": 0.23,
+      "collides": true,
+      "unique_id": "0x29768fc424ee1953",
+      "file": "Worlds/Development/Development/Entities/8225/2987733475402848595.wobj",
+      "written_hash": "eed86b199f4f8bce5ce06aa493bf96c88ae7bad1"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        414.23,
+        12.65,
+        641.24
+      ],
+      "yaw": 101.23,
+      "tilt": [
+        0.52,
+        54.83
+      ],
+      "scale": 0.22,
+      "collides": true,
+      "unique_id": "0x29767c7e2029cbaf",
+      "file": "Worlds/Development/Development/Entities/8225/2987712283954236335.wobj",
+      "written_hash": "3a5c47f8dd7c1611f93b45f7de9e40a907e1df55"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        417.01,
+        14.14,
+        652.22
+      ],
+      "yaw": 60.29,
+      "tilt": [
+        14.11,
+        51.47
+      ],
+      "scale": 0.16,
+      "collides": true,
+      "unique_id": "0x2976a625317f44bb",
+      "file": "Worlds/Development/Development/Entities/8225/2987758081481327803.wobj",
+      "written_hash": "c293c8904374c1f0431725867ef7af43bbe0896b"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        411.55,
+        10.13,
+        651.89
+      ],
+      "yaw": 91.24,
+      "tilt": [
+        4.72,
+        15.05
+      ],
+      "scale": 0.15,
+      "collides": true,
+      "unique_id": "0x29774504b17d9db1",
+      "file": "Worlds/Development/Development/Entities/8225/2987932764243598769.wobj",
+      "written_hash": "a93153a679213c99f81ea5f97acb66e34ffd04f6"
+    },
+    {
+      "role": "screen",
+      "asset": "Models/FalwynPlains/Plants/Shrub_02.hmsh",
+      "store": "hfol",
+      "position": [
+        410.71,
+        9.45,
+        654.28
+      ],
+      "yaw": 312.4,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.89,
+      "collides": false,
+      "unique_id": "0x2977171f7512cdfe",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "f2f7c3cd70b9f62b16f680b87e596d1f91b8f011"
+    },
+    {
+      "role": "screen",
+      "asset": "Models/FalwynPlains/Plants/Bush_01.hmsh",
+      "store": "hfol",
+      "position": [
+        410.38,
+        9.6,
+        651.06
+      ],
+      "yaw": 353.73,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.81,
+      "collides": false,
+      "unique_id": "0x2977dfaed2fb25fc",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "d1d38c30e3bb39dd5fcb49dc1bc3bac69375fe72"
+    },
+    {
+      "role": "screen",
+      "asset": "Models/FalwynPlains/Plants/Bush_01.hmsh",
+      "store": "hfol",
+      "position": [
+        408.03,
+        6.96,
+        638.97
+      ],
+      "yaw": 25.76,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.82,
+      "collides": false,
+      "unique_id": "0x2977ec43a3575915",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "025420c284eed5f46ab6b3d007997fe0cc12a9e6"
+    },
+    {
+      "role": "screen",
+      "asset": "Models/FalwynPlains/Plants/Bush_01.hmsh",
+      "store": "hfol",
+      "position": [
+        406.76,
+        7.31,
+        642.0
+      ],
+      "yaw": 208.56,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.14,
+      "collides": false,
+      "unique_id": "0x29770ea82241ee55",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "9af3074cae069abc67ac91775d333868b8dac638"
+    },
+    {
+      "role": "screen",
+      "asset": "Models/FalwynPlains/Plants/Bush_01.hmsh",
+      "store": "hfol",
+      "position": [
+        405.73,
+        7.49,
+        643.91
+      ],
+      "yaw": 7.11,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.13,
+      "collides": false,
+      "unique_id": "0x29776b3089cf9b62",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "82fc4b145b9b9d24a7367c84c2296afe2a273794"
+    }
+  ],
+  "gaps": [],
+  "notes": [
+    "The cave itself (interior, kobolds, chest) belongs to the content spec; this pass only frames its mouth.",
+    "Asset gap: there is no cave-entrance mesh, so the opening is only framed by rocks against the cliff (art request: a cave or mine entrance that sits into a cliff)."
+  ],
+  "checks": {
+    "placement": [],
+    "walkability": [
+      {
+        "key": "spawn_off_mesh|unit:0:19:-:396:648",
+        "rule": "spawn_off_mesh",
+        "severity": "error",
+        "subject": "unit:0:19:-:396:648",
+        "message": "unit:0:19:-:396:648 is off the navmesh near hidden_cave",
+        "x": 396.19,
+        "z": 648.33
+      }
+    ]
+  },
+  "status": "applied",
+  "created_files": [],
+  "applied": "2026-10-01T20:11:36",
+  "nav": {
+    "path": "generated/world/nav"
+  }
+}

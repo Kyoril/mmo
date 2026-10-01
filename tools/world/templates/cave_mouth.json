@@ -4,11 +4,11 @@
   "description": "A hidden-looking opening at a cliff: large rocks framing a gap that stays walkable, cliff rocks, rubble and bushes partly screening it.",
   "entry": "anchor",
   "clear": [2.5],
-  "notes": ["The cave itself (interior, kobolds, chest) belongs to the content spec; this pass only frames its mouth."],
+  "notes": ["The cave itself (interior, kobolds, chest) belongs to the content spec; this pass only frames its mouth.", "Asset gap: there is no cave-entrance mesh, so the opening is only framed by rocks against the cliff (art request: a cave or mine entrance that sits into a cliff)."],
   "roles": [
-    {"name": "frame_rocks", "query": {"tags": ["rock"], "size": "large"}, "count": [2, 3], "spacing": 3.0, "store": "wobj", "rule": {"type": "ring", "r1": 3.0, "r2": 6.0}},
-    {"name": "cliff_rocks", "query": {"tags": ["rock"], "size": "medium"}, "count": [3, 5], "spacing": 3.0, "store": "wobj", "rule": {"type": "against_cliff", "min_cliff_slope": 40, "max_offset": 3.0}},
-    {"name": "rubble", "query": {"tags": ["rock"], "size": "small"}, "count": [4, 8], "spacing": 1.5, "store": "wobj", "rule": {"type": "scatter", "radius_fraction": 0.7}},
-    {"name": "screen", "query": {"tags": ["bush"]}, "count": [3, 6], "spacing": 2.0, "store": "hfol", "rule": {"type": "ring", "r1": 4.0, "r2": 10.0}}
+    {"name": "frame_rocks", "query": {"assets": ["Models/Stones/SM_stone_06.hmsh"]}, "count": [2, 3], "spacing": 5.0, "store": "wobj", "rule": {"type": "ring", "r1": 5.0, "r2": 9.0}, "scale": [0.5, 0.8], "sink": 1.0},
+    {"name": "cliff_rocks", "query": {"assets": ["Models/Stones/SM_stone_06.hmsh"]}, "count": [3, 5], "spacing": 3.0, "store": "wobj", "rule": {"type": "against_cliff", "min_cliff_slope": 40, "max_offset": 3.0}, "scale": [0.3, 0.5], "sink": 0.4},
+    {"name": "rubble", "query": {"assets": ["Models/Stones/SM_stone_06.hmsh"]}, "count": [5, 8], "spacing": 1.5, "store": "wobj", "rule": {"type": "near_role", "role": "frame_rocks", "distance": [2.0, 5.0]}, "scale": [0.12, 0.25], "sink": 0.1},
+    {"name": "screen", "query": {"assets": ["Models/FalwynPlains/Plants/Bush_01.hmsh", "Models/FalwynPlains/Plants/Shrub_02.hmsh"]}, "count": [4, 7], "spacing": 1.8, "store": "hfol", "rule": {"type": "ring", "r1": 3.5, "r2": 9.0}}
   ]
 }

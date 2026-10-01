@@ -1,0 +1,348 @@
+{
+  "version": 1,
+  "pass_id": "20261001-ring_waterfall-1",
+  "map": 0,
+  "world": "Development",
+  "poi": "ring_waterfall",
+  "template": "waterfall_basin",
+  "seed": 2,
+  "anchor": [
+    417.0,
+    761.0
+  ],
+  "keep_away": [],
+  "entry": [
+    417.0,
+    761.0
+  ],
+  "created": "2026-10-01T19:59:26",
+  "world_fingerprint": "2b2a1ac850077be983d63a3666d2579fce4cbbe3",
+  "items": [
+    {
+      "role": "basin_rim",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        410.76,
+        23.14,
+        763.9
+      ],
+      "yaw": 160.15,
+      "tilt": [
+        -13.17,
+        14.31
+      ],
+      "scale": 0.41,
+      "collides": true,
+      "unique_id": "0xa9644e3b40c21027",
+      "file": "Worlds/Development/Development/Entities/8225/12205966906477383719.wobj",
+      "written_hash": "b2f6bd125e49b9ee577f60f41e5dafad2dbc5f00"
+    },
+    {
+      "role": "basin_rim",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        408.59,
+        21.92,
+        760.96
+      ],
+      "yaw": 163.69,
+      "tilt": [
+        -15.76,
+        18.54
+      ],
+      "scale": 0.43,
+      "collides": true,
+      "unique_id": "0xa964f10649ca0118",
+      "file": "Worlds/Development/Development/Entities/8225/12206145899390959896.wobj",
+      "written_hash": "c4b81faa6fee5257c728260722fe7d638003b502"
+    },
+    {
+      "role": "basin_rim",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        422.74,
+        25.54,
+        759.55
+      ],
+      "yaw": 354.07,
+      "tilt": [
+        -27.11,
+        16.88
+      ],
+      "scale": 0.36,
+      "collides": true,
+      "unique_id": "0xa9644070b976c664",
+      "file": "Worlds/Development/Development/Entities/8225/12205951742972970596.wobj",
+      "written_hash": "bb4e871b027dd5281a8b430d556eecbe6785244a"
+    },
+    {
+      "role": "cliff_rocks",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        408.9,
+        22.64,
+        763.21
+      ],
+      "yaw": 40.29,
+      "tilt": [
+        -24.58,
+        13.21
+      ],
+      "scale": 0.62,
+      "collides": true,
+      "unique_id": "0xa9654925dff496d5",
+      "file": "Worlds/Development/Development/Entities/8225/12206242792077563605.wobj",
+      "written_hash": "fa08b212a6895708b99b77405627d4b415204452"
+    },
+    {
+      "role": "cliff_rocks",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        404.22,
+        20.45,
+        760.25
+      ],
+      "yaw": 156.26,
+      "tilt": [
+        -8.11,
+        16.01
+      ],
+      "scale": 0.62,
+      "collides": true,
+      "unique_id": "0xa965f2e2c9e3ea5a",
+      "file": "Worlds/Development/Development/Entities/8225/12206429420921285210.wobj",
+      "written_hash": "f95e4443be7fb836d1e5dfe6c3451db4812a2f00"
+    },
+    {
+      "role": "herbs",
+      "asset": "Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh",
+      "store": "hfol",
+      "position": [
+        408.03,
+        20.28,
+        758.68
+      ],
+      "yaw": 86.35,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.01,
+      "collides": false,
+      "unique_id": "0xa966037748a3a3f5",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "e7f553e6795c14bf5a0c63e41574b4b4a72e57a5"
+    },
+    {
+      "role": "herbs",
+      "asset": "Models/FalwynPlains/Plants/Grass_03.hmsh",
+      "store": "hfol",
+      "position": [
+        413.94,
+        23.23,
+        765.16
+      ],
+      "yaw": 229.62,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.29,
+      "collides": false,
+      "unique_id": "0xa966a513e35af350",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "332d0d3cb3bdef2d25d89cd28376edc8d9a3f0b7"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/FalwynPlains/Trees/Tree_05.hmsh",
+      "store": "hfol",
+      "position": [
+        402.19,
+        18.94,
+        758.94
+      ],
+      "yaw": 192.49,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.05,
+      "collides": true,
+      "unique_id": "0xa96672d339d81764",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "9410e846c23a1eecba090d90efe41927a47804a5"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/FalwynPlains/Trees/Tree_05.hmsh",
+      "store": "hfol",
+      "position": [
+        417.87,
+        53.45,
+        777.74
+      ],
+      "yaw": 194.08,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.2,
+      "collides": true,
+      "unique_id": "0xa9668b76465c0349",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "2c2554b2dfb4aadf07926585a5fe2c2b851df56f"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/FalwynPlains/Trees/Tree_04.hmsh",
+      "store": "hfol",
+      "position": [
+        422.73,
+        54.17,
+        773.64
+      ],
+      "yaw": 48.1,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.16,
+      "collides": true,
+      "unique_id": "0xa966014a20a53176",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "ebd73bfb182e6953676caa42fd8d001b67d53136"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/FalwynPlains/Trees/Tree_05.hmsh",
+      "store": "hfol",
+      "position": [
+        429.75,
+        59.7,
+        773.23
+      ],
+      "yaw": 316.73,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.86,
+      "collides": true,
+      "unique_id": "0xa966a2022b433203",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "da976fdc6c8cc13a42ab33294c3e5528a13e6b51"
+    },
+    {
+      "role": "herbs",
+      "asset": "Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh",
+      "store": "hfol",
+      "position": [
+        403.5,
+        18.58,
+        755.5
+      ],
+      "yaw": 40.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xa96671f53fe82139",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "0729fb5a99fb33a4ae7d8255f3e682cf4013c7a0"
+    },
+    {
+      "role": "herbs",
+      "asset": "Models/FalwynPlains/Plants/Flower_01.hmsh",
+      "store": "hfol",
+      "position": [
+        412.0,
+        21.64,
+        761.0
+      ],
+      "yaw": 200.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.1,
+      "collides": false,
+      "unique_id": "0xa966986dcba92278",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "e9a471c4a4c6bde0222d94b64b31ff242a34983f"
+    },
+    {
+      "role": "herbs",
+      "asset": "Models/FalwynPlains/Plants/Flower_01.hmsh",
+      "store": "hfol",
+      "position": [
+        404.0,
+        18.73,
+        757.5
+      ],
+      "yaw": 80.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.95,
+      "collides": false,
+      "unique_id": "0xa966047cf022bd73",
+      "file": "Worlds/Development/Development/Foliage/8225.hfol",
+      "written_hash": "cc2f498d277b48a34942a09e7b2c8f07d5c770f1"
+    }
+  ],
+  "gaps": [
+    {
+      "role": "basin_rim",
+      "kind": "space",
+      "wanted": 4,
+      "placed": 3
+    },
+    {
+      "role": "cliff_rocks",
+      "kind": "space",
+      "wanted": 3,
+      "placed": 2
+    }
+  ],
+  "notes": [
+    "Awaiting water: paint the pool with the editor's water brush (or a later waterfall feature); the falling water does not exist in the engine yet."
+  ],
+  "checks": {
+    "placement": [
+      {
+        "key": "prop_on_road|20261001-ring_waterfall-1:12",
+        "rule": "prop_on_road",
+        "severity": "warning",
+        "subject": "20261001-ring_waterfall-1:12",
+        "message": "Flower_01.hmsh at (412.0, 761.0): stands on or next to a road",
+        "x": 412.0,
+        "z": 761.0
+      },
+      {
+        "key": "prop_on_road|20261001-ring_waterfall-1:13",
+        "rule": "prop_on_road",
+        "severity": "warning",
+        "subject": "20261001-ring_waterfall-1:13",
+        "message": "Flower_01.hmsh at (404.0, 757.5): stands on or next to a road",
+        "x": 404.0,
+        "z": 757.5
+      }
+    ],
+    "walkability": []
+  },
+  "status": "applied",
+  "created_files": [],
+  "applied": "2026-10-01T20:12:09",
+  "nav": {
+    "path": "generated/world/nav"
+  }
+}
