@@ -150,5 +150,13 @@ class PropLintTests(unittest.TestCase):
 		self.assertEqual([v for v in violations if v.severity == "error"], [])
 
 
+@fx.requires_live_data
+class PropLintCliTests(unittest.TestCase):
+	def test_shipped_world_is_clean_against_the_baseline(self):
+		sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "world"))
+		import prop_lint  # noqa: E402
+		self.assertEqual(prop_lint.main(["--map", "0"]), 0)
+
+
 if __name__ == "__main__":
 	unittest.main()

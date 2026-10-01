@@ -4,8 +4,9 @@
 Round-trips every quest, item, NPC and spell through its authoring skill's
 export + validate scripts (catching broken references and invalid data), checks
 the quest chain graph for cycles and dangling links (questchain domain), runs
-the world placement lint (placement domain, GLOBAL maps) and the quest
-reachability report (reachability domain) from tools/world - both fail only on
+the world placement lint (placement domain, GLOBAL maps), the prop lint (props
+domain) and the quest reachability report (reachability domain) from
+tools/world - all fail only on
 findings missing from tools/world/lint_baseline.json - then runs the XP coverage
 audit (tools/xp_audit.py, threshold 120%). Writes a JSON report to
 tools/gate/reports/ and exits non-zero if anything failed.
@@ -43,7 +44,7 @@ DOMAINS = {
     "spell": ("mmo-spell-designer", "export_spell_json.py", "validate_spell_json.py", "--spell-id", "spells", "Spells", "spells.data"),
 }
 
-ALL_DOMAINS = [*DOMAINS, "questchain", "placement", "reachability", "xp"]
+ALL_DOMAINS = [*DOMAINS, "questchain", "placement", "reachability", "props", "xp"]
 
 _mods = None
 
@@ -172,7 +173,7 @@ def audit_world(tool: str, name: str, tmp_dir: Path) -> dict:
     """Runs tools/world/<tool>.py per map; only new errors (not in the baseline) are failures."""
     msg = proto_modules()["maps"].Maps()
     msg.ParseFromString((DATA / "maps.data").read_bytes())
-    maps = [m for m in msg.entry if name != "placement" or m.instancetype == MAP_GLOBAL]
+    maps = [m for m in msg.entry if name not in ("placement", "props") or m.instancetype == MAP_GLOBAL]
     result = {"checked": 0, "failures": [], "warnings": [], "known": 0, "maps": {}}
     for map_entry in maps:
         out = tmp_dir / f"{name}_{map_entry.id}.json"
@@ -223,6 +224,8 @@ def main() -> int:
                 result = audit_world("lint", "placement", tmp_dir)
             elif name == "reachability":
                 result = audit_world("report", "reachability", tmp_dir)
+            elif name == "props":
+                result = audit_world("prop_lint", "props", tmp_dir)
             else:
                 result = audit_domain(name, args.limit, tmp_dir)
             report["domains"][name] = result
