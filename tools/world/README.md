@@ -24,6 +24,9 @@ The design is in `docs/superpowers/specs/2026-09-27-content-foundation-design.md
 | `python tools/world/bootstrap_atlas.py --map N` | First atlas for a new map. Refuses to overwrite an existing one. |
 | `python tools/world/extract_canon.py --map 0 --out c.md` | Dump of quest and NPC text, as source material for the bible. |
 | `.agents/skills/mmo-npc-designer/scripts/inspect_terrain.py` | The NPC skill's point and zone query, backed by worldkit. |
+| `python -m worldkit assets [--sheets] [--views ASSET] [--untagged]` | Asset catalog summary; contact sheets and 3-view pictures in `generated/world/assets/`. |
+| `python tools/world/dress.py plan/check/apply/undo/list ...` | Dressing passes: place a template on a confirmed atlas place, check it, write it, undo it. See the world-dresser skill. |
+| `python tools/world/prop_lint.py --map 0` | Placement lint for every existing prop and tree, compared to the `props` baseline. |
 
 ## Files
 
@@ -31,11 +34,16 @@ The design is in `docs/superpowers/specs/2026-09-27-content-foundation-design.md
 |---|---|
 | `data/world/atlas/map_<id>.json` | Named places, zone bands and roads. Edit as text or in mmo_edit's **Atlas** mode. Statuses: placeholder / canon / note; only the user sets canon. |
 | `docs/world/bible.md` | The world bible: [E] established, [C] in-game canon, [?] open. |
-| `tools/world/lint_baseline.json` | Known placement and reachability findings. Update with `--update-baseline`, per map and per section. |
+| `tools/world/lint_baseline.json` | Known placement, reachability and `props` findings. Update with `--update-baseline`, per map and per section. |
 | `tools/world/worldkit/terrain_kinds.json` | Which splat layer of which terrain material is a path or road. |
+| `tools/world/asset_tags.json` | Asset tags and placement defaults for dressing. |
+| `tools/world/templates/*.json` | Site templates (roles, counts, placement rules). |
+| `tools/world/nav_routes.json` | Protected routes that dressing must keep walkable, with baseline lengths. |
+| `data/world/passes/<id>.json` | Manifest of every applied dressing pass: what was written, with ids and hashes. |
+| `generated/world/passes/`, `generated/world/assets/`, `generated/world/nav/` | Drafts and previews, catalog and contact sheets, scratch navmesh (gitignored). |
 | `generated/world/<World>/` | Snapshot cache (gitignored). It rebuilds itself when tiles or props change. |
 | `generated/world/review/<slug>/` | Review packets: `README.md` brief, before/after PNGs, `report.md`. |
 
-The weekly content audit (`tools/gate/content_audit.py`) runs the `placement` and `reachability` domains. The quest and NPC validators call `worldkit.skill_checks`.
+The weekly content audit (`tools/gate/content_audit.py`) runs the `placement`, `reachability`, and `props` domains via `prop_lint.py`. The quest and NPC validators call `worldkit.skill_checks`.
 
 **Tests:** `python -m unittest discover -s tools/tests -p "test_world_*.py"`

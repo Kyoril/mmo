@@ -1,0 +1,50 @@
+---
+name: world-dresser
+description: Dress confirmed world-atlas places with props and trees (quarries, camps, cave mouths, ruins) as undoable passes, using the asset catalog, site templates, placement and walkability checks, and a visual review packet. Use when asked to dress, decorate, furnish or populate a place with objects, props, rocks or trees, or to undo such a pass.
+---
+
+<essential_rules>
+- Dress only places whose atlas status is `canon`, unless the user explicitly asks for a placeholder.
+- **mmo_edit must be closed** for `apply`, `undo` and `publish-nav`. If it is running, ask the user to close it. Never kill it.
+- Never commit `data/client`. The user commits accepted passes. Do commit the manifests under `data/world/passes/`.
+- Never run `publish-nav` unless the user asked for it; it rebuilds the real navmesh.
+- Look at the previews before applying. A pass with placement errors cannot be applied; fix the draft by hand instead of loosening the checks.
+- Report asset gaps honestly: a role with no matching asset is an art request, never a reason to use an unrelated asset.
+</essential_rules>
+
+<world_aware_design>
+1. Read `docs/world/bible.md`: the place's section and the ring dressing palette (section 3.2). Read the place's atlas entry: description, notes, radius.
+2. Look at the assets you will use:
+   - `cd tools/world; python -m worldkit assets --sheets` writes contact sheets to `generated/world/assets/sheets/`; open the relevant ones.
+   - `python -m worldkit assets --views <asset>` shows one asset from three sides.
+3. Pick or write a template in `tools/world/templates/` (see the template guide below). Keep away from neighbours with `--keep-away <poi>:<metres>`.
+4. Run `python tools/world/dress.py plan ...`, then open the previews in `generated/world/passes/<id>/`. North is -Z; the previews name the direction they look in.
+5. Fix what looks wrong by editing `draft.json`: move, rotate, swap or delete an item. Then run `dress.py check <id>` and look again.
+6. Run `dress.py apply <id>`. When doing several passes, use `--skip-nav` and then one `dress.py check --nav <id> <id> ...` at the end.
+7. Hand the user the packet: `dress.py packet-index --name <batch> <ids...>`. List the gaps, any "awaiting water" notes, and how to undo.
+</world_aware_design>
+
+<template_guide>
+- A template file has: `name`, `description`, `entry` (`anchor` or a role name), `clear` (radii kept empty around the anchor), `notes`, and `roles`.
+- Each role has `name`, `query` (`tags`, `exclude`, `size`: small < 1.5 m, medium < 4 m, large; or `assets`), `count` [min, max], `spacing`, `store` (`wobj` or `hfol`), `rule`, and optionally `scale` and `yaw`.
+- Rules:
+  - `at_anchor {offset}`
+  - `ring {r1, r2}`
+  - `scatter {radius_fraction}`
+  - `cluster {radius_fraction, spread}`
+  - `against_cliff {min_cliff_slope, max_offset}`
+  - `along_path {offset}`
+  - `near_role {role, distance}`
+- Trees and plants go in `hfol`; everything else goes in `wobj`.
+</template_guide>
+
+<tags>
+- `tools/world/asset_tags.json` maps asset globs to tags and placement defaults (`sink`, `max_slope`, `align_to_slope`, `may_overlap`, `footprint_scale`, `collides_override`).
+- Add rules only for assets that have none (`python -m worldkit assets --untagged`), and only after looking at them.
+- The user's edits win.
+</tags>
+
+<undo>
+- `python tools/world/dress.py undo <id>` removes exactly what the pass wrote.
+- Anything the user changed since is kept and listed, unless `--force`.
+</undo>
