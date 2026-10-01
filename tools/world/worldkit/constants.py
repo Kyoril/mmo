@@ -31,3 +31,9 @@ def page_of(x: float, z: float) -> tuple[int, int]:
 def page_origin(page_x: int, page_z: int) -> tuple[float, float]:
     """Returns the world (x, z) of a page's minimum corner."""
     return (page_x - WORLD_CENTER_PAGE) * PAGE_SIZE, (page_z - WORLD_CENTER_PAGE) * PAGE_SIZE
+
+
+def entity_page_index(x: float, z: float) -> int:
+    """Folder index of the page holding world point (x, z): (page_x << 8) | page_z, as mmo_edit names them."""
+    page_x, page_z = page_of(x, z)
+    return (page_x << 8) | page_z

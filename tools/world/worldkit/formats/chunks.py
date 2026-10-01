@@ -75,8 +75,34 @@ class Cursor:
     def str16(self) -> str:
         return bytes(self._take(self.u16())).decode("utf-8")
 
+    def raw(self, count: int) -> memoryview:
+        """The next `count` bytes as-is (vertex and index blocks)."""
+        return self._take(count)
+
+    def strz32(self) -> str:
+        """u32 length, that many bytes, then one NUL not counted in the length (world-model strings)."""
+        text = bytes(self._take(self.u32())).decode("utf-8")
+        if self.u8() != 0:
+            raise FormatError(f"{self._source}: chunk {self._magic!r} string is not NUL-terminated")
+        return text
+
     def remaining(self) -> int:
         return len(self._data) - self._pos
 
     def done(self) -> bool:
         return self._pos == len(self._data)
+
+
+def chunk_bytes(magic: bytes, payload: bytes) -> bytes:
+    """One chunk as the engine's ChunkWriter writes it: 4 magic bytes, u32 payload size, payload."""
+    return magic + struct.pack("<I", len(payload)) + payload
+
+
+def str8_bytes(text: str) -> bytes:
+    raw = text.encode("utf-8")
+    return struct.pack("<B", len(raw)) + raw
+
+
+def str16_bytes(text: str) -> bytes:
+    raw = text.encode("utf-8")
+    return struct.pack("<H", len(raw)) + raw

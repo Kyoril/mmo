@@ -114,6 +114,18 @@ def hwld_bytes(version=3, has_terrain=True, default_material="Models/Terrain/Def
 	return b"".join(parts)
 
 
+def hfol_bytes(meshes, instances, version=2) -> bytes:
+	"""Builds a .hfol file. instances: iterable of (unique_id, mesh_index, position, rotation(w,x,y,z), scale, collides)."""
+	names = b"".join(str16(m) for m in meshes)
+	body = struct.pack("<I", len(instances))
+	for unique_id, index, position, rotation, scale, collides in instances:
+		body += struct.pack("<QI", unique_id, index) + struct.pack("<3f", *position) + struct.pack("<4f", *rotation)
+		body += struct.pack("<3f", *scale)
+		if version >= 2:
+			body += struct.pack("<B", 1 if collides else 0)
+	return chunk(b"REVF", struct.pack("<I", version)) + chunk(b"HSMF", names) + chunk(b"SNIF", body)
+
+
 def make_world(repo: Path, directory: str, pages: dict, entities=(), default_material="Models/Terrain/Default.hmi") -> None:
 	"""Writes a synthetic world under <repo>/data/client/Worlds/<directory>/.
 
