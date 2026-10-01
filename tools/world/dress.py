@@ -142,11 +142,20 @@ def main(argv=None) -> int:
                     nav_check(session, [doc])
                 except NavError as exc:
                     nav_error = exc                          # nav_check already saved the pass as applied-unchecked
-            print(_summary(doc), "->", _packet(session, doc))    # the props are in the world: always leave a reviewable packet
+            recovery = (f"Run `python tools/world/dress.py check --nav {doc['pass_id']}` to re-check it, or "
+                        f"`python tools/world/dress.py undo {doc['pass_id']}` to remove the props.")
+            try:
+                packet = _packet(session, doc)               # the props are in the world: always leave a reviewable packet
+            except PassError as exc:
+                print(_summary(doc))
+                note = f"; the navmesh check also failed ({nav_error})" if nav_error is not None else ""
+                print(f"error: pass {doc['pass_id']} was already applied (the props are written){note}, but building its "
+                      f"review packet failed: {exc}. {recovery}", file=sys.stderr)
+                return 1
+            print(_summary(doc), "->", packet)
             if nav_error is not None:
                 print(f"error: the props are placed but the navmesh check failed ({nav_error}); the pass is applied-unchecked. "
-                      f"Run `python tools/world/dress.py check --nav {doc['pass_id']}` once that is fixed, or "
-                      f"`python tools/world/dress.py undo {doc['pass_id']}`.", file=sys.stderr)
+                      f"{recovery}", file=sys.stderr)
                 return 1
         else:
             session = open_session(map_id)

@@ -190,6 +190,48 @@ class NavCheckTests(unittest.TestCase):
 		self.assertEqual(load_doc(first["pass_id"], self.repo)["status"], "applied")
 		self.assertEqual(load_doc(second["pass_id"], self.repo)["status"], "applied-unchecked")
 
+	def test_interrupt_during_the_build_leaves_the_pass_unchecked(self):
+		doc = self.applied()
+
+		def interrupted(command, **kwargs):
+			raise KeyboardInterrupt()
+		with self.assertRaises(KeyboardInterrupt):
+			nav_check(self.session, [doc], runner=interrupted, nav_factory=lambda: _Nav())
+		self.assertEqual(doc["status"], "applied-unchecked")
+		self.assertIn("error", doc["nav"])
+		self.assertEqual(load_doc(doc["pass_id"], self.repo)["status"], "applied-unchecked")
+
+	def test_interrupt_mid_loop_keeps_the_finished_pass(self):
+		first = self.applied()
+		second = copy.deepcopy(first)
+		second["pass_id"] += "-b"
+		save_doc(second, self.repo)
+
+		class Interrupted(_Nav):
+			def on_mesh(self, point, radius=2.0):
+				self.calls += 1
+				if self.calls == 2:
+					raise KeyboardInterrupt()
+				return None
+		nav = Interrupted()
+		with self.assertRaises(KeyboardInterrupt):
+			nav_check(self.session, [first, second], runner=self.runner(), nav_factory=lambda: nav)
+		self.assertEqual(first["status"], "applied")
+		self.assertTrue(first["checks"]["walkability"])
+		self.assertEqual(second["status"], "applied-unchecked")
+		self.assertEqual(load_doc(first["pass_id"], self.repo)["status"], "applied")
+		self.assertEqual(load_doc(second["pass_id"], self.repo)["status"], "applied-unchecked")
+
+	def test_a_failing_save_does_not_mask_the_interrupt(self):
+		doc = self.applied()
+
+		def interrupted(command, **kwargs):
+			raise KeyboardInterrupt()
+		with mock.patch.object(dress_commands, "save_doc", side_effect=OSError("disk full")), 				mock.patch.object(sys, "stderr"):
+			with self.assertRaises(KeyboardInterrupt):
+				nav_check(self.session, [doc], runner=interrupted, nav_factory=lambda: _Nav())
+		self.assertEqual(doc["status"], "applied-unchecked")
+
 	def test_planned_and_undone_passes_are_refused(self):
 		planned = plan_pass(self.session, "site", "t", seed=4, render=False)
 		with self.assertRaises(PassError):

@@ -140,8 +140,9 @@ def check_pass(session: DressSession, doc: dict, render: bool = True) -> dict:
 def nav_check(session: DressSession, docs: list[dict], runner=None, nav_factory=None) -> None:
     """One scratch navmesh build for all given applied passes, then their walkability checks.
 
-    Any failure after the applied state is known leaves the not yet checked passes "applied-unchecked" with
-    nav.error set (a partially-undone pass keeps its status) and raises NavError; passes checked before the
+    Any failure or interruption (including KeyboardInterrupt, which is re-raised unchanged) after the applied state
+    is known leaves the not yet checked passes "applied-unchecked" with nav.error set (a partially-undone pass keeps
+    its status); an ordinary failure raises NavError; passes checked before the
     failure keep their result.
     """
     for doc in docs:
@@ -149,13 +150,16 @@ def nav_check(session: DressSession, docs: list[dict], runner=None, nav_factory=
             raise PassError(f"pass {doc['pass_id']} is {doc['status']}; walkability is only checked for applied passes")
     pending = list(docs)
 
-    def mark_unchecked(exc: Exception) -> NavError:
+    def mark_unchecked(exc: BaseException) -> None:
+        message = str(exc)[-500:] or type(exc).__name__
         for doc in pending:
             if doc["status"] != "partially-undone":
                 doc["status"] = "applied-unchecked"
-            doc["nav"] = {"error": str(exc)[-500:]}
-            save_doc(doc, session.repo)
-        return exc if isinstance(exc, NavError) else NavError(str(exc))
+            doc["nav"] = {"error": message}
+            try:
+                save_doc(doc, session.repo)
+            except Exception as save_exc:  # never let a failed save mask the exception that got us here
+                print(f"warning: could not record {doc['pass_id']} as applied-unchecked: {save_exc}", file=sys.stderr)
 
     try:
         nav_dir = build_nav(session.directory, scratch_nav_root(session.repo), session.repo, runner=runner or subprocess.run)
@@ -173,8 +177,11 @@ def nav_check(session: DressSession, docs: list[dict], runner=None, nav_factory=
                     doc["status"] = "applied"
                 save_doc(doc, session.repo)
                 pending.pop(0)
-    except Exception as exc:  # a failed check must never lose the applied state or the pass that was already checked
-        raise mark_unchecked(exc) from exc
+    except BaseException as exc:  # a failed or interrupted check must never lose the applied state or the pass already checked
+        mark_unchecked(exc)
+        if isinstance(exc, NavError) or not isinstance(exc, Exception):
+            raise                                              # KeyboardInterrupt / SystemExit propagate unchanged
+        raise NavError(str(exc)) from exc
 
 
 def after_map(session: DressSession, doc: dict) -> Path:
