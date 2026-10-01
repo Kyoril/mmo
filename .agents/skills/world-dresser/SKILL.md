@@ -26,7 +26,7 @@ description: Dress confirmed world-atlas places with props and trees (quarries, 
 
 <template_guide>
 - A template file has: `name`, `description`, `entry` (`anchor` or a role name), `clear` (radii kept empty around the anchor), `notes`, and `roles`.
-- Each role has `name`, `query` (`tags`, `exclude`, `size`: small < 1.5 m, medium < 4 m, large; or `assets`), `count` [min, max], `spacing`, `store` (`wobj` or `hfol`), `rule`, and optionally `scale` and `yaw`.
+- Each role has `name`, `query` (`tags`, `exclude`, `size`: small < 1.5 m, medium < 4 m, large; or `assets`), `count` [min, max], `spacing`, `store` (`wobj` or `hfol`), `rule`, and optionally `scale`, `yaw` and `sink`. `sink` (metres, >= 0) replaces the asset tag's sink for placement depth only; use it when a small scale makes the tag's sink (calibrated for big instances) bury the asset. The lint still judges with the tag's own sink.
 - Rules:
   - `at_anchor {offset}`
   - `ring {r1, r2}`

@@ -212,6 +212,24 @@ class TemplateTests(unittest.TestCase):
 		bad([self.role("r", "crate", {"type": "ring", "r1": 3.0})])
 		self.make([crate, self.role("n", "crate", {"type": "near_role", "role": "a"})], entry="n", name="good")
 
+	def test_role_sink_overrides_the_tag_sink(self):
+		info = self.catalog["Models/Test/Cube.hmsh"]
+		template = self.make([self.role("flat", "crate", {"type": "scatter", "radius_fraction": 0.3}, count=(4, 4), spacing=3.0, sink=0.0, scale=[0.5, 1.5])])
+		self.assertEqual(template.roles[0].sink, 0.0)
+		result = place(template, (50.0, 60.0), 30.0, self.context, 2)
+		self.assertTrue(result.items)
+		for item in result.items:
+			x, _, z = item["position"]
+			bottom = item["position"][1] + info.bounds_min[1] * item["scale"]
+			self.assertAlmostEqual(bottom, self.query.height_at(x, z), delta=0.01)
+		# without a role sink the tag's sink applies and the template field stays unset
+		plain = self.make([self.role("flat", "crate", {"type": "scatter"})], name="plain")
+		self.assertIsNone(plain.roles[0].sink)
+
+	def test_negative_role_sink_is_rejected(self):
+		with self.assertRaises(ValueError):
+			self.make([self.role("n", "crate", {"type": "scatter"}, sink=-0.1)], name="negsink")
+
 	def test_shipped_templates_load(self):
 		for name in ("quarry", "cave_mouth", "waterfall_basin", "hunting_camp", "abbey_surround"):
 			self.assertTrue(load_template(name).roles, name)

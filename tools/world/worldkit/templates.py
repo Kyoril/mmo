@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +44,7 @@ class Role:
     rule: dict
     scale: tuple[float, float] | None
     yaw: tuple[float, float] | None
+    sink: float | None = None    # metres; overrides the asset tag's sink for placement depth only
 
 
 @dataclass(frozen=True)
@@ -80,12 +81,17 @@ def load_template(name: str, directory: Path | None = None) -> Template:
             raise ValueError(f"{path}: role {raw['name']!r} is near_role of {rule.get('role')!r}, which is not defined earlier")
         if rule["type"] == "ring" and ("r1" not in rule or "r2" not in rule):
             raise ValueError(f"{path}: ring role {raw['name']!r} needs r1 and r2")
+        sink = raw.get("sink")
+        if sink is not None:
+            if isinstance(sink, bool) or not isinstance(sink, (int, float)) or sink < 0:
+                raise ValueError(f"{path}: role {raw['name']!r} sink must be a number >= 0")
+            sink = float(sink)
         seen.add(raw["name"])
         query = raw.get("query", {})
         roles.append(Role(raw["name"], tuple(query.get("tags", [])), tuple(query.get("exclude", [])), query.get("size"),
                           tuple(query["assets"]) if "assets" in query else None, tuple(raw["count"]),
                           float(raw.get("spacing", 0.0)), raw.get("store", "wobj"), rule,
-                          tuple(raw["scale"]) if "scale" in raw else None, tuple(raw["yaw"]) if "yaw" in raw else None))
+                          tuple(raw["scale"]) if "scale" in raw else None, tuple(raw["yaw"]) if "yaw" in raw else None, sink))
     entry = doc.get("entry", "anchor")
     if entry != "anchor" and entry not in seen:
         raise ValueError(f"{path}: entry {entry!r} is not a role")
@@ -272,7 +278,9 @@ def place(template: Template, anchor, radius: float, context: PropContext, seed:
                     yaw = facing + rng.uniform(-20.0, 20.0)
                 else:
                     yaw = rng.uniform(*(role.yaw or (0.0, 360.0)))
-                settled = settle(info, tags, context.query, x, z, yaw, scale)
+                # The role's sink only changes placement depth; the lint below keeps judging with the tag's own sink.
+                settle_tags = replace(tags, sink=role.sink) if role.sink is not None else tags
+                settled = settle(info, settle_tags, context.query, x, z, yaw, scale)
                 if settled is None:
                     continue
                 y, pitch, roll = settled
