@@ -67,18 +67,29 @@ def load_template(name: str, directory: Path | None = None) -> Template:
     path = Path(directory or templates_dir()) / f"{name}.json"
     doc = json.loads(path.read_text(encoding="utf-8"))
     roles = []
+    seen: set[str] = set()
     for raw in doc["roles"]:
         rule = raw["rule"]
+        if raw["name"] in seen:
+            raise ValueError(f"{path}: duplicate role name {raw['name']!r}")
         if rule.get("type") not in RULE_TYPES:
             raise ValueError(f"{path}: role {raw['name']!r} has unknown rule {rule.get('type')!r}")
         if raw.get("store", "wobj") not in ("wobj", "hfol"):
             raise ValueError(f"{path}: role {raw['name']!r} store must be wobj or hfol")
+        if rule["type"] == "near_role" and rule.get("role") not in seen:
+            raise ValueError(f"{path}: role {raw['name']!r} is near_role of {rule.get('role')!r}, which is not defined earlier")
+        if rule["type"] == "ring" and ("r1" not in rule or "r2" not in rule):
+            raise ValueError(f"{path}: ring role {raw['name']!r} needs r1 and r2")
+        seen.add(raw["name"])
         query = raw.get("query", {})
         roles.append(Role(raw["name"], tuple(query.get("tags", [])), tuple(query.get("exclude", [])), query.get("size"),
                           tuple(query["assets"]) if "assets" in query else None, tuple(raw["count"]),
                           float(raw.get("spacing", 0.0)), raw.get("store", "wobj"), rule,
                           tuple(raw["scale"]) if "scale" in raw else None, tuple(raw["yaw"]) if "yaw" in raw else None))
-    return Template(doc["name"], doc.get("description", ""), doc.get("entry", "anchor"), tuple(doc.get("clear", [])),
+    entry = doc.get("entry", "anchor")
+    if entry != "anchor" and entry not in seen:
+        raise ValueError(f"{path}: entry {entry!r} is not a role")
+    return Template(doc["name"], doc.get("description", ""), entry, tuple(doc.get("clear", [])),
                     tuple(doc.get("notes", [])), tuple(roles))
 
 
@@ -193,13 +204,18 @@ def _candidate(role: Role, anchor, radius, context: PropContext, rng: random.Ran
         if "cliff" not in state:
             state["cliff"] = _cliff_spots(context.query, ax, az, radius, float(rule.get("min_cliff_slope", 40.0)),
                                           float(rule.get("max_offset", 3.0)))
-        return rng.choice(state["cliff"]) if state["cliff"] else None
+        if not state["cliff"]:
+            return None
+        x, z, facing = rng.choice(state["cliff"])
+        return x + rng.uniform(-GRID_STEP / 2.0, GRID_STEP / 2.0), z + rng.uniform(-GRID_STEP / 2.0, GRID_STEP / 2.0), facing
     if kind == "along_path":
         if "path" not in state:
             state["path"] = _path_spots(context.query, context.roads, ax, az, radius)
         if not state["path"]:
             return None
         px, pz = rng.choice(state["path"])
+        px += rng.uniform(-GRID_STEP / 2.0, GRID_STEP / 2.0)
+        pz += rng.uniform(-GRID_STEP / 2.0, GRID_STEP / 2.0)
         lo, hi = rule.get("offset", [2.0, 5.0])
         angle = rng.uniform(0.0, 2.0 * math.pi)
         distance = rng.uniform(float(lo), float(hi))
@@ -217,13 +233,15 @@ def _candidate(role: Role, anchor, radius, context: PropContext, rng: random.Ran
 
 
 def place(template: Template, anchor, radius: float, context: PropContext, seed: int, keep_away=()) -> PlacementResult:
-    """Fits the template onto a site. keep_away: extra (x, z, r) circles no item may enter."""
+    """Fits the template onto a site. keep_away: extra (x, z, r) circles no item (footprint included, at_anchor
+    roles too) may touch. The template's own clear radii exempt only at_anchor roles."""
     rng = random.Random(seed)
     items: list[dict] = []
     props: list[PlacedProp] = []
     gaps: list[dict] = []
     by_role: dict[str, list[dict]] = {}
-    circles = [(anchor[0], anchor[1], r) for r in template.clear] + list(keep_away)
+    clear = [(anchor[0], anchor[1], r) for r in template.clear]
+    keep_away = list(keep_away)
     for role in template.roles:
         assets = select_assets(context.catalog, context.rules, tags=role.tags, exclude=role.exclude, size=role.size,
                                allow=list(role.assets) if role.assets is not None else None)
@@ -234,21 +252,22 @@ def place(template: Template, anchor, radius: float, context: PropContext, seed:
             gaps.append({"role": role.name, "kind": "asset", "wanted": wanted, "placed": 0})
             continue
         state: dict = {}
-        exempt_clear = role.rule["type"] == "at_anchor"
+        circles = keep_away if role.rule["type"] == "at_anchor" else clear + keep_away   # only the template's own clear radii exempt at_anchor
         for _ in range(wanted):
             for _attempt in range(ATTEMPTS):
                 spot = _candidate(role, anchor, radius, context, rng, by_role, state)
                 if spot is None:
                     break
                 x, z, facing = spot
-                if not exempt_clear and any(math.hypot(x - cx, z - cz) < r for cx, cz, r in circles):
-                    continue
                 if any(math.hypot(x - o["position"][0], z - o["position"][2]) < role.spacing for o in by_role.get(role.name, [])):
                     continue
                 asset = rng.choice(assets)
                 info, tags = context.catalog[asset], context.tags_for(asset)
                 lo, hi = role.scale or tags.scale
                 scale = round(rng.uniform(lo, hi), 2)
+                footprint = info.radius * scale * tags.footprint_scale
+                if any(math.hypot(x - cx, z - cz) < r + footprint for cx, cz, r in circles):
+                    continue
                 if facing is not None:
                     yaw = facing + rng.uniform(-20.0, 20.0)
                 else:
