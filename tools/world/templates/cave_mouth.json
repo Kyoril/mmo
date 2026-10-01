@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "cave_mouth",
+  "description": "A hidden-looking opening at a cliff: large rocks framing a gap that stays walkable, cliff rocks, rubble and bushes partly screening it.",
+  "entry": "anchor",
+  "clear": [2.5],
+  "notes": ["The cave itself (interior, kobolds, chest) belongs to the content spec; this pass only frames its mouth."],
+  "roles": [
+    {"name": "frame_rocks", "query": {"tags": ["rock"], "size": "large"}, "count": [2, 3], "spacing": 3.0, "store": "wobj", "rule": {"type": "ring", "r1": 3.0, "r2": 6.0}},
+    {"name": "cliff_rocks", "query": {"tags": ["rock"], "size": "medium"}, "count": [3, 5], "spacing": 3.0, "store": "wobj", "rule": {"type": "against_cliff", "min_cliff_slope": 40, "max_offset": 3.0}},
+    {"name": "rubble", "query": {"tags": ["rock"], "size": "small"}, "count": [4, 8], "spacing": 1.5, "store": "wobj", "rule": {"type": "scatter", "radius_fraction": 0.7}},
+    {"name": "screen", "query": {"tags": ["bush"]}, "count": [3, 6], "spacing": 2.0, "store": "hfol", "rule": {"type": "ring", "r1": 4.0, "r2": 10.0}}
+  ]
+}
