@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "routes": [
+    {"id": "oakenshire_to_west_gate", "name": "Oakenshire town square -> West Gate", "points": [[253.7, 568.8], [231.2, 557.7], [204.5, 514.4], [125.2, 498.7], [75.4, 499.2]], "baseline_length": null},
+    {"id": "west_gate_to_old_stone_bridge", "name": "West Gate -> Old Stone Bridge (Old King's Road)", "points": [[74.9, 495.8], [32.1, 499.0], [-50.5, 496.4], [-117.2, 469.1], [-170.9, 460.3], [-252.4, 467.1], [-300.0, 432.0], [-390.0, 396.0], [-440.0, 372.0], [-480.0, 360.0]], "baseline_length": null},
+    {"id": "barrowfront_to_abbey", "name": "Barrowfront Camp -> Hollow Choir abbey teleport", "points": [[-436.0, 262.0], [107.0, 345.0]], "baseline_length": null}
+  ]
+}

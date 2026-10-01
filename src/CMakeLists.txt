@@ -30,6 +30,7 @@ if (MMO_BUILD_TOOLS)
 	add_subdirectory(update_compiler)
 	add_subdirectory(nav_builder)
 	add_subdirectory(terrain_tool)
+	add_subdirectory(nav_query)
 	
 	if (WIN32)
 		add_subdirectory(mmo_error)
