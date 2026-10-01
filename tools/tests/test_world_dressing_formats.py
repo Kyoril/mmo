@@ -17,8 +17,10 @@ import world_fixtures as fx  # noqa: E402
 
 from worldkit.formats.chunks import FormatError  # noqa: E402
 from worldkit.formats.hfol import FoliageInstance, append_instances, parse_hfol, remove_instances, write_hfol  # noqa: E402
+from worldkit.formats.hmsh import parse_hmsh  # noqa: E402
+from worldkit.formats.hwmo import parse_hwmo  # noqa: E402
 from worldkit.formats.wobj import entity_file, new_unique_id, parse_wobj, wobj_bytes  # noqa: E402
-from worldkit.paths import foliage_dir  # noqa: E402
+from worldkit.paths import client_root, foliage_dir  # noqa: E402
 
 TREES = ["Models/Trees/A.hmsh", "Models/Trees/B.hmsh"]
 IDENTITY = (1.0, 0.0, 0.0, 0.0)
@@ -110,6 +112,67 @@ class EntityWriterTests(unittest.TestCase):
 		self.assertEqual(len(ids), 200)
 		self.assertTrue(ids.isdisjoint({0, 1, 2}))
 		self.assertTrue(ids <= taken)
+
+
+def write(tmp: str, name: str, data: bytes) -> Path:
+	path = Path(tmp) / name
+	path.write_bytes(data)
+	return path
+
+
+class MeshReaderTests(unittest.TestCase):
+	def setUp(self):
+		self._tmp = tempfile.TemporaryDirectory()
+		self.tmp = self._tmp.name
+
+	def tearDown(self):
+		self._tmp.cleanup()
+
+	def test_cube_bounds_material_and_collision(self):
+		mesh = parse_hmsh(write(self.tmp, "c.hmsh", fx.cube_hmsh()))
+		lo, hi = mesh.bounds
+		self.assertEqual(lo.tolist(), [-1.0, 0.0, -1.0])
+		self.assertEqual(hi.tolist(), [1.0, 2.0, 1.0])
+		self.assertTrue(mesh.has_collision)
+		(sub,) = mesh.submeshes
+		self.assertEqual((sub.material, len(sub.positions), len(sub.indices)), ("Textures/Test/Cube.hmi", 8, 36))
+
+	def test_32bit_indices_uvs_and_no_collision(self):
+		data = fx.hmsh_bytes([("S", "M.hmi", [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)],
+							   [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)], [0, 1, 2], True)], collision=False)
+		mesh = parse_hmsh(write(self.tmp, "t.hmsh", data))
+		self.assertFalse(mesh.has_collision)
+		self.assertEqual(mesh.submeshes[0].indices.tolist(), [0, 1, 2])
+		self.assertEqual(mesh.submeshes[0].uvs[1].tolist(), [1.0, 0.0])
+
+	def test_legacy_shared_vertex_layout(self):
+		mesh = parse_hmsh(write(self.tmp, "l.hmsh", fx.legacy_hmsh_bytes(fx.CUBE_POSITIONS, fx.CUBE_INDICES, "Old.hmi")))
+		self.assertEqual((mesh.version, mesh.submeshes[0].material, len(mesh.submeshes[0].indices)), (0x200, "Old.hmi", 36))
+
+	def test_broken_files_raise(self):
+		bad_index = fx.hmsh_bytes([("S", "M", [(0.0, 0.0, 0.0)] * 3, None, [0, 1, 7], False)])
+		with self.assertRaises(FormatError):
+			parse_hmsh(write(self.tmp, "b.hmsh", bad_index))
+		with self.assertRaises(FormatError):
+			parse_hmsh(write(self.tmp, "x.hmsh", fx.cube_hmsh()[:-10]))
+
+	def test_world_model_bounds_and_refs(self):
+		data = fx.hwmo_bytes((-25.0, -1.0, -39.0), (25.0, 12.0, 40.0),
+							 [("Models/Mine/gold_mine_greybox.hmsh", (1.0, 0.0, 2.0), (1.0, 0.0, 0.0, 0.0), (1.0, 1.0, 1.0))])
+		model = parse_hwmo(write(self.tmp, "m.hwmo", data))
+		self.assertEqual((model.bounds_min, model.bounds_max), ((-25.0, -1.0, -39.0), (25.0, 12.0, 40.0)))
+		self.assertEqual([r.mesh for r in model.mesh_refs], ["Models/Mine/gold_mine_greybox.hmsh"])
+		self.assertEqual(model.mesh_refs[0].position, (1.0, 0.0, 2.0))
+
+	@fx.requires_live_data
+	def test_shipped_tent_and_mine(self):
+		tent = parse_hmsh(client_root() / "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh")
+		self.assertTrue(tent.has_collision)
+		self.assertEqual(len(tent.submeshes), 2)
+		self.assertEqual(tent.submeshes[0].material, "Textures/FalwynPlains/Props/CampTent.hmi")
+		self.assertEqual(len(tent.submeshes[0].positions), 1050)
+		mine = parse_hwmo(client_root() / "Models/Mine/Mine_01.hwmo")
+		self.assertIn("Models/Mine/gold_mine_greybox.hmsh", [r.mesh for r in mine.mesh_refs])
 
 
 if __name__ == "__main__":

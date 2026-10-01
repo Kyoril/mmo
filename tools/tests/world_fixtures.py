@@ -126,6 +126,65 @@ def hfol_bytes(meshes, instances, version=2) -> bytes:
 	return chunk(b"REVF", struct.pack("<I", version)) + chunk(b"HSMF", names) + chunk(b"SNIF", body)
 
 
+def vertex_block(positions, uvs=None) -> bytes:
+	"""u32 count + 64-byte vertices: pos 3f, colour u32, uv 2f, w f, normal 3f, binormal 3f, tangent 3f."""
+	data = b""
+	for i, p in enumerate(positions):
+		uv = uvs[i] if uvs is not None else (0.0, 0.0)
+		data += struct.pack("<3fI2ff3f3f3f", *p, 0xFFFFFFFF, *uv, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+	return struct.pack("<I", len(positions)) + data
+
+
+def hmsh_bytes(submeshes, version=0x301, collision=True) -> bytes:
+	"""submeshes: iterable of (name, material, positions, uvs, indices, index32). Mirrors MeshSerializer (v3 SUBM)."""
+	parts = [chunk(b"MESH", struct.pack("<I", version))]
+	if collision:
+		parts.append(chunk(b"LLOC", b"1HVB" + b"\x00" * 12))
+	for name, material, positions, uvs, indices, index32 in submeshes:
+		body = str8(name) + str16(material) + struct.pack("<B", 0)
+		if version >= 0x301:
+			body += struct.pack("<B", 1)
+		body += vertex_block(positions, uvs)
+		body += struct.pack("<BIB", 1, len(indices), 1 if index32 else 0)
+		body += struct.pack(f"<{len(indices)}{'I' if index32 else 'H'}", *indices)
+		body += struct.pack("<I", 0)
+		parts.append(chunk(b"SUBM", body))
+	return b"".join(parts)
+
+
+def legacy_hmsh_bytes(positions, indices, material) -> bytes:
+	"""Version 0x200: shared VERT, INDX (flag 1 = 16-bit) and an index-range SUBM."""
+	return (chunk(b"MESH", struct.pack("<I", 0x200)) + chunk(b"VERT", vertex_block(positions))
+			+ chunk(b"INDX", struct.pack("<IB", len(indices), 1) + struct.pack(f"<{len(indices)}H", *indices))
+			+ chunk(b"SUBM", str16(material) + struct.pack("<II", 0, len(indices))))
+
+
+def strz32(text: str) -> bytes:
+	raw = text.encode("utf-8")
+	return struct.pack("<I", len(raw)) + raw + b"\x00"
+
+
+def hwmo_bytes(bounds_min, bounds_max, refs) -> bytes:
+	"""refs: iterable of (mesh, position, rotation(w,x,y,z), scale). One group with one FRMM."""
+	header = struct.pack("<8I", 0, 1, 0, 0, 0, 0, 0, 0) + struct.pack("<3f", *bounds_min) + struct.pack("<3f", *bounds_max)
+	header += struct.pack("<II", 0, 0)
+	frmm = struct.pack("<I", len(refs))
+	for mesh, position, rotation, scale in refs:
+		frmm += strz32(mesh) + strz32("") + strz32("") + struct.pack("<3f4f3fB", *position, *rotation, *scale, 1)
+	group = b"\x00" * 68 + chunk(b"MNGM", b"Group_01\x00") + chunk(b"FRMM", frmm)
+	return chunk(b"REVM", struct.pack("<I", 0x200)) + chunk(b"DHOM", header) + chunk(b"PGOM", group)
+
+
+CUBE_POSITIONS = [(x, y, z) for x in (-1.0, 1.0) for y in (0.0, 2.0) for z in (-1.0, 1.0)]
+CUBE_INDICES = [0, 1, 3, 0, 3, 2, 4, 6, 7, 4, 7, 5, 0, 4, 5, 0, 5, 1, 2, 3, 7, 2, 7, 6, 0, 2, 6, 0, 6, 4, 1, 5, 7, 1, 7, 3]
+
+
+def cube_hmsh(material="Textures/Test/Cube.hmi", collision=True, size=1.0) -> bytes:
+	"""A 2x2x2 cube (scaled by size) standing on y = 0, one submesh."""
+	positions = [(x * size, y * size, z * size) for x, y, z in CUBE_POSITIONS]
+	return hmsh_bytes([("Cube0", material, positions, None, CUBE_INDICES, False)], collision=collision)
+
+
 def make_world(repo: Path, directory: str, pages: dict, entities=(), default_material="Models/Terrain/Default.hmi") -> None:
 	"""Writes a synthetic world under <repo>/data/client/Worlds/<directory>/.
 
