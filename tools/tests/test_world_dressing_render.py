@@ -17,10 +17,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import world_fixtures as fx  # noqa: E402
 
 from worldkit.assets import GeometryCache, build_catalog  # noqa: E402
+from worldkit.foliage import load_world_foliage  # noqa: E402
 from worldkit.materials import TextureCache  # noqa: E402
 from worldkit.meshrender import Camera, DrawMesh, outline, render  # noqa: E402
 from worldkit.paths import client_root  # noqa: E402
-from worldkit.previews import asset_views, contact_sheet  # noqa: E402
+from worldkit.previews import asset_views, contact_sheet, site_previews  # noqa: E402
+from worldkit.query import WorldQuery  # noqa: E402
+from worldkit.snapshot import build_snapshot  # noqa: E402
 
 QUAD = np.array([[-1.0, -1.0, 0.0], [1.0, -1.0, 0.0], [1.0, 1.0, 0.0], [-1.0, 1.0, 0.0]])
 QUAD_TRIS = np.array([[0, 1, 2], [0, 2, 3]])
@@ -81,6 +84,33 @@ class AssetImageTests(unittest.TestCase):
 		self.assertGreater(sheet.width, 100)
 		self.assertGreater(len(set(np.asarray(sheet.convert("RGB")).reshape(-1, 3)[:, 0].tolist())), 3)
 		self.assertEqual(views.width, 3 * 320)
+
+
+class SitePreviewTests(unittest.TestCase):
+	def test_previews_show_the_new_item_outlined(self):
+		with tempfile.TemporaryDirectory() as tmp:
+			repo = Path(tmp)
+			models = repo / "data" / "client" / "Models" / "Test"
+			models.mkdir(parents=True)
+			(models / "Cube.hmsh").write_bytes(fx.cube_hmsh())
+			fx.make_world(repo, "P", {(32, 32): dict(water={0: (1, 0xFFFFFFFFFFFFFFFF)}, water_heights=np.full((129, 129), 1.0, np.float32))},
+						  entities=[dict(asset="Models/Test/Cube.hmsh", position=(60.0, 0.0, 50.0), unique_id=9)])
+			foliage = repo / "data" / "client" / "Worlds" / "P" / "P" / "Foliage"
+			foliage.mkdir(parents=True)
+			(foliage / f"{(32 << 8) | 32}.hfol").write_bytes(fx.hfol_bytes(["Models/Test/Cube.hmsh"], [(77, 0, (45.0, 0.0, 45.0), (1.0, 0.0, 0.0, 0.0), (1.0, 1.0, 1.0), True)]))
+			snapshot = build_snapshot("P", repo=repo)
+			catalog = build_catalog(repo)
+			world_foliage = load_world_foliage("P", repo)
+			item = {"role": "r", "asset": "Models/Test/Cube.hmsh", "store": "wobj", "position": [50.0, 0.0, 50.0],
+					"yaw": 30.0, "tilt": [0.0, 0.0], "scale": 1.5, "collides": True}
+			images = site_previews(WorldQuery(snapshot), catalog, GeometryCache(repo), TextureCache(client_root(repo)),
+								   (50.0, 50.0), 20.0, snapshot.entities, [i for f in world_foliage.values() for i in f.instances],
+								   [item], count=2, size=(320, 200))
+		self.assertEqual(len(images), 2)
+		label, image = images[0]
+		self.assertIn("looking", label)
+		pixels = np.asarray(image)
+		self.assertTrue((pixels == [255, 220, 60]).all(axis=2).any())   # the new item is outlined
 
 
 if __name__ == "__main__":

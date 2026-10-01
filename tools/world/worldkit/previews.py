@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .assets import AssetInfo, GeometryCache
-from .geometry import trs_matrix
+from .geometry import quat_from_yaw_tilt, trs_matrix
 from .materials import TextureCache
 from .meshrender import Camera, DrawMesh, render
 
@@ -136,3 +136,105 @@ def write_contact_sheets(catalog: dict[str, AssetInfo], geometry: GeometryCache,
         contact_sheet(rels, catalog, geometry, textures, title=folder).save(path)
         written.append(path)
     return written
+
+
+_KIND_COLOURS = {"grass": (88, 130, 62), "forest_floor": (70, 105, 52), "path": (150, 120, 80), "road": (160, 135, 95),
+                 "dirt": (130, 100, 70), "mud": (100, 80, 60), "rock": (125, 125, 120), "sand": (194, 178, 128),
+                 "snow": (235, 235, 240)}
+_WATER = (60, 110, 190)
+_FIRST_ITEM_ID = 1000
+_TERRAIN_STEP = 2.0
+
+
+def _compass(dx: float, dz: float) -> str:
+    angle = (math.degrees(math.atan2(dx, -dz)) + 360.0) % 360.0   # 0 = north (-Z), 90 = east (+X)
+    return ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][int((angle + 22.5) // 45) % 8]
+
+
+def terrain_meshes(query, cx: float, cz: float, radius: float) -> list[DrawMesh]:
+    """Ground (coloured by terrain kind, holes left open) and water surfaces around a point."""
+    steps = int(math.ceil(radius / _TERRAIN_STEP))
+    xs = cx + (np.arange(-steps, steps + 1)) * _TERRAIN_STEP
+    zs = cz + (np.arange(-steps, steps + 1)) * _TERRAIN_STEP
+    n = len(xs)
+    heights = np.full((n, n), np.nan)
+    for j, z in enumerate(zs):
+        for i, x in enumerate(xs):
+            h = query.height_at(float(x), float(z))
+            if h is not None:
+                heights[j, i] = h
+    positions = np.stack([np.repeat(xs[None, :], n, 0), np.nan_to_num(heights), np.repeat(zs[:, None], n, 1)], -1).reshape(-1, 3)
+    tris, colours, water_quads = [], [], []
+    for j in range(n - 1):
+        for i in range(n - 1):
+            if np.isnan(heights[j:j + 2, i:i + 2]).any():
+                continue
+            mx, mz = float(xs[i] + _TERRAIN_STEP / 2), float(zs[j] + _TERRAIN_STEP / 2)
+            if query.hole_at(mx, mz):
+                continue
+            a, b, c, d = j * n + i, j * n + i + 1, (j + 1) * n + i, (j + 1) * n + i + 1
+            colour = _KIND_COLOURS.get(query.terrain_kind_at(mx, mz) or "grass", _KIND_COLOURS["grass"])
+            tris += [(a, b, d), (a, d, c)]
+            colours += [colour, colour]
+            depth = query.water_depth_at(mx, mz)
+            if depth > 0.05:
+                level = float(np.mean(heights[j:j + 2, i:i + 2])) + depth
+                water_quads.append((float(xs[i]), float(zs[j]), level))
+    meshes = [DrawMesh(positions, np.asarray(tris, np.int64).reshape(-1, 3), tri_colors=np.asarray(colours, np.float32),
+                       object_id=-2)] if tris else []
+    if water_quads:
+        points, faces = [], []
+        for x, z, level in water_quads:
+            base = len(points)
+            points += [(x, level, z), (x + _TERRAIN_STEP, level, z), (x, level, z + _TERRAIN_STEP),
+                       (x + _TERRAIN_STEP, level, z + _TERRAIN_STEP)]
+            faces += [(base, base + 1, base + 3), (base, base + 3, base + 2)]
+        meshes.append(DrawMesh(np.asarray(points, float), np.asarray(faces, np.int64), color=_WATER, object_id=-3))
+    return meshes
+
+
+def item_matrix(item: dict) -> np.ndarray:
+    pitch, roll = item.get("tilt", [0.0, 0.0])
+    scale = float(item["scale"])
+    return trs_matrix(item["position"], quat_from_yaw_tilt(float(item["yaw"]), float(pitch), float(roll)), (scale, scale, scale))
+
+
+def _item_id(item: dict) -> int | None:
+    value = item.get("unique_id")
+    return int(value, 16) if isinstance(value, str) else value
+
+
+def site_previews(query, catalog, geometry, textures, center, radius: float, entities, instances, items,
+                  count: int = 3, size=(960, 640)) -> list[tuple[str, Image.Image]]:
+    """Perspective views around a site: terrain, existing props and trees, and the draft items outlined."""
+    from .meshrender import outline
+    cx, cz = center
+    ground = query.height_at(cx, cz) or 0.0
+    reach = radius * 1.4
+    skip = {_item_id(i) for i in items if _item_id(i) is not None}
+    meshes = terrain_meshes(query, cx, cz, reach)
+    for entity in entities:
+        if entity.unique_id in skip or math.hypot(entity.position[0] - cx, entity.position[2] - cz) > reach:
+            continue
+        meshes += asset_meshes(entity.asset, catalog, geometry, textures,
+                               trs_matrix(entity.position, entity.rotation, entity.scale), object_id=-4)
+    for inst in instances:
+        if inst.unique_id in skip or math.hypot(inst.position[0] - cx, inst.position[2] - cz) > reach:
+            continue
+        meshes += asset_meshes(inst.mesh, catalog, geometry, textures, trs_matrix(inst.position, inst.rotation, inst.scale),
+                               object_id=-5)
+    highlight = set()
+    for index, item in enumerate(items):
+        meshes += asset_meshes(item["asset"], catalog, geometry, textures, item_matrix(item), object_id=_FIRST_ITEM_ID + index)
+        highlight.add(_FIRST_ITEM_ID + index)
+    out = []
+    for k in range(count):
+        azimuth = math.radians(30.0 + k * 360.0 / count)
+        eye = (cx + math.sin(azimuth) * radius * 1.7, ground + radius * 0.9, cz + math.cos(azimuth) * radius * 1.7)
+        camera = Camera(eye=eye, target=(cx, ground + 2.0, cz), width=size[0], height=size[1], fov_deg=50.0)
+        rgb, ids = render(meshes, camera, background=(150, 180, 215))
+        image = Image.fromarray(outline(rgb, ids, highlight))
+        label = f"preview {k + 1} - looking {_compass(cx - eye[0], cz - eye[2])}"
+        ImageDraw.Draw(image).text((8, 6), label, fill=(20, 20, 20), font=_font(14))
+        out.append((label, image))
+    return out
