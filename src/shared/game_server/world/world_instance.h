@@ -23,6 +23,7 @@
 #include "shared/proto_data/trigger_event_filter.h"
 
 #include "nav_mesh/map.h"
+#include "nav_mesh/page_streamer.h"
 
 namespace mmo
 {
@@ -80,6 +81,10 @@ namespace mmo
 
 		/// @brief Enables or disables dynamic collision geometry. Handle 0 and unknown handles are a safe no-op.
 		virtual void SetDynamicCollisionEnabled(uint64 handle, bool enabled) {}
+
+		/// @brief Called once per world tick on the world thread, for map data that finishes
+		/// loading in the background.
+		virtual void Update() {}
 	};
 
 	class SimpleMapData final : public MapData
@@ -150,8 +155,20 @@ namespace mmo
 
 		void SetDynamicCollisionEnabled(uint64 handle, bool enabled) override;
 
+		/// @brief Installs nav mesh pages the background loader has read, within a time budget.
+		void Update() override;
+
+	private:
+		/// @brief Makes sure the nav mesh has every page overlapping the XZ rectangle spanned by
+		/// a and b, grown by margin. No-op once streaming has completed.
+		void EnsureNavLoaded(const Vector3& a, const Vector3& b, float margin) const;
+
 	private:
 		std::shared_ptr<nav::Map> m_map;
+		/// Streams the nav mesh pages in while the instance is already running. Reset once every
+		/// page is installed. Declared after m_map, which it fills, so it is destroyed first.
+		std::unique_ptr<nav::PageStreamer> m_pageStreamer;
+		std::chrono::steady_clock::time_point m_navStreamStart;
 		/// Geometry-based collision map for accurate wall/object LOS. Always present so dynamic
 		/// collision (e.g. doors) works even on maps without static world geometry; nav mesh LOS
 		/// is used as fallback only when the pointer is null (allocation-free maps).
