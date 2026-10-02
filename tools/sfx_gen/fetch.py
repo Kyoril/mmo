@@ -5,6 +5,7 @@ Download generated audio and run it through the postprocessor.
 Usage::
 
     python tools/sfx_gen/fetch.py <out.wav> <target_dbfs> <signed-url>
+    python tools/sfx_gen/fetch.py --loop <out.wav> <target_dbfs> <signed-url>
     python tools/sfx_gen/fetch.py --audition <out.wav> <wav> [<wav> ...]
 
 The signed URLs come from the MCP connector's run status; they expire, so fetch promptly.
@@ -23,8 +24,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import postprocess
 
 
-def fetch_and_process(url: str, out_path: str, target_dbfs: float) -> dict:
-    """Download one generated clip, postprocess it, and write it as a game-ready WAV."""
+def fetch_and_process(url: str, out_path: str, target_dbfs: float, loop: bool = False) -> dict:
+    """Download one generated clip, postprocess it, and write it as a game-ready WAV.
+
+    ``loop`` selects :func:`postprocess.process_loop`, which keeps the seam intact."""
     tmp_path = out_path + ".download"
     # Create output directories before attempting to download
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
@@ -35,7 +38,10 @@ def fetch_and_process(url: str, out_path: str, target_dbfs: float) -> dict:
                 handle.write(response.read())
 
         raw = postprocess.decode_to_mono(tmp_path)
-        processed = postprocess.process(raw, postprocess.RATE, target_dbfs=target_dbfs)
+        if loop:
+            processed = postprocess.process_loop(raw, postprocess.RATE, target_dbfs=target_dbfs)
+        else:
+            processed = postprocess.process(raw, postprocess.RATE, target_dbfs=target_dbfs)
         postprocess.write_wav(out_path, processed)
     finally:
         if os.path.exists(tmp_path):
@@ -62,6 +68,10 @@ if __name__ == "__main__":
         build_audition(sys.argv[3:], sys.argv[2])
         print("wrote %s" % sys.argv[2])
     else:
-        stats = fetch_and_process(sys.argv[3], sys.argv[1], float(sys.argv[2]))
+        args = sys.argv[1:]
+        is_loop = args[0] == "--loop"
+        if is_loop:
+            args = args[1:]
+        stats = fetch_and_process(args[2], args[0], float(args[1]), loop=is_loop)
         print("wrote %s  peak=%.3f  duration=%.2fs"
               % (sys.argv[1], stats["peak"], stats["duration"]))
