@@ -7,6 +7,8 @@
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 
+#include <algorithm>
+
 // --- Shader bytecode seam ---------------------------------------------------------------
 // Mirrors the seam in ssao_pass.cpp; the deferred path is D3D11-only today.
 #ifdef _WIN32
@@ -303,7 +305,9 @@ namespace mmo
 		constants.noiseAmount = wind.noiseAmount;
 		constants.windOffsetX = wind.noiseOffsetX;
 		constants.windOffsetZ = wind.noiseOffsetZ;
-		constants.skyDistance = VolumetricFogSettings::SkyDistance;
+		// Sky pixels must never be fogged less than the farthest geometry in front of them, or the
+		// distant terrain at the far clip ends up hazier than the sky behind it.
+		constants.skyDistance = std::max(VolumetricFogSettings::SkyDistance, camera.GetFarClipDistance());
 		constants.volumeEnabled = volumeEnabled ? 1.0f : 0.0f;
 		constants.lightCount = lightCount;
 		constants.lightScatterStrength = m_settings.lightScatterStrength;

@@ -22,7 +22,8 @@ namespace mmo
 		/// @brief View depth of the grid's near plane in metres.
 		static constexpr float NearDistance = 0.5f;
 
-		/// @brief Distance at which sky pixels (no geometry) are fogged.
+		/// @brief Minimum distance at which sky pixels (no geometry) are fogged; a camera whose far clip is
+		///        farther fogs the sky at its far clip instead.
 		static constexpr float SkyDistance = 2000.0f;
 
 		/// @brief Weight of the reprojected history in the temporal blend.
