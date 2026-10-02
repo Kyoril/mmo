@@ -296,7 +296,10 @@ namespace mmo
 
 	void GraphicsDevice::DestroyVertexDeclaration(VertexDeclaration& declaration)
 	{
-		m_vertexDeclarations.erase(&declaration);
+		// Exactly one: a second destroy of the same address may already hit someone else's declaration.
+		const size_t erased = m_vertexDeclarations.erase(&declaration);
+		ASSERT(erased == 1);
+		(void)erased;
 	}
 
 	VertexBufferBinding* GraphicsDevice::CreateVertexBufferBinding()
@@ -309,7 +312,9 @@ namespace mmo
 
 	void GraphicsDevice::DestroyVertexBufferBinding(VertexBufferBinding& binding)
 	{
-		m_vertexBufferBindings.erase(&binding);
+		const size_t erased = m_vertexBufferBindings.erase(&binding);
+		ASSERT(erased == 1);
+		(void)erased;
 	}
 
 	std::vector<std::pair<uint16, uint16>> GraphicsDevice::GetSupportedResolutions() const

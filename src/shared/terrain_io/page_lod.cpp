@@ -68,14 +68,21 @@ namespace mmo
 			}
 
 			/// Normalised mean of the full-resolution normals within half a LOD cell of outer vertex (x, z).
+			/// On the page border the window collapses onto the border line: those vertices are shared with
+			/// the neighbouring page, whose LOD must arrive at the same normal there, or the lighting creases
+			/// along every page seam.
 			EncodedNormal8 FilteredNormal(const PageLodSource &source, const uint32 x, const uint32 z)
 			{
 				constexpr int32 radius = static_cast<int32>(LodVertexStride / 2);
+				const bool onVerticalBorder = (x == 0 || x == OuterSide - 1);
+				const bool onHorizontalBorder = (z == 0 || z == OuterSide - 1);
+				const int32 radiusX = onVerticalBorder ? 0 : radius;
+				const int32 radiusZ = onHorizontalBorder ? 0 : radius;
 
 				float sx = 0.0f, sy = 0.0f, sz = 0.0f;
-				for (int32 dz = -radius; dz <= radius; ++dz)
+				for (int32 dz = -radiusZ; dz <= radiusZ; ++dz)
 				{
-					for (int32 dx = -radius; dx <= radius; ++dx)
+					for (int32 dx = -radiusX; dx <= radiusX; ++dx)
 					{
 						const int32 px = static_cast<int32>(x) + dx;
 						const int32 pz = static_cast<int32>(z) + dz;

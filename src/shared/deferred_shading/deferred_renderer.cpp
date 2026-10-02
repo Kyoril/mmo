@@ -1,6 +1,5 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include <atomic>
 #include "deferred_renderer.h"
 #include "cascaded_shadow_camera_setup.h"
 #include "ssao_pass.h"
@@ -19,6 +18,8 @@
 #include "scene_graph/light_math.h"
 #include "log/default_log_levels.h"
 #include "base/profiler.h"
+
+#include <atomic>
 
 #ifdef WIN32
 #   include <Windows.h>

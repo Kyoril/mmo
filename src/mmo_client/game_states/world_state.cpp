@@ -2174,10 +2174,10 @@ namespace mmo
 		m_cvarChangedSignals += s_terrainLodEnabledVar->Changed.connect(this, &WorldState::OnTerrainLodEnabledChanged);
 
 		s_terrainOcclusionCullingVar = ConsoleVarMgr::RegisterConsoleVar("TerrainOcclusionCulling", "Enable or disable GPU occlusion culling for terrain tiles", "1");
+		m_cvarChangedSignals += s_terrainOcclusionCullingVar->Changed.connect(this, &WorldState::OnTerrainOcclusionCullingChanged);
 
 		// Read each frame in OnIdle, so no change handler is required.
 		s_terrainFarRadiusVar = ConsoleVarMgr::RegisterConsoleVar("TerrainFarRadius", "Radius in terrain pages (533 m each) of the baked low-resolution distant terrain around the camera. 0 disables it and restores the 1000 m view distance.", "4");
-		m_cvarChangedSignals += s_terrainOcclusionCullingVar->Changed.connect(this, &WorldState::OnTerrainOcclusionCullingChanged);
 
 		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
 		m_cvarChangedSignals += s_foliageEnabledVar->Changed.connect(this, &WorldState::OnFoliageEnabledChanged);
@@ -5823,30 +5823,33 @@ namespace mmo
 		const int32 radiusValue = s_terrainFarRadiusVar ? s_terrainFarRadiusVar->GetIntValue() : 0;
 		const uint32 radius = static_cast<uint32>(std::clamp(radiusValue, 0, 16));
 
-		// Draw distance follows the distant terrain: everything up to the far edge of its outermost
-		// pages. Shadow cascades are capped separately (maxShadowDistance), so they are unaffected.
+		Camera &camera = m_playerController->GetCamera();
+
+		if (m_farTerrain)
+		{
+			if (m_farTerrain->GetRadius() != radius)
+			{
+				m_farTerrain->SetRadius(radius);
+			}
+
+			m_farTerrain->Update(camera.GetDerivedPosition());
+		}
+
+		// Draw distance follows the distant terrain, but only while there is some: a map without terrain
+		// or without baked data would only get a hazier sky and less depth precision. A page is drawn when
+		// its nearest point is within radius pages, so its far corner can be another page diagonal away;
+		// the far plane sits half a page beyond the selection to leave that mostly uncut. Shadow cascades
+		// are capped separately (maxShadowDistance), so they are unaffected.
 		constexpr float defaultFarClip = 1000.0f;
-		const float farClip = radius > 0
-			? std::max(defaultFarClip, static_cast<float>(radius + 1) * static_cast<float>(terrain::constants::PageSize))
+		const bool hasDistantTerrain = m_farTerrain && radius > 0 && m_farTerrain->GetReadyPageCount() > 0;
+		const float farClip = hasDistantTerrain
+			? std::max(defaultFarClip, (static_cast<float>(radius) + 1.5f) * static_cast<float>(terrain::constants::PageSize))
 			: defaultFarClip;
 
-		Camera &camera = m_playerController->GetCamera();
 		if (camera.GetFarClipDistance() != farClip)
 		{
 			camera.SetFarClipDistance(farClip);
 		}
-
-		if (!m_farTerrain)
-		{
-			return;
-		}
-
-		if (m_farTerrain->GetRadius() != radius)
-		{
-			m_farTerrain->SetRadius(radius);
-		}
-
-		m_farTerrain->Update(camera.GetDerivedPosition());
 	}
 
 	void WorldState::EnsurePageIsLoaded(PagePosition pos)

@@ -2072,12 +2072,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		ImGui::End();
 	}
 
-	void WorldEditorInstance::GenerateTerrainLod(const bool onlyStale)
+	bool WorldEditorInstance::GenerateTerrainLod(const bool onlyStale)
 	{
 		if (!m_terrain || !m_hasTerrain)
 		{
 			ELOG("Cannot generate terrain LOD: no terrain available");
-			return;
+			return false;
 		}
 
 		// Hidden by the baker along with everything else outside the terrain, but foliage keeps
@@ -2085,12 +2085,15 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
 		if (m_foliage) m_foliage->SetVisible(false);
 
+		TerrainLodBaker::Stats stats;
 		{
-			TerrainLodBaker baker(m_scene, *m_terrain);
-			baker.BakeAll(onlyStale);
+			TerrainLodBaker baker(m_scene, *m_terrain, [this]() { return m_dispatcher.poll_one() > 0; });
+			stats = baker.BakeAll(onlyStale);
 		}
 
 		if (m_foliage) m_foliage->SetVisible(foliageWasVisible);
+
+		return stats.failed == 0;
 	}
 
 	void WorldEditorInstance::GenerateMinimaps()

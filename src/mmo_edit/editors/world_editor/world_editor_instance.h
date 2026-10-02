@@ -497,7 +497,8 @@ namespace mmo
 		/// @brief Bakes the distant-terrain data (.tlod + colour texture) the client draws beyond its
 		///        streamed pages. See TerrainLodBaker.
 		/// @param onlyStale Skip pages whose baked files are newer than their .tile and that have no unsaved changes.
-		void GenerateTerrainLod(bool onlyStale);
+		/// @return false if there is no terrain or any page failed to bake.
+		bool GenerateTerrainLod(bool onlyStale);
 
 		/// @brief The most recently created world editor instance (the --bake-terrain-lod command line
 		///        job bakes the world it just opened). Null once that instance is gone.

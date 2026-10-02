@@ -109,6 +109,10 @@ namespace mmo
 			/// @brief Number of stand-ins currently drawn.
 			[[nodiscard]] uint32 GetVisiblePageCount() const { return m_visiblePageCount; }
 
+			/// @brief Number of stand-ins streamed in and ready to draw, whether currently hidden or not.
+			///        Zero for a map without baked data.
+			[[nodiscard]] uint32 GetReadyPageCount() const { return m_readyPageCount; }
+
 		private:
 			enum class EntryState : uint8
 			{
@@ -141,6 +145,7 @@ namespace mmo
 
 			uint32 m_radius = 0;
 			uint32 m_visiblePageCount = 0;
+			uint32 m_readyPageCount = 0;
 
 			std::unordered_map<uint32, Entry> m_entries;
 			std::vector<far_selection::PageCoord> m_selection;

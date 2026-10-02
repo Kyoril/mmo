@@ -5,6 +5,7 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -39,7 +40,10 @@ namespace mmo
 			uint32 failed = 0;
 		};
 
-		TerrainLodBaker(Scene& scene, terrain::Terrain& terrain);
+		/// @param pumpStreaming Runs one queued main-thread step of the owner's page streaming and returns
+		///        whether there was one. Pages the streaming is preparing when the bake reaches them
+		///        complete on that queue.
+		TerrainLodBaker(Scene& scene, terrain::Terrain& terrain, std::function<bool()> pumpStreaming);
 
 		~TerrainLodBaker() override;
 
@@ -60,6 +64,7 @@ namespace mmo
 	private:
 		Scene& m_scene;
 		terrain::Terrain& m_terrain;
+		std::function<bool()> m_pumpStreaming;
 		std::unique_ptr<DeferredRenderer> m_renderer;
 		Camera* m_camera = nullptr;
 		SceneNode* m_cameraNode = nullptr;

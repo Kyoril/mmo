@@ -22,6 +22,8 @@
 #include "tex_v1_0/header_save.h"
 
 #include <algorithm>
+#include <chrono>
+#include <thread>
 #include <cmath>
 #include <cstring>
 #include <utility>
@@ -183,9 +185,10 @@ namespace mmo
 		}
 	}
 
-	TerrainLodBaker::TerrainLodBaker(Scene& scene, terrain::Terrain& terrain)
+	TerrainLodBaker::TerrainLodBaker(Scene& scene, terrain::Terrain& terrain, std::function<bool()> pumpStreaming)
 		: m_scene(scene)
 		, m_terrain(terrain)
+		, m_pumpStreaming(std::move(pumpStreaming))
 	{
 		m_renderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, TextureSize, TextureSize);
 
@@ -273,6 +276,24 @@ namespace mmo
 
 	bool TerrainLodBaker::BakePage(terrain::Page& page, const uint32 x, const uint32 z)
 	{
+		// A page the streaming is preparing right now completes on the streaming's main-thread queue;
+		// Prepare() would just report it as busy. The parse itself may still be running on the
+		// streaming thread, so an idle queue means wait, not done.
+		const auto waitStart = std::chrono::steady_clock::now();
+		while (page.IsPreparing() && m_pumpStreaming && std::chrono::steady_clock::now() - waitStart < std::chrono::seconds(30))
+		{
+			if (!m_pumpStreaming())
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+		}
+
+		if (page.IsPreparing())
+		{
+			WLOG("Terrain LOD bake: page " << x << "x" << z << " is still being streamed in, skipped");
+			return false;
+		}
+
 		const bool wasPrepared = page.IsPrepared();
 		const bool wasLoaded = page.IsLoaded();
 		ILOG("Baking terrain LOD of page " << x << "x" << z);

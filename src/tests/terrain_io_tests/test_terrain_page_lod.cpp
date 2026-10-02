@@ -151,6 +151,43 @@ TEST_CASE("Page LOD normals average the full-resolution normals around a sample"
 	CHECK(std::abs(n.x) < 0.3f);
 }
 
+TEST_CASE("Page LOD border normals only depend on the shared border", "[terrain_io][page_lod]")
+{
+	// Two neighbouring pages share the column of outer vertices on their common edge (east edge of the
+	// west page = west edge of the east page) but differ everywhere else. Their LOD normals on that
+	// edge must agree, or the lighting creases along every page border.
+	const float s = std::sqrt(0.5f);
+	terrain_io::PageData west = MakeFlatPage(0.0f);
+	terrain_io::PageData east = MakeFlatPage(0.0f);
+	for (uint32 z = 0; z < outerSide; ++z)
+	{
+		for (uint32 x = 0; x < outerSide; ++x)
+		{
+			west.normals[x + z * outerSide] = EncodeNormalSNorm8(s, s, 0.0f);
+			east.normals[x + z * outerSide] = EncodeNormalSNorm8(-s, s, 0.0f);
+		}
+
+		// The shared column: tilted along z, varying with z.
+		const EncodedNormal8 shared = (z % 3 == 0) ? EncodeNormalSNorm8(0.0f, s, s) : EncodeNormalSNorm8(0.0f, 1.0f, 0.0f);
+		west.normals[(outerSide - 1) + z * outerSide] = shared;
+		east.normals[0 + z * outerSide] = shared;
+	}
+
+	terrain_io::PageLodData westLod, eastLod;
+	terrain_io::BuildPageLod(terrain_io::MakeLodSource(west), westLod);
+	terrain_io::BuildPageLod(terrain_io::MakeLodSource(east), eastLod);
+
+	constexpr uint32 side = terrain_io::LodVerticesPerPageSide;
+	for (uint32 j = 0; j < side; ++j)
+	{
+		const EncodedNormal8& a = westLod.normals[(side - 1) + j * side];
+		const EncodedNormal8& b = eastLod.normals[0 + j * side];
+		CHECK(a.x == b.x);
+		CHECK(a.y == b.y);
+		CHECK(a.z == b.z);
+	}
+}
+
 TEST_CASE("Page LOD data round-trips through save and load", "[terrain_io][page_lod]")
 {
 	terrain_io::PageLodData original;

@@ -317,15 +317,15 @@ int main(int argc, char* arg[])
 	std::thread dbThread{ [&dbService]() { dbService.run(); } };
 
 #ifdef _WIN32
-	// Unattended jobs. --bake-terrain-lod Worlds/<n>/<n>.hwld [--force] opens the world, bakes the
+	// Unattended jobs. `--bake-terrain-lod Worlds/<n>/<n>.hwld [--force]` opens the world, bakes the
 	// distant-terrain data of every page whose .tile changed since the last bake (every page with
 	// --force), then exits.
 	{
-		int argc = 0;
-		auto* const argv = CommandLineToArgvA(GetCommandLine(), &argc);
-		for (int i = 1; argv && i + 1 < argc; ++i)
+		int argCount = 0;
+		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
+		for (int i = 1; args && i + 1 < argCount; ++i)
 		{
-			if (std::string(argv[i]) == "--bake-terrain-lod")
+			if (std::string(args[i]) == "--bake-terrain-lod")
 			{
 				// Nobody watches an unattended run: keep its log, and let failed debug assertions
 				// land in that log instead of a message box nobody can answer.
@@ -346,26 +346,27 @@ int main(int argc, char* arg[])
 
 				// Bake right away instead of from the viewport's paint handler, so the job also runs
 				// with the window minimised (a minimised window never paints).
-				if (mainWindow.OpenAsset(argv[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
 				{
 					bool force = false;
-					for (int j = 1; j < argc; ++j)
+					for (int j = 1; j < argCount; ++j)
 					{
-						force = force || std::string(argv[j]) == "--force";
+						force = force || std::string(args[j]) == "--force";
 					}
 
-					mmo::WorldEditorInstance::GetLastCreated()->GenerateTerrainLod(!force);
-					PostQuitMessage(0);
+					// Exit code 1 when any page failed, for scripted use.
+					const bool baked = mmo::WorldEditorInstance::GetLastCreated()->GenerateTerrainLod(!force);
+					PostQuitMessage(baked ? 0 : 1);
 				}
 				else
 				{
-					ELOG("--bake-terrain-lod: failed to open " << argv[i + 1]);
+					ELOG("--bake-terrain-lod: failed to open " << args[i + 1]);
 					PostQuitMessage(1);
 				}
 				break;
 			}
 		}
-		LocalFree(argv);
+		GlobalFree(args);
 	}
 #endif
 
@@ -396,5 +397,10 @@ int main(int argc, char* arg[])
 	dbService.stop();
 	dbThread.join();
 
+#ifdef _WIN32
+	// PostQuitMessage's code, e.g. the --bake-terrain-lod result.
+	return static_cast<int>(msg.wParam);
+#else
 	return 0;
+#endif
 }

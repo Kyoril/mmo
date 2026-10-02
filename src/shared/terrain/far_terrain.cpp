@@ -157,6 +157,7 @@ namespace mmo
 		void FarTerrain::Update(const Vector3& viewerPosition)
 		{
 			m_visiblePageCount = 0;
+			m_readyPageCount = 0;
 			if (m_radius == 0)
 			{
 				return;
@@ -196,8 +197,12 @@ namespace mmo
 					continue;
 				}
 
+				++m_readyPageCount;
+
 				// The full-resolution page replaces the stand-in once it is completely loaded. Until then
-				// (tiles are excluded from rendering while a page loads) the stand-in keeps the area covered.
+				// the stand-in keeps the area covered: with batch rendering (the client default) tiles are
+				// excluded from rendering while their page loads. Without it (gxTerrainBatching 0, a debug
+				// path) tiles appear one by one and overlap the stand-in until the page is complete.
 				const Page* page = m_terrain.GetPage(coord.x, coord.z);
 				const bool replaced = page != nullptr && page->IsLoaded();
 				entry.page->SetVisible(!replaced);
@@ -229,7 +234,7 @@ namespace mmo
 			std::weak_ptr<char> lifetime = m_lifetime;
 
 			// The worker job must not touch members: this object may be gone by the time it runs.
-			m_postToWorker([this, lifetime, postToMain = m_postToMain, filename, x, z]()
+			m_postToWorker([lifetime, postToMain = m_postToMain, filename, x, z, owner = this]()
 			{
 				std::vector<far_mesh::Vertex> vertices;
 				bool success = false;
@@ -254,14 +259,14 @@ namespace mmo
 					}
 				}
 
-				postToMain([this, lifetime, x, z, success, vertices = std::move(vertices)]() mutable
+				postToMain([owner, lifetime, x, z, success, vertices = std::move(vertices)]() mutable
 				{
 					if (lifetime.expired())
 					{
 						return;
 					}
 
-					OnPageStreamed(x, z, success, std::move(vertices));
+					owner->OnPageStreamed(x, z, success, std::move(vertices));
 				});
 			});
 		}
