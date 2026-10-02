@@ -98,7 +98,10 @@ namespace mmo
         void RemoveTintFromActor(GameUnitC& actor, uint32 spellId);
 
         /// \brief Remove all active spell effects (particles, lights, ribbons) for a given actor and spell.
-        void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId);
+        /// \param includeAuraBound Also remove effects spawned by AURA_APPLIED / AURA_IDLE kits. A cast
+        ///        ending passes false: it must not strip the visual of an aura the same spell already
+        ///        put on the caster (recasting a self buff refreshes it without a new AURA_APPLIED).
+        void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId, bool includeAuraBound = true);
 
     private:
         SpellVisualizationService() = default;
@@ -126,20 +129,21 @@ namespace mmo
                              const proto_client::SpellKit& kit,
                              GameUnitC& actor,
                              uint32 spellId,
-                             bool instantEvent = false);
+                             bool instantEvent = false,
+                             bool auraBound = false);
 
         void ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         void ApplyTintToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         /// \brief Spawn particle emitters defined in a kit, optionally attached to a bone.
-        void ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
+        void ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool auraBound);
 
         /// \brief Spawn a point light defined in a kit, optionally attached to a bone.
-        void ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent = false);
+        void ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent, bool auraBound);
 
         /// \brief Spawn a ribbon trail defined in a kit, optionally attached to a bone.
-        void ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
+        void ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool auraBound);
 
         static uint32 ToProtoEventValue(Event e);
 
@@ -220,7 +224,13 @@ namespace mmo
             std::vector<Light*> lights;
             std::vector<RibbonTrail*> ribbonTrails;
             std::vector<SceneNode*> effectNodes;
+            /// Spawned by an AURA_APPLIED / AURA_IDLE kit: lives until the aura is removed, and
+            /// survives the cast-end cleanup of the spell that applied it.
+            bool auraBound{ false };
         };
+
+        /// \brief Returns the effect record for an actor, spell and lifetime, creating it if needed.
+        ActiveSpellEffect& FindOrCreateEffect(uint64 actorGuid, uint32 spellId, bool auraBound);
 
         /// \brief All active spell effects across all actors.
         mutable std::vector<ActiveSpellEffect> m_activeEffects;
@@ -252,6 +262,7 @@ namespace mmo
             uint32 spellId{ 0 };
             uint32 visualizationId{ 0 };
             bool instantEvent{ false };
+            bool auraBound{ false };
             float remainingSeconds{ 0.0f };
         };
 
