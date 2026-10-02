@@ -499,9 +499,9 @@ namespace mmo
 		/// @param onlyStale Skip pages whose baked files are newer than their .tile and that have no unsaved changes.
 		void GenerateTerrainLod(bool onlyStale);
 
-		/// @brief Makes the next world editor instance to render bake its stale terrain LOD and quit the
-		///        editor (the --bake-terrain-lod command line job).
-		static void RequestTerrainLodBakeAndQuit() { s_terrainLodBakeAndQuitRequested = true; }
+		/// @brief The most recently created world editor instance (the --bake-terrain-lod command line
+		///        job bakes the world it just opened). Null once that instance is gone.
+		static WorldEditorInstance* GetLastCreated() { return s_lastCreated; }
 
 		/// @brief Moves the editor camera so it focuses the given world location (X/Z plane). The
 		///        height is sampled from the terrain when available. Used by the minimap location
@@ -661,8 +661,7 @@ namespace mmo
 
 		uint32 m_worldFileVersion;
 
-		/// Set by the --bake-terrain-lod command line job.
-		static inline bool s_terrainLodBakeAndQuitRequested = false;
+		static inline WorldEditorInstance* s_lastCreated = nullptr;
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 

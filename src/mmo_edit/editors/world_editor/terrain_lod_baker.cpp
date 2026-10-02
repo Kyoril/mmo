@@ -99,8 +99,9 @@ namespace mmo
 
 				for (uint32 i = 0; i < node.GetNumAttachedObjects(); ++i)
 				{
+					// Cameras are never drawn; leave the bake camera (and everyone else's) alone.
 					MovableObject* object = node.GetAttachedObject(i);
-					if (object && object->IsVisible())
+					if (object && object->IsVisible() && !dynamic_cast<Camera*>(object))
 					{
 						m_hidden.emplace_back(object, true);
 						object->SetVisible(false);
@@ -274,6 +275,7 @@ namespace mmo
 	{
 		const bool wasPrepared = page.IsPrepared();
 		const bool wasLoaded = page.IsLoaded();
+		ILOG("Baking terrain LOD of page " << x << "x" << z);
 
 		if (!wasPrepared && !page.Prepare())
 		{
@@ -347,7 +349,17 @@ namespace mmo
 		// The page water is translucent and samples scene depth/refraction; the opaque minimap
 		// variant lands in the G-buffer instead.
 		page.SetMinimapWaterMode(true);
-		m_renderer->Render(m_scene, *m_camera);
+		// Twice: freshly loaded tiles build their index buffers in PreRender, which the scene calls
+		// after it has already captured their (still empty) render operation, so a page's first
+		// frame draws nothing.
+		auto& gx = GraphicsDevice::Get();
+		for (int pass = 0; pass < 2; ++pass)
+		{
+			// Same per-frame device reset the editor viewport does before it renders.
+			gx.Reset();
+			gx.SetViewport(0, 0, TextureSize, TextureSize, 0.0f, 1.0f);
+			m_renderer->Render(m_scene, *m_camera);
+		}
 		page.SetMinimapWaterMode(false);
 
 		GBuffer& gBuffer = m_renderer->GetGBuffer();

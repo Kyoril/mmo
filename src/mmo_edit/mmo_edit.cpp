@@ -15,6 +15,9 @@
 #ifdef _WIN32
 #include "fmod_audio/fmod_audio.h"
 #include "base/win_utility.h"
+#include <crtdbg.h>
+#include <fstream>
+#include <mutex>
 #else
 #include "null_audio/null_audio.h"
 #endif
@@ -323,8 +326,31 @@ int main(int argc, char* arg[])
 		{
 			if (std::string(argv[i]) == "--bake-terrain-lod")
 			{
-				mmo::WorldEditorInstance::RequestTerrainLodBakeAndQuit();
-				if (!mainWindow.OpenAsset(argv[i + 1]))
+				// Nobody watches an unattended run: keep its log, and let failed debug assertions
+				// land in that log instead of a message box nobody can answer.
+				static std::ofstream bakeLog("terrain_lod_bake.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("terrain_lod_bake_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				// Bake right away instead of from the viewport's paint handler, so the job also runs
+				// with the window minimised (a minimised window never paints).
+				if (mainWindow.OpenAsset(argv[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				{
+					mmo::WorldEditorInstance::GetLastCreated()->GenerateTerrainLod(true);
+					PostQuitMessage(0);
+				}
+				else
 				{
 					ELOG("--bake-terrain-lod: failed to open " << argv[i + 1]);
 					PostQuitMessage(1);

@@ -4,6 +4,8 @@
 #include "graphics_device_d3d11.h"
 
 #include "base/macros.h"
+#include "base/utilities.h"
+#include "log/default_log_levels.h"
 
 #include <d3d11.h>
 
@@ -297,7 +299,11 @@ namespace mmo
 		ID3D11Texture2D* stagingTexture = nullptr;
 		ID3D11Device& d3d11Device = m_device;
 		HRESULT hr = d3d11Device.CreateTexture2D(&textureDesc, nullptr, &stagingTexture);
-		if (FAILED(hr)) return;
+		if (FAILED(hr))
+		{
+			ELOG("Failed to create staging texture to read back render texture " << m_name << " (hr " << log_hex_digit(static_cast<uint32>(hr)) << ")");
+			return;
+		}
 
 		// Step 2: Copy the texture data to the staging texture
 		ID3D11DeviceContext* context = nullptr;
@@ -309,6 +315,7 @@ namespace mmo
 		hr = context->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
 		if (FAILED(hr))
 		{
+			ELOG("Failed to map staging texture to read back render texture " << m_name << " (hr " << log_hex_digit(static_cast<uint32>(hr)) << ")");
 			stagingTexture->Release();
 			context->Release();
 			return;

@@ -446,10 +446,17 @@ namespace mmo
 			}
 			DLOG("Loaded " << m_fogVolumes.size() << " local fog volume(s) for map " << fogFileName);
 		}
+
+		s_lastCreated = this;
 	}
 
 	WorldEditorInstance::~WorldEditorInstance()
 	{
+		if (s_lastCreated == this)
+		{
+			s_lastCreated = nullptr;
+		}
+
 		// Stop background loading thread
 		m_work.reset();
 		m_workQueue.stop();
@@ -481,14 +488,6 @@ namespace mmo
 	{
 		m_dispatcher.poll();
 
-		if (s_terrainLodBakeAndQuitRequested)
-		{
-			s_terrainLodBakeAndQuitRequested = false;
-			GenerateTerrainLod(true);
-#ifdef _WIN32
-			PostQuitMessage(0);
-#endif
-		}
 
 		// Keep water visibility in sync with the active edit mode (water is forced visible while editing water).
 		UpdateWaterVisibility();

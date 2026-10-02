@@ -1,5 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+#include <atomic>
 #include "deferred_renderer.h"
 #include "cascaded_shadow_camera_setup.h"
 #include "ssao_pass.h"
@@ -169,11 +170,14 @@ namespace mmo
         // Keep a reference to the first cascade for legacy single-shadow-map code paths
 		m_shadowMapRT = m_cascadeShadowMaps[0];
 
-        // Setup shadow cameras for each cascade
+        // Setup shadow cameras for each cascade. Scene object names are unique per scene, and a scene
+        // can be rendered by several renderers (the world editor bakes terrain LOD with a second one).
+        static std::atomic<uint32> s_instanceCounter{ 0 };
+        const String instanceTag = std::to_string(s_instanceCounter++);
         for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
         {
-            m_shadowCameraNodes[i] = m_scene.GetRootSceneNode().CreateChildSceneNode("__ShadowCameraNode_" + std::to_string(i) + "__");
-            m_shadowCameras[i] = m_scene.CreateCamera("__DeferredShadowCamera_" + std::to_string(i) + "__");
+            m_shadowCameraNodes[i] = m_scene.GetRootSceneNode().CreateChildSceneNode("__ShadowCameraNode_" + instanceTag + "_" + std::to_string(i) + "__");
+            m_shadowCameras[i] = m_scene.CreateCamera("__DeferredShadowCamera_" + instanceTag + "_" + std::to_string(i) + "__");
             m_shadowCameraNodes[i]->AttachObject(*m_shadowCameras[i]);
         }
 
