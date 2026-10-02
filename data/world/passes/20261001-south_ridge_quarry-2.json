@@ -1,0 +1,505 @@
+{
+  "version": 1,
+  "pass_id": "20261001-south_ridge_quarry-2",
+  "map": 0,
+  "world": "Development",
+  "poi": "south_ridge_quarry",
+  "template": "quarry",
+  "seed": 4,
+  "anchor": [
+    173.0,
+    772.0
+  ],
+  "keep_away": [
+    "forest_bandit_grounds:0"
+  ],
+  "entry": [
+    173.0,
+    772.0
+  ],
+  "created": "2026-10-01T20:19:15",
+  "world_fingerprint": "f9ebed9dae0556e95670003afe66b354024c6acb",
+  "items": [
+    {
+      "role": "rock_face",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        169.37,
+        14.43,
+        782.43
+      ],
+      "yaw": 23.95,
+      "tilt": [
+        -43.9,
+        -9.23
+      ],
+      "scale": 0.65,
+      "collides": true,
+      "unique_id": "0xe8971487be97a965",
+      "file": "Worlds/Development/Development/Entities/8225/16759887111533341029.wobj",
+      "written_hash": "d132f495aaacd1c69631c3e29d0a7473174de7f7"
+    },
+    {
+      "role": "stone_piles",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        167.94,
+        11.28,
+        770.38
+      ],
+      "yaw": 193.2,
+      "tilt": [
+        -12.0,
+        -19.83
+      ],
+      "scale": 0.34,
+      "collides": true,
+      "unique_id": "0xe897b065beb320ff",
+      "file": "Worlds/Development/Development/Entities/8225/16760058489320186111.wobj",
+      "written_hash": "4edf2abb70e45b62569094ac9edcc26a4697c69e"
+    },
+    {
+      "role": "stone_piles",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        172.27,
+        11.05,
+        776.32
+      ],
+      "yaw": 339.47,
+      "tilt": [
+        -2.72,
+        -6.91
+      ],
+      "scale": 0.35,
+      "collides": true,
+      "unique_id": "0xe89899555e48de92",
+      "file": "Worlds/Development/Development/Entities/8225/16760314605192404626.wobj",
+      "written_hash": "b46f680fc6c2cde0ff92fcc4db0311d6a50fb891"
+    },
+    {
+      "role": "stone_piles",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        166.82,
+        10.92,
+        765.66
+      ],
+      "yaw": 218.11,
+      "tilt": [
+        -6.85,
+        -20.1
+      ],
+      "scale": 0.32,
+      "collides": true,
+      "unique_id": "0xe8981c85d6e46d32",
+      "file": "Worlds/Development/Development/Entities/8225/16760177374420823346.wobj",
+      "written_hash": "7f2822f1f9567eeb5342df3664f85c693fc033e7"
+    },
+    {
+      "role": "stone_piles",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        175.98,
+        11.6,
+        778.1
+      ],
+      "yaw": 294.44,
+      "tilt": [
+        -9.53,
+        7.42
+      ],
+      "scale": 0.49,
+      "collides": true,
+      "unique_id": "0xe898bb17ba345f01",
+      "file": "Worlds/Development/Development/Entities/8225/16760351723841937153.wobj",
+      "written_hash": "6f78389f9dc992259d4cd22b00b7350fbbcdd298"
+    },
+    {
+      "role": "loose_stones",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        170.64,
+        10.29,
+        768.64
+      ],
+      "yaw": 183.01,
+      "tilt": [
+        -1.69,
+        -5.19
+      ],
+      "scale": 0.23,
+      "collides": true,
+      "unique_id": "0xe8993bd48a9e5933",
+      "file": "Worlds/Development/Development/Entities/8225/16760493272280750387.wobj",
+      "written_hash": "e1f801dc33283ec3d27c849659c7a64d7e282abe"
+    },
+    {
+      "role": "loose_stones",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        173.88,
+        11.05,
+        779.19
+      ],
+      "yaw": 109.84,
+      "tilt": [
+        -21.66,
+        0.78
+      ],
+      "scale": 0.14,
+      "collides": true,
+      "unique_id": "0xe8998cc0e513ead8",
+      "file": "Worlds/Development/Development/Entities/8225/16760582248340908760.wobj",
+      "written_hash": "f706353c85c7221ac2e7c0618e2c86c9784a8886"
+    },
+    {
+      "role": "loose_stones",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        170.46,
+        10.49,
+        771.79
+      ],
+      "yaw": 233.28,
+      "tilt": [
+        -9.06,
+        -15.43
+      ],
+      "scale": 0.19,
+      "collides": true,
+      "unique_id": "0xe899a27532065182",
+      "file": "Worlds/Development/Development/Entities/8225/16760606112470159746.wobj",
+      "written_hash": "42f60565de9686d2fc2028a11919ecfcf58af323"
+    },
+    {
+      "role": "loose_stones",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        168.98,
+        10.34,
+        768.44
+      ],
+      "yaw": 72.96,
+      "tilt": [
+        -2.08,
+        -12.55
+      ],
+      "scale": 0.17,
+      "collides": true,
+      "unique_id": "0xe89955ee1343c5f4",
+      "file": "Worlds/Development/Development/Entities/8225/16760521969249797620.wobj",
+      "written_hash": "dac9919fa59231f9c21fea83fc93f4ebb91e1145"
+    },
+    {
+      "role": "loose_stones",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        175.56,
+        12.02,
+        780.63
+      ],
+      "yaw": 71.54,
+      "tilt": [
+        -31.09,
+        -1.01
+      ],
+      "scale": 0.2,
+      "collides": true,
+      "unique_id": "0xe89a59fe2e040c4e",
+      "file": "Worlds/Development/Development/Entities/8225/16760807911441304654.wobj",
+      "written_hash": "2140f36a61f36abd1e7570762810424568d07c34"
+    },
+    {
+      "role": "loose_stones",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        168.18,
+        10.6,
+        766.66
+      ],
+      "yaw": 209.59,
+      "tilt": [
+        -2.56,
+        -11.76
+      ],
+      "scale": 0.16,
+      "collides": true,
+      "unique_id": "0xe89a4bbeea35d721",
+      "file": "Worlds/Development/Development/Entities/8225/16760792246557988641.wobj",
+      "written_hash": "d7d3c13b6de0b326b71a11d39151da67c669f648"
+    },
+    {
+      "role": "loose_stones",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        165.25,
+        11.73,
+        766.07
+      ],
+      "yaw": 343.71,
+      "tilt": [
+        -6.93,
+        -27.73
+      ],
+      "scale": 0.24,
+      "collides": true,
+      "unique_id": "0xe89af41e87ccd73c",
+      "file": "Worlds/Development/Development/Entities/8225/16760977375177267004.wobj",
+      "written_hash": "3f22748f60ebafe9b280e9f448c549a0ca273a92"
+    },
+    {
+      "role": "tools",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Bucket.hmsh",
+      "store": "wobj",
+      "position": [
+        167.25,
+        11.2,
+        772.86
+      ],
+      "yaw": 90.02,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xe89b697aa3b29481",
+      "file": "Worlds/Development/Development/Entities/8225/16761106413642749057.wobj",
+      "written_hash": "0da0b953b25973014b1f0590f11c7c1453aab9a9"
+    },
+    {
+      "role": "tools",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Bucket.hmsh",
+      "store": "wobj",
+      "position": [
+        170.53,
+        9.53,
+        765.59
+      ],
+      "yaw": 152.62,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xe89bc004a952613c",
+      "file": "Worlds/Development/Development/Entities/8225/16761201564442583356.wobj",
+      "written_hash": "5dd28b1354715195c7407dcc316fbb5c3d405005"
+    },
+    {
+      "role": "tools",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Bucket.hmsh",
+      "store": "wobj",
+      "position": [
+        172.72,
+        9.73,
+        773.1
+      ],
+      "yaw": 18.46,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xe89ba75af996e506",
+      "file": "Worlds/Development/Development/Entities/8225/16761174447365743878.wobj",
+      "written_hash": "d31fb3133ae162ec50893fb027e58e4d4654e108"
+    },
+    {
+      "role": "crates",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        168.84,
+        10.9,
+        775.43
+      ],
+      "yaw": 158.27,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xe89bc66ee6248416",
+      "file": "Worlds/Development/Development/Entities/8225/16761208617799287830.wobj",
+      "written_hash": "adb9e7d01e9077c99d69dea101ea7188c60265dd"
+    },
+    {
+      "role": "crates",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        170.17,
+        10.29,
+        773.5
+      ],
+      "yaw": 92.5,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xe89c347d2a451ab9",
+      "file": "Worlds/Development/Development/Entities/8225/16761329625350871737.wobj",
+      "written_hash": "849eaf859fd581615ece6eb2bd8e0316f5b39613"
+    },
+    {
+      "role": "crates",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        174.57,
+        9.65,
+        771.84
+      ],
+      "yaw": 30.65,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xe89ca21b94556b25",
+      "file": "Worlds/Development/Development/Entities/8225/16761450152502586149.wobj",
+      "written_hash": "a251d2e78d06be1d9d685955e25abbefc31cb655"
+    },
+    {
+      "role": "barrels",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        171.14,
+        10.23,
+        774.16
+      ],
+      "yaw": 156.22,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xe89cadb6d4e4dd4a",
+      "file": "Worlds/Development/Development/Entities/8225/16761462913933565258.wobj",
+      "written_hash": "5394362a1a8e69118bc2fa88f4643f16a87e9266"
+    },
+    {
+      "role": "barrels",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        174.75,
+        9.62,
+        770.75
+      ],
+      "yaw": 334.71,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xe89c911eb7d9e5b3",
+      "file": "Worlds/Development/Development/Entities/8225/16761431474285700531.wobj",
+      "written_hash": "a1b0a52bb7a6a2cb6d9e69ebacbbd549bbcec53d"
+    },
+    {
+      "role": "barrels",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        168.23,
+        10.99,
+        774.53
+      ],
+      "yaw": 58.62,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xe89dcf0d1ba708d0",
+      "file": "Worlds/Development/Development/Entities/8225/16761781043348310224.wobj",
+      "written_hash": "3459504a3626b4a5c603c884c25c755204f003a5"
+    },
+    {
+      "role": "fire",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_CampFire_A.hmsh",
+      "store": "wobj",
+      "position": [
+        172.54,
+        9.59,
+        767.5
+      ],
+      "yaw": 187.46,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xe89d2dee6191f6e6",
+      "file": "Worlds/Development/Development/Entities/8225/16761603890005276390.wobj",
+      "written_hash": "0b5488205f14876537e1ca8a3e2b52729355c50b"
+    },
+    {
+      "role": "cart",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Wagon_Small.hmsh",
+      "store": "wobj",
+      "position": [
+        171.04,
+        9.18,
+        765.72
+      ],
+      "yaw": 46.8,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xe89d6c4184e417f3",
+      "file": "Worlds/Development/Development/Entities/8225/16761672416801069043.wobj",
+      "written_hash": "c2a1630679a78376c780b25461c4e83e1194f761"
+    }
+  ],
+  "gaps": [
+    {
+      "role": "tent",
+      "kind": "space",
+      "wanted": 1,
+      "placed": 0
+    }
+  ],
+  "notes": [
+    "Rocks: SM_stone_06 (grey stone cluster) at three scales is the only forest-biome rock art; the desert rocks are the wrong biome (art request: forest rocks and cut stone blocks)."
+  ],
+  "checks": {
+    "placement": [],
+    "walkability": []
+  },
+  "status": "applied",
+  "created_files": [],
+  "applied": "2026-10-01T22:10:23",
+  "nav": {
+    "path": "generated/world/nav"
+  }
+}

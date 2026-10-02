@@ -31,12 +31,21 @@ def backup_file(path: Path) -> None:
 
 
 def reconcile_quest_links(entries, quest_id: int, field_name: str, target_ids: set[int]) -> None:
+    """Links the quest to exactly the target entries. An existing link keeps its position: the list
+    order is the order the quest dialog offers the quests in."""
     for entry in entries:
         values = list(getattr(entry, field_name))
-        filtered = [value for value in values if value != quest_id]
-        target_contains = entry.id in target_ids
-        if target_contains and quest_id not in filtered:
-            filtered.append(quest_id)
+        if entry.id in target_ids:
+            filtered = []
+            for value in values:
+                if value != quest_id or quest_id not in filtered:
+                    filtered.append(value)
+            if quest_id not in filtered:
+                filtered.append(quest_id)
+        else:
+            filtered = [value for value in values if value != quest_id]
+        if filtered == values:
+            continue
         repeated = getattr(entry, field_name)
         del repeated[:]
         repeated.extend(filtered)

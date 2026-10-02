@@ -18,6 +18,16 @@ from npc_catalog_lib import (
 )
 
 
+def world_checks(doc: dict) -> tuple[list[str], list[str]]:
+    """Terrain/atlas placement checks from tools/world (a tooling failure never blocks validation)."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools" / "world"))
+        from worldkit.skill_checks import npc_draft_findings
+        return npc_draft_findings(doc)
+    except Exception as exc:  # noqa: BLE001 - surfaced as a warning, never a crash
+        return [], [f"world placement checks skipped: {exc}"]
+
+
 def is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
@@ -307,6 +317,10 @@ def main() -> int:
         return 1
 
     errors = validate_document(doc, project_root)
+    world_errors, world_warnings = world_checks(doc)
+    errors.extend(world_errors)
+    for message in world_warnings:
+        print(f"WARNING: {message}")
     if errors:
         for message in errors:
             print(f"ERROR: {message}")

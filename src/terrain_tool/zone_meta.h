@@ -7,6 +7,8 @@
 #include <cmath>
 #include <filesystem>
 #include <limits>
+#include <utility>
+#include <vector>
 
 namespace mmo
 {
@@ -43,6 +45,24 @@ namespace mmo
 
 		/// @brief Water surface material asset path (used when waterLevel is set).
 		String waterMaterial = "Worlds/Water_Base.hmat";
+
+		/// @brief Water type written for flagged water quads (see terrain::WaterType, 1 = Water, 2 = Ocean).
+		uint8 waterType = 1;
+
+		/// @brief Optional 16-bit PNG holding one zone (area) id per terrain tile, sized
+		///	       (pages x · 16) × (pages z · 16). Resolved relative to the metadata file. Empty = no zones.
+		std::filesystem::path zoneMap;
+
+		/// @brief When set, pages that already exist are not overwritten.
+		bool skipExistingPages = false;
+
+		/// @brief With skipExistingPages: also give the unzoned tiles (id 0) of existing pages the zone
+		///	       from the zone map. Everything else in those pages stays untouched. Only v2 pages can be updated.
+		bool fillExistingZones = false;
+
+		/// @brief Optional list of pages (x, z) to write. Empty = every page of the rect. Pages
+		///	       outside this list are neither written nor touched.
+		std::vector<std::pair<int32, int32>> pages;
 
 		/// @brief Whether a water level has been configured.
 		[[nodiscard]] bool HasWaterLevel() const { return !std::isnan(waterLevel); }

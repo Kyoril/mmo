@@ -3,9 +3,13 @@
 
 Round-trips every quest, item, NPC and spell through its authoring skill's
 export + validate scripts (catching broken references and invalid data), checks
-the quest chain graph for cycles and dangling links (questchain domain), then
-runs the XP coverage audit (tools/xp_audit.py, threshold 120%). Writes a JSON
-report to tools/gate/reports/ and exits non-zero if anything failed.
+the quest chain graph for cycles and dangling links (questchain domain), runs
+the world placement lint (placement domain, GLOBAL maps), the prop lint (props
+domain) and the quest reachability report (reachability domain) from
+tools/world - all fail only on
+findings missing from tools/world/lint_baseline.json - then runs the XP coverage
+audit (tools/xp_audit.py, threshold 120%). Writes a JSON report to
+tools/gate/reports/ and exits non-zero if anything failed.
 
 Runs each check as a subprocess for isolation; a full run takes a while and is
 meant for the weekly scheduled task. Use --limit for a quick smoke test.
@@ -27,8 +31,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-SKILLS = REPO / ".claude" / "skills"
+SKILLS = REPO / ".agents" / "skills"
 DATA = REPO / "data" / "editor" / "data"
+WORLD_TOOLS = REPO / "tools" / "world"
+MAP_GLOBAL = 0
 
 # domain -> (skill dir, export script, validate script, id flag, module key, message class, data file)
 DOMAINS = {
@@ -37,6 +43,8 @@ DOMAINS = {
     "npc": ("mmo-npc-designer", "export_npc_json.py", "validate_npc_json.py", "--unit-id", "units", "Units", "units.data"),
     "spell": ("mmo-spell-designer", "export_spell_json.py", "validate_spell_json.py", "--spell-id", "spells", "Spells", "spells.data"),
 }
+
+ALL_DOMAINS = [*DOMAINS, "questchain", "placement", "reachability", "props", "xp"]
 
 _mods = None
 
@@ -161,14 +169,43 @@ def audit_quest_chains() -> dict:
     return {"checked": len(quests), "failures": failures}
 
 
+def audit_world(tool: str, name: str, tmp_dir: Path) -> dict:
+    """Runs tools/world/<tool>.py per map; only new errors (not in the baseline) are failures."""
+    msg = proto_modules()["maps"].Maps()
+    msg.ParseFromString((DATA / "maps.data").read_bytes())
+    maps = [m for m in msg.entry if name not in ("placement", "props") or m.instancetype == MAP_GLOBAL]
+    result = {"checked": 0, "failures": [], "warnings": [], "known": 0, "maps": {}}
+    for map_entry in maps:
+        out = tmp_dir / f"{name}_{map_entry.id}.json"
+        proc = subprocess.run([sys.executable, str(WORLD_TOOLS / f"{tool}.py"), "--map", str(map_entry.id), "--json", str(out)],
+                              capture_output=True, text=True, cwd=str(WORLD_TOOLS))
+        text = (proc.stdout + proc.stderr).strip()
+        if not out.is_file():
+            if "skipped map" in text:
+                result["maps"][map_entry.id] = "skipped (no terrain)"
+                continue
+            result["failures"].append({"id": map_entry.id, "stage": tool, "output": text[-2000:]})
+            continue
+        data = json.loads(out.read_text(encoding="utf-8"))
+        result["checked"] += 1
+        result["known"] += data["known"]
+        result["failures"] += [{"id": map_entry.id, **f} for f in data["new_errors"]]
+        result["warnings"] += [{"id": map_entry.id, **w} for w in data["new_warnings"]]
+        result["maps"][map_entry.id] = {"new_errors": len(data["new_errors"]), "new_warnings": len(data["new_warnings"]),
+                                        "known": data["known"]}
+    print(f"[{name}] maps {result['checked']}, new errors {len(result['failures'])}, "
+          f"new warnings {len(result['warnings'])}, known {result['known']}")
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--domain", choices=[*DOMAINS, "questchain", "xp"], action="append",
-                        help="restrict to specific domain(s); default: all four + questchain + xp")
+    parser.add_argument("--domain", choices=ALL_DOMAINS, action="append",
+                        help="restrict to specific domain(s); default: all domains")
     parser.add_argument("--limit", type=int, help="max entities per domain (smoke test)")
     args = parser.parse_args()
 
-    selected = args.domain or [*DOMAINS, "questchain", "xp"]
+    selected = args.domain or ALL_DOMAINS
     report = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "limit": args.limit,
@@ -183,6 +220,12 @@ def main() -> int:
                 result = audit_xp()
             elif name == "questchain":
                 result = audit_quest_chains()
+            elif name == "placement":
+                result = audit_world("lint", "placement", tmp_dir)
+            elif name == "reachability":
+                result = audit_world("report", "reachability", tmp_dir)
+            elif name == "props":
+                result = audit_world("prop_lint", "props", tmp_dir)
             else:
                 result = audit_domain(name, args.limit, tmp_dir)
             report["domains"][name] = result

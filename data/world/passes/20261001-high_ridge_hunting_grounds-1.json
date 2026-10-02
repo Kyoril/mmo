@@ -1,0 +1,354 @@
+{
+  "version": 1,
+  "pass_id": "20261001-high_ridge_hunting_grounds-1",
+  "map": 0,
+  "world": "Development",
+  "poi": "high_ridge_hunting_grounds",
+  "template": "hunting_camp",
+  "seed": 1,
+  "anchor": [
+    275.0,
+    360.0
+  ],
+  "keep_away": [],
+  "entry": [
+    275.0,
+    360.0
+  ],
+  "created": "2026-10-01T20:02:36",
+  "world_fingerprint": "ff309345553fb6b73d1076f3220cd33b010ffe4a",
+  "items": [
+    {
+      "role": "fire",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_CampFire_A.hmsh",
+      "store": "wobj",
+      "position": [
+        275.0,
+        46.38,
+        360.0
+      ],
+      "yaw": 178.36,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0x4a4327d22678fa8f",
+      "file": "Worlds/Development/Development/Entities/8224/5351164565788359311.wobj",
+      "written_hash": "c8beaee5a0f05b9a20c8f8b2144a3fc3ae84b076"
+    },
+    {
+      "role": "tents",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_A.hmsh",
+      "store": "wobj",
+      "position": [
+        271.31,
+        46.38,
+        354.81
+      ],
+      "yaw": 321.59,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x4a43355d7125ec4c",
+      "file": "Worlds/Development/Development/Entities/8224/5351179457692822604.wobj",
+      "written_hash": "66dcc47b2f748bc6351ce3c1e501542d17a69aa4"
+    },
+    {
+      "role": "tents",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_A.hmsh",
+      "store": "wobj",
+      "position": [
+        269.27,
+        46.39,
+        362.58
+      ],
+      "yaw": 95.88,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x4a44d47035a59c50",
+      "file": "Worlds/Development/Development/Entities/8224/5351635835624463440.wobj",
+      "written_hash": "79dbd2c37bb7c990d2435e576f8c021182645762"
+    },
+    {
+      "role": "seats",
+      "asset": "Models/Swamp/SM_log_01.hmsh",
+      "store": "wobj",
+      "position": [
+        277.62,
+        46.98,
+        361.58
+      ],
+      "yaw": 187.54,
+      "tilt": [
+        -0.04,
+        0.04
+      ],
+      "scale": 1.19,
+      "collides": true,
+      "unique_id": "0x4a44c1f07f7e8cea",
+      "file": "Worlds/Development/Development/Entities/8224/5351615495898303722.wobj",
+      "written_hash": "703f7bff5697b67ded18fe3e0e0dbf584c253098"
+    },
+    {
+      "role": "supplies",
+      "asset": "Models/FalwynPlains/Buildings/SM_Crate.hmsh",
+      "store": "wobj",
+      "position": [
+        268.54,
+        46.4,
+        357.29
+      ],
+      "yaw": 202.09,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x4a44160a8277462a",
+      "file": "Worlds/Development/Development/Entities/8224/5351426491617330730.wobj",
+      "written_hash": "4cb29a8d840f08472ec8bd6fb5e6f92dcf0d85c9"
+    },
+    {
+      "role": "supplies",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        272.09,
+        46.42,
+        361.66
+      ],
+      "yaw": 71.94,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x4a45a08bf88d426b",
+      "file": "Worlds/Development/Development/Entities/8224/5351860255230607979.wobj",
+      "written_hash": "7c56228aef94987b0eaed0e3252a23f2ddca4681"
+    },
+    {
+      "role": "barrels",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        273.62,
+        46.41,
+        352.05
+      ],
+      "yaw": 339.69,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x4a459dafb123bb42",
+      "file": "Worlds/Development/Development/Entities/8224/5351857110116449090.wobj",
+      "written_hash": "8459934650837e3070b7d766f065c6591ff228ed"
+    },
+    {
+      "role": "barrels",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        269.87,
+        46.41,
+        358.41
+      ],
+      "yaw": 90.85,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x4a45eafa92408bf8",
+      "file": "Worlds/Development/Development/Entities/8224/5351942094116129784.wobj",
+      "written_hash": "ebf3a7ea21701399258e936460b6c4e4944d534a"
+    },
+    {
+      "role": "targets",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Target_D.hmsh",
+      "store": "wobj",
+      "position": [
+        263.26,
+        46.44,
+        360.56
+      ],
+      "yaw": 179.93,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x4a46ec2b2a660d0b",
+      "file": "Worlds/Development/Development/Entities/8224/5352224877315493131.wobj",
+      "written_hash": "6baafff5496e4d4a0370ad059f9a6539a6a1d151"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/FalwynPlains/Trees/Tree_05.hmsh",
+      "store": "hfol",
+      "position": [
+        263.7,
+        46.32,
+        350.4
+      ],
+      "yaw": 72.31,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.81,
+      "collides": true,
+      "unique_id": "0x4a465e8aec645172",
+      "file": "Worlds/Development/Development/Foliage/8224.hfol",
+      "written_hash": "24797186b9ffc7eb75de9d1871a6fa63e799f475"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/FalwynPlains/Trees/Tree_04.hmsh",
+      "store": "hfol",
+      "position": [
+        264.75,
+        46.36,
+        379.29
+      ],
+      "yaw": 76.69,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.95,
+      "collides": true,
+      "unique_id": "0x4a461bc95f2d0a23",
+      "file": "Worlds/Development/Development/Foliage/8224.hfol",
+      "written_hash": "57955c3842723f9b4a6d8cf50b60b7981200b916"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/Trees/SM_Tree_05.hmsh",
+      "store": "hfol",
+      "position": [
+        265.84,
+        46.29,
+        342.16
+      ],
+      "yaw": 317.66,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.28,
+      "collides": true,
+      "unique_id": "0x4a46d7bbab3a984b",
+      "file": "Worlds/Development/Development/Foliage/8224.hfol",
+      "written_hash": "4c308c8c62a77cda65afa2ed14cf414e20286f32"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/Trees/SM_Tree_05.hmsh",
+      "store": "hfol",
+      "position": [
+        287.76,
+        46.41,
+        358.83
+      ],
+      "yaw": 47.89,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.03,
+      "collides": true,
+      "unique_id": "0x4a462d846b8f9d1d",
+      "file": "Worlds/Development/Development/Foliage/8224.hfol",
+      "written_hash": "d88038a069ef0e2541e482422fd6976b8f36a6c2"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/FalwynPlains/Trees/Tree_05.hmsh",
+      "store": "hfol",
+      "position": [
+        283.24,
+        46.43,
+        374.25
+      ],
+      "yaw": 216.08,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.14,
+      "collides": true,
+      "unique_id": "0x4a467e3f20754695",
+      "file": "Worlds/Development/Development/Foliage/8224.hfol",
+      "written_hash": "42ba7439bcdb4a40c28be5d4f40540bd0e33d9b8"
+    },
+    {
+      "role": "trees",
+      "asset": "Models/FalwynPlains/Trees/Tree_05.hmsh",
+      "store": "hfol",
+      "position": [
+        282.81,
+        46.26,
+        347.88
+      ],
+      "yaw": 84.67,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.85,
+      "collides": true,
+      "unique_id": "0x4a46114d4ef95ddd",
+      "file": "Worlds/Development/Development/Foliage/8224.hfol",
+      "written_hash": "4fe6e21625a5f9dad1d883d439c4bc8c7219012a"
+    },
+    {
+      "role": "dead_tree",
+      "asset": "Models/Swamp/SM_dry_tree_01.hmsh",
+      "store": "hfol",
+      "position": [
+        283.19,
+        47.51,
+        369.33
+      ],
+      "yaw": 146.38,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.93,
+      "collides": true,
+      "unique_id": "0x4a4664fac829f282",
+      "file": "Worlds/Development/Development/Foliage/8224.hfol",
+      "written_hash": "f439a3c9d99ca6f486343b61892e535831ff2b26"
+    }
+  ],
+  "gaps": [],
+  "notes": [],
+  "checks": {
+    "placement": [],
+    "walkability": []
+  },
+  "status": "applied",
+  "created_files": [],
+  "applied": "2026-10-01T20:12:50",
+  "nav": {
+    "path": "generated/world/nav"
+  }
+}

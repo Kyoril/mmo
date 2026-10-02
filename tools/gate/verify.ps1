@@ -128,6 +128,10 @@ try
 		$ok = Invoke-GateStep -Name "tool_tests" -Exe "python" -Arguments @("-m", "unittest", "discover", "-s", "tools/tests", "-p", "test_*.py")
 	}
 
+	# Warning only: a stale .claude/skills copy does not break the build, but it is how an agent
+	# ends up following instructions the tracked .agents/skills no longer contains.
+	& (Join-Path $repoRoot "tools\sync_skills.ps1") -Check
+
 	if ($ok)
 	{
 		$ok = Invoke-GateStep -Name "build" -Exe "cmake" -Arguments (@("--build", "build", "--config", "Debug", "-t") + $Targets)

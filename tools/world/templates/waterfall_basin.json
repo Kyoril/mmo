@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "waterfall_basin",
+  "description": "Cliff rocks around a basin-shaped spot at a cliff foot, herbs and a few trees nearby. The water itself is added later.",
+  "entry": "anchor",
+  "clear": [4.0],
+  "notes": ["Awaiting water: paint the pool with the editor's water brush (or a later waterfall feature); the falling water does not exist in the engine yet."],
+  "roles": [
+    {"name": "basin_rim", "query": {"assets": ["Models/Stones/SM_stone_06.hmsh"]}, "count": [4, 7], "spacing": 2.5, "store": "wobj", "rule": {"type": "ring", "r1": 5.5, "r2": 9.0}, "scale": [0.3, 0.5], "sink": 0.4},
+    {"name": "cliff_rocks", "query": {"assets": ["Models/Stones/SM_stone_06.hmsh"]}, "count": [2, 3], "spacing": 5.0, "store": "wobj", "rule": {"type": "ring", "r1": 7.0, "r2": 13.0}, "scale": [0.6, 1.0], "sink": 1.0},
+    {"name": "herbs", "query": {"assets": ["Models/FalwynPlains/Plants/Flower_01.hmsh", "Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh", "Models/FalwynPlains/Plants/Shrub_02.hmsh", "Models/FalwynPlains/Plants/Grass_03.hmsh"]}, "count": [5, 9], "spacing": 1.5, "store": "hfol", "rule": {"type": "ring", "r1": 5.0, "r2": 12.0}},
+    {"name": "trees", "query": {"assets": ["Models/Trees/SM_Tree_05.hmsh", "Models/FalwynPlains/Trees/Tree_04.hmsh", "Models/FalwynPlains/Trees/Tree_05.hmsh", "Models/Trees/Tree_01.hmsh"]}, "count": [2, 4], "spacing": 5.0, "store": "hfol", "rule": {"type": "ring", "r1": 10.0, "r2": 18.0}}
+  ]
+}

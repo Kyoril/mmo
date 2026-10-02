@@ -8,9 +8,10 @@ Read these reference files now:
 
 <process>
 1. Validate the JSON draft before any write step.
-2. Before any placement change, inspect the target terrain with `scripts/inspect_terrain.py`:
-   - Query the intended `world_x/world_z` to get the terrain height that should become `positiony`.
+2. Before any placement change, follow SKILL.md <world_aware_design>: pick the atlas place, render the area, and choose positions from the map. Then inspect the exact points with `scripts/inspect_terrain.py` (or `python -m worldkit query`):
+   - Query the intended `world_x/world_z` to get the terrain height that should become `positiony`; the result also reports slope, water depth, holes, terrain kind and whether the point is placeable.
    - Query the intended zone by name when the request is area-driven, so the placement is anchored to actual zone-bound terrain tiles rather than screenshots or memory.
+   - Run `python tools/world/lint.py --map <id> --draft <draft.json>` and fix every error before apply.
 3. Apply base unit and linked service or loot data with `scripts/apply_npc_json.py`.
 4. Only apply spawns when the request actually includes placement changes. Use `--apply-spawns` intentionally because it modifies `maps.data`.
 5. Prefer named spawns for idempotent updates. Unnamed spawns are treated as append-only unless the JSON explicitly uses a replacement mode supported by the apply script.

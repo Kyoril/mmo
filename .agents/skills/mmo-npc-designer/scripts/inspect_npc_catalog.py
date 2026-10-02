@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 from npc_catalog_lib import (
     find_project_root,
@@ -186,6 +187,12 @@ def main() -> int:
             "combat_scripts": list_builtin_combat_scripts(project_root),
         }
 
+    if unit is None and isinstance(output, dict):
+        # Lists are capped at --limit; say so instead of silently looking complete.
+        capped = sorted(key for key, value in output.items() if isinstance(value, list) and len(value) >= args.limit)
+        if capped:
+            output["truncated"] = {"limit": args.limit, "sections": capped}
+            print(f"NOTE: {', '.join(capped)} capped at --limit {args.limit}; pass a larger --limit to see every row", file=sys.stderr)
     print(json.dumps(output, indent=2 if args.pretty else None, ensure_ascii=True))
     return 0
 

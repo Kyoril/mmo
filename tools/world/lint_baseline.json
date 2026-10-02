@@ -1,0 +1,2009 @@
+{
+  "version": 1,
+  "placement": [
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:44:-:-14:535",
+      "message": "7 x Young Forest Wolf around (2, 538) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:4:-:102:497",
+      "message": "8 x Guard around (99, 500) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:56:Mirewater - Mire Prowler 01:-296:206",
+      "message": "9 x Mirewater - Mire Prowler 01 around (-272, 239) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:57:Mirewater - Poacher 01:-386:268",
+      "message": "9 x Mirewater - Poacher 01 around (-364, 288) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:58:Barrowfront - Risen Laborer 01:-424:168",
+      "message": "9 x Barrowfront - Risen Laborer 01 around (-412, 202) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:59:Barrowfield - Barrow Skeleton 01:-494:188",
+      "message": "10 x Barrowfield - Barrow Skeleton 01 around (-474, 218) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:60:Barrowfield - Gravebound Cultist 01:-488:238",
+      "message": "6 x Barrowfield - Gravebound Cultist 01 around (-479, 251) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "grid_pattern|pack:unit:0:66:Kingsroad - Roadside Marauder 01:-298:384",
+      "message": "10 x Kingsroad - Roadside Marauder 01 around (-278, 413) sit on a regular grid; scatter them irregularly"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:168:676",
+      "message": "Silverleaf Sprig at (168, 676): 0.5 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:320:725",
+      "message": "Silverleaf Sprig at (320, 725): 1.0 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:375:615",
+      "message": "Silverleaf Sprig at (375, 615): 1.0 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:379:615",
+      "message": "Silverleaf Sprig at (379, 615): 0.8 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:1:-:384:666",
+      "message": "Silverleaf Sprig at (384, 666): 2.5 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|object:0:7:-:-79:113",
+      "message": "Copper Vein at (-79, 113): 1.8 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:14:-:341:731",
+      "message": "Young Forest Boar at (341, 731): 1.9 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:14:-:405:689",
+      "message": "Young Forest Boar at (405, 689): 0.7 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:19:-:366:661",
+      "message": "Forest Boar at (366, 661): 1.5 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:19:-:396:648",
+      "message": "Forest Boar at (396, 648): 2.5 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:19:-:397:676",
+      "message": "Forest Boar at (397, 676): 2.5 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:41:ArmsmasterTheobald:53:-51",
+      "message": "ArmsmasterTheobald at (53, -51): 6.7 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:42:Fighter_01:38:-48",
+      "message": "Fighter_01 at (38, -48): 5.8 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:43:Sergeant Bram Halford:39:-45",
+      "message": "Sergeant Bram Halford at (39, -45): 5.9 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:5:-:-15:21",
+      "message": "Eliza Thorne at (-15, 21): 3.7 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:6:-:-10:21",
+      "message": "Garret Blackwood at (-10, 21): 4.0 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:7:-:-21:22",
+      "message": "Roland Stonehelm at (-21, 22): 3.2 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:8:-:20:22",
+      "message": "Derrick Longstride at (20, 22): 3.6 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "height_delta|unit:0:9:-:14:21",
+      "message": "Mariana Silkspun at (14, 21): 3.8 m below the ground"
+    },
+    {
+      "map": 0,
+      "key": "inside_footprint|object:0:1:-:384:666",
+      "message": "Silverleaf Sprig at (384, 666): inside the footprint of Models/FalwynPlains/Props/Furniture/SM_hc_Wagon_Big.hmsh"
+    },
+    {
+      "map": 0,
+      "key": "inside_footprint|unit:0:26:-:149:509",
+      "message": "Lina Groveroot at (149, 509): inside the footprint of Models/FalwynPlains/Props/Furniture/SM_hc_WagonDamaged.hmsh"
+    },
+    {
+      "map": 0,
+      "key": "level_band|unit:0:21:-:417:755",
+      "message": "Grimtusk, the Ironback at (417, 755) is level 5-5, outside the Forest Boar grounds band 1-4"
+    },
+    {
+      "map": 0,
+      "key": "level_band|unit:0:44:Briarwatch March - Young Wolf 04:-245:395",
+      "message": "Briarwatch March - Young Wolf 04 at (-245, 395) is level 3-4, outside the Kingsroad band 6-7"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|object:0:4:-:260:608",
+      "message": "Water Barrel at (260, 608): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:27:-:265:613",
+      "message": "Old Harbin at (265, 613): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:259:595",
+      "message": "Cellar Rat at (259, 595): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:261:599",
+      "message": "Cellar Rat at (261, 599): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:262:601",
+      "message": "Cellar Rat at (262, 601): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:265:609",
+      "message": "Cellar Rat at (265, 609): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:266:595",
+      "message": "Cellar Rat at (266, 595): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:-:267:599",
+      "message": "Cellar Rat at (267, 599): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "steep_slope|object:0:7:-:-79:113",
+      "message": "Copper Vein at (-79, 113): slope 48° exceeds 35°"
+    },
+    {
+      "map": 0,
+      "key": "steep_slope|unit:0:67:Briarwatch - Duskfang Stalker 01:-148:408",
+      "message": "Briarwatch - Duskfang Stalker 01 at (-148, 408): slope 38° exceeds 35°"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|object:2:11:-:10:4",
+      "message": "Mailbox at (10, 4): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|object:2:4:-:11:-7",
+      "message": "Water Barrel at (11, -7): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:40:-:1:18",
+      "message": "Training Dummy at (1, 18): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:40:-:3:18",
+      "message": "Training Dummy at (3, 18): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:40:-:5:18",
+      "message": "Training Dummy at (5, 18): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:4:-:5:-11",
+      "message": "Guard at (5, -11): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:4:-:8:-11",
+      "message": "Guard at (8, -11): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "height_delta|unit:2:54:-:9:9",
+      "message": "Griphook at (9, 9): 1.0 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "inside_footprint|object:2:11:-:10:4",
+      "message": "Mailbox at (10, 4): inside the footprint of Models/Prototyping/Cube.hmsh"
+    },
+    {
+      "map": 2,
+      "key": "inside_footprint|object:2:4:-:11:-7",
+      "message": "Water Barrel at (11, -7): inside the footprint of Models/Prototyping/Cube.hmsh"
+    },
+    {
+      "map": 2,
+      "key": "inside_footprint|unit:2:4:-:5:-11",
+      "message": "Guard at (5, -11): inside the footprint of Models/Prototyping/Cube.hmsh"
+    },
+    {
+      "map": 2,
+      "key": "inside_footprint|unit:2:4:-:8:-11",
+      "message": "Guard at (8, -11): inside the footprint of Models/Prototyping/Cube.hmsh"
+    }
+  ],
+  "props": [
+    {
+      "map": 0,
+      "key": "prop_buried|hfol:10317838020841123219",
+      "message": "Tree_02.hmsh at (288.6, 608.1): base is 0.81 m below the ground (allowed 0.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|hfol:11181284678479510240",
+      "message": "SM_Tree_05.hmsh at (409.4, 515.2): base is 1.01 m below the ground (allowed 0.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|hfol:12613488866373911684",
+      "message": "SM_Tree_05.hmsh at (432.1, 768.2): base is 3.71 m below the ground (allowed 0.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|hfol:272749028455473335",
+      "message": "Tree_02.hmsh at (310.1, 565.4): base is 1.23 m below the ground (allowed 0.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|hfol:4603255483172000334",
+      "message": "SM_Tree_05.hmsh at (410.0, 722.1): base is 1.06 m below the ground (allowed 0.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|hfol:5772983917506165537",
+      "message": "SM_stump_03.hmsh at (347.0, 732.6): base is 1.93 m below the ground (allowed 1.60 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|hfol:7646995976862647818",
+      "message": "SM_Tree_05.hmsh at (344.8, 709.4): base is 0.83 m below the ground (allowed 0.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|hfol:7647096592917661827",
+      "message": "SM_Tree_05.hmsh at (352.2, 718.9): base is 1.07 m below the ground (allowed 0.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|hfol:9640608718232768794",
+      "message": "Tree_02.hmsh at (316.7, 588.9): base is 1.32 m below the ground (allowed 0.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:12395803636508898250",
+      "message": "SM_hc_Target_C.hmsh at (257.8, 766.1): base is 0.40 m below the ground (allowed 0.05 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:16843960383578272569",
+      "message": "SM_hc_Pier.hmsh at (-490.9, 355.1): base is 4.87 m below the ground (allowed 0.05 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:2050426437",
+      "message": "Cylinder.hmsh at (107.0, 345.0): base is 0.54 m below the ground (allowed 0.05 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:2130926524527364094",
+      "message": "SM_hc_Haystack_C.hmsh at (287.2, 536.9): base is 0.37 m below the ground (allowed 0.05 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:2709262186390258331",
+      "message": "SM_stone_06.hmsh at (314.8, 747.7): base is 4.46 m below the ground (allowed 3.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:520",
+      "message": "Fortress_Wall_01.hmsh at (109.0, 447.0): base is 18.52 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:524",
+      "message": "Fortress_Wall_01.hmsh at (109.0, 553.0): base is 16.50 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:532",
+      "message": "Fortress_Tower_01.hmsh at (84.0, 455.0): base is 3.41 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:539",
+      "message": "Fortress_Wall_01.hmsh at (101.0, 545.0): base is 6.42 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:543",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 455.0): base is 6.91 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:544",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 545.0): base is 1.33 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:547",
+      "message": "Fortress_Wall_01.hmsh at (91.0, 455.0): base is 1.95 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:548",
+      "message": "Fortress_Wall_01.hmsh at (101.0, 455.0): base is 1.51 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:549",
+      "message": "Fortress_Wall_01.hmsh at (91.0, 545.0): base is 4.79 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:551972121208371659",
+      "message": "Tree_02.hmsh at (264.0, 568.1): base is 1.37 m below the ground (allowed 0.50 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:567",
+      "message": "Foundation_Wall_01.hmsh at (103.0, 505.0): base is 2.93 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:568",
+      "message": "Foundation_Wall_01.hmsh at (105.0, 507.0): base is 2.93 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:569",
+      "message": "Foundation_Wall_01.hmsh at (103.0, 501.0): base is 2.91 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:571",
+      "message": "Foundation_Wall_01.hmsh at (103.0, 497.0): base is 2.83 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:572",
+      "message": "Foundation_Wall_01.hmsh at (105.0, 495.0): base is 2.73 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:575",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 553.0): base is 10.52 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:576",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 447.0): base is 18.38 m below the ground (allowed 1.00 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_buried|wobj:6548326356033481854",
+      "message": "SM_hc_Pier.hmsh at (-505.4, 361.3): base is 0.37 m below the ground (allowed 0.05 m)"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:10099548462577455319",
+      "message": "SM_Tree_05.hmsh at (457.5, 581.9): a footprint corner floats 0.51 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:11148425337338106624",
+      "message": "SM_Tree_05.hmsh at (410.4, 522.4): a footprint corner floats 0.49 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:11569641504481924165",
+      "message": "SM_Tree_05.hmsh at (43.5, 677.0): a footprint corner floats 0.72 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:11797643725590328079",
+      "message": "SM_Tree_05.hmsh at (114.2, 584.6): a footprint corner floats 0.55 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:12554017098325301207",
+      "message": "SM_Tree_05.hmsh at (155.1, 580.2): a footprint corner floats 0.41 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:13000310304050785513",
+      "message": "SM_Tree_05.hmsh at (389.3, 785.7): a footprint corner floats 1.05 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:13175456947611339135",
+      "message": "SM_Tree_05.hmsh at (381.2, 773.4): a footprint corner floats 0.91 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:13328312581269912671",
+      "message": "Tree_02.hmsh at (-263.3, 356.9): a footprint corner floats 0.74 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:13469662064201901082",
+      "message": "Tree_02.hmsh at (-288.0, 299.4): a footprint corner floats 0.98 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:13904209973675797921",
+      "message": "Tree_02.hmsh at (-316.8, 273.1): a footprint corner floats 0.77 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:14563131225459354133",
+      "message": "Tree_02.hmsh at (-286.6, 538.9): a footprint corner floats 0.63 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:14574555309393430311",
+      "message": "SM_Tree_05.hmsh at (161.7, 832.5): a footprint corner floats 0.56 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:14599183230860157760",
+      "message": "Tree_02.hmsh at (-262.8, 572.2): a footprint corner floats 0.47 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:15534573849985347754",
+      "message": "Tree_02.hmsh at (16.4, 584.2): a footprint corner floats 0.33 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:16823204430855317341",
+      "message": "Tree_02.hmsh at (-49.3, 648.8): a footprint corner floats 0.33 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:16823282862114362129",
+      "message": "Tree_02.hmsh at (-40.3, 630.1): a footprint corner floats 0.44 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:16899127006747537287",
+      "message": "SM_Tree_05.hmsh at (114.6, 447.0): a footprint corner floats 0.70 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:17490648297589449673",
+      "message": "Tree_02.hmsh at (-184.7, 743.8): a footprint corner floats 0.49 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:2377016744626288600",
+      "message": "Tree_02.hmsh at (254.0, 789.0): a footprint corner floats 0.48 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:4122159914173635907",
+      "message": "Tree_02.hmsh at (263.4, 480.5): a footprint corner floats 0.37 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:6273690139119874255",
+      "message": "SM_Tree_05.hmsh at (406.3, 594.9): a footprint corner floats 0.48 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:7462647670057387594",
+      "message": "Tree_02.hmsh at (322.3, 514.7): a footprint corner floats 0.33 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:8394467285048772770",
+      "message": "Tree_02.hmsh at (-2.2, 592.1): a footprint corner floats 0.51 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:9495835325014894422",
+      "message": "Tree_02.hmsh at (326.3, 579.7): a footprint corner floats 0.39 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|hfol:9767142728180323659",
+      "message": "SM_Tree_05.hmsh at (454.4, 648.7): a footprint corner floats 0.37 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:10754645726273718910",
+      "message": "SM_hc_Bookcase_A.hmsh at (331.7, 565.6): a footprint corner floats 1.51 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:11736172135226262138",
+      "message": "SM_hc_Chest.hmsh at (336.6, 554.6): a footprint corner floats 1.72 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:16487879727980823298",
+      "message": "SM_hc_DinnerTable_B.hmsh at (344.6, 553.1): a footprint corner floats 3.01 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:17944848150373963357",
+      "message": "SM_hc_Bookcase_A.hmsh at (337.9, 561.9): a footprint corner floats 1.54 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:18183530386609610645",
+      "message": "SM_hc_DinnerTable_B.hmsh at (342.2, 556.9): a footprint corner floats 2.20 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:2630581494366932705",
+      "message": "SM_hc_Bookcase_A.hmsh at (336.3, 562.8): a footprint corner floats 1.54 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:3744566109499041360",
+      "message": "SM_hc_Bookcase_A.hmsh at (334.8, 563.8): a footprint corner floats 1.52 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:3882417762159893462",
+      "message": "Oakenshire_TownHall_001.hwmo at (337.1, 548.0): a footprint corner floats 2.76 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:4438029190290773824",
+      "message": "SM_hc_Bookcase_A.hmsh at (333.3, 564.7): a footprint corner floats 1.51 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:4536538794313722590",
+      "message": "SM_hc_WoodCrate.hmsh at (147.9, 512.1): a footprint corner floats 0.69 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:555",
+      "message": "Balcony_02.hmsh at (107.0, 505.0): a footprint corner floats 6.70 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:556",
+      "message": "Balcony_02.hmsh at (107.0, 497.0): a footprint corner floats 6.94 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:557",
+      "message": "Balcony_02.hmsh at (82.0, 535.0): a footprint corner floats 6.68 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:558",
+      "message": "Balcony_02.hmsh at (82.0, 467.0): a footprint corner floats 6.81 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:559",
+      "message": "Balcony_02.hmsh at (82.0, 480.0): a footprint corner floats 6.61 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:560",
+      "message": "Balcony_02.hmsh at (82.0, 519.0): a footprint corner floats 6.71 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:570",
+      "message": "Floor_01.hmsh at (105.0, 501.0): a footprint corner floats 1.46 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:8107755902977961546",
+      "message": "SM_hc_DinnerTable_B.hmsh at (341.2, 555.3): a footprint corner floats 1.88 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:8290733669967064449",
+      "message": "HouseTest.hwmo at (278.5, 530.7): a footprint corner floats 0.76 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:8331744964239187468",
+      "message": "SM_hc_WoodBarrel.hmsh at (147.4, 511.3): a footprint corner floats 0.90 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:852170945476138740",
+      "message": "SM_hc_DinnerTable_B.hmsh at (345.6, 554.8): a footprint corner floats 3.14 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_floating|wobj:981387496298482349",
+      "message": "SM_hc_Haystack_A.hmsh at (288.4, 541.3): a footprint corner floats 0.32 m above the ground"
+    },
+    {
+      "map": 0,
+      "key": "prop_grid_pattern|grid:hfol:1630997689289322010",
+      "message": "16 x SM_stump_03.hmsh are evenly spaced like a machine-made grid"
+    },
+    {
+      "map": 0,
+      "key": "prop_grid_pattern|grid:wobj:10754645726273718910",
+      "message": "5 x SM_hc_Bookcase_A.hmsh are evenly spaced like a machine-made grid"
+    },
+    {
+      "map": 0,
+      "key": "prop_grid_pattern|grid:wobj:14855154279832668660",
+      "message": "8 x Border_02.hmsh are evenly spaced like a machine-made grid"
+    },
+    {
+      "map": 0,
+      "key": "prop_grid_pattern|grid:wobj:1501993713",
+      "message": "10 x SM_hc_Camptent_B.hmsh are evenly spaced like a machine-made grid"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:12206448774685572467",
+      "message": "Flower_01.hmsh at (404.0, 757.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:12206611437370024568",
+      "message": "Flower_01.hmsh at (412.0, 761.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:15254371498845732600",
+      "message": "Tree_02.hmsh at (140.8, 498.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:1630997689289322010",
+      "message": "SM_stump_03.hmsh at (374.0, 729.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:1631114425500695202",
+      "message": "SM_stump_03.hmsh at (392.5, 731.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:2452256159272535650",
+      "message": "Tree_02.hmsh at (248.5, 595.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:2567720553333781610",
+      "message": "SM_stump_03.hmsh at (388.8, 692.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:3677919955351733768",
+      "message": "SM_stump_03.hmsh at (317.9, 679.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:4073901858747742292",
+      "message": "SM_stump_03.hmsh at (324.6, 700.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:4588458544773108124",
+      "message": "SM_Tree_05.hmsh at (387.7, 601.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:5772983917506165537",
+      "message": "SM_stump_03.hmsh at (347.0, 732.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:6653327770276752160",
+      "message": "SM_stump_03.hmsh at (320.0, 740.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:6794896292432687022",
+      "message": "SM_stump_03.hmsh at (309.1, 723.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:698358044344308354",
+      "message": "SM_stump_03.hmsh at (371.6, 682.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:7150466234836697033",
+      "message": "Tree_02.hmsh at (336.0, 608.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:7227476724644768899",
+      "message": "SM_Tree_05.hmsh at (345.9, 646.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:7227508009743601608",
+      "message": "SM_Tree_05.hmsh at (344.8, 653.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:7292948757347371157",
+      "message": "SM_stump_03.hmsh at (326.3, 646.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:7316720075081303804",
+      "message": "SM_stump_03.hmsh at (311.3, 629.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:7476921802971029075",
+      "message": "SM_stump_03.hmsh at (344.1, 678.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:7763380104362784031",
+      "message": "SM_stump_03.hmsh at (348.1, 619.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:8202383505778709499",
+      "message": "SM_stump_03.hmsh at (376.8, 646.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:10565906866567994135",
+      "message": "SM_Fence_05.hmsh at (201.3, 516.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:10754645726273718910",
+      "message": "SM_hc_Bookcase_A.hmsh at (331.7, 565.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:11126977590783670303",
+      "message": "SM_Fence_04.hmsh at (239.9, 566.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:11736172135226262138",
+      "message": "SM_hc_Chest.hmsh at (336.6, 554.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:12054636612347807094",
+      "message": "SM_stone_06.hmsh at (314.7, 753.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:12395803636508898250",
+      "message": "SM_hc_Target_C.hmsh at (257.8, 766.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:12520083768007379668",
+      "message": "WoodLantern_A.hwmo at (182.8, 510.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:13544113915131662179",
+      "message": "SM_Fence_01.hmsh at (237.5, 565.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:14421878526371815784",
+      "message": "SM_Fence_06.hmsh at (162.2, 508.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:1501993713",
+      "message": "SM_hc_Camptent_B.hmsh at (-127.8, 110.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:15023795139526443101",
+      "message": "Border_02.hmsh at (310.5, 571.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:15367984603361509633",
+      "message": "WoodLantern_A.hwmo at (158.4, 508.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:15506318760673951644",
+      "message": "HouseTest.hwmo at (-465.0, 343.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:15743589621381224496",
+      "message": "SM_Fence_03.hmsh at (255.8, 557.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:15942862622137660808",
+      "message": "SM_Fence_01.hmsh at (223.4, 538.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:16203574585404621813",
+      "message": "Border_02.hmsh at (312.1, 570.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:16378047762389236318",
+      "message": "WoodLantern_A.hwmo at (270.9, 575.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:1659406366666269635",
+      "message": "SM_Fence_01.hmsh at (221.8, 551.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:16843960383578272569",
+      "message": "SM_hc_Pier.hmsh at (-490.9, 355.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:17047534019004921149",
+      "message": "WoodLantern_A.hwmo at (125.4, 475.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:17212173193625134279",
+      "message": "WoodLantern_A.hwmo at (139.1, 511.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:1727746655",
+      "message": "SM_hc_CampFire_A.hmsh at (-93.4, 141.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:17312858972038391841",
+      "message": "SM_Fence_01.hmsh at (233.3, 555.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:17722179149827950306",
+      "message": "SM_stone_06.hmsh at (319.7, 751.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:1791221111986188178",
+      "message": "SM_Fence_01.hmsh at (205.5, 522.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:17944848150373963357",
+      "message": "SM_hc_Bookcase_A.hmsh at (337.9, 561.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:1851263712468996073",
+      "message": "SM_Fence_06.hmsh at (235.4, 556.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:2012548175",
+      "message": "SM_hc_CampFire_A.hmsh at (-123.7, 106.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:2033732477",
+      "message": "SM_hc_Camptent_B.hmsh at (-97.2, 146.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:2050426437",
+      "message": "Cylinder.hmsh at (107.0, 345.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:2225635037",
+      "message": "SM_hc_CampFire_A.hmsh at (-125.2, 145.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:2522957878",
+      "message": "SM_hc_Camptent_B.hmsh at (-130.5, 148.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:255626072",
+      "message": "SM_hc_Camptent_B.hmsh at (-126.9, 101.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:2630581494366932705",
+      "message": "SM_hc_Bookcase_A.hmsh at (336.3, 562.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:2709262186390258331",
+      "message": "SM_stone_06.hmsh at (314.8, 747.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:298920051",
+      "message": "SM_hc_WagonDamaged.hmsh at (-86.5, 134.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:3422460250228677036",
+      "message": "SM_Fence_01.hmsh at (180.7, 509.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:3464411365",
+      "message": "SM_hc_Camptent_B.hmsh at (-95.6, 136.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:3558399371998886736",
+      "message": "SM_Fence_04.hmsh at (220.1, 549.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:3568796440482989805",
+      "message": "SM_Fence_04.hmsh at (207.3, 524.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:3744566109499041360",
+      "message": "SM_hc_Bookcase_A.hmsh at (334.8, 563.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:3850861330422559994",
+      "message": "SM_hc_Camptent_B.hmsh at (253.1, 766.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:3882417762159893462",
+      "message": "Oakenshire_TownHall_001.hwmo at (337.1, 548.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:428044443",
+      "message": "SM_hc_Camptent_B.hmsh at (-125.7, 139.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:4426299814074139213",
+      "message": "Border_02.hmsh at (312.4, 575.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:4438029190290773824",
+      "message": "SM_hc_Bookcase_A.hmsh at (333.3, 564.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:4803095572556855044",
+      "message": "Stairs_01.hmsh at (313.9, 572.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:483177380993806898",
+      "message": "SM_Fence_04.hmsh at (164.6, 507.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:518",
+      "message": "Fortress_Tower_01.hmsh at (84.0, 509.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:5180199208010731651",
+      "message": "SM_hc_Camptent_B.hmsh at (227.8, 762.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:519",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 517.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:521",
+      "message": "Fortress_Tower_01.hmsh at (84.0, 545.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:522",
+      "message": "Fortress_Arch_01.hmsh at (109.0, 522.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:527",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 473.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:528",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 463.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:529",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 527.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:530",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 537.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:531",
+      "message": "Fortress_Arch_01.hmsh at (84.0, 500.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:533",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 483.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:538",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 488.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:539",
+      "message": "Fortress_Wall_01.hmsh at (101.0, 545.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:540",
+      "message": "Fortress_Arch_01.hmsh at (109.0, 479.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:541",
+      "message": "Fortress_Wall_01.hmsh at (109.0, 537.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:542",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 513.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:543",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 455.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:544",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 545.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:545",
+      "message": "Fortress_Wall_01.hmsh at (109.0, 462.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:547",
+      "message": "Fortress_Wall_01.hmsh at (91.0, 455.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:548",
+      "message": "Fortress_Wall_01.hmsh at (101.0, 455.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:549",
+      "message": "Fortress_Wall_01.hmsh at (91.0, 545.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:550",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 531.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:551",
+      "message": "Fortress_Wall_01.hmsh at (109.0, 506.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:551972121208371659",
+      "message": "Tree_02.hmsh at (264.0, 568.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:552",
+      "message": "Fortress_Tower_01.hmsh at (84.0, 491.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:553",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 470.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:554",
+      "message": "Fortress_Wall_01.hmsh at (109.0, 496.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:555",
+      "message": "Balcony_02.hmsh at (107.0, 505.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:556",
+      "message": "Balcony_02.hmsh at (107.0, 497.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:567",
+      "message": "Foundation_Wall_01.hmsh at (103.0, 505.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:568",
+      "message": "Foundation_Wall_01.hmsh at (105.0, 507.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:569",
+      "message": "Foundation_Wall_01.hmsh at (103.0, 501.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:570",
+      "message": "Floor_01.hmsh at (105.0, 501.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:571",
+      "message": "Foundation_Wall_01.hmsh at (103.0, 497.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:5713291674537484661",
+      "message": "WoodLantern_A.hwmo at (223.1, 553.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:572",
+      "message": "Foundation_Wall_01.hmsh at (105.0, 495.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:573",
+      "message": "Foundation_Column_01.hmsh at (103.0, 507.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:574",
+      "message": "Foundation_Column_01.hmsh at (103.0, 495.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:5781227182829565163",
+      "message": "SM_Fence_02.hmsh at (177.6, 509.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:6010524385746012748",
+      "message": "SM_hc_Camptent_B.hmsh at (261.7, 766.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:6154673297397848068",
+      "message": "Border_02.hmsh at (314.1, 574.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:6219086134528247027",
+      "message": "SM_hc_Camptent_B.hmsh at (235.7, 761.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:6548326356033481854",
+      "message": "SM_hc_Pier.hmsh at (-505.4, 361.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:6798036785257358440",
+      "message": "Border_02.hmsh at (315.9, 573.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:6915375695178525296",
+      "message": "SM_Fence_06.hmsh at (213.4, 536.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:7416680479746947149",
+      "message": "WoodLantern_A.hwmo at (214.0, 537.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:769305343",
+      "message": "SM_Fence_03.hmsh at (-86.0, 138.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:7754561438370621472",
+      "message": "SM_hc_CampFire_A.hmsh at (231.0, 759.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:7836253780261889169",
+      "message": "SM_hc_Wagon_Big.hmsh at (385.3, 668.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:7901536297932650047",
+      "message": "Stairs_01.hmsh at (310.6, 573.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:8071283896705102248",
+      "message": "SM_Fence_03.hmsh at (202.9, 518.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:8113939386983648207",
+      "message": "Border_02.hmsh at (317.5, 572.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:814220156",
+      "message": "SM_Fence_05.hmsh at (-84.0, 139.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:852170945476138740",
+      "message": "SM_hc_DinnerTable_B.hmsh at (345.6, 554.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:9010816605037314178",
+      "message": "SM_Fence_05.hmsh at (212.8, 534.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:9454805207535355449",
+      "message": "WoodLantern_A.hwmo at (203.9, 520.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:9658200298078390010",
+      "message": "SM_hc_CampFire_A.hmsh at (258.2, 762.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:9888181939690578343",
+      "message": "SM_Fence_05.hmsh at (160.1, 508.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_spawn|hfol:10227940645619536937",
+      "message": "Tree_02.hmsh at (-431.6, 271.0): covers the spawn point of Barrowfront Camp - Hargen Dray"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_spawn|hfol:12895445112696974621",
+      "message": "Tree_02.hmsh at (243.0, 780.4): covers the spawn point of unit:0:37:-:243:779"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_spawn|hfol:2452361216615151278",
+      "message": "Tree_02.hmsh at (248.4, 581.7): covers the spawn point of object:0:1:-:249:581"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_spawn|wobj:1248239675558434552",
+      "message": "HouseTest.hwmo at (296.5, 540.7): covers the spawn point of unit:0:16:-:295:538"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_spawn|wobj:3882417762159893462",
+      "message": "Oakenshire_TownHall_001.hwmo at (337.1, 548.0): covers the spawn point of unit:0:20:-:329:559"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_spawn|wobj:4555430321098860313",
+      "message": "Oakenshire_Inn_001.hwmo at (265.3, 603.9): covers the spawn point of unit:0:28:-:267:599"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_spawn|wobj:531",
+      "message": "Fortress_Arch_01.hmsh at (84.0, 500.0): covers the spawn point of unit:0:4:-:84:497"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_spawn|wobj:570",
+      "message": "Floor_01.hmsh at (105.0, 501.0): covers the spawn point of unit:0:4:-:102:497"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_spawn|wobj:8290733669967064449",
+      "message": "HouseTest.hwmo at (278.5, 530.7): covers the spawn point of object:0:4:-:275:529"
+    },
+    {
+      "map": 0,
+      "key": "prop_over_hole|wobj:4555430321098860313",
+      "message": "Oakenshire_Inn_001.hwmo at (265.3, 603.9): stands over a terrain hole"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|hfol:1410364949162101991",
+      "message": "Tree_02.hmsh at (276.1, 559.5): overlaps Runestone_01_Unstable.hmsh (wobj:6284499470419061652)"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|hfol:272364598318296931",
+      "message": "Tree_02.hmsh at (311.9, 547.9): overlaps Oakenshire_TownHall_001.hwmo (wobj:3882417762159893462)"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|wobj:1069",
+      "message": "SM_hc_WagonDamaged.hmsh at (148.1, 511.8): overlaps SM_hc_WoodBarrel.hmsh (wobj:13378052169432014541)"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|wobj:1248239675558434552",
+      "message": "HouseTest.hwmo at (296.5, 540.7): overlaps HouseTest.hwmo (wobj:8290733669967064449)"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|wobj:13378052169432014541",
+      "message": "SM_hc_WoodBarrel.hmsh at (150.1, 510.7): overlaps SM_hc_WagonDamaged.hmsh (wobj:1069)"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|wobj:3882417762159893462",
+      "message": "Oakenshire_TownHall_001.hwmo at (337.1, 548.0): overlaps HouseTest.hwmo (wobj:1248239675558434552)"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|wobj:4536538794313722590",
+      "message": "SM_hc_WoodCrate.hmsh at (147.9, 512.1): overlaps SM_hc_WagonDamaged.hmsh (wobj:1069)"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|wobj:6284499470419061652",
+      "message": "Runestone_01_Unstable.hmsh at (273.3, 560.1): overlaps Tree_02.hmsh (hfol:1410364949162101991)"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|wobj:8290733669967064449",
+      "message": "HouseTest.hwmo at (278.5, 530.7): overlaps HouseTest.hwmo (wobj:1248239675558434552)"
+    },
+    {
+      "map": 0,
+      "key": "prop_overlap|wobj:8331744964239187468",
+      "message": "SM_hc_WoodBarrel.hmsh at (147.4, 511.3): overlaps SM_hc_WagonDamaged.hmsh (wobj:1069)"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:10099548462577455319",
+      "message": "SM_Tree_05.hmsh at (457.5, 581.9): ground slope 62 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:10154409735137503854",
+      "message": "SM_Tree_05.hmsh at (451.7, 572.0): ground slope 54 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:10305542304569051074",
+      "message": "SM_Tree_05.hmsh at (449.9, 564.7): ground slope 66 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:10665499079395028748",
+      "message": "SM_Tree_05.hmsh at (104.9, 681.0): ground slope 58 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:11181284678479510240",
+      "message": "SM_Tree_05.hmsh at (409.4, 515.2): ground slope 54 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:12613488866373911684",
+      "message": "SM_Tree_05.hmsh at (432.1, 768.2): ground slope 51 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:13000310304050785513",
+      "message": "SM_Tree_05.hmsh at (389.3, 785.7): ground slope 53 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:13175456947611339135",
+      "message": "SM_Tree_05.hmsh at (381.2, 773.4): ground slope 55 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:13449602780579781783",
+      "message": "SM_Tree_05.hmsh at (274.8, 812.4): ground slope 53 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:13469662064201901082",
+      "message": "Tree_02.hmsh at (-288.0, 299.4): ground slope 47 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:13904209973675797921",
+      "message": "Tree_02.hmsh at (-316.8, 273.1): ground slope 48 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:14574555309393430311",
+      "message": "SM_Tree_05.hmsh at (161.7, 832.5): ground slope 53 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:14574574438136486589",
+      "message": "SM_Tree_05.hmsh at (130.5, 822.4): ground slope 52 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:16899127006747537287",
+      "message": "SM_Tree_05.hmsh at (114.6, 447.0): ground slope 69 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:17037492047431545112",
+      "message": "SM_Tree_05.hmsh at (107.7, 421.2): ground slope 58 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:17290915557024001755",
+      "message": "SM_Tree_05.hmsh at (148.7, 427.1): ground slope 50 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:18043767893200102840",
+      "message": "SM_Tree_05.hmsh at (158.3, 411.9): ground slope 51 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:5631788352816277761",
+      "message": "SM_Tree_05.hmsh at (143.5, 567.3): ground slope 57 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:7517668569087374236",
+      "message": "SM_Tree_05.hmsh at (437.6, 658.9): ground slope 51 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:80480489685700039",
+      "message": "SM_Tree_05.hmsh at (212.7, 405.0): ground slope 50 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:8657685404530830362",
+      "message": "SM_Tree_05.hmsh at (471.2, 691.5): ground slope 51 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:935769416038604050",
+      "message": "SM_Tree_05.hmsh at (258.2, 437.1): ground slope 57 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|hfol:9767142728180323659",
+      "message": "SM_Tree_05.hmsh at (454.4, 648.7): ground slope 59 deg exceeds 50 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:1069",
+      "message": "SM_hc_WagonDamaged.hmsh at (148.1, 511.8): ground slope 16 deg exceeds 16 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:1248239675558434552",
+      "message": "HouseTest.hwmo at (296.5, 540.7): ground slope 15 deg exceeds 8 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:15506318760673951644",
+      "message": "HouseTest.hwmo at (-465.0, 343.0): ground slope 9 deg exceeds 8 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:16487879727980823298",
+      "message": "SM_hc_DinnerTable_B.hmsh at (344.6, 553.1): ground slope 21 deg exceeds 20 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:16843960383578272569",
+      "message": "SM_hc_Pier.hmsh at (-490.9, 355.1): ground slope 32 deg exceeds 20 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:3882417762159893462",
+      "message": "Oakenshire_TownHall_001.hwmo at (337.1, 548.0): ground slope 14 deg exceeds 8 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:428044443",
+      "message": "SM_hc_Camptent_B.hmsh at (-125.7, 139.9): ground slope 17 deg exceeds 15 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:4555430321098860313",
+      "message": "Oakenshire_Inn_001.hwmo at (265.3, 603.9): ground slope 10 deg exceeds 8 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:520",
+      "message": "Fortress_Wall_01.hmsh at (109.0, 447.0): ground slope 69 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:521",
+      "message": "Fortress_Tower_01.hmsh at (84.0, 545.0): ground slope 67 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:524",
+      "message": "Fortress_Wall_01.hmsh at (109.0, 553.0): ground slope 69 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:532",
+      "message": "Fortress_Tower_01.hmsh at (84.0, 455.0): ground slope 73 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:539",
+      "message": "Fortress_Wall_01.hmsh at (101.0, 545.0): ground slope 71 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:543",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 455.0): ground slope 68 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:544",
+      "message": "Fortress_Tower_01.hmsh at (109.0, 545.0): ground slope 72 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:545",
+      "message": "Fortress_Wall_01.hmsh at (109.0, 462.0): ground slope 53 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:547",
+      "message": "Fortress_Wall_01.hmsh at (91.0, 455.0): ground slope 74 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:548",
+      "message": "Fortress_Wall_01.hmsh at (101.0, 455.0): ground slope 74 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:549",
+      "message": "Fortress_Wall_01.hmsh at (91.0, 545.0): ground slope 67 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:575",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 553.0): ground slope 68 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:576",
+      "message": "Fortress_Wall_01.hmsh at (84.0, 447.0): ground slope 73 deg exceeds 45 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:8107755902977961546",
+      "message": "SM_hc_DinnerTable_B.hmsh at (341.2, 555.3): ground slope 21 deg exceeds 20 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:8290733669967064449",
+      "message": "HouseTest.hwmo at (278.5, 530.7): ground slope 15 deg exceeds 8 deg for this asset"
+    },
+    {
+      "map": 0,
+      "key": "prop_slope|wobj:852170945476138740",
+      "message": "SM_hc_DinnerTable_B.hmsh at (345.6, 554.8): ground slope 21 deg exceeds 20 deg for this asset"
+    },
+    {
+      "map": 2,
+      "key": "prop_buried|wobj:16392246145289718572",
+      "message": "Monastery_001.hwmo at (32.0, 42.0): base is 2.10 m below the ground (allowed 0.05 m)"
+    },
+    {
+      "map": 2,
+      "key": "prop_buried|wobj:3951836418029000653",
+      "message": "Wooden_Archway.hmsh at (-37.0, 197.0): base is 0.69 m below the ground (allowed 0.30 m)"
+    },
+    {
+      "map": 2,
+      "key": "prop_buried|wobj:4542338970769447339",
+      "message": "Mine_01.hwmo at (-35.0, 233.5): base is 27.15 m below the ground (allowed 0.05 m)"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1",
+      "message": "Cylinder.hmsh at (0.0, 0.0): a footprint corner floats 2.05 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1037505603",
+      "message": "Ramp.hmsh at (-2.0, 5.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1149758366",
+      "message": "QuarterCylinder.hmsh at (2.0, 2.0): a footprint corner floats 1.00 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1252978629",
+      "message": "Cube.hmsh at (-5.0, -20.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1395176866",
+      "message": "ChamferCube.hmsh at (-8.5, 8.0): a footprint corner floats 2.00 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1410086821",
+      "message": "ChamferCube.hmsh at (15.8, 14.0): a footprint corner floats 1.00 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1525434834",
+      "message": "Ramp.hmsh at (-5.0, -16.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1588275605",
+      "message": "Ramp.hmsh at (-5.0, -18.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1613189597",
+      "message": "Ramp.hmsh at (-5.0, -20.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1620438509",
+      "message": "Cube.hmsh at (-2.0, -5.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:172327223",
+      "message": "QuarterCylinder.hmsh at (-2.0, -2.0): a footprint corner floats 1.00 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:1898364245",
+      "message": "Cube.hmsh at (-5.0, -2.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:2315437327",
+      "message": "Cube.hmsh at (17.2, 16.8): a footprint corner floats 0.50 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:2760920802",
+      "message": "Cube.hmsh at (20.0, 12.0): a footprint corner floats 0.49 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:2830482987",
+      "message": "QuarterCylinder.hmsh at (2.0, -2.0): a footprint corner floats 1.00 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:3070191329",
+      "message": "Ramp.hmsh at (-5.0, -14.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:3117984807",
+      "message": "Ramp.hmsh at (2.0, -5.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:3149856958",
+      "message": "Ramp.hmsh at (-5.0, -2.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:3377572160",
+      "message": "Cube.hmsh at (-2.0, 5.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:3951836418029000653",
+      "message": "Wooden_Archway.hmsh at (-37.0, 197.0): a footprint corner floats 0.96 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:4131906820",
+      "message": "ChamferCube.hmsh at (-8.0, 8.0): a footprint corner floats 1.00 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:4178113790",
+      "message": "Cylinder.hmsh at (17.0, 9.2): a footprint corner floats 0.75 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:4187707935",
+      "message": "Shrub_02.hmsh at (2.0, 0.0): a footprint corner floats 2.98 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:4237682353",
+      "message": "Ramp.hmsh at (5.0, 2.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:57142511",
+      "message": "QuarterCylinder.hmsh at (-2.0, 2.0): a footprint corner floats 1.00 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:911164282",
+      "message": "Cube.hmsh at (2.0, -2.0): a footprint corner floats 0.99 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_floating|wobj:977874700",
+      "message": "ChamferCube.hmsh at (-9.0, 8.0): a footprint corner floats 1.00 m above the ground"
+    },
+    {
+      "map": 2,
+      "key": "prop_grid_pattern|grid:hfol:12095279737013606413",
+      "message": "194 x Tree_02.hmsh are evenly spaced like a machine-made grid"
+    },
+    {
+      "map": 2,
+      "key": "prop_in_water|wobj:16098526769078440368",
+      "message": "Runestone_01_Unstable.hmsh at (-143.0, 25.0): base is under 2.0 m of water"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|hfol:12149674595563325946",
+      "message": "Tree_02.hmsh at (-65.1, 63.0): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|hfol:12163290809803763645",
+      "message": "Tree_02.hmsh at (-87.6, 66.4): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|hfol:14211310798680998162",
+      "message": "Tree_02.hmsh at (-76.3, 81.6): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|hfol:14248659520666810093",
+      "message": "Tree_02.hmsh at (-73.6, 98.0): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|hfol:14798237871983398118",
+      "message": "Tree_02.hmsh at (-101.5, 101.4): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|hfol:14912048769138024774",
+      "message": "Tree_02.hmsh at (-154.9, 20.8): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|hfol:14912258283388265223",
+      "message": "Tree_02.hmsh at (-146.2, 50.4): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|wobj:2315437327",
+      "message": "Cube.hmsh at (17.2, 16.8): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|wobj:3105078333",
+      "message": "Cube.hmsh at (-20.0, -20.0): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_road|wobj:7883273685063518117",
+      "message": "Ramp.hmsh at (23.0, 39.0): stands on or next to a road"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_spawn|wobj:16392246145289718572",
+      "message": "Monastery_001.hwmo at (32.0, 42.0): covers the spawn point of object:2:13:-:31:42"
+    },
+    {
+      "map": 2,
+      "key": "prop_on_spawn|wobj:3105078333",
+      "message": "Cube.hmsh at (-20.0, -20.0): covers the spawn point of unit:2:4:-:5:-11"
+    },
+    {
+      "map": 2,
+      "key": "prop_over_hole|wobj:3951836418029000653",
+      "message": "Wooden_Archway.hmsh at (-37.0, 197.0): stands over a terrain hole"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|hfol:14063282465982019485",
+      "message": "Tree_02.hmsh at (-13.9, -19.6): overlaps Cube.hmsh (wobj:3105078333)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:1",
+      "message": "Cylinder.hmsh at (0.0, 0.0): overlaps Shrub_02.hmsh (wobj:4187707935)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:1620438509",
+      "message": "Cube.hmsh at (-2.0, -5.0): overlaps Shrub_02.hmsh (wobj:4187707935)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:16392246145289718572",
+      "message": "Monastery_001.hwmo at (32.0, 42.0): overlaps Cube.hmsh (wobj:2760920802)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:2760920802",
+      "message": "Cube.hmsh at (20.0, 12.0): overlaps Monastery_001.hwmo (wobj:16392246145289718572)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:3105078333",
+      "message": "Cube.hmsh at (-20.0, -20.0): overlaps Shrub_02.hmsh (wobj:4187707935)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:3411034011",
+      "message": "Cube.hmsh at (20.0, 12.0): overlaps Monastery_001.hwmo (wobj:16392246145289718572)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:3951836418029000653",
+      "message": "Wooden_Archway.hmsh at (-37.0, 197.0): overlaps Mine_01.hwmo (wobj:4542338970769447339)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:4187707935",
+      "message": "Shrub_02.hmsh at (2.0, 0.0): overlaps Cube.hmsh (wobj:1620438509)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:4542338970769447339",
+      "message": "Mine_01.hwmo at (-35.0, 233.5): overlaps Wooden_Archway.hmsh (wobj:3951836418029000653)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:7883273685063518117",
+      "message": "Ramp.hmsh at (23.0, 39.0): overlaps Monastery_001.hwmo (wobj:16392246145289718572)"
+    },
+    {
+      "map": 2,
+      "key": "prop_overlap|wobj:911164282",
+      "message": "Cube.hmsh at (2.0, -2.0): overlaps Shrub_02.hmsh (wobj:4187707935)"
+    },
+    {
+      "map": 2,
+      "key": "prop_slope|wobj:3951836418029000653",
+      "message": "Wooden_Archway.hmsh at (-37.0, 197.0): ground slope 58 deg exceeds 12 deg for this asset"
+    },
+    {
+      "map": 2,
+      "key": "prop_slope|wobj:4542338970769447339",
+      "message": "Mine_01.hwmo at (-35.0, 233.5): ground slope 45 deg exceeds 20 deg for this asset"
+    }
+  ],
+  "reachability": [
+    {
+      "map": 0,
+      "key": "no_turn_in|quest:56",
+      "message": "Quest 56 'Out of the Barrowfield' has no NPC or object that accepts the turn-in"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:19:req1",
+      "message": "Quest 19 'Foundations of Progress': nearest 'collect Foundation Stake' source is 250 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:24:req0",
+      "message": "Quest 24 'The Red Armbands': nearest 'collect Torn Bandit Armband' source is 266 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:27:req1",
+      "message": "Quest 27 'The Old King's Road': nearest 'kill Kingsroad Hexer' source is 255 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:35:req0",
+      "message": "Quest 35 'A Shepherd's Mercy': nearest 'kill Forest Wolf' source is 551 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:37:req0",
+      "message": "Quest 37 'Essence of the Wild': nearest 'kill Young Forest Wolf' source is 294 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:39:req0",
+      "message": "Quest 39 'Eyes on the Kingsroad': nearest 'kill Kingsroad Cutthroat' source is 590 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:55:req0",
+      "message": "Quest 55 'Tails for the Tally': nearest 'collect Bog Rat Tail' source is 358 m from the quest giver (> 250 m)"
+    },
+    {
+      "map": 0,
+      "key": "source_far|quest:9:req0",
+      "message": "Quest 9 'A Crate Too Far': nearest 'collect Lina's Lost Crate' source is 278 m from the quest giver (> 250 m)"
+    }
+  ]
+}

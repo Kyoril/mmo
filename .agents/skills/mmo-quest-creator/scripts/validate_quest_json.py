@@ -16,6 +16,16 @@ from quest_catalog_lib import (
 )
 
 
+def world_warnings(doc: dict) -> list[str]:
+    """Level-band checks against the world atlas (a tooling failure never blocks validation)."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools" / "world"))
+        from worldkit.skill_checks import quest_draft_warnings
+        return quest_draft_warnings(doc)
+    except Exception as exc:  # noqa: BLE001 - surfaced as a warning, never a crash
+        return [f"world level-band checks skipped: {exc}"]
+
+
 def add_error(errors: list[str], message: str) -> None:
     errors.append(message)
 
@@ -83,6 +93,8 @@ def validate_document(doc: dict, project_root: Path) -> tuple[list[str], list[st
         add_error(errors, "quest.questlevel must not be negative")
     if quest_message.HasField("type") and quest_message.type not in {0, 1, 2}:
         add_error(errors, "quest.type must be one of 0, 1, 2")
+    if quest_message.flags & 0x0020:
+        add_error(errors, "quest.flags sets AutoRewarded (0x20); every quest must end with a turn-in at an NPC or object (docs/world/bible.md, quest-writing guide)")
     if len(quest_message.requirements) > 4:
         add_error(errors, "quest.requirements may contain at most 4 entries because runtime quest counters are packed into 4 slots")
     if quest_message.HasField("timelimit") and quest_message.timelimit > 0 and quest_message.timelimit < 5:
@@ -315,6 +327,7 @@ def main() -> int:
         return 1
 
     errors, warnings = validate_document(doc, project_root)
+    warnings.extend(world_warnings(doc))
     for message in warnings:
         print(f"WARNING: {message}")
     if errors:

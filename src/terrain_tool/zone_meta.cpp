@@ -32,6 +32,21 @@ namespace mmo
 			return false;
 		}
 
+		if (waterType == 0 || waterType >= static_cast<uint8>(terrain::WaterType::Count_))
+		{
+			ELOG("Zone metadata water type " << static_cast<uint32>(waterType) << " is invalid (valid: 1 Water, 2 Ocean, 3 Lava, 4 Slime)!");
+			return false;
+		}
+
+		for (const auto &[x, z] : pages)
+		{
+			if (x < pageX0 || x > pageX1 || z < pageZ0 || z > pageZ1)
+			{
+				ELOG("Zone metadata lists page " << x << "," << z << " outside of its page rect!");
+				return false;
+			}
+		}
+
 		return true;
 	}
 
@@ -57,6 +72,29 @@ namespace mmo
 		out.material = json.value("material", String());
 		out.waterLevel = json.value("waterLevel", std::numeric_limits<float>::quiet_NaN());
 		out.waterMaterial = json.value("waterMaterial", String("Worlds/Water_Base.hmat"));
+		out.waterType = static_cast<uint8>(json.value("waterType", 1));
+		out.skipExistingPages = json.value("skipExistingPages", false);
+		out.fillExistingZones = json.value("fillExistingZones", false);
+
+		if (const String zoneMap = json.value("zoneMap", String()); !zoneMap.empty())
+		{
+			out.zoneMap = std::filesystem::path(zoneMap).is_absolute() ? std::filesystem::path(zoneMap) : path.parent_path() / zoneMap;
+		}
+
+		out.pages.clear();
+		if (const auto pages = json.find("pages"); pages != json.end() && pages->is_array())
+		{
+			for (const auto &page : *pages)
+			{
+				if (!page.is_array() || page.size() != 2)
+				{
+					ELOG("Zone metadata file '" << path.string() << "' has a malformed pages entry (expected [x, z])!");
+					return false;
+				}
+
+				out.pages.emplace_back(page[0].get<int32>(), page[1].get<int32>());
+			}
+		}
 
 		if (const auto rect = json.find("pageRect"); rect != json.end() && rect->is_object())
 		{
@@ -86,6 +124,7 @@ namespace mmo
 		{
 			json["waterLevel"] = meta.waterLevel;
 			json["waterMaterial"] = meta.waterMaterial;
+			json["waterType"] = meta.waterType;
 		}
 
 		std::ofstream file{ path };

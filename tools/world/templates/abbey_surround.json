@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "name": "abbey_surround",
+  "description": "Ruins around a dungeon entrance: wall pieces, foundations, a tower stand-in for the bell tower, rubble and dead trees. The anchor (the teleport) stays clear.",
+  "entry": "anchor",
+  "clear": [3.0],
+  "notes": ["Asset gaps: there is no abbey, church or bell-tower art; a stone Fortress_Tower stands in for the bell tower and fortress wall/arch pieces at half scale stand in for the abbey ruin (art request: ruined abbey walls, a broken choir, a bell tower)."],
+  "roles": [
+    {"name": "walls", "query": {"assets": ["Models/FalwynPlains/Buildings/Fortress_Wall_01.hmsh", "Models/FalwynPlains/Buildings/Fortress_Arch_01.hmsh"]}, "count": [2, 4], "spacing": 5.0, "store": "wobj", "rule": {"type": "ring", "r1": 5.5, "r2": 12.0}, "scale": [0.4, 0.6]},
+    {"name": "foundations", "query": {"assets": ["Models/FalwynPlains/Buildings/Foundation_Wall_01.hmsh", "Models/FalwynPlains/Buildings/Foundation_Wall_02.hmsh", "Models/FalwynPlains/Buildings/Foundation_Column_02.hmsh", "Models/FalwynPlains/Buildings/Foundation_Column_01.hmsh"]}, "count": [4, 7], "spacing": 2.5, "store": "wobj", "rule": {"type": "ring", "r1": 4.5, "r2": 13.0}},
+    {"name": "bell_tower", "query": {"assets": ["Models/FalwynPlains/Buildings/Fortress_Tower_01.hmsh"]}, "count": [1, 1], "spacing": 0, "store": "wobj", "rule": {"type": "ring", "r1": 14.0, "r2": 22.0}, "scale": [0.8, 1.0]},
+    {"name": "rubble", "query": {"assets": ["Models/Stones/SM_stone_06.hmsh"]}, "count": [6, 10], "spacing": 1.5, "store": "wobj", "rule": {"type": "near_role", "role": "foundations", "distance": [1.0, 4.0]}, "scale": [0.12, 0.25], "sink": 0.1},
+    {"name": "dead_trees", "query": {"tags": ["tree_dead"]}, "count": [1, 3], "spacing": 6.0, "store": "hfol", "rule": {"type": "ring", "r1": 12.0, "r2": 20.0}},
+    {"name": "graves", "query": {"assets": ["Models/FalwynPlains/Props/Furniture/SM_hc_Grave_B.hmsh", "Models/FalwynPlains/Props/Furniture/SM_hc_Grave_C.hmsh", "Models/FalwynPlains/Props/Furniture/SM_hc_Grave_D.hmsh", "Models/FalwynPlains/Props/Furniture/SM_hc_Grave_E.hmsh"]}, "count": [2, 4], "spacing": 1.6, "store": "wobj", "rule": {"type": "near_role", "role": "foundations", "distance": [2.5, 6.0]}}
+  ]
+}

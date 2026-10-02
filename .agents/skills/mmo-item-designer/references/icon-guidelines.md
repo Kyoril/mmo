@@ -29,7 +29,7 @@ They establish the rendering language, lighting, backdrop, and composition. Do n
 
 ## Prompt Template
 
-Use the built-in `image_gen` tool with a prompt shaped like:
+Use the available image-generation tool (`image_gen` in Codex, the image-generation connector in Claude Code) with a prompt shaped like:
 
 ```text
 Use case: stylized-concept
@@ -52,6 +52,6 @@ For weapons in particular, specify blade wear, edge highlights, grip wrapping, m
 
 Generate a square source image, then run `scripts/normalize_item_icon.ps1`. The script center-crops non-square inputs, resizes with high-quality filtering, writes an opaque RGB PNG, and verifies `128x128`.
 
-Inspect the final PNG after resizing. Reject and regenerate when the subject is ambiguous, cropped, too small, overly detailed, framed, text-bearing, visually inconsistent with the references, or noticeably flatter / simpler than the `image_gen` draft.
+Inspect the final PNG after resizing. Reject and regenerate when the subject is ambiguous, cropped, too small, overly detailed, framed, text-bearing, visually inconsistent with the references, or noticeably flatter / simpler than the generated draft.
 
-Do not replace a weak or missing `image_gen` export with locally drawn fallback art. If the actual generated image file cannot be found, report that as a blocker and preserve the last good icon rather than silently downgrading quality.
+Do not replace a weak or missing image-generation export with locally drawn fallback art. If the actual generated image file cannot be found, report that as a blocker and preserve the last good icon rather than silently downgrading quality.

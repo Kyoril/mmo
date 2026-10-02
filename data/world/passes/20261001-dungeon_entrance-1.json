@@ -1,0 +1,436 @@
+{
+  "version": 1,
+  "pass_id": "20261001-dungeon_entrance-1",
+  "map": 0,
+  "world": "Development",
+  "poi": "dungeon_entrance",
+  "template": "abbey_surround",
+  "seed": 4,
+  "anchor": [
+    107.0,
+    345.0
+  ],
+  "keep_away": [],
+  "entry": [
+    107.0,
+    345.0
+  ],
+  "created": "2026-10-01T20:28:55",
+  "world_fingerprint": "9c54aa9266e6b17aad17d3c226198765c6735089",
+  "items": [
+    {
+      "role": "walls",
+      "asset": "Models/FalwynPlains/Buildings/Fortress_Wall_01.hmsh",
+      "store": "wobj",
+      "position": [
+        117.17,
+        28.71,
+        341.31
+      ],
+      "yaw": 105.1,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.4,
+      "collides": true,
+      "unique_id": "0xaad74fbfc7641057",
+      "file": "Worlds/Development/Development/Entities/8224/12310395791543111767.wobj",
+      "written_hash": "a73cffa2c29a5b26b0787f60ac6065fe6bc22018"
+    },
+    {
+      "role": "walls",
+      "asset": "Models/FalwynPlains/Buildings/Fortress_Arch_01.hmsh",
+      "store": "wobj",
+      "position": [
+        115.81,
+        28.0,
+        349.77
+      ],
+      "yaw": 311.3,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.5,
+      "collides": true,
+      "unique_id": "0xaad783a69f9bbf0d",
+      "file": "Worlds/Development/Development/Entities/8224/12310452858106134285.wobj",
+      "written_hash": "5e1b49072839c5a5c4e5fda23203abe0ced6ac15"
+    },
+    {
+      "role": "foundations",
+      "asset": "Models/FalwynPlains/Buildings/Foundation_Wall_02.hmsh",
+      "store": "wobj",
+      "position": [
+        98.2,
+        27.19,
+        343.53
+      ],
+      "yaw": 128.44,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xaad8633910c325d9",
+      "file": "Worlds/Development/Development/Entities/8224/12310698678162761177.wobj",
+      "written_hash": "37011f8c67f143152eb6cbc08ede9f933589a191"
+    },
+    {
+      "role": "foundations",
+      "asset": "Models/FalwynPlains/Buildings/Foundation_Wall_01.hmsh",
+      "store": "wobj",
+      "position": [
+        119.72,
+        28.57,
+        342.89
+      ],
+      "yaw": 112.41,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xaad8b00ae1d5cfbf",
+      "file": "Worlds/Development/Development/Entities/8224/12310783142202298303.wobj",
+      "written_hash": "4d20fca0b092a7e492ffbd43069dd4019dbc885a"
+    },
+    {
+      "role": "foundations",
+      "asset": "Models/FalwynPlains/Buildings/Foundation_Column_01.hmsh",
+      "store": "wobj",
+      "position": [
+        118.77,
+        28.3,
+        347.1
+      ],
+      "yaw": 284.21,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xaad821152a85a58b",
+      "file": "Worlds/Development/Development/Entities/8224/12310625956208682379.wobj",
+      "written_hash": "3370bea273700153f36f86a30616e0ba52159ed8"
+    },
+    {
+      "role": "bell_tower",
+      "asset": "Models/FalwynPlains/Buildings/Fortress_Tower_01.hmsh",
+      "store": "wobj",
+      "position": [
+        127.37,
+        28.1,
+        338.37
+      ],
+      "yaw": 223.24,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.86,
+      "collides": true,
+      "unique_id": "0xaad97ea622f0291f",
+      "file": "Worlds/Development/Development/Entities/8224/12311010308409796895.wobj",
+      "written_hash": "13e8fe4e8d93552536fc1a15433c9f2643c6bc0c"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        96.73,
+        28.24,
+        342.27
+      ],
+      "yaw": 252.37,
+      "tilt": [
+        11.89,
+        13.52
+      ],
+      "scale": 0.2,
+      "collides": true,
+      "unique_id": "0xaad96999c49f6693",
+      "file": "Worlds/Development/Development/Entities/8224/12310987165543655059.wobj",
+      "written_hash": "af230fd5f369dd14aafaf22b46107721f0b45568"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        120.5,
+        29.33,
+        344.32
+      ],
+      "yaw": 128.94,
+      "tilt": [
+        1.88,
+        -3.85
+      ],
+      "scale": 0.14,
+      "collides": true,
+      "unique_id": "0xaad95a7b6961cee0",
+      "file": "Worlds/Development/Development/Entities/8224/12310970542489456352.wobj",
+      "written_hash": "ac2f6ca6d666956d7e905ab87e952408fb6f1199"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        121.18,
+        29.66,
+        340.05
+      ],
+      "yaw": 342.24,
+      "tilt": [
+        3.05,
+        -6.06
+      ],
+      "scale": 0.24,
+      "collides": true,
+      "unique_id": "0xaad988f75fc02e01",
+      "file": "Worlds/Development/Development/Entities/8224/12311021652438691329.wobj",
+      "written_hash": "ada171a5b77ef0ac340ebe419a0cf7f863d1f9d6"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        120.83,
+        28.93,
+        350.51
+      ],
+      "yaw": 2.11,
+      "tilt": [
+        -1.61,
+        7.69
+      ],
+      "scale": 0.17,
+      "collides": true,
+      "unique_id": "0xaad9d8477df64bf5",
+      "file": "Worlds/Development/Development/Entities/8224/12311108857961532405.wobj",
+      "written_hash": "3bcd766505039374c85c83ef6c20a328aba1088d"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        122.88,
+        29.25,
+        341.36
+      ],
+      "yaw": 120.63,
+      "tilt": [
+        2.07,
+        -4.98
+      ],
+      "scale": 0.15,
+      "collides": true,
+      "unique_id": "0xaadae0dad85224f8",
+      "file": "Worlds/Development/Development/Entities/8224/12311399761907426552.wobj",
+      "written_hash": "eeefed5ccebb10dc6cf3d77ad218cd964ec6d2f1"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        120.13,
+        29.44,
+        345.86
+      ],
+      "yaw": 190.64,
+      "tilt": [
+        4.99,
+        -1.56
+      ],
+      "scale": 0.22,
+      "collides": true,
+      "unique_id": "0xaada514a6980ff15",
+      "file": "Worlds/Development/Development/Entities/8224/12311241911410163477.wobj",
+      "written_hash": "8d8c6579f1ffad43640fad731256227477633497"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        100.39,
+        29.14,
+        340.34
+      ],
+      "yaw": 330.56,
+      "tilt": [
+        3.21,
+        34.06
+      ],
+      "scale": 0.15,
+      "collides": true,
+      "unique_id": "0xaada03ec12edd419",
+      "file": "Worlds/Development/Development/Entities/8224/12311156843835413529.wobj",
+      "written_hash": "f844f65061bc79f1f3d2517f2d6768b7963a86d8"
+    },
+    {
+      "role": "rubble",
+      "asset": "Models/Stones/SM_stone_06.hmsh",
+      "store": "wobj",
+      "position": [
+        118.52,
+        29.45,
+        343.84
+      ],
+      "yaw": 241.03,
+      "tilt": [
+        4.08,
+        -1.77
+      ],
+      "scale": 0.16,
+      "collides": true,
+      "unique_id": "0xaada3b4f56eb6bfc",
+      "file": "Worlds/Development/Development/Entities/8224/12311217743317396476.wobj",
+      "written_hash": "f67518a6c65aa7e33ffa47f394775cfb4178e411"
+    },
+    {
+      "role": "dead_trees",
+      "asset": "Models/Swamp/SM_dry_tree_01.hmsh",
+      "store": "hfol",
+      "position": [
+        109.67,
+        47.28,
+        363.65
+      ],
+      "yaw": 102.48,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.17,
+      "collides": true,
+      "unique_id": "0xaadb383322bc974d",
+      "file": "Worlds/Development/Development/Foliage/8224.hfol",
+      "written_hash": "150a605d90a973d9fd518cd4ec5b11ea187dc2ae"
+    },
+    {
+      "role": "dead_trees",
+      "asset": "Models/Swamp/SM_dry_tree_01.hmsh",
+      "store": "hfol",
+      "position": [
+        118.73,
+        29.46,
+        349.34
+      ],
+      "yaw": 265.16,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.84,
+      "collides": true,
+      "unique_id": "0xaadb65dd08715d20",
+      "file": "Worlds/Development/Development/Foliage/8224.hfol",
+      "written_hash": "edf04a0ac5bda25c6ffb664512262abcb9507934"
+    },
+    {
+      "role": "graves",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Grave_D.hmsh",
+      "store": "wobj",
+      "position": [
+        114.46,
+        28.85,
+        347.25
+      ],
+      "yaw": 20.38,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xaadb79d4b702928f",
+      "file": "Worlds/Development/Development/Entities/8224/12311567960857809551.wobj",
+      "written_hash": "ff93e27a640117546c4a7f5a00bfc0063e56ba69"
+    },
+    {
+      "role": "graves",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Grave_B.hmsh",
+      "store": "wobj",
+      "position": [
+        123.3,
+        28.73,
+        349.19
+      ],
+      "yaw": 139.45,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xaadb3a0cf4aacc67",
+      "file": "Worlds/Development/Development/Entities/8224/12311497833666235495.wobj",
+      "written_hash": "ea775d2395ab25decd932c733c3d77f641321663"
+    },
+    {
+      "role": "foundations",
+      "asset": "Models/FalwynPlains/Buildings/Foundation_Column_01.hmsh",
+      "store": "wobj",
+      "position": [
+        116.0,
+        28.17,
+        348.0
+      ],
+      "yaw": 125.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xaadb219aac125eea",
+      "file": "Worlds/Development/Development/Entities/8224/12311470954542948074.wobj",
+      "written_hash": "5ec72fe1f0b8c67415c36239afb1d8050c4a068b"
+    },
+    {
+      "role": "foundations",
+      "asset": "Models/FalwynPlains/Buildings/Foundation_Column_01.hmsh",
+      "store": "wobj",
+      "position": [
+        122.0,
+        28.21,
+        346.0
+      ],
+      "yaw": 15.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xaadb8bd3d9bd3a34",
+      "file": "Worlds/Development/Development/Entities/8224/12311587748354800180.wobj",
+      "written_hash": "2e80b20e056453f8d7c283eb5e2bb9ea6716a08d"
+    }
+  ],
+  "gaps": [],
+  "notes": [
+    "Asset gaps: there is no abbey, church or bell-tower art; a stone Fortress_Tower stands in for the bell tower and fortress wall/arch pieces at half scale stand in for the abbey ruin (art request: ruined abbey walls, a broken choir, a bell tower)."
+  ],
+  "checks": {
+    "placement": [],
+    "walkability": []
+  },
+  "status": "applied",
+  "created_files": [],
+  "applied": "2026-10-01T20:30:43",
+  "nav": {
+    "path": "generated/world/nav"
+  }
+}

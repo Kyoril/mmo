@@ -1,0 +1,899 @@
+{
+  "map": 0,
+  "version": 1,
+  "zones": [
+    {
+      "areaId": 1,
+      "name": "Falwyn Forest",
+      "levelMin": 7,
+      "levelMax": 10,
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 2,
+      "name": "Oakenshire",
+      "levelMin": 1,
+      "levelMax": 10,
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 8,
+      "name": "Briarwatch March",
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 9,
+      "name": "Thalrics Camp",
+      "levelMin": 4,
+      "levelMax": 7,
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 10,
+      "name": "Ruined Cottages",
+      "levelMin": 7,
+      "levelMax": 7,
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 11,
+      "name": "Ruined Watchtower",
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 12,
+      "name": "Deepwood Fringe",
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 13,
+      "name": "Marsh Edge",
+      "status": "placeholder",
+      "ask": "Confirm the level band and write a one-line theme and description.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "areaId": 14,
+      "name": "Whispering Woods",
+      "description": "Dense forest just north of Oakenshire (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 15,
+      "name": "Frostward Peaks",
+      "description": "Snow-capped mountains along the north coast (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 16,
+      "name": "Stonehelm Clans",
+      "description": "Mountain realm of the Stonehelm Clans, north-east (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 17,
+      "name": "Ironspine Wastes",
+      "description": "Brown badlands below the Stonehelm mountains (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 18,
+      "name": "Dawnbreak Plains",
+      "description": "Open golden plains east of the heartland (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 19,
+      "name": "Emberreach",
+      "description": "Volcanic land with a dark fortress, east across the strait (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 20,
+      "name": "The Blackmoors",
+      "description": "Dark moorland to the south-east (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 21,
+      "name": "Silvermere",
+      "description": "Town or city with a fortress south of Haven (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 22,
+      "name": "Sands of Korash",
+      "description": "Desert with a fortress city in the far south (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 23,
+      "name": "Greenvale Forest",
+      "description": "Forest to the south-west (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 24,
+      "name": "Valemarch",
+      "description": "A realm with a fortress to the west (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    },
+    {
+      "areaId": 25,
+      "name": "Westerfell",
+      "description": "Hills with a fortress in the far west (sketch).",
+      "status": "placeholder",
+      "ask": "Rough blockout region from the continent sketch: confirm the name, extent and level band, and write a one-line theme.",
+      "source": "agent"
+    }
+  ],
+  "pois": [
+    {
+      "id": "barrowfield",
+      "name": "Barrowfield",
+      "kind": "hub",
+      "center": [
+        -474.8,
+        227.1
+      ],
+      "radius": 85.0,
+      "areaId": 1,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "barrowfront",
+      "name": "Barrowfront",
+      "kind": "camp",
+      "center": [
+        -412.4,
+        201.6
+      ],
+      "radius": 50.0,
+      "areaId": 1,
+      "levelMin": 8,
+      "levelMax": 9,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "barrowfront_camp",
+      "name": "Barrowfront Camp",
+      "kind": "hub",
+      "center": [
+        -436.1,
+        267.0
+      ],
+      "radius": 25.0,
+      "areaId": 1,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "briarwatch",
+      "name": "Briarwatch",
+      "kind": "camp",
+      "center": [
+        -122.8,
+        435.0
+      ],
+      "radius": 50.0,
+      "areaId": 8,
+      "levelMin": 5,
+      "levelMax": 6,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "briarwatch_camp",
+      "name": "Briarwatch Camp",
+      "kind": "hub",
+      "center": [
+        -60.0,
+        517.7
+      ],
+      "radius": 30.0,
+      "areaId": 9,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "briarwatch_west_gate",
+      "name": "Briarwatch West Gate",
+      "kind": "hub",
+      "center": [
+        85.9,
+        498.6
+      ],
+      "radius": 20.5,
+      "areaId": 2,
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "kingsroad",
+      "name": "Kingsroad",
+      "kind": "camp",
+      "center": [
+        -278.2,
+        412.8
+      ],
+      "radius": 45.0,
+      "areaId": 8,
+      "levelMin": 6,
+      "levelMax": 7,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "kingsroad_waypost",
+      "name": "Kingsroad Waypost",
+      "kind": "hub",
+      "center": [
+        -262.0,
+        405.0
+      ],
+      "radius": 20.0,
+      "areaId": 10,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "mirewater",
+      "name": "Mirewater",
+      "kind": "camp",
+      "center": [
+        -320.1,
+        247.9
+      ],
+      "radius": 95.0,
+      "areaId": 1,
+      "levelMin": 7,
+      "levelMax": 8,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "mirewater_camp",
+      "name": "Mirewater Camp",
+      "kind": "hub",
+      "center": [
+        -330.0,
+        230.0
+      ],
+      "radius": 20.0,
+      "areaId": 1,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "oakenshire_west_gate",
+      "name": "Oakenshire West Gate",
+      "kind": "hub",
+      "center": [
+        114.9,
+        500.5
+      ],
+      "radius": 24.0,
+      "areaId": 2,
+      "status": "canon",
+      "source": "user",
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 1 - West Gate, the main exit towards Haven and the valley; the only gap in the mountain ring (the fortress towers stand at x 84-109)."
+    },
+    {
+      "id": "forest_camp",
+      "name": "Oakenshire",
+      "kind": "hub",
+      "center": [
+        301.5,
+        550.1
+      ],
+      "radius": 35.0,
+      "status": "canon",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "haven",
+      "name": "Haven",
+      "kind": "hub",
+      "center": [
+        -780.6,
+        1249.1
+      ],
+      "radius": 311.5,
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "dungeon_entrance",
+      "name": "The Hollow Choir (ruined abbey)",
+      "kind": "dungeon_entrance",
+      "center": [
+        103.4,
+        345.8
+      ],
+      "radius": 30.0,
+      "status": "canon",
+      "source": "user",
+      "description": "Entrance to map 1. Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): a ruined abbey with a bell tower visible from far, on a side path north-west of Oakenshire, off the beaten path; an overgrown path leads up from the valley. Your pin sits on the plateau edge at 29 m, next to the prototype Cylinder marker at (107, 345)."
+    },
+    {
+      "id": "oakenshire_hub",
+      "name": "Oakenshire Town Hall",
+      "kind": "hub",
+      "center": [
+        341.8,
+        546.5
+      ],
+      "radius": 25.0,
+      "status": "canon",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "hub_near_lina_groveroot",
+      "name": "Hub near Lina Groveroot",
+      "kind": "hub",
+      "center": [
+        148.7,
+        509.4
+      ],
+      "radius": 25.0,
+      "status": "canon",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "hub_near_old_harbin",
+      "name": "Oakenshire Inn",
+      "kind": "hub",
+      "center": [
+        265.2,
+        612.7
+      ],
+      "radius": 25.0,
+      "status": "canon",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "falwyn_forest_hub",
+      "name": "Falwyn Forest hub",
+      "kind": "hub",
+      "center": [
+        -2.6,
+        21.5
+      ],
+      "radius": 35.0,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "forest_bandit_grounds",
+      "name": "Forest Bandit grounds",
+      "kind": "camp",
+      "center": [
+        235.0,
+        757.7
+      ],
+      "radius": 58.5,
+      "levelMin": 1,
+      "levelMax": 4,
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "young_forest_boar_grounds",
+      "name": "Young Forest Boar grounds",
+      "kind": "camp",
+      "center": [
+        232.6,
+        653.6
+      ],
+      "radius": 94.0,
+      "levelMin": 1,
+      "levelMax": 2,
+      "status": "canon",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "forest_boar_grounds",
+      "name": "Forest Boar grounds",
+      "kind": "camp",
+      "center": [
+        381.9,
+        711.5
+      ],
+      "radius": 60.0,
+      "status": "canon",
+      "source": "user",
+      "levelMin": 1,
+      "levelMax": 4
+    },
+    {
+      "id": "forest_boar_grounds_378_647",
+      "name": "Forest Boar grounds (378, 647)",
+      "kind": "camp",
+      "center": [
+        357.4,
+        646.7
+      ],
+      "radius": 41.5,
+      "status": "canon",
+      "source": "user",
+      "levelMin": 1,
+      "levelMax": 4
+    },
+    {
+      "id": "forest_bandit_grounds_101_137",
+      "name": "Forest Bandit grounds (-101, 137)",
+      "kind": "camp",
+      "center": [
+        -101.1,
+        137.3
+      ],
+      "radius": 60.0,
+      "levelMin": 3,
+      "levelMax": 4,
+      "status": "canon",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "young_forest_wolf_grounds",
+      "name": "Young Forest Wolf grounds",
+      "kind": "camp",
+      "center": [
+        3.9,
+        542.7
+      ],
+      "radius": 65.0,
+      "levelMin": 3,
+      "levelMax": 4,
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "young_forest_wolf_grounds_12_458",
+      "name": "Young Forest Wolf grounds (12, 458)",
+      "kind": "camp",
+      "center": [
+        1.8,
+        439.9
+      ],
+      "radius": 64.5,
+      "levelMin": 3,
+      "levelMax": 4,
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "forest_wolf_grounds",
+      "name": "Forest Wolf grounds",
+      "kind": "camp",
+      "center": [
+        -202.3,
+        337.3
+      ],
+      "radius": 80.0,
+      "levelMin": 3,
+      "levelMax": 8,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "kingsroad_cutthroat_grounds",
+      "name": "Kingsroad Cutthroat grounds",
+      "kind": "camp",
+      "center": [
+        -349.0,
+        371.0
+      ],
+      "radius": 40.0,
+      "levelMin": 6,
+      "levelMax": 7,
+      "status": "placeholder",
+      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
+      "source": "agent-bootstrap"
+    },
+    {
+      "id": "props_near_93_538",
+      "name": "Oakenshire Gate",
+      "kind": "landmark",
+      "center": [
+        97.7,
+        531.2
+      ],
+      "radius": 26.0,
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "props_near_98_465",
+      "name": "Oakenshire Gate",
+      "kind": "landmark",
+      "center": [
+        97.0,
+        468.5
+      ],
+      "radius": 27.0,
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "props_near_226_543",
+      "name": "Oakenshire House 01",
+      "kind": "landmark",
+      "center": [
+        249.8,
+        535.9
+      ],
+      "radius": 9.0,
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "north_high_ridge",
+      "name": "North High Ridge",
+      "kind": "landmark",
+      "center": [
+        238.0,
+        425.2
+      ],
+      "radius": 60.5,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): steep, rocky, little paths, leads to hunting areas. Terrain: the ring's north crest, 60-78 m.",
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "high_ridge_hunting_grounds",
+      "name": "High Ridge hunting grounds",
+      "kind": "camp",
+      "center": [
+        250.0,
+        320.0
+      ],
+      "radius": 80.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): hunting areas and hunting camps beyond the North High Ridge. Terrain: the plateau north of the ring, about 45 m.",
+      "status": "canon",
+      "source": "agent"
+    },
+    {
+      "id": "hidden_cave",
+      "name": "Hidden cave",
+      "kind": "landmark",
+      "center": [
+        420.6,
+        643.7
+      ],
+      "radius": 15.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): small cave on the mountain ring around Oakenshire (east), not obvious. Terrain: foot of the east cliff behind the town, 10 m.",
+      "status": "canon",
+      "source": "user",
+      "notes": "Hidden cave with kobolds inside, maybe a hidden treasure chest."
+    },
+    {
+      "id": "ring_waterfall",
+      "name": "Waterfall",
+      "kind": "landmark",
+      "center": [
+        426.9,
+        762.6
+      ],
+      "radius": 25.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): waterfall on the mountain ring around Oakenshire (south-east), good landmark, herb spawns. Terrain: the south-east cliff above the boar grounds. No water exists here yet.",
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "south_ridge_quarry",
+      "name": "South Ridge quarry",
+      "kind": "resource",
+      "center": [
+        185.0,
+        800.0
+      ],
+      "radius": 45.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): South Ridge, rocky slopes, some lead to a quarry or mine. Terrain: foot of the south ridge, 25-35 m, right next to the Forest Bandit camp tents at (230-262, 762).",
+      "status": "canon",
+      "source": "agent",
+      "notes": "Quarry is separate"
+    },
+    {
+      "id": "forward_outpost",
+      "name": "Forward Outpost",
+      "kind": "camp",
+      "center": [
+        -620.0,
+        300.0
+      ],
+      "radius": 40.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 3 - Forward Outpost, north-west across the river from the Forest Road.",
+      "status": "placeholder",
+      "ask": "Is this Briarwatch Camp or Barrowfront Camp (then delete this pin), or a new camp on the west bank (drag and confirm)?",
+      "source": "agent"
+    },
+    {
+      "id": "old_stone_bridge",
+      "name": "Old Stone Bridge",
+      "kind": "landmark",
+      "center": [
+        -495.0,
+        355.0
+      ],
+      "radius": 25.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 4 - Old Stone Bridge. Terrain: where the painted road meets the river (7 m deep); today a house (HouseTest) and two piers stand here.",
+      "status": "placeholder",
+      "ask": "Is this the crossing? A stone bridge prop is needed (today there are only piers). Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "river_valley",
+      "name": "River Valley",
+      "kind": "landmark",
+      "center": [
+        -600.0,
+        650.0
+      ],
+      "radius": 170.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 5 - River Valley opens up; views get wider, terrain gets softer. Terrain: flat ground on both banks south of the bridge, no zone yet.",
+      "status": "placeholder",
+      "ask": "Name and level band of this stretch? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "farmlands_and_hamlets",
+      "name": "Farmlands and Hamlets",
+      "kind": "hub",
+      "center": [
+        -690.0,
+        560.0
+      ],
+      "radius": 110.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 6 - Farmlands & Hamlets in the valley. West of the river. Flat, empty ground today.",
+      "status": "placeholder",
+      "ask": "Hamlet name(s) and level band? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "crossroads_inn",
+      "name": "Crossroads Inn",
+      "kind": "hub",
+      "center": [
+        -720.0,
+        820.0
+      ],
+      "radius": 30.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 7 - Crossroads Inn on the Haven road. West of the river. Which roads cross here is open.",
+      "status": "placeholder",
+      "ask": "Which roads cross at the inn (the Northroad?), and its name? Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "the_river",
+      "name": "The river (unnamed)",
+      "kind": "landmark",
+      "center": [
+        -520.0,
+        500.0
+      ],
+      "radius": 40.0,
+      "description": "Terrain: a river 30-50 m wide and about 7 m deep running north-south at x -520 from z -450 to z 920, with a loop at its north end, a branch east at z 50 and a shallow ford (2 m) at z 150-200. The layout sketch has it west of Oakenshire, flowing south past Haven.",
+      "status": "placeholder",
+      "ask": "Name the river. Then confirm.",
+      "source": "agent"
+    },
+    {
+      "id": "east_of_the_ring",
+      "name": "East of the ring: the wilds",
+      "kind": "note",
+      "center": [
+        650.0,
+        600.0
+      ],
+      "radius": 150.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp) (side view): east of the mountain ring lie wilder, more dangerous areas; west lie the civilized lands (valley, Haven). No terrain is sculpted here yet.",
+      "status": "note",
+      "source": "agent"
+    },
+    {
+      "id": "new_place",
+      "name": "Oakenshire House 02",
+      "kind": "hub",
+      "center": [
+        279.3,
+        530.4
+      ],
+      "radius": 7.5,
+      "status": "canon",
+      "source": "user"
+    }
+  ],
+  "roads": [
+    {
+      "id": "westroad",
+      "name": "Westroad",
+      "points": [
+        [
+          253.7,
+          568.8
+        ],
+        [
+          231.2,
+          557.7
+        ],
+        [
+          204.5,
+          514.4
+        ],
+        [
+          125.2,
+          498.7
+        ],
+        [
+          122.9,
+          521.4
+        ],
+        [
+          97.2,
+          521.9
+        ],
+        [
+          96.4,
+          498.7
+        ],
+        [
+          75.4,
+          499.2
+        ]
+      ],
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "northroad",
+      "name": "Northroad",
+      "points": [
+        [
+          -56.4,
+          408.0
+        ],
+        [
+          -23.9,
+          116.5
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Drag the start and end of the Northroad, add points where it bends, then confirm.",
+      "source": "user"
+    },
+    {
+      "id": "old_kings_road",
+      "name": "Old King's Road (painted path)",
+      "points": [
+        [
+          74.9,
+          495.8
+        ],
+        [
+          32.1,
+          499.0
+        ],
+        [
+          -50.5,
+          496.4
+        ],
+        [
+          -117.2,
+          469.1
+        ],
+        [
+          -170.9,
+          460.3
+        ],
+        [
+          -252.4,
+          467.1
+        ],
+        [
+          -300.0,
+          432.0
+        ],
+        [
+          -390.0,
+          396.0
+        ],
+        [
+          -440.0,
+          372.0
+        ],
+        [
+          -495.0,
+          355.0
+        ]
+      ],
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "haven_road",
+      "name": "Haven Road",
+      "points": [
+        [
+          -495.0,
+          355.0
+        ],
+        [
+          -580.0,
+          370.0
+        ],
+        [
+          -660.0,
+          470.0
+        ],
+        [
+          -690.0,
+          560.0
+        ],
+        [
+          -705.0,
+          700.0
+        ],
+        [
+          -720.0,
+          820.0
+        ],
+        [
+          -705.0,
+          960.0
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Layout sketch: 8 - Haven Road (south-west), from the Old Stone Bridge down the valley past the farmlands and the Crossroads Inn to Haven. Only if Haven goes south-west. Drag the bends, then confirm.",
+      "source": "agent"
+    }
+  ]
+}

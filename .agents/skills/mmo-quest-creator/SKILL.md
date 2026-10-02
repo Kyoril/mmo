@@ -1,6 +1,6 @@
 ---
 name: mmo-quest-creator
-description: Inspects, designs, validates, exports, and applies MMO quest data for F:/mmo using the live protobuf project files. Use when creating or editing single quests, building or extending quest chains, wiring questgivers and turn-in NPCs, authoring exploration or scripted quest flows, balancing quest rewards, or fixing broken quest dependencies.
+description: Inspects, designs, validates, exports, and applies MMO quest data for this repository using the live protobuf project files. Use when creating or editing single quests, building or extending quest chains, wiring questgivers and turn-in NPCs, authoring exploration or scripted quest flows, balancing quest rewards, or fixing broken quest dependencies.
 ---
 
 <essential_principles>
@@ -19,6 +19,32 @@ Default to cloning the closest live quest and editing the minimal set of fields 
 When a quest needs new supporting units, items, or spells, invoke `mmo-npc-designer`, `mmo-item-designer`, or `mmo-spell-designer` first, then wire the confirmed IDs back into the quest draft.
 </essential_principles>
 
+<world_aware_design>
+Design against the real world, never in a vacuum. Before designing new content:
+
+1. Read `docs/world/bible.md`: identity and tone, the geography section of the target zone, named
+   characters, the naming guide and the quest-writing guide. Reuse established characters and places; never
+   contradict an [E] statement, and ask the user about anything marked [?].
+2. Look up the target zone and places in `data/world/atlas/map_<id>.json`. Do not invent a location
+   that is not in the atlas. If the content needs a new place, add it to the atlas as a `placeholder`
+   POI with an `ask` for the user (source `agent`) and say so in the review packet. Only the user
+   promotes anything to `canon`.
+3. Render the area and look at it before choosing positions (north is up = -Z, as on the minimap):
+   `python tools/world/render_map.py --map 0 --zone "<Zone>" --dump-state generated/world/review/<slug>/before.json --out generated/world/review/<slug>/before.png`
+   For a single point use `cd tools/world; python -m worldkit query --map 0 --at X Z`
+   (height, slope, water, holes, terrain kind, nearby props, containing places, placeable).
+4. Every objective sits in a named place within ~250 m of its hub, and every direction word in the
+   text matches the north-up map. Every quest ends with a turn-in at an NPC or object (the
+   validator rejects `AutoRewarded`).
+5. After applying, run `python tools/world/report.py --map 0` and `python tools/world/lint.py --map 0`
+   (no new errors allowed) and render the after-map with
+   `--diff generated/world/review/<slug>/before.json`. Hand the user a review packet in
+   `generated/world/review/<slug>/`: `README.md` (what changed and why, open questions), the
+   before/after images, and the report output.
+
+See `tools/world/README.md` for every world tool.
+</world_aware_design>
+
 <objective>
 Create or edit MMO quests as data instead of code. This skill is designed for the actual quest system in this repository: `quests.data` for the quest row itself, `units.data` and `objects.data` for provider and turn-in wiring, `objects.data` for quest-gated interactables, `triggers.data` plus `area_triggers.data` for scripted or exploration completion, and the runtime behavior in `game_player_s.cpp`, `player_npc_handlers.cpp`, `player.cpp`, and `trigger_handler.cpp`.
 
@@ -31,25 +57,25 @@ It also supports the newer quest-system additions in this repository: timed ques
 Inspect a live quest and its dependencies first:
 
 ```powershell
-python .agents/skills/mmo-quest-creator/scripts/inspect_quest_catalog.py --project-root F:/mmo --quest-id 22 --pretty
+python .agents/skills/mmo-quest-creator/scripts/inspect_quest_catalog.py --quest-id 22 --pretty
 ```
 
 Clone an existing quest into an editable JSON draft:
 
 ```powershell
-python .agents/skills/mmo-quest-creator/scripts/export_quest_json.py --project-root F:/mmo --quest-id 22 --output F:/mmo/generated/quests/lessons_in_steel.json
+python .agents/skills/mmo-quest-creator/scripts/export_quest_json.py --quest-id 22 --output generated/quests/lessons_in_steel.json
 ```
 
 Validate the draft against live project data before applying it:
 
 ```powershell
-python .agents/skills/mmo-quest-creator/scripts/validate_quest_json.py F:/mmo/generated/quests/lessons_in_steel.json --project-root F:/mmo
+python .agents/skills/mmo-quest-creator/scripts/validate_quest_json.py generated/quests/lessons_in_steel.json
 ```
 
 Apply the validated draft back into quest, linkage, trigger, and area-trigger data with backups:
 
 ```powershell
-python .agents/skills/mmo-quest-creator/scripts/apply_quest_json.py F:/mmo/generated/quests/lessons_in_steel.json --project-root F:/mmo --backup
+python .agents/skills/mmo-quest-creator/scripts/apply_quest_json.py generated/quests/lessons_in_steel.json --backup
 ```
 </quick_start>
 
@@ -91,7 +117,7 @@ This skill is being used correctly when:
 - The agent inspected live quest, provider, turn-in, item, trigger, and area-trigger data before proposing IDs or flow changes.
 - The quest draft includes provider and ender wiring instead of assuming `quests.data` alone makes the quest available.
 - Exploration and scripted quests are backed by a real completion path that the current runtime executes.
-- The draft respects the current quest runtime constraints, especially the four-objective counter limit and the lack of native object-use counters.
+- The draft respects the current quest runtime constraints, especially the four-objective counter limit, and spell-cast-on-object requirements are credited only through the spell path.
 - Validation passes before any apply step.
 - Supporting NPC, item, and spell dependencies are confirmed from live project data or delegated to the dedicated skills.
 </success_criteria>
