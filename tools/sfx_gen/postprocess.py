@@ -101,6 +101,36 @@ def process(samples: np.ndarray, sample_rate: int, target_dbfs: float = -3.0) ->
     return normalize_peak(faded, target_dbfs)
 
 
+def crossfade_loop(samples: np.ndarray, sample_rate: int, crossfade_ms: float = 40.0) -> np.ndarray:
+    """Make the wrap point of a loop seamless by blending its tail into its head.
+
+    The first ``crossfade_ms`` are removed and mixed, linearly, into the last
+    ``crossfade_ms``: the clip now ends on exactly the sample that precedes its new first
+    sample, so the wrap is continuous. Linear rather than equal-power because the two ends of
+    a near-seamless loop are strongly correlated, and an equal-power blend of correlated
+    signals swells by up to 3 dB mid-fade. The model's ``loop`` option gets close but not exact --
+    generated frost loops still jumped by ~10% of peak at the seam, enough to click.
+    """
+    n = int(sample_rate * crossfade_ms / 1000.0)
+    if n <= 0 or len(samples) <= 2 * n:
+        return samples.astype(np.float32, copy=True)
+    t = np.linspace(0.0, 1.0, n, endpoint=False, dtype=np.float32)
+    fade_in = t
+    fade_out = 1.0 - t
+    out = samples[n:].astype(np.float32, copy=True)
+    out[-n:] = samples[-n:] * fade_out + samples[:n] * fade_in
+    return out
+
+
+def process_loop(samples: np.ndarray, sample_rate: int = RATE, target_dbfs: float = -3.0) -> np.ndarray:
+    """Seam-crossfade and normalise a loop without trimming or fading its ends.
+
+    Trimming would cut into the loop and the one-shot anti-click fades would put a dip in the
+    level on every repetition; a loop only gets its wrap point blended and its level set.
+    """
+    return normalize_peak(crossfade_loop(samples, sample_rate), target_dbfs)
+
+
 def _ffmpeg() -> str:
     exe = shutil.which("ffmpeg")
     if not exe:

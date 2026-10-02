@@ -18,40 +18,59 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sfx_gen"))
 
-from recipes import warrior
+from recipes import mage, warrior
 
 
-class WarriorRecipeTests(unittest.TestCase):
+class _RecipeChecks:
+    """Checks every recipe table must pass. Subclasses set ``recipe`` and ``count``."""
+
+    recipe = None
+    count = 0
+
     def test_table_is_complete(self):
-        self.assertEqual(len(warrior.SOUNDS), 15)
+        self.assertEqual(len(self.recipe.SOUNDS), self.count)
 
     def test_every_prompt_fits_the_model_limit(self):
-        for name, spec in warrior.SOUNDS.items():
+        for name, spec in self.recipe.SOUNDS.items():
             self.assertLessEqual(
-                len(spec.prompt), warrior.MAX_PROMPT_CHARS,
+                len(spec.prompt), self.recipe.MAX_PROMPT_CHARS,
                 f"{name}: prompt is {len(spec.prompt)} chars; the model rejects anything "
-                f"over {warrior.MAX_PROMPT_CHARS} and the generation fails silently")
+                f"over {self.recipe.MAX_PROMPT_CHARS} and the generation fails silently")
 
     def test_every_prompt_names_its_layers(self):
         # A prompt without an explicit layer list produces flat single-object foley.
-        for name, spec in warrior.SOUNDS.items():
+        for name, spec in self.recipe.SOUNDS.items():
             self.assertIn("Layers:", spec.prompt, f"{name}: prompt has no layer list")
 
     def test_no_prompt_reintroduces_the_foley_clause(self):
         # These phrases produced the thin metallic clanks of the first pass.
         banned = ("dry close-mic", "no reverb", "single isolated")
-        for name, spec in warrior.SOUNDS.items():
+        for name, spec in self.recipe.SOUNDS.items():
             lowered = spec.prompt.lower()
             for phrase in banned:
                 self.assertNotIn(phrase, lowered,
                                  f"{name}: '{phrase}' flattens the result to foley")
 
     def test_durations_and_levels_are_sane(self):
-        for name, spec in warrior.SOUNDS.items():
+        for name, spec in self.recipe.SOUNDS.items():
             # The model itself accepts 0.5-30s; these are ability sounds, not ambience.
             self.assertTrue(0.5 <= spec.duration <= 5.0, f"{name}: duration {spec.duration}")
             self.assertTrue(-12.0 <= spec.target_dbfs <= 0.0, f"{name}: {spec.target_dbfs}")
 
+
+class WarriorRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = warrior
+    count = 15
+
+
+class MageRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = mage
+    count = 23
+
+    def test_only_channels_loop(self):
+        # A looping one-shot would never stop; a one-shot channel would cut out mid-cast.
+        for name, spec in mage.SOUNDS.items():
+            self.assertEqual(spec.loop, name.endswith("Channel"), name)
 
 if __name__ == "__main__":
     unittest.main()
