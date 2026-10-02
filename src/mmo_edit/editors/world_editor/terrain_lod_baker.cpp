@@ -391,6 +391,35 @@ namespace mmo
 			srgb[i * 4 + 3] = 255;
 		}
 
+		// Terrain holes draw nothing and would bake as black spots, while the far mesh has no holes.
+		// The G-buffer albedo alpha is 1 wherever geometry was drawn; give the rest the page's mean colour.
+		uint64 sum[3] = {};
+		uint32 covered = 0;
+		for (uint32 i = 0; i < pixelCount; ++i)
+		{
+			if (HalfToFloat(albedo[i * 4 + 3]) > 0.5f)
+			{
+				sum[0] += srgb[i * 4 + 0];
+				sum[1] += srgb[i * 4 + 1];
+				sum[2] += srgb[i * 4 + 2];
+				++covered;
+			}
+		}
+
+		if (covered > 0 && covered < pixelCount)
+		{
+			for (uint32 i = 0; i < pixelCount; ++i)
+			{
+				if (HalfToFloat(albedo[i * 4 + 3]) <= 0.5f)
+				{
+					for (uint32 c = 0; c < 3; ++c)
+					{
+						srgb[i * 4 + c] = static_cast<uint8>(sum[c] / covered);
+					}
+				}
+			}
+		}
+
 		return true;
 	}
 }

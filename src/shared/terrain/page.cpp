@@ -595,15 +595,21 @@ namespace mmo
 				m_waterRenderObject = nullptr;
 			}
 
-			// Unload all loaded data so we will have to reload it again later
-			m_heightmap.clear();
-			m_normals.clear();
-			m_materials.clear();
-			m_layers.clear();
-			m_waterQuadMasks.clear();
-			m_waterVertexHeights.clear();
-			m_waterTypes.clear();
-			m_waterMaterialName.clear();
+			// Unload all loaded data so we will have to reload it again later. Release the storage, not
+			// just the contents: page objects live as long as the world, so clear() kept every page ever
+			// streamed in at its full size (the splat layers alone are 4 MB per page).
+			const auto release = [](auto &container)
+			{
+				std::remove_reference_t<decltype(container)>().swap(container);
+			};
+			release(m_heightmap);
+			release(m_normals);
+			release(m_materials);
+			release(m_layers);
+			release(m_waterQuadMasks);
+			release(m_waterVertexHeights);
+			release(m_waterTypes);
+			release(m_waterMaterialName);
 
 			m_prepared = false;
 			m_preparing = false;

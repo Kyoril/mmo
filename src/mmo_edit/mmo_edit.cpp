@@ -317,8 +317,9 @@ int main(int argc, char* arg[])
 	std::thread dbThread{ [&dbService]() { dbService.run(); } };
 
 #ifdef _WIN32
-	// Unattended jobs. --bake-terrain-lod Worlds/<n>/<n>.hwld opens the world, bakes the
-	// distant-terrain data of every page whose .tile changed since the last bake, then exits.
+	// Unattended jobs. --bake-terrain-lod Worlds/<n>/<n>.hwld [--force] opens the world, bakes the
+	// distant-terrain data of every page whose .tile changed since the last bake (every page with
+	// --force), then exits.
 	{
 		int argc = 0;
 		auto* const argv = CommandLineToArgvA(GetCommandLine(), &argc);
@@ -347,7 +348,13 @@ int main(int argc, char* arg[])
 				// with the window minimised (a minimised window never paints).
 				if (mainWindow.OpenAsset(argv[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
 				{
-					mmo::WorldEditorInstance::GetLastCreated()->GenerateTerrainLod(true);
+					bool force = false;
+					for (int j = 1; j < argc; ++j)
+					{
+						force = force || std::string(argv[j]) == "--force";
+					}
+
+					mmo::WorldEditorInstance::GetLastCreated()->GenerateTerrainLod(!force);
 					PostQuitMessage(0);
 				}
 				else
