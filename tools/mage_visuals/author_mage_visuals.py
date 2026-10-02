@@ -130,7 +130,7 @@ def projectile(trail, colour, intensity=2.5, range_=9.0, **extra):
 def definitions():
     """(visualization name suffix, spell ids, kits_by_event, projectiles)."""
     frost_channel = channel("FrostHandChannel", "Frost Channel", FROST_LIGHT)
-    fire_channel = channel("FireHandChannel", "Fire Channel", FIRE_LIGHT)
+    fire_channel = channel("FireHandChannel", "Fire Channel", FIRE_LIGHT)  # Fireball only
     arcane_channel = channel("ArcaneHandChannel", "Arcane Channel", ARCANE_LIGHT)
 
     # Fire Barrage: three arcing comets per wave, spread left / high / right, like the
@@ -191,12 +191,14 @@ def definitions():
             IMPACT: [fx("FireBlastImpact", "Fire Blast", "TARGET",
                         flash=light(FIRE_LIGHT, 3.5, 8.0, 0.05, 0.6))],
         }, []),
+        # Fire Barrage is channeled: the server sends SpellStart, ChannelStart and SpellGo in
+        # the same tick, so a CASTING kit would be torn down the frame it spawned. The barrage
+        # reads through its waves instead: every triggered 152 cast flares the hand.
         ("Fire Barrage", [150], {
-            CASTING: [fire_channel],
             CAST: [release()],
         }, []),
         ("Fire Barrage Projectile", [152], {
-            CAST: [{"scope": "CASTER", "loop": False, "sound_ids": [SND["Fire Barrage Shot"]]}],
+            CAST: [fx("FireBlastHand", "Fire Barrage Shot", bone="hand_r")],
             IMPACT: [fx("FireBarrageImpact", "Fire Barrage Impact", "TARGET", "spine_03")],
         }, barrage),
         ("Arcane Intellect", [11], {
@@ -258,6 +260,11 @@ def validate_visualizations(dataset, sound_ids):
                              f"carrier comes into view")
                 if event == 3:
                     _require(kit.scope == 0, f"{vis.name}: CastSucceeded has no target list")
+                if event in (5, 8):
+                    # Aura events pass the aura holder as the target. A CASTER-scoped aura kit
+                    # would be keyed on the caster, which neither cast end (skips aura-bound
+                    # effects) nor aura removal (cleans the holder) ever tears down.
+                    _require(kit.scope == 1, f"{vis.name}: aura kits must be TARGET-scoped")
                 for sound_id in kit.sound_ids:
                     _require(sound_id in sound_ids, f"{vis.name}: unknown sound id {sound_id}")
                 for particle in kit.particles:

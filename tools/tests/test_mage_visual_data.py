@@ -79,6 +79,19 @@ class MageVisualDataTests(unittest.TestCase):
                 self.assertFalse(list(kit.sound_ids),
                                  f"{name}: aura sounds replay whenever a carrier comes into view")
 
+    def test_aura_kits_target_the_aura_holder(self):
+        # A CASTER-scoped aura kit is keyed on the caster, and nothing ever removes it: cast
+        # end skips aura-bound effects and aura removal only cleans the holder.
+        for name, event, kit in self.kits:
+            if event in (AURA_APPLIED, AURA_IDLE):
+                self.assertEqual(kit.scope, 1, f"{name}: aura kits must be TARGET-scoped")
+
+    def test_channeled_fire_barrage_has_no_casting_kit(self):
+        # SpellStart, ChannelStart and SpellGo arrive in one tick for a channeled spell, so a
+        # CASTING kit is destroyed the frame it spawns (and spawned twice before that).
+        barrage = next(v for v in self.mage if v.name == "Mage - Fire Barrage")
+        self.assertNotIn(CASTING, barrage.kits_by_event)
+
     def test_every_referenced_sound_exists_with_its_files(self):
         by_id = {e.id: e for e in self.sounds.entry}
         for name, _, kit in self.kits:

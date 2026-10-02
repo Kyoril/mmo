@@ -55,8 +55,8 @@ shared default entries that clerics and creatures also use. The superseded mage-
 | Chilled (22) | -- | -- | ChilledBurst + sound + tint on apply |
 | Fireball (4) | CastLoop + FireHandChannel + fire channel loop | FireballTrail projectile; FireballImpact + shuffled impact pair + light | FireballBurn loop during the DoT |
 | Fire Blast (7) | -- | FireBlastHand at `hand_r`; FireBlastImpact eruption at the target's feet + sound + light | -- |
-| Fire Barrage (150) | fire channel | release animation | none (see below) |
-| Fire Barrage Projectile (152) | -- | three arcing FireBarrageTrail comets; shot sound; FireBarrageImpact + quiet impact sound | -- |
+| Fire Barrage (150) | -- (channeled, see below) | release animation | none (see below) |
+| Fire Barrage Projectile (152) | -- | per wave: FireBlastHand flare at `hand_r` + shot sound, three arcing FireBarrageTrail comets; FireBarrageImpact + quiet impact sound | -- |
 | Arcane Intellect (11) | -- | ArcaneIntellectBurst + sound on the target | -- |
 | Sleep (72) | CastLoop + ArcaneHandChannel + arcane channel loop | SleepApply at `head` + sound | SleepAura loop above the head |
 | Arcane Disruption (75) | -- | ArcaneDisruptionCast at `hand_r` + sound; ArcaneDisruptionImpact at `head` + light | -- |
@@ -76,6 +76,12 @@ service skips the animation and still plays particles, light and sound.
   and a looping catalog sound; CAST_SUCCEEDED / CANCEL_CAST tear all of it down. Looping
   *particles* elsewhere (trails, aura states) need no kit flag -- the `.hpar` loops and the
   engine destroys it on projectile impact or aura removal.
+- **Fire Barrage has no CASTING kit.** It is channeled: the server sends SpellStart,
+  ChannelStart and SpellGo in the same tick, so a CASTING kit is spawned twice and destroyed by
+  the SpellGo in the same frame. The barrage reads through its waves instead -- every triggered
+  152 cast flares the casting hand.
+- **Aura kits are TARGET-scoped** (validated). Aura events pass the aura holder as the target; a
+  CASTER-scoped aura kit would be keyed on the caster and never torn down.
 - **Fire Barrage has no AURA_IDLE kit.** It applies spell 150 auras to both the caster and the
   target, and an aura-scoped kit plays on whoever holds the aura -- the target would get the
   caster's hand effect.
@@ -92,7 +98,12 @@ service skips the animation and still plays particles, light and sound.
 2. **Projectile trails fade instead of popping** (`projectile_manager`). The trail particle
    system was destroyed in the frame of impact, deleting every world-space particle it had left
    behind. On impact the trail now stops emitting and stays at the impact point until its
-   particles have died (3 s safety limit, since a system culled off-screen may never age).
+   particles have died (3 s safety limit).
+3. **Visualization state is reset on world leave** (`SpellVisualizationService::Reset`, called
+   from `WorldState`). The service is a process-lifetime singleton holding raw pointers into the
+   world scene; a record that outlived the scene was dereferenced as soon as the same
+   character's guid resolved again after re-login. This predates the branch, but a long-lived
+   aura-bound record (Frost Armor) made it the common path.
 
 Neither touches the wire; no `ProtocolVersion` bump.
 
@@ -111,5 +122,9 @@ its seam.
   FireballBurn, ManastoneConjure).
 - Frost Nova and Arcane Pulse play their ground effect from CAST_SUCCEEDED on the caster; there
   is no per-target impact for AoE spells (the same confirmed-hit-list limitation as Cleave).
-- Projectile ribbon trails still pop on impact (Fire Barrage); only particle trails fade.
+- Projectile ribbon trails and projectile lights still pop on impact; only particle trails fade.
+  The editor's preview uses its own projectile manager and does not show the fade.
+- The aura-bound fix covers particles, lights and ribbons, not tints or looped sounds: cast end
+  still removes the caster's tint for that spell, and any aura expiring on a mage stops its
+  current channel loop (one looped sound per actor).
 - Orc rigs need cast animations.

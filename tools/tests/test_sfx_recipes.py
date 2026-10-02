@@ -72,5 +72,6 @@ class MageRecipeTests(_RecipeChecks, unittest.TestCase):
         for name, spec in mage.SOUNDS.items():
             self.assertEqual(spec.loop, name.endswith("Channel"), name)
 
+
 if __name__ == "__main__":
     unittest.main()
