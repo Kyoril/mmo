@@ -39,7 +39,10 @@ namespace mmo
 
 		for (const AABB& box : bounds)
 		{
-			if (box.min.x > box.max.x || box.min.z > box.max.z)
+			// Skips inverted boxes, and NaN or infinite ones (the comparisons are false for NaN, and casting a
+			// non-finite value to an integer is undefined).
+			const bool finite = std::isfinite(box.min.x) && std::isfinite(box.max.x) && std::isfinite(box.min.z) && std::isfinite(box.max.z);
+			if (!finite || box.min.x > box.max.x || box.min.z > box.max.z)
 			{
 				continue;
 			}

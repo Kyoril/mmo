@@ -419,7 +419,7 @@ namespace mmo
 
                     // Adjust tile bounds
                     Bounds.min.y = std::min(Bounds.min.y, minY);
-                    Bounds.max.y = std::min(Bounds.max.y, maxY);
+                    Bounds.max.y = std::max(Bounds.max.y, maxY);
                 }
 
                 // Adjust min and max Y values based on world model entities
@@ -435,7 +435,7 @@ namespace mmo
 
                     // Adjust tile bounds
                     Bounds.min.y = std::min(Bounds.min.y, minY);
-                    Bounds.max.y = std::min(Bounds.max.y, maxY);
+                    Bounds.max.y = std::max(Bounds.max.y, maxY);
                 }
             }
         }
@@ -617,14 +617,21 @@ namespace mmo
             std::vector<AABB> geometryBounds;
             geometryBounds.reserve(m_loadedMapEntityInstances.size() + m_loadedWorldModelEntityInstances.size());
 
+            // A mesh without collision has nothing to rasterize; its zero-size bounds would only add empty pages.
             for (const auto& [uniqueId, instance] : m_loadedMapEntityInstances)
             {
-                geometryBounds.push_back(instance->Bounds);
+                if (!instance->Model->Vertices.empty())
+                {
+                    geometryBounds.push_back(instance->Bounds);
+                }
             }
 
             for (const auto& [uniqueId, instance] : m_loadedWorldModelEntityInstances)
             {
-                geometryBounds.push_back(instance->Bounds);
+                if (!instance->Model->Vertices.empty())
+                {
+                    geometryBounds.push_back(instance->Bounds);
+                }
             }
 
             const uint32 pageCount = MarkPagesCoveredByBounds(geometryBounds, m_hasPage);

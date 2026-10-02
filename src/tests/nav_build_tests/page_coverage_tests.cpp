@@ -4,6 +4,7 @@
 
 #include "nav_build/page_coverage.h"
 
+#include <limits>
 #include <vector>
 
 using namespace mmo;
@@ -70,15 +71,30 @@ TEST_CASE("Geometry across page borders marks every page its footprint overlaps"
 	CHECK(CountPages(pages) == 4);
 }
 
-TEST_CASE("Empty bounds mark no page and existing pages are kept", "[nav_build]")
+TEST_CASE("Inverted bounds mark no page and existing pages are kept", "[nav_build]")
 {
 	NavPageGrid pages{};
 	pages[5][7] = true;
 
-	// A default AABB is inverted (min above max) until something is added to it.
+	// Bounds whose minimum lies above their maximum describe nothing.
 	const std::vector<AABB> bounds{ AABB(Vector3(10.f, 10.f, 10.f), Vector3(-10.f, -10.f, -10.f)) };
 
 	CHECK(MarkPagesCoveredByBounds(bounds, pages) == 0);
 	CHECK(pages[5][7]);
 	CHECK(CountPages(pages) == 1);
+}
+
+TEST_CASE("Bounds with a NaN or infinite coordinate mark no page", "[nav_build]")
+{
+	NavPageGrid pages{};
+	const float nan = std::numeric_limits<float>::quiet_NaN();
+	const float infinity = std::numeric_limits<float>::infinity();
+
+	const std::vector<AABB> bounds{
+		AABB(Vector3(nan, 0.f, 0.f), Vector3(10.f, 5.f, 10.f)),
+		AABB(Vector3(0.f, 0.f, 0.f), Vector3(10.f, 5.f, infinity)),
+	};
+
+	CHECK(MarkPagesCoveredByBounds(bounds, pages) == 0);
+	CHECK(CountPages(pages) == 0);
 }

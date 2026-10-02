@@ -88,8 +88,6 @@ namespace mmo::nav
 			return;
 		}
 
-		m_hasPages = true;
-
 		// Extract bitmap
 		for (auto y = 0; y < terrain::constants::MaxPages; ++y)
 		{
@@ -127,6 +125,7 @@ namespace mmo::nav
 			return;
 		}
 
+		m_hasPages = true;
 		m_valid = true;
 	}
 

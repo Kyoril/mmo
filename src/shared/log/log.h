@@ -37,6 +37,9 @@ namespace mmo
 		/// thread (nav_builder's workers, the servers' database thread), so direct emission is
 		/// serialized: two threads emitting at once raced on the signal's non-atomic reference
 		/// counts and corrupted the heap, which is what made nav_builder crash at random.
+		/// Only emission is serialized: connecting to or disconnecting from signal() while
+		/// another thread logs is still a race, so connect before the threads start and
+		/// disconnect after they stop.
 		void Emit(const LogEntry &entry);
 
 		/// @brief Emits all buffered off-thread entries through the signal. Call once per
