@@ -47,10 +47,12 @@ namespace mmo::nav
 	{
 		const String filename = mapName + ".map";
 
+		// Every failure below leaves the map invalid, which means it has no navigation. Detour's query keeps a
+		// null nav mesh until it is initialized, so a map that went on answering queries would crash the server.
 		std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(filename);
 		if (!file)
 		{
-			ELOG("Failed to open map " << filename);
+			ELOG("Failed to open nav map " << filename << ", the map has no navigation");
 			return;
 		}
 
@@ -58,69 +60,74 @@ namespace mmo::nav
 		io::Reader reader{ source };
 
 		uint32 magic;
-		if (!(reader >> io::read<uint32>(magic)))
+		if (!(reader >> io::read<uint32>(magic)) || magic != FileMap)
 		{
-			ELOG("Failed to read map magic");
+			ELOG("Nav map " << filename << " is not a nav map file, the map has no navigation");
 			return;
 		}
 
-		if (magic != FileMap)
+		// The flag says that a page bitmap follows. Until 2026-10 nav_builder wrote nothing after the magic for a
+		// world without terrain, so a file that ends here is either one of those or was cut short.
+		uint8 hasPages;
+		if (!(reader >> io::read<uint8>(hasPages)))
 		{
-			ELOG("Invalid or corrupted map file!");
+			ELOG("Nav map " << filename << " ends after its header (rebuild it with nav_builder), the map has no navigation");
 			return;
 		}
 
-		uint8 hasTerrain;
-		if (!(reader >> io::read<uint8>(hasTerrain)))
+		if (!hasPages)
 		{
-			ELOG("Failed to read map terrain flag");
+			WLOG("Nav map " << filename << " has no navigation pages, the map has no navigation");
 			return;
 		}
 
-		if (hasTerrain)
+		std::uint8_t pageBits[terrain::constants::MaxPages * terrain::constants::MaxPages / 8];
+		if (reader.readPOD(pageBits); !reader)
 		{
-			m_hasPages = true;
+			ELOG("Nav map " << filename << " is truncated in its page bitmap, the map has no navigation");
+			return;
+		}
 
-			std::uint8_t hasPages[terrain::constants::MaxPages * terrain::constants::MaxPages / 8];
-			reader.readPOD(hasPages);
+		m_hasPages = true;
 
-			// Extract bitmap
-			for (auto y = 0; y < terrain::constants::MaxPages; ++y)
+		// Extract bitmap
+		for (auto y = 0; y < terrain::constants::MaxPages; ++y)
+		{
+			for (auto x = 0; x < terrain::constants::MaxPages; ++x)
 			{
-				for (auto x = 0; x < terrain::constants::MaxPages; ++x)
-				{
-					auto const offset = y * terrain::constants::MaxPages + x;
-					auto const byte_offset = offset / 8;
-					auto const bit_offset = offset % 8;
+				auto const offset = y * terrain::constants::MaxPages + x;
+				auto const byte_offset = offset / 8;
+				auto const bit_offset = offset % 8;
 
-					m_hasPage[x][y] = (hasPages[byte_offset] & (1 << bit_offset)) != 0;
-				}
+				m_hasPage[x][y] = (pageBits[byte_offset] & (1 << bit_offset)) != 0;
 			}
-
-			dtNavMeshParams params;
-
-			constexpr float mapOrigin = -32.f * terrain::constants::PageSize;
-			constexpr int maxTiles = terrain::constants::MaxPages * terrain::constants::TilesPerPage * terrain::constants::MaxPages * terrain::constants::TilesPerPage;
-
-			params.orig[0] = mapOrigin;
-			params.orig[1] = 0.f;
-			params.orig[2] = mapOrigin;
-			params.tileHeight = params.tileWidth = terrain::constants::TileSize;
-			params.maxTiles = maxTiles;
-			params.maxPolys = 1 << DT_POLY_BITS;
-
-			auto const result = m_navMesh.init(&params);
-			assert(result == DT_SUCCESS);
 		}
-		else
+
+		dtNavMeshParams params;
+
+		constexpr float mapOrigin = -32.f * terrain::constants::PageSize;
+		constexpr int maxTiles = terrain::constants::MaxPages * terrain::constants::TilesPerPage * terrain::constants::MaxPages * terrain::constants::TilesPerPage;
+
+		params.orig[0] = mapOrigin;
+		params.orig[1] = 0.f;
+		params.orig[2] = mapOrigin;
+		params.tileHeight = params.tileWidth = terrain::constants::TileSize;
+		params.maxTiles = maxTiles;
+		params.maxPolys = 1 << DT_POLY_BITS;
+
+		if (const dtStatus result = m_navMesh.init(&params); dtStatusFailed(result))
 		{
-			m_hasPages = false;
+			ELOG("Failed to initialize the navigation mesh of " << filename << ": " << result << ", the map has no navigation");
+			return;
 		}
 
-		if (dtStatus result = m_navQuery.init(&m_navMesh, 65535); result != DT_SUCCESS)
+		if (const dtStatus result = m_navQuery.init(&m_navMesh, 65535); dtStatusFailed(result))
 		{
-			ELOG("Failed to initialize navigation mesh query: " << result);
+			ELOG("Failed to initialize the navigation mesh query of " << filename << ": " << result << ", the map has no navigation");
+			return;
 		}
+
+		m_valid = true;
 	}
 
 	bool Map::HasPage(const int32 x, const int32 y) const
@@ -141,6 +148,11 @@ namespace mmo::nav
 
 	bool Map::LoadPage(int32 x, int32 y)
 	{
+		if (!m_valid)
+		{
+			return false;
+		}
+
 		if (IsPageLoaded(x, y))
 		{
 			return true;
@@ -252,6 +264,11 @@ namespace mmo::nav
 
 	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial) const
 	{
+		if (!m_valid)
+		{
+			return false;
+		}
+
 		constexpr float extents[] = { 5.f, 3.5f, 5.f };
 
 		float recastStart[3] = { start.x, start.y, start.z };
@@ -402,6 +419,11 @@ namespace mmo::nav
 
 	bool Map::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
 	{
+		if (!m_valid)
+		{
+			return false;
+		}
+
 		constexpr int maxAttempts = 10;
 
 		// Prepare for Recast/Detour calls.
@@ -456,6 +478,12 @@ namespace mmo::nav
 	bool Map::LineOfSightEx(const Vector3& start, const Vector3& end, Vector3& hitPoint) const
 	{
 		hitPoint = end;
+
+		// Without a nav mesh nothing is known to block the ray, the same answer as for a start off the mesh.
+		if (!m_valid)
+		{
+			return true;
+		}
 
 		// Trivially clear when positions are identical.
 		const float dx = end.x - start.x;

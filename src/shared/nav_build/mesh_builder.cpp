@@ -357,14 +357,13 @@ namespace mmo
 			return;
         }
 
+		// The map knows which pages to build: the pages with a .tile file, or for a world without terrain the pages
+		// its placed geometry covers. Stale .tile files of a world whose terrain was switched off are ignored.
 		for (int32 y = terrain::constants::MaxPages - 1; y >= 0; --y)
 		{
 			for (int32 x = terrain::constants::MaxPages - 1; x >= 0; --x)
 			{
-                std::stringstream strm;
-				strm << "Worlds/" << m_worldPath << "/" << m_worldPath << "/Terrain/" << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".tile";
-
-				if (!AssetRegistry::HasFile(strm.str()))
+				if (!m_map->HasPage(x, y))
 				{
 					continue;
 				}
@@ -448,6 +447,14 @@ namespace mmo
         // the start of the collection, we know that the first element in the
         // 'chunks' collection is also the chunk upon which this tile falls.
         auto const tileChunk = chunks[0];
+
+        // Without terrain the chunks only hold placed geometry. Should a chunk end up with none at all, it becomes an
+        // empty tile instead of failing the whole build.
+        if (!m_map->HasTerrain() && minY > maxY)
+        {
+            minY = 0.f;
+            maxY = 0.f;
+        }
 
         rcConfig config;
         InitializeRecastConfig(config);

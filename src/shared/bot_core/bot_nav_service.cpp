@@ -310,6 +310,13 @@ namespace mmo
 			{
 				outDirectory = *resolvedDirectory;
 			}
+
+			if (!existing->second->IsValid())
+			{
+				outReason = "nav_unavailable";
+				return {};
+			}
+
 			return existing->second;
 		}
 
@@ -328,9 +335,16 @@ namespace mmo
 			return {};
 		}
 
+		// An unreadable .map is cached too, so it is reported once instead of reloaded on every query.
 		auto loadedMap = std::make_shared<nav::Map>(outDirectory);
-		loadedMap->LoadAllPages();
 		m_loadedMaps.emplace(mapId, loadedMap);
+		if (!loadedMap->IsValid())
+		{
+			outReason = "nav_unavailable";
+			return {};
+		}
+
+		loadedMap->LoadAllPages();
 		return loadedMap;
 	}
 

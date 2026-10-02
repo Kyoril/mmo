@@ -3,6 +3,7 @@
 #include <thread>
 
 #include "assets/asset_registry.h"
+#include "base/crash_handler.h"
 #include "base/typedefs.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
@@ -92,10 +93,17 @@ int main(int argc, char* argv[])
 
 	// Add cout to the list of log output streams and make logging thread safe, so we don't write garbage to the console window
 	std::mutex coutLogMutex;
-	mmo::g_DefaultLog.signal().connect([&coutLogMutex, &logOptions](const mmo::LogEntry& entry) {
+	// Scoped: the slot captures locals of main, so it must not outlive main into the static log's destruction.
+	const mmo::scoped_connection coutLogConnection{ mmo::g_DefaultLog.signal().connect([&coutLogMutex, &logOptions](const mmo::LogEntry& entry) {
 		std::scoped_lock lock{ coutLogMutex };
 		printLogEntry(std::cout, entry, logOptions);
-		});
+		}) };
+
+	// A crash leaves a report with a stack trace in the working directory, which tools/symbolicate_crash.ps1 reads.
+	mmo::CrashHandlerConfig crashConfig;
+	crashConfig.applicationName = "nav_builder";
+	crashConfig.outputDirectory = std::filesystem::current_path();
+	mmo::InstallCrashHandler(std::move(crashConfig));
 
 	mmo::String dataDirectory;
 	mmo::String worldName;

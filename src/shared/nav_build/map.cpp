@@ -268,11 +268,17 @@ namespace mmo
         terrain::Terrain terrain(scene, nullptr, terrain::constants::MaxPages, terrain::constants::MaxPages);
         terrain.SetBaseFileName("Worlds/" + map->Name + "/" + map->Name + "/Terrain");
 
-        terrain::Page* page = terrain.GetPage(x, y);
-        ASSERT(page);
+        // A world without terrain still has pages: the ones its placed geometry covers. Their chunks hold only
+        // that geometry.
+        terrain::Page* page = nullptr;
+        if (map->HasTerrain())
+        {
+            page = terrain.GetPage(x, y);
+            ASSERT(page);
 
-        const bool pagePrepared = page->Prepare();
-        ASSERT(pagePrepared);
+            const bool pagePrepared = page->Prepare();
+            ASSERT(pagePrepared);
+        }
 
         for (uint32 y = 0; y < terrain::constants::TilesPerPage; ++y)
         {
@@ -288,105 +294,109 @@ namespace mmo
                 // 4 triangles per inner vertex -> 12 indices per inner
                 m_chunks[y][x]->m_terrainIndices.reserve(terrain::constants::InnerVerticesPerTile * 12);
 
-                // Fill the terrain chunk vertex, index and height data
-                const size_t startX = x * (terrain::constants::OuterVerticesPerTileSide - 1);
-                const size_t startZ = y * (terrain::constants::OuterVerticesPerTileSide - 1);
-                const size_t endX = startX + terrain::constants::OuterVerticesPerTileSide;
-                const size_t endZ = startZ + terrain::constants::OuterVerticesPerTileSide;
-
-                constexpr float scale = terrain::constants::TileSize / (terrain::constants::OuterVerticesPerTileSide - 1);
-
-                for (size_t j = startZ; j < endZ; ++j)
+                if (page)
                 {
-                    for (size_t i = startX; i < endX; ++i)
+                    // Fill the terrain chunk vertex, index and height data
+                    const size_t startX = x * (terrain::constants::OuterVerticesPerTileSide - 1);
+                    const size_t startZ = y * (terrain::constants::OuterVerticesPerTileSide - 1);
+                    const size_t endX = startX + terrain::constants::OuterVerticesPerTileSide;
+                    const size_t endZ = startZ + terrain::constants::OuterVerticesPerTileSide;
+
+                    constexpr float scale = terrain::constants::TileSize / (terrain::constants::OuterVerticesPerTileSide - 1);
+
+                    for (size_t j = startZ; j < endZ; ++j)
                     {
-                        const float height = page->GetHeightAt(i, j);
-
-                        auto position = Vector3(scale * i, height, scale * j);
-
-                        // TODO: Convert this position to the global position!
-                        position.x += Bounds.min.x;
-                        position.z += Bounds.min.z;
-
-                        m_chunks[y][x]->m_minY = std::min(height, m_chunks[y][x]->m_minY);
-                        m_chunks[y][x]->m_maxY = std::max(height, m_chunks[y][x]->m_maxY);
-
-                        Bounds.min.y = std::min(height, Bounds.min.y);
-                        Bounds.max.y = std::max(height, Bounds.max.y);
-
-                        // Save height and vertex
-                        m_chunks[y][x]->m_terrainVertices.push_back(position);
-						m_chunks[y][x]->m_heights[(j - startZ) + (i - startX) * terrain::constants::OuterVerticesPerTileSide] = height;
-                    }
-                }
-
-                // Create inner vertices (centers of each outer quad) and indices (4 triangles per inner)
-                for (size_t j = 0; j < terrain::constants::InnerVerticesPerTileSide; ++j)
-                {
-                    for (size_t i = 0; i < terrain::constants::InnerVerticesPerTileSide; ++i)
-                    {
-                        // Check if this inner vertex is marked as a hole
-                        const uint64 holeMap = page->GetTileHoleMap(x, y);
-                        const uint32 bitIndex = static_cast<uint32>(i + j * terrain::constants::InnerVerticesPerTileSide);
-                        const bool isHole = (holeMap & (1ULL << bitIndex)) != 0;
-
-                        const size_t ox = startX + i;
-                        const size_t oz = startZ + j;
-
-                        const float h00 = page->GetHeightAt(ox, oz);
-                        const float h10 = page->GetHeightAt(ox + 1, oz);
-                        const float h01 = page->GetHeightAt(ox, oz + 1);
-                        const float h11 = page->GetHeightAt(ox + 1, oz + 1);
-                        const float centerHeight = (h00 + h10 + h01 + h11) * 0.25f;
-
-                        Vector3 centerPos(scale * (ox + 0.5f), centerHeight, scale * (oz + 0.5f));
-                        centerPos.x += Bounds.min.x;
-                        centerPos.z += Bounds.min.z;
-
-                        const uint16 centerIdx = GetInnerIndex(i, j);
-                        m_chunks[y][x]->m_terrainVertices.push_back(centerPos);
-
-                        // Skip triangle indices for holes
-                        if (isHole)
+                        for (size_t i = startX; i < endX; ++i)
                         {
-                            continue;
+                            const float height = page->GetHeightAt(i, j);
+
+                            auto position = Vector3(scale * i, height, scale * j);
+
+                            // TODO: Convert this position to the global position!
+                            position.x += Bounds.min.x;
+                            position.z += Bounds.min.z;
+
+                            m_chunks[y][x]->m_minY = std::min(height, m_chunks[y][x]->m_minY);
+                            m_chunks[y][x]->m_maxY = std::max(height, m_chunks[y][x]->m_maxY);
+
+                            Bounds.min.y = std::min(height, Bounds.min.y);
+                            Bounds.max.y = std::max(height, Bounds.max.y);
+
+                            // Save height and vertex
+                            m_chunks[y][x]->m_terrainVertices.push_back(position);
+                            m_chunks[y][x]->m_heights[(j - startZ) + (i - startX) * terrain::constants::OuterVerticesPerTileSide] = height;
                         }
-
-                        const uint16 tl = GetOuterIndex(i, j);
-                        const uint16 tr = GetOuterIndex(i + 1, j);
-                        const uint16 br = GetOuterIndex(i + 1, j + 1);
-                        const uint16 bl = GetOuterIndex(i, j + 1);
-
-                        // Center - TL - TR
-                        m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
-                        m_chunks[y][x]->m_terrainIndices.push_back(tl);
-                        m_chunks[y][x]->m_terrainIndices.push_back(tr);
-
-                        // Center - TR - BR
-                        m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
-                        m_chunks[y][x]->m_terrainIndices.push_back(tr);
-                        m_chunks[y][x]->m_terrainIndices.push_back(br);
-
-                        // Center - BR - BL
-                        m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
-                        m_chunks[y][x]->m_terrainIndices.push_back(br);
-                        m_chunks[y][x]->m_terrainIndices.push_back(bl);
-
-                        // Center - BL - TL
-                        m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
-                        m_chunks[y][x]->m_terrainIndices.push_back(bl);
-                        m_chunks[y][x]->m_terrainIndices.push_back(tl);
                     }
-                }
 
-                for (const auto& index : m_chunks[y][x]->m_terrainIndices)
-                {
-					ASSERT(index < m_chunks[y][x]->m_terrainVertices.size());
+                    // Create inner vertices (centers of each outer quad) and indices (4 triangles per inner)
+                    for (size_t j = 0; j < terrain::constants::InnerVerticesPerTileSide; ++j)
+                    {
+                        for (size_t i = 0; i < terrain::constants::InnerVerticesPerTileSide; ++i)
+                        {
+                            // Check if this inner vertex is marked as a hole
+                            const uint64 holeMap = page->GetTileHoleMap(x, y);
+                            const uint32 bitIndex = static_cast<uint32>(i + j * terrain::constants::InnerVerticesPerTileSide);
+                            const bool isHole = (holeMap & (1ULL << bitIndex)) != 0;
+
+                            const size_t ox = startX + i;
+                            const size_t oz = startZ + j;
+
+                            const float h00 = page->GetHeightAt(ox, oz);
+                            const float h10 = page->GetHeightAt(ox + 1, oz);
+                            const float h01 = page->GetHeightAt(ox, oz + 1);
+                            const float h11 = page->GetHeightAt(ox + 1, oz + 1);
+                            const float centerHeight = (h00 + h10 + h01 + h11) * 0.25f;
+
+                            Vector3 centerPos(scale * (ox + 0.5f), centerHeight, scale * (oz + 0.5f));
+                            centerPos.x += Bounds.min.x;
+                            centerPos.z += Bounds.min.z;
+
+                            const uint16 centerIdx = GetInnerIndex(i, j);
+                            m_chunks[y][x]->m_terrainVertices.push_back(centerPos);
+
+                            // Skip triangle indices for holes
+                            if (isHole)
+                            {
+                                continue;
+                            }
+
+                            const uint16 tl = GetOuterIndex(i, j);
+                            const uint16 tr = GetOuterIndex(i + 1, j);
+                            const uint16 br = GetOuterIndex(i + 1, j + 1);
+                            const uint16 bl = GetOuterIndex(i, j + 1);
+
+                            // Center - TL - TR
+                            m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
+                            m_chunks[y][x]->m_terrainIndices.push_back(tl);
+                            m_chunks[y][x]->m_terrainIndices.push_back(tr);
+
+                            // Center - TR - BR
+                            m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
+                            m_chunks[y][x]->m_terrainIndices.push_back(tr);
+                            m_chunks[y][x]->m_terrainIndices.push_back(br);
+
+                            // Center - BR - BL
+                            m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
+                            m_chunks[y][x]->m_terrainIndices.push_back(br);
+                            m_chunks[y][x]->m_terrainIndices.push_back(bl);
+
+                            // Center - BL - TL
+                            m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
+                            m_chunks[y][x]->m_terrainIndices.push_back(bl);
+                            m_chunks[y][x]->m_terrainIndices.push_back(tl);
+                        }
+                    }
+
+                    for (const auto& index : m_chunks[y][x]->m_terrainIndices)
+                    {
+                        ASSERT(index < m_chunks[y][x]->m_terrainVertices.size());
+                    }
                 }
 
                 // TODO: Calculate chunk bounds and use these instead of page bounds, but whatever
                 AABB tileBounds = Bounds;
-                tileBounds.min.y = FLT_MIN;
+                // lowest, not FLT_MIN: FLT_MIN is the smallest positive float and dropped all geometry below y = 0
+                tileBounds.min.y = std::numeric_limits<float>::lowest();
                 tileBounds.max.y = FLT_MAX;
                 map->GetMapEntityInstancesInArea(tileBounds, m_chunks[y][x]->m_mapEntityInstances);
                 map->GetWorldModelEntityInstancesInArea(tileBounds, m_chunks[y][x]->m_worldModelInstances);
@@ -601,6 +611,25 @@ namespace mmo
         }
 
         DLOG("Loaded " << foliageInstances << " foliage instances for navmesh generation!");
+
+        if (!m_hasTerrain)
+        {
+            std::vector<AABB> geometryBounds;
+            geometryBounds.reserve(m_loadedMapEntityInstances.size() + m_loadedWorldModelEntityInstances.size());
+
+            for (const auto& [uniqueId, instance] : m_loadedMapEntityInstances)
+            {
+                geometryBounds.push_back(instance->Bounds);
+            }
+
+            for (const auto& [uniqueId, instance] : m_loadedWorldModelEntityInstances)
+            {
+                geometryBounds.push_back(instance->Bounds);
+            }
+
+            const uint32 pageCount = MarkPagesCoveredByBounds(geometryBounds, m_hasPage);
+            ILOG("World " << Name << " has no terrain: building the " << pageCount << " pages its placed geometry covers");
+        }
     }
 
     bool Map::HasPage(int x, int y) const
@@ -729,10 +758,18 @@ namespace mmo
     {
         writer << io::write<uint32>('MAP1');
 
-        if (m_hasTerrain)
+        // The flag says that the page bitmap follows. It is set for a world without terrain too, whose pages are
+        // the ones its placed geometry covers: the server only needs to know which pages to load.
+        bool hasAnyPage = false;
+        for (const auto& column : m_hasPage)
         {
-            writer << io::write<uint8>(1);
+            hasAnyPage = hasAnyPage || std::any_of(std::begin(column), std::end(column), [](const bool hasPage) { return hasPage; });
+        }
 
+        writer << io::write<uint8>(hasAnyPage ? 1 : 0);
+
+        if (hasAnyPage)
+        {
             uint8 hasPageMap[sizeof(m_hasPage) / 8] = {};
             for (auto y = 0; y < terrain::constants::MaxPages; ++y)
             {

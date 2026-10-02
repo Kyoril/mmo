@@ -48,6 +48,10 @@ namespace mmo::nav
 		~Map() override = default;
 
 	public:
+		/// @brief Whether the map's .map file was read and its nav mesh initialized. An invalid map has no
+		///	navigation: it loads no pages, finds no paths and no random points, and blocks no line of sight.
+		[[nodiscard]] bool IsValid() const { return m_valid; }
+
 		[[nodiscard]] bool HasPage(int32 x, int32 y) const;
 
 		[[nodiscard]] bool HasPages() const { return m_hasPages; }
@@ -112,6 +116,9 @@ namespace mmo::nav
 
 		// this is false when the map is based on a global world object
 		bool m_hasPages = false;
+
+		// set once the .map file was read and the nav mesh and its query are initialized
+		bool m_valid = false;
 
 		bool m_hasPage[terrain::constants::MaxPages][terrain::constants::MaxPages]{};
 		bool m_loadedPage[terrain::constants::MaxPages][terrain::constants::MaxPages]{};
