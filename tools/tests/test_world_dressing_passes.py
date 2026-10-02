@@ -252,10 +252,13 @@ class PassTests(unittest.TestCase):
 				raise OSError("disk full")
 			return real(path, data)
 
+		draft = self.repo / "generated" / "world" / "passes" / self.doc["pass_id"] / "draft.json"
 		with mock.patch.object(dressing, "write_atomic", half_write):
 			with self.assertRaises(PassError):
 				self.apply()
 		self.assertEqual(list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj")), [])
+		self.assertIn(b'"status": "planned"', draft.read_bytes())
+		self.assertFalse((manifests_dir(self.repo) / f"{self.doc['pass_id']}.json").exists())
 
 	def test_rollback_step_failure_does_not_skip_the_rest(self):
 		real = Path.unlink
@@ -272,8 +275,37 @@ class PassTests(unittest.TestCase):
 				self.apply()
 		self.assertIn("rollback was incomplete", str(ctx.exception))
 		self.assertIn("locked", str(ctx.exception))
+		self.assertIn("dress.py undo", str(ctx.exception))
 		left = list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj"))
 		self.assertEqual(left, stuck)  # only the one that could not be removed survives
+		manifest = load_doc(self.doc["pass_id"], self.repo)
+		self.assertEqual(manifest["status"], "applying")  # so undo can still find the prop that survived
+		report = undo_pass(manifest, self.repo, probe=NOT_RUNNING)
+		self.assertEqual(list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj")), [])
+		self.assertEqual(self.hfol.read_bytes(), self.original)
+		self.assertEqual(manifest["status"], "undone")
+		self.assertEqual(len(report.changed), 0)
+
+	def test_failing_intent_save_leaves_world_and_manifests_untouched(self):
+		real = dressing.write_atomic
+		tracked = manifests_dir(self.repo) / f"{self.doc['pass_id']}.json"
+		draft = self.repo / "generated" / "world" / "passes" / self.doc["pass_id"] / "draft.json"
+
+		def fail_tracked(path, data):
+			if path == tracked:
+				raise OSError("disk full")  # the draft was already rewritten as "applying"
+			return real(path, data)
+
+		with mock.patch.object(dressing, "write_atomic", fail_tracked):
+			with self.assertRaises(PassError) as ctx:
+				self.apply()
+		draft_after = draft.read_bytes()
+		self.assertIn("rolled back", str(ctx.exception))
+		self.assertIn(b'"status": "planned"', draft_after)
+		self.assertFalse(tracked.exists())
+		self.assertEqual(list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj")), [])
+		self.assertEqual(self.hfol.read_bytes(), self.original)
+		self.assertEqual(self.doc["status"], "planned")
 
 	def test_keyboard_interrupt_mid_write_rolls_back_and_propagates(self):
 		real = dressing.write_atomic
@@ -281,7 +313,7 @@ class PassTests(unittest.TestCase):
 		draft_before = draft.read_bytes()
 
 		def interrupted(path, data):
-			if path.suffix == ".hfol":
+			if path.parent.name == "Foliage":  # a world write, after the .wobj files and the "applying" manifest
 				raise KeyboardInterrupt()
 			return real(path, data)
 
@@ -293,6 +325,7 @@ class PassTests(unittest.TestCase):
 		self.assertEqual(self.doc["status"], "planned")
 		self.assertNotIn("file", self.doc["items"][0])
 		self.assertEqual(draft.read_bytes(), draft_before)
+		self.assertFalse((manifests_dir(self.repo) / f"{self.doc['pass_id']}.json").exists())
 
 	def test_failing_save_after_the_writes_rolls_back(self):
 		draft = self.repo / "generated" / "world" / "passes" / self.doc["pass_id"] / "draft.json"

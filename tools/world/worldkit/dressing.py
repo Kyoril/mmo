@@ -78,7 +78,10 @@ def write_atomic(path: Path, data: bytes) -> None:
             os.fsync(handle.fileno())
         os.replace(tmp, path)
     except BaseException:
-        tmp.unlink(missing_ok=True)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass  # a temp file we cannot remove must not hide the error that got us here
         raise
 
 
@@ -222,7 +225,8 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
     client = client_root(repo)
     taken = _taken_ids(doc["world"], repo)
     written: list[Path] = []
-    originals: dict[Path, bytes | None] = {}
+    originals: dict[Path, bytes | None] = {}      # world files only
+    doc_originals: dict[Path, bytes | None] = {}  # the draft and the tracked manifest, restored last
     made_dirs: list[Path] = []
     previous = {key: doc.get(key) for key in ("status", "created_files", "applied", "backups")}
     try:
@@ -275,7 +279,7 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
         doc["backups"] = backups
         doc["created_files"] = [path.relative_to(client).as_posix() for path, original, _ in hfol_writes if original is None]
         for doc_path in _paths(doc["pass_id"], repo):  # the saves are guarded too: a failing save rolls the world back
-            originals[doc_path] = doc_path.read_bytes() if doc_path.is_file() else None
+            doc_originals[doc_path] = doc_path.read_bytes() if doc_path.is_file() else None
         doc["status"] = "applying"
         save_doc(doc, repo)
 
@@ -294,6 +298,17 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
         save_doc(doc, repo)
     except BaseException as exc:  # any failure, an interrupt included, must leave the world exactly as it was
         failures = _roll_back(written, originals, made_dirs)
+        if failures:
+            # Part of the pass is still in the world. The manifest on disk stays "applying" with every unique id, so
+            # undo can still find what is left; putting it back to "planned" would orphan those props.
+            message = (f"apply failed ({exc}) and the rollback was incomplete: {'; '.join(failures)}. The pass stays "
+                       f"'applying', so `dress.py undo {doc['pass_id']}` can remove what is left")
+            if doc.get("backups"):
+                message += f"; the original page files are backed up in {', '.join(doc['backups'])}"
+            if not isinstance(exc, Exception):
+                raise
+            raise PassError(message) from exc
+        failures = _roll_back([], doc_originals, [])
         for item in doc["items"]:
             for key in APPLY_KEYS:
                 item.pop(key, None)
@@ -310,10 +325,9 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
     return doc
 
 
-def _moved_entity(directory: str, unique_id: str, repo: Path) -> Path | None:
-    """The .wobj of a prop that is no longer where the pass wrote it, found by its unique id in any page folder."""
-    matches = sorted(entities_dir(directory, repo).glob(f"*/{int(unique_id, 16)}.wobj"))
-    return matches[0] if matches else None
+def _entity_files(directory: str, repo: Path) -> dict[str, Path]:
+    """Every .wobj of a world by its file name (the decimal unique id), across all page folders."""
+    return {path.stem: path for path in sorted(entities_dir(directory, repo).glob("*/*.wobj"))}
 
 
 @dataclass
@@ -337,6 +351,16 @@ def undo_pass(doc: dict, repo: Path = REPO, force: bool = False, probe=None) -> 
         path = (client / rel).resolve()
         return path if path.is_relative_to(root) else None
 
+    entity_files: dict[str, Path] | None = None  # built on first need: a scan of every page folder
+
+    def moved_entity(unique_id: str) -> Path | None:
+        """The .wobj of a prop that is no longer where the pass wrote it (mmo_edit moves a prop dragged across a
+        page border into the new page's folder), found by its unique id."""
+        nonlocal entity_files
+        if entity_files is None:
+            entity_files = _entity_files(doc["world"], repo)
+        return entity_files.get(str(int(unique_id, 16)))
+
     # Plan everything first (reads and parses only), so a malformed file aborts before anything was deleted.
     delete: list[Path] = []
     for item in doc["items"]:
@@ -346,7 +370,7 @@ def undo_pass(doc: dict, repo: Path = REPO, force: bool = False, probe=None) -> 
         if path is None:
             report.missing.append(f"{item['file']} (outside the client data folder, left alone)")
         elif not path.exists():
-            moved = _moved_entity(doc["world"], item["unique_id"], repo)
+            moved = moved_entity(item["unique_id"])
             if moved is None:
                 report.missing.append(item["file"])
             elif force:
