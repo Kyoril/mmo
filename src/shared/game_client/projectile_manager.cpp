@@ -218,6 +218,29 @@ namespace mmo
 		CleanupVisuals();
 	}
 
+	bool Projectile::ReleaseTrail(ParticleSystem *&outEmitter, SceneNode *&outNode)
+	{
+		outEmitter = nullptr;
+		outNode = nullptr;
+
+		if (!m_trailEmitter || !m_node)
+		{
+			return false;
+		}
+
+		// Stop spawning; particles already alive keep simulating until they expire.
+		m_trailEmitter->Stop();
+
+		outEmitter = m_trailEmitter;
+		outNode = m_node;
+		m_trailEmitter = nullptr;
+
+		// The node stays alive for the trail. Everything else attached to it is destroyed
+		// by CleanupVisuals, so it must not destroy the node as well.
+		m_node = nullptr;
+		return true;
+	}
+
 	void Projectile::CleanupVisuals()
 	{
 		// Stop looping sound
@@ -539,7 +562,45 @@ namespace mmo
 	{
 	}
 
-	ProjectileManager::~ProjectileManager() = default;
+	ProjectileManager::~ProjectileManager()
+	{
+		for (DyingTrail &trail : m_dyingTrails)
+		{
+			DestroyDyingTrail(trail);
+		}
+	}
+
+	void ProjectileManager::DestroyDyingTrail(DyingTrail &trail)
+	{
+		if (trail.emitter)
+		{
+			m_scene.DestroyParticleEmitter(*trail.emitter);
+			trail.emitter = nullptr;
+		}
+
+		if (trail.node)
+		{
+			m_scene.DestroySceneNode(*trail.node);
+			trail.node = nullptr;
+		}
+	}
+
+	void ProjectileManager::UpdateDyingTrails(const float deltaTime)
+	{
+		for (auto it = m_dyingTrails.begin(); it != m_dyingTrails.end(); )
+		{
+			it->remaining -= deltaTime;
+			if (it->remaining <= 0.0f || it->emitter->GetTotalParticleCount() == 0)
+			{
+				DestroyDyingTrail(*it);
+				it = m_dyingTrails.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+	}
 
 	/// @brief Wrapper to adapt GameUnitC to IProjectileTarget interface.
 	class GameUnitProjectileTarget : public IProjectileTarget
@@ -821,6 +882,14 @@ namespace mmo
 				projectileImpact(projectile->GetSpell(), target.get());
 				projectileImpactSimple(target.get());
 
+				// Let the trail's particles fade out at the impact point instead of popping.
+				DyingTrail trail;
+				if (projectile->ReleaseTrail(trail.emitter, trail.node))
+				{
+					trail.remaining = 3.0f;
+					m_dyingTrails.push_back(trail);
+				}
+
 				// Remove projectile
 				it = EraseByMove(m_projectiles, it);
 			}
@@ -829,11 +898,18 @@ namespace mmo
 				++it;
 			}
 		}
+
+		UpdateDyingTrails(deltaTime);
 	}
 
 	void ProjectileManager::Clear()
 	{
 		m_projectiles.clear();
+		for (DyingTrail &trail : m_dyingTrails)
+		{
+			DestroyDyingTrail(trail);
+		}
+		m_dyingTrails.clear();
 		if (m_tempStorage)
 		{
 			m_tempStorage->spells.clear();
