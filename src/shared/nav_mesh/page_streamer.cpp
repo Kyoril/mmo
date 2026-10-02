@@ -149,7 +149,7 @@ namespace mmo::nav
 			}
 
 			ReadResult result;
-			result.success = Map::ReadPage(m_mapName, x, y, result.page);
+			result.success = Map::ReadPage(m_mapName, x, y, result.page, &result.error);
 
 			std::scoped_lock lock{ m_readyMutex };
 			m_ready.emplace(PageIndex(x, y), std::move(result));
@@ -169,8 +169,8 @@ namespace mmo::nav
 		if (!result.success || !m_map.AddPage(std::move(result.page)))
 		{
 			++m_failedCount;
-			WLOG("Nav map '" << m_mapName << "': page " << (index % terrain::constants::MaxPages) << "x" << (index / terrain::constants::MaxPages)
-				<< " failed to load, units will not find paths there");
+			ELOG("Nav map '" << m_mapName << "': page " << (index % terrain::constants::MaxPages) << "x" << (index / terrain::constants::MaxPages)
+				<< " failed to load (" << result.error << "), units will not find paths there");
 		}
 	}
 
@@ -197,7 +197,7 @@ namespace mmo::nav
 		m_claimed[index] = true;
 
 		ReadResult result;
-		result.success = Map::ReadPage(m_mapName, x, y, result.page);
+		result.success = Map::ReadPage(m_mapName, x, y, result.page, &result.error);
 		Resolve(index, std::move(result));
 	}
 }

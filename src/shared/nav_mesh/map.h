@@ -12,6 +12,7 @@
 
 #include <unordered_map>
 #include <memory>
+#include <ostream>
 #include <vector>
 
 namespace mmo::nav
@@ -44,7 +45,9 @@ namespace mmo::nav
 		uint32 y;
 		uint32 tileCount;
 
-		[[nodiscard]] bool Verify() const;
+		/// @brief Checks signature, version and kind.
+		/// @param reason Receives why the header was rejected.
+		[[nodiscard]] bool Verify(std::ostream& reason) const;
 	};
 #pragma pack(pop)
 
@@ -73,8 +76,10 @@ namespace mmo::nav
 		/// @param x Page x coordinate.
 		/// @param y Page y coordinate.
 		/// @param out Receives the page's tiles.
+		/// @param error When given, receives why the read failed instead of it being logged.
+		///        Off the main thread, pass one: the log is main-thread-only.
 		/// @return false if the page file is missing or malformed.
-		static bool ReadPage(const std::string& mapName, int32 x, int32 y, PageData& out);
+		static bool ReadPage(const std::string& mapName, int32 x, int32 y, PageData& out, std::string* error = nullptr);
 
 		/// @brief Installs a page previously produced by ReadPage into this map's nav mesh.
 		/// @details Must be called on the thread that owns this map. A page that is already

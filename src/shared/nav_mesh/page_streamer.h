@@ -10,6 +10,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -61,6 +62,8 @@ namespace mmo::nav
 		{
 			bool success = false;
 			PageData page;
+			/// Why the read failed. Logged by the owning thread: the reader thread must not log.
+			std::string error;
 		};
 
 		static uint32 PageIndex(int32 x, int32 y);

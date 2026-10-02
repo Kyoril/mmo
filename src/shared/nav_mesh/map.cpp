@@ -21,23 +21,23 @@ namespace mmo::nav
 	static constexpr uint32 FilePage = 'PAGE';
 	static constexpr uint32 FileMap = 'MAP1';
 
-	bool MapHeader::Verify() const
+	bool MapHeader::Verify(std::ostream& reason) const
 	{
 		if (sig != FileSignature)
 		{
-			ELOG("File signature mismatch!");
+			reason << "file signature mismatch";
 			return false;
 		}
 
 		if (ver != FileVersion)
 		{
-			ELOG("File version mismatch!");
+			reason << "file version mismatch";
 			return false;
 		}
 
 		if (kind != FilePage)
 		{
-			ELOG("Unsupported file kind");
+			reason << "unsupported file kind";
 			return false;
 		}
 
@@ -87,6 +87,7 @@ namespace mmo::nav
 			reader.readPOD(hasPages);
 
 			// Extract bitmap
+			size_t pageCount = 0;
 			for (auto y = 0; y < terrain::constants::MaxPages; ++y)
 			{
 				for (auto x = 0; x < terrain::constants::MaxPages; ++x)
@@ -96,8 +97,16 @@ namespace mmo::nav
 					auto const bit_offset = offset % 8;
 
 					m_hasPage[x][y] = (hasPages[byte_offset] & (1 << bit_offset)) != 0;
+					if (m_hasPage[x][y])
+					{
+						++pageCount;
+					}
 				}
 			}
+
+			// Size the tile table for the whole map up front: rehashing it as pages arrive moves
+			// every tile loaded so far, a multi-millisecond stall once a large map is half loaded.
+			m_tiles.reserve(pageCount * terrain::constants::TilesPerPage * terrain::constants::TilesPerPage);
 
 			dtNavMeshParams params;
 
@@ -162,88 +171,117 @@ namespace mmo::nav
 		return AddPage(std::move(page));
 	}
 
-	bool Map::ReadPage(const std::string& mapName, const int32 x, const int32 y, PageData& out)
+	namespace
 	{
-		std::stringstream strm;
-		strm << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".nav";
-
-		std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(mapName + "/" + strm.str());
-		if (!file)
+		bool ReadPageFile(const std::string& mapName, const int32 x, const int32 y, PageData& out, std::ostream& reason)
 		{
-			return false;
-		}
+			std::stringstream strm;
+			strm << std::setfill('0') << std::setw(2) << x << "_" << std::setfill('0') << std::setw(2) << y << ".nav";
 
-		// Pull the whole page into memory with one read. Parsing straight from the stream costs
-		// an istream call per byte of tile data, which made loading a large map take many seconds.
-		file->seekg(0, std::ios::end);
-		const std::streamoff fileSize = file->tellg();
-		file->seekg(0, std::ios::beg);
-		if (fileSize <= 0)
-		{
-			ELOG("Nav page " << x << "x" << y << " of map " << mapName << " is empty");
-			return false;
-		}
-
-		std::vector<char> buffer(static_cast<size_t>(fileSize));
-		if (!file->read(buffer.data(), static_cast<std::streamsize>(buffer.size())))
-		{
-			ELOG("Failed to read nav page " << x << "x" << y << " of map " << mapName);
-			return false;
-		}
-
-		io::MemorySource source{ buffer };
-		io::Reader reader{ source };
-
-		MapHeader header;
-		if (reader.readPOD(header); !reader)
-		{
-			ELOG("Failed to read map header for nav page " << x << "x" << y);
-			return false;
-		}
-
-		if (!header.Verify())
-		{
-			ELOG("Failed to verify page header!");
-			return false;
-		}
-
-		if (header.x != static_cast<std::uint32_t>(x) ||
-			header.y != static_cast<std::uint32_t>(y))
-		{
-			ELOG("Map header coordinates mismatch for page " << x << "x" << y << ": File references coordinates " << header.x << "x" << header.y << " instead");
-			return false;
-		}
-
-		out.x = x;
-		out.y = y;
-		out.tiles.clear();
-		out.tiles.reserve(header.tileCount);
-
-		for (auto i = 0u; i < header.tileCount; ++i)
-		{
-			PageData::TileData& tile = out.tiles.emplace_back();
-
-			uint32 meshSize = 0;
-			if (!(reader >> io::read<int32>(tile.x) >> io::read<int32>(tile.y) >> io::read<uint32>(meshSize)))
+			std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(mapName + "/" + strm.str());
+			if (!file)
 			{
-				ELOG("Failed to read tile " << i << " of nav page " << x << "x" << y);
+				reason << "file " << strm.str() << " not found";
 				return false;
 			}
 
-			if (meshSize > source.getRest())
+			// Pull the whole page into memory with one read. Parsing straight from the stream costs
+			// an istream call per byte of tile data, which made loading a large map take many seconds.
+			file->seekg(0, std::ios::end);
+			const std::streamoff fileSize = file->tellg();
+			file->seekg(0, std::ios::beg);
+			if (fileSize <= 0)
 			{
-				ELOG("Tile " << i << " of nav page " << x << "x" << y << " claims " << meshSize << " bytes but only " << source.getRest() << " remain");
+				reason << "file is empty";
 				return false;
 			}
 
-			tile.meshData.resize(meshSize);
-			if (meshSize > 0)
+			std::vector<char> buffer(static_cast<size_t>(fileSize));
+			if (!file->read(buffer.data(), static_cast<std::streamsize>(buffer.size())))
 			{
-				source.read(reinterpret_cast<char*>(tile.meshData.data()), meshSize);
+				reason << "failed to read the file";
+				return false;
 			}
+
+			io::MemorySource source{ buffer };
+			io::Reader reader{ source };
+
+			MapHeader header;
+			if (reader.readPOD(header); !reader)
+			{
+				reason << "failed to read the page header";
+				return false;
+			}
+
+			if (!header.Verify(reason))
+			{
+				return false;
+			}
+
+			if (header.x != static_cast<std::uint32_t>(x) ||
+				header.y != static_cast<std::uint32_t>(y))
+			{
+				reason << "file references coordinates " << header.x << "x" << header.y << " instead";
+				return false;
+			}
+
+			if (header.tileCount > terrain::constants::TilesPerPage * terrain::constants::TilesPerPage)
+			{
+				reason << "header claims " << header.tileCount << " tiles";
+				return false;
+			}
+
+			out.x = x;
+			out.y = y;
+			out.tiles.clear();
+			out.tiles.reserve(header.tileCount);
+
+			for (auto i = 0u; i < header.tileCount; ++i)
+			{
+				PageData::TileData& tile = out.tiles.emplace_back();
+
+				uint32 meshSize = 0;
+				if (!(reader >> io::read<int32>(tile.x) >> io::read<int32>(tile.y) >> io::read<uint32>(meshSize)))
+				{
+					reason << "failed to read tile " << i;
+					return false;
+				}
+
+				if (meshSize > source.getRest())
+				{
+					reason << "tile " << i << " claims " << meshSize << " bytes but only " << source.getRest() << " remain";
+					return false;
+				}
+
+				tile.meshData.resize(meshSize);
+				if (meshSize > 0)
+				{
+					source.read(reinterpret_cast<char*>(tile.meshData.data()), meshSize);
+				}
+			}
+
+			return true;
+		}
+	}
+
+	bool Map::ReadPage(const std::string& mapName, const int32 x, const int32 y, PageData& out, std::string* error)
+	{
+		std::ostringstream reason;
+		if (ReadPageFile(mapName, x, y, out, reason))
+		{
+			return true;
 		}
 
-		return true;
+		if (error)
+		{
+			*error = reason.str();
+		}
+		else
+		{
+			ELOG("Failed to read nav page " << x << "x" << y << " of map " << mapName << ": " << reason.str());
+		}
+
+		return false;
 	}
 
 	bool Map::AddPage(PageData&& page)
