@@ -55,14 +55,16 @@ namespace mmo
 
 	VertexData::~VertexData()
 	{
-		if (deleteDeclarationBinding)
+		// The device owns every declaration and binding it creates; give back the ones this instance
+		// owns, or each of them (and every vertex buffer still bound) lives until the device does.
+		// Skipped when the device is already gone, which destroyed them along with itself.
+		if (deleteDeclarationBinding && GraphicsDevice::HasInstance() && &GraphicsDevice::Get() == m_device)
 		{
 			ASSERT(vertexBufferBinding);
 			ASSERT(vertexDeclaration);
 
-			// TODO
-			//m_device->DestroyVertexBufferBinding(*vertexBufferBinding);
-			//m_device->DestroyVertexDeclaration(*vertexDeclaration);
+			m_device->DestroyVertexBufferBinding(*vertexBufferBinding);
+			m_device->DestroyVertexDeclaration(*vertexDeclaration);
 		}
 	}
 

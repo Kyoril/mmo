@@ -330,6 +330,10 @@ namespace mmo
 			page.Destroy();
 		}
 
+		// D3D11 only frees released resources once the context is flushed, which presenting a frame
+		// does. The command line bake never presents, so without this every page's buffers pile up.
+		GraphicsDevice::Get().FlushCommands();
+
 		return success;
 	}
 

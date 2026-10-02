@@ -284,36 +284,32 @@ namespace mmo
 
 	VertexDeclaration* GraphicsDevice::CreateVertexDeclaration()
 	{
-		return m_vertexDeclarations.emplace_back(std::make_unique<VertexDeclaration>()).get();
+		return AdoptVertexDeclaration(std::make_unique<VertexDeclaration>());
+	}
+
+	VertexDeclaration* GraphicsDevice::AdoptVertexDeclaration(std::unique_ptr<VertexDeclaration> declaration)
+	{
+		VertexDeclaration* result = declaration.get();
+		m_vertexDeclarations.emplace(result, std::move(declaration));
+		return result;
 	}
 
 	void GraphicsDevice::DestroyVertexDeclaration(VertexDeclaration& declaration)
 	{
-		for (auto it = m_vertexDeclarations.begin(); it != m_vertexDeclarations.end(); ++it)
-		{
-			if (it->get() == &declaration)
-			{
-				m_vertexDeclarations.erase(it);
-				return;
-			}
-		}
+		m_vertexDeclarations.erase(&declaration);
 	}
 
 	VertexBufferBinding* GraphicsDevice::CreateVertexBufferBinding()
 	{
-		return m_vertexBufferBindings.emplace_back(std::make_unique<VertexBufferBinding>()).get();
+		auto binding = std::make_unique<VertexBufferBinding>();
+		VertexBufferBinding* result = binding.get();
+		m_vertexBufferBindings.emplace(result, std::move(binding));
+		return result;
 	}
 
 	void GraphicsDevice::DestroyVertexBufferBinding(VertexBufferBinding& binding)
 	{
-		for (auto it = m_vertexBufferBindings.begin(); it != m_vertexBufferBindings.end(); ++it)
-		{
-			if (it->get() == &binding)
-			{
-				m_vertexBufferBindings.erase(it);
-				return;
-			}
-		}
+		m_vertexBufferBindings.erase(&binding);
 	}
 
 	std::vector<std::pair<uint16, uint16>> GraphicsDevice::GetSupportedResolutions() const
