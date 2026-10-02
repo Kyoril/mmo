@@ -19,28 +19,6 @@ namespace mmo
 		m_hardwareAnimationDataItemsUsed = 0;
 	}
 
-	VertexData::VertexData(const VertexData& rhs)
-	{
-		m_device = rhs.m_device;
-		vertexBufferBinding = rhs.vertexBufferBinding;
-		vertexDeclaration = rhs.vertexDeclaration;
-		deleteDeclarationBinding = false;
-		vertexCount = rhs.vertexCount;
-		vertexStart = rhs.vertexStart;
-		m_hardwareAnimationDataItemsUsed = rhs.m_hardwareAnimationDataItemsUsed;
-	}
-
-	VertexData& VertexData::operator=(const VertexData& rhs)
-	{
-		m_device = rhs.m_device;
-		vertexBufferBinding = rhs.vertexBufferBinding;
-		vertexDeclaration = rhs.vertexDeclaration;
-		deleteDeclarationBinding = false;
-		vertexCount = rhs.vertexCount;
-		vertexStart = rhs.vertexStart;
-		m_hardwareAnimationDataItemsUsed = rhs.m_hardwareAnimationDataItemsUsed;
-		return *this;
-	}
 
 	VertexData::VertexData(VertexDeclaration& declaration, VertexBufferBinding& binding)
 	{
@@ -55,14 +33,16 @@ namespace mmo
 
 	VertexData::~VertexData()
 	{
-		if (deleteDeclarationBinding)
+		// The device owns every declaration and binding it creates; give back the ones this instance
+		// owns, or each of them (and every vertex buffer still bound) lives until the device does.
+		// Skipped when the device is already gone, which destroyed them along with itself.
+		if (deleteDeclarationBinding && GraphicsDevice::HasInstance() && &GraphicsDevice::Get() == m_device)
 		{
 			ASSERT(vertexBufferBinding);
 			ASSERT(vertexDeclaration);
 
-			// TODO
-			//m_device->DestroyVertexBufferBinding(*vertexBufferBinding);
-			//m_device->DestroyVertexDeclaration(*vertexDeclaration);
+			m_device->DestroyVertexBufferBinding(*vertexBufferBinding);
+			m_device->DestroyVertexDeclaration(*vertexDeclaration);
 		}
 	}
 

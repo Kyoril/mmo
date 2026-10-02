@@ -19,6 +19,7 @@
 #include "shared/graphics/volume_texture.h"
 #include "shared/graphics/sampler_state.h"
 
+#include <unordered_map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -392,9 +393,19 @@ namespace mmo
 
 		virtual void DestroyVertexDeclaration(VertexDeclaration& declaration);
 
+	protected:
+		/// @brief Takes ownership of a declaration created by a derived device and returns it.
+		VertexDeclaration* AdoptVertexDeclaration(std::unique_ptr<VertexDeclaration> declaration);
+
+	public:
+
 		virtual VertexBufferBinding* CreateVertexBufferBinding();
 
 		virtual void DestroyVertexBufferBinding(VertexBufferBinding& binding);
+
+		/// @brief Submits queued GPU work and lets the driver release resources destroyed since the last
+		///        present. Only needed by code that renders without presenting (offline bakes).
+		virtual void FlushCommands() {}
 
 		virtual uint64 GetBatchCount() const = 0;
 
@@ -452,7 +463,8 @@ namespace mmo
 		DepthTestMethod m_depthComparison { DepthTestMethod::Always };
 		DepthTestMethod m_restoreDepthComparison { DepthTestMethod::Always };
 		bool m_gbufferDepthPrepass { false };
-		std::vector<std::unique_ptr<VertexDeclaration>> m_vertexDeclarations;
-		std::vector<std::unique_ptr<VertexBufferBinding>> m_vertexBufferBindings;
+		/// Keyed by address so destroying one is O(1): every VertexData owns one of each.
+		std::unordered_map<const VertexDeclaration*, std::unique_ptr<VertexDeclaration>> m_vertexDeclarations;
+		std::unordered_map<const VertexBufferBinding*, std::unique_ptr<VertexBufferBinding>> m_vertexBufferBindings;
 	};
 }

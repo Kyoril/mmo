@@ -164,6 +164,7 @@ namespace mmo
 
 		static ConsoleVar *s_terrainLodEnabledVar = nullptr;
 		static ConsoleVar *s_terrainOcclusionCullingVar = nullptr;
+		static ConsoleVar *s_terrainFarRadiusVar = nullptr;
 
 		static ConsoleVar *s_chatBubblesSayVar = nullptr;
 		static ConsoleVar *s_chatBubblesYellVar = nullptr;
@@ -487,6 +488,7 @@ namespace mmo
 		m_worldPingVisualizer.reset();
 		m_debugPathVisualizer.reset();
 		m_foliage.reset();
+		m_farTerrain.reset();
 		m_foliageRegistry.clear();
 		m_pageFoliageKeys.clear();
 
@@ -1163,6 +1165,8 @@ namespace mmo
 		const auto pos = GetPagePositionFromCamera();
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
+
+		UpdateFarTerrain();
 
 		CheckForZoneUpdate();
 
@@ -2172,6 +2176,9 @@ namespace mmo
 		s_terrainOcclusionCullingVar = ConsoleVarMgr::RegisterConsoleVar("TerrainOcclusionCulling", "Enable or disable GPU occlusion culling for terrain tiles", "1");
 		m_cvarChangedSignals += s_terrainOcclusionCullingVar->Changed.connect(this, &WorldState::OnTerrainOcclusionCullingChanged);
 
+		// Read each frame in OnIdle, so no change handler is required.
+		s_terrainFarRadiusVar = ConsoleVarMgr::RegisterConsoleVar("TerrainFarRadius", "Radius in terrain pages (533 m each) of the baked low-resolution distant terrain around the camera. 0 disables it and restores the 1000 m view distance.", "4");
+
 		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
 		m_cvarChangedSignals += s_foliageEnabledVar->Changed.connect(this, &WorldState::OnFoliageEnabledChanged);
 		s_foliageDensityVar = ConsoleVarMgr::RegisterConsoleVar("FoliageDensity", "Foliage density multiplier (0.1 to 1.0). Lower values improve performance.", "1.0");
@@ -2306,6 +2313,7 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
+		ConsoleVarMgr::UnregisterConsoleVar("TerrainFarRadius");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesSay");
@@ -5376,6 +5384,8 @@ namespace mmo
 
 	bool WorldState::LoadMap()
 	{
+		// The distant terrain belongs to the old world's terrain.
+		m_farTerrain.reset();
 		m_worldInstance.reset();
 
 		m_worldLoaded = false;
@@ -5439,6 +5449,8 @@ namespace mmo
 		{
 			m_worldInstance->GetTerrain()->SetOcclusionCullingEnabled(s_terrainOcclusionCullingVar->GetIntValue() != 0);
 		}
+
+		CreateFarTerrain();
 
 		// g_mapId already reflects the destination map (set by the caller before LoadMap runs, see
 		// OnEnter/OnNewWorld), so this applies the new map's default environment profile instead of
@@ -5772,6 +5784,72 @@ namespace mmo
 								floor(camPos.x / terrain::constants::PageSize)) +
 								32,
 							static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)) + 32);
+	}
+
+	void WorldState::CreateFarTerrain()
+	{
+		m_farTerrain.reset();
+
+		if (!m_worldInstance || !m_worldInstance->HasTerrain())
+		{
+			return;
+		}
+
+		// A generic lit albedo + normal material; the per-page instances only swap in the baked colour.
+		// The flat normal map leaves the (baked, filtered) vertex normals in charge of the lighting.
+		const MaterialPtr parent = MaterialManager::Get().Load("Models/AlbedoNormal_Opaque_Base.hmat");
+		if (!parent)
+		{
+			WLOG("Distant terrain disabled: its material could not be loaded");
+			return;
+		}
+
+		auto material = std::make_shared<MaterialInstance>("FarTerrain", parent);
+		material->SetTextureParameter("Normal", "Textures/Character/BaseFlattenNormalMap.htex");
+		material->SetScalarParameter("Specular", 0.2f);
+		material->SetScalarParameter("Roughness", 1.0f);
+
+		auto &workQueue = m_workQueue;
+		auto &dispatcher = m_dispatcher;
+		m_farTerrain = std::make_unique<terrain::FarTerrain>(
+			*m_worldInstance->GetTerrain(),
+			std::move(material),
+			[&workQueue](std::function<void()> work) { workQueue.post(std::move(work)); },
+			[&dispatcher](std::function<void()> work) { dispatcher.post(std::move(work)); });
+	}
+
+	void WorldState::UpdateFarTerrain()
+	{
+		const int32 radiusValue = s_terrainFarRadiusVar ? s_terrainFarRadiusVar->GetIntValue() : 0;
+		const uint32 radius = static_cast<uint32>(std::clamp(radiusValue, 0, 16));
+
+		Camera &camera = m_playerController->GetCamera();
+
+		if (m_farTerrain)
+		{
+			if (m_farTerrain->GetRadius() != radius)
+			{
+				m_farTerrain->SetRadius(radius);
+			}
+
+			m_farTerrain->Update(camera.GetDerivedPosition());
+		}
+
+		// Draw distance follows the distant terrain, but only while there is some: a map without terrain
+		// or without baked data would only get a hazier sky and less depth precision. A page is drawn when
+		// its nearest point is within radius pages, so its far corner can be another page diagonal away;
+		// the far plane sits half a page beyond the selection to leave that mostly uncut. Shadow cascades
+		// are capped separately (maxShadowDistance), so they are unaffected.
+		constexpr float defaultFarClip = 1000.0f;
+		const bool hasDistantTerrain = m_farTerrain && radius > 0 && m_farTerrain->GetReadyPageCount() > 0;
+		const float farClip = hasDistantTerrain
+			? std::max(defaultFarClip, (static_cast<float>(radius) + 1.5f) * static_cast<float>(terrain::constants::PageSize))
+			: defaultFarClip;
+
+		if (camera.GetFarClipDistance() != farClip)
+		{
+			camera.SetFarClipDistance(farClip);
+		}
 	}
 
 	void WorldState::EnsurePageIsLoaded(PagePosition pos)

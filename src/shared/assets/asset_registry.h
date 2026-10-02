@@ -8,6 +8,7 @@
 #include <memory>
 #include <istream>
 #include <mutex>
+#include <optional>
 #include <ostream>
 #include <vector>
 
@@ -38,6 +39,10 @@ namespace mmo
 
 		/// Determines whether a given file name is already taken.
 		static bool HasFile(const std::string& filename);
+
+		/// @brief Gets the modification time of a loose file below the asset root.
+		/// @return The time, or nothing if the file is not a loose file (missing, or packed in an archive).
+		static std::optional<std::filesystem::file_time_type> GetLastWriteTime(const std::string& filename);
 
 		static bool RemoveFile(const std::string& filename);
 

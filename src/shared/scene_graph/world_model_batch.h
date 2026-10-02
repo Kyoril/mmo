@@ -30,10 +30,9 @@ namespace mmo
 	///
 	///          Geometry is *referenced*, never copied: PrepareRenderOperation points straight at the
 	///          submesh's own VertexData/IndexData and the batch holds a MeshPtr to keep them alive.
-	///          Cloning would be the obvious alternative (FoliageChunk does it), but VertexData's
-	///          destructor cannot currently release the VertexDeclaration its constructor allocates,
-	///          so every clone permanently leaks a declaration plus its input-layout cache. Sharing
-	///          is also safe: instanced and non-instanced draws use separate input-layout caches on
+	///          Cloning would be the obvious alternative (FoliageChunk does it), but it would duplicate
+	///          every vertex buffer for nothing. Sharing is also safe: instanced and non-instanced
+	///          draws use separate input-layout caches on
 	///          the declaration, so the same mesh can be drawn both ways in one frame.
 	///
 	///          Instance matrices are world-space. The generated instanced vertex shader uses them as

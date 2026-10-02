@@ -498,6 +498,16 @@ namespace mmo
 		/// Filenames are encoded using page coordinates: (x << 8) | y.
 		void GenerateMinimaps();
 
+		/// @brief Bakes the distant-terrain data (.tlod + colour texture) the client draws beyond its
+		///        streamed pages. See TerrainLodBaker.
+		/// @param onlyStale Skip pages whose baked files are newer than their .tile and that have no unsaved changes.
+		/// @return false if there is no terrain or any page failed to bake.
+		bool GenerateTerrainLod(bool onlyStale);
+
+		/// @brief The most recently created world editor instance (the --bake-terrain-lod command line
+		///        job bakes the world it just opened). Null once that instance is gone.
+		static WorldEditorInstance* GetLastCreated() { return s_lastCreated; }
+
 		/// @brief Moves the editor camera so it focuses the given world location (X/Z plane). The
 		///        height is sampled from the terrain when available. Used by the minimap location
 		///        picker and the in-editor minimap teleport panel.
@@ -656,6 +666,8 @@ namespace mmo
 		std::vector<String> m_meshNames;
 
 		uint32 m_worldFileVersion;
+
+		static inline WorldEditorInstance* s_lastCreated = nullptr;
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 

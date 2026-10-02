@@ -4,6 +4,8 @@
 #include "graphics_device_d3d11.h"
 
 #include "base/macros.h"
+#include "base/utilities.h"
+#include "log/default_log_levels.h"
 
 #include <d3d11.h>
 
@@ -297,7 +299,11 @@ namespace mmo
 		ID3D11Texture2D* stagingTexture = nullptr;
 		ID3D11Device& d3d11Device = m_device;
 		HRESULT hr = d3d11Device.CreateTexture2D(&textureDesc, nullptr, &stagingTexture);
-		if (FAILED(hr)) return;
+		if (FAILED(hr))
+		{
+			ELOG("Failed to create staging texture to read back render texture " << m_name << " (hr " << log_hex_digit(static_cast<uint32>(hr)) << ")");
+			return;
+		}
 
 		// Step 2: Copy the texture data to the staging texture
 		ID3D11DeviceContext* context = nullptr;
@@ -309,13 +315,20 @@ namespace mmo
 		hr = context->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
 		if (FAILED(hr))
 		{
+			ELOG("Failed to map staging texture to read back render texture " << m_name << " (hr " << log_hex_digit(static_cast<uint32>(hr)) << ")");
 			stagingTexture->Release();
 			context->Release();
 			return;
 		}
 
-		// Copy pixel data to buffer
-		memcpy(destination, mappedResource.pData, GetPixelDataSize());
+		// Copy row by row: the mapped rows are RowPitch apart, which is padded beyond the tightly
+		// packed width for many sizes and formats.
+		const uint32 rowSize = GetPixelDataSize() / m_height;
+		const auto* source = static_cast<const uint8*>(mappedResource.pData);
+		for (uint32 row = 0; row < m_height; ++row)
+		{
+			memcpy(destination + row * rowSize, source + row * mappedResource.RowPitch, rowSize);
+		}
 
 		context->Unmap(stagingTexture, 0);
 		stagingTexture->Release();
@@ -324,7 +337,23 @@ namespace mmo
 
 	uint32 RenderTextureD3D11::GetPixelDataSize() const
 	{
-		return m_width * m_height * 4;
+		uint32 bytesPerPixel = 4;
+		switch (m_colorFormat)
+		{
+		case PixelFormat::R16G16B16A16:
+			bytesPerPixel = 8;
+			break;
+		case PixelFormat::R32G32B32A32:
+			bytesPerPixel = 16;
+			break;
+		case PixelFormat::R8:
+			bytesPerPixel = 1;
+			break;
+		default:
+			break;
+		}
+
+		return m_width * m_height * bytesPerPixel;
 	}
 
 	void RenderTextureD3D11::UpdateFromMemory(void* data, size_t dataSize)

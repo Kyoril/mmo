@@ -16,6 +16,7 @@
 #include "scene_graph/mesh.h"
 #include "terrain/water_lookup.h"
 #include "terrain/water_mesh_build.h"
+#include "terrain_io/page_lod.h"
 
 #include <functional>
 
@@ -148,6 +149,13 @@ namespace mmo
 			bool Save();
 
 			String GetPageFilename() const;
+
+			/// @brief Gets the texture manager name of a render batch quadrant's coverage texture.
+			String GetBatchCoverageTextureName(uint32 quadX, uint32 quadY) const;
+
+			/// @brief Derives this page's distant-terrain LOD from its current (possibly unsaved) data.
+			/// @remark The page must be prepared.
+			void BuildLod(terrain_io::PageLodData &out) const;
 
 			void NotifyTileMaterialChanged(uint32 x, uint32 y);
 

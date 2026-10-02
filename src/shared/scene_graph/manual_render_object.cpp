@@ -47,6 +47,10 @@ namespace mmo
 		subMesh.vertexData->vertexStart = m_vertexData->vertexStart;
 		subMesh.vertexData->m_hardwareAnimationDataList = m_vertexData->m_hardwareAnimationDataList;
 
+		// The submesh outlives this operation: hand it the declaration and binding along with the index buffer.
+		subMesh.vertexData->deleteDeclarationBinding = m_vertexData->deleteDeclarationBinding;
+		m_vertexData->deleteDeclarationBinding = false;
+
 		subMesh.SetTopologyType(TopologyType::LineList);
 
 		if (m_indexData)
@@ -68,6 +72,10 @@ namespace mmo
 		subMesh.vertexData->vertexCount = m_vertexData->vertexCount;
 		subMesh.vertexData->vertexStart = m_vertexData->vertexStart;
 		subMesh.vertexData->m_hardwareAnimationDataList = m_vertexData->m_hardwareAnimationDataList;
+
+		// The submesh outlives this operation: hand it the declaration and binding along with the index buffer.
+		subMesh.vertexData->deleteDeclarationBinding = m_vertexData->deleteDeclarationBinding;
+		m_vertexData->deleteDeclarationBinding = false;
 
 		if (m_indexData)
 		{

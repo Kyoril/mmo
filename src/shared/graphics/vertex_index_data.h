@@ -19,8 +19,9 @@ namespace mmo
 
 	public:
 		VertexData(GraphicsDevice* device = nullptr);
-		VertexData(const VertexData& rhs);
-		VertexData& operator=(const VertexData& rhs);
+		/// Not copyable: a copy would alias the declaration and binding this instance destroys.
+		VertexData(const VertexData& rhs) = delete;
+		VertexData& operator=(const VertexData& rhs) = delete;
 		VertexData(VertexDeclaration& declaration, VertexBufferBinding& binding);
 		~VertexData();
 
