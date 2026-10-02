@@ -1,6 +1,9 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 """
-Author the cleric spell sound catalog entries (ids 82-96) into sounds.data.
+Author the cleric spell sound catalog entries (ids 120-134) into sounds.data.
+
+Ids 120-134 deliberately leave a gap after the mage set (82-102, feature/mage-spell-visuals),
+which was authored in parallel; the upsert refuses to overwrite an id another class owns.
 
 Writes both the editor dataset and the client ClientDB copy. Idempotent: re-running replaces
 the same ids rather than appending duplicates. The files come from the prompt table in
@@ -36,21 +39,21 @@ SOUND_DIR = "Sound/Spells/Cleric/"
 # Ticks fire every 2-3 s for the length of an aura, so they get the widest pitch range and
 # the lowest volume -- they are the sounds that must never fatigue.
 ENTRIES = [
-    (82, "Cleric - Holy Cast Loop", ["HolyCastLoop.wav"], True, 1.0, 1.0, 0.55),
-    (83, "Cleric - Holy Fire Cast Loop", ["HolyFireCastLoop.wav"], True, 1.0, 1.0, 0.55),
-    (84, "Cleric - Resurrection Channel", ["ResurrectionChannel.wav"], True, 1.0, 1.0, 0.60),
-    (85, "Cleric - Holy Release", ["HolyRelease.wav"], False, 0.95, 1.05, 0.80),
-    (86, "Cleric - Healing Light", ["HealingLight.wav"], False, 0.97, 1.03, 0.90),
-    (87, "Cleric - Smite", ["Smite.wav"], False, 0.95, 1.05, 1.00),
-    (88, "Cleric - Holy Fire", ["HolyFire.wav"], False, 0.97, 1.03, 0.95),
-    (89, "Cleric - Holy Fire Tick", ["HolyFireTick.wav"], False, 0.90, 1.10, 0.65),
-    (90, "Cleric - Divine Vitality", ["DivineVitality.wav"], False, 0.98, 1.02, 0.90),
-    (91, "Cleric - Renewing Light", ["RenewingLight.wav"], False, 0.97, 1.03, 0.85),
-    (92, "Cleric - Renewing Light Tick", ["RenewingLightTick.wav"], False, 0.90, 1.10, 0.60),
-    (93, "Cleric - Healing Aura", ["HealingAura.wav"], False, 0.98, 1.02, 0.90),
-    (94, "Cleric - Protective Aura", ["ProtectiveAura.wav"], False, 0.98, 1.02, 0.90),
-    (95, "Cleric - Faithward", ["Faithward.wav"], False, 0.96, 1.04, 0.85),
-    (96, "Cleric - Resurrection", ["Resurrection.wav"], False, 1.0, 1.0, 1.00),
+    (120, "Cleric - Holy Cast Loop", ["HolyCastLoop.wav"], True, 1.0, 1.0, 0.55),
+    (121, "Cleric - Holy Fire Cast Loop", ["HolyFireCastLoop.wav"], True, 1.0, 1.0, 0.55),
+    (122, "Cleric - Resurrection Channel", ["ResurrectionChannel.wav"], True, 1.0, 1.0, 0.60),
+    (123, "Cleric - Holy Release", ["HolyRelease.wav"], False, 0.95, 1.05, 0.80),
+    (124, "Cleric - Healing Light", ["HealingLight.wav"], False, 0.97, 1.03, 0.90),
+    (125, "Cleric - Smite", ["Smite.wav"], False, 0.95, 1.05, 1.00),
+    (126, "Cleric - Holy Fire", ["HolyFire.wav"], False, 0.97, 1.03, 0.95),
+    (127, "Cleric - Holy Fire Tick", ["HolyFireTick.wav"], False, 0.90, 1.10, 0.65),
+    (128, "Cleric - Divine Vitality", ["DivineVitality.wav"], False, 0.98, 1.02, 0.90),
+    (129, "Cleric - Renewing Light", ["RenewingLight.wav"], False, 0.97, 1.03, 0.85),
+    (130, "Cleric - Renewing Light Tick", ["RenewingLightTick.wav"], False, 0.90, 1.10, 0.60),
+    (131, "Cleric - Healing Aura", ["HealingAura.wav"], False, 0.98, 1.02, 0.90),
+    (132, "Cleric - Protective Aura", ["ProtectiveAura.wav"], False, 0.98, 1.02, 0.90),
+    (133, "Cleric - Faithward", ["Faithward.wav"], False, 0.96, 1.04, 0.85),
+    (134, "Cleric - Resurrection", ["Resurrection.wav"], False, 1.0, 1.0, 1.00),
 ]
 
 
@@ -128,7 +131,7 @@ def main():
         datasets.append(dataset)
 
     if not args.apply:
-        print(f"validated {len(ENTRIES)} cleric sound entries (ids 82-96) in both datasets")
+        print(f"validated {len(ENTRIES)} cleric sound entries (ids 120-134) in both datasets")
         return
 
     OUT.mkdir(parents=True, exist_ok=True)
@@ -140,7 +143,7 @@ def main():
     for (path, _), dataset in zip(targets, datasets):
         path.write_bytes(dataset.SerializeToString())
 
-    print(f"wrote {len(ENTRIES)} cleric sound entries (ids 82-96) to both datasets. "
+    print(f"wrote {len(ENTRIES)} cleric sound entries (ids 120-134) to both datasets. "
           f"Backup: {backup}")
 
 

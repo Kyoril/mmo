@@ -56,7 +56,7 @@ Covered by `src/tests/game_client_tests/test_spell_visual_rules.cpp`.
 ## Installed presentation
 
 Visualizations are authored by `tools/cleric_visuals/author_visuals.py`, which also relinks each
-spell's `visualization_id` (editor + ClientDB). Sounds are catalog entries 82-96 from
+spell's `visualization_id` (editor + ClientDB). Sounds are catalog entries 120-134 from
 `tools/cleric_visuals/author_sounds.py`. Particles live in `data/client/Particles/Cleric/`
 (recipes `cleric_offense.py`, `cleric_healing.py`, `cleric_auras.py`, shared `cleric_common.py`).
 
@@ -115,3 +115,18 @@ ticks and the burn ending with the aura), Renewing Light (idle motes + ticks for
 Vitality, both auras (recipients sparkle once; idles stay subtle with five people on screen),
 recast an aura while it is active (idle must survive), cancel a Healing Light by moving (hand glow,
 light, ribbon and loop sound must stop), and a full 10 s Resurrection on a dead party member.
+
+## Parallel mage branch
+
+`feature/mage-spell-visuals` was authored at the same time and touches the same surfaces: sound
+ids 82-102, new visualization ids allocated from 42, `spell_visualization_service.cpp` (its own
+fix for aura effects being torn down at cast end, an `auraBound` flag) and
+`tools/sfx_gen/postprocess.py` (its own loop postprocessing). The cleric set therefore uses sound
+ids 120-134 and visualizations from 70. Whichever branch merges second must:
+
+1. take develop's `.data` files in both submodules and re-run
+   `tools/cleric_visuals/author_sounds.py --apply` and `author_visuals.py --apply` (ids are
+   matched by name, so nothing duplicates);
+2. reconcile the service: the cleric `castPhase` split is a superset of the mage `auraBound`
+   flag (it also protects self-impact effects), so keep one mechanism, not both;
+3. keep one loop postprocess in `postprocess.py`.

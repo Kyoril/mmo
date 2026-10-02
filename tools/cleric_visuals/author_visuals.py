@@ -55,21 +55,21 @@ PARTICLE_DIR = "Particles/Cleric/"
 CASTING, CAST, IMPACT, AURA, TICK, IDLE = "2", "3", "4", "5", "7", "8"
 
 # Sound catalog ids authored by author_sounds.py.
-SND_CAST_LOOP = 82
-SND_FIRE_CAST_LOOP = 83
-SND_RES_CHANNEL = 84
-SND_RELEASE = 85
-SND_HEALING_LIGHT = 86
-SND_SMITE = 87
-SND_HOLY_FIRE = 88
-SND_HOLY_FIRE_TICK = 89
-SND_DIVINE_VITALITY = 90
-SND_RENEWING_LIGHT = 91
-SND_RENEWING_LIGHT_TICK = 92
-SND_HEALING_AURA = 93
-SND_PROTECTIVE_AURA = 94
-SND_FAITHWARD = 95
-SND_RESURRECTION = 96
+SND_CAST_LOOP = 120
+SND_FIRE_CAST_LOOP = 121
+SND_RES_CHANNEL = 122
+SND_RELEASE = 123
+SND_HEALING_LIGHT = 124
+SND_SMITE = 125
+SND_HOLY_FIRE = 126
+SND_HOLY_FIRE_TICK = 127
+SND_DIVINE_VITALITY = 128
+SND_RENEWING_LIGHT = 129
+SND_RENEWING_LIGHT_TICK = 130
+SND_HEALING_AURA = 131
+SND_PROTECTIVE_AURA = 132
+SND_FAITHWARD = 133
+SND_RESURRECTION = 134
 
 # Colours (linear RGB) shared by lights, ribbons and tints.
 GOLD = (1.00, 0.84, 0.48)
@@ -77,6 +77,11 @@ WHITE_GOLD = (1.00, 0.95, 0.78)
 AMBER = (1.00, 0.66, 0.28)
 LIFE = (0.82, 1.00, 0.62)
 WARD = (0.70, 0.84, 1.00)
+
+# New cleric visualizations are numbered from here (unless one with the same name already
+# exists). The gap leaves room for the mage set authored in parallel on
+# feature/mage-spell-visuals, which also allocates from the old maximum (42).
+FIRST_NEW_VIS_ID = 70
 
 # Visualization 21 "Resurrection" already exists (empty) and spell 179 points at it; it is
 # reused under its id rather than orphaned.
@@ -328,7 +333,7 @@ def main():
                  sounds_type.FromString((ROOT / "data/editor/data/sounds.data").read_bytes()).entry}
 
     existing = {v.name: v.id for v in data["editor_vis"].entry}
-    next_id = max(v.id for v in data["editor_vis"].entry) + 1
+    next_id = max(max(v.id for v in data["editor_vis"].entry) + 1, FIRST_NEW_VIS_ID)
     spells_by_id = {s.id: s for s in data["editor_spells"].entry}
 
     drafts, mapping = [], {}
