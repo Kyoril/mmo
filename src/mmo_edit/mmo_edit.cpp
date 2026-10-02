@@ -14,6 +14,7 @@
 
 #ifdef _WIN32
 #include "fmod_audio/fmod_audio.h"
+#include "base/win_utility.h"
 #else
 #include "null_audio/null_audio.h"
 #endif
@@ -80,6 +81,7 @@
 #include "editors/material_instance_editor/material_instance_editor.h"
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
+#include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
@@ -310,6 +312,29 @@ int main(int argc, char* arg[])
 
 	// Run the database service thread
 	std::thread dbThread{ [&dbService]() { dbService.run(); } };
+
+#ifdef _WIN32
+	// Unattended jobs. --bake-terrain-lod Worlds/<n>/<n>.hwld opens the world, bakes the
+	// distant-terrain data of every page whose .tile changed since the last bake, then exits.
+	{
+		int argc = 0;
+		auto* const argv = CommandLineToArgvA(GetCommandLine(), &argc);
+		for (int i = 1; argv && i + 1 < argc; ++i)
+		{
+			if (std::string(argv[i]) == "--bake-terrain-lod")
+			{
+				mmo::WorldEditorInstance::RequestTerrainLodBakeAndQuit();
+				if (!mainWindow.OpenAsset(argv[i + 1]))
+				{
+					ELOG("--bake-terrain-lod: failed to open " << argv[i + 1]);
+					PostQuitMessage(1);
+				}
+				break;
+			}
+		}
+		LocalFree(argv);
+	}
+#endif
 
 #ifdef _WIN32
 	// Run the message loop

@@ -38,6 +38,7 @@ namespace mmo
         /// @param lastContentRectMin Reference to last content rect min.
         /// @param renderCallback Callback to trigger rendering.
         /// @param generateMinimapsCallback Callback to generate minimaps.
+        /// @param generateTerrainLodCallback Callback to bake the distant-terrain data of stale pages.
         explicit ViewportPanel(
             DeferredRenderer &deferredRenderer,
             WorldGrid &worldGrid,
@@ -52,7 +53,8 @@ namespace mmo
             ImVec2 &lastAvailViewportSize,
             ImVec2 &lastContentRectMin,
             std::function<void()> renderCallback,
-            std::function<void()> generateMinimapsCallback);
+            std::function<void()> generateMinimapsCallback,
+            std::function<void()> generateTerrainLodCallback);
 
         ~ViewportPanel() override = default;
 
@@ -93,6 +95,7 @@ namespace mmo
         ImVec2 &m_lastContentRectMin;
         std::function<void()> m_renderCallback;
         std::function<void()> m_generateMinimapsCallback;
+        std::function<void()> m_generateTerrainLodCallback;
 
         static Texture *s_translateIcon;
         static Texture *s_rotateIcon;

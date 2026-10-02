@@ -46,6 +46,7 @@
 #include "graphics/render_texture.h"
 
 #include "stb_dxt.h"
+#include "terrain_lod_baker.h"
 
 namespace mmo
 {
@@ -323,7 +324,9 @@ namespace mmo
 			[this]()
 			{ Render(); },
 			[this]()
-			{ GenerateMinimaps(); });
+			{ GenerateMinimaps(); },
+			[this]()
+			{ GenerateTerrainLod(true); });
 
 		// Load and set transform mode icons
 		static auto translateIcon = TextureManager::Get().CreateOrRetrieve("Editor/translate.htex");
@@ -477,6 +480,15 @@ namespace mmo
 	void WorldEditorInstance::Render()
 	{
 		m_dispatcher.poll();
+
+		if (s_terrainLodBakeAndQuitRequested)
+		{
+			s_terrainLodBakeAndQuitRequested = false;
+			GenerateTerrainLod(true);
+#ifdef _WIN32
+			PostQuitMessage(0);
+#endif
+		}
 
 		// Keep water visibility in sync with the active edit mode (water is forced visible while editing water).
 		UpdateWaterVisibility();
@@ -2059,6 +2071,27 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			}
 		}
 		ImGui::End();
+	}
+
+	void WorldEditorInstance::GenerateTerrainLod(const bool onlyStale)
+	{
+		if (!m_terrain || !m_hasTerrain)
+		{
+			ELOG("Cannot generate terrain LOD: no terrain available");
+			return;
+		}
+
+		// Hidden by the baker along with everything else outside the terrain, but foliage keeps
+		// its own visibility flag on top of its scene objects.
+		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
+		if (m_foliage) m_foliage->SetVisible(false);
+
+		{
+			TerrainLodBaker baker(m_scene, *m_terrain);
+			baker.BakeAll(onlyStale);
+		}
+
+		if (m_foliage) m_foliage->SetVisible(foliageWasVisible);
 	}
 
 	void WorldEditorInstance::GenerateMinimaps()

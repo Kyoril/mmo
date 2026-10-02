@@ -175,6 +175,18 @@ namespace mmo
 		return it->second->Open(filename);
 	}
 
+	std::optional<std::filesystem::file_time_type> AssetRegistry::GetLastWriteTime(const std::string& filename)
+	{
+		std::error_code error;
+		const auto time = std::filesystem::last_write_time(s_basePath / filename, error);
+		if (error)
+		{
+			return std::nullopt;
+		}
+
+		return time;
+	}
+
 	bool AssetRegistry::HasFile(const std::string& filename)
 	{
 		std::unique_lock lock { s_fileLock };

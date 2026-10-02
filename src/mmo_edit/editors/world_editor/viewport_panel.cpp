@@ -39,8 +39,9 @@ namespace mmo
         ImVec2 &lastAvailViewportSize,
         ImVec2 &lastContentRectMin,
         std::function<void()> renderCallback,
-        std::function<void()> generateMinimapsCallback)
-        : m_deferredRenderer(deferredRenderer), m_worldGrid(worldGrid), m_transformWidget(transformWidget), m_gridSnapSettings(gridSnapSettings), m_selection(selection), m_sceneOutlineWindow(sceneOutlineWindow), m_hovering(hovering), m_leftButtonPressed(leftButtonPressed), m_rightButtonPressed(rightButtonPressed), m_cameraSpeed(cameraSpeed), m_lastAvailViewportSize(lastAvailViewportSize), m_lastContentRectMin(lastContentRectMin), m_renderCallback(std::move(renderCallback)), m_generateMinimapsCallback(std::move(generateMinimapsCallback))
+        std::function<void()> generateMinimapsCallback,
+        std::function<void()> generateTerrainLodCallback)
+        : m_deferredRenderer(deferredRenderer), m_worldGrid(worldGrid), m_transformWidget(transformWidget), m_gridSnapSettings(gridSnapSettings), m_selection(selection), m_sceneOutlineWindow(sceneOutlineWindow), m_hovering(hovering), m_leftButtonPressed(leftButtonPressed), m_rightButtonPressed(rightButtonPressed), m_cameraSpeed(cameraSpeed), m_lastAvailViewportSize(lastAvailViewportSize), m_lastContentRectMin(lastContentRectMin), m_renderCallback(std::move(renderCallback)), m_generateMinimapsCallback(std::move(generateMinimapsCallback)), m_generateTerrainLodCallback(std::move(generateTerrainLodCallback))
     {
     }
 
@@ -227,6 +228,19 @@ namespace mmo
             {
                 m_generateMinimapsCallback();
             }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Generate Terrain LOD"))
+        {
+            if (m_generateTerrainLodCallback)
+            {
+                m_generateTerrainLodCallback();
+            }
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Bakes the distant-terrain data (.tlod + colour) of every page whose .tile changed since the last bake.");
         }
 
         // Position transform buttons at the right edge with margin
