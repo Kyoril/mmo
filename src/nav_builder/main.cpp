@@ -3,6 +3,7 @@
 #include <thread>
 
 #include "assets/asset_registry.h"
+#include "base/crash_handler.h"
 #include "base/typedefs.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
@@ -36,14 +37,15 @@ namespace mmo
 			std::generate_n(networkThreads.begin(), concurrentThreads, [&builder, &success, &finishedThreads]() {
 				return std::thread{ [&builder, &success, &finishedThreads]
 				{
+					// Once any tile failed the build is lost, so the other workers stop as well. Every worker
+					// counts itself finished on the way out: the progress loop below waits for all of them.
 					TileIndex nextTile;
-					while (builder->GetNextTile(nextTile))
+					while (success && builder->GetNextTile(nextTile))
 					{
 						if (!builder->BuildAndSerializeTerrainTile(nextTile))
 						{
 							ELOG("Failed building tile " << nextTile.x << "x" << nextTile.y);
 							success = false;
-							return;
 						}
 					}
 
@@ -67,18 +69,26 @@ namespace mmo
 			}
 		}
 
-		ILOG("Saving map...");
-		builder->SaveMap();
-
-		ILOG("Finished");
-		
 		// Wait for network threads to finish execution
 		for (auto& thread : networkThreads)
 		{
 			thread.join();
 		}
 
-		return success ? 0 : 1;
+		// A failed build leaves pages unwritten. The .map would list them anyway, so it is not saved at all.
+		if (!success)
+		{
+			ELOG("Building world " << worldName << " failed. The .map was not saved and the nav data in "
+				<< directoryPath << " is incomplete: fix the error above and build again");
+			return 1;
+		}
+
+		ILOG("Saving map...");
+		builder->SaveMap();
+
+		ILOG("Finished");
+
+		return 0;
 	}
 }
 
@@ -92,10 +102,17 @@ int main(int argc, char* argv[])
 
 	// Add cout to the list of log output streams and make logging thread safe, so we don't write garbage to the console window
 	std::mutex coutLogMutex;
-	mmo::g_DefaultLog.signal().connect([&coutLogMutex, &logOptions](const mmo::LogEntry& entry) {
+	// Scoped: the slot captures locals of main, so it must not outlive main into the static log's destruction.
+	const mmo::scoped_connection coutLogConnection{ mmo::g_DefaultLog.signal().connect([&coutLogMutex, &logOptions](const mmo::LogEntry& entry) {
 		std::scoped_lock lock{ coutLogMutex };
 		printLogEntry(std::cout, entry, logOptions);
-		});
+		}) };
+
+	// A crash leaves a report with a stack trace in the working directory, which tools/symbolicate_crash.ps1 reads.
+	mmo::CrashHandlerConfig crashConfig;
+	crashConfig.applicationName = "nav_builder";
+	crashConfig.outputDirectory = std::filesystem::current_path();
+	mmo::InstallCrashHandler(std::move(crashConfig));
 
 	mmo::String dataDirectory;
 	mmo::String worldName;

@@ -7,6 +7,7 @@
 #include "math/vector3.h"
 #include "math/aabb.h"
 #include "terrain/constants.h"
+#include "page_coverage.h"
 
 #include <memory>
 #include <vector>
@@ -252,7 +253,9 @@ namespace mmo
 
         std::vector<String> m_meshNames;
 
-        bool m_hasPage[terrain::constants::MaxPages][terrain::constants::MaxPages];
+        // Pages that get a navigation page: the pages with a .tile file, or for a world without terrain the
+        // pages its placed geometry covers.
+        NavPageGrid m_hasPage{};
         bool m_hasTerrain = false;
 
         mutable std::mutex m_pageMutex;

@@ -29,6 +29,7 @@ namespace mmo
 	{
 		if (IsMainThread())
 		{
+			std::scoped_lock emitLock{ m_emitMutex };
 			m_signal(entry);
 			return;
 		}
@@ -51,6 +52,7 @@ namespace mmo
 			pending.swap(m_buffered);
 		}
 
+		std::scoped_lock emitLock{ m_emitMutex };
 		for (const LogEntry &entry : pending)
 		{
 			m_signal(entry);
