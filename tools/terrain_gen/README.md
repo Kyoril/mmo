@@ -41,3 +41,18 @@ python preview.py --diff zone.png exported.png
 See `generate_heightmap.py --help` for the recipe format and
 `terrain_lib.py` for the full primitive library (fbm/ridged noise, domain warp,
 edge walls, river carving, road flattening, plateaus, erosion, blur).
+
+## Optional splat import
+
+`terrain_tool import ... --splat layers.png` accepts an 8-bit RGBA PNG over the
+same full page rectangle. Its exact resolution is `(nx*1008+1, nz*1008+1)`.
+R/G/B/A store layers 0/1/2/3; alpha is a weight, not transparency. Each pixel
+must sum to 255. Invalid dimensions, channel counts or sums fail before writing.
+Shared page-edge pixels are copied from the same source column/row. Without
+`--splat`, import retains the original all-layer-0 default. Import regenerates
+whole pages; it is not a paint-only patch for existing terrain.
+
+`collision_rock_poc.py` generates the single-page Collision rock study in
+`generated/terrain/collision-rock-poc/`. Its README records assets, import and
+review details. The script writes source images/instance JSON only; importing
+the HMI and page is an explicit separate step.

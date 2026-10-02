@@ -136,6 +136,28 @@ namespace mmo
 		return WritePng(path, image.width, image.height, 16, 0, raw, bytesPerRow);
 	}
 
+	bool LoadRgba8Png(const std::filesystem::path &path, RgbaImage8 &out)
+	{
+		int width = 0, height = 0, channels = 0;
+		if (stbi_is_16_bit(path.string().c_str()))
+		{
+			ELOG("Splat images must use 8-bit RGBA weights!");
+			return false;
+		}
+		stbi_uc *pixels = stbi_load(path.string().c_str(), &width, &height, &channels, 4);
+		if (!pixels || channels != 4)
+		{
+			ELOG("Unable to load four-channel splat image '" << path.string() << "'!");
+			stbi_image_free(pixels);
+			return false;
+		}
+		out.width = static_cast<uint32>(width);
+		out.height = static_cast<uint32>(height);
+		out.pixels.assign(pixels, pixels + static_cast<size_t>(width) * height * 4);
+		stbi_image_free(pixels);
+		return true;
+	}
+
 	bool SaveRgb8Png(const std::filesystem::path &path, const RgbImage8 &image)
 	{
 		if (image.pixels.size() != static_cast<size_t>(image.width) * image.height * 3)
