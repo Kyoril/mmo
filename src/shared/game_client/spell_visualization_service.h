@@ -103,6 +103,14 @@ namespace mmo
         ///        put on the caster (recasting a self buff refreshes it without a new AURA_APPLIED).
         void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId, bool includeAuraBound = true);
 
+        /// \brief Forget every tracked effect, light, animation, pending kit and sound. Call when
+        ///        leaving the world, before the scene is cleared: the records hold raw pointers into
+        ///        that scene, and the service outlives it. Without this, re-entering with the same
+        ///        character makes the player's guid resolve again and Update() dereferences
+        ///        emitters of the destroyed scene (most easily via a long-lived aura effect such as
+        ///        Frost Armor's). Scene objects themselves are left to the scene's own teardown.
+        void Reset();
+
     private:
         SpellVisualizationService() = default;
         ~SpellVisualizationService() = default;

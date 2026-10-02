@@ -188,7 +188,8 @@ namespace mmo
         {
             ParticleSystem *emitter{ nullptr };
             SceneNode *node{ nullptr };
-            /// Safety limit in seconds: a system culled off-screen may never age its particles.
+            /// Safety limit in seconds, so a trail whose particles somehow never drain (an
+            /// over-long lifetime in a .hpar) cannot accumulate.
             float remaining{ 0.0f };
         };
 
