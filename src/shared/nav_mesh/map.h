@@ -12,19 +12,28 @@
 
 #include <unordered_map>
 #include <memory>
-
-
-template <>
-struct std::hash<std::pair<int, int>>
-{
-	std::size_t operator()(const std::pair<int, int>& coordinate) const
-	{
-		return std::hash<int>()(coordinate.first ^ coordinate.second);
-	}
-};
+#include <vector>
 
 namespace mmo::nav
 {
+	/// @brief The parsed contents of one nav page file, ready to be installed into a Map.
+	/// @details Reading a page (Map::ReadPage) only touches the asset registry and is safe on any
+	/// thread. Installing it (Map::AddPage) mutates the Detour nav mesh and must happen on the
+	/// thread that owns the Map.
+	struct PageData
+	{
+		struct TileData
+		{
+			int32 x = 0;
+			int32 y = 0;
+			std::vector<uint8> meshData;
+		};
+
+		int32 x = 0;
+		int32 y = 0;
+		std::vector<TileData> tiles;
+	};
+
 #pragma pack(push, 1)
 	struct MapHeader
 	{
@@ -54,7 +63,24 @@ namespace mmo::nav
 
 		[[nodiscard]] bool IsPageLoaded(int32 x, int32 y) const;
 
+		/// @brief Reads and installs a single page. Equivalent to ReadPage followed by AddPage.
 		bool LoadPage(int32 x, int32 y);
+
+		/// @brief Reads and parses a nav page file without touching any Map.
+		/// @details Thread-safe: only the (internally locked) asset registry is accessed, so
+		/// this can run on a background thread while the owning thread keeps querying the map.
+		/// @param mapName Name of the nav map (its directory name).
+		/// @param x Page x coordinate.
+		/// @param y Page y coordinate.
+		/// @param out Receives the page's tiles.
+		/// @return false if the page file is missing or malformed.
+		static bool ReadPage(const std::string& mapName, int32 x, int32 y, PageData& out);
+
+		/// @brief Installs a page previously produced by ReadPage into this map's nav mesh.
+		/// @details Must be called on the thread that owns this map. A page that is already
+		/// loaded is left untouched.
+		/// @return true if the page is loaded afterwards.
+		bool AddPage(PageData&& page);
 
 		void UnloadPage(int32 x, int32 y);
 
@@ -93,6 +119,17 @@ namespace mmo::nav
 
 		[[nodiscard]] const dtNavMeshQuery& GetNavMeshQuery() const { return m_navQuery; }
 
+		[[nodiscard]] const std::string& GetName() const { return m_mapName; }
+
+	private:
+		struct TileCoordHash
+		{
+			std::size_t operator()(const std::pair<int32, int32>& coordinate) const
+			{
+				return std::hash<uint64>()((static_cast<uint64>(static_cast<uint32>(coordinate.first)) << 32) | static_cast<uint32>(coordinate.second));
+			}
+		};
+
 	private:
 		[[nodiscard]] const Tile* GetTile(float x, float y) const;
 
@@ -123,6 +160,6 @@ namespace mmo::nav
 		dtNavMeshQuery m_navQuery;
 		dtQueryFilter m_queryFilter;
 
-		std::unordered_map<std::pair<int, int>, std::unique_ptr<Tile>> m_tiles;
+		std::unordered_map<std::pair<int32, int32>, std::unique_ptr<Tile>, TileCoordHash> m_tiles;
 	};
 }

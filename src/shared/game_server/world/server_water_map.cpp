@@ -119,13 +119,19 @@ namespace mmo
 				}
 			}
 
+			// One bulk read: going through io::read<float> per vertex costs an istream call each,
+			// which for a large map added up to a second of world instance startup.
 			pageWater.vertexHeights.resize(static_cast<size_t>(OuterVertsPerPage) * OuterVertsPerPage, 0.0f);
-			for (auto& h : pageWater.vertexHeights)
+			const size_t heightBytes = pageWater.vertexHeights.size() * sizeof(float);
+			if (source.read(reinterpret_cast<char*>(pageWater.vertexHeights.data()), heightBytes) != heightBytes)
 			{
-				if (!(reader >> io::read<float>(h)))
-				{
-					return false;
-				}
+				return false;
+			}
+
+			// io::read<float> rejected non-finite values; keep that guarantee.
+			if (std::any_of(pageWater.vertexHeights.begin(), pageWater.vertexHeights.end(), [](const float h) { return !std::isfinite(h); }))
+			{
+				return false;
 			}
 
 			// Material name and any remaining bytes of this chunk are not needed server-side.
