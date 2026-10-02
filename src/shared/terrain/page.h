@@ -150,6 +150,9 @@ namespace mmo
 
 			String GetPageFilename() const;
 
+			/// @brief Gets the texture manager name of a render batch quadrant's coverage texture.
+			String GetBatchCoverageTextureName(uint32 quadX, uint32 quadY) const;
+
 			/// @brief Derives this page's distant-terrain LOD from its current (possibly unsaved) data.
 			/// @remark The page must be prepared.
 			void BuildLod(terrain_io::PageLodData &out) const;

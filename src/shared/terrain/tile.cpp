@@ -77,7 +77,14 @@ namespace mmo
 			m_materialInstance->SetTextureParameter("Splatting", m_coverageTexture);
 		}
 
-		Tile::~Tile() = default;
+		Tile::~Tile()
+		{
+			// The coverage texture is a named manual texture the texture manager would otherwise keep
+			// forever. Drop the material first: it references the texture as well.
+			m_materialInstance.reset();
+			m_coverageTexture.reset();
+			TextureManager::Get().ReleaseIfUnreferenced(m_name);
+		}
 
 		void Tile::PrepareRenderOperation(RenderOperation &operation)
 		{

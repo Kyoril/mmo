@@ -75,6 +75,15 @@ namespace mmo
 		return texture;
 	}
 
+	void TextureManager::ReleaseIfUnreferenced(const std::string& name)
+	{
+		const auto it = m_texturesByName.find(name);
+		if (it != m_texturesByName.end() && it->second.use_count() == 1)
+		{
+			m_texturesByName.erase(it);
+		}
+	}
+
 	void TextureManager::RemoveAllUnreferenced()
 	{
 		size_t erasedCount = 0;

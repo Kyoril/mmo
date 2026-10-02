@@ -38,6 +38,12 @@ with 256 collision tiles.
   targets (readback had to learn RowPitch and 8-byte pixels), converted to sRGB8 and DXT1 (stb_dxt).
 - Command line: `mmo_edit --bake-terrain-lod Worlds/<n>/<n>.hwld` opens the world, bakes all stale
   pages and exits.
+  Bakes right after opening (not from the paint handler, so it works with a hidden window —
+  a *minimised* one fails to create its swap chain) and logs to `bin/<cfg>/terrain_lod_bake.log`.
+- Traps found while building it: the bake must `gx.Reset()` + `SetViewport` before rendering like the
+  viewport does (otherwise the first, pre-viewport bake leaves the G-buffer empty); each page is rendered
+  twice because fresh tiles create their index buffers in `PreRender`, after the scene captured their
+  render operation; DeferredRenderer's shadow camera names had to become per-instance.
 
 ## Runtime (client)
 

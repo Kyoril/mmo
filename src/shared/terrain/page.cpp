@@ -464,6 +464,7 @@ namespace mmo
 					// replaces the member tiles' individual coverage textures for rendering purposes
 					// and mirrors their pixel-window layout (adjacent windows share a border pixel).
 					const String quadName = pageBaseName + "_" + std::to_string(quadX) + "_" + std::to_string(quadY);
+					ASSERT(quadName + "_Coverage" == GetBatchCoverageTextureName(quadX, quadY));
 
 					std::vector<uint32> buffer(batchPixels * batchPixels);
 
@@ -544,6 +545,16 @@ namespace mmo
 				batch->DetachFromParent();
 			}
 			m_batches.clear();
+
+			// Their quadrant coverage textures are named manual textures, which the texture manager
+			// would otherwise keep forever (one set per page ever visited).
+			for (uint32 quadY = 0; quadY < 2; ++quadY)
+			{
+				for (uint32 quadX = 0; quadX < 2; ++quadX)
+				{
+					TextureManager::Get().ReleaseIfUnreferenced(GetBatchCoverageTextureName(quadX, quadY));
+				}
+			}
 
 			for (const auto &tile : m_Tiles)
 			{
@@ -1311,6 +1322,11 @@ namespace mmo
 			// Read heightmap data
 			reader >> io::read_range(m_layers);
 			return reader;
+		}
+
+		String Page::GetBatchCoverageTextureName(const uint32 quadX, const uint32 quadY) const
+		{
+			return "PageBatch_" + std::to_string(m_x) + "_" + std::to_string(m_z) + "_" + std::to_string(quadX) + "_" + std::to_string(quadY) + "_Coverage";
 		}
 
 		String Page::GetPageFilename() const
