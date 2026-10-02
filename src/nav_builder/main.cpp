@@ -37,14 +37,15 @@ namespace mmo
 			std::generate_n(networkThreads.begin(), concurrentThreads, [&builder, &success, &finishedThreads]() {
 				return std::thread{ [&builder, &success, &finishedThreads]
 				{
+					// Once any tile failed the build is lost, so the other workers stop as well. Every worker
+					// counts itself finished on the way out: the progress loop below waits for all of them.
 					TileIndex nextTile;
-					while (builder->GetNextTile(nextTile))
+					while (success && builder->GetNextTile(nextTile))
 					{
 						if (!builder->BuildAndSerializeTerrainTile(nextTile))
 						{
 							ELOG("Failed building tile " << nextTile.x << "x" << nextTile.y);
 							success = false;
-							return;
 						}
 					}
 
@@ -68,18 +69,26 @@ namespace mmo
 			}
 		}
 
-		ILOG("Saving map...");
-		builder->SaveMap();
-
-		ILOG("Finished");
-		
 		// Wait for network threads to finish execution
 		for (auto& thread : networkThreads)
 		{
 			thread.join();
 		}
 
-		return success ? 0 : 1;
+		// A failed build leaves pages unwritten. The .map would list them anyway, so it is not saved at all.
+		if (!success)
+		{
+			ELOG("Building world " << worldName << " failed. The .map was not saved and the nav data in "
+				<< directoryPath << " is incomplete: fix the error above and build again");
+			return 1;
+		}
+
+		ILOG("Saving map...");
+		builder->SaveMap();
+
+		ILOG("Finished");
+
+		return 0;
 	}
 }
 
