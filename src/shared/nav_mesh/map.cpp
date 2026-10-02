@@ -296,6 +296,14 @@ namespace mmo::nav
 
 		for (PageData::TileData& tileData : page.tiles)
 		{
+			// A malformed page repeating a tile would otherwise replace the installed Tile, whose
+			// destructor pulls the valid Detour tile out of the mesh and leaves a hole.
+			if (m_tiles.count({ tileData.x, tileData.y }) != 0)
+			{
+				WLOG("Nav page " << x << "x" << y << " of map " << m_mapName << " repeats tile " << tileData.x << "x" << tileData.y << ", ignoring the duplicate");
+				continue;
+			}
+
 			auto tile = std::make_unique<Tile>(*this, tileData.x, tileData.y, std::move(tileData.meshData));
 			m_tiles[{tile->GetX(), tile->GetY()}] = std::move(tile);
 		}

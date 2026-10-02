@@ -195,10 +195,28 @@ namespace mmo
 	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const
 	{
 		// A path may bend out of the box its endpoints span; the margin covers the usual detour.
-		// A corridor that leaves it further can only come out partial until streaming completes.
 		constexpr float pathMargin = 64.0f;
 		EnsureNavLoaded(start, destination, pathMargin);
 
+		const bool found = m_map->FindPath(start, destination, out_path, true);
+		if (!found || !m_pageStreamer || out_path.empty())
+		{
+			return found;
+		}
+
+		// While streaming, a path that stops short may have run into a page that is still
+		// pending outside the margin, rather than into a real obstacle. Widen the area by a full
+		// page and ask once more, so the unit is not sent to a dead end the finished map lacks.
+		const float dx = out_path.back().x - destination.x;
+		const float dz = out_path.back().z - destination.z;
+		constexpr float arrivalTolerance = 2.0f;
+		if (dx * dx + dz * dz <= arrivalTolerance * arrivalTolerance)
+		{
+			return true;
+		}
+
+		EnsureNavLoaded(start, destination, static_cast<float>(terrain::constants::PageSize));
+		out_path.clear();
 		return m_map->FindPath(start, destination, out_path, true);
 	}
 

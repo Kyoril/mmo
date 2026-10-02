@@ -14,6 +14,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <set>
 #include <thread>
 #include <utility>
@@ -317,6 +318,39 @@ TEST_CASE("PageStreamer::EnsureLoaded clamps areas outside the page grid", "[nav
 	{
 		CHECK(map.IsPageLoaded(x, y));
 	}
+}
+
+TEST_CASE("PageStreamer::EnsureLoaded ignores non-finite areas", "[nav_mesh]")
+{
+	SyntheticNavMap files(RowOfPages);
+	nav::Map map(SyntheticNavMap::Name);
+
+	nav::PageStreamer streamer(map);
+	const float nan = std::numeric_limits<float>::quiet_NaN();
+	streamer.EnsureLoaded(nan, 0.f, nan, 0.f);
+	streamer.EnsureLoaded(-std::numeric_limits<float>::infinity(), 0.f, 0.f, 0.f);
+
+	for (const auto& [x, y] : RowOfPages)
+	{
+		CHECK_FALSE(map.IsPageLoaded(x, y));
+	}
+}
+
+TEST_CASE("AddPage keeps the installed tile when a page repeats a tile", "[nav_mesh]")
+{
+	SyntheticNavMap files(RowOfPages);
+	nav::Map map(SyntheticNavMap::Name);
+
+	nav::PageData page;
+	REQUIRE(nav::Map::ReadPage(SyntheticNavMap::Name, 31, 32, page));
+	const nav::PageData::TileData first = page.tiles.front();
+	page.tiles.push_back(first);
+	REQUIRE(map.AddPage(std::move(page)));
+
+	// Both ends inside the repeated tile: it must still be in the nav mesh
+	const Vector3 tileMin(MapOrigin + static_cast<float>(first.x) * TileSize, 0.f, MapOrigin + static_cast<float>(first.y) * TileSize);
+	std::vector<Vector3> path;
+	CHECK(map.FindPath(tileMin + Vector3(5.f, 0.f, 5.f), tileMin + Vector3(25.f, 0.f, 25.f), path));
 }
 
 TEST_CASE("PageStreamer completes when a listed page has no file", "[nav_mesh]")

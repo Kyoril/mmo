@@ -20,8 +20,8 @@ namespace mmo::nav
 		int32 WorldToPage(const float coordinate)
 		{
 			constexpr double origin = -32.0 * terrain::constants::PageSize;
-			const auto page = static_cast<int32>(std::floor((coordinate - origin) / terrain::constants::PageSize));
-			return std::clamp(page, 0, MaxPages - 1);
+			const double page = std::floor((coordinate - origin) / terrain::constants::PageSize);
+			return static_cast<int32>(std::clamp(page, 0.0, static_cast<double>(MaxPages - 1)));
 		}
 	}
 
@@ -105,6 +105,13 @@ namespace mmo::nav
 	void PageStreamer::EnsureLoaded(const float minX, const float minZ, const float maxX, const float maxZ)
 	{
 		if (IsComplete())
+		{
+			return;
+		}
+
+		// A broken position must not turn into page indices (converting NaN or a huge float to an
+		// integer is undefined) and from there into a synchronous load of half the map.
+		if (!std::isfinite(minX) || !std::isfinite(minZ) || !std::isfinite(maxX) || !std::isfinite(maxZ))
 		{
 			return;
 		}
