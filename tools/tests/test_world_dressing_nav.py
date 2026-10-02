@@ -222,6 +222,8 @@ from worldkit.nav import scratch_nav_root, tool_exe  # noqa: E402
 
 
 @fx.requires_live_data
+@unittest.skipUnless(os.environ.get("MMO_LIVE_NAV_TESTS") == "1",
+					 "reads the gitignored scratch navmesh, which every dress.py apply rebuilds; set MMO_LIVE_NAV_TESTS=1")
 class LiveNavTests(unittest.TestCase):
 	def test_town_hall_to_west_gate(self):
 		nav_dir = scratch_nav_root() / "nav"

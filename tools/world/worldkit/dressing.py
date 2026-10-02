@@ -28,6 +28,10 @@ from .templates import item_rotation
 
 DRAFT_VERSION = 1
 APPLIED = ("applied", "applied-unchecked", "partially-undone")
+# "applying" is the intent record written before the first world write: a pass a hard kill left in it is undone like an
+# applied one (items not written yet are simply reported as already gone), but never walkability-checked.
+UNDOABLE = APPLIED + ("applying",)
+APPLY_KEYS = ("unique_id", "file", "written_hash")
 
 
 class PassError(RuntimeError):
@@ -63,14 +67,36 @@ def _paths(pass_id: str, repo: Path) -> tuple[Path, Path]:
     return passes_dir(repo) / pass_id / "draft.json", manifests_dir(repo) / f"{pass_id}.json"
 
 
+def write_atomic(path: Path, data: bytes) -> None:
+    """Writes through a temporary file next to `path` and swaps it in, so a crash, a kill or a full disk leaves either
+    the old or the new file, never a truncated one. The temporary name ends in .tmp, which no world reader picks up."""
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with open(tmp, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def save_doc(doc: dict, repo: Path = REPO) -> None:
-    text = json.dumps(_round(doc), indent=2, ensure_ascii=False) + "\n"
+    data = (json.dumps(_round(doc), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     work, tracked = _paths(doc["pass_id"], repo)
     work.parent.mkdir(parents=True, exist_ok=True)
-    work.write_text(text, encoding="utf-8", newline="\n")
+    write_atomic(work, data)
     if doc["status"] != "planned":
         tracked.parent.mkdir(parents=True, exist_ok=True)
-        tracked.write_text(text, encoding="utf-8", newline="\n")
+        write_atomic(tracked, data)
+
+
+def items_hash(items: list[dict]) -> str:
+    """Hash of the items as a check saw them (rounded like a saved draft, apply's own keys left out), so apply can tell
+    whether the draft was edited after its last check."""
+    canonical = [{k: v for k, v in item.items() if k not in APPLY_KEYS} for item in _round(items)]
+    return hashlib.sha1(json.dumps(canonical, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def load_doc(pass_id: str, repo: Path = REPO) -> dict:
@@ -156,7 +182,7 @@ def _roll_back(written: list[Path], originals: dict[Path, bytes | None], made_di
             if original is None:
                 path.unlink(missing_ok=True)
             elif not path.is_file() or path.read_bytes() != original:
-                path.write_bytes(original)
+                write_atomic(path, original)
         except OSError as exc:
             failures.append(f"could not restore {path}: {exc}")
     for directory in made_dirs:
@@ -174,22 +200,34 @@ def _instance(item: dict, unique_id: int) -> FoliageInstance:
 
 
 def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | None = None) -> dict:
+    """Writes the pass into the world and leaves it "applied-unchecked" (a walkability check promotes it to "applied").
+
+    Everything is planned first, without writing. Then the original page .hfol files are backed up next to the draft and
+    the manifest is saved as "applying" with every unique id and file, so even a hard kill mid-write leaves a pass that
+    undo can find. Every world write is atomic. Any failure in the process, an interrupt included, rolls the world back.
+    """
     if doc["status"] != "planned":
         raise PassError(f"pass {doc['pass_id']} is {doc['status']}, only planned passes can be applied")
     _guard_editor(probe)
     if world_fingerprint(doc["world"], repo) != doc["world_fingerprint"]:
         raise PassError("the world changed since this draft was planned or checked: run `dress.py check` first")
+    if doc["checks"].get("items_hash") != items_hash(doc["items"]):
+        raise PassError("the draft changed since its last check (or was never checked): run `dress.py check` first")
     if any(v.get("severity") == "error" for v in doc["checks"]["placement"]):
         raise PassError("the draft has placement errors: fix the draft and run `dress.py check`")
+    for item in doc["items"]:
+        if item.get("store") not in ("wobj", "hfol"):
+            raise PassError(f"{item.get('asset')}: unknown store {item.get('store')!r} (expected 'wobj' or 'hfol')")
     rng = rng or random.Random()
     client = client_root(repo)
     taken = _taken_ids(doc["world"], repo)
     written: list[Path] = []
     originals: dict[Path, bytes | None] = {}
-    created: list[str] = []
     made_dirs: list[Path] = []
-    previous = {key: doc.get(key) for key in ("status", "created_files", "applied")}
+    previous = {key: doc.get(key) for key in ("status", "created_files", "applied", "backups")}
     try:
+        # 1. Plan every write; nothing touches the disk yet.
+        wobj_writes: list[tuple[Path, bytes]] = []
         for item in doc["items"]:
             if item["store"] != "wobj":
                 continue
@@ -205,9 +243,7 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
             data = wobj_bytes(kind="mesh" if suffix == "hmsh" else "wmo", unique_id=unique_id, asset=item["asset"],
                               position=item["position"], rotation=item_rotation(item), scale=(scale, scale, scale),
                               category=f"dressing/{doc['template']}")
-            _make_dirs(path.parent, made_dirs)
-            written.append(path)  # recorded before the write so a partial write is unlinked by the rollback
-            path.write_bytes(data)
+            wobj_writes.append((path, data))
             item.update(unique_id=f"0x{unique_id:016x}", file=path.relative_to(client).as_posix(),
                         written_hash=hashlib.sha1(data).hexdigest())
         by_page: dict[int, list[dict]] = {}
@@ -216,6 +252,7 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
                 if not item["asset"].lower().endswith(".hmsh"):
                     raise PassError(f"{item['asset']}: foliage must be a .hmsh")
                 by_page.setdefault(entity_page_index(item["position"][0], item["position"][2]), []).append(item)
+        hfol_writes: list[tuple[Path, bytes | None, bytes]] = []  # (path, original bytes or None, new bytes)
         for page, page_items in sorted(by_page.items()):
             path = page_foliage_path(doc["world"], page, repo)
             original = path.read_bytes() if path.is_file() else None
@@ -225,22 +262,40 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
                 instances.append(inst)
                 item.update(unique_id=f"0x{inst.unique_id:016x}", file=path.relative_to(client).as_posix(),
                             written_hash=instance_hash(inst))
-            new_bytes = write_hfol(append_instances(load_hfol(path), instances))
+            hfol_writes.append((path, original, write_hfol(append_instances(load_hfol(path), instances))))
+
+        # 2. Back up the page files the pass is about to change, then record the intent.
+        backup_dir = passes_dir(repo) / doc["pass_id"] / "backup"
+        backups = []
+        for path, original, _ in hfol_writes:
+            if original is not None:
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                write_atomic(backup_dir / path.name, original)
+                backups.append((backup_dir / path.name).relative_to(repo).as_posix())
+        doc["backups"] = backups
+        doc["created_files"] = [path.relative_to(client).as_posix() for path, original, _ in hfol_writes if original is None]
+        for doc_path in _paths(doc["pass_id"], repo):  # the saves are guarded too: a failing save rolls the world back
+            originals[doc_path] = doc_path.read_bytes() if doc_path.is_file() else None
+        doc["status"] = "applying"
+        save_doc(doc, repo)
+
+        # 3. Write the world, every file atomically.
+        for path, data in wobj_writes:
+            _make_dirs(path.parent, made_dirs)
+            written.append(path)
+            write_atomic(path, data)
+        for path, original, data in hfol_writes:
             _make_dirs(path.parent, made_dirs)
             originals[path] = original  # recorded only when the write is next: a failure before it leaves the file untouched
-            path.write_bytes(new_bytes)
-            if original is None:
-                created.append(path.relative_to(client).as_posix())
-        doc["created_files"] = created
-        doc["status"] = "applied"
+            write_atomic(path, data)
+
+        doc["status"] = "applied-unchecked"
         doc["applied"] = datetime.now().isoformat(timespec="seconds")
-        for doc_path in _paths(doc["pass_id"], repo):  # the save is guarded too: a failing save rolls the world back
-            originals[doc_path] = doc_path.read_bytes() if doc_path.is_file() else None
         save_doc(doc, repo)
     except BaseException as exc:  # any failure, an interrupt included, must leave the world exactly as it was
         failures = _roll_back(written, originals, made_dirs)
         for item in doc["items"]:
-            for key in ("unique_id", "file", "written_hash"):
+            for key in APPLY_KEYS:
                 item.pop(key, None)
         for key, value in previous.items():
             if value is None:
@@ -255,6 +310,12 @@ def apply_pass(doc: dict, repo: Path = REPO, probe=None, rng: random.Random | No
     return doc
 
 
+def _moved_entity(directory: str, unique_id: str, repo: Path) -> Path | None:
+    """The .wobj of a prop that is no longer where the pass wrote it, found by its unique id in any page folder."""
+    matches = sorted(entities_dir(directory, repo).glob(f"*/{int(unique_id, 16)}.wobj"))
+    return matches[0] if matches else None
+
+
 @dataclass
 class UndoReport:
     removed: list[str] = field(default_factory=list)
@@ -263,7 +324,7 @@ class UndoReport:
 
 
 def undo_pass(doc: dict, repo: Path = REPO, force: bool = False, probe=None) -> UndoReport:
-    if doc["status"] not in APPLIED:
+    if doc["status"] not in UNDOABLE:
         raise PassError(f"pass {doc['pass_id']} is {doc['status']}, nothing to undo")
     _guard_editor(probe)
     client = client_root(repo)
@@ -285,7 +346,15 @@ def undo_pass(doc: dict, repo: Path = REPO, force: bool = False, probe=None) -> 
         if path is None:
             report.missing.append(f"{item['file']} (outside the client data folder, left alone)")
         elif not path.exists():
-            report.missing.append(item["file"])
+            moved = _moved_entity(doc["world"], item["unique_id"], repo)
+            if moved is None:
+                report.missing.append(item["file"])
+            elif force:
+                delete.append(moved)
+                report.removed.append(moved.relative_to(client).as_posix())
+            else:  # mmo_edit moves a prop dragged across a page border into the new page's folder: it is still placed
+                report.changed.append(f"{moved.relative_to(client).as_posix()} (moved from {item['file']})")
+                kept.append(item["unique_id"])
         elif hashlib.sha1(path.read_bytes()).hexdigest() != item["written_hash"] and not force:
             report.changed.append(item["file"])
             kept.append(item["unique_id"])
@@ -333,7 +402,7 @@ def undo_pass(doc: dict, repo: Path = REPO, force: bool = False, probe=None) -> 
         if data is None:
             path.unlink()
         else:
-            path.write_bytes(data)
+            write_atomic(path, data)
     doc["status"] = "partially-undone" if kept else "undone"
     doc["kept_after_undo"] = kept
     doc["undone"] = datetime.now().isoformat(timespec="seconds")

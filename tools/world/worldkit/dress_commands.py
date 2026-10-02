@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .assets import GeometryCache, build_catalog
 from .atlas import Atlas
-from .dressing import APPLIED, PassError, new_draft, new_pass_id, save_doc, world_fingerprint
+from .dressing import APPLIED, PassError, items_hash, new_draft, new_pass_id, save_doc, world_fingerprint
 from .foliage import all_instances, load_world_foliage
 from .materials import TextureCache
 from .nav import NavError, NavQuery, build_nav, load_routes, scratch_nav_root, walkability_violations
@@ -116,6 +116,7 @@ def plan_pass(session: DressSession, poi_id: str, template_name: str, seed: int 
                     centre, list(keep_away), result.entry, result.items, result.gaps, template.notes,
                     world_fingerprint(session.directory, session.repo))
     doc["checks"]["placement"] = _lint(session, doc)
+    doc["checks"]["items_hash"] = items_hash(doc["items"])
     save_doc(doc, session.repo)
     if render:
         _render_map(session, doc, "before.png", ["--dump-state", str(passes_dir(session.repo) / doc["pass_id"] / "before.json")])
@@ -129,6 +130,7 @@ def check_pass(session: DressSession, doc: dict, render: bool = True) -> dict:
     if doc["status"] != "planned":
         raise PassError(f"pass {doc['pass_id']} is {doc['status']}; only planned drafts are re-checked (use --nav for applied ones)")
     doc["checks"]["placement"] = _lint(session, doc)
+    doc["checks"]["items_hash"] = items_hash(doc["items"])
     doc["world_fingerprint"] = world_fingerprint(session.directory, session.repo)
     save_doc(doc, session.repo)
     if render:

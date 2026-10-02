@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 from worldkit.dress_commands import after_map, check_pass, nav_check, open_session, pass_images, plan_pass
-from worldkit.dressing import PassError, apply_pass, editor_running, list_docs, load_doc, save_doc, undo_pass
+from worldkit.dressing import PassError, apply_pass, editor_running, list_docs, load_doc, undo_pass
 from worldkit.nav import NavError, NavQuery, build_nav, load_routes, route_length, save_routes, scratch_nav_root
 from worldkit.packet import write_batch_index, write_packet
 from worldkit.paths import REPO, passes_dir
@@ -132,12 +132,9 @@ def main(argv=None) -> int:
         elif args.command == "apply":
             doc = load_doc(args.pass_id)
             session = _session(args, [doc])
-            doc = apply_pass(doc)
+            doc = apply_pass(doc)                            # saved as applied-unchecked; the check promotes it
             nav_error = None
-            if args.skip_nav:
-                doc["status"] = "applied-unchecked"
-                save_doc(doc)
-            else:
+            if not args.skip_nav:
                 try:
                     nav_check(session, [doc])
                 except NavError as exc:

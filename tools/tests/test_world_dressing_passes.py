@@ -56,7 +56,19 @@ class PassTests(unittest.TestCase):
 		self._tmp.cleanup()
 
 	def apply(self):
+		self.doc["checks"]["items_hash"] = dressing.items_hash(self.doc["items"])  # what `dress.py check` records
 		return apply_pass(self.doc, self.repo, probe=NOT_RUNNING, rng=random.Random(1))
+
+	def fail_final_save(self):
+		"""Makes the save after the world writes fail, so a rollback has real files to undo."""
+		real = dressing.save_doc
+
+		def save(doc, repo=dressing.REPO):
+			if doc["status"] == "applied-unchecked":
+				raise OSError("disk full")
+			return real(doc, repo)
+
+		return mock.patch.object(dressing, "save_doc", save)
 
 	def test_pass_ids_count_up(self):
 		self.assertEqual(self.doc["pass_id"], "20261001-site-1")
@@ -64,12 +76,12 @@ class PassTests(unittest.TestCase):
 
 	def test_apply_writes_entities_and_foliage(self):
 		doc = self.apply()
-		self.assertEqual(doc["status"], "applied")
+		self.assertEqual(doc["status"], "applied-unchecked")  # only a walkability check promotes it to "applied"
 		cube = parse_wobj(self.repo / "data" / "client" / doc["items"][0]["file"])
 		self.assertEqual((cube.kind, cube.asset, cube.category), ("mesh", "Models/Test/Cube.hmsh", "dressing/t"))
 		self.assertEqual(parse_wobj(self.repo / "data" / "client" / doc["items"][1]["file"]).kind, "wmo")
 		self.assertTrue((manifests_dir(self.repo) / f"{doc['pass_id']}.json").is_file())
-		self.assertEqual(load_doc(doc["pass_id"], self.repo)["status"], "applied")
+		self.assertEqual(load_doc(doc["pass_id"], self.repo)["status"], "applied-unchecked")
 		self.assertNotEqual(self.hfol.read_bytes(), self.original)
 
 	def test_undo_restores_everything(self):
@@ -99,6 +111,74 @@ class PassTests(unittest.TestCase):
 		stale = dict(self.doc, world_fingerprint="0" * 40)
 		with self.assertRaises(PassError):
 			apply_pass(stale, self.repo, probe=NOT_RUNNING)
+
+	def test_apply_refuses_a_draft_edited_after_its_check(self):
+		self.doc["checks"]["items_hash"] = dressing.items_hash(self.doc["items"])
+		self.doc["items"][0]["position"] = [51.0, 0.0, 50.0]
+		with self.assertRaises(PassError) as ctx:
+			apply_pass(self.doc, self.repo, probe=NOT_RUNNING)
+		self.assertIn("changed since its last check", str(ctx.exception))
+		self.assertEqual(list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj")), [])
+
+	def test_apply_refuses_an_unknown_store(self):
+		self.doc["items"][0]["store"] = "wobjj"
+		with self.assertRaises(PassError) as ctx:
+			self.apply()
+		self.assertIn("unknown store", str(ctx.exception))
+
+	def test_intent_is_recorded_before_the_first_world_write(self):
+		real = dressing.write_atomic
+		seen = []
+
+		def spy(path, data):
+			if path.suffix == ".wobj" and not seen:
+				seen.append(load_doc(self.doc["pass_id"], self.repo))
+			return real(path, data)
+
+		with mock.patch.object(dressing, "write_atomic", spy):
+			self.apply()
+		manifest = seen[0]
+		self.assertEqual(manifest["status"], "applying")
+		self.assertTrue(all("unique_id" in item and "file" in item for item in manifest["items"]))
+		self.assertTrue((manifests_dir(self.repo) / f"{self.doc['pass_id']}.json").is_file())
+
+	def test_pass_left_applying_by_a_hard_kill_can_be_undone(self):
+		doc = self.apply()
+		doc["status"] = "applying"  # as if killed after the first prop: the second one was never written
+		(self.repo / "data" / "client" / doc["items"][1]["file"]).unlink()
+		report = undo_pass(doc, self.repo, probe=NOT_RUNNING)
+		self.assertEqual((len(report.removed), len(report.missing)), (3, 1))
+		self.assertEqual(self.hfol.read_bytes(), self.original)
+		self.assertEqual(doc["status"], "undone")
+
+	def test_apply_backs_up_the_pages_it_changes(self):
+		doc = self.apply()
+		self.assertEqual(len(doc["backups"]), 1)
+		self.assertEqual((self.repo / doc["backups"][0]).read_bytes(), self.original)
+
+	def test_undo_keeps_a_prop_the_user_moved_to_another_page(self):
+		doc = self.apply()
+		placed = self.repo / "data" / "client" / doc["items"][0]["file"]
+		moved = placed.parent.parent / "1234" / placed.name
+		moved.parent.mkdir()
+		placed.rename(moved)
+		report = undo_pass(doc, self.repo, probe=NOT_RUNNING)
+		self.assertTrue(moved.exists())
+		self.assertEqual(len(report.changed), 1)
+		self.assertIn("moved from", report.changed[0])
+		self.assertEqual(doc["status"], "partially-undone")
+		self.assertEqual(report.missing, [])
+
+	def test_forced_undo_removes_a_moved_prop(self):
+		doc = self.apply()
+		placed = self.repo / "data" / "client" / doc["items"][0]["file"]
+		moved = placed.parent.parent / "1234" / placed.name
+		moved.parent.mkdir()
+		placed.rename(moved)
+		report = undo_pass(doc, self.repo, force=True, probe=NOT_RUNNING)
+		self.assertFalse(moved.exists())
+		self.assertEqual(doc["status"], "undone")
+		self.assertEqual(len(report.removed), 4)
 
 	def test_failed_apply_rolls_back(self):
 		self.doc["items"].append({"role": "x", "asset": "Models/Test/Bad.txt", "store": "wobj", "position": [1.0, 0.0, 1.0],
@@ -136,10 +216,9 @@ class PassTests(unittest.TestCase):
 		self.assertEqual(doc["status"], "undone")
 
 	def failing_apply(self):
-		self.doc["items"].append({"role": "x", "asset": "Models/Test/Bad.txt", "store": "wobj", "position": [1.0, 0.0, 1.0],
-								  "yaw": 0.0, "tilt": [0.0, 0.0], "scale": 1.0, "collides": False})
-		with self.assertRaises(PassError) as ctx:
-			self.apply()
+		with self.fail_final_save():
+			with self.assertRaises(PassError) as ctx:
+				self.apply()
 		return ctx.exception
 
 	def entity_dir(self):
@@ -165,15 +244,15 @@ class PassTests(unittest.TestCase):
 		self.assertEqual(self.hfol.read_bytes(), self.original)
 
 	def test_partial_wobj_write_is_removed_by_rollback(self):
-		real = Path.write_bytes
+		real = dressing.write_atomic
 
 		def half_write(path, data):
 			if path.suffix == ".wobj":
-				real(path, data[:4])
+				path.write_bytes(data[:4])  # a writer that is not atomic, should one ever be swapped in
 				raise OSError("disk full")
 			return real(path, data)
 
-		with mock.patch.object(Path, "write_bytes", half_write):
+		with mock.patch.object(dressing, "write_atomic", half_write):
 			with self.assertRaises(PassError):
 				self.apply()
 		self.assertEqual(list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj")), [])
@@ -188,9 +267,7 @@ class PassTests(unittest.TestCase):
 				raise OSError("locked")
 			return real(path, missing_ok=missing_ok)
 
-		self.doc["items"].append({"role": "x", "asset": "Models/Test/Bad.txt", "store": "wobj", "position": [1.0, 0.0, 1.0],
-								  "yaw": 0.0, "tilt": [0.0, 0.0], "scale": 1.0, "collides": False})
-		with mock.patch.object(Path, "unlink", flaky_unlink):
+		with mock.patch.object(Path, "unlink", flaky_unlink), self.fail_final_save():
 			with self.assertRaises(PassError) as ctx:
 				self.apply()
 		self.assertIn("rollback was incomplete", str(ctx.exception))
@@ -199,7 +276,7 @@ class PassTests(unittest.TestCase):
 		self.assertEqual(left, stuck)  # only the one that could not be removed survives
 
 	def test_keyboard_interrupt_mid_write_rolls_back_and_propagates(self):
-		real = Path.write_bytes
+		real = dressing.write_atomic
 		draft = self.repo / "generated" / "world" / "passes" / self.doc["pass_id"] / "draft.json"
 		draft_before = draft.read_bytes()
 
@@ -208,7 +285,7 @@ class PassTests(unittest.TestCase):
 				raise KeyboardInterrupt()
 			return real(path, data)
 
-		with mock.patch.object(Path, "write_bytes", interrupted):
+		with mock.patch.object(dressing, "write_atomic", interrupted):
 			with self.assertRaises(KeyboardInterrupt):
 				self.apply()
 		self.assertEqual(list((self.repo / "data" / "client" / "Worlds" / "D" / "D" / "Entities").glob("*/*.wobj")), [])
@@ -220,7 +297,7 @@ class PassTests(unittest.TestCase):
 	def test_failing_save_after_the_writes_rolls_back(self):
 		draft = self.repo / "generated" / "world" / "passes" / self.doc["pass_id"] / "draft.json"
 		draft_before = draft.read_bytes()
-		with mock.patch.object(dressing, "save_doc", side_effect=OSError("disk full")):
+		with self.fail_final_save():
 			with self.assertRaises(PassError) as ctx:
 				self.apply()
 		self.assertIn("rolled back", str(ctx.exception))
@@ -243,7 +320,7 @@ class PassTests(unittest.TestCase):
 		with self.assertRaises(PassError):
 			undo_pass(doc, self.repo, probe=RUNNING)
 		self.assertTrue((self.repo / "data" / "client" / doc["items"][0]["file"]).exists())
-		self.assertEqual(doc["status"], "applied")
+		self.assertEqual(doc["status"], "applied-unchecked")
 
 	def test_undo_refuses_paths_outside_the_client_folder(self):
 		doc = self.apply()
@@ -263,7 +340,7 @@ class PassTests(unittest.TestCase):
 			undo_pass(doc, self.repo, probe=NOT_RUNNING)
 		for item in doc["items"][:2]:
 			self.assertTrue((self.repo / "data" / "client" / item["file"]).exists())
-		self.assertEqual(doc["status"], "applied")
+		self.assertEqual(doc["status"], "applied-unchecked")
 
 	def test_undo_leaves_foliage_alone_when_nothing_to_remove(self):
 		doc = self.apply()
@@ -272,6 +349,28 @@ class PassTests(unittest.TestCase):
 		report = undo_pass(doc, self.repo, probe=NOT_RUNNING)
 		self.assertEqual(len(report.missing), 2)
 		self.assertEqual(self.hfol.stat().st_mtime_ns, 1_000_000_000_000_000_000)
+
+
+class WriteAtomicTests(unittest.TestCase):
+	def setUp(self):
+		self._tmp = tempfile.TemporaryDirectory()
+		self.path = Path(self._tmp.name) / "page.hfol"
+		self.path.write_bytes(b"original")
+
+	def tearDown(self):
+		self._tmp.cleanup()
+
+	def test_replaces_the_file(self):
+		dressing.write_atomic(self.path, b"new")
+		self.assertEqual(self.path.read_bytes(), b"new")
+		self.assertEqual(sorted(p.name for p in self.path.parent.iterdir()), ["page.hfol"])
+
+	def test_a_failed_write_keeps_the_original_and_leaves_no_temp_file(self):
+		with mock.patch.object(dressing.os, "fsync", side_effect=OSError("disk full")):
+			with self.assertRaises(OSError):
+				dressing.write_atomic(self.path, b"new")
+		self.assertEqual(self.path.read_bytes(), b"original")
+		self.assertEqual(sorted(p.name for p in self.path.parent.iterdir()), ["page.hfol"])
 
 
 class EditorProbeTests(unittest.TestCase):
