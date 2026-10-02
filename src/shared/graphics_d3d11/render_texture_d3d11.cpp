@@ -314,8 +314,14 @@ namespace mmo
 			return;
 		}
 
-		// Copy pixel data to buffer
-		memcpy(destination, mappedResource.pData, GetPixelDataSize());
+		// Copy row by row: the mapped rows are RowPitch apart, which is padded beyond the tightly
+		// packed width for many sizes and formats.
+		const uint32 rowSize = GetPixelDataSize() / m_height;
+		const auto* source = static_cast<const uint8*>(mappedResource.pData);
+		for (uint32 row = 0; row < m_height; ++row)
+		{
+			memcpy(destination + row * rowSize, source + row * mappedResource.RowPitch, rowSize);
+		}
 
 		context->Unmap(stagingTexture, 0);
 		stagingTexture->Release();
@@ -324,7 +330,23 @@ namespace mmo
 
 	uint32 RenderTextureD3D11::GetPixelDataSize() const
 	{
-		return m_width * m_height * 4;
+		uint32 bytesPerPixel = 4;
+		switch (m_colorFormat)
+		{
+		case PixelFormat::R16G16B16A16:
+			bytesPerPixel = 8;
+			break;
+		case PixelFormat::R32G32B32A32:
+			bytesPerPixel = 16;
+			break;
+		case PixelFormat::R8:
+			bytesPerPixel = 1;
+			break;
+		default:
+			break;
+		}
+
+		return m_width * m_height * bytesPerPixel;
 	}
 
 	void RenderTextureD3D11::UpdateFromMemory(void* data, size_t dataSize)

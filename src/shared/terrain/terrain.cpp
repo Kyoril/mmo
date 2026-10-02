@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "terrain.h"
 
@@ -544,6 +544,21 @@ namespace mmo
 		const String &Terrain::GetBaseFileName() const
 		{
 			return m_baseFileName;
+		}
+
+		String Terrain::GetPageFilename(const uint32 x, const uint32 z) const
+		{
+			return m_baseFileName + "/" + std::to_string(x) + "_" + std::to_string(z) + ".tile";
+		}
+
+		String Terrain::GetPageLodFilename(const uint32 x, const uint32 z) const
+		{
+			return m_baseFileName + "/" + std::to_string(x) + "_" + std::to_string(z) + ".tlod";
+		}
+
+		String Terrain::GetPageLodTextureFilename(const uint32 x, const uint32 z) const
+		{
+			return m_baseFileName + "/" + std::to_string(x) + "_" + std::to_string(z) + "_lod.htex";
 		}
 
 		MaterialPtr Terrain::GetDefaultMaterial() const

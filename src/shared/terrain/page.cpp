@@ -386,6 +386,14 @@ namespace mmo
 
 				// Ensure tile respects selection query
 				tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
+
+				// With batch rendering the page is drawn by the TerrainBatches created once every tile
+				// exists. Drawing the tiles one by one until then only flickers the page in, and fights
+				// the distant-terrain stand-in that covers the page until it is complete.
+				if (m_terrain.IsBatchRenderingEnabled())
+				{
+					tile->SetExcludedFromRendering(true);
+				}
 				m_pageNode->AttachObject(*tile);
 
 				// Grow the page bounding box by the new tile instead of recombining the whole grid.
@@ -1307,7 +1315,19 @@ namespace mmo
 
 		String Page::GetPageFilename() const
 		{
-			return m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
+			return m_terrain.GetPageFilename(m_x, m_z);
+		}
+
+		void Page::BuildLod(terrain_io::PageLodData &out) const
+		{
+			ASSERT(IsPrepared());
+
+			terrain_io::PageLodSource source;
+			source.heightmap = m_heightmap.data();
+			source.normals = m_normals.data();
+			source.waterQuadMasks = m_waterQuadMasks.empty() ? nullptr : m_waterQuadMasks.data();
+			source.waterVertexHeights = m_waterVertexHeights.empty() ? nullptr : m_waterVertexHeights.data();
+			terrain_io::BuildPageLod(source, out);
 		}
 
 		void Page::NotifyTileMaterialChanged(const uint32 x, const uint32 y)

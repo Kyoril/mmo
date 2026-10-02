@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -234,6 +234,15 @@ namespace mmo
 			/// @brief Gets the base file name for terrain data files.
 			/// @return The base file name.
 			[[nodiscard]] const String &GetBaseFileName() const;
+
+			/// @brief Gets the asset path of a page's full-resolution data file (.tile).
+			[[nodiscard]] String GetPageFilename(uint32 x, uint32 z) const;
+
+			/// @brief Gets the asset path of a page's baked distant-terrain geometry (.tlod).
+			[[nodiscard]] String GetPageLodFilename(uint32 x, uint32 z) const;
+
+			/// @brief Gets the asset path of a page's baked distant-terrain colour texture (.htex).
+			[[nodiscard]] String GetPageLodTextureFilename(uint32 x, uint32 z) const;
 
 			/// @brief Gets the default material used for terrain rendering.
 			/// @return The default material.
