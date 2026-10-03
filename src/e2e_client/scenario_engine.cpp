@@ -56,6 +56,12 @@ namespace mmo
 			uint32 swingErrors { 0 };
 			uint32 swingRecoveries { 0 };
 
+			/// Channels the server announced (ChannelStart) per caster, and the casters whose last
+			/// channel has not been ended by a ChannelUpdate(0) yet. Mirrors what the real client
+			/// believes, which only ever learns that a channel is over from that packet.
+			std::map<uint64, uint32> channelStarts;
+			std::set<uint64> channeling;
+
 			/// A second session on the same account, created by LoginElsewhere. Kept alive for the
 			/// rest of the scenario so its connection is not torn down while the first session is
 			/// still being observed.
@@ -433,6 +439,26 @@ namespace mmo
 		{
 			const auto it = g_runtime->meleeSwings.find(guidFromString(guid));
 			return it == g_runtime->meleeSwings.end() ? 0 : static_cast<int32>(it->second);
+		}
+
+		/// Whether the server has told us guid is channeling and not yet that the channel ended.
+		bool luaIsChanneling(const std::string& guid)
+		{
+			return g_runtime->channeling.count(guidFromString(guid)) != 0;
+		}
+
+		/// Whether our own client shows a cooldown on the spell, as the server's SpellStart, SpellGo
+		/// and SpellCooldown packets left it.
+		bool luaIsSpellOnCooldown(const uint32 spellId)
+		{
+			return g_runtime->session->GetContext().IsSpellOnCooldown(spellId);
+		}
+
+		/// How many channels the server has announced for guid (ChannelStart packets).
+		int32 luaChannelStartCount(const std::string& guid)
+		{
+			const auto it = g_runtime->channelStarts.find(guidFromString(guid));
+			return it == g_runtime->channelStarts.end() ? 0 : static_cast<int32>(it->second);
 		}
 
 		/// Name of the last swing error the server reported ("out_of_range", ...), or "none".
@@ -1079,6 +1105,33 @@ namespace mmo
 			}
 		}
 
+		void luaGmResetCooldowns()
+		{
+			g_runtime->session->GetRealm().CheatResetCooldowns();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.ResetCooldowns");
+			}
+		}
+
+		void luaGmHeal()
+		{
+			g_runtime->session->GetRealm().CheatHeal();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.Heal");
+			}
+		}
+
+		void luaGmRestorePower()
+		{
+			g_runtime->session->GetRealm().CheatRestorePower();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.RestorePower");
+			}
+		}
+
 		void luaGmWorldPort(const uint32 mapId, const float x, const float y, const float z, const float facing)
 		{
 			BotSession& session = *g_runtime->session;
@@ -1230,6 +1283,9 @@ namespace mmo
 				luabind::def_lambda("IsAlive", &luaIsAlive),
 				luabind::def_lambda("MeleeSwingCount", &luaMeleeSwingCount),
 				luabind::def_lambda("IsAutoAttacking", &luaIsAutoAttacking),
+				luabind::def_lambda("IsChanneling", &luaIsChanneling),
+				luabind::def_lambda("ChannelStartCount", &luaChannelStartCount),
+				luabind::def_lambda("IsSpellOnCooldown", &luaIsSpellOnCooldown),
 				luabind::def_lambda("GetName", &luaGetName),
 				luabind::def_lambda("GetPosX", &luaGetPosX),
 				luabind::def_lambda("GetPosY", &luaGetPosY),
@@ -1288,6 +1344,9 @@ namespace mmo
 				luabind::def_lambda("GM_Godmode", &luaGmGodmode),
 				luabind::def_lambda("GM_SetInstanceVariable", &luaGmSetInstanceVariable),
 				luabind::def_lambda("GM_DamageTarget", &luaGmDamageTarget),
+				luabind::def_lambda("GM_ResetCooldowns", &luaGmResetCooldowns),
+				luabind::def_lambda("GM_Heal", &luaGmHeal),
+				luabind::def_lambda("GM_RestorePower", &luaGmRestorePower),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
 				luabind::def_lambda("GM_SetTimeOfDay", &luaGmSetTimeOfDay),
@@ -1349,6 +1408,9 @@ namespace mmo
 				Godmode = GM_Godmode,
 				SetInstanceVariable = GM_SetInstanceVariable,
 				DamageTarget = GM_DamageTarget,
+				ResetCooldowns = GM_ResetCooldowns,
+				Heal = GM_Heal,
+				RestorePower = GM_RestorePower,
 				Worldport = GM_WorldPort,
 				SetSpeed = GM_SetSpeed,
 				SetTimeOfDay = function(timeText, transitionSeconds) return GM_SetTimeOfDay(timeText, transitionSeconds or 8) end,
@@ -1426,6 +1488,25 @@ namespace mmo
 				transcript.Event("attack_hit",
 					{ { "attacker", guidToString(attacker) }, { "victim", guidToString(victim) },
 					  { "damage", damage }, { "hit_info", hitInfo }, { "victim_state", victimState } });
+			}) };
+
+		const scoped_connection channelStartedRecorder { realm.ChannelStarted.connect(
+			[&transcript, &runtime](const uint64 caster, const uint32 spellId, const int32 durationMs)
+			{
+				++runtime.channelStarts[caster];
+				runtime.channeling.insert(caster);
+				transcript.Event("channel_start",
+					{ { "caster", guidToString(caster) }, { "spell_id", spellId }, { "duration_ms", durationMs } });
+			}) };
+		const scoped_connection channelUpdatedRecorder { realm.ChannelUpdated.connect(
+			[&transcript, &runtime](const uint64 caster, const GameTime remainingMs)
+			{
+				if (remainingMs == 0)
+				{
+					runtime.channeling.erase(caster);
+				}
+				transcript.Event("channel_update",
+					{ { "caster", guidToString(caster) }, { "remaining_ms", remainingMs } });
 			}) };
 
 		lua_State* state = luaL_newstate();

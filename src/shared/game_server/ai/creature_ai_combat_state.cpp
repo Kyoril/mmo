@@ -1545,6 +1545,15 @@ namespace mmo
 		}
 	}
 
+	void CreatureAICombatState::ResetSpellCooldowns()
+	{
+		for (auto& creatureSpell : m_availableSpells)
+		{
+			creatureSpell.cooldownEnd = 0;
+			creatureSpell.canCast = true;
+		}
+	}
+
 	void CreatureAICombatState::RaiseSpellCooldownToAtLeast(const proto::SpellEntry& spellEntry, const GameTime minimumCooldownMs)
 	{
 		for (auto& creatureSpell : m_availableSpells)

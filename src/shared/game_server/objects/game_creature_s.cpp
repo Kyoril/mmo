@@ -394,6 +394,18 @@ namespace mmo
 		}
 	}
 
+	void GameCreatureS::OnCooldownsReset()
+	{
+		// Creatures pick their combat spells by the AI's own cooldowns, not the unit's.
+		if (m_ai)
+		{
+			if (auto* combatState = dynamic_cast<CreatureAICombatState*>(m_ai->GetCurrentState()))
+			{
+				combatState->ResetSpellCooldowns();
+			}
+		}
+	}
+
 	void GameCreatureS::OnDespawn()
 	{
 		// Stop all repeating timers before the base despawn logic runs.

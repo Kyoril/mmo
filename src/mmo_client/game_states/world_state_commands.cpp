@@ -514,6 +514,21 @@ namespace mmo
 		m_realmConnector.CheatDamage(static_cast<uint32>(amount));
 	}
 
+	void WorldState::Command_ResetCooldowns(const std::string &cmd, const std::string &args) const
+	{
+		m_realmConnector.CheatResetCooldowns();
+	}
+
+	void WorldState::Command_Heal(const std::string &cmd, const std::string &args) const
+	{
+		m_realmConnector.CheatHeal();
+	}
+
+	void WorldState::Command_RestorePower(const std::string &cmd, const std::string &args) const
+	{
+		m_realmConnector.CheatRestorePower();
+	}
+
 	void WorldState::Command_SetTime(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream stream(args);

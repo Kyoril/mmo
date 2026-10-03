@@ -847,6 +847,24 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::ResetCooldowns()
+	{
+		std::vector<uint32> spellIds;
+		spellIds.reserve(m_spellCooldowns.size());
+		for (const auto& [spellId, cooldownEnd] : m_spellCooldowns)
+		{
+			spellIds.push_back(spellId);
+		}
+
+		m_spellCooldowns.clear();
+		m_spellCategoryCooldowns.clear();
+		m_globalCooldownEnd = 0;
+
+		OnCooldownsReset();
+
+		spellCooldownsReset(spellIds);
+	}
+
 	GameTime GameUnitS::GetGlobalCooldownDuration() const
 	{
 		return GetCombatSettings().global_cooldown_ms();

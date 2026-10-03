@@ -668,6 +668,83 @@ namespace mmo
 #endif
 
 #if MMO_WITH_DEV_COMMANDS
+	GameUnitS* Player::GetCheatTargetUnit(const char* commandName) const
+	{
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(targetGuid);
+		if (!object)
+		{
+			ELOG(commandName << ": target not found in world");
+			return nullptr;
+		}
+
+		GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+		if (!unit)
+		{
+			ELOG(commandName << ": target is not a unit");
+			return nullptr;
+		}
+
+		return unit;
+	}
+
+	void Player::OnCheatResetCooldowns(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		GameUnitS* unit = GetCheatTargetUnit("CheatResetCooldowns");
+		if (!unit)
+		{
+			return;
+		}
+
+		DLOG("GM reset cooldowns on unit " << log_hex_digit(unit->GetGuid()));
+		unit->ResetCooldowns();
+	}
+
+	void Player::OnCheatHeal(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		GameUnitS* unit = GetCheatTargetUnit("CheatHeal");
+		if (!unit)
+		{
+			return;
+		}
+
+		if (!unit->IsAlive())
+		{
+			ELOG("CheatHeal: target is dead, use the revive command instead");
+			return;
+		}
+
+		DLOG("GM heal on unit " << log_hex_digit(unit->GetGuid()));
+		unit->Set<uint32>(object_fields::Health, unit->GetMaxHealth());
+	}
+
+	void Player::OnCheatRestorePower(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		GameUnitS* unit = GetCheatTargetUnit("CheatRestorePower");
+		if (!unit)
+		{
+			return;
+		}
+
+		DLOG("GM restore power on unit " << log_hex_digit(unit->GetGuid()));
+
+		// Every power the unit has a pool for, not just its active one: a multi-class character
+		// keeps the other pools around.
+		for (const uint8 powerType : { power_type::Mana, power_type::Rage, power_type::Energy })
+		{
+			const uint32 maxPower = unit->Get<uint32>(object_fields::MaxMana + powerType);
+			if (maxPower > 0)
+			{
+				unit->Set<uint32>(object_fields::Mana + powerType, maxPower);
+			}
+		}
+	}
+
 	void Player::OnCheatRevive(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);

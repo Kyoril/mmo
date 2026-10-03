@@ -10,8 +10,8 @@
 
 namespace mmo
 {
-	/// Owns the channel countdown, ChannelStart/ChannelUpdate packets, and fires
-	/// SpellCast::ended on completion. Created by SingleCastState after effects are
+	/// Owns the channel countdown, the channel's end (ChannelUpdate(0)) and its target's death or
+	/// despawn, and fires SpellCast::ended on completion. Created by SingleCastState after effects are
 	/// applied for channeled spells; replaces SingleCastState as the active CastState.
 	class ChannelingCastState final
 		: public CastState
@@ -23,8 +23,7 @@ namespace mmo
 			const proto::SpellEntry& spell,
 			SpellCastContext context,
 			GameTime remainingMs,
-			scoped_connection onTargetDied,
-			scoped_connection onTargetRemoved);
+			GameUnitS* unitTarget);
 
 		// CastState overrides
 		void Activate() override;
@@ -50,12 +49,20 @@ namespace mmo
 	private:
 		void EndChanneling(bool succeeded);
 
+		/// Sends ChannelUpdate(0), the only packet that ends a channel at the clients.
+		void SendChannelEnded() const;
+
+		/// Ends the channel when its unit target dies or leaves the world.
+		void OnTargetLost();
+
 	private:
 		SpellCast& m_cast;
 		const proto::SpellEntry& m_spell;
 		SpellCastContext m_context;
 		GameTime m_remainingMs;
 		Countdown m_countdown;
+		/// The unit target as of the hand-over, subscribed to in Activate. Never dereferenced after.
+		GameUnitS* m_unitTarget;
 		scoped_connection m_onTargetDied;
 		scoped_connection m_onTargetRemoved;
 		bool m_hasFinished{ false };

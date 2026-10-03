@@ -157,11 +157,19 @@ namespace mmo
 		bool m_globalCooldownTriggered { false };
 		GameTime m_appliedGlobalCooldownMs { 0 };
 		bool m_endNotified { false };
+		/// Whether clients were sent ChannelStart for this cast and are still owed the matching
+		/// ChannelUpdate(0). Only set between the ChannelStart send and the hand-over to
+		/// ChannelingCastState, which owns the channel's end from there on.
+		bool m_channelStartSent { false };
 		/// Result of Activate(). CastOkay unless validation rejected the cast.
 		SpellCastResult m_activationResult { spell_cast_result::CastOkay };
 		std::shared_ptr<SingleCastState> m_selfHold;
 
 		void SendEndCast(SpellCastResult result);
+		/// Sends ChannelUpdate(0) if clients were told a channel started and it has not been
+		/// handed over to ChannelingCastState yet. Every path that ends such a cast must call it,
+		/// or clients keep showing a channel the server has already dropped.
+		void SendChannelEnded();
 		void OnCastFinished();
 		void OnTargetKilled(GameUnitS*);
 		void OnTargetDespawned(GameObjectS&);

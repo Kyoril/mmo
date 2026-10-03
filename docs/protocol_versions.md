@@ -115,6 +115,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 16 | 2026-10-03 | GM `CheatResetCooldowns`, `CheatHeal` and `CheatRestorePower` opcodes (target, or self); `SpellCooldown` entries with 0 ms remaining now clear that cooldown on the client, and an entry for spell 0 with 0 ms clears every cooldown including the global cooldown |
 | 14 | 2026-09-21 | Realm-wide time of day: `CheatSetTimeOfDay` GM opcode (handled by the realm), `GameTimeInfo` gains a trailing uint32 `transitionMs` so clients blend smoothly to a changed time |
 | 13 | 2026-09-09 | `AttackSwingError` now also carries `attack_swing_event::Success`, telling the client a swing landed again so it stops repeating the previous error message and voice line |
 | 12 | 2026-09-07 | `PlaySpellVisual` server opcode: plays a SpellVisualization on a unit by id for every client in sight, so non-spell events (level up) can drive spell-quality visuals |

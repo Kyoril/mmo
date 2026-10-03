@@ -393,6 +393,9 @@ namespace mmo
 		/// @brief Clears a cooldown snapshot.
 		void ClearSpellCooldown(uint32 spellId);
 
+		/// @brief Clears every cooldown snapshot (GM cooldown reset).
+		void ClearAllSpellCooldowns();
+
 		/// @brief Updates the mirrored last cast request to a pending state.
 		void SetLastCastPending(uint32 spellId, const uint32 targetFlags, uint64 unitTargetGuid, GameTime nowMs);
 

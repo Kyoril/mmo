@@ -125,8 +125,8 @@
 		]
 	},
 	"game": {
-		"version": 15,
-		"fingerprint": "sha256:5ceb71cc0368203425f2dada93da156130a6b35de159c9f71908cd1ea9f7e746",
+		"version": 16,
+		"fingerprint": "sha256:0e63740c8ce5fa6b2972e27b2329a41ea3eb4badb7f1497c0ad44a529f817fff",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -142,7 +142,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:271a1d33c74421cd34691068c805e98f9b21ad9e5e20eb722e6dbac2b759d1ef"
+			"src/shared/game_protocol/game_protocol.h": "sha256:bc77f51f80382b77a244a8598457c5770ac879bf9ac04d5f56dbb5d963e2c028"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -209,12 +209,15 @@
 			"game::client_realm_packet::CheatFollowMe = 32",
 			"game::client_realm_packet::CheatGiveMoney = 60",
 			"game::client_realm_packet::CheatGodmode = 160",
+			"game::client_realm_packet::CheatHeal = 165",
 			"game::client_realm_packet::CheatKill = 134",
 			"game::client_realm_packet::CheatLearnEmote = 154",
 			"game::client_realm_packet::CheatLearnSpell = 29",
 			"game::client_realm_packet::CheatLevelUp = 59",
 			"game::client_realm_packet::CheatMorph = 133",
 			"game::client_realm_packet::CheatRecharge = 30",
+			"game::client_realm_packet::CheatResetCooldowns = 164",
+			"game::client_realm_packet::CheatRestorePower = 166",
 			"game::client_realm_packet::CheatRevive = 135",
 			"game::client_realm_packet::CheatSetInstanceVariable = 161",
 			"game::client_realm_packet::CheatSetTimeOfDay = 163",
@@ -223,7 +226,7 @@
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 164",
+			"game::client_realm_packet::Count_ = 167",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",

@@ -86,6 +86,24 @@ namespace mmo
 		}
 	}
 
+	void CooldownManager::ClearAllCooldowns()
+	{
+		// Collected first: ClearCooldown erases from the map, and its handlers may read it.
+		std::vector<uint32> spellIds;
+		spellIds.reserve(m_cooldowns.size());
+		for (const auto& [spellId, info] : m_cooldowns)
+		{
+			spellIds.push_back(spellId);
+		}
+
+		for (const uint32 spellId : spellIds)
+		{
+			ClearCooldown(spellId);
+		}
+
+		ClearGlobalCooldown();
+	}
+
 	float CooldownManager::GetCooldownProgress(const uint32 spellId) const
 	{
 		// The effective progress is the lesser of the spell's own cooldown progress and the

@@ -1989,6 +1989,12 @@ namespace mmo
 								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
 		Console::RegisterCommand("damage", [this](const std::string &cmd, const std::string &args)
 								 { Command_Damage(cmd, args); }, ConsoleCommandCategory::Gm, "Deals the given amount of raw damage to your current target. Used to walk a boss to its next phase threshold.");
+		Console::RegisterCommand("resetcooldowns", [this](const std::string &cmd, const std::string &args)
+								 { Command_ResetCooldowns(cmd, args); }, ConsoleCommandCategory::Gm, "Clears all spell cooldowns of the selected unit (or yourself if nothing is selected).");
+		Console::RegisterCommand("heal", [this](const std::string &cmd, const std::string &args)
+								 { Command_Heal(cmd, args); }, ConsoleCommandCategory::Gm, "Heals the selected unit (or yourself if nothing is selected) to full health.");
+		Console::RegisterCommand("restorepower", [this](const std::string &cmd, const std::string &args)
+								 { Command_RestorePower(cmd, args); }, ConsoleCommandCategory::Gm, "Fills mana, rage and energy of the selected unit (or yourself if nothing is selected).");
 		Console::RegisterCommand("settime", [this](const std::string &cmd, const std::string &args)
 								 { Command_SetTime(cmd, args); }, ConsoleCommandCategory::Gm, "Sets the realm-wide time of day for all players: 'settime <HH:MM[:SS]> [transition seconds]', or 'settime reset' to return to the server's system time.");
 #endif
@@ -2018,6 +2024,9 @@ namespace mmo
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
 		Console::UnregisterCommand("damage");
+		Console::UnregisterCommand("resetcooldowns");
+		Console::UnregisterCommand("heal");
+		Console::UnregisterCommand("restorepower");
 		Console::UnregisterCommand("settime");
 #endif
 
@@ -3817,10 +3826,19 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
-			if (remainingMs > 0)
+			// Spell 0 with no time left: every cooldown was reset (GM command), including the
+			// global cooldown and cast-start previews the server never lists per spell.
+			if (spellId == 0)
 			{
-				m_cooldownManager.StartCooldown(spellId, remainingMs);
+				if (remainingMs == 0)
+				{
+					m_cooldownManager.ClearAllCooldowns();
+				}
+				continue;
 			}
+
+			// Zero clears the cooldown (sent when a GM resets the character's cooldowns).
+			m_cooldownManager.StartCooldown(spellId, remainingMs);
 		}
 
 		return PacketParseResult::Pass;

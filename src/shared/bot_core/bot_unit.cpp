@@ -363,6 +363,11 @@ namespace mmo
 		m_spellCooldowns.erase(spellId);
 	}
 
+	void BotUnit::ClearAllSpellCooldowns()
+	{
+		m_spellCooldowns.clear();
+	}
+
 	void BotUnit::SetLastCastPending(const uint32 spellId, const uint32 targetFlags, const uint64 unitTargetGuid, const GameTime nowMs)
 	{
 		SetLastCastState(CastState::Status::Pending, spellId, targetFlags, unitTargetGuid, nowMs);

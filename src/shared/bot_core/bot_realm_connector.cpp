@@ -451,6 +451,8 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::SpellFailure, *this, &BotRealmConnector::OnSpellFailure);
 		RegisterPacketHandler(game::realm_client_packet::SpellCooldown, *this, &BotRealmConnector::OnSpellCooldown);
 		RegisterPacketHandler(game::realm_client_packet::AuraUpdate, *this, &BotRealmConnector::OnAuraUpdate);
+		RegisterPacketHandler(game::realm_client_packet::ChannelStart, *this, &BotRealmConnector::OnChannelStart);
+		RegisterPacketHandler(game::realm_client_packet::ChannelUpdate, *this, &BotRealmConnector::OnChannelUpdate);
 
 		// These packets can be safely ignored
 		RegisterPacketHandler(game::realm_client_packet::ActionButtons, *this, &BotRealmConnector::OnIgnoredPacket);
@@ -1888,22 +1890,45 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		uint32 spellId = 0;
-		uint32 cooldownMs = 0;
-		if (!(packet >> io::read<uint32>(spellId) >> io::read<uint32>(cooldownMs)) || spellId == 0)
+		// uint16 count, then (uint32 spellId, uint32 remainingMs) per entry. A zero remaining time
+		// clears the cooldown; spell 0 with zero clears all of them (GM cooldown reset).
+		uint16 count = 0;
+		if (!(packet >> io::read<uint16>(count)))
 		{
 			UpdateSpellStateIssue("spell_cooldown_parse_failed");
 			return PacketParseResult::Pass;
 		}
 
 		const GameTime nowMs = GetAsyncTimeMs();
-		if (!self->KnowsSpell(spellId))
+		for (uint16 i = 0; i < count; ++i)
 		{
-			UpdateSpellStateIssue("spell_cooldown_unknown_spell");
-			return PacketParseResult::Pass;
+			uint32 spellId = 0;
+			uint32 cooldownMs = 0;
+			if (!(packet >> io::read<uint32>(spellId) >> io::read<uint32>(cooldownMs)))
+			{
+				UpdateSpellStateIssue("spell_cooldown_parse_failed");
+				return PacketParseResult::Pass;
+			}
+
+			// Spell 0 with no time left: every cooldown was reset (GM command).
+			if (spellId == 0)
+			{
+				if (cooldownMs == 0)
+				{
+					self->ClearAllSpellCooldowns();
+				}
+				continue;
+			}
+
+			if (!self->KnowsSpell(spellId))
+			{
+				UpdateSpellStateIssue("spell_cooldown_unknown_spell");
+				continue;
+			}
+
+			self->SetSpellCooldown(spellId, nowMs, cooldownMs);
 		}
 
-		self->SetSpellCooldown(spellId, nowMs, cooldownMs);
 		ClearSpellStateIssue();
 		UnitUpdated(*self);
 		return PacketParseResult::Pass;
@@ -2071,6 +2096,37 @@ namespace mmo
 		}
 
 		AttackStopped(attackerGuid);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChannelStart(game::IncomingPacket& packet)
+	{
+		uint64 casterGuid;
+		uint32 spellId;
+		int32 durationMs;
+
+		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<int32>(durationMs)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		ChannelStarted(casterGuid, spellId, durationMs);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChannelUpdate(game::IncomingPacket& packet)
+	{
+		uint64 casterGuid;
+		GameTime remainingMs;
+
+		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<GameTime>(remainingMs)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		ChannelUpdated(casterGuid, remainingMs);
 
 		return PacketParseResult::Pass;
 	}
@@ -2383,6 +2439,30 @@ namespace mmo
 		sendSinglePacket([amount](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatDamage);
 			packet << io::write<uint32>(amount);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatResetCooldowns()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatResetCooldowns);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatHeal()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatHeal);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatRestorePower()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatRestorePower);
 			packet.Finish();
 			});
 	}

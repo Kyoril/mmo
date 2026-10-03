@@ -329,6 +329,17 @@ namespace mmo
 		///	path, so health-threshold triggers fire exactly as they would in a real fight.
 		void CheatDamage(uint32 amount);
 
+		/// GAME MASTER only. Clears every cooldown of the current target (or of the controlled
+		///	character when nothing is targeted).
+		void CheatResetCooldowns();
+
+		/// GAME MASTER only. Heals the current target (or the controlled character) to full health.
+		void CheatHeal();
+
+		/// GAME MASTER only. Fills mana, rage and energy of the current target (or the controlled
+		///	character).
+		void CheatRestorePower();
+
 		/// GAME MASTER only. Changes the realm-wide time of day for every player on the realm.
 		/// @param timeOfDay The new time of day in milliseconds since midnight.
 		/// @param transitionMs How long clients blend towards the new time of day.
