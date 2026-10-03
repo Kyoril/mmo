@@ -502,6 +502,36 @@ namespace mmo
         }
     }
 
+    void SpellVisualizationService::Reset()
+    {
+        if (m_audioPlayer)
+        {
+            for (auto& [guid, handle] : m_loopedSounds)
+            {
+                if (handle.audioHandle != InvalidChannel)
+                {
+                    m_audioPlayer->StopSound(&handle.audioHandle);
+                }
+            }
+
+            for (FadingSound& sound : m_fadingSounds)
+            {
+                if (sound.channel != InvalidChannel)
+                {
+                    m_audioPlayer->StopSound(&sound.channel);
+                }
+            }
+        }
+
+        m_loopedSounds.clear();
+        m_fadingSounds.clear();
+        m_activeSpellAnimations.clear();
+        m_activeEffects.clear();
+        m_fadingLights.clear();
+        m_tintPulses.clear();
+        m_pendingKits.clear();
+    }
+
     void SpellVisualizationService::FadeOutLoopedSoundForActor(uint64 actorGuid)
     {
         auto it = m_loopedSounds.find(actorGuid);

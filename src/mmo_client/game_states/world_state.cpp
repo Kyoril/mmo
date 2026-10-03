@@ -519,6 +519,10 @@ namespace mmo
 			m_projectileManager.reset();
 		}
 
+		// Its effect records point into the scene cleared below; a stale one would be
+		// dereferenced as soon as the same character's guid resolves again on re-entry.
+		SpellVisualizationService::Get().Reset();
+
 		ObjectMgr::Initialize(m_project, m_partyInfo);
 
 		m_worldInstance.reset();

@@ -73,5 +73,5 @@ if __name__ == "__main__":
         if is_loop:
             args = args[1:]
         stats = fetch_and_process(args[2], args[0], float(args[1]), loop=is_loop)
-        print("wrote %s  peak=%.3f  duration=%.2fs"
-              % (sys.argv[1], stats["peak"], stats["duration"]))
+        print("wrote %s  peak=%.3f  duration=%.2fs%s"
+              % (args[0], stats["peak"], stats["duration"], "  (loop)" if is_loop else ""))

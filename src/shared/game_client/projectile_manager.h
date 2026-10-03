@@ -74,6 +74,15 @@ namespace mmo
         /// @brief Get current projectile position
         const Vector3 &GetPosition() const;
 
+        /// @brief Hands the trail particle system and the node it hangs off over to the caller,
+        ///        with emission stopped, so particles already in flight can die out where the
+        ///        projectile hit instead of vanishing with it. The projectile no longer destroys
+        ///        either of them.
+        /// @param outEmitter Receives the trail system, or nullptr if the projectile has none.
+        /// @param outNode Receives the projectile's scene node (only set when outEmitter is).
+        /// @return True if a trail was handed over.
+        bool ReleaseTrail(ParticleSystem *&outEmitter, SceneNode *&outNode);
+
     private:
         void UpdateLinearMotion(float deltaTime);
         void UpdateArcMotion(float deltaTime);
@@ -173,7 +182,22 @@ namespace mmo
         Scene &m_scene;
         IAudio *m_audio;
         std::vector<std::unique_ptr<Projectile>> m_projectiles;
-        
+
+        /// @brief A projectile trail left behind at its impact point to let its particles fade.
+        struct DyingTrail
+        {
+            ParticleSystem *emitter{ nullptr };
+            SceneNode *node{ nullptr };
+            /// Safety limit in seconds, so a trail whose particles somehow never drain (an
+            /// over-long lifetime in a .hpar) cannot accumulate.
+            float remaining{ 0.0f };
+        };
+
+        std::vector<DyingTrail> m_dyingTrails;
+
+        void UpdateDyingTrails(float deltaTime);
+        void DestroyDyingTrail(DyingTrail &trail);
+
         // Internal storage for SpawnProjectileEx - implementation details hidden in cpp
         struct TempProtoStorage;
         std::unique_ptr<TempProtoStorage> m_tempStorage;

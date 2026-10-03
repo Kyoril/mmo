@@ -120,6 +120,14 @@ namespace mmo
         /// \brief Remove the active effects of one phase for a given actor and spell.
         void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId, EffectPhase phase);
 
+        /// rief Forget every tracked effect, light, animation, tint pulse, pending kit and sound.
+        ///        Call when leaving the world, before the scene is cleared: the records hold raw
+        ///        pointers into that scene, and the service outlives it. Without this, re-entering
+        ///        with the same character makes the player's guid resolve again and Update()
+        ///        dereferences emitters of the destroyed scene (most easily via a long-lived aura
+        ///        effect such as Frost Armor's). Scene objects are left to the scene's teardown.
+        void Reset();
+
     private:
         SpellVisualizationService() = default;
         ~SpellVisualizationService() = default;

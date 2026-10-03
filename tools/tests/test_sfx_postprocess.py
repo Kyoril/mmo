@@ -111,6 +111,30 @@ class ProcessTests(unittest.TestCase):
 class ProcessLoopTests(unittest.TestCase):
     RATE = 44100
 
+    def test_crossfade_closes_a_discontinuous_seam(self):
+        # A ramp jumps from 1.0 back to 0.0 at the wrap -- the worst possible click.
+        rate = 1000
+        clip = np.linspace(0.0, 1.0, 2000, dtype=np.float32)
+
+        out = postprocess.crossfade_loop(clip, rate, crossfade_ms=40.0)
+
+        self.assertEqual(len(out), 2000 - 40)
+        steps = np.abs(np.diff(np.concatenate([out, out[:1]])))
+        self.assertLess(float(steps.max()), 0.05)
+
+    def test_loop_is_not_trimmed_or_faded(self):
+        # Constant level: a one-shot fade would pull the ends towards zero.
+        rate = 1000
+        clip = np.full(2000, 0.25, dtype=np.float32)
+
+        out = postprocess.process_loop(clip, rate, target_dbfs=-3.0)
+
+        self.assertEqual(len(out), 2000 - 40)
+        peak = 10 ** (-3.0 / 20.0)
+        self.assertAlmostEqual(float(out[0]), peak, places=2)
+        self.assertAlmostEqual(float(out[-1]), peak, places=2)
+
+
     def test_keeps_the_body_instead_of_trimming_it(self):
         # A loop with a quiet stretch must not be trimmed: that stretch is part of the cycle.
         t = np.arange(self.RATE * 2) / self.RATE

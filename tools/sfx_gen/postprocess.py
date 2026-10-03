@@ -101,29 +101,38 @@ def process(samples: np.ndarray, sample_rate: int, target_dbfs: float = -3.0) ->
     return normalize_peak(faded, target_dbfs)
 
 
-def process_loop(samples: np.ndarray, sample_rate: int, target_dbfs: float = -9.0,
+def crossfade_loop(samples: np.ndarray, sample_rate: int, crossfade_ms: float = 40.0) -> np.ndarray:
+    """Make the wrap point of a loop seamless by blending its tail into its head.
+
+    The first ``crossfade_ms`` are removed and mixed, linearly, into the last
+    ``crossfade_ms``: the clip now ends on exactly the sample that precedes its new first
+    sample, so the wrap is continuous. Linear rather than equal-power because the two ends of
+    a near-seamless loop are strongly correlated, and an equal-power blend of correlated
+    signals swells by up to 3 dB mid-fade. The model's ``loop`` option gets close but not
+    exact -- generated frost loops still jumped by ~10% of peak at the seam, enough to click.
+    """
+    n = int(sample_rate * crossfade_ms / 1000.0)
+    if n <= 1 or len(samples) < 4 * n:
+        return samples.astype(np.float32, copy=True)
+    t = np.linspace(0.0, 1.0, n, endpoint=False, dtype=np.float32)
+    out = samples[n:].astype(np.float32, copy=True)
+    out[-n:] = samples[-n:] * (1.0 - t) + samples[:n] * t
+    return out
+
+
+def process_loop(samples: np.ndarray, sample_rate: int = RATE, target_dbfs: float = -9.0,
                  crossfade_ms: float = 40.0) -> np.ndarray:
     """Normalise a seamless loop without breaking its seam.
 
     :func:`process` would destroy a loop twice over: trimming removes the material that
     joins the end back to the start, and the fades put a click-free but very audible hole in
-    the sound once per cycle. Loops are generated seamless, so they are only levelled -- plus
-    a short equal-power crossfade of the tail into the head, which hides any residual
-    discontinuity the model left at the wrap point. The result is ``crossfade_ms`` shorter
-    than the input and still loops end-to-start.
+    the sound once per cycle. A loop only gets its wrap point blended
+    (:func:`crossfade_loop`) and its level set; the result is ``crossfade_ms`` shorter than
+    the input and still loops end-to-start.
     """
     if len(samples) == 0:
         return samples.astype(np.float32, copy=True)
-
-    out = samples.astype(np.float32, copy=True)
-    n = int(sample_rate * crossfade_ms / 1000.0)
-    if 1 < n < len(out) // 4:
-        t = np.linspace(0.0, 1.0, n, dtype=np.float32)
-        fade_in = np.sin(t * np.pi * 0.5)
-        fade_out = np.cos(t * np.pi * 0.5)
-        head = out[:n] * fade_in + out[-n:] * fade_out
-        out = np.concatenate([head, out[n:-n]])
-    return normalize_peak(out, target_dbfs)
+    return normalize_peak(crossfade_loop(samples, sample_rate, crossfade_ms), target_dbfs)
 
 
 def _ffmpeg() -> str:
