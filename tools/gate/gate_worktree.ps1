@@ -113,7 +113,11 @@ function Invoke-WorktreeGate
 		Remove-Item -Path $stale -Force
 	}
 
-	& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Worktree "tools\gate\verify.ps1") -Tier full | Out-Host
+	# The scheduled task redirects every stream (*>>), and PS 5.1 turns redirected native stderr
+	# into terminating errors under "Stop": the gate's stderr chatter would abort the run. The
+	# verdict rests on the exit code alone.
+	$ErrorActionPreference = "Continue"
+	& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Worktree "tools\gate\verify.ps1") -Tier full 2>&1 | Out-Host
 	return $LASTEXITCODE
 }
 
