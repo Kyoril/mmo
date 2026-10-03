@@ -29,6 +29,16 @@ namespace mmo
 		return remaining;
 	}
 
+	bool ShouldPropagateAreaAura(const bool onlyOneStackTotal, const bool targetHasSpell, const bool targetHasSpellFromCaster)
+	{
+		if (targetHasSpellFromCaster)
+		{
+			return false;
+		}
+
+		return !(onlyOneStackTotal && targetHasSpell);
+	}
+
 	namespace
 	{
 		bool IsHostileTargetType(const uint32 target)
@@ -393,8 +403,10 @@ namespace mmo
 						// Must be in the same group and friendly
 						if (GamePlayerS& player = unit.AsPlayer(); player.GetGroupId() == owner.GetGroupId() && player.UnitIsFriendly(owner))
 						{
-							// Aura already active from same caster?
-							if (!player.HasAuraSpellFromCaster(m_spell.id(), m_casterId))
+							// Skip if the target has it from this caster. A single-stack spell must also not
+							// replace another caster's aura of the same spell, or it would wipe their source aura.
+							const bool onlyOneStackTotal = m_spell.attributes_size() > 0 && (m_spell.attributes(0) & spell_attributes::OnlyOneStackTotal) != 0;
+							if (ShouldPropagateAreaAura(onlyOneStackTotal, player.HasAuraSpell(m_spell.id()), player.HasAuraSpellFromCaster(m_spell.id(), m_casterId)))
 							{
 								// Copies expire together with our aura instead of restarting its duration
 								const std::optional<GameTime> propagationTime = GetAreaAuraPropagationTime(m_duration, GetRemainingTime());

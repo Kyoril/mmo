@@ -265,4 +265,11 @@ namespace mmo
 	/// @return std::nullopt if the aura must not be propagated (a timed aura with no time left),
 	///	0 for a permanent copy, otherwise the copy's initial remaining time.
 	std::optional<GameTime> GetAreaAuraPropagationTime(GameTime duration, GameTime remaining);
+
+	/// Decides whether a party member receives a copy of an area aura on this tick.
+	/// @param onlyOneStackTotal The aura spell carries spell_attributes::OnlyOneStackTotal.
+	/// @param targetHasSpell The target already has an aura of this spell from any caster.
+	/// @param targetHasSpellFromCaster The target already has an aura of this spell from this caster.
+	/// @return true if a copy should be applied.
+	bool ShouldPropagateAreaAura(bool onlyOneStackTotal, bool targetHasSpell, bool targetHasSpellFromCaster);
 }
