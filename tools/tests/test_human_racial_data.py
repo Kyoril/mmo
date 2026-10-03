@@ -81,6 +81,36 @@ class HumanRacialDataTest(unittest.TestCase):
             client = (ROOT / f"data/client/ClientDB/{name}.data").read_bytes()
             self.assertEqual(editor, client, f"ClientDB/{name}.data drifted from the editor")
 
+    def test_call_of_the_watch_points_at_its_visualization(self):
+        self.assertEqual(self.spell(self.ahr.CALL_OF_THE_WATCH).visualization_id,
+                         self.ahr.VIS_ID)
+
+    def test_visualization_follows_the_kit_rules(self):
+        import author_visuals as av
+        vis = next(v for v in av.load_editor_visuals().entry if v.id == self.ahr.VIS_ID)
+        self.assertEqual(vis.name, "Human - Call of the Watch")
+        for event, kit_list in vis.kits_by_event.items():
+            for kit in kit_list.kits:
+                self.assertFalse(kit.HasField("duration_ms"), "duration_ms time-warps the clip")
+                self.assertFalse(kit.sounds, "kits use sound_ids, never sounds")
+                self.assertFalse(kit.loop, "nothing in this visualization loops")
+                if event == 5:
+                    self.assertFalse(kit.sound_ids, "aura events replay on view-in: no sound")
+                for path in kit.particles:
+                    self.assertTrue((ROOT / "data/client" / path).is_file(), path)
+        cast_sounds = [sid for kit in vis.kits_by_event[3].kits for sid in kit.sound_ids]
+        self.assertEqual(cast_sounds, [self.ahr.SOUND_ID])
+
+    def test_sound_entry_exists_and_mirrors(self):
+        import author_visuals as av
+        sounds = av.load_editor_sounds()
+        entry = next(e for e in sounds.entry if e.id == self.ahr.SOUND_ID)
+        self.assertEqual(list(entry.files), ["Sound/Spells/Human/CallOfTheWatch.wav"])
+        for name in ("sounds", "spell_visualizations", "spells"):
+            editor = (ROOT / f"data/editor/data/{name}.data").read_bytes()
+            client = (ROOT / f"data/client/ClientDB/{name}.data").read_bytes()
+            self.assertEqual(editor, client, f"ClientDB/{name}.data drifted")
+
 
 if __name__ == "__main__":
     unittest.main()
