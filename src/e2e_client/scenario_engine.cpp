@@ -447,6 +447,13 @@ namespace mmo
 			return g_runtime->channeling.count(guidFromString(guid)) != 0;
 		}
 
+		/// Whether our own client shows a cooldown on the spell, as the server's SpellStart, SpellGo
+		/// and SpellCooldown packets left it.
+		bool luaIsSpellOnCooldown(const uint32 spellId)
+		{
+			return g_runtime->session->GetContext().IsSpellOnCooldown(spellId);
+		}
+
 		/// How many channels the server has announced for guid (ChannelStart packets).
 		int32 luaChannelStartCount(const std::string& guid)
 		{
@@ -1278,6 +1285,7 @@ namespace mmo
 				luabind::def_lambda("IsAutoAttacking", &luaIsAutoAttacking),
 				luabind::def_lambda("IsChanneling", &luaIsChanneling),
 				luabind::def_lambda("ChannelStartCount", &luaChannelStartCount),
+				luabind::def_lambda("IsSpellOnCooldown", &luaIsSpellOnCooldown),
 				luabind::def_lambda("GetName", &luaGetName),
 				luabind::def_lambda("GetPosX", &luaGetPosX),
 				luabind::def_lambda("GetPosY", &luaGetPosY),

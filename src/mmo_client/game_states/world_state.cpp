@@ -3826,6 +3826,17 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
+			// Spell 0 with no time left: every cooldown was reset (GM command), including the
+			// global cooldown and cast-start previews the server never lists per spell.
+			if (spellId == 0)
+			{
+				if (remainingMs == 0)
+				{
+					m_cooldownManager.ClearAllCooldowns();
+				}
+				continue;
+			}
+
 			// Zero clears the cooldown (sent when a GM resets the character's cooldowns).
 			m_cooldownManager.StartCooldown(spellId, remainingMs);
 		}

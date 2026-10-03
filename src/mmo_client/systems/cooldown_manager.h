@@ -50,6 +50,9 @@ namespace mmo
 		/// @brief Clears the shared global cooldown.
 		void ClearGlobalCooldown();
 
+		/// @brief Clears every spell cooldown and the global cooldown, firing CooldownEnded for each.
+		void ClearAllCooldowns();
+
 		/// @brief Gets the cooldown progress for a spell.
 		/// @param spellId The spell ID.
 		/// @return Progress from 0.0 (just started) to 1.0 (ready/no cooldown).

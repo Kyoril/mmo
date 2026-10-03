@@ -3411,22 +3411,29 @@ namespace mmo
 
 	void Player::OnSpellCooldownsReset(const std::vector<uint32>& spellIds)
 	{
-		if (!m_spawned || spellIds.empty())
+		if (!m_spawned)
 		{
 			return;
 		}
 
-		// A zero remaining time clears the cooldown on the client.
+		// A zero remaining time clears that spell's cooldown on the client. The closing entry for
+		// spell 0 tells it every cooldown is gone: the global cooldown, which the server never
+		// lists per spell, and the cast-start previews the client shows for spells whose
+		// cooldown the server has not recorded yet. Sent even with no spells cleared, since the
+		// global cooldown may still be running.
 		SendPacket([&spellIds](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::SpellCooldown);
-			packet << io::write<uint16>(static_cast<uint16>(spellIds.size()));
+			packet << io::write<uint16>(static_cast<uint16>(spellIds.size() + 1));
 			for (const uint32 spellId : spellIds)
 			{
 				packet
 					<< io::write<uint32>(spellId)
 					<< io::write<uint32>(0);
 			}
+			packet
+				<< io::write<uint32>(0)
+				<< io::write<uint32>(0);
 			packet.Finish();
 		});
 	}

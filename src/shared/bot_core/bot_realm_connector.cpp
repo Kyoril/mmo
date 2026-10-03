@@ -1891,7 +1891,7 @@ namespace mmo
 		}
 
 		// uint16 count, then (uint32 spellId, uint32 remainingMs) per entry. A zero remaining time
-		// clears the cooldown (GM cooldown reset).
+		// clears the cooldown; spell 0 with zero clears all of them (GM cooldown reset).
 		uint16 count = 0;
 		if (!(packet >> io::read<uint16>(count)))
 		{
@@ -1904,10 +1904,20 @@ namespace mmo
 		{
 			uint32 spellId = 0;
 			uint32 cooldownMs = 0;
-			if (!(packet >> io::read<uint32>(spellId) >> io::read<uint32>(cooldownMs)) || spellId == 0)
+			if (!(packet >> io::read<uint32>(spellId) >> io::read<uint32>(cooldownMs)))
 			{
 				UpdateSpellStateIssue("spell_cooldown_parse_failed");
 				return PacketParseResult::Pass;
+			}
+
+			// Spell 0 with no time left: every cooldown was reset (GM command).
+			if (spellId == 0)
+			{
+				if (cooldownMs == 0)
+				{
+					self->ClearAllSpellCooldowns();
+				}
+				continue;
 			}
 
 			if (!self->KnowsSpell(spellId))

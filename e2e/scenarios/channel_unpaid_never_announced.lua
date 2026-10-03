@@ -49,8 +49,11 @@ Assert(WaitUntil(function() return not IsChanneling(me) end, 5000, "channel ende
 Assert(ChannelStartCount(me) == 1, "expected exactly one ChannelStart, got " .. ChannelStartCount(me))
 
 -- Fire Barrage's 10s cooldown would otherwise outlast the drained mana: only the five seconds
--- after spending mana keep it from regenerating past the channel's cost again.
+-- after spending mana keep it from regenerating past the channel's cost again. The reset acts on
+-- the current target, so drop the dummy for it.
+TargetUnit("0x0")
 GM.ResetCooldowns()
+TargetUnit(dummy)
 
 -- Drain mana with Fireballs until Fire Barrage can no longer be paid for.
 local guard = 0
@@ -72,10 +75,12 @@ while GetPower(me) >= FIRE_BARRAGE_COST do
 	Assert(WaitUntil(function() return GetPower(me) < manaBefore end, 5000, "mana spent"),
 		"Fireball should have cost mana, still " .. GetPower(me))
 
-	-- Fireball's cooldown and the global cooldown; a request inside either is refused with a
-	-- packet the headless client does not track. The reset reaches the server ahead of the next
-	-- cast request: both travel the same ordered connection.
+	-- Fireball's cooldown and the global cooldown; a request inside either is refused (failed:10,
+	-- NotReady). Reset our own (untargeted) cooldowns; the reset reaches the server ahead of the
+	-- next cast request, as both travel the same ordered connection.
+	TargetUnit("0x0")
 	GM.ResetCooldowns()
+	TargetUnit(dummy)
 
 	-- The dummy is targeted. At zero health its immortality script resets it, and a Fireball
 	-- cast across that reset fails with bad targets.

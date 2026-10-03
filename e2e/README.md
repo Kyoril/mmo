@@ -87,6 +87,8 @@ one error, and the swing that lands again reports one recovery),
 packets rather than by the requests we send, so it reports what the server acknowledged),
 `IsChanneling(g)` (the server sent `g` a ChannelStart and no ChannelUpdate(0) since — what a
 real client believes), `ChannelStartCount(g)` (ChannelStart packets received for `g`),
+`IsSpellOnCooldown(spellId)` (own character, as the server's cooldown packets left it; the global
+cooldown is not tracked),
 `GetStandState(g)` (0 = Stand, 1 = Sit, 2 = Sleep, 3 = Dead, 4 = Kneel),
 `GetSitPoseEmote(g)`, `GetMoodEmote(g)`
 
@@ -130,9 +132,10 @@ on the test character's damage output, which cannot chew through an elite's
 health pool quickly or reliably; also tags the creature like `GM.KillTarget`),
 `GM.SetInstanceVariable(key, value)`,
 `GM.ResetCooldowns()` / `GM.Heal()` / `GM.RestorePower()` (clear every spell, category and
-global cooldown — a creature's combat spells too —, heal to full, or fill mana/rage/energy of
-the current target, or of the GM when nothing is targeted; `TargetUnit("0x0")` clears the
-target. Ordered with the requests that follow, so a cast right after a reset is not refused),
+global cooldown, a creature's combat AI spells too, and the client's whole cooldown display; heal
+to full; or fill mana/rage/energy - of the current target, or of the GM when nothing is targeted; `TargetUnit("0x0")` clears the
+target, and you need to: with an enemy selected, `GM.ResetCooldowns()` resets *its* cooldowns, not
+yours. Ordered with the requests that follow, so a cast right after a reset is not refused),
 `GM.Godmode(enable)` (toggles damage immunity on the GM character;
 school-agnostic, covers auto-attacks, periodic auras and spell effects alike —
 use to survive content the level-10 test character otherwise cannot, and disable
