@@ -169,7 +169,7 @@ namespace mmo
 			if (const auto* entry = project.items.getById(payload.subjectId))
 			{
 				subject["entryName"] = entry->name();
-				subject["entryDump"] = entry->DebugString();
+				subject["entryDump"] = entry->Utf8DebugString();
 			}
 			else
 			{
@@ -209,7 +209,7 @@ namespace mmo
 			if (const auto* entry = project.spells.getById(payload.subjectId))
 			{
 				subject["entryName"] = entry->name();
-				subject["entryDump"] = entry->DebugString();
+				subject["entryDump"] = entry->Utf8DebugString();
 			}
 			else
 			{
@@ -242,7 +242,7 @@ namespace mmo
 			if (const auto* entry = project.units.getById(payload.subjectId))
 			{
 				subject["entryName"] = entry->name();
-				subject["entryDump"] = entry->DebugString();
+				subject["entryDump"] = entry->Utf8DebugString();
 			}
 			else
 			{
@@ -302,7 +302,7 @@ namespace mmo
 			if (const auto* entry = project.quests.getById(payload.subjectId))
 			{
 				subject["entryName"] = entry->name();
-				subject["entryDump"] = entry->DebugString();
+				subject["entryDump"] = entry->Utf8DebugString();
 			}
 			else
 			{
@@ -337,7 +337,7 @@ namespace mmo
 			if (const auto* entry = project.spells.getById(payload.subjectId))
 			{
 				subject["entryName"] = entry->name();
-				subject["entryDump"] = entry->DebugString();
+				subject["entryDump"] = entry->Utf8DebugString();
 			}
 			else
 			{
@@ -362,7 +362,7 @@ namespace mmo
 			if (const auto* entry = project.objects.getById(payload.subjectId))
 			{
 				subject["entryName"] = entry->name();
-				subject["entryDump"] = entry->DebugString();
+				subject["entryDump"] = entry->Utf8DebugString();
 			}
 			else
 			{

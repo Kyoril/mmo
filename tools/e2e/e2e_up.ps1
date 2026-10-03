@@ -70,6 +70,11 @@ $dataDir = (Join-Path $s.RepoRoot "data\editor\data") -replace '\\', '/'
 $navDir = (Join-Path $s.RepoRoot "data\editor\nav") -replace '\\', '/'
 $worldDataDir = (Join-Path $s.RepoRoot "data\client") -replace '\\', '/'
 $scriptsDir = (Join-Path $s.RepoRoot "data\scripts") -replace '\\', '/'
+# The test world node "uploads" bug reports into this folder (file:// bug API) instead of the
+# real bug API; scenarios read them back through MMO_E2E_BUG_DIR (set by e2e_run.ps1).
+$bugReportDir = (Join-Path $s.RuntimeDir "bugs") -replace '\\', '/'
+if (Test-Path $bugReportDir) { Remove-Item -Recurse -Force $bugReportDir }
+New-Item -ItemType Directory -Force -Path $bugReportDir | Out-Null
 $loginUpdates = (Join-Path $s.RepoRoot "data\login\updates") -replace '\\', '/'
 $realmUpdates = (Join-Path $s.RepoRoot "data\realm\updates") -replace '\\', '/'
 
@@ -215,6 +220,13 @@ folders =
 	maps = "$navDir"
 	worldData = "$worldDataDir"
 	scripts = "$scriptsDir"
+)
+
+bugReport =
+(
+	enabled = 1
+	apiUrl = "file://$bugReportDir"
+	apiKey = ""
 )
 
 log =

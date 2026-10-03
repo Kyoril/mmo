@@ -8,6 +8,7 @@
 #include "game/spell.h"
 #include "game/spell_target_map.h"
 #include "game/time_of_day.h"
+#include "game/bug_report_compression.h"
 #include "log/default_log_levels.h"
 #include "mmo_client/luabind_lambda.h"
 
@@ -265,6 +266,112 @@ namespace mmo
 		void luaClearLastSpellVisual()
 		{
 			g_runtime->session->ClearLastSpellVisual();
+		}
+
+		bool luaIsSubsystemAvailable(const std::string& name)
+		{
+			game::Subsystem subsystem;
+			return game::FindSubsystemByName(name.c_str(), subsystem) && g_runtime->session->GetRealm().IsSubsystemAvailable(subsystem);
+		}
+
+		uint32 luaSubsystemStatusCount()
+		{
+			return g_runtime->session->GetRealm().GetSubsystemStatusPacketCount();
+		}
+
+		std::string luaLastBugReportResult()
+		{
+			return g_runtime->session->GetRealm().GetLastBugReportResult();
+		}
+
+		void luaClearLastBugReportResult()
+		{
+			g_runtime->session->GetRealm().ClearLastBugReportResult();
+		}
+
+		/// Files a bug report. clientJson is sent as the client diagnostics (compressed like the
+		/// real client does); subjectGuid is a decimal string because Lua numbers are doubles.
+		void luaSubmitBugReport(const std::string& subjectType, const uint32 subjectId, const std::string& subjectGuid, const std::string& subjectName, const std::string& comment, const std::string& clientJson)
+		{
+			game::BugReportPayload payload;
+			payload.subjectType = game::bug_report_subject::Generic;
+			for (uint8 i = 0; i < game::bug_report_subject::Count_; ++i)
+			{
+				if (subjectType == game::GetBugReportSubjectName(i))
+				{
+					payload.subjectType = i;
+				}
+			}
+			payload.subjectId = subjectId;
+			payload.subjectGuid = std::strtoull(subjectGuid.c_str(), nullptr, 10);
+			payload.subjectName = subjectName;
+			payload.comment = comment;
+			payload.clientData = game::CompressBugReportData(clientJson);
+			payload.uncompressedSize = static_cast<uint32>(clientJson.size());
+
+			g_runtime->session->GetRealm().SubmitBugReport(payload);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("SubmitBugReport", { { "subject_type", subjectType }, { "subject_id", subjectId } });
+			}
+		}
+
+		/// Content of the newest file in the directory named by MMO_E2E_BUG_DIR (where the test
+		/// world node writes uploaded bug reports), or an empty string if there is none.
+		std::string luaNewestBugReportFile()
+		{
+			const char* directory = std::getenv("MMO_E2E_BUG_DIR");
+			if (!directory || !std::filesystem::is_directory(directory))
+			{
+				return {};
+			}
+
+			std::filesystem::path newest;
+			std::filesystem::file_time_type newestTime{};
+			for (const auto& entry : std::filesystem::directory_iterator(directory))
+			{
+				if (entry.is_regular_file() && (newest.empty() || entry.last_write_time() > newestTime))
+				{
+					newest = entry.path();
+					newestTime = entry.last_write_time();
+				}
+			}
+
+			if (newest.empty())
+			{
+				return {};
+			}
+
+			FILE* file = std::fopen(newest.string().c_str(), "rb");
+			if (!file)
+			{
+				return {};
+			}
+
+			std::string content;
+			char buffer[4096];
+			size_t read = 0;
+			while ((read = std::fread(buffer, 1, sizeof(buffer), file)) > 0)
+			{
+				content.append(buffer, read);
+			}
+			std::fclose(file);
+			return content;
+		}
+
+		void luaGmSetSubsystem(const std::string& name, const bool enabled)
+		{
+			game::Subsystem subsystem;
+			if (!game::FindSubsystemByName(name.c_str(), subsystem))
+			{
+				abortScenario(bot_exit_code::ScenarioFailed, "GM.SetSubsystem: unknown subsystem '" + name + "'");
+			}
+
+			g_runtime->session->GetRealm().CheatSetSubsystem(subsystem, enabled);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.SetSubsystem", { { "name", name }, { "enabled", enabled } });
+			}
 		}
 
 		/// Logs the session back in and returns to the world, over the same connector objects the
@@ -1269,6 +1376,12 @@ namespace mmo
 				luabind::def_lambda("LastSpellVisualTarget", &luaLastSpellVisualTarget),
 				luabind::def_lambda("LastSpellVisualEvent", &luaLastSpellVisualEvent),
 				luabind::def_lambda("ClearLastSpellVisual", &luaClearLastSpellVisual),
+				luabind::def_lambda("IsSubsystemAvailable", &luaIsSubsystemAvailable),
+				luabind::def_lambda("SubsystemStatusCount", &luaSubsystemStatusCount),
+				luabind::def_lambda("LastBugReportResult", &luaLastBugReportResult),
+				luabind::def_lambda("ClearLastBugReportResult", &luaClearLastBugReportResult),
+				luabind::def_lambda("SubmitBugReport", &luaSubmitBugReport),
+				luabind::def_lambda("NewestBugReportFile", &luaNewestBugReportFile),
 				luabind::def_lambda("LoginElsewhereImpl", &luaLoginElsewhere),
 				luabind::def_lambda("ReconnectImpl", &luaReconnect),
 
@@ -1353,7 +1466,8 @@ namespace mmo
 				luabind::def_lambda("GM_ResetTimeOfDay", &luaGmResetTimeOfDay),
 				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
 				luabind::def_lambda("GM_TurnInQuest", &luaGmTurnInQuest),
-				luabind::def_lambda("GM_ClearInventory", &luaGmClearInventory)
+				luabind::def_lambda("GM_ClearInventory", &luaGmClearInventory),
+				luabind::def_lambda("GM_SetSubsystem", &luaGmSetSubsystem)
 			);
 
 			luabind::module(state)[std::move(apiScope)];
@@ -1418,6 +1532,7 @@ namespace mmo
 				AcceptQuest = GM_AcceptQuest,
 				TurnInQuest = function(questId, rewardChoice) GM_TurnInQuest(questId, rewardChoice or 0) end,
 				ClearInventory = GM_ClearInventory,
+				SetSubsystem = GM_SetSubsystem,
 			}
 		)LUA";
 

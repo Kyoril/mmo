@@ -121,6 +121,8 @@ namespace mmo
 			// A reason left over from a previous session must not be reported for this one.
 			m_kickReason.reset();
 			m_lastSpellVisual.reset();
+			m_subsystemStatus.fill(game::subsystem_status::Unavailable);
+			m_lastBugReportResult.clear();
 
 			// Accept LogonChallenge packets from here on
 			RegisterPacketHandler(game::realm_client_packet::AuthChallenge, *this, &BotRealmConnector::OnAuthChallenge);
@@ -129,6 +131,8 @@ namespace mmo
 			// finish authenticating.
 			RegisterPacketHandler(game::realm_client_packet::KickReason, *this, &BotRealmConnector::OnKickReason);
 			RegisterPacketHandler(game::realm_client_packet::PlaySpellVisual, *this, &BotRealmConnector::OnPlaySpellVisual);
+			RegisterPacketHandler(game::realm_client_packet::SubsystemStatus, *this, &BotRealmConnector::OnSubsystemStatus);
+			RegisterPacketHandler(game::realm_client_packet::BugReportResult, *this, &BotRealmConnector::OnBugReportResult);
 		}
 		else
 		{
@@ -546,6 +550,71 @@ namespace mmo
 
 		m_lastSpellVisual = visual;
 		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnSubsystemStatus(game::IncomingPacket& packet)
+	{
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint8 i = 0; i < count; ++i)
+		{
+			uint8 id = 0;
+			uint8 status = 0;
+			if (!(packet >> io::read<uint8>(id) >> io::read<uint8>(status)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			if (id < game::subsystem::Count_)
+			{
+				m_subsystemStatus[id] = status == game::subsystem_status::Available ? game::subsystem_status::Available : game::subsystem_status::Unavailable;
+			}
+		}
+
+		++m_subsystemStatusPackets;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnBugReportResult(game::IncomingPacket& packet)
+	{
+		uint8 result = 0;
+		if (!(packet >> io::read<uint8>(result)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		switch (result)
+		{
+		case game::bug_report_result::Accepted: m_lastBugReportResult = "ACCEPTED"; break;
+		case game::bug_report_result::RateLimited: m_lastBugReportResult = "RATE_LIMITED"; break;
+		case game::bug_report_result::TooLarge: m_lastBugReportResult = "TOO_LARGE"; break;
+		case game::bug_report_result::Disabled: m_lastBugReportResult = "DISABLED"; break;
+		default: m_lastBugReportResult = "INVALID"; break;
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::SubmitBugReport(const game::BugReportPayload& payload)
+	{
+		sendSinglePacket([&payload](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::BugReport);
+			packet << payload;
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatSetSubsystem(const game::Subsystem subsystem, const bool enabled)
+	{
+		sendSinglePacket([subsystem, enabled](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatSetSubsystem);
+			packet << io::write<uint8>(subsystem) << io::write<uint8>(enabled ? 1 : 0);
+			packet.Finish();
+			});
 	}
 
 	PacketParseResult BotRealmConnector::OnAuthSessionResponse(game::IncomingPacket& packet)

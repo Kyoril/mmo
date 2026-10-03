@@ -15,6 +15,8 @@
 #include "game/chat_type.h"
 #include "game/auto_attack.h"
 #include "game/spell_target_map.h"
+#include "game/bug_report.h"
+#include "game/subsystem.h"
 
 #include "binary_io/reader.h"
 
@@ -140,6 +142,11 @@ namespace mmo
 		/// Reason the realm gave for terminating this session, if any.
 		std::optional<auth::SessionKickReason> m_kickReason;
 
+		/// Subsystem availability as announced by the realm.
+		std::array<game::SubsystemStatus, game::subsystem::Count_> m_subsystemStatus{};
+		uint32 m_subsystemStatusPackets = 0;
+		std::string m_lastBugReportResult;
+
 		/// Last spell visualization the server told us to play, if any.
 		struct SpellVisual
 		{
@@ -196,6 +203,27 @@ namespace mmo
 
 		/// Forgets the last observed spell visual, so a scenario can wait for the next one.
 		void ClearLastSpellVisual() { m_lastSpellVisual.reset(); }
+
+		/// Whether the realm announced the subsystem as available.
+		[[nodiscard]] bool IsSubsystemAvailable(game::Subsystem subsystem) const
+		{
+			return subsystem < game::subsystem::Count_ && m_subsystemStatus[subsystem] == game::subsystem_status::Available;
+		}
+
+		/// Number of SubsystemStatus packets received, so a scenario can wait for the next one.
+		[[nodiscard]] uint32 GetSubsystemStatusPacketCount() const { return m_subsystemStatusPackets; }
+
+		/// Result of the last bug report ("ACCEPTED", "RATE_LIMITED", ...), or empty for none.
+		[[nodiscard]] const std::string& GetLastBugReportResult() const { return m_lastBugReportResult; }
+
+		/// Forgets the last bug report result.
+		void ClearLastBugReportResult() { m_lastBugReportResult.clear(); }
+
+		/// Files a bug report with the given (uncompressed) client JSON.
+		void SubmitBugReport(const game::BugReportPayload& payload);
+
+		/// GAME MASTER only. Switches a subsystem realm-wide.
+		void CheatSetSubsystem(game::Subsystem subsystem, bool enabled);
 
 	public:
 		// ~ Begin IConnectorListener
@@ -456,6 +484,10 @@ namespace mmo
 		PacketParseResult OnKickReason(game::IncomingPacket& packet);
 
 		PacketParseResult OnPlaySpellVisual(game::IncomingPacket& packet);
+
+		PacketParseResult OnSubsystemStatus(game::IncomingPacket& packet);
+
+		PacketParseResult OnBugReportResult(game::IncomingPacket& packet);
 
 		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
 
