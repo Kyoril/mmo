@@ -50,6 +50,9 @@ namespace mmo
 	private:
 		void EndChanneling(bool succeeded);
 
+		/// Sends ChannelUpdate(0), the only packet that ends a channel at the clients.
+		void SendChannelEnded() const;
+
 	private:
 		SpellCast& m_cast;
 		const proto::SpellEntry& m_spell;

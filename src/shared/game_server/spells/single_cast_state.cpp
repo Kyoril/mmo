@@ -134,9 +134,39 @@ namespace mmo
 			// For channeled spells, apply effects immediately when the channel starts
 			if (m_spell.attributes(0) & spell_attributes::Channeled)
 			{
-				// Send ChannelStart now that validation has passed
-				auto* worldInstance = m_context.GetWorldInstance();
-				if (worldInstance)
+				// Pay for the channel before announcing it. ChannelStart used to go out first, so a
+				// channel that could not be paid for was announced and then dropped with nothing but a
+				// SpellFailure, and clients kept showing it: only ChannelUpdate(0) ends a channel there.
+				if (!ConsumePower())
+				{
+					m_countdown.Cancel();
+					NotifyCastEnded(false);
+					return;
+				}
+
+				if (!ConsumeReagents())
+				{
+					m_countdown.Cancel();
+					m_hasFinished = true;
+					NotifyCastEnded(false);
+					return;
+				}
+
+				if (!ConsumeItem())
+				{
+					// Unlike the two above, ConsumeItem reports nothing itself, and SpellStart already
+					// put up a cast bar.
+					m_countdown.Cancel();
+					m_hasFinished = true;
+					SendEndCast(spell_cast_result::FailedError);
+					return;
+				}
+
+				// Keep *this* alive to the end: the effects below can stop or abandon this cast (the
+				// target dies, the caster despawns), which swaps it out of the SpellCast.
+				auto strongThis = shared_from_this();
+
+				if (m_context.GetWorldInstance())
 				{
 					const uint64 casterId = m_cast.GetExecuter().GetGuid();
 					m_context.SendPacketFromCaster(
@@ -150,27 +180,7 @@ namespace mmo
 							out_packet.Finish();
 						}
 					);
-				}
-
-				if (!ConsumePower())
-				{
-					m_countdown.Cancel();
-					NotifyCastEnded(false);
-					return;
-				}
-
-				if (!ConsumeReagents())
-				{
-					m_countdown.Cancel();
-					NotifyCastEnded(false);
-					return;
-				}
-
-				if (!ConsumeItem())
-				{
-					m_countdown.Cancel();
-					NotifyCastEnded(false);
-					return;
+					m_channelStartSent = true;
 				}
 
 				// Send SpellGo packet without ending the cast (channel continues)
@@ -215,10 +225,22 @@ namespace mmo
 				}
 
 				ApplyAllEffects();
-				m_cast.GetExecuter().RaiseTrigger(trigger_event::OnSpellCast, { m_spell.id() }, &m_cast.GetExecuter());
+				if (m_hasFinished)
+				{
+					// Stopped or abandoned while the effects ran, which already ended the channel at
+					// the clients. Handing over now would resurrect it in place of the NoCastState.
+					return;
+				}
 
-				// Transition to ChannelingCastState which owns the countdown from here on.
-				auto strongThis = shared_from_this();  // keep alive across SetState
+				m_cast.GetExecuter().RaiseTrigger(trigger_event::OnSpellCast, { m_spell.id() }, &m_cast.GetExecuter());
+				if (m_hasFinished)
+				{
+					return;
+				}
+
+				// Transition to ChannelingCastState which owns the countdown and the channel's end
+				// (ChannelUpdate(0)) from here on.
+				m_channelStartSent = false;
 				m_countdown.Cancel();                  // stop SingleCastState countdown
 				const GameTime remaining = m_castEnd - GetAsyncTimeMs();
 				m_cast.SetState(std::make_shared<ChannelingCastState>(
@@ -301,6 +323,7 @@ namespace mmo
 		// calls NotifyCastEnded (idempotent). This must happen before SetState so the
 		// world instance and context are still reachable from this SingleCastState.
 		SendEndCast(result);
+		SendChannelEnded();
 
 		// Keep *this* alive across SetState: SetState activates the new NoCastState
 		// which may drop the last external reference to this SingleCastState.
@@ -319,6 +342,10 @@ namespace mmo
 		// Suppress any later NotifyCastEnded: the ended signal would run handlers belonging to a
 		// caster that is on its way out.
 		m_endNotified = true;
+
+		// The despawn broadcast follows this hook, and a client may outlive it: the caster can
+		// merely be leaving this instance.
+		SendChannelEnded();
 
 		m_countdown.Cancel();
 		m_impactCountdown.Cancel();
@@ -1215,6 +1242,27 @@ namespace mmo
 					out_packet.Finish();
 				});
 		}
+	}
+
+	void SingleCastState::SendChannelEnded()
+	{
+		if (!m_channelStartSent)
+		{
+			return;
+		}
+
+		m_channelStartSent = false;
+
+		const uint64 casterId = m_cast.GetExecuter().GetGuid();
+		m_context.SendPacketFromCaster(
+			[casterId](game::OutgoingPacket& out_packet)
+			{
+				out_packet.Start(game::realm_client_packet::ChannelUpdate);
+				out_packet
+					<< io::write_packed_guid(casterId)
+					<< io::write<GameTime>(0);
+				out_packet.Finish();
+			});
 	}
 
 	void SingleCastState::OnCastFinished()

@@ -451,6 +451,8 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::SpellFailure, *this, &BotRealmConnector::OnSpellFailure);
 		RegisterPacketHandler(game::realm_client_packet::SpellCooldown, *this, &BotRealmConnector::OnSpellCooldown);
 		RegisterPacketHandler(game::realm_client_packet::AuraUpdate, *this, &BotRealmConnector::OnAuraUpdate);
+		RegisterPacketHandler(game::realm_client_packet::ChannelStart, *this, &BotRealmConnector::OnChannelStart);
+		RegisterPacketHandler(game::realm_client_packet::ChannelUpdate, *this, &BotRealmConnector::OnChannelUpdate);
 
 		// These packets can be safely ignored
 		RegisterPacketHandler(game::realm_client_packet::ActionButtons, *this, &BotRealmConnector::OnIgnoredPacket);
@@ -2071,6 +2073,37 @@ namespace mmo
 		}
 
 		AttackStopped(attackerGuid);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChannelStart(game::IncomingPacket& packet)
+	{
+		uint64 casterGuid;
+		uint32 spellId;
+		int32 durationMs;
+
+		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<int32>(durationMs)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		ChannelStarted(casterGuid, spellId, durationMs);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChannelUpdate(game::IncomingPacket& packet)
+	{
+		uint64 casterGuid;
+		GameTime remainingMs;
+
+		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<GameTime>(remainingMs)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		ChannelUpdated(casterGuid, remainingMs);
 
 		return PacketParseResult::Pass;
 	}

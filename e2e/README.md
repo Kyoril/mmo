@@ -85,6 +85,8 @@ one error, and the swing that lands again reports one recovery),
 `MeleeSwingCount(g)` (auto-attack swings the server resolved against `g`, hit or miss),
 `IsAutoAttacking()` (own character; set by the broadcast `AttackStart`/`AttackStop`
 packets rather than by the requests we send, so it reports what the server acknowledged),
+`IsChanneling(g)` (the server sent `g` a ChannelStart and no ChannelUpdate(0) since — what a
+real client believes), `ChannelStartCount(g)` (ChannelStart packets received for `g`),
 `GetStandState(g)` (0 = Stand, 1 = Sit, 2 = Sleep, 3 = Dead, 4 = Kneel),
 `GetSitPoseEmote(g)`, `GetMoodEmote(g)`
 

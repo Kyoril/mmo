@@ -87,6 +87,18 @@ namespace mmo
 		/// @param attackerGuid The GUID of the attacker.
 		signal<void(uint64)> AttackStopped;
 
+		/// @brief Emitted when a unit in sight starts channeling (ChannelStart).
+		/// @param casterGuid The GUID of the channeling unit.
+		/// @param spellId The channeled spell.
+		/// @param durationMs The channel's duration in milliseconds.
+		signal<void(uint64, uint32, int32)> ChannelStarted;
+
+		/// @brief Emitted on ChannelUpdate. A remaining time of 0 is the server's only signal that
+		///		a channel has ended, whether it ran out, was interrupted or never got going.
+		/// @param casterGuid The GUID of the channeling unit.
+		/// @param remainingMs The channel time left in milliseconds.
+		signal<void(uint64, GameTime)> ChannelUpdated;
+
 		/// @brief Emitted when an attack swing error occurs.
 		/// @param error The error code (see attack_swing_event). Never attack_swing_event::Success
 		///		-- the return to landing swings is reported by AttackSwingRecovered instead.
@@ -501,6 +513,8 @@ namespace mmo
 		PacketParseResult OnSpellFailure(game::IncomingPacket& packet);
 		PacketParseResult OnSpellCooldown(game::IncomingPacket& packet);
 		PacketParseResult OnAuraUpdate(game::IncomingPacket& packet);
+		PacketParseResult OnChannelStart(game::IncomingPacket& packet);
+		PacketParseResult OnChannelUpdate(game::IncomingPacket& packet);
 
 		// ============================================================
 		// Combat Packet Handlers

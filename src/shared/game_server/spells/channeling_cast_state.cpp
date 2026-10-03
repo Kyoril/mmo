@@ -57,6 +57,14 @@ namespace mmo
 		// leaves an armed state that dereferences the dead caster when the channel would have ended.
 		auto strongThis = shared_from_this();
 
+		// Clients were told this channel started, and only ChannelUpdate(0) ends it for them: the
+		// despawn broadcast that follows this hook does not reach a client that keeps seeing the
+		// caster, e.g. its own client when the caster merely leaves this instance.
+		if (!m_hasFinished)
+		{
+			SendChannelEnded();
+		}
+
 		m_hasFinished = true;
 		m_endNotified = true;
 
@@ -120,20 +128,7 @@ namespace mmo
 		// Cancel the countdown in case we arrived here via StopCast (not timer expiry).
 		m_countdown.Cancel();
 
-		// Send ChannelUpdate(0) to inform clients the channel has ended.
-		if (m_context.GetWorldInstance())
-		{
-			const uint64 casterId = m_cast.GetExecuter().GetGuid();
-			m_context.SendPacketFromCaster(
-				[casterId](game::OutgoingPacket& out_packet)
-				{
-					out_packet.Start(game::realm_client_packet::ChannelUpdate);
-					out_packet
-						<< io::write_packed_guid(casterId)
-						<< io::write<GameTime>(0);
-					out_packet.Finish();
-				});
-		}
+		SendChannelEnded();
 
 		// Fire ended signal exactly once. Transition to NoCastState first, then
 		// release m_selfHold — the SetState call may drop external references so
@@ -147,5 +142,20 @@ namespace mmo
 		// Last statement: release our self-hold. If the signal fire above caused
 		// SetState (dropping external refs), this is the final destructor trigger.
 		m_selfHold.reset();
+	}
+
+	void ChannelingCastState::SendChannelEnded() const
+	{
+		// SendPacketFromCaster is a no-op without a world instance.
+		const uint64 casterId = m_cast.GetExecuter().GetGuid();
+		m_context.SendPacketFromCaster(
+			[casterId](game::OutgoingPacket& out_packet)
+			{
+				out_packet.Start(game::realm_client_packet::ChannelUpdate);
+				out_packet
+					<< io::write_packed_guid(casterId)
+					<< io::write<GameTime>(0);
+				out_packet.Finish();
+			});
 	}
 }
