@@ -125,7 +125,7 @@ def spell_definitions():
     })
     call.update(texts(
         ("Ruf der Wache", "Call of the Watch", "Appel de la Garde", "Зов Стражи"),
-        ("Ruft die Pflicht der Wache wach: Du und Gruppenmitglieder im Umkreis von 30 Metern "
+        ("Ruft die Wache zur Pflicht: Du und deine Gruppenmitglieder im Umkreis von 30 Metern "
          "verursacht $D lang $s0% mehr Schaden und erleidet 5% weniger Schaden.",
          "Calls upon the duty of the Watch: you and party members within 30 yards deal $s0% "
          "more damage and take 5% less damage for $D.",
