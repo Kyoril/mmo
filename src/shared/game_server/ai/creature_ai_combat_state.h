@@ -220,6 +220,19 @@ namespace mmo
 		std::vector<GameUnitS*> GetThreatTargets() const;
 
 		/**
+		 * @brief Calls the callback with (guid, threat amount) for every threat list entry.
+		 * @param callback Invoked for each entry, including units that are no longer valid.
+		 */
+		template<class Callback>
+		void ForEachThreat(Callback&& callback) const
+		{
+			for (const auto& [guid, entry] : m_threat)
+			{
+				callback(guid, entry.amount);
+			}
+		}
+
+		/**
 		 * @brief Whether the creature is currently casting a spell.
 		 * @return True if casting.
 		 */

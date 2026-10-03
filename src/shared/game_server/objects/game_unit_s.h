@@ -959,6 +959,21 @@ namespace mmo
 		/// @param writer The writer to write the packet to.
 		void BuildAuraPacket(io::Writer &writer) const;
 
+		/// Calls the given callback for every aura container on this unit, including passive and
+		/// not yet applied ones. Read-only diagnostics (e.g. bug report snapshots).
+		/// @param callback Invoked with a const reference to each aura container.
+		template<class Callback>
+		void ForEachAura(Callback &&callback) const
+		{
+			for (const auto &aura : m_auras)
+			{
+				if (aura)
+				{
+					callback(static_cast<const AuraContainer &>(*aura));
+				}
+			}
+		}
+
 		/// Collects all auras that should be persisted across world instances. Only non-passive
 		/// auras that were not granted by equipment and have not yet expired are returned.
 		/// @returns A snapshot of the persistable auras.

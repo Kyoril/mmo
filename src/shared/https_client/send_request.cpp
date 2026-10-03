@@ -4,6 +4,7 @@
 #include "base/macros.h"
 #include "base/utilities.h"
 
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <memory>
@@ -78,6 +79,33 @@ namespace mmo
 			}
 #endif
 
+			std::string FormatRequestHead(const Request &request)
+			{
+				std::ostringstream head;
+				head << request.method << " " << escapePath(request.document) << " HTTP/1.0\r\n";
+				head << "Host: " << request.host << "\r\n";
+				bool hasAccept = false;
+				for (const auto& [name, value] : request.headers)
+				{
+					if (name == "Accept")
+					{
+						hasAccept = true;
+					}
+					head << name << ": " << value << "\r\n";
+				}
+				if (!hasAccept)
+				{
+					head << "Accept: */*\r\n";
+				}
+				if (request.method != "GET")
+				{
+					head << "Content-Length: " << request.body.size() << "\r\n";
+				}
+				head << "Connection: close\r\n";
+				head << "\r\n";
+				return head.str();
+			}
+
 			https_client::Response sendRequest(
 			    const std::string &host,
 				uint16 port,
@@ -111,14 +139,7 @@ namespace mmo
 				ssl_stream->lowest_layer().set_option(asio::ip::tcp::no_delay(true));
 				ssl_stream->handshake(asio::ssl::stream_base::client);
 
-				std::ostringstream request_stream;
-				request_stream << "GET " << escapePath(request.document) << " HTTP/1.0\r\n";
-				request_stream << "Host: " << request.host << "\r\n";
-				request_stream << "Accept: */*\r\n";
-				request_stream << "Connection: close\r\n";
-				request_stream << "\r\n";
-
-				std::string request_str = request_stream.str();
+				const std::string request_str = FormatRequestHead(request) + request.body;
 
 				asio::write(*ssl_stream, asio::buffer(request_str));
 

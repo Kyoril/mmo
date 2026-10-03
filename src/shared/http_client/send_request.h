@@ -13,6 +13,9 @@ namespace mmo
 	{
 		namespace http_client
 		{
+			/// Formats the request line and headers (up to and including the empty line).
+			std::string FormatRequestHead(const Request &request);
+
 			Response sendRequest(
 			    const std::string &host,
 				uint16 port,
