@@ -12,6 +12,7 @@ manual for now; this command answers "is this commit safe to publish?".
 2. Run:
    `powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/release_check.ps1`
    Append `-Ref <commit-ish>` if the user named a commit or tag; the default is `develop`.
+   Pass a branch name, tag or full SHA — `HEAD` resolves in the main checkout, not in a worktree.
    If no nightly covered the commit this runs the full gate in `H:/mmo-nightly` and takes
    ~10 min — run it in the background and say so.
 3. Exit 0: report "safe to publish <sha8>" and which report proved it.

@@ -28,19 +28,28 @@ The following systems are fully implemented and should not be suggested as futur
 - All agent implementation work happens on a `feature/<topic>` branch (use a worktree
   for parallel sessions). Direct commits to `develop` are reserved for trivial
   data/docs tweaks the user explicitly requests.
-- Merging to `develop` goes through the local quality gate: `/gate` runs
-  `tools/gate/verify.ps1` (Debug build + unit tests + E2E) and then a code review of
-  the branch diff; `/ship` performs the merge and refuses without a green, full,
-  HEAD-matching `tools/gate/last_report.json`.
+- The quality gate has three tiers (`tools/gate/verify.ps1 -Tier fast|full`):
+  - **Merge (fast):** `/ship` merges a feature branch into `develop` after a green fast
+    gate for HEAD — protocol check, build, unit tests, tool tests (~1.5 min incremental).
+    It runs the gate itself when needed. `/gate` runs the same check on demand;
+    `/gate full` adds E2E and a code review for risky changes.
+  - **Nightly (full):** the "MMO Nightly Gate" task runs the full gate including E2E on
+    `develop` in the dedicated worktree `H:/mmo-nightly`, which no session may use or
+    edit. It skips when develop has not moved since the last green night. The scheduled
+    task runs the copy of `nightly_gate.ps1` its previous run checked out, so gate-script
+    changes take effect one night after reaching develop.
+  - **Release (full):** before publishing a build to the live client distribution or
+    servers, `/release` (`tools/gate/release_check.ps1`) must be green for that exact
+    commit; it runs the full gate if no nightly covered it.
 - Never push to origin unless the user explicitly asks.
-- Scheduled reports land in `tools/gate/reports/` (nightly gate on develop, weekly
-  content audit). At session start, if the newest nightly report there is red,
-  surface it to the user before starting new work.
-- A nightly report with `"skipped": true` / `"passed": null` means the run was skipped
-  because the repo was busy (dirty tree or non-develop branch checked out) — treat
-  that as "did not run," not as red. Note also that `.claude/settings.local.json`
-  (htex MCP config) does not follow git worktrees, so parallel worktree sessions run
-  without it.
+- Reports land in `tools/gate/reports/` (`nightly-*.json`, `release-*.json`, weekly
+  content audit). At session start, surface to the user before starting new work:
+  the newest nightly report if `passed` is `false` (quote `merges_since_last_green`, the
+  suspects, and `setup_error` if present), or the fact that no nightly report with a
+  non-null `passed` is younger than 48 h (the nightly is not running). Reports with
+  `"skipped": true` predate the dedicated worktree and mean "did not run".
+- `.claude/settings.local.json` (htex MCP config) does not follow git worktrees, so
+  parallel worktree sessions run without it.
 
 ## Network Protocol Changes
 
