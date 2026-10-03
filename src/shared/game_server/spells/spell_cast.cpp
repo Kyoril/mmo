@@ -14,12 +14,13 @@ namespace mmo
 	{
 		auto newState = std::make_shared<SingleCastState>(cast, spell, target, castTime, isProc, itemGuid);
 
-		// SetState activates the state, which is where validation runs. The state stays owned by
-		// the cast afterwards even when validation rejected it, so reading its result here is safe.
-		SingleCastState* activated = newState.get();
-		cast.SetState(std::move(newState));
+		// SetState activates the state, which is where validation runs. Hold our own reference
+		// across it: a channel hands over to a ChannelingCastState while activating, which drops
+		// the cast's reference to this state. Read through a raw pointer, the result then came
+		// from freed memory, and a channel that had started was reported to its caster as failed.
+		cast.SetState(newState);
 
-		return activated->GetActivationResult();
+		return newState->GetActivationResult();
 	}
 
 	SpellCast::SpellCast(TimerQueue& timer, GameUnitS& executor)

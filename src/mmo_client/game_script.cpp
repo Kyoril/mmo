@@ -936,6 +936,13 @@ namespace mmo
 			return (spell->attributes(0) & spell_attributes::Passive) != 0;
 		}
 
+		/// Channeled spells take effect while the caster channels; their cast time is the channel's
+		/// duration, so the tooltip labels it as such instead of as a cast time.
+		bool Script_IsChanneledSpell(const proto_client::SpellEntry *spell)
+		{
+			return spell != nullptr && (spell->attributes(0) & spell_attributes::Channeled) != 0;
+		}
+
 		/// Racial abilities are restricted to one or more races instead of a class (racemask set,
 		/// classmask 0), so the tooltip can label them as such.
 		bool Script_IsRacialSpell(const proto_client::SpellEntry *spell)
@@ -1444,6 +1451,7 @@ namespace mmo
 					   luabind::def("GetSpellDescription", &Script_GetSpellDescription),
 					   luabind::def("GetSpellAuraText", &Script_GetSpellAuraText),
 					   luabind::def("IsPassiveSpell", &Script_IsPassiveSpell),
+					   luabind::def("IsChanneledSpell", &Script_IsChanneledSpell),
 					   luabind::def("IsRacialSpell", &Script_IsRacialSpell),
 
 					   luabind::def("MoveForwardStart", &Script_MoveForwardStart),
