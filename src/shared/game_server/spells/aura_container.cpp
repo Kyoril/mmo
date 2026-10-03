@@ -14,6 +14,21 @@
 
 namespace mmo
 {
+	std::optional<GameTime> GetAreaAuraPropagationTime(const GameTime duration, const GameTime remaining)
+	{
+		if (duration == 0)
+		{
+			return GameTime{ 0 };
+		}
+
+		if (remaining == 0)
+		{
+			return std::nullopt;
+		}
+
+		return remaining;
+	}
+
 	namespace
 	{
 		bool IsHostileTargetType(const uint32 target)
@@ -381,8 +396,20 @@ namespace mmo
 							// Aura already active from same caster?
 							if (!player.HasAuraSpellFromCaster(m_spell.id(), m_casterId))
 							{
+								// Copies expire together with our aura instead of restarting its duration
+								const std::optional<GameTime> propagationTime = GetAreaAuraPropagationTime(m_duration, GetRemainingTime());
+								if (!propagationTime)
+								{
+									return true;
+								}
+
 								// Apply the aura
 								auto container = std::make_shared<AuraContainer>(player, m_casterId, m_spell, m_duration, m_itemGuid);
+								if (*propagationTime > 0)
+								{
+									container->SetInitialRemainingTime(*propagationTime);
+								}
+
 								for (const auto& effect : m_auras)
 								{
 									container->AddAuraEffect(effect->GetEffect(), effect->GetBasePoints());

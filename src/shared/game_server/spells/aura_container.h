@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "spell_cast.h"
@@ -253,4 +254,15 @@ namespace mmo
 		uint32 m_stackingCategoryId { 0 };          // Cached from m_spell.stacking_category_id() at construction
 		uint32 m_stackCount { 1 };                  // Current stack count; incremented or reset by RefreshAura
 	};
+
+	/// Computes how long a party member's copy of an area aura lasts.
+	///
+	/// Copies must expire together with the caster's aura. Otherwise leaving and re-entering
+	/// range would hand out a fresh full duration.
+	///
+	/// @param duration The aura spell's full duration in milliseconds; 0 means permanent.
+	/// @param remaining The caster aura's remaining time in milliseconds.
+	/// @return std::nullopt if the aura must not be propagated (a timed aura with no time left),
+	///	0 for a permanent copy, otherwise the copy's initial remaining time.
+	std::optional<GameTime> GetAreaAuraPropagationTime(GameTime duration, GameTime remaining);
 }
