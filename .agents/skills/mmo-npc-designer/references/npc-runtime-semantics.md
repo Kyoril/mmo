@@ -54,10 +54,15 @@ Per group, exactly ONE roll `r` in 0..100 is made:
   candidate. A group containing any 0-chance entry therefore always drops something.
 - At most one item drops per group.
 
-Consequences that are easy to get wrong (they made boars drop nothing on most kills):
+This is intended design, not a bug: a group is an exclusive "at most one of these" pick, which
+keeps valuable groups (greens) rare. Do not change the runtime to cumulative chances. What it means
+when authoring:
 
 - Chances inside a group do NOT add up. The probability that a group drops anything is its
   HIGHEST `dropchance`, not the sum. Seven trash items at 12-18% each = an 18% group, not ~100%.
+  Nineteen greens at 5% each = a ~5% green group, which is exactly what is wanted for greens.
+- If a creature should drop something on nearly every kill, put a high-chance group into its
+  family base table (meat, body parts) instead of raising rare groups.
 - An item's own effective chance is lower than its `dropchance` when other entries share the group.
   Give all entries of a group the same `dropchance` p to get "p% for the group, split evenly".
 - Put outcomes that should be rolled independently (meat AND a hide) into separate groups.
