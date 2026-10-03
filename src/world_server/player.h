@@ -723,6 +723,32 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatDamage(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to clear every cooldown of their current target (or of
+		///	their own character when nothing is targeted).
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatResetCooldowns(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to heal their current target (or themselves) to full health.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatHeal(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to fill mana, rage and energy of their current target (or
+		///	themselves).
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatRestorePower(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Resolves the unit a target-or-self GM command acts on: the character's current target,
+		///	or the character itself when nothing is targeted.
+		///	@param commandName Name used in the error log when the target cannot be resolved.
+		///	@returns The unit, or nullptr (already logged) if the target is not a unit in this world.
+		GameUnitS* GetCheatTargetUnit(const char* commandName) const;
+
 		/// Handles the client's request to set an instance-scoped variable in the player's world
 		///	instance, which trigger conditions can then read back through the InstanceVariable
 		///	function. Used by the E2E harness to put an encounter into a given state directly.
@@ -758,6 +784,10 @@ namespace mmo
 		/// Notifies the client that a deferred spell cooldown has started (e.g. after a
 		/// "Disabled While Active" spell's aura faded), so the action bar shows the cooldown.
 		void OnSpellCooldownStarted(uint32 spellId, GameTime cooldownMs);
+
+		/// Notifies the client that the character's cooldowns were reset, so the action bar
+		/// clears them.
+		void OnSpellCooldownsReset(const std::vector<uint32>& spellIds);
 
 		/// Notifies the client that the character's talent points have been reset.
 		void OnTalentsReset();

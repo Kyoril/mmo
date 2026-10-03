@@ -424,6 +424,15 @@ namespace mmo
 		///	@param amount The amount of damage to deal.
 		void CheatDamage(uint32 amount);
 
+		/// GAME MASTER only. Clears every cooldown of the current target (or of the character).
+		void CheatResetCooldowns();
+
+		/// GAME MASTER only. Heals the current target (or the character) to full health.
+		void CheatHeal();
+
+		/// GAME MASTER only. Fills mana, rage and energy of the current target (or the character).
+		void CheatRestorePower();
+
 		/// GAME MASTER only. Accepts the given quest without a questgiver interaction.
 		void CheatAcceptQuest(uint32 questId);
 

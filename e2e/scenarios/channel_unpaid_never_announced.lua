@@ -48,9 +48,9 @@ Assert(WaitUntil(function() return not IsChanneling(me) end, 5000, "channel ende
 	"the channel should end with ChannelUpdate(0) once its 1.5s have run out")
 Assert(ChannelStartCount(me) == 1, "expected exactly one ChannelStart, got " .. ChannelStartCount(me))
 
--- Wait out Fire Barrage's cooldown before draining: once drained, mana must not regenerate past
--- the channel's cost again, and only the five seconds after spending it keep it from doing so.
-Sleep(10500)
+-- Fire Barrage's 10s cooldown would otherwise outlast the drained mana: only the five seconds
+-- after spending mana keep it from regenerating past the channel's cost again.
+GM.ResetCooldowns()
 
 -- Drain mana with Fireballs until Fire Barrage can no longer be paid for.
 local guard = 0
@@ -59,6 +59,7 @@ while GetPower(me) >= FIRE_BARRAGE_COST do
 	Assert(guard <= 30, "mana never dropped below " .. FIRE_BARRAGE_COST .. ", still " .. GetPower(me))
 	Assert(GetPower(me) >= FIREBALL_COST, "cannot drain further with Fireball")
 
+	local manaBefore = GetPower(me)
 	Assert(CastSpell(FIREBALL, dummy), "Fireball request should be accepted")
 	Assert(WaitUntil(function()
 		local result = LastCastResult()
@@ -66,9 +67,19 @@ while GetPower(me) >= FIRE_BARRAGE_COST do
 	end, 10000, "Fireball finished"), "Fireball should finish, last result: " .. LastCastResult())
 	Assert(LastCastResult() == "ok", "Fireball should succeed while draining, got " .. LastCastResult())
 
+	-- The mana update replicates separately from SpellGo; reading power before it lands would
+	-- decide the next iteration on the old value.
+	Assert(WaitUntil(function() return GetPower(me) < manaBefore end, 5000, "mana spent"),
+		"Fireball should have cost mana, still " .. GetPower(me))
+
 	-- Fireball's cooldown and the global cooldown; a request inside either is refused with a
-	-- packet the headless client does not track.
-	Sleep(1700)
+	-- packet the headless client does not track. The reset reaches the server ahead of the next
+	-- cast request: both travel the same ordered connection.
+	GM.ResetCooldowns()
+
+	-- The dummy is targeted. At zero health its immortality script resets it, and a Fireball
+	-- cast across that reset fails with bad targets.
+	GM.Heal()
 end
 Log("Mana drained to " .. GetPower(me))
 

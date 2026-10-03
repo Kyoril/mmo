@@ -574,6 +574,10 @@ namespace mmo
 		/// @param spellId Id of the spell whose cooldown just started.
 		/// @param cooldownMs Cooldown duration in milliseconds.
 		signal<void(uint32, GameTime)> spellCooldownStarted;
+		/// Signal fired when ResetCooldowns cleared this unit's cooldowns, so the owning client
+		/// can clear them on its action bar too.
+		/// @param spellIds Ids of the spells whose own cooldown was running.
+		signal<void(const std::vector<uint32>&)> spellCooldownsReset;
 
 	public:
 		/// Constructs a new unit object.
@@ -794,6 +798,10 @@ namespace mmo
 		/// @param cooldownTimeMs The cooldown time in milliseconds.
 		void SetGlobalCooldown(GameTime cooldownTimeMs);
 
+		/// Clears every spell, spell category and global cooldown of this unit, and the combat
+		/// spell cooldowns of a creature's AI. Fires spellCooldownsReset. Used by the GM command.
+		void ResetCooldowns();
+
 		/// Gets the configured global cooldown duration in milliseconds (from combat settings).
 		/// @returns The global cooldown duration in milliseconds.
 		[[nodiscard]] GameTime GetGlobalCooldownDuration() const;
@@ -997,6 +1005,10 @@ namespace mmo
 		/// Checks if the unit regenerates power.
 		/// @returns true if the unit regenerates power, false otherwise.
 		bool RegeneratesPower() const { return (m_regeneration & regeneration_flags::Power) != 0; }
+
+		/// Executed by ResetCooldowns after the unit's own cooldowns were cleared, for cooldowns
+		/// a subclass keeps elsewhere (creature AI combat spells).
+		virtual void OnCooldownsReset() {}
 
 		/// Executed when an attack was successfully parried.
 		virtual void OnParry();

@@ -256,6 +256,11 @@ namespace mmo
 		 */
 		CreatureCombatScript* GetScript() const { return m_script.get(); }
 
+		/**
+		 * @brief Makes every combat spell of the creature available again right away (GM command).
+		 */
+		void ResetSpellCooldowns();
+
 	private:
 		// === Threat Management ===
 

@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000000F;
+		constexpr uint32 ProtocolVersion = 0x00000010;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -414,6 +414,19 @@ namespace mmo
 				/// Payload: uint8 reset (1 = go back to the realm's system time, ignoring timeOfDay),
 				/// uint32 timeOfDay (milliseconds since midnight), uint32 transitionMs.
 				CheatSetTimeOfDay, // GAME MASTER
+
+				/// GAME MASTER. Clears every spell, spell category and global cooldown of the sender's
+				/// current target (or of the sender when nothing is targeted); a creature's combat
+				/// spells become available again as well. No payload.
+				CheatResetCooldowns, // GAME MASTER
+
+				/// GAME MASTER. Heals the sender's current target (or the sender) to full health.
+				/// Dead units are left alone (use the revive cheat). No payload.
+				CheatHeal, // GAME MASTER
+
+				/// GAME MASTER. Fills mana, rage and energy of the sender's current target (or the
+				/// sender) to their maximum. No payload.
+				CheatRestorePower, // GAME MASTER
 
 				/// Counter constant
 				Count_,

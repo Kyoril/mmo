@@ -252,6 +252,8 @@ namespace mmo
 
 		void OnDespawn() override;
 
+		void OnCooldownsReset() override;
+
 	protected:
 		/// @brief Returns the auto-attack spell configured for this creature, if any.
 		/// Creatures use a single auto-attack spell regardless of weapon hand.

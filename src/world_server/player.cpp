@@ -66,6 +66,7 @@ namespace mmo
 			m_character->spellLearned.connect(*this, &Player::OnSpellLearned),
 			m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned),
 			m_character->spellCooldownStarted.connect(*this, &Player::OnSpellCooldownStarted),
+			m_character->spellCooldownsReset.connect(*this, &Player::OnSpellCooldownsReset),
 
 			// Emote unlock signal
 			m_character->emoteLearned.connect(*this, &Player::OnEmoteLearned),
@@ -819,6 +820,15 @@ namespace mmo
 			break;
 		case game::client_realm_packet::CheatDamage:
 			OnCheatDamage(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatResetCooldowns:
+			OnCheatResetCooldowns(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatHeal:
+			OnCheatHeal(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatRestorePower:
+			OnCheatRestorePower(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::CheatAcceptQuest:
 			OnCheatAcceptQuest(opCode, buffer.size(), reader);
@@ -3395,6 +3405,28 @@ namespace mmo
 			packet
 				<< io::write<uint32>(spellId)
 				<< io::write<uint32>(static_cast<uint32>(cooldownMs));
+			packet.Finish();
+		});
+	}
+
+	void Player::OnSpellCooldownsReset(const std::vector<uint32>& spellIds)
+	{
+		if (!m_spawned || spellIds.empty())
+		{
+			return;
+		}
+
+		// A zero remaining time clears the cooldown on the client.
+		SendPacket([&spellIds](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::SpellCooldown);
+			packet << io::write<uint16>(static_cast<uint16>(spellIds.size()));
+			for (const uint32 spellId : spellIds)
+			{
+				packet
+					<< io::write<uint32>(spellId)
+					<< io::write<uint32>(0);
+			}
 			packet.Finish();
 		});
 	}

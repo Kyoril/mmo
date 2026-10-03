@@ -129,6 +129,10 @@ all run — use it to walk a boss across its phase thresholds instead of dependi
 on the test character's damage output, which cannot chew through an elite's
 health pool quickly or reliably; also tags the creature like `GM.KillTarget`),
 `GM.SetInstanceVariable(key, value)`,
+`GM.ResetCooldowns()` / `GM.Heal()` / `GM.RestorePower()` (clear every spell, category and
+global cooldown — a creature's combat spells too —, heal to full, or fill mana/rage/energy of
+the current target, or of the GM when nothing is targeted; `TargetUnit("0x0")` clears the
+target. Ordered with the requests that follow, so a cast right after a reset is not refused),
 `GM.Godmode(enable)` (toggles damage immunity on the GM character;
 school-agnostic, covers auto-attacks, periodic auras and spell effects alike —
 use to survive content the level-10 test character otherwise cannot, and disable

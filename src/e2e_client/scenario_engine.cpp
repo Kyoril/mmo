@@ -1098,6 +1098,33 @@ namespace mmo
 			}
 		}
 
+		void luaGmResetCooldowns()
+		{
+			g_runtime->session->GetRealm().CheatResetCooldowns();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.ResetCooldowns");
+			}
+		}
+
+		void luaGmHeal()
+		{
+			g_runtime->session->GetRealm().CheatHeal();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.Heal");
+			}
+		}
+
+		void luaGmRestorePower()
+		{
+			g_runtime->session->GetRealm().CheatRestorePower();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.RestorePower");
+			}
+		}
+
 		void luaGmWorldPort(const uint32 mapId, const float x, const float y, const float z, const float facing)
 		{
 			BotSession& session = *g_runtime->session;
@@ -1309,6 +1336,9 @@ namespace mmo
 				luabind::def_lambda("GM_Godmode", &luaGmGodmode),
 				luabind::def_lambda("GM_SetInstanceVariable", &luaGmSetInstanceVariable),
 				luabind::def_lambda("GM_DamageTarget", &luaGmDamageTarget),
+				luabind::def_lambda("GM_ResetCooldowns", &luaGmResetCooldowns),
+				luabind::def_lambda("GM_Heal", &luaGmHeal),
+				luabind::def_lambda("GM_RestorePower", &luaGmRestorePower),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
 				luabind::def_lambda("GM_SetTimeOfDay", &luaGmSetTimeOfDay),
@@ -1370,6 +1400,9 @@ namespace mmo
 				Godmode = GM_Godmode,
 				SetInstanceVariable = GM_SetInstanceVariable,
 				DamageTarget = GM_DamageTarget,
+				ResetCooldowns = GM_ResetCooldowns,
+				Heal = GM_Heal,
+				RestorePower = GM_RestorePower,
 				Worldport = GM_WorldPort,
 				SetSpeed = GM_SetSpeed,
 				SetTimeOfDay = function(timeText, transitionSeconds) return GM_SetTimeOfDay(timeText, transitionSeconds or 8) end,

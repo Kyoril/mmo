@@ -581,6 +581,12 @@ namespace mmo
 
 		void Command_Damage(const std::string &cmd, const std::string &args) const;
 
+		void Command_ResetCooldowns(const std::string &cmd, const std::string &args) const;
+
+		void Command_Heal(const std::string &cmd, const std::string &args) const;
+
+		void Command_RestorePower(const std::string &cmd, const std::string &args) const;
+
 		void Command_SetTime(const std::string &cmd, const std::string &args) const;
 #endif
 
