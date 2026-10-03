@@ -24,14 +24,21 @@ Record the current branch name — every `<branch>` below means that name.
    If it is red, report it exactly as /gate does (failing step, quoted log lines) and STOP.
 3. Run `python tools/gate/serialization_warning.py`. If it prints anything, show it and ask
    the user whether the listed edits change a packet's wire format without a protocol
-   version bump; merge only after they answer.
+   version bump. If they confirm it IS a wire-format change without a protocol version
+   bump, STOP without merging and tell them to bump `mmo::auth::ProtocolVersion` and/or
+   `mmo::game::ProtocolVersion`, then run `python tools/protocol_version_check.py --update`
+   (see CLAUDE.md "Network Protocol Changes"). Merge only if they say it is not a wire
+   change or the bump is already in.
 
 ## Merge
 
 1. Find the checkout holding develop: in `git worktree list --porcelain`, the `worktree`
    line of the block containing `branch refs/heads/develop`.
    - Held by another checkout `<X>`: if `<X>` is not `H:/mmo` and may belong to a live
-     session, ask the user before merging there. Then
+     session, ask the user before merging there. Before merging, check that `<X>` has no
+     merge/rebase in progress (`git -C <X> status` must not mention an unmerged state or
+     "rebase in progress"). Unrelated local modifications in `<X>` are fine (git refuses the
+     merge if they would be overwritten — then report it and STOP). Then
      `git -C <X> merge --no-ff <branch> -m "Merge <branch> (gate green at <first 8 chars of report commit>)"`
      and `git checkout --detach` in the current checkout.
    - Held by nobody: `git checkout develop` here, then the same `git merge --no-ff ...`.
@@ -40,7 +47,8 @@ Record the current branch name — every `<branch>` below means that name.
 2. If the branch changed a submodule pointer, run
    `git -C <checkout that merged> -c protocol.file.allow=always submodule update` so that
    checkout is not left dirty.
-3. `git branch -d <branch>`
+3. `git branch -d <branch>` only after the current checkout is no longer on `<branch>`
+   (it was detached or switched to develop above).
 4. Report the merge commit hash, and remind the user that E2E for it runs in tonight's
    nightly gate (or now via /release if they intend to publish).
 
