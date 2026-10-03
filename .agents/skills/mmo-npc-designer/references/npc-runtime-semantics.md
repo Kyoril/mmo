@@ -43,14 +43,27 @@ If `useStatBasedSystem = false`, the runtime falls back to legacy fields such as
 </stat_system_semantics>
 
 <loot_semantics>
-`LootInstance` evaluates loot one group at a time:
+`LootInstance` evaluates loot one group at a time. Every table in `unitlootentries` is rolled
+independently and the results are combined; gold is the sum of each table's `minmoney..maxmoney` roll.
+
+Per group, exactly ONE roll `r` in 0..100 is made:
 
 - Conditional drops are skipped if no eligible loot recipient satisfies the condition.
-- Non-zero `dropchance` entries compete inside their group.
-- `dropchance == 0` acts as an equal-chance pool fallback when no non-equal-chance entry won.
-- Gold is rolled separately from `minmoney` and `maxmoney`.
+- Every entry with `dropchance >= r` becomes a candidate; ONE candidate is picked uniformly at random.
+- `dropchance == 0` entries form a fallback pool that is used whenever no non-zero entry became a
+  candidate. A group containing any 0-chance entry therefore always drops something.
+- At most one item drops per group.
 
-This means loot groups matter. Flattening every possible item into one big group changes behavior.
+Consequences that are easy to get wrong (they made boars drop nothing on most kills):
+
+- Chances inside a group do NOT add up. The probability that a group drops anything is its
+  HIGHEST `dropchance`, not the sum. Seven trash items at 12-18% each = an 18% group, not ~100%.
+- An item's own effective chance is lower than its `dropchance` when other entries share the group.
+  Give all entries of a group the same `dropchance` p to get "p% for the group, split evenly".
+- Put outcomes that should be rolled independently (meat AND a hide) into separate groups.
+
+Before and after changing loot, simulate it: roll the creature's tables 100k times with the algorithm
+above and report the empty-loot rate and the per-item rates.
 </loot_semantics>
 
 <gossip_semantics>
