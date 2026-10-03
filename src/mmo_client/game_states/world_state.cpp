@@ -2003,6 +2003,8 @@ namespace mmo
 								 { Command_ResetCooldowns(cmd, args); }, ConsoleCommandCategory::Gm, "Clears all spell cooldowns of the selected unit (or yourself if nothing is selected).");
 		Console::RegisterCommand("heal", [this](const std::string &cmd, const std::string &args)
 								 { Command_Heal(cmd, args); }, ConsoleCommandCategory::Gm, "Heals the selected unit (or yourself if nothing is selected) to full health.");
+		Console::RegisterCommand("subsystem", [this](const std::string &cmd, const std::string &args)
+								 { Command_SetSubsystem(cmd, args); }, ConsoleCommandCategory::Gm, "Switches a server subsystem realm-wide: subsystem <name> on|off (e.g. subsystem BUG_REPORT off).");
 		Console::RegisterCommand("restorepower", [this](const std::string &cmd, const std::string &args)
 								 { Command_RestorePower(cmd, args); }, ConsoleCommandCategory::Gm, "Fills mana, rage and energy of the selected unit (or yourself if nothing is selected).");
 		Console::RegisterCommand("settime", [this](const std::string &cmd, const std::string &args)
@@ -2036,6 +2038,7 @@ namespace mmo
 		Console::UnregisterCommand("damage");
 		Console::UnregisterCommand("resetcooldowns");
 		Console::UnregisterCommand("heal");
+		Console::UnregisterCommand("subsystem");
 		Console::UnregisterCommand("restorepower");
 		Console::UnregisterCommand("settime");
 #endif

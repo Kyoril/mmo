@@ -672,6 +672,15 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::CheatSetSubsystem(const uint8 subsystem, const bool enabled)
+	{
+		sendSinglePacket([subsystem, enabled](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatSetSubsystem);
+			packet << io::write<uint8>(subsystem) << io::write<uint8>(enabled ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::CheatRestorePower()
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {

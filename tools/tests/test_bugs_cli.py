@@ -83,7 +83,7 @@ class BugApiTests(unittest.TestCase):
 	def test_main_requires_api_key(self):
 		env = dict(os.environ)
 		env.pop("MMO_BUG_API_KEY", None)
-		self.assertEqual(bugs.main(["list"], environ=env, out=io.StringIO()), 2)
+		self.assertEqual(bugs.main(["list"], environ=env, out=io.StringIO(), err=io.StringIO()), 2)
 
 
 if __name__ == "__main__":

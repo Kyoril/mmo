@@ -95,14 +95,15 @@ def build_parser():
 	return parser
 
 
-def main(argv=None, environ=None, out=None):
+def main(argv=None, environ=None, out=None, err=None):
 	environ = os.environ if environ is None else environ
 	out = sys.stdout if out is None else out
+	err = sys.stderr if err is None else err
 	args = build_parser().parse_args(argv)
 
 	api_key = environ.get("MMO_BUG_API_KEY")
 	if not api_key:
-		print("MMO_BUG_API_KEY is not set (reader key of the bug API)", file=sys.stderr)
+		print("MMO_BUG_API_KEY is not set (reader key of the bug API)", file=err)
 		return 2
 
 	api = BugApi(environ.get("MMO_BUG_API_URL", DEFAULT_URL), api_key)
