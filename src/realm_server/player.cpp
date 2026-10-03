@@ -32,6 +32,7 @@
 #include "game/quest_info.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/objects/game_player_s.h"
+#include "game_server/racial_spells.h"
 
 namespace mmo
 {
@@ -668,19 +669,13 @@ namespace mmo
 		std::map<uint8, ActionButton> actionButtons;
 
 		std::vector<uint32> spellIds;
-		spellIds.reserve(classInstance->spells().size());
+		spellIds.reserve(classInstance->spells().size() + raceEntry->racialspells().size());
 		for (const auto &spell : classInstance->spells())
 		{
 			const proto::SpellEntry *spellEntry = m_project.spells.getById(spell.spell());
-			if (spellEntry && actionButtons.size() < 12)
+			if (spellEntry && actionButtons.size() < 12 && IsActionBarAbility(*spellEntry))
 			{
-				// Not a passive, not hidden and an ability? Put it in the action bar!
-				if ((spellEntry->attributes(0) & spell_attributes::Passive) == 0 &&
-					(spellEntry->attributes(0) & spell_attributes::HiddenClientSide) == 0 &&
-					(spellEntry->attributes(0) & spell_attributes::Ability) != 0)
-				{
-					actionButtons[actionButtons.size()] = ActionButton{static_cast<uint16>(spell.spell()), action_button_type::Spell};
-				}
+				actionButtons[actionButtons.size()] = ActionButton{static_cast<uint16>(spell.spell()), action_button_type::Spell};
 			}
 
 			if (spell.level() <= level)
@@ -697,6 +692,17 @@ namespace mmo
 			if (std::find(spellIds.begin(), spellIds.end(), classChangeSpell) == spellIds.end())
 			{
 				spellIds.push_back(classChangeSpell);
+			}
+		}
+
+		// Racial spells are known by every character of the race, regardless of class. Racial
+		// abilities follow the class abilities on the action bar.
+		for (const uint32 racialSpellId : AppendRacialSpells(*raceEntry, m_project.spells, spellIds))
+		{
+			const proto::SpellEntry *spellEntry = m_project.spells.getById(racialSpellId);
+			if (spellEntry && actionButtons.size() < 12 && IsActionBarAbility(*spellEntry))
+			{
+				actionButtons[actionButtons.size()] = ActionButton{static_cast<uint16>(racialSpellId), action_button_type::Spell};
 			}
 		}
 
@@ -3561,6 +3567,16 @@ namespace mmo
 			}
 		}
 
+		// Add potentially missing racial spells, so existing characters learn racials added later
+		if (const proto::RaceEntry *raceEntry = m_project.races.getById(m_characterData->raceId))
+		{
+			for (const uint32 racialSpellId : AppendRacialSpells(*raceEntry, m_project.spells, m_characterData->spellIds))
+			{
+				spellsAdded.insert(racialSpellId);
+				DLOG("Added racial spell " << racialSpellId << " to character because its race grants it");
+			}
+		}
+
 		// TODO: Persist added spells back in database
 
 		// Resolve the correct instance id based on map type (dungeon vs global)
@@ -4026,15 +4042,33 @@ namespace mmo
 			}
 
 			// Place each non-passive, non-hidden ability on the bar (same rule as character creation).
-			const uint32 attributes = spellEntry->attributes(0);
-			if ((attributes & spell_attributes::Passive) != 0 ||
-				(attributes & spell_attributes::HiddenClientSide) != 0 ||
-				(attributes & spell_attributes::Ability) == 0)
+			if (!IsActionBarAbility(*spellEntry))
 			{
 				continue;
 			}
 
 			buttons[slot++] = ActionButton{ static_cast<uint16>(classSpell.spell()), action_button_type::Spell };
+		}
+
+		// Racial abilities follow the class abilities, on every class's bar.
+		if (m_characterData)
+		{
+			if (const proto::RaceEntry* raceEntry = m_project.races.getById(m_characterData->raceId))
+			{
+				for (const uint32 racialSpellId : raceEntry->racialspells())
+				{
+					if (slot >= MaxActionButtons)
+					{
+						break;
+					}
+
+					const proto::SpellEntry* spellEntry = m_project.spells.getById(racialSpellId);
+					if (spellEntry && IsActionBarAbility(*spellEntry))
+					{
+						buttons[slot++] = ActionButton{ static_cast<uint16>(racialSpellId), action_button_type::Spell };
+					}
+				}
+			}
 		}
 
 		return buttons;
