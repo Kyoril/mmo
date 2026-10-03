@@ -36,9 +36,10 @@ if (-not [Environment]::GetEnvironmentVariable("MMO_E2E_MYSQL_PASSWORD", "User")
 
 $nightlyScript = Join-Path $nightlyWorktree "tools\gate\nightly_gate.ps1"
 $nightlyLog = Join-Path $reportDir "nightly-task.log"
-# Move the worktree to develop before the script starts, so each night runs develop's own
-# copy of the gate scripts rather than whatever the previous night left behind.
-$nightlyCommand = "& git -C '{0}' checkout --detach --force develop *>> '{1}'; & '{2}' *>> '{1}'" -f $nightlyWorktree, $nightlyLog, $nightlyScript
+# The task runs the copy of the script the previous run checked out, so changes to the gate
+# scripts take effect one night after they reach develop. The script itself moves the worktree
+# to develop under the worktree lock; the task must not touch the worktree outside it.
+$nightlyCommand = "& '{0}' *>> '{1}'" -f $nightlyScript, $nightlyLog
 
 $contentAuditScript = Join-Path $repoRoot "tools\gate\content_audit.py"
 $contentAuditLog = Join-Path $reportDir "content-audit-task.log"
