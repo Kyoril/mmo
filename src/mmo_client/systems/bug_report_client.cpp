@@ -216,7 +216,11 @@ namespace mmo
 			client["gpu"] = gpu;
 		}
 
-		client["fps"] = Profiler::GetInstance().GetAverageFPS();
+		// The profiler only measures while the perf overlay is enabled.
+		if (const double fps = Profiler::GetInstance().GetAverageFPS(); fps > 0.0)
+		{
+			client["fps"] = fps;
+		}
 
 		if (const auto* locale = ConsoleVarMgr::FindConsoleVar("locale"))
 		{
