@@ -16,8 +16,7 @@ namespace mmo
 			spell,
 			target,
 			castTime,
-			itemGuid,
-			false
+			itemGuid
 		);
 	}
 

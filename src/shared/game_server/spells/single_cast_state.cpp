@@ -35,11 +35,21 @@ namespace mmo
 	{
 		m_effectTargetsScratch.reserve(8);
 
-		// Apply cast time modifier using a temporary so we avoid UB from reinterpret_cast on GameTime.
 		auto& executor = m_cast.GetExecuter();
-		int32 castTimeMod = static_cast<int32>(m_castTime);
-		executor.ApplySpellMod<int32>(spell_mod_op::CastTime, spell.id(), castTimeMod);
-		m_castTime = static_cast<GameTime>(std::max(0, castTimeMod));
+		if (m_isProc)
+		{
+			// Procs resolve at once. A proc is not the caster's current state (SpellCast::StartCast),
+			// so nothing could interrupt it, and a channeled one would hand itself over in place of
+			// whatever the caster is actually doing.
+			m_castTime = 0;
+		}
+		else
+		{
+			// Apply cast time modifier using a temporary so we avoid UB from reinterpret_cast on GameTime.
+			int32 castTimeMod = static_cast<int32>(m_castTime);
+			executor.ApplySpellMod<int32>(spell_mod_op::CastTime, spell.id(), castTimeMod);
+			m_castTime = static_cast<GameTime>(std::max(0, castTimeMod));
+		}
 
 		const Vector3& location = executor.GetPosition();
 		m_x = location.x;
@@ -282,8 +292,7 @@ namespace mmo
 			spell,
 			target,
 			castTime,
-			itemGuid,
-			false);
+			itemGuid);
 	}
 
 	void SingleCastState::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown)
@@ -333,6 +342,12 @@ namespace mmo
 		// world instance and context are still reachable from this SingleCastState.
 		SendEndCast(result);
 		SendChannelEnded();
+
+		// A proc is not the current state, so whatever is installed there is someone else's.
+		if (m_isProc)
+		{
+			return;
+		}
 
 		// Keep *this* alive across SetState: SetState activates the new NoCastState
 		// which may drop the last external reference to this SingleCastState.
@@ -867,7 +882,15 @@ namespace mmo
 		}
 
 		m_endNotified = true;
-		m_cast.ended(succeeded);
+
+		// SpellCast::ended reports the end of what the caster is doing. A proc never occupied the
+		// caster, and its end fired in the middle of a cast or channel tells the caster's listeners
+		// that one is over: the swing timer resumes, creature AI stops waiting for its cast.
+		if (!m_isProc)
+		{
+			m_cast.ended(succeeded);
+		}
+
 		m_selfHold.reset();
 	}
 
