@@ -53,15 +53,23 @@ namespace mmo
 	}
 
 	SpellCastResult ChannelingCastState::StartCast(
-		SpellCast& /*cast*/,
-		const proto::SpellEntry& /*spell*/,
-		const SpellTargetMap& /*target*/,
-		GameTime /*castTime*/,
+		SpellCast& cast,
+		const proto::SpellEntry& spell,
+		const SpellTargetMap& target,
+		const GameTime castTime,
 		bool /*doReplacePreviousCast*/,
-		uint64 /*itemGuid*/)
+		const uint64 itemGuid)
 	{
 		// A channel is already in progress; cannot start another cast.
-		return spell_cast_result::FailedSpellInProgress;
+		if (!m_hasFinished)
+		{
+			return spell_cast_result::FailedSpellInProgress;
+		}
+
+		// A finished channel stays installed until the next cast replaces it, just like a finished
+		// SingleCastState. This went unnoticed while a channel's first periodic trigger swapped it
+		// out for the proc that tick cast, which accepted the next cast in its place.
+		return CastSpell(cast, spell, target, castTime, itemGuid);
 	}
 
 	void ChannelingCastState::AbandonCast()
