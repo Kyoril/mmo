@@ -2,6 +2,7 @@
 
 #include "channeling_cast_state.h"
 
+#include "game_server/objects/game_unit_s.h"
 #include "game_server/spells/no_cast_state.h"
 #include "base/clock.h"
 #include "game/spell.h"
@@ -13,15 +14,13 @@ namespace mmo
 		const proto::SpellEntry& spell,
 		SpellCastContext context,
 		GameTime remainingMs,
-		scoped_connection onTargetDied,
-		scoped_connection onTargetRemoved)
+		GameUnitS* unitTarget)
 		: m_cast(cast)
 		, m_spell(spell)
 		, m_context(std::move(context))
 		, m_remainingMs(remainingMs)
 		, m_countdown(cast.GetTimerQueue())
-		, m_onTargetDied(std::move(onTargetDied))
-		, m_onTargetRemoved(std::move(onTargetRemoved))
+		, m_unitTarget(unitTarget)
 	{
 	}
 
@@ -35,6 +34,22 @@ namespace mmo
 			});
 
 		m_countdown.SetEnd(GetAsyncTimeMs() + m_remainingMs);
+
+		// Subscribed here rather than inherited from SingleCastState: those connections call back
+		// into the SingleCastState, which would end the cast without ever ending the channel.
+		if (m_unitTarget)
+		{
+			m_onTargetDied = m_unitTarget->killed.connect([this](GameUnitS*) { OnTargetLost(); });
+			m_onTargetRemoved = m_unitTarget->despawned.connect([this](GameObjectS&) { OnTargetLost(); });
+			m_unitTarget = nullptr;
+		}
+	}
+
+	void ChannelingCastState::OnTargetLost()
+	{
+		// EndChanneling releases m_selfHold, which may be the last reference.
+		auto strongThis = shared_from_this();
+		EndChanneling(false);
 	}
 
 	SpellCastResult ChannelingCastState::StartCast(

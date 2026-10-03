@@ -238,18 +238,27 @@ namespace mmo
 					return;
 				}
 
-				// Transition to ChannelingCastState which owns the countdown and the channel's end
-				// (ChannelUpdate(0)) from here on.
+				// Transition to ChannelingCastState, which owns the countdown, the channel's end
+				// (ChannelUpdate(0)) and the target subscriptions from here on. This state retires
+				// completely: its target connections call back into *this*, and a target dying
+				// mid-channel used to stop this stale state instead - a SpellFailure with no
+				// ChannelUpdate(0), and the live channel swapped out without being ended.
 				m_channelStartSent = false;
-				m_countdown.Cancel();                  // stop SingleCastState countdown
+				m_hasFinished = true;
+				m_endNotified = true;
+				m_countdown.Cancel();
+				m_onTargetDied.disconnect();
+				m_onTargetRemoved.disconnect();
+
 				const GameTime remaining = m_castEnd - GetAsyncTimeMs();
 				m_cast.SetState(std::make_shared<ChannelingCastState>(
 					m_cast, m_spell,
 					m_context,
 					remaining > 0 ? remaining : 0,
-					std::move(m_onTargetDied),
-					std::move(m_onTargetRemoved)));
-				// strongThis drops here — SingleCastState dies after return
+					ResolveUnitTarget()));
+
+				// strongThis drops on return and with it the last reference.
+				m_selfHold.reset();
 				return;
 			}
 		}
