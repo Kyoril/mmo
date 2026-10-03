@@ -126,6 +126,7 @@ namespace mmo
 		}
 
 		m_applied = apply;
+		m_owner.auraApplyChanged(*this, apply);
 
 		if (notify && m_owner.GetWorldInstance())
 		{

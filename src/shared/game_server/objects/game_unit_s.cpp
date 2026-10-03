@@ -993,6 +993,7 @@ namespace mmo
 
 		Set<uint32>(object_fields::Health, health);
 		takenDamage(instigator, school, damageType);
+		damageTakenAmount(instigator, damage, school);
 		if (instigator)
 		{
 			instigator->doneDamage(*this, school, damageType);
@@ -1046,6 +1047,7 @@ namespace mmo
 		}
 
 		Set<uint32>(object_fields::Health, health + amount);
+		healedAmount(instigator, amount);
 		return static_cast<int32>(amount);
 	}
 

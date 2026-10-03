@@ -25,6 +25,7 @@
 #include "binary_io/vector_sink.h"
 #include "binary_io/writer.h"
 #include "group_manager.h"
+#include "game_server/spells/aura_container.h"
 
 #include <algorithm>
 #include <zlib.h>
@@ -85,6 +86,29 @@ namespace mmo
 			inventory.itemInstanceCreated.connect(this, &Player::OnItemCreated),
 			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
 			inventory.itemInstanceDestroyed.connect(this, &Player::OnItemDestroyed),
+
+			// Combat history for bug reports
+			m_character->damageTakenAmount.connect([this](GameUnitS* attacker, const uint32 amount, const uint32 school)
+			{
+				RecordCombatEvent(combat_event_type::DamageTaken, attacker ? attacker->GetGuid() : 0, 0, amount, school);
+			}),
+			m_character->healedAmount.connect([this](GameUnitS* healer, const uint32 amount)
+			{
+				RecordCombatEvent(combat_event_type::HealTaken, healer ? healer->GetGuid() : 0, 0, amount, 0);
+			}),
+			m_character->auraApplyChanged.connect([this](const AuraContainer& aura, const bool applied)
+			{
+				RecordCombatEvent(applied ? combat_event_type::AuraApplied : combat_event_type::AuraRemoved, aura.GetCasterId(), aura.GetSpellId(), 0, 0);
+			}),
+			m_character->startedCasting.connect([this](const proto::SpellEntry& spell)
+			{
+				m_lastCastSpellId = spell.id();
+				RecordCombatEvent(combat_event_type::CastStarted, m_character->Get<uint64>(object_fields::TargetUnit), spell.id(), 0, 0);
+			}),
+			m_character->finishedCasting.connect([this](const bool succeeded)
+			{
+				RecordCombatEvent(combat_event_type::CastFinished, 0, m_lastCastSpellId, succeeded ? 1 : 0, 0);
+			}),
 		};
 
 		// Group update signal
@@ -3834,8 +3858,22 @@ namespace mmo
 			});
 	}
 
+	void Player::RecordCombatEvent(const CombatEventType type, const uint64 otherGuid, const uint32 spellId, const uint32 amount, const uint32 school)
+	{
+		CombatEvent event;
+		event.time = GetAsyncTimeMs();
+		event.type = type;
+		event.otherGuid = otherGuid;
+		event.spellId = spellId;
+		event.amount = amount;
+		event.school = school;
+		m_combatEvents.Add(event);
+	}
+
 	void Player::OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked)
 	{
+		RecordCombatEvent(combat_event_type::DamageDone, targetGuid, spell.id(), amount, school);
+
 		SendPacket([targetGuid, amount, school, flags, &spell, blocked](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::SpellDamageLog);
@@ -3852,6 +3890,8 @@ namespace mmo
 
 	void Player::OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags)
 	{
+		RecordCombatEvent(combat_event_type::DamageDone, targetGuid, 0, amount, 0);
+
 		SendPacket([targetGuid, amount, flags](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::NonSpellDamageLog);

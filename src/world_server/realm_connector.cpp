@@ -19,6 +19,7 @@
 #include "game_protocol/game_protocol.h"
 #include "game_server/world_server_inventory_repository.h"
 #include "group_manager.h"
+#include "bug_report_service.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -530,6 +531,14 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::MailTakeMoneyResult, *this, &RealmConnector::OnMailTakeMoneyResult);
 				RegisterPacketHandler(auth::realm_world_packet::MailTakeItemResult, *this, &RealmConnector::OnMailTakeItemResult);
 				RegisterPacketHandler(auth::realm_world_packet::TimeOfDay, *this, &RealmConnector::OnTimeOfDay);
+				RegisterPacketHandler(auth::realm_world_packet::BugReport, *this, &RealmConnector::OnBugReport);
+				RegisterPacketHandler(auth::realm_world_packet::SetSubsystemEnabled, *this, &RealmConnector::OnSetSubsystemEnabled);
+
+				m_loggedIn = true;
+				if (m_subsystems)
+				{
+					SendSubsystemStatus(m_subsystems->GetWorldOwnedStatus());
+				}
 				
 				PropagateHostedMapIds();
 			}
@@ -1270,6 +1279,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 	void RealmConnector::connectionLost()
 	{
 		ELOG("Lost connection to the realm server");
+		m_loggedIn = false;
 
 		// Clear packet handlers
 		ClearPacketHandlers();
@@ -1286,5 +1296,98 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 	{
 		m_fallDamageMinHeight = minHeight;
 		m_fallDamageLethalHeight = lethalHeight;
+	}
+	void RealmConnector::SetBugReporting(WorldSubsystemState& subsystems, BugReportService& bugReports)
+	{
+		m_subsystems = &subsystems;
+		m_bugReports = &bugReports;
+		m_subsystemStatusChanged = subsystems.statusChanged.connect([this](const WorldSubsystemState::StatusList& entries)
+		{
+			SendSubsystemStatus(entries);
+		});
+	}
+
+	void RealmConnector::SendSubsystemStatus(const WorldSubsystemState::StatusList& entries)
+	{
+		if (!m_loggedIn || entries.empty())
+		{
+			return;
+		}
+
+		sendSinglePacket([&entries](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::world_realm_packet::SubsystemStatus);
+			packet << io::write<uint8>(entries.size());
+			for (const auto& [id, status] : entries)
+			{
+				packet << io::write<uint8>(id) << io::write<uint8>(status);
+			}
+			packet.Finish();
+		});
+	}
+
+	void RealmConnector::SendBugReportResult(const uint64 characterGuid, const game::BugReportResult result)
+	{
+		sendSinglePacket([characterGuid, result](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::world_realm_packet::BugReportResult);
+			packet << io::write<uint64>(characterGuid) << io::write<uint8>(result);
+			packet.Finish();
+		});
+	}
+
+	PacketParseResult RealmConnector::OnBugReport(auth::IncomingPacket& packet)
+	{
+		BugReporterIdentity reporter;
+		if (!(packet
+			>> io::read<uint64>(reporter.characterGuid)
+			>> io::read<uint64>(reporter.accountId)
+			>> io::read_container<uint8>(reporter.characterName)
+			>> io::read_container<uint8>(reporter.realmName)))
+		{
+			ELOG("Failed to read BugReport packet from realm");
+			return PacketParseResult::Disconnect;
+		}
+
+		// The realm already validated the payload, but a bad one must only cost the report,
+		// never the realm link.
+		game::BugReportPayload payload;
+		if (!(packet >> payload))
+		{
+			WLOG("Received an unreadable bug report from " << reporter.characterName);
+			SendBugReportResult(reporter.characterGuid, game::bug_report_result::Invalid);
+			return PacketParseResult::Pass;
+		}
+
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(reporter.characterGuid);
+		if (!player || !m_bugReports)
+		{
+			SendBugReportResult(reporter.characterGuid, game::bug_report_result::Disabled);
+			return PacketParseResult::Pass;
+		}
+
+		SendBugReportResult(reporter.characterGuid, m_bugReports->HandleReport(*player, reporter, payload));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnSetSubsystemEnabled(auth::IncomingPacket& packet)
+	{
+		uint8 id = 0;
+		uint8 enabled = 0;
+		if (!(packet >> io::read<uint8>(id) >> io::read<uint8>(enabled)))
+		{
+			ELOG("Failed to read SetSubsystemEnabled packet from realm");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (id >= game::subsystem::Count_ || !m_subsystems)
+		{
+			WLOG("Realm toggled unknown subsystem " << static_cast<uint32>(id));
+			return PacketParseResult::Pass;
+		}
+
+		ILOG("Subsystem " << game::GetSubsystemName(id) << (enabled ? " enabled" : " disabled") << " by the realm");
+		m_subsystems->SetManualEnabled(static_cast<game::Subsystem>(id), enabled != 0);
+		return PacketParseResult::Pass;
 	}
 }

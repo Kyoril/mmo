@@ -10,6 +10,8 @@
 #include "log/default_log_levels.h"
 #include "auth_protocol/auth_server.h"
 #include "configuration.h"
+#include "bug_report_service.h"
+#include "subsystem_state.h"
 #include "realm_connector.h"
 #include "game_server/world/world_instance_manager.h"
 #include "player_manager.h"
@@ -194,6 +196,12 @@ namespace mmo
 		// Game service setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
+		// Bug reports. Declared before the realm connector, which subscribes to the subsystem
+		// state: the connector (and its subscription) must be destroyed first.
+		WorldSubsystemState subsystems;
+		BugReportService bugReports(ioService, subsystems, project, BugReportService::Config{
+			config.bugReportEnabled, config.bugReportApiUrl, config.bugReportApiKey, config.realmServerAuthName });
+
 		auto realmConnector =
 			std::make_shared<RealmConnector>(
 				std::ref(ioService), 
@@ -206,6 +214,8 @@ namespace mmo
 				groupManager);
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
 		realmConnector->SetFallDamageConfig(config.fallDamageMinHeight, config.fallDamageLethalHeight);
+		realmConnector->SetBugReporting(subsystems, bugReports);
+		bugReports.Start();
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the web service
@@ -222,7 +232,7 @@ namespace mmo
 		// Declared before the handler that captures it, so the handler can cancel its own wait.
 		std::unique_ptr<asio::signal_set> shutdownSignals;
 		shutdownSignals = InstallShutdownHandler(ioService,
-			[&realmConnector, &worldInstanceManager, &shutdownSignals, &timerQueue, &timer]()
+			[&realmConnector, &worldInstanceManager, &shutdownSignals, &timerQueue, &timer, &bugReports]()
 		{
 			ILOG("Shutdown signal received - stopping cleanly");
 
@@ -235,6 +245,9 @@ namespace mmo
 			// The world tick re-arms itself every 30ms, so it never stops being outstanding work
 			// on its own. This is the one that kept the node alive after everything else was shut.
 			worldInstanceManager.Stop();
+
+			// The bug report health check re-arms a timer, and the uploader owns a thread.
+			bugReports.Stop();
 
 			// This node has no acceptor of its own; its only link is upstream to the realm. Closing
 			// it also stops the reconnect loop, which would otherwise dial back in mid-shutdown.

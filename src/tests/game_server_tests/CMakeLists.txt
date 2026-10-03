@@ -14,4 +14,13 @@ mmo_add_test(game_server_tests
 	math
 	game
 	game_server
+	http_client
+	https_client
 	${OPENSSL_LIBRARIES})
+
+# The world server is an executable; its self-contained bug report pieces are compiled in here.
+target_sources(game_server_tests PRIVATE
+	${CMAKE_SOURCE_DIR}/src/world_server/bug_report_uploader.cpp
+	${CMAKE_SOURCE_DIR}/src/world_server/bug_report_transport.cpp
+	${CMAKE_SOURCE_DIR}/src/world_server/bug_report_document.cpp
+)

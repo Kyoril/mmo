@@ -7,6 +7,9 @@
 #include "base/sha1.h"
 #include "game/game.h"
 #include "game/mail.h"
+#include "game/bug_report.h"
+#include "base/signal.h"
+#include "subsystem_state.h"
 
 #include "asio/io_service.hpp"
 
@@ -23,6 +26,7 @@ namespace mmo
 	struct ItemData;
 	class GamePlayerS;
 	class GroupManager;
+	class BugReportService;
 
 	namespace proto
 	{
@@ -125,6 +129,16 @@ namespace mmo
 		/// @param lethalHeight Fall distance in meters at which fall damage becomes lethal.
 		void SetFallDamageConfig(float minHeight, float lethalHeight);
 
+		/// Wires up bug reports and subsystem status. The status is pushed to the realm after every
+		/// logon and whenever it changes.
+		void SetBugReporting(WorldSubsystemState& subsystems, BugReportService& bugReports);
+
+		/// Sends subsystem status entries to the realm (no-op while not logged in).
+		void SendSubsystemStatus(const WorldSubsystemState::StatusList& entries);
+
+		/// Sends the answer to a bug report back to the realm.
+		void SendBugReportResult(uint64 characterGuid, game::BugReportResult result);
+
 	private:
 		/// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
@@ -178,6 +192,12 @@ namespace mmo
 
 		/// Handles the realm-wide time of day sent by the realm after login and on every change.
 		PacketParseResult OnTimeOfDay(auth::IncomingPacket& packet);
+
+		/// Handles a bug report forwarded by the realm.
+		PacketParseResult OnBugReport(auth::IncomingPacket& packet);
+
+		/// Handles a GM / REST toggle of a world-owned subsystem.
+		PacketParseResult OnSetSubsystemEnabled(auth::IncomingPacket& packet);
 
 		/// Handles the result of an inventory operation (save/delete).
 		/// @param packet Incoming packet containing operation result.
@@ -253,6 +273,13 @@ namespace mmo
 
 		/// @brief Fall distance in meters at which fall damage becomes lethal (100% of max HP).
 		float m_fallDamageLethalHeight{ 40.0f };
+
+		WorldSubsystemState* m_subsystems = nullptr;
+		BugReportService* m_bugReports = nullptr;
+		scoped_connection m_subsystemStatusChanged;
+
+		/// True between a successful logon proof and the loss of the connection.
+		bool m_loggedIn = false;
 
 	public:
 		/// Gets the synchronized world-side group manager.
