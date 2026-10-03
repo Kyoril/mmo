@@ -1093,7 +1093,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/register_schedule
 (Get-ScheduledTask -TaskName "MMO Nightly Gate").Actions.Arguments
 ```
 
-Expected: `Scheduled tasks registered.`; the arguments contain `git -C 'H:\mmo-nightly' checkout --detach --force develop` and `H:\mmo-nightly\tools\gate\nightly_gate.ps1`. (`H:\mmo-nightly` already exists from Task 3, so no worktree is created.)
+Expected: `Scheduled tasks registered.`; the arguments are just `& 'H:\mmo-nightly\tools\gate\nightly_gate.ps1' *>> '<log>'` (no checkout in the task). (`H:\mmo-nightly` already exists from Task 3, so no worktree is created.)
+
+Before registering, with no gate run in progress, move the worktree to the new scripts:
+
+```powershell
+git -C H:/mmo-nightly checkout --detach --force develop
+```
+
+(`release_check.ps1` also returns the worktree to develop after checking a non-develop commit.)
 
 - [ ] **Step 3: Trigger one real run under Task Scheduler**
 
@@ -1101,7 +1109,7 @@ Expected: `Scheduled tasks registered.`; the arguments contain `git -C 'H:\mmo-n
 Start-ScheduledTask -TaskName "MMO Nightly Gate"
 ```
 
-Then wait with Monitor (until-loop on `(Get-ScheduledTask -TaskName "MMO Nightly Gate").State -ne "Running"`, ~10–15 min). Expected afterwards: `H:\mmo\tools\gate\reports\nightly-<today>.json` with `"tier": "full"`, `"passed": true`, `last_green_commit` null (first night) and `merges_since_last_green` listing the last ten develop merges. Read `nightly-task.log` tail too.
+Then wait with Monitor (until-loop on `(Get-ScheduledTask -TaskName "MMO Nightly Gate").State -ne "Running"`, ~10–15 min). Expected afterwards: `H:\mmo\tools\gate\reports\nightly-<today>.json`. The first real nightly is expected to be RED at `tool_tests` while develop's `data/editor` submodule pin lacks the Fire Barrage data commit (`test_mage_visual_data` `test_channeled_fire_barrage_holds_a_channel_kit`). So verify the report shape rather than green: `"tier": "full"`, no `setup_error`, `merges_since_last_green` an array (the last ten develop merges), `last_green_commit` null. Read `nightly-task.log` tail too.
 
 - [ ] **Step 4: Only if the run failed at `protocol` with a python launch error**
 
@@ -1121,11 +1129,11 @@ Task Scheduler picks the new user env var up on the next start; re-run Step 3.
 Start-ScheduledTask -TaskName "MMO Nightly Gate"
 ```
 
-Expected within a minute: today's nightly report is overwritten with `"unchanged": true` (develop did not move). This is the state tomorrow's 03:00 run compares against.
+A same-day green full report for the same commit is kept: the run prints "not re-run" and leaves the report alone (expected only if the first night was green). With a red first night there is no green night on record, so this second run re-runs the full gate (~10 min) and rewrites today's report; wait for it as in Step 3. Either way, the report is the state tomorrow's 03:00 run compares against.
 
 - [ ] **Step 6: Update memory**
 
-Rewrite the top of `agentic-dev-flow-gate.md` (keep the gotchas that still apply: BOM, worktree submodule init, data/editor pointer trap, develop-held-by-any-worktree, python launch, half-started-run poisoning) to describe: three tiers; `/ship` runs fast gate itself; nightly in `H:/mmo-nightly` via task that checks out develop then runs develop's script; `release_check.ps1` exit codes and `release-<sha8>.json`; `MMO_GATE_PYTHON`; `Local\MMOGateWorktree` mutex. Remove the now-false lines: "`-SkipE2E` reports are not shippable", "/ship ... AND a green `e2e` step entry (precondition 6)", "skips with `passed: null` when repo busy". Update the `MEMORY.md` index line hook to mention "tiered (fast merge / nightly full in H:/mmo-nightly / release check)".
+Rewrite the top of `agentic-dev-flow-gate.md` (keep the gotchas that still apply: BOM, worktree submodule init, data/editor pointer trap, develop-held-by-any-worktree, python launch, half-started-run poisoning) to describe: three tiers; `/ship` runs fast gate itself; nightly in `H:/mmo-nightly` via a task that runs the worktree's current copy of `nightly_gate.ps1` (one-night lag for script changes, no pre-checkout; the script moves the worktree to develop itself, and `release_check.ps1` returns it to develop after checking another commit); `release_check.ps1` exit codes and `release-<sha8>.json`; `MMO_GATE_PYTHON`; `Local\MMOGateWorktree` mutex. Remove the now-false lines: "`-SkipE2E` reports are not shippable", "/ship ... AND a green `e2e` step entry (precondition 6)", "skips with `passed: null` when repo busy". Update the `MEMORY.md` index line hook to mention "tiered (fast merge / nightly full in H:/mmo-nightly / release check)".
 
 - [ ] **Step 7: Report to the user**
 
