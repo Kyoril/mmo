@@ -35,7 +35,34 @@ namespace mmo
 		if (m_effect.amplitude() > 0)
 		{
 			m_totalTicks = m_container.GetDuration() / m_effect.amplitude();
+			m_maxTicks = m_totalTicks;
 		}
+	}
+
+	void AuraEffect::OnDurationRefreshed(const GameTime expiration)
+	{
+		// Permanent periodic auras (no tick budget) and non-periodic effects are unaffected
+		if (!m_isPeriodic || m_tickInterval == 0 || m_maxTicks == 0)
+		{
+			return;
+		}
+
+		// The tick timer stops once the budget is spent, which can happen before the aura
+		// expires (the last tick lands on or just before expiration). Resume it.
+		if (!m_tickCountdown.IsRunning())
+		{
+			StartPeriodicTimer();
+		}
+
+		// Keep the current tick phase and allow every tick that lands up to the new expiration
+		const GameTime nextTick = m_tickCountdown.GetEnd();
+		uint32 remainingTicks = 0;
+		if (expiration >= nextTick)
+		{
+			remainingTicks = static_cast<uint32>((expiration - nextTick) / m_tickInterval) + 1;
+		}
+
+		m_maxTicks = m_tickCount + remainingTicks;
 	}
 
 	void AuraEffect::HandleEffect(bool apply)
@@ -910,8 +937,8 @@ namespace mmo
 	void AuraEffect::OnTick()
 	{
 		// No more ticks
-		if (m_totalTicks > 0 &&
-			m_tickCount >= m_totalTicks)
+		if (m_maxTicks > 0 &&
+			m_tickCount >= m_maxTicks)
 		{
 			return;
 		}
@@ -921,7 +948,7 @@ namespace mmo
 		auto strongThis = shared_from_this();
 
 		// Increase tick counter
-		if (m_totalTicks > 0)
+		if (m_maxTicks > 0)
 		{
 			m_tickCount++;
 		}
@@ -936,7 +963,7 @@ namespace mmo
 		if (tickIt != kTickHandlers.end()) { tickIt->second(*this); }
 
 		// Start another tick
-		if (m_tickCount < m_totalTicks)
+		if (m_tickCount < m_maxTicks)
 		{
 			StartPeriodicTimer();
 		}

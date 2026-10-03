@@ -748,6 +748,12 @@ namespace mmo
 		m_expiration = newExpiration;
 		m_expirationCountdown.SetEnd(m_expiration);
 
+		// Periodic effects budget their ticks from the duration; extend them to the new expiration
+		for (const auto& aura : m_auras)
+		{
+			aura->OnDurationRefreshed(m_expiration);
+		}
+
 		// Stack count update: policy 0 = GrantReset (reset to max), else increment up to max
 		const uint32 maxStacks = (incomingSpell.stackamount() > 0) ? incomingSpell.stackamount() : 1u;
 		const bool grantReset = (incomingSpell.stack_reset_policy() == 0u);
