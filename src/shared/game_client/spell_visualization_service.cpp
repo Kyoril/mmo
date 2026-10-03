@@ -4,6 +4,7 @@
 #include "game_unit_c.h"
 #include "object_mgr.h"
 #include "sound_entry_player.h"
+#include "spell_visual_rules.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/animation_state.h"
 #include "scene_graph/scene.h"
@@ -180,10 +181,10 @@ namespace mmo
             // Remove tints for this spell on the caster
             RemoveTintFromActor(*caster, spellId);
 
-            // Clean up visual effects (particles, lights, ribbon trails). Aura-bound effects stay:
-            // recasting a self buff ends a cast of the same spell whose aura the caster still
-            // carries, and the refreshed aura raises no new AURA_APPLIED to restore them.
-            CleanupEffectsForActor(casterGuid, spellId, false);
+            // Clean up the cast-phase visual effects (hand glows, channel loops). Impact and
+            // aura effects on the caster are left alone: a self-heal's impact lands on the
+            // caster around this event, and an aura's idle loop must survive a recast.
+            CleanupEffectsForActor(casterGuid, spellId, EffectPhase::Cast);
         }
         
         if (!hasKits)
@@ -193,7 +194,7 @@ namespace mmo
         }
 
         const bool isInstantEvent = (event == Event::CancelCast || event == Event::CastSucceeded || event == Event::Impact || event == Event::AuraTick);
-        const bool isAuraBound = (event == Event::AuraApplied || event == Event::AuraIdle);
+        const bool castPhase = spell_visual::IsCastPhaseEvent(key);
 
         const proto_client::SpellKitList& kitList = it->second;
 
@@ -217,13 +218,13 @@ namespace mmo
                     pending.spellId = spellId;
                     pending.visualizationId = vis->id();
                     pending.instantEvent = isInstantEvent;
-                    pending.auraBound = isAuraBound;
+                    pending.castPhase = castPhase;
                     pending.remainingSeconds = kit.delay_ms() / 1000.0f;
                     m_pendingKits.push_back(std::move(pending));
                     return;
                 }
 
-                ApplyKitToActor(*vis, kit, *unit, spellId, isInstantEvent, isAuraBound);
+                ApplyKitToActor(*vis, kit, *unit, spellId, isInstantEvent, castPhase);
             };
 
             if (scope == proto_client::CASTER)
@@ -247,7 +248,7 @@ namespace mmo
                                                      GameUnitC& actor,
                                                      uint32 spellId,
                                                      bool instantEvent,
-                                                     bool auraBound)
+                                                     bool castPhase)
     {
         // A visualization played by id (level up and friends) has no spell behind it, so nothing
         // will ever raise the lifecycle event that tears these down: a tint would stay on the
@@ -382,8 +383,10 @@ namespace mmo
             }
         }
 
-        // Apply tint to the actor
-        if (selfTerminatingOnly && kit.has_tint())
+        // Apply tint to the actor. A timed tint removes itself, so it is safe even for a
+        // visualization played by id.
+        const bool timedTint = kit.has_tint() && kit.tint().duration_ms() > 0;
+        if (selfTerminatingOnly && kit.has_tint() && !timedTint)
         {
             WLOG("Spell visualization " << vis.id() << " is played by id; its tint is skipped"
                 " because nothing would ever remove it.");
@@ -394,10 +397,10 @@ namespace mmo
         }
 
         // Spawn particle emitters
-        ApplyParticlesToActor(kit, actor, spellId, auraBound);
+        ApplyParticlesToActor(kit, actor, spellId, castPhase);
 
         // Spawn point light
-        ApplyLightToActor(kit, actor, spellId, instantEvent, auraBound);
+        ApplyLightToActor(kit, actor, spellId, instantEvent, castPhase);
 
         // Spawn ribbon trail
         if (selfTerminatingOnly && kit.has_ribbon_trail())
@@ -407,7 +410,7 @@ namespace mmo
         }
         else
         {
-            ApplyRibbonTrailToActor(kit, actor, spellId, auraBound);
+            ApplyRibbonTrailToActor(kit, actor, spellId, castPhase);
         }
     }
 
@@ -477,6 +480,15 @@ namespace mmo
         }
     }
 
+    void SpellVisualizationService::StopLoopedSoundForActor(const uint64 actorGuid, const uint32 visualizationId)
+    {
+        const auto it = m_loopedSounds.find(actorGuid);
+        if (it != m_loopedSounds.end() && it->second.spellId == visualizationId)
+        {
+            StopLoopedSoundForActor(actorGuid);
+        }
+    }
+
     void SpellVisualizationService::StopLoopedSoundForActor(uint64 actorGuid)
     {
         auto it = m_loopedSounds.find(actorGuid);
@@ -516,6 +528,7 @@ namespace mmo
         m_activeSpellAnimations.clear();
         m_activeEffects.clear();
         m_fadingLights.clear();
+        m_tintPulses.clear();
         m_pendingKits.clear();
     }
 
@@ -562,13 +575,15 @@ namespace mmo
                     // Re-resolve the actor by guid; it may have despawned during the delay.
                     if (const auto actor = ObjectMgr::Get<GameUnitC>(it->actorGuid))
                     {
-                        ApplyKitToActor(*vis, it->kit, *actor, it->spellId, it->instantEvent, it->auraBound);
+                        ApplyKitToActor(*vis, it->kit, *actor, it->spellId, it->instantEvent, it->castPhase);
                     }
                 }
             }
 
             it = m_pendingKits.erase(it);
         }
+
+        UpdateTintPulses(deltaTime);
 
 		// One-shot impacts on targets do not receive a caster completion event.
 		// Retire their finished emitters here so repeated hits cannot accumulate them.
@@ -821,10 +836,81 @@ namespace mmo
         }
 
         const auto& tintProto = kit.tint();
+
+        if (tintProto.duration_ms() > 0)
+        {
+            // A timed pulse: tracked under its own key and faded by UpdateTintPulses, so it
+            // needs no lifecycle event to end and never disturbs a persistent tint.
+            const uint64 guid = actor.GetGuid();
+            const uint32 tintKey = spell_visual::TimedTintKey(spellId);
+
+            // Re-triggering restarts the pulse rather than stacking a second one.
+            std::erase_if(m_tintPulses, [guid, tintKey](const TintPulse& pulse)
+            {
+                return pulse.actorGuid == guid && pulse.tintKey == tintKey;
+            });
+
+            TintPulse pulse;
+            pulse.actorGuid = guid;
+            pulse.tintKey = tintKey;
+            pulse.r = tintProto.r();
+            pulse.g = tintProto.g();
+            pulse.b = tintProto.b();
+            pulse.a = tintProto.a();
+            pulse.durationSeconds = static_cast<float>(tintProto.duration_ms()) / 1000.0f;
+            m_tintPulses.push_back(pulse);
+
+            // Start dark; the next Update ramps it in.
+            actor.AddSpellTint(tintKey, Vector4(pulse.r, pulse.g, pulse.b, 0.0f));
+            return;
+        }
+
         const Vector4 tintColor(tintProto.r(), tintProto.g(), tintProto.b(), tintProto.a());
-        
+
         // Delegate to GameUnitC to manage tints
         actor.AddSpellTint(spellId, tintColor);
+    }
+
+    void SpellVisualizationService::UpdateTintPulses(const float deltaTime)
+    {
+        for (auto it = m_tintPulses.begin(); it != m_tintPulses.end(); )
+        {
+            const auto actor = ObjectMgr::Get<GameUnitC>(it->actorGuid);
+            if (!actor)
+            {
+                it = m_tintPulses.erase(it);
+                continue;
+            }
+
+            it->elapsedSeconds += deltaTime;
+            if (it->elapsedSeconds >= it->durationSeconds)
+            {
+                actor->RemoveSpellTint(it->tintKey);
+                it = m_tintPulses.erase(it);
+                continue;
+            }
+
+            const float strength = spell_visual::TintPulseEnvelope(it->elapsedSeconds, it->durationSeconds);
+            actor->AddSpellTint(it->tintKey, Vector4(it->r, it->g, it->b, it->a * strength));
+            ++it;
+        }
+    }
+
+    SpellVisualizationService::ActiveSpellEffect& SpellVisualizationService::GetOrCreateEffect(const uint64 actorGuid, const uint32 spellId, const bool castPhase)
+    {
+        for (auto& e : m_activeEffects)
+        {
+            if (e.actorGuid == actorGuid && e.spellId == spellId && e.castPhase == castPhase)
+            {
+                return e;
+            }
+        }
+
+        ActiveSpellEffect& effect = m_activeEffects.emplace_back();
+        effect.spellId = spellId;
+        effect.actorGuid = actorGuid;
+        effect.castPhase = castPhase;
+        return effect;
     }
 
     void SpellVisualizationService::RemoveTintFromActor(GameUnitC& actor, uint32 spellId)
@@ -833,7 +919,7 @@ namespace mmo
         actor.RemoveSpellTint(spellId);
     }
 
-    void SpellVisualizationService::ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool auraBound)
+    void SpellVisualizationService::ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, const bool castPhase)
     {
         if (kit.particles_size() == 0)
         {
@@ -850,7 +936,7 @@ namespace mmo
         Scene& scene = actor.GetScene();
         const uint64 guid = actor.GetGuid();
 
-        ActiveSpellEffect* effect = &FindOrCreateEffect(guid, spellId, auraBound);
+        ActiveSpellEffect* effect = &GetOrCreateEffect(guid, spellId, castPhase);
 
         for (int i = 0; i < kit.particles_size(); ++i)
         {
@@ -916,7 +1002,7 @@ namespace mmo
         }
     }
 
-    void SpellVisualizationService::ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent, bool auraBound)
+    void SpellVisualizationService::ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent, const bool castPhase)
     {
         if (!kit.has_light())
         {
@@ -933,7 +1019,7 @@ namespace mmo
         Scene& scene = actor.GetScene();
         const uint64 guid = actor.GetGuid();
 
-        ActiveSpellEffect* effect = &FindOrCreateEffect(guid, spellId, auraBound);
+        ActiveSpellEffect* effect = &GetOrCreateEffect(guid, spellId, castPhase);
 
         try
         {
@@ -1001,7 +1087,7 @@ namespace mmo
         }
     }
 
-    void SpellVisualizationService::ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool auraBound)
+    void SpellVisualizationService::ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, const bool castPhase)
     {
         if (!kit.has_ribbon_trail())
         {
@@ -1018,7 +1104,7 @@ namespace mmo
         Scene& scene = actor.GetScene();
         const uint64 guid = actor.GetGuid();
 
-        ActiveSpellEffect* effect = &FindOrCreateEffect(guid, spellId, auraBound);
+        ActiveSpellEffect* effect = &GetOrCreateEffect(guid, spellId, castPhase);
 
         try
         {
@@ -1088,34 +1174,27 @@ namespace mmo
         }
     }
 
-    SpellVisualizationService::ActiveSpellEffect& SpellVisualizationService::FindOrCreateEffect(const uint64 actorGuid, const uint32 spellId, const bool auraBound)
+    void SpellVisualizationService::CleanupEffectsForActor(const uint64 actorGuid, const uint32 spellId)
     {
-        for (auto& e : m_activeEffects)
-        {
-            if (e.actorGuid == actorGuid && e.spellId == spellId && e.auraBound == auraBound)
-            {
-                return e;
-            }
-        }
-
-        ActiveSpellEffect& effect = m_activeEffects.emplace_back();
-        effect.spellId = spellId;
-        effect.actorGuid = actorGuid;
-        effect.auraBound = auraBound;
-        return effect;
+        CleanupEffectsForActor(actorGuid, spellId, EffectPhase::Any);
     }
 
-    void SpellVisualizationService::CleanupEffectsForActor(uint64 actorGuid, uint32 spellId, bool includeAuraBound)
+    void SpellVisualizationService::CleanupEffectsForActor(uint64 actorGuid, uint32 spellId, const EffectPhase phase)
     {
-        // Drop any not-yet-fired delayed kits for this actor and spell
-        std::erase_if(m_pendingKits, [actorGuid, spellId, includeAuraBound](const PendingKit& pending)
+        const auto phaseMatches = [phase](const bool castPhase)
         {
-            return pending.actorGuid == actorGuid && pending.spellId == spellId && (includeAuraBound || !pending.auraBound);
+            return phase == EffectPhase::Any || (phase == EffectPhase::Cast) == castPhase;
+        };
+
+        // Drop any not-yet-fired delayed kits for this actor, spell and phase
+        std::erase_if(m_pendingKits, [actorGuid, spellId, &phaseMatches](const PendingKit& pending)
+        {
+            return pending.actorGuid == actorGuid && pending.spellId == spellId && phaseMatches(pending.castPhase);
         });
 
         for (auto it = m_activeEffects.begin(); it != m_activeEffects.end(); )
         {
-            if (it->actorGuid == actorGuid && it->spellId == spellId && (includeAuraBound || !it->auraBound))
+            if (it->actorGuid == actorGuid && it->spellId == spellId && phaseMatches(it->castPhase))
             {
                 // We need a Scene reference to destroy the objects.
                 // Try to get it from ObjectMgr via the actor guid.
@@ -1249,12 +1328,14 @@ namespace mmo
         {
             std::vector<GameUnitC*> targets { target };
             SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraRemoved, spell, caster, targets);
-            // Stop looped sounds for this target when aura is removed
-            SpellVisualizationService::Get().StopLoopedSoundForActor(target->GetGuid());
+            // Stop this aura's looped sound -- but not the cast loop of another spell the target
+            // happens to be channelling right now.
+            SpellVisualizationService::Get().StopLoopedSoundForActor(target->GetGuid(), spell.visualization_id());
             // Remove tints for this spell on the target
             SpellVisualizationService::Get().RemoveTintFromActor(*target, spell.id());
-            // Clean up visual effects for this target
-            SpellVisualizationService::Get().CleanupEffectsForActor(target->GetGuid(), spell.id());
+            // Clean up the aura's visual effects on this target, leaving a running cast of the
+            // same spell alone.
+            SpellVisualizationService::Get().CleanupEffectsForActor(target->GetGuid(), spell.id(), SpellVisualizationService::EffectPhase::NonCast);
         }
     }
 }

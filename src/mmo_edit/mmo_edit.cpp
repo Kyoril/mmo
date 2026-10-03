@@ -14,6 +14,10 @@
 
 #ifdef _WIN32
 #include "fmod_audio/fmod_audio.h"
+#include "base/win_utility.h"
+#include <crtdbg.h>
+#include <fstream>
+#include <mutex>
 #else
 #include "null_audio/null_audio.h"
 #endif
@@ -80,6 +84,7 @@
 #include "editors/material_instance_editor/material_instance_editor.h"
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
+#include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
@@ -312,6 +317,60 @@ int main(int argc, char* arg[])
 	std::thread dbThread{ [&dbService]() { dbService.run(); } };
 
 #ifdef _WIN32
+	// Unattended jobs. `--bake-terrain-lod Worlds/<n>/<n>.hwld [--force]` opens the world, bakes the
+	// distant-terrain data of every page whose .tile changed since the last bake (every page with
+	// --force), then exits.
+	{
+		int argCount = 0;
+		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
+		for (int i = 1; args && i + 1 < argCount; ++i)
+		{
+			if (std::string(args[i]) == "--bake-terrain-lod")
+			{
+				// Nobody watches an unattended run: keep its log, and let failed debug assertions
+				// land in that log instead of a message box nobody can answer.
+				static std::ofstream bakeLog("terrain_lod_bake.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("terrain_lod_bake_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				// Bake right away instead of from the viewport's paint handler, so the job also runs
+				// with the window minimised (a minimised window never paints).
+				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				{
+					bool force = false;
+					for (int j = 1; j < argCount; ++j)
+					{
+						force = force || std::string(args[j]) == "--force";
+					}
+
+					// Exit code 1 when any page failed, for scripted use.
+					const bool baked = mmo::WorldEditorInstance::GetLastCreated()->GenerateTerrainLod(!force);
+					PostQuitMessage(baked ? 0 : 1);
+				}
+				else
+				{
+					ELOG("--bake-terrain-lod: failed to open " << args[i + 1]);
+					PostQuitMessage(1);
+				}
+				break;
+			}
+		}
+		GlobalFree(args);
+	}
+#endif
+
+#ifdef _WIN32
 	// Run the message loop
 	MSG msg = { nullptr };
 	while (GetMessage(&msg, nullptr, 0, 0))
@@ -338,5 +397,10 @@ int main(int argc, char* arg[])
 	dbService.stop();
 	dbThread.join();
 
+#ifdef _WIN32
+	// PostQuitMessage's code, e.g. the --bake-terrain-lod result.
+	return static_cast<int>(msg.wParam);
+#else
 	return 0;
+#endif
 }

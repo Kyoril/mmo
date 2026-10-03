@@ -18,7 +18,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sfx_gen"))
 
-from recipes import mage, warrior
+from recipes import cleric, mage, warrior
 
 
 class _RecipeChecks:
@@ -71,6 +71,25 @@ class MageRecipeTests(_RecipeChecks, unittest.TestCase):
         # A looping one-shot would never stop; a one-shot channel would cut out mid-cast.
         for name, spec in mage.SOUNDS.items():
             self.assertEqual(spec.loop, name.endswith("Channel"), name)
+
+
+class ClericRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = cleric
+    count = 15
+
+    def test_choir_layers_stay_wordless(self):
+        # A sung or spoken word would read as dialogue and clash across races and genders.
+        for name, spec in cleric.SOUNDS.items():
+            if "choir" in spec.prompt.lower():
+                self.assertTrue("wordless" in spec.prompt.lower() or "no words" in spec.prompt.lower(),
+                                f"{name}: a choir layer must be wordless")
+
+    def test_loops_are_quieter_than_one_shots(self):
+        # A 10 s cast loop at impact level would mask combat for its whole duration.
+        loudest_loop = max(s.target_dbfs for s in cleric.SOUNDS.values() if s.loop)
+        quietest_impact = min(s.target_dbfs for n, s in cleric.SOUNDS.items()
+                              if not s.loop and "Tick" not in n)
+        self.assertLess(loudest_loop, quietest_impact)
 
 
 if __name__ == "__main__":

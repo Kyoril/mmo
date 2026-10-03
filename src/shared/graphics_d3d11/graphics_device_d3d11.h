@@ -135,6 +135,10 @@ namespace mmo
 
 		VertexDeclaration* CreateVertexDeclaration() override;
 
+		void DestroyVertexDeclaration(VertexDeclaration& declaration) override;
+
+		void FlushCommands() override;
+
 		VertexBufferBinding* CreateVertexBufferBinding() override;
 
 		void Render(const RenderOperation& operation) override;

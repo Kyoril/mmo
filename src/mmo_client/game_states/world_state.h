@@ -50,6 +50,7 @@
 #include "game_common/fog_volume.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
+#include "terrain/far_terrain.h"
 
 #include <map>
 #include <optional>
@@ -626,6 +627,12 @@ namespace mmo
 
 		void EnsurePageIsLoaded(PagePosition position);
 
+		/// Creates the distant terrain for the current world's terrain (nothing if the world has none).
+		void CreateFarTerrain();
+
+		/// Applies the TerrainFarRadius cvar (camera far clip included) and updates the distant terrain.
+		void UpdateFarTerrain();
+
 	private:
 		RealmConnector &m_realmConnector;
 		ScreenLayerIt m_paintLayer;
@@ -809,6 +816,9 @@ namespace mmo
 
 		/// Foliage system for rendering grass and other vegetation
 		std::unique_ptr<Foliage> m_foliage;
+
+		/// Baked low-resolution stand-ins for the terrain pages beyond the streamed full-resolution ones.
+		std::unique_ptr<terrain::FarTerrain> m_farTerrain;
 
 		/// Key identifying a distinct procedural foliage layer derived from terrain material data:
 		/// the painted terrain material (base or instance), the bound layer index and the mesh asset.

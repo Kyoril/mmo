@@ -307,17 +307,25 @@ def upsert_sounds(dataset):
     _require(dataset.IsInitialized(), "sounds dataset is missing required fields")
 
 
+FIRST_VISUALIZATION_ID = 42
+
+
 def build_drafts(existing_visuals):
     from google.protobuf import json_format  # noqa: F401  (imported for callers)
     existing = {v.name: v.id for v in existing_visuals.entry}
-    next_id = max(v.id for v in existing_visuals.entry) + 1
+    taken = set(existing.values())
+    # New entries are allocated from the mage block (42+), skipping ids other classes hold, so
+    # the ids stay stable when the datasets are rebuilt from a develop that gained entries.
+    next_id = FIRST_VISUALIZATION_ID
     drafts, links = [], {}
     for suffix, spell_ids, events, projectiles in definitions():
         name = "Mage - " + suffix
         vis_id = existing.get(name)
         if vis_id is None:
+            while next_id in taken:
+                next_id += 1
             vis_id = next_id
-            next_id += 1
+            taken.add(vis_id)
         draft = {"id": vis_id, "name": name,
                  "kits_by_event": {k: {"kits": v} for k, v in events.items()}}
         if projectiles:

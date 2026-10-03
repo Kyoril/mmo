@@ -27,7 +27,7 @@ import postprocess
 def fetch_and_process(url: str, out_path: str, target_dbfs: float, loop: bool = False) -> dict:
     """Download one generated clip, postprocess it, and write it as a game-ready WAV.
 
-    ``loop`` keeps a seamless loop's ends intact (see ``postprocess.process_loop``)."""
+    ``loop`` selects :func:`postprocess.process_loop`, which keeps the seam intact."""
     tmp_path = out_path + ".download"
     # Create output directories before attempting to download
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
@@ -67,11 +67,11 @@ if __name__ == "__main__":
     if sys.argv[1] == "--audition":
         build_audition(sys.argv[3:], sys.argv[2])
         print("wrote %s" % sys.argv[2])
-    elif sys.argv[1] == "--loop":
-        stats = fetch_and_process(sys.argv[4], sys.argv[2], float(sys.argv[3]), loop=True)
-        print("wrote %s  peak=%.3f  duration=%.2fs  (loop)"
-              % (sys.argv[2], stats["peak"], stats["duration"]))
     else:
-        stats = fetch_and_process(sys.argv[3], sys.argv[1], float(sys.argv[2]))
-        print("wrote %s  peak=%.3f  duration=%.2fs"
-              % (sys.argv[1], stats["peak"], stats["duration"]))
+        args = sys.argv[1:]
+        is_loop = args[0] == "--loop"
+        if is_loop:
+            args = args[1:]
+        stats = fetch_and_process(args[2], args[0], float(args[1]), loop=is_loop)
+        print("wrote %s  peak=%.3f  duration=%.2fs%s"
+              % (args[0], stats["peak"], stats["duration"], "  (loop)" if is_loop else ""))

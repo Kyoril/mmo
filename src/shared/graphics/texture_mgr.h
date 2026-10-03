@@ -41,6 +41,12 @@ namespace mmo
 
 		void RemoveAllUnreferenced();
 
+		/// @brief Drops the manager's reference to a named texture if nobody else holds it any more.
+		/// @remark Manual textures (CreateManual) never count towards the memory budget, so the budget
+		///         never evicts them: their owners must release them when they are done, or the manager
+		///         keeps every one ever created.
+		void ReleaseIfUnreferenced(const std::string& name);
+
 	private:
 		/// Checks if the memory budget is exceeded and if so, tries to free some memory
 		/// by removing textures that are not referenced anymore.

@@ -1350,7 +1350,20 @@ namespace mmo
 
 	VertexDeclaration* GraphicsDeviceD3D11::CreateVertexDeclaration()
 	{
-		return m_vertexDeclarations.emplace_back(std::make_unique<VertexDeclarationD3D11>(*this)).get();
+		return AdoptVertexDeclaration(std::make_unique<VertexDeclarationD3D11>(*this));
+	}
+
+	void GraphicsDeviceD3D11::FlushCommands()
+	{
+		m_immContext->Flush();
+	}
+
+	void GraphicsDeviceD3D11::DestroyVertexDeclaration(VertexDeclaration& declaration)
+	{
+		// The address is about to be reused by another declaration, which must not inherit this one's
+		// cached answer (a terrain tile drawn with a skinned vertex shader).
+		m_blendIndicesCache.erase(&declaration);
+		GraphicsDevice::DestroyVertexDeclaration(declaration);
 	}
 
 	VertexBufferBinding* GraphicsDeviceD3D11::CreateVertexBufferBinding()

@@ -63,6 +63,9 @@ namespace mmo
         /// @return The final render target.
         [[nodiscard]] TexturePtr GetFinalRenderTarget() const;
 
+        /// @brief Gets the G-buffer filled by the last Render call (e.g. to read back unlit albedo).
+        [[nodiscard]] GBuffer& GetGBuffer() { return m_gBuffer; }
+
         /// @brief Sets the underwater state used by the post-process pass for the next frame.
         /// @param state The state, normally produced by the client's WaterVolumeSystem.
         /// @remark Left at its default (dry) by every tool that does not track water, which is

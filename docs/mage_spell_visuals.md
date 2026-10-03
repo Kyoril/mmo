@@ -90,11 +90,13 @@ service skips the animation and still plays particles, light and sound.
 
 ## Engine changes
 
-1. **Aura visuals survive the cast ending** (`spell_visualization_service`). CAST_SUCCEEDED and
-   CANCEL_CAST cleaned up every effect the caster had for that spell, including AURA_IDLE
-   effects. Recasting a self buff refreshes its aura without a new AURA_APPLIED, so Frost Armor's
-   idle effect vanished for the remaining 30 minutes. Effects now record whether an aura event
-   spawned them, and only aura removal destroys those.
+1. **Aura visuals survive the cast ending.** CAST_SUCCEEDED and CANCEL_CAST used to clean up
+   every effect the caster had for that spell, including AURA_IDLE effects, so recasting Frost
+   Armor stripped its idle visual for the remaining 30 minutes. This branch first fixed it with an
+   `auraBound` flag; the cleric branch, merged to develop first, fixed the same bug more generally
+   by splitting effects into cast phase and non-cast phase (`spell_visual_rules.h`,
+   `IsCastPhaseEvent`), which also protects self-impact effects. The merge keeps only the cleric
+   mechanism.
 2. **Projectile trails fade instead of popping** (`projectile_manager`). The trail particle
    system was destroyed in the frame of impact, deleting every world-space particle it had left
    behind. On impact the trail now stops emitting and stays at the impact point until its
@@ -103,7 +105,7 @@ service skips the animation and still plays particles, light and sound.
    from `WorldState`). The service is a process-lifetime singleton holding raw pointers into the
    world scene; a record that outlived the scene was dereferenced as soon as the same
    character's guid resolved again after re-login. This predates the branch, but a long-lived
-   aura-bound record (Frost Armor) made it the common path.
+   aura record (Frost Armor) that now survives recasts made it the common path.
 
 Neither touches the wire; no `ProtocolVersion` bump.
 
@@ -112,8 +114,10 @@ Neither touches the wire; no `ProtocolVersion` bump.
 See `tools/sfx_gen/recipes/mage.py`. 23 sounds, generated with ElevenLabs
 `eleven_text_to_sound_v2`, four takes each, preselected on measurements (attack time, peak
 position, loop seam). The three channel sounds are generated with the model's `loop` option and
-fetched with `fetch.py --loop`, which only normalises: trimming or fading a seamless loop breaks
-its seam.
+fetched with `fetch.py --loop` (`postprocess.process_loop`): no trimming or one-shot fades, only
+a 40 ms *linear* seam crossfade and normalisation. Linear because the two ends of a near-seamless
+loop are strongly correlated, and an equal-power blend of correlated signals swells by up to
+3 dB mid-fade.
 
 ## Remaining work
 
@@ -124,7 +128,6 @@ its seam.
   is no per-target impact for AoE spells (the same confirmed-hit-list limitation as Cleave).
 - Projectile ribbon trails and projectile lights still pop on impact; only particle trails fade.
   The editor's preview uses its own projectile manager and does not show the fade.
-- The aura-bound fix covers particles, lights and ribbons, not tints or looped sounds: cast end
-  still removes the caster's tint for that spell, and any aura expiring on a mage stops its
-  current channel loop (one looped sound per actor).
+- One looped sound per actor: an aura expiring on a casting mage can still affect its channel
+  loop, depending on whether the aura's visualization owns the loop.
 - Orc rigs need cast animations.

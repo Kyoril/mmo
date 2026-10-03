@@ -109,6 +109,8 @@ class ProcessTests(unittest.TestCase):
 
 
 class ProcessLoopTests(unittest.TestCase):
+    RATE = 44100
+
     def test_crossfade_closes_a_discontinuous_seam(self):
         # A ramp jumps from 1.0 back to 0.0 at the wrap -- the worst possible click.
         rate = 1000
@@ -131,6 +133,31 @@ class ProcessLoopTests(unittest.TestCase):
         peak = 10 ** (-3.0 / 20.0)
         self.assertAlmostEqual(float(out[0]), peak, places=2)
         self.assertAlmostEqual(float(out[-1]), peak, places=2)
+
+
+    def test_keeps_the_body_instead_of_trimming_it(self):
+        # A loop with a quiet stretch must not be trimmed: that stretch is part of the cycle.
+        t = np.arange(self.RATE * 2) / self.RATE
+        loop = (0.2 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+        loop[: self.RATE // 2] *= 0.001
+        out = postprocess.process_loop(loop, self.RATE, target_dbfs=-9.0, crossfade_ms=40.0)
+        self.assertEqual(len(out), len(loop) - int(self.RATE * 0.04))
+
+    def test_levels_to_target(self):
+        loop = (0.1 * np.sin(np.linspace(0, 400 * np.pi, self.RATE))).astype(np.float32)
+        out = postprocess.process_loop(loop, self.RATE, target_dbfs=-9.0)
+        self.assertAlmostEqual(float(np.max(np.abs(out))), 10 ** (-9.0 / 20.0), places=3)
+
+    def test_crossfade_hides_a_seam_discontinuity(self):
+        # A ramp jumps from +1 back to -1 at the wrap point; after the crossfade the
+        # end-to-start jump must be no larger than a normal sample step.
+        ramp = np.linspace(-1.0, 1.0, self.RATE, dtype=np.float32)
+        out = postprocess.process_loop(ramp, self.RATE, target_dbfs=0.0, crossfade_ms=40.0)
+        steps = np.abs(np.diff(out))
+        self.assertLessEqual(abs(float(out[0]) - float(out[-1])), float(np.max(steps)) * 1.5)
+
+    def test_empty_input(self):
+        self.assertEqual(len(postprocess.process_loop(np.zeros(0, np.float32), self.RATE)), 0)
 
 
 if __name__ == "__main__":

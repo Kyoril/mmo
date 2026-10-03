@@ -87,6 +87,12 @@ namespace mmo
         /// \brief Stop any looped sound currently playing for an actor (e.g., on cancel/success/death).
         void StopLoopedSoundForActor(uint64 actorGuid);
 
+        /// \brief Stop an actor's looped sound only if it was started by the given visualization.
+        ///
+        /// An actor carries one looped sound at a time, so an aura expiring on a unit must not
+        /// silence the cast loop of a different spell that unit is channelling right now.
+        void StopLoopedSoundForActor(uint64 actorGuid, uint32 visualizationId);
+
         /// \brief Fade out any looped sound currently playing for an actor (smooth transition).
         void FadeOutLoopedSoundForActor(uint64 actorGuid);
 
@@ -98,17 +104,28 @@ namespace mmo
         void RemoveTintFromActor(GameUnitC& actor, uint32 spellId);
 
         /// \brief Remove all active spell effects (particles, lights, ribbons) for a given actor and spell.
-        /// \param includeAuraBound Also remove effects spawned by AURA_APPLIED / AURA_IDLE kits. A cast
-        ///        ending passes false: it must not strip the visual of an aura the same spell already
-        ///        put on the caster (recasting a self buff refreshes it without a new AURA_APPLIED).
-        void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId, bool includeAuraBound = true);
+        void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId);
 
-        /// \brief Forget every tracked effect, light, animation, pending kit and sound. Call when
-        ///        leaving the world, before the scene is cleared: the records hold raw pointers into
-        ///        that scene, and the service outlives it. Without this, re-entering with the same
-        ///        character makes the player's guid resolve again and Update() dereferences
-        ///        emitters of the destroyed scene (most easily via a long-lived aura effect such as
-        ///        Frost Armor's). Scene objects themselves are left to the scene's own teardown.
+        /// \brief Which effects a cleanup removes.
+        enum class EffectPhase : uint8
+        {
+            /// Effects spawned by StartCast / Casting kits.
+            Cast,
+            /// Effects spawned by every other event (cast success, impact, aura events).
+            NonCast,
+            /// Both of the above.
+            Any
+        };
+
+        /// \brief Remove the active effects of one phase for a given actor and spell.
+        void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId, EffectPhase phase);
+
+        /// rief Forget every tracked effect, light, animation, tint pulse, pending kit and sound.
+        ///        Call when leaving the world, before the scene is cleared: the records hold raw
+        ///        pointers into that scene, and the service outlives it. Without this, re-entering
+        ///        with the same character makes the player's guid resolve again and Update()
+        ///        dereferences emitters of the destroyed scene (most easily via a long-lived aura
+        ///        effect such as Frost Armor's). Scene objects are left to the scene's teardown.
         void Reset();
 
     private:
@@ -133,25 +150,33 @@ namespace mmo
         ///        visualization played by id and will never receive a lifecycle event.
         static bool IsSyntheticSpellId(uint32 spellId);
 
+        /// \param castPhase Whether the kit belongs to a StartCast/Casting event; its effects are
+        ///        then torn down by the terminating events rather than by aura removal.
         void ApplyKitToActor(const proto_client::SpellVisualization& vis,
                              const proto_client::SpellKit& kit,
                              GameUnitC& actor,
                              uint32 spellId,
-                             bool instantEvent = false,
-                             bool auraBound = false);
+                             bool instantEvent,
+                             bool castPhase);
 
         void ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
+        /// \brief Apply a kit's tint. A tint with duration_ms is a self-removing pulse (see
+        ///        spell_visual::TintPulseEnvelope); without it the tint lasts until the spell's
+        ///        terminating or aura-removed event.
         void ApplyTintToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         /// \brief Spawn particle emitters defined in a kit, optionally attached to a bone.
-        void ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool auraBound);
+        void ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool castPhase);
 
         /// \brief Spawn a point light defined in a kit, optionally attached to a bone.
-        void ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent, bool auraBound);
+        void ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent, bool castPhase);
 
         /// \brief Spawn a ribbon trail defined in a kit, optionally attached to a bone.
-        void ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool auraBound);
+        void ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool castPhase);
+
+        /// \brief Advance timed tint pulses and remove the finished ones.
+        void UpdateTintPulses(float deltaTime);
 
         static uint32 ToProtoEventValue(Event e);
 
@@ -228,20 +253,19 @@ namespace mmo
         {
             uint32 spellId{ 0 };
             uint64 actorGuid{ 0 };
+            /// Spawned by a StartCast/Casting kit (see spell_visual::IsCastPhaseEvent).
+            bool castPhase{ false };
             std::vector<ParticleSystem*> particles;
             std::vector<Light*> lights;
             std::vector<RibbonTrail*> ribbonTrails;
             std::vector<SceneNode*> effectNodes;
-            /// Spawned by an AURA_APPLIED / AURA_IDLE kit: lives until the aura is removed, and
-            /// survives the cast-end cleanup of the spell that applied it.
-            bool auraBound{ false };
         };
-
-        /// \brief Returns the effect record for an actor, spell and lifetime, creating it if needed.
-        ActiveSpellEffect& FindOrCreateEffect(uint64 actorGuid, uint32 spellId, bool auraBound);
 
         /// \brief All active spell effects across all actors.
         mutable std::vector<ActiveSpellEffect> m_activeEffects;
+
+        /// \brief Find or create the effect record for an actor, spell and phase.
+        ActiveSpellEffect& GetOrCreateEffect(uint64 actorGuid, uint32 spellId, bool castPhase);
 
         /// \brief Tracks a light that is fading in or out.
         struct FadingLight
@@ -270,9 +294,26 @@ namespace mmo
             uint32 spellId{ 0 };
             uint32 visualizationId{ 0 };
             bool instantEvent{ false };
-            bool auraBound{ false };
+            bool castPhase{ false };
             float remainingSeconds{ 0.0f };
         };
+
+        /// \brief A running timed tint (ColorTint.duration_ms) on an actor.
+        struct TintPulse
+        {
+            uint64 actorGuid{ 0 };
+            /// Key in the actor's tint map, see spell_visual::TimedTintKey.
+            uint32 tintKey{ 0 };
+            float r{ 1.0f };
+            float g{ 1.0f };
+            float b{ 1.0f };
+            float a{ 1.0f };
+            float elapsedSeconds{ 0.0f };
+            float durationSeconds{ 0.0f };
+        };
+
+        /// \brief Timed tints still fading; advanced in Update().
+        mutable std::vector<TintPulse> m_tintPulses;
 
         /// \brief Kits waiting for their delay to elapse; drained in Update().
         mutable std::vector<PendingKit> m_pendingKits;

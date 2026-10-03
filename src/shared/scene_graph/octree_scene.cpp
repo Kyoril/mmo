@@ -624,11 +624,17 @@ namespace mmo
 			return true;
 		}
 
-		// Test if the ray intersects this octant's bounding box
-		const auto rayIntersection = ray.IntersectsAABB(octant.m_box);
-		if (!rayIntersection.first)
+		// Test the ray against the octant's loosened bounds, never its tight box: a node may hang out
+		// of its octant by up to half the octant's size (see OctreeNode::IsInAABB). The root holds
+		// every node outside the octree as well, so it is never culled.
+		if (&octant != m_octreeScene.m_octree.get())
 		{
-			return true; // Ray doesn't intersect this octant, continue with siblings
+			AABB octantBounds;
+			octant.GetCullBounds(octantBounds);
+			if (!ray.IntersectsAABB(octantBounds).first)
+			{
+				return true; // Ray doesn't intersect this octant, continue with siblings
+			}
 		}
 
 		// Test all nodes directly attached to this octant
@@ -735,10 +741,19 @@ namespace mmo
 			return;
 		}
 
-		// Test if the query AABB intersects this octant's bounding box
-		if (!queryAABB.Intersects(octant.m_box))
+		// Test the query against the octant's loosened bounds, never its tight box: a node may hang
+		// out of its octant by up to half the octant's size (see OctreeNode::IsInAABB), and the
+		// collision sweeps that run through here then miss it - terrain pages grow tile by tile after
+		// they were placed, so the player fell through the ground at page borders. The root holds
+		// every node outside the octree as well, so it is never culled.
+		if (&octant != m_octreeScene.m_octree.get())
 		{
-			return; // No intersection with this octant, skip it
+			AABB octantBounds;
+			octant.GetCullBounds(octantBounds);
+			if (!queryAABB.Intersects(octantBounds))
+			{
+				return; // No intersection with this octant, skip it
+			}
 		}
 
 		// Test all nodes directly attached to this octant

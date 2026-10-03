@@ -386,6 +386,14 @@ namespace mmo
 
 				// Ensure tile respects selection query
 				tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
+
+				// With batch rendering the page is drawn by the TerrainBatches created once every tile
+				// exists. Drawing the tiles one by one until then only flickers the page in, and fights
+				// the distant-terrain stand-in that covers the page until it is complete.
+				if (m_terrain.IsBatchRenderingEnabled())
+				{
+					tile->SetExcludedFromRendering(true);
+				}
 				m_pageNode->AttachObject(*tile);
 
 				// Grow the page bounding box by the new tile instead of recombining the whole grid.
@@ -456,6 +464,7 @@ namespace mmo
 					// replaces the member tiles' individual coverage textures for rendering purposes
 					// and mirrors their pixel-window layout (adjacent windows share a border pixel).
 					const String quadName = pageBaseName + "_" + std::to_string(quadX) + "_" + std::to_string(quadY);
+					ASSERT(quadName + "_Coverage" == GetBatchCoverageTextureName(quadX, quadY));
 
 					std::vector<uint32> buffer(batchPixels * batchPixels);
 
@@ -537,6 +546,16 @@ namespace mmo
 			}
 			m_batches.clear();
 
+			// Their quadrant coverage textures are named manual textures, which the texture manager
+			// would otherwise keep forever (one set per page ever visited).
+			for (uint32 quadY = 0; quadY < 2; ++quadY)
+			{
+				for (uint32 quadX = 0; quadX < 2; ++quadX)
+				{
+					TextureManager::Get().ReleaseIfUnreferenced(GetBatchCoverageTextureName(quadX, quadY));
+				}
+			}
+
 			for (const auto &tile : m_Tiles)
 			{
 				if (!tile)
@@ -576,15 +595,21 @@ namespace mmo
 				m_waterRenderObject = nullptr;
 			}
 
-			// Unload all loaded data so we will have to reload it again later
-			m_heightmap.clear();
-			m_normals.clear();
-			m_materials.clear();
-			m_layers.clear();
-			m_waterQuadMasks.clear();
-			m_waterVertexHeights.clear();
-			m_waterTypes.clear();
-			m_waterMaterialName.clear();
+			// Unload all loaded data so we will have to reload it again later. Release the storage, not
+			// just the contents: page objects live as long as the world, so clear() kept every page ever
+			// streamed in at its full size (the splat layers alone are 4 MB per page).
+			const auto release = [](auto &container)
+			{
+				std::remove_reference_t<decltype(container)>().swap(container);
+			};
+			release(m_heightmap);
+			release(m_normals);
+			release(m_materials);
+			release(m_layers);
+			release(m_waterQuadMasks);
+			release(m_waterVertexHeights);
+			release(m_waterTypes);
+			release(m_waterMaterialName);
 
 			m_prepared = false;
 			m_preparing = false;
@@ -1305,9 +1330,26 @@ namespace mmo
 			return reader;
 		}
 
+		String Page::GetBatchCoverageTextureName(const uint32 quadX, const uint32 quadY) const
+		{
+			return "PageBatch_" + std::to_string(m_x) + "_" + std::to_string(m_z) + "_" + std::to_string(quadX) + "_" + std::to_string(quadY) + "_Coverage";
+		}
+
 		String Page::GetPageFilename() const
 		{
-			return m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
+			return m_terrain.GetPageFilename(m_x, m_z);
+		}
+
+		void Page::BuildLod(terrain_io::PageLodData &out) const
+		{
+			ASSERT(IsPrepared());
+
+			terrain_io::PageLodSource source;
+			source.heightmap = m_heightmap.data();
+			source.normals = m_normals.data();
+			source.waterQuadMasks = m_waterQuadMasks.empty() ? nullptr : m_waterQuadMasks.data();
+			source.waterVertexHeights = m_waterVertexHeights.empty() ? nullptr : m_waterVertexHeights.data();
+			terrain_io::BuildPageLod(source, out);
 		}
 
 		void Page::NotifyTileMaterialChanged(const uint32 x, const uint32 y)
