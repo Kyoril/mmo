@@ -127,7 +127,8 @@ try
 	$report | Add-Member -NotePropertyName last_green_commit -NotePropertyValue $script:lastGreenCommit -Force
 	$report | Add-Member -NotePropertyName merges_since_last_green -NotePropertyValue $script:merges -Force
 	Write-NightlyReport $report
-	exit (if ($report.passed -eq $true) { 0 } else { 1 })
+	# $(...), not (...): PS 5.1 cannot use a bare if statement as a parenthesized expression.
+	exit $(if ($report.passed -eq $true) { 0 } else { 1 })
 }
 catch
 {
