@@ -447,3 +447,41 @@ size limit, list filters, claim race and expiry, PATCH history.
 - **Real client**: F6 hint on item and spell tooltips, dialog opens with the right
   subject, micro-menu button hides when the subsystem is turned off.
 - `tools/shutdown_check.py` stays green.
+
+## Implementation notes (2026-10-03)
+
+Built autonomously from this spec; deviations and findings worth knowing:
+
+- **GM toggle is a client console command, not a chat command.** The world server has no
+  `.command` chat system; GM commands are client console commands that send `Cheat*` opcodes.
+  The toggle is `CheatSetSubsystem` (handled by the realm, GM level 1), sent by the console
+  command `subsystem <name> on|off`, and `POST /subsystem` (`name=BUG_REPORT&enabled=0|1`,
+  form encoded like every realm REST route). Both relay world-owned subsystems to all nodes.
+- **HTTP POST did not exist.** `http_client` / `https_client` were GET-only; both now take
+  method, headers and body (`FormatRequestHead`). Still HTTP/1.0 and synchronous — only the
+  uploader thread calls them.
+- **Account id comes from the realm.** The world node has no account id; the realm puts it into
+  the forwarded `BugReport` together with the character and realm name.
+- **Combat history** is fed by three new diagnostic signals on `GameUnitS`
+  (`damageTakenAmount`, `healedAmount`, `auraApplyChanged`) plus the existing
+  `startedCasting` / `finishedCasting` and the player's damage logs.
+- **Snapshot gaps:** quest snapshots carry status and counters but not whether quest giver /
+  turn-in NPCs are in range; creature snapshots have no spawn id (creatures do not store one);
+  item instances are only resolved when the client sends an item guid, which the tooltip hooks
+  cannot provide for bag items (`ItemHandle` exposes no guid) — the snapshot then reports the
+  owned count instead.
+- **Guids in Lua are decimal strings** (`UnitHandle:GetGuidString`,
+  `GetMouseoverWorldObjectGuid`): luabind turns `uint64` into a double.
+- **Runtime key bindings:** UI Lua runs before `Bindings::Load`, so `RegisterBinding` keeps
+  pending registrations (cleared on world leave) and `Load` applies them before the `.cfg`
+  files run; an untouched default key is not written back by `SaveBindings`.
+- **frame_ui fix:** registering the same event twice on a frame used to fire its handler twice.
+- **UI trap:** property-bound images (`<PropertyValue property="Icon"/>`) only bind on frames
+  created from a template — the subject icon is `BugReportIconTemplate`.
+- **Subsystem health** is a circuit breaker: three failed upload attempts or a full queue make
+  `BUG_REPORT` unavailable; it closes after 60 s (or on the next delivery), because an
+  unavailable subsystem stops the reports that would prove the API is back.
+- **Verification:** unit tests (protocol payload/zlib, HTTP POST loopback, world subsystem
+  state/health/uploader/transport/document, realm rate limiter/table, client log tail),
+  backend jest (31), web UI tests + tsc, CLI tests, E2E `bug_report.lua`, and a scripted run of
+  the real client (spell report from a tooltip, generic report, micro-menu help, rate limit).
