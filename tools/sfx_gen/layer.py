@@ -93,11 +93,11 @@ def parse_layer_arg(text: str) -> Layer:
     return Layer(path, offset=offset, gain_db=gain_db, length=length)
 
 
-def recipe_layers(mix: dict, layer_dir: str) -> list:
+def recipe_layers(recipe_mix: dict, layer_dir: str) -> list:
     """Turn a recipe ``MIXES`` entry into Layers pointing at the downloaded takes."""
     return [Layer(os.path.join(layer_dir, f"{entry.sound}_take{entry.take}.wav"),
                   offset=entry.offset, gain_db=entry.gain_db, length=entry.length)
-            for entry in mix["layers"]]
+            for entry in recipe_mix["layers"]]
 
 
 def main():
@@ -110,13 +110,20 @@ def main():
     parser.add_argument("--mix", help="MIXES key in the recipe module")
     parser.add_argument("--layer-dir", default=".", help="where the <SoundKey>_take<n>.wav files are")
     args = parser.parse_args()
+    if bool(args.recipe) != bool(args.mix):
+        parser.error("--recipe and --mix go together")
     if args.recipe:
-        mix = importlib.import_module(f"recipes.{args.recipe}").MIXES[args.mix]
-        layers, target = recipe_layers(mix, args.layer_dir), mix["target_dbfs"]
+        mixes = importlib.import_module(f"recipes.{args.recipe}").MIXES
+        if args.mix not in mixes:
+            parser.error(f"recipe {args.recipe} has no mix {args.mix!r}: {sorted(mixes)}")
+        layers, target = recipe_layers(mixes[args.mix], args.layer_dir), mixes[args.mix]["target_dbfs"]
     else:
         if not args.layer:
             parser.error("give --layer arguments or --recipe/--mix")
         layers, target = [parse_layer_arg(text) for text in args.layer], args.target
+    missing = [spec.path for spec in layers if not os.path.isfile(spec.path)]
+    if missing:
+        parser.error("missing layer files: " + ", ".join(missing))
     stats = render(layers, args.out, target)
     print("wrote %s  peak=%.3f  duration=%.2fs" % (args.out, stats["peak"], stats["duration"]))
 
