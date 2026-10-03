@@ -10,7 +10,7 @@ Art direction
 -------------
 *Call of the Watch* is a call to duty, not a miracle. Warm gold with a steel-blue accent
 (the Watch and the Crown); no sigils or holy rays, which belong to the cleric. The activation
-is a horn-blast shockwave: a bright onset flash at chest height, a gold ring and a steel
+is a horn-blast shockwave: a bright onset flash at the caster's feet, a gold ring and a steel
 ring racing outward over the 30 yd party radius, and banner-like gold sparks rising around
 the caster. The apply effect plays on every party member in range: a small gold ring at the
 feet and a few rising motes, low alpha.
