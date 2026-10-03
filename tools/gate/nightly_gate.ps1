@@ -54,6 +54,7 @@ function Write-RedReport
 		tier = "full"
 		passed = $false
 		setup_error = $Message
+		logs_dir = (Join-Path (Get-NightlyWorktreePath) "tools\gate\logs")
 		last_green_commit = $script:lastGreenCommit
 		merges_since_last_green = @($script:merges)
 	})
@@ -99,7 +100,7 @@ try
 		exit 0
 	}
 
-	$script:merges = Get-MergesSince -From $script:lastGreenCommit -To $script:commit
+	$script:merges = @(Get-MergesSince -From $script:lastGreenCommit -To $script:commit)
 
 	$lock = Enter-GateWorktreeLock
 	$worktree = Initialize-GateWorktree -Commit $script:commit
@@ -117,6 +118,12 @@ try
 			setup_error = ("verify.ps1 exited {0} without writing a report for this commit" -f $exit)
 		}
 	}
+	# A non-zero exit is red whatever the report says (a stale or hand-edited report).
+	if ($exit -ne 0)
+	{
+		$report | Add-Member -NotePropertyName passed -NotePropertyValue $false -Force
+	}
+	$report | Add-Member -NotePropertyName logs_dir -NotePropertyValue (Join-Path $worktree "tools\gate\logs") -Force
 	$report | Add-Member -NotePropertyName last_green_commit -NotePropertyValue $script:lastGreenCommit -Force
 	$report | Add-Member -NotePropertyName merges_since_last_green -NotePropertyValue $script:merges -Force
 	Write-NightlyReport $report

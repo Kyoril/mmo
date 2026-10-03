@@ -105,6 +105,14 @@ function Invoke-WorktreeGate
 		[Parameter(Mandatory)][string]$Worktree
 	)
 
+	# last_report.json is gitignored and survives checkout: a report left by an earlier run
+	# must never be mistaken for this run's verdict.
+	$stale = Join-Path $Worktree "tools\gate\last_report.json"
+	if (Test-Path $stale)
+	{
+		Remove-Item -Path $stale -Force
+	}
+
 	& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Worktree "tools\gate\verify.ps1") -Tier full | Out-Host
 	return $LASTEXITCODE
 }

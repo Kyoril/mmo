@@ -116,6 +116,8 @@ function Invoke-GateStep
 
 $branch = (& git -C $repoRoot rev-parse --abbrev-ref HEAD)
 $commit = (& git -C $repoRoot rev-parse HEAD)
+# A report from a dirty tree describes more than the commit it names; /ship refuses those.
+$dirty = [bool](& git -C $repoRoot status --porcelain)
 
 Push-Location $repoRoot
 try
@@ -188,6 +190,8 @@ finally
 	[ordered]@{
 		branch = $branch
 		commit = $commit
+		dirty = $dirty
+		targets = $Targets
 		timestamp = (Get-Date -Format "o")
 		config = "Debug"
 		tier = $Tier

@@ -14,9 +14,10 @@
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$reportDir = Join-Path $PSScriptRoot "reports"
-New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 . (Join-Path $PSScriptRoot "gate_worktree.ps1")
+# Always the main checkout's reports, even when this runs from a feature worktree.
+$reportDir = Get-ReportDir
+New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 
 # The nightly gate runs in its own worktree, never in a checkout a session may be using.
 $nightlyWorktree = Get-NightlyWorktreePath

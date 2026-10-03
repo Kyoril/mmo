@@ -19,7 +19,9 @@ Record the current branch name — every `<branch>` below means that name.
 ## Gate
 
 1. Read `tools/gate/last_report.json`. It satisfies the merge if it exists, `passed` is
-   `true`, and `commit` equals `git rev-parse HEAD` — fast or full tier.
+   `true`, `commit` equals `git rev-parse HEAD`, and `dirty` is `false` — fast or full tier.
+   A report without the `dirty` field (written before it existed) does not satisfy this;
+   rerun the fast gate.
 2. Otherwise run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/verify.ps1 -Tier fast`.
    If it is red, report it exactly as /gate does (failing step, quoted log lines) and STOP.
 3. Run `python tools/gate/serialization_warning.py`. If it prints anything, show it and ask
@@ -46,7 +48,9 @@ Record the current branch name — every `<branch>` below means that name.
      afterwards so develop is free for other checkouts.
 2. If the branch changed a submodule pointer, run
    `git -C <checkout that merged> -c protocol.file.allow=always submodule update` so that
-   checkout is not left dirty.
+   checkout is not left dirty. If that checkout is `H:/mmo` or another checkout the user
+   works in, ask the user first: the update can detach their submodule branch (e.g.
+   `data/editor` on `master`).
 3. `git branch -d <branch>` only after the current checkout is no longer on `<branch>`
    (it was detached or switched to develop above).
 4. Report the merge commit hash, and remind the user that E2E for it runs in tonight's

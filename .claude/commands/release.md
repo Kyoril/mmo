@@ -22,6 +22,9 @@ manual for now; this command answers "is this commit safe to publish?".
    says the worktree could not be prepared, quote that error instead.
    Exit 2: the ref does not exist.
 
+Commits that predate the tiered gate cannot be checked (their `verify.ps1` has no `-Tier`)
+and always report RED.
+
 ## Hard rules
 
 - Never publish, push or tag from this command.

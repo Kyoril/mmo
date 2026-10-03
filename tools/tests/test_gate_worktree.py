@@ -19,7 +19,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import date
 
+GATE_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "gate"))
 HELPERS = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "gate", "gate_worktree.ps1"))
 
 
@@ -102,6 +104,63 @@ class GateWorktreeTests(unittest.TestCase):
 	def test_last_green_nightly_none(self):
 		write_report(self.reports, "nightly-2026-10-03.json", commit="bad", passed=False, tier="full")
 		self.assertEqual(self.ps("$null -eq (Get-LastGreenNightly)"), "True")
+
+
+@unittest.skipUnless(sys.platform == "win32", "gate scripts are Windows PowerShell")
+class GateScriptTests(unittest.TestCase):
+	"""release_check.ps1 / nightly_gate.ps1 end to end, on paths that never touch a worktree."""
+
+	@classmethod
+	def setUpClass(cls):
+		cls.sha = subprocess.run(["git", "-C", GATE_DIR, "rev-parse", "HEAD"],
+			capture_output=True, text=True, check=True).stdout.strip()
+
+	def setUp(self):
+		self._tmp = tempfile.TemporaryDirectory()
+		self.reports = os.path.join(self._tmp.name, "reports")
+		self.nightly = os.path.join(self._tmp.name, "nightly")
+		os.makedirs(self.reports)
+		os.makedirs(self.nightly)
+
+	def tearDown(self):
+		self._tmp.cleanup()
+
+	def run_script(self, name, *args):
+		env = dict(os.environ, MMO_GATE_REPORT_DIR=self.reports, MMO_NIGHTLY_WORKTREE=self.nightly)
+		return subprocess.run(
+			["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", os.path.join(GATE_DIR, name)] + list(args),
+			capture_output=True, text=True, env=env)
+
+	def today_report(self):
+		path = os.path.join(self.reports, "nightly-{}.json".format(date.today().isoformat()))
+		with open(path, encoding="utf-8-sig") as f:
+			return json.load(f)
+
+	def test_release_check_covered_commit_is_green(self):
+		write_report(self.reports, "release-x.json", commit=self.sha, passed=True, tier="full")
+		self.assertEqual(self.run_script("release_check.ps1", "-Ref", self.sha, "-NoRun").returncode, 0)
+
+	def test_release_check_uncovered_commit_is_red(self):
+		write_report(self.reports, "release-x.json", commit=self.sha, passed=True, tier="fast")
+		self.assertEqual(self.run_script("release_check.ps1", "-Ref", self.sha, "-NoRun").returncode, 1)
+
+	def test_release_check_unknown_ref(self):
+		self.assertEqual(self.run_script("release_check.ps1", "-Ref", "no-such-ref-xyz", "-NoRun").returncode, 2)
+
+	def test_nightly_unknown_ref_writes_red_report(self):
+		self.assertEqual(self.run_script("nightly_gate.ps1", "-Ref", "no-such-ref-xyz").returncode, 1)
+		report = self.today_report()
+		self.assertIs(report["passed"], False)
+		self.assertTrue(report["setup_error"])
+
+	def test_nightly_unchanged_commit_is_green_with_list_merges(self):
+		write_report(self.reports, "nightly-2026-01-01.json", commit=self.sha, passed=True, tier="full")
+		result = self.run_script("nightly_gate.ps1", "-Ref", self.sha)
+		self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+		report = self.today_report()
+		self.assertIs(report["passed"], True)
+		self.assertIs(report["unchanged"], True)
+		self.assertEqual(report["merges_since_last_green"], [])
 
 
 if __name__ == "__main__":

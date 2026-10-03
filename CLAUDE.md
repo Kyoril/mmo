@@ -45,7 +45,7 @@ The following systems are fully implemented and should not be suggested as futur
 - Reports land in `tools/gate/reports/` (`nightly-*.json`, `release-*.json`, weekly
   content audit). At session start, surface to the user before starting new work:
   the newest nightly report if `passed` is `false` (quote `merges_since_last_green`, the
-  suspects, and `setup_error` if present), or the fact that no nightly report with a
+  suspects, and `setup_error` if present; step logs are under `logs_dir`), or the fact that no nightly report with a
   non-null `passed` is younger than 48 h (the nightly is not running). Reports with
   `"skipped": true` predate the dedicated worktree and mean "did not run".
 - `.claude/settings.local.json` (htex MCP config) does not follow git worktrees, so
