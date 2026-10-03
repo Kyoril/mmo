@@ -26,6 +26,7 @@
 #include "cursor.h"
 #include "event_loop.h"
 #include "game_client/sound_entry_player.h"
+#include "game_client/spell_text_formatter.h"
 #include "loading_screen.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
@@ -658,250 +659,36 @@ namespace mmo
 			WorldState::GetInputControl()->StopJump();
 		}
 
-		void CalculateEffectBasePoints(const proto_client::SpellEffect &effect, const proto_client::SpellEntry &spell, int32 casterLevel, int32 &minBasePoints, int32 &maxBasePoints)
-		{
-			if (casterLevel > spell.maxlevel() && spell.maxlevel() > 0)
-			{
-				casterLevel = spell.maxlevel();
-			}
-			else if (casterLevel < spell.baselevel())
-			{
-				casterLevel = spell.baselevel();
-			}
-			casterLevel -= spell.spelllevel();
-
-			// Calculate the damage done
-			const float basePointsPerLevel = effect.pointsperlevel();
-			const float randomPointsPerLevel = effect.diceperlevel();
-			const int32 basePoints = effect.basepoints() + casterLevel * basePointsPerLevel;
-			const int32 randomPoints = effect.diesides() + casterLevel * randomPointsPerLevel;
-
-			minBasePoints = basePoints + effect.basedice();
-			maxBasePoints = basePoints + randomPoints;
-		}
-
-		void Spell_GetEffectPoints(const proto_client::SpellEntry &spell, int32 level, int effectIndex, bool includeTickCount, int &min, int &max)
-		{
-			min = 0;
-			max = 0;
-
-			if (effectIndex < 0 || effectIndex >= spell.effects_size())
-			{
-				return;
-			}
-
-			if (effectIndex >= spell.effects_size())
-			{
-				return;
-			}
-
-			const bool isPeriodicEffect =
-				spell.effects(effectIndex).aura() == aura_type::PeriodicDamage ||
-				spell.effects(effectIndex).aura() == aura_type::PeriodicHeal ||
-				spell.effects(effectIndex).aura() == aura_type::PeriodicTriggerSpell ||
-				spell.effects(effectIndex).aura() == aura_type::PeriodicEnergize;
-
-			int32 tickCount = 1;
-			if (isPeriodicEffect && spell.effects(effectIndex).amplitude() > 0 && spell.duration() > 0)
-			{
-				tickCount = spell.duration() / spell.effects(effectIndex).amplitude();
-			}
-
-			const auto &effect = spell.effects(effectIndex);
-
-			int32 minPoints = 0, maxPoints = 0;
-			CalculateEffectBasePoints(effect, spell, level, minPoints, maxPoints);
-
-			if (includeTickCount)
-			{
-				minPoints *= tickCount;
-				maxPoints *= tickCount;
-			}
-
-			min = std::abs(minPoints);
-			max = std::abs(maxPoints);
-		}
-
-		std::string FormatSpellText(const std::string &text, const proto_client::SpellEntry *spell)
+		/// Replaces the description placeholders of a spell, see FormatSpellText in
+		/// game_client/spell_text_formatter.h for the token list.
+		std::string FormatClientSpellText(const std::string &text, const proto_client::SpellEntry &spell, const proto_client::Project &project)
 		{
 			// The active player can be null here: a spell tooltip can fire from an action button
 			// hover while the world is still loading (e.g. re-entering the world right after a
-			// logout), before the player object has spawned. Fall back to level 0 in that case,
-			// which CalculateEffectBasePoints clamps to the spell's base level.
+			// logout), before the player object has spawned. Fall back to level 1 in that case,
+			// which the formatter clamps to the spell's base level.
 			const std::shared_ptr<GameUnitC> player = ObjectMgr::GetActivePlayer();
-			const int32 level = player ? player->GetLevel() : 1;
 
-			std::ostringstream strm;
-			int min = 0, max = 0, effectIndex = 0;
-
-			for (int i = 0; i < text.size(); ++i)
+			SpellTextContext context;
+			context.level = player ? player->GetLevel() : 1;
+			context.findSpell = [&project](const uint32 spellId)
 			{
-				if (text[i] == '$' && i < text.size() - 1)
+				return project.spells.getById(spellId);
+			};
+			context.formatDuration = [](const std::string &formatKey, const double value) -> std::string
+			{
+				const auto *format = FrameManager::Get().GetLocalization().FindStringById(formatKey);
+				if (!format)
 				{
-					i++;
-
-					const char token = text[i];
-					switch (token)
-					{
-					case 'd':
-					case 'D':
-					{
-						// Default display value is seconds
-						double displayValue = static_cast<double>(spell->duration()) / 1000.0;
-						String formatTemplate = "FORMAT_DURATION_SECONDS";
-
-						if (spell->duration() >= 60000 * 60)
-						{
-							// Hour display, each hour has 60 minutes * 60 seconds = 3600 seconds
-							displayValue /= 3600.0;
-							formatTemplate = "FORMAT_DURATION_HOURS";
-						}
-						else if (spell->duration() >= 60000)
-						{
-							displayValue /= 60.0;
-							formatTemplate = "FORMAT_DURATION_MINUTES";
-						}
-
-						if (token == 'd')
-						{
-							formatTemplate += "_PRECISE";
-						}
-
-						auto *format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
-						if (format)
-						{
-							char buffer[128];
-							snprintf(buffer, 128, format->c_str(), displayValue);
-							strm << buffer;
-						}
-						else
-						{
-							strm << formatTemplate;
-						}
-					}
-					break;
-
-					case 'i':
-					case 'I':
-					{
-						if (i < text.size() - 1 && text[i + 1] != ' ')
-						{
-							effectIndex = text[i + 1] - '0';
-							i++;
-						}
-
-						uint32 amplitude = 0;
-						double displayValue = 0.0f;
-						if (effectIndex >= 0 && effectIndex < spell->effects_size())
-						{
-							if (spell->effects(effectIndex).amplitude() > 0)
-							{
-								amplitude = spell->effects(effectIndex).amplitude();
-								displayValue = static_cast<double>(spell->effects(effectIndex).amplitude()) / 1000.0;
-							}
-						}
-
-						// Default display value is seconds
-						String formatTemplate = "FORMAT_DURATION_SECONDS";
-
-						if (amplitude >= 60000 * 60)
-						{
-							// Hour display, each hour has 60 minutes * 60 seconds = 3600 seconds
-							displayValue /= 3600.0;
-							formatTemplate = "FORMAT_DURATION_HOURS";
-						}
-						else if (amplitude >= 60000)
-						{
-							displayValue /= 60.0;
-							formatTemplate = "FORMAT_DURATION_MINUTES";
-						}
-
-						if (token == 'i')
-						{
-							formatTemplate += "_PRECISE";
-						}
-
-						auto *format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
-						if (format)
-						{
-							char buffer[128];
-							snprintf(buffer, 128, format->c_str(), displayValue);
-							strm << buffer;
-						}
-						else
-						{
-							strm << formatTemplate;
-						}
-					}
-					break;
-
-					case 'm':
-						if (i < text.size() - 1 && text[i + 1] != ' ')
-						{
-							effectIndex = text[i + 1] - '0';
-							i++;
-						}
-
-						Spell_GetEffectPoints(*spell, level, effectIndex, false, min, max);
-						strm << min;
-						break;
-
-					case 'M':
-						if (i < text.size() - 1 && text[i + 1] != ' ')
-						{
-							effectIndex = text[i + 1] - '0';
-							i++;
-						}
-						Spell_GetEffectPoints(*spell, level, effectIndex, false, min, max);
-						strm << max;
-						break;
-
-					case 's':
-					case 'S':
-						if (i < text.size() - 1 && text[i + 1] != ' ')
-						{
-							effectIndex = text[i + 1] - '0';
-							i++;
-						}
-
-						Spell_GetEffectPoints(*spell, level, effectIndex, false, min, max);
-						if (min == max)
-						{
-							strm << min;
-						}
-						else
-						{
-							strm << min << " - " << max;
-						}
-						break;
-
-					case 'o':
-					case 'O':
-						if (i < text.size() - 1 && text[i + 1] != ' ')
-						{
-							effectIndex = text[i + 1] - '0';
-							i++;
-						}
-
-						Spell_GetEffectPoints(*spell, level, effectIndex, true, min, max);
-						if (min == max)
-						{
-							strm << min;
-						}
-						else
-						{
-							strm << min << " - " << max;
-						}
-						break;
-					}
+					return formatKey;
 				}
-				else
-				{
-					strm << text[i];
-				}
-			}
 
-			return strm.str();
+				char buffer[128];
+				snprintf(buffer, 128, format->c_str(), value);
+				return buffer;
+			};
+
+			return FormatSpellText(text, spell, context);
 		}
 
 		/// Returns the spell's name localized to the client's locale (English fallback). Used as the
@@ -911,24 +698,24 @@ namespace mmo
 			return GetLocalizedString(spell.name(), spell.name_loc(), GetClientLocale());
 		}
 
-		std::string Script_GetSpellAuraText(const proto_client::SpellEntry *spell)
+		std::string Script_GetSpellAuraText(const proto_client::Project &project, const proto_client::SpellEntry *spell)
 		{
 			if (spell == nullptr)
 			{
 				return "<NULL>";
 			}
 
-			return FormatSpellText(GetLocalizedString(spell->auratext(), spell->auratext_loc(), GetClientLocale()), spell);
+			return FormatClientSpellText(GetLocalizedString(spell->auratext(), spell->auratext_loc(), GetClientLocale()), *spell, project);
 		}
 
-		std::string Script_GetSpellDescription(const proto_client::SpellEntry *spell)
+		std::string Script_GetSpellDescription(const proto_client::Project &project, const proto_client::SpellEntry *spell)
 		{
 			if (spell == nullptr)
 			{
 				return "<NULL>";
 			}
 
-			return FormatSpellText(GetLocalizedString(spell->description(), spell->description_loc(), GetClientLocale()), spell);
+			return FormatClientSpellText(GetLocalizedString(spell->description(), spell->description_loc(), GetClientLocale()), *spell, project);
 		}
 
 		bool Script_IsPassiveSpell(const proto_client::SpellEntry *spell)
@@ -1441,8 +1228,10 @@ namespace mmo
 
 					   luabind::def<std::function<void(uint32)>>("CancelAura", [this](uint32 spellId)
 															{ m_realmConnector.CancelAura(spellId); }),
-					   luabind::def("GetSpellDescription", &Script_GetSpellDescription),
-					   luabind::def("GetSpellAuraText", &Script_GetSpellAuraText),
+					   luabind::def<std::function<std::string(const proto_client::SpellEntry*)>>("GetSpellDescription", [this](const proto_client::SpellEntry* spell)
+																			   { return Script_GetSpellDescription(m_project, spell); }),
+					   luabind::def<std::function<std::string(const proto_client::SpellEntry*)>>("GetSpellAuraText", [this](const proto_client::SpellEntry* spell)
+																			   { return Script_GetSpellAuraText(m_project, spell); }),
 					   luabind::def("IsPassiveSpell", &Script_IsPassiveSpell),
 					   luabind::def("IsRacialSpell", &Script_IsRacialSpell),
 

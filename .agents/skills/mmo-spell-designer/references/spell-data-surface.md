@@ -21,6 +21,19 @@ Important top-level `SpellEntry` fields:
 - relationships: `additionalspells`, `baseid`, `prevspell`, `nextspell`, `visualization_id`
 </primary_schema>
 
+<description_placeholders>
+`description` and `auratext` (and their `_loc` translations) are run through the client's spell text formatter (`src/shared/game_client/spell_text_formatter.h`). A placeholder is `$`, an optional spell id, a token and, for indexed tokens, one zero-based effect index digit. An omitted index reuses the previous one.
+
+- `$s0` effect points ("min - max" when they differ), `$m0` / `$M0` minimum / maximum
+- `$o0` total over the duration (points x ticks). On a `PeriodicTriggerSpell` effect it totals the triggered spell's first damage or heal effect over all ticks instead
+- `$t0` number of ticks of a periodic effect (duration / amplitude)
+- `$d` / `$D` spell duration, `$i0` / `$I0` tick interval (lower case = precise)
+- `$152s0` reads the value from spell 152 instead, at the reader's level clamped to spell 152's own level range. Use it whenever a spell's numbers live in a triggered, proc'd or companion spell (Fire Barrage 150 reads its projectile 152)
+- `$$` is a literal dollar sign
+
+Broken placeholders (unknown token, unknown spell id) are written back verbatim. `tools/tests/test_spell_text_placeholders.py` lints every spell text, so run it after editing descriptions.
+</description_placeholders>
+
 <effect_schema>
 Each `SpellEffect` entry is indexed and contains the execution payload for one effect slot.
 
