@@ -76,6 +76,9 @@ function Initialize-GateWorktree
 	$main = Get-MainRepoRoot
 	$worktree = Get-NightlyWorktreePath
 
+	# A hand-deleted worktree folder leaves a stale registration that blocks `worktree add`.
+	Invoke-Git -C $main worktree prune
+
 	if (-not (Test-Path (Join-Path $worktree ".git")))
 	{
 		Invoke-Git -C $main worktree add --detach $worktree $Commit
