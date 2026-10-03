@@ -261,6 +261,12 @@ matters:
   count requires doing the login server's `shared_ptr` + `Post` work there first.
 - **Database** — one connection per tier behind one worker thread. Call sites rely on the
   implicit FIFO ordering that gives.
+- **Nav mesh streaming (world server)** — each new world instance starts a short-lived
+  `nav::PageStreamer` thread that only reads page files through the asset registry; the world
+  thread alone touches Detour, installing pages in 4 ms slices per tick. Until a map is
+  complete, `NavMapData` path/random-point queries load the pages they touch on demand, so
+  any new nav query must go through `EnsureNavLoaded` first. The reader thread must not log
+  (the log signal is main-thread-only and servers do not buffer off-thread entries).
 
 Anything owning an asio timer, acceptor, or work guard needs a `Stop()` wired into its tier's
 shutdown handler, or the process will not exit. Verify with `python tools/shutdown_check.py`.

@@ -18,6 +18,9 @@ namespace mmo
 		/// @brief Path of the 16-bit grayscale heightmap PNG.
 		std::filesystem::path heightmapPath;
 
+		/// @brief Optional lossless RGBA layer-weight PNG covering the full page rect.
+		std::filesystem::path splatmapPath;
+
 		/// @brief Path of the zone metadata JSON sidecar.
 		std::filesystem::path metaPath;
 
