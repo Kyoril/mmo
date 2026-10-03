@@ -1,10 +1,10 @@
 ﻿# Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
-# Local quality gate: protocol version check -> build -> unit tests -> E2E. Writes tools/gate/last_report.json
+# Local quality gate: protocol version check -> build -> unit tests -> tool tests -> E2E. Writes tools/gate/last_report.json
 # and exits 0 only if every step passed.
 #
 # Tiers:
-#   fast  protocol check, tool tests, build, unit tests (~1.5 min incremental). What /ship requires.
+#   fast  protocol check, build, unit tests, tool tests (~1.5 min incremental). What /ship requires.
 #   full  fast + E2E (~8.5 min). Run nightly in H:/mmo-nightly, by /gate full and by release_check.ps1.
 #
 # Usage:
@@ -133,16 +133,6 @@ try
 		$ok = Invoke-GateStep -Name "protocol_tests" -Exe $python -Arguments @("tools/tests/test_protocol_version_check.py")
 	}
 
-	# Discovery rather than a list of filenames: a tool test that nobody runs rots silently,
-	# and the one thing worse than an untested tool is a tool with tests that stopped being
-	# true. This re-runs the protocol tests above as part of the sweep, which costs
-	# milliseconds and keeps the step free of exclusions. Named separately so a failure here
-	# does not read as the protocol checker itself being broken.
-	if ($ok)
-	{
-		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments @("-m", "unittest", "discover", "-s", "tools/tests", "-p", "test_*.py")
-	}
-
 	# Warning only: a stale .claude/skills copy does not break the build, but it is how an agent
 	# ends up following instructions the tracked .agents/skills no longer contains.
 	& (Join-Path $repoRoot "tools\sync_skills.ps1") -Check
@@ -158,6 +148,17 @@ try
 		# edit here. --output-on-failure names the failing suite and prints its output into
 		# tools/gate/logs/tests.log.
 		$ok = Invoke-GateStep -Name "tests" -Exe "ctest" -Arguments @("-C", "Debug", "--output-on-failure") -WorkingDirectory (Join-Path $repoRoot "build")
+	}
+
+	# Discovery rather than a list of filenames: a tool test that nobody runs rots silently,
+	# and the one thing worse than an untested tool is a tool with tests that stopped being
+	# true. This re-runs the protocol tests above as part of the sweep, which costs
+	# milliseconds and keeps the step free of exclusions. Named separately so a failure here
+	# does not read as the protocol checker itself being broken. Runs after the build because
+	# some tool tests need the protoc built by it.
+	if ($ok)
+	{
+		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments @("-m", "unittest", "discover", "-s", "tools/tests", "-p", "test_*.py")
 	}
 
 	if ($ok -and $Tier -eq "full")
