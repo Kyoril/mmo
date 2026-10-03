@@ -196,6 +196,31 @@ namespace mmo
 
 		const std::set<std::pair<int32, int32>> pageFilter(meta.pages.begin(), meta.pages.end());
 
+		// Validate all layer data before opening any destination page for writing.
+		constexpr uint32 splatSide = terrain::constants::PixelsPerPage;
+		RgbaImage8 splat;
+		if (!args.splatmapPath.empty())
+		{
+			if (!LoadRgba8Png(args.splatmapPath, splat))
+			{
+				return 1;
+			}
+			if (splat.width != pagesX * (splatSide - 1) + 1 || splat.height != pagesZ * (splatSide - 1) + 1)
+			{
+				ELOG("Splat image dimensions must be (pagesX * 1008 + 1) by (pagesZ * 1008 + 1)!");
+				return 1;
+			}
+			for (size_t i = 0; i < splat.pixels.size(); i += 4)
+			{
+				const uint32 sum = static_cast<uint32>(splat.pixels[i]) + splat.pixels[i + 1] + splat.pixels[i + 2] + splat.pixels[i + 3];
+				if (sum != 255)
+				{
+					ELOG("Splat weights must sum to 255 at every pixel (invalid pixel " << i / 4 << ")!");
+					return 1;
+				}
+			}
+		}
+
 		if (image.width != gridWidth || image.height != gridHeight)
 		{
 			WLOG("Heightmap is " << image.width << "x" << image.height << " but the lossless resolution for this page rect is "
@@ -257,6 +282,24 @@ namespace mmo
 				}
 
 				page.Reset();
+
+				if (!splat.pixels.empty())
+				{
+					const uint32 splatX = static_cast<uint32>(pageX - meta.pageX0) * (splatSide - 1);
+					const uint32 splatZ = static_cast<uint32>(pageZ - meta.pageZ0) * (splatSide - 1);
+					for (uint32 z = 0; z < splatSide; ++z)
+					{
+						for (uint32 x = 0; x < splatSide; ++x)
+						{
+							const size_t source = (static_cast<size_t>(splatZ + z) * splat.width + splatX + x) * 4;
+							page.layers[static_cast<size_t>(z) * splatSide + x] =
+								static_cast<uint32>(splat.pixels[source]) |
+								(static_cast<uint32>(splat.pixels[source + 1]) << 8) |
+								(static_cast<uint32>(splat.pixels[source + 2]) << 16) |
+								(static_cast<uint32>(splat.pixels[source + 3]) << 24);
+						}
+					}
+				}
 
 				const uint32 baseX = static_cast<uint32>(pageX - meta.pageX0) * VerticesPerPageEdge;
 				const uint32 baseZ = static_cast<uint32>(pageZ - meta.pageZ0) * VerticesPerPageEdge;

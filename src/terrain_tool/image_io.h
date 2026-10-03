@@ -35,6 +35,20 @@ namespace mmo
 		std::vector<uint8> pixels;
 	};
 
+	/// @brief An 8-bit RGBA image containing four terrain layer weights per pixel.
+	struct RgbaImage8
+	{
+		/// @brief Width in pixels.
+		uint32 width = 0;
+		/// @brief Height in pixels.
+		uint32 height = 0;
+		/// @brief Row-major interleaved RGBA weights (alpha is layer 3, not transparency).
+		std::vector<uint8> pixels;
+	};
+
+	/// @brief Loads an 8-bit, four-channel PNG without changing its layer weights.
+	bool LoadRgba8Png(const std::filesystem::path &path, RgbaImage8 &out);
+
 	/// @brief Loads a grayscale PNG as 16-bit image. 8-bit inputs are scaled to 16 bit,
 	///	       multi-channel inputs are converted to grayscale.
 	///	@param path Path of the PNG file to load.

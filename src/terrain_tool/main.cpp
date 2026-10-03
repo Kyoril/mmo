@@ -38,6 +38,7 @@ namespace mmo
 			ILOG("");
 			ILOG("  import  --data <dir> --heightmap <png> --meta <json> [--world <name>] [--material <asset>]");
 			ILOG("          Converts a 16-bit grayscale heightmap into terrain page (.tile) files.");
+			ILOG("          Optional --splat <rgba.png>: exact-size four-channel layer weights, sum 255 per pixel.");
 			ILOG("  export  --data <dir> --world <name> --pages x0,z0,x1,z1 --out <png> [--meta-out <json>]");
 			ILOG("          Exports terrain pages back into a heightmap image plus metadata sidecar.");
 			ILOG("  preview --data <dir> --world <name> --pages x0,z0,x1,z1 --out <png> [--contours <units>] [--scale <n>]");
@@ -76,6 +77,7 @@ int main(int argc, char *argv[])
 	mmo::String dataDirectory;
 	mmo::String world;
 	mmo::String heightmapPath;
+	mmo::String splatmapPath;
 	mmo::String metaPath;
 	mmo::String material;
 	mmo::String pageRect;
@@ -92,6 +94,7 @@ int main(int argc, char *argv[])
 		("d,data", "path of the client data directory (e.g. H:/mmo/data/client)", cxxopts::value<std::string>(dataDirectory))
 		("w,world", "world name", cxxopts::value<std::string>(world))
 		("heightmap", "path of the 16-bit grayscale heightmap PNG to import", cxxopts::value<std::string>(heightmapPath))
+		("splat", "optional RGBA splat PNG, (pages * 1008 + 1) pixels per axis, weights sum to 255", cxxopts::value<std::string>(splatmapPath))
 		("m,meta", "path of the zone metadata JSON", cxxopts::value<std::string>(metaPath))
 		("material", "per-tile material asset path override", cxxopts::value<std::string>(material))
 		("water-level", "flag water quads below this world height (overrides metadata)", cxxopts::value<float>(waterLevel))
@@ -136,6 +139,7 @@ int main(int argc, char *argv[])
 			mmo::ImportArgs args;
 			args.world = world;
 			args.heightmapPath = heightmapPath;
+			args.splatmapPath = splatmapPath;
 			args.metaPath = metaPath;
 			args.materialOverride = material;
 			args.waterLevelOverride = waterLevel;

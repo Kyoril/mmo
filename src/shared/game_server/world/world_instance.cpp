@@ -73,9 +73,12 @@ namespace mmo
 	{
 		m_map = std::make_shared<nav::Map>(mapEntry.directory());
 
-		// Load all map pages
-		DLOG("Loading nav map pages...");
-		m_map->LoadAllPages();
+		// Stream the nav mesh pages in instead of loading them all here: on a large map that
+		// held up the world thread for every instance created. Queries load what they touch on
+		// demand until streaming completes (see EnsureNavLoaded).
+		m_pageStreamer = std::make_unique<nav::PageStreamer>(*m_map);
+		m_navStreamStart = std::chrono::steady_clock::now();
+		DLOG("NavMapData: streaming " << m_pageStreamer->GetPageCount() << " nav page(s) for map '" << mapEntry.directory() << "'");
 
 		// Load world geometry for accurate 3D LOS. The collision map is kept even when no
 		// static geometry was found, so dynamic collision (e.g. doors) can still block LOS;
@@ -158,13 +161,69 @@ namespace mmo
 		}
 	}
 
+	void NavMapData::Update()
+	{
+		if (!m_pageStreamer)
+		{
+			return;
+		}
+
+		// A slice of each 30 ms world tick. Reading the pages happens on the streamer's thread;
+		// this only pays for adding the read tiles to Detour, which is not thread-safe.
+		constexpr auto installBudget = std::chrono::milliseconds(4);
+		if (!m_pageStreamer->InstallReadyPages(installBudget))
+		{
+			return;
+		}
+
+		const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_navStreamStart);
+		DLOG("NavMapData: nav map '" << m_map->GetName() << "' complete, " << m_pageStreamer->GetPageCount() << " page(s) streamed in " << elapsed.count() << " ms"
+			<< (m_pageStreamer->GetFailedPageCount() > 0 ? " (" + std::to_string(m_pageStreamer->GetFailedPageCount()) + " failed)" : std::string()));
+		m_pageStreamer.reset();
+	}
+
+	void NavMapData::EnsureNavLoaded(const Vector3& a, const Vector3& b, const float margin) const
+	{
+		if (m_pageStreamer)
+		{
+			m_pageStreamer->EnsureLoaded(
+				std::min(a.x, b.x) - margin, std::min(a.z, b.z) - margin,
+				std::max(a.x, b.x) + margin, std::max(a.z, b.z) + margin);
+		}
+	}
+
 	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const
 	{
+		// A path may bend out of the box its endpoints span; the margin covers the usual detour.
+		constexpr float pathMargin = 64.0f;
+		EnsureNavLoaded(start, destination, pathMargin);
+
+		const bool found = m_map->FindPath(start, destination, out_path, true);
+		if (!found || !m_pageStreamer || out_path.empty())
+		{
+			return found;
+		}
+
+		// While streaming, a path that stops short may have run into a page that is still
+		// pending outside the margin, rather than into a real obstacle. Widen the area by a full
+		// page and ask once more, so the unit is not sent to a dead end the finished map lacks.
+		const float dx = out_path.back().x - destination.x;
+		const float dz = out_path.back().z - destination.z;
+		constexpr float arrivalTolerance = 2.0f;
+		if (dx * dx + dz * dz <= arrivalTolerance * arrivalTolerance)
+		{
+			return true;
+		}
+
+		EnsureNavLoaded(start, destination, static_cast<float>(terrain::constants::PageSize));
+		out_path.clear();
 		return m_map->FindPath(start, destination, out_path, true);
 	}
 
 	bool NavMapData::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
 	{
+		EnsureNavLoaded(centerPosition, centerPosition, radius + 5.0f);
+
 		return m_map->FindRandomPointAroundCircle(centerPosition, radius, randomPoint);
 	}
 
@@ -290,6 +349,11 @@ namespace mmo
 	void WorldInstance::Update(const RegularUpdate& update)
 	{
 		m_updating = true;
+
+		if (m_mapData)
+		{
+			m_mapData->Update();
+		}
 
 		// Update game time
 		m_gameTime.Update(update.GetTimestamp());
