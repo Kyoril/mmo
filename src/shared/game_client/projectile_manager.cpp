@@ -604,7 +604,6 @@ namespace mmo
 		}
 	}
 
-	/// @brief Wrapper to adapt GameUnitC to IProjectileTarget interface.
 	namespace
 	{
 		/// Bone projectiles aim at, and the height used when a model has no such bone.
@@ -626,16 +625,13 @@ namespace mmo
 			if (Entity* entity = unit.GetEntity(); entity && !boneName.empty() && entity->HasSkeleton())
 			{
 				const auto& skeleton = entity->GetSkeleton();
-				if (skeleton && skeleton->HasBone(boneName))
+				if (const Bone* bone = skeleton ? skeleton->GetBone(boneName) : nullptr)
 				{
-					if (const Bone* bone = skeleton->GetBone(boneName))
+					const Vector3 local = bone->GetDerivedPosition();
+					if (const SceneNode* node = entity->GetParentSceneNode())
 					{
-						const Vector3 local = bone->GetDerivedPosition();
-						if (const SceneNode* node = entity->GetParentSceneNode())
-						{
-							return node->GetDerivedPosition() +
-								node->GetDerivedOrientation() * (node->GetDerivedScale() * local);
-						}
+						return node->GetDerivedPosition() +
+							node->GetDerivedOrientation() * (node->GetDerivedScale() * local);
 					}
 				}
 			}
@@ -644,6 +640,7 @@ namespace mmo
 		}
 	}
 
+	/// @brief Wrapper to adapt GameUnitC to IProjectileTarget interface.
 	class GameUnitProjectileTarget : public IProjectileTarget
 	{
 	public:

@@ -2773,6 +2773,9 @@ namespace mmo
 				}
 			}
 
+			// A caster that despawns or leaves view mid-channel never sends ChannelUpdate(0) to us.
+			SpellVisualizationService::Get().EndChannel(id);
+
 			ObjectMgr::RemoveObject(id);
 
 			// Trigger UI event after the object has been removed from ObjectMgr
@@ -4026,7 +4029,7 @@ namespace mmo
 				casterUnit->NotifyChannelStarted(*spell, spellId, static_cast<GameTime>(duration));
 
 				// Held until ChannelUpdate(0), across the SpellGo that follows in the same tick.
-				SpellVisualizationService::Get().BeginChannel(*spell, *casterUnit);
+				SpellVisualizationService::Get().BeginChannel(*spell, *casterUnit, static_cast<GameTime>(duration));
 			}
 		}
 

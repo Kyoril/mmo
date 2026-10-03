@@ -134,7 +134,9 @@ namespace mmo
         /// They are held until EndChannel: the channel spell's own SpellGo, and the SpellGos of
         /// the spells it triggers every tick (Fire Barrage's projectiles), arrive while the
         /// channel runs and must not stop its loop animation or loop sound.
-        void BeginChannel(const proto_client::SpellEntry& spell, GameUnitC& caster);
+        /// \param durationMs Channel length from ChannelStart; a channel still recorded well past
+        ///        it is treated as ended (see ActiveChannel::expiresAt).
+        void BeginChannel(const proto_client::SpellEntry& spell, GameUnitC& caster, GameTime durationMs);
 
         /// \brief End the running channel of a caster, if any (call when the channel ends).
         void EndChannel(uint64 casterGuid);
@@ -334,7 +336,15 @@ namespace mmo
         {
             uint32 spellId{ 0 };
             uint32 visualizationId{ 0 };
+            /// Async time after which the channel is treated as over even without its end
+            /// packet. The server does not send ChannelUpdate(0) on every path (a caster that
+            /// despawns mid-channel, consumption failing after ChannelStart), and a stale entry
+            /// would keep suppressing the loop cleanup of the unit's later casts.
+            GameTime expiresAt{ 0 };
         };
+
+        /// \brief Whether a caster has a running channel, ending an expired one on the way.
+        bool IsChanneling(uint64 casterGuid);
 
         /// \brief Caster guid -> running channel.
         std::map<uint64, ActiveChannel> m_channels;

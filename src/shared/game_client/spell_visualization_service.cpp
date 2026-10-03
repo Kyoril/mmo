@@ -3,6 +3,7 @@
 #include "spell_visualization_service.h"
 #include "game_unit_c.h"
 #include "object_mgr.h"
+#include "base/clock.h"
 #include "sound_entry_player.h"
 #include "spell_visual_rules.h"
 #include "log/default_log_levels.h"
@@ -165,7 +166,7 @@ namespace mmo
             // While a channel runs, the loop animation and loop sound belong to it: the channel
             // spell's own SpellGo and those of the spells it triggers (every tick for Fire
             // Barrage) arrive mid-channel. EndChannel releases them.
-            const bool casterChanneling = m_channels.contains(caster->GetGuid());
+            const bool casterChanneling = IsChanneling(caster->GetGuid());
 
             // Clear any locked loop animation (e.g. cast channel animation)
             if (!casterChanneling)
@@ -548,7 +549,24 @@ namespace mmo
         m_channels.clear();
     }
 
-    void SpellVisualizationService::BeginChannel(const proto_client::SpellEntry& spell, GameUnitC& caster)
+    bool SpellVisualizationService::IsChanneling(const uint64 casterGuid)
+    {
+        const auto it = m_channels.find(casterGuid);
+        if (it == m_channels.end())
+        {
+            return false;
+        }
+
+        if (GetAsyncTimeMs() > it->second.expiresAt)
+        {
+            EndChannel(casterGuid);
+            return false;
+        }
+
+        return true;
+    }
+
+    void SpellVisualizationService::BeginChannel(const proto_client::SpellEntry& spell, GameUnitC& caster, const GameTime durationMs)
     {
         // A new channel replaces whatever the caster was channeling before.
         EndChannel(caster.GetGuid());
@@ -573,6 +591,9 @@ namespace mmo
         ActiveChannel& channel = m_channels[caster.GetGuid()];
         channel.spellId = spell.id();
         channel.visualizationId = vis->id();
+        // Grace for latency and the end packet trailing the last tick.
+        constexpr GameTime ChannelEndGraceMs = 2000;
+        channel.expiresAt = GetAsyncTimeMs() + durationMs + ChannelEndGraceMs;
 
         // Tracked under the channel key, so neither the spell's cast-end nor its aura removal
         // touches these effects.

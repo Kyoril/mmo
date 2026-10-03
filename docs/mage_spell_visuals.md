@@ -120,7 +120,10 @@ service skips the animation and still plays particles, light and sound.
    spell's cast-end nor its aura removal touches them, and while a caster channels, terminating
    events (the channel spell's own SpellGo, and every SpellGo of the spells it triggers) leave
    its locked loop animation and loop sound alone. Triggers cannot play it: the trigger editor
-   and the world server stop at AURA_IDLE.
+   and the world server stop at AURA_IDLE. Not every server path sends ChannelUpdate(0) (a
+   caster despawning mid-channel; consumption failing after ChannelStart is sent), so a channel
+   also ends when its caster is destroyed client-side and is treated as over 2 s past its
+   duration -- a stale record would keep suppressing the loop cleanup of the unit's later casts.
 
 None of these touch the wire: visualization contents and event values never cross it; no
 `ProtocolVersion` bump.
