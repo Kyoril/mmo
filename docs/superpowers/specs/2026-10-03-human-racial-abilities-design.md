@@ -37,8 +37,12 @@ Passives:
 - *Versatility*: five `ApplyAura` effects, `ModStatPct` (aura 31), basepoints 2, `miscvaluea`
   0–4, target caster, infinite duration.
 - *Used to Hard Work*: one `ApplyAura`, `ModHealthRegenPercent` (aura 38), basepoints 10.
-- Both get an icon from the existing icon set and an aura text, so they are readable in the
-  spellbook and on hover.
+- Both carry `HiddenAura`, like talent passives, so two permanent buffs do not clutter the
+  buff bar. They are read from the spellbook (icon + description).
+- Icons (unused so far):
+  - *Versatility* `T_Icon_Gold_17` (scales)
+  - *Used to Hard Work* `T_Icon_Gold_07` (hammer)
+  - *Call of the Watch* `T_Icon_Gold_84` (winged crest)
 
 Active (*Call of the Watch*):
 - Attribute `Ability`, so it is auto-placed on the action bar of new characters and lands in the
@@ -83,10 +87,13 @@ does not need the racial list.
 
 ## Area-aura duration fix
 
-`AuraContainer::HandleAreaAuraTick` copies the caster's aura to party members with `m_duration`.
-If that is the full duration rather than the remaining one, a member who leaves range and
-returns gets a fresh 10 s while the caster's aura is about to expire. This is verified first;
-if confirmed, propagated auras receive the caster aura's remaining duration.
+`AuraContainer::HandleAreaAuraTick` copies the caster's aura to party members with the full
+`m_duration` (confirmed in code). A member who leaves range and returns therefore gets a
+fresh 10 s, even when the caster's aura is about to expire.
+
+The fix: propagated copies start with the caster aura's remaining time, via the existing
+`SetInitialRemainingTime`. A timed aura with no time left is not propagated at all, because
+an initial remaining time of 0 would fall back to the full duration.
 
 ## Visualization of *Call of the Watch*
 
@@ -123,14 +130,18 @@ Colour language: warm gold with a steel-blue accent — the Watch and the Crown,
 
 ## Testing
 
-- **Unit test** (`game_server_tests` or the nearest suite reaching the code): a player with
-  racial spells keeps them across a class switch.
-- If the creation and backfill logic is factored into a helper, the helper is unit-tested
-  directly: it merges the racial list without duplicates and skips unknown spell ids.
+- **Unit tests** (`game_server_tests`):
+  - The racial-spell helper merges the list without duplicates and skips unknown spell ids.
+  - The action-bar predicate.
+  - The area-aura propagation-time function.
+  - `realm_server/player.cpp` itself is not compiled into any test suite, so the logic lives
+    in `game_server`.
 - **E2E scenario** `e2e/scenarios/human_racials.lua`:
   - A fresh human character knows all three spells.
-  - Both passive auras are active.
   - Casting *Call of the Watch* applies its aura and puts the spell on cooldown.
+  - After switching to another class, all three racials are still known and castable.
+  - The passive auras are hidden and cannot be observed from the client. Passive application
+    uses the same path as every other passive (Dodge, talents).
 - **Data tests:** the new spells carry all four locales, racemask Human and classmask 0.
 - Gate: `/gate` must be green before `/ship`.
 
