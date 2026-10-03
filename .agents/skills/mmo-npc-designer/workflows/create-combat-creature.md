@@ -13,7 +13,7 @@ Read these reference files now:
 3. Default to `useStatBasedSystem = true` and select a real `unitClassId` from live data unless the request is explicitly legacy.
 4. Decide whether the creature is passive, neutral, or aggressive through faction setup, movement, triggers, and combat spell choices rather than through prose alone.
 5. Configure combat abilities with existing spell IDs. Confirm range, passives, and proc behavior against the spell system. If the creature needs new abilities, invoke `mmo-spell-designer`.
-6. Configure loot through `unit.unitlootentry` and the linked `loot_entry`. Validate every referenced item ID. If the loot table needs new items, invoke `mmo-item-designer`.
+6. Configure loot through `unit.unitlootentries` following `<loot_design>` in `references/npc-authoring-workflow.md`: link the family base table plus the matching level-band tables, never money on animals, and simulate the empty-loot rate. Validate every referenced item ID. If the loot table needs new items, invoke `mmo-item-designer`.
 7. Use `script_name` only when the name is actually registered in the current C++ runtime. Otherwise leave it empty and rely on default AI plus triggers and spells.
 8. Validate the draft with `scripts/validate_npc_json.py`.
 </process>
