@@ -46,6 +46,10 @@ if ($NoRun)
 $reportDir = Get-ReportDir
 New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 $target = Join-Path $reportDir ("release-{0}.json" -f $short)
+if (Test-Path $target)
+{
+	Remove-Item -Path $target -Force
+}
 
 Write-Host ("No full gate covers {0} yet - running it in the nightly worktree." -f $short)
 $lock = Enter-GateWorktreeLock
@@ -82,7 +86,8 @@ try
 		exit 0
 	}
 
-	Write-Host ("RED: full gate failed for {0} ({1}). Report: {2}; step logs: {3}" -f $short, $Ref, $target, $logsDir) -ForegroundColor Red
+	$reportMsg = if ($reportMatches) { $target } else { "no report was written" }
+	Write-Host ("RED: full gate failed for {0} ({1}). Report: {2}; step logs: {3}" -f $short, $Ref, $reportMsg, $logsDir) -ForegroundColor Red
 	exit 1
 }
 finally

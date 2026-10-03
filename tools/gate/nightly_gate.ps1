@@ -127,7 +127,7 @@ try
 	$report | Add-Member -NotePropertyName last_green_commit -NotePropertyValue $script:lastGreenCommit -Force
 	$report | Add-Member -NotePropertyName merges_since_last_green -NotePropertyValue $script:merges -Force
 	Write-NightlyReport $report
-	exit $exit
+	exit (if ($report.passed -eq $true) { 0 } else { 1 })
 }
 catch
 {
