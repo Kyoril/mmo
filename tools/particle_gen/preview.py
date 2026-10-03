@@ -378,8 +378,70 @@ def _resolve_material(material_name, data_root):
     return result
 
 
-def _draw_particle(buf, cx, cy, half_w, half_h, angle, rgba, opaque):
-    """Stamp an axis-aligned-then-rotated soft blob into the float RGB buffer."""
+# --- Sprite textures ------------------------------------------------------------------
+#
+# A material instance (.hmi) names its sprite in a TPAR chunk. Sampling that sprite's alpha
+# instead of a generic blob is what lets a preview show a rune circle as a rune circle;
+# without it every shaped sprite (sigil, feather, flame, rays) looks like the same puff.
+# Materials without a resolvable texture fall back to the blob.
+
+_SPRITE_CACHE = {}
+_HTEX_TOOL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".claude",
+                          "skills", "mmo-material-editor", "scripts")
+
+
+def _material_texture(material_name, data_root):
+    path = os.path.join(data_root, material_name.replace("/", os.sep))
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+    pos = 12 if data[:4] == b"HMIT" else 0
+    while pos + 8 <= len(data):
+        magic = data[pos:pos + 4]
+        size = struct.unpack("<I", data[pos + 4:pos + 8])[0]
+        if magic == b"TPAR":
+            payload = data[pos + 8:pos + 8 + size]
+            count, cur = payload[0], 1
+            for _ in range(count):
+                name_len = payload[cur]
+                cur += 1 + name_len
+                value_len = struct.unpack("<H", payload[cur:cur + 2])[0]
+                cur += 2
+                return payload[cur:cur + value_len].decode("ascii", "replace")
+        pos += 8 + size
+    return None
+
+
+def _get_sprite(material_name, data_root):
+    """Alpha mask (float HxW, row 0 = top of the texture) for a material, or None."""
+    if not material_name:
+        return None
+    if material_name in _SPRITE_CACHE:
+        return _SPRITE_CACHE[material_name]
+    sprite = None
+    texture = _material_texture(material_name, data_root)
+    if texture:
+        try:
+            if _HTEX_TOOL not in sys.path:
+                sys.path.insert(0, _HTEX_TOOL)
+            from pathlib import Path
+            import htex_tool
+            info = htex_tool.read_htex(Path(os.path.join(data_root, texture.replace("/", os.sep))))
+            mip = 0
+            while mip + 1 < info.get("mip_count", 1) and min(info["width"] >> mip, info["height"] >> mip) > 128:
+                mip += 1
+            image = htex_tool.decode_mip(info, mip).convert("RGBA")
+            sprite = np.asarray(image, dtype=float)[..., 3] / 255.0
+        except Exception:  # an undecodable texture just falls back to the blob
+            sprite = None
+    _SPRITE_CACHE[material_name] = sprite
+    return sprite
+
+
+def _draw_particle(buf, cx, cy, half_w, half_h, angle, rgba, opaque, sprite=None, flip_v=False):
+    """Stamp an axis-aligned-then-rotated sprite (or soft blob) into the float RGB buffer."""
     h, w = buf.shape[:2]
     ext = int(math.ceil(math.hypot(half_w, half_h))) + 1
     if ext <= 0:
@@ -395,8 +457,18 @@ def _draw_particle(buf, cx, cy, half_w, half_h, angle, rgba, opaque):
     ca, sa = math.cos(-angle), math.sin(-angle)
     u = (dx * ca - dy * sa) / max(half_w, 1e-3)
     v = (dx * sa + dy * ca) / max(half_h, 1e-3)
-    r = np.sqrt(u * u + v * v)
-    mask = np.clip(1.0 - r, 0.0, 1.0) ** 2.0
+    if sprite is not None:
+        sh, sw = sprite.shape
+        inside = (np.abs(u) <= 1.0) & (np.abs(v) <= 1.0)
+        tx = np.clip(((u + 1.0) * 0.5 * sw).astype(int), 0, sw - 1)
+        # Stretched quads put the texture top on the end the particle travels towards
+        # (particle_emitter.cpp); the rotation above points +v away from it, so flip.
+        tv = -v if flip_v else v
+        ty = np.clip(((tv + 1.0) * 0.5 * sh).astype(int), 0, sh - 1)
+        mask = np.where(inside, sprite[ty, tx], 0.0)
+    else:
+        r = np.sqrt(u * u + v * v)
+        mask = np.clip(1.0 - r, 0.0, 1.0) ** 2.0
     a = mask * rgba[3]
     if not np.any(a > 0.002):
         return
@@ -507,6 +579,7 @@ def _render_frame(sims, size, camera, ppu, origin_y_px, figure, exposure, data_r
         params = sim.p
         blend, _ = _resolve_material(params.material_name, data_root)
         opaque = (blend == "opaque")
+        sprite = _get_sprite(params.material_name, data_root)
         stretched = params.render_mode in (hpar.RENDER_VELOCITY_ALIGNED, hpar.RENDER_STRETCHED)
         for particle in sim.particles:
             cx, cy = _project(particle.pos, camera, ppu, size, size, origin_y_px)
@@ -530,7 +603,7 @@ def _render_frame(sims, size, camera, ppu, origin_y_px, figure, exposure, data_r
             else:
                 angle = particle.rotation
 
-            _draw_particle(buf, cx, cy, half_w, half_h, angle, particle.color, opaque)
+            _draw_particle(buf, cx, cy, half_w, half_h, angle, particle.color, opaque, sprite, flip_v=stretched)
 
     buf = buf * exposure
     return Image.fromarray((np.clip(buf, 0.0, 1.0) * 255).astype(np.uint8), "RGB")

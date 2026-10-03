@@ -3749,7 +3749,18 @@ namespace mmo
 				}
 			}
 		}
-		else
+		// Cast succeeded is dispatched before the impact: it is the terminating event that tears
+		// down the caster's cast-phase effects and cast tint, and on a self-cast the impact lands
+		// on the caster. Dispatched the other way round, the impact's tint was removed in the
+		// same frame it was applied.
+		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+		{
+			// Trigger spell visualization for cast succeeded
+			std::vector<GameUnitC *> targets;
+			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CastSucceeded, *spell, casterUnit.get(), targets);
+		}
+
+		if (spell->speed() <= 0.0f)
 		{
 			// Instant spells: directly dispatch impact to unit targets if any
 			if (targetMap.HasUnitTarget())
@@ -3761,12 +3772,6 @@ namespace mmo
 				}
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, *spell, nullptr, targets);
 			}
-		}
-		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
-		{
-			// Trigger spell visualization for cast succeeded
-			std::vector<GameUnitC *> targets;
-			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CastSucceeded, *spell, casterUnit.get(), targets);
 		}
 
 		if (casterId == ObjectMgr::GetActivePlayerGuid())

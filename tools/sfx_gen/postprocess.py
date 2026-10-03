@@ -101,6 +101,31 @@ def process(samples: np.ndarray, sample_rate: int, target_dbfs: float = -3.0) ->
     return normalize_peak(faded, target_dbfs)
 
 
+def process_loop(samples: np.ndarray, sample_rate: int, target_dbfs: float = -9.0,
+                 crossfade_ms: float = 40.0) -> np.ndarray:
+    """Normalise a seamless loop without breaking its seam.
+
+    :func:`process` would destroy a loop twice over: trimming removes the material that
+    joins the end back to the start, and the fades put a click-free but very audible hole in
+    the sound once per cycle. Loops are generated seamless, so they are only levelled -- plus
+    a short equal-power crossfade of the tail into the head, which hides any residual
+    discontinuity the model left at the wrap point. The result is ``crossfade_ms`` shorter
+    than the input and still loops end-to-start.
+    """
+    if len(samples) == 0:
+        return samples.astype(np.float32, copy=True)
+
+    out = samples.astype(np.float32, copy=True)
+    n = int(sample_rate * crossfade_ms / 1000.0)
+    if 1 < n < len(out) // 4:
+        t = np.linspace(0.0, 1.0, n, dtype=np.float32)
+        fade_in = np.sin(t * np.pi * 0.5)
+        fade_out = np.cos(t * np.pi * 0.5)
+        head = out[:n] * fade_in + out[-n:] * fade_out
+        out = np.concatenate([head, out[n:-n]])
+    return normalize_peak(out, target_dbfs)
+
+
 def _ffmpeg() -> str:
     exe = shutil.which("ffmpeg")
     if not exe:
