@@ -1,21 +1,36 @@
 ﻿# Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
 # Local quality gate: protocol version check -> build -> unit tests -> E2E. Writes tools/gate/last_report.json
-# and exits 0 only if every step passed. /ship refuses to merge into develop without
-# a green, fresh (HEAD-matching), non-E2E-skipped report.
+# and exits 0 only if every step passed.
+#
+# Tiers:
+#   fast  protocol check, tool tests, build, unit tests (~1.5 min incremental). What /ship requires.
+#   full  fast + E2E (~8.5 min). Run nightly in H:/mmo-nightly, by /gate full and by release_check.ps1.
 #
 # Usage:
-#   powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/verify.ps1
-#   powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/verify.ps1 -SkipE2E   # quick pre-check; NOT valid for /ship
+#   powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/verify.ps1 -Tier fast
+#   powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/verify.ps1            # full
+#
+# $env:MMO_GATE_PYTHON overrides the python executable (the WindowsApps "python" alias is not
+# launchable from every context, e.g. Claude sessions or Task Scheduler).
 
 [CmdletBinding()]
 param(
+	[ValidateSet("fast", "full")]
+	[string]$Tier = "full",
+	# Legacy spelling of -Tier fast.
 	[switch]$SkipE2E,
 	# all_tests is an aggregate that every mmo_add_test() suite adds itself to, so a new
 	# test suite never needs an edit here.
 	[string[]]$Targets = @("login_server", "realm_server", "world_server", "e2e_client", "all_tests")
 )
 
+if ($SkipE2E)
+{
+	$Tier = "fast"
+}
+
+$python = if ($env:MMO_GATE_PYTHON) { $env:MMO_GATE_PYTHON } else { "python" }
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $logDir = Join-Path $PSScriptRoot "logs"
@@ -108,14 +123,14 @@ try
 	# First, and before the build, because it costs milliseconds and answers a question the
 	# build cannot: did the wire format change without the version bump that makes incompatible
 	# peers get rejected instead of silently misparsing each other?
-	$ok = Invoke-GateStep -Name "protocol" -Exe "python" -Arguments @("tools/protocol_version_check.py")
+	$ok = Invoke-GateStep -Name "protocol" -Exe $python -Arguments @("tools/protocol_version_check.py")
 
 	# After the check, not before: when the manifest is simply stale the step above says so
 	# in one clear line, and that is the common case. These tests are here for the case that
 	# check cannot report on -- the checker itself quietly breaking and passing everything.
 	if ($ok)
 	{
-		$ok = Invoke-GateStep -Name "protocol_tests" -Exe "python" -Arguments @("tools/tests/test_protocol_version_check.py")
+		$ok = Invoke-GateStep -Name "protocol_tests" -Exe $python -Arguments @("tools/tests/test_protocol_version_check.py")
 	}
 
 	# Discovery rather than a list of filenames: a tool test that nobody runs rots silently,
@@ -125,7 +140,7 @@ try
 	# does not read as the protocol checker itself being broken.
 	if ($ok)
 	{
-		$ok = Invoke-GateStep -Name "tool_tests" -Exe "python" -Arguments @("-m", "unittest", "discover", "-s", "tools/tests", "-p", "test_*.py")
+		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments @("-m", "unittest", "discover", "-s", "tools/tests", "-p", "test_*.py")
 	}
 
 	# Warning only: a stale .claude/skills copy does not break the build, but it is how an agent
@@ -145,7 +160,7 @@ try
 		$ok = Invoke-GateStep -Name "tests" -Exe "ctest" -Arguments @("-C", "Debug", "--output-on-failure") -WorkingDirectory (Join-Path $repoRoot "build")
 	}
 
-	if ($ok -and -not $SkipE2E)
+	if ($ok -and $Tier -eq "full")
 	{
 		if (-not $env:MMO_E2E_MYSQL_PASSWORD)
 		{
@@ -174,7 +189,8 @@ finally
 		commit = $commit
 		timestamp = (Get-Date -Format "o")
 		config = "Debug"
-		e2e_skipped = [bool]$SkipE2E
+		tier = $Tier
+		e2e_skipped = ($Tier -ne "full")
 		steps = $steps
 		passed = $reportPassed
 	} | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PSScriptRoot "last_report.json") -Encoding UTF8
