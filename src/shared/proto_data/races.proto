@@ -73,6 +73,10 @@ message RaceEntry {
 	repeated uint32 allowedClasses = 19;
 	optional VoiceLineSet male_voice = 20;
 	optional VoiceLineSet female_voice = 21;
+	// Spells every character of this race knows regardless of class (racial abilities).
+	// Granted at character creation and backfilled on login. Racial spells should carry
+	// classmask 0 so they stay active across class switches.
+	repeated uint32 racialSpells = 22;
 }
 
 message Races {
