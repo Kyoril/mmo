@@ -8,6 +8,7 @@
 #include "shared/proto_data/spells.pb.h"
 
 #include <memory>
+#include <vector>
 
 namespace mmo
 {
@@ -49,7 +50,9 @@ namespace mmo
 		virtual const proto::SpellEntry* GetSpell() const = 0;
 	};
 
-	/// Creates and activates a cast state for the given spell.
+	/// Creates a cast state for the given spell and installs it as the cast's current state.
+	/// Only for deliberate casts: procs go through SpellCast::StartCast, which never replaces the
+	/// current state.
 	/// @returns CastOkay when the cast actually started. A spell that fails validation reports
 	///          its failure here rather than pretending to have started - callers rely on this to
 	///          tell a real cast from one that died during activation.
@@ -58,8 +61,7 @@ namespace mmo
 		const proto::SpellEntry& spell,
 		const SpellTargetMap& target,
 		GameTime castTime,
-		uint64 itemGuid,
-		bool isProc = false
+		uint64 itemGuid
 	);
 
 	class SpellCast
@@ -98,9 +100,16 @@ namespace mmo
 		signal<void(bool)> ended;
 
 	private:
+		/// Resolves a proc or triggered cast beside the current state instead of in place of it.
+		void StartProcCast(const proto::SpellEntry& spell, const SpellTargetMap& target, GameTime castTime, uint64 itemGuid);
+
+	private:
 
 		TimerQueue& m_timerQueue;
 		GameUnitS& m_executor;
 		std::shared_ptr<CastState> m_castState;
+		/// Proc casts that may still be resolving, e.g. with a projectile in flight. They keep
+		/// themselves alive; these references only let AbandonCast reach them.
+		std::vector<std::weak_ptr<CastState>> m_procCasts;
 	};
 }

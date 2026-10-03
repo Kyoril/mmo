@@ -879,7 +879,10 @@ namespace mmo
 		}
 
 		SpellCastResult r = m_spellCast->StartCast(spell, target, castTimeMs, isProc, itemGuid);
-		if (r == spell_cast_result::CastOkay)
+
+		// A proc does not occupy the caster and never reports its end through SpellCast::ended, so
+		// it must not report a start either: creature AI would wait for an end that never comes.
+		if (r == spell_cast_result::CastOkay && !isProc)
 		{
 			startedCasting(spell);
 

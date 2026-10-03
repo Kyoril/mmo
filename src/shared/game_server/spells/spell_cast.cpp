@@ -8,11 +8,13 @@
 #include "single_cast_state.h"
 #include "log/default_log_levels.h"
 
+#include <algorithm>
+
 namespace mmo
 {
-	SpellCastResult CastSpell(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, GameTime castTime, uint64 itemGuid, bool isProc)
+	SpellCastResult CastSpell(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, GameTime castTime, uint64 itemGuid)
 	{
-		auto newState = std::make_shared<SingleCastState>(cast, spell, target, castTime, isProc, itemGuid);
+		auto newState = std::make_shared<SingleCastState>(cast, spell, target, castTime, false, itemGuid);
 
 		// SetState activates the state, which is where validation runs. The state stays owned by
 		// the cast afterwards even when validation rejected it, so reading its result here is safe.
@@ -69,7 +71,7 @@ namespace mmo
 		// Check if we have enough resources for that spell
 		if (isProc)
 		{
-			CastSpell(*this, spell, target, castTime, itemGuid, true);
+			StartProcCast(spell, target, castTime, itemGuid);
 			return spell_cast_result::CastOkay;
 		}
 
@@ -95,6 +97,36 @@ namespace mmo
 
 		// Back to idle so nothing can reach the abandoned state through this cast any more.
 		m_castState = std::make_shared<NoCastState>();
+
+		// A proc still resolving reaches the caster through this cast just the same, e.g. when
+		// its projectile lands.
+		auto procCasts = std::move(m_procCasts);
+		m_procCasts.clear();
+		for (const auto& weakProc : procCasts)
+		{
+			if (const auto procCast = weakProc.lock())
+			{
+				procCast->AbandonCast();
+			}
+		}
+	}
+
+	void SpellCast::StartProcCast(const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const uint64 itemGuid)
+	{
+		// A proc never becomes the current state. Triggered spells go off while the caster is
+		// casting or channeling something else - a channel's own periodic trigger does so on every
+		// tick - and installing the proc there swapped that cast out: it kept running on its own
+		// timer, but movement, interrupts and control effects reached the finished proc instead.
+		m_procCasts.erase(
+			std::remove_if(m_procCasts.begin(), m_procCasts.end(),
+				[](const std::weak_ptr<CastState>& weakProc) { return weakProc.expired(); }),
+			m_procCasts.end());
+
+		auto procCast = std::make_shared<SingleCastState>(*this, spell, target, castTime, true, itemGuid);
+		m_procCasts.push_back(procCast);
+
+		// The state holds itself from here until it has resolved.
+		procCast->Activate();
 	}
 
 	void SpellCast::OnUserStartsMoving()
