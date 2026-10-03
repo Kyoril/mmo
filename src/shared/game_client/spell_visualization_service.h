@@ -52,7 +52,8 @@ namespace mmo
             AuraApplied = 5,
             AuraRemoved = 6,
             AuraTick = 7,
-            AuraIdle = 8
+            AuraIdle = 8,
+            Channeling = 9
         };
 
     public:
@@ -127,6 +128,16 @@ namespace mmo
         ///        dereferences emitters of the destroyed scene (most easily via a long-lived aura
         ///        effect such as Frost Armor's). Scene objects are left to the scene's teardown.
         void Reset();
+
+        /// \brief Start the CHANNELING kits of a channeled spell on its caster (call on ChannelStart).
+        ///
+        /// They are held until EndChannel: the channel spell's own SpellGo, and the SpellGos of
+        /// the spells it triggers every tick (Fire Barrage's projectiles), arrive while the
+        /// channel runs and must not stop its loop animation or loop sound.
+        void BeginChannel(const proto_client::SpellEntry& spell, GameUnitC& caster);
+
+        /// \brief End the running channel of a caster, if any (call when the channel ends).
+        void EndChannel(uint64 casterGuid);
 
     private:
         SpellVisualizationService() = default;
@@ -317,6 +328,16 @@ namespace mmo
 
         /// \brief Kits waiting for their delay to elapse; drained in Update().
         mutable std::vector<PendingKit> m_pendingKits;
+
+        /// \brief A channel whose CHANNELING kits are running on its caster.
+        struct ActiveChannel
+        {
+            uint32 spellId{ 0 };
+            uint32 visualizationId{ 0 };
+        };
+
+        /// \brief Caster guid -> running channel.
+        std::map<uint64, ActiveChannel> m_channels;
 
         /// \brief Counter for generating unique effect names.
         mutable uint32 m_effectCounter{ 0 };

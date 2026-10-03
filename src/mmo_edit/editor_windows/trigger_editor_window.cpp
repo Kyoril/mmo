@@ -116,13 +116,15 @@ namespace mmo
 	// the stored value, so the order is the enum's order and not a display order; the static_asserts
 	// are what keeps them from drifting the way the action-name list once did.
 
-	/// Names for proto::SpellVisualEvent, in enum order.
+	/// Names for proto::SpellVisualEvent, in enum order, up to AURA_IDLE: the events a trigger may
+	/// play. CHANNELING is held by a running channel and cannot be played on its own -- the world
+	/// server rejects any value past AURA_IDLE (trigger_handler.cpp).
 	static const char* s_spellVisualEventNames[] = {
 		"Start Cast", "Cancel Cast", "Casting", "Cast Succeeded", "Impact",
 		"Aura Applied", "Aura Removed", "Aura Tick", "Aura Idle"
 	};
 
-	static_assert(std::size(s_spellVisualEventNames) == proto::SpellVisualEvent_ARRAYSIZE,
+	static_assert(std::size(s_spellVisualEventNames) == proto::AURA_IDLE + 1,
 		"s_spellVisualEventNames size mismatch");
 
 	/// Names for trigger_spell_cast_target::Type, in enum order.

@@ -21,6 +21,21 @@ TEST_CASE("Only StartCast and Casting spawn cast-phase effects", "[spell_visual]
 	CHECK_FALSE(spell_visual::IsCastPhaseEvent(AuraRemoved));
 	CHECK_FALSE(spell_visual::IsCastPhaseEvent(AuraTick));
 	CHECK_FALSE(spell_visual::IsCastPhaseEvent(AuraIdle));
+	CHECK_FALSE(spell_visual::IsCastPhaseEvent(Channeling));
+}
+
+TEST_CASE("Channel keys stay apart from spell, timed-tint and synthetic keys", "[spell_visual]")
+{
+	constexpr uint32 spellId = 150;
+	const uint32 channelKey = spell_visual::ChannelKey(spellId);
+
+	// Cast-end and aura-removal cleanups match effects by key; a channel key equal to the
+	// spell id would let the channel spell's own SpellGo tear its channel down.
+	CHECK(channelKey != spellId);
+	CHECK((channelKey & ~spell_visual::ChannelKeyBit) == spellId);
+	CHECK(channelKey != spell_visual::TimedTintKey(spellId));
+	CHECK((spell_visual::ChannelKeyBit & spell_visual::TimedTintKeyBit) == 0);
+	CHECK((spell_visual::ChannelKeyBit & 0x80000000u) == 0);
 }
 
 TEST_CASE("Timed tint keys never collide with persistent or synthetic keys", "[spell_visual]")
