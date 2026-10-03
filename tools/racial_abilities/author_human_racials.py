@@ -72,7 +72,7 @@ def texts(name, description, auratext):
 
 
 def common(spell_id, icon):
-    return {"id": spell_id, "baseid": spell_id, "rank": 1, "baselevel": 1, "spelllevel": 1,
+    return {"id": spell_id, "baseid": 0, "rank": 0, "baselevel": 1, "spelllevel": 1,
             "racemask": HUMAN_RACEMASK, "classmask": 0, "positive": 1,
             "icon": ICON_DIR + icon}
 

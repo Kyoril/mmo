@@ -42,6 +42,12 @@ class HumanRacialDataTest(unittest.TestCase):
             self.assertEqual(spell.racemask, self.ahr.HUMAN_RACEMASK, spell.name)
             self.assertEqual(spell.classmask, 0, spell.name)
 
+    def test_racials_have_no_rank(self):
+        # Rank 0 hides the "Rank 1" line in the tooltip: racials never get further ranks.
+        for spell_id in self.ahr.SPELL_IDS:
+            spell = self.spell(spell_id)
+            self.assertEqual((spell.rank, spell.baseid), (0, 0), spell.name)
+
     def test_passives_are_hidden_passive_auras(self):
         for spell_id in (248, 249):
             spell = self.spell(spell_id)

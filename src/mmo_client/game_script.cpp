@@ -936,6 +936,13 @@ namespace mmo
 			return (spell->attributes(0) & spell_attributes::Passive) != 0;
 		}
 
+		/// Racial abilities are restricted to one or more races instead of a class (racemask set,
+		/// classmask 0), so the tooltip can label them as such.
+		bool Script_IsRacialSpell(const proto_client::SpellEntry *spell)
+		{
+			return spell != nullptr && spell->racemask() != 0 && spell->classmask() == 0;
+		}
+
 		void Script_Quit()
 		{
 			EventLoop::Terminate(0);
@@ -1437,6 +1444,7 @@ namespace mmo
 					   luabind::def("GetSpellDescription", &Script_GetSpellDescription),
 					   luabind::def("GetSpellAuraText", &Script_GetSpellAuraText),
 					   luabind::def("IsPassiveSpell", &Script_IsPassiveSpell),
+					   luabind::def("IsRacialSpell", &Script_IsRacialSpell),
 
 					   luabind::def("MoveForwardStart", &Script_MoveForwardStart),
 					   luabind::def("MoveForwardStop", &Script_MoveForwardStop),
