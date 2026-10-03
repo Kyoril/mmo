@@ -37,6 +37,9 @@ namespace mmo
 		/// Handles a Message of the Day update.
 		void handleSetMotd(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
+		/// POST /subsystem: switches a subsystem realm-wide ('name=BUG_REPORT', 'enabled=0|1').
+		void handleSetSubsystem(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+
 		/// GET /time-of-day: reports the realm-wide time of day, the system time and the override offset.
 		void handleGetTimeOfDay(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 

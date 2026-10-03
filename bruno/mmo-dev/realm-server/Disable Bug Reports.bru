@@ -1,0 +1,21 @@
+meta {
+  name: Disable Bug Reports
+  type: http
+  seq: 9
+}
+
+post {
+  url: http://localhost:8092/subsystem
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  name: BUG_REPORT
+  enabled: 0
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

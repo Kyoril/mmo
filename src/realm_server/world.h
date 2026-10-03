@@ -22,6 +22,9 @@
 #include "game/chat_type.h"
 
 
+#include "game/bug_report.h"
+#include "realm_subsystem_table.h"
+
 namespace mmo
 {
 	class TimerQueue;
@@ -143,6 +146,15 @@ namespace mmo
 		/// @param lootThreshold The group's loot quality threshold.
 		void NotifyPlayerGroupLootMethodChanged(uint64 characterId, uint8 lootMethod, uint64 lootMasterGuid, uint8 lootThreshold);
 
+		/// The availability of the world-owned subsystems as last reported by this node.
+		const SubsystemStatusArray& GetSubsystemStatus() const { return m_subsystemStatus; }
+
+		/// Forwards a bug report to this node, with the identity the realm vouches for.
+		void SendBugReport(uint64 characterGuid, uint64 accountId, const String& characterName, const String& realmName, const game::BugReportPayload& payload) const;
+
+		/// Enables or disables a world-owned subsystem on this node.
+		void SendSetSubsystemEnabled(game::Subsystem subsystem, bool enabled) const;
+
 	private:
 		TimerQueue& m_timerQueue;
 		WorldManager &m_manager;
@@ -175,6 +187,7 @@ namespace mmo
 		std::map<uint64, JoinWorldCallback> m_joinCallbacks;
 		const proto::Project& m_project;
 		const TimeOfDayManager& m_timeOfDayManager;
+		SubsystemStatusArray m_subsystemStatus = MakeUnavailableSubsystemArray();
 
 	private:
 		/// Closes the connection if still connected.
@@ -248,6 +261,12 @@ namespace mmo
 
 		/// Handles an incoming request to re-attach an item to a mail after failed delivery.
 		PacketParseResult OnMailRestoreItem(auth::IncomingPacket& packet);
+
+		/// Handles the node's subsystem availability (full list after logon, changes afterwards).
+		PacketParseResult OnSubsystemStatus(auth::IncomingPacket& packet);
+
+		/// Handles the node's answer to a bug report.
+		PacketParseResult OnBugReportResult(auth::IncomingPacket& packet);
 	};
 
 }

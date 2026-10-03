@@ -7,6 +7,8 @@
 #include "base/signal.h"
 #include "game/game.h"
 #include "auth_protocol/auth_protocol.h"
+#include "bug_report_rate_limiter.h"
+#include "realm_subsystem_table.h"
 #include <memory>
 #include <mutex>
 #include <list>
@@ -105,6 +107,21 @@ namespace mmo
 		/// @param instanceId The instance id that was destroyed.
 		void OnInstanceDestroyed(InstanceId instanceId);
 
+		/// Gets the per-character bug report rate limiter.
+		BugReportRateLimiter& GetBugReportRateLimiter() { return m_bugReportRateLimiter; }
+
+		/// Gets the realm's subsystem availability table.
+		RealmSubsystemTable& GetSubsystemTable() { return m_subsystemTable; }
+
+		/// Gets the realm's subsystem availability table.
+		const RealmSubsystemTable& GetSubsystemTable() const { return m_subsystemTable; }
+
+		/// Sets the name of this realm (reported with bug reports).
+		void SetRealmName(String name) { m_realmName = std::move(name); }
+
+		/// Gets the name of this realm.
+		const String& GetRealmName() const { return m_realmName; }
+
 	private:
 
 		Players m_players;
@@ -112,5 +129,8 @@ namespace mmo
 		mutable std::mutex m_playerMutex;
 		MOTDManager& m_motdManager;
 		scoped_connection m_motdChangedConnection;
+		BugReportRateLimiter m_bugReportRateLimiter;
+		RealmSubsystemTable m_subsystemTable;
+		String m_realmName;
 	};
 }

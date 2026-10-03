@@ -23,6 +23,8 @@
 #include "login_connector.h"
 #include "game/action_button.h"
 #include "game/mail.h"
+#include "game/bug_report.h"
+#include "realm_subsystem_table.h"
 #include "game_server/character_data.h"
 #include "game/character_view.h"
 #include "game/group.h"
@@ -236,6 +238,15 @@ namespace mmo
 
 		/// Sends the Message of the Day to the player
 		void SendMessageOfTheDay(const std::string &motd);
+
+		/// Sends subsystem availability entries to the client.
+		void SendSubsystemStatus(const SubsystemStatusList& entries);
+
+		/// Sends the availability of every subsystem for the player's current world node.
+		void SendFullSubsystemStatus();
+
+		/// Sends the answer to a bug report to the client.
+		void SendBugReportResult(game::BugReportResult result);
 
 		/// Notifies the player that the world node was left.
 		void OnWorldLeft(const std::shared_ptr<World> &world, auth::WorldLeftReason reason);
@@ -562,6 +573,10 @@ namespace mmo
 		PacketParseResult OnMailDelete(game::IncomingPacket &packet);
 		PacketParseResult OnMailMarkRead(game::IncomingPacket &packet);
 
+		/// Handles a bug report: checks availability and the rate limit, then forwards it to the
+		/// world node with the account and character identity attached.
+		PacketParseResult OnBugReport(game::IncomingPacket &packet);
+
 		// Chat channel packet handlers
 		PacketParseResult OnChannelJoin(game::IncomingPacket &packet);
 		PacketParseResult OnChannelLeave(game::IncomingPacket &packet);
@@ -593,6 +608,7 @@ namespace mmo
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSummon(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetTimeOfDay(game::IncomingPacket &packet);
+		PacketParseResult OnCheatSetSubsystem(game::IncomingPacket &packet);
 		PacketParseResult OnGuildCreate(game::IncomingPacket &packet);
 #endif
 	};
