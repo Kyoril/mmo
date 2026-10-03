@@ -7,6 +7,7 @@
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
+#include <string>
 
 #include "game/auto_attack.h"
 #include "game/spell.h"
@@ -362,6 +363,59 @@ namespace mmo
 				}
 
 				ImGui::EndTable();
+			}
+		}
+
+		if (const auto section = ScopedEditorSection("Racial Spells", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			static const char* s_spellNone = "<None>";
+			DrawSectionHeader("Racial Abilities");
+			ImGui::TextDisabled("Spells every character of this race knows regardless of class. Granted at character creation and backfilled on login. Racial spells should have classmask 0.");
+			ImGui::Spacing();
+
+			auto& racialSpells = *currentEntry.mutable_racialspells();
+			for (int index = 0; index < racialSpells.size(); ++index)
+			{
+				ImGui::PushID(index);
+
+				const uint32 spellId = racialSpells[index];
+				const auto* spellEntry = m_project.spells.getById(spellId);
+
+				if (ImGui::BeginCombo("##racialSpell", spellEntry != nullptr ? spellEntry->name().c_str() : s_spellNone, ImGuiComboFlags_HeightLargest))
+				{
+					for (int i = 0; i < m_project.spells.count(); ++i)
+					{
+						const auto& candidate = m_project.spells.getTemplates().entry(i);
+						ImGui::PushID(i);
+						const bool selected = candidate.id() == spellId;
+						const std::string label = "#" + std::to_string(candidate.id()) + " " + candidate.name();
+						if (ImGui::Selectable(label.c_str(), selected))
+						{
+							racialSpells[index] = candidate.id();
+						}
+						if (selected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+					ImGui::EndCombo();
+				}
+
+				ImGui::SameLine();
+				if (DrawDangerButton("Remove"))
+				{
+					racialSpells.erase(racialSpells.begin() + index);
+					ImGui::PopID();
+					break;
+				}
+
+				ImGui::PopID();
+			}
+
+			if (DrawSuccessButton("Add Racial Spell"))
+			{
+				racialSpells.Add(0);
 			}
 		}
 

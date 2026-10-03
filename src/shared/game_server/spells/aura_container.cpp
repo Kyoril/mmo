@@ -14,6 +14,31 @@
 
 namespace mmo
 {
+	std::optional<GameTime> GetAreaAuraPropagationTime(const GameTime duration, const GameTime remaining)
+	{
+		if (duration == 0)
+		{
+			return GameTime{ 0 };
+		}
+
+		if (remaining == 0)
+		{
+			return std::nullopt;
+		}
+
+		return remaining;
+	}
+
+	bool ShouldPropagateAreaAura(const bool onlyOneStackTotal, const bool targetHasSpell, const bool targetHasSpellFromCaster)
+	{
+		if (targetHasSpellFromCaster)
+		{
+			return false;
+		}
+
+		return !(onlyOneStackTotal && targetHasSpell);
+	}
+
 	namespace
 	{
 		bool IsHostileTargetType(const uint32 target)
@@ -378,11 +403,25 @@ namespace mmo
 						// Must be in the same group and friendly
 						if (GamePlayerS& player = unit.AsPlayer(); player.GetGroupId() == owner.GetGroupId() && player.UnitIsFriendly(owner))
 						{
-							// Aura already active from same caster?
-							if (!player.HasAuraSpellFromCaster(m_spell.id(), m_casterId))
+							// Skip if the target has it from this caster. A single-stack spell must also not
+							// replace another caster's aura of the same spell, or it would wipe their source aura.
+							const bool onlyOneStackTotal = m_spell.attributes_size() > 0 && (m_spell.attributes(0) & spell_attributes::OnlyOneStackTotal) != 0;
+							if (ShouldPropagateAreaAura(onlyOneStackTotal, player.HasAuraSpell(m_spell.id()), player.HasAuraSpellFromCaster(m_spell.id(), m_casterId)))
 							{
+								// Copies expire together with our aura instead of restarting its duration
+								const std::optional<GameTime> propagationTime = GetAreaAuraPropagationTime(m_duration, GetRemainingTime());
+								if (!propagationTime)
+								{
+									return true;
+								}
+
 								// Apply the aura
 								auto container = std::make_shared<AuraContainer>(player, m_casterId, m_spell, m_duration, m_itemGuid);
+								if (*propagationTime > 0)
+								{
+									container->SetInitialRemainingTime(*propagationTime);
+								}
+
 								for (const auto& effect : m_auras)
 								{
 									container->AddAuraEffect(effect->GetEffect(), effect->GetBasePoints());
@@ -720,6 +759,12 @@ namespace mmo
 		const GameTime newExpiration = now + std::min(remaining + m_duration, effectiveMax);
 		m_expiration = newExpiration;
 		m_expirationCountdown.SetEnd(m_expiration);
+
+		// Periodic effects budget their ticks from the duration; extend them to the new expiration
+		for (const auto& aura : m_auras)
+		{
+			aura->OnDurationRefreshed(m_expiration);
+		}
 
 		// Stack count update: policy 0 = GrantReset (reset to max), else increment up to max
 		const uint32 maxStacks = (incomingSpell.stackamount() > 0) ? incomingSpell.stackamount() : 1u;

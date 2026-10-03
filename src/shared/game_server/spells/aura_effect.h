@@ -52,7 +52,7 @@ namespace mmo
 
 		uint32 GetMaxTickCount()
 		{
-			return m_totalTicks;
+			return m_maxTicks;
 		}
 
 		bool IsPeriodic() const
@@ -64,6 +64,11 @@ namespace mmo
 
 	public:
 		void HandleEffect(bool apply);
+
+		/// Re-budgets the periodic ticks after the owning container's duration was refreshed, so
+		/// the aura keeps ticking until the new expiration instead of running out of ticks early.
+		/// @param expiration The container's new absolute expiration time.
+		void OnDurationRefreshed(GameTime expiration);
 
 	private:
 		/// Starts periodic ticks.
@@ -144,7 +149,10 @@ namespace mmo
 		GameTime m_tickInterval = 0;
 		const proto::SpellEffect& m_effect;
 		Countdown m_tickCountdown;
+		/// Ticks over one full base duration; spell power coefficients are split across these.
 		uint32 m_totalTicks = 0;
+		/// Ticks this effect may run in total; grows when the aura duration is refreshed.
+		uint32 m_maxTicks = 0;
 		uint32 m_tickCount = 0;
 		scoped_connection m_onTick;
 		bool m_isPeriodic = false;

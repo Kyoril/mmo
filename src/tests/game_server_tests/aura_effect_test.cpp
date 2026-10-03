@@ -6,6 +6,7 @@
 #include "game_server/spells/aura_container.h"
 #include "game_server/objects/game_player_s.h"
 #include "game/aura.h"
+#include "game/spell.h"
 #include "base/timer_queue.h"
 #include "shared/proto_data/project.h"
 #include "shared/proto_data/spells.pb.h"
@@ -266,4 +267,57 @@ TEST_CASE("AuraEffect GetTickInterval equals effect amplitude", "[aura_effect]")
 	AuraEffect aura(container, effect, timers, /*basePoints=*/10);
 
 	CHECK(aura.GetTickInterval() == 2000);
+}
+
+// ---------------------------------------------------------------------------
+// Duration refresh — the tick budget must follow the refreshed expiration
+// ---------------------------------------------------------------------------
+
+// Regression: RefreshAura used to move only the container's expiration. Each periodic effect
+// kept the tick budget computed from the original duration, so a refreshed DoT ran out of
+// ticks mid-way and sat on the target without dealing damage until it finally expired.
+TEST_CASE("AuraEffect keeps ticking until the refreshed expiration after RefreshAura", "[aura_effect]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto unit = MakeUnit(project, timers);
+	unit->Set<uint32>(object_fields::Health, 100000);
+	unit->Set<uint32>(object_fields::MaxHealth, 100000);
+
+	auto spell = MakeSpell();
+	spell.set_id(500);
+	spell.set_baseid(500);
+	auto* effect = spell.add_effects();
+	effect->set_type(spell_effects::ApplyAura);
+	effect->set_aura(static_cast<uint32>(aura_type::PeriodicDamage));
+	effect->set_basepoints(1);
+	effect->set_amplitude(100);
+	effect->set_targeta(spell_effect_targets::TargetEnemy);
+
+	// 300 ms / 100 ms = 3 ticks
+	auto container = std::make_shared<AuraContainer>(*unit, /*casterId=*/0, spell, /*duration=*/300, /*itemGuid=*/0);
+	container->AddAuraEffect(spell.effects(0), 1);
+	{
+		auto handle = container;
+		unit->ApplyAura(std::move(handle));
+	}
+
+	const auto& aura = container->GetAuraEffects().front();
+	REQUIRE(aura->GetMaxTickCount() == 3u);
+
+	while (aura->GetTickCount() < 2u)
+	{
+		io.run_one();
+	}
+
+	// Refresh to the full 300 ms again. The next tick is at most 100 ms away, so ticks at
+	// +100, +200 and +300 all fit: 2 already done + 3 more.
+	container->RefreshAura(spell);
+	CHECK(aura->GetMaxTickCount() == 5u);
+
+	io.run();
+
+	CHECK(aura->GetTickCount() == 5u);
 }

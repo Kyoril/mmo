@@ -18,7 +18,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sfx_gen"))
 
-from recipes import cleric, mage, warrior
+from recipes import cleric, human, mage, warrior
 
 
 class _RecipeChecks:
@@ -91,6 +91,29 @@ class ClericRecipeTests(_RecipeChecks, unittest.TestCase):
                               if not s.loop and "Tick" not in n)
         self.assertLess(loudest_loop, quietest_impact)
 
+
+
+class HumanRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = human
+    count = 4
+
+    def test_every_prompt_names_its_layers(self):
+        # Human sounds are *layered by mixing*: each prompt is one element on purpose, because
+        # a multi-layer prompt collapsed into a single dull drum hit. Instead every layer
+        # prompt must exclude the other elements, or they bleed into each other.
+        for name, spec in human.SOUNDS.items():
+            lowered = spec.prompt.lower()
+            for exclusion in ("no voice", "no music"):
+                self.assertIn(exclusion, lowered, f"{name}: must exclude the other elements")
+
+    def test_mixes_reference_generated_layers(self):
+        for mix_name, mix in human.MIXES.items():
+            self.assertGreaterEqual(len(mix["layers"]), 2, f"{mix_name}: a mix needs layers")
+            for entry in mix["layers"]:
+                self.assertIn(entry.sound, human.SOUNDS, f"{mix_name}: unknown layer")
+                self.assertTrue(1 <= entry.take <= 4, f"{mix_name}: take {entry.take}")
+                self.assertGreaterEqual(entry.offset, 0.0)
+                self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
 
 if __name__ == "__main__":
     unittest.main()
