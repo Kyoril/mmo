@@ -3,6 +3,7 @@
 #include "spell_visualization_service.h"
 #include "game_unit_c.h"
 #include "object_mgr.h"
+#include "base/clock.h"
 #include "sound_entry_player.h"
 #include "spell_visual_rules.h"
 #include "log/default_log_levels.h"
@@ -76,6 +77,10 @@ namespace mmo
         case Event::AuraIdle:
         {
             return static_cast<uint32>(proto_client::AURA_IDLE);
+        }
+        case Event::Channeling:
+        {
+            return static_cast<uint32>(proto_client::CHANNELING);
         }
         default:
         {
@@ -158,8 +163,16 @@ namespace mmo
         // Handle terminating events - stop active animations and clean up
         if (caster != nullptr && isTerminatingEvent)
         {
+            // While a channel runs, the loop animation and loop sound belong to it: the channel
+            // spell's own SpellGo and those of the spells it triggers (every tick for Fire
+            // Barrage) arrive mid-channel. EndChannel releases them.
+            const bool casterChanneling = IsChanneling(caster->GetGuid());
+
             // Clear any locked loop animation (e.g. cast channel animation)
-            caster->SetLockedLoopAnimation(nullptr);
+            if (!casterChanneling)
+            {
+                caster->SetLockedLoopAnimation(nullptr);
+            }
 
             const uint64 casterGuid = caster->GetGuid();
             auto animIt = m_activeSpellAnimations.find(casterGuid);
@@ -176,7 +189,10 @@ namespace mmo
             }
             
             // Fade out any looped sound for this caster (smooth transition)
-            FadeOutLoopedSoundForActor(caster->GetGuid());
+            if (!casterChanneling)
+            {
+                FadeOutLoopedSoundForActor(caster->GetGuid());
+            }
             
             // Remove tints for this spell on the caster
             RemoveTintFromActor(*caster, spellId);
@@ -530,6 +546,86 @@ namespace mmo
         m_fadingLights.clear();
         m_tintPulses.clear();
         m_pendingKits.clear();
+        m_channels.clear();
+    }
+
+    bool SpellVisualizationService::IsChanneling(const uint64 casterGuid)
+    {
+        const auto it = m_channels.find(casterGuid);
+        if (it == m_channels.end())
+        {
+            return false;
+        }
+
+        if (GetAsyncTimeMs() > it->second.expiresAt)
+        {
+            EndChannel(casterGuid);
+            return false;
+        }
+
+        return true;
+    }
+
+    void SpellVisualizationService::BeginChannel(const proto_client::SpellEntry& spell, GameUnitC& caster, const GameTime durationMs)
+    {
+        // A new channel replaces whatever the caster was channeling before.
+        EndChannel(caster.GetGuid());
+
+        if (!m_project || !spell.has_visualization_id())
+        {
+            return;
+        }
+
+        const auto* vis = m_project->spellVisualizations.getById(spell.visualization_id());
+        if (!vis)
+        {
+            return;
+        }
+
+        const auto it = vis->kits_by_event().find(static_cast<uint32>(proto_client::CHANNELING));
+        if (it == vis->kits_by_event().end() || it->second.kits_size() == 0)
+        {
+            return;
+        }
+
+        ActiveChannel& channel = m_channels[caster.GetGuid()];
+        channel.spellId = spell.id();
+        channel.visualizationId = vis->id();
+        // Grace for latency and the end packet trailing the last tick.
+        constexpr GameTime ChannelEndGraceMs = 2000;
+        channel.expiresAt = GetAsyncTimeMs() + durationMs + ChannelEndGraceMs;
+
+        // Tracked under the channel key, so neither the spell's cast-end nor its aura removal
+        // touches these effects.
+        ApplyVisualization(Event::Channeling, *vis, spell_visual::ChannelKey(spell.id()), &caster, {});
+    }
+
+    void SpellVisualizationService::EndChannel(const uint64 casterGuid)
+    {
+        const auto channelIt = m_channels.find(casterGuid);
+        if (channelIt == m_channels.end())
+        {
+            return;
+        }
+
+        const ActiveChannel channel = channelIt->second;
+        m_channels.erase(channelIt);
+
+        const uint32 channelKey = spell_visual::ChannelKey(channel.spellId);
+        if (const auto actor = ObjectMgr::Get<GameUnitC>(casterGuid))
+        {
+            actor->SetLockedLoopAnimation(nullptr);
+            RemoveTintFromActor(*actor, channelKey);
+        }
+
+        // Only the channel's own loop: LoopedSoundHandle::spellId holds the visualization id.
+        if (const auto soundIt = m_loopedSounds.find(casterGuid);
+            soundIt != m_loopedSounds.end() && soundIt->second.spellId == channel.visualizationId)
+        {
+            FadeOutLoopedSoundForActor(casterGuid);
+        }
+
+        CleanupEffectsForActor(casterGuid, channelKey, EffectPhase::Any);
     }
 
     void SpellVisualizationService::FadeOutLoopedSoundForActor(uint64 actorGuid)

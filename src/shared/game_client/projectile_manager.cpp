@@ -10,6 +10,8 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/skeleton_instance.h"
+#include "scene_graph/bone.h"
 #include "scene_graph/particle_emitter.h"
 #include "scene_graph/particle_emitter_serializer.h"
 #include "scene_graph/light.h"
@@ -602,6 +604,42 @@ namespace mmo
 		}
 	}
 
+	namespace
+	{
+		/// Bone projectiles aim at, and the height used when a model has no such bone.
+		const String TargetAimBone = "spine_03";
+		constexpr float TargetAimFallbackHeight = 1.0f;
+
+		/// Height a projectile starts at when its visual names no spawn bone, or the caster's
+		/// model lacks it. Unit positions are at the feet, so anything lower skims the ground.
+		constexpr float SpawnFallbackHeight = 1.2f;
+
+		/// World position of a bone on a unit's model, or the unit position plus fallbackHeight
+		/// when the model, its skeleton or the bone is missing.
+		///
+		/// Bone derived positions are skeleton-local; the entity hangs off the unit's entity
+		/// offset node (model rotation offset, swim pitch), so that node's transform -- not the
+		/// unit's scene node -- turns them into world space. Same math as the editor preview.
+		Vector3 UnitBoneWorldPosition(const GameUnitC& unit, const String& boneName, const float fallbackHeight)
+		{
+			if (Entity* entity = unit.GetEntity(); entity && !boneName.empty() && entity->HasSkeleton())
+			{
+				const auto& skeleton = entity->GetSkeleton();
+				if (const Bone* bone = skeleton ? skeleton->GetBone(boneName) : nullptr)
+				{
+					const Vector3 local = bone->GetDerivedPosition();
+					if (const SceneNode* node = entity->GetParentSceneNode())
+					{
+						return node->GetDerivedPosition() +
+							node->GetDerivedOrientation() * (node->GetDerivedScale() * local);
+					}
+				}
+			}
+
+			return unit.GetPosition() + Vector3(0.0f, fallbackHeight, 0.0f);
+		}
+	}
+
 	/// @brief Wrapper to adapt GameUnitC to IProjectileTarget interface.
 	class GameUnitProjectileTarget : public IProjectileTarget
 	{
@@ -613,9 +651,10 @@ namespace mmo
 
 		Vector3 GetPosition() const override
 		{
+			// Aim at the torso, where the impact kits attach, not at the feet.
 			if (auto unit = m_unit.lock())
 			{
-				return unit->GetPosition();
+				return UnitBoneWorldPosition(*unit, TargetAimBone, TargetAimFallbackHeight);
 			}
 			return Vector3::Zero;
 		}
@@ -706,8 +745,8 @@ namespace mmo
 			return;
 		}
 
-		const Vector3 baseStartPosition = caster->GetPosition();
-		const Vector3 targetPosition = target->GetPosition();
+		const Vector3 baseStartPosition = caster->GetPosition() + Vector3(0.0f, SpawnFallbackHeight, 0.0f);
+		const Vector3 targetPosition = UnitBoneWorldPosition(*target, TargetAimBone, TargetAimFallbackHeight);
 
 		// Get weak_ptr from ObjectMgr since GameUnitC doesn't use shared_from_this
 		std::shared_ptr<GameObjectC> targetShared = ObjectMgr::Get<GameObjectC>(target->GetGuid());
@@ -727,7 +766,13 @@ namespace mmo
 			{
 				const float offsetRight = projVis->has_spawn_offset_right() ? projVis->spawn_offset_right() : 0.0f;
 				const float offsetUp = projVis->has_spawn_offset_up() ? projVis->spawn_offset_up() : 0.0f;
-				const Vector3 startPos = ApplySpawnOffset(baseStartPosition, targetPosition, offsetRight, offsetUp);
+
+				// Launch from the spawn bone (e.g. the casting hand) as posed right now: spawning is
+				// already delayed to the cast animation's release, so this is where the hand is.
+				const Vector3 boneStart = projVis->has_spawn_bone()
+					? UnitBoneWorldPosition(*caster, projVis->spawn_bone(), SpawnFallbackHeight)
+					: baseStartPosition;
+				const Vector3 startPos = ApplySpawnOffset(boneStart, targetPosition, offsetRight, offsetUp);
 
 				auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, projVis, startPos, targetWrapper, animationDelay);
 				m_projectiles.push_back(std::move(projectile));

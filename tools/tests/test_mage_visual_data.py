@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_warrior_visual_data import SAFE_PARTICLE_MATERIALS, _load  # noqa: E402
 
-CASTING, AURA_APPLIED, AURA_IDLE = 2, 5, 8
+CASTING, AURA_APPLIED, AURA_IDLE, CHANNELING = 2, 5, 8, 9
 
 # Chilled is the deliberate exception to "no sound on aura events": a 5 s slow that is the
 # attacker's only feedback, and its AURA_APPLIED is the only event it has.
@@ -50,7 +50,7 @@ class MageVisualDataTests(unittest.TestCase):
         cls.particles = {}
         for name, event, kit in cls.kits:
             for particle in kit.particles:
-                may_loop = event in (CASTING, AURA_IDLE)
+                may_loop = event in (CASTING, AURA_IDLE, CHANNELING)
                 cls.particles[particle] = cls.particles.get(particle, True) and may_loop
         for vis in cls.mage:
             for proj in vis.projectiles:
@@ -69,8 +69,9 @@ class MageVisualDataTests(unittest.TestCase):
             self.assertFalse(list(kit.sounds), f"{name}: mage kits reference sound_ids")
 
     def test_only_casting_kits_loop(self):
+        # CASTING ends with the cast, CHANNELING with the channel; nothing else stops a loop.
         for name, event, kit in self.kits:
-            self.assertFalse(kit.loop and event != CASTING,
+            self.assertFalse(kit.loop and event not in (CASTING, CHANNELING),
                              f"{name}: event {event} kit loops and nothing would stop it")
 
     def test_no_sound_on_aura_events(self):
@@ -85,6 +86,11 @@ class MageVisualDataTests(unittest.TestCase):
         for name, event, kit in self.kits:
             if event in (AURA_APPLIED, AURA_IDLE):
                 self.assertEqual(kit.scope, 1, f"{name}: aura kits must be TARGET-scoped")
+
+    def test_channeled_fire_barrage_holds_a_channel_kit(self):
+        barrage = next(v for v in self.mage if v.name == "Mage - Fire Barrage")
+        kits = list(barrage.kits_by_event[CHANNELING].kits)
+        self.assertTrue(any(k.loop and k.animation_name == "Channel" for k in kits))
 
     def test_channeled_fire_barrage_has_no_casting_kit(self):
         # SpellStart, ChannelStart and SpellGo arrive in one tick for a channeled spell, so a

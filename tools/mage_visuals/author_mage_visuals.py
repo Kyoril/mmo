@@ -46,7 +46,7 @@ SOUND_DIR = "Sound/Spells/Mage/"
 PARTICLE_DIR = "Particles/Mage/"
 
 # Event ids from spell_visualizations.proto.
-CASTING, CAST, IMPACT, AURA, AURA_IDLE = "2", "3", "4", "5", "8"
+CASTING, CAST, IMPACT, AURA, AURA_IDLE, CHANNELING = "2", "3", "4", "5", "8", "9"
 
 # Measured from the Human rigs: CastRelease is 0.53 s (female) / 0.63 s (male). Orcs have
 # neither CastLoop nor CastRelease; the service skips the animation and still plays the rest.
@@ -92,9 +92,10 @@ def light(colour, intensity, range_, fade_in=0.15, fade_out=0.5):
                 fade_in_time=fade_in, fade_out_time=fade_out)
 
 
-def channel(particle, sound, colour):
-    """The looping CASTING kit: CastLoop + hand particles + channel loop sound + hand light."""
-    return {"scope": "CASTER", "loop": True, "animation_name": "CastLoop",
+def channel(particle, sound, colour, animation="CastLoop"):
+    """A looping cast kit: loop animation + hand particles + channel loop sound + hand light.
+    Used for CASTING (cast bar) and CHANNELING (held from ChannelStart to the channel's end)."""
+    return {"scope": "CASTER", "loop": True, "animation_name": animation,
             "attach_bone": "hand_r", "particles": [PARTICLE_DIR + particle + ".hpar"],
             "sound_ids": [SND[sound]], "light": light(colour, 1.3, 4.5, 0.3, 0.4)}
 
@@ -194,8 +195,11 @@ def definitions():
         # Fire Barrage is channeled: the server sends SpellStart, ChannelStart and SpellGo in
         # the same tick, so a CASTING kit would be torn down the frame it spawned. The barrage
         # reads through its waves instead: every triggered 152 cast flares the hand.
+        # Channeled: CHANNELING kits run from ChannelStart until the channel ends, across the
+        # SpellGos of 150 itself and of every 152 wave. "Channel" is a forward-facing hold pose;
+        # no CastRelease, which would cut into it at channel start.
         ("Fire Barrage", [150], {
-            CAST: [release()],
+            CHANNELING: [channel("FireHandChannel", "Fire Channel", FIRE_LIGHT, "Channel")],
         }, []),
         ("Fire Barrage Projectile", [152], {
             CAST: [fx("FireBlastHand", "Fire Barrage Shot", bone="hand_r")],
@@ -252,8 +256,8 @@ def validate_visualizations(dataset, sound_ids):
                 _require(not kit.HasField("duration_ms"),
                          f"{vis.name}: duration_ms time-warps the clip; leave it unset")
                 _require(not kit.sounds, f"{vis.name}: mage kits use sound_ids")
-                _require(not kit.loop or event == 2,
-                         f"{vis.name}: only CASTING kits may loop (event {event})")
+                _require(not kit.loop or event in (2, 9),
+                         f"{vis.name}: only CASTING/CHANNELING kits may loop (event {event})")
                 if event in (5, 8) and vis.name not in AURA_SOUND_EXCEPTIONS:
                     _require(not kit.sound_ids,
                              f"{vis.name}: no sound on aura events -- they replay whenever a "

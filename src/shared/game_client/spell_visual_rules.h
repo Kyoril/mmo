@@ -23,6 +23,7 @@ namespace mmo::spell_visual
 		constexpr uint32 AuraRemoved = 6;
 		constexpr uint32 AuraTick = 7;
 		constexpr uint32 AuraIdle = 8;
+		constexpr uint32 Channeling = 9;
 	}
 
 	/// \brief Whether effects spawned by an event belong to the cast phase of a spell.
@@ -36,6 +37,20 @@ namespace mmo::spell_visual
 	inline bool IsCastPhaseEvent(const uint32 protoEvent)
 	{
 		return protoEvent == event::StartCast || protoEvent == event::Casting;
+	}
+
+	/// \brief Bit marking an effect key as belonging to a running channel.
+	///
+	/// Channel effects (CHANNELING kits) live from ChannelStart until the channel ends, across
+	/// the channel spell's own SpellGo and the SpellGos of every spell it triggers. Keying them
+	/// apart from the spell's other effects keeps cast-end and aura-removal cleanups away from
+	/// them. Distinct from the 0x80000000 synthetic and 0x40000000 timed-tint bits.
+	constexpr uint32 ChannelKeyBit = 0x20000000u;
+
+	/// \brief Effect key the channel effects of the given spell are tracked under.
+	inline uint32 ChannelKey(const uint32 spellId)
+	{
+		return spellId | ChannelKeyBit;
 	}
 
 	/// \brief Bit marking a tint key as a timed pulse (ColorTint.duration_ms).

@@ -55,7 +55,7 @@ shared default entries that clerics and creatures also use. The superseded mage-
 | Chilled (22) | -- | -- | ChilledBurst + sound + tint on apply |
 | Fireball (4) | CastLoop + FireHandChannel + fire channel loop | FireballTrail projectile; FireballImpact + shuffled impact pair + light | FireballBurn loop during the DoT |
 | Fire Blast (7) | -- | FireBlastHand at `hand_r`; FireBlastImpact eruption at the target's feet + sound + light | -- |
-| Fire Barrage (150) | -- (channeled, see below) | release animation | none (see below) |
+| Fire Barrage (150) | CHANNELING: `Channel` loop pose + FireHandChannel + fire channel loop, held until the channel ends | -- | none (see below) |
 | Fire Barrage Projectile (152) | -- | per wave: FireBlastHand flare at `hand_r` + shot sound, three arcing FireBarrageTrail comets; FireBarrageImpact + quiet impact sound | -- |
 | Arcane Intellect (11) | -- | ArcaneIntellectBurst + sound on the target | -- |
 | Sleep (72) | CastLoop + ArcaneHandChannel + arcane channel loop | SleepApply at `head` + sound | SleepAura loop above the head |
@@ -76,10 +76,11 @@ service skips the animation and still plays particles, light and sound.
   and a looping catalog sound; CAST_SUCCEEDED / CANCEL_CAST tear all of it down. Looping
   *particles* elsewhere (trails, aura states) need no kit flag -- the `.hpar` loops and the
   engine destroys it on projectile impact or aura removal.
-- **Fire Barrage has no CASTING kit.** It is channeled: the server sends SpellStart,
-  ChannelStart and SpellGo in the same tick, so a CASTING kit is spawned twice and destroyed by
-  the SpellGo in the same frame. The barrage reads through its waves instead -- every triggered
-  152 cast flares the casting hand.
+- **Fire Barrage uses CHANNELING, not CASTING.** It is channeled: the server sends SpellStart,
+  ChannelStart and SpellGo in the same tick, so a CASTING kit would be spawned and destroyed by
+  the SpellGo in the same frame. CHANNELING kits start on ChannelStart and are held until
+  ChannelUpdate(0), which every channel end sends (expiry, movement, interrupt, target loss).
+  Every triggered 152 wave additionally flares the casting hand.
 - **Aura kits are TARGET-scoped** (validated). Aura events pass the aura holder as the target; a
   CASTER-scoped aura kit would be keyed on the caster and never torn down.
 - **Fire Barrage has no AURA_IDLE kit.** It applies spell 150 auras to both the caster and the
@@ -107,7 +108,25 @@ service skips the animation and still plays particles, light and sound.
    character's guid resolved again after re-login. This predates the branch, but a long-lived
    aura record (Frost Armor) that now survives recasts made it the common path.
 
-Neither touches the wire; no `ProtocolVersion` bump.
+4. **Projectiles launch from the hand and fly at the torso** (`projectile_manager`). The client
+   ignored `ProjectileVisual.spawn_bone` and started every projectile at the caster's feet,
+   aimed at the target's feet; only the editor preview resolved the bone. Projectiles now start
+   at the spawn bone's world position as posed at launch (spawning is already delayed to the
+   cast animation's release) and aim at the target's `spine_03`, with height fallbacks (1.2 /
+   1.0) for models without those bones.
+5. **CHANNELING visualization event** (`SpellVisualEvent` 9, both proto copies). Started by
+   `SpellVisualizationService::BeginChannel` on ChannelStart, ended by `EndChannel` on
+   ChannelUpdate(0). Channel effects are keyed by `spell_visual::ChannelKey` so neither the
+   spell's cast-end nor its aura removal touches them, and while a caster channels, terminating
+   events (the channel spell's own SpellGo, and every SpellGo of the spells it triggers) leave
+   its locked loop animation and loop sound alone. Triggers cannot play it: the trigger editor
+   and the world server stop at AURA_IDLE. Not every server path sends ChannelUpdate(0) (a
+   caster despawning mid-channel; consumption failing after ChannelStart is sent), so a channel
+   also ends when its caster is destroyed client-side and is treated as over 2 s past its
+   duration -- a stale record would keep suppressing the loop cleanup of the unit's later casts.
+
+None of these touch the wire: visualization contents and event values never cross it; no
+`ProtocolVersion` bump.
 
 ## Sounds
 

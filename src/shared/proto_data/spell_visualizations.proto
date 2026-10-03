@@ -13,6 +13,9 @@ enum SpellVisualEvent
     AURA_REMOVED = 6;
     AURA_TICK = 7;
     AURA_IDLE = 8;
+    // A channeled spell is being channeled: from ChannelStart until the channel ends
+    // (ChannelUpdate with no time left). Looping kits here hold until then.
+    CHANNELING = 9;
 }
 
 // Scope defines which actor(s) the kit applies to

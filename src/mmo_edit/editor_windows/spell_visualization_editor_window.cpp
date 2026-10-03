@@ -13,6 +13,7 @@
 #include "preview_providers/preview_provider_manager.h"
 
 #include <algorithm>
+#include <iterator>
 
 namespace mmo
 {
@@ -213,7 +214,8 @@ namespace mmo
 		"Aura Applied",
 		"Aura Removed",
 		"Aura Tick",
-		"Aura Idle"};
+		"Aura Idle",
+		"Channeling"};
 
 	// Scope names matching proto::KitScope enum
 	static const char *s_scopeNames[] = {
@@ -617,7 +619,7 @@ namespace mmo
 		ImGui::Spacing();
 
 		// Draw kit editors for each event type
-		for (int eventIdx = 0; eventIdx < 9; ++eventIdx)
+		for (int eventIdx = 0; eventIdx < static_cast<int>(std::size(s_eventNames)); ++eventIdx)
 		{
 			DrawEventKits(currentEntry, eventIdx, s_eventNames[eventIdx]);
 		}
