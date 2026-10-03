@@ -14,6 +14,7 @@
 namespace mmo
 {
 	Bindings* Bindings::s_instance = nullptr;
+	std::map<String, Bindings::RuntimeBinding> Bindings::s_runtimeBindings;
 
 	namespace
 	{
@@ -125,6 +126,12 @@ namespace mmo
 
 		XML_ParserFree(parser);
 
+		// Actions registered by UI modules must exist before the config files bind keys to them.
+		for (const auto& [name, runtime] : s_runtimeBindings)
+		{
+			ApplyRuntimeBinding(runtime, false);
+		}
+
 		// Load default bindings
 		Console::ExecuteCommand("run Config/DefaultBindings.cfg");
 
@@ -133,11 +140,59 @@ namespace mmo
 		{
 			Console::ExecuteCommand("run Config/Bindings.cfg");
 		}
+
+		// Default keys of runtime bindings only fill in what the config files left open.
+		for (const auto& [name, runtime] : s_runtimeBindings)
+		{
+			ApplyRuntimeBinding(runtime, true);
+		}
+	}
+
+	void Bindings::RegisterRuntimeBinding(const Binding& binding, const String& defaultKey)
+	{
+		if (binding.name.empty())
+		{
+			ELOG("Tried to register a binding without a name!");
+			return;
+		}
+
+		RuntimeBinding& runtime = s_runtimeBindings[binding.name];
+		runtime.binding = binding;
+		runtime.defaultKey = defaultKey;
+
+		if (s_instance)
+		{
+			s_instance->ApplyRuntimeBinding(runtime, true);
+		}
+	}
+
+	void Bindings::ClearRuntimeBindings()
+	{
+		s_runtimeBindings.clear();
+	}
+
+	void Bindings::ApplyRuntimeBinding(const RuntimeBinding& runtime, const bool applyDefault)
+	{
+		m_bindings[runtime.binding.name] = runtime.binding;
+
+		if (!applyDefault || runtime.defaultKey.empty())
+		{
+			return;
+		}
+
+		if (!GetKeysForAction(runtime.binding.name).empty() || m_inputActionBindings.contains(runtime.defaultKey))
+		{
+			return;
+		}
+
+		m_inputActionBindings[runtime.defaultKey] = runtime.binding.name;
+		m_runtimeDefaultKeys[runtime.defaultKey] = runtime.binding.name;
 	}
 
 	void Bindings::Unload()
 	{
 		m_inputActionBindings.clear();
+		m_runtimeDefaultKeys.clear();
 		m_bindings.clear();
 	}
 
@@ -150,6 +205,7 @@ namespace mmo
 		}
 
 		m_inputActionBindings[keyName] = command;
+		m_runtimeDefaultKeys.erase(keyName);
 	}
 
 	bool Bindings::ExecuteKey(const String& keyName, BindingKeyState keyState)
@@ -270,6 +326,7 @@ namespace mmo
 	void Bindings::UnbindKey(const String& keyName)
 	{
 		m_inputActionBindings.erase(keyName);
+		m_runtimeDefaultKeys.erase(keyName);
 	}
 
 	void Bindings::SaveBindings()
@@ -283,6 +340,14 @@ namespace mmo
 
 		for (const auto& pair : m_inputActionBindings)
 		{
+			// A runtime binding's untouched default stays a default: if the module is removed, the
+			// key must not stay bound to an action that no longer exists.
+			const auto defaultIt = m_runtimeDefaultKeys.find(pair.first);
+			if (defaultIt != m_runtimeDefaultKeys.end() && defaultIt->second == pair.second)
+			{
+				continue;
+			}
+
 			file << "bind " << pair.first << " " << pair.second << "\n";
 		}
 	}

@@ -38,6 +38,8 @@
 #include "systems/bank_client.h"
 #include "systems/mail_client.h"
 #include "ui/minimap.h"
+#include "systems/subsystem_client.h"
+#include "systems/bug_report_client.h"
 #include "frame_ui/frame_mgr.h"
 #include "startup_error.h"
 
@@ -240,6 +242,8 @@ namespace mmo
 		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.project->emotes, context.clientCache->GetItemCache(), *context.spellCast);
 		context.talentClient = std::make_unique<TalentClient>(context.project->talentTabs, context.project->talents, context.project->spells, realmConnector);
 		context.tradeClient = std::make_unique<TradeClient>(realmConnector);
+		context.subsystemClient = std::make_unique<SubsystemClient>(realmConnector);
+		context.bugReportClient = std::make_unique<BugReportClient>(realmConnector, *context.subsystemClient);
 	}
 
 	/// @copydoc ClientApplication::InitializeStatesAndScripts
@@ -258,6 +262,8 @@ namespace mmo
 		context.minimap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.bankClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.mailClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
+		context.subsystemClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
+		context.bugReportClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 	}
 
 	/// @copydoc ClientApplication::InitializeUiAndEnterState
@@ -342,6 +348,8 @@ namespace mmo
 		if (context.partyInfo) context.partyInfo->Shutdown();
 		if (context.guildClient) context.guildClient->Shutdown();
 		if (context.friendClient) context.friendClient->Shutdown();
+		if (context.bugReportClient) context.bugReportClient->Shutdown();
+		if (context.subsystemClient) context.subsystemClient->Shutdown();
 
 		context.vendorClient.reset();
 		context.bankClient.reset();
@@ -403,6 +411,8 @@ namespace mmo
 	{
 		context.talentClient.reset();
 		context.tradeClient.reset();
+		context.bugReportClient.reset();
+		context.subsystemClient.reset();
 		context.actionBar.reset();
 		context.spellCast.reset();
 		context.cooldownManager.reset();

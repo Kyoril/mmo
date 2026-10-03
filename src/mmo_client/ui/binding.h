@@ -85,12 +85,39 @@ namespace mmo
 		/// Returns the global Bindings instance (set during Initialize / cleared during Shutdown).
 		static Bindings* GetCurrent() { return s_instance; }
 
+		/// Registers a binding action at runtime (from a UI module) instead of Bindings.xml.
+		///
+		/// UI modules load before the bindings do, so registrations are kept and applied when the
+		/// bindings are (re)loaded, and immediately if they already are. Registering an existing
+		/// name replaces its script, which keeps UI reloads working. The default key is bound only
+		/// if the action has no key yet and the key is free, and it is not written to Bindings.cfg
+		/// unless the player changes it.
+		/// @param binding The action (name, description, category, script).
+		/// @param defaultKey Key to bind by default, or empty for none.
+		static void RegisterRuntimeBinding(const Binding& binding, const String& defaultKey);
+
+		/// Forgets every runtime binding registration (they hold script references).
+		static void ClearRuntimeBindings();
+
 	private:
 		static Bindings* s_instance;
+
+		struct RuntimeBinding
+		{
+			Binding binding;
+			String defaultKey;
+		};
+
+		static std::map<String, RuntimeBinding> s_runtimeBindings;
+
+		/// Adds or replaces a runtime binding on this instance; with applyDefault, binds its default key.
+		void ApplyRuntimeBinding(const RuntimeBinding& runtime, bool applyDefault);
 
 	private:
 		std::map<String, Binding> m_bindings;
 		std::map<String, String> m_inputActionBindings;
+		/// Keys bound only because they are a runtime binding's default (key -> action); not saved.
+		std::map<String, String> m_runtimeDefaultKeys;
 		IInputControl* m_inputControl{ nullptr };
 
 		bool m_capturePending{ false };

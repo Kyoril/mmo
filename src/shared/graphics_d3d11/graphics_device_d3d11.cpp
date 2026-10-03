@@ -1645,6 +1645,30 @@ namespace mmo
 		return true;
 	}
 
+	std::string GraphicsDeviceD3D11::GetAdapterDescription() const
+	{
+		ComPtr<IDXGIDevice> dxgiDevice;
+		ComPtr<IDXGIAdapter> adapter;
+		DXGI_ADAPTER_DESC desc{};
+		if (!m_device ||
+			FAILED(m_device.As(&dxgiDevice)) ||
+			FAILED(dxgiDevice->GetAdapter(&adapter)) ||
+			FAILED(adapter->GetDesc(&desc)))
+		{
+			return {};
+		}
+
+		const int size = WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1, nullptr, 0, nullptr, nullptr);
+		if (size <= 1)
+		{
+			return {};
+		}
+
+		std::string name(static_cast<size_t>(size - 1), '\0');
+		WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1, name.data(), size, nullptr, nullptr);
+		return name + " (" + std::to_string(desc.DedicatedVideoMemory / (1024 * 1024)) + " MB)";
+	}
+
 	std::vector<std::pair<uint16, uint16>> GraphicsDeviceD3D11::GetSupportedResolutions() const
 	{
 		std::vector<std::pair<uint16, uint16>> result;

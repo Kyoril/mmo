@@ -1,6 +1,8 @@
 #pragma once
 
 #include "base/signal.h"
+#include "systems/bug_report_client.h"
+#include "systems/subsystem_client.h"
 
 #include <fstream>
 #include <memory>
@@ -102,6 +104,10 @@ namespace mmo
 		std::unique_ptr<CharSelect> charSelect;
 		std::unique_ptr<TalentClient> talentClient;
 		std::unique_ptr<TradeClient> tradeClient;
+		/// @brief Availability of server subsystems announced by the realm.
+		std::unique_ptr<SubsystemClient> subsystemClient;
+		/// @brief Files in-game bug reports. Depends on subsystemClient.
+		std::unique_ptr<BugReportClient> bugReportClient;
 		std::unique_ptr<Discord> discord;
 		/// @brief Loaded client project data (DB/content metadata).
 		std::unique_ptr<proto_client::Project> project;

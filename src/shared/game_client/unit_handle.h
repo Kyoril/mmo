@@ -58,6 +58,12 @@ namespace mmo
 
 	public:
 		[[nodiscard]] virtual uint64 GetGuid() const;
+
+		/// Gets the creature template entry of the unit (0 for players or an invalid handle).
+		[[nodiscard]] uint32 GetEntry() const;
+
+		/// Gets the unit guid as a decimal string. Script numbers are doubles and cannot hold every guid.
+		[[nodiscard]] std::string GetGuidString() const;
 		[[nodiscard]] virtual int32 GetHealth() const;
 		[[nodiscard]] virtual int32 GetMaxHealth() const;
 		[[nodiscard]] virtual int32 GetLevel() const;
