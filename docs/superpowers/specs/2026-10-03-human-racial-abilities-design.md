@@ -134,6 +134,33 @@ Colour language: warm gold with a steel-blue accent — the Watch and the Crown,
 - **Data tests:** the new spells carry all four locales, racemask Human and classmask 0.
 - Gate: `/gate` must be green before `/ship`.
 
+## Balance framework for further peoples
+
+Numbers checked against the class data (2026-10-03): base stats at the current level cap 10 are
+17–35, so *Versatility* is worth roughly 0–1 point per stat today. At ~300 in a main stat it
+would give about +6 to the main stat and +6 Stamina. That is less than a specialised
+"+5% one stat" racial (+15) for the classes that want that stat, but it helps every class.
+
+This is the intended trade for humans, who can switch freely between classes. *Used to Hard
+Work* is deliberately modest, since it acts mostly out of combat.
+
+Rule for future peoples: each people gets one **broad** and one **narrow** passive. Humans
+take the broadest option. Other peoples should each lean towards a role. Candidates that the
+server already supports:
+
+| Archetype | Example | Aura type |
+|---|---|---|
+| Specialist | +5% to one stat (Stamina for a hardy people, Intellect for a learned one) | `ModStatPct` |
+| Magic ward | +25 resistance to one or all schools, or −2% magic damage taken | `ModResistance`, `ModDamageTakenPct` + dmgclass |
+| Nimble | +1% dodge | `ModDodgeChance` |
+| Toughness | −2% chance to be critically hit | `ModCritChanceTaken` |
+| Scholarly | +10% mana regeneration | `ModPowerRegenPercent` |
+| Fleet | +3% run speed | `ModSpeedAlways` |
+| Instinct | chance on hit to gain a short buff | `ProcTriggerSpell` |
+
+With new code, later options are an XP bonus, crit chance and weapon skill. Revisit
+*Versatility* when the level cap rises or when the second people becomes playable.
+
 ## Out of scope
 
 - Racials for Orc / Undead Human (disabled races) — the mechanism supports them, content later.
