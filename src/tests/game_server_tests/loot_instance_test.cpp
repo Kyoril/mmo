@@ -327,3 +327,55 @@ TEST_CASE("LootInstance combines multiple loot tables", "[loot_instance]")
 		REQUIRE(loot.GetItemCount() == 1);
 	}
 }
+
+// The creature death state drops a freshly rolled loot instance when IsEmpty() reports true, so
+// the corpse is never flagged lootable just to open an empty window.
+TEST_CASE("LootInstance reports a fresh roll without gold or items as empty", "[loot_instance]")
+{
+	asio::io_service ioService;
+	TimerQueue timerQueue(ioService);
+	proto::Project project;
+
+	auto* itemEntry = project.items.add(1);
+	itemEntry->set_id(1);
+	itemEntry->set_maxstack(20);
+
+	ConditionMgr conditionMgr(project.conditions);
+
+	std::vector<std::weak_ptr<GamePlayerS>> recipients;
+
+	SECTION("LOOT-13: A table whose groups roll nothing yields empty loot")
+	{
+		// A drop chance below zero never passes the group roll, so the group yields nothing.
+		proto::LootEntry table = MakeLootEntry(1);
+		table.mutable_groups(0)->mutable_definitions(0)->set_dropchance(-1.0f);
+
+		const std::vector<const proto::LootEntry*> entries{ &table };
+		LootInstance loot(project.items, conditionMgr, 42ULL, entries, recipients);
+
+		REQUIRE(loot.GetItemCount() == 0);
+		REQUIRE(loot.IsEmpty());
+	}
+
+	SECTION("LOOT-14: Gold alone makes loot non-empty")
+	{
+		proto::LootEntry table = MakeLootEntry(0);
+		table.set_minmoney(1);
+		table.set_maxmoney(1);
+
+		const std::vector<const proto::LootEntry*> entries{ &table };
+		LootInstance loot(project.items, conditionMgr, 42ULL, entries, recipients);
+
+		REQUIRE_FALSE(loot.IsEmpty());
+	}
+
+	SECTION("LOOT-15: An item alone makes loot non-empty")
+	{
+		proto::LootEntry table = MakeLootEntry(1);
+
+		const std::vector<const proto::LootEntry*> entries{ &table };
+		LootInstance loot(project.items, conditionMgr, 42ULL, entries, recipients);
+
+		REQUIRE_FALSE(loot.IsEmpty());
+	}
+}
