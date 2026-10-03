@@ -105,6 +105,17 @@ class GateWorktreeTests(unittest.TestCase):
 		write_report(self.reports, "nightly-2026-10-03.json", commit="bad", passed=False, tier="full")
 		self.assertEqual(self.ps("$null -eq (Get-LastGreenNightly)"), "True")
 
+	# The scheduled task runs the nightly under `*>> log`, which turns native stderr into
+	# terminating errors under ErrorActionPreference Stop. The gate's chatter on stderr must not
+	# abort the run: its exit code alone is the verdict.
+	def test_stderr_under_redirection_returns_exit_code(self):
+		with open(os.path.join(self.nightly, "tools", "gate", "verify.ps1"), "w") as f:
+			f.write("param([string]$Tier)\r\n[Console]::Error.WriteLine('chatter on stderr')\r\nexit 3\r\n")
+		log = os.path.join(self._tmp.name, "task.log")
+		out = self.ps("$ErrorActionPreference = 'Stop'; "
+			"& {{ $global:code = Invoke-WorktreeGate -Worktree '{}' }} *>> '{}'; $global:code".format(self.nightly, log))
+		self.assertEqual(out, "3")
+
 
 @unittest.skipUnless(sys.platform == "win32", "gate scripts are Windows PowerShell")
 class GateScriptTests(unittest.TestCase):
