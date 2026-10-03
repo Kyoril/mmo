@@ -675,17 +675,9 @@ namespace mmo
 			{
 				return project.spells.getById(spellId);
 			};
-			context.formatDuration = [](const std::string &formatKey, const double value) -> std::string
+			context.findDurationFormat = [](const std::string &formatKey)
 			{
-				const auto *format = FrameManager::Get().GetLocalization().FindStringById(formatKey);
-				if (!format)
-				{
-					return formatKey;
-				}
-
-				char buffer[128];
-				snprintf(buffer, 128, format->c_str(), value);
-				return buffer;
+				return FrameManager::Get().GetLocalization().FindStringById(formatKey);
 			};
 
 			return FormatSpellText(text, spell, context);

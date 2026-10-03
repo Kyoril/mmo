@@ -18,13 +18,13 @@ namespace mmo
 
 		/// Resolves a spell id to its entry, for placeholders that reference another spell
 		/// ("$152s0") and for periodic trigger totals. May be empty, then such references
-		/// resolve to nothing.
+		/// resolve to nothing and are written back verbatim.
 		std::function<const proto_client::SpellEntry*(uint32 spellId)> findSpell;
 
-		/// Formats a duration in the given unit. The key is one of FORMAT_DURATION_SECONDS,
-		/// _MINUTES or _HOURS, with a _PRECISE suffix for the lower case tokens. Empty means
-		/// the key itself is written.
-		std::function<std::string(const std::string& formatKey, double value)> formatDuration;
+		/// Resolves a duration format key (FORMAT_DURATION_SECONDS, _MINUTES or _HOURS, with a
+		/// _PRECISE suffix for the lower case tokens) to its localized template, for example
+		/// "%.0f seconds". Returning null, or leaving this empty, writes the key itself.
+		std::function<const std::string*(const std::string& formatKey)> findDurationFormat;
 	};
 
 	/// @brief Computes the minimum and maximum points of one spell effect at a given level.
@@ -32,13 +32,25 @@ namespace mmo
 	/// @param level The caster level, clamped to the spell's base and max level.
 	/// @param effectIndex Zero-based effect index. Out of range yields 0 / 0.
 	/// @param includeTickCount Multiplies periodic effects by their number of ticks.
-	/// @param min Receives the absolute minimum.
-	/// @param max Receives the absolute maximum.
+	/// @param min Receives the absolute minimum, saturated to the int32 range.
+	/// @param max Receives the absolute maximum, saturated to the int32 range.
 	void GetSpellEffectPoints(const proto_client::SpellEntry& spell, int32 level, int32 effectIndex, bool includeTickCount, int32& min, int32& max);
 
 	/// @brief Number of ticks a periodic effect performs over the spell's duration, or 0 for
-	/// an effect without an amplitude.
+	/// an effect that is not periodic, has no amplitude or belongs to a spell without duration.
 	int32 GetSpellEffectTickCount(const proto_client::SpellEntry& spell, int32 effectIndex);
+
+	/// @brief Writes a value into a localized printf-style template without ever handing the
+	/// template to printf.
+	///
+	/// Only the first conversion is replaced. It may carry flags, a width and a precision, and
+	/// must be one of f F e E g G (written as a floating point value) or d i u (rounded to a
+	/// whole number). "%%" writes a percent sign. Anything else, including a second conversion
+	/// or "%s", is written back verbatim, so a translation mistake shows up as text instead of
+	/// reading garbage off the stack.
+	/// @param out Receives the formatted text (appended).
+	/// @param trimTrailingZeros Drops trailing zeros of a fixed point value ("1.50" -> "1.5").
+	void AppendFormattedValue(std::string& out, const std::string& format, double value, bool trimTrailingZeros = false);
 
 	/// @brief Replaces the placeholders in a spell description or aura text.
 	///
@@ -54,11 +66,15 @@ namespace mmo
 	/// | o / O     | total over the duration: points x ticks. A periodic trigger effect totals  |
 	/// |           | the damage or healing of the spell it triggers instead                     |
 	/// | t / T     | number of ticks of a periodic effect                                       |
-	/// | d / D     | spell duration (d = precise, D = rounded)                                  |
-	/// | i / I     | tick interval of an effect (i = precise, I = rounded)                      |
+	/// | d / D     | spell duration. d always uses the precise template ("1.50 seconds"); D     |
+	/// |           | uses the rounded one for whole values and the precise one without trailing |
+	/// |           | zeros otherwise ("2 seconds", "1.5 seconds")                               |
+	/// | i / I     | tick interval of an effect, precise / rounded like d / D                   |
 	/// | $         | a literal '$'                                                              |
 	///
 	/// Unknown tokens and references to unknown spells are written back unchanged, so a typo
-	/// stays visible in the tooltip instead of silently vanishing.
+	/// stays visible in the tooltip instead of silently vanishing. The formatter never reads
+	/// out of bounds, never overflows and never hands data-driven text to printf: any text and
+	/// any spell data produce some string.
 	std::string FormatSpellText(const std::string& text, const proto_client::SpellEntry& spell, const SpellTextContext& context);
 }
