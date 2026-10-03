@@ -6,11 +6,11 @@
 --      character slides across the floor mid-kneel).
 --   3. An explicit release clears it too.
 --
--- Uses Forest Wolf (entry 45): it has a unit loot entry, and the server creates the loot
--- instance -- and with it the Lootable flag -- whenever an entry is configured, regardless
--- of what the drop chances roll. That makes the Lootable step deterministic.
+-- Uses Forest Bandit (entry 37): one of its loot tables always drops gold. The server only
+-- creates a loot instance -- and with it the Lootable flag -- when the roll yields gold or
+-- items, so a creature whose drops are pure chance (e.g. Forest Wolf) is not deterministic.
 
-local FOREST_WOLF = 45
+local FOREST_BANDIT = 37
 local UNIT_FLAG_LOOTABLE = 2
 local UNIT_FLAG_LOOTING = 4
 
@@ -23,26 +23,26 @@ end
 -- Save the character's starting position before the scenario body runs.
 local startX, startY, startZ = GetPosX(Me()), GetPosY(Me()), GetPosZ(Me())
 
-local wolf = GM.CreateMonster(FOREST_WOLF)
+local bandit = GM.CreateMonster(FOREST_BANDIT)
 -- Declared out here so the cleanup below can destroy it even if the body fails first.
 local second = nil
 
 -- Wrap the scenario body in pcall so cleanup always runs, even on assertion failure.
 local success, errorMsg = pcall(function()
-	Assert(IsAlive(wolf), "wolf should spawn alive")
+	Assert(IsAlive(bandit), "bandit should spawn alive")
 
-	TargetUnit(wolf)
+	TargetUnit(bandit)
 	GM.KillTarget()
 
-	Assert(WaitUntil(function() return not IsAlive(wolf) end, 10000, "wolf dies"),
-		"wolf should be dead after GM.KillTarget")
+	Assert(WaitUntil(function() return not IsAlive(bandit) end, 10000, "bandit dies"),
+		"bandit should be dead after GM.KillTarget")
 
-	Assert(WaitUntil(function() return hasFlag(wolf, UNIT_FLAG_LOOTABLE) end, 10000,
+	Assert(WaitUntil(function() return hasFlag(bandit, UNIT_FLAG_LOOTABLE) end, 10000,
 		"corpse becomes lootable"),
 		"the corpse should carry unit_flags::Lootable after the kill")
 
 	-- 1. Opening the loot window flags the looter.
-	LootUnit(wolf)
+	LootUnit(bandit)
 	Assert(WaitUntil(function() return hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
 		"looter is flagged"),
 		"unit_flags::Looting should be set on the character while the loot window is open")
@@ -59,20 +59,16 @@ local success, errorMsg = pcall(function()
 
 	Log("Looting flag cleared by movement")
 
-	-- 3. An explicit release clears it too. This needs a SECOND corpse, not the first one
-	-- again: a group whose drop chances do not cover the whole 0..100 roll can produce an
-	-- empty loot instance, and CloseLootDialog deliberately clears an empty instance so the
-	-- corpse stops being flagged lootable. Re-looting the same corpse is therefore a coin
-	-- flip. Opening the FIRST loot is always safe, because the instance is created whenever
-	-- the creature has a loot entry at all, empty or not.
-	second = GM.CreateMonster(FOREST_WOLF)
-	Assert(IsAlive(second), "second wolf should spawn alive")
+	-- 3. An explicit release clears it too. Use a fresh corpse so this step does not depend on
+	-- what the first loot window left behind.
+	second = GM.CreateMonster(FOREST_BANDIT)
+	Assert(IsAlive(second), "second bandit should spawn alive")
 
 	TargetUnit(second)
 	GM.KillTarget()
 
-	Assert(WaitUntil(function() return not IsAlive(second) end, 10000, "second wolf dies"),
-		"second wolf should be dead after GM.KillTarget")
+	Assert(WaitUntil(function() return not IsAlive(second) end, 10000, "second bandit dies"),
+		"second bandit should be dead after GM.KillTarget")
 
 	LootUnit(second)
 	Assert(WaitUntil(function() return hasFlag(Me(), UNIT_FLAG_LOOTING) end, 10000,
@@ -88,7 +84,7 @@ local success, errorMsg = pcall(function()
 end)
 
 -- Always clean up, regardless of whether the scenario body succeeded or failed.
-GM.DestroyMonster(wolf)
+GM.DestroyMonster(bandit)
 if second then
 	GM.DestroyMonster(second)
 end

@@ -239,6 +239,8 @@ namespace mmo
 				lootEntries.push_back(legacyLoot);
 			}
 
+			std::unique_ptr<LootInstance> loot;
+			LootMethod groupLootMethod = loot_method::FreeForAll;
 			if (!lootEntries.empty())
 			{
 				// Generate loot
@@ -249,7 +251,6 @@ namespace mmo
 				}
 
 				// Read loot method from first recipient — must be done here; LootInstance has no auth context.
-				LootMethod groupLootMethod = loot_method::FreeForAll;
 				uint64 lootMasterGuid = 0;
 				if (!weakRecipients.empty())
 				{
@@ -269,7 +270,7 @@ namespace mmo
 				}
 
 				ASSERT(controlled.GetWorldInstance());
-				auto loot = std::make_unique<LootInstance>(
+				loot = std::make_unique<LootInstance>(
 					controlled.GetProject().items,
 					controlled.GetWorldInstance()->GetConditionMgr(),
 					controlled.GetGuid(),
@@ -278,6 +279,16 @@ namespace mmo
 					groupLootMethod,
 					lootMasterGuid);
 
+				// A roll that produced neither gold nor items must not leave a lootable corpse behind:
+				// opening an empty loot window over and over reads like a bug to players.
+				if (loot->IsEmpty())
+				{
+					loot.reset();
+				}
+			}
+
+			if (loot)
+			{
 				if (primaryLootRecipient)
 				{
 					uint8 lootThreshold = primaryLootRecipient->GetLootThreshold();
