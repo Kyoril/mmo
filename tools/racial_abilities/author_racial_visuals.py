@@ -2,8 +2,8 @@
 """
 Author the Call of the Watch sound entry (135) and visualization (78), and link spell 250.
 
-    py tools/racial_abilities/author_visuals.py            # validate only
-    py tools/racial_abilities/author_visuals.py --apply    # write editor + ClientDB
+    py tools/racial_abilities/author_racial_visuals.py            # validate only
+    py tools/racial_abilities/author_racial_visuals.py --apply    # write editor + ClientDB
 
 ClientDB receives byte copies of the editor blobs (what mmo_edit's ExportToClient does).
 

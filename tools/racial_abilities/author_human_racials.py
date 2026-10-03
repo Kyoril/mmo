@@ -40,7 +40,7 @@ HUMAN_RACEMASK = 0x80000000
 VERSATILITY, HARD_WORK, CALL_OF_THE_WATCH = 248, 249, 250
 SPELL_IDS = (VERSATILITY, HARD_WORK, CALL_OF_THE_WATCH)
 
-# Ids used by the visualization and sound authored in later steps (see author_visuals.py).
+# Ids used by the visualization and sound authored in later steps (see author_racial_visuals.py).
 VIS_ID = 78
 SOUND_ID = 135
 
@@ -194,7 +194,7 @@ def upsert_spells(dataset):
             visualization_id = target.visualization_id
         target.Clear()
         json_format.ParseDict(draft, target)
-        # The spell -> visualization link is owned by author_visuals.py; keep it on re-runs.
+        # The spell -> visualization link is owned by author_racial_visuals.py; keep it on re-runs.
         if visualization_id:
             target.visualization_id = visualization_id
 

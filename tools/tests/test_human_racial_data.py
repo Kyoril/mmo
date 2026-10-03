@@ -86,7 +86,7 @@ class HumanRacialDataTest(unittest.TestCase):
                          self.ahr.VIS_ID)
 
     def test_visualization_follows_the_kit_rules(self):
-        import author_visuals as av
+        import author_racial_visuals as av
         vis = next(v for v in av.load_editor_visuals().entry if v.id == self.ahr.VIS_ID)
         self.assertEqual(vis.name, "Human - Call of the Watch")
         for event, kit_list in vis.kits_by_event.items():
@@ -102,7 +102,7 @@ class HumanRacialDataTest(unittest.TestCase):
         self.assertEqual(cast_sounds, [self.ahr.SOUND_ID])
 
     def test_sound_entry_exists_and_mirrors(self):
-        import author_visuals as av
+        import author_racial_visuals as av
         sounds = av.load_editor_sounds()
         entry = next(e for e in sounds.entry if e.id == self.ahr.SOUND_ID)
         self.assertEqual(list(entry.files), ["Sound/Spells/Human/CallOfTheWatch.wav"])
