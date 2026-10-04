@@ -239,6 +239,9 @@ namespace mmo
 		/// Sends the Message of the Day to the player
 		void SendMessageOfTheDay(const std::string &motd);
 
+		/// Sends a pending shutdown's remaining seconds (or ShutdownCountdownCancelled) to the client.
+		void SendShutdownCountdown(uint32 seconds);
+
 		/// Sends subsystem availability entries to the client.
 		void SendSubsystemStatus(const SubsystemStatusList& entries);
 
@@ -609,6 +612,7 @@ namespace mmo
 		PacketParseResult OnCheatSummon(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetTimeOfDay(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetSubsystem(game::IncomingPacket &packet);
+		PacketParseResult OnGmShutdown(game::IncomingPacket &packet);
 		PacketParseResult OnGuildCreate(game::IncomingPacket &packet);
 #endif
 	};

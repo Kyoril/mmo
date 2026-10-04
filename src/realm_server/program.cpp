@@ -15,6 +15,8 @@
 #include "chat_channel_mgr.h"
 #include "motd_manager.h"
 #include "time_of_day_manager.h"
+#include "shutdown_manager.h"
+#include "game/shutdown_countdown.h"
 
 #include "asio.hpp"
 
@@ -217,6 +219,16 @@ namespace mmo
 
 		PlayerManager playerManager{ config.maxPlayers, *motdManager };
 		playerManager.SetRealmName(config.realmName);
+
+		// Scheduled shutdowns count down on the timer queue, which the shutdown handler stops.
+		ShutdownManager shutdownManager{
+			[&timerQueue]() { return timerQueue.GetNow(); },
+			[&timerQueue](std::function<void()> callback, const GameTime time) { timerQueue.AddEvent(std::move(callback), time); } };
+		playerManager.SetShutdownManager(shutdownManager);
+		const scoped_connection shutdownAnnounced{ shutdownManager.announce.connect([&playerManager](const uint32 seconds)
+		{
+			playerManager.BroadcastShutdownCountdown(seconds);
+		}) };
 
 		// Initialize asset registry
 		AssetRegistry::Initialize(config.dataFolder, {});
@@ -426,11 +438,19 @@ namespace mmo
 
 		// Declared before the handler that captures it, so the handler can cancel its own wait.
 		std::unique_ptr<asio::signal_set> shutdownSignals;
-		shutdownSignals = InstallShutdownHandler(ioService,
-			[&worldServer, &playerServer, &webService, &playerManager, &worldManager,
-			 &shutdownSignals, &timerQueue, &ioWork, &databasePool]()
+		// Shared by the signal handler and the scheduled shutdown below, and safe to call twice:
+		// a SIGTERM arriving while a scheduled shutdown is winding down must not stop things again.
+		bool realmStopped = false;
+		const std::function<void()> stopRealm = [&worldServer, &playerServer, &webService, &playerManager, &worldManager,
+			 &shutdownSignals, &timerQueue, &ioWork, &databasePool, &realmStopped]()
 		{
-			ILOG("Shutdown signal received - stopping cleanly");
+			if (realmStopped)
+			{
+				return;
+			}
+			realmStopped = true;
+
+			ILOG("Stopping the realm server cleanly");
 
 			// Stop taking new work first, so nothing arrives while the rest winds down. The web
 			// service counts: its acceptor holds a pending async_accept that would otherwise keep
@@ -469,7 +489,43 @@ namespace mmo
 			{
 				databasePool->Stop();
 			}
-		});
+		};
+		shutdownSignals = InstallShutdownHandler(ioService, [&stopRealm]() { stopRealm(); });
+
+		// A scheduled shutdown: log the players out first (their logout saves travel world -> realm
+		// on the same links), then tell the world nodes to go, and stop the realm once they have
+		// disconnected or the grace period ran out. The database pool keeps running until then, so
+		// the character data the world nodes send back is still written.
+		const GameTime worldGracePeriod = constants::OneSecond * 15;
+		std::function<void(GameTime)> stopOnceWorldsAreGone;
+		stopOnceWorldsAreGone = [&stopOnceWorldsAreGone, &worldManager, &timerQueue, &ioService, &stopRealm](const GameTime deadline)
+		{
+			const size_t remaining = worldManager.GetWorldCount();
+			if (remaining == 0 || timerQueue.GetNow() >= deadline)
+			{
+				if (remaining != 0)
+				{
+					WLOG(remaining << " world node(s) did not disconnect in time - stopping anyway");
+				}
+
+				// Posted rather than run here: this is a timer queue callback, and stopping
+				// stops that queue.
+				ioService.post([&stopRealm]() { stopRealm(); });
+				return;
+			}
+
+			timerQueue.AddEvent([&stopOnceWorldsAreGone, deadline]() { stopOnceWorldsAreGone(deadline); }, timerQueue.GetNow() + 250);
+		};
+
+		const scoped_connection shutdownDue{ shutdownManager.shutdownDue.connect(
+			[&playerServer, &playerManager, &worldManager, &timerQueue, &stopOnceWorldsAreGone, worldGracePeriod]()
+		{
+			ILOG("Scheduled realm shutdown is due - logging out players and stopping world nodes");
+			playerServer->Stop();
+			playerManager.DisconnectAll(auth::session_kick_reason::RealmShutdown);
+			worldManager.BroadcastShutdown();
+			stopOnceWorldsAreGone(timerQueue.GetNow() + worldGracePeriod);
+		}) };
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Launch worker threads

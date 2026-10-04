@@ -16,6 +16,8 @@ namespace mmo
 
     void Player::SendMessageOfTheDay(const std::string&) {}
 
+    void Player::SendShutdownCountdown(uint32) {}
+
     void Player::ClearDungeonBindingByInstanceId(InstanceId) {}
 
     // ---- World stubs ----

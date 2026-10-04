@@ -188,7 +188,7 @@ namespace mmo
 		return m_motdManager.GetMessageOfTheDay();
 	}
 
-	void PlayerManager::DisconnectAll()
+	void PlayerManager::DisconnectAll(const std::optional<auth::SessionKickReason> reason)
 	{
 		// Copy the list out under the lock first: Kick() removes the player from this manager,
 		// which takes the same mutex.
@@ -200,7 +200,7 @@ namespace mmo
 
 		for (const auto& player : players)
 		{
-			player->Kick();
+			player->Kick(reason);
 		}
 	}
 
@@ -222,6 +222,17 @@ namespace mmo
 			if (player.HasCharacterGuid())
 			{
 				player.SendMessageOfTheDay(motd);
+			}
+		});
+	}
+
+	void PlayerManager::BroadcastShutdownCountdown(const uint32 seconds)
+	{
+		ForEachPlayer([seconds](Player& player)
+		{
+			if (player.HasCharacterGuid())
+			{
+				player.SendShutdownCountdown(seconds);
 			}
 		});
 	}
