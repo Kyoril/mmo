@@ -106,6 +106,10 @@ services:
       - DATA_DIR=/server-data/data
       - NAV_DIR=/server-data/nav
       - WORLD_DATA_DIR=/server-data/client
+      # In-game bug reports: 1 to enable; the key is the bug API's ingest key (BUG_INGEST_KEYS).
+      - BUG_REPORT_ENABLED=0
+      - BUG_REPORT_API_URL=https://error.mmo-dev.net
+      - BUG_REPORT_API_KEY=BUG_API_INGEST_KEY
     extra_hosts:
       host.docker.internal: "172.17.0.1"
     networks:
