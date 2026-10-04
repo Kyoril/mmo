@@ -155,6 +155,9 @@ namespace mmo
 		/// Enables or disables a world-owned subsystem on this node.
 		void SendSetSubsystemEnabled(game::Subsystem subsystem, bool enabled) const;
 
+		/// Tells the world node to remove its remaining players and shut down for good.
+		void SendShutdown() const;
+
 	private:
 		TimerQueue& m_timerQueue;
 		WorldManager &m_manager;

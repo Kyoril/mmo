@@ -4,8 +4,8 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 7 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 17 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 8 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 18 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -104,6 +104,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 8 | 2026-10-04 | Scheduled realm shutdown: realm→world `Shutdown` opcode; `session_kick_reason::RealmShutdown` |
 | 7 | 2026-10-03 | In-game bug reports and subsystem status: realm→world `BugReport` (identity + client payload) and `SetSubsystemEnabled`, world→realm `BugReportResult` and `SubsystemStatus` |
 | 6 | 2026-09-21 | Realm-wide time of day: `TimeOfDay` realm→world opcode (absolute time of day + client transition length) |
 | 5 | 2026-08-11 | The world→realm handshake carries both protocol versions, and the realm validates them (`1c87e67d`'s link was the last one negotiating nothing) |
@@ -116,6 +117,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 18 | 2026-10-04 | Scheduled realm shutdown: operator `GmShutdown` (start/cancel + delay, handled by the realm in all builds) and server `ShutdownCountdown` (remaining seconds, 0xFFFFFFFF = cancelled) |
 | 17 | 2026-10-03 | In-game bug reports: client `BugReport` (subject + comment + zlib compressed client JSON) and GM `CheatSetSubsystem`; server `BugReportResult` and `SubsystemStatus` (generic subsystem availability, full list on world enter, deltas afterwards) |
 | 16 | 2026-10-03 | GM `CheatResetCooldowns`, `CheatHeal` and `CheatRestorePower` opcodes (target, or self); `SpellCooldown` entries with 0 ms remaining now clear that cooldown on the client, and an entry for spell 0 with 0 ms clears every cooldown including the global cooldown |
 | 14 | 2026-09-21 | Realm-wide time of day: `CheatSetTimeOfDay` GM opcode (handled by the realm), `GameTimeInfo` gains a trailing uint32 `transitionMs` so clients blend smoothly to a changed time |

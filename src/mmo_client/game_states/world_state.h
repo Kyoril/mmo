@@ -509,6 +509,8 @@ namespace mmo
 
 		PacketParseResult OnMessageOfTheDay(game::IncomingPacket &packet);
 
+		PacketParseResult OnShutdownCountdown(game::IncomingPacket &packet);
+
 		PacketParseResult OnMoveRoot(game::IncomingPacket &packet);
 		PacketParseResult OnMoveStun(game::IncomingPacket &packet);
 		PacketParseResult OnMoveSleep(game::IncomingPacket &packet);
@@ -536,6 +538,9 @@ namespace mmo
 		PacketParseResult OnDebugLineOfSightResult(game::IncomingPacket &packet);
 
 	private:
+		/// Console 'shutdown <seconds | m:ss | h:mm:ss>' / 'shutdown cancel' (operators only; the realm checks).
+		void Command_Shutdown(const std::string &cmd, const std::string &args) const;
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		void Command_CheckLineOfSight(const std::string &cmd, const std::string &args) const;
 

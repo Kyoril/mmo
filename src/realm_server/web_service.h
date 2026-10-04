@@ -14,8 +14,9 @@ namespace mmo
 	class MOTDManager;
 	class TimeOfDayManager;
 	class WorldManager;
+	class ShutdownManager;
 
-	class WebService 
+	class WebService
 		: public web::WebService
 	{
 	public:
@@ -49,6 +50,11 @@ namespace mmo
 		/// Gets the world manager, or nullptr if none was set.
 		WorldManager *GetWorldManager() const { return m_worldManager; }
 
+		/// Sets the shutdown manager that /shutdown schedules and cancels through.
+		void SetShutdownManager(ShutdownManager &shutdownManager) { m_shutdownManager = &shutdownManager; }
+		/// Gets the shutdown manager, or nullptr if none was set.
+		ShutdownManager *GetShutdownManager() const { return m_shutdownManager; }
+
 		/// Creates a web client instance for a new connection.
 		virtual web::WebService::WebClientPtr createClient(std::shared_ptr<Client> connection) override;
 
@@ -61,5 +67,6 @@ namespace mmo
 		const GameTime m_startTime;
 		const String m_password;
 		WorldManager *m_worldManager = nullptr;
+		ShutdownManager *m_shutdownManager = nullptr;
 	};
 }

@@ -175,6 +175,8 @@ namespace mmo
 
 		// Most recent GameTimeInfo from the server
 		uint32 m_gameTimeInfoCounter { 0 };
+		uint32 m_shutdownCountdownCounter { 0 };
+		uint32 m_lastShutdownCountdown { 0 };
 		GameTime m_lastGameTime { 0 };
 		uint32 m_lastGameTimeTransitionMs { 0 };
 
@@ -405,6 +407,15 @@ namespace mmo
 		/// Returns the transition length of the most recent GameTimeInfo (0 = plain clock sync).
 		uint32 GetLastGameTimeTransitionMs() const { return m_lastGameTimeTransitionMs; }
 
+		/// Schedules (gm_shutdown_action::Start) or cancels a realm shutdown. Needs gm_level 3.
+		void GmShutdown(uint8 action, uint32 delaySeconds);
+
+		/// Incremented for every ShutdownCountdown received.
+		uint32 GetShutdownCountdownCounter() const { return m_shutdownCountdownCounter; }
+
+		/// Seconds of the last ShutdownCountdown (ShutdownCountdownCancelled after a cancel).
+		uint32 GetLastShutdownCountdown() const { return m_lastShutdownCountdown; }
+
 		/// GAME MASTER only. Learns the given spell.
 		void CheatLearnSpell(uint32 spellId);
 
@@ -550,6 +561,8 @@ namespace mmo
 		PacketParseResult OnDebugLineOfSightResult(game::IncomingPacket& packet);
 
 		PacketParseResult OnGameTimeInfo(game::IncomingPacket& packet);
+
+		PacketParseResult OnShutdownCountdown(game::IncomingPacket& packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
 

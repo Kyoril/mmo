@@ -538,8 +538,24 @@ namespace mmo
 		M2hash.fill(0);
 	}
 
+	void LoginConnector::Shutdown()
+	{
+		m_shuttingDown = true;
+
+		m_pingCountdown.Cancel();
+
+		resetListener();
+		close();
+	}
+
 	void LoginConnector::QueueReconnect()
 	{
+		// Nothing to reconnect to during shutdown -- see Shutdown().
+		if (m_shuttingDown)
+		{
+			return;
+		}
+
 		if (!m_willTerminate)
 		{
 			ILOG("Server will reconnect in 5 seconds...");
@@ -551,6 +567,13 @@ namespace mmo
 
 	void LoginConnector::OnReconnectTimer()
 	{
+		// The timer event cannot be cancelled once queued, so shutdown between queueing and
+		// firing has to be caught at the point of use.
+		if (m_shuttingDown)
+		{
+			return;
+		}
+
 		if (!m_willTerminate)
 		{
 			ILOG("Reconnecting to the login server...");

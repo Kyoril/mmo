@@ -8,6 +8,7 @@
 #include "game/spell.h"
 #include "game/spell_target_map.h"
 #include "game/time_of_day.h"
+#include "game/shutdown_countdown.h"
 #include "game/bug_report_compression.h"
 #include "log/default_log_levels.h"
 #include "mmo_client/luabind_lambda.h"
@@ -1422,6 +1423,46 @@ namespace mmo
 			return waitForTimeOfDayChange("GM.ResetTimeOfDay", previousCounter, transitionMs);
 		}
 
+		/// Waits for the first ShutdownCountdown after previousCounter and returns its seconds.
+		uint32 waitForShutdownCountdown(const char* action, const uint32 previousCounter)
+		{
+			BotRealmConnector& realm = g_runtime->session->GetRealm();
+
+			const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+			while (std::chrono::steady_clock::now() < until)
+			{
+				if (realm.GetShutdownCountdownCounter() != previousCounter)
+				{
+					const uint32 seconds = realm.GetLastShutdownCountdown();
+					if (g_runtime->transcript)
+					{
+						g_runtime->transcript->Action(action, { { "seconds", seconds } });
+					}
+					return seconds;
+				}
+
+				pumpChecked();
+			}
+
+			abortScenario(bot_exit_code::ScenarioFailed, std::string(action) + ": no shutdown countdown received within 10s");
+		}
+
+		uint32 luaGmScheduleShutdown(const uint32 delaySeconds)
+		{
+			BotRealmConnector& realm = g_runtime->session->GetRealm();
+			const uint32 previousCounter = realm.GetShutdownCountdownCounter();
+			realm.GmShutdown(game::gm_shutdown_action::Start, delaySeconds);
+			return waitForShutdownCountdown("GM.ScheduleShutdown", previousCounter);
+		}
+
+		bool luaGmCancelShutdown()
+		{
+			BotRealmConnector& realm = g_runtime->session->GetRealm();
+			const uint32 previousCounter = realm.GetShutdownCountdownCounter();
+			realm.GmShutdown(game::gm_shutdown_action::Cancel, 0);
+			return waitForShutdownCountdown("GM.CancelShutdown", previousCounter) == ShutdownCountdownCancelled;
+		}
+
 		void luaGmSetSpeed(const float speed)
 		{
 			g_runtime->session->GetRealm().CheatSpeed(speed);
@@ -1571,6 +1612,8 @@ namespace mmo
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
 				luabind::def_lambda("GM_SetTimeOfDay", &luaGmSetTimeOfDay),
 				luabind::def_lambda("GM_ResetTimeOfDay", &luaGmResetTimeOfDay),
+				luabind::def_lambda("GM_ScheduleShutdown", &luaGmScheduleShutdown),
+				luabind::def_lambda("GM_CancelShutdown", &luaGmCancelShutdown),
 				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
 				luabind::def_lambda("GM_TurnInQuest", &luaGmTurnInQuest),
 				luabind::def_lambda("GM_ClearInventory", &luaGmClearInventory),
@@ -1639,6 +1682,8 @@ namespace mmo
 				SetSpeed = GM_SetSpeed,
 				SetTimeOfDay = function(timeText, transitionSeconds) return GM_SetTimeOfDay(timeText, transitionSeconds or 8) end,
 				ResetTimeOfDay = function(transitionSeconds) return GM_ResetTimeOfDay(transitionSeconds or 8) end,
+				ScheduleShutdown = function(seconds) return GM_ScheduleShutdown(seconds) end,
+				CancelShutdown = function() return GM_CancelShutdown() end,
 				AcceptQuest = GM_AcceptQuest,
 				TurnInQuest = function(questId, rewardChoice) GM_TurnInQuest(questId, rewardChoice or 0) end,
 				ClearInventory = GM_ClearInventory,

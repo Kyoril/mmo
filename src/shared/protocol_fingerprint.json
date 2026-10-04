@@ -7,15 +7,15 @@
 	],
 	"_format": 3,
 	"auth": {
-		"version": 7,
-		"fingerprint": "sha256:2ceb1be1d847b97d93d0b97db170e4ee091258e1dce6e53ce9303ad3349c1c0b",
+		"version": 8,
+		"fingerprint": "sha256:7f3bbbe64d9f61c1f90e62159f37f3b2ab6bf93f890dc321adb44e213bf90dcb",
 		"files": {
 			"src/shared/auth_protocol/auth_incoming_packet.cpp": "sha256:0e23f09921b76939917c9f7e660deab2977ba79eaa03c9e7ea92e38764f7d5ff",
 			"src/shared/auth_protocol/auth_incoming_packet.h": "sha256:324112379d24eacb03fc3f2984a5180e741ddb95978d1c91616ce43fa68a0745",
 			"src/shared/auth_protocol/auth_outgoing_packet.cpp": "sha256:7003aee85725f5955505c74037f0bcdfb89fd4ebd647257d2edc9d4b06268ca1",
 			"src/shared/auth_protocol/auth_outgoing_packet.h": "sha256:eff0a023adf8133bf02c2df220b97cb364e7b91b82b45470da2cbec34307926c",
 			"src/shared/auth_protocol/auth_protocol.cpp": "sha256:3ae02697539b108be5892fb3288d1480749c9a720e5d4545e2efbfb5601de224",
-			"src/shared/auth_protocol/auth_protocol.h": "sha256:82979e5eb4f3424f53aeffc7bdc5977bc37bc872cada4052ae00e99326b42bca"
+			"src/shared/auth_protocol/auth_protocol.h": "sha256:4bf8d6e1d5b1082f7a1dc83345ab894acf1caccfab4031b23a2252f360e45b10"
 		},
 		"symbols": [
 			"auth::AuthLocale::Default = 0",
@@ -95,11 +95,13 @@
 			"auth::realm_world_packet::PlayerGuildChanged = 9",
 			"auth::realm_world_packet::ProxyPacket = 4",
 			"auth::realm_world_packet::SetSubsystemEnabled = 17",
+			"auth::realm_world_packet::Shutdown = 18",
 			"auth::realm_world_packet::TeleportRequest = 7",
 			"auth::realm_world_packet::TimeOfDay = 15",
 			"auth::session_kick_reason::AccountBanned = 1",
-			"auth::session_kick_reason::Count_ = 2",
+			"auth::session_kick_reason::Count_ = 3",
 			"auth::session_kick_reason::LoggedInElsewhere = 0",
+			"auth::session_kick_reason::RealmShutdown = 2",
 			"auth::world_left_reason::Disconnect = 2",
 			"auth::world_left_reason::Logout = 0",
 			"auth::world_left_reason::Teleport = 1",
@@ -129,8 +131,8 @@
 		]
 	},
 	"game": {
-		"version": 17,
-		"fingerprint": "sha256:87cbc7a5105103238aeda159ddf738ce816a669cd0301b91c3439ba3dfdfc0bb",
+		"version": 18,
+		"fingerprint": "sha256:405f7477fb6e4e87d379161e798167a96f9688f7ef94e23a314ae85ebcd0a6aa",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -146,7 +148,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:25c3cdf2a4ff142207005afb1368fe56e0c2506d694d599437426a6c3b732341"
+			"src/shared/game_protocol/game_protocol.h": "sha256:3542710b1178277f9707444a393184eec9ce2accf094aaa6af0f708e04ba91bb"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -232,7 +234,7 @@
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 169",
+			"game::client_realm_packet::Count_ = 170",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",
@@ -253,6 +255,7 @@
 			"game::client_realm_packet::FriendInvite = 112",
 			"game::client_realm_packet::FriendListRequest = 116",
 			"game::client_realm_packet::FriendRemove = 115",
+			"game::client_realm_packet::GmShutdown = 169",
 			"game::client_realm_packet::GossipAction = 89",
 			"game::client_realm_packet::GossipHello = 61",
 			"game::client_realm_packet::GroupAccept = 85",
@@ -364,6 +367,8 @@
 			"game::game_world_object_type::Door = 1",
 			"game::game_world_object_type::Mailbox = 2",
 			"game::game_world_object_type::QuestObject = 3",
+			"game::gm_shutdown_action::Cancel = 1",
+			"game::gm_shutdown_action::Start = 0",
 			"game::guild_command::Demote = 3",
 			"game::guild_command::Disband = 7",
 			"game::guild_command::Invite = 0",
@@ -577,7 +582,7 @@
 			"game::realm_client_packet::ChatMessage = 23",
 			"game::realm_client_packet::ClassXpUpdate = 168",
 			"game::realm_client_packet::CompressedUpdateObject = 9",
-			"game::realm_client_packet::Count_ = 178",
+			"game::realm_client_packet::Count_ = 179",
 			"game::realm_client_packet::CreatureMove = 38",
 			"game::realm_client_packet::CreatureQueryResult = 42",
 			"game::realm_client_packet::DebugLineOfSightResult = 149",
@@ -704,6 +709,7 @@
 			"game::realm_client_packet::SetProficiency = 133",
 			"game::realm_client_packet::ShowBank = 159",
 			"game::realm_client_packet::ShowMailbox = 161",
+			"game::realm_client_packet::ShutdownCountdown = 178",
 			"game::realm_client_packet::SpellCooldown = 34",
 			"game::realm_client_packet::SpellDamageLog = 39",
 			"game::realm_client_packet::SpellEnergizeLog = 93",

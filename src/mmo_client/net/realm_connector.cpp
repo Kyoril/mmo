@@ -1482,4 +1482,13 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::GmShutdown(const uint8 action, const uint32 delaySeconds)
+	{
+		sendSinglePacket([action, delaySeconds](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GmShutdown);
+			packet << io::write<uint8>(action) << io::write<uint32>(delaySeconds);
+			packet.Finish();
+		});
+	}
 }

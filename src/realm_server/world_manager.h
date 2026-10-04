@@ -64,6 +64,12 @@ namespace mmo
 		/// @param transitionMs How long clients should blend towards the new time, 0 = instantly.
 		void BroadcastTimeOfDay(GameTime timeOfDay, uint32 transitionMs);
 
+		/// Tells every connected world node to shut down for good (scheduled realm shutdown).
+		void BroadcastShutdown();
+
+		/// Number of currently connected world nodes.
+		size_t GetWorldCount();
+
 		/// Switches a subsystem realm-wide: world-owned subsystems are relayed to every world node,
 		/// realm-owned ones are set in the realm's table and pushed to every player in the world.
 		/// @returns false if the subsystem id is unknown.

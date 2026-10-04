@@ -4,10 +4,12 @@
 
 #include "database.h"
 #include "motd_manager.h"
+#include "shutdown_manager.h"
 #include "time_of_day_manager.h"
 #include "web_service.h"
 #include "world_manager.h"
 #include "game/subsystem.h"
+#include "game/shutdown_countdown.h"
 #include "base/clock.h"
 #include "log/default_log_levels.h"
 #include "game/time_of_day.h"
@@ -15,6 +17,7 @@
 #include "nlohmann/json.hpp"
 
 #include <algorithm>
+#include <charconv>
 
 using json = nlohmann::json;
 
@@ -59,6 +62,16 @@ namespace mmo
 		RegisterRoute(Type::Get, "/motd", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
 		{
 			handleGetMotd(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/shutdown", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleGetShutdown(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/shutdown/cancel", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleCancelShutdown(req, response);
 		});
 
 		RegisterRoute(Type::Post, "/shutdown", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
@@ -110,13 +123,99 @@ namespace mmo
 		DispatchRoute(request, response);
 	}
 
+	void WebClient::handleGetShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const ShutdownManager* shutdown = m_service.GetShutdownManager();
+
+		json jsonResponse;
+		jsonResponse["pending"] = shutdown && shutdown->IsPending();
+		jsonResponse["shuttingDown"] = shutdown && shutdown->IsShuttingDown();
+		jsonResponse["remaining"] = shutdown ? shutdown->GetRemainingSeconds() : 0;
+		SendJsonResponse(response, jsonResponse);
+	}
+
 	void WebClient::handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const
 	{
-		ILOG("Shutting down..");
-		response.finish();
+		ShutdownManager* shutdown = m_service.GetShutdownManager();
+		if (!shutdown)
+		{
+			response.setStatus(net::http::OutgoingAnswer::ServiceUnavailable);
 
-		auto& ioService = getService().getIOService();
-		ioService.stop();
+			json jsonResponse;
+			jsonResponse["status"] = "UNAVAILABLE";
+			jsonResponse["message"] = "Shutdown is not available";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (shutdown->IsShuttingDown())
+		{
+			response.setStatus(net::http::OutgoingAnswer::Conflict);
+
+			json jsonResponse;
+			jsonResponse["status"] = "SHUTTING_DOWN";
+			jsonResponse["message"] = "The realm is already shutting down";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		uint32 delaySeconds = 0;
+		const auto& arguments = request.getPostFormArguments();
+		if (const auto it = arguments.find("delay"); it != arguments.end() && !it->second.empty())
+		{
+			const String& text = it->second;
+			const auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), delaySeconds);
+			if (ec != std::errc() || ptr != text.data() + text.size() || delaySeconds > MaxShutdownDelaySeconds)
+			{
+				response.setStatus(net::http::OutgoingAnswer::BadRequest);
+
+				json jsonResponse;
+				jsonResponse["status"] = "INVALID_PARAMETER";
+				jsonResponse["message"] = "delay must be a whole number of seconds between 0 and " + std::to_string(MaxShutdownDelaySeconds);
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+		}
+
+		ILOG("Realm shutdown scheduled via web API in " << delaySeconds << " seconds");
+		shutdown->Schedule(delaySeconds);
+
+		json jsonResponse;
+		jsonResponse["status"] = "SUCCESS";
+		jsonResponse["delay"] = delaySeconds;
+		SendJsonResponse(response, jsonResponse);
+	}
+
+	void WebClient::handleCancelShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		ShutdownManager* shutdown = m_service.GetShutdownManager();
+		if (shutdown && shutdown->IsShuttingDown())
+		{
+			response.setStatus(net::http::OutgoingAnswer::Conflict);
+
+			json jsonResponse;
+			jsonResponse["status"] = "SHUTTING_DOWN";
+			jsonResponse["message"] = "The realm is already shutting down";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (!shutdown || !shutdown->Cancel())
+		{
+			response.setStatus(net::http::OutgoingAnswer::Conflict);
+
+			json jsonResponse;
+			jsonResponse["status"] = "NOT_PENDING";
+			jsonResponse["message"] = "No shutdown is pending";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		ILOG("Realm shutdown cancelled via web API");
+
+		json jsonResponse;
+		jsonResponse["status"] = "SUCCESS";
+		SendJsonResponse(response, jsonResponse);
 	}
 
 	std::pair<BigNumber, BigNumber> calculateSV(String& id, String& password)

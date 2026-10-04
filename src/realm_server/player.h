@@ -239,6 +239,9 @@ namespace mmo
 		/// Sends the Message of the Day to the player
 		void SendMessageOfTheDay(const std::string &motd);
 
+		/// Sends a pending shutdown's remaining seconds (or ShutdownCountdownCancelled) to the client.
+		void SendShutdownCountdown(uint32 seconds);
+
 		/// Sends subsystem availability entries to the client.
 		void SendSubsystemStatus(const SubsystemStatusList& entries);
 
@@ -576,6 +579,9 @@ namespace mmo
 		/// Handles a bug report: checks availability and the rate limit, then forwards it to the
 		/// world node with the account and character identity attached.
 		PacketParseResult OnBugReport(game::IncomingPacket &packet);
+
+		/// Operator-only GM command that schedules or cancels a realm shutdown; available in every build.
+		PacketParseResult OnGmShutdown(game::IncomingPacket &packet);
 
 		// Chat channel packet handlers
 		PacketParseResult OnChannelJoin(game::IncomingPacket &packet);

@@ -7,6 +7,7 @@
 #include "login_connector.h"
 #include "database.h"
 #include "version.h"
+#include "shutdown_manager.h"
 
 #include "base/random.h"
 #include "base/sha1.h"
@@ -25,6 +26,8 @@
 #include "player_group.h"
 #include "time_of_day_manager.h"
 #include "game/time_of_day.h"
+#include "game/gm_level.h"
+#include "game/shutdown_countdown.h"
 #include "base/utilities.h"
 #include "game/chat_type.h"
 #include "game/guild_info.h"
@@ -789,7 +792,7 @@ namespace mmo
 		case game::client_realm_packet::CheatKill:
 		case game::client_realm_packet::CheatRevive:
 			// Require GM level 1 (basic GM)
-			if (!HasGMLevel(1))
+			if (!HasGMLevel(gm_level::Gm))
 			{
 				WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
 				return PacketParseResult::Pass;
@@ -815,7 +818,7 @@ namespace mmo
 		case game::client_realm_packet::CheatHeal:
 		case game::client_realm_packet::CheatRestorePower:
 			// Require GM level 2
-			if (!HasGMLevel(2))
+			if (!HasGMLevel(gm_level::SeniorGm))
 			{
 				WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
 				return PacketParseResult::Pass;
@@ -2371,7 +2374,7 @@ namespace mmo
 	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket &packet)
 	{
 		// Require GM level 1 for teleport commands
-		if (!HasGMLevel(1))
+		if (!HasGMLevel(gm_level::Gm))
 		{
 			WLOG("Player " << m_characterData->name << " attempted to use teleport command without sufficient privileges");
 			return PacketParseResult::Pass;
@@ -2442,7 +2445,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (!HasGMLevel(1))
+		if (!HasGMLevel(gm_level::Gm))
 		{
 			WLOG("Player " << m_characterData->name << " attempted to toggle a subsystem without sufficient privileges");
 			return PacketParseResult::Pass;
@@ -2466,7 +2469,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (!HasGMLevel(1))
+		if (!HasGMLevel(gm_level::Gm))
 		{
 			WLOG("Player " << m_characterData->name << " attempted to set the time of day without sufficient privileges");
 			return PacketParseResult::Pass;
@@ -2495,7 +2498,7 @@ namespace mmo
 	PacketParseResult Player::OnCheatSummon(game::IncomingPacket &packet)
 	{
 		// Require GM level 2 for teleport commands
-		if (!HasGMLevel(2))
+		if (!HasGMLevel(gm_level::SeniorGm))
 		{
 			WLOG("Player " << m_characterData->name << " attempted to use summon command without sufficient privileges");
 			return PacketParseResult::Pass;
@@ -3261,6 +3264,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::ChannelJoin, *this, &Player::OnChannelJoin);
 			RegisterPacketHandler(game::client_realm_packet::ChannelLeave, *this, &Player::OnChannelLeave);
 			RegisterPacketHandler(game::client_realm_packet::BugReport, *this, &Player::OnBugReport);
+			RegisterPacketHandler(game::client_realm_packet::GmShutdown, *this, &Player::OnGmShutdown);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatSetSubsystem, *this, &Player::OnCheatSetSubsystem);
@@ -3297,6 +3301,7 @@ namespace mmo
 			ClearPacketHandler(game::client_realm_packet::ChannelJoin);
 			ClearPacketHandler(game::client_realm_packet::ChannelLeave);
 			ClearPacketHandler(game::client_realm_packet::BugReport);
+			ClearPacketHandler(game::client_realm_packet::GmShutdown);
 
 #if MMO_WITH_DEV_COMMANDS
 			ClearPacketHandler(game::client_realm_packet::CheatSetSubsystem);
@@ -3371,6 +3376,12 @@ namespace mmo
 		if (!motd.empty())
 		{
 			SendMessageOfTheDay(motd);
+		}
+
+		// A shutdown already counting down is announced once to players arriving late
+		if (const ShutdownManager* shutdown = GetManager().GetShutdownManager(); shutdown && shutdown->IsPending())
+		{
+			SendShutdownCountdown(shutdown->GetRemainingSeconds());
 		}
 
 		// Check if we are in a guild
@@ -4828,6 +4839,71 @@ namespace mmo
 		};
 		m_database.asyncRequestKeyed(m_characterData->guildId, std::move(dbHandler), &IDatabase::SetGuildMotd, m_characterData->guildId, motd);
 
+		return PacketParseResult::Pass;
+	}
+
+	void Player::SendShutdownCountdown(const uint32 seconds)
+	{
+		if (!m_connection)
+		{
+			return;
+		}
+
+		m_connection->sendSinglePacket([seconds](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::ShutdownCountdown);
+			packet << io::write<uint32>(seconds);
+			packet.Finish();
+		});
+	}
+
+	PacketParseResult Player::OnGmShutdown(game::IncomingPacket &packet)
+	{
+		uint8 action = 0;
+		uint32 delaySeconds = 0;
+		if (!(packet >> io::read<uint8>(action) >> io::read<uint32>(delaySeconds)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!HasGMLevel(gm_level::Operator))
+		{
+			WLOG("Account " << GetAccountName() << " attempted to schedule a realm shutdown without operator rights");
+			return PacketParseResult::Pass;
+		}
+
+		ShutdownManager* shutdown = GetManager().GetShutdownManager();
+		if (!shutdown)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		if (action == game::gm_shutdown_action::Cancel)
+		{
+			if (shutdown->Cancel())
+			{
+				ILOG("Account " << GetAccountName() << " cancelled the pending realm shutdown");
+			}
+			else if (shutdown->IsShuttingDown())
+			{
+				WLOG("Account " << GetAccountName() << " tried to cancel the realm shutdown, but the realm is already shutting down");
+			}
+			return PacketParseResult::Pass;
+		}
+
+		if (action != game::gm_shutdown_action::Start || delaySeconds > MaxShutdownDelaySeconds)
+		{
+			WLOG("Account " << GetAccountName() << " sent an invalid shutdown request (action " << static_cast<uint32>(action) << ", delay " << delaySeconds << ")");
+			return PacketParseResult::Pass;
+		}
+
+		if (!shutdown->Schedule(delaySeconds))
+		{
+			WLOG("Account " << GetAccountName() << " tried to schedule a realm shutdown, but the realm is already shutting down");
+			return PacketParseResult::Pass;
+		}
+
+		ILOG("Account " << GetAccountName() << " scheduled a realm shutdown in " << delaySeconds << " seconds");
 		return PacketParseResult::Pass;
 	}
 

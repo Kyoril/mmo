@@ -19,6 +19,7 @@ namespace mmo
 {
 	class Player;
 	class MOTDManager;
+	class ShutdownManager;
 
 	/// Manages all connected players.
 	///
@@ -94,11 +95,12 @@ namespace mmo
 
 		/// Disconnects every managed player. Used at shutdown so clients see a closed connection
 		/// rather than a socket that simply stops answering.
+		/// @param reason Sent to each client before the disconnect, if set.
 		///
 		/// Unlike the login server's equivalent this calls Kick() directly: the realm server runs
 		/// all io work on one thread (see maxNetworkThreads in program.cpp), so the shutdown
 		/// handler is already on the thread that owns every connection.
-		void DisconnectAll();
+		void DisconnectAll(std::optional<auth::SessionKickReason> reason = std::nullopt);
 
 		/// Broadcasts the Message of the Day to all connected players.
 		void BroadcastMessageOfTheDay(const String& motd);
@@ -122,6 +124,16 @@ namespace mmo
 		/// Gets the name of this realm.
 		const String& GetRealmName() const { return m_realmName; }
 
+		/// Sets the realm's shutdown manager (pending shutdowns are announced to entering players).
+		void SetShutdownManager(ShutdownManager& shutdownManager) { m_shutdownManager = &shutdownManager; }
+
+		/// Gets the realm's shutdown manager, or nullptr if none was set.
+		ShutdownManager* GetShutdownManager() const { return m_shutdownManager; }
+
+		/// Sends a shutdown countdown (remaining seconds or ShutdownCountdownCancelled) to every
+		/// player that is in the world.
+		void BroadcastShutdownCountdown(uint32 seconds);
+
 	private:
 
 		Players m_players;
@@ -132,5 +144,6 @@ namespace mmo
 		BugReportRateLimiter m_bugReportRateLimiter;
 		RealmSubsystemTable m_subsystemTable;
 		String m_realmName;
+		ShutdownManager* m_shutdownManager = nullptr;
 	};
 }

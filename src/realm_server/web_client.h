@@ -28,8 +28,12 @@ namespace mmo
 
 	private:
 
-		/// Handles a shutdown request.
+		/// GET /shutdown: reports whether a shutdown is pending and the seconds remaining.
+		void handleGetShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		/// POST /shutdown: schedules a graceful realm shutdown ('delay' in seconds, default 0 = now).
 		void handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		/// POST /shutdown/cancel: cancels the pending shutdown.
+		void handleCancelShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		/// Handles a world creation request.
 		void handleCreateWorld(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		/// Handles a Message of the Day query.

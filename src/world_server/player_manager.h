@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <map>
+#include <vector>
 
 namespace mmo
 {
@@ -29,6 +30,9 @@ namespace mmo
 		/// @param guid Character guid to look up.
 		/// @return Shared pointer to the player if found, otherwise nullptr.
 		PlayerPtr GetPlayerByCharacterGuid(ObjectGuid guid) const;
+
+		/// Character guids of every player currently on this node.
+		std::vector<ObjectGuid> GetCharacterGuids() const;
 
 	private:
 		std::map<ObjectId, PlayerPtr> m_players;

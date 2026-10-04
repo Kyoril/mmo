@@ -114,6 +114,24 @@ namespace mmo
 		}
 	}
 
+	void WorldManager::BroadcastShutdown()
+	{
+		std::scoped_lock scopedLock{ m_worldsMutex };
+		for (const auto& world : m_worlds)
+		{
+			if (world->IsAuthenticated())
+			{
+				world->SendShutdown();
+			}
+		}
+	}
+
+	size_t WorldManager::GetWorldCount()
+	{
+		std::scoped_lock scopedLock{ m_worldsMutex };
+		return m_worlds.size();
+	}
+
 	bool WorldManager::SetSubsystemEnabled(const game::Subsystem subsystem, const bool enabled, PlayerManager& playerManager)
 	{
 		if (subsystem >= game::subsystem::Count_)

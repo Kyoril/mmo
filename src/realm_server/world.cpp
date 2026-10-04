@@ -1306,6 +1306,15 @@ namespace mmo
 		});
 	}
 
+	void World::SendShutdown() const
+	{
+		m_connection->sendSinglePacket([](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::realm_world_packet::Shutdown);
+			packet.Finish();
+		});
+	}
+
 	void World::SendSetSubsystemEnabled(const game::Subsystem subsystem, const bool enabled) const
 	{
 		m_connection->sendSinglePacket([subsystem, enabled](auth::OutgoingPacket& packet)

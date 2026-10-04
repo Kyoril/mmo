@@ -1,0 +1,16 @@
+meta {
+  name: Shutdown Cancel
+  type: http
+  seq: 11
+}
+
+post {
+  url: http://localhost:8092/shutdown/cancel
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

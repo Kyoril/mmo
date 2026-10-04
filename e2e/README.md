@@ -130,6 +130,11 @@ character first, so the kill grants real kill xp and quest kill credit),
 `GM.ResetTimeOfDay([transitionSeconds]) -> "HH:MM:SS"` (change the realm-wide time of day,
 default transition 8s; wait for the resulting GameTimeInfo and return the time it carries —
 realm state that outlives the scenario, so always reset it before the scenario ends),
+`GM.ScheduleShutdown(seconds) -> seconds` and `GM.CancelShutdown() -> true` (schedule or
+cancel the realm's scheduled shutdown, needs gm_level 3; wait for the realm's
+ShutdownCountdown announcement and return its seconds, `GM.CancelShutdown` returns whether it
+announced the cancellation — a shutdown that runs out stops the shared test stack, so always
+cancel it within the scenario, and never pass 0 seconds),
 `GM.TurnInQuest(questId [, rewardChoice])` (quest must be objective-complete; no
 quest ender needed), `GM.ClearInventory()` (destroys all backpack items, keeps
 equipment), `GM.DamageTarget(amount)` (deals raw damage to the current target through the
