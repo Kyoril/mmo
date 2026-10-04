@@ -119,14 +119,22 @@ def check(name, exe, config, workdir, port, startup_grace, signal_timeout):
         # After a clean shutdown the peer must see the connection closed, not a socket that
         # merely stopped answering -- that distinction is the whole point of closing rather
         # than releasing the connection.
+        # A goodbye packet ahead of the close is fine (the realm tells clients why it kicks them,
+        # e.g. RealmShutdown); what must follow it is the close itself.
         client.settimeout(3)
+        received = 0
         try:
-            data = client.recv(64)
-            if data == b"":
-                print(f"{name}: client saw EOF (closed)")
-            else:
-                print(f"{name}: FAIL - client got unexpected data instead of a close")
-                clean = False
+            while True:
+                data = client.recv(4096)
+                if data == b"":
+                    suffix = f" after {received} byte(s)" if received else ""
+                    print(f"{name}: client saw EOF (closed){suffix}")
+                    break
+                received += len(data)
+                if received > 65536:
+                    print(f"{name}: FAIL - client kept receiving data instead of a close")
+                    clean = False
+                    break
         except socket.timeout:
             print(f"{name}: FAIL - client never saw a close")
             clean = False

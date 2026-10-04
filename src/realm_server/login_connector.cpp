@@ -540,6 +540,11 @@ namespace mmo
 
 	void LoginConnector::Shutdown()
 	{
+		// Called when the shutdown sequence starts and again by the final stop; once is enough.
+		if (m_shuttingDown)
+		{
+			return;
+		}
 		m_shuttingDown = true;
 
 		m_pingCountdown.Cancel();
