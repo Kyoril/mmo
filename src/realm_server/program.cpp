@@ -497,6 +497,7 @@ namespace mmo
 		// disconnected or the grace period ran out. The database pool keeps running until then, so
 		// the character data the world nodes send back is still written.
 		const GameTime worldGracePeriod = constants::OneSecond * 15;
+		const GameTime worldPollInterval = constants::OneSecond / 4;
 		std::function<void(GameTime)> stopOnceWorldsAreGone;
 		stopOnceWorldsAreGone = [&stopOnceWorldsAreGone, &worldManager, &timerQueue, &ioService, &stopRealm](const GameTime deadline)
 		{
@@ -514,7 +515,7 @@ namespace mmo
 				return;
 			}
 
-			timerQueue.AddEvent([&stopOnceWorldsAreGone, deadline]() { stopOnceWorldsAreGone(deadline); }, timerQueue.GetNow() + 250);
+			timerQueue.AddEvent([&stopOnceWorldsAreGone, deadline]() { stopOnceWorldsAreGone(deadline); }, timerQueue.GetNow() + worldPollInterval);
 		};
 
 		const scoped_connection shutdownDue{ shutdownManager.shutdownDue.connect(

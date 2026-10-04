@@ -580,6 +580,9 @@ namespace mmo
 		/// world node with the account and character identity attached.
 		PacketParseResult OnBugReport(game::IncomingPacket &packet);
 
+		/// Operator-only GM command that schedules or cancels a realm shutdown; available in every build.
+		PacketParseResult OnGmShutdown(game::IncomingPacket &packet);
+
 		// Chat channel packet handlers
 		PacketParseResult OnChannelJoin(game::IncomingPacket &packet);
 		PacketParseResult OnChannelLeave(game::IncomingPacket &packet);
@@ -612,7 +615,6 @@ namespace mmo
 		PacketParseResult OnCheatSummon(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetTimeOfDay(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetSubsystem(game::IncomingPacket &packet);
-		PacketParseResult OnGmShutdown(game::IncomingPacket &packet);
 		PacketParseResult OnGuildCreate(game::IncomingPacket &packet);
 #endif
 	};
