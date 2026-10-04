@@ -2,9 +2,13 @@
 
 If you want, you can support me on [ko-fi](https://ko-fi.com/kyoril)!
 
-Character Selection Screen             |  Ingame
+Character Selection             |  Group combat with spell effects
 :-------------------------:|:-------------------------:
-<img src="./screenshots/char_select.png" width="600">  |  <img src="./screenshots/ingame_01.png" width="600">
+<img src="./screenshots/char_select.png" width="600">  |  <img src="./screenshots/party_combat_holy_fire.png" width="600">
+Boss loot with group loot rolls  |  Party chat
+<img src="./screenshots/boss_loot_roll.png" width="600">  |  <img src="./screenshots/party_chat.png" width="600">
+Character sheet and inventory  |  Talents
+<img src="./screenshots/character_inventory.png" width="600">  |  <img src="./screenshots/talents.png" width="600">
 Spawn Editor        |  Unreal inspired material graph editor with PBR support
 <img src="./screenshots/spawn_editor.png" width="600">  |  <img src="./screenshots/material_editor.png" width="600">
 World Editor with Deferred Shading | 

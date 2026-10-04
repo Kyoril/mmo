@@ -89,3 +89,6 @@ tools/gate/last_report.json
 tools/gate/logs/
 tools/gate/reports/
 dev/
+
+# Screenshot staging runtime (tools/showcase)
+tools/showcase/runtime/
