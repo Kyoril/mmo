@@ -37,5 +37,9 @@ namespace mmo
 
 		/// @param shape
 		virtual std::unique_ptr<UnitWatcher> WatchUnits(const Circle& shape, std::function<bool(GameUnitS&, bool)> visibilityChanged) = 0;
+
+		/// @param position A world position.
+		/// @return true if the position lies inside the area the finder can index (and is finite).
+		virtual bool IsInBounds(const Vector3& position) const = 0;
 	};
 }

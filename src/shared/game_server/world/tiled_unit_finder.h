@@ -20,6 +20,7 @@ namespace mmo
 		void UpdatePosition(GameUnitS& updated, const Vector3& previousPos) override;
 		void FindUnits(const Circle& shape, const std::function<bool(GameUnitS&)>& resultHandler) override;
 		std::unique_ptr<UnitWatcher> WatchUnits(const Circle& shape, std::function<bool(GameUnitS&, bool)> visibilityChanged) override;
+		bool IsInBounds(const Vector3& position) const override;
 
 	private:
 
@@ -42,6 +43,12 @@ namespace mmo
 		Tile& GetTile(const TileIndex2D& position);
 
 		//const Tile &getTile(const TileIndex2D &position) const;
+
+		/// Maps one planar coordinate onto a tile index, clamped to [0, gridLength).
+		/// @return false if the coordinate lies outside the grid or is not finite.
+		bool ToTileIndex(float coordinate, size_t gridLength, TileIndex& outIndex) const;
+
+		/// @return The tile index of a planar point, clamped to the grid.
 		TileIndex2D GetTilePosition(const Vector<float, 2>& point) const;
 
 		Tile& GetUnitsTile(const GameUnitS& findable);

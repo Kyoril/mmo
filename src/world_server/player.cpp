@@ -1909,6 +1909,21 @@ namespace mmo
 		m_manager.RemovePlayer(shared_from_this());
 	}
 
+	bool Player::ValidateClientPosition(const Vector3& position, const uint16 opCode)
+	{
+		if (m_worldInstance && m_worldInstance->IsValidPosition(position))
+		{
+			return true;
+		}
+
+		// No legitimate client sends a position the world cannot hold, and applying one indexes
+		// the world grids out of range. Kick rather than correct.
+		ELOG("[AntiCheat] Kicking player " << m_character->GetName() << " (GUID " << log_hex_digit(m_character->GetGuid())
+			<< "): invalid position (" << position.x << ", " << position.y << ", " << position.z << ") in packet " << log_hex_digit(opCode));
+		Kick();
+		return false;
+	}
+
 	void Player::SendTrainerBuyError(uint64 trainerGuid, trainer_result::Type result) const
 	{
 		SendPacket([trainerGuid, result](game::OutgoingPacket& packet)
@@ -2141,6 +2156,11 @@ namespace mmo
 		if (!(contentReader >> io::read<uint64>(characterGuid) >> info))
 		{
 			ELOG("Failed to read movement packet")
+			return;
+		}
+
+		if (!ValidateClientPosition(info.position, opCode))
+		{
 			return;
 		}
 
@@ -3100,7 +3120,12 @@ namespace mmo
 			ELOG("Could not read movement info from ack packet 0x" << std::hex << opCode);
 			return;
 		}
-		
+
+		if (!ValidateClientPosition(info.position, opCode))
+		{
+			return;
+		}
+
 		// TODO: Validate movement speed
 
 		// Used by speed change acks

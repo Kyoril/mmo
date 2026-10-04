@@ -433,8 +433,8 @@ namespace mmo
 			}
 		};
 
-		// Execute
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetRealmAuthData, std::cref(m_realmName));
+		// Execute. By value: the request runs on the database thread and may outlive this connection.
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetRealmAuthData, m_realmName);
 		return PacketParseResult::Pass;
 	}
 

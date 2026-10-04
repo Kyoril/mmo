@@ -258,6 +258,13 @@ namespace mmo
 
 		VisibilityGrid& GetGrid() const;
 
+		/// Tests whether a position can be held by this world: finite, and inside both the
+		/// visibility grid and the unit finder grid. Every position that comes from a client must
+		/// pass this before it is applied - the grids index directly by position.
+		/// @param position The world position to test.
+		/// @return true if the position is valid in this world.
+		[[nodiscard]] bool IsValidPosition(const Vector3& position) const;
+
 		void NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo, const MovementInfo& newMovementInfo) const;
 
 		std::shared_ptr<GameCreatureS> CreateCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius);
