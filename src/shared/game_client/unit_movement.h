@@ -486,6 +486,15 @@ namespace mmo
 		/// @return True if ground was found and position was corrected, false otherwise
 		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f, std::optional<float> referenceHeight = std::nullopt);
 
+		/// @brief CorrectGroundHeight for a unit standing still (idle NPCs).
+		/// While the node sits exactly where the previous successful correction put it, the scene
+		/// query is skipped and only re-run every IdleGroundRecheckInterval seconds, so ground that
+		/// changes underneath (a page streaming in, a door closing) is still picked up. Any
+		/// movement, or a failed search, falls back to a correction on every call.
+		/// @param deltaTime Seconds since the previous call.
+		/// @return True if the unit is grounded.
+		bool CorrectIdleGroundHeight(float deltaTime);
+
 	public:
 		/// @brief Calculates velocity based on input parameters and applies friction
 		/// @param deltaTime Time step for velocity calculation
@@ -926,6 +935,15 @@ namespace mmo
 
 		/// The velocity of the moved unit.
 		Vector3 m_velocity = Vector3::Zero;
+
+		/// Where the last successful CorrectIdleGroundHeight left the unit's node.
+		Vector3 m_idleGroundPosition = Vector3::Zero;
+
+		/// Whether m_idleGroundPosition holds a grounded position that can be reused.
+		bool m_idleGroundValid = false;
+
+		/// Seconds until an unmoved idle unit re-validates its ground height.
+		float m_idleGroundRecheckTimer = 0.0f;
 
 		Vector3 m_gravityDirection = Vector3::NegativeUnitY;
 

@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -38,26 +39,16 @@ namespace mmo
 		/// Number of times this activity was performed in the frame.
 		uint64 callCount = 0;
 
-		/// Rolling history of the last MaxHistorySize frames for this metric.
-		std::deque<FrameData> history;
+		/// Average time in ms over the last MaxHistorySize frames this metric reported in.
+		double averageTimeMs = 0.0;
 
 		/// Maximum number of frames to keep in history.
 		static constexpr size_t MaxHistorySize = 60;
 
-		/// @brief Returns the average time in ms over the stored history.
+		/// @brief Returns the average time in ms over the rolling history window.
 		[[nodiscard]] double GetAverageTimeMs() const
 		{
-			if (history.empty())
-			{
-				return totalTimeMs;
-			}
-
-			double sum = 0.0;
-			for (const auto& frame : history)
-			{
-				sum += frame.timeMs;
-			}
-			return sum / static_cast<double>(history.size());
+			return averageTimeMs;
 		}
 	};
 
@@ -94,7 +85,7 @@ namespace mmo
 		/// @brief Adds measured time for a named metric. Safe to call from any thread.
 		/// @param metricName The name of the metric to add time to.
 		/// @param timeMs The time in milliseconds to add.
-		void AddTime(const std::string& metricName, double timeMs);
+		void AddTime(std::string_view metricName, double timeMs);
 
 		/// @brief Retrieves the sorted list of metrics from the last completed frame. Main thread only.
 		[[nodiscard]] const std::vector<PerformanceMetric>& GetMetrics() const { return m_metrics; }
@@ -119,6 +110,17 @@ namespace mmo
 		[[nodiscard]] double GetAverageFPS() const;
 
 	private:
+		/// @brief Transparent string hash for heterogeneous std::string_view lookups.
+		struct StringViewHash
+		{
+			using is_transparent = void;
+
+			size_t operator()(const std::string_view value) const
+			{
+				return std::hash<std::string_view>{}(value);
+			}
+		};
+
 		/// @brief Per-frame accumulation of a single metric on a single thread.
 		struct MetricAccumulator
 		{
@@ -139,14 +141,18 @@ namespace mmo
 			/// Display name of the owning thread.
 			std::string threadName;
 
-			/// Per-frame metric accumulation of the owning thread.
-			std::unordered_map<std::string, MetricAccumulator> metrics;
+			/// Per-frame metric accumulation of the owning thread. Transparent hashing lets
+			/// AddTime look up a scope's literal name without building a std::string.
+			std::unordered_map<std::string, MetricAccumulator, StringViewHash, std::equal_to<>> metrics;
 		};
 
 		/// @brief Rolling history entry for a metric, persisted across frames.
 		struct MetricHistory
 		{
 			std::deque<FrameData> history;
+
+			/// Sum of history[].timeMs, maintained incrementally so averaging is O(1).
+			double historyTimeSumMs = 0.0;
 
 			/// Frame counter value when this metric last reported data (for pruning).
 			uint64 lastSeenFrame = 0;
@@ -203,18 +209,22 @@ namespace mmo
 	};
 
 	/// @brief RAII timer that measures the scope's lifetime and reports it to the Profiler.
+	/// @remark Scopes run hundreds of times per frame even with the profiler off, so the timer
+	///         neither allocates nor reads the clock unless profiling is enabled.
 	class ScopedTimer final : public NonCopyable
 	{
 	public:
 		/// @brief Constructs a scoped timer for the given metric name.
-		/// @param metricName The name of the metric to measure.
-		explicit ScopedTimer(std::string metricName);
+		/// @param metricName The name of the metric to measure. Must outlive the timer
+		///        (PROFILE_SCOPE passes string literals).
+		explicit ScopedTimer(const char* metricName);
 
 		/// @brief Destructor that reports the elapsed time to the profiler.
 		~ScopedTimer() override;
 
 	private:
-		std::string m_metricName;
+		const char* m_metricName;
+		bool m_active;
 		std::chrono::high_resolution_clock::time_point m_startTime;
 	};
 

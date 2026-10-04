@@ -496,7 +496,7 @@ namespace mmo
 			// For idle non-player units (NPCs without a path), correct ground height.
 			// Remote players apply ground correction inside UpdateRemoteMovement()
 			// after their dead-reckoning position is written to the scene node.
-			m_unitMovement->CorrectGroundHeight();
+			m_unitMovement->CorrectIdleGroundHeight(deltaTime);
 		}
 
 	}
