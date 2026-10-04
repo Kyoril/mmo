@@ -252,6 +252,9 @@ namespace mmo
 
 		[[nodiscard]] uint8 GetSlotType(uint8 slot, uint64 receiver) const;
 
+		/// @return true if the receiver already took its share of a party-shared (PartyLoot) item.
+		[[nodiscard]] bool HasLootedPartyItem(const LootItem& item, const proto::ItemEntry& entry, uint64 receiver) const;
+
 		void ResolveRoll(uint8 slot);
 
 	private:

@@ -379,3 +379,35 @@ TEST_CASE("LootInstance reports a fresh roll without gold or items as empty", "[
 		REQUIRE_FALSE(loot.IsEmpty());
 	}
 }
+
+TEST_CASE("LootInstance hands a party-shared item to each player only once", "[loot_instance]")
+{
+	asio::io_service ioService;
+	TimerQueue timerQueue(ioService);
+	proto::Project project;
+
+	auto* itemEntry = project.items.add(1);
+	itemEntry->set_id(1);
+	itemEntry->set_maxstack(20);
+	itemEntry->set_flags(item_flags::PartyLoot);
+
+	ConditionMgr conditionMgr(project.conditions);
+
+	const auto first = MakePlayer(project, timerQueue, 2001);
+	const auto second = MakePlayer(project, timerQueue, 2002);
+	const std::vector<std::weak_ptr<GamePlayerS>> recipients{ first, second };
+
+	proto::LootEntry entry = MakeLootEntry(1);
+	LootInstance loot(project.items, conditionMgr, 42ULL, &entry, 0, 0, recipients, loot_method::FreeForAll, 0);
+
+	// Repeating AutoStoreLootItem on the same slot used to hand out a new copy every time.
+	REQUIRE(loot.TakeItem(0, first->GetGuid()));
+	CHECK_FALSE(loot.TakeItem(0, first->GetGuid()));
+	CHECK_FALSE(loot.CanLootItem(0, first->GetGuid()));
+
+	// The other recipient still gets theirs, once.
+	CHECK_FALSE(loot.IsEmpty());
+	REQUIRE(loot.TakeItem(0, second->GetGuid()));
+	CHECK_FALSE(loot.TakeItem(0, second->GetGuid()));
+	CHECK(loot.IsEmpty());
+}

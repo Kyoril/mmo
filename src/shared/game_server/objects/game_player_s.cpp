@@ -484,9 +484,16 @@ namespace mmo
 		return true;
 	}
 
+	bool GamePlayerS::CanAddMoney(const uint32 amount) const
+	{
+		return amount <= std::numeric_limits<uint32>::max() - Get<uint32>(object_fields::Money);
+	}
+
 	void GamePlayerS::AddMoney(const uint32 amount)
 	{
-		Set<uint32>(object_fields::Money, Get<uint32>(object_fields::Money) + amount);
+		// Saturate rather than wrap: an overflowing add used to leave a near-capped player nearly broke.
+		const uint32 money = Get<uint32>(object_fields::Money);
+		Set<uint32>(object_fields::Money, CanAddMoney(amount) ? money + amount : std::numeric_limits<uint32>::max());
 	}
 
 	QuestStatus GamePlayerS::GetQuestStatus(const uint32 quest) const
@@ -814,6 +821,17 @@ namespace mmo
 				m_quests.erase(quest);
 				CancelQuestTimer(quest);
 
+				// The quest's source item goes with it, as on turn-in. AcceptQuest grants it afresh
+				// every time, so abandon and re-accept used to farm unlimited copies.
+				if (const auto* questEntry = GetProject().quests.getById(quest); questEntry && questEntry->srcitemid())
+				{
+					if (const auto* itemEntry = GetProject().items.getById(questEntry->srcitemid()))
+					{
+						// 0 means: remove ALL of this item
+						m_inventory.RemoveItems(*itemEntry, 0);
+					}
+				}
+
 				// Reset quest log
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), QuestField());
 				if (m_netPlayerWatcher)
@@ -1125,7 +1143,7 @@ namespace mmo
 		uint32 money = entry->rewardmoney();
 		if (money > 0)
 		{
-			Set<uint32>(object_fields::Money, Get<uint32>(object_fields::Money) + money);
+			AddMoney(money);
 		}
 
 		// Remove source items of this quest (if any)

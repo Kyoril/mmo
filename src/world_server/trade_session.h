@@ -22,6 +22,14 @@ namespace mmo
 		/// Absolute inventory slot for each trade slot (0 = empty).
 		std::array<uint16, TradeSlotCount> itemSlots{};
 
+		/// Guid of the item that sat in each slot when it was offered. Execute requires the
+		/// same item to still be there: the partner accepted that item, not whatever ends up
+		/// in the slot later.
+		std::array<uint64, TradeSlotCount> itemGuids{};
+
+		/// Stack count of each offered item at the time it was offered.
+		std::array<uint32, TradeSlotCount> stackCounts{};
+
 		/// Money offered in copper.
 		uint32 money{ 0 };
 
