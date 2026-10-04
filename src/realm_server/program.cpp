@@ -443,7 +443,7 @@ namespace mmo
 		// a SIGTERM arriving while a scheduled shutdown is winding down must not stop things again.
 		bool realmStopped = false;
 		const std::function<void()> stopRealm = [&worldServer, &playerServer, &webService, &playerManager, &worldManager,
-			 &shutdownSignals, &timerQueue, &ioWork, &databasePool, &realmStopped]()
+			 &shutdownSignals, &timerQueue, &ioWork, &databasePool, &realmStopped, &loginConnector]()
 		{
 			if (realmStopped)
 			{
@@ -470,6 +470,11 @@ namespace mmo
 			// Then close what is already connected.
 			playerManager.DisconnectAll();
 			worldManager.DisconnectAll();
+
+			// The link to the login server is an open socket with a pending read, so it is outstanding
+			// io work like any other. tools/shutdown_check.py cannot see it: it runs the realm without
+			// a login server, so the connector is never connected there.
+			loginConnector->Shutdown();
 
 			// The pending async_wait on the signal set is itself outstanding io_service work.
 			// Left armed, the service would never run dry and ioService.run() would never return.

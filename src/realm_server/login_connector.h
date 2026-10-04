@@ -102,6 +102,9 @@ namespace mmo
 		/// Mutex for accessing m_pendingClientAuthSessionReqs
 		std::mutex m_authSessionReqMutex;
 
+		/// Set by Shutdown(). Suppresses any further reconnect attempt.
+		bool m_shuttingDown = false;
+
 		Countdown m_pingCountdown;
 
 		scoped_connection m_pingConnection;
@@ -123,6 +126,11 @@ namespace mmo
 		/// Queues a client auth session request for the login connector and waits for response from a login server.
 		/// @returns false if the request couldn't be queued.
 		bool QueueClientAuthSession(const std::string& accountName, uint32 clientSeed, uint32 serverSeed, const SHA1Hash& clientHash, ClientAuthSessionCallback callback);
+
+		/// Closes the link to the login server for good. Used by the realm's stop routine: an open
+		/// upstream socket is outstanding io work that keeps the io service from running dry. No
+		/// reconnect is attempted afterwards.
+		void Shutdown();
 		
 	private:
 		// Perform client-side srp6-a calculations after we received server values
