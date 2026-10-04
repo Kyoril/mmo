@@ -100,6 +100,60 @@ namespace mmo
 			return SaturateToInt32(value < 0 ? -value : value);
 		}
 
+		/// The duration the reader's spell modifiers give a spell. Infinite stays infinite, like
+		/// on the server.
+		int32 GetEffectiveDuration(const proto_client::SpellEntry& spell, const SpellTextContext& context)
+		{
+			if (spell.duration() == 0 || !context.getDuration)
+			{
+				return spell.duration();
+			}
+
+			return context.getDuration(spell);
+		}
+
+		int32 GetTickCount(const proto_client::SpellEntry& spell, const int32 effectIndex, const int32 duration)
+		{
+			if (effectIndex < 0 || effectIndex >= spell.effects_size())
+			{
+				return 0;
+			}
+
+			const auto& effect = spell.effects(effectIndex);
+			if (!IsPeriodicAura(effect.aura()) || effect.amplitude() <= 0 || duration <= 0)
+			{
+				return 0;
+			}
+
+			return duration / effect.amplitude();
+		}
+
+		/// Effect points, multiplied by a tick count unless it is 0.
+		void CalculateEffectPoints(const proto_client::SpellEntry& spell, const int32 level, const int32 effectIndex, const int32 ticks, int32& min, int32& max)
+		{
+			min = 0;
+			max = 0;
+
+			if (effectIndex < 0 || effectIndex >= spell.effects_size())
+			{
+				return;
+			}
+
+			int64 minPoints = 0, maxPoints = 0;
+			CalculateEffectBasePoints(spell.effects(effectIndex), spell, level, minPoints, maxPoints);
+
+			if (ticks > 0)
+			{
+				// Saturate first: the base points fit int64 comfortably, but times a tick count of
+				// up to int32 max they might not.
+				minPoints = static_cast<int64>(SaturateToInt32(minPoints)) * ticks;
+				maxPoints = static_cast<int64>(SaturateToInt32(maxPoints)) * ticks;
+			}
+
+			min = AbsoluteSaturated(minPoints);
+			max = AbsoluteSaturated(maxPoints);
+		}
+
 		/// The total a periodic trigger effect amounts to: the triggered spell's first damage or
 		/// heal effect, once per tick. Returns false when there is nothing sensible to total, so
 		/// the caller can fall back to the trigger effect's own points.
@@ -127,7 +181,7 @@ namespace mmo
 				GetSpellEffectPoints(*triggered, context.level, i, false, min, max);
 
 				// Both factors are at most int32, so the product cannot overflow int64
-				const int64 ticks = GetSpellEffectTickCount(spell, effectIndex);
+				const int64 ticks = GetTickCount(spell, effectIndex, GetEffectiveDuration(spell, context));
 				min = SaturateToInt32(static_cast<int64>(min) * ticks);
 				max = SaturateToInt32(static_cast<int64>(max) * ticks);
 				return true;
@@ -295,44 +349,14 @@ namespace mmo
 
 	void GetSpellEffectPoints(const proto_client::SpellEntry& spell, const int32 level, const int32 effectIndex, const bool includeTickCount, int32& min, int32& max)
 	{
-		min = 0;
-		max = 0;
-
-		if (effectIndex < 0 || effectIndex >= spell.effects_size())
-		{
-			return;
-		}
-
-		int64 minPoints = 0, maxPoints = 0;
-		CalculateEffectBasePoints(spell.effects(effectIndex), spell, level, minPoints, maxPoints);
-
-		if (includeTickCount)
-		{
-			// Saturate first: the base points fit int64 comfortably, but times a tick count of up
-			// to int32 max they might not.
-			const int64 ticks = std::max(GetSpellEffectTickCount(spell, effectIndex), 1);
-			minPoints = SaturateToInt32(minPoints) * ticks;
-			maxPoints = SaturateToInt32(maxPoints) * ticks;
-		}
-
-		min = AbsoluteSaturated(minPoints);
-		max = AbsoluteSaturated(maxPoints);
+		// A non-periodic effect still counts once
+		const int32 ticks = includeTickCount ? std::max(GetSpellEffectTickCount(spell, effectIndex), 1) : 0;
+		CalculateEffectPoints(spell, level, effectIndex, ticks, min, max);
 	}
 
 	int32 GetSpellEffectTickCount(const proto_client::SpellEntry& spell, const int32 effectIndex)
 	{
-		if (effectIndex < 0 || effectIndex >= spell.effects_size())
-		{
-			return 0;
-		}
-
-		const auto& effect = spell.effects(effectIndex);
-		if (!IsPeriodicAura(effect.aura()) || effect.amplitude() <= 0 || spell.duration() <= 0)
-		{
-			return 0;
-		}
-
-		return spell.duration() / effect.amplitude();
+		return GetTickCount(spell, effectIndex, spell.duration());
 	}
 
 	void AppendFormattedValue(std::string& out, const std::string& format, const double value, const bool trimTrailingZeros)
@@ -515,7 +539,7 @@ namespace mmo
 			{
 			case 'd':
 			case 'D':
-				AppendDuration(out, source->duration(), token == 'd', context);
+				AppendDuration(out, GetEffectiveDuration(*source, context), token == 'd', context);
 				break;
 
 			case 'i':
@@ -546,14 +570,15 @@ namespace mmo
 			case 'O':
 				if (!validEffect || !GetPeriodicTriggerTotal(*source, effectIndex, context, min, max))
 				{
-					GetSpellEffectPoints(*source, context.level, effectIndex, true, min, max);
+					const int32 ticks = GetTickCount(*source, effectIndex, GetEffectiveDuration(*source, context));
+					CalculateEffectPoints(*source, context.level, effectIndex, std::max(ticks, 1), min, max);
 				}
 				AppendRange(out, min, max);
 				break;
 
 			case 't':
 			case 'T':
-				AppendNumber(out, GetSpellEffectTickCount(*source, effectIndex));
+				AppendNumber(out, GetTickCount(*source, effectIndex, GetEffectiveDuration(*source, context)));
 				break;
 
 			default:

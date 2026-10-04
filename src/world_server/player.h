@@ -270,6 +270,12 @@ namespace mmo
 
 		void Kick();
 
+		/// Kicks the player if a client-supplied position cannot be held by the world.
+		/// @param position The position read from the packet.
+		/// @param opCode The packet it came from, for the log.
+		/// @return true if the position is valid; false if the player was kicked and the packet must be dropped.
+		bool ValidateClientPosition(const Vector3& position, uint16 opCode);
+
 		void SendTrainerBuyError(uint64 trainerGuid, trainer_result::Type result) const;
 
 		void SendTrainerBuySucceeded(uint64 trainerGuid, uint32 spellId) const;

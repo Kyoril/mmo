@@ -305,7 +305,9 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditor(std::make_unique<mmo::TextureEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::MeshEditor>(mainWindow, previewProviderManager, project, editorAudio.get()));
 	mainWindow.AddEditor(std::make_unique<mmo::CharacterEditor>(mainWindow));
-	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow, previewProviderManager, project));
+	auto materialEditor = std::make_unique<mmo::MaterialEditor>(mainWindow, previewProviderManager, project);
+	mmo::MaterialEditor* const materialEditorPtr = materialEditor.get();
+	mainWindow.AddEditor(std::move(materialEditor));
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow, previewProviderManager, project));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow, project));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldModelEditor>(mainWindow, project));
@@ -317,7 +319,8 @@ int main(int argc, char* arg[])
 	std::thread dbThread{ [&dbService]() { dbService.run(); } };
 
 #ifdef _WIN32
-	// Unattended jobs. `--bake-terrain-lod Worlds/<n>/<n>.hwld [--force]` opens the world, bakes the
+	// Unattended jobs. `--rebuild-material <asset>` recompiles a material's shaders from its stored
+	// graph, then exits. `--bake-terrain-lod Worlds/<n>/<n>.hwld [--force]` opens the world, bakes the
 	// distant-terrain data of every page whose .tile changed since the last bake (every page with
 	// --force), then exits.
 	{
@@ -325,6 +328,32 @@ int main(int argc, char* arg[])
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
 		for (int i = 1; args && i + 1 < argCount; ++i)
 		{
+			if (std::string(args[i]) == "--rebuild-material")
+			{
+				// `--rebuild-material <asset> [--rebuild-material <asset> ...]`: recompile the named
+				// materials from their stored graphs, re-save them, then exit (1 on any failure).
+				static std::ofstream rebuildLog("material_rebuild.log", std::ios::out | std::ios::trunc);
+				static std::mutex rebuildLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ rebuildLogMutex };
+					rebuildLog << entry.message << std::endl;
+				});
+
+				std::vector<std::string> materials;
+				for (int j = 1; j + 1 < argCount; ++j)
+				{
+					if (std::string(args[j]) == "--rebuild-material")
+					{
+						materials.emplace_back(args[j + 1]);
+					}
+				}
+
+				const bool rebuilt = materialEditorPtr->RebuildMaterialsNow(materials);
+				PostQuitMessage(rebuilt ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--bake-terrain-lod")
 			{
 				// Nobody watches an unattended run: keep its log, and let failed debug assertions

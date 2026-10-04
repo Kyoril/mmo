@@ -7,6 +7,7 @@
 #include "base/typedefs.h"
 #include "math/aabb.h"
 #include "math/vector3.h"
+#include "math/vector4.h"
 
 #include <functional>
 #include <map>
@@ -41,6 +42,10 @@ namespace mmo
 
 		/// @brief Coverage of each of the four terrain layers at the position (0-1).
 		float coverage[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+		/// @brief Painted terrain vertex colour at the position (RGBA, 0-1). Becomes the instance
+		///        tint, so a ground-matched foliage material can shade itself like the ground.
+		Vector4 color { 1.0f, 1.0f, 1.0f, 1.0f };
 	};
 
 	/// @brief Callback function type for sampling terrain data at a position.

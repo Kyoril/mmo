@@ -499,6 +499,13 @@ namespace mmo
 			return;
 		}
 
+		// All instances share the same grid dimensions, so the current one can vouch for the target map too.
+		if (!m_worldInstance || !m_worldInstance->IsValidPosition(position))
+		{
+			ELOG("CheatWorldPort: position (" << position.x << ", " << position.y << ", " << position.z << ") is outside the world");
+			return;
+		}
+
 		// Teleport the player
 		m_character->Teleport(mapId, position, Radian(facingRadianVal));
 	}

@@ -5,6 +5,7 @@
 #include "base/grid.h"
 #include "base/typedefs.h"
 #include "math/vector3.h"
+#include "math/vector4.h"
 
 #include <memory>
 #include <functional>
@@ -150,6 +151,13 @@ namespace mmo
 			/// @param z World Z coordinate.
 			/// @return The interpolated normal vector.
 			Vector3 GetSmoothNormalAt(float x, float z);
+
+			/// @brief Gets the painted vertex colour at a world position, interpolated the way the
+			///        terrain renders it.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @return RGBA in 0..1, or opaque white where no prepared page covers the position.
+			Vector4 GetSmoothColorAt(float x, float z);
 
 			/// @brief Gets the tangent vector at a specific coordinate.
 			/// @param x The X coordinate.

@@ -542,17 +542,35 @@ namespace mmo
 			return;
 		}
 
+		if (!m_lootSource)
+		{
+			ELOG("Player tried to loot money without a loot source");
+			return;
+		}
+
 		// Check if it's a creature
 		std::vector<std::shared_ptr<GamePlayerS>> recipients;
 		if (m_lootSource->GetTypeId() == ObjectTypeId::Unit)
 		{
 			// If looting a creature, loot has to be shared between nearby group members
 			std::shared_ptr<GameCreatureS> creature = std::dynamic_pointer_cast<GameCreatureS>(m_lootSource);
+			if (!creature)
+			{
+				ELOG("Player tried to loot money from a unit that is not a creature");
+				return;
+			}
+
 			creature->ForEachLootRecipient([&recipients](std::shared_ptr<GamePlayerS> &recipient)
 										   { recipients.push_back(recipient); });
 
-			// If this fires, the creature has no loot recipients added. Please check CreatureAIDeathState::OnEnter!
-			ASSERT(!recipients.empty());
+			// Recipients that left the instance are skipped, so the list can be empty even though
+			// CreatureAIDeathState::OnEnter added some: the killer logged out and someone else opened
+			// the corpse. Nobody present is owed the gold - and dividing by zero would kill the node.
+			if (recipients.empty())
+			{
+				WLOG("Player " << log_hex_digit(m_character->GetGuid()) << " tried to loot money from a creature with no loot recipient in the world");
+				return;
+			}
 
 			// Share gold
 			lootGold /= recipients.size();

@@ -4,6 +4,9 @@
 
 #include "visibility_tile.h"
 #include "game/constants.h"
+#include "log/default_log_levels.h"
+
+#include <algorithm>
 
 namespace mmo
 {
@@ -57,13 +60,16 @@ namespace mmo
 		ASSERT(m_tiles.width());
 		ASSERT(m_tiles.height());
 
-		auto &tile = m_tiles(position[0], position[1]);
-		if (!tile)
+		// Grid only ASSERTs its bounds, so an index from a bad position would write past the tile
+		// storage in release builds. Land on the nearest edge tile instead.
+		const TileIndex2D clamped(
+			std::clamp<TileIndex>(position[0], 0, static_cast<TileIndex>(m_tiles.width()) - 1),
+			std::clamp<TileIndex>(position[1], 0, static_cast<TileIndex>(m_tiles.height()) - 1));
+		if (clamped != position)
 		{
-			tile = std::make_unique<VisibilityTile>();
-			tile->SetPosition(position);
+			ELOG("RequireTile: tile index (" << position[0] << ", " << position[1] << ") is outside the visibility grid, clamped");
 		}
 
-		return *tile;
+		return *GetTile(clamped);
 	}
 }

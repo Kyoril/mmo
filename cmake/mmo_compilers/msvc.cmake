@@ -24,6 +24,14 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 add_definitions("/std:c++latest")
 add_compile_options(/arch:SSE2)
 
+# Debug: inline functions marked inline (/Ob1) instead of none (/Ob0, CMake's default). Without
+# it every Vector3 operator and one-line getter is a real call, which made math-heavy client
+# code several times slower than it needs to be. Code stays unoptimized (/Od) and steppable;
+# only the inlined helpers lose their own stack frame.
+foreach (flagVar CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG)
+	string(REPLACE "/Ob0" "/Ob1" ${flagVar} "${${flagVar}}")
+endforeach()
+
 # If in release mode, enable optimizations and link time code generation
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
 set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /DEBUG")

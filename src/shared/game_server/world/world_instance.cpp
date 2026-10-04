@@ -767,6 +767,21 @@ namespace mmo
 		return *m_visibilityGrid;
 	}
 
+	bool WorldInstance::IsValidPosition(const Vector3& position) const
+	{
+		// Height indexes no grid, but nothing legitimate is kilometres up or down either, and an
+		// absurd value still feeds distance maths and nav queries.
+		constexpr float MaxAbsoluteHeight = 20000.0f;
+		if (!std::isfinite(position.y) || std::abs(position.y) > MaxAbsoluteHeight)
+		{
+			return false;
+		}
+
+		TileIndex2D gridIndex;
+		return m_visibilityGrid->GetTilePosition(position, gridIndex[0], gridIndex[1]) &&
+			m_unitFinder->IsInBounds(position);
+	}
+
 	void WorldInstance::NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo,
 		const MovementInfo& newMovementInfo) const
 	{
@@ -901,10 +916,16 @@ namespace mmo
 		if (oldIndex != newIndex)
 		{
 			// Get the tiles
+			// GetTilePosition clamps, so both tiles exist; a null here means the grid and
+			// GetTilePosition disagree about the grid size. ASSERT alone compiles away in release.
 			VisibilityTile* oldTile = m_visibilityGrid->GetTile(oldIndex);
-			ASSERT(oldTile);
 			VisibilityTile* newTile = m_visibilityGrid->GetTile(newIndex);
-			ASSERT(newTile);
+			ASSERT(oldTile && newTile);
+			if (!oldTile || !newTile)
+			{
+				ELOG("OnObjectMoved: no visibility tile for object " << log_hex_digit(object.GetGuid()) << ", skipping tile change");
+				return;
+			}
 
 			// Remove the object
 			oldTile->GetGameObjects().remove(&object);

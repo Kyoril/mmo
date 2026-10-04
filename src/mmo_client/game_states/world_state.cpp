@@ -1610,6 +1610,7 @@ namespace mmo
 
 			out.height = terrain->GetSmoothHeightAt(x, z);
 			out.normal = terrain->GetSmoothNormalAt(x, z);
+			out.color = terrain->GetSmoothColorAt(x, z);
 
 			if (const MaterialPtr material = terrain->GetBaseMaterialAt(x, z))
 			{

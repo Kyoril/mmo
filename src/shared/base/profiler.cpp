@@ -158,8 +158,10 @@ namespace mmo
 			MetricHistory& history = m_metricHistory[name];
 			history.lastSeenFrame = m_frameCounter;
 			history.history.push_back(FrameData{ data.totalTimeMs, static_cast<int>(data.callCount) });
+			history.historyTimeSumMs += data.totalTimeMs;
 			while (history.history.size() > PerformanceMetric::MaxHistorySize)
 			{
+				history.historyTimeSumMs -= history.history.front().timeMs;
 				history.history.pop_front();
 			}
 
@@ -168,7 +170,7 @@ namespace mmo
 			metric.threadName = data.multipleThreads ? "Multiple" : data.threadName;
 			metric.totalTimeMs = data.totalTimeMs;
 			metric.callCount = data.callCount;
-			metric.history = history.history;
+			metric.averageTimeMs = history.historyTimeSumMs / static_cast<double>(history.history.size());
 			m_metrics.push_back(std::move(metric));
 		}
 
@@ -194,7 +196,7 @@ namespace mmo
 			});
 	}
 
-	void Profiler::AddTime(const std::string& metricName, const double timeMs)
+	void Profiler::AddTime(const std::string_view metricName, const double timeMs)
 	{
 		if (!IsEnabled())
 		{
@@ -204,7 +206,13 @@ namespace mmo
 		ThreadBuffer& buffer = GetThreadBuffer();
 
 		std::scoped_lock lock{ buffer.mutex };
-		MetricAccumulator& accumulator = buffer.metrics[metricName];
+		auto it = buffer.metrics.find(metricName);
+		if (it == buffer.metrics.end())
+		{
+			it = buffer.metrics.emplace(std::string(metricName), MetricAccumulator{}).first;
+		}
+
+		MetricAccumulator& accumulator = it->second;
 		accumulator.totalTimeMs += timeMs;
 		accumulator.callCount++;
 	}
@@ -230,14 +238,23 @@ namespace mmo
 		return (avgTime > 0.0) ? (1000.0 / avgTime) : 0.0;
 	}
 
-	ScopedTimer::ScopedTimer(std::string metricName)
-		: m_metricName(std::move(metricName))
-		, m_startTime(std::chrono::high_resolution_clock::now())
+	ScopedTimer::ScopedTimer(const char* metricName)
+		: m_metricName(metricName)
+		, m_active(Profiler::GetInstance().IsEnabled())
 	{
+		if (m_active)
+		{
+			m_startTime = std::chrono::high_resolution_clock::now();
+		}
 	}
 
 	ScopedTimer::~ScopedTimer()
 	{
+		if (!m_active)
+		{
+			return;
+		}
+
 		auto endTime = std::chrono::high_resolution_clock::now();
 		// Calculate the duration in microseconds, then convert to milliseconds
 		double elapsedMs = std::chrono::duration<double, std::milli>(endTime - m_startTime).count();

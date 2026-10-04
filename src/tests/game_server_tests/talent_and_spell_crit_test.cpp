@@ -274,3 +274,37 @@ TEST_CASE("A saved talent that became a placeholder resets the talents", "[talen
 	CHECK_FALSE(ctx.player->HasTalent(TalentCtx::RealTalent));
 	CHECK_FALSE(ctx.player->HasTalent(TalentCtx::PlaceholderTalent));
 }
+
+// A talent may rank in a spell without the Talent attribute (e.g. an existing class spell reused as a
+// talent). Such a spell must still be owned by the talent system: recorded in the persistent known-spell
+// set, it outlived talent resets and made the client show the talent as learned while the server did not.
+TEST_CASE("An unflagged talent rank spell is not recorded as a known spell", "[talents]")
+{
+	TalentCtx ctx;
+	ctx.Init();
+	REQUIRE(ctx.player->LearnTalent(TalentCtx::RealTalent, 0));
+	CHECK(ctx.player->HasSpell(500));
+	CHECK_FALSE(ctx.player->GetKnownSpellIds().contains(500));
+}
+
+TEST_CASE("An unflagged talent rank spell does not survive a talent reset", "[talents]")
+{
+	TalentCtx ctx;
+	ctx.Init();
+	REQUIRE(ctx.player->LearnTalent(TalentCtx::RealTalent, 0));
+	ctx.player->ResetTalents();
+
+	// Persist and restore the known-spell set the way logout and login do.
+	const auto& known = ctx.player->GetKnownSpellIds();
+	ctx.player->SetKnownSpells(std::vector<uint32>(known.begin(), known.end()));
+	CHECK_FALSE(ctx.player->HasSpell(500));
+}
+
+TEST_CASE("A saved known spell that is a talent rank is dropped on load", "[talents]")
+{
+	TalentCtx ctx;
+	ctx.Init();
+	ctx.player->SetKnownSpells({ 500 });
+	CHECK_FALSE(ctx.player->HasSpell(500));
+	CHECK_FALSE(ctx.player->GetKnownSpellIds().contains(500));
+}

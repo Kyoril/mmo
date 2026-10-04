@@ -699,6 +699,14 @@ namespace mmo
 			{
 				return FrameManager::Get().GetLocalization().FindStringById(formatKey);
 			};
+			if (player)
+			{
+				context.getDuration = [&player](const proto_client::SpellEntry &modded)
+				{
+					const int32 duration = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Duration), modded.duration(), modded.familyflags());
+					return std::max(0, duration);
+				};
+			}
 
 			return FormatSpellText(text, spell, context);
 		}

@@ -25,6 +25,13 @@ namespace mmo
 		/// _PRECISE suffix for the lower case tokens) to its localized template, for example
 		/// "%.0f seconds". Returning null, or leaving this empty, writes the key itself.
 		std::function<const std::string*(const std::string& formatKey)> findDurationFormat;
+
+		/// Returns the duration a spell's auras last for the reader, with their duration spell
+		/// modifiers (talents like Dreamweaver) applied, in milliseconds. Drives the d / D, t / T
+		/// and o / O tokens, matching the server, which also counts ticks over the modified
+		/// duration. Not called for spells without duration, which stay infinite. Leaving this
+		/// empty uses the spell's own duration.
+		std::function<int32(const proto_client::SpellEntry& spell)> getDuration;
 	};
 
 	/// @brief Computes the minimum and maximum points of one spell effect at a given level.
@@ -66,7 +73,7 @@ namespace mmo
 	/// | o / O     | total over the duration: points x ticks. A periodic trigger effect totals  |
 	/// |           | the damage or healing of the spell it triggers instead                     |
 	/// | t / T     | number of ticks of a periodic effect                                       |
-	/// | d / D     | spell duration. d always uses the precise template ("1.50 seconds"); D     |
+	/// | d / D     | spell duration after the reader's modifiers. d always uses the precise template ("1.50 seconds"); D     |
 	/// |           | uses the rounded one for whole values and the precise one without trailing |
 	/// |           | zeros otherwise ("2 seconds", "1.5 seconds")                               |
 	/// | i / I     | tick interval of an effect, precise / rounded like d / D                   |

@@ -242,8 +242,8 @@ namespace mmo
 			}
 		};
 
-		// Execute
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetWorldAuthData, std::cref(m_worldName));
+		// Execute. By value: the request runs on the database thread and may outlive this connection.
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetWorldAuthData, m_worldName);
 		return PacketParseResult::Pass;
 	}
 
@@ -401,9 +401,11 @@ namespace mmo
 
 			// Store session key in account database
 			m_database.asyncRequestKeyed<void>(m_worldId, 
-				[this, sessionKey = K.asHexStr(), capture1 = versionBuilder.str()](auto&& database)
+				// Captured by value: this runs on the database thread and must not touch the World,
+				// which is destroyed if the connection drops before the request runs.
+				[worldId = m_worldId, address = m_address, sessionKey = K.asHexStr(), capture1 = versionBuilder.str()](auto&& database)
 				{
-					database->WorldLogin(m_worldId, sessionKey, m_address, capture1);
+					database->WorldLogin(worldId, sessionKey, address, capture1);
 				},
 				std::move(handler));
 
