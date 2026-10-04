@@ -14,8 +14,13 @@ namespace mmo
 	{
 	}
 
-	void ShutdownManager::Schedule(const uint32 delaySeconds)
+	bool ShutdownManager::Schedule(const uint32 delaySeconds)
 	{
+		if (m_shuttingDown)
+		{
+			return false;
+		}
+
 		ASSERT(delaySeconds <= MaxShutdownDelaySeconds);
 
 		++m_generation;
@@ -28,11 +33,12 @@ namespace mmo
 		}
 
 		ArmNext(delaySeconds);
+		return true;
 	}
 
 	bool ShutdownManager::Cancel()
 	{
-		if (!m_pending)
+		if (m_shuttingDown || !m_pending)
 		{
 			return false;
 		}
@@ -78,6 +84,7 @@ namespace mmo
 		{
 			++m_generation;
 			m_pending = false;
+			m_shuttingDown = true;
 			shutdownDue();
 			return;
 		}

@@ -129,6 +129,7 @@ namespace mmo
 
 		json jsonResponse;
 		jsonResponse["pending"] = shutdown && shutdown->IsPending();
+		jsonResponse["shuttingDown"] = shutdown && shutdown->IsShuttingDown();
 		jsonResponse["remaining"] = shutdown ? shutdown->GetRemainingSeconds() : 0;
 		SendJsonResponse(response, jsonResponse);
 	}
@@ -143,6 +144,17 @@ namespace mmo
 			json jsonResponse;
 			jsonResponse["status"] = "UNAVAILABLE";
 			jsonResponse["message"] = "Shutdown is not available";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (shutdown->IsShuttingDown())
+		{
+			response.setStatus(net::http::OutgoingAnswer::Conflict);
+
+			json jsonResponse;
+			jsonResponse["status"] = "SHUTTING_DOWN";
+			jsonResponse["message"] = "The realm is already shutting down";
 			SendJsonResponse(response, jsonResponse);
 			return;
 		}
@@ -177,6 +189,17 @@ namespace mmo
 	void WebClient::handleCancelShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const
 	{
 		ShutdownManager* shutdown = m_service.GetShutdownManager();
+		if (shutdown && shutdown->IsShuttingDown())
+		{
+			response.setStatus(net::http::OutgoingAnswer::Conflict);
+
+			json jsonResponse;
+			jsonResponse["status"] = "SHUTTING_DOWN";
+			jsonResponse["message"] = "The realm is already shutting down";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
 		if (!shutdown || !shutdown->Cancel())
 		{
 			response.setStatus(net::http::OutgoingAnswer::Conflict);

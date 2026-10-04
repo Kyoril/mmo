@@ -35,14 +35,19 @@ namespace mmo
 		/// Schedules the shutdown, replacing a pending one. Announces the exact remaining time
 		/// right away (except for a delay of 0, which only fires shutdownDue on the next timer run).
 		/// @param delaySeconds Seconds until the shutdown; must not exceed MaxShutdownDelaySeconds.
-		void Schedule(uint32 delaySeconds);
+		/// @returns false (and does nothing) if the realm is already shutting down.
+		bool Schedule(uint32 delaySeconds);
 
 		/// Cancels the pending shutdown and announces the cancellation.
-		/// @returns false if no shutdown was pending.
+		/// @returns false if no shutdown was pending or the realm is already shutting down.
 		bool Cancel();
 
 		/// Whether a shutdown is currently scheduled.
 		[[nodiscard]] bool IsPending() const { return m_pending; }
+
+		/// True once the shutdown became due: the realm is winding down and will exit. From then on
+		/// Schedule and Cancel do nothing.
+		[[nodiscard]] bool IsShuttingDown() const { return m_shuttingDown; }
 
 		/// Seconds until the pending shutdown, rounded up; 0 if none is pending.
 		[[nodiscard]] uint32 GetRemainingSeconds() const;
@@ -66,6 +71,7 @@ namespace mmo
 		Clock m_clock;
 		Scheduler m_scheduler;
 		bool m_pending = false;
+		bool m_shuttingDown = false;
 		GameTime m_deadline = 0;
 		uint32 m_generation = 0;
 	};

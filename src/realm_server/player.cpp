@@ -4884,6 +4884,10 @@ namespace mmo
 			{
 				ILOG("Account " << GetAccountName() << " cancelled the pending realm shutdown");
 			}
+			else if (shutdown->IsShuttingDown())
+			{
+				WLOG("Account " << GetAccountName() << " tried to cancel the realm shutdown, but the realm is already shutting down");
+			}
 			return PacketParseResult::Pass;
 		}
 
@@ -4893,8 +4897,13 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		if (!shutdown->Schedule(delaySeconds))
+		{
+			WLOG("Account " << GetAccountName() << " tried to schedule a realm shutdown, but the realm is already shutting down");
+			return PacketParseResult::Pass;
+		}
+
 		ILOG("Account " << GetAccountName() << " scheduled a realm shutdown in " << delaySeconds << " seconds");
-		shutdown->Schedule(delaySeconds);
 		return PacketParseResult::Pass;
 	}
 

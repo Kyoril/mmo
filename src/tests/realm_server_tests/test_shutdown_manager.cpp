@@ -170,3 +170,31 @@ TEST_CASE("Remaining seconds round up while a shutdown is pending", "[shutdown]"
 	timers.now = start + 1000;
 	CHECK(manager.GetRemainingSeconds() == 99);
 }
+
+TEST_CASE("Once the shutdown is due the manager refuses to schedule or cancel", "[shutdown]")
+{
+	FakeTimers timers;
+	ShutdownManager manager(timers.Clock(), timers.Scheduler());
+	Recorder recorder(manager);
+	const GameTime start = timers.now;
+
+	CHECK_FALSE(manager.IsShuttingDown());
+	CHECK(manager.Schedule(20));
+	CHECK_FALSE(manager.IsShuttingDown());
+
+	timers.AdvanceTo(start + 20000);
+	REQUIRE(recorder.dueCount == 1);
+	const size_t announcementCount = recorder.announcements.size();
+
+	CHECK(manager.IsShuttingDown());
+	CHECK_FALSE(manager.IsPending());
+	CHECK_FALSE(manager.Schedule(30));
+	CHECK(recorder.announcements.size() == announcementCount);
+	CHECK_FALSE(manager.IsPending());
+	CHECK_FALSE(manager.Cancel());
+	CHECK(recorder.announcements.size() == announcementCount);
+
+	timers.AdvanceTo(start + 120 * 1000);
+	CHECK(recorder.dueCount == 1);
+	CHECK(recorder.announcements.size() == announcementCount);
+}

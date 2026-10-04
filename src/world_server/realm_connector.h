@@ -201,6 +201,8 @@ namespace mmo
 
 		/// Handles a GM / REST toggle of a world-owned subsystem.
 		PacketParseResult OnSetSubsystemEnabled(auth::IncomingPacket& packet);
+		/// Handles the realm's order to shut down for good: removes the remaining players the same
+		/// way as PlayerCharacterLeave so their data is saved, then fires shutdownRequested.
 		PacketParseResult OnShutdown(auth::IncomingPacket& packet);
 
 		/// Handles the result of an inventory operation (save/delete).

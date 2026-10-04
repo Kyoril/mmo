@@ -16,7 +16,6 @@
 #include "motd_manager.h"
 #include "time_of_day_manager.h"
 #include "shutdown_manager.h"
-#include "game/shutdown_countdown.h"
 
 #include "asio.hpp"
 

@@ -154,11 +154,12 @@ Reports whether a realm shutdown is pending.
 ```json
 {
   "pending": true,
+  "shuttingDown": false,
   "remaining": 540
 }
 ```
 
-`remaining` is the number of seconds until the shutdown (0 when none is pending).
+`remaining` is the number of seconds until the shutdown (0 when none is pending). `shuttingDown` becomes true once the shutdown is due: the realm is then winding down (up to about 15 seconds) and will exit, so nothing is pending any more, but nothing can be scheduled or cancelled either.
 
 #### POST /shutdown
 
@@ -176,6 +177,7 @@ Schedules a graceful realm shutdown. Scheduling again while one is pending repla
 |---|---|
 | `200 OK` | `{ "status": "SUCCESS", "delay": 600 }` |
 | `400 Bad Request` | `{ "status": "INVALID_PARAMETER", "message": "..." }` when `delay` is not a whole number or exceeds the maximum |
+| `409 Conflict` | `{ "status": "SHUTTING_DOWN", "message": "The realm is already shutting down" }` once the shutdown is due |
 | `503 Service Unavailable` | `{ "status": "UNAVAILABLE", "message": "..." }` if shutdown is not available |
 
 #### POST /shutdown/cancel
@@ -188,14 +190,18 @@ Cancels the pending shutdown.
 |---|---|
 | `200 OK` | `{ "status": "SUCCESS" }` |
 | `409 Conflict` | `{ "status": "NOT_PENDING", "message": "No shutdown is pending" }` |
+| `409 Conflict` | `{ "status": "SHUTTING_DOWN", "message": "The realm is already shutting down" }` once the shutdown is due |
 
 A scheduled shutdown announces itself to players in chat, logs them out, stops every connected world node and then the realm; all exit with code 0.
+
+**Deployment note:** GM level 3 (operator) now grants realm shutdown rights, so existing accounts with `gm_level >= 3` should be audited before deploying this feature.
 
 ## Common Error Codes
 
 - `MISSING_PARAMETER`: A required parameter is missing from the request
 - `INVALID_PARAMETER`: A parameter has an invalid value
 - `NOT_PENDING`: There is no pending shutdown to cancel
+- `SHUTTING_DOWN`: The realm's shutdown is already due; it can no longer be scheduled or cancelled
 - `UNAVAILABLE`: The requested feature is not available
 - `WORLD_NAME_ALREADY_IN_USE`: The world name provided already exists
 - `INTERNAL_SERVER_ERROR`: An unexpected server error occurred
