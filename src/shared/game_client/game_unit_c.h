@@ -9,6 +9,7 @@
 
 #include "game_object_c.h"
 #include "game_aura_c.h"
+#include "item_display_applier.h"
 #include "world_text_component.h"
 #include "game/movement_info.h"
 #include "game/creature_data.h"
@@ -769,6 +770,14 @@ namespace mmo
 	protected:
 		virtual void OnDisplayIdChanged();
 
+		/// Applies the item displays of the unit's model data entry (the outfit an NPC model
+		/// wears) to the entity. Players are skipped: their look comes from their equipment.
+		/// @param model The model data entry the entity was just set up from.
+		void ApplyModelItemDisplays(const proto_client::ModelDataEntry& model);
+
+		/// Destroys every mesh attached by ApplyModelItemDisplays.
+		void ClearModelItemAttachments();
+
 		/// @brief Returns true when the unit currently has an unexpired stealth aura
 		/// (an aura with the ModStealth effect). Drives the stealth animation override set.
 		[[nodiscard]] bool HasStealthAura() const;
@@ -915,6 +924,9 @@ namespace mmo
 		bool m_stealthHidden = false;
 
 		AvatarConfiguration m_configuration;
+
+		/// Meshes attached to the entity by the model's own item displays (NPC outfits).
+		ItemDisplayAttachmentMap m_modelItemAttachments;
 
 		Vector3 m_questOffset = Vector3::Zero;
 

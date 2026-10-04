@@ -8,6 +8,7 @@
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 #include <algorithm>
+#include <cctype>
 
 #include "asset_picker_widget.h"
 #include "assets/asset_registry.h"
@@ -712,6 +713,94 @@ namespace mmo
 					}
 
 				}
+			}
+		}
+
+		if (const auto section = ScopedEditorSection("Outfit", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Item displays every NPC using this model wears, applied in order like equipped items.");
+			ImGui::TextDisabled("Variants authored for a player model also apply to NPC models rendering the same mesh.");
+
+			if (DrawSuccessButton("Add Item Display", ImVec2(-1, 0)))
+			{
+				currentEntry.add_item_displays(0);
+			}
+
+			for (int displayIndex = 0; displayIndex < currentEntry.item_displays_size(); ++displayIndex)
+			{
+				ImGui::PushID(displayIndex);
+
+				const uint32 displayId = currentEntry.item_displays(displayIndex);
+				const auto* displayEntry = m_project.itemDisplays.getById(displayId);
+
+				// A display id which no longer resolves must not look like a deliberate empty slot.
+				String displayPreview = "(None)";
+				if (displayEntry != nullptr)
+				{
+					displayPreview = std::to_string(displayId) + " - " + displayEntry->name();
+				}
+				else if (displayId != 0)
+				{
+					displayPreview = "Unknown display " + std::to_string(displayId);
+				}
+
+				if (ImGui::BeginCombo("##itemDisplay", displayPreview.c_str(), ImGuiComboFlags_None))
+				{
+					if (ImGui::IsWindowAppearing())
+					{
+						m_itemDisplayFilter.clear();
+						ImGui::SetKeyboardFocusHere();
+					}
+
+					ImGui::InputText("##itemDisplayFilter", &m_itemDisplayFilter);
+
+					for (int i = 0; i < m_project.itemDisplays.count(); ++i)
+					{
+						const auto& display = m_project.itemDisplays.getTemplates().entry(i);
+
+						if (!m_itemDisplayFilter.empty())
+						{
+							const String& name = display.name();
+							const auto matchIt = std::search(
+								name.begin(), name.end(),
+								m_itemDisplayFilter.begin(), m_itemDisplayFilter.end(),
+								[](const unsigned char lhs, const unsigned char rhs)
+								{
+									return std::tolower(lhs) == std::tolower(rhs);
+								});
+
+							if (matchIt == name.end())
+							{
+								continue;
+							}
+						}
+
+						ImGui::PushID(i);
+						const bool selected = display.id() == displayId;
+						const String label = std::to_string(display.id()) + " - " + display.name();
+						if (ImGui::Selectable(label.c_str(), selected))
+						{
+							currentEntry.set_item_displays(displayIndex, display.id());
+						}
+						if (selected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+
+				ImGui::SameLine();
+
+				if (DrawDangerButton("Remove"))
+				{
+					currentEntry.mutable_item_displays()->erase(currentEntry.mutable_item_displays()->begin() + displayIndex);
+					displayIndex--;
+				}
+
+				ImGui::PopID();
 			}
 		}
 

@@ -52,7 +52,8 @@ namespace mmo
 	/// visibility changes, sub entity material overrides and attached meshes.
 	/// @param scene The scene the character entity lives in. Attachment entities are created here.
 	/// @param entity The character entity to apply the display data to.
-	/// @param modelDisplayId The display id of the character model. Variants are filtered by it.
+	/// @param modelDisplayId The display id of the character model. Variants are filtered by it: a
+	///	       variant applies to its own model id and to every model rendering the same mesh.
 	/// @param itemDisplayId The id of the item display entry, used as the attachment map key.
 	/// @param display The item display entry to apply.
 	/// @param weaponsDrawn Whether the character currently has its weapons drawn.

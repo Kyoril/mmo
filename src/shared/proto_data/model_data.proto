@@ -35,6 +35,12 @@ message ModelDataEntry {
 	// creatures and unarmed players, the body's hit material, and the combat voice
 	// (attacker effort and victim pain reacts).
 	optional CombatSounds combat_sounds = 10;
+
+	// Item display ids worn by every non-player unit using this model, applied in order like
+	// equipped items: armor hides/shows sub meshes and overrides materials, weapons attach to
+	// their (sheathed) bone. Purely client-side visuals. Players ignore it; their look comes
+	// from their equipment.
+	repeated uint32 item_displays = 11;
 }
 
 message ModelDatas {

@@ -8,11 +8,12 @@ mmo_add_test(game_client_tests
 	${OPENSSL_LIBRARIES})
 
 # Compiled in directly rather than linking game_client, whose transitive frame_ui and
-# graphics dependencies do not exist in a headless build. These two files have no render
+# graphics dependencies do not exist in a headless build. These files have no render
 # dependencies of their own.
 target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/remote_movement_queue.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/remote_movement_renderer.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/item_display_model_match.cpp
 )
 
 # test_console_var.cpp reaches into the client executable's headers; it supplies its own
