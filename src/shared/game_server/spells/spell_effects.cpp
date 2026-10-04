@@ -72,6 +72,13 @@ namespace mmo
 			return outBasePoints;
 		}
 
+		float ApplyCritDamageBonus(const GameUnitS& executer, const uint32 spellId, const float critMultiplier)
+		{
+			float bonusPct = (critMultiplier - 1.0f) * 100.0f;
+			executer.ApplySpellMod(spell_mod_op::CritDamageBonus, spellId, bonusPct);
+			return std::max(1.0f, 1.0f + bonusPct / 100.0f);
+		}
+
 		void HandleInstantKill(SpellEffectContext& ctx)
 		{
 			if (ctx.effectTargets.empty())
@@ -120,7 +127,7 @@ namespace mmo
 					continue;
 				}
 
-				// TODO: Do real calculation including crit chance, miss chance, resists, etc.
+				// TODO: Miss chance and resists.
 				uint32 damageAmount = std::max<int32_t>(0, ctx.basePoints);
 				executer.ApplySpellMod(spell_mod_op::Damage, spell.id(), damageAmount);
 
@@ -134,6 +141,26 @@ namespace mmo
 				// Apply both Damage and SpellDamage mods to the damage amount!
 				damageAmount = executer.CalculateModifiedValue(unit_mods::Damage, damageAmount);
 				damageAmount = executer.CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
+
+				// Roll for a critical hit: base chance from the combat settings, the caster's
+				// CritChance modifiers (talents), then the victim's own vulnerability
+				// (ModCritChanceTaken), added last so the caster's percentage modifiers do not
+				// scale it — the same order as the weapon-damage spells below.
+				const auto& combatSettings = executer.GetCombatSettings();
+				float critChance = combatSettings.spell_default_crit_chance();
+				executer.ApplySpellMod(spell_mod_op::CritChance, spell.id(), critChance);
+				critChance += unitTarget.GetCritChanceTakenBonus();
+
+				bool isCrit = false;
+				if (critChance > 0.0f)
+				{
+					std::uniform_real_distribution critDistribution(0.0f, 100.0f);
+					if (critDistribution(randomGenerator) < critChance)
+					{
+						isCrit = true;
+						damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * ApplyCritDamageBonus(executer, spell.id(), combatSettings.spell_crit_multiplier()));
+					}
+				}
 
 				// Roll for a block. Only physical damage from the front can be blocked; the helper
 				// returns no block for other schools, so this is a no-op for magical spells.
@@ -155,12 +182,18 @@ namespace mmo
 					unitTarget.threatened(executer, threat);
 				}
 
-				// Log spell damage to client
-				executer.SpellDamageLog(unitTarget.GetGuid(), damageAmount, spell.spellschool(), block.blocked ? DamageFlags::Block : DamageFlags::None, spell, blockedDamage);
+				uint8 damageFlags = DamageFlags::None;
+				if (isCrit) damageFlags |= DamageFlags::Crit;
+				if (block.blocked) damageFlags |= DamageFlags::Block;
 
-				// Trigger proc events for spell damage
-				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, proc_ex_flags::NormalHit, spell.spellschool(), false, spell.familyflags());
-				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassNeg, &executer, damageAmount, proc_ex_flags::NormalHit, spell.spellschool(), false, spell.familyflags());
+				// Log spell damage to client
+				executer.SpellDamageLog(unitTarget.GetGuid(), damageAmount, spell.spellschool(), static_cast<DamageFlags>(damageFlags), spell, blockedDamage);
+
+				// Trigger proc events for spell damage. Crits carry CriticalHit so "on critical
+				// strike" procs (procexflags) can fire.
+				const uint32 procEx = proc_ex_flags::NormalHit | (isCrit ? proc_ex_flags::CriticalHit : 0);
+				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
+				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassNeg, &executer, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
 			}
 		}
 
@@ -322,7 +355,7 @@ namespace mmo
 				ctx.markAffectedTarget(*targetObject);
 				auto& unitTarget = targetObject->AsUnit();
 
-				// TODO: Do real calculation including crit chance, miss chance, resists, etc.
+				// TODO: Miss chance and resists.
 				uint32 healingAmount = std::max<int32_t>(0, ctx.basePoints);
 
 				// Add spell power to heal
@@ -352,8 +385,8 @@ namespace mmo
 					std::uniform_real_distribution<float> critDistribution(0.0f, 100.0f);
 					if (critDistribution(randomGenerator) < critChance)
 					{
-						// Crit heal (double healing amount)
-						healingAmount = static_cast<uint32>(healingAmount * 2.0f);
+						// Crit heal (double healing amount, scaled by CritDamageBonus modifiers)
+						healingAmount = static_cast<uint32>(static_cast<float>(healingAmount) * ApplyCritDamageBonus(executer, spell.id(), 2.0f));
 						isCrit = true;
 					}
 				}
@@ -1444,19 +1477,15 @@ namespace mmo
 
 				executer.ApplySpellMod(spell_mod_op::CritChance, spell.id(), critChance);
 
-				// The target's own vulnerability (ModCritChanceTaken).
-				//
-				// The plain SchoolDamage effects do not roll for crit at all yet (they carry a
-				// "TODO: Do real calculation including crit chance" instead), so this and the
-				// melee attack table are the only two places a crit-taken bonus can apply. When
-				// spell crit is implemented, it needs this line too.
+				// The target's own vulnerability (ModCritChanceTaken). HandleSchoolDamage and the
+				// melee attack table apply it the same way.
 				critChance += unitTarget.GetCritChanceTakenBonus();
 
 				bool isCrit = false;
 				if (critDistribution(randomGenerator) < critChance)
 				{
 					isCrit = true;
-					totalDamage = static_cast<uint32>(totalDamage * combatSettings.spell_weapon_crit_multiplier());
+					totalDamage = static_cast<uint32>(static_cast<float>(totalDamage) * ApplyCritDamageBonus(executer, spell.id(), combatSettings.spell_weapon_crit_multiplier()));
 				}
 
 				// Roll for a block (physical front attacks only) — reduces the post-crit damage by a flat amount.
@@ -1485,8 +1514,9 @@ namespace mmo
 				executer.SpellDamageLog(unitTarget.GetGuid(), totalDamage, school, static_cast<DamageFlags>(damageFlags), spell, blockedDamage);
 
 				// Trigger proc events for spell damage
-				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMeleeDmgClass, &unitTarget, totalDamage, proc_ex_flags::NormalHit, spell.spellschool(), false, spell.familyflags());
-				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMeleeDmgClass, &executer, totalDamage, proc_ex_flags::NormalHit, spell.spellschool(), false, spell.familyflags());
+				const uint32 procEx = proc_ex_flags::NormalHit | (isCrit ? proc_ex_flags::CriticalHit : 0);
+				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMeleeDmgClass, &unitTarget, totalDamage, procEx, spell.spellschool(), false, spell.familyflags());
+				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMeleeDmgClass, &executer, totalDamage, procEx, spell.spellschool(), false, spell.familyflags());
 			}
 		}
 

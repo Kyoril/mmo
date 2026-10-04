@@ -177,6 +177,17 @@ namespace mmo
 				break;
 			}
 
+			// The talent data may have been redesigned since the talents were saved: a rank that no
+			// longer exists or a talent that became a placeholder would silently refund its points
+			// while the old rank spell stays learned. Reset instead, which unlearns every talent spell.
+			const auto* talentEntry = m_project.talents.getById(talentId);
+			if (rank >= talentEntry->ranks_size() || talentEntry->placeholder())
+			{
+				WLOG("Character talent " << talentId << " rank " << static_cast<uint32>(rank) << " is no longer learnable - resetting talents");
+				resetTalents = true;
+				break;
+			}
+
 			// Learning this rank costs this much talent points
 			const uint32 talentPointCost = rank + 1;
 			if (talentPointCost > talentPoints)
@@ -2037,6 +2048,13 @@ namespace mmo
 		if (!m_classEntry || talentTab->class_id() != m_classEntry->id())
 		{
 			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " which is not intended for his class!");
+			return false;
+		}
+
+		// Placeholder talents only show a planned design in the tree; they have no working spell yet.
+		if (talentEntry->placeholder())
+		{
+			WLOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn placeholder talent " << talentId);
 			return false;
 		}
 
