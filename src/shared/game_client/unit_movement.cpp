@@ -3470,6 +3470,39 @@ namespace mmo
 		return true;
 	}
 
+	bool UnitMovement::CorrectIdleGroundHeight(const float deltaTime)
+	{
+		// An idle NPC re-ran a full octree query plus ray tests every frame for a result that
+		// cannot change while nothing moves - with ~25 NPCs that was a fifth of the client's
+		// main thread in Debug.
+		constexpr float idleGroundRecheckInterval = 0.5f;
+
+		if (m_idleGroundValid && GetUpdatedNode().GetPosition() == m_idleGroundPosition)
+		{
+			m_idleGroundRecheckTimer -= deltaTime;
+			if (m_idleGroundRecheckTimer > 0.0f)
+			{
+				return true;
+			}
+
+			m_idleGroundRecheckTimer += idleGroundRecheckInterval;
+		}
+		else
+		{
+			// Spread the re-checks of units that settle in the same frame (a whole camp
+			// streaming in at once) over the interval instead of spiking one frame.
+			m_idleGroundRecheckTimer = idleGroundRecheckInterval * static_cast<float>(m_movedUnit.GetGuid() % 16) / 16.0f;
+		}
+
+		m_idleGroundValid = CorrectGroundHeight();
+		if (m_idleGroundValid)
+		{
+			m_idleGroundPosition = GetUpdatedNode().GetPosition();
+		}
+
+		return m_idleGroundValid;
+	}
+
 	SceneNode& UnitMovement::GetUpdatedNode() const
 	{
 		return *m_movedUnit.GetSceneNode();
