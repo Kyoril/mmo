@@ -469,6 +469,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnGameTimeInfo);
+		RegisterPacketHandler(game::realm_client_packet::ShutdownCountdown, *this, &BotRealmConnector::OnShutdownCountdown);
 		RegisterPacketHandler(game::realm_client_packet::CastFailed, *this, &BotRealmConnector::OnIgnoredPacket);
 
 		// Combat packet handlers
@@ -2376,6 +2377,29 @@ namespace mmo
 		m_lastGameTimeTransitionMs = transitionMs;
 		++m_gameTimeInfoCounter;
 
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::GmShutdown(const uint8 action, const uint32 delaySeconds)
+	{
+		sendSinglePacket([action, delaySeconds](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GmShutdown);
+			packet << io::write<uint8>(action) << io::write<uint32>(delaySeconds);
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnShutdownCountdown(game::IncomingPacket& packet)
+	{
+		uint32 seconds = 0;
+		if (!(packet >> io::read<uint32>(seconds)))
+		{
+			ELOG("Failed to read ShutdownCountdown packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_lastShutdownCountdown = seconds;
+		++m_shutdownCountdownCounter;
 		return PacketParseResult::Pass;
 	}
 
