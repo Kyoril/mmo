@@ -86,6 +86,10 @@ services:
       host.docker.internal: "172.17.0.1"
     networks:
       - mmo_game_servers
+    # A scheduled realm shutdown (GM 'shutdown' command or POST /shutdown on the realm) makes the
+    # realm and its world nodes exit with code 0, which on-failure does not restart. Crashes exit
+    # non-zero and are still restarted. Do not switch to 'always' or 'unless-stopped' unless a
+    # scheduled shutdown should restart the servers.
     restart: on-failure
 
   world_node_01:
@@ -114,6 +118,10 @@ services:
       host.docker.internal: "172.17.0.1"
     networks:
       - mmo_game_servers
+    # A scheduled realm shutdown (GM 'shutdown' command or POST /shutdown on the realm) makes the
+    # realm and its world nodes exit with code 0, which on-failure does not restart. Crashes exit
+    # non-zero and are still restarted. Do not switch to 'always' or 'unless-stopped' unless a
+    # scheduled shutdown should restart the servers.
     restart: on-failure
     
 networks:
