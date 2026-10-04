@@ -200,6 +200,26 @@ namespace mmo
 		}
 
 		/// Returns the name of the currently hovered world object, or nullptr if none is hovered.
+		uint32 Script_GetMouseoverWorldObjectEntry()
+		{
+			if (const GameObjectC* hovered = Script_GetHoveredWorldObject())
+			{
+				return hovered->Get<uint32>(object_fields::Entry);
+			}
+
+			return 0;
+		}
+
+		std::string Script_GetMouseoverWorldObjectGuid()
+		{
+			if (const GameObjectC* hovered = Script_GetHoveredWorldObject())
+			{
+				return std::to_string(hovered->GetGuid());
+			}
+
+			return "0";
+		}
+
 		const char* Script_GetMouseoverWorldObjectName()
 		{
 			if (const GameObjectC* hovered = Script_GetHoveredWorldObject())
@@ -913,6 +933,8 @@ namespace mmo
 					   luabind::scope(
 						   luabind::class_<UnitHandle>("UnitHandle")
 								.def("GetGuid", &UnitHandle::GetGuid)
+								.def("GetEntry", &UnitHandle::GetEntry)
+								.def("GetGuidString", &UnitHandle::GetGuidString)
 							   .def("GetHealth", &UnitHandle::GetHealth)
 							   .def("GetMaxHealth", &UnitHandle::GetMaxHealth)
 							   .def("GetPower", &UnitHandle::GetPower)
@@ -1147,6 +1169,23 @@ namespace mmo
 						   }
 					   }),
 
+					   luabind::def<std::function<void(const std::string&, const std::string&, const std::string&, luabind::object, const std::string&)>>("RegisterBinding",
+						   [](const std::string& name, const std::string& description, const std::string& category, luabind::object handler, const std::string& defaultKey)
+					   {
+						   if (luabind::type(handler) != LUA_TFUNCTION)
+						   {
+							   ELOG("RegisterBinding('" << name << "'): the handler must be a function");
+							   return;
+						   }
+
+						   Binding binding;
+						   binding.name = name;
+						   binding.description = description;
+						   binding.category = category;
+						   binding.script = handler;
+						   Bindings::RegisterRuntimeBinding(binding, defaultKey);
+					   }),
+
 					   luabind::def<std::function<void()>>("SaveBindings", []()
 					   {
 						   Bindings* b = Bindings::GetCurrent();
@@ -1204,6 +1243,8 @@ namespace mmo
 					   luabind::def("UnitExists", &Script_UnitExists),
 					   luabind::def("IsMouseoverWorldObject", &Script_IsMouseoverWorldObject),
 					   luabind::def("GetMouseoverWorldObjectName", &Script_GetMouseoverWorldObjectName),
+					   luabind::def("GetMouseoverWorldObjectEntry", &Script_GetMouseoverWorldObjectEntry),
+					   luabind::def("GetMouseoverWorldObjectGuid", &Script_GetMouseoverWorldObjectGuid),
 					   luabind::def("GetMouseoverWorldObjectScreenPosition", &Script_GetMouseoverWorldObjectScreenPosition, luabind::joined<luabind::pure_out_value<1>, luabind::pure_out_value<2>>()),
 					   luabind::def("UnitAttributeCost", &Script_UnitAttributeCost),
 					   luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),

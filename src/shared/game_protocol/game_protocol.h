@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000010;
+		constexpr uint32 ProtocolVersion = 0x00000011;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -427,6 +427,16 @@ namespace mmo
 				/// GAME MASTER. Fills mana, rage and energy of the sender's current target (or the
 				/// sender) to their maximum. No payload.
 				CheatRestorePower, // GAME MASTER
+
+				/// Files a bug report. Handled by the realm (rate limit, identity) and forwarded to the
+				/// world node. Payload: uint8 subjectType (bug_report_subject), uint32 subjectId,
+				/// uint64 subjectGuid, uint8-prefixed subjectName, uint16-prefixed comment, uint32
+				/// uncompressedSize, uint32-prefixed zlib compressed client JSON.
+				BugReport,
+
+				/// GAME MASTER. Switches a subsystem on or off realm-wide. Payload: uint8 subsystem
+				/// (game::subsystem), uint8 enabled.
+				CheatSetSubsystem, // GAME MASTER
 
 				/// Counter constant
 				Count_,
@@ -794,6 +804,14 @@ namespace mmo
 				/// Payload: packed uint64 targetGuid, uint32 visualizationId, uint8 event
 				/// (SpellVisualEvent; 4 = IMPACT is the usual one-shot).
 				PlaySpellVisual,
+
+				/// Answer to a BugReport. Payload: uint8 result (bug_report_result).
+				BugReportResult,
+
+				/// Availability of server subsystems. The full list after entering the world, only the
+				/// changed entries afterwards; either way the client overwrites what it receives.
+				/// Payload: uint8 count, count x (uint8 subsystem, uint8 status (subsystem_status)).
+				SubsystemStatus,
 
 				/// Counter constant
 				Count_,

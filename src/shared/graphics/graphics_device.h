@@ -426,6 +426,10 @@ namespace mmo
 		/// @return A list of supported {width, height} resolutions. At minimum the native one.
 		virtual std::vector<std::pair<uint16, uint16>> GetSupportedResolutions() const;
 
+		/// Gets a human readable description of the graphics adapter (GPU name), used for
+		/// diagnostics such as bug reports. Empty if the backend cannot tell.
+		virtual std::string GetAdapterDescription() const { return {}; }
+
 	public:
 		RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
 

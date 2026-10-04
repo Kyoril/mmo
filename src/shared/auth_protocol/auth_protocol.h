@@ -31,7 +31,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000006;
+		constexpr uint32 ProtocolVersion = 0x00000007;
 
 		/// Largest payload, in bytes, that a single incoming auth packet may announce.
 		///
@@ -187,6 +187,15 @@ namespace mmo
 				/// Payload: uint64 timeOfDay (milliseconds since midnight), uint32 transitionMs (how long
 				/// clients blend towards the new time, 0 = instantly).
 				TimeOfDay,
+
+				/// A bug report filed by a player, with the identity the realm vouches for.
+				/// Payload: uint64 characterGuid, uint64 accountId, uint8-prefixed characterName,
+				/// uint8-prefixed realmName, followed by the client's BugReport payload unchanged.
+				BugReport,
+
+				/// Enables or disables a world-owned subsystem on the world node (GM command or REST).
+				/// Payload: uint8 subsystem (game::subsystem), uint8 enabled.
+				SetSubsystemEnabled,
 			};
 		}
 
@@ -246,6 +255,13 @@ namespace mmo
 
 				/// Sent to re-attach an item to a mail after a failed delivery. Payload: uint64 mailId, MailAttachment.
 				MailRestoreItem,
+
+				/// Answer to a BugReport. Payload: uint64 characterGuid, uint8 result (game::bug_report_result).
+				BugReportResult,
+
+				/// Availability of the world-owned subsystems on this node. The full list after logon, the
+				/// changed entries afterwards. Payload: uint8 count, count x (uint8 subsystem, uint8 status).
+				SubsystemStatus,
 			};
 		}
 

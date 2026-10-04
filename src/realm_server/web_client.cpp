@@ -6,6 +6,8 @@
 #include "motd_manager.h"
 #include "time_of_day_manager.h"
 #include "web_service.h"
+#include "world_manager.h"
+#include "game/subsystem.h"
 #include "base/clock.h"
 #include "log/default_log_levels.h"
 #include "game/time_of_day.h"
@@ -72,6 +74,11 @@ namespace mmo
 		RegisterRoute(Type::Post, "/motd", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
 		{
 			handleSetMotd(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/subsystem", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleSetSubsystem(req, response);
 		});
 
 		RegisterRoute(Type::Get, "/time-of-day", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
@@ -314,6 +321,50 @@ namespace mmo
 
 		jsonResponse = TimeOfDayToJson(manager);
 		jsonResponse["status"] = "SUCCESS";
+		SendJsonResponse(response, jsonResponse);
+	}
+	void WebClient::handleSetSubsystem(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto nameIt = arguments.find("name");
+		const auto enabledIt = arguments.find("enabled");
+
+		json jsonResponse;
+		if (nameIt == arguments.end() || enabledIt == arguments.end())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Expected parameters 'name' and 'enabled'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		game::Subsystem subsystem;
+		if (!game::FindSubsystemByName(nameIt->second.c_str(), subsystem))
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "UNKNOWN_SUBSYSTEM";
+			jsonResponse["message"] = "Unknown subsystem '" + nameIt->second + "'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		WorldManager* worldManager = m_service.GetWorldManager();
+		if (!worldManager)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			jsonResponse["message"] = "World manager not available";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		const bool enabled = enabledIt->second == "1" || enabledIt->second == "true";
+		worldManager->SetSubsystemEnabled(subsystem, enabled, m_service.GetPlayerManager());
+
+		jsonResponse["status"] = "SUCCESS";
+		jsonResponse["subsystem"] = nameIt->second;
+		jsonResponse["enabled"] = enabled;
 		SendJsonResponse(response, jsonResponse);
 	}
 }

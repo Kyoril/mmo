@@ -166,6 +166,13 @@ namespace mmo
 				weeklyQuestResetHour = gameplay->getInteger("weeklyQuestResetHour", weeklyQuestResetHour);
 			}
 
+			if (const Table* const bugReport = global.getTable("bugReport"))
+			{
+				bugReportEnabled = detail::parseBoolean(*bugReport, "enabled", bugReportEnabled);
+				bugReportApiUrl = bugReport->getString("apiUrl", bugReportApiUrl);
+				bugReportApiKey = bugReport->getString("apiKey", bugReportApiKey);
+			}
+
 			if (const Table *const log = global.getTable("log"))
 			{
 				isLogActive = log->getInteger("active", static_cast<unsigned>(isLogActive)) != 0;
@@ -290,6 +297,16 @@ namespace mmo
 			gameplay.addKey("weeklyQuestResetWeekday", weeklyQuestResetWeekday);
 			gameplay.addKey("weeklyQuestResetHour", weeklyQuestResetHour);
 			gameplay.Finish();
+		}
+
+		global.writer.newLine();
+
+		{
+			sff::write::Table<Char> bugReport(global, "bugReport", sff::write::MultiLine);
+			bugReport.addKey("enabled", static_cast<unsigned>(bugReportEnabled));
+			bugReport.addKey("apiUrl", bugReportApiUrl);
+			bugReport.addKey("apiKey", bugReportApiKey);
+			bugReport.Finish();
 		}
 
 		return true;

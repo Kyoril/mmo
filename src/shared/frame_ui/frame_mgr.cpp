@@ -1103,7 +1103,18 @@ namespace mmo
 
 	void FrameManager::FrameRegisterEvent(FramePtr frame, const std::string & eventName)
 	{
-		m_eventFrames[eventName].emplace_back(std::move(frame));
+		// A frame registering the same event again only replaces its handler (Frame::RegisterEvent);
+		// listing it twice would fire that handler twice per event.
+		auto& frames = m_eventFrames[eventName];
+		for (const auto& weakFrame : frames)
+		{
+			if (const auto strongFrame = weakFrame.lock(); strongFrame.get() == frame.get())
+			{
+				return;
+			}
+		}
+
+		frames.emplace_back(std::move(frame));
 	}
 
 	void FrameManager::FrameUnregisterEvent(FramePtr frame, const std::string & eventName)

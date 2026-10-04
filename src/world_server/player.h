@@ -18,6 +18,7 @@
 #include "base/clock.h"
 #include "base/localization.h"
 #include "anti_cheat_tracker.h"
+#include "combat_event_log.h"
 #include "trade_session.h"
 
 #include <algorithm>
@@ -122,6 +123,12 @@ namespace mmo
 
 		/// @copydoc TileSubscriber::IsObjectHiddenForClient
 		bool IsObjectHiddenForClient(uint64 guid) const override { return m_hiddenGuids.contains(guid); }
+
+		/// Recent combat events of this player, recorded for bug reports.
+		[[nodiscard]] const CombatEventLog& GetCombatEvents() const { return m_combatEvents; }
+
+		/// Gets the character data this player joined the world with.
+		[[nodiscard]] const CharacterData& GetCharacterData() const { return m_characterData; }
 
 		/// Handles a proxy packet received from the realm server.
 		void HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer);
@@ -950,6 +957,9 @@ namespace mmo
 		void ClearPendingRevive();
 
 	private:
+		void RecordCombatEvent(CombatEventType type, uint64 otherGuid, uint32 spellId, uint32 amount, uint32 school);
+
+	private:
 		PlayerManager& m_manager;
 		RealmConnector& m_connector;
 		std::shared_ptr<GamePlayerS> m_character;
@@ -958,6 +968,8 @@ namespace mmo
 		std::vector<std::string> m_accountFeatures;	// Active account feature keys (entitlements) granted to the account
 		LocaleIndex m_locale = LocaleIndex::enUS;	// Client locale, used to serve localized game data
 		scoped_connection_container m_characterConnections;
+		CombatEventLog m_combatEvents;
+		uint32 m_lastCastSpellId = 0;
 		const proto::Project& m_project;
 		std::shared_ptr<LootInstance> m_loot{ nullptr };
 		std::shared_ptr<GameObjectS> m_lootSource{ nullptr };

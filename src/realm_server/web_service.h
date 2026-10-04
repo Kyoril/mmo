@@ -13,6 +13,7 @@ namespace mmo
 	struct IDatabase;
 	class MOTDManager;
 	class TimeOfDayManager;
+	class WorldManager;
 
 	class WebService 
 		: public web::WebService
@@ -43,6 +44,11 @@ namespace mmo
 		/// Gets the configured admin password.
 		const String &GetPassword() const;
 
+		/// Sets the world manager (needed to relay subsystem toggles to world nodes).
+		void SetWorldManager(WorldManager &worldManager) { m_worldManager = &worldManager; }
+		/// Gets the world manager, or nullptr if none was set.
+		WorldManager *GetWorldManager() const { return m_worldManager; }
+
 		/// Creates a web client instance for a new connection.
 		virtual web::WebService::WebClientPtr createClient(std::shared_ptr<Client> connection) override;
 
@@ -54,5 +60,6 @@ namespace mmo
 		TimeOfDayManager &m_timeOfDayManager;
 		const GameTime m_startTime;
 		const String m_password;
+		WorldManager *m_worldManager = nullptr;
 	};
 }

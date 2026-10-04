@@ -80,6 +80,16 @@ namespace mmo
 		/// @brief Hour of day [0, 23] (UTC/server time) at which daily quests reset.
 		uint32 dailyQuestResetHour{ 3 };
 
+		/// @brief Whether players may file in-game bug reports through this node.
+		bool bugReportEnabled{ false };
+
+		/// @brief Base url of the central bug API (https://host[:port][/prefix]), or file://<dir> to
+		///        write every report as a JSON file instead (tests).
+		String bugReportApiUrl{ "https://error.mmo-dev.net" };
+
+		/// @brief Ingest key of the bug API, sent as X-Api-Key.
+		String bugReportApiKey;
+
 		/// @brief Weekday [0 = Sunday, 6 = Saturday] on which weekly quests reset.
 		uint32 weeklyQuestResetWeekday{ 3 };
 

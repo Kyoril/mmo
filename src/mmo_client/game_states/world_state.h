@@ -585,6 +585,8 @@ namespace mmo
 
 		void Command_Heal(const std::string &cmd, const std::string &args) const;
 
+		void Command_SetSubsystem(const std::string &cmd, const std::string &args) const;
+
 		void Command_RestorePower(const std::string &cmd, const std::string &args) const;
 
 		void Command_SetTime(const std::string &cmd, const std::string &args) const;

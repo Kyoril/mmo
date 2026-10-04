@@ -2433,6 +2433,29 @@ namespace mmo
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
+	PacketParseResult Player::OnCheatSetSubsystem(game::IncomingPacket &packet)
+	{
+		uint8 subsystem = 0;
+		uint8 enabled = 0;
+		if (!(packet >> io::read<uint8>(subsystem) >> io::read<uint8>(enabled)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!HasGMLevel(1))
+		{
+			WLOG("Player " << m_characterData->name << " attempted to toggle a subsystem without sufficient privileges");
+			return PacketParseResult::Pass;
+		}
+
+		if (!GetWorldManager().SetSubsystemEnabled(static_cast<game::Subsystem>(subsystem), enabled != 0, GetManager()))
+		{
+			WLOG("Player " << m_characterData->name << " tried to toggle unknown subsystem " << static_cast<uint32>(subsystem));
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult Player::OnCheatSetTimeOfDay(game::IncomingPacket &packet)
 	{
 		uint8 reset = 0;
@@ -3237,8 +3260,10 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::PartyPing, *this, &Player::OnPartyPing);
 			RegisterPacketHandler(game::client_realm_packet::ChannelJoin, *this, &Player::OnChannelJoin);
 			RegisterPacketHandler(game::client_realm_packet::ChannelLeave, *this, &Player::OnChannelLeave);
+			RegisterPacketHandler(game::client_realm_packet::BugReport, *this, &Player::OnBugReport);
 
 #if MMO_WITH_DEV_COMMANDS
+			RegisterPacketHandler(game::client_realm_packet::CheatSetSubsystem, *this, &Player::OnCheatSetSubsystem);
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
 			RegisterPacketHandler(game::client_realm_packet::CheatSummon, *this, &Player::OnCheatSummon);
 			RegisterPacketHandler(game::client_realm_packet::CheatSetTimeOfDay, *this, &Player::OnCheatSetTimeOfDay);
@@ -3271,8 +3296,10 @@ namespace mmo
 
 			ClearPacketHandler(game::client_realm_packet::ChannelJoin);
 			ClearPacketHandler(game::client_realm_packet::ChannelLeave);
+			ClearPacketHandler(game::client_realm_packet::BugReport);
 
 #if MMO_WITH_DEV_COMMANDS
+			ClearPacketHandler(game::client_realm_packet::CheatSetSubsystem);
 			ClearPacketHandler(game::client_realm_packet::CheatTeleportToPlayer);
 			ClearPacketHandler(game::client_realm_packet::CheatSummon);
 			ClearPacketHandler(game::client_realm_packet::CheatSetTimeOfDay);
@@ -3335,6 +3362,9 @@ namespace mmo
 				<< io::write<float>(m_characterData->facing.GetValueRadians())
 			;
 			outPacket.Finish(); });
+
+		// Tell the client which subsystems it may use on this world node
+		SendFullSubsystemStatus();
 
 		// Send Message of the Day to the player
 		String motd = GetManager().GetMessageOfTheDay();
@@ -3405,6 +3435,9 @@ namespace mmo
 		m_world = world;
 		m_instanceId = instanceId;
 		NotifyWorldNodeChanged(world.get());
+
+		// The new node may offer different subsystems than the previous one.
+		SendFullSubsystemStatus();
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
@@ -5006,5 +5039,68 @@ namespace mmo
 
 		// Get all characters who have this character as a friend
 		m_database.asyncRequestKeyed(charGuid, std::move(handler), &IDatabase::GetCharactersWithFriend, charGuid);
+	}
+	void Player::SendSubsystemStatus(const SubsystemStatusList& entries)
+	{
+		if (entries.empty())
+		{
+			return;
+		}
+
+		SendPacket([&entries](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::SubsystemStatus);
+			packet << io::write<uint8>(entries.size());
+			for (const auto& [id, status] : entries)
+			{
+				packet << io::write<uint8>(id) << io::write<uint8>(status);
+			}
+			packet.Finish();
+		});
+	}
+
+	void Player::SendFullSubsystemStatus()
+	{
+		const auto world = m_world.lock();
+		SendSubsystemStatus(GetManager().GetSubsystemTable().Compose(world ? &world->GetSubsystemStatus() : nullptr));
+	}
+
+	void Player::SendBugReportResult(const game::BugReportResult result)
+	{
+		SendPacket([result](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::BugReportResult);
+			packet << io::write<uint8>(result);
+			packet.Finish();
+		});
+	}
+
+	PacketParseResult Player::OnBugReport(game::IncomingPacket &packet)
+	{
+		// An unreadable or oversized report costs the report, never the session.
+		game::BugReportPayload payload;
+		if (!(packet >> payload))
+		{
+			const bool tooLarge = packet.GetSize() > game::bug_report_limits::MaxCompressedBytes;
+			WLOG("Player " << m_characterData->name << " sent an unreadable bug report (" << packet.GetSize() << " bytes)");
+			SendBugReportResult(tooLarge ? game::bug_report_result::TooLarge : game::bug_report_result::Invalid);
+			return PacketParseResult::Pass;
+		}
+
+		const auto world = m_world.lock();
+		if (!world || world->GetSubsystemStatus()[game::subsystem::BugReport] != game::subsystem_status::Available)
+		{
+			SendBugReportResult(game::bug_report_result::Disabled);
+			return PacketParseResult::Pass;
+		}
+
+		if (!GetManager().GetBugReportRateLimiter().TryConsume(GetCharacterGuid(), GetAsyncTimeMs()))
+		{
+			SendBugReportResult(game::bug_report_result::RateLimited);
+			return PacketParseResult::Pass;
+		}
+
+		world->SendBugReport(GetCharacterGuid(), GetAccountId(), m_characterData->name, GetManager().GetRealmName(), payload);
+		return PacketParseResult::Pass;
 	}
 }

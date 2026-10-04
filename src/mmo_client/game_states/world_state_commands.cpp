@@ -9,8 +9,10 @@
 #include "game_client/object_mgr.h"
 #include "log/default_log_levels.h"
 #include "game/time_of_day.h"
+#include "game/subsystem.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <charconv>
 #include <cstdlib>
@@ -522,6 +524,26 @@ namespace mmo
 	void WorldState::Command_Heal(const std::string &cmd, const std::string &args) const
 	{
 		m_realmConnector.CheatHeal();
+	}
+
+	void WorldState::Command_SetSubsystem(const std::string &cmd, const std::string &args) const
+	{
+		std::istringstream stream(args);
+		std::string name;
+		std::string state;
+		stream >> name >> state;
+
+		// Accept the script name in any case ("bug_report" as well as "BUG_REPORT").
+		std::transform(name.begin(), name.end(), name.begin(), [](const unsigned char c) { return static_cast<char>(std::toupper(c)); });
+
+		game::Subsystem subsystem;
+		if (!game::FindSubsystemByName(name.c_str(), subsystem) || (state != "on" && state != "off"))
+		{
+			ELOG("Usage: subsystem <name> on|off (e.g. subsystem BUG_REPORT off)");
+			return;
+		}
+
+		m_realmConnector.CheatSetSubsystem(subsystem, state == "on");
 	}
 
 	void WorldState::Command_RestorePower(const std::string &cmd, const std::string &args) const

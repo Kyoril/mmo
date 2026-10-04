@@ -44,6 +44,33 @@ namespace mmo
 			}
 
 
+			std::string FormatRequestHead(const Request &request)
+			{
+				std::ostringstream head;
+				head << request.method << " " << escapePath(request.document) << " HTTP/1.0\r\n";
+				head << "Host: " << request.host << "\r\n";
+				bool hasAccept = false;
+				for (const auto& [name, value] : request.headers)
+				{
+					if (name == "Accept")
+					{
+						hasAccept = true;
+					}
+					head << name << ": " << value << "\r\n";
+				}
+				if (!hasAccept)
+				{
+					head << "Accept: */*\r\n";
+				}
+				if (request.method != "GET")
+				{
+					head << "Content-Length: " << request.body.size() << "\r\n";
+				}
+				head << "Connection: close\r\n";
+				head << "\r\n";
+				return head.str();
+			}
+
 			Response sendRequest(
 			    const std::string &host,
 				uint16 port,
@@ -61,11 +88,8 @@ namespace mmo
 					throw std::runtime_error("Could not connect to " + host);
 				}
 
-				*connection << "GET " << escapePath(request.document) << " HTTP/1.0\r\n";
-				*connection << "Host: " << request.host << "\r\n";
-				*connection << "Accept: */*\r\n";
-				*connection << "Connection: close\r\n";
-				*connection << "\r\n";
+				*connection << FormatRequestHead(request) << request.body;
+				connection->flush();
 
 				std::string responseVersion;
 				unsigned status;

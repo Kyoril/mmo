@@ -336,6 +336,11 @@ namespace mmo
 		/// GAME MASTER only. Heals the current target (or the controlled character) to full health.
 		void CheatHeal();
 
+		/// GAME MASTER only. Switches a server subsystem on or off realm-wide.
+		/// @param subsystem The subsystem id (game::subsystem).
+		/// @param enabled Whether the subsystem should be available.
+		void CheatSetSubsystem(uint8 subsystem, bool enabled);
+
 		/// GAME MASTER only. Fills mana, rage and energy of the current target (or the controlled
 		///	character).
 		void CheatRestorePower();

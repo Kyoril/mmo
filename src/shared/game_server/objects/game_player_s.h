@@ -264,6 +264,14 @@ namespace mmo
 		/// @returns Quest status.
 		QuestStatus GetQuestStatus(uint32 quest) const;
 
+		/// Gets the tracked progress of a quest in the quest log.
+		/// @returns The quest data, or nullptr if the quest is not tracked for this player.
+		const QuestStatusData* GetQuestData(uint32 quest) const
+		{
+			const auto it = m_quests.find(quest);
+			return it != m_quests.end() ? &it->second : nullptr;
+		}
+
 		/// Returns true if the quest's required-classes mask permits the currently ACTIVE class.
 		/// Quests already in the log stay there when the player switches to a non-matching class,
 		/// but are frozen: no objective progress and no turn-in until a matching class is active.

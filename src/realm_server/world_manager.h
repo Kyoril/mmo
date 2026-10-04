@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "game/subsystem.h"
+
 #include "base/non_copyable.h"
 #include "game/game.h"
 
@@ -11,6 +13,7 @@
 
 namespace mmo
 {
+	class PlayerManager;
 	class World;
 
 	/// Manages all connected world nodes.
@@ -60,6 +63,11 @@ namespace mmo
 		/// @param timeOfDay Time of day in milliseconds since midnight.
 		/// @param transitionMs How long clients should blend towards the new time, 0 = instantly.
 		void BroadcastTimeOfDay(GameTime timeOfDay, uint32 transitionMs);
+
+		/// Switches a subsystem realm-wide: world-owned subsystems are relayed to every world node,
+		/// realm-owned ones are set in the realm's table and pushed to every player in the world.
+		/// @returns false if the subsystem id is unknown.
+		bool SetSubsystemEnabled(game::Subsystem subsystem, bool enabled, PlayerManager& playerManager);
 
 	private:
 

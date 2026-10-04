@@ -4,4 +4,5 @@ mmo_add_test(game_protocol_tests
 	game_protocol
 	binary_io_hdrs
 	network_hdrs
+	zlibstatic
 	${OPENSSL_LIBRARIES})

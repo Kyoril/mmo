@@ -549,6 +549,19 @@ namespace mmo
 		/// @param school The damage school type.
 		/// @param damageType The type of damage taken.
 		signal<void(GameUnitS *, uint32, DamageType)> takenDamage;
+		/// Signal fired after this unit took damage, with the amount actually subtracted.
+		/// @param attacker The unit that caused the damage (may be nullptr).
+		/// @param amount The damage amount after clamping to the remaining health.
+		/// @param school The damage school type.
+		signal<void(GameUnitS *, uint32, uint32)> damageTakenAmount;
+		/// Signal fired after this unit was healed, with the effective amount (over-heal excluded).
+		/// @param healer The healing unit (may be nullptr).
+		/// @param amount The health actually restored.
+		signal<void(GameUnitS *, uint32)> healedAmount;
+		/// Signal fired when an aura on this unit is applied or removed.
+		/// @param aura The aura container whose applied state changed.
+		/// @param applied True if the aura was applied, false if it was removed.
+		signal<void(const AuraContainer &, bool)> auraApplyChanged;
 		/// Signal fired when this unit deals damage to another unit.
 		/// @param victim The unit that received damage from this unit.
 		/// @param school The damage school type.
@@ -958,6 +971,21 @@ namespace mmo
 		/// Builds an aura packet for network transmission.
 		/// @param writer The writer to write the packet to.
 		void BuildAuraPacket(io::Writer &writer) const;
+
+		/// Calls the given callback for every aura container on this unit, including passive and
+		/// not yet applied ones. Read-only diagnostics (e.g. bug report snapshots).
+		/// @param callback Invoked with a const reference to each aura container.
+		template<class Callback>
+		void ForEachAura(Callback &&callback) const
+		{
+			for (const auto &aura : m_auras)
+			{
+				if (aura)
+				{
+					callback(static_cast<const AuraContainer &>(*aura));
+				}
+			}
+		}
 
 		/// Collects all auras that should be persisted across world instances. Only non-passive
 		/// auras that were not granted by equipment and have not yet expired are returned.

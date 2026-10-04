@@ -369,6 +369,8 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::MailTakeMoney, *strongThis, &World::OnMailTakeMoney);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::MailTakeItem, *strongThis, &World::OnMailTakeItem);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::MailRestoreItem, *strongThis, &World::OnMailRestoreItem);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::SubsystemStatus, *strongThis, &World::OnSubsystemStatus);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::BugReportResult, *strongThis, &World::OnBugReportResult);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -1284,6 +1286,109 @@ namespace mmo
 		// Send world instance data
 		const auto strong = shared_from_this();
 		player->OnWorldLeft(strong, reason);
+
+		return PacketParseResult::Pass;
+	}
+	void World::SendBugReport(const uint64 characterGuid, const uint64 accountId, const String& characterName, const String& realmName, const game::BugReportPayload& payload) const
+	{
+		m_connection->sendSinglePacket([&](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::realm_world_packet::BugReport);
+			packet
+				<< io::write<uint64>(characterGuid)
+				<< io::write<uint64>(accountId)
+				<< io::write_dynamic_range<uint8>(characterName)
+				<< io::write_dynamic_range<uint8>(realmName)
+				<< payload;
+			packet.Finish();
+		});
+	}
+
+	void World::SendSetSubsystemEnabled(const game::Subsystem subsystem, const bool enabled) const
+	{
+		m_connection->sendSinglePacket([subsystem, enabled](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::realm_world_packet::SetSubsystemEnabled);
+			packet << io::write<uint8>(subsystem) << io::write<uint8>(enabled ? 1 : 0);
+			packet.Finish();
+		});
+	}
+
+	PacketParseResult World::OnSubsystemStatus(auth::IncomingPacket& packet)
+	{
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			ELOG("Failed to read SubsystemStatus packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		SubsystemStatusList changed;
+		for (uint8 i = 0; i < count; ++i)
+		{
+			uint8 id = 0;
+			uint8 status = 0;
+			if (!(packet >> io::read<uint8>(id) >> io::read<uint8>(status)))
+			{
+				ELOG("Failed to read SubsystemStatus packet entry");
+				return PacketParseResult::Disconnect;
+			}
+
+			// Only world-owned subsystems are this node's to decide.
+			if (id >= game::subsystem::Count_ || status >= game::subsystem_status::Count_ ||
+				game::GetSubsystemOwner(static_cast<game::Subsystem>(id)) != game::subsystem_owner::World)
+			{
+				continue;
+			}
+
+			const auto typedStatus = static_cast<game::SubsystemStatus>(status);
+			if (m_subsystemStatus[id] != typedStatus)
+			{
+				m_subsystemStatus[id] = typedStatus;
+				changed.emplace_back(static_cast<game::Subsystem>(id), typedStatus);
+			}
+		}
+
+		if (changed.empty())
+		{
+			return PacketParseResult::Pass;
+		}
+
+		for (const auto& [id, status] : changed)
+		{
+			ILOG("World node " << m_worldName << ": subsystem " << game::GetSubsystemName(id) << " is now " << (status == game::subsystem_status::Available ? "available" : "unavailable"));
+		}
+
+		m_playerManager.ForEachPlayer([this, &changed](Player& player)
+		{
+			if (player.GetWorld().get() == this)
+			{
+				player.SendSubsystemStatus(changed);
+			}
+		});
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnBugReportResult(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint8 result = 0;
+		if (!(packet >> io::read<uint64>(characterGuid) >> io::read<uint8>(result)))
+		{
+			ELOG("Failed to read BugReportResult packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (result >= game::bug_report_result::Count_)
+		{
+			result = game::bug_report_result::Invalid;
+		}
+
+		if (Player* player = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
+		{
+			player->SendBugReportResult(static_cast<game::BugReportResult>(result));
+		}
 
 		return PacketParseResult::Pass;
 	}

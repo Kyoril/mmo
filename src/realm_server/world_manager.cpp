@@ -2,6 +2,9 @@
 
 #include "world_manager.h"
 #include "world.h"
+#include "player.h"
+#include "player_manager.h"
+#include "log/default_log_levels.h"
 
 #include <vector>
 
@@ -109,6 +112,43 @@ namespace mmo
 				world->SendTimeOfDay(timeOfDay, transitionMs);
 			}
 		}
+	}
+
+	bool WorldManager::SetSubsystemEnabled(const game::Subsystem subsystem, const bool enabled, PlayerManager& playerManager)
+	{
+		if (subsystem >= game::subsystem::Count_)
+		{
+			return false;
+		}
+
+		ILOG("Subsystem " << game::GetSubsystemName(subsystem) << (enabled ? " enabled" : " disabled") << " realm-wide");
+
+		if (game::GetSubsystemOwner(subsystem) == game::subsystem_owner::World)
+		{
+			// Each node answers with its new effective status, which reaches the players.
+			std::scoped_lock scopedLock{ m_worldsMutex };
+			for (const auto& world : m_worlds)
+			{
+				if (world->IsAuthenticated())
+				{
+					world->SendSetSubsystemEnabled(subsystem, enabled);
+				}
+			}
+			return true;
+		}
+
+		if (playerManager.GetSubsystemTable().SetRealmOwned(subsystem, enabled))
+		{
+			const SubsystemStatusList changed{ { subsystem, enabled ? game::subsystem_status::Available : game::subsystem_status::Unavailable } };
+			playerManager.ForEachPlayer([&changed](Player& player)
+			{
+				if (player.GetWorld())
+				{
+					player.SendSubsystemStatus(changed);
+				}
+			});
+		}
+		return true;
 	}
 
 	std::shared_ptr<World> WorldManager::GetWorldByInstanceId(InstanceId instanceId)

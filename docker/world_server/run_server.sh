@@ -48,6 +48,12 @@ log =
 	fileName = "logs/logs"
 	buffering = 0
 )
+bugReport =
+(
+	enabled = ${BUG_REPORT_ENABLED:-0}
+	apiUrl = "${BUG_REPORT_API_URL:-https://error.mmo-dev.net}"
+	apiKey = "${BUG_REPORT_API_KEY}"
+)
 EOF
 
 # Start the server

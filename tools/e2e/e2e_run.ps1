@@ -29,6 +29,9 @@ $scenarioDir = Join-Path $s.RepoRoot "e2e\scenarios"
 $logDir = Join-Path $s.RuntimeDir "logs"
 $clientConfig = Join-Path $s.RuntimeDir "e2e_client.json"
 
+# Where the test world node writes bug reports (see e2e_up.ps1); inherited by e2e_client.
+$env:MMO_E2E_BUG_DIR = Join-Path $s.RuntimeDir "bugs"
+
 # Scenarios that are EXPECTED to fail (negative controls proving the failure plumbing).
 $expectedFailures = @{ "always_fails" = 1 }
 

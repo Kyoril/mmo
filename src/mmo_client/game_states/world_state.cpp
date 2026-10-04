@@ -1,6 +1,9 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_state.h"
+#include "client_context.h"
+#include "systems/subsystem_client.h"
+#include "systems/bug_report_client.h"
 #include "client.h"
 #include "client_locale.h"
 #include "base/localization.h"
@@ -574,6 +577,8 @@ namespace mmo
 		// Remove bindings
 		m_bindings.Unload();
 		m_bindings.Shutdown();
+		// Runtime bindings hold script functions of the UI that is going away; it registers them again.
+		Bindings::ClearRuntimeBindings();
 
 		m_scene.reset();
 
@@ -1944,6 +1949,11 @@ namespace mmo
 		m_talentClient.Initialize();
 		m_inventoryClient.Initialize();
 		m_tradeClient.Initialize();
+		if (ClientContext& context = GetClientContext(); context.subsystemClient && context.bugReportClient)
+		{
+			context.subsystemClient->Initialize();
+			context.bugReportClient->Initialize();
+		}
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string &cmd, const std::string &args)
 								 { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -1993,6 +2003,8 @@ namespace mmo
 								 { Command_ResetCooldowns(cmd, args); }, ConsoleCommandCategory::Gm, "Clears all spell cooldowns of the selected unit (or yourself if nothing is selected).");
 		Console::RegisterCommand("heal", [this](const std::string &cmd, const std::string &args)
 								 { Command_Heal(cmd, args); }, ConsoleCommandCategory::Gm, "Heals the selected unit (or yourself if nothing is selected) to full health.");
+		Console::RegisterCommand("subsystem", [this](const std::string &cmd, const std::string &args)
+								 { Command_SetSubsystem(cmd, args); }, ConsoleCommandCategory::Gm, "Switches a server subsystem realm-wide: subsystem <name> on|off (e.g. subsystem BUG_REPORT off).");
 		Console::RegisterCommand("restorepower", [this](const std::string &cmd, const std::string &args)
 								 { Command_RestorePower(cmd, args); }, ConsoleCommandCategory::Gm, "Fills mana, rage and energy of the selected unit (or yourself if nothing is selected).");
 		Console::RegisterCommand("settime", [this](const std::string &cmd, const std::string &args)
@@ -2026,6 +2038,7 @@ namespace mmo
 		Console::UnregisterCommand("damage");
 		Console::UnregisterCommand("resetcooldowns");
 		Console::UnregisterCommand("heal");
+		Console::UnregisterCommand("subsystem");
 		Console::UnregisterCommand("restorepower");
 		Console::UnregisterCommand("settime");
 #endif
@@ -2042,6 +2055,11 @@ namespace mmo
 		m_vendorClient.Shutdown();
 		m_bankClient.Shutdown();
 		m_mailClient.Shutdown();
+		if (ClientContext& context = GetClientContext(); context.subsystemClient && context.bugReportClient)
+		{
+			context.bugReportClient->Shutdown();
+			context.subsystemClient->Shutdown();
+		}
 
 		m_worldPacketHandlers.Clear();
 		m_worldChangeHandlers.Clear();

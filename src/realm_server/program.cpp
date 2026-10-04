@@ -216,6 +216,7 @@ namespace mmo
 		auto motdManager = std::make_unique<MOTDManager>(asyncMotdDb);
 
 		PlayerManager playerManager{ config.maxPlayers, *motdManager };
+		playerManager.SetRealmName(config.realmName);
 
 		// Initialize asset registry
 		AssetRegistry::Initialize(config.dataFolder, {});
@@ -416,6 +417,7 @@ namespace mmo
 			*motdManager,
 			timeOfDayManager
 		);
+		webService->SetWorldManager(worldManager);
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////

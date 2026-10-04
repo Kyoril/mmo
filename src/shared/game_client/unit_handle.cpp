@@ -96,6 +96,18 @@ namespace mmo
 
 	UnitHandle::UnitHandle() = default;
 
+	std::string UnitHandle::GetGuidString() const
+	{
+		return std::to_string(GetGuid());
+	}
+
+	uint32 UnitHandle::GetEntry() const
+	{
+		if (!CheckNonNull()) return 0;
+		if (Get()->GetTypeId() == ObjectTypeId::Player) return 0;
+		return Get()->Get<uint32>(object_fields::Entry);
+	}
+
 	uint64 UnitHandle::GetGuid() const
 	{
 		if (!CheckNonNull()) return 0;
