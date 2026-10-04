@@ -495,12 +495,20 @@ namespace mmo
 				databasePool->Stop();
 			}
 		};
-		shutdownSignals = InstallShutdownHandler(ioService, [&stopRealm]() { stopRealm(); });
+		// SIGTERM (docker stop) and Ctrl+C run the same sequence as a scheduled shutdown, just without
+		// the countdown. Calling stopRealm directly here would close the world links in the same step
+		// as the player kicks, and the character data the world nodes send back would have nowhere to
+		// go. If a scheduled shutdown is already winding down, Schedule refuses and that one finishes.
+		shutdownSignals = InstallShutdownHandler(ioService, [&shutdownManager]()
+		{
+			ILOG("Shutdown signal received - saving characters before stopping");
+			shutdownManager.Schedule(0);
+		});
 
-		// A scheduled shutdown: log the players out first (their logout saves travel world -> realm
+		// The shutdown sequence: log the players out first (their logout saves travel world -> realm
 		// on the same links), then tell the world nodes to go, and stop the realm once they have
 		// disconnected or the grace period ran out. The database pool keeps running until then, so
-		// the character data the world nodes send back is still written.
+		// the character data the world nodes send back is still written, and stopRealm drains it.
 		const GameTime worldGracePeriod = constants::OneSecond * 15;
 		const GameTime worldPollInterval = constants::OneSecond / 4;
 		std::function<void(GameTime)> stopOnceWorldsAreGone;
@@ -524,10 +532,16 @@ namespace mmo
 		};
 
 		const scoped_connection shutdownDue{ shutdownManager.shutdownDue.connect(
-			[&playerServer, &playerManager, &worldManager, &timerQueue, &stopOnceWorldsAreGone, worldGracePeriod]()
+			[&playerServer, &playerManager, &worldManager, &timerQueue, &stopOnceWorldsAreGone, &loginConnector, worldGracePeriod]()
 		{
-			ILOG("Scheduled realm shutdown is due - logging out players and stopping world nodes");
+			ILOG("Realm shutdown is due - logging out players and stopping world nodes");
 			playerServer->Stop();
+
+			// Leaving the login server takes the realm off the realm list right away, instead of
+			// listing it until the very end while its player port no longer accepts anyone. Nothing
+			// still needs the link: it only verifies new client sessions.
+			loginConnector->Shutdown();
+
 			playerManager.DisconnectAll(auth::session_kick_reason::RealmShutdown);
 			worldManager.BroadcastShutdown();
 			stopOnceWorldsAreGone(timerQueue.GetNow() + worldGracePeriod);

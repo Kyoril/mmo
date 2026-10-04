@@ -91,6 +91,10 @@ services:
     # non-zero and are still restarted. Do not switch to 'always' or 'unless-stopped' unless a
     # scheduled shutdown should restart the servers.
     restart: on-failure
+    # docker stop sends SIGTERM and kills the container if it is still running after the grace
+    # period (10 s by default). On SIGTERM the realm saves every online character before it
+    # exits, which takes longer with many players online, so allow it time.
+    stop_grace_period: 5m
 
   world_node_01:
     image: kyoril/mmo_world_server:latest
@@ -123,6 +127,10 @@ services:
     # non-zero and are still restarted. Do not switch to 'always' or 'unless-stopped' unless a
     # scheduled shutdown should restart the servers.
     restart: on-failure
+    # docker stop sends SIGTERM and kills the container if it is still running after the grace
+    # period (10 s by default). On SIGTERM the realm saves every online character before it
+    # exits, which takes longer with many players online, so allow it time.
+    stop_grace_period: 5m
     
 networks:
   mmo_game_servers:

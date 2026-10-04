@@ -245,6 +245,14 @@ namespace mmo
 
 			ILOG("Stopping the world server cleanly");
 
+			// Save first, while the instances still run and the realm link is still open. On the
+			// realm-ordered path nobody is left by now; on SIGTERM (docker stop, which hits the realm
+			// and its world nodes at the same time) this is what keeps the players' progress.
+			if (realmConnector)
+			{
+				realmConnector->RemoveAllPlayers();
+			}
+
 			// Both queues hold an armed asio timer on the io_service, which is outstanding work.
 			// The reconnect delay lives in one of them, so stopping them is also what keeps the
 			// world node from dialling the realm back up mid-shutdown.

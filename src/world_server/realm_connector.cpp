@@ -1376,8 +1376,17 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		ILOG("The realm ordered this world node to shut down");
 
 		// The realm logs its players out before sending this, and those PlayerCharacterLeave
-		// packets arrived first on this link. Anyone still here leaves the same way, so their
-		// character data goes back to the realm before the link closes.
+		// packets arrived first on this link. Anyone still here leaves the same way.
+		RemoveAllPlayers();
+
+		shutdownRequested();
+		return PacketParseResult::Pass;
+	}
+
+	void RealmConnector::RemoveAllPlayers()
+	{
+		// The same path as PlayerCharacterLeave: removing a player despawns its character, which
+		// sends the character data to the realm right away, ahead of anything the caller does next.
 		for (const ObjectGuid characterGuid : m_playerManager.GetCharacterGuids())
 		{
 			if (const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
@@ -1386,9 +1395,6 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				NotifyWorldInstanceLeft(characterGuid, auth::world_left_reason::Disconnect);
 			}
 		}
-
-		shutdownRequested();
-		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult RealmConnector::OnSetSubsystemEnabled(auth::IncomingPacket& packet)

@@ -192,7 +192,9 @@ Cancels the pending shutdown.
 | `409 Conflict` | `{ "status": "NOT_PENDING", "message": "No shutdown is pending" }` |
 | `409 Conflict` | `{ "status": "SHUTTING_DOWN", "message": "The realm is already shutting down" }` once the shutdown is due |
 
-A scheduled shutdown announces itself to players in chat, logs them out, stops every connected world node and then the realm; all exit with code 0.
+A scheduled shutdown announces itself to players in chat, logs them out, stops every connected world node and then the realm; all exit with code 0. The realm leaves the login server's realm list the moment the shutdown becomes due, and it writes every character's data to the database before the process exits.
+
+SIGTERM (`docker stop`) and Ctrl+C run the same sequence without the countdown, so characters are saved there too. A world node that receives SIGTERM on its own also saves its players before it exits. Give the containers enough time to finish: `compose.yml` sets `stop_grace_period: 5m`, because Docker otherwise kills them 10 s after the signal.
 
 **Deployment note:** GM level 3 (operator) now grants realm shutdown rights, so existing accounts with `gm_level >= 3` should be audited before deploying this feature.
 

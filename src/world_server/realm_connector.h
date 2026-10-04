@@ -65,6 +65,10 @@ namespace mmo
 		/// to vanish.
 		void Shutdown();
 
+		/// Removes every player from this node the way PlayerCharacterLeave does, which sends each
+		/// character's data to the realm. Used before shutting down, so progress is saved.
+		void RemoveAllPlayers();
+
 		/// Fired when the realm orders this node to shut down for good (scheduled realm shutdown).
 		signal<void()> shutdownRequested;
 
