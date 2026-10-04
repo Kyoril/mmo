@@ -31,7 +31,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000007;
+		constexpr uint32 ProtocolVersion = 0x00000008;
 
 		/// Largest payload, in bytes, that a single incoming auth packet may announce.
 		///
@@ -196,6 +196,11 @@ namespace mmo
 				/// Enables or disables a world-owned subsystem on the world node (GM command or REST).
 				/// Payload: uint8 subsystem (game::subsystem), uint8 enabled.
 				SetSubsystemEnabled,
+
+				/// Tells the world node to save and remove its remaining players and shut down for
+				/// good: it exits instead of reconnecting. Sent when a scheduled realm shutdown is
+				/// due, after the realm has logged its players out. No payload.
+				Shutdown,
 			};
 		}
 
@@ -377,6 +382,9 @@ namespace mmo
 
 				/// The account was banned or suspended while this session was live.
 				AccountBanned = 1,
+
+				/// The realm is shutting down (scheduled shutdown reached zero).
+				RealmShutdown = 2,
 
 				/// Counter constant. Receivers validate against this rather than against the last
 				/// named reason, so adding one does not mean remembering to widen four bounds

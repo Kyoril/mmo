@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000011;
+		constexpr uint32 ProtocolVersion = 0x00000012;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -437,6 +437,11 @@ namespace mmo
 				/// GAME MASTER. Switches a subsystem on or off realm-wide. Payload: uint8 subsystem
 				/// (game::subsystem), uint8 enabled.
 				CheatSetSubsystem, // GAME MASTER
+
+				/// OPERATOR (gm_level::Operator). Schedules or cancels a realm shutdown. Handled by the
+				/// realm; available in every build, not only with dev commands. Payload: uint8 action
+				/// (gm_shutdown_action), uint32 delaySeconds (ignored for Cancel; 0 = immediately).
+				GmShutdown,
 
 				/// Counter constant
 				Count_,
@@ -813,8 +818,25 @@ namespace mmo
 				/// Payload: uint8 count, count x (uint8 subsystem, uint8 status (subsystem_status)).
 				SubsystemStatus,
 
+				/// A pending realm shutdown: sent to every player in the world at each announcement
+				/// mark, and once on world entry while a shutdown is pending. Payload: uint32 seconds
+				/// remaining, or 0xFFFFFFFF (ShutdownCountdownCancelled) when it was cancelled.
+				ShutdownCountdown,
+
 				/// Counter constant
 				Count_,
+			};
+		}
+
+		/// Action carried by a GmShutdown packet.
+		namespace gm_shutdown_action
+		{
+			enum Type : uint8
+			{
+				/// Schedules a shutdown, replacing a pending one.
+				Start = 0,
+				/// Cancels the pending shutdown.
+				Cancel = 1,
 			};
 		}
 
