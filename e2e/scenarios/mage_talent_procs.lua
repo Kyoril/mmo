@@ -1,17 +1,18 @@
 -- e2e-timeout: 150
 -- e2e-own-character: tlp
--- The new mage talents' procs fire end to end: Shatter marks enemies hit by Frost Nova,
--- Heating Up empowers the caster when Fire Blast hits, and Ignite sets the target ablaze on a
--- Fire critical strike. Ignite also proves that direct damage spells roll crits at all (they
--- did not before the talent redesign).
+-- The new mage talents' procs fire end to end: Frostbrittle marks enemies hit by Frost Nova,
+-- Stoke the Flames empowers the caster when Fire Blast hits, and Smoldering Wounds sets the
+-- target ablaze on a Fire critical strike. The latter also proves that direct damage spells
+-- roll crits at all (they did not before the talent redesign).
 --
 -- The talent passives are learned with GM.LearnSpell, which applies the same aura the talent
 -- would. The character is the scenario's own: the passives must not leak into scenarios that
 -- assert on plain damage.
 --
--- Uses: Frost Nova (68, 10 yd around the caster), Fire Blast (7, instant), Shatter (1014 ->
--- debuff 1015, +50% crit chance taken), Ignite (1021 -> burn 1022), Heating Up (1023 -> buff
--- 1024) and the Training Dummy (creature 40).
+-- Uses: Frost Nova (68, 10 yd around the caster), Fire Blast (7, instant), Frostbrittle (1014 ->
+-- debuff 1015, +50% crit chance taken), Smoldering Wounds (1021 -> burn 1022), Stoke the
+-- Flames (1023 -> buff 1024) and the Training Dummy (creature 40). The Lua names below keep
+-- the mechanic, not the talent name.
 
 local FROST_NOVA = 68
 local FIRE_BLAST = 7
