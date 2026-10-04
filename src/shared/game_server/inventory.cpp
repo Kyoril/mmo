@@ -1811,6 +1811,10 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 		newItem->Set(object_fields::Creator, sourceItem->Get<uint64>(object_fields::Creator));
 		newItem->Set(object_fields::Durability, sourceItem->Get<uint32>(object_fields::Durability));
 
+		// The instance flags carry Bound: a fresh item starts from the entry's flags, so without this
+		// splitting a soulbound stack produced a tradeable, mailable half.
+		newItem->Set<uint32>(object_fields::ItemFlags, sourceItem->Get<uint32>(object_fields::ItemFlags));
+
 		// Reduce source stack
 		sourceItem->Set(object_fields::StackCount, static_cast<int32>(currentStacks - count));
 

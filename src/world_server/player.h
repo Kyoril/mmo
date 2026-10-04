@@ -139,6 +139,11 @@ namespace mmo
 		/// Persists current character data to the database.
 		void SaveCharacterData() const;
 
+		/// Persists inventory and character data (money) right away. Call it before anything that
+		/// commits the other side of a transfer on the realm (a mail draft), so a world node
+		/// crash cannot roll this side back while the other side is already stored.
+		void SaveEconomyState();
+
 		/// Opens the loot dialog for a loot instance.
 		void OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source);
 

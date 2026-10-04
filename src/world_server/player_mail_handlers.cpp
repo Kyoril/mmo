@@ -8,7 +8,11 @@
 #include "game_server/objects/game_bag_s.h"
 #include "game_server/objects/game_player_s.h"
 #include "game_server/objects/game_world_object_s.h"
+#include "game_server/inventory_types.h"
 #include "proto_data/project.h"
+
+#include <algorithm>
+#include <limits>
 
 namespace mmo
 {
@@ -110,10 +114,34 @@ namespace mmo
 		Inventory& inventory = m_character->GetInventory();
 		std::vector<std::shared_ptr<GameItemS>> items;
 		items.reserve(itemSlots.size());
-		for (const uint16 slot : itemSlots)
+		for (size_t i = 0; i < itemSlots.size(); ++i)
 		{
+			const uint16 slot = itemSlots[i];
+
+			// The same slot listed twice would snapshot one item into two attachments.
+			if (std::find(itemSlots.begin(), itemSlots.begin() + i, slot) != itemSlots.begin() + i)
+			{
+				SendMailSendResult(mail_result::InternalError);
+				return;
+			}
+
+			// Only carried items: equipment, the bag bar, the bank and buyback are out.
+			const InventorySlot inventorySlot = InventorySlot::FromAbsolute(slot);
+			if (!inventorySlot.IsInventory() && !inventorySlot.IsBag())
+			{
+				SendMailSendResult(mail_result::InternalError);
+				return;
+			}
+
 			auto item = inventory.GetItemAtSlot(slot);
 			if (!item || IsInventorySlotTradeLocked(slot))
+			{
+				SendMailSendResult(mail_result::InternalError);
+				return;
+			}
+
+			// MailAttachment carries the stack count as a uint8: a bigger stack would arrive short.
+			if (item->GetStackCount() > std::numeric_limits<uint8>::max())
 			{
 				SendMailSendResult(mail_result::InternalError);
 				return;
@@ -175,7 +203,20 @@ namespace mmo
 		m_pendingMail.escrowedMoney = totalCost;
 		m_pendingMail.attachments = draft.attachments;
 
+		// The realm commits the mail as soon as it arrives, so the sender's side of the escrow must
+		// be in the database first. Otherwise the inventory and money only reached it with the next
+		// periodic save, and a world node crash in between rolled the sender back while the mail -
+		// items, gold and all - was already delivered. Both saves are queued on the sender's
+		// database key ahead of CreateMail, so the realm commits them in this order.
+		SaveEconomyState();
+
 		m_connector.SendMailDraft(draft);
+	}
+
+	void Player::SaveEconomyState()
+	{
+		m_character->GetInventory().SaveToRepository();
+		SaveCharacterData();
 	}
 
 	void Player::OnMailDraftResult(const uint8 result)
@@ -188,7 +229,7 @@ namespace mmo
 		if (result != mail_result::Ok)
 		{
 			// Refund the escrowed money (minus nothing - postage is only paid on success)
-			m_character->Set<uint32>(object_fields::Money, m_character->Get<uint32>(object_fields::Money) + m_pendingMail.escrowedMoney);
+			m_character->AddMoney(m_pendingMail.escrowedMoney);
 
 			// Refund the escrowed items
 			for (const auto& attachment : m_pendingMail.attachments)
@@ -198,6 +239,10 @@ namespace mmo
 					m_character->GetInventory().CreateItems(*entry, attachment.stackCount);
 				}
 			}
+
+			// The escrow was saved before the draft went out; save the refund too, or a crash now
+			// would leave the database holding the escrowed (deducted) state.
+			SaveEconomyState();
 		}
 
 		m_pendingMail = PendingMail{};
@@ -231,7 +276,10 @@ namespace mmo
 			return;
 		}
 
-		m_character->Set<uint32>(object_fields::Money, m_character->Get<uint32>(object_fields::Money) + money);
+		// The realm already removed the money from the mail and committed that; save our side too
+		// so a crash cannot lose it. AddMoney caps instead of wrapping.
+		m_character->AddMoney(money);
+		SaveCharacterData();
 		SendMailTakeResult(mail_result::Ok);
 	}
 
@@ -272,6 +320,8 @@ namespace mmo
 			return;
 		}
 
+		// The realm already removed the attachment from the mail and committed that.
+		m_character->GetInventory().SaveToRepository();
 		SendMailTakeResult(mail_result::Ok);
 	}
 

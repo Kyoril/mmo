@@ -823,10 +823,33 @@ namespace mmo
 			return;
 		}
 
+		// Any friendly NPC used to buy anything.
+		if (vendor->GetEntry().vendorentry() == 0)
+		{
+			WLOG("Player tried to sell an item to an npc that is not a vendor");
+			return;
+		}
+
 		uint16 itemSlot = 0;
 		if (!m_character->GetInventory().FindItemByGUID(itemGuid, itemSlot))
 		{
 			SendInventoryError(inventory_change_failure::ItemNotFound);
+			return;
+		}
+
+		// FindItemByGUID searches the bank too: those items are only reachable at a banker.
+		const InventorySlot slot = InventorySlot::FromAbsolute(itemSlot);
+		if ((slot.IsBankItem() || slot.IsBankBag() || slot.IsBankBagContent()) && !IsBankAccessible())
+		{
+			SendInventoryError(inventory_change_failure::ItemNotFound);
+			return;
+		}
+
+		// An item offered in a trade must stay where it is until the trade ends, or the partner
+		// accepts one item and receives whatever is put into the emptied slot.
+		if (IsInventorySlotTradeLocked(itemSlot))
+		{
+			SendInventoryError(inventory_change_failure::CannotTradeThat);
 			return;
 		}
 
@@ -839,19 +862,20 @@ namespace mmo
 		}
 
 		const uint16 stack = static_cast<uint16>(item->GetStackCount());
-		const uint32 money = stack * item->GetEntry().sellprice();
-		if (money == 0)
+		const uint64 sellValue = static_cast<uint64>(stack) * item->GetEntry().sellprice();
+		if (sellValue == 0)
 		{
 			SendInventoryError(inventory_change_failure::CannotTradeThat);
 			return;
 		}
 
 		// Check for gold overflow and prevent sell if so
-		if (m_character->Get<uint32>(object_fields::Money) >= std::numeric_limits<uint32>::max() - money)
+		if (sellValue > std::numeric_limits<uint32>::max() - m_character->Get<uint32>(object_fields::Money))
 		{
 			SendInventoryError(inventory_change_failure::TooMuchGold);
 			return;
 		}
+		const uint32 money = static_cast<uint32>(sellValue);
 
 		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
 
@@ -900,7 +924,15 @@ namespace mmo
 		uint32 buyCount = itemEntry->buycount();
 		if (buyCount == 0) buyCount = 1;
 
-		uint8 totalCount = count * buyCount;
+		// Computed wide: this used to be a uint8, so count 128 of an item sold in pairs wrapped to 0,
+		// which priced the purchase at 0 while CreateItems still handed out one item.
+		const uint64 totalCount = static_cast<uint64>(count) * buyCount;
+		if (totalCount > std::numeric_limits<uint16>::max())
+		{
+			WLOG("Player tried to buy " << totalCount << " items at once");
+			SendInventoryError(inventory_change_failure::ItemNotFound);
+			return;
+		}
 
 		ASSERT(m_character->GetWorldInstance());
 		const GameCreatureS* vendor = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(vendorGuid);
@@ -936,8 +968,9 @@ namespace mmo
 		}
 
 		// Take money
-		uint32 price = itemEntry->buyprice() * totalCount;
-		uint32 money = m_character->Get<uint32>(object_fields::Money);
+		// 64-bit so an expensive item times a large count cannot wrap to a small price.
+		const uint64 price = static_cast<uint64>(itemEntry->buyprice()) * totalCount;
+		const uint32 money = m_character->Get<uint32>(object_fields::Money);
 		if (money < price)
 		{
 			WLOG("Not enough money to buy item from vendor");
@@ -946,14 +979,14 @@ namespace mmo
 		}
 
 		std::map<uint16, uint16> addedBySlot;
-		if (auto result = m_character->GetInventory().CreateItems(*itemEntry, totalCount, &addedBySlot); result != inventory_change_failure::Okay)
+		if (auto result = m_character->GetInventory().CreateItems(*itemEntry, static_cast<uint16>(totalCount), &addedBySlot); result != inventory_change_failure::Okay)
 		{
 			WLOG("Failed to create items in inventory!");
 			SendInventoryError(inventory_change_failure::InventoryFull);
 			return;
 		}
 
-		m_character->Set<uint32>(object_fields::Money, money - price);
+		m_character->Set<uint32>(object_fields::Money, money - static_cast<uint32>(price));
 
 		// Send push notifications
 		for (auto& slot : addedBySlot)
