@@ -80,18 +80,19 @@ change).
    player with `session_kick_reason::RealmShutdown`. Each kick runs the normal `Player::Destroy`
    path, which sends `PlayerCharacterLeave` to the world node; the node answers with the character
    data, which the realm persists through the still-running database pool.
-2. **Shut down world nodes.** Once every world node has no characters left, or after 10 s at most,
-   the realm sends `realm_world_packet::Shutdown` to each connected node. The node runs the same
-   graceful handler its SIGTERM path uses (which includes `RealmConnector::Shutdown()`, so it does
-   not reconnect) and exits with code 0.
-3. **Stop the realm.** Once all world nodes have disconnected, or after 10 s at most, the realm runs
+2. **Shut down world nodes.** Right after the kicks, the realm sends `realm_world_packet::Shutdown`
+   to each connected node. It travels on the same link *after* the `PlayerCharacterLeave` packets,
+   and the world node removes a player synchronously (despawn → `SaveCharacterData`), so every
+   character's data is on its way back before the node acts on `Shutdown`. The node then removes
+   any players still present the same way, runs the same graceful handler its SIGTERM path uses
+   (which includes `RealmConnector::Shutdown()`, so it does not reconnect) and exits with code 0.
+   `close()` defers while a send is in flight, so the last character data still goes out.
+3. **Stop the realm.** Once all world nodes have disconnected, or after 15 s at most, the realm runs
    its graceful stop (acceptors, web service, timer queue, remaining connections, signal set, work
    guard, database pool drain) and `main` returns 0.
 
-The grace timeouts use a dedicated timer that the stop path itself does not depend on, so a world
-node that never answers cannot keep the realm alive. The wait in step 1 needs to know how many
-characters each world currently hosts; if `World` does not already track that, step 1 waits for
-every realm `Player` with a world link to be destroyed instead.
+The wait in step 3 polls the world count on the realm `TimerQueue`; a world node that never answers
+cannot keep the realm alive past the grace period.
 
 **Refactor:** the inline lambdas passed to `InstallShutdownHandler` in
 `src/realm_server/program.cpp` and `src/world_server/program.cpp` become named callables invoked from
