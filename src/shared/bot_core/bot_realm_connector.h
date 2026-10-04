@@ -160,6 +160,7 @@ namespace mmo
 		std::vector<BotPartyMember> m_partyMembers;
 		uint64 m_partyLeaderGuid { 0 };
 		bool m_inParty { false };
+		bool m_hasPendingPartyInvitation { false };
 
 		// Object management
 		BotObjectManager m_objectManager;
@@ -277,6 +278,10 @@ namespace mmo
 		/// Checks if the bot is currently in a party.
 		bool IsInParty() const { return m_inParty; }
 
+		/// Whether a party invitation arrived that was not yet accepted or declined. The realm
+		/// disconnects a client that accepts without one, so check this before accepting.
+		bool HasPendingPartyInvitation() const { return m_hasPendingPartyInvitation; }
+
 		/// Gets the number of members in the party (including the bot).
 		uint32 GetPartyMemberCount() const { return m_inParty ? static_cast<uint32>(m_partyMembers.size()) : 0; }
 
@@ -307,6 +312,11 @@ namespace mmo
 
 		/// Invites a player to the party by name.
 		void InviteToParty(const std::string& playerName);
+
+		/// Equips the item in the given bag slot into the first matching equipment slot.
+		/// @param bag The bag index (255 for the backpack).
+		/// @param slot The slot inside that bag.
+		void AutoEquipItem(uint8 bag, uint8 slot);
 
 		// ============================================================
 		// Object Management Methods
@@ -422,6 +432,9 @@ namespace mmo
 		/// GAME MASTER only. Teleports the player to the given map position.
 		void CheatWorldPort(uint32 mapId, const Vector3& position, float facing);
 
+		/// Teleports the named player to this character (GM).
+		void CheatSummon(const std::string& playerName);
+
 		/// GAME MASTER only. Changes the player movement speed.
 		void CheatSpeed(float speed);
 
@@ -457,6 +470,9 @@ namespace mmo
 
 		/// GAME MASTER only. Heals the current target (or the character) to full health.
 		void CheatHeal();
+
+		/// GAME MASTER only. Revives the current target (or the character without one).
+		void CheatRevive();
 
 		/// GAME MASTER only. Fills mana, rage and energy of the current target (or the character).
 		void CheatRestorePower();

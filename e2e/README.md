@@ -96,7 +96,12 @@ Actions:
 `TargetUnit(g)`, `FaceUnit(g)`, `CastSpell(spellId [, g]) -> bool` (faces the target
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
 the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
-`MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing), `SendChat(msg)`,
+`MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing),
+`SendChat(msg [, channel])` (channel `"say"` (default), `"party"`, `"yell"` or `"emote"`),
+`InviteToParty(name)`, `AcceptPartyInvitation()` (only once `HasPendingPartyInvitation()` is
+true: the realm disconnects a client that accepts with no invitation pending), `LeaveParty()`,
+`IsInParty()`, `GetPartyMemberCount()`, `EquipFromBackpack()` (asks the server to equip every
+backpack item; empty slots and unwearable items are rejected harmlessly),
 `LootUnit(g)` (opens the loot window on a corpse or world object; the character must
 be within loot range), `ReleaseLoot(g)` (closes it),
 `DoEmote(emoteId)` (emote 4 = Sit, a pose emote that toggles: performing it again
@@ -118,6 +123,8 @@ side of a door, never the door itself, since its own geometry occludes its cente
 `GM.KillTarget()` (tags an untagged creature to the GM
 character first, so the kill grants real kill xp and quest kill credit),
 `GM.Worldport(map, x, y, z, facing)` (waits for the teleport),
+`GM.Summon(playerName)` (teleports that player to this character, across maps and into instances),
+`GM.Revive()` (revives the current target, or the character itself without one),
 `GM.SetSpeed(multiplier)`, `GM.AcceptQuest(questId)` (no questgiver needed),
 `GM.SetTimeOfDay("HH:MM[:SS]" [, transitionSeconds]) -> "HH:MM:SS"` and
 `GM.ResetTimeOfDay([transitionSeconds]) -> "HH:MM:SS"` (change the realm-wide time of day,

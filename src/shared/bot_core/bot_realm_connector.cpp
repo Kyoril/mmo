@@ -842,6 +842,7 @@ namespace mmo
 		}
 
 		ILOG("Received party invitation from " << inviterName);
+		m_hasPendingPartyInvitation = true;
 
 		// Trigger the signal for the bot profile to handle
 		PartyInvitationReceived(inviterName);
@@ -851,6 +852,7 @@ namespace mmo
 
 	void BotRealmConnector::AcceptPartyInvitation()
 	{
+		m_hasPendingPartyInvitation = false;
 		// Send GroupAccept packet to the server
 		sendSinglePacket([](game::OutgoingPacket& packet)
 		{
@@ -863,6 +865,7 @@ namespace mmo
 
 	void BotRealmConnector::DeclinePartyInvitation()
 	{
+		m_hasPendingPartyInvitation = false;
 		// Send GroupDecline packet to the server
 		sendSinglePacket([](game::OutgoingPacket& packet)
 		{
@@ -965,6 +968,18 @@ namespace mmo
 		});
 
 		ILOG("Invited " << playerName << " to party");
+	}
+
+	void BotRealmConnector::AutoEquipItem(const uint8 bag, const uint8 slot)
+	{
+		sendSinglePacket([bag, slot](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::AutoEquipItem);
+			packet
+				<< io::write<uint8>(bag)
+				<< io::write<uint8>(slot);
+			packet.Finish();
+		});
 	}
 
 	PacketParseResult BotRealmConnector::OnGroupList(game::IncomingPacket& packet)
@@ -2435,6 +2450,15 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::CheatSummon(const std::string& playerName)
+	{
+		sendSinglePacket([&playerName](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatSummon);
+			packet << io::write_dynamic_range<uint8>(playerName);
+			packet.Finish();
+			});
+	}
+
 	void BotRealmConnector::CheatWorldPort(const uint32 mapId, const Vector3& position, const float facing)
 	{
 		sendSinglePacket([mapId, &position, facing](game::OutgoingPacket& packet) {
@@ -2516,6 +2540,14 @@ namespace mmo
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatResetCooldowns);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatRevive()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatRevive);
 			packet.Finish();
 			});
 	}

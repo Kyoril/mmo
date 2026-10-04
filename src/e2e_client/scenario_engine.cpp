@@ -944,13 +944,93 @@ namespace mmo
 			return reached;
 		}
 
-		void luaSendChat(const std::string& message)
+		void luaSendChat(const std::string& message, const std::string& channel)
 		{
-			g_runtime->session->GetContext().SendChatMessage(message, ChatType::Say);
+			ChatType type = ChatType::Say;
+			if (channel == "party")
+			{
+				type = ChatType::Group;
+			}
+			else if (channel == "yell")
+			{
+				type = ChatType::Yell;
+			}
+			else if (channel == "emote")
+			{
+				type = ChatType::Emote;
+			}
+			else if (channel != "say")
+			{
+				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell or emote)");
+			}
+
+			g_runtime->session->GetContext().SendChatMessage(message, type);
 			if (g_runtime->transcript)
 			{
-				g_runtime->transcript->Action("SendChat", { { "message", message } });
+				g_runtime->transcript->Action("SendChat", { { "message", message }, { "channel", channel } });
 			}
+		}
+
+		// ============================================================
+		// Party
+		// ============================================================
+
+		void luaInviteToParty(const std::string& playerName)
+		{
+			g_runtime->session->GetContext().InviteToParty(playerName);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("InviteToParty", { { "name", playerName } });
+			}
+		}
+
+		void luaAcceptPartyInvitation()
+		{
+			g_runtime->session->GetContext().AcceptPartyInvitation();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("AcceptPartyInvitation");
+			}
+		}
+
+		void luaLeaveParty()
+		{
+			g_runtime->session->GetContext().LeaveParty();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("LeaveParty");
+			}
+		}
+
+		/// Asks the server to equip every item in the backpack. Empty slots and items that
+		/// cannot be worn are rejected server-side, which is harmless.
+		void luaEquipFromBackpack()
+		{
+			BotRealmConnector& realm = g_runtime->session->GetRealm();
+			for (uint8 slot = player_inventory_pack_slots::Start; slot < player_inventory_pack_slots::End; ++slot)
+			{
+				realm.AutoEquipItem(player_inventory_slots::Bag_0, slot);
+			}
+
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("EquipFromBackpack");
+			}
+		}
+
+		bool luaHasPendingPartyInvitation()
+		{
+			return g_runtime->session->GetRealm().HasPendingPartyInvitation();
+		}
+
+		bool luaIsInParty()
+		{
+			return g_runtime->session->GetContext().IsInParty();
+		}
+
+		uint32 luaGetPartyMemberCount()
+		{
+			return g_runtime->session->GetContext().GetPartyMemberCount();
 		}
 
 		// ============================================================
@@ -1221,6 +1301,15 @@ namespace mmo
 			}
 		}
 
+		void luaGmRevive()
+		{
+			g_runtime->session->GetRealm().CheatRevive();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.Revive");
+			}
+		}
+
 		void luaGmHeal()
 		{
 			g_runtime->session->GetRealm().CheatHeal();
@@ -1236,6 +1325,15 @@ namespace mmo
 			if (g_runtime->transcript)
 			{
 				g_runtime->transcript->Action("GM.RestorePower");
+			}
+		}
+
+		void luaGmSummon(const std::string& playerName)
+		{
+			g_runtime->session->GetRealm().CheatSummon(playerName);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.Summon", { { "name", playerName } });
 			}
 		}
 
@@ -1438,7 +1536,14 @@ namespace mmo
 				luabind::def_lambda("StopAttack", &luaStopAttack),
 				luabind::def_lambda("MoveToImpl", &luaMoveTo),
 				luabind::def_lambda("SendAreaTrigger", &luaSendAreaTrigger),
-				luabind::def_lambda("SendChat", &luaSendChat),
+				luabind::def_lambda("SendChatImpl", &luaSendChat),
+				luabind::def_lambda("InviteToParty", &luaInviteToParty),
+				luabind::def_lambda("AcceptPartyInvitation", &luaAcceptPartyInvitation),
+				luabind::def_lambda("LeaveParty", &luaLeaveParty),
+				luabind::def_lambda("EquipFromBackpack", &luaEquipFromBackpack),
+				luabind::def_lambda("IsInParty", &luaIsInParty),
+				luabind::def_lambda("HasPendingPartyInvitation", &luaHasPendingPartyInvitation),
+				luabind::def_lambda("GetPartyMemberCount", &luaGetPartyMemberCount),
 				luabind::def_lambda("DoEmote", &luaDoEmote),
 				luabind::def_lambda("CyclePose", &luaCyclePose),
 
@@ -1461,6 +1566,8 @@ namespace mmo
 				luabind::def_lambda("GM_Heal", &luaGmHeal),
 				luabind::def_lambda("GM_RestorePower", &luaGmRestorePower),
 				luabind::def_lambda("GM_WorldPort", &luaGmWorldPort),
+				luabind::def_lambda("GM_Summon", &luaGmSummon),
+				luabind::def_lambda("GM_Revive", &luaGmRevive),
 				luabind::def_lambda("GM_SetSpeed", &luaGmSetSpeed),
 				luabind::def_lambda("GM_SetTimeOfDay", &luaGmSetTimeOfDay),
 				luabind::def_lambda("GM_ResetTimeOfDay", &luaGmResetTimeOfDay),
@@ -1480,6 +1587,7 @@ namespace mmo
 			function Assert(cond, msg) AssertImpl(not not cond, msg or "assertion failed") end
 			function WaitUntil(fn, timeoutMs, desc) return WaitUntilImpl(fn, timeoutMs or 10000, desc or "condition") end
 			function CastSpell(spellId, target) return CastSpellImpl(spellId, target or "") end
+			function SendChat(message, channel) SendChatImpl(message, channel or "say") end
 			function MoveTo(x, y, z, timeoutMs) return MoveToImpl(x, y, z, timeoutMs or 30000) end
 			function LoginElsewhere(timeoutMs) return LoginElsewhereImpl(timeoutMs or 15000) end
 			function Reconnect(timeoutMs) return ReconnectImpl(timeoutMs or 30000) end
@@ -1526,6 +1634,8 @@ namespace mmo
 				Heal = GM_Heal,
 				RestorePower = GM_RestorePower,
 				Worldport = GM_WorldPort,
+				Summon = GM_Summon,
+				Revive = GM_Revive,
 				SetSpeed = GM_SetSpeed,
 				SetTimeOfDay = function(timeText, transitionSeconds) return GM_SetTimeOfDay(timeText, transitionSeconds or 8) end,
 				ResetTimeOfDay = function(transitionSeconds) return GM_ResetTimeOfDay(transitionSeconds or 8) end,
