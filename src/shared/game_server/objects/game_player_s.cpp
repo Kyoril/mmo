@@ -2898,10 +2898,28 @@ namespace mmo
 	namespace
 	{
 		/// Talent spells are restored from per-class talent data rather than the persistent known-spell
-		/// set, so they are excluded from the latter.
-		bool IsTalentSpell(const proto::SpellEntry& spell)
+		/// set, so they are excluded from the latter. A spell that is a rank of any talent counts as a
+		/// talent spell even without the Talent attribute (talents may reuse an existing spell): talent
+		/// spells are only ever obtained through the talent tree.
+		bool IsTalentSpell(const proto::Project& project, const proto::SpellEntry& spell)
 		{
-			return spell.attributes_size() > 1 && (spell.attributes(1) & spell_attributes_b::Talent) != 0;
+			if (spell.attributes_size() > 1 && (spell.attributes(1) & spell_attributes_b::Talent) != 0)
+			{
+				return true;
+			}
+
+			for (const auto& talent : project.talents.getTemplates().entry())
+			{
+				for (const uint32 rankSpellId : talent.ranks())
+				{
+					if (rankSpellId == spell.id())
+					{
+						return true;
+					}
+				}
+			}
+
+			return false;
 		}
 
 		/// A proficiency spell grants the ability to use a weapon/armor subclass via a Proficiency
@@ -2939,7 +2957,7 @@ namespace mmo
 	void GamePlayerS::OnSpellLearned(const proto::SpellEntry& spell)
 	{
 		// Record every learned non-talent spell so it survives logout and class switches.
-		if (!IsTalentSpell(spell))
+		if (!IsTalentSpell(m_project, spell))
 		{
 			m_knownSpellIds.insert(spell.id());
 		}
@@ -3043,7 +3061,7 @@ namespace mmo
 			}
 
 			// Talent spells are restored separately from talent data.
-			if (IsTalentSpell(*spell))
+			if (IsTalentSpell(m_project, *spell))
 			{
 				continue;
 			}
