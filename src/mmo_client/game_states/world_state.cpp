@@ -53,6 +53,7 @@
 #include "game/aura.h"
 #include "game/auto_attack.h"
 #include "game/chat_type.h"
+#include "game/shutdown_countdown.h"
 #include "game/damage_school.h"
 #include "game_client/game_player_c.h"
 #include "game/spell_target_map.h"
@@ -1921,6 +1922,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LogoutResponse, *this, &WorldState::OnLogoutResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MessageOfTheDay, *this, &WorldState::OnMessageOfTheDay);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ShutdownCountdown, *this, &WorldState::OnShutdownCountdown);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStun, *this, &WorldState::OnMoveStun);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSleep, *this, &WorldState::OnMoveSleep);
@@ -2010,6 +2012,8 @@ namespace mmo
 		Console::RegisterCommand("settime", [this](const std::string &cmd, const std::string &args)
 								 { Command_SetTime(cmd, args); }, ConsoleCommandCategory::Gm, "Sets the realm-wide time of day for all players: 'settime <HH:MM[:SS]> [transition seconds]', or 'settime reset' to return to the server's system time.");
 #endif
+		Console::RegisterCommand("shutdown", [this](const std::string &cmd, const std::string &args)
+								 { Command_Shutdown(cmd, args); }, ConsoleCommandCategory::Gm, "Schedules a realm shutdown for all players: 'shutdown <seconds | m:ss | h:mm:ss>', or 'shutdown cancel'. Operators only.");
 	}
 
 	void WorldState::RemovePacketHandler()
@@ -2042,6 +2046,7 @@ namespace mmo
 		Console::UnregisterCommand("restorepower");
 		Console::UnregisterCommand("settime");
 #endif
+		Console::UnregisterCommand("shutdown");
 
 		m_tradeClient.Shutdown();
 		m_inventoryClient.Shutdown();
@@ -5234,6 +5239,45 @@ namespace mmo
 
 		FrameManager::Get().TriggerLuaEvent("MOTD", motd.c_str());
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnShutdownCountdown(game::IncomingPacket &packet)
+	{
+		uint32 seconds = 0;
+		if (!(packet >> io::read<uint32>(seconds)))
+		{
+			ELOG("Failed to read ShutdownCountdown packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto& localization = FrameManager::Get().GetLocalization();
+		if (seconds == ShutdownCountdownCancelled)
+		{
+			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", Localize(localization, "REALM_SHUTDOWN_CANCELLED"));
+			return PacketParseResult::Pass;
+		}
+
+		// Indexed by shutdown_time_unit
+		static const char* const unitKeys[] = {
+			"REALM_SHUTDOWN_IN_HOURS",
+			"REALM_SHUTDOWN_IN_MINUTES",
+			"REALM_SHUTDOWN_IN_MINUTE",
+			"REALM_SHUTDOWN_IN_SECONDS",
+		};
+
+		const FormattedShutdownTime formatted = FormatShutdownTime(seconds);
+		String message = Localize(localization, unitKeys[formatted.unit]);
+		if (const size_t placeholder = message.find("%s"); placeholder != String::npos)
+		{
+			message.replace(placeholder, 2, formatted.time);
+		}
+		else
+		{
+			message += " " + formatted.time;
+		}
+
+		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
 		return PacketParseResult::Pass;
 	}
 

@@ -613,6 +613,11 @@ namespace mmo
 		/// Accepts the current trade terms.
 		void AcceptTrade();
 
+		/// OPERATOR only. Schedules (gm_shutdown_action::Start) or cancels a realm shutdown.
+		/// @param action A game::gm_shutdown_action value.
+		/// @param delaySeconds Seconds until the shutdown; ignored for Cancel.
+		void GmShutdown(uint8 action, uint32 delaySeconds);
+
 	public:
 		/// Gets a constant list of character views.
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }

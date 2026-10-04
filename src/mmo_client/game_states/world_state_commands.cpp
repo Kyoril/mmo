@@ -10,6 +10,7 @@
 #include "log/default_log_levels.h"
 #include "game/time_of_day.h"
 #include "game/subsystem.h"
+#include "game/shutdown_countdown.h"
 
 #include <algorithm>
 #include <cctype>
@@ -597,4 +598,34 @@ namespace mmo
 		ILOG("Setting the time of day to " << FormatTimeOfDay(timeOfDay));
 	}
 #endif
+
+	void WorldState::Command_Shutdown(const std::string &cmd, const std::string &args) const
+	{
+		std::istringstream stream(args);
+		std::string arg;
+		stream >> arg;
+
+		if (arg.empty())
+		{
+			ELOG("Usage: shutdown <seconds | m:ss | h:mm:ss> | shutdown cancel");
+			return;
+		}
+
+		if (arg == "cancel")
+		{
+			m_realmConnector.GmShutdown(game::gm_shutdown_action::Cancel, 0);
+			ILOG("Requested cancellation of the pending realm shutdown");
+			return;
+		}
+
+		uint32 delaySeconds = 0;
+		if (!ParseShutdownDelay(arg, delaySeconds))
+		{
+			ELOG("Invalid shutdown delay '" << arg << "': expected seconds, m:ss or h:mm:ss, at most " << MaxShutdownDelaySeconds / 3600 << " hours");
+			return;
+		}
+
+		m_realmConnector.GmShutdown(game::gm_shutdown_action::Start, delaySeconds);
+		ILOG("Requested a realm shutdown in " << FormatShutdownTime(delaySeconds).time);
+	}
 }
