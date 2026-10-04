@@ -1,17 +1,13 @@
 meta {
-  name: Shutdown
+  name: Shutdown Status
   type: http
-  seq: 5
+  seq: 12
 }
 
-post {
+get {
   url: http://localhost:8092/shutdown
-  body: formUrlEncoded
+  body: none
   auth: inherit
-}
-
-body:form-urlencoded {
-  delay: 300
 }
 
 settings {

@@ -430,6 +430,7 @@ namespace mmo
 			timeOfDayManager
 		);
 		webService->SetWorldManager(worldManager);
+		webService->SetShutdownManager(shutdownManager);
 
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////

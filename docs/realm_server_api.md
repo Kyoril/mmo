@@ -146,16 +146,57 @@ Creates a new world node with authentication credentials.
 
 ### Server Control
 
+#### GET /shutdown
+
+Reports whether a realm shutdown is pending.
+
+**Response:**
+```json
+{
+  "pending": true,
+  "remaining": 540
+}
+```
+
+`remaining` is the number of seconds until the shutdown (0 when none is pending).
+
 #### POST /shutdown
 
-Initiates a server shutdown sequence.
+Schedules a graceful realm shutdown. Scheduling again while one is pending replaces the pending shutdown.
 
-**Response:** Empty response with a successful status code.
+**Parameters (form-encoded):**
+
+| Name | Required | Description |
+|---|---|---|
+| `delay` | No | Whole seconds until the shutdown, from 0 up to 604800 (7 days). Defaults to 0 (shut down now). |
+
+**Responses:**
+
+| Status | Body |
+|---|---|
+| `200 OK` | `{ "status": "SUCCESS", "delay": 600 }` |
+| `400 Bad Request` | `{ "status": "INVALID_PARAMETER", "message": "..." }` when `delay` is not a whole number or exceeds the maximum |
+| `503 Service Unavailable` | `{ "status": "UNAVAILABLE", "message": "..." }` if shutdown is not available |
+
+#### POST /shutdown/cancel
+
+Cancels the pending shutdown.
+
+**Responses:**
+
+| Status | Body |
+|---|---|
+| `200 OK` | `{ "status": "SUCCESS" }` |
+| `409 Conflict` | `{ "status": "NOT_PENDING", "message": "No shutdown is pending" }` |
+
+A scheduled shutdown announces itself to players in chat, logs them out, stops every connected world node and then the realm; all exit with code 0.
 
 ## Common Error Codes
 
 - `MISSING_PARAMETER`: A required parameter is missing from the request
 - `INVALID_PARAMETER`: A parameter has an invalid value
+- `NOT_PENDING`: There is no pending shutdown to cancel
+- `UNAVAILABLE`: The requested feature is not available
 - `WORLD_NAME_ALREADY_IN_USE`: The world name provided already exists
 - `INTERNAL_SERVER_ERROR`: An unexpected server error occurred
 
