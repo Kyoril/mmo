@@ -1,5 +1,7 @@
 #include "sky_component.h"
 
+#include <algorithm>
+
 #include "global_shader_parameters.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/scene_node.h"
@@ -240,6 +242,23 @@ namespace mmo
         // Update light direction in material
         m_skyMatInst->SetVectorParameter("LightDirection", Vector4(lightDir.x, lightDir.y, lightDir.z, 0.0f));
         m_skyMatInst->SetScalarParameter("SunHeight", blendMoon);
+
+        // The light follows the sun across the day arc and the moon across the night arc, so the sky
+        // draws exactly one disc at the light's position. Both fade out at the horizon, where the light
+        // jumps from one arc to the other.
+        const bool dayArc = normalizedTime >= m_transitionStart && normalizedTime <= m_transitionEnd;
+        const float horizonFade = std::clamp(-lightDir.y * 8.0f, 0.0f, 1.0f);
+        m_skyMatInst->SetScalarParameter("SunDiscVisibility", dayArc ? horizonFade : 0.0f);
+        m_skyMatInst->SetScalarParameter("MoonVisibility", dayArc ? 0.0f : horizonFade);
+
+        // Tangent frame around the moon's direction, pre-divided by its radius: the sky material maps
+        // the camera vector through it to moon texture coordinates in [-1, 1].
+        const Vector3 moonRight = Vector3::UnitY.Cross(lightDir).NormalizedCopy();
+        const Vector3 moonUp = lightDir.Cross(moonRight).NormalizedCopy();
+        const float invMoonRadius = 1.0f / m_moonAngularRadius;
+        m_skyMatInst->SetVectorParameter("MoonRight", Vector4(moonRight.x * invMoonRadius, moonRight.y * invMoonRadius, moonRight.z * invMoonRadius, 0.0f));
+        m_skyMatInst->SetVectorParameter("MoonUp", Vector4(moonUp.x * invMoonRadius, moonUp.y * invMoonRadius, moonUp.z * invMoonRadius, 0.0f));
+        m_skyMatInst->SetVectorParameter("MoonColor", Vector4(m_environment.moonColor.x, m_environment.moonColor.y, m_environment.moonColor.z, 1.0f));
 
         const Vector4& horizonColor = m_environment.skyHorizon;
         const Vector4& zenithColor = m_environment.skyZenith;

@@ -175,5 +175,6 @@ namespace mmo
         const float m_dayStart = 0.30f;                ///< Full daylight start time
         const float m_dayEnd = 0.70f;                  ///< Full daylight end time
         const float m_transitionEnd = 0.80f;           ///< Dusk transition end time
+        const float m_moonAngularRadius = 0.035f;      ///< Moon disc radius in radians
     };
 }
