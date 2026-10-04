@@ -392,8 +392,9 @@ namespace mmo
 			}
 		};
 
-		// Execute
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetAccountDataByName, std::cref(m_accountName));
+		// Execute. The name is passed by value: the request runs on the database thread, and a
+		// client that disconnects right after the challenge destroys this Player before it does.
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetAccountDataByName, m_accountName);
 		return PacketParseResult::Pass;
 	}
 
@@ -528,9 +529,10 @@ namespace mmo
 			}
 		};
 
-		// Store session key in account database
-		m_database.asyncRequestKeyed<void>(GetAccountId(), 
-			[this, address = std::cref(m_address)](auto&& database) { database->PlayerLoginFailed(GetAccountId(), address); },
+		// Record the failed attempt. Everything is captured by value: the request runs on the
+		// database thread and must not touch this Player, which is gone if the client disconnected.
+		m_database.asyncRequestKeyed<void>(GetAccountId(),
+			[accountId = GetAccountId(), address = m_address](auto&& database) { database->PlayerLoginFailed(accountId, address); },
 			std::move(loginFailedDbHandler));
 
 		return PacketParseResult::Pass;

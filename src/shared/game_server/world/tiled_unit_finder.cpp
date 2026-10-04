@@ -124,15 +124,42 @@ namespace mmo
 		return *tile;
 	}
 
+	bool TiledUnitFinder::ToTileIndex(const float coordinate, const size_t gridLength, TileIndex& outIndex) const
+	{
+		const double index = floor(static_cast<double>(gridLength) * 0.5 - floor(static_cast<double>(coordinate) / m_tileWidth));
+
+		// Written so that NaN fails this test too.
+		if (!(index >= 0.0))
+		{
+			outIndex = 0;
+			return false;
+		}
+
+		if (index >= static_cast<double>(gridLength))
+		{
+			outIndex = static_cast<TileIndex>(gridLength) - 1;
+			return false;
+		}
+
+		outIndex = static_cast<TileIndex>(index);
+		return true;
+	}
+
 	TileIndex2D TiledUnitFinder::GetTilePosition(const Vector<float, 2>& point) const
 	{
+		// Clamped to the grid: Grid only ASSERTs its bounds, so a unit positioned outside the map
+		// would otherwise be filed into memory past the tile storage in release builds. Such a unit
+		// lands on an edge tile instead, and every lookup clamps the same way so it stays findable.
 		TileIndex2D output;
-
-		// Calculate grid coordinates
-		output[0] = static_cast<TileIndex>(floor((static_cast<double>(m_grid.width()) * 0.5 - floor(static_cast<double>(point[0]) / m_tileWidth))));
-		output[1] = static_cast<TileIndex>(floor((static_cast<double>(m_grid.height()) * 0.5 - floor(static_cast<double>(point[1]) / m_tileWidth))));
-
+		ToTileIndex(point[0], m_grid.width(), output[0]);
+		ToTileIndex(point[1], m_grid.height(), output[1]);
 		return output;
+	}
+
+	bool TiledUnitFinder::IsInBounds(const Vector3& position) const
+	{
+		TileIndex index;
+		return ToTileIndex(position.x, m_grid.width(), index) && ToTileIndex(position.z, m_grid.height(), index);
 	}
 
 	TiledUnitFinder::Tile& TiledUnitFinder::GetUnitsTile(const GameUnitS& findable)

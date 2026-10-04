@@ -16,8 +16,17 @@ namespace mmo
 		explicit VisibilityGrid();
 		virtual ~VisibilityGrid();
 
+		/// Resolves the tile index of a world position.
+		/// @param position The world position.
+		/// @param outX Receives the tile column. Always a valid index: clamped to the grid edge if the position is outside.
+		/// @param outY Receives the tile row. Always a valid index: clamped to the grid edge if the position is outside.
+		/// @return false if the position lies outside the grid (or is not finite).
 		bool GetTilePosition(const Vector3 &position, int32 &outX, int32 &outY) const;
+
+		/// @return The tile at the given index, or nullptr if the index is outside the grid.
 		virtual VisibilityTile* GetTile(const TileIndex2D &position) = 0;
+
+		/// @return The tile at the given index. An index outside the grid is clamped to the nearest edge tile.
 		virtual VisibilityTile& RequireTile(const TileIndex2D &position) = 0;
 	};
 
