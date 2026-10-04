@@ -92,6 +92,34 @@ namespace mmo
 		}
 	}
 
+	bool MaterialEditor::RebuildMaterialsNow(const std::vector<std::string>& assetPaths)
+	{
+		// Same throwaway node-editor context as the incremental rebuild uses (see RebuildAllMaterials).
+		ax::NodeEditor::Config editorConfig;
+		editorConfig.SettingsFile = nullptr;
+		ax::NodeEditor::EditorContext* context = ax::NodeEditor::CreateEditor(&editorConfig);
+		ax::NodeEditor::EditorContext* previousContext = ax::NodeEditor::GetCurrentEditor();
+		ax::NodeEditor::SetCurrentEditor(context);
+
+		bool allSucceeded = true;
+		for (const std::string& assetPath : assetPaths)
+		{
+			if (RebuildMaterial(assetPath))
+			{
+				ILOG("Rebuilt material " << assetPath);
+			}
+			else
+			{
+				ELOG("Failed to rebuild material " << assetPath);
+				allSucceeded = false;
+			}
+		}
+
+		ax::NodeEditor::SetCurrentEditor(previousContext);
+		ax::NodeEditor::DestroyEditor(context);
+		return allSucceeded;
+	}
+
 	bool MaterialEditor::RebuildMaterial(const std::string& assetPath)
 	{
 		// Load the material and its node graph, mirroring MaterialEditorInstance's load path.

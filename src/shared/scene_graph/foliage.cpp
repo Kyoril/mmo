@@ -457,6 +457,9 @@ namespace mmo
 			// Add instance
 			FoliageInstanceData instanceData;
 			instanceData.worldMatrix = worldMatrix;
+			// Ground colour in RGB. Alpha stays 1: a ground-matched mesh carries its own per-vertex
+			// data there (blade height), which the vertex shader multiplies by this tint.
+			instanceData.color = Vector4(sample.color.x, sample.color.y, sample.color.z, 1.0f);
 			chunk.AddInstance(instanceData);
 		}
 	}

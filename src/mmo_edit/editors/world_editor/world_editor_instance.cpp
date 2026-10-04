@@ -2594,6 +2594,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 			out.height = m_terrain->GetSmoothHeightAt(x, z);
 			out.normal = m_terrain->GetSmoothNormalAt(x, z);
+			out.color = m_terrain->GetSmoothColorAt(x, z);
 
 			if (const MaterialPtr material = m_terrain->GetBaseMaterialAt(x, z))
 			{

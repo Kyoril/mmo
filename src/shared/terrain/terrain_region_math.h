@@ -172,6 +172,69 @@ namespace mmo
 					- ((1.0f - u) * (1.0f - v) * h00 + u * (1.0f - v) * h10
 						+ (1.0f - u) * v * h01 + u * v * h11);
 			}
+
+			/// Interpolation weights of the five vertices of one terrain cell, as the renderer
+			/// triangulates it: a fan of four triangles from the stored centre (inner) vertex to
+			/// each edge. The weights sum to one.
+			struct CellFanWeights
+			{
+				float w00 = 0.0f;
+				float w10 = 0.0f;
+				float w01 = 0.0f;
+				float w11 = 0.0f;
+				float centre = 0.0f;
+			};
+
+			/// Barycentric weights of a point inside a terrain cell.
+			/// @param u Position along x inside the cell, 0 at the min edge and 1 at the max edge.
+			/// @param v Position along z inside the cell, 0 at the min edge and 1 at the max edge.
+			inline CellFanWeights ComputeCellFanWeights(float u, float v)
+			{
+				u = std::clamp(u, 0.0f, 1.0f);
+				v = std::clamp(v, 0.0f, 1.0f);
+
+				const float dx = u - 0.5f;
+				const float dz = v - 0.5f;
+
+				CellFanWeights weights;
+
+				// The triangle is the one whose edge is nearest; the centre weight falls linearly
+				// from 1 at the centre to 0 on that edge, the rest is split along the edge.
+				if (std::abs(dx) > std::abs(dz))
+				{
+					weights.centre = 1.0f - 2.0f * std::abs(dx);
+					const float rest = 1.0f - weights.centre;
+					const float t = rest > 0.0f ? std::clamp((v - 0.5f * weights.centre) / rest, 0.0f, 1.0f) : 0.5f;
+					if (dx < 0.0f)
+					{
+						weights.w00 = rest * (1.0f - t);
+						weights.w01 = rest * t;
+					}
+					else
+					{
+						weights.w10 = rest * (1.0f - t);
+						weights.w11 = rest * t;
+					}
+				}
+				else
+				{
+					weights.centre = 1.0f - 2.0f * std::abs(dz);
+					const float rest = 1.0f - weights.centre;
+					const float t = rest > 0.0f ? std::clamp((u - 0.5f * weights.centre) / rest, 0.0f, 1.0f) : 0.5f;
+					if (dz < 0.0f)
+					{
+						weights.w00 = rest * (1.0f - t);
+						weights.w10 = rest * t;
+					}
+					else
+					{
+						weights.w01 = rest * (1.0f - t);
+						weights.w11 = rest * t;
+					}
+				}
+
+				return weights;
+			}
 		}
 	}
 }

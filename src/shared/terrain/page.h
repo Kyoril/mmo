@@ -5,6 +5,7 @@
 #include "base/grid.h"
 #include "graphics/material.h"
 #include "math/aabb.h"
+#include "math/vector4.h"
 #include "terrain.h"
 
 #include <unordered_map>
@@ -99,6 +100,13 @@ namespace mmo
 			float GetSmoothHeightAt(float x, float y) const;
 
 			Vector3 GetSmoothNormalAt(float x, float y) const;
+
+			/** rief Get the vertex colour at a page-local position, interpolated across the
+			 *         cell's triangle fan exactly as the renderer does (RGBA, 0..1 each).
+			 *
+			 * Includes the cell's inner vertex, which is painted independently of its corners.
+			 */
+			Vector4 GetSmoothColorAt(float x, float y) const;
 
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ, bool normalsOnly = false);
 

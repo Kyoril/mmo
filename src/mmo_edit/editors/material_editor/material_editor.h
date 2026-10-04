@@ -39,6 +39,12 @@ namespace mmo
 
 		void AddAssetActions(const String& asset) override;
 
+		/// @brief Recompiles the given materials from their stored node graphs and re-saves them,
+		///        synchronously. Used by unattended command-line jobs (--rebuild-material), so a
+		///        graph written outside the editor gets fresh shader bytecode without the UI.
+		/// @return true if every material was rebuilt.
+		bool RebuildMaterialsNow(const std::vector<std::string>& assetPaths);
+
 		/// @copydoc EditorBase::AddToolMenuItems
 		void AddToolMenuItems() override;
 
