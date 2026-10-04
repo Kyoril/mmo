@@ -17,6 +17,10 @@ message TalentEntry {
 	repeated TalentPrerequisite prerequisites = 8;
 	optional uint32 required_points = 9;
 	optional float node_scale = 10 [default = 1.0];
+	// A placeholder shows a planned talent in the tree but can not be learned yet.
+	optional bool placeholder = 11;
+	// Path color (ARGB) of the node's links and glow. 0 = derive from the rank spell's school.
+	optional uint32 accent_color = 12;
 }
 
 message Talents {

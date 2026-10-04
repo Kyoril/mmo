@@ -55,6 +55,15 @@ namespace mmo
 		/// handlers can call it without referencing SingleCastState internals.
 		int32_t CalculateBasePoints(SpellCastContext& castCtx, const proto::SpellEffect& effect);
 
+		/// Applies the executer's CritDamageBonus spell modifiers to a critical hit multiplier.
+		/// The modifiers scale only the bonus part of the crit: a +50% modifier turns a 1.5x crit
+		/// into 1.75x and a 2.0x crit into 2.5x. Flat modifiers add percentage points to the bonus.
+		/// @param executer The unit dealing the critical hit.
+		/// @param spellId Id of the spell that crit, used to match the modifiers' family flags.
+		/// @param critMultiplier The unmodified crit multiplier (e.g. 1.5).
+		/// @returns The modified crit multiplier, never below 1.0.
+		float ApplyCritDamageBonus(const GameUnitS& executer, uint32 spellId, float critMultiplier);
+
 		// ------------------------------------------------------------------ //
 		// One free function per handler, named Handle<MethodSuffix>.         //
 		// The suffix is the part of the original method name after            //
