@@ -138,3 +138,59 @@ TEST_CASE("VertexRectForBrush_Covers_Footprint", "[terrain_region]")
 	CHECK(r.minX + r.sizeX >= 65);
 	CHECK(!r.IsEmpty());
 }
+
+namespace
+{
+	float FanSum(const CellFanWeights& w)
+	{
+		return w.w00 + w.w10 + w.w01 + w.w11 + w.centre;
+	}
+
+	// Reconstructs the point from its weights, using the cell's vertex positions.
+	void FanPoint(const CellFanWeights& w, float& u, float& v)
+	{
+		u = w.w10 + w.w11 + 0.5f * w.centre;
+		v = w.w01 + w.w11 + 0.5f * w.centre;
+	}
+}
+
+TEST_CASE("CellFanWeights_Reproduce_Every_Vertex", "[terrain_region]")
+{
+	CHECK(ComputeCellFanWeights(0.5f, 0.5f).centre == Approx(1.0f));
+	CHECK(ComputeCellFanWeights(0.0f, 0.0f).w00 == Approx(1.0f));
+	CHECK(ComputeCellFanWeights(1.0f, 0.0f).w10 == Approx(1.0f));
+	CHECK(ComputeCellFanWeights(0.0f, 1.0f).w01 == Approx(1.0f));
+	CHECK(ComputeCellFanWeights(1.0f, 1.0f).w11 == Approx(1.0f));
+}
+
+TEST_CASE("CellFanWeights_Edge_Midpoint_Ignores_Centre", "[terrain_region]")
+{
+	// On a cell edge only that edge's two corners contribute, never the centre: the edge is
+	// shared with the neighbouring cell, which has a different centre.
+	const CellFanWeights w = ComputeCellFanWeights(0.5f, 0.0f);
+	CHECK(w.centre == Approx(0.0f).margin(1e-6));
+	CHECK(w.w00 == Approx(0.5f));
+	CHECK(w.w10 == Approx(0.5f));
+}
+
+TEST_CASE("CellFanWeights_Are_Barycentric", "[terrain_region]")
+{
+	for (float u = 0.0f; u <= 1.0f; u += 0.0625f)
+	{
+		for (float v = 0.0f; v <= 1.0f; v += 0.0625f)
+		{
+			const CellFanWeights w = ComputeCellFanWeights(u, v);
+			CHECK(FanSum(w) == Approx(1.0f));
+			CHECK(w.w00 >= 0.0f);
+			CHECK(w.w10 >= 0.0f);
+			CHECK(w.w01 >= 0.0f);
+			CHECK(w.w11 >= 0.0f);
+			CHECK(w.centre >= 0.0f);
+
+			float pu, pv;
+			FanPoint(w, pu, pv);
+			CHECK(pu == Approx(u).margin(1e-5));
+			CHECK(pv == Approx(v).margin(1e-5));
+		}
+	}
+}

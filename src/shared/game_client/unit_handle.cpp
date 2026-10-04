@@ -5,6 +5,7 @@
 #include "game_player_c.h"
 #include "game_unit_c.h"
 #include "base/clock.h"
+#include "game/spell_negativity.h"
 #include "log/default_log_levels.h"
 #include "shared/client_data/proto_client/classes.pb.h"
 #include "shared/client_data/proto_client/spells.pb.h"
@@ -56,14 +57,9 @@ namespace mmo
 		
 		const auto* spell = Get()->GetSpell();
 		if (!spell) return false;
-		
-		// Check if the Negative attribute flag is set (0x04000000 in attributes[0])
-		if (spell->attributes_size() > 0)
-		{
-			return (spell->attributes(0) & 0x04000000) != 0;
-		}
-		
-		return false;
+
+		// Not just the Negative flag: DoTs like Holy Fire carry no flag but still debuff their target
+		return IsNegativeAura(*spell, Get()->GetCasterId(), Get()->GetTargetId());
 	}
 
 	uint8 AuraHandle::GetStackCount() const

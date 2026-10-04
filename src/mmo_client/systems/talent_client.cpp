@@ -7,8 +7,21 @@
 #include "net/realm_connector.h"
 #include "frame_ui/frame_mgr.h"
 
+#include <cstdio>
+
 namespace mmo
 {
+	namespace
+	{
+		/// Formats an ARGB color as the "AARRGGBB" hex string frame properties expect.
+		String FormatArgbColor(const uint32 argb)
+		{
+			char buffer[9];
+			std::snprintf(buffer, sizeof(buffer), "%08X", argb);
+			return buffer;
+		}
+	}
+
 	TalentClient::TalentClient(const proto_client::TalentTabManager& tabManager, const proto_client::TalentManager& talentManager, const proto_client::SpellManager& spellManager, RealmConnector& realmConnector)
 		: m_tabManager(tabManager)
 		, m_talentManager(talentManager)
@@ -39,6 +52,16 @@ namespace mmo
 				.def_readonly("canvasWidth", &TalentTabInfo::canvasWidth)
 				.def_readonly("canvasHeight", &TalentTabInfo::canvasHeight)
 				.def_readonly("initialZoom", &TalentTabInfo::initialZoom)
+				.def_readonly("hubX", &TalentTabInfo::hubX)
+				.def_readonly("hubY", &TalentTabInfo::hubY)
+				.def_readonly("hasHub", &TalentTabInfo::hasHub)
+			),
+			luabind::scope(
+				luabind::class_<TalentTabLabelInfo>("TalentTabLabelInfo")
+				.def_readonly("text", &TalentTabLabelInfo::text)
+				.def_readonly("x", &TalentTabLabelInfo::x)
+				.def_readonly("y", &TalentTabLabelInfo::y)
+				.def_readonly("color", &TalentTabLabelInfo::color)
 			),
 			luabind::scope(
 				luabind::class_<TalentPrerequisiteInfo>("TalentPrerequisiteInfo")
@@ -65,11 +88,27 @@ namespace mmo
 				.def_readonly("requiredPoints", &TalentInfo::requiredPoints)
 				.def_readonly("nodeScale", &TalentInfo::nodeScale)
 				.def_readonly("canLearn", &TalentInfo::canLearn)
+				.def_readonly("placeholder", &TalentInfo::placeholder)
+				.def_readonly("accentColor", &TalentInfo::accentColor)
 			),
 				
 			luabind::def_lambda("GetNumTalentTabs", [this]() { return GetNumTalentTabs(); }),
 			luabind::def_lambda("GetTalentTabName", [this](int32 index) { return GetTalentTabName(index); }),
 			luabind::def_lambda("GetTalentTabInfo", [this](int32 index) { return GetTalentTabInfo(index); }),
+			luabind::def_lambda("GetNumTalentTabLabels", [this](int32 index)
+			{
+				const TalentTabInfo* tab = GetTalentTabInfo(index);
+				return tab ? static_cast<int32>(tab->labels.size()) : 0;
+			}),
+			luabind::def_lambda("GetTalentTabLabelInfo", [this](int32 index, int32 labelIndex) -> const TalentTabLabelInfo*
+			{
+				const TalentTabInfo* tab = GetTalentTabInfo(index);
+				if (!tab || labelIndex < 0 || labelIndex >= static_cast<int32>(tab->labels.size()))
+				{
+					return nullptr;
+				}
+				return &tab->labels[labelIndex];
+			}),
 			luabind::def_lambda("GetNumTalents", [this](int32 tabIndex) { return GetNumTalents(tabIndex); }),
 			luabind::def_lambda("GetTalentInfo", [this](int32 tabIndex, int32 talentIndex) { return GetTalentInfo(tabIndex, talentIndex); }),
 			luabind::def_lambda("GetNumTalentPrerequisites", [this](int32 tabIndex, int32 talentIndex)
@@ -135,15 +174,21 @@ namespace mmo
 				continue;
 			}
 
-			m_tabs.push_back({
-				tab.id(),
-				tab.name(),
-				tab.icon(),
-				tab.background(),
-				tab.canvas_width(),
-				tab.canvas_height(),
-				tab.initial_zoom()
-			});
+			TalentTabInfo& info = m_tabs.emplace_back();
+			info.id = tab.id();
+			info.name = tab.name();
+			info.icon = tab.icon();
+			info.background = tab.background();
+			info.canvasWidth = tab.canvas_width();
+			info.canvasHeight = tab.canvas_height();
+			info.initialZoom = tab.initial_zoom();
+			info.hubX = tab.hub_x();
+			info.hubY = tab.hub_y();
+			info.hasHub = tab.hub_x() != 0 || tab.hub_y() != 0;
+			for (const auto& label : tab.labels())
+			{
+				info.labels.push_back({ label.text(), label.x(), label.y(), FormatArgbColor(label.color()) });
+			}
 			m_talentsByTreeId[tab.id()];
 			m_talentPointsSpentPerTab[tab.id()] = 0;
 		}
@@ -199,6 +244,8 @@ namespace mmo
 			);
 
 			TalentInfo& info = entry.back();
+			info.placeholder = talent.placeholder();
+			info.accentColor = talent.accent_color() != 0 ? FormatArgbColor(talent.accent_color()) : String();
 			for (const auto& prerequisite : talent.prerequisites())
 			{
 				info.prerequisites.push_back({ prerequisite.talent_id(), prerequisite.rank(), 0, false });
@@ -306,7 +353,8 @@ namespace mmo
 					prerequisitesMet = prerequisitesMet && prerequisite.met;
 				}
 
-				talent.canLearn = availablePoints > 0
+				talent.canLearn = !talent.placeholder
+					&& availablePoints > 0
 					&& static_cast<uint32>(talent.rank) < talent.maxRank
 					&& m_talentPointsSpentPerTab[tabId] >= talent.requiredPoints
 					&& prerequisitesMet;

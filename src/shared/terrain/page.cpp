@@ -10,6 +10,7 @@
 
 #include "tile.h"
 #include "terrain_batch.h"
+#include "terrain_region_math.h"
 #include "assets/asset_registry.h"
 #include "graphics/texture_mgr.h"
 #include "base/chunk_writer.h"
@@ -785,6 +786,42 @@ namespace mmo
 
 			// Then interpolate the result along the z-axis.
 			return (n0 * (1.0f - zpct) + n1 * zpct).NormalizedCopy();
+		}
+
+		Vector4 Page::GetSmoothColorAt(float x, float y) const
+		{
+			if (!IsPrepared())
+			{
+				return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+			}
+
+			const float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
+			x /= scale;
+			y /= scale;
+
+			constexpr float maxCell = static_cast<float>(constants::OuterVerticesPerPageSide - 1);
+			x = std::clamp(x, 0.0f, maxCell);
+			y = std::clamp(y, 0.0f, maxCell);
+
+			const size_t xi = std::min(static_cast<size_t>(x), static_cast<size_t>(constants::InnerVerticesPerPageSide - 1));
+			const size_t zi = std::min(static_cast<size_t>(y), static_cast<size_t>(constants::InnerVerticesPerPageSide - 1));
+
+			const region_math::CellFanWeights w = region_math::ComputeCellFanWeights(x - static_cast<float>(xi), y - static_cast<float>(zi));
+
+			const auto unpack = [](const uint32 argb)
+			{
+				return Vector4(
+					static_cast<float>((argb >> 16) & 0xFF) / 255.0f,
+					static_cast<float>((argb >> 8) & 0xFF) / 255.0f,
+					static_cast<float>(argb & 0xFF) / 255.0f,
+					static_cast<float>((argb >> 24) & 0xFF) / 255.0f);
+			};
+
+			return unpack(GetColorAt(xi, zi)) * w.w00
+				+ unpack(GetColorAt(xi + 1, zi)) * w.w10
+				+ unpack(GetColorAt(xi, zi + 1)) * w.w01
+				+ unpack(GetColorAt(xi + 1, zi + 1)) * w.w11
+				+ unpack(GetInnerColorAt(xi, zi)) * w.centre;
 		}
 
 		void Page::UpdateTiles(const int fromX, const int fromZ, const int toX, const int toZ, const bool normalsOnly)

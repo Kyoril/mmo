@@ -1,6 +1,15 @@
 syntax = "proto2";
 package mmo.proto_client;
 
+message TalentTabLabel {
+    // Localization key of the label text (Localization.txt), shown as is when missing.
+    required string text = 1;
+    optional sint32 x = 2;
+    optional sint32 y = 3;
+    // Text color (ARGB).
+    optional uint32 color = 4 [default = 0xFFFFFFFF];
+}
+
 message TalentTabEntry {
     required uint32 id = 1;
     required string name = 2;
@@ -10,6 +19,12 @@ message TalentTabEntry {
     optional uint32 canvas_width = 6 [default = 1600];
     optional uint32 canvas_height = 7 [default = 1200];
     optional float initial_zoom = 8 [default = 1.0];
+    // Canvas position of the class emblem (icon) that every root talent connects to.
+    // Both 0 = no hub.
+    optional sint32 hub_x = 9;
+    optional sint32 hub_y = 10;
+    // Path names printed on the canvas.
+    repeated TalentTabLabel labels = 11;
 }
 
 message TalentTabs {

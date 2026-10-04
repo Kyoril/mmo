@@ -371,6 +371,25 @@ namespace mmo
 				fmod(z + constants::PageSize * pageY, terrain::constants::PageSize));
 		}
 
+		Vector4 Terrain::GetSmoothColorAt(const float x, const float z)
+		{
+			int32 pageX, pageY;
+			if (!GetPageIndexByWorldPosition(Vector3(x, 0.0f, z), pageX, pageY))
+			{
+				return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+			}
+
+			const Page* page = GetPage(pageX, pageY);
+			if (!page || !page->IsPrepared())
+			{
+				return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+			}
+
+			return page->GetSmoothColorAt(
+				fmod(x + constants::PageSize * pageX, terrain::constants::PageSize),
+				fmod(z + constants::PageSize * pageY, terrain::constants::PageSize));
+		}
+
 		Vector3 Terrain::GetTangentAt(uint32 x, uint32 z)
 		{
 			return Vector3();

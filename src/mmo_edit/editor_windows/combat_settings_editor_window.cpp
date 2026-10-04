@@ -316,6 +316,25 @@ namespace mmo
 			}
 		}
 
+		// === Spell Damage ===
+		if (const auto section = ScopedEditorSection("Spell Damage", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::TextDisabled("Critical hits of direct damage spell effects (e.g. Frostbolt, Smite).");
+			ImGui::Spacing();
+
+			float critChance = settings.spell_default_crit_chance();
+			if (DrawFloatSetting("Default Crit Chance %##SpellDamage", critChance, defaults.spell_default_crit_chance()))
+			{
+				settings.set_spell_default_crit_chance(critChance);
+			}
+
+			float critMultiplier = settings.spell_crit_multiplier();
+			if (DrawFloatSetting("Crit Multiplier##SpellDamage", critMultiplier, defaults.spell_crit_multiplier()))
+			{
+				settings.set_spell_crit_multiplier(critMultiplier);
+			}
+		}
+
 		// === Spell Weapon Damage ===
 		if (const auto section = ScopedEditorSection("Spell Weapon Damage", ImGuiTreeNodeFlags_DefaultOpen))
 		{

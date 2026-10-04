@@ -13,6 +13,18 @@ namespace mmo
 {
 	class RealmConnector;
 
+	/// A path name printed on a talent tree canvas.
+	struct TalentTabLabelInfo
+	{
+		/// Localization key of the text.
+		String text;
+		/// Canvas position of the label center.
+		int32 x = 0;
+		int32 y = 0;
+		/// Text color as an "AARRGGBB" hex string, ready for a frame's TextColor property.
+		String color;
+	};
+
 	struct TalentTabInfo
 	{
 		uint32 id = 0;
@@ -22,6 +34,12 @@ namespace mmo
 		uint32 canvasWidth = 1600;
 		uint32 canvasHeight = 1200;
 		float initialZoom = 1.0f;
+		/// Canvas position of the class emblem that root talents connect to.
+		int32 hubX = 0;
+		int32 hubY = 0;
+		/// Whether the tab defines a hub (hubX/hubY are not both zero).
+		bool hasHub = false;
+		std::vector<TalentTabLabelInfo> labels;
 	};
 
 	struct TalentPrerequisiteInfo
@@ -48,6 +66,10 @@ namespace mmo
 		uint32 requiredPoints = 0;
 		float nodeScale = 1.0f;
 		bool canLearn = false;
+		/// A placeholder shows a planned talent that can not be learned yet.
+		bool placeholder = false;
+		/// Path color as an "AARRGGBB" hex string, or empty to derive it from the spell school.
+		String accentColor;
 		String icon;
 		String name;
 		std::vector<TalentPrerequisiteInfo> prerequisites;
