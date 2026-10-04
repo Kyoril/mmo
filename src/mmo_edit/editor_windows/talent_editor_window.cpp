@@ -32,6 +32,32 @@ namespace mmo
 			}
 			return std::round(value / static_cast<float>(step)) * static_cast<float>(step);
 		}
+
+		/// Converts an ARGB color (as stored in the talent protos) to an ImGui color.
+		ImU32 ArgbToImColor(const uint32 argb, const float alphaScale = 1.0f)
+		{
+			const auto alpha = static_cast<uint32>(static_cast<float>((argb >> 24) & 0xFF) * alphaScale);
+			return IM_COL32((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, alpha);
+		}
+
+		/// Edits an ARGB color with an ImGui color picker. Returns true if it changed.
+		bool EditArgbColor(const char* label, uint32& argb)
+		{
+			float color[4] = {
+				static_cast<float>((argb >> 16) & 0xFF) / 255.0f,
+				static_cast<float>((argb >> 8) & 0xFF) / 255.0f,
+				static_cast<float>(argb & 0xFF) / 255.0f,
+				static_cast<float>((argb >> 24) & 0xFF) / 255.0f
+			};
+			if (!ImGui::ColorEdit4(label, color))
+			{
+				return false;
+			}
+
+			const auto channel = [](const float value) { return static_cast<uint32>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f)); };
+			argb = (channel(color[3]) << 24) | (channel(color[0]) << 16) | (channel(color[1]) << 8) | channel(color[2]);
+			return true;
+		}
 	}
 
 	TalentEditorWindow::TalentEditorWindow(const String& name, proto::Project& project, EditorHost& host)
@@ -103,6 +129,63 @@ namespace mmo
 			if (ImGui::SliderFloat("Initial game zoom", &initialZoom, 0.35f, 1.5f, "%.2fx"))
 			{
 				currentEntry.set_initial_zoom(initialZoom);
+			}
+
+			int hub[2] = { currentEntry.hub_x(), currentEntry.hub_y() };
+			if (ImGui::InputInt2("Hub position", hub))
+			{
+				currentEntry.set_hub_x(hub[0]);
+				currentEntry.set_hub_y(hub[1]);
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("(?)");
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Canvas position of the class emblem (the tab icon). Root talents connect to it. 0, 0 = no hub.");
+			}
+		}
+
+		if (const auto section = ScopedEditorSection("Path Labels", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Text is a localization key from Localization.txt.");
+			for (int index = 0; index < currentEntry.labels_size(); ++index)
+			{
+				auto* label = currentEntry.mutable_labels(index);
+				ImGui::PushID(index);
+				std::string text = label->text();
+				ImGui::SetNextItemWidth(220.0f);
+				if (ImGui::InputText("Text", &text))
+				{
+					label->set_text(text);
+				}
+				ImGui::SameLine();
+				int labelPosition[2] = { label->x(), label->y() };
+				ImGui::SetNextItemWidth(160.0f);
+				if (ImGui::InputInt2("Position", labelPosition))
+				{
+					label->set_x(labelPosition[0]);
+					label->set_y(labelPosition[1]);
+				}
+				ImGui::SameLine();
+				uint32 color = label->color();
+				if (EditArgbColor("##LabelColor", color))
+				{
+					label->set_color(color);
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Remove"))
+				{
+					currentEntry.mutable_labels()->DeleteSubrange(index, 1);
+					--index;
+				}
+				ImGui::PopID();
+			}
+			if (ImGui::Button("Add label"))
+			{
+				auto* label = currentEntry.add_labels();
+				label->set_text("TALENT_PATH_NEW");
+				label->set_x(static_cast<int32>(currentEntry.canvas_width() / 2));
+				label->set_y(60);
 			}
 		}
 
@@ -270,6 +353,14 @@ namespace mmo
 			}
 		}
 
+		const bool hasHub = currentTab.hub_x() != 0 || currentTab.hub_y() != 0;
+		const ImVec2 hub(origin.x + currentTab.hub_x() * m_canvasZoom, origin.y + currentTab.hub_y() * m_canvasZoom);
+		for (const auto& label : currentTab.labels())
+		{
+			const ImVec2 textSize = ImGui::CalcTextSize(label.text().c_str());
+			drawList->AddText(ImVec2(origin.x + label.x() * m_canvasZoom - textSize.x * 0.5f, origin.y + label.y() * m_canvasZoom - textSize.y * 0.5f), ArgbToImColor(label.color()), label.text().c_str());
+		}
+
 		for (const auto& talent : m_project.talents.getTemplates().entry())
 		{
 			if (talent.tab() != currentTab.id())
@@ -278,6 +369,11 @@ namespace mmo
 			}
 			const ImVec2 targetPosition = GetTalentPosition(talent);
 			const ImVec2 target(origin.x + targetPosition.x * m_canvasZoom, origin.y + targetPosition.y * m_canvasZoom);
+			const ImU32 lineColor = talent.accent_color() != 0 ? ArgbToImColor(talent.accent_color(), 0.8f) : IM_COL32(76, 181, 199, 210);
+			if (hasHub && talent.prerequisites_size() == 0)
+			{
+				drawList->AddLine(hub, target, lineColor, std::max(1.5f, 3.0f * m_canvasZoom));
+			}
 			for (const auto& prerequisite : talent.prerequisites())
 			{
 				const auto* sourceTalent = m_project.talents.getById(prerequisite.talent_id());
@@ -287,7 +383,26 @@ namespace mmo
 				}
 				const ImVec2 sourcePosition = GetTalentPosition(*sourceTalent);
 				const ImVec2 source(origin.x + sourcePosition.x * m_canvasZoom, origin.y + sourcePosition.y * m_canvasZoom);
-				drawList->AddLine(source, target, IM_COL32(76, 181, 199, 210), std::max(2.0f, 5.0f * m_canvasZoom));
+				drawList->AddLine(source, target, lineColor, std::max(2.0f, 5.0f * m_canvasZoom));
+			}
+		}
+
+		if (hasHub)
+		{
+			const float hubRadius = NodeRadius * 1.3f * m_canvasZoom;
+			drawList->AddCircleFilled(hub, hubRadius + 4.0f, IM_COL32(105, 91, 61, 255));
+			drawList->AddCircleFilled(hub, hubRadius, IM_COL32(31, 37, 46, 255));
+			if (!currentTab.icon().empty())
+			{
+				if (!m_iconCache.contains(currentTab.icon()))
+				{
+					m_iconCache[currentTab.icon()] = TextureManager::Get().CreateOrRetrieve(currentTab.icon());
+				}
+				if (const TexturePtr& icon = m_iconCache[currentTab.icon()])
+				{
+					const float half = hubRadius * 0.7f;
+					drawList->AddImage(icon->GetTextureObject(), ImVec2(hub.x - half, hub.y - half), ImVec2(hub.x + half, hub.y + half));
+				}
 			}
 		}
 
@@ -311,7 +426,9 @@ namespace mmo
 			drawList->AddRectFilled(nodeMin, nodeMax, IM_COL32(31, 37, 46, 255), rounding);
 			if (TexturePtr icon = GetTalentIcon(*talent))
 			{
-				drawList->AddImage(icon->GetTextureObject(), ImVec2(nodeMin.x + 3.0f, nodeMin.y + 3.0f), ImVec2(nodeMax.x - 3.0f, nodeMax.y - 3.0f));
+				// Placeholders are drawn dimmed, like the game shows them.
+				drawList->AddImage(icon->GetTextureObject(), ImVec2(nodeMin.x + 3.0f, nodeMin.y + 3.0f), ImVec2(nodeMax.x - 3.0f, nodeMax.y - 3.0f),
+					ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), talent->placeholder() ? IM_COL32(110, 110, 110, 160) : IM_COL32_WHITE);
 			}
 
 			ImGui::SetCursorScreenPos(nodeMin);
@@ -392,6 +509,26 @@ namespace mmo
 		if (ImGui::InputInt("Points in tree required", &requiredPoints))
 		{
 			talent.set_required_points(static_cast<uint32>(std::max(0, requiredPoints)));
+		}
+		bool placeholder = talent.placeholder();
+		if (ImGui::Checkbox("Placeholder (not learnable yet)", &placeholder))
+		{
+			talent.set_placeholder(placeholder);
+		}
+		bool useAccentColor = talent.accent_color() != 0;
+		if (ImGui::Checkbox("Custom path color", &useAccentColor))
+		{
+			talent.set_accent_color(useAccentColor ? 0xFFFFFFFF : 0);
+		}
+		if (useAccentColor)
+		{
+			ImGui::SameLine();
+			uint32 accentColor = talent.accent_color();
+			if (EditArgbColor("##AccentColor", accentColor))
+			{
+				// 0 means "no custom color", so a fully transparent black pick is nudged off zero.
+				talent.set_accent_color(accentColor != 0 ? accentColor : 0x01000000);
+			}
 		}
 
 		ImGui::Separator();

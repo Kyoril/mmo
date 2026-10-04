@@ -11,6 +11,7 @@
 #include <map>
 #include <iterator>
 #include <random>
+#include <vector>
 
 using namespace mmo;
 
@@ -373,6 +374,36 @@ TEST_CASE("Missing duration formats write the localization key", "[spell_text]")
 
 	fixture.context.findDurationFormat = nullptr;
 	CHECK(fixture.Format("$D", 160) == "FORMAT_DURATION_SECONDS");
+}
+
+TEST_CASE("Durations, ticks and totals follow the reader's duration modifiers", "[spell_text]")
+{
+	SpellFixture fixture;
+
+	// Like a talent adding 50% duration to spell 160 only; infinite durations stay infinite
+	std::vector<uint32> queried;
+	fixture.context.getDuration = [&queried](const proto_client::SpellEntry& spell)
+	{
+		queried.push_back(spell.id());
+		return spell.id() == 160 ? spell.duration() * 3 / 2 : spell.duration();
+	};
+
+	CHECK(fixture.Format("$d", 160) == "18.00 sec");
+	CHECK(fixture.Format("$D", 160) == "18 sec");
+	CHECK(fixture.Format("$t0", 160) == "6");
+	CHECK(fixture.Format("$o0", 160) == "60");
+
+	// A reference applies the modifiers of the referenced spell
+	CHECK(fixture.Format("$160D", 170) == "18 sec");
+	CHECK(fixture.Format("$D", 170) == "8 sec");
+
+	// Fire Barrage's total uses the channel's ticks, the projectile has no duration to modify
+	CHECK(fixture.Format("$o0", 150) == "57 - 69");
+
+	queried.clear();
+	fixture.Spell(330, 0);
+	CHECK(fixture.Format("$D", 330) == "0 sec");
+	CHECK(queried.empty());
 }
 
 TEST_CASE("A spell id prefix reads values from another spell", "[spell_text]")

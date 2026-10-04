@@ -86,6 +86,14 @@ message CombatSettings {
 	// 1.0 = full off-hand damage, 0.5 = half. Only affects the off-hand swing; the
 	// main-hand swing is unaffected. Off-hand swings run on their own attack timer.
 	optional float offhand_damage_multiplier = 29 [default = 0.5];
+
+	// === Spell Damage ===
+	// Base chance (in percent) for a direct damage spell effect (SchoolDamage) to critically
+	// hit, before the caster's CritChance spell modifiers and the victim's ModCritChanceTaken.
+	optional float spell_default_crit_chance = 30 [default = 5.0];
+	// Damage multiplier of a critical direct damage spell hit (1.5 = +50%). CritDamageBonus
+	// spell modifiers scale the bonus part of it.
+	optional float spell_crit_multiplier = 31 [default = 1.5];
 }
 
 // Wrapper for loading
