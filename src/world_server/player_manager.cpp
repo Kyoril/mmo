@@ -30,4 +30,15 @@ namespace mmo
 
 		return it->second;
 	}
+
+	std::vector<ObjectGuid> PlayerManager::GetCharacterGuids() const
+	{
+		std::vector<ObjectGuid> guids;
+		guids.reserve(m_players.size());
+		for (const auto& [guid, player] : m_players)
+		{
+			guids.push_back(guid);
+		}
+		return guids;
+	}
 }

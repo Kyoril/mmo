@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <vector>
 #include <thread>
+#include <functional>
 
 #include "base/server_crash_handler.h"
 #include "base/filesystem.h"
@@ -231,10 +232,18 @@ namespace mmo
 
 		// Declared before the handler that captures it, so the handler can cancel its own wait.
 		std::unique_ptr<asio::signal_set> shutdownSignals;
-		shutdownSignals = InstallShutdownHandler(ioService,
-			[&realmConnector, &worldInstanceManager, &shutdownSignals, &timerQueue, &timer, &bugReports]()
+
+		// Shared by the signal handler and a realm-ordered shutdown; safe to call twice.
+		bool worldStopped = false;
+		const std::function<void()> stopWorld = [&realmConnector, &worldInstanceManager, &shutdownSignals, &timerQueue, &timer, &bugReports, &worldStopped]()
 		{
-			ILOG("Shutdown signal received - stopping cleanly");
+			if (worldStopped)
+			{
+				return;
+			}
+			worldStopped = true;
+
+			ILOG("Stopping the world server cleanly");
 
 			// Both queues hold an armed asio timer on the io_service, which is outstanding work.
 			// The reconnect delay lives in one of them, so stopping them is also what keeps the
@@ -263,7 +272,15 @@ namespace mmo
 				asio::error_code error;
 				shutdownSignals->cancel(error);
 			}
-		});
+		};
+		shutdownSignals = InstallShutdownHandler(ioService, [&stopWorld]() { stopWorld(); });
+
+		// The realm's order arrives inside the realm connector's packet handler, and stopping closes
+		// that very connection, so it runs as its own handler instead.
+		const scoped_connection realmShutdown{ realmConnector->shutdownRequested.connect([&ioService, &stopWorld]()
+		{
+			ioService.post([&stopWorld]() { stopWorld(); });
+		}) };
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Launch worker threads

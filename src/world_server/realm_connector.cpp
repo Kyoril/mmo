@@ -533,6 +533,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::TimeOfDay, *this, &RealmConnector::OnTimeOfDay);
 				RegisterPacketHandler(auth::realm_world_packet::BugReport, *this, &RealmConnector::OnBugReport);
 				RegisterPacketHandler(auth::realm_world_packet::SetSubsystemEnabled, *this, &RealmConnector::OnSetSubsystemEnabled);
+				RegisterPacketHandler(auth::realm_world_packet::Shutdown, *this, &RealmConnector::OnShutdown);
 
 				m_loggedIn = true;
 				if (m_subsystems)
@@ -1367,6 +1368,26 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		}
 
 		SendBugReportResult(reporter.characterGuid, m_bugReports->HandleReport(*player, reporter, payload));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnShutdown(auth::IncomingPacket& packet)
+	{
+		ILOG("The realm ordered this world node to shut down");
+
+		// The realm logs its players out before sending this, and those PlayerCharacterLeave
+		// packets arrived first on this link. Anyone still here leaves the same way, so their
+		// character data goes back to the realm before the link closes.
+		for (const ObjectGuid characterGuid : m_playerManager.GetCharacterGuids())
+		{
+			if (const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
+			{
+				m_playerManager.RemovePlayer(player);
+				NotifyWorldInstanceLeft(characterGuid, auth::world_left_reason::Disconnect);
+			}
+		}
+
+		shutdownRequested();
 		return PacketParseResult::Pass;
 	}
 

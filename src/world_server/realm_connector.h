@@ -65,6 +65,9 @@ namespace mmo
 		/// to vanish.
 		void Shutdown();
 
+		/// Fired when the realm orders this node to shut down for good (scheduled realm shutdown).
+		signal<void()> shutdownRequested;
+
 		/// Updates the list of map ids that can be hosted by this world node and if connected, propagates this
 		///	list to the realm server.
 		///	@param mapIds Set of map ids that can be hosted.
@@ -198,6 +201,7 @@ namespace mmo
 
 		/// Handles a GM / REST toggle of a world-owned subsystem.
 		PacketParseResult OnSetSubsystemEnabled(auth::IncomingPacket& packet);
+		PacketParseResult OnShutdown(auth::IncomingPacket& packet);
 
 		/// Handles the result of an inventory operation (save/delete).
 		/// @param packet Incoming packet containing operation result.
