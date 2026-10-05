@@ -486,6 +486,14 @@ namespace mmo
 			return false;
 		}));
 
+		for (const auto &file : updateState->requiredFiles)
+		{
+			if (!file.present)
+			{
+				update.steps.back().downloads.push_back(RemoteFile{ file.sourcePath, file.compressedSize });
+			}
+		}
+
 		return update;
 	}
 }

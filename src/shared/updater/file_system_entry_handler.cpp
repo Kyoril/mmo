@@ -134,6 +134,7 @@ namespace mmo::updating
 				//TODO: Copy step-wise
 				return false;
 			}));
+			update.steps.back().downloads.push_back(RemoteFile{ source, compressedSize });
 
 			return update;
 		}

@@ -130,12 +130,14 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 {
 	size_t concurrency = 8;
 	bool selfUpdateEnabled = true;
+	bool pipeliningEnabled = true;
 
 	cxxopts::Options options("Available options");
 	options.add_options()
 		("v,version", "Displays the version of the launcher on screen.")
 		("remove-previous", "Tries to remove a specified file", cxxopts::value<std::string>(g_previousExecutableToBeRemoved))
 		("no-self-update", "Disables self-update of the launcher executable")
+		("no-pipelining", "Requests files one at a time instead of pipelining them (for troubleshooting)")
 		("j,concurrency", "The number of threads used for downloading and updating", cxxopts::value<size_t>(concurrency))
 		;
 
@@ -156,6 +158,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 		if (results.count("no-self-update"))
 		{
 			selfUpdateEnabled = false;
+		}
+
+		if (results.count("no-pipelining"))
+		{
+			pipeliningEnabled = false;
 		}
 
 		std::array<char, MAX_PATH> documents = { "." };
@@ -193,6 +200,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 		mmo::UpdateWorkerConfig config;
 		config.sourceUrl = DefaultUpdateSourceUrl;
 		config.concurrency = concurrency;
+		if (!pipeliningEnabled)
+		{
+			config.pipelineConnections = 0;
+		}
 		config.selfUpdateEnabled = selfUpdateEnabled;
 
 		mmo::UpdateWorker worker(model, config);
