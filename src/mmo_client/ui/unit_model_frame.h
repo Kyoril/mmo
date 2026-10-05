@@ -44,7 +44,7 @@ namespace mmo
 		void RefreshVisuals();
 
 		/// Applies the item display data of everything the given unit has equipped to the
-		/// displayed entity. Only players carry visible equipment.
+		/// displayed entity: a player's visible equipment, or the outfit configured on an NPC's model.
 		void ApplyEquipment(GameUnitC& unit);
 
 		/// Detaches and destroys all item meshes attached to the displayed entity.

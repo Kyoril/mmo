@@ -86,6 +86,9 @@ namespace mmo
 			m_scene.DestroyManualRenderObject(*m_selectionRing);
 			m_selectionRing = nullptr;
 		}
+
+		// Attachments hang off the entity's bones, and GameObjectC destroys the entity after us.
+		ClearModelItemAttachments();
 	}
 
 	void GameUnitC::QueueMovementEvent(MovementEventType eventType, GameTime timestamp,
@@ -2696,6 +2699,9 @@ namespace mmo
 		m_animationController->NotifyMeshChanged();
 		m_customizationDefinition = nullptr;
 
+		// The previous model's outfit meshes hang off bones which do not survive a mesh change.
+		ClearModelItemAttachments();
+
 		if (m_entity)
 			m_entity->SetVisible(modelEntry != nullptr);
 		if (!modelEntry)
@@ -2755,6 +2761,9 @@ namespace mmo
 			m_configuration.Apply(*this, *m_customizationDefinition);
 		}
 
+		// Dress the model after the customization, so a helmet can hide the chosen hair style.
+		ApplyModelItemDisplays(*modelEntry);
+
 		// Bind the model's animation profile (0 = built-in default clip names) and
 		// re-resolve all animation clip bindings against the new mesh.
 		m_animationController->SetProfileId(modelEntry->animation_profile());
@@ -2776,6 +2785,40 @@ namespace mmo
 		RefreshMoodAnimation();
 
 		OnScaleChanged();
+	}
+
+	void GameUnitC::ApplyModelItemDisplays(const proto_client::ModelDataEntry& model)
+	{
+		if (!m_entity || IsPlayer())
+		{
+			return;
+		}
+
+		const uint32 modelDisplayId = Get<uint32>(object_fields::DisplayId);
+		const bool weaponsDrawn = IsWeaponDrawn();
+
+		for (const uint32 itemDisplayId : model.item_displays())
+		{
+			const proto_client::ItemDisplayEntry* display = m_project.itemDisplays.getById(itemDisplayId);
+			if (!display)
+			{
+				WLOG("Model " << model.id() << " references unknown item display " << itemDisplayId);
+				continue;
+			}
+
+			ApplyItemDisplay(m_scene, *m_entity, modelDisplayId, itemDisplayId, *display, weaponsDrawn, m_modelItemAttachments);
+		}
+	}
+
+	void GameUnitC::ClearModelItemAttachments()
+	{
+		if (!m_entity)
+		{
+			m_modelItemAttachments.clear();
+			return;
+		}
+
+		ClearItemDisplayAttachments(m_scene, *m_entity, m_modelItemAttachments);
 	}
 
 	void GameUnitC::UpdateCollider()

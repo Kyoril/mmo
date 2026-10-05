@@ -2,6 +2,10 @@
 
 #include "item_display_applier.h"
 
+#include "game/item_display_model_match.h"
+#include "object_mgr.h"
+#include "game/character_customization/avatar_definition_mgr.h"
+#include "game/character_customization/customizable_avatar_definition.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh.h"
@@ -11,11 +15,30 @@
 #include "scene_graph/sub_mesh.h"
 #include "scene_graph/tag_point.h"
 #include "shared/client_data/proto_client/item_display.pb.h"
+#include "shared/client_data/proto_client/model_data.pb.h"
 
 namespace mmo
 {
 	namespace
 	{
+		/// Resolves the mesh file a model data entry renders, see ModelMeshResolver.
+		String ResolveModelMesh(const uint32 modelId)
+		{
+			const proto_client::ModelDataEntry* model = ObjectMgr::GetModelData(modelId);
+			if (!model)
+			{
+				return String();
+			}
+
+			if ((model->flags() & model_data_flags::IsCustomizable) == 0)
+			{
+				return model->filename();
+			}
+
+			const auto definition = AvatarDefinitionManager::Get().Load(model->filename());
+			return definition ? definition->GetBaseMesh() : String();
+		}
+
 		/// Changes the visibility of every sub entity whose sub mesh carries the given tag.
 		void SetSubEntityVisibilityByTag(Entity& entity, const String& tag, const bool visible)
 		{
@@ -159,7 +182,7 @@ namespace mmo
 		for (const auto& variant : display.variants())
 		{
 			// Does this variant affect the character model we are applying to?
-			if (variant.model() != 0 && variant.model() != modelDisplayId)
+			if (!ItemDisplayVariantAppliesToModel(variant.model(), modelDisplayId, &ResolveModelMesh))
 			{
 				continue;
 			}

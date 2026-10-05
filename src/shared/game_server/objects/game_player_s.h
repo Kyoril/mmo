@@ -184,6 +184,11 @@ namespace mmo
 
 		bool ConsumeMoney(uint32 amount);
 
+		/// @return true if the amount can be added without exceeding the money cap.
+		bool CanAddMoney(uint32 amount) const;
+
+		/// Adds money, capped at the maximum (never wraps). Check CanAddMoney first where the
+		/// excess must not be lost.
 		void AddMoney(uint32 amount);
 
 		/// Gets the characters group id.

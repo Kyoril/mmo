@@ -106,8 +106,28 @@ namespace mmo
 
 	void UnitModelFrame::ApplyEquipment(GameUnitC& unit)
 	{
-		if (!m_entity || !unit.IsPlayer())
+		if (!m_entity)
 		{
+			return;
+		}
+
+		if (!unit.IsPlayer())
+		{
+			// NPCs wear the outfit configured on their model, mirroring GameUnitC::ApplyModelItemDisplays.
+			const proto_client::ModelDataEntry* model = unit.GetDisplayModel();
+			if (!model)
+			{
+				return;
+			}
+
+			const uint32 modelDisplayId = unit.Get<uint32>(object_fields::DisplayId);
+			for (const uint32 itemDisplayId : model->item_displays())
+			{
+				if (const proto_client::ItemDisplayEntry* display = unit.GetProject().itemDisplays.getById(itemDisplayId))
+				{
+					ApplyItemDisplay(m_scene, *m_entity, modelDisplayId, itemDisplayId, *display, unit.IsWeaponDrawn(), m_itemAttachments);
+				}
+			}
 			return;
 		}
 
