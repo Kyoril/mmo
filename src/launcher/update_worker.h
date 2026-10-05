@@ -83,6 +83,9 @@ namespace mmo
 		/// Called whenever the prepare step starts checking a local file.
 		void OnCheckLocalCopy();
 
+		/// Called with every chunk of data received from the network, from any thread.
+		void OnBytesReceived(std::uintmax_t bytes);
+
 		/// Pushes the download counters into the model. m_progressMutex must be held.
 		void PublishDownloadProgress();
 
@@ -110,10 +113,17 @@ namespace mmo
 		/// growth past the previous maximum counts towards the total.
 		std::unordered_map<std::string, FileProgress> m_fileProgress;
 
-		/// Totals, known only after the prepare step completes.
+		/// Totals, known only after the prepare step completes. The download size is
+		/// what goes over the wire, i.e. compressed; the update size is what gets written.
+		std::uintmax_t m_downloadSize = 0;
 		std::uintmax_t m_updateSize = 0;
 		std::uintmax_t m_fileCount = 0;
 
+		/// True if the source reports received bytes. Otherwise the bytes received are
+		/// estimated from the bytes written.
+		bool m_sourceReportsBytes = false;
+
+		std::uintmax_t m_received = 0;
 		std::uintmax_t m_updated = 0;
 		std::uintmax_t m_filesDone = 0;
 		std::uintmax_t m_filesChecked = 0;

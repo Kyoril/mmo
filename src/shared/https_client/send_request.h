@@ -9,6 +9,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <functional>
 
 namespace mmo
 {
@@ -31,6 +33,11 @@ namespace mmo
 				/// When set and it becomes true, the request is aborted as soon as possible.
 				/// It is polled, so it may be flipped from any thread.
 				const std::atomic<bool>* cancel = nullptr;
+
+				/// Called with the number of response body bytes each time some arrived, as
+				/// they arrive. Lets a caller show transfer progress of large bodies, which
+				/// are otherwise only handed over once complete.
+				std::function<void(std::size_t bytes)> onBodyReceived;
 			};
 
 			/// Sends `request` and reads the whole response into memory.

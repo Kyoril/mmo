@@ -222,6 +222,20 @@ namespace mmo
 		PublishDownloadProgress();
 	}
 
+	void UpdateWorker::OnBytesReceived(const std::uintmax_t bytes)
+	{
+		const std::scoped_lock lock{ m_progressMutex };
+
+		m_received += bytes;
+
+		// Before the prepare step has finished this is the update list itself, which is
+		// not part of the totals; it is discarded once they are known.
+		if (m_fileCount > 0)
+		{
+			PublishDownloadProgress();
+		}
+	}
+
 	void UpdateWorker::PublishDownloadProgress()
 	{
 		// The total is only known once the prepare step has finished. Report
@@ -235,10 +249,23 @@ namespace mmo
 
 		const std::uintmax_t filesDone = std::min(m_filesDone, m_fileCount);
 
-		std::string status = "Downloading files: " + std::to_string(filesDone) + " / " + std::to_string(m_fileCount);
-		if (m_updateSize > 0)
+		// Shown is what actually goes over the wire. The files are stored compressed on
+		// the server and are many times larger once written, so the written size would
+		// suggest a far bigger download than the player is actually facing.
+		std::uintmax_t received = m_received;
+		if (!m_sourceReportsBytes && m_updateSize > 0)
 		{
-			status += "  (" + FormatByteSize(std::min(m_updated, m_updateSize)) + " / " + FormatByteSize(m_updateSize) + ")";
+			received = static_cast<std::uintmax_t>(static_cast<double>(m_updated) *
+				static_cast<double>(m_downloadSize) / static_cast<double>(m_updateSize));
+		}
+
+		// Retried transfers count twice, so the received bytes may overshoot slightly.
+		received = std::min(received, m_downloadSize);
+
+		std::string status = "Downloading files: " + std::to_string(filesDone) + " / " + std::to_string(m_fileCount);
+		if (m_downloadSize > 0)
+		{
+			status += "  (" + FormatByteSize(received) + " / " + FormatByteSize(m_downloadSize) + ")";
 		}
 
 		m_model.SetStatus(std::move(status));
@@ -246,8 +273,8 @@ namespace mmo
 		// Bytes describe large files well, the file count describes many small ones well.
 		// Whichever is further behind is the honest number: it keeps the bar from sitting
 		// at 100% while thousands of tiny files are still being written.
-		const float byteProgress = m_updateSize > 0
-			? static_cast<float>(static_cast<double>(m_updated) / static_cast<double>(m_updateSize))
+		const float byteProgress = m_downloadSize > 0
+			? static_cast<float>(static_cast<double>(received) / static_cast<double>(m_downloadSize))
 			: 1.0f;
 		const float fileProgress = static_cast<float>(static_cast<double>(filesDone) / static_cast<double>(m_fileCount));
 		m_model.SetProgress(std::min(byteProgress, fileProgress));
@@ -273,12 +300,19 @@ namespace mmo
 			sourceOptions.cancel = &m_shouldQuit;
 			sourceOptions.prefetchConnections = m_config.pipelineConnections;
 			sourceOptions.pipelineDepth = m_config.pipelineDepth;
+			sourceOptions.onBytesReceived = [this](const std::uintmax_t bytes) { OnBytesReceived(bytes); };
+
+			const updating::UpdateURL sourceUrl(m_config.sourceUrl);
+			{
+				const std::scoped_lock lock{ m_progressMutex };
+				m_sourceReportsBytes = sourceUrl.scheme == updating::UP_HTTPS;
+			}
 
 			updating::RetryPolicy retryPolicy;
 			retryPolicy.maxAttempts = m_config.maxDownloadAttempts;
 
 			auto source = std::make_unique<updating::RetryingUpdateSource>(
-				updating::openSourceFromUrl(updating::UpdateURL(m_config.sourceUrl), sourceOptions),
+				updating::openSourceFromUrl(sourceUrl, sourceOptions),
 				retryPolicy,
 				&m_shouldQuit);
 
@@ -308,8 +342,10 @@ namespace mmo
 
 			{
 				const std::scoped_lock lock{ m_progressMutex };
+				m_downloadSize = preparedUpdate.estimates.downloadSize;
 				m_updateSize = preparedUpdate.estimates.updateSize;
 				m_fileCount = preparedUpdate.estimates.fileCount;
+				m_received = 0;
 			}
 
 			DLOG("Download size: " << preparedUpdate.estimates.downloadSize);
@@ -464,7 +500,8 @@ namespace mmo
 			{
 				const std::scoped_lock lock{ m_progressMutex };
 				DLOG("Updated " << m_filesDone << " / " << m_fileCount << " files, "
-					<< m_updated << " / " << m_updateSize << " bytes");
+					<< m_received << " / " << m_downloadSize << " bytes received, "
+					<< m_updated << " / " << m_updateSize << " bytes written");
 			}
 
 			ILOG("Game is up-to-date!");
