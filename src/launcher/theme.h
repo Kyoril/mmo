@@ -40,12 +40,9 @@ namespace mmo
 		/// stretches rather than tiles.
 		constexpr NineSliceDef PanelBottom{ IDR_PNG_PANEL_BOTTOM, { 44, 18, 44, 18 }, false };
 
-		/// fg4_borders_01_03, 984x623. The window frame, drawn with NineSliceFill::FrameOnly:
-		/// the source's middle is an opaque panel fill, which would paint over the splash.
-		/// 48 captures the metal band plus a thin inner lip; more drags in the interior
-		/// gradient, less clips the corner ornaments. The unused middle of the asset has
-		/// been cleared to transparent so it costs almost nothing to embed.
-		constexpr NineSliceDef WindowBorder{ IDR_PNG_BORDER_FRAME, { 48, 48, 48, 48 }, false };
+		/// Detailed bronze frame, trimmed and normalized to 963x557 in the view.
+		/// Wider corner slices preserve the brackets; the transparent center is omitted.
+		constexpr NineSliceDef WindowBorder{ IDR_PNG_BORDER_REFINED, { 112, 80, 112, 80 }, false };
 
 		/// fg4_borders_01_07, 970x118. Used frame-only around the panoramic feature
 		/// art. The 18px bevel rail is preserved while the long straight runs stretch.
@@ -68,11 +65,11 @@ namespace mmo
 		constexpr NineSliceDef ProgressFill{ IDR_PNG_PROGRESS_FILL, { 9, 9, 9, 9 }, false };
 
 		// --- colors ------------------------------------------------------------
-		constexpr Color TitleColor = FromArgb(0xFFE8D8B0);
+		constexpr Color TitleColor = FromArgb(0xFFFFD88A);
 		constexpr Color TitleOutline = FromArgb(0xC0000000);
 		constexpr Color VersionColor = FromArgb(0x88E8D8B0);
 
-		constexpr Color StatusColor = FromArgb(0xFFD8C7A4);
+		constexpr Color StatusColor = FromArgb(0xFFE1DED7);
 		constexpr Color StatusErrorColor = FromArgb(0xFFE08A70);
 		constexpr Color StatusWarningColor = FromArgb(0xFFE8C060);
 		constexpr Color PercentColor = FromArgb(0xFFF0E2C0);
@@ -81,7 +78,7 @@ namespace mmo
 		constexpr Color HeroBacking = FromArgb(0xFF090705);
 		constexpr Color HeroScrimFrom = FromArgb(0x00000000);
 		constexpr Color HeroScrimTo = FromArgb(0xE6080503);
-		constexpr Color HeroTitleColor = FromArgb(0xFFF3D58A);
+		constexpr Color HeroTitleColor = FromArgb(0xFFFFCF70);
 		constexpr Color HeroSubtitleColor = FromArgb(0xFFD2C09A);
 		constexpr Color ContentShade = FromArgb(0xC4000000);
 
@@ -122,13 +119,13 @@ namespace mmo
 
 		// --- fonts -------------------------------------------------------------
 		/// Logical pixel heights; scaled by DPI when the faces are built.
-		constexpr int32 TitleFontSize = 15;
+		constexpr int32 TitleFontSize = 32;
 		constexpr int32 HeroTitleFontSize = 24;
-		constexpr int32 HeroSubtitleFontSize = 11;
+		constexpr int32 HeroSubtitleFontSize = 13;
 		constexpr int32 VersionFontSize = 11;
-		constexpr int32 StatusFontSize = 13;
+		constexpr int32 StatusFontSize = 14;
 		constexpr int32 PercentFontSize = 12;
-		constexpr int32 PlayFontSize = 26;
+		constexpr int32 PlayFontSize = 22;
 
 		// --- motion ------------------------------------------------------------
 		/// Seconds for a button's hover glow to fade fully in or out.

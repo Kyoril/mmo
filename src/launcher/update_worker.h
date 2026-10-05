@@ -60,10 +60,15 @@ namespace mmo
 
 		void Start();
 
+		/// Starts a fresh verification run after a completed or failed update. UI thread only.
+		bool Restart();
+
 		/// Asks the run to stop as soon as possible and returns immediately. Running
 		/// downloads are aborted, so this is safe to call the moment the user closes the
 		/// window. Callable from any thread.
 		void RequestStop();
+		/// Pauses transfers at the next chunk boundary; resumes without discarding progress.
+		void SetPaused(bool paused);
 
 		/// Asks the run to stop and waits up to `timeout` for it to end. Returns true if
 		/// the worker has ended (or never started) and the thread was joined. On false
@@ -88,6 +93,7 @@ namespace mmo
 
 		/// Pushes the download counters into the model. m_progressMutex must be held.
 		void PublishDownloadProgress();
+		void WaitWhilePaused();
 
 		LauncherModel& m_model;
 		UpdateWorkerConfig m_config;
@@ -127,6 +133,12 @@ namespace mmo
 		std::uintmax_t m_updated = 0;
 		std::uintmax_t m_filesDone = 0;
 		std::uintmax_t m_filesChecked = 0;
+		std::chrono::steady_clock::time_point m_downloadStarted;
+		std::mutex m_pauseMutex;
+		std::condition_variable m_pauseCondition;
+		std::atomic<bool> m_paused{false};
+		std::chrono::steady_clock::time_point m_pauseStarted;
+		std::chrono::steady_clock::duration m_pausedDuration{};
 
 		friend struct ModelProgressHandler;
 	};

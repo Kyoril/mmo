@@ -3,87 +3,39 @@
 #pragma once
 
 #include "geometry.h"
-
 #include "base/typedefs.h"
 
 namespace mmo::layout
 {
-	/// The launcher is authored once at this size in logical units and scaled to the
-	/// physical surface at composite time. Every rectangle below is used by both the
-	/// drawing code and the hit testing, so there is exactly one definition of where
-	/// anything is.
-	constexpr int32 WindowWidth = 900;
-	constexpr int32 WindowHeight = 550;
-
-	// --- window frame ---------------------------------------------------------
-	/// The ornate border wraps the whole window; all content sits inside its opening.
-	constexpr Rect WindowFrame{ 0, 0, WindowWidth, WindowHeight };
-
-	/// How far the frame art reaches in from each edge. Content is inset by this.
-	constexpr int32 FrameThickness = 48;
-
-	/// The frame's inner opening. Everything below lives inside it, and the splash is
-	/// clipped to it: outside the frame art's silhouette the window is a real hole
-	/// through to the desktop, so anything drawn out there would fill it back in.
-	constexpr Rect Content{
-		FrameThickness, FrameThickness,
-		WindowWidth - FrameThickness, WindowHeight - FrameThickness
-	};
-
-	// --- feature art ----------------------------------------------------------
-	/// The panoramic artwork has its own framed stage. Its aspect ratio closely matches
-	/// the source art, keeping the whole castle readable instead of cover-cropping most
-	/// of it away to fill the much taller window.
-	constexpr Rect HeroFrame{ 62, 104, 838, 376 };
-	constexpr Rect HeroImage{ 72, 114, 828, 364 };
-
-	/// Crop anchor for replacement art that does not exactly match HeroImage.
+	/// Shared logical dimensions, scaled for the display DPI.
+	constexpr int32 WindowWidth = 1140;
+	constexpr int32 WindowHeight = 740;
+	constexpr int32 FrameThickness = 32;
+	constexpr Rect WindowFrame{0, 0, WindowWidth, WindowHeight};
+	constexpr Rect Content{32, 32, 1108, 708};
+	constexpr Rect TitleBarPlate{32, 32, 1108, 100};
+	constexpr Rect TitleBarEdge{32, 98, 1108, 100};
+	constexpr Rect TitleBarShadow{32, 100, 1108, 108};
+	constexpr Rect Caption{0, 0, WindowWidth, 100};
+	constexpr Rect TitleText{66, 38, 374, 96};
+	constexpr Rect VersionText{906, 62, 990, 84};
+	constexpr Rect MinimizeButton{996, 54, 1030, 88};
+	constexpr Rect CloseButton{1040, 54, 1074, 88};
+	constexpr int32 TitleIconSize = 16;
+	constexpr Rect Page{64, 112, 1076, 578};
+	constexpr Rect HeroFrame{64, 112, 716, 406};
+	constexpr Rect HeroImage{72, 120, 708, 398};
+	constexpr Rect HeroScrim{72, 276, 708, 398};
+	constexpr Rect HeroTitle{92, 332, 700, 368};
+	constexpr Rect HeroSubtitle{94, 368, 692, 390};
 	constexpr float SplashAnchorX = 0.5f;
 	constexpr float SplashAnchorY = 0.45f;
-
-	/// A dark lower ramp gives the feature caption a stable reading surface without
-	/// flattening the brighter upper half of the artwork.
-	constexpr Rect HeroScrim{ 72, 270, 828, 364 };
-
-	constexpr Rect HeroTitle{ 96, 300, 700, 332 };
-	constexpr Rect HeroSubtitle{ 98, 332, 640, 352 };
-
-	/// The title row is an opaque piece of window chrome, not text floating over the
-	/// content surface. A short shadow below it separates chrome from feature content.
-	constexpr Rect TitleBarPlate{ FrameThickness, FrameThickness,
-		WindowWidth - FrameThickness, 96 };
-	constexpr Rect TitleBarEdge{ FrameThickness, 94,
-		WindowWidth - FrameThickness, 97 };
-	constexpr Rect TitleBarShadow{ FrameThickness, 97,
-		WindowWidth - FrameThickness, 104 };
-
-	/// Applied to the frame's opening, not the window, so the darkening lands on the
-	/// leather and feature stage instead of underneath the border.
-	constexpr float VignetteStrength = 0.22f;
-
-	// --- title bar ------------------------------------------------------------
-	/// The drag strip covers the whole top of the window including the frame itself,
-	/// so the border is grabbable and not just the text row. The buttons are carved
-	/// out of it in LauncherView::HitTestCaption.
-	constexpr Rect Caption{ 0, 0, WindowWidth, 88 };
-
-	constexpr Rect TitleText{ 68, 48, 600, 88 };
-	constexpr Rect VersionText{ 600, 60, 756, 80 };
-	constexpr Rect MinimizeButton{ 768, 52, 800, 84 };
-	constexpr Rect CloseButton{ 808, 52, 840, 84 };
-
-	/// Titlebar icons are square and centered in their button.
-	constexpr int32 TitleIconSize = 16;
-
-	// --- bottom bar -----------------------------------------------------------
-	/// 98 tall on purpose: that is exactly the source art's height, so at 100% DPI the
-	/// panel needs no vertical resampling and only its center stretches horizontally.
-	/// Sits inside the frame opening with a small margin below it.
-	constexpr Rect BottomPanel{ 60, 392, 840, 490 };
-
-	constexpr Rect StatusLabel{ 88, 410, 580, 430 };
-	constexpr Rect ProgressTrack{ 88, 434, 580, 462 };
-	constexpr Rect PercentText{ 480, 437, 577, 459 };
-	constexpr Rect NoticeLabel{ 88, 465, 580, 482 };
-	constexpr Rect PlayButton{ 600, 408, 820, 474 };
+	constexpr float VignetteStrength = 0.15f;
+	constexpr Rect BottomPanel{32, 592, 1108, 708};
+	constexpr Rect StatusLabel{88, 608, 626, 632};
+	constexpr Rect ProgressTrack{88, 634, 552, 674};
+	constexpr Rect PercentText{478, 634, 548, 674};
+	constexpr Rect PauseButton{568, 634, 626, 677};
+	constexpr Rect NoticeLabel{664, 632, 834, 682};
+	constexpr Rect PlayButton{858, 634, 1058, 677};
 }

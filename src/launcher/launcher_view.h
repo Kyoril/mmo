@@ -4,6 +4,10 @@
 
 #include "bitmap.h"
 #include "launcher_model.h"
+#include "launcher_content.h"
+#include "launcher_content_service.h"
+#include <array>
+#include <vector>
 #include "platform_host.h"
 #include "text_renderer.h"
 #include "widget.h"
@@ -38,6 +42,8 @@ namespace mmo
 
 		/// Applies the latest state from the model.
 		void ApplySnapshot(const UpdateSnapshot& snapshot);
+		/// Applies an immutable remote-content snapshot on the UI thread.
+		void ApplyRemoteContent(std::shared_ptr<const RemoteLauncherContent> content);
 
 		/// Advances animations. Returns true if anything moved and a repaint is needed.
 		bool Tick(float deltaSeconds);
@@ -49,6 +55,13 @@ namespace mmo
 		/// titlebar buttons so that clicking those does not start a window drag.
 		bool HitTestCaption(const Point& logical) const;
 
+		/// Scrolls the current article or list in logical pixels.
+		void OnScroll(int32 delta);
+		/// Moves keyboard focus, activates it, or scrolls the current page.
+		void OnKey(int32 key, bool shift);
+
+		/// True when an enabled control occupies the logical point.
+		bool HasControlAt(const Point& logical);
 		void OnMouseMove(const Point& logical);
 		void OnMouseLeave();
 		void OnMouseDown(const Point& logical);
@@ -62,66 +75,103 @@ namespace mmo
 		Insets Scale(const Insets& logical) const;
 
 	private:
-		bool LoadAssets();
-		bool BuildFonts();
+	  enum class Page
+	  {
+		  Home,
+		  News,
+		  PatchNotes,
+		  Settings
+	  };
+	  void SelectPage(Page page);
+	  void BuildPageButtons();
+	  std::vector<Button*> GetButtons();
+	  void DrawPage(Canvas& canvas);
+	  void DrawTextLine(Canvas& canvas, const std::string& text, Rect area, bool heading = false, bool gold = false, TextAlign align = TextAlign::Left);
+	  void DrawPanel(Canvas& canvas, Rect area);
+	  void DrawArtwork(Canvas& canvas, uint32 resourceId, Rect area, const std::string& image = {});
+	  int32 DrawParagraph(Canvas& canvas, const std::string& text, Rect area, bool heading = false);
+	  void DrawArticle(Canvas& canvas, const LauncherArticle& article, Rect area);
 
-		/// Composites the splash, scrims, vignette and panel into m_background.
-		/// Everything above that changes per frame, so this runs only on a scale change.
-		void RebuildBackground();
+	  bool LoadAssets();
+	  bool BuildFonts();
 
-		const Bitmap* GetAsset(uint32 resourceId) const;
+	  /// Composites the splash, scrims, vignette and panel into m_background.
+	  /// Everything above that changes per frame, so this runs only on a scale change.
+	  void RebuildBackground();
 
-		/// Mattes the outer band and draws the ornate window frame over it.
-		void DrawWindowFrame(Canvas& canvas);
+	  const Bitmap* GetAsset(uint32 resourceId) const;
 
-		void DrawButton(Canvas& canvas, const Button& button);
-		void DrawProgress(Canvas& canvas);
-		void DrawLabel(Canvas& canvas, FontFace& face, const Label& label,
-			const TextStyle& style);
+	  /// Mattes the outer band and draws the ornate window frame over it.
+	  void DrawWindowFrame(Canvas& canvas);
 
-		Button* FindButtonAt(const Point& logical);
+	  void DrawButton(Canvas& canvas, const Button& button);
+	  void DrawProgress(Canvas& canvas);
+	  void DrawLabel(Canvas& canvas, FontFace& face, const Label& label, const TextStyle& style);
 
-		IPlatformHost& m_host;
+	  Button* FindButtonAt(const Point& logical);
 
-		float m_dpiScale = 1.0f;
-		bool m_dirty = true;
+	  IPlatformHost& m_host;
 
-		/// Decoded art, keyed by resource id.
-		std::unordered_map<uint32, Bitmap> m_assets;
+	  float m_dpiScale = 1.0f;
+	  bool m_dirty = true;
 
-		/// The feature art cover-fitted to its stage once per scale change, so the
-		/// per-frame path is a filtered 1:1 blit rather than a resize.
-		Bitmap m_heroScaled;
+	  /// Decoded art, keyed by resource id.
+	  std::unordered_map<uint32, Bitmap> m_assets;
 
-		/// Titlebar icons resampled once from 128x128 to their drawn size. An 8x
-		/// bilinear reduction per frame would alias badly; stb's filtered reduction
-		/// does not.
-		Bitmap m_closeIcon;
-		Bitmap m_minimizeIcon;
+	  /// Titlebar icons resampled once from 128x128 to their drawn size. An 8x
+	  /// bilinear reduction per frame would alias badly; stb's filtered reduction
+	  /// does not.
+	  Bitmap m_closeIcon;
+	  Bitmap m_minimizeIcon;
+		Bitmap m_windowFrameScaled;
+		std::array<Bitmap, 3> m_sectionIcons;
 
-		/// Splash + scrims + vignette + panel, composited once.
-		Bitmap m_background;
+	  /// Splash + scrims + vignette + panel, composited once.
+	  Bitmap m_background;
+	  Bitmap m_pageCache;
+	  bool m_pageDirty = true;
 
-		std::unique_ptr<FontFace> m_titleFont;
-		std::unique_ptr<FontFace> m_heroTitleFont;
-		std::unique_ptr<FontFace> m_heroSubtitleFont;
-		std::unique_ptr<FontFace> m_versionFont;
-		std::unique_ptr<FontFace> m_statusFont;
-		std::unique_ptr<FontFace> m_percentFont;
-		std::unique_ptr<FontFace> m_playFont;
+	  std::unique_ptr<FontFace> m_titleFont;
+	  std::unique_ptr<FontFace> m_headingFont;
+		std::unique_ptr<FontFace> m_sectionFont;
+	  std::unique_ptr<FontFace> m_heroTitleFont;
+	  std::unique_ptr<FontFace> m_heroSubtitleFont;
+	  std::unique_ptr<FontFace> m_versionFont;
+	  std::unique_ptr<FontFace> m_statusFont;
+	  std::unique_ptr<FontFace> m_percentFont;
+	  std::unique_ptr<FontFace> m_playFont;
 
-		Button m_playButton;
-		Button m_closeButton;
-		Button m_minimizeButton;
-		ProgressBar m_progress;
-		Label m_titleLabel;
-		Label m_heroTitleLabel;
-		Label m_heroSubtitleLabel;
-		Label m_versionLabel;
-		Label m_statusLabel;
-		Label m_percentLabel;
-		Label m_noticeLabel;
+	  LauncherContent m_content;
+	  std::shared_ptr<const RemoteLauncherContent> m_remoteContent;
+	  Page m_page = Page::Home;
+	  std::array<Button, 4> m_navigation;
+	  std::vector<Button> m_pageButtons;
+	  int32 m_selectedArticle = -1;
+	  int32 m_selectedPatch = 0;
+	  int32 m_newsOffset = 0;
+	  int32 m_patchOffset = 0;
+	  int32 m_scroll = 0;
+	  int32 m_maxScroll = 0;
+	  int32 m_focus = -1;
+	  bool m_keepOpen = false;
+	  bool m_settingsSaved = false;
+	  bool m_contentRefreshed = false;
+	  Button m_playButton;
+	  Button m_pauseButton;
+	  bool m_paused = false;
+	  Button m_closeButton;
+	  Button m_minimizeButton;
+	  ProgressBar m_progress;
+	  std::string m_downloadSizeText;
+	  std::string m_downloadRateText;
+	  Label m_titleLabel;
+	  Label m_heroTitleLabel;
+	  Label m_heroSubtitleLabel;
+	  Label m_versionLabel;
+	  Label m_statusLabel;
+	  Label m_percentLabel;
+	  Label m_noticeLabel;
 
-		bool m_progressIndeterminate = true;
+	  bool m_progressIndeterminate = true;
 	};
 }

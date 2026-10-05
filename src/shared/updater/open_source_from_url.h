@@ -31,6 +31,8 @@ namespace mmo::updating
 		/// from any thread that downloads. These are the bytes actually transferred, i.e.
 		/// compressed for compressed files. Only HTTPS sources report it.
 		std::function<void(std::uintmax_t bytes)> onBytesReceived;
+		/// Holds back new prefetch batches while true. Already issued requests finish.
+		const std::atomic<bool>* pause = nullptr;
 
 		/// Background connections that download announced small files ahead of time with
 		/// HTTP pipelining (see IUpdateSource::prefetch). Zero disables prefetching.

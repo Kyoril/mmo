@@ -271,6 +271,30 @@ TEST_CASE("https Connection reuses one connection for several requests", "[https
 	CHECK(server.GetRequests() == 3);
 }
 
+TEST_CASE("https Connection enforces configured body limits for every transfer framing", "[https_client][network]")
+{
+	const std::string body = "0123456789";
+	std::string wire;
+	SECTION("Content-Length")
+	{
+		wire = "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n" + body;
+	}
+	SECTION("Chunked")
+	{
+		wire = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n01234\r\n5\r\n56789\r\n0\r\n\r\n";
+	}
+	SECTION("Connection close")
+	{
+		wire = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n" + body;
+	}
+	TlsServer server([&](const std::string&) { return Reply{wire}; });
+	net::https_client::RequestOptions options;
+	options.maxResponseBytes = 6;
+	options.inactivityTimeout = std::chrono::seconds(2);
+	net::https_client::Connection connection("127.0.0.1", server.GetPort(), options, MakeClientContext());
+	CHECK_THROWS(connection.Send(MakeRequest("/")));
+}
+
 TEST_CASE("https Connection decodes chunked bodies", "[https_client][network]")
 {
 	TlsServer server([](const std::string&)
@@ -527,6 +551,31 @@ TEST_CASE("HTTPSUpdateSource prefetches announced files with pipelining", "[upda
 	// Every file was requested exactly once, whether prefetched or claimed by the reader.
 	CHECK(server.GetRequests() == 100);
 	CHECK(server.GetPipelinedRequests() > 0);
+}
+
+TEST_CASE("HTTPSUpdateSource holds new prefetch batches during pause and resumes them", "[updater][network]")
+{
+	TlsServer server(EchoPath);
+	std::atomic<bool> paused{true};
+	auto options = MakePrefetchOptions();
+	options.pause = &paused;
+	updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/patch", options, MakeClientContext());
+	const auto files = MakeFiles(16);
+	source.prefetch(files);
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	CHECK(server.GetRequests() == 0);
+	paused = false;
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+	while (server.GetRequests() < files.size() && std::chrono::steady_clock::now() < deadline)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	REQUIRE(server.GetRequests() == files.size());
+	for (const auto& file : files)
+	{
+		CHECK(ReadFileContent(source, file.path) == "/patch/" + file.path);
+	}
+	CHECK(server.GetRequests() == files.size());
 }
 
 TEST_CASE("HTTPSUpdateSource recovers when the server drops pipelined requests", "[updater][network]")

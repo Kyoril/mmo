@@ -9,7 +9,10 @@
 #include "log/default_log_levels.h"
 
 #include <array>
+#include <algorithm>
 #include <windowsx.h>
+#include <ShlObj.h>
+#include <shellapi.h>
 
 namespace mmo
 {
@@ -47,6 +50,18 @@ namespace mmo
 			{
 				setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 			}
+		}
+
+		float fitDpiScale(const HMONITOR monitor, const float requested)
+		{
+			MONITORINFO info{sizeof(info)};
+			if (!GetMonitorInfoW(monitor, &info))
+			{
+				return requested;
+			}
+			const float widthScale = static_cast<float>(info.rcWork.right - info.rcWork.left - 24) / layout::WindowWidth;
+			const float heightScale = static_cast<float>(info.rcWork.bottom - info.rcWork.top - 24) / layout::WindowHeight;
+			return (std::min)(requested, (std::min)(widthScale, heightScale));
 		}
 
 		uint32 GetWindowDpi(const HWND handle)
@@ -130,7 +145,8 @@ namespace mmo
 			return false;
 		}
 
-		m_dpiScale = static_cast<float>(GetWindowDpi(m_handle)) / static_cast<float>(USER_DEFAULT_SCREEN_DPI);
+		m_dpiScale = fitDpiScale(MonitorFromWindow(m_handle, MONITOR_DEFAULTTONEAREST),
+								 static_cast<float>(GetWindowDpi(m_handle)) / static_cast<float>(USER_DEFAULT_SCREEN_DPI));
 
 		if (!m_view.Initialize(m_dpiScale))
 		{
@@ -265,7 +281,70 @@ namespace mmo
 		CloseHandle(processInfo.hThread);
 		CloseHandle(processInfo.hProcess);
 
-		Close();
+		if (!GetKeepOpen())
+		{
+			Close();
+		}
+	}
+
+	std::string LauncherWindow::GetGameDirectory() const
+	{
+		std::array<char, 32768> directory{};
+		const DWORD length = GetCurrentDirectoryA(static_cast<DWORD>(directory.size()), directory.data());
+		return length > 0 && length < directory.size() ? directory.data() : ".";
+	}
+
+	bool LauncherWindow::GetKeepOpen() const
+	{
+		const std::string path = GetGameDirectory() + "/launcher.ini";
+		return GetPrivateProfileIntA("Launcher", "KeepOpen", 0, path.c_str()) != 0;
+	}
+
+	bool LauncherWindow::SaveKeepOpen(const bool keepOpen)
+	{
+		const std::string path = GetGameDirectory() + "/launcher.ini";
+		return WritePrivateProfileStringA("Launcher", "KeepOpen", keepOpen ? "1" : "0", path.c_str()) != FALSE;
+	}
+
+	void LauncherWindow::OpenGameDirectory()
+	{
+		ShellExecuteA(m_handle, "open", GetGameDirectory().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+	}
+
+	void LauncherWindow::OpenLogDirectory()
+	{
+		std::array<char, MAX_PATH> directory{};
+		if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_MYDOCUMENTS, nullptr, SHGFP_TYPE_CURRENT, directory.data())))
+		{
+			const std::string path = std::string(directory.data()) + "/MMORPG/Logs";
+			ShellExecuteA(m_handle, "open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+		}
+	}
+
+	bool LauncherWindow::SetDownloadPaused(const bool paused)
+	{
+		UpdateSnapshot snapshot;
+		uint32 version = 0;
+		m_model.TryGetSnapshot(snapshot, version);
+		if (snapshot.phase != UpdatePhase::Updating)
+		{
+			return false;
+		}
+		m_worker.SetPaused(paused);
+		return true;
+	}
+
+	bool LauncherWindow::RepairGame()
+	{
+		if (!m_worker.Restart())
+		{
+			return false;
+		}
+		UpdateSnapshot snapshot;
+		snapshot.phase = UpdatePhase::Preparing;
+		snapshot.statusText = "Checking game files...";
+		m_view.ApplySnapshot(snapshot);
+		return true;
 	}
 
 	void LauncherWindow::NotifySelfUpdateFinished() const
@@ -325,8 +404,31 @@ namespace mmo
 		ReleaseDC(nullptr, screenDc);
 	}
 
+	void LauncherWindow::StartContent(const std::string& url)
+	{
+		PWSTR localDirectory = nullptr;
+		if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localDirectory)))
+		{
+			WLOG("Launcher content cache directory unavailable");
+			return;
+		}
+		const auto cacheDirectory = std::filesystem::path(localDirectory) / "AlestiaOnline" / "Launcher" / "content";
+		CoTaskMemFree(localDirectory);
+		m_contentService.Start(url, cacheDirectory);
+		std::shared_ptr<const RemoteLauncherContent> content;
+		if (m_contentService.TryGetContent(content, m_contentRevision))
+		{
+			m_view.ApplyRemoteContent(std::move(content));
+		}
+	}
+
 	void LauncherWindow::OnTimer()
 	{
+		std::shared_ptr<const RemoteLauncherContent> content;
+		if (m_contentService.TryGetContent(content, m_contentRevision))
+		{
+			m_view.ApplyRemoteContent(std::move(content));
+		}
 		UpdateSnapshot snapshot;
 		if (m_model.TryGetSnapshot(snapshot, m_lastSeenVersion))
 		{
@@ -344,7 +446,8 @@ namespace mmo
 
 	void LauncherWindow::OnDpiChanged(const uint32 dpi, const RECT& suggested)
 	{
-		m_dpiScale = static_cast<float>(dpi) / static_cast<float>(USER_DEFAULT_SCREEN_DPI);
+		m_dpiScale = fitDpiScale(MonitorFromRect(&suggested, MONITOR_DEFAULTTONEAREST),
+								 static_cast<float>(dpi) / static_cast<float>(USER_DEFAULT_SCREEN_DPI));
 
 		// Rebuilds the fonts at the new pixel size, rescales the splash and re-composites
 		// the cached background.
@@ -354,11 +457,7 @@ namespace mmo
 
 		// Using the suggested rectangle is mandatory rather than computing one: it is
 		// what keeps a drag across a DPI boundary from fighting the cursor.
-		SetWindowPos(m_handle, nullptr,
-			suggested.left, suggested.top,
-			suggested.right - suggested.left,
-			suggested.bottom - suggested.top,
-			SWP_NOZORDER | SWP_NOACTIVATE);
+		SetWindowPos(m_handle, nullptr, suggested.left, suggested.top, m_surfaceWidth, m_surfaceHeight, SWP_NOZORDER | SWP_NOACTIVATE);
 
 		RenderAndPresent();
 	}
@@ -429,6 +528,16 @@ namespace mmo
 		case WM_NCLBUTTONDBLCLK:
 			return 0;
 
+		case WM_SETCURSOR:
+		{
+			POINT point{};
+			GetCursorPos(&point);
+			ScreenToClient(m_handle, &point);
+			const LPCWSTR cursor = reinterpret_cast<LPCWSTR>(m_view.HasControlAt(ToLogical(point)) ? IDC_HAND : IDC_ARROW);
+			SetCursor(LoadCursorW(nullptr, cursor));
+			return TRUE;
+		}
+
 		case WM_MOUSEMOVE:
 		{
 			if (!m_trackingMouse)
@@ -444,6 +553,14 @@ namespace mmo
 			return 0;
 		}
 
+		case WM_MOUSEWHEEL:
+			m_view.OnScroll(-GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA * 72);
+			return 0;
+
+		case WM_CAPTURECHANGED:
+			m_view.OnMouseLeave();
+			return 0;
+
 		case WM_MOUSELEAVE:
 			m_trackingMouse = false;
 			m_view.OnMouseLeave();
@@ -456,8 +573,8 @@ namespace mmo
 			return 0;
 
 		case WM_LBUTTONUP:
-			ReleaseCapture();
 			m_view.OnMouseUp(ToLogical(POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) }));
+			ReleaseCapture();
 			return 0;
 
 		case WM_DPICHANGED:
@@ -469,6 +586,7 @@ namespace mmo
 			return 0;
 
 		case WM_KEYDOWN:
+			m_view.OnKey(static_cast<int32>(wParam), (GetKeyState(VK_SHIFT) & 0x8000) != 0);
 			if (wParam == VK_ESCAPE)
 			{
 				Close();

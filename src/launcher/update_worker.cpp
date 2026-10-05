@@ -97,6 +97,7 @@ namespace mmo
 
 		void updateFile(const std::string& name, const std::uintmax_t size, const std::uintmax_t loaded) override
 		{
+			m_worker.WaitWhilePaused();
 			if (m_worker.m_shouldQuit)
 			{
 				throw updating::UpdateCancelled();
@@ -136,9 +137,74 @@ namespace mmo
 		m_thread = std::thread([this] { Run(); });
 	}
 
+	bool UpdateWorker::Restart()
+	{
+		{
+			const std::scoped_lock lock{m_finishedMutex};
+			if (!m_finished)
+			{
+				return false;
+			}
+		}
+		if (m_thread.joinable())
+		{
+			m_thread.join();
+		}
+		{
+			const std::scoped_lock lock{m_progressMutex};
+			m_fileProgress.clear();
+			m_updateSize = 0;
+			m_fileCount = 0;
+			m_updated = 0;
+			m_filesDone = 0;
+			m_filesChecked = 0;
+		}
+		m_finished = false;
+		m_shouldQuit = false;
+		m_model.SetPhase(UpdatePhase::Preparing);
+		m_model.SetStatus("Checking game files...");
+		m_model.SetNotice("");
+		m_model.SetProgress(-1.0f);
+		Start();
+		return true;
+	}
+
 	void UpdateWorker::RequestStop()
 	{
-		m_shouldQuit = true;
+		{
+			const std::scoped_lock lock{m_pauseMutex};
+			m_shouldQuit = true;
+		}
+		m_pauseCondition.notify_all();
+	}
+
+	void UpdateWorker::SetPaused(const bool paused)
+	{
+		{
+			const std::scoped_lock lock{m_pauseMutex};
+			if (m_paused == paused)
+			{
+				return;
+			}
+			const auto now = std::chrono::steady_clock::now();
+			if (paused)
+			{
+				m_pauseStarted = now;
+			}
+			else
+			{
+				m_pausedDuration += now - m_pauseStarted;
+			}
+			m_paused = paused;
+			m_model.SetPaused(paused);
+		}
+		m_pauseCondition.notify_all();
+	}
+
+	void UpdateWorker::WaitWhilePaused()
+	{
+		std::unique_lock lock{m_pauseMutex};
+		m_pauseCondition.wait(lock, [this] { return !m_paused || m_shouldQuit.load(); });
 	}
 
 	bool UpdateWorker::Stop(const std::chrono::milliseconds timeout)
@@ -266,6 +332,29 @@ namespace mmo
 		if (m_downloadSize > 0)
 		{
 			status += "  (" + FormatByteSize(received) + " / " + FormatByteSize(m_downloadSize) + ")";
+			const auto loaded = received;
+			double elapsed;
+			{
+				const std::scoped_lock lock{m_pauseMutex};
+				const auto now = m_paused ? m_pauseStarted : std::chrono::steady_clock::now();
+				elapsed = std::chrono::duration<double>(now - m_downloadStarted - m_pausedDuration).count();
+			}
+			std::string rate = "Measuring speed...";
+			if (elapsed >= 1.0 && loaded > 0)
+			{
+				const double bytesPerSecond = static_cast<double>(loaded) / elapsed;
+				const auto seconds = static_cast<uint64>((m_downloadSize - loaded) / bytesPerSecond);
+				rate = FormatByteSize(static_cast<std::uintmax_t>(bytesPerSecond)) + "/s  |  ~";
+				if (seconds >= 3600)
+				{
+					rate += std::to_string(seconds / 3600) + "h " + std::to_string(seconds / 60 % 60) + "m";
+				}
+				else
+				{
+					rate += std::to_string(seconds / 60) + "m " + std::to_string(seconds % 60) + "s";
+				}
+			}
+			m_model.SetDownloadDetails(FormatByteSize(loaded) + " / " + FormatByteSize(m_downloadSize), std::move(rate));
 		}
 
 		m_model.SetStatus(std::move(status));
@@ -298,6 +387,7 @@ namespace mmo
 			updating::SourceOptions sourceOptions;
 			sourceOptions.inactivityTimeout = m_config.inactivityTimeout;
 			sourceOptions.cancel = &m_shouldQuit;
+			sourceOptions.pause = &m_paused;
 			sourceOptions.prefetchConnections = m_config.pipelineConnections;
 			sourceOptions.pipelineDepth = m_config.pipelineDepth;
 			sourceOptions.onBytesReceived = [this](const std::uintmax_t bytes) { OnBytesReceived(bytes); };
@@ -393,9 +483,15 @@ namespace mmo
 			}
 
 			ILOG("Updating files...");
-			m_model.SetPhase(UpdatePhase::Updating);
 			{
 				const std::scoped_lock lock{ m_progressMutex };
+				m_downloadStarted = std::chrono::steady_clock::now();
+				{
+					const std::scoped_lock pauseLock{m_pauseMutex};
+					m_paused = false;
+					m_pausedDuration = {};
+				}
+				m_model.SetPhase(UpdatePhase::Updating);
 				PublishDownloadProgress();
 			}
 
@@ -430,6 +526,11 @@ namespace mmo
 					{
 						try
 						{
+							WaitWhilePaused();
+							if (m_shouldQuit)
+							{
+								throw updating::UpdateCancelled();
+							}
 							if (!m_config.selfUpdateEnabled)
 							{
 								try

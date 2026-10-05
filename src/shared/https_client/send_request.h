@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <cstdint>
 
 namespace mmo
 {
@@ -38,6 +39,8 @@ namespace mmo
 				/// they arrive. Lets a caller show transfer progress of large bodies, which
 				/// are otherwise only handed over once complete.
 				std::function<void(std::size_t bytes)> onBodyReceived;
+				/// Maximum response body bytes. Zero keeps the historic unlimited behavior.
+				std::uintmax_t maxResponseBytes = 0;
 			};
 
 			/// Sends `request` and reads the whole response into memory.

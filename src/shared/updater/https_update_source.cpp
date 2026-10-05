@@ -168,7 +168,8 @@ namespace mmo::updating
 					std::unique_lock lock{ m_mutex };
 					m_fetchersCondition.wait_for(lock, std::chrono::milliseconds(100), [this]
 					{
-						return IsStopping() || (!m_queue.empty() && m_buffered < m_source.m_options.prefetchBufferLimit);
+						return IsStopping() || ((!m_source.m_options.pause || !m_source.m_options.pause->load()) &&
+							!m_queue.empty() && m_buffered < m_source.m_options.prefetchBufferLimit);
 					});
 
 					if (IsStopping())
@@ -176,7 +177,8 @@ namespace mmo::updating
 						return;
 					}
 
-					while (batch.size() < m_depth && !m_queue.empty() &&
+					while ((!m_source.m_options.pause || !m_source.m_options.pause->load()) &&
+						batch.size() < m_depth && !m_queue.empty() &&
 					        m_buffered < m_source.m_options.prefetchBufferLimit)
 					{
 						std::string path = std::move(m_queue.front());

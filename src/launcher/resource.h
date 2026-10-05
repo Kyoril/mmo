@@ -25,6 +25,9 @@
 #define IDR_PNG_BORDER_FRAME            310
 #define IDR_PNG_CONTENT_TEXTURE         311
 #define IDR_PNG_HERO_FRAME              312
+#define IDR_PNG_NEWS_DEVELOPMENT 313
+#define IDR_PNG_NEWS_WORLD 314
+#define IDR_PNG_BORDER_REFINED 315
 
 // --- Embedded fonts (RCDATA, TTF): 400-499 ----------------------------------
 #define IDR_TTF_DISPLAY                 400

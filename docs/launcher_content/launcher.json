@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "hero": {
+    "image": "https://patch.mmo-dev.net/launcher/images/hero-v1.png",
+    "title": "ENTER THE WORLD OF ALESTIA",
+    "subtitle": "YOUR ADVENTURE AWAITS"
+  },
+  "news": [
+    {
+      "title": "From the development team",
+      "date": "Alestia Online",
+      "summary": "A new home for your adventure.",
+      "body": "Welcome to the Alestia Online launcher. Browse news and release notes while your game downloads.\n\n## Stay informed\nNews, patch notes and artwork can now be published independently of game updates.\n\n## Ready for your adventure\nYour download continues while you browse these pages.",
+      "image": "https://patch.mmo-dev.net/launcher/images/news-development-v1.png"
+    },
+    {
+      "title": "Explore Alestia",
+      "date": "Discover the world",
+      "summary": "Your next adventure awaits.",
+      "body": "Discover a world of towns, forests and winding paths.\n\n## A world to explore\nThese images are promotional artwork, rather than in-game screenshots.",
+      "image": "https://patch.mmo-dev.net/launcher/images/news-world-v1.png"
+    }
+  ],
+  "patches": [
+    {
+      "title": "Launcher news and artwork",
+      "date": "October 2026",
+      "summary": "Live content without a launcher rebuild.",
+      "body": "## Highlights\n- News and patch notes load independently over HTTPS.\n- Cached articles and artwork remain available offline.\n\n## Launcher improvements\n- Read while the game updates.\n- Pause and resume downloads.\n\n## Game release notes\nThis entry describes the launcher. Replace it with published game release notes when available."
+    }
+  ]
+}
