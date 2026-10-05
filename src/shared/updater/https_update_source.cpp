@@ -155,6 +155,7 @@ namespace mmo::updating
 			net::https_client::RequestOptions requestOptions;
 			requestOptions.inactivityTimeout = m_source.m_options.inactivityTimeout;
 			requestOptions.cancel = &m_stop;
+			requestOptions.onBodyReceived = m_source.m_options.onBytesReceived;
 
 			net::https_client::Connection connection(m_source.m_host, m_source.m_port, requestOptions, m_source.m_context);
 
@@ -395,6 +396,7 @@ namespace mmo::updating
 			net::https_client::RequestOptions requestOptions;
 			requestOptions.inactivityTimeout = m_options.inactivityTimeout;
 			requestOptions.cancel = m_options.cancel;
+			requestOptions.onBodyReceived = m_options.onBytesReceived;
 
 			connection = std::make_unique<net::https_client::Connection>(m_host, m_port, requestOptions, m_context);
 		}

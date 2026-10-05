@@ -353,8 +353,8 @@ namespace mmo
 		PreparedUpdate update;
 		if (!file.present && m_isChangeNecessary)	// Only add if the file needs to be downloaded
 		{
-			update.estimates.downloadSize = originalSize;
-			update.estimates.updateSize = originalSize;	// Since the files will be saved compressed with zlib
+			update.estimates.downloadSize = compressedSize;
+			update.estimates.updateSize = originalSize;
 			update.estimates.fileCount = 1;
 		}
 

@@ -300,6 +300,14 @@ namespace mmo
 					return line;
 				}
 
+				void ReportBody(const std::size_t bytes) const
+				{
+					if (bytes > 0 && options.onBodyReceived)
+					{
+						options.onBodyReceived(bytes);
+					}
+				}
+
 				/// Appends exactly `count` bytes to `out`.
 				void ReadExactly(const std::uintmax_t count, std::string& out)
 				{
@@ -317,6 +325,7 @@ namespace mmo
 						const auto begin = asio::buffers_begin(buffer.data());
 						out.append(begin, begin + static_cast<std::ptrdiff_t>(take));
 						buffer.consume(take);
+						ReportBody(take);
 					}
 				}
 
@@ -326,8 +335,10 @@ namespace mmo
 					for (;;)
 					{
 						const auto begin = asio::buffers_begin(buffer.data());
-						out.append(begin, begin + static_cast<std::ptrdiff_t>(buffer.size()));
-						buffer.consume(buffer.size());
+						const std::size_t take = buffer.size();
+						out.append(begin, begin + static_cast<std::ptrdiff_t>(take));
+						buffer.consume(take);
+						ReportBody(take);
 
 						try
 						{

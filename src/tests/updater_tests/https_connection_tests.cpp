@@ -627,6 +627,79 @@ TEST_CASE("HTTPSUpdateSource stops prefetching when destroyed", "[updater][netwo
 	CHECK(server.GetRequests() < 1000);
 }
 
+TEST_CASE("https Connection reports received body bytes", "[https_client][network]")
+{
+	const std::string payload(100000, 'x');
+	TlsServer server([&payload](const std::string& head)
+	{
+		if (head.find("/chunked") != std::string::npos)
+		{
+			return Reply{ "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n" };
+		}
+		if (head.find("/eof") != std::string::npos)
+		{
+			return Reply{ "HTTP/1.0 200 OK\r\n\r\nuntil the end", true };
+		}
+		return Reply{ "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(payload.size()) + "\r\n\r\n" + payload };
+	});
+
+	std::atomic<std::size_t> received{ 0 };
+	std::atomic<int> calls{ 0 };
+	net::https_client::RequestOptions options;
+	options.onBodyReceived = [&](const std::size_t bytes)
+	{
+		received += bytes;
+		++calls;
+	};
+
+	net::https_client::Connection connection("127.0.0.1", server.GetPort(), options, MakeClientContext());
+
+	SECTION("with a content length, as it arrives")
+	{
+		connection.Send(MakeRequest("/large"));
+		CHECK(received == payload.size());
+		CHECK(calls > 1);
+	}
+
+	SECTION("chunked, counting only the content")
+	{
+		connection.Send(MakeRequest("/chunked"));
+		CHECK(received == 11);
+	}
+
+	SECTION("up to the end of the connection")
+	{
+		net::https_client::Request request;
+		request.document = "/eof";
+		connection.Send(request);
+		CHECK(received == 13);
+	}
+}
+
+TEST_CASE("HTTPSUpdateSource reports the bytes it received", "[updater][network]")
+{
+	TlsServer server(EchoPath);
+
+	std::atomic<std::uintmax_t> received{ 0 };
+	auto options = MakePrefetchOptions();
+	options.onBytesReceived = [&received](const std::uintmax_t bytes) { received += bytes; };
+
+	updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/", options, MakeClientContext());
+
+	const auto files = MakeFiles(50);
+	source.prefetch(files);
+
+	// Prefetched and directly requested files count alike.
+	std::uintmax_t expected = 0;
+	for (const auto& file : files)
+	{
+		expected += ReadFileContent(source, file.path).size();
+	}
+	expected += ReadFileContent(source, "not/announced").size();
+
+	CHECK(received == expected);
+}
+
 TEST_CASE("Pipelining benchmark", "[.bench]")
 {
 	TlsServer server(EchoPath);

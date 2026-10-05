@@ -6,6 +6,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <functional>
 #include <memory>
 
 namespace mmo::updating
@@ -24,6 +26,11 @@ namespace mmo::updating
 		/// When set and it becomes true, running reads are aborted with UpdateCancelled.
 		/// Only HTTPS sources can abort a transfer that is already in progress.
 		const std::atomic<bool>* cancel = nullptr;
+
+		/// Called with the number of bytes received from the network whenever some arrived,
+		/// from any thread that downloads. These are the bytes actually transferred, i.e.
+		/// compressed for compressed files. Only HTTPS sources report it.
+		std::function<void(std::uintmax_t bytes)> onBytesReceived;
 
 		/// Background connections that download announced small files ahead of time with
 		/// HTTP pipelining (see IUpdateSource::prefetch). Zero disables prefetching.
