@@ -36,6 +36,8 @@ namespace mmo
 
 		/// Pumps messages until the window closes.
 		int Run();
+		/// Starts the independent content worker using the user's local cache.
+		void StartContent(const std::string& url);
 
 		HWND GetHandle() const { return m_handle; }
 
@@ -81,6 +83,8 @@ namespace mmo
 		LauncherModel& m_model;
 		UpdateWorker& m_worker;
 		LauncherView m_view;
+		LauncherContentService m_contentService;
+		uint64 m_contentRevision = 0;
 
 		HWND m_handle = nullptr;
 		HINSTANCE m_instance = nullptr;

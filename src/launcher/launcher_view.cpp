@@ -381,7 +381,10 @@ namespace mmo
 		}
 		else if (!m_contentRefreshed)
 		{
-			m_content.Load(m_host.GetGameDirectory());
+			if (!m_remoteContent)
+			{
+				m_content.Load(m_host.GetGameDirectory());
+			}
 			m_contentRefreshed = true;
 			m_selectedArticle = -1;
 			m_selectedPatch = 0;
@@ -412,6 +415,31 @@ namespace mmo
 			? std::string()
 			: std::to_string(static_cast<int32>(snapshot.progress * 100.0f + 0.5f)) + "%";
 
+		m_dirty = true;
+	}
+
+	void LauncherView::ApplyRemoteContent(std::shared_ptr<const RemoteLauncherContent> content)
+	{
+		if (!content || !content->manifest)
+		{
+			return;
+		}
+		const bool changed = !m_remoteContent || m_remoteContent->manifest->revision != content->manifest->revision;
+		m_remoteContent = std::move(content);
+		if (changed)
+		{
+			m_content.Load(m_host.GetGameDirectory());
+			m_content.Apply(m_remoteContent->manifest->news, m_remoteContent->manifest->patches);
+			m_selectedArticle = -1;
+			m_selectedPatch = 0;
+			m_newsOffset = 0;
+			m_patchOffset = 0;
+			m_scroll = 0;
+			m_heroTitleLabel.text = m_remoteContent->manifest->heroTitle.empty() ? "ENTER THE WORLD OF ALESTIA" : m_remoteContent->manifest->heroTitle;
+			m_heroSubtitleLabel.text = m_remoteContent->manifest->heroSubtitle.empty() ? "YOUR ADVENTURE AWAITS" : m_remoteContent->manifest->heroSubtitle;
+			BuildPageButtons();
+		}
+		m_pageDirty = true;
 		m_dirty = true;
 	}
 
@@ -1094,9 +1122,18 @@ namespace mmo
 		canvas.FillRect(Scale(Rect{ area.left + 2, area.top + 1, area.right - 2, area.top + 2 }), FromArgb(0x30FFFFFF));
 	}
 
-	void LauncherView::DrawArtwork(Canvas& canvas, const uint32 resourceId, const Rect area)
+	void LauncherView::DrawArtwork(Canvas& canvas, const uint32 resourceId, const Rect area, const std::string& image)
 	{
-		if (const Bitmap* bitmap = GetAsset(resourceId))
+		const Bitmap* bitmap = GetAsset(resourceId);
+		if (m_remoteContent && !image.empty())
+		{
+			const auto found = m_remoteContent->images.find(image);
+			if (found != m_remoteContent->images.end())
+			{
+				bitmap = found->second.get();
+			}
+		}
+		if (bitmap)
 		{
 			Rect source = bitmap->GetBounds();
 			const double ratio = static_cast<double>(area.GetWidth()) / area.GetHeight();
@@ -1159,6 +1196,11 @@ namespace mmo
 		y += 42;
 		y += DrawParagraph(canvas, article.summary, Rect{area.left, y, area.right - 20, y + 100});
 		y += 20;
+		if (!article.image.empty())
+		{
+			DrawArtwork(canvas, IDR_PNG_SPLASH, Rect{area.left, y, area.right - 20, y + 140}, article.image);
+			y += 160;
+		}
 		std::istringstream lines(article.body);
 		std::string line;
 		while (std::getline(lines, line))
@@ -1197,7 +1239,7 @@ namespace mmo
 		if (m_page == Page::Home)
 		{
 			DrawPanel(canvas, layout::HeroFrame);
-			DrawArtwork(canvas, IDR_PNG_SPLASH, layout::HeroImage);
+			DrawArtwork(canvas, IDR_PNG_SPLASH, layout::HeroImage, m_remoteContent ? m_remoteContent->manifest->heroImage : std::string());
 			canvas.FillGradient(Scale(layout::HeroScrim), theme::HeroScrimFrom, theme::HeroScrimTo, false);
 			TextStyle heroStyle;
 			heroStyle.outline = theme::PlayTextOutline;
@@ -1208,7 +1250,7 @@ namespace mmo
 			{
 				const int32 x = 64 + i * 332;
 				DrawPanel(canvas, Rect{x, 422, x + 320, 578});
-				DrawArtwork(canvas, i == 0 ? IDR_PNG_NEWS_DEVELOPMENT : IDR_PNG_NEWS_WORLD, Rect{x + 1, 423, x + 319, 577});
+				DrawArtwork(canvas, i == 0 ? IDR_PNG_NEWS_DEVELOPMENT : IDR_PNG_NEWS_WORLD, Rect{x + 1, 423, x + 319, 577}, news[i].image);
 				canvas.FillGradient(Scale(Rect{ x + 1, 478, x + 319, 577 }), FromArgb(0x18080E16), FromArgb(0xEA030609), false);
 				canvas.FillGradient(Scale(Rect{ x + 1, 518, x + 319, 577 }), FromArgb(0x7013212B), FromArgb(0xA005080C), false);
 				canvas.FillRect(Scale(Rect{ x + 1, 518, x + 319, 519 }), FromArgb(0x20E5F2FF));
@@ -1313,7 +1355,7 @@ namespace mmo
 					if (i == 0)
 					{
 						DrawPanel(canvas, Rect{64, 176, 706, 536});
-						DrawArtwork(canvas, IDR_PNG_NEWS_DEVELOPMENT, Rect{65, 177, 705, 535});
+						DrawArtwork(canvas, IDR_PNG_NEWS_DEVELOPMENT, Rect{65, 177, 705, 535}, article.image);
 						canvas.FillGradient(Scale(Rect{65, 310, 705, 535}), theme::HeroScrimFrom, FromArgb(0xFF090807), false);
 						DrawTextLine(canvas, article.title, Rect{88, 394, 684, 432}, true);
 						DrawTextLine(canvas, article.date, Rect{88, 432, 684, 458});
@@ -1324,7 +1366,7 @@ namespace mmo
 					{
 						const int32 y = 176 + (i - 1) * 180;
 						DrawPanel(canvas, Rect{724, y, 1076, y + 168});
-						DrawArtwork(canvas, i == 1 ? IDR_PNG_NEWS_WORLD : IDR_PNG_SPLASH, Rect{725, y + 1, 1075, y + 92});
+						DrawArtwork(canvas, i == 1 ? IDR_PNG_NEWS_WORLD : IDR_PNG_SPLASH, Rect{725, y + 1, 1075, y + 92}, article.image);
 						DrawTextLine(canvas, article.title, Rect{738, y + 96, 1064, y + 126}, false, true);
 						DrawTextLine(canvas, article.summary, Rect{738, y + 126, 1064, y + 156});
 					}

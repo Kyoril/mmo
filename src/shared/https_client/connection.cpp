@@ -303,6 +303,10 @@ namespace mmo
 				/// Appends exactly `count` bytes to `out`.
 				void ReadExactly(const std::uintmax_t count, std::string& out)
 				{
+					if (options.maxResponseBytes > 0 && (out.size() > options.maxResponseBytes || count > options.maxResponseBytes - out.size()))
+					{
+						throw std::runtime_error("HTTP response exceeds configured body limit");
+					}
 					const std::size_t target = out.size() + static_cast<std::size_t>(count);
 					out.reserve(target);
 
@@ -326,6 +330,10 @@ namespace mmo
 					for (;;)
 					{
 						const auto begin = asio::buffers_begin(buffer.data());
+						if (options.maxResponseBytes > 0 && (out.size() > options.maxResponseBytes || buffer.size() > options.maxResponseBytes - out.size()))
+						{
+							throw std::runtime_error("HTTP response exceeds configured body limit");
+						}
 						out.append(begin, begin + static_cast<std::ptrdiff_t>(buffer.size()));
 						buffer.consume(buffer.size());
 

@@ -5,8 +5,8 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 
-// The launcher only ever decodes its own embedded PNGs, so every other decoder is
-// dead weight in the binary and dead attack surface at runtime.
+// Embedded and remotely published artwork uses PNG exclusively. Remote payloads
+// and dimensions are bounded by the content service before decoding.
 #define STBI_ONLY_PNG
 #define STBI_NO_STDIO
 #define STBI_NO_LINEAR

@@ -14,6 +14,7 @@ namespace mmo
 		std::string date;
 		std::string summary;
 		std::string body;
+		std::string image;
 	};
 
 	/// Loads bounded UTF-8 content files; invalid files retain the embedded fallback.
@@ -24,6 +25,8 @@ namespace mmo
 		void Load(const std::string& directory);
 		/// Parses articles separated by a line containing ---. First three lines are metadata.
 		static std::vector<LauncherArticle> Parse(const std::string& text);
+		/// Applies remotely published lists, retaining fallback lists when omitted.
+		void Apply(const std::vector<LauncherArticle>& news, const std::vector<LauncherArticle>& patches);
 		/// Current news, newest first.
 		const std::vector<LauncherArticle>& GetNews() const
 		{

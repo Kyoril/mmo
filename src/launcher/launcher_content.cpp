@@ -87,11 +87,23 @@ namespace mmo
 		return result;
 	}
 
+	void LauncherContent::Apply(const std::vector<LauncherArticle>& news, const std::vector<LauncherArticle>& patches)
+	{
+		if (!news.empty())
+		{
+			m_news = news;
+		}
+		if (!patches.empty())
+		{
+			m_patches = patches;
+		}
+	}
+
 	void LauncherContent::Load(const std::string& directory)
 	{
 		m_news = Parse("From the development team\nAlestia Online\nA new home for your adventure.\n"
 					   "Welcome to the Alestia Online launcher. Browse the latest news and read update notes while your game downloads.\n\n"
-					   "## Stay informed\nNews and release notes will appear here as they are published with game updates.\n\n"
+					   "## Stay informed\nNews and release notes appear here as they are published, independently of game updates.\n\n"
 					   "## Built for your adventure\nYour download continues when you change pages. Once the update is complete, select "
 					   "PLAY to enter Alestia.\n"
 					   "---\nExplore Alestia\nDiscover the world\nYour next adventure awaits.\n"

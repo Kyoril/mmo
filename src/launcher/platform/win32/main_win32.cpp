@@ -130,12 +130,16 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 	bool selfUpdateEnabled = true;
 	bool pipeliningEnabled = true;
 	bool preview = false;
+	std::string contentUrl = "https://patch.mmo-dev.net/launcher/launcher.json";
+	bool noContent = false;
 	std::string renderPreviewDirectory;
 
 	cxxopts::Options options("Available options");
 	options.add_options()("v,version", "Displays the version of the launcher on screen.")(
 		"remove-previous", "Tries to remove a specified file", cxxopts::value<std::string>(g_previousExecutableToBeRemoved))(
 		"preview", "Shows the launcher without checking for or downloading updates", cxxopts::value<bool>(preview))(
+		"content-url", "HTTPS launcher content manifest URL", cxxopts::value<std::string>(contentUrl))(
+		"no-content", "Uses embedded content without contacting the content server", cxxopts::value<bool>(noContent))(
 		"render-preview", "Renders all launcher pages to BMP files without downloading updates",
 		cxxopts::value<std::string>(renderPreviewDirectory))("no-self-update", "Disables self-update of the launcher executable")(
 		"no-pipelining", "Requests files one at a time instead of pipelining them (for troubleshooting)")(
@@ -251,6 +255,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 		else
 		{
 			worker.Start();
+			if (!noContent)
+			{
+				window.StartContent(contentUrl);
+			}
 		}
 
 		const int result = window.Run();

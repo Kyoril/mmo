@@ -117,3 +117,6 @@ The footer groups the taller progress track and pause control separately from tr
 
 ## Develop integration and footer alignment
 Merged local develop at b3149917, including launcher HTTP pipelining. Startup keeps both preview options and --no-pipelining. The pause signal also holds back new prefetch batches; already sent batches finish. A local HTTPS test verifies no requests while initially paused, automatic prefetch after resume, and correct contents without duplicate downloads. Pause uses only its icon, and Play shares the progress controls' height and vertical center with a matching restrained gold outline.
+
+## HTTPS publishing
+The preferred content source is now the independent HTTPS manifest. See [Publishing launcher content](launcher_content/README.md) and the ready-to-upload [example manifest](launcher_content/launcher.json). Legacy news.txt and patches.txt remain optional fallback sources. The native layout and footer are unchanged.

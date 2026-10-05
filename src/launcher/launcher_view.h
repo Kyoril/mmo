@@ -5,6 +5,7 @@
 #include "bitmap.h"
 #include "launcher_model.h"
 #include "launcher_content.h"
+#include "launcher_content_service.h"
 #include <array>
 #include <vector>
 #include "platform_host.h"
@@ -41,6 +42,8 @@ namespace mmo
 
 		/// Applies the latest state from the model.
 		void ApplySnapshot(const UpdateSnapshot& snapshot);
+		/// Applies an immutable remote-content snapshot on the UI thread.
+		void ApplyRemoteContent(std::shared_ptr<const RemoteLauncherContent> content);
 
 		/// Advances animations. Returns true if anything moved and a repaint is needed.
 		bool Tick(float deltaSeconds);
@@ -85,7 +88,7 @@ namespace mmo
 	  void DrawPage(Canvas& canvas);
 	  void DrawTextLine(Canvas& canvas, const std::string& text, Rect area, bool heading = false, bool gold = false, TextAlign align = TextAlign::Left);
 	  void DrawPanel(Canvas& canvas, Rect area);
-	  void DrawArtwork(Canvas& canvas, uint32 resourceId, Rect area);
+	  void DrawArtwork(Canvas& canvas, uint32 resourceId, Rect area, const std::string& image = {});
 	  int32 DrawParagraph(Canvas& canvas, const std::string& text, Rect area, bool heading = false);
 	  void DrawArticle(Canvas& canvas, const LauncherArticle& article, Rect area);
 
@@ -139,6 +142,7 @@ namespace mmo
 	  std::unique_ptr<FontFace> m_playFont;
 
 	  LauncherContent m_content;
+	  std::shared_ptr<const RemoteLauncherContent> m_remoteContent;
 	  Page m_page = Page::Home;
 	  std::array<Button, 4> m_navigation;
 	  std::vector<Button> m_pageButtons;

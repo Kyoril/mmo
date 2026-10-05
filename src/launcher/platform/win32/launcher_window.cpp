@@ -404,8 +404,31 @@ namespace mmo
 		ReleaseDC(nullptr, screenDc);
 	}
 
+	void LauncherWindow::StartContent(const std::string& url)
+	{
+		PWSTR localDirectory = nullptr;
+		if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localDirectory)))
+		{
+			WLOG("Launcher content cache directory unavailable");
+			return;
+		}
+		const auto cacheDirectory = std::filesystem::path(localDirectory) / "AlestiaOnline" / "Launcher" / "content";
+		CoTaskMemFree(localDirectory);
+		m_contentService.Start(url, cacheDirectory);
+		std::shared_ptr<const RemoteLauncherContent> content;
+		if (m_contentService.TryGetContent(content, m_contentRevision))
+		{
+			m_view.ApplyRemoteContent(std::move(content));
+		}
+	}
+
 	void LauncherWindow::OnTimer()
 	{
+		std::shared_ptr<const RemoteLauncherContent> content;
+		if (m_contentService.TryGetContent(content, m_contentRevision))
+		{
+			m_view.ApplyRemoteContent(std::move(content));
+		}
 		UpdateSnapshot snapshot;
 		if (m_model.TryGetSnapshot(snapshot, m_lastSeenVersion))
 		{

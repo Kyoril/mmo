@@ -33,6 +33,8 @@ set(codeFiles
     widget.h
     launcher_content.h
     launcher_content.cpp
+    launcher_content_service.h
+    launcher_content_service.cpp
     launcher_layout.h
     launcher_model.h
     launcher_model.cpp

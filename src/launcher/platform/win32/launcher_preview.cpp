@@ -4,6 +4,8 @@
 #include "launcher_view.h"
 #include "launcher_layout.h"
 #include "canvas.h"
+#include "resource_data.h"
+#include "resource.h"
 #include "log/default_log_levels.h"
 
 #include <Windows.h>
@@ -199,6 +201,60 @@ namespace mmo
 			snapshot.playEnabled = false;
 			view.ApplySnapshot(snapshot);
 			if (!capture("failed"))
+			{
+				return false;
+			}
+			// Exercise live manifest application and artwork substitution without networking.
+			auto manifest = std::make_shared<LauncherManifest>();
+			if (!LauncherContentService::ParseManifest(
+				R"({"version":1,"hero":{"image":"https://preview.example/world-v1.png","title":"LIVE CONTENT PREVIEW","subtitle":"The native layout stays the same"},"news":[{"title":"Published article","summary":"Read while downloading","body":"## News\nThis article came from a manifest.","image":"https://preview.example/world-v1.png"},{"title":"Fallback artwork","summary":"A missing image keeps embedded artwork","body":"An unavailable content image does not block the launcher.","image":"https://preview.example/missing.png"}],"patches":[{"title":"Published patch notes","summary":"Independent content refresh","body":"## Highlights\n- Remote content is visible.\n\n## Launcher improvements\n- The download footer stays unchanged."}]})",
+				*manifest))
+			{
+				return false;
+			}
+			auto image = std::make_shared<Bitmap>();
+			if (!Bitmap::DecodePng(LoadResourceBlob(IDR_PNG_NEWS_WORLD), *image))
+			{
+				return false;
+			}
+			auto content = std::make_shared<RemoteLauncherContent>();
+			content->manifest = manifest;
+			content->images.emplace(manifest->heroImage, image);
+			view.ApplyRemoteContent(content);
+			snapshot.phase = UpdatePhase::Updating;
+			snapshot.statusText = "Downloading files: 7754 / 10166";
+			snapshot.noticeText.clear();
+			snapshot.progress = 0.57f;
+			view.ApplySnapshot(snapshot);
+			view.Tick(10.0f);
+			click(Point{430, 74});
+			if (!capture("remote-home"))
+			{
+				return false;
+			}
+			click(Point{554, 74});
+			if (!capture("remote-news"))
+			{
+				return false;
+			}
+			click(Point{300, 300});
+			if (!capture("remote-article"))
+			{
+				return false;
+			}
+			const Bitmap reader = surface;
+			auto refreshed = std::make_shared<RemoteLauncherContent>(*content);
+			refreshed->manifest = std::make_shared<LauncherManifest>(*manifest);
+			refreshed->images.emplace("https://preview.example/missing.png", image);
+			view.ApplyRemoteContent(refreshed);
+			view.Render(canvas);
+			if (std::memcmp(reader.GetPixels(), surface.GetPixels(), surface.GetWidth() * surface.GetHeight() * sizeof(Color)) != 0)
+			{
+				ELOG("An artwork or same-manifest refresh interrupted the article reader");
+				return false;
+			}
+			click(Point{678, 74});
+			if (!capture("remote-patch-notes"))
 			{
 				return false;
 			}

@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 
 namespace mmo
 {
@@ -31,6 +32,9 @@ namespace mmo
 				/// When set and it becomes true, the request is aborted as soon as possible.
 				/// It is polled, so it may be flipped from any thread.
 				const std::atomic<bool>* cancel = nullptr;
+
+				/// Maximum response body bytes. Zero keeps the historic unlimited behavior.
+				std::uintmax_t maxResponseBytes = 0;
 			};
 
 			/// Sends `request` and reads the whole response into memory.
