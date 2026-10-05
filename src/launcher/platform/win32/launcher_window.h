@@ -45,6 +45,12 @@ namespace mmo
 
 		// IPlatformHost
 		void LaunchGame() override;
+		std::string GetGameDirectory() const override;
+		bool GetKeepOpen() const override;
+		bool SaveKeepOpen(bool keepOpen) override;
+		void OpenGameDirectory() override;
+		void OpenLogDirectory() override;
+		bool RepairGame() override;
 		void Minimize() override;
 		void Close() override;
 		void ShowMessage(const std::string& title, const std::string& body) override;

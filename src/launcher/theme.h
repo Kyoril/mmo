@@ -122,11 +122,11 @@ namespace mmo
 
 		// --- fonts -------------------------------------------------------------
 		/// Logical pixel heights; scaled by DPI when the faces are built.
-		constexpr int32 TitleFontSize = 15;
+		constexpr int32 TitleFontSize = 23;
 		constexpr int32 HeroTitleFontSize = 24;
-		constexpr int32 HeroSubtitleFontSize = 11;
+		constexpr int32 HeroSubtitleFontSize = 13;
 		constexpr int32 VersionFontSize = 11;
-		constexpr int32 StatusFontSize = 13;
+		constexpr int32 StatusFontSize = 14;
 		constexpr int32 PercentFontSize = 12;
 		constexpr int32 PlayFontSize = 26;
 

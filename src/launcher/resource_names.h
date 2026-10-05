@@ -22,22 +22,23 @@ namespace mmo
 	};
 
 	/// Must stay in sync with the RCDATA block in launcher.rc, in both content and order.
-	constexpr ResourceName ResourceNames[] =
-	{
-		{ IDR_PNG_SPLASH,           "splash.png" },
-		{ IDR_PNG_PANEL_BOTTOM,     "panel_bottom.png" },
-		{ IDR_PNG_BUTTON_UP,        "button_up.png" },
-		{ IDR_PNG_BUTTON_OVER,      "button_over.png" },
-		{ IDR_PNG_BUTTON_DOWN,      "button_down.png" },
-		{ IDR_PNG_BUTTON_DISABLED,  "button_disabled.png" },
-		{ IDR_PNG_PROGRESS_TRACK,   "progress_track.png" },
-		{ IDR_PNG_PROGRESS_FILL,    "progress_fill.png" },
-		{ IDR_PNG_ICON_CLOSE,       "icon_close.png" },
-		{ IDR_PNG_ICON_MINIMIZE,    "icon_minimize.png" },
-		{ IDR_PNG_BORDER_FRAME,     "border_frame.png" },
-		{ IDR_PNG_CONTENT_TEXTURE,  "content_texture.png" },
-		{ IDR_PNG_HERO_FRAME,       "hero_frame.png" },
-		{ IDR_TTF_DISPLAY,          "font_display.ttf" },
-		{ IDR_TTF_BODY,             "font_body.ttf" },
+	constexpr ResourceName ResourceNames[] = {
+		{IDR_PNG_SPLASH, "splash.png"},
+		{IDR_PNG_PANEL_BOTTOM, "panel_bottom.png"},
+		{IDR_PNG_BUTTON_UP, "button_up.png"},
+		{IDR_PNG_BUTTON_OVER, "button_over.png"},
+		{IDR_PNG_BUTTON_DOWN, "button_down.png"},
+		{IDR_PNG_BUTTON_DISABLED, "button_disabled.png"},
+		{IDR_PNG_PROGRESS_TRACK, "progress_track.png"},
+		{IDR_PNG_PROGRESS_FILL, "progress_fill.png"},
+		{IDR_PNG_ICON_CLOSE, "icon_close.png"},
+		{IDR_PNG_ICON_MINIMIZE, "icon_minimize.png"},
+		{IDR_PNG_BORDER_FRAME, "border_frame.png"},
+		{IDR_PNG_CONTENT_TEXTURE, "content_texture.png"},
+		{IDR_PNG_HERO_FRAME, "hero_frame.png"},
+		{IDR_PNG_NEWS_DEVELOPMENT, "news_development.png"},
+		{IDR_PNG_NEWS_WORLD, "news_world.png"},
+		{IDR_TTF_DISPLAY, "font_display.ttf"},
+		{IDR_TTF_BODY, "font_body.ttf"},
 	};
 }

@@ -12,6 +12,7 @@ namespace mmo
 		Mutate([phase](UpdateSnapshot& state)
 		{
 			state.phase = phase;
+			state.playEnabled = phase == UpdatePhase::Ready;
 		});
 	}
 

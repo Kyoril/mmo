@@ -31,6 +31,8 @@ set(codeFiles
     platform_host.h
     theme.h
     widget.h
+    launcher_content.h
+    launcher_content.cpp
     launcher_layout.h
     launcher_model.h
     launcher_model.cpp
@@ -42,6 +44,8 @@ set(codeFiles
 
 IF(WIN32)
     LIST(APPEND codeFiles
+        platform/win32/launcher_preview.h
+        platform/win32/launcher_preview.cpp
         platform/win32/main_win32.cpp
         platform/win32/launcher_window.h
         platform/win32/launcher_window.cpp
@@ -53,6 +57,8 @@ ENDIF(WIN32)
 # parses .rc includes, so without an explicit OBJECT_DEPENDS below, editing an asset
 # would not relink and the stale copy would silently keep shipping.
 set(launcherAssets
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/news_development.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/news_world.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/splash.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/panel_bottom.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/button_up.png

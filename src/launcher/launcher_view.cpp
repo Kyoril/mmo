@@ -14,27 +14,18 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <sstream>
 
 namespace mmo
 {
 	namespace
 	{
-		/// Every image the skin needs. Decoded up front: the whole set is under half a
-		/// megabyte and decoding on demand would stutter the first hover.
-		constexpr std::array<uint32, 12> RequiredImages = {
-			IDR_PNG_SPLASH,
-			IDR_PNG_PANEL_BOTTOM,
-			IDR_PNG_BORDER_FRAME,
-			IDR_PNG_BUTTON_UP,
-			IDR_PNG_BUTTON_OVER,
-			IDR_PNG_BUTTON_DOWN,
-			IDR_PNG_BUTTON_DISABLED,
-			IDR_PNG_PROGRESS_TRACK,
-			IDR_PNG_PROGRESS_FILL,
-			IDR_PNG_ICON_CLOSE,
-			IDR_PNG_CONTENT_TEXTURE,
-			IDR_PNG_HERO_FRAME
-		};
+		/// Every image the skin needs. Decode once so opening a page does not stall
+		/// while loading its artwork.
+		constexpr std::array<uint32, 14> RequiredImages = {
+			IDR_PNG_SPLASH,			 IDR_PNG_PANEL_BOTTOM,	  IDR_PNG_BORDER_FRAME,		IDR_PNG_BUTTON_UP,	   IDR_PNG_BUTTON_OVER,
+			IDR_PNG_BUTTON_DOWN,	 IDR_PNG_BUTTON_DISABLED, IDR_PNG_PROGRESS_TRACK,	IDR_PNG_PROGRESS_FILL, IDR_PNG_ICON_CLOSE,
+			IDR_PNG_CONTENT_TEXTURE, IDR_PNG_HERO_FRAME,	  IDR_PNG_NEWS_DEVELOPMENT, IDR_PNG_NEWS_WORLD};
 
 		const NineSliceDef& SelectButtonAsset(const ButtonState state)
 		{
@@ -136,6 +127,20 @@ namespace mmo
 		m_closeButton.iconId = IDR_PNG_ICON_CLOSE;
 		m_closeButton.onClick = [this] { m_host.Close(); };
 
+		m_content.Load(m_host.GetGameDirectory());
+		m_keepOpen = m_host.GetKeepOpen();
+		const std::array<const char*, 4> tabs{"Home", "News", "Patch Notes", "Settings"};
+		for (size_t i = 0; i < m_navigation.size(); ++i)
+		{
+			Button& button = m_navigation[i];
+			button.rect = Rect{390 + static_cast<int32>(i) * 124, 50, 506 + static_cast<int32>(i) * 124, 98};
+			button.text = tabs[i];
+			button.onClick = [this, i]
+			{
+				SelectPage(static_cast<Page>(i));
+			};
+		}
+		BuildPageButtons();
 		SetDpiScale(dpiScale);
 		return true;
 	}
@@ -189,6 +194,7 @@ namespace mmo
 		};
 
 		m_titleFont = build(display, Scale(theme::TitleFontSize));
+		m_headingFont = build(body, Scale(24));
 		m_heroTitleFont = build(display, Scale(theme::HeroTitleFontSize));
 		m_heroSubtitleFont = build(body, Scale(theme::HeroSubtitleFontSize));
 		m_playFont = build(display, Scale(theme::PlayFontSize));
@@ -196,8 +202,8 @@ namespace mmo
 		m_statusFont = build(body, Scale(theme::StatusFontSize));
 		m_percentFont = build(body, Scale(theme::PercentFontSize));
 
-		if (!m_titleFont || !m_heroTitleFont || !m_heroSubtitleFont || !m_playFont
-			|| !m_versionFont || !m_statusFont || !m_percentFont)
+		if (!m_titleFont || !m_headingFont || !m_heroTitleFont || !m_heroSubtitleFont || !m_playFont || !m_versionFont || !m_statusFont ||
+			!m_percentFont)
 		{
 			ELOG("Failed to build the launcher fonts");
 			return false;
@@ -212,21 +218,6 @@ namespace mmo
 
 		BuildFonts();
 
-		// Cover-fit the splash to the panoramic feature stage. The source and target are
-		// intentionally close in aspect ratio, so the full composition remains visible.
-		if (const Bitmap* splash = GetAsset(IDR_PNG_SPLASH); splash && splash->IsValid())
-		{
-			const Rect hero = Scale(layout::HeroImage);
-			const float scaleX = static_cast<float>(hero.GetWidth()) / static_cast<float>(splash->GetWidth());
-			const float scaleY = static_cast<float>(hero.GetHeight()) / static_cast<float>(splash->GetHeight());
-			const float scale = std::max(scaleX, scaleY);
-
-			const int32 width = std::max(1, static_cast<int32>(splash->GetWidth() * scale + 0.5f));
-			const int32 height = std::max(1, static_cast<int32>(splash->GetHeight() * scale + 0.5f));
-
-			Bitmap::Resample(*splash, width, height, m_heroScaled);
-		}
-
 		const int32 iconSize = Scale(layout::TitleIconSize);
 		if (const Bitmap* icon = GetAsset(IDR_PNG_ICON_CLOSE); icon && icon->IsValid())
 		{
@@ -239,6 +230,7 @@ namespace mmo
 		}
 
 		RebuildBackground();
+		m_pageDirty = true;
 		m_dirty = true;
 	}
 
@@ -286,33 +278,6 @@ namespace mmo
 		canvas.FillGradient(Scale(layout::TitleBarShadow),
 			theme::TitleBarShadowFrom, theme::TitleBarShadowTo, false);
 
-		const Rect hero = Scale(layout::HeroImage);
-		canvas.FillRect(hero, theme::HeroBacking);
-
-		// Feature art, cropped minimally around the focal anchor.
-		if (m_heroScaled.IsValid())
-		{
-			const int32 overflowX = m_heroScaled.GetWidth() - hero.GetWidth();
-			const int32 overflowY = m_heroScaled.GetHeight() - hero.GetHeight();
-			const int32 offsetX = hero.left - static_cast<int32>(overflowX * layout::SplashAnchorX);
-			const int32 offsetY = hero.top - static_cast<int32>(overflowY * layout::SplashAnchorY);
-
-			canvas.PushClip(hero);
-			canvas.Blit(m_heroScaled, m_heroScaled.GetBounds(),
-				Rect{ offsetX, offsetY, offsetX + m_heroScaled.GetWidth(), offsetY + m_heroScaled.GetHeight() },
-				BlitFilter::Nearest);
-			canvas.PopClip();
-		}
-
-		canvas.FillGradient(Scale(layout::HeroScrim), theme::HeroScrimFrom, theme::HeroScrimTo, false);
-
-		if (const Bitmap* frame = GetAsset(theme::HeroFrame.resourceId))
-		{
-			canvas.DrawNineSlice(*frame, Scale(theme::HeroFrame.insets),
-				Scale(layout::HeroFrame), Color{ 255, 255, 255, 255 },
-				theme::HeroFrame.tileEdges, NineSliceFill::FrameOnly);
-		}
-
 		canvas.DrawVignette(Scale(layout::Content), layout::VignetteStrength);
 
 		if (const Bitmap* panel = GetAsset(theme::PanelBottom.resourceId))
@@ -338,6 +303,21 @@ namespace mmo
 
 	void LauncherView::ApplySnapshot(const UpdateSnapshot& snapshot)
 	{
+		if (snapshot.phase != UpdatePhase::Ready)
+		{
+			m_contentRefreshed = false;
+		}
+		else if (!m_contentRefreshed)
+		{
+			m_content.Load(m_host.GetGameDirectory());
+			m_contentRefreshed = true;
+			m_selectedArticle = -1;
+			m_selectedPatch = 0;
+			m_newsOffset = 0;
+			m_patchOffset = 0;
+			m_scroll = 0;
+			BuildPageButtons();
+		}
 		m_statusLabel.text = snapshot.statusText;
 		m_statusLabel.color = snapshot.phase == UpdatePhase::Failed
 			? theme::StatusErrorColor
@@ -363,7 +343,7 @@ namespace mmo
 	{
 		bool moved = false;
 
-		for (Button* button : { &m_playButton, &m_closeButton, &m_minimizeButton })
+		for (Button* button : GetButtons())
 		{
 			const float target = button->hovered && button->enabled ? 1.0f : 0.0f;
 			if (std::abs(button->hoverFade - target) > 0.001f)
@@ -408,12 +388,19 @@ namespace mmo
 
 		// The buttons sit inside the caption strip, so they must be carved out or the
 		// window would start dragging instead of closing.
+		for (const Button& button : m_navigation)
+		{
+			if (button.rect.Contains(logical))
+			{
+				return false;
+			}
+		}
 		return !m_closeButton.rect.Contains(logical) && !m_minimizeButton.rect.Contains(logical);
 	}
 
 	Button* LauncherView::FindButtonAt(const Point& logical)
 	{
-		for (Button* button : { &m_playButton, &m_closeButton, &m_minimizeButton })
+		for (Button* button : GetButtons())
 		{
 			if (button->enabled && button->rect.Contains(logical))
 			{
@@ -424,11 +411,16 @@ namespace mmo
 		return nullptr;
 	}
 
+	bool LauncherView::HasControlAt(const Point& logical)
+	{
+		return FindButtonAt(logical) != nullptr;
+	}
+
 	void LauncherView::OnMouseMove(const Point& logical)
 	{
 		const Button* hit = FindButtonAt(logical);
 
-		for (Button* button : { &m_playButton, &m_closeButton, &m_minimizeButton })
+		for (Button* button : GetButtons())
 		{
 			const bool hovered = button == hit;
 			if (button->hovered != hovered)
@@ -441,7 +433,7 @@ namespace mmo
 
 	void LauncherView::OnMouseLeave()
 	{
-		for (Button* button : { &m_playButton, &m_closeButton, &m_minimizeButton })
+		for (Button* button : GetButtons())
 		{
 			if (button->hovered || button->pressed)
 			{
@@ -463,7 +455,7 @@ namespace mmo
 
 	void LauncherView::OnMouseUp(const Point& logical)
 	{
-		for (Button* button : { &m_playButton, &m_closeButton, &m_minimizeButton })
+		for (Button* button : GetButtons())
 		{
 			const bool wasPressed = button->pressed;
 			button->pressed = false;
@@ -477,7 +469,8 @@ namespace mmo
 			// pressed, so pressing and dragging away cancels.
 			if (wasPressed && button->enabled && button->rect.Contains(logical) && button->onClick)
 			{
-				button->onClick();
+				auto action = button->onClick;
+				action();
 				return;
 			}
 		}
@@ -646,20 +639,41 @@ namespace mmo
 			DrawLabel(canvas, *m_versionFont, m_versionLabel, bodyStyle);
 		}
 
-		TextStyle heroTitleStyle;
-		heroTitleStyle.outline = theme::PlayTextOutline;
-		heroTitleStyle.outlineWidth = std::max(1, Scale(2));
-		heroTitleStyle.shadow = theme::TextShadow;
-		heroTitleStyle.shadowOffset = Point{ 0, Scale(2) };
-
-		if (m_heroTitleFont)
+		if (m_pageDirty || !m_pageCache.IsValid())
 		{
-			DrawLabel(canvas, *m_heroTitleFont, m_heroTitleLabel, heroTitleStyle);
+			m_pageCache = Bitmap(canvas.GetWidth(), canvas.GetHeight());
+			Canvas pageCanvas(m_pageCache.GetPixels(), canvas.GetWidth(), canvas.GetHeight(), canvas.GetWidth());
+			pageCanvas.Clear(theme::Transparent);
+			DrawPage(pageCanvas);
+			m_pageDirty = false;
 		}
-
-		if (m_heroSubtitleFont)
+		canvas.Blit(m_pageCache, m_pageCache.GetBounds(), canvas.GetBounds(), BlitFilter::Nearest);
+		for (size_t i = 0; i < m_navigation.size(); ++i)
 		{
-			DrawLabel(canvas, *m_heroSubtitleFont, m_heroSubtitleLabel, bodyStyle);
+			const Button& button = m_navigation[i];
+			const bool selected = static_cast<size_t>(m_page) == i;
+			if (button.hovered || selected)
+			{
+				canvas.FillGradient(Scale(button.rect), FromArgb(0x002F2417), FromArgb(0xB02F2417), false);
+			}
+			DrawTextLine(canvas, button.text, button.rect, false, selected || button.hovered);
+			if (selected)
+			{
+				canvas.FillRect(Scale(Rect{button.rect.left + 12, 96, button.rect.right - 12, 99}), theme::ProgressTint);
+			}
+		}
+		for (const Button& button : m_pageButtons)
+		{
+			if (button.hovered && button.enabled)
+			{
+				canvas.FillRect(Scale(button.rect), FromArgb(0x182F2417));
+			}
+		}
+		const auto controls = GetButtons();
+		if (m_focus >= 0 && static_cast<size_t>(m_focus) < controls.size())
+		{
+			const Rect r = Scale(controls[m_focus]->rect);
+			canvas.FillRect(Rect{r.left, r.bottom - Scale(2), r.right, r.bottom}, theme::ProgressTint);
 		}
 
 		DrawButton(canvas, m_minimizeButton);
@@ -685,5 +699,521 @@ namespace mmo
 		DrawButton(canvas, m_playButton);
 
 		m_dirty = false;
+	}
+	std::vector<Button*> LauncherView::GetButtons()
+	{
+		std::vector<Button*> result;
+		for (Button& button : m_navigation)
+		{
+			result.push_back(&button);
+		}
+		for (Button& button : m_pageButtons)
+		{
+			result.push_back(&button);
+		}
+		result.push_back(&m_playButton);
+		result.push_back(&m_minimizeButton);
+		result.push_back(&m_closeButton);
+		return result;
+	}
+
+	void LauncherView::SelectPage(const Page page)
+	{
+		m_page = page;
+		m_selectedArticle = -1;
+		m_scroll = 0;
+		m_maxScroll = 0;
+		m_focus = -1;
+		BuildPageButtons();
+		m_dirty = true;
+	}
+
+	void LauncherView::BuildPageButtons()
+	{
+		m_pageDirty = true;
+		m_pageButtons.clear();
+		m_focus = -1;
+		const auto add = [this](const Rect rect, std::function<void()> action, const bool enabled = true)
+		{
+			Button button;
+			button.rect = rect;
+			button.onClick = std::move(action);
+			button.enabled = enabled;
+			m_pageButtons.push_back(std::move(button));
+		};
+		const auto readNews = [this](const int32 index)
+		{
+			m_page = Page::News;
+			m_selectedArticle = index;
+			m_scroll = 0;
+			BuildPageButtons();
+			m_dirty = true;
+		};
+		if (m_page == Page::Home)
+		{
+			add(Rect{64, 422, 384, 578},
+				[readNews]
+				{
+					readNews(0);
+				});
+			if (m_content.GetNews().size() > 1)
+			{
+				add(Rect{396, 422, 716, 578},
+					[readNews]
+					{
+						readNews(1);
+					});
+			}
+			add(Rect{748, 526, 1056, 566},
+				[this]
+				{
+					SelectPage(Page::PatchNotes);
+				});
+		}
+		else if (m_page == Page::News)
+		{
+			if (m_selectedArticle >= 0)
+			{
+				add(Rect{84, 128, 254, 160},
+					[this]
+					{
+						SelectPage(Page::News);
+					});
+			}
+			else
+			{
+				for (int32 i = 0; i < 3 && m_newsOffset + i < static_cast<int32>(m_content.GetNews().size()); ++i)
+				{
+					const Rect rect = i == 0 ? Rect{64, 176, 706, 536} : Rect{724, 176 + (i - 1) * 180, 1076, 344 + (i - 1) * 180};
+					add(rect,
+						[readNews, index = m_newsOffset + i]
+						{
+							readNews(index);
+						});
+				}
+				add(
+					Rect{738, 540, 850, 574},
+					[this]
+					{
+						m_newsOffset -= 3;
+						BuildPageButtons();
+						m_dirty = true;
+					},
+					m_newsOffset >= 3);
+				add(
+					Rect{950, 540, 1064, 574},
+					[this]
+					{
+						m_newsOffset += 3;
+						BuildPageButtons();
+						m_dirty = true;
+					},
+					m_newsOffset + 3 < static_cast<int32>(m_content.GetNews().size()));
+			}
+		}
+		else if (m_page == Page::PatchNotes)
+		{
+			for (int32 i = 0; i < 5 && m_patchOffset + i < static_cast<int32>(m_content.GetPatches().size()); ++i)
+			{
+				add(Rect{76, 178 + i * 66, 316, 240 + i * 66},
+					[this, index = m_patchOffset + i]
+					{
+						m_selectedPatch = index;
+						m_pageDirty = true;
+						m_scroll = 0;
+						m_dirty = true;
+					});
+			}
+			add(
+				Rect{80, 536, 180, 572},
+				[this]
+				{
+					m_patchOffset -= 5;
+					BuildPageButtons();
+					m_dirty = true;
+				},
+				m_patchOffset >= 5);
+			add(
+				Rect{204, 536, 304, 572},
+				[this]
+				{
+					m_patchOffset += 5;
+					BuildPageButtons();
+					m_dirty = true;
+				},
+				m_patchOffset + 5 < static_cast<int32>(m_content.GetPatches().size()));
+		}
+		else if (m_page == Page::Settings)
+		{
+			add(Rect{790, 210, 1048, 250},
+				[this]
+				{
+					m_host.OpenGameDirectory();
+				});
+			add(Rect{96, 280, 356, 322},
+				[this]
+				{
+					if (!m_host.RepairGame())
+					{
+						m_host.ShowMessage("Repair game files",
+										   "Please wait until the current update finishes before checking your files again.");
+					}
+				});
+			add(Rect{96, 420, 1028, 464},
+				[this]
+				{
+					m_keepOpen = !m_keepOpen;
+					m_settingsSaved = false;
+					m_pageDirty = true;
+					m_dirty = true;
+				});
+			add(Rect{96, 520, 300, 562},
+				[this]
+				{
+					m_host.OpenLogDirectory();
+				});
+			add(Rect{716, 520, 888, 562},
+				[this]
+				{
+					m_settingsSaved = m_host.SaveKeepOpen(m_keepOpen);
+					m_pageDirty = true;
+					if (!m_settingsSaved)
+					{
+						m_host.ShowMessage("Settings",
+										   "Could not save launcher settings. Please check write permissions for the game folder.");
+					}
+					m_dirty = true;
+				});
+			add(Rect{916, 520, 1048, 562},
+				[this]
+				{
+					m_keepOpen = m_host.GetKeepOpen();
+					m_settingsSaved = false;
+					m_pageDirty = true;
+					m_dirty = true;
+				});
+		}
+		if (m_page == Page::PatchNotes || (m_page == Page::News && m_selectedArticle >= 0))
+		{
+			add(Rect{1050, 176, 1074, 212},
+				[this]
+				{
+					OnScroll(-100);
+				});
+			add(Rect{1050, 536, 1074, 574},
+				[this]
+				{
+					OnScroll(100);
+				});
+		}
+	}
+
+	void LauncherView::OnScroll(const int32 delta)
+	{
+		m_pageDirty = true;
+		m_scroll = std::clamp(m_scroll + delta, 0, m_maxScroll);
+		m_dirty = true;
+	}
+
+	void LauncherView::OnKey(const int32 key, const bool shift)
+	{
+		if (key == 9)
+		{
+			const auto buttons = GetButtons();
+			const int32 count = static_cast<int32>(buttons.size());
+			for (int32 i = 0; i < count; ++i)
+			{
+				m_focus = (m_focus + (shift ? count - 1 : 1) + count) % count;
+				if (buttons[m_focus]->enabled)
+				{
+					break;
+				}
+			}
+			m_dirty = true;
+		}
+		else if (key == 13 || key == 32)
+		{
+			const auto buttons = GetButtons();
+			if (m_focus >= 0 && static_cast<size_t>(m_focus) < buttons.size() && buttons[m_focus]->enabled && buttons[m_focus]->onClick)
+			{
+				// Copy first: page changes rebuild and destroy the originating button.
+				auto action = buttons[m_focus]->onClick;
+				action();
+			}
+		}
+		else if (key == 38 || key == 33)
+		{
+			OnScroll(key == 33 ? -300 : -48);
+		}
+		else if (key == 40 || key == 34)
+		{
+			OnScroll(key == 34 ? 300 : 48);
+		}
+		else if (key == 36 || key == 35)
+		{
+			OnScroll(key == 36 ? -m_maxScroll : m_maxScroll);
+		}
+	}
+
+	void LauncherView::DrawTextLine(Canvas& canvas, const std::string& text, const Rect area, const bool heading, const bool gold)
+	{
+		FontFace* font = heading ? m_headingFont.get() : m_statusFont.get();
+		if (!font)
+		{
+			return;
+		}
+		TextStyle style;
+		style.color = gold || heading ? theme::HeroTitleColor : theme::StatusColor;
+		const Rect physical = Scale(area);
+		canvas.PushClip(physical);
+		DrawText(canvas, *font, ElideText(*font, text, physical.GetWidth()), physical, TextAlign::Left, style);
+		canvas.PopClip();
+	}
+
+	void LauncherView::DrawPanel(Canvas& canvas, const Rect area)
+	{
+		canvas.FillRect(Scale(area), FromArgb(0xFF63513A));
+		canvas.FillRect(Scale(Inflate(area, -1)), FromArgb(0xF0100F0D));
+	}
+
+	void LauncherView::DrawArtwork(Canvas& canvas, const uint32 resourceId, const Rect area)
+	{
+		if (const Bitmap* bitmap = GetAsset(resourceId))
+		{
+			Rect source = bitmap->GetBounds();
+			const double ratio = static_cast<double>(area.GetWidth()) / area.GetHeight();
+			if (static_cast<double>(source.GetWidth()) / source.GetHeight() > ratio)
+			{
+				const int32 width = static_cast<int32>(source.GetHeight() * ratio);
+				source.left = (source.GetWidth() - width) / 2;
+				source.right = source.left + width;
+			}
+			else
+			{
+				const int32 height = static_cast<int32>(source.GetWidth() / ratio);
+				source.top = (source.GetHeight() - height) / 2;
+				source.bottom = source.top + height;
+			}
+			canvas.Blit(*bitmap, source, Scale(area));
+		}
+	}
+
+	int32 LauncherView::DrawParagraph(Canvas& canvas, const std::string& text, const Rect area, const bool heading)
+	{
+		FontFace* font = heading ? m_headingFont.get() : m_statusFont.get();
+		if (!font)
+		{
+			return 0;
+		}
+		const int32 lineHeight = heading ? 34 : 23;
+		std::istringstream words(text);
+		std::string word;
+		std::string line;
+		int32 y = area.top;
+		while (words >> word)
+		{
+			const std::string candidate = line.empty() ? word : line + " " + word;
+			if (!line.empty() && MeasureText(*font, candidate) > Scale(area.GetWidth()))
+			{
+				DrawTextLine(canvas, line, Rect{area.left, y, area.right, y + lineHeight}, heading);
+				y += lineHeight;
+				line = word;
+			}
+			else
+			{
+				line = candidate;
+			}
+		}
+		if (!line.empty())
+		{
+			DrawTextLine(canvas, line, Rect{area.left, y, area.right, y + lineHeight}, heading);
+			y += lineHeight;
+		}
+		return y - area.top;
+	}
+
+	void LauncherView::DrawArticle(Canvas& canvas, const LauncherArticle& article, const Rect area)
+	{
+		canvas.PushClip(Scale(area));
+		int32 y = area.top - m_scroll;
+		y += DrawParagraph(canvas, article.title, Rect{area.left, y, area.right - 20, y + 100}, true);
+		DrawTextLine(canvas, article.date, Rect{area.left, y, area.right - 20, y + 26});
+		y += 42;
+		y += DrawParagraph(canvas, article.summary, Rect{area.left, y, area.right - 20, y + 100});
+		y += 20;
+		std::istringstream lines(article.body);
+		std::string line;
+		while (std::getline(lines, line))
+		{
+			if (line.empty())
+			{
+				y += 12;
+				continue;
+			}
+			const bool heading = line.compare(0, 3, "## ") == 0;
+			if (heading)
+			{
+				canvas.FillRect(Scale(Rect{area.left, y + 2, area.right - 20, y + 3}), FromArgb(0xFF413524));
+				y += 12;
+				line.erase(0, 3);
+			}
+			y += DrawParagraph(canvas, line, Rect{area.left, y, area.right - 20, y + 100}, heading);
+			y += heading ? 8 : 4;
+		}
+		m_maxScroll = std::max(0, y + m_scroll - area.bottom + 16);
+		canvas.PopClip();
+		if (m_maxScroll > 0)
+		{
+			const int32 trackHeight = area.GetHeight();
+			const int32 thumbHeight = std::max(28, trackHeight * trackHeight / (trackHeight + m_maxScroll));
+			const int32 thumbY = area.top + (trackHeight - thumbHeight) * m_scroll / m_maxScroll;
+			canvas.FillRect(Scale(Rect{area.right - 4, area.top, area.right, area.bottom}), FromArgb(0xFF332A1E));
+			canvas.FillRoundedRect(Scale(Rect{area.right - 4, thumbY, area.right, thumbY + thumbHeight}), Scale(2), theme::HeroTitleColor);
+		}
+	}
+
+	void LauncherView::DrawPage(Canvas& canvas)
+	{
+		const auto& news = m_content.GetNews();
+		const auto& patches = m_content.GetPatches();
+		if (m_page == Page::Home)
+		{
+			DrawPanel(canvas, layout::HeroFrame);
+			DrawArtwork(canvas, IDR_PNG_SPLASH, layout::HeroImage);
+			canvas.FillGradient(Scale(layout::HeroScrim), theme::HeroScrimFrom, theme::HeroScrimTo, false);
+			TextStyle heroStyle;
+			heroStyle.outline = theme::PlayTextOutline;
+			heroStyle.outlineWidth = Scale(2);
+			DrawLabel(canvas, *m_heroTitleFont, m_heroTitleLabel, heroStyle);
+			DrawTextLine(canvas, m_heroSubtitleLabel.text, layout::HeroSubtitle);
+			for (int32 i = 0; i < 2 && i < static_cast<int32>(news.size()); ++i)
+			{
+				const int32 x = 64 + i * 332;
+				DrawPanel(canvas, Rect{x, 422, x + 320, 578});
+				DrawArtwork(canvas, i == 0 ? IDR_PNG_NEWS_DEVELOPMENT : IDR_PNG_NEWS_WORLD, Rect{x + 1, 423, x + 319, 516});
+				DrawTextLine(canvas, news[i].title, Rect{x + 12, 518, x + 298, 548}, false, true);
+				DrawTextLine(canvas, news[i].summary, Rect{x + 12, 546, x + 298, 570});
+			}
+			DrawPanel(canvas, Rect{732, 112, 1076, 578});
+			DrawTextLine(canvas, "Latest update", Rect{752, 128, 1056, 168}, true);
+			DrawTextLine(canvas, patches.front().title, Rect{752, 170, 1056, 198}, false, true);
+			DrawTextLine(canvas, patches.front().date, Rect{752, 198, 1056, 224});
+			canvas.PushClip(Scale(Rect{752, 238, 1056, 518}));
+			int32 y = 238;
+			std::istringstream lines(patches.front().body);
+			std::string line;
+			while (std::getline(lines, line) && y < 492)
+			{
+				if (line.empty())
+				{
+					y += 10;
+					continue;
+				}
+				const bool heading = line.compare(0, 3, "## ") == 0;
+				if (heading)
+				{
+					line.erase(0, 3);
+				}
+				y += DrawParagraph(canvas, line, Rect{752, y, 1056, y + 100}, heading);
+				y += 8;
+			}
+			canvas.PopClip();
+			DrawTextLine(canvas, "Read full patch notes  >", Rect{752, 532, 1056, 564}, false, true);
+		}
+		else if (m_page == Page::News)
+		{
+			if (m_selectedArticle >= 0)
+			{
+				DrawPanel(canvas, layout::Page);
+				DrawTextLine(canvas, "< Back to news", Rect{84, 128, 254, 160}, false, true);
+				DrawArticle(canvas, news[m_selectedArticle], Rect{100, 180, 1040, 558});
+				DrawTextLine(canvas, "^", Rect{1052, 180, 1074, 206}, false, true);
+				DrawTextLine(canvas, "v", Rect{1052, 540, 1074, 568}, false, true);
+			}
+			else
+			{
+				DrawTextLine(canvas, "Latest news", Rect{76, 120, 352, 162}, true);
+				DrawTextLine(canvas, "From the world of Alestia", Rect{354, 128, 760, 158});
+				for (int32 i = 0; i < 3 && m_newsOffset + i < static_cast<int32>(news.size()); ++i)
+				{
+					const LauncherArticle& article = news[m_newsOffset + i];
+					if (i == 0)
+					{
+						DrawPanel(canvas, Rect{64, 176, 706, 536});
+						DrawArtwork(canvas, IDR_PNG_NEWS_DEVELOPMENT, Rect{65, 177, 705, 535});
+						canvas.FillGradient(Scale(Rect{65, 310, 705, 535}), theme::HeroScrimFrom, FromArgb(0xFF090807), false);
+						DrawTextLine(canvas, article.title, Rect{88, 394, 684, 432}, true);
+						DrawTextLine(canvas, article.date, Rect{88, 432, 684, 458});
+						DrawTextLine(canvas, article.summary, Rect{88, 458, 684, 486});
+						DrawTextLine(canvas, "Read article  >", Rect{88, 492, 684, 524}, false, true);
+					}
+					else
+					{
+						const int32 y = 176 + (i - 1) * 180;
+						DrawPanel(canvas, Rect{724, y, 1076, y + 168});
+						DrawArtwork(canvas, i == 1 ? IDR_PNG_NEWS_WORLD : IDR_PNG_SPLASH, Rect{725, y + 1, 1075, y + 92});
+						DrawTextLine(canvas, article.title, Rect{738, y + 96, 1064, y + 126}, false, true);
+						DrawTextLine(canvas, article.summary, Rect{738, y + 126, 1064, y + 156});
+					}
+				}
+				if (news.size() > 3)
+				{
+					DrawTextLine(canvas, "< Previous", Rect{738, 540, 850, 574}, false, m_newsOffset >= 3);
+					DrawTextLine(canvas, "Next >", Rect{950, 540, 1064, 574}, false, m_newsOffset + 3 < static_cast<int32>(news.size()));
+				}
+			}
+		}
+		else if (m_page == Page::PatchNotes)
+		{
+			DrawPanel(canvas, Rect{64, 112, 330, 578});
+			DrawPanel(canvas, Rect{342, 112, 1076, 578});
+			DrawTextLine(canvas, "Patch notes", Rect{82, 126, 310, 164}, true);
+			for (int32 i = 0; i < 5 && m_patchOffset + i < static_cast<int32>(patches.size()); ++i)
+			{
+				const int32 index = m_patchOffset + i;
+				const int32 y = 178 + i * 66;
+				if (index == m_selectedPatch)
+				{
+					canvas.FillGradient(Scale(Rect{76, y, 316, y + 62}), FromArgb(0xFF46351E), FromArgb(0xFF1B1711), true);
+					canvas.FillRect(Scale(Rect{76, y, 79, y + 62}), theme::ProgressTint);
+				}
+				DrawTextLine(canvas, patches[index].title, Rect{90, y + 4, 304, y + 32}, false, index == m_selectedPatch);
+				DrawTextLine(canvas, patches[index].date, Rect{90, y + 32, 304, y + 58});
+			}
+			if (patches.size() > 5)
+			{
+				DrawTextLine(canvas, "< Newer", Rect{80, 536, 180, 572}, false, m_patchOffset >= 5);
+				DrawTextLine(canvas, "Older >", Rect{204, 536, 304, 572}, false, m_patchOffset + 5 < static_cast<int32>(patches.size()));
+			}
+			DrawArticle(canvas, patches[m_selectedPatch], Rect{366, 136, 1040, 558});
+			DrawTextLine(canvas, "^", Rect{1052, 180, 1074, 206}, false, true);
+			DrawTextLine(canvas, "v", Rect{1052, 540, 1074, 568}, false, true);
+		}
+		else if (m_page == Page::Settings)
+		{
+			DrawTextLine(canvas, "Settings", Rect{76, 120, 352, 164}, true);
+			DrawTextLine(canvas, "Make yourself at home", Rect{354, 128, 760, 158});
+			DrawPanel(canvas, Rect{64, 180, 1076, 350});
+			DrawTextLine(canvas, "Installation", Rect{96, 188, 670, 224}, true);
+			DrawTextLine(canvas, m_host.GetGameDirectory(), Rect{96, 236, 764, 264});
+			DrawPanel(canvas, Rect{790, 210, 1048, 250});
+			DrawTextLine(canvas, "Open game folder  >", Rect{806, 212, 1032, 248}, false, true);
+			DrawPanel(canvas, Rect{96, 280, 356, 322});
+			DrawTextLine(canvas, "Check and repair files", Rect{110, 282, 344, 320}, false, true);
+			DrawTextLine(canvas, "Rechecks installed files and downloads missing or changed files.", Rect{378, 282, 1048, 320});
+			DrawPanel(canvas, Rect{64, 368, 1076, 492});
+			DrawTextLine(canvas, "Launcher behavior", Rect{96, 382, 1048, 418}, true);
+			DrawPanel(canvas, Rect{98, 430, 118, 450});
+			if (m_keepOpen)
+			{
+				DrawTextLine(canvas, "x", Rect{102, 428, 118, 452}, false, true);
+			}
+			DrawTextLine(canvas, "Keep the launcher open after starting the game", Rect{136, 422, 1028, 462});
+			DrawTextLine(canvas, "Open launcher logs  >", Rect{96, 520, 300, 562}, false, true);
+			DrawPanel(canvas, Rect{716, 520, 888, 562});
+			DrawTextLine(canvas, m_settingsSaved ? "Saved" : "Save changes", Rect{738, 522, 880, 560}, false, true);
+			DrawPanel(canvas, Rect{916, 520, 1048, 562});
+			DrawTextLine(canvas, "Cancel", Rect{946, 522, 1038, 560});
+		}
 	}
 }

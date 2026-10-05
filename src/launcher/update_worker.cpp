@@ -136,6 +136,38 @@ namespace mmo
 		m_thread = std::thread([this] { Run(); });
 	}
 
+	bool UpdateWorker::Restart()
+	{
+		{
+			const std::scoped_lock lock{m_finishedMutex};
+			if (!m_finished)
+			{
+				return false;
+			}
+		}
+		if (m_thread.joinable())
+		{
+			m_thread.join();
+		}
+		{
+			const std::scoped_lock lock{m_progressMutex};
+			m_fileProgress.clear();
+			m_updateSize = 0;
+			m_fileCount = 0;
+			m_updated = 0;
+			m_filesDone = 0;
+			m_filesChecked = 0;
+		}
+		m_finished = false;
+		m_shouldQuit = false;
+		m_model.SetPhase(UpdatePhase::Preparing);
+		m_model.SetStatus("Checking game files...");
+		m_model.SetNotice("");
+		m_model.SetProgress(-1.0f);
+		Start();
+		return true;
+	}
+
 	void UpdateWorker::RequestStop()
 	{
 		m_shouldQuit = true;

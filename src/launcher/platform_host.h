@@ -21,6 +21,35 @@ namespace mmo
 		/// user itself.
 		virtual void LaunchGame() = 0;
 
+		/// Directory used by both updates and the game executable.
+		virtual std::string GetGameDirectory() const
+		{
+			return ".";
+		}
+		/// Reads the persisted launcher behavior.
+		virtual bool GetKeepOpen() const
+		{
+			return false;
+		}
+		/// Persists launcher behavior. Returns false on write failure.
+		virtual bool SaveKeepOpen(bool keepOpen)
+		{
+			return false;
+		}
+		/// Opens the installation folder in the platform file browser.
+		virtual void OpenGameDirectory()
+		{
+		}
+		/// Opens the existing launcher log folder.
+		virtual void OpenLogDirectory()
+		{
+		}
+		/// Rechecks and repairs the installation when the updater is idle.
+		virtual bool RepairGame()
+		{
+			return false;
+		}
+
 		virtual void Minimize() = 0;
 		virtual void Close() = 0;
 

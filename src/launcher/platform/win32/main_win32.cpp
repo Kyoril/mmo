@@ -5,6 +5,7 @@
 
 #include "launcher_model.h"
 #include "launcher_window.h"
+#include "launcher_preview.h"
 #include "resource.h"
 #include "update_worker.h"
 #include "version.h"
@@ -93,13 +94,10 @@ namespace
 	/// blank rectangle somewhere in the UI much later.
 	void VerifyEmbeddedAssets()
 	{
-		constexpr std::array<uint32, 13> images = {
-			IDR_PNG_SPLASH, IDR_PNG_PANEL_BOTTOM, IDR_PNG_BORDER_FRAME,
-			IDR_PNG_BUTTON_UP, IDR_PNG_BUTTON_OVER, IDR_PNG_BUTTON_DOWN, IDR_PNG_BUTTON_DISABLED,
-			IDR_PNG_PROGRESS_TRACK, IDR_PNG_PROGRESS_FILL,
-			IDR_PNG_ICON_CLOSE, IDR_PNG_ICON_MINIMIZE,
-			IDR_PNG_CONTENT_TEXTURE, IDR_PNG_HERO_FRAME
-		};
+		constexpr std::array<uint32, 15> images = {
+			IDR_PNG_SPLASH,		   IDR_PNG_PANEL_BOTTOM,	IDR_PNG_BORDER_FRAME,	IDR_PNG_BUTTON_UP,		  IDR_PNG_BUTTON_OVER,
+			IDR_PNG_BUTTON_DOWN,   IDR_PNG_BUTTON_DISABLED, IDR_PNG_PROGRESS_TRACK, IDR_PNG_PROGRESS_FILL,	  IDR_PNG_ICON_CLOSE,
+			IDR_PNG_ICON_MINIMIZE, IDR_PNG_CONTENT_TEXTURE, IDR_PNG_HERO_FRAME,		IDR_PNG_NEWS_DEVELOPMENT, IDR_PNG_NEWS_WORLD};
 
 		for (const uint32 id : images)
 		{
@@ -130,14 +128,16 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 {
 	size_t concurrency = 8;
 	bool selfUpdateEnabled = true;
+	bool preview = false;
+	std::string renderPreviewDirectory;
 
 	cxxopts::Options options("Available options");
-	options.add_options()
-		("v,version", "Displays the version of the launcher on screen.")
-		("remove-previous", "Tries to remove a specified file", cxxopts::value<std::string>(g_previousExecutableToBeRemoved))
-		("no-self-update", "Disables self-update of the launcher executable")
-		("j,concurrency", "The number of threads used for downloading and updating", cxxopts::value<size_t>(concurrency))
-		;
+	options.add_options()("v,version", "Displays the version of the launcher on screen.")(
+		"remove-previous", "Tries to remove a specified file", cxxopts::value<std::string>(g_previousExecutableToBeRemoved))(
+		"preview", "Shows the launcher without checking for or downloading updates", cxxopts::value<bool>(preview))(
+		"render-preview", "Renders all launcher pages to BMP files without downloading updates",
+		cxxopts::value<std::string>(renderPreviewDirectory))("no-self-update", "Disables self-update of the launcher executable")(
+		"j,concurrency", "The number of threads used for downloading and updating", cxxopts::value<size_t>(concurrency));
 
 	try
 	{
@@ -156,6 +156,24 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 		if (results.count("no-self-update"))
 		{
 			selfUpdateEnabled = false;
+		}
+
+		if (!renderPreviewDirectory.empty())
+		{
+			return mmo::RenderLauncherPreviews(renderPreviewDirectory) ? 0 : 1;
+		}
+
+		// Installation and updates are relative to the executable, not the shell's cwd.
+		std::array<wchar_t, 32768> executable{};
+		const DWORD executableLength = GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
+		if (executableLength == 0 || executableLength >= executable.size())
+		{
+			return 1;
+		}
+		const auto gameDirectory = std::filesystem::path(executable.data()).parent_path();
+		if (!SetCurrentDirectoryW(gameDirectory.c_str()))
+		{
+			return 1;
 		}
 
 		std::array<char, MAX_PATH> documents = { "." };
@@ -213,7 +231,16 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 			}
 		};
 
-		worker.Start();
+		if (preview)
+		{
+			model.SetPhase(mmo::UpdatePhase::Updating);
+			model.SetStatus("Preview mode - no files are being downloaded");
+			model.SetProgress(0.57f);
+		}
+		else
+		{
+			worker.Start();
+		}
 
 		const int result = window.Run();
 

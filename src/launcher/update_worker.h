@@ -53,6 +53,9 @@ namespace mmo
 
 		void Start();
 
+		/// Starts a fresh verification run after a completed or failed update. UI thread only.
+		bool Restart();
+
 		/// Asks the run to stop as soon as possible and returns immediately. Running
 		/// downloads are aborted, so this is safe to call the moment the user closes the
 		/// window. Callable from any thread.
