@@ -60,6 +60,8 @@ namespace mmo
 		/// downloads are aborted, so this is safe to call the moment the user closes the
 		/// window. Callable from any thread.
 		void RequestStop();
+		/// Pauses transfers at the next chunk boundary; resumes without discarding progress.
+		void SetPaused(bool paused);
 
 		/// Asks the run to stop and waits up to `timeout` for it to end. Returns true if
 		/// the worker has ended (or never started) and the thread was joined. On false
@@ -81,6 +83,7 @@ namespace mmo
 
 		/// Pushes the download counters into the model. m_progressMutex must be held.
 		void PublishDownloadProgress();
+		void WaitWhilePaused();
 
 		LauncherModel& m_model;
 		UpdateWorkerConfig m_config;
@@ -114,6 +117,11 @@ namespace mmo
 		std::uintmax_t m_filesDone = 0;
 		std::uintmax_t m_filesChecked = 0;
 		std::chrono::steady_clock::time_point m_downloadStarted;
+		std::mutex m_pauseMutex;
+		std::condition_variable m_pauseCondition;
+		bool m_paused = false;
+		std::chrono::steady_clock::time_point m_pauseStarted;
+		std::chrono::steady_clock::duration m_pausedDuration{};
 
 		friend struct ModelProgressHandler;
 	};

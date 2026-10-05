@@ -97,6 +97,7 @@ namespace mmo
 
 		void updateFile(const std::string& name, const std::uintmax_t size, const std::uintmax_t loaded) override
 		{
+			m_worker.WaitWhilePaused();
 			if (m_worker.m_shouldQuit)
 			{
 				throw updating::UpdateCancelled();
@@ -170,7 +171,40 @@ namespace mmo
 
 	void UpdateWorker::RequestStop()
 	{
-		m_shouldQuit = true;
+		{
+			const std::scoped_lock lock{m_pauseMutex};
+			m_shouldQuit = true;
+		}
+		m_pauseCondition.notify_all();
+	}
+
+	void UpdateWorker::SetPaused(const bool paused)
+	{
+		{
+			const std::scoped_lock lock{m_pauseMutex};
+			if (m_paused == paused)
+			{
+				return;
+			}
+			const auto now = std::chrono::steady_clock::now();
+			if (paused)
+			{
+				m_pauseStarted = now;
+			}
+			else
+			{
+				m_pausedDuration += now - m_pauseStarted;
+			}
+			m_paused = paused;
+			m_model.SetPaused(paused);
+		}
+		m_pauseCondition.notify_all();
+	}
+
+	void UpdateWorker::WaitWhilePaused()
+	{
+		std::unique_lock lock{m_pauseMutex};
+		m_pauseCondition.wait(lock, [this] { return !m_paused || m_shouldQuit.load(); });
 	}
 
 	bool UpdateWorker::Stop(const std::chrono::milliseconds timeout)
@@ -271,7 +305,12 @@ namespace mmo
 		if (m_updateSize > 0)
 		{
 			const auto loaded = std::min(m_updated, m_updateSize);
-			const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_downloadStarted).count();
+			double elapsed;
+			{
+				const std::scoped_lock lock{m_pauseMutex};
+				const auto now = m_paused ? m_pauseStarted : std::chrono::steady_clock::now();
+				elapsed = std::chrono::duration<double>(now - m_downloadStarted - m_pausedDuration).count();
+			}
 			std::string rate = "Measuring speed...";
 			if (elapsed >= 1.0 && loaded > 0)
 			{
@@ -392,10 +431,15 @@ namespace mmo
 			}
 
 			ILOG("Updating files...");
-			m_model.SetPhase(UpdatePhase::Updating);
 			{
 				const std::scoped_lock lock{ m_progressMutex };
 				m_downloadStarted = std::chrono::steady_clock::now();
+				{
+					const std::scoped_lock pauseLock{m_pauseMutex};
+					m_paused = false;
+					m_pausedDuration = {};
+				}
+				m_model.SetPhase(UpdatePhase::Updating);
 				PublishDownloadProgress();
 			}
 
@@ -430,6 +474,11 @@ namespace mmo
 					{
 						try
 						{
+							WaitWhilePaused();
+							if (m_shouldQuit)
+							{
+								throw updating::UpdateCancelled();
+							}
 							if (!m_config.selfUpdateEnabled)
 							{
 								try

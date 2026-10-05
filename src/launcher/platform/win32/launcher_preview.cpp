@@ -41,6 +41,12 @@ namespace mmo
 				return m_keepOpen;
 			}
 			bool m_launched = false;
+			bool SetDownloadPaused(const bool paused) override
+			{
+				m_paused = paused;
+				return true;
+			}
+			bool m_paused = false;
 			bool m_keepOpen = false;
 		};
 
@@ -116,6 +122,22 @@ namespace mmo
 					return false;
 				}
 			}
+			click(Point{597, 655});
+			snapshot.paused = host.m_paused;
+			view.ApplySnapshot(snapshot);
+			if (!host.m_paused || !capture("paused"))
+			{
+				ELOG("Pause interaction failed");
+				return false;
+			}
+			click(Point{597, 655});
+			if (host.m_paused)
+			{
+				ELOG("Resume interaction failed");
+				return false;
+			}
+			snapshot.paused = false;
+			view.ApplySnapshot(snapshot);
 			click(Point{110, 440});
 			click(Point{780, 540});
 			if (!host.m_keepOpen)

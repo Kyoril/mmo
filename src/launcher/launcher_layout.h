@@ -32,9 +32,10 @@ namespace mmo::layout
 	constexpr float SplashAnchorY = 0.45f;
 	constexpr float VignetteStrength = 0.15f;
 	constexpr Rect BottomPanel{32, 592, 1108, 708};
-	constexpr Rect StatusLabel{88, 608, 846, 632};
-	constexpr Rect ProgressTrack{88, 640, 626, 665};
-	constexpr Rect PercentText{542, 640, 622, 665};
-	constexpr Rect NoticeLabel{644, 638, 846, 676};
+	constexpr Rect StatusLabel{88, 608, 626, 632};
+	constexpr Rect ProgressTrack{88, 634, 552, 674};
+	constexpr Rect PercentText{478, 634, 548, 674};
+	constexpr Rect PauseButton{568, 634, 626, 677};
+	constexpr Rect NoticeLabel{664, 632, 834, 682};
 	constexpr Rect PlayButton{858, 608, 1058, 674};
 }

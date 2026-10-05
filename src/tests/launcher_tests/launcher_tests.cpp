@@ -105,9 +105,15 @@ TEST_CASE("Download details are cleared when leaving the download phase", "[laun
 	{
 		model.SetPhase(UpdatePhase::Updating);
 		model.SetDownloadDetails("4.6 GB / 8.1 GB", "12.4 MB/s | ~4m 49s");
+		model.SetPaused(true);
 		REQUIRE(model.TryGetSnapshot(snapshot, version));
 		CHECK(snapshot.downloadSizeText == "4.6 GB / 8.1 GB");
 		CHECK_FALSE(snapshot.downloadRateText.empty());
+		CHECK(snapshot.paused);
+		model.SetPaused(false);
+		REQUIRE(model.TryGetSnapshot(snapshot, version));
+		CHECK_FALSE(snapshot.paused);
+		model.SetPaused(true);
 		if (phase == UpdatePhase::Ready)
 		{
 			model.SetReady("Ready");
@@ -123,6 +129,10 @@ TEST_CASE("Download details are cleared when leaving the download phase", "[laun
 		REQUIRE(model.TryGetSnapshot(snapshot, version));
 		CHECK(snapshot.downloadSizeText.empty());
 		CHECK(snapshot.downloadRateText.empty());
+		CHECK_FALSE(snapshot.paused);
+		model.SetPaused(true);
+		REQUIRE(model.TryGetSnapshot(snapshot, version));
+		CHECK_FALSE(snapshot.paused);
 	}
 }
 

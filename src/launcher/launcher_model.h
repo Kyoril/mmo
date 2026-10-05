@@ -34,6 +34,7 @@ namespace mmo
 		/// 0..1. Negative means indeterminate: the total is not known yet.
 		float progress = -1.0f;
 		bool playEnabled = false;
+		bool paused = false;
 	};
 
 	/// The single point of contact between the update worker and the UI.
@@ -57,6 +58,8 @@ namespace mmo
 
 		/// Publishes the two download detail lines together.
 		void SetDownloadDetails(std::string size, std::string rate);
+		/// Updates whether download transfers are paused.
+		void SetPaused(bool paused);
 
 		/// Moves to Ready, enables Play and clears the notice.
 		void SetReady(std::string text);

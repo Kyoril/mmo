@@ -51,6 +51,7 @@ namespace mmo
 		void OpenGameDirectory() override;
 		void OpenLogDirectory() override;
 		bool RepairGame() override;
+		bool SetDownloadPaused(bool paused) override;
 		void Minimize() override;
 		void Close() override;
 		void ShowMessage(const std::string& title, const std::string& body) override;

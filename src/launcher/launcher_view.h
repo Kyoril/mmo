@@ -153,6 +153,8 @@ namespace mmo
 	  bool m_settingsSaved = false;
 	  bool m_contentRefreshed = false;
 	  Button m_playButton;
+	  Button m_pauseButton;
+	  bool m_paused = false;
 	  Button m_closeButton;
 	  Button m_minimizeButton;
 	  ProgressBar m_progress;

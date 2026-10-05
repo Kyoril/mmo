@@ -51,6 +51,11 @@ namespace mmo
 		}
 
 		virtual void Minimize() = 0;
+		/// Changes download pause state. Returns false when unavailable.
+		virtual bool SetDownloadPaused(bool paused)
+		{
+			return false;
+		}
 		virtual void Close() = 0;
 
 		/// A blocking, modal message. Used only for terminal conditions.

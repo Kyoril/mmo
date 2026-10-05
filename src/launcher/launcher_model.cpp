@@ -12,6 +12,7 @@ namespace mmo
 		Mutate([phase](UpdateSnapshot& state)
 		{
 			state.phase = phase;
+			state.paused = false;
 			state.playEnabled = phase == UpdatePhase::Ready;
 			if (phase != UpdatePhase::Updating)
 			{
@@ -54,11 +55,20 @@ namespace mmo
 		});
 	}
 
+	void LauncherModel::SetPaused(const bool paused)
+	{
+		Mutate([paused](UpdateSnapshot& state)
+		{
+			state.paused = state.phase == UpdatePhase::Updating && paused;
+		});
+	}
+
 	void LauncherModel::SetReady(std::string text)
 	{
 		Mutate([&text](UpdateSnapshot& state)
 		{
 			state.phase = UpdatePhase::Ready;
+			state.paused = false;
 			state.statusText = std::move(text);
 			state.noticeText.clear();
 			state.downloadSizeText.clear();
@@ -73,6 +83,7 @@ namespace mmo
 		Mutate([&error](UpdateSnapshot& state)
 		{
 			state.phase = UpdatePhase::Failed;
+			state.paused = false;
 			state.downloadSizeText.clear();
 			state.downloadRateText.clear();
 			state.statusText = std::move(error);

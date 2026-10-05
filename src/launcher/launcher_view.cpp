@@ -175,6 +175,16 @@ namespace mmo
 		// sees; the Disabled art matters as much as the Up art.
 		m_playButton.enabled = false;
 		m_playButton.onClick = [this] { m_host.LaunchGame(); };
+		m_pauseButton.rect = layout::PauseButton;
+		m_pauseButton.enabled = false;
+		m_pauseButton.onClick = [this]
+		{
+			if (m_host.SetDownloadPaused(!m_paused))
+			{
+				m_paused = !m_paused;
+				m_dirty = true;
+			}
+		};
 
 		m_minimizeButton.rect = layout::MinimizeButton;
 		m_minimizeButton.iconId = IDR_PNG_ICON_MINIMIZE;
@@ -359,6 +369,8 @@ namespace mmo
 		canvas.FillRect(Scale(Rect{32, 594, 1108, 595}), FromArgb(0x403F3019));
 		canvas.FillGradient(Scale(Rect{32, 690, 1108, 708}), FromArgb(0x00291E10), FromArgb(0x904A3619), false);
 		canvas.FillRect(Scale(Rect{844, 611, 845, 682}), FromArgb(0x604F412B));
+		canvas.FillRect(Scale(Rect{644, 611, 645, 682}), FromArgb(0xA087704A));
+		canvas.FillRect(Scale(Rect{645, 611, 646, 682}), FromArgb(0x70000000));
 
 		canvas.PopClip();
 
@@ -391,7 +403,9 @@ namespace mmo
 			m_scroll = 0;
 			BuildPageButtons();
 		}
-		m_statusLabel.text = snapshot.statusText;
+		m_statusLabel.text = snapshot.paused ? "Download paused" : snapshot.statusText;
+		m_paused = snapshot.paused;
+		m_pauseButton.enabled = snapshot.phase == UpdatePhase::Updating;
 		m_statusLabel.color = snapshot.phase == UpdatePhase::Failed
 			? theme::StatusErrorColor
 			: theme::StatusColor;
@@ -773,8 +787,11 @@ namespace mmo
 			{
 				TextStyle detailStyle = bodyStyle;
 				detailStyle.color = theme::StatusColor;
-				DrawText(canvas, *m_percentFont, m_downloadSizeText, Scale(Rect{644, 635, 834, 654}), TextAlign::Left, detailStyle);
-				DrawText(canvas, *m_percentFont, m_downloadRateText, Scale(Rect{644, 655, 834, 675}), TextAlign::Left, detailStyle);
+				detailStyle.color = theme::HeroTitleColor;
+				DrawText(canvas, *m_percentFont, "TRANSFER", Scale(Rect{664, 609, 834, 628}), TextAlign::Left, detailStyle);
+				detailStyle.color = theme::StatusColor;
+				DrawText(canvas, *m_percentFont, m_downloadSizeText, Scale(Rect{664, 632, 834, 652}), TextAlign::Left, detailStyle);
+				DrawText(canvas, *m_percentFont, m_paused ? "Paused" : m_downloadRateText, Scale(Rect{664, 654, 834, 675}), TextAlign::Left, detailStyle);
 			}
 
 			if (!m_noticeLabel.text.empty() && m_downloadSizeText.empty())
@@ -783,6 +800,28 @@ namespace mmo
 			}
 		}
 
+		const Rect pauseRect = Scale(m_pauseButton.rect);
+		canvas.FillRoundedRect(pauseRect, Scale(4), FromArgb(m_pauseButton.hovered && m_pauseButton.enabled ? 0xFFB88C3D : 0xFF665331));
+		canvas.FillRoundedRect(Scale(Rect{569, 635, 625, 676}), Scale(3), FromArgb(0xFF171717));
+		const Color pauseColor = m_pauseButton.enabled ? theme::HeroTitleColor : theme::VersionColor;
+		if (m_paused)
+		{
+			for (int32 x = 0; x < 12; ++x)
+			{
+				canvas.FillRect(Scale(Rect{592 + x, 646 + x / 2, 593 + x, 664 - x / 2}), pauseColor);
+			}
+		}
+		else
+		{
+			canvas.FillRoundedRect(Scale(Rect{589, 647, 594, 663}), Scale(1), pauseColor);
+			canvas.FillRoundedRect(Scale(Rect{600, 647, 605, 663}), Scale(1), pauseColor);
+		}
+		if (m_percentFont)
+		{
+			TextStyle pauseStyle = bodyStyle;
+			pauseStyle.color = pauseColor;
+			DrawText(canvas, *m_percentFont, m_paused ? "Resume" : "Pause", Scale(Rect{568, 678, 626, 696}), TextAlign::Center, pauseStyle);
+		}
 		DrawButton(canvas, m_playButton);
 
 		m_dirty = false;
@@ -799,6 +838,7 @@ namespace mmo
 			result.push_back(&button);
 		}
 		result.push_back(&m_playButton);
+		result.push_back(&m_pauseButton);
 		result.push_back(&m_minimizeButton);
 		result.push_back(&m_closeButton);
 		return result;

@@ -112,3 +112,5 @@ Final frame prompt:
 
 ## Integrated download footer
 The footer now joins the window frame at both sides and along the bottom. Download size appears to the right of the progress track, with measured average throughput and an approximate remaining time underneath. Throughput uses completed byte growth divided by monotonic elapsed download time; the first second shows a measuring hint. Details clear when verification, completion or failure replaces the download phase. Preview figures are illustrative; normal downloads publish real counters.
+
+The footer groups the taller progress track and pause control separately from transfer details and Play, with vertical separators. Pause waits at file/chunk boundaries and resumes through a condition variable; closing wakes paused workers. Paused time is excluded from throughput and ETA. A long pause may require the existing retry mechanism to reopen a server connection. Preview checks exercise Pause/Resume at each DPI; model tests verify that pause clears on preparation, success and failure.

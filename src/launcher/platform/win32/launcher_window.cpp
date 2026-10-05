@@ -321,6 +321,19 @@ namespace mmo
 		}
 	}
 
+	bool LauncherWindow::SetDownloadPaused(const bool paused)
+	{
+		UpdateSnapshot snapshot;
+		uint32 version = 0;
+		m_model.TryGetSnapshot(snapshot, version);
+		if (snapshot.phase != UpdatePhase::Updating)
+		{
+			return false;
+		}
+		m_worker.SetPaused(paused);
+		return true;
+	}
+
 	bool LauncherWindow::RepairGame()
 	{
 		if (!m_worker.Restart())
