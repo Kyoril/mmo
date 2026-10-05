@@ -825,9 +825,19 @@ namespace mmo
 		const Color pauseColor = m_pauseButton.enabled ? theme::HeroTitleColor : theme::VersionColor;
 		if (m_paused)
 		{
-			for (int32 x = 0; x < 12; ++x)
+			const Rect triangle = Scale(Rect{590, 646, 608, 664});
+			const float centerY = (triangle.top + triangle.bottom) * 0.5f;
+			for (int32 x = triangle.left; x < triangle.right; ++x)
 			{
-				canvas.FillRect(Scale(Rect{592 + x, 646 + x / 2, 593 + x, 664 - x / 2}), pauseColor);
+				const float halfHeight = triangle.GetHeight() * 0.5f *
+					(1.0f - (x - triangle.left + 0.5f) / triangle.GetWidth());
+				const float top = centerY - halfHeight;
+				const float bottom = centerY + halfHeight;
+				for (int32 y = static_cast<int32>(std::floor(top)); y < static_cast<int32>(std::ceil(bottom)); ++y)
+				{
+					const float coverage = std::min(bottom, y + 1.0f) - std::max(top, static_cast<float>(y));
+					canvas.FillRect(Rect{x, y, x + 1, y + 1}, ScaleColor(pauseColor, static_cast<uint8>(coverage * 255.0f + 0.5f)));
+				}
 			}
 		}
 		else
