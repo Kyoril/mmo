@@ -28,6 +28,9 @@ namespace mmo
 		/// A secondary hint below the progress bar, e.g. about connection problems.
 		/// Empty when there is nothing to point out.
 		std::string noticeText;
+		/// Download size, measured throughput and estimated remaining time.
+		std::string downloadSizeText;
+		std::string downloadRateText;
 		/// 0..1. Negative means indeterminate: the total is not known yet.
 		float progress = -1.0f;
 		bool playEnabled = false;
@@ -51,6 +54,9 @@ namespace mmo
 
 		/// `progress` is 0..1, or negative for indeterminate.
 		void SetProgress(float progress);
+
+		/// Publishes the two download detail lines together.
+		void SetDownloadDetails(std::string size, std::string rate);
 
 		/// Moves to Ready, enables Play and clears the notice.
 		void SetReady(std::string text);

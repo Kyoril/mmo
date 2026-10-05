@@ -270,7 +270,24 @@ namespace mmo
 		std::string status = "Downloading files: " + std::to_string(filesDone) + " / " + std::to_string(m_fileCount);
 		if (m_updateSize > 0)
 		{
-			status += "  (" + FormatByteSize(std::min(m_updated, m_updateSize)) + " / " + FormatByteSize(m_updateSize) + ")";
+			const auto loaded = std::min(m_updated, m_updateSize);
+			const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_downloadStarted).count();
+			std::string rate = "Measuring speed...";
+			if (elapsed >= 1.0 && loaded > 0)
+			{
+				const double bytesPerSecond = static_cast<double>(loaded) / elapsed;
+				const auto seconds = static_cast<uint64>((m_updateSize - loaded) / bytesPerSecond);
+				rate = FormatByteSize(static_cast<std::uintmax_t>(bytesPerSecond)) + "/s  |  ~";
+				if (seconds >= 3600)
+				{
+					rate += std::to_string(seconds / 3600) + "h " + std::to_string(seconds / 60 % 60) + "m";
+				}
+				else
+				{
+					rate += std::to_string(seconds / 60) + "m " + std::to_string(seconds % 60) + "s";
+				}
+			}
+			m_model.SetDownloadDetails(FormatByteSize(loaded) + " / " + FormatByteSize(m_updateSize), std::move(rate));
 		}
 
 		m_model.SetStatus(std::move(status));
@@ -378,6 +395,7 @@ namespace mmo
 			m_model.SetPhase(UpdatePhase::Updating);
 			{
 				const std::scoped_lock lock{ m_progressMutex };
+				m_downloadStarted = std::chrono::steady_clock::now();
 				PublishDownloadProgress();
 			}
 

@@ -113,6 +113,7 @@ namespace mmo
 		std::uintmax_t m_updated = 0;
 		std::uintmax_t m_filesDone = 0;
 		std::uintmax_t m_filesChecked = 0;
+		std::chrono::steady_clock::time_point m_downloadStarted;
 
 		friend struct ModelProgressHandler;
 	};

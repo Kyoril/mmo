@@ -354,11 +354,11 @@ namespace mmo
 
 		canvas.DrawVignette(Scale(layout::Content), layout::VignetteStrength);
 
-		if (const Bitmap* panel = GetAsset(theme::PanelBottom.resourceId))
-		{
-			canvas.DrawNineSlice(*panel, Scale(theme::PanelBottom.insets),
-				Scale(layout::BottomPanel), Color{ 255, 255, 255, 255 }, theme::PanelBottom.tileEdges);
-		}
+		canvas.FillGradient(Scale(layout::BottomPanel), FromArgb(0xE32C2418), FromArgb(0xF008090A), false);
+		canvas.FillRect(Scale(Rect{32, 592, 1108, 594}), FromArgb(0xFF867044));
+		canvas.FillRect(Scale(Rect{32, 594, 1108, 595}), FromArgb(0x403F3019));
+		canvas.FillGradient(Scale(Rect{32, 690, 1108, 708}), FromArgb(0x00291E10), FromArgb(0x904A3619), false);
+		canvas.FillRect(Scale(Rect{844, 611, 845, 682}), FromArgb(0x604F412B));
 
 		canvas.PopClip();
 
@@ -397,6 +397,8 @@ namespace mmo
 			: theme::StatusColor;
 
 		m_noticeLabel.text = snapshot.noticeText;
+		m_downloadSizeText = snapshot.phase == UpdatePhase::Updating ? snapshot.downloadSizeText : std::string();
+		m_downloadRateText = snapshot.phase == UpdatePhase::Updating ? snapshot.downloadRateText : std::string();
 
 		m_playButton.enabled = snapshot.playEnabled;
 
@@ -767,8 +769,15 @@ namespace mmo
 		if (m_percentFont)
 		{
 			DrawLabel(canvas, *m_percentFont, m_percentLabel, bodyStyle);
+			if (!m_downloadSizeText.empty())
+			{
+				TextStyle detailStyle = bodyStyle;
+				detailStyle.color = theme::StatusColor;
+				DrawText(canvas, *m_percentFont, m_downloadSizeText, Scale(Rect{644, 635, 834, 654}), TextAlign::Left, detailStyle);
+				DrawText(canvas, *m_percentFont, m_downloadRateText, Scale(Rect{644, 655, 834, 675}), TextAlign::Left, detailStyle);
+			}
 
-			if (!m_noticeLabel.text.empty())
+			if (!m_noticeLabel.text.empty() && m_downloadSizeText.empty())
 			{
 				DrawLabel(canvas, *m_percentFont, m_noticeLabel, bodyStyle);
 			}

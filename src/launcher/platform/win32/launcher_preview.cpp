@@ -84,7 +84,9 @@ namespace mmo
 			Canvas canvas(surface.GetPixels(), surface.GetWidth(), surface.GetHeight(), surface.GetWidth());
 			UpdateSnapshot snapshot;
 			snapshot.phase = UpdatePhase::Updating;
-			snapshot.statusText = "Downloading files: 7754 / 10166  (4.6 GB / 8.1 GB)";
+			snapshot.statusText = "Downloading files: 7754 / 10166";
+			snapshot.downloadSizeText = "4.6 GB / 8.1 GB";
+			snapshot.downloadRateText = "12.4 MB/s  |  ~4m 49s";
 			snapshot.progress = 0.57f;
 			view.ApplySnapshot(snapshot);
 			view.Tick(10.0f);

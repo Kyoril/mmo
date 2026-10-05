@@ -96,6 +96,36 @@ TEST_CASE("Rechecking an installation disables Play immediately", "[launcher][mo
 	CHECK_FALSE(snapshot.playEnabled);
 	CHECK_FALSE(model.TryGetSnapshot(snapshot, version));
 }
+TEST_CASE("Download details are cleared when leaving the download phase", "[launcher][model]")
+{
+	LauncherModel model;
+	uint32 version = 0;
+	UpdateSnapshot snapshot;
+	for (const auto phase : {UpdatePhase::Preparing, UpdatePhase::Ready, UpdatePhase::Failed})
+	{
+		model.SetPhase(UpdatePhase::Updating);
+		model.SetDownloadDetails("4.6 GB / 8.1 GB", "12.4 MB/s | ~4m 49s");
+		REQUIRE(model.TryGetSnapshot(snapshot, version));
+		CHECK(snapshot.downloadSizeText == "4.6 GB / 8.1 GB");
+		CHECK_FALSE(snapshot.downloadRateText.empty());
+		if (phase == UpdatePhase::Ready)
+		{
+			model.SetReady("Ready");
+		}
+		else if (phase == UpdatePhase::Failed)
+		{
+			model.SetFailed("Failed");
+		}
+		else
+		{
+			model.SetPhase(phase);
+		}
+		REQUIRE(model.TryGetSnapshot(snapshot, version));
+		CHECK(snapshot.downloadSizeText.empty());
+		CHECK(snapshot.downloadRateText.empty());
+	}
+}
+
 #ifdef _WIN32
 #include "update_worker.h"
 #include <condition_variable>

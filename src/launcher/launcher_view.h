@@ -156,6 +156,8 @@ namespace mmo
 	  Button m_closeButton;
 	  Button m_minimizeButton;
 	  ProgressBar m_progress;
+	  std::string m_downloadSizeText;
+	  std::string m_downloadRateText;
 	  Label m_titleLabel;
 	  Label m_heroTitleLabel;
 	  Label m_heroSubtitleLabel;
