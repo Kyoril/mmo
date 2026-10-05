@@ -271,6 +271,8 @@ namespace mmo
 			updating::SourceOptions sourceOptions;
 			sourceOptions.inactivityTimeout = m_config.inactivityTimeout;
 			sourceOptions.cancel = &m_shouldQuit;
+			sourceOptions.prefetchConnections = m_config.pipelineConnections;
+			sourceOptions.pipelineDepth = m_config.pipelineDepth;
 
 			updating::RetryPolicy retryPolicy;
 			retryPolicy.maxAttempts = m_config.maxDownloadAttempts;
@@ -318,6 +320,18 @@ namespace mmo
 				std::move(prepareParameters.source),
 				doUnpackArchives,
 				progressHandler);
+
+			// Announce every download in the order the steps will run, so that small files
+			// are already streaming in on pipelined connections when the steps ask for them.
+			{
+				std::vector<updating::RemoteFile> downloads;
+				for (const auto& step : preparedUpdate.steps)
+				{
+					downloads.insert(downloads.end(), step.downloads.begin(), step.downloads.end());
+				}
+
+				updateParameters.source->prefetch(downloads);
+			}
 
 			const std::string selfExecutablePath = GetSelfExecutablePath();
 			ASSERT(!selfExecutablePath.empty());

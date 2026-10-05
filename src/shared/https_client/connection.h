@@ -9,8 +9,11 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 
+#include <cstddef>
+#include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace asio::ssl
 {
@@ -55,6 +58,22 @@ namespace mmo
 				/// normal for keep-alive and not an error. Any other failure throws as
 				/// sendRequest does, and leaves the connection closed.
 				Response Send(Request request);
+
+				typedef std::function<void(std::size_t index, Response response)> ResponseHandler;
+
+				/// Sends all `requests` at once and reads their responses in order (HTTP/1.1
+				/// pipelining), handing each to `onResponse` together with its index. For many
+				/// small requests this saves one round trip per request over Send.
+				///
+				/// Every request but the last should have keepAlive set, or the server closes
+				/// the connection after it. Requests must be small, like GETs: they are all
+				/// written before any response is read.
+				///
+				/// Returns the number of responses received, which is less than requests.size()
+				/// when the server closed the connection or the connection failed after the
+				/// first response; the caller sends the rest again. Throws, like Send, only if
+				/// no response arrived at all. Exceptions thrown by `onResponse` are passed on.
+				std::size_t SendPipelined(std::vector<Request> requests, const ResponseHandler& onResponse);
 
 				/// True if the connection is open and may be used for the next request.
 				bool IsOpen() const;

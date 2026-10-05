@@ -25,6 +25,13 @@ namespace mmo
 		/// Parallel downloads. Each one keeps its own connection alive, so this mostly
 		/// pays off for many small files, where the round trip dominates.
 		size_t concurrency = 8;
+
+		/// Background connections that download small files ahead of time with HTTP
+		/// pipelining. Zero disables it.
+		uint32 pipelineConnections = 4;
+
+		/// Requests sent ahead on each pipelined connection.
+		uint32 pipelineDepth = 16;
 		bool selfUpdateEnabled = true;
 
 		/// How long the connection may stall before a download attempt is given up.

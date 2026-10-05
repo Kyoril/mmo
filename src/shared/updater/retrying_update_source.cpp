@@ -83,6 +83,11 @@ namespace mmo::updating
 		}
 	}
 
+	void RetryingUpdateSource::prefetch(const std::vector<RemoteFile>& files)
+	{
+		m_inner->prefetch(files);
+	}
+
 	bool RetryingUpdateSource::IsCancelled() const
 	{
 		return m_cancel && m_cancel->load();
