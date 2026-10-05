@@ -2,7 +2,7 @@
 
 #include "item_display_applier.h"
 
-#include "item_display_model_match.h"
+#include "game/item_display_model_match.h"
 #include "object_mgr.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"

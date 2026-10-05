@@ -14,6 +14,7 @@
 #include "assets/asset_registry.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
+#include "game/item_display_model_match.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
@@ -22,6 +23,10 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/sub_entity.h"
+#include "scene_graph/sub_mesh.h"
+#include "scene_graph/mesh.h"
+#include "scene_graph/skeleton.h"
+#include "scene_graph/tag_point.h"
 #include "scene_graph/animation_state.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/axis_display.h"
@@ -31,8 +36,9 @@ namespace mmo
 	class ModelPreview final : public CustomizationPropertyGroupApplier
 	{
 	public:
-		explicit ModelPreview(EditorHost& host)
+		explicit ModelPreview(EditorHost& host, const proto::Project& project)
 			: m_host(host)
+			, m_project(project)
 		{
 			m_cameraAnchor = &m_scene.CreateSceneNode("ModelPreviewCameraAnchor");
 			m_cameraNode = &m_scene.CreateSceneNode("ModelPreviewCameraNode");
@@ -55,6 +61,7 @@ namespace mmo
 		{
 			if (m_entity)
 			{
+				ClearItemAttachments();
 				m_scene.GetRootSceneNode().DetachObject(*m_entity);
 				m_scene.DestroyEntity(*m_entity);
 				m_entity = nullptr;
@@ -77,7 +84,17 @@ namespace mmo
 
 			if (m_currentEntry)
 			{
-				const std::string serialized = m_currentEntry->SerializeAsString();
+				// The outfit's item displays are edited in their own window, so their content is
+				// part of what the preview depends on.
+				std::string serialized = m_currentEntry->SerializeAsString();
+				for (const uint32 itemDisplayId : m_currentEntry->item_displays())
+				{
+					if (const auto* display = m_project.itemDisplays.getById(itemDisplayId))
+					{
+						serialized += display->SerializeAsString();
+					}
+				}
+
 				if (serialized != m_lastEntrySerialized)
 				{
 					m_lastEntrySerialized = serialized;
@@ -197,6 +214,7 @@ namespace mmo
 
 			if (m_entity)
 			{
+				ClearItemAttachments();
 				m_scene.GetRootSceneNode().DetachObject(*m_entity);
 				m_scene.DestroyEntity(*m_entity);
 				m_entity = nullptr;
@@ -327,9 +345,162 @@ namespace mmo
 				m_avatarConfiguration.Apply(*this, *m_avatarDefinition);
 			}
 
+			// Dress the model after the customization, like the client does, so a helmet can
+			// hide the chosen hair style.
+			ApplyItemDisplays();
+
 			const float radius = std::max(1.0f, m_entity->GetBoundingRadius());
 			m_cameraAnchor->SetPosition(Vector3::UnitY * radius * 0.5f);
 			m_cameraNode->SetPosition(Vector3(0.0f, radius * 0.2f, radius * 2.2f));
+		}
+
+		/// Resolves the mesh a model data entry renders, see ModelMeshResolver.
+		String ResolveModelMesh(const uint32 modelId) const
+		{
+			const proto::ModelDataEntry* model = m_project.models.getById(modelId);
+			if (!model)
+			{
+				return String();
+			}
+
+			if (Path(model->filename()).extension() != ".char")
+			{
+				return model->filename();
+			}
+
+			const auto definition = AvatarDefinitionManager::Get().Load(model->filename());
+			return definition ? definition->GetBaseMesh() : String();
+		}
+
+		void SetSubEntitiesVisibleByTag(const String& tag, const bool visible)
+		{
+			for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+			{
+				if (m_entity->GetMesh()->GetSubMesh(i).HasTag(tag))
+				{
+					if (SubEntity* subEntity = m_entity->GetSubEntity(i))
+					{
+						subEntity->SetVisible(visible);
+					}
+				}
+			}
+		}
+
+		/// Mirrors the client's ApplyItemDisplay (game_client/item_display_applier.cpp) for the
+		/// editor's proto types: sub entity visibility, material overrides and attached meshes.
+		void ApplyItemDisplays()
+		{
+			if (!m_entity || !m_currentEntry)
+			{
+				return;
+			}
+
+			const ModelMeshResolver resolveMesh = [this](const uint32 modelId) { return ResolveModelMesh(modelId); };
+
+			for (const uint32 itemDisplayId : m_currentEntry->item_displays())
+			{
+				const proto::ItemDisplayEntry* display = m_project.itemDisplays.getById(itemDisplayId);
+				if (!display)
+				{
+					continue;
+				}
+
+				for (const auto& variant : display->variants())
+				{
+					if (!ItemDisplayVariantAppliesToModel(variant.model(), m_currentEntry->id(), resolveMesh))
+					{
+						continue;
+					}
+
+					for (const auto& name : variant.hidden_by_name())
+					{
+						if (SubEntity* subEntity = m_entity->GetSubEntity(name))
+						{
+							subEntity->SetVisible(false);
+						}
+					}
+
+					for (const auto& tag : variant.hidden_by_tag())
+					{
+						SetSubEntitiesVisibleByTag(tag, false);
+					}
+
+					for (const auto& name : variant.shown_by_name())
+					{
+						if (SubEntity* subEntity = m_entity->GetSubEntity(name))
+						{
+							subEntity->SetVisible(true);
+						}
+					}
+
+					for (const auto& tag : variant.shown_by_tag())
+					{
+						SetSubEntitiesVisibleByTag(tag, true);
+					}
+
+					for (const auto& materialOverride : variant.material_overrides())
+					{
+						if (SubEntity* subEntity = m_entity->GetSubEntity(materialOverride.first))
+						{
+							if (MaterialPtr material = MaterialManager::Get().Load(materialOverride.second))
+							{
+								subEntity->SetMaterial(material);
+							}
+						}
+					}
+
+					AttachItemMesh(variant);
+				}
+			}
+		}
+
+		/// Attaches a variant's mesh (weapons, shields, ...) the way an NPC wears it: at the
+		/// default bone, falling back to the sheathed one.
+		void AttachItemMesh(const proto::ItemDisplayVariant& variant)
+		{
+			if (!variant.has_mesh() || variant.mesh().empty() || !m_entity->HasSkeleton())
+			{
+				return;
+			}
+
+			const proto::ItemDisplayBoneAttachment* bone = nullptr;
+			if (variant.has_attached_bone_default())
+			{
+				bone = &variant.attached_bone_default();
+			}
+			else if (variant.has_attached_bone_sheath())
+			{
+				bone = &variant.attached_bone_sheath();
+			}
+			else if (variant.has_attached_bone_drawn())
+			{
+				bone = &variant.attached_bone_drawn();
+			}
+
+			if (!bone || !m_entity->GetSkeleton()->HasBone(bone->bone_name()))
+			{
+				return;
+			}
+
+			Entity* attachment = m_scene.CreateEntity("ModelEditorPreviewItem_" + std::to_string(m_itemAttachments.size()), variant.mesh());
+			if (TagPoint* tagPoint = m_entity->AttachObjectToBone(bone->bone_name(), *attachment))
+			{
+				tagPoint->SetPosition(Vector3(bone->offset_x(), bone->offset_y(), bone->offset_z()));
+				tagPoint->SetOrientation(Quaternion(bone->rotation_w(), bone->rotation_x(), bone->rotation_y(), bone->rotation_z()));
+				tagPoint->SetScale(Vector3(bone->scale_x(), bone->scale_y(), bone->scale_z()));
+			}
+			m_itemAttachments.push_back(attachment);
+		}
+
+		void ClearItemAttachments()
+		{
+			for (Entity* attachment : m_itemAttachments)
+			{
+				m_entity->DetachObjectFromBone(attachment->GetName());
+				m_scene.DestroyEntity(*attachment);
+			}
+
+			m_itemAttachments.clear();
 		}
 
 		void DrawViewport()
@@ -398,6 +569,7 @@ namespace mmo
 
 	private:
 		EditorHost& m_host;
+		const proto::Project& m_project;
 		scoped_connection m_renderConnection;
 		Scene m_scene;
 		SceneNode* m_cameraAnchor{ nullptr };
@@ -409,6 +581,9 @@ namespace mmo
 		ImVec2 m_viewportSize{ 0.0f, 0.0f };
 		Entity* m_entity{ nullptr };
 		AnimationState* m_animState{ nullptr };
+
+		/// Meshes the outfit's item displays attached to m_entity's bones.
+		std::vector<Entity*> m_itemAttachments;
 
 		proto::ModelDataEntry* m_currentEntry{ nullptr };
 		String m_lastEntrySerialized;
@@ -429,7 +604,7 @@ namespace mmo
 
 		m_toolbarButtonText = "Models";
 		ReloadModelList();
-		m_preview = std::make_unique<ModelPreview>(m_host);
+		m_preview = std::make_unique<ModelPreview>(m_host, m_project);
 
 		m_assetImported = m_host.assetImported.connect(this, &ModelEditorWindow::OnAssetImported);
 	}

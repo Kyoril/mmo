@@ -2,7 +2,7 @@
 
 #include "catch.hpp"
 
-#include "game_client/item_display_model_match.h"
+#include "game/item_display_model_match.h"
 
 #include <map>
 
