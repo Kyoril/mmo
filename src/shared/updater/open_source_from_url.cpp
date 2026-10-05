@@ -13,7 +13,8 @@ namespace mmo
 	namespace updating
 	{
 		std::unique_ptr<IUpdateSource> openSourceFromUrl(
-		    const UpdateURL &url)
+		    const UpdateURL &url,
+		    const SourceOptions &options)
 		{
 			std::unique_ptr<IUpdateSource> source;
 
@@ -34,7 +35,8 @@ namespace mmo
 				source.reset(new HTTPSUpdateSource(
 				                 url.host,
 				                 static_cast<uint16>(url.port ? url.port : 443),
-				                 url.path));
+				                 url.path,
+				                 options));
 				break;
 
 			default:

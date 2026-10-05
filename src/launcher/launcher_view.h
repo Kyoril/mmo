@@ -120,6 +120,7 @@ namespace mmo
 		Label m_versionLabel;
 		Label m_statusLabel;
 		Label m_percentLabel;
+		Label m_noticeLabel;
 
 		bool m_progressIndeterminate = true;
 	};

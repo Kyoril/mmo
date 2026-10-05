@@ -25,6 +25,9 @@ namespace mmo
 	{
 		UpdatePhase phase = UpdatePhase::Connecting;
 		std::string statusText;
+		/// A secondary hint below the progress bar, e.g. about connection problems.
+		/// Empty when there is nothing to point out.
+		std::string noticeText;
 		/// 0..1. Negative means indeterminate: the total is not known yet.
 		float progress = -1.0f;
 		bool playEnabled = false;
@@ -43,10 +46,13 @@ namespace mmo
 		void SetPhase(UpdatePhase phase);
 		void SetStatus(std::string text);
 
+		/// Sets the secondary hint shown below the progress bar. Empty hides it.
+		void SetNotice(std::string text);
+
 		/// `progress` is 0..1, or negative for indeterminate.
 		void SetProgress(float progress);
 
-		/// Moves to Ready and enables Play.
+		/// Moves to Ready, enables Play and clears the notice.
 		void SetReady(std::string text);
 
 		/// Moves to Failed and reports `error` as the status.

@@ -94,6 +94,7 @@ namespace mmo::updating
 			PreparedUpdate update;
 			update.estimates.downloadSize = compressedSize;
 			update.estimates.updateSize = originalSize;
+			update.estimates.fileCount = 1;
 			update.steps.push_back(PreparedUpdateStep(
 			                           destination,
 			                           [source, destination, compression, compressedSize, originalSize]

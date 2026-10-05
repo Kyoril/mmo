@@ -23,6 +23,14 @@ namespace mmo
 		});
 	}
 
+	void LauncherModel::SetNotice(std::string text)
+	{
+		Mutate([&text](UpdateSnapshot& state)
+		{
+			state.noticeText = std::move(text);
+		});
+	}
+
 	void LauncherModel::SetProgress(const float progress)
 	{
 		Mutate([progress](UpdateSnapshot& state)
@@ -37,6 +45,7 @@ namespace mmo
 		{
 			state.phase = UpdatePhase::Ready;
 			state.statusText = std::move(text);
+			state.noticeText.clear();
 			state.progress = 1.0f;
 			state.playEnabled = true;
 		});

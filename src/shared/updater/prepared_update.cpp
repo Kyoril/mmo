@@ -17,6 +17,7 @@ namespace mmo::updating
 	PreparedUpdate::Estimates::Estimates()
 		: downloadSize(0)
 		, updateSize(0)
+		, fileCount(0)
 	{
 	}
 
@@ -31,6 +32,7 @@ namespace mmo::updating
 		{
 			sum.estimates.downloadSize += part.estimates.downloadSize;
 			sum.estimates.updateSize += part.estimates.updateSize;
+			sum.estimates.fileCount += part.estimates.fileCount;
 
 			sum.steps.insert(
 			    sum.steps.end(),

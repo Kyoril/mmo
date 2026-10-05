@@ -115,6 +115,10 @@ namespace mmo
 		m_percentLabel.align = TextAlign::Right;
 		m_percentLabel.color = theme::PercentColor;
 
+		m_noticeLabel.rect = layout::NoticeLabel;
+		m_noticeLabel.align = TextAlign::Left;
+		m_noticeLabel.color = theme::StatusWarningColor;
+
 		m_progress.rect = layout::ProgressTrack;
 
 		m_playButton.rect = layout::PlayButton;
@@ -338,6 +342,8 @@ namespace mmo
 		m_statusLabel.color = snapshot.phase == UpdatePhase::Failed
 			? theme::StatusErrorColor
 			: theme::StatusColor;
+
+		m_noticeLabel.text = snapshot.noticeText;
 
 		m_playButton.enabled = snapshot.playEnabled;
 
@@ -669,6 +675,11 @@ namespace mmo
 		if (m_percentFont)
 		{
 			DrawLabel(canvas, *m_percentFont, m_percentLabel, bodyStyle);
+
+			if (!m_noticeLabel.text.empty())
+			{
+				DrawLabel(canvas, *m_percentFont, m_noticeLabel, bodyStyle);
+			}
 		}
 
 		DrawButton(canvas, m_playButton);
