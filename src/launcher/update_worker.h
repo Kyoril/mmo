@@ -22,7 +22,9 @@ namespace mmo
 	{
 		std::string sourceUrl;
 		std::string outputDir = "./";
-		size_t concurrency = 4;
+		/// Parallel downloads. Each one keeps its own connection alive, so this mostly
+		/// pays off for many small files, where the round trip dominates.
+		size_t concurrency = 8;
 		bool selfUpdateEnabled = true;
 
 		/// How long the connection may stall before a download attempt is given up.

@@ -128,7 +128,7 @@ namespace
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR commandLine, int showCommand)
 {
-	size_t concurrency = 4;
+	size_t concurrency = 8;
 	bool selfUpdateEnabled = true;
 
 	cxxopts::Options options("Available options");
