@@ -4,6 +4,8 @@
 #include "base/macros.h"
 #include "base/utilities.h"
 
+#include <array>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -106,10 +108,82 @@ namespace mmo
 				return head.str();
 			}
 
+			namespace
+			{
+				typedef std::function<void(const asio::error_code&, std::size_t)> CompletionHandler;
+
+				/// Runs one asynchronous operation to completion on `io` and returns the number
+				/// of bytes it transferred.
+				///
+				/// The operations are asynchronous only so that they can be bounded: blocking
+				/// socket calls cannot be given a timeout portably, and a stalled connection
+				/// would otherwise hang the caller forever. `start` begins the operation and
+				/// hands the given handler to it; `abort` makes a pending operation complete
+				/// early, which is what both the timeout and cancellation do.
+				std::size_t Await(
+					asio::io_context& io,
+					const RequestOptions& options,
+					const std::function<void()>& abort,
+					const std::function<void(CompletionHandler)>& start)
+				{
+					std::optional<asio::error_code> result;
+					std::size_t transferred = 0;
+					start([&result, &transferred](const asio::error_code& ec, const std::size_t bytes)
+					{
+						result = ec;
+						transferred = bytes;
+					});
+
+					// The previous operation ran the context out of work, which stops it.
+					io.restart();
+
+					const auto startedAt = std::chrono::steady_clock::now();
+					asio::error_code abortReason;
+
+					// Even after aborting, the handler still has to run: it refers to the locals
+					// above, so returning before it did would leave it dangling.
+					while (!result)
+					{
+						if (!abortReason)
+						{
+							if (options.cancel && options.cancel->load())
+							{
+								abortReason = asio::error::operation_aborted;
+							}
+							else if (options.inactivityTimeout.count() > 0 &&
+								std::chrono::steady_clock::now() - startedAt >= options.inactivityTimeout)
+							{
+								abortReason = asio::error::timed_out;
+							}
+
+							if (abortReason)
+							{
+								abort();
+							}
+						}
+
+						io.run_one_for(std::chrono::milliseconds(50));
+					}
+
+					if (abortReason)
+					{
+						throw asio::system_error(abortReason);
+					}
+
+					if (*result)
+					{
+						throw asio::system_error(*result);
+					}
+
+					return transferred;
+				}
+			}
+
 			https_client::Response sendRequest(
 			    const std::string &host,
 				uint16 port,
-			    const Request &request
+			    const Request &request,
+				const RequestOptions &options
 			)
 			{
 				asio::io_context io_context;
@@ -133,18 +207,56 @@ namespace mmo
 					throw asio::system_error(ec);
 				}
 
+				// Closing the socket completes whatever is pending on the stream with an error.
+				const auto closeSocket = [&ssl_stream]()
+				{
+					asio::error_code ignored;
+					ssl_stream->lowest_layer().close(ignored);
+				};
+
 				asio::ip::tcp::resolver resolver(io_context);
-				auto endpoints = resolver.resolve(host, std::to_string(port));
-				asio::connect(ssl_stream->lowest_layer(), endpoints);
+				asio::ip::tcp::resolver::results_type endpoints;
+				Await(io_context, options, [&resolver] { resolver.cancel(); }, [&](CompletionHandler done)
+				{
+					resolver.async_resolve(host, std::to_string(port),
+						[&endpoints, done](const asio::error_code& ec, asio::ip::tcp::resolver::results_type results)
+						{
+							endpoints = std::move(results);
+							done(ec, 0);
+						});
+				});
+
+				Await(io_context, options, closeSocket, [&](CompletionHandler done)
+				{
+					asio::async_connect(ssl_stream->lowest_layer(), endpoints,
+						[done](const asio::error_code& ec, const asio::ip::tcp::endpoint&)
+						{
+							done(ec, 0);
+						});
+				});
+
 				ssl_stream->lowest_layer().set_option(asio::ip::tcp::no_delay(true));
-				ssl_stream->handshake(asio::ssl::stream_base::client);
+
+				Await(io_context, options, closeSocket, [&](CompletionHandler done)
+				{
+					ssl_stream->async_handshake(asio::ssl::stream_base::client, [done](const asio::error_code& ec)
+					{
+						done(ec, 0);
+					});
+				});
 
 				const std::string request_str = FormatRequestHead(request) + request.body;
 
-				asio::write(*ssl_stream, asio::buffer(request_str));
+				Await(io_context, options, closeSocket, [&](CompletionHandler done)
+				{
+					asio::async_write(*ssl_stream, asio::buffer(request_str), done);
+				});
 
 				asio::streambuf response_buf;
-				asio::read_until(*ssl_stream, response_buf, "\r\n");
+				Await(io_context, options, closeSocket, [&](CompletionHandler done)
+				{
+					asio::async_read_until(*ssl_stream, response_buf, "\r\n", done);
+				});
 
 				std::istream response_stream(&response_buf);
 				std::string response_version;
@@ -160,7 +272,10 @@ namespace mmo
 				}
 
 				std::map<std::string, std::string> headers;
-				asio::read_until(*ssl_stream, response_buf, "\r\n\r\n");
+				Await(io_context, options, closeSocket, [&](CompletionHandler done)
+				{
+					asio::async_read_until(*ssl_stream, response_buf, "\r\n\r\n", done);
+				});
 
 				std::string header_line;
 				while (std::getline(response_stream, header_line) && header_line != "\r")
@@ -192,34 +307,45 @@ namespace mmo
 					body.append(std::istreambuf_iterator<char>(response_stream), std::istreambuf_iterator<char>());
 				}
 
+				std::array<char, 16 * 1024> buf;
+				const auto readSome = [&](const std::size_t maxBytes)
+				{
+					return Await(io_context, options, closeSocket, [&](CompletionHandler done)
+					{
+						ssl_stream->async_read_some(asio::buffer(buf.data(), maxBytes), done);
+					});
+				};
+
 				// Read until EOF or Content-Length
 				if (bodySize)
 				{
-					std::size_t bytes_remaining = *bodySize - body.size();
-					while (bytes_remaining > 0)
+					// A connection dropped early surfaces as an error from the read, never as a
+					// silently truncated body.
+					while (body.size() < *bodySize)
 					{
-						char buf[1024];
-						std::size_t bytes_to_read = std::min(bytes_remaining, sizeof(buf));
-						std::size_t bytes_read = ssl_stream->read_some(asio::buffer(buf, bytes_to_read));
-						if (bytes_read == 0)
-							break;
-						body.append(buf, bytes_read);
-						bytes_remaining -= bytes_read;
+						const std::size_t bytes_remaining = static_cast<std::size_t>(*bodySize - body.size());
+						const std::size_t bytes_read = readSome(std::min(bytes_remaining, buf.size()));
+						body.append(buf.data(), bytes_read);
 					}
 				}
 				else
 				{
-					asio::error_code ec;
-					while (true)
+					for (;;)
 					{
-						char buf[1024];
-						std::size_t bytes_read = ssl_stream->read_some(asio::buffer(buf), ec);
-						if (ec == asio::error::eof)
-							break;
+						try
+						{
+							const std::size_t bytes_read = readSome(buf.size());
+							body.append(buf.data(), bytes_read);
+						}
+						catch (const asio::system_error& ex)
+						{
+							if (ex.code() == asio::error::eof)
+							{
+								break;
+							}
 
-						if (ec)
-							throw asio::system_error(ec);
-						body.append(buf, bytes_read);
+							throw;
+						}
 					}
 				}
 

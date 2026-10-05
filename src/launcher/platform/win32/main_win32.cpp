@@ -217,9 +217,17 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 
 		const int result = window.Run();
 
-		// Stop() signals the run to abort and joins, so the worker cannot outlive the
-		// model it holds a reference to.
-		worker.Stop();
+		// Stop() aborts the run and joins, so the worker cannot outlive the model it
+		// holds a reference to. Downloads abort within a fraction of a second; the
+		// timeout only guards against something unforeseen blocking the worker. The
+		// window is already gone at this point, and a launcher that lingers invisibly
+		// in the background while it keeps writing files is worse than cutting it off.
+		if (!worker.Stop(std::chrono::seconds(5)))
+		{
+			WLOG("The update worker did not stop in time, terminating the launcher");
+			ExitProcess(static_cast<UINT>(result));
+		}
+
 		return result;
 	}
 	catch (const cxxopts::OptionException& ex)

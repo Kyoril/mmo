@@ -163,11 +163,14 @@ namespace mmo
 						const bool doZLibUncompress =
 						    (newEntry.compression == hpak::v1_0::NotCompressed);
 
+						// Reported under the server path: unlike the path inside the
+						// archive, it is unique across archives, which progress
+						// tracking per file relies on.
 						copyWithProgress(
 						    parameters,
 						    *sourceFile.content,
 						    archive,
-						    newEntry.path,
+						    requiredFile.sourcePath,
 						    newEntry.compressedSize,
 							newEntry.originalSize,
 						    doZLibUncompress
@@ -352,6 +355,7 @@ namespace mmo
 		{
 			update.estimates.downloadSize = originalSize;
 			update.estimates.updateSize = originalSize;	// Since the files will be saved compressed with zlib
+			update.estimates.fileCount = 1;
 		}
 
 		return update;

@@ -33,6 +33,7 @@ namespace mmo::updating
 		{
 			std::uintmax_t downloadSize;
 			std::uintmax_t updateSize;		// Uncompressed update size for better progress!
+			std::uintmax_t fileCount;		// Number of files that have to be downloaded.
 
 			Estimates();
 		};

@@ -74,6 +74,7 @@ namespace mmo
 
 		constexpr Color StatusColor = FromArgb(0xFFD8C7A4);
 		constexpr Color StatusErrorColor = FromArgb(0xFFE08A70);
+		constexpr Color StatusWarningColor = FromArgb(0xFFE8C060);
 		constexpr Color PercentColor = FromArgb(0xFFF0E2C0);
 		constexpr Color TextShadow = FromArgb(0xB4000000);
 
