@@ -83,7 +83,7 @@ namespace mmo
 	  void BuildPageButtons();
 	  std::vector<Button*> GetButtons();
 	  void DrawPage(Canvas& canvas);
-	  void DrawTextLine(Canvas& canvas, const std::string& text, Rect area, bool heading = false, bool gold = false);
+	  void DrawTextLine(Canvas& canvas, const std::string& text, Rect area, bool heading = false, bool gold = false, TextAlign align = TextAlign::Left);
 	  void DrawPanel(Canvas& canvas, Rect area);
 	  void DrawArtwork(Canvas& canvas, uint32 resourceId, Rect area);
 	  int32 DrawParagraph(Canvas& canvas, const std::string& text, Rect area, bool heading = false);
@@ -120,6 +120,8 @@ namespace mmo
 	  /// does not.
 	  Bitmap m_closeIcon;
 	  Bitmap m_minimizeIcon;
+		Bitmap m_windowFrameScaled;
+		std::array<Bitmap, 3> m_sectionIcons;
 
 	  /// Splash + scrims + vignette + panel, composited once.
 	  Bitmap m_background;
@@ -128,6 +130,7 @@ namespace mmo
 
 	  std::unique_ptr<FontFace> m_titleFont;
 	  std::unique_ptr<FontFace> m_headingFont;
+		std::unique_ptr<FontFace> m_sectionFont;
 	  std::unique_ptr<FontFace> m_heroTitleFont;
 	  std::unique_ptr<FontFace> m_heroSubtitleFont;
 	  std::unique_ptr<FontFace> m_versionFont;

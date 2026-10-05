@@ -22,10 +22,10 @@ namespace mmo
 	{
 		/// Every image the skin needs. Decode once so opening a page does not stall
 		/// while loading its artwork.
-		constexpr std::array<uint32, 14> RequiredImages = {
+		constexpr std::array<uint32, 15> RequiredImages = {
 			IDR_PNG_SPLASH,			 IDR_PNG_PANEL_BOTTOM,	  IDR_PNG_BORDER_FRAME,		IDR_PNG_BUTTON_UP,	   IDR_PNG_BUTTON_OVER,
 			IDR_PNG_BUTTON_DOWN,	 IDR_PNG_BUTTON_DISABLED, IDR_PNG_PROGRESS_TRACK,	IDR_PNG_PROGRESS_FILL, IDR_PNG_ICON_CLOSE,
-			IDR_PNG_CONTENT_TEXTURE, IDR_PNG_HERO_FRAME,	  IDR_PNG_NEWS_DEVELOPMENT, IDR_PNG_NEWS_WORLD};
+			IDR_PNG_CONTENT_TEXTURE, IDR_PNG_HERO_FRAME,	  IDR_PNG_NEWS_DEVELOPMENT, IDR_PNG_NEWS_WORLD, IDR_PNG_BORDER_REFINED};
 
 		const NineSliceDef& SelectButtonAsset(const ButtonState state)
 		{
@@ -46,6 +46,63 @@ namespace mmo
 			const float t = 1.0f - std::exp(-rate * deltaSeconds);
 			return current + (target - current) * t;
 		}
+		/// Small vector silhouettes rasterized with subpixel coverage at the current DPI.
+		Bitmap makeSectionIcon(const size_t index, const int32 size)
+		{
+			Bitmap bitmap(size, size);
+			constexpr int samples = 4;
+			for (int32 y = 0; y < size; ++y)
+			{
+				for (int32 x = 0; x < size; ++x)
+				{
+					int coverage = 0;
+					for (int sy = 0; sy < samples; ++sy)
+					{
+						for (int sx = 0; sx < samples; ++sx)
+						{
+							const float px = (x + (sx + 0.5f) / samples) * 24.0f / size - 12.0f;
+							const float py = (y + (sy + 0.5f) / samples) * 24.0f / size - 12.0f;
+							const float radius = std::sqrt(px * px + py * py);
+							bool inside = false;
+							if (index == 0)
+							{
+								inside = (std::abs(px) / 2.0f + std::abs(py) / 11.0f <= 1.0f)
+									|| (std::abs(px) / 11.0f + std::abs(py) / 2.0f <= 1.0f)
+									|| std::abs(radius - 6.2f) < 0.85f;
+								if (radius < 2.6f && radius > 1.2f)
+								{
+									inside = false;
+								}
+							}
+							else if (index == 1)
+							{
+								const float edge = std::cos(std::atan2(py, px) * 8.0f) > 0.25f ? 10.2f : 8.2f;
+								inside = radius <= edge && radius >= 3.2f;
+							}
+							else
+							{
+								const float u = (px + py) * 0.70710678f;
+								const float v = (py - px) * 0.70710678f;
+								const float jaw = std::sqrt(u * u + (v + 6.0f) * (v + 6.0f));
+								const float handle = std::sqrt(u * u + (v - 7.8f) * (v - 7.8f));
+								inside = (jaw < 4.5f && !(v < -6.0f && std::abs(u) < 2.4f))
+									|| (std::abs(u) < 1.8f && v > -5.5f && v < 8.0f)
+									|| (handle < 2.8f && handle > 1.0f);
+								if (handle < 1.0f)
+								{
+									inside = false;
+								}
+							}
+							coverage += inside ? 1 : 0;
+						}
+					}
+					bitmap.GetRow(y)[x] = MakeColor(255, static_cast<uint8>(220 - y * 32 / size), 112,
+						static_cast<uint8>(coverage * 255 / (samples * samples)));
+				}
+			}
+			return bitmap;
+		}
+
 	}
 
 	LauncherView::LauncherView(IPlatformHost& host)
@@ -195,6 +252,7 @@ namespace mmo
 
 		m_titleFont = build(display, Scale(theme::TitleFontSize));
 		m_headingFont = build(body, Scale(24));
+		m_sectionFont = build(body, Scale(18));
 		m_heroTitleFont = build(display, Scale(theme::HeroTitleFontSize));
 		m_heroSubtitleFont = build(body, Scale(theme::HeroSubtitleFontSize));
 		m_playFont = build(display, Scale(theme::PlayFontSize));
@@ -202,7 +260,7 @@ namespace mmo
 		m_statusFont = build(body, Scale(theme::StatusFontSize));
 		m_percentFont = build(body, Scale(theme::PercentFontSize));
 
-		if (!m_titleFont || !m_headingFont || !m_heroTitleFont || !m_heroSubtitleFont || !m_playFont || !m_versionFont || !m_statusFont ||
+		if (!m_titleFont || !m_headingFont || !m_sectionFont || !m_heroTitleFont || !m_heroSubtitleFont || !m_playFont || !m_versionFont || !m_statusFont ||
 			!m_percentFont)
 		{
 			ELOG("Failed to build the launcher fonts");
@@ -227,6 +285,22 @@ namespace mmo
 		if (const Bitmap* icon = GetAsset(IDR_PNG_ICON_MINIMIZE); icon && icon->IsValid())
 		{
 			Bitmap::Resample(*icon, iconSize, iconSize, m_minimizeIcon);
+		}
+
+		// This asset has transparent export padding. Preserve the measured corner art,
+		// then scale the source as well as its nine-slice insets for consistent DPI.
+		if (const Bitmap* frame = GetAsset(IDR_PNG_BORDER_REFINED))
+		{
+			const Rect source{ 40, 71, 1521, 928 };
+			Bitmap trimmed(source.GetWidth(), source.GetHeight());
+			Canvas trimCanvas(trimmed.GetPixels(), trimmed.GetWidth(), trimmed.GetHeight(), trimmed.GetWidth());
+			trimCanvas.Clear(theme::Transparent);
+			trimCanvas.Blit(*frame, source, trimmed.GetBounds(), BlitFilter::Nearest);
+			Bitmap::Resample(trimmed, Scale(963), Scale(557), m_windowFrameScaled);
+		}
+		for (size_t i = 0; i < m_sectionIcons.size(); ++i)
+		{
+			m_sectionIcons[i] = makeSectionIcon(i, Scale(24));
 		}
 
 		RebuildBackground();
@@ -293,11 +367,10 @@ namespace mmo
 
 	void LauncherView::DrawWindowFrame(Canvas& canvas)
 	{
-		if (const Bitmap* border = GetAsset(theme::WindowBorder.resourceId))
+		if (m_windowFrameScaled.IsValid())
 		{
-			canvas.DrawNineSlice(*border, Scale(theme::WindowBorder.insets),
-				Scale(layout::WindowFrame), Color{ 255, 255, 255, 255 },
-				theme::WindowBorder.tileEdges, NineSliceFill::FrameOnly);
+			canvas.DrawNineSlice(m_windowFrameScaled, Scale(theme::WindowBorder.insets),
+				Scale(layout::WindowFrame), Color{ 255, 255, 255, 255 }, false, NineSliceFill::FrameOnly);
 		}
 	}
 
@@ -656,10 +729,15 @@ namespace mmo
 			{
 				canvas.FillGradient(Scale(button.rect), FromArgb(0x002F2417), FromArgb(0xB02F2417), false);
 			}
-			DrawTextLine(canvas, button.text, button.rect, false, selected || button.hovered);
+			DrawTextLine(canvas, button.text, button.rect, false, selected || button.hovered, TextAlign::Center);
 			if (selected)
 			{
-				canvas.FillRect(Scale(Rect{button.rect.left + 12, 96, button.rect.right - 12, 99}), theme::ProgressTint);
+				const int32 center = (button.rect.left + button.rect.right) / 2;
+				canvas.FillRoundedRect(Scale(Rect{ center - 38, 93, center + 38, 101 }), Scale(4), FromArgb(0x30FFC04A));
+				canvas.FillGradient(Scale(Rect{ center - 36, 96, center, 99 }), FromArgb(0x409D5A16), theme::ProgressTint, true);
+				canvas.FillGradient(Scale(Rect{ center, 96, center + 36, 99 }), theme::ProgressTint, FromArgb(0x409D5A16), true);
+				canvas.FillRoundedRect(Scale(Rect{ center - 6, 93, center + 6, 99 }), Scale(3), theme::ProgressTint);
+				canvas.FillRect(Scale(Rect{ center - 3, 93, center + 3, 95 }), FromArgb(0xFFFFE4A1));
 			}
 		}
 		for (const Button& button : m_pageButtons)
@@ -955,7 +1033,7 @@ namespace mmo
 		}
 	}
 
-	void LauncherView::DrawTextLine(Canvas& canvas, const std::string& text, const Rect area, const bool heading, const bool gold)
+	void LauncherView::DrawTextLine(Canvas& canvas, const std::string& text, const Rect area, const bool heading, const bool gold, const TextAlign align)
 	{
 		FontFace* font = heading ? m_headingFont.get() : m_statusFont.get();
 		if (!font)
@@ -966,14 +1044,20 @@ namespace mmo
 		style.color = gold || heading ? theme::HeroTitleColor : theme::StatusColor;
 		const Rect physical = Scale(area);
 		canvas.PushClip(physical);
-		DrawText(canvas, *font, ElideText(*font, text, physical.GetWidth()), physical, TextAlign::Left, style);
+		DrawText(canvas, *font, ElideText(*font, text, physical.GetWidth()), physical, align, style);
 		canvas.PopClip();
 	}
 
 	void LauncherView::DrawPanel(Canvas& canvas, const Rect area)
 	{
-		canvas.FillRect(Scale(area), FromArgb(0xFF63513A));
-		canvas.FillRect(Scale(Inflate(area, -1)), FromArgb(0xF0100F0D));
+		// The border must not fill the center: that would make a translucent surface opaque.
+		const Color edge = FromArgb(0xBB87704A);
+		canvas.FillRect(Scale(Rect{ area.left, area.top, area.right, area.top + 1 }), edge);
+		canvas.FillRect(Scale(Rect{ area.left, area.bottom - 1, area.right, area.bottom }), edge);
+		canvas.FillRect(Scale(Rect{ area.left, area.top + 1, area.left + 1, area.bottom - 1 }), edge);
+		canvas.FillRect(Scale(Rect{ area.right - 1, area.top + 1, area.right, area.bottom - 1 }), edge);
+		canvas.FillGradient(Scale(Inflate(area, -1)), FromArgb(0xAA1C2024), FromArgb(0x8806090C), false);
+		canvas.FillRect(Scale(Rect{ area.left + 2, area.top + 1, area.right - 2, area.top + 2 }), FromArgb(0x30FFFFFF));
 	}
 
 	void LauncherView::DrawArtwork(Canvas& canvas, const uint32 resourceId, const Rect area)
@@ -1090,32 +1174,87 @@ namespace mmo
 			{
 				const int32 x = 64 + i * 332;
 				DrawPanel(canvas, Rect{x, 422, x + 320, 578});
-				DrawArtwork(canvas, i == 0 ? IDR_PNG_NEWS_DEVELOPMENT : IDR_PNG_NEWS_WORLD, Rect{x + 1, 423, x + 319, 516});
+				DrawArtwork(canvas, i == 0 ? IDR_PNG_NEWS_DEVELOPMENT : IDR_PNG_NEWS_WORLD, Rect{x + 1, 423, x + 319, 577});
+				canvas.FillGradient(Scale(Rect{ x + 1, 478, x + 319, 577 }), FromArgb(0x18080E16), FromArgb(0xEA030609), false);
+				canvas.FillGradient(Scale(Rect{ x + 1, 518, x + 319, 577 }), FromArgb(0x7013212B), FromArgb(0xA005080C), false);
+				canvas.FillRect(Scale(Rect{ x + 1, 518, x + 319, 519 }), FromArgb(0x20E5F2FF));
 				DrawTextLine(canvas, news[i].title, Rect{x + 12, 518, x + 298, 548}, false, true);
 				DrawTextLine(canvas, news[i].summary, Rect{x + 12, 546, x + 298, 570});
 			}
 			DrawPanel(canvas, Rect{732, 112, 1076, 578});
-			DrawTextLine(canvas, "Latest update", Rect{752, 128, 1056, 168}, true);
+			DrawTextLine(canvas, "LATEST UPDATE", Rect{752, 128, 1056, 168}, true);
 			DrawTextLine(canvas, patches.front().title, Rect{752, 170, 1056, 198}, false, true);
 			DrawTextLine(canvas, patches.front().date, Rect{752, 198, 1056, 224});
-			canvas.PushClip(Scale(Rect{752, 238, 1056, 518}));
-			int32 y = 238;
+			struct Section
+			{
+				std::string title;
+				std::vector<std::string> lines;
+			};
+			std::vector<Section> sections;
 			std::istringstream lines(patches.front().body);
 			std::string line;
-			while (std::getline(lines, line) && y < 492)
+			while (std::getline(lines, line))
 			{
-				if (line.empty())
+				if (line.compare(0, 3, "## ") == 0)
 				{
-					y += 10;
-					continue;
+					sections.push_back(Section{ line.substr(3), {} });
 				}
-				const bool heading = line.compare(0, 3, "## ") == 0;
-				if (heading)
+				else if (!line.empty() && !sections.empty())
 				{
-					line.erase(0, 3);
+					sections.back().lines.push_back(line.compare(0, 2, "- ") == 0 ? line.substr(2) : line);
 				}
-				y += DrawParagraph(canvas, line, Rect{752, y, 1056, y + 100}, heading);
-				y += 8;
+			}
+			canvas.FillRect(Scale(Rect{ 752, 224, 1056, 225 }), FromArgb(0x554C463D));
+			canvas.PushClip(Scale(Rect{ 748, 230, 1058, 520 }));
+			for (size_t i = 0; i < sections.size() && i < 3; ++i)
+			{
+				const Section& section = sections[i];
+				const int32 y = 238 + static_cast<int32>(i) * 96;
+				const Bitmap& icon = m_sectionIcons[i];
+				canvas.Blit(icon, icon.GetBounds(), Scale(Rect{ 748, y + 3, 772, y + 27 }), BlitFilter::Nearest);
+				TextStyle sectionStyle;
+				sectionStyle.color = theme::HeroTitleColor;
+				const Rect heading = Scale(Rect{ 786, y, 1056, y + 30 });
+				DrawText(canvas, *m_sectionFont, ElideText(*m_sectionFont, section.title, heading.GetWidth()), heading, TextAlign::Left, sectionStyle);
+				int32 row = y + 28;
+				for (size_t j = 0; j < section.lines.size() && j < 2; ++j)
+				{
+					std::istringstream words(section.lines[j]);
+					std::vector<std::string> wrapped;
+					std::string word;
+					std::string run;
+					while (words >> word)
+					{
+						const std::string candidate = run.empty() ? word : run + " " + word;
+						if (!run.empty() && MeasureText(*m_percentFont, candidate) > Scale(258))
+						{
+							wrapped.push_back(run);
+							run = word;
+						}
+						else
+						{
+							run = candidate;
+						}
+					}
+					if (!run.empty())
+					{
+						wrapped.push_back(run);
+					}
+					canvas.FillRoundedRect(Scale(Rect{ 786, row + 7, 789, row + 10 }), Scale(1), theme::StatusColor);
+					for (size_t k = 0; k < wrapped.size() && k < 2; ++k)
+					{
+						TextStyle summaryStyle;
+						summaryStyle.color = theme::StatusColor;
+						const Rect textArea = Scale(Rect{ 798, row, 1056, row + 16 });
+						std::string text = wrapped[k];
+						if (k == 1 && wrapped.size() > 2)
+						{
+							text += " ...";
+						}
+						DrawText(canvas, *m_percentFont, ElideText(*m_percentFont, text, textArea.GetWidth()), textArea, TextAlign::Left, summaryStyle);
+						row += 16;
+					}
+				}
 			}
 			canvas.PopClip();
 			DrawTextLine(canvas, "Read full patch notes  >", Rect{752, 532, 1056, 564}, false, true);

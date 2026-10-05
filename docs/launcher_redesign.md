@@ -79,7 +79,7 @@ ctest --test-dir build -C Debug -R '^(launcher_tests|updater_tests)$' --output-o
 
 ## Artwork
 
-The following images were generated with the built-in image generation tool, then copied into the worktree as embedded launcher assets. They are promotional artwork, not screenshots of existing game locations. No existing fonts or frame assets were replaced.
+The following images were generated with the built-in image generation tool, then copied into the worktree as embedded launcher assets. They are promotional artwork, not screenshots of existing game locations. The existing fonts are reused. The outer frame now uses a separate, detailed bronze asset; the original frame is retained in the source tree.
 
 - `src/launcher/res/splash.png`: fortified town, stone bridge, castle, pine forests and blue mountains; calm darker lower-left region for the title.
 - `src/launcher/res/news_development.png`: timber village, windmill and countryside in warm sunlight.
@@ -98,3 +98,14 @@ Final generation prompts:
 ### World card
 
 > Production Alestia Online launcher news card artwork, wide landscape 2:1, beautiful stylized painterly low-poly 3D fantasy environment. Tranquil blue lake in forested valley with pine covered islands, distant medieval castle on rocky hill, winding lakeside trail, layered blue mountains, clear blue sky with soft clouds, warm morning sunlight. Hand-painted rich textures and polished indie MMO aesthetic matching sunlit timber villages and castle town promotional art. Strong simple composition legible as small thumbnail. No text, no UI, no borders, no logos, no close-up people.
+
+
+## Visual refinement toward concept A
+
+Top navigation labels are centered. The active underline has a subtle gold glow and a raised center ornament. The launcher title is larger and brighter. The Home update preview uses gold compass, gear and wrench silhouettes, smaller gold section headings, neutral light body copy and compact wrapped bullet previews; full text remains in the patch reader. News artwork continues behind the caption under a translucent shaded glass surface. Panel borders paint only their edges, preserving center transparency.
+
+`src/launcher/res/border_frame_refined.png` was generated with the built-in image generation tool using the original concept A as a style reference. The renderer trims its transparent export padding and scales the source and nine-slice corners together at each DPI.
+
+Final frame prompt:
+
+> Create ONLY a production 2D UI frame asset for a desktop fantasy game launcher, inspired closely by the ornate antique bronze frame of concept A (TOP WINDOW in reference; ignore B and its content). The output must be a standalone transparent PNG border, with entirely transparent empty center and transparent exterior, NO panels, NO artwork, NO text, NO buttons, no dark opaque background. Wide rectangular proportions approx 1140x740. Straight horizontal and vertical rails suitable for nine-slice stretching, elegant fine antique dark bronze / gunmetal bevels with brighter gold highlights. Narrow frame rails (roughly 20 pixels visual width at 1140x740), crisp layered raised metal edges, small engraved geometric motifs, rivets, diagonal decorative corner brackets, tasteful jewel-like brass diamond at corners, a few small angular ornamental tabs along outside rails. Top bottom and side midpoints MUST remain simple straight continuous rails, no central title crest. All visible border detail must lie within the outermost 48 pixels; center opening from 48px inset entirely transparent. Outer corners compact detailed beveled geometry. Straight-on orthographic UI asset, subtle surface texture and convincing relief, sharp clean geometry and controlled contrast, no glow haze, no shadows extending into center. Important: make a reusable empty FRAME not a screenshot or comparison board. Rich fine details reminiscent of A without large thick bulky brown slabs.

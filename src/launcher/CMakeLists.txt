@@ -59,6 +59,7 @@ ENDIF(WIN32)
 set(launcherAssets
     ${CMAKE_CURRENT_SOURCE_DIR}/res/news_development.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/news_world.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/border_frame_refined.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/splash.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/panel_bottom.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/button_up.png

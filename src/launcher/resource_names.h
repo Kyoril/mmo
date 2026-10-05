@@ -38,6 +38,7 @@ namespace mmo
 		{IDR_PNG_HERO_FRAME, "hero_frame.png"},
 		{IDR_PNG_NEWS_DEVELOPMENT, "news_development.png"},
 		{IDR_PNG_NEWS_WORLD, "news_world.png"},
+		{IDR_PNG_BORDER_REFINED, "border_frame_refined.png"},
 		{IDR_TTF_DISPLAY, "font_display.ttf"},
 		{IDR_TTF_BODY, "font_body.ttf"},
 	};

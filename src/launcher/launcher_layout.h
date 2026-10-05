@@ -10,14 +10,14 @@ namespace mmo::layout
 	/// Shared logical dimensions, scaled for the display DPI.
 	constexpr int32 WindowWidth = 1140;
 	constexpr int32 WindowHeight = 740;
-	constexpr int32 FrameThickness = 48;
+	constexpr int32 FrameThickness = 32;
 	constexpr Rect WindowFrame{0, 0, WindowWidth, WindowHeight};
-	constexpr Rect Content{48, 48, 1092, 692};
-	constexpr Rect TitleBarPlate{48, 48, 1092, 100};
-	constexpr Rect TitleBarEdge{48, 98, 1092, 100};
-	constexpr Rect TitleBarShadow{48, 100, 1092, 108};
+	constexpr Rect Content{32, 32, 1108, 708};
+	constexpr Rect TitleBarPlate{32, 32, 1108, 100};
+	constexpr Rect TitleBarEdge{32, 98, 1108, 100};
+	constexpr Rect TitleBarShadow{32, 100, 1108, 108};
 	constexpr Rect Caption{0, 0, WindowWidth, 100};
-	constexpr Rect TitleText{66, 48, 370, 96};
+	constexpr Rect TitleText{66, 38, 374, 96};
 	constexpr Rect VersionText{906, 62, 990, 84};
 	constexpr Rect MinimizeButton{996, 54, 1030, 88};
 	constexpr Rect CloseButton{1040, 54, 1074, 88};

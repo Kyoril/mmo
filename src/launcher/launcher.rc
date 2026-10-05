@@ -77,6 +77,7 @@ IDR_PNG_CONTENT_TEXTURE RCDATA                  "res/content_texture.png"
 IDR_PNG_HERO_FRAME      RCDATA                  "res/hero_frame.png"
 IDR_PNG_NEWS_DEVELOPMENT RCDATA                  "res/news_development.png"
 IDR_PNG_NEWS_WORLD       RCDATA                  "res/news_world.png"
+IDR_PNG_BORDER_REFINED   RCDATA                  "res/border_frame_refined.png"
 
 IDR_TTF_DISPLAY         RCDATA                  "res/font_display.ttf"
 IDR_TTF_BODY            RCDATA                  "res/font_body.ttf"
