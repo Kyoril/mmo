@@ -84,5 +84,6 @@ namespace mmo::layout
 	constexpr Rect StatusLabel{ 88, 410, 580, 430 };
 	constexpr Rect ProgressTrack{ 88, 434, 580, 462 };
 	constexpr Rect PercentText{ 480, 437, 577, 459 };
+	constexpr Rect NoticeLabel{ 88, 465, 580, 482 };
 	constexpr Rect PlayButton{ 600, 408, 820, 474 };
 }

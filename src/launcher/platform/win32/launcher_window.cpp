@@ -476,6 +476,9 @@ namespace mmo
 			return 0;
 
 		case WM_CLOSE:
+			// Start aborting the update right away rather than only after the message
+			// loop has ended, so downloads stop while the window is going away.
+			m_worker.RequestStop();
 			DestroyWindow(m_handle);
 			return 0;
 
