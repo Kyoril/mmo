@@ -819,31 +819,34 @@ namespace mmo
 			}
 		}
 
-		const Rect pauseRect = Scale(m_pauseButton.rect);
-		canvas.FillRoundedRect(pauseRect, Scale(4), FromArgb(m_pauseButton.hovered && m_pauseButton.enabled ? 0xFFB88C3D : 0xFF665331));
-		canvas.FillRoundedRect(Scale(Rect{569, 635, 625, 676}), Scale(3), FromArgb(0xFF171717));
-		const Color pauseColor = m_pauseButton.enabled ? theme::HeroTitleColor : theme::VersionColor;
-		if (m_paused)
+		if (m_pauseButton.enabled)
 		{
-			const Rect triangle = Scale(Rect{590, 646, 608, 664});
-			const float centerY = (triangle.top + triangle.bottom) * 0.5f;
-			for (int32 x = triangle.left; x < triangle.right; ++x)
+			const Rect pauseRect = Scale(m_pauseButton.rect);
+			canvas.FillRoundedRect(pauseRect, Scale(4), FromArgb(m_pauseButton.hovered && m_pauseButton.enabled ? 0xFFB88C3D : 0xFF665331));
+			canvas.FillRoundedRect(Scale(Rect{569, 635, 625, 676}), Scale(3), FromArgb(0xFF171717));
+			const Color pauseColor = m_pauseButton.enabled ? theme::HeroTitleColor : theme::VersionColor;
+			if (m_paused)
 			{
-				const float halfHeight = triangle.GetHeight() * 0.5f *
-					(1.0f - (x - triangle.left + 0.5f) / triangle.GetWidth());
-				const float top = centerY - halfHeight;
-				const float bottom = centerY + halfHeight;
-				for (int32 y = static_cast<int32>(std::floor(top)); y < static_cast<int32>(std::ceil(bottom)); ++y)
+				const Rect triangle = Scale(Rect{590, 646, 608, 664});
+				const float centerY = (triangle.top + triangle.bottom) * 0.5f;
+				for (int32 x = triangle.left; x < triangle.right; ++x)
 				{
-					const float coverage = std::min(bottom, y + 1.0f) - std::max(top, static_cast<float>(y));
-					canvas.FillRect(Rect{x, y, x + 1, y + 1}, ScaleColor(pauseColor, static_cast<uint8>(coverage * 255.0f + 0.5f)));
+					const float halfHeight = triangle.GetHeight() * 0.5f *
+						(1.0f - (x - triangle.left + 0.5f) / triangle.GetWidth());
+					const float top = centerY - halfHeight;
+					const float bottom = centerY + halfHeight;
+					for (int32 y = static_cast<int32>(std::floor(top)); y < static_cast<int32>(std::ceil(bottom)); ++y)
+					{
+						const float coverage = std::min(bottom, y + 1.0f) - std::max(top, static_cast<float>(y));
+						canvas.FillRect(Rect{x, y, x + 1, y + 1}, ScaleColor(pauseColor, static_cast<uint8>(coverage * 255.0f + 0.5f)));
+					}
 				}
 			}
-		}
-		else
-		{
-			canvas.FillRoundedRect(Scale(Rect{589, 647, 594, 663}), Scale(1), pauseColor);
-			canvas.FillRoundedRect(Scale(Rect{600, 647, 605, 663}), Scale(1), pauseColor);
+			else
+			{
+				canvas.FillRoundedRect(Scale(Rect{589, 647, 594, 663}), Scale(1), pauseColor);
+				canvas.FillRoundedRect(Scale(Rect{600, 647, 605, 663}), Scale(1), pauseColor);
+			}
 		}
 		DrawButton(canvas, m_playButton);
 
@@ -861,7 +864,10 @@ namespace mmo
 			result.push_back(&button);
 		}
 		result.push_back(&m_playButton);
-		result.push_back(&m_pauseButton);
+		if (m_pauseButton.enabled)
+		{
+			result.push_back(&m_pauseButton);
+		}
 		result.push_back(&m_minimizeButton);
 		result.push_back(&m_closeButton);
 		return result;

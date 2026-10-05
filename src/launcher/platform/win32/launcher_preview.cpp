@@ -179,6 +179,11 @@ namespace mmo
 			snapshot.playEnabled = true;
 			view.ApplySnapshot(snapshot);
 			view.Tick(10.0f);
+			if (view.HasControlAt(Point{597, 655}))
+			{
+				ELOG("Pause control remains present after the update finishes");
+				return false;
+			}
 			if (!capture("ready"))
 			{
 				return false;
