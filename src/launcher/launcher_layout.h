@@ -37,5 +37,5 @@ namespace mmo::layout
 	constexpr Rect PercentText{478, 634, 548, 674};
 	constexpr Rect PauseButton{568, 634, 626, 677};
 	constexpr Rect NoticeLabel{664, 632, 834, 682};
-	constexpr Rect PlayButton{858, 608, 1058, 674};
+	constexpr Rect PlayButton{858, 634, 1058, 677};
 }

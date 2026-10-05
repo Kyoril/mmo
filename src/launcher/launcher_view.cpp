@@ -27,19 +27,6 @@ namespace mmo
 			IDR_PNG_BUTTON_DOWN,	 IDR_PNG_BUTTON_DISABLED, IDR_PNG_PROGRESS_TRACK,	IDR_PNG_PROGRESS_FILL, IDR_PNG_ICON_CLOSE,
 			IDR_PNG_CONTENT_TEXTURE, IDR_PNG_HERO_FRAME,	  IDR_PNG_NEWS_DEVELOPMENT, IDR_PNG_NEWS_WORLD, IDR_PNG_BORDER_REFINED};
 
-		const NineSliceDef& SelectButtonAsset(const ButtonState state)
-		{
-			switch (state)
-			{
-			case ButtonState::Hovered: return theme::ButtonOver;
-			case ButtonState::Pressed: return theme::ButtonDown;
-			case ButtonState::Disabled: return theme::ButtonDisabled;
-			case ButtonState::Normal: break;
-			}
-
-			return theme::ButtonUp;
-		}
-
 		/// Moves `current` toward `target` at `rate` per second, framerate independently.
 		float EaseTowards(const float current, const float target, const float rate, const float deltaSeconds)
 		{
@@ -620,11 +607,15 @@ namespace mmo
 			return;
 		}
 
-		const NineSliceDef& def = SelectButtonAsset(button.GetState());
-		if (const Bitmap* art = GetAsset(def.resourceId))
-		{
-			canvas.DrawNineSlice(*art, Scale(def.insets), rect, Color{ 255, 255, 255, 255 }, def.tileEdges);
-		}
+		const bool highlighted = button.enabled && button.hovered;
+		canvas.FillRoundedRect(rect, Scale(4), FromArgb(highlighted ? 0xFFB88C3D : 0xFF665331));
+		const Rect inner = Inflate(rect, -Scale(1));
+		canvas.FillRoundedRect(inner, Scale(3), FromArgb(0xFF171717));
+		canvas.PushClip(inner);
+		const bool pressed = button.GetState() == ButtonState::Pressed;
+		canvas.FillGradient(inner, FromArgb(pressed ? 0xFF241C12 : button.enabled ? 0xFF4B361B : 0xFF25221D), FromArgb(0xFF101112), false);
+		canvas.PopClip();
+		canvas.FillRect(Rect{inner.left + Scale(4), inner.top, inner.right - Scale(4), inner.top + Scale(1)}, FromArgb(0x506D5732));
 
 		if (button.text.empty() || !m_playFont)
 		{
@@ -632,9 +623,9 @@ namespace mmo
 		}
 
 		TextStyle style;
-		style.color = button.enabled ? theme::PlayTextEnabled : theme::PlayTextDisabled;
+		style.color = button.enabled ? theme::HeroTitleColor : theme::VersionColor;
 		style.outline = theme::PlayTextOutline;
-		style.outlineWidth = std::max(1, Scale(2));
+		style.outlineWidth = std::max(1, Scale(1));
 		style.shadow = theme::TextShadow;
 		style.shadowOffset = Point{ 0, Scale(2) };
 
@@ -815,12 +806,6 @@ namespace mmo
 		{
 			canvas.FillRoundedRect(Scale(Rect{589, 647, 594, 663}), Scale(1), pauseColor);
 			canvas.FillRoundedRect(Scale(Rect{600, 647, 605, 663}), Scale(1), pauseColor);
-		}
-		if (m_percentFont)
-		{
-			TextStyle pauseStyle = bodyStyle;
-			pauseStyle.color = pauseColor;
-			DrawText(canvas, *m_percentFont, m_paused ? "Resume" : "Pause", Scale(Rect{568, 678, 626, 696}), TextAlign::Center, pauseStyle);
 		}
 		DrawButton(canvas, m_playButton);
 

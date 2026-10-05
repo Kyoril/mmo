@@ -125,7 +125,7 @@ namespace mmo
 		constexpr int32 VersionFontSize = 11;
 		constexpr int32 StatusFontSize = 14;
 		constexpr int32 PercentFontSize = 12;
-		constexpr int32 PlayFontSize = 26;
+		constexpr int32 PlayFontSize = 22;
 
 		// --- motion ------------------------------------------------------------
 		/// Seconds for a button's hover glow to fade fully in or out.

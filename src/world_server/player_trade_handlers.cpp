@@ -290,11 +290,13 @@ namespace mmo
 			return;
 		}
 
-		// Disallow equip slots and bag slots
+		// Only carried items: backpack and the content of equipped bags. Equipment, the bag bar,
+		// the bank (reachable without a banker) and buyback are all out. TradeSession::Execute's
+		// space check also relies on every offered item freeing one bag slot.
 		const InventorySlot slot = InventorySlot::FromAbsolute(inventorySlot);
-		if (slot.IsEquipment() || slot.IsBagPack())
+		if (!slot.IsInventory() && !slot.IsBag())
 		{
-			WLOG("Player tried to trade an equipped item or bag");
+			WLOG("Player tried to trade an item that is not carried in a bag");
 			return;
 		}
 

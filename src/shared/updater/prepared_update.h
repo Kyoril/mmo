@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "update_source.h"
+
 #include <functional>
 #include <string>
 #include <vector>
@@ -19,6 +21,8 @@ namespace mmo::updating
 
 		std::string destinationPath;
 		StepFunction step;
+		/// The files this step downloads, in the order it reads them.
+		std::vector<RemoteFile> downloads;
 
 
 		PreparedUpdateStep();

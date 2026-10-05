@@ -63,6 +63,9 @@ namespace mmo::updating
 
 		UpdateSourceFile readFile(const std::string& path) override;
 
+		/// Forwarded to the wrapped source.
+		void prefetch(const std::vector<RemoteFile>& files) override;
+
 		RetryCallback onRetry;
 		RecoveredCallback onRecovered;
 

@@ -63,5 +63,8 @@ namespace mmo
 		ImGuiTextFilter m_attackCritVoiceFilter;
 		ImGuiTextFilter m_hitVoiceFilter;
 		ImGuiTextFilter m_critHitVoiceFilter;
+
+		/// Search text of the item display combo in the Outfit section.
+		String m_itemDisplayFilter;
 	};
 }

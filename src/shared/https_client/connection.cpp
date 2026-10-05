@@ -2,10 +2,13 @@
 
 #include "connection.h"
 
+#include "base/macros.h"
+
 #include "asio.hpp"
 #include "asio/ssl.hpp"
 
 #include <algorithm>
+#include <exception>
 #include <cctype>
 #include <chrono>
 #include <functional>
@@ -387,13 +390,11 @@ namespace mmo
 					}
 				}
 
-				/// Sends the request and reads the response. `responseStarted` is set once the
-				/// first byte of the response arrived; up to then, a failure on a reused
-				/// connection just means the server had closed it while it was idle.
-				Response Exchange(const Request& request, bool& responseStarted)
+				/// Reads one response to `request`. `responseStarted` is set once the first
+				/// byte of it arrived; up to then, a failure on a reused connection just means
+				/// the server had closed the connection while it was idle.
+				Response ReadResponse(const Request& request, bool& responseStarted)
 				{
-					Write(FormatRequestHead(request) + request.body);
-
 					std::string version;
 					unsigned status = 0;
 					std::map<std::string, std::string> headers;
@@ -502,10 +503,41 @@ namespace mmo
 
 			Response Connection::Send(Request request)
 			{
-				if (request.host.empty())
+				std::optional<Response> result;
+				SendPipelined({ std::move(request) }, [&result](std::size_t, Response response)
 				{
-					request.host = m_impl->host;
+					result = std::move(response);
+				});
+
+				// SendPipelined throws unless at least one response arrived.
+				ASSERT(result);
+				return std::move(*result);
+			}
+
+			std::size_t Connection::SendPipelined(std::vector<Request> requests, const ResponseHandler& onResponse)
+			{
+				if (requests.empty())
+				{
+					return 0;
 				}
+
+				std::string data;
+				for (Request& request : requests)
+				{
+					if (request.host.empty())
+					{
+						request.host = m_impl->host;
+					}
+
+					data += FormatRequestHead(request);
+					data += request.body;
+				}
+
+				std::size_t received = 0;
+
+				// Exceptions from the handler are the caller's own and always passed on;
+				// only network errors after the first response are absorbed below.
+				std::exception_ptr handlerError;
 
 				for (bool firstTry = true; ; firstTry = false)
 				{
@@ -518,11 +550,45 @@ namespace mmo
 					bool responseStarted = false;
 					try
 					{
-						return m_impl->Exchange(request, responseStarted);
+						// All requests go out at once. They are small, so this cannot fill the
+						// socket buffers while the server is already sending responses back.
+						m_impl->Write(data);
+
+						while (received < requests.size())
+						{
+							responseStarted = false;
+							Response response = m_impl->ReadResponse(requests[received], responseStarted);
+							++received;
+
+							try
+							{
+								onResponse(received - 1, std::move(response));
+							}
+							catch (...)
+							{
+								handlerError = std::current_exception();
+								throw;
+							}
+
+							// The server closed the connection after this response, e.g. because
+							// it limits the requests per connection. Whatever was pipelined
+							// behind it is lost and is the caller's to send again.
+							if (!m_impl->open)
+							{
+								break;
+							}
+						}
+
+						return received;
 					}
 					catch (const asio::system_error& ex)
 					{
 						m_impl->Close();
+
+						if (received > 0)
+						{
+							return received;
+						}
 
 						// A server may close an idle keep-alive connection at any time, and we
 						// only learn about it when using it. Resend once on a fresh connection.
@@ -536,6 +602,12 @@ namespace mmo
 					catch (...)
 					{
 						m_impl->Close();
+
+						if (received > 0 && !handlerError)
+						{
+							return received;
+						}
+
 						throw;
 					}
 				}

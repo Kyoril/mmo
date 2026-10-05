@@ -513,6 +513,27 @@ namespace mmo
 			}
 		}
 
+		// A corpse belongs to the players who tagged it. Nothing else stopped a stranger opening it
+		// and taking whatever the loot method left unlocked (free-for-all, finished rolls).
+		if (lootObject->GetTypeId() == ObjectTypeId::Unit)
+		{
+			const auto* creature = dynamic_cast<GameCreatureS*>(lootObject);
+			if (!creature || !creature->IsLootRecipient(*m_character))
+			{
+				WLOG("Player tried to loot a creature they have no loot rights for");
+				SendPacket([objectGuid](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::LootResponse);
+					packet
+						<< io::write<uint64>(objectGuid)
+						<< io::write<uint8>(loot_type::None)
+						<< io::write<uint8>(loot_error::DidntKill);
+					packet.Finish();
+				});
+				return;
+			}
+		}
+
 		m_character->CancelCast(spell_interrupt_flags::Any);
 		m_character->LootObject(lootObject->shared_from_this());
 	}
@@ -669,6 +690,20 @@ namespace mmo
 		if (item->GetGuid() != itemGuid)
 		{
 			WLOG("Item GUID does not match. We look for " << log_hex_digit(itemGuid) << " but found " << log_hex_digit(item->GetGuid()));
+			return;
+		}
+
+		// Bank items are only reachable at a banker, and an item offered in a trade stays as offered.
+		if (invSlot.IsBuyBack() ||
+			((invSlot.IsBankItem() || invSlot.IsBankBag() || invSlot.IsBankBagContent()) && !IsBankAccessible()))
+		{
+			WLOG("Player tried to use an item that is not carried");
+			return;
+		}
+
+		if (IsInventorySlotTradeLocked(invSlot.GetAbsolute()))
+		{
+			SendInventoryError(inventory_change_failure::CannotTradeThat);
 			return;
 		}
 

@@ -10,6 +10,7 @@
 #include "asio/ssl.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <sstream>
@@ -78,6 +79,16 @@ namespace
 		uint32 GetConnections() const { return m_connections; }
 		uint32 GetRequests() const { return m_requests; }
 
+		/// Requests which arrived while an earlier one was still unanswered.
+		uint32 GetPipelinedRequests() const { return m_pipelinedRequests; }
+
+		/// Silently drops each connection after `count` requests, like a server limiting
+		/// requests per keep-alive connection. Whatever was pipelined behind is lost.
+		void SetCloseEvery(const uint32 count) { m_closeEvery = count; }
+
+		/// Delays every request that had to travel over the network, like a round trip.
+		void SetLatency(const std::chrono::milliseconds latency) { m_latencyMs = latency.count(); }
+
 	private:
 		struct Session : std::enable_shared_from_this<Session>
 		{
@@ -99,41 +110,83 @@ namespace
 				});
 			}
 
+			bool HasBufferedRequest() const
+			{
+				const auto data = buffer.data();
+				const std::string pending(asio::buffers_begin(data), asio::buffers_end(data));
+				return pending.find("\r\n\r\n") != std::string::npos;
+			}
+
 			void ReadRequest()
 			{
+				// Data that has to come in over the network first pays the simulated
+				// latency; requests which arrived together with an earlier one do not.
+				const bool mustWait = !HasBufferedRequest();
+
 				auto self = shared_from_this();
-				asio::async_read_until(stream, buffer, "\r\n\r\n", [self](const asio::error_code& ec, const std::size_t length)
+				asio::async_read_until(stream, buffer, "\r\n\r\n", [self, mustWait](const asio::error_code& ec, const std::size_t length)
 				{
 					if (ec)
 					{
 						return;
 					}
 
-					const auto begin = asio::buffers_begin(self->buffer.data());
-					const std::string head(begin, begin + static_cast<std::ptrdiff_t>(length));
-					self->buffer.consume(length);
-
-					++self->server.m_requests;
-					self->reply = self->server.m_respond(head);
-					asio::async_write(self->stream, asio::buffer(self->reply.data), [self](const asio::error_code& writeError, std::size_t)
+					const std::chrono::milliseconds latency(self->server.m_latencyMs.load());
+					if (mustWait && latency.count() > 0)
 					{
-						if (writeError)
+						auto timer = std::make_shared<asio::steady_timer>(self->stream.get_executor(), latency);
+						timer->async_wait([self, timer, length](const asio::error_code&)
 						{
-							return;
-						}
+							self->HandleRequest(length);
+						});
+						return;
+					}
 
-						if (self->reply.closeAfter)
-						{
-							asio::error_code ignored;
-							self->stream.lowest_layer().close(ignored);
-							return;
-						}
-
-						self->ReadRequest();
-					});
+					self->HandleRequest(length);
 				});
 			}
 
+			void HandleRequest(const std::size_t length)
+			{
+				const auto begin = asio::buffers_begin(buffer.data());
+				const std::string head(begin, begin + static_cast<std::ptrdiff_t>(length));
+				buffer.consume(length);
+
+				if (HasBufferedRequest())
+				{
+					++server.m_pipelinedRequests;
+				}
+
+				++server.m_requests;
+				++requestsOnConnection;
+				reply = server.m_respond(head);
+
+				const uint32 closeEvery = server.m_closeEvery;
+				if (closeEvery > 0 && requestsOnConnection % closeEvery == 0)
+				{
+					reply.closeAfter = true;
+				}
+
+				auto self = shared_from_this();
+				asio::async_write(stream, asio::buffer(reply.data), [self](const asio::error_code& writeError, std::size_t)
+				{
+					if (writeError)
+					{
+						return;
+					}
+
+					if (self->reply.closeAfter)
+					{
+						asio::error_code ignored;
+						self->stream.lowest_layer().close(ignored);
+						return;
+					}
+
+					self->ReadRequest();
+				});
+			}
+
+			uint32 requestsOnConnection = 0;
 			asio::ssl::stream<asio::ip::tcp::socket> stream;
 			asio::streambuf buffer;
 			Reply reply;
@@ -161,6 +214,9 @@ namespace
 		Responder m_respond;
 		std::atomic<uint32> m_connections{ 0 };
 		std::atomic<uint32> m_requests{ 0 };
+		std::atomic<uint32> m_pipelinedRequests{ 0 };
+		std::atomic<uint32> m_closeEvery{ 0 };
+		std::atomic<int64> m_latencyMs{ 0 };
 		std::thread m_thread;
 	};
 
@@ -368,4 +424,268 @@ TEST_CASE("HTTPSUpdateSource reports a missing file as permanent", "[updater][ne
 	// The error response was read completely, so the connection stays usable.
 	CHECK_THROWS_AS(source.readFile("missing.bin"), updating::PermanentSourceError);
 	CHECK(server.GetConnections() == 1);
+}
+
+TEST_CASE("https Connection pipelines requests and keeps the responses in order", "[https_client][network]")
+{
+	TlsServer server(EchoPath);
+	net::https_client::Connection connection("127.0.0.1", server.GetPort(), {}, MakeClientContext());
+
+	std::vector<net::https_client::Request> requests;
+	for (int i = 0; i < 10; ++i)
+	{
+		requests.push_back(MakeRequest("/file" + std::to_string(i)));
+	}
+
+	std::vector<std::string> bodies;
+	const size_t received = connection.SendPipelined(requests, [&](const size_t index, net::https_client::Response response)
+	{
+		CHECK(index == bodies.size());
+		bodies.push_back(ReadBody(response));
+	});
+
+	REQUIRE(received == 10);
+	for (int i = 0; i < 10; ++i)
+	{
+		CHECK(bodies[i] == "/file" + std::to_string(i));
+	}
+
+	CHECK(connection.IsOpen());
+	CHECK(connection.GetConnectCount() == 1);
+	CHECK(server.GetPipelinedRequests() > 0);
+}
+
+TEST_CASE("https Connection reports how far a pipeline got before the server closed", "[https_client][network]")
+{
+	TlsServer server(EchoPath);
+	server.SetCloseEvery(3);
+	net::https_client::Connection connection("127.0.0.1", server.GetPort(), {}, MakeClientContext());
+
+	std::vector<net::https_client::Request> requests;
+	for (int i = 0; i < 8; ++i)
+	{
+		requests.push_back(MakeRequest("/file" + std::to_string(i)));
+	}
+
+	std::vector<std::string> bodies;
+	const size_t received = connection.SendPipelined(requests, [&](size_t, net::https_client::Response response)
+	{
+		bodies.push_back(ReadBody(response));
+	});
+
+	CHECK(received == 3);
+	CHECK(bodies == std::vector<std::string>{ "/file0", "/file1", "/file2" });
+	CHECK_FALSE(connection.IsOpen());
+
+	// The connection is usable again for the rest.
+	auto response = connection.Send(MakeRequest("/file3"));
+	CHECK(ReadBody(response) == "/file3");
+}
+
+namespace
+{
+	std::vector<updating::RemoteFile> MakeFiles(const int count)
+	{
+		std::vector<updating::RemoteFile> files;
+		for (int i = 0; i < count; ++i)
+		{
+			files.push_back(updating::RemoteFile{ "dir/file" + std::to_string(i), 32 });
+		}
+		return files;
+	}
+
+	std::string ReadFileContent(updating::IUpdateSource& source, const std::string& path)
+	{
+		const auto file = source.readFile(path);
+		std::ostringstream content;
+		content << file.content->rdbuf();
+		return content.str();
+	}
+
+	updating::SourceOptions MakePrefetchOptions()
+	{
+		updating::SourceOptions options;
+		options.prefetchConnections = 2;
+		options.pipelineDepth = 8;
+		return options;
+	}
+}
+
+TEST_CASE("HTTPSUpdateSource prefetches announced files with pipelining", "[updater][network]")
+{
+	TlsServer server(EchoPath);
+	updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/patch", MakePrefetchOptions(), MakeClientContext());
+
+	const auto files = MakeFiles(100);
+	source.prefetch(files);
+
+	for (const auto& file : files)
+	{
+		CHECK(ReadFileContent(source, file.path) == "/patch/" + file.path);
+	}
+
+	// Every file was requested exactly once, whether prefetched or claimed by the reader.
+	CHECK(server.GetRequests() == 100);
+	CHECK(server.GetPipelinedRequests() > 0);
+}
+
+TEST_CASE("HTTPSUpdateSource holds new prefetch batches during pause and resumes them", "[updater][network]")
+{
+	TlsServer server(EchoPath);
+	std::atomic<bool> paused{true};
+	auto options = MakePrefetchOptions();
+	options.pause = &paused;
+	updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/patch", options, MakeClientContext());
+	const auto files = MakeFiles(16);
+	source.prefetch(files);
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	CHECK(server.GetRequests() == 0);
+	paused = false;
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+	while (server.GetRequests() < files.size() && std::chrono::steady_clock::now() < deadline)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	REQUIRE(server.GetRequests() == files.size());
+	for (const auto& file : files)
+	{
+		CHECK(ReadFileContent(source, file.path) == "/patch/" + file.path);
+	}
+	CHECK(server.GetRequests() == files.size());
+}
+
+TEST_CASE("HTTPSUpdateSource recovers when the server drops pipelined requests", "[updater][network]")
+{
+	TlsServer server(EchoPath);
+	server.SetCloseEvery(5);
+	updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/patch", MakePrefetchOptions(), MakeClientContext());
+
+	const auto files = MakeFiles(60);
+	source.prefetch(files);
+
+	std::vector<std::thread> readers;
+	std::atomic<int> mismatches{ 0 };
+	for (int t = 0; t < 3; ++t)
+	{
+		readers.emplace_back([&, t]
+		{
+			for (size_t i = static_cast<size_t>(t); i < files.size(); i += 3)
+			{
+				if (ReadFileContent(source, files[i].path) != "/patch/" + files[i].path)
+				{
+					++mismatches;
+				}
+			}
+		});
+	}
+
+	for (std::thread& reader : readers)
+	{
+		reader.join();
+	}
+
+	CHECK(mismatches == 0);
+}
+
+TEST_CASE("HTTPSUpdateSource reports errors of prefetched files", "[updater][network]")
+{
+	TlsServer server([](const std::string& head)
+	{
+		if (head.find("missing") != std::string::npos)
+		{
+			return Reply{ "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n" };
+		}
+		return EchoPath(head);
+	});
+	updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/", MakePrefetchOptions(), MakeClientContext());
+
+	source.prefetch({ { "a", 8 }, { "missing", 8 }, { "b", 8 } });
+
+	CHECK(ReadFileContent(source, "a") == "/a");
+	CHECK_THROWS_AS(source.readFile("missing"), updating::PermanentSourceError);
+	CHECK(ReadFileContent(source, "b") == "/b");
+}
+
+TEST_CASE("HTTPSUpdateSource does not stall when files are read out of order", "[updater][network]")
+{
+	TlsServer server(EchoPath);
+
+	// Room for very few files, so the prefetch fills up with files read last.
+	auto options = MakePrefetchOptions();
+	options.prefetchBufferLimit = 64;
+	updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/", options, MakeClientContext());
+
+	const auto files = MakeFiles(40);
+	source.prefetch(files);
+
+	for (auto it = files.rbegin(); it != files.rend(); ++it)
+	{
+		CHECK(ReadFileContent(source, it->path) == "/" + it->path);
+	}
+}
+
+TEST_CASE("HTTPSUpdateSource skips large files when prefetching", "[updater][network]")
+{
+	TlsServer server(EchoPath);
+	updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/", MakePrefetchOptions(), MakeClientContext());
+
+	source.prefetch({ { "huge", 100 * 1024 * 1024 } });
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+	CHECK(server.GetRequests() == 0);
+	CHECK(ReadFileContent(source, "huge") == "/huge");
+}
+
+TEST_CASE("HTTPSUpdateSource stops prefetching when destroyed", "[updater][network]")
+{
+	TlsServer server(EchoPath);
+	server.SetLatency(std::chrono::milliseconds(200));
+
+	const auto startedAt = std::chrono::steady_clock::now();
+	{
+		updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/", MakePrefetchOptions(), MakeClientContext());
+		source.prefetch(MakeFiles(1000));
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+
+	CHECK(std::chrono::steady_clock::now() - startedAt < std::chrono::seconds(2));
+	CHECK(server.GetRequests() < 1000);
+}
+
+TEST_CASE("Pipelining benchmark", "[.bench]")
+{
+	TlsServer server(EchoPath);
+	server.SetLatency(std::chrono::milliseconds(20));
+	const auto files = MakeFiles(400);
+
+	const auto measure = [&](const uint32 prefetchConnections)
+	{
+		updating::SourceOptions options;
+		options.prefetchConnections = prefetchConnections;
+		updating::HTTPSUpdateSource source("127.0.0.1", server.GetPort(), "/", options, MakeClientContext());
+		source.prefetch(files);
+
+		const auto startedAt = std::chrono::steady_clock::now();
+		std::vector<std::thread> readers;
+		for (int t = 0; t < 8; ++t)
+		{
+			readers.emplace_back([&, t]
+			{
+				for (size_t i = static_cast<size_t>(t); i < files.size(); i += 8)
+				{
+					ReadFileContent(source, files[i].path);
+				}
+			});
+		}
+		for (std::thread& reader : readers)
+		{
+			reader.join();
+		}
+		return std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
+	};
+
+	const double plain = measure(0);
+	const double pipelined = measure(4);
+	WARN("400 files, 20 ms latency, 8 readers. Without pipelining (s): " << plain);
+	WARN("With 4 pipelined prefetch connections (s): " << pipelined);
 }

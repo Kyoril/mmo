@@ -128,6 +128,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 {
 	size_t concurrency = 8;
 	bool selfUpdateEnabled = true;
+	bool pipeliningEnabled = true;
 	bool preview = false;
 	std::string renderPreviewDirectory;
 
@@ -137,6 +138,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 		"preview", "Shows the launcher without checking for or downloading updates", cxxopts::value<bool>(preview))(
 		"render-preview", "Renders all launcher pages to BMP files without downloading updates",
 		cxxopts::value<std::string>(renderPreviewDirectory))("no-self-update", "Disables self-update of the launcher executable")(
+		"no-pipelining", "Requests files one at a time instead of pipelining them (for troubleshooting)")(
 		"j,concurrency", "The number of threads used for downloading and updating", cxxopts::value<size_t>(concurrency));
 
 	try
@@ -156,6 +158,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 		if (results.count("no-self-update"))
 		{
 			selfUpdateEnabled = false;
+		}
+
+		if (results.count("no-pipelining"))
+		{
+			pipeliningEnabled = false;
 		}
 
 		if (!renderPreviewDirectory.empty())
@@ -211,6 +218,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 		mmo::UpdateWorkerConfig config;
 		config.sourceUrl = DefaultUpdateSourceUrl;
 		config.concurrency = concurrency;
+		if (!pipeliningEnabled)
+		{
+			config.pipelineConnections = 0;
+		}
 		config.selfUpdateEnabled = selfUpdateEnabled;
 
 		mmo::UpdateWorker worker(model, config);

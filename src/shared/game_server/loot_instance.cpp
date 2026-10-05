@@ -639,7 +639,9 @@ namespace mmo
 		const auto* itemEntry = m_itemManager.getById(item.definition.item());
 		if (itemEntry && (itemEntry->flags() & item_flags::PartyLoot))
 		{
-			return loot_slot_type::AllowLoot;
+			// Every player gets the shared item once. TakeItem records the count, and this is the
+			// one place that reads it back: without it the same slot could be looted endlessly.
+			return HasLootedPartyItem(item, *itemEntry, receiver) ? loot_slot_type::Locked : loot_slot_type::AllowLoot;
 		}
 
 		switch (m_lootMethod)
@@ -664,6 +666,18 @@ namespace mmo
 		}
 
 		return loot_slot_type::AllowLoot;
+	}
+
+	bool LootInstance::HasLootedPartyItem(const LootItem& item, const proto::ItemEntry& entry, const uint64 receiver) const
+	{
+		const auto dataIt = m_playerLootData.find(receiver);
+		if (dataIt == m_playerLootData.end())
+		{
+			return false;
+		}
+
+		const auto counterIt = dataIt->second.find(entry.id());
+		return counterIt != dataIt->second.end() && counterIt->second >= item.count;
 	}
 
 	void LootInstance::AddLootItem(const proto::LootDefinition& def)
