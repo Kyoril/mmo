@@ -23,20 +23,22 @@
 # will hopefully still be useful for you as a starting point to not have figure out everything entirely from scratch!
 
 version: "3.7"
+
+# MMO_TAG (a full commit SHA) is set by the deployer through Portainer; see docs/deployment.md.
 volumes:
   data-volume:
     name: mmo-shared-data
-    
+
 services:
   data-service:
-    image: kyoril/mmo_data:latest
+    image: kyoril/mmo_data:${MMO_TAG:-latest}
     volumes:
       - data-volume:/server_data
     # This service doesn't need to stay running; it just provides the data
-    command: ["/bin/sh", "-c", "mkdir -p /server_data/data; mkdir -p /server_data/nav; mkdir -p /server_data/client/Worlds; cp -r /data/* /server_data/data; cp -r /nav/* /server_data/nav; cp -r /client/Worlds /server_data/client/; true"]
+    command: ["/bin/sh", "-c", "set -e; rm -rf /server_data/data /server_data/nav /server_data/client; mkdir -p /server_data/data /server_data/nav /server_data/client; cp -r /data/. /server_data/data/; cp -r /nav/. /server_data/nav/; cp -r /client/Worlds /server_data/client/"]
     
   login_server:
-    image: kyoril/mmo_login_server:latest
+    image: kyoril/mmo_login_server:${MMO_TAG:-latest}
     hostname: mmo-dev-login
     environment:
       - LOGIN_WEB_API_PASSWORD=test
@@ -60,8 +62,11 @@ services:
     restart: on-failure
 
   realm_server_01:
-    image: kyoril/mmo_realm_server:latest
+    image: kyoril/mmo_realm_server:${MMO_TAG:-latest}
     hostname: mmo-dev-realm-01
+    depends_on:
+      data-service:
+        condition: service_completed_successfully
     volumes:
       - data-volume:/server-data
     environment:
@@ -97,8 +102,11 @@ services:
     stop_grace_period: 5m
 
   world_node_01:
-    image: kyoril/mmo_world_server:latest
+    image: kyoril/mmo_world_server:${MMO_TAG:-latest}
     hostname: mmo-dev-node-01
+    depends_on:
+      data-service:
+        condition: service_completed_successfully
     volumes:
       - data-volume:/server-data
     environment:
@@ -134,4 +142,5 @@ services:
     
 networks:
   mmo_game_servers:
+    name: mmo_game_servers
     driver: bridge
