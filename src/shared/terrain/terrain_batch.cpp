@@ -97,6 +97,14 @@ namespace mmo
 
 		bool TerrainBatch::PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
 		{
+			// The G-Buffer pass after a depth pre-pass draws exactly what the pre-pass drew: neither a
+			// LOD update nor an index rebuild may change the mesh between the two, or pixels end up
+			// with depth but no colour.
+			if (scene.IsReusingRenderQueue())
+			{
+				return Renderable::PreRender(scene, graphicsDevice, camera);
+			}
+
 			// Shadow cascades reuse the LOD the main view chose: a cascade camera must not re-drive it
 			// (index rebuilds every pass, and stitching that no longer matches the screen).
 			if (scene.IsShadowCasterPass())
@@ -131,9 +139,9 @@ namespace mmo
 
 			if (m_indexDirty)
 			{
-				// Note: RenderSingleObject captures the operation's index-data pointer BEFORE
-				// PreRender runs, so the previous index data must stay alive through this draw —
-				// RebuildIndexBuffer retires it instead of destroying it (see m_retiredIndexData).
+				// RenderSingleObject prepares the operation after PreRender, so this draw already
+				// uses the rebuilt index data. RebuildIndexBuffer still retires the previous data
+				// instead of destroying it (see m_retiredIndexData), in case anything else holds it.
 				RebuildIndexBuffer();
 				m_indexDirty = false;
 			}

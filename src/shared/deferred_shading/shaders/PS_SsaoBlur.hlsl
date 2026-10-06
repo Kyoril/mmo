@@ -17,8 +17,8 @@ struct PS_INPUT
 // The raw (or horizontally-blurred) AO term, single channel.
 Texture2D AoTexture : register(t0);
 
-// G-Buffer normal target — sampled for its alpha (radial depth) to weight the blur.
-Texture2D NormalTexture : register(t1);
+// Radial depth at the AO resolution (written by PS_SsaoDepth), to weight the blur.
+Texture2D<float> DepthTexture : register(t2);
 
 SamplerState PointSampler : register(s0);
 
@@ -50,7 +50,7 @@ static const int BLUR_RADIUS = 4;
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
-    float centerDepth = NormalTexture.SampleLevel(PointSampler, input.TexCoord, 0).a;
+    float centerDepth = DepthTexture.SampleLevel(PointSampler, input.TexCoord, 0);
 
     // Sky pixels carry no AO.
     if (centerDepth <= 0.0f)
@@ -68,7 +68,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     {
         float2 sampleUv = input.TexCoord + texelStep * float(i);
 
-        float sampleDepth = NormalTexture.SampleLevel(PointSampler, sampleUv, 0).a;
+        float sampleDepth = DepthTexture.SampleLevel(PointSampler, sampleUv, 0);
 
         if (sampleDepth <= 0.0f)
         {

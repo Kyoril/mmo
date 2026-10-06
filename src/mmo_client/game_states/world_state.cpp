@@ -6,6 +6,7 @@
 #include "systems/bug_report_client.h"
 #include "client.h"
 #include "client_locale.h"
+#include "perf_capture.h"
 #include "base/localization.h"
 #include "systems/loot_client.h"
 #include "systems/spell_cast.h"
@@ -160,6 +161,7 @@ namespace mmo
 		static ConsoleVar *s_renderScaleVar = nullptr;
 
 		static ConsoleVar *s_depthPrepassVar = nullptr;
+	static ConsoleVar *s_shadowDistanceVar = nullptr;
 
 		static ConsoleVar *s_viewDistanceVar = nullptr;
 
@@ -464,6 +466,31 @@ namespace mmo
 		m_worldRootNode = m_scene->GetRootSceneNode().CreateChildSceneNode();
 		LoadMap();
 
+		PerfCaptureWorldHooks perfHooks;
+		perfHooks.isWorldReady = [this]()
+		{
+			return m_worldLoaded && m_timeSyncResponseSent && m_playerController && m_playerController->GetControlledUnit();
+		};
+		perfHooks.rotateCamera = [this](const float degrees)
+		{
+			if (m_playerController)
+			{
+				m_playerController->RotateCamera(degrees);
+			}
+		};
+		perfHooks.getLocation = [this](uint32& mapId, Vector3& position)
+		{
+			if (!m_playerController || !m_playerController->GetControlledUnit())
+			{
+				return false;
+			}
+
+			mapId = g_mapId;
+			position = m_playerController->GetControlledUnit()->GetPosition();
+			return true;
+		};
+		PerfCapture::SetWorldHooks(std::move(perfHooks));
+
 		// Zone background music and ambience are data driven: they start as soon as the first
 		// zone is resolved in CheckForZoneUpdate (see ZoneEntry::music_sound / ambience_sound).
 
@@ -487,6 +514,8 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		PerfCapture::ClearWorldHooks();
+
 		CombatVignette::Destroy();
 
 		m_worldPingVisualizer.reset();
@@ -1002,7 +1031,6 @@ namespace mmo
 
 	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
-		PROFILE_BEGIN_FRAME();
 		PROFILE_SCOPE("WorldState::OnIdle");
 
 		if (m_debugPathVisualizer)
@@ -1251,8 +1279,6 @@ namespace mmo
 			// Chat bubbles are NOT drawn here: they live in the frame tree under the WorldFrame
 			// (see m_chatBubbleLayer) so they render above the 3D world but beneath the rest of the UI.
 		}
-
-		PROFILE_END_FRAME();
 	}
 
 	void WorldState::CheckForZoneUpdate()
@@ -2120,6 +2146,10 @@ namespace mmo
 		s_shadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("ShadowQuality", "Shadow detail preset: 0 = Low (2 cascades, 4 PCF taps), 1 = Medium (3/8), 2 = High (4/16). Lower values improve performance.", "2");
 		m_cvarChangedSignals += s_shadowQualityVar->Changed.connect(this, &WorldState::OnShadowQualityChanged);
 
+		// Applied together with the shadow quality, which has the renderer lookup and the logging.
+		s_shadowDistanceVar = ConsoleVarMgr::RegisterConsoleVar("gxShadowDistance", "How far sun shadows reach from the camera in metres (50 to 1000). Shorter is faster in forests and sharpens nearby shadows.", "250");
+		m_cvarChangedSignals += s_shadowDistanceVar->Changed.connect([this](ConsoleVar&, const std::string& oldValue) { OnShadowQualityChanged(*s_shadowQualityVar, oldValue); });
+
 		s_shadowTemporalVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTemporal", "Temporal cascade staggering: 1 = distant cascades refresh every few frames (faster), 0 = every cascade every frame.", "1");
 		m_cvarChangedSignals += s_shadowTemporalVar->Changed.connect(this, &WorldState::OnShadowTemporalChanged);
 
@@ -2131,7 +2161,7 @@ namespace mmo
 		// GPUs. Read directly by WorldRenderer each frame, so no change handler is required here.
 		s_renderScaleVar = ConsoleVarMgr::RegisterConsoleVar("gxRenderScale", "3D render resolution scale (0.25 to 1.0). Lower values improve performance by rendering the world at a lower resolution and upscaling.", "1.0");
 
-		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "0");
+		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "1");
 		m_cvarChangedSignals += s_depthPrepassVar->Changed.connect(this, &WorldState::OnDepthPrepassChanged);
 
 		// Screen-space ambient occlusion (visibility-bitmask / SSILVB occlusion core). All
@@ -2201,6 +2231,23 @@ namespace mmo
 		m_cvarChangedSignals += s_bloomQualityVar->Changed.connect(this, &WorldState::OnBloomChanged);
 
 		s_exposureVar = ConsoleVarMgr::RegisterConsoleVar("gxExposure", "Player brightness: multiplies the zone's environment exposure before tone mapping (0.5 to 2 in Options).", "1.0");
+
+		// Profiling aids: hide whole kinds of objects from the camera view or from the shadow maps to
+		// measure what they cost (compare benchmark runs with and without).
+		ConsoleVar* hideViewTypesVar = ConsoleVarMgr::RegisterConsoleVar("gxDebugHideViewTypes", "Debug: comma separated movable types not rendered in the camera view (Tile, TerrainBatch, FarPage, FoliageChunk, InstancedFoliageChunk, Entity, WorldModelInstance, WorldModelBatch).", "");
+		ConsoleVar* hideShadowTypesVar = ConsoleVarMgr::RegisterConsoleVar("gxDebugHideShadowTypes", "Debug: comma separated movable types not rendered into shadow maps (see gxDebugHideViewTypes).", "");
+		m_cvarChangedSignals += hideViewTypesVar->Changed.connect([](ConsoleVar& var, const std::string&) { RenderDebugFilter::hiddenInView = RenderDebugFilter::Parse(var.GetStringValue()); });
+		m_cvarChangedSignals += hideShadowTypesVar->Changed.connect([](ConsoleVar& var, const std::string&) { RenderDebugFilter::hiddenInShadows = RenderDebugFilter::Parse(var.GetStringValue()); });
+		ConsoleVar* foliageCullingVar = ConsoleVarMgr::RegisterConsoleVar("gxFoliageInstanceCulling", "Cull grass and tree instances individually per render pass instead of drawing whole foliage cells. 1 = on (faster), 0 = off.", "1");
+		m_cvarChangedSignals += foliageCullingVar->Changed.connect([](ConsoleVar& var, const std::string&) { FoliageChunk::SetPerInstanceCullingEnabled(var.GetBoolValue()); });
+		FoliageChunk::SetPerInstanceCullingEnabled(foliageCullingVar->GetBoolValue());
+
+		ConsoleVar* shadowAlphaTestVar = ConsoleVarMgr::RegisterConsoleVar("gxShadowAlphaTest", "Alpha test cut-out materials (leaves, grass) in shadow maps. 0 renders them as solid shapes: much faster in forests, but leaves cast blocky shadows.", "1");
+		m_cvarChangedSignals += shadowAlphaTestVar->Changed.connect([](ConsoleVar& var, const std::string&) { GraphicsDevice::Get().SetAlphaTestedShadows(var.GetBoolValue()); });
+		GraphicsDevice::Get().SetAlphaTestedShadows(shadowAlphaTestVar->GetBoolValue());
+
+		RenderDebugFilter::hiddenInView = RenderDebugFilter::Parse(hideViewTypesVar->GetStringValue());
+		RenderDebugFilter::hiddenInShadows = RenderDebugFilter::Parse(hideShadowTypesVar->GetStringValue());
 
 		// Distance (world units) beyond which authored instanced foliage (trees, bushes, rocks) is
 		// culled. Lower values cut the overdraw from dense forests. Read each frame in OnIdle, so no
@@ -2325,6 +2372,11 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowClampBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("gxShadowDistance");
+		ConsoleVarMgr::UnregisterConsoleVar("gxShadowAlphaTest");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFoliageInstanceCulling");
+		ConsoleVarMgr::UnregisterConsoleVar("gxDebugHideViewTypes");
+		ConsoleVarMgr::UnregisterConsoleVar("gxDebugHideShadowTypes");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTemporal");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowLightStep");
 		ConsoleVarMgr::UnregisterConsoleVar("gxRenderScale");
@@ -6092,6 +6144,11 @@ namespace mmo
 		const int level = Clamp(var.GetIntValue(), 0, 2);
 		ILOG("Updating shadow quality to level " << level);
 		deferred->SetShadowQuality(level);
+
+		if (s_shadowDistanceVar)
+		{
+			deferred->SetShadowDistance(s_shadowDistanceVar->GetFloatValue());
+		}
 	}
 
 	void WorldState::OnShadowTemporalChanged(ConsoleVar &var, const std::string &oldValue)

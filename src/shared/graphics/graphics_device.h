@@ -385,6 +385,43 @@ namespace mmo
 		/// @brief Returns whether G-Buffer depth pre-pass mode is currently active.
 		[[nodiscard]] bool IsGBufferDepthPrepass() const { return m_gbufferDepthPrepass; }
 
+		/// @brief Enables or disables the alpha test of masked materials in depth-only passes.
+		/// @remark When off, masked shadow casters (leaves, grass) render as solid geometry with no
+		///         pixel shader: much cheaper, but cut-outs cast solid shadows.
+		void SetAlphaTestedShadows(const bool enabled)
+		{
+			if (m_alphaTestedShadows != enabled)
+			{
+				m_alphaTestedShadows = enabled;
+				InvalidateBoundMaterial();
+			}
+		}
+
+		/// @brief Forgets which material is bound, so the next draw applies its material again.
+		/// @remark Needed when something that changes how a material applies (not the material
+		///         itself) changes, like the shadow alpha test above.
+		virtual void InvalidateBoundMaterial() {}
+
+		/// @brief Marks the main view's depth pre-pass as running.
+		/// @remark The pre-pass has to reject exactly the pixels the G-Buffer pass rejects, and every
+		///         G-Buffer shader alpha tests on its opacity - including materials not flagged as masked.
+		///         So during the pre-pass every material binds its depth shader, never the null pixel
+		///         shader that shadow passes use for supposedly solid casters.
+		void SetDepthPrepassActive(const bool active)
+		{
+			if (m_depthPrepassActive != active)
+			{
+				m_depthPrepassActive = active;
+				InvalidateBoundMaterial();
+			}
+		}
+
+		/// @brief Returns whether the main view's depth pre-pass is running.
+		[[nodiscard]] bool IsDepthPrepassActive() const { return m_depthPrepassActive; }
+
+		/// @brief Returns whether masked materials alpha test in depth-only passes.
+		[[nodiscard]] bool AreAlphaTestedShadowsEnabled() const { return m_alphaTestedShadows; }
+
 		virtual std::unique_ptr<MaterialCompiler> CreateMaterialCompiler() = 0;
 
 		virtual std::unique_ptr<ShaderCompiler> CreateShaderCompiler() = 0;
@@ -430,6 +467,50 @@ namespace mmo
 		/// diagnostics such as bug reports. Empty if the backend cannot tell.
 		virtual std::string GetAdapterDescription() const { return {}; }
 
+		/// @brief Sets the highest anisotropy used for anisotropically filtered textures (1 to 16).
+		/// @remark 1 turns anisotropic filtering into plain trilinear filtering. Anisotropic taps are
+		///         a large share of the texture cost on bandwidth-limited (integrated) GPUs.
+		virtual void SetMaxAnisotropy(uint32 maxAnisotropy) {}
+
+		/// @brief Limits the texture filter of every texture bound from now on, until reset.
+		/// @remark Used by passes that only need a cheap lookup, e.g. alpha-tested shadow casters,
+		///         which never need anisotropic filtering. Pass TextureFilter::Anisotropic to lift it.
+		virtual void SetTextureFilterCap(TextureFilter maxFilter) {}
+
+		/// @brief Enables or disables vertical sync for subsequent presents.
+		/// @remark Backends that bake the setting into the swap chain at creation ignore this.
+		virtual void SetVSyncEnabled(bool enable) {}
+
+		/// @brief Marks the start of a frame for whole-frame GPU timing.
+		/// @remark Pair with EndFrameGpuTimer before the frame is presented. The result becomes
+		///         available a few frames later through GetLastFrameGpuTimeMs, so the GPU is never
+		///         stalled waiting for it. Backends without timer queries do nothing.
+		virtual void BeginFrameGpuTimer() {}
+
+		/// @brief Marks the end of a frame for whole-frame GPU timing. See BeginFrameGpuTimer.
+		virtual void EndFrameGpuTimer() {}
+
+		/// @brief Starts a named GPU timing scope inside the current timed frame (see BeginFrameGpuTimer).
+		/// @remark The result is reported to the profiler under the given name once it resolves, a few
+		///         frames later. Scopes may nest. Does nothing while no frame timer is running.
+		/// @param name Name of the scope. Must stay valid for the life of the device (a string literal).
+		virtual void BeginGpuScope(const char* name) {}
+
+		/// @brief Ends the innermost GPU timing scope started with BeginGpuScope.
+		virtual void EndGpuScope() {}
+
+		/// @brief Returns the GPU time of the most recently resolved timed frame in milliseconds.
+		/// @return The GPU time, or a negative value when no measurement is available.
+		[[nodiscard]] virtual double GetLastFrameGpuTimeMs() const { return -1.0; }
+
+		/// @brief Returns the number of draw calls issued since the device was created.
+		/// @remark Monotonic, so a caller measures a span of work by taking the difference.
+		[[nodiscard]] virtual uint64 GetTotalDrawCount() const { return 0; }
+
+		/// @brief Returns the number of triangles submitted since the device was created, counting
+		///        every instance of an instanced draw. Monotonic like GetTotalDrawCount.
+		[[nodiscard]] virtual uint64 GetTotalPrimitiveCount() const { return 0; }
+
 	public:
 		RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
 
@@ -467,6 +548,8 @@ namespace mmo
 		DepthTestMethod m_depthComparison { DepthTestMethod::Always };
 		DepthTestMethod m_restoreDepthComparison { DepthTestMethod::Always };
 		bool m_gbufferDepthPrepass { false };
+		bool m_alphaTestedShadows { true };
+		bool m_depthPrepassActive { false };
 		/// Keyed by address so destroying one is O(1): every VertexData owns one of each.
 		std::unordered_map<const VertexDeclaration*, std::unique_ptr<VertexDeclaration>> m_vertexDeclarations;
 		std::unordered_map<const VertexBufferBinding*, std::unique_ptr<VertexBufferBinding>> m_vertexBufferBindings;

@@ -479,6 +479,14 @@ namespace mmo
 		m_cameraNode->SetPosition(m_desiredCameraLocation + shakeOffset);
 	}
 
+	void PlayerController::RotateCamera(const float degrees)
+	{
+		if (m_cameraAnchorNode)
+		{
+			m_cameraAnchorNode->Yaw(Degree(degrees), TransformSpace::Parent);
+		}
+	}
+
 	void PlayerController::SetOrbitModeEnabled(bool enable)
 	{
 		// Already enabled / disabled? Then do nothing

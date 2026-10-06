@@ -42,6 +42,9 @@ namespace mmo
 		/// BC5 compressed two-channel (normal maps)
 		BC5,
 
+		/// Single-channel 32-bit float (render targets holding depth or other scalar data)
+		R32F,
+
 		Unknown
 	};
 

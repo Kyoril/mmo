@@ -33,6 +33,19 @@ namespace mmo
 		return *t_buffer;
 	}
 
+	void Profiler::SetEnabled(const bool enabled)
+	{
+		const bool wasEnabled = m_enabled.exchange(enabled, std::memory_order_relaxed);
+		if (enabled && !wasEnabled)
+		{
+			// The last frame start dates from before profiling was switched off, so the first
+			// frame period measured against it would be bogus and skew every average for a second.
+			m_lastFrameBeginValid = false;
+			m_frameStartValid = false;
+			m_frameTimeHistory.clear();
+		}
+	}
+
 	void Profiler::SetCurrentThreadName(std::string name)
 	{
 		ThreadBuffer& buffer = GetThreadBuffer();
@@ -215,6 +228,22 @@ namespace mmo
 		MetricAccumulator& accumulator = it->second;
 		accumulator.totalTimeMs += timeMs;
 		accumulator.callCount++;
+	}
+
+	void Profiler::SetCounter(const std::string_view name, const double value)
+	{
+		if (!IsEnabled())
+		{
+			return;
+		}
+
+		if (const auto it = m_counters.find(name); it != m_counters.end())
+		{
+			it->second = value;
+			return;
+		}
+
+		m_counters.emplace(std::string(name), value);
 	}
 
 	double Profiler::GetAverageFrameTimeMs() const

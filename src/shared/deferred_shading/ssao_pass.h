@@ -84,6 +84,10 @@ namespace mmo
 		/// @brief Ping target for the separable blur (horizontal result).
 		RenderTexturePtr m_blurRT;
 
+		/// @brief Radial depth at the AO resolution (R32F), read by the march and the blur instead
+		///        of the full-resolution RGBA16F normal target.
+		RenderTexturePtr m_depthRT;
+
 		/// @brief 1x1 white texture handed out while SSAO is disabled, so the lighting shader can
 		///        sample unconditionally with no permutation and no branch.
 		TexturePtr m_whiteTexture;
@@ -97,5 +101,7 @@ namespace mmo
 		ShaderPtr m_ssaoPs;
 
 		ShaderPtr m_ssaoBlurPs;
+
+		ShaderPtr m_ssaoDepthPs;
 	};
 }

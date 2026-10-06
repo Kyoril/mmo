@@ -41,7 +41,11 @@
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "frame_ui/frame_mgr.h"
+#include "graphics_presets.h"
+#include "perf_capture.h"
 #include "startup_error.h"
+
+#include "lua.hpp"
 
 #include <filesystem>
 
@@ -146,6 +150,9 @@ namespace mmo
 		{
 			return false;
 		}
+
+		PerfCapture::Initialize();
+		GraphicsPresets::Initialize();
 
 		return true;
 	}
@@ -264,6 +271,26 @@ namespace mmo
 		context.mailClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.subsystemClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.bugReportClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
+
+#ifdef MMO_WITH_DEV_COMMANDS
+		// Runs a Lua chunk in the UI's script state, so scripted sessions (-exec) can drive the UI,
+		// e.g. "script ShowUIPanel(OptionsFrame)".
+		Console::RegisterCommand("script", [](const std::string&, const std::string& args)
+		{
+			auto& localContext = GetClientContext();
+			if (!localContext.gameScript || args.empty())
+			{
+				return;
+			}
+
+			lua_State* state = &localContext.gameScript->GetLuaState();
+			if (luaL_dostring(state, args.c_str()) != 0)
+			{
+				ELOG("script: " << lua_tostring(state, -1));
+				lua_pop(state, 1);
+			}
+		}, ConsoleCommandCategory::Debug, "Runs a line of Lua in the user interface's script state (developer builds only).");
+#endif
 	}
 
 	/// @copydoc ClientApplication::InitializeUiAndEnterState
@@ -276,6 +303,12 @@ namespace mmo
 
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 		Console::ExecuteCommand("run Config/RunOnce.cfg");
+
+		for (const std::string& script : m_startupScripts)
+		{
+			ILOG("Running startup script " << script);
+			Console::ExecuteCommand("run " + script);
+		}
 
 		const auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
 		if (window)
@@ -309,7 +342,9 @@ namespace mmo
 			context.runtime.reset();
 		}
 
-		// Both of these are no-ops when the stage that would have set them up never ran.
+		// All of these are no-ops when the stage that would have set them up never ran.
+		GraphicsPresets::Destroy();
+		PerfCapture::Destroy();
 		EventLoop::Destroy();
 		AssetRegistry::Destroy();
 
@@ -362,6 +397,10 @@ namespace mmo
 	/// @copydoc ClientApplication::ShutdownUiSystems
 	void ClientApplication::ShutdownUiSystems(ClientContext& context)
 	{
+#ifdef MMO_WITH_DEV_COMMANDS
+		Console::UnregisterCommand("script");
+#endif
+
 		if (context.uiRuntime)
 		{
 			context.uiRuntime->Shutdown();
@@ -389,6 +428,8 @@ namespace mmo
 	/// @copydoc ClientApplication::ShutdownCoreServices
 	void ClientApplication::ShutdownCoreServices(ClientContext& context)
 	{
+		GraphicsPresets::Destroy();
+		PerfCapture::Destroy();
 		Console::Destroy();
 		EventLoop::Destroy();
 		AssetRegistry::Destroy();

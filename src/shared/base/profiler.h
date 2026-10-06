@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -65,9 +66,9 @@ namespace mmo
 		/// @brief Returns the global profiler singleton instance.
 		static Profiler& GetInstance();
 
-		/// @brief Enables or disables profiling.
+		/// @brief Enables or disables profiling. Main thread only.
 		/// @param enabled Whether profiling is enabled.
-		void SetEnabled(const bool enabled) { m_enabled.store(enabled, std::memory_order_relaxed); }
+		void SetEnabled(bool enabled);
 
 		/// @brief Returns whether profiling is currently enabled.
 		[[nodiscard]] bool IsEnabled() const { return m_enabled.load(std::memory_order_relaxed); }
@@ -108,6 +109,16 @@ namespace mmo
 
 		/// @brief Returns the rolling average FPS over the history window.
 		[[nodiscard]] double GetAverageFPS() const;
+
+		/// @brief Records a per-frame value that is not a summed duration (whole-frame GPU time,
+		///        draw call count, ...). Main thread only. A counter keeps its last value until it
+		///        is set again.
+		/// @param name The counter name.
+		/// @param value The value for the current frame.
+		void SetCounter(std::string_view name, double value);
+
+		/// @brief Returns all counters with their most recent values, sorted by name. Main thread only.
+		[[nodiscard]] const std::map<std::string, double, std::less<>>& GetCounters() const { return m_counters; }
 
 	private:
 		/// @brief Transparent string hash for heterogeneous std::string_view lookups.
@@ -206,6 +217,9 @@ namespace mmo
 
 		/// Maximum frame time history size.
 		static constexpr size_t MaxFrameTimeHistory = 60;
+
+		/// Most recent value of every counter recorded through SetCounter. Main thread only.
+		std::map<std::string, double, std::less<>> m_counters;
 	};
 
 	/// @brief RAII timer that measures the scope's lifetime and reports it to the Profiler.

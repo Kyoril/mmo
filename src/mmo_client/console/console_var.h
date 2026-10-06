@@ -6,6 +6,7 @@
 #include "base/non_copyable.h"
 #include "base/signal.h"
 
+#include <functional>
 #include <string>
 
 
@@ -256,6 +257,9 @@ namespace mmo
 
 		/// Finds a registered console variable if it exists.
 		static ConsoleVar* FindConsoleVar(const std::string& name, bool allowUnregistered = false);
+
+		/// @brief Calls the given function for every registered console variable, sorted by name.
+		static void ForEachConsoleVar(const std::function<void(const ConsoleVar&)>& callback);
 	};
 
 }

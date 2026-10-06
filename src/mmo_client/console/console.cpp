@@ -84,6 +84,10 @@ namespace mmo
 
 	static scoped_connection s_perfChanged;
 
+	static scoped_connection s_vsyncChanged;
+
+	static scoped_connection s_anisotropyChanged;
+
 	namespace
 	{
 		ConsoleVar* s_dataPathCVar = nullptr;
@@ -137,6 +141,7 @@ namespace mmo
 		ConsoleVar* s_gxVSyncCVar = nullptr;
 		ConsoleVar* s_gxApiCVar = nullptr;
 		ConsoleVar* s_gxPerfCVar = nullptr;
+		ConsoleVar* s_gxAnisotropyCVar = nullptr;
 
 		/// Helper struct for automatic gx cvar table.
 		struct GxCVarHelper
@@ -154,6 +159,7 @@ namespace mmo
 			{"gxResolution",	"The resolution of the primary output window.",			"",			&s_gxResolutionCVar },
 			{"gxWindow",		"Whether the application will run in windowed mode.",	"0",		&s_gxWindowedCVar },
 			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar },
+			{"gxAnisotropy",	"Maximum anisotropic texture filtering (1, 2, 4, 8 or 16). Lower values are faster, especially on integrated GPUs.",	"8",	&s_gxAnisotropyCVar },
 
 			{ "perf", "Toggles whether performance counters are visible", "0", &s_gxPerfCVar },
 
@@ -183,12 +189,37 @@ namespace mmo
 			});
 
 			s_perfChanged = s_gxPerfCVar->Changed.connect([](ConsoleVar& var, const std::string&) { Profiler::GetInstance().SetEnabled(var.GetBoolValue()); });
+
+			// The config file runs before the cvars above are registered, so a "set perf 1" in it has
+			// already assigned the value without anyone listening. Apply what is there now, or the
+			// overlay shows up empty because the profiler never got switched on.
+			Profiler::GetInstance().SetEnabled(s_gxPerfCVar->GetBoolValue());
+
+			// VSync can be switched without recreating the device: it only changes how frames are
+			// presented, so apply changes immediately instead of waiting for a restart.
+			s_vsyncChanged = s_gxVSyncCVar->Changed.connect([](ConsoleVar& var, const std::string&)
+			{
+				if (GraphicsDevice::HasInstance())
+				{
+					GraphicsDevice::Get().SetVSyncEnabled(var.GetBoolValue());
+				}
+			});
+
+			s_anisotropyChanged = s_gxAnisotropyCVar->Changed.connect([](ConsoleVar& var, const std::string&)
+			{
+				if (GraphicsDevice::HasInstance())
+				{
+					GraphicsDevice::Get().SetMaxAnisotropy(static_cast<uint32>(std::max(1, var.GetIntValue())));
+				}
+			});
 		}
 
 		/// Unregisters the automatically managed gx cvars from the table above.
 		void UnregisterGraphicsCVars()
 		{
 			s_perfChanged.disconnect();
+			s_vsyncChanged.disconnect();
+			s_anisotropyChanged.disconnect();
 
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
 				ConsoleVarMgr::UnregisterConsoleVar(x.name);
@@ -370,6 +401,7 @@ namespace mmo
 		}
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
+		device.SetMaxAnisotropy(static_cast<uint32>(std::max(1, s_gxAnisotropyCVar->GetIntValue())));
 
 		// Load the project-wide global shader parameter registry so every material can reference
 		// the shared globals. A missing file simply leaves the registry empty.
@@ -784,11 +816,22 @@ namespace mmo
 				yOffset += lineHeight;
 			}
 
-			// Batch count
+			// Batch count and the whole-frame GPU time (scene, UI and post-processing together)
 			{
 				std::ostringstream strm;
+				strm << std::fixed << std::setprecision(1);
 				strm << "Batches: " << gx.GetBatchCount();
-				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, Color(0.7f, 0.7f, 0.7f));
+
+				const auto& counters = profiler.GetCounters();
+				const bool hasGpuFrame = counters.find("GPU frame (ms)") != counters.end();
+				const double gpuFrameMs = hasGpuFrame ? counters.find("GPU frame (ms)")->second : 0.0;
+				if (hasGpuFrame)
+				{
+					strm << "   GPU frame: " << gpuFrameMs << " ms";
+				}
+
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f,
+					(hasGpuFrame && gpuFrameMs > frameTime * 0.8) ? Color(1.0f, 1.0f, 0.0f) : Color(0.7f, 0.7f, 0.7f));
 				yOffset += lineHeight;
 			}
 

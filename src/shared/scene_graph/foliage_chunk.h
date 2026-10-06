@@ -148,6 +148,18 @@ namespace mmo
 		/// @copydoc MovableObject::PopulateRenderQueue
 		void PopulateRenderQueue(RenderQueue& queue) override;
 
+		/// @copydoc MovableObject::SetCurrentCamera
+		void SetCurrentCamera(Camera& cam) override;
+
+		/// @brief Enables or disables per-instance frustum culling for every foliage chunk.
+		/// @remark On by default. A chunk covers a large cell, so without this every pass that
+		///         touches the cell (including the small near shadow cascades) draws all of its
+		///         instances. The switch exists for A/B measurements.
+		static void SetPerInstanceCullingEnabled(bool enabled) { s_perInstanceCulling = enabled; }
+
+		/// @brief Returns whether per-instance frustum culling is enabled.
+		[[nodiscard]] static bool IsPerInstanceCullingEnabled() { return s_perInstanceCulling; }
+
 	public:
 		// Renderable interface
 
@@ -162,6 +174,10 @@ namespace mmo
 
 		/// @copydoc Renderable::GetCastsShadows
 		[[nodiscard]] bool GetCastsShadows() const override;
+
+		/// @brief Procedural ground cover stays out of the depth pre-pass: its materials' depth and
+		///        G-Buffer alpha tests have been seen to disagree, and grass gains little from it.
+		[[nodiscard]] bool IsExcludedFromDepthPrepass() const override { return m_parent != nullptr; }
 
 		/// @copydoc Renderable::GetMaterial
 		[[nodiscard]] MaterialPtr GetMaterial() const override;
@@ -178,8 +194,33 @@ namespace mmo
 		/// @brief Instance data for CPU-side storage.
 		std::vector<FoliageInstanceData> m_instances;
 
+		/// @brief World-space bounding sphere per instance (xyz = centre, w = radius), parallel to
+		///        m_instances. Used for per-instance frustum culling.
+		std::vector<Vector4> m_instanceSpheres;
+
 		/// @brief GPU buffer containing instance transform matrices.
 		VertexBufferPtr m_instanceBuffer;
+
+		/// @brief Dynamic buffer receiving the instances that survived culling for the current pass.
+		VertexBufferPtr m_culledInstanceBuffer;
+
+		/// @brief Device the buffers were built with, for creating the culled buffer lazily.
+		GraphicsDevice* m_device = nullptr;
+
+		/// @brief Camera of the pass currently building its render queue (see SetCurrentCamera).
+		Camera* m_cullCamera = nullptr;
+
+		/// @brief Whether the next draw uses m_culledInstanceBuffer instead of m_instanceBuffer.
+		bool m_drawCulled = false;
+
+		/// @brief Instance count of the next draw.
+		uint32 m_drawInstanceCount = 0;
+
+		/// @brief Indices of the instances that survived culling, reused between passes.
+		std::vector<uint32> m_visibleScratch;
+
+		/// @brief Global per-instance culling switch.
+		static bool s_perInstanceCulling;
 
 		/// @brief Constant buffer for passing instance data to shaders.
 		ConstantBufferPtr m_instanceConstantBuffer;
@@ -195,6 +236,9 @@ namespace mmo
 
 		/// @brief Static type name for MovableObject.
 		static String s_movableType;
+
+		/// @brief Type name of chunks that belong to InstancedFoliage (authored meshes like trees).
+		static String s_instancedMovableType;
 	};
 
 	using FoliageChunkPtr = std::shared_ptr<FoliageChunk>;

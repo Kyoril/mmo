@@ -196,11 +196,51 @@ namespace mmo
 		// TODO
 	}
 
+	std::vector<String> RenderDebugFilter::hiddenInView;
+	std::vector<String> RenderDebugFilter::hiddenInShadows;
+
+	bool RenderDebugFilter::Contains(const std::vector<String>& list, const String& type)
+	{
+		return std::find(list.begin(), list.end(), type) != list.end();
+	}
+
+	std::vector<String> RenderDebugFilter::Parse(const String& commaSeparated)
+	{
+		std::vector<String> result;
+		size_t start = 0;
+		while (start <= commaSeparated.size())
+		{
+			size_t end = commaSeparated.find_first_of(",;", start);
+			if (end == String::npos)
+			{
+				end = commaSeparated.size();
+			}
+
+			String token = commaSeparated.substr(start, end - start);
+			token.erase(0, token.find_first_not_of(" \t"));
+			token.erase(token.find_last_not_of(" \t") + 1);
+			if (!token.empty() && token != "0")
+			{
+				result.push_back(std::move(token));
+			}
+
+			start = end + 1;
+		}
+
+		return result;
+	}
+
 	void RenderQueue::ProcessVisibleObject(MovableObject& movableObject, Camera& camera, VisibleObjectsBoundsInfo& visibleBounds, bool onlyShadowCasters)
 	{
 		movableObject.SetCurrentCamera(camera);
 
 		if (!movableObject.IsVisible() || (onlyShadowCasters && !movableObject.IsCastingShadows()))
+		{
+			return;
+		}
+
+		const std::vector<String>& hidden = onlyShadowCasters ? RenderDebugFilter::hiddenInShadows : RenderDebugFilter::hiddenInView;
+		if (!hidden.empty() && RenderDebugFilter::Contains(hidden, movableObject.GetMovableType()))
 		{
 			return;
 		}

@@ -251,6 +251,9 @@ namespace mmo
         const uint32 frame = m_gpuTimerWriteFrame;
         ctx.Begin(m_gpuDisjointQueries[frame].Get());
         ctx.End(m_gpuTimestampQueries[frame][0].Get()); // start timestamp
+
+        m_passDrawMarks[0] = d3dDev.GetTotalDrawCount();
+        m_passPrimitiveMarks[0] = d3dDev.GetTotalPrimitiveCount();
     }
 
     void DeferredRenderer::GpuTimerMark(const uint32 point)
@@ -263,6 +266,9 @@ namespace mmo
         GraphicsDeviceD3D11& d3dDev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
         ID3D11DeviceContext& ctx = d3dDev;
         ctx.End(m_gpuTimestampQueries[m_gpuTimerWriteFrame][point].Get());
+
+        m_passDrawMarks[point] = d3dDev.GetTotalDrawCount();
+        m_passPrimitiveMarks[point] = d3dDev.GetTotalPrimitiveCount();
     }
 
     void DeferredRenderer::GpuTimerEndAndCollect()
@@ -275,6 +281,20 @@ namespace mmo
         const uint32 frame = m_gpuTimerWriteFrame;
         ctx.End(m_gpuDisjointQueries[frame].Get());
         m_gpuTimerFrameStarted[frame] = true;
+
+        // Geometry submitted per pass this frame (available immediately, unlike the timestamps).
+        {
+            static constexpr const char* passNames[GpuTimerPointCount - 1] = {
+                "Shadows", "GBuffer", "SSAO", "ContactShadows", "Lighting", "Volumetric fog", "Forward", "Bloom", "Tonemap"
+            };
+
+            for (uint32 p = 0; p + 1 < GpuTimerPointCount; ++p)
+            {
+                const String name(passNames[p]);
+                profiler.SetCounter("Draws: " + name, static_cast<double>(m_passDrawMarks[p + 1] - m_passDrawMarks[p]));
+                profiler.SetCounter("Tris (k): " + name, static_cast<double>(m_passPrimitiveMarks[p + 1] - m_passPrimitiveMarks[p]) / 1000.0);
+            }
+        }
 
         // Read back a frame several frames in the past so the GPU is never stalled and all timestamps
         // have resolved (some drivers report the disjoint query complete slightly before the last few
@@ -470,6 +490,7 @@ namespace mmo
             ID3D11DeviceContext& d3dCtx = d3dDev;
             auto* sceneRt = static_cast<RenderTextureD3D11*>(m_renderTexture.get());
             auto* copyRt = static_cast<RenderTextureD3D11*>(m_sceneColorCopy.get());
+            m_device.BeginGpuScope("GPU: Scene color copy");
             if (runAtmosphere)
             {
                 d3dCtx.CopyResource(sceneRt->GetTex2D(), copyRt->GetTex2D());
@@ -478,6 +499,7 @@ namespace mmo
             {
                 d3dCtx.CopyResource(copyRt->GetTex2D(), sceneRt->GetTex2D());
             }
+            m_device.EndGpuScope();
         }
 #endif
 
@@ -607,9 +629,14 @@ namespace mmo
             //    pixel shader (which still alpha-tests foliage). This also builds the render queue
             //    for the frame; SetDepthPrepass(true) makes it capture the full visible set (not
             //    just shadow casters) so the G-Buffer pass below can reuse the same queue.
+            //    The pre-pass must alpha test exactly like the G-Buffer pass below: same texture
+            //    filter, and never the solid-caster shortcut of the shadow passes. Any pixel whose
+            //    alpha test passes here but fails there gets depth without colour - a black hole.
             m_gBuffer.BindDepthOnly();
             scene.SetDepthPrepass(true);
+            m_device.SetDepthPrepassActive(true);
             scene.Render(camera, PixelShaderType::ShadowMap);
+            m_device.SetDepthPrepassActive(false);
             scene.SetDepthPrepass(false);
 
             // 2) G-Buffer pass. Keep the pre-pass depth (do not clear it), reuse the queue, and let
@@ -791,6 +818,9 @@ namespace mmo
 
         // Store statistics for external access
         m_lastLightStats = scene.GetLightRenderStats();
+
+        // The lighting pass loops over every one of these for every pixel.
+        Profiler::GetInstance().SetCounter("Lights", static_cast<double>(m_shaderLights.size()));
     }
 
     void DeferredRenderer::RenderShadowMap(Scene& scene, Camera& camera)
@@ -845,20 +875,27 @@ namespace mmo
 
         // Temporal cascade staggering: distant cascades change little frame-to-frame, so we re-render
         // them only every few frames and reuse their previous depth map in between. Cascade 0 (near,
-        // highest detail) always refreshes. The staggered phases are chosen so at most one distant
-        // cascade refreshes on any given frame, which also smooths the per-frame cost. The first frames
+        // highest detail) always refreshes. Exactly one distant cascade refreshes on every other
+        // frame, in a fixed 4-frame cycle (1, 2, 1, 3), so the per-frame shadow cost stays level:
+        // the former independent 2- and 3-frame periods coincided every few frames and stacked three
+        // cascades into one frame, which showed up as regular frame time spikes. The first frames
         // force a full update so every cascade's map is initialised before it is sampled. On the frame
         // the quantized light direction steps, all cascades refresh together — letting the stagger
-        // spread the step across three frames would make near and far shadows jump at different times.
+        // spread the step across several frames would make near and far shadows jump at different times.
         ++m_shadowFrameCounter;
         uint32 updateMask = (1u << activeCascades) - 1u; // default: all active cascades
         if (m_temporalShadows && !lightStepped && m_shadowFrameCounter > NUM_SHADOW_CASCADES)
         {
-            updateMask = 1u << 0; // cascade 0 every frame
-            if ((m_shadowFrameCounter % 2u) == 0u) { updateMask |= 1u << 1; } // cascade 1 every 2 frames
-            if ((m_shadowFrameCounter % 3u) == 0u) { updateMask |= 1u << 2; } // cascade 2 every 3 frames (phase 0)
-            if ((m_shadowFrameCounter % 3u) == 1u) { updateMask |= 1u << 3; } // cascade 3 every 3 frames (phase 1)
-            updateMask &= (1u << activeCascades) - 1u;
+            static constexpr uint32 distantCascadeCycle[4] = { 1u, 2u, 1u, 3u };
+            uint32 distantCascade = distantCascadeCycle[m_shadowFrameCounter % 4u];
+
+            // With fewer active cascades, the slots of the missing ones go to the last active cascade.
+            if (distantCascade >= activeCascades)
+            {
+                distantCascade = activeCascades - 1u;
+            }
+
+            updateMask = (1u << 0) | (1u << distantCascade);
         }
 
         // Setup the cascades scheduled to refresh this frame (others keep their cached camera matrix).
@@ -900,6 +937,10 @@ namespace mmo
         m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
         m_device.SetDepthBiasClamp(m_depthBiasClamp);
 
+        // Shadow casters only sample textures for their alpha test. Anisotropic filtering buys nothing
+        // there but costs heavily for the dense alpha-tested canopies that dominate this pass.
+        m_device.SetTextureFilterCap(TextureFilter::Bilinear);
+
         // Render each cascade scheduled this frame by re-filtering the gathered caster list against the
         // cascade's own frustum. Cascades not scheduled this frame keep last frame's depth map.
         for (uint32 i = 0; i < activeCascades; ++i)
@@ -908,6 +949,11 @@ namespace mmo
             {
                 continue;
             }
+
+            static constexpr const char* cascadeScopeNames[NUM_SHADOW_CASCADES] = {
+                "GPU: Shadow cascade 0", "GPU: Shadow cascade 1", "GPU: Shadow cascade 2", "GPU: Shadow cascade 3"
+            };
+            m_device.BeginGpuScope(cascadeScopeNames[i]);
 
             m_cascadeShadowMaps[i]->Activate();
             m_cascadeShadowMaps[i]->Clear(ClearFlags::Depth);
@@ -922,6 +968,7 @@ namespace mmo
             scene.RenderShadowCasters(*m_shadowCameras[i], m_shadowCasterCache, minCasterWorldRadius);
 
             m_cascadeShadowMaps[i]->Update();
+            m_device.EndGpuScope();
         }
 
         // Update the shadow buffer with cascade data
@@ -947,6 +994,7 @@ namespace mmo
         m_device.SetDepthBias(0);
         m_device.SetSlopeScaledDepthBias(0);
         m_device.SetDepthBiasClamp(0);
+        m_device.SetTextureFilterCap(TextureFilter::Anisotropic);
     }
 
     TexturePtr DeferredRenderer::GetFinalRenderTarget() const
@@ -964,6 +1012,47 @@ namespace mmo
         return m_tonemapPass->GetResult();
     }
 
+    void DeferredRenderer::SetShadowQuality(const int level)
+    {
+        switch (level)
+        {
+        case 0: // Low: 2 cascades, 4 PCF taps, only the nearest at full size
+            m_cascadedShadowSetup->GetConfig().activeCascadeCount = 2;
+            m_pcfSampleCount = 4;
+            m_fullResolutionCascades = 1;
+            break;
+        case 1: // Medium: 3 cascades, 8 PCF taps, only the nearest at full size
+            m_cascadedShadowSetup->GetConfig().activeCascadeCount = 3;
+            m_pcfSampleCount = 8;
+            m_fullResolutionCascades = 1;
+            break;
+        default: // High: 4 cascades, 16 PCF taps, the two nearest at full size
+            m_cascadedShadowSetup->GetConfig().activeCascadeCount = NUM_SHADOW_CASCADES;
+            m_pcfSampleCount = 16;
+            m_fullResolutionCascades = 2;
+            break;
+        }
+
+        // Force a full (non-staggered) refresh of every cascade for the next few frames so any
+        // newly-activated cascade's shadow map is initialised before it is sampled.
+        m_shadowFrameCounter = 0;
+
+        ResizeCascadeShadowMaps();
+    }
+
+    void DeferredRenderer::ResizeCascadeShadowMaps()
+    {
+        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
+        {
+            if (m_cascadeShadowMaps[i])
+            {
+                const uint16 cascadeSize = GetCascadeShadowMapSize(i);
+                m_cascadeShadowMaps[i]->Resize(cascadeSize, cascadeSize);
+                m_cascadeShadowMaps[i]->ApplyPendingResize();
+            }
+        }
+    }
+
     void DeferredRenderer::SetShadowMapSize(const uint16 size)
     {
         if (m_shadowMapSize == size || size == 0)
@@ -977,16 +1066,8 @@ namespace mmo
         m_shadowFrameCounter = 0;
 
         // Resize all cascade shadow maps (distant cascades use a reduced resolution).
-        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
-        {
-            if (m_cascadeShadowMaps[i])
-            {
-                const uint16 cascadeSize = GetCascadeShadowMapSize(i);
-                m_cascadeShadowMaps[i]->Resize(cascadeSize, cascadeSize);
-                m_cascadeShadowMaps[i]->ApplyPendingResize();
-            }
-        }
-        
+        ResizeCascadeShadowMaps();
+
         // Update CSM config
         if (m_cascadedShadowSetup)
         {

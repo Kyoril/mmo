@@ -21,6 +21,11 @@ struct PS_INPUT
 // G-Buffer normal target: rgb = world normal * 0.5 + 0.5, a = linear RADIAL depth
 // (length(viewPos)), not view-space Z. Reconstruct positions with viewRay * depth.
 Texture2D NormalTexture : register(t1);
+
+// The same radial depth as NormalTexture.a, copied into a compact R32F target at this pass's
+// resolution by PS_SsaoDepth. Every march sample reads this instead of the wide normal target.
+Texture2D<float> DepthTexture : register(t2);
+
 SamplerState PointSampler : register(s0);
 
 // Per-view matrices (b12). Auto-bound by GraphicsDeviceD3D11 (kPerViewMatrixBufferSlot).
@@ -51,14 +56,52 @@ cbuffer SsaoBuffer : register(b2)
     float2 SsaoPadding;
 };
 
-// Reconstructs a view-space position from a screen UV and the RADIAL depth stored in the
-// normal target's alpha. Mirrors PS_DeferredLighting.hlsl so the two passes cannot disagree.
-float3 ReconstructViewPos(float2 uv, float radialDepth)
+// Unnormalized view ray through a screen UV, unprojected exactly as PS_DeferredLighting.hlsl does so
+// the two passes cannot disagree. For any perspective projection the homogeneous w of the
+// unprojected point does not depend on the screen position, so the ray is affine in UV:
+// ray(uv) = origin + uv.x * stepU + uv.y * stepV. main() derives the three terms once per pixel,
+// which replaces a matrix multiply per march sample.
+struct ViewRayBasis
+{
+    float3 origin;
+    float3 stepU;
+    float3 stepV;
+};
+
+float3 UnprojectRay(float2 uv)
 {
     float2 ndc = float2(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f);
     float4 viewH = mul(float4(ndc, 1.0f, 1.0f), InverseProjection);
-    float3 viewRay = normalize(viewH.xyz / viewH.w);
-    return viewRay * radialDepth;
+    return viewH.xyz / viewH.w;
+}
+
+ViewRayBasis MakeViewRayBasis()
+{
+    ViewRayBasis basis;
+    basis.origin = UnprojectRay(float2(0.0f, 0.0f));
+    basis.stepU = UnprojectRay(float2(1.0f, 0.0f)) - basis.origin;
+    basis.stepV = UnprojectRay(float2(0.0f, 1.0f)) - basis.origin;
+    return basis;
+}
+
+// Reconstructs a view-space position from a screen UV and the RADIAL depth stored in the
+// normal target's alpha (and copied into DepthTexture).
+float3 ReconstructViewPos(ViewRayBasis basis, float2 uv, float radialDepth)
+{
+    return normalize(basis.origin + uv.x * basis.stepU + uv.y * basis.stepV) * radialDepth;
+}
+
+// atan2 approximation (max error ~0.0015 rad), far below the PI/32 sector width it feeds, at a
+// fraction of the cost of the intrinsic. Two of these run per march sample.
+float FastAtan2(float y, float x)
+{
+    float ax = abs(x);
+    float ay = abs(y);
+    float a = min(ax, ay) / max(max(ax, ay), 1e-20f);
+    float r = a * (0.78539816f - (a - 1.0f) * (0.2447f + 0.0663f * a));
+    r = (ay > ax) ? (PI * 0.5f - r) : r;
+    r = (x < 0.0f) ? (PI - r) : r;
+    return (y < 0.0f) ? -r : r;
 }
 
 // Interleaved gradient noise, keyed on pixel position ONLY — deliberately not on a frame index.
@@ -140,7 +183,8 @@ float4 main(PS_INPUT input) : SV_TARGET
         return 1.0f;
     }
 
-    float3 viewPos = ReconstructViewPos(input.TexCoord, depth);
+    const ViewRayBasis rayBasis = MakeViewRayBasis();
+    float3 viewPos = ReconstructViewPos(rayBasis, input.TexCoord, depth);
     float3 worldNormal = normalize(normalData.rgb * 2.0f - 1.0f);
 
     // This engine is row-vector: the vector goes FIRST. MakeViewMatrix writes translation into the
@@ -192,7 +236,7 @@ float4 main(PS_INPUT input) : SV_TARGET
         // The slice plane contains the view direction and the slice's screen-space direction
         // lifted into view space. This is the standard GTAO-family approximation.
         //
-        // The y flip is required: UV space is y-down (ReconstructViewPos does 1.0 - uv.y * 2.0)
+        // The y flip is required: UV space is y-down (UnprojectRay does 1.0 - uv.y * 2.0)
         // while view space is y-up. Feeding the raw UV-space sliceDir into the view-space plane
         // construction builds, for sin(phi) != 0, the MIRRORED plane — so the normal-oriented
         // weighting would be computed for a slice other than the one actually being marched.
@@ -226,7 +270,7 @@ float4 main(PS_INPUT input) : SV_TARGET
         projNormal /= projNormalLen;
 
         // Signed angle of the projected normal relative to the view direction, within the plane.
-        float nAngle = atan2(dot(projNormal, sliceTangent), dot(projNormal, viewDir));
+        float nAngle = FastAtan2(dot(projNormal, sliceTangent), dot(projNormal, viewDir));
 
         // Only the hemisphere in front of the surface can occlude it. Sectors outside
         // [n - PI/2, n + PI/2] lie behind the surface and must not count — this is the
@@ -270,14 +314,14 @@ float4 main(PS_INPUT input) : SV_TARGET
                     break;
                 }
 
-                float sampleDepth = NormalTexture.SampleLevel(PointSampler, sampleUv, 0).a;
+                float sampleDepth = DepthTexture.SampleLevel(PointSampler, sampleUv, 0);
 
                 if (sampleDepth <= 0.0f)
                 {
                     continue;
                 }
 
-                float3 samplePos = ReconstructViewPos(sampleUv, sampleDepth);
+                float3 samplePos = ReconstructViewPos(rayBasis, sampleUv, sampleDepth);
                 float3 delta = samplePos - viewPos;
                 float dist = length(delta);
 
@@ -297,8 +341,8 @@ float4 main(PS_INPUT input) : SV_TARGET
                 // Signed, in the same parametrization as nAngle and validMask, so which side of
                 // the view direction the occluder is on is preserved. `side` now genuinely
                 // separates the two march directions instead of only choosing sampleUv.
-                float angFront = atan2(dot(frontDir, sliceTangent), dot(frontDir, viewDir));
-                float angBack = atan2(dot(backDir, sliceTangent), dot(backDir, viewDir));
+                float angFront = FastAtan2(dot(frontDir, sliceTangent), dot(frontDir, viewDir));
+                float angBack = FastAtan2(dot(backDir, sliceTangent), dot(backDir, viewDir));
 
                 // A sample can sit behind the shading point relative to the view (|theta| > PI/2).
                 // Clamp into the representable range rather than letting the fraction saturate at a

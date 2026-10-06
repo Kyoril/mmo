@@ -4,6 +4,7 @@
 
 #include "discord.h"
 #include "game_state_mgr.h"
+#include "event_loop.h"
 #include "loading_screen.h"
 #include "platform.h"
 #include "world_state.h"
@@ -93,6 +94,14 @@ namespace mmo
 				ConsoleCommand_Login(command, args);
 			}, ConsoleCommandCategory::Debug, "Attempts to login with the given account name and password.");
 
+		m_charListReceived = false;
+		Console::RegisterCommand("enterworld", [&](const String& command, const String& args)
+			{
+				ConsoleCommand_EnterWorld(command, args);
+			}, ConsoleCommandCategory::Debug, "Enters the world with the selected character as soon as the character list is shown.");
+
+		m_loginConnections += EventLoop::KeyDown.connect(this, &LoginState::OnKeyDown);
+
 		if (m_realmConnector.IsConnected())
 		{
 			// Request a fresh character list from the server; the UI shows a loading dialog
@@ -158,6 +167,8 @@ namespace mmo
 		m_musicSound = InvalidSound;
 
 		Console::UnregisterCommand("login");
+		Console::UnregisterCommand("enterworld");
+		m_enterWorldRequested = false;
 
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CharCreateResponse);
 
@@ -206,6 +217,39 @@ namespace mmo
 	void LoginState::OnCharListUpdated()
 	{
 		FrameManager::Get().TriggerLuaEvent("CHAR_LIST");
+
+		m_charListReceived = true;
+		TryEnterWorld();
+	}
+
+	void LoginState::ConsoleCommand_EnterWorld(const std::string& cmd, const std::string& arguments)
+	{
+		m_enterWorldRequested = true;
+		TryEnterWorld();
+	}
+
+	void LoginState::TryEnterWorld()
+	{
+		if (!m_enterWorldRequested || !m_charListReceived || !m_realmConnector.IsConnected())
+		{
+			return;
+		}
+
+		m_enterWorldRequested = false;
+
+		// The character screen decides: it knows the selection and whether that character may enter.
+		FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_REQUESTED");
+	}
+
+	bool LoginState::OnKeyDown(const int32 key, bool repeat)
+	{
+		constexpr int32 enterKey = 0x0D;
+		if (key == enterKey && !repeat && m_charListReceived && m_realmConnector.IsConnected())
+		{
+			FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_REQUESTED");
+		}
+
+		return true;
 	}
 
 	PacketParseResult LoginState::OnCharCreationResponse(game::IncomingPacket& packet)

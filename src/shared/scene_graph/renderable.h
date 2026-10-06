@@ -72,6 +72,12 @@ namespace mmo
         ///         default used to cause: it returned false while MovableObject defaulted to true,
         ///         so anything trusting the Renderable saw "nothing casts shadows".
         [[nodiscard]] virtual bool GetCastsShadows() const { return true; }
+
+        /// @brief Whether this renderable stays out of the main view's depth pre-pass.
+        /// @remark The G-Buffer pass still draws it (with depth writes), so this only costs the
+        ///         early-Z benefit. Used for geometry whose depth-only alpha test is not guaranteed to
+        ///         match its G-Buffer alpha test: any mismatch leaves depth without colour (black holes).
+        [[nodiscard]] virtual bool IsExcludedFromDepthPrepass() const { return false; }
         
         [[nodiscard]] virtual MaterialPtr GetMaterial() const = 0;
 	};

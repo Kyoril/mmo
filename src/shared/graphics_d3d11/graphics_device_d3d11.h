@@ -175,6 +175,28 @@ namespace mmo
 		std::vector<std::pair<uint16, uint16>> GetSupportedResolutions() const override;
 
 		std::string GetAdapterDescription() const override;
+
+		void SetVSyncEnabled(const bool enable) override { m_vsync = enable; }
+
+		void SetMaxAnisotropy(uint32 maxAnisotropy) override;
+
+		void SetTextureFilterCap(TextureFilter maxFilter) override;
+
+		void InvalidateBoundMaterial() override { m_lastBoundMaterial = nullptr; }
+
+		void BeginFrameGpuTimer() override;
+
+		void EndFrameGpuTimer() override;
+
+		void BeginGpuScope(const char* name) override;
+
+		void EndGpuScope() override;
+
+		[[nodiscard]] double GetLastFrameGpuTimeMs() const override { return m_lastFrameGpuTimeMs; }
+
+		[[nodiscard]] uint64 GetTotalDrawCount() const override { return m_totalDrawCount; }
+
+		[[nodiscard]] uint64 GetTotalPrimitiveCount() const override { return m_totalPrimitiveCount; }
 		// ~ End GraphicsDevice
 
 	public:
@@ -374,5 +396,51 @@ namespace mmo
 
 		uint64 m_batchCount = 0;
 		uint64 m_lastFrameBatchCount = 0;
+		uint64 m_totalDrawCount = 0;
+		uint64 m_totalPrimitiveCount = 0;
+
+		/// Highest anisotropy for anisotropically filtered textures (see SetMaxAnisotropy).
+		uint32 m_maxAnisotropy = D3D11_MAX_MAXANISOTROPY;
+
+		/// Filter limit of the current pass (see SetTextureFilterCap).
+		TextureFilter m_textureFilterCap = TextureFilter::Anisotropic;
+
+		/// Derives the sampler filter from the requested filter, the pass cap and the anisotropy.
+		void ApplyEffectiveTextureFilter();
+
+		/// Number of frames the whole-frame GPU timer keeps in flight. Results are read this many
+		/// frames late so GetData never has to wait on the GPU.
+		static constexpr uint32 FrameGpuTimerLatency = 4;
+
+		/// A named GPU timing scope recorded inside a timed frame.
+		struct GpuScope
+		{
+			const char* name = nullptr;
+			ComPtr<ID3D11Query> begin;
+			ComPtr<ID3D11Query> end;
+			uint64 drawsAtBegin = 0;
+			uint64 primitivesAtBegin = 0;
+		};
+
+		/// One in-flight whole-frame GPU measurement.
+		struct FrameGpuTimer
+		{
+			ComPtr<ID3D11Query> disjoint;
+			ComPtr<ID3D11Query> begin;
+			ComPtr<ID3D11Query> end;
+			bool pending = false;
+
+			/// Scope queries of this frame. The vector is reused; only the first scopeCount are live.
+			std::vector<GpuScope> scopes;
+			uint32 scopeCount = 0;
+		};
+
+		/// Indices (into the open frame's scopes) of the scopes that have begun but not ended.
+		std::vector<uint32> m_openGpuScopes;
+
+		FrameGpuTimer m_frameGpuTimers[FrameGpuTimerLatency];
+		uint32 m_frameGpuTimerIndex = 0;
+		bool m_frameGpuTimerOpen = false;
+		double m_lastFrameGpuTimeMs = -1.0;
 	};
 }

@@ -724,7 +724,22 @@ namespace mmo
 				continue;
 			}
 
+			// GPU timing per queue group of the camera view (only recorded while profiling).
+			const char* gpuScope = nullptr;
+			if (m_pixelShaderType == PixelShaderType::GBuffer)
+			{
+				gpuScope = groupId == RenderQueueGroupId::Main ? "GPU: GBuffer main group"
+					: groupId == RenderQueueGroupId::TerrainGeometry ? "GPU: GBuffer terrain group"
+					: "GPU: GBuffer other groups";
+				GraphicsDevice::Get().BeginGpuScope(gpuScope);
+			}
+
 			RenderQueueGroupObjects(*group);
+
+			if (gpuScope)
+			{
+				GraphicsDevice::Get().EndGpuScope();
+			}
 		}
 	}
 
@@ -862,9 +877,10 @@ namespace mmo
 
 			// Queue population mutates the shared render queue (and defers skinned entities to
 			// the batched animation pass) — main thread only.
+			const std::vector<String>& hidden = RenderDebugFilter::hiddenInShadows;
 			for (size_t i = 0; i < casters.size(); ++i)
 			{
-				if (casterVisible[i])
+				if (casterVisible[i] && (hidden.empty() || !RenderDebugFilter::Contains(hidden, casters[i]->GetMovableType())))
 				{
 					casters[i]->PopulateRenderQueue(queue);
 				}
@@ -945,6 +961,20 @@ namespace mmo
 	{
 		PROFILE_SCOPE("RenderSingleObject");
 
+		if (m_depthPrepass && m_pixelShaderType == PixelShaderType::ShadowMap && renderable.IsExcludedFromDepthPrepass())
+		{
+			return;
+		}
+
+		auto& gx = GraphicsDevice::Get();
+
+		// PreRender runs before the operation is prepared: terrain picks its LOD there, and the
+		// draw must use the index data of the LOD it just picked. Prepared the other way round,
+		// the first draw after a LOD change still used the old mesh - harmless alone, but with a
+		// depth pre-pass the pre-pass and the G-Buffer pass drew different meshes, which leaves
+		// depth without colour (black holes in distant terrain while moving).
+		renderable.PreRender(*this, gx, *m_activeCamera);
+
 		// Reuse a single RenderOperation (cleared, capacity retained) to avoid a per-draw heap
 		// allocation for its constant-buffer vectors.
 		RenderOperation& op = m_renderOp;
@@ -954,10 +984,10 @@ namespace mmo
 
 		if (op.vertexData == nullptr || op.vertexData->vertexCount == 0)
 		{
+			// Close whatever PreRender opened (terrain wraps its draw in an occlusion query).
+			renderable.PostRender(*this, gx, *m_activeCamera);
 			return;
 		}
-
-		auto& gx = GraphicsDevice::Get();
 
 		// Grab material with fallback to default material of the scene
 		if (!op.material)
@@ -990,8 +1020,6 @@ namespace mmo
 		}
 		op.pixelConstantBuffers.push_back(m_psCameraBuffer.get());
 
-		// Bind vertex layout
-		renderable.PreRender(*this, gx, *m_activeCamera);
 		gx.Render(op);
 		renderable.PostRender(*this, gx, *m_activeCamera);
 	}

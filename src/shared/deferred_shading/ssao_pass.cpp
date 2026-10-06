@@ -13,15 +13,20 @@
 #	include <Windows.h>
 #	include "shaders/PS_Ssao.h"
 #	include "shaders/PS_SsaoBlur.h"
+#	include "shaders/PS_SsaoDepth.h"
 #	define MMO_SSAO_PS_BYTECODE g_PS_Ssao
 #	define MMO_SSAO_PS_SIZE std::size(g_PS_Ssao)
 #	define MMO_SSAO_BLUR_PS_BYTECODE g_PS_SsaoBlur
 #	define MMO_SSAO_BLUR_PS_SIZE std::size(g_PS_SsaoBlur)
+#	define MMO_SSAO_DEPTH_PS_BYTECODE g_PS_SsaoDepth
+#	define MMO_SSAO_DEPTH_PS_SIZE std::size(g_PS_SsaoDepth)
 #else
 #	define MMO_SSAO_PS_BYTECODE nullptr
 #	define MMO_SSAO_PS_SIZE 0
 #	define MMO_SSAO_BLUR_PS_BYTECODE nullptr
 #	define MMO_SSAO_BLUR_PS_SIZE 0
+#	define MMO_SSAO_DEPTH_PS_BYTECODE nullptr
+#	define MMO_SSAO_DEPTH_PS_SIZE 0
 #endif
 // ---------------------------------------------------------------------------------------
 
@@ -78,8 +83,10 @@ namespace mmo
 
 		m_ssaoPs = m_device.CreateShader(ShaderType::PixelShader, MMO_SSAO_PS_BYTECODE, MMO_SSAO_PS_SIZE);
 		m_ssaoBlurPs = m_device.CreateShader(ShaderType::PixelShader, MMO_SSAO_BLUR_PS_BYTECODE, MMO_SSAO_BLUR_PS_SIZE);
+		m_ssaoDepthPs = m_device.CreateShader(ShaderType::PixelShader, MMO_SSAO_DEPTH_PS_BYTECODE, MMO_SSAO_DEPTH_PS_SIZE);
 		ASSERT(m_ssaoPs);
 		ASSERT(m_ssaoBlurPs);
+		ASSERT(m_ssaoDepthPs);
 
 		// A 1x1 opaque white texture stands in for the AO term while SSAO is disabled, so the
 		// lighting shader always has something to sample. CreateTexture takes no pixel data —
@@ -105,6 +112,7 @@ namespace mmo
 	{
 		m_aoRT.reset();
 		m_blurRT.reset();
+		m_depthRT.reset();
 		m_targetWidth = 0;
 		m_targetHeight = 0;
 	}
@@ -131,6 +139,12 @@ namespace mmo
 			RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView,
 			PixelFormat::R8);
 		ASSERT(m_blurRT);
+
+		m_depthRT = m_device.CreateRenderTexture("SsaoDepth",
+			static_cast<uint16>(desiredWidth), static_cast<uint16>(desiredHeight),
+			RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView,
+			PixelFormat::R32F);
+		ASSERT(m_depthRT);
 
 		m_targetWidth = desiredWidth;
 		m_targetHeight = desiredHeight;
@@ -182,10 +196,6 @@ namespace mmo
 		m_device.SetTransformMatrix(View, camera.GetViewMatrix());
 		m_device.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
 
-		m_aoRT->Activate();
-		m_aoRT->Clear(ClearFlags::Color);
-		m_device.SetViewport(0, 0, static_cast<int32>(m_targetWidth), static_cast<int32>(m_targetHeight), 0.0f, 1.0f);
-
 		m_device.SetDepthEnabled(false);
 		m_device.SetDepthWriteEnabled(false);
 		m_device.SetFillMode(FillMode::Solid);
@@ -193,19 +203,37 @@ namespace mmo
 		m_device.SetTextureAddressMode(TextureAddressMode::Clamp, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
 		m_device.SetTextureFilter(TextureFilter::None);
 
-		// Bind the G-Buffer normal target at t1, matching PS_Ssao.hlsl.
-		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
-
 		m_device.SetVertexFormat(VertexFormat::PosColorTex1);
 		m_device.SetTopologyType(TopologyType::TriangleList);
 
 		fullscreenVs.Set();
-		m_ssaoPs->Set();
-
 		quad.Set(0);
 		m_ssaoBuffer->BindToStage(ShaderType::PixelShader, 2);
 
+		// --- Depth copy -------------------------------------------------------------------
+		// Radial depth into a compact R32F target at the AO resolution; the march and the blur
+		// sample it many times per pixel and are bound by those reads.
+		m_device.BeginGpuScope("GPU: SSAO depth copy");
+		m_depthRT->Activate();
+		m_device.SetViewport(0, 0, static_cast<int32>(m_targetWidth), static_cast<int32>(m_targetHeight), 0.0f, 1.0f);
+		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
+		m_ssaoDepthPs->Set();
 		m_device.Draw(6, 0);
+		m_device.EndGpuScope();
+
+		// --- AO march ---------------------------------------------------------------------
+		m_device.BeginGpuScope("GPU: SSAO march");
+		m_aoRT->Activate();
+		m_aoRT->Clear(ClearFlags::Color);
+		m_device.SetViewport(0, 0, static_cast<int32>(m_targetWidth), static_cast<int32>(m_targetHeight), 0.0f, 1.0f);
+
+		// Normal target at t1 (centre normal), depth at t2, matching PS_Ssao.hlsl.
+		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
+		m_device.BindTexture(m_depthRT, ShaderType::PixelShader, 2);
+		m_ssaoPs->Set();
+
+		m_device.Draw(6, 0);
+		m_device.EndGpuScope();
 
 		// Release the normal target SRV so it cannot collide with render target bindings later.
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 1);
@@ -226,7 +254,6 @@ namespace mmo
 		m_blurRT->Clear(ClearFlags::Color);
 		m_device.SetViewport(0, 0, static_cast<int32>(m_targetWidth), static_cast<int32>(m_targetHeight), 0.0f, 1.0f);
 		m_device.BindTexture(m_aoRT, ShaderType::PixelShader, 0);
-		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
 		m_device.Draw(6, 0);
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 0);
 
@@ -239,11 +266,10 @@ namespace mmo
 		m_aoRT->Clear(ClearFlags::Color);
 		m_device.SetViewport(0, 0, static_cast<int32>(m_targetWidth), static_cast<int32>(m_targetHeight), 0.0f, 1.0f);
 		m_device.BindTexture(m_blurRT, ShaderType::PixelShader, 0);
-		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
 		m_device.Draw(6, 0);
 
 		// Release SRVs so they cannot collide with render target bindings next frame.
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 0);
-		m_device.BindTexture(nullptr, ShaderType::PixelShader, 1);
+		m_device.BindTexture(nullptr, ShaderType::PixelShader, 2);
 	}
 }
