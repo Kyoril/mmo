@@ -38,11 +38,18 @@ class FullNight(unittest.TestCase):
 			for prefix in ("/realm", "/login"):
 				stub.route("GET", prefix + "/uptime", (200, {"uptime": 5}))
 			stub.route("POST", "/realm/shutdown", (200, {"status": "SUCCESS", "delay": 900}))
-			stub.route("GET", "/api/status", (200, {"Version": "2.21"}))
 			stub.route("GET", "/api/stacks/7", (200, {"Id": 7, "Name": "mmo", "Env": [{"name": "MMO_TAG", "value": OLD}]}))
 			stub.route("GET", "/api/stacks/7/file", (200, {"StackFileContent": "services: {}\n"}))
 			stub.route("PUT", "/api/stacks/7", (200, {"Id": 7}))
-			stub.route("GET", "/api/endpoints/2/docker/containers/json", (200, []))
+
+			def containers(request):
+				# Exited after the countdown, running again once the stack update went through.
+				state = "running" if stub.find("PUT", "/api/stacks/7") else "exited"
+				return 200, [
+					{"Names": ["/" + service], "State": state, "Labels": {"com.docker.compose.service": service}}
+					for service in ("realm_server_01", "world_node_01")]
+
+			stub.route("GET", "/api/endpoints/2/docker/containers/json", containers)
 
 			cfg = dataclasses.replace(
 				make_config(tmp, data_repo_url=str(root / "mmo-data")),
