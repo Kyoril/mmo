@@ -1,0 +1,32 @@
+FROM ubuntu:24.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y gcc-13 g++-13 cmake git zlib1g-dev libzstd-dev libssl-dev libmariadb-dev-compat uuid-dev
+
+COPY . /app
+WORKDIR /app
+
+ENV CC=gcc-13
+ENV CXX=g++-13
+RUN mkdir -p docker-build && \
+	cd docker-build && \
+	cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_OPENSSL_STATIC=OFF -DMMO_BUILD_TOOLS=ON -DMMO_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release /app && \
+	make -j4 update_compiler
+
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+		python3 git ca-certificates mariadb-client tzdata libssl3 zlib1g libzstd1 && \
+	rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /app/bin/update_compiler /app/update_compiler
+COPY deploy/deployer/mmo_deployer /app/mmo_deployer
+COPY deploy/deployer/deployer.sh /usr/local/bin/deployer
+COPY deploy/deployer/smoke_update_compiler.sh /app/smoke_update_compiler.sh
+RUN chmod +x /app/update_compiler /usr/local/bin/deployer /app/smoke_update_compiler.sh
+
+ENV PYTHONUNBUFFERED=1
+CMD ["deployer", "run"]

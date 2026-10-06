@@ -29,6 +29,8 @@ jobs:
             dockerfile: ./Dockerfile.world_server
           - image: mmo_data
             dockerfile: ./Dockerfile.data
+          - image: mmo_deployer
+            dockerfile: ./Dockerfile.deployer
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
@@ -68,3 +70,10 @@ jobs:
           tags: ${{ steps.tags.outputs.list }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      - name: Smoke-test update_compiler in the deployer image
+        if: matrix.image == 'mmo_deployer'
+        shell: bash
+        run: |
+          first_tag=$(echo "${{ steps.tags.outputs.list }}" | head -n1)
+          docker run --rm "$first_tag" /app/smoke_update_compiler.sh

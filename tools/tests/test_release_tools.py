@@ -117,5 +117,14 @@ class ReleaseManifest(unittest.TestCase):
 		json.dumps(manifest)
 
 
+class SmokeTestUsesRealSource(unittest.TestCase):
+	def test_smoke_script_embeds_source_txt(self):
+		with open(os.path.join(REPO_ROOT, "deploy", "patch", "source.txt"), encoding="utf-8") as handle:
+			source = handle.read().strip()
+		with open(os.path.join(REPO_ROOT, "deploy", "deployer", "smoke_update_compiler.sh"), encoding="utf-8") as handle:
+			script = handle.read()
+		self.assertIn(source, script)
+
+
 if __name__ == "__main__":
 	unittest.main()

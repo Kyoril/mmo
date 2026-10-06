@@ -1,0 +1,6 @@
+.git/
+build/
+bin/
+data/client/
+data/editor/
+e2e/runtime/
