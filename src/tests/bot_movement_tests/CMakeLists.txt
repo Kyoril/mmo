@@ -1,7 +1,8 @@
 mmo_add_test(bot_movement_tests
 	base
 	math
-	binary_io_hdrs)
+	binary_io_hdrs
+	network_hdrs)
 
 # Only the movement math is under test here, and it has no dependencies of its own, so its
 # source is compiled into the suite directly rather than linking the whole bot_core library.

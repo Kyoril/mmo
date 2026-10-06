@@ -4,6 +4,7 @@
 
 #include "bot_ai/strategies/grind_strategy.h"
 #include "bot_core/bot_movement_controller.h"
+#include "bot_core/io_poll.h"
 #include "bot_core/bot_realm_connector.h"
 #include "bot_core/bot_unit.h"
 
@@ -499,7 +500,7 @@ namespace mmo
 			// One poll for every session in the process. Polling per session would be the same
 			// work; sleeping per session is what would turn a 50ms frame into a several-second
 			// one once there are a hundred bots.
-			m_io.poll();
+			PollRestarting(m_io);
 
 			StartPendingLogins(frameStartMs);
 
@@ -542,7 +543,7 @@ namespace mmo
 		// then collides with its own ghosts.
 		for (int i = 0; i < 20; ++i)
 		{
-			m_io.poll();
+			PollRestarting(m_io);
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
 

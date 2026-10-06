@@ -3,6 +3,7 @@
 #include "bot_session.h"
 
 #include "bot_startup_selection.h"
+#include "io_poll.h"
 
 #include "base/macros.h"
 #include "game_protocol/game_protocol.h"
@@ -162,7 +163,7 @@ namespace mmo
 
 	void BotSession::Pump()
 	{
-		m_io.poll();
+		PollRestarting(m_io);
 		Update();
 		std::this_thread::sleep_for(10ms);
 	}
@@ -172,7 +173,7 @@ namespace mmo
 		m_shuttingDown = true;
 		m_realm->close();
 		m_login->close();
-		m_io.poll();
+		PollRestarting(m_io);
 	}
 
 	void BotSession::Fail(const bot_exit_code::Type code)
