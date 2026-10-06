@@ -49,6 +49,8 @@ root = (type = "fs", from = ".", to = "", entries =
 	)
 })
 EOF
+# The nightly backup shells out to mysqldump; a missing client must fail the image build, not a night.
+command -v mysqldump >/dev/null || { echo "mysqldump missing"; exit 1; }
 /app/update_compiler -s "$work/deploy/patch" -o "$work/out" -c zlib -j 2
 for bin in Launcher.exe mmo_client.exe mmo_error.exe fmod.dll; do
 	grep -q "$bin" "$work/out/list.txt" || { echo "list.txt lacks $bin"; exit 1; }

@@ -25,7 +25,8 @@ def dump_databases(cfg, dest, run=subprocess.run):
 	for database in cfg.backup_databases:
 		try:
 			result = run(
-				["mysqldump", "--single-transaction", "--routines", "--triggers",
+				# --no-tablespaces: MySQL >= 8.0.21 otherwise demands the global PROCESS privilege.
+				["mysqldump", "--single-transaction", "--no-tablespaces", "--routines", "--triggers",
 					"-h", cfg.mysql_host, "-u", cfg.mysql_user, database],
 				capture_output=True, env=env, timeout=DUMP_TIMEOUT_S)
 		except subprocess.TimeoutExpired:

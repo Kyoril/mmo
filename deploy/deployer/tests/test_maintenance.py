@@ -79,7 +79,28 @@ class MaintenanceTests(unittest.TestCase):
 		self.assertEqual(self.make(cfg=cfg).run(self.state), Outcome.DRY_RUN)
 		self.assertNotIn(("shutdown", 900), self.realm_a.calls)
 		self.assertEqual(self.portainer.deploys, [])
+		self.assertEqual(self.patchdir.flips, [])
 		self.assertTrue(any("dry-run" in m for m in self.notifier.messages))
+
+	def test_dry_run_proves_the_backup(self):
+		cfg = make_config(self.tmp.name, dry_run=True)
+		self.assertEqual(self.make(cfg=cfg).run(self.state), Outcome.DRY_RUN)
+		self.assertEqual(self.backups, ["new"])
+		message = [m for m in self.notifier.messages if "[dry-run] would deploy" in m][0]
+		self.assertIn("backup OK", message)
+
+	def test_dry_run_reports_a_failed_backup(self):
+		cfg = make_config(self.tmp.name, dry_run=True)
+		self.assertEqual(self.make(backup=self._failing_backup, cfg=cfg).run(self.state), Outcome.DRY_RUN)
+		message = [m for m in self.notifier.messages if "[dry-run] would deploy" in m][0]
+		self.assertIn("backup FAILED: disk full", message)
+		self.assertEqual(self.portainer.deploys, [])
+
+	def test_dry_run_survives_unreadable_container_states(self):
+		cfg = make_config(self.tmp.name, dry_run=True)
+		self.portainer.states_error = OSError("refused")
+		self.assertEqual(self.make(cfg=cfg).run(self.state), Outcome.DRY_RUN)
+		self.assertEqual(self.backups, ["new"])
 
 	def test_containers_that_never_exit_do_not_block_forever(self):
 		self.portainer.states = {"realm_server_01": "running", "world_node_01": "running"}

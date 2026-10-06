@@ -57,6 +57,7 @@ class Backup(unittest.TestCase):
 		command, kwargs = run.calls[0]
 		self.assertEqual(command[0], "mysqldump")
 		self.assertIn("--single-transaction", command)
+		self.assertIn("--no-tablespaces", command)
 		self.assertEqual(command[-1], "mmo_login")
 		self.assertEqual(kwargs["env"]["MYSQL_PWD"], "secret")
 		self.assertNotIn("secret", command)

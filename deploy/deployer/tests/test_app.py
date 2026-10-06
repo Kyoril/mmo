@@ -341,6 +341,15 @@ class AppTests(unittest.TestCase):
 		self.assertFalse(self.state().paused)
 		self.assertEqual(self.notifier.messages, [])
 
+	def test_dry_run_prunes_its_backups(self):
+		backups = self.cfg.state_dir / "backups"
+		for day in range(1, 10):
+			(backups / "202610{:02d}-044500-nnnnnnnn".format(day)).mkdir(parents=True)
+		self.maintenance.outcome = Outcome.DRY_RUN
+		self._run_window()
+		self.assertEqual(len(list(backups.iterdir())), self.cfg.keep_backups)
+		self.assertFalse((backups / "20261001-044500-nnnnnnnn").exists())
+
 	def test_malformed_request_is_dropped(self):
 		requests = self.cfg.state_dir / "requests"
 		requests.mkdir()

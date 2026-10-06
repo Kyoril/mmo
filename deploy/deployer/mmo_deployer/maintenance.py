@@ -64,9 +64,7 @@ class Maintenance:
 			return Outcome.ABORTED
 
 		if self.cfg.dry_run:
-			self.notifier.send("[dry-run] would deploy {} after a {} s countdown on {}".format(
-				_short(sha), self.cfg.countdown_s, ", ".join(r.name for r in self.realms)))
-			return Outcome.DRY_RUN
+			return self._dry_run(sha)
 
 		try:
 			self._schedule_shutdowns()
@@ -107,6 +105,21 @@ class Maintenance:
 
 		self.notifier.send("Release {} failed its health check; rolling back to {}.".format(_short(sha), _short(state.live)))
 		return Outcome.ROLLED_BACK if self.rollback_to(state.live) else Outcome.FAILED
+
+	def _dry_run(self, sha):
+		"""Changes nothing on the stack, but proves the container query and the real backup."""
+		try:
+			log.info("[dry-run] container states: %s", self.portainer.service_states())
+		except _REMOTE_ERRORS as error:
+			log.warning("[dry-run] could not read container states: %s", error)
+		try:
+			self.backup(sha)
+			backup_result = "backup OK"
+		except (BackupError, OSError) as error:
+			backup_result = "backup FAILED: {}".format(error)
+		self.notifier.send("[dry-run] would deploy {} after a {} s countdown on {}; {}".format(
+			_short(sha), self.cfg.countdown_s, ", ".join(r.name for r in self.realms), backup_result))
+		return Outcome.DRY_RUN
 
 	def rollback_to(self, sha):
 		"""Points patch and stack back at `sha`. True once it is healthy again."""

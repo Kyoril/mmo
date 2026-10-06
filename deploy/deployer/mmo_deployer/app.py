@@ -158,6 +158,12 @@ class Deployer:
 		record(state, now, "maintenance", outcome=outcome, commit=sha)
 		if outcome == Outcome.DEPLOYED:
 			self._promote(state, now)
+		elif outcome == Outcome.DRY_RUN:
+			# Dry runs take a real backup every night; keep them within the same retention.
+			try:
+				prune_backups(Path(self.cfg.state_dir) / "backups", self.cfg.keep_backups)
+			except OSError as error:
+				log.warning("pruning backups after the dry run failed: %s", error)
 		elif outcome in (Outcome.ROLLED_BACK, Outcome.FAILED):
 			state.bad.append(sha)
 			state.staged = None

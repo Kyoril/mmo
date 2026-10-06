@@ -41,6 +41,7 @@ Order matters: the game stack is redeployed with the new `compose.yml` FIRST (it
    GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT ON mmo_login.* TO 'deployer'@'%';
    GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT ON mmo_realm_01.* TO 'deployer'@'%';
    ```
+   The dump runs with `--no-tablespaces`, so these grants suffice on MySQL 8.0.21+ (no global `PROCESS` privilege needed).
    `mmo_world_01` is not backed up because the world server does not use its database yet. If that changes, add it to `BACKUP_DATABASES` and grant it.
 7. **First clone of mmo-data**: the first staging run clones about 830 MB and checks out 8 GB into the `deployer-state` volume. Expect the first stage to take a while. `DATA_REPO_URL` must be an HTTPS URL (the image has no ssh client).
 8. **Deployer stack**
@@ -53,7 +54,7 @@ The patch is built from `deploy/patch/source.txt`, which packs every `data/clien
 
 ## 3. Going live
 
-1. Watch at least one dry-run night: a "Staged ..." message, then a "[dry-run] would deploy ..." message at 04:45.
+1. Watch at least one dry-run night: a "Staged ..." message, then a "[dry-run] would deploy ..." message at 04:45. Dry-run nights take a real database backup (and read the container states from Portainer), so that message must end in `backup OK`; `backup FAILED: <error>` means the MySQL user, its grants or the network path to MySQL needs fixing before going live. Dry-run backups land in `/state/backups/` like real ones and share the `KEEP_BACKUPS` retention.
 2. Then do the first real deploy by hand and while watching: set `DRY_RUN=0`, redeploy the deployer stack, then
    ```bash
    docker exec mmo-deployer deployer deploy-now
@@ -81,7 +82,7 @@ Notifications:
 | `Deployer started (...)` | Service (re)started; shows live/staged/dry-run. |
 | `Staged <tag> (N changes)` | New release staged, goes live at the next 04:45. |
 | `Staging <tag> failed; retrying` | Staging error (once per release); live release unchanged. |
-| `[dry-run] would deploy` | Dry run; nothing changed. |
+| `[dry-run] would deploy ...; backup OK` / `backup FAILED: <error>` | Dry run; nothing changed on the stack, but a real backup was attempted. |
 | `Maintenance for <sha> aborted, nothing changed` | Preflight failed or a realm shutdown could not be scheduled. |
 | `Maintenance started` | Countdown running, servers go down in 15 min. |
 | `Database backup failed ... restarting` | Backup failed after the shutdown; stack is restarted on the live release. |
