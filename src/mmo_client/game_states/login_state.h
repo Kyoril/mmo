@@ -96,6 +96,16 @@ namespace mmo
 		
 		void ConsoleCommand_Login(const std::string& cmd, const std::string& arguments);
 
+		/// Asks the character screen to enter the world with the selected character, now if the
+		/// character list is showing, otherwise as soon as it arrives.
+		void ConsoleCommand_EnterWorld(const std::string& cmd, const std::string& arguments);
+
+		/// Hands a pending enter world request to the character screen once the list has arrived.
+		void TryEnterWorld();
+
+		/// Enter on the character screen enters the world, like clicking the button.
+		bool OnKeyDown(int32 key, bool repeat);
+
 	private:
 
 		LoginConnector& m_loginConnector;
@@ -109,5 +119,11 @@ namespace mmo
 
 		SoundIndex m_musicSound = InvalidSound;
 		ChannelIndex m_musicChannel = InvalidChannel;
+
+		/// Set by the enterworld command until the character screen has been asked to act on it.
+		bool m_enterWorldRequested = false;
+
+		/// Whether the character list has arrived since this state was entered.
+		bool m_charListReceived = false;
 	};
 }

@@ -862,9 +862,10 @@ namespace mmo
 
 			// Queue population mutates the shared render queue (and defers skinned entities to
 			// the batched animation pass) — main thread only.
+			const std::vector<String>& hidden = RenderDebugFilter::hiddenInShadows;
 			for (size_t i = 0; i < casters.size(); ++i)
 			{
-				if (casterVisible[i])
+				if (casterVisible[i] && (hidden.empty() || !RenderDebugFilter::Contains(hidden, casters[i]->GetMovableType())))
 				{
 					casters[i]->PopulateRenderQueue(queue);
 				}

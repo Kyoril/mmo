@@ -29,6 +29,7 @@
 #include "null_audio/null_audio.h"
 #endif
 
+#include <cstring>
 #include <iostream>
 #include <fstream>
 #include <memory>
@@ -64,9 +65,20 @@ namespace mmo
 	/// Shared entry point of the application on all platforms.
 	int32 CommonMain(int argc, char **argv)
 	{
-		// TODO: Do something with command line arguments
-
 		ClientApplication app;
+
+		// -exec <script>: console script to run after startup (repeatable). Used by tooling such as
+		// tools/perf/run_benchmark.ps1 to drive a session without editing the player's config files.
+		std::vector<std::string> startupScripts;
+		for (int i = 1; i + 1 < argc; ++i)
+		{
+			if (std::strcmp(argv[i], "-exec") == 0)
+			{
+				startupScripts.emplace_back(argv[++i]);
+			}
+		}
+		app.SetStartupScripts(std::move(startupScripts));
+
 		if (!app.Start())
 		{
 			// The reason has already been logged, and reported to the player where it is something

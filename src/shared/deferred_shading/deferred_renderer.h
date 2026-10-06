@@ -516,6 +516,11 @@ namespace mmo
         uint32 m_gpuTimerWriteFrame = 0;
         bool m_gpuTimersInitialized = false;
         bool m_gpuTimingActiveThisFrame = false;
+
+        // Device draw/triangle counters sampled at the same points as the timestamps, so each pass
+        // also reports how much geometry it submitted.
+        uint64 m_passDrawMarks[GpuTimerPointCount] = {};
+        uint64 m_passPrimitiveMarks[GpuTimerPointCount] = {};
 #endif
     };
 }

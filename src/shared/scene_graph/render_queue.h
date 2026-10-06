@@ -4,6 +4,7 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 #include "math/aabb.h"
 #include "renderable.h"
@@ -17,6 +18,25 @@ namespace mmo
 	class MovableObject;
 	class Sphere;
 	class Camera;
+
+	/// @brief Debug aid that keeps chosen kinds of objects out of rendering, to measure what each
+	///        kind costs. Matched against MovableObject::GetMovableType ("Tile", "TerrainBatch",
+	///        "FoliageChunk", "InstancedFoliageChunk", "Entity", "WorldModelBatch", ...).
+	/// @remark Main thread only. Empty lists (the default) cost a single empty() check per object.
+	struct RenderDebugFilter
+	{
+		/// Types skipped when building the camera view (G-Buffer, forward) queues.
+		static std::vector<String> hiddenInView;
+
+		/// Types skipped when rendering shadow maps.
+		static std::vector<String> hiddenInShadows;
+
+		/// @brief Returns whether the given type is in the given list.
+		[[nodiscard]] static bool Contains(const std::vector<String>& list, const String& type);
+
+		/// @brief Parses a comma separated type list.
+		[[nodiscard]] static std::vector<String> Parse(const String& commaSeparated);
+	};
 
 
 	enum RenderQueueGroupId

@@ -69,6 +69,11 @@ namespace mmo
 		/// @param amount Trauma to add (roughly 0.15 for a light hit, up to ~0.6 for a heavy/critical hit).
 		void AddTrauma(float amount);
 
+		/// @brief Orbits the camera around the controlled unit without turning the unit.
+		/// @remark Used by scripted captures (the benchmark command) to sweep the view around.
+		/// @param degrees The yaw to add, in degrees.
+		void RotateCamera(float degrees);
+
 	private:
 		void SetupCamera();
 

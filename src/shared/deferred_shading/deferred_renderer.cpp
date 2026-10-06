@@ -251,6 +251,9 @@ namespace mmo
         const uint32 frame = m_gpuTimerWriteFrame;
         ctx.Begin(m_gpuDisjointQueries[frame].Get());
         ctx.End(m_gpuTimestampQueries[frame][0].Get()); // start timestamp
+
+        m_passDrawMarks[0] = d3dDev.GetTotalDrawCount();
+        m_passPrimitiveMarks[0] = d3dDev.GetTotalPrimitiveCount();
     }
 
     void DeferredRenderer::GpuTimerMark(const uint32 point)
@@ -263,6 +266,9 @@ namespace mmo
         GraphicsDeviceD3D11& d3dDev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
         ID3D11DeviceContext& ctx = d3dDev;
         ctx.End(m_gpuTimestampQueries[m_gpuTimerWriteFrame][point].Get());
+
+        m_passDrawMarks[point] = d3dDev.GetTotalDrawCount();
+        m_passPrimitiveMarks[point] = d3dDev.GetTotalPrimitiveCount();
     }
 
     void DeferredRenderer::GpuTimerEndAndCollect()
@@ -275,6 +281,20 @@ namespace mmo
         const uint32 frame = m_gpuTimerWriteFrame;
         ctx.End(m_gpuDisjointQueries[frame].Get());
         m_gpuTimerFrameStarted[frame] = true;
+
+        // Geometry submitted per pass this frame (available immediately, unlike the timestamps).
+        {
+            static constexpr const char* passNames[GpuTimerPointCount - 1] = {
+                "Shadows", "GBuffer", "SSAO", "ContactShadows", "Lighting", "Volumetric fog", "Forward", "Bloom", "Tonemap"
+            };
+
+            for (uint32 p = 0; p + 1 < GpuTimerPointCount; ++p)
+            {
+                const String name(passNames[p]);
+                profiler.SetCounter("Draws: " + name, static_cast<double>(m_passDrawMarks[p + 1] - m_passDrawMarks[p]));
+                profiler.SetCounter("Tris (k): " + name, static_cast<double>(m_passPrimitiveMarks[p + 1] - m_passPrimitiveMarks[p]) / 1000.0);
+            }
+        }
 
         // Read back a frame several frames in the past so the GPU is never stalled and all timestamps
         // have resolved (some drivers report the disjoint query complete slightly before the last few
@@ -609,7 +629,9 @@ namespace mmo
             //    just shadow casters) so the G-Buffer pass below can reuse the same queue.
             m_gBuffer.BindDepthOnly();
             scene.SetDepthPrepass(true);
+            m_device.SetTextureFilterCap(TextureFilter::Bilinear);
             scene.Render(camera, PixelShaderType::ShadowMap);
+            m_device.SetTextureFilterCap(TextureFilter::Anisotropic);
             scene.SetDepthPrepass(false);
 
             // 2) G-Buffer pass. Keep the pre-pass depth (do not clear it), reuse the queue, and let
@@ -900,6 +922,10 @@ namespace mmo
         m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
         m_device.SetDepthBiasClamp(m_depthBiasClamp);
 
+        // Shadow casters only sample textures for their alpha test. Anisotropic filtering buys nothing
+        // there but costs heavily for the dense alpha-tested canopies that dominate this pass.
+        m_device.SetTextureFilterCap(TextureFilter::Bilinear);
+
         // Render each cascade scheduled this frame by re-filtering the gathered caster list against the
         // cascade's own frustum. Cascades not scheduled this frame keep last frame's depth map.
         for (uint32 i = 0; i < activeCascades; ++i)
@@ -947,6 +973,7 @@ namespace mmo
         m_device.SetDepthBias(0);
         m_device.SetSlopeScaledDepthBias(0);
         m_device.SetDepthBiasClamp(0);
+        m_device.SetTextureFilterCap(TextureFilter::Anisotropic);
     }
 
     TexturePtr DeferredRenderer::GetFinalRenderTarget() const

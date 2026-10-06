@@ -41,6 +41,7 @@
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "frame_ui/frame_mgr.h"
+#include "perf_capture.h"
 #include "startup_error.h"
 
 #include <filesystem>
@@ -146,6 +147,8 @@ namespace mmo
 		{
 			return false;
 		}
+
+		PerfCapture::Initialize();
 
 		return true;
 	}
@@ -277,6 +280,12 @@ namespace mmo
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 		Console::ExecuteCommand("run Config/RunOnce.cfg");
 
+		for (const std::string& script : m_startupScripts)
+		{
+			ILOG("Running startup script " << script);
+			Console::ExecuteCommand("run " + script);
+		}
+
 		const auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
 		if (window)
 		{
@@ -309,7 +318,8 @@ namespace mmo
 			context.runtime.reset();
 		}
 
-		// Both of these are no-ops when the stage that would have set them up never ran.
+		// All of these are no-ops when the stage that would have set them up never ran.
+		PerfCapture::Destroy();
 		EventLoop::Destroy();
 		AssetRegistry::Destroy();
 
@@ -389,6 +399,7 @@ namespace mmo
 	/// @copydoc ClientApplication::ShutdownCoreServices
 	void ClientApplication::ShutdownCoreServices(ClientContext& context)
 	{
+		PerfCapture::Destroy();
 		Console::Destroy();
 		EventLoop::Destroy();
 		AssetRegistry::Destroy();

@@ -253,6 +253,17 @@ namespace mmo
 		return &(it->second);
 	}
 
+	void ConsoleVarMgr::ForEachConsoleVar(const std::function<void(const ConsoleVar&)>& callback)
+	{
+		for (const auto& [name, var] : s_consoleVars)
+		{
+			if (var.IsValid())
+			{
+				callback(var);
+			}
+		}
+	}
+
 	ConsoleVar::ConsoleVar(std::string name, std::string description, std::string defaultValue)
 		: m_name(std::move(name))
 		, m_description(std::move(description))

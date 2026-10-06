@@ -430,6 +430,41 @@ namespace mmo
 		/// diagnostics such as bug reports. Empty if the backend cannot tell.
 		virtual std::string GetAdapterDescription() const { return {}; }
 
+		/// @brief Sets the highest anisotropy used for anisotropically filtered textures (1 to 16).
+		/// @remark 1 turns anisotropic filtering into plain trilinear filtering. Anisotropic taps are
+		///         a large share of the texture cost on bandwidth-limited (integrated) GPUs.
+		virtual void SetMaxAnisotropy(uint32 maxAnisotropy) {}
+
+		/// @brief Limits the texture filter of every texture bound from now on, until reset.
+		/// @remark Used by passes that only need a cheap lookup, e.g. alpha-tested shadow casters,
+		///         which never need anisotropic filtering. Pass TextureFilter::Anisotropic to lift it.
+		virtual void SetTextureFilterCap(TextureFilter maxFilter) {}
+
+		/// @brief Enables or disables vertical sync for subsequent presents.
+		/// @remark Backends that bake the setting into the swap chain at creation ignore this.
+		virtual void SetVSyncEnabled(bool enable) {}
+
+		/// @brief Marks the start of a frame for whole-frame GPU timing.
+		/// @remark Pair with EndFrameGpuTimer before the frame is presented. The result becomes
+		///         available a few frames later through GetLastFrameGpuTimeMs, so the GPU is never
+		///         stalled waiting for it. Backends without timer queries do nothing.
+		virtual void BeginFrameGpuTimer() {}
+
+		/// @brief Marks the end of a frame for whole-frame GPU timing. See BeginFrameGpuTimer.
+		virtual void EndFrameGpuTimer() {}
+
+		/// @brief Returns the GPU time of the most recently resolved timed frame in milliseconds.
+		/// @return The GPU time, or a negative value when no measurement is available.
+		[[nodiscard]] virtual double GetLastFrameGpuTimeMs() const { return -1.0; }
+
+		/// @brief Returns the number of draw calls issued since the device was created.
+		/// @remark Monotonic, so a caller measures a span of work by taking the difference.
+		[[nodiscard]] virtual uint64 GetTotalDrawCount() const { return 0; }
+
+		/// @brief Returns the number of triangles submitted since the device was created, counting
+		///        every instance of an instanced draw. Monotonic like GetTotalDrawCount.
+		[[nodiscard]] virtual uint64 GetTotalPrimitiveCount() const { return 0; }
+
 	public:
 		RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
 

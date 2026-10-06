@@ -2,6 +2,9 @@
 
 #include "base/non_copyable.h"
 
+#include <string>
+#include <vector>
+
 namespace mmo
 {
 	struct ClientContext;
@@ -29,6 +32,12 @@ namespace mmo
 		/// @brief Returns whether the application is currently started.
 		/// @return True if Start succeeded and Stop has not been called.
 		bool IsStarted() const { return m_started; }
+
+		/// @brief Sets console scripts to run once startup is complete, after Config/RunOnce.cfg.
+		/// @remark Fed from the -exec command line argument, so tooling can drive a client session
+		///         (log in, enter the world, run a benchmark, quit) without touching the player's config.
+		/// @param scripts Paths of the scripts, run in order.
+		void SetStartupScripts(std::vector<std::string> scripts) { m_startupScripts = std::move(scripts); }
 
 	private:
 		/// @brief Initializes core services and foundational runtime objects.
@@ -98,5 +107,7 @@ namespace mmo
 		void ResetContext(ClientContext& context);
 
 		bool m_started = false;
+
+		std::vector<std::string> m_startupScripts;
 	};
 }

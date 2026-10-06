@@ -3,6 +3,7 @@
 #include "event_loop.h"
 
 #include "base/clock.h"
+#include "base/profiler.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log.h"
 
@@ -50,6 +51,25 @@ namespace mmo
 			// is main-thread-only, see Log::Emit).
 			g_DefaultLog.FlushBuffered();
 
+			// The frame is bracketed here rather than inside a game state, so the profiler (and the
+			// perf overlay) works in every state, not only while in the world.
+			Profiler& profiler = Profiler::GetInstance();
+			const bool profiling = profiler.IsEnabled();
+			if (profiling)
+			{
+				profiler.BeginFrame();
+
+				// Counters of the frame that was just presented. The batch count is latched by the
+				// render window right before Present, the GPU time resolves a few frames late.
+				profiler.SetCounter("Batches", static_cast<double>(gx.GetBatchCount()));
+				if (const double gpuMs = gx.GetLastFrameGpuTimeMs(); gpuMs >= 0.0)
+				{
+					profiler.SetCounter("GPU frame (ms)", gpuMs);
+				}
+
+				gx.BeginFrameGpuTimer();
+			}
+
 			Idle(timePassed, currentTime);
 
 			gx.Reset();
@@ -59,7 +79,18 @@ namespace mmo
 
 			Paint();
 
-			gxWindow->Update();
+			if (profiling)
+			{
+				gx.EndFrameGpuTimer();
+				profiler.EndFrame();
+			}
+
+			{
+				// Attributed to the next frame, as EndFrame already ran. Present blocks when the GPU
+				// is behind (or on VSync), so this is the clearest "GPU-bound" signal on the CPU side.
+				PROFILE_SCOPE("Present");
+				gxWindow->Update();
+			}
 		}
 	}
 }

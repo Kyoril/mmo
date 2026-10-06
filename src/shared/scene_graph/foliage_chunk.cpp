@@ -9,9 +9,13 @@
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
+#include <cmath>
+
 namespace mmo
 {
 	String FoliageChunk::s_movableType = "FoliageChunk";
+	String FoliageChunk::s_instancedMovableType = "InstancedFoliageChunk";
+	bool FoliageChunk::s_perInstanceCulling = true;
 
 	FoliageChunk::FoliageChunk(
 		Foliage& parent,
@@ -63,6 +67,7 @@ namespace mmo
 	void FoliageChunk::ClearInstances()
 	{
 		m_instances.clear();
+		m_instanceSpheres.clear();
 		m_needsRebuild = true;
 	}
 
@@ -133,6 +138,32 @@ namespace mmo
 
 		m_instanceConstantBuffer = device.CreateConstantBuffer(sizeof(ChunkConstants), &constants);
 
+		// Per-instance bounding spheres for culling: the mesh bounds' centre moved into world space,
+		// with a radius scaled by the largest axis scale so non-uniformly scaled instances are covered.
+		m_device = &device;
+		m_culledInstanceBuffer.reset();
+		m_drawCulled = false;
+		m_drawInstanceCount = static_cast<uint32>(m_instances.size());
+		m_instanceSpheres.clear();
+		m_instanceSpheres.reserve(m_instances.size());
+		{
+			const AABB& meshBounds = mesh->GetBounds();
+			const Vector3 localCenter = meshBounds.GetCenter();
+			const float localRadius = meshBounds.GetExtents().GetLength();
+
+			for (const auto& instance : m_instances)
+			{
+				const Matrix4& m = instance.worldMatrix;
+				const float scaleX = Vector3(m[0][0], m[1][0], m[2][0]).GetLength();
+				const float scaleY = Vector3(m[0][1], m[1][1], m[2][1]).GetLength();
+				const float scaleZ = Vector3(m[0][2], m[1][2], m[2][2]).GetLength();
+				const float maxScale = std::max(scaleX, std::max(scaleY, scaleZ));
+
+				const Vector3 center = m.TransformAffine(localCenter);
+				m_instanceSpheres.emplace_back(center.x, center.y, center.z, localRadius * maxScale);
+			}
+		}
+
 		// Update bounds based on instances
 		UpdateBounds();
 
@@ -186,7 +217,9 @@ namespace mmo
 
 	const String& FoliageChunk::GetMovableType() const
 	{
-		return s_movableType;
+		// Procedural ground cover (grass) belongs to a Foliage parent, authored instanced meshes
+		// (trees) do not. Distinct names let diagnostics tell the two apart.
+		return m_parent ? s_movableType : s_instancedMovableType;
 	}
 
 	const AABB& FoliageChunk::GetBoundingBox() const
@@ -209,13 +242,114 @@ namespace mmo
 
 	void FoliageChunk::PopulateRenderQueue(RenderQueue& queue)
 	{
+		// Consumed here: every pass sets its camera right before populating, and a camera pointer kept
+		// past this point could outlive the camera.
+		Camera* const cullCamera = m_cullCamera;
+		m_cullCamera = nullptr;
+
 		if (!HasInstances() || !m_instanceBuffer || !m_vertexData || !m_indexData)
 		{
 			return;
 		}
 
+		m_drawCulled = false;
+		m_drawInstanceCount = static_cast<uint32>(m_instances.size());
+
+		// The chunk as a whole passed the frustum test, but a chunk spans a large cell: only a few of
+		// its instances may be inside the frustum, especially for the tight near shadow cascades.
+		// Upload just those, so the GPU does not transform (and rasterize) the rest.
+		if (s_perInstanceCulling && cullCamera && m_device && m_instanceSpheres.size() == m_instances.size())
+		{
+			Plane planes[6];
+			cullCamera->ExtractFrustumPlanes(planes);
+			const bool infiniteFar = cullCamera->GetFarClipDistance() == 0.0f;
+
+			// A chunk entirely inside the frustum keeps every instance: skip the per-instance tests.
+			const AABB& bounds = GetWorldBoundingBox(true);
+			const Vector3 boundsCenter = bounds.GetCenter();
+			const Vector3 boundsHalfSize = bounds.GetExtents();
+			bool fullyInside = true;
+			for (int plane = 0; plane < 6 && fullyInside; ++plane)
+			{
+				if (plane == FrustumPlaneFar && infiniteFar)
+				{
+					continue;
+				}
+
+				const Vector3& normal = planes[plane].normal;
+				const float projectedRadius = std::abs(normal.x) * boundsHalfSize.x + std::abs(normal.y) * boundsHalfSize.y + std::abs(normal.z) * boundsHalfSize.z;
+				fullyInside = planes[plane].GetDistance(boundsCenter) >= projectedRadius;
+			}
+
+			if (!fullyInside)
+			{
+				m_visibleScratch.clear();
+				for (size_t i = 0; i < m_instances.size(); ++i)
+				{
+					const Vector4& sphere = m_instanceSpheres[i];
+					const Vector3 center(sphere.x, sphere.y, sphere.z);
+
+					bool visible = true;
+					for (int plane = 0; plane < 6; ++plane)
+					{
+						if (plane == FrustumPlaneFar && infiniteFar)
+						{
+							continue;
+						}
+
+						if (planes[plane].GetDistance(center) < -sphere.w)
+						{
+							visible = false;
+							break;
+						}
+					}
+
+					if (visible)
+					{
+						m_visibleScratch.push_back(static_cast<uint32>(i));
+					}
+				}
+
+				if (m_visibleScratch.empty())
+				{
+					return;
+				}
+
+				if (m_visibleScratch.size() < m_instances.size())
+				{
+					if (!m_culledInstanceBuffer)
+					{
+						m_culledInstanceBuffer = m_device->CreateVertexBuffer(m_instances.size(), sizeof(FoliageInstanceData), BufferUsage::DynamicWriteOnlyDiscardable, nullptr);
+					}
+
+					// Discard renames the buffer, so a draw of an earlier pass that still reads the
+					// previous contents is unaffected.
+					if (m_culledInstanceBuffer)
+					{
+						if (auto* memory = static_cast<FoliageInstanceData*>(m_culledInstanceBuffer->Map(LockOptions::Discard)))
+						{
+							for (size_t i = 0; i < m_visibleScratch.size(); ++i)
+							{
+								memory[i] = m_instances[m_visibleScratch[i]];
+							}
+							m_culledInstanceBuffer->Unmap();
+
+							m_drawCulled = true;
+							m_drawInstanceCount = static_cast<uint32>(m_visibleScratch.size());
+						}
+					}
+				}
+			}
+		}
+
 		// Add to main render queue
 		queue.AddRenderable(*this, Main);
+	}
+
+	void FoliageChunk::SetCurrentCamera(Camera& cam)
+	{
+		MovableObject::SetCurrentCamera(cam);
+		m_cullCamera = &cam;
 	}
 
 	void FoliageChunk::PrepareRenderOperation(RenderOperation& operation)
@@ -230,9 +364,9 @@ namespace mmo
 		operation.indexData = m_indexData.get();
 		operation.material = GetMaterial();
 
-		// Set up instanced rendering
-		operation.instanceBuffer = m_instanceBuffer.get();
-		operation.instanceCount = static_cast<uint32>(m_instances.size());
+		// Set up instanced rendering with the instances that survived culling for this pass
+		operation.instanceBuffer = m_drawCulled ? m_culledInstanceBuffer.get() : m_instanceBuffer.get();
+		operation.instanceCount = m_drawInstanceCount;
 	}
 
 	const Matrix4& FoliageChunk::GetWorldTransform() const
