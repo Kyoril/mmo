@@ -2,7 +2,9 @@ name: Nightly Release
 
 on:
   schedule:
-    - cron: "30 0 * * *"
+    # 22:00 UTC = 00:00 Berlin in summer, 23:00 in winter: the gate (<= 180 min), client build
+    # and staging finish well before the 04:45 maintenance.
+    - cron: "0 22 * * *"
   workflow_dispatch:
     inputs:
       force:

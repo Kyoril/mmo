@@ -47,7 +47,7 @@ Key facts that shape the design:
 ## Architecture
 
 ```
- GitHub Actions (nightly-release.yml, ~00:30)
+ GitHub Actions (nightly-release.yml, 22:00 UTC)
  ┌──────────┐   ┌──────────────┐   ┌───────────────┐   ┌────────────────────────────┐
  │ gate     │──▶│ client (win) │──▶│               │   │ GitHub prerelease          │
  │ (ubuntu, │   └──────────────┘   │   publish     │──▶│ nightly-YYYYMMDD-<sha8>    │
@@ -75,7 +75,7 @@ owned by the server (GitHub cron can be delayed by 15–60 min).
 
 New workflow `.github/workflows/nightly-release.yml`.
 
-**Triggers:** `schedule` (~00:30 UTC) and `workflow_dispatch` (optional `force` input).
+**Triggers:** `schedule` (22:00 UTC, i.e. 00:00/23:00 Berlin) and `workflow_dispatch` (optional `force` input).
 
 **Job `check`:** resolves `develop` HEAD; if it equals the `commit` of the newest
 `nightly-*` release and `force` is not set, all further jobs are skipped.
