@@ -168,6 +168,12 @@ try
 		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments @("-m", "unittest", "discover", "-s", "tools/tests", "-p", "test_*.py")
 	}
 
+	# The deployer ships to the live server; its tests gate every merge like the C++ suites.
+	if ($ok)
+	{
+		$ok = Invoke-GateStep -Name "deployer_tests" -Exe $python -Arguments @("-m", "unittest", "discover", "-s", "deploy/deployer/tests", "-t", "deploy/deployer", "-p", "test_*.py")
+	}
+
 	if ($ok -and $Tier -eq "full")
 	{
 		if (-not $env:MMO_E2E_MYSQL_PASSWORD)
