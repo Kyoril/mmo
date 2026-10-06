@@ -350,6 +350,42 @@ class AppTests(unittest.TestCase):
 		self.assertEqual(len(list(backups.iterdir())), self.cfg.keep_backups)
 		self.assertFalse((backups / "20261001-044500-nnnnnnnn").exists())
 
+	def test_unreadable_state_idles_and_notifies_once(self):
+		self.state_path.write_text("{not json", encoding="utf-8")
+		write_request(self.cfg.state_dir, "pause", [])
+		self.clock.current = at(4, 46)
+		self.app.tick()
+		self.app.tick()
+		self.assertEqual(self.notifier.messages, ["state.json unreadable: JSONDecodeError; deployer idle until fixed"])
+		self.assertEqual(self.stager.staged, [])
+		self.assertEqual(self.maintenance.runs, [])
+		self.assertEqual(self.state_path.read_text(encoding="utf-8"), "{not json")
+		self.assertEqual(len(list((self.cfg.state_dir / "requests").glob("*.json"))), 1)
+
+	def test_state_that_is_not_an_object_is_unreadable(self):
+		self.state_path.write_text("[]", encoding="utf-8")
+		self.app.tick()
+		self.assertEqual(self.notifier.messages, ["state.json unreadable: AttributeError; deployer idle until fixed"])
+
+	def test_deployer_resumes_once_state_is_fixed(self):
+		self.state_path.write_text("{not json", encoding="utf-8")
+		self.app.tick()
+		save_state(self.state_path, State(live=OLD))
+		self.app.tick()
+		self.assertEqual(self.state().staged, NEW)
+		self.state_path.write_text("{not json", encoding="utf-8")
+		self.app.tick()
+		self.assertEqual(sum("unreadable" in m for m in self.notifier.messages), 2)
+
+	def test_interrupted_maintenance_is_recovered_once_state_is_readable(self):
+		self.app.recovery_pending = True
+		save_state(self.state_path, State(live=OLD, staged=NEW, maintenance_in_progress={"commit": NEW, "started": "x"}))
+		self.clock.current = at(4, 46)
+		self.app.tick()
+		self.assertTrue(self.state().paused)
+		self.assertFalse(self.app.recovery_pending)
+		self.assertEqual(self.maintenance.runs, [])
+
 	def test_malformed_request_is_dropped(self):
 		requests = self.cfg.state_dir / "requests"
 		requests.mkdir()

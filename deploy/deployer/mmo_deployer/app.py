@@ -51,12 +51,19 @@ class Deployer:
 		self.requests_dir = Path(cfg.state_dir) / "requests"
 		self.next_poll = None
 		self.stage_failures = set()
+		self.state_unreadable = False
+		# The interrupted-maintenance check runs on the first readable state.json.
+		self.recovery_pending = False
 
 	def run_forever(self):
-		state = load_state(self.state_path)
-		self.recover_interrupted_maintenance(state)
-		self.notifier.send("Deployer started (live {}, staged {}, dry run {}).".format(
-			_short(state.live), _short(state.staged), self.cfg.dry_run))
+		state = self._load_state()
+		if state is None:
+			self.recovery_pending = True
+			self.notifier.send("Deployer started (dry run {}).".format(self.cfg.dry_run))
+		else:
+			self.recover_interrupted_maintenance(state)
+			self.notifier.send("Deployer started (live {}, staged {}, dry run {}).".format(
+				_short(state.live), _short(state.staged), self.cfg.dry_run))
 		while True:
 			try:
 				self.tick()
@@ -80,8 +87,28 @@ class Deployer:
 			"The deployer is paused. See docs/deployment.md (manual recovery).".format(_short(sha)))
 		return True
 
+	def _load_state(self):
+		"""state.json, or None (notified once) while it cannot be read: guessing could redeploy or lose a release."""
+		try:
+			state = load_state(self.state_path)
+		except (ValueError, TypeError, AttributeError, OSError) as error:
+			log.error("state.json unreadable: %s", error)
+			if not self.state_unreadable:
+				self.state_unreadable = True
+				self.notifier.send("state.json unreadable: {}; deployer idle until fixed".format(type(error).__name__))
+			return None
+		if self.state_unreadable:
+			self.state_unreadable = False
+			log.info("state.json readable again")
+		return state
+
 	def tick(self):
-		state = load_state(self.state_path)
+		state = self._load_state()
+		if state is None:
+			return
+		if self.recovery_pending:
+			self.recovery_pending = False
+			self.recover_interrupted_maintenance(state)
 		self._handle_requests(state)
 		now = self.clock.now()
 		if not state.paused and (self.next_poll is None or now >= self.next_poll):

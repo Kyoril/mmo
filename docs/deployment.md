@@ -97,6 +97,7 @@ Notifications:
 | `MANUAL INTERVENTION REQUIRED` | Deployer paused; see the playbook. |
 | `MANUAL INTERVENTION REQUIRED: the deployer restarted during maintenance for <sha>` | The deployer process died mid-maintenance (container restart, host reboot); the stack may be down. Paused, nothing done automatically; see the playbook. |
 | `Request <cmd> failed` | A CLI request crashed and was dropped. |
+| `state.json unreadable: <error>; deployer idle until fixed` | `/state/state.json` is corrupt or unreadable. The deployer does nothing (no staging, maintenance or requests) until it can read the file again; sent once. Fix or restore the file (it is plain JSON); the deployer picks it up on the next tick. |
 
 Backups: `/state/backups/<timestamp>-<sha8>/` in the `deployer-state` volume, one `<db>.sql.gz` per database. Restore with `gunzip -c <db>.sql.gz | mysql <db>`.
 
