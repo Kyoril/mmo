@@ -49,7 +49,7 @@ Order matters: the game stack is redeployed with the new `compose.yml` FIRST (it
    - `REALMS=[{"name":"realm01","url":"http://mmo-dev-realm-01:8092","password":"<WEB_API_PASSWORD>"}]`
    - Keep `DRY_RUN=1` (also the default in the compose file). Other defaults (maintenance time, countdown, retention `KEEP_RELEASES=3` / `KEEP_BACKUPS=7`) live in `deploy/deployer/mmo_deployer/config.py`.
 
-Known gap to confirm: the patch is built from `deploy/patch/source.txt`, which does not pack the `data/client` folders `Cache`, `Editor` and `Particles`. Check that the client does not need them from the patch.
+The patch is built from `deploy/patch/source.txt`, which packs every `data/client` folder the client loads, including `Particles` (`Particles.hpak`). `Cache` (a runtime cache the client fills itself) and `Editor` (editor-only assets) are intentionally not packed.
 
 ## 3. Going live
 

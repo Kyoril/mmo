@@ -14,6 +14,7 @@ root = (type = "fs", from = ".", to = "", entries =
 		(type = "hpak2", from = "Textures", to = "Textures.hpak", sub = "Textures")
 		(type = "hpak2", from = "ClientDB", to = "ClientDB.hpak", sub = "ClientDB")
 		(type = "hpak2", from = "Worlds", to = "Worlds.hpak", sub = "Worlds")
+		(type = "hpak2", from = "Particles", to = "Particles.hpak", sub = "Particles")
 		(type = "fs", from = "Locales", to = "Locales", entries =
 		{
 			(type = "hpak2", from = "Locale_deDE", to = "Locale_deDE.hpak")
