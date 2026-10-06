@@ -50,6 +50,10 @@ The following systems are fully implemented and should not be suggested as futur
   `"skipped": true` predate the dedicated worktree and mean "did not run".
 - `.claude/settings.local.json` (htex MCP config) does not follow git worktrees, so
   parallel worktree sessions run without it.
+- **Deploy (nightly):** `.github/workflows/nightly-release.yml` gates develop on Linux and
+  publishes a `nightly-*` release; `mmo-deployer` on the root server ships it at 04:45 with a
+  15-minute realm countdown and rolls back on failed health checks. Anything merged to
+  develop reaches players the next morning — see [docs/deployment.md](docs/deployment.md).
 
 ## Network Protocol Changes
 
@@ -214,6 +218,11 @@ Modifying the databases for the login server or realm server are automated. To c
 The file name is added to the databases "history" table with the filename (without .sql) as the migration names already applied.
 
 When you create a database migration, and you want to also include the changes in the "*_db_full.sql", you need to add the INSERT call in the history table there as well, otherwise the server will try to apply the update you already applied a second time on server launch, which might fail (due to tables already existing, or being in a wrong state).
+
+Migrations must be **additive**: the previous server build must keep working on the new
+schema (add tables/columns; drop or rename only in a later release). Nightly deploys roll
+back automatically by redeploying the previous images on the already-migrated database, so
+a destructive migration turns a rollback into an outage.
 
 
 ## Localization
