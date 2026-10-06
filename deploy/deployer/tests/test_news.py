@@ -52,6 +52,27 @@ class News(unittest.TestCase):
 		for entry in data["patches"]:
 			self.assertLessEqual(len(entry["summary"].encode("utf-8")), 400)
 
+	def test_malformed_json_returns_false(self):
+		self.path.write_text("{invalid json}", encoding="utf-8")
+		original = self.path.read_bytes()
+		self.assertFalse(add_patch_note(self.path, "2026-10-07", ["fix: x"]))
+		self.assertEqual(self.path.read_bytes(), original)
+
+	def test_bom_prefixed_valid_file_is_updated(self):
+		data = {"version": 1, "news": [], "patches": []}
+		text = json.dumps(data)
+		self.path.write_bytes(b'\xef\xbb\xbf' + text.encode("utf-8"))
+		self.assertTrue(add_patch_note(self.path, "2026-10-07", ["fix: x"]))
+		updated = self._load()
+		self.assertEqual(len(updated["patches"]), 1)
+		self.assertEqual(updated["patches"][0]["title"], "Update 2026-10-07")
+
+	def test_patches_wrong_type_returns_false(self):
+		self.path.write_text(json.dumps({"version": 1, "news": [], "patches": "x"}), encoding="utf-8")
+		original = self.path.read_bytes()
+		self.assertFalse(add_patch_note(self.path, "2026-10-07", ["fix: x"]))
+		self.assertEqual(self.path.read_bytes(), original)
+
 
 if __name__ == "__main__":
 	unittest.main()

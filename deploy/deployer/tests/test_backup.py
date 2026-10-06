@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mmo_deployer.backup import BackupError, dump_databases, prune_backups
+from mmo_deployer.backup import DUMP_TIMEOUT_S, BackupError, dump_databases, prune_backups
 
 from .fakes import make_config
 
@@ -19,6 +19,24 @@ class FakeRun:
 	def __call__(self, command, **kwargs):
 		self.calls.append((command, kwargs))
 		return self.result
+
+
+class FakeRunTimeout:
+	def __init__(self):
+		self.calls = []
+
+	def __call__(self, command, **kwargs):
+		self.calls.append((command, kwargs))
+		raise subprocess.TimeoutExpired(command, DUMP_TIMEOUT_S)
+
+
+class FakeRunMissing:
+	def __init__(self):
+		self.calls = []
+
+	def __call__(self, command, **kwargs):
+		self.calls.append((command, kwargs))
+		raise FileNotFoundError("mysqldump not found")
 
 
 class Backup(unittest.TestCase):
@@ -61,6 +79,22 @@ class Backup(unittest.TestCase):
 
 	def test_prune_missing_dir(self):
 		self.assertEqual(prune_backups(Path(self.tmp.name) / "none", 3), [])
+
+	def test_timeout_raises(self):
+		with self.assertRaises(BackupError) as ctx:
+			dump_databases(self.cfg, self.dest, FakeRunTimeout())
+		self.assertIn("timed out", str(ctx.exception))
+
+	def test_missing_mysqldump_raises(self):
+		with self.assertRaises(BackupError) as ctx:
+			dump_databases(self.cfg, self.dest, FakeRunMissing())
+		self.assertIn("mmo_login", str(ctx.exception))
+
+	def test_timeout_kwarg_passed(self):
+		run = FakeRun()
+		dump_databases(self.cfg, self.dest, run)
+		command, kwargs = run.calls[0]
+		self.assertEqual(kwargs.get("timeout"), DUMP_TIMEOUT_S)
 
 
 if __name__ == "__main__":

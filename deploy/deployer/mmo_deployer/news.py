@@ -5,6 +5,7 @@ Limits come from docs/launcher_content/README.md.
 """
 
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -43,7 +44,18 @@ def add_patch_note(path, date_text, changes):
 	path = Path(path)
 	if not path.is_file():
 		return False
-	content = json.loads(path.read_text(encoding="utf-8"))
+	try:
+		content = json.loads(path.read_text(encoding="utf-8-sig"))
+	except ValueError as error:
+		logging.getLogger("deployer").warning("Failed to parse launcher.json: %s", error)
+		return False
+	if not isinstance(content, dict):
+		logging.getLogger("deployer").warning("launcher.json top level is not a dict")
+		return False
+	patches_field = content.get("patches")
+	if patches_field is not None and not isinstance(patches_field, list):
+		logging.getLogger("deployer").warning("launcher.json patches field is not a list")
+		return False
 	lines = [describe_change(change) for change in changes][:MAX_LINES]
 	if not lines:
 		summary = "Maintenance update"

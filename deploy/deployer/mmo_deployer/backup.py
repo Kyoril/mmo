@@ -10,6 +10,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+DUMP_TIMEOUT_S = 1800
+
 
 class BackupError(Exception):
 	pass
@@ -21,10 +23,15 @@ def dump_databases(cfg, dest, run=subprocess.run):
 	env = dict(os.environ, MYSQL_PWD=cfg.mysql_password)
 	paths = []
 	for database in cfg.backup_databases:
-		result = run(
-			["mysqldump", "--single-transaction", "--routines", "--triggers",
-				"-h", cfg.mysql_host, "-u", cfg.mysql_user, database],
-			capture_output=True, env=env)
+		try:
+			result = run(
+				["mysqldump", "--single-transaction", "--routines", "--triggers",
+					"-h", cfg.mysql_host, "-u", cfg.mysql_user, database],
+				capture_output=True, env=env, timeout=DUMP_TIMEOUT_S)
+		except subprocess.TimeoutExpired:
+			raise BackupError("mysqldump {} timed out after {} seconds".format(database, DUMP_TIMEOUT_S))
+		except OSError as error:
+			raise BackupError("mysqldump {} failed: {}".format(database, str(error)))
 		if result.returncode != 0:
 			raise BackupError("mysqldump {} failed: {}".format(database, result.stderr.decode("utf-8", "replace")[-1000:]))
 		if not result.stdout:
