@@ -54,6 +54,7 @@ class Deployer:
 
 	def run_forever(self):
 		state = load_state(self.state_path)
+		self.recover_interrupted_maintenance(state)
 		self.notifier.send("Deployer started (live {}, staged {}, dry run {}).".format(
 			_short(state.live), _short(state.staged), self.cfg.dry_run))
 		while True:
@@ -63,6 +64,21 @@ class Deployer:
 				# Keep the service alive; the next tick starts from state.json again.
 				log.exception("tick failed")
 			self.clock.sleep(TICK_S)
+
+	def recover_interrupted_maintenance(self, state):
+		"""A maintenance marker at startup means the deployer died mid-maintenance: pause, never guess."""
+		marker = state.maintenance_in_progress
+		if not marker:
+			return False
+		sha = marker.get("commit") if isinstance(marker, dict) else None
+		state.paused = True
+		state.maintenance_in_progress = None
+		record(state, self.clock.now(), "interrupted_maintenance", commit=sha)
+		save_state(self.state_path, state)
+		self.notifier.send(
+			"MANUAL INTERVENTION REQUIRED: the deployer restarted during maintenance for {}; the game stack may be down. "
+			"The deployer is paused. See docs/deployment.md (manual recovery).".format(_short(sha)))
+		return True
 
 	def tick(self):
 		state = load_state(self.state_path)
@@ -120,12 +136,18 @@ class Deployer:
 
 	def run_maintenance(self, state):
 		sha = state.staged
+		if sha and sha != state.live:
+			# Durable before anything touches the stack, so a restart mid-maintenance is noticed.
+			state.maintenance_in_progress = {"commit": sha, "started": self.clock.now().isoformat()}
+			save_state(self.state_path, state)
 		try:
 			outcome = self.maintenance.run(state)
 		except Exception:
 			# After the realm shutdown an escaping exception must never leave the stack silently down.
 			log.exception("maintenance crashed")
 			outcome = Outcome.FAILED
+		# Cleared together with the outcome: every save below persists both at once.
+		state.maintenance_in_progress = None
 		now = self.clock.now()
 		record(state, now, "maintenance", outcome=outcome, commit=sha)
 		if outcome == Outcome.DEPLOYED:
@@ -141,6 +163,7 @@ class Deployer:
 			else:
 				state.paused = True
 				self.notifier.send("MANUAL INTERVENTION REQUIRED: maintenance for {} did not complete and the stack could not be recovered automatically. The deployer is paused; the release is marked bad (deployer unbad {} after fixing).".format(_short(sha), sha))
+		save_state(self.state_path, state)
 		return outcome
 
 	def _promote(self, state, now):

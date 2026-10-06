@@ -19,6 +19,8 @@ class State:
 	bad: list = field(default_factory=list)
 	paused: bool = False
 	last_maintenance_date: Optional[str] = None
+	# {"commit": sha, "started": iso time} while a maintenance runs; set at startup means it was interrupted.
+	maintenance_in_progress: Optional[dict] = None
 	history: list = field(default_factory=list)
 
 

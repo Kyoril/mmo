@@ -261,6 +261,65 @@ class AppTests(unittest.TestCase):
 		self.app.tick()
 		self.assertEqual(self.maintenance.runs, [NEW])
 
+	def _maintenance_seeing_marker(self, outcome=None, error=None):
+		seen = []
+		state_path = self.state_path
+
+		class Observing(FakeMaintenance):
+			def run(self, state):
+				seen.append(load_state(state_path).maintenance_in_progress)
+				if error:
+					raise error
+				return outcome
+
+		self.app.maintenance = Observing()
+		return seen
+
+	def _run_window(self):
+		save_state(self.state_path, State(live=OLD, staged=NEW))
+		self.clock.current = at(4, 46)
+		self.app.next_poll = at(23, 0)
+		self.app.tick()
+
+	def test_marker_is_durable_during_maintenance_and_cleared_after_each_outcome(self):
+		for outcome in (Outcome.DEPLOYED, Outcome.ROLLED_BACK, Outcome.FAILED, Outcome.ABORTED, Outcome.DRY_RUN):
+			with self.subTest(outcome=outcome):
+				seen = self._maintenance_seeing_marker(outcome=outcome)
+				self._run_window()
+				self.assertEqual(seen, [{"commit": NEW, "started": at(4, 46).isoformat()}])
+				self.assertIsNone(self.state().maintenance_in_progress)
+
+	def test_marker_is_cleared_when_maintenance_crashes(self):
+		seen = self._maintenance_seeing_marker(error=RuntimeError("boom"))
+		self._run_window()
+		self.assertEqual(seen[0]["commit"], NEW)
+		self.assertIsNone(self.state().maintenance_in_progress)
+
+	def test_no_marker_when_nothing_is_staged(self):
+		state = State(live=OLD, staged=OLD)
+		self.app.run_maintenance(state)
+		self.assertIsNone(state.maintenance_in_progress)
+		self.assertIsNone(self.state().maintenance_in_progress)
+
+	def test_startup_after_interrupted_maintenance_pauses(self):
+		save_state(self.state_path, State(live=OLD, staged=NEW, maintenance_in_progress={"commit": NEW, "started": "x"}))
+		state = self.state()
+		self.assertTrue(self.app.recover_interrupted_maintenance(state))
+		saved = self.state()
+		self.assertTrue(saved.paused)
+		self.assertIsNone(saved.maintenance_in_progress)
+		self.assertEqual((saved.live, saved.staged), (OLD, NEW))
+		self.assertEqual(self.maintenance.runs, [])
+		self.assertEqual(self.maintenance.rollbacks, [])
+		self.assertTrue(any(m.startswith("MANUAL INTERVENTION REQUIRED: the deployer restarted during maintenance for nnnnnnnn")
+			for m in self.notifier.messages))
+
+	def test_startup_without_marker_does_nothing(self):
+		state = self.state()
+		self.assertFalse(self.app.recover_interrupted_maintenance(state))
+		self.assertFalse(self.state().paused)
+		self.assertEqual(self.notifier.messages, [])
+
 	def test_malformed_request_is_dropped(self):
 		requests = self.cfg.state_dir / "requests"
 		requests.mkdir()

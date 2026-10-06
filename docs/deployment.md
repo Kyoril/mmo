@@ -93,6 +93,7 @@ Notifications:
 | `Release <sha> was rolled back` | Rollback healthy; release marked bad. |
 | `Release <sha> is live` | Success, with the change list. |
 | `MANUAL INTERVENTION REQUIRED` | Deployer paused; see the playbook. |
+| `MANUAL INTERVENTION REQUIRED: the deployer restarted during maintenance for <sha>` | The deployer process died mid-maintenance (container restart, host reboot); the stack may be down. Paused, nothing done automatically; see the playbook. |
 | `Request <cmd> failed` | A CLI request crashed and was dropped. |
 
 Backups: `/state/backups/<timestamp>-<sha8>/` in the `deployer-state` volume, one `<db>.sql.gz` per database. Restore with `gunzip -c <db>.sql.gz | mysql <db>`.
@@ -110,6 +111,8 @@ Backups: `/state/backups/<timestamp>-<sha8>/` in the `deployer-state` volume, on
   4. Check that login and realm come up.
   5. Optionally `docker exec mmo-deployer deployer unbad <failed sha>` if the release should be retried.
   6. `docker exec mmo-deployer deployer resume`.
+
+- **Deployer restarted during maintenance** (notification `MANUAL INTERVENTION REQUIRED: the deployer restarted during maintenance for <sha>`): `state.json` still carried the in-progress marker at startup, so the deployer cannot know how far the night got (servers may be shut down, `current` may point at either release, the stack may run either tag). It pauses and does nothing else. The release is not marked bad and stays staged; `live` still names the last good release. Follow the manual recovery steps above (1 to 4) to bring the stack back on `live`, then `resume`: the staged release is retried at the next 04:45 (or `deploy-now` it while watching). If the release itself caused the crash, keep it from coming back by letting a newer nightly replace it before resuming.
 
 ## 6. Updating the deployer itself
 
