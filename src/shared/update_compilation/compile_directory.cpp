@@ -14,7 +14,15 @@
 
 #include "zstr/zstr.hpp"
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <iostream>
+#include <mutex>
+#include <set>
+#include <sstream>
+#include <thread>
+#include <vector>
 
 namespace mmo
 {
@@ -26,18 +34,219 @@ namespace mmo
 			typedef sff::read::tree::Table<Iterator> Table;
 			typedef sff::write::Table<char> TableWriter;
 
+			/// A single file which has to be hashed and (optionally) compressed into the output directory.
+			struct FileJob
+			{
+				virtual_dir::Path sourcePath;
+				virtual_dir::Path outputPath;
+			};
 
-			void compileFile(
+			/// The values a processed file contributes to list.txt.
+			struct FileResult
+			{
+				std::uintmax_t originalSize = 0;
+				std::string sha1Hex;
+				std::uintmax_t compressedSize = 0;
+			};
+
+			/// The source tree is walked twice by the same code: the collect pass only gathers the
+			/// files, which are then hashed and compressed in parallel, and the emit pass writes
+			/// list.txt from those results in the original traversal order.
+			struct CompileContext
+			{
+				virtual_dir::IReader &sourceRoot;
+				virtual_dir::IWriter &outputRoot;
+				bool isZLibCompressed;
+				bool isCollecting;
+				std::vector<FileJob> jobs;
+				std::vector<FileResult> results;
+				size_t nextResult;
+			};
+
+			/// Output directories which already exist, so that each one is created exactly once.
+			struct CreatedDirectories
+			{
+				std::mutex mutex;
+				std::set<virtual_dir::Path> paths;
+			};
+
+			FileResult processFile(
 				virtual_dir::IReader &sourceRoot,
 				virtual_dir::IWriter &outputRoot,
+				CreatedDirectories &createdDirectories,
+				const FileJob &job,
+				bool isZLibCompressed
+			)
+			{
+				const auto sourceFile = sourceRoot.readFile(job.sourcePath, false);
+				if (!sourceFile)
+				{
+					throw std::runtime_error("Could not open source file " + job.sourcePath);
+				}
+
+				// Read the file once, it is needed for both hashing and compression
+				std::string content;
+				{
+					sourceFile->seekg(0, std::ios::end);
+					const std::streamoff size = sourceFile->tellg();
+					sourceFile->seekg(0, std::ios::beg);
+
+					content.resize(static_cast<size_t>(size));
+					if (size > 0 && !sourceFile->read(content.data(), size))
+					{
+						throw std::runtime_error("Could not read source file " + job.sourcePath);
+					}
+				}
+
+				FileResult result;
+				result.originalSize = content.size();
+
+				{
+					const auto hashCode = sha1(content.data(), content.size());
+					std::ostringstream formatter;
+					sha1PrintHex(formatter, hashCode);
+					result.sha1Hex = formatter.str();
+				}
+
+				// Creating directories is slow and not safe from several threads at once, so only the
+				// first file of every directory creates it while the others wait for it.
+				std::unique_ptr<std::ostream> outputFile;
+				{
+					const auto directory = virtual_dir::splitLeaf(job.outputPath).first;
+
+					std::scoped_lock lock(createdDirectories.mutex);
+					if (createdDirectories.paths.insert(directory).second)
+					{
+						outputFile = outputRoot.writeFile(job.outputPath, false, true);
+					}
+				}
+
+				if (!outputFile)
+				{
+					outputFile = outputRoot.writeFile(job.outputPath, false, false);
+				}
+
+				if (!outputFile)
+				{
+					throw std::runtime_error("Could not open output file " + job.outputPath);
+				}
+
+				if (isZLibCompressed)
+				{
+					{
+						zstr::ostream compressed(*outputFile);
+						compressed.write(content.data(), static_cast<std::streamsize>(content.size()));
+						compressed.flush();
+					}
+
+					result.compressedSize = static_cast<std::uintmax_t>(outputFile->tellp());
+				}
+				else
+				{
+					outputFile->write(content.data(), static_cast<std::streamsize>(content.size()));
+				}
+
+				if (!*outputFile)
+				{
+					throw std::runtime_error("Could not write output file " + job.outputPath);
+				}
+
+				return result;
+			}
+
+			void processFiles(CompileContext &context, unsigned threadCount)
+			{
+				const size_t jobCount = context.jobs.size();
+				context.results.resize(jobCount);
+
+				if (threadCount == 0)
+				{
+					threadCount = std::max(1u, std::thread::hardware_concurrency());
+				}
+				threadCount = static_cast<unsigned>(std::min<size_t>(threadCount, std::max<size_t>(jobCount, 1)));
+
+				std::cout << "Processing " << jobCount << " files on " << threadCount << " threads..." << std::endl;
+				const auto startTime = std::chrono::steady_clock::now();
+
+				std::atomic<size_t> nextJob { 0 };
+				std::atomic<size_t> finishedJobs { 0 };
+				std::atomic<bool> failed { false };
+				CreatedDirectories createdDirectories;
+				std::mutex reportMutex;
+				std::string firstError;
+
+				auto worker = [&]()
+				{
+					while (!failed)
+					{
+						const size_t index = nextJob++;
+						if (index >= jobCount)
+						{
+							break;
+						}
+
+						try
+						{
+							context.results[index] = processFile(
+								context.sourceRoot,
+								context.outputRoot,
+								createdDirectories,
+								context.jobs[index],
+								context.isZLibCompressed);
+						}
+						catch (const std::exception &e)
+						{
+							std::scoped_lock lock(reportMutex);
+							if (!failed.exchange(true))
+							{
+								firstError = e.what();
+							}
+							break;
+						}
+
+						const size_t finished = ++finishedJobs;
+						if (finished % 1000 == 0)
+						{
+							std::scoped_lock lock(reportMutex);
+							std::cout << "  " << finished << " / " << jobCount << std::endl;
+						}
+					}
+				};
+
+				std::vector<std::thread> threads;
+				threads.reserve(threadCount - 1);
+				for (unsigned i = 1; i < threadCount; ++i)
+				{
+					threads.emplace_back(worker);
+				}
+
+				// The calling thread is a worker as well
+				worker();
+
+				for (auto &thread : threads)
+				{
+					thread.join();
+				}
+
+				if (failed)
+				{
+					throw std::runtime_error(firstError);
+				}
+
+				const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - startTime);
+				std::cout << "Processed " << jobCount << " files in " << elapsed.count() << " ms" << std::endl;
+			}
+
+			void compileFile(
+				CompileContext &context,
 				const virtual_dir::Path &fromLocation,
 				TableWriter &outputDescription,
 				const virtual_dir::Path &destinationDir,
-				bool isZLibCompressed,
 				const std::string &fileName
 			)
 			{
-				const auto type = sourceRoot.getType(fromLocation);
+				const auto type = context.sourceRoot.getType(fromLocation);
 
 				if (type == virtual_dir::file_type::Directory)
 				{
@@ -46,7 +255,7 @@ namespace mmo
 					    "entries",
 					    sff::write::MultiLine);
 
-					const auto entries = sourceRoot.queryEntries(
+					const auto entries = context.sourceRoot.queryEntries(
 					                         fromLocation
 					                     );
 
@@ -57,12 +266,10 @@ namespace mmo
 						entryOutput.addKey("name", entry);
 
 						compileFile(
-						    sourceRoot,
-						    outputRoot,
+						    context,
 						    virtual_dir::joinPaths(fromLocation, entry),
 						    entryOutput,
 						    virtual_dir::joinPaths(destinationDir, entry),
-						    isZLibCompressed,
 						    entry
 						);
 
@@ -73,20 +280,8 @@ namespace mmo
 				}
 				else if (type == virtual_dir::file_type::File)
 				{
-					const auto sourceFile = sourceRoot.readFile(
-					                            fromLocation,
-					                            false
-					                        );
-
-					if (!sourceFile)
-					{
-						throw std::runtime_error(
-						    "Could not open source file " +
-						    fromLocation);
-					}
-
 					auto compressedNameFull = destinationDir;
-					if (isZLibCompressed)
+					if (context.isZLibCompressed)
 					{
 						const auto compressedName = fileName + ".z";
 						outputDescription.addKey("compressedName", compressedName);
@@ -94,97 +289,45 @@ namespace mmo
 						compressedNameFull += ".z";
 					}
 
+					if (context.isCollecting)
 					{
-						sourceFile->seekg(0, std::ios::end);
-						{
-							const std::streamoff originalSize = sourceFile->tellg();
-							outputDescription.addKey("originalSize", originalSize);
-						}
-
-						sourceFile->seekg(0, std::ios::beg);
-						{
-							const auto hashCode = sha1(*sourceFile);
-							std::ostringstream formatter;
-							sha1PrintHex(formatter, hashCode);
-							outputDescription.addKey("sha1", formatter.str());
-						}
+						context.jobs.push_back(FileJob { fromLocation, compressedNameFull });
+						return;
 					}
 
-					//workaround:
-					const auto outputFile = outputRoot.writeFile(
-					                            compressedNameFull,
-					                            false,
-					                            true
-					                        );
-
-					if (!outputFile)
+					if (context.nextResult >= context.results.size())
 					{
-						throw std::runtime_error(
-						    "Could not open output file " +
-						    compressedNameFull);
+						throw std::runtime_error("Source tree changed while compiling the update");
 					}
 
-					sourceFile->clear();
-					sourceFile->seekg(0, std::ios::beg);
+					const auto &result = context.results[context.nextResult++];
 
+					outputDescription.addKey("originalSize", result.originalSize);
+					outputDescription.addKey("sha1", result.sha1Hex);
 
-					// Generate the output stream with compression if requested
-					std::unique_ptr<std::ostream> outStream;
-					if (!isZLibCompressed)
-					{
-						outStream = std::make_unique<std::ostream>(outputFile->rdbuf());
-					}
-					else
-					{
-						outStream = std::make_unique<zstr::ostream>(*outputFile);
-					}
-
-					// Read in source file in 4k byte chunks and process it
-					char buf[4096];
-					std::streamsize read;
-					do
-					{
-						sourceFile->read(buf, 4096);
-						read = sourceFile->gcount();
-						if (read > 0)
-						{
-							outStream->write(buf, read);
-						}
-					} while (*sourceFile && read > 0);
-
-					// Flush the output stream
-					outStream->flush();
-					outStream.reset();
-
-					if (isZLibCompressed)
+					if (context.isZLibCompressed)
 					{
 						outputDescription.addKey("compression", "zlib");
-
-						const std::uintmax_t compressedSize = outputFile->tellp();
-						outputDescription.addKey("compressedSize", compressedSize);
+						outputDescription.addKey("compressedSize", result.compressedSize);
 					}
 				}
 			}
 
 			void compileIf(
-			    virtual_dir::IReader &sourceRoot,
-			    virtual_dir::IWriter &outputRoot,
+			    CompileContext &context,
 			    const Table &inputDescription,
 			    const virtual_dir::Path &fromLocation,
 			    TableWriter &outputDescription,
-			    const virtual_dir::Path &destinationDir,
-			    bool isZLibCompressed
+			    const virtual_dir::Path &destinationDir
 			);
 
 
 			void compileEntry(
-			    virtual_dir::IReader &sourceRoot,
-			    virtual_dir::IWriter &outputRoot,
+			    CompileContext &context,
 			    const Table &inputDescription,
 			    const virtual_dir::Path &fromLocation,
 			    TableWriter &outputDescription,
-			    const virtual_dir::Path &destinationDir,
-			    bool isZLibCompressed
+			    const virtual_dir::Path &destinationDir
 			)
 			{
 				// Obtain the source type so we can apply a different compiler eventually
@@ -197,13 +340,11 @@ namespace mmo
 				if (type == "if")
 				{
 					compileIf(
-					    sourceRoot,
-					    outputRoot,
+					    context,
 					    inputDescription,
 					    fromLocation,
 					    outputDescription,
-					    destinationDir,
-					    isZLibCompressed
+					    destinationDir
 					);
 				}
 				else
@@ -254,13 +395,11 @@ namespace mmo
 									sff::write::Comma);
 
 								compileEntry(
-									sourceRoot,
-									outputRoot,
+									context,
 									*entryDescription,
 									subFromLocation,
 									entryDescriptionOutput,
-									virtual_dir::joinPaths(subDestinationDir, sub),
-									isZLibCompressed
+									virtual_dir::joinPaths(subDestinationDir, sub)
 								);
 
 								subEntriesOutput.Finish();
@@ -275,13 +414,11 @@ namespace mmo
 									sff::write::Comma);
 
 								compileEntry(
-									sourceRoot,
-									outputRoot,
+									context,
 									*entryDescription,
 									subFromLocation,
 									entryDescriptionOutput,
-									subDestinationDir,
-									isZLibCompressed
+									subDestinationDir
 								);
 
 								entryDescriptionOutput.Finish();
@@ -306,12 +443,10 @@ namespace mmo
 							entryOutput.addKey("name", sub);
 
 							compileFile(
-								sourceRoot,
-								outputRoot,
+								context,
 								subFromLocation,
 								entryOutput,
 								virtual_dir::joinPaths(subDestinationDir, sub),
-								isZLibCompressed,
 								to
 							);
 
@@ -321,12 +456,10 @@ namespace mmo
 						else
 						{
 							compileFile(
-								sourceRoot,
-								outputRoot,
+								context,
 								subFromLocation,
 								outputDescription,
 								subDestinationDir,
-								isZLibCompressed,
 								to
 							);
 						}
@@ -336,13 +469,11 @@ namespace mmo
 
 
 			void compileIf(
-			    virtual_dir::IReader &sourceRoot,
-			    virtual_dir::IWriter &outputRoot,
+			    CompileContext &context,
 			    const Table &inputDescription,
 			    const virtual_dir::Path &fromLocation,
 			    TableWriter &outputDescription,
-			    const virtual_dir::Path &destinationDir,
-			    bool isZLibCompressed
+			    const virtual_dir::Path &destinationDir
 			)
 			{
 				{
@@ -366,16 +497,37 @@ namespace mmo
 				    sff::write::Comma);
 
 				compileEntry(
-				    sourceRoot,
-				    outputRoot,
+				    context,
 				    *value,
 				    fromLocation,
 				    valueOutput,
-				    destinationDir,
-				    isZLibCompressed
+				    destinationDir
 				);
 
 				valueOutput.Finish();
+			}
+
+			/// Writes the complete list description for the root entry. Used by both passes.
+			void writeList(CompileContext &context, const Table &root, std::ostream &listFile)
+			{
+				sff::write::Writer<char> listWriter(listFile);
+				TableWriter listTable(listWriter, sff::write::MultiLine);
+
+				// Add the current file format verison
+				listTable.addKey("version", 1);
+
+				// Compile the first entry from the source list
+				TableWriter rootEntry(listTable, "root", sff::write::Comma);
+				compileEntry(
+				    context,
+				    root,
+				    "",
+				    rootEntry,
+				    ""
+				);
+
+				// And finishe the root entry in list.txt
+				rootEntry.Finish();
 			}
 		}
 
@@ -383,7 +535,8 @@ namespace mmo
 		void compileDirectory(
 			virtual_dir::IReader &sourceDir,
 			virtual_dir::IWriter &destinationDir,
-		    bool isZLibCompressed
+		    bool isZLibCompressed,
+			unsigned threadCount
 		)
 		{
 			// Try to find source.txt in source directoy and open it for reading
@@ -410,6 +563,17 @@ namespace mmo
 					throw std::runtime_error("Root directory entry is missing");
 				}
 
+				CompileContext context { sourceDir, destinationDir, isZLibCompressed, true, {}, {}, 0 };
+
+				// Collect pass: walk the tree to find every file, the list it produces is discarded
+				{
+					std::ostringstream discardedList;
+					writeList(context, *root, discardedList);
+				}
+
+				// Hash and compress all files in parallel
+				processFiles(context, threadCount);
+
 				// Create the list.txt file in the target directory for writing. This file
 				// will contain a summary of all file entries
 				const virtual_dir::Path fullListFileName = "list.txt";
@@ -420,27 +584,14 @@ namespace mmo
 					    "Could not open output list file " + fullListFileName);
 				}
 
-				// Write the target root table
-				sff::write::Writer<char> listWriter(*listFile);
-				TableWriter listTable(listWriter, sff::write::MultiLine);
+				// Emit pass: same traversal, now filled in with the results
+				context.isCollecting = false;
+				writeList(context, *root, *listFile);
 
-				// Add the current file format verison
-				listTable.addKey("version", 1);
-
-				// Compile the first entry from the source list
-				TableWriter rootEntry(listTable, "root", sff::write::Comma);
-				compileEntry(
-				    sourceDir,
-				    destinationDir,
-				    *root,
-				    "",
-				    rootEntry,
-				    "",
-				    isZLibCompressed
-				);
-
-				// And finishe the root entry in list.txt
-				rootEntry.Finish();
+				if (context.nextResult != context.results.size())
+				{
+					throw std::runtime_error("Source tree changed while compiling the update");
+				}
 			}
 			else
 			{

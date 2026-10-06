@@ -21,6 +21,7 @@ int main(int argc, char **argv)
 	// Paramaters parsed out of command line options
 	std::string sourceDir, outputDir;
 	std::string compression;
+	unsigned threadCount = 0;
 
 	// Build command line options
 	cxxopts::Options options(VersionStr + ", available options");
@@ -30,6 +31,7 @@ int main(int argc, char **argv)
 		("s,source", "A directory containing source.txt", cxxopts::value(sourceDir))
 		("o,output", "Where to put the updater-compatible files", cxxopts::value(outputDir))
 		("c,compression", "Provide 'zlib' for compression", cxxopts::value(compression))
+		("j,threads", "Number of worker threads (0 = all hardware threads)", cxxopts::value(threadCount))
 		;
 
 	// Support positional arguments
@@ -76,7 +78,8 @@ int main(int argc, char **argv)
 			mmo::updating::compileDirectory(
 				sourceReader,
 				outputWriter,
-				isZLibCompressed
+				isZLibCompressed,
+				threadCount
 			);
 		}
 		catch (const std::exception &e)
