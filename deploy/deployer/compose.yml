@@ -1,0 +1,42 @@
+# Portainer stack for mmo-deployer. Pin DEPLOYER_TAG to a commit SHA; see docs/deployment.md.
+services:
+  deployer:
+    image: kyoril/mmo_deployer:${DEPLOYER_TAG}
+    container_name: mmo-deployer
+    restart: unless-stopped
+    environment:
+      - GITHUB_REPO=Kyoril/mmo
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DATA_REPO_URL=https://github.com/Kyoril/mmo-data
+      - PORTAINER_URL=${PORTAINER_URL}
+      - PORTAINER_TOKEN=${PORTAINER_TOKEN}
+      - PORTAINER_STACK_ID=${PORTAINER_STACK_ID}
+      - PORTAINER_ENDPOINT_ID=${PORTAINER_ENDPOINT_ID}
+      - WAIT_SERVICES=realm_server_01,world_node_01
+      - REALMS=${REALMS}
+      - LOGIN_URL=http://mmo-dev-login:8090
+      - LOGIN_PASSWORD=${LOGIN_PASSWORD}
+      - MYSQL_HOST=host.docker.internal
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - BACKUP_DATABASES=mmo_login,mmo_realm_01
+      - MAINTENANCE_AT=04:45
+      - TZ=Europe/Berlin
+      - COUNTDOWN_S=900
+      - NOTIFY_WEBHOOK=${NOTIFY_WEBHOOK}
+      - NOTIFY_FORMAT=discord
+      - DRY_RUN=${DRY_RUN:-1}
+    volumes:
+      - /srv/mmo-patch:/srv/mmo-patch
+      - deployer-state:/state
+    extra_hosts:
+      host.docker.internal: "172.17.0.1"
+    networks:
+      - mmo_game_servers
+
+volumes:
+  deployer-state:
+
+networks:
+  mmo_game_servers:
+    external: true

@@ -7,11 +7,11 @@ Set-StrictMode -Version Latest
 # Central definition of everything that distinguishes the e2e test stack from the dev stack.
 function Get-E2eSettings
 {
-	$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+	$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 
 	return [ordered]@{
 		RepoRoot          = $repoRoot
-		RuntimeDir        = Join-Path $repoRoot "e2e\runtime"
+		RuntimeDir        = Join-Path $repoRoot "e2e/runtime"
 
 		# Test-stack ports (chosen to never collide with the dev stack defaults).
 		LoginPlayerPort   = 13724   # dev: 3724
@@ -45,6 +45,27 @@ function Get-E2eSettings
 	}
 }
 
+# Windows PowerShell 5.1 has no $IsWindows (and strict mode rejects reading it), but it
+# only ever runs on Windows.
+function Test-OnWindows
+{
+	if ($PSVersionTable.PSEdition -eq "Desktop")
+	{
+		return $true
+	}
+	return [bool]$IsWindows
+}
+
+# Executable file name for a CMake target: login_server.exe on Windows, login_server elsewhere.
+function Get-ExeName([string]$Name)
+{
+	if (Test-OnWindows)
+	{
+		return "$Name.exe"
+	}
+	return $Name
+}
+
 function Get-Sha1Hex([string]$Text)
 {
 	$sha1 = [System.Security.Cryptography.SHA1]::Create()
@@ -59,11 +80,16 @@ function Get-Sha1Hex([string]$Text)
 	}
 }
 
-# Locates mysql.exe or aborts with an actionable message.
+# Locates the mysql client or aborts with an actionable message.
 function Get-MysqlExe
 {
-	$cmd = Get-Command mysql.exe -ErrorAction SilentlyContinue
-	if (-not $cmd)
+	$name = Get-ExeName "mysql"
+	$cmd = Get-Command $name -ErrorAction SilentlyContinue
+	if ($cmd)
+	{
+		return $cmd.Source
+	}
+	if (Test-OnWindows)
 	{
 		# Try common install locations before giving up.
 		$candidates = Get-ChildItem -Path "C:\Program Files\MySQL\*\bin\mysql.exe", "C:\Program Files\MariaDB*\bin\mysql.exe" -ErrorAction SilentlyContinue
@@ -71,9 +97,8 @@ function Get-MysqlExe
 		{
 			return $candidates[0].FullName
 		}
-		throw "mysql.exe not found on PATH. Install the MySQL/MariaDB client or add it to PATH."
 	}
-	return $cmd.Source
+	throw "$name not found on PATH. Install the MySQL/MariaDB client or add it to PATH."
 }
 
 function Get-MysqlCredentials
@@ -270,11 +295,23 @@ function Start-E2eServer
 
 	New-Item -ItemType Directory -Force $WorkingDirectory | Out-Null
 	$stderrPath = [System.IO.Path]::ChangeExtension($StdoutPath, ".err.log")
-	$process = Start-Process -FilePath $ExePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory `
-		-PassThru -WindowStyle Hidden -RedirectStandardOutput $StdoutPath -RedirectStandardError $stderrPath
+	$startArgs = @{
+		FilePath = $ExePath
+		ArgumentList = $Arguments
+		WorkingDirectory = $WorkingDirectory
+		PassThru = $true
+		RedirectStandardOutput = $StdoutPath
+		RedirectStandardError = $stderrPath
+	}
+	if (Test-OnWindows)
+	{
+		$startArgs.WindowStyle = "Hidden"
+	}
+	$process = Start-Process @startArgs
 	return $process
 }
 
 Export-ModuleMember -Function Get-E2eSettings, Get-Sha1Hex, Get-MysqlExe, Get-MysqlCredentials, `
 	Invoke-Mysql, Invoke-MysqlScriptFile, Get-BasicAuthHeader, Wait-HttpReady, Wait-LogContains, `
-	Wait-RealmOnline, Invoke-RestForm, Start-E2eServer
+	Wait-RealmOnline, Invoke-RestForm, Start-E2eServer, `
+	Test-OnWindows, Get-ExeName

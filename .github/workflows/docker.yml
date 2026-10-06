@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - develop
   workflow_run:
     workflows: ["Linux Servers"]
     types:
@@ -13,69 +12,41 @@ on:
       - develop
 
 jobs:
-  push_to_registry:
-    name: Build and push ${{ matrix.service }}
+  resolve:
+    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    # Only run if workflow was triggered by push to master, or if the test workflow succeeded on develop
-    if: |
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-    environment: DockerHub
-    
-    strategy:
-      matrix:
-        include:
-          - service: login_server
-            dockerfile: ./Dockerfile.login_server
-            image: mmo_login_server
-            context: .
-          - service: realm_server
-            dockerfile: ./Dockerfile.realm_server
-            image: mmo_realm_server
-            context: .
-          - service: world_server
-            dockerfile: ./Dockerfile.world_server
-            image: mmo_world_server
-            context: .
-          - service: data
-            dockerfile: ./Dockerfile.data
-            image: mmo_data
-            context: .
-    
+    outputs:
+      ref: ${{ steps.resolve.outputs.ref }}
+      tags: ${{ steps.resolve.outputs.tags }}
     steps:
-    - name: Check out the repo
-      uses: actions/checkout@v3
-      with:
-        submodules: 'recursive'
+      - id: resolve
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            sha="${{ github.event.workflow_run.head_sha }}"
+            branch="${{ github.event.workflow_run.head_branch }}"
+          else
+            sha="${{ github.sha }}"
+            branch="${{ github.ref_name }}"
+          fi
+          echo "ref=$sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "$branch"
+            echo "$branch-${sha:0:7}"
+            echo "$sha"
+            if [ "$branch" = "develop" ]; then
+              echo "latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-
-    - name: Login to DockerHub
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-    
-    - name: Generate Docker metadata
-      id: meta
-      uses: docker/metadata-action@v4
-      with:
-        images: ${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}
-        tags: |
-          type=ref,event=branch
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
-  
-    - name: Build and push ${{ matrix.service }} image
-      uses: docker/build-push-action@v4
-      with:
-        context: ${{ matrix.context }}
-        file: ${{ matrix.dockerfile }}
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha,scope=${{ matrix.service }}
-        cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+  build:
+    needs: resolve
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      ref: ${{ needs.resolve.outputs.ref }}
+      tags: ${{ needs.resolve.outputs.tags }}
+    secrets: inherit
 
   

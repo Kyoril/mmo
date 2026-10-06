@@ -3,6 +3,7 @@
 #include "secondary_login_session.h"
 
 #include "log/default_log_levels.h"
+#include "io_poll.h"
 
 namespace mmo
 {
@@ -34,13 +35,13 @@ namespace mmo
 
 	void SecondaryLoginSession::Pump()
 	{
-		m_io.poll();
+		PollRestarting(m_io);
 	}
 
 	void SecondaryLoginSession::Shutdown()
 	{
 		m_login->close();
-		m_io.poll();
+		PollRestarting(m_io);
 	}
 
 	SecondaryLoginSession::~SecondaryLoginSession()

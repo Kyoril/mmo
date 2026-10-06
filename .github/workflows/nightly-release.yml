@@ -1,0 +1,218 @@
+name: Nightly Release
+
+on:
+  schedule:
+    # 22:00 UTC = 00:00 Berlin in summer, 23:00 in winter: the gate (<= 180 min), client build
+    # and staging finish well before the 04:45 maintenance.
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Release even if develop has not moved since the last nightly
+        type: boolean
+        default: false
+
+concurrency:
+  group: nightly-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.pick.outputs.commit }}
+      previous: ${{ steps.pick.outputs.previous }}
+      prefix: ${{ steps.pick.outputs.prefix }}
+      proceed: ${{ steps.pick.outputs.proceed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || 'develop' }}
+          fetch-depth: 0
+
+      - id: pick
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit=$(git rev-parse HEAD)
+          if [ "${{ github.event_name }}" = "push" ]; then prefix="test-nightly-"; else prefix="nightly-"; fi
+          latest=$(gh release list --limit 100 --json tagName,createdAt \
+            --jq "[.[] | select(.tagName | startswith(\"$prefix\"))] | sort_by(.createdAt) | last | .tagName // empty")
+          previous=""
+          if [ -n "$latest" ]; then previous=$(git rev-list -n 1 "$latest"); fi
+          proceed=true
+          if [ "$previous" = "$commit" ] && [ "${{ inputs.force }}" != "true" ]; then proceed=false; fi
+          echo "Nightly candidate $commit (previous ${previous:-none}, proceed $proceed)"
+          {
+            echo "commit=$commit"
+            echo "previous=$previous"
+            echo "prefix=$prefix"
+            echo "proceed=$proceed"
+          } >> "$GITHUB_OUTPUT"
+
+  gate:
+    needs: check
+    if: needs.check.outputs.proceed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      CC: gcc-13
+      CXX: g++-13
+      MMO_GATE_PYTHON: python3
+      MMO_E2E_MYSQL_USER: root
+      MMO_E2E_MYSQL_PASSWORD: root
+    steps:
+      - name: Free disk space (data/client is ~8 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.commit }}
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python tool dependencies
+        run: python -m pip install -r tools/world/requirements.txt -r tools/terrain_gen/requirements.txt
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-13 g++-13 ninja-build libmysqlclient-dev uuid-dev ffmpeg
+
+      - name: Start MySQL (preinstalled on the runner, root/root)
+        run: |
+          sudo systemctl start mysql.service
+          mysql -uroot -proot -h127.0.0.1 -e "SELECT VERSION();"
+
+      - name: Configure
+        run: cmake -S . -B build -G "Ninja Multi-Config" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_WITH_DEV_COMMANDS=ON
+
+      - name: Full gate
+        shell: pwsh
+        run: ./tools/gate/verify.ps1 -Tier full
+
+      # The summary alone, at a fixed path: publish reads it, whatever the logs artifact holds.
+      - name: Upload gate summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-summary
+          if-no-files-found: ignore
+          path: tools/gate/last_report.json
+
+      - name: Upload gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-report
+          if-no-files-found: ignore
+          path: |
+            tools/gate/last_report.json
+            tools/gate/logs/
+            e2e/runtime/logs/
+
+  client:
+    needs: [check, gate]
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.commit }}
+
+      - name: Init code submodules (not the data repos)
+        run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
+
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v6
+        with:
+          pkgs: openssl
+          triplet: x64-windows-static-md
+          token: ${{ github.token }}
+          github-binarycache: true
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' `
+            '-DMMO_BUILD_CLIENT=ON' `
+            '-DMMO_BUILD_LAUNCHER=ON' `
+            '-DMMO_BUILD_TOOLS=ON' `
+            '-DMMO_BUILD_TESTS=OFF' `
+            '-DMMO_WITH_DEV_COMMANDS=ON' `
+            '-DMMO_OPENSSL_STATIC=ON' `
+            '-DOPENSSL_USE_STATIC_LIBS=TRUE' `
+            '-DVCPKG_TARGET_TRIPLET=x64-windows-static-md' `
+            "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build client, launcher, crash reporter
+        run: cmake --build build --config Release --parallel 4 -t mmo_client launcher mmo_error
+
+      - name: Package
+        shell: pwsh
+        run: |
+          python tools/release/package_client.py --bin-dir bin/Release --source deploy/patch/source.txt --out client-bin.zip
+          Compress-Archive -Path bin/Release/*.pdb -DestinationPath symbols.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-bin
+          path: |
+            client-bin.zip
+            symbols.zip
+
+  images:
+    needs: [check, gate]
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      ref: ${{ needs.check.outputs.commit }}
+      tags: ${{ needs.check.outputs.commit }}
+    secrets: inherit
+
+  publish:
+    needs: [check, gate, client, images]
+    runs-on: ubuntu-latest
+    env:
+      COMMIT: ${{ needs.check.outputs.commit }}
+      PREVIOUS: ${{ needs.check.outputs.previous }}
+      PREFIX: ${{ needs.check.outputs.prefix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.commit }}
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-bin
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: gate-summary
+          path: gate
+
+      - name: Build release.json
+        run: |
+          python3 tools/release/make_release_manifest.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
+            --asset client-bin.zip=dist/client-bin.zip --asset symbols.zip=dist/symbols.zip \
+            --gate-report gate/last_report.json --out dist/release.json
+
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${PREFIX}$(date -u +%Y%m%d)-${COMMIT:0:8}"
+          python3 -c "import json; m = json.load(open('dist/release.json')); print('\n'.join('- ' + c for c in m['changes']) or '- No changes')" > notes.md
+          gh release create "$tag" --target "$COMMIT" --prerelease --title "$tag" --notes-file notes.md \
+            dist/client-bin.zip dist/symbols.zip dist/release.json

@@ -63,7 +63,7 @@ def _build_template_root() -> Path:
 	under a fresh tempfile.mkdtemp() -- data/editor (the real submodule) is never touched.
 
 	Contains: a copy of src/shared/proto_data (for the schema compile), a copy of the
-	real protoc.exe (so load_modules() never reaches into the real build/ tree), and one
+	real protoc (so load_modules() never reaches into the real build/ tree), and one
 	empty .data file per catalog so load_catalog_bundle() can load all of them -- maps.data
 	is seeded with a single MapEntry(id=1) so the map-id lookups in main() resolve.
 	"""
@@ -77,7 +77,7 @@ def _build_template_root() -> Path:
 	real_protoc = find_protoc(Path(REPO_ROOT))
 	protoc_dst_dir = root / "build" / "_deps" / "protobuf-build" / real_protoc.parent.name
 	protoc_dst_dir.mkdir(parents=True, exist_ok=True)
-	shutil.copy2(real_protoc, protoc_dst_dir / "protoc.exe")
+	shutil.copy2(real_protoc, protoc_dst_dir / real_protoc.name)
 
 	data_dir = root / "data" / "editor" / "data"
 	data_dir.mkdir(parents=True, exist_ok=True)

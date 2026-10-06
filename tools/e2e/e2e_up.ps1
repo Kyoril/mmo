@@ -24,7 +24,7 @@ $ErrorActionPreference = "Stop"
 Import-Module (Join-Path $PSScriptRoot "e2e_common.psm1") -Force
 
 $s = Get-E2eSettings
-$binDir = Join-Path $s.RepoRoot "bin\$BuildConfig"
+$binDir = Join-Path (Join-Path $s.RepoRoot "bin") $BuildConfig
 $runtime = $s.RuntimeDir
 $configDir = Join-Path $runtime "config"
 $logDir = Join-Path $runtime "logs"
@@ -40,11 +40,11 @@ if (Test-Path $pidFile)
 # Fail fast on missing prerequisites before touching anything.
 Get-MysqlExe | Out-Null
 Get-MysqlCredentials | Out-Null
-foreach ($exe in @("login_server.exe", "realm_server.exe", "world_server.exe"))
+foreach ($target in @("login_server", "realm_server", "world_server"))
 {
-	if (-not (Test-Path (Join-Path $binDir $exe)))
+	if (-not (Test-Path (Join-Path $binDir (Get-ExeName $target))))
 	{
-		throw "$exe not found in $binDir. Build it first: cmake --build build -t $($exe -replace '\.exe$','') --config $BuildConfig"
+		throw "$(Get-ExeName $target) not found in $binDir. Build it first: cmake --build build -t $target --config $BuildConfig"
 	}
 }
 
@@ -57,8 +57,8 @@ New-Item -ItemType Directory -Force $configDir, $logDir | Out-Null
 
 Write-Host "Resetting e2e databases ($($s.LoginDb), $($s.RealmDb))..."
 Invoke-Mysql -Sql "DROP DATABASE IF EXISTS ``$($s.LoginDb)``; CREATE DATABASE ``$($s.LoginDb)``; DROP DATABASE IF EXISTS ``$($s.RealmDb)``; CREATE DATABASE ``$($s.RealmDb)``;" | Out-Null
-Invoke-MysqlScriptFile -Path (Join-Path $s.RepoRoot "data\login\login_db_schema_full.sql") -Database $s.LoginDb -StripUse
-Invoke-MysqlScriptFile -Path (Join-Path $s.RepoRoot "data\realm\realm_db_schema_full.sql") -Database $s.RealmDb -StripUse
+Invoke-MysqlScriptFile -Path (Join-Path $s.RepoRoot "data/login/login_db_schema_full.sql") -Database $s.LoginDb -StripUse
+Invoke-MysqlScriptFile -Path (Join-Path $s.RepoRoot "data/realm/realm_db_schema_full.sql") -Database $s.RealmDb -StripUse
 
 #############################################################################################
 # 2. Generate server configs. Registration hashes are sha1(UPPERNAME:UPPERPASSWORD) and can
@@ -66,17 +66,17 @@ Invoke-MysqlScriptFile -Path (Join-Path $s.RepoRoot "data\realm\realm_db_schema_
 #############################################################################################
 
 $mysqlCred = Get-MysqlCredentials
-$dataDir = (Join-Path $s.RepoRoot "data\editor\data") -replace '\\', '/'
-$navDir = (Join-Path $s.RepoRoot "data\editor\nav") -replace '\\', '/'
-$worldDataDir = (Join-Path $s.RepoRoot "data\client") -replace '\\', '/'
-$scriptsDir = (Join-Path $s.RepoRoot "data\scripts") -replace '\\', '/'
+$dataDir = (Join-Path $s.RepoRoot "data/editor/data") -replace '\\', '/'
+$navDir = (Join-Path $s.RepoRoot "data/editor/nav") -replace '\\', '/'
+$worldDataDir = (Join-Path $s.RepoRoot "data/client") -replace '\\', '/'
+$scriptsDir = (Join-Path $s.RepoRoot "data/scripts") -replace '\\', '/'
 # The test world node "uploads" bug reports into this folder (file:// bug API) instead of the
 # real bug API; scenarios read them back through MMO_E2E_BUG_DIR (set by e2e_run.ps1).
 $bugReportDir = (Join-Path $s.RuntimeDir "bugs") -replace '\\', '/'
 if (Test-Path $bugReportDir) { Remove-Item -Recurse -Force $bugReportDir }
 New-Item -ItemType Directory -Force -Path $bugReportDir | Out-Null
-$loginUpdates = (Join-Path $s.RepoRoot "data\login\updates") -replace '\\', '/'
-$realmUpdates = (Join-Path $s.RepoRoot "data\realm\updates") -replace '\\', '/'
+$loginUpdates = (Join-Path $s.RepoRoot "data/login/updates") -replace '\\', '/'
+$realmUpdates = (Join-Path $s.RepoRoot "data/realm/updates") -replace '\\', '/'
 
 $realmHash = Get-Sha1Hex "$($s.RealmName):$($s.RealmPassword)"
 $worldHash = Get-Sha1Hex "$($s.WorldName):$($s.WorldPassword)"
@@ -256,7 +256,7 @@ function Save-Pids
 
 Write-Host "Starting login server..."
 $loginOut = Join-Path $logDir "login_server.out.log"
-$login = Start-E2eServer -ExePath (Join-Path $binDir "login_server.exe") `
+$login = Start-E2eServer -ExePath (Join-Path $binDir (Get-ExeName "login_server")) `
 	-Arguments @("-c", (Join-Path $configDir "login_server.cfg")) `
 	-WorkingDirectory (Join-Path $runtime "login") -StdoutPath $loginOut
 $pids.login = $login.Id
@@ -275,7 +275,7 @@ Invoke-RestForm -Url "$loginRest/gm-level" -User $s.WebUser -Password $s.WebPass
 
 Write-Host "Starting realm server..."
 $realmOut = Join-Path $logDir "realm_server.out.log"
-$realm = Start-E2eServer -ExePath (Join-Path $binDir "realm_server.exe") `
+$realm = Start-E2eServer -ExePath (Join-Path $binDir (Get-ExeName "realm_server")) `
 	-Arguments @("-c", (Join-Path $configDir "realm_server.cfg")) `
 	-WorkingDirectory (Join-Path $runtime "realm") -StdoutPath $realmOut
 $pids.realm = $realm.Id
@@ -291,14 +291,14 @@ Invoke-RestForm -Url "http://127.0.0.1:$($s.RealmWebPort)/create-world" -User $s
 
 Write-Host "Starting world server..."
 $worldOut = Join-Path $logDir "world_server.out.log"
-$world = Start-E2eServer -ExePath (Join-Path $binDir "world_server.exe") `
+$world = Start-E2eServer -ExePath (Join-Path $binDir (Get-ExeName "world_server")) `
 	-Arguments @("-c", (Join-Path $configDir "world_server.cfg")) `
 	-WorkingDirectory (Join-Path $runtime "world") -StdoutPath $worldOut
 $pids.world = $world.Id
 Save-Pids
 # The world server has no REST service yet; its file log (flushed per line) is the only
 # reliable readiness signal.
-Wait-LogContains -PathGlob (Join-Path $runtime "world\logs\*.log") -Pattern "Successfully authenticated at the realm server" `
+Wait-LogContains -PathGlob (Join-Path $runtime "world/logs/*.log") -Pattern "Successfully authenticated at the realm server" `
 	-TimeoutSec 60 -Description "world-to-realm authentication"
 
 #############################################################################################
