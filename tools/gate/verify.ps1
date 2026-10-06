@@ -32,7 +32,9 @@ if ($SkipE2E)
 
 $python = if ($env:MMO_GATE_PYTHON) { $env:MMO_GATE_PYTHON } else { "python" }
 $ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
+# Windows PowerShell 5.1 has no $IsWindows; it only runs on Windows.
+$onWindows = ($PSVersionTable.PSEdition -eq "Desktop") -or [bool]$IsWindows
 $logDir = Join-Path $PSScriptRoot "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
@@ -137,7 +139,10 @@ try
 
 	# Warning only: a stale .claude/skills copy does not break the build, but it is how an agent
 	# ends up following instructions the tracked .agents/skills no longer contains.
-	& (Join-Path $repoRoot "tools\sync_skills.ps1") -Check
+	if ($onWindows)
+	{
+		& (Join-Path $repoRoot "tools/sync_skills.ps1") -Check
+	}
 
 	if ($ok)
 	{
@@ -173,7 +178,8 @@ try
 		}
 		else
 		{
-			$null = Invoke-GateStep -Name "e2e" -Exe "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $repoRoot "tools\e2e\e2e_run.ps1"))
+			$shellExe = (Get-Process -Id $PID).Path
+			$null = Invoke-GateStep -Name "e2e" -Exe $shellExe -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $repoRoot "tools/e2e/e2e_run.ps1"))
 		}
 	}
 

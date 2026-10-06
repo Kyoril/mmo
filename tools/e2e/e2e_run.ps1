@@ -23,9 +23,9 @@ $ErrorActionPreference = "Stop"
 Import-Module (Join-Path $PSScriptRoot "e2e_common.psm1") -Force
 
 $s = Get-E2eSettings
-$binDir = Join-Path $s.RepoRoot "bin\$BuildConfig"
-$clientExe = Join-Path $binDir "e2e_client.exe"
-$scenarioDir = Join-Path $s.RepoRoot "e2e\scenarios"
+$binDir = Join-Path (Join-Path $s.RepoRoot "bin") $BuildConfig
+$clientExe = Join-Path $binDir (Get-ExeName "e2e_client")
+$scenarioDir = Join-Path $s.RepoRoot "e2e/scenarios"
 $logDir = Join-Path $s.RuntimeDir "logs"
 $clientConfig = Join-Path $s.RuntimeDir "e2e_client.json"
 
@@ -37,7 +37,7 @@ $expectedFailures = @{ "always_fails" = 1 }
 
 if (-not (Test-Path $clientExe))
 {
-	throw "e2e_client.exe not found in $binDir. Build it first: cmake --build build -t e2e_client --config $BuildConfig"
+	throw "$(Split-Path -Leaf $clientExe) not found in $binDir. Build it first: cmake --build build -t e2e_client --config $BuildConfig"
 }
 
 $scenarios = if ($Scenario)
@@ -147,13 +147,25 @@ try
 			$attempts++
 
 			# Each scenario runs in a fresh client process with its own character.
-			$process = Start-Process -FilePath $clientExe -ArgumentList (@(
-				"--config", $clientConfig,
-				"--script", $file.FullName,
-				"--transcript", $transcript,
-				"--character", $characterName,
-				"--timeout", "$timeoutSeconds"
-			) + $classArgs) -WorkingDirectory $s.RepoRoot -PassThru -WindowStyle Hidden -Wait -RedirectStandardOutput $stdout
+			$clientArgs = @{
+				FilePath = $clientExe
+				ArgumentList = (@(
+					"--config", $clientConfig,
+					"--script", $file.FullName,
+					"--transcript", $transcript,
+					"--character", $characterName,
+					"--timeout", "$timeoutSeconds"
+				) + $classArgs)
+				WorkingDirectory = $s.RepoRoot
+				PassThru = $true
+				Wait = $true
+				RedirectStandardOutput = $stdout
+			}
+			if (Test-OnWindows)
+			{
+				$clientArgs.WindowStyle = "Hidden"
+			}
+			$process = Start-Process @clientArgs
 
 			$exitCode = $process.ExitCode
 			if ($exitCode -eq $expected -or $attempts -ge 2)
