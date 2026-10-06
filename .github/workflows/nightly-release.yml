@@ -91,7 +91,7 @@ jobs:
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-13 g++-13 ninja-build libmysqlclient-dev uuid-dev
+          sudo apt-get install -y gcc-13 g++-13 ninja-build libmysqlclient-dev uuid-dev ffmpeg
 
       - name: Start MySQL (preinstalled on the runner, root/root)
         run: |

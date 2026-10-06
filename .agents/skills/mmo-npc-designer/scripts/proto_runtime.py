@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import subprocess
 import sys
 import tempfile
@@ -21,15 +22,16 @@ def find_proto_dir(project_root: Path) -> Path:
 
 
 def find_protoc(project_root: Path) -> Path:
+    protoc_exe = "protoc.exe" if os.name == "nt" else "protoc"
     candidates = [
-        project_root / "build" / "_deps" / "protobuf-build" / "Release" / "protoc.exe",
-        project_root / "build" / "_deps" / "protobuf-build" / "RelWithDebInfo" / "protoc.exe",
-        project_root / "build" / "_deps" / "protobuf-build" / "Debug" / "protoc.exe",
+        project_root / "build" / "_deps" / "protobuf-build" / "Release" / protoc_exe,
+        project_root / "build" / "_deps" / "protobuf-build" / "RelWithDebInfo" / protoc_exe,
+        project_root / "build" / "_deps" / "protobuf-build" / "Debug" / protoc_exe,
     ]
     for candidate in candidates:
         if candidate.is_file():
             return candidate
-    raise FileNotFoundError("Unable to locate protoc.exe under build/_deps/protobuf-build")
+    raise FileNotFoundError("Unable to locate protoc under build/_deps/protobuf-build/<config>/")
 
 
 def compile_proto_modules(project_root: Path) -> Path:
