@@ -11,11 +11,6 @@ on:
         description: Release even if develop has not moved since the last nightly
         type: boolean
         default: false
-  # TEMPORARY: lets the feature branch prove the pipeline (publishes test-nightly-*).
-  # Removed in Task 15.
-  push:
-    branches:
-      - feature/nightly-deploy
 
 concurrency:
   group: nightly-release
