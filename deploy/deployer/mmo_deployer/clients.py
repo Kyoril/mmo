@@ -1,6 +1,7 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 """Clients for every remote system the deployer talks to."""
 
+import http.client
 import json
 import logging
 import os
@@ -101,7 +102,7 @@ class PortainerClient:
 		return self.http.get_json("{}/api/stacks/{}".format(self.url, self.stack_id), None, self._auth())
 
 	def ping(self):
-		self.http.get_json(self.url + "/api/status", None, self._auth())
+		self._stack()
 
 	def current_tag(self):
 		for item in self._stack().get("Env") or []:
@@ -141,6 +142,9 @@ class Notifier:
 		if not self.url:
 			return
 		try:
-			self.http.send_json("POST", self.url, {self.key: text[:MESSAGE_LIMIT]})
-		except (HttpError, OSError, ValueError) as error:
-			log.warning("notification failed: %s", error)
+			payload = json.dumps({self.key: text[:MESSAGE_LIMIT]}).encode("utf-8")
+			self.http.request("POST", self.url, {"Content-Type": "application/json"}, payload)
+		except HttpError as error:
+			log.warning("notification failed: HTTP %s", error.status)
+		except (OSError, ValueError, http.client.HTTPException) as error:
+			log.warning("notification failed: %s", type(error).__name__)

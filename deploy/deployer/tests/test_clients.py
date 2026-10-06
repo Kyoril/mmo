@@ -120,6 +120,13 @@ class Portainer(unittest.TestCase):
 			query = stub.find("GET", "/api/endpoints/2/docker/containers/json")[0].query
 			self.assertEqual(json.loads(query["filters"][0]), {"label": ["com.docker.compose.project=mmo"]})
 
+	def test_ping_verifies_authentication(self):
+		with StubServer() as stub:
+			stub.route("GET", "/api/stacks/7", (401, {"status": "UNAUTHORIZED"}))
+			with self.assertRaises(HttpError) as ctx:
+				PortainerClient(stub.url, "badkey", 7, 2, Http()).ping()
+			self.assertEqual(ctx.exception.status, 401)
+
 
 class Notify(unittest.TestCase):
 	def test_discord_payload(self):
@@ -130,15 +137,35 @@ class Notify(unittest.TestCase):
 
 	def test_slack_payload(self):
 		with StubServer() as stub:
-			stub.route("POST", "/hook", (200, None))
+			stub.route("POST", "/hook", (200, b"ok"))
 			Notifier(stub.url + "/hook", "slack", Http()).send("hello")
 			self.assertEqual(stub.requests[0].json(), {"text": "hello"})
+			# Slack's plain-text "ok" response should not cause logged warnings
+			with self.assertNoLogs("deployer", level="WARNING"):
+				Notifier(stub.url + "/hook", "slack", Http()).send("hello")
 
 	def test_failures_never_raise(self):
 		with StubServer() as stub:
 			stub.route("POST", "/hook", (500, {"error": "down"}))
 			Notifier(stub.url + "/hook", "discord", Http()).send("hello")
 		Notifier("http://127.0.0.1:9/hook", "discord", Http(timeout=1)).send("hello")
+
+	def test_failures_do_not_log_secrets(self):
+		import logging
+		secret_url = "http://127.0.0.1:12345/hook?token=secret123"
+		with StubServer() as stub:
+			stub.route("POST", "/hook", (500, {"error": "down"}))
+			with self.assertLogs("deployer", level="WARNING") as log_ctx:
+				Notifier(stub.url + "/hook", "discord", Http()).send("hello")
+			# Ensure URL is not in the warning
+			for message in log_ctx.output:
+				self.assertNotIn(stub.url, message)
+		# Timeout error should only log the exception type, not the URL
+		with self.assertLogs("deployer", level="WARNING") as log_ctx:
+			Notifier(secret_url, "discord", Http(timeout=0.001)).send("hello")
+		for message in log_ctx.output:
+			self.assertNotIn(secret_url, message)
+			self.assertNotIn("127.0.0.1", message)
 
 	def test_no_url_sends_nothing(self):
 		Notifier("", "discord", Http()).send("hello")
