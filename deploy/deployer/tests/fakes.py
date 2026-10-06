@@ -144,3 +144,81 @@ class FakeGitHub:
 
 	def fetch_manifest(self, release, scratch_dir):
 		return json.loads(self.assets[(release["tag_name"], "release.json")].decode("utf-8"))
+
+
+class FakeApi:
+	def __init__(self, name, health=None, schedule_error=None):
+		self.name = name
+		self.health = health or (lambda: True)
+		self.schedule_error = schedule_error
+		self.calls = []
+
+	def uptime(self):
+		self.calls.append("uptime")
+		if not self.health():
+			raise OSError("connection refused")
+		return 10
+
+	def schedule_shutdown(self, delay):
+		self.calls.append(("shutdown", delay))
+		if self.schedule_error:
+			raise self.schedule_error
+		return True
+
+	def cancel_shutdown(self):
+		self.calls.append("cancel")
+
+
+class FakePortainer:
+	def __init__(self, tag="old"):
+		self.tag = tag
+		self.deploys = []
+		self.states = {"realm_server_01": "exited", "world_node_01": "exited"}
+		self.ping_error = None
+		self.redeploy_error = None
+
+	def ping(self):
+		if self.ping_error:
+			raise self.ping_error
+
+	def current_tag(self):
+		return self.tag
+
+	def redeploy(self, tag):
+		self.deploys.append(tag)
+		if self.redeploy_error:
+			raise self.redeploy_error
+		self.tag = tag
+
+	def service_states(self):
+		return dict(self.states)
+
+
+class FakeNotifier:
+	def __init__(self):
+		self.messages = []
+
+	def send(self, text):
+		self.messages.append(text)
+
+
+class FakePatchDir:
+	def __init__(self, root, releases, current=None):
+		self.root = Path(root)
+		self.release_set = set(releases)
+		self.current = current
+		self.flips = []
+		self.pruned = []
+
+	def has_release(self, sha):
+		return sha in self.release_set
+
+	def flip_current(self, sha):
+		if sha not in self.release_set:
+			raise FileNotFoundError(sha)
+		self.flips.append(sha)
+		self.current = sha
+
+	def prune(self, keep, protect):
+		self.pruned.append((keep, set(protect)))
+		return []
