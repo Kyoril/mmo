@@ -98,6 +98,15 @@ jobs:
         shell: pwsh
         run: ./tools/gate/verify.ps1 -Tier full
 
+      # The summary alone, at a fixed path: publish reads it, whatever the logs artifact holds.
+      - name: Upload gate summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-summary
+          if-no-files-found: ignore
+          path: tools/gate/last_report.json
+
       - name: Upload gate report
         if: always()
         uses: actions/upload-artifact@v4
@@ -188,14 +197,14 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: gate-report
+          name: gate-summary
           path: gate
 
       - name: Build release.json
         run: |
           python3 tools/release/make_release_manifest.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
             --asset client-bin.zip=dist/client-bin.zip --asset symbols.zip=dist/symbols.zip \
-            --gate-report gate/tools/gate/last_report.json --out dist/release.json
+            --gate-report gate/last_report.json --out dist/release.json
 
       - name: Publish prerelease
         env:
