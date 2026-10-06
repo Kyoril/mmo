@@ -724,7 +724,22 @@ namespace mmo
 				continue;
 			}
 
+			// GPU timing per queue group of the camera view (only recorded while profiling).
+			const char* gpuScope = nullptr;
+			if (m_pixelShaderType == PixelShaderType::GBuffer)
+			{
+				gpuScope = groupId == RenderQueueGroupId::Main ? "GPU: GBuffer main group"
+					: groupId == RenderQueueGroupId::TerrainGeometry ? "GPU: GBuffer terrain group"
+					: "GPU: GBuffer other groups";
+				GraphicsDevice::Get().BeginGpuScope(gpuScope);
+			}
+
 			RenderQueueGroupObjects(*group);
+
+			if (gpuScope)
+			{
+				GraphicsDevice::Get().EndGpuScope();
+			}
 		}
 	}
 
@@ -945,6 +960,11 @@ namespace mmo
 	void Scene::RenderSingleObject(Renderable& renderable, uint32 groupId)
 	{
 		PROFILE_SCOPE("RenderSingleObject");
+
+		if (m_depthPrepass && m_pixelShaderType == PixelShaderType::ShadowMap && renderable.IsExcludedFromDepthPrepass())
+		{
+			return;
+		}
 
 		// Reuse a single RenderOperation (cleared, capacity retained) to avoid a per-draw heap
 		// allocation for its constant-buffer vectors.

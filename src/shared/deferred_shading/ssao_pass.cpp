@@ -213,13 +213,16 @@ namespace mmo
 		// --- Depth copy -------------------------------------------------------------------
 		// Radial depth into a compact R32F target at the AO resolution; the march and the blur
 		// sample it many times per pixel and are bound by those reads.
+		m_device.BeginGpuScope("GPU: SSAO depth copy");
 		m_depthRT->Activate();
 		m_device.SetViewport(0, 0, static_cast<int32>(m_targetWidth), static_cast<int32>(m_targetHeight), 0.0f, 1.0f);
 		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
 		m_ssaoDepthPs->Set();
 		m_device.Draw(6, 0);
+		m_device.EndGpuScope();
 
 		// --- AO march ---------------------------------------------------------------------
+		m_device.BeginGpuScope("GPU: SSAO march");
 		m_aoRT->Activate();
 		m_aoRT->Clear(ClearFlags::Color);
 		m_device.SetViewport(0, 0, static_cast<int32>(m_targetWidth), static_cast<int32>(m_targetHeight), 0.0f, 1.0f);
@@ -230,6 +233,7 @@ namespace mmo
 		m_ssaoPs->Set();
 
 		m_device.Draw(6, 0);
+		m_device.EndGpuScope();
 
 		// Release the normal target SRV so it cannot collide with render target bindings later.
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 1);

@@ -137,28 +137,23 @@ namespace mmo
         /// @brief Applies a coarse shadow-quality preset that trades visual quality for performance.
         /// @param level 0 = Low, 1 = Medium, 2 = High (anything higher is treated as High).
         /// @remark This controls the number of rendered cascades (each is a full scene geometry
-        ///         re-submission) and the number of PCF taps in the lighting shader. It deliberately
-        ///         does not touch the shadow-map resolution, which has its own setting.
-        void SetShadowQuality(int level)
+        ///         re-submission), the number of PCF taps in the lighting shader, and how many of the
+        ///         near cascades use the full shadow map size (the others use half of it). The base
+        ///         shadow map size has its own setting.
+        void SetShadowQuality(int level);
+
+        /// @brief Sets how far from the camera sun shadows reach, in world units.
+        /// @remark The cascades split this range, so a shorter distance both drops distant casters
+        ///         (most of the far cascades' cost in forests) and sharpens the near cascades.
+        void SetShadowDistance(const float distance)
         {
-            switch (level)
+            const float clamped = distance < 50.0f ? 50.0f : (distance > 1000.0f ? 1000.0f : distance);
+            if (m_cascadedShadowSetup->GetConfig().maxShadowDistance == clamped)
             {
-            case 0: // Low: 2 cascades, 4 PCF taps
-                m_cascadedShadowSetup->GetConfig().activeCascadeCount = 2;
-                m_pcfSampleCount = 4;
-                break;
-            case 1: // Medium: 3 cascades, 8 PCF taps
-                m_cascadedShadowSetup->GetConfig().activeCascadeCount = 3;
-                m_pcfSampleCount = 8;
-                break;
-            default: // High: 4 cascades, 16 PCF taps
-                m_cascadedShadowSetup->GetConfig().activeCascadeCount = NUM_SHADOW_CASCADES;
-                m_pcfSampleCount = 16;
-                break;
+                return;
             }
 
-            // Force a full (non-staggered) refresh of every cascade for the next few frames so any
-            // newly-activated cascade's shadow map is initialised before it is sampled.
+            m_cascadedShadowSetup->GetConfig().maxShadowDistance = clamped;
             m_shadowFrameCounter = 0;
         }
 
@@ -329,9 +324,12 @@ namespace mmo
         /// @brief Returns the shadow-map resolution to use for a given cascade index. Distant cascades
         ///        (index >= 2) render at half the base resolution (floored at 256) to cut shadow fill,
         ///        since their large world coverage per texel makes the resolution loss hard to notice.
+        /// @brief Resizes every cascade shadow map to its current GetCascadeShadowMapSize.
+        void ResizeCascadeShadowMaps();
+
         [[nodiscard]] uint16 GetCascadeShadowMapSize(uint32 cascadeIndex) const
         {
-            if (cascadeIndex < 2)
+            if (cascadeIndex < m_fullResolutionCascades)
             {
                 return m_shadowMapSize;
             }
@@ -467,6 +465,7 @@ namespace mmo
         float m_lightSize = 0.0268f;           // Size of the virtual light (smaller = sharper shadows)
         uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
         uint32 m_pcfSampleCount = 16;         // PCF taps per shadow lookup (shadow quality preset)
+        uint32 m_fullResolutionCascades = 2;  // Cascades rendered at the full shadow map size; the rest use half
         bool m_depthPrepassEnabled = false;   // Opaque depth pre-pass before the G-Buffer pass
 
         /// @brief Cached light render statistics from the last frame.

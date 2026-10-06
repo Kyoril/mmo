@@ -179,7 +179,8 @@ namespace mmo
 
 			// Opaque/unlit casters don't need a pixel shader to write shadow depth; binding none lets
 			// the GPU use its faster depth-only path. Masked materials still need the alpha-test shader.
-			if (pixelShaderType == PixelShaderType::ShadowMap && m_type != MaterialType::Masked
+			if (pixelShaderType == PixelShaderType::ShadowMap && !device.IsDepthPrepassActive()
+				&& (m_type != MaterialType::Masked || !device.AreAlphaTestedShadowsEnabled())
 				&& device.SupportsNullPixelShaderForShadows())
 			{
 				device.BindNullPixelShader();
@@ -207,13 +208,14 @@ namespace mmo
 		{
 			if (pixelShaderType == PixelShaderType::GBuffer && device.IsGBufferDepthPrepass())
 			{
-				// A depth pre-pass already wrote the front-most depth. Test LessEqual with depth
-				// write off so occluded pixels are early-Z rejected before this shader runs.
+				// A depth pre-pass already wrote the front-most depth. Test LessEqual so occluded
+				// pixels are early-Z rejected before this shader runs; keep depth writes for the
+				// renderables the pre-pass skipped (Renderable::IsExcludedFromDepthPrepass).
 				// (Must match Material::Apply, or instanced renderables like terrain — which use a
 				// MaterialInstance — would test Less against the equal pre-pass depth and vanish.)
 				device.SetDepthEnabled(true);
 				device.SetDepthTestComparison(DepthTestMethod::LessEqual);
-				device.SetDepthWriteEnabled(false);
+				device.SetDepthWriteEnabled(m_depthWrite);
 			}
 			else
 			{

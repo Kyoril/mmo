@@ -161,6 +161,7 @@ namespace mmo
 		static ConsoleVar *s_renderScaleVar = nullptr;
 
 		static ConsoleVar *s_depthPrepassVar = nullptr;
+	static ConsoleVar *s_shadowDistanceVar = nullptr;
 
 		static ConsoleVar *s_viewDistanceVar = nullptr;
 
@@ -2145,6 +2146,10 @@ namespace mmo
 		s_shadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("ShadowQuality", "Shadow detail preset: 0 = Low (2 cascades, 4 PCF taps), 1 = Medium (3/8), 2 = High (4/16). Lower values improve performance.", "2");
 		m_cvarChangedSignals += s_shadowQualityVar->Changed.connect(this, &WorldState::OnShadowQualityChanged);
 
+		// Applied together with the shadow quality, which has the renderer lookup and the logging.
+		s_shadowDistanceVar = ConsoleVarMgr::RegisterConsoleVar("gxShadowDistance", "How far sun shadows reach from the camera in metres (50 to 1000). Shorter is faster in forests and sharpens nearby shadows.", "250");
+		m_cvarChangedSignals += s_shadowDistanceVar->Changed.connect([this](ConsoleVar&, const std::string& oldValue) { OnShadowQualityChanged(*s_shadowQualityVar, oldValue); });
+
 		s_shadowTemporalVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTemporal", "Temporal cascade staggering: 1 = distant cascades refresh every few frames (faster), 0 = every cascade every frame.", "1");
 		m_cvarChangedSignals += s_shadowTemporalVar->Changed.connect(this, &WorldState::OnShadowTemporalChanged);
 
@@ -2156,7 +2161,7 @@ namespace mmo
 		// GPUs. Read directly by WorldRenderer each frame, so no change handler is required here.
 		s_renderScaleVar = ConsoleVarMgr::RegisterConsoleVar("gxRenderScale", "3D render resolution scale (0.25 to 1.0). Lower values improve performance by rendering the world at a lower resolution and upscaling.", "1.0");
 
-		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "0");
+		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "1");
 		m_cvarChangedSignals += s_depthPrepassVar->Changed.connect(this, &WorldState::OnDepthPrepassChanged);
 
 		// Screen-space ambient occlusion (visibility-bitmask / SSILVB occlusion core). All
@@ -2236,6 +2241,10 @@ namespace mmo
 		ConsoleVar* foliageCullingVar = ConsoleVarMgr::RegisterConsoleVar("gxFoliageInstanceCulling", "Cull grass and tree instances individually per render pass instead of drawing whole foliage cells. 1 = on (faster), 0 = off.", "1");
 		m_cvarChangedSignals += foliageCullingVar->Changed.connect([](ConsoleVar& var, const std::string&) { FoliageChunk::SetPerInstanceCullingEnabled(var.GetBoolValue()); });
 		FoliageChunk::SetPerInstanceCullingEnabled(foliageCullingVar->GetBoolValue());
+
+		ConsoleVar* shadowAlphaTestVar = ConsoleVarMgr::RegisterConsoleVar("gxShadowAlphaTest", "Alpha test cut-out materials (leaves, grass) in shadow maps. 0 renders them as solid shapes: much faster in forests, but leaves cast blocky shadows.", "1");
+		m_cvarChangedSignals += shadowAlphaTestVar->Changed.connect([](ConsoleVar& var, const std::string&) { GraphicsDevice::Get().SetAlphaTestedShadows(var.GetBoolValue()); });
+		GraphicsDevice::Get().SetAlphaTestedShadows(shadowAlphaTestVar->GetBoolValue());
 
 		RenderDebugFilter::hiddenInView = RenderDebugFilter::Parse(hideViewTypesVar->GetStringValue());
 		RenderDebugFilter::hiddenInShadows = RenderDebugFilter::Parse(hideShadowTypesVar->GetStringValue());
@@ -2363,6 +2372,11 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowClampBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("gxShadowDistance");
+		ConsoleVarMgr::UnregisterConsoleVar("gxShadowAlphaTest");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFoliageInstanceCulling");
+		ConsoleVarMgr::UnregisterConsoleVar("gxDebugHideViewTypes");
+		ConsoleVarMgr::UnregisterConsoleVar("gxDebugHideShadowTypes");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTemporal");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowLightStep");
 		ConsoleVarMgr::UnregisterConsoleVar("gxRenderScale");
@@ -6130,6 +6144,11 @@ namespace mmo
 		const int level = Clamp(var.GetIntValue(), 0, 2);
 		ILOG("Updating shadow quality to level " << level);
 		deferred->SetShadowQuality(level);
+
+		if (s_shadowDistanceVar)
+		{
+			deferred->SetShadowDistance(s_shadowDistanceVar->GetFloatValue());
+		}
 	}
 
 	void WorldState::OnShadowTemporalChanged(ConsoleVar &var, const std::string &oldValue)

@@ -163,6 +163,16 @@ namespace mmo
 		BenchmarkState s_benchmark;
 		scoped_connection s_idleConnection;
 
+		/// A console command waiting for the world (see ConsoleCommand_InWorld).
+		struct PendingWorldCommand
+		{
+			double delaySeconds = 0.0;
+			std::string command;
+		};
+
+		std::vector<PendingWorldCommand> s_pendingWorldCommands;
+		GameTime s_worldReadySince = 0;
+
 		/// Returns the value at the given percentile (0..100) of an unsorted sample list.
 		double Percentile(std::vector<double> values, const double percentile)
 		{
@@ -611,8 +621,72 @@ namespace mmo
 			s_benchmark.stepApplied = false;
 		}
 
+		void RunPendingWorldCommands(const GameTime timestamp)
+		{
+			if (!s_hooks.isWorldReady || !s_hooks.isWorldReady())
+			{
+				s_worldReadySince = 0;
+				return;
+			}
+
+			if (s_worldReadySince == 0)
+			{
+				s_worldReadySince = timestamp;
+			}
+
+			const double readySeconds = static_cast<double>(timestamp - s_worldReadySince) / 1000.0;
+			for (auto it = s_pendingWorldCommands.begin(); it != s_pendingWorldCommands.end();)
+			{
+				if (readySeconds < it->delaySeconds)
+				{
+					++it;
+					continue;
+				}
+
+				// Copy first: the command may queue further commands.
+				const std::string command = it->command;
+				it = s_pendingWorldCommands.erase(it);
+				Console::ExecuteCommand(command);
+				return;
+			}
+		}
+
+		/// inworld [delaySeconds] <command>: runs a console command once the world is loaded.
+		void ConsoleCommand_InWorld(const std::string&, const std::string& args)
+		{
+			PendingWorldCommand pending;
+			std::istringstream strm(args);
+			std::string first;
+			strm >> first;
+
+			char* end = nullptr;
+			const double delay = std::strtod(first.c_str(), &end);
+			if (end != first.c_str() && *end == '\0')
+			{
+				pending.delaySeconds = delay;
+				std::getline(strm >> std::ws, pending.command);
+			}
+			else
+			{
+				pending.command = args;
+			}
+
+			if (pending.command.empty())
+			{
+				ELOG("Usage: inworld [delaySeconds] <command>");
+				return;
+			}
+
+			s_pendingWorldCommands.push_back(std::move(pending));
+		}
+
 		void OnIdle(const float deltaSeconds, const GameTime timestamp)
 		{
+			if (!s_pendingWorldCommands.empty())
+			{
+				RunPendingWorldCommands(timestamp);
+			}
+
 			if (s_benchmark.phase == BenchmarkPhase::Idle)
 			{
 				return;
@@ -766,6 +840,9 @@ namespace mmo
 			"Records frame times in the world and writes a JSON report. Usage: benchmark [duration=20] [warmup=5] [orbit=360] [segments=8] [label=x] [out=file] [quit=0|1]. "
 			"Comparison: v0=cvar:value;cvar:value v1=... [n0=name] [dwell=2] [settle=0.75] measures each variant at every view, interleaved.");
 
+		Console::RegisterCommand("inworld", ConsoleCommand_InWorld, ConsoleCommandCategory::Debug,
+			"Runs a console command once the world is loaded. Usage: inworld [delaySeconds] <command>");
+
 		s_idleConnection = EventLoop::Idle.connect(&OnIdle);
 	}
 
@@ -774,6 +851,8 @@ namespace mmo
 		s_idleConnection.disconnect();
 		s_benchmark = BenchmarkState{};
 
+		s_pendingWorldCommands.clear();
+		Console::UnregisterCommand("inworld");
 		Console::UnregisterCommand("benchmark");
 		Console::UnregisterCommand("perfdump");
 	}

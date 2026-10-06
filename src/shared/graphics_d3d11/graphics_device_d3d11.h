@@ -182,9 +182,15 @@ namespace mmo
 
 		void SetTextureFilterCap(TextureFilter maxFilter) override;
 
+		void InvalidateBoundMaterial() override { m_lastBoundMaterial = nullptr; }
+
 		void BeginFrameGpuTimer() override;
 
 		void EndFrameGpuTimer() override;
+
+		void BeginGpuScope(const char* name) override;
+
+		void EndGpuScope() override;
 
 		[[nodiscard]] double GetLastFrameGpuTimeMs() const override { return m_lastFrameGpuTimeMs; }
 
@@ -406,6 +412,16 @@ namespace mmo
 		/// frames late so GetData never has to wait on the GPU.
 		static constexpr uint32 FrameGpuTimerLatency = 4;
 
+		/// A named GPU timing scope recorded inside a timed frame.
+		struct GpuScope
+		{
+			const char* name = nullptr;
+			ComPtr<ID3D11Query> begin;
+			ComPtr<ID3D11Query> end;
+			uint64 drawsAtBegin = 0;
+			uint64 primitivesAtBegin = 0;
+		};
+
 		/// One in-flight whole-frame GPU measurement.
 		struct FrameGpuTimer
 		{
@@ -413,7 +429,14 @@ namespace mmo
 			ComPtr<ID3D11Query> begin;
 			ComPtr<ID3D11Query> end;
 			bool pending = false;
+
+			/// Scope queries of this frame. The vector is reused; only the first scopeCount are live.
+			std::vector<GpuScope> scopes;
+			uint32 scopeCount = 0;
 		};
+
+		/// Indices (into the open frame's scopes) of the scopes that have begun but not ended.
+		std::vector<uint32> m_openGpuScopes;
 
 		FrameGpuTimer m_frameGpuTimers[FrameGpuTimerLatency];
 		uint32 m_frameGpuTimerIndex = 0;

@@ -175,6 +175,10 @@ namespace mmo
 		/// @copydoc Renderable::GetCastsShadows
 		[[nodiscard]] bool GetCastsShadows() const override;
 
+		/// @brief Procedural ground cover stays out of the depth pre-pass: its materials' depth and
+		///        G-Buffer alpha tests have been seen to disagree, and grass gains little from it.
+		[[nodiscard]] bool IsExcludedFromDepthPrepass() const override { return m_parent != nullptr; }
+
 		/// @copydoc Renderable::GetMaterial
 		[[nodiscard]] MaterialPtr GetMaterial() const override;
 

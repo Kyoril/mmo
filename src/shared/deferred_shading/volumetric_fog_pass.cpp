@@ -323,6 +323,7 @@ namespace mmo
 			shadowBuffer.BindToStage(ShaderType::ComputeShader, 3);
 
 			// --- Inject -----------------------------------------------------------------------
+			m_device.BeginGpuScope("GPU: Fog inject");
 			m_noiseVolume->Bind(ShaderType::ComputeShader, 0);
 			for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
 			{
@@ -340,8 +341,10 @@ namespace mmo
 			m_injectCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), groupCount(m_gridDepth));
 			m_device.ClearComputeBindings();
+			m_device.EndGpuScope();
 
 			// --- Temporal ---------------------------------------------------------------------
+			m_device.BeginGpuScope("GPU: Fog temporal and integrate");
 			const VolumeTexturePtr& temporalTarget = m_historyVolumes[m_historyIndex];
 			const VolumeTexturePtr& history = m_historyVolumes[1 - m_historyIndex];
 			m_injectVolume->Bind(ShaderType::ComputeShader, 0);
@@ -361,9 +364,11 @@ namespace mmo
 			m_integrateCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), 1);
 			m_device.ClearComputeBindings();
+			m_device.EndGpuScope();
 		}
 
 		// --- Composite ------------------------------------------------------------------------
+		m_device.BeginGpuScope("GPU: Fog composite");
 		m_device.SetDepthEnabled(false);
 		m_device.SetDepthWriteEnabled(false);
 		m_device.SetFillMode(FillMode::Solid);
@@ -404,6 +409,7 @@ namespace mmo
 		}
 
 		m_device.Draw(6, 0);
+		m_device.EndGpuScope();
 
 		// Cache hygiene only, not a hazard fix: this clears these slots from the device's texture bind
 		// cache. The next frame's lighting pass rebinds t2/t3 to its own targets before this pass's

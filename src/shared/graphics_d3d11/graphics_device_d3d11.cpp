@@ -1433,11 +1433,29 @@ namespace mmo
 				m_immContext->GetData(timer.end.Get(), &end, sizeof(end), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK &&
 				!disjoint.Disjoint && disjoint.Frequency != 0 && end >= begin)
 			{
-				m_lastFrameGpuTimeMs = static_cast<double>(end - begin) * 1000.0 / static_cast<double>(disjoint.Frequency);
+				const double frequency = static_cast<double>(disjoint.Frequency);
+				m_lastFrameGpuTimeMs = static_cast<double>(end - begin) * 1000.0 / frequency;
+
+				Profiler& profiler = Profiler::GetInstance();
+				for (uint32 i = 0; i < timer.scopeCount; ++i)
+				{
+					const GpuScope& scope = timer.scopes[i];
+					UINT64 scopeBegin = 0;
+					UINT64 scopeEnd = 0;
+					if (m_immContext->GetData(scope.begin.Get(), &scopeBegin, sizeof(scopeBegin), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK &&
+						m_immContext->GetData(scope.end.Get(), &scopeEnd, sizeof(scopeEnd), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK &&
+						scopeEnd >= scopeBegin)
+					{
+						profiler.AddTime(scope.name, static_cast<double>(scopeEnd - scopeBegin) * 1000.0 / frequency);
+					}
+				}
 			}
 
 			timer.pending = false;
 		}
+
+		timer.scopeCount = 0;
+		m_openGpuScopes.clear();
 
 		if (!timer.disjoint)
 		{
@@ -1468,12 +1486,78 @@ namespace mmo
 		}
 
 		FrameGpuTimer& timer = m_frameGpuTimers[m_frameGpuTimerIndex];
+
+		// Close scopes a caller left open, so their queries are complete pairs.
+		while (!m_openGpuScopes.empty())
+		{
+			EndGpuScope();
+		}
+
 		m_immContext->End(timer.end.Get());
 		m_immContext->End(timer.disjoint.Get());
 		timer.pending = true;
 
 		m_frameGpuTimerOpen = false;
 		m_frameGpuTimerIndex = (m_frameGpuTimerIndex + 1) % FrameGpuTimerLatency;
+	}
+
+	void GraphicsDeviceD3D11::BeginGpuScope(const char* name)
+	{
+		if (!m_frameGpuTimerOpen)
+		{
+			return;
+		}
+
+		// A runaway scope count would mean a missing EndGpuScope; stop recording rather than grow.
+		constexpr uint32 maxScopesPerFrame = 64;
+		FrameGpuTimer& timer = m_frameGpuTimers[m_frameGpuTimerIndex];
+		if (timer.scopeCount >= maxScopesPerFrame)
+		{
+			return;
+		}
+
+		if (timer.scopeCount == timer.scopes.size())
+		{
+			GpuScope scope;
+			D3D11_QUERY_DESC desc = {};
+			desc.Query = D3D11_QUERY_TIMESTAMP;
+			m_device->CreateQuery(&desc, scope.begin.GetAddressOf());
+			m_device->CreateQuery(&desc, scope.end.GetAddressOf());
+			if (!scope.begin || !scope.end)
+			{
+				return;
+			}
+
+			timer.scopes.push_back(std::move(scope));
+		}
+
+		GpuScope& scope = timer.scopes[timer.scopeCount];
+		scope.name = name;
+		scope.drawsAtBegin = m_totalDrawCount;
+		scope.primitivesAtBegin = m_totalPrimitiveCount;
+		m_immContext->End(scope.begin.Get());
+		m_openGpuScopes.push_back(timer.scopeCount);
+		++timer.scopeCount;
+	}
+
+	void GraphicsDeviceD3D11::EndGpuScope()
+	{
+		if (!m_frameGpuTimerOpen || m_openGpuScopes.empty())
+		{
+			return;
+		}
+
+		FrameGpuTimer& timer = m_frameGpuTimers[m_frameGpuTimerIndex];
+		const GpuScope& scope = timer.scopes[m_openGpuScopes.back()];
+		m_immContext->End(scope.end.Get());
+		m_openGpuScopes.pop_back();
+
+		// The geometry a scope submitted is known right away, unlike its GPU time.
+		Profiler& profiler = Profiler::GetInstance();
+		const std::string_view name(scope.name);
+		const std::string_view shortName = name.substr(0, 5) == "GPU: " ? name.substr(5) : name;
+		profiler.SetCounter("Draws: " + std::string(shortName), static_cast<double>(m_totalDrawCount - scope.drawsAtBegin));
+		profiler.SetCounter("Tris (k): " + std::string(shortName), static_cast<double>(m_totalPrimitiveCount - scope.primitivesAtBegin) / 1000.0);
 	}
 
 	void GraphicsDeviceD3D11::DestroyVertexDeclaration(VertexDeclaration& declaration)

@@ -33,7 +33,10 @@ param(
 	# Interleaved comparison variants as "name=cvar:value;cvar:value"
 	[string[]]$Compare = @(),
 	[double]$Dwell = 2,
-	[double]$Settle = 0.75
+	[double]$Settle = 0.75,
+	# Extra console commands for the startup script, run before the benchmark is armed
+	# (e.g. "inworld 2 script ShowUIPanel(OptionsFrame)")
+	[string[]]$Commands = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -81,6 +84,7 @@ foreach ($assignment in ($Set | ForEach-Object { $_ -split ',' })) {
 $execLines = @()
 $execLines += $overrideLines
 $execLines += "enterworld"
+$execLines += $Commands
 $variantArgs = ""
 for ($i = 0; $i -lt $Compare.Count; $i++) {
 	$parts = $Compare[$i] -split '=', 2

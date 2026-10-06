@@ -385,6 +385,43 @@ namespace mmo
 		/// @brief Returns whether G-Buffer depth pre-pass mode is currently active.
 		[[nodiscard]] bool IsGBufferDepthPrepass() const { return m_gbufferDepthPrepass; }
 
+		/// @brief Enables or disables the alpha test of masked materials in depth-only passes.
+		/// @remark When off, masked shadow casters (leaves, grass) render as solid geometry with no
+		///         pixel shader: much cheaper, but cut-outs cast solid shadows.
+		void SetAlphaTestedShadows(const bool enabled)
+		{
+			if (m_alphaTestedShadows != enabled)
+			{
+				m_alphaTestedShadows = enabled;
+				InvalidateBoundMaterial();
+			}
+		}
+
+		/// @brief Forgets which material is bound, so the next draw applies its material again.
+		/// @remark Needed when something that changes how a material applies (not the material
+		///         itself) changes, like the shadow alpha test above.
+		virtual void InvalidateBoundMaterial() {}
+
+		/// @brief Marks the main view's depth pre-pass as running.
+		/// @remark The pre-pass has to reject exactly the pixels the G-Buffer pass rejects, and every
+		///         G-Buffer shader alpha tests on its opacity - including materials not flagged as masked.
+		///         So during the pre-pass every material binds its depth shader, never the null pixel
+		///         shader that shadow passes use for supposedly solid casters.
+		void SetDepthPrepassActive(const bool active)
+		{
+			if (m_depthPrepassActive != active)
+			{
+				m_depthPrepassActive = active;
+				InvalidateBoundMaterial();
+			}
+		}
+
+		/// @brief Returns whether the main view's depth pre-pass is running.
+		[[nodiscard]] bool IsDepthPrepassActive() const { return m_depthPrepassActive; }
+
+		/// @brief Returns whether masked materials alpha test in depth-only passes.
+		[[nodiscard]] bool AreAlphaTestedShadowsEnabled() const { return m_alphaTestedShadows; }
+
 		virtual std::unique_ptr<MaterialCompiler> CreateMaterialCompiler() = 0;
 
 		virtual std::unique_ptr<ShaderCompiler> CreateShaderCompiler() = 0;
@@ -453,6 +490,15 @@ namespace mmo
 		/// @brief Marks the end of a frame for whole-frame GPU timing. See BeginFrameGpuTimer.
 		virtual void EndFrameGpuTimer() {}
 
+		/// @brief Starts a named GPU timing scope inside the current timed frame (see BeginFrameGpuTimer).
+		/// @remark The result is reported to the profiler under the given name once it resolves, a few
+		///         frames later. Scopes may nest. Does nothing while no frame timer is running.
+		/// @param name Name of the scope. Must stay valid for the life of the device (a string literal).
+		virtual void BeginGpuScope(const char* name) {}
+
+		/// @brief Ends the innermost GPU timing scope started with BeginGpuScope.
+		virtual void EndGpuScope() {}
+
 		/// @brief Returns the GPU time of the most recently resolved timed frame in milliseconds.
 		/// @return The GPU time, or a negative value when no measurement is available.
 		[[nodiscard]] virtual double GetLastFrameGpuTimeMs() const { return -1.0; }
@@ -502,6 +548,8 @@ namespace mmo
 		DepthTestMethod m_depthComparison { DepthTestMethod::Always };
 		DepthTestMethod m_restoreDepthComparison { DepthTestMethod::Always };
 		bool m_gbufferDepthPrepass { false };
+		bool m_alphaTestedShadows { true };
+		bool m_depthPrepassActive { false };
 		/// Keyed by address so destroying one is O(1): every VertexData owns one of each.
 		std::unordered_map<const VertexDeclaration*, std::unique_ptr<VertexDeclaration>> m_vertexDeclarations;
 		std::unordered_map<const VertexBufferBinding*, std::unique_ptr<VertexBufferBinding>> m_vertexBufferBindings;
