@@ -1,2 +1,3 @@
 data/world/atlas/*.json text eol=lf
 deploy/patch/source.txt text eol=lf
+deploy/deployer/deployer.sh text eol=lf

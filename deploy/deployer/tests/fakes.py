@@ -224,3 +224,32 @@ class FakePatchDir:
 	def prune(self, keep, protect):
 		self.pruned.append((keep, set(protect)))
 		return []
+
+
+class FakeStager:
+	def __init__(self):
+		self.staged = []
+		self.error = None
+		self.manifests = {}
+
+	def stage(self, release):
+		self.staged.append(release["target_commitish"])
+		if self.error:
+			raise self.error
+		return self.manifests.get(release["target_commitish"], {"changes": ["fix(loot): roll on the right table"]})
+
+
+class FakeMaintenance:
+	def __init__(self, outcome="deployed", rollback_ok=True):
+		self.outcome = outcome
+		self.rollback_ok = rollback_ok
+		self.runs = []
+		self.rollbacks = []
+
+	def run(self, state):
+		self.runs.append(state.staged)
+		return self.outcome
+
+	def rollback_to(self, sha):
+		self.rollbacks.append(sha)
+		return self.rollback_ok
