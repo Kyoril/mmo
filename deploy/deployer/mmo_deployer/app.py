@@ -140,7 +140,7 @@ class Deployer:
 					_short(sha), _short(state.live), sha))
 			else:
 				state.paused = True
-				self.notifier.send("MANUAL INTERVENTION REQUIRED: release {} failed and the rollback did not recover. The deployer is paused.".format(_short(sha)))
+				self.notifier.send("MANUAL INTERVENTION REQUIRED: maintenance for {} did not complete and the stack could not be recovered automatically. The deployer is paused; the release is marked bad (deployer unbad {} after fixing).".format(_short(sha), sha))
 		return outcome
 
 	def _promote(self, state, now):
@@ -150,11 +150,23 @@ class Deployer:
 		state.staged = None
 		state.staged_tag = None
 		state.staged_changes = []
-		self.patchdir.prune(self.cfg.keep_releases, {sha for sha in (state.live, state.previous_live) if sha})
-		prune_backups(Path(self.cfg.state_dir) / "backups", self.cfg.keep_backups)
+		# Durable before any best-effort cleanup, so a crash cannot forget the promotion.
+		save_state(self.state_path, state)
 		news = self.patchdir.root / "launcher" / "launcher.json"
-		if not add_patch_note(news, now.strftime("%Y-%m-%d"), changes):
-			log.warning("no launcher.json at %s; patch notes not published", news)
+		steps = (
+			lambda: self.patchdir.prune(self.cfg.keep_releases, {sha for sha in (state.live, state.previous_live) if sha}),
+			lambda: prune_backups(Path(self.cfg.state_dir) / "backups", self.cfg.keep_backups),
+			lambda: add_patch_note(news, now.strftime("%Y-%m-%d"), changes),
+		)
+		for index, step in enumerate(steps):
+			try:
+				result = step()
+			except OSError as error:
+				log.warning("post-deploy cleanup step failed: %s", error)
+				self.notifier.send("post-deploy cleanup step failed: {}".format(error))
+				continue
+			if index == 2 and not result:
+				log.warning("no launcher.json at %s; patch notes not published", news)
 		lines = "\n".join("- " + change for change in changes[:20])
 		self.notifier.send("Release {} is live.\n{}".format(_short(state.live), lines))
 
@@ -164,10 +176,19 @@ class Deployer:
 		for path in sorted(self.requests_dir.glob("*.json")):
 			try:
 				request = json.loads(path.read_text(encoding="utf-8"))
-				self._apply_request(state, request["command"], list(request.get("args") or []))
-			except (ValueError, KeyError, TypeError) as error:
+				command = request["command"]
+				args = list(request.get("args") or [])
+			except (ValueError, KeyError, TypeError, OSError) as error:
 				log.error("dropping malformed request %s: %s", path.name, error)
-			path.unlink()
+				command = None
+			# Removed before it is applied: a request that raises must never be retried.
+			path.unlink(missing_ok=True)
+			if command is not None:
+				try:
+					self._apply_request(state, command, args)
+				except Exception as error:
+					log.exception("request %s failed", command)
+					self.notifier.send("Request {} failed: {}".format(command, type(error).__name__))
 			save_state(self.state_path, state)
 
 	def _apply_request(self, state, command, args):
@@ -203,6 +224,9 @@ class Deployer:
 		if not state.staged or state.staged == state.live:
 			self.notifier.send("deploy-now: nothing new is staged")
 			return
+		# Same guard as the scheduled path: no second maintenance in this window.
+		state.last_maintenance_date = self.clock.now().date().isoformat()
+		save_state(self.state_path, state)
 		self.run_maintenance(state)
 
 	def _manual_rollback(self, state):

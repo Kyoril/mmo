@@ -4,6 +4,7 @@ import datetime
 import json
 import tempfile
 import unittest
+import zoneinfo
 from pathlib import Path
 
 from mmo_deployer.app import Deployer, write_request
@@ -14,6 +15,10 @@ from mmo_deployer.state import State, load_state, save_state
 from .fakes import FakeClock, FakeGitHub, FakeMaintenance, FakeNotifier, FakePatchDir, FakeStager, make_config
 
 UTC = datetime.timezone.utc
+try:
+	BERLIN = zoneinfo.ZoneInfo("Europe/Berlin")
+except Exception:
+	BERLIN = None
 NEW = "n" * 40
 OLD = "o" * 40
 
@@ -202,6 +207,59 @@ class AppTests(unittest.TestCase):
 		self.assertIsNone(state.staged)
 		self.assertIn(NEW, state.bad)
 		self.assertTrue(any("MANUAL INTERVENTION" in m for m in self.notifier.messages))
+
+	def test_poison_request_is_dropped_and_does_not_block(self):
+		save_state(self.state_path, State(live=OLD, bad=[NEW]))
+		write_request(self.cfg.state_dir, "unbad", [])
+		write_request(self.cfg.state_dir, "pause", [])
+		self.app.tick()
+		self.assertEqual(list((self.cfg.state_dir / "requests").glob("*.json")), [])
+		self.assertTrue(self.state().paused)
+		self.assertTrue(any("failed" in m for m in self.notifier.messages))
+
+	def test_promotion_is_durable_when_cleanup_fails(self):
+		def broken(keep, protect):
+			raise OSError("disk")
+
+		self.patchdir.prune = broken
+		save_state(self.state_path, State(live=OLD, staged=NEW))
+		self.clock.current = at(4, 46)
+		self.app.tick()
+		state = self.state()
+		self.assertEqual(state.live, NEW)
+		self.assertEqual(state.previous_live, OLD)
+		self.assertIsNone(state.staged)
+		self.assertTrue(any("is live" in m for m in self.notifier.messages))
+		self.assertTrue(any("cleanup step failed" in m for m in self.notifier.messages))
+
+	def test_window_start_is_inclusive_and_end_exclusive(self):
+		save_state(self.state_path, State(live=OLD, staged=NEW))
+		self.clock.current = at(4, 44)
+		self.app.next_poll = at(23, 0)
+		self.app.tick()
+		self.assertEqual(self.maintenance.runs, [])
+		self.clock.current = at(5, 45)
+		self.app.tick()
+		self.assertEqual(self.maintenance.runs, [])
+
+	@unittest.skipUnless(BERLIN, "zoneinfo data unavailable")
+	def test_fall_back_day_runs_once(self):
+		self.clock.current = datetime.datetime(2026, 10, 25, 4, 50, tzinfo=BERLIN)
+		save_state(self.state_path, State(live=OLD, staged=NEW))
+		self.app.next_poll = self.clock.current + datetime.timedelta(hours=5)
+		self.app.tick()
+		self.clock.current = datetime.datetime(2026, 10, 25, 4, 55, tzinfo=BERLIN)
+		self.app.tick()
+		self.assertEqual(self.maintenance.runs, [NEW])
+
+	def test_aborted_deploy_now_in_window_runs_once(self):
+		self.maintenance.outcome = Outcome.ABORTED
+		save_state(self.state_path, State(live=OLD, staged=NEW))
+		write_request(self.cfg.state_dir, "deploy-now", [])
+		self.clock.current = at(4, 50)
+		self.app.next_poll = at(23, 0)
+		self.app.tick()
+		self.assertEqual(self.maintenance.runs, [NEW])
 
 	def test_malformed_request_is_dropped(self):
 		requests = self.cfg.state_dir / "requests"

@@ -20,8 +20,6 @@ from .stage import Stager
 from .state import load_state
 from .web import Http
 
-REQUEST_COMMANDS = ("pause", "resume", "stage-now", "deploy-now", "rollback", "unbad")
-
 
 def build_deployer(cfg, clock=None, backup=None, compiler_command=None, github_api="https://api.github.com"):
 	clock = clock or Clock(cfg.timezone)
@@ -53,7 +51,7 @@ def main(argv=None, env=None):
 	sub.add_parser("pause", help="skip staging and maintenance until resumed")
 	sub.add_parser("resume")
 	sub.add_parser("stage-now", help="poll GitHub on the next tick")
-	deploy_now = sub.add_parser("deploy-now", help="run the maintenance now (with countdown)")
+	deploy_now = sub.add_parser("deploy-now", help="run the maintenance now (with countdown), even when paused")
 	deploy_now.add_argument("sha", nargs="?")
 	sub.add_parser("rollback", help="return to the previous live release immediately")
 	unbad = sub.add_parser("unbad", help="allow a rolled-back release to be staged again")
