@@ -1,6 +1,7 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -9,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from mmo_deployer.patchdir import PatchDir
-from mmo_deployer.stage import StageError, Stager, select_release
+from mmo_deployer.stage import COMPILER_TIMEOUT_S, GIT_TIMEOUT_S, StageError, Stager, select_release
 from mmo_deployer.state import State
 
 from .fakes import CAN_SYMLINK, FakeGitHub, make_config, make_git_repo, make_release_assets
@@ -142,6 +143,45 @@ class StagerTests(unittest.TestCase):
 	def test_zip_without_source_txt(self):
 		with self.assertRaises(StageError):
 			self.stager.stage(self._release(source_txt=None))
+		self._assert_nothing_left()
+
+	def _recording_run(self, timeout_on=None):
+		calls = []
+
+		def run(command, **kwargs):
+			calls.append((command, kwargs))
+			if timeout_on and timeout_on in command:
+				raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+			return subprocess.run(command, **kwargs)
+
+		self.stager.run = run
+		return calls
+
+	def test_git_runs_without_prompts_and_with_timeouts(self):
+		calls = self._recording_run()
+		self.stager.stage(self._release())
+		git_calls = [(c, k) for c, k in calls if c[0] == "git"]
+		self.assertGreaterEqual(len(git_calls), 3)
+		for command, kwargs in git_calls:
+			self.assertEqual(command[1:5], ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=300"])
+			self.assertEqual(kwargs["env"]["GIT_TERMINAL_PROMPT"], "0")
+			self.assertEqual(kwargs["timeout"], GIT_TIMEOUT_S)
+		compiler = [(c, k) for c, k in calls if c[0] != "git"]
+		self.assertEqual(len(compiler), 1)
+		self.assertEqual(compiler[0][1]["timeout"], COMPILER_TIMEOUT_S)
+
+	def test_git_timeout_is_a_stage_error(self):
+		self._recording_run(timeout_on="fetch")
+		with self.assertRaises(StageError) as ctx:
+			self.stager.stage(self._release())
+		self.assertIn("git fetch timed out after {} s".format(GIT_TIMEOUT_S), str(ctx.exception))
+		self._assert_nothing_left()
+
+	def test_compiler_timeout_is_a_stage_error(self):
+		self._recording_run(timeout_on="zlib")
+		with self.assertRaises(StageError) as ctx:
+			self.stager.stage(self._release())
+		self.assertIn("timed out after {} s".format(COMPILER_TIMEOUT_S), str(ctx.exception))
 		self._assert_nothing_left()
 
 	def test_ungated_release_is_refused(self):

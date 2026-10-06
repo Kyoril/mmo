@@ -13,6 +13,11 @@ from .web import HttpError
 
 log = logging.getLogger("deployer")
 
+GIT_TIMEOUT_S = 1800
+COMPILER_TIMEOUT_S = 3 * 3600
+# Abort a fetch that stalls below 1 KB/s for 5 minutes instead of hanging the deployer.
+GIT_OPTIONS = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=300"]
+
 
 class StageError(Exception):
 	pass
@@ -98,7 +103,8 @@ class Stager:
 			shutil.rmtree(tmp)
 		self.patchdir.releases.mkdir(parents=True, exist_ok=True)
 		self._run(self.compiler_command + [
-			"-s", str(self.patch_source), "-o", str(tmp), "-c", "zlib", "-j", str(self.cfg.compiler_threads)])
+			"-s", str(self.patch_source), "-o", str(tmp), "-c", "zlib", "-j", str(self.cfg.compiler_threads)],
+			COMPILER_TIMEOUT_S)
 		self._sanity_check(tmp, binaries)
 
 		final = self.patchdir.release_path(commit)
@@ -111,11 +117,17 @@ class Stager:
 	def _checkout_data(self, data_commit):
 		if not (self.data_checkout / ".git").exists():
 			self.data_checkout.parent.mkdir(parents=True, exist_ok=True)
-			self._run(["git", "clone", "--quiet", "--no-checkout", self.cfg.data_repo_url, str(self.data_checkout)])
-		git = ["git", "-C", str(self.data_checkout)]
-		self._run(git + ["fetch", "--quiet", "origin", data_commit])
-		self._run(git + ["checkout", "--quiet", "--force", data_commit])
-		self._run(git + ["clean", "-ffdxq"])
+			self._git(["clone", "--quiet", "--no-checkout", self.cfg.data_repo_url, str(self.data_checkout)])
+		here = ["-C", str(self.data_checkout)]
+		self._git(here + ["fetch", "--quiet", "origin", data_commit])
+		self._git(here + ["checkout", "--quiet", "--force", data_commit])
+		self._git(here + ["clean", "-ffdxq"])
+
+	def _git(self, args):
+		# Never wait for credentials on a terminal nobody is watching.
+		env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+		subcommand = args[2] if args[0] == "-C" else args[0]
+		self._run(["git"] + GIT_OPTIONS + args, GIT_TIMEOUT_S, env, "git " + subcommand)
 
 	def _sanity_check(self, output, binaries):
 		listing = output / "list.txt"
@@ -126,8 +138,12 @@ class Stager:
 			if name not in text:
 				raise StageError("list.txt does not mention {}".format(name))
 
-	def _run(self, command):
-		result = self.run(command, capture_output=True, text=True)
+	def _run(self, command, timeout, env=None, name=None):
+		name = name or " ".join(command[:3])
+		try:
+			result = self.run(command, capture_output=True, text=True, timeout=timeout, env=env)
+		except subprocess.TimeoutExpired:
+			raise StageError("{} timed out after {} s".format(name, timeout))
 		if result.returncode != 0:
 			detail = (result.stderr or result.stdout or "").strip()[-2000:]
-			raise StageError("{} failed ({}): {}".format(" ".join(command[:3]), result.returncode, detail))
+			raise StageError("{} failed ({}): {}".format(name, result.returncode, detail))
