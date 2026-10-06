@@ -437,6 +437,12 @@ namespace mmo
 		/// terrain occlusion-culling state machine and cause horizon flicker.
 		void SetReuseRenderQueue(bool value) { m_reuseRenderQueue = value; }
 
+		/// @brief Whether this pass redraws the queue a preceding pass of the same view built (the
+		///        G-Buffer pass after the depth pre-pass).
+		/// @remark Renderables that change per-frame state while drawing (terrain LOD, occlusion
+		///         queries) must leave it alone in such a pass, so both passes draw identical geometry.
+		[[nodiscard]] bool IsReusingRenderQueue() const { return m_reuseRenderQueue; }
+
 		/// @brief When set, a ShadowMap-typed Render() (used for the deferred depth pre-pass of the
 		/// main view) builds the full visible set rather than only shadow casters, so the queue can
 		/// be reused by the following G-Buffer pass without dropping non-shadow-casting objects.

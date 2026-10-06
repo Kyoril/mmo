@@ -287,8 +287,10 @@ namespace mmo
 		{
 			// Shadow cascades draw the tile with the LOD the main view chose. Updating LOD from a
 			// cascade camera would thrash index buffers every pass, and an occlusion query issued here
-			// would measure the shadow map instead of the screen.
-			if (scene.IsShadowCasterPass())
+			// would measure the shadow map instead of the screen. The G-Buffer pass after a depth
+			// pre-pass must draw exactly the mesh the pre-pass drew (a neighbour may have changed LOD
+			// since, re-stitching this tile), and the pre-pass already issued the occlusion query.
+			if (scene.IsShadowCasterPass() || scene.IsReusingRenderQueue())
 			{
 				return Renderable::PreRender(scene, graphicsDevice, camera);
 			}
@@ -333,8 +335,9 @@ namespace mmo
 
 		void Tile::PostRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
 		{
-			// End occlusion query after the draw call (none was begun in a shadow cascade pass)
-			if (!scene.IsShadowCasterPass() && m_occlusionQuery && m_page.GetTerrain().IsOcclusionCullingEnabled())
+			// End occlusion query after the draw call (none was begun in a shadow cascade pass or in
+			// the G-Buffer pass that reuses the depth pre-pass queue)
+			if (!scene.IsShadowCasterPass() && !scene.IsReusingRenderQueue() && m_occlusionQuery && m_page.GetTerrain().IsOcclusionCullingEnabled())
 			{
 				m_occlusionQuery->End();
 			}
