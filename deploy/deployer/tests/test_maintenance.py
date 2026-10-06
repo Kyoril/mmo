@@ -1,6 +1,7 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 import datetime
+import http.client
 import itertools
 import tempfile
 import unittest
@@ -124,6 +125,40 @@ class MaintenanceTests(unittest.TestCase):
 		start = self.clock.now()
 		self.make().run(self.state)
 		self.assertGreaterEqual((self.clock.now() - start).total_seconds(), VERIFY_TIMEOUT_S)
+
+	def _failing_backup(self, sha):
+		raise BackupError("disk full")
+
+	def test_backup_failure_restart_raises_is_failed(self):
+		self.portainer.redeploy_error = OSError("down")
+		self.assertEqual(self.make(backup=self._failing_backup).run(self.state), Outcome.FAILED)
+		self.assertTrue(any("MANUAL INTERVENTION" in m for m in self.notifier.messages))
+
+	def test_backup_failure_without_live_release_is_failed(self):
+		self.assertEqual(self.make(backup=self._failing_backup).run(State(live=None, staged="new")), Outcome.FAILED)
+		self.assertEqual(self.portainer.deploys, [])
+
+	def test_backup_failure_unhealthy_restart_is_failed(self):
+		self.realm_a.health = lambda: not self.portainer.deploys
+		self.assertEqual(self.make(backup=self._failing_backup).run(self.state), Outcome.FAILED)
+		self.assertEqual(self.patchdir.flips, [])
+
+	def test_http_client_error_during_redeploy_rolls_back(self):
+		self.portainer.redeploy_error = http.client.IncompleteRead(b"")
+		self.portainer.redeploy_error_tags = {"new"}
+		self.assertEqual(self.make().run(self.state), Outcome.ROLLED_BACK)
+		self.assertEqual(self.portainer.deploys, ["new", "old"])
+
+	def test_realm_already_shutting_down_is_not_cancelled(self):
+		self.realm_a.schedule_result = False
+		self.realm_b.schedule_error = HttpError(503, "unavailable", "x")
+		self.assertEqual(self.make().run(self.state), Outcome.ABORTED)
+		self.assertNotIn("cancel", self.realm_a.calls)
+
+	def test_missing_service_state_counts_as_not_exited(self):
+		self.portainer.states = {"realm_server_01": "exited"}
+		self.assertEqual(self.make().run(self.state), Outcome.DEPLOYED)
+		self.assertGreaterEqual(self.clock.slept, self.cfg.countdown_s + EXIT_GRACE_S)
 
 
 if __name__ == "__main__":

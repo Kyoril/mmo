@@ -151,6 +151,7 @@ class FakeApi:
 		self.name = name
 		self.health = health or (lambda: True)
 		self.schedule_error = schedule_error
+		self.schedule_result = True
 		self.calls = []
 
 	def uptime(self):
@@ -163,7 +164,7 @@ class FakeApi:
 		self.calls.append(("shutdown", delay))
 		if self.schedule_error:
 			raise self.schedule_error
-		return True
+		return self.schedule_result
 
 	def cancel_shutdown(self):
 		self.calls.append("cancel")
@@ -176,6 +177,7 @@ class FakePortainer:
 		self.states = {"realm_server_01": "exited", "world_node_01": "exited"}
 		self.ping_error = None
 		self.redeploy_error = None
+		self.redeploy_error_tags = None
 
 	def ping(self):
 		if self.ping_error:
@@ -186,7 +188,7 @@ class FakePortainer:
 
 	def redeploy(self, tag):
 		self.deploys.append(tag)
-		if self.redeploy_error:
+		if self.redeploy_error and (self.redeploy_error_tags is None or tag in self.redeploy_error_tags):
 			raise self.redeploy_error
 		self.tag = tag
 

@@ -6,6 +6,7 @@ fails after it rolls back to the previous release.
 """
 
 import datetime
+import http.client
 import logging
 
 from .backup import BackupError
@@ -19,7 +20,7 @@ POLL_S = 15
 # A crash-looping server can answer once between restarts.
 HEALTHY_ROUNDS = 2
 
-_REMOTE_ERRORS = (HttpError, OSError, ValueError, KeyError)
+_REMOTE_ERRORS = (HttpError, OSError, ValueError, KeyError, http.client.HTTPException, TypeError, AttributeError)
 
 
 class Outcome:
@@ -32,7 +33,9 @@ class Outcome:
 
 
 class Abort(Exception):
-	"""Stopped before anything changed on the live stack."""
+	"""Stopped before anything changed on the live stack.
+
+	Outcome.ABORTED means: release not deployed, live release running."""
 
 
 def _short(sha):
@@ -77,13 +80,20 @@ class Maintenance:
 		try:
 			self.backup(sha)
 		except (BackupError, OSError) as error:
-			tag = self.portainer.current_tag()
-			self.notifier.send("Database backup failed ({}); restarting the stack on the current release {}.".format(error, tag))
+			self.notifier.send("Database backup failed ({}); restarting the stack on the current release {}.".format(error, _short(state.live)))
+			if not state.live:
+				self.notifier.send("MANUAL INTERVENTION REQUIRED: no live release to restart after the backup failure.")
+				return Outcome.FAILED
 			try:
-				self.portainer.redeploy(tag)
+				self.portainer.redeploy(state.live)
+				restarted = self._verify()
 			except _REMOTE_ERRORS as restart_error:
-				self.notifier.send("MANUAL INTERVENTION REQUIRED: restart on {} failed: {}".format(tag, restart_error))
-			return Outcome.ABORTED
+				log.error("restart on %s failed: %s", state.live, restart_error)
+				restarted = False
+			if restarted:
+				return Outcome.ABORTED
+			self.notifier.send("MANUAL INTERVENTION REQUIRED: restart on {} failed or is unhealthy.".format(_short(state.live)))
+			return Outcome.FAILED
 
 		try:
 			self.patchdir.flip_current(sha)
@@ -128,8 +138,9 @@ class Maintenance:
 		accepted = []
 		for realm in self.realms:
 			try:
-				realm.schedule_shutdown(self.cfg.countdown_s)
-				accepted.append(realm)
+				# False means a shutdown is already due (not ours); never cancel that one.
+				if realm.schedule_shutdown(self.cfg.countdown_s):
+					accepted.append(realm)
 			except _REMOTE_ERRORS as error:
 				for other in accepted:
 					try:
@@ -143,7 +154,7 @@ class Maintenance:
 		while self.clock.now() < deadline:
 			try:
 				states = self.portainer.service_states()
-				if all(states.get(service) != "running" for service in self.cfg.wait_services):
+				if all(service in states and states[service] != "running" for service in self.cfg.wait_services):
 					return True
 			except _REMOTE_ERRORS as error:
 				log.warning("could not read container states: %s", error)
