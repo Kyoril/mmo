@@ -58,6 +58,26 @@ class AppTests(unittest.TestCase):
 		self.assertTrue(any("Staged" in m for m in self.notifier.messages))
 		self.assertEqual(self.maintenance.runs, [])
 
+	def test_staging_prunes_old_releases(self):
+		save_state(self.state_path, State(live=OLD, previous_live="p" * 40))
+		self.app.tick()
+		self.assertEqual(self.patchdir.pruned, [(3, {NEW, OLD, "p" * 40})])
+
+	def test_failed_staging_does_not_prune(self):
+		self.stager.error = StageError("git fetch failed")
+		self.app.tick()
+		self.assertEqual(self.patchdir.pruned, [])
+
+	def test_prune_failure_after_staging_is_reported_but_harmless(self):
+		def broken(keep, protect):
+			raise OSError("disk")
+
+		self.patchdir.prune = broken
+		self.app.tick()
+		self.assertEqual(self.state().staged, NEW)
+		self.assertTrue(any("post-stage cleanup failed" in m for m in self.notifier.messages))
+		self.assertTrue(any("Staged" in m for m in self.notifier.messages))
+
 	def test_poll_interval_is_respected(self):
 		self.app.tick()
 		self.stager.staged.clear()
@@ -94,7 +114,8 @@ class AppTests(unittest.TestCase):
 		self.assertEqual(state.previous_live, OLD)
 		self.assertIsNone(state.staged)
 		self.assertEqual(state.last_maintenance_date, "2026-10-07")
-		self.assertEqual(self.patchdir.pruned, [(3, {NEW, OLD})])
+		# Once after staging (protecting live and staged), once after promotion.
+		self.assertEqual(self.patchdir.pruned, [(3, {NEW, OLD}), (3, {NEW, OLD})])
 		self.assertEqual(json.loads(news.read_text(encoding="utf-8"))["patches"][0]["title"], "Update 2026-10-07")
 		self.assertTrue(any("is live" in m for m in self.notifier.messages))
 

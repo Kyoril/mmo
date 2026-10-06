@@ -89,6 +89,7 @@ Notifications:
 | `rollback: there is no previous release to return to` | `rollback` requested but `previous_live` is empty. |
 | `deploy-now: ...` | Reply to `deploy-now`: could not list releases, no release for that sha, or nothing new is staged. |
 | `post-deploy cleanup step failed: ...` | Pruning releases/backups or the patch note failed after a successful deploy; harmless. |
+| `post-stage cleanup failed: ...` | Pruning old releases after staging failed; the staged release is fine, check the patch disk. |
 | `Release <sha> failed its health check; rolling back` | Verify failed, rolling back. |
 | `Release <sha> was rolled back` | Rollback healthy; release marked bad. |
 | `Release <sha> is live` | Success, with the change list. |
@@ -97,6 +98,8 @@ Notifications:
 | `Request <cmd> failed` | A CLI request crashed and was dropped. |
 
 Backups: `/state/backups/<timestamp>-<sha8>/` in the `deployer-state` volume, one `<db>.sql.gz` per database. Restore with `gunzip -c <db>.sql.gz | mysql <db>`.
+
+Disk budget: plan for roughly `KEEP_RELEASES + 1` compressed client data sets under `/srv/mmo-patch/releases` (old releases are pruned after every stage and every deploy; live, previous live and staged are never pruned), plus the ~9 GB `mmo-data` checkout in the `deployer-state` volume, plus `KEEP_BACKUPS` (7) DB backups.
 
 ## 5. Failure playbook
 

@@ -129,6 +129,12 @@ class Deployer:
 		state.staged_tag = release["tag_name"]
 		state.staged_changes = list(manifest.get("changes") or [])
 		record(state, self.clock.now(), "staged", commit=commit, tag=release["tag_name"])
+		# Releases that never go live (replaced while staged, or rolled back) would pile up otherwise.
+		try:
+			self.patchdir.prune(self.cfg.keep_releases, {sha for sha in (state.live, state.previous_live, state.staged) if sha})
+		except OSError as error:
+			log.warning("pruning releases after staging failed: %s", error)
+			self.notifier.send("post-stage cleanup failed: {}".format(error))
 		lines = "\n".join("- " + change for change in state.staged_changes[:20])
 		self.notifier.send("Staged {} ({} changes) for the {} maintenance.\n{}".format(
 			release["tag_name"], len(state.staged_changes), self.cfg.maintenance_at.strftime("%H:%M"), lines))
