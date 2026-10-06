@@ -155,6 +155,22 @@ class MaintenanceTests(unittest.TestCase):
 		self.assertEqual(self.make().run(self.state), Outcome.ABORTED)
 		self.assertNotIn("cancel", self.realm_a.calls)
 
+	def test_world_node_restarting_after_deploy_rolls_back(self):
+		self.portainer.deployed_states = lambda tag: {
+			"realm_server_01": "running", "world_node_01": "restarting" if tag == "new" else "running"}
+		self.assertEqual(self.make().run(self.state), Outcome.ROLLED_BACK)
+		self.assertEqual(self.portainer.deploys, ["new", "old"])
+		self.assertEqual(self.patchdir.flips, ["new", "old"])
+
+	def test_missing_service_after_deploy_is_unhealthy(self):
+		self.portainer.deployed_states = lambda tag: {"realm_server_01": "running"}
+		self.assertEqual(self.make().run(self.state), Outcome.FAILED)
+
+	def test_unreadable_container_states_count_as_unhealthy(self):
+		maintenance = self.make()
+		self.portainer.states_error = OSError("portainer down")
+		self.assertFalse(maintenance._healthy())
+
 	def test_missing_service_state_counts_as_not_exited(self):
 		self.portainer.states = {"realm_server_01": "exited"}
 		self.assertEqual(self.make().run(self.state), Outcome.DEPLOYED)

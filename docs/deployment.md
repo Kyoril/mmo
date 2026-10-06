@@ -7,7 +7,7 @@ Design: [docs/superpowers/specs/2026-10-06-nightly-deploy-design.md](superpowers
 1. 00:30 UTC (02:30 Berlin in summer; the cron is UTC, while `MAINTENANCE_AT` 04:45 is in `TZ`, Europe/Berlin): `.github/workflows/nightly-release.yml` gates `develop` on Linux (full gate incl. E2E), builds the images and client patch, and publishes a `nightly-*` release (with `release.json`).
 2. The `mmo-deployer` container on the root server polls GitHub and stages the newest green release (patch files, data, `update_compiler`). The stager refuses a release whose `release.json` gate is not green.
 3. 04:45 (Europe/Berlin): maintenance. Preflight (login, realms, Portainer token), 15-minute realm shutdown countdown, DB backup, patch `current` flip, Portainer redeploy with `MMO_TAG=<sha>`.
-4. Verify: login and realms must answer twice in a row within 300 s. Otherwise the deployer rolls back to the previous release.
+4. Verify: within 300 s there must be two consecutive rounds in which login and every realm answer `/uptime` and Portainer reports every `WAIT_SERVICES` container (default `realm_server_01,world_node_01`, so the world node too) as `running`. Otherwise the deployer rolls back to the previous release.
 5. Notify: every step posts to `NOTIFY_WEBHOOK` (the URL itself is never included in a message).
 
 ## 2. One-time server setup

@@ -174,7 +174,11 @@ class FakePortainer:
 	def __init__(self, tag="old"):
 		self.tag = tag
 		self.deploys = []
+		# Container states before any redeploy (what the shutdown wait sees)...
 		self.states = {"realm_server_01": "exited", "world_node_01": "exited"}
+		# ...and after one: a callable of the deployed tag, so a test can break only one release.
+		self.deployed_states = lambda tag: {"realm_server_01": "running", "world_node_01": "running"}
+		self.states_error = None
 		self.ping_error = None
 		self.redeploy_error = None
 		self.redeploy_error_tags = None
@@ -193,6 +197,10 @@ class FakePortainer:
 		self.tag = tag
 
 	def service_states(self):
+		if self.states_error:
+			raise self.states_error
+		if self.deploys:
+			return dict(self.deployed_states(self.tag))
 		return dict(self.states)
 
 

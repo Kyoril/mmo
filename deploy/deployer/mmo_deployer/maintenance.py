@@ -164,10 +164,20 @@ class Maintenance:
 		return False
 
 	def _healthy(self):
+		"""Login and every realm answer, and every waited-for container (the world node too) runs."""
 		for api in [self.login] + self.realms:
 			try:
 				api.uptime()
 			except _REMOTE_ERRORS:
+				return False
+		try:
+			states = self.portainer.service_states()
+		except _REMOTE_ERRORS as error:
+			log.warning("could not read container states: %s", error)
+			return False
+		for service in self.cfg.wait_services:
+			if states.get(service) != "running":
+				log.info("%s is %s, not running", service, states.get(service, "missing"))
 				return False
 		return True
 
