@@ -18,10 +18,12 @@ namespace mmo
 		/// @sourceDir A reader object for the source directory.
 		/// @destinationDir A writer object for the destination directory.
 		/// @param isZLibCompressed True to apply zlib compression on the files.
+		/// @param threadCount Number of threads hashing and compressing files, 0 uses all hardware threads.
 		void compileDirectory(
 			virtual_dir::IReader &sourceDir,
 			virtual_dir::IWriter &destinationDir,
-		    bool isZLibCompressed
+		    bool isZLibCompressed,
+			unsigned threadCount = 0
 		);
 	}
 }
