@@ -81,6 +81,13 @@ jobs:
           ref: ${{ needs.check.outputs.commit }}
           submodules: recursive
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python tool dependencies
+        run: python -m pip install -r tools/world/requirements.txt -r tools/terrain_gen/requirements.txt
+
       - name: Install toolchain
         run: |
           sudo apt-get update
