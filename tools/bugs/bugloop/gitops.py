@@ -5,6 +5,7 @@ the worktree but never ships; only the orchestrator calls ship()."""
 
 import collections
 import os
+import re
 import subprocess
 
 from .guard import FileChange
@@ -36,8 +37,10 @@ def _count(text):
 
 def _numstat(output, prefix=""):
 	changes = []
-	for line in output.splitlines():
-		added, removed, path = line.split("\t", 2)
+	for record in output.split("\0"):
+		if not record:
+			continue
+		added, removed, path = record.split("\t", 2)
 		changes.append(FileChange(prefix + path, _count(added), _count(removed), added == "-"))
 	return changes
 
@@ -118,13 +121,17 @@ class Worktree:
 		return [(sub, old.get(sub), new[sub]) for sub in self.submodules if sub in new and old.get(sub) != new[sub]]
 
 	def changes(self, base, head):
-		output = self.git("diff", "--numstat", "--no-renames", base, head)
+		output = self.git("diff", "--numstat", "-z", "--no-renames", base, head)
 		result = [change for change in _numstat(output) if change.path not in self.submodules]
 		for sub, old, new in self._changed_links(base, head):
 			if old is None:
 				result.append(FileChange(sub, 0, 0, True))
 				continue
-			result += _numstat(self.git("diff", "--numstat", "--no-renames", old, new, cwd=self.sub_path(sub)), sub + "/")
+			result += _numstat(self.git("diff", "--numstat", "-z", "--no-renames", old, new, cwd=self.sub_path(sub)), sub + "/")
+		new_links = self.gitlinks(head)
+		for sub in self.gitlinks(base):
+			if sub not in new_links:
+				result.append(FileChange(sub, 0, 0, True))
 		return result
 
 	def unified_diff(self, base, head):
@@ -162,6 +169,7 @@ class Worktree:
 			self.git("fetch", self.sub_remote, cwd=sub_dir)
 			master = "{}/{}".format(self.sub_remote, self.master)
 			if run_git(sub_dir, "merge-base", "--is-ancestor", master, sha, check=False).returncode != 0:
+				self.git("checkout", "--detach", "--force", tip)
 				return ShipResult(False, "", "{}: {} is not an ancestor of {}; a submodule merge is needed".format(sub, master, sha[:8]))
 			pushes.append((sub_dir, sha))
 		self.git("checkout", "--detach", "--force", tip)
@@ -187,10 +195,15 @@ class Worktree:
 		"""The merge commit of `branch` on develop or origin/develop, found by its message
 		(both /ship and the loop write `Merge <branch> (...)`), or None."""
 		for ref in (self.develop, self.target):
-			found = run_git(self.main_repo, "log", "--first-parent", "--format=%H", "-F",
-				"--grep=Merge {} ".format(branch), ref, check=False)
-			if found.returncode == 0 and found.stdout.strip():
-				return found.stdout.split()[0]
+			# git's --grep anchors ^ at every message line; the subject is checked here instead.
+			found = run_git(self.main_repo, "log", "--first-parent", "--format=%H%x09%s",
+				"--grep=Merge {} ".format(re.escape(branch)), "-E", ref, check=False)
+			if found.returncode != 0:
+				continue
+			for line in found.stdout.splitlines():
+				commit, _, subject = line.partition("\t")
+				if subject.startswith("Merge {} ".format(branch)):
+					return commit
 		return None
 
 	def delete_branch(self, branch):

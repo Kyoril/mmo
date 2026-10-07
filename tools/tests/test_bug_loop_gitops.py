@@ -121,6 +121,32 @@ class GitopsTests(unittest.TestCase):
 		self.assertFalse(result.ok)
 		self.assertIn("not an ancestor", result.reason)
 		self.assertEqual(git(self.origin, "rev-parse", "develop"), before)
+		detached = gitops.run_git(self.wt.path, "symbolic-ref", "-q", "HEAD", check=False)
+		self.assertNotEqual(detached.returncode, 0)
+
+	def test_changes_reports_non_ascii_paths_unquoted(self):
+		base = self.wt.prepare()
+		self.wt.start_branch("bugfix/x", base)
+		write(os.path.join(self.wt.path, "src", "é.cpp"), "int e;\n")
+		git(self.wt.path, "add", "-A")
+		git(self.wt.path, "commit", "-m", "unicode")
+		paths = [change.path for change in self.wt.changes(base, self.wt.head())]
+		self.assertEqual(paths, ["src/é.cpp"])
+
+	def test_changes_reports_removed_submodule(self):
+		base = self.wt.prepare()
+		self.wt.start_branch("bugfix/x", base)
+		git(self.wt.path, "rm", "-f", "data/client")
+		git(self.wt.path, "commit", "-m", "drop submodule")
+		result = self.wt.changes(base, self.wt.head())
+		self.assertIn(gitops.FileChange("data/client", 0, 0, True), result)
+
+	def test_merged_is_subject_anchored(self):
+		self.make_fix()
+		write(os.path.join(self.main, "README.md"), "x\n")
+		git(self.main, "add", "-A")
+		git(self.main, "commit", "-m", "note\n\nMerge bugfix/x (not really)")
+		self.assertIsNone(self.wt.merged("bugfix/x"))
 
 	def test_ship_gates_the_merge_when_develop_moved(self):
 		self.make_fix()
