@@ -104,6 +104,18 @@ class Worktree:
 		for sub in self.submodules:
 			self.git("checkout", "-B", branch, cwd=self.sub_path(sub))
 
+	def resume_branch(self, branch):
+		"""Checks out an existing fix branch at its tip for another round; returns its head."""
+		self.git("checkout", "--force", branch)
+		self._sync_submodules()
+		for sub in self.submodules:
+			self.git("checkout", "-B", branch, cwd=self.sub_path(sub))
+		return self.head()
+
+	def fork_point(self, branch):
+		"""Where the fix branch left origin/develop; the base for diffs, guard and proof."""
+		return self.git("merge-base", self.target, branch)
+
 	def head(self, ref="HEAD"):
 		return self.git("rev-parse", ref)
 

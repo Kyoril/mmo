@@ -193,6 +193,20 @@ class GitopsTests(unittest.TestCase):
 		self.make_fix()
 		self.assertIsNone(self.wt.merged("bugfix/x"))
 
+	def test_resume_branch_continues_on_the_fix_tip(self):
+		base, head = self.make_fix()
+		self.wt.prepare()
+		self.assertEqual(self.wt.resume_branch("bugfix/x"), head)
+		self.assertEqual(git(self.wt.path, "symbolic-ref", "HEAD"), "refs/heads/bugfix/x")
+		self.assertEqual(git(self.wt.sub_path("data/client"), "symbolic-ref", "HEAD"), "refs/heads/bugfix/x")
+		self.assertEqual(self.wt.fork_point("bugfix/x"), base)
+		self.assertTrue(self.wt.is_clean())
+
+	def test_resume_missing_branch_raises(self):
+		self.wt.prepare()
+		with self.assertRaises(gitops.GitError):
+			self.wt.resume_branch("bugfix/missing")
+
 
 @unittest.skipUnless(sys.platform == "win32", "named mutexes are Windows-only")
 class WinlockTests(unittest.TestCase):
