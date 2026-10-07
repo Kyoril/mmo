@@ -31,7 +31,15 @@ and report instead of guessing: a wrong fix that ships is worse than no fix.
   `.agents/`, `CLAUDE.md`, `deploy/`, `src/shared/proto_data/` or database migrations.
 - Code fixes need a regression test that fails without the fix: a Catch2 test in
   `src/tests/<library>_tests/` (preferred) or an E2E scenario in `e2e/scenarios/` (see
-  `e2e/README.md`). Build and run it: confirm it fails before your fix and passes after.
+  `e2e/README.md`). Build and run unit tests freely: confirm a unit test fails before your fix
+  and passes after.
+- Never run `tools/e2e/e2e_run.ps1` or start servers. The E2E stack is shared with the nightly
+  gate; the orchestrator runs your scenario itself, before and after your fix, under the gate
+  lock. You may write a scenario; you cannot watch it fail, so prefer a unit test and use
+  `confidence: high` with an E2E scenario only when the code path is unambiguous.
+- Tests go only in `src/tests/` (C/C++ files, `#include` of headers only) or `e2e/scenarios/`
+  (`.lua`, no `require`/`dofile`/`load`). Do not edit `tools/tests/`; such a fix never ships
+  unreviewed. A change of tests alone is not a fix.
 - Data-only fixes (game data, localization, UI text) may use regression_test kind `none`.
 - Build with `cmake --build build --config Debug -t <target>`. Test binaries are
   `bin/Debug/<suite>.exe`.
@@ -40,9 +48,10 @@ and report instead of guessing: a wrong fix that ships is worse than no fix.
 
 1. Read the triage and the evidence. Find the code or data involved.
 2. Find the project source of the expected behaviour. If there is none, use `no_project_basis`.
-3. Reproduce: write the regression test first and watch it fail. If you cannot reproduce the
-   bug, use outcome `not_reproducible`.
-4. Fix the root cause. Watch the test pass. Build what you touched.
+3. Reproduce: write the regression test first and watch it fail (unit tests; an E2E scenario
+   is run by the orchestrator, not by you). If you cannot reproduce the bug, use outcome
+   `not_reproducible`.
+4. Fix the root cause. Watch the unit test pass. Build what you touched.
 5. Commit, then write FIX.json.
 
 ## FIX.json
@@ -63,5 +72,6 @@ Write this object to the path named in the input (`Write FIX.json to:`):
 
 `regression_test` is one of `{"kind": "unit", "suite": "<library>_tests", "filter": "<Catch2 test spec>"}`,
 `{"kind": "e2e", "scenario": "<scenario name>"}`, or `{"kind": "none"}` (only with
-`"data_only": true`). Use `confidence: high` only when you reproduced the bug, the test fails
-before and passes after, and the cited source clearly defines the behaviour.
+`"data_only": true`). Use `confidence: high` only when you reproduced the bug, the unit test
+fails before and passes after (or, for an E2E scenario, the failing code path is unambiguous),
+and the cited source clearly defines the behaviour.

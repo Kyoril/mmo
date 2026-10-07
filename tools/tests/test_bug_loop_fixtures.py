@@ -58,6 +58,12 @@ class PromptTests(unittest.TestCase):
 			self.assertIn(fragment, fix)
 		self.assertIn("reduces_security", self.read("review.md"))
 
+	def test_fixer_never_runs_the_e2e_stack(self):
+		"""The fixer runs outside the gate mutex; E2E runs only in the orchestrator's proof."""
+		fix = self.read("fix.md")
+		self.assertIn("Never run `tools/e2e/e2e_run.ps1`", fix)
+		self.assertNotIn("Build and run it: confirm it fails before your fix and passes after.", fix)
+
 
 if __name__ == "__main__":
 	unittest.main()
