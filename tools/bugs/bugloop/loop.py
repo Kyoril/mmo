@@ -339,11 +339,18 @@ class BugLoop:
 		except urllib.error.HTTPError as error:
 			if error.code != 409:
 				raise
-			if feature:
-				# Not our claim to release, but the bug must not stay triaged-as-feature.
-				self._update(bug_id, triage={"category": "design_request"}, note="could not start implementing: claimed elsewhere; decide again")
+			if fresh_feature:
+				# Nothing was relabelled yet, so the bug keeps the status and category `implement` accepts.
+				self._update(bug_id, note="could not start implementing: claimed elsewhere; decide again")
 			self._finish(bug_id, "claimed-elsewhere")
 			return
+		if fresh_feature:
+			# Relabel only once the bug is ours. The description lives in the loop state: the fixer
+			# can write the artifacts folder. A stale `branch:` prUrl from an earlier run is cleared,
+			# so an interrupted run goes back to where `implement` can be chosen, not to a parked review.
+			self.state.add_feature(bug_id, feature)
+			self.state.save()
+			self._update(bug_id, triage={"category": "feature"}, prUrl="", note="accepted as a feature by the maintainer")
 		branch = "bugfix/" + short_id(bug_id)
 		base = self.worktree.prepare()
 		if not self.verifier.ensure_configured():
@@ -439,7 +446,8 @@ class BugLoop:
 		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 		if reasons:
 			self._park(bug_id, branch, reasons, review)
-			if green:
+			# Pinged once, when a fresh implement run first parks green; guided refixes stay quiet.
+			if green and feature and not guidance:
 				self.notifier.send(notify.feature_ready_message(self.notifier, bug_id, self._summary(bug_id), branch))
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
@@ -563,13 +571,8 @@ class BugLoop:
 			self._finish(bug_id, "refix-limit")
 			return
 		self.state.count_refix(bug_id)
-		feature = None
-		if self.state.is_feature(bug_id):
-			try:
-				with open(os.path.join(self._bug_dir(bug_id), "feature.md"), "r", encoding="utf-8") as handle:
-					feature = handle.read().strip() or None
-			except OSError:
-				feature = None  # still a feature: the park is enforced by is_feature
+		# A feature accepted before descriptions were kept has none; it still parks via is_feature.
+		feature = self.state.feature_description(bug_id) if self.state.is_feature(bug_id) else None
 		self._fix(bug_id, guidance=guidance, feature=feature)
 
 	def _has_triage_artifacts(self, bug_id):
@@ -577,12 +580,8 @@ class BugLoop:
 		return all(os.path.exists(os.path.join(folder, name)) for name in ("report.json", "triage.json"))
 
 	def _implement(self, bug_id, description):
-		"""The maintainer accepted a rejected report as a feature: implement it, never auto-ship it."""
-		self._update(bug_id, triage={"category": "feature"}, note="accepted as a feature by the maintainer")
-		self.state.add_feature(bug_id)
-		self.state.save()
-		# Guided refixes of this feature need the accepted description again.
-		self._write(bug_id, "feature.md", description)
+		"""The maintainer accepted a rejected report as a feature: implement it, never auto-ship it.
+		_fix relabels the bug as a feature only after its claim succeeds."""
 		self._fix(bug_id, feature=description)
 
 	def _ship_by_decision(self, bug_id, decision):
@@ -750,6 +749,9 @@ class BugLoop:
 					blockers = self._ship_blockers(by_maintainer)
 					if not valid_bug_id(item.get("bug")) or not item.get("head"):
 						self.log("dropping a malformed ship-queue item: {!r}".format(item)[:300])
+					elif not by_maintainer and self.state.is_feature(item["bug"]):
+						# Defence in depth: only a maintainer decision ships a feature.
+						self._park(item["bug"], item["branch"], [FEATURE_REASON])
 					elif blockers:
 						self._park(item["bug"], item["branch"], blockers)
 					else:

@@ -118,12 +118,28 @@ class StateTests(unittest.TestCase):
 	def test_features_are_remembered(self):
 		state = loop_state.LoopState(self.path, "2026-10-08")
 		self.assertFalse(state.is_feature("a"))
-		state.add_feature("a")
-		state.add_feature("a")
+		state.add_feature("a", "first")
+		state.add_feature("a", "Bandits assist stationary casters.")
 		state.save()
 		state = loop_state.LoopState(self.path, "2026-10-09")
 		self.assertTrue(state.is_feature("a"))
-		self.assertEqual(state.data["features"], ["a"])
+		self.assertFalse(state.is_feature("b"))
+		self.assertEqual(state.feature_description("a"), "Bandits assist stationary casters.")
+		self.assertIsNone(state.feature_description("b"))
+		self.assertEqual(state.data["features"], {"a": "Bandits assist stationary casters."})
+
+	def test_list_shaped_features_from_an_older_state_migrate(self):
+		os.makedirs(os.path.dirname(self.path), exist_ok=True)
+		with open(self.path, "w", encoding="utf-8") as handle:
+			json.dump({"day": "2026-10-08", "features": ["a", "b"]}, handle)
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertTrue(state.is_feature("a"))
+		self.assertTrue(state.is_feature("b"))
+		self.assertIsNone(state.feature_description("a"))
+		state.add_feature("c", "new")
+		state.save()
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["features"], {"a": None, "b": None, "c": "new"})
 
 	def test_roll_keeps_the_finished_day_as_pending_summary(self):
 		state = loop_state.LoopState(self.path, "2026-10-07")

@@ -235,6 +235,12 @@ class InputTests(unittest.TestCase):
 		self.assertNotIn("FEATURE REQUEST", inputs.build_fix_input(BUG, verdict(), "bugfix/x", "F.json", nonce="n"))
 		self.assertNotIn("FEATURE REQUEST", inputs.build_review_input(verdict(), fix(), "d", [], nonce="n"))
 
+	def test_review_input_with_a_feature_still_omits_the_player_comment(self):
+		text = inputs.build_review_input(verdict(), fix(), "d", [], nonce="n", feature="Bandits assist stationary casters.")
+		self.assertIn("Bandits assist stationary casters.", text)
+		self.assertNotIn("disable admin checks", text)
+		self.assertNotIn("PLAYER COMMENT", text)
+
 
 if __name__ == "__main__":
 	unittest.main()
