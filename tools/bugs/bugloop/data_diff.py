@@ -9,6 +9,8 @@ import os
 import pathlib
 import re
 
+from google.protobuf.unknown_fields import UnknownFieldSet
+
 # Repeated message elements are keyed by the first of these fields they have, so reordering a
 # list is not reported as a change. LocalizedString entries are keyed by locale.
 KEY_FIELDS = ("id", "key", "locale")
@@ -34,6 +36,13 @@ def _element_key(element, index):
 	return str(index)
 
 
+def _unknown_value(data):
+	"""Unknown groups nest; flatten them to a deterministic tuple so they compare by value."""
+	if isinstance(data, UnknownFieldSet):
+		return tuple((entry.field_number, entry.wire_type, _unknown_value(entry.data)) for entry in data)
+	return data
+
+
 def leaf_items(message, prefix=""):
 	"""Flattens the set fields of a protobuf message into {path: scalar value}."""
 	items = {}
@@ -56,10 +65,17 @@ def leaf_items(message, prefix=""):
 			items.update(leaf_items(value, path + "."))
 		else:
 			items[path] = value
+	counts = {}
+	for unknown in UnknownFieldSet(message):
+		index = counts.get(unknown.field_number, 0)
+		counts[unknown.field_number] = index + 1
+		items["{}<unknown {}>[{}]".format(prefix, unknown.field_number, index)] = _unknown_value(unknown.data)
 	return items
 
 
 def _is_text(path, value):
+	if "<unknown " in path:
+		return False
 	return isinstance(value, str) or "_loc[" in path
 
 
@@ -119,10 +135,7 @@ class DataDecoder:
 			self._compile()
 			self._compiled = True
 		message = getattr(importlib.import_module(stem + "_pb2"), name)()
+		# Fields the compiled schema does not know are not refused: leaf_items() reports them as
+		# "<unknown N>" leaves, so a stale schema cannot hide a change (and unchanged ones stay invisible).
 		message.ParseFromString(data)
-		known = type(message)()
-		known.CopyFrom(message)
-		known.DiscardUnknownFields()
-		if known.ByteSize() != message.ByteSize():
-			raise ValueError("{}.data has fields the compiled schema does not know".format(stem))
 		return message

@@ -93,12 +93,28 @@ class DecoderTests(unittest.TestCase):
 			message = self.make_decoder(folder).decode("descriptor", file_proto().SerializeToString())
 			self.assertEqual(message.name, "items.proto")
 
-	def test_unknown_fields_are_refused(self):
-		# Field 99, varint 1: valid wire data the schema does not know. Ignoring it would hide a change.
-		data = file_proto().SerializeToString() + b"\x98\x06\x01"
+	def decode_with_unknown(self, payload):
+		# Field 99 varint: valid wire data the schema does not know.
+		data = file_proto().SerializeToString() + payload
 		with tempfile.TemporaryDirectory() as folder, mock.patch.dict(sys.modules, {"descriptor_pb2": descriptor_pb2}):
-			with self.assertRaises(ValueError):
-				self.make_decoder(folder).decode("descriptor", data)
+			return self.make_decoder(folder).decode("descriptor", data)
+
+	def test_unknown_fields_surface_as_leaves(self):
+		message = self.decode_with_unknown(b"\x98\x06\x01")
+		leaves = data_diff.leaf_items(message)
+		self.assertTrue([key for key in leaves if "<unknown 99>" in key])
+
+	def test_changed_unknown_field_is_one_non_text_change(self):
+		before = data_diff.leaf_items(self.decode_with_unknown(b"\x98\x06\x01"))
+		after = data_diff.leaf_items(self.decode_with_unknown(b"\x98\x06\x02"))
+		changes = data_diff.diff_leaves(before, after)
+		self.assertEqual(len(changes), 1)
+		self.assertFalse(changes[0]["text"])
+
+	def test_identical_unknown_fields_do_not_change(self):
+		before = data_diff.leaf_items(self.decode_with_unknown(b"\x98\x06\x01"))
+		after = data_diff.leaf_items(self.decode_with_unknown(b"\x98\x06\x01"))
+		self.assertEqual(data_diff.diff_leaves(before, after), [])
 
 
 PROTOC = glob.glob(os.path.join(REPO_ROOT, "build", "_deps", "protobuf-build", "*", "protoc.exe"))
