@@ -82,6 +82,77 @@ class RunnerTests(unittest.TestCase):
 		self.assertEqual(command[command.index("--model") + 1], "opus")
 		self.assertNotIn("--tools", command)
 
+	def test_every_stage_runs_without_mcp_servers(self):
+		run = FakeRun(result(structured_output={}))
+		runner = claude.ClaudeRunner("claude", run=run, environ={})
+		runner.structured("p", "i", {}, claude.TRIAGE_TOOLS, ".", 1)
+		runner.structured("p", "i", {}, claude.REVIEW_TOOLS, ".", 1)
+		runner.agent("p", "i", ".", 1, 1.0)
+		for command, _ in run.calls:
+			self.assertIn("--strict-mcp-config", command)
+
+	def test_triage_and_review_get_no_secrets(self):
+		environ = {"PATH": "p", "MMO_BUG_API_KEY": "k", "MMO_BUG_API_URL": "u", "MMO_E2E_MYSQL_PASSWORD": "pw"}
+		run = FakeRun(result(structured_output={}))
+		runner = claude.ClaudeRunner("claude", run=run, environ=environ)
+		runner.structured("p", "i", {}, claude.TRIAGE_TOOLS, ".", 1)
+		runner.structured("p", "i", {}, claude.REVIEW_TOOLS, ".", 1)
+		for _, kwargs in run.calls:
+			self.assertEqual(kwargs["env"], {"PATH": "p"})
+		self.assertEqual(environ["MMO_BUG_API_KEY"], "k")
+
+	def test_fixer_env_blocks_pushes_and_keeps_only_the_e2e_password(self):
+		environ = {"PATH": "p", "MMO_BUG_API_KEY": "k", "MMO_BUG_API_URL": "u", "MMO_E2E_MYSQL_PASSWORD": "pw"}
+		run = FakeRun(result(result="done"))
+		claude.ClaudeRunner("claude", run=run, environ=environ).agent("p", "i", ".", 1, 1.0)
+		command, kwargs = run.calls[0]
+		env = kwargs["env"]
+		self.assertNotIn("MMO_BUG_API_KEY", env)
+		self.assertNotIn("MMO_BUG_API_URL", env)
+		self.assertEqual(env["MMO_E2E_MYSQL_PASSWORD"], "pw")
+		self.assertEqual(env["GIT_TERMINAL_PROMPT"], "0")
+		self.assertEqual(env["GIT_SSH_COMMAND"], "false")
+		config = {env["GIT_CONFIG_KEY_{}".format(index)]: env["GIT_CONFIG_VALUE_{}".format(index)]
+			for index in range(int(env["GIT_CONFIG_COUNT"]))}
+		self.assertEqual(config, {"remote.origin.pushurl": claude.BLOCKED_PUSH_URL,
+			"remote.upstream.pushurl": claude.BLOCKED_PUSH_URL, "credential.helper": ""})
+		at = command.index("--disallowedTools")
+		self.assertEqual(command[at + 1:at + 3], ["Bash(git push:*)", "Bash(git -C * push:*)"])
+
+	def test_fixer_git_config_appends_to_existing_entries(self):
+		env = claude.stage_env({"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.x", "GIT_CONFIG_VALUE_0": "y"}, fixer=True)
+		self.assertEqual(env["GIT_CONFIG_KEY_0"], "core.x")
+		self.assertEqual(env["GIT_CONFIG_KEY_1"], "remote.origin.pushurl")
+		self.assertEqual(env["GIT_CONFIG_COUNT"], "4")
+
+	def test_orchestrator_environment_is_untouched(self):
+		before = dict(os.environ)
+		claude.stage_env(os.environ, fixer=True)
+		self.assertEqual(dict(os.environ), before)
+		self.assertNotIn(claude.BLOCKED_PUSH_URL, " ".join(os.environ.values()))
+
+	def test_blocked_push_url_really_fails(self):
+		"""A push with the fixer's environment fails even though origin is a reachable local repo."""
+		import shutil
+		import tempfile
+		with tempfile.TemporaryDirectory() as folder:
+			origin = os.path.join(folder, "origin.git")
+			clone = os.path.join(folder, "clone")
+			base = {key: value for key, value in os.environ.items() if not key.upper().startswith("GIT_")}
+			base.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.test",
+				"GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.test"})
+			git = shutil.which("git")
+			subprocess.run([git, "init", "-q", "--bare", origin], check=True, env=base)
+			subprocess.run([git, "init", "-q", clone], check=True, env=base)
+			subprocess.run([git, "-C", clone, "commit", "-q", "--allow-empty", "-m", "x"], check=True, env=base)
+			subprocess.run([git, "-C", clone, "remote", "add", "origin", origin], check=True, env=base)
+			blocked = subprocess.run([git, "-C", clone, "push", "origin", "HEAD:refs/heads/develop"],
+				capture_output=True, text=True, env=claude.stage_env(base, fixer=True))
+			self.assertNotEqual(blocked.returncode, 0)
+			allowed = subprocess.run([git, "-C", clone, "push", "-q", "origin", "HEAD:refs/heads/develop"],
+				capture_output=True, text=True, env=base)
+			self.assertEqual(allowed.returncode, 0, allowed.stderr)
+
 	def test_every_invocation_is_counted(self):
 		counter = []
 		run = FakeRun(result(structured_output={}))
