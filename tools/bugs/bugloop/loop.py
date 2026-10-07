@@ -11,7 +11,7 @@ import re
 import traceback
 import urllib.error
 
-from . import guard, inputs, state as loop_state, verdicts, verification
+from . import guard, inputs, notify, state as loop_state, verdicts, verification
 from .claude import REVIEW_TOOLS, TRIAGE_TOOLS, ClaudeError
 
 CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -22,6 +22,10 @@ RESTART_EXIT_CODE = 75
 # data; the fixer's own `data_only` claim is never trusted.
 # Client UI Lua under data/client/Interface/ cannot cheat the server, so it needs no proof either.
 DATA_ONLY_ROOTS = ("data/editor/data/", "data/client/Locales/", "data/client/Interface/")
+# Statuses of bugs parked for the maintainer.
+PARKED_STATUSES = ("pr_open", "needs_decision")
+# The web UI shows the candidate diff; the API stores at most this much.
+REVIEW_DIFF_LIMIT = 128 * 1024
 # Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
 BUG_ID = re.compile(r"^[0-9a-f]{24}$")
 
@@ -93,7 +97,7 @@ def decide(fix, review, guard_result, proof, gate):
 
 class BugLoop:
 	def __init__(self, api, runner, worktree, verifier, decoder, config, state, prompts, schemas,
-			artifacts_dir, report_dir, clock=utcnow, lock=contextlib.nullcontext, dry_run=False, log=print):
+			artifacts_dir, report_dir, clock=utcnow, lock=contextlib.nullcontext, dry_run=False, log=print, notifier=None):
 		self.api = api
 		self.runner = runner
 		self.worktree = worktree
@@ -109,6 +113,8 @@ class BugLoop:
 		self.lock = lock
 		self.dry_run = dry_run
 		self.log = log
+		self.notifier = notifier or notify.Notifier("", log=log)
+		self._backfilled = False
 
 	# ---- small helpers
 
@@ -144,13 +150,19 @@ class BugLoop:
 	def poll_once(self):
 		"""Returns True when it did work, so the caller polls again without sleeping."""
 		now = self.clock()
-		self.state.roll(now.strftime("%Y-%m-%d"))
+		today = now.strftime("%Y-%m-%d")
+		if self.state.data["day"] != today and not self.dry_run:
+			# The finished day's counters are still in the state; roll() resets them.
+			self._send_daily_summary()
+		self.state.roll(today)
 		self._check_nightly_breaker(now)
+		worked = False
 		if not self.dry_run:
+			self._backfill_review_diffs()
 			self._release_stale_claims()
 			self._reconcile_parked()
 		self._ship_queued(now)
-		worked = self._triage_new()
+		worked = self._triage_new() or worked
 		bug_id = self.state.next_fix()
 		if bug_id is not None and self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 			try:
@@ -379,7 +391,7 @@ class BugLoop:
 		reasons = decide(fix, review, guard_result, proof, gate)
 		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 		if reasons:
-			self._park(bug_id, branch, reasons)
+			self._park(bug_id, branch, reasons, review)
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
 
@@ -394,10 +406,66 @@ class BugLoop:
 
 	# ---- park and ship
 
-	def _park(self, bug_id, branch, reasons):
-		self._update(bug_id, status="pr_open", prUrl="branch:" + branch,
-			note="parked for review: " + "; ".join(reasons)[:1800], release_claim=True)
-		self._finish(bug_id, "parked", branch=branch, reasons=reasons[:10])
+	def _park(self, bug_id, branch, reasons, review=None):
+		question = ""
+		if isinstance(review, dict) and isinstance(review.get("design_question"), str):
+			question = review["design_question"].strip()[:2000]
+		self._update(bug_id, status="needs_decision" if question else "pr_open", prUrl="branch:" + branch,
+			designQuestion=question, note="parked for review: " + "; ".join(reasons)[:1800], release_claim=True)
+		self._upload_diff(bug_id)
+		self._finish(bug_id, "parked", branch=branch, reasons=reasons[:10], decision_needed=bool(question))
+		if question:
+			self.notifier.send(notify.design_question_message(self.notifier, bug_id, self._summary(bug_id), question, branch))
+
+	def _summary(self, bug_id):
+		try:
+			return str(self._read(bug_id, "triage.json").get("observed", ""))[:200]
+		except (OSError, ValueError):
+			return ""
+
+	def _upload_diff(self, bug_id):
+		path = os.path.join(self.artifacts_dir, bug_id, "diff.patch")
+		if not os.path.exists(path):
+			return
+		with open(path, "r", encoding="utf-8", errors="replace") as handle:
+			text = handle.read()
+		if len(text) > REVIEW_DIFF_LIMIT:
+			marker = "\n... (diff truncated for the web UI)"
+			text = text[:REVIEW_DIFF_LIMIT - len(marker)] + marker
+		try:
+			self.api.put_review_diff(bug_id, text, actor=self.config.worker)
+		except Exception:  # the diff is a convenience for the maintainer, never a reason to stop
+			self.log(traceback.format_exc())
+
+	def _backfill_review_diffs(self):
+		"""Bugs parked before the web UI showed diffs get theirs once per process start."""
+		if self._backfilled:
+			return
+		self._backfilled = True
+		for status in PARKED_STATUSES:
+			try:
+				parked = self.api.list(status=status, limit=100).get("bugs", [])
+			except Exception:
+				self.log(traceback.format_exc())
+				continue
+			for bug in parked:
+				bug_id = bug.get("_id")
+				if not valid_bug_id(bug_id):
+					continue
+				try:
+					if not (self.api.show(bug_id).get("reviewDiff") or ""):
+						self._upload_diff(bug_id)
+				except Exception:
+					self.log(traceback.format_exc())
+
+	def _send_daily_summary(self):
+		try:
+			waiting = sum(self.api.list(status=status, limit=1).get("pagination", {}).get("total", 0)
+				for status in PARKED_STATUSES)
+		except Exception:
+			self.log(traceback.format_exc())
+			waiting = None
+		self.notifier.send(notify.daily_summary(self.state.data, self.config.invocation_budget_per_day, waiting))
 
 	def _ship_blockers(self):
 		blockers = []
@@ -437,6 +505,7 @@ class BugLoop:
 			self._update(bug_id, status="resolved", release_claim=True,
 				note="shipped by the bug loop in {}; reaches players with the next nightly deploy".format(result.commit))
 			self._finish(bug_id, "shipped", branch=branch, commit=result.commit)
+			self.notifier.send(notify.shipped_message(self.notifier, bug_id, result.commit, False))
 		except Exception:
 			self.log(traceback.format_exc())
 			self._finish(bug_id, "shipped", branch=branch, commit=result.commit, bookkeeping_failed=True)
@@ -469,14 +538,15 @@ class BugLoop:
 	# ---- housekeeping
 
 	def _reconcile_parked(self):
-		for bug in self.api.list(status="pr_open", limit=100).get("bugs", []):
-			pr = bug.get("prUrl") or ""
-			if not pr.startswith("branch:"):
-				continue
-			commit = self.worktree.merged(pr[len("branch:"):])
-			if commit:
-				self._update(bug["_id"], status="resolved", note="merged into develop in " + commit)
-				self.state.record(bug["_id"], "merged-by-user", commit=commit)
+		for status in PARKED_STATUSES:
+			for bug in self.api.list(status=status, limit=100).get("bugs", []):
+				pr = bug.get("prUrl") or ""
+				if not pr.startswith("branch:"):
+					continue
+				commit = self.worktree.merged(pr[len("branch:"):])
+				if commit:
+					self._update(bug["_id"], status="resolved", note="merged into develop in " + commit)
+					self.state.record(bug["_id"], "merged-by-user", commit=commit)
 
 	def _check_nightly_breaker(self, now):
 		try:
@@ -488,6 +558,7 @@ class BugLoop:
 			self.state.data["seen_red_reports"].append(name)
 			loop_state.trip_breaker(self.artifacts_dir, "nightly {} is red and includes bug-loop merges".format(name), now)
 			self.log("circuit breaker tripped by " + name)
+			self.notifier.send(notify.breaker_message("nightly {} is red and includes bug-loop merges".format(name)))
 
 	def _write_daily_report(self):
 		day = self.state.data["day"]

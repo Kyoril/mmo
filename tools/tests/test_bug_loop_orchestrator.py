@@ -87,14 +87,17 @@ class FakeApi:
 		self.claims = []
 		self.show_errors = {}
 		self.update_errors = []
+		self.review_diffs = []
 
-	def list(self, status=None, subject=None, since=None, page=1, limit=20):
+	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False):
 		result = list(self.bugs.values())
 		if status:
 			result = [bug for bug in result if bug["status"] == status]
 		if subject:
 			kind, _, ident = subject.partition(":")
 			result = [bug for bug in result if bug["subject"]["type"] == kind and str(bug["subject"]["id"]) == ident]
+		if decision_pending:
+			result = [bug for bug in result if bug.get("decision") and not bug["decision"].get("consumedAt")]
 		return {"bugs": [dict(bug) for bug in result], "pagination": {"total": len(result), "page": 1, "pages": 1}}
 
 	def show(self, bug_id):
@@ -113,13 +116,36 @@ class FakeApi:
 			if matches(bug_id, fields):
 				raise error
 		self.updates.append((bug_id, dict(fields, release_claim=release_claim)))
-		for key in ("status", "prUrl", "duplicateOf", "triage"):
+		for key in ("status", "prUrl", "duplicateOf", "triage", "designQuestion"):
 			if key in fields:
 				self.bugs[bug_id][key] = fields[key]
+		if fields.get("decisionConsumed") and self.bugs[bug_id].get("decision"):
+			self.bugs[bug_id]["decision"]["consumedAt"] = "now"
+		if release_claim:
+			self.bugs[bug_id]["claimedBy"] = None
 		return dict(self.bugs[bug_id])
+
+	def put_review_diff(self, bug_id, diff, actor="unknown"):
+		self.review_diffs.append((bug_id, diff))
+		self.bugs[bug_id]["reviewDiff"] = diff
+		return {"reviewDiffLength": len(diff)}
 
 	def notes(self, bug_id):
 		return [fields.get("note", "") for bug, fields in self.updates if bug == bug_id]
+
+
+class FakeNotifier:
+	enabled = True
+
+	def __init__(self):
+		self.messages = []
+
+	def bug_link(self, bug_id):
+		return "bug " + bug_id
+
+	def send(self, text):
+		self.messages.append(text)
+		return True
 
 
 class FakeRunner:
@@ -235,16 +261,90 @@ class LoopTests(unittest.TestCase):
 		self.worktree = FakeWorktree(changes, diff)
 		self.verifier = FakeVerifier(proof_ok, gate_ok)
 		self.now = utc(now)
+		self.notifier = FakeNotifier()
 		self.state = loop_state.LoopState(os.path.join(self.artifacts, "state.json"), self.now.strftime("%Y-%m-%d"))
 		api = loop.DryRunApi(self.api, os.path.join(self.artifacts, "journal.jsonl")) if dry_run else self.api
 		self.loop = loop.BugLoop(api, self.runner, self.worktree, self.verifier, None,
 			dataclasses.replace(loop_config.LoopConfig(), **config), self.state,
 			{"triage": "T", "fix": "F", "review": "R"}, {"triage": {}, "review": {}}, self.artifacts, self.reports,
-			clock=lambda: self.now, dry_run=dry_run, log=lambda message: None)
+			clock=lambda: self.now, dry_run=dry_run, log=lambda message: None, notifier=self.notifier)
 		return self.loop
 
 	def outcomes(self):
 		return [entry["outcome"] for entry in self.state.data["outcomes"]]
+
+	def test_design_question_parks_as_needs_decision_and_pings(self):
+		self.make(review=dict(GOOD_REVIEW, design_question="Should assist chain beyond one level?"))
+		self.loop.poll_once()
+		bug = self.api.bugs[BUG_ID]
+		self.assertEqual(bug["status"], "needs_decision")
+		self.assertEqual(bug["designQuestion"], "Should assist chain beyond one level?")
+		self.assertEqual(self.api.review_diffs[0][0], BUG_ID)
+		self.assertIn("diff --git", self.api.review_diffs[0][1])
+		self.assertEqual(len(self.notifier.messages), 1)
+		self.assertIn("Should assist chain beyond one level?", self.notifier.messages[0])
+
+	def test_plain_park_is_pr_open_without_ping(self):
+		self.make(gate_ok=False)
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertEqual(self.api.bugs[BUG_ID]["designQuestion"], "")
+		self.assertEqual(len(self.api.review_diffs), 1)
+		self.assertEqual(self.notifier.messages, [])
+
+	def test_large_diff_upload_is_truncated(self):
+		self.make(bugs=[dict(BUG, status="pr_open", prUrl="branch:" + BRANCH)])
+		os.makedirs(os.path.join(self.artifacts, BUG_ID), exist_ok=True)
+		with open(os.path.join(self.artifacts, BUG_ID, "diff.patch"), "w", encoding="utf-8") as handle:
+			handle.write("+" * (loop.REVIEW_DIFF_LIMIT + 500))
+		self.loop._upload_diff(BUG_ID)
+		uploaded = self.api.review_diffs[0][1]
+		self.assertEqual(len(uploaded), loop.REVIEW_DIFF_LIMIT)
+		self.assertTrue(uploaded.endswith("(diff truncated for the web UI)"))
+
+	def test_backfill_uploads_missing_review_diffs_once(self):
+		self.make(bugs=[dict(BUG, status="pr_open", prUrl="branch:" + BRANCH)])
+		os.makedirs(os.path.join(self.artifacts, BUG_ID), exist_ok=True)
+		with open(os.path.join(self.artifacts, BUG_ID, "diff.patch"), "w", encoding="utf-8") as handle:
+			handle.write("diff --git a/x b/x\n")
+		self.loop.poll_once()
+		self.loop.poll_once()
+		self.assertEqual(self.api.review_diffs, [(BUG_ID, "diff --git a/x b/x\n")])
+
+	def test_reconcile_covers_needs_decision(self):
+		self.make(bugs=[dict(BUG, status="needs_decision", prUrl="branch:" + BRANCH)])
+		self.worktree.merged_[BRANCH] = "abc123"
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_daily_summary_once_per_new_day(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+		self.now = utc("2026-10-08 00:05")
+		self.loop.poll_once()
+		self.loop.poll_once()
+		summaries = [m for m in self.notifier.messages if "Bug loop summary" in m]
+		self.assertEqual(len(summaries), 1)
+		self.assertIn("2026-10-07", summaries[0])
+
+	def test_no_summary_in_dry_run(self):
+		self.make(dry_run=True, verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.poll_once()
+		self.now = utc("2026-10-08 00:05")
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+
+	def test_breaker_trip_and_ship_ping(self):
+		self.make()
+		self.loop.poll_once()
+		self.assertTrue(any("Shipped" in m for m in self.notifier.messages))
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		os.makedirs(self.reports)
+		with open(os.path.join(self.reports, "nightly-2026-10-07.json"), "w", encoding="utf-8-sig") as handle:
+			json.dump({"passed": False, "merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]}, handle)
+		self.loop.poll_once()
+		self.assertTrue(any("circuit breaker" in m for m in self.notifier.messages))
 
 	def test_abuse_is_flagged_and_never_fixed(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="abuse_suspected", abuse_evidence="asks to disable admin checks"))
