@@ -5,6 +5,7 @@ import http.client
 import json
 import logging
 import os
+import re
 import urllib.parse
 
 from .web import HttpError, basic_auth
@@ -34,6 +35,33 @@ class GitHubClient:
 		matching = [r for r in releases if r["tag_name"].startswith(prefix) and not r.get("draft")]
 		return sorted(matching, key=lambda r: r["created_at"], reverse=True)
 
+	def newest_versioned_release(self, prefix):
+		"""The published release of the highest `<prefix>X.Y.Z` tag, or None.
+
+		Looked up through the tags, not the release list: one page of the list holds only the
+		newest 50 releases, and nightlies would push a months-old launcher release off it.
+		"""
+		url = "{}/repos/{}/git/matching-refs/tags/{}".format(self.api, self.repo, urllib.parse.quote(prefix))
+		refs = self.http.get_json(url, {"Accept": "application/vnd.github+json"}, self._auth())
+		versions = []
+		for ref in refs:
+			tag = ref["ref"][len("refs/tags/"):]
+			match = re.fullmatch(re.escape(prefix) + r"(\d+)\.(\d+)\.(\d+)", tag)
+			if match:
+				versions.append((tuple(int(part) for part in match.groups()), tag))
+		for _, tag in sorted(versions, reverse=True):
+			try:
+				release = self.http.get_json("{}/repos/{}/releases/tags/{}".format(self.api, self.repo, urllib.parse.quote(tag)),
+					{"Accept": "application/vnd.github+json"}, self._auth())
+			except HttpError as error:
+				# A tag whose release workflow has not finished yet.
+				if error.status == 404:
+					continue
+				raise
+			if not release.get("draft"):
+				return release
+		return None
+
 	def download_asset(self, release, name, dest):
 		for asset in release.get("assets", []):
 			if asset["name"] == name:
@@ -42,9 +70,9 @@ class GitHubClient:
 				return
 		raise KeyError("release {} has no asset {}".format(release["tag_name"], name))
 
-	def fetch_manifest(self, release, scratch_dir):
-		path = os.path.join(scratch_dir, "release.json")
-		self.download_asset(release, "release.json", path)
+	def fetch_manifest(self, release, scratch_dir, name="release.json"):
+		path = os.path.join(scratch_dir, name)
+		self.download_asset(release, name, path)
 		with open(path, encoding="utf-8") as handle:
 			return json.load(handle)
 

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mmo_deployer.news import MANIFEST_LIMIT, MAX_PATCHES, add_patch_note, describe_change
+from mmo_deployer.news import MANIFEST_LIMIT, MAX_PATCHES, add_patch_note, describe_change, render_notes
 
 
 class News(unittest.TestCase):
@@ -33,6 +33,27 @@ class News(unittest.TestCase):
 		self.assertIn("- Roll on the right table", patches[0]["body"])
 		self.assertEqual(patches[1]["title"], "Old")
 		self.assertEqual(self._load()["version"], 1)
+
+	def test_versioned_player_notes(self):
+		notes = {"headline": "Mages rejoice.", "sections": [
+			{"title": "Classes: Mage", "bullets": ["Frostbolt has a new impact effect."]},
+			{"title": "Bug Fixes", "bullets": ["Fixed an issue where doors blocked sight."]}]}
+		self.assertTrue(add_patch_note(self.path, "2026-10-07", ["fix: x"], "0.3.0.3441", notes))
+		entry = self._load()["patches"][0]
+		self.assertEqual(entry["title"], "Patch 0.3.0.3441")
+		self.assertEqual(entry["date"], "2026-10-07")
+		self.assertEqual(entry["summary"], "Mages rejoice.")
+		self.assertEqual(entry["body"], "## Classes: Mage\n- Frostbolt has a new impact effect.\n\n## Bug Fixes\n- Fixed an issue where doors blocked sight.")
+
+	def test_empty_or_malformed_notes_fall_back_to_changes(self):
+		for notes in ({"headline": "h", "sections": []}, {"sections": [{"title": "General", "bullets": []}]}, "garbage"):
+			add_patch_note(self.path, "2026-10-07", ["fix(loot): roll on the right table"], "0.3.0.1", notes)
+			entry = self._load()["patches"][0]
+			self.assertEqual(entry["title"], "Patch 0.3.0.1")
+			self.assertEqual(entry["body"], "## Changes\n- Roll on the right table")
+
+	def test_render_notes_skips_empty_sections(self):
+		self.assertEqual(render_notes({"sections": [{"title": "General", "bullets": []}, {"title": "World", "bullets": ["a"]}]}), "## World\n- a")
 
 	def test_no_changes(self):
 		add_patch_note(self.path, "2026-10-07", [])

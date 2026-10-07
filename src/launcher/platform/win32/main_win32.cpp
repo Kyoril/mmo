@@ -46,7 +46,7 @@ namespace
 	void ShowVersionInfoDialog()
 	{
 		const std::string body =
-			"Version: " MMO_VERSION_STR "\n"
+			"Version: " MMO_LAUNCHER_VERSION_STR "\n"
 			"Build date: " __DATE__ " " __TIME__ "\n"
 #ifndef NDEBUG
 			"Debug configuration\n"

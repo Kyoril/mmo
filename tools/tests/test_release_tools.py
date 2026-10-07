@@ -114,7 +114,24 @@ class ReleaseManifest(unittest.TestCase):
 		self.assertEqual(manifest["assets"]["client-bin.zip"]["sha256"], hashlib.sha256(b"zipdata").hexdigest())
 		self.assertEqual(manifest["gate"], {"passed": True, "steps": [{"name": "e2e", "passed": True, "duration_s": 12.5}]})
 		self.assertEqual(len(manifest["changes"]), 2)
+		self.assertIsNone(manifest["version"])
+		self.assertIsNone(manifest["patch_notes"])
 		json.dumps(manifest)
+
+	def test_main_embeds_version_and_patch_notes(self):
+		notes = {"headline": "h", "sections": [{"title": "General", "bullets": ["a"]}], "source": "ai", "model": "m"}
+		notes_path = os.path.join(self.repo, "patch_notes.json")
+		with open(notes_path, "w", encoding="utf-8") as handle:
+			json.dump(notes, handle)
+		out = os.path.join(self.repo, "release.json")
+
+		make_release_manifest.main(["--repo", self.repo, "--commit", self.head, "--previous", self.first,
+			"--version", "0.3.0.4", "--patch-notes", notes_path, "--out", out])
+
+		with open(out, encoding="utf-8") as handle:
+			manifest = json.load(handle)
+		self.assertEqual(manifest["version"], "0.3.0.4")
+		self.assertEqual(manifest["patch_notes"], notes)
 
 
 class SmokeTestUsesRealSource(unittest.TestCase):

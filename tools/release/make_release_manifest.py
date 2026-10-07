@@ -42,7 +42,7 @@ def sha256_file(path):
 	return digest.hexdigest()
 
 
-def build_manifest(repo, commit, previous, assets, gate_report, created_at):
+def build_manifest(repo, commit, previous, assets, gate_report, created_at, version=None, patch_notes=None):
 	gate = None
 	if gate_report is not None:
 		gate = {
@@ -59,6 +59,9 @@ def build_manifest(repo, commit, previous, assets, gate_report, created_at):
 		"assets": {name: {"sha256": sha256_file(path), "size": os.path.getsize(path)} for name, path in assets.items()},
 		"gate": gate,
 		"changes": collect_changes(repo, previous, commit),
+		# Optional for the deployer: older releases carry neither.
+		"version": version or None,
+		"patch_notes": patch_notes,
 	}
 
 
@@ -69,6 +72,8 @@ def main(argv=None):
 	parser.add_argument("--previous", default="")
 	parser.add_argument("--asset", action="append", default=[], help="NAME=PATH")
 	parser.add_argument("--gate-report")
+	parser.add_argument("--version", help="game version, tools/release/version.py")
+	parser.add_argument("--patch-notes", help="patch_notes.json from tools/release/patch_notes.py")
 	parser.add_argument("--out", required=True)
 	args = parser.parse_args(argv)
 
@@ -81,7 +86,11 @@ def main(argv=None):
 			print("gate report is not green; refusing to write a release manifest", file=sys.stderr)
 			return 1
 	created_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-	manifest = build_manifest(args.repo, args.commit, args.previous, assets, report, created_at)
+	notes = None
+	if args.patch_notes:
+		with open(args.patch_notes, encoding="utf-8") as handle:
+			notes = json.load(handle)
+	manifest = build_manifest(args.repo, args.commit, args.previous, assets, report, created_at, args.version, notes)
 	with open(args.out, "w", encoding="utf-8") as handle:
 		json.dump(manifest, handle, indent=2)
 	print("wrote {} ({} changes)".format(args.out, len(manifest["changes"])))

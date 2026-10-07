@@ -119,7 +119,7 @@ namespace mmo
 					   "This verifies installed files against the update manifest.\n\n"
 					   "## Keyboard controls\nUse Tab and Shift+Tab to move between controls, Enter to activate, and the arrow or Page Up "
 					   "/ Page Down keys to scroll an article.\n");
-		m_patches = Parse("Launcher " MMO_VERSION_STR "\nCurrent build\nA clearer view of news and updates.\n"
+		m_patches = Parse("Launcher " MMO_LAUNCHER_VERSION_STR "\nCurrent build\nA clearer view of news and updates.\n"
 						  "## Highlights\n- A roomier launcher with dedicated Home, News and Patch Notes pages.\n"
 						  "- Refreshed promotional artwork for Alestia Online.\n\n"
 						  "## Launcher improvements\n- Read articles without interrupting downloads.\n"

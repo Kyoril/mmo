@@ -27,6 +27,7 @@ jobs:
       previous: ${{ steps.pick.outputs.previous }}
       prefix: ${{ steps.pick.outputs.prefix }}
       proceed: ${{ steps.pick.outputs.proceed }}
+      version: ${{ steps.pick.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,9 +47,12 @@ jobs:
           if [ -n "$latest" ]; then previous=$(git rev-list -n 1 "$latest"); fi
           proceed=true
           if [ "$previous" = "$commit" ] && [ "${{ inputs.force }}" != "true" ]; then proceed=false; fi
-          echo "Nightly candidate $commit (previous ${previous:-none}, proceed $proceed)"
+          # vX.Y.Z tag + commit count; needs the full history fetched above (docs/versioning.md).
+          version=$(python3 tools/release/version.py --commit "$commit")
+          echo "Nightly candidate $commit $version (previous ${previous:-none}, proceed $proceed)"
           {
             echo "commit=$commit"
+            echo "version=$version"
             echo "previous=$previous"
             echo "prefix=$prefix"
             echo "proceed=$proceed"
@@ -125,9 +129,19 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
+      # Full history and tags: the version is the newest vX.Y.Z tag plus the commit count, and a
+      # shallow clone builds every client as X.Y.Z.1.
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.check.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Check the build version
+        shell: pwsh
+        run: |
+          $expected = "${{ needs.check.outputs.version }}"
+          $actual = python tools/release/version.py
+          if ($actual -ne $expected) { throw "client build would be $actual, release is $expected" }
 
       - name: Init code submodules (not the data repos)
         run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
@@ -155,6 +169,8 @@ jobs:
             '-DVCPKG_TARGET_TRIPLET=x64-windows-static-md' `
             "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
 
+      # This launcher build is only the fallback until a launcher-v* release exists: the deployer
+      # swaps in the newest launcher release (.github/workflows/launcher-release.yml).
       - name: Build client, launcher, crash reporter
         run: cmake --build build --config Release --parallel 4 -t mmo_client launcher mmo_error
 
@@ -182,10 +198,15 @@ jobs:
   publish:
     needs: [check, gate, client, images]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # GitHub Models (free tier) writes the patch notes with this job's GITHUB_TOKEN; no paid key.
+      models: read
     env:
       COMMIT: ${{ needs.check.outputs.commit }}
       PREVIOUS: ${{ needs.check.outputs.previous }}
       PREFIX: ${{ needs.check.outputs.prefix }}
+      VERSION: ${{ needs.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -202,17 +223,29 @@ jobs:
           name: gate-summary
           path: gate
 
+      # Never fails the release: without the model, or without the data names, the notes fall
+      # back to the commit subjects (tools/release/patch_notes.py).
+      - name: Write patch notes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m pip install --quiet grpcio-tools || echo "grpcio-tools unavailable; notes without data names"
+          python3 tools/release/patch_notes.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
+            --version "$VERSION" --out dist/patch_notes.json --markdown notes.md
+
       - name: Build release.json
         run: |
           python3 tools/release/make_release_manifest.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
             --asset client-bin.zip=dist/client-bin.zip --asset symbols.zip=dist/symbols.zip \
-            --gate-report gate/last_report.json --out dist/release.json
+            --gate-report gate/last_report.json --version "$VERSION" --patch-notes dist/patch_notes.json \
+            --out dist/release.json
 
       - name: Publish prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${PREFIX}$(date -u +%Y%m%d)-${COMMIT:0:8}"
-          python3 -c "import json; m = json.load(open('dist/release.json')); print('\n'.join('- ' + c for c in m['changes']) or '- No changes')" > notes.md
-          gh release create "$tag" --target "$COMMIT" --prerelease --title "$tag" --notes-file notes.md \
+          tag="${PREFIX}${VERSION}"
+          # A forced re-release of the same commit has the same version.
+          if gh release view "$tag" > /dev/null 2>&1; then tag="${tag}-$(date -u +%Y%m%d%H%M)"; fi
+          gh release create "$tag" --target "$COMMIT" --prerelease --title "Patch ${VERSION}" --notes-file notes.md \
             dist/client-bin.zip dist/symbols.zip dist/release.json

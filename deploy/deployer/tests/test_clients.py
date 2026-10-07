@@ -46,6 +46,26 @@ class GitHub(unittest.TestCase):
 			self.assertEqual(api_request.headers["authorization"], "Bearer tok")
 			self.assertNotIn("authorization", stub.find("GET", "/storage/blob")[0].headers)
 
+	def test_newest_versioned_release_sorts_semver_and_skips_unreleased_tags(self):
+		with StubServer() as stub:
+			stub.route("GET", "/repos/Kyoril/mmo/git/matching-refs/tags/launcher-v", (200, [
+				{"ref": "refs/tags/launcher-v1.9.0"},
+				{"ref": "refs/tags/launcher-v1.10.0"},
+				{"ref": "refs/tags/launcher-v2.0.0"},
+				{"ref": "refs/tags/launcher-v2.0.0-rc1"},
+			]))
+			stub.route("GET", "/repos/Kyoril/mmo/releases/tags/launcher-v2.0.0", (404, {"message": "Not Found"}))
+			stub.route("GET", "/repos/Kyoril/mmo/releases/tags/launcher-v1.10.0", (200, _release("launcher-v1.10.0", "2026-10-01T00:00:00Z")))
+			client = GitHubClient("Kyoril/mmo", "tok", Http(), stub.url)
+			self.assertEqual(client.newest_versioned_release("launcher-v")["tag_name"], "launcher-v1.10.0")
+			self.assertFalse(stub.find("GET", "/repos/Kyoril/mmo/releases/tags/launcher-v1.9.0"))
+
+	def test_newest_versioned_release_without_tags(self):
+		with StubServer() as stub:
+			stub.route("GET", "/repos/Kyoril/mmo/git/matching-refs/tags/launcher-v", (200, []))
+			client = GitHubClient("Kyoril/mmo", "", Http(), stub.url)
+			self.assertIsNone(client.newest_versioned_release("launcher-v"))
+
 	def test_missing_asset(self):
 		client = GitHubClient("Kyoril/mmo", "", Http(), "http://127.0.0.1:9")
 		with self.assertRaises(KeyError):

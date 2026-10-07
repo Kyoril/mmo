@@ -139,6 +139,13 @@ class FakeGitHub:
 		matching = [r for r in self.releases if r["tag_name"].startswith(prefix)]
 		return sorted(matching, key=lambda r: r["created_at"], reverse=True)
 
+	def newest_versioned_release(self, prefix):
+		def version(release):
+			return tuple(int(part) for part in release["tag_name"][len(prefix):].split("."))
+
+		matching = [r for r in self.releases if r["tag_name"].startswith(prefix)]
+		return max(matching, key=version) if matching else None
+
 	def download_asset(self, release, name, dest):
 		key = (release["tag_name"], name)
 		if key not in self.assets:
@@ -146,8 +153,15 @@ class FakeGitHub:
 		with open(dest, "wb") as handle:
 			handle.write(self.assets[key])
 
-	def fetch_manifest(self, release, scratch_dir):
-		return json.loads(self.assets[(release["tag_name"], "release.json")].decode("utf-8"))
+	def fetch_manifest(self, release, scratch_dir, name="release.json"):
+		return json.loads(self.assets[(release["tag_name"], name)].decode("utf-8"))
+
+
+def make_launcher_assets(version, binary=b"pinned launcher", sha_override=None):
+	"""Returns {asset name: bytes} for a launcher-v* release."""
+	info = {"version": version, "commit": "f" * 40, "size": len(binary),
+		"sha256": sha_override or hashlib.sha256(binary).hexdigest()}
+	return {"Launcher.exe": binary, "launcher-release.json": json.dumps(info).encode("utf-8")}
 
 
 class FakeApi:

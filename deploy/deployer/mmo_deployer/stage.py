@@ -19,6 +19,10 @@ COMPILER_TIMEOUT_S = 3 * 3600
 GIT_OPTIONS = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=300"]
 
 
+LAUNCHER_BINARY = "Launcher.exe"
+LAUNCHER_MANIFEST = "launcher-release.json"
+
+
 class StageError(Exception):
 	pass
 
@@ -98,6 +102,7 @@ class Stager:
 			binaries = [name for name in archive.namelist() if name != "source.txt"]
 		if not (self.patch_source / "source.txt").is_file():
 			raise StageError("client-bin.zip contains no source.txt")
+		launcher_version = self._pin_launcher()
 
 		if tmp.exists():
 			shutil.rmtree(tmp)
@@ -111,8 +116,27 @@ class Stager:
 		if final.exists():
 			shutil.rmtree(final)
 		os.replace(tmp, final)
-		log.info("staged %s into %s", commit, final)
-		return manifest
+		log.info("staged %s into %s (launcher %s)", commit, final, launcher_version or "from the nightly")
+		return dict(manifest, launcher_version=launcher_version)
+
+	def _pin_launcher(self):
+		"""Replaces the nightly's Launcher.exe with the newest launcher release; returns its version.
+
+		The launcher has its own release cycle: a rebuilt launcher differs in bytes every night,
+		and every changed Launcher.exe makes every player's launcher update itself. Until the
+		first launcher release exists the nightly's own build ships. Raises StageError.
+		"""
+		release = self.github.newest_versioned_release(self.cfg.launcher_prefix)
+		if release is None:
+			log.warning("no %s* release; shipping the nightly's launcher build", self.cfg.launcher_prefix)
+			return None
+		info = self.github.fetch_manifest(release, str(self.downloads), LAUNCHER_MANIFEST)
+		binary = self.downloads / LAUNCHER_BINARY
+		self.github.download_asset(release, LAUNCHER_BINARY, str(binary))
+		if sha256_file(binary) != info["sha256"]:
+			raise StageError("{} of {} checksum mismatch".format(LAUNCHER_BINARY, release["tag_name"]))
+		shutil.copyfile(binary, self.patch_source / LAUNCHER_BINARY)
+		return str(info["version"])
 
 	def _checkout_data(self, data_commit):
 		if not (self.data_checkout / ".git").exists():

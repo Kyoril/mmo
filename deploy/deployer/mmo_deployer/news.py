@@ -40,7 +40,20 @@ def describe_change(subject):
 	return stripped[:1].upper() + stripped[1:]
 
 
-def add_patch_note(path, date_text, changes):
+def render_notes(notes):
+	"""Body text for patch notes from tools/release/patch_notes.py ({headline, sections})."""
+	lines = []
+	for section in notes.get("sections") or []:
+		bullets = [str(bullet) for bullet in section.get("bullets") or []]
+		if section.get("title") and bullets:
+			lines.append("## " + str(section["title"]))
+			lines.extend("- " + bullet for bullet in bullets[:MAX_LINES])
+			lines.append("")
+	return "\n".join(lines).strip()
+
+
+def add_patch_note(path, date_text, changes, version=None, notes=None):
+	"""Prepends one patch entry. `notes` (player patch notes) wins over the raw `changes`."""
 	path = Path(path)
 	if not path.is_file():
 		return False
@@ -57,14 +70,17 @@ def add_patch_note(path, date_text, changes):
 		logging.getLogger("deployer").warning("launcher.json patches field is not a list")
 		return False
 	lines = [describe_change(change) for change in changes][:MAX_LINES]
-	if not lines:
+	body = render_notes(notes) if isinstance(notes, dict) else ""
+	if body:
+		summary = str(notes.get("headline") or "Fixes and improvements")
+	elif not lines:
 		summary = "Maintenance update"
 		body = "## Changes\n- Maintenance update"
 	else:
 		summary = lines[0] if len(lines) == 1 else "{} fixes and improvements".format(len(lines))
 		body = "## Changes\n" + "\n".join("- " + line for line in lines)
 	entry = {
-		"title": _clip("Update " + date_text, TITLE_LIMIT),
+		"title": _clip("Patch " + version if version else "Update " + date_text, TITLE_LIMIT),
 		"date": _clip(date_text, DATE_LIMIT),
 		"summary": _clip(summary, SUMMARY_LIMIT),
 		"body": _clip(body, BODY_LIMIT),

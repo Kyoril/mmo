@@ -13,7 +13,7 @@ from mmo_deployer.patchdir import PatchDir
 from mmo_deployer.stage import COMPILER_TIMEOUT_S, GIT_TIMEOUT_S, StageError, Stager, select_release
 from mmo_deployer.state import State
 
-from .fakes import CAN_SYMLINK, FakeGitHub, make_config, make_git_repo, make_release_assets
+from .fakes import CAN_SYMLINK, FakeGitHub, make_config, make_git_repo, make_launcher_assets, make_release_assets
 
 FAKE_COMPILER = [sys.executable, os.path.join(os.path.dirname(__file__), "fake_update_compiler.py")]
 COMMIT = "c" * 40
@@ -101,6 +101,26 @@ class StagerTests(unittest.TestCase):
 		self.assertIn('"source.txt"', listing)
 		self.assertFalse(self.patchdir.tmp_path(COMMIT).exists())
 		self.assertTrue((self.stager.data_checkout / "Worlds" / "map.txt").is_file())
+
+	def test_nightly_launcher_ships_until_a_launcher_release_exists(self):
+		manifest = self.stager.stage(self._release())
+		self.assertIsNone(manifest["launcher_version"])
+		self.assertEqual((self.stager.patch_source / "Launcher.exe").read_bytes(), b"launcher")
+
+	def test_newest_launcher_release_replaces_the_nightly_build(self):
+		self.github.add_release("launcher-v1.0.0", "e" * 40, make_launcher_assets("1.0.0", b"old launcher"), "2026-09-01T00:00:00Z")
+		self.github.add_release("launcher-v1.1.0", "f" * 40, make_launcher_assets("1.1.0"), "2026-10-01T00:00:00Z")
+		manifest = self.stager.stage(self._release())
+		self.assertEqual(manifest["launcher_version"], "1.1.0")
+		self.assertEqual((self.stager.patch_source / "Launcher.exe").read_bytes(), b"pinned launcher")
+		self.assertTrue(self.patchdir.has_release(COMMIT))
+
+	def test_launcher_checksum_mismatch_fails_staging(self):
+		self.github.add_release("launcher-v1.0.0", "f" * 40, make_launcher_assets("1.0.0", sha_override="0" * 64), "2026-10-01T00:00:00Z")
+		with self.assertRaises(StageError) as ctx:
+			self.stager.stage(self._release())
+		self.assertIn("Launcher.exe", str(ctx.exception))
+		self._assert_nothing_left()
 
 	def test_restage_replaces_existing_release(self):
 		self.stager.stage(self._release())
