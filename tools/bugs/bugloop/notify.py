@@ -29,18 +29,21 @@ class Notifier:
 			return False
 		if len(text) > LIMIT:
 			text = text[:LIMIT - 1] + "…"
-		# Summaries derive from player reports: never let them ping anyone.
-		data = json.dumps({"content": text, "allowed_mentions": {"parse": []}}).encode("utf-8")
-		request = urllib.request.Request(self.webhook_url, data=data, method="POST")
-		request.add_header("Content-Type", "application/json")
-		# Discord's Cloudflare front rejects urllib's default agent.
-		request.add_header("User-Agent", USER_AGENT)
 		try:
+			# Summaries derive from player reports: never let them ping anyone.
+			data = json.dumps({"content": text, "allowed_mentions": {"parse": []}}).encode("utf-8")
+			request = urllib.request.Request(self.webhook_url, data=data, method="POST")
+			request.add_header("Content-Type", "application/json")
+			# Discord's Cloudflare front rejects urllib's default agent.
+			request.add_header("User-Agent", USER_AGENT)
 			with self.opener(request, timeout=10) as response:
 				response.read()
 			return True
 		except Exception as error:  # a notification must never stop the loop
-			self.log("notification failed: {}".format(type(error).__name__))
+			try:
+				self.log("notification failed: {}".format(type(error).__name__))
+			except Exception:
+				pass
 			return False
 
 

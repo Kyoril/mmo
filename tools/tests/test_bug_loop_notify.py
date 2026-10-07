@@ -79,6 +79,12 @@ class NotifierTests(unittest.TestCase):
 		self.assertEqual(self.make(ui="https://ui.example/").bug_link("abc"), "https://ui.example/bugs/abc")
 		self.assertEqual(self.make().bug_link("abc"), "bug abc")
 
+	def test_malformed_url_returns_false_and_logs_safely(self):
+		notifier = self.make(url="not a url")
+		self.assertFalse(notifier.send("hi"))
+		self.assertEqual(len(self.logs), 1)
+		self.assertNotIn("not a url", self.logs[0])
+
 
 class MessageTests(unittest.TestCase):
 	def test_design_question(self):
