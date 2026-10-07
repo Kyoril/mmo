@@ -64,6 +64,10 @@ def refix_limit_message(notifier, bug_id, limit):
 	return "**Refix limit reached** — {} had {} guided refixes; finish it by hand.".format(notifier.bug_link(bug_id), limit)
 
 
+def feature_ready_message(notifier, bug_id, summary, branch):
+	return "**Feature ready for review** — {}\n{}\nBranch: `{}`".format(notifier.bug_link(bug_id), summary[:200], branch)
+
+
 def daily_summary(data, budget, waiting):
 	counts = {}
 	for entry in data.get("outcomes", []):

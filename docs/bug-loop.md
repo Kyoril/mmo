@@ -115,14 +115,18 @@ Nothing the fixer writes can change how later diffs are decoded. If protoc or th
 missing, the loop logs a warning and runs without a decoder: every `.data` change then parks.
 
 Stale claims: if the loop is killed mid-fix, the next live poll releases the bug as `triaged`
-with an "interrupted" note.
+with an "interrupted" note. An interrupted guided refix goes back to `pr_open`; an interrupted
+feature implement run goes back to `triaged` with the category `design_request` and "decide
+again" in the note, so "Implement as feature" can be chosen again.
 
 ## Where to look
 
 - `tools/gate/reports/bugloop-YYYY-MM-DD.json`: the day's outcomes, ships, parked branches,
   abuse flags, model invocations (`bugloop-dry-*.json` in shadow mode).
 - `artifacts/bug-loop/<bug id>/`: `report.json`, `triage.json`, `FIX.json`, `diff.patch`,
-  `guard.json`, `review.json`, `proof.json`, `gate.json`, `decision.json`.
+  `guard.json`, `review.json`, `proof.json`, `gate.json`, `decision.json`. The accepted
+  description of a feature is not stored here (the fixer can write this folder) but in
+  `artifacts/bug-loop/state.json` under `features`.
 - `artifacts/bug-loop/_runs/<date>.log`: the runner log. `dry-run-journal.jsonl`: the API
   writes a shadow run would have made.
 - The bug's history in the web UI (`actor: bug-loop`). Abuse flags: web UI → Flagged reporters.
@@ -143,8 +147,9 @@ A parked bug has one of two statuses. `pr_open` is an ordinary park: the fix wai
 also sends a Discord ping with the question. Every park uploads the candidate diff, so the web
 UI can show it next to the decision panel.
 
-The panel offers three actions. The loop consumes decisions before it does anything else in a
-poll:
+The decision panel of a parked bug offers three actions: refix, ship and discard. A separate
+"Feature request" panel offers a fourth, "Implement as feature", on rejected reports that are
+not parked (see below). The loop consumes decisions before it does anything else in a poll:
 
 - **Refix with guidance**: the fixer continues on the existing `bugfix/<id8>` branch with the
   maintainer's guidance, at most 3 guided rounds per bug. A refix with empty guidance is
@@ -162,6 +167,19 @@ poll:
   nightly freeze window queues the ship until the window ends; a second ship decision for a
   queued bug only adds a note.
 - **Discard**: sets the bug to `wontfix` and deletes the branch.
+- **Implement as feature** (Feature request panel, only for `wontfix`/`not_a_bug` and
+  `triaged`/`design_request` without a pending decision): the maintainer's description (at
+  most 4000 characters) becomes the trusted expected behaviour for the fixer and the reviewer.
+  Once the loop has claimed the bug it relabels the category to `feature` and keeps the
+  description in its state; if the claim fails, the bug keeps its status and category and only
+  gets a "decide again" note. A fresh `bugfix/<id8>` branch starts from `origin/develop`;
+  guard, regression proof and gate run unchanged. A feature never ships on its own: every round
+  parks with "feature: shipping needs the maintainer's approval", and the first green park of
+  an implement run sends a "Feature ready for review" ping. It needs 2 invocations of budget
+  and runs only live. A failed or interrupted implement run returns the bug to
+  `triaged`/`design_request` with "decide again", so it can be implemented again. Once parked,
+  the feature moves on through the usual refix, ship (hash-bound, as above) or discard; guided
+  refixes keep the original description.
 
 A discard or refix also drops a ship of the same bug that is still queued for the end of the
 freeze window. Decisions without an action or already consumed are skipped, so an API from
@@ -188,6 +206,8 @@ loop logs `notifications: on` or `off` at startup (`off (dry run)` in a dry run)
 webhook nothing is sent. Messages:
 
 - design decision needed (the reviewer's question, with a link and the branch);
+- feature ready for review ("Feature ready for review": an implement run parked with an
+  otherwise green result, with a link and the branch);
 - circuit breaker tripped (a red nightly that lists a `Merge bugfix/...`);
 - shipped (marked as a maintainer decision when it came from the panel);
 - refix limit reached;

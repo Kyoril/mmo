@@ -27,3 +27,8 @@ Decide:
    Ordinary bug fixes that restore documented or evident behaviour need no question; leave it empty.
 8. `guidance_followed`: if a MAINTAINER GUIDANCE block is present, does the diff implement it? `true`
    when no guidance was given.
+9. If a FEATURE REQUEST block is present, the maintainer accepted the report as a feature: judge
+   `fixes_symptom` and `expected_source_supported` against that block (it is the expected
+   behaviour), and leave `design_question` empty unless the diff goes beyond the block. Set
+   `guidance_followed` to false if the diff does not implement what the block describes or goes
+   beyond it without a MAINTAINER GUIDANCE block justifying the extra changes.

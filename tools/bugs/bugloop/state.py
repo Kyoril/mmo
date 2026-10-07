@@ -24,6 +24,9 @@ _DEFAULT = {
 	"seen_red_reports": [],
 	"refix_rounds": {},
 	"pending_summary": None,
+	# Maintainer-accepted features: bug id -> the accepted description. It lives here, not in
+	# the bug's artifacts folder, because the fixer can write that folder.
+	"features": {},
 }
 
 
@@ -34,6 +37,9 @@ class LoopState:
 		if os.path.exists(path):
 			with open(path, "r", encoding="utf-8") as handle:
 				self.data.update(json.load(handle))
+		if isinstance(self.data["features"], list):
+			# State from before descriptions were kept: still features, without a description.
+			self.data["features"] = {bug_id: None for bug_id in self.data["features"]}
 		if not self.data["day"]:
 			self.data["day"] = today
 		self.roll(today)
@@ -124,6 +130,18 @@ class LoopState:
 
 	def count_refix(self, bug_id):
 		self.data["refix_rounds"][bug_id] = self.refix_count(bug_id) + 1
+
+	def add_feature(self, bug_id, description=None):
+		"""A maintainer-accepted feature: no round of this bug ever ships on its own. The
+		description is the trusted FEATURE REQUEST text for this and every later round."""
+		self.data["features"][bug_id] = description
+
+	def is_feature(self, bug_id):
+		return bug_id in self.data["features"]
+
+	def feature_description(self, bug_id):
+		"""The accepted description, or None (not a feature, or accepted before it was kept)."""
+		return self.data["features"].get(bug_id)
 
 
 def _minutes(text):
