@@ -1,0 +1,97 @@
+name: Launcher Release
+
+# The launcher has its own release cycle (docs/versioning.md): pushing a launcher-vX.Y.Z tag
+# builds it and publishes a release the deployer ships with the next nightly patch. Nightly
+# builds never change the launcher players run, so launchers only update themselves on purpose.
+
+on:
+  push:
+    tags:
+      - "launcher-v*"
+
+concurrency:
+  group: launcher-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      # Full history and tags: the launcher version is read from the newest launcher-v tag.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Check the tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^launcher-v(\d+\.\d+\.\d+)$') { throw "$tag is not launcher-vX.Y.Z" }
+          $version = $Matches[1]
+          $built = python tools/release/version.py --launcher
+          if ($built -ne $version) { throw "the build would report $built, the tag says $version" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Init code submodules (not the data repos)
+        run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
+
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v6
+        with:
+          pkgs: openssl
+          triplet: x64-windows-static-md
+          token: ${{ github.token }}
+          github-binarycache: true
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' `
+            '-DMMO_BUILD_CLIENT=ON' `
+            '-DMMO_BUILD_LAUNCHER=ON' `
+            '-DMMO_BUILD_TESTS=OFF' `
+            '-DMMO_OPENSSL_STATIC=ON' `
+            '-DOPENSSL_USE_STATIC_LIBS=TRUE' `
+            '-DVCPKG_TARGET_TRIPLET=x64-windows-static-md' `
+            "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build launcher
+        run: cmake --build build --config Release --parallel 4 -t launcher
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $binary = "bin/Release/Launcher.exe"
+          $info = [ordered]@{
+            version = "${{ steps.version.outputs.version }}"
+            commit = "${{ github.sha }}"
+            sha256 = (Get-FileHash -Algorithm SHA256 $binary).Hash.ToLowerInvariant()
+            size = (Get-Item $binary).Length
+          }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item $binary dist/Launcher.exe
+          $info | ConvertTo-Json | Set-Content -Encoding utf8NoBOM dist/launcher-release.json
+          Compress-Archive -Path bin/Release/Launcher.pdb -DestinationPath dist/launcher-symbols.zip
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          previous=$(git describe --tags --abbrev=0 --match "launcher-v[0-9]*" "${tag}^" 2>/dev/null || true)
+          range="${previous:+$previous..}$tag"
+          {
+            echo "## Launcher ${{ steps.version.outputs.version }}"
+            echo
+            git log --no-merges --format='- %s' "$range" -- src/launcher | sed -E 's/^- [a-z]+(\([^)]*\))?!?: /- /' | head -50
+          } > notes.md
+          gh release create "$tag" --target "${{ github.sha }}" --title "Launcher ${{ steps.version.outputs.version }}" \
+            --notes-file notes.md dist/Launcher.exe dist/launcher-release.json dist/launcher-symbols.zip

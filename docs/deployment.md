@@ -4,8 +4,8 @@ Design: [docs/superpowers/specs/2026-10-06-nightly-deploy-design.md](superpowers
 
 ## 1. Overview
 
-1. 22:00 UTC (00:00 Berlin in summer, 23:00 in winter; the cron is UTC, while `MAINTENANCE_AT` 04:45 is in `TZ`, Europe/Berlin). The gate may take up to 180 min, then the client build and staging follow, so the release is staged well before 04:45: `.github/workflows/nightly-release.yml` gates `develop` on Linux (full gate incl. E2E), builds the images and client patch, and publishes a `nightly-*` release (with `release.json`).
-2. The `mmo-deployer` container on the root server polls GitHub and stages the newest green release (patch files, data, `update_compiler`). The stager refuses a release whose `release.json` gate is not green.
+1. 22:00 UTC (00:00 Berlin in summer, 23:00 in winter; the cron is UTC, while `MAINTENANCE_AT` 04:45 is in `TZ`, Europe/Berlin). The gate may take up to 180 min, then the client build and staging follow, so the release is staged well before 04:45: `.github/workflows/nightly-release.yml` gates `develop` on Linux (full gate incl. E2E), builds the images and client patch, writes player patch notes, and publishes a `nightly-<version>` release (with `release.json`). Versions, patch notes and the launcher's own release cycle are described in [versioning.md](versioning.md).
+2. The `mmo-deployer` container on the root server polls GitHub and stages the newest green release (patch files, data, `update_compiler`). The stager refuses a release whose `release.json` gate is not green. It ships the newest `launcher-v*` release's `Launcher.exe` instead of the nightly's build (`LAUNCHER_RELEASE_PREFIX`, default `launcher-v`).
 3. 04:45 (Europe/Berlin): maintenance. Preflight (login, realms, Portainer token), 15-minute realm shutdown countdown, DB backup, patch `current` flip, Portainer redeploy with `MMO_TAG=<sha>`.
 4. Verify: within 300 s there must be two consecutive rounds in which login and every realm answer `/uptime` and Portainer reports every `WAIT_SERVICES` container (default `realm_server_01,world_node_01`, so the world node too) as `running`. Otherwise the deployer rolls back to the previous release.
 5. Notify: every step posts to `NOTIFY_WEBHOOK` (the URL itself is never included in a message).
@@ -93,7 +93,7 @@ Notifications:
 | `post-stage cleanup failed: ...` | Pruning old releases after staging failed; the staged release is fine, check the patch disk. |
 | `Release <sha> failed its health check; rolling back` | Verify failed, rolling back. |
 | `Release <sha> was rolled back` | Rollback healthy; release marked bad. |
-| `Release <sha> is live` | Success, with the change list. |
+| `Release <sha> is live` | Success, with the change list. The launcher gets a `Patch <version>` entry with the player patch notes. |
 | `MANUAL INTERVENTION REQUIRED` | Deployer paused; see the playbook. |
 | `MANUAL INTERVENTION REQUIRED: the deployer restarted during maintenance for <sha>` | The deployer process died mid-maintenance (container restart, host reboot); the stack may be down. Paused, nothing done automatically; see the playbook. |
 | `Request <cmd> failed` | A CLI request crashed and was dropped. |
