@@ -323,8 +323,47 @@ class LoopTests(unittest.TestCase):
 	def test_refix_without_a_new_commit_needs_info(self):
 		self.park_with_decision("refix", "Check line of sight.")
 		self.loop.poll_once()
-		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
 		self.assertIn("no new clean commit", self.api.notes(BUG_ID)[-1])
+
+	def test_refix_fix_stage_error_stays_decidable(self):
+		self.park_with_decision("refix", "Try again.")
+		def boom(*args):
+			raise claude.ClaudeError("boom")
+		self.runner.agent = boom
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_refix_handler_crash_stays_decidable(self):
+		self.park_with_decision("refix", "Try again.")
+		def boom(*args):
+			raise ValueError("crash")
+		self.runner.agent = boom
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_interrupted_refix_is_released_to_pr_open(self):
+		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="bug-loop", prUrl="branch:" + BRANCH)])
+		self.state.mark_attempted(BUG_ID, "fix-started")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_refix_with_blank_guidance_is_not_run(self):
+		self.park_with_decision("refix", "   ")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "needs_decision")
+		self.assertIn("needs guidance", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.worktree.resumed, [])
+		self.assertEqual(self.runner.inputs, [])
+		self.assertIn("refix-without-guidance", self.outcomes())
+
+	def test_second_ship_decision_during_freeze_does_not_duplicate(self):
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.api.bugs[BUG_ID]["decision"] = {"action": "ship", "guidance": "", "decidedAt": "t2", "consumedAt": None}
+		self.loop.poll_once()
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.assertIn("already queued", self.api.notes(BUG_ID)[-1])
 
 	def test_refix_limit(self):
 		self.park_with_decision("refix", "Again.")

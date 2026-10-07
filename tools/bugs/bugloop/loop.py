@@ -193,9 +193,9 @@ class BugLoop:
 			if not worked:
 				sleep(self.config.poll_seconds)
 
-	def _safe_release(self, bug_id, note):
+	def _safe_release(self, bug_id, note, status="triaged"):
 		try:
-			self._release(bug_id, "triaged", note)
+			self._release(bug_id, status, note)
 		except Exception:
 			self.log(traceback.format_exc())
 
@@ -247,7 +247,9 @@ class BugLoop:
 				bug = self.api.show(bug_id)
 				if bug.get("status") != "in_progress" or bug.get("claimedBy") != self.config.worker:
 					continue
-				self._release(bug_id, "triaged",
+				# A bug parked before (an interrupted refix) goes back to the maintainer, not to triage.
+				parked = (bug.get("prUrl") or "").startswith("branch:")
+				self._release(bug_id, "pr_open" if parked else "triaged",
 					"needs-info: the bug loop was interrupted while fixing; see artifacts/bug-loop/" + bug_id)
 				self._finish(bug_id, "interrupted")
 			except Exception:
@@ -317,6 +319,8 @@ class BugLoop:
 		self.state.save()
 		bug = self._read(bug_id, "report.json")
 		verdict = self._read(bug_id, "triage.json")
+		# A guided refix that fails goes back to the maintainer, who can only decide on parked bugs.
+		failed_status = "pr_open" if guidance else "triaged"
 		previous = self._previous_attempt(bug_id) if guidance else None
 		try:
 			self.api.claim(bug_id, self.config.worker)
@@ -328,7 +332,7 @@ class BugLoop:
 		branch = "bugfix/" + short_id(bug_id)
 		base = self.worktree.prepare()
 		if not self.verifier.ensure_configured():
-			self._release(bug_id, "triaged", "needs-info: build configure failed in the bug-loop worktree")
+			self._release(bug_id, failed_status, "needs-info: build configure failed in the bug-loop worktree")
 			self._finish(bug_id, "needs-info", reason="build configure failed")
 			return
 		if guidance:
@@ -352,7 +356,7 @@ class BugLoop:
 			self._write(bug_id, "fix_result.json", result)
 			fix = verdicts.load_fix(fix_path)
 		except (ClaudeError, verdicts.VerdictError) as error:
-			self._release(bug_id, "triaged", "needs-info: the fix stage failed: " + str(error)[:500])
+			self._release(bug_id, failed_status, "needs-info: the fix stage failed: " + str(error)[:500])
 			self._finish(bug_id, "needs-info", reason=str(error)[:300])
 			return
 		if fix["outcome"] == "no_project_basis":
@@ -361,18 +365,18 @@ class BugLoop:
 			self._finish(bug_id, "wontfix-no-basis")
 			return
 		if fix["outcome"] != "fixed":
-			self._release(bug_id, "triaged", "needs-info ({}): {}".format(fix["outcome"], fix["root_cause"][:1000]))
+			self._release(bug_id, failed_status, "needs-info ({}): {}".format(fix["outcome"], fix["root_cause"][:1000]))
 			self._finish(bug_id, "needs-info", reason=fix["outcome"])
 			return
 		head = self.worktree.head()
 		if head == start or not self.worktree.is_clean():
-			self._release(bug_id, "triaged", "needs-info: the fixer reported a fix but left no new clean commit")
+			self._release(bug_id, failed_status, "needs-info: the fixer reported a fix but left no new clean commit")
 			self._finish(bug_id, "needs-info", reason="no clean commit")
 			return
 		# Everything below judges `head`; the branch must point there, or a later ship would merge
 		# something nobody guarded.
 		if self.worktree.head(branch) != head:
-			self._release(bug_id, "triaged", "needs-info: the fixer moved the branch away from the checked-out commit")
+			self._release(bug_id, failed_status, "needs-info: the fixer moved the branch away from the checked-out commit")
 			self._finish(bug_id, "needs-info", reason="fixer moved the branch")
 			return
 		self._verify_and_ship(bug_id, verdict, fix, branch, base, head, guidance=guidance)
@@ -452,6 +456,16 @@ class BugLoop:
 			guidance = (decision.get("guidance") or "").strip()
 			if action == "refix" and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 				continue  # stays pending until tomorrow's budget
+			if action == "refix" and not guidance:
+				# Without guidance a refix would be a fresh fix that resets the branch.
+				try:
+					self._update(bug_id, decisionConsumed=True)
+					self._update(bug_id, status="needs_decision", note="refix needs guidance; decide again")
+					self._finish(bug_id, "refix-without-guidance")
+				except Exception:
+					self.log(traceback.format_exc())
+				worked = True
+				continue
 			try:
 				# Consume first: a crash below must not replay the action.
 				self._update(bug_id, decisionConsumed=True)
@@ -469,7 +483,7 @@ class BugLoop:
 					self.log("unknown decision action {!r} for {}".format(action, bug_id)[:200])
 			except Exception:
 				self.log(traceback.format_exc())
-				self._safe_release(bug_id, "the bug loop failed to carry out the maintainer decision; see artifacts/bug-loop/" + bug_id)
+				self._safe_release(bug_id, "the bug loop failed to carry out the maintainer decision; see artifacts/bug-loop/" + bug_id, status="pr_open")
 				self._finish(bug_id, "loop-error")
 			worked = True
 		return worked
@@ -506,6 +520,9 @@ class BugLoop:
 			self._park(bug_id, branch, ["the circuit breaker is tripped"])
 			return
 		summary = self._summary(bug_id)
+		if any(item.get("bug") == bug_id for item in self.state.data["ship_queue"]):
+			self._update(bug_id, note="already queued to ship after the freeze window")
+			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=True)
 			self.state.mark_attempted(bug_id, "ship-queued")
