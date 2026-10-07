@@ -137,6 +137,11 @@ namespace mmo
 		// These methods are meant to be called by the AI states on specific events.
 		void OnThreatened(GameUnitS& threat, float amount);
 
+		/// Calls nearby friendly creatures that are not yet in combat into the fight against an
+		/// enemy that threatened this creature. Does nothing if the threat is friendly.
+		/// @param threat The unit that attacked or threatened this creature.
+		void CallForHelp(GameUnitS& threat);
+
 	protected:
 
 		void SetState(CreatureAIStatePtr state);

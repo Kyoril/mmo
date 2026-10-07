@@ -228,46 +228,65 @@ namespace mmo
 			return;
 		}
 
-		auto* worldInstance = controlled.GetWorldInstance();
-		ASSERT(worldInstance);
-
 		if (!controlled.UnitIsFriendly(threat))
 		{
-			const auto& location = controlled.GetPosition();
-
-			worldInstance->GetUnitFinder().FindUnits(Circle(location.x, location.z, 8.0f), [&controlled, &threat, &worldInstance](GameUnitS& unit) -> bool
-				{
-					if (!unit.IsUnit())
-					{
-						return true;
-					}
-
-					if (!unit.IsAlive())
-					{
-						return true;
-					}
-
-					if (unit.IsInCombat())
-					{
-						return true;
-					}
-
-					// TODO: Line of sight
-
-					if (controlled.UnitIsFriendly(unit) && controlled.UnitIsEnemy(threat))
-					{
-						worldInstance->GetUniverse().Post([&unit, &threat]()
-							{
-								unit.threatened(threat, 0.0f);
-							});
-					}
-
-					return false;
-				});
+			CallForHelp(threat);
 
 			// Warning: This destroys the current AI state as it enters the combat state
 			EnterCombat(threat);
 		}
+	}
+
+	void CreatureAI::CallForHelp(GameUnitS& threat)
+	{
+		GameCreatureS& controlled = GetControlled();
+		if (threat.GetGuid() == controlled.GetGuid() || controlled.UnitIsFriendly(threat))
+		{
+			return;
+		}
+
+		auto* worldInstance = controlled.GetWorldInstance();
+		ASSERT(worldInstance);
+
+		const auto& location = controlled.GetPosition();
+
+		worldInstance->GetUnitFinder().FindUnits(Circle(location.x, location.z, 8.0f), [&controlled, &threat, &worldInstance](GameUnitS& unit) -> bool
+			{
+				if (&unit == &controlled)
+				{
+					return true;
+				}
+
+				if (!unit.IsUnit())
+				{
+					return true;
+				}
+
+				if (!unit.IsAlive())
+				{
+					return true;
+				}
+
+				if (unit.IsInCombat())
+				{
+					return true;
+				}
+
+				// TODO: Line of sight
+
+				if (controlled.UnitIsFriendly(unit) && controlled.UnitIsEnemy(threat))
+				{
+					auto strongUnit = std::static_pointer_cast<GameUnitS>(unit.shared_from_this());
+					auto strongThreat = std::static_pointer_cast<GameUnitS>(threat.shared_from_this());
+					worldInstance->GetUniverse().Post([strongUnit, strongThreat]()
+						{
+							strongUnit->threatened(*strongThreat, 0.0f);
+						});
+				}
+
+				// Keep searching: every ally in range is called, not just the first unit found
+				return true;
+			});
 	}
 
 }
