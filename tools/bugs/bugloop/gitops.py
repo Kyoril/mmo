@@ -85,6 +85,9 @@ class Worktree:
 		run_git(self.main_repo, "worktree", "prune")
 		if not os.path.exists(os.path.join(self.path, ".git")):
 			run_git(self.main_repo, "worktree", "add", "--detach", self.path, self.target)
+		# A killed run can leave a merge, rebase or cherry-pick in progress; checkout would refuse.
+		for operation in ("merge", "rebase", "cherry-pick"):
+			run_git(self.path, operation, "--abort", check=False)
 		self.checkout(self.target)
 		self.git("clean", "-fd")
 		for sub in self.submodules:
@@ -155,16 +158,20 @@ class Worktree:
 		completed = run_git(repo, "show", "{}:{}".format(rev, relative), check=False, binary=True)
 		return completed.stdout if completed.returncode == 0 else None
 
-	def ship(self, branch, message, fast_gate):
-		"""Merges branch onto the current origin/develop and pushes: changed submodules first
-		(fast-forward of their master only), then develop. fast_gate() runs only when develop
-		moved since the branch was cut, because then the merge result was never gated."""
+	def ship(self, branch, head, message, fast_gate):
+		"""Merges `head`, the commit that was guarded, proved and gated, onto the current
+		origin/develop and pushes: changed submodules first (fast-forward of their master only),
+		then develop. Refuses when `branch` no longer points at `head`. fast_gate() runs only when
+		develop moved since the branch was cut, because then the merge result was never gated."""
+		current = run_git(self.path, "rev-parse", "--verify", "-q", branch + "^{commit}", check=False).stdout.strip()
+		if current != head:
+			return ShipResult(False, "", "branch moved after gating ({} is at {}, gated {})".format(branch, current[:8] or "nothing", head[:8]))
 		run_git(self.main_repo, "fetch", self.remote)
 		tip = self.head(self.target)
-		fork = self.git("merge-base", tip, branch)
+		fork = self.git("merge-base", tip, head)
 		moved = fork != tip
 		pushes = []
-		for sub, _, sha in self._changed_links(fork, branch):
+		for sub, _, sha in self._changed_links(fork, head):
 			sub_dir = self.sub_path(sub)
 			self.git("fetch", self.sub_remote, cwd=sub_dir)
 			master = "{}/{}".format(self.sub_remote, self.master)
@@ -173,7 +180,7 @@ class Worktree:
 				return ShipResult(False, "", "{}: {} is not an ancestor of {}; a submodule merge is needed".format(sub, master, sha[:8]))
 			pushes.append((sub_dir, sha))
 		self.git("checkout", "--detach", "--force", tip)
-		merge = run_git(self.path, "merge", "--no-ff", "-m", message, branch, check=False)
+		merge = run_git(self.path, "merge", "--no-ff", "-m", message, head, check=False)
 		if merge.returncode != 0:
 			run_git(self.path, "merge", "--abort", check=False)
 			return ShipResult(False, "", "merge conflict with " + self.target)

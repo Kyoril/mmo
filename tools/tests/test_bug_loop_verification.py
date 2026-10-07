@@ -4,6 +4,7 @@
 """Tests for the regression proof and gate runs, with fake processes and a fake worktree."""
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,12 +19,16 @@ from bugloop import guard, verification  # noqa: E402
 
 
 class FakeTree:
-	def __init__(self, path="wt", events=None):
+	def __init__(self, path="wt", events=None, deleted=()):
 		self.path = path
 		self.commands = []
 		self.events = events if events is not None else []
+		self.deleted = set(deleted)
 
 	def git(self, *args, cwd=None, check=True):
+		if args[0] == "ls-tree":
+			files = args[args.index("--") + 1:]
+			return "\0".join(path for path in files if path not in self.deleted)
 		self.commands.append(("git",) + args)
 		self.events.append(("git",) + args)
 		return ""
@@ -82,7 +87,7 @@ class ProofTests(unittest.TestCase):
 		self.assertTrue(result["ok"], result)
 		self.assertEqual((result["before"], result["after"]), ("failed", "passed"))
 		self.assertEqual(run.commands[0], ["cmake", "--build", "build", "--config", "Debug", "-t", "game_server_tests"])
-		self.assertEqual(run.commands[1], [os.path.join("bin", "Debug", "game_server_tests.exe"), "[quest]"])
+		self.assertEqual(run.commands[1], [os.path.abspath(os.path.join("wt", "bin", "Debug", "game_server_tests.exe")), "[quest]"])
 		self.assertEqual(tree.commands, [
 			("checkout", "base"),
 			("git", "checkout", "bugfix/x", "--", "src/tests/game_server_tests/test_q.cpp"),
@@ -146,17 +151,63 @@ class ProofTests(unittest.TestCase):
 
 	def test_proof_restores_branch_on_error(self):
 		tree = FakeTree()
-		tree.git = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("git error"))
+		listing = tree.git
+
+		def failing_git(*args, **kwargs):
+			if args[0] == "ls-tree":
+				return listing(*args, **kwargs)
+			raise RuntimeError("git error")
+		tree.git = failing_git
 		check, _, _ = verifier([0, 1, 0, 0], tree)
 		with self.assertRaises(RuntimeError):
-			check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])
-		self.assertEqual(tree.commands[-1], ("checkout", "bugfix/x"))
+			check.proof(UNIT, "base", "head1", ["src/tests/a.cpp"])
+		self.assertEqual(tree.commands[-1], ("checkout", "head1"))
+
+	def test_deleted_test_files_are_not_checked_out(self):
+		tree = FakeTree(deleted=["src/tests/old.cpp"])
+		check, _, _ = verifier([0, 1, 0, 0], tree)
+		self.assertTrue(check.proof(UNIT, "base", "head1", ["src/tests/old.cpp", "src/tests/new.cpp"])["ok"])
+		self.assertIn(("git", "checkout", "head1", "--", "src/tests/new.cpp"), tree.commands)
+		tree = FakeTree(deleted=["src/tests/old.cpp"])
+		check, _, _ = verifier([0, 1, 0, 0], tree)
+		check.proof(UNIT, "base", "head1", ["src/tests/old.cpp"])
+		self.assertEqual(tree.commands, [("checkout", "base"), ("checkout", "head1")])
+
+	def test_missing_executable_is_a_failed_step(self):
+		def missing(command, **kwargs):
+			raise FileNotFoundError(2, "The system cannot find the file specified")
+		check = verification.Verifier(FakeTree(), "H:/mmo/build", run=missing)
+		self.assertFalse(check.build(["game_server_tests"]))
+		self.assertIn("cannot find the file", check.last_output)
+		self.assertFalse(check.last_timed_out)
 
 	def test_proof_includes_output_tail_in_result(self):
 		check, run, _ = verifier([0, 1, 0, 0])
 		result = check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])
 		self.assertIn("output_tail", result)
 		self.assertIsInstance(result["output_tail"], str)
+
+
+class RealProcessTests(unittest.TestCase):
+	"""The unit-test executable must be found with the real process API while the loop's own cwd
+	is somewhere else (C1: CreateProcess resolves a relative program against the parent's cwd)."""
+
+	def test_unit_test_exe_runs_from_another_cwd(self):
+		with tempfile.TemporaryDirectory() as folder:
+			exe = os.path.join(folder, "bin", "Debug", "x_tests.exe")
+			os.makedirs(os.path.dirname(exe))
+			if os.name == "nt":
+				shutil.copyfile(os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "hostname.exe"), exe)
+			else:
+				with open(exe, "w", encoding="utf-8") as handle:
+					handle.write("#!/bin/sh\nexit 0\n")
+				os.chmod(exe, 0o755)
+			self.assertNotEqual(os.path.abspath(os.getcwd()), os.path.abspath(folder))
+			check = verification.Verifier(FakeTree(folder), "H:/mmo/build")
+			command, _ = check._test({"kind": "unit", "suite": "x_tests"})
+			self.assertTrue(os.path.isabs(command[0]))
+			self.assertEqual(os.path.dirname(os.path.dirname(os.path.dirname(command[0]))), os.path.abspath(folder))
+			self.assertTrue(check._run(command), check.last_output)
 
 
 class GateTests(unittest.TestCase):

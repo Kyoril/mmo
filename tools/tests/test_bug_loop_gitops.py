@@ -104,20 +104,20 @@ class GitopsTests(unittest.TestCase):
 	def test_ship_pushes_submodule_then_develop(self):
 		_, head = self.make_fix()
 		sub_head = self.wt.gitlinks(head)["data/client"]
-		result = self.wt.ship("bugfix/x", "Merge bugfix/x (bug-loop, gate green at 1)\n\nbody", lambda: self.fail("no gate needed"))
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x (bug-loop, gate green at 1)\n\nbody", lambda: self.fail("no gate needed"))
 		self.assertTrue(result.ok, result.reason)
 		self.assertEqual(git(self.sub_origin, "rev-parse", "master"), sub_head)
 		self.assertEqual(git(self.origin, "rev-parse", "develop"), result.commit)
 		self.assertEqual(self.wt.merged("bugfix/x"), result.commit)
 
 	def test_ship_refuses_when_submodule_master_moved(self):
-		self.make_fix()
+		_, head = self.make_fix()
 		write(os.path.join(self.sub_seed, "other.txt"), "x\n")
 		git(self.sub_seed, "add", "-A")
 		git(self.sub_seed, "commit", "-m", "elsewhere")
 		git(self.sub_seed, "push", self.sub_origin, "master")
 		before = git(self.origin, "rev-parse", "develop")
-		result = self.wt.ship("bugfix/x", "Merge bugfix/x", lambda: True)
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: True)
 		self.assertFalse(result.ok)
 		self.assertIn("not an ancestor", result.reason)
 		self.assertEqual(git(self.origin, "rev-parse", "develop"), before)
@@ -149,16 +149,45 @@ class GitopsTests(unittest.TestCase):
 		self.assertIsNone(self.wt.merged("bugfix/x"))
 
 	def test_ship_gates_the_merge_when_develop_moved(self):
-		self.make_fix()
+		_, head = self.make_fix()
 		write(os.path.join(self.main, "README.md"), "moved\n")
 		git(self.main, "add", "-A")
 		git(self.main, "commit", "-m", "someone else")
 		git(self.main, "push", "origin", "develop")
-		red = self.wt.ship("bugfix/x", "Merge bugfix/x", lambda: False)
+		red = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: False)
 		self.assertFalse(red.ok)
 		self.assertIn("moved", red.reason)
-		green = self.wt.ship("bugfix/x", "Merge bugfix/x", lambda: True)
+		green = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: True)
 		self.assertTrue(green.ok, green.reason)
+
+	def test_ship_refuses_a_branch_that_moved_after_gating(self):
+		_, head = self.make_fix()
+		write(os.path.join(self.wt.path, "src", "a.cpp"), "int a = 3;\n")
+		git(self.wt.path, "commit", "-am", "sneaked in after the gate")
+		before = git(self.origin, "rev-parse", "develop")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: True)
+		self.assertFalse(result.ok)
+		self.assertIn("branch moved after gating", result.reason)
+		self.assertEqual(git(self.origin, "rev-parse", "develop"), before)
+
+	def test_ship_merges_the_gated_commit(self):
+		_, head = self.make_fix()
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: True)
+		self.assertTrue(result.ok, result.reason)
+		self.assertEqual(git(self.origin, "rev-parse", "develop^2"), head)
+
+	def test_prepare_clears_a_leftover_merge(self):
+		base = self.wt.prepare()
+		self.wt.start_branch("bugfix/x", base)
+		write(os.path.join(self.wt.path, "src", "a.cpp"), "int a = 2;\n")
+		git(self.wt.path, "commit", "-am", "ours")
+		git(self.main, "checkout", "-b", "other", base)
+		write(os.path.join(self.main, "src", "a.cpp"), "int a = 9;\n")
+		git(self.main, "commit", "-am", "theirs")
+		conflict = gitops.run_git(self.wt.path, "merge", "other", check=False)
+		self.assertNotEqual(conflict.returncode, 0)
+		self.assertEqual(self.wt.prepare(), base)
+		self.assertTrue(self.wt.is_clean())
 
 	def test_merged_is_none_before_merge(self):
 		self.make_fix()

@@ -36,11 +36,14 @@ GOOD_FIX = {"outcome": "fixed", "root_cause": "Kill credit ignored", "expected_s
 GOOD_REVIEW = {"fixes_symptom": True, "expected_source_supported": True, "reduces_security": False,
 	"out_of_scope_changes": False, "blocking_issues": [], "summary": "ok"}
 FIX_PATH = "src/shared/game_server/ai/creature_ai_idle_state.cpp"
-BENIGN_CHANGES = [guard.FileChange(FIX_PATH, 1, 1, False),
-	guard.FileChange("src/tests/game_server_tests/test_creature_ai_idle_state.cpp", 20, 0, False)]
+TEST_PATH = "src/tests/game_server_tests/test_creature_ai_idle_state.cpp"
+BENIGN_CHANGES = [guard.FileChange(FIX_PATH, 1, 1, False), guard.FileChange(TEST_PATH, 2, 0, False)]
 BENIGN_DIFF = ("diff --git a/{0} b/{0}\n--- a/{0}\n+++ b/{0}\n"
 	"@@ -300 +300 @@ void CreatureAIIdleState::PickClosest()\n"
-	"-\t\t\tif (distanceSq < closestDistanceSq)\n+\t\t\tif (distanceSq <= closestDistanceSq)\n").format(FIX_PATH)
+	"-\t\t\tif (distanceSq < closestDistanceSq)\n+\t\t\tif (distanceSq <= closestDistanceSq)\n"
+	"diff --git a/{1} b/{1}\n--- a/{1}\n+++ b/{1}\n"
+	"@@ -40,0 +41,2 @@ TEST_CASE(\"idle\")\n"
+	"+\tCHECK(PickClosest(a, b) == a);\n+\tCHECK(PickClosest(b, a) == b);\n").format(FIX_PATH, TEST_PATH)
 
 
 def source_text(changed_line=None, line_number=300, total=340):
@@ -148,8 +151,11 @@ class FakeWorktree:
 		self.changes_ = changes
 		self.diff = diff
 		self.head_ = "head1"
+		self.branch_heads = {}
+		self.checkouts = []
 		self.clean = True
 		self.shipped = []
+		self.shipped_heads = []
 		self.ship_result = gitops.ShipResult(True, "merge1", "")
 		self.merged_ = {}
 		self.deleted = []
@@ -164,7 +170,7 @@ class FakeWorktree:
 		pass
 
 	def head(self, ref="HEAD"):
-		return self.head_
+		return self.branch_heads.get(ref, self.head_)
 
 	def is_clean(self):
 		return self.clean
@@ -179,9 +185,12 @@ class FakeWorktree:
 		return FILES.get(rev, {}).get(path)
 
 	def checkout(self, ref):
-		pass
+		self.checkouts.append(ref)
 
-	def ship(self, branch, message, fast_gate):
+	def ship(self, branch, head, message, fast_gate):
+		self.shipped_heads.append(head)
+		if self.branch_heads.get(branch, head) != head:
+			return gitops.ShipResult(False, "", "branch moved after gating")
 		self.shipped.append((branch, message))
 		return self.ship_result
 
@@ -197,11 +206,14 @@ class FakeVerifier:
 		self.proof_ok = proof_ok
 		self.gate_ok = gate_ok
 		self.gates = []
+		self.proofs = []
+		self.configured = True
 
 	def ensure_configured(self):
-		return True
+		return self.configured
 
-	def proof(self, spec, base, branch, files):
+	def proof(self, spec, base, head, files):
+		self.proofs.append((base, head, list(files)))
 		return {"ok": self.proof_ok, "before": "failed", "after": "passed" if self.proof_ok else "failed",
 			"reason": "" if self.proof_ok else "regression test before=failed after=failed"}
 
@@ -501,6 +513,72 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertEqual(self.api.updates, [])
 		self.assertEqual(self.outcomes(), [])
+
+	# ---- final review fixes
+
+	def test_proof_and_gate_judge_the_head_commit(self):
+		self.make()
+		self.loop.poll_once()
+		self.assertEqual(self.verifier.proofs, [("base1", "head1", [TEST_PATH])])
+		self.assertIn("head1", self.worktree.checkouts)
+		self.assertNotIn(BRANCH, self.worktree.checkouts)
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+
+	def test_fixer_moving_the_branch_needs_info(self):
+		self.make()
+		self.worktree.branch_heads[BRANCH] = "elsewhere"
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertIn("moved the branch", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.verifier.gates, [])
+
+	def test_branch_moved_after_gating_parks(self):
+		self.make(now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["ship_queue"][0]["head"], "head1")
+		self.worktree.branch_heads[BRANCH] = "head2"
+		self.now = utc("2026-10-08 00:10")
+		self.loop.poll_once()
+		self.assertParked("branch moved after gating")
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+
+	def test_diff_too_large_for_review_parks(self):
+		big = BENIGN_DIFF + "".join("+\tCHECK({});\n".format(index) for index in range(6000))
+		self.make(diff=big)
+		self.loop.poll_once()
+		self.assertParked("diff too large for review")
+		self.assertNotIn("review", self.runner.calls)
+		self.assertEqual(self.verifier.gates, [])
+
+	def test_failed_configure_needs_info_without_a_fixer_run(self):
+		self.make()
+		self.verifier.configured = False
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertIn("build configure failed", self.api.notes(BUG_ID)[-1])
+		self.assertNotIn("fix", self.runner.calls)
+		self.assertEqual(self.verifier.gates, [])
+
+	def test_malformed_bug_id_is_skipped(self):
+		bad = dict(BUG, _id="../../evil")
+		self.make(bugs=[bad], verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.poll_once()
+		self.assertEqual(self.runner.calls, [])
+		self.assertFalse(os.path.exists(os.path.join(self.artifacts, "..", "..", "evil")))
+
+	def test_test_only_diff_parks(self):
+		changes = [guard.FileChange(TEST_PATH, 2, 0, False)]
+		test_diff = BENIGN_DIFF[BENIGN_DIFF.index("diff --git a/" + TEST_PATH):]
+		self.make(changes=changes, diff=test_diff, fix=dict(GOOD_FIX, data_only=True, regression_test={"kind": "none"}))
+		self.loop.poll_once()
+		self.assertParked("no production change")
+		self.assertFalse(loop.proof_exempt(changes))
+		self.assertFalse(loop.proof_exempt([]))
+
+	def test_tool_test_change_is_not_proof_exempt(self):
+		self.assertFalse(loop.proof_exempt([guard.FileChange("tools/tests/test_x.py", 1, 0, False),
+			guard.FileChange(LOC_PATH, 1, 1, False)]))
+		self.assertTrue(loop.proof_exempt([guard.FileChange(TEST_PATH, 1, 0, False), guard.FileChange(LOC_PATH, 1, 1, False)]))
 
 	def test_malformed_nightly_report_does_not_stop_the_loop(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))

@@ -18,7 +18,13 @@ Hunk = collections.namedtuple("Hunk",
 	"path context removed added old_start old_count new_start new_count new_file deleted_file unchanged problems",
 	defaults=(0, 0, 0, 0, False, False, (), ()))
 
-TEST_PREFIXES = ("src/tests/", "e2e/scenarios/", "tools/tests/")
+# Test roots the regression proof runs from. Their files skip the production allow-list and the
+# changed-line limit, but not the rules that could smuggle code in (see _test_line_reasons).
+TEST_PREFIXES = ("src/tests/", "e2e/scenarios/")
+# Python tool tests run on CI and in every gate run with the operator's credentials; a fix never
+# ships them unreviewed.
+TOOL_TESTS_PREFIX = "tools/tests/"
+MAX_TEST_LINES = 600
 DATA_PREFIX = "data/editor/data/"
 SUBMODULE_ROOTS = ("data/client", "data/editor")
 
@@ -60,6 +66,12 @@ ROOT_SUFFIXES = (
 	("data/editor/data/", (".data",)),
 	("data/scripts/", (".lua",)),
 )
+# File types each test root may ship. A C-family test may only #include headers (TEST_INCLUDE).
+TEST_SUFFIXES = (
+	("src/tests/", C_FAMILY_SUFFIXES),
+	("e2e/scenarios/", (".lua",)),
+)
+HEADER_SUFFIXES = (".h", ".hpp", ".hxx", ".inl")
 # Server-authoritative code: here an edit to reward, loot or economy logic needs a human, literals or not.
 SERVER_ROOTS = ("src/shared/game/", "src/shared/game_server/", "src/world_server/", "src/realm_server/", "data/scripts/")
 # Client UI Lua cannot cheat the server, so a numeric condition alone does not park there.
@@ -108,6 +120,8 @@ PREPROCESSOR = re.compile(
 # Lua that pulls in or compiles other code.
 LUA_LOADER = re.compile(r"\b(require|dofile|loadstring|loadfile)\b|\bload\s*\(")
 GOTO = re.compile(r"\bgoto\b")
+# The one preprocessor directive a test may change: an include of a header by a plain path.
+TEST_INCLUDE = re.compile(r'^\s*#\s*include\s*(?:<([^<>"]+)>|"([^<>"]+)")\s*(?://.*)?$')
 # Line separators str.splitlines() honours, other control characters, and bidi overrides.
 CONTROL = re.compile("[\x00-\x08\x0a-\x1f\x7f\x85\u2028\u2029\u202a-\u202e\u2066-\u2069]")
 HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$")
@@ -252,7 +266,40 @@ def _allowed(path):
 
 def _suffix_allowed(path):
 	lower = path.lower()
-	return any(path.startswith(root) and lower.endswith(suffixes) for root, suffixes in ROOT_SUFFIXES)
+	roots = TEST_SUFFIXES if _is_test(path) else ROOT_SUFFIXES
+	return any(path.startswith(root) and lower.endswith(suffixes) for root, suffixes in roots)
+
+
+def _plain_header(match):
+	angle, quoted = match.group(1), match.group(2)
+	target = angle if angle is not None else quoted
+	parts = target.split("/")
+	if not target or ".." in parts or target.startswith("/") or "\\" in target or ":" in target:
+		return False
+	# <vector> has no suffix; anything with one must be a header.
+	return target.lower().endswith(HEADER_SUFFIXES) or (angle is not None and "." not in parts[-1])
+
+
+def _test_line_reasons(hunk):
+	"""The rules a test hunk keeps: tests never ship to players, but they are compiled and run by the
+	gate and CI, so they must not pull in other files or hide text from the reviewer."""
+	path = hunk.path
+	reasons = []
+	lua = path.lower().endswith(".lua")
+	for line in hunk.removed + hunk.added:
+		if CONTROL.search(line):
+			reasons.append("{}: control character in a changed line: {}".format(path, ascii(line)[:120]))
+			break
+	for line in _unmatched(hunk.removed, hunk.added) + _unmatched(hunk.added, hunk.removed):
+		if PREPROCESSOR.search(line):
+			include = TEST_INCLUDE.match(line)
+			if include is None or not _plain_header(include):
+				reasons.append("{}: preprocessor directive changed: {}".format(path, _short(line)))
+		if lua and LUA_LOADER.search(line) and not _comment_only(line, lua):
+			reasons.append("{}: loads code (require/dofile/load): {}".format(path, _short(line)))
+		if not lua and line.rstrip().endswith("\\"):
+			reasons.append("{}: line continuation: {}".format(path, _short(line)))
+	return reasons
 
 
 def _is_code(path):
@@ -395,7 +442,10 @@ def _hunk_reasons(hunks, listed, load_data):
 			reasons.append("{}: {}".format(path, problem))
 		if any("Subproject commit" in line for line in hunk.removed + hunk.added + list(hunk.unchanged)):
 			reasons.append("{}: Subproject commit line in diff (submodule pointer)".format(path))
-		if _is_test(path) or not _is_code(path):
+		if _is_test(path):
+			reasons.extend(_test_line_reasons(hunk))
+			continue
+		if not _is_code(path):
 			continue
 		reasons.extend(_line_reasons(hunk))
 		reasons.extend(_surrounding_reasons(hunk, load_data, cache))
@@ -439,21 +489,29 @@ def _data_reasons(path, load_data, decoder, max_entries, report):
 	return reasons
 
 
-def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, max_entries=5):
+def is_production(path):
+	"""Anything that is not a regression test counts as a production change (tool tests too)."""
+	return not _is_test(path)
+
+
+def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, max_entries=5, max_test_lines=MAX_TEST_LINES):
 	reasons = []
 	data = {}
 	changed_lines = 0
+	test_lines = 0
 	hunks = parse_unified_diff(diff_text)
 	hunk_paths = {hunk.path for hunk in hunks if hunk.path}
 	for change in changes:
 		path = change.path
 		if path in SUBMODULE_ROOTS:
 			reasons.append("{}: submodule pointer changed".format(path))
+		if path.startswith(TOOL_TESTS_PREFIX):
+			reasons.append("{}: tools/tests changes run on CI and gates; never auto-shipped".format(path))
 		if _protected(path):
 			reasons.append("{}: protected path".format(path))
 		if not _allowed(path):
 			reasons.append("{}: outside the auto-ship allow-list".format(path))
-		elif not _is_test(path) and not _suffix_allowed(path):
+		elif not _suffix_allowed(path):
 			reasons.append("{}: file type not allowed to auto-ship here".format(path))
 		if path.startswith(DATA_PREFIX) and path.endswith(".data"):
 			reasons.extend(_data_reasons(path, load_data, decoder, max_entries, data))
@@ -461,13 +519,19 @@ def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, ma
 		if change.binary:
 			reasons.append("{}: binary file changed".format(path))
 			continue
-		if not _is_test(path):
+		if change.added + change.removed > 0 and path not in hunk_paths:
+			reasons.append("diff text missing for {}".format(path))
+		if _is_test(path):
+			test_lines += change.added + change.removed
+		else:
 			changed_lines += change.added + change.removed
-			if change.added + change.removed > 0 and path not in hunk_paths:
-				reasons.append("diff text missing for {}".format(path))
 	if not changes:
 		reasons.append("empty diff")
+	elif not any(is_production(change.path) for change in changes):
+		reasons.append("no production change: a diff of tests alone fixes nothing")
 	if changed_lines > max_lines:
 		reasons.append("{} changed lines outside tests (limit {})".format(changed_lines, max_lines))
+	if test_lines > max_test_lines:
+		reasons.append("{} changed test lines (limit {})".format(test_lines, max_test_lines))
 	reasons.extend(_hunk_reasons(hunks, {change.path for change in changes}, load_data))
 	return {"auto_ship_allowed": not reasons, "reasons": reasons, "changed_lines": changed_lines, "data": data}

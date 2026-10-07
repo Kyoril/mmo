@@ -361,10 +361,76 @@ class CorpusBlocked(unittest.TestCase):
 		self.assertEqual([c for c in source if ord(c) > 0x7e and c != "\t"], [])
 
 
+TEST_FILE = "src/tests/game_server_tests/test_quest_status.cpp"
+NEW_TEST = raw_diff(TEST_FILE, (0, 0, 1, 4, [], ["#include \"catch.hpp\"", "#include <vector>",
+	"#include \"game_server/quest_status.h\"", "TEST_CASE(\"kill credit\") { REQUIRE(true); }"]), old=None)
+
+
+class TestPathRules(unittest.TestCase):
+	"""Tests skip the production allow-list but not the rules that could smuggle code in."""
+
+	def assertBlocked(self, result, fragment):
+		self.assertFalse(result["auto_ship_allowed"], result)
+		self.assertTrue(any(fragment in reason for reason in result["reasons"]), result["reasons"])
+
+	def test_tool_test_with_os_system_parks(self):
+		path = "tools/tests/test_x.py"
+		text = raw_diff(path, (0, 0, 1, 2, [], ["import os", "os.system('git push origin HEAD:develop')"]), old=None)
+		result = verdict_of([FileChange(path, 2, 0, False), FileChange("src/shared/game/foo.cpp", 1, 1, False)],
+			text + diff("src/shared/game/foo.cpp", "void Foo()", removed=["	DoWork();"], added=["	DoMoreWork();"]),
+			load_data=plain_loader)
+		self.assertBlocked(result, "tools/tests changes run on CI and gates; never auto-shipped")
+
+	def test_test_including_a_non_header_parks(self):
+		path = "src/tests/a.cpp"
+		text = raw_diff(path, (0, 0, 1, 1, [], ["#include \"../../evil.txt\""]), old=None)
+		text += diff("src/shared/game/foo.cpp", "void Foo()", removed=["	DoWork();"], added=["	DoMoreWork();"])
+		result = verdict_of([FileChange(path, 1, 0, False), FileChange("src/shared/game/foo.cpp", 1, 1, False)], text,
+			load_data=plain_loader)
+		self.assertBlocked(result, "preprocessor directive changed")
+
+	def test_test_defining_a_macro_parks(self):
+		text = raw_diff(TEST_FILE, (5, 0, 5, 1, [], ["#define private public"]))
+		result = verdict_of([FileChange(TEST_FILE, 1, 0, False)], text, load_data=plain_loader)
+		self.assertBlocked(result, "preprocessor directive changed")
+
+	def test_test_only_diff_parks(self):
+		result = verdict_of([FileChange(TEST_FILE, 4, 0, False)], NEW_TEST, load_data=plain_loader)
+		self.assertBlocked(result, "no production change")
+
+	def test_test_file_types_are_limited(self):
+		for path in ("src/tests/game_tests/data.txt", "e2e/scenarios/helper.py"):
+			text = raw_diff(path, (0, 0, 1, 1, [], ["x"]), old=None)
+			result = verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader)
+			self.assertBlocked(result, "file type not allowed")
+
+	def test_scenario_loading_code_parks(self):
+		path = "e2e/scenarios/quest.lua"
+		text = raw_diff(path, (0, 0, 1, 2, [], ["-- require the cooldown to reset", "local x = dofile('C:/x.lua')"]), old=None)
+		result = verdict_of([FileChange(path, 2, 0, False)], text, load_data=plain_loader)
+		reasons = [reason for reason in result["reasons"] if "loads code" in reason]
+		self.assertEqual(len(reasons), 1, result["reasons"])
+		self.assertIn("dofile", reasons[0])
+
+	def test_control_character_in_a_test_parks(self):
+		text = raw_diff(TEST_FILE, (5, 0, 5, 1, [], ["\tREQUIRE(x); // ‮"]))
+		result = verdict_of([FileChange(TEST_FILE, 1, 0, False)], text, load_data=plain_loader)
+		self.assertBlocked(result, "control character")
+
+	def test_test_lines_are_capped(self):
+		result = verdict_of([FileChange(TEST_FILE, 601, 0, False)], "", load_data=plain_loader)
+		self.assertBlocked(result, "changed test lines (limit 600)")
+
+	def test_test_hunk_must_be_in_the_diff(self):
+		result = verdict_of([FileChange("src/shared/game_server/ai/creature_ai_combat_state.cpp", 1, 1, False),
+			FileChange(TEST_FILE, 4, 0, False)], BENIGN, load_data=plain_loader)
+		self.assertBlocked(result, "diff text missing for " + TEST_FILE)
+
+
 class CorpusAllowed(unittest.TestCase):
 	def test_honest_code_fix(self):
 		result = verdict_of([FileChange("src/shared/game_server/ai/creature_ai_combat_state.cpp", 1, 1, False),
-			FileChange("src/tests/game_server_tests/test_quest_status.cpp", 400, 0, False)], BENIGN, load_data=plain_loader)
+			FileChange(TEST_FILE, 4, 0, False)], BENIGN + NEW_TEST, load_data=plain_loader)
 		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
 		self.assertEqual(result["changed_lines"], 2)
 

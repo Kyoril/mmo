@@ -7,6 +7,7 @@ import os
 import subprocess
 
 from .guard import TEST_PREFIXES
+from .procs import run_with_tree_kill
 
 E2E_TARGETS = ("e2e_client", "login_server", "realm_server", "world_server")
 
@@ -16,7 +17,7 @@ def regression_files(changes):
 
 
 class Verifier:
-	def __init__(self, worktree, main_build, powershell="powershell", config="Debug", timeout=3600, run=subprocess.run):
+	def __init__(self, worktree, main_build, powershell="powershell", config="Debug", timeout=3600, run=run_with_tree_kill):
 		self.worktree = worktree
 		self.main_build = main_build
 		self.powershell = powershell
@@ -35,6 +36,10 @@ class Verifier:
 			self.last_output = "timed out: " + " ".join(command)
 			self.last_timed_out = True
 			return False
+		except OSError as error:  # a missing executable is a failed step, not a loop crash
+			self.last_output = "cannot run {}: {}".format(" ".join(command), error)
+			self.last_timed_out = False
+			return False
 		self.last_output = ((completed.stdout or "") + (completed.stderr or ""))[-4000:]
 		return completed.returncode == 0
 
@@ -52,7 +57,8 @@ class Verifier:
 
 	def _test(self, spec):
 		if spec["kind"] == "unit":
-			command = [os.path.join("bin", self.config, spec["suite"] + ".exe")]
+			# Absolute: Windows resolves a relative executable against the parent's cwd, not cwd=.
+			command = [os.path.abspath(os.path.join(self.worktree.path, "bin", self.config, spec["suite"] + ".exe"))]
 			if spec.get("filter"):
 				command.append(spec["filter"])
 			return command, [spec["suite"]]
@@ -69,23 +75,29 @@ class Verifier:
 			return "passed"
 		return "timeout" if self.last_timed_out else "failed"
 
-	def proof(self, spec, base, branch, files):
+	def proof(self, spec, base, head, files):
+		"""Runs the test with the fix's test files on `base` (must fail) and on `head` (must pass).
+		`head` is the exact commit that is later gated and shipped, checked out detached."""
 		if spec.get("kind") not in ("unit", "e2e"):
 			return {"ok": False, "before": "", "after": "", "reason": "no runnable regression test"}
 		if not files:
 			return {"ok": False, "before": "", "after": "",
 				"reason": "the fix changes no file under " + ", ".join(TEST_PREFIXES)}
+		# A test file the fix deleted does not exist at head; checking it out would fail.
+		present = set(self.worktree.git("ls-tree", "-r", "-z", "--name-only", head, "--", *files).split("\0"))
+		existing = [path for path in files if path in present]
 		self.worktree.checkout(base)
-		on_branch = False
+		on_head = False
 		try:
-			self.worktree.git("checkout", branch, "--", *files)
+			if existing:
+				self.worktree.git("checkout", head, "--", *existing)
 			before = self._attempt(spec)
-			self.worktree.checkout(branch)
-			on_branch = True
+			self.worktree.checkout(head)
+			on_head = True
 			after = self._attempt(spec)
 		finally:
-			if not on_branch:
-				self.worktree.checkout(branch)
+			if not on_head:
+				self.worktree.checkout(head)
 		ok = before in ("failed", "build_failed") and after == "passed"
 		return {"ok": ok, "before": before, "after": after,
 			"reason": "" if ok else "regression test before={} after={}".format(before, after),

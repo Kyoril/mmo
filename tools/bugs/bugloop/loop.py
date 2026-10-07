@@ -7,6 +7,7 @@ import contextlib
 import datetime
 import json
 import os
+import re
 import traceback
 import urllib.error
 
@@ -19,11 +20,19 @@ CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 RESTART_EXIT_CODE = 75
 # A change set is exempt from the regression-proof requirement only when every non-test path is
 # data; the fixer's own `data_only` claim is never trusted.
+# Client UI Lua under data/client/Interface/ cannot cheat the server, so it needs no proof either.
 DATA_ONLY_ROOTS = ("data/editor/data/", "data/client/Locales/", "data/client/Interface/")
+# Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
+BUG_ID = re.compile(r"^[0-9a-f]{24}$")
+
+
+def valid_bug_id(bug_id):
+	return isinstance(bug_id, str) and BUG_ID.match(bug_id) is not None
 
 
 def proof_exempt(changes):
-	return all(change.path.startswith(DATA_ONLY_ROOTS) for change in changes if not change.path.startswith(guard.TEST_PREFIXES))
+	production = [change for change in changes if guard.is_production(change.path)]
+	return bool(production) and all(change.path.startswith(DATA_ONLY_ROOTS) for change in production)
 
 
 def short_id(bug_id):
@@ -176,7 +185,10 @@ class BugLoop:
 		listing = self.api.list(status="new", limit=100)
 		worked = False
 		for summary in sorted(listing.get("bugs", []), key=lambda bug: bug.get("createdAt") or ""):
-			bug_id = summary["_id"]
+			bug_id = summary.get("_id")
+			if not valid_bug_id(bug_id):
+				self.log("skipping a bug with a malformed id: {!r}".format(bug_id)[:200])
+				continue
 			if self.state.in_fix_queue(bug_id):
 				continue
 			if self.state.attempted(bug_id):
@@ -278,6 +290,9 @@ class BugLoop:
 
 	def _fix(self, bug_id):
 		self.state.drop_fix(bug_id)
+		if not valid_bug_id(bug_id):
+			self.log("dropping a queued fix with a malformed bug id: {!r}".format(bug_id)[:200])
+			return
 		self.state.mark_attempted(bug_id, "fix-started")
 		self.state.save()
 		bug = self._read(bug_id, "report.json")
@@ -291,7 +306,10 @@ class BugLoop:
 			return
 		branch = "bugfix/" + short_id(bug_id)
 		base = self.worktree.prepare()
-		self.verifier.ensure_configured()
+		if not self.verifier.ensure_configured():
+			self._release(bug_id, "triaged", "needs-info: build configure failed in the bug-loop worktree")
+			self._finish(bug_id, "needs-info", reason="build configure failed")
+			return
 		self.worktree.start_branch(branch, base)
 		fix_path = os.path.join(self._bug_dir(bug_id), "FIX.json")
 		if os.path.exists(fix_path):
@@ -319,6 +337,12 @@ class BugLoop:
 			self._release(bug_id, "triaged", "needs-info: the fixer reported a fix but left no clean commit")
 			self._finish(bug_id, "needs-info", reason="no clean commit")
 			return
+		# Everything below judges `head`; the branch must point there, or a later ship would merge
+		# something nobody guarded.
+		if self.worktree.head(branch) != head:
+			self._release(bug_id, "triaged", "needs-info: the fixer moved the branch away from the checked-out commit")
+			self._finish(bug_id, "needs-info", reason="fixer moved the branch")
+			return
 		self._verify_and_ship(bug_id, verdict, fix, branch, base, head)
 
 	def _verify_and_ship(self, bug_id, verdict, fix, branch, base, head):
@@ -329,6 +353,13 @@ class BugLoop:
 			load_data=lambda path: (self.worktree.file_bytes(base, path), self.worktree.file_bytes(head, path)),
 			decoder=self.decoder, max_lines=self.config.max_changed_lines, max_entries=self.config.max_changed_data_entries)
 		self._write(bug_id, "guard.json", guard_result)
+		if len(diff_text) > inputs.DIFF_LIMIT:
+			# The reviewer would only see a truncated diff; nothing that large ships unreviewed.
+			reasons = ["diff too large for review ({} characters, limit {})".format(len(diff_text), inputs.DIFF_LIMIT)]
+			reasons += ["guard: " + reason for reason in guard_result["reasons"]]
+			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
+			self._park(bug_id, branch, reasons)
+			return
 		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"])
 		with self.lock():
 			proof = None
@@ -336,9 +367,9 @@ class BugLoop:
 				if not proof_exempt(changes):
 					proof = {"ok": False, "reason": "a code change needs a regression test"}
 			else:
-				proof = self.verifier.proof(fix["regression_test"], base, branch, verification.regression_files(changes))
+				proof = self.verifier.proof(fix["regression_test"], base, head, verification.regression_files(changes))
 				self._write(bug_id, "proof.json", proof)
-			self.worktree.checkout(branch)
+			self.worktree.checkout(head)
 			gate = self.verifier.gate("full")
 			self._write(bug_id, "gate.json", gate)
 		reasons = decide(fix, review, guard_result, proof, gate)
@@ -391,7 +422,7 @@ class BugLoop:
 	def _ship(self, bug_id, branch, summary, head):
 		message = "Merge {} (bug-loop, gate green at {})\n\nBug {}: {}\n\n{}".format(branch, head[:8], bug_id, summary, CO_AUTHOR)
 		with self.lock():
-			result = self.worktree.ship(branch, message, lambda: self.verifier.gate("fast")["ok"])
+			result = self.worktree.ship(branch, head, message, lambda: self.verifier.gate("fast")["ok"])
 		if not result.ok:
 			self._park(bug_id, branch, ["ship: " + result.reason])
 			return
@@ -415,7 +446,9 @@ class BugLoop:
 			try:
 				try:
 					blockers = self._ship_blockers()
-					if blockers:
+					if not valid_bug_id(item.get("bug")) or not item.get("head"):
+						self.log("dropping a malformed ship-queue item: {!r}".format(item)[:300])
+					elif blockers:
 						self._park(item["bug"], item["branch"], blockers)
 					else:
 						self._ship(item["bug"], item["branch"], item["summary"], item["head"])
