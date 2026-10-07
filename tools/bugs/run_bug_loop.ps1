@@ -58,11 +58,18 @@ function Send-StopNotice([int]$ExitCode)
 	$body = @{ content = ("Bug loop stopped with exit code {0}; see tools/gate/reports/bugloop-task.log" -f $ExitCode); allowed_mentions = @{ parse = @() } } | ConvertTo-Json -Compress
 	try
 	{
+		[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 		Invoke-RestMethod -Uri $hook -Method Post -ContentType "application/json" -UserAgent "mmo-bug-loop/1" -Body $body -TimeoutSec 10 | Out-Null
 	}
 	catch
 	{
-		Write-LoopLog ("stop notice failed: {0}" -f $_.Exception.GetType().Name)
+		try
+		{
+			Write-LoopLog ("stop notice failed: {0}" -f $_.Exception.GetType().Name)
+		}
+		catch
+		{
+		}
 	}
 }
 

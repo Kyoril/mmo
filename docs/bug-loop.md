@@ -150,9 +150,12 @@ poll:
   maintainer's guidance, at most 3 guided rounds per bug. A refix with empty guidance is
   refused ("decide again"). If a guided refix fails, the bug goes back to `pr_open` so it can
   be decided again; at the limit the loop posts a "refix limit reached" message.
-- **Ship**: ships exactly the recorded commit. The daily cap does not apply; the circuit
-  breaker and the freeze window do, and the bug is then queued until they lift. A second ship
-  decision for a queued bug only adds a note.
+- **Ship**: ships exactly the recorded commit. The daily cap does not apply. If the branch tip
+  no longer matches the recorded commit (or none is recorded, or the branch is gone), the bug
+  is re-parked and the maintainer must decide again. An active circuit breaker also re-parks
+  the bug ("the circuit breaker is tripped"); decide again once it is cleared. Only the
+  nightly freeze window queues the ship until the window ends; a second ship decision for a
+  queued bug only adds a note.
 - **Discard**: sets the bug to `wontfix` and deletes the branch.
 
 In a dry run decisions are ignored and no Discord messages are sent.
