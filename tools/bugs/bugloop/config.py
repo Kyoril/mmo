@@ -17,7 +17,9 @@ class LoopConfig:
 	freeze_end_utc: str = "23:59"
 	max_changed_lines: int = 150
 	max_changed_data_entries: int = 5
-	worktree: str = "D:/mmo-bugloop"
+	# Empty: the worktree is resolved at startup (MMO_BUGLOOP_WORKTREE, else a sibling of the main
+	# checkout), so no machine-specific path lives in the repository.
+	worktree: str = ""
 	claude_exe: str = "claude"
 	model: str = ""
 	fix_timeout_seconds: int = 5400

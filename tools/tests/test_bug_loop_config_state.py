@@ -40,7 +40,8 @@ class ConfigTests(unittest.TestCase):
 
 	def test_checked_in_config_loads(self):
 		config = loop_config.load_config(os.path.join(REPO_ROOT, "tools", "bugs", "bug_loop.json"))
-		self.assertEqual(config.worktree, "D:/mmo-bugloop")
+		# Machine paths never live in the repository; the worktree is resolved at startup.
+		self.assertEqual(config.worktree, "")
 		self.assertEqual(config.worker, "bug-loop")
 
 

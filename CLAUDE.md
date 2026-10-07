@@ -56,8 +56,9 @@ The following systems are fully implemented and should not be suggested as futur
   15-minute realm countdown and rolls back on failed health checks. Anything merged to
   develop reaches players the next morning — see [docs/deployment.md](docs/deployment.md).
 - **Bug loop:** the scheduled task "MMO Bug Loop" runs `tools/bugs/bug_loop.py`, which works
-  the bug API backlog (see [docs/bug-loop.md](docs/bug-loop.md)). It owns `D:/mmo-bugloop`
-  and `D:/mmo-bugloop-runtime`; no session may use or edit them. It may push `develop` and the
+  the bug API backlog (see [docs/bug-loop.md](docs/bug-loop.md)). It owns its worktree `mmo-bugloop`
+  and `mmo-bugloop-runtime` (siblings of the main checkout unless `MMO_BUGLOOP_WORKTREE` /
+  `MMO_BUGLOOP_RUNTIME` say otherwise); no session may use or edit them. It may push `develop` and the
   data submodules' `master` to origin on its auto-ship path only. Its merges are titled
   `Merge bugfix/<id8> (bug-loop, ...)`. Parked fixes are `bugfix/<id8>` branches: review them,
   then `/ship`. Nothing in `tools/bugs/` may be changed by the loop itself; such changes go
