@@ -76,12 +76,16 @@ class Verifier:
 			return {"ok": False, "before": "", "after": "",
 				"reason": "the fix changes no file under " + ", ".join(TEST_PREFIXES)}
 		self.worktree.checkout(base)
+		on_branch = False
 		try:
 			self.worktree.git("checkout", branch, "--", *files)
 			before = self._attempt(spec)
+			self.worktree.checkout(branch)
+			on_branch = True
 			after = self._attempt(spec)
 		finally:
-			self.worktree.checkout(branch)
+			if not on_branch:
+				self.worktree.checkout(branch)
 		ok = before in ("failed", "build_failed") and after == "passed"
 		return {"ok": ok, "before": before, "after": after,
 			"reason": "" if ok else "regression test before={} after={}".format(before, after),

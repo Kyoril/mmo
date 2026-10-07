@@ -18,25 +18,38 @@ from bugloop import guard, verification  # noqa: E402
 
 
 class FakeTree:
-	def __init__(self, path="wt"):
+	def __init__(self, path="wt", events=None):
 		self.path = path
 		self.commands = []
+		self.events = events if events is not None else []
 
 	def git(self, *args, cwd=None, check=True):
 		self.commands.append(("git",) + args)
+		self.events.append(("git",) + args)
 		return ""
 
 	def checkout(self, ref):
 		self.commands.append(("checkout", ref))
+		self.events.append(("checkout", ref))
 
 
 class FakeRun:
-	def __init__(self, codes):
+	def __init__(self, codes, events=None):
 		self.codes = list(codes)
 		self.commands = []
+		self.events = events if events is not None else []
 
 	def __call__(self, command, **kwargs):
 		self.commands.append(command)
+		# Record build targets and test runs in event log
+		if len(command) >= 4 and command[:3] == ["cmake", "--build", "build"]:
+			# Build command: extract targets
+			targets = command[command.index("-t") + 1:] if "-t" in command else []
+			self.events.append(("build",) + tuple(targets))
+		else:
+			# Test command
+			self.events.append(("test", command[-1] if command else ""))
+
 		code = self.codes.pop(0)
 		if code is None:
 			raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
@@ -47,14 +60,24 @@ UNIT = {"kind": "unit", "suite": "game_server_tests", "filter": "[quest]"}
 
 
 def verifier(codes, tree=None):
-	run = FakeRun(codes)
-	return verification.Verifier(tree or FakeTree(), "H:/mmo/build", run=run), run
+	if tree is None:
+		events = []
+		tree = FakeTree(events=events)
+	else:
+		# Use the tree's events list if it has one, otherwise create a new one
+		if not hasattr(tree, 'events'):
+			tree.events = []
+		events = tree.events
+	run = FakeRun(codes, events=events)
+	return verification.Verifier(tree, "H:/mmo/build", run=run), run, events
 
 
 class ProofTests(unittest.TestCase):
 	def test_fails_before_passes_after(self):
 		tree = FakeTree()
-		check, run = verifier([0, 1, 0, 0], tree)
+		events = []
+		tree.events = events
+		check, run, _ = verifier([0, 1, 0, 0], tree)
 		result = check.proof(UNIT, "base", "bugfix/x", ["src/tests/game_server_tests/test_q.cpp"])
 		self.assertTrue(result["ok"], result)
 		self.assertEqual((result["before"], result["after"]), ("failed", "passed"))
@@ -66,34 +89,57 @@ class ProofTests(unittest.TestCase):
 			("checkout", "bugfix/x"),
 		])
 
+	def test_after_attempt_on_fix_branch(self):
+		"""Verify that the after attempt runs on the full fix branch, not the partial branch."""
+		events = []
+		tree = FakeTree(events=events)
+		check, run, _ = verifier([0, 1, 0, 0], tree)
+		# Codes: 0 (before build ok), 1 (before test fail), 0 (after build ok), 0 (after test pass)
+		result = check.proof(UNIT, "base", "bugfix/x", ["src/tests/game_server_tests/test_q.cpp"])
+		self.assertTrue(result["ok"], result)
+
+		# Verify exact sequence of tree checkouts and git operations interspersed with build/test
+		# Expected: checkout base -> git checkout files -> before build -> before test -> checkout branch -> after build -> after test
+		expected_sequence = [
+			("checkout", "base"),
+			("git", "checkout", "bugfix/x", "--", "src/tests/game_server_tests/test_q.cpp"),
+			("build", "game_server_tests"),
+			("test", "[quest]"),
+			("checkout", "bugfix/x"),  # THIS IS THE KEY: before this is before attempt, after is after attempt
+			("build", "game_server_tests"),
+			("test", "[quest]"),
+		]
+		self.assertEqual(events, expected_sequence,
+			f"Expected:\n{expected_sequence}\nGot:\n{events}")
+
 	def test_test_passing_before_the_fix_proves_nothing(self):
-		check, _ = verifier([0, 0, 0, 0])
+		check, _, _ = verifier([0, 0, 0, 0])
 		result = check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])
 		self.assertFalse(result["ok"])
 		self.assertIn("before=passed", result["reason"])
 
 	def test_test_that_does_not_compile_before_counts_as_failing(self):
-		check, _ = verifier([1, 0, 0])
+		check, _, _ = verifier([1, 0, 0])
 		self.assertTrue(check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])["ok"])
 
 	def test_failing_after_the_fix(self):
-		check, _ = verifier([0, 1, 0, 1])
+		check, _, _ = verifier([0, 1, 0, 1])
 		self.assertFalse(check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])["ok"])
 
 	def test_no_test_files_runs_nothing(self):
-		check, run = verifier([])
+		check, run, _ = verifier([])
 		result = check.proof(UNIT, "base", "bugfix/x", [])
 		self.assertFalse(result["ok"])
 		self.assertEqual(run.commands, [])
 
 	def test_e2e_scenario_command(self):
-		check, run = verifier([0, 1, 0, 0])
+		check, run, _ = verifier([0, 1, 0, 0])
 		check.proof({"kind": "e2e", "scenario": "quest_kill_credit"}, "base", "bugfix/x", ["e2e/scenarios/quest_kill_credit.lua"])
 		self.assertEqual(run.commands[0][-4:], list(verification.E2E_TARGETS))
 		self.assertEqual(run.commands[1][-3:], [os.path.join("tools", "e2e", "e2e_run.ps1"), "-Scenario", "quest_kill_credit"])
 
 	def test_timeout_before_does_not_prove_anything(self):
-		check, _ = verifier([0, None, 0, 0])
+		check, _, _ = verifier([0, None, 0, 0])
 		result = check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])
 		self.assertFalse(result["ok"])
 		self.assertIn("before=timeout", result["reason"])
@@ -101,13 +147,13 @@ class ProofTests(unittest.TestCase):
 	def test_proof_restores_branch_on_error(self):
 		tree = FakeTree()
 		tree.git = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("git error"))
-		check, _ = verifier([0, 1, 0, 0], tree)
+		check, _, _ = verifier([0, 1, 0, 0], tree)
 		with self.assertRaises(RuntimeError):
 			check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])
 		self.assertEqual(tree.commands[-1], ("checkout", "bugfix/x"))
 
 	def test_proof_includes_output_tail_in_result(self):
-		check, run = verifier([0, 1, 0, 0])
+		check, run, _ = verifier([0, 1, 0, 0])
 		result = check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])
 		self.assertIn("output_tail", result)
 		self.assertIsInstance(result["output_tail"], str)
@@ -120,7 +166,7 @@ class GateTests(unittest.TestCase):
 			os.makedirs(os.path.dirname(report))
 			with open(report, "w") as handle:
 				handle.write("{}")
-			check, run = verifier([0], FakeTree(folder))
+			check, run, _ = verifier([0], FakeTree(folder))
 			result = check.gate("full")
 			self.assertTrue(result["ok"])
 			self.assertFalse(os.path.exists(report))
@@ -128,7 +174,7 @@ class GateTests(unittest.TestCase):
 			self.assertEqual(run.commands[0][-2:], ["-Tier", "full"])
 
 	def test_red_gate(self):
-		check, _ = verifier([1])
+		check, _, _ = verifier([1])
 		self.assertFalse(check.gate("fast")["ok"])
 
 
