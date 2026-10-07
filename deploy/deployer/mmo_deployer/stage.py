@@ -126,11 +126,10 @@ class Stager:
 		and every changed Launcher.exe makes every player's launcher update itself. Until the
 		first launcher release exists the nightly's own build ships. Raises StageError.
 		"""
-		releases = self.github.list_releases(self.cfg.launcher_prefix)
-		if not releases:
+		release = self.github.newest_versioned_release(self.cfg.launcher_prefix)
+		if release is None:
 			log.warning("no %s* release; shipping the nightly's launcher build", self.cfg.launcher_prefix)
 			return None
-		release = releases[0]
 		info = self.github.fetch_manifest(release, str(self.downloads), LAUNCHER_MANIFEST)
 		binary = self.downloads / LAUNCHER_BINARY
 		self.github.download_asset(release, LAUNCHER_BINARY, str(binary))

@@ -139,6 +139,13 @@ class FakeGitHub:
 		matching = [r for r in self.releases if r["tag_name"].startswith(prefix)]
 		return sorted(matching, key=lambda r: r["created_at"], reverse=True)
 
+	def newest_versioned_release(self, prefix):
+		def version(release):
+			return tuple(int(part) for part in release["tag_name"][len(prefix):].split("."))
+
+		matching = [r for r in self.releases if r["tag_name"].startswith(prefix)]
+		return max(matching, key=version) if matching else None
+
 	def download_asset(self, release, name, dest):
 		key = (release["tag_name"], name)
 		if key not in self.assets:
