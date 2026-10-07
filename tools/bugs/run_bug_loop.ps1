@@ -47,6 +47,40 @@ function Invoke-Logged([string]$Exe, [string[]]$Arguments)
 	return $LASTEXITCODE
 }
 
+# Exit code of bug_loop.py when another instance already runs: nothing stopped, no notice.
+$secondInstanceCode = 3
+
+# Best effort: tells the maintainer the loop stopped. Never logs the webhook URL. A dry run (shadow
+# mode) sends nothing, like the loop itself.
+function Send-StopNotice([int]$ExitCode)
+{
+	if ($DryRun -or $ExitCode -eq $secondInstanceCode)
+	{
+		return
+	}
+	$hook = [Environment]::GetEnvironmentVariable("MMO_BUGLOOP_WEBHOOK", "User")
+	if (-not $hook)
+	{
+		return
+	}
+	$body = @{ content = ("Bug loop stopped with exit code {0}; see tools/gate/reports/bugloop-task.log" -f $ExitCode); allowed_mentions = @{ parse = @() } } | ConvertTo-Json -Compress
+	try
+	{
+		[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+		Invoke-RestMethod -Uri $hook -Method Post -ContentType "application/json" -UserAgent "mmo-bug-loop/1" -Body $body -TimeoutSec 10 | Out-Null
+	}
+	catch
+	{
+		try
+		{
+			Write-LoopLog ("stop notice failed: {0}" -f $_.Exception.GetType().Name)
+		}
+		catch
+		{
+		}
+	}
+}
+
 do
 {
 	$fetched = $false
@@ -64,6 +98,7 @@ do
 	if (-not $fetched)
 	{
 		Write-LoopLog "giving up: origin cannot be fetched"
+		Send-StopNotice 1
 		exit 1
 	}
 
@@ -78,12 +113,14 @@ do
 	if ($code -ne 0)
 	{
 		Write-LoopLog ("git archive failed with {0}" -f $code)
+		Send-StopNotice 1
 		exit 1
 	}
 	$code = Invoke-Logged $tar @("-x", "-f", $archive, "-C", $Runtime)
 	if ($code -ne 0)
 	{
 		Write-LoopLog ("tar failed with {0}" -f $code)
+		Send-StopNotice 1
 		exit 1
 	}
 
@@ -97,4 +134,8 @@ do
 	Write-LoopLog ("bug loop exited with {0}" -f $code)
 } while ($code -eq $restartCode)
 
+if ($code -ne 0)
+{
+	Send-StopNotice $code
+}
 exit $code

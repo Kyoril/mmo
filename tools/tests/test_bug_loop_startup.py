@@ -66,5 +66,24 @@ class WorktreePathTests(unittest.TestCase):
 		self.assertEqual(config.worktree, "")
 
 
+class NotifierWiringTests(unittest.TestCase):
+	def test_notifier_reads_webhook_and_ui_url(self):
+		notifier = bug_loop.make_notifier({"MMO_BUGLOOP_WEBHOOK": "https://hook", "MMO_BUGLOOP_UI_URL": "https://ui/"}, print)
+		self.assertTrue(notifier.enabled)
+		self.assertEqual(notifier.bug_link("a"), "https://ui/bugs/a")
+
+	def test_no_webhook_means_silent(self):
+		self.assertFalse(bug_loop.make_notifier({}, print).enabled)
+
+	def test_notifications_log_line(self):
+		on = bug_loop.make_notifier({"MMO_BUGLOOP_WEBHOOK": "https://hook"}, print)
+		off = bug_loop.make_notifier({}, print)
+		self.assertEqual(bug_loop.notifications_status(on, dry_run=False), "notifications: on")
+		self.assertEqual(bug_loop.notifications_status(off, dry_run=False), "notifications: off (MMO_BUGLOOP_WEBHOOK not set)")
+		# A dry run never sends, whether or not the variable is set.
+		self.assertEqual(bug_loop.notifications_status(on, dry_run=True), "notifications: off (dry run)")
+		self.assertEqual(bug_loop.notifications_status(off, dry_run=True), "notifications: off (dry run)")
+
+
 if __name__ == "__main__":
 	unittest.main()

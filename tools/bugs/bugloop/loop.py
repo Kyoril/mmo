@@ -5,13 +5,14 @@ develop or to origin; the Claude stages only return data, and the guard decides 
 
 import contextlib
 import datetime
+import hashlib
 import json
 import os
 import re
 import traceback
 import urllib.error
 
-from . import guard, inputs, state as loop_state, verdicts, verification
+from . import guard, inputs, notify, state as loop_state, verdicts, verification
 from .claude import REVIEW_TOOLS, TRIAGE_TOOLS, ClaudeError
 
 CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -22,6 +23,13 @@ RESTART_EXIT_CODE = 75
 # data; the fixer's own `data_only` claim is never trusted.
 # Client UI Lua under data/client/Interface/ cannot cheat the server, so it needs no proof either.
 DATA_ONLY_ROOTS = ("data/editor/data/", "data/client/Locales/", "data/client/Interface/")
+# Statuses of bugs parked for the maintainer.
+PARKED_STATUSES = ("pr_open", "needs_decision")
+# The web UI shows the candidate diff; the API stores at most this much.
+REVIEW_DIFF_LIMIT = 128 * 1024
+TRUNCATION_MARKER = "\n... (diff truncated for the web UI)"
+# Guided refixes a maintainer may request per bug.
+MAX_REFIX = 3
 # Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
 BUG_ID = re.compile(r"^[0-9a-f]{24}$")
 
@@ -71,6 +79,10 @@ class DryRunApi:
 		self._journal("update", bug_id, dict(fields, release_claim=release_claim))
 		return {"_id": bug_id}
 
+	def put_review_diff(self, bug_id, diff, actor="unknown"):
+		self._journal("review-diff", bug_id, {"length": len(diff), "actor": actor})
+		return {"reviewDiffLength": len(diff)}
+
 
 def decide(fix, review, guard_result, proof, gate):
 	"""Every reason that forbids auto-ship. Empty means eligible; the breaker, the daily cap
@@ -89,7 +101,7 @@ def decide(fix, review, guard_result, proof, gate):
 
 class BugLoop:
 	def __init__(self, api, runner, worktree, verifier, decoder, config, state, prompts, schemas,
-			artifacts_dir, report_dir, clock=utcnow, lock=contextlib.nullcontext, dry_run=False, log=print):
+			artifacts_dir, report_dir, clock=utcnow, lock=contextlib.nullcontext, dry_run=False, log=print, notifier=None):
 		self.api = api
 		self.runner = runner
 		self.worktree = worktree
@@ -105,6 +117,8 @@ class BugLoop:
 		self.lock = lock
 		self.dry_run = dry_run
 		self.log = log
+		self.notifier = notify.Notifier("", log=log) if dry_run or notifier is None else notifier
+		self._backfilled = False
 
 	# ---- small helpers
 
@@ -140,13 +154,21 @@ class BugLoop:
 	def poll_once(self):
 		"""Returns True when it did work, so the caller polls again without sleeping."""
 		now = self.clock()
-		self.state.roll(now.strftime("%Y-%m-%d"))
+		today = now.strftime("%Y-%m-%d")
+		self.state.roll(today)
+		if self.state.data.get("pending_summary"):
+			if not self.dry_run:
+				self._send_daily_summary(self.state.data["pending_summary"])
+			self.state.data["pending_summary"] = None
 		self._check_nightly_breaker(now)
+		worked = False
 		if not self.dry_run:
+			self._backfill_review_diffs()
+			worked = self._handle_decisions() or worked
 			self._release_stale_claims()
 			self._reconcile_parked()
 		self._ship_queued(now)
-		worked = self._triage_new()
+		worked = self._triage_new() or worked
 		bug_id = self.state.next_fix()
 		if bug_id is not None and self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 			try:
@@ -173,9 +195,9 @@ class BugLoop:
 			if not worked:
 				sleep(self.config.poll_seconds)
 
-	def _safe_release(self, bug_id, note):
+	def _safe_release(self, bug_id, note, status="triaged"):
 		try:
-			self._release(bug_id, "triaged", note)
+			self._release(bug_id, status, note)
 		except Exception:
 			self.log(traceback.format_exc())
 
@@ -227,7 +249,9 @@ class BugLoop:
 				bug = self.api.show(bug_id)
 				if bug.get("status") != "in_progress" or bug.get("claimedBy") != self.config.worker:
 					continue
-				self._release(bug_id, "triaged",
+				# A bug parked before (an interrupted refix) goes back to the maintainer, not to triage.
+				parked = (bug.get("prUrl") or "").startswith("branch:")
+				self._release(bug_id, "pr_open" if parked else "triaged",
 					"needs-info: the bug loop was interrupted while fixing; see artifacts/bug-loop/" + bug_id)
 				self._finish(bug_id, "interrupted")
 			except Exception:
@@ -288,7 +312,7 @@ class BugLoop:
 
 	# ---- fix
 
-	def _fix(self, bug_id):
+	def _fix(self, bug_id, guidance=None):
 		self.state.drop_fix(bug_id)
 		if not valid_bug_id(bug_id):
 			self.log("dropping a queued fix with a malformed bug id: {!r}".format(bug_id)[:200])
@@ -297,6 +321,9 @@ class BugLoop:
 		self.state.save()
 		bug = self._read(bug_id, "report.json")
 		verdict = self._read(bug_id, "triage.json")
+		# A guided refix that fails goes back to the maintainer, who can only decide on parked bugs.
+		failed_status = "pr_open" if guidance else "triaged"
+		previous = self._previous_attempt(bug_id) if guidance else None
 		try:
 			self.api.claim(bug_id, self.config.worker)
 		except urllib.error.HTTPError as error:
@@ -307,20 +334,31 @@ class BugLoop:
 		branch = "bugfix/" + short_id(bug_id)
 		base = self.worktree.prepare()
 		if not self.verifier.ensure_configured():
-			self._release(bug_id, "triaged", "needs-info: build configure failed in the bug-loop worktree")
+			self._release(bug_id, failed_status, "needs-info: build configure failed in the bug-loop worktree")
 			self._finish(bug_id, "needs-info", reason="build configure failed")
 			return
-		self.worktree.start_branch(branch, base)
+		if guidance:
+			try:
+				start = self.worktree.resume_branch(branch)
+				base = self.worktree.fork_point(branch)
+			except Exception as error:
+				self._release(bug_id, "pr_open", "cannot refix: the branch {} is gone or unusable ({}); decide again".format(branch, str(error)[:200]))
+				self._finish(bug_id, "needs-info", reason="branch unusable")
+				return
+		else:
+			self.worktree.start_branch(branch, base)
+			start = base
 		fix_path = os.path.join(self._bug_dir(bug_id), "FIX.json")
 		if os.path.exists(fix_path):
 			os.remove(fix_path)
 		try:
-			result = self.runner.agent(self.prompts["fix"], inputs.build_fix_input(bug, verdict, branch, fix_path),
+			result = self.runner.agent(self.prompts["fix"],
+				inputs.build_fix_input(bug, verdict, branch, fix_path, guidance=guidance, previous=previous),
 				self.worktree.path, self.config.fix_timeout_seconds, self.config.fix_max_usd)
 			self._write(bug_id, "fix_result.json", result)
 			fix = verdicts.load_fix(fix_path)
 		except (ClaudeError, verdicts.VerdictError) as error:
-			self._release(bug_id, "triaged", "needs-info: the fix stage failed: " + str(error)[:500])
+			self._release(bug_id, failed_status, "needs-info: the fix stage failed: " + str(error)[:500])
 			self._finish(bug_id, "needs-info", reason=str(error)[:300])
 			return
 		if fix["outcome"] == "no_project_basis":
@@ -329,23 +367,23 @@ class BugLoop:
 			self._finish(bug_id, "wontfix-no-basis")
 			return
 		if fix["outcome"] != "fixed":
-			self._release(bug_id, "triaged", "needs-info ({}): {}".format(fix["outcome"], fix["root_cause"][:1000]))
+			self._release(bug_id, failed_status, "needs-info ({}): {}".format(fix["outcome"], fix["root_cause"][:1000]))
 			self._finish(bug_id, "needs-info", reason=fix["outcome"])
 			return
 		head = self.worktree.head()
-		if head == base or not self.worktree.is_clean():
-			self._release(bug_id, "triaged", "needs-info: the fixer reported a fix but left no clean commit")
+		if head == start or not self.worktree.is_clean():
+			self._release(bug_id, failed_status, "needs-info: the fixer reported a fix but left no new clean commit")
 			self._finish(bug_id, "needs-info", reason="no clean commit")
 			return
 		# Everything below judges `head`; the branch must point there, or a later ship would merge
 		# something nobody guarded.
 		if self.worktree.head(branch) != head:
-			self._release(bug_id, "triaged", "needs-info: the fixer moved the branch away from the checked-out commit")
+			self._release(bug_id, failed_status, "needs-info: the fixer moved the branch away from the checked-out commit")
 			self._finish(bug_id, "needs-info", reason="fixer moved the branch")
 			return
-		self._verify_and_ship(bug_id, verdict, fix, branch, base, head)
+		self._verify_and_ship(bug_id, verdict, fix, branch, base, head, guidance=guidance)
 
-	def _verify_and_ship(self, bug_id, verdict, fix, branch, base, head):
+	def _verify_and_ship(self, bug_id, verdict, fix, branch, base, head, guidance=None):
 		changes = self.worktree.changes(base, head)
 		diff_text = self.worktree.unified_diff(base, head)
 		self._write(bug_id, "diff.patch", diff_text)
@@ -360,7 +398,7 @@ class BugLoop:
 			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 			self._park(bug_id, branch, reasons)
 			return
-		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"])
+		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"], guidance=guidance)
 		with self.lock():
 			proof = None
 			if fix["regression_test"]["kind"] == "none":
@@ -375,13 +413,13 @@ class BugLoop:
 		reasons = decide(fix, review, guard_result, proof, gate)
 		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 		if reasons:
-			self._park(bug_id, branch, reasons)
+			self._park(bug_id, branch, reasons, review)
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
 
-	def _review(self, bug_id, verdict, fix, diff_text, guard_reasons):
+	def _review(self, bug_id, verdict, fix, diff_text, guard_reasons, guidance=None):
 		try:
-			review = self.runner.structured(self.prompts["review"], inputs.build_review_input(verdict, fix, diff_text, guard_reasons),
+			review = self.runner.structured(self.prompts["review"], inputs.build_review_input(verdict, fix, diff_text, guard_reasons, guidance=guidance),
 				self.schemas["review"], REVIEW_TOOLS, self.worktree.path, self.config.step_timeout_seconds)
 		except ClaudeError as error:
 			review = {"error": str(error)[:500]}
@@ -390,16 +428,205 @@ class BugLoop:
 
 	# ---- park and ship
 
-	def _park(self, bug_id, branch, reasons):
-		self._update(bug_id, status="pr_open", prUrl="branch:" + branch,
-			note="parked for review: " + "; ".join(reasons)[:1800], release_claim=True)
-		self._finish(bug_id, "parked", branch=branch, reasons=reasons[:10])
+	def _park(self, bug_id, branch, reasons, review=None):
+		question = ""
+		if isinstance(review, dict) and isinstance(review.get("design_question"), str):
+			question = review["design_question"].strip()[:2000]
+		self._update(bug_id, status="needs_decision" if question else "pr_open", prUrl="branch:" + branch,
+			designQuestion=question, note="parked for review: " + "; ".join(reasons)[:1800], release_claim=True)
+		self._upload_diff(bug_id)
+		self._finish(bug_id, "parked", branch=branch, reasons=reasons[:10], decision_needed=bool(question))
+		if question:
+			self.notifier.send(notify.design_question_message(self.notifier, bug_id, self._summary(bug_id), question, branch))
 
-	def _ship_blockers(self):
+	# ---- maintainer decisions
+
+	def _handle_decisions(self):
+		try:
+			pending = self.api.list(decision_pending=True, limit=20).get("bugs", [])
+		except Exception:
+			self.log(traceback.format_exc())
+			return False
+		worked = False
+		for summary in pending:
+			bug_id = summary.get("_id")
+			if not valid_bug_id(bug_id):
+				self.log("skipping a decision with a malformed bug id: {!r}".format(bug_id)[:200])
+				continue
+			decision = summary.get("decision") or {}
+			# An API that predates decisions ignores decisionPending and lists every bug.
+			if not isinstance(decision, dict) or not decision.get("action") or decision.get("consumedAt"):
+				continue
+			action = decision.get("action")
+			guidance = (decision.get("guidance") or "").strip()
+			if action == "refix" and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+				continue  # stays pending until tomorrow's budget
+			if action == "refix" and not guidance:
+				# Without guidance a refix would be a fresh fix that resets the branch.
+				try:
+					self._update(bug_id, decisionConsumed=True)
+					self._update(bug_id, status="needs_decision", note="refix needs guidance; decide again")
+					self._finish(bug_id, "refix-without-guidance")
+				except Exception:
+					self.log(traceback.format_exc())
+				worked = True
+				continue
+			try:
+				# Consume first: a crash below must not replay the action.
+				self._update(bug_id, decisionConsumed=True)
+			except Exception:
+				self.log(traceback.format_exc())
+				continue
+			try:
+				if action == "discard":
+					self._discard(bug_id, guidance)
+				elif action == "ship":
+					self._ship_by_decision(bug_id, decision)
+				elif action == "refix":
+					self._refix(bug_id, guidance)
+				else:
+					self.log("unknown decision action {!r} for {}".format(action, bug_id)[:200])
+			except Exception:
+				self.log(traceback.format_exc())
+				self._safe_release(bug_id, "the bug loop failed to carry out the maintainer decision; see artifacts/bug-loop/" + bug_id, status="pr_open")
+				self._finish(bug_id, "loop-error")
+			worked = True
+		return worked
+
+	def _drop_queued_ship(self, bug_id):
+		"""A later discard or refix overrides an earlier ship decision still waiting out the freeze."""
+		queue = self.state.data["ship_queue"]
+		kept = [item for item in queue if item.get("bug") != bug_id]
+		if len(kept) != len(queue):
+			self.state.data["ship_queue"] = kept
+			self.state.save()
+
+	def _discard(self, bug_id, guidance):
+		self._drop_queued_ship(bug_id)
+		self.worktree.delete_branch("bugfix/" + short_id(bug_id))
+		self._release(bug_id, "wontfix", "discarded by maintainer: " + (guidance or "(no reason given)"))
+		self._finish(bug_id, "discarded")
+
+	def _refix(self, bug_id, guidance):
+		self._drop_queued_ship(bug_id)
+		if self.state.refix_count(bug_id) >= MAX_REFIX:
+			self._update(bug_id, status="needs_decision",
+				note="refix limit reached ({} guided refixes); finish it by hand".format(MAX_REFIX))
+			self.notifier.send(notify.refix_limit_message(self.notifier, bug_id, MAX_REFIX))
+			self._finish(bug_id, "refix-limit")
+			return
+		self.state.count_refix(bug_id)
+		self._fix(bug_id, guidance=guidance)
+
+	def _ship_by_decision(self, bug_id, decision):
+		branch = "bugfix/" + short_id(bug_id)
+		try:
+			head = self._read(bug_id, "decision.json").get("head")
+		except (OSError, ValueError):
+			head = None
+		try:
+			current = self.worktree.head(branch)
+		except Exception:
+			current = None
+		if not head or current != head:
+			self._park(bug_id, branch, ["branch moved since it was parked (or no candidate commit is recorded); decide again"])
+			return
+		# The maintainer approved a diff, not a commit id: ship only if the diff uploaded for the
+		# recorded commit is the one they saw (the review diff is writable with the reader key).
+		approved = (decision or {}).get("diffSha256")
+		uploaded = self._review_diff_text(bug_id)
+		if not approved or uploaded is None or hashlib.sha256(uploaded.encode("utf-8")).hexdigest() != approved:
+			self._park(bug_id, branch, ["the diff you approved does not match the candidate commit; decide again"])
+			return
+		if loop_state.breaker_active(self.artifacts_dir):
+			self._park(bug_id, branch, ["the circuit breaker is tripped"])
+			return
+		summary = self._summary(bug_id)
+		if any(item.get("bug") == bug_id for item in self.state.data["ship_queue"]):
+			self._update(bug_id, note="already queued to ship after the freeze window")
+			return
+		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
+			self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=True)
+			self.state.mark_attempted(bug_id, "ship-queued")
+			self._update(bug_id, note="maintainer approved {}; ships after the nightly freeze window".format(branch))
+			self.state.record(bug_id, "ship-queued", branch=branch)
+			return
+		self._ship(bug_id, branch, summary, head, by_maintainer=True)
+
+	def _previous_attempt(self, bug_id):
+		previous = {}
+		try:
+			fix = self._read(bug_id, "FIX.json")
+			previous["fix"] = {key: fix.get(key) for key in ("root_cause", "expected_source", "confidence", "regression_test", "notes")}
+		except (OSError, ValueError):
+			pass
+		try:
+			previous["park_reasons"] = self._read(bug_id, "decision.json").get("reasons", [])
+		except (OSError, ValueError):
+			pass
+		return previous
+
+	def _summary(self, bug_id):
+		try:
+			return str(self._read(bug_id, "triage.json").get("observed", ""))[:200]
+		except (OSError, ValueError):
+			return ""
+
+	def _review_diff_text(self, bug_id):
+		"""The exact review diff text uploaded for the bug's candidate commit, or None without one.
+		A ship decision carries the SHA-256 of this text."""
+		path = os.path.join(self.artifacts_dir, bug_id, "diff.patch")
+		if not os.path.exists(path):
+			return None
+		with open(path, "r", encoding="utf-8", errors="replace") as handle:
+			text = handle.read()
+		if len(text) > REVIEW_DIFF_LIMIT:
+			text = text[:REVIEW_DIFF_LIMIT - len(TRUNCATION_MARKER)] + TRUNCATION_MARKER
+		return text
+
+	def _upload_diff(self, bug_id):
+		try:
+			text = self._review_diff_text(bug_id)
+			if text is None:
+				return
+			self.api.put_review_diff(bug_id, text, actor=self.config.worker)
+		except Exception:  # the diff is a convenience for the maintainer, never a reason to stop
+			self.log(traceback.format_exc())
+
+	def _backfill_review_diffs(self):
+		"""Bugs parked before the web UI showed diffs get theirs once per process start."""
+		if self._backfilled:
+			return
+		self._backfilled = True
+		for status in PARKED_STATUSES:
+			try:
+				parked = self.api.list(status=status, limit=100).get("bugs", [])
+			except Exception:
+				self.log(traceback.format_exc())
+				continue
+			for bug in parked:
+				bug_id = bug.get("_id")
+				if not valid_bug_id(bug_id):
+					continue
+				try:
+					if not (self.api.show(bug_id).get("reviewDiff") or ""):
+						self._upload_diff(bug_id)
+				except Exception:
+					self.log(traceback.format_exc())
+
+	def _send_daily_summary(self, snapshot):
+		try:
+			waiting = self.api.list(awaiting_decision=True, limit=1).get("pagination", {}).get("total", 0)
+		except Exception:
+			self.log(traceback.format_exc())
+			waiting = None
+		self.notifier.send(notify.daily_summary(snapshot, self.config.invocation_budget_per_day, waiting))
+
+	def _ship_blockers(self, by_maintainer=False):
 		blockers = []
 		if loop_state.breaker_active(self.artifacts_dir):
 			blockers.append("the circuit breaker is tripped")
-		if not self.state.autoship_left(self.config.autoship_cap_per_day):
+		if not by_maintainer and not self.state.autoship_left(self.config.autoship_cap_per_day):
 			blockers.append("the daily auto-ship cap is reached")
 		return blockers
 
@@ -419,23 +646,28 @@ class BugLoop:
 			return
 		self._ship(bug_id, branch, summary, head)
 
-	def _ship(self, bug_id, branch, summary, head):
-		message = "Merge {} (bug-loop, gate green at {})\n\nBug {}: {}\n\n{}".format(branch, head[:8], bug_id, summary, CO_AUTHOR)
+	def _ship(self, bug_id, branch, summary, head, by_maintainer=False):
+		label = "maintainer decision" if by_maintainer else "gate green at " + head[:8]
+		message = "Merge {} (bug-loop, {})\n\nBug {}: {}\n\n{}".format(branch, label, bug_id, summary, CO_AUTHOR)
 		with self.lock():
 			result = self.worktree.ship(branch, head, message, lambda: self.verifier.gate("fast")["ok"])
 		if not result.ok:
 			self._park(bug_id, branch, ["ship: " + result.reason])
 			return
-		self.state.count_autoship()
+		if not by_maintainer:
+			self.state.count_autoship()
+		outcome = "shipped-by-maintainer" if by_maintainer else "shipped"
 		# The merge is on develop now: nothing below may undo that by releasing the bug.
 		try:
 			self.worktree.delete_branch(branch)
 			self._update(bug_id, status="resolved", release_claim=True,
-				note="shipped by the bug loop in {}; reaches players with the next nightly deploy".format(result.commit))
-			self._finish(bug_id, "shipped", branch=branch, commit=result.commit)
+				note="shipped by the bug loop{} in {}; reaches players with the next nightly deploy".format(
+					" on the maintainer's decision" if by_maintainer else "", result.commit))
+			self._finish(bug_id, outcome, branch=branch, commit=result.commit)
+			self.notifier.send(notify.shipped_message(self.notifier, bug_id, result.commit, by_maintainer))
 		except Exception:
 			self.log(traceback.format_exc())
-			self._finish(bug_id, "shipped", branch=branch, commit=result.commit, bookkeeping_failed=True)
+			self._finish(bug_id, outcome, branch=branch, commit=result.commit, bookkeeping_failed=True)
 
 	def _ship_queued(self, now):
 		if loop_state.in_freeze(now, self.config.freeze_start_utc, self.config.freeze_end_utc):
@@ -445,13 +677,14 @@ class BugLoop:
 			item = pending.pop(0)
 			try:
 				try:
-					blockers = self._ship_blockers()
+					by_maintainer = bool(item.get("by_maintainer"))
+					blockers = self._ship_blockers(by_maintainer)
 					if not valid_bug_id(item.get("bug")) or not item.get("head"):
 						self.log("dropping a malformed ship-queue item: {!r}".format(item)[:300])
 					elif blockers:
 						self._park(item["bug"], item["branch"], blockers)
 					else:
-						self._ship(item["bug"], item["branch"], item["summary"], item["head"])
+						self._ship(item["bug"], item["branch"], item["summary"], item["head"], by_maintainer=by_maintainer)
 				except Exception:
 					self.log(traceback.format_exc())
 					self._park(item["bug"], item["branch"], ["ship error, see the runner log"])
@@ -465,14 +698,15 @@ class BugLoop:
 	# ---- housekeeping
 
 	def _reconcile_parked(self):
-		for bug in self.api.list(status="pr_open", limit=100).get("bugs", []):
-			pr = bug.get("prUrl") or ""
-			if not pr.startswith("branch:"):
-				continue
-			commit = self.worktree.merged(pr[len("branch:"):])
-			if commit:
-				self._update(bug["_id"], status="resolved", note="merged into develop in " + commit)
-				self.state.record(bug["_id"], "merged-by-user", commit=commit)
+		for status in PARKED_STATUSES:
+			for bug in self.api.list(status=status, limit=100).get("bugs", []):
+				pr = bug.get("prUrl") or ""
+				if not pr.startswith("branch:"):
+					continue
+				commit = self.worktree.merged(pr[len("branch:"):])
+				if commit:
+					self._update(bug["_id"], status="resolved", note="merged into develop in " + commit)
+					self.state.record(bug["_id"], "merged-by-user", commit=commit)
 
 	def _check_nightly_breaker(self, now):
 		try:
@@ -484,6 +718,7 @@ class BugLoop:
 			self.state.data["seen_red_reports"].append(name)
 			loop_state.trip_breaker(self.artifacts_dir, "nightly {} is red and includes bug-loop merges".format(name), now)
 			self.log("circuit breaker tripped by " + name)
+			self.notifier.send(notify.breaker_message("nightly {} is red and includes bug-loop merges".format(name)))
 
 	def _write_daily_report(self):
 		day = self.state.data["day"]

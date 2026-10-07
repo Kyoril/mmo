@@ -130,9 +130,74 @@ with an "interrupted" note.
 ## Reviewing a parked fix
 
 Parked fixes are expected and normal: measured on 761 small historical server edits, the guard
-parks about 49%. They wait for review. The note on the bug names every reason it parked. Check out `bugfix/<id8>`, review it, and
-`/ship` it. The loop notices the merge and marks the bug resolved. To reject it, set the bug
-to `wontfix` and delete the branch.
+parks about 49%. They wait for review. The note on the bug names every reason it parked. Open
+the bug in the web UI first: the decision panel shows the candidate diff and takes the
+decision (see "Decisions and notifications"). The manual alternative still works: check out
+`bugfix/<id8>`, review it, and `/ship` it. The loop notices the merge and marks the bug
+resolved. To reject it by hand, set the bug to `wontfix` and delete the branch.
+
+## Decisions and notifications
+
+A parked bug has one of two statuses. `pr_open` is an ordinary park: the fix waits for review.
+`needs_decision` means the reviewer asked a design question the loop cannot answer itself; it
+also sends a Discord ping with the question. Every park uploads the candidate diff, so the web
+UI can show it next to the decision panel.
+
+The panel offers three actions. The loop consumes decisions before it does anything else in a
+poll:
+
+- **Refix with guidance**: the fixer continues on the existing `bugfix/<id8>` branch with the
+  maintainer's guidance, at most 3 guided rounds per bug. A refix with empty guidance is
+  refused ("decide again"). If a guided refix fails, the bug goes back to `pr_open` so it can
+  be decided again; at the limit the loop posts a "refix limit reached" message.
+- **Ship**: ships exactly the recorded commit. The daily cap does not apply. If the branch tip
+  no longer matches the recorded commit (or none is recorded, or the branch is gone), the bug
+  is re-parked and the maintainer must decide again. The panel sends the SHA-256 of the diff it
+  shows with the decision; the loop ships only if that matches the diff it uploaded for the
+  recorded commit, otherwise it re-parks ("the diff you approved does not match the candidate
+  commit; decide again") and uploads the real diff. The API refuses a new review diff while a
+  decision is pending, the UI proxy refuses review-diff uploads altogether, and "Ship as is" is
+  disabled until a diff is uploaded. An active circuit breaker also re-parks
+  the bug ("the circuit breaker is tripped"); decide again once it is cleared. Only the
+  nightly freeze window queues the ship until the window ends; a second ship decision for a
+  queued bug only adds a note.
+- **Discard**: sets the bug to `wontfix` and deletes the branch.
+
+A discard or refix also drops a ship of the same bug that is still queued for the end of the
+freeze window. Decisions without an action or already consumed are skipped, so an API from
+before this feature (which ignores `decisionPending` and lists every bug) cannot trigger one.
+
+In a dry run decisions are ignored and no Discord messages are sent.
+
+Decisions need the maintainer key. Only the UI proxy holds it: `BUG_MAINTAINER_KEY` in the UI
+container, accepted by the API through `BUG_MAINTAINER_KEYS`. The loop itself keeps using the
+reader key; the browser never sees either key.
+
+Rollout order: deploy the bug API with `BUG_MAINTAINER_KEYS` and the web UI with
+`BUG_MAINTAINER_KEY` (the same key) *before* pushing develop. The loop's runtime snapshot updates
+itself from `origin/develop` at the next day-boundary restart, and an old API breaks the new
+loop. Then set `MMO_BUGLOOP_WEBHOOK` (and optionally `MMO_BUGLOOP_UI_URL`) as user environment
+variables, re-register the task with `tools/bugs/register_bug_loop_task.ps1` (the task runs a
+copied launcher, so a launcher change needs the re-registration) and restart it.
+
+Discord is optional. Set `MMO_BUGLOOP_WEBHOOK` (the webhook URL) and optionally
+`MMO_BUGLOOP_UI_URL` (the web UI base URL, used for links to bugs) as user environment
+variables on the loop machine, then re-register the scheduled task
+(`register_bug_loop_task.ps1`) and restart it so the launcher and the loop pick them up; the
+loop logs `notifications: on` or `off` at startup (`off (dry run)` in a dry run). Without a
+webhook nothing is sent. Messages:
+
+- design decision needed (the reviewer's question, with a link and the branch);
+- circuit breaker tripped (a red nightly that lists a `Merge bugfix/...`);
+- shipped (marked as a maintainer decision when it came from the panel);
+- refix limit reached;
+- a daily summary (outcomes, Claude invocations against the budget, bugs waiting for a
+  decision), sent once per UTC day when the day rolls over; it is persisted, so the restart at
+  the day boundary does not send it twice or lose it;
+- the launcher's stop notice, "Bug loop stopped with exit code N", sent when the launcher
+  itself ends abnormally (any exit code other than 0, the day-boundary restart 75 or 3 for a
+  second instance, and a failed fetch, archive or extract). Never in a dry run (`-DryRun`). It
+  reads the variable directly and never logs the URL.
 
 ## Circuit breaker
 

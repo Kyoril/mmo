@@ -6,6 +6,7 @@ fake worktree and a fake verifier. The real diff guard runs."""
 
 import dataclasses
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -34,7 +35,8 @@ GOOD_FIX = {"outcome": "fixed", "root_cause": "Kill credit ignored", "expected_s
 	"confidence": "high", "data_only": False, "regression_test": {"kind": "unit", "suite": "game_server_tests", "filter": "[quest]"},
 	"notes": ""}
 GOOD_REVIEW = {"fixes_symptom": True, "expected_source_supported": True, "reduces_security": False,
-	"out_of_scope_changes": False, "blocking_issues": [], "summary": "ok"}
+	"out_of_scope_changes": False, "blocking_issues": [], "summary": "ok",
+	"design_question": "", "guidance_followed": True}
 FIX_PATH = "src/shared/game_server/ai/creature_ai_idle_state.cpp"
 TEST_PATH = "src/tests/game_server_tests/test_creature_ai_idle_state.cpp"
 BENIGN_CHANGES = [guard.FileChange(FIX_PATH, 1, 1, False), guard.FileChange(TEST_PATH, 2, 0, False)]
@@ -82,18 +84,28 @@ def utc(text):
 class FakeApi:
 	def __init__(self, bugs):
 		self.bugs = {bug["_id"]: dict(bug) for bug in bugs}
+		# An API from before decisions ignores decisionPending and lists everything.
+		self.ignores_decision_filter = False
+		self.lists = []
 		self.updates = []
 		self.claims = []
 		self.show_errors = {}
 		self.update_errors = []
+		self.review_diffs = []
 
-	def list(self, status=None, subject=None, since=None, page=1, limit=20):
+	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False, awaiting_decision=False):
+		self.lists.append(dict(status=status, limit=limit, decision_pending=decision_pending, awaiting_decision=awaiting_decision))
 		result = list(self.bugs.values())
 		if status:
 			result = [bug for bug in result if bug["status"] == status]
 		if subject:
 			kind, _, ident = subject.partition(":")
 			result = [bug for bug in result if bug["subject"]["type"] == kind and str(bug["subject"]["id"]) == ident]
+		if decision_pending and not self.ignores_decision_filter:
+			result = [bug for bug in result if bug.get("decision") and not bug["decision"].get("consumedAt")]
+		if awaiting_decision:
+			result = [bug for bug in result if bug["status"] in ("pr_open", "needs_decision")
+				and not (bug.get("decision") and not bug["decision"].get("consumedAt"))]
 		return {"bugs": [dict(bug) for bug in result], "pagination": {"total": len(result), "page": 1, "pages": 1}}
 
 	def show(self, bug_id):
@@ -112,13 +124,36 @@ class FakeApi:
 			if matches(bug_id, fields):
 				raise error
 		self.updates.append((bug_id, dict(fields, release_claim=release_claim)))
-		for key in ("status", "prUrl", "duplicateOf", "triage"):
+		for key in ("status", "prUrl", "duplicateOf", "triage", "designQuestion"):
 			if key in fields:
 				self.bugs[bug_id][key] = fields[key]
+		if fields.get("decisionConsumed") and self.bugs[bug_id].get("decision"):
+			self.bugs[bug_id]["decision"]["consumedAt"] = "now"
+		if release_claim:
+			self.bugs[bug_id]["claimedBy"] = None
 		return dict(self.bugs[bug_id])
+
+	def put_review_diff(self, bug_id, diff, actor="unknown"):
+		self.review_diffs.append((bug_id, diff))
+		self.bugs[bug_id]["reviewDiff"] = diff
+		return {"reviewDiffLength": len(diff)}
 
 	def notes(self, bug_id):
 		return [fields.get("note", "") for bug, fields in self.updates if bug == bug_id]
+
+
+class FakeNotifier:
+	enabled = True
+
+	def __init__(self):
+		self.messages = []
+
+	def bug_link(self, bug_id):
+		return "bug " + bug_id
+
+	def send(self, text):
+		self.messages.append(text)
+		return True
 
 
 class FakeRunner:
@@ -127,9 +162,12 @@ class FakeRunner:
 		self.fix = fix
 		self.review = review
 		self.calls = []
+		self.inputs = []
+		self.on_fix = None
 
 	def structured(self, prompt, input_text, schema, tools, cwd, timeout):
 		self.calls.append(("triage" if tools == claude.TRIAGE_TOOLS else "review"))
+		self.inputs.append(("triage" if tools == claude.TRIAGE_TOOLS else "review", input_text))
 		if tools == claude.TRIAGE_TOOLS:
 			if isinstance(self.verdict, Exception):
 				raise self.verdict
@@ -138,9 +176,12 @@ class FakeRunner:
 
 	def agent(self, prompt, input_text, cwd, timeout, max_usd):
 		self.calls.append("fix")
+		self.inputs.append(("fix", input_text))
 		path = re.search(r"Write FIX.json to: (.+)", input_text).group(1).strip()
 		with open(path, "w", encoding="utf-8") as handle:
 			json.dump(self.fix, handle)
+		if self.on_fix:
+			self.on_fix()
 		return {"result": "done"}
 
 
@@ -152,6 +193,7 @@ class FakeWorktree:
 		self.diff = diff
 		self.head_ = "head1"
 		self.branch_heads = {}
+		self.resumed = []
 		self.checkouts = []
 		self.clean = True
 		self.shipped = []
@@ -171,6 +213,16 @@ class FakeWorktree:
 
 	def head(self, ref="HEAD"):
 		return self.branch_heads.get(ref, self.head_)
+
+	def resume_branch(self, branch):
+		if branch not in self.branch_heads:
+			raise RuntimeError("no such branch " + branch)
+		self.resumed.append(branch)
+		self.head_ = self.branch_heads[branch]
+		return self.head_
+
+	def fork_point(self, branch):
+		return "base1"
 
 	def is_clean(self):
 		return self.clean
@@ -234,16 +286,349 @@ class LoopTests(unittest.TestCase):
 		self.worktree = FakeWorktree(changes, diff)
 		self.verifier = FakeVerifier(proof_ok, gate_ok)
 		self.now = utc(now)
+		self.notifier = FakeNotifier()
 		self.state = loop_state.LoopState(os.path.join(self.artifacts, "state.json"), self.now.strftime("%Y-%m-%d"))
 		api = loop.DryRunApi(self.api, os.path.join(self.artifacts, "journal.jsonl")) if dry_run else self.api
 		self.loop = loop.BugLoop(api, self.runner, self.worktree, self.verifier, None,
 			dataclasses.replace(loop_config.LoopConfig(), **config), self.state,
 			{"triage": "T", "fix": "F", "review": "R"}, {"triage": {}, "review": {}}, self.artifacts, self.reports,
-			clock=lambda: self.now, dry_run=dry_run, log=lambda message: None)
+			clock=lambda: self.now, dry_run=dry_run, log=lambda message: None, notifier=self.notifier)
 		return self.loop
 
 	def outcomes(self):
 		return [entry["outcome"] for entry in self.state.data["outcomes"]]
+
+	PARKED_DIFF = BENIGN_DIFF
+
+	def decision(self, action, guidance="", diff_sha=None, decided_at="t"):
+		"""A pending decision as the API lists it; ship carries the hash of the uploaded diff."""
+		decision = {"action": action, "guidance": guidance, "decidedAt": decided_at, "consumedAt": None}
+		if diff_sha is None and action == "ship":
+			diff_sha = hashlib.sha256(self.PARKED_DIFF.encode("utf-8")).hexdigest()
+		if diff_sha:
+			decision["diffSha256"] = diff_sha
+		return decision
+
+	def park_with_decision(self, action, guidance="", head="head0", diff_sha=None, **make_kwargs):
+		"""A bug parked earlier (artifacts present) with a pending maintainer decision."""
+		bug = dict(BUG, status="needs_decision", prUrl="branch:" + BRANCH,
+			decision=self.decision(action, guidance, diff_sha))
+		self.make(bugs=[bug], **make_kwargs)
+		folder = os.path.join(self.artifacts, BUG_ID)
+		os.makedirs(folder, exist_ok=True)
+		for name, value in (("report.json", BUG), ("triage.json", GOOD_VERDICT),
+				("decision.json", {"reasons": ["review: design question: chain?"], "head": head}),
+				("FIX.json", GOOD_FIX)):
+			with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
+				json.dump(value, handle)
+		with open(os.path.join(folder, "diff.patch"), "w", encoding="utf-8") as handle:
+			handle.write(self.PARKED_DIFF)
+		self.worktree.branch_heads[BRANCH] = head
+
+	def test_refix_with_guidance_continues_the_branch_and_ships(self):
+		self.park_with_decision("refix", "Limit the chain to one level.")
+		# The fixer commits on the resumed branch: HEAD and the branch both move to head1.
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop.poll_once()
+		first = self.api.updates[0]
+		self.assertEqual(first[1].get("decisionConsumed"), True)
+		self.assertEqual(self.worktree.resumed, [BRANCH])
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("Limit the chain to one level.", fix_input)
+		self.assertIn("PREVIOUS ATTEMPT", fix_input)
+		review_input = [text for kind, text in self.runner.inputs if kind == "review"][0]
+		self.assertIn("Limit the chain to one level.", review_input)
+		self.assertEqual(self.state.refix_count(BUG_ID), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_refix_without_a_new_commit_needs_info(self):
+		self.park_with_decision("refix", "Check line of sight.")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertIn("no new clean commit", self.api.notes(BUG_ID)[-1])
+
+	def test_refix_fix_stage_error_stays_decidable(self):
+		self.park_with_decision("refix", "Try again.")
+		def boom(*args):
+			raise claude.ClaudeError("boom")
+		self.runner.agent = boom
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_refix_handler_crash_stays_decidable(self):
+		self.park_with_decision("refix", "Try again.")
+		def boom(*args):
+			raise ValueError("crash")
+		self.runner.agent = boom
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_interrupted_refix_is_released_to_pr_open(self):
+		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="bug-loop", prUrl="branch:" + BRANCH)])
+		self.state.mark_attempted(BUG_ID, "fix-started")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_refix_with_blank_guidance_is_not_run(self):
+		self.park_with_decision("refix", "   ")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "needs_decision")
+		self.assertIn("needs guidance", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.worktree.resumed, [])
+		self.assertEqual(self.runner.inputs, [])
+		self.assertIn("refix-without-guidance", self.outcomes())
+
+	def test_second_ship_decision_during_freeze_does_not_duplicate(self):
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.api.bugs[BUG_ID]["decision"] = self.decision("ship", decided_at="t2")
+		self.loop.poll_once()
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.assertIn("already queued", self.api.notes(BUG_ID)[-1])
+
+	def test_refix_limit(self):
+		self.park_with_decision("refix", "Again.")
+		for _ in range(loop.MAX_REFIX):
+			self.state.count_refix(BUG_ID)
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "needs_decision")
+		self.assertIn("refix limit", self.api.notes(BUG_ID)[-1])
+		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertTrue(any("Refix limit" in m for m in self.notifier.messages))
+
+	def test_refix_on_a_missing_branch_is_released(self):
+		self.park_with_decision("refix", "Again.")
+		self.worktree.branch_heads = {}
+		self.loop.poll_once()
+		self.assertIn("unusable", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.worktree.shipped, [])
+
+	def test_ship_decision_ships_the_recorded_commit_past_the_cap(self):
+		self.park_with_decision("ship", head="head1", autoship_cap_per_day=0)
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+		self.assertEqual(self.state.data["autoships"], 0)
+		self.assertIn("shipped-by-maintainer", self.outcomes())
+		self.assertTrue(any("maintainer decision" in m for m in self.notifier.messages))
+
+	def test_ship_decision_ships_only_the_approved_diff(self):
+		self.park_with_decision("ship", head="head1", diff_sha="0" * 64)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.worktree.shipped_heads, [])
+		self.assertIn("the diff you approved does not match the candidate commit; decide again", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		# Re-parking uploads the real candidate diff again, so the maintainer sees what would ship.
+		self.assertEqual(self.api.review_diffs[-1], (BUG_ID, self.PARKED_DIFF))
+
+	def test_ship_decision_without_diff_hash_parks(self):
+		self.park_with_decision("ship", head="head1", diff_sha="")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("does not match the candidate commit", self.api.notes(BUG_ID)[-1])
+
+	def test_ship_decision_hash_covers_the_truncated_upload(self):
+		self.PARKED_DIFF = "+" * (loop.REVIEW_DIFF_LIMIT + 10)
+		uploaded = self.PARKED_DIFF[:loop.REVIEW_DIFF_LIMIT - len(loop.TRUNCATION_MARKER)] + loop.TRUNCATION_MARKER
+		self.park_with_decision("ship", head="head1", diff_sha=hashlib.sha256(uploaded.encode("utf-8")).hexdigest())
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+
+	def test_discard_drops_a_queued_maintainer_ship(self):
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.api.bugs[BUG_ID]["decision"] = self.decision("discard", "Changed my mind.", decided_at="t2")
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["ship_queue"], [])
+		saved = loop_state.LoopState(os.path.join(self.artifacts, "state.json"), "2026-10-07")
+		self.assertEqual(saved.data["ship_queue"], [])
+		self.now = utc("2026-10-08 00:10")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "wontfix")
+
+	def test_refix_drops_a_queued_maintainer_ship(self):
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.api.bugs[BUG_ID]["decision"] = self.decision("refix", "Check line of sight.", decided_at="t2")
+		self.api.bugs[BUG_ID]["status"] = "pr_open"
+		saved_queues = []
+		original_save = self.state.save
+		def save():
+			saved_queues.append([item["bug"] for item in self.state.data["ship_queue"]])
+			original_save()
+		self.state.save = save
+		self.loop.poll_once()
+		self.assertIn([], saved_queues)
+		self.assertEqual(self.state.data["ship_queue"], [])
+		self.now = utc("2026-10-08 00:10")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+
+	def test_consumed_or_actionless_decisions_from_an_old_api_are_skipped(self):
+		self.park_with_decision("discard", "x")
+		self.api.ignores_decision_filter = True
+		self.api.bugs[BUG_ID]["decision"]["consumedAt"] = "earlier"
+		self.api.bugs["b" * 24] = dict(BUG, _id="b" * 24, status="pr_open", decision={"guidance": "no action"})
+		self.api.bugs["c" * 24] = dict(BUG, _id="c" * 24, status="pr_open")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.deleted, [])
+		self.assertEqual([fields for bug, fields in self.api.updates if fields.get("decisionConsumed")], [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "needs_decision")
+
+	def test_ship_decision_refused_when_the_branch_moved(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.branch_heads[BRANCH] = "head9"
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("branch moved", self.api.notes(BUG_ID)[-1])
+
+	def test_ship_decision_without_recorded_commit_parks(self):
+		self.park_with_decision("ship", head="head1")
+		os.remove(os.path.join(self.artifacts, BUG_ID, "decision.json"))
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("decide again", self.api.notes(BUG_ID)[-1])
+
+	def test_ship_decision_respects_breaker_and_freeze(self):
+		self.park_with_decision("ship", head="head1")
+		loop_state.trip_breaker(self.artifacts, "test", self.now)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("circuit breaker", self.api.notes(BUG_ID)[-1])
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertTrue(self.state.data["ship_queue"][0]["by_maintainer"])
+
+	def test_discard_decision(self):
+		self.park_with_decision("discard", "Not worth it.")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "wontfix")
+		self.assertIn(BRANCH, self.worktree.deleted)
+		self.assertIn("Not worth it.", self.api.notes(BUG_ID)[-1])
+
+	def test_decisions_are_ignored_in_dry_run(self):
+		self.park_with_decision("discard", "x", dry_run=True)
+		self.loop.poll_once()
+		self.assertIsNone(self.api.bugs[BUG_ID]["decision"]["consumedAt"])
+		self.assertEqual(self.worktree.deleted, [])
+
+	def test_decision_not_acted_on_when_it_cannot_be_consumed(self):
+		self.park_with_decision("discard", "x")
+		self.api.update_errors.append((lambda bug_id, fields: fields.get("decisionConsumed"), RuntimeError("api down")))
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.deleted, [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "needs_decision")
+
+	def test_refix_waits_for_budget(self):
+		self.park_with_decision("refix", "x", invocation_budget_per_day=1)
+		self.loop.poll_once()
+		self.assertIsNone(self.api.bugs[BUG_ID]["decision"]["consumedAt"])
+
+	def test_design_question_parks_as_needs_decision_and_pings(self):
+		self.make(review=dict(GOOD_REVIEW, design_question="Should assist chain beyond one level?"))
+		self.loop.poll_once()
+		bug = self.api.bugs[BUG_ID]
+		self.assertEqual(bug["status"], "needs_decision")
+		self.assertEqual(bug["designQuestion"], "Should assist chain beyond one level?")
+		self.assertEqual(self.api.review_diffs[0][0], BUG_ID)
+		self.assertIn("diff --git", self.api.review_diffs[0][1])
+		self.assertEqual(len(self.notifier.messages), 1)
+		self.assertIn("Should assist chain beyond one level?", self.notifier.messages[0])
+
+	def test_plain_park_is_pr_open_without_ping(self):
+		self.make(gate_ok=False)
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertEqual(self.api.bugs[BUG_ID]["designQuestion"], "")
+		self.assertEqual(len(self.api.review_diffs), 1)
+		self.assertEqual(self.notifier.messages, [])
+
+	def test_large_diff_upload_is_truncated(self):
+		self.make(bugs=[dict(BUG, status="pr_open", prUrl="branch:" + BRANCH)])
+		os.makedirs(os.path.join(self.artifacts, BUG_ID), exist_ok=True)
+		with open(os.path.join(self.artifacts, BUG_ID, "diff.patch"), "w", encoding="utf-8") as handle:
+			handle.write("+" * (loop.REVIEW_DIFF_LIMIT + 500))
+		self.loop._upload_diff(BUG_ID)
+		uploaded = self.api.review_diffs[0][1]
+		self.assertEqual(len(uploaded), loop.REVIEW_DIFF_LIMIT)
+		self.assertTrue(uploaded.endswith("(diff truncated for the web UI)"))
+
+	def test_backfill_uploads_missing_review_diffs_once(self):
+		self.make(bugs=[dict(BUG, status="pr_open", prUrl="branch:" + BRANCH)])
+		os.makedirs(os.path.join(self.artifacts, BUG_ID), exist_ok=True)
+		with open(os.path.join(self.artifacts, BUG_ID, "diff.patch"), "w", encoding="utf-8") as handle:
+			handle.write("diff --git a/x b/x\n")
+		self.loop.poll_once()
+		self.loop.poll_once()
+		self.assertEqual(self.api.review_diffs, [(BUG_ID, "diff --git a/x b/x\n")])
+
+	def test_reconcile_covers_needs_decision(self):
+		self.make(bugs=[dict(BUG, status="needs_decision", prUrl="branch:" + BRANCH)])
+		self.worktree.merged_[BRANCH] = "abc123"
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_daily_summary_once_per_new_day(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+		self.now = utc("2026-10-08 00:05")
+		self.loop.poll_once()
+		self.loop.poll_once()
+		summaries = [m for m in self.notifier.messages if "Bug loop summary" in m]
+		self.assertEqual(len(summaries), 1)
+		self.assertIn("2026-10-07", summaries[0])
+
+	def test_daily_summary_counts_bugs_awaiting_a_decision_once(self):
+		pending = dict(BUG, _id="b" * 24, status="pr_open", decision=self.decision("discard", "x"))
+		self.make(bugs=[dict(BUG, _id="c" * 24, status="pr_open"), dict(BUG, _id="d" * 24, status="needs_decision"), pending])
+		self.api.lists.clear()
+		self.loop._send_daily_summary(self.state.data)
+		self.assertEqual(self.api.lists, [dict(status=None, limit=1, decision_pending=False, awaiting_decision=True)])
+		self.assertIn("waiting for a decision: 2", self.notifier.messages[-1])
+
+	def test_daily_summary_survives_a_restart(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+		self.now = utc("2026-10-08 00:05")
+		state = loop_state.LoopState(os.path.join(self.artifacts, "state.json"), "2026-10-08")
+		restarted = loop.BugLoop(self.api, self.runner, self.worktree, self.verifier, None,
+			self.loop.config, state, {"triage": "T", "fix": "F", "review": "R"}, {"triage": {}, "review": {}},
+			self.artifacts, self.reports, clock=lambda: self.now, log=lambda message: None, notifier=self.notifier)
+		restarted.poll_once()
+		restarted.poll_once()
+		summaries = [m for m in self.notifier.messages if "Bug loop summary" in m]
+		self.assertEqual(len(summaries), 1)
+		self.assertIn("2026-10-07", summaries[0])
+
+	def test_dry_run_sends_no_pings(self):
+		self.make(dry_run=True, review=dict(GOOD_REVIEW, design_question="Q?"))
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+
+	def test_no_summary_in_dry_run(self):
+		self.make(dry_run=True, verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.poll_once()
+		self.now = utc("2026-10-08 00:05")
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+
+	def test_breaker_trip_and_ship_ping(self):
+		self.make()
+		self.loop.poll_once()
+		self.assertTrue(any("Shipped" in m for m in self.notifier.messages))
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		os.makedirs(self.reports)
+		with open(os.path.join(self.reports, "nightly-2026-10-07.json"), "w", encoding="utf-8-sig") as handle:
+			json.dump({"passed": False, "merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]}, handle)
+		self.loop.poll_once()
+		self.assertTrue(any("circuit breaker" in m for m in self.notifier.messages))
 
 	def test_abuse_is_flagged_and_never_fixed(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="abuse_suspected", abuse_evidence="asks to disable admin checks"))

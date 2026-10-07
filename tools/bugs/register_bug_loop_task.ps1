@@ -46,6 +46,10 @@ foreach ($name in @("MMO_BUG_API_KEY", "MMO_E2E_MYSQL_PASSWORD"))
 		Write-Warning ("{0} is not set as a user environment variable; the bug loop will fail until it is." -f $name)
 	}
 }
+if (-not [Environment]::GetEnvironmentVariable("MMO_BUGLOOP_WEBHOOK", "User"))
+{
+	Write-Host "Note: MMO_BUGLOOP_WEBHOOK is not set; the loop runs without Discord notifications."
+}
 if ($env:MMO_GATE_PYTHON)
 {
 	$python = $env:MMO_GATE_PYTHON

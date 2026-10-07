@@ -116,6 +116,11 @@ def review_blockers(review):
 		reasons.append("review: the diff reduces a security, permission or integrity property")
 	if review.get("out_of_scope_changes") is not False:
 		reasons.append("review: the diff changes behaviour beyond the stated bug")
+	question = review.get("design_question")
+	if isinstance(question, str) and question.strip():
+		reasons.append("review: design question: " + question.strip()[:300])
+	if review.get("guidance_followed") is False:
+		reasons.append("review: the maintainer guidance was not followed")
 	blocking_issues = review.get("blocking_issues")
 	if blocking_issues is not None and not isinstance(blocking_issues, list):
 		reasons.append("review: malformed blocking_issues")

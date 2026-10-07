@@ -22,6 +22,8 @@ _DEFAULT = {
 	"fix_queue": [],
 	"ship_queue": [],
 	"seen_red_reports": [],
+	"refix_rounds": {},
+	"pending_summary": None,
 }
 
 
@@ -39,6 +41,9 @@ class LoopState:
 	def roll(self, today):
 		"""Starts a new UTC day: counters reset, attempts and queues stay."""
 		if self.data["day"] != today:
+			# Kept so the daily summary survives a restart after midnight.
+			self.data["pending_summary"] = {"day": self.data["day"], "invocations": self.data["invocations"],
+				"autoships": self.data["autoships"], "outcomes": self.data["outcomes"]}
 			self.data["day"] = today
 			self.data["invocations"] = 0
 			self.data["autoships"] = 0
@@ -105,13 +110,20 @@ class LoopState:
 	def drop_fix(self, bug_id):
 		self.data["fix_queue"] = [item for item in self.data["fix_queue"] if item["bug"] != bug_id]
 
-	def enqueue_ship(self, bug_id, branch, summary, head):
-		self.data["ship_queue"].append({"bug": bug_id, "branch": branch, "summary": summary, "head": head})
+	def enqueue_ship(self, bug_id, branch, summary, head, by_maintainer=False):
+		self.data["ship_queue"].append({"bug": bug_id, "branch": branch, "summary": summary, "head": head,
+			"by_maintainer": by_maintainer})
 
 	def take_ship_queue(self):
 		queue = self.data["ship_queue"]
 		self.data["ship_queue"] = []
 		return queue
+
+	def refix_count(self, bug_id):
+		return self.data["refix_rounds"].get(bug_id, 0)
+
+	def count_refix(self, bug_id):
+		self.data["refix_rounds"][bug_id] = self.refix_count(bug_id) + 1
 
 
 def _minutes(text):

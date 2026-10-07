@@ -161,6 +161,14 @@ class RunnerTests(unittest.TestCase):
 		runner.agent("p", "i", ".", 1, 1.0)
 		self.assertEqual(len(counter), 2)
 
+	def test_webhook_and_ui_url_never_reach_a_stage(self):
+		base = {"MMO_BUGLOOP_WEBHOOK": "https://discord.example/hook", "MMO_BUGLOOP_UI_URL": "https://ui.example", "PATH": "x"}
+		for fixer in (False, True):
+			env = claude.stage_env(base, fixer=fixer)
+			self.assertNotIn("MMO_BUGLOOP_WEBHOOK", env)
+			self.assertNotIn("MMO_BUGLOOP_UI_URL", env)
+			self.assertEqual(env["PATH"], "x")
+
 
 if __name__ == "__main__":
 	unittest.main()
