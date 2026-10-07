@@ -113,7 +113,7 @@ class BugLoop:
 		self.lock = lock
 		self.dry_run = dry_run
 		self.log = log
-		self.notifier = notifier or notify.Notifier("", log=log)
+		self.notifier = notify.Notifier("", log=log) if dry_run or notifier is None else notifier
 		self._backfilled = False
 
 	# ---- small helpers
@@ -151,10 +151,11 @@ class BugLoop:
 		"""Returns True when it did work, so the caller polls again without sleeping."""
 		now = self.clock()
 		today = now.strftime("%Y-%m-%d")
-		if self.state.data["day"] != today and not self.dry_run:
-			# The finished day's counters are still in the state; roll() resets them.
-			self._send_daily_summary()
 		self.state.roll(today)
+		if self.state.data.get("pending_summary"):
+			if not self.dry_run:
+				self._send_daily_summary(self.state.data["pending_summary"])
+			self.state.data["pending_summary"] = None
 		self._check_nightly_breaker(now)
 		worked = False
 		if not self.dry_run:
@@ -427,12 +428,12 @@ class BugLoop:
 		path = os.path.join(self.artifacts_dir, bug_id, "diff.patch")
 		if not os.path.exists(path):
 			return
-		with open(path, "r", encoding="utf-8", errors="replace") as handle:
-			text = handle.read()
-		if len(text) > REVIEW_DIFF_LIMIT:
-			marker = "\n... (diff truncated for the web UI)"
-			text = text[:REVIEW_DIFF_LIMIT - len(marker)] + marker
 		try:
+			with open(path, "r", encoding="utf-8", errors="replace") as handle:
+				text = handle.read()
+			if len(text) > REVIEW_DIFF_LIMIT:
+				marker = "\n... (diff truncated for the web UI)"
+				text = text[:REVIEW_DIFF_LIMIT - len(marker)] + marker
 			self.api.put_review_diff(bug_id, text, actor=self.config.worker)
 		except Exception:  # the diff is a convenience for the maintainer, never a reason to stop
 			self.log(traceback.format_exc())
@@ -458,14 +459,14 @@ class BugLoop:
 				except Exception:
 					self.log(traceback.format_exc())
 
-	def _send_daily_summary(self):
+	def _send_daily_summary(self, snapshot):
 		try:
 			waiting = sum(self.api.list(status=status, limit=1).get("pagination", {}).get("total", 0)
 				for status in PARKED_STATUSES)
 		except Exception:
 			self.log(traceback.format_exc())
 			waiting = None
-		self.notifier.send(notify.daily_summary(self.state.data, self.config.invocation_budget_per_day, waiting))
+		self.notifier.send(notify.daily_summary(snapshot, self.config.invocation_budget_per_day, waiting))
 
 	def _ship_blockers(self):
 		blockers = []

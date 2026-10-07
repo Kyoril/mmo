@@ -328,6 +328,26 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(len(summaries), 1)
 		self.assertIn("2026-10-07", summaries[0])
 
+	def test_daily_summary_survives_a_restart(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+		self.now = utc("2026-10-08 00:05")
+		state = loop_state.LoopState(os.path.join(self.artifacts, "state.json"), "2026-10-08")
+		restarted = loop.BugLoop(self.api, self.runner, self.worktree, self.verifier, None,
+			self.loop.config, state, {"triage": "T", "fix": "F", "review": "R"}, {"triage": {}, "review": {}},
+			self.artifacts, self.reports, clock=lambda: self.now, log=lambda message: None, notifier=self.notifier)
+		restarted.poll_once()
+		restarted.poll_once()
+		summaries = [m for m in self.notifier.messages if "Bug loop summary" in m]
+		self.assertEqual(len(summaries), 1)
+		self.assertIn("2026-10-07", summaries[0])
+
+	def test_dry_run_sends_no_pings(self):
+		self.make(dry_run=True, review=dict(GOOD_REVIEW, design_question="Q?"))
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+
 	def test_no_summary_in_dry_run(self):
 		self.make(dry_run=True, verdict=dict(GOOD_VERDICT, category="not_a_bug"))
 		self.loop.poll_once()

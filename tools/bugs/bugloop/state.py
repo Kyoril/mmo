@@ -23,6 +23,7 @@ _DEFAULT = {
 	"ship_queue": [],
 	"seen_red_reports": [],
 	"refix_rounds": {},
+	"pending_summary": None,
 }
 
 
@@ -40,6 +41,9 @@ class LoopState:
 	def roll(self, today):
 		"""Starts a new UTC day: counters reset, attempts and queues stay."""
 		if self.data["day"] != today:
+			# Kept so the daily summary survives a restart after midnight.
+			self.data["pending_summary"] = {"day": self.data["day"], "invocations": self.data["invocations"],
+				"autoships": self.data["autoships"], "outcomes": self.data["outcomes"]}
 			self.data["day"] = today
 			self.data["invocations"] = 0
 			self.data["autoships"] = 0

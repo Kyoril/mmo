@@ -116,6 +116,23 @@ class StateTests(unittest.TestCase):
 		self.assertEqual([item["by_maintainer"] for item in state.take_ship_queue()], [True, False])
 
 
+	def test_roll_keeps_the_finished_day_as_pending_summary(self):
+		state = loop_state.LoopState(self.path, "2026-10-07")
+		state.record("b1", "shipped")
+		state.roll("2026-10-08")
+		self.assertEqual(state.data["pending_summary"]["day"], "2026-10-07")
+		self.assertEqual([e["outcome"] for e in state.data["pending_summary"]["outcomes"]], ["shipped"])
+		self.assertEqual(state.data["outcomes"], [])
+
+	def test_reload_on_a_later_day_produces_pending_summary(self):
+		state = loop_state.LoopState(self.path, "2026-10-07")
+		state.record("b1", "shipped")
+		state.save()
+		reloaded = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(reloaded.data["pending_summary"]["day"], "2026-10-07")
+		self.assertEqual(len(reloaded.data["pending_summary"]["outcomes"]), 1)
+
+
 class FreezeTests(unittest.TestCase):
 	def test_inside_and_outside(self):
 		self.assertTrue(loop_state.in_freeze(utc("2026-10-07 21:30"), "21:30", "23:59"))
