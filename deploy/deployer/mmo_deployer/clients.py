@@ -145,6 +145,7 @@ class Notifier:
 			payload = json.dumps({self.key: text[:MESSAGE_LIMIT]}).encode("utf-8")
 			self.http.request("POST", self.url, {"Content-Type": "application/json"}, payload)
 		except HttpError as error:
-			log.warning("notification failed: HTTP %s", error.status)
+			# The body is the provider's error ("error code: 1010", Discord's JSON), never the URL.
+			log.warning("notification failed: HTTP %s %s", error.status, " ".join(error.body.split())[:160])
 		except (OSError, ValueError, http.client.HTTPException) as error:
 			log.warning("notification failed: %s", type(error).__name__)

@@ -134,6 +134,8 @@ class Notify(unittest.TestCase):
 			stub.route("POST", "/hook", (204, None))
 			Notifier(stub.url + "/hook", "discord", Http()).send("hello")
 			self.assertEqual(stub.requests[0].json(), {"content": "hello"})
+			# Discord's Cloudflare front rejects urllib's default agent with 403.
+			self.assertTrue(stub.requests[0].headers["user-agent"].startswith("mmo-deployer"))
 
 	def test_slack_payload(self):
 		with StubServer() as stub:
@@ -166,6 +168,13 @@ class Notify(unittest.TestCase):
 		for message in log_ctx.output:
 			self.assertNotIn(secret_url, message)
 			self.assertNotIn("127.0.0.1", message)
+
+	def test_failure_logs_provider_error(self):
+		with StubServer() as stub:
+			stub.route("POST", "/hook", (403, b"error code: 1010"))
+			with self.assertLogs("deployer", level="WARNING") as log_ctx:
+				Notifier(stub.url + "/hook", "discord", Http()).send("hello")
+			self.assertIn("HTTP 403 error code: 1010", log_ctx.output[0])
 
 	def test_no_url_sends_nothing(self):
 		Notifier("", "discord", Http()).send("hello")

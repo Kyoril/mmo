@@ -50,15 +50,19 @@ class FakeClock:
 
 
 def _can_symlink():
+	"""True if a directory symlink can be created and atomically replaced, as flip_current does."""
 	with tempfile.TemporaryDirectory() as tmp:
 		try:
-			os.symlink(tmp, os.path.join(tmp, "link"))
+			os.symlink(tmp, os.path.join(tmp, "link"), target_is_directory=True)
+			os.symlink(tmp, os.path.join(tmp, "link.new"), target_is_directory=True)
+			os.replace(os.path.join(tmp, "link.new"), os.path.join(tmp, "link"))
 			return True
 		except (OSError, NotImplementedError):
 			return False
 
 
-# Windows without developer mode cannot create symlinks; the Linux CI gate runs these tests.
+# Windows cannot create symlinks without developer mode, and even with it cannot replace a
+# directory symlink in place; the Linux CI gate runs these tests.
 CAN_SYMLINK = _can_symlink()
 
 SOURCE_TXT = (

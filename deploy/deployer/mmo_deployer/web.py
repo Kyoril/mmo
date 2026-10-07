@@ -8,6 +8,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# Discord's Cloudflare front answers urllib's default "Python-urllib/3.x" agent with 403
+# (error 1010), so every request identifies itself.
+USER_AGENT = "mmo-deployer (https://github.com/Kyoril/mmo)"
+
 
 class HttpError(Exception):
 	"""HTTP status >= 400. Connection failures surface as OSError instead."""
@@ -29,6 +33,7 @@ class Http:
 
 	def _open(self, method, url, headers, body, secret_headers):
 		request = urllib.request.Request(url, data=body, method=method)
+		request.add_header("User-Agent", USER_AGENT)
 		for key, value in (headers or {}).items():
 			request.add_header(key, value)
 		# Never forwarded on redirects: GitHub asset downloads redirect to a storage host
