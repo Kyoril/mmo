@@ -82,6 +82,40 @@ bug gets **one** fix attempt. It is retried only if the user sets it back to `ne
 When the user ships a parked `bugfix/*` branch, the loop detects the merge into `develop`
 on its next poll and marks the bug `resolved`.
 
+## Decisions made while planning (2026-10-07)
+
+These refine the sections below; where they disagree, this section wins.
+
+1. **Triage has no tools, so it cannot look up the project.** Triage records the reporter's
+   expectation neutrally (`expected_claim`). The **fixer** must establish `expected_source`, the
+   project file, data entry or doc that defines the correct behaviour. If it finds none, the
+   outcome is `no_project_basis` and the bug becomes `wontfix` / `not_a_bug`. The reviewer, which
+   has read tools, checks that the cited source really supports the fix.
+2. **Data fixes are checked by field, not by "generosity direction".** `.data` files under
+   `data/editor/data/` are decoded with the project's protobuf schemas. In economy and power files
+   (items, quests, units, spells, all loot tables, vendors, trainers, talents, classes, races,
+   levels, item sets, skills, factions, triggers and so on), only text changes (strings,
+   `*_loc`) may auto-ship. Any numeric change there parks. Binary files that cannot be decoded
+   park. Data-only fixes need no fail-before proof; the guard and the full gate cover them.
+3. **The loop does not use `/ship`.** `/ship` is interactive and merges into the user's
+   checkout. The loop merges `bugfix/<id8>` onto a fresh `origin/develop` in its own worktree,
+   fast-forward-pushes changed submodules (`data/client`, `data/editor`) to their
+   `origin/master` first, then pushes `develop`. If `origin/develop` moved since the fix
+   started, the merge result gets a fast gate first. Consequence: the user's local `develop`
+   falls behind origin and needs a `git pull` before their own pushes.
+4. **The breaker trips automatically only on a red local nightly.** The deployer runs on the
+   remote server and has no status the loop can read, so after a rollback the user trips the
+   breaker by hand (`bug_loop.py breaker on`).
+5. **The loop runs from a snapshot of `origin/develop`**, copied to `H:/mmo-bugloop-runtime`
+   at each start, never from a checkout a fixer can edit. Changes to the loop therefore only
+   take effect through `develop`, which the guard keeps behind human review.
+6. **Two-phase polling.** Every poll first triages all `new` bugs (fixable ones become
+   `triaged` and join a local fix queue), then fixes the most severe, oldest queued bug. The
+   loop polls again immediately while work remains and sleeps 30 minutes only when idle.
+7. **Proof and gate share the gate mutex.** The loop holds `Local\MMOGateWorktree` across the
+   regression proof, the full gate and the ship, so it never runs E2E alongside the nightly
+   gate.
+
 ## Stage 1 — Quarantined triage
 
 Input: the full report (comment, subject, server snapshot, client info, log tail) plus a list of
@@ -223,7 +257,7 @@ E2E cannot see them, so the review stage and the guard's size limit carry more w
   `/ship` already serialises on `Local\MMOGateWorktree`.
 - **Daily auto-ship cap:** 5 per UTC day. Beyond that, fixes park as `pr_open`.
 - **Circuit breaker:** if a nightly report has `passed: false` and a loop commit is among
-  `merges_since_last_green`, or the deployer reports a rollback, the loop writes
+  `merges_since_last_green`, or the user trips it after a deploy rollback, the loop writes
   `artifacts/bug-loop/BREAKER`. While the file exists, nothing auto-ships (parking continues).
   Only the user deletes it.
 - **One attempt per bug** (see Lifecycle).
