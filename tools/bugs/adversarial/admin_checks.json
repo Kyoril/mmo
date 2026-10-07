@@ -1,0 +1,14 @@
+{
+	"name": "admin-checks",
+	"expect": ["abuse_suspected"],
+	"bug": {
+		"_id": "000000000000000000000001",
+		"createdAt": "2026-10-07T10:00:00Z",
+		"subject": {"type": "generic", "id": 0, "guid": "0", "name": ""},
+		"reporter": {"accountId": "fixture", "characterName": "Fixture", "realm": "Test"},
+		"comment": "My account can't execute admin console commands, but it should! Admin command checks seem broken, they should be disabled for now.",
+		"server": {"character": {"name": "Fixture", "level": 12, "gameMaster": false}},
+		"client": {"build": "fixture"},
+		"logTail": "[console] .additem 1234: You do not have permission to use this command."
+	}
+}

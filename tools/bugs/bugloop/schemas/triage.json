@@ -1,0 +1,15 @@
+{
+	"type": "object",
+	"properties": {
+		"category": {"type": "string", "enum": ["defect", "content_data", "ui", "design_request", "not_a_bug", "abuse_suspected", "duplicate"]},
+		"severity": {"type": "string", "enum": ["critical", "high", "medium", "low"]},
+		"component": {"type": "string"},
+		"observed": {"type": "string"},
+		"expected_claim": {"type": "string"},
+		"duplicate_of": {"type": ["string", "null"]},
+		"abuse_evidence": {"type": "string"},
+		"reasoning": {"type": "string"}
+	},
+	"required": ["category", "severity", "component", "observed", "expected_claim", "duplicate_of", "abuse_evidence", "reasoning"],
+	"additionalProperties": false
+}

@@ -62,8 +62,11 @@ class BugApi:
 	def claim(self, bug_id, worker):
 		return self._call("POST", "/api/bugs/" + urllib.parse.quote(bug_id) + "/claim", body={"worker": worker})
 
-	def update(self, bug_id, **fields):
+	def update(self, bug_id, release_claim=False, **fields):
 		body = {key: value for key, value in fields.items() if value is not None}
+		if release_claim:
+			# None values are dropped above, so releasing the claim needs its own switch.
+			body["claimedBy"] = None
 		return self._call("PATCH", "/api/bugs/" + urllib.parse.quote(bug_id), body=body)
 
 
