@@ -41,7 +41,7 @@ class BugApi:
 		with self.opener(request, timeout=30) as response:
 			return json.loads(response.read().decode("utf-8"))
 
-	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False):
+	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False, awaiting_decision=False):
 		query = []
 		if status:
 			query.append(("status", status))
@@ -54,6 +54,8 @@ class BugApi:
 			query.append(("since", since))
 		if decision_pending:
 			query.append(("decisionPending", "true"))
+		if awaiting_decision:
+			query.append(("awaitingDecision", "true"))
 		query.append(("page", str(page)))
 		query.append(("limit", str(limit)))
 		return self._call("GET", "/api/bugs", query=query)

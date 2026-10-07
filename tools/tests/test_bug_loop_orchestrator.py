@@ -6,6 +6,7 @@ fake worktree and a fake verifier. The real diff guard runs."""
 
 import dataclasses
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -83,21 +84,28 @@ def utc(text):
 class FakeApi:
 	def __init__(self, bugs):
 		self.bugs = {bug["_id"]: dict(bug) for bug in bugs}
+		# An API from before decisions ignores decisionPending and lists everything.
+		self.ignores_decision_filter = False
+		self.lists = []
 		self.updates = []
 		self.claims = []
 		self.show_errors = {}
 		self.update_errors = []
 		self.review_diffs = []
 
-	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False):
+	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False, awaiting_decision=False):
+		self.lists.append(dict(status=status, limit=limit, decision_pending=decision_pending, awaiting_decision=awaiting_decision))
 		result = list(self.bugs.values())
 		if status:
 			result = [bug for bug in result if bug["status"] == status]
 		if subject:
 			kind, _, ident = subject.partition(":")
 			result = [bug for bug in result if bug["subject"]["type"] == kind and str(bug["subject"]["id"]) == ident]
-		if decision_pending:
+		if decision_pending and not self.ignores_decision_filter:
 			result = [bug for bug in result if bug.get("decision") and not bug["decision"].get("consumedAt")]
+		if awaiting_decision:
+			result = [bug for bug in result if bug["status"] in ("pr_open", "needs_decision")
+				and not (bug.get("decision") and not bug["decision"].get("consumedAt"))]
 		return {"bugs": [dict(bug) for bug in result], "pagination": {"total": len(result), "page": 1, "pages": 1}}
 
 	def show(self, bug_id):
@@ -290,10 +298,21 @@ class LoopTests(unittest.TestCase):
 	def outcomes(self):
 		return [entry["outcome"] for entry in self.state.data["outcomes"]]
 
-	def park_with_decision(self, action, guidance="", head="head0", **make_kwargs):
+	PARKED_DIFF = BENIGN_DIFF
+
+	def decision(self, action, guidance="", diff_sha=None, decided_at="t"):
+		"""A pending decision as the API lists it; ship carries the hash of the uploaded diff."""
+		decision = {"action": action, "guidance": guidance, "decidedAt": decided_at, "consumedAt": None}
+		if diff_sha is None and action == "ship":
+			diff_sha = hashlib.sha256(self.PARKED_DIFF.encode("utf-8")).hexdigest()
+		if diff_sha:
+			decision["diffSha256"] = diff_sha
+		return decision
+
+	def park_with_decision(self, action, guidance="", head="head0", diff_sha=None, **make_kwargs):
 		"""A bug parked earlier (artifacts present) with a pending maintainer decision."""
 		bug = dict(BUG, status="needs_decision", prUrl="branch:" + BRANCH,
-			decision={"action": action, "guidance": guidance, "decidedAt": "t", "consumedAt": None})
+			decision=self.decision(action, guidance, diff_sha))
 		self.make(bugs=[bug], **make_kwargs)
 		folder = os.path.join(self.artifacts, BUG_ID)
 		os.makedirs(folder, exist_ok=True)
@@ -302,6 +321,8 @@ class LoopTests(unittest.TestCase):
 				("FIX.json", GOOD_FIX)):
 			with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
 				json.dump(value, handle)
+		with open(os.path.join(folder, "diff.patch"), "w", encoding="utf-8") as handle:
+			handle.write(self.PARKED_DIFF)
 		self.worktree.branch_heads[BRANCH] = head
 
 	def test_refix_with_guidance_continues_the_branch_and_ships(self):
@@ -360,7 +381,7 @@ class LoopTests(unittest.TestCase):
 	def test_second_ship_decision_during_freeze_does_not_duplicate(self):
 		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
 		self.loop.poll_once()
-		self.api.bugs[BUG_ID]["decision"] = {"action": "ship", "guidance": "", "decidedAt": "t2", "consumedAt": None}
+		self.api.bugs[BUG_ID]["decision"] = self.decision("ship", decided_at="t2")
 		self.loop.poll_once()
 		self.assertEqual(len(self.state.data["ship_queue"]), 1)
 		self.assertIn("already queued", self.api.notes(BUG_ID)[-1])
@@ -390,6 +411,73 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.state.data["autoships"], 0)
 		self.assertIn("shipped-by-maintainer", self.outcomes())
 		self.assertTrue(any("maintainer decision" in m for m in self.notifier.messages))
+
+	def test_ship_decision_ships_only_the_approved_diff(self):
+		self.park_with_decision("ship", head="head1", diff_sha="0" * 64)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.worktree.shipped_heads, [])
+		self.assertIn("the diff you approved does not match the candidate commit; decide again", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		# Re-parking uploads the real candidate diff again, so the maintainer sees what would ship.
+		self.assertEqual(self.api.review_diffs[-1], (BUG_ID, self.PARKED_DIFF))
+
+	def test_ship_decision_without_diff_hash_parks(self):
+		self.park_with_decision("ship", head="head1", diff_sha="")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("does not match the candidate commit", self.api.notes(BUG_ID)[-1])
+
+	def test_ship_decision_hash_covers_the_truncated_upload(self):
+		self.PARKED_DIFF = "+" * (loop.REVIEW_DIFF_LIMIT + 10)
+		uploaded = self.PARKED_DIFF[:loop.REVIEW_DIFF_LIMIT - len(loop.TRUNCATION_MARKER)] + loop.TRUNCATION_MARKER
+		self.park_with_decision("ship", head="head1", diff_sha=hashlib.sha256(uploaded.encode("utf-8")).hexdigest())
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+
+	def test_discard_drops_a_queued_maintainer_ship(self):
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.api.bugs[BUG_ID]["decision"] = self.decision("discard", "Changed my mind.", decided_at="t2")
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["ship_queue"], [])
+		saved = loop_state.LoopState(os.path.join(self.artifacts, "state.json"), "2026-10-07")
+		self.assertEqual(saved.data["ship_queue"], [])
+		self.now = utc("2026-10-08 00:10")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "wontfix")
+
+	def test_refix_drops_a_queued_maintainer_ship(self):
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.api.bugs[BUG_ID]["decision"] = self.decision("refix", "Check line of sight.", decided_at="t2")
+		self.api.bugs[BUG_ID]["status"] = "pr_open"
+		saved_queues = []
+		original_save = self.state.save
+		def save():
+			saved_queues.append([item["bug"] for item in self.state.data["ship_queue"]])
+			original_save()
+		self.state.save = save
+		self.loop.poll_once()
+		self.assertIn([], saved_queues)
+		self.assertEqual(self.state.data["ship_queue"], [])
+		self.now = utc("2026-10-08 00:10")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+
+	def test_consumed_or_actionless_decisions_from_an_old_api_are_skipped(self):
+		self.park_with_decision("discard", "x")
+		self.api.ignores_decision_filter = True
+		self.api.bugs[BUG_ID]["decision"]["consumedAt"] = "earlier"
+		self.api.bugs["b" * 24] = dict(BUG, _id="b" * 24, status="pr_open", decision={"guidance": "no action"})
+		self.api.bugs["c" * 24] = dict(BUG, _id="c" * 24, status="pr_open")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.deleted, [])
+		self.assertEqual([fields for bug, fields in self.api.updates if fields.get("decisionConsumed")], [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "needs_decision")
 
 	def test_ship_decision_refused_when_the_branch_moved(self):
 		self.park_with_decision("ship", head="head1")
@@ -495,6 +583,14 @@ class LoopTests(unittest.TestCase):
 		summaries = [m for m in self.notifier.messages if "Bug loop summary" in m]
 		self.assertEqual(len(summaries), 1)
 		self.assertIn("2026-10-07", summaries[0])
+
+	def test_daily_summary_counts_bugs_awaiting_a_decision_once(self):
+		pending = dict(BUG, _id="b" * 24, status="pr_open", decision=self.decision("discard", "x"))
+		self.make(bugs=[dict(BUG, _id="c" * 24, status="pr_open"), dict(BUG, _id="d" * 24, status="needs_decision"), pending])
+		self.api.lists.clear()
+		self.loop._send_daily_summary(self.state.data)
+		self.assertEqual(self.api.lists, [dict(status=None, limit=1, decision_pending=False, awaiting_decision=True)])
+		self.assertIn("waiting for a decision: 2", self.notifier.messages[-1])
 
 	def test_daily_summary_survives_a_restart(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))

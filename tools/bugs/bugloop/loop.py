@@ -5,6 +5,7 @@ develop or to origin; the Claude stages only return data, and the guard decides 
 
 import contextlib
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -26,6 +27,7 @@ DATA_ONLY_ROOTS = ("data/editor/data/", "data/client/Locales/", "data/client/Int
 PARKED_STATUSES = ("pr_open", "needs_decision")
 # The web UI shows the candidate diff; the API stores at most this much.
 REVIEW_DIFF_LIMIT = 128 * 1024
+TRUNCATION_MARKER = "\n... (diff truncated for the web UI)"
 # Guided refixes a maintainer may request per bug.
 MAX_REFIX = 3
 # Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
@@ -452,6 +454,9 @@ class BugLoop:
 				self.log("skipping a decision with a malformed bug id: {!r}".format(bug_id)[:200])
 				continue
 			decision = summary.get("decision") or {}
+			# An API that predates decisions ignores decisionPending and lists every bug.
+			if not isinstance(decision, dict) or not decision.get("action") or decision.get("consumedAt"):
+				continue
 			action = decision.get("action")
 			guidance = (decision.get("guidance") or "").strip()
 			if action == "refix" and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
@@ -476,7 +481,7 @@ class BugLoop:
 				if action == "discard":
 					self._discard(bug_id, guidance)
 				elif action == "ship":
-					self._ship_by_decision(bug_id)
+					self._ship_by_decision(bug_id, decision)
 				elif action == "refix":
 					self._refix(bug_id, guidance)
 				else:
@@ -488,12 +493,22 @@ class BugLoop:
 			worked = True
 		return worked
 
+	def _drop_queued_ship(self, bug_id):
+		"""A later discard or refix overrides an earlier ship decision still waiting out the freeze."""
+		queue = self.state.data["ship_queue"]
+		kept = [item for item in queue if item.get("bug") != bug_id]
+		if len(kept) != len(queue):
+			self.state.data["ship_queue"] = kept
+			self.state.save()
+
 	def _discard(self, bug_id, guidance):
+		self._drop_queued_ship(bug_id)
 		self.worktree.delete_branch("bugfix/" + short_id(bug_id))
 		self._release(bug_id, "wontfix", "discarded by maintainer: " + (guidance or "(no reason given)"))
 		self._finish(bug_id, "discarded")
 
 	def _refix(self, bug_id, guidance):
+		self._drop_queued_ship(bug_id)
 		if self.state.refix_count(bug_id) >= MAX_REFIX:
 			self._update(bug_id, status="needs_decision",
 				note="refix limit reached ({} guided refixes); finish it by hand".format(MAX_REFIX))
@@ -503,7 +518,7 @@ class BugLoop:
 		self.state.count_refix(bug_id)
 		self._fix(bug_id, guidance=guidance)
 
-	def _ship_by_decision(self, bug_id):
+	def _ship_by_decision(self, bug_id, decision):
 		branch = "bugfix/" + short_id(bug_id)
 		try:
 			head = self._read(bug_id, "decision.json").get("head")
@@ -515,6 +530,13 @@ class BugLoop:
 			current = None
 		if not head or current != head:
 			self._park(bug_id, branch, ["branch moved since it was parked (or no candidate commit is recorded); decide again"])
+			return
+		# The maintainer approved a diff, not a commit id: ship only if the diff uploaded for the
+		# recorded commit is the one they saw (the review diff is writable with the reader key).
+		approved = (decision or {}).get("diffSha256")
+		uploaded = self._review_diff_text(bug_id)
+		if not approved or uploaded is None or hashlib.sha256(uploaded.encode("utf-8")).hexdigest() != approved:
+			self._park(bug_id, branch, ["the diff you approved does not match the candidate commit; decide again"])
 			return
 		if loop_state.breaker_active(self.artifacts_dir):
 			self._park(bug_id, branch, ["the circuit breaker is tripped"])
@@ -550,16 +572,23 @@ class BugLoop:
 		except (OSError, ValueError):
 			return ""
 
-	def _upload_diff(self, bug_id):
+	def _review_diff_text(self, bug_id):
+		"""The exact review diff text uploaded for the bug's candidate commit, or None without one.
+		A ship decision carries the SHA-256 of this text."""
 		path = os.path.join(self.artifacts_dir, bug_id, "diff.patch")
 		if not os.path.exists(path):
-			return
+			return None
+		with open(path, "r", encoding="utf-8", errors="replace") as handle:
+			text = handle.read()
+		if len(text) > REVIEW_DIFF_LIMIT:
+			text = text[:REVIEW_DIFF_LIMIT - len(TRUNCATION_MARKER)] + TRUNCATION_MARKER
+		return text
+
+	def _upload_diff(self, bug_id):
 		try:
-			with open(path, "r", encoding="utf-8", errors="replace") as handle:
-				text = handle.read()
-			if len(text) > REVIEW_DIFF_LIMIT:
-				marker = "\n... (diff truncated for the web UI)"
-				text = text[:REVIEW_DIFF_LIMIT - len(marker)] + marker
+			text = self._review_diff_text(bug_id)
+			if text is None:
+				return
 			self.api.put_review_diff(bug_id, text, actor=self.config.worker)
 		except Exception:  # the diff is a convenience for the maintainer, never a reason to stop
 			self.log(traceback.format_exc())
@@ -587,8 +616,7 @@ class BugLoop:
 
 	def _send_daily_summary(self, snapshot):
 		try:
-			waiting = sum(self.api.list(status=status, limit=1).get("pagination", {}).get("total", 0)
-				for status in PARKED_STATUSES)
+			waiting = self.api.list(awaiting_decision=True, limit=1).get("pagination", {}).get("total", 0)
 		except Exception:
 			self.log(traceback.format_exc())
 			waiting = None

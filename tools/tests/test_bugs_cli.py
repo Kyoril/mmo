@@ -105,6 +105,14 @@ class BugApiTests(unittest.TestCase):
 		api.list()
 		self.assertNotIn("decisionPending", opener.requests[1].full_url)
 
+	def test_list_can_ask_for_bugs_awaiting_a_decision(self):
+		api, opener = self.make({"bugs": []})
+		api.list(awaiting_decision=True, limit=1)
+		self.assertIn("awaitingDecision=true", opener.requests[0].full_url)
+		self.assertIn("limit=1", opener.requests[0].full_url)
+		api.list()
+		self.assertNotIn("awaitingDecision", opener.requests[1].full_url)
+
 	def test_put_review_diff(self):
 		api, opener = self.make({"reviewDiffLength": 3})
 		api.put_review_diff("abc", "+x\n", actor="bug-loop")
