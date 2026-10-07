@@ -41,7 +41,8 @@ The following systems are fully implemented and should not be suggested as futur
   - **Release (full):** before publishing a build to the live client distribution or
     servers, `/release` (`tools/gate/release_check.ps1`) must be green for that exact
     commit; it runs the full gate if no nightly covered it.
-- Never push to origin unless the user explicitly asks.
+- Never push to origin unless the user explicitly asks. The one standing exception is the
+  bug loop's auto-ship path (below).
 - Reports land in `tools/gate/reports/` (`nightly-*.json`, `release-*.json`, weekly
   content audit). At session start, surface to the user before starting new work:
   the newest nightly report if `passed` is `false` (quote `merges_since_last_green`, the
@@ -54,6 +55,16 @@ The following systems are fully implemented and should not be suggested as futur
   publishes a `nightly-*` release; `mmo-deployer` on the root server ships it at 04:45 with a
   15-minute realm countdown and rolls back on failed health checks. Anything merged to
   develop reaches players the next morning — see [docs/deployment.md](docs/deployment.md).
+- **Bug loop:** the scheduled task "MMO Bug Loop" runs `tools/bugs/bug_loop.py`, which works
+  the bug API backlog (see [docs/bug-loop.md](docs/bug-loop.md)). It owns `H:/mmo-bugloop`
+  and `H:/mmo-bugloop-runtime`; no session may use or edit them. It may push `develop` and the
+  data submodules' `master` to origin on its auto-ship path only. Its merges are titled
+  `Merge bugfix/<id8> (bug-loop, ...)`. Parked fixes are `bugfix/<id8>` branches: review them,
+  then `/ship`. Nothing in `tools/bugs/` may be changed by the loop itself; such changes go
+  through a normal feature branch.
+- At session start, also surface: `artifacts/bug-loop/BREAKER` if it exists (quote it), and from
+  the newest `tools/gate/reports/bugloop-*.json` (not `bugloop-dry-*`) the `parked` and `abuse`
+  outcomes.
 
 ## Network Protocol Changes
 
