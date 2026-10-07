@@ -18,7 +18,7 @@ TRIAGE_TOOLS = ""
 REVIEW_TOOLS = "Read,Grep,Glob"
 
 # Never passed to any stage.
-SECRET_ENV = ("MMO_BUG_API_KEY", "MMO_BUG_API_URL")
+SECRET_ENV = ("MMO_BUG_API_KEY", "MMO_BUG_API_URL", "MMO_BUGLOOP_WEBHOOK", "MMO_BUGLOOP_UI_URL")
 # Passed only to the fixer, which works in the build tree; never to the stages reading player text.
 FIXER_ONLY_ENV = ("MMO_E2E_MYSQL_PASSWORD",)
 FIXER_DISALLOWED_TOOLS = ("Bash(git push:*)", "Bash(git -C * push:*)")

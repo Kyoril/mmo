@@ -6,7 +6,7 @@
 No network: BugApi takes an opener, and these tests hand it a fake one that records the
 request and returns a canned JSON body.
 
-    python tools/tests/test_bugs_cli.py
+	python tools/tests/test_bugs_cli.py
 """
 
 import importlib.util
@@ -97,6 +97,21 @@ class BugApiTests(unittest.TestCase):
 		env = dict(os.environ)
 		env.pop("MMO_BUG_API_KEY", None)
 		self.assertEqual(bugs.main(["list"], environ=env, out=io.StringIO(), err=io.StringIO()), 2)
+
+	def test_list_can_ask_for_pending_decisions(self):
+		api, opener = self.make({"bugs": []})
+		api.list(decision_pending=True, limit=5)
+		self.assertIn("decisionPending=true", opener.requests[0].full_url)
+		api.list()
+		self.assertNotIn("decisionPending", opener.requests[1].full_url)
+
+	def test_put_review_diff(self):
+		api, opener = self.make({"reviewDiffLength": 3})
+		api.put_review_diff("abc", "+x\n", actor="bug-loop")
+		request = opener.requests[0]
+		self.assertEqual(request.get_method(), "PUT")
+		self.assertTrue(request.full_url.endswith("/api/bugs/abc/review-diff"))
+		self.assertEqual(json.loads(request.data.decode("utf-8")), {"diff": "+x\n", "actor": "bug-loop"})
 
 
 if __name__ == "__main__":

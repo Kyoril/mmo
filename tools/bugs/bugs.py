@@ -41,7 +41,7 @@ class BugApi:
 		with self.opener(request, timeout=30) as response:
 			return json.loads(response.read().decode("utf-8"))
 
-	def list(self, status=None, subject=None, since=None, page=1, limit=20):
+	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False):
 		query = []
 		if status:
 			query.append(("status", status))
@@ -52,6 +52,8 @@ class BugApi:
 				query.append(("subjectId", subject_id))
 		if since:
 			query.append(("since", since))
+		if decision_pending:
+			query.append(("decisionPending", "true"))
 		query.append(("page", str(page)))
 		query.append(("limit", str(limit)))
 		return self._call("GET", "/api/bugs", query=query)
@@ -68,6 +70,9 @@ class BugApi:
 			# None values are dropped above, so releasing the claim needs its own switch.
 			body["claimedBy"] = None
 		return self._call("PATCH", "/api/bugs/" + urllib.parse.quote(bug_id), body=body)
+
+	def put_review_diff(self, bug_id, diff, actor="unknown"):
+		return self._call("PUT", "/api/bugs/" + urllib.parse.quote(bug_id) + "/review-diff", body={"diff": diff, "actor": actor})
 
 
 def build_parser():

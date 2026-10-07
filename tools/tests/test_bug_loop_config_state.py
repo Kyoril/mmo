@@ -99,6 +99,22 @@ class StateTests(unittest.TestCase):
 		self.assertEqual([item["bug"] for item in state.take_ship_queue()], ["a"])
 		self.assertEqual(state.take_ship_queue(), [])
 
+	def test_refix_rounds_count_per_bug_and_persist(self):
+		state = loop_state.LoopState(self.path, "2026-10-07")
+		self.assertEqual(state.refix_count("a"), 0)
+		state.count_refix("a")
+		state.count_refix("a")
+		state.save()
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.refix_count("a"), 2)
+		self.assertEqual(state.refix_count("b"), 0)
+
+	def test_ship_queue_items_remember_maintainer_approval(self):
+		state = loop_state.LoopState(self.path, "2026-10-07")
+		state.enqueue_ship("a", "bugfix/a", "s", "h", by_maintainer=True)
+		state.enqueue_ship("b", "bugfix/b", "s", "h")
+		self.assertEqual([item["by_maintainer"] for item in state.take_ship_queue()], [True, False])
+
 
 class FreezeTests(unittest.TestCase):
 	def test_inside_and_outside(self):

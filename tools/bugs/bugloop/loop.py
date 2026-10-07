@@ -71,6 +71,10 @@ class DryRunApi:
 		self._journal("update", bug_id, dict(fields, release_claim=release_claim))
 		return {"_id": bug_id}
 
+	def put_review_diff(self, bug_id, diff, actor="unknown"):
+		self._journal("review-diff", bug_id, {"length": len(diff), "actor": actor})
+		return {"reviewDiffLength": len(diff)}
+
 
 def decide(fix, review, guard_result, proof, gate):
 	"""Every reason that forbids auto-ship. Empty means eligible; the breaker, the daily cap
