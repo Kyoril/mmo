@@ -28,10 +28,10 @@ namespace mmo
 		ConnectionsByTile m_connections;
 
 		TileArea GetTileIndexArea(const Circle& shape) const;
-		bool WatchTile(Tile& tile);
-		bool UnwatchTile(Tile& tile);
+		void WatchTile(Tile& tile);
+		void UnwatchTile(Tile& tile);
 		void OnUnitMoved(GameUnitS& unit);
-		bool UpdateTile(Tile& tile);
+		void UpdateTile(Tile& tile);
 		void OnShapeUpdated() override;
 	};
 }
