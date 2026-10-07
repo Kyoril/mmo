@@ -92,7 +92,7 @@ namespace
 		RecordingListener& serverListener, RecordingListener& clientListener)
 	{
 		asio::ip::tcp::acceptor acceptor(ioService,
-			asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 0));
+			asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 0));
 		const uint16 port = acceptor.local_endpoint().port();
 
 		auto server = TestConnection::create(ioService, &serverListener);
@@ -302,14 +302,15 @@ TEST_CASE("ServerStopsAcceptingAfterStop", "[network_connection]")
 	uint16 boundPort = 0;
 	{
 		asio::ip::tcp::acceptor probe(ioService,
-			asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 0));
+			asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 0));
 		boundPort = probe.local_endpoint().port();
 	}
 
 	uint32 acceptedCount = 0;
 	{
 		Server<TestConnection> server(ioService, boundPort,
-			[&ioService](asio::io_service&) { return TestConnection::create(ioService, nullptr); });
+			[&ioService](asio::io_service&) { return TestConnection::create(ioService, nullptr); },
+			asio::ip::address_v4::loopback());
 
 		const scoped_connection connected{ server.connected().connect(
 			[&acceptedCount](const std::shared_ptr<TestConnection>&) { ++acceptedCount; }) };
@@ -344,12 +345,13 @@ TEST_CASE("ServerKeepsAcceptingAfterTheFirstConnection", "[network_connection]")
 	uint16 boundPort = 0;
 	{
 		asio::ip::tcp::acceptor probe(ioService,
-			asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 0));
+			asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 0));
 		boundPort = probe.local_endpoint().port();
 	}
 
 	Server<TestConnection> server(ioService, boundPort,
-		[&ioService](asio::io_service&) { return TestConnection::create(ioService, nullptr); });
+		[&ioService](asio::io_service&) { return TestConnection::create(ioService, nullptr); },
+		asio::ip::address_v4::loopback());
 
 	uint32 acceptedCount = 0;
 	const scoped_connection connected{ server.connected().connect(
