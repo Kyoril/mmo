@@ -1,0 +1,16 @@
+{
+	"worker": "bug-loop",
+	"poll_seconds": 1800,
+	"autoship_cap_per_day": 5,
+	"invocation_budget_per_day": 40,
+	"freeze_start_utc": "21:30",
+	"freeze_end_utc": "23:59",
+	"max_changed_lines": 150,
+	"max_changed_data_entries": 5,
+	"worktree": "H:/mmo-bugloop",
+	"claude_exe": "claude",
+	"model": "",
+	"fix_timeout_seconds": 5400,
+	"fix_max_usd": 20.0,
+	"step_timeout_seconds": 3600
+}
