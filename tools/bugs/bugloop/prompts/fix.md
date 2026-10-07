@@ -26,7 +26,7 @@ and report instead of guessing: a wrong fix that ships is worse than no fix.
   inside the submodule (already on the branch of the same name) first, then commit in the
   parent repository including the updated submodule pointer. End every commit message with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Leave no uncommitted or untracked files.
-- Never push, merge, rebase, or touch other branches, other worktrees or `H:/mmo`.
+- Never push, merge, rebase, or touch other branches, other worktrees or the main checkout.
 - Do not edit `tools/bugs/`, `tools/gate/`, `tools/e2e/`, `.github/`, `.claude/`,
   `.agents/`, `CLAUDE.md`, `deploy/`, `src/shared/proto_data/` or database migrations.
 - Code fixes need a regression test that fails without the fix: a Catch2 test in

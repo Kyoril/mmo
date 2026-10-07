@@ -10,7 +10,7 @@ test, and auto-ships low-risk fixes to `origin/develop`. Everything else is park
 | Stage | Runs as | Can |
 |---|---|---|
 | Triage | `claude -p --tools ""` | classify only; reads the raw report |
-| Fix | `claude -p` in `H:/mmo-bugloop` | edit, build, run unit tests, commit on `bugfix/<id8>`; never push, never run E2E |
+| Fix | `claude -p` in the loop worktree | edit, build, run unit tests, commit on `bugfix/<id8>`; never push, never run E2E |
 | Review | `claude -p --tools Read,Grep,Glob` | read the branch; never sees the report |
 | Guard | `bugloop/guard.py` | protected paths, suspicious patterns, data field rules |
 | Proof | orchestrator | test fails on base, passes on the fix (E2E scenarios run here, under the gate lock) |
@@ -79,8 +79,19 @@ Prerequisites:
   shadow day.
 - `MMO_BUG_API_KEY` and `MMO_E2E_MYSQL_PASSWORD` as user environment variables, and
   `MMO_GATE_PYTHON` (the registration warns without it and falls back to `python` on PATH).
-- A configured main build (`H:/mmo/build`) with `protoc` for the game-data decoder.
+- A configured main build (`<main checkout>/build`) with `protoc` for the game-data decoder.
 - Git push access to origin (ssh) and HTTPS access to the data submodule remotes.
+
+Where the loop keeps its files is per machine, never in the repository:
+
+| Directory | Default | Override (user environment variable) |
+|---|---|---|
+| Worktree (both data submodules plus its own build, 15–30 GB) | `mmo-bugloop` next to the main checkout | `MMO_BUGLOOP_WORKTREE` |
+| Runtime snapshot (a few MB) | `mmo-bugloop-runtime` next to the main checkout | `MMO_BUGLOOP_RUNTIME` (or `-Runtime` at registration) |
+
+The worktree may live on another drive than the repository, e.g. a large HDD
+(`setx MMO_BUGLOOP_WORKTREE D:\mmo-bugloop`); builds there are slower but the loop is unattended.
+The registration prints both resolved paths.
 
 ```powershell
 $env:MMO_BUG_API_KEY = "<reader key>"
@@ -92,7 +103,7 @@ powershell -File tools/bugs/register_bug_loop_task.ps1                 # live, a
 The scheduled task runs `%LOCALAPPDATA%\mmo-bugloop\run_bug_loop.ps1`, a copy of
 `tools/bugs/run_bug_loop.ps1` made at registration; re-run `register_bug_loop_task.ps1` to
 update it. The launcher takes a snapshot of `origin/develop` (`tools/bugs` and
-`src/shared/proto_data`) into `H:/mmo-bugloop-runtime` with `System32\tar.exe` and runs the loop
+`src/shared/proto_data`) into the runtime directory with `System32\tar.exe` and runs the loop
 from there, so loop changes only take effect once they are pushed to develop. The loop exits
 with 75 at each UTC day boundary and the launcher starts it again from a new snapshot; any
 other exit code (and a failed fetch, archive or extract) ends the task until the next logon.

@@ -42,5 +42,29 @@ class StartupTests(unittest.TestCase):
 		self.assertEqual(os.path.normcase(bug_loop.RUNTIME_ROOT), os.path.normcase(REPO_ROOT))
 
 
+class WorktreePathTests(unittest.TestCase):
+	REPO = os.path.join(tempfile.gettempdir(), "checkouts", "mmo")
+
+	def config(self, worktree=""):
+		return bug_loop.loop_config.LoopConfig(worktree=worktree)
+
+	def test_default_is_a_sibling_of_the_main_checkout(self):
+		path = bug_loop.resolve_worktree(self.config(), self.REPO, {})
+		self.assertEqual(path, os.path.join(os.path.dirname(self.REPO), "mmo-bugloop"))
+
+	def test_environment_variable_wins(self):
+		other = os.path.join(tempfile.gettempdir(), "elsewhere", "loop")
+		path = bug_loop.resolve_worktree(self.config("ignored"), self.REPO, {"MMO_BUGLOOP_WORKTREE": other})
+		self.assertEqual(path, os.path.abspath(other))
+
+	def test_config_value_is_used_without_environment_variable(self):
+		other = os.path.join(tempfile.gettempdir(), "configured")
+		self.assertEqual(bug_loop.resolve_worktree(self.config(other), self.REPO, {}), os.path.abspath(other))
+
+	def test_checked_in_config_holds_no_machine_path(self):
+		config = bug_loop.loop_config.load_config(os.path.join(REPO_ROOT, "tools", "bugs", "bug_loop.json"))
+		self.assertEqual(config.worktree, "")
+
+
 if __name__ == "__main__":
 	unittest.main()

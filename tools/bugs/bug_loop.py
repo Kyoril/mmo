@@ -3,8 +3,8 @@
 
 """Autonomous bug loop over the central bug API. Operator guide: docs/bug-loop.md.
 
-    python tools/bugs/bug_loop.py [--repo H:/mmo] watch [--dry-run] [--once]
-    python tools/bugs/bug_loop.py [--repo H:/mmo] breaker on|off|status [--reason "..."]
+    python tools/bugs/bug_loop.py [--repo <main checkout>] watch [--dry-run] [--once]
+    python tools/bugs/bug_loop.py [--repo <main checkout>] breaker on|off|status [--reason "..."]
 
 Environment: MMO_BUG_API_KEY (reader key, required), MMO_BUG_API_URL (optional),
 MMO_E2E_MYSQL_PASSWORD (the gate's E2E step).
@@ -57,6 +57,13 @@ def _read(relative):
 		return handle.read()
 
 
+def resolve_worktree(config, repo, environ):
+	"""The loop's worktree: MMO_BUGLOOP_WORKTREE, else the config value, else mmo-bugloop next to the
+	main checkout (the same convention as the nightly gate's mmo-nightly)."""
+	path = environ.get("MMO_BUGLOOP_WORKTREE") or config.worktree
+	return os.path.abspath(path) if path else os.path.join(os.path.dirname(repo), "mmo-bugloop")
+
+
 def main(argv=None):
 	# Bug text and tool output can hold anything; a console that cannot print it must not crash the loop.
 	for stream in (sys.stdout, sys.stderr):
@@ -101,7 +108,7 @@ def main(argv=None):
 	if args.dry_run:
 		api = loop.DryRunApi(api, os.path.join(artifacts, "dry-run-journal.jsonl"))
 	runner = claude.ClaudeRunner(shutil.which(config.claude_exe) or config.claude_exe, config.model, on_invoke=state.count_invocation)
-	worktree = gitops.Worktree(repo, config.worktree)
+	worktree = gitops.Worktree(repo, resolve_worktree(config, repo, os.environ))
 	verifier = verification.Verifier(worktree, os.path.join(repo, "build"), timeout=config.step_timeout_seconds)
 	decoder = make_decoder(RUNTIME_ROOT, repo, log)
 	prompts = {name: _read(os.path.join("prompts", name + ".md")) for name in ("triage", "fix", "review")}

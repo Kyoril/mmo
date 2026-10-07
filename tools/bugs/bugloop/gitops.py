@@ -1,7 +1,7 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-"""Git operations of the bug loop in its own worktree (H:/mmo-bugloop). The fixer works in
-the worktree but never ships; only the orchestrator calls ship()."""
+"""Git operations of the bug loop in its own worktree (by default ../mmo-bugloop next to the main
+checkout). The fixer works in the worktree but never ships; only the orchestrator calls ship()."""
 
 import collections
 import os

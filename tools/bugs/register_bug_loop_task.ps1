@@ -1,8 +1,11 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
 # Registers the "MMO Bug Loop" scheduled task (current user). It starts at logon and runs
-# tools/bugs/bug_loop.py watch from a fresh snapshot of origin/develop in H:\mmo-bugloop-runtime,
+# tools/bugs/bug_loop.py watch from a fresh snapshot of origin/develop in the runtime directory,
 # never from a checkout a fixer can edit: loop changes take effect only through develop.
+# Runtime directory: -Runtime, else the user environment variable MMO_BUGLOOP_RUNTIME, else
+# mmo-bugloop-runtime next to the main checkout. The loop's worktree is chosen the same way by
+# bug_loop.py (MMO_BUGLOOP_WORKTREE, else mmo-bugloop next to the main checkout).
 #
 # The task's action is run_bug_loop.ps1, copied from this directory to
 # %LOCALAPPDATA%\mmo-bugloop\run_bug_loop.ps1 (outside every checkout). Re-run this script to
@@ -18,13 +21,21 @@
 
 [CmdletBinding()]
 param(
-	[string]$Runtime = "H:\mmo-bugloop-runtime",
+	[string]$Runtime = "",
 	[switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "..\gate\gate_worktree.ps1")
 $main = Get-MainRepoRoot
+if (-not $Runtime)
+{
+	$Runtime = [Environment]::GetEnvironmentVariable("MMO_BUGLOOP_RUNTIME", "User")
+}
+if (-not $Runtime)
+{
+	$Runtime = Join-Path (Split-Path -Parent $main) "mmo-bugloop-runtime"
+}
 $reportDir = Get-ReportDir
 New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 
@@ -65,5 +76,10 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances 
 	-RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 5) -ExecutionTimeLimit ([TimeSpan]::Zero)
 Register-ScheduledTask -TaskName "MMO Bug Loop" -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 
-Write-Host ("Registered 'MMO Bug Loop' ({0}) running {1}. Start it now with: Start-ScheduledTask -TaskName 'MMO Bug Loop'" -f `
-	$(if ($DryRun) { "dry run" } else { "live" }), $launcher)
+$worktree = [Environment]::GetEnvironmentVariable("MMO_BUGLOOP_WORKTREE", "User")
+if (-not $worktree)
+{
+	$worktree = Join-Path (Split-Path -Parent $main) "mmo-bugloop"
+}
+Write-Host ("Registered 'MMO Bug Loop' ({0}) running {1}`n  runtime:  {2}`n  worktree: {3}`nStart it now with: Start-ScheduledTask -TaskName 'MMO Bug Loop'" -f `
+	$(if ($DryRun) { "dry run" } else { "live" }), $launcher, $Runtime, $worktree)
