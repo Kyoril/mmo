@@ -1159,6 +1159,15 @@ namespace mmo
 	{
 		ASSERT(aura);
 
+		// Dead units carry no auras: OnKilled removed them, and a spell whose own damage killed
+		// the target applies its auras afterwards (e.g. a damage-over-time on the corpse).
+		// Passive auras survive death, and spells flagged to work on or while dead keep theirs.
+		if (!IsAlive() &&
+			(aura->GetSpell().attributes(0) & (spell_attributes::Passive | spell_attributes::CanTargetDead | spell_attributes::CastableWhileDead)) == 0)
+		{
+			return;
+		}
+
 		// SingleTargetPerCaster: evict this aura from the previous target before applying here
 		if (static_cast<SpellStackingRule>(aura->GetSpell().stacking_rule()) == SpellStackingRule::SingleTargetPerCaster)
 		{
