@@ -346,6 +346,31 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(len(self.worktree.shipped), 1)
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 
+	def test_queued_ship_not_released_as_interrupted(self):
+		"""A fix ready at 22:00 UTC (freeze window) is queued; second poll at 23:00
+		(still frozen) must not release it as interrupted; poll at 00:10 ships it."""
+		self.make(now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.assertEqual(self.state.data["attempts"][BUG_ID], "ship-queued")
+		updates_after_first_poll = len(self.api.updates)
+		# Still in freeze: should not release
+		self.now = utc("2026-10-07 23:00")
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["attempts"][BUG_ID], "ship-queued")
+		# No new updates with release_claim should be added during the freeze
+		release_updates = [u for u in self.api.updates[updates_after_first_poll:] if u[1].get("release_claim")]
+		self.assertEqual(len(release_updates), 0)
+		# No "interrupted" note should be added
+		for update in self.api.updates[updates_after_first_poll:]:
+			self.assertNotIn("interrupted", update[1].get("note", ""))
+		# After freeze: ships
+		self.now = utc("2026-10-08 00:10")
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+		self.assertEqual(self.state.data["attempts"][BUG_ID], "shipped")
+
 	def test_dry_run_writes_nothing(self):
 		self.make(dry_run=True)
 		self.loop.poll_once()

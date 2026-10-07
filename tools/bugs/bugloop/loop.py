@@ -205,8 +205,11 @@ class BugLoop:
 
 	def _release_stale_claims(self):
 		"""A crash or kill mid-fix leaves the bug claimed; give it back once."""
+		ship_queue_ids = {item["bug"] for item in self.state.data["ship_queue"]}
 		for bug_id, outcome in list(self.state.data["attempts"].items()):
 			if outcome != "fix-started":
+				continue
+			if bug_id in ship_queue_ids:
 				continue
 			try:
 				bug = self.api.show(bug_id)
@@ -379,6 +382,7 @@ class BugLoop:
 			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head)
+			self.state.mark_attempted(bug_id, "ship-queued")
 			self._update(bug_id, note="fix ready on {}; ships after the nightly freeze window".format(branch))
 			self.state.record(bug_id, "ship-queued", branch=branch)
 			return
