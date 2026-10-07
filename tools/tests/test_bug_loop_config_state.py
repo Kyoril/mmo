@@ -40,7 +40,7 @@ class ConfigTests(unittest.TestCase):
 
 	def test_checked_in_config_loads(self):
 		config = loop_config.load_config(os.path.join(REPO_ROOT, "tools", "bugs", "bug_loop.json"))
-		self.assertEqual(config.worktree, "H:/mmo-bugloop")
+		self.assertEqual(config.worktree, "D:/mmo-bugloop")
 		self.assertEqual(config.worker, "bug-loop")
 
 

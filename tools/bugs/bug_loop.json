@@ -7,7 +7,7 @@
 	"freeze_end_utc": "23:59",
 	"max_changed_lines": 150,
 	"max_changed_data_entries": 5,
-	"worktree": "H:/mmo-bugloop",
+	"worktree": "D:/mmo-bugloop",
 	"claude_exe": "claude",
 	"model": "",
 	"fix_timeout_seconds": 5400,

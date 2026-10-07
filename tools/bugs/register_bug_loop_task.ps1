@@ -1,7 +1,7 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
 # Registers the "MMO Bug Loop" scheduled task (current user). It starts at logon and runs
-# tools/bugs/bug_loop.py watch from a fresh snapshot of origin/develop in H:\mmo-bugloop-runtime,
+# tools/bugs/bug_loop.py watch from a fresh snapshot of origin/develop in D:\mmo-bugloop-runtime,
 # never from a checkout a fixer can edit: loop changes take effect only through develop.
 #
 # The task's action is run_bug_loop.ps1, copied from this directory to
@@ -18,7 +18,7 @@
 
 [CmdletBinding()]
 param(
-	[string]$Runtime = "H:\mmo-bugloop-runtime",
+	[string]$Runtime = "D:\mmo-bugloop-runtime",
 	[switch]$DryRun
 )
 

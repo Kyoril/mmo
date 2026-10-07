@@ -17,7 +17,7 @@ class LoopConfig:
 	freeze_end_utc: str = "23:59"
 	max_changed_lines: int = 150
 	max_changed_data_entries: int = 5
-	worktree: str = "H:/mmo-bugloop"
+	worktree: str = "D:/mmo-bugloop"
 	claude_exe: str = "claude"
 	model: str = ""
 	fix_timeout_seconds: int = 5400

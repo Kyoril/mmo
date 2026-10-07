@@ -10,7 +10,7 @@ test, and auto-ships low-risk fixes to `origin/develop`. Everything else is park
 | Stage | Runs as | Can |
 |---|---|---|
 | Triage | `claude -p --tools ""` | classify only; reads the raw report |
-| Fix | `claude -p` in `H:/mmo-bugloop` | edit, build, run unit tests, commit on `bugfix/<id8>`; never push, never run E2E |
+| Fix | `claude -p` in `D:/mmo-bugloop` | edit, build, run unit tests, commit on `bugfix/<id8>`; never push, never run E2E |
 | Review | `claude -p --tools Read,Grep,Glob` | read the branch; never sees the report |
 | Guard | `bugloop/guard.py` | protected paths, suspicious patterns, data field rules |
 | Proof | orchestrator | test fails on base, passes on the fix (E2E scenarios run here, under the gate lock) |
@@ -92,7 +92,7 @@ powershell -File tools/bugs/register_bug_loop_task.ps1                 # live, a
 The scheduled task runs `%LOCALAPPDATA%\mmo-bugloop\run_bug_loop.ps1`, a copy of
 `tools/bugs/run_bug_loop.ps1` made at registration; re-run `register_bug_loop_task.ps1` to
 update it. The launcher takes a snapshot of `origin/develop` (`tools/bugs` and
-`src/shared/proto_data`) into `H:/mmo-bugloop-runtime` with `System32\tar.exe` and runs the loop
+`src/shared/proto_data`) into `D:/mmo-bugloop-runtime` with `System32\tar.exe` and runs the loop
 from there, so loop changes only take effect once they are pushed to develop. The loop exits
 with 75 at each UTC day boundary and the launcher starts it again from a new snapshot; any
 other exit code (and a failed fetch, archive or extract) ends the task until the next logon.
