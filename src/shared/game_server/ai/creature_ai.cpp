@@ -272,21 +272,61 @@ namespace mmo
 					return true;
 				}
 
-				// TODO: Line of sight
+				// Allies behind walls or floors do not hear the call
+				if (MapData* mapData = worldInstance->GetMapData())
+				{
+					if (!mapData->IsInLineOfSight(controlled.GetPosition(), unit.GetPosition()))
+					{
+						return true;
+					}
+				}
+
+				auto* ally = dynamic_cast<GameCreatureS*>(&unit);
+				if (ally == nullptr)
+				{
+					return true;
+				}
 
 				if (controlled.UnitIsFriendly(unit) && controlled.UnitIsEnemy(threat))
 				{
-					auto strongUnit = std::static_pointer_cast<GameUnitS>(unit.shared_from_this());
+					auto strongAlly = std::static_pointer_cast<GameCreatureS>(ally->shared_from_this());
 					auto strongThreat = std::static_pointer_cast<GameUnitS>(threat.shared_from_this());
-					worldInstance->GetUniverse().Post([strongUnit, strongThreat]()
+					worldInstance->GetUniverse().Post([strongAlly, strongThreat]()
 						{
-							strongUnit->threatened(*strongThreat, 0.0f);
+							if (CreatureAI* allyAI = strongAlly->GetAI())
+							{
+								allyAI->OnCalledForHelp(*strongThreat);
+							}
 						});
 				}
 
 				// Keep searching: every ally in range is called, not just the first unit found
 				return true;
 			});
+	}
+
+	void CreatureAI::OnCalledForHelp(GameUnitS& threat)
+	{
+		// Only creatures waiting for a fight answer the call; evading, alerted or dead ones keep their state
+		if (dynamic_cast<CreatureAIIdleState*>(m_state.get()) == nullptr && dynamic_cast<CreatureAIPrepareState*>(m_state.get()) == nullptr)
+		{
+			return;
+		}
+
+		GameCreatureS& controlled = GetControlled();
+		if (!controlled.IsAlive() || controlled.IsInCombat() || threat.GetGuid() == controlled.GetGuid())
+		{
+			return;
+		}
+
+		if (!threat.IsAlive() || !controlled.UnitIsEnemy(threat))
+		{
+			return;
+		}
+
+		// No call for help of our own: a call reaches one wave of allies, or packed camps chain-pull.
+		// Warning: This destroys the current AI state as it enters the combat state
+		EnterCombat(threat);
 	}
 
 }

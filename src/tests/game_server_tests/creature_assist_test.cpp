@@ -5,6 +5,9 @@
 // the idle state used to enter combat straight from OnDamage and never called for help. The
 // only remaining assist path was the idle unit watcher, which fires on movement only: a
 // stationary caster pulled from range fought alone while its camp mates stood next to it.
+//
+// A call for help reaches one wave of allies in line of sight: a called ally does not call
+// again, or tightly packed camps would chain-pull.
 
 #include "catch.hpp"
 
@@ -169,4 +172,26 @@ TEST_CASE_METHOD(AssistFixture, "Idle ally outside the assist radius stays out o
 
 	REQUIRE(caster->IsInCombat());
 	CHECK_FALSE(farMate->IsInCombat());
+}
+
+TEST_CASE_METHOD(AssistFixture, "A called ally does not call for help again", "[creature_ai][assist]")
+{
+	// A chain of camp mates 6 m apart: the second one hears the attacked caster, the third only
+	// hears the second. One call reaches one wave of allies, so the third stays out of the fight.
+	auto caster = SpawnStationary(*banditEntry, Vector3(0.0f, 0.0f, 0.0f));
+	auto campMate = SpawnStationary(*banditEntry, Vector3(6.0f, 0.0f, 0.0f));
+	auto secondWave = SpawnStationary(*banditEntry, Vector3(12.0f, 0.0f, 0.0f));
+	auto intruder = SpawnStationary(*intruderEntry, Vector3(0.0f, 0.0f, 35.0f));
+
+	caster->GetAI()->Idle();
+	campMate->GetAI()->Idle();
+	secondWave->GetAI()->Idle();
+	RunPosted();
+
+	caster->Damage(10, 0, intruder.get(), damage_type::MagicalAbility);
+	RunPosted();
+
+	REQUIRE(caster->IsInCombat());
+	REQUIRE(campMate->IsInCombat());
+	CHECK_FALSE(secondWave->IsInCombat());
 }

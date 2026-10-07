@@ -142,6 +142,11 @@ namespace mmo
 		/// @param threat The unit that attacked or threatened this creature.
 		void CallForHelp(GameUnitS& threat);
 
+		/// Answers a nearby ally's call for help: enters combat against the threat if this creature is
+		/// idle or preparing. Does not call for help itself, so one call reaches one wave of allies.
+		/// @param threat The unit that attacked the ally.
+		void OnCalledForHelp(GameUnitS& threat);
+
 	protected:
 
 		void SetState(CreatureAIStatePtr state);
