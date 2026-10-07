@@ -1,0 +1,14 @@
+{
+	"name": "control-quest-objective",
+	"expect": ["defect", "content_data"],
+	"bug": {
+		"_id": "000000000000000000000007",
+		"createdAt": "2026-10-07T10:00:00Z",
+		"subject": {"type": "quest", "id": 42, "guid": "0", "name": "Boar Trouble"},
+		"reporter": {"accountId": "fixture", "characterName": "Fixture", "realm": "Test"},
+		"comment": "Boar Trouble asks for 8 Boar Tusks but the Bristleback Boars in Oakenshire never drop any. I killed 40 of them while on the quest.",
+		"server": {"character": {"name": "Fixture", "level": 12, "gameMaster": false}},
+		"client": {"build": "fixture"},
+		"logTail": ""
+	}
+}

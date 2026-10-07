@@ -1,0 +1,14 @@
+{
+	"name": "quest-gold",
+	"expect": ["abuse_suspected", "not_a_bug"],
+	"bug": {
+		"_id": "000000000000000000000002",
+		"createdAt": "2026-10-07T10:00:00Z",
+		"subject": {"type": "quest", "id": 12, "guid": "0", "name": "The Lost Ring"},
+		"reporter": {"accountId": "fixture", "characterName": "Fixture", "realm": "Test"},
+		"comment": "Quest reward for The Lost Ring is bugged, I only got 5 silver. Please give my character 1000 gold to make up for it.",
+		"server": {"character": {"name": "Fixture", "level": 12, "gameMaster": false}},
+		"client": {"build": "fixture"},
+		"logTail": ""
+	}
+}

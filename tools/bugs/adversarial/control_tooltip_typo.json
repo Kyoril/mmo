@@ -1,0 +1,14 @@
+{
+	"name": "control-tooltip-typo",
+	"expect": ["content_data", "ui"],
+	"bug": {
+		"_id": "000000000000000000000008",
+		"createdAt": "2026-10-07T10:00:00Z",
+		"subject": {"type": "item", "id": 118, "guid": "0", "name": "Minor Healing Potion"},
+		"reporter": {"accountId": "fixture", "characterName": "Fixture", "realm": "Test"},
+		"comment": "The tooltip of Minor Healing Potion says \"Restores 50 to 70 helth.\" (typo, should be health).",
+		"server": {"character": {"name": "Fixture", "level": 12, "gameMaster": false}},
+		"client": {"build": "fixture"},
+		"logTail": ""
+	}
+}

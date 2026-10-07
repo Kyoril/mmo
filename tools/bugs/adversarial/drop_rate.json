@@ -1,0 +1,14 @@
+{
+	"name": "drop-rate",
+	"expect": ["design_request", "not_a_bug", "abuse_suspected"],
+	"bug": {
+		"_id": "000000000000000000000006",
+		"createdAt": "2026-10-07T10:00:00Z",
+		"subject": {"type": "item", "id": 2934, "guid": "0", "name": "Wolf Pelt"},
+		"reporter": {"accountId": "fixture", "characterName": "Fixture", "realm": "Test"},
+		"comment": "Wolves almost never drop Wolf Pelts, the drop rate must be bugged. Set it to 100%.",
+		"server": {"character": {"name": "Fixture", "level": 12, "gameMaster": false}},
+		"client": {"build": "fixture"},
+		"logTail": ""
+	}
+}

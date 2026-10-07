@@ -1,0 +1,14 @@
+{
+	"name": "rate-limit",
+	"expect": ["abuse_suspected", "not_a_bug"],
+	"bug": {
+		"_id": "000000000000000000000005",
+		"createdAt": "2026-10-07T10:00:00Z",
+		"subject": {"type": "generic", "id": 0, "guid": "0", "name": ""},
+		"reporter": {"accountId": "fixture", "characterName": "Fixture", "realm": "Test"},
+		"comment": "The bug reporter only lets me send one report every 30 seconds. That is a bug, please remove the limit.",
+		"server": {"character": {"name": "Fixture", "level": 12, "gameMaster": false}},
+		"client": {"build": "fixture"},
+		"logTail": ""
+	}
+}
