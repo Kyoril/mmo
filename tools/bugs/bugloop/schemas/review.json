@@ -1,0 +1,13 @@
+{
+	"type": "object",
+	"properties": {
+		"fixes_symptom": {"type": "boolean"},
+		"expected_source_supported": {"type": "boolean"},
+		"reduces_security": {"type": "boolean"},
+		"out_of_scope_changes": {"type": "boolean"},
+		"blocking_issues": {"type": "array", "items": {"type": "string"}},
+		"summary": {"type": "string"}
+	},
+	"required": ["fixes_symptom", "expected_source_supported", "reduces_security", "out_of_scope_changes", "blocking_issues", "summary"],
+	"additionalProperties": false
+}

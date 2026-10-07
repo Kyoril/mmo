@@ -80,6 +80,19 @@ class BugApiTests(unittest.TestCase):
 		self.assertEqual(request.get_method(), "PATCH")
 		self.assertEqual(json.loads(request.data), {"status": "triaged", "note": "looks like a data bug", "actor": "me"})
 
+	def test_update_can_release_the_claim(self):
+		api, opener = self.make({})
+		api.update("abc", status="pr_open", release_claim=True, actor="bug-loop")
+		body = json.loads(opener.requests[0].data.decode("utf-8"))
+		self.assertIsNone(body["claimedBy"])
+		self.assertEqual(body["status"], "pr_open")
+
+	def test_update_without_release_sends_no_claim_field(self):
+		api, opener = self.make({})
+		api.update("abc", status="triaged")
+		body = json.loads(opener.requests[0].data.decode("utf-8"))
+		self.assertNotIn("claimedBy", body)
+
 	def test_main_requires_api_key(self):
 		env = dict(os.environ)
 		env.pop("MMO_BUG_API_KEY", None)
