@@ -66,5 +66,15 @@ class WorktreePathTests(unittest.TestCase):
 		self.assertEqual(config.worktree, "")
 
 
+class NotifierWiringTests(unittest.TestCase):
+	def test_notifier_reads_webhook_and_ui_url(self):
+		notifier = bug_loop.make_notifier({"MMO_BUGLOOP_WEBHOOK": "https://hook", "MMO_BUGLOOP_UI_URL": "https://ui/"}, print)
+		self.assertTrue(notifier.enabled)
+		self.assertEqual(notifier.bug_link("a"), "https://ui/bugs/a")
+
+	def test_no_webhook_means_silent(self):
+		self.assertFalse(bug_loop.make_notifier({}, print).enabled)
+
+
 if __name__ == "__main__":
 	unittest.main()

@@ -24,7 +24,7 @@ RUNTIME_ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import bugs  # noqa: E402
-from bugloop import claude, config as loop_config, data_diff, gitops, loop, state as loop_state, verification, winlock  # noqa: E402
+from bugloop import claude, config as loop_config, data_diff, gitops, loop, notify, state as loop_state, verification, winlock  # noqa: E402
 
 
 def _logger(path):
@@ -50,6 +50,11 @@ def make_decoder(schema_root, repo, log, factory=None):
 	except (data_diff.DecoderUnavailable, OSError) as error:
 		log("warning: game-data decoder unavailable, data fixes will park: {}".format(error))
 		return None
+
+
+def make_notifier(environ, log):
+	"""Discord notifications are optional: no MMO_BUGLOOP_WEBHOOK, no messages."""
+	return notify.Notifier(environ.get("MMO_BUGLOOP_WEBHOOK", ""), environ.get("MMO_BUGLOOP_UI_URL", ""), log=log)
 
 
 def _read(relative):
@@ -114,8 +119,10 @@ def main(argv=None):
 	prompts = {name: _read(os.path.join("prompts", name + ".md")) for name in ("triage", "fix", "review")}
 	schemas = {name: json.loads(_read(os.path.join("schemas", name + ".json"))) for name in ("triage", "review")}
 	bug_loop = loop.BugLoop(api, runner, worktree, verifier, decoder, config, state, prompts, schemas,
-		artifacts, os.path.join(repo, "tools", "gate", "reports"), lock=winlock.named_mutex, dry_run=args.dry_run, log=log)
+		artifacts, os.path.join(repo, "tools", "gate", "reports"), lock=winlock.named_mutex, dry_run=args.dry_run, log=log,
+		notifier=make_notifier(os.environ, log))
 	log("bug loop started ({}, {})".format("dry run" if args.dry_run else "live", HERE))
+	log("notifications: " + ("on" if bug_loop.notifier.enabled else "off (MMO_BUGLOOP_WEBHOOK not set)"))
 	if args.once:
 		bug_loop.poll_once()
 		return 0
