@@ -37,7 +37,10 @@ class FakeRun:
 
 	def __call__(self, command, **kwargs):
 		self.commands.append(command)
-		return subprocess.CompletedProcess(command, self.codes.pop(0), "", "")
+		code = self.codes.pop(0)
+		if code is None:
+			raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+		return subprocess.CompletedProcess(command, code, "", "")
 
 
 UNIT = {"kind": "unit", "suite": "game_server_tests", "filter": "[quest]"}
@@ -88,6 +91,26 @@ class ProofTests(unittest.TestCase):
 		check.proof({"kind": "e2e", "scenario": "quest_kill_credit"}, "base", "bugfix/x", ["e2e/scenarios/quest_kill_credit.lua"])
 		self.assertEqual(run.commands[0][-4:], list(verification.E2E_TARGETS))
 		self.assertEqual(run.commands[1][-3:], [os.path.join("tools", "e2e", "e2e_run.ps1"), "-Scenario", "quest_kill_credit"])
+
+	def test_timeout_before_does_not_prove_anything(self):
+		check, _ = verifier([0, None, 0, 0])
+		result = check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])
+		self.assertFalse(result["ok"])
+		self.assertIn("before=timeout", result["reason"])
+
+	def test_proof_restores_branch_on_error(self):
+		tree = FakeTree()
+		tree.git = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("git error"))
+		check, _ = verifier([0, 1, 0, 0], tree)
+		with self.assertRaises(RuntimeError):
+			check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])
+		self.assertEqual(tree.commands[-1], ("checkout", "bugfix/x"))
+
+	def test_proof_includes_output_tail_in_result(self):
+		check, run = verifier([0, 1, 0, 0])
+		result = check.proof(UNIT, "base", "bugfix/x", ["src/tests/a.cpp"])
+		self.assertIn("output_tail", result)
+		self.assertIsInstance(result["output_tail"], str)
 
 
 class GateTests(unittest.TestCase):

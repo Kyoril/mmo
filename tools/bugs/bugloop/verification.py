@@ -24,13 +24,16 @@ class Verifier:
 		self.timeout = timeout
 		self.run = run
 		self.last_output = ""
+		self.last_timed_out = False
 
 	def _run(self, command, timeout=None):
 		try:
 			completed = self.run(command, cwd=self.worktree.path, capture_output=True, text=True,
 				encoding="utf-8", errors="replace", timeout=timeout or self.timeout)
+			self.last_timed_out = False
 		except subprocess.TimeoutExpired:
 			self.last_output = "timed out: " + " ".join(command)
+			self.last_timed_out = True
 			return False
 		self.last_output = ((completed.stdout or "") + (completed.stderr or ""))[-4000:]
 		return completed.returncode == 0
@@ -59,8 +62,12 @@ class Verifier:
 	def _attempt(self, spec):
 		command, targets = self._test(spec)
 		if not self.build(targets):
+			if self.last_timed_out:
+				return "timeout"
 			return "build_failed"
-		return "passed" if self._run(command) else "failed"
+		if self._run(command):
+			return "passed"
+		return "timeout" if self.last_timed_out else "failed"
 
 	def proof(self, spec, base, branch, files):
 		if spec.get("kind") not in ("unit", "e2e"):
@@ -69,13 +76,16 @@ class Verifier:
 			return {"ok": False, "before": "", "after": "",
 				"reason": "the fix changes no file under " + ", ".join(TEST_PREFIXES)}
 		self.worktree.checkout(base)
-		self.worktree.git("checkout", branch, "--", *files)
-		before = self._attempt(spec)
-		self.worktree.checkout(branch)
-		after = self._attempt(spec)
+		try:
+			self.worktree.git("checkout", branch, "--", *files)
+			before = self._attempt(spec)
+			after = self._attempt(spec)
+		finally:
+			self.worktree.checkout(branch)
 		ok = before in ("failed", "build_failed") and after == "passed"
 		return {"ok": ok, "before": before, "after": after,
-			"reason": "" if ok else "regression test before={} after={}".format(before, after)}
+			"reason": "" if ok else "regression test before={} after={}".format(before, after),
+			"output_tail": self.last_output[-2000:]}
 
 	def gate(self, tier):
 		report = os.path.join(self.worktree.path, "tools", "gate", "last_report.json")
