@@ -162,6 +162,7 @@ poll:
   nightly freeze window queues the ship until the window ends; a second ship decision for a
   queued bug only adds a note.
 - **Discard**: sets the bug to `wontfix` and deletes the branch.
+- **Implement as feature**: accepts a rejected report (`wontfix`/`not_a_bug` or `triaged`/`design_request`) as a feature request. The description (≤4000 chars) becomes the trusted expected behaviour for the fixer and reviewer. A fresh `bugfix/<id8>` branch starts from `origin/develop`; guard, regression proof, and gate run unchanged. Features always park with the reason "feature: shipping needs the maintainer's approval" and send a Discord "Feature ready for review" ping when otherwise green. Needs 2 invocations of budget (live mode only). If an implement run fails or is interrupted, the bug returns to `triaged`/`design_request` and the decision can be chosen again. Only a hash-bound "Ship" decision (or refix/discard) moves the feature forward; a guided refix preserves the description.
 
 A discard or refix also drops a ship of the same bug that is still queued for the end of the
 freeze window. Decisions without an action or already consumed are skipped, so an API from
