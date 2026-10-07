@@ -57,6 +57,13 @@ def make_notifier(environ, log):
 	return notify.Notifier(environ.get("MMO_BUGLOOP_WEBHOOK", ""), environ.get("MMO_BUGLOOP_UI_URL", ""), log=log)
 
 
+def notifications_status(notifier, dry_run):
+	"""The startup log line about Discord notifications. A dry run never sends any."""
+	if dry_run:
+		return "notifications: off (dry run)"
+	return "notifications: " + ("on" if notifier.enabled else "off (MMO_BUGLOOP_WEBHOOK not set)")
+
+
 def _read(relative):
 	with open(os.path.join(HERE, "bugloop", relative), "r", encoding="utf-8") as handle:
 		return handle.read()
@@ -122,7 +129,7 @@ def main(argv=None):
 		artifacts, os.path.join(repo, "tools", "gate", "reports"), lock=winlock.named_mutex, dry_run=args.dry_run, log=log,
 		notifier=make_notifier(os.environ, log))
 	log("bug loop started ({}, {})".format("dry run" if args.dry_run else "live", HERE))
-	log("notifications: " + ("on" if bug_loop.notifier.enabled else "off (MMO_BUGLOOP_WEBHOOK not set)"))
+	log(notifications_status(bug_loop.notifier, args.dry_run))
 	if args.once:
 		bug_loop.poll_once()
 		return 0

@@ -37,7 +37,7 @@ with reasons.
 - Status list gains `needs_decision` (between `pr_open` and `resolved` in the UI order).
 - `designQuestion: String` (≤ 2000 chars, default `''`): the reviewer's question for the maintainer.
 - `reviewDiff: String` (≤ 128 KB, default `''`): the candidate diff of the parked branch.
-- `decision`: `{ action: 'refix' | 'ship' | 'discard', guidance: String (≤ 4000), decidedAt: Date, consumedAt: Date | null }`, default `null`.
+- `decision`: `{ action: 'refix' | 'ship' | 'discard', guidance: String (≤ 4000), diffSha256: String (64 hex or ''), decidedAt: Date, consumedAt: Date | null }`, default `null`.
 
 ### Keys
 
@@ -47,7 +47,10 @@ only the web UI proxy on the server does.
 
 ### Routes
 
-- `POST /api/bugs/:id/decision` — maintainer key only. Body `{ action, guidance }`.
+- `POST /api/bugs/:id/decision` — maintainer key only. Body `{ action, guidance, diffSha256 }`;
+  `ship` requires `diffSha256`, the SHA-256 hex of the `reviewDiff` the UI showed (amended after
+  the final review: the loop ships only when it matches the diff it uploaded; `PUT review-diff`
+  answers `409` while a decision is pending).
   - `400` unless `action` is one of the three; `refix` requires non-empty `guidance`.
   - `409` unless the bug's status is `pr_open` or `needs_decision`, or while an unconsumed
     decision exists.
@@ -186,9 +189,11 @@ review processes never see the decision route or the maintainer key.
 
 1. Bug API: deploy with `BUG_MAINTAINER_KEYS` set (new key, `openssl rand -hex 32`).
 2. Web UI: deploy with `BUG_MAINTAINER_KEY` set to that key.
-3. Bug loop: merge, push develop; set `MMO_BUGLOOP_WEBHOOK` (and optionally
-   `MMO_BUGLOOP_UI_URL`) as user environment variables; restart the scheduled task so it picks
-   up the variables and the new snapshot.
+3. Bug loop: only after 1 and 2 (the snapshot follows `origin/develop` at the next day-boundary
+   restart, and an old API breaks the new loop): merge, push develop; set `MMO_BUGLOOP_WEBHOOK`
+   (and optionally `MMO_BUGLOOP_UI_URL`) as user environment variables; re-register the task
+   (`register_bug_loop_task.ps1`, the task runs a copied launcher) and restart it so it picks up
+   the variables, the new launcher and the new snapshot.
 4. The two bugs already parked before this feature (`bugfix/6462d2bc`, `bugfix/6462d2be`) have
    no `reviewDiff`; the loop uploads it for every `pr_open`/`needs_decision` bug without one on
    its first poll after the update (from `artifacts/bug-loop/<id>/diff.patch`).

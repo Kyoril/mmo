@@ -47,9 +47,17 @@ function Invoke-Logged([string]$Exe, [string[]]$Arguments)
 	return $LASTEXITCODE
 }
 
-# Best effort: tells the maintainer the loop stopped. Never logs the webhook URL.
+# Exit code of bug_loop.py when another instance already runs: nothing stopped, no notice.
+$secondInstanceCode = 3
+
+# Best effort: tells the maintainer the loop stopped. Never logs the webhook URL. A dry run (shadow
+# mode) sends nothing, like the loop itself.
 function Send-StopNotice([int]$ExitCode)
 {
+	if ($DryRun -or $ExitCode -eq $secondInstanceCode)
+	{
+		return
+	}
 	$hook = [Environment]::GetEnvironmentVariable("MMO_BUGLOOP_WEBHOOK", "User")
 	if (-not $hook)
 	{

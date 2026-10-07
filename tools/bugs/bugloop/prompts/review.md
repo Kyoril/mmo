@@ -24,5 +24,6 @@ Decide:
 7. `design_question`: if the change involves a product or game-design choice the maintainer should
    make — balance, difficulty, encounter or AI behaviour, anything the cited source does not settle —
    state it as one concrete question the maintainer can answer. Otherwise an empty string.
+   Ordinary bug fixes that restore documented or evident behaviour need no question; leave it empty.
 8. `guidance_followed`: if a MAINTAINER GUIDANCE block is present, does the diff implement it? `true`
    when no guidance was given.
