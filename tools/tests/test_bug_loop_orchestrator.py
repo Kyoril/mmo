@@ -325,6 +325,84 @@ class LoopTests(unittest.TestCase):
 			handle.write(self.PARKED_DIFF)
 		self.worktree.branch_heads[BRANCH] = head
 
+	def rejected_with_implement(self, description="Bandits also assist stationary casters.", status="wontfix",
+			category="not_a_bug", **make_kwargs):
+		bug = dict(BUG, status=status, triage={"category": category},
+			decision={"action": "implement", "guidance": description, "decidedAt": "t", "consumedAt": None})
+		self.make(bugs=[bug], **make_kwargs)
+		folder = os.path.join(self.artifacts, BUG_ID)
+		os.makedirs(folder, exist_ok=True)
+		for name, value in (("report.json", BUG), ("triage.json", GOOD_VERDICT)):
+			with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
+				json.dump(value, handle)
+
+	def test_implement_runs_as_feature_and_always_parks(self):
+		self.rejected_with_implement()
+		self.loop.poll_once()
+		self.assertEqual(self.api.updates[0][1].get("decisionConsumed"), True)
+		self.assertTrue(self.state.is_feature(BUG_ID))
+		self.assertTrue(any((fields.get("triage") or {}).get("category") == "feature" for _, fields in self.api.updates))
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("FEATURE REQUEST", fix_input)
+		self.assertIn("Bandits also assist stationary casters.", fix_input)
+		review_input = [text for kind, text in self.runner.inputs if kind == "review"][0]
+		self.assertIn("FEATURE REQUEST", review_input)
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertIn(loop.FEATURE_REASON, self.api.notes(BUG_ID)[-1])
+		self.assertTrue(any("Feature ready for review" in m for m in self.notifier.messages))
+
+	def test_implement_works_for_design_requests(self):
+		self.rejected_with_implement(status="triaged", category="design_request")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_refix_of_a_feature_still_parks(self):
+		self.park_with_decision("refix", "Also check line of sight.")
+		self.state.add_feature(BUG_ID)
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn(loop.FEATURE_REASON, self.api.notes(BUG_ID)[-1])
+
+	def test_implement_without_description_is_refused(self):
+		self.rejected_with_implement(description="   ")
+		self.loop.poll_once()
+		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertIn("implement needs a description", self.api.notes(BUG_ID)[-1])
+		self.assertIn("implement-without-description", self.outcomes())
+
+	def test_implement_without_triage_artifacts_is_refused(self):
+		self.rejected_with_implement()
+		os.remove(os.path.join(self.artifacts, BUG_ID, "triage.json"))
+		self.loop.poll_once()
+		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertIn("triage artifacts missing", self.api.notes(BUG_ID)[-1])
+
+	def test_failed_implement_goes_back_to_design_request(self):
+		self.rejected_with_implement()
+		self.worktree.head_ = "base1"  # the fixer leaves no commit
+		self.loop.poll_once()
+		bug = self.api.bugs[BUG_ID]
+		self.assertEqual(bug["status"], "triaged")
+		self.assertEqual(bug["triage"]["category"], "design_request")
+		self.assertIn("decide again", self.api.notes(BUG_ID)[-1])
+
+	def test_no_project_basis_is_not_an_answer_for_a_feature(self):
+		self.rejected_with_implement(fix=dict(GOOD_FIX, outcome="no_project_basis", expected_source=""))
+		self.loop.poll_once()
+		bug = self.api.bugs[BUG_ID]
+		self.assertEqual(bug["status"], "triaged")
+		self.assertEqual(bug["triage"]["category"], "design_request")
+
+	def test_implement_ignored_in_dry_run_and_waits_for_budget(self):
+		self.rejected_with_implement(dry_run=True)
+		self.loop.poll_once()
+		self.assertIsNone(self.api.bugs[BUG_ID]["decision"]["consumedAt"])
+		self.rejected_with_implement(invocation_budget_per_day=1)
+		self.loop.poll_once()
+		self.assertIsNone(self.api.bugs[BUG_ID]["decision"]["consumedAt"])
+
 	def test_refix_with_guidance_continues_the_branch_and_ships(self):
 		self.park_with_decision("refix", "Limit the chain to one level.")
 		# The fixer commits on the resumed branch: HEAD and the branch both move to head1.

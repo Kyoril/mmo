@@ -30,6 +30,8 @@ REVIEW_DIFF_LIMIT = 128 * 1024
 TRUNCATION_MARKER = "\n... (diff truncated for the web UI)"
 # Guided refixes a maintainer may request per bug.
 MAX_REFIX = 3
+# Every feature parks for the maintainer: only a hash-bound "ship" decision merges one.
+FEATURE_REASON = "feature: shipping needs the maintainer's approval"
 # Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
 BUG_ID = re.compile(r"^[0-9a-f]{24}$")
 
@@ -312,7 +314,7 @@ class BugLoop:
 
 	# ---- fix
 
-	def _fix(self, bug_id, guidance=None):
+	def _fix(self, bug_id, guidance=None, feature=None):
 		self.state.drop_fix(bug_id)
 		if not valid_bug_id(bug_id):
 			self.log("dropping a queued fix with a malformed bug id: {!r}".format(bug_id)[:200])
@@ -321,8 +323,11 @@ class BugLoop:
 		self.state.save()
 		bug = self._read(bug_id, "report.json")
 		verdict = self._read(bug_id, "triage.json")
-		# A guided refix that fails goes back to the maintainer, who can only decide on parked bugs.
+		# A guided refix that fails goes back to the maintainer, who can only decide on parked bugs;
+		# a failed feature run goes back to where `implement` can be chosen again.
 		failed_status = "pr_open" if guidance else "triaged"
+		failed_fields = {"triage": {"category": "design_request"}} if feature else {}
+		again = "; decide again" if feature else ""
 		previous = self._previous_attempt(bug_id) if guidance else None
 		try:
 			self.api.claim(bug_id, self.config.worker)
@@ -334,7 +339,7 @@ class BugLoop:
 		branch = "bugfix/" + short_id(bug_id)
 		base = self.worktree.prepare()
 		if not self.verifier.ensure_configured():
-			self._release(bug_id, failed_status, "needs-info: build configure failed in the bug-loop worktree")
+			self._release(bug_id, failed_status, "needs-info: build configure failed in the bug-loop worktree" + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason="build configure failed")
 			return
 		if guidance:
@@ -353,13 +358,18 @@ class BugLoop:
 			os.remove(fix_path)
 		try:
 			result = self.runner.agent(self.prompts["fix"],
-				inputs.build_fix_input(bug, verdict, branch, fix_path, guidance=guidance, previous=previous),
+				inputs.build_fix_input(bug, verdict, branch, fix_path, guidance=guidance, previous=previous, feature=feature),
 				self.worktree.path, self.config.fix_timeout_seconds, self.config.fix_max_usd)
 			self._write(bug_id, "fix_result.json", result)
 			fix = verdicts.load_fix(fix_path)
 		except (ClaudeError, verdicts.VerdictError) as error:
-			self._release(bug_id, failed_status, "needs-info: the fix stage failed: " + str(error)[:500])
+			self._release(bug_id, failed_status, "needs-info: the fix stage failed: " + str(error)[:500] + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason=str(error)[:300])
+			return
+		if fix["outcome"] == "no_project_basis" and feature:
+			self._release(bug_id, failed_status,
+				"needs-info: the fixer found no way to implement the feature: " + fix["root_cause"][:1000] + again, **failed_fields)
+			self._finish(bug_id, "needs-info", reason="no_project_basis")
 			return
 		if fix["outcome"] == "no_project_basis":
 			self._release(bug_id, "wontfix", "not a bug: nothing in the project defines the expected behaviour. " + fix["root_cause"][:1000],
@@ -367,23 +377,23 @@ class BugLoop:
 			self._finish(bug_id, "wontfix-no-basis")
 			return
 		if fix["outcome"] != "fixed":
-			self._release(bug_id, failed_status, "needs-info ({}): {}".format(fix["outcome"], fix["root_cause"][:1000]))
+			self._release(bug_id, failed_status, "needs-info ({}): {}".format(fix["outcome"], fix["root_cause"][:1000]) + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason=fix["outcome"])
 			return
 		head = self.worktree.head()
 		if head == start or not self.worktree.is_clean():
-			self._release(bug_id, failed_status, "needs-info: the fixer reported a fix but left no new clean commit")
+			self._release(bug_id, failed_status, "needs-info: the fixer reported a fix but left no new clean commit" + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason="no clean commit")
 			return
 		# Everything below judges `head`; the branch must point there, or a later ship would merge
 		# something nobody guarded.
 		if self.worktree.head(branch) != head:
-			self._release(bug_id, failed_status, "needs-info: the fixer moved the branch away from the checked-out commit")
+			self._release(bug_id, failed_status, "needs-info: the fixer moved the branch away from the checked-out commit" + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason="fixer moved the branch")
 			return
-		self._verify_and_ship(bug_id, verdict, fix, branch, base, head, guidance=guidance)
+		self._verify_and_ship(bug_id, verdict, fix, branch, base, head, guidance=guidance, feature=feature)
 
-	def _verify_and_ship(self, bug_id, verdict, fix, branch, base, head, guidance=None):
+	def _verify_and_ship(self, bug_id, verdict, fix, branch, base, head, guidance=None, feature=None):
 		changes = self.worktree.changes(base, head)
 		diff_text = self.worktree.unified_diff(base, head)
 		self._write(bug_id, "diff.patch", diff_text)
@@ -395,10 +405,12 @@ class BugLoop:
 			# The reviewer would only see a truncated diff; nothing that large ships unreviewed.
 			reasons = ["diff too large for review ({} characters, limit {})".format(len(diff_text), inputs.DIFF_LIMIT)]
 			reasons += ["guard: " + reason for reason in guard_result["reasons"]]
+			if self.state.is_feature(bug_id):
+				reasons.append(FEATURE_REASON)
 			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 			self._park(bug_id, branch, reasons)
 			return
-		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"], guidance=guidance)
+		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"], guidance=guidance, feature=feature)
 		with self.lock():
 			proof = None
 			if fix["regression_test"]["kind"] == "none":
@@ -411,15 +423,22 @@ class BugLoop:
 			gate = self.verifier.gate("full")
 			self._write(bug_id, "gate.json", gate)
 		reasons = decide(fix, review, guard_result, proof, gate)
+		if self.state.is_feature(bug_id):
+			green = not reasons
+			reasons = reasons + [FEATURE_REASON]
+		else:
+			green = False
 		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 		if reasons:
 			self._park(bug_id, branch, reasons, review)
+			if green:
+				self.notifier.send(notify.feature_ready_message(self.notifier, bug_id, self._summary(bug_id), branch))
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
 
-	def _review(self, bug_id, verdict, fix, diff_text, guard_reasons, guidance=None):
+	def _review(self, bug_id, verdict, fix, diff_text, guard_reasons, guidance=None, feature=None):
 		try:
-			review = self.runner.structured(self.prompts["review"], inputs.build_review_input(verdict, fix, diff_text, guard_reasons, guidance=guidance),
+			review = self.runner.structured(self.prompts["review"], inputs.build_review_input(verdict, fix, diff_text, guard_reasons, guidance=guidance, feature=feature),
 				self.schemas["review"], REVIEW_TOOLS, self.worktree.path, self.config.step_timeout_seconds)
 		except ClaudeError as error:
 			review = {"error": str(error)[:500]}
@@ -459,7 +478,7 @@ class BugLoop:
 				continue
 			action = decision.get("action")
 			guidance = (decision.get("guidance") or "").strip()
-			if action == "refix" and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+			if action in ("refix", "implement") and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 				continue  # stays pending until tomorrow's budget
 			if action == "refix" and not guidance:
 				# Without guidance a refix would be a fresh fix that resets the branch.
@@ -467,6 +486,19 @@ class BugLoop:
 					self._update(bug_id, decisionConsumed=True)
 					self._update(bug_id, status="needs_decision", note="refix needs guidance; decide again")
 					self._finish(bug_id, "refix-without-guidance")
+				except Exception:
+					self.log(traceback.format_exc())
+				worked = True
+				continue
+			if action == "implement" and (not guidance or not self._has_triage_artifacts(bug_id)):
+				try:
+					self._update(bug_id, decisionConsumed=True)
+					if not guidance:
+						self._update(bug_id, note="implement needs a description; decide again")
+						self._finish(bug_id, "implement-without-description")
+					else:
+						self._update(bug_id, note="cannot implement: triage artifacts missing in artifacts/bug-loop/" + bug_id)
+						self._finish(bug_id, "implement-without-artifacts")
 				except Exception:
 					self.log(traceback.format_exc())
 				worked = True
@@ -484,6 +516,8 @@ class BugLoop:
 					self._ship_by_decision(bug_id, decision)
 				elif action == "refix":
 					self._refix(bug_id, guidance)
+				elif action == "implement":
+					self._implement(bug_id, guidance)
 				else:
 					self.log("unknown decision action {!r} for {}".format(action, bug_id)[:200])
 			except Exception:
@@ -517,6 +551,17 @@ class BugLoop:
 			return
 		self.state.count_refix(bug_id)
 		self._fix(bug_id, guidance=guidance)
+
+	def _has_triage_artifacts(self, bug_id):
+		folder = os.path.join(self.artifacts_dir, bug_id)
+		return all(os.path.exists(os.path.join(folder, name)) for name in ("report.json", "triage.json"))
+
+	def _implement(self, bug_id, description):
+		"""The maintainer accepted a rejected report as a feature: implement it, never auto-ship it."""
+		self._update(bug_id, triage={"category": "feature"}, note="accepted as a feature by the maintainer")
+		self.state.add_feature(bug_id)
+		self.state.save()
+		self._fix(bug_id, feature=description)
 
 	def _ship_by_decision(self, bug_id, decision):
 		branch = "bugfix/" + short_id(bug_id)
@@ -632,6 +677,8 @@ class BugLoop:
 
 	def _try_ship(self, bug_id, branch, summary, head):
 		blockers = self._ship_blockers()
+		if self.state.is_feature(bug_id):
+			blockers.append(FEATURE_REASON)
 		if blockers:
 			self._park(bug_id, branch, blockers)
 			return
