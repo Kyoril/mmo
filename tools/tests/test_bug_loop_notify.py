@@ -118,6 +118,13 @@ class MessageTests(unittest.TestCase):
 		self.assertIn("waiting for a decision: 3", text)
 		self.assertIn("6462d2bc: review: chains without limit", text)
 
+	def test_feature_ready(self):
+		notifier = notify.Notifier("", "https://ui.example")
+		text = notify.feature_ready_message(notifier, "a" * 24, "Bandits ignore stationary casters", "bugfix/aaaaaaaa")
+		self.assertIn("Feature ready for review", text)
+		self.assertIn("https://ui.example/bugs/" + "a" * 24, text)
+		self.assertIn("bugfix/aaaaaaaa", text)
+
 
 if __name__ == "__main__":
 	unittest.main()

@@ -24,6 +24,7 @@ _DEFAULT = {
 	"seen_red_reports": [],
 	"refix_rounds": {},
 	"pending_summary": None,
+	"features": [],
 }
 
 
@@ -124,6 +125,14 @@ class LoopState:
 
 	def count_refix(self, bug_id):
 		self.data["refix_rounds"][bug_id] = self.refix_count(bug_id) + 1
+
+	def add_feature(self, bug_id):
+		"""A maintainer-accepted feature: no round of this bug ever ships on its own."""
+		if bug_id not in self.data["features"]:
+			self.data["features"].append(bug_id)
+
+	def is_feature(self, bug_id):
+		return bug_id in self.data["features"]
 
 
 def _minutes(text):

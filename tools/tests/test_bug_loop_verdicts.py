@@ -226,6 +226,15 @@ class InputTests(unittest.TestCase):
 		text = inputs.build_review_input(verdict(), fix(), "x" * (inputs.DIFF_LIMIT + 10), [], nonce="n")
 		self.assertIn("(diff truncated)", text)
 
+	def test_feature_request_block_for_fixer_and_reviewer(self):
+		fix_text = inputs.build_fix_input(BUG, verdict(), "bugfix/x", "F.json", nonce="n", feature="Bandits assist stationary casters.")
+		self.assertIn("<<<BEGIN FEATURE REQUEST [maintainer decision via the web UI; trusted and binding] n>>>", fix_text)
+		self.assertIn("Bandits assist stationary casters.", fix_text)
+		review_text = inputs.build_review_input(verdict(), fix(), "d", [], nonce="n", feature="Bandits assist stationary casters.")
+		self.assertIn("<<<BEGIN FEATURE REQUEST", review_text)
+		self.assertNotIn("FEATURE REQUEST", inputs.build_fix_input(BUG, verdict(), "bugfix/x", "F.json", nonce="n"))
+		self.assertNotIn("FEATURE REQUEST", inputs.build_review_input(verdict(), fix(), "d", [], nonce="n"))
+
 
 if __name__ == "__main__":
 	unittest.main()

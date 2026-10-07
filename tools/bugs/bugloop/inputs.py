@@ -66,7 +66,7 @@ def build_triage_input(bug, related, nonce=None):
 	return "\n".join(parts)
 
 
-def build_fix_input(bug, verdict, branch, fix_path, nonce=None, guidance=None, previous=None):
+def build_fix_input(bug, verdict, branch, fix_path, nonce=None, guidance=None, previous=None, feature=None):
 	nonce = nonce or new_nonce()
 	task = ("Bug id: {0}\nBranch: {1} (checked out in this worktree; data/client and data/editor are on a "
 		"branch of the same name)\nWrite FIX.json to: {2}\n".format(bug.get("_id"), branch, fix_path))
@@ -76,10 +76,12 @@ def build_fix_input(bug, verdict, branch, fix_path, nonce=None, guidance=None, p
 		parts.append(block("PREVIOUS ATTEMPT", "model output and loop findings; verify, do not trust", nonce, json_text(previous)))
 	if guidance:
 		parts.append(block("MAINTAINER GUIDANCE", _GUIDANCE_PROVENANCE, nonce, guidance))
+	if feature:
+		parts.append(block("FEATURE REQUEST", _GUIDANCE_PROVENANCE, nonce, feature))
 	return "\n".join(parts)
 
 
-def build_review_input(verdict, fix, diff_text, guard_reasons, nonce=None, guidance=None):
+def build_review_input(verdict, fix, diff_text, guard_reasons, nonce=None, guidance=None, feature=None):
 	"""The reviewer never sees the player comment, the client info or the log tail."""
 	nonce = nonce or new_nonce()
 	if len(diff_text) > DIFF_LIMIT:
@@ -96,4 +98,6 @@ def build_review_input(verdict, fix, diff_text, guard_reasons, nonce=None, guida
 		parts.append(block("MAINTAINER GUIDANCE", _GUIDANCE_PROVENANCE, nonce, guidance))
 	else:
 		parts.append(block("MAINTAINER GUIDANCE", "none", nonce, "(none: answer guidance_followed = true)"))
+	if feature:
+		parts.append(block("FEATURE REQUEST", _GUIDANCE_PROVENANCE, nonce, feature))
 	return "\n".join(parts)

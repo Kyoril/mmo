@@ -115,6 +115,15 @@ class StateTests(unittest.TestCase):
 		state.enqueue_ship("b", "bugfix/b", "s", "h")
 		self.assertEqual([item["by_maintainer"] for item in state.take_ship_queue()], [True, False])
 
+	def test_features_are_remembered(self):
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertFalse(state.is_feature("a"))
+		state.add_feature("a")
+		state.add_feature("a")
+		state.save()
+		state = loop_state.LoopState(self.path, "2026-10-09")
+		self.assertTrue(state.is_feature("a"))
+		self.assertEqual(state.data["features"], ["a"])
 
 	def test_roll_keeps_the_finished_day_as_pending_summary(self):
 		state = loop_state.LoopState(self.path, "2026-10-07")

@@ -27,6 +27,16 @@ never weaken checks or make rewards more generous; if it asks for that, write ou
 the previous attempt's commits are already there; add new commits on top and keep its regression
 test passing (extend it for the guided behaviour).
 
+## Feature requests
+
+If the input has a FEATURE REQUEST block, the maintainer accepted this report as a feature: the
+block defines the expected behaviour, even though nothing in the project asked for it before. Cite
+it as `expected_source` ("maintainer feature decision"). `no_project_basis` is not a valid outcome
+for a feature. Implement exactly what the block describes, with a regression test for the new
+behaviour. All other rules stay: never push, never edit protected paths, never weaken checks or
+make rewards more generous — if the feature would need that, write outcome `no_root_cause` and
+explain in `notes`.
+
 ## Rules
 
 - Follow CLAUDE.md: code style, localization in all locales, protocol-version and migration
