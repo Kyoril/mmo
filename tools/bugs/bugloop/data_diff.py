@@ -15,6 +15,7 @@ from google.protobuf.unknown_fields import UnknownFieldSet
 # list is not reported as a change. LocalizedString entries are keyed by locale.
 KEY_FIELDS = ("id", "key", "locale")
 _ENTRY = re.compile(r"^[^.\[]+\[[^\]]*\]")
+_LOC_PATH = re.compile(r"(^|\.)[A-Za-z0-9_]+_loc\[")
 
 
 def _is_repeated(field):
@@ -56,10 +57,15 @@ def leaf_items(message, prefix=""):
 				else:
 					items["{}[{}]".format(path, key)] = element
 		elif _is_repeated(field):
-			for index, element in enumerate(value):
-				if field.type == field.TYPE_MESSAGE:
-					items.update(leaf_items(element, "{}[{}].".format(path, _element_key(element, index))))
-				else:
+			if field.type == field.TYPE_MESSAGE:
+				keys = [_element_key(element, index) for index, element in enumerate(value)]
+				if len(set(keys)) != len(keys):
+					# Colliding keys would overwrite each other's leaves and hide changes.
+					keys = [str(index) for index in range(len(keys))]
+				for key, element in zip(keys, value):
+					items.update(leaf_items(element, "{}[{}].".format(path, key)))
+			else:
+				for index, element in enumerate(value):
 					items["{}[{}]".format(path, index)] = element
 		elif field.type == field.TYPE_MESSAGE:
 			items.update(leaf_items(value, path + "."))
@@ -76,7 +82,7 @@ def leaf_items(message, prefix=""):
 def _is_text(path, value):
 	if "<unknown " in path:
 		return False
-	return isinstance(value, str) or "_loc[" in path
+	return isinstance(value, str) or _LOC_PATH.search(path) is not None
 
 
 def diff_leaves(before, after):

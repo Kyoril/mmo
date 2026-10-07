@@ -61,6 +61,28 @@ class LeafTests(unittest.TestCase):
 		self.assertIn("message_type[0].field[number=2].name", before_leaves)
 		self.assertEqual(data_diff.diff_leaves(before_leaves, after_leaves), [])
 
+	def test_colliding_keys_fall_back_to_index(self):
+		def build(first_name):
+			proto = descriptor_pb2.FileDescriptorProto(name="items.proto", package="mmo")
+			message = proto.message_type.add(name="Item")
+			message.field.add(name=first_name, number=1)
+			message.field.add(name="b", number=1)
+			return proto
+		with mock.patch.object(data_diff, "KEY_FIELDS", ("number",)):
+			before = data_diff.leaf_items(build("a"))
+			after = data_diff.leaf_items(build("changed"))
+		self.assertEqual(before["message_type[0].field[0].name"], "a")
+		self.assertEqual(before["message_type[0].field[1].name"], "b")
+		self.assertEqual([c["path"] for c in data_diff.diff_leaves(before, after)], ["message_type[0].field[0].name"])
+
+	def test_loc_text_detection_is_anchored(self):
+		changes = data_diff.diff_leaves({"name_loc[locale=1].value": "a"}, {"name_loc[locale=1].value": "b"})
+		self.assertTrue(changes[0]["text"])
+		changes = data_diff.diff_leaves({"entry[key=x_loc[].price": 1}, {"entry[key=x_loc[].price": 2})
+		self.assertFalse(changes[0]["text"])
+		path = "entry[id=1].name_loc[locale=1].locale"
+		self.assertTrue(data_diff.diff_leaves({path: 1}, {path: 2})[0]["text"])
+
 	def test_changed_entries_groups_by_top_level_element(self):
 		changes = [{"path": "entry[id=5].name"}, {"path": "entry[id=5].price"}, {"path": "entry[id=9].name"}, {"path": "name"}]
 		self.assertEqual(data_diff.changed_entries(changes), {"entry[id=5]", "entry[id=9]", "name"})
