@@ -154,9 +154,12 @@ class FakeRunner:
 		self.fix = fix
 		self.review = review
 		self.calls = []
+		self.inputs = []
+		self.on_fix = None
 
 	def structured(self, prompt, input_text, schema, tools, cwd, timeout):
 		self.calls.append(("triage" if tools == claude.TRIAGE_TOOLS else "review"))
+		self.inputs.append(("triage" if tools == claude.TRIAGE_TOOLS else "review", input_text))
 		if tools == claude.TRIAGE_TOOLS:
 			if isinstance(self.verdict, Exception):
 				raise self.verdict
@@ -165,9 +168,12 @@ class FakeRunner:
 
 	def agent(self, prompt, input_text, cwd, timeout, max_usd):
 		self.calls.append("fix")
+		self.inputs.append(("fix", input_text))
 		path = re.search(r"Write FIX.json to: (.+)", input_text).group(1).strip()
 		with open(path, "w", encoding="utf-8") as handle:
 			json.dump(self.fix, handle)
+		if self.on_fix:
+			self.on_fix()
 		return {"result": "done"}
 
 
@@ -179,6 +185,7 @@ class FakeWorktree:
 		self.diff = diff
 		self.head_ = "head1"
 		self.branch_heads = {}
+		self.resumed = []
 		self.checkouts = []
 		self.clean = True
 		self.shipped = []
@@ -198,6 +205,16 @@ class FakeWorktree:
 
 	def head(self, ref="HEAD"):
 		return self.branch_heads.get(ref, self.head_)
+
+	def resume_branch(self, branch):
+		if branch not in self.branch_heads:
+			raise RuntimeError("no such branch " + branch)
+		self.resumed.append(branch)
+		self.head_ = self.branch_heads[branch]
+		return self.head_
+
+	def fork_point(self, branch):
+		return "base1"
 
 	def is_clean(self):
 		return self.clean
@@ -272,6 +289,118 @@ class LoopTests(unittest.TestCase):
 
 	def outcomes(self):
 		return [entry["outcome"] for entry in self.state.data["outcomes"]]
+
+	def park_with_decision(self, action, guidance="", head="head0", **make_kwargs):
+		"""A bug parked earlier (artifacts present) with a pending maintainer decision."""
+		bug = dict(BUG, status="needs_decision", prUrl="branch:" + BRANCH,
+			decision={"action": action, "guidance": guidance, "decidedAt": "t", "consumedAt": None})
+		self.make(bugs=[bug], **make_kwargs)
+		folder = os.path.join(self.artifacts, BUG_ID)
+		os.makedirs(folder, exist_ok=True)
+		for name, value in (("report.json", BUG), ("triage.json", GOOD_VERDICT),
+				("decision.json", {"reasons": ["review: design question: chain?"], "head": head}),
+				("FIX.json", GOOD_FIX)):
+			with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
+				json.dump(value, handle)
+		self.worktree.branch_heads[BRANCH] = head
+
+	def test_refix_with_guidance_continues_the_branch_and_ships(self):
+		self.park_with_decision("refix", "Limit the chain to one level.")
+		# The fixer commits on the resumed branch: HEAD and the branch both move to head1.
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop.poll_once()
+		first = self.api.updates[0]
+		self.assertEqual(first[1].get("decisionConsumed"), True)
+		self.assertEqual(self.worktree.resumed, [BRANCH])
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("Limit the chain to one level.", fix_input)
+		self.assertIn("PREVIOUS ATTEMPT", fix_input)
+		review_input = [text for kind, text in self.runner.inputs if kind == "review"][0]
+		self.assertIn("Limit the chain to one level.", review_input)
+		self.assertEqual(self.state.refix_count(BUG_ID), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_refix_without_a_new_commit_needs_info(self):
+		self.park_with_decision("refix", "Check line of sight.")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertIn("no new clean commit", self.api.notes(BUG_ID)[-1])
+
+	def test_refix_limit(self):
+		self.park_with_decision("refix", "Again.")
+		for _ in range(loop.MAX_REFIX):
+			self.state.count_refix(BUG_ID)
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "needs_decision")
+		self.assertIn("refix limit", self.api.notes(BUG_ID)[-1])
+		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertTrue(any("Refix limit" in m for m in self.notifier.messages))
+
+	def test_refix_on_a_missing_branch_is_released(self):
+		self.park_with_decision("refix", "Again.")
+		self.worktree.branch_heads = {}
+		self.loop.poll_once()
+		self.assertIn("unusable", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.worktree.shipped, [])
+
+	def test_ship_decision_ships_the_recorded_commit_past_the_cap(self):
+		self.park_with_decision("ship", head="head1", autoship_cap_per_day=0)
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+		self.assertEqual(self.state.data["autoships"], 0)
+		self.assertIn("shipped-by-maintainer", self.outcomes())
+		self.assertTrue(any("maintainer decision" in m for m in self.notifier.messages))
+
+	def test_ship_decision_refused_when_the_branch_moved(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.branch_heads[BRANCH] = "head9"
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("branch moved", self.api.notes(BUG_ID)[-1])
+
+	def test_ship_decision_without_recorded_commit_parks(self):
+		self.park_with_decision("ship", head="head1")
+		os.remove(os.path.join(self.artifacts, BUG_ID, "decision.json"))
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("decide again", self.api.notes(BUG_ID)[-1])
+
+	def test_ship_decision_respects_breaker_and_freeze(self):
+		self.park_with_decision("ship", head="head1")
+		loop_state.trip_breaker(self.artifacts, "test", self.now)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("circuit breaker", self.api.notes(BUG_ID)[-1])
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertTrue(self.state.data["ship_queue"][0]["by_maintainer"])
+
+	def test_discard_decision(self):
+		self.park_with_decision("discard", "Not worth it.")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "wontfix")
+		self.assertIn(BRANCH, self.worktree.deleted)
+		self.assertIn("Not worth it.", self.api.notes(BUG_ID)[-1])
+
+	def test_decisions_are_ignored_in_dry_run(self):
+		self.park_with_decision("discard", "x", dry_run=True)
+		self.loop.poll_once()
+		self.assertIsNone(self.api.bugs[BUG_ID]["decision"]["consumedAt"])
+		self.assertEqual(self.worktree.deleted, [])
+
+	def test_decision_not_acted_on_when_it_cannot_be_consumed(self):
+		self.park_with_decision("discard", "x")
+		self.api.update_errors.append((lambda bug_id, fields: fields.get("decisionConsumed"), RuntimeError("api down")))
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.deleted, [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "needs_decision")
+
+	def test_refix_waits_for_budget(self):
+		self.park_with_decision("refix", "x", invocation_budget_per_day=1)
+		self.loop.poll_once()
+		self.assertIsNone(self.api.bugs[BUG_ID]["decision"]["consumedAt"])
 
 	def test_design_question_parks_as_needs_decision_and_pings(self):
 		self.make(review=dict(GOOD_REVIEW, design_question="Should assist chain beyond one level?"))
