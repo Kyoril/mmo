@@ -64,6 +64,13 @@ ADMIN_DIFF = ("diff --git a/src/realm_server/player.cpp b/src/realm_server/playe
 	"--- a/src/realm_server/player.cpp\n+++ b/src/realm_server/player.cpp\n"
 	"@@ -795 +795 @@ PacketParseResult Player::OnCheatCommand()\n-\t\t\tif (!HasGMLevel(gm_level::Gm))\n+\t\t\tif (false)\n")
 
+LOC_PATH = "data/client/Locales/Locale_enUS/Localization.txt"
+for _rev, _line in (("base1", "\tLABEL_TITLE = Old"), ("head1", "\tLABEL_TITLE = New")):
+	FILES[_rev][LOC_PATH] = source_text(_line, line_number=10, total=40)
+LOC_CHANGES = [guard.FileChange(LOC_PATH, 1, 1, False)]
+LOC_DIFF = ("diff --git a/{0} b/{0}\n--- a/{0}\n+++ b/{0}\n"
+	"@@ -10 +10 @@\n-\tLABEL_TITLE = Old\n+\tLABEL_TITLE = New\n").format(LOC_PATH)
+
 
 def utc(text):
 	return datetime.datetime.strptime(text, "%Y-%m-%d %H:%M").replace(tzinfo=datetime.timezone.utc)
@@ -74,6 +81,8 @@ class FakeApi:
 		self.bugs = {bug["_id"]: dict(bug) for bug in bugs}
 		self.updates = []
 		self.claims = []
+		self.show_errors = {}
+		self.update_errors = []
 
 	def list(self, status=None, subject=None, since=None, page=1, limit=20):
 		result = list(self.bugs.values())
@@ -85,14 +94,20 @@ class FakeApi:
 		return {"bugs": [dict(bug) for bug in result], "pagination": {"total": len(result), "page": 1, "pages": 1}}
 
 	def show(self, bug_id):
+		if bug_id in self.show_errors:
+			raise self.show_errors[bug_id]
 		return dict(self.bugs[bug_id])
 
 	def claim(self, bug_id, worker):
 		self.claims.append(bug_id)
 		self.bugs[bug_id]["status"] = "in_progress"
+		self.bugs[bug_id]["claimedBy"] = worker
 		return dict(self.bugs[bug_id])
 
 	def update(self, bug_id, release_claim=False, **fields):
+		for matches, error in self.update_errors:
+			if matches(bug_id, fields):
+				raise error
 		self.updates.append((bug_id, dict(fields, release_claim=release_claim)))
 		for key in ("status", "prUrl", "duplicateOf", "triage"):
 			if key in fields:
@@ -379,6 +394,97 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
 		self.assertTrue(self.api.updates[-1][1]["release_claim"])
 		self.assertIn("loop-error", self.outcomes())
+
+	# ---- fix round 1
+
+	def test_data_only_claim_does_not_waive_the_regression_proof(self):
+		fix = dict(GOOD_FIX, data_only=True, regression_test={"kind": "none"})
+		self.make(fix=fix)
+		self.loop.poll_once()
+		self.assertParked("proof: a code change needs a regression test")
+
+	def test_localization_only_change_ships_without_a_regression_test(self):
+		fix = dict(GOOD_FIX, data_only=True, regression_test={"kind": "none"})
+		self.make(fix=fix, changes=LOC_CHANGES, diff=LOC_DIFF)
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_ship_queue_survives_a_failing_park(self):
+		self.make()
+		self.state.enqueue_ship(BUG_ID, BRANCH, "s", "head1")
+		self.state.enqueue_ship("b" * 24, "bugfix/bbbbbbbb", "s", "head2")
+		self.worktree.ship_result = gitops.ShipResult(False, "", "boom")
+		self.api.update_errors.append((lambda bug, fields: fields.get("status") == "pr_open", RuntimeError("api down")))
+		with self.assertRaises(RuntimeError):
+			self.loop._ship_queued(self.now)
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID, "b" * 24])
+
+	def test_ship_queue_is_emptied_after_shipping(self):
+		self.make()
+		self.state.enqueue_ship(BUG_ID, BRANCH, "s", "head1")
+		self.loop._ship_queued(self.now)
+		self.assertEqual(self.state.data["ship_queue"], [])
+		self.assertEqual(len(self.worktree.shipped), 1)
+
+	def test_a_failing_triage_does_not_wedge_the_loop(self):
+		bad = dict(BUG, _id="a" * 24, createdAt="2026-10-07T07:00:00Z")
+		self.make(bugs=[BUG, bad], verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.api.show_errors["a" * 24] = RuntimeError("404")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "wontfix")
+		self.assertFalse(self.state.attempted("a" * 24))
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["attempts"]["a" * 24], "loop-error")
+		self.assertIn("loop-error", self.outcomes())
+		self.assertTrue(os.path.exists(os.path.join(self.reports, "bugloop-2026-10-07.json")))
+
+	def test_stale_claim_from_a_crashed_fix_is_released(self):
+		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="bug-loop")])
+		self.state.mark_attempted(BUG_ID, "fix-started")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		bug, fields = self.api.updates[-1]
+		self.assertTrue(fields["release_claim"])
+		self.assertIn("interrupted", fields["note"])
+		self.assertEqual(self.state.data["attempts"][BUG_ID], "interrupted")
+
+	def test_stale_claim_check_skips_other_workers_and_dry_run(self):
+		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="someone-else")])
+		self.state.mark_attempted(BUG_ID, "fix-started")
+		self.loop.poll_once()
+		self.assertEqual(self.api.updates, [])
+		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="bug-loop")], dry_run=True)
+		self.state.mark_attempted(BUG_ID, "fix-started")
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["attempts"][BUG_ID], "fix-started")
+
+	def test_bookkeeping_failure_after_push_does_not_release(self):
+		self.make()
+		self.api.update_errors.append((lambda bug, fields: fields.get("status") == "resolved", RuntimeError("api down")))
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertEqual(self.state.data["attempts"][BUG_ID], "shipped")
+		entry = [item for item in self.state.data["outcomes"] if item["outcome"] == "shipped"][0]
+		self.assertEqual(entry["commit"], "merge1")
+		self.assertTrue(entry["bookkeeping_failed"])
+		self.assertNotIn("loop-error", self.outcomes())
+
+	def test_dry_run_skips_reconcile(self):
+		self.make(bugs=[dict(BUG, status="pr_open", prUrl="branch:" + BRANCH)], dry_run=True)
+		self.worktree.merged_[BRANCH] = "abc123"
+		self.loop.poll_once()
+		self.assertEqual(self.api.updates, [])
+		self.assertEqual(self.outcomes(), [])
+
+	def test_malformed_nightly_report_does_not_stop_the_loop(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		os.makedirs(self.reports)
+		with open(os.path.join(self.reports, "nightly-2026-10-07.json"), "w", encoding="utf-8") as handle:
+			handle.write("{not json")
+		self.loop.poll_once()
+		self.assertFalse(loop_state.breaker_active(self.artifacts))
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "wontfix")
 
 
 class DecideTests(unittest.TestCase):

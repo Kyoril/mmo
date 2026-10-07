@@ -17,6 +17,13 @@ CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 # watch() returns this at the UTC day boundary; the scheduled task restarts the loop from a
 # fresh origin/develop snapshot (new loop code, new protobuf schemas).
 RESTART_EXIT_CODE = 75
+# A change set is exempt from the regression-proof requirement only when every non-test path is
+# data; the fixer's own `data_only` claim is never trusted.
+DATA_ONLY_ROOTS = ("data/editor/data/", "data/client/Locales/", "data/client/Interface/")
+
+
+def proof_exempt(changes):
+	return all(change.path.startswith(DATA_ONLY_ROOTS) for change in changes if not change.path.startswith(guard.TEST_PREFIXES))
 
 
 def short_id(bug_id):
@@ -126,7 +133,9 @@ class BugLoop:
 		now = self.clock()
 		self.state.roll(now.strftime("%Y-%m-%d"))
 		self._check_nightly_breaker(now)
-		self._reconcile_parked()
+		if not self.dry_run:
+			self._release_stale_claims()
+			self._reconcile_parked()
 		self._ship_queued(now)
 		worked = self._triage_new()
 		bug_id = self.state.next_fix()
@@ -177,9 +186,37 @@ class BugLoop:
 				self.state.forget(bug_id)
 			if not self.state.budget_left(self.config.invocation_budget_per_day):
 				break
-			self._triage(bug_id)
+			try:
+				self._triage(bug_id)
+			except Exception:  # one unreadable bug must not wedge the loop
+				self.log(traceback.format_exc())
+				self._triage_crashed(bug_id)
 			worked = True
 		return worked
+
+	def _triage_crashed(self, bug_id):
+		if self.state.triage_failed(bug_id) < 2:
+			return
+		try:
+			self._update(bug_id, note="the bug loop could not triage this bug (internal error); needs a human")
+		except Exception:
+			self.log(traceback.format_exc())
+		self._finish(bug_id, "loop-error")
+
+	def _release_stale_claims(self):
+		"""A crash or kill mid-fix leaves the bug claimed; give it back once."""
+		for bug_id, outcome in list(self.state.data["attempts"].items()):
+			if outcome != "fix-started":
+				continue
+			try:
+				bug = self.api.show(bug_id)
+				if bug.get("status") != "in_progress" or bug.get("claimedBy") != self.config.worker:
+					continue
+				self._release(bug_id, "triaged",
+					"needs-info: the bug loop was interrupted while fixing; see artifacts/bug-loop/" + bug_id)
+				self._finish(bug_id, "interrupted")
+			except Exception:
+				self.log(traceback.format_exc())
 
 	def _related(self, bug):
 		subject = bug.get("subject") or {}
@@ -292,7 +329,10 @@ class BugLoop:
 		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"])
 		with self.lock():
 			proof = None
-			if fix["regression_test"]["kind"] != "none":
+			if fix["regression_test"]["kind"] == "none":
+				if not proof_exempt(changes):
+					proof = {"ok": False, "reason": "a code change needs a regression test"}
+			else:
 				proof = self.verifier.proof(fix["regression_test"], base, branch, verification.regression_files(changes))
 				self._write(bug_id, "proof.json", proof)
 			self.worktree.checkout(branch)
@@ -352,24 +392,38 @@ class BugLoop:
 			self._park(bug_id, branch, ["ship: " + result.reason])
 			return
 		self.state.count_autoship()
-		self.worktree.delete_branch(branch)
-		self._update(bug_id, status="resolved", release_claim=True,
-			note="shipped by the bug loop in {}; reaches players with the next nightly deploy".format(result.commit))
-		self._finish(bug_id, "shipped", branch=branch, commit=result.commit)
+		# The merge is on develop now: nothing below may undo that by releasing the bug.
+		try:
+			self.worktree.delete_branch(branch)
+			self._update(bug_id, status="resolved", release_claim=True,
+				note="shipped by the bug loop in {}; reaches players with the next nightly deploy".format(result.commit))
+			self._finish(bug_id, "shipped", branch=branch, commit=result.commit)
+		except Exception:
+			self.log(traceback.format_exc())
+			self._finish(bug_id, "shipped", branch=branch, commit=result.commit, bookkeeping_failed=True)
 
 	def _ship_queued(self, now):
 		if loop_state.in_freeze(now, self.config.freeze_start_utc, self.config.freeze_end_utc):
 			return
-		for item in self.state.take_ship_queue():
+		pending = self.state.take_ship_queue()
+		while pending:
+			item = pending.pop(0)
 			try:
-				blockers = self._ship_blockers()
-				if blockers:
-					self._park(item["bug"], item["branch"], blockers)
-				else:
-					self._ship(item["bug"], item["branch"], item["summary"], item["head"])
-			except Exception:
-				self.log(traceback.format_exc())
-				self._park(item["bug"], item["branch"], ["ship error, see the runner log"])
+				try:
+					blockers = self._ship_blockers()
+					if blockers:
+						self._park(item["bug"], item["branch"], blockers)
+					else:
+						self._ship(item["bug"], item["branch"], item["summary"], item["head"])
+				except Exception:
+					self.log(traceback.format_exc())
+					self._park(item["bug"], item["branch"], ["ship error, see the runner log"])
+			except BaseException:
+				# Even parking failed: keep this item and the rest for the next poll.
+				self.state.data["ship_queue"] = [item] + pending + self.state.data["ship_queue"]
+				raise
+			self.state.data["ship_queue"] = list(pending)
+			self.state.save()
 
 	# ---- housekeeping
 
@@ -384,7 +438,11 @@ class BugLoop:
 				self.state.record(bug["_id"], "merged-by-user", commit=commit)
 
 	def _check_nightly_breaker(self, now):
-		name, report = loop_state.newest_nightly(self.report_dir)
+		try:
+			name, report = loop_state.newest_nightly(self.report_dir)
+		except Exception:  # a malformed report must not stop the loop
+			self.log(traceback.format_exc())
+			return
 		if name and name not in self.state.data["seen_red_reports"] and loop_state.red_nightly_blames_loop(report):
 			self.state.data["seen_red_reports"].append(name)
 			loop_state.trip_breaker(self.artifacts_dir, "nightly {} is red and includes bug-loop merges".format(name), now)
