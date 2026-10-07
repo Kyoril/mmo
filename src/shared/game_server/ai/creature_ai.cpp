@@ -228,46 +228,105 @@ namespace mmo
 			return;
 		}
 
-		auto* worldInstance = controlled.GetWorldInstance();
-		ASSERT(worldInstance);
-
 		if (!controlled.UnitIsFriendly(threat))
 		{
-			const auto& location = controlled.GetPosition();
-
-			worldInstance->GetUnitFinder().FindUnits(Circle(location.x, location.z, 8.0f), [&controlled, &threat, &worldInstance](GameUnitS& unit) -> bool
-				{
-					if (!unit.IsUnit())
-					{
-						return true;
-					}
-
-					if (!unit.IsAlive())
-					{
-						return true;
-					}
-
-					if (unit.IsInCombat())
-					{
-						return true;
-					}
-
-					// TODO: Line of sight
-
-					if (controlled.UnitIsFriendly(unit) && controlled.UnitIsEnemy(threat))
-					{
-						worldInstance->GetUniverse().Post([&unit, &threat]()
-							{
-								unit.threatened(threat, 0.0f);
-							});
-					}
-
-					return false;
-				});
+			CallForHelp(threat);
 
 			// Warning: This destroys the current AI state as it enters the combat state
 			EnterCombat(threat);
 		}
+	}
+
+	void CreatureAI::CallForHelp(GameUnitS& threat)
+	{
+		GameCreatureS& controlled = GetControlled();
+		if (threat.GetGuid() == controlled.GetGuid() || controlled.UnitIsFriendly(threat))
+		{
+			return;
+		}
+
+		auto* worldInstance = controlled.GetWorldInstance();
+		ASSERT(worldInstance);
+
+		const auto& location = controlled.GetPosition();
+
+		worldInstance->GetUnitFinder().FindUnits(Circle(location.x, location.z, 8.0f), [&controlled, &threat, &worldInstance](GameUnitS& unit) -> bool
+			{
+				if (&unit == &controlled)
+				{
+					return true;
+				}
+
+				if (!unit.IsUnit())
+				{
+					return true;
+				}
+
+				if (!unit.IsAlive())
+				{
+					return true;
+				}
+
+				if (unit.IsInCombat())
+				{
+					return true;
+				}
+
+				// Allies behind walls or floors do not hear the call
+				if (MapData* mapData = worldInstance->GetMapData())
+				{
+					if (!mapData->IsInLineOfSight(controlled.GetPosition(), unit.GetPosition()))
+					{
+						return true;
+					}
+				}
+
+				auto* ally = dynamic_cast<GameCreatureS*>(&unit);
+				if (ally == nullptr)
+				{
+					return true;
+				}
+
+				if (controlled.UnitIsFriendly(unit) && controlled.UnitIsEnemy(threat))
+				{
+					auto strongAlly = std::static_pointer_cast<GameCreatureS>(ally->shared_from_this());
+					auto strongThreat = std::static_pointer_cast<GameUnitS>(threat.shared_from_this());
+					worldInstance->GetUniverse().Post([strongAlly, strongThreat]()
+						{
+							if (CreatureAI* allyAI = strongAlly->GetAI())
+							{
+								allyAI->OnCalledForHelp(*strongThreat);
+							}
+						});
+				}
+
+				// Keep searching: every ally in range is called, not just the first unit found
+				return true;
+			});
+	}
+
+	void CreatureAI::OnCalledForHelp(GameUnitS& threat)
+	{
+		// Only creatures waiting for a fight answer the call; evading, alerted or dead ones keep their state
+		if (dynamic_cast<CreatureAIIdleState*>(m_state.get()) == nullptr && dynamic_cast<CreatureAIPrepareState*>(m_state.get()) == nullptr)
+		{
+			return;
+		}
+
+		GameCreatureS& controlled = GetControlled();
+		if (!controlled.IsAlive() || controlled.IsInCombat() || threat.GetGuid() == controlled.GetGuid())
+		{
+			return;
+		}
+
+		if (!threat.IsAlive() || !controlled.UnitIsEnemy(threat))
+		{
+			return;
+		}
+
+		// No call for help of our own: a call reaches one wave of allies, or packed camps chain-pull.
+		// Warning: This destroys the current AI state as it enters the combat state
+		EnterCombat(threat);
 	}
 
 }

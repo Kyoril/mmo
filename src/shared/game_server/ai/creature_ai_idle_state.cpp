@@ -304,6 +304,9 @@ namespace mmo
 	{
 		CreatureAIState::OnDamage(attacker);
 
+		// Damage reaches the AI before the threat it causes, and entering combat here ends this state
+		// before OnThreatened could alert the neighbours. A stationary creature would fight alone.
+		GetAI().CallForHelp(attacker);
 		GetAI().EnterCombat(attacker);
 	}
 
