@@ -50,30 +50,71 @@ CODE_SUFFIXES = (
 	".sh", ".bat", ".cmd", ".js", ".ts", ".tsx", ".xml", ".toc",
 )
 C_FAMILY_SUFFIXES = (".cpp", ".cc", ".cxx", ".h", ".hpp", ".hxx", ".inl", ".c", ".mm")
+
+# File types each allowed root may ship (tests excepted). Anything else could be pulled into the
+# build or the client by an #include, a require or a .toc line while no content rule looks at it.
+ROOT_SUFFIXES = (
+	("src/", C_FAMILY_SUFFIXES),
+	("data/client/Interface/", (".lua", ".xml", ".toc")),
+	("data/client/Locales/", (".txt",)),
+	("data/editor/data/", (".data",)),
+	("data/scripts/", (".lua",)),
+)
+# Server-authoritative code: here an edit to reward, loot or economy logic needs a human, literals or not.
+SERVER_ROOTS = ("src/shared/game/", "src/shared/game_server/", "src/world_server/", "src/realm_server/", "data/scripts/")
+# Client UI Lua cannot cheat the server, so a numeric condition alone does not park there.
+CLIENT_UI_ROOT = "data/client/Interface/"
+
+
+def _word_pattern(words):
+	"""Matches any of the words at the start of an identifier part: after a non-letter (m_xp, xp) or as
+	a capitalised camelCase part (kXp, RewardXp), but not inside a word (expr, Backdrop, Generate)."""
+	return r"(?:(?<![A-Za-z])|(?=[A-Z]))(?i:" + "|".join(words) + r")"
+
+
+ECONOMY_WORDS = ("xp(?!(?-i:[a-z]))", "experience", "reward", "money", "gold", "loot", "drop", "credit", "cutoff",
+	"price", "cost", "honor", "reputation", "stack", "charges")
+# A camel-anchored economy word, or one buried in a lowercase protobuf accessor (minlevelxp(), rewardmoney()).
+ECONOMY = re.compile(_word_pattern(ECONOMY_WORDS) + r"|(?<!\w)[a-z0-9_]*(?:xp|" + "|".join(ECONOMY_WORDS[1:]) + r")\s*\(")
 SENSITIVE = re.compile(
 	r"gm_?level|game_?master|mmo_with_dev_commands|cheat|rate_?limit|protocol_?version"
 	r"|packetparseresult::(disconnect|block)|is_?admin",
 	re.IGNORECASE)
 CHECK_STEMS = r"(Check|Can|Allow|Valid|Verify|Permi|Is)"
 CHECK_FUNCTION = re.compile(r"\b\w*" + CHECK_STEMS + r"\w*\s*\(")
+CHECK_CALL = re.compile(r"\b\w*(Check|Can|Allow|Valid|Verify|Permi|Has|Is)\w*\s*\(")
 REMOVED_CHECK = re.compile(r"\bif\s*\(.*\b\w*(Check|Can|Allow|Valid|Verify|Permi|Has|Is)\w*\s*\(")
+# Lua conditions have no parentheses: "if not player:HasItem(KEY) then return end".
+LUA_CONDITION = re.compile(r"\b(if|elseif)\b")
+LUA_NOT = re.compile(r"\bnot\s")
 RETURN_TRUE = re.compile(r"\breturn\s+true\s*;")
-REJECTION = re.compile(r"\breturn\s+(false|PacketParseResult::\w+)\s*;")
+# An added early success return in server code skips whatever check follows it, however far away.
+EARLY_RETURN = re.compile(r"\breturn\s+(true\b|PacketParseResult::\w+)")
+FAILED_RESULT = r"(\w+::)+Failed\w*|[\w:]*Error\b"
+REJECTION = re.compile(r"\breturn\s+(false\b|PacketParseResult::\w+|" + FAILED_RESULT + r")")
+# What makes surrounding code worth a human look: security identifiers and explicit rejections. Plain
+# "return false" and ordinary IsAlive()/HasAura() calls are everywhere and would park most server code.
+NEAR_CHECK = re.compile(r"PacketParseResult|\breturn\s+(" + FAILED_RESULT + r")")
 TUNED = re.compile(
-	r"max|limit|\bcap|cooldown|cost|price|chance|\brate|reward|\bxp|money|gold|drop"
-	r"|range|dist|radius|level|duration|delay|speed",
-	re.IGNORECASE)
+	r"(?i:max|limit|cooldown|cost|price|chance|reward|money|gold|drop"
+	r"|range|dist|radius|level|duration|delay|speed)|" + _word_pattern(("cap", "rate", "xp(?!(?-i:[a-z]))")))
 # A numeric literal is a digit (or ".digit") that does not continue an identifier: 5, 0.05f, .5f, 0x10.
 NUMERIC_LITERAL = re.compile(r"(?<![\w.])(\d|\.\d)")
 CONDITION = re.compile(r"\b(if|elseif|while|until)\b|\?.*:|<=|>=|==|!=|~=|<|>")
 CONDITION_NOISE = re.compile(r"->|<<|>>")
-PREPROCESSOR = re.compile(r"^\s*#\s*(if|ifdef|ifndef|else|elif|elifdef|elifndef|endif|define|undef)\b")
+PREPROCESSOR = re.compile(
+	r"^\s*(#|%:)\s*(if|ifdef|ifndef|else|elif|elifdef|elifndef|endif|define|undef|include|include_next|pragma"
+	r"|line|import)\b|\b_Pragma\b")
+# Lua that pulls in or compiles other code.
+LUA_LOADER = re.compile(r"\b(require|dofile|loadstring|loadfile)\b|\bload\s*\(")
 GOTO = re.compile(r"\bgoto\b")
 # Line separators str.splitlines() honours, other control characters, and bidi overrides.
-CONTROL = re.compile("[\x00-\x08\x0a-\x1f\x7f\x85  ‪-‮⁦-⁩]")
+CONTROL = re.compile("[\x00-\x08\x0a-\x1f\x7f\x85\u2028\u2029\u202a-\u202e\u2066-\u2069]")
 HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$")
 LUA_BLOCK_OPEN = re.compile(r"--\[=*\[")
 LUA_BLOCK_CLOSE = re.compile(r"\]=*\]")
+C_COMMENT_LINE = re.compile(r"^\s*//")
+LUA_COMMENT_LINE = re.compile(r"^\s*--(?!\[=*\[)")
 
 # Lines of surrounding code inspected on each side of a hunk for a security-sensitive check.
 NEAR_WINDOW = 20
@@ -84,7 +125,7 @@ ECONOMY_DATA = frozenset((
 	"pickpocketing_loot", "quests", "units", "unit_classes", "spells", "talents", "talent_tabs",
 	"classes", "races", "levels", "skills", "proficiencies", "vendors", "trainers", "factions",
 	"faction_templates", "triggers", "conditions", "variables", "objects", "gtvalues",
-	"stat_calculations", "stat_constants", "combat_settings",
+	"stat_calculations", "stat_constants", "combat_settings", "maps", "gossip_menus",
 ))
 
 
@@ -209,6 +250,11 @@ def _allowed(path):
 	return _normal_path(path) and (_is_test(path) or path.startswith(ALLOWED_ROOTS))
 
 
+def _suffix_allowed(path):
+	lower = path.lower()
+	return any(path.startswith(root) and lower.endswith(suffixes) for root, suffixes in ROOT_SUFFIXES)
+
+
 def _is_code(path):
 	return path.lower().endswith(CODE_SUFFIXES)
 
@@ -217,14 +263,32 @@ def _short(line):
 	return line.strip()[:120]
 
 
+def _comment_only(line, lua):
+	"""A whole-line // (C family) or -- (Lua; in C++ that is a decrement) comment cannot change
+	behaviour, unless a trailing backslash splices the next line into it."""
+	pattern = LUA_COMMENT_LINE if lua else C_COMMENT_LINE
+	return bool(pattern.match(line)) and not line.rstrip().endswith("\\")
+
+
+def _unmatched(lines, others):
+	"""The lines without a counterpart on the other side (a re-indented or moved line is kept). Counts
+	multiplicity, so duplicating a line (one removed, two added) leaves one added line to judge."""
+	available = collections.Counter(line.strip() for line in others)
+	result = []
+	for line in lines:
+		if available[line.strip()] > 0:
+			available[line.strip()] -= 1
+		else:
+			result.append(line)
+	return result
+
+
 def _line_reasons(hunk):
 	"""Rules that judge the changed lines of one non-test code hunk."""
 	path = hunk.path
 	reasons = []
-	removed_kept = {line.strip() for line in hunk.added}
-	added_kept = {line.strip() for line in hunk.removed}
-	removed_new = [line for line in hunk.removed if line.strip() not in removed_kept]
-	added_new = [line for line in hunk.added if line.strip() not in added_kept]
+	removed_new = _unmatched(hunk.removed, hunk.added)
+	added_new = _unmatched(hunk.added, hunk.removed)
 	for line in hunk.removed + hunk.added:
 		if CONTROL.search(line):
 			reasons.append("{}: control character in a changed line: {}".format(path, ascii(line)[:120]))
@@ -235,32 +299,44 @@ def _line_reasons(hunk):
 			break
 	if CHECK_FUNCTION.search(hunk.context) and any(RETURN_TRUE.search(line) for line in hunk.added):
 		reasons.append("{}: a check function now returns true ({})".format(path, hunk.context[:80]))
+	lua = path.lower().endswith(".lua")
+	server = path.startswith(SERVER_ROOTS)
 	for line in removed_new:
-		if REMOVED_CHECK.search(line):
+		if REMOVED_CHECK.search(line) or (lua and LUA_CONDITION.search(line)
+				and (CHECK_CALL.search(line) or LUA_NOT.search(line))):
 			reasons.append("{}: removed a check condition: {}".format(path, _short(line)))
 		elif REJECTION.search(line):
 			reasons.append("{}: removed a rejection path: {}".format(path, _short(line)))
 	for line in removed_new + added_new:
 		if PREPROCESSOR.search(line):
 			reasons.append("{}: preprocessor directive changed: {}".format(path, _short(line)))
+		if lua and LUA_LOADER.search(line):
+			reasons.append("{}: loads code (require/dofile/load): {}".format(path, _short(line)))
+		if server and ECONOMY.search(line) and not _comment_only(line, lua):
+			reasons.append("{}: touches reward or economy logic: {}".format(path, _short(line)))
 	for line in added_new:
 		if GOTO.search(line):
 			reasons.append("{}: added a goto: {}".format(path, _short(line)))
+		if server and EARLY_RETURN.search(line):
+			reasons.append("{}: added an early return: {}".format(path, _short(line)))
 		if path.lower().endswith(C_FAMILY_SUFFIXES):
 			if line.count("/*") != line.count("*/"):
 				reasons.append("{}: unbalanced block comment: {}".format(path, _short(line)))
 			if line.rstrip().endswith("\\"):
 				reasons.append("{}: line continuation: {}".format(path, _short(line)))
-		elif path.lower().endswith(".lua"):
+		elif lua:
 			opened = LUA_BLOCK_OPEN.search(line)
 			if (opened and not LUA_BLOCK_CLOSE.search(line, opened.end())) or line.strip().startswith(("--]", "]]")):
 				reasons.append("{}: unbalanced block comment: {}".format(path, _short(line)))
+	for line in removed_new:
+		if path.lower().endswith(C_FAMILY_SUFFIXES) and line.rstrip().endswith("\\"):
+			reasons.append("{}: removed a line continuation: {}".format(path, _short(line)))
 	for line in removed_new + added_new:
 		if not NUMERIC_LITERAL.search(line):
 			continue
 		if TUNED.search(line):
 			reasons.append("{}: changed a tuned value: {}".format(path, _short(line)))
-		elif CONDITION.search(CONDITION_NOISE.sub(" ", line)):
+		elif not path.startswith(CLIENT_UI_ROOT) and CONDITION.search(CONDITION_NOISE.sub(" ", line)):
 			reasons.append("{}: changed a numeric condition: {}".format(path, _short(line)))
 	return reasons
 
@@ -300,7 +376,7 @@ def _surrounding_reasons(hunk, load_data, cache):
 		if lines is None:
 			return ["{}: cannot inspect surrounding code ({} side missing)".format(path, side)]
 		for line in _window(lines, start, count):
-			if SENSITIVE.search(line) or REMOVED_CHECK.search(line):
+			if SENSITIVE.search(line) or NEAR_CHECK.search(line):
 				return ["{}: edit near a security-sensitive check: {}".format(path, _short(line))]
 	return []
 
@@ -377,6 +453,8 @@ def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, ma
 			reasons.append("{}: protected path".format(path))
 		if not _allowed(path):
 			reasons.append("{}: outside the auto-ship allow-list".format(path))
+		elif not _is_test(path) and not _suffix_allowed(path):
+			reasons.append("{}: file type not allowed to auto-ship here".format(path))
 		if path.startswith(DATA_PREFIX) and path.endswith(".data"):
 			reasons.extend(_data_reasons(path, load_data, decoder, max_entries, data))
 			continue

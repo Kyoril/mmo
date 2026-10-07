@@ -68,7 +68,10 @@ RETURN_TRUE = diff("src/shared/game_server/game_player_s.cpp", "bool GamePlayerS
 	removed=["\tif (item.requiredlevel() > GetLevel())", "\t{", "\t\treturn false;"], added=["\treturn true;"])
 DROP_BOOST = diff("src/shared/game_server/loot_instance.cpp", "void LootInstance::Roll()",
 	removed=["\tconstexpr float BaseDropChance = 0.05f;"], added=["\tconstexpr float BaseDropChance = 0.50f;"])
-BENIGN = diff("src/shared/game_server/quest_status.cpp", "void QuestStatus::OnKill(uint64 creatureId)",
+BENIGN = diff("src/shared/game_server/ai/creature_ai_combat_state.cpp", "void CreatureAICombatState::ChooseNextAction()",
+	removed=["\tif (victim == nullptr)"], added=["\tif (victim == nullptr || !victim->IsAlive())"])
+# Round 1's honest example: granting quest credit for a second creature is a reward change now.
+KILL_CREDIT = diff("src/shared/game_server/quest_status.cpp", "void QuestStatus::OnKill(uint64 creatureId)",
 	removed=["\tif (entry.creatureid() == creatureId)"], added=["\tif (entry.creatureid() == creatureId || entry.creatureid() == killCredit)"])
 LUA_COMMENT = diff("data/client/Interface/GameUI/QuestLog.lua", "function QuestLog_Update()",
 	removed=["-- old comment", "local title = quest.title"], added=["local title = Localize(quest.title)"])
@@ -225,10 +228,142 @@ class CorpusBlocked(unittest.TestCase):
 			self.assertBlocked(verdict_of([FileChange(path, 1, 1, False)], text, load_data=plain_loader),
 				"security-sensitive identifier")
 
+	# --- Fix round 2 ---
+
+	def test_R2_1_non_code_file_compiled_via_include(self):
+		cpp = "src/shared/game_server/ai/creature_ai_death_state.cpp"
+		for suffix in (".txt", ".inc", ".ipp"):
+			table = "src/shared/game_server/ai/death_tables" + suffix
+			text = raw_diff(cpp, (3, 0, 4, 1, [], ['#include "game_server/ai/death_tables{}"'.format(suffix)]))
+			text += raw_diff(table, (0, 0, 1, 1, [], ["\tif (true) { m_gmLevel = 3; }"]), old=None)
+			loader = lambda path, table=table: (None, b"\tif (true) { m_gmLevel = 3; }\n") if path == table else plain_loader(path)
+			result = verdict_of([FileChange(cpp, 1, 0, False), FileChange(table, 1, 0, False)], text, load_data=loader)
+			self.assertBlocked(result, table + ": file type not allowed to auto-ship here")
+			self.assertBlocked(result, "preprocessor directive")
+
+	def test_R2_1_file_types_per_root(self):
+		for path in ("data/client/Interface/GameUI/notes.txt", "data/client/Locales/enUS/strings.lua",
+				"data/editor/data/items.json", "data/scripts/helper.py", "src/world_server/table.json",
+				"data/scripts/run.sh"):
+			text = raw_diff(path, (10, 1, 10, 1, ["\tDoWork();"], ["\tDoMoreWork();"]))
+			self.assertBlocked(verdict_of([FileChange(path, 1, 1, False)], text, load_data=plain_loader),
+				"file type not allowed to auto-ship here")
+
+	def test_R2_1_more_preprocessor_directives(self):
+		path = "src/world_server/world_instance.cpp"
+		for line in ('#include "x.h"', "#pragma once", '#line 1 "fake.cpp"', "#import <x>", '%:include "x.h"',
+				'_Pragma("GCC diagnostic ignored")'):
+			for removed, added in (([], [line]), ([line], [])):
+				text = raw_diff(path, (50, len(removed), 50, len(added), removed, added))
+				result = verdict_of([FileChange(path, len(added), len(removed), False)], text, load_data=plain_loader)
+				self.assertBlocked(result, "preprocessor directive")
+
+	def test_R2_1_lua_loaders(self):
+		for path in ("data/scripts/quest_42.lua", "data/client/Interface/GameUI/QuestLog.lua"):
+			for line in ('require("cheats")', 'dofile("x.lua")', "loadstring(s)()", 'loadfile("x")()', "load(code)()"):
+				for removed, added in (([], [line]), ([line], [])):
+					text = raw_diff(path, (50, len(removed), 50, len(added), removed, added))
+					result = verdict_of([FileChange(path, len(added), len(removed), False)], text, load_data=plain_loader)
+					self.assertBlocked(result, "loads code")
+
+	DEATH_STATE = "\n".join(["\tDoWork();"] * 10 + [
+		"\t\t\tfor (auto& recipient : recipients)",
+		"\t\t\t{",
+		"\t\t\t\trecipient.second->OnQuestKillCredit(controlled.GetGuid(), controlled.GetEntry());",
+		"\t\t\t}",
+		"\t\t\tconst uint32 baseXp = Interpolate(controlled.GetEntry().minlevelxp(), controlled.GetEntry().maxlevelxp(), t);",
+		"\t\t\tconst uint32 cutoffLevel = xp::GetExpCutoffLevel(level);",
+		"\t\t\tif (controlled.GetLevel() > cutoffLevel)",
+	] + ["\tDoWork();"] * 40) + "\n"
+
+	def test_R2_2_literal_free_reward_boosts(self):
+		path = "src/shared/game_server/ai/creature_ai_death_state.cpp"
+		credit = "\t\t\t\trecipient.second->OnQuestKillCredit(controlled.GetGuid(), controlled.GetEntry());"
+		cases = (
+			(15, ["\t\t\tconst uint32 baseXp = Interpolate(controlled.GetEntry().minlevelxp(), controlled.GetEntry().maxlevelxp(), t);"],
+				["\t\t\tconst uint32 baseXp = Interpolate(controlled.GetEntry().maxlevelxp(), controlled.GetEntry().maxlevelxp(), t);"]),
+			(17, ["\t\t\tif (controlled.GetLevel() > cutoffLevel)"], ["\t\t\tif (controlled.GetLevel() > cutoffLevel || sumLevel)"]),
+			(14, [], [credit]),
+			(13, [credit], [credit, credit]),
+			(15, ["\t\t\tconst uint32 v = entry.minlevelxp();"], ["\t\t\tconst uint32 v = entry.maxlevelxp();"]),
+		)
+		for line, removed, added in cases:
+			after = self.DEATH_STATE
+			text = raw_diff(path, (line, len(removed), line, len(added), removed, added))
+			result = verdict_of([FileChange(path, len(added), len(removed), False)], text,
+				load_data=text_loader(self.DEATH_STATE, after))
+			self.assertBlocked(result, "reward or economy logic")
+
+	def test_R2_2_economy_word_anchoring(self):
+		path = "src/world_server/x.cpp"
+		for line in ("\tm_xp += a;", "\tkXp = b;", "\tGiveRewardXp(c);", "\tm_moneyDelta = d;", "\tAddLoot(e);",
+				"\tif (stackCount < maxStack)", "\tspell.set_charges(n);", "\tGetReputation(f);"):
+			text = raw_diff(path, (50, 0, 50, 1, [], [line]))
+			self.assertBlocked(verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader), "reward or economy logic")
+		for line in ("\tconst auto expr = Parse(text);", "\tBackdrop(frame);", "\tconst float xPos = x;"):
+			text = raw_diff(path, (50, 0, 50, 1, [], [line]))
+			result = verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader)
+			self.assertTrue(result["auto_ship_allowed"], (line, result["reasons"]))
+
+	def test_R2_2_comment_line_that_splices_code(self):
+		path = "src/shared/game_server/ai/creature_ai_death_state.cpp"
+		text = raw_diff(path, (10, 1, 10, 0, ["\t// give loot \\"], []))
+		self.assertBlocked(verdict_of([FileChange(path, 0, 1, False)], text, load_data=plain_loader), "reward or economy logic")
+		# In C++ a leading "--" is a decrement, not a comment.
+		text = raw_diff(path, (10, 0, 10, 1, [], ["\t--m_charges;"]))
+		self.assertBlocked(verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader), "reward or economy logic")
+
+	def test_R2_2_tuned_word_anchoring(self):
+		path = "src/shared/game_client/x.cpp"
+		for line in ("\tm_xp = 10;", "\tconst float kRate = 2.0f;", "\tm_cap = 3;", "\tstatic constexpr int kXpBonus = 5;"):
+			text = raw_diff(path, (50, 0, 50, 1, [], [line]))
+			self.assertBlocked(verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader), "changed a tuned value")
+
+	def test_R2_2_old_kill_credit_example_is_a_reward_change(self):
+		result = verdict_of([FileChange("src/shared/game_server/quest_status.cpp", 1, 1, False)], KILL_CREDIT, load_data=plain_loader)
+		self.assertBlocked(result, "reward or economy logic")
+
+	def test_R2_3_removed_lua_check(self):
+		path = "data/scripts/x.lua"
+		for line in ("\tif not player:HasItem(ITEM_KEY) then return end", "\tif not unlocked then return end",
+				"\telseif creature:IsInCombat() then"):
+			text = raw_diff(path, (10, 1, 9, 0, [line], []))
+			self.assertBlocked(verdict_of([FileChange(path, 0, 1, False)], text, load_data=plain_loader), "removed a check condition")
+
+	def test_R2_4_added_early_return_far_from_a_check(self):
+		for path, line in (("src/world_server/player.cpp", "\treturn PacketParseResult::Pass;"),
+				("src/world_server/spell_target.cpp", "\treturn true;"), ("data/scripts/x.lua", "\treturn true")):
+			text = raw_diff(path, (50, 0, 51, 1, [], [line]))
+			self.assertBlocked(verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader), "added an early return")
+
+	def test_R2_5_removed_failed_result(self):
+		path = "src/shared/game_server/spells/spell_cast.cpp"
+		for line in ("\t\treturn spell_cast_result::FailedNoPower;", "\t\treturn inventory::NotEnoughSpaceError;"):
+			text = raw_diff(path, (10, 1, 9, 0, [line], []))
+			self.assertBlocked(verdict_of([FileChange(path, 0, 1, False)], text, load_data=plain_loader), "removed a rejection path")
+
+	def test_R2_7_window_still_sees_failed_results(self):
+		path = "src/shared/game_server/spells/spell_cast.cpp"
+		surroundings = "\n".join(["\tDoWork();"] * 10 + ["\tif (power < cost)", "\t{",
+			"\t\treturn spell_cast_result::FailedNoPower;", "\t}"] + ["\tDoWork();"] * 40) + "\n"
+		text = raw_diff(path, (9, 0, 10, 1, [], ["\tDoOtherWork();"]))
+		result = verdict_of([FileChange(path, 1, 0, False)], text, load_data=text_loader(surroundings, surroundings))
+		self.assertBlocked(result, "edit near a security-sensitive check")
+
+	def test_lua_block_comment_opened_by_an_added_line(self):
+		path = "data/client/Interface/GameUI/QuestLog.lua"
+		text = raw_diff(path, (50, 0, 50, 1, [], ["--[["]))
+		self.assertBlocked(verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader), "unbalanced block comment")
+
+	def test_R2_9_guard_source_is_ascii(self):
+		with open(guard.__file__, encoding="utf-8") as handle:
+			source = handle.read()
+		self.assertEqual([c for c in source if ord(c) > 0x7e and c != "\t"], [])
+
 
 class CorpusAllowed(unittest.TestCase):
 	def test_honest_code_fix(self):
-		result = verdict_of([FileChange("src/shared/game_server/quest_status.cpp", 1, 1, False),
+		result = verdict_of([FileChange("src/shared/game_server/ai/creature_ai_combat_state.cpp", 1, 1, False),
 			FileChange("src/tests/game_server_tests/test_quest_status.cpp", 400, 0, False)], BENIGN, load_data=plain_loader)
 		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
 		self.assertEqual(result["changed_lines"], 2)
@@ -247,7 +382,7 @@ class CorpusAllowed(unittest.TestCase):
 
 	def test_honest_fix_with_crlf_line_endings(self):
 		text = BENIGN.replace("\n", "\r\n")
-		result = verdict_of([FileChange("src/shared/game_server/quest_status.cpp", 1, 1, False)], text, load_data=plain_loader)
+		result = verdict_of([FileChange("src/shared/game_server/ai/creature_ai_combat_state.cpp", 1, 1, False)], text, load_data=plain_loader)
 		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
 
 	def test_new_file_without_before_side(self):
@@ -257,11 +392,55 @@ class CorpusAllowed(unittest.TestCase):
 		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
 
 	def test_honest_fix_with_realistic_surroundings(self):
-		path = "src/shared/game_server/quest_status.cpp"
-		before = "\n".join(["\tDoWork();"] * 9 + ["\tif (entry.creatureid() == creatureId)"] + ["\tDoWork();"] * 50) + "\n"
-		after = before.replace("creatureId)", "creatureId || entry.creatureid() == killCredit)")
+		path = "src/shared/game_server/ai/creature_ai_combat_state.cpp"
+		before = "\n".join(["\tDoWork();"] * 9 + ["\tif (victim == nullptr)"] + ["\tDoWork();"] * 50) + "\n"
+		after = before.replace("nullptr)", "nullptr || !victim->IsAlive())")
 		result = verdict_of([FileChange(path, 1, 1, False)], BENIGN, load_data=text_loader(before, after))
 		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
+
+	def assertAllowed(self, path, hunk, loader=plain_loader, old="a/"):
+		removed, added = hunk[4], hunk[5]
+		text = raw_diff(path, hunk, old=old)
+		result = verdict_of([FileChange(path, len(added), len(removed), False)], text, load_data=loader)
+		self.assertTrue(result["auto_ship_allowed"], (path, result["reasons"]))
+
+	def test_R2_one_char_comparison_fix(self):
+		self.assertAllowed("src/shared/game_server/ai/creature_ai_idle_state.cpp",
+			(300, 1, 300, 1, ["\t\t\tif (distanceSq < closestDistanceSq)"], ["\t\t\tif (distanceSq <= closestDistanceSq)"]))
+
+	def test_R2_added_empty_guard_with_bare_return(self):
+		self.assertAllowed("src/shared/game_server/ai/creature_ai_idle_state.cpp",
+			(376, 0, 377, 4, [], ["\t\t\tif (patrolWaypoints.empty())", "\t\t\t{", "\t\t\t\treturn;", "\t\t\t}"]))
+
+	def test_R2_lua_ui_key_fix(self):
+		self.assertAllowed("data/client/Interface/BankFrame.lua",
+			(40, 1, 40, 1, ['\tBankFrameTitle:SetText(Localize("BANK_TITEL"))'], ['\tBankFrameTitle:SetText(Localize("BANK_TITLE"))']))
+
+	def test_R2_localization_string_edit(self):
+		self.assertAllowed("data/client/Locales/enUS/Localization.txt",
+			(120, 2, 120, 2, ['BANK_TITLE = "Bnak"', 'BANK_SLOTS_INFO = "Purchase 1 more slot"'],
+				['BANK_TITLE = "Bank"', 'BANK_SLOTS_INFO = "Purchase 1 more bag slot"']))
+
+	def test_R2_xml_text_fix(self):
+		self.assertAllowed("data/client/Interface/DebugUI.xml",
+			(30, 1, 30, 1, ['\t\t<FontString name="$parentFps" text="DEBUG_FSP" size="14"/>'],
+				['\t\t<FontString name="$parentFps" text="DEBUG_FPS" size="14"/>']))
+
+	def test_R2_economy_words_in_comment_lines(self):
+		self.assertAllowed("src/shared/game_server/objects/game_player_s.cpp",
+			(80, 1, 80, 1, ["\t// drop the disabled marker"], ["\t// The item leaves its slot; drop any disabled marker so the stack is not rendered."]))
+		self.assertAllowed("data/scripts/x.lua", (80, 0, 80, 1, [], ["\t-- loot is handed out by the server"]))
+
+	def test_R2_client_ui_numeric_condition(self):
+		self.assertAllowed("data/client/Interface/x.lua",
+			(55, 1, 55, 1, ["\tif healthIncrease > 0 then"], ["\tif healthIncrease ~= 0 then"]))
+
+	def test_R2_edit_near_ordinary_checks(self):
+		path = "src/shared/game_server/ai/creature_ai_combat_state.cpp"
+		surroundings = "\n".join(["\tDoWork();"] * 10 + ["\tif (!target->IsAlive())", "\t{", "\t\treturn false;", "\t}",
+			"\tif (target->HasAura(auraId) && CanCast(spell))", "\t{", "\t\treturn;", "\t}"] + ["\tDoWork();"] * 40) + "\n"
+		after = surroundings.replace("\tDoWork();\n\tif (!target", "\tDoOtherWork();\n\tif (!target", 1)
+		self.assertAllowed(path, (10, 1, 10, 1, ["\tDoWork();"], ["\tDoOtherWork();"]), text_loader(surroundings, after))
 
 
 def proto(name="items.proto", number=2):
@@ -293,6 +472,12 @@ class DataRules(unittest.TestCase):
 		self.assertFalse(result["auto_ship_allowed"])
 		self.assertIn("non-text change in economy data", result["reasons"][0])
 
+	def test_R2_6_maps_and_gossip_menus_are_economy_data(self):
+		for stem in ("maps", "gossip_menus"):
+			result = self.run_data("data/editor/data/{}.data".format(stem), b"base", b"numeric")
+			self.assertFalse(result["auto_ship_allowed"], stem)
+			self.assertIn("non-text change in economy data", result["reasons"][0])
+
 	def test_text_change_in_economy_data_is_allowed(self):
 		result = self.run_data("data/editor/data/items.data", b"base", b"text")
 		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
@@ -321,7 +506,7 @@ class DataRules(unittest.TestCase):
 class ParserTests(unittest.TestCase):
 	def test_hunks_carry_path_context_and_lines(self):
 		hunks = guard.parse_unified_diff(ADMIN_BYPASS + BENIGN)
-		self.assertEqual([hunk.path for hunk in hunks], ["src/realm_server/player.cpp", "src/shared/game_server/quest_status.cpp"])
+		self.assertEqual([hunk.path for hunk in hunks], ["src/realm_server/player.cpp", "src/shared/game_server/ai/creature_ai_combat_state.cpp"])
 		self.assertIn("OnCheatCommand", hunks[0].context)
 		self.assertEqual(hunks[0].added, ["\t\t\tif (false)"])
 
