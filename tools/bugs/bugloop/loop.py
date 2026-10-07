@@ -197,9 +197,9 @@ class BugLoop:
 			if not worked:
 				sleep(self.config.poll_seconds)
 
-	def _safe_release(self, bug_id, note, status="triaged"):
+	def _safe_release(self, bug_id, note, status="triaged", **fields):
 		try:
-			self._release(bug_id, status, note)
+			self._release(bug_id, status, note, **fields)
 		except Exception:
 			self.log(traceback.format_exc())
 
@@ -253,8 +253,12 @@ class BugLoop:
 					continue
 				# A bug parked before (an interrupted refix) goes back to the maintainer, not to triage.
 				parked = (bug.get("prUrl") or "").startswith("branch:")
-				self._release(bug_id, "pr_open" if parked else "triaged",
-					"needs-info: the bug loop was interrupted while fixing; see artifacts/bug-loop/" + bug_id)
+				note = "needs-info: the bug loop was interrupted while fixing; see artifacts/bug-loop/" + bug_id
+				if self.state.is_feature(bug_id) and not parked:
+					# An interrupted first feature run goes back to where `implement` can be chosen again.
+					self._release(bug_id, "triaged", note + "; decide again", triage={"category": "design_request"})
+				else:
+					self._release(bug_id, "pr_open" if parked else "triaged", note)
 				self._finish(bug_id, "interrupted")
 			except Exception:
 				self.log(traceback.format_exc())
@@ -326,14 +330,18 @@ class BugLoop:
 		# A guided refix that fails goes back to the maintainer, who can only decide on parked bugs;
 		# a failed feature run goes back to where `implement` can be chosen again.
 		failed_status = "pr_open" if guidance else "triaged"
-		failed_fields = {"triage": {"category": "design_request"}} if feature else {}
-		again = "; decide again" if feature else ""
+		fresh_feature = bool(feature) and not guidance
+		failed_fields = {"triage": {"category": "design_request"}} if fresh_feature else {}
+		again = "; decide again" if fresh_feature else ""
 		previous = self._previous_attempt(bug_id) if guidance else None
 		try:
 			self.api.claim(bug_id, self.config.worker)
 		except urllib.error.HTTPError as error:
 			if error.code != 409:
 				raise
+			if feature:
+				# Not our claim to release, but the bug must not stay triaged-as-feature.
+				self._update(bug_id, triage={"category": "design_request"}, note="could not start implementing: claimed elsewhere; decide again")
 			self._finish(bug_id, "claimed-elsewhere")
 			return
 		branch = "bugfix/" + short_id(bug_id)
@@ -522,7 +530,12 @@ class BugLoop:
 					self.log("unknown decision action {!r} for {}".format(action, bug_id)[:200])
 			except Exception:
 				self.log(traceback.format_exc())
-				self._safe_release(bug_id, "the bug loop failed to carry out the maintainer decision; see artifacts/bug-loop/" + bug_id, status="pr_open")
+				if action == "implement":
+					# No branch is parked yet: back to where `implement` can be chosen again.
+					self._safe_release(bug_id, "the bug loop failed to implement the feature; see artifacts/bug-loop/" + bug_id + "; decide again",
+						status="triaged", triage={"category": "design_request"})
+				else:
+					self._safe_release(bug_id, "the bug loop failed to carry out the maintainer decision; see artifacts/bug-loop/" + bug_id, status="pr_open")
 				self._finish(bug_id, "loop-error")
 			worked = True
 		return worked
@@ -550,7 +563,14 @@ class BugLoop:
 			self._finish(bug_id, "refix-limit")
 			return
 		self.state.count_refix(bug_id)
-		self._fix(bug_id, guidance=guidance)
+		feature = None
+		if self.state.is_feature(bug_id):
+			try:
+				with open(os.path.join(self._bug_dir(bug_id), "feature.md"), "r", encoding="utf-8") as handle:
+					feature = handle.read().strip() or None
+			except OSError:
+				feature = None  # still a feature: the park is enforced by is_feature
+		self._fix(bug_id, guidance=guidance, feature=feature)
 
 	def _has_triage_artifacts(self, bug_id):
 		folder = os.path.join(self.artifacts_dir, bug_id)
@@ -561,6 +581,8 @@ class BugLoop:
 		self._update(bug_id, triage={"category": "feature"}, note="accepted as a feature by the maintainer")
 		self.state.add_feature(bug_id)
 		self.state.save()
+		# Guided refixes of this feature need the accepted description again.
+		self._write(bug_id, "feature.md", description)
 		self._fix(bug_id, feature=description)
 
 	def _ship_by_decision(self, bug_id, decision):

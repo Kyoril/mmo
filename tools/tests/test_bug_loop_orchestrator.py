@@ -13,6 +13,7 @@ import re
 import sys
 import tempfile
 import unittest
+import urllib.error
 
 sys.dont_write_bytecode = True
 
@@ -364,6 +365,48 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertIn(loop.FEATURE_REASON, self.api.notes(BUG_ID)[-1])
+
+	def test_refix_of_a_feature_keeps_the_feature_request_block(self):
+		self.rejected_with_implement()
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.api.bugs[BUG_ID]["decision"] = self.decision("refix", "Also check line of sight.")
+		self.runner.inputs.clear()
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head2"), self.worktree.branch_heads.update({BRANCH: "head2"}))
+		self.worktree.branch_heads[BRANCH] = "head1"
+		self.loop.poll_once()
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("FEATURE REQUEST", fix_input)
+		self.assertIn("Bandits also assist stationary casters.", fix_input)
+		self.assertEqual(self.worktree.shipped, [])
+
+	def test_interrupted_implement_goes_back_to_design_request(self):
+		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="bug-loop", triage={"category": "feature"})])
+		self.state.add_feature(BUG_ID)
+		self.state.mark_attempted(BUG_ID, "fix-started")
+		self.loop.poll_once()
+		bug = self.api.bugs[BUG_ID]
+		self.assertEqual(bug["status"], "triaged")
+		self.assertEqual(bug["triage"]["category"], "design_request")
+		self.assertIn("decide again", self.api.notes(BUG_ID)[-1])
+
+	def test_exception_during_implement_goes_back_to_design_request(self):
+		self.rejected_with_implement()
+		self.worktree.prepare_error = RuntimeError("boom")
+		self.loop.poll_once()
+		bug = self.api.bugs[BUG_ID]
+		self.assertEqual(bug["status"], "triaged")
+		self.assertEqual(bug["triage"]["category"], "design_request")
+		self.assertIn("decide again", self.api.notes(BUG_ID)[-1])
+
+	def test_claim_conflict_on_implement_goes_back_to_design_request(self):
+		self.rejected_with_implement()
+
+		def conflict(bug_id, worker):
+			raise urllib.error.HTTPError("u", 409, "conflict", {}, None)
+		self.api.claim = conflict
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "design_request")
 
 	def test_implement_without_description_is_refused(self):
 		self.rejected_with_implement(description="   ")
