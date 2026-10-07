@@ -127,7 +127,7 @@ namespace mmo
 		m_titleLabel.color = theme::TitleColor;
 
 		m_versionLabel.rect = layout::VersionText;
-		m_versionLabel.text = MMO_VERSION_STR;
+		m_versionLabel.text = MMO_LAUNCHER_VERSION_STR;
 		m_versionLabel.align = TextAlign::Right;
 		m_versionLabel.color = theme::VersionColor;
 
