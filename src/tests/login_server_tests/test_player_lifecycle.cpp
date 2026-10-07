@@ -64,7 +64,7 @@ namespace mmo
 		LoopbackPair makeLoopbackPair(asio::io_service& ioService)
 		{
 			asio::ip::tcp::acceptor acceptor(ioService,
-				asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 0));
+				asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 0));
 			const uint16 port = acceptor.local_endpoint().port();
 
 			auto server = auth::Connection::create(ioService, nullptr);

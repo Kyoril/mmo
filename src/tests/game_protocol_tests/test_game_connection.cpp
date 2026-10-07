@@ -72,7 +72,7 @@ namespace
 		GameRecordingListener& serverListener, GameRecordingListener& clientListener)
 	{
 		asio::ip::tcp::acceptor acceptor(ioService,
-			asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 0));
+			asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 0));
 		const uint16 port = acceptor.local_endpoint().port();
 
 		auto server = game::Connection::Create(ioService, &serverListener);

@@ -46,8 +46,11 @@ namespace mmo
 		Server() { }
 		virtual ~Server() { }
 
-		/// Initializes a new server instance and binds it to a specific port.
-		Server(asio::io_service &IOService, uint16 Port, ConnectionFactory CreateConnection)
+		/// Initializes a new server instance and binds it to a specific port. Tests pass the
+		/// loopback address: binding all interfaces makes Windows Firewall prompt for every
+		/// newly built test executable.
+		Server(asio::io_service &IOService, uint16 Port, ConnectionFactory CreateConnection,
+		       const asio::ip::address &BindAddress = asio::ip::address_v4::any())
 			: m_ioService(IOService)
 			, m_createConn(std::move(CreateConnection))
 			, m_state(new State(std::unique_ptr<AcceptorType>(new AcceptorType(IOService)), IOService))
@@ -61,7 +64,7 @@ namespace mmo
 				m_state->Acceptor->set_option(typename AcceptorType::reuse_address(true));
 #endif
 				m_state->Acceptor->bind(asio::ip::tcp::endpoint(
-				                           asio::ip::tcp::v4(),
+				                           BindAddress,
 				                           static_cast<uint16>(Port)));
 				// A backlog of 16 drops connections during a login burst; asio's maximum defers to
 				// what the OS is willing to queue, which is the right ceiling here.
