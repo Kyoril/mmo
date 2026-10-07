@@ -63,7 +63,9 @@ class PromptTests(unittest.TestCase):
 		self.assertIn("Ordinary bug fixes that restore documented or evident behaviour need no question; leave it empty.",
 			" ".join(self.read("review.md").split()))
 		self.assertIn("FEATURE REQUEST", fix)
-		self.assertIn("FEATURE REQUEST", self.read("review.md"))
+		review = self.read("review.md")
+		self.assertIn("FEATURE REQUEST", review)
+		self.assertIn("guidance_followed", review.split("FEATURE REQUEST")[1])
 
 	def test_fixer_never_runs_the_e2e_stack(self):
 		"""The fixer runs outside the gate mutex; E2E runs only in the orchestrator's proof."""
