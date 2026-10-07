@@ -19,6 +19,8 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# The checkout this script runs from: the runtime snapshot of origin/develop under the scheduled task.
+RUNTIME_ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import bugs  # noqa: E402
@@ -37,12 +39,29 @@ def _logger(path):
 	return log
 
 
+def make_decoder(schema_root, repo, log, factory=None):
+	"""Compiles the game-data schemas now, before any poll: the schemas come from schema_root (the
+	runtime snapshot) and protoc from the main checkout's build, never from the fixer's worktree.
+	Without either the loop still runs, and every data fix parks ("no decoder for game data")."""
+	factory = factory or data_diff.DataDecoder
+	protoc = data_diff.find_protoc(repo)
+	try:
+		return factory(schema_root, protoc=protoc)
+	except (data_diff.DecoderUnavailable, OSError) as error:
+		log("warning: game-data decoder unavailable, data fixes will park: {}".format(error))
+		return None
+
+
 def _read(relative):
 	with open(os.path.join(HERE, "bugloop", relative), "r", encoding="utf-8") as handle:
 		return handle.read()
 
 
 def main(argv=None):
+	# Bug text and tool output can hold anything; a console that cannot print it must not crash the loop.
+	for stream in (sys.stdout, sys.stderr):
+		if hasattr(stream, "reconfigure"):
+			stream.reconfigure(errors="replace")
 	parser = argparse.ArgumentParser(description="Autonomous bug loop over the central bug API")
 	parser.add_argument("--repo", default=os.path.dirname(os.path.dirname(HERE)), help="main checkout: artifacts, reports, build")
 	sub = parser.add_subparsers(dest="command", required=True)
@@ -84,7 +103,7 @@ def main(argv=None):
 	runner = claude.ClaudeRunner(shutil.which(config.claude_exe) or config.claude_exe, config.model, on_invoke=state.count_invocation)
 	worktree = gitops.Worktree(repo, config.worktree)
 	verifier = verification.Verifier(worktree, os.path.join(repo, "build"), timeout=config.step_timeout_seconds)
-	decoder = data_diff.DataDecoder(config.worktree, os.path.dirname(os.path.dirname(HERE)))
+	decoder = make_decoder(RUNTIME_ROOT, repo, log)
 	prompts = {name: _read(os.path.join("prompts", name + ".md")) for name in ("triage", "fix", "review")}
 	schemas = {name: json.loads(_read(os.path.join("schemas", name + ".json"))) for name in ("triage", "review")}
 	bug_loop = loop.BugLoop(api, runner, worktree, verifier, decoder, config, state, prompts, schemas,

@@ -96,19 +96,32 @@ class DecoderTests(unittest.TestCase):
 				handle.write("message Entry {\n\tmessage Nested {}\n}\nmessage Entries {\n\trepeated Entry entry = 1;\n}\n")
 			self.assertEqual(data_diff.message_name(path), "Entries")
 
-	def test_missing_schema_decodes_to_none_without_compiling(self):
-		def fail():
-			raise AssertionError("must not compile")
+	def test_schemas_compile_at_construction_not_on_first_decode(self):
+		calls = []
 		with tempfile.TemporaryDirectory() as folder:
-			decoder = data_diff.DataDecoder(folder, folder, compile_modules=fail)
+			decoder = data_diff.DataDecoder(folder, compile_modules=lambda: calls.append(1))
+			self.assertEqual(calls, [1])
 			self.assertIsNone(decoder.decode("combat_ratings", b""))
+			self.assertEqual(calls, [1])
+
+	def test_missing_schemas_or_protoc_make_the_decoder_unavailable(self):
+		with tempfile.TemporaryDirectory() as folder:
+			with self.assertRaises(data_diff.DecoderUnavailable):
+				data_diff.DataDecoder(folder, protoc=os.path.join(folder, "protoc.exe"))
+			proto_dir = os.path.join(folder, "src", "shared", "proto_data")
+			os.makedirs(proto_dir)
+			with open(os.path.join(proto_dir, "x.proto"), "w", encoding="utf-8") as handle:
+				handle.write("message X {}\n")
+			with self.assertRaises(data_diff.DecoderUnavailable):
+				data_diff.DataDecoder(folder, protoc=os.path.join(folder, "protoc.exe"))
+			self.assertIsNone(data_diff.find_protoc(folder))
 
 	def make_decoder(self, folder):
 		proto_dir = os.path.join(folder, "src", "shared", "proto_data")
 		os.makedirs(proto_dir)
 		with open(os.path.join(proto_dir, "descriptor.proto"), "w", encoding="utf-8") as handle:
 			handle.write("message FileDescriptorProto {}\n")
-		return data_diff.DataDecoder(folder, folder, compile_modules=lambda: None)
+		return data_diff.DataDecoder(folder, compile_modules=lambda: None)
 
 	def test_decodes_with_compiled_module(self):
 		with tempfile.TemporaryDirectory() as folder, mock.patch.dict(sys.modules, {"descriptor_pb2": descriptor_pb2}):
@@ -139,14 +152,14 @@ class DecoderTests(unittest.TestCase):
 		self.assertEqual(data_diff.diff_leaves(before, after), [])
 
 
-PROTOC = glob.glob(os.path.join(REPO_ROOT, "build", "_deps", "protobuf-build", "*", "protoc.exe"))
+PROTOC = data_diff.find_protoc(REPO_ROOT)
 ZONES = os.path.join(REPO_ROOT, "data", "editor", "data", "zones.data")
 
 
 @unittest.skipUnless(PROTOC and os.path.exists(ZONES), "needs a build with protoc and the data/editor submodule")
 class RealDataTests(unittest.TestCase):
 	def test_decodes_a_real_data_file(self):
-		decoder = data_diff.DataDecoder(REPO_ROOT, REPO_ROOT)
+		decoder = data_diff.DataDecoder(REPO_ROOT, protoc=PROTOC)
 		with open(ZONES, "rb") as handle:
 			message = decoder.decode("zones", handle.read())
 		self.assertIsNotNone(message)

@@ -3,11 +3,13 @@
 """Field-level diff of the protobuf game data files (data/editor/data/*.data), so the guard
 can tell a typo fix from a numeric change."""
 
+import glob
 import importlib
-import importlib.util
 import os
-import pathlib
 import re
+import subprocess
+import sys
+import tempfile
 
 from google.protobuf.unknown_fields import UnknownFieldSet
 
@@ -112,23 +114,47 @@ def message_name(proto_path):
 	return names[-1] if names else None
 
 
+class DecoderUnavailable(RuntimeError):
+	pass
+
+
+def find_protoc(repo):
+	"""protoc from the main checkout's build (never from a worktree a fixer can edit)."""
+	base = os.path.join(repo, "build", "_deps", "protobuf-build")
+	for config in ("Release", "RelWithDebInfo", "MinSizeRel", "Debug"):
+		for name in ("protoc.exe", "protoc"):
+			candidate = os.path.join(base, config, name)
+			if os.path.isfile(candidate):
+				return candidate
+	found = sorted(glob.glob(os.path.join(base, "*", "protoc.exe")) + glob.glob(os.path.join(base, "*", "protoc")))
+	return found[0] if found else None
+
+
 class DataDecoder:
-	"""Decodes data files with the schemas of the checkout being judged (project_root). The
-	proto_runtime helper that compiles them comes from the loop's runtime copy (runtime_root),
-	never from the checkout a fixer edited."""
+	"""Decodes data files with the protobuf schemas under schema_root/src/shared/proto_data. The
+	loop passes its runtime snapshot of origin/develop as schema_root and protoc from the main
+	checkout's build, and the schemas are compiled once, here, before any fix runs: nothing a
+	fixer writes can change how later diffs are decoded."""
 
-	def __init__(self, project_root, runtime_root, compile_modules=None):
-		self.project_root = project_root
-		self.runtime_root = runtime_root
-		self._compile = compile_modules or self._compile_with_proto_runtime
-		self._compiled = False
+	def __init__(self, schema_root, protoc=None, compile_modules=None):
+		self.project_root = schema_root
+		self.protoc = protoc
+		self._compile = compile_modules or self._compile_with_protoc
+		self._compile()
 
-	def _compile_with_proto_runtime(self):
-		path = os.path.join(self.runtime_root, ".agents", "skills", "mmo-quest-creator", "scripts", "proto_runtime.py")
-		spec = importlib.util.spec_from_file_location("bugloop_proto_runtime", path)
-		module = importlib.util.module_from_spec(spec)
-		spec.loader.exec_module(module)
-		module.compile_proto_modules(pathlib.Path(self.project_root))
+	def _compile_with_protoc(self):
+		proto_dir = os.path.abspath(os.path.join(self.project_root, "src", "shared", "proto_data"))
+		protos = sorted(name for name in os.listdir(proto_dir) if name.endswith(".proto")) if os.path.isdir(proto_dir) else []
+		if not protos:
+			raise DecoderUnavailable("no .proto schemas under " + proto_dir)
+		if not self.protoc or not os.path.isfile(self.protoc):
+			raise DecoderUnavailable("protoc not found ({})".format(self.protoc))
+		out_dir = tempfile.mkdtemp(prefix="mmo_bugloop_proto_")
+		completed = subprocess.run([self.protoc, "-I" + proto_dir, "--python_out=" + out_dir] + protos, cwd=proto_dir,
+			capture_output=True, text=True, encoding="utf-8", errors="replace")
+		if completed.returncode != 0:
+			raise DecoderUnavailable("protoc failed: " + (completed.stderr or completed.stdout or "")[-1000:])
+		sys.path.insert(0, out_dir)
 
 	def decode(self, stem, data):
 		proto = os.path.join(self.project_root, "src", "shared", "proto_data", stem + ".proto")
@@ -137,9 +163,6 @@ class DataDecoder:
 		name = message_name(proto)
 		if name is None:
 			return None
-		if not self._compiled:
-			self._compile()
-			self._compiled = True
 		message = getattr(importlib.import_module(stem + "_pb2"), name)()
 		# Fields the compiled schema does not know are not refused: leaf_items() reports them as
 		# "<unknown N>" leaves, so a stale schema cannot hide a change (and unchanged ones stay invisible).
