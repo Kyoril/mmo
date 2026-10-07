@@ -4,7 +4,7 @@
 
 #include <functional>
 
-#include "objects/game_unit_s.h"
+#include "game_server/objects/game_unit_s.h"
 
 namespace mmo
 {

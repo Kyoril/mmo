@@ -35,11 +35,7 @@ namespace mmo
 		{
 			for (TileIndex x = shapeArea.topLeft[0]; x <= shapeArea.bottomRight[0]; ++x)
 			{
-				auto& tile = m_finder.GetTile(TileIndex2D(x, y));
-				if (WatchTile(tile))
-				{
-					//return;
-				}
+				WatchTile(m_finder.GetTile(TileIndex2D(x, y)));
 			}
 		}
 
@@ -53,7 +49,7 @@ namespace mmo
 		return TileArea(topLeft, bottomRight);
 	}
 
-	bool TiledUnitFinder::TiledUnitWatcher::WatchTile(Tile& tile)
+	void TiledUnitFinder::TiledUnitWatcher::WatchTile(Tile& tile)
 	{
 		ASSERT(!m_connections.contains(&tile));
 
@@ -69,17 +65,12 @@ namespace mmo
 
 			if (GetShape().IsPointInside(Point(location.x, location.z)))
 			{
-				if (m_visibilityChanged(*unit, true))
-				{
-					return true;
-				}
+				m_visibilityChanged(*unit, true);
 			}
 		}
-
-		return false;
 	}
 
-	bool TiledUnitFinder::TiledUnitWatcher::UnwatchTile(Tile& tile)
+	void TiledUnitFinder::TiledUnitWatcher::UnwatchTile(Tile& tile)
 	{
 		ASSERT(m_connections.contains(&tile));
 
@@ -98,14 +89,9 @@ namespace mmo
 			const Vector3& location = unit->GetPosition();
 			if (GetShape().IsPointInside(Point(location.x, location.z)))
 			{
-				if (m_visibilityChanged(*unit, false))
-				{
-					return true;
-				}
+				m_visibilityChanged(*unit, false);
 			}
 		}
-
-		return false;
 	}
 
 	void TiledUnitFinder::TiledUnitWatcher::OnUnitMoved(GameUnitS& unit)
@@ -116,21 +102,19 @@ namespace mmo
 		m_visibilityChanged(unit, isInside);
 	}
 
-	bool TiledUnitFinder::TiledUnitWatcher::UpdateTile(Tile& tile)
+	void TiledUnitFinder::TiledUnitWatcher::UpdateTile(Tile& tile)
 	{
+		// Every unit of the tile is reported: the callback's return value does not end the
+		// scan, otherwise units listed after the first one (e.g. a player standing still next
+		// to a moving creature) would never be re-evaluated.
 		for (GameUnitS* const unit : tile.GetUnits().getElements())
 		{
 			const auto& location = unit->GetPosition();
 			const auto planarPos = Point(location.x, location.z);
 			const bool isInside = GetShape().IsPointInside(planarPos);
 
-			if (m_visibilityChanged(*unit, isInside))
-			{
-				return true;
-			}
+			m_visibilityChanged(*unit, isInside);
 		}
-
-		return false;
 	}
 
 	void TiledUnitFinder::TiledUnitWatcher::OnShapeUpdated()
@@ -149,17 +133,11 @@ namespace mmo
 
 				if (currentArea.IsInside(pos))
 				{
-					if (UpdateTile(tile))
-					{
-						//break;
-					}
+					UpdateTile(tile);
 				}
 				else
 				{
-					if (UnwatchTile(tile))
-					{
-						//break;
-					}
+					UnwatchTile(tile);
 				}
 			}
 		}
@@ -173,17 +151,11 @@ namespace mmo
 
 				if (previousArea.IsInside(pos))
 				{
-					if (UpdateTile(tile))
-					{
-						//break;
-					}
+					UpdateTile(tile);
 				}
 				else
 				{
-					if (WatchTile(tile))
-					{
-						//break;
-					}
+					WatchTile(tile);
 				}
 			}
 		}
