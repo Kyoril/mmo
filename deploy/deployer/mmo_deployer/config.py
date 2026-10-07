@@ -31,6 +31,7 @@ class Config:
 	github_repo: str
 	github_token: str
 	release_prefix: str
+	launcher_prefix: str
 	data_repo_url: str
 	update_compiler: str
 	compiler_threads: int
@@ -91,6 +92,7 @@ def load_config(env):
 			github_repo=env["GITHUB_REPO"],
 			github_token=env.get("GITHUB_TOKEN", ""),
 			release_prefix=env.get("RELEASE_PREFIX", "nightly-"),
+			launcher_prefix=env.get("LAUNCHER_RELEASE_PREFIX", "launcher-v"),
 			data_repo_url=env["DATA_REPO_URL"],
 			update_compiler=env.get("UPDATE_COMPILER", "/app/update_compiler"),
 			compiler_threads=int(env.get("COMPILER_THREADS", "2")),

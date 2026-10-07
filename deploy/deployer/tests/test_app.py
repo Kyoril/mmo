@@ -119,6 +119,24 @@ class AppTests(unittest.TestCase):
 		self.assertEqual(json.loads(news.read_text(encoding="utf-8"))["patches"][0]["title"], "Update 2026-10-07")
 		self.assertTrue(any("is live" in m for m in self.notifier.messages))
 
+	def test_promotion_publishes_versioned_player_notes(self):
+		news = Path(self.tmp.name) / "launcher" / "launcher.json"
+		news.parent.mkdir()
+		news.write_text(json.dumps({"version": 1, "patches": []}), encoding="utf-8")
+		notes = {"headline": "The Hollow Choir opens.", "sections": [{"title": "Dungeons", "bullets": ["New dungeon."]}]}
+		self.stager.manifests[NEW] = {"changes": ["feat: x"], "version": "0.3.0.3441", "patch_notes": notes}
+		self.app.tick()
+		self.assertEqual(self.state().staged_version, "0.3.0.3441")
+		self.clock.current = at(4, 46)
+		self.app.tick()
+		entry = json.loads(news.read_text(encoding="utf-8"))["patches"][0]
+		self.assertEqual(entry["title"], "Patch 0.3.0.3441")
+		self.assertEqual(entry["date"], "2026-10-07")
+		self.assertEqual(entry["summary"], "The Hollow Choir opens.")
+		self.assertEqual(entry["body"], "## Dungeons\n- New dungeon.")
+		self.assertIsNone(self.state().staged_version)
+		self.assertIsNone(self.state().staged_notes)
+
 	def test_maintenance_runs_once_per_day(self):
 		self.app.tick()
 		self.clock.current = at(4, 46)

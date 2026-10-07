@@ -42,9 +42,9 @@ class GitHubClient:
 				return
 		raise KeyError("release {} has no asset {}".format(release["tag_name"], name))
 
-	def fetch_manifest(self, release, scratch_dir):
-		path = os.path.join(scratch_dir, "release.json")
-		self.download_asset(release, "release.json", path)
+	def fetch_manifest(self, release, scratch_dir, name="release.json"):
+		path = os.path.join(scratch_dir, name)
+		self.download_asset(release, name, path)
 		with open(path, encoding="utf-8") as handle:
 			return json.load(handle)
 

@@ -16,6 +16,9 @@ class State:
 	staged: Optional[str] = None
 	staged_tag: Optional[str] = None
 	staged_changes: list = field(default_factory=list)
+	# Game version and player patch notes of the staged release (release.json); None for old releases.
+	staged_version: Optional[str] = None
+	staged_notes: Optional[dict] = None
 	bad: list = field(default_factory=list)
 	paused: bool = False
 	last_maintenance_date: Optional[str] = None

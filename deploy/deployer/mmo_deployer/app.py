@@ -155,6 +155,8 @@ class Deployer:
 		state.staged = commit
 		state.staged_tag = release["tag_name"]
 		state.staged_changes = list(manifest.get("changes") or [])
+		state.staged_version = manifest.get("version")
+		state.staged_notes = manifest.get("patch_notes")
 		record(state, self.clock.now(), "staged", commit=commit, tag=release["tag_name"])
 		# Releases that never go live (replaced while staged, or rolled back) would pile up otherwise.
 		try:
@@ -196,6 +198,8 @@ class Deployer:
 			state.staged = None
 			state.staged_tag = None
 			state.staged_changes = []
+			state.staged_version = None
+			state.staged_notes = None
 			if outcome == Outcome.ROLLED_BACK:
 				self.notifier.send("Release {} was rolled back; {} is live again. It will not be staged again (deployer unbad {} to retry).".format(
 					_short(sha), _short(state.live), sha))
@@ -209,16 +213,19 @@ class Deployer:
 		state.previous_live = state.live
 		state.live = state.staged
 		changes = state.staged_changes
+		version, notes = state.staged_version, state.staged_notes
 		state.staged = None
 		state.staged_tag = None
 		state.staged_changes = []
+		state.staged_version = None
+		state.staged_notes = None
 		# Durable before any best-effort cleanup, so a crash cannot forget the promotion.
 		save_state(self.state_path, state)
 		news = self.patchdir.root / "launcher" / "launcher.json"
 		steps = (
 			lambda: self.patchdir.prune(self.cfg.keep_releases, {sha for sha in (state.live, state.previous_live) if sha}),
 			lambda: prune_backups(Path(self.cfg.state_dir) / "backups", self.cfg.keep_backups),
-			lambda: add_patch_note(news, now.strftime("%Y-%m-%d"), changes),
+			lambda: add_patch_note(news, now.strftime("%Y-%m-%d"), changes, version, notes),
 		)
 		for index, step in enumerate(steps):
 			try:
