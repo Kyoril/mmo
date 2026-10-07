@@ -14,7 +14,7 @@ FIX_OUTCOMES = ("fixed", "no_root_cause", "no_project_basis", "not_reproducible"
 CONFIDENCES = ("high", "medium", "low")
 
 _SUITE = re.compile(r"[a-z0-9_]+_tests")
-_SCENARIO = re.compile(r"[A-Za-z0-9_\-]+")
+_SCENARIO = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_\-]*")
 # A Catch2 test spec, passed as one argv entry: it must never look like an option.
 _FILTER = re.compile(r"[^\-\s][^\r\n]*")
 
@@ -70,10 +70,17 @@ def parse_fix(fix):
 		raise VerdictError("regression_test must be an object")
 	kind = test.get("kind")
 	if kind == "unit":
-		if not _SUITE.fullmatch(str(test.get("suite", ""))):
+		suite = test.get("suite")
+		if not isinstance(suite, str):
+			raise VerdictError("unit test suite must be a string")
+		if not _SUITE.fullmatch(suite):
 			raise VerdictError("unit test suite must look like <library>_tests")
-		if test.get("filter") is not None and not _FILTER.fullmatch(str(test["filter"])):
-			raise VerdictError("invalid unit test filter")
+		filter_val = test.get("filter")
+		if filter_val is not None:
+			if not isinstance(filter_val, str):
+				raise VerdictError("unit test filter must be a string")
+			if not _FILTER.fullmatch(filter_val):
+				raise VerdictError("invalid unit test filter")
 	elif kind == "e2e":
 		if not _SCENARIO.fullmatch(str(test.get("scenario", ""))):
 			raise VerdictError("invalid e2e scenario name")
@@ -109,6 +116,10 @@ def review_blockers(review):
 		reasons.append("review: the diff reduces a security, permission or integrity property")
 	if review.get("out_of_scope_changes") is not False:
 		reasons.append("review: the diff changes behaviour beyond the stated bug")
-	for issue in review.get("blocking_issues") or []:
-		reasons.append("review: " + str(issue)[:300])
+	blocking_issues = review.get("blocking_issues")
+	if blocking_issues is not None and not isinstance(blocking_issues, list):
+		reasons.append("review: malformed blocking_issues")
+	else:
+		for issue in blocking_issues or []:
+			reasons.append("review: " + str(issue)[:300])
 	return reasons

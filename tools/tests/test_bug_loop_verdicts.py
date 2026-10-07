@@ -95,6 +95,18 @@ class FixTests(unittest.TestCase):
 			verdicts.parse_fix(fix(regression_test={"kind": "e2e", "scenario": "a b"}))
 		self.assertTrue(verdicts.parse_fix(fix(regression_test={"kind": "e2e", "scenario": "quest_kill_credit"})))
 
+	def test_scenario_cannot_start_with_dash(self):
+		with self.assertRaises(verdicts.VerdictError):
+			verdicts.parse_fix(fix(regression_test={"kind": "e2e", "scenario": "--all"}))
+
+	def test_filter_must_be_a_string(self):
+		with self.assertRaises(verdicts.VerdictError):
+			verdicts.parse_fix(fix(regression_test={"kind": "unit", "suite": "game_server_tests", "filter": 5}))
+
+	def test_suite_must_be_a_string(self):
+		with self.assertRaises(verdicts.VerdictError):
+			verdicts.parse_fix(fix(regression_test={"kind": "unit", "suite": 123}))
+
 	def test_no_test_only_for_data_fixes(self):
 		with self.assertRaises(verdicts.VerdictError):
 			verdicts.parse_fix(fix(regression_test={"kind": "none"}))
@@ -132,6 +144,10 @@ class ReviewTests(unittest.TestCase):
 		self.assertTrue(verdicts.review_blockers(None))
 		self.assertTrue(verdicts.review_blockers({"error": "timeout"}))
 		self.assertTrue(verdicts.review_blockers({}))
+
+	def test_blocking_issues_must_be_a_list(self):
+		review = dict(self.GOOD, blocking_issues="oops")
+		self.assertEqual(verdicts.review_blockers(review), ["review: malformed blocking_issues"])
 
 
 class SchemaTests(unittest.TestCase):
