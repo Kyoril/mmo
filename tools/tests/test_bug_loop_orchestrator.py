@@ -34,7 +34,8 @@ GOOD_FIX = {"outcome": "fixed", "root_cause": "Kill credit ignored", "expected_s
 	"confidence": "high", "data_only": False, "regression_test": {"kind": "unit", "suite": "game_server_tests", "filter": "[quest]"},
 	"notes": ""}
 GOOD_REVIEW = {"fixes_symptom": True, "expected_source_supported": True, "reduces_security": False,
-	"out_of_scope_changes": False, "blocking_issues": [], "summary": "ok"}
+	"out_of_scope_changes": False, "blocking_issues": [], "summary": "ok",
+	"design_question": "", "guidance_followed": True}
 FIX_PATH = "src/shared/game_server/ai/creature_ai_idle_state.cpp"
 TEST_PATH = "src/tests/game_server_tests/test_creature_ai_idle_state.cpp"
 BENIGN_CHANGES = [guard.FileChange(FIX_PATH, 1, 1, False), guard.FileChange(TEST_PATH, 2, 0, False)]

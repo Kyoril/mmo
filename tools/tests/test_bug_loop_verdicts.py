@@ -126,7 +126,17 @@ class FixTests(unittest.TestCase):
 
 class ReviewTests(unittest.TestCase):
 	GOOD = {"fixes_symptom": True, "expected_source_supported": True, "reduces_security": False,
-		"out_of_scope_changes": False, "blocking_issues": [], "summary": "ok"}
+		"out_of_scope_changes": False, "blocking_issues": [], "summary": "ok",
+		"design_question": "", "guidance_followed": True}
+
+	def test_design_question_blocks(self):
+		review = dict(self.GOOD, design_question="Should assist chain beyond one level?")
+		self.assertEqual(verdicts.review_blockers(review), ["review: design question: Should assist chain beyond one level?"])
+		self.assertEqual(verdicts.review_blockers(dict(self.GOOD, design_question="   ")), [])
+
+	def test_unfollowed_guidance_blocks(self):
+		self.assertEqual(verdicts.review_blockers(dict(self.GOOD, guidance_followed=False)),
+			["review: the maintainer guidance was not followed"])
 
 	def test_clean_review_has_no_blockers(self):
 		self.assertEqual(verdicts.review_blockers(dict(self.GOOD)), [])
@@ -163,11 +173,28 @@ class SchemaTests(unittest.TestCase):
 
 	def test_review_schema_covers_review_blockers(self):
 		schema = self.load("review.json")
-		for key in ("fixes_symptom", "expected_source_supported", "reduces_security", "out_of_scope_changes", "blocking_issues", "summary"):
+		for key in ("fixes_symptom", "expected_source_supported", "reduces_security", "out_of_scope_changes", "blocking_issues", "summary", "design_question", "guidance_followed"):
 			self.assertIn(key, schema["required"])
 
 
 class InputTests(unittest.TestCase):
+	def test_guidance_and_previous_attempt_blocks(self):
+		text = inputs.build_fix_input(BUG, verdict(), "bugfix/x", "F.json", nonce="n",
+			guidance="Limit the chain to one level.", previous={"park_reasons": ["review: chains"]})
+		self.assertIn("<<<BEGIN MAINTAINER GUIDANCE [maintainer decision via the web UI; trusted and binding] n>>>", text)
+		self.assertIn("Limit the chain to one level.", text)
+		self.assertIn("<<<BEGIN PREVIOUS ATTEMPT", text)
+		plain = inputs.build_fix_input(BUG, verdict(), "bugfix/x", "F.json", nonce="n")
+		self.assertNotIn("MAINTAINER GUIDANCE", plain)
+		self.assertNotIn("PREVIOUS ATTEMPT", plain)
+
+	def test_review_input_always_states_the_guidance(self):
+		with_guidance = inputs.build_review_input(verdict(), fix(), "d", [], nonce="n", guidance="Check line of sight.")
+		self.assertIn("Check line of sight.", with_guidance)
+		without = inputs.build_review_input(verdict(), fix(), "d", [], nonce="n")
+		self.assertIn("<<<BEGIN MAINTAINER GUIDANCE [none] n>>>", without)
+		self.assertNotIn("disable admin checks", with_guidance)
+
 	def test_triage_input_fences_untrusted_blocks_with_nonce(self):
 		text = inputs.build_triage_input(BUG, [{"_id": "aaa", "status": "triaged", "triage": {"summary": "same thing"}}], nonce="n0nce")
 		self.assertIn("carry the nonce n0nce", text)
