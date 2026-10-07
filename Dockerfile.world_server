@@ -17,7 +17,8 @@ FROM ubuntu:latest
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y libmariadb-dev-compat libssl-dev uuid-dev
+# ca-certificates: the bug report upload verifies TLS against the system trust store.
+RUN apt-get update && apt-get install -y ca-certificates libmariadb-dev-compat libssl-dev uuid-dev
 
 RUN mkdir -p /app/config
 COPY --from=builder /app/bin/world_server /app/world_server
