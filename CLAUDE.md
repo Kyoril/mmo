@@ -34,8 +34,9 @@ The following systems are fully implemented and should not be suggested as futur
     It runs the gate itself when needed. `/gate` runs the same check on demand;
     `/gate full` adds E2E and a code review for risky changes.
   - **Nightly (full):** the "MMO Nightly Gate" task runs the full gate including E2E on
-    `develop` in the dedicated worktree `H:/mmo-nightly`, which no session may use or
-    edit. It skips when develop has not moved since the last green night. The scheduled
+    `origin/develop` (after `git fetch origin`) in the dedicated worktree `H:/mmo-nightly`,
+    which no session may use or edit. It skips when origin/develop has not moved since the
+    last green night. The scheduled
     task runs the copy of `nightly_gate.ps1` its previous run checked out, so gate-script
     changes take effect one night after reaching develop.
   - **Release (full):** before publishing a build to the live client distribution or
