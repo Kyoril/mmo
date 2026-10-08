@@ -29,46 +29,55 @@ release and launcher entry are titled `Patch <version>`.
 
 ## Player patch notes
 
-The nightly `publish` job runs `tools/release/patch_notes.py`. It builds a condensed
-context, at most about 18,000 characters, with the most important parts first:
+The nightly `publish` job runs `tools/release/patch_notes.py`. It builds a context of at most
+60,000 characters, with the most important parts first:
 
 1. New and renamed quests, items, spells, units and zones, decoded from the `data/editor`
    protobuf data at both submodule commits (this needs `grpcio-tools`).
 2. Commit messages from the `data/editor` and `data/client` repositories.
 3. Changed files per area.
 4. Player-facing commit subjects and bodies.
+5. Internal commit subjects only, for a short "Behind the Scenes" section. These are `ci`,
+   `test`, `docs`, `chore`, `build`, `refactor` and `style` commits, scopes such as `gate`,
+   `deployer`, `e2e` and `bug-loop`, and commits that only touch `tools/`, `deploy/`,
+   `.github/`, `docs/` or tests.
 
-Internal commits are dropped. These are `ci`, `test`, `docs`, `chore`, `build`, `refactor` and
-`style` commits, scopes such as `gate`, `deployer` and `e2e`, and commits that only touch
-`tools/`, `deploy/`, `.github/`, `docs/` or tests.
+Claude writes the notes: `claude -p` (Claude Code, installed by the job with npm), no tools,
+our instructions as the system prompt, run in an empty directory so no `CLAUDE.md` leaks in.
+The credential is the repository secret `CLAUDE_CODE_OAUTH_TOKEN`, created once with
+`claude setup-token` from the maintainer's Claude subscription. There is no paid API key. The
+default model is `opus`; set `PATCH_NOTES_MODEL` to change it. A nightly makes one call.
 
-The script sends this context to `openai/gpt-4o-mini` on GitHub Models. The workflow's
-`GITHUB_TOKEN` with `models: read` is the only credential; there is no paid key. To change
-the model, set the `PATCH_NOTES_MODEL` environment variable. The free tier allows about 150
-requests per day, and a nightly makes one.
-
-The answer must be JSON with a headline and sections from a fixed list ("General",
-"Classes: Mage", "Quests", "Bug Fixes", and so on). Anything else, and any HTTP error, falls
-back to notes built from the cleaned commit subjects. A release never fails because of its
+GitHub Models, the earlier free generator, was shut down on 2026-07-30. Its endpoint answers
+every request with a plain `OK`, which is why the first versioned nightlies only had fallback
 notes.
+
+The voice is the hand-written "Night Watch" entry of 2026-10-07, kept in the script as
+`STYLE_SAMPLE`: in-world, wry, addressed to "Adventurers", one dry aside on every second or
+third bullet at most, nothing technical, nothing invented. The answer is JSON with a `title`
+(the update's theme, such as "The Night Watch"), a `headline`, an `intro` of one or two short
+paragraphs, and `sections`, ending with "Bug Fixes" and "Behind the Scenes". Anything
+unusable, a missing token, or any process error falls back to notes built from the cleaned
+commit subjects. A release never fails because of its notes.
 
 The notes are stored in `release.json` as `patch_notes`, together with `version`, and also
 become the GitHub release body. At promotion the deployer writes them to `launcher.json`:
 
 | Field | Value |
 |---|---|
-| `title` | `Patch <version>` |
+| `title` | `Patch <version>: <title>` (just `Patch <version>` for fallback notes) |
 | `date` | Promotion date |
 | `summary` | The headline |
-| `body` | The sections |
+| `body` | The intro, then the sections |
 
-Releases from before this change carry no notes and keep the old commit list.
+Releases from before this change carry no notes and keep the old commit list. The deployer on
+the root server must run this version to show titles and intros.
 
-Try it locally without a token. This writes the fallback notes, and the data names need
-`pip install grpcio-tools`:
+Try it locally with your own Claude Code login. `--context-out` shows what the model saw,
+`--no-model` writes the fallback notes, and the data names need `pip install grpcio-tools`:
 
 ```bash
-python tools/release/patch_notes.py --previous <old sha> --commit HEAD --version 0.3.0.1 --out notes.json --markdown notes.md
+python tools/release/patch_notes.py --previous <old sha> --commit HEAD --version 0.3.0.1 --context-out context.txt --out notes.json --markdown notes.md
 ```
 
 ## Launcher releases

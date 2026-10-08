@@ -41,7 +41,8 @@ def describe_change(subject):
 
 
 def render_notes(notes):
-	"""Body text for patch notes from tools/release/patch_notes.py ({headline, sections})."""
+	"""Body text for patch notes from tools/release/patch_notes.py ({intro, sections}); empty
+	without a usable section."""
 	lines = []
 	for section in notes.get("sections") or []:
 		bullets = [str(bullet) for bullet in section.get("bullets") or []]
@@ -49,7 +50,10 @@ def render_notes(notes):
 			lines.append("## " + str(section["title"]))
 			lines.extend("- " + bullet for bullet in bullets[:MAX_LINES])
 			lines.append("")
-	return "\n".join(lines).strip()
+	if not lines:
+		return ""
+	intro = str(notes.get("intro") or "").strip()
+	return "\n".join(([intro, ""] if intro else []) + lines).strip()
 
 
 def add_patch_note(path, date_text, changes, version=None, notes=None):
@@ -71,6 +75,7 @@ def add_patch_note(path, date_text, changes, version=None, notes=None):
 		return False
 	lines = [describe_change(change) for change in changes][:MAX_LINES]
 	body = render_notes(notes) if isinstance(notes, dict) else ""
+	theme = str(notes.get("title") or "").strip() if body else ""
 	if body:
 		summary = str(notes.get("headline") or "Fixes and improvements")
 	elif not lines:
@@ -79,8 +84,11 @@ def add_patch_note(path, date_text, changes, version=None, notes=None):
 	else:
 		summary = lines[0] if len(lines) == 1 else "{} fixes and improvements".format(len(lines))
 		body = "## Changes\n" + "\n".join("- " + line for line in lines)
+	title = "Patch " + version if version else "Update " + date_text
+	if theme:
+		title += ": " + theme
 	entry = {
-		"title": _clip("Patch " + version if version else "Update " + date_text, TITLE_LIMIT),
+		"title": _clip(title, TITLE_LIMIT),
 		"date": _clip(date_text, DATE_LIMIT),
 		"summary": _clip(summary, SUMMARY_LIMIT),
 		"body": _clip(body, BODY_LIMIT),

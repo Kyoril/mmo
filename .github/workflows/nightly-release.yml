@@ -200,8 +200,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      # GitHub Models (free tier) writes the patch notes with this job's GITHUB_TOKEN; no paid key.
-      models: read
     env:
       COMMIT: ${{ needs.check.outputs.commit }}
       PREVIOUS: ${{ needs.check.outputs.previous }}
@@ -223,13 +221,16 @@ jobs:
           name: gate-summary
           path: gate
 
-      # Never fails the release: without the model, or without the data names, the notes fall
-      # back to the commit subjects (tools/release/patch_notes.py).
+      # Claude Code writes the notes with the maintainer's subscription token (`claude setup-token`,
+      # repository secret CLAUDE_CODE_OAUTH_TOKEN); no paid API key. Never fails the release:
+      # without Claude, or without the data names, the notes fall back to the commit subjects
+      # (tools/release/patch_notes.py).
       - name: Write patch notes
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           python3 -m pip install --quiet grpcio-tools || echo "grpcio-tools unavailable; notes without data names"
+          npm install --global --silent @anthropic-ai/claude-code || echo "claude CLI unavailable; fallback notes"
           python3 tools/release/patch_notes.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
             --version "$VERSION" --out dist/patch_notes.json --markdown notes.md
 
