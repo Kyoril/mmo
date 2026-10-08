@@ -126,5 +126,20 @@ class MessageTests(unittest.TestCase):
 		self.assertIn("bugfix/aaaaaaaa", text)
 
 
+class StatusMessageTests(unittest.TestCase):
+	def test_label_link_details_and_summary(self):
+		notifier = notify.Notifier("", "https://bugs.example")
+		text = notify.status_message(notifier, "a" * 24, "duplicate", "Boar\nkills", {"of": "b" * 24, "account": 42})
+		self.assertIn("**Duplicate**", text)
+		self.assertIn("https://bugs.example/bugs/" + "a" * 24, text)
+		self.assertIn("of https://bugs.example/bugs/" + "b" * 24, text)
+		self.assertIn("> Boar kills", text)
+		self.assertNotIn("42", text)
+
+	def test_unknown_outcome_uses_its_name(self):
+		text = notify.status_message(notify.Notifier(""), "a" * 24, "something-new", "", {})
+		self.assertIn("**something-new**", text)
+
+
 if __name__ == "__main__":
 	unittest.main()

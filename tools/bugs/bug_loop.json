@@ -11,5 +11,6 @@
 	"model": "",
 	"fix_timeout_seconds": 5400,
 	"fix_max_usd": 20.0,
-	"step_timeout_seconds": 3600
+	"step_timeout_seconds": 3600,
+	"notify_status_changes": true
 }
