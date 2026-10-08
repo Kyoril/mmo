@@ -173,6 +173,9 @@ namespace mmo
 		bool ValidateFullscreenResolution(uint16 width, uint16 height) const override;
 
 		std::vector<std::pair<uint16, uint16>> GetSupportedResolutions() const override;
+		std::vector<DisplayMonitor> GetDisplayMonitors() const override;
+		std::vector<std::pair<uint16, uint16>> GetMonitorResolutions(uint32 monitorIndex) const override;
+		GpuInfo GetGpuInfo() const override;
 
 		std::string GetAdapterDescription() const override;
 

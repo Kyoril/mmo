@@ -88,6 +88,12 @@ namespace mmo
 
 	static scoped_connection s_anisotropyChanged;
 
+	/// Connections applying gxWindow, gxMonitor and gxResolution to the game window.
+	static scoped_connection_container s_displayModeChanged;
+
+	/// True if no config file provided a resolution, i.e. the game runs for the first time.
+	static bool s_firstLaunch = false;
+
 	namespace
 	{
 		ConsoleVar* s_dataPathCVar = nullptr;
@@ -138,6 +144,7 @@ namespace mmo
 	{
 		ConsoleVar* s_gxResolutionCVar = nullptr;
 		ConsoleVar* s_gxWindowedCVar = nullptr;
+		ConsoleVar* s_gxMonitorCVar = nullptr;
 		ConsoleVar* s_gxVSyncCVar = nullptr;
 		ConsoleVar* s_gxApiCVar = nullptr;
 		ConsoleVar* s_gxPerfCVar = nullptr;
@@ -156,8 +163,9 @@ namespace mmo
 		const std::vector<GxCVarHelper> s_gxCVars = 
 		{
 			{"gxApi",			"Which graphics api should be used.",					"",			&s_gxApiCVar },
-			{"gxResolution",	"The resolution of the primary output window.",			"",			&s_gxResolutionCVar },
-			{"gxWindow",		"Whether the application will run in windowed mode.",	"0",		&s_gxWindowedCVar },
+			{"gxResolution",	"Client size of the game window in windowed mode (WIDTHxHEIGHT). A fullscreen window always uses the monitor's resolution.",	"",	&s_gxResolutionCVar },
+			{"gxWindow",		"Display mode: 1 = window, 0 = fullscreen (a borderless window covering the monitor). Applies immediately.",	"0",	&s_gxWindowedCVar },
+			{"gxMonitor",		"Index of the monitor to show the game on: 0 = primary monitor, the others from left to right. Applies immediately.",	"0",	&s_gxMonitorCVar },
 			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar },
 			{"gxAnisotropy",	"Maximum anisotropic texture filtering (1, 2, 4, 8 or 16). Lower values are faster, especially on integrated GPUs.",	"8",	&s_gxAnisotropyCVar },
 
@@ -170,6 +178,9 @@ namespace mmo
 			// TODO: Add more graphics cvars here that should be registered and unregistered automatically
 			// as well as being serialized when saving the graphics settings of the game.
 		};
+
+		/// Moves the game window to match gxWindow, gxMonitor and gxResolution. Defined below.
+		void ApplyDisplayMode();
 
 		/// Triggered when a gxcvar is changed to invalidate the current graphics settings.
 		static void GxCVarChanged(ConsoleVar& var, const std::string& oldValue)
@@ -212,6 +223,13 @@ namespace mmo
 					GraphicsDevice::Get().SetMaxAnisotropy(static_cast<uint32>(std::max(1, var.GetIntValue())));
 				}
 			});
+
+			// The game never takes the display exclusively, so window mode, monitor and window size
+			// are all just window placement and apply without recreating the device.
+			const auto displayModeChanged = [](ConsoleVar&, const std::string&) { ApplyDisplayMode(); };
+			s_displayModeChanged += s_gxWindowedCVar->Changed.connect(displayModeChanged);
+			s_displayModeChanged += s_gxMonitorCVar->Changed.connect(displayModeChanged);
+			s_displayModeChanged += s_gxResolutionCVar->Changed.connect(displayModeChanged);
 		}
 
 		/// Unregisters the automatically managed gx cvars from the table above.
@@ -220,6 +238,7 @@ namespace mmo
 			s_perfChanged.disconnect();
 			s_vsyncChanged.disconnect();
 			s_anisotropyChanged.disconnect();
+			s_displayModeChanged.disconnect();
 
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
 				ConsoleVarMgr::UnregisterConsoleVar(x.name);
@@ -263,6 +282,29 @@ namespace mmo
 			out_width = static_cast<uint16>(std::atoi(resolutionString.substr(0, delimiter).c_str()));
 			out_height = static_cast<uint16>(std::atoi(resolutionString.substr(delimiter + 1).c_str()));
 		}
+
+		void ApplyDisplayMode()
+		{
+			if (!GraphicsDevice::HasInstance())
+			{
+				return;
+			}
+
+			const RenderWindowPtr window = GraphicsDevice::Get().GetAutoCreatedWindow();
+			if (!window)
+			{
+				return;
+			}
+
+			uint16 width = 1280, height = 720;
+			ExtractResolution(s_gxResolutionCVar->GetStringValue(), width, height);
+			window->SetDisplayMode(!s_gxWindowedCVar->GetBoolValue(), static_cast<uint32>(std::max(0, s_gxMonitorCVar->GetIntValue())), width, height);
+		}
+	}
+
+	bool Console::IsFirstLaunch()
+	{
+		return s_firstLaunch;
 	}
 
 	
@@ -371,12 +413,14 @@ namespace mmo
 			const auto [w, h] = Platform::GetPrimaryDisplayResolution();
 			s_gxResolutionCVar->Set(std::to_string(w) + "x" + std::to_string(h));
 			s_gxWindowedCVar->Set("0");
+			s_firstLaunch = true;
 			ILOG("First launch: defaulting to native display resolution " << w << "x" << h << " fullscreen");
 		}
 
 		GraphicsDeviceDesc desc;
 		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
 		desc.windowed = s_gxWindowedCVar->GetBoolValue();
+		desc.monitor = static_cast<uint32>(std::max(0, s_gxMonitorCVar->GetIntValue()));
 		desc.vsync = s_gxVSyncCVar->GetBoolValue();
 
 		switch (api)

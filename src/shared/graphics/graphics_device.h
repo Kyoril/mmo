@@ -18,6 +18,7 @@
 #include "shared/graphics/occlusion_query.h"
 #include "shared/graphics/volume_texture.h"
 #include "shared/graphics/sampler_state.h"
+#include "shared/graphics/display_settings.h"
 
 #include <unordered_map>
 #include <string>
@@ -61,10 +62,30 @@ namespace mmo
 	{
 		/// If a custom window handle should be used.
 		void* customWindowHandle = nullptr;
+		/// Client size of the window in windowed mode. A fullscreen window always covers its monitor.
 		uint16 width = 1280;
 		uint16 height = 720;
 		bool vsync = true;
+		/// False shows the game in a borderless window covering the whole monitor.
 		bool windowed = true;
+		/// Index of the monitor to show the window on, see GraphicsDevice::GetDisplayMonitors.
+		uint32 monitor = 0;
+	};
+
+
+	/// Describes a monitor attached to the desktop.
+	struct DisplayMonitor final
+	{
+		/// Friendly name of the monitor, e.g. its model name. May be empty.
+		std::string name;
+		/// Position of the monitor on the virtual desktop, in pixels.
+		int32 x = 0;
+		int32 y = 0;
+		/// Current desktop resolution of the monitor, in pixels.
+		uint16 width = 0;
+		uint16 height = 0;
+		/// True for the primary monitor, which is always listed first.
+		bool primary = false;
 	};
 
 
@@ -463,9 +484,25 @@ namespace mmo
 		/// @return A list of supported {width, height} resolutions. At minimum the native one.
 		virtual std::vector<std::pair<uint16, uint16>> GetSupportedResolutions() const;
 
+		/// @brief Lists the monitors attached to the desktop, the primary one first, the others from
+		///        left to right. The index into this list is what GraphicsDeviceDesc::monitor and
+		///        RenderWindow::SetDisplayMode refer to.
+		/// @remark The default implementation reports a single primary monitor.
+		virtual std::vector<DisplayMonitor> GetDisplayMonitors() const;
+
+		/// @brief Lists the resolutions a window on the given monitor can use, sorted ascending
+		///        without duplicates, none of them larger than the monitor.
+		/// @param monitorIndex Index into GetDisplayMonitors. Out of range means the primary monitor.
+		/// @remark The default implementation returns GetSupportedResolutions.
+		virtual std::vector<std::pair<uint16, uint16>> GetMonitorResolutions(uint32 monitorIndex) const { return GetSupportedResolutions(); }
+
 		/// Gets a human readable description of the graphics adapter (GPU name), used for
 		/// diagnostics such as bug reports. Empty if the backend cannot tell.
 		virtual std::string GetAdapterDescription() const { return {}; }
+
+		/// @brief Describes the graphics adapter, e.g. to recommend graphics settings for it.
+		/// @remark Backends that cannot tell leave the vendor unknown.
+		virtual GpuInfo GetGpuInfo() const { return {}; }
 
 		/// @brief Sets the highest anisotropy used for anisotropically filtered textures (1 to 16).
 		/// @remark 1 turns anisotropic filtering into plain trilinear filtering. Anisotropic taps are

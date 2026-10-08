@@ -145,6 +145,30 @@ namespace
 
 		mmo::InstallCrashHandler(std::move(config));
 	}
+
+	/// Opts the process into PerMonitorV2 DPI awareness, so the game sees every monitor's real pixels.
+	///
+	/// Without it, Windows reports scaled-down desktop sizes on monitors with display scaling (a 4K
+	/// screen at 150% looks like 2560x1440) and stretches the borderless fullscreen window back up,
+	/// which blurs the whole frame. Resolved dynamically like the launcher does, since the API only
+	/// exists from Windows 10 1703 on.
+	void EnablePerMonitorV2Dpi()
+	{
+		using SetProcessDpiAwarenessContextFn = BOOL(WINAPI*)(DPI_AWARENESS_CONTEXT);
+
+		const HMODULE user32 = GetModuleHandleW(L"user32.dll");
+		if (!user32)
+		{
+			return;
+		}
+
+		const auto setContext = reinterpret_cast<SetProcessDpiAwarenessContextFn>(
+			reinterpret_cast<void*>(GetProcAddress(user32, "SetProcessDpiAwarenessContext")));
+		if (setContext)
+		{
+			setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+		}
+	}
 }
 
 
@@ -153,6 +177,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int)
 {
 	// InstallCrashHandler itself stands down when a debugger is attached in debug builds.
 	InstallClientCrashHandler();
+
+	// Before any window exists: the awareness of a window is fixed when it is created.
+	EnablePerMonitorV2Dpi();
 
 	// Setup log to print each log entry to the debug output on windows
 #ifdef _DEBUG

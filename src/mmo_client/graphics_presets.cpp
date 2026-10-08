@@ -2,9 +2,11 @@
 
 #include "graphics_presets.h"
 
+#include "console/console.h"
 #include "console/console_var.h"
 
 #include "base/signal.h"
+#include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
 #include <algorithm>
@@ -130,6 +132,14 @@ namespace mmo
 		{
 			ApplyPreset(ParsePreset(var.GetStringValue()));
 		});
+
+		// Nothing has been saved yet, so start with what the hardware can handle instead of the defaults.
+		if (Console::IsFirstLaunch())
+		{
+			const int preset = GetRecommendedPreset();
+			ILOG("First launch: using the recommended graphics quality preset " << preset);
+			s_qualityVar->Set(std::to_string(preset));
+		}
 	}
 
 	void GraphicsPresets::Destroy()
@@ -168,5 +178,28 @@ namespace mmo
 				ConsoleVarMgr::RegisterConsoleVar(name, "", value);
 			}
 		}
+	}
+
+	int GraphicsPresets::GetRecommendedPreset()
+	{
+		if (!GraphicsDevice::HasInstance())
+		{
+			return graphics_preset::Medium;
+		}
+
+		const GraphicsDevice& device = GraphicsDevice::Get();
+
+		// Judge by the monitor the game is shown on: the render cost follows its pixel count.
+		const std::vector<DisplayMonitor> monitors = device.GetDisplayMonitors();
+		const ConsoleVar* monitorVar = ConsoleVarMgr::FindConsoleVar("gxMonitor");
+		size_t monitorIndex = monitorVar ? static_cast<size_t>(std::max(0, monitorVar->GetIntValue())) : 0;
+		if (monitorIndex >= monitors.size())
+		{
+			monitorIndex = 0;
+		}
+
+		const uint32 width = monitors.empty() ? 1920 : monitors[monitorIndex].width;
+		const uint32 height = monitors.empty() ? 1080 : monitors[monitorIndex].height;
+		return RecommendGraphicsPreset(device.GetGpuInfo(), width, height);
 	}
 }

@@ -41,6 +41,7 @@
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "frame_ui/frame_mgr.h"
+#include "frame_pacing.h"
 #include "graphics_presets.h"
 #include "perf_capture.h"
 #include "startup_error.h"
@@ -56,6 +57,7 @@
 #endif
 
 #include "audio_settings.h"
+#include "graphics/graphics_device.h"
 #include "game_client/game_unit_c.h"
 #include "game_client/sound_entry_player.h"
 #include "systems/cast_error_voice.h"
@@ -153,6 +155,7 @@ namespace mmo
 
 		PerfCapture::Initialize();
 		GraphicsPresets::Initialize();
+		FramePacing::Initialize();
 
 		return true;
 	}
@@ -180,6 +183,15 @@ namespace mmo
 				}
 
 				localContext.timerService.poll_one();
+
+				// Lets "Sound in Background" mute the game while another window has the focus.
+				if (localContext.audioSettings && GraphicsDevice::HasInstance())
+				{
+					if (const RenderWindowPtr window = GraphicsDevice::Get().GetAutoCreatedWindow())
+					{
+						localContext.audioSettings->SetWindowFocused(window->HasFocus());
+					}
+				}
 			});
 
 		if (!context.runtime->IsInitialized())
@@ -343,6 +355,7 @@ namespace mmo
 		}
 
 		// All of these are no-ops when the stage that would have set them up never ran.
+		FramePacing::Destroy();
 		GraphicsPresets::Destroy();
 		PerfCapture::Destroy();
 		EventLoop::Destroy();
@@ -428,6 +441,7 @@ namespace mmo
 	/// @copydoc ClientApplication::ShutdownCoreServices
 	void ClientApplication::ShutdownCoreServices(ClientContext& context)
 	{
+		FramePacing::Destroy();
 		GraphicsPresets::Destroy();
 		PerfCapture::Destroy();
 		Console::Destroy();

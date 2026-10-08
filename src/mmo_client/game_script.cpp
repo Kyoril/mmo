@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
 #include "base/localization.h"
@@ -25,6 +25,7 @@
 #include "client_context.h"
 #include "cursor.h"
 #include "event_loop.h"
+#include "graphics_presets.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/spell_text_formatter.h"
 #include "loading_screen.h"
@@ -1062,13 +1063,14 @@ namespace mmo
 					   luabind::def("GetCVar", &Script_GetConsoleVar),
 					   luabind::def("SetCVar", &Script_SetConsoleVar),
 
-					   // Returns an array of supported fullscreen screen resolutions, each entry
-					   // being a table with { width, height, label = "WxH" }, sorted ascending.
-					   luabind::def<std::function<luabind::object()>>("GetScreenResolutions", [this]() -> luabind::object
+					   // Returns the window resolutions available on a monitor (0-based index as in
+					   // GetDisplayMonitors), each entry being a table with { width, height, label = "WxH" },
+					   // sorted ascending.
+					   luabind::def<std::function<luabind::object(int)>>("GetScreenResolutions", [this](const int monitorIndex) -> luabind::object
 					   {
 						   luabind::object result = luabind::newtable(m_luaState.get());
 
-						   const auto resolutions = GraphicsDevice::Get().GetSupportedResolutions();
+						   const auto resolutions = GraphicsDevice::Get().GetMonitorResolutions(static_cast<uint32>(std::max(0, monitorIndex)));
 						   int i = 1;
 						   for (const auto& res : resolutions)
 						   {
@@ -1077,6 +1079,54 @@ namespace mmo
 							   entry["height"] = static_cast<int>(res.second);
 							   entry["label"] = std::to_string(res.first) + "x" + std::to_string(res.second);
 							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
+
+					   // Returns the desktop's monitors, the primary one first; the position in the array minus
+					   // one is the value of the gxMonitor cvar. Each entry is a table with
+					   // { name, width, height, primary }; name may be empty.
+					   luabind::def<std::function<luabind::object()>>("GetDisplayMonitors", [this]() -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+
+						   int i = 1;
+						   for (const DisplayMonitor& monitor : GraphicsDevice::Get().GetDisplayMonitors())
+						   {
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["name"] = monitor.name;
+							   entry["width"] = static_cast<int>(monitor.width);
+							   entry["height"] = static_cast<int>(monitor.height);
+							   entry["primary"] = monitor.primary;
+							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
+
+					   // Describes the graphics hardware for the options screen: { gpu, videoMemoryMB,
+					   // integrated, recommendedQuality }, the latter being a gxQuality preset index.
+					   luabind::def<std::function<luabind::object()>>("GetGraphicsHardwareInfo", [this]() -> luabind::object
+					   {
+						   const GpuInfo gpu = GraphicsDevice::Get().GetGpuInfo();
+
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   result["gpu"] = gpu.name;
+						   result["videoMemoryMB"] = static_cast<int>(gpu.dedicatedVideoMemory / (1024 * 1024));
+						   result["integrated"] = gpu.integrated;
+						   result["recommendedQuality"] = GraphicsPresets::GetRecommendedPreset();
+						   return result;
+					   }),
+
+					   // Returns the settings of a gxQuality preset (0 = Low ... 3 = Ultra) as a table
+					   // mapping cvar names to their values.
+					   luabind::def<std::function<luabind::object(int)>>("GetGraphicsPresetValues", [this](const int preset) -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   for (const auto& [name, value] : GraphicsPresets::GetPresetValues(preset))
+						   {
+							   result[name] = value;
 						   }
 
 						   return result;
