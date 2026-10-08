@@ -1753,6 +1753,83 @@ class LoopTests(unittest.TestCase):
 		self.assertTrue(self.state.ci_phase()["parked"])
 		self.assertTrue(any("needs you" in m for m in self.notifier.messages))
 
+	# ---- the breaker and the emergency fix
+
+	BLAMING_NIGHTLY = {"passed": False, "merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]}
+
+	def run_emergency_with_red_nightly(self, breaker_run=10, nightly_red=True):
+		"""develop red on both workflows (nightly run 10 red); the breaker source reports
+		`breaker_run` red with a bug-loop merge (no trip when `nightly_red` is False); the emergency
+		fix pushed and its branch run green on exactly the pushed head."""
+		self.ci_red(bugs=[dict(BUG, status="resolved")])
+		gh = self.loop.github
+		gh.runs_by_workflow["nightly-release.yml"] = [run(10, "failure", "red1", event="schedule")]
+		gh.jobs_by_run[10] = [{"id": 100, "conclusion": "failure", "steps": [{"name": "gate", "conclusion": "failure"}]}]
+		report = self.BLAMING_NIGHTLY if nightly_red else {"passed": True, "merges_since_last_green": []}
+		self.loop.nightly = lambda: ("nightly run {}".format(breaker_run), report)
+		self.loop.poll_once()
+		ticket = self.state.emergency_ticket()
+		self.assertEqual(self.state.ci_phase()["nightly_red_runs"], [10])
+		branch = "bugfix/" + ticket[-8:]
+		gh.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		return ticket, branch
+
+	def test_breaker_tripped_by_the_phases_red_nightly_lets_the_emergency_fix_ship(self):
+		ticket, branch = self.run_emergency_with_red_nightly()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+		self.assertEqual(self.state.data["breaker_source"]["nightly_run"], 10)
+		self.loop.poll_once()
+		self.assertEqual([b for b, _ in self.worktree.shipped], [branch])
+		self.assertTrue(any("shipping despite the breaker" in note for note in self.api.notes(ticket)))
+		self.assertFalse(any("needs you" in m for m in self.notifier.messages))
+		# Only the emergency ship is exempt: the breaker stays tripped for every other ship.
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+		self.assertIn("the circuit breaker is tripped", self.loop._ship_blockers())
+		self.assertIn("the circuit breaker is tripped", self.loop._ship_blockers(by_maintainer=True))
+
+	def test_breaker_set_by_hand_parks_the_emergency_fix_once(self):
+		ticket, branch = self.run_emergency_with_red_nightly(nightly_red=False)
+		loop_state.trip_breaker(self.artifacts, "tripped by hand", self.now)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn(branch, self.worktree.remote_deleted)
+		self.assertTrue(self.state.ci_phase()["parked"])
+		self.assertEqual(len([m for m in self.notifier.messages if "needs you" in m]), 1)
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len([m for m in self.notifier.messages if "needs you" in m]), 1)
+
+	def test_breaker_tripped_by_a_nightly_outside_the_phase_parks_the_emergency_fix(self):
+		ticket, branch = self.run_emergency_with_red_nightly(breaker_run=99)
+		self.assertEqual(self.state.data["breaker_source"]["nightly_run"], 99)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertTrue(self.state.ci_phase()["parked"])
+		self.assertTrue(any("needs you" in m for m in self.notifier.messages))
+
+	def test_breaker_reset_and_set_by_hand_forgets_the_nightly_source(self):
+		ticket, branch = self.run_emergency_with_red_nightly()
+		loop_state.reset_breaker(self.artifacts)
+		loop_state.trip_breaker(self.artifacts, "tripped by hand", self.now)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertTrue(self.state.ci_phase()["parked"])
+
+	def test_breaker_source_is_cleared_once_the_breaker_is_reset(self):
+		self.run_emergency_with_red_nightly()
+		loop_state.reset_breaker(self.artifacts)
+		self.loop.poll_once()
+		self.assertIsNone(self.state.data["breaker_source"])
+
+	def test_breaker_tripped_by_the_red_nightly_still_parks_an_ordinary_fix(self):
+		self.make()
+		self.loop.nightly = lambda: ("nightly run 10", self.BLAMING_NIGHTLY)
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["breaker_source"]["nightly_run"], 10)
+		self.assertParked("circuit breaker")
+		self.assertEqual(self.worktree.shipped, [])
+
 	def test_green_run_for_another_head_does_not_ship(self):
 		ticket = self.run_emergency()
 		branch = "bugfix/" + ticket[-8:]

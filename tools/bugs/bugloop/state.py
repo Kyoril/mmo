@@ -21,6 +21,9 @@ _DEFAULT = {
 	"fix_queue": [],
 	"ship_queue": [],
 	"seen_red_reports": [],
+	# What tripped the breaker when the loop tripped it from a red GitHub nightly:
+	# {"nightly_run": <run id>, "text": <the BREAKER file's content>}. None for a manual trip.
+	"breaker_source": None,
 	"refix_rounds": {},
 	"pending_summary": None,
 	# Maintainer-accepted features: bug id -> the accepted description. It lives here, not in
@@ -174,12 +177,23 @@ def breaker_active(artifacts_dir):
 
 
 def trip_breaker(artifacts_dir, reason, now_utc):
+	"""Writes the breaker file. True when this call tripped it, False when it already was."""
 	path = os.path.join(artifacts_dir, BREAKER_FILE)
 	if os.path.exists(path):
-		return
+		return False
 	os.makedirs(artifacts_dir, exist_ok=True)
 	with open(path, "w", encoding="utf-8") as handle:
 		handle.write("{}Z {}\n".format(now_utc.strftime("%Y-%m-%dT%H:%M:%S"), reason))
+	return True
+
+
+def breaker_text(artifacts_dir):
+	"""The breaker file's content, or None when the breaker is clear (or the file is unreadable)."""
+	try:
+		with open(os.path.join(artifacts_dir, BREAKER_FILE), "r", encoding="utf-8") as handle:
+			return handle.read()
+	except OSError:
+		return None
 
 
 def reset_breaker(artifacts_dir):

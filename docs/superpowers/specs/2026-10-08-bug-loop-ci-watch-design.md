@@ -105,7 +105,9 @@ verified on the platform that broke. Until `develop` is green again nothing else
 - While `develop` is red nothing ships automatically except the emergency fix: auto-ships and
   maintainer "ship as is" decisions go to the existing ship queue with the reason
   "develop is red" and ship one by one after it turns green (each with the fast gate on the merge).
-  Refix and discard decisions run as usual. The circuit breaker is unchanged.
+  Refix and discard decisions run as usual. The circuit breaker blocks every ship as before, with
+  one exception: a green emergency fix ships when the loop tripped the breaker itself for a red
+  Nightly Release run that belongs to the current red phase. The breaker stays tripped.
 - Discord (once per event, never per poll): "develop is red" (workflow, failing test, run link,
   ticket link), "emergency fix shipped", "emergency fix needs you" (parked or out of attempts),
   "develop is green again".
@@ -133,6 +135,8 @@ verified on the platform that broke. Until `develop` is green again nothing else
 - Guard, review and proof still apply to emergency fixes; only the local proof can be waived, and
   only in favour of the CI run.
 - Log excerpts are untrusted data; the instruction block is fixed loop text.
+- The breaker exemption needs the run id the loop itself recorded when it tripped the breaker,
+  and the breaker file unchanged since; a manual trip can never be bypassed.
 
 ## Testing
 
@@ -145,7 +149,6 @@ verified on the platform that broke. Until `develop` is green again nothing else
 - API: system create (reader key, single open ticket, 409), source default, logTail PATCH only for
   system bugs.
 - UI: chip and filter; build.
-- Nightly gate: resolves `origin/develop` after a fetch (tool test).
 
 ## Rollout
 

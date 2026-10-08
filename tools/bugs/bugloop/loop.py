@@ -76,6 +76,14 @@ def short_id(bug_id):
 	return bug_id[-8:]
 
 
+def _nightly_run_id(name):
+	"""The GitHub run id in a breaker source name ("nightly run 123", see ci.newest_nightly), or None."""
+	prefix = "nightly run "
+	if not isinstance(name, str) or not name.startswith(prefix) or not name[len(prefix):].isdigit():
+		return None
+	return int(name[len(prefix):])
+
+
 def utcnow():
 	return datetime.datetime.now(datetime.timezone.utc)
 
@@ -1120,7 +1128,8 @@ class BugLoop:
 		if colour is None and not expired:
 			return
 		if colour == "green":
-			if loop_state.breaker_active(self.artifacts_dir):
+			exempt = self._breaker_allows_emergency()
+			if loop_state.breaker_active(self.artifacts_dir) and not exempt:
 				reason = "Linux CI green on {}, but the circuit breaker is tripped".format(head[:8])
 				ci_state["pending"] = None
 				self._park_emergency(bug_id, reason)
@@ -1134,6 +1143,14 @@ class BugLoop:
 				return  # the recheck found develop green and closed the phase (and the check)
 			ci_state["pending"] = None
 			self.state.save()
+			if exempt:
+				# The breaker stays tripped for everything else; the maintainer resets it as always.
+				message = "shipping despite the breaker: it was tripped by the red nightly this emergency fix repairs"
+				self.log("ci watch: {} ({})".format(message, bug_id))
+				try:
+					self._update(bug_id, note=message)
+				except Exception:
+					self.log(traceback.format_exc())
 			try:
 				self._ship(bug_id, branch, self._summary(bug_id), head, emergency=True)
 			except Exception:
@@ -1307,6 +1324,7 @@ class BugLoop:
 			actor=self.config.worker)
 		self.state.data["ci"]["phase"] = {"since": now.isoformat(), "ticket": ticket,
 			"red_runs": {name: run["id"] for name, run in red.items()}, "ci": context, "attempts": 0,
+			"nightly_red_runs": [red["nightly"]["id"]] if "nightly" in red else [],
 			"nightly_dispatched": [], "parked": False, "notified_exhausted": False, "counted_runs": []}
 		if valid_bug_id(ticket):
 			self._write(ticket, "report.json", {"_id": ticket, "comment": summary, "subject": {"type": "generic", "id": 0}})
@@ -1320,6 +1338,9 @@ class BugLoop:
 	def _refresh_ci_phase(self, red, lists):
 		phase = self.state.ci_phase()
 		ticket = phase["ticket"]
+		seen_nightlies = phase.setdefault("nightly_red_runs", [])
+		if "nightly" in red and red["nightly"]["id"] not in seen_nightlies:
+			seen_nightlies.append(red["nightly"]["id"])
 		for key, run in red.items():
 			if phase["red_runs"].get(key) == run["id"]:
 				self._refill_ci_context(phase, key, run, lists[key])
@@ -1439,11 +1460,34 @@ class BugLoop:
 		except Exception:  # an unreachable GitHub or a malformed answer must not stop the loop
 			self.log(traceback.format_exc())
 			return
+		if self.state.data.get("breaker_source") and not loop_state.breaker_active(self.artifacts_dir):
+			# The maintainer reset the breaker: what tripped it last time is history.
+			self.state.data["breaker_source"] = None
+			self.state.save()
 		if name and name not in self.state.data["seen_red_reports"] and loop_state.red_nightly_blames_loop(report):
 			self.state.data["seen_red_reports"].append(name)
-			loop_state.trip_breaker(self.artifacts_dir, "nightly {} is red and includes bug-loop merges".format(name), now)
+			if loop_state.trip_breaker(self.artifacts_dir, "nightly {} is red and includes bug-loop merges".format(name), now):
+				run_id = _nightly_run_id(name)
+				# Only a trip by this run is attributed; a breaker already set (by hand, say) stays unattributed.
+				self.state.data["breaker_source"] = None if run_id is None else {
+					"nightly_run": run_id, "text": loop_state.breaker_text(self.artifacts_dir)}
+			self.state.save()
 			self.log("circuit breaker tripped by " + name)
 			self.notifier.send(notify.breaker_message("nightly {} is red and includes bug-loop merges".format(name)))
+
+	def _breaker_allows_emergency(self):
+		"""True when the tripped breaker must not hold a green emergency fix: the loop tripped it
+		itself for a red Nightly Release run that belongs to the current red phase, so the fix
+		repairs exactly what tripped it. A manual trip, a trip for another run, or a breaker file
+		rewritten since the trip keeps blocking."""
+		if not loop_state.breaker_active(self.artifacts_dir):
+			return False
+		source = self.state.data.get("breaker_source") or {}
+		run_id = source.get("nightly_run")
+		if run_id is None or source.get("text") != loop_state.breaker_text(self.artifacts_dir):
+			return False
+		phase = self.state.ci_phase()
+		return phase is not None and run_id in (phase.get("nightly_red_runs") or [])
 
 	def _write_daily_report(self):
 		day = self.state.data["day"]

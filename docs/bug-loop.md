@@ -267,7 +267,11 @@ ships are not held`.
   pushed; they park. If the loop crashes right after the branch push, `bugfix/<id8>` stays on
   origin until the next emergency push of the same ticket; if the phase closes first, delete it
   by hand: `git push origin --delete bugfix/<id8>`. The emergency ship ignores the nightly
-  freeze window: repairing develop before the nightly is the point.
+  freeze window: repairing develop before the nightly is the point. A tripped circuit breaker
+  parks a green emergency fix ("Emergency fix needs you"), with one exception: the loop tripped
+  the breaker itself for a red Nightly Release run of the current red phase. Then the fix
+  repairs what tripped it and ships (ticket note "shipping despite the breaker"); the breaker
+  stays tripped.
 - **After the ship** the loop waits for develop's own CI: 60 minutes, or 240 minutes when the
   Nightly Release decides (its gate alone can take about 180). A red run on the merge commit or
   on a descendant counts as a failed attempt. After 3 attempts the phase is parked and one
@@ -294,7 +298,15 @@ python process tree, start the task). Set `MMO_BUGLOOP_GITHUB_TOKEN` before the 
 when the newest finished GitHub "Nightly Release" run on develop failed and a `Merge bugfix/...`
 landed on develop since the last successful run (read through `gh` in the user's login, see
 `bugloop/ci.py`). If `gh` cannot be reached, the loop logs it and keeps going without the check.
-After a deploy rollback, trip it by hand. Only clear it once the cause is understood:
+After a deploy rollback, trip it by hand. Only clear it once the cause is understood.
+
+The one exemption: when the loop tripped the breaker for a red nightly run, it records that run
+id (`breaker_source` in `state.json`, together with the breaker file's text). A green emergency
+fix of a red phase that saw that same nightly run red ships despite the breaker. Everything
+else stays blocked, and the breaker stays tripped after the emergency ship: reset it yourself
+as always. A breaker set by hand (`breaker on`), tripped for another run, or reset and set
+again, keeps blocking the emergency fix too; it parks with "Emergency fix needs you".
+
 
 ```powershell
 & $env:MMO_GATE_PYTHON tools/bugs/bug_loop.py breaker on --reason "rollback of nightly-..."
