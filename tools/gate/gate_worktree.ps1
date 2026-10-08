@@ -1,10 +1,11 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
-# Shared helpers for gate runs in the dedicated nightly worktree (H:/mmo-nightly by
-# default) and for finding gate reports. Dot-source it:
+# Shared helpers for full gate runs in a dedicated worktree (H:/mmo-nightly by default; the
+# name predates the move of the nightly to GitHub Actions) and for finding gate reports.
+# Dot-source it:
 #   . (Join-Path $PSScriptRoot "gate_worktree.ps1")
-# Used by nightly_gate.ps1, release_check.ps1 and register_scheduled_tasks.ps1.
-# No session works in the nightly worktree: it is force-checked-out on every run.
+# Used by release_check.ps1 and the bug loop's build configure. It creates the worktree on
+# demand. No session works in it: it is force-checked-out on every run.
 #
 # Overrides (tests): $env:MMO_NIGHTLY_WORKTREE, $env:MMO_GATE_REPORT_DIR.
 
@@ -123,9 +124,9 @@ function Invoke-WorktreeGate
 
 function Enter-GateWorktreeLock
 {
-	# Nightly and release runs share one worktree, one build dir and the E2E ports; a second
-	# caller waits instead of trampling the first. Local\ is enough: the scheduled task runs
-	# in the logged-on user's session.
+	# Release runs share one worktree, one build dir and the E2E ports (the bug loop takes the
+	# same lock before E2E); a second caller waits instead of trampling the first. Local\ is
+	# enough: everything runs in the logged-on user's session.
 	$mutex = New-Object System.Threading.Mutex($false, "Local\MMOGateWorktree")
 	try
 	{
@@ -211,23 +212,3 @@ function Find-GreenFullReport
 	return $null
 }
 
-function Get-LastGreenNightly
-{
-	$reportDir = Get-ReportDir
-	if (-not (Test-Path $reportDir))
-	{
-		return $null
-	}
-
-	# File names sort by date (nightly-YYYY-MM-DD.json).
-	foreach ($file in (Get-ChildItem -Path $reportDir -Filter "nightly-*.json" | Sort-Object Name -Descending))
-	{
-		$report = Read-GateReport -Path $file.FullName
-		if (Test-GreenFullReport -Report $report)
-		{
-			$report | Add-Member -NotePropertyName Path -NotePropertyValue $file.FullName -Force
-			return $report
-		}
-	}
-	return $null
-}

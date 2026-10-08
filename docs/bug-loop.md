@@ -234,7 +234,9 @@ webhook nothing is sent. Messages:
 ## Circuit breaker
 
 `artifacts/bug-loop/BREAKER` stops all auto-shipping; parking continues. It trips by itself
-when a nightly report is red and lists a `Merge bugfix/...` among `merges_since_last_green`.
+when the newest finished GitHub "Nightly Release" run on develop failed and a `Merge bugfix/...`
+landed on develop since the last successful run (read through `gh` in the user's login, see
+`bugloop/ci.py`). If `gh` cannot be reached, the loop logs it and keeps going without the check.
 After a deploy rollback, trip it by hand. Only clear it once the cause is understood:
 
 ```powershell

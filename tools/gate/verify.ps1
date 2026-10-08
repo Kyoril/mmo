@@ -5,7 +5,7 @@
 #
 # Tiers:
 #   fast  protocol check, build, unit tests, tool tests, Linux check (a few min incremental). What /ship requires.
-#   full  fast + E2E (~8.5 min). Run nightly in H:/mmo-nightly, by /gate full and by release_check.ps1.
+#   full  fast + E2E (~8.5 min). Run by the GitHub nightly (on Linux), /gate full and release_check.ps1.
 #
 # Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/verify.ps1 -Tier fast
