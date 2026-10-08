@@ -41,7 +41,7 @@ ICONS = ROOT / "data/client"
 # spell_effects (src/shared/game/spell.h)
 SCHOOL_DAMAGE, APPLY_AURA, PERSISTENT_AREA_AURA, SUMMON = 2, 6, 24, 25
 # spell_effect_targets (src/shared/game/spell_target_map.h)
-CASTER, TARGET_ENEMY, SOURCE_AREA_ENEMY, CONE_ENEMY = 0, 5, 9, 16
+CASTER, TARGET_ENEMY, SOURCE_AREA_ENEMY, TARGET_ALLY, CONE_ENEMY = 0, 5, 9, 14, 16
 # aura_type (src/shared/game/aura.h)
 PERIODIC_TRIGGER_SPELL, MOD_DECREASE_SPEED, MOD_DAMAGE_DONE_PCT, MOD_DAMAGE_TAKEN_PCT = 9, 15, 23, 24
 # spell schools
@@ -66,11 +66,11 @@ def effect(type_, target=CASTER, **fields):
 
 def spell(id_, name, level, school, description, icon, effects,
           cast_ms=0, duration=0, attributes=(0, 0), interrupt=0, range_type=RANGE_SELF,
-          aura_text=None, stack_amount=None):
+          aura_text=None, stack_amount=None, facing=0):
     return dict(id=id_, name=name, level=level, school=school, description=description,
                 icon=icon, effects=effects, cast_ms=cast_ms,
                 duration=duration, attributes=attributes, interrupt=interrupt,
-                range_type=range_type, aura_text=aura_text, stack_amount=stack_amount)
+                range_type=range_type, aura_text=aura_text, stack_amount=stack_amount, facing=facing)
 
 
 SPELLS = [
@@ -80,7 +80,7 @@ SPELLS = [
           "everyone in front of the caster.",
           "Interface/Icons/Spells/T_Icon_BloodCombat_12.htex",
           [effect(SCHOOL_DAMAGE, CONE_ENEMY, basepoints=104, diesides=22, radius=8.0, miscvalueb=100)],
-          cast_ms=1500, attributes=(NEGATIVE, CANNOT_BE_INTERRUPTED), range_type=RANGE_MELEE),
+          cast_ms=1500, attributes=(NEGATIVE, CANNOT_BE_INTERRUPTED), range_type=RANGE_MELEE, facing=1),
     spell(252, "Last Vigil", 12, SHADOW,
           "Calls two novices up from their biers to keep the vigil with the caster.",
           "Interface/Icons/Spells/T_Icon_Unholy_40.htex",
@@ -156,12 +156,16 @@ SPELLS = [
           "Interface/Icons/Spells/T_Icon_Unholy_100.htex",
           [effect(SUMMON, CASTER, basepoints=2, summonunit=HOLLOW_CHORISTER, radius=10.0)],
           cast_ms=2000, attributes=(0, CANNOT_BE_INTERRUPTED)),
+    # One instance per chorister: each living chorister keeps re-applying its own copy on Veyr
+    # (auras of one spell from different casters coexist, the same caster refreshes its own).
+    # When a chorister dies its copy runs out within 6 s, so the buff tracks the living choir
+    # without any trigger having to remove a stack.
     spell(265, "Choral Resonance", 14, SHADOW,
-          "Each living chorister swells the caster's voice, increasing damage done by $s0% per "
-          "stack.",
+          "A living chorister swells the target's voice, increasing damage done by $s0% for $D. "
+          "Each chorister sustains its own resonance.",
           "Interface/Icons/Spells/T_Icon_Unholy_100.htex",
-          [effect(APPLY_AURA, CASTER, aura=MOD_DAMAGE_DONE_PCT, basepoints=12)],
-          aura_text="Damage done increased.", stack_amount=4),
+          [effect(APPLY_AURA, TARGET_ALLY, aura=MOD_DAMAGE_DONE_PCT, basepoints=12)],
+          duration=6000, aura_text="Damage done increased by 12%.", range_type=RANGE_INFINITE),
 ]
 
 
@@ -184,7 +188,9 @@ def build(spells_pb, spec):
     entry.maxlevel = spec["level"]
     entry.baselevel = entry.spelllevel = 1
     entry.spellSchool = spec["school"]
-    entry.facing = 1
+    # Only Grave Strike is aimed: the ground spells mark wherever their target stands, and the
+    # rest centre on the caster. Facing 1 would demand the target in front for all of them.
+    entry.facing = spec["facing"]
     entry.duration = spec["duration"]
     entry.interruptflags = spec["interrupt"]
     entry.rangetype = spec["range_type"]

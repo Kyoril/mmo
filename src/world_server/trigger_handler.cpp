@@ -1511,6 +1511,7 @@ namespace mmo
 					return;
 				}
 				summon->ClearFieldChanges();
+				summon->SetGrantsKillRewards(false);
 
 				GameCreatureS* summonPtr = summon.get();
 

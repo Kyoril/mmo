@@ -52,7 +52,7 @@ Authoring: `tools/hollow_choir/author_bosses.py` (idempotent).
 | 262 | Veyr | Dirge of the Grave (Grabeshymne) | 5 s interruptible channel |
 | 263 | Veyr | Dirge of the Grave — pulse | shadow damage to the whole group, once per second |
 | 264 | Veyr | The Choir Rises (Der Chor erhebt sich) | 2 s cast, two Hollow Choristers |
-| 265 | Veyr | Choral Resonance | stacking aura on Veyr: +12 % damage per living chorister |
+| 265 | Veyr | Choral Resonance | +12 % damage for 6 s; each living chorister keeps its own copy on Veyr refreshed |
 
 The encounter rules from the brief that are *not* spells — health thresholds, cast timers,
 "Dissonance comes more often below 30 %", removing Mourning Chorus when the choristers die — are
@@ -89,7 +89,7 @@ where the danger is roughly.
 | Dissonance | instant: CastRelease | — | GROUND_ACTIVE 2 s: concentric magenta rings contracting and jittering on the 4.0 rim; GROUND_EXPIRED: sonic ring burst and column | discordant bell cluster rising; discordant choir blast |
 | Dirge of the Grave | CHANNELING 5 s: ChannelUp (conducting), violet voices spiralling up, a ring pulse every second | — | small violet hit on each player per pulse | dark male choir drone loop |
 | The Choir Rises | ChannelUp, magenta motes | EmoteShout, burst | — | choir crescendo |
-| Choral Resonance | — | — | AURA_IDLE: magenta harmonic rings orbiting Veyr | soft harmonic hum on gain |
+| Choral Resonance | — | — | AURA_IDLE: magenta harmonic rings orbiting Veyr | none (refreshed every few seconds) |
 
 ## Engine work the spells need
 
@@ -117,6 +117,9 @@ All three now exist, plus two fixes the boss spells needed:
   `GROUND_ACTIVE` kits at the position and its `GROUND_EXPIRED` kits on expiry.
 - **CannotBeInterrupted** (`spell_attributes_b`, bit 11): kicks used to stop every cast. Grave
   Strike and the three summons opt out; Lament and Dirge of the Grave stay interruptible.
+- **Summoned creatures reward nobody** (`GameCreatureS::GrantsKillRewards`): no experience, no
+  class experience, no quest kill credit, no loot — for spell summons and for the
+  `SummonCreature` trigger action alike, so a boss's adds cannot be farmed.
 - An **interrupted channel** now removes the aura it put on its caster. Before, a kicked channel
   kept ticking to its natural end (Fire Barrage did too).
 
@@ -134,11 +137,22 @@ Choir Rises summon hostile adds next to the caster — godmode helps. Spells 254
 |---|---|
 | Brother Oswin | 251 Grave Strike, 252 Last Vigil, 253 Guttering Candle |
 | Sister Mereth | 255 Lament, 256 Mourning Voices, 257 Mourning Chorus (self buff), 258 Silent Place |
-| Cantor Veyr | 260 Dissonance, 262 Dirge of the Grave, 264 The Choir Rises, 265 Choral Resonance (self buff, stacks) |
+| Cantor Veyr | 260 Dissonance, 262 Dirge of the Grave, 264 The Choir Rises, 265 Choral Resonance (target yourself or an ally; 6 s) |
 
 Sounds were picked by measurement only and still need a listen; the sound agent flagged Lament
 Cast (fades instead of building), Choir Rises Cast, the Dissonance bell pitch, and how much the
 Candle Flare reads as fire. Every layer take is in `generated/hollow_choir/sfx/` for swapping.
+
+## Feedback round 1 (2026-10-08)
+
+The user tested every spell by hand. Changes made from it:
+
+- Guttering Candle (and every spell but Grave Strike) no longer needs its target in front.
+- Summoned adds dropped loot; summons now never reward their killers (see above).
+- Dissonance flashed too much: its telegraph beats are shallower and stay in one colour, and
+  the detonation flash and light are softer.
+- Choral Resonance never went away: it was a permanent stacking aura waiting for triggers to
+  take stacks off. It is now a 6 s aura per chorister, so it decays by itself.
 
 ## Open work
 

@@ -99,6 +99,13 @@ namespace mmo
 		/// Determines whether this creature is tagged by a player or group.
 		bool IsTagged() const { return !m_lootRecipients.empty(); }
 
+		/// Whether killing this creature rewards anyone: experience, class experience, quest kill
+		/// credit or loot. False for summoned creatures, so a boss's adds cannot be farmed.
+		bool GrantsKillRewards() const { return m_grantsKillRewards; }
+
+		/// Turns kill rewards off (or back on). Called for every summoned creature.
+		void SetGrantsKillRewards(const bool grants) { m_grantsKillRewards = grants; }
+
 		void SetHealthPercent(float percent);
 
 		void SetUnitLoot(std::unique_ptr<LootInstance> unitLoot);
@@ -293,6 +300,7 @@ namespace mmo
 		/// Distance in world units kept to the followed unit.
 		float m_followDistance = 2.5f;
 		LootRecipients m_lootRecipients;
+		bool m_grantsKillRewards = true;
 		float m_healthPercent = 1.0f;
 		bool m_combatMovementEnabled = true;
 		/// Per-spawn additional triggers — appended to the template's trigger list at runtime.

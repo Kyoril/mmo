@@ -244,7 +244,8 @@ def dissonance_ground():
     rim = _ring_size(DISSONANCE_RADIUS)
 
     # The rim: one crisp ring held for the whole warning, beating faster and brighter as the
-    # detonation nears. Ends at exactly 2.0 s.
+    # detonation nears. The beats stay within one colour: alternating white-hot and magenta read
+    # as flashing in game (user feedback 2026-10-08). Ends at exactly 2.0 s.
     rim_main = _e(name="Rim", bursts=[Burst(0.0, 1)], max_particles=2,
                   min_lifetime=GROUND_LIFE, max_lifetime=GROUND_LIFE,
                   min_velocity=(0.0, 0.03, 0.0), max_velocity=(0.0, 0.03, 0.0),
@@ -253,10 +254,10 @@ def dissonance_ground():
                   render_mode=hpar.RENDER_HORIZONTAL, material_name=RING,
                   size_over_life=float_curve((0.0, 1.06), (0.08, 1.0), (1.0, 1.0)),
                   color_over_lifetime=_beat(
-                      VEYR_MAGENTA, VEYR_HOT,
+                      VEYR_MAGENTA, VEYR_MAGENTA,
                       [(0.06, 0.45), (0.24, 0.45), (0.40, 0.48), (0.53, 0.5), (0.64, 0.52),
                        (0.73, 0.55), (0.81, 0.58), (0.87, 0.62), (0.92, 0.66), (0.965, 0.7)],
-                      base=0.5, end=1.0))
+                      base=0.8, end=1.0))
     # Detuned twins: two more rings slightly in and out of the rim, offset a hair and
     # wandering on noise -- the rim visibly shivers instead of being a printed circle.
     rim_shiver = _e(name="Rim Shiver", bursts=[Burst(0.0, 3)], max_particles=4,
@@ -268,10 +269,10 @@ def dissonance_ground():
                     render_mode=hpar.RENDER_HORIZONTAL, material_name=RING,
                     size_over_life=float_curve((0.0, 1.0), (1.0, 1.0)),
                     color_over_lifetime=_beat(
-                        VEYR_VIOLET, VEYR_MAGENTA,
+                        VEYR_VIOLET, VEYR_VIOLET,
                         [(0.10, 0.22), (0.30, 0.26), (0.46, 0.3), (0.58, 0.32), (0.69, 0.36),
                          (0.78, 0.4), (0.85, 0.42), (0.91, 0.45), (0.96, 0.45)],
-                        base=0.15, end=1.0))
+                        base=0.55, end=1.0))
     # Contracting rings: launched from the rim inward on an accelerating cadence.
     cadence = [0.0, 0.32, 0.58, 0.80, 0.98, 1.13, 1.25, 1.35]
     contract = _e(name="Contracting Rings",
@@ -283,9 +284,9 @@ def dissonance_ground():
                   render_mode=hpar.RENDER_HORIZONTAL, material_name=RING,
                   size_over_life=float_curve((0.0, 1.0), (0.45, 0.72), (1.0, 0.22)),
                   color_over_lifetime=color_curve(
-                      (0.00, rgba(VEYR_HOT, 0.0)),
-                      (0.10, rgba(VEYR_HOT, 0.70)),
-                      (0.45, rgba(VEYR_MAGENTA, 0.55)),
+                      (0.00, rgba(VEYR_MAGENTA, 0.0)),
+                      (0.10, rgba(VEYR_MAGENTA, 0.45)),
+                      (0.45, rgba(VEYR_MAGENTA, 0.38)),
                       (1.00, rgba(VEYR_VIOLET, 0.0))))
     # Floor fill: darkens and tints the floor so the inside reads as "the zone", building up.
     fill_dark = _e(name="Fill Shadow", bursts=[Burst(0.0, 1)], max_particles=2,
@@ -318,10 +319,10 @@ def dissonance_ground():
                min_start_size=0.38, max_start_size=0.52,
                size_over_life=float_curve((0.0, 1.0), (1.0, 1.0)),
                color_over_lifetime=_beat(
-                   VEYR_MAGENTA, VEYR_HOT,
+                   VEYR_MAGENTA, VEYR_MAGENTA,
                    [(0.10, 0.85), (0.35, 0.9), (0.55, 0.9), (0.70, 0.95), (0.82, 1.0),
                     (0.91, 1.0), (0.97, 1.0)],
-                   base=0.65, end=1.0))
+                   base=0.85, end=1.0))
     _park(beads, radius=DISSONANCE_RADIUS, height=0.06, drag=5.0, hidden=0.0, jitter=0.01)
     # Sparks parked on the rim, crackling upward and shaking on noise.
     rim_sparks = _e(name="Rim Sparks", spawn_rate=95.0, duration=0.90,
@@ -384,8 +385,8 @@ def dissonance_wave():
                     render_mode=hpar.RENDER_HORIZONTAL,
                     size_over_life=float_curve((0.0, 0.9), (0.3, 1.1), (1.0, 1.3)),
                     color_over_lifetime=color_curve(
-                        (0.00, rgba(VEYR_HOT, 0.65)),
-                        (0.30, rgba(VEYR_MAGENTA, 0.45)),
+                        (0.00, rgba(VEYR_HOT, 0.40)),
+                        (0.30, rgba(VEYR_MAGENTA, 0.30)),
                         (1.00, rgba(VEYR_VIOLET, 0.0))))
     wave = _hring("Sonic Ring", rim, rim * 1.8, VEYR_MAGENTA, 0.9, 0.85, growth=0.35)
     wave2 = _hring("Sonic Ring Echo", rim * 0.9, rim * 1.6, VEYR_VIOLET, 0.7, 0.85,
@@ -450,8 +451,8 @@ def dissonance_wave():
     return ParticleSystem(emitters=[
         flash_disc, mist, wave_gold, wave2, wave, inner, sheath, column, shards,
         notes, gold_notes,
-        _flash("Detonation Flash", 3.2, VEYR_HOT, alpha=0.7, lifetime=0.2, lift=1.0),
-        _flash("Detonation Rays", 4.2, VEYR_MAGENTA, alpha=0.75, lifetime=0.3, lift=1.0,
+        _flash("Detonation Flash", 3.2, VEYR_HOT, alpha=0.5, lifetime=0.2, lift=1.0),
+        _flash("Detonation Rays", 4.2, VEYR_MAGENTA, alpha=0.55, lifetime=0.3, lift=1.0,
                material=RAYS),
     ])
 

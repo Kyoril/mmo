@@ -711,6 +711,7 @@ namespace mmo
 							continue;
 						}
 						summon->ClearFieldChanges();
+						summon->SetGrantsKillRewards(false);
 
 						GameCreatureS* summonPtr = summon.get();
 						summon->killed.connect([world, weakOwner, summonPtr](GameUnitS* /*killer*/)

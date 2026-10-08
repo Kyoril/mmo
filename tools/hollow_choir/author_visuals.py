@@ -19,7 +19,7 @@ Rules carried over from the class visual passes (see tools/mage_visuals/author_m
   one-shot sound are two kits.
 * Only CASTING, CHANNELING and GROUND_ACTIVE kits may loop; everything else is a one-shot.
 * No sound on aura events: AURA_APPLIED replays whenever a carrier comes into view. Choral
-  Resonance therefore sounds on its CAST_SUCCEEDED (the boss casting it on himself).
+  Resonance has none at all, since every chorister refreshes it every few seconds.
 * Aura kits are TARGET-scoped (the aura holder), CAST_SUCCEEDED kits CASTER-scoped.
 * Per-player impacts only exist for unit-targeted spells. The caster-centred AoEs (Lament,
   the Dirge pulse) have none, so their release effect has to carry the hit on its own.
@@ -152,7 +152,7 @@ VISUALIZATIONS = [
     (89, "Hollow Choir - Dissonance", [260], {
         CAST: [anim("CastRelease")],
         GROUND_ACTIVE: [fx("Veyr_DissonanceGround", "Dissonance Mark", flash=light(MAGENTA, 1.8, 7.0, 1.8, 0.2))],
-        GROUND_EXPIRED: [fx("Veyr_DissonanceWave", "Dissonance Wave", flash=light(MAGENTA, 4.0, 11.0, 0.05, 0.6))],
+        GROUND_EXPIRED: [fx("Veyr_DissonanceWave", "Dissonance Wave", flash=light(MAGENTA, 2.6, 10.0, 0.08, 0.6))],
     }),
     (90, "Hollow Choir - Dissonance Hit", [261], {
         IMPACT: [fx("Veyr_DissonanceHit", scope="TARGET")],
@@ -166,8 +166,8 @@ VISUALIZATIONS = [
         CASTING: [pose("ChannelUp"), fx("Veyr_ChoirRisesCast", "Choir Rises Cast")],
         CAST: [anim("EmoteShout"), fx("Veyr_ChoirRisesRelease", flash=light(MAGENTA, 2.5, 9.0, 0.05, 0.6))],
     }),
+    # No sound: every living chorister re-casts this on Veyr every few seconds.
     (94, "Hollow Choir - Choral Resonance", [265], {
-        CAST: [fx(sound="Resonance Hum")],
         AURA_IDLE: [fx("Veyr_ResonanceAura", scope="TARGET")],
     }),
 ]
