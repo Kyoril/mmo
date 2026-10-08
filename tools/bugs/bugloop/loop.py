@@ -380,7 +380,7 @@ class BugLoop:
 				start = self.worktree.resume_branch(branch)
 				base = self.worktree.fork_point(branch)
 			except Exception as error:
-				self._release(bug_id, "pr_open", "cannot refix: the branch {} is gone or unusable ({}); decide again".format(branch, str(error)[:200]))
+				self._release(bug_id, "pr_open", "cannot refix {}: {}; decide again".format(branch, str(error)[:300]))
 				self._finish(bug_id, "needs-info", reason="branch unusable")
 				return
 		else:
