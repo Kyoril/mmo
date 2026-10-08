@@ -14,7 +14,7 @@ import urllib.error
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "tools", "bugs"))
 
-from bugloop import ci, github  # noqa: E402
+from bugloop import ci_runs, github  # noqa: E402
 
 CI_LOG = """2026-10-07T21:20:00.0000000Z ##[group]Run cd build && ctest --output-on-failure
 2026-10-07T21:20:01.0000000Z 11/33 Test #11: game_protocol_tests ..............   Passed    0.96 sec
@@ -132,11 +132,11 @@ class ClientTests(unittest.TestCase):
 
 class EvaluationTests(unittest.TestCase):
 	def test_colours(self):
-		self.assertEqual(ci.colour({"status": "completed", "conclusion": "failure"}), "red")
-		self.assertEqual(ci.colour({"status": "completed", "conclusion": "timed_out"}), "red")
-		self.assertEqual(ci.colour({"status": "completed", "conclusion": "success"}), "green")
-		self.assertIsNone(ci.colour({"status": "completed", "conclusion": "cancelled"}))
-		self.assertIsNone(ci.colour({"status": "in_progress", "conclusion": None}))
+		self.assertEqual(ci_runs.colour({"status": "completed", "conclusion": "failure"}), "red")
+		self.assertEqual(ci_runs.colour({"status": "completed", "conclusion": "timed_out"}), "red")
+		self.assertEqual(ci_runs.colour({"status": "completed", "conclusion": "success"}), "green")
+		self.assertIsNone(ci_runs.colour({"status": "completed", "conclusion": "cancelled"}))
+		self.assertIsNone(ci_runs.colour({"status": "in_progress", "conclusion": None}))
 
 	def test_newest_completed_skips_running_and_cancelled_runs(self):
 		runs = [  # newest first, as GitHub lists them
@@ -145,28 +145,28 @@ class EvaluationTests(unittest.TestCase):
 			{"id": 2, "status": "completed", "conclusion": "failure", "event": "push"},
 			{"id": 1, "status": "completed", "conclusion": "success", "event": "push"},
 		]
-		self.assertEqual(ci.newest_completed(runs, lambda run: run["event"] == "push")["id"], 2)
-		self.assertIsNone(ci.newest_completed(runs, lambda run: run["event"] == "schedule"))
+		self.assertEqual(ci_runs.newest_completed(runs, lambda run: run["event"] == "push")["id"], 2)
+		self.assertIsNone(ci_runs.newest_completed(runs, lambda run: run["event"] == "schedule"))
 
 	def test_excerpt_keeps_the_failure_and_drops_timestamps(self):
-		text = ci.excerpt(CI_LOG)
+		text = ci_runs.excerpt(CI_LOG)
 		self.assertIn("creature_assist_test.cpp:129: FAILED", text)
 		self.assertIn("double free or corruption", text)
 		self.assertNotIn("2026-10-07T21:20", text)
 		self.assertNotIn("game_protocol_tests", text)
-		self.assertLessEqual(len(ci.excerpt(CI_LOG * 500, limit=500)), 500)
+		self.assertLessEqual(len(ci_runs.excerpt(CI_LOG * 500, limit=500)), 500)
 
 	def test_excerpt_without_markers_keeps_the_tail(self):
-		text = ci.excerpt("\n".join("line {}".format(index) for index in range(200)))
+		text = ci_runs.excerpt("\n".join("line {}".format(index) for index in range(200)))
 		self.assertIn("line 199", text)
 		self.assertNotIn("line 10\n", text)
 
 	def test_failing_step(self):
 		jobs = [{"id": 1, "conclusion": "success", "steps": []},
 			{"id": 2, "conclusion": "failure", "steps": [{"name": "make", "conclusion": "success"}, {"name": "tests", "conclusion": "failure"}]}]
-		job, step = ci.failing_step(jobs)
+		job, step = ci_runs.failing_step(jobs)
 		self.assertEqual((job["id"], step), (2, "tests"))
-		self.assertEqual(ci.failing_step([]), (None, ""))
+		self.assertEqual(ci_runs.failing_step([]), (None, ""))
 
 
 if __name__ == "__main__":

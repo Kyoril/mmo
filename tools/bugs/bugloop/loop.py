@@ -12,7 +12,7 @@ import re
 import traceback
 import urllib.error
 
-from . import ci, github, gitops, guard, inputs, notify, state as loop_state, verdicts, verification
+from . import ci_runs, github, gitops, guard, inputs, notify, state as loop_state, verdicts, verification
 from .claude import REVIEW_TOOLS, TRIAGE_TOOLS, ClaudeError
 
 CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -1082,10 +1082,10 @@ class BugLoop:
 		try:
 			runs = [item for item in self.github.runs(self.config.ci_push_workflow, branch=branch)
 				if item.get("head_sha") == head and item.get("head_branch") == branch and item.get("event") == "push"]
-			result = ci.newest_completed(runs, lambda item: True)
+			result = ci_runs.newest_completed(runs, lambda item: True)
 		except github.GitHubError as error:
 			self.log("ci watch: " + str(error))
-		colour = ci.colour(result) if result else None
+		colour = ci_runs.colour(result) if result else None
 		expired = now >= datetime.datetime.fromisoformat(pending["deadline"])
 		if colour is None and not expired:
 			return
@@ -1118,9 +1118,9 @@ class BugLoop:
 		if result is not None:
 			retry = "CI run failed: " + result.get("html_url", "")
 			try:
-				job, _ = ci.failing_step(self.github.jobs(result["id"]))
+				job, _ = ci_runs.failing_step(self.github.jobs(result["id"]))
 				if job:
-					retry = ci.excerpt(self.github.job_log(job["id"])) or retry
+					retry = ci_runs.excerpt(self.github.job_log(job["id"])) or retry
 			except github.GitHubError as error:
 				self.log("ci watch: " + str(error))
 		phase["ci"]["retry"] = retry
@@ -1208,8 +1208,8 @@ class BugLoop:
 				"push": self.github.runs(self.config.ci_push_workflow, branch="develop"),
 				"nightly": self.github.runs(self.config.ci_nightly_workflow),
 			}
-			newest = {key: ci.newest_completed(lists[key], _CI_ACCEPT[key]) for key in lists}
-			colours = {key: ci.colour(run) for key, run in newest.items() if run}
+			newest = {key: ci_runs.newest_completed(lists[key], _CI_ACCEPT[key]) for key in lists}
+			colours = {key: ci_runs.colour(run) for key, run in newest.items() if run}
 			ci_state["colours"] = colours
 			red = {key: newest[key] for key, colour in colours.items() if colour == "red"}
 			phase = self.state.ci_phase()
@@ -1232,18 +1232,18 @@ class BugLoop:
 
 	def _ci_context(self, key, run, runs):
 		jobs = self.github.jobs(run["id"])
-		job, step = ci.failing_step(jobs)
+		job, step = ci_runs.failing_step(jobs)
 		excerpt = ""
 		if job:
 			try:
-				excerpt = ci.excerpt(self.github.job_log(job["id"]))
+				excerpt = ci_runs.excerpt(self.github.job_log(job["id"]))
 			except github.GitHubError as error:
 				self.log("ci watch: " + str(error))
 		# Suspects: develop's first-parent commits since the newest green run before the red one.
 		green_sha = ""
 		older = runs[runs.index(run) + 1:] if run in runs else []
 		for candidate in older:
-			if _CI_ACCEPT[key](candidate) and ci.colour(candidate) == "green":
+			if _CI_ACCEPT[key](candidate) and ci_runs.colour(candidate) == "green":
 				green_sha = candidate.get("head_sha") or ""
 				break
 		suspects = self.worktree.log_lines(green_sha, run.get("head_sha") or "")
