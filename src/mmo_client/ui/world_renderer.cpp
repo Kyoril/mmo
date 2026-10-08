@@ -11,6 +11,7 @@
 #include "base/profiler.h"
 #include "math/clamp.h"
 #include "console/console_var.h"
+#include "frame_pacing.h"
 
 #include <algorithm>
 
@@ -50,7 +51,9 @@ namespace mmo
 		{
 			s_renderScaleVar = ConsoleVarMgr::FindConsoleVar("gxRenderScale");
 		}
-		const float renderScale = s_renderScaleVar ? Clamp(s_renderScaleVar->GetFloatValue(), 0.25f, 1.0f) : 1.0f;
+		// The frame rate threshold (FramePacing) lowers it further while the GPU cannot keep up.
+		const float playerScale = s_renderScaleVar ? Clamp(s_renderScaleVar->GetFloatValue(), 0.25f, 1.0f) : 1.0f;
+		const float renderScale = std::max(0.25f, playerScale * FramePacing::GetDynamicRenderScale());
 
 		const uint16 internalWidth = static_cast<uint16>(std::max(1.0f, frameRect.GetWidth() * renderScale));
 		const uint16 internalHeight = static_cast<uint16>(std::max(1.0f, frameRect.GetHeight() * renderScale));

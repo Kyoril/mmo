@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "event_loop.h"
+#include "frame_pacing.h"
 
 #include "base/clock.h"
 #include "base/profiler.h"
@@ -55,6 +56,9 @@ namespace mmo
 			// perf overlay) works in every state, not only while in the world.
 			Profiler& profiler = Profiler::GetInstance();
 			const bool profiling = profiler.IsEnabled();
+
+			// The frame rate threshold judges the GPU by its frame time, so the timer also runs for it.
+			const bool gpuTiming = profiling || FramePacing::NeedsGpuTiming();
 			if (profiling)
 			{
 				profiler.BeginFrame();
@@ -66,7 +70,10 @@ namespace mmo
 				{
 					profiler.SetCounter("GPU frame (ms)", gpuMs);
 				}
+			}
 
+			if (gpuTiming)
+			{
 				gx.BeginFrameGpuTimer();
 			}
 
@@ -79,9 +86,13 @@ namespace mmo
 
 			Paint();
 
-			if (profiling)
+			if (gpuTiming)
 			{
 				gx.EndFrameGpuTimer();
+			}
+
+			if (profiling)
+			{
 				profiler.EndFrame();
 			}
 
@@ -90,6 +101,12 @@ namespace mmo
 				// is behind (or on VSync), so this is the clearest "GPU-bound" signal on the CPU side.
 				PROFILE_SCOPE("Present");
 				gxWindow->Update();
+			}
+
+			{
+				// Waits out the rest of the frame under a frame rate limit; also attributed to the next frame.
+				PROFILE_SCOPE("Frame limit");
+				FramePacing::EndFrame(*gxWindow, timePassed, gpuTiming ? gx.GetLastFrameGpuTimeMs() : -1.0);
 			}
 		}
 	}

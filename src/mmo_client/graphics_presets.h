@@ -18,7 +18,8 @@ namespace mmo
 	///          one of the individual settings.
 	///
 	///          A preset is only applied when gxQuality changes, never while the config is loaded, so
-	///          saved individual values always win at startup.
+	///          saved individual values always win at startup. The one exception is the very first launch,
+	///          which applies the preset recommended for the detected hardware.
 	class GraphicsPresets final : public NonCopyable
 	{
 	public:
@@ -38,5 +39,9 @@ namespace mmo
 		/// @brief Assigns every setting of a preset.
 		/// @param preset 0 = Low ... 3 = Ultra. Other values are ignored.
 		static void ApplyPreset(int preset);
+
+		/// @brief Returns the preset recommended for the graphics adapter and the monitor the game runs on.
+		/// @return 0 = Low ... 3 = Ultra.
+		[[nodiscard]] static int GetRecommendedPreset();
 	};
 }

@@ -41,6 +41,7 @@
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "frame_ui/frame_mgr.h"
+#include "frame_pacing.h"
 #include "graphics_presets.h"
 #include "perf_capture.h"
 #include "startup_error.h"
@@ -153,6 +154,7 @@ namespace mmo
 
 		PerfCapture::Initialize();
 		GraphicsPresets::Initialize();
+		FramePacing::Initialize();
 
 		return true;
 	}
@@ -343,6 +345,7 @@ namespace mmo
 		}
 
 		// All of these are no-ops when the stage that would have set them up never ran.
+		FramePacing::Destroy();
 		GraphicsPresets::Destroy();
 		PerfCapture::Destroy();
 		EventLoop::Destroy();
@@ -428,6 +431,7 @@ namespace mmo
 	/// @copydoc ClientApplication::ShutdownCoreServices
 	void ClientApplication::ShutdownCoreServices(ClientContext& context)
 	{
+		FramePacing::Destroy();
 		GraphicsPresets::Destroy();
 		PerfCapture::Destroy();
 		Console::Destroy();
