@@ -68,6 +68,23 @@ def feature_ready_message(notifier, bug_id, summary, branch):
 	return "**Feature ready for review** — {}\n{}\nBranch: `{}`".format(notifier.bug_link(bug_id), summary[:200], branch)
 
 
+def ci_red_message(notifier, ticket, workflow, step, run_url):
+	return "**develop is red** — {} failed{} ({})\nEmergency ticket: {}\nAuto-shipping is paused.".format(
+		workflow, " in step `{}`".format(step) if step else "", run_url, notifier.bug_link(ticket))
+
+
+def emergency_shipped_message(notifier, ticket, commit):
+	return "**Emergency fix shipped** — {} in `{}`; waiting for CI on develop".format(notifier.bug_link(ticket), commit[:8])
+
+
+def emergency_needs_you_message(notifier, ticket, reason):
+	return "**Emergency fix needs you** — {}: {}".format(notifier.bug_link(ticket), reason[:500])
+
+
+def ci_green_message(workflow_names):
+	return "**develop is green again** ({}) — auto-shipping resumes".format(", ".join(workflow_names))
+
+
 # Outcomes that change a bug's status, as the label of a status message. An outcome missing here
 # is announced by its raw name.
 STATUS_LABELS = {

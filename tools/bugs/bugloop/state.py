@@ -21,11 +21,16 @@ _DEFAULT = {
 	"fix_queue": [],
 	"ship_queue": [],
 	"seen_red_reports": [],
+	# What tripped the breaker when the loop tripped it from a red GitHub nightly:
+	# {"nightly_run": <run id>, "text": <the BREAKER file's content>}. None for a manual trip.
+	"breaker_source": None,
 	"refix_rounds": {},
 	"pending_summary": None,
 	# Maintainer-accepted features: bug id -> the accepted description. It lives here, not in
 	# the bug's artifacts folder, because the fixer can write that folder.
 	"features": {},
+	# CI watch: the newest colour per workflow, the current red phase and a pending emergency verification.
+	"ci": {"last_check": "", "colours": {}, "phase": None, "pending": None},
 }
 
 
@@ -39,6 +44,9 @@ class LoopState:
 		if isinstance(self.data["features"], list):
 			# State from before descriptions were kept: still features, without a description.
 			self.data["features"] = {bug_id: None for bug_id in self.data["features"]}
+		for key, value in copy.deepcopy(_DEFAULT["ci"]).items():
+			# data.update replaced the whole dict from an old file: fill what it lacked.
+			self.data["ci"].setdefault(key, value)
 		if not self.data["day"]:
 			self.data["day"] = today
 		self.roll(today)
@@ -130,6 +138,13 @@ class LoopState:
 	def count_refix(self, bug_id):
 		self.data["refix_rounds"][bug_id] = self.refix_count(bug_id) + 1
 
+	def ci_phase(self):
+		return self.data["ci"]["phase"]
+
+	def emergency_ticket(self):
+		phase = self.data["ci"]["phase"]
+		return phase.get("ticket") if phase else None
+
 	def add_feature(self, bug_id, description=None):
 		"""A maintainer-accepted feature: no round of this bug ever ships on its own. The
 		description is the trusted FEATURE REQUEST text for this and every later round."""
@@ -161,13 +176,31 @@ def breaker_active(artifacts_dir):
 	return os.path.exists(os.path.join(artifacts_dir, BREAKER_FILE))
 
 
-def trip_breaker(artifacts_dir, reason, now_utc):
+def trip_breaker(artifacts_dir, reason, now_utc, by_hand=False):
+	"""Writes the breaker file. True when this call tripped it, False when it already was.
+	`by_hand` (the `breaker on` command): the line is marked "(set by hand)" and is appended to a
+	breaker that is already tripped, so the file always changes. That is what keeps a maintainer's
+	hold from being mistaken for the loop's own nightly trip (BugLoop._breaker_allows_emergency)."""
 	path = os.path.join(artifacts_dir, BREAKER_FILE)
+	line = "{}Z {}{}\n".format(now_utc.strftime("%Y-%m-%dT%H:%M:%S"), reason, " (set by hand)" if by_hand else "")
 	if os.path.exists(path):
-		return
+		if by_hand:
+			with open(path, "a", encoding="utf-8") as handle:
+				handle.write(line)
+		return False
 	os.makedirs(artifacts_dir, exist_ok=True)
 	with open(path, "w", encoding="utf-8") as handle:
-		handle.write("{}Z {}\n".format(now_utc.strftime("%Y-%m-%dT%H:%M:%S"), reason))
+		handle.write(line)
+	return True
+
+
+def breaker_text(artifacts_dir):
+	"""The breaker file's content, or None when the breaker is clear (or the file is unreadable)."""
+	try:
+		with open(os.path.join(artifacts_dir, BREAKER_FILE), "r", encoding="utf-8") as handle:
+			return handle.read()
+	except OSError:
+		return None
 
 
 def reset_breaker(artifacts_dir):

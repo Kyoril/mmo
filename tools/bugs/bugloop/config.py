@@ -25,6 +25,13 @@ class LoopConfig:
 	fix_timeout_seconds: int = 5400
 	fix_max_usd: float = 20.0
 	step_timeout_seconds: int = 3600
+	ci_poll_seconds: int = 300
+	ci_push_workflow: str = "ccpp.yml"
+	ci_nightly_workflow: str = "nightly-release.yml"
+	ci_wait_minutes: int = 60
+	# The wait for develop after an emergency ship when the Nightly Release decides (its gate alone can take 180 min).
+	ci_nightly_wait_minutes: int = 240
+	emergency_attempts: int = 3
 	# Post a Discord message on every bug status change, not only ships, pings and the summary.
 	notify_status_changes: bool = True
 

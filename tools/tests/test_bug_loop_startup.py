@@ -19,6 +19,21 @@ bug_loop = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(bug_loop)
 
 
+class BreakerCommandTests(unittest.TestCase):
+	def test_breaker_on_always_changes_a_tripped_breaker(self):
+		with tempfile.TemporaryDirectory() as repo:
+			artifacts = os.path.join(repo, "artifacts", "bug-loop")
+			bug_loop.loop_state.trip_breaker(artifacts, "nightly run 10 is red", bug_loop.loop.utcnow())
+			path = os.path.join(artifacts, bug_loop.loop_state.BREAKER_FILE)
+			with open(path, encoding="utf-8") as handle:
+				before = handle.read()
+			self.assertEqual(bug_loop.main(["--repo", repo, "breaker", "on", "--reason", "hold"]), 0)
+			with open(path, encoding="utf-8") as handle:
+				after = handle.read()
+			self.assertTrue(after.startswith(before))
+			self.assertTrue(after.rstrip("\n").endswith("hold (set by hand)"))
+
+
 class StartupTests(unittest.TestCase):
 	def test_decoder_is_built_from_the_runtime_schemas_with_main_protoc(self):
 		with tempfile.TemporaryDirectory() as repo:
@@ -83,6 +98,38 @@ class NotifierWiringTests(unittest.TestCase):
 		# A dry run never sends, whether or not the variable is set.
 		self.assertEqual(bug_loop.notifications_status(on, dry_run=True), "notifications: off (dry run)")
 		self.assertEqual(bug_loop.notifications_status(off, dry_run=True), "notifications: off (dry run)")
+
+
+class GitHubWiringTests(unittest.TestCase):
+	def test_token_and_github_origin_turn_the_watch_on(self):
+		messages = []
+		client = bug_loop.make_github({"MMO_BUGLOOP_GITHUB_TOKEN": "t0ken"}, "git@github.com:Kyoril/mmo.git", messages.append)
+		self.assertEqual(client.base, "https://api.github.com/repos/Kyoril/mmo")
+		self.assertFalse(any("t0ken" in message for message in messages))
+
+	def test_no_token_means_no_watch(self):
+		messages = []
+		self.assertIsNone(bug_loop.make_github({}, "git@github.com:Kyoril/mmo.git", messages.append))
+		self.assertTrue(messages[0].startswith("ci watch: off ("))
+
+	def test_non_github_origin_means_no_watch(self):
+		messages = []
+		self.assertIsNone(bug_loop.make_github({"MMO_BUGLOOP_GITHUB_TOKEN": "t"}, "https://gitlab.com/a/b.git", messages.append))
+		self.assertTrue(messages[0].startswith("ci watch: off ("))
+
+	def test_stored_phase_without_the_watch_is_warned_about(self):
+		class State:
+			def __init__(self, phase):
+				self.phase = phase
+
+			def ci_phase(self):
+				return self.phase
+
+		phase = {"ticket": "c1" + "0" * 22}
+		self.assertEqual(bug_loop.stored_phase_warning(State(phase), None),
+			"ci watch: off, but state holds a red phase for ticket c1{}; ships are not held".format("0" * 22))
+		self.assertIsNone(bug_loop.stored_phase_warning(State(phase), object()))
+		self.assertIsNone(bug_loop.stored_phase_warning(State(None), None))
 
 
 if __name__ == "__main__":

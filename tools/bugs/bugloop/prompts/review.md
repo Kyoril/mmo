@@ -32,3 +32,5 @@ Decide:
    behaviour), and leave `design_question` empty unless the diff goes beyond the block. Set
    `guidance_followed` to false if the diff does not implement what the block describes or goes
    beyond it without a MAINTAINER GUIDANCE block justifying the extra changes.
+10. If a CI FAILURE block is present, the change must fix the named failure at its root: a change
+   that weakens, skips or deletes a test, or edits CI configuration, sets `fixes_symptom` to false.

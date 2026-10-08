@@ -10,6 +10,9 @@ import subprocess
 
 from .guard import FileChange
 
+_EMERGENCY_BRANCH = re.compile(r"bugfix/[0-9a-f]{8}")
+_FULL_SHA = re.compile(r"[0-9a-f]{40}")
+_SHORT_SHA = re.compile(r"[0-9a-f]{7,40}")
 SUBMODULES = ("data/client", "data/editor")
 ShipResult = collections.namedtuple("ShipResult", "ok commit reason")
 
@@ -283,3 +286,40 @@ class Worktree:
 
 	def delete_branch(self, branch):
 		run_git(self.main_repo, "branch", "-D", branch, check=False)
+
+	def push_branch(self, branch, head):
+		"""Pushes an emergency branch for CI verification; nothing but bugfix/<id8> ever goes out here."""
+		if not _EMERGENCY_BRANCH.fullmatch(branch):
+			return False, "refusing to push " + branch
+		if not _FULL_SHA.fullmatch(head or ""):
+			# Anything else could be an option, an empty (deleting) source or a symbolic ref.
+			return False, "refusing to push a head that is not a full commit id"
+		push = run_git(self.path, "push", "--force", "--", self.remote, "{}:refs/heads/{}".format(head, branch), check=False)
+		if push.returncode != 0:
+			return False, "push of {} failed: {}".format(branch, push.stderr.strip()[-300:])
+		return True, ""
+
+	def delete_remote_branch(self, branch):
+		if not _EMERGENCY_BRANCH.fullmatch(branch):
+			raise ValueError("refusing to delete " + branch)
+		run_git(self.path, "push", "--delete", "--", self.remote, branch, check=False)
+
+	def is_ancestor(self, ancestor, descendant):
+		"""True when commit `ancestor` is `descendant` or one of its ancestors. Only hex ids are
+		accepted; an unknown commit is fetched once, and anything still unknown is False."""
+		if not _SHORT_SHA.fullmatch(ancestor or "") or not _SHORT_SHA.fullmatch(descendant or ""):
+			return False
+		for attempt in range(2):
+			check = run_git(self.main_repo, "merge-base", "--is-ancestor", ancestor, descendant, check=False)
+			if check.returncode in (0, 1):
+				return check.returncode == 0
+			if attempt == 0:
+				run_git(self.main_repo, "fetch", self.remote, check=False)
+		return False
+
+	def log_lines(self, base, head, limit=30):
+		if (base and not _SHORT_SHA.fullmatch(base)) or not _SHORT_SHA.fullmatch(head or ""):
+			return []
+		rng = "{}..{}".format(base, head) if base else head
+		out = run_git(self.main_repo, "log", "--first-parent", "--format=%h %s", "-n", str(limit), rng, "--", check=False)
+		return [line for line in out.stdout.splitlines() if line.strip()]

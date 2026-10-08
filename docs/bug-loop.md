@@ -231,13 +231,84 @@ webhook nothing is sent. Messages:
   second instance, and a failed fetch, archive or extract). Never in a dry run (`-DryRun`). It
   reads the variable directly and never logs the URL.
 
+## CI watch and emergency fixes
+
+The loop also watches GitHub Actions for `develop`. Without a token (and in a dry run) it logs
+`ci watch: off` at startup and behaves as before; with one it logs `ci watch: on`. A red phase
+still stored in the state from an earlier run with the watch on is then ignored, so nothing is
+held, and the startup log warns: `ci watch: off, but state holds a red phase for ticket <id>;
+ships are not held`.
+
+- **Token:** user environment variable `MMO_BUGLOOP_GITHUB_TOKEN`, a fine-grained token for the
+  repository with Actions read and write (write only to restart the Nightly Release) and
+  Contents read.
+- **Watched workflows:** `ccpp.yml` (Linux Servers, on every push to `develop` and to
+  `bugfix/**`) and `nightly-release.yml`. Poll interval, workflow names and waits are the
+  `ci_*` keys of the loop config (`ci_poll_seconds` 300, `ci_wait_minutes` 60,
+  `ci_nightly_wait_minutes` 240, `emergency_attempts` 3).
+- **Ticket:** when the newest run on `develop` is red, the loop opens an emergency ticket in the
+  bug API (one per red phase) and sends a Discord message ("develop is red"). If GitHub cannot
+  list the failing job yet, the ticket opens with "(log unavailable)" and the log is read again
+  on a later poll. The ticket is resolved when develop is green again ("develop is green
+  again"), even if the emergency fix is parked; a parked branch stays for the maintainer.
+- **While develop is red** every other ship is queued with the reason "develop is red"
+  (parking continues). A red result from the last read holds ships even before the phase could
+  be opened. When GitHub is unreachable, the last known state holds: ships continue if develop
+  was green and stay held if it was red. If the check fails for another reason (the bug API
+  during the check, say), ships are queued with "CI check failed" until the CI state is
+  confirmed again; triage and decisions go on meanwhile.
+- **Discord:** the emergency ticket posts no per-attempt status messages; the CI messages
+  ("develop is red", "Emergency fix shipped", "Emergency fix needs you", "develop is green
+  again") are sent once per event.
+- **Emergency fix:** the fixer works the ticket like a bug. Because Linux CI cannot run locally,
+  the candidate is pushed to origin as `bugfix/<id8>` and the loop waits for the `ccpp.yml` run
+  of that branch; only a green run ships it (Discord: "Emergency fix shipped"). The branch is
+  deleted afterwards. Emergency fixes that touch `data/client` or `data/editor` are never
+  pushed; they park. If the loop crashes right after the branch push, `bugfix/<id8>` stays on
+  origin until the next emergency push of the same ticket; if the phase closes first, delete it
+  by hand: `git push origin --delete bugfix/<id8>`. The emergency ship ignores the nightly
+  freeze window: repairing develop before the nightly is the point. A tripped circuit breaker
+  parks a green emergency fix ("Emergency fix needs you"), with one exception: the loop tripped
+  the breaker itself for a red Nightly Release run of the current red phase. Then the fix
+  repairs what tripped it and ships (ticket note "shipping despite the breaker"); the breaker
+  stays tripped.
+- **After the ship** the loop waits for develop's own CI: 60 minutes, or 240 minutes when the
+  Nightly Release decides (its gate alone can take about 180). A red run on the merge commit or
+  on a descendant counts as a failed attempt. After 3 attempts the phase is parked and one
+  Discord message "Emergency fix needs you" is sent. When an attempt is due but the daily
+  invocation budget is used up, the same message says so once per phase and UTC day; develop
+  stays red until the next UTC day or until the maintainer acts.
+- **Maintainer decisions** on the emergency ticket steer the automation: discard parks the
+  phase; ship merges the approved diff (hash-bound only, without a Linux CI run) and then waits
+  for develop; refix gives the fixer guidance as for any bug, but a refix of the emergency
+  ticket is never pushed to CI: it parks again for a ship decision.
+- **Nightly Release:** if the Nightly Release is red, the loop starts a new Nightly Release run
+  on develop (workflow_dispatch) once Linux Servers is green on a newer develop commit, at most
+  once per commit and never while a nightly is queued or running. A restarted run that fails
+  again counts as a failed attempt. A green release is not a deploy: `mmo-deployer` still
+  ships it at 04:45.
+
+Rollout order: deploy the bug API and UI first, then push `develop` (the `bugfix/**` workflow
+trigger goes with it), then restart the loop task (`Stop-ScheduledTask`, kill any leftover
+python process tree, start the task). Set `MMO_BUGLOOP_GITHUB_TOKEN` before the restart.
+
 ## Circuit breaker
 
 `artifacts/bug-loop/BREAKER` stops all auto-shipping; parking continues. It trips by itself
 when the newest finished GitHub "Nightly Release" run on develop failed and a `Merge bugfix/...`
 landed on develop since the last successful run (read through `gh` in the user's login, see
 `bugloop/ci.py`). If `gh` cannot be reached, the loop logs it and keeps going without the check.
-After a deploy rollback, trip it by hand. Only clear it once the cause is understood:
+After a deploy rollback, trip it by hand. Only clear it once the cause is understood.
+
+The one exemption: when the loop tripped the breaker for a red nightly run, it records that run
+id (`breaker_source` in `state.json`, together with the breaker file's text). A green emergency
+fix of a red phase that saw that same nightly run red ships despite the breaker. Everything
+else stays blocked, and the breaker stays tripped after the emergency ship: reset it yourself
+as always. A breaker set by hand (`breaker on`), tripped for another run, or reset and set
+again, keeps blocking the emergency fix too; it parks with "Emergency fix needs you".
+`breaker on` on an already tripped breaker appends a line marked "(set by hand)", so a
+hold set on top of the loop's own trip also ends the exemption.
+
 
 ```powershell
 & $env:MMO_GATE_PYTHON tools/bugs/bug_loop.py breaker on --reason "rollback of nightly-..."

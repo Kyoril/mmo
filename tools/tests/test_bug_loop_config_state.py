@@ -44,6 +44,12 @@ class ConfigTests(unittest.TestCase):
 		self.assertEqual(config.worktree, "")
 		self.assertEqual(config.worker, "bug-loop")
 
+	def test_ci_defaults(self):
+		config = loop_config.LoopConfig()
+		self.assertEqual((config.ci_poll_seconds, config.ci_wait_minutes, config.emergency_attempts), (300, 60, 3))
+		self.assertEqual(config.ci_nightly_wait_minutes, 240)
+		self.assertEqual((config.ci_push_workflow, config.ci_nightly_workflow), ("ccpp.yml", "nightly-release.yml"))
+
 
 class StateTests(unittest.TestCase):
 	def setUp(self):
@@ -157,6 +163,28 @@ class StateTests(unittest.TestCase):
 		self.assertEqual(reloaded.data["pending_summary"]["day"], "2026-10-07")
 		self.assertEqual(len(reloaded.data["pending_summary"]["outcomes"]), 1)
 
+	def test_ci_state_defaults_and_helpers(self):
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["ci"], {"last_check": "", "colours": {}, "phase": None, "pending": None})
+		self.assertIsNone(state.emergency_ticket())
+		state.data["ci"]["phase"] = {"ticket": "a" * 24}
+		state.save()
+		state = loop_state.LoopState(self.path, "2026-10-09")
+		self.assertEqual(state.emergency_ticket(), "a" * 24)
+
+	def test_old_state_files_get_the_ci_keys(self):
+		with open(self.path, "w", encoding="utf-8") as handle:
+			json.dump({"day": "2026-10-08", "invocations": 2}, handle)
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["ci"]["colours"], {})
+		self.assertIsNone(state.ci_phase())
+		with open(self.path, "w", encoding="utf-8") as handle:
+			json.dump({"day": "2026-10-08", "ci": {"colours": {"ccpp.yml": "red"}}}, handle)
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["ci"]["colours"], {"ccpp.yml": "red"})
+		self.assertEqual((state.data["ci"]["last_check"], state.data["ci"]["pending"]), ("", None))
+		self.assertIsNone(state.emergency_ticket())
+
 
 class FreezeTests(unittest.TestCase):
 	def test_inside_and_outside(self):
@@ -180,6 +208,18 @@ class BreakerTests(unittest.TestCase):
 				self.assertIn("test", handle.read())
 			loop_state.reset_breaker(folder)
 			self.assertFalse(loop_state.breaker_active(folder))
+
+	def test_trip_by_hand_appends_to_a_tripped_breaker(self):
+		with tempfile.TemporaryDirectory() as folder:
+			path = os.path.join(folder, loop_state.BREAKER_FILE)
+			self.assertTrue(loop_state.trip_breaker(folder, "nightly run 10 is red", utc("2026-10-07 10:00")))
+			self.assertFalse(loop_state.trip_breaker(folder, "again", utc("2026-10-07 10:05")))
+			with open(path, encoding="utf-8") as handle:
+				self.assertEqual(handle.read(), "2026-10-07T10:00:00Z nightly run 10 is red\n")
+			self.assertFalse(loop_state.trip_breaker(folder, "hold", utc("2026-10-07 11:00"), by_hand=True))
+			with open(path, encoding="utf-8") as handle:
+				self.assertEqual(handle.read().splitlines(), ["2026-10-07T10:00:00Z nightly run 10 is red",
+					"2026-10-07T11:00:00Z hold (set by hand)"])
 
 	def test_red_nightly_with_loop_merge_blames_loop(self):
 		loop_merge = "abc123 Merge bugfix/0a1b2c3d (bug-loop, gate green at 1234abcd)"

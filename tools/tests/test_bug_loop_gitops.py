@@ -207,6 +207,45 @@ class GitopsTests(unittest.TestCase):
 		with self.assertRaises(gitops.GitError):
 			self.wt.resume_branch("bugfix/missing")
 
+	def test_branch_pushes_are_limited_to_bugfix_branches(self):
+		worktree = gitops.Worktree("main", "wt")
+		self.assertEqual(worktree.push_branch("develop", "abc")[0], False)
+		self.assertEqual(worktree.push_branch("bugfix/../develop", "abc")[0], False)
+		with self.assertRaises(ValueError):
+			worktree.delete_remote_branch("master")
+
+	def test_push_and_log_refuse_odd_commit_ids_without_running_git(self):
+		worktree = gitops.Worktree("main", "wt")
+		with mock.patch.object(gitops, "run_git") as run:
+			for head in ("--receive-pack=x", "", "HEAD", "abc", "A" * 40):
+				self.assertFalse(worktree.push_branch("bugfix/aaaaaaaa", head)[0], head)
+			self.assertEqual(worktree.log_lines("", "--output=x"), [])
+			self.assertEqual(worktree.log_lines("-n1", "abcdef0"), [])
+			self.assertEqual(worktree.log_lines("abcdef0", ""), [])
+			self.assertEqual(worktree.log_lines("abcdef0", "HEAD"), [])
+			self.assertFalse(worktree.is_ancestor("--all", "abcdef0"))
+			self.assertFalse(worktree.is_ancestor("abcdef0", "HEAD"))
+			self.assertFalse(worktree.is_ancestor("", "abcdef0"))
+			run.assert_not_called()
+
+	def test_is_ancestor(self):
+		base, head = self.make_fix()
+		self.assertTrue(self.wt.is_ancestor(base, head))
+		self.assertTrue(self.wt.is_ancestor(head, head))
+		self.assertFalse(self.wt.is_ancestor(head, base))
+		self.assertFalse(self.wt.is_ancestor("0" * 40, head))  # unknown even after a fetch
+
+	def test_emergency_branch_push_log_and_delete(self):
+		base, head = self.make_fix()
+		ok, reason = self.wt.push_branch("bugfix/aaaaaaaa", head)
+		self.assertEqual((ok, reason), (True, ""))
+		self.assertEqual(git(self.origin, "rev-parse", "refs/heads/bugfix/aaaaaaaa"), head)
+		self.assertEqual(len(self.wt.log_lines(base, head)), 1)
+		self.assertEqual(len(self.wt.log_lines(base[:8], head, limit=1)), 1)
+		self.assertEqual(len(self.wt.log_lines("", head)), 2)
+		self.wt.delete_remote_branch("bugfix/aaaaaaaa")
+		self.assertEqual(git(self.origin, "branch", "--list", "bugfix/aaaaaaaa"), "")
+
 	def move_develop_submodule(self, name, text):
 		"""Someone else lands a data change: submodule master and develop's pointer move together."""
 		write(os.path.join(self.sub_seed, name), text)
