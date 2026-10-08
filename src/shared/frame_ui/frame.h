@@ -345,6 +345,11 @@ namespace mmo
 
 		const char* GetPropertyValue(const std::string& name);
 
+		/// Gets the unit token (e.g. "player" or "target") this frame stands in for, taken from its
+		/// "HoverUnit" property. Hovering such a frame counts as hovering that unit.
+		/// @returns The unit token, or an empty string if the frame does not represent a unit.
+		std::string GetHoverUnit();
+
 		bool IsChildOf(Frame& parent) const;
 
 		Pointer FindChild(const std::string& name);
