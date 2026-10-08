@@ -945,7 +945,7 @@ class BugLoop:
 			if not phase.get("parked") and deadline and self.clock() >= datetime.datetime.fromisoformat(deadline):
 				# develop's run on the merge never finished (cancelled, say): leave it to the maintainer, once.
 				self._park_emergency(phase["ticket"], "develop's CI did not finish on the emergency merge {} within {} minutes".format(
-					phase["awaiting_develop"][:8], self.config.ci_wait_minutes))
+					phase["awaiting_develop"][:8], self._awaiting_minutes(phase)))
 			return False
 		if phase.get("parked") or self.state.data["ci"]["pending"]:
 			return False
@@ -1126,8 +1126,15 @@ class BugLoop:
 		phase["parked"] = False
 		phase["notified_exhausted"] = False
 		phase["awaiting_develop"] = commit
-		phase["awaiting_deadline"] = (self.clock() + datetime.timedelta(minutes=self.config.ci_wait_minutes)).isoformat()
+		phase["awaiting_deadline"] = (self.clock() + datetime.timedelta(minutes=self._awaiting_minutes(phase))).isoformat()
 		self.state.save()
+
+	def _awaiting_minutes(self, phase):
+		"""How long to wait for develop after an emergency ship: a red phase with a red nightly is
+		decided by a Nightly Release, which runs far longer than the push workflow."""
+		if "nightly" in (phase.get("red_runs") or {}):
+			return self.config.ci_nightly_wait_minutes
+		return self.config.ci_wait_minutes
 
 	def _descends(self, ancestor, commit):
 		try:
@@ -1299,7 +1306,7 @@ class BugLoop:
 		phase["nightly_dispatched"].append(sha)
 		if phase.get("awaiting_develop"):
 			# The restarted nightly is the run that decides now; its wait starts with the dispatch.
-			phase["awaiting_deadline"] = (self.clock() + datetime.timedelta(minutes=self.config.ci_wait_minutes)).isoformat()
+			phase["awaiting_deadline"] = (self.clock() + datetime.timedelta(minutes=self._awaiting_minutes(phase))).isoformat()
 		self.log("ci watch: restarted the Nightly Release for " + sha[:8])
 		self._update(phase["ticket"], note="restarted the Nightly Release for " + sha[:8])
 

@@ -47,6 +47,7 @@ class ConfigTests(unittest.TestCase):
 	def test_ci_defaults(self):
 		config = loop_config.LoopConfig()
 		self.assertEqual((config.ci_poll_seconds, config.ci_wait_minutes, config.emergency_attempts), (300, 60, 3))
+		self.assertEqual(config.ci_nightly_wait_minutes, 240)
 		self.assertEqual((config.ci_push_workflow, config.ci_nightly_workflow), ("ccpp.yml", "nightly-release.yml"))
 
 

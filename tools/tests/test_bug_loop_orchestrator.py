@@ -1765,6 +1765,28 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(sum("needs you" in m for m in self.notifier.messages), 1)
 		self.assertTrue(self.state.ci_phase()["parked"])
 
+	def test_a_nightly_red_phase_waits_longer_for_develop(self):
+		self.make(bugs=[dict(BUG, status="resolved")], github=FakeGitHub())
+		gh = self.loop.github
+		gh.runs_by_workflow["nightly-release.yml"] = [run(10, "failure", "old1", event="schedule")]
+		gh.runs_by_workflow["ccpp.yml"] = [run(11, "success", "old1")]
+		self.loop.poll_once()
+		ticket = self.state.emergency_ticket()
+		branch = "bugfix/" + ticket[-8:]
+		self.assertEqual(self.worktree.pushed, [(branch, "head1")])
+		gh.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.now += datetime.timedelta(minutes=61)
+		self.loop.poll_once()
+		self.assertFalse(self.state.ci_phase()["parked"])
+		self.assertFalse(any("needs you" in m for m in self.notifier.messages))
+		self.now += datetime.timedelta(minutes=180)  # 241 minutes after the ship
+		self.loop.poll_once()
+		self.assertTrue(self.state.ci_phase()["parked"])
+		self.assertEqual(sum("needs you" in m for m in self.notifier.messages), 1)
+
 	def test_maintainer_ship_of_a_parked_emergency_fix_unparks(self):
 		ticket = self.run_emergency(review=dict(GOOD_REVIEW, fixes_symptom=False))
 		self.assertTrue(self.state.ci_phase()["parked"])
