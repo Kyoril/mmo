@@ -45,10 +45,15 @@ namespace mmo
 		// file before this point survive registration, so we never overwrite user settings.
 		ConsoleVar* masterEnabled = ConsoleVarMgr::RegisterConsoleVar("SoundEnabled", "Whether sound output is enabled at all.", "1");
 		ConsoleVar* masterVolume = ConsoleVarMgr::RegisterConsoleVar("MasterVolume", "Master volume (0 to 1).", "1.0");
+		ConsoleVar* inBackground = ConsoleVarMgr::RegisterConsoleVar("SoundInBackground", "Whether sound keeps playing while the game window is in the background or minimized.", "1");
 
-		m_connections += masterEnabled->Changed.connect([this](ConsoleVar& var, const std::string&)
+		m_connections += masterEnabled->Changed.connect([this](ConsoleVar&, const std::string&)
 			{
-				m_audio.SetMasterMuted(!var.GetBoolValue());
+				ApplyMasterMute();
+			});
+		m_connections += inBackground->Changed.connect([this](ConsoleVar&, const std::string&)
+			{
+				ApplyMasterMute();
 			});
 		m_connections += masterVolume->Changed.connect([this](ConsoleVar& var, const std::string&)
 			{
@@ -79,10 +84,8 @@ namespace mmo
 
 	void AudioSettings::ApplyAll() const
 	{
-		if (const ConsoleVar* masterEnabled = ConsoleVarMgr::FindConsoleVar("SoundEnabled"))
-		{
-			m_audio.SetMasterMuted(!masterEnabled->GetBoolValue());
-		}
+		ApplyMasterMute();
+
 		if (const ConsoleVar* masterVolume = ConsoleVarMgr::FindConsoleVar("MasterVolume"))
 		{
 			m_audio.SetMasterVolume(ClampVolume(masterVolume->GetFloatValue()));
@@ -99,5 +102,26 @@ namespace mmo
 				m_audio.SetCategoryVolume(definition.category, ClampVolume(volume->GetFloatValue()));
 			}
 		}
+	}
+
+	void AudioSettings::SetWindowFocused(const bool focused)
+	{
+		if (focused == m_windowFocused)
+		{
+			return;
+		}
+
+		m_windowFocused = focused;
+		ApplyMasterMute();
+	}
+
+	void AudioSettings::ApplyMasterMute() const
+	{
+		const ConsoleVar* masterEnabled = ConsoleVarMgr::FindConsoleVar("SoundEnabled");
+		const ConsoleVar* inBackground = ConsoleVarMgr::FindConsoleVar("SoundInBackground");
+
+		const bool enabled = !masterEnabled || masterEnabled->GetBoolValue();
+		const bool audible = m_windowFocused || !inBackground || inBackground->GetBoolValue();
+		m_audio.SetMasterMuted(!(enabled && audible));
 	}
 }

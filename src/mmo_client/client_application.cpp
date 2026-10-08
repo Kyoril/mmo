@@ -57,6 +57,7 @@
 #endif
 
 #include "audio_settings.h"
+#include "graphics/graphics_device.h"
 #include "game_client/game_unit_c.h"
 #include "game_client/sound_entry_player.h"
 #include "systems/cast_error_voice.h"
@@ -182,6 +183,15 @@ namespace mmo
 				}
 
 				localContext.timerService.poll_one();
+
+				// Lets "Sound in Background" mute the game while another window has the focus.
+				if (localContext.audioSettings && GraphicsDevice::HasInstance())
+				{
+					if (const RenderWindowPtr window = GraphicsDevice::Get().GetAutoCreatedWindow())
+					{
+						localContext.audioSettings->SetWindowFocused(window->HasFocus());
+					}
+				}
 			});
 
 		if (!context.runtime->IsInitialized())
