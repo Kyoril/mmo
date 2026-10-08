@@ -246,6 +246,65 @@ class GitopsTests(unittest.TestCase):
 		self.wt.delete_remote_branch("bugfix/aaaaaaaa")
 		self.assertEqual(git(self.origin, "branch", "--list", "bugfix/aaaaaaaa"), "")
 
+	def move_develop_submodule(self, name, text):
+		"""Someone else lands a data change: submodule master and develop's pointer move together."""
+		write(os.path.join(self.sub_seed, name), text)
+		git(self.sub_seed, "add", "-A")
+		git(self.sub_seed, "commit", "-m", "elsewhere: " + name)
+		git(self.sub_seed, "push", self.sub_origin, "master")
+		sub = os.path.join(self.main, "data", "client")
+		git(sub, "fetch", "origin")
+		git(sub, "checkout", "--detach", "origin/master")
+		git(self.main, "add", "data/client")
+		git(self.main, "commit", "-m", "bump data/client")
+		git(self.main, "push", "origin", "develop")
+		return git(sub, "rev-parse", "HEAD")
+
+	def test_resume_branch_merges_develop_including_submodule_pointers(self):
+		_, old_head = self.make_fix()
+		moved = self.move_develop_submodule("stump.txt", "collision\n")
+		self.wt.prepare()
+		head = self.wt.resume_branch("bugfix/x")
+		self.assertNotEqual(head, old_head)
+		self.assertEqual(self.wt.fork_point("bugfix/x"), git(self.origin, "rev-parse", "develop"))
+		# The refix is judged against today's develop: the other data change is not part of it.
+		paths = sorted(change.path for change in self.wt.changes(self.wt.fork_point("bugfix/x"), head))
+		self.assertEqual(paths, ["data/client/data.txt", "src/a.cpp"])
+		sub = self.wt.sub_path("data/client")
+		self.assertEqual(gitops.run_git(sub, "merge-base", "--is-ancestor", moved, "HEAD", check=False).returncode, 0)
+		self.assertEqual(git(sub, "symbolic-ref", "HEAD"), "refs/heads/bugfix/x")
+		self.assertTrue(self.wt.is_clean())
+
+	def test_resume_branch_raises_on_a_submodule_conflict_and_leaves_no_merge(self):
+		self.make_fix()
+		self.move_develop_submodule("data.txt", "three\n")
+		self.wt.prepare()
+		with self.assertRaises(gitops.GitError) as raised:
+			self.wt.resume_branch("bugfix/x")
+		self.assertIn("data/client", str(raised.exception))
+		self.assertNotEqual(gitops.run_git(self.wt.path, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False).returncode, 0)
+		self.assertTrue(self.wt.is_clean())
+
+	def test_ship_merges_a_submodule_pointer_develop_moved(self):
+		_, head = self.make_fix()
+		fix_sub = self.wt.gitlinks(head)["data/client"]
+		moved = self.move_develop_submodule("stump.txt", "collision\n")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: True)
+		self.assertTrue(result.ok, result.reason)
+		shipped = git(self.sub_origin, "rev-parse", "master")
+		self.assertEqual(self.wt.gitlinks(result.commit)["data/client"], shipped)
+		for commit in (fix_sub, moved):
+			self.assertEqual(gitops.run_git(self.sub_origin, "merge-base", "--is-ancestor", commit, shipped, check=False).returncode, 0)
+
+	def test_ship_gates_a_merge_that_had_to_merge_a_submodule(self):
+		_, head = self.make_fix()
+		self.move_develop_submodule("stump.txt", "collision\n")
+		before = git(self.origin, "rev-parse", "develop")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: False)
+		self.assertFalse(result.ok)
+		self.assertIn("fast gate", result.reason)
+		self.assertEqual(git(self.origin, "rev-parse", "develop"), before)
+
 
 @unittest.skipUnless(sys.platform == "win32", "named mutexes are Windows-only")
 class WinlockTests(unittest.TestCase):

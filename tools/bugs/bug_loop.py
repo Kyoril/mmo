@@ -25,7 +25,7 @@ RUNTIME_ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import bugs  # noqa: E402
-from bugloop import claude, config as loop_config, data_diff, github, gitops, loop, notify, state as loop_state, verification, winlock  # noqa: E402
+from bugloop import ci, claude, config as loop_config, data_diff, github, gitops, loop, notify, state as loop_state, verification, winlock  # noqa: E402
 
 
 def _logger(path):
@@ -158,7 +158,7 @@ def main(argv=None):
 		gh = make_github(os.environ, origin, log)
 	bug_loop = loop.BugLoop(api, runner, worktree, verifier, decoder, config, state, prompts, schemas,
 		artifacts, os.path.join(repo, "tools", "gate", "reports"), lock=winlock.named_mutex, dry_run=args.dry_run, log=log,
-		notifier=make_notifier(os.environ, log), github=gh)
+		notifier=make_notifier(os.environ, log), github=gh, nightly=ci.github_nightly(repo))
 	log("bug loop started ({}, {})".format("dry run" if args.dry_run else "live", HERE))
 	log(notifications_status(bug_loop.notifier, args.dry_run))
 	warning = stored_phase_warning(state, gh)

@@ -14,7 +14,7 @@ test, and auto-ships low-risk fixes to `origin/develop`. Everything else is park
 | Review | `claude -p --tools Read,Grep,Glob` | read the branch; never sees the report |
 | Guard | `bugloop/guard.py` | protected paths, suspicious patterns, data field rules |
 | Proof | orchestrator | test fails on base, passes on the fix (E2E scenarios run here, under the gate lock) |
-| Gate | `verify.ps1 -Tier full` | build, unit, tool tests, E2E |
+| Gate | `verify.ps1 -Tier full` | build, unit, tool tests, Linux check (WSL), E2E |
 
 Every Claude stage runs with `--strict-mcp-config` (no MCP servers) and a scrubbed environment:
 no stage gets `MMO_BUG_API_KEY` or `MMO_BUG_API_URL`; only the fixer gets
@@ -152,7 +152,12 @@ The decision panel of a parked bug offers three actions: refix, ship and discard
 not parked (see below). The loop consumes decisions before it does anything else in a poll:
 
 - **Refix with guidance**: the fixer continues on the existing `bugfix/<id8>` branch with the
-  maintainer's guidance, at most 3 guided rounds per bug. A refix with empty guidance is
+  maintainer's guidance, at most 3 guided rounds per bug. Before the fixer starts, the loop
+  merges today's `origin/develop` into the branch itself; a data submodule pointer that both
+  moved is resolved by merging the two submodule commits. The refix is then guarded and
+  reviewed against today's develop, so data that landed meanwhile (another fix's mesh, say) is
+  not counted as part of this fix. A conflict there ends the refix ("decide again"). Shipping
+  merges submodule pointers the same way. A refix with empty guidance is
   refused ("decide again"). If a guided refix fails, the bug goes back to `pr_open` so it can
   be decided again; at the limit the loop posts a "refix limit reached" message.
 - **Ship**: ships exactly the recorded commit. The daily cap does not apply. If the branch tip
@@ -278,8 +283,6 @@ ships are not held`.
   once per commit and never while a nightly is queued or running. A restarted run that fails
   again counts as a failed attempt. A green release is not a deploy: `mmo-deployer` still
   ships it at 04:45.
-- **Local nightly gate:** `nightly_gate.ps1` now gates `origin/develop` (after
-  `git fetch origin`), the same commits the loop and CI look at.
 
 Rollout order: deploy the bug API and UI first, then push `develop` (the `bugfix/**` workflow
 trigger goes with it), then restart the loop task (`Stop-ScheduledTask`, kill any leftover
@@ -288,7 +291,9 @@ python process tree, start the task). Set `MMO_BUGLOOP_GITHUB_TOKEN` before the 
 ## Circuit breaker
 
 `artifacts/bug-loop/BREAKER` stops all auto-shipping; parking continues. It trips by itself
-when a nightly report is red and lists a `Merge bugfix/...` among `merges_since_last_green`.
+when the newest finished GitHub "Nightly Release" run on develop failed and a `Merge bugfix/...`
+landed on develop since the last successful run (read through `gh` in the user's login, see
+`bugloop/ci.py`). If `gh` cannot be reached, the loop logs it and keeps going without the check.
 After a deploy rollback, trip it by hand. Only clear it once the cause is understood:
 
 ```powershell

@@ -30,26 +30,24 @@ The following systems are fully implemented and should not be suggested as futur
   data/docs tweaks the user explicitly requests.
 - The quality gate has three tiers (`tools/gate/verify.ps1 -Tier fast|full`):
   - **Merge (fast):** `/ship` merges a feature branch into `develop` after a green fast
-    gate for HEAD — protocol check, build, unit tests, tool tests (~1.5 min incremental).
+    gate for HEAD — protocol check, build, unit tests, tool tests, then the same server
+    targets built and tested on Linux in WSL (`tools/gate/linux_gate.sh`; gcc catches what
+    MSVC does not, and the servers ship on Linux).
     It runs the gate itself when needed. `/gate` runs the same check on demand;
     `/gate full` adds E2E and a code review for risky changes.
-  - **Nightly (full):** the "MMO Nightly Gate" task runs the full gate including E2E on
-    `origin/develop` (after `git fetch origin`) in the dedicated worktree `H:/mmo-nightly`,
-    which no session may use or edit. It skips when origin/develop has not moved since the
-    last green night. The scheduled
-    task runs the copy of `nightly_gate.ps1` its previous run checked out, so gate-script
-    changes take effect one night after reaching develop.
-  - **Release (full):** before publishing a build to the live client distribution or
-    servers, `/release` (`tools/gate/release_check.ps1`) must be green for that exact
-    commit; it runs the full gate if no nightly covered it.
+  - **Nightly (full):** the GitHub "Nightly Release" workflow (below) runs the full gate
+    including E2E on `develop`, on Linux, before it builds and publishes anything. There is
+    no local nightly anymore.
+  - **Release (full):** `/release` (`tools/gate/release_check.ps1`) runs the full gate for
+    an exact commit on demand, in the gate worktree `H:/mmo-nightly`, which no session may
+    use or edit (it is created when needed).
 - Never push to origin unless the user explicitly asks. The one standing exception is the
   bug loop's auto-ship path (below).
-- Reports land in `tools/gate/reports/` (`nightly-*.json`, `release-*.json`, weekly
-  content audit). At session start, surface to the user before starting new work:
-  the newest nightly report if `passed` is `false` (quote `merges_since_last_green`, the
-  suspects, and `setup_error` if present; step logs are under `logs_dir`), or the fact that no nightly report with a
-  non-null `passed` is younger than 48 h (the nightly is not running). Reports with
-  `"skipped": true` predate the dedicated worktree and mean "did not run".
+- At session start, surface to the user before starting new work: the newest finished
+  nightly if it failed (`gh run list --workflow nightly-release.yml --branch develop -L 5`;
+  quote the failing step from `gh run view <id> --log-failed`), or the fact that no run
+  finished in the last 48 h (the nightly is not running). Local reports land in
+  `tools/gate/reports/` (`release-*.json`, bug loop, weekly content audit).
 - `.claude/settings.local.json` (htex MCP config) does not follow git worktrees, so
   parallel worktree sessions run without it.
 - **Deploy (nightly):** `.github/workflows/nightly-release.yml` gates develop on Linux and

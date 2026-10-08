@@ -4,7 +4,6 @@
 fix and ship queues. Also the freeze window and the circuit breaker file."""
 
 import copy
-import glob
 import json
 import os
 
@@ -187,16 +186,6 @@ def reset_breaker(artifacts_dir):
 	path = os.path.join(artifacts_dir, BREAKER_FILE)
 	if os.path.exists(path):
 		os.remove(path)
-
-
-def newest_nightly(report_dir):
-	"""(file name, parsed report) of the newest nightly report, or (None, None)."""
-	paths = sorted(glob.glob(os.path.join(report_dir, "nightly-*.json")))
-	if not paths:
-		return None, None
-	# The gate writes reports from PowerShell 5.1, which prepends a BOM.
-	with open(paths[-1], "r", encoding="utf-8-sig") as handle:
-		return os.path.basename(paths[-1]), json.load(handle)
 
 
 def red_nightly_blames_loop(report):

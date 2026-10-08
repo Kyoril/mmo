@@ -217,19 +217,6 @@ class BreakerTests(unittest.TestCase):
 		self.assertFalse(loop_state.red_nightly_blames_loop({"passed": None, "merges_since_last_green": [loop_merge]}))
 		self.assertFalse(loop_state.red_nightly_blames_loop(None))
 
-	def test_newest_nightly_reads_reports_with_bom(self):
-		with tempfile.TemporaryDirectory() as folder:
-			for day, passed in (("2026-10-06", True), ("2026-10-07", False)):
-				with open(os.path.join(folder, "nightly-{}.json".format(day)), "w", encoding="utf-8-sig") as handle:
-					json.dump({"passed": passed}, handle)
-			name, report = loop_state.newest_nightly(folder)
-			self.assertEqual(name, "nightly-2026-10-07.json")
-			self.assertFalse(report["passed"])
-
-	def test_newest_nightly_without_reports(self):
-		with tempfile.TemporaryDirectory() as folder:
-			self.assertEqual(loop_state.newest_nightly(folder), (None, None))
-
 
 if __name__ == "__main__":
 	unittest.main()

@@ -678,7 +678,7 @@ class LoopTests(unittest.TestCase):
 		self.park_with_decision("refix", "Again.")
 		self.worktree.branch_heads = {}
 		self.loop.poll_once()
-		self.assertIn("unusable", self.api.notes(BUG_ID)[-1])
+		self.assertIn("cannot refix", self.api.notes(BUG_ID)[-1])
 		self.assertEqual(self.worktree.shipped, [])
 
 	def test_ship_decision_ships_the_recorded_commit_past_the_cap(self):
@@ -941,9 +941,8 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertTrue(any("Shipped" in m for m in self.notifier.messages))
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
-		os.makedirs(self.reports)
-		with open(os.path.join(self.reports, "nightly-2026-10-07.json"), "w", encoding="utf-8-sig") as handle:
-			json.dump({"passed": False, "merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]}, handle)
+		self.loop.nightly = lambda: ("nightly run 7", {"passed": False,
+			"merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]})
 		self.loop.poll_once()
 		self.assertTrue(any("circuit breaker" in m for m in self.notifier.messages))
 
@@ -1110,9 +1109,8 @@ class LoopTests(unittest.TestCase):
 
 	def test_red_nightly_with_loop_merge_trips_breaker_once(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
-		os.makedirs(self.reports)
-		with open(os.path.join(self.reports, "nightly-2026-10-07.json"), "w", encoding="utf-8-sig") as handle:
-			json.dump({"passed": False, "merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]}, handle)
+		self.loop.nightly = lambda: ("nightly run 7", {"passed": False,
+			"merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]})
 		self.loop.poll_once()
 		self.assertTrue(loop_state.breaker_active(self.artifacts))
 		loop_state.reset_breaker(self.artifacts)
@@ -1282,11 +1280,13 @@ class LoopTests(unittest.TestCase):
 			guard.FileChange(LOC_PATH, 1, 1, False)]))
 		self.assertTrue(loop.proof_exempt([guard.FileChange(TEST_PATH, 1, 0, False), guard.FileChange(LOC_PATH, 1, 1, False)]))
 
-	def test_malformed_nightly_report_does_not_stop_the_loop(self):
+	def test_unreachable_nightly_does_not_stop_the_loop(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
-		os.makedirs(self.reports)
-		with open(os.path.join(self.reports, "nightly-2026-10-07.json"), "w", encoding="utf-8") as handle:
-			handle.write("{not json")
+
+		def unreachable():
+			raise RuntimeError("gh run list failed: no network")
+
+		self.loop.nightly = unreachable
 		self.loop.poll_once()
 		self.assertFalse(loop_state.breaker_active(self.artifacts))
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "wontfix")
