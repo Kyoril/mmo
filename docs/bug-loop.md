@@ -219,6 +219,45 @@ webhook nothing is sent. Messages:
   second instance, and a failed fetch, archive or extract). Never in a dry run (`-DryRun`). It
   reads the variable directly and never logs the URL.
 
+## CI watch and emergency fixes
+
+The loop also watches GitHub Actions for `develop`. Without a token it logs `ci watch: off` at
+startup and behaves as before; with one it logs `ci watch: on`.
+
+- **Token:** user environment variable `MMO_BUGLOOP_GITHUB_TOKEN`, a fine-grained token for the
+  repository with Actions read and write (write only to restart the Nightly Release) and
+  Contents read.
+- **Watched workflows:** `ccpp.yml` (Linux Servers, on every push to `develop` and to
+  `bugfix/**`) and `nightly-release.yml`. Poll interval, workflow names and waits are the
+  `ci_*` keys of the loop config (`ci_poll_seconds` 300, `ci_wait_minutes` 60,
+  `ci_nightly_wait_minutes` 240, `emergency_attempts` 3).
+- **Ticket:** when the newest run on `develop` is red, the loop opens an emergency ticket in the
+  bug API (one per red phase) and sends a Discord message ("develop is red"). The ticket is
+  resolved when develop is green again ("develop is green again").
+- **While develop is red** every other ship is queued with the reason "develop is red"
+  (parking continues). If the CI check itself fails, ships are queued with "CI check failed"
+  until CI state is confirmed again.
+- **Emergency fix:** the fixer works the ticket like a bug. Because Linux CI cannot run locally,
+  the candidate is pushed to origin as `bugfix/<id8>` and the loop waits for the `ccpp.yml` run
+  of that branch; only a green run ships it (Discord: "Emergency fix shipped"). The branch is
+  deleted afterwards. Emergency fixes that touch `data/client` or `data/editor` are never
+  pushed; they park. If the loop crashes right after the branch push, `bugfix/<id8>` can stay
+  on origin until the next emergency push.
+- **After the ship** the loop waits for develop's own CI: 60 minutes, or 240 minutes when the
+  Nightly Release decides (its gate alone can take about 180). A red run on the merge commit or
+  on a descendant counts as a failed attempt. After 3 attempts the phase is parked and one
+  Discord message "Emergency fix needs you" is sent.
+- **Maintainer decisions** on the emergency ticket steer the automation: discard parks the
+  phase; ship waits for develop; refix gives the fixer guidance as for any bug.
+- **Nightly Release:** if the Nightly Release is red the loop restarts that workflow run once
+  the cause is fixed. A green release is not a deploy: `mmo-deployer` still ships it at 04:45.
+- **Local nightly gate:** `nightly_gate.ps1` now gates `origin/develop` (after
+  `git fetch origin`), the same commits the loop and CI look at.
+
+Rollout order: deploy the bug API and UI first, then push `develop` (the `bugfix/**` workflow
+trigger goes with it), then restart the loop task (`Stop-ScheduledTask`, kill any leftover
+python process tree, start the task). Set `MMO_BUGLOOP_GITHUB_TOKEN` before the restart.
+
 ## Circuit breaker
 
 `artifacts/bug-loop/BREAKER` stops all auto-shipping; parking continues. It trips by itself

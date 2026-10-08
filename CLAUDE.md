@@ -59,7 +59,8 @@ The following systems are fully implemented and should not be suggested as futur
   the bug API backlog (see [docs/bug-loop.md](docs/bug-loop.md)). It owns its worktree `mmo-bugloop`
   and `mmo-bugloop-runtime` (siblings of the main checkout unless `MMO_BUGLOOP_WORKTREE` /
   `MMO_BUGLOOP_RUNTIME` say otherwise); no session may use or edit them. It may push `develop` and the
-  data submodules' `master` to origin on its auto-ship path only. Its merges are titled
+  data submodules' `master` to origin on its auto-ship path only, and `bugfix/<id8>` branches of its own
+  CI emergency tickets for verification (deleted afterwards). Its merges are titled
   `Merge bugfix/<id8> (bug-loop, ...)`. Parked fixes are `bugfix/<id8>` branches: review them,
   then `/ship`. Nothing in `tools/bugs/` may be changed by the loop itself; such changes go
   through a normal feature branch.

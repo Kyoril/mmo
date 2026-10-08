@@ -173,6 +173,11 @@ class GateScriptTests(unittest.TestCase):
 		self.assertIs(report["unchanged"], True)
 		self.assertEqual(report["merges_since_last_green"], [])
 
+	def test_nightly_gates_origin_develop_after_a_fetch(self):
+		with open(os.path.join(GATE_DIR, "nightly_gate.ps1"), encoding="utf-8-sig") as handle:
+			text = handle.read()
+		self.assertIn('[string]$Ref = "origin/develop"', text)
+		self.assertLess(text.index("fetch --quiet origin"), text.index("rev-parse --verify"))
 
 if __name__ == "__main__":
 	unittest.main()

@@ -1,16 +1,20 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
-# Nightly FULL gate (build + unit tests + E2E) on develop, run in the dedicated nightly
+# Nightly FULL gate (build + unit tests + E2E) on origin/develop, run in the dedicated nightly
 # worktree (H:/mmo-nightly) so it no longer depends on what the main checkout is doing.
 # Writes tools/gate/reports/nightly-YYYY-MM-DD.json in the MAIN checkout: the gate report
 # plus the last green commit and the merges since then (the suspects when it is red).
+#
+# The default ref is origin/develop (fetched first): the bug loop and the Linux CI work against
+# origin, and a local develop that lags behind it must not be what gets gated. Pass -Ref develop
+# to gate the local branch instead.
 #
 # Skips the 8-minute run when develop has not moved since the last green night
 # ("unchanged": true); -Force runs anyway.
 
 [CmdletBinding()]
 param(
-	[string]$Ref = "develop",
+	[string]$Ref = "origin/develop",
 	[switch]$Force
 )
 
@@ -68,6 +72,16 @@ try
 	$reportDir = Get-ReportDir
 	New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 	$script:target = Join-Path $reportDir ("nightly-{0}.json" -f (Get-Date -Format "yyyy-MM-dd"))
+
+	if ($Ref.StartsWith("origin/"))
+	{
+		& git -C $script:main fetch --quiet origin
+		if ($LASTEXITCODE -ne 0)
+		{
+			Write-RedReport -Message "cannot fetch origin"
+			exit 1
+		}
+	}
 
 	$resolved = @(& git -C $script:main rev-parse --verify --quiet ("{0}^{{commit}}" -f $Ref))
 	if ($LASTEXITCODE -ne 0 -or $resolved.Count -eq 0 -or -not $resolved[0])
