@@ -34,6 +34,8 @@ MAX_REFIX = 3
 FEATURE_REASON = "feature: shipping needs the maintainer's approval"
 # Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
 BUG_ID = re.compile(r"^[0-9a-f]{24}$")
+# Outcomes that already send a dedicated message, so no status message repeats them.
+ANNOUNCED_ELSEWHERE = ("shipped", "shipped-by-maintainer", "refix-limit")
 
 
 def valid_bug_id(bug_id):
@@ -146,10 +148,24 @@ class BugLoop:
 	def _release(self, bug_id, status, note, **fields):
 		return self._update(bug_id, status=status, note=note[:1900], release_claim=True, **fields)
 
-	def _finish(self, bug_id, outcome, **details):
+	def _finish(self, bug_id, outcome, announce=True, **details):
 		self.state.mark_attempted(bug_id, outcome)
 		self.state.record(bug_id, outcome, **details)
 		self.log("bug {}: {} {}".format(bug_id, outcome, json.dumps(details, default=str) if details else ""))
+		if announce:
+			self._announce(bug_id, outcome, details)
+
+	def _announce(self, bug_id, outcome, details=None):
+		"""A status-change message. Outcomes with a message of their own stay quiet here."""
+		details = details or {}
+		if not self.config.notify_status_changes or not self.notifier.enabled or outcome in ANNOUNCED_ELSEWHERE:
+			return
+		if outcome == "parked" and details.get("decision_needed"):
+			return  # the design question message says it
+		try:
+			self.notifier.send(notify.status_message(self.notifier, bug_id, outcome, self._summary(bug_id), details))
+		except Exception:  # a notification must never stop the loop
+			self.log(traceback.format_exc())
 
 	# ---- one poll
 
@@ -315,6 +331,7 @@ class BugLoop:
 			self._update(bug_id, status="triaged", triage=triage, note="queued for an automated fix (severity {})".format(verdict["severity"]))
 			self.state.enqueue_fix(bug_id, verdict["severity"], bug.get("createdAt") or "")
 			self.state.record(bug_id, "queued", severity=verdict["severity"])
+			self._announce(bug_id, "queued", {"severity": verdict["severity"]})
 
 	# ---- fix
 
@@ -352,6 +369,7 @@ class BugLoop:
 			self.state.save()
 			self._update(bug_id, triage={"category": "feature"}, prUrl="", note="accepted as a feature by the maintainer")
 		branch = "bugfix/" + short_id(bug_id)
+		self._announce(bug_id, "refix-started" if guidance else "implement-started" if feature else "fix-started", {"branch": branch})
 		base = self.worktree.prepare()
 		if not self.verifier.ensure_configured():
 			self._release(bug_id, failed_status, "needs-info: build configure failed in the bug-loop worktree" + again, **failed_fields)
@@ -445,9 +463,11 @@ class BugLoop:
 			green = False
 		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 		if reasons:
-			self._park(bug_id, branch, reasons, review)
+			ready = green and feature and not guidance
+			# The "Feature ready" ping replaces the status message of this park.
+			self._park(bug_id, branch, reasons, review, announce=not ready)
 			# Pinged once, when a fresh implement run first parks green; guided refixes stay quiet.
-			if green and feature and not guidance:
+			if ready:
 				self.notifier.send(notify.feature_ready_message(self.notifier, bug_id, self._summary(bug_id), branch))
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
@@ -463,14 +483,14 @@ class BugLoop:
 
 	# ---- park and ship
 
-	def _park(self, bug_id, branch, reasons, review=None):
+	def _park(self, bug_id, branch, reasons, review=None, announce=True):
 		question = ""
 		if isinstance(review, dict) and isinstance(review.get("design_question"), str):
 			question = review["design_question"].strip()[:2000]
 		self._update(bug_id, status="needs_decision" if question else "pr_open", prUrl="branch:" + branch,
 			designQuestion=question, note="parked for review: " + "; ".join(reasons)[:1800], release_claim=True)
 		self._upload_diff(bug_id)
-		self._finish(bug_id, "parked", branch=branch, reasons=reasons[:10], decision_needed=bool(question))
+		self._finish(bug_id, "parked", announce=announce, branch=branch, reasons=reasons[:10], decision_needed=bool(question))
 		if question:
 			self.notifier.send(notify.design_question_message(self.notifier, bug_id, self._summary(bug_id), question, branch))
 
@@ -616,6 +636,7 @@ class BugLoop:
 			self.state.mark_attempted(bug_id, "ship-queued")
 			self._update(bug_id, note="maintainer approved {}; ships after the nightly freeze window".format(branch))
 			self.state.record(bug_id, "ship-queued", branch=branch)
+			self._announce(bug_id, "ship-queued", {"branch": branch})
 			return
 		self._ship(bug_id, branch, summary, head, by_maintainer=True)
 
@@ -711,6 +732,7 @@ class BugLoop:
 			self.state.mark_attempted(bug_id, "ship-queued")
 			self._update(bug_id, note="fix ready on {}; ships after the nightly freeze window".format(branch))
 			self.state.record(bug_id, "ship-queued", branch=branch)
+			self._announce(bug_id, "ship-queued", {"branch": branch})
 			return
 		self._ship(bug_id, branch, summary, head)
 
@@ -778,6 +800,7 @@ class BugLoop:
 				if commit:
 					self._update(bug["_id"], status="resolved", note="merged into develop in " + commit)
 					self.state.record(bug["_id"], "merged-by-user", commit=commit)
+					self._announce(bug["_id"], "merged-by-user", {"commit": commit})
 
 	def _check_nightly_breaker(self, now):
 		try:

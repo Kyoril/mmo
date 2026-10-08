@@ -68,6 +68,58 @@ def feature_ready_message(notifier, bug_id, summary, branch):
 	return "**Feature ready for review** — {}\n{}\nBranch: `{}`".format(notifier.bug_link(bug_id), summary[:200], branch)
 
 
+# Outcomes that change a bug's status, as the label of a status message. An outcome missing here
+# is announced by its raw name.
+STATUS_LABELS = {
+	"queued": "Triaged, queued for an automated fix",
+	"fix-started": "Fix started",
+	"refix-started": "Guided refix started",
+	"implement-started": "Feature implementation started",
+	"parked": "Parked for review",
+	"ship-queued": "Fix ready, ships after the freeze window",
+	"needs-info": "Needs info",
+	"duplicate": "Duplicate",
+	"abuse": "Flagged as abuse (wontfix)",
+	"wontfix-not-a-bug": "Won't fix: not a bug",
+	"wontfix-no-basis": "Won't fix: nothing in the project defines the expected behaviour",
+	"design-request": "Design request, parked for the team",
+	"discarded": "Discarded by maintainer",
+	"merged-by-user": "Resolved: merged by hand",
+	"interrupted": "Interrupted while fixing, released",
+	"loop-error": "Bug loop error, needs a human",
+	"triage-invalid": "Triage failed twice, needs a human",
+	"claimed-elsewhere": "Claimed elsewhere, skipped",
+	"refix-without-guidance": "Refix refused: no guidance; decide again",
+	"implement-without-description": "Implement refused: no description; decide again",
+	"implement-without-artifacts": "Implement refused: triage artifacts missing",
+}
+
+
+def status_message(notifier, bug_id, outcome, summary, details):
+	"""One line per status change. `details` are the outcome's recorded details; only fields
+	safe to post are used (never the reporter's account)."""
+	label = STATUS_LABELS.get(outcome, outcome)
+	extra = []
+	if details.get("severity"):
+		extra.append("severity {}".format(details["severity"]))
+	if details.get("of"):
+		extra.append("of " + notifier.bug_link(str(details["of"])))
+	if details.get("reason"):
+		extra.append(str(details["reason"])[:300])
+	if details.get("reasons"):
+		extra.append("; ".join(str(reason) for reason in details["reasons"][:3])[:600])
+	if details.get("commit"):
+		extra.append("in `{}`".format(str(details["commit"])[:8]))
+	if details.get("branch"):
+		extra.append("branch `{}`".format(details["branch"]))
+	lines = ["**{}** — {}".format(label, notifier.bug_link(bug_id))]
+	if extra:
+		lines.append(" · ".join(extra))
+	if summary:
+		lines.append("> " + summary[:200].replace("\n", " "))
+	return "\n".join(lines)
+
+
 def daily_summary(data, budget, waiting):
 	counts = {}
 	for entry in data.get("outcomes", []):

@@ -25,6 +25,8 @@ class LoopConfig:
 	fix_timeout_seconds: int = 5400
 	fix_max_usd: float = 20.0
 	step_timeout_seconds: int = 3600
+	# Post a Discord message on every bug status change, not only ships, pings and the summary.
+	notify_status_changes: bool = True
 
 
 def load_config(path):
