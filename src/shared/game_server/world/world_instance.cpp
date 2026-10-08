@@ -451,12 +451,13 @@ namespace mmo
 			return;
 		}
 
-		// A zone dies with its caster: a dead boss's candle does not go off.
+		// A zone lives as long as its caster is in the world, dead or alive: a candle already set
+		// still flares when the boss dies, and a Candlebearer's death leaves its flame behind. It
+		// ends early only when the caster leaves (despawn, logout, a corpse being cleaned up).
 		m_spellZones.RemoveIf(
 			[this](const SpellZone& zone)
 			{
-				const GameUnitS* caster = FindByGuid<GameUnitS>(zone.casterGuid);
-				return caster == nullptr || !caster->IsAlive();
+				return FindByGuid<GameUnitS>(zone.casterGuid) == nullptr;
 			},
 			[this](const SpellZone& zone) { BroadcastSpellZoneEnd(zone, false); });
 

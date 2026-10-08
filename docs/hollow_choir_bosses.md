@@ -112,7 +112,8 @@ All three now exist, plus two fixes the boss spells needed:
 - **PersistentAreaAura** creates a ground zone (`world/spell_zone_set.h`): `radius`, lifetime =
   spell `duration`, and every `amplitude` ms it casts `triggerspell` on each enemy inside. An
   amplitude equal to the duration means exactly one tick as the zone runs out — the delayed
-  detonation of Guttering Candle and Dissonance. A zone dies with its caster. Clients learn of
+  detonation of Guttering Candle and Dissonance. A zone lasts while its caster is in the world,
+  dead or alive (a Candlebearer's flame outlives it), and ends when the caster leaves. Clients learn of
   it through `SpellZoneStart` / `SpellZoneEnd` (game protocol 19) and play the visualization's
   `GROUND_ACTIVE` kits at the position and its `GROUND_EXPIRED` kits on expiry.
 - **CannotBeInterrupted** (`spell_attributes_b`, bit 11): kicks used to stop every cast. Grave
@@ -154,10 +155,72 @@ The user tested every spell by hand. Changes made from it:
 - Choral Resonance never went away: it was a permanent stacking aura waiting for triggers to
   take stacks off. It is now a 6 s aura per chorister, so it decays by itself.
 
+## Layout (map 1, Monastery_001)
+
+The dungeon geometry is the world model `Models/Dungeon/Monastery_001.hwmo`, placed at (8, 1, 0) and
+turned 90 degrees. **The design sketch's north (towards the apse) is world -X, its east is world -Z.**
+Floors: entrance hall and south yard y 1.2, Wake of the Dead and nave y 0.2, the raised west wing
+(apse, cloister) y 5.2.
+
+| Sketch | World area (x, z) | Notes |
+|---|---|---|
+| Eingang | x 9..17, z -2..2 | |
+| 01 Vorhalle | x -21..9, z -6..5, plus the south yard x -25..11, z 5..30 | |
+| 02 Totenwache | x -21..9, z -46..-7 | sarcophagus x -10..-3, z -33..-11 |
+| G1 | corridor x -32..-21, z -3..3 | seal at x -27 |
+| 03 Kirchenschiff | x -79..-32, z -12..12 | pillar rows z -6 and +6, pews x -70..-40 |
+| Sakristei | niche x -40..-34, z -24..-17 | |
+| Treppe / G2 | x -86..-79, z -6..6 | seals at x -85.5 |
+| 06 Apsis | round room x -104..-85, z -12..12 | podium at the centre, passages north and south |
+| 04 Kreuzgang | x -105..-76, z 18..48 | arcade pillars x -100.5 and -82 |
+
+`tools/hollow_choir/survey_layout.py` renders the floor plan with the walkable navmesh;
+`tools/hollow_choir/author_spawns.py` places the spawns, checks them against the navmesh and the
+spacing rule, and renders `generated/hollow_choir/spawns.png`.
+
+**Spacing.** Creatures in combat call idle allies within 8 units, so members of two packs stay at
+least 12 apart (assist radius plus drift). Pairs a wall separates are exempt. Player aggro is a
+different, larger radius (20 at equal level, +1 per level the creature is above the player), and
+walking through a room still pulls; that is intended.
+
+**Groups.** A (hall), B (Wake), C, D, E, F (nave), H, I (cloister), J, K (passages beside the apse),
+M (sacristy), patrols P1 (nave, round the pews) and P2 (cloister arcades). Trash does not respawn
+during a run. G (passage to the cloister) and L (gallery) wait for the geometry.
+
+**Trash.** Gravewarden (92, Warden's Cleave 266), Mourning Cantor (93, Mournful Dirge 267),
+Candlebearer (94, leaves Spilled Wax 268 where it dies), Restless Novice (95).
+
+## Encounters
+
+`tools/hollow_choir/author_triggers.py`, triggers 53-76.
+
+| Boss | AI (creature spells, at the victim) | Triggers |
+|---|---|---|
+| Oswin | Grave Strike every ~10 s | Guttering Candle under a random player every 14-16 s; Last Vigil at 50 %; death opens G1 |
+| Mereth | Lament every 18 s | Silent Place under a random non-tank every 15-19 s; Mourning Voices + Mourning Chorus at 65 % and 30 %; the chorus drops with the last chorister; death opens G2 |
+| Veyr | Dirge of the Grave every 25 s | Dissonance under a random player every 12 s (8 s below 30 %); The Choir Rises at 60 % and 30 %; each Hollow Chorister keeps its own Choral Resonance on him |
+
+Timed ground spells go out through the `ApplyAura` action, which casts as a proc: a normal
+trigger cast is refused while the boss is still casting or channeling, and the timer would simply
+be lost. Phase changes cancel the boss's current cast before they cast. Adds despawn when their
+boss resets or dies (instance variables 2001-2003). Summoned creatures never reward their killers.
+
+Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua` and
+`hollow_choir_mereth_veyr_encounter.lua`.
+
 ## Open work
 
+- **Geometry (user):** a passage from the nave to the cloister. Then group G goes into it.
+- **Navmesh:** the Wake of the Dead floor is 1 unit below the entrance hall with no ramp, and the
+  stair from the nave to the west wing has almost no navmesh. Both are separate islands: creatures
+  fight inside them but cannot follow players out. Rebuild the navmesh once the geometry is fixed.
+- **Cramped rooms:** the apse and the cloister are small for a 20-unit player aggro radius.
+  Fighting H or I can pull Mereth, and anything in the apse pulls Veyr.
+- **Gate art:** the seals are placeholder walls (FP_Wall_01). The sketch wants the singing to stop
+  audibly and the altar light to change when G2 opens; neither has a hook yet.
+- Gallery (L) and its stair; the down stair south-west of the cloister.
 - Re-point quests 58-61 (kill objectives on 81, 84, 85) at the new bosses.
-- Spawn the bosses once the new layout has coordinates.
-- Encounter triggers (step 3).
+- Mourning Cantors log "validation failed" for Dirge of the Hollow Choir (242) when a pillar
+  blocks their line of sight; the creature AI does not check line of sight before choosing a spell.
 - Update `docs/world/bible.md` section 3.9 and the named-characters table once the user confirms
   the new roster's lore.

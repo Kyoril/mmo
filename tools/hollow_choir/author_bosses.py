@@ -49,13 +49,16 @@ AUTO_ATTACK = 37
 BOSSES = [
     dict(id=86, name="Brother Oswin", subname="Keeper of the Vigil", level=12,
          model=MODEL_UNDEAD_MALE, elite=3.5, attack_time=2400, loot=29,
-         gold=(1100, 1600), xp=420, armor=(160, 40.0), dmg_per_level=1.1),
+         gold=(1100, 1600), xp=420, armor=(160, 40.0), dmg_per_level=1.1,
+         spells=[(251, 9500, 10500, 0.0, 8.0)]),
     dict(id=87, name="Sister Mereth", subname="The Mourning Voice", level=13,
          model=MODEL_UNDEAD_FEMALE, elite=3.8, attack_time=2800, loot=30,
-         gold=(1300, 1900), xp=480, armor=(140, 34.0), dmg_per_level=1.0),
+         gold=(1300, 1900), xp=480, armor=(140, 34.0), dmg_per_level=1.0,
+         spells=[(255, 18000, 18000, 0.0, 40.0)]),
     dict(id=88, name="Cantor Veyr", subname="The Hollow Choir", level=14,
          model=MODEL_UNDEAD_MALE, elite=4.2, attack_time=3000, loot=28,
-         gold=(1900, 2700), xp=560, armor=(175, 42.0), dmg_per_level=1.2),
+         gold=(1900, 2700), xp=560, armor=(175, 42.0), dmg_per_level=1.2,
+         spells=[(262, 25000, 25000, 0.0, 40.0)]),
 ]
 
 # Adds give no XP and no loot: they are part of a boss's fight, not farmable trash.
@@ -66,6 +69,26 @@ ADDS = [
          elite=0.8, attack_time=2400, armor=(60, 12.0)),
     dict(id=91, name="Hollow Chorister", level=12, model=MODEL_UNDEAD_MALE, cls=CLASS_MAGE,
          elite=1.0, attack_time=2400, armor=(60, 12.0)),
+]
+
+# Trash: four recurring types whose abilities rehearse the boss fights. Loot modules 20 (trash
+# loot) and 18 (open world greens), as the crypt's earlier trash had.
+TRASH_LOOT = [20, 18]
+TRASH = [
+    # Gravewarden: slow telegraphed frontal cleave (Warden's Cleave), the tank turns it away.
+    dict(id=92, name="Gravewarden", level=11, model=MODEL_UNDEAD_MALE, cls=CLASS_WARRIOR,
+         elite=2.0, attack_time=2400, armor=(120, 30.0), xp=260, gold=(60, 110),
+         spells=[(266, 10000, 14000, 0.0, 0.0)]),
+    # Mourning Cantor: ranged caster with an interruptible group-damage dirge.
+    dict(id=93, name="Mourning Cantor", level=11, model=MODEL_UNDEAD_FEMALE, cls=CLASS_MAGE,
+         elite=1.6, attack_time=2400, armor=(70, 14.0), xp=220, gold=(60, 110),
+         spells=[(267, 15000, 20000, 0.0, 30.0), (242, 3000, 5000, 0.0, 25.0)]),
+    # Candlebearer: weak melee; its death leaves a short-lived flame (trigger, Spilled Wax).
+    dict(id=94, name="Candlebearer", level=11, model=MODEL_UNDEAD_MALE, cls=CLASS_WARRIOR,
+         elite=1.0, attack_time=2000, armor=(80, 16.0), xp=120, gold=(30, 70), spells=[]),
+    # Restless Novice: plain melee.
+    dict(id=95, name="Restless Novice", level=11, model=MODEL_UNDEAD_MALE, cls=CLASS_WARRIOR,
+         elite=1.4, attack_time=2000, armor=(90, 18.0), xp=160, gold=(40, 80), spells=[]),
 ]
 
 ENCOUNTER_NAMES = {1: "Brother Oswin", 2: "Sister Mereth", 3: "Cantor Veyr"}
@@ -104,9 +127,26 @@ def make_unit(units_pb, spec, unit_class, xp, gold, loot):
     return unit
 
 
+def set_spells(unit, spells):
+    """Creature spells (id, min cooldown, max cooldown, min range, max range), placed before
+    the auto attack (37) so the AI weighs them first. Encounter abilities aimed at random
+    players are cast by triggers instead: the AI only ever targets its victim."""
+    auto_attack = list(unit.creaturespells)
+    del unit.creaturespells[:]
+    for spell_id, min_cd, max_cd, min_range, max_range in spells:
+        entry = unit.creaturespells.add()
+        entry.spellid = spell_id
+        entry.priority = 100
+        entry.mincooldown, entry.maxcooldown = min_cd, max_cd
+        entry.minrange, entry.maxrange = min_range, max_range
+    unit.creaturespells.extend(auto_attack)
+
+
 def upsert(entries, new_entry):
     for i, entry in enumerate(entries):
         if entry.id == new_entry.id:
+            # Trigger links belong to author_triggers.py; keep whatever it set.
+            new_entry.triggers.extend(entry.triggers)
             entries[i].CopyFrom(new_entry)
             return "updated"
     entries.append(new_entry)
@@ -180,9 +220,15 @@ def main():
     # 2. New roster.
     for spec in BOSSES:
         unit = make_unit(mods["units"], spec, CLASS_DUNGEON_BOSS, spec["xp"], spec["gold"], spec["loot"])
+        set_spells(unit, spec["spells"])
         print(f"unit {spec['id']} {spec['name']}: {upsert(units.entry, unit)}")
     for spec in ADDS:
         unit = make_unit(mods["units"], spec, spec["cls"], 0, None, None)
+        print(f"unit {spec['id']} {spec['name']}: {upsert(units.entry, unit)}")
+    for spec in TRASH:
+        unit = make_unit(mods["units"], spec, spec["cls"], spec["xp"], spec["gold"], None)
+        unit.unitlootentries.extend(TRASH_LOOT)
+        set_spells(unit, spec["spells"])
         print(f"unit {spec['id']} {spec['name']}: {upsert(units.entry, unit)}")
 
     if not args.apply:

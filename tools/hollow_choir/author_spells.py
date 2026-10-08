@@ -48,6 +48,8 @@ PERIODIC_TRIGGER_SPELL, MOD_DECREASE_SPEED, MOD_DAMAGE_DONE_PCT, MOD_DAMAGE_TAKE
 PHYSICAL, FIRE, SHADOW = 0, 2, 5
 # attributes
 CHANNELED = 0x00000001
+CAN_TARGET_DEAD = 0x00000400
+CASTABLE_WHILE_DEAD = 0x00800000
 NEGATIVE = 0x04000000
 IGNORE_LOS = 1 << 7
 CANNOT_BE_INTERRUPTED = 1 << 11
@@ -107,7 +109,8 @@ SPELLS = [
     spell(256, "Mourning Voices", 13, SHADOW,
           "Calls two Mourning Choristers to opposite sides of the hall.",
           "Interface/Icons/Spells/T_Icon_Shadow_45.htex",
-          [effect(SUMMON, CASTER, basepoints=2, summonunit=MOURNING_CHORISTER, radius=14.0)],
+          # Small enough that the choristers land inside the cloister whichever way Mereth faces.
+          [effect(SUMMON, CASTER, basepoints=2, summonunit=MOURNING_CHORISTER, radius=5.5)],
           cast_ms=2000, attributes=(0, CANNOT_BE_INTERRUPTED)),
     spell(257, "Mourning Chorus", 13, SHADOW,
           "The choristers' grief shrouds the caster, reducing damage taken by $s0%.",
@@ -154,7 +157,8 @@ SPELLS = [
     spell(264, "The Choir Rises", 14, SHADOW,
           "Raises two Hollow Choristers from the dark of the apse.",
           "Interface/Icons/Spells/T_Icon_Unholy_100.htex",
-          [effect(SUMMON, CASTER, basepoints=2, summonunit=HOLLOW_CHORISTER, radius=10.0)],
+          # Small enough that the choristers land inside the round apse whichever way Veyr faces.
+          [effect(SUMMON, CASTER, basepoints=2, summonunit=HOLLOW_CHORISTER, radius=7.0)],
           cast_ms=2000, attributes=(0, CANNOT_BE_INTERRUPTED)),
     # One instance per chorister: each living chorister keeps re-applying its own copy on Veyr
     # (auras of one spell from different casters coexist, the same caster refreshes its own).
@@ -166,6 +170,32 @@ SPELLS = [
           "Interface/Icons/Spells/T_Icon_Unholy_100.htex",
           [effect(APPLY_AURA, TARGET_ALLY, aura=MOD_DAMAGE_DONE_PCT, basepoints=12)],
           duration=6000, aura_text="Damage done increased by 12%.", range_type=RANGE_INFINITE),
+
+    # --- Trash ---------------------------------------------------------------------------------
+    # Each trash ability rehearses a boss mechanic at lower stakes.
+    spell(266, "Warden's Cleave", 11, PHYSICAL,
+          "Heaves a grave-spade in a wide arc, dealing $s0 physical damage to everyone in front "
+          "of the caster.",
+          "Interface/Icons/Spells/T_Icon_BloodCombat_12.htex",
+          [effect(SCHOOL_DAMAGE, CONE_ENEMY, basepoints=55, diesides=13, radius=8.0, miscvalueb=100)],
+          cast_ms=2000, attributes=(NEGATIVE, CANNOT_BE_INTERRUPTED), range_type=RANGE_MELEE, facing=1),
+    spell(267, "Mournful Dirge", 11, SHADOW,
+          "A dirge for the unburied, dealing $s0 shadow damage to every enemy within 30 yards.",
+          "Interface/Icons/Spells/T_Icon_Shadow_30.htex",
+          [effect(SCHOOL_DAMAGE, SOURCE_AREA_ENEMY, basepoints=26, diesides=8, radius=30.0)],
+          cast_ms=2500, attributes=(NEGATIVE, IGNORE_LOS), interrupt=INTERRUPT),
+    # Cast by a Candlebearer's OnKilled trigger, so by a dead caster on its own corpse.
+    spell(268, "Spilled Wax", 11, FIRE,
+          "The fallen candle spills burning wax, dealing $269s0 fire damage every second to "
+          "anyone standing in it for 6 sec.",
+          "Interface/Icons/Spells/T_Icon_Fire_40.htex",
+          [effect(PERSISTENT_AREA_AURA, CASTER, radius=2.2, amplitude=1000, triggerspell=269)],
+          duration=6000, attributes=(CASTABLE_WHILE_DEAD | CAN_TARGET_DEAD, IGNORE_LOS)),
+    spell(269, "Spilled Wax", 11, FIRE,
+          "Burning wax deals $s0 fire damage.",
+          "Interface/Icons/Spells/T_Icon_Fire_40.htex",
+          [effect(SCHOOL_DAMAGE, TARGET_ENEMY, basepoints=9, diesides=4)],
+          attributes=(NEGATIVE, IGNORE_LOS), range_type=RANGE_INFINITE),
 ]
 
 

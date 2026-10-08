@@ -172,6 +172,18 @@ VISUALIZATIONS = [
     }),
 ]
 
+# Trash. Warden's Cleave and Mournful Dirge reuse their bosses' visualizations on purpose: the
+# trash teaches what the boss's version looks and sounds like.
+VISUALIZATIONS += [
+    (95, "Hollow Choir - Spilled Wax", [268], {
+        GROUND_ACTIVE: [fx("Candlebearer_WaxPool", flash=light(CANDLE, 1.4, 5.0, 0.3, 0.6), loop=True)],
+    }),
+    (96, "Hollow Choir - Spilled Wax Burn", [269], {
+        IMPACT: [fx("Oswin_CandleBurn", scope="TARGET")],
+    }),
+]
+SHARED_VISUALIZATIONS = {266: 80, 267: 84}
+
 # Spells deliberately left without a visualization: the Dirge pulse fires every second from
 # the boss himself, and the channel's CHANNELING kit already carries the whole picture.
 NO_VISUALIZATION = {263}
@@ -181,6 +193,7 @@ EXPECTED_SPELLS = {
     255: "Lament", 256: "Mourning Voices", 257: "Mourning Chorus", 258: "Silent Place",
     259: "Silent Place", 260: "Dissonance", 261: "Dissonance", 262: "Dirge of the Grave",
     263: "Dirge of the Grave", 264: "The Choir Rises", 265: "Choral Resonance",
+    266: "Warden's Cleave", 267: "Mournful Dirge", 268: "Spilled Wax", 269: "Spilled Wax",
 }
 
 
@@ -266,6 +279,8 @@ def link_spells(dataset):
     for vis_id, _, spell_ids, _ in VISUALIZATIONS:
         for spell_id in spell_ids:
             by_id[spell_id].visualization_id = vis_id
+    for spell_id, vis_id in SHARED_VISUALIZATIONS.items():
+        by_id[spell_id].visualization_id = vis_id
 
 
 def main():

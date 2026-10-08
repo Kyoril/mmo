@@ -280,7 +280,8 @@ namespace mmo
 
 		/// Creates a spell zone on the ground and tells every client in sight of it. The zone
 		/// casts its trigger spell on each enemy of the caster inside it every tickInterval
-		/// milliseconds, and ends after duration milliseconds or when its caster dies or leaves.
+		/// milliseconds, and ends after duration milliseconds or when its caster leaves the world.
+		/// A dead caster keeps its zones: they belong to the corpse until it despawns.
 		/// @param caster Unit the zone belongs to; it casts the ticks.
 		/// @param spellId Spell whose PersistentAreaAura effect created the zone.
 		/// @param triggerSpellId Spell cast on enemies inside on each tick, 0 for none.

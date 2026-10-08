@@ -109,6 +109,23 @@ Assert(WaitUntil(function() return not IsChanneling(me) end, 3000, "dirge ends")
 Assert(WaitUntil(function() return not HasAura(me, DIRGE_OF_THE_GRAVE) end, 3000, "dirge aura gone"),
 	"cancelling the channel must remove its caster aura")
 
+-- Candlebearer: its death leaves Spilled Wax on its corpse, which burns whoever stands in it. The
+-- corpse casts it (the spell is castable while dead), and the zone must outlive its dead caster.
+local CANDLEBEARER = 94
+local bearer = GM.CreateMonster(CANDLEBEARER)
+TargetUnit(bearer)
+GM.KillTarget()
+Assert(WaitUntil(function() return not IsAlive(bearer) end, 5000, "candlebearer dies"),
+	"the Candlebearer should die")
+-- Undo any swing it landed before dying, so only the wax can move our health from here.
+TargetUnit("0x0")
+GM.Heal()
+Assert(WaitUntil(function() return GetHealth(me) == GetMaxHealth(me) end, 5000, "healed"), "should be at full health")
+Assert(WaitUntil(function() return GetHealth(me) < GetMaxHealth(me) end, 4000, "wax burns"),
+	"standing in the Candlebearer's Spilled Wax should burn")
+GM.DestroyMonster(bearer)
+GM.Heal()
+
 -- Last Vigil: the novices are hostile to us as they are to the boss's enemies, so stay safe.
 GM.Godmode(true)
 resetMyCooldowns()
