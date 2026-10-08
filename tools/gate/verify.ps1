@@ -1,11 +1,11 @@
 ﻿# Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #
-# Local quality gate: protocol version check -> build -> unit tests -> tool tests -> E2E. Writes tools/gate/last_report.json
-# and exits 0 only if every step passed.
+# Local quality gate: protocol version check -> build -> unit tests -> tool tests -> Linux build and tests (WSL, Windows
+# only) -> E2E. Writes tools/gate/last_report.json and exits 0 only if every step passed.
 #
 # Tiers:
-#   fast  protocol check, build, unit tests, tool tests (~1.5 min incremental). What /ship requires.
-#   full  fast + E2E (~8.5 min). Run nightly in H:/mmo-nightly, by /gate full and by release_check.ps1.
+#   fast  protocol check, build, unit tests, tool tests, Linux check (a few min incremental). What /ship requires.
+#   full  fast + E2E (~8.5 min). Run by the GitHub nightly (on Linux), /gate full and release_check.ps1.
 #
 # Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools/gate/verify.ps1 -Tier fast
@@ -172,6 +172,24 @@ try
 	if ($ok)
 	{
 		$ok = Invoke-GateStep -Name "deployer_tests" -Exe $python -Arguments @("-m", "unittest", "discover", "-s", "deploy/deployer/tests", "-t", "deploy/deployer", "-p", "test_*.py")
+	}
+
+	# The servers ship on Linux, and MSVC is not gcc: a double free libstdc++ aborts on, or a
+	# test that only runs where symlinks work, passes here and turns the nightly red. On Windows
+	# the same targets therefore build and test once more in WSL (Ubuntu 24.04, like CI); on
+	# Linux the steps above already were that check.
+	if ($ok -and $onWindows -and -not (Get-Command wsl.exe -ErrorAction SilentlyContinue))
+	{
+		Write-Host "WSL is not installed - the Linux check cannot run (see tools/gate/linux_gate.sh)." -ForegroundColor Red
+		$steps += [ordered]@{ name = "linux"; passed = $false; exit_code = -1; log = $null; duration_s = 0 }
+		$allPassed = $false
+		$ok = $false
+	}
+	elseif ($ok -and $onWindows)
+	{
+		$checkout = (& wsl.exe -e wslpath -a ($repoRoot -replace '\\', '/'))
+		$script = "$checkout/tools/gate/linux_gate.sh"
+		$ok = Invoke-GateStep -Name "linux" -Exe "wsl.exe" -Arguments (@("-e", "bash", $script, $checkout) + $Targets)
 	}
 
 	if ($ok -and $Tier -eq "full")

@@ -105,7 +105,8 @@ def decide(fix, review, guard_result, proof, gate):
 
 class BugLoop:
 	def __init__(self, api, runner, worktree, verifier, decoder, config, state, prompts, schemas,
-			artifacts_dir, report_dir, clock=utcnow, lock=contextlib.nullcontext, dry_run=False, log=print, notifier=None):
+			artifacts_dir, report_dir, clock=utcnow, lock=contextlib.nullcontext, dry_run=False, log=print, notifier=None,
+			nightly=lambda: (None, None)):
 		self.api = api
 		self.runner = runner
 		self.worktree = worktree
@@ -117,6 +118,8 @@ class BugLoop:
 		self.schemas = schemas
 		self.artifacts_dir = artifacts_dir
 		self.report_dir = report_dir
+		# () -> (name, report) of the newest finished nightly; see ci.newest_nightly.
+		self.nightly = nightly
 		self.clock = clock
 		self.lock = lock
 		self.dry_run = dry_run
@@ -380,7 +383,7 @@ class BugLoop:
 				start = self.worktree.resume_branch(branch)
 				base = self.worktree.fork_point(branch)
 			except Exception as error:
-				self._release(bug_id, "pr_open", "cannot refix: the branch {} is gone or unusable ({}); decide again".format(branch, str(error)[:200]))
+				self._release(bug_id, "pr_open", "cannot refix {}: {}; decide again".format(branch, str(error)[:300]))
 				self._finish(bug_id, "needs-info", reason="branch unusable")
 				return
 		else:
@@ -804,8 +807,8 @@ class BugLoop:
 
 	def _check_nightly_breaker(self, now):
 		try:
-			name, report = loop_state.newest_nightly(self.report_dir)
-		except Exception:  # a malformed report must not stop the loop
+			name, report = self.nightly()
+		except Exception:  # an unreachable GitHub or a malformed answer must not stop the loop
 			self.log(traceback.format_exc())
 			return
 		if name and name not in self.state.data["seen_red_reports"] and loop_state.red_nightly_blames_loop(report):

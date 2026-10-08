@@ -3,14 +3,13 @@
 # Registers the recurring maintenance jobs in Windows Task Scheduler (current user),
 # via the ScheduledTasks cmdlets (not schtasks). Idempotent: -Force overwrites existing
 # definitions. Re-run after changing schedules.
-# Also creates the dedicated nightly worktree (H:/mmo-nightly) if it does not exist.
 #
-# StartWhenAvailable is set on both tasks so a missed run (machine asleep/off at the
-# scheduled time) fires as soon as the machine is next available, instead of silently
-# never running until the next scheduled slot.
+# StartWhenAvailable is set so a missed run (machine asleep/off at the scheduled time) fires
+# as soon as the machine is next available, instead of silently never running until the next
+# scheduled slot.
 #
-# Requires MMO_E2E_MYSQL_PASSWORD as a persistent USER environment variable
-# (setx MMO_E2E_MYSQL_PASSWORD "<password>"), otherwise the nightly E2E step fails.
+# The nightly full gate runs in GitHub Actions (.github/workflows/nightly-release.yml), not
+# here; an "MMO Nightly Gate" task left over from before is removed.
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -19,28 +18,10 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $reportDir = Get-ReportDir
 New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 
-# The nightly gate runs in its own worktree, never in a checkout a session may be using.
-$nightlyWorktree = Get-NightlyWorktreePath
-if (-not (Test-Path (Join-Path $nightlyWorktree ".git")))
+if (Get-ScheduledTask -TaskName "MMO Nightly Gate" -ErrorAction SilentlyContinue)
 {
-	& git -C $repoRoot worktree add --detach $nightlyWorktree develop
-	if ($LASTEXITCODE -ne 0)
-	{
-		throw ("Could not create the nightly worktree at {0}" -f $nightlyWorktree)
-	}
+	Unregister-ScheduledTask -TaskName "MMO Nightly Gate" -Confirm:$false
 }
-
-if (-not [Environment]::GetEnvironmentVariable("MMO_E2E_MYSQL_PASSWORD", "User"))
-{
-	Write-Warning "MMO_E2E_MYSQL_PASSWORD is not set as a user environment variable; the nightly E2E step will fail until it is (setx MMO_E2E_MYSQL_PASSWORD `"<password>`")."
-}
-
-$nightlyScript = Join-Path $nightlyWorktree "tools\gate\nightly_gate.ps1"
-$nightlyLog = Join-Path $reportDir "nightly-task.log"
-# The task runs the copy of the script the previous run checked out, so changes to the gate
-# scripts take effect one night after they reach develop. The script itself moves the worktree
-# to develop under the worktree lock; the task must not touch the worktree outside it.
-$nightlyCommand = "& '{0}' *>> '{1}'" -f $nightlyScript, $nightlyLog
 
 $contentAuditScript = Join-Path $repoRoot "tools\gate\content_audit.py"
 $contentAuditLog = Join-Path $reportDir "content-audit-task.log"
@@ -48,12 +29,8 @@ $contentAuditCommand = "& python '{0}' *>> '{1}'" -f $contentAuditScript, $conte
 
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
 
-$nightlyAction = New-ScheduledTaskAction -Execute "powershell" -Argument ("-NoProfile -ExecutionPolicy Bypass -Command `"{0}`"" -f $nightlyCommand)
-$nightlyTrigger = New-ScheduledTaskTrigger -Daily -At "03:00"
-Register-ScheduledTask -TaskName "MMO Nightly Gate" -Action $nightlyAction -Trigger $nightlyTrigger -Settings $settings -Force | Out-Null
-
 $contentAuditAction = New-ScheduledTaskAction -Execute "powershell" -Argument ("-NoProfile -ExecutionPolicy Bypass -Command `"{0}`"" -f $contentAuditCommand)
 $contentAuditTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At "04:00"
 Register-ScheduledTask -TaskName "MMO Weekly Content Audit" -Action $contentAuditAction -Trigger $contentAuditTrigger -Settings $settings -Force | Out-Null
 
-Write-Host "Scheduled tasks registered. Verify with: Get-ScheduledTask -TaskName `"MMO Nightly Gate`",`"MMO Weekly Content Audit`""
+Write-Host "Scheduled tasks registered. Verify with: Get-ScheduledTask -TaskName `"MMO Weekly Content Audit`""

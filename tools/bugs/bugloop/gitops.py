@@ -105,12 +105,66 @@ class Worktree:
 			self.git("checkout", "-B", branch, cwd=self.sub_path(sub))
 
 	def resume_branch(self, branch):
-		"""Checks out an existing fix branch at its tip for another round; returns its head."""
+		"""Checks out an existing fix branch for another round, brought up to date with
+		origin/develop (submodule pointers included), so the refix is judged against today's
+		develop and not against whatever data landed since the branch was cut. Returns its head;
+		raises GitError when the merge needs a human."""
 		self.git("checkout", "--force", branch)
 		self._sync_submodules()
+		reason = self._merge_with_submodules(self.target, "Merge {} into {} (bug-loop refix)".format(self.target, branch))
+		if reason:
+			self.git("checkout", "--detach", "--force", self.target)
+			self._sync_submodules()
+			raise GitError("cannot bring {} up to date: {}".format(branch, reason))
 		for sub in self.submodules:
 			self.git("checkout", "-B", branch, cwd=self.sub_path(sub))
 		return self.head()
+
+	def _is_ancestor(self, cwd, ancestor, commit):
+		return run_git(cwd, "merge-base", "--is-ancestor", ancestor, commit, check=False).returncode == 0
+
+	def _merge_with_submodules(self, other, message):
+		"""Merges `other` into HEAD. A submodule pointer both sides moved is resolved by merging
+		the two submodule commits inside the submodule; any other conflict aborts the merge.
+		Returns "" on success, else why it failed (HEAD and submodules are then left as before)."""
+		head = self.head()
+		base = self.git("merge-base", "HEAD", other)
+		ours, theirs, common = self.gitlinks("HEAD"), self.gitlinks(other), self.gitlinks(base)
+		merge = run_git(self.path, "merge", "--no-ff", "--no-commit", other, check=False)
+		in_progress = run_git(self.path, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False).returncode == 0
+		if merge.returncode != 0 and not in_progress:
+			return "merge of {} failed: {}".format(other, (merge.stderr or merge.stdout).strip()[-300:])
+
+		def abort(reason):
+			run_git(self.path, "merge", "--abort", check=False)
+			self.git("checkout", "--detach", "--force", head)
+			self._sync_submodules()
+			return reason
+
+		for sub in self.submodules:
+			mine, other_link, was = ours.get(sub), theirs.get(sub), common.get(sub)
+			if mine is None or other_link is None or mine == other_link or other_link == was or mine == was:
+				continue  # at most one side moved it; git's own merge already took that side
+			sub_dir = self.sub_path(sub)
+			if self._is_ancestor(sub_dir, other_link, mine):
+				resolved = mine
+			elif self._is_ancestor(sub_dir, mine, other_link):
+				resolved = other_link
+			else:
+				self.git("checkout", "--detach", "--force", mine, cwd=sub_dir)
+				sub_merge = run_git(sub_dir, "merge", "--no-ff", "-m", "Merge {} into {}".format(other_link[:8], mine[:8]), other_link, check=False)
+				if sub_merge.returncode != 0:
+					run_git(sub_dir, "merge", "--abort", check=False)
+					return abort("{}: the fix's data change conflicts with {} (needs a manual merge)".format(sub, other_link[:8]))
+				resolved = self.git("rev-parse", "HEAD", cwd=sub_dir)
+			self.git("update-index", "--cacheinfo", "160000,{},{}".format(resolved, sub))
+		unmerged = self.git("diff", "--name-only", "--diff-filter=U")
+		if unmerged:
+			return abort("merge conflict with {} in {}".format(other, ", ".join(unmerged.splitlines()[:5])))
+		if in_progress:
+			self.git("commit", "--no-edit", "-m", message)
+		self._sync_submodules()
+		return ""
 
 	def fork_point(self, branch):
 		"""Where the fix branch left origin/develop; the base for diffs, guard and proof."""
@@ -182,21 +236,23 @@ class Worktree:
 		tip = self.head(self.target)
 		fork = self.git("merge-base", tip, head)
 		moved = fork != tip
+		for sub in self.submodules:
+			self.git("fetch", self.sub_remote, cwd=self.sub_path(sub))
+		self.git("checkout", "--detach", "--force", tip)
+		self._sync_submodules()
+		reason = self._merge_with_submodules(head, message)
+		if reason:
+			return ShipResult(False, "", reason)
+		# After the merge: a pointer both sides moved now names a submodule merge commit.
 		pushes = []
-		for sub, _, sha in self._changed_links(fork, head):
+		for sub, _, sha in self._changed_links(tip, "HEAD"):
 			sub_dir = self.sub_path(sub)
-			self.git("fetch", self.sub_remote, cwd=sub_dir)
 			master = "{}/{}".format(self.sub_remote, self.master)
-			if run_git(sub_dir, "merge-base", "--is-ancestor", master, sha, check=False).returncode != 0:
+			if not self._is_ancestor(sub_dir, master, sha):
 				self.git("checkout", "--detach", "--force", tip)
+				self._sync_submodules()
 				return ShipResult(False, "", "{}: {} is not an ancestor of {}; a submodule merge is needed".format(sub, master, sha[:8]))
 			pushes.append((sub_dir, sha))
-		self.git("checkout", "--detach", "--force", tip)
-		merge = run_git(self.path, "merge", "--no-ff", "-m", message, head, check=False)
-		if merge.returncode != 0:
-			run_git(self.path, "merge", "--abort", check=False)
-			return ShipResult(False, "", "merge conflict with " + self.target)
-		self._sync_submodules()
 		if moved and not fast_gate():
 			return ShipResult(False, "", self.target + " moved and the fast gate on the merge is red")
 		for sub_dir, sha in pushes:
