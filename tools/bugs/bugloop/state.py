@@ -29,9 +29,6 @@ _DEFAULT = {
 	# Maintainer-accepted features: bug id -> the accepted description. It lives here, not in
 	# the bug's artifacts folder, because the fixer can write that folder.
 	"features": {},
-	# Submodule commits origin/develop points at that their origin lacks ("data/client@<sha>"), as
-	# last reported to the maintainer; None while develop's data is published. Fixes wait meanwhile.
-	"unpublished_data": None,
 	# CI watch: the newest colour per workflow, the current red phase and a pending emergency verification.
 	"ci": {"last_check": "", "colours": {}, "phase": None, "pending": None},
 	# The fix worktree could not be prepared: {"since", "retry_at", "error", "notified"}; None when it works.
