@@ -35,6 +35,8 @@ class FullNight(unittest.TestCase):
 				"draft": False, "assets": [{"name": "client-bin.zip", "id": 1}, {"name": "release.json", "id": 2}]}]))
 			stub.route("GET", "/repos/Kyoril/mmo/releases/assets/1", (200, assets["client-bin.zip"]))
 			stub.route("GET", "/repos/Kyoril/mmo/releases/assets/2", (200, assets["release.json"]))
+			# No launcher-v* tag yet: GitHub answers an unmatched prefix with an empty list, not 404.
+			stub.route("GET", "/repos/Kyoril/mmo/git/matching-refs/tags/launcher-v", (200, []))
 			for prefix in ("/realm", "/login"):
 				stub.route("GET", prefix + "/uptime", (200, {"uptime": 5}))
 			stub.route("POST", "/realm/shutdown", (200, {"status": "SUCCESS", "delay": 900}))
