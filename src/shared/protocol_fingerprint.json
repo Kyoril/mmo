@@ -131,8 +131,8 @@
 		]
 	},
 	"game": {
-		"version": 18,
-		"fingerprint": "sha256:405f7477fb6e4e87d379161e798167a96f9688f7ef94e23a314ae85ebcd0a6aa",
+		"version": 19,
+		"fingerprint": "sha256:297fccf735ad6a8318cee7af473ed5aacccdb0d04af14aac4e62b41d6b7b3485",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -148,7 +148,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:3542710b1178277f9707444a393184eec9ce2accf094aaa6af0f708e04ba91bb"
+			"src/shared/game_protocol/game_protocol.h": "sha256:d0a1a1aa31bd35f54b3fdb2276d38cb5e72a2b02d4e6e2f748e66795a626e923"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -582,7 +582,7 @@
 			"game::realm_client_packet::ChatMessage = 23",
 			"game::realm_client_packet::ClassXpUpdate = 168",
 			"game::realm_client_packet::CompressedUpdateObject = 9",
-			"game::realm_client_packet::Count_ = 179",
+			"game::realm_client_packet::Count_ = 181",
 			"game::realm_client_packet::CreatureMove = 38",
 			"game::realm_client_packet::CreatureQueryResult = 42",
 			"game::realm_client_packet::DebugLineOfSightResult = 149",
@@ -719,6 +719,8 @@
 			"game::realm_client_packet::SpellModChanged = 134",
 			"game::realm_client_packet::SpellStart = 31",
 			"game::realm_client_packet::SpellSuperceeded = 132",
+			"game::realm_client_packet::SpellZoneEnd = 180",
+			"game::realm_client_packet::SpellZoneStart = 179",
 			"game::realm_client_packet::StartLootRoll = 67",
 			"game::realm_client_packet::StealthDetected = 167",
 			"game::realm_client_packet::SubsystemStatus = 177",

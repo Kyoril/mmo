@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000012;
+		constexpr uint32 ProtocolVersion = 0x00000013;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -822,6 +822,18 @@ namespace mmo
 				/// mark, and once on world entry while a shutdown is pending. Payload: uint32 seconds
 				/// remaining, or 0xFFFFFFFF (ShutdownCountdownCancelled) when it was cancelled.
 				ShutdownCountdown,
+
+				/// A spell zone (PersistentAreaAura) appeared on the ground: clients show its
+				/// GROUND_ACTIVE kits at the position until SpellZoneEnd or the time runs out.
+				/// Only clients in sight of the position when it is created receive this.
+				/// Payload: uint32 zoneId, packed uint64 casterGuid, uint32 spellId,
+				/// float x, float y, float z, float radius, uint32 remainingMs.
+				SpellZoneStart,
+
+				/// A spell zone ended. Payload: uint32 zoneId, uint8 expired (1 = it ran its full
+				/// duration and clients play its GROUND_EXPIRED kits, 0 = it was removed early,
+				/// e.g. because its caster died).
+				SpellZoneEnd,
 
 				/// Counter constant
 				Count_,

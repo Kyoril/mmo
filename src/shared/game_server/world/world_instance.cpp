@@ -398,6 +398,125 @@ namespace mmo
 		m_updating = false;
 		m_objectUpdates = m_queuedObjectUpdates;
 		m_queuedObjectUpdates.clear();
+
+		// After the object pass: zone ticks cast spells, and those must not run while objects
+		// are being updated.
+		UpdateSpellZones(update.GetTimestamp());
+	}
+
+	uint32 WorldInstance::CreateSpellZone(const GameUnitS& caster, const uint32 spellId, const uint32 triggerSpellId, const Vector3& position, const float radius, const GameTime duration, const GameTime tickInterval)
+	{
+		const GameTime now = GetAsyncTimeMs();
+
+		SpellZone zone;
+		zone.casterGuid = caster.GetGuid();
+		zone.spellId = spellId;
+		zone.triggerSpellId = triggerSpellId;
+		zone.position = position;
+		zone.radius = radius;
+		zone.expiresAt = now + duration;
+		zone.tickInterval = tickInterval;
+		zone.nextTickAt = now + tickInterval;
+		zone.id = m_spellZones.Add(zone);
+
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::SpellZoneStart);
+		packet
+			<< io::write<uint32>(zone.id)
+			<< io::write_packed_guid(zone.casterGuid)
+			<< io::write<uint32>(spellId)
+			<< io::write<float>(position.x)
+			<< io::write<float>(position.y)
+			<< io::write<float>(position.z)
+			<< io::write<float>(radius)
+			<< io::write<uint32>(static_cast<uint32>(duration));
+		packet.Finish();
+
+		TileIndex2D tile;
+		GetGrid().GetTilePosition(position, tile[0], tile[1]);
+		ForEachSubscriberInSight(GetGrid(), tile, [&packet, &buffer](TileSubscriber& subscriber)
+		{
+			subscriber.SendPacket(packet, buffer);
+		});
+
+		return zone.id;
+	}
+
+	void WorldInstance::UpdateSpellZones(const GameTime now)
+	{
+		if (m_spellZones.Size() == 0)
+		{
+			return;
+		}
+
+		// A zone dies with its caster: a dead boss's candle does not go off.
+		m_spellZones.RemoveIf(
+			[this](const SpellZone& zone)
+			{
+				const GameUnitS* caster = FindByGuid<GameUnitS>(zone.casterGuid);
+				return caster == nullptr || !caster->IsAlive();
+			},
+			[this](const SpellZone& zone) { BroadcastSpellZoneEnd(zone, false); });
+
+		m_spellZones.Advance(now,
+			[this](const SpellZone& zone) { TickSpellZone(zone); },
+			[this](const SpellZone& zone) { BroadcastSpellZoneEnd(zone, true); });
+	}
+
+	void WorldInstance::TickSpellZone(const SpellZone& zone)
+	{
+		if (zone.triggerSpellId == 0)
+		{
+			return;
+		}
+
+		GameUnitS* caster = FindByGuid<GameUnitS>(zone.casterGuid);
+		const proto::SpellEntry* triggerSpell = m_project.spells.getById(zone.triggerSpellId);
+		if (!caster || !triggerSpell)
+		{
+			return;
+		}
+
+		// Collect first: the casts below deal damage, and a dying unit must not be visited by the
+		// finder that is still iterating.
+		std::vector<uint64> targets;
+		GetUnitFinder().FindUnits(Circle(zone.position.x, zone.position.z, zone.radius), [caster, &zone, &targets](GameUnitS& unit)
+		{
+			if (&unit != caster && unit.IsAlive() && !caster->UnitIsFriendly(unit) && IsInsideSpellZone(zone, unit.GetPosition()))
+			{
+				targets.push_back(unit.GetGuid());
+			}
+			return true;
+		});
+
+		for (const uint64 targetGuid : targets)
+		{
+			SpellTargetMap targetMap;
+			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+			targetMap.SetUnitTarget(targetGuid);
+			caster->CastSpell(targetMap, *triggerSpell, 0, true);
+		}
+	}
+
+	void WorldInstance::BroadcastSpellZoneEnd(const SpellZone& zone, const bool expired)
+	{
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::SpellZoneEnd);
+		packet
+			<< io::write<uint32>(zone.id)
+			<< io::write<uint8>(expired ? 1 : 0);
+		packet.Finish();
+
+		TileIndex2D tile;
+		GetGrid().GetTilePosition(zone.position, tile[0], tile[1]);
+		ForEachSubscriberInSight(GetGrid(), tile, [&packet, &buffer](TileSubscriber& subscriber)
+		{
+			subscriber.SendPacket(packet, buffer);
+		});
 	}
 
 	void WorldInstance::AddGameObject(GameObjectS& added)

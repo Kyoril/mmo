@@ -7,13 +7,33 @@
 #include "game_server/objects/game_object_s.h"
 #include "game/spell.h"
 #include "log/default_log_levels.h"
+#include "math/math_utils.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 #include <vector>
 
 namespace mmo
 {
+	bool IsInPlanarCone(const Vector3& origin, const Radian& facing, const float halfConeRadians, const Vector3& position)
+	{
+		const float dx = position.x - origin.x;
+		const float dz = position.z - origin.z;
+		const float distanceSq = dx * dx + dz * dz;
+
+		// A unit standing on the caster's own spot is inside every cone.
+		if (distanceSq < 0.0001f)
+		{
+			return true;
+		}
+
+		const Vector3 forward = FacingToDirection(facing);
+		const float forwardLength = std::sqrt(forward.x * forward.x + forward.z * forward.z);
+		const float cosAngle = std::clamp((dx * forward.x + dz * forward.z) / (std::sqrt(distanceSq) * forwardLength), -1.0f, 1.0f);
+		return std::acos(cosAngle) <= halfConeRadians;
+	}
+
 	SpellTargetResolver::SpellTargetResolver(const SpellCastContext& context)
 		: m_context(context)
 	{
@@ -305,6 +325,49 @@ namespace mmo
 		return false;
 	}
 
+	bool SpellTargetResolver::ResolveConeEnemyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const
+	{
+		if (!ValidateEffectRadius(effect))
+		{
+			return false;
+		}
+
+		auto* world = m_context.GetWorldInstance();
+		if (!world)
+		{
+			return false;
+		}
+
+		// The cone opens along the caster's facing; miscvalueb is its full width in degrees.
+		const float coneDegrees = effect.miscvalueb() > 0 ? static_cast<float>(effect.miscvalueb()) : DefaultConeDegrees;
+		const float halfConeRadians = coneDegrees * 0.5f * Pi / 180.0f;
+		const Radian facing = m_context.GetExecutor().GetFacing();
+		const Vector3& origin = m_context.GetExecutor().GetPosition();
+
+		world->GetUnitFinder().FindUnits(Circle(origin.x, origin.z, effect.radius()), [this, &targets, &origin, &facing, halfConeRadians](GameUnitS& unit)
+		{
+			if (&unit == &m_context.GetExecutor() || m_context.GetExecutor().UnitIsFriendly(unit))
+			{
+				return true;
+			}
+
+			if (!IsInPlanarCone(origin, facing, halfConeRadians, unit.GetPosition()))
+			{
+				return true;
+			}
+
+			if (!CanAddUnitTarget(targets, unit))
+			{
+				return true;
+			}
+
+			targets.push_back(&unit);
+			return true;
+		});
+
+		return true;
+	}
+
 	bool SpellTargetResolver::ResolveSecondaryEnemyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const
 	{
 		if (!ValidateEffectRadius(effect))
@@ -402,6 +465,8 @@ namespace mmo
 			return ResolveAreaEnemyTargets(effect, targets);
 		case spell_effect_targets::TargetSecondaryEnemy:
 			return ResolveSecondaryEnemyTargets(effect, targets);
+		case spell_effect_targets::ConeEnemy:
+			return ResolveConeEnemyTargets(effect, targets);
 		default:
 			return false;
 		}

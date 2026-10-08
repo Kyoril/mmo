@@ -424,6 +424,9 @@ namespace mmo
 			/// of standing them up. Used by food and drink, whose auras carry the NotSeated
 			/// interrupt flag and so need a seated state to break out of.
 			SitsCaster = 1 << 10,
+			/// Interrupt effects (kicks) cannot stop this cast or channel. For boss abilities that
+			/// are answered by positioning rather than by an interrupt, e.g. a telegraphed cleave.
+			CannotBeInterrupted = 1 << 11,
 		};
 	}
 

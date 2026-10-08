@@ -23,6 +23,15 @@
 
 namespace mmo
 {
+    namespace
+    {
+        /// How long a zone stays on screen past its announced end when no SpellZoneEnd arrives.
+        constexpr float GroundZoneGraceSeconds = 1.0f;
+
+        /// Longest a ground effect may take to fade out before it is destroyed regardless.
+        constexpr float GroundEffectMaxFadeSeconds = 4.0f;
+    }
+
     SpellVisualizationService& SpellVisualizationService::Get()
     {
         static SpellVisualizationService instance;
@@ -81,6 +90,14 @@ namespace mmo
         case Event::Channeling:
         {
             return static_cast<uint32>(proto_client::CHANNELING);
+        }
+        case Event::GroundActive:
+        {
+            return static_cast<uint32>(proto_client::GROUND_ACTIVE);
+        }
+        case Event::GroundExpired:
+        {
+            return static_cast<uint32>(proto_client::GROUND_EXPIRED);
         }
         default:
         {
@@ -547,6 +564,8 @@ namespace mmo
         m_tintPulses.clear();
         m_pendingKits.clear();
         m_channels.clear();
+        m_groundZones.clear();
+        m_groundBursts.clear();
     }
 
     bool SpellVisualizationService::IsChanneling(const uint64 casterGuid)
@@ -680,6 +699,7 @@ namespace mmo
         }
 
         UpdateTintPulses(deltaTime);
+        UpdateGroundZones(deltaTime);
 
 		// One-shot impacts on targets do not receive a caster completion event.
 		// Retire their finished emitters here so repeated hits cannot accumulate them.
@@ -1267,6 +1287,237 @@ namespace mmo
         catch (const std::exception& e)
         {
             ELOG("Failed to spawn spell ribbon trail: " << e.what());
+        }
+    }
+
+    std::vector<ParticleSystem*> SpellVisualizationService::PlayKitAtPosition(const proto_client::SpellKit& kit, Scene& scene,
+        SceneNode& node, const Vector3& position, ChannelIndex* loopChannel)
+    {
+        const bool isLooped = kit.has_loop() && kit.loop();
+
+        if (m_soundEntryPlayer && m_audioPlayer)
+        {
+            for (const uint32 soundId : kit.sound_ids())
+            {
+                ChannelIndex channel = m_soundEntryPlayer->PlayEntry(soundId, position);
+                if (!isLooped || !loopChannel || channel == InvalidChannel)
+                {
+                    continue;
+                }
+
+                // One loop per zone, like one loop per actor elsewhere in this service.
+                if (*loopChannel != InvalidChannel)
+                {
+                    m_audioPlayer->StopSound(loopChannel);
+                }
+                *loopChannel = channel;
+            }
+        }
+
+        std::vector<ParticleSystem*> spawned;
+        for (const auto& particlePath : kit.particles())
+        {
+            if (particlePath.empty())
+            {
+                continue;
+            }
+
+            const String emitterName = "GroundParticle_" + std::to_string(m_effectCounter++);
+            ParticleEmitter* emitter = scene.CreateParticleEmitter(emitterName);
+            if (!emitter)
+            {
+                continue;
+            }
+
+            if (const auto file = AssetRegistry::OpenFile(particlePath))
+            {
+                io::StreamSource source(*file);
+                io::Reader reader(source);
+
+                ParticleSystemSerializer serializer;
+                ParticleSystemParameters params;
+                if (serializer.Deserialize(params, reader))
+                {
+                    emitter->SetSystemParameters(params);
+                }
+            }
+            else
+            {
+                ELOG("Failed to open ground particle " << particlePath);
+            }
+
+            node.AttachObject(*emitter);
+            emitter->Play();
+            spawned.push_back(emitter);
+        }
+
+        return spawned;
+    }
+
+    void SpellVisualizationService::BeginGroundZone(const uint32 zoneId, const proto_client::SpellEntry& spell, Scene& scene,
+        const Vector3& position, const GameTime durationMs)
+    {
+        if (!m_project || !spell.has_visualization_id())
+        {
+            return;
+        }
+
+        const auto* vis = m_project->spellVisualizations.getById(spell.visualization_id());
+        if (!vis)
+        {
+            return;
+        }
+
+        // A zone id the server reuses replaces whatever is still shown under it.
+        EndGroundZone(zoneId, false);
+
+        GroundZone zone;
+        zone.zoneId = zoneId;
+        zone.visualizationId = vis->id();
+        zone.scene = &scene;
+        zone.position = position;
+        zone.remainingSeconds = static_cast<float>(durationMs) / 1000.0f + GroundZoneGraceSeconds;
+        zone.node = scene.GetRootSceneNode().CreateChildSceneNode("GroundZone_" + std::to_string(m_effectCounter++));
+        zone.node->SetPosition(position);
+
+        const auto it = vis->kits_by_event().find(static_cast<uint32>(proto_client::GROUND_ACTIVE));
+        if (it != vis->kits_by_event().end())
+        {
+            for (const auto& kit : it->second.kits())
+            {
+                auto particles = PlayKitAtPosition(kit, scene, *zone.node, position, &zone.loopChannel);
+                zone.particles.insert(zone.particles.end(), particles.begin(), particles.end());
+            }
+        }
+
+        m_groundZones.push_back(zone);
+    }
+
+    void SpellVisualizationService::EndGroundZone(const uint32 zoneId, const bool expired)
+    {
+        const auto it = std::find_if(m_groundZones.begin(), m_groundZones.end(),
+            [zoneId](const GroundZone& zone) { return zone.zoneId == zoneId && !zone.ending; });
+        if (it == m_groundZones.end())
+        {
+            return;
+        }
+
+        if (expired && m_project)
+        {
+            if (const auto* vis = m_project->spellVisualizations.getById(it->visualizationId))
+            {
+                const auto kits = vis->kits_by_event().find(static_cast<uint32>(proto_client::GROUND_EXPIRED));
+                if (kits != vis->kits_by_event().end())
+                {
+                    GroundBurst burst;
+                    burst.scene = it->scene;
+                    burst.node = it->scene->GetRootSceneNode().CreateChildSceneNode("GroundBurst_" + std::to_string(m_effectCounter++));
+                    burst.node->SetPosition(it->position);
+                    burst.fadeSeconds = GroundEffectMaxFadeSeconds;
+                    for (const auto& kit : kits->second.kits())
+                    {
+                        // A detonation is a one-shot: there is no zone left to hold a loop.
+                        auto particles = PlayKitAtPosition(kit, *it->scene, *burst.node, it->position, nullptr);
+                        burst.particles.insert(burst.particles.end(), particles.begin(), particles.end());
+                    }
+                    m_groundBursts.push_back(burst);
+                }
+            }
+        }
+
+        BeginGroundZoneFade(*it);
+    }
+
+    void SpellVisualizationService::BeginGroundZoneFade(GroundZone& zone)
+    {
+        zone.ending = true;
+        zone.fadeSeconds = GroundEffectMaxFadeSeconds;
+
+        // Stop spawning and let the live particles run out their lifetime: the marking fades
+        // instead of vanishing in one frame.
+        for (ParticleSystem* particles : zone.particles)
+        {
+            for (size_t i = 0; i < particles->GetEmitterCount(); ++i)
+            {
+                particles->GetEmitter(i)->Stop();
+            }
+        }
+
+        if (m_audioPlayer && zone.loopChannel != InvalidChannel)
+        {
+            m_audioPlayer->StopSound(&zone.loopChannel);
+        }
+    }
+
+    void SpellVisualizationService::UpdateGroundZones(const float deltaTime)
+    {
+        const auto allParticlesGone = [](const std::vector<ParticleSystem*>& systems)
+        {
+            for (const ParticleSystem* system : systems)
+            {
+                for (size_t i = 0; i < system->GetEmitterCount(); ++i)
+                {
+                    const EmitterInstance* emitter = system->GetEmitter(i);
+                    if (emitter->GetParticleCount() > 0 || (emitter->IsEmitting() && !emitter->IsFinished()))
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        const auto destroy = [](Scene& scene, SceneNode* node, std::vector<ParticleSystem*>& systems)
+        {
+            for (ParticleSystem* system : systems)
+            {
+                scene.DestroyParticleEmitter(*system);
+            }
+            systems.clear();
+            if (node)
+            {
+                scene.DestroySceneNode(*node);
+            }
+        };
+
+        for (auto it = m_groundZones.begin(); it != m_groundZones.end();)
+        {
+            if (!it->ending)
+            {
+                it->remainingSeconds -= deltaTime;
+                if (it->remainingSeconds <= 0.0f)
+                {
+                    // SpellZoneEnd never came: we left sight of the zone, or it was lost.
+                    BeginGroundZoneFade(*it);
+                }
+                ++it;
+                continue;
+            }
+
+            it->fadeSeconds -= deltaTime;
+            if (it->fadeSeconds <= 0.0f || allParticlesGone(it->particles))
+            {
+                destroy(*it->scene, it->node, it->particles);
+                it = m_groundZones.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        for (auto it = m_groundBursts.begin(); it != m_groundBursts.end();)
+        {
+            it->fadeSeconds -= deltaTime;
+            if (it->fadeSeconds <= 0.0f || allParticlesGone(it->particles))
+            {
+                destroy(*it->scene, it->node, it->particles);
+                it = m_groundBursts.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
         }
     }
 
