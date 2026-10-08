@@ -69,7 +69,11 @@ class GitHub:
 
 	def _json(self, path, **query):
 		url = self.base + path + ("?" + urllib.parse.urlencode(query) if query else "")
-		body = self._open(self._request(url)) or b"{}"
+		try:
+			body = self._open(self._request(url)) or b"{}"
+		except _Redirect:
+			# A moved repository (301) or endpoint: the configured origin is stale. No Location in the message.
+			raise GitHubError("GitHub redirected {}".format(_path(url)))
 		try:
 			return json.loads(body)
 		except ValueError:
@@ -95,7 +99,11 @@ class GitHub:
 		return body.decode("utf-8", "replace")
 
 	def dispatch(self, workflow, ref):
-		self._open(self._request(self.base + "/actions/workflows/{}/dispatches".format(workflow), method="POST", body={"ref": ref}))
+		url = self.base + "/actions/workflows/{}/dispatches".format(workflow)
+		try:
+			self._open(self._request(url, method="POST", body={"ref": ref}))
+		except _Redirect:
+			raise GitHubError("GitHub redirected {}".format(_path(url)))
 
 
 class _Redirect(Exception):

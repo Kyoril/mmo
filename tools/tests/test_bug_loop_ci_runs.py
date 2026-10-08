@@ -129,6 +129,29 @@ class ClientTests(unittest.TestCase):
 		self.assertEqual(json.loads(opener.requests[0].data), {"ref": "develop"})
 		self.assertEqual(opener.requests[0].get_method(), "POST")
 
+	def _moved(self):
+		# A renamed repository: GitHub answers 301 with the new location.
+		return urllib.error.HTTPError(API, 301, "Moved Permanently",
+			{"Location": "https://api.github.com/repositories/123/secret-location"}, io.BytesIO(b""))
+
+	def _assert_redirect_error(self, call):
+		with self.assertRaises(github.GitHubError) as caught:
+			call()
+		self.assertIn("redirected", str(caught.exception))
+		self.assertNotIn("secret-location", str(caught.exception))
+
+	def test_redirected_runs_are_a_github_error(self):
+		client = self._client([(API, self._moved())])
+		self._assert_redirect_error(lambda: client.runs("ccpp.yml", branch="develop"))
+
+	def test_redirected_jobs_are_a_github_error(self):
+		client = self._client([(API, self._moved())])
+		self._assert_redirect_error(lambda: client.jobs(7))
+
+	def test_redirected_dispatch_is_a_github_error(self):
+		client = self._client([(API, self._moved())])
+		self._assert_redirect_error(lambda: client.dispatch("nightly-release.yml", "develop"))
+
 
 class EvaluationTests(unittest.TestCase):
 	def test_colours(self):
