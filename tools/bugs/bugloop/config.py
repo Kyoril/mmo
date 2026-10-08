@@ -35,6 +35,10 @@ class LoopConfig:
 	# The pause before the next emergency attempt after one ended in an internal loop error, so a
 	# persistent fault cannot use up every attempt within seconds.
 	emergency_retry_minutes: int = 30
+	# A fix worktree that cannot reach origin/develop (fetch, checkout, submodule sync) is retried
+	# every ci_poll_seconds without consuming an attempt; the maintainer hears of it once it has
+	# lasted this long.
+	worktree_escalate_minutes: int = 60
 	# Post a Discord message on every bug status change, not only ships, pings and the summary.
 	notify_status_changes: bool = True
 

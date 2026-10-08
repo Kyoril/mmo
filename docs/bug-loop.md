@@ -250,7 +250,8 @@ ships are not held`.
   `bugfix/**`) and `nightly-release.yml`. Poll interval, workflow names and waits are the
   `ci_*` keys of the loop config (`ci_poll_seconds` 300, `ci_wait_minutes` 60,
   `ci_nightly_wait_minutes` 240, `emergency_attempts` 3, `emergency_retry_minutes` 30). An
-  emergency attempt that ends in an internal loop error counts, and the next one waits
+  emergency attempt that ends in an internal loop error (other than an unreachable worktree,
+  below) counts, and the next one waits
   `emergency_retry_minutes` (the ticket note says when), so a persistent fault cannot use up
   every attempt within seconds.
 - **Ticket:** when the newest run on `develop` is red, the loop opens an emergency ticket in the
@@ -291,6 +292,17 @@ ships are not held`.
   starts no fix at all, spends no attempt, and says so once per set of missing commits (a ticket
   note plus "Emergency fix needs you", or "Bug loop waits for you" without a red phase). Push
   the submodule's master; the next poll goes on, and the next develop CI run closes the phase.
+- **Worktree unavailable:** when the loop cannot bring its worktree to origin/develop before a
+  fix (fetch, checkout or `git submodule update` fails for any reason the unpublished-data
+  check above does not catch: network, a locked worktree, the check itself failing), that is
+  the loop's fault, not the bug's.
+  Nothing is touched: the bug stays queued and unclaimed, the emergency ticket stays `triaged`,
+  and no attempt (emergency or otherwise) is used. Every fix then waits `ci_poll_seconds`
+  before the worktree is tried again; the emergency ticket still goes first once it works.
+  After `worktree_escalate_minutes` (60) of failures the maintainer gets one Discord message
+  "Bug loop stalled" with the git error, and "Bug loop resumed" when it recovers. The
+  back-off is `worktree_down` in `state.json`. A maintainer decision (refix, implement) that
+  hits the same failure is consumed as before and goes back to the maintainer.
 - **Maintainer decisions** on the emergency ticket steer the automation: discard parks the
   phase; ship merges the approved diff (hash-bound only, without a Linux CI run) and then waits
   for develop; refix gives the fixer guidance as for any bug, but a refix of the emergency
