@@ -12,7 +12,7 @@ import re
 import traceback
 import urllib.error
 
-from . import ci, github, guard, inputs, notify, state as loop_state, verdicts, verification
+from . import ci, github, gitops, guard, inputs, notify, state as loop_state, verdicts, verification
 from .claude import REVIEW_TOOLS, TRIAGE_TOOLS, ClaudeError
 
 CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -38,6 +38,8 @@ BUG_ID = re.compile(r"^[0-9a-f]{24}$")
 RED_REASON = "develop is red"
 # The pre-ship CI check failed (not GitHub: the bug API, say): the CI state is unknown, so nothing ships.
 CI_UNKNOWN_REASON = "CI check failed"
+# The emergency ticket auto-ships only through its CI-verified path (_check_pending_ci).
+EMERGENCY_REASON = "emergency fix: ships only after a green Linux CI run or on the maintainer's decision"
 # Statuses of a GitHub run that has not finished yet.
 ACTIVE_RUN_STATUSES = ("queued", "in_progress", "waiting", "pending", "requested")
 CI_NAMES = {"push": "Linux Servers", "nightly": "Nightly Release"}
@@ -193,6 +195,19 @@ class BugLoop:
 			self._reconcile_parked()
 		self._ship_queued(now)
 		worked = self._triage_new() or worked
+		if not self.dry_run and self.github is not None:
+			self._check_pending_ci(now)
+			# The emergency ticket goes before every other bug; the ordinary fix waits for the next poll.
+			if self._emergency_due() and self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+				ticket = self.state.emergency_ticket()
+				try:
+					self._emergency_fix()
+				except Exception:  # the loop must survive a bad emergency run too
+					self.log(traceback.format_exc())
+					self._safe_release(ticket, "needs-info: the bug loop hit an internal error on the emergency fix; see artifacts/bug-loop/{}{}".format(
+						ticket, self._retry_note()))
+					self._finish(ticket, "loop-error")
+				return self._end_poll(True)
 		bug_id = self.state.next_fix()
 		if bug_id is not None and self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 			try:
@@ -202,6 +217,9 @@ class BugLoop:
 				self._safe_release(bug_id, "needs-info: the bug loop hit an internal error; see artifacts/bug-loop/" + bug_id)
 				self._finish(bug_id, "loop-error")
 			worked = True
+		return self._end_poll(worked)
+
+	def _end_poll(self, worked):
 		self._write_daily_report()
 		self.state.save()
 		return worked
@@ -340,22 +358,35 @@ class BugLoop:
 
 	# ---- fix
 
-	def _fix(self, bug_id, guidance=None, feature=None):
+	def _fix(self, bug_id, guidance=None, feature=None, emergency=None):
+		"""`emergency` is the CI context of the red phase when bug_id is its emergency ticket: the
+		fixer then sees only the loop's CI task and log, and a locally green fix goes to CI, not develop."""
 		self.state.drop_fix(bug_id)
 		if not valid_bug_id(bug_id):
 			self.log("dropping a queued fix with a malformed bug id: {!r}".format(bug_id)[:200])
 			return
+		if emergency is not None and bug_id != self.state.emergency_ticket():
+			raise ValueError("an emergency fix for {} which is not the recorded emergency ticket".format(bug_id))
 		self.state.mark_attempted(bug_id, "fix-started")
 		self.state.save()
-		bug = self._read(bug_id, "report.json")
-		verdict = self._read(bug_id, "triage.json")
+		if emergency is not None:
+			# The ticket is the loop's own; no API field or player text reaches the fixer.
+			bug = {"_id": bug_id}
+			verdict = EMERGENCY_VERDICT
+		else:
+			bug = self._read(bug_id, "report.json")
+			verdict = self._read(bug_id, "triage.json")
 		# A guided refix that fails goes back to the maintainer, who can only decide on parked bugs;
-		# a failed feature run goes back to where `implement` can be chosen again.
+		# a failed feature run goes back to where `implement` can be chosen again; a failed
+		# emergency run goes back to `triaged`, where the loop retries it while attempts remain.
 		failed_status = "pr_open" if guidance else "triaged"
 		fresh_feature = bool(feature) and not guidance
 		failed_fields = {"triage": {"category": "design_request"}} if fresh_feature else {}
 		again = "; decide again" if fresh_feature else ""
-		previous = self._previous_attempt(bug_id) if guidance else None
+		if emergency is not None:
+			again = self._retry_note()
+		resume = bool(guidance) or bool(emergency and emergency.get("resume"))
+		previous = self._previous_attempt(bug_id) if resume else None
 		try:
 			self.api.claim(bug_id, self.config.worker)
 		except urllib.error.HTTPError as error:
@@ -379,29 +410,43 @@ class BugLoop:
 			self._release(bug_id, failed_status, "needs-info: build configure failed in the bug-loop worktree" + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason="build configure failed")
 			return
-		if guidance:
+		start = None
+		if resume:
 			try:
 				start = self.worktree.resume_branch(branch)
 				base = self.worktree.fork_point(branch)
 			except Exception as error:
-				self._release(bug_id, "pr_open", "cannot refix: the branch {} is gone or unusable ({}); decide again".format(branch, str(error)[:200]))
-				self._finish(bug_id, "needs-info", reason="branch unusable")
-				return
-		else:
+				if emergency is None:
+					self._release(bug_id, "pr_open", "cannot refix: the branch {} is gone or unusable ({}); decide again".format(branch, str(error)[:200]))
+					self._finish(bug_id, "needs-info", reason="branch unusable")
+					return
+				# The emergency branch is only a convenience: start again from develop.
+				self.log("emergency fix: cannot resume {} ({}); starting fresh".format(branch, str(error)[:200]))
+				previous = None
+				start = None
+		if start is None:
 			self.worktree.start_branch(branch, base)
 			start = base
 		fix_path = os.path.join(self._bug_dir(bug_id), "FIX.json")
 		if os.path.exists(fix_path):
 			os.remove(fix_path)
+		if emergency is not None:
+			fix_input = inputs.build_emergency_fix_input(bug_id, emergency, branch, fix_path, previous=previous)
+		else:
+			fix_input = inputs.build_fix_input(bug, verdict, branch, fix_path, guidance=guidance, previous=previous, feature=feature)
 		try:
-			result = self.runner.agent(self.prompts["fix"],
-				inputs.build_fix_input(bug, verdict, branch, fix_path, guidance=guidance, previous=previous, feature=feature),
+			result = self.runner.agent(self.prompts["fix"], fix_input,
 				self.worktree.path, self.config.fix_timeout_seconds, self.config.fix_max_usd)
 			self._write(bug_id, "fix_result.json", result)
 			fix = verdicts.load_fix(fix_path)
 		except (ClaudeError, verdicts.VerdictError) as error:
 			self._release(bug_id, failed_status, "needs-info: the fix stage failed: " + str(error)[:500] + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason=str(error)[:300])
+			return
+		if fix["outcome"] == "no_project_basis" and emergency is not None:
+			# A red CI run is never "not a bug".
+			self._release(bug_id, failed_status, "needs-info: the fixer found no fix for the CI failure: " + fix["root_cause"][:1000] + again)
+			self._finish(bug_id, "needs-info", reason="no_project_basis")
 			return
 		if fix["outcome"] == "no_project_basis" and feature:
 			self._release(bug_id, failed_status,
@@ -428,9 +473,9 @@ class BugLoop:
 			self._release(bug_id, failed_status, "needs-info: the fixer moved the branch away from the checked-out commit" + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason="fixer moved the branch")
 			return
-		self._verify_and_ship(bug_id, verdict, fix, branch, base, head, guidance=guidance, feature=feature)
+		self._verify_and_ship(bug_id, verdict, fix, branch, base, head, guidance=guidance, feature=feature, emergency=emergency)
 
-	def _verify_and_ship(self, bug_id, verdict, fix, branch, base, head, guidance=None, feature=None):
+	def _verify_and_ship(self, bug_id, verdict, fix, branch, base, head, guidance=None, feature=None, emergency=None):
 		changes = self.worktree.changes(base, head)
 		diff_text = self.worktree.unified_diff(base, head)
 		self._write(bug_id, "diff.patch", diff_text)
@@ -446,8 +491,11 @@ class BugLoop:
 				reasons.append(FEATURE_REASON)
 			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 			self._park(bug_id, branch, reasons)
+			if emergency is not None:
+				self._park_emergency(bug_id, "parked: " + reasons[0])
 			return
-		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"], guidance=guidance, feature=feature)
+		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"], guidance=guidance, feature=feature,
+			ci_failure=(emergency.get("excerpt") or "(no log)") if emergency is not None else None)
 		with self.lock():
 			proof = None
 			if fix["regression_test"]["kind"] == "none":
@@ -455,11 +503,23 @@ class BugLoop:
 					proof = {"ok": False, "reason": "a code change needs a regression test"}
 			else:
 				proof = self.verifier.proof(fix["regression_test"], base, head, verification.regression_files(changes))
+				if emergency is not None and not proof["ok"] and proof.get("after") == "passed":
+					# The CI failure does not reproduce on Windows; the Linux CI run on the pushed head is the proof.
+					proof = dict(proof, ok=True, waived="the test passed before the fix on Windows; the Linux CI run is the proof")
 				self._write(bug_id, "proof.json", proof)
 			self.worktree.checkout(head)
 			gate = self.verifier.gate("full")
 			self._write(bug_id, "gate.json", gate)
 		reasons = decide(fix, review, guard_result, proof, gate)
+		if emergency is not None:
+			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
+			if reasons:
+				self._park(bug_id, branch, reasons, review)
+				self._park_emergency(bug_id, "parked: " + reasons[0])
+				return
+			# Locally green: CI on the exact head decides, never _try_ship.
+			self._push_for_ci(bug_id, branch, base, head)
+			return
 		if self.state.is_feature(bug_id):
 			green = not reasons
 			reasons = reasons + [FEATURE_REASON]
@@ -474,9 +534,10 @@ class BugLoop:
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
 
-	def _review(self, bug_id, verdict, fix, diff_text, guard_reasons, guidance=None, feature=None):
+	def _review(self, bug_id, verdict, fix, diff_text, guard_reasons, guidance=None, feature=None, ci_failure=None):
 		try:
-			review = self.runner.structured(self.prompts["review"], inputs.build_review_input(verdict, fix, diff_text, guard_reasons, guidance=guidance, feature=feature),
+			review = self.runner.structured(self.prompts["review"],
+				inputs.build_review_input(verdict, fix, diff_text, guard_reasons, guidance=guidance, feature=feature, ci_failure=ci_failure),
 				self.schemas["review"], REVIEW_TOOLS, self.worktree.path, self.config.step_timeout_seconds)
 		except ClaudeError as error:
 			review = {"error": str(error)[:500]}
@@ -726,6 +787,10 @@ class BugLoop:
 		blockers = self._ship_blockers()
 		if self.state.is_feature(bug_id):
 			blockers.append(FEATURE_REASON)
+		if bug_id == self.state.emergency_ticket():
+			# A guided refix of the emergency ticket: only a green Linux CI run (the emergency path)
+			# or the maintainer's ship decision takes it to develop.
+			blockers.append(EMERGENCY_REASON)
 		if blockers:
 			self._park(bug_id, branch, blockers)
 			return
@@ -773,25 +838,49 @@ class BugLoop:
 		except Exception:  # the fix is queued; a lost note must not throw it away
 			self.log(traceback.format_exc())
 
-	def _ship(self, bug_id, branch, summary, head, by_maintainer=False):
-		label = "maintainer decision" if by_maintainer else "gate green at " + head[:8]
+	def _ship(self, bug_id, branch, summary, head, by_maintainer=False, emergency=False):
+		"""`emergency`: the emergency ticket's fix after a green Linux CI run on exactly `head`; it
+		ships outside the daily cap."""
+		if emergency and (bug_id != self.state.emergency_ticket() or branch != "bugfix/" + short_id(bug_id)):
+			raise ValueError("refusing an emergency ship for {!r}: not the recorded emergency ticket".format(bug_id)[:200])
+		if emergency:
+			label = "emergency fix, Linux CI green on " + head[:8]
+		else:
+			label = "maintainer decision" if by_maintainer else "gate green at " + head[:8]
 		message = "Merge {} (bug-loop, {})\n\nBug {}: {}\n\n{}".format(branch, label, bug_id, summary, CO_AUTHOR)
 		with self.lock():
 			result = self.worktree.ship(branch, head, message, lambda: self.verifier.gate("fast")["ok"])
 		if not result.ok:
 			self._park(bug_id, branch, ["ship: " + result.reason])
+			if emergency:
+				self._park_emergency(bug_id, "ship: " + result.reason)
 			return
-		if not by_maintainer:
+		if not by_maintainer and not emergency:
 			self.state.count_autoship()
-		outcome = "shipped-by-maintainer" if by_maintainer else "shipped"
+		outcome = "shipped-emergency" if emergency else ("shipped-by-maintainer" if by_maintainer else "shipped")
+		if emergency:
+			phase = self.state.ci_phase()
+			# The branch is merged, so a later attempt starts fresh; none starts before develop's own
+			# CI run on the merge is red again (_refresh_ci_phase) or green (_close_ci_phase).
+			phase["resume"] = False
+			phase["awaiting_develop"] = result.commit
+			self.state.save()
 		# The merge is on develop now: nothing below may undo that by releasing the bug.
 		try:
 			self.worktree.delete_branch(branch)
-			self._update(bug_id, status="resolved", release_claim=True,
-				note="shipped by the bug loop{} in {}; reaches players with the next nightly deploy".format(
-					" on the maintainer's decision" if by_maintainer else "", result.commit))
+			if emergency:
+				self._update(bug_id, status="resolved", release_claim=True,
+					note="emergency fix shipped by the bug loop in {} after {} was green on {}; waiting for CI on develop".format(
+						result.commit, CI_NAMES["push"], head[:8]))
+			else:
+				self._update(bug_id, status="resolved", release_claim=True,
+					note="shipped by the bug loop{} in {}; reaches players with the next nightly deploy".format(
+						" on the maintainer's decision" if by_maintainer else "", result.commit))
 			self._finish(bug_id, outcome, branch=branch, commit=result.commit)
-			self.notifier.send(notify.shipped_message(self.notifier, bug_id, result.commit, by_maintainer))
+			if emergency:
+				self.notifier.send(notify.emergency_shipped_message(self.notifier, bug_id, result.commit))
+			else:
+				self.notifier.send(notify.shipped_message(self.notifier, bug_id, result.commit, by_maintainer))
 		except Exception:
 			self.log(traceback.format_exc())
 			self._finish(bug_id, outcome, branch=branch, commit=result.commit, bookkeeping_failed=True)
@@ -842,9 +931,174 @@ class BugLoop:
 		return self.state.ci_phase() is not None
 
 	def _emergency_due(self):
-		"""An open red phase whose emergency ticket still has fix attempts left (Task 6 acts on it)."""
+		"""True when the emergency ticket should get a fix attempt now: a red phase that is not parked,
+		has no CI verification pending, is not waiting for develop's own run after a ship, has attempts
+		left (running out notifies the maintainer once) and whose ticket is `triaged` in the API (a
+		maintainer who discards or parks it stops the retries)."""
 		phase = self.state.ci_phase()
-		return phase is not None and not phase.get("parked") and phase.get("attempts", 0) < self.config.emergency_attempts
+		if not phase or phase.get("parked") or self.state.data["ci"]["pending"] or phase.get("awaiting_develop"):
+			return False
+		if not valid_bug_id(phase.get("ticket")):
+			return False
+		if phase.get("attempts", 0) >= self.config.emergency_attempts:
+			if not phase.get("notified_exhausted"):
+				phase["notified_exhausted"] = True
+				self.state.save()
+				self.notifier.send(notify.emergency_needs_you_message(self.notifier, phase["ticket"],
+					"{} attempts failed; develop stays red".format(phase["attempts"])))
+			return False
+		try:
+			status = self.api.show(phase["ticket"]).get("status")
+		except Exception:
+			self.log(traceback.format_exc())
+			return False
+		return status == "triaged"
+
+	def _emergency_fix(self):
+		phase = self.state.ci_phase()
+		phase["attempts"] = phase.get("attempts", 0) + 1
+		self.state.save()
+		# A failed verification resumes the pushed branch; after a ship (or the first time) it starts fresh.
+		context = dict(phase["ci"], resume=bool(phase.get("resume")))
+		self._fix(phase["ticket"], emergency=context)
+
+	def _retry_note(self):
+		phase = self.state.ci_phase()
+		if not phase:
+			return ""
+		attempts, limit = phase.get("attempts", 0), self.config.emergency_attempts
+		if attempts < limit:
+			return "; the bug loop retries (attempt {} of {})".format(attempts, limit)
+		return "; attempt {} of {}, none left".format(attempts, limit)
+
+	def _park_emergency(self, bug_id, reason):
+		"""The emergency ticket is parked for the maintainer: no more automatic attempts this phase."""
+		phase = self.state.ci_phase()
+		if phase is not None and phase.get("ticket") == bug_id:
+			phase["parked"] = True
+			self.state.save()
+		self.notifier.send(notify.emergency_needs_you_message(self.notifier, bug_id, reason))
+
+	def _push_for_ci(self, bug_id, branch, base, head):
+		"""Pushes the locally green emergency fix (exactly `head`) to origin for the Linux CI run and
+		records the pending check. The only branch push the loop makes."""
+		phase = self.state.ci_phase()
+		if phase is None or not valid_bug_id(bug_id) or bug_id != self.state.emergency_ticket():
+			raise ValueError("refusing to push for {!r}: not the recorded emergency ticket".format(bug_id)[:200])
+		if branch != "bugfix/" + short_id(bug_id):
+			raise ValueError("refusing to push {!r} for the emergency ticket".format(branch)[:200])
+		# A moved gitlink shows up as the submodule's own files, or as the bare submodule path.
+		roots = tuple(sub + "/" for sub in gitops.SUBMODULES)
+		submodule_changes = [change.path for change in self.worktree.changes(base, head)
+			if change.path in gitops.SUBMODULES or change.path.startswith(roots)]
+		if submodule_changes:
+			reason = "the emergency fix changes a data submodule ({}); CI cannot verify an unpublished submodule commit".format(submodule_changes[0])
+		elif self.worktree.head(branch) != head:
+			reason = "the branch moved away from the gated commit"
+		else:
+			ok, reason = self.worktree.push_branch(branch, head)
+			if ok:
+				deadline = self.clock() + datetime.timedelta(minutes=self.config.ci_wait_minutes)
+				self.state.data["ci"]["pending"] = {"bug": bug_id, "branch": branch, "head": head, "deadline": deadline.isoformat()}
+				phase["resume"] = True
+				self.state.save()
+				self._update(bug_id, status="pr_open", prUrl="branch:" + branch, release_claim=True,
+					note="emergency fix pushed; verifying in {} on {}".format(CI_NAMES["push"], head[:8]))
+				self._finish(bug_id, "ci-pending", branch=branch, head=head)
+				return
+		self._park(bug_id, branch, [reason])
+		self._park_emergency(bug_id, "parked: " + reason)
+
+	def _check_pending_ci(self, now):
+		"""Looks at the CI run of the pushed emergency branch (never blocks): green ships it, red or
+		the deadline retries or, out of attempts, leaves it to the maintainer. The origin branch is
+		deleted whatever the outcome."""
+		ci_state = self.state.data["ci"]
+		pending = ci_state["pending"]
+		if not pending:
+			return
+		phase = self.state.ci_phase()
+		bug_id, branch, head = pending.get("bug"), pending.get("branch"), pending.get("head")
+		if phase is None or bug_id != phase.get("ticket"):
+			# Defence in depth: _close_ci_phase drops the check together with the phase.
+			ci_state["pending"] = None
+			self._delete_remote(branch)
+			self.state.save()
+			return
+		result = None
+		try:
+			runs = [item for item in self.github.runs(self.config.ci_push_workflow, branch=branch)
+				if item.get("head_sha") == head and item.get("head_branch") == branch and item.get("event") == "push"]
+			result = ci.newest_completed(runs, lambda item: True)
+		except github.GitHubError as error:
+			self.log("ci watch: " + str(error))
+		colour = ci.colour(result) if result else None
+		expired = now >= datetime.datetime.fromisoformat(pending["deadline"])
+		if colour is None and not expired:
+			return
+		if colour == "green":
+			if loop_state.breaker_active(self.artifacts_dir):
+				reason = "Linux CI green on {}, but the circuit breaker is tripped".format(head[:8])
+				ci_state["pending"] = None
+				self._park_emergency(bug_id, reason)
+				self._safe_park(bug_id, branch, [reason])
+				self._delete_remote(branch)
+				self.state.save()
+				return
+			if self._ci_hold(bug_id):
+				return  # the CI state is unknown: wait, the check stays pending
+			if self.state.data["ci"]["pending"] is not pending:
+				return  # the recheck found develop green and closed the phase (and the check)
+			ci_state["pending"] = None
+			self.state.save()
+			try:
+				self._ship(bug_id, branch, self._summary(bug_id), head, emergency=True)
+			except Exception:
+				self.log(traceback.format_exc())
+				self._park_emergency(bug_id, "the ship failed after Linux CI was green on " + head[:8])
+				self._safe_park(bug_id, branch, ["Linux CI green on {}, but the ship failed (see the runner log)".format(head[:8])])
+			finally:
+				self._delete_remote(branch)
+				self.state.save()
+			return
+		retry = "timed out after {} minutes without a CI result".format(self.config.ci_wait_minutes)
+		if result is not None:
+			retry = "CI run failed: " + result.get("html_url", "")
+			try:
+				job, _ = ci.failing_step(self.github.jobs(result["id"]))
+				if job:
+					retry = ci.excerpt(self.github.job_log(job["id"])) or retry
+			except github.GitHubError as error:
+				self.log("ci watch: " + str(error))
+		phase["ci"]["retry"] = retry
+		try:
+			if phase.get("attempts", 0) >= self.config.emergency_attempts:
+				self._update(bug_id, note="emergency verification failed; no attempts left: " + retry[:500])
+				self._finish(bug_id, "emergency-failed", branch=branch, head=head)
+			else:
+				# Back to `triaged`, where _emergency_due picks it up again (on the same branch).
+				self._update(bug_id, status="triaged", prUrl="", note="emergency verification failed; retrying: " + retry[:500])
+				self.state.record(bug_id, "ci-failed", branch=branch, head=head)
+		except Exception:
+			# The bug API is down: the check stays pending, so the next poll does this again.
+			self.log(traceback.format_exc())
+			self.state.save()
+			return
+		ci_state["pending"] = None
+		self._delete_remote(branch)
+		self.state.save()
+
+	def _safe_park(self, bug_id, branch, reasons):
+		try:
+			self._park(bug_id, branch, reasons)
+		except Exception:
+			self.log(traceback.format_exc())
+
+	def _delete_remote(self, branch):
+		try:
+			self.worktree.delete_remote_branch(branch)
+		except Exception:
+			self.log(traceback.format_exc())
 
 	def _watch_ci(self, now):
 		"""Reads the newest completed develop runs of both workflows at most every ci_poll_seconds.
@@ -941,7 +1195,14 @@ class BugLoop:
 			if failed_restart:
 				context["retry"] = context["excerpt"]
 			phase["ci"] = context
-			self._update(ticket, logTail=context["excerpt"] or "(no log)", note="still red: " + context["run_url"])
+			if phase.get("awaiting_develop"):
+				# develop is still (or again) red after the emergency fix shipped: the ticket goes back
+				# to `triaged`, where _emergency_due retries it while attempts remain.
+				self._update(ticket, status="triaged", prUrl="", logTail=context["excerpt"] or "(no log)",
+					note="still red after the emergency fix: " + context["run_url"])
+				phase["awaiting_develop"] = None
+			else:
+				self._update(ticket, logTail=context["excerpt"] or "(no log)", note="still red: " + context["run_url"])
 			phase["red_runs"][key] = run["id"]
 
 	def _close_ci_phase(self, newest):

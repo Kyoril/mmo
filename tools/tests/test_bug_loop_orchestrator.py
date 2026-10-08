@@ -215,6 +215,8 @@ class FakeWorktree:
 		self.merged_ = {}
 		self.deleted = []
 		self.prepare_error = None
+		self.pushed = []
+		self.remote_deleted = []
 
 	def prepare(self):
 		if self.prepare_error:
@@ -268,6 +270,13 @@ class FakeWorktree:
 	def log_lines(self, base, head, limit=30):
 		return ["e89eb837 Merge bugfix/6462d2bc (bug-loop, maintainer decision)"]
 
+	def push_branch(self, branch, head):
+		self.pushed.append((branch, head))
+		return True, ""
+
+	def delete_remote_branch(self, branch):
+		self.remote_deleted.append(branch)
+
 
 class FakeGitHub:
 	"""Runs per workflow (newest first), jobs per run and logs per job; records dispatches."""
@@ -311,12 +320,15 @@ class FakeVerifier:
 		self.gates = []
 		self.proofs = []
 		self.configured = True
+		self.proof_result = None
 
 	def ensure_configured(self):
 		return self.configured
 
 	def proof(self, spec, base, head, files):
 		self.proofs.append((base, head, list(files)))
+		if self.proof_result is not None:
+			return dict(self.proof_result)
 		return {"ok": self.proof_ok, "before": "failed", "after": "passed" if self.proof_ok else "failed",
 			"reason": "" if self.proof_ok else "regression test before=failed after=failed"}
 
@@ -1418,7 +1430,8 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		phase = self.state.ci_phase()
 		self.assertEqual(phase["red_runs"]["nightly"], 13)
-		self.assertEqual(phase["attempts"], 1)
+		# The emergency fix of the first poll is attempt 1; the failed restart counts once, not per retry.
+		self.assertEqual(phase["attempts"], 2)
 		self.assertEqual(phase["ci"]["step"], "package")
 		self.assertIn("packaging failed", phase["ci"]["retry"])
 		self.assertIn("packaging failed", self.api.bugs[self.state.emergency_ticket()]["logTail"])
@@ -1459,6 +1472,205 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
+
+
+	# ---- emergency fix
+
+	def run_emergency(self, **make_kwargs):
+		"""develop red, the ticket open, the emergency fix run locally green and pushed."""
+		self.ci_red(bugs=[dict(BUG, status="resolved")], **make_kwargs)
+		self.loop.poll_once()
+		return self.state.emergency_ticket()
+
+	def test_emergency_fix_runs_first_without_player_text_and_is_pushed(self):
+		ticket = self.run_emergency()
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("CI FAILURE", fix_input)
+		self.assertIn("double free", fix_input)
+		self.assertNotIn("PLAYER COMMENT", fix_input)
+		review_input = [text for kind, text in self.runner.inputs if kind == "review"][0]
+		self.assertIn("CI FAILURE", review_input)
+		branch = "bugfix/" + ticket[-8:]
+		self.assertEqual(self.worktree.pushed, [(branch, "head1")])
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.state.data["ci"]["pending"]["branch"], branch)
+		self.assertEqual(self.api.bugs[ticket]["status"], "pr_open")
+		self.assertIn("ci-pending", self.outcomes())
+
+	def test_green_branch_run_ships_outside_the_cap(self):
+		ticket = self.run_emergency(autoship_cap_per_day=0)
+		branch = "bugfix/" + ticket[-8:]
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual([b for b, _ in self.worktree.shipped], [branch])
+		self.assertIn(branch, self.worktree.remote_deleted)
+		self.assertIsNone(self.state.data["ci"]["pending"])
+		self.assertEqual(self.state.data["autoships"], 0)
+		self.assertTrue(any("Emergency fix shipped" in m for m in self.notifier.messages))
+		self.assertIsNotNone(self.state.ci_phase())  # green only once develop's own run is green
+
+	def test_red_branch_run_retries_on_the_same_branch(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "failure", "head1", branch=branch))
+		self.loop.github.jobs_by_run[5] = [{"id": 50, "conclusion": "failure", "steps": [{"name": "tests", "conclusion": "failure"}]}]
+		self.loop.github.logs[50] = "still: SIGSEGV in creature_ai.cpp"
+		self.worktree.branch_heads[branch] = "head1"
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.state.ci_phase()["attempts"], 2)
+		self.assertIn(branch, self.worktree.resumed)
+		last_fix = [text for kind, text in self.runner.inputs if kind == "fix"][-1]
+		self.assertIn("SIGSEGV", last_fix)
+
+	def test_three_failed_attempts_need_the_maintainer(self):
+		ticket = self.run_emergency(emergency_attempts=1)
+		branch = "bugfix/" + ticket[-8:]
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "failure", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len([kind for kind, _ in self.runner.inputs if kind == "fix"]), 1)
+		self.assertEqual(sum("needs you" in m for m in self.notifier.messages), 1)
+		self.assertEqual(self.api.bugs[ticket]["status"], "pr_open")
+
+	def test_ci_wait_times_out(self):
+		ticket = self.run_emergency(emergency_attempts=1)
+		self.now += datetime.timedelta(minutes=61)
+		self.loop.poll_once()
+		self.assertIsNone(self.state.data["ci"]["pending"])
+		self.assertIn("bugfix/" + ticket[-8:], self.worktree.remote_deleted)
+		self.assertTrue(any("needs you" in m for m in self.notifier.messages))
+
+	def test_parked_emergency_fix_needs_the_maintainer(self):
+		ticket = self.run_emergency(review=dict(GOOD_REVIEW, fixes_symptom=False))
+		self.assertEqual(self.worktree.pushed, [])
+		self.assertEqual(self.api.bugs[ticket]["status"], "pr_open")
+		self.assertTrue(any("needs you" in m for m in self.notifier.messages))
+
+	def test_emergency_fix_touching_a_data_submodule_is_not_pushed(self):
+		changes = [guard.FileChange("data/client/Models/x.hmsh", 0, 0, True)] + BENIGN_CHANGES
+		ticket = self.run_emergency(changes=changes)
+		self.assertEqual(self.worktree.pushed, [])
+		self.assertEqual(self.api.bugs[ticket]["status"], "pr_open")
+
+	def test_failing_after_the_fix_still_blocks(self):
+		ticket = self.run_emergency(proof_ok=False)  # FakeVerifier: before=failed, after=failed
+		self.assertEqual(self.worktree.pushed, [])
+		self.assertEqual(self.api.bugs[ticket]["status"], "pr_open")
+
+	def test_windows_pass_before_the_fix_is_waived(self):
+		self.ci_red(bugs=[dict(BUG, status="resolved")])
+		self.verifier.proof_result = {"ok": False, "before": "passed", "after": "passed",
+			"reason": "regression test before=passed after=passed"}
+		self.loop.poll_once()
+		ticket = self.state.emergency_ticket()
+		self.assertEqual(len(self.worktree.pushed), 1)
+		with open(os.path.join(self.artifacts, ticket, "proof.json"), encoding="utf-8") as handle:
+			self.assertIn("waived", json.load(handle))
+
+	def test_green_develop_while_pending_drops_the_check(self):
+		ticket = self.run_emergency()
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(6, "success", "other1"))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[ticket]["status"], "resolved")
+		self.assertIsNone(self.state.data["ci"]["pending"])
+		self.assertIn("bugfix/" + ticket[-8:], self.worktree.remote_deleted)
+		self.assertEqual(self.worktree.shipped, [])
+
+	def test_a_discarded_ticket_is_not_retried(self):
+		ticket = self.run_emergency(emergency_attempts=3)
+		self.api.bugs[ticket]["status"] = "wontfix"
+		self.state.data["ci"]["pending"] = None
+		self.now += datetime.timedelta(minutes=6)
+		fixes = len([kind for kind, _ in self.runner.inputs if kind == "fix"])
+		self.loop.poll_once()
+		self.assertEqual(len([kind for kind, _ in self.runner.inputs if kind == "fix"]), fixes)
+
+	# Beyond the brief: the push and ship paths' own invariants.
+
+	def test_only_the_emergency_ticket_is_ever_pushed(self):
+		self.run_emergency()
+		with self.assertRaises(ValueError):
+			self.loop._push_for_ci(BUG_ID, BRANCH, "base1", "head1")
+		self.assertEqual(len(self.worktree.pushed), 1)
+		ticket = self.state.emergency_ticket()
+		with self.assertRaises(ValueError):
+			self.loop._push_for_ci(ticket, BRANCH, "base1", "head1")  # not the ticket's own branch
+		self.assertEqual(len(self.worktree.pushed), 1)
+		with self.assertRaises(ValueError):
+			self.loop._ship(BUG_ID, BRANCH, "s", "head1", emergency=True)
+		self.assertEqual(self.worktree.shipped, [])
+
+	def test_tripped_breaker_parks_a_green_emergency_branch(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		loop_state.trip_breaker(self.artifacts, "test", self.now)
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn(branch, self.worktree.remote_deleted)
+		self.assertTrue(self.state.ci_phase()["parked"])
+		self.assertTrue(any("needs you" in m for m in self.notifier.messages))
+
+	def test_green_run_for_another_head_does_not_ship(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head2", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIsNotNone(self.state.data["ci"]["pending"])
+
+	def test_unknown_ci_state_holds_a_green_emergency_branch(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop._recheck_ci = lambda: False
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIsNotNone(self.state.data["ci"]["pending"])
+		self.assertEqual(self.worktree.remote_deleted, [])
+
+	def test_red_develop_after_the_emergency_ship_retries(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		gh = self.loop.github
+		gh.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		fixes = len([kind for kind, _ in self.runner.inputs if kind == "fix"])
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()  # develop's own run has not finished: no new attempt
+		self.assertEqual(len([kind for kind, _ in self.runner.inputs if kind == "fix"]), fixes)
+		gh.runs_by_workflow["ccpp.yml"].insert(0, run(7, "failure", "merge1"))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len([kind for kind, _ in self.runner.inputs if kind == "fix"]), fixes + 1)
+		self.assertEqual(self.state.ci_phase()["attempts"], 2)
+		self.assertNotIn(branch, self.worktree.resumed)  # the shipped branch is merged: start fresh
+
+	def test_a_moved_data_gitlink_is_not_pushed(self):
+		changes = [guard.FileChange("data/editor", 0, 0, True)] + BENIGN_CHANGES
+		self.make(changes=changes, github=FakeGitHub())
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1")]
+		self.loop.poll_once()
+		self.loop._push_for_ci(self.state.emergency_ticket(), "bugfix/" + self.state.emergency_ticket()[-8:], "base1", "head1")
+		self.assertEqual(self.worktree.pushed, [])
+
+	def test_a_guided_refix_of_the_emergency_ticket_does_not_auto_ship(self):
+		ticket = self.run_emergency()
+		self.state.data["ci"]["pending"] = None
+		self.loop._try_ship(ticket, "bugfix/" + ticket[-8:], "s", "head1")
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.state.data["ship_queue"], [])
+		self.assertIn(loop.EMERGENCY_REASON, self.api.notes(ticket)[-1])
 
 
 class DecideTests(unittest.TestCase):
