@@ -3,6 +3,7 @@
 """Minimal GitHub Actions client of the bug loop (stdlib only). The token reads Actions and
 contents and may start a workflow; it is never logged or put into an error message."""
 
+import http.client
 import json
 import re
 import urllib.error
@@ -54,15 +55,25 @@ class GitHub:
 			with self.opener(request, timeout=30) as response:
 				return response.read()
 		except urllib.error.HTTPError as error:
-			if error.code in (301, 302, 303, 307, 308) and error.headers.get("Location"):
-				raise _Redirect(error.headers["Location"])
-			raise GitHubError("GitHub answered {} for {} {}".format(error.code, request.get_method(), _path(request.full_url)))
-		except (urllib.error.URLError, OSError) as error:
+			try:
+				location = error.headers.get("Location") if error.headers else None
+				if error.code in (301, 302, 303, 307, 308) and location:
+					if not location.startswith("https://"):
+						raise GitHubError("GitHub redirected to a non-https location for {}".format(_path(request.full_url)))
+					raise _Redirect(location)
+				raise GitHubError("GitHub answered {} for {} {}".format(error.code, request.get_method(), _path(request.full_url)))
+			finally:
+				error.close()
+		except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
 			raise GitHubError("GitHub unreachable ({}) for {}".format(type(error).__name__, _path(request.full_url)))
 
 	def _json(self, path, **query):
 		url = self.base + path + ("?" + urllib.parse.urlencode(query) if query else "")
-		return json.loads(self._open(self._request(url)) or b"{}")
+		body = self._open(self._request(url)) or b"{}"
+		try:
+			return json.loads(body)
+		except ValueError:
+			raise GitHubError("GitHub sent a non-JSON body for {}".format(_path(url)))
 
 	def runs(self, workflow, branch=None, per_page=20):
 		query = {"per_page": per_page}
@@ -77,7 +88,10 @@ class GitHub:
 		try:
 			body = self._open(self._request(self.base + "/actions/jobs/{}/logs".format(job_id)))
 		except _Redirect as redirect:
-			body = self._open(self._request(redirect.location, auth=False))
+			try:
+				body = self._open(self._request(redirect.location, auth=False))
+			except _Redirect:
+				raise GitHubError("GitHub log download redirected twice for job {}".format(job_id))
 		return body.decode("utf-8", "replace")
 
 	def dispatch(self, workflow, ref):

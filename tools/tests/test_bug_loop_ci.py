@@ -3,6 +3,7 @@
 
 """The GitHub client (with a fake transport) and the pure CI evaluation of the bug loop."""
 
+import http.client
 import io
 import json
 import os
@@ -90,6 +91,37 @@ class ClientTests(unittest.TestCase):
 		text = github.GitHub("Kyoril", "mmo", "secret-token", opener=opener).job_log(7)
 		self.assertIn("double free", text)
 		self.assertIsNone(opener.requests[1].get_header("Authorization"))
+
+	def _client(self, routes):
+		return github.GitHub("Kyoril", "mmo", "secret-token", opener=FakeOpener(routes))
+
+	def _assert_github_error(self, call):
+		with self.assertRaises(github.GitHubError) as caught:
+			call()
+		self.assertNotIn("secret-token", str(caught.exception))
+
+	def test_second_redirect_is_a_github_error(self):
+		first = urllib.error.HTTPError(API, 302, "Found", {"Location": "https://blob.example/log"}, io.BytesIO(b""))
+		second = urllib.error.HTTPError("https://blob.example/log", 302, "Found", {"Location": "https://other.example/log"}, io.BytesIO(b""))
+		client = self._client([(API + "/actions/jobs/7/logs", first), ("https://blob.example/log", second)])
+		self._assert_github_error(lambda: client.job_log(7))
+
+	def test_non_https_redirect_is_a_github_error(self):
+		redirect = urllib.error.HTTPError(API, 302, "Found", {"Location": "http://blob.example/log"}, io.BytesIO(b""))
+		client = self._client([(API + "/actions/jobs/7/logs", redirect)])
+		self._assert_github_error(lambda: client.job_log(7))
+
+	def test_non_json_body_is_a_github_error(self):
+		client = self._client([(API, FakeResponse(b"<html>proxy</html>"))])
+		self._assert_github_error(lambda: client.runs("ccpp.yml"))
+
+	def test_url_error_is_a_github_error(self):
+		client = self._client([(API, urllib.error.URLError("boom secret-token"))])
+		self._assert_github_error(lambda: client.runs("ccpp.yml"))
+
+	def test_incomplete_read_is_a_github_error(self):
+		client = self._client([(API, http.client.IncompleteRead(b"par"))])
+		self._assert_github_error(lambda: client.runs("ccpp.yml"))
 
 	def test_dispatch_posts_the_ref(self):
 		opener = FakeOpener([(API + "/actions/workflows/nightly-release.yml/dispatches", FakeResponse(b"", status=204))])
