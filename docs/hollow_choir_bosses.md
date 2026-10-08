@@ -1,6 +1,6 @@
 # The Hollow Choir — boss rework
 
-Status: **in progress** (2026-10-08, `feature/hollow-choir-bosses`).
+Status: **spells ready for manual testing** (2026-10-08, `feature/hollow-choir-bosses`).
 
 The first roster (Sevrin Wax, Ossuar, Choirmistress Vell) is retired: their spawns are gone from
 map 1 and their triggers 29-50 are deleted. The unit rows 81-85 remain because quests 58-61 still
@@ -9,7 +9,7 @@ name them as kill objectives; re-pointing those quests is open work (see the end
 Order of work, as agreed with the user:
 
 1. Boss and add NPCs — **done**, unspawned (the new layout has no coordinates yet).
-2. The bosses' spells, each with cast animation, impact, sound and particles. Each spell is
+2. **Done, awaiting the user's feedback:** the bosses' spells, each with cast animation, impact, sound and particles. Each spell is
    testable on its own: `learnspell <id>` on a GM character, then cast it at a hostile NPC.
 3. Encounter logic in triggers (health thresholds, timers, add bookkeeping) — **not started**.
 
@@ -101,7 +101,44 @@ The spell runtime could not express three of the brief's mechanics as data:
 - **Ground zones.** `spell_effects::PersistentAreaAura` was an empty handler, and nothing told the
   client about an area on the ground.
 
-Their design is described in the sections below as they land.
+All three now exist, plus two fixes the boss spells needed:
+
+- **ConeEnemy** resolves enemies within `radius` and within `miscvalueb` degrees (default 90) of
+  the caster's facing (`spell_target_resolver.cpp`, `IsInPlanarCone`).
+- **Summon** spawns `summonunit` x `basepoints` creatures evenly on a circle of `radius` around
+  the caster, starting at its right, so two summons stand on opposite sides. They despawn after
+  the spell's `duration` (0 = never), attack the caster's victim, and their death raises
+  `OnSummonedUnitDied` on the caster — the hook the encounter triggers will use.
+- **PersistentAreaAura** creates a ground zone (`world/spell_zone_set.h`): `radius`, lifetime =
+  spell `duration`, and every `amplitude` ms it casts `triggerspell` on each enemy inside. An
+  amplitude equal to the duration means exactly one tick as the zone runs out — the delayed
+  detonation of Guttering Candle and Dissonance. A zone dies with its caster. Clients learn of
+  it through `SpellZoneStart` / `SpellZoneEnd` (game protocol 19) and play the visualization's
+  `GROUND_ACTIVE` kits at the position and its `GROUND_EXPIRED` kits on expiry.
+- **CannotBeInterrupted** (`spell_attributes_b`, bit 11): kicks used to stop every cast. Grave
+  Strike and the three summons opt out; Lament and Dirge of the Grave stay interruptible.
+- An **interrupted channel** now removes the aura it put on its caster. Before, a kicked channel
+  kept ticking to its natural end (Fire Barrage did too).
+
+Covered by `game_server_tests` (`[cone]`, `[summon]`, `[spell_zone]`) and the E2E scenario
+`hollow_choir_boss_spells.lua`.
+
+## Testing the spells by hand
+
+On a GM character: `learnspell <id>`, select a hostile NPC (a Training Dummy works well), cast.
+The ground spells mark the floor under the selected NPC. Last Vigil, Mourning Voices and The
+Choir Rises summon hostile adds next to the caster — godmode helps. Spells 254, 259, 261 and
+263 are the internal hits of the zones and of the Dirge; they are not meant to be cast directly.
+
+| Boss | Spells to learn |
+|---|---|
+| Brother Oswin | 251 Grave Strike, 252 Last Vigil, 253 Guttering Candle |
+| Sister Mereth | 255 Lament, 256 Mourning Voices, 257 Mourning Chorus (self buff), 258 Silent Place |
+| Cantor Veyr | 260 Dissonance, 262 Dirge of the Grave, 264 The Choir Rises, 265 Choral Resonance (self buff, stacks) |
+
+Sounds were picked by measurement only and still need a listen; the sound agent flagged Lament
+Cast (fades instead of building), Choir Rises Cast, the Dissonance bell pitch, and how much the
+Candle Flare reads as fire. Every layer take is in `generated/hollow_choir/sfx/` for swapping.
 
 ## Open work
 

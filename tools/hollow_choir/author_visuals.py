@@ -306,8 +306,10 @@ def main():
     for key in ("vis_editor", "vis_client"):
         upsert_visuals(data[key])
         validate_visualizations(data[key], sound_ids)
-    for key in ("spells_editor", "spells_client"):
-        link_spells(data[key])
+    link_spells(data["spells_editor"])
+    # The ClientDB copy must stay byte-identical to the editor file (tools/tests check this), and
+    # the client schema serializes the same entries differently, so it gets the editor bytes.
+    data["spells_client"] = targets["spells_client"][1].FromString(data["spells_editor"].SerializeToString())
     print(f"{len(SOUND_ENTRIES)} sounds, {len(VISUALIZATIONS)} visualizations, "
           f"{len(EXPECTED_SPELLS)} spells checked")
 
@@ -319,7 +321,8 @@ def main():
     backup.mkdir(parents=True, exist_ok=True)
     for key, (path, _) in targets.items():
         shutil.copy2(path, backup / f"{path.parent.name}_{path.name}")
-        path.write_bytes(data[key].SerializeToString())
+        payload = data["spells_editor"] if key == "spells_client" else data[key]
+        path.write_bytes(payload.SerializeToString())
         print(f"wrote {path.relative_to(ROOT)}")
 
 
