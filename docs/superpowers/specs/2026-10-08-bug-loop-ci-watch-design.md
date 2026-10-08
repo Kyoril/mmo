@@ -31,17 +31,25 @@ verified on the platform that broke. Until `develop` is green again nothing else
 ## 1. Detection
 
 - New config/env: `MMO_BUGLOOP_GITHUB_TOKEN` (fine-grained token, repository `Kyoril/mmo` only,
-  permissions Actions: read, Contents: read). Owner and repository come from the main repository's
+  permissions Actions: read and write (write only to start the Nightly Release workflow),
+  Contents: read). Owner and repository come from the main repository's
   `origin` URL; no names or machine paths are hardcoded. Without a token the watch is off and the
   loop logs `ci watch: off (no token)` at startup.
 - Watched workflows (config, defaults): `ccpp.yml` ("Linux Servers", every push to `develop`) and
   `nightly-release.yml` ("Nightly Release", its gate job).
 - Poll at most every 5 minutes (each poll cycle checks whether the interval passed). Stdlib HTTP
   only. GitHub errors and rate limits are logged and never stop the loop.
-- Per watched workflow, the newest completed run on branch `develop` decides: conclusion `failure`
-  → that workflow is red; `success` → green; `cancelled`/`skipped` → no change. `develop` is red when
-  any watched workflow is red; it is green again when every watched workflow's newest completed run
-  succeeded. (A red nightly therefore clears with the next successful nightly.)
+- Per watched workflow, the newest completed run decides (for "Linux Servers" runs on branch
+  `develop`; for "Nightly Release" runs started by the schedule or by `workflow_dispatch`, which
+  always build `develop`): conclusion `failure` → that workflow is red; `success` → green;
+  `cancelled`/`skipped` → no change. `develop` is red when any watched workflow is red; it is green
+  again when every watched workflow's newest completed run succeeded.
+- A red nightly does not wait for the next night: once a commit newer than the failed nightly's
+  commit is on `develop` and "Linux Servers" is green for it (normally right after the emergency fix
+  ships), the loop starts the real Nightly Release (`workflow_dispatch`, no `force`). It gates and
+  publishes a release; publishing is not deploying — `mmo-deployer` stages it and deploys it in the
+  next maintenance window, as with every nightly. At most one such start per red phase and `develop`
+  commit; a start that is red again counts as a failed emergency attempt.
 - On red: download the failing job's log (`/actions/jobs/{id}/logs`) and extract a bounded excerpt
   (≤ 8000 characters): failed test names with file:line, the assertion/abort lines, compiler
   `error:` lines, and the failing step name. Suspects: `git log` from the newest green run's commit to
@@ -78,7 +86,9 @@ verified on the platform that broke. Until `develop` is green again nothing else
   waived for this ticket only (reason recorded), because the CI run below is the proof.
 - CI verification: when everything local is green the loop pushes `bugfix/<id8>` to origin (the
   only branch push the loop may make, and only for its emergency ticket) and records a pending CI
-  check (branch, head, deadline 60 min) in state. The poll cycle checks it without blocking other
+  check (branch, head, deadline 60 min) in state. The branch is verified by "Linux Servers" only (the
+  Nightly Release always builds `develop`); a failure only the nightly sees (for example a Linux-only
+  E2E failure) is verified by the nightly start after the ship, see section 1. The poll cycle checks it without blocking other
   work. The workflow "Linux Servers" gets a `bugfix/**` push trigger.
 - Result:
   - CI green and guard clean → ship to `develop` (fast gate on the merge as today), outside the daily
