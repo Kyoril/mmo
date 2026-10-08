@@ -13,12 +13,13 @@ Both checks here correspond to a real failure:
 """
 
 import os
+import re
 import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sfx_gen"))
 
-from recipes import cleric, human, mage, warrior
+from recipes import cleric, hollow_choir, human, mage, warrior
 
 
 class _RecipeChecks:
@@ -114,6 +115,45 @@ class HumanRecipeTests(_RecipeChecks, unittest.TestCase):
                 self.assertTrue(1 <= entry.take <= 4, f"{mix_name}: take {entry.take}")
                 self.assertGreaterEqual(entry.offset, 0.0)
                 self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
+
+
+class HollowChoirRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = hollow_choir
+    count = 26
+
+    def test_every_prompt_names_its_layers(self):
+        # Layered by mixing (see human.py): each prompt is one element and must exclude music,
+        # or a generic score bed bleeds into every layer.
+        for name, spec in hollow_choir.SOUNDS.items():
+            self.assertIn("no music", spec.prompt.lower(), f"{name}: must exclude music")
+
+    def test_voice_layers_stay_wordless(self):
+        # A sung or spoken word would read as dialogue. ("no choir" is an exclusion, not a voice.)
+        for name, spec in hollow_choir.SOUNDS.items():
+            lowered = spec.prompt.lower()
+            if re.search(r"(?<!no )\b(choir|wail|chant|cry|voices)\b", lowered):
+                self.assertTrue("wordless" in lowered or "no words" in lowered, name)
+
+    def test_only_loop_finals_loop(self):
+        for final, (sound, take, _) in hollow_choir.SINGLES.items():
+            self.assertIn(sound, hollow_choir.SOUNDS)
+            self.assertTrue(1 <= take <= 4)
+            self.assertEqual(hollow_choir.SOUNDS[sound].loop, final.endswith("Loop"), final)
+
+    def test_mixes_reference_generated_layers(self):
+        for mix_name, mix in hollow_choir.MIXES.items():
+            self.assertGreaterEqual(len(mix["layers"]), 2, f"{mix_name}: a mix needs layers")
+            for entry in mix["layers"]:
+                self.assertIn(entry.sound, hollow_choir.SOUNDS, f"{mix_name}: unknown layer")
+                self.assertFalse(hollow_choir.SOUNDS[entry.sound].loop, mix_name)
+                self.assertTrue(1 <= entry.take <= 4, f"{mix_name}: take {entry.take}")
+                self.assertGreaterEqual(entry.offset, 0.0)
+                self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
+
+    def test_every_final_is_built_exactly_once(self):
+        built = list(hollow_choir.MIXES) + list(hollow_choir.SINGLES)
+        self.assertEqual(sorted(built), sorted(hollow_choir.FINAL_ORDER))
+
 
 if __name__ == "__main__":
     unittest.main()
