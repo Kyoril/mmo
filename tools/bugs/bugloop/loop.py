@@ -251,6 +251,7 @@ class BugLoop:
 					self._emergency_fix()
 				except Exception:  # the loop must survive a bad emergency run too
 					self.log(traceback.format_exc())
+					self._delay_emergency_retry()
 					self._safe_release(ticket, "needs-info: the bug loop hit an internal error on the emergency fix; see artifacts/bug-loop/{}{}".format(
 						ticket, self._retry_note()))
 					self._finish(ticket, "loop-error")
@@ -1041,6 +1042,8 @@ class BugLoop:
 			return False
 		if phase.get("parked") or self.state.data["ci"]["pending"]:
 			return False
+		if self._emergency_retry_pending(phase):
+			return False
 		if not valid_bug_id(phase.get("ticket")):
 			return False
 		if phase.get("attempts", 0) >= self.config.emergency_attempts:
@@ -1078,11 +1081,28 @@ class BugLoop:
 		self.notifier.send(notify.emergency_needs_you_message(self.notifier, phase["ticket"],
 			"invocation budget exhausted; develop stays red until {} 00:00 UTC or until you act".format(tomorrow)))
 
+	def _delay_emergency_retry(self):
+		"""An emergency attempt ended in an internal loop error: the next one waits
+		emergency_retry_minutes instead of starting in the very next poll."""
+		phase = self.state.ci_phase()
+		if phase is None:
+			return
+		retry_at = self.clock() + datetime.timedelta(minutes=self.config.emergency_retry_minutes)
+		phase["retry_after"] = retry_at.isoformat()
+		self.state.save()
+
+	def _emergency_retry_pending(self, phase):
+		retry_after = phase.get("retry_after")
+		return bool(retry_after) and self.clock() < datetime.datetime.fromisoformat(retry_after)
+
 	def _retry_note(self):
 		phase = self.state.ci_phase()
 		if not phase:
 			return ""
 		attempts, limit = phase.get("attempts", 0), self.config.emergency_attempts
+		if attempts < limit and self._emergency_retry_pending(phase):
+			return "; the bug loop retries at {} UTC (attempt {} of {})".format(
+				datetime.datetime.fromisoformat(phase["retry_after"]).strftime("%H:%M"), attempts, limit)
 		if attempts < limit:
 			return "; the bug loop retries (attempt {} of {})".format(attempts, limit)
 		return "; attempt {} of {}, none left".format(attempts, limit)

@@ -32,6 +32,9 @@ class LoopConfig:
 	# The wait for develop after an emergency ship when the Nightly Release decides (its gate alone can take 180 min).
 	ci_nightly_wait_minutes: int = 240
 	emergency_attempts: int = 3
+	# The pause before the next emergency attempt after one ended in an internal loop error, so a
+	# persistent fault cannot use up every attempt within seconds.
+	emergency_retry_minutes: int = 30
 	# Post a Discord message on every bug status change, not only ships, pings and the summary.
 	notify_status_changes: bool = True
 

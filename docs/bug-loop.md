@@ -249,7 +249,10 @@ ships are not held`.
 - **Watched workflows:** `ccpp.yml` (Linux Servers, on every push to `develop` and to
   `bugfix/**`) and `nightly-release.yml`. Poll interval, workflow names and waits are the
   `ci_*` keys of the loop config (`ci_poll_seconds` 300, `ci_wait_minutes` 60,
-  `ci_nightly_wait_minutes` 240, `emergency_attempts` 3).
+  `ci_nightly_wait_minutes` 240, `emergency_attempts` 3, `emergency_retry_minutes` 30). An
+  emergency attempt that ends in an internal loop error counts, and the next one waits
+  `emergency_retry_minutes` (the ticket note says when), so a persistent fault cannot use up
+  every attempt within seconds.
 - **Ticket:** when the newest run on `develop` is red, the loop opens an emergency ticket in the
   bug API (one per red phase) and sends a Discord message ("develop is red"). If GitHub cannot
   list the failing job yet, the ticket opens with "(log unavailable)" and the log is read again

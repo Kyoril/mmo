@@ -2091,6 +2091,23 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.state.ci_phase()["attempts"], 1)
 		self.assertIsNone(self.state.data["unpublished_data"])
 
+	def test_an_internal_error_delays_the_next_emergency_attempt(self):
+		self.ci_red(bugs=[dict(BUG, status="resolved")])
+		self.worktree.prepare_error = RuntimeError("boom")
+		self.loop.poll_once()
+		ticket = self.state.emergency_ticket()
+		self.assertEqual(self.state.ci_phase()["attempts"], 1)
+		self.assertIn("loop-error", self.outcomes())
+		self.assertIn("retries at", self.api.notes(ticket)[-1])
+		for _ in range(3):  # what used to spend every attempt within seconds
+			self.loop.poll_once()
+		self.now += datetime.timedelta(minutes=29)
+		self.loop.poll_once()
+		self.assertEqual(self.state.ci_phase()["attempts"], 1)
+		self.now += datetime.timedelta(minutes=2)
+		self.loop.poll_once()
+		self.assertEqual(self.state.ci_phase()["attempts"], 2)
+
 	def test_unpublished_data_holds_ordinary_fixes(self):
 		self.make()
 		self.worktree.unpublished = [("data/editor", "7b04985e" + "0" * 32)]
