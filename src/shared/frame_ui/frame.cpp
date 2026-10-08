@@ -839,6 +839,12 @@ namespace mmo
 		return nullptr;
 	}
 
+	std::string Frame::GetHoverUnit()
+	{
+		const char* unit = GetPropertyValue("HoverUnit");
+		return unit ? unit : std::string();
+	}
+
 	bool Frame::IsChildOf(Frame& parent) const
 	{
 		if (m_parent == &parent)

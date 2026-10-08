@@ -28,8 +28,10 @@ namespace
 
 TEST_CASE("Decorative overlays pass mouse hit tests to the window underneath", "[frame_input]")
 {
-	static auto& device = GraphicsDevice::CreateNull(GraphicsDeviceDesc());
-	(void)device;
+	if (!GraphicsDevice::HasInstance())
+	{
+		GraphicsDevice::CreateNull(GraphicsDeviceDesc());
+	}
 
 	auto root = std::make_shared<HitTestFrame>("Root");
 	auto tab = std::make_shared<HitTestFrame>("ClassesTab");

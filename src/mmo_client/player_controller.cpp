@@ -888,6 +888,24 @@ namespace mmo
 			m_hoveredObjectGuid = hoveredUnit ? hoveredUnit->GetGuid() : 0;
 			OnHoveredObjectChanged(previousHoveredObjectGuid);
 		}
+		else if (const std::string hoverUnit = hoverFrame ? hoverFrame->GetHoverUnit() : std::string(); !hoverUnit.empty())
+		{
+			// Unit frames (player frame, target frame) count as hovering the unit they show, just
+			// like nameplates: the unit's tooltip, cursor and hover ring follow the frame.
+			const ObjectGuid previousHoveredObjectGuid = m_hoveredObjectGuid;
+			std::shared_ptr<GameUnitC> hoveredUnit;
+			if (hoverUnit == "player")
+			{
+				hoveredUnit = ObjectMgr::GetActivePlayer();
+			}
+			else if (hoverUnit == "target")
+			{
+				hoveredUnit = ObjectMgr::GetSelectedObject();
+			}
+
+			m_hoveredObjectGuid = hoveredUnit ? hoveredUnit->GetGuid() : 0;
+			OnHoveredObjectChanged(previousHoveredObjectGuid);
+		}
 		else if (!hoverFrame || !(hoverFrame->IsEnabled() && hoverFrame->GetType() == Button::Type))
 		{
 			// Fire unit raycast
