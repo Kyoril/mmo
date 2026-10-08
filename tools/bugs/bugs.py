@@ -86,7 +86,10 @@ class BugApi:
 		except urllib.error.HTTPError as error:
 			if error.code != 409:
 				raise
-			return json.loads(error.read() or b"{}")["bugId"]
+			try:
+				return json.loads(error.read() or b"{}")["bugId"]
+			except (ValueError, KeyError, TypeError):
+				raise RuntimeError("409 without bugId") from error
 
 
 def build_parser():

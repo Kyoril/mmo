@@ -132,19 +132,27 @@ class BugApiTests(unittest.TestCase):
 		self.assertEqual((body["kind"], body["commit"], body["runUrl"], body["actor"]), ("ci_failure", "abc", "https://run/1", "bug-loop"))
 
 	def test_create_system_conflict_returns_the_open_ticket(self):
-		def conflict(request, timeout=None):
-			raise urllib.error.HTTPError(request.full_url, 409, "Conflict", {}, io.BytesIO(b'{"bugId": "x"}'))
-
-		api = bugs.BugApi("https://example.test/", "secret", opener=conflict)
+		api = bugs.BugApi("https://example.test/", "secret", opener=self.failing(409, b'{"bugId": "x"}'))
 		self.assertEqual(api.create_system("red", "d", "abc", "u"), "x")
 
-	def test_create_system_other_errors_propagate(self):
-		def broken(request, timeout=None):
-			raise urllib.error.HTTPError(request.full_url, 500, "Boom", {}, io.BytesIO(b"{}"))
+	def test_create_system_conflict_without_a_bug_id_is_a_clear_error(self):
+		for body in (b"{}", b"not json", b""):
+			api = bugs.BugApi("https://example.test/", "secret", opener=self.failing(409, body))
+			with self.assertRaisesRegex(RuntimeError, "409 without bugId"):
+				api.create_system("red", "d", "abc", "u")
 
-		api = bugs.BugApi("https://example.test/", "secret", opener=broken)
+	def test_create_system_other_errors_propagate(self):
+		api = bugs.BugApi("https://example.test/", "secret", opener=self.failing(500, b"{}"))
 		with self.assertRaises(urllib.error.HTTPError):
 			api.create_system("red", "d", "abc", "u")
+
+	@staticmethod
+	def failing(code, body):
+		def opener(request, timeout=None):
+			raise urllib.error.HTTPError(request.full_url, code, "error", {}, io.BytesIO(body))
+
+		return opener
+
 
 if __name__ == "__main__":
 	unittest.main()
