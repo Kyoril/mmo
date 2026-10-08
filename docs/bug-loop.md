@@ -157,7 +157,11 @@ not parked (see below). The loop consumes decisions before it does anything else
   moved is resolved by merging the two submodule commits. The refix is then guarded and
   reviewed against today's develop, so data that landed meanwhile (another fix's mesh, say) is
   not counted as part of this fix. A conflict there ends the refix ("decide again"). Shipping
-  merges submodule pointers the same way. A refix with empty guidance is
+  merges submodule pointers the same way, and also merges a submodule `master` that moved past
+  develop's pointer (data pushed without a develop bump) into the fix's submodule commit; that
+  merge result always runs the fast gate before anything is pushed, and a conflict parks with
+  "needs a manual merge". A refix never has to merge submodule master itself: it would lose the
+  same race again before it ships. A refix with empty guidance is
   refused ("decide again"). If a guided refix fails, the bug goes back to `pr_open` so it can
   be decided again; at the limit the loop posts a "refix limit reached" message.
 - **Ship**: ships exactly the recorded commit. The daily cap does not apply. If the branch tip
