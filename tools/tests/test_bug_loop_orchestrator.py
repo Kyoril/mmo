@@ -215,6 +215,7 @@ class FakeWorktree:
 		self.merged_ = {}
 		self.deleted = []
 		self.prepare_error = None
+		self.prepares = 0
 		self.pushed = []
 		self.remote_deleted = []
 		self.ancestors = True
@@ -226,6 +227,7 @@ class FakeWorktree:
 		return list(self.unpublished)
 
 	def prepare(self):
+		self.prepares += 1
 		if self.prepare_error:
 			raise self.prepare_error
 		return "base1"
@@ -1137,6 +1139,79 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
 		self.assertTrue(self.api.updates[-1][1]["release_claim"])
 		self.assertIn("loop-error", self.outcomes())
+
+	# ---- worktree unavailable (an infrastructure fault, not the bug's)
+
+	NOT_OUR_REF = gitops.GitError("git submodule update --init --force failed (128): fatal: remote error: "
+		"upload-pack: not our ref 5ef9d0ee8b56389cd29742ef8e34f981bb4e3883")
+
+	def test_worktree_failure_keeps_a_queued_bug_queued(self):
+		self.make()
+		self.worktree.prepare_error = self.NOT_OUR_REF
+		self.loop.poll_once()
+		self.assertTrue(self.state.in_fix_queue(BUG_ID))
+		self.assertEqual(self.api.claims, [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertNotIn("loop-error", self.outcomes())
+		self.assertNotEqual(self.state.data["attempts"].get(BUG_ID), "fix-started")
+		self.worktree.prepare_error = None
+		self.now += datetime.timedelta(seconds=self.loop.config.ci_poll_seconds)
+		self.loop.poll_once()
+		self.assertEqual([branch for branch, _ in self.worktree.shipped], [BRANCH])
+		self.assertIsNone(self.state.data["worktree_down"])
+
+	def test_worktree_failure_backs_off_instead_of_retrying_in_the_same_poll(self):
+		self.make()
+		self.worktree.prepare_error = self.NOT_OUR_REF
+		self.loop.poll_once()
+		self.now += datetime.timedelta(seconds=5)
+		self.assertFalse(self.loop.poll_once())
+		self.assertEqual(self.worktree.prepares, 1)
+		self.now += datetime.timedelta(seconds=self.loop.config.ci_poll_seconds)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.prepares, 2)
+
+	def test_worktree_failure_does_not_consume_an_emergency_attempt(self):
+		self.ci_red(bugs=[dict(BUG, status="resolved")])
+		self.worktree.prepare_error = self.NOT_OUR_REF
+		for _ in range(3):
+			self.loop.poll_once()
+			self.now += datetime.timedelta(seconds=5)
+		ticket = self.state.emergency_ticket()
+		self.assertEqual(self.state.ci_phase()["attempts"], 0)
+		self.assertEqual(self.api.bugs[ticket]["status"], "triaged")
+		self.assertNotIn("loop-error", self.outcomes())
+		self.assertEqual(self.fixes(), 0)
+		self.assertEqual(self.worktree.prepares, 1)
+		self.worktree.prepare_error = None
+		self.now += datetime.timedelta(seconds=self.loop.config.ci_poll_seconds)
+		self.loop.poll_once()
+		self.assertEqual(self.state.ci_phase()["attempts"], 1)
+		self.assertEqual(self.fixes(), 1)
+		self.assertEqual(self.worktree.pushed, [("bugfix/" + ticket[-8:], "head1")])
+
+	def test_persistent_worktree_failure_needs_the_maintainer_once(self):
+		self.ci_red(bugs=[dict(BUG, status="resolved")], worktree_escalate_minutes=60)
+		self.worktree.prepare_error = self.NOT_OUR_REF
+		for _ in range(30):
+			self.loop.poll_once()
+			self.now += datetime.timedelta(minutes=6)
+		stalled = [m for m in self.notifier.messages if "worktree" in m]
+		self.assertEqual(len(stalled), 1)
+		self.assertIn("not our ref", stalled[0])
+		self.assertEqual(self.state.ci_phase()["attempts"], 0)
+		self.assertNotIn("loop-error", self.outcomes())
+		self.worktree.prepare_error = None
+		self.loop.poll_once()
+		self.assertEqual(self.state.ci_phase()["attempts"], 1)
+		self.assertTrue(any("worktree works again" in m for m in self.notifier.messages))
+
+	def test_a_non_git_failure_while_preparing_is_still_a_loop_error(self):
+		self.make()
+		self.worktree.prepare_error = RuntimeError("disk full")
+		self.loop.poll_once()
+		self.assertIn("loop-error", self.outcomes())
+		self.assertIsNone(self.state.data["worktree_down"])
 
 	# ---- fix round 1
 

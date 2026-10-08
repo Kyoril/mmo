@@ -62,6 +62,12 @@ ANNOUNCED_ELSEWHERE = ("shipped", "shipped-by-maintainer", "refix-limit", "shipp
 EMERGENCY_QUIET = ("fix-started", "interrupted", "needs-info", "loop-error", "claimed-elsewhere")
 
 
+class WorktreeUnavailable(RuntimeError):
+	"""The fix worktree could not be brought to origin/develop (fetch, checkout or submodule sync
+	failed: develop pushed before its submodule commit, say). It is the loop's fault, not the bug's,
+	and is raised before the bug is touched: the bug stays queued and no attempt is used."""
+
+
 def valid_bug_id(bug_id):
 	return isinstance(bug_id, str) and BUG_ID.match(bug_id) is not None
 
@@ -243,12 +249,15 @@ class BugLoop:
 			due = self._emergency_due()
 			if due and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 				self._notify_budget_exhausted(now)
-			elif due and self._data_unpublished():
+			elif due and (self._data_unpublished() or self._worktree_waiting(now)):
+				# The emergency ticket still goes first: nothing else is fixed until the worktree works.
 				return self._end_poll(worked)
 			elif due:
 				ticket = self.state.emergency_ticket()
 				try:
 					self._emergency_fix()
+				except WorktreeUnavailable:
+					return self._end_poll(worked)
 				except Exception:  # the loop must survive a bad emergency run too
 					self.log(traceback.format_exc())
 					self._safe_release(ticket, "needs-info: the bug loop hit an internal error on the emergency fix; see artifacts/bug-loop/{}{}".format(
@@ -257,15 +266,18 @@ class BugLoop:
 				return self._end_poll(True)
 		bug_id = self.state.next_fix()
 		if bug_id is not None and self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
-			if not self.dry_run and self._data_unpublished():
+			if (not self.dry_run and self._data_unpublished()) or self._worktree_waiting(now):
 				return self._end_poll(worked)
 			try:
 				self._fix(bug_id)
+				worked = True
+			except WorktreeUnavailable:
+				pass
 			except Exception:  # the loop must survive one bad bug
 				self.log(traceback.format_exc())
 				self._safe_release(bug_id, "needs-info: the bug loop hit an internal error; see artifacts/bug-loop/" + bug_id)
 				self._finish(bug_id, "loop-error")
-			worked = True
+				worked = True
 		return self._end_poll(worked)
 
 	def _data_unpublished(self):
@@ -440,12 +452,16 @@ class BugLoop:
 	def _fix(self, bug_id, guidance=None, feature=None, emergency=None):
 		"""`emergency` is the CI context of the red phase when bug_id is its emergency ticket: the
 		fixer then sees only the loop's CI task and log, and a locally green fix goes to CI, not develop."""
-		self.state.drop_fix(bug_id)
 		if not valid_bug_id(bug_id):
+			self.state.drop_fix(bug_id)
 			self.log("dropping a queued fix with a malformed bug id: {!r}".format(bug_id)[:200])
 			return
 		if emergency is not None and bug_id != self.state.emergency_ticket():
 			raise ValueError("an emergency fix for {} which is not the recorded emergency ticket".format(bug_id))
+		# Before the bug is touched (queue, claim, attempt): a worktree that cannot reach develop
+		# raises WorktreeUnavailable and leaves everything as it was for a later poll.
+		base = self._prepare_worktree()
+		self.state.drop_fix(bug_id)
 		self.state.mark_attempted(bug_id, "fix-started")
 		self.state.save()
 		if emergency is not None:
@@ -485,7 +501,6 @@ class BugLoop:
 			self._update(bug_id, triage={"category": "feature"}, prUrl="", note="accepted as a feature by the maintainer")
 		branch = "bugfix/" + short_id(bug_id)
 		self._announce(bug_id, "refix-started" if guidance else "implement-started" if feature else "fix-started", {"branch": branch})
-		base = self.worktree.prepare()
 		if not self.verifier.ensure_configured():
 			self._release(bug_id, failed_status, "needs-info: build configure failed in the bug-loop worktree" + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason="build configure failed")
@@ -1063,7 +1078,50 @@ class BugLoop:
 		self.state.save()
 		# A failed verification resumes the pushed branch; after a ship (or the first time) it starts fresh.
 		context = dict(phase["ci"], resume=bool(phase.get("resume")))
-		self._fix(phase["ticket"], emergency=context)
+		try:
+			self._fix(phase["ticket"], emergency=context)
+		except WorktreeUnavailable:
+			# Nothing was attempted: the fixer never started.
+			phase["attempts"] -= 1
+			self.state.save()
+			raise
+
+	def _prepare_worktree(self):
+		"""worktree.prepare(); a git failure starts (or extends) the worktree back-off and raises
+		WorktreeUnavailable. The first success after a failure ends it."""
+		now = self.clock()
+		try:
+			base = self.worktree.prepare()
+		except gitops.GitError as error:
+			self._worktree_failed(now, str(error))
+			raise WorktreeUnavailable(str(error)) from error
+		down = self.state.data.get("worktree_down")
+		if down:
+			self.log("worktree works again (down since {})".format(down.get("since")))
+			self.state.data["worktree_down"] = None
+			self.state.save()
+			if down.get("notified"):
+				self.notifier.send(notify.worktree_up_message())
+		return base
+
+	def _worktree_failed(self, now, error):
+		"""No retry before the next CI poll interval: an immediate retry fails the same way. The
+		maintainer hears of it once, after worktree_escalate_minutes."""
+		down = self.state.data.get("worktree_down") or {"since": now.isoformat(), "notified": False}
+		down["error"] = error[-2000:]
+		down["retry_at"] = (now + datetime.timedelta(seconds=self.config.ci_poll_seconds)).isoformat()
+		self.state.data["worktree_down"] = down
+		minutes = int((now - datetime.datetime.fromisoformat(down["since"])).total_seconds() // 60)
+		self.log("worktree unavailable for {} min, retrying after {}: {}".format(minutes, down["retry_at"], error[-500:]))
+		if not down["notified"] and minutes >= self.config.worktree_escalate_minutes:
+			down["notified"] = True
+			self.notifier.send(notify.worktree_down_message(minutes, error))
+		self.state.save()
+
+	def _worktree_waiting(self, now):
+		"""True while the worktree back-off holds every fix (emergency or queued)."""
+		down = self.state.data.get("worktree_down")
+		return bool(down) and now < datetime.datetime.fromisoformat(down["retry_at"])
 
 	def _notify_budget_exhausted(self, now):
 		"""An emergency attempt is due but the daily invocation budget is used up: tell the maintainer
