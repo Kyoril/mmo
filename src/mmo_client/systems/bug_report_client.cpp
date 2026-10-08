@@ -36,7 +36,7 @@ namespace mmo
 	{
 		/// Graphics and gameplay settings worth knowing when looking at a bug.
 		const char* const ReportedConsoleVars[] = {
-			"gxResolution", "gxWindow", "gxVSync", "gxApi", "gxRenderScale", "gxBloomQuality", "gxSsao", "gxSsaoQuality",
+			"gxResolution", "gxWindow", "gxMonitor", "gxVSync", "gxMaxFpsEnabled", "gxMaxFps", "gxTargetFpsEnabled", "gxTargetFps", "gxQuality", "gxApi", "gxRenderScale", "gxBloomQuality", "gxSsao", "gxSsaoQuality",
 			"gxAtmosphereQuality", "gxContactShadows", "gxContactShadowQuality", "gxDepthPrepass", "gxTerrainBatching",
 			"gxWorldModelBatching", "RenderShadows", "ShadowQuality", "ShadowTextureSize", "ViewDistance",
 			"TerrainFarRadius", "TerrainLodEnabled", "FoliageEnabled", "FoliageDensity", "SoundEnabled", "MasterVolume"

@@ -15,6 +15,7 @@
 #include "rasterizer_state_hash.h"
 #include "render_texture_d3d11.h"
 #include "render_window_d3d11.h"
+#include "display_monitors_d3d11.h"
 #include "sampler_state_hash.h"
 #include "shader_compiler_d3d11.h"
 #include "texture_d3d11.h"
@@ -764,7 +765,7 @@ namespace mmo
 		// Create an automatic render window if requested
 		if (desc.customWindowHandle == nullptr)
 		{
-			m_autoCreatedWindow = CreateRenderWindow("__auto_window__", desc.width, desc.height, !desc.windowed);
+			m_autoCreatedWindow = std::make_shared<RenderWindowD3D11>(*this, "__auto_window__", desc.width, desc.height, !desc.windowed, desc.monitor);
 		}
 		else
 		{
@@ -1873,46 +1874,75 @@ namespace mmo
 
 	std::vector<std::pair<uint16, uint16>> GraphicsDeviceD3D11::GetSupportedResolutions() const
 	{
-		std::vector<std::pair<uint16, uint16>> result;
+		return GetMonitorResolutions(0);
+	}
 
-		// Walk from the device up to its DXGI factory so we can enumerate the primary output's
-		// supported display modes for the back buffer format we render with.
-		ComPtr<IDXGIDevice> dxgiDevice;
-		ComPtr<IDXGIAdapter> adapter;
-		ComPtr<IDXGIOutput> output;
-		if (m_device &&
-			SUCCEEDED(m_device.As(&dxgiDevice)) &&
-			SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) &&
-			SUCCEEDED(adapter->EnumOutputs(0, &output)))
+	std::vector<DisplayMonitor> GraphicsDeviceD3D11::GetDisplayMonitors() const
+	{
+		std::vector<DisplayMonitor> result;
+		for (Win32Monitor& monitor : EnumerateWin32Monitors())
 		{
-			const DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
-
-			UINT modeCount = 0;
-			if (SUCCEEDED(output->GetDisplayModeList(format, 0, &modeCount, nullptr)) && modeCount > 0)
-			{
-				std::vector<DXGI_MODE_DESC> modes(modeCount);
-				if (SUCCEEDED(output->GetDisplayModeList(format, 0, &modeCount, modes.data())))
-				{
-					result.reserve(modeCount);
-					for (const DXGI_MODE_DESC& mode : modes)
-					{
-						result.emplace_back(static_cast<uint16>(mode.Width), static_cast<uint16>(mode.Height));
-					}
-
-					// Modes are returned per refresh rate / scanline order, so de-duplicate the
-					// width/height pairs and present them sorted ascending.
-					std::sort(result.begin(), result.end());
-					result.erase(std::unique(result.begin(), result.end()), result.end());
-				}
-			}
+			result.push_back(std::move(monitor.info));
 		}
 
-		// Fall back to the common-resolution list if DXGI enumeration yielded nothing.
 		if (result.empty())
+		{
+			return GraphicsDevice::GetDisplayMonitors();
+		}
+
+		return result;
+	}
+
+	std::vector<std::pair<uint16, uint16>> GraphicsDeviceD3D11::GetMonitorResolutions(const uint32 monitorIndex) const
+	{
+		Win32Monitor monitor;
+		if (!FindWin32Monitor(monitorIndex, monitor))
 		{
 			return GraphicsDevice::GetSupportedResolutions();
 		}
 
-		return result;
+		return GetWin32MonitorResolutions(monitor);
+	}
+
+	GpuInfo GraphicsDeviceD3D11::GetGpuInfo() const
+	{
+		GpuInfo info;
+
+		ComPtr<IDXGIDevice> dxgiDevice;
+		ComPtr<IDXGIAdapter> adapter;
+		ComPtr<IDXGIAdapter1> adapter1;
+		DXGI_ADAPTER_DESC1 desc{};
+		if (!m_device ||
+			FAILED(m_device.As(&dxgiDevice)) ||
+			FAILED(dxgiDevice->GetAdapter(&adapter)) ||
+			FAILED(adapter.As(&adapter1)) ||
+			FAILED(adapter1->GetDesc1(&desc)))
+		{
+			return info;
+		}
+
+		const int size = WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1, nullptr, 0, nullptr, nullptr);
+		if (size > 1)
+		{
+			info.name.resize(static_cast<size_t>(size - 1));
+			WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1, info.name.data(), size, nullptr, nullptr);
+		}
+
+		info.vendorId = desc.VendorId;
+		info.deviceId = desc.DeviceId;
+		info.dedicatedVideoMemory = desc.DedicatedVideoMemory;
+		info.software = (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
+
+		// A GPU sharing the system memory (UMA) has a single, local memory segment: it reports no budget
+		// for non-local memory, while a discrete GPU can always spill into system memory over the bus.
+		ComPtr<IDXGIAdapter3> adapter3;
+		DXGI_QUERY_VIDEO_MEMORY_INFO nonLocal{};
+		if (SUCCEEDED(adapter.As(&adapter3)) &&
+			SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &nonLocal)))
+		{
+			info.integrated = nonLocal.Budget == 0;
+		}
+
+		return info;
 	}
 }

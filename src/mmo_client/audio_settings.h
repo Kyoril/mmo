@@ -22,12 +22,20 @@ namespace mmo
 		/// the current values to the audio system.
 		explicit AudioSettings(IAudio& audio);
 
+		/// @brief Tells whether the game window is in the foreground. While it is not, sound is muted
+		/// unless SoundInBackground is set. Cheap to call every frame: only a change is applied.
+		void SetWindowFocused(bool focused);
+
 	private:
 		/// @brief Applies all cvar values to the audio system at once.
 		void ApplyAll() const;
 
+		/// @brief Mutes or unmutes the master channel from SoundEnabled, SoundInBackground and the focus.
+		void ApplyMasterMute() const;
+
 	private:
 		IAudio& m_audio;
 		scoped_connection_container m_connections;
+		bool m_windowFocused = true;
 	};
 }

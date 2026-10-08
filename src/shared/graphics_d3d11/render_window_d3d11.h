@@ -21,7 +21,11 @@ namespace mmo
 		, public RenderTargetD3D11
 	{
 	public:
-		RenderWindowD3D11(GraphicsDeviceD3D11& device, std::string name, uint16 width, uint16 height, bool fullScreen);
+		/// @param fullScreen True for a borderless window covering the monitor. The game never takes
+		///        the display exclusively: a borderless flip-model swap chain gets the same direct scan-out
+		///        from the compositor, without mode switches when alt-tabbing.
+		/// @param monitorIndex Index into GraphicsDevice::GetDisplayMonitors to show the window on.
+		RenderWindowD3D11(GraphicsDeviceD3D11& device, std::string name, uint16 width, uint16 height, bool fullScreen, uint32 monitorIndex = 0);
 		RenderWindowD3D11(GraphicsDeviceD3D11& device, std::string name, HWND externalHandle);
 
 	public:
@@ -37,6 +41,10 @@ namespace mmo
 		virtual void SetTitle(const std::string& title) final override;
 
 		virtual void Hide() final override;
+
+		virtual void SetDisplayMode(bool fullscreenWindow, uint32 monitorIndex, uint16 width, uint16 height) final override;
+
+		[[nodiscard]] virtual bool HasFocus() const final override;
 		// ~End RenderWindow
 
 	private:
@@ -68,8 +76,7 @@ namespace mmo
 		/// 
 		bool m_resizePending;
 
+		/// Whether the window currently is a borderless window covering its monitor.
 		bool m_fullScreen;
-
-		bool m_prevFullScreenState = false;
 	};
 }

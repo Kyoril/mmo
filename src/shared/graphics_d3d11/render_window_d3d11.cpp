@@ -5,9 +5,11 @@
 #include <dwmapi.h>
 
 #include "graphics_device_d3d11.h"
+#include "display_monitors_d3d11.h"
 
 #include "base/macros.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "log/default_log_levels.h"
@@ -20,15 +22,14 @@ namespace mmo
 	/// Name of the render window class.
 	static const TCHAR s_d3d11RenderWindowClassName[] = TEXT("D3D11RenderWindow");
 
-	RenderWindowD3D11::RenderWindowD3D11(GraphicsDeviceD3D11 & device, std::string name, uint16 width, uint16 height, bool fullScreen)
+	RenderWindowD3D11::RenderWindowD3D11(GraphicsDeviceD3D11 & device, std::string name, uint16 width, uint16 height, bool fullScreen, uint32 monitorIndex)
 		: RenderWindow(std::move(name), width, height)
 		, RenderTargetD3D11(device)
 		, m_handle(nullptr)
 		, m_pendingWidth(0)
 		, m_pendingHeight(0)
 		, m_resizePending(false)
-		, m_fullScreen(fullScreen)
-		, m_prevFullScreenState(fullScreen)
+		, m_fullScreen(false)
 	{
 		// Create the window handle first
 		CreateWindowHandle();
@@ -38,6 +39,10 @@ namespace mmo
 
 		// Lastly, create size dependant resources like the back buffer
 		CreateSizeDependantResources();
+
+		// Places the still hidden window on its monitor and shows it. The swap chain follows through
+		// the resulting WM_SIZE like after any other resize.
+		SetDisplayMode(fullScreen, monitorIndex, width, height);
 	}
 
 	RenderWindowD3D11::RenderWindowD3D11(GraphicsDeviceD3D11 & device, std::string name, HWND externalHandle)
@@ -107,43 +112,6 @@ namespace mmo
 
 	void RenderWindowD3D11::Update()
 	{
-		BOOL dxgiIsFullscreenState;
-		VERIFY(SUCCEEDED(m_swapChain->GetFullscreenState(&dxgiIsFullscreenState, nullptr)));
-
-		const bool isFullScreenState = (dxgiIsFullscreenState == TRUE);
-		if (isFullScreenState != m_prevFullScreenState)
-		{
-			// Get the actual current window client area dimensions when fullscreen state changes
-			RECT clientRect;
-			if (GetClientRect(m_handle, &clientRect))
-			{
-				const uint16 actualWidth = static_cast<uint16>(clientRect.right - clientRect.left);
-				const uint16 actualHeight = static_cast<uint16>(clientRect.bottom - clientRect.top);
-				
-				// Use actual dimensions if they are valid, otherwise fall back to current size
-				if (actualWidth > 0 && actualHeight > 0)
-				{
-					m_pendingWidth = actualWidth;
-					m_pendingHeight = actualHeight;
-				}
-				else
-				{
-					m_pendingWidth = m_width;
-					m_pendingHeight = m_height;
-				}
-			}
-			else
-			{
-				// Fall back to current size if GetClientRect fails
-				m_pendingWidth = m_width;
-				m_pendingHeight = m_height;
-			}
-			
-			ApplyInternalResize();
-			m_resizePending = false;
-			m_prevFullScreenState = isFullScreenState;
-		}
-
 		// Unbind render target before present
 		ID3D11DeviceContext& d3dCtx = m_device;
 		d3dCtx.OMSetRenderTargets(0, nullptr, nullptr);
@@ -151,7 +119,7 @@ namespace mmo
 		// Latch the per-frame draw-call counter at the true frame boundary (see GetBatchCount).
 		m_device.LatchFrameBatchCount();
 
-		const UINT presentFlags = m_device.HasTearingSupport() && !m_device.IsVSyncEnabled() && !dxgiIsFullscreenState ? DXGI_PRESENT_ALLOW_TEARING : 0;
+		const UINT presentFlags = m_device.HasTearingSupport() && !m_device.IsVSyncEnabled() ? DXGI_PRESENT_ALLOW_TEARING : 0;
 		m_swapChain->Present(m_device.IsVSyncEnabled() ? 1 : 0, presentFlags);
 
 		// Apply pending resize
@@ -165,20 +133,86 @@ namespace mmo
 
 	void RenderWindowD3D11::Hide()
 	{
-		// Leaving fullscreen has to happen through the swap chain rather than by hiding the
-		// window: while DXGI holds the output exclusively it also owns the display mode, and
-		// anything drawn by someone else ends up behind the fullscreen surface.
-		if (m_swapChain)
-		{
-			m_swapChain->SetFullscreenState(FALSE, nullptr);
-			m_fullScreen = false;
-			m_prevFullScreenState = false;
-		}
-
+		// The window never owns the display exclusively, so hiding it is enough to make room for
+		// UI shown by someone else, such as a message box.
 		if (m_handle)
 		{
 			::ShowWindow(m_handle, SW_HIDE);
 		}
+	}
+
+	void RenderWindowD3D11::SetDisplayMode(const bool fullscreenWindow, const uint32 monitorIndex, const uint16 width, const uint16 height)
+	{
+		// A window handed in from outside (the editor viewport) is laid out by its owner.
+		if (!m_ownHandle || !m_handle)
+		{
+			return;
+		}
+
+		Win32Monitor monitor;
+		if (!FindWin32Monitor(monitorIndex, monitor))
+		{
+			WLOG("No monitor found to place the game window on");
+			return;
+		}
+
+		// A maximized or minimized window ignores the position and size given below.
+		if (::IsZoomed(m_handle) || ::IsIconic(m_handle))
+		{
+			::ShowWindow(m_handle, SW_RESTORE);
+		}
+
+		constexpr UINT flags = SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOOWNERZORDER;
+		if (fullscreenWindow)
+		{
+			::SetWindowLongPtr(m_handle, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+
+			const RECT& bounds = monitor.bounds;
+			::SetWindowPos(m_handle, HWND_TOP, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top, flags);
+		}
+		else
+		{
+			constexpr DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+			::SetWindowLongPtr(m_handle, GWL_STYLE, style);
+
+			const LONG clientWidth = std::max<LONG>(320, width);
+			const LONG clientHeight = std::max<LONG>(240, height);
+
+			RECT outer = { 0, 0, clientWidth, clientHeight };
+			::AdjustWindowRect(&outer, style, FALSE);
+			LONG outerWidth = outer.right - outer.left;
+			LONG outerHeight = outer.bottom - outer.top;
+
+			// Centered on the work area, but never with the title bar above or left of it, so the
+			// window can still be grabbed when it is as large as the monitor.
+			const RECT& work = monitor.workArea;
+			const LONG x = std::max(work.left, work.left + ((work.right - work.left) - outerWidth) / 2);
+			const LONG y = std::max(work.top, work.top + ((work.bottom - work.top) - outerHeight) / 2);
+			::SetWindowPos(m_handle, HWND_TOP, x, y, outerWidth, outerHeight, flags);
+
+			// AdjustWindowRect does not know the frame size at the monitor's DPI, so correct the
+			// outer size by whatever the client area missed.
+			RECT client;
+			if (::GetClientRect(m_handle, &client) &&
+				(client.right != clientWidth || client.bottom != clientHeight))
+			{
+				outerWidth += clientWidth - client.right;
+				outerHeight += clientHeight - client.bottom;
+				::SetWindowPos(m_handle, HWND_TOP, x, y, outerWidth, outerHeight, SWP_NOOWNERZORDER);
+			}
+		}
+
+		m_fullScreen = fullscreenWindow;
+	}
+
+	bool RenderWindowD3D11::HasFocus() const
+	{
+		if (!m_ownHandle)
+		{
+			return true;
+		}
+
+		return m_handle && ::GetForegroundWindow() == m_handle && !::IsIconic(m_handle);
 	}
 
 	void RenderWindowD3D11::EnsureWindowClassCreated()
@@ -279,9 +313,8 @@ namespace mmo
 		// Prevent double initialization
 		ASSERT(m_handle == nullptr);
 		
-		// Always create the window with borders and let DXGI handle fullscreen transitions
-		// As per Microsoft documentation: "DXGI now handles much of this style changing on its own.
-		// Manual setting of window styles can interfere with DXGI, and this can cause unexpected behavior."
+		// Created as a regular window; SetDisplayMode switches the style for a fullscreen window. DXGI
+		// never takes the window fullscreen itself, so it does not fight us over the styles.
 		const DWORD ws = WS_OVERLAPPEDWINDOW;
 
 		// Calculate the real window size needed to make the client area the requestes size
@@ -309,9 +342,8 @@ namespace mmo
 		DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUND;
 		DwmSetWindowAttribute(m_handle, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
 
-		// Make the window visible on screen
-		ShowWindow(m_handle, SW_SHOWNORMAL);
-		UpdateWindow(m_handle);
+		// Not shown yet: SetDisplayMode places the window on its monitor first, so it never flashes up
+		// at a default position.
 	}
 
 	void RenderWindowD3D11::CreateSwapChain()
@@ -350,42 +382,15 @@ namespace mmo
 		scd.OutputWindow = m_handle;
 		scd.SampleDesc.Count = 1;
 		scd.SwapEffect = m_device.HasTearingSupport() ? DXGI_SWAP_EFFECT_FLIP_DISCARD : DXGI_SWAP_EFFECT_DISCARD;
-		scd.Windowed = !m_fullScreen;
-
-		// Query the output (monitor) from the adapter
-		ComPtr<IDXGIOutput> DXGIOutput;
-		VERIFY(SUCCEEDED(DXGIAdapter->EnumOutputs(0, &DXGIOutput)));
-
-		// Get the description of the output
-		DXGI_OUTPUT_DESC outputDesc;
-		VERIFY(SUCCEEDED(DXGIOutput->GetDesc(&outputDesc)));
-
-		DXGI_RATIONAL refreshRate = { 60, 1 }; // Default to 60 Hz if no match is found
-
-		// Get the display modes supported by the output for the desired format
-		UINT numModes = 0;
-		VERIFY(SUCCEEDED(DXGIOutput->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, 0, &numModes, nullptr)));
-
-		// Allocate memory to hold the display mode list
-		std::vector<DXGI_MODE_DESC> displayModes(numModes);
-		VERIFY(SUCCEEDED(DXGIOutput->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, 0, &numModes, displayModes.data())));
-
-		// Find a matching display mode for the desired resolution
-		for (const auto& mode : displayModes)
-		{
-			if (mode.Width == m_width && mode.Height == m_height)
-			{
-				if (static_cast<double>(mode.RefreshRate.Numerator) / static_cast<double>(mode.RefreshRate.Denominator) > static_cast<double>(refreshRate.Numerator) / static_cast<double>(refreshRate.Denominator))
-				{
-					refreshRate = mode.RefreshRate;
-				}
-			}
-		}
-
-		// Now use the refresh rate in the swap chain description
-		scd.BufferDesc.RefreshRate = refreshRate;
+		// Always windowed: a fullscreen window is a borderless window covering the monitor. With the flip
+		// model the compositor scans it out directly, which is as fast as exclusive fullscreen but switches
+		// monitors, alt-tabs and overlays without display mode changes.
+		scd.Windowed = TRUE;
 
 		VERIFY(SUCCEEDED(DXGIFactory->CreateSwapChain(&d3dDev, &scd, &m_swapChain)));
+
+		// Keep DXGI from switching to exclusive fullscreen on Alt+Enter behind our back.
+		DXGIFactory->MakeWindowAssociation(m_handle, DXGI_MWA_NO_ALT_ENTER);
 	}
 
 	LRESULT RenderWindowD3D11::RenderWindowProc(HWND Wnd, UINT Msg, WPARAM WParam, LPARAM LParam)

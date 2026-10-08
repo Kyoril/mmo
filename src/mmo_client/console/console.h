@@ -62,6 +62,10 @@ namespace mmo
 
 		static void ListCommands();
 
+		/// @brief Returns true if the game runs for the first time on this machine (no saved config
+		///        provided a resolution), so settings still have to be chosen for the hardware.
+		static bool IsFirstLaunch();
+
 	public:
 		/// Registers a new console command.
 		static void RegisterCommand(

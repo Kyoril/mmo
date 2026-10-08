@@ -11,6 +11,7 @@
 #include <memory>
 #include <cassert>
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 
 #include "graphics_null/graphics_device_null.h"
@@ -359,5 +360,20 @@ namespace mmo
 		result.erase(std::unique(result.begin(), result.end()), result.end());
 
 		return result;
+	}
+
+	std::vector<DisplayMonitor> GraphicsDevice::GetDisplayMonitors() const
+	{
+		DisplayMonitor monitor;
+		monitor.primary = true;
+
+		const std::string native = GetPrimaryMonitorResolution();
+		if (const auto xPos = native.find('x'); xPos != std::string::npos)
+		{
+			monitor.width = static_cast<uint16>(std::atoi(native.substr(0, xPos).c_str()));
+			monitor.height = static_cast<uint16>(std::atoi(native.substr(xPos + 1).c_str()));
+		}
+
+		return { monitor };
 	}
 }
