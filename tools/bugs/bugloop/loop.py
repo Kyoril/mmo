@@ -12,7 +12,7 @@ import re
 import traceback
 import urllib.error
 
-from . import guard, inputs, notify, state as loop_state, verdicts, verification
+from . import ci, github, guard, inputs, notify, state as loop_state, verdicts, verification
 from .claude import REVIEW_TOOLS, TRIAGE_TOOLS, ClaudeError
 
 CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -34,6 +34,19 @@ MAX_REFIX = 3
 FEATURE_REASON = "feature: shipping needs the maintainer's approval"
 # Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
 BUG_ID = re.compile(r"^[0-9a-f]{24}$")
+# While develop is red in CI nothing but the emergency ticket ships; everything else queues.
+RED_REASON = "develop is red"
+CI_NAMES = {"push": "Linux Servers", "nightly": "Nightly Release"}
+# The triage verdict written for an emergency ticket (for the operator; the loop reads its context from state).
+EMERGENCY_VERDICT = {"category": "defect", "severity": "critical", "component": "ci", "observed": "develop is red in CI",
+	"expected_claim": "develop is green in CI", "duplicate_of": None, "abuse_evidence": "",
+	"reasoning": "written by the bug loop from a red CI run"}
+
+
+_CI_ACCEPT = {
+	"push": lambda run: run.get("event") == "push" and run.get("head_branch") == "develop",
+	"nightly": lambda run: run.get("event") in ("schedule", "workflow_dispatch"),
+}
 
 
 def valid_bug_id(bug_id):
@@ -103,7 +116,8 @@ def decide(fix, review, guard_result, proof, gate):
 
 class BugLoop:
 	def __init__(self, api, runner, worktree, verifier, decoder, config, state, prompts, schemas,
-			artifacts_dir, report_dir, clock=utcnow, lock=contextlib.nullcontext, dry_run=False, log=print, notifier=None):
+			artifacts_dir, report_dir, clock=utcnow, lock=contextlib.nullcontext, dry_run=False, log=print, notifier=None,
+			github=None):
 		self.api = api
 		self.runner = runner
 		self.worktree = worktree
@@ -120,6 +134,8 @@ class BugLoop:
 		self.dry_run = dry_run
 		self.log = log
 		self.notifier = notify.Notifier("", log=log) if dry_run or notifier is None else notifier
+		# GitHub Actions client of the CI watch; None turns the watch off.
+		self.github = github
 		self._backfilled = False
 
 	# ---- small helpers
@@ -165,6 +181,8 @@ class BugLoop:
 		self._check_nightly_breaker(now)
 		worked = False
 		if not self.dry_run:
+			# First, so a red develop is known before anything can ship in this poll.
+			self._watch_ci(now)
 			self._backfill_review_diffs()
 			worked = self._handle_decisions() or worked
 			self._release_stale_claims()
@@ -195,7 +213,7 @@ class BugLoop:
 			if self.clock().strftime("%Y-%m-%d") != day:
 				return RESTART_EXIT_CODE
 			if not worked:
-				sleep(self.config.poll_seconds)
+				sleep(min(self.config.poll_seconds, self.config.ci_poll_seconds) if self.github else self.config.poll_seconds)
 
 	def _safe_release(self, bug_id, note, status="triaged", **fields):
 		try:
@@ -611,6 +629,13 @@ class BugLoop:
 		if any(item.get("bug") == bug_id for item in self.state.data["ship_queue"]):
 			self._update(bug_id, note="already queued to ship after the freeze window")
 			return
+		self._watch_ci(self.clock())
+		if self._develop_red() and bug_id != self.state.emergency_ticket():
+			self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=True)
+			self.state.mark_attempted(bug_id, "ship-queued")
+			self._update(bug_id, note="maintainer approved {}; {}: ships once CI is green".format(branch, RED_REASON))
+			self.state.record(bug_id, "ship-queued", branch=branch, reason=RED_REASON)
+			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=True)
 			self.state.mark_attempted(bug_id, "ship-queued")
@@ -706,6 +731,14 @@ class BugLoop:
 		if self.dry_run:
 			self._finish(bug_id, "would-ship", branch=branch)
 			return
+		# A fix can take an hour and more; look at CI again (rate-limited) before deciding.
+		self._watch_ci(self.clock())
+		if self._develop_red() and bug_id != self.state.emergency_ticket():
+			self.state.enqueue_ship(bug_id, branch, summary, head)
+			self.state.mark_attempted(bug_id, "ship-queued")
+			self._update(bug_id, note="fix ready on {}; {}: ships once CI is green".format(branch, RED_REASON))
+			self.state.record(bug_id, "ship-queued", branch=branch, reason=RED_REASON)
+			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head)
 			self.state.mark_attempted(bug_id, "ship-queued")
@@ -740,7 +773,15 @@ class BugLoop:
 	def _ship_queued(self, now):
 		if loop_state.in_freeze(now, self.config.freeze_start_utc, self.config.freeze_end_utc):
 			return
+		self._watch_ci(now)
 		pending = self.state.take_ship_queue()
+		kept = []
+		if self._develop_red():
+			# Only the emergency ticket ships while develop is red; the rest waits untouched.
+			ticket = self.state.emergency_ticket()
+			kept = [item for item in pending if item.get("bug") != ticket]
+			pending = [item for item in pending if item.get("bug") == ticket]
+			self.state.data["ship_queue"] = kept + list(pending)
 		while pending:
 			item = pending.pop(0)
 			try:
@@ -760,11 +801,150 @@ class BugLoop:
 					self.log(traceback.format_exc())
 					self._park(item["bug"], item["branch"], ["ship error, see the runner log"])
 			except BaseException:
-				# Even parking failed: keep this item and the rest for the next poll.
-				self.state.data["ship_queue"] = [item] + pending + self.state.data["ship_queue"]
+				# Even parking failed: keep this item and the rest for the next poll. The queue may
+				# already hold them (saved after the previous item); never list one twice.
+				ours = kept + [item] + pending
+				self.state.data["ship_queue"] = ours + [extra for extra in self.state.data["ship_queue"] if extra not in ours]
 				raise
-			self.state.data["ship_queue"] = list(pending)
+			self.state.data["ship_queue"] = kept + list(pending)
 			self.state.save()
+
+	# ---- CI watch
+
+	def _develop_red(self):
+		return self.state.ci_phase() is not None
+
+	def _emergency_due(self):
+		"""An open red phase whose emergency ticket still has fix attempts left (Task 6 acts on it)."""
+		phase = self.state.ci_phase()
+		return phase is not None and not phase.get("parked") and phase.get("attempts", 0) < self.config.emergency_attempts
+
+	def _watch_ci(self, now):
+		"""Reads the newest completed develop runs of both workflows at most every ci_poll_seconds.
+		A red one opens a phase (one emergency ticket); all green closes it. GitHub trouble leaves
+		the phase as it is."""
+		if self.github is None or self.dry_run:
+			return
+		ci_state = self.state.data["ci"]
+		last = ci_state.get("last_check")
+		if last and (now - datetime.datetime.fromisoformat(last)).total_seconds() < self.config.ci_poll_seconds:
+			return
+		ci_state["last_check"] = now.isoformat()
+		try:
+			lists = {
+				"push": self.github.runs(self.config.ci_push_workflow, branch="develop"),
+				"nightly": self.github.runs(self.config.ci_nightly_workflow),
+			}
+			newest = {key: ci.newest_completed(lists[key], _CI_ACCEPT[key]) for key in lists}
+			colours = {key: ci.colour(run) for key, run in newest.items() if run}
+			ci_state["colours"] = colours
+			red = {key: newest[key] for key, colour in colours.items() if colour == "red"}
+			phase = self.state.ci_phase()
+			if red and phase is None:
+				self._open_ci_phase(now, red, lists)
+			elif red:
+				self._refresh_ci_phase(red, lists)
+			elif phase is not None and all(colours.get(key) == "green" for key in phase["red_runs"]):
+				# Only a green run of every workflow that was red ends the phase; a workflow GitHub
+				# lists no completed run for (renamed, all in progress) proves nothing.
+				self._close_ci_phase(newest)
+			self._restart_nightly(newest, colours)
+		except github.GitHubError as error:
+			self.log("ci watch: " + str(error))
+		except BaseException:
+			# Not a GitHub answer (the bug API, say): look again on the next poll instead of in ci_poll_seconds.
+			ci_state["last_check"] = last
+			raise
+		self.state.save()
+
+	def _ci_context(self, key, run, runs):
+		jobs = self.github.jobs(run["id"])
+		job, step = ci.failing_step(jobs)
+		excerpt = ""
+		if job:
+			try:
+				excerpt = ci.excerpt(self.github.job_log(job["id"]))
+			except github.GitHubError as error:
+				self.log("ci watch: " + str(error))
+		# Suspects: develop's first-parent commits since the newest green run before the red one.
+		green_sha = ""
+		older = runs[runs.index(run) + 1:] if run in runs else []
+		for candidate in older:
+			if _CI_ACCEPT[key](candidate) and ci.colour(candidate) == "green":
+				green_sha = candidate.get("head_sha") or ""
+				break
+		suspects = self.worktree.log_lines(green_sha, run.get("head_sha") or "")
+		return {"workflow": CI_NAMES[key], "key": key, "run_id": run["id"], "run_url": run.get("html_url", ""),
+			"red_sha": run.get("head_sha") or "", "step": step, "excerpt": excerpt, "suspects": suspects}
+
+	def _open_ci_phase(self, now, red, lists):
+		key = "push" if "push" in red else "nightly"
+		context = self._ci_context(key, red[key], lists[key])
+		summary = "{} is red on develop at {}{}".format(context["workflow"], context["red_sha"][:8],
+			": " + context["step"] if context["step"] else "")
+		ticket = self.api.create_system(summary, context["excerpt"] or "(no log)", context["red_sha"], context["run_url"],
+			actor=self.config.worker)
+		self.state.data["ci"]["phase"] = {"since": now.isoformat(), "ticket": ticket,
+			"red_runs": {name: run["id"] for name, run in red.items()}, "ci": context, "attempts": 0,
+			"nightly_dispatched": [], "parked": False, "notified_exhausted": False}
+		if valid_bug_id(ticket):
+			self._write(ticket, "report.json", {"_id": ticket, "comment": summary, "subject": {"type": "generic", "id": 0}})
+			self._write(ticket, "triage.json", EMERGENCY_VERDICT)
+		else:
+			self.log("ci watch: the bug API returned a malformed ticket id {!r}".format(ticket)[:200])
+		self.log("ci watch: develop is red ({}), emergency ticket {}".format(context["run_url"], ticket))
+		self.state.record(ticket, "ci-red", workflow=context["workflow"], run=context["run_url"])
+		self.notifier.send(notify.ci_red_message(self.notifier, ticket, context["workflow"], context["step"], context["run_url"]))
+
+	def _refresh_ci_phase(self, red, lists):
+		phase = self.state.ci_phase()
+		ticket = phase["ticket"]
+		for key, run in red.items():
+			if phase["red_runs"].get(key) == run["id"]:
+				continue
+			phase["red_runs"][key] = run["id"]
+			context = self._ci_context(key, run, lists[key])
+			phase["ci"] = context
+			self._update(ticket, logTail=context["excerpt"] or "(no log)", note="still red: " + context["run_url"])
+			if key == "nightly" and run.get("head_sha") in phase["nightly_dispatched"]:
+				# The restarted nightly failed again.
+				phase["attempts"] += 1
+				phase["ci"]["retry"] = context["excerpt"]
+
+	def _close_ci_phase(self, newest):
+		phase = self.state.ci_phase()
+		ticket = phase["ticket"]
+		ci_state = self.state.data["ci"]
+		pending = ci_state["pending"]
+		if pending:
+			try:
+				self.worktree.delete_remote_branch(pending["branch"])
+			except Exception:
+				self.log(traceback.format_exc())
+			ci_state["pending"] = None
+		green = newest.get("push") or newest.get("nightly")
+		try:
+			self._update(ticket, status="resolved", release_claim=True,
+				note="develop is green again in CI at {}".format(((green or {}).get("head_sha") or "")[:8]))
+		except Exception:
+			self.log(traceback.format_exc())
+		ci_state["phase"] = None
+		self.state.record(ticket, "ci-green")
+		self.log("ci watch: develop is green again, ticket {} resolved".format(ticket))
+		self.notifier.send(notify.ci_green_message([CI_NAMES[key] for key in newest if newest[key]]))
+
+	def _restart_nightly(self, newest, colours):
+		"""A red Nightly Release reruns once a newer develop commit is green in the push workflow."""
+		phase = self.state.ci_phase()
+		if phase is None or colours.get("nightly") != "red" or colours.get("push") != "green":
+			return
+		sha = newest["push"].get("head_sha") or ""
+		if not sha or sha == newest["nightly"].get("head_sha") or sha in phase["nightly_dispatched"]:
+			return
+		self.github.dispatch(self.config.ci_nightly_workflow, "develop")
+		phase["nightly_dispatched"].append(sha)
+		self.log("ci watch: restarted the Nightly Release for " + sha[:8])
+		self._update(phase["ticket"], note="restarted the Nightly Release for " + sha[:8])
 
 	# ---- housekeeping
 

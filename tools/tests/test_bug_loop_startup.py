@@ -85,5 +85,23 @@ class NotifierWiringTests(unittest.TestCase):
 		self.assertEqual(bug_loop.notifications_status(off, dry_run=True), "notifications: off (dry run)")
 
 
+class GitHubWiringTests(unittest.TestCase):
+	def test_token_and_github_origin_turn_the_watch_on(self):
+		messages = []
+		client = bug_loop.make_github({"MMO_BUGLOOP_GITHUB_TOKEN": "t0ken"}, "git@github.com:Kyoril/mmo.git", messages.append)
+		self.assertEqual(client.base, "https://api.github.com/repos/Kyoril/mmo")
+		self.assertFalse(any("t0ken" in message for message in messages))
+
+	def test_no_token_means_no_watch(self):
+		messages = []
+		self.assertIsNone(bug_loop.make_github({}, "git@github.com:Kyoril/mmo.git", messages.append))
+		self.assertTrue(messages[0].startswith("ci watch: off ("))
+
+	def test_non_github_origin_means_no_watch(self):
+		messages = []
+		self.assertIsNone(bug_loop.make_github({"MMO_BUGLOOP_GITHUB_TOKEN": "t"}, "https://gitlab.com/a/b.git", messages.append))
+		self.assertTrue(messages[0].startswith("ci watch: off ("))
+
+
 if __name__ == "__main__":
 	unittest.main()

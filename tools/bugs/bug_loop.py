@@ -7,7 +7,8 @@
     python tools/bugs/bug_loop.py [--repo <main checkout>] breaker on|off|status [--reason "..."]
 
 Environment: MMO_BUG_API_KEY (reader key, required), MMO_BUG_API_URL (optional),
-MMO_E2E_MYSQL_PASSWORD (the gate's E2E step).
+MMO_E2E_MYSQL_PASSWORD (the gate's E2E step), MMO_BUGLOOP_GITHUB_TOKEN (optional: the CI watch;
+reads Actions and contents, may start a workflow).
 """
 
 import argparse
@@ -24,7 +25,7 @@ RUNTIME_ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import bugs  # noqa: E402
-from bugloop import claude, config as loop_config, data_diff, gitops, loop, notify, state as loop_state, verification, winlock  # noqa: E402
+from bugloop import claude, config as loop_config, data_diff, github, gitops, loop, notify, state as loop_state, verification, winlock  # noqa: E402
 
 
 def _logger(path):
@@ -55,6 +56,21 @@ def make_decoder(schema_root, repo, log, factory=None):
 def make_notifier(environ, log):
 	"""Discord notifications are optional: no MMO_BUGLOOP_WEBHOOK, no messages."""
 	return notify.Notifier(environ.get("MMO_BUGLOOP_WEBHOOK", ""), environ.get("MMO_BUGLOOP_UI_URL", ""), log=log)
+
+
+def make_github(environ, origin_url, log):
+	"""The CI watch is optional: without MMO_BUGLOOP_GITHUB_TOKEN (or a GitHub origin) it is off."""
+	token = environ.get("MMO_BUGLOOP_GITHUB_TOKEN", "")
+	if not token:
+		log("ci watch: off (MMO_BUGLOOP_GITHUB_TOKEN not set)")
+		return None
+	try:
+		owner, repo = github.parse_origin(origin_url)
+	except ValueError:
+		log("ci watch: off (origin is not a GitHub remote)")
+		return None
+	log("ci watch: on ({}/{})".format(owner, repo))
+	return github.GitHub(owner, repo, token)
 
 
 def notifications_status(notifier, dry_run):
@@ -125,9 +141,15 @@ def main(argv=None):
 	decoder = make_decoder(RUNTIME_ROOT, repo, log)
 	prompts = {name: _read(os.path.join("prompts", name + ".md")) for name in ("triage", "fix", "review")}
 	schemas = {name: json.loads(_read(os.path.join("schemas", name + ".json"))) for name in ("triage", "review")}
+	if args.dry_run:
+		gh = None
+		log("ci watch: off (dry run)")
+	else:
+		origin = gitops.run_git(repo, "remote", "get-url", "origin", check=False).stdout.strip()
+		gh = make_github(os.environ, origin, log)
 	bug_loop = loop.BugLoop(api, runner, worktree, verifier, decoder, config, state, prompts, schemas,
 		artifacts, os.path.join(repo, "tools", "gate", "reports"), lock=winlock.named_mutex, dry_run=args.dry_run, log=log,
-		notifier=make_notifier(os.environ, log))
+		notifier=make_notifier(os.environ, log), github=gh)
 	log("bug loop started ({}, {})".format("dry run" if args.dry_run else "live", HERE))
 	log(notifications_status(bug_loop.notifier, args.dry_run))
 	if args.once:

@@ -20,7 +20,7 @@ sys.dont_write_bytecode = True
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "bugs"))
 
-from bugloop import claude, config as loop_config, gitops, guard, loop, state as loop_state  # noqa: E402
+from bugloop import claude, config as loop_config, github, gitops, guard, loop, state as loop_state  # noqa: E402
 
 BUG_ID = "65f0aa00bb11cc22dd33ee44"
 BRANCH = "bugfix/dd33ee44"
@@ -93,6 +93,7 @@ class FakeApi:
 		self.show_errors = {}
 		self.update_errors = []
 		self.review_diffs = []
+		self.system_creates = []
 
 	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False, awaiting_decision=False):
 		self.lists.append(dict(status=status, limit=limit, decision_pending=decision_pending, awaiting_decision=awaiting_decision))
@@ -125,7 +126,7 @@ class FakeApi:
 			if matches(bug_id, fields):
 				raise error
 		self.updates.append((bug_id, dict(fields, release_claim=release_claim)))
-		for key in ("status", "prUrl", "duplicateOf", "triage", "designQuestion"):
+		for key in ("status", "prUrl", "duplicateOf", "triage", "designQuestion", "logTail"):
 			if key in fields:
 				self.bugs[bug_id][key] = fields[key]
 		if fields.get("decisionConsumed") and self.bugs[bug_id].get("decision"):
@@ -141,6 +142,17 @@ class FakeApi:
 
 	def notes(self, bug_id):
 		return [fields.get("note", "") for bug, fields in self.updates if bug == bug_id]
+
+	def create_system(self, summary, details, commit, run_url, actor="bug-loop"):
+		self.system_creates.append(dict(summary=summary, details=details, commit=commit, run_url=run_url, actor=actor))
+		for bug in self.bugs.values():
+			if (bug.get("triage") or {}).get("category") == "ci_failure" and bug["status"] not in ("resolved", "wontfix", "duplicate"):
+				return bug["_id"]
+		bug_id = "c1" + "0" * 22
+		self.bugs[bug_id] = {"_id": bug_id, "status": "triaged", "source": "system",
+			"triage": {"category": "ci_failure", "severity": "emergency"}, "comment": summary, "logTail": details,
+			"subject": {"type": "generic", "id": 0}}
+		return bug_id
 
 
 class FakeNotifier:
@@ -253,6 +265,39 @@ class FakeWorktree:
 	def delete_branch(self, branch):
 		self.deleted.append(branch)
 
+	def log_lines(self, base, head, limit=30):
+		return ["e89eb837 Merge bugfix/6462d2bc (bug-loop, maintainer decision)"]
+
+
+class FakeGitHub:
+	"""Runs per workflow (newest first), jobs per run and logs per job; records dispatches."""
+
+	def __init__(self):
+		self.runs_by_workflow = {"ccpp.yml": [], "nightly-release.yml": []}
+		self.jobs_by_run = {}
+		self.logs = {}
+		self.dispatched = []
+		self.error = None
+
+	def runs(self, workflow, branch=None, per_page=20):
+		if self.error:
+			raise self.error
+		return [run for run in self.runs_by_workflow.get(workflow, []) if branch is None or run.get("head_branch") == branch]
+
+	def jobs(self, run_id):
+		return self.jobs_by_run.get(run_id, [])
+
+	def job_log(self, job_id):
+		return self.logs.get(job_id, "")
+
+	def dispatch(self, workflow, ref):
+		self.dispatched.append((workflow, ref))
+
+
+def run(run_id, conclusion, sha, branch="develop", event="push", status="completed"):
+	return {"id": run_id, "status": status, "conclusion": conclusion, "head_sha": sha, "head_branch": branch,
+		"event": event, "html_url": "https://github.com/Kyoril/mmo/actions/runs/{}".format(run_id)}
+
 
 class FakeVerifier:
 	def __init__(self, proof_ok=True, gate_ok=True):
@@ -277,7 +322,7 @@ class FakeVerifier:
 
 class LoopTests(unittest.TestCase):
 	def make(self, verdict=GOOD_VERDICT, fix=GOOD_FIX, review=GOOD_REVIEW, changes=BENIGN_CHANGES, diff=BENIGN_DIFF,
-			bugs=None, now="2026-10-07 10:00", dry_run=False, proof_ok=True, gate_ok=True, **config):
+			bugs=None, now="2026-10-07 10:00", dry_run=False, proof_ok=True, gate_ok=True, github=None, **config):
 		folder = tempfile.TemporaryDirectory()
 		self.addCleanup(folder.cleanup)
 		self.artifacts = os.path.join(folder.name, "artifacts")
@@ -293,7 +338,7 @@ class LoopTests(unittest.TestCase):
 		self.loop = loop.BugLoop(api, self.runner, self.worktree, self.verifier, None,
 			dataclasses.replace(loop_config.LoopConfig(), **config), self.state,
 			{"triage": "T", "fix": "F", "review": "R"}, {"triage": {}, "review": {}}, self.artifacts, self.reports,
-			clock=lambda: self.now, dry_run=dry_run, log=lambda message: None, notifier=self.notifier)
+			clock=lambda: self.now, dry_run=dry_run, log=lambda message: None, notifier=self.notifier, github=github)
 		return self.loop
 
 	def outcomes(self):
@@ -1185,6 +1230,116 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertFalse(loop_state.breaker_active(self.artifacts))
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "wontfix")
+
+
+	# ---- CI watch
+
+	def ci_red(self, **make_kwargs):
+		self.make(**make_kwargs, github=FakeGitHub())
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1"), run(1, "success", "green1")]
+		self.loop.github.jobs_by_run[2] = [{"id": 20, "conclusion": "failure", "steps": [{"name": "tests", "conclusion": "failure"}]}]
+		self.loop.github.logs[20] = "x_test.cpp:129: FAILED:\ndouble free or corruption (fasttop)"
+
+	def test_red_ci_opens_one_ticket_and_notifies(self):
+		self.ci_red()
+		self.loop.poll_once()
+		self.now += datetime.timedelta(minutes=10)
+		self.loop.poll_once()
+		self.assertEqual(len(self.api.system_creates), 1)
+		ticket = self.state.emergency_ticket()
+		self.assertTrue(ticket)
+		self.assertIn("double free", self.state.ci_phase()["ci"]["excerpt"])
+		self.assertEqual(self.state.ci_phase()["ci"]["step"], "tests")
+		self.assertEqual(sum("develop is red" in m for m in self.notifier.messages), 1)
+
+	def test_no_github_means_no_watch(self):
+		self.make()
+		self.loop.poll_once()
+		self.assertIsNone(self.state.ci_phase())
+
+	def test_github_errors_do_not_stop_the_poll(self):
+		self.ci_red()
+		self.loop.github.error = github.GitHubError("GitHub answered 502")
+		self.loop.poll_once()  # must not raise
+		self.assertIsNone(self.state.ci_phase())
+
+	def test_polls_github_at_most_every_ci_poll_seconds(self):
+		self.ci_red()
+		self.loop.poll_once()
+		calls = len(self.api.system_creates)
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(3, "success", "green2"))
+		self.now += datetime.timedelta(seconds=60)
+		self.loop.poll_once()
+		self.assertIsNotNone(self.state.ci_phase())  # not re-read yet
+		self.now += datetime.timedelta(seconds=300)
+		self.loop.poll_once()
+		self.assertIsNone(self.state.ci_phase())
+
+	def test_green_again_resolves_the_ticket_and_notifies(self):
+		self.ci_red()
+		self.loop.poll_once()
+		ticket = self.state.emergency_ticket()
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(3, "success", "fixed1"))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[ticket]["status"], "resolved")
+		self.assertIsNone(self.state.ci_phase())
+		self.assertTrue(any("green again" in m for m in self.notifier.messages))
+
+	def test_second_red_run_refreshes_the_excerpt(self):
+		self.ci_red()
+		self.loop.poll_once()
+		ticket = self.state.emergency_ticket()
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(4, "failure", "red2"))
+		self.loop.github.jobs_by_run[4] = [{"id": 40, "conclusion": "failure", "steps": [{"name": "make", "conclusion": "failure"}]}]
+		self.loop.github.logs[40] = "foo.cpp:3: error: expected ';'"
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len(self.api.system_creates), 1)
+		self.assertIn("expected ';'", self.api.bugs[ticket]["logTail"])
+		self.assertEqual(self.state.ci_phase()["ci"]["step"], "make")
+
+	def test_red_develop_queues_an_auto_ship(self):
+		self.ci_red()
+		self.loop.poll_once()  # watch opens the phase, BUG is triaged, the emergency fix runs and is pushed
+		self.now += datetime.timedelta(minutes=1)
+		self.loop.poll_once()  # the emergency waits for CI, so BUG is fixed now
+		self.assertEqual(self.worktree.shipped, [])
+		queue = self.state.data["ship_queue"]
+		self.assertEqual([item["bug"] for item in queue], [BUG_ID])
+		self.assertIn(loop.RED_REASON, self.api.notes(BUG_ID)[-1])
+		self.assertNotEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_queued_ships_go_out_after_green(self):
+		self.ci_red()
+		self.loop.poll_once()
+		self.now += datetime.timedelta(minutes=1)
+		self.loop.poll_once()
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(3, "success", "fixed1"))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual([branch for branch, _ in self.worktree.shipped], [BRANCH])
+
+	def test_maintainer_ship_waits_while_red(self):
+		self.park_with_decision("ship", github=FakeGitHub())
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1")]
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.state.data["ship_queue"][0]["bug"], BUG_ID)
+
+	def test_red_nightly_restarts_after_a_newer_green_push_run(self):
+		self.make(github=FakeGitHub())
+		gh = self.loop.github
+		gh.runs_by_workflow["nightly-release.yml"] = [run(10, "failure", "old1", event="schedule")]
+		gh.runs_by_workflow["ccpp.yml"] = [run(11, "success", "old1")]
+		self.loop.poll_once()
+		self.assertEqual(gh.dispatched, [])  # no newer commit yet
+		gh.runs_by_workflow["ccpp.yml"].insert(0, run(12, "success", "new1"))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(gh.dispatched, [("nightly-release.yml", "develop")])
 
 
 class DecideTests(unittest.TestCase):
