@@ -32,6 +32,10 @@ class LoopConfig:
 	# The wait for develop after an emergency ship when the Nightly Release decides (its gate alone can take 180 min).
 	ci_nightly_wait_minutes: int = 240
 	emergency_attempts: int = 3
+	# A fix worktree that cannot reach origin/develop (fetch, checkout, submodule sync) is retried
+	# every ci_poll_seconds without consuming an attempt; the maintainer hears of it once it has
+	# lasted this long.
+	worktree_escalate_minutes: int = 60
 	# Post a Discord message on every bug status change, not only ships, pings and the summary.
 	notify_status_changes: bool = True
 

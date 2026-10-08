@@ -31,6 +31,8 @@ _DEFAULT = {
 	"features": {},
 	# CI watch: the newest colour per workflow, the current red phase and a pending emergency verification.
 	"ci": {"last_check": "", "colours": {}, "phase": None, "pending": None},
+	# The fix worktree could not be prepared: {"since", "retry_at", "error", "notified"}; None when it works.
+	"worktree_down": None,
 }
 
 

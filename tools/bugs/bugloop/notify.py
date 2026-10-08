@@ -81,6 +81,15 @@ def emergency_needs_you_message(notifier, ticket, reason):
 	return "**Emergency fix needs you** — {}: {}".format(notifier.bug_link(ticket), reason[:500])
 
 
+def worktree_down_message(minutes, error):
+	return "**Bug loop stalled** — the fix worktree has not reached origin/develop for {} minutes; fixes wait (no attempts are used): {}".format(
+		minutes, error[-500:])
+
+
+def worktree_up_message():
+	return "**Bug loop resumed** — the fix worktree works again"
+
+
 def ci_green_message(workflow_names):
 	return "**develop is green again** ({}) — auto-shipping resumes".format(", ".join(workflow_names))
 

@@ -282,6 +282,16 @@ ships are not held`.
   Discord message "Emergency fix needs you" is sent. When an attempt is due but the daily
   invocation budget is used up, the same message says so once per phase and UTC day; develop
   stays red until the next UTC day or until the maintainer acts.
+- **Worktree unavailable:** when the loop cannot bring its worktree to origin/develop before a
+  fix (fetch, checkout or `git submodule update` fails, e.g. develop was pushed before its
+  `data/client` commit reached origin: "not our ref"), that is the loop's fault, not the bug's.
+  Nothing is touched: the bug stays queued and unclaimed, the emergency ticket stays `triaged`,
+  and no attempt (emergency or otherwise) is used. Every fix then waits `ci_poll_seconds`
+  before the worktree is tried again; the emergency ticket still goes first once it works.
+  After `worktree_escalate_minutes` (60) of failures the maintainer gets one Discord message
+  "Bug loop stalled" with the git error, and "Bug loop resumed" when it recovers. The
+  back-off is `worktree_down` in `state.json`. A maintainer decision (refix, implement) that
+  hits the same failure is consumed as before and goes back to the maintainer.
 - **Maintainer decisions** on the emergency ticket steer the automation: discard parks the
   phase; ship merges the approved diff (hash-bound only, without a Linux CI run) and then waits
   for develop; refix gives the fixer guidance as for any bug, but a refix of the emergency
