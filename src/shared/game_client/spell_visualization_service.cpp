@@ -1291,9 +1291,27 @@ namespace mmo
     }
 
     std::vector<ParticleSystem*> SpellVisualizationService::PlayKitAtPosition(const proto_client::SpellKit& kit, Scene& scene,
-        SceneNode& node, const Vector3& position, ChannelIndex* loopChannel)
+        SceneNode& node, const Vector3& position, ChannelIndex* loopChannel, std::vector<GroundLight>& lights)
     {
         const bool isLooped = kit.has_loop() && kit.loop();
+
+        if (kit.has_light())
+        {
+            const auto& config = kit.light();
+            Light& light = scene.CreateLight("GroundLight_" + std::to_string(m_effectCounter++), LightType::Point);
+            light.SetColor(Vector4(config.r(), config.g(), config.b(), 1.0f));
+            light.SetRange(config.range());
+            light.SetFogScattering(config.fog_scattering());
+            light.SetIntensity(0.0f);
+            node.AttachObject(light);
+
+            GroundLight groundLight;
+            groundLight.light = &light;
+            groundLight.target = config.intensity();
+            groundLight.fadeInSpeed = config.fade_in_time() > 0.0f ? config.intensity() / config.fade_in_time() : 1000.0f;
+            groundLight.fadeOutSpeed = config.fade_out_time() > 0.0f ? config.intensity() / config.fade_out_time() : 1000.0f;
+            lights.push_back(groundLight);
+        }
 
         if (m_soundEntryPlayer && m_audioPlayer)
         {
@@ -1385,7 +1403,7 @@ namespace mmo
         {
             for (const auto& kit : it->second.kits())
             {
-                auto particles = PlayKitAtPosition(kit, scene, *zone.node, position, &zone.loopChannel);
+                auto particles = PlayKitAtPosition(kit, scene, *zone.node, position, &zone.loopChannel, zone.lights);
                 zone.particles.insert(zone.particles.end(), particles.begin(), particles.end());
             }
         }
@@ -1417,7 +1435,7 @@ namespace mmo
                     for (const auto& kit : kits->second.kits())
                     {
                         // A detonation is a one-shot: there is no zone left to hold a loop.
-                        auto particles = PlayKitAtPosition(kit, *it->scene, *burst.node, it->position, nullptr);
+                        auto particles = PlayKitAtPosition(kit, *it->scene, *burst.node, it->position, nullptr, burst.lights);
                         burst.particles.insert(burst.particles.end(), particles.begin(), particles.end());
                     }
                     m_groundBursts.push_back(burst);
@@ -1447,6 +1465,37 @@ namespace mmo
         {
             m_audioPlayer->StopSound(&zone.loopChannel);
         }
+
+        for (GroundLight& light : zone.lights)
+        {
+            light.fadingOut = true;
+        }
+    }
+
+    bool SpellVisualizationService::UpdateGroundLights(Scene& scene, std::vector<GroundLight>& lights, const float deltaTime)
+    {
+        for (auto it = lights.begin(); it != lights.end();)
+        {
+            if (it->fadingOut)
+            {
+                it->current -= it->fadeOutSpeed * deltaTime;
+                if (it->current <= 0.0f)
+                {
+                    scene.DestroyLight(*it->light);
+                    it = lights.erase(it);
+                    continue;
+                }
+            }
+            else
+            {
+                it->current = std::min(it->target, it->current + it->fadeInSpeed * deltaTime);
+            }
+
+            it->light->SetIntensity(it->current);
+            ++it;
+        }
+
+        return lights.empty();
     }
 
     void SpellVisualizationService::UpdateGroundZones(const float deltaTime)
@@ -1467,13 +1516,18 @@ namespace mmo
             return true;
         };
 
-        const auto destroy = [](Scene& scene, SceneNode* node, std::vector<ParticleSystem*>& systems)
+        const auto destroy = [](Scene& scene, SceneNode* node, std::vector<ParticleSystem*>& systems, std::vector<GroundLight>& lights)
         {
             for (ParticleSystem* system : systems)
             {
                 scene.DestroyParticleEmitter(*system);
             }
             systems.clear();
+            for (const GroundLight& light : lights)
+            {
+                scene.DestroyLight(*light.light);
+            }
+            lights.clear();
             if (node)
             {
                 scene.DestroySceneNode(*node);
@@ -1482,6 +1536,7 @@ namespace mmo
 
         for (auto it = m_groundZones.begin(); it != m_groundZones.end();)
         {
+            const bool lightsGone = UpdateGroundLights(*it->scene, it->lights, deltaTime);
             if (!it->ending)
             {
                 it->remainingSeconds -= deltaTime;
@@ -1495,9 +1550,9 @@ namespace mmo
             }
 
             it->fadeSeconds -= deltaTime;
-            if (it->fadeSeconds <= 0.0f || allParticlesGone(it->particles))
+            if (it->fadeSeconds <= 0.0f || (allParticlesGone(it->particles) && lightsGone))
             {
-                destroy(*it->scene, it->node, it->particles);
+                destroy(*it->scene, it->node, it->particles, it->lights);
                 it = m_groundZones.erase(it);
             }
             else
@@ -1508,10 +1563,20 @@ namespace mmo
 
         for (auto it = m_groundBursts.begin(); it != m_groundBursts.end();)
         {
-            it->fadeSeconds -= deltaTime;
-            if (it->fadeSeconds <= 0.0f || allParticlesGone(it->particles))
+            // A detonation's light is a flash: it turns around as soon as it peaked.
+            for (GroundLight& light : it->lights)
             {
-                destroy(*it->scene, it->node, it->particles);
+                if (!light.fadingOut && light.current >= light.target)
+                {
+                    light.fadingOut = true;
+                }
+            }
+
+            const bool lightsGone = UpdateGroundLights(*it->scene, it->lights, deltaTime);
+            it->fadeSeconds -= deltaTime;
+            if (it->fadeSeconds <= 0.0f || (allParticlesGone(it->particles) && lightsGone))
+            {
+                destroy(*it->scene, it->node, it->particles, it->lights);
                 it = m_groundBursts.erase(it);
             }
             else

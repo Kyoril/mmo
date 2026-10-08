@@ -5,7 +5,8 @@ Author the Hollow Choir boss spells (251-265) in the editor dataset and the Clie
     py -3 tools/hollow_choir/author_spells.py            # validate only
     py -3 tools/hollow_choir/author_spells.py --apply    # write both spells.data files
 
-Idempotent: spells are written by id, replacing what is there. Design: docs/hollow_choir_bosses.md.
+Idempotent: spells are written by id, replacing what is there, except for visualization_id, which
+tools/hollow_choir/author_visuals.py owns. Design: docs/hollow_choir_bosses.md.
 
 Each spell can be tested on its own with `learnspell <id>` and a cast at a hostile NPC. The zone
 spells (Guttering Candle, Silent Place, Dissonance) then mark the ground under that NPC.
@@ -63,11 +64,11 @@ def effect(type_, target=CASTER, **fields):
     return dict(type=type_, targeta=target, **fields)
 
 
-def spell(id_, name, level, school, description, icon, visualization, effects,
+def spell(id_, name, level, school, description, icon, effects,
           cast_ms=0, duration=0, attributes=(0, 0), interrupt=0, range_type=RANGE_SELF,
           aura_text=None, stack_amount=None):
     return dict(id=id_, name=name, level=level, school=school, description=description,
-                icon=icon, visualization=visualization, effects=effects, cast_ms=cast_ms,
+                icon=icon, effects=effects, cast_ms=cast_ms,
                 duration=duration, attributes=attributes, interrupt=interrupt,
                 range_type=range_type, aura_text=aura_text, stack_amount=stack_amount)
 
@@ -77,51 +78,51 @@ SPELLS = [
     spell(251, "Grave Strike", 12, PHYSICAL,
           "Brings the broken censer down in a crushing arc, dealing $s0 physical damage to "
           "everyone in front of the caster.",
-          "Interface/Icons/Spells/T_Icon_BloodCombat_12.htex", 80,
+          "Interface/Icons/Spells/T_Icon_BloodCombat_12.htex",
           [effect(SCHOOL_DAMAGE, CONE_ENEMY, basepoints=104, diesides=22, radius=8.0, miscvalueb=100)],
           cast_ms=1500, attributes=(NEGATIVE, CANNOT_BE_INTERRUPTED), range_type=RANGE_MELEE),
     spell(252, "Last Vigil", 12, SHADOW,
           "Calls two novices up from their biers to keep the vigil with the caster.",
-          "Interface/Icons/Spells/T_Icon_Unholy_40.htex", 81,
+          "Interface/Icons/Spells/T_Icon_Unholy_40.htex",
           [effect(SUMMON, CASTER, basepoints=2, summonunit=RISEN_NOVICE, radius=6.0)],
           cast_ms=2000, attributes=(0, CANNOT_BE_INTERRUPTED)),
     spell(253, "Guttering Candle", 12, FIRE,
           "Sets a guttering candle flame on the ground beneath the target. After 2 sec it flares, "
           "dealing $254s0 fire damage to everyone still standing in it.",
-          "Interface/Icons/Spells/T_Icon_Fire_40.htex", 82,
+          "Interface/Icons/Spells/T_Icon_Fire_40.htex",
           [effect(PERSISTENT_AREA_AURA, TARGET_ENEMY, radius=3.5, amplitude=2000, triggerspell=254)],
           duration=2000, attributes=(NEGATIVE, IGNORE_LOS), range_type=RANGE_35),
     spell(254, "Guttering Candle", 12, FIRE,
           "The candle flares, dealing $s0 fire damage.",
-          "Interface/Icons/Spells/T_Icon_Fire_40.htex", 83,
+          "Interface/Icons/Spells/T_Icon_Fire_40.htex",
           [effect(SCHOOL_DAMAGE, TARGET_ENEMY, basepoints=78, diesides=18)],
           attributes=(NEGATIVE, IGNORE_LOS), range_type=RANGE_INFINITE),
 
     # --- Sister Mereth -------------------------------------------------------------------------
     spell(255, "Lament", 13, SHADOW,
           "A lament for the unburied, dealing $s0 shadow damage to every enemy within 40 yards.",
-          "Interface/Icons/Spells/T_Icon_Shadow_30.htex", 84,
+          "Interface/Icons/Spells/T_Icon_Shadow_30.htex",
           [effect(SCHOOL_DAMAGE, SOURCE_AREA_ENEMY, basepoints=48, diesides=12, radius=40.0)],
           cast_ms=3000, attributes=(NEGATIVE, IGNORE_LOS), interrupt=INTERRUPT),
     spell(256, "Mourning Voices", 13, SHADOW,
           "Calls two Mourning Choristers to opposite sides of the hall.",
-          "Interface/Icons/Spells/T_Icon_Shadow_45.htex", 85,
+          "Interface/Icons/Spells/T_Icon_Shadow_45.htex",
           [effect(SUMMON, CASTER, basepoints=2, summonunit=MOURNING_CHORISTER, radius=14.0)],
           cast_ms=2000, attributes=(0, CANNOT_BE_INTERRUPTED)),
     spell(257, "Mourning Chorus", 13, SHADOW,
           "The choristers' grief shrouds the caster, reducing damage taken by $s0%.",
-          "Interface/Icons/Spells/T_Icon_Shadow_45.htex", 86,
+          "Interface/Icons/Spells/T_Icon_Shadow_45.htex",
           [effect(APPLY_AURA, CASTER, aura=MOD_DAMAGE_TAKEN_PCT, basepoints=-40)],
           aura_text="Damage taken reduced by 40%."),
     spell(258, "Silent Place", 13, SHADOW,
           "Hushes the ground beneath the target for 12 sec. Anyone standing in the silence takes "
           "$259s0 shadow damage every second and is slowed by 50%.",
-          "Interface/Icons/Spells/T_Icon_Shadow_60.htex", 87,
+          "Interface/Icons/Spells/T_Icon_Shadow_60.htex",
           [effect(PERSISTENT_AREA_AURA, TARGET_ENEMY, radius=4.5, amplitude=1000, triggerspell=259)],
           duration=12000, attributes=(NEGATIVE, IGNORE_LOS), range_type=RANGE_35),
     spell(259, "Silent Place", 13, SHADOW,
           "The silence deals $s0 shadow damage and slows movement by 50%.",
-          "Interface/Icons/Spells/T_Icon_Shadow_60.htex", 88,
+          "Interface/Icons/Spells/T_Icon_Shadow_60.htex",
           [effect(SCHOOL_DAMAGE, TARGET_ENEMY, basepoints=14, diesides=6),
            effect(APPLY_AURA, TARGET_ENEMY, aura=MOD_DECREASE_SPEED, basepoints=-50)],
           duration=1500, attributes=(NEGATIVE, IGNORE_LOS), range_type=RANGE_INFINITE,
@@ -131,34 +132,34 @@ SPELLS = [
     spell(260, "Dissonance", 14, SHADOW,
           "Strikes a discordant note beneath the target. After 2 sec a wave of sound bursts from "
           "it, dealing $261s0 shadow damage to everyone still standing in it.",
-          "Interface/Icons/Spells/T_Icon_Arcane_20.htex", 89,
+          "Interface/Icons/Spells/T_Icon_Arcane_20.htex",
           [effect(PERSISTENT_AREA_AURA, TARGET_ENEMY, radius=4.0, amplitude=2000, triggerspell=261)],
           duration=2000, attributes=(NEGATIVE, IGNORE_LOS), range_type=RANGE_35),
     spell(261, "Dissonance", 14, SHADOW,
           "A wave of discordant sound deals $s0 shadow damage.",
-          "Interface/Icons/Spells/T_Icon_Arcane_20.htex", 90,
+          "Interface/Icons/Spells/T_Icon_Arcane_20.htex",
           [effect(SCHOOL_DAMAGE, TARGET_ENEMY, basepoints=88, diesides=20)],
           attributes=(NEGATIVE, IGNORE_LOS), range_type=RANGE_INFINITE),
     spell(262, "Dirge of the Grave", 14, SHADOW,
           "Conducts the hollow choir for 5 sec, dealing $263s0 shadow damage to every enemy "
           "within 40 yards each second.",
-          "Interface/Icons/Spells/T_Icon_Unholy_80.htex", 91,
+          "Interface/Icons/Spells/T_Icon_Unholy_80.htex",
           [effect(APPLY_AURA, CASTER, aura=PERIODIC_TRIGGER_SPELL, amplitude=1000, triggerspell=263, targetb=CASTER)],
           cast_ms=5000, duration=5000, attributes=(CHANNELED | NEGATIVE, 0), interrupt=INTERRUPT),
     spell(263, "Dirge of the Grave", 14, SHADOW,
           "The dirge deals $s0 shadow damage.",
-          "Interface/Icons/Spells/T_Icon_Unholy_80.htex", 92,
+          "Interface/Icons/Spells/T_Icon_Unholy_80.htex",
           [effect(SCHOOL_DAMAGE, SOURCE_AREA_ENEMY, basepoints=16, diesides=6, radius=40.0)],
           attributes=(NEGATIVE, IGNORE_LOS)),
     spell(264, "The Choir Rises", 14, SHADOW,
           "Raises two Hollow Choristers from the dark of the apse.",
-          "Interface/Icons/Spells/T_Icon_Unholy_100.htex", 93,
+          "Interface/Icons/Spells/T_Icon_Unholy_100.htex",
           [effect(SUMMON, CASTER, basepoints=2, summonunit=HOLLOW_CHORISTER, radius=10.0)],
           cast_ms=2000, attributes=(0, CANNOT_BE_INTERRUPTED)),
     spell(265, "Choral Resonance", 14, SHADOW,
           "Each living chorister swells the caster's voice, increasing damage done by $s0% per "
           "stack.",
-          "Interface/Icons/Spells/T_Icon_Unholy_100.htex", 94,
+          "Interface/Icons/Spells/T_Icon_Unholy_100.htex",
           [effect(APPLY_AURA, CASTER, aura=MOD_DAMAGE_DONE_PCT, basepoints=12)],
           aura_text="Damage done increased.", stack_amount=4),
 ]
@@ -177,7 +178,11 @@ def build(spells_pb, spec):
     entry.cooldown = 0
     entry.casttime = spec["cast_ms"]
     entry.cost = 0
-    entry.maxlevel = entry.baselevel = entry.spelllevel = spec["level"]
+    # spelllevel gates who may cast the spell (ValidateCasterRequirements), so it stays at 1:
+    # these are boss spells, but a GM tests them on a level 10 character with learnspell. No
+    # effect scales per level, so the level fields do not change any number.
+    entry.maxlevel = spec["level"]
+    entry.baselevel = entry.spelllevel = 1
     entry.spellSchool = spec["school"]
     entry.facing = 1
     entry.duration = spec["duration"]
@@ -191,7 +196,6 @@ def build(spells_pb, spec):
         entry.auratext = spec["aura_text"]
     if spec["stack_amount"]:
         entry.stackamount = spec["stack_amount"]
-    entry.visualization_id = spec["visualization"]
     # Same as every other creature spell in this project: no global cooldown, no school lockout.
     entry.cooldownflags = 3
     return entry
@@ -235,6 +239,9 @@ def main():
         entry = build(mods["spells"], spec)
         for i, existing in enumerate(spells.entry):
             if existing.id == entry.id:
+                # The visualization link belongs to author_visuals.py; keep whatever it set.
+                if existing.HasField("visualization_id"):
+                    entry.visualization_id = existing.visualization_id
                 spells.entry[i].CopyFrom(entry)
                 break
         else:

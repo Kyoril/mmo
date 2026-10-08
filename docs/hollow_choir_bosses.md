@@ -58,6 +58,39 @@ The encounter rules from the brief that are *not* spells — health thresholds, 
 "Dissonance comes more often below 30 %", removing Mourning Chorus when the choristers die — are
 trigger work for step 3.
 
+## Audio-visual design
+
+Every spell gets a cast animation, an impact, a sound and particles. Each one has to read clearly
+between pillars and under the players' feet in a dark crypt. Particles live in
+`data/client/Particles/HollowChoir/`, their recipes in `tools/particle_gen/recipes/hollow_choir_*.py`,
+sounds in `data/client/Sound/Spells/HollowChoir/`.
+
+Each boss has its own palette, so a player can tell from a glance whose mechanic is on the floor:
+
+| Boss | Palette | Motifs |
+|---|---|---|
+| Brother Oswin | warm candle amber and gold, grey incense smoke, bone dust | censer, candle flames, wax, the vigil |
+| Sister Mereth | spectral pale teal and cyan, mourning silver | wails, tears, sound rings, ghostly veils, hush |
+| Cantor Veyr | discordant magenta and violet, with a sickly gold accent | jittering sound rings, notes, choir columns |
+
+Ground telegraphs are built from a bright rim (the ring sprite) plus a low, dense fill, and they
+build up over their warning time. They have to tell the player where the edge is, not just
+where the danger is roughly.
+
+| Spell | Cast (caster) | Release / success | Ground / impact | Sound |
+|---|---|---|---|---|
+| Grave Strike | 1.5 s wind-up: CastLoop, incense smoke at the censer hand, amber embers fanning forward over the ground in a 100° cone of 8 units | Attack_1H_02, forward dust and ash shockwave, bone shards | — | censer chain swing + rising groan; crushing slam |
+| Last Vigil | ChannelUp loop, pale soul wisps rising around Oswin | EmoteRoar, ghost burst | — | stone lids grinding + low monk chant |
+| Guttering Candle | instant: CastRelease | — | GROUND_ACTIVE 2 s: ring of guttering candle flames on the 3.5 rim, amber floor glow growing; GROUND_EXPIRED: flame pillar and embers | flame ignite + small bell (the warning); fire flare |
+| Lament | 3 s CastLoop, teal wail rings pulsing from the chest, rising tears | CastRelease, teal sound ring sweeping outward | small teal shiver on each player hit | wordless ghostly female wail; spectral shockwave |
+| Mourning Voices | ChannelUp, choir wisps | EmoteCry | — | eerie choir swell |
+| Mourning Chorus | — | — | AURA_IDLE: veil of ghostly ribbons around Mereth while the choristers live | — |
+| Silent Place | instant: CastRelease | — | GROUND_ACTIVE 12 s loop: dark indigo pool, 4.5 rim, motes sinking into it, ripples running inward | muffled sub thump + whisper; low hush loop |
+| Dissonance | instant: CastRelease | — | GROUND_ACTIVE 2 s: concentric magenta rings contracting and jittering on the 4.0 rim; GROUND_EXPIRED: sonic ring burst and column | discordant bell cluster rising; discordant choir blast |
+| Dirge of the Grave | CHANNELING 5 s: ChannelUp (conducting), violet voices spiralling up, a ring pulse every second | — | small violet hit on each player per pulse | dark male choir drone loop |
+| The Choir Rises | ChannelUp, magenta motes | EmoteShout, burst | — | choir crescendo |
+| Choral Resonance | — | — | AURA_IDLE: magenta harmonic rings orbiting Veyr | soft harmonic hum on gain |
+
 ## Engine work the spells need
 
 The spell runtime could not express three of the brief's mechanics as data:

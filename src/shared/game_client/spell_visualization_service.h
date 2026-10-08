@@ -125,7 +125,7 @@ namespace mmo
         /// \brief Remove the active effects of one phase for a given actor and spell.
         void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId, EffectPhase phase);
 
-        /// rief Forget every tracked effect, light, animation, tint pulse, pending kit and sound.
+        /// \brief Forget every tracked effect, light, animation, tint pulse, pending kit and sound.
         ///        Call when leaving the world, before the scene is cleared: the records hold raw
         ///        pointers into that scene, and the service outlives it. Without this, re-entering
         ///        with the same character makes the player's guid resolve again and Update()
@@ -217,7 +217,18 @@ namespace mmo
 
         static uint32 ToProtoEventValue(Event e);
 
-        /// rief A spell zone shown on the ground, or one that ended and is fading out.
+        /// \brief A point light of a ground effect, faded in and out by UpdateGroundZones.
+        struct GroundLight
+        {
+            Light* light{ nullptr };
+            float current{ 0.0f };
+            float target{ 0.0f };
+            float fadeInSpeed{ 0.0f };
+            float fadeOutSpeed{ 0.0f };
+            bool fadingOut{ false };
+        };
+
+        /// \brief A spell zone shown on the ground, or one that ended and is fading out.
         struct GroundZone
         {
             uint32 zoneId{ 0 };
@@ -227,6 +238,7 @@ namespace mmo
             /// Holds the GROUND_ACTIVE particles; destroyed once they have faded out.
             SceneNode* node{ nullptr };
             std::vector<ParticleSystem*> particles;
+            std::vector<GroundLight> lights;
             ChannelIndex loopChannel{ InvalidChannel };
             /// Seconds until the zone ends on its own if no SpellZoneEnd arrives.
             float remainingSeconds{ 0.0f };
@@ -236,25 +248,29 @@ namespace mmo
             float fadeSeconds{ 0.0f };
         };
 
-        /// rief Spawn a kit's particles under a scene node at the ground and play its sounds
+        /// \brief Spawn a kit's particles under a scene node at the ground and play its sounds
         ///        at a position. Returns the particle systems created.
-        std::vector<ParticleSystem*> PlayKitAtPosition(const proto_client::SpellKit& kit, Scene& scene, SceneNode& node, const Vector3& position, ChannelIndex* loopChannel);
+        std::vector<ParticleSystem*> PlayKitAtPosition(const proto_client::SpellKit& kit, Scene& scene, SceneNode& node, const Vector3& position, ChannelIndex* loopChannel, std::vector<GroundLight>& lights);
 
-        /// rief Stop a zone's emitters and its loop sound; it is destroyed once faded.
+        /// \brief Fade ground lights; returns true once every light faded out and was destroyed.
+        static bool UpdateGroundLights(Scene& scene, std::vector<GroundLight>& lights, float deltaTime);
+
+        /// \brief Stop a zone's emitters and its loop sound; it is destroyed once faded.
         void BeginGroundZoneFade(GroundZone& zone);
 
-        /// rief Advance ground zones: time out lost ones, destroy faded ones.
+        /// \brief Advance ground zones: time out lost ones, destroy faded ones.
         void UpdateGroundZones(float deltaTime);
 
-        /// rief Ground zones currently shown or fading out.
+        /// \brief Ground zones currently shown or fading out.
         std::vector<GroundZone> m_groundZones;
 
-        /// rief One-shot ground effects (GROUND_EXPIRED) waiting for their particles to finish.
+        /// \brief One-shot ground effects (GROUND_EXPIRED) waiting for their particles to finish.
         struct GroundBurst
         {
             Scene* scene{ nullptr };
             SceneNode* node{ nullptr };
             std::vector<ParticleSystem*> particles;
+            std::vector<GroundLight> lights;
             float fadeSeconds{ 0.0f };
         };
         std::vector<GroundBurst> m_groundBursts;
