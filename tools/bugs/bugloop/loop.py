@@ -210,8 +210,13 @@ class BugLoop:
 		self._check_nightly_breaker(now)
 		worked = False
 		if not self.dry_run:
-			# First, so a red develop is known before anything can ship in this poll.
-			self._watch_ci(now)
+			# First, so a red develop is known before anything can ship in this poll. A failure that is
+			# not GitHub's (the bug API, say) must not stop triage and decisions: _watch_ci left
+			# last_check reset, so every ship of this poll rechecks and stays held ("CI check failed").
+			try:
+				self._watch_ci(now)
+			except Exception:
+				self.log(traceback.format_exc())
 			self._backfill_review_diffs()
 			worked = self._handle_decisions() or worked
 			self._release_stale_claims()
@@ -221,7 +226,10 @@ class BugLoop:
 		if not self.dry_run and self.github is not None:
 			self._check_pending_ci(now)
 			# The emergency ticket goes before every other bug; the ordinary fix waits for the next poll.
-			if self._emergency_due() and self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+			due = self._emergency_due()
+			if due and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+				self._notify_budget_exhausted(now)
+			elif due:
 				ticket = self.state.emergency_ticket()
 				try:
 					self._emergency_fix()
@@ -960,7 +968,14 @@ class BugLoop:
 	# ---- CI watch
 
 	def _develop_red(self):
-		return self.state.ci_phase() is not None
+		"""An open phase, or a red colour from the last read (defence in depth: a phase that could not
+		be opened yet still holds ships). Without a GitHub client (no token, dry run) nothing could
+		ever close a stored phase, so it is ignored (bug_loop.py warns at startup)."""
+		if self.github is None:
+			return False
+		if self.state.ci_phase() is not None:
+			return True
+		return "red" in (self.state.data["ci"].get("colours") or {}).values()
 
 	def _emergency_due(self):
 		"""True when the emergency ticket should get a fix attempt now: a red phase that is not parked,
@@ -1002,6 +1017,19 @@ class BugLoop:
 		# A failed verification resumes the pushed branch; after a ship (or the first time) it starts fresh.
 		context = dict(phase["ci"], resume=bool(phase.get("resume")))
 		self._fix(phase["ticket"], emergency=context)
+
+	def _notify_budget_exhausted(self, now):
+		"""An emergency attempt is due but the daily invocation budget is used up: tell the maintainer
+		once per phase and UTC day instead of waiting silently for the day to roll."""
+		phase = self.state.ci_phase()
+		today = now.strftime("%Y-%m-%d")
+		if phase is None or phase.get("budget_notified") == today:
+			return
+		phase["budget_notified"] = today
+		self.state.save()
+		tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+		self.notifier.send(notify.emergency_needs_you_message(self.notifier, phase["ticket"],
+			"invocation budget exhausted; develop stays red until {} 00:00 UTC or until you act".format(tomorrow)))
 
 	def _retry_note(self):
 		phase = self.state.ci_phase()
@@ -1230,8 +1258,17 @@ class BugLoop:
 			raise
 		self.state.save()
 
-	def _ci_context(self, key, run, runs):
-		jobs = self.github.jobs(run["id"])
+	def _ci_context(self, key, run, runs, best_effort=False):
+		"""The context of a red run. `best_effort`: a GitHub error reading the jobs leaves the step
+		and excerpt empty and the context `incomplete` (refilled by _refresh_ci_phase) instead of raising."""
+		incomplete = False
+		try:
+			jobs = self.github.jobs(run["id"])
+		except github.GitHubError as error:
+			if not best_effort:
+				raise
+			self.log("ci watch: " + str(error))
+			jobs, incomplete = [], True
 		job, step = ci_runs.failing_step(jobs)
 		excerpt = ""
 		if job:
@@ -1239,6 +1276,7 @@ class BugLoop:
 				excerpt = ci_runs.excerpt(self.github.job_log(job["id"]))
 			except github.GitHubError as error:
 				self.log("ci watch: " + str(error))
+				incomplete = True
 		# Suspects: develop's first-parent commits since the newest green run before the red one.
 		green_sha = ""
 		older = runs[runs.index(run) + 1:] if run in runs else []
@@ -1248,14 +1286,22 @@ class BugLoop:
 				break
 		suspects = self.worktree.log_lines(green_sha, run.get("head_sha") or "")
 		return {"workflow": CI_NAMES[key], "key": key, "run_id": run["id"], "run_url": run.get("html_url", ""),
-			"red_sha": run.get("head_sha") or "", "step": step, "excerpt": excerpt, "suspects": suspects}
+			"red_sha": run.get("head_sha") or "", "step": step, "excerpt": excerpt, "suspects": suspects,
+			"incomplete": incomplete}
+
+	@staticmethod
+	def _log_tail(context):
+		if context.get("excerpt"):
+			return context["excerpt"]
+		return "(log unavailable)" if context.get("incomplete") else "(no log)"
 
 	def _open_ci_phase(self, now, red, lists):
+		# Nothing GitHub says about the jobs may stop the phase from opening: develop is red either way.
 		key = "push" if "push" in red else "nightly"
-		context = self._ci_context(key, red[key], lists[key])
+		context = self._ci_context(key, red[key], lists[key], best_effort=True)
 		summary = "{} is red on develop at {}{}".format(context["workflow"], context["red_sha"][:8],
 			": " + context["step"] if context["step"] else "")
-		ticket = self.api.create_system(summary, context["excerpt"] or "(no log)", context["red_sha"], context["run_url"],
+		ticket = self.api.create_system(summary, self._log_tail(context), context["red_sha"], context["run_url"],
 			actor=self.config.worker)
 		self.state.data["ci"]["phase"] = {"since": now.isoformat(), "ticket": ticket,
 			"red_runs": {name: run["id"] for name, run in red.items()}, "ci": context, "attempts": 0,
@@ -1274,9 +1320,10 @@ class BugLoop:
 		ticket = phase["ticket"]
 		for key, run in red.items():
 			if phase["red_runs"].get(key) == run["id"]:
+				self._refill_ci_context(phase, key, run, lists[key])
 				continue
-			# The run counts as seen only once all of this succeeded, so a transient error retries it;
-			# the attempt is counted once per run however often that happens.
+			# The run counts as seen only once its context is read, so a GitHub error retries it; the
+			# attempt is counted once per run however often that happens.
 			failed_restart = key == "nightly" and run.get("head_sha") in phase["nightly_dispatched"]
 			counted = phase.setdefault("counted_runs", [])
 			if failed_restart and run["id"] not in counted:
@@ -1287,17 +1334,47 @@ class BugLoop:
 			if failed_restart:
 				context["retry"] = context["excerpt"]
 			phase["ci"] = context
+			# The ticket notes are best-effort: a bug API error (a deleted ticket answers 404 forever)
+			# must not keep the run unseen and abort every poll.
 			if phase.get("awaiting_develop") and self._descends(phase["awaiting_develop"], run.get("head_sha") or ""):
 				# develop is still (or again) red with the emergency fix in it: the ticket goes back
 				# to `triaged`, where _emergency_due retries it while attempts remain. An older run
 				# finishing after the ship proves nothing about the fix.
-				self._update(ticket, status="triaged", prUrl="", logTail=context["excerpt"] or "(no log)",
-					note="still red after the emergency fix: " + context["run_url"])
 				phase["awaiting_develop"] = None
 				phase["awaiting_deadline"] = None
+				try:
+					self._update(ticket, status="triaged", prUrl="", logTail=self._log_tail(context),
+						note="still red after the emergency fix: " + context["run_url"])
+				except Exception:
+					self.log(traceback.format_exc())
+					# Without `triaged` no attempt starts: say so once instead of staying red silently.
+					self._park_emergency(ticket, "develop is still red after the emergency fix ({}), and the ticket "
+						"could not be set back to triaged".format(context["run_url"]))
 			else:
-				self._update(ticket, logTail=context["excerpt"] or "(no log)", note="still red: " + context["run_url"])
+				self._safe_note(ticket, logTail=self._log_tail(context), note="still red: " + context["run_url"])
 			phase["red_runs"][key] = run["id"]
+
+	def _refill_ci_context(self, phase, key, run, runs):
+		"""A phase opened while GitHub could not list the run's jobs has no excerpt yet: read it again."""
+		context = phase.get("ci") or {}
+		if not context.get("incomplete") or context.get("run_id") != run["id"]:
+			return
+		try:
+			fresh = self._ci_context(key, run, runs)
+		except github.GitHubError as error:
+			self.log("ci watch: " + str(error))
+			return
+		if "retry" in context:
+			fresh["retry"] = context["retry"]
+		phase["ci"] = fresh
+		if not fresh["incomplete"]:
+			self._safe_note(phase["ticket"], logTail=self._log_tail(fresh), note="CI log read: " + fresh["run_url"])
+
+	def _safe_note(self, bug_id, **fields):
+		try:
+			self._update(bug_id, **fields)
+		except Exception:
+			self.log(traceback.format_exc())
 
 	def _close_ci_phase(self, newest):
 		phase = self.state.ci_phase()
@@ -1338,7 +1415,7 @@ class BugLoop:
 			# The restarted nightly is the run that decides now; its wait starts with the dispatch.
 			phase["awaiting_deadline"] = (self.clock() + datetime.timedelta(minutes=self._awaiting_minutes(phase))).isoformat()
 		self.log("ci watch: restarted the Nightly Release for " + sha[:8])
-		self._update(phase["ticket"], note="restarted the Nightly Release for " + sha[:8])
+		self._safe_note(phase["ticket"], note="restarted the Nightly Release for " + sha[:8])
 
 	# ---- housekeeping
 

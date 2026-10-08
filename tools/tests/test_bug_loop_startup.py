@@ -102,6 +102,20 @@ class GitHubWiringTests(unittest.TestCase):
 		self.assertIsNone(bug_loop.make_github({"MMO_BUGLOOP_GITHUB_TOKEN": "t"}, "https://gitlab.com/a/b.git", messages.append))
 		self.assertTrue(messages[0].startswith("ci watch: off ("))
 
+	def test_stored_phase_without_the_watch_is_warned_about(self):
+		class State:
+			def __init__(self, phase):
+				self.phase = phase
+
+			def ci_phase(self):
+				return self.phase
+
+		phase = {"ticket": "c1" + "0" * 22}
+		self.assertEqual(bug_loop.stored_phase_warning(State(phase), None),
+			"ci watch: off, but state holds a red phase for ticket c1{}; ships are not held".format("0" * 22))
+		self.assertIsNone(bug_loop.stored_phase_warning(State(phase), object()))
+		self.assertIsNone(bug_loop.stored_phase_warning(State(None), None))
+
 
 if __name__ == "__main__":
 	unittest.main()

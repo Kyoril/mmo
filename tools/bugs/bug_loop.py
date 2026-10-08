@@ -73,6 +73,15 @@ def make_github(environ, origin_url, log):
 	return github.GitHub(owner, repo, token)
 
 
+def stored_phase_warning(state, gh):
+	"""The startup warning when the watch is off but the state still holds a red phase: the loop
+	ignores it (nobody would ever close it), so ships are not held. None when there is nothing to say."""
+	phase = state.ci_phase()
+	if gh is not None or not phase:
+		return None
+	return "ci watch: off, but state holds a red phase for ticket {}; ships are not held".format(phase.get("ticket"))
+
+
 def notifications_status(notifier, dry_run):
 	"""The startup log line about Discord notifications. A dry run never sends any."""
 	if dry_run:
@@ -152,6 +161,9 @@ def main(argv=None):
 		notifier=make_notifier(os.environ, log), github=gh)
 	log("bug loop started ({}, {})".format("dry run" if args.dry_run else "live", HERE))
 	log(notifications_status(bug_loop.notifier, args.dry_run))
+	warning = stored_phase_warning(state, gh)
+	if warning:
+		log(warning)
 	if args.once:
 		bug_loop.poll_once()
 		return 0

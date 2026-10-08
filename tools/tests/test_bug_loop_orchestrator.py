@@ -1517,6 +1517,93 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
 
 
+	# Final review fixes: a red develop is held whatever else fails.
+
+	def test_jobs_error_still_opens_the_phase_and_holds_ships(self):
+		self.ci_red()
+		self.loop.github.jobs_errors[2] = 1
+		self.loop.poll_once()
+		phase = self.state.ci_phase()
+		self.assertIsNotNone(phase)
+		self.assertTrue(phase["ci"]["incomplete"])
+		self.assertEqual(self.api.system_creates[0]["details"], "(log unavailable)")
+		self.now += datetime.timedelta(minutes=1)
+		self.loop.poll_once()  # the ordinary fix is green, but develop is red
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
+		# The next read of the same run fills the excerpt in.
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		phase = self.state.ci_phase()
+		self.assertFalse(phase["ci"]["incomplete"])
+		self.assertIn("double free", phase["ci"]["excerpt"])
+		self.assertEqual(phase["ci"]["step"], "tests")
+		self.assertIn("double free", self.api.bugs[self.state.emergency_ticket()]["logTail"])
+
+	def test_a_red_colour_holds_ships_without_a_phase(self):
+		self.make(github=FakeGitHub())
+		self.state.data["ci"]["colours"] = {"push": "red"}
+		self.assertIsNone(self.state.ci_phase())
+		self.assertTrue(self.loop._develop_red())
+		self.state.data["ci"]["colours"] = {"push": "green", "nightly": "green"}
+		self.assertFalse(self.loop._develop_red())
+
+	def test_ticket_creation_failure_does_not_stop_the_poll(self):
+		self.ci_red()
+		self.api_down_for_tickets()
+		self.loop.poll_once()  # must not raise
+		self.assertIn("triage", self.runner.calls)
+		self.assertIn("fix", self.runner.calls)
+		self.assertIsNone(self.state.ci_phase())
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
+
+	def test_a_deleted_ticket_does_not_wedge_the_refresh(self):
+		self.run_emergency()
+		ticket = self.state.emergency_ticket()
+		failures = []
+
+		def deleted(bug_id, fields):
+			if bug_id == ticket and "logTail" in fields:
+				failures.append(fields)
+				return True
+			return False
+		self.api.update_errors.append((deleted, urllib.error.HTTPError("u", 404, "Not Found", {}, None)))
+		gh = self.loop.github
+		gh.runs_by_workflow["ccpp.yml"].insert(0, run(4, "failure", "red2"))
+		gh.jobs_by_run[4] = [{"id": 40, "conclusion": "failure", "steps": [{"name": "make", "conclusion": "failure"}]}]
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.state.ci_phase()["red_runs"]["push"], 4)
+		self.assertEqual(len(failures), 1)
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len(failures), 1)  # the run is seen: no second try, no second error
+
+	def test_no_github_ignores_a_stored_phase(self):
+		self.make()
+		self.state.data["ci"]["phase"] = {"since": "2026-10-07T09:00:00", "ticket": "c1" + "0" * 22,
+			"red_runs": {"push": 2}, "ci": {}, "attempts": 0, "nightly_dispatched": [], "parked": False,
+			"notified_exhausted": False, "counted_runs": []}
+		self.assertFalse(self.loop._develop_red())
+		self.loop.poll_once()
+		self.assertEqual([branch for branch, _ in self.worktree.shipped], [BRANCH])
+
+	def test_exhausted_budget_needs_the_maintainer_once_a_day(self):
+		self.ci_red(bugs=[dict(BUG, status="resolved")], invocation_budget_per_day=0)
+		self.loop.poll_once()
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.fixes(), 0)
+		budget = [m for m in self.notifier.messages if "invocation budget exhausted" in m]
+		self.assertEqual(len(budget), 1)
+		self.assertIn("needs you", budget[0])
+		self.assertIn("2026-10-08 00:00 UTC", budget[0])
+		self.now += datetime.timedelta(days=1)
+		self.loop.poll_once()
+		self.assertEqual(sum("invocation budget exhausted" in m for m in self.notifier.messages), 2)
+
+
 	# ---- emergency fix
 
 	def run_emergency(self, **make_kwargs):
