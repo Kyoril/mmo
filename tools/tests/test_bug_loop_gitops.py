@@ -96,6 +96,27 @@ class GitopsTests(unittest.TestCase):
 		self.assertEqual(self.wt.file_bytes(head, "data/client/data.txt"), b"two\n")
 		self.assertIsNone(self.wt.file_bytes(head, "missing.txt"))
 
+	def test_unpublished_gitlinks_names_data_develop_was_pushed_before(self):
+		self.wt.prepare()
+		self.assertEqual(self.wt.unpublished_gitlinks(), [])
+		# Someone commits data, pushes develop with the new pointer, but not the data.
+		sub = os.path.join(self.main, "data", "client")
+		write(os.path.join(sub, "data.txt"), "local only\n")
+		git(sub, "commit", "-am", "local data")
+		sha = git(sub, "rev-parse", "HEAD")
+		git(self.main, "commit", "-am", "bump data")
+		git(self.main, "push", "origin", "develop")
+		self.assertEqual(self.wt.unpublished_gitlinks(), [("data/client", sha)])
+		with self.assertRaises(gitops.GitError):
+			self.wt.prepare()  # what the check spares the loop
+		git(sub, "push", self.sub_origin, "HEAD:master")
+		self.assertEqual(self.wt.unpublished_gitlinks(), [])
+		self.wt.prepare()
+		self.assertEqual(self.wt.gitlinks("HEAD")["data/client"], sha)
+
+	def test_unpublished_gitlinks_skips_a_worktree_not_set_up_yet(self):
+		self.assertEqual(self.wt.unpublished_gitlinks(), [])
+
 	def test_untracked_file_is_not_clean(self):
 		self.make_fix()
 		write(os.path.join(self.wt.path, "stray.txt"), "x")

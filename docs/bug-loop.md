@@ -282,9 +282,16 @@ ships are not held`.
   Discord message "Emergency fix needs you" is sent. When an attempt is due but the daily
   invocation budget is used up, the same message says so once per phase and UTC day; develop
   stays red until the next UTC day or until the maintainer acts.
+- **Unpublished data:** when origin/develop points `data/client` or `data/editor` at a commit
+  the submodule's origin does not have (develop pushed before its data; CI fails at checkout
+  with "not our ref"), no fix can check develop out and no code change repairs it. The loop then
+  starts no fix at all, spends no attempt, and says so once per set of missing commits (a ticket
+  note plus "Emergency fix needs you", or "Bug loop waits for you" without a red phase). Push
+  the submodule's master; the next poll goes on, and the next develop CI run closes the phase.
 - **Worktree unavailable:** when the loop cannot bring its worktree to origin/develop before a
-  fix (fetch, checkout or `git submodule update` fails, e.g. develop was pushed before its
-  `data/client` commit reached origin: "not our ref"), that is the loop's fault, not the bug's.
+  fix (fetch, checkout or `git submodule update` fails for any reason the unpublished-data
+  check above does not catch: network, a locked worktree, the check itself failing), that is
+  the loop's fault, not the bug's.
   Nothing is touched: the bug stays queued and unclaimed, the emergency ticket stays `triaged`,
   and no attempt (emergency or otherwise) is used. Every fix then waits `ci_poll_seconds`
   before the worktree is tried again; the emergency ticket still goes first once it works.
