@@ -230,8 +230,10 @@ class Worktree:
 	def ship(self, branch, head, message, fast_gate):
 		"""Merges `head`, the commit that was guarded, proved and gated, onto the current
 		origin/develop and pushes: changed submodules first (fast-forward of their master only),
-		then develop. Refuses when `branch` no longer points at `head`. fast_gate() runs only when
-		develop moved since the branch was cut, because then the merge result was never gated."""
+		then develop. Refuses when `branch` no longer points at `head`. A submodule master that moved
+		past the fix is merged into the fix's submodule commit here; a conflict refuses. fast_gate()
+		runs only when develop or a submodule master moved since the branch was cut, because then
+		the merge result was never gated."""
 		current = run_git(self.path, "rev-parse", "--verify", "-q", branch + "^{commit}", check=False).stdout.strip()
 		if current != head:
 			return ShipResult(False, "", "branch moved after gating ({} is at {}, gated {})".format(branch, current[:8] or "nothing", head[:8]))
@@ -248,16 +250,30 @@ class Worktree:
 			return ShipResult(False, "", reason)
 		# After the merge: a pointer both sides moved now names a submodule merge commit.
 		pushes = []
+		caught_up = False
 		for sub, _, sha in self._changed_links(tip, "HEAD"):
 			sub_dir = self.sub_path(sub)
 			master = "{}/{}".format(self.sub_remote, self.master)
 			if not self._is_ancestor(sub_dir, master, sha):
-				self.git("checkout", "--detach", "--force", tip)
-				self._sync_submodules()
-				return ShipResult(False, "", "{}: {} is not an ancestor of {}; a submodule merge is needed".format(sub, master, sha[:8]))
+				# The submodule's master moved past develop's pointer (data pushed without a develop
+				# bump). Merge it here, at ship time: a refix that merges it can lose the same race
+				# again before it ships.
+				self.git("checkout", "--detach", "--force", sha, cwd=sub_dir)
+				sub_merge = run_git(sub_dir, "merge", "--no-ff", "-m", "Merge {} into {}".format(master, sha[:8]), master, check=False)
+				if sub_merge.returncode != 0:
+					run_git(sub_dir, "merge", "--abort", check=False)
+					self.git("checkout", "--detach", "--force", tip)
+					self._sync_submodules()
+					return ShipResult(False, "", "{}: the fix's data change conflicts with {} (needs a manual merge)".format(sub, master))
+				sha = self.git("rev-parse", "HEAD", cwd=sub_dir)
+				self.git("update-index", "--cacheinfo", "160000,{},{}".format(sha, sub))
+				caught_up = True
 			pushes.append((sub_dir, sha))
-		if moved and not fast_gate():
-			return ShipResult(False, "", self.target + " moved and the fast gate on the merge is red")
+		if caught_up:
+			# HEAD is the local, unpushed merge commit of the fix; it takes the new pointers.
+			self.git("commit", "--amend", "--no-edit")
+		if (moved or caught_up) and not fast_gate():
+			return ShipResult(False, "", "the fast gate on the merge is red ({} or submodule master moved)".format(self.target))
 		for sub_dir, sha in pushes:
 			push = run_git(sub_dir, "push", self.sub_remote, "{}:refs/heads/{}".format(sha, self.master), check=False)
 			if push.returncode != 0:

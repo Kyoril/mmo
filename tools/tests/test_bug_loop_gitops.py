@@ -110,19 +110,54 @@ class GitopsTests(unittest.TestCase):
 		self.assertEqual(git(self.origin, "rev-parse", "develop"), result.commit)
 		self.assertEqual(self.wt.merged("bugfix/x"), result.commit)
 
-	def test_ship_refuses_when_submodule_master_moved(self):
-		_, head = self.make_fix()
-		write(os.path.join(self.sub_seed, "other.txt"), "x\n")
+	def move_submodule_master(self, name, text):
+		"""Someone pushes data to the submodule's master without bumping develop's pointer."""
+		write(os.path.join(self.sub_seed, name), text)
 		git(self.sub_seed, "add", "-A")
-		git(self.sub_seed, "commit", "-m", "elsewhere")
+		git(self.sub_seed, "commit", "-m", "elsewhere: " + name)
 		git(self.sub_seed, "push", self.sub_origin, "master")
+		return git(self.sub_seed, "rev-parse", "HEAD")
+
+	def test_ship_merges_a_submodule_master_that_moved_and_gates_it(self):
+		# Bug 6ac66714: parking here sent the fix back for a refix that merged master, and master
+		# had moved again by the time that refix shipped, three times in a row.
+		_, head = self.make_fix()
+		fix_sub = self.wt.gitlinks(head)["data/client"]
+		moved = self.move_submodule_master("other.txt", "x\n")
+		gated = []
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x (bug-loop, gate green at 1)", lambda: gated.append(True) or True)
+		self.assertTrue(result.ok, result.reason)
+		self.assertEqual(gated, [True])
+		shipped = git(self.sub_origin, "rev-parse", "master")
+		self.assertEqual(self.wt.gitlinks(result.commit)["data/client"], shipped)
+		for commit in (fix_sub, moved):
+			self.assertEqual(gitops.run_git(self.sub_origin, "merge-base", "--is-ancestor", commit, shipped, check=False).returncode, 0)
+		self.assertEqual(git(self.origin, "rev-parse", "develop"), result.commit)
+		self.assertEqual(self.wt.merged("bugfix/x"), result.commit)
+		self.assertEqual(len(git(self.origin, "rev-list", "--parents", "-n", "1", result.commit).split()), 3)
+
+	def test_ship_does_not_push_a_submodule_catch_up_the_gate_rejects(self):
+		_, head = self.make_fix()
+		moved = self.move_submodule_master("other.txt", "x\n")
 		before = git(self.origin, "rev-parse", "develop")
-		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: True)
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: False)
 		self.assertFalse(result.ok)
-		self.assertIn("not an ancestor", result.reason)
+		self.assertIn("fast gate", result.reason)
 		self.assertEqual(git(self.origin, "rev-parse", "develop"), before)
+		self.assertEqual(git(self.sub_origin, "rev-parse", "master"), moved)
+
+	def test_ship_refuses_when_submodule_master_conflicts_with_the_fix(self):
+		_, head = self.make_fix()
+		moved = self.move_submodule_master("data.txt", "three\n")
+		before = git(self.origin, "rev-parse", "develop")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: self.fail("nothing to gate"))
+		self.assertFalse(result.ok)
+		self.assertIn("manual merge", result.reason)
+		self.assertEqual(git(self.origin, "rev-parse", "develop"), before)
+		self.assertEqual(git(self.sub_origin, "rev-parse", "master"), moved)
 		detached = gitops.run_git(self.wt.path, "symbolic-ref", "-q", "HEAD", check=False)
 		self.assertNotEqual(detached.returncode, 0)
+		self.assertTrue(self.wt.is_clean())
 
 	def test_changes_reports_non_ascii_paths_unquoted(self):
 		base = self.wt.prepare()
