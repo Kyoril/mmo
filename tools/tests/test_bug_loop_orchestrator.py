@@ -808,7 +808,7 @@ class LoopTests(unittest.TestCase):
 		self.assertIsNone(self.api.bugs[BUG_ID]["decision"]["consumedAt"])
 
 	def test_design_question_parks_as_needs_decision_and_pings(self):
-		self.make(review=dict(GOOD_REVIEW, design_question="Should assist chain beyond one level?"))
+		self.make(review=dict(GOOD_REVIEW, design_question="Should assist chain beyond one level?"), notify_status_changes=False)
 		self.loop.poll_once()
 		bug = self.api.bugs[BUG_ID]
 		self.assertEqual(bug["status"], "needs_decision")
@@ -819,11 +819,50 @@ class LoopTests(unittest.TestCase):
 		self.assertIn("Should assist chain beyond one level?", self.notifier.messages[0])
 
 	def test_plain_park_is_pr_open_without_ping(self):
-		self.make(gate_ok=False)
+		self.make(gate_ok=False, notify_status_changes=False)
 		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
 		self.assertEqual(self.api.bugs[BUG_ID]["designQuestion"], "")
 		self.assertEqual(len(self.api.review_diffs), 1)
+		self.assertEqual(self.notifier.messages, [])
+
+	def test_status_changes_are_announced(self):
+		self.make(gate_ok=False)
+		self.loop.poll_once()
+		self.assertEqual(len(self.notifier.messages), 3)
+		self.assertIn("Triaged, queued", self.notifier.messages[0])
+		self.assertIn("severity high", self.notifier.messages[0])
+		self.assertIn("Fix started", self.notifier.messages[1])
+		self.assertIn("Parked for review", self.notifier.messages[2])
+		self.assertIn("the full gate is red", self.notifier.messages[2])
+		self.assertTrue(all(BUG_ID in m for m in self.notifier.messages))
+
+	def test_design_question_replaces_the_park_status_message(self):
+		self.make(review=dict(GOOD_REVIEW, design_question="Q?"))
+		self.loop.poll_once()
+		self.assertFalse(any("Parked for review" in m for m in self.notifier.messages))
+		self.assertEqual(sum("Design decision needed" in m for m in self.notifier.messages), 1)
+
+	def test_ship_is_announced_once(self):
+		self.make()
+		self.loop.poll_once()
+		self.assertEqual(sum(BUG_ID in m for m in self.notifier.messages if "Shipped" in m), 1)
+
+	def test_wontfix_is_announced_without_the_reporter(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.poll_once()
+		self.assertEqual(len(self.notifier.messages), 1)
+		self.assertIn("Won't fix: not a bug", self.notifier.messages[0])
+
+	def test_merge_by_hand_is_announced(self):
+		self.make(bugs=[dict(BUG, status="pr_open", prUrl="branch:" + BRANCH)])
+		self.worktree.merged_[BRANCH] = "abc12345ff"
+		self.loop.poll_once()
+		self.assertTrue(any("merged by hand" in m and "abc12345" in m for m in self.notifier.messages))
+
+	def test_status_messages_can_be_switched_off(self):
+		self.make(gate_ok=False, notify_status_changes=False)
+		self.loop.poll_once()
 		self.assertEqual(self.notifier.messages, [])
 
 	def test_large_diff_upload_is_truncated(self):
@@ -852,7 +891,7 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 
 	def test_daily_summary_once_per_new_day(self):
-		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"), notify_status_changes=False)
 		self.loop.poll_once()
 		self.assertEqual(self.notifier.messages, [])
 		self.now = utc("2026-10-08 00:05")
@@ -871,7 +910,7 @@ class LoopTests(unittest.TestCase):
 		self.assertIn("waiting for a decision: 2", self.notifier.messages[-1])
 
 	def test_daily_summary_survives_a_restart(self):
-		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"), notify_status_changes=False)
 		self.loop.poll_once()
 		self.assertEqual(self.notifier.messages, [])
 		self.now = utc("2026-10-08 00:05")
@@ -1803,6 +1842,42 @@ class LoopTests(unittest.TestCase):
 		self.now += datetime.timedelta(minutes=6)
 		self.loop.poll_once()
 		self.assertEqual(self.fixes(), fixes + 1)
+
+
+	# Integration with the status announcements: once per event, never per attempt.
+
+	def ticket_messages(self, ticket):
+		return [m for m in self.notifier.messages if ticket in m]
+
+	def test_an_emergency_ship_sends_one_message(self):
+		ticket = self.ship_emergency()
+		messages = self.ticket_messages(ticket)
+		self.assertEqual(len(messages), 2, messages)
+		self.assertIn("develop is red", messages[0])
+		self.assertIn("Emergency fix shipped", messages[1])
+
+	def test_an_emergency_park_sends_only_needs_you(self):
+		ticket = self.run_emergency(review=dict(GOOD_REVIEW, fixes_symptom=False))
+		messages = self.ticket_messages(ticket)
+		self.assertEqual(len(messages), 2, messages)
+		self.assertIn("develop is red", messages[0])
+		self.assertIn("needs you", messages[1])
+		self.assertFalse(any("Parked for review" in m or "Fix started" in m for m in self.notifier.messages))
+
+	def test_emergency_retries_post_no_status_messages(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "failure", "head1", branch=branch))
+		self.worktree.branch_heads[branch] = "head1"
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()  # red branch run: back to triaged, attempt 2 runs and is pushed again
+		self.assertEqual(self.state.ci_phase()["attempts"], 2)
+		self.assertEqual(self.ticket_messages(ticket), [m for m in self.notifier.messages if "develop is red" in m])
+
+	def test_a_failed_emergency_fix_run_is_quiet(self):
+		ticket = self.run_emergency(fix=dict(GOOD_FIX, outcome="cannot_reproduce"))
+		self.assertIn("needs-info", self.outcomes())
+		self.assertEqual(len(self.ticket_messages(ticket)), 1)  # develop is red
 
 
 class DecideTests(unittest.TestCase):

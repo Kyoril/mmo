@@ -53,6 +53,13 @@ _CI_ACCEPT = {
 	"push": lambda run: run.get("event") == "push" and run.get("head_branch") == "develop",
 	"nightly": lambda run: run.get("event") in ("schedule", "workflow_dispatch"),
 }
+# Outcomes that already send a dedicated message, so no status message repeats them. The CI
+# outcomes are covered by the "develop is red/green", "Emergency fix shipped/needs you" messages.
+ANNOUNCED_ELSEWHERE = ("shipped", "shipped-by-maintainer", "refix-limit", "shipped-emergency",
+	"ci-pending", "ci-failed", "emergency-failed", "ci-red", "ci-green")
+# Per-attempt outcomes of the open phase's emergency ticket: the CI messages say what matters,
+# once per event, never per attempt.
+EMERGENCY_QUIET = ("fix-started", "interrupted", "needs-info", "loop-error", "claimed-elsewhere")
 
 
 def valid_bug_id(bug_id):
@@ -168,10 +175,26 @@ class BugLoop:
 	def _release(self, bug_id, status, note, **fields):
 		return self._update(bug_id, status=status, note=note[:1900], release_claim=True, **fields)
 
-	def _finish(self, bug_id, outcome, **details):
+	def _finish(self, bug_id, outcome, announce=True, **details):
 		self.state.mark_attempted(bug_id, outcome)
 		self.state.record(bug_id, outcome, **details)
 		self.log("bug {}: {} {}".format(bug_id, outcome, json.dumps(details, default=str) if details else ""))
+		if announce:
+			self._announce(bug_id, outcome, details)
+
+	def _announce(self, bug_id, outcome, details=None):
+		"""A status-change message. Outcomes with a message of their own stay quiet here."""
+		details = details or {}
+		if not self.config.notify_status_changes or not self.notifier.enabled or outcome in ANNOUNCED_ELSEWHERE:
+			return
+		if outcome == "parked" and details.get("decision_needed"):
+			return  # the design question message says it
+		if outcome in EMERGENCY_QUIET and bug_id == self.state.emergency_ticket():
+			return
+		try:
+			self.notifier.send(notify.status_message(self.notifier, bug_id, outcome, self._summary(bug_id), details))
+		except Exception:  # a notification must never stop the loop
+			self.log(traceback.format_exc())
 
 	# ---- one poll
 
@@ -355,6 +378,7 @@ class BugLoop:
 			self._update(bug_id, status="triaged", triage=triage, note="queued for an automated fix (severity {})".format(verdict["severity"]))
 			self.state.enqueue_fix(bug_id, verdict["severity"], bug.get("createdAt") or "")
 			self.state.record(bug_id, "queued", severity=verdict["severity"])
+			self._announce(bug_id, "queued", {"severity": verdict["severity"]})
 
 	# ---- fix
 
@@ -405,6 +429,7 @@ class BugLoop:
 			self.state.save()
 			self._update(bug_id, triage={"category": "feature"}, prUrl="", note="accepted as a feature by the maintainer")
 		branch = "bugfix/" + short_id(bug_id)
+		self._announce(bug_id, "refix-started" if guidance else "implement-started" if feature else "fix-started", {"branch": branch})
 		base = self.worktree.prepare()
 		if not self.verifier.ensure_configured():
 			self._release(bug_id, failed_status, "needs-info: build configure failed in the bug-loop worktree" + again, **failed_fields)
@@ -490,7 +515,8 @@ class BugLoop:
 			if self.state.is_feature(bug_id):
 				reasons.append(FEATURE_REASON)
 			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
-			self._park(bug_id, branch, reasons)
+			# An emergency park says it in its "needs you" message only.
+			self._park(bug_id, branch, reasons, announce=emergency is None)
 			if emergency is not None:
 				self._park_emergency(bug_id, "parked: " + reasons[0])
 			return
@@ -514,7 +540,7 @@ class BugLoop:
 		if emergency is not None:
 			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 			if reasons:
-				self._park(bug_id, branch, reasons, review)
+				self._park(bug_id, branch, reasons, review, announce=False)
 				self._park_emergency(bug_id, "parked: " + reasons[0])
 				return
 			# Locally green: CI on the exact head decides, never _try_ship.
@@ -527,9 +553,11 @@ class BugLoop:
 			green = False
 		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 		if reasons:
-			self._park(bug_id, branch, reasons, review)
+			ready = green and feature and not guidance
+			# The "Feature ready" ping replaces the status message of this park.
+			self._park(bug_id, branch, reasons, review, announce=not ready)
 			# Pinged once, when a fresh implement run first parks green; guided refixes stay quiet.
-			if green and feature and not guidance:
+			if ready:
 				self.notifier.send(notify.feature_ready_message(self.notifier, bug_id, self._summary(bug_id), branch))
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
@@ -546,14 +574,14 @@ class BugLoop:
 
 	# ---- park and ship
 
-	def _park(self, bug_id, branch, reasons, review=None):
+	def _park(self, bug_id, branch, reasons, review=None, announce=True):
 		question = ""
 		if isinstance(review, dict) and isinstance(review.get("design_question"), str):
 			question = review["design_question"].strip()[:2000]
 		self._update(bug_id, status="needs_decision" if question else "pr_open", prUrl="branch:" + branch,
 			designQuestion=question, note="parked for review: " + "; ".join(reasons)[:1800], release_claim=True)
 		self._upload_diff(bug_id)
-		self._finish(bug_id, "parked", branch=branch, reasons=reasons[:10], decision_needed=bool(question))
+		self._finish(bug_id, "parked", announce=announce, branch=branch, reasons=reasons[:10], decision_needed=bool(question))
 		if question:
 			self.notifier.send(notify.design_question_message(self.notifier, bug_id, self._summary(bug_id), question, branch))
 
@@ -709,6 +737,7 @@ class BugLoop:
 			self.state.mark_attempted(bug_id, "ship-queued")
 			self._update(bug_id, note="maintainer approved {}; ships after the nightly freeze window".format(branch))
 			self.state.record(bug_id, "ship-queued", branch=branch)
+			self._announce(bug_id, "ship-queued", {"branch": branch})
 			return
 		self._ship(bug_id, branch, summary, head, by_maintainer=True)
 
@@ -812,6 +841,7 @@ class BugLoop:
 			self.state.mark_attempted(bug_id, "ship-queued")
 			self._update(bug_id, note="fix ready on {}; ships after the nightly freeze window".format(branch))
 			self.state.record(bug_id, "ship-queued", branch=branch)
+			self._announce(bug_id, "ship-queued", {"branch": branch})
 			return
 		self._ship(bug_id, branch, summary, head)
 
@@ -857,7 +887,7 @@ class BugLoop:
 		with self.lock():
 			result = self.worktree.ship(branch, head, message, lambda: self.verifier.gate("fast")["ok"])
 		if not result.ok:
-			self._park(bug_id, branch, ["ship: " + result.reason])
+			self._park(bug_id, branch, ["ship: " + result.reason], announce=not emergency)
 			if emergency:
 				self._park_emergency(bug_id, "ship: " + result.reason)
 			return
@@ -1017,7 +1047,7 @@ class BugLoop:
 					note="emergency fix pushed; verifying in {} on {}".format(CI_NAMES["push"], head[:8]))
 				self._finish(bug_id, "ci-pending", branch=branch, head=head)
 				return
-		self._park(bug_id, branch, [reason])
+		self._park(bug_id, branch, [reason], announce=False)
 		self._park_emergency(bug_id, "parked: " + reason)
 
 	def _check_pending_ci(self, now):
@@ -1064,7 +1094,7 @@ class BugLoop:
 				reason = "Linux CI green on {}, but the circuit breaker is tripped".format(head[:8])
 				ci_state["pending"] = None
 				self._park_emergency(bug_id, reason)
-				self._safe_park(bug_id, branch, [reason])
+				self._safe_park(bug_id, branch, [reason], announce=False)
 				self._delete_remote(branch)
 				self.state.save()
 				return
@@ -1079,7 +1109,7 @@ class BugLoop:
 			except Exception:
 				self.log(traceback.format_exc())
 				self._park_emergency(bug_id, "the ship failed after Linux CI was green on " + head[:8])
-				self._safe_park(bug_id, branch, ["Linux CI green on {}, but the ship failed (see the runner log)".format(head[:8])])
+				self._safe_park(bug_id, branch, ["Linux CI green on {}, but the ship failed (see the runner log)".format(head[:8])], announce=False)
 			finally:
 				self._delete_remote(branch)
 				self.state.save()
@@ -1097,7 +1127,7 @@ class BugLoop:
 		try:
 			if phase.get("attempts", 0) >= self.config.emergency_attempts:
 				# Out of attempts: park the last candidate so the maintainer can decide on its diff.
-				self._park(bug_id, branch, ["emergency verification failed, no attempts left: " + retry[:300]])
+				self._park(bug_id, branch, ["emergency verification failed, no attempts left: " + retry[:300]], announce=False)
 				self.state.record(bug_id, "emergency-failed", branch=branch, head=head)
 				# The one "needs you" for running out (_emergency_due would send it otherwise).
 				phase["notified_exhausted"] = True
@@ -1150,9 +1180,9 @@ class BugLoop:
 			self._delete_remote(pending.get("branch"))
 			self.state.save()
 
-	def _safe_park(self, bug_id, branch, reasons):
+	def _safe_park(self, bug_id, branch, reasons, announce=True):
 		try:
-			self._park(bug_id, branch, reasons)
+			self._park(bug_id, branch, reasons, announce=announce)
 		except Exception:
 			self.log(traceback.format_exc())
 
@@ -1322,6 +1352,7 @@ class BugLoop:
 				if commit:
 					self._update(bug["_id"], status="resolved", note="merged into develop in " + commit)
 					self.state.record(bug["_id"], "merged-by-user", commit=commit)
+					self._announce(bug["_id"], "merged-by-user", {"commit": commit})
 
 	def _check_nightly_breaker(self, now):
 		try:

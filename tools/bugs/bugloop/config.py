@@ -32,6 +32,8 @@ class LoopConfig:
 	# The wait for develop after an emergency ship when the Nightly Release decides (its gate alone can take 180 min).
 	ci_nightly_wait_minutes: int = 240
 	emergency_attempts: int = 3
+	# Post a Discord message on every bug status change, not only ships, pings and the summary.
+	notify_status_changes: bool = True
 
 
 def load_config(path):

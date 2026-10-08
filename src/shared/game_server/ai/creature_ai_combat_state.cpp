@@ -1205,11 +1205,13 @@ namespace mmo
 			RemoveThreat(threatener);
 		});
 
-		// Watch for unit despawned signal
-		auto strongThreatener = std::static_pointer_cast<GameUnitS>(threatener.shared_from_this());
-		m_miscSignals[guid] += threatener.despawned.connect([this, strongThreatener](GameObjectS&)
+		// Watch for unit despawned signal. The slot must not own the threatener: it lives inside the
+		// threatener's own signal, so a strong capture made the threatener keep itself alive until this
+		// state disconnects - and that disconnect then destroyed the signal from inside its own slot's
+		// destructor (double free). The despawning object is kept alive by RemoveGameObject.
+		m_miscSignals[guid] += threatener.despawned.connect([this](GameObjectS& object)
 		{
-			RemoveThreat(*strongThreatener);
+			RemoveThreat(object.AsUnit());
 		});
 	}
 

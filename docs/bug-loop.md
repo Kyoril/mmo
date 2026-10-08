@@ -211,6 +211,13 @@ webhook nothing is sent. Messages:
 - circuit breaker tripped (a red nightly that lists a `Merge bugfix/...`);
 - shipped (marked as a maintainer decision when it came from the panel);
 - refix limit reached;
+- every other status change of a bug (`notify_status_changes` in `bug_loop.json`, on by
+  default): queued for a fix (with severity), fix / guided refix / feature implementation
+  started, parked for review (first reasons and branch), ships after the freeze window,
+  needs-info, duplicate, won't fix, abuse flag (never the reporter's account), design request,
+  discarded, merged by hand, interrupted, loop error. Outcomes with a message of their own
+  (shipped, refix limit, design decision needed, feature ready) are not repeated. Each message
+  links the bug and quotes the triage summary;
 - a daily summary (outcomes, Claude invocations against the budget, bugs waiting for a
   decision), sent once per UTC day when the day rolls over; it is persisted, so the restart at
   the day boundary does not send it twice or lose it;
