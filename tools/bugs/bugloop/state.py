@@ -27,6 +27,8 @@ _DEFAULT = {
 	# Maintainer-accepted features: bug id -> the accepted description. It lives here, not in
 	# the bug's artifacts folder, because the fixer can write that folder.
 	"features": {},
+	# CI watch: the newest colour per workflow, the current red phase and a pending emergency verification.
+	"ci": {"last_check": "", "colours": {}, "phase": None, "pending": None},
 }
 
 
@@ -40,6 +42,9 @@ class LoopState:
 		if isinstance(self.data["features"], list):
 			# State from before descriptions were kept: still features, without a description.
 			self.data["features"] = {bug_id: None for bug_id in self.data["features"]}
+		for key, value in copy.deepcopy(_DEFAULT["ci"]).items():
+			# data.update replaced the whole dict from an old file: fill what it lacked.
+			self.data["ci"].setdefault(key, value)
 		if not self.data["day"]:
 			self.data["day"] = today
 		self.roll(today)
@@ -130,6 +135,13 @@ class LoopState:
 
 	def count_refix(self, bug_id):
 		self.data["refix_rounds"][bug_id] = self.refix_count(bug_id) + 1
+
+	def ci_phase(self):
+		return self.data["ci"]["phase"]
+
+	def emergency_ticket(self):
+		phase = self.data["ci"]["phase"]
+		return phase.get("ticket") if phase else None
 
 	def add_feature(self, bug_id, description=None):
 		"""A maintainer-accepted feature: no round of this bug ever ships on its own. The

@@ -206,6 +206,12 @@ class GitopsTests(unittest.TestCase):
 		self.wt.prepare()
 		with self.assertRaises(gitops.GitError):
 			self.wt.resume_branch("bugfix/missing")
+	def test_branch_pushes_are_limited_to_bugfix_branches(self):
+		worktree = gitops.Worktree("main", "wt")
+		self.assertEqual(worktree.push_branch("develop", "abc")[0], False)
+		self.assertEqual(worktree.push_branch("bugfix/../develop", "abc")[0], False)
+		with self.assertRaises(ValueError):
+			worktree.delete_remote_branch("master")
 
 
 @unittest.skipUnless(sys.platform == "win32", "named mutexes are Windows-only")

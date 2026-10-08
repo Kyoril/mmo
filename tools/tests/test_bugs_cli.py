@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import unittest
+import urllib.error
 
 sys.dont_write_bytecode = True
 
@@ -121,6 +122,29 @@ class BugApiTests(unittest.TestCase):
 		self.assertTrue(request.full_url.endswith("/api/bugs/abc/review-diff"))
 		self.assertEqual(json.loads(request.data.decode("utf-8")), {"diff": "+x\n", "actor": "bug-loop"})
 
+	def test_create_system_posts_ci_failure(self):
+		api, opener = self.make({"bugId": "new1"})
+		self.assertEqual(api.create_system("red", "details", "abc", "https://run/1", actor="bug-loop"), "new1")
+		request = opener.requests[0]
+		self.assertEqual(request.get_method(), "POST")
+		self.assertTrue(request.full_url.endswith("/api/bugs/system"))
+		body = json.loads(request.data.decode("utf-8"))
+		self.assertEqual((body["kind"], body["commit"], body["runUrl"], body["actor"]), ("ci_failure", "abc", "https://run/1", "bug-loop"))
+
+	def test_create_system_conflict_returns_the_open_ticket(self):
+		def conflict(request, timeout=None):
+			raise urllib.error.HTTPError(request.full_url, 409, "Conflict", {}, io.BytesIO(b'{"bugId": "x"}'))
+
+		api = bugs.BugApi("https://example.test/", "secret", opener=conflict)
+		self.assertEqual(api.create_system("red", "d", "abc", "u"), "x")
+
+	def test_create_system_other_errors_propagate(self):
+		def broken(request, timeout=None):
+			raise urllib.error.HTTPError(request.full_url, 500, "Boom", {}, io.BytesIO(b"{}"))
+
+		api = bugs.BugApi("https://example.test/", "secret", opener=broken)
+		with self.assertRaises(urllib.error.HTTPError):
+			api.create_system("red", "d", "abc", "u")
 
 if __name__ == "__main__":
 	unittest.main()

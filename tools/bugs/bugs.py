@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -75,6 +76,17 @@ class BugApi:
 
 	def put_review_diff(self, bug_id, diff, actor="unknown"):
 		return self._call("PUT", "/api/bugs/" + urllib.parse.quote(bug_id) + "/review-diff", body={"diff": diff, "actor": actor})
+
+	def create_system(self, summary, details, commit, run_url, actor="bug-loop"):
+		"""A ticket of the bug loop itself (a red CI run). Returns the open ticket's id when one exists."""
+		body = {"kind": "ci_failure", "summary": summary[:300], "details": details[:8000], "commit": commit,
+			"runUrl": run_url, "actor": actor}
+		try:
+			return self._call("POST", "/api/bugs/system", body=body)["bugId"]
+		except urllib.error.HTTPError as error:
+			if error.code != 409:
+				raise
+			return json.loads(error.read() or b"{}")["bugId"]
 
 
 def build_parser():

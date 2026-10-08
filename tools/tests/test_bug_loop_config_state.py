@@ -44,6 +44,14 @@ class ConfigTests(unittest.TestCase):
 		self.assertEqual(config.worktree, "")
 		self.assertEqual(config.worker, "bug-loop")
 
+	def test_ci_defaults(self):
+		config = loop_config.LoopConfig()
+		self.assertEqual((config.ci_poll_seconds, config.ci_wait_minutes, config.emergency_attempts), (300, 60, 3))
+		self.assertEqual((config.ci_push_workflow, config.ci_nightly_workflow), ("ccpp.yml", "nightly-release.yml"))
+	def test_ci_defaults(self):
+		config = loop_config.LoopConfig()
+		self.assertEqual((config.ci_poll_seconds, config.ci_wait_minutes, config.emergency_attempts), (300, 60, 3))
+		self.assertEqual((config.ci_push_workflow, config.ci_nightly_workflow), ("ccpp.yml", "nightly-release.yml"))
 
 class StateTests(unittest.TestCase):
 	def setUp(self):
@@ -157,6 +165,48 @@ class StateTests(unittest.TestCase):
 		self.assertEqual(reloaded.data["pending_summary"]["day"], "2026-10-07")
 		self.assertEqual(len(reloaded.data["pending_summary"]["outcomes"]), 1)
 
+	def test_ci_state_defaults_and_helpers(self):
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["ci"], {"last_check": "", "colours": {}, "phase": None, "pending": None})
+		self.assertIsNone(state.emergency_ticket())
+		state.data["ci"]["phase"] = {"ticket": "a" * 24}
+		state.save()
+		state = loop_state.LoopState(self.path, "2026-10-09")
+		self.assertEqual(state.emergency_ticket(), "a" * 24)
+
+	def test_old_state_files_get_the_ci_keys(self):
+		with open(self.path, "w", encoding="utf-8") as handle:
+			json.dump({"day": "2026-10-08", "invocations": 2}, handle)
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["ci"]["colours"], {})
+		self.assertIsNone(state.ci_phase())
+		with open(self.path, "w", encoding="utf-8") as handle:
+			json.dump({"day": "2026-10-08", "ci": {"colours": {"ccpp.yml": "red"}}}, handle)
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["ci"]["colours"], {"ccpp.yml": "red"})
+		self.assertEqual((state.data["ci"]["last_check"], state.data["ci"]["pending"]), ("", None))
+		self.assertIsNone(state.emergency_ticket())
+	def test_ci_state_defaults_and_helpers(self):
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["ci"], {"last_check": "", "colours": {}, "phase": None, "pending": None})
+		self.assertIsNone(state.emergency_ticket())
+		state.data["ci"]["phase"] = {"ticket": "a" * 24}
+		state.save()
+		state = loop_state.LoopState(self.path, "2026-10-09")
+		self.assertEqual(state.emergency_ticket(), "a" * 24)
+
+	def test_old_state_files_get_the_ci_keys(self):
+		with open(self.path, "w", encoding="utf-8") as handle:
+			json.dump({"day": "2026-10-08", "invocations": 2}, handle)
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["ci"]["colours"], {})
+		self.assertIsNone(state.ci_phase())
+		with open(self.path, "w", encoding="utf-8") as handle:
+			json.dump({"day": "2026-10-08", "ci": {"colours": {"ccpp.yml": "red"}}}, handle)
+		state = loop_state.LoopState(self.path, "2026-10-08")
+		self.assertEqual(state.data["ci"]["colours"], {"ccpp.yml": "red"})
+		self.assertEqual((state.data["ci"]["last_check"], state.data["ci"]["pending"]), ("", None))
+		self.assertIsNone(state.emergency_ticket())
 
 class FreezeTests(unittest.TestCase):
 	def test_inside_and_outside(self):

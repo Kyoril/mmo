@@ -56,6 +56,12 @@ class PromptTests(unittest.TestCase):
 		fix = self.read("fix.md")
 		for fragment in ("no_project_basis", "expected_source", "FIX.json", "Co-Authored-By", "Never push"):
 			self.assertIn(fragment, fix)
+		self.assertIn("CI FAILURE", fix)
+		self.assertIn("never weaken, skip or delete a test", " ".join(fix.split()))
+		self.assertIn("CI FAILURE", self.read("review.md"))
+		self.assertIn("CI FAILURE", fix)
+		self.assertIn("never weaken, skip or delete a test", " ".join(fix.split()))
+		self.assertIn("CI FAILURE", self.read("review.md"))
 		self.assertIn("reduces_security", self.read("review.md"))
 		self.assertIn("MAINTAINER GUIDANCE", fix)
 		self.assertIn("design_question", self.read("review.md"))

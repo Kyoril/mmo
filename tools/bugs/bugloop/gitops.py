@@ -10,6 +10,7 @@ import subprocess
 
 from .guard import FileChange
 
+_EMERGENCY_BRANCH = re.compile(r"bugfix/[0-9a-f]{8}")
 SUBMODULES = ("data/client", "data/editor")
 ShipResult = collections.namedtuple("ShipResult", "ok commit reason")
 
@@ -227,3 +228,22 @@ class Worktree:
 
 	def delete_branch(self, branch):
 		run_git(self.main_repo, "branch", "-D", branch, check=False)
+
+	def push_branch(self, branch, head):
+		"""Pushes an emergency branch for CI verification; nothing but bugfix/<id8> ever goes out here."""
+		if not _EMERGENCY_BRANCH.fullmatch(branch):
+			return False, "refusing to push " + branch
+		push = run_git(self.path, "push", "--force", self.remote, "{}:refs/heads/{}".format(head, branch), check=False)
+		if push.returncode != 0:
+			return False, "push of {} failed: {}".format(branch, push.stderr.strip()[-300:])
+		return True, ""
+
+	def delete_remote_branch(self, branch):
+		if not _EMERGENCY_BRANCH.fullmatch(branch):
+			raise ValueError("refusing to delete " + branch)
+		run_git(self.path, "push", self.remote, "--delete", branch, check=False)
+
+	def log_lines(self, base, head, limit=30):
+		rng = "{}..{}".format(base, head) if base else head
+		out = run_git(self.main_repo, "log", "--first-parent", "--format=%h %s", "-n", str(limit), rng, check=False)
+		return [line for line in out.stdout.splitlines() if line.strip()]

@@ -125,6 +125,24 @@ class MessageTests(unittest.TestCase):
 		self.assertIn("https://ui.example/bugs/" + "a" * 24, text)
 		self.assertIn("bugfix/aaaaaaaa", text)
 
+	def test_ci_messages(self):
+		notifier = notify.Notifier("", "https://ui.example")
+		red = notify.ci_red_message(notifier, "a" * 24, "Linux Servers", "tests", "https://github.com/run/1")
+		self.assertIn("develop is red", red)
+		self.assertIn("https://ui.example/bugs/" + "a" * 24, red)
+		self.assertIn("https://github.com/run/1", red)
+		self.assertIn("Emergency fix shipped", notify.emergency_shipped_message(notifier, "a" * 24, "abcdef123"))
+		self.assertIn("needs you", notify.emergency_needs_you_message(notifier, "a" * 24, "3 attempts failed"))
+		self.assertIn("green again", notify.ci_green_message(["Linux Servers"]))
+	def test_ci_messages(self):
+		notifier = notify.Notifier("", "https://ui.example")
+		red = notify.ci_red_message(notifier, "a" * 24, "Linux Servers", "tests", "https://github.com/run/1")
+		self.assertIn("develop is red", red)
+		self.assertIn("https://ui.example/bugs/" + "a" * 24, red)
+		self.assertIn("https://github.com/run/1", red)
+		self.assertIn("Emergency fix shipped", notify.emergency_shipped_message(notifier, "a" * 24, "abcdef123"))
+		self.assertIn("needs you", notify.emergency_needs_you_message(notifier, "a" * 24, "3 attempts failed"))
+		self.assertIn("green again", notify.ci_green_message(["Linux Servers"]))
 
 if __name__ == "__main__":
 	unittest.main()
