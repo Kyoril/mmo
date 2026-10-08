@@ -223,7 +223,17 @@ class GitopsTests(unittest.TestCase):
 			self.assertEqual(worktree.log_lines("-n1", "abcdef0"), [])
 			self.assertEqual(worktree.log_lines("abcdef0", ""), [])
 			self.assertEqual(worktree.log_lines("abcdef0", "HEAD"), [])
+			self.assertFalse(worktree.is_ancestor("--all", "abcdef0"))
+			self.assertFalse(worktree.is_ancestor("abcdef0", "HEAD"))
+			self.assertFalse(worktree.is_ancestor("", "abcdef0"))
 			run.assert_not_called()
+
+	def test_is_ancestor(self):
+		base, head = self.make_fix()
+		self.assertTrue(self.wt.is_ancestor(base, head))
+		self.assertTrue(self.wt.is_ancestor(head, head))
+		self.assertFalse(self.wt.is_ancestor(head, base))
+		self.assertFalse(self.wt.is_ancestor("0" * 40, head))  # unknown even after a fetch
 
 	def test_emergency_branch_push_log_and_delete(self):
 		base, head = self.make_fix()

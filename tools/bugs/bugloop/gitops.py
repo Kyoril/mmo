@@ -248,6 +248,19 @@ class Worktree:
 			raise ValueError("refusing to delete " + branch)
 		run_git(self.path, "push", "--delete", "--", self.remote, branch, check=False)
 
+	def is_ancestor(self, ancestor, descendant):
+		"""True when commit `ancestor` is `descendant` or one of its ancestors. Only hex ids are
+		accepted; an unknown commit is fetched once, and anything still unknown is False."""
+		if not _SHORT_SHA.fullmatch(ancestor or "") or not _SHORT_SHA.fullmatch(descendant or ""):
+			return False
+		for attempt in range(2):
+			check = run_git(self.main_repo, "merge-base", "--is-ancestor", ancestor, descendant, check=False)
+			if check.returncode in (0, 1):
+				return check.returncode == 0
+			if attempt == 0:
+				run_git(self.main_repo, "fetch", self.remote, check=False)
+		return False
+
 	def log_lines(self, base, head, limit=30):
 		if (base and not _SHORT_SHA.fullmatch(base)) or not _SHORT_SHA.fullmatch(head or ""):
 			return []

@@ -217,6 +217,7 @@ class FakeWorktree:
 		self.prepare_error = None
 		self.pushed = []
 		self.remote_deleted = []
+		self.ancestors = True
 
 	def prepare(self):
 		if self.prepare_error:
@@ -276,6 +277,9 @@ class FakeWorktree:
 
 	def delete_remote_branch(self, branch):
 		self.remote_deleted.append(branch)
+
+	def is_ancestor(self, ancestor, descendant):
+		return self.ancestors
 
 
 class FakeGitHub:
@@ -1535,6 +1539,12 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(len([kind for kind, _ in self.runner.inputs if kind == "fix"]), 1)
 		self.assertEqual(sum("needs you" in m for m in self.notifier.messages), 1)
 		self.assertEqual(self.api.bugs[ticket]["status"], "pr_open")
+		# Parked with its diff, so the maintainer can decide on the last candidate.
+		self.assertEqual(self.api.bugs[ticket]["prUrl"], "branch:" + branch)
+		self.assertIn("emergency verification failed", self.api.notes(ticket)[-1])
+		self.assertIn("emergency-failed", self.outcomes())
+		self.assertIn("parked", self.outcomes())
+		self.assertIn(ticket, [bug for bug, _ in self.api.review_diffs])
 
 	def test_ci_wait_times_out(self):
 		ticket = self.run_emergency(emergency_attempts=1)
@@ -1671,6 +1681,106 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertEqual(self.state.data["ship_queue"], [])
 		self.assertIn(loop.EMERGENCY_REASON, self.api.notes(ticket)[-1])
+
+
+	# Fix round 1: maintainer decisions and the wait after an emergency ship.
+
+	def fixes(self):
+		return len([kind for kind, _ in self.runner.inputs if kind == "fix"])
+
+	def test_discard_while_pending_stops_the_emergency(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		self.api.bugs[ticket]["decision"] = self.decision("discard", "a human fixes this")
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "failure", "head1", branch=branch))
+		fixes = self.fixes()
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.now += datetime.timedelta(minutes=61)
+		self.loop.poll_once()
+		self.assertEqual(self.fixes(), fixes)
+		self.assertEqual(self.api.bugs[ticket]["status"], "wontfix")
+		self.assertIsNone(self.state.data["ci"]["pending"])
+		self.assertIn(branch, self.worktree.remote_deleted)
+		self.assertTrue(self.state.ci_phase()["parked"])
+		self.assertFalse(any("needs you" in m for m in self.notifier.messages))
+
+	def test_maintainer_ship_while_pending_awaits_develop(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		self.api.bugs[ticket]["decision"] = self.decision("ship")
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual([b for b, _ in self.worktree.shipped], [branch])
+		self.assertIsNone(self.state.data["ci"]["pending"])
+		self.assertIn(branch, self.worktree.remote_deleted)
+		phase = self.state.ci_phase()
+		self.assertEqual(phase["awaiting_develop"], "merge1")
+		self.assertFalse(phase["parked"])
+		self.assertFalse(phase["resume"])
+		# A green branch run arriving now changes nothing: the check is gone.
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertFalse(any("needs you" in m for m in self.notifier.messages))
+
+	def test_a_ticket_moved_since_the_push_drops_the_check(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		self.api.bugs[ticket]["status"] = "needs_decision"
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIsNone(self.state.data["ci"]["pending"])
+		self.assertIn(branch, self.worktree.remote_deleted)
+
+	def ship_emergency(self):
+		ticket = self.run_emergency()
+		branch = "bugfix/" + ticket[-8:]
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(5, "success", "head1", branch=branch))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		return ticket
+
+	def test_an_older_red_run_after_the_ship_spends_no_attempt(self):
+		self.ship_emergency()
+		self.worktree.ancestors = False  # the run's commit does not contain the merge
+		fixes = self.fixes()
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(7, "failure", "older1"))
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.fixes(), fixes)
+		self.assertEqual(self.state.ci_phase()["attempts"], 1)
+		self.assertEqual(self.state.ci_phase()["awaiting_develop"], "merge1")
+
+	def test_awaiting_develop_times_out_once(self):
+		self.ship_emergency()
+		self.now += datetime.timedelta(minutes=61)
+		self.loop.poll_once()
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(sum("needs you" in m for m in self.notifier.messages), 1)
+		self.assertTrue(self.state.ci_phase()["parked"])
+
+	def test_maintainer_ship_of_a_parked_emergency_fix_unparks(self):
+		ticket = self.run_emergency(review=dict(GOOD_REVIEW, fixes_symptom=False))
+		self.assertTrue(self.state.ci_phase()["parked"])
+		self.api.bugs[ticket]["decision"] = self.decision("ship")
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual([b for b, _ in self.worktree.shipped], ["bugfix/" + ticket[-8:]])
+		phase = self.state.ci_phase()
+		self.assertFalse(phase["parked"])
+		self.assertEqual(phase["awaiting_develop"], "merge1")
+		# develop is still red with the fix in it: the loop tries again.
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(7, "failure", "merge1"))
+		fixes = self.fixes()
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.fixes(), fixes + 1)
 
 
 class DecideTests(unittest.TestCase):

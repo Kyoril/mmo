@@ -608,6 +608,8 @@ class BugLoop:
 			except Exception:
 				self.log(traceback.format_exc())
 				continue
+			# A maintainer decision supersedes a pending CI check of the same bug (the emergency ticket).
+			self._drop_pending_check(bug_id)
 			try:
 				if action == "discard":
 					self._discard(bug_id, guidance)
@@ -642,6 +644,10 @@ class BugLoop:
 	def _discard(self, bug_id, guidance):
 		self._drop_queued_ship(bug_id)
 		self.worktree.delete_branch("bugfix/" + short_id(bug_id))
+		if bug_id == self.state.emergency_ticket():
+			# No more automatic attempts on a ticket the maintainer discarded.
+			self.state.ci_phase()["parked"] = True
+			self.state.save()
 		self._release(bug_id, "wontfix", "discarded by maintainer: " + (guidance or "(no reason given)"))
 		self._finish(bug_id, "discarded")
 
@@ -858,13 +864,9 @@ class BugLoop:
 		if not by_maintainer and not emergency:
 			self.state.count_autoship()
 		outcome = "shipped-emergency" if emergency else ("shipped-by-maintainer" if by_maintainer else "shipped")
-		if emergency:
-			phase = self.state.ci_phase()
-			# The branch is merged, so a later attempt starts fresh; none starts before develop's own
-			# CI run on the merge is red again (_refresh_ci_phase) or green (_close_ci_phase).
-			phase["resume"] = False
-			phase["awaiting_develop"] = result.commit
-			self.state.save()
+		if emergency or bug_id == self.state.emergency_ticket():
+			# Also a maintainer ship of the emergency ticket: develop's own CI run now decides.
+			self._await_develop(result.commit)
 		# The merge is on develop now: nothing below may undo that by releasing the bug.
 		try:
 			self.worktree.delete_branch(branch)
@@ -936,7 +938,16 @@ class BugLoop:
 		left (running out notifies the maintainer once) and whose ticket is `triaged` in the API (a
 		maintainer who discards or parks it stops the retries)."""
 		phase = self.state.ci_phase()
-		if not phase or phase.get("parked") or self.state.data["ci"]["pending"] or phase.get("awaiting_develop"):
+		if not phase:
+			return False
+		if phase.get("awaiting_develop"):
+			deadline = phase.get("awaiting_deadline")
+			if not phase.get("parked") and deadline and self.clock() >= datetime.datetime.fromisoformat(deadline):
+				# develop's run on the merge never finished (cancelled, say): leave it to the maintainer, once.
+				self._park_emergency(phase["ticket"], "develop's CI did not finish on the emergency merge {} within {} minutes".format(
+					phase["awaiting_develop"][:8], self.config.ci_wait_minutes))
+			return False
+		if phase.get("parked") or self.state.data["ci"]["pending"]:
 			return False
 		if not valid_bug_id(phase.get("ticket")):
 			return False
@@ -1025,6 +1036,18 @@ class BugLoop:
 			self._delete_remote(branch)
 			self.state.save()
 			return
+		try:
+			ticket = self.api.show(bug_id)
+		except Exception:
+			self.log(traceback.format_exc())
+			return  # look again on the next poll
+		if ticket.get("status") != "pr_open" or ticket.get("prUrl") != "branch:" + branch:
+			# Someone (the maintainer) moved the ticket since the push: the check is stale.
+			self.log("ci watch: dropping the CI check of {}: the ticket is {} now".format(bug_id, ticket.get("status")))
+			ci_state["pending"] = None
+			self._delete_remote(branch)
+			self.state.save()
+			return
 		result = None
 		try:
 			runs = [item for item in self.github.runs(self.config.ci_push_workflow, branch=branch)
@@ -1073,8 +1096,12 @@ class BugLoop:
 		phase["ci"]["retry"] = retry
 		try:
 			if phase.get("attempts", 0) >= self.config.emergency_attempts:
-				self._update(bug_id, note="emergency verification failed; no attempts left: " + retry[:500])
-				self._finish(bug_id, "emergency-failed", branch=branch, head=head)
+				# Out of attempts: park the last candidate so the maintainer can decide on its diff.
+				self._park(bug_id, branch, ["emergency verification failed, no attempts left: " + retry[:300]])
+				self.state.record(bug_id, "emergency-failed", branch=branch, head=head)
+				# The one "needs you" for running out (_emergency_due would send it otherwise).
+				phase["notified_exhausted"] = True
+				self._park_emergency(bug_id, "{} attempts failed; develop stays red".format(phase["attempts"]))
 			else:
 				# Back to `triaged`, where _emergency_due picks it up again (on the same branch).
 				self._update(bug_id, status="triaged", prUrl="", note="emergency verification failed; retrying: " + retry[:500])
@@ -1087,6 +1114,34 @@ class BugLoop:
 		ci_state["pending"] = None
 		self._delete_remote(branch)
 		self.state.save()
+
+	def _await_develop(self, commit):
+		"""The emergency fix is merged in `commit`: no attempt starts until develop's own CI run on it
+		(or a descendant) is red (_refresh_ci_phase) or green (_close_ci_phase), or the wait times out
+		(_emergency_due). A later attempt starts on a fresh branch; a maintainer ship un-parks."""
+		phase = self.state.ci_phase()
+		if phase is None:
+			return
+		phase["resume"] = False
+		phase["parked"] = False
+		phase["notified_exhausted"] = False
+		phase["awaiting_develop"] = commit
+		phase["awaiting_deadline"] = (self.clock() + datetime.timedelta(minutes=self.config.ci_wait_minutes)).isoformat()
+		self.state.save()
+
+	def _descends(self, ancestor, commit):
+		try:
+			return bool(self.worktree.is_ancestor(ancestor, commit))
+		except Exception:
+			self.log(traceback.format_exc())
+			return False
+
+	def _drop_pending_check(self, bug_id):
+		pending = self.state.data["ci"]["pending"]
+		if pending and pending.get("bug") == bug_id:
+			self.state.data["ci"]["pending"] = None
+			self._delete_remote(pending.get("branch"))
+			self.state.save()
 
 	def _safe_park(self, bug_id, branch, reasons):
 		try:
@@ -1195,12 +1250,14 @@ class BugLoop:
 			if failed_restart:
 				context["retry"] = context["excerpt"]
 			phase["ci"] = context
-			if phase.get("awaiting_develop"):
-				# develop is still (or again) red after the emergency fix shipped: the ticket goes back
-				# to `triaged`, where _emergency_due retries it while attempts remain.
+			if phase.get("awaiting_develop") and self._descends(phase["awaiting_develop"], run.get("head_sha") or ""):
+				# develop is still (or again) red with the emergency fix in it: the ticket goes back
+				# to `triaged`, where _emergency_due retries it while attempts remain. An older run
+				# finishing after the ship proves nothing about the fix.
 				self._update(ticket, status="triaged", prUrl="", logTail=context["excerpt"] or "(no log)",
 					note="still red after the emergency fix: " + context["run_url"])
 				phase["awaiting_develop"] = None
+				phase["awaiting_deadline"] = None
 			else:
 				self._update(ticket, logTail=context["excerpt"] or "(no log)", note="still red: " + context["run_url"])
 			phase["red_runs"][key] = run["id"]
@@ -1240,6 +1297,9 @@ class BugLoop:
 			return
 		self.github.dispatch(self.config.ci_nightly_workflow, "develop")
 		phase["nightly_dispatched"].append(sha)
+		if phase.get("awaiting_develop"):
+			# The restarted nightly is the run that decides now; its wait starts with the dispatch.
+			phase["awaiting_deadline"] = (self.clock() + datetime.timedelta(minutes=self.config.ci_wait_minutes)).isoformat()
 		self.log("ci watch: restarted the Nightly Release for " + sha[:8])
 		self._update(phase["ticket"], note="restarted the Nightly Release for " + sha[:8])
 
