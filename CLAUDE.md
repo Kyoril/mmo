@@ -30,7 +30,9 @@ The following systems are fully implemented and should not be suggested as futur
   data/docs tweaks the user explicitly requests.
 - The quality gate has three tiers (`tools/gate/verify.ps1 -Tier fast|full`):
   - **Merge (fast):** `/ship` merges a feature branch into `develop` after a green fast
-    gate for HEAD — protocol check, build, unit tests, tool tests (~1.5 min incremental).
+    gate for HEAD — protocol check, build, unit tests, tool tests, then the same server
+    targets built and tested on Linux in WSL (`tools/gate/linux_gate.sh`; gcc catches what
+    MSVC does not, and the servers ship on Linux).
     It runs the gate itself when needed. `/gate` runs the same check on demand;
     `/gate full` adds E2E and a code review for risky changes.
   - **Nightly (full):** the "MMO Nightly Gate" task runs the full gate including E2E on
