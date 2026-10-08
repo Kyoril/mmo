@@ -19,6 +19,21 @@ bug_loop = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(bug_loop)
 
 
+class BreakerCommandTests(unittest.TestCase):
+	def test_breaker_on_always_changes_a_tripped_breaker(self):
+		with tempfile.TemporaryDirectory() as repo:
+			artifacts = os.path.join(repo, "artifacts", "bug-loop")
+			bug_loop.loop_state.trip_breaker(artifacts, "nightly run 10 is red", bug_loop.loop.utcnow())
+			path = os.path.join(artifacts, bug_loop.loop_state.BREAKER_FILE)
+			with open(path, encoding="utf-8") as handle:
+				before = handle.read()
+			self.assertEqual(bug_loop.main(["--repo", repo, "breaker", "on", "--reason", "hold"]), 0)
+			with open(path, encoding="utf-8") as handle:
+				after = handle.read()
+			self.assertTrue(after.startswith(before))
+			self.assertTrue(after.rstrip("\n").endswith("hold (set by hand)"))
+
+
 class StartupTests(unittest.TestCase):
 	def test_decoder_is_built_from_the_runtime_schemas_with_main_protoc(self):
 		with tempfile.TemporaryDirectory() as repo:

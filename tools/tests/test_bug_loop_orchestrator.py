@@ -1816,6 +1816,30 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertTrue(self.state.ci_phase()["parked"])
 
+	def test_breaker_set_by_hand_over_the_nightly_trip_parks_the_emergency_fix_once(self):
+		ticket, branch = self.run_emergency_with_red_nightly()
+		self.assertEqual(self.state.data["breaker_source"]["nightly_run"], 10)
+		# The maintainer's hold on top of the loop's own trip (what `bug_loop.py breaker on` does).
+		loop_state.trip_breaker(self.artifacts, "hold everything", self.now, by_hand=True)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertTrue(self.state.ci_phase()["parked"])
+		self.assertEqual(len([m for m in self.notifier.messages if "needs you" in m]), 1)
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(len([m for m in self.notifier.messages if "needs you" in m]), 1)
+
+	def test_a_nightly_name_with_unicode_digits_records_no_source(self):
+		self.assertIsNone(loop._nightly_run_id("nightly run \u00b2"))
+		self.assertIsNone(loop._nightly_run_id("nightly run "))
+		self.assertEqual(loop._nightly_run_id("nightly run 42"), 42)
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.nightly = lambda: ("nightly run \u00b2", self.BLAMING_NIGHTLY)
+		self.loop.poll_once()  # must not raise after the trip
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+		self.assertIsNone(self.state.data["breaker_source"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "wontfix")
+
 	def test_breaker_source_is_cleared_once_the_breaker_is_reset(self):
 		self.run_emergency_with_red_nightly()
 		loop_state.reset_breaker(self.artifacts)

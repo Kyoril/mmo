@@ -306,6 +306,8 @@ fix of a red phase that saw that same nightly run red ships despite the breaker.
 else stays blocked, and the breaker stays tripped after the emergency ship: reset it yourself
 as always. A breaker set by hand (`breaker on`), tripped for another run, or reset and set
 again, keeps blocking the emergency fix too; it parks with "Emergency fix needs you".
+`breaker on` on an already tripped breaker appends a line marked "(set by hand)", so a
+hold set on top of the loop's own trip also ends the exemption.
 
 
 ```powershell

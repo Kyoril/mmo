@@ -176,14 +176,21 @@ def breaker_active(artifacts_dir):
 	return os.path.exists(os.path.join(artifacts_dir, BREAKER_FILE))
 
 
-def trip_breaker(artifacts_dir, reason, now_utc):
-	"""Writes the breaker file. True when this call tripped it, False when it already was."""
+def trip_breaker(artifacts_dir, reason, now_utc, by_hand=False):
+	"""Writes the breaker file. True when this call tripped it, False when it already was.
+	`by_hand` (the `breaker on` command): the line is marked "(set by hand)" and is appended to a
+	breaker that is already tripped, so the file always changes. That is what keeps a maintainer's
+	hold from being mistaken for the loop's own nightly trip (BugLoop._breaker_allows_emergency)."""
 	path = os.path.join(artifacts_dir, BREAKER_FILE)
+	line = "{}Z {}{}\n".format(now_utc.strftime("%Y-%m-%dT%H:%M:%S"), reason, " (set by hand)" if by_hand else "")
 	if os.path.exists(path):
+		if by_hand:
+			with open(path, "a", encoding="utf-8") as handle:
+				handle.write(line)
 		return False
 	os.makedirs(artifacts_dir, exist_ok=True)
 	with open(path, "w", encoding="utf-8") as handle:
-		handle.write("{}Z {}\n".format(now_utc.strftime("%Y-%m-%dT%H:%M:%S"), reason))
+		handle.write(line)
 	return True
 
 

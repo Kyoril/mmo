@@ -79,9 +79,13 @@ def short_id(bug_id):
 def _nightly_run_id(name):
 	"""The GitHub run id in a breaker source name ("nightly run 123", see ci.newest_nightly), or None."""
 	prefix = "nightly run "
-	if not isinstance(name, str) or not name.startswith(prefix) or not name[len(prefix):].isdigit():
+	if not isinstance(name, str) or not name.startswith(prefix):
 		return None
-	return int(name[len(prefix):])
+	suffix = name[len(prefix):]
+	# ASCII digits only: str.isdigit() accepts "²", which int() then rejects.
+	if not re.fullmatch(r"[0-9]+", suffix):
+		return None
+	return int(suffix)
 
 
 def utcnow():

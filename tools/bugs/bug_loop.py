@@ -122,7 +122,7 @@ def main(argv=None):
 	now = loop.utcnow()
 	if args.command == "breaker":
 		if args.action == "on":
-			loop_state.trip_breaker(artifacts, args.reason, now)
+			loop_state.trip_breaker(artifacts, args.reason, now, by_hand=True)
 		elif args.action == "off":
 			loop_state.reset_breaker(artifacts)
 		print("breaker: " + ("tripped" if loop_state.breaker_active(artifacts) else "clear"))

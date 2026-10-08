@@ -209,6 +209,18 @@ class BreakerTests(unittest.TestCase):
 			loop_state.reset_breaker(folder)
 			self.assertFalse(loop_state.breaker_active(folder))
 
+	def test_trip_by_hand_appends_to_a_tripped_breaker(self):
+		with tempfile.TemporaryDirectory() as folder:
+			path = os.path.join(folder, loop_state.BREAKER_FILE)
+			self.assertTrue(loop_state.trip_breaker(folder, "nightly run 10 is red", utc("2026-10-07 10:00")))
+			self.assertFalse(loop_state.trip_breaker(folder, "again", utc("2026-10-07 10:05")))
+			with open(path, encoding="utf-8") as handle:
+				self.assertEqual(handle.read(), "2026-10-07T10:00:00Z nightly run 10 is red\n")
+			self.assertFalse(loop_state.trip_breaker(folder, "hold", utc("2026-10-07 11:00"), by_hand=True))
+			with open(path, encoding="utf-8") as handle:
+				self.assertEqual(handle.read().splitlines(), ["2026-10-07T10:00:00Z nightly run 10 is red",
+					"2026-10-07T11:00:00Z hold (set by hand)"])
+
 	def test_red_nightly_with_loop_merge_blames_loop(self):
 		loop_merge = "abc123 Merge bugfix/0a1b2c3d (bug-loop, gate green at 1234abcd)"
 		self.assertTrue(loop_state.red_nightly_blames_loop({"passed": False, "merges_since_last_green": [loop_merge]}))
