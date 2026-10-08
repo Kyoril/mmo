@@ -36,6 +36,10 @@ FEATURE_REASON = "feature: shipping needs the maintainer's approval"
 BUG_ID = re.compile(r"^[0-9a-f]{24}$")
 # While develop is red in CI nothing but the emergency ticket ships; everything else queues.
 RED_REASON = "develop is red"
+# The pre-ship CI check failed (not GitHub: the bug API, say): the CI state is unknown, so nothing ships.
+CI_UNKNOWN_REASON = "CI check failed"
+# Statuses of a GitHub run that has not finished yet.
+ACTIVE_RUN_STATUSES = ("queued", "in_progress", "waiting", "pending", "requested")
 CI_NAMES = {"push": "Linux Servers", "nightly": "Nightly Release"}
 # The triage verdict written for an emergency ticket (for the operator; the loop reads its context from state).
 EMERGENCY_VERDICT = {"category": "defect", "severity": "critical", "component": "ci", "observed": "develop is red in CI",
@@ -629,12 +633,9 @@ class BugLoop:
 		if any(item.get("bug") == bug_id for item in self.state.data["ship_queue"]):
 			self._update(bug_id, note="already queued to ship after the freeze window")
 			return
-		self._watch_ci(self.clock())
-		if self._develop_red() and bug_id != self.state.emergency_ticket():
-			self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=True)
-			self.state.mark_attempted(bug_id, "ship-queued")
-			self._update(bug_id, note="maintainer approved {}; {}: ships once CI is green".format(branch, RED_REASON))
-			self.state.record(bug_id, "ship-queued", branch=branch, reason=RED_REASON)
+		reason = self._ci_hold(bug_id)
+		if reason:
+			self._queue_for_ci(bug_id, branch, summary, head, reason, "maintainer approved {}".format(branch), by_maintainer=True)
 			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=True)
@@ -731,13 +732,9 @@ class BugLoop:
 		if self.dry_run:
 			self._finish(bug_id, "would-ship", branch=branch)
 			return
-		# A fix can take an hour and more; look at CI again (rate-limited) before deciding.
-		self._watch_ci(self.clock())
-		if self._develop_red() and bug_id != self.state.emergency_ticket():
-			self.state.enqueue_ship(bug_id, branch, summary, head)
-			self.state.mark_attempted(bug_id, "ship-queued")
-			self._update(bug_id, note="fix ready on {}; {}: ships once CI is green".format(branch, RED_REASON))
-			self.state.record(bug_id, "ship-queued", branch=branch, reason=RED_REASON)
+		reason = self._ci_hold(bug_id)
+		if reason:
+			self._queue_for_ci(bug_id, branch, summary, head, reason, "fix ready on {}".format(branch))
 			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head)
@@ -746,6 +743,35 @@ class BugLoop:
 			self.state.record(bug_id, "ship-queued", branch=branch)
 			return
 		self._ship(bug_id, branch, summary, head)
+
+	def _recheck_ci(self):
+		"""The CI check right before a ship decision (a fix can take an hour and more); rate-limited.
+		False when it failed for another reason than GitHub: the CI state is unknown then."""
+		try:
+			self._watch_ci(self.clock())
+			return True
+		except Exception:
+			self.log(traceback.format_exc())
+			return False
+
+	def _ci_hold(self, bug_id):
+		"""Why `bug_id` must not ship now because of CI, or "" when it may."""
+		if not self._recheck_ci():
+			return CI_UNKNOWN_REASON
+		if self._develop_red() and bug_id != self.state.emergency_ticket():
+			return RED_REASON
+		return ""
+
+	def _queue_for_ci(self, bug_id, branch, summary, head, reason, what, by_maintainer=False):
+		self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=by_maintainer)
+		self.state.mark_attempted(bug_id, "ship-queued")
+		self.state.record(bug_id, "ship-queued", branch=branch, reason=reason)
+		self.state.save()
+		when = "ships once CI is green" if reason == RED_REASON else "ships once CI is confirmed green"
+		try:
+			self._update(bug_id, note="{}; {}: {}".format(what, reason, when))
+		except Exception:  # the fix is queued; a lost note must not throw it away
+			self.log(traceback.format_exc())
 
 	def _ship(self, bug_id, branch, summary, head, by_maintainer=False):
 		label = "maintainer decision" if by_maintainer else "gate green at " + head[:8]
@@ -773,7 +799,8 @@ class BugLoop:
 	def _ship_queued(self, now):
 		if loop_state.in_freeze(now, self.config.freeze_start_utc, self.config.freeze_end_utc):
 			return
-		self._watch_ci(now)
+		if self.state.data["ship_queue"] and not self._recheck_ci():
+			return  # CI state unknown: everything stays queued
 		pending = self.state.take_ship_queue()
 		kept = []
 		if self._develop_red():
@@ -848,7 +875,7 @@ class BugLoop:
 				# Only a green run of every workflow that was red ends the phase; a workflow GitHub
 				# lists no completed run for (renamed, all in progress) proves nothing.
 				self._close_ci_phase(newest)
-			self._restart_nightly(newest, colours)
+			self._restart_nightly(newest, colours, lists["nightly"])
 		except github.GitHubError as error:
 			self.log("ci watch: " + str(error))
 		except BaseException:
@@ -886,7 +913,7 @@ class BugLoop:
 			actor=self.config.worker)
 		self.state.data["ci"]["phase"] = {"since": now.isoformat(), "ticket": ticket,
 			"red_runs": {name: run["id"] for name, run in red.items()}, "ci": context, "attempts": 0,
-			"nightly_dispatched": [], "parked": False, "notified_exhausted": False}
+			"nightly_dispatched": [], "parked": False, "notified_exhausted": False, "counted_runs": []}
 		if valid_bug_id(ticket):
 			self._write(ticket, "report.json", {"_id": ticket, "comment": summary, "subject": {"type": "generic", "id": 0}})
 			self._write(ticket, "triage.json", EMERGENCY_VERDICT)
@@ -902,14 +929,20 @@ class BugLoop:
 		for key, run in red.items():
 			if phase["red_runs"].get(key) == run["id"]:
 				continue
-			phase["red_runs"][key] = run["id"]
-			context = self._ci_context(key, run, lists[key])
-			phase["ci"] = context
-			self._update(ticket, logTail=context["excerpt"] or "(no log)", note="still red: " + context["run_url"])
-			if key == "nightly" and run.get("head_sha") in phase["nightly_dispatched"]:
+			# The run counts as seen only once all of this succeeded, so a transient error retries it;
+			# the attempt is counted once per run however often that happens.
+			failed_restart = key == "nightly" and run.get("head_sha") in phase["nightly_dispatched"]
+			counted = phase.setdefault("counted_runs", [])
+			if failed_restart and run["id"] not in counted:
 				# The restarted nightly failed again.
 				phase["attempts"] += 1
-				phase["ci"]["retry"] = context["excerpt"]
+				counted.append(run["id"])
+			context = self._ci_context(key, run, lists[key])
+			if failed_restart:
+				context["retry"] = context["excerpt"]
+			phase["ci"] = context
+			self._update(ticket, logTail=context["excerpt"] or "(no log)", note="still red: " + context["run_url"])
+			phase["red_runs"][key] = run["id"]
 
 	def _close_ci_phase(self, newest):
 		phase = self.state.ci_phase()
@@ -933,10 +966,13 @@ class BugLoop:
 		self.log("ci watch: develop is green again, ticket {} resolved".format(ticket))
 		self.notifier.send(notify.ci_green_message([CI_NAMES[key] for key in newest if newest[key]]))
 
-	def _restart_nightly(self, newest, colours):
-		"""A red Nightly Release reruns once a newer develop commit is green in the push workflow."""
+	def _restart_nightly(self, newest, colours, nightly_runs):
+		"""A red Nightly Release reruns once a newer develop commit is green in the push workflow,
+		unless a nightly run is already queued or running."""
 		phase = self.state.ci_phase()
 		if phase is None or colours.get("nightly") != "red" or colours.get("push") != "green":
+			return
+		if any(run.get("status") in ACTIVE_RUN_STATUSES for run in nightly_runs):
 			return
 		sha = newest["push"].get("head_sha") or ""
 		if not sha or sha == newest["nightly"].get("head_sha") or sha in phase["nightly_dispatched"]:

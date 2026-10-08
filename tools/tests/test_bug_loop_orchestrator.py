@@ -278,6 +278,8 @@ class FakeGitHub:
 		self.logs = {}
 		self.dispatched = []
 		self.error = None
+		# run id -> how many jobs() calls for it fail before it answers
+		self.jobs_errors = {}
 
 	def runs(self, workflow, branch=None, per_page=20):
 		if self.error:
@@ -285,6 +287,9 @@ class FakeGitHub:
 		return [run for run in self.runs_by_workflow.get(workflow, []) if branch is None or run.get("head_branch") == branch]
 
 	def jobs(self, run_id):
+		if self.jobs_errors.get(run_id):
+			self.jobs_errors[run_id] -= 1
+			raise github.GitHubError("GitHub answered 502 for jobs")
 		return self.jobs_by_run.get(run_id, [])
 
 	def job_log(self, job_id):
@@ -1266,7 +1271,6 @@ class LoopTests(unittest.TestCase):
 	def test_polls_github_at_most_every_ci_poll_seconds(self):
 		self.ci_red()
 		self.loop.poll_once()
-		calls = len(self.api.system_creates)
 		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(3, "success", "green2"))
 		self.now += datetime.timedelta(seconds=60)
 		self.loop.poll_once()
@@ -1340,6 +1344,121 @@ class LoopTests(unittest.TestCase):
 		self.now += datetime.timedelta(minutes=6)
 		self.loop.poll_once()
 		self.assertEqual(gh.dispatched, [("nightly-release.yml", "develop")])
+
+
+	def api_down_for_tickets(self):
+		def down(*args, **kwargs):
+			raise urllib.error.URLError("bug API unreachable")
+		self.api.create_system = down
+
+	def test_bug_api_blip_in_the_pre_ship_ci_check_queues_the_fix(self):
+		self.make(github=FakeGitHub())
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(1, "success", "green1")]
+
+		def long_fix():
+			# CI turns red while the fixer works, and the bug API fails when the ticket is opened.
+			self.now += datetime.timedelta(minutes=30)
+			self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(2, "failure", "red1"))
+			self.api_down_for_tickets()
+		self.runner.on_fix = long_fix
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
+		self.assertNotIn("loop-error", self.outcomes())
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "in_progress")  # not released
+		self.assertIn(loop.CI_UNKNOWN_REASON, self.api.notes(BUG_ID)[-1])
+		self.assertIsNone(self.state.ci_phase())
+		# The API is back: the next poll opens the phase, and the fix still waits.
+		del self.api.create_system
+		self.now += datetime.timedelta(minutes=1)
+		self.loop.poll_once()
+		self.assertIsNotNone(self.state.ci_phase())
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
+
+	def test_bug_api_blip_in_the_ci_check_holds_a_maintainer_ship(self):
+		self.park_with_decision("ship", github=FakeGitHub())
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1")]
+		self.api_down_for_tickets()
+		self.loop._ship_by_decision(BUG_ID, self.api.bugs[BUG_ID]["decision"])  # must not raise
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.state.data["ship_queue"][0]["bug"], BUG_ID)
+		self.assertTrue(self.state.data["ship_queue"][0]["by_maintainer"])
+		self.assertIn(loop.CI_UNKNOWN_REASON, self.api.notes(BUG_ID)[-1])
+
+	def test_bug_api_blip_in_the_ci_check_keeps_the_ship_queue(self):
+		self.make(github=FakeGitHub())
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1")]
+		self.state.enqueue_ship(BUG_ID, BRANCH, "s", "head1")
+		self.api_down_for_tickets()
+		self.loop._ship_queued(self.now)  # must not raise
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
+
+	def restarted_nightly(self):
+		"""A phase opened by a red nightly, restarted once for the green push commit new1."""
+		self.make(github=FakeGitHub())
+		gh = self.loop.github
+		gh.runs_by_workflow["nightly-release.yml"] = [run(10, "failure", "old1", event="schedule")]
+		gh.runs_by_workflow["ccpp.yml"] = [run(12, "success", "new1"), run(11, "success", "old1")]
+		self.loop.poll_once()
+		self.assertEqual(gh.dispatched, [("nightly-release.yml", "develop")])
+		return gh
+
+	def test_refresh_retries_a_run_after_a_github_error(self):
+		gh = self.restarted_nightly()
+		gh.runs_by_workflow["nightly-release.yml"].insert(0, run(13, "failure", "new1", event="workflow_dispatch"))
+		gh.jobs_by_run[13] = [{"id": 130, "conclusion": "failure", "steps": [{"name": "package", "conclusion": "failure"}]}]
+		gh.logs[130] = "error: packaging failed"
+		gh.jobs_errors[13] = 1
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.state.ci_phase()["red_runs"]["nightly"], 10)  # not marked as seen
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		phase = self.state.ci_phase()
+		self.assertEqual(phase["red_runs"]["nightly"], 13)
+		self.assertEqual(phase["attempts"], 1)
+		self.assertEqual(phase["ci"]["step"], "package")
+		self.assertIn("packaging failed", phase["ci"]["retry"])
+		self.assertIn("packaging failed", self.api.bugs[self.state.emergency_ticket()]["logTail"])
+
+	def test_no_nightly_restart_while_a_nightly_runs(self):
+		self.make(github=FakeGitHub())
+		gh = self.loop.github
+		gh.runs_by_workflow["nightly-release.yml"] = [
+			run(14, None, "new1", event="workflow_dispatch", status="in_progress"),
+			run(10, "failure", "old1", event="schedule")]
+		gh.runs_by_workflow["ccpp.yml"] = [run(12, "success", "new1"), run(11, "success", "old1")]
+		self.loop.poll_once()
+		self.assertIsNotNone(self.state.ci_phase())
+		self.assertEqual(gh.dispatched, [])
+		gh.runs_by_workflow["nightly-release.yml"][0]["status"] = "queued"
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(gh.dispatched, [])
+
+	def test_phase_stays_open_without_a_completed_run_of_the_red_workflow(self):
+		self.ci_red()
+		self.loop.poll_once()
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(3, None, "x1", status="in_progress")]
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertIsNotNone(self.state.ci_phase())
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(4, "cancelled", "x2")]
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertIsNotNone(self.state.ci_phase())
+		self.assertFalse(any("green again" in m for m in self.notifier.messages))
+
+	def test_queued_ship_stays_queued_across_red_polls(self):
+		self.ci_red()
+		for minutes in (1, 6, 6):
+			self.loop.poll_once()
+			self.now += datetime.timedelta(minutes=minutes)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
 
 
 class DecideTests(unittest.TestCase):
