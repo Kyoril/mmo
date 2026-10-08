@@ -45,8 +45,16 @@ class News(unittest.TestCase):
 		self.assertEqual(entry["summary"], "Mages rejoice.")
 		self.assertEqual(entry["body"], "## Classes: Mage\n- Frostbolt has a new impact effect.\n\n## Bug Fixes\n- Fixed an issue where doors blocked sight.")
 
+	def test_themed_title_and_intro(self):
+		notes = {"title": "The Night Watch", "headline": "h", "intro": "Adventurers, hello.\n\nSecond paragraph.",
+			"sections": [{"title": "General", "bullets": ["a"]}]}
+		add_patch_note(self.path, "2026-10-07", ["fix: x"], "0.3.0.3441", notes)
+		entry = self._load()["patches"][0]
+		self.assertEqual(entry["title"], "Patch 0.3.0.3441: The Night Watch")
+		self.assertEqual(entry["body"], "Adventurers, hello.\n\nSecond paragraph.\n\n## General\n- a")
+
 	def test_empty_or_malformed_notes_fall_back_to_changes(self):
-		for notes in ({"headline": "h", "sections": []}, {"sections": [{"title": "General", "bullets": []}]}, "garbage"):
+		for notes in ({"headline": "h", "sections": []}, {"title": "T", "intro": "i", "sections": [{"title": "General", "bullets": []}]}, "garbage"):
 			add_patch_note(self.path, "2026-10-07", ["fix(loot): roll on the right table"], "0.3.0.1", notes)
 			entry = self._load()["patches"][0]
 			self.assertEqual(entry["title"], "Patch 0.3.0.1")

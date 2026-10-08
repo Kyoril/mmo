@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import urllib.error
+import unittest.mock
 
 sys.dont_write_bytecode = True
 
@@ -50,20 +50,21 @@ def _commit_dict(subject, files=("src/world_server/x.cpp",), body=""):
 	return {"subject": subject, "body": body, "files": list(files)}
 
 
-class FakeResponse(io.BytesIO):
-	def __enter__(self):
-		return self
+class FakeRun:
+	"""Stands in for subprocess.run of `claude -p --output-format json`."""
 
-	def __exit__(self, *args):
-		self.close()
+	def __init__(self, result="", returncode=0, is_error=False, stdout=None):
+		self.stdout = stdout if stdout is not None else json.dumps({"type": "result", "is_error": is_error, "result": result})
+		self.returncode = returncode
+		self.calls = []
+
+	def __call__(self, argv, **kwargs):
+		self.calls.append((argv, kwargs))
+		return subprocess.CompletedProcess(argv, self.returncode, self.stdout, "boom" if self.returncode else "")
 
 
-def _answer(content):
-	payload = {"choices": [{"message": {"content": content}}]}
-	return lambda request, timeout: FakeResponse(json.dumps(payload).encode("utf-8"))
-
-
-GOOD = {"headline": "The Hollow Choir awaits.", "sections": [
+GOOD = {"title": "Songs Below", "headline": "The Hollow Choir awaits.",
+	"intro": "Adventurers, something sings under the hills.\n\nGo and listen.", "sections": [
 	{"title": "Dungeons", "bullets": ["A new five-player dungeon, the Hollow Choir, is now open."]},
 	{"title": "Classes: Mage", "bullets": ["Frostbolt now has a new impact effect."]},
 	{"title": "Bug Fixes", "bullets": ["Fixed an issue where doors could block line of sight while open."]},
@@ -84,15 +85,20 @@ class Classification(unittest.TestCase):
 
 
 class Context(unittest.TestCase):
-	def test_data_changes_come_first_and_internal_commits_are_dropped(self):
-		commits = [_commit_dict("feat: new mount"), _commit_dict("ci: cache vcpkg", files=[".github/x.yml"])]
+	def test_data_changes_first_and_internal_commits_last(self):
+		commits = [_commit_dict("ci: cache vcpkg", files=[".github/x.yml"]), _commit_dict("feat: new mount")]
 		data = {"catalogs": {"quests": {"added": ["The Lost Hymn"], "renamed": [], "added_total": 1}},
 			"editor_commits": [{"subject": "Sentinel item displays", "body": "- Item displays 184-215"}]}
 		context = patch_notes.build_context(commits, data)
 		self.assertLess(context.index("The Lost Hymn"), context.index("New mount"))
+		self.assertLess(context.index("New mount"), context.index("Cache vcpkg"))
 		self.assertIn("Sentinel item displays", context)
-		self.assertNotIn("vcpkg", context)
 		self.assertIn("Gameplay (server): 1", context)
+
+	def test_internal_commits_carry_no_bodies(self):
+		context = patch_notes.build_context([_commit_dict("fix(deployer): retry", files=["deploy/a.py"], body="secret detail")], {})
+		self.assertIn("Retry", context)
+		self.assertNotIn("secret detail", context)
 
 	def test_budget_drops_bodies_then_commits(self):
 		commits = [_commit_dict("feat: thing {}".format(i), body="b" * 300) for i in range(200)]
@@ -103,9 +109,15 @@ class Context(unittest.TestCase):
 
 
 class Validation(unittest.TestCase):
-	def test_keeps_allowed_sections(self):
-		notes = patch_notes.validate_notes(dict(GOOD, sections=GOOD["sections"] + [{"title": "Refactoring", "bullets": ["x"]}]))
+	def test_keeps_title_intro_and_well_formed_sections(self):
+		notes = patch_notes.validate_notes(dict(GOOD, sections=GOOD["sections"] + [{"title": "<b>Refactoring</b>", "bullets": ["x"]}]))
 		self.assertEqual([s["title"] for s in notes["sections"]], ["Dungeons", "Classes: Mage", "Bug Fixes"])
+		self.assertEqual(notes["title"], "Songs Below")
+		self.assertEqual(notes["intro"], "Adventurers, something sings under the hills.\n\nGo and listen.")
+
+	def test_title_and_intro_are_optional(self):
+		notes = patch_notes.validate_notes({"headline": "h", "sections": GOOD["sections"]})
+		self.assertEqual((notes["title"], notes["intro"]), ("", ""))
 
 	def test_rejects_unusable_answers(self):
 		for raw in (None, [], {"headline": "x"}, {"headline": "", "sections": GOOD["sections"]},
@@ -130,6 +142,8 @@ class Fallback(unittest.TestCase):
 	def test_render_markdown(self):
 		self.assertEqual(patch_notes.render_markdown({"headline": "h", "sections": [{"title": "General", "bullets": ["a", "b"]}]}),
 			"## General\n- a\n- b")
+		self.assertEqual(patch_notes.render_markdown({"headline": "h", "intro": "Hello.", "sections": [{"title": "World", "bullets": ["a"]}]}),
+			"Hello.\n\n## World\n- a")
 
 
 class Generate(unittest.TestCase):
@@ -154,36 +168,41 @@ class Generate(unittest.TestCase):
 		self.assertEqual(commits[1]["files"], ["src/world_server/b.cpp"])
 
 	def test_uses_the_model_answer(self):
-		notes = patch_notes.generate(self.repo, self.first, self.head, "token", urlopen=_answer(json.dumps(GOOD)), log=self.logs.append)
+		notes = patch_notes.generate(self.repo, self.first, self.head, run=FakeRun(json.dumps(GOOD)), log=self.logs.append)
 		self.assertEqual(notes["source"], "ai")
-		self.assertEqual(notes["headline"], "The Hollow Choir awaits.")
+		self.assertEqual(notes["title"], "Songs Below")
 
-	def test_accepts_fenced_json(self):
-		notes = patch_notes.generate(self.repo, self.first, self.head, "token",
-			urlopen=_answer("```json\n" + json.dumps(GOOD) + "\n```"), log=self.logs.append)
-		self.assertEqual(notes["source"], "ai")
+	def test_accepts_fenced_json_and_prose(self):
+		for answer in ("```json\n" + json.dumps(GOOD) + "\n```", "Here you go:\n" + json.dumps(GOOD)):
+			notes = patch_notes.generate(self.repo, self.first, self.head, run=FakeRun(answer), log=self.logs.append)
+			self.assertEqual(notes["source"], "ai")
 
-	def test_falls_back_on_http_error_garbage_or_no_token(self):
-		def failing(request, timeout):
-			raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {}, None)
+	def test_falls_back_on_any_failure(self):
+		def timeout(argv, **kwargs):
+			raise subprocess.TimeoutExpired(argv, 1)
 
-		for urlopen, token in ((failing, "t"), (_answer("not json"), "t"), (_answer(json.dumps({"headline": "x"})), "t"), (failing, "")):
-			notes = patch_notes.generate(self.repo, self.first, self.head, token, urlopen=urlopen, log=self.logs.append)
+		def missing(argv, **kwargs):
+			raise FileNotFoundError("claude")
+
+		for run in (FakeRun(returncode=1), FakeRun(stdout="OK"), FakeRun("not json"), FakeRun(json.dumps({"headline": "x"})),
+				FakeRun("Not logged in", is_error=True), timeout, missing):
+			notes = patch_notes.generate(self.repo, self.first, self.head, run=run, log=self.logs.append)
 			self.assertEqual(notes["source"], "fallback")
 			self.assertEqual(notes["sections"], [{"title": "General", "bullets": ["Add parry"]}])
+		notes = patch_notes.generate(self.repo, self.first, self.head, use_model=False, run=FakeRun(json.dumps(GOOD)), log=self.logs.append)
+		self.assertEqual(notes["source"], "fallback")
 
-	def test_request_carries_token_and_model(self):
-		seen = {}
-
-		def capture(request, timeout):
-			seen["auth"] = request.get_header("Authorization")
-			seen["body"] = json.loads(request.data.decode("utf-8"))
-			return _answer(json.dumps(GOOD))(request, timeout)
-
-		patch_notes.generate(self.repo, self.first, self.head, "secret", model="openai/gpt-4o-mini", urlopen=capture, log=self.logs.append)
-		self.assertEqual(seen["auth"], "Bearer secret")
-		self.assertEqual(seen["body"]["model"], "openai/gpt-4o-mini")
-		self.assertIn("Add parry", seen["body"]["messages"][1]["content"])
+	@unittest.mock.patch("shutil.which", return_value="/usr/bin/claude")
+	def test_invocation_is_tool_less_with_our_prompt(self, _which):
+		run = FakeRun(json.dumps(GOOD))
+		patch_notes.generate(self.repo, self.first, self.head, model="sonnet", run=run, log=self.logs.append)
+		argv, kwargs = run.calls[0]
+		self.assertEqual(argv[:2], ["/usr/bin/claude", "-p"])
+		self.assertEqual(argv[argv.index("--model") + 1], "sonnet")
+		self.assertEqual(argv[argv.index("--tools") + 1], "")
+		self.assertEqual(argv[argv.index("--system-prompt") + 1], patch_notes.INSTRUCTIONS)
+		self.assertIn("Add parry", kwargs["input"])
+		self.assertNotEqual(os.path.abspath(kwargs["cwd"]), os.path.abspath(self.repo))
 
 
 class DataChanges(unittest.TestCase):
