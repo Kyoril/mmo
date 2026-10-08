@@ -181,9 +181,30 @@ class Worktree:
 			return False
 		return all(not self.git("status", "--porcelain", cwd=self.sub_path(sub)) for sub in self.submodules)
 
-	def gitlinks(self, rev):
+	def unpublished_gitlinks(self):
+		"""The submodule commits origin/develop points at that neither this worktree's submodule nor
+		its origin has, as [(sub, sha)]: develop was pushed before its data. Every checkout of develop
+		fails on them, here and in CI, until whoever holds the commits pushes them. A submodule this
+		worktree has not checked out yet is not checked."""
+		run_git(self.main_repo, "fetch", self.remote, "--prune")
+		missing = []
+		for sub, sha in sorted(self.gitlinks(self.target, cwd=self.main_repo).items()):
+			sub_dir = self.sub_path(sub)
+			if not os.path.exists(os.path.join(sub_dir, ".git")) or self._has_commit(sub_dir, sha):
+				continue
+			# The remote `submodule update` fetches from; a failing fetch raises, it proves nothing.
+			self.git("fetch", "origin", cwd=sub_dir)
+			if not self._has_commit(sub_dir, sha):
+				missing.append((sub, sha))
+		return missing
+
+	@staticmethod
+	def _has_commit(cwd, sha):
+		return run_git(cwd, "cat-file", "-e", sha + "^{commit}", check=False).returncode == 0
+
+	def gitlinks(self, rev, cwd=None):
 		links = {}
-		for line in self.git("ls-tree", rev, "--", *self.submodules).splitlines():
+		for line in self.git("ls-tree", rev, "--", *self.submodules, cwd=cwd).splitlines():
 			meta, path = line.split("\t", 1)
 			links[path] = meta.split()[2]
 		return links

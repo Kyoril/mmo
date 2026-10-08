@@ -282,6 +282,12 @@ ships are not held`.
   Discord message "Emergency fix needs you" is sent. When an attempt is due but the daily
   invocation budget is used up, the same message says so once per phase and UTC day; develop
   stays red until the next UTC day or until the maintainer acts.
+- **Unpublished data:** when origin/develop points `data/client` or `data/editor` at a commit
+  the submodule's origin does not have (develop pushed before its data; CI fails at checkout
+  with "not our ref"), no fix can check develop out and no code change repairs it. The loop then
+  starts no fix at all, spends no attempt, and says so once per set of missing commits (a ticket
+  note plus "Emergency fix needs you", or "Bug loop waits for you" without a red phase). Push
+  the submodule's master; the next poll goes on, and the next develop CI run closes the phase.
 - **Maintainer decisions** on the emergency ticket steer the automation: discard parks the
   phase; ship merges the approved diff (hash-bound only, without a Linux CI run) and then waits
   for develop; refix gives the fixer guidance as for any bug, but a refix of the emergency

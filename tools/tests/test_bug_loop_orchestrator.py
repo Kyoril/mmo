@@ -218,6 +218,12 @@ class FakeWorktree:
 		self.pushed = []
 		self.remote_deleted = []
 		self.ancestors = True
+		self.unpublished = []
+
+	def unpublished_gitlinks(self):
+		if isinstance(self.unpublished, Exception):
+			raise self.unpublished
+		return list(self.unpublished)
 
 	def prepare(self):
 		if self.prepare_error:
@@ -2061,6 +2067,46 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()  # red branch run: back to triaged, attempt 2 runs and is pushed again
 		self.assertEqual(self.state.ci_phase()["attempts"], 2)
 		self.assertEqual(self.ticket_messages(ticket), [m for m in self.notifier.messages if "develop is red" in m])
+
+	def test_unpublished_data_holds_the_emergency_fix_without_spending_attempts(self):
+		self.ci_red(bugs=[dict(BUG, status="resolved")])
+		self.worktree.unpublished = [("data/client", "5ef9d0ee" + "0" * 32)]
+		self.assertFalse(self.loop.poll_once())
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		ticket = self.state.emergency_ticket()
+		self.assertEqual(self.fixes(), 0)
+		self.assertEqual(self.state.ci_phase()["attempts"], 0)
+		self.assertEqual(self.api.bugs[ticket]["status"], "triaged")
+		self.assertNotIn("loop-error", self.outcomes())
+		waiting = [m for m in self.ticket_messages(ticket) if "5ef9d0ee" in m]
+		self.assertEqual(len(waiting), 1)  # once, not per poll
+		self.assertIn("needs you", waiting[0])
+		self.assertEqual(sum("5ef9d0ee" in note for note in self.api.notes(ticket)), 1)
+		# Pushed: the attempt runs as usual.
+		self.worktree.unpublished = []
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.fixes(), 1)
+		self.assertEqual(self.state.ci_phase()["attempts"], 1)
+		self.assertIsNone(self.state.data["unpublished_data"])
+
+	def test_unpublished_data_holds_ordinary_fixes(self):
+		self.make()
+		self.worktree.unpublished = [("data/editor", "7b04985e" + "0" * 32)]
+		self.loop.poll_once()
+		self.assertEqual(self.fixes(), 0)
+		self.assertFalse(self.state.attempted(BUG_ID))
+		self.assertEqual(sum("7b04985e" in m for m in self.notifier.messages), 1)
+		self.worktree.unpublished = []
+		self.loop.poll_once()
+		self.assertEqual([branch for branch, _ in self.worktree.shipped], [BRANCH])
+
+	def test_a_failing_publish_check_holds_nothing(self):
+		self.make()
+		self.worktree.unpublished = gitops.GitError("network down")
+		self.loop.poll_once()
+		self.assertEqual([branch for branch, _ in self.worktree.shipped], [BRANCH])
 
 	def test_a_failed_emergency_fix_run_is_quiet(self):
 		ticket = self.run_emergency(fix=dict(GOOD_FIX, outcome="cannot_reproduce"))

@@ -243,6 +243,8 @@ class BugLoop:
 			due = self._emergency_due()
 			if due and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 				self._notify_budget_exhausted(now)
+			elif due and self._data_unpublished():
+				return self._end_poll(worked)
 			elif due:
 				ticket = self.state.emergency_ticket()
 				try:
@@ -255,6 +257,8 @@ class BugLoop:
 				return self._end_poll(True)
 		bug_id = self.state.next_fix()
 		if bug_id is not None and self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+			if not self.dry_run and self._data_unpublished():
+				return self._end_poll(worked)
 			try:
 				self._fix(bug_id)
 			except Exception:  # the loop must survive one bad bug
@@ -263,6 +267,35 @@ class BugLoop:
 				self._finish(bug_id, "loop-error")
 			worked = True
 		return self._end_poll(worked)
+
+	def _data_unpublished(self):
+		"""True while origin/develop points a data submodule at a commit its remote does not have
+		(develop pushed before its data): every fix would fail its checkout, and only whoever holds
+		the commit can push it. No fix starts and no attempt is spent until it is pushed; the
+		maintainer hears once per set of missing commits. A failing check holds nothing."""
+		try:
+			missing = self.worktree.unpublished_gitlinks()
+		except Exception:
+			self.log(traceback.format_exc())
+			return False
+		key = ["{}@{}".format(sub, sha) for sub, sha in missing]
+		if self.state.data.get("unpublished_data") != (key or None):
+			self.state.data["unpublished_data"] = key or None
+			self.state.save()
+			if key:
+				reason = "develop points {} at {} which the submodule's origin does not have (develop was pushed " \
+					"before its data); push the submodule's master. No fix starts until then".format(
+					" and ".join(sub for sub, _ in missing), ", ".join(sha[:8] for _, sha in missing))
+				self.log("bug loop holds: " + reason)
+				ticket = self.state.emergency_ticket()
+				if valid_bug_id(ticket):
+					self._safe_note(ticket, note="waiting: " + reason)
+					self.notifier.send(notify.emergency_needs_you_message(self.notifier, ticket, reason))
+				else:
+					self.notifier.send("**Bug loop waits for you** — " + reason)
+			else:
+				self.log("bug loop: develop's data commits are published again")
+		return bool(key)
 
 	def _end_poll(self, worked):
 		self._write_daily_report()
