@@ -157,6 +157,11 @@ class Generate(unittest.TestCase):
 		_commit(self.repo, ".github/workflows/x.yml", "ci: tweak")
 		self.head = _git(self.repo, "rev-parse", "HEAD")
 		self.logs = []
+		# The fake run stands in for claude, but the argv is built first and needs the CLI on PATH;
+		# CI runners have none, so stub the lookup to keep these tests independent of the host.
+		which = unittest.mock.patch("shutil.which", return_value="/usr/bin/claude")
+		which.start()
+		self.addCleanup(which.stop)
 
 	def tearDown(self):
 		self.tmp.cleanup()
