@@ -581,8 +581,10 @@ namespace mmo
 			}
 			else
 			{
-				// Internal node - add children to stack if they exist and we have space
-				if (stackCount < maxStackSize - 2 && node.children < nodes.size() - 1)
+				// Internal node - add children to stack if they exist and we have space. The builder
+				// always places children after their parent; a child index that does not move
+				// forward is a malformed tree and would make this loop revisit nodes forever.
+				if (stackCount < maxStackSize - 2 && node.children > current.nodeIndex && node.children + 1 < nodes.size())
 				{
 					stack[stackCount++] = { node.children };     // Left child
 					stack[stackCount++] = { node.children + 1 }; // Right child
@@ -706,8 +708,10 @@ namespace mmo
 			}
 			else
 			{
-				// Internal node - add children to stack if they exist and we have space
-				if (stackCount < maxStackSize - 2 && node.children < nodes.size() - 1)
+				// Internal node - add children to stack if they exist and we have space. The builder
+				// always places children after their parent; a child index that does not move
+				// forward is a malformed tree and would make this loop revisit nodes forever.
+				if (stackCount < maxStackSize - 2 && node.children > current.nodeIndex && node.children + 1 < nodes.size())
 				{
 					stack[stackCount++] = { node.children };     // Left child
 					stack[stackCount++] = { node.children + 1 }; // Right child
