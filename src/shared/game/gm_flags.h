@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "game/gm_level.h"
 
 namespace mmo
 {
@@ -26,18 +27,26 @@ namespace mmo
 		};
 	}
 
-	/// Returns the flags that may actually apply for an account of the given gm level: none for
-	/// a regular player account (a demoted account must never stay hidden), unknown bits dropped.
+	/// Returns the flags that may actually apply for an account of the given gm level. Each flag
+	/// survives only at the level that may toggle it, so a demoted account never keeps state it
+	/// can no longer clear: godmode needs gm_level::SeniorGm, invisibility gm_level::Gm, and a
+	/// regular player account keeps nothing. Unknown bits are dropped.
 	/// @param flags The stored flags.
 	/// @param gmLevel The account's gm level (gm_level::Type).
 	/// @returns The effective flags.
 	inline uint8 SanitizeGmFlags(const uint8 flags, const uint8 gmLevel)
 	{
-		if (gmLevel == 0)
+		if (gmLevel < gm_level::Gm)
 		{
 			return gm_flags::None;
 		}
 
-		return flags & gm_flags::All;
+		uint8 result = flags & gm_flags::All;
+		if (gmLevel < gm_level::SeniorGm)
+		{
+			result &= static_cast<uint8>(~gm_flags::Godmode);
+		}
+
+		return result;
 	}
 }

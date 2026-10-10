@@ -16,13 +16,30 @@ TEST_CASE("SanitizeGmFlags clears flags without a gm level", "[gm_flags]")
 {
 	const uint8 both = gm_flags::Invisible | gm_flags::Godmode;
 	CHECK(SanitizeGmFlags(both, gm_level::Player) == gm_flags::None);
-	CHECK(SanitizeGmFlags(both, gm_level::Gm) == both);
+	CHECK(SanitizeGmFlags(gm_flags::Invisible, gm_level::Player) == gm_flags::None);
+	CHECK(SanitizeGmFlags(gm_flags::Godmode, gm_level::Player) == gm_flags::None);
+}
+
+TEST_CASE("SanitizeGmFlags keeps invisibility but drops godmode below SeniorGm", "[gm_flags]")
+{
+	const uint8 both = gm_flags::Invisible | gm_flags::Godmode;
+	CHECK(SanitizeGmFlags(both, gm_level::Gm) == gm_flags::Invisible);
+	CHECK(SanitizeGmFlags(gm_flags::Godmode, gm_level::Gm) == gm_flags::None);
+	CHECK(SanitizeGmFlags(gm_flags::Invisible, gm_level::Gm) == gm_flags::Invisible);
+}
+
+TEST_CASE("SanitizeGmFlags keeps both flags from SeniorGm up", "[gm_flags]")
+{
+	const uint8 both = gm_flags::Invisible | gm_flags::Godmode;
+	CHECK(SanitizeGmFlags(both, gm_level::SeniorGm) == both);
 	CHECK(SanitizeGmFlags(both, gm_level::Operator) == both);
 }
 
 TEST_CASE("SanitizeGmFlags drops unknown bits", "[gm_flags]")
 {
-	CHECK(SanitizeGmFlags(0xFF, gm_level::Gm) == (gm_flags::Invisible | gm_flags::Godmode));
+	CHECK(SanitizeGmFlags(0xFF, gm_level::SeniorGm) == (gm_flags::Invisible | gm_flags::Godmode));
+	CHECK(SanitizeGmFlags(0xFF, gm_level::Gm) == gm_flags::Invisible);
+	CHECK(SanitizeGmFlags(0xFC, gm_level::Operator) == gm_flags::None);
 }
 
 TEST_CASE("CharacterData round-trips gmFlags", "[gm_flags]")
