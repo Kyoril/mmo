@@ -194,6 +194,7 @@ TEST_CASE_METHOD(GmWorldFixture, "Toggling invisibility inside the instance keep
 	const auto gm2 = MakePlayer(0x22);
 	gm2->SetGmInvisible(true);
 	world->AddGameObject(*gm2);
+	CHECK(world->GetPlayerCount() == 1);
 	gm2->SetGmInvisible(false);
 	world->RemoveGameObject(*gm2);
 	CHECK(world->GetPlayerCount() == 1);
