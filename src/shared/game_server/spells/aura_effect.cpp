@@ -766,37 +766,11 @@ namespace mmo
 			caster = &m_container.GetOwner();
 		}
 
-		// Build the target map based on the effect's target type
 		SpellTargetMap targetMap;
-		switch (m_effect.targetb())
+		if (!BuildTriggerSpellTargetMap(*caster, targetMap))
 		{
-		case spell_effect_targets::Caster:
-			targetMap.SetTargetMap(spell_cast_target_flags::Self);
-			break;
-
-		case spell_effect_targets::TargetEnemy:
-		case spell_effect_targets::TargetAny:
-		case spell_effect_targets::TargetAlly:
-			{
-				// Use the caster's current combat victim as the target
-				const uint64 targetGuid = caster->Get<uint64>(object_fields::TargetUnit);
-				if (targetGuid != 0)
-				{
-					targetMap.SetTargetMap(spell_cast_target_flags::Unit);
-					targetMap.SetUnitTarget(targetGuid);
-				}
-				else
-				{
-					WLOG("HandlePeriodicTriggerSpell: No enemy target available for trigger spell " << m_effect.triggerspell());
-					return;
-				}
-			}
-			break;
-
-		default:
-			// Fallback: target the caster itself
-			targetMap.SetUnitTarget(m_container.GetCasterId());
-			break;
+			WLOG("HandlePeriodicTriggerSpell: No enemy target available for trigger spell " << m_effect.triggerspell());
+			return;
 		}
 
 		// Cast trigger spell if we know it
@@ -808,6 +782,45 @@ namespace mmo
 		{
 			WLOG("Failed to cast trigger spell: unknown spell id " << m_effect.triggerspell());
 		}
+	}
+
+	bool AuraEffect::BuildTriggerSpellTargetMap(const GameUnitS& caster, SpellTargetMap& targetMap) const
+	{
+		switch (m_effect.targetb())
+		{
+		case spell_effect_targets::Caster:
+			targetMap.SetTargetMap(spell_cast_target_flags::Self);
+			break;
+
+		case spell_effect_targets::TargetEnemy:
+		case spell_effect_targets::TargetAny:
+		case spell_effect_targets::TargetAlly:
+			{
+				// Stay on the unit the spell was cast at: a channel is bound to its target (it ends when
+				// that target dies or despawns), so changing selection mid-channel must not redirect it.
+				// Only fall back to the caster's current selection if the spell had no unit target.
+				uint64 targetGuid = m_container.GetSpellTargetGuid();
+				if (targetGuid == 0)
+				{
+					targetGuid = caster.Get<uint64>(object_fields::TargetUnit);
+				}
+				if (targetGuid == 0)
+				{
+					return false;
+				}
+
+				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+				targetMap.SetUnitTarget(targetGuid);
+			}
+			break;
+
+		default:
+			// Fallback: target the caster itself
+			targetMap.SetUnitTarget(m_container.GetCasterId());
+			break;
+		}
+
+		return true;
 	}
 
 	void AuraEffect::HandleProcForUnitTarget(GameUnitS& unit)

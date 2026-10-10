@@ -7,6 +7,7 @@
 #include "game_server/objects/game_player_s.h"
 #include "game/aura.h"
 #include "game/spell.h"
+#include "game/spell_target_map.h"
 #include "base/timer_queue.h"
 #include "shared/proto_data/project.h"
 #include "shared/proto_data/spells.pb.h"
@@ -320,4 +321,75 @@ TEST_CASE("AuraEffect keeps ticking until the refreshed expiration after Refresh
 	io.run();
 
 	CHECK(aura->GetTickCount() == 5u);
+}
+
+// ---------------------------------------------------------------------------
+// PeriodicTriggerSpell — target of the triggered spell
+// ---------------------------------------------------------------------------
+
+TEST_CASE("A periodic trigger keeps hitting the unit its spell was cast at after the caster changes target", "[aura_effect][periodic_trigger]")
+{
+	// Fire Barrage (spell 150) channels a PeriodicTriggerSpell aura on the caster, whose ticks cast
+	// the damage spell at an enemy target. Each tick used to read the caster's current selection:
+	// switching or clearing the target mid-channel sent the remaining waves elsewhere, or nowhere.
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto caster = MakeUnit(project, timers);
+	caster->Set<uint64>(object_fields::Guid, 0x10);
+
+	auto spell = MakeSpell();
+	spell.set_id(150);
+	auto* effect = spell.add_effects();
+	effect->set_type(spell_effects::ApplyAura);
+	effect->set_aura(static_cast<uint32>(aura_type::PeriodicTriggerSpell));
+	effect->set_amplitude(500);
+	effect->set_targetb(spell_effect_targets::TargetEnemy);
+	effect->set_triggerspell(152);
+
+	AuraContainer container(*caster, /*casterId=*/0x10, spell, /*duration=*/1500, /*itemGuid=*/0);
+	container.SetSpellTargetGuid(0x20);
+	AuraEffect aura(container, spell.effects(0), timers, /*basePoints=*/0);
+
+	SECTION("the caster selected another unit")
+	{
+		caster->Set<uint64>(object_fields::TargetUnit, 0x30);
+	}
+
+	SECTION("the caster cleared its target")
+	{
+		caster->Set<uint64>(object_fields::TargetUnit, 0);
+	}
+
+	SpellTargetMap targetMap;
+	REQUIRE(aura.BuildTriggerSpellTargetMap(*caster, targetMap));
+	CHECK(targetMap.GetTargetMap() == spell_cast_target_flags::Unit);
+	CHECK(targetMap.GetUnitTarget() == 0x20);
+}
+
+TEST_CASE("A periodic trigger without a cast target falls back to the caster's selection", "[aura_effect][periodic_trigger]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto caster = MakeUnit(project, timers);
+	caster->Set<uint64>(object_fields::Guid, 0x10);
+	caster->Set<uint64>(object_fields::TargetUnit, 0x30);
+
+	auto spell = MakeSpell();
+	auto* effect = spell.add_effects();
+	effect->set_type(spell_effects::ApplyAura);
+	effect->set_aura(static_cast<uint32>(aura_type::PeriodicTriggerSpell));
+	effect->set_amplitude(500);
+	effect->set_targetb(spell_effect_targets::TargetEnemy);
+	effect->set_triggerspell(152);
+
+	AuraContainer container(*caster, /*casterId=*/0x10, spell, /*duration=*/1500, /*itemGuid=*/0);
+	AuraEffect aura(container, spell.effects(0), timers, /*basePoints=*/0);
+
+	SpellTargetMap targetMap;
+	REQUIRE(aura.BuildTriggerSpellTargetMap(*caster, targetMap));
+	CHECK(targetMap.GetUnitTarget() == 0x30);
 }
