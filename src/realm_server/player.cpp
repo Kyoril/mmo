@@ -27,6 +27,7 @@
 #include "time_of_day_manager.h"
 #include "game/time_of_day.h"
 #include "game/gm_level.h"
+#include "game/gm_flags.h"
 #include "game/shutdown_countdown.h"
 #include "base/utilities.h"
 #include "game/chat_type.h"
@@ -791,7 +792,6 @@ namespace mmo
 		case game::client_realm_packet::CheatMorph:
 		case game::client_realm_packet::CheatKill:
 		case game::client_realm_packet::CheatRevive:
-		case game::client_realm_packet::CheatInvisible:
 			// Require GM level 1 (basic GM)
 			if (!HasGMLevel(gm_level::Gm))
 			{
@@ -812,7 +812,6 @@ namespace mmo
 		case game::client_realm_packet::CheatClearInventory:
 		case game::client_realm_packet::CheatClassLevelUp:
 		case game::client_realm_packet::CheatCreateObject:
-		case game::client_realm_packet::CheatGodmode:
 		case game::client_realm_packet::CheatSetInstanceVariable:
 		case game::client_realm_packet::CheatDamage:
 		case game::client_realm_packet::CheatResetCooldowns:
@@ -2495,7 +2494,96 @@ namespace mmo
 	}
 #endif
 
+	void Player::SendSystemMessage(const String &message)
+	{
+		m_connection->sendSinglePacket([&message](game::OutgoingPacket &outPacket)
+		{
+			outPacket.Start(game::realm_client_packet::ChatMessage);
+			outPacket
+				<< io::write_packed_guid(0)
+				<< io::write<uint8>(ChatType::System)
+				<< io::write_range(message) << io::write<uint8>(0)
+				<< io::write<uint8>(0)
+				<< io::write<uint8>(0);
+			outPacket.Finish();
+		});
+	}
+
+	void Player::ForwardProxyPayload(const uint16 opCode, const std::vector<uint8> &payload)
+	{
+		const auto strongWorld = m_world.lock();
+		if (!strongWorld || !m_characterData)
+		{
+			return;
+		}
+
+		const auto characterId = m_characterData->characterId;
+		strongWorld->GetConnection().sendSinglePacket([characterId, opCode, &payload](auth::OutgoingPacket &outPacket)
+		{
+			outPacket.Start(auth::realm_world_packet::ProxyPacket);
+			outPacket
+				<< io::write<uint64>(characterId)
+				<< io::write<uint16>(opCode)
+				<< io::write<uint32>(payload.size());
+			if (!payload.empty())
+			{
+				outPacket << io::write_range(payload);
+			}
+			outPacket.Finish();
+		});
+	}
+
+	void Player::SendGmFlagStatus()
+	{
+		if (!m_characterData || m_characterData->gmFlags == gm_flags::None)
+		{
+			return;
+		}
+
+		if (m_characterData->gmFlags & gm_flags::Invisible)
+		{
+			SendSystemMessage("GM invisibility is on.");
+		}
+		if (m_characterData->gmFlags & gm_flags::Godmode)
+		{
+			SendSystemMessage("Godmode is on.");
+		}
+	}
+
 #ifdef MMO_WITH_DEV_COMMANDS
+	PacketParseResult Player::OnCheatGmFlag(game::IncomingPacket &packet)
+	{
+		const bool isInvisible = packet.GetId() == game::client_realm_packet::CheatInvisible;
+		const uint8 flag = isInvisible ? gm_flags::Invisible : gm_flags::Godmode;
+
+		if (!HasGMLevel(isInvisible ? gm_level::Gm : gm_level::SeniorGm))
+		{
+			WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
+			return PacketParseResult::Pass;
+		}
+
+		uint8 enable = 0;
+		if (!(packet >> io::read<uint8>(enable)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (enable)
+		{
+			m_characterData->gmFlags |= flag;
+		}
+		else
+		{
+			m_characterData->gmFlags &= ~flag;
+		}
+
+		m_database.asyncRequestKeyed(m_characterData->characterId, [](bool) {}, &IDatabase::SetCharacterGmFlags, m_characterData->characterId, m_characterData->gmFlags);
+
+		SendSystemMessage(std::string(isInvisible ? "GM invisibility" : "Godmode") + (enable ? " is on." : " is off."));
+		ForwardProxyPayload(static_cast<uint16>(packet.GetId()), { enable });
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult Player::OnCheatSummon(game::IncomingPacket &packet)
 	{
 		// Require GM level 2 for teleport commands
@@ -3237,8 +3325,8 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatClearInventory, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatClassLevelUp, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatCreateObject, *this, &Player::OnProxyPacket);
-			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatGodmode, *this, &Player::OnProxyPacket);
-			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatInvisible, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatGodmode, *this, &Player::OnCheatGmFlag);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatInvisible, *this, &Player::OnCheatGmFlag);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatSetInstanceVariable, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatDamage, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatResetCooldowns, *this, &Player::OnProxyPacket);
@@ -3372,6 +3460,7 @@ namespace mmo
 
 		// Tell the client which subsystems it may use on this world node
 		SendFullSubsystemStatus();
+		SendGmFlagStatus();
 
 		// Send Message of the Day to the player
 		String motd = GetManager().GetMessageOfTheDay();
@@ -3451,6 +3540,7 @@ namespace mmo
 
 		// The new node may offer different subsystems than the previous one.
 		SendFullSubsystemStatus();
+		SendGmFlagStatus();
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
@@ -3554,6 +3644,7 @@ namespace mmo
 
 		m_characterData = characterData;
 		m_characterData->isGameMaster = (m_gmLevel > 0);
+		m_characterData->gmFlags = SanitizeGmFlags(m_characterData->gmFlags, m_gmLevel);
 
 		// Server-side guard: reject enter-world if the character's race or class is disabled
 		const auto* raceEntry = m_project.races.getById(m_characterData->raceId);

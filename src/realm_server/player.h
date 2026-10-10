@@ -248,6 +248,18 @@ namespace mmo
 		/// Sends the availability of every subsystem for the player's current world node.
 		void SendFullSubsystemStatus();
 
+		/// Sends a plain system chat message to the client.
+		/// @param message The message text.
+		void SendSystemMessage(const String &message);
+
+		/// Forwards an opcode and raw payload to the world node as a proxied client packet.
+		/// @param opCode The client opcode the world node should handle.
+		/// @param payload The packet payload.
+		void ForwardProxyPayload(uint16 opCode, const std::vector<uint8> &payload);
+
+		/// Informs a game master about the persistent GM flags that are active for the character.
+		void SendGmFlagStatus();
+
 		/// Sends the answer to a bug report to the client.
 		void SendBugReportResult(game::BugReportResult result);
 
@@ -613,6 +625,7 @@ namespace mmo
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSummon(game::IncomingPacket &packet);
+		PacketParseResult OnCheatGmFlag(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetTimeOfDay(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetSubsystem(game::IncomingPacket &packet);
 		PacketParseResult OnGuildCreate(game::IncomingPacket &packet);

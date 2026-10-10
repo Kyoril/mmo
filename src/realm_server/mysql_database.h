@@ -183,6 +183,9 @@ namespace mmo
 		/// @copydoc IDatabase::SetCharacterChannelState
 		void SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status) override;
 
+		/// @copydoc IDatabase::SetCharacterGmFlags
+		void SetCharacterGmFlags(uint64 characterId, uint8 flags) override;
+
 		/// @copydoc IDatabase::CreateMail
 		MailCreationResult CreateMail(const MailDraft& draft) override;
 

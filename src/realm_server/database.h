@@ -314,6 +314,9 @@ namespace mmo
 		/// Persists a single character's membership decision for one channel (upsert).
 		/// @param status 1 if the character joined the channel, 0 if the character left it.
 		virtual void SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status) = 0;
+
+		/// Stores the persistent game master flags (gm_flags::Type bits) of a character.
+		virtual void SetCharacterGmFlags(uint64 characterId, uint8 flags) = 0;
 	};
 
 	/// Mail storage operations. Money and item attachments stay stored with the mail

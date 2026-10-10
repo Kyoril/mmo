@@ -1,5 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+#include "game/gm_flags.h"
 #include "realm_connector.h"
 
 #include "player.h"
@@ -771,6 +772,12 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		characterObject->Set<uint32>(object_fields::Rage, characterData.rage);
 		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
 		characterObject->SetIsGameMaster(characterData.isGameMaster);
+
+		// Persistent GM state (the realm already cleared it for accounts without a gm level). Applied
+		// before the character enters the instance so an invisible observer is never spawned to
+		// other players and never counted as an instance player.
+		characterObject->SetGodmode((characterData.gmFlags & gm_flags::Godmode) != 0);
+		characterObject->SetGmInvisible((characterData.gmFlags & gm_flags::Invisible) != 0);
 
 		characterObject->ClearFieldChanges();
 
