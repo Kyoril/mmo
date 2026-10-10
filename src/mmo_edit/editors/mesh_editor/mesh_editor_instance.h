@@ -45,6 +45,12 @@ namespace mmo
 
 		bool Save() override;
 
+		/// @brief Replaces the steps in a mesh file's collision with a ramp (see BuildStairRamp) and
+		/// saves it. Used by the unattended `mmo_edit --stairs-to-ramp <asset>` job.
+		/// @param assetPath The mesh's asset path.
+		/// @return True if the ramp was built and the file saved.
+		static bool StairsToRampInFile(const String& assetPath);
+
 	private:
 		void SetAnimationState(AnimationState* animState);
 
@@ -108,6 +114,9 @@ namespace mmo
 		std::unique_ptr<AnimEvaluator> m_animEvaluator;
 
 		std::set<uint16> m_includedSubMeshes;
+
+		/// @brief Result of the last collision tool run, shown in the collision panel.
+		String m_collisionToolMessage;
 
 		typedef std::map<String, Matrix4> NodeTransformMap;
 		NodeTransformMap mNodeDerivedTransformByName;

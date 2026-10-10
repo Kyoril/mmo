@@ -399,6 +399,12 @@ namespace mmo
 
 		PacketParseResult OnPlaySpellVisual(game::IncomingPacket &packet);
 
+		/// Shows a spell zone (PersistentAreaAura) on the ground.
+		PacketParseResult OnSpellZoneStart(game::IncomingPacket &packet);
+
+		/// Ends a spell zone shown on the ground.
+		PacketParseResult OnSpellZoneEnd(game::IncomingPacket &packet);
+
 		/// Plays a stealth alert sound (or the default sound when the file name is empty)
 		/// as a 3D sound at the given world position.
 		void PlayStealthAlertSound(const String &soundFile, const Vector3 &position);

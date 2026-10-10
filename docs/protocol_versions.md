@@ -117,6 +117,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 19 | 2026-10-08 | Spell zones on the ground (`PersistentAreaAura`): server `SpellZoneStart` (zone id, caster, spell, position, radius, remaining ms) and `SpellZoneEnd` (zone id, expired flag) |
 | 18 | 2026-10-04 | Scheduled realm shutdown: operator `GmShutdown` (start/cancel + delay, handled by the realm in all builds) and server `ShutdownCountdown` (remaining seconds, 0xFFFFFFFF = cancelled) |
 | 17 | 2026-10-03 | In-game bug reports: client `BugReport` (subject + comment + zlib compressed client JSON) and GM `CheatSetSubsystem`; server `BugReportResult` and `SubsystemStatus` (generic subsystem availability, full list on world enter, deltas afterwards) |
 | 16 | 2026-10-03 | GM `CheatResetCooldowns`, `CheatHeal` and `CheatRestorePower` opcodes (target, or self); `SpellCooldown` entries with 0 ms remaining now clear that cooldown on the client, and an entry for spell 0 with 0 ms clears every cooldown including the global cooldown |

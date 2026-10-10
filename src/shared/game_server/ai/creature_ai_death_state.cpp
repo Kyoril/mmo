@@ -39,7 +39,9 @@ namespace mmo
 
 		GameTime despawnDelay = constants::OneSecond * 30;
 
-		if (controlled.IsTagged())
+		// Summons reward nobody: a boss raising adds on a timer would otherwise be a loot and
+		// experience farm.
+		if (controlled.IsTagged() && controlled.GrantsKillRewards())
 		{
 			uint32 sumLevel = 0;
 

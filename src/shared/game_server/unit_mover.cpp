@@ -560,6 +560,47 @@ namespace mmo
 		movementStopped();
 	}
 
+	void UnitMover::Teleport(const Vector3& position, const Radian& facing)
+	{
+		m_moveReached.Cancel();
+		m_moveUpdated.Cancel();
+		m_path.Clear();
+		m_customFacing.reset();
+
+		m_start = position;
+		m_target = position;
+
+		auto& moved = GetMoved();
+		moved.Relocate(position, facing);
+
+		// A one-point move starting at the new position: clients place the unit there
+		TileIndex2D tile;
+		if (moved.GetWorldInstance() && moved.GetTileIndex(tile))
+		{
+			const GameTime now = GetAsyncTimeMs();
+			std::vector<char> buffer;
+			io::VectorSink sink(buffer);
+			game::Protocol::OutgoingPacket packet(sink);
+			WriteCreatureMove(packet, moved.GetGuid(), position, { position }, moved.GetMovementMode(), &facing, now, now);
+
+			ForEachSubscriberInSight(
+				moved.GetWorldInstance()->GetGrid(),
+				tile,
+				[&packet, &buffer, &moved](TileSubscriber& subscriber)
+				{
+					// Never leak movement of units the subscriber's client currently can't see (stealth)
+					if (subscriber.IsObjectHiddenForClient(moved.GetGuid()))
+					{
+						return;
+					}
+
+					subscriber.SendPacket(packet, buffer);
+				});
+		}
+
+		movementStopped();
+	}
+
 	Vector3 UnitMover::GetCurrentLocation() const
 	{
 		// Unit didn't move yet or isn't moving at all

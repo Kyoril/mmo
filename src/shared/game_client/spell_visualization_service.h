@@ -14,6 +14,7 @@
 #include "shared/client_data/proto_client/spells.pb.h"
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
 #include "shared/client_data/project.h"
+#include "math/vector3.h"
 
 namespace mmo
 {
@@ -24,6 +25,7 @@ namespace mmo
     class RibbonTrail;
     class SceneNode;
     class SoundEntryPlayer;
+    class Scene;
 
     namespace proto_client
     {
@@ -53,7 +55,9 @@ namespace mmo
             AuraRemoved = 6,
             AuraTick = 7,
             AuraIdle = 8,
-            Channeling = 9
+            Channeling = 9,
+            GroundActive = 10,
+            GroundExpired = 11
         };
 
     public:
@@ -121,7 +125,7 @@ namespace mmo
         /// \brief Remove the active effects of one phase for a given actor and spell.
         void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId, EffectPhase phase);
 
-        /// rief Forget every tracked effect, light, animation, tint pulse, pending kit and sound.
+        /// \brief Forget every tracked effect, light, animation, tint pulse, pending kit and sound.
         ///        Call when leaving the world, before the scene is cleared: the records hold raw
         ///        pointers into that scene, and the service outlives it. Without this, re-entering
         ///        with the same character makes the player's guid resolve again and Update()
@@ -140,6 +144,26 @@ namespace mmo
 
         /// \brief End the running channel of a caster, if any (call when the channel ends).
         void EndChannel(uint64 casterGuid);
+
+        /// \brief Show a spell zone on the ground (call on SpellZoneStart).
+        ///
+        /// Plays the GROUND_ACTIVE kits of the spell's visualization at the position: particles
+        /// on a scene node of their own, sounds at the position. Looping particles and a looping
+        /// sound hold until EndGroundZone, or until durationMs plus a grace period passed, so a
+        /// lost SpellZoneEnd cannot leave a zone on screen for ever. Animations, tints, lights,
+        /// ribbon trails and kit delays have no meaning on the ground and are ignored.
+        /// \param zoneId Id the server gave the zone.
+        /// \param spell The spell whose PersistentAreaAura effect created it.
+        /// \param scene Scene to place the effects in. Must outlive the zone (Reset forgets zones).
+        /// \param position Centre of the zone on the ground.
+        /// \param durationMs Remaining lifetime the server announced.
+        void BeginGroundZone(uint32 zoneId, const proto_client::SpellEntry& spell, Scene& scene, const Vector3& position, GameTime durationMs);
+
+        /// \brief End a spell zone (call on SpellZoneEnd). Its particles stop emitting and fade
+        ///        out; an expired zone also plays its GROUND_EXPIRED kits at the position.
+        /// \param zoneId Id the server gave the zone.
+        /// \param expired True if the zone ran its full duration (its detonation).
+        void EndGroundZone(uint32 zoneId, bool expired);
 
     private:
         SpellVisualizationService() = default;
@@ -192,6 +216,64 @@ namespace mmo
         void UpdateTintPulses(float deltaTime);
 
         static uint32 ToProtoEventValue(Event e);
+
+        /// \brief A point light of a ground effect, faded in and out by UpdateGroundZones.
+        struct GroundLight
+        {
+            Light* light{ nullptr };
+            float current{ 0.0f };
+            float target{ 0.0f };
+            float fadeInSpeed{ 0.0f };
+            float fadeOutSpeed{ 0.0f };
+            bool fadingOut{ false };
+        };
+
+        /// \brief A spell zone shown on the ground, or one that ended and is fading out.
+        struct GroundZone
+        {
+            uint32 zoneId{ 0 };
+            uint32 visualizationId{ 0 };
+            Scene* scene{ nullptr };
+            Vector3 position;
+            /// Holds the GROUND_ACTIVE particles; destroyed once they have faded out.
+            SceneNode* node{ nullptr };
+            std::vector<ParticleSystem*> particles;
+            std::vector<GroundLight> lights;
+            ChannelIndex loopChannel{ InvalidChannel };
+            /// Seconds until the zone ends on its own if no SpellZoneEnd arrives.
+            float remainingSeconds{ 0.0f };
+            /// Set once the zone ended; it is then only waiting for its particles to fade.
+            bool ending{ false };
+            /// Seconds after which a fading zone is destroyed even if particles linger.
+            float fadeSeconds{ 0.0f };
+        };
+
+        /// \brief Spawn a kit's particles under a scene node at the ground and play its sounds
+        ///        at a position. Returns the particle systems created.
+        std::vector<ParticleSystem*> PlayKitAtPosition(const proto_client::SpellKit& kit, Scene& scene, SceneNode& node, const Vector3& position, ChannelIndex* loopChannel, std::vector<GroundLight>& lights);
+
+        /// \brief Fade ground lights; returns true once every light faded out and was destroyed.
+        static bool UpdateGroundLights(Scene& scene, std::vector<GroundLight>& lights, float deltaTime);
+
+        /// \brief Stop a zone's emitters and its loop sound; it is destroyed once faded.
+        void BeginGroundZoneFade(GroundZone& zone);
+
+        /// \brief Advance ground zones: time out lost ones, destroy faded ones.
+        void UpdateGroundZones(float deltaTime);
+
+        /// \brief Ground zones currently shown or fading out.
+        std::vector<GroundZone> m_groundZones;
+
+        /// \brief One-shot ground effects (GROUND_EXPIRED) waiting for their particles to finish.
+        struct GroundBurst
+        {
+            Scene* scene{ nullptr };
+            SceneNode* node{ nullptr };
+            std::vector<ParticleSystem*> particles;
+            std::vector<GroundLight> lights;
+            float fadeSeconds{ 0.0f };
+        };
+        std::vector<GroundBurst> m_groundBursts;
 
     private:
         /// \brief Structure to track a looped sound handle per event/actor.

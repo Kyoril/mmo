@@ -178,6 +178,16 @@ namespace mmo
 		{
 			ImGui::SetTooltip("Create a box-shaped containment volume matching the current bounding box.\nUseful as a starting point for defining interior spaces.");
 		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Derive from Floors") && callbacks.onDeriveContainmentVolumes)
+		{
+			callbacks.onDeriveContainmentVolumes(groupIndex);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Replace this group's containment volumes with boxes over its floor, platform and stair pieces.");
+		}
 		
 		// List existing volumes with editing
 		static int selectedVolumeIndex = -1;

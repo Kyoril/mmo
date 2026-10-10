@@ -10,6 +10,10 @@
 #include "game_server/objects/game_world_object_s.h"
 #include "game_server/spells/aura_container.h"
 #include "base/utilities.h"
+#include "game_server/objects/game_creature_s.h"
+#include "game_server/world/world_instance.h"
+#include "math/math_utils.h"
+#include "proto_data/trigger_helper.h"
 
 #include "proto_data/project.h"
 #include "world/universe.h"
@@ -18,6 +22,23 @@
 
 namespace mmo
 {
+	std::vector<Vector3> SummonPositions(const Vector3& origin, const Radian& facing, const int32 count, const float distance)
+	{
+		std::vector<Vector3> positions;
+		positions.reserve(static_cast<size_t>(std::max(count, 0)));
+
+		// Spread evenly on a circle, starting at the caster's right: two summons stand on
+		// opposite sides of the caster, never both in front where the tank is.
+		const float start = facing.GetValueRadians() - Pi * 0.5f;
+		for (int32 i = 0; i < count; ++i)
+		{
+			const float angle = start + 2.0f * Pi * static_cast<float>(i) / static_cast<float>(count);
+			positions.push_back(origin + FacingToDirection(Radian(angle)) * distance);
+		}
+
+		return positions;
+	}
+
 	namespace SpellEffects
 	{
 		int32_t CalculateBasePoints(SpellCastContext& castCtx, const proto::SpellEffect& effect)
@@ -330,7 +351,38 @@ namespace mmo
 			}
 		}
 
-		void HandlePersistentAreaAura(SpellEffectContext& /*ctx*/) {}
+		void HandlePersistentAreaAura(SpellEffectContext& ctx)
+		{
+			GameUnitS& executer = ctx.castContext.GetExecutor();
+			WorldInstance* world = ctx.castContext.GetWorldInstance();
+			const proto::SpellEntry& spell = ctx.castContext.GetSpell();
+			if (!world)
+			{
+				return;
+			}
+
+			if (ctx.effect.radius() <= 0.0f || spell.duration() <= 0)
+			{
+				ELOG("PersistentAreaAura effect of spell " << spell.id() << " needs a radius and a spell duration");
+				return;
+			}
+
+			// The zone goes where the spell was aimed: a ground location, else under the unit
+			// target (a boss marks the ground under a player), else under the caster.
+			Vector3 position = executer.GetPosition();
+			const SpellTargetMap& target = ctx.castContext.GetTarget();
+			if (target.HasDestTarget())
+			{
+				target.GetDestLocation(position.x, position.y, position.z);
+			}
+			else if (const GameUnitS* unitTarget = ctx.castContext.FindUnitByGuid(target.GetUnitTarget()))
+			{
+				position = unitTarget->GetPosition();
+			}
+
+			world->CreateSpellZone(executer, spell.id(), ctx.effect.triggerspell(), position, ctx.effect.radius(),
+				static_cast<GameTime>(spell.duration()), static_cast<GameTime>(std::max(ctx.effect.amplitude(), 0)));
+		}
 
 		void HandleDrainPower(SpellEffectContext& /*ctx*/) {}
 
@@ -610,7 +662,82 @@ namespace mmo
 
 		void HandleDispel(SpellEffectContext& /*ctx*/) {}
 
-		void HandleSummon(SpellEffectContext& /*ctx*/) {}
+		void HandleSummon(SpellEffectContext& ctx)
+		{
+			GameUnitS& executer = ctx.castContext.GetExecutor();
+			WorldInstance* world = ctx.castContext.GetWorldInstance();
+			if (!world)
+			{
+				return;
+			}
+
+			const uint32 entryId = ctx.effect.summonunit() != 0 ? ctx.effect.summonunit() : static_cast<uint32>(ctx.effect.miscvaluea());
+			const proto::UnitEntry* unitEntry = executer.GetProject().units.getById(entryId);
+			if (!unitEntry)
+			{
+				ELOG("Summon effect of spell " << ctx.castContext.GetSpell().id() << " names unknown creature entry " << entryId);
+				return;
+			}
+
+			const std::vector<Vector3> positions = SummonPositions(
+				executer.GetPosition(), executer.GetFacing(), std::max(1, ctx.basePoints),
+				ctx.effect.radius() > 0.0f ? ctx.effect.radius() : DefaultSummonDistance);
+			const int32 duration = ctx.castContext.GetSpell().duration();
+			const uint32 despawnMs = duration > 0 ? static_cast<uint32>(duration) : 0;
+
+			// The summons join the caster's fight: the caster's victim, or the unit the spell was cast at.
+			std::weak_ptr<GameUnitS> weakAggroTarget;
+			if (GameUnitS* victim = executer.GetVictim())
+			{
+				weakAggroTarget = std::static_pointer_cast<GameUnitS>(victim->shared_from_this());
+			}
+			else if (GameUnitS* unitTarget = ctx.castContext.FindUnitByGuid(ctx.castContext.GetTarget().GetUnitTarget()); unitTarget && unitTarget != &executer)
+			{
+				weakAggroTarget = std::static_pointer_cast<GameUnitS>(unitTarget->shared_from_this());
+			}
+
+			std::weak_ptr<GameUnitS> weakOwner = std::static_pointer_cast<GameUnitS>(executer.shared_from_this());
+			const float facing = executer.GetFacing().GetValueRadians();
+
+			// Same deferral as the SummonCreature trigger action: spawning must not happen inside the
+			// world update tick, which is where creature AI casts its spells.
+			world->GetUniverse().Post([world, unitEntry, positions, facing, despawnMs, weakOwner, weakAggroTarget]()
+				{
+					for (const Vector3& position : positions)
+					{
+						auto summon = world->CreateTemporaryCreature(*unitEntry, position, facing, 0.0f);
+						if (!summon)
+						{
+							continue;
+						}
+						summon->ClearFieldChanges();
+						summon->SetGrantsKillRewards(false);
+
+						GameCreatureS* summonPtr = summon.get();
+						summon->killed.connect([world, weakOwner, summonPtr](GameUnitS* /*killer*/)
+							{
+								if (const auto owner = weakOwner.lock())
+								{
+									owner->RaiseTrigger(trigger_event::OnSummonedUnitDied, summonPtr);
+									return;
+								}
+
+								world->RaiseInstanceTrigger(trigger_event::OnSummonedUnitDied, summonPtr);
+							});
+
+						world->AddGameObject(*summon);
+						if (despawnMs > 0)
+						{
+							summon->TriggerDespawnTimer(despawnMs);
+						}
+
+						if (const auto target = weakAggroTarget.lock(); target && target->IsAlive())
+						{
+							summon->threatened(*target, 1.0f);
+						}
+					}
+				});
+		}
 
 		void HandleSummonPet(SpellEffectContext& /*ctx*/) {}
 

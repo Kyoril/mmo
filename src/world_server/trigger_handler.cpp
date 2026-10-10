@@ -1381,6 +1381,19 @@ namespace mmo
 			auto players = GetPlayersInWorld(GetWorldInstance(context));
 			return players.empty() ? nullptr : players[0];
 		}
+		case trigger_action_target::RandomPlayerNotVictim:
+		{
+			auto players = GetPlayersInWorld(GetWorldInstance(context));
+			const GameUnitS* victim = (context.owner && context.owner->IsUnit()) ? context.owner->AsUnit().GetVictim() : nullptr;
+			if (players.size() > 1)
+			{
+				std::erase(players, victim);
+			}
+
+			if (players.empty()) return nullptr;
+			std::uniform_int_distribution<size_t> dist(0, players.size() - 1);
+			return players[dist(randomGenerator)];
+		}
 		default:
 			WLOG("Unhandled action target " << action.target());
 			break;
@@ -1511,6 +1524,7 @@ namespace mmo
 					return;
 				}
 				summon->ClearFieldChanges();
+				summon->SetGrantsKillRewards(false);
 
 				GameCreatureS* summonPtr = summon.get();
 

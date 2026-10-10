@@ -80,6 +80,8 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 one error, and the swing that lands again reports one recovery),
 `FindUnitByEntry(entry) -> g|nil`, `FindUnitByName(name) -> g|nil`,
 `FindObjectByEntry(entry) -> g|nil` (world objects: chests, doors, ...),
+`FindNearestObjectByEntry(entry, x, y, z) -> g|nil` (the one closest to a position, for maps with
+several objects of one entry, e.g. the Hollow Choir's seals),
 `GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open),
 `GetUnitFlags(g)` (the unit's replicated Flags field),
 `MeleeSwingCount(g)` (auto-attack swings the server resolved against `g`, hit or miss),
