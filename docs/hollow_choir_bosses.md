@@ -177,7 +177,7 @@ Floors: entrance hall and south yard y 1.2, Wake of the Dead and nave y 0.2, the
 | G Durchgang | x -73..-67, z 12..30, then west to the cloister wall at x -76 | nave y 1, stair z 18..24 up to y 5, door into the cloister's east walk at z 27 |
 | 04 Kreuzgang | x -105..-76, z 18..48 | arcade pillars x -100.5 and -82 |
 | L Galerie | east walk y 13 (x -82..-76, z 18..36), west and south walks y 17 | stair from the courtyard: x -89..-83, from z 36 (y 5) north to a landing at z 18..24 (y 13) |
-| Krypta | landing x -130..-124, z 24..36 (y -3), corridor z 12..24, hall x -142..-112, z -12..12 | below the south-west stair; pillar rows z -6 and +6, burial niches, altar niche north |
+| Krypta | landing x -130..-124, z 24..36 (y -3), corridor z 12..24, hall x -142..-112, z -12..12 | below the south-west stair; pillar rows z -6 and +6, burial niches, altar niche north. **Sister Mereth** at (-127, -3, -3), facing the corridor |
 
 Every room is closed to the sky. The nave is vaulted in steps after the kit's demo hall: aisles
 under small domes (y 13), the central nave on a clerestory with rib vaults between transverse
@@ -255,9 +255,9 @@ Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua` and
 ## Open work
 
 - **Spawns:** group G goes into the passage (world model group `Room_007_PassageG`), group L onto
-  the galleries; the crypt (`Room_008_Crypt`) has no encounter yet.
-- **Cramped rooms:** the apse and the cloister are small for a 20-unit player aggro radius.
-  Fighting H or I can pull Mereth, and anything in the apse pulls Veyr.
+  the galleries.
+- **Cramped rooms:** the apse is small for a 20-unit player aggro radius; anything in it pulls
+  Veyr.
 - **Gate art:** the seals are placeholder walls (FP_Wall_01). The sketch wants the singing to stop
   audibly and the altar light to change when G2 opens; neither has a hook yet.
 - Re-point quests 58-61 (kill objectives on 81, 84, 85) at the new bosses.
