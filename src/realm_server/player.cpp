@@ -2441,7 +2441,9 @@ namespace mmo
 					targetInstance = target->GetWorldInstanceId();
 				}
 
-				if (!targetInstance.is_nil())
+				// Only when a transfer will actually happen: an in-place teleport inside our own instance
+				// never reaches OnMoveWorldPortAck, so an override set for it would linger and redirect a later transfer.
+				if (!targetInstance.is_nil() && targetInstance != strongThis->m_instanceId)
 				{
 					strongThis->m_pendingInstanceOverride = InstanceOverride{ mapId, targetInstance };
 				}
@@ -3447,8 +3449,10 @@ namespace mmo
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
 
-		// Login path: never joined through an instance override.
+		// Login path: never joined through an instance override, and no override from an earlier
+		// session may redirect this one's transfers.
 		m_joinedByInstanceOverride = false;
+		m_pendingInstanceOverride.reset();
 
 		// Store dungeon instance binding if applicable
 		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
@@ -3628,6 +3632,9 @@ namespace mmo
 			// Clear group and invite state so a fresh EnterWorld starts with no stale membership.
 			m_group.reset();
 			m_inviterGuid = 0;
+			// A pending GM instance override belongs to this session only.
+			m_pendingInstanceOverride.reset();
+			m_joinedByInstanceOverride = false;
 			EnableProxyPackets(false);
 			EnableEnterWorldPacket(true);
 			ILOG("Successfully logged out");
