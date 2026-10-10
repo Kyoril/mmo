@@ -611,7 +611,15 @@ namespace mmo
 
 	if (added.GetTypeId() == ObjectTypeId::Player)
 	{
-		++m_playerCount;
+		// An invisible game master observes; it must not start the instance, count towards
+		// PlayerCount conditions or fire OnPlayerEnterInstance.
+		if (added.AsUnit().IsGmInvisible())
+		{
+			return;
+		}
+
+		m_countedPlayers.insert(added.GetGuid());
+		m_playerCount = static_cast<uint32>(m_countedPlayers.size());
 
 		// Start instance-wide periodic timers once the first player is present.
 		if (m_playerCount == 1)
@@ -643,6 +651,8 @@ namespace mmo
 
 		// Keep the object alive for this call
 		auto strong = remove.shared_from_this();
+		const uint64 removedGuid = remove.GetGuid();
+		const bool isPlayer = remove.GetTypeId() == ObjectTypeId::Player;
 		m_objectsByGuid.erase(it);
 
 		// Clear update
@@ -710,12 +720,14 @@ namespace mmo
 			remove.destroy(remove);
 		}
 
-		if (remove.GetTypeId() == ObjectTypeId::Player)
+		if (isPlayer)
 		{
-			if (m_playerCount > 0)
+			if (m_countedPlayers.erase(removedGuid) == 0)
 			{
-				--m_playerCount;
+				return;
 			}
+
+			m_playerCount = static_cast<uint32>(m_countedPlayers.size());
 
 			FireInstanceTriggerEvent(trigger_event::OnPlayerLeaveInstance, nullptr);
 

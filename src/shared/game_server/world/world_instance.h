@@ -486,6 +486,9 @@ namespace mmo
 		/// Active repeating OnTimer timers for instance-owned (map) triggers.
 		std::vector<std::unique_ptr<Countdown>> m_instanceTimers;
 
+		/// Players counted towards the instance (game-master observers are not), by guid. Removal
+		/// uncounts exactly the players that were counted on entry.
+		std::unordered_set<uint64> m_countedPlayers;
 		/// Number of players currently in this instance (tracked for wipe detection).
 		uint32 m_playerCount{ 0 };
 
