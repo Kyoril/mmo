@@ -1919,6 +1919,8 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		SpellWentOff(casterGuid, spellId);
+
 		if (casterGuid != m_selectedCharacterGuid)
 		{
 			return PacketParseResult::Pass;

@@ -249,7 +249,7 @@ trigger cast is refused while the boss is still casting or channeling, and the t
 be lost. Phase changes cancel the boss's current cast before they cast. Adds despawn when their
 boss resets or dies (instance variables 2001-2003). Summoned creatures never reward their killers.
 
-Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua` and
+Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua`, `hollow_choir_boss_abilities.lua` (every recurring ability goes off and its zone hits) and
 `hollow_choir_mereth_veyr_encounter.lua`.
 
 ## Open work

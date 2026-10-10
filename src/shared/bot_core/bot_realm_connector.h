@@ -95,6 +95,11 @@ namespace mmo
 		/// @param durationMs The channel's duration in milliseconds.
 		signal<void(uint64, uint32, int32)> ChannelStarted;
 
+		/// @brief Emitted when a unit in sight finishes a cast (SpellGo), ours or anyone else's.
+		/// @param casterGuid The GUID of the casting unit.
+		/// @param spellId The spell that went off.
+		signal<void(uint64, uint32)> SpellWentOff;
+
 		/// @brief Emitted on ChannelUpdate. A remaining time of 0 is the server's only signal that
 		///		a channel has ended, whether it ran out, was interrupted or never got going.
 		/// @param casterGuid The GUID of the channeling unit.
