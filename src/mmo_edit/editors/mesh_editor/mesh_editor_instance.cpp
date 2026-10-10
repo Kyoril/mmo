@@ -7,6 +7,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "mesh_editor.h"
+#include "mesh_collision_geometry.h"
 #include "editor_host.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
@@ -1397,57 +1398,6 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void ReadVertexDataPositions(const VertexData& vertexData, std::vector<Vector3>& out_vertexPositions)
-	{
-		// Get shared vertex data
-		const auto buffer = vertexData.vertexBufferBinding->GetBuffer(0);
-
-		auto bufferData = static_cast<uint8*>(buffer->Map(LockOptions::ReadOnly));
-		ASSERT(bufferData);
-
-		for (size_t i = 0; i < vertexData.vertexCount; ++i)
-		{
-			const VertexElement* posElement = vertexData.vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Position);
-			float* position = nullptr;
-			posElement->BaseVertexPointerToElement(bufferData, &position);
-
-			const float x = *position++;
-			const float y = *position++;
-			const float z = *position++;
-			out_vertexPositions.emplace_back(x, y, z);
-
-			bufferData += vertexData.vertexDeclaration->GetVertexSize(0);
-		}
-
-		buffer->Unmap();
-	}
-
-	void ReadIndexData(const IndexData& indexData, uint32 offset, std::vector<uint32>& out_indices)
-	{
-		if (indexData.indexBuffer->GetIndexSize() == IndexBufferSize::Index_16)
-		{
-			const uint16* indices = reinterpret_cast<uint16*>(indexData.indexBuffer->Map(LockOptions::ReadOnly));
-			ASSERT(indices);
-
-			for (size_t i = 0; i < indexData.indexCount; ++i)
-			{
-				out_indices.push_back((*indices++) + offset);
-			}
-		}
-		else
-		{
-			const uint32* indices = reinterpret_cast<uint32*>(indexData.indexBuffer->Map(LockOptions::ReadOnly));
-			ASSERT(indices);
-
-			for (size_t i = 0; i < indexData.indexCount; ++i)
-			{
-				out_indices.push_back((*indices++) + offset);
-			}
-		}
-
-		indexData.indexBuffer->Unmap();
-	}
-
 	void MeshEditorInstance::DrawCollision(const String& id)
 	{
 		if (ImGui::Begin(id.c_str()))
@@ -1475,81 +1425,9 @@ namespace mmo
 
 			if (ImGui::Button("Build Complex"))
 			{
-				m_mesh->GetCollisionTree().Clear();
-
-				// Gather all vertex data. Skinned/skeletal meshes may keep their (bind pose)
-				// vertices in the mesh's shared vertex data, referenced by every submesh;
-				// static meshes usually use per-submesh vertex data. Both are supported:
-				// the shared pool is gathered once and reused by all submeshes that
-				// reference it.
-				std::vector<Vector3> vertices;
-				std::vector<uint32> indices;
-				std::vector<uint16> faceSubMeshes;
-
-				uint32 sharedVertexOffset = 0;
-				bool sharedVerticesGathered = false;
-
-				for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
-				{
-					if (!m_includedSubMeshes.contains(i))
-					{
-						continue;
-					}
-
-					SubMesh& sub = m_mesh->GetSubMesh(i);
-
-					if (!sub.indexData)
-					{
-						continue;
-					}
-
-					uint32 vertexOffset = 0;
-					if (sub.useSharedVertices)
-					{
-						if (!m_mesh->sharedVertexData)
-						{
-							continue;
-						}
-
-						if (!sharedVerticesGathered)
-						{
-							sharedVertexOffset = static_cast<uint32>(vertices.size());
-							vertices.reserve(vertices.size() + m_mesh->sharedVertexData->vertexCount);
-							ReadVertexDataPositions(*m_mesh->sharedVertexData, vertices);
-							sharedVerticesGathered = true;
-						}
-
-						vertexOffset = sharedVertexOffset;
-					}
-					else
-					{
-						if (!sub.vertexData)
-						{
-							continue;
-						}
-
-						vertexOffset = static_cast<uint32>(vertices.size());
-						vertices.reserve(vertices.size() + sub.vertexData->vertexCount);
-						ReadVertexDataPositions(*sub.vertexData, vertices);
-					}
-
-					indices.reserve(indices.size() + sub.indexData->indexCount);
-
-					const size_t indexCountBefore = indices.size();
-					ReadIndexData(*sub.indexData, vertexOffset, indices);
-
-					// Remember the source submesh of every gathered face so surface
-					// types can be resolved from the hit submesh's material.
-					const size_t facesAdded = (indices.size() - indexCountBefore) / 3;
-					faceSubMeshes.insert(faceSubMeshes.end(), facesAdded, i);
-				}
-
-				// Building from an empty gather (nothing included) would still allocate a
-				// node pool, making the tree serialize as non-empty bogus collision.
-				if (!indices.empty())
-				{
-					m_mesh->GetCollisionTree().Build(vertices, indices, faceSubMeshes);
-				}
+				CollisionRecipe recipe;
+				recipe.includedSubMeshes.assign(m_includedSubMeshes.begin(), m_includedSubMeshes.end());
+				RebuildMeshCollision(*m_mesh, recipe);
 			}
 
 			static const char* s_noMaterial = "(No Material)";
