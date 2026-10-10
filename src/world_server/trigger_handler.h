@@ -243,8 +243,10 @@ namespace mmo
 
 		/// Collects all alive players currently in the given world instance.
 		/// @param world The world instance to enumerate. May be nullptr.
+		/// @param includeObservers If true, invisible GMs are included. Target selection must leave this
+		///        false so an observing GM never influences an encounter; only message delivery passes true.
 		/// @return Vector of alive player units (possibly empty).
-		std::vector<GameUnitS*> GetPlayersInWorld(WorldInstance* world) const;
+		std::vector<GameUnitS*> GetPlayersInWorld(WorldInstance* world, bool includeObservers = false) const;
 
 		/// Invokes a callback for each target an action resolves to. For most targets this is a single
 		/// object; for the AllPlayers target it is every player in the instance.
