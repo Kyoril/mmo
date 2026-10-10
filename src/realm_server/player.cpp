@@ -2548,6 +2548,7 @@ namespace mmo
 		const auto strongWorld = m_world.lock();
 		if (!strongWorld || !m_characterData)
 		{
+			DLOG("Dropping proxy payload for opcode " << opCode << ": no world node or character");
 			return;
 		}
 
@@ -2616,6 +2617,18 @@ namespace mmo
 		SendSystemMessage(std::string(isInvisible ? "GM invisibility" : "Godmode") + (enable ? " is on." : " is off."));
 		ForwardProxyPayload(static_cast<uint16>(packet.GetId()), { enable });
 		return PacketParseResult::Pass;
+	}
+
+	void Player::ForwardGmFlagsToWorld()
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		const uint8 flags = m_characterData->gmFlags;
+		ForwardProxyPayload(game::client_realm_packet::CheatGodmode, { static_cast<uint8>((flags & gm_flags::Godmode) != 0 ? 1 : 0) });
+		ForwardProxyPayload(game::client_realm_packet::CheatInvisible, { static_cast<uint8>((flags & gm_flags::Invisible) != 0 ? 1 : 0) });
 	}
 
 	PacketParseResult Player::OnCheatSummon(game::IncomingPacket &packet)
@@ -3037,12 +3050,13 @@ namespace mmo
 
 			// No group binding yet - check if the leader is currently inside that
 			// dungeon.  If so, adopt the leader's instance as the group binding so
-			// that other members entering the dungeon join the same instance.
+			// that other members entering the dungeon join the same instance. A leader
+			// who is only visiting (GM port into someone else's run) never binds the group.
 			const uint64 leaderGuid = m_group->GetLeader();
 			if (leaderGuid != 0 && leaderGuid != GetCharacterGuid())
 			{
 				Player* leader = m_manager.GetPlayerByCharacterGuid(leaderGuid);
-				if (leader && leader->HasCharacterGuid())
+				if (leader && leader->HasCharacterGuid() && !leader->IsVisitingInstance())
 				{
 					const auto& leaderData = leader->GetCharacterData();
 					if (leaderData.mapId == mapId && !leaderData.instanceId.is_nil())
@@ -3500,6 +3514,9 @@ namespace mmo
 		// Tell the client which subsystems it may use on this world node
 		SendFullSubsystemStatus();
 		SendGmFlagStatus();
+#ifdef MMO_WITH_DEV_COMMANDS
+		ForwardGmFlagsToWorld();
+#endif
 
 		// Send Message of the Day to the player
 		String motd = GetManager().GetMessageOfTheDay();
@@ -3580,6 +3597,9 @@ namespace mmo
 		// The new node may offer different subsystems than the previous one.
 		SendFullSubsystemStatus();
 		SendGmFlagStatus();
+#ifdef MMO_WITH_DEV_COMMANDS
+		ForwardGmFlagsToWorld();
+#endif
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;

@@ -105,6 +105,10 @@ namespace mmo
 		/// Gets the character data for the active character.
 		[[nodiscard]] const CharacterData& GetCharacterData() const { return m_characterData.value(); }
 
+		/// Returns true while the character is in an instance it joined through a GM port override
+		/// (observing someone else's run). Such an instance must never become a group binding.
+		[[nodiscard]] bool IsVisitingInstance() const { return m_joinedByInstanceOverride; }
+
 		/// Gets the active character guid, or 0 if not set.
 		[[nodiscard]] uint64 GetCharacterGuid() const { return m_characterData.has_value() ? m_characterData.value().characterId : 0; }
 
@@ -637,6 +641,11 @@ namespace mmo
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSummon(game::IncomingPacket &packet);
 		PacketParseResult OnCheatGmFlag(game::IncomingPacket &packet);
+
+		/// Sends the character's current godmode and invisibility flags to the world node it just
+		/// joined. A toggle made while the join was in flight was persisted but could not be
+		/// forwarded (no world yet); the world side applies the values idempotently.
+		void ForwardGmFlagsToWorld();
 		PacketParseResult OnCheatSetTimeOfDay(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetSubsystem(game::IncomingPacket &packet);
 		PacketParseResult OnGuildCreate(game::IncomingPacket &packet);
