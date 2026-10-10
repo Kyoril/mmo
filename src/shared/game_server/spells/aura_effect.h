@@ -12,6 +12,7 @@
 namespace mmo
 {
 	class TimerQueue;
+	class SpellTargetMap;
 
 	namespace proto
 	{
@@ -61,6 +62,12 @@ namespace mmo
 		}
 
 		void HandleProcEffect(GameUnitS* instigator);
+
+		/// Builds the target map for the spell a PeriodicTriggerSpell aura casts on each tick.
+		/// @param caster The unit casting the triggered spell.
+		/// @param targetMap Receives the target map.
+		/// @return false if the effect needs a unit target and none is available.
+		bool BuildTriggerSpellTargetMap(const GameUnitS& caster, SpellTargetMap& targetMap) const;
 
 	public:
 		void HandleEffect(bool apply);

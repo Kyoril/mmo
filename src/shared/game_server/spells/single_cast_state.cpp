@@ -1182,6 +1182,10 @@ namespace mmo
 		}
 
 		auto& container = (m_targetAuraContainers[targetGuid] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, duration, m_itemGuid));
+		if (m_target.HasUnitTarget())
+		{
+			container->SetSpellTargetGuid(m_target.GetUnitTarget());
+		}
 		return *container;
 	}
 

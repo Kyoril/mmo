@@ -210,6 +210,12 @@ namespace mmo
 
 		uint64 GetItemGuid() const { return m_itemGuid; }
 
+		/// Gets the guid of the unit the spell which caused this aura was cast at, or 0 if it had none.
+		uint64 GetSpellTargetGuid() const { return m_spellTargetGuid; }
+
+		/// Remembers the unit the spell which caused this aura was cast at.
+		void SetSpellTargetGuid(const uint64 guid) { m_spellTargetGuid = guid; }
+
 	private:
 
 		GameUnitS &m_owner;
@@ -234,6 +240,8 @@ namespace mmo
 		mutable std::weak_ptr<GameUnitS> m_caster;
 
 		uint64 m_itemGuid = 0;
+
+		uint64 m_spellTargetGuid = 0;
 
 		scoped_connection m_expiredConnection;
 
