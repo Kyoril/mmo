@@ -30,7 +30,6 @@ The design is in `docs/superpowers/specs/2026-09-27-content-foundation-design.md
 | `plan --keep-away POI:N` | Keeps items out of a circle of the place's radius plus N metres around its centre (use `:0` or small values to keep distance from the place's edge). |
 | `plan --anchor X Z` | Pin centres are often on steep ground, so choose an anchor on suitable ground; every pilot site needed one. |
 | `python tools/world/prop_lint.py --map 0` | Placement lint for every existing prop and tree, compared to the `props` baseline. |
-| `python tools/world/wmo_rooms.py Models/X.hwmo [--write] [--image x.png]` | Portal-culling rooms of a world model: derives each group's containment volumes from its floor, platform and stair pieces and relinks portals that join the wrong rooms. Re-run after changing rooms in the world model editor; without volumes the engine falls back to the groups' overlapping bounding boxes and culls the room the camera is in. |
 
 ## Files
 

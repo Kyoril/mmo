@@ -230,7 +230,7 @@ TEST_CASE("Hollow Choir rooms keep the eye's room and every door of it in view",
 {
 	// Monastery_001 is the Hollow Choir dungeon. Its rooms once had no containment volumes, so the
 	// eye was placed by overlapping bounding boxes - in the wrong room in most of the entrance hall,
-	// which then hid the hall itself. tools/world/wmo_rooms.py derives the volumes from the floors.
+	// which then hid the hall itself. The volumes are derived from the floors (scene_graph/world_model_rooms.h).
 	std::ifstream file(MMO_SOURCE_DIR "/data/client/Models/Dungeon/Monastery_001.hwmo", std::ios::binary);
 	if (!file)
 	{
@@ -339,4 +339,15 @@ TEST_CASE("Hollow Choir rooms keep the eye's room and every door of it in view",
 	// each other (as their bounding boxes did) are not.
 	INFO(shared << " of " << samples << " eye positions lie in more than one room");
 	CHECK(shared * 50 <= samples);
+
+	// Looking from the Wake (Room_002) through each window into the entrance hall (Room_001), the
+	// window straight across opens onto the south yard (Room_003). Its windows once had no portals,
+	// so the yard vanished (and the sky showed) whenever no portalled opening was in view as well.
+	for (const float windowZ : { -2.0f, -8.0f, -26.0f })
+	{
+		INFO("window at z " << windowZ);
+		CollectVisiblePortalGroups(model, Matrix4::Identity, LookAlong(Vector3(10.0f, 5.0f, windowZ), Vector3(-1, 0, 0)), visible);
+		CHECK(Contains(visible, 0));
+		CHECK(Contains(visible, 2));
+	}
 }

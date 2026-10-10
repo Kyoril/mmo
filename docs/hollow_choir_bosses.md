@@ -178,13 +178,17 @@ Floors: entrance hall and south yard y 1.2, Wake of the Dead and nave y 0.2, the
 `tools/hollow_choir/author_spawns.py` places the spawns, checks them against the navmesh and the
 spacing rule, and renders `generated/hollow_choir/spawns.png`.
 
-**Portal culling.** The six groups (rooms) carry containment volumes derived from their floors by
-`tools/world/wmo_rooms.py`; without them the engine placed the camera by the groups' bounding
-boxes, which overlap across the hall, the yard and the nave, and culled the hall from its own
-entrance. The same run relinked portals 6 and 7 (hall to south yard; they were linked to the
-Wake). Re-run `py -3 tools/world/wmo_rooms.py Models/Dungeon/Monastery_001.hwmo --write` after
-changing rooms, portals or floors in the editor; portal 8 (towards the cloister) sits inside the
-cloister floor until the passage exists, and the tool reports it rather than guessing.
+**Portal culling.** The six groups (rooms) carry containment volumes derived from their floors;
+without them the engine placed the camera by the groups' bounding boxes, which overlap across the
+hall, the yard and the nave, and culled the hall from its own entrance. Portals 6 and 7 were
+relinked to join the hall and the south yard (they were linked to the Wake), and portals 10-12
+were added for the three yard-side hall windows that had none (through them the yard vanished and
+the sky showed). In mmo_edit's world model editor, **World Model Settings > Rooms** has
+*Derive Room Volumes*, *Check Portal Links* and *Fix Portal Links* (and each group's properties a
+*Derive from Floors* button); redo them after changing rooms, portals or floors.
+`mmo_edit --derive-rooms Models/Dungeon/Monastery_001.hwmo` does the same unattended. Portal 8
+(towards the cloister) sits inside the cloister floor until the passage exists, and the check
+reports it rather than guessing.
 
 **Spacing.** Creatures in combat call idle allies within 8 units, so members of two packs stay at
 least 12 apart (assist radius plus drift). Pairs a wall separates are exempt. Player aggro is a
@@ -219,8 +223,8 @@ Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua` and
 ## Open work
 
 - **Geometry (user):** a passage from the nave to the cloister. Then group G goes into it.
-- **Rooms:** after the passage is built, re-run `tools/world/wmo_rooms.py` (see Layout) and make
-  sure portal 8 sits on the nave/cloister boundary.
+- **Rooms:** after the passage is built, derive the room volumes again (see Layout) and make
+  sure portal 8 sits on the nave/cloister boundary; every opening between rooms needs a portal.
 - **Navmesh:** the Wake of the Dead floor is 1 unit below the entrance hall with no ramp, and the
   stair from the nave to the west wing has almost no navmesh. Both are separate islands: creatures
   fight inside them but cannot follow players out. Rebuild the navmesh once the geometry is fixed.
