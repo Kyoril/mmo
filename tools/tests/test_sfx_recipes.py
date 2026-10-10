@@ -119,7 +119,7 @@ class HumanRecipeTests(_RecipeChecks, unittest.TestCase):
 
 class HollowChoirRecipeTests(_RecipeChecks, unittest.TestCase):
     recipe = hollow_choir
-    count = 26
+    count = 29
 
     def test_every_prompt_names_its_layers(self):
         # Layered by mixing (see human.py): each prompt is one element and must exclude music,

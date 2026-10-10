@@ -64,6 +64,8 @@ SOUND_ENTRIES = [
     (152, "Hollow Choir - Dirge Loop", "Veyr_DirgeLoop.wav", True, 0.80),
     (153, "Hollow Choir - Choir Rises Cast", "Veyr_ChoirRisesCast.wav", False, 0.95),
     (154, "Hollow Choir - Resonance Hum", "Veyr_ResonanceHum.wav", False, 0.80),
+    # Loot proc: fires on melee hits, on top of the swing sound, so it stays well below the bosses.
+    (156, "Hollow Choir - Coffin Rot Hit", "Loot_CoffinRotHit.wav", False, 0.70),
 ]
 SND = {name[len("Hollow Choir - "):]: sid for sid, name, *_ in SOUND_ENTRIES}
 
@@ -182,6 +184,14 @@ VISUALIZATIONS += [
         IMPACT: [fx("Oswin_CandleBurn", scope="TARGET")],
     }),
 ]
+# Loot. Coffin Rot (274) is the shadow DoT the Coffin Nail Dagger's equip proc (273) drives in.
+# The aura has no sound (rules above); the hit carries it. The equip proc itself is invisible.
+VISUALIZATIONS += [
+    (97, "Hollow Choir - Coffin Rot", [274], {
+        IMPACT: [fx("Loot_CoffinRotHit", "Coffin Rot Hit", scope="TARGET")],
+        AURA_IDLE: [fx("Loot_CoffinRotAura", scope="TARGET")],
+    }),
+]
 SHARED_VISUALIZATIONS = {266: 80, 267: 84}
 
 # Spells deliberately left without a visualization: the Dirge pulse fires every second from
@@ -194,6 +204,7 @@ EXPECTED_SPELLS = {
     259: "Silent Place", 260: "Dissonance", 261: "Dissonance", 262: "Dirge of the Grave",
     263: "Dirge of the Grave", 264: "The Choir Rises", 265: "Choral Resonance",
     266: "Warden's Cleave", 267: "Mournful Dirge", 268: "Spilled Wax", 269: "Spilled Wax",
+    274: "Coffin Rot",
 }
 
 

@@ -204,6 +204,25 @@ SOUNDS = {
         "fading in about one second, slightly eerie. Only the hum: no voice, no impact, no "
         "music. Fantasy game buff sound.",
         duration=1.5, target_dbfs=-3.0),
+
+    # --- Loot: Coffin Nail Dagger proc (Coffin Rot, spell 274) ---------------------------------
+    # Fires on a melee hit, so it sits on top of the swing sound: short, dark, and quieter than
+    # the boss sounds (the final goes out at -6 dBFS).
+    "Loot_Rot_Nail": SoundSpec(
+        "A single short sharp puncture: an old rusty iron nail driven hard into rotten wet wood, "
+        "a quick crunchy splintering stab with very fast decay. Only the nail puncture: no "
+        "magic, no voice, no music. " + _CRYPT,
+        duration=1.0, target_dbfs=-3.0),
+    "Loot_Rot_Shadow": SoundSpec(
+        "A short dark magical shadow burst: a hollow cold ghostly exhale, a low breathy whoosh "
+        "of dark energy that swells and fades quickly. Only the dark whoosh: no impact, no "
+        "voice, no music. " + _CRYPT,
+        duration=1.2, target_dbfs=-3.0),
+    "Loot_Rot_Hiss": SoundSpec(
+        "A short sickly wet hiss of rot and decay: tiny bubbling, festering fizz and spores "
+        "puffing out, fading away quickly. Only the rot hiss: no impact, no whoosh, no voice, "
+        "no music. " + _CRYPT,
+        duration=1.2, target_dbfs=-3.0),
 }
 
 # Finals that are a single generated take, postprocessed: final name -> (layer, take, dBFS).
@@ -283,6 +302,16 @@ MIXES = {
     },
     # The swell prompt still peaks around 40% of the clip, so the crescendo is built by the mix:
     # the riser carries the build and the choir lands on its burst.
+    # Coffin Nail Dagger proc. Three variants went to audition (balanced / darker / punchy);
+    # the balanced one is in until the user picks. Quieter than the boss sounds.
+    "Loot_CoffinRotHit": {
+        "target_dbfs": -6.0,
+        "layers": [
+            MixLayer("Loot_Rot_Nail", take=2, offset=0.0, gain_db=0.0),
+            MixLayer("Loot_Rot_Shadow", take=1, offset=0.02, gain_db=-3.0),
+            MixLayer("Loot_Rot_Hiss", take=3, offset=0.05, gain_db=-8.0, length=0.7),
+        ],
+    },
     "Veyr_ChoirRisesCast": {
         "target_dbfs": -4.0,
         "layers": [
@@ -300,4 +329,5 @@ FINAL_ORDER = [
     "Mereth_SilentLoop",
     "Veyr_DissonanceMark", "Veyr_DissonanceWave", "Veyr_DirgeLoop", "Veyr_ChoirRisesCast",
     "Veyr_ResonanceHum",
+    "Loot_CoffinRotHit",
 ]
