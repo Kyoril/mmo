@@ -7,6 +7,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "mesh_editor.h"
+#include "mesh_collision_geometry.h"
 #include "editor_host.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
@@ -109,10 +110,14 @@ namespace mmo
 				skeletonRoot->SetVisible(false, true);
 			}
 		}
+
+		m_collisionEditor = std::make_unique<MeshCollisionEditor>(m_scene, *m_camera, *m_cameraAnchor, m_mesh, m_entity, m_assetPath.string());
 	}
 
 	MeshEditorInstance::~MeshEditorInstance()
 	{
+		m_collisionEditor.reset();
+
 		if (m_entity)
 		{
 			m_scene.DestroyEntity(*m_entity);
@@ -153,6 +158,7 @@ namespace mmo
 
 		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 
+		m_collisionEditor->Update();
 		m_scene.Render(*m_camera, PixelShaderType::Forward);
 		
 		m_viewportRT->Update();
@@ -504,14 +510,34 @@ namespace mmo
 		ImGui::PopID();
 	}
 
+	ImVec2 MeshEditorInstance::ViewportMouse01() const
+	{
+		const ImVec2 mouse = ImGui::GetMousePos();
+		return ImVec2(
+			(mouse.x - m_viewportImageMin.x) / std::max(1.0f, m_lastAvailViewportSize.x),
+			(mouse.y - m_viewportImageMin.y) / std::max(1.0f, m_lastAvailViewportSize.y));
+	}
+
 	void MeshEditorInstance::OnMouseButtonDown(const uint32 button, const uint16 x, const uint16 y)
 	{
 		m_lastMouseX = x;
 		m_lastMouseY = y;
+		m_pressMouseX = x;
+		m_pressMouseY = y;
+
+		if (m_viewportHovered)
+		{
+			const ImVec2 p = ViewportMouse01();
+			m_collisionEditor->OnMousePressed(button, p.x, p.y);
+		}
 	}
 
 	void MeshEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
 	{
+		const ImVec2 p = ViewportMouse01();
+		const bool wasClick = std::abs(static_cast<int>(x) - m_pressMouseX) < 4 && std::abs(static_cast<int>(y) - m_pressMouseY) < 4;
+		m_collisionEditor->OnMouseReleased(button, p.x, p.y, wasClick && m_viewportHovered);
+
 		if (button == 0)
 		{
 			m_leftButtonPressed = false;
@@ -532,16 +558,23 @@ namespace mmo
 		const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
 		const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
-		if (m_leftButtonPressed || m_rightButtonPressed)
+		// While the collision gizmo is dragged, the mouse moves the shape, not the camera.
+		if (!m_collisionEditor->IsGizmoActive())
 		{
-			m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
-			m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
+			if (m_leftButtonPressed || m_rightButtonPressed)
+			{
+				m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
+				m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
+			}
+
+			if (m_middleButtonPressed)
+			{
+				m_cameraAnchor->Translate(Vector3(0.0f, deltaY * 0.05f, 0.0f), TransformSpace::Local);
+			}
 		}
 
-		if (m_middleButtonPressed)
-		{
-			m_cameraAnchor->Translate(Vector3(0.0f, deltaY * 0.05f, 0.0f), TransformSpace::Local);
-		}
+		const ImVec2 p = ViewportMouse01();
+		m_collisionEditor->OnMouseMoved(p.x, p.y);
 
 		m_lastMouseX = x;
 		m_lastMouseY = y;
@@ -578,6 +611,16 @@ namespace mmo
 
 	bool MeshEditorInstance::StairsToRampInFile(const String& assetPath)
 	{
+		// Meshes with collision shapes rebuild their tree from the recipe, which would undo the ramp,
+		// and this save would drop the recipe: refuse them.
+		CollisionRecipe recipe;
+		collision_recipe_read::Type recipeResult = collision_recipe_read::Absent;
+		if (LoadMeshCollisionRecipe(assetPath, recipe, recipeResult) && recipeResult != collision_recipe_read::Absent)
+		{
+			ELOG("Stairs to ramp: " << assetPath << " has collision shapes; use a Wedge or Helix Ramp shape instead");
+			return false;
+		}
+
 		const MeshPtr mesh = MeshManager::Get().Load(assetPath);
 		if (!mesh)
 		{
@@ -610,18 +653,10 @@ namespace mmo
 
 	bool MeshEditorInstance::Save()
 	{
-		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
-		if (!file)
+		if (!SaveMeshWithRecipe(m_mesh, GetAssetPath().string(), m_collisionEditor->GetRecipeForSave()))
 		{
-			ELOG("Failed to open mesh file " << GetAssetPath() << " for writing!");
 			return false;
 		}
-
-		io::StreamSink sink { *file };
-		io::Writer writer { sink };
-		
-		MeshSerializer serializer;
-		serializer.Serialize(m_mesh, writer);
 
 		ILOG("Successfully saved mesh " << GetAssetPath());
 		
@@ -1459,57 +1494,6 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void ReadVertexDataPositions(const VertexData& vertexData, std::vector<Vector3>& out_vertexPositions)
-	{
-		// Get shared vertex data
-		const auto buffer = vertexData.vertexBufferBinding->GetBuffer(0);
-
-		auto bufferData = static_cast<uint8*>(buffer->Map(LockOptions::ReadOnly));
-		ASSERT(bufferData);
-
-		for (size_t i = 0; i < vertexData.vertexCount; ++i)
-		{
-			const VertexElement* posElement = vertexData.vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Position);
-			float* position = nullptr;
-			posElement->BaseVertexPointerToElement(bufferData, &position);
-
-			const float x = *position++;
-			const float y = *position++;
-			const float z = *position++;
-			out_vertexPositions.emplace_back(x, y, z);
-
-			bufferData += vertexData.vertexDeclaration->GetVertexSize(0);
-		}
-
-		buffer->Unmap();
-	}
-
-	void ReadIndexData(const IndexData& indexData, uint32 offset, std::vector<uint32>& out_indices)
-	{
-		if (indexData.indexBuffer->GetIndexSize() == IndexBufferSize::Index_16)
-		{
-			const uint16* indices = reinterpret_cast<uint16*>(indexData.indexBuffer->Map(LockOptions::ReadOnly));
-			ASSERT(indices);
-
-			for (size_t i = 0; i < indexData.indexCount; ++i)
-			{
-				out_indices.push_back((*indices++) + offset);
-			}
-		}
-		else
-		{
-			const uint32* indices = reinterpret_cast<uint32*>(indexData.indexBuffer->Map(LockOptions::ReadOnly));
-			ASSERT(indices);
-
-			for (size_t i = 0; i < indexData.indexCount; ++i)
-			{
-				out_indices.push_back((*indices++) + offset);
-			}
-		}
-
-		indexData.indexBuffer->Unmap();
-	}
-
 	void MeshEditorInstance::DrawCollision(const String& id)
 	{
 		if (ImGui::Begin(id.c_str()))
@@ -1528,157 +1512,35 @@ namespace mmo
 				ImGui::Separator();
 			}
 
-			if (ImGui::Button("Clear"))
-			{
-				m_mesh->GetCollisionTree().Clear();
-			}
+			m_collisionEditor->DrawPanel();
 
-			ImGui::SameLine();
-
-			if (ImGui::Button("Build Complex"))
-			{
-				m_mesh->GetCollisionTree().Clear();
-
-				// Gather all vertex data. Skinned/skeletal meshes may keep their (bind pose)
-				// vertices in the mesh's shared vertex data, referenced by every submesh;
-				// static meshes usually use per-submesh vertex data. Both are supported:
-				// the shared pool is gathered once and reused by all submeshes that
-				// reference it.
-				std::vector<Vector3> vertices;
-				std::vector<uint32> indices;
-				std::vector<uint16> faceSubMeshes;
-
-				uint32 sharedVertexOffset = 0;
-				bool sharedVerticesGathered = false;
-
-				for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
-				{
-					if (!m_includedSubMeshes.contains(i))
-					{
-						continue;
-					}
-
-					SubMesh& sub = m_mesh->GetSubMesh(i);
-
-					if (!sub.indexData)
-					{
-						continue;
-					}
-
-					uint32 vertexOffset = 0;
-					if (sub.useSharedVertices)
-					{
-						if (!m_mesh->sharedVertexData)
-						{
-							continue;
-						}
-
-						if (!sharedVerticesGathered)
-						{
-							sharedVertexOffset = static_cast<uint32>(vertices.size());
-							vertices.reserve(vertices.size() + m_mesh->sharedVertexData->vertexCount);
-							ReadVertexDataPositions(*m_mesh->sharedVertexData, vertices);
-							sharedVerticesGathered = true;
-						}
-
-						vertexOffset = sharedVertexOffset;
-					}
-					else
-					{
-						if (!sub.vertexData)
-						{
-							continue;
-						}
-
-						vertexOffset = static_cast<uint32>(vertices.size());
-						vertices.reserve(vertices.size() + sub.vertexData->vertexCount);
-						ReadVertexDataPositions(*sub.vertexData, vertices);
-					}
-
-					indices.reserve(indices.size() + sub.indexData->indexCount);
-
-					const size_t indexCountBefore = indices.size();
-					ReadIndexData(*sub.indexData, vertexOffset, indices);
-
-					// Remember the source submesh of every gathered face so surface
-					// types can be resolved from the hit submesh's material.
-					const size_t facesAdded = (indices.size() - indexCountBefore) / 3;
-					faceSubMeshes.insert(faceSubMeshes.end(), facesAdded, i);
-				}
-
-				// Building from an empty gather (nothing included) would still allocate a
-				// node pool, making the tree serialize as non-empty bogus collision.
-				if (!indices.empty())
-				{
-					m_mesh->GetCollisionTree().Build(vertices, indices, faceSubMeshes);
-				}
-				m_collisionToolMessage.clear();
-			}
-
-			ImGui::SameLine();
+			ImGui::Separator();
 
 			if (ImGui::Button("Stairs to Ramp"))
 			{
-				m_collisionToolMessage = ReplaceStairCollisionWithRamp(*m_mesh).message;
+				// The ramp rewrites the baked tree directly; a mesh with collision shapes rebuilds that
+				// tree from its recipe, which would silently undo the ramp. Shapes cover that case.
+				if (m_collisionEditor->GetRecipeForSave())
+				{
+					m_collisionToolMessage = "This mesh has collision shapes. Use a Wedge or Helix Ramp shape instead of Stairs to Ramp.";
+				}
+				else
+				{
+					m_collisionToolMessage = ReplaceStairCollisionWithRamp(*m_mesh).message;
+					m_collisionEditor->OnTreeReplaced();
+				}
 			}
 			if (ImGui::IsItemHovered())
 			{
 				ImGui::SetTooltip("Replace the steps of a straight staircase in the collision with one ramp from its foot to its top tread.\n"
 					"Players and the navigation mesh then walk the stairs smoothly. The visible steps are unchanged.\n"
-					"Build the collision first; save afterwards and rebuild the navigation mesh of maps using the mesh.");
+					"Build the collision first; save afterwards and rebuild the navigation mesh of maps using the mesh.\n"
+					"Not available for meshes with collision shapes: use a Wedge or Helix Ramp shape there.");
 			}
 
 			if (!m_collisionToolMessage.empty())
 			{
 				ImGui::TextWrapped("%s", m_collisionToolMessage.c_str());
-			}
-
-			static const char* s_noMaterial = "(No Material)";
-
-			if (ImGui::CollapsingHeader("Meshes To Include", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				const AABBTree& tree = m_mesh->GetCollisionTree();
-				ImGui::Text("Nodes: %zu", tree.GetNodes().size());
-
-				const uint16 subMeshCount = m_mesh->GetSubMeshCount();
-
-				if (ImGui::Button("Select All"))
-				{
-					for (uint16 i = 0; i < subMeshCount; ++i)
-					{
-						m_includedSubMeshes.insert(i);
-					}
-				}
-
-				ImGui::SameLine();
-
-				if (ImGui::Button("Deselect All"))
-				{
-					m_includedSubMeshes.clear();
-				}
-
-				for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
-				{
-					ImGui::PushID(i);
-					bool included = m_includedSubMeshes.contains(i);
-					if (ImGui::Checkbox("##include", &included))
-					{
-						if (included)
-						{
-							m_includedSubMeshes.insert(i);
-						}
-						else
-						{
-							m_includedSubMeshes.erase(i);
-						}
-					}
-					ImGui::SameLine();
-
-					const char* materialName = m_mesh->GetSubMesh(i).GetMaterial() ? m_mesh->GetSubMesh(i).GetMaterial()->GetName().data() : s_noMaterial;
-					ImGui::Text("#%u: %s", i + 1, materialName);
-					ImGui::PopID();
-				}
-				
 			}
 		}
 		ImGui::End();
@@ -1711,6 +1573,13 @@ namespace mmo
 			// Render the render target content into the window as image object
 			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
 			ImGui::SetItemUsingMouseWheel();
+
+			m_viewportImageMin = ImGui::GetItemRectMin();
+			m_viewportHovered = ImGui::IsItemHovered();
+			if (m_viewportHovered)
+			{
+				m_collisionEditor->HandleKeys();
+			}
 
 			if (ImGui::IsItemHovered())
 			{
