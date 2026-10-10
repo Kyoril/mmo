@@ -1749,8 +1749,22 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::SetGmInvisible(const bool enable)
+	{
+		m_gmInvisible = enable;
+		NotifyVisibilityChanged();
+	}
+
 	void GameUnitS::NotifyVisibilityChanged()
 	{
+		// Game master invisibility outranks every aura: an observing GM must never be revealed
+		// by a stealth or invisibility aura being added, removed or interrupted.
+		if (m_gmInvisible)
+		{
+			SetVisibility(unit_visibility::Off);
+			return;
+		}
+
 		// Invisibility (ModVisibility) has priority over everything else and keeps its
 		// original semantics: the unit is fully invisible except to game masters.
 		if (HasAuraEffect(aura_type::ModVisibility))
