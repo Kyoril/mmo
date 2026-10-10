@@ -81,7 +81,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000013;
+		constexpr uint32 ProtocolVersion = 0x00000014;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -442,6 +442,11 @@ namespace mmo
 				/// realm; available in every build, not only with dev commands. Payload: uint8 action
 				/// (gm_shutdown_action), uint32 delaySeconds (ignored for Cancel; 0 = immediately).
 				GmShutdown,
+
+				/// GAME MASTER. Toggles game master invisibility on the sender's character: hidden from
+				/// players and creatures, visible to other game masters. Persisted by the realm.
+				/// Payload: uint8 (0/1).
+				CheatInvisible, // GAME MASTER
 
 				/// Counter constant
 				Count_,

@@ -791,6 +791,7 @@ namespace mmo
 		case game::client_realm_packet::CheatMorph:
 		case game::client_realm_packet::CheatKill:
 		case game::client_realm_packet::CheatRevive:
+		case game::client_realm_packet::CheatInvisible:
 			// Require GM level 1 (basic GM)
 			if (!HasGMLevel(gm_level::Gm))
 			{
@@ -3237,6 +3238,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatClassLevelUp, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatCreateObject, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatGodmode, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatInvisible, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatSetInstanceVariable, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatDamage, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatResetCooldowns, *this, &Player::OnProxyPacket);

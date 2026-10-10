@@ -590,6 +590,8 @@ namespace mmo
 
 		void Command_Godmode(const std::string &cmd, const std::string &args) const;
 
+		void Command_Invisible(const std::string &cmd, const std::string &args) const;
+
 		void Command_Damage(const std::string &cmd, const std::string &args) const;
 
 		void Command_ResetCooldowns(const std::string &cmd, const std::string &args) const;

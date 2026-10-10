@@ -5,7 +5,7 @@ Two constants describe what a binary can say on the wire:
 | Constant | Defined in | Current |
 |---|---|---|
 | `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 9 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 19 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 20 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -118,6 +118,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 20 | 2026-10-10 | GM observation: client `CheatInvisible` (uint8 enable), handled by the realm (persisted) and forwarded to the world node |
 | 19 | 2026-10-08 | Spell zones on the ground (`PersistentAreaAura`): server `SpellZoneStart` (zone id, caster, spell, position, radius, remaining ms) and `SpellZoneEnd` (zone id, expired flag) |
 | 18 | 2026-10-04 | Scheduled realm shutdown: operator `GmShutdown` (start/cancel + delay, handled by the realm in all builds) and server `ShutdownCountdown` (remaining seconds, 0xFFFFFFFF = cancelled) |
 | 17 | 2026-10-03 | In-game bug reports: client `BugReport` (subject + comment + zlib compressed client JSON) and GM `CheatSetSubsystem`; server `BugReportResult` and `SubsystemStatus` (generic subsystem availability, full list on world enter, deltas afterwards) |

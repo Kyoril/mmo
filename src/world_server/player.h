@@ -734,6 +734,12 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatGodmode(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to toggle game master invisibility on their own character.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatInvisible(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to deal raw damage to their current target. Routed through
 		///	the normal damage path so health-threshold triggers, threat and death handling all run.
 		///	@param opCode The op code of the packet.

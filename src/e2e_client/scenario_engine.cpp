@@ -1295,6 +1295,15 @@ namespace mmo
 			}
 		}
 
+		void luaGmInvisible(const bool enable)
+		{
+			g_runtime->session->GetRealm().CheatInvisible(enable);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action(enable ? "GM.Invisible(true)" : "GM.Invisible(false)");
+			}
+		}
+
 		void luaGmGodmode(const bool enable)
 		{
 			g_runtime->session->GetRealm().CheatGodmode(enable);
@@ -1613,6 +1622,7 @@ namespace mmo
 				luabind::def_lambda("GM_CheckLoS", &luaGmCheckLoS),
 				luabind::def_lambda("GM_KillTarget", &luaGmKillTarget),
 				luabind::def_lambda("GM_Godmode", &luaGmGodmode),
+				luabind::def_lambda("GM_Invisible", &luaGmInvisible),
 				luabind::def_lambda("GM_SetInstanceVariable", &luaGmSetInstanceVariable),
 				luabind::def_lambda("GM_DamageTarget", &luaGmDamageTarget),
 				luabind::def_lambda("GM_ResetCooldowns", &luaGmResetCooldowns),
@@ -1689,6 +1699,7 @@ namespace mmo
 				CheckLoS = GM_CheckLoS,
 				KillTarget = GM_KillTarget,
 				Godmode = GM_Godmode,
+				Invisible = GM_Invisible,
 				SetInstanceVariable = GM_SetInstanceVariable,
 				DamageTarget = GM_DamageTarget,
 				ResetCooldowns = GM_ResetCooldowns,

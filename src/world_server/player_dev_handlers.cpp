@@ -811,6 +811,26 @@ namespace mmo
 #endif
 
 #if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatInvisible(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 enable = 0;
+		if (!(contentReader >> io::read<uint8>(enable)))
+		{
+			ELOG("Failed to read CheatInvisible packet!");
+			return;
+		}
+
+		if (!m_character)
+		{
+			return;
+		}
+
+		DLOG("GM invisibility " << (enable ? "enabled" : "disabled") << " on character " << log_hex_digit(m_character->GetGuid()));
+		m_character->SetGmInvisible(enable != 0);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
 	void Player::OnCheatSetInstanceVariable(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint32 key = 0;

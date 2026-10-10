@@ -499,6 +499,20 @@ namespace mmo
 		ILOG("Godmode " << (enable ? "enabled" : "disabled"));
 	}
 
+	void WorldState::Command_Invisible(const std::string &cmd, const std::string &args) const
+	{
+		// Same argument convention as godmode: no argument enables, "0"/"off"/"false" disables.
+		bool enable = true;
+		if (!args.empty())
+		{
+			const String value = args.substr(0, args.find_first_of(" \t"));
+			enable = !(value == "0" || value == "off" || value == "false");
+		}
+
+		m_realmConnector.CheatInvisible(enable);
+		ILOG("GM invisibility " << (enable ? "enabled" : "disabled"));
+	}
+
 	void WorldState::Command_Damage(const std::string &cmd, const std::string &args) const
 	{
 		if (args.empty())

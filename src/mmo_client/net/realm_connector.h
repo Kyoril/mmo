@@ -325,6 +325,10 @@ namespace mmo
 		/// @param enable True to become immune to all incoming damage, false to restore normal damage.
 		void CheatGodmode(bool enable);
 
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Toggles game master invisibility on the controlled character.
+		/// @param enable True to hide the character from players and creatures, false to become visible again.
+		void CheatInvisible(bool enable);
+
 		/// GAME MASTER only. Deals raw damage to the current target through the normal damage
 		///	path, so health-threshold triggers fire exactly as they would in a real fight.
 		void CheatDamage(uint32 amount);

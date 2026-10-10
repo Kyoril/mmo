@@ -131,8 +131,8 @@
 		]
 	},
 	"game": {
-		"version": 19,
-		"fingerprint": "sha256:297fccf735ad6a8318cee7af473ed5aacccdb0d04af14aac4e62b41d6b7b3485",
+		"version": 20,
+		"fingerprint": "sha256:03698623136f8516e379b8156b93dda7c7cc4de0ab78f4e992ae5c8894723594",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -148,7 +148,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:d0a1a1aa31bd35f54b3fdb2276d38cb5e72a2b02d4e6e2f748e66795a626e923"
+			"src/shared/game_protocol/game_protocol.h": "sha256:860eb85f673ae9af4d03be46fb1e51c52f1c9c06b0dafed4f0f9702e4bca95b8"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -217,6 +217,7 @@
 			"game::client_realm_packet::CheatGiveMoney = 60",
 			"game::client_realm_packet::CheatGodmode = 160",
 			"game::client_realm_packet::CheatHeal = 165",
+			"game::client_realm_packet::CheatInvisible = 170",
 			"game::client_realm_packet::CheatKill = 134",
 			"game::client_realm_packet::CheatLearnEmote = 154",
 			"game::client_realm_packet::CheatLearnSpell = 29",
@@ -234,7 +235,7 @@
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 170",
+			"game::client_realm_packet::Count_ = 171",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",
