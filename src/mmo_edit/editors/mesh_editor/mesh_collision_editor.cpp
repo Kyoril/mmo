@@ -13,8 +13,11 @@
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "math/ray.h"
+
 #include <algorithm>
 #include <cstdio>
+#include <limits>
 
 namespace mmo
 {
@@ -195,6 +198,11 @@ namespace mmo
 	{
 		m_selection.Clear();
 		m_selectedShape = (m_recipe && index >= 0 && index < static_cast<int32>(m_recipe->shapes.size())) ? index : -1;
+		if (m_selectedShape >= 0)
+		{
+			m_selection.AddSelectable(std::make_unique<SelectedCollisionShape>(*this, static_cast<uint32>(m_selectedShape)));
+		}
+
 		m_overlayDirty = true;
 	}
 
@@ -498,5 +506,192 @@ namespace mmo
 			// Drags fire every frame: preview while the mouse is held; Update() rebuilds the tree on release.
 			Rebake(!ImGui::IsMouseDown(ImGuiMouseButton_Left));
 		}
+	}
+
+	void MeshCollisionEditor::OnMousePressed(const uint32 button, const float x, const float y)
+	{
+		if (IsActive())
+		{
+			m_transformWidget->OnMousePressed(button, x, y);
+		}
+	}
+
+	void MeshCollisionEditor::OnMouseReleased(const uint32 button, const float x, const float y, const bool wasClick)
+	{
+		if (!IsActive())
+		{
+			return;
+		}
+
+		const bool gizmoWasActive = m_transformWidget->IsActive();
+		m_transformWidget->OnMouseReleased(button, x, y);
+		if (gizmoWasActive)
+		{
+			Rebake(true);
+			return;
+		}
+
+		if (button != 0 || !wasClick || !m_recipe)
+		{
+			return;
+		}
+
+		// Nearest shape under the cursor, tested against its own tessellation (both windings).
+		const Ray ray = m_camera.GetCameraToViewportRay(x, y, 10000.0f);
+		int32 best = -1;
+		float bestDistance = std::numeric_limits<float>::max();
+		for (size_t i = 0; i < m_recipe->shapes.size(); ++i)
+		{
+			std::vector<Vector3> vertices;
+			std::vector<uint32> indices;
+			TessellateCollisionShape(m_recipe->shapes[i], vertices, indices);
+			for (size_t f = 0; f + 2 < indices.size(); f += 3)
+			{
+				const auto [hit, distance] = ray.IntersectsTriangle(vertices[indices[f]], vertices[indices[f + 1]], vertices[indices[f + 2]]);
+				if (hit && distance < bestDistance)
+				{
+					bestDistance = distance;
+					best = static_cast<int32>(i);
+				}
+			}
+		}
+
+		SelectShape(best);
+	}
+
+	void MeshCollisionEditor::OnMouseMoved(const float x, const float y)
+	{
+		if (IsActive())
+		{
+			m_transformWidget->OnMouseMoved(x, y);
+		}
+	}
+
+	void MeshCollisionEditor::HandleKeys()
+	{
+		if (!IsActive() || ImGui::GetIO().WantTextInput)
+		{
+			return;
+		}
+
+		if (ImGui::IsKeyPressed(ImGuiKey_1, false))
+		{
+			m_transformWidget->SetTransformMode(TransformMode::Translate);
+		}
+
+		if (ImGui::IsKeyPressed(ImGuiKey_2, false))
+		{
+			m_transformWidget->SetTransformMode(TransformMode::Rotate);
+		}
+
+		if (ImGui::IsKeyPressed(ImGuiKey_3, false))
+		{
+			m_transformWidget->SetTransformMode(TransformMode::Scale);
+		}
+
+		if (ImGui::IsKeyPressed(ImGuiKey_4, false))
+		{
+			m_transformWidget->SetUseLocalTransform(!m_transformWidget->IsUsingLocalTransform());
+		}
+
+		if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && m_selectedShape >= 0)
+		{
+			RequestDeleteShape(static_cast<uint32>(m_selectedShape));
+		}
+	}
+
+	SelectedCollisionShape::SelectedCollisionShape(MeshCollisionEditor& editor, const uint32 index)
+		: m_editor(editor)
+		, m_index(index)
+	{
+	}
+
+	void SelectedCollisionShape::Duplicate()
+	{
+		// Deferred: duplicating reselects, which would destroy this selectable mid-call.
+		m_editor.RequestDuplicateShape(m_index);
+	}
+
+	void SelectedCollisionShape::Translate(const Vector3& delta)
+	{
+		if (CollisionShape* shape = m_editor.GetShape(m_index))
+		{
+			shape->position += delta;
+			positionChanged(*this);
+			m_editor.OnShapeChanged(false);
+		}
+	}
+
+	void SelectedCollisionShape::Rotate(const Quaternion& delta)
+	{
+		if (CollisionShape* shape = m_editor.GetShape(m_index))
+		{
+			shape->rotation = delta * shape->rotation;
+			shape->rotation.Normalize();
+			rotationChanged(*this);
+			m_editor.OnShapeChanged(false);
+		}
+	}
+
+	void SelectedCollisionShape::Scale(const Vector3& delta)
+	{
+		// TransformWidget passes multiplicative per-frame factors (see TransformWidget::ApplyScale).
+		if (CollisionShape* shape = m_editor.GetShape(m_index))
+		{
+			shape->scale = Vector3(shape->scale.x * delta.x, shape->scale.y * delta.y, shape->scale.z * delta.z);
+			scaleChanged(*this);
+			m_editor.OnShapeChanged(false);
+		}
+	}
+
+	void SelectedCollisionShape::Remove()
+	{
+		// Deferred: deleting clears the selection, which would destroy this selectable mid-call.
+		m_editor.RequestDeleteShape(m_index);
+	}
+
+	void SelectedCollisionShape::SetPosition(const Vector3& position) const
+	{
+		if (CollisionShape* shape = m_editor.GetShape(m_index))
+		{
+			shape->position = position;
+			m_editor.OnShapeChanged(false);
+		}
+	}
+
+	void SelectedCollisionShape::SetOrientation(const Quaternion& orientation) const
+	{
+		if (CollisionShape* shape = m_editor.GetShape(m_index))
+		{
+			shape->rotation = orientation;
+			m_editor.OnShapeChanged(false);
+		}
+	}
+
+	void SelectedCollisionShape::SetScale(const Vector3& scale) const
+	{
+		if (CollisionShape* shape = m_editor.GetShape(m_index))
+		{
+			shape->scale = scale;
+			m_editor.OnShapeChanged(false);
+		}
+	}
+
+	Vector3 SelectedCollisionShape::GetPosition() const
+	{
+		const CollisionShape* shape = m_editor.GetShape(m_index);
+		return shape ? shape->position : Vector3::Zero;
+	}
+
+	Quaternion SelectedCollisionShape::GetOrientation() const
+	{
+		const CollisionShape* shape = m_editor.GetShape(m_index);
+		return shape ? shape->rotation : Quaternion::Identity;
+	}
+
+	Vector3 SelectedCollisionShape::GetScale() const
+	{
+		const CollisionShape* shape = m_editor.GetShape(m_index);
+		return shape ? shape->scale : Vector3::UnitScale;
 	}
 }

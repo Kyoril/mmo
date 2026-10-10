@@ -63,6 +63,9 @@ namespace mmo
 
 		void DrawViewport(const String& id);
 
+		/// @brief Current mouse position in 0..1 coordinates of the viewport image.
+		ImVec2 ViewportMouse01() const;
+
 		void ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName);
 
 		void ImportAdditionalSubmeshes(const std::filesystem::path& path);
@@ -91,6 +94,9 @@ namespace mmo
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		int16 m_lastMouseX { 0 }, m_lastMouseY { 0 };
 		bool m_leftButtonPressed { false };
+		ImVec2 m_viewportImageMin {};
+		bool m_viewportHovered { false };
+		int16 m_pressMouseX { 0 }, m_pressMouseY { 0 };
 		bool m_rightButtonPressed { false };
 		bool m_middleButtonPressed { false };
 		bool m_initDockLayout { true };

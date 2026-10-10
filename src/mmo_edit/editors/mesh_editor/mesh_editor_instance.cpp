@@ -509,14 +509,34 @@ namespace mmo
 		ImGui::PopID();
 	}
 
+	ImVec2 MeshEditorInstance::ViewportMouse01() const
+	{
+		const ImVec2 mouse = ImGui::GetMousePos();
+		return ImVec2(
+			(mouse.x - m_viewportImageMin.x) / std::max(1.0f, m_lastAvailViewportSize.x),
+			(mouse.y - m_viewportImageMin.y) / std::max(1.0f, m_lastAvailViewportSize.y));
+	}
+
 	void MeshEditorInstance::OnMouseButtonDown(const uint32 button, const uint16 x, const uint16 y)
 	{
 		m_lastMouseX = x;
 		m_lastMouseY = y;
+		m_pressMouseX = x;
+		m_pressMouseY = y;
+
+		if (m_viewportHovered)
+		{
+			const ImVec2 p = ViewportMouse01();
+			m_collisionEditor->OnMousePressed(button, p.x, p.y);
+		}
 	}
 
 	void MeshEditorInstance::OnMouseButtonUp(const uint32 button, const uint16 x, const uint16 y)
 	{
+		const ImVec2 p = ViewportMouse01();
+		const bool wasClick = std::abs(static_cast<int>(x) - m_pressMouseX) < 4 && std::abs(static_cast<int>(y) - m_pressMouseY) < 4;
+		m_collisionEditor->OnMouseReleased(button, p.x, p.y, wasClick && m_viewportHovered);
+
 		if (button == 0)
 		{
 			m_leftButtonPressed = false;
@@ -537,16 +557,23 @@ namespace mmo
 		const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
 		const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
-		if (m_leftButtonPressed || m_rightButtonPressed)
+		// While the collision gizmo is dragged, the mouse moves the shape, not the camera.
+		if (!m_collisionEditor->IsGizmoActive())
 		{
-			m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
-			m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
+			if (m_leftButtonPressed || m_rightButtonPressed)
+			{
+				m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
+				m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
+			}
+
+			if (m_middleButtonPressed)
+			{
+				m_cameraAnchor->Translate(Vector3(0.0f, deltaY * 0.05f, 0.0f), TransformSpace::Local);
+			}
 		}
 
-		if (m_middleButtonPressed)
-		{
-			m_cameraAnchor->Translate(Vector3(0.0f, deltaY * 0.05f, 0.0f), TransformSpace::Local);
-		}
+		const ImVec2 p = ViewportMouse01();
+		m_collisionEditor->OnMouseMoved(p.x, p.y);
 
 		m_lastMouseX = x;
 		m_lastMouseY = y;
@@ -1445,6 +1472,13 @@ namespace mmo
 			// Render the render target content into the window as image object
 			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
 			ImGui::SetItemUsingMouseWheel();
+
+			m_viewportImageMin = ImGui::GetItemRectMin();
+			m_viewportHovered = ImGui::IsItemHovered();
+			if (m_viewportHovered)
+			{
+				m_collisionEditor->HandleKeys();
+			}
 
 			if (ImGui::IsItemHovered())
 			{

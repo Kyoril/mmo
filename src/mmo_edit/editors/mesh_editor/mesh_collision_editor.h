@@ -74,6 +74,21 @@ namespace mmo
 		/// @brief Duplicates a shape at the start of the next Update (safe to call from the shape's own selectable).
 		void RequestDuplicateShape(uint32 index) { m_pendingDuplicate = static_cast<int32>(index); }
 
+		/// @brief Mouse button pressed over the viewport; coordinates are 0..1 within it.
+		void OnMousePressed(uint32 button, float x, float y);
+
+		/// @brief Mouse button released; `wasClick` if it barely moved since the press (selects under the cursor).
+		void OnMouseReleased(uint32 button, float x, float y, bool wasClick);
+
+		/// @brief Mouse moved; coordinates are 0..1 within the viewport.
+		void OnMouseMoved(float x, float y);
+
+		/// @brief Whether the gizmo is being dragged (the caller must not orbit the camera).
+		[[nodiscard]] bool IsGizmoActive() const { return m_transformWidget->IsActive(); }
+
+		/// @brief Gizmo mode keys 1-4 and Delete; call once per frame while the viewport is hovered.
+		void HandleKeys();
+
 	private:
 		void EnsureRecipe();
 		void Rebake(bool buildTree);
@@ -111,5 +126,56 @@ namespace mmo
 		collision_view_mode::Type m_viewMode { collision_view_mode::Off };
 		bool m_wireframe { true };
 		String m_status;
+	};
+
+	/// @brief Gizmo handle for one collision shape; writes transforms back into the recipe.
+	class SelectedCollisionShape final : public Selectable
+	{
+	public:
+		/// @brief Selects shape `index` of `editor`.
+		SelectedCollisionShape(MeshCollisionEditor& editor, uint32 index);
+
+		/// @copydoc Selectable::Visit
+		void Visit(SelectableVisitor& visitor) override {}
+
+		/// @copydoc Selectable::Duplicate
+		void Duplicate() override;
+
+		/// @copydoc Selectable::Translate
+		void Translate(const Vector3& delta) override;
+
+		/// @copydoc Selectable::Rotate
+		void Rotate(const Quaternion& delta) override;
+
+		/// @copydoc Selectable::Scale
+		void Scale(const Vector3& delta) override;
+
+		/// @copydoc Selectable::Remove
+		void Remove() override;
+
+		/// @copydoc Selectable::Deselect
+		void Deselect() override {}
+
+		/// @copydoc Selectable::SetPosition
+		void SetPosition(const Vector3& position) const override;
+
+		/// @copydoc Selectable::SetOrientation
+		void SetOrientation(const Quaternion& orientation) const override;
+
+		/// @copydoc Selectable::SetScale
+		void SetScale(const Vector3& scale) const override;
+
+		/// @copydoc Selectable::GetPosition
+		Vector3 GetPosition() const override;
+
+		/// @copydoc Selectable::GetOrientation
+		Quaternion GetOrientation() const override;
+
+		/// @copydoc Selectable::GetScale
+		Vector3 GetScale() const override;
+
+	private:
+		MeshCollisionEditor& m_editor;
+		uint32 m_index;
 	};
 }
