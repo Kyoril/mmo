@@ -4,6 +4,7 @@
 
 #include "base/chunk_reader.h"
 #include "base/typedefs.h"
+#include "math/collision_recipe.h"
 #include "math/vector3.h"
 
 #include <vector>
@@ -29,7 +30,9 @@ namespace mmo
 			Version_0_1 = 0x0100,
 			Version_0_2 = 0x0200,
 			Version_0_3 = 0x0300,
-			Version_0_3_1 = 0x0301
+			Version_0_3_1 = 0x0301,
+			/// @brief Adds the optional editor-only collision recipe chunk (CSRC); unknown chunks are ignored from here on.
+			Version_0_3_2 = 0x0302
 		};	
 	}
 
@@ -166,7 +169,12 @@ namespace mmo
 	class MeshSerializer
 	{
 	public:
-		void Serialize(const MeshPtr& mesh, io::Writer& writer, MeshVersion version = mesh_version::Latest);
+		/// @brief Writes a mesh file.
+		/// @param mesh The mesh to write.
+		/// @param writer Destination.
+		/// @param version File format version; Latest is the newest.
+		/// @param recipe Editor-only collision recipe, written as a CSRC chunk when non-null and version >= 0x0302.
+		void Serialize(const MeshPtr& mesh, io::Writer& writer, MeshVersion version = mesh_version::Latest, const CollisionRecipe* recipe = nullptr);
 	};
 	
 	/// @brief Implementation of the ChunkReader to read chunked mesh files.
@@ -203,4 +211,24 @@ namespace mmo
 		MeshEntry m_entry;
 		Mesh& m_mesh;
 	};
+
+	namespace collision_recipe_read
+	{
+		/// @brief Outcome of ReadMeshCollisionRecipe.
+		enum Type
+		{
+			/// @brief The mesh has no recipe chunk.
+			Absent,
+			/// @brief The recipe was read.
+			Read,
+			/// @brief A recipe chunk exists but could not be read.
+			Corrupt
+		};
+	}
+
+	/// @brief Scans a serialized mesh's top-level chunks for the editor-only collision recipe.
+	/// @param reader Reader positioned at the start of the mesh file.
+	/// @param out_recipe Receives the recipe when the result is Read.
+	/// @return Whether the recipe was absent, read, or present but unreadable.
+	collision_recipe_read::Type ReadMeshCollisionRecipe(io::Reader& reader, CollisionRecipe& out_recipe);
 }

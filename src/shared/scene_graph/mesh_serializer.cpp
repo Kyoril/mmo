@@ -24,6 +24,7 @@ namespace mmo
 	static const ChunkMagic MeshSkeletonChunk = MakeChunkMagic('SKEL');
 	static const ChunkMagic MeshBoneChunk = MakeChunkMagic('BONE');
 	static const ChunkMagic MeshCollisionChunk = MakeChunkMagic('COLL');
+	static const ChunkMagic MeshCollisionRecipeChunk = MakeChunkMagic('CSRC');
 	
 	void WriteVertexData(const VertexData& vertexData, io::Writer& writer)
 	{
@@ -119,11 +120,11 @@ namespace mmo
 		indexData.indexBuffer->Unmap();
 	}
 
-	void MeshSerializer::Serialize(const MeshPtr& mesh, io::Writer& writer, MeshVersion version)
+	void MeshSerializer::Serialize(const MeshPtr& mesh, io::Writer& writer, MeshVersion version, const CollisionRecipe* recipe)
 	{
 		if (version == mesh_version::Latest)
 		{
-			version = mesh_version::Version_0_3_1;
+			version = mesh_version::Version_0_3_2;
 		}
 
 		// Write the vertex chunk data
@@ -159,6 +160,14 @@ namespace mmo
 			ChunkWriter collisionChunk{ MeshCollisionChunk, writer };
 			writer << mesh->GetCollisionTree();
 			collisionChunk.Finish();
+		}
+
+		// Editor-only collision recipe; runtime readers skip it.
+		if (recipe && version >= mesh_version::Version_0_3_2)
+		{
+			ChunkWriter recipeChunk{ MeshCollisionRecipeChunk, writer };
+			writer << *recipe;
+			recipeChunk.Finish();
 		}
 
 		// Write submesh chunks
@@ -288,6 +297,19 @@ namespace mmo
 
 						// Chunk no longer supported in V03 because there is no longer global index data
 						RemoveChunkHandler(*MeshIndexChunk);
+
+						if (version >= mesh_version::Version_0_3_2)
+						{
+							// The collision recipe is editor-only data; the editor reads it with
+							// ReadMeshCollisionRecipe. From this version on, chunks a reader does not
+							// know are skipped instead of failing the load.
+							AddChunkHandler(*MeshCollisionRecipeChunk, false, [](io::Reader& chunkReader, uint32, const uint32 chunkSize)
+							{
+								chunkReader >> io::skip(chunkSize);
+								return static_cast<bool>(chunkReader);
+							});
+							SetIgnoreUnhandledChunks(true);
+						}
 					}
 				}
 			}
@@ -858,5 +880,34 @@ namespace mmo
 		CreateHardwareBuffers();
 		
 		return true;
+	}
+
+	collision_recipe_read::Type ReadMeshCollisionRecipe(io::Reader& reader, CollisionRecipe& out_recipe)
+	{
+		while (reader)
+		{
+			uint32 chunkId = 0, chunkSize = 0;
+			if (!(reader >> io::read<uint32>(chunkId) >> io::read<uint32>(chunkSize)))
+			{
+				break;
+			}
+
+			if (chunkId == *MeshCollisionRecipeChunk)
+			{
+				CollisionRecipe recipe;
+				reader >> recipe;
+				if (!reader)
+				{
+					return collision_recipe_read::Corrupt;
+				}
+
+				out_recipe = std::move(recipe);
+				return collision_recipe_read::Read;
+			}
+
+			reader >> io::skip(chunkSize);
+		}
+
+		return collision_recipe_read::Absent;
 	}
 }
