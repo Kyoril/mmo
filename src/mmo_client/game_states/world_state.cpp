@@ -1900,6 +1900,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::StealthDetected, *this, &WorldState::OnStealthDetected);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PlaySoundById, *this, &WorldState::OnPlaySoundById);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PlaySpellVisual, *this, &WorldState::OnPlaySpellVisual);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellZoneStart, *this, &WorldState::OnSpellZoneStart);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellZoneEnd, *this, &WorldState::OnSpellZoneEnd);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
@@ -3024,6 +3026,52 @@ namespace mmo
 		SpellVisualizationService::Get().ApplyById(
 			static_cast<SpellVisualizationService::Event>(visualEvent), visualizationId, unit.get(), {});
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSpellZoneStart(game::IncomingPacket &packet)
+	{
+		uint32 zoneId;
+		uint64 casterGuid;
+		uint32 spellId;
+		Vector3 position;
+		float radius;
+		uint32 remainingMs;
+		if (!(packet
+			>> io::read<uint32>(zoneId)
+			>> io::read_packed_guid(casterGuid)
+			>> io::read<uint32>(spellId)
+			>> io::read<float>(position.x)
+			>> io::read<float>(position.y)
+			>> io::read<float>(position.z)
+			>> io::read<float>(radius)
+			>> io::read<uint32>(remainingMs)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// An unknown spell is a data mismatch between client and server, not a broken packet.
+		const auto *spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			WLOG("Received SpellZoneStart for unknown spell " << spellId);
+			return PacketParseResult::Pass;
+		}
+
+		SpellVisualizationService::Get().BeginGroundZone(zoneId, *spell, *m_scene, position, remainingMs);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSpellZoneEnd(game::IncomingPacket &packet)
+	{
+		uint32 zoneId;
+		uint8 expired;
+		if (!(packet >> io::read<uint32>(zoneId) >> io::read<uint8>(expired)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		SpellVisualizationService::Get().EndGroundZone(zoneId, expired != 0);
 		return PacketParseResult::Pass;
 	}
 

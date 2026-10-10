@@ -7,6 +7,7 @@
 #include "game_server/objects/game_world_object_s.h"
 #include "game_server/spells/no_cast_state.h"
 #include "game_server/spells/spell_effects.h"
+#include "game_server/spells/spell_interrupt_rules.h"
 
 #include "base/utilities.h"
 #include "game_server/world/world_instance.h"
@@ -312,6 +313,11 @@ namespace mmo
 		if (reason != spell_interrupt_flags::Any &&
 			reason != spell_interrupt_flags::Interrupt &&
 			(m_spell.interruptflags() & reason) == 0)
+		{
+			return;
+		}
+
+		if (reason == spell_interrupt_flags::Interrupt && IsUninterruptible(m_spell))
 		{
 			return;
 		}

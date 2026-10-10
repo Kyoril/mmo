@@ -96,6 +96,8 @@ namespace mmo
 
 		// Initialize state
 		m_stuckCounter = 0;
+		m_unreachable.Reset();
+		m_unreachableVictim = 0;
 		m_movementState.Reset();
 		m_lastSpellCastTime = 0;
 
@@ -714,6 +716,12 @@ namespace mmo
 		const Vector3 currentLoc = mover.GetCurrentLocation();
 		const bool inAttackRange = target.GetSquaredDistanceTo(currentLoc, false) <= attackRangeSq;
 
+		if (m_unreachableVictim != target.GetGuid())
+		{
+			m_unreachable.Reset();
+			m_unreachableVictim = target.GetGuid();
+		}
+
 		// Collect the other units attacking the same target. They drive both the formation
 		// slotting (how many of us there are) and the reactive separation (where they stand).
 		std::vector<GameUnitS*> siblingAttackers;
@@ -765,7 +773,18 @@ namespace mmo
 			// between creatures here in exchange for stable, predictable positioning. De-stacking
 			// still happens naturally while creatures are *approaching* (the separation pass above
 			// only changes where an out-of-range creature stops).
+			m_unreachable.Update(false, GetAsyncTimeMs());
 			return true;
+		}
+		else if (m_unreachable.ShouldEvade(GetAsyncTimeMs()))
+		{
+			// The victim stands where our paths do not lead and has done so for a while: we
+			// would only wait at the edge of our area. Evade instead. Unlike leashing (m_canReset,
+			// off in instances), this applies everywhere: a boss that can be fought from where it
+			// cannot follow is an exploit in a dungeon as much as outside.
+			DLOG("Creature 0x" << std::hex << controlled.GetGuid() << std::dec << " cannot reach its victim, evading");
+			GetAI().Reset();
+			return false;
 		}
 		else if (!ShouldMoveToTarget(target))
 		{
@@ -793,6 +812,9 @@ namespace mmo
 			// recalculation gating still measures "how far has the target moved since we planned".
 			m_movementState.UpdateTarget(target.GetPosition(), attackRange);
 			m_stuckCounter = 0;
+
+			// A partial path is still a started move; note whether it actually gets us to the victim
+			m_unreachable.Update(UnreachableTargetTracker::EndsShortOfVictim(mover.GetTarget(), slotPosition, acceptance, target.GetPosition(), attackRange), GetAsyncTimeMs());
 			return true;
 		}
 

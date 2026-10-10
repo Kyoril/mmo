@@ -292,6 +292,12 @@ namespace mmo
 		/// @return Pointer to the world object state, or nullptr if none is known.
 		const BotWorldObjectState* FindWorldObjectByEntry(uint32 entry) const;
 
+		/// @brief Finds the known world object with the given entry id closest to a position.
+		/// @param entry The object entry id.
+		/// @param position Position to measure from.
+		/// @return Pointer to the world object state, or nullptr if none is known.
+		const BotWorldObjectState* FindNearestWorldObjectByEntry(uint32 entry, const Vector3& position) const;
+
 		// ============================================================
 		// Iteration
 		// ============================================================

@@ -32,6 +32,7 @@
 #include "assimp/Logger.hpp"
 #include "assimp/DefaultLogger.hpp"
 #include "math/aabb_tree.h"
+#include "math/stair_ramp.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/render_operation.h"
 #include "scene_graph/skeleton_serializer.h"
@@ -577,6 +578,77 @@ namespace mmo
 
 		m_lastMouseX = x;
 		m_lastMouseY = y;
+	}
+
+	namespace
+	{
+		/// Replaces the steps in a mesh's collision tree with a ramp. Leaves the tree alone on failure.
+		StairRampResult ReplaceStairCollisionWithRamp(Mesh& mesh)
+		{
+			AABBTree& tree = mesh.GetCollisionTree();
+			if (tree.IsEmpty())
+			{
+				StairRampResult result;
+				result.message = "The mesh has no collision. Build it first (Build Complex).";
+				return result;
+			}
+
+			StairRampResult result = BuildStairRamp(tree.GetVertices(), tree.GetIndices(), tree.GetFaceSubMeshes());
+			if (result.success)
+			{
+				if (result.faceSubMeshes.empty())
+				{
+					tree.Build(result.vertices, result.indices);
+				}
+				else
+				{
+					tree.Build(result.vertices, result.indices, result.faceSubMeshes);
+				}
+			}
+			return result;
+		}
+	}
+
+	bool MeshEditorInstance::StairsToRampInFile(const String& assetPath)
+	{
+		// Meshes with collision shapes rebuild their tree from the recipe, which would undo the ramp,
+		// and this save would drop the recipe: refuse them.
+		CollisionRecipe recipe;
+		collision_recipe_read::Type recipeResult = collision_recipe_read::Absent;
+		if (LoadMeshCollisionRecipe(assetPath, recipe, recipeResult) && recipeResult != collision_recipe_read::Absent)
+		{
+			ELOG("Stairs to ramp: " << assetPath << " has collision shapes; use a Wedge or Helix Ramp shape instead");
+			return false;
+		}
+
+		const MeshPtr mesh = MeshManager::Get().Load(assetPath);
+		if (!mesh)
+		{
+			ELOG("Stairs to ramp: cannot load " << assetPath);
+			return false;
+		}
+
+		const StairRampResult result = ReplaceStairCollisionWithRamp(*mesh);
+		if (!result.success)
+		{
+			ELOG("Stairs to ramp: " << assetPath << ": " << result.message);
+			return false;
+		}
+		ILOG("Stairs to ramp: " << assetPath << ": " << result.message);
+
+		const auto file = AssetRegistry::CreateNewFile(assetPath);
+		if (!file)
+		{
+			ELOG("Stairs to ramp: cannot write " << assetPath);
+			return false;
+		}
+
+		io::StreamSink sink{ *file };
+		io::Writer writer{ sink };
+		MeshSerializer serializer;
+		serializer.Serialize(mesh, writer);
+		sink.Flush();
+		return true;
 	}
 
 	bool MeshEditorInstance::Save()
@@ -1441,6 +1513,35 @@ namespace mmo
 			}
 
 			m_collisionEditor->DrawPanel();
+
+			ImGui::Separator();
+
+			if (ImGui::Button("Stairs to Ramp"))
+			{
+				// The ramp rewrites the baked tree directly; a mesh with collision shapes rebuilds that
+				// tree from its recipe, which would silently undo the ramp. Shapes cover that case.
+				if (m_collisionEditor->GetRecipeForSave())
+				{
+					m_collisionToolMessage = "This mesh has collision shapes. Use a Wedge or Helix Ramp shape instead of Stairs to Ramp.";
+				}
+				else
+				{
+					m_collisionToolMessage = ReplaceStairCollisionWithRamp(*m_mesh).message;
+					m_collisionEditor->OnTreeReplaced();
+				}
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Replace the steps of a straight staircase in the collision with one ramp from its foot to its top tread.\n"
+					"Players and the navigation mesh then walk the stairs smoothly. The visible steps are unchanged.\n"
+					"Build the collision first; save afterwards and rebuild the navigation mesh of maps using the mesh.\n"
+					"Not available for meshes with collision shapes: use a Wedge or Helix Ramp shape there.");
+			}
+
+			if (!m_collisionToolMessage.empty())
+			{
+				ImGui::TextWrapped("%s", m_collisionToolMessage.c_str());
+			}
 		}
 		ImGui::End();
 	}

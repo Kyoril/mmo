@@ -14,6 +14,7 @@
 #include "log/default_log_levels.h"
 #include "math/aabb.h"
 #include "map.h"
+#include "rasterize.h"
 #include "vector_sink.h"
 
 namespace mmo
@@ -145,71 +146,6 @@ namespace mmo
 
             for (size_t i = 0; i < input.size(); ++i)
                 VertexToRecast(input[i], &output[i * 3]);
-        }
-
-        bool TransformAndRasterize(rcContext& ctx, rcHeightfield& heightField, const float slope, const std::vector<Vector3>& vertices, const std::vector<int32>& indices, const uint8 areaFlags)
-        {
-            if (vertices.empty() || indices.empty())
-            {
-                return true;
-            }
-
-            std::vector<float> recastVertices;
-            std::vector<int> cleanedIndices;
-            std::vector<uint8> cleanedAreas;
-
-            recastVertices.reserve(vertices.size() * 3);
-            cleanedIndices.reserve(indices.size());
-            cleanedAreas.reserve(indices.size() / 3);
-
-            for (const Vector3& v : vertices)
-            {
-                recastVertices.push_back(v.x);
-                recastVertices.push_back(v.y);
-                recastVertices.push_back(v.z);
-            }
-
-            // Cosine of the maximum walkable slope. A triangle counts as walkable when the angle
-            // between its face normal and the vertical axis is at or below this angle.
-            const float walkableCosThreshold = std::cos(slope * (3.14159265358979323846f / 180.0f));
-
-            for (size_t i = 0; i < indices.size(); i += 3)
-            {
-                const Vector3& a = vertices[indices[i + 0]];
-                const Vector3& b = vertices[indices[i + 1]];
-                const Vector3& c = vertices[indices[i + 2]];
-
-                const Vector3 normal = (b - a).Cross(c - a);
-                const float normalLengthSq = normal.GetSquaredLength();
-
-                // This is the critical degenerate triangle filter
-                if (normalLengthSq < 1e-5f)
-                {
-                    continue;  // Skip flat/invalid triangle
-                }
-
-                cleanedIndices.push_back(indices[i + 0]);
-                cleanedIndices.push_back(indices[i + 1]);
-                cleanedIndices.push_back(indices[i + 2]);
-
-                // Slope test. We use the absolute value of the vertical normal component so the
-                // result does not depend on triangle winding order - terrain fans wind the opposite
-                // way from imported model geometry, and the previous rcClearUnwalkableTriangles call
-                // (which assumes an upward-facing normal) rejected all terrain as a result. Steep
-                // triangles get the null area so the near-vertical sides of trees, fences and walls
-                // do not become walkable nav mesh.
-                const float verticalCos = std::fabs(normal.y) / std::sqrt(normalLengthSq);
-                cleanedAreas.push_back(verticalCos >= walkableCosThreshold ? areaFlags : static_cast<uint8>(0));
-            }
-
-            if (cleanedIndices.empty())
-                return true;  // No valid triangles
-
-            const int triangleCount = static_cast<int>(cleanedIndices.size() / 3);
-
-            return rcRasterizeTriangles(
-                &ctx, recastVertices.data(), static_cast<int>(vertices.size()), cleanedIndices.data(),
-                cleanedAreas.data(), triangleCount, heightField, -1);
         }
 
         bool SerializeMeshTile(rcContext& ctx, const rcConfig& config, int tileX, int tileY, rcHeightfield& solid, io::Writer& out)
@@ -501,7 +437,7 @@ namespace mmo
         for (auto const& chunk : chunks)
         {
             // Terrain
-            if (!TransformAndRasterize(ctx, *solid, config.walkableSlopeAngle, chunk->m_terrainVertices, chunk->m_terrainIndices, poly_flags::Ground))
+            if (!RasterizeNavTriangles(ctx, *solid, config.walkableSlopeAngle, chunk->m_terrainVertices, chunk->m_terrainIndices, poly_flags::Ground, config.walkableClimb))
             {
                 return false;
             }
@@ -519,8 +455,8 @@ namespace mmo
                 std::vector<int32> indices;
 
                 entityInstance->BuildTriangles(vertices, indices);
-                if (!TransformAndRasterize(ctx, *solid, config.walkableSlopeAngle,
-                    vertices, indices, poly_flags::Entity))
+                if (!RasterizeNavTriangles(ctx, *solid, config.walkableSlopeAngle,
+                    vertices, indices, poly_flags::Entity, config.walkableClimb))
                     return false;
 
                 rasterizedEntities.insert(wmoId);
@@ -544,8 +480,8 @@ namespace mmo
                 
                 DLOG("Rasterizing world model instance " << worldModelId << " with " << vertices.size() << " vertices and " << indices.size() << " indices");
                 
-                if (!TransformAndRasterize(ctx, *solid, config.walkableSlopeAngle,
-                    vertices, indices, poly_flags::WorldModel))
+                if (!RasterizeNavTriangles(ctx, *solid, config.walkableSlopeAngle,
+                    vertices, indices, poly_flags::WorldModel, config.walkableClimb))
                 {
                     return false;
                 }

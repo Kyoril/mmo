@@ -686,13 +686,14 @@ namespace mmo
 			const float baseRadius = m_parameters.shapeExtents.z;
 
 			const float t = RandomRange(0.0f, 1.0f);
-			const float currentHeight = height * t;
-			const float currentRadius = baseRadius * t;
 			const float theta = RandomRange(0.0f, 2.0f * 3.14159265f);
 
-			const Vector3 offset(currentRadius * std::cos(theta), currentHeight, currentRadius * std::sin(theta));
-			outDirection = offset.GetSquaredLength() > 1e-6f ? offset.NormalizedCopy() : Vector3::UnitY;
-			return offset;
+			// The direction runs along the cone's surface line through theta. It does not depend on
+			// t, so it is taken from the line itself: deriving it from the offset sent particles
+			// spawned at the apex (t near 0) straight up, a stray mote above flat outward bursts.
+			const Vector3 surfaceLine(baseRadius * std::cos(theta), height, baseRadius * std::sin(theta));
+			outDirection = surfaceLine.GetSquaredLength() > 1e-6f ? surfaceLine.NormalizedCopy() : Vector3::UnitY;
+			return surfaceLine * t;
 		}
 
 		case EmitterShape::Point:

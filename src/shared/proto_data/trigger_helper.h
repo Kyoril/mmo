@@ -306,6 +306,11 @@ namespace mmo
 			/// applied to each player; actions that do not are applied to the first resolved player.
 			AllPlayers = 10,
 
+			/// A random living player other than the owner's current victim, so the tank is spared
+			/// (boss ground zones meant for ranged and healers). Falls back to the victim when no one
+			/// else is there.
+			RandomPlayerNotVictim = 11,
+
 			Invalid,
 			Count_ = Invalid
 		};

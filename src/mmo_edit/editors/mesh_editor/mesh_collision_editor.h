@@ -62,6 +62,9 @@ namespace mmo
 		/// @brief Called after a shape changed; final=false only refreshes the preview, true also rebuilds the tree.
 		void OnShapeChanged(bool final);
 
+		/// @brief Called after another tool replaced the mesh's collision tree, so the overlay shows the new tree.
+		void OnTreeReplaced() { m_overlayDirty = true; }
+
 		/// @brief Removes a shape and rebakes.
 		void DeleteShape(uint32 index);
 

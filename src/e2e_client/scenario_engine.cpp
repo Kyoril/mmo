@@ -1177,6 +1177,17 @@ namespace mmo
 			return guidToString(object->guid);
 		}
 
+		std::string luaFindNearestObjectByEntry(const uint32 entry, const float x, const float y, const float z)
+		{
+			const BotWorldObjectState* object = g_runtime->session->GetRealm().GetObjectManager().FindNearestWorldObjectByEntry(entry, Vector3(x, y, z));
+			if (!object)
+			{
+				return "";
+			}
+
+			return guidToString(object->guid);
+		}
+
 		uint32 luaGetObjectState(const std::string& guidStr)
 		{
 			const BotWorldObjectState* object = g_runtime->session->GetRealm().GetObjectManager().GetWorldObject(guidFromString(guidStr));
@@ -1562,6 +1573,7 @@ namespace mmo
 				luabind::def_lambda("FindUnitByNameImpl", &luaFindUnitByName),
 				luabind::def_lambda("CountUnitsByEntryImpl", &luaCountUnitsByEntry),
 				luabind::def_lambda("FindObjectByEntryImpl", &luaFindObjectByEntry),
+				luabind::def_lambda("FindNearestObjectByEntryImpl", &luaFindNearestObjectByEntry),
 				luabind::def_lambda("GetObjectState", &luaGetObjectState),
 				luabind::def_lambda("GetUnitFlags", &luaGetUnitFlags),
 				luabind::def_lambda("LootUnit", &luaLootUnit),
@@ -1653,6 +1665,12 @@ namespace mmo
 
 			function FindObjectByEntry(entry)
 				local guid = FindObjectByEntryImpl(entry)
+				if guid == "" then return nil end
+				return guid
+			end
+
+			function FindNearestObjectByEntry(entry, x, y, z)
+				local guid = FindNearestObjectByEntryImpl(entry, x, y, z)
 				if guid == "" then return nil end
 				return guid
 			end

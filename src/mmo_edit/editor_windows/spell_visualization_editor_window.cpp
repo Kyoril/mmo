@@ -215,7 +215,10 @@ namespace mmo
 		"Aura Removed",
 		"Aura Tick",
 		"Aura Idle",
-		"Channeling"};
+		"Channeling",
+		"Ground Active",
+		"Ground Expired"};
+	static_assert(std::size(s_eventNames) == proto::SpellVisualEvent_MAX + 1, "One name per SpellVisualEvent");
 
 	// Scope names matching proto::KitScope enum
 	static const char *s_scopeNames[] = {

@@ -539,6 +539,28 @@ namespace mmo
 		return nullptr;
 	}
 
+	const BotWorldObjectState* BotObjectManager::FindNearestWorldObjectByEntry(const uint32 entry, const Vector3& position) const
+	{
+		const BotWorldObjectState* nearest = nullptr;
+		float nearestDistanceSq = 0.0f;
+		for (const auto& [guid, object] : m_worldObjects)
+		{
+			if (object.entry != entry)
+			{
+				continue;
+			}
+
+			const float distanceSq = (object.position - position).GetSquaredLength();
+			if (!nearest || distanceSq < nearestDistanceSq)
+			{
+				nearest = &object;
+				nearestDistanceSq = distanceSq;
+			}
+		}
+
+		return nearest;
+	}
+
 	const BotWorldObjectState* BotObjectManager::FindWorldObjectByEntry(const uint32 entry) const
 	{
 		for (const auto& [guid, object] : m_worldObjects)

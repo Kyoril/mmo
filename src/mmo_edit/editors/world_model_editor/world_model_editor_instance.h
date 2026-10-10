@@ -155,6 +155,12 @@ namespace mmo
 		/// @copydoc EditorInstance::Save
 		bool Save() override;
 
+		/// @brief Derives the room volumes of a world model file and fixes its mislinked portals, then
+		/// saves it. Used by the unattended `mmo_edit --derive-rooms <asset>` job.
+		/// @param assetPath The world model's asset path.
+		/// @return True if the file was loaded and saved.
+		static bool DeriveRoomsInFile(const String& assetPath);
+
 	private:
 		/// @brief Updates the debug AABB visualization.
 		void UpdateDebugAABB(const AABB& aabb);
@@ -300,6 +306,18 @@ namespace mmo
 		/// @brief Updates visualization for all portals.
 		void UpdatePortalVisualizations();
 
+		/// @brief Replaces containment volumes with ones derived from the walkable pieces (see
+		/// DeriveRoomVolumes in scene_graph/world_model_rooms.h) and reports the result.
+		/// @param groupIndex The group to derive, or -1 for every group.
+		void DeriveContainmentVolumes(int32 groupIndex);
+
+		/// @brief Checks every portal's links against the rooms on its sides and reports the result.
+		/// @param fix Whether to relink mislinked portals.
+		void CheckPortalLinks(bool fix);
+
+		/// @brief Draws the rooms section of the world model settings panel.
+		void DrawRoomsSection();
+
 		/// @brief Updates visibility of portal visualizations based on m_showPortals.
 		void UpdatePortalVisibility();
 
@@ -413,6 +431,19 @@ namespace mmo
 		bool m_freezePortalCulling { false };
 		int32 m_lastCameraGroupIndex { -1 };
 		String m_portalCullingDebugInfo;
+
+		/// @brief One line of the last room volume or portal link report.
+		struct RoomsReportLine
+		{
+			String text;
+			bool warning { false };
+		};
+
+		/// @brief Result of the last DeriveContainmentVolumes or CheckPortalLinks run, shown in the settings panel.
+		std::vector<RoomsReportLine> m_roomsReport;
+
+		/// @brief Whether the last portal link check found portals it could relink.
+		bool m_portalLinksFixable { false };
 
 		// Portal creation state
 		bool m_creatingPortal { false };

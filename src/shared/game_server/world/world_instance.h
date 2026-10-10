@@ -14,6 +14,7 @@
 #include "game/game_time_component.h"
 #include "visibility_grid.h"
 #include "world_object_spawner.h"
+#include "spell_zone_set.h"
 #include "base/id_generator.h"
 #include "base/countdown.h"
 #include "math/matrix4.h"
@@ -277,6 +278,23 @@ namespace mmo
 		///	needs to be spawned using the AddGameObject method.
 		std::shared_ptr<GameCreatureS> CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius);
 
+		/// Creates a spell zone on the ground and tells every client in sight of it. The zone
+		/// casts its trigger spell on each enemy of the caster inside it every tickInterval
+		/// milliseconds, and ends after duration milliseconds or when its caster leaves the world.
+		/// A dead caster keeps its zones: they belong to the corpse until it despawns.
+		/// @param caster Unit the zone belongs to; it casts the ticks.
+		/// @param spellId Spell whose PersistentAreaAura effect created the zone.
+		/// @param triggerSpellId Spell cast on enemies inside on each tick, 0 for none.
+		/// @param position Centre of the zone.
+		/// @param radius Radius of the zone.
+		/// @param duration Lifetime in milliseconds.
+		/// @param tickInterval Milliseconds between ticks; the first tick comes one interval after creation.
+		/// @return The zone id.
+		uint32 CreateSpellZone(const GameUnitS& caster, uint32 spellId, uint32 triggerSpellId, const Vector3& position, float radius, GameTime duration, GameTime tickInterval);
+
+		/// The live spell zones, for inspection.
+		const SpellZoneSet& GetSpellZones() const { return m_spellZones; }
+
 		/// Removes the reference to a creature that was created using CreateTemporaryCreature. The creature needs to be despawned before this call.
 		void DestroyTemporaryCreature(uint64 guid);
 
@@ -452,6 +470,18 @@ namespace mmo
 
 		/// Per-instance script variables/counters owned by the world instance. Key = variable key.
 		std::unordered_map<uint32, int64> m_instanceVariables;
+
+		/// Ticks, expires and prunes the spell zones. Runs after the object update pass.
+		void UpdateSpellZones(GameTime now);
+
+		/// Casts a zone's trigger spell on every enemy of its caster standing inside it.
+		void TickSpellZone(const SpellZone& zone);
+
+		/// Tells every client in sight of a zone that it ended.
+		void BroadcastSpellZoneEnd(const SpellZone& zone, bool expired);
+
+		/// Ground zones created by PersistentAreaAura spell effects.
+		SpellZoneSet m_spellZones;
 
 		/// Active repeating OnTimer timers for instance-owned (map) triggers.
 		std::vector<std::unique_ptr<Countdown>> m_instanceTimers;
