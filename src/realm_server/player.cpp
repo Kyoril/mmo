@@ -2434,11 +2434,24 @@ namespace mmo
 					return;
 				}
 
-				// Follow the target into its instance, even across copies of the same dungeon map.
+				// The GM may have logged out while the location was fetched: without a world node the
+				// teleport is dropped, so no override may be set for it either.
+				if (!strongThis->m_world.lock())
+				{
+					WLOG("Dropping teleport to player '" << playerName << "': not connected to a world node");
+					return;
+				}
+
+				// Follow the target into its instance, even across copies of the same dungeon map. The
+				// target may have changed maps since its location was fetched; its instance id is only
+				// valid for the fetched map, so it is used only while both still agree.
 				InstanceId targetInstance{};
 				if (Player* target = strongThis->m_manager.GetPlayerByCharacterName(playerName))
 				{
-					targetInstance = target->GetWorldInstanceId();
+					if (target->HasCharacterGuid() && target->GetCharacterData().mapId == mapId)
+					{
+						targetInstance = target->GetWorldInstanceId();
+					}
 				}
 
 				// Only when a transfer will actually happen: an in-place teleport inside our own instance
