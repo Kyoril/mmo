@@ -109,10 +109,14 @@ namespace mmo
 				skeletonRoot->SetVisible(false, true);
 			}
 		}
+
+		m_collisionEditor = std::make_unique<MeshCollisionEditor>(m_scene, *m_camera, *m_cameraAnchor, m_mesh, m_entity, m_assetPath.string());
 	}
 
 	MeshEditorInstance::~MeshEditorInstance()
 	{
+		m_collisionEditor.reset();
+
 		if (m_entity)
 		{
 			m_scene.DestroyEntity(*m_entity);
@@ -153,6 +157,7 @@ namespace mmo
 
 		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 
+		m_collisionEditor->Update();
 		m_scene.Render(*m_camera, PixelShaderType::Forward);
 		
 		m_viewportRT->Update();
@@ -549,18 +554,10 @@ namespace mmo
 
 	bool MeshEditorInstance::Save()
 	{
-		const auto file = AssetRegistry::CreateNewFile(GetAssetPath().string());
-		if (!file)
+		if (!SaveMeshWithRecipe(m_mesh, GetAssetPath().string(), m_collisionEditor->GetRecipeForSave()))
 		{
-			ELOG("Failed to open mesh file " << GetAssetPath() << " for writing!");
 			return false;
 		}
-
-		io::StreamSink sink { *file };
-		io::Writer writer { sink };
-		
-		MeshSerializer serializer;
-		serializer.Serialize(m_mesh, writer);
 
 		ILOG("Successfully saved mesh " << GetAssetPath());
 		
@@ -1416,67 +1413,7 @@ namespace mmo
 				ImGui::Separator();
 			}
 
-			if (ImGui::Button("Clear"))
-			{
-				m_mesh->GetCollisionTree().Clear();
-			}
-
-			ImGui::SameLine();
-
-			if (ImGui::Button("Build Complex"))
-			{
-				CollisionRecipe recipe;
-				recipe.includedSubMeshes.assign(m_includedSubMeshes.begin(), m_includedSubMeshes.end());
-				RebuildMeshCollision(*m_mesh, recipe);
-			}
-
-			static const char* s_noMaterial = "(No Material)";
-
-			if (ImGui::CollapsingHeader("Meshes To Include", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				const AABBTree& tree = m_mesh->GetCollisionTree();
-				ImGui::Text("Nodes: %zu", tree.GetNodes().size());
-
-				const uint16 subMeshCount = m_mesh->GetSubMeshCount();
-
-				if (ImGui::Button("Select All"))
-				{
-					for (uint16 i = 0; i < subMeshCount; ++i)
-					{
-						m_includedSubMeshes.insert(i);
-					}
-				}
-
-				ImGui::SameLine();
-
-				if (ImGui::Button("Deselect All"))
-				{
-					m_includedSubMeshes.clear();
-				}
-
-				for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
-				{
-					ImGui::PushID(i);
-					bool included = m_includedSubMeshes.contains(i);
-					if (ImGui::Checkbox("##include", &included))
-					{
-						if (included)
-						{
-							m_includedSubMeshes.insert(i);
-						}
-						else
-						{
-							m_includedSubMeshes.erase(i);
-						}
-					}
-					ImGui::SameLine();
-
-					const char* materialName = m_mesh->GetSubMesh(i).GetMaterial() ? m_mesh->GetSubMesh(i).GetMaterial()->GetName().data() : s_noMaterial;
-					ImGui::Text("#%u: %s", i + 1, materialName);
-					ImGui::PopID();
-				}
-				
-			}
+			m_collisionEditor->DrawPanel();
 		}
 		ImGui::End();
 	}

@@ -8,6 +8,7 @@
 #include <assimp/scene.h>
 
 #include "anim_evaluator.h"
+#include "mesh_collision_editor.h"
 #include "editors/editor_instance.h"
 #include "graphics/render_texture.h"
 #include "scene_graph/animation_notify.h"
@@ -107,7 +108,7 @@ namespace mmo
 
 		std::unique_ptr<AnimEvaluator> m_animEvaluator;
 
-		std::set<uint16> m_includedSubMeshes;
+		std::unique_ptr<MeshCollisionEditor> m_collisionEditor;
 
 		typedef std::map<String, Matrix4> NodeTransformMap;
 		NodeTransformMap mNodeDerivedTransformByName;
