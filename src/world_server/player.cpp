@@ -1390,6 +1390,14 @@ namespace mmo
 			return;
 		}
 
+		// An invisible GM is an observer and must never start scripted events or take portals;
+		// they move with port / worldport instead.
+		if (m_character && m_character->IsGmInvisible())
+		{
+			DLOG("Ignoring area trigger " << triggerId << " for invisible game master " << log_hex_digit(m_character->GetGuid()));
+			return;
+		}
+
 		DLOG("Player triggered area trigger " << triggerId);
 
 		// Get the area trigger from the project
@@ -1440,6 +1448,12 @@ namespace mmo
 		if (!(contentReader >> io::read<uint32>(triggerId)))
 		{
 			ELOG("Failed to read AreaTriggerLeft packet!");
+			return;
+		}
+
+		// Invisible GMs never fire area triggers (see OnAreaTriggerTriggered), so leaving one is ignored too.
+		if (m_character && m_character->IsGmInvisible())
+		{
 			return;
 		}
 
