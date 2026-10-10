@@ -89,6 +89,7 @@
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
 #include "editors/global_shader_parameters_editor/global_shader_parameters_editor.h"
+#include "editors/mesh_editor/mesh_collision_geometry.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -322,7 +323,9 @@ int main(int argc, char* arg[])
 	// Unattended jobs. `--rebuild-material <asset>` recompiles a material's shaders from its stored
 	// graph, then exits. `--bake-terrain-lod Worlds/<n>/<n>.hwld [--force]` opens the world, bakes the
 	// distant-terrain data of every page whose .tile changed since the last bake (every page with
-	// --force), then exits.
+	// --force), then exits. `--rebake-collision <asset.hmsh> [--rebake-collision ...]` rebuilds the
+	// meshes' collision trees from their stored collision recipes (editor-only CSRC chunk), saves
+	// them and exits.
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
@@ -351,6 +354,37 @@ int main(int argc, char* arg[])
 
 				const bool rebuilt = materialEditorPtr->RebuildMaterialsNow(materials);
 				PostQuitMessage(rebuilt ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--rebake-collision")
+			{
+				static std::ofstream rebakeLog("collision_rebake.log", std::ios::out | std::ios::trunc);
+				static std::mutex rebakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ rebakeLogMutex };
+					rebakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				// A broken mesh must fail the job, not park it behind an assert box nobody answers.
+				static HANDLE assertFile = CreateFileA("collision_rebake_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				bool allRebaked = true;
+				for (int j = 1; j + 1 < argCount; ++j)
+				{
+					if (std::string(args[j]) == "--rebake-collision")
+					{
+						allRebaked = mmo::RebakeMeshCollisionFile(args[j + 1]) && allRebaked;
+					}
+				}
+
+				PostQuitMessage(allRebaked ? 0 : 1);
 				break;
 			}
 
