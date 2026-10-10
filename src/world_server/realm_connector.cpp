@@ -981,12 +981,14 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		uint32 mapId;
 		Vector3 position;
 		float facingRadianValue;
+		InstanceId instanceId{};
 
 		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint32>(mapId)
 			>> io::read<float>(position.x)
 			>> io::read<float>(position.y)
 			>> io::read<float>(position.z)
-			>> io::read<float>(facingRadianValue)))
+			>> io::read<float>(facingRadianValue)
+			>> instanceId))
 		{
 			ELOG("Failed to read CHARACTER_LOCATION_REQUEST packet");
 			return PacketParseResult::Disconnect;
@@ -997,6 +999,15 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		if (!player)
 		{
 			WLOG("Received teleport request for non-connected player character " << log_hex_digit(characterId));
+			return PacketParseResult::Pass;
+		}
+
+		// A GM following a player into another copy of the same dungeon map: the in-instance
+		// relocation would keep them in their own copy, so force a real transfer.
+		const WorldInstance* current = player->GetGameUnit().GetWorldInstance();
+		if (!instanceId.is_nil() && current && current->GetMapId() == mapId && current->GetId() != instanceId)
+		{
+			player->BeginMapTransfer(mapId, position, Radian(facingRadianValue));
 			return PacketParseResult::Pass;
 		}
 

@@ -914,6 +914,13 @@ namespace mmo
 
 		void OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing) override;
 
+		/// Leaves the current world instance and asks the realm to transfer the character to mapId —
+		/// also used for a same-map move into another instance.
+		/// @param mapId The map to transfer to.
+		/// @param position The target position on that map.
+		/// @param facing The target facing.
+		void BeginMapTransfer(uint32 mapId, const Vector3& position, const Radian& facing);
+
 		void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff,
 			int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) override;
 

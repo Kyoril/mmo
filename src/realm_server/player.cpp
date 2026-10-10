@@ -1209,8 +1209,15 @@ namespace mmo
 
 		// Resolve the correct instance id based on map type
 		InstanceId targetInstanceId{};
+		const std::optional<InstanceId> overrideInstance = ConsumeInstanceOverride(m_pendingInstanceOverride, m_transferMap);
+		m_joinedByInstanceOverride = overrideInstance.has_value();
 		const proto::MapEntry* mapEntry = m_project.maps.getById(m_transferMap);
-		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
+		if (overrideInstance)
+		{
+			targetInstanceId = *overrideInstance;
+			DLOG("Using instance override for transfer map " << m_transferMap << ": " << targetInstanceId);
+		}
+		else if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
 		{
 			// Dungeon/raid map: resolve instance from group or personal bindings
 			targetInstanceId = ResolveDungeonInstanceId(m_transferMap);
@@ -2413,7 +2420,7 @@ namespace mmo
 
 		// Player is currently connected, so we need to get the players location data first by asking the world node the player is currently connected to
 		std::weak_ptr weakThis{shared_from_this()};
-		player->FetchCharacterLocationAsync([weakThis](bool succeeded, uint32 mapId, Vector3 position, Radian facing)
+		player->FetchCharacterLocationAsync([weakThis, playerName](bool succeeded, uint32 mapId, Vector3 position, Radian facing)
 											{
 				auto strongThis = weakThis.lock();
 				if (!strongThis)
@@ -2427,9 +2434,21 @@ namespace mmo
 					return;
 				}
 
+				// Follow the target into its instance, even across copies of the same dungeon map.
+				InstanceId targetInstance{};
+				if (Player* target = strongThis->m_manager.GetPlayerByCharacterName(playerName))
+				{
+					targetInstance = target->GetWorldInstanceId();
+				}
+
+				if (!targetInstance.is_nil())
+				{
+					strongThis->m_pendingInstanceOverride = InstanceOverride{ mapId, targetInstance };
+				}
+
 				// Teleport player to the location
-				DLOG("Teleporting player to map " << mapId << ", location " << position << "...");
-				strongThis->SendTeleportRequest(mapId, position, facing); });
+				DLOG("Teleporting player to map " << mapId << ", instance " << targetInstance << ", location " << position << "...");
+				strongThis->SendTeleportRequest(mapId, position, facing, targetInstance); });
 
 		return PacketParseResult::Pass;
 	}
@@ -3428,6 +3447,9 @@ namespace mmo
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
 
+		// Login path: never joined through an instance override.
+		m_joinedByInstanceOverride = false;
+
 		// Store dungeon instance binding if applicable
 		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
 		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
@@ -3546,8 +3568,9 @@ namespace mmo
 		m_characterData->instanceId = instanceId;
 
 		// Store dungeon instance binding if applicable
+		// A GM who followed a player in is a visitor: never bind them or their group to that instance.
 		const proto::MapEntry* transferMapEntry = m_project.maps.getById(m_characterData->mapId);
-		if (transferMapEntry && transferMapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
+		if (transferMapEntry && transferMapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil() && !m_joinedByInstanceOverride)
 		{
 			if (m_group && m_group->IsCreated())
 			{
@@ -4346,7 +4369,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	void Player::SendTeleportRequest(uint32 mapId, const Vector3 &position, const Radian &facing) const
+	void Player::SendTeleportRequest(uint32 mapId, const Vector3 &position, const Radian &facing, const InstanceId &instanceId) const
 	{
 		// Check if we are currently connected to a world node
 		std::shared_ptr<World> world = m_world.lock();
@@ -4356,7 +4379,7 @@ namespace mmo
 		}
 
 		// Send a request to the world node to teleport the character
-		world->SendTeleportRequest(m_characterData->characterId, mapId, position, facing);
+		world->SendTeleportRequest(m_characterData->characterId, mapId, position, facing, instanceId);
 	}
 
 	void Player::SendPartyOperationResult(PartyOperation operation, PartyResult result, const String &playerName)

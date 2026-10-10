@@ -4009,43 +4009,48 @@ namespace mmo
 		}
 		else
 		{
-			// Save inventory before teleporting to a different map
-			if (m_inventoryRepo)
-			{
-				auto& inventory = m_character->GetInventory();
-				if (inventory.IsDirty())
-				{
-					inventory.SaveToRepository();
-				}
-			}
-
-			// Send transfer pending state. This will show up the loading screen at the client side and will
-			// tell the realm where our character should be sent to
-			SendPacket([mapId](game::OutgoingPacket& packet)
-				{
-					packet.Start(game::realm_client_packet::TransferPending);
-					packet << io::write<uint32>(mapId);
-					packet.Finish();
-				});
-
-			// Initialize teleport request at realm
-			const uint64 guid = m_character->GetGuid();
-			m_connector.SendTeleportRequest(guid, mapId, position, facing);
-
-			// No longer watch tile
-			VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
-			tile.GetWatchers().remove(this);
-
-			// Remove the character from the world (this will save the character)
-			m_worldInstance->RemoveGameObject(*m_character);
-
-			// Notify realm that our character left this world instance (this will commit the pending teleport request)
-			m_connector.NotifyWorldInstanceLeft(guid, auth::world_left_reason::Teleport);
-
-			// Destroy player instance
-			m_character.reset();
-			m_manager.RemovePlayer(shared_from_this());
+			BeginMapTransfer(mapId, position, facing);
 		}
+	}
+
+	void Player::BeginMapTransfer(const uint32 mapId, const Vector3& position, const Radian& facing)
+	{
+		// Save inventory before teleporting to a different map
+		if (m_inventoryRepo)
+		{
+			auto& inventory = m_character->GetInventory();
+			if (inventory.IsDirty())
+			{
+				inventory.SaveToRepository();
+			}
+		}
+
+		// Send transfer pending state. This will show up the loading screen at the client side and will
+		// tell the realm where our character should be sent to
+		SendPacket([mapId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::TransferPending);
+				packet << io::write<uint32>(mapId);
+				packet.Finish();
+			});
+
+		// Initialize teleport request at realm
+		const uint64 guid = m_character->GetGuid();
+		m_connector.SendTeleportRequest(guid, mapId, position, facing);
+
+		// No longer watch tile
+		VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
+		tile.GetWatchers().remove(this);
+
+		// Remove the character from the world (this will save the character)
+		m_worldInstance->RemoveGameObject(*m_character);
+
+		// Notify realm that our character left this world instance (this will commit the pending teleport request)
+		m_connector.NotifyWorldInstanceLeft(guid, auth::world_left_reason::Teleport);
+
+		// Destroy player instance
+		m_character.reset();
+		m_manager.RemovePlayer(shared_from_this());
 	}
 
 	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints)

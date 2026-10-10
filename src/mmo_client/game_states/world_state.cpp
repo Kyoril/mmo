@@ -363,6 +363,9 @@ namespace mmo
 	{
 		LoadingScreen::Show();
 
+		// A transfer cut short by a disconnect must not swallow the next session's transfers.
+		m_transferPending = false;
+
 		// The game clock outlives the world state; it was not updated while we were out of the world
 		m_gameTime.ResetUpdateReference();
 
@@ -5040,11 +5043,13 @@ namespace mmo
 		}
 
 		ILOG("Transfer pending to map " << mapId << "...");
-		if (g_mapId == mapId)
+		if (m_transferPending)
 		{
+			// A transfer is already in progress; the realm only ever starts one at a time.
 			return PacketParseResult::Pass;
 		}
 
+		m_transferPending = true;
 		LoadingScreen::Show();
 
 		g_mapId = mapId;
@@ -5080,6 +5085,8 @@ namespace mmo
 			ELOG("Failed to read NewWorld packet!");
 			return PacketParseResult::Disconnect;
 		}
+
+		m_transferPending = false;
 
 		ILOG("Transfer to map " << mapId << " completed! Loading map...");
 		g_mapId = mapId;

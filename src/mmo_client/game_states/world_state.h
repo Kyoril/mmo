@@ -878,6 +878,9 @@ namespace mmo
 
 		bool m_timeSyncResponseSent = false;
 
+		/// True between TransferPending and NewWorld; later TransferPending packets for the same transfer are ignored.
+		bool m_transferPending = false;
+
 		AreaTriggerManager m_areaTriggerManager;
 
 	private:

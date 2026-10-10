@@ -21,6 +21,7 @@
 #include <set>
 
 #include "login_connector.h"
+#include "instance_override.h"
 #include "game/action_button.h"
 #include "game/mail.h"
 #include "game/bug_report.h"
@@ -327,7 +328,9 @@ namespace mmo
 
 		void FetchCharacterLocationAsync(CharacterLocationAsyncCallback &&callback);
 
-		void SendTeleportRequest(uint32 mapId, const Vector3 &position, const Radian &facing) const;
+		/// Asks the current world node to teleport the character.
+		/// @param instanceId Instance the character should end up in, or nil to let the world node decide.
+		void SendTeleportRequest(uint32 mapId, const Vector3 &position, const Radian &facing, const InstanceId &instanceId = {}) const;
 
 		void SendPartyOperationResult(PartyOperation operation, PartyResult result, const String &playerName);
 
@@ -477,6 +480,14 @@ namespace mmo
 		uint32 m_actionButtonClassId = 0;
 		InstanceId m_instanceId{};
 		uint32 m_transferMap = 0;
+
+		/// Instance the next transfer must join (GM port to a player), consumed by OnMoveWorldPortAck.
+		std::optional<InstanceOverride> m_pendingInstanceOverride;
+
+		/// True while the character is in an instance it joined through an override: no dungeon
+		/// binding is stored for it, so a visiting GM never rebinds their own group or themselves.
+		bool m_joinedByInstanceOverride = false;
+
 		Vector3 m_transferPosition{};
 		float m_transferFacing = 0.0f;
 		std::shared_ptr<PlayerGroup> m_group;
