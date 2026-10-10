@@ -257,7 +257,8 @@ namespace mmo
 		m_environmentProfiles = std::make_unique<EnvironmentProfileCache<proto::EnvironmentProfileManager>>(m_editor.GetProject().environmentProfiles);
 
 		// Setup edit modes
-		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
+		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera,
+			m_editor.GetTerrainClipboard(), m_assetPath.string());
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
 
 		// Create scene outline window

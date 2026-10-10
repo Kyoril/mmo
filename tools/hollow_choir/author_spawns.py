@@ -11,7 +11,7 @@ map: docs/hollow_choir_bosses.md, section "Layout".
 
 World orientation: the monastery is rotated in the world. The design sketch's north (towards the
 apse) is world -X, its east is world -Z. Floors: entrance hall y 1.2, Wake and nave y 0.2, the
-raised west wing (apse, cloister) y 5.2.
+raised west wing (apse, cloister) y 5.2, crypt y -3.
 
 Spacing rule (user, 2026-10-08): pulling one group must not drag others along. Creatures in combat
 call idle allies within 8 units (creature_ai_idle_state.cpp), so the members of two different
@@ -20,6 +20,7 @@ to wander into fights.
 """
 
 import argparse
+import json
 import math
 import shutil
 import sys
@@ -47,7 +48,7 @@ W, K, Z, N = 92, 93, 94, 95   # Gravewarden, Mourning Cantor, Candlebearer, Rest
 EAST, WEST, SOUTH, NORTH = 0.0, math.pi, -math.pi / 2, math.pi / 2
 
 # Floor levels, used to pick the right floor when the navmesh has several at one x/z.
-HALL, WAKE, RAISED = 1.2, 0.2, 5.2
+HALL, WAKE, RAISED, CRYPT = 1.2, 0.2, 5.2, -3.0
 
 # Compact pack: offsets from the group centre, in world units.
 PACK3 = [(0.0, 0.0), (-1.8, 1.6), (-1.8, -1.6)]
@@ -74,8 +75,8 @@ GROUPS = [
 # Groups where the floor is too cramped for a rotated pack: member positions picked by hand from
 # the navmesh probe (each list matches the group's members).
 EXPLICIT = {
-    # The cloister is cramped for two packs, a patrol and Mereth at 12-unit spacing: the packs
-    # hold its two northern corners, Mereth the southern half, the patrol the other three arcades.
+    # The cloister holds two packs and a patrol at 12-unit spacing: the packs hold its two northern
+    # corners, the patrol the other three arcades.
     "I": [(-101.5, 20.5), (-103.5, 20.5), (-101.5, 22.2), (-103.5, 22.2)],
     "H": [(-80.5, 21.0), (-78.5, 20.3), (-78.5, 22.0)],
     # The round apse is too small to keep a pack 12 units from Veyr on the podium: J and K stand
@@ -87,7 +88,9 @@ EXPLICIT = {
 # Spawn name, unit, (x, z), level, facing. Triggers address the bosses by these names.
 BOSSES = [
     ("HollowChoir_Oswin", OSWIN, (-6.5, -40.0), WAKE, SOUTH),
-    ("HollowChoir_Mereth", MERETH, (-91.0, 35.5), RAISED, EAST),
+    # Mereth holds the crypt below the south-west stair: the centre aisle of the hall, facing the
+    # corridor the group comes down (+z is SOUTH in the facing convention).
+    ("HollowChoir_Mereth", MERETH, (-127.0, -3.0), CRYPT, SOUTH),
     ("HollowChoir_Veyr", VEYR, (-92.0, 0.0), RAISED, EAST),
 ]
 
@@ -198,7 +201,8 @@ def render(spawns, out):
     overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     font = ImageFont.load_default()
-    x0, z0, ppu = -134.0, -52.0, 8   # survey_layout.py's full-map framing
+    framing = json.loads(survey.with_suffix(".json").read_text())   # written by survey_layout.py
+    x0, z0, ppu = framing["x0"], framing["z0"], framing["ppu"]
 
     def px(x, z):
         return (x - x0) * ppu, (z - z0) * ppu

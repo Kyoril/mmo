@@ -50,15 +50,15 @@ BOSSES = [
     dict(id=86, name="Brother Oswin", subname="Keeper of the Vigil", level=12,
          model=MODEL_UNDEAD_MALE, elite=3.5, attack_time=2400, loot=29,
          gold=(1100, 1600), xp=420, armor=(160, 40.0), dmg_per_level=1.1,
-         spells=[(251, 9500, 10500, 0.0, 8.0)]),
+         spells=[(251, 9500, 10500, 0.0, 5.0)]),
     dict(id=87, name="Sister Mereth", subname="The Mourning Voice", level=13,
          model=MODEL_UNDEAD_FEMALE, elite=3.8, attack_time=2800, loot=30,
          gold=(1300, 1900), xp=480, armor=(140, 34.0), dmg_per_level=1.0,
-         spells=[(255, 18000, 18000, 0.0, 40.0)]),
+         spells=[(255, 18000, 18000, 0.0, 5.0)]),
     dict(id=88, name="Cantor Veyr", subname="The Hollow Choir", level=14,
          model=MODEL_UNDEAD_MALE, elite=4.2, attack_time=3000, loot=28,
          gold=(1900, 2700), xp=560, armor=(175, 42.0), dmg_per_level=1.2,
-         spells=[(262, 25000, 25000, 0.0, 40.0)]),
+         spells=[(262, 25000, 25000, 0.0, 5.0)]),
 ]
 
 # Adds give no XP and no loot: they are part of a boss's fight, not farmable trash.
@@ -129,7 +129,10 @@ def make_unit(units_pb, spec, unit_class, xp, gold, loot):
 
 def set_spells(unit, spells):
     """Creature spells (id, min cooldown, max cooldown, min range, max range), placed before
-    the auto attack (37) so the AI weighs them first. Encounter abilities aimed at random
+    the auto attack (37) so the AI weighs them first. Keep the bosses' max ranges within melee
+    reach + 5: a creature with more longer-reaching spells than short ones becomes a Caster, which
+    stands off instead of chasing and meleeing its victim. Lament and Dirge hit everyone around the
+    boss anyway, so casting them only with the tank in melee costs nothing. Encounter abilities aimed at random
     players are cast by triggers instead: the AI only ever targets its victim."""
     auto_attack = list(unit.creaturespells)
     del unit.creaturespells[:]

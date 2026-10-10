@@ -64,6 +64,9 @@ namespace mmo
 			std::map<uint64, uint32> channelStarts;
 			std::set<uint64> channeling;
 
+			/// Casts that went off (SpellGo) per caster and spell.
+			std::map<std::pair<uint64, uint32>, uint32> spellGos;
+
 			/// A second session on the same account, created by LoginElsewhere. Kept alive for the
 			/// rest of the scenario so its connection is not torn down while the first session is
 			/// still being observed.
@@ -567,6 +570,13 @@ namespace mmo
 		{
 			const auto it = g_runtime->channelStarts.find(guidFromString(guid));
 			return it == g_runtime->channelStarts.end() ? 0 : static_cast<int32>(it->second);
+		}
+
+		/// How many times guid's cast of spellId went off (SpellGo packets received).
+		int32 luaSpellGoCount(const std::string& guid, const uint32 spellId)
+		{
+			const auto it = g_runtime->spellGos.find({ guidFromString(guid), spellId });
+			return it == g_runtime->spellGos.end() ? 0 : static_cast<int32>(it->second);
 		}
 
 		/// Name of the last swing error the server reported ("out_of_range", ...), or "none".
@@ -1548,6 +1558,7 @@ namespace mmo
 				luabind::def_lambda("IsAutoAttacking", &luaIsAutoAttacking),
 				luabind::def_lambda("IsChanneling", &luaIsChanneling),
 				luabind::def_lambda("ChannelStartCount", &luaChannelStartCount),
+				luabind::def_lambda("SpellGoCount", &luaSpellGoCount),
 				luabind::def_lambda("IsSpellOnCooldown", &luaIsSpellOnCooldown),
 				luabind::def_lambda("GetName", &luaGetName),
 				luabind::def_lambda("GetPosX", &luaGetPosX),
@@ -1778,6 +1789,12 @@ namespace mmo
 					  { "damage", damage }, { "hit_info", hitInfo }, { "victim_state", victimState } });
 			}) };
 
+		const scoped_connection spellWentOffRecorder { realm.SpellWentOff.connect(
+			[&transcript, &runtime](const uint64 caster, const uint32 spellId)
+			{
+				++runtime.spellGos[{ caster, spellId }];
+				transcript.Event("spell_go", { { "caster", guidToString(caster) }, { "spell_id", spellId } });
+			}) };
 		const scoped_connection channelStartedRecorder { realm.ChannelStarted.connect(
 			[&transcript, &runtime](const uint64 caster, const uint32 spellId, const int32 durationMs)
 			{

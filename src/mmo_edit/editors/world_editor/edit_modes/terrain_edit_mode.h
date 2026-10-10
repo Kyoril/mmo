@@ -13,6 +13,7 @@
 #include "terrain/flatten_plane.h"
 #include "terrain/terrain_region_snapshot.h"
 
+#include "editors/world_editor/terrain_clipboard.h"
 #include "editors/world_editor/terrain_undo_stack.h"
 
 #include <vector>
@@ -126,7 +127,11 @@ namespace mmo
 	class TerrainEditMode final : public WorldEditMode
 	{
 	public:
-		explicit TerrainEditMode(IWorldEditor& worldEditor, terrain::Terrain& terrain, const proto::ZoneManager& zones, Camera& camera);
+		/// @param clipboard The region clipboard, shared by all open worlds so regions can be copied
+		///        between them. Must outlive this edit mode.
+		/// @param worldName Asset path of this world, recorded with copied regions.
+		explicit TerrainEditMode(IWorldEditor& worldEditor, terrain::Terrain& terrain, const proto::ZoneManager& zones, Camera& camera,
+			std::optional<TerrainClipboard>& clipboard, String worldName);
 		~TerrainEditMode() override;
 
 	public:
@@ -241,6 +246,9 @@ namespace mmo
 		/// Captures the current selection into the clipboard.
 		void CopySelection();
 
+		/// True if the clipboard holds a region copied from a different world than this one.
+		[[nodiscard]] bool IsClipboardFromOtherWorld() const;
+
 		/// Captures the selection into the clipboard, records undo, and edge-fills the source.
 		void CutSelection();
 
@@ -338,8 +346,14 @@ namespace mmo
 		RegionEditState m_regionState = RegionEditState::Idle;
 		terrain::region_math::VertexRect m_selection{};
 		Vector3 m_regionDragStart{};
-		std::optional<terrain::TerrainRegionSnapshot> m_clipboard;
+		std::optional<TerrainClipboard>& m_clipboard;
+		String m_worldName;
 		bool m_ghostIsMove = false;
+
+		/// Whether a paste from another world also takes over that world's area IDs. Off by
+		/// default: area IDs name zones of the source map and would rename, re-light and re-score
+		/// the destination tiles.
+		bool m_pasteForeignAreaIds = false;
 		float m_ghostHeightOffset = 0.0f;
 		ManualRenderObject* m_regionOverlay = nullptr;
 		SceneNode* m_regionOverlayNode = nullptr;

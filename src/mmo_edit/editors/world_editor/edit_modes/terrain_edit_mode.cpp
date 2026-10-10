@@ -99,8 +99,11 @@ namespace mmo
 
 	static_assert(std::size(s_terrainHoleModeStrings) == static_cast<uint32>(TerrainHoleMode::Count_), "There needs to be one string per enum value to display!");
 
-	TerrainEditMode::TerrainEditMode(IWorldEditor& worldEditor, terrain::Terrain& terrain, const proto::ZoneManager& zones, Camera& camera)
+	TerrainEditMode::TerrainEditMode(IWorldEditor& worldEditor, terrain::Terrain& terrain, const proto::ZoneManager& zones, Camera& camera,
+		std::optional<TerrainClipboard>& clipboard, String worldName)
 		: WorldEditMode(worldEditor)
+		, m_clipboard(clipboard)
+		, m_worldName(std::move(worldName))
 		, m_terrain(terrain)
 		, m_zones(zones)
 		, m_camera(camera)
@@ -365,8 +368,13 @@ namespace mmo
 		auto snapshot = m_terrain.CaptureRegion(m_selection);
 		if (snapshot.IsValid())
 		{
-			m_clipboard = std::move(snapshot);
+			m_clipboard = TerrainClipboard{ std::move(snapshot), m_worldName };
 		}
+	}
+
+	bool TerrainEditMode::IsClipboardFromOtherWorld() const
+	{
+		return m_clipboard && m_clipboard->sourceWorld != m_worldName;
 	}
 
 	void TerrainEditMode::CutSelection()
@@ -382,7 +390,7 @@ namespace mmo
 			return;
 		}
 
-		m_clipboard = snapshot;
+		m_clipboard = TerrainClipboard{ snapshot, m_worldName };
 		std::vector<terrain::TerrainRegionSnapshot> before;
 		before.push_back(std::move(snapshot));
 		m_undoStack.Push("Cut Region", std::move(before));
@@ -401,7 +409,7 @@ namespace mmo
 			CopySelection();
 		}
 
-		if (!m_clipboard || !m_clipboard->IsValid())
+		if (!m_clipboard || !m_clipboard->snapshot.IsValid())
 		{
 			return;
 		}
@@ -421,8 +429,8 @@ namespace mmo
 
 		const int32 pagesW = static_cast<int32>(m_terrain.GetWidth());
 		const int32 pagesH = static_cast<int32>(m_terrain.GetHeight());
-		const int32 sizeX = m_clipboard->rect.sizeX;
-		const int32 sizeZ = m_clipboard->rect.sizeZ;
+		const int32 sizeX = m_clipboard->snapshot.rect.sizeX;
+		const int32 sizeZ = m_clipboard->snapshot.rect.sizeZ;
 
 		int32 minX = terrain::region_math::RoundWorldToVertex(m_brushPosition.x, pagesW) - sizeX / 2;
 		int32 minZ = terrain::region_math::RoundWorldToVertex(m_brushPosition.z, pagesH) - sizeZ / 2;
@@ -436,7 +444,7 @@ namespace mmo
 
 	void TerrainEditMode::CommitGhostDrag()
 	{
-		if (!m_clipboard || !m_clipboard->IsValid() || !m_brushPositionValid)
+		if (!m_clipboard || !m_clipboard->snapshot.IsValid() || !m_brushPositionValid)
 		{
 			CancelGhostDrag();
 			return;
@@ -454,15 +462,28 @@ namespace mmo
 		if (m_ghostIsMove)
 		{
 			// The clipboard IS the source's before-state.
-			before.push_back(*m_clipboard);
+			before.push_back(m_clipboard->snapshot);
 		}
 		m_undoStack.Push(m_ghostIsMove ? "Move Region" : "Paste Region", std::move(before));
 
 		if (m_ghostIsMove)
 		{
-			m_terrain.FillRegionFromEdges(m_clipboard->rect);
+			m_terrain.FillRegionFromEdges(m_clipboard->snapshot.rect);
 		}
-		m_terrain.ApplyRegion(*m_clipboard, destRect.minX, destRect.minZ, m_ghostHeightOffset);
+
+		if (IsClipboardFromOtherWorld() && !m_pasteForeignAreaIds)
+		{
+			// Keep the destination's own area IDs: an empty list makes ApplyRegion leave them alone.
+			terrain::TerrainRegionSnapshot withoutAreas = m_clipboard->snapshot;
+			withoutAreas.areaIds.clear();
+			withoutAreas.tileCountX = 0;
+			withoutAreas.tileCountZ = 0;
+			m_terrain.ApplyRegion(withoutAreas, destRect.minX, destRect.minZ, m_ghostHeightOffset);
+		}
+		else
+		{
+			m_terrain.ApplyRegion(m_clipboard->snapshot, destRect.minX, destRect.minZ, m_ghostHeightOffset);
+		}
 
 		// The pasted area becomes the new selection.
 		m_selection = destRect;
@@ -530,7 +551,7 @@ namespace mmo
 		{
 			const float wx = terrain::region_math::VertexToWorld(destRect.minX + x, pagesW);
 			const float wz = terrain::region_math::VertexToWorld(destRect.minZ + z, pagesH);
-			const float h = m_clipboard->outerHeights[static_cast<size_t>(z) * (m_clipboard->rect.sizeX + 1) + x]
+			const float h = m_clipboard->snapshot.outerHeights[static_cast<size_t>(z) * (m_clipboard->snapshot.rect.sizeX + 1) + x]
 				+ m_ghostHeightOffset;
 			return Vector3(wx, h, wz);
 		};
@@ -1028,7 +1049,7 @@ namespace mmo
 		}
 
 		const bool hasSelection = HasRegionSelection();
-		const bool hasClipboard = m_clipboard && m_clipboard->IsValid();
+		const bool hasClipboard = m_clipboard && m_clipboard->snapshot.IsValid();
 		const bool ghostActive = m_regionState == RegionEditState::GhostDrag;
 
 		ImGui::BeginDisabled(!hasSelection || ghostActive);
@@ -1054,6 +1075,18 @@ namespace mmo
 			BeginGhostDrag(false);
 		}
 		ImGui::EndDisabled();
+
+		if (hasClipboard && IsClipboardFromOtherWorld())
+		{
+			ImGui::TextWrapped("Clipboard: %d x %d cells copied from %s",
+				m_clipboard->snapshot.rect.sizeX, m_clipboard->snapshot.rect.sizeZ, m_clipboard->sourceWorld.c_str());
+			ImGui::Checkbox("Paste area IDs too", &m_pasteForeignAreaIds);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Area IDs name zones of the world the region came from.\n"
+					"Leave this off to keep this world's own zones on the pasted tiles.");
+			}
+		}
 
 		if (ghostActive)
 		{

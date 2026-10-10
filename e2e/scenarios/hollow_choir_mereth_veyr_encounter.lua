@@ -71,10 +71,10 @@ GM.Worldport(SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z, 0)
 Assert(WaitUntil(function() return GetPosX(Me()) > 0 end, 30000, "at the spawn point"),
 	"player should start from the default spawn")
 
--- Mereth, in the cloister.
-GM.Worldport(1, -91.0, 5.7, 27.0, 0)
-Assert(WaitUntil(function() return GetPosX(Me()) < 100 end, 30000, "arrived in the cloister"),
-	"the worldport into the cloister should land")
+-- Mereth, in the crypt below the south-west stair: land in the corridor and walk into the hall.
+GM.Worldport(1, -127.0, -2.5, 10.0, 0)
+Assert(WaitUntil(function() return GetPosX(Me()) < 100 end, 30000, "arrived in the crypt"),
+	"the worldport into the crypt should land")
 Sleep(3000)
 GM.Godmode(true)
 

@@ -164,15 +164,33 @@ Floors: entrance hall and south yard y 1.2, Wake of the Dead and nave y 0.2, the
 
 | Sketch | World area (x, z) | Notes |
 |---|---|---|
-| Eingang | x 9..17, z -2..2 | |
-| 01 Vorhalle | x -21..9, z -6..5, plus the south yard x -25..11, z 5..30 | |
+| Eingang | x 9..17, z -2..2 | outside the door: the forecourt of the outdoor entrance (see below) |
+| 01 Vorhalle | x -21..9, z -6..5 | |
+| Skriptorium | x -25..11, z 6..30 (the former open south yard) | 3 x 2 rib-vaulted bays on pillars z 18, desks, lecterns, shelves |
 | 02 Totenwache | x -21..9, z -46..-7 | sarcophagus x -10..-3, z -33..-11 |
 | G1 | corridor x -32..-21, z -3..3 | seal at x -27 |
 | 03 Kirchenschiff | x -79..-32, z -12..12 | pillar rows z -6 and +6, pews x -70..-40 |
 | Sakristei | niche x -40..-34, z -24..-17 | |
 | Treppe / G2 | x -86..-79, z -6..6 | seals at x -85.5 |
 | 06 Apsis | round room x -104..-85, z -12..12 | podium at the centre, passages north and south |
+| Seitenkapelle | niche x -43..-31, z 12..22 | mirror of the sacristy, lectern and candlesticks |
+| G Durchgang | x -73..-67, z 12..30, then west to the cloister wall at x -76 | nave y 1, stair z 18..24 up to y 5, door into the cloister's east walk at z 27 |
 | 04 Kreuzgang | x -105..-76, z 18..48 | arcade pillars x -100.5 and -82 |
+| L Galerie | east walk y 13 (x -82..-76, z 18..36), west and south walks y 17 | stair from the courtyard: x -89..-83, from z 36 (y 5) north to a landing at z 18..24 (y 13) |
+| Krypta | landing x -130..-124, z 24..36 (y -3), corridor z 12..24, hall x -142..-112, z -12..12 | below the south-west stair; pillar rows z -6 and +6, burial niches, altar niche north. **Sister Mereth** at (-127, -3, -3), facing the corridor |
+
+Every room is closed to the sky. The nave is vaulted in steps after the kit's demo hall: aisles
+under small domes (y 13), the central nave on a clerestory with rib vaults between transverse
+arches (y 21); the apse, sacristy, chapel, aisles of the Wake, cloister walks, cloister courtyard
+(y 27) and crypt have cross vaults (`Ceiling_01`).
+
+**View out of the entrance.** `Models/Dungeon/HollowChoir_Entrance_View.hwmo` is the forecourt of
+`HollowChoir_Entrance_Outdoor_001.hwmo` (everything in front of its facade), placed in the Test
+world in front of the dungeon door, so looking out shows the steps, graveyard and gate the
+player came through. Child WMO references are saved but never instantiated at runtime, and the
+outdoor model's full shell would run through the entrance hall, hence a separate placed model.
+Copy the matching outdoor terrain over with the world editor's region copy (Terrain > Region
+works across open worlds; area IDs stay the destination's unless "Paste area IDs too" is set).
 
 `tools/hollow_choir/survey_layout.py` renders the floor plan with the walkable navmesh;
 `tools/hollow_choir/author_spawns.py` places the spawns, checks them against the navmesh and the
@@ -186,9 +204,9 @@ were added for the three yard-side hall windows that had none (through them the 
 the sky showed). In mmo_edit's world model editor, **World Model Settings > Rooms** has
 *Derive Room Volumes*, *Check Portal Links* and *Fix Portal Links* (and each group's properties a
 *Derive from Floors* button); redo them after changing rooms, portals or floors.
-`mmo_edit --derive-rooms Models/Dungeon/Monastery_001.hwmo` does the same unattended. Portal 8
-(towards the cloister) sits inside the cloister floor until the passage exists, and the check
-reports it rather than guessing.
+`mmo_edit --derive-rooms Models/Dungeon/Monastery_001.hwmo` does the same unattended. Portal 8 is
+the apse's doorway into the cloister; 13 joins the nave and passage G, 14 passage G and the
+cloister, 15 the south-west stair's landing and the crypt.
 
 **Navigation mesh.** The whole dungeon is one connected navmesh (2026-10-10). Two causes had cut
 it into islands: nav_builder rasterized with a span merge threshold of -1, so wherever a vertical
@@ -231,19 +249,17 @@ trigger cast is refused while the boss is still casting or channeling, and the t
 be lost. Phase changes cancel the boss's current cast before they cast. Adds despawn when their
 boss resets or dies (instance variables 2001-2003). Summoned creatures never reward their killers.
 
-Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua` and
+Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua`, `hollow_choir_boss_abilities.lua` (every recurring ability goes off and its zone hits) and
 `hollow_choir_mereth_veyr_encounter.lua`.
 
 ## Open work
 
-- **Geometry (user):** a passage from the nave to the cloister. Then group G goes into it.
-- **Rooms:** after the passage is built, derive the room volumes again (see Layout) and make
-  sure portal 8 sits on the nave/cloister boundary; every opening between rooms needs a portal.
-- **Cramped rooms:** the apse and the cloister are small for a 20-unit player aggro radius.
-  Fighting H or I can pull Mereth, and anything in the apse pulls Veyr.
+- **Spawns:** group G goes into the passage (world model group `Room_007_PassageG`), group L onto
+  the galleries.
+- **Cramped rooms:** the apse is small for a 20-unit player aggro radius; anything in it pulls
+  Veyr.
 - **Gate art:** the seals are placeholder walls (FP_Wall_01). The sketch wants the singing to stop
   audibly and the altar light to change when G2 opens; neither has a hook yet.
-- Gallery (L) and its stair; the down stair south-west of the cloister.
 - Re-point quests 58-61 (kill objectives on 81, 84, 85) at the new bosses.
 - Mourning Cantors log "validation failed" for Dirge of the Hollow Choir (242) when a pillar
   blocks their line of sight; the creature AI does not check line of sight before choosing a spell.
