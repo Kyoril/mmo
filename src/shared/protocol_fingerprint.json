@@ -7,7 +7,7 @@
 	],
 	"_format": 3,
 	"auth": {
-		"version": 8,
+		"version": 9,
 		"fingerprint": "sha256:7f3bbbe64d9f61c1f90e62159f37f3b2ab6bf93f890dc321adb44e213bf90dcb",
 		"files": {
 			"src/shared/auth_protocol/auth_incoming_packet.cpp": "sha256:0e23f09921b76939917c9f7e660deab2977ba79eaa03c9e7ea92e38764f7d5ff",

@@ -4,8 +4,8 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 8 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 18 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 9 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 19 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -104,6 +104,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 9 | 2026-10-10 | GM observation: CharacterData carries uint8 gmFlags after isGameMaster; realm→world TeleportRequest carries the target InstanceId |
 | 8 | 2026-10-04 | Scheduled realm shutdown: realm→world `Shutdown` opcode; `session_kick_reason::RealmShutdown` |
 | 7 | 2026-10-03 | In-game bug reports and subsystem status: realm→world `BugReport` (identity + client payload) and `SetSubsystemEnabled`, world→realm `BugReportResult` and `SubsystemStatus` |
 | 6 | 2026-09-21 | Realm-wide time of day: `TimeOfDay` realm→world opcode (absolute time of day + client transition length) |
