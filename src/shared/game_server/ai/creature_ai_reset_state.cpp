@@ -39,17 +39,30 @@ namespace mmo
 			}
 			});
 
-		if (GetAI().HasSavedPatrolReturnPosition())
+		// Return to where the creature was on its patrol route when combat started rather than
+		// all the way back to the spawn point.
+		const bool toPatrol = GetAI().HasSavedPatrolReturnPosition();
+		const Vector3 destination = toPatrol ? GetAI().GetSavedPatrolReturnPosition() : GetAI().GetHome().position;
+		const Radian facing = toPatrol ? controlled.GetFacing() : Radian(GetAI().GetHome().orientation);
+
+		auto& mover = controlled.GetMover();
+		const bool walking = mover.MoveTo(destination, 0.0f, toPatrol ? nullptr : &facing);
+
+		// No path home, or one that ends elsewhere (the creature was drawn onto another part of
+		// the navigation mesh, or off it): waiting for an arrival that never comes would leave it
+		// evading forever. Put it home instead.
+		const float dx = mover.GetTarget().x - destination.x;
+		const float dz = mover.GetTarget().z - destination.z;
+		if (!walking || dx * dx + dz * dz > HomeArrivalTolerance * HomeArrivalTolerance)
 		{
-			// Return to where the creature was on its patrol route when combat started
-			// rather than all the way back to the spawn point.
-			const Vector3 returnPos = GetAI().GetSavedPatrolReturnPosition();
-			controlled.GetMover().MoveTo(returnPos, 0.0f);
-		}
-		else
-		{
-			const auto facing = Radian(GetAI().GetHome().orientation);
-			controlled.GetMover().MoveTo(GetAI().GetHome().position, 0.0f, &facing);
+			WLOG("Creature 0x" << std::hex << controlled.GetGuid() << std::dec << " cannot walk home, teleporting it there");
+			mover.Teleport(destination, facing);
+
+			auto& ai = GetAI();
+			if (auto* world = controlled.GetWorldInstance())
+			{
+				world->GetUniverse().Post([&ai]() { ai.Idle(); });
+			}
 		}
 	}
 

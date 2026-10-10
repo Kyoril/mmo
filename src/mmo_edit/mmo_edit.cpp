@@ -87,6 +87,7 @@
 #include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/world_model_editor/world_model_editor_instance.h"
+#include "editors/mesh_editor/mesh_editor_instance.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
 #include "editors/global_shader_parameters_editor/global_shader_parameters_editor.h"
@@ -325,6 +326,8 @@ int main(int argc, char* arg[])
 	// distant-terrain data of every page whose .tile changed since the last bake (every page with
 	// --force), then exits. `--derive-rooms <asset.hwmo> [--derive-rooms ...]` derives the world
 	// models' room volumes from their floors, fixes mislinked portals, saves them and exits.
+	// `--stairs-to-ramp <asset.hmsh> [--stairs-to-ramp ...]` replaces the steps in the meshes'
+	// collision with a ramp, saves them and exits.
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
@@ -372,6 +375,29 @@ int main(int argc, char* arg[])
 					if (std::string(args[j]) == "--derive-rooms")
 					{
 						allSaved = mmo::WorldModelEditorInstance::DeriveRoomsInFile(args[j + 1]) && allSaved;
+					}
+				}
+
+				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--stairs-to-ramp")
+			{
+				static std::ofstream rampLog("stairs_to_ramp.log", std::ios::out | std::ios::trunc);
+				static std::mutex rampLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ rampLogMutex };
+					rampLog << entry.message << std::endl;
+				});
+
+				bool allSaved = true;
+				for (int j = 1; j + 1 < argCount; ++j)
+				{
+					if (std::string(args[j]) == "--stairs-to-ramp")
+					{
+						allSaved = mmo::MeshEditorInstance::StairsToRampInFile(args[j + 1]) && allSaved;
 					}
 				}
 

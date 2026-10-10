@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 #include "creature_ai_state.h"
 #include "creature_combat_script.h"
+#include "unreachable_target.h"
 #include "base/countdown.h"
 #include "objects/game_unit_s.h"
 #include "math/vector3.h"
@@ -496,6 +497,10 @@ namespace mmo
 		Countdown m_nextActionCountdown;
 		Countdown m_recalculationCountdown;
 		uint32 m_stuckCounter;
+
+		/// Victim whose chase paths end short of it, and since when (see UnreachableTargetTracker).
+		UnreachableTargetTracker m_unreachable;
+		uint64 m_unreachableVictim { 0 };
 		
 		// === Flags ===
 		bool m_isCasting;

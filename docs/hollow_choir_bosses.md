@@ -190,6 +190,20 @@ the sky showed). In mmo_edit's world model editor, **World Model Settings > Room
 (towards the cloister) sits inside the cloister floor until the passage exists, and the check
 reports it rather than guessing.
 
+**Navigation mesh.** The whole dungeon is one connected navmesh (2026-10-10). Two causes had cut
+it into islands: nav_builder rasterized with a span merge threshold of -1, so wherever a vertical
+face (a riser, a platform's side) met a floor flush, the later triangle won and the floor edge
+turned into an unwalkable seam that erosion widened into a gap - this sealed the Wake off at its
+archway and broke the stairs; and the carved steps of `Stair_01` (nave to apse, cloister to
+gallery) were too uneven for the climb limit, so its collision now has a ramp instead
+(mesh editor, Collision > *Stairs to Ramp*, or `mmo_edit --stairs-to-ramp <mesh>`). Left over are
+four tiny islands players cannot reach (ledges outside the Wake's side walls, a niche behind the
+apse, the top of an object in the nave). Rebuild with
+`bin/Release/nav_builder.exe -d data/client -w Test -o data/editor` after changing geometry.
+Creatures whose victim stands where their paths do not lead now evade after five seconds instead
+of waiting at the edge of their area (`UnreachableTargetTracker`), in dungeons too; a creature
+that cannot walk home is put home.
+
 **Spacing.** Creatures in combat call idle allies within 8 units, so members of two packs stay at
 least 12 apart (assist radius plus drift). Pairs a wall separates are exempt. Player aggro is a
 different, larger radius (20 at equal level, +1 per level the creature is above the player), and
@@ -225,9 +239,6 @@ Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua` and
 - **Geometry (user):** a passage from the nave to the cloister. Then group G goes into it.
 - **Rooms:** after the passage is built, derive the room volumes again (see Layout) and make
   sure portal 8 sits on the nave/cloister boundary; every opening between rooms needs a portal.
-- **Navmesh:** the Wake of the Dead floor is 1 unit below the entrance hall with no ramp, and the
-  stair from the nave to the west wing has almost no navmesh. Both are separate islands: creatures
-  fight inside them but cannot follow players out. Rebuild the navmesh once the geometry is fixed.
 - **Cramped rooms:** the apse and the cloister are small for a 20-unit player aggro radius.
   Fighting H or I can pull Mereth, and anything in the apse pulls Veyr.
 - **Gate art:** the seals are placeholder walls (FP_Wall_01). The sketch wants the singing to stop
