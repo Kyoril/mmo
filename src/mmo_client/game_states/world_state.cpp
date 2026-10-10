@@ -2070,6 +2070,7 @@ namespace mmo
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
+		Console::UnregisterCommand("invisible");
 		Console::UnregisterCommand("damage");
 		Console::UnregisterCommand("resetcooldowns");
 		Console::UnregisterCommand("heal");
