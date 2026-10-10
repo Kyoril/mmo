@@ -244,3 +244,112 @@ TEST_CASE("Walkability uses the absolute normal Y against 0.71", "[collision_sha
 	CHECK_FALSE(IsCollisionFaceWalkable(Vector3(0, 0, 0), Vector3(0, 1, 0), Vector3(1, 0, 0)));
 	CHECK_FALSE(IsCollisionFaceWalkable(Vector3(0, 0, 0), Vector3(0, 0, 0), Vector3(1, 0, 0)));
 }
+
+namespace
+{
+	float TopHeightAt(const TriangleSoup& soup, const float x, const float z)
+	{
+		AABBTree tree;
+		tree.Build(soup.vertices, soup.indices);
+		Ray ray(Vector3(x, 100.0f, z), Vector3(x, -100.0f, z));
+		REQUIRE(tree.IntersectRay(ray, nullptr, raycast_flags::IgnoreBackface));
+		return HitHeight(ray);
+	}
+}
+
+TEST_CASE("Cylinder is closed, outward and has the given size", "[collision_shape]")
+{
+	CollisionShape cylinder = MakeShape(collision_shape_type::Cylinder, Vector3(0.0f, 1.0f, 0.0f), Vector3(2.0f, 2.0f, 2.0f));
+	cylinder.segments = 16;
+	const TriangleSoup soup = Tessellate(cylinder);
+
+	CHECK(soup.indices.size() == 16 * 4 * 3);   // 2 side triangles + 2 cap triangles per segment
+	CHECK(IsClosedAndConsistentlyWound(soup));
+	CHECK(AllFacesPointAwayFrom(soup, cylinder.position));
+	CHECK(TopHeightAt(soup, 0.1f, 0.2f) == Approx(2.0f));
+
+	CHECK(IsPointInsideCollisionShape(cylinder, Vector3(0.9f, 1.0f, 0.0f)));
+	CHECK_FALSE(IsPointInsideCollisionShape(cylinder, Vector3(0.8f, 1.0f, 0.8f)));   // r = 1.13 > 1
+	CHECK_FALSE(IsPointInsideCollisionShape(cylinder, Vector3(0.0f, 2.1f, 0.0f)));
+}
+
+TEST_CASE("Helix ramp is closed and its top rises linearly with the turn", "[collision_shape]")
+{
+	CollisionShape helix = MakeShape(collision_shape_type::HelixRamp, Vector3::Zero, Vector3(4.0f, 3.0f, 4.0f));
+	helix.segments = 32;
+	helix.innerRadius = 0.5f;      // inner radius 1 m, outer 2 m
+	helix.sweepDegrees = 360.0f;
+	const TriangleSoup soup = Tessellate(helix);
+
+	CHECK(IsClosedAndConsistentlyWound(soup));
+
+	// Counter-clockwise seen from above with north = -Z: angle 0 at +X, 90 degrees at -Z.
+	// Probe at the middle of a segment (11.25 degrees each) on the band's mid radius, never on a
+	// seam between quads and never at the 0/360 overlap where start and end share an angle.
+	auto expectTopAt = [&soup](const float degrees)
+	{
+		const float radians = degrees * 3.14159265f / 180.0f;
+		const float x = 1.5f * std::cos(radians);
+		const float z = -1.5f * std::sin(radians);
+		CHECK(TopHeightAt(soup, x, z) == Approx(-1.5f + 3.0f * degrees / 360.0f).margin(0.03f));
+	};
+	expectTopAt(5.625f + 11.25f * 3);
+	expectTopAt(5.625f + 11.25f * 8);
+	expectTopAt(5.625f + 11.25f * 16);
+	expectTopAt(5.625f + 11.25f * 24);
+
+	// The treads of a 32-segment, 3 m high helix between 1 m and 2 m radius are walkable.
+	for (size_t f = 0; f + 2 < soup.indices.size(); f += 3)
+	{
+		const Vector3& a = soup.vertices[soup.indices[f]];
+		const Vector3& b = soup.vertices[soup.indices[f + 1]];
+		const Vector3& c = soup.vertices[soup.indices[f + 2]];
+		const Vector3 n = (b - a).Cross(c - a);
+		if (n.y > 0.0f && n.GetLength() > 1e-6f && n.y / n.GetLength() > 0.5f)
+		{
+			CHECK(IsCollisionFaceWalkable(a, b, c));
+		}
+	}
+}
+
+TEST_CASE("Clockwise helix mirrors the turn direction", "[collision_shape]")
+{
+	CollisionShape helix = MakeShape(collision_shape_type::HelixRamp, Vector3::Zero, Vector3(4.0f, 3.0f, 4.0f));
+	helix.segments = 32;
+	helix.innerRadius = 0.5f;
+	helix.clockwise = true;
+	const TriangleSoup soup = Tessellate(helix);
+
+	// Mid-segment probe near a quarter turn: clockwise seen from above puts it at +Z, not -Z.
+	const float degrees = 5.625f + 11.25f * 8;
+	const float radians = degrees * 3.14159265f / 180.0f;
+	CHECK(TopHeightAt(soup, 1.5f * std::cos(radians), 1.5f * std::sin(radians)) == Approx(-1.5f + 3.0f * degrees / 360.0f).margin(0.03f));
+}
+
+TEST_CASE("Helix point-inside follows the band across several turns", "[collision_shape]")
+{
+	CollisionShape helix = MakeShape(collision_shape_type::HelixRamp, Vector3::Zero, Vector3(4.0f, 4.0f, 4.0f));
+	helix.sweepDegrees = 720.0f;     // two turns over 4 m: 2 m per turn
+	helix.thickness = 0.1f;          // 0.4 m thick
+	// At angle 90 degrees the tread tops are at -2 + 4 * (90 / 720) = -1.5 and at -1.5 + 2 = 0.5.
+	CHECK(IsPointInsideCollisionShape(helix, Vector3(0.0f, -1.6f, -1.25f)));
+	CHECK(IsPointInsideCollisionShape(helix, Vector3(0.0f, 0.4f, -1.25f)));
+	CHECK_FALSE(IsPointInsideCollisionShape(helix, Vector3(0.0f, -0.5f, -1.25f)));   // between the two turns
+	CHECK_FALSE(IsPointInsideCollisionShape(helix, Vector3(0.0f, -1.6f, -0.2f)));    // inside the inner radius
+}
+
+TEST_CASE("Helix sanitising clamps sweep, segments and inner radius", "[collision_shape]")
+{
+	CollisionShape helix = MakeShape(collision_shape_type::HelixRamp, Vector3::Zero, Vector3(4.0f, 3.0f, 4.0f));
+	helix.sweepDegrees = 0.0f;
+	helix.segments = 1;
+	helix.innerRadius = 1.5f;
+	const CollisionShape sane = SanitizeCollisionShape(helix);
+	CHECK(sane.sweepDegrees == Approx(1.0f));
+	CHECK(sane.segments == 3);
+	CHECK(sane.innerRadius == Approx(0.95f));
+	CHECK(IsClosedAndConsistentlyWound(Tessellate(helix)));
+
+	helix.sweepDegrees = 7200.0f;
+	CHECK(SanitizeCollisionShape(helix).sweepDegrees == Approx(3600.0f));
+}
