@@ -7,6 +7,7 @@
 #include "material_manager.h"
 #include "mesh.h"
 
+#include "binary_io/memory_source.h"
 #include "binary_io/writer.h"
 
 #include "base/chunk_writer.h"
@@ -894,9 +895,25 @@ namespace mmo
 
 			if (chunkId == *MeshCollisionRecipeChunk)
 			{
+				// Parse only the chunk's own bytes, so a damaged recipe can neither read into the
+				// next chunk nor claim more data than the file holds.
+				io::ISource& source = *reader.getSource();
+				if (chunkSize > source.size() - source.position())
+				{
+					return collision_recipe_read::Corrupt;
+				}
+
+				std::vector<char> bytes(chunkSize);
+				if (chunkSize > 0 && source.read(bytes.data(), chunkSize) != chunkSize)
+				{
+					return collision_recipe_read::Corrupt;
+				}
+
+				io::MemorySource chunkSource{ bytes.data(), bytes.data() + bytes.size() };
+				io::Reader chunkReader{ chunkSource };
 				CollisionRecipe recipe;
-				reader >> recipe;
-				if (!reader)
+				chunkReader >> recipe;
+				if (!chunkReader)
 				{
 					return collision_recipe_read::Corrupt;
 				}

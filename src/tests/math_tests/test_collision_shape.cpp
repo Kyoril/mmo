@@ -8,6 +8,7 @@
 #include "math/ray.h"
 
 #include <cmath>
+#include <limits>
 #include <map>
 #include <tuple>
 
@@ -352,4 +353,39 @@ TEST_CASE("Helix sanitising clamps sweep, segments and inner radius", "[collisio
 
 	helix.sweepDegrees = 7200.0f;
 	CHECK(SanitizeCollisionShape(helix).sweepDegrees == Approx(3600.0f));
+}
+
+TEST_CASE("Sanitize replaces non-finite values and a zero quaternion", "[collision_shape]")
+{
+	const float nan = std::numeric_limits<float>::quiet_NaN();
+	const float inf = std::numeric_limits<float>::infinity();
+
+	CollisionShape shape = MakeShape(collision_shape_type::HelixRamp, Vector3(nan, 1.0f, inf), Vector3(nan, inf, 2.0f));
+	shape.rotation = Quaternion(0.0f, 0.0f, 0.0f, 0.0f);
+	shape.innerRadius = nan;
+	shape.sweepDegrees = inf;
+	shape.thickness = nan;
+
+	const CollisionShape sane = SanitizeCollisionShape(shape);
+	CHECK(std::isfinite(sane.position.x));
+	CHECK(sane.position.y == Approx(1.0f));
+	CHECK(std::isfinite(sane.position.z));
+	CHECK(std::isfinite(sane.scale.x));
+	CHECK(std::isfinite(sane.scale.y));
+	CHECK(sane.scale.z == Approx(2.0f));
+	CHECK(sane.rotation.w == Approx(1.0f));
+	CHECK(std::isfinite(sane.innerRadius));
+	CHECK(std::isfinite(sane.sweepDegrees));
+	CHECK(std::isfinite(sane.thickness));
+
+	const TriangleSoup soup = Tessellate(shape);
+	REQUIRE_FALSE(soup.vertices.empty());
+	for (const auto& v : soup.vertices)
+	{
+		CHECK((std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z)));
+	}
+
+	CollisionShape nanRotation = MakeShape(collision_shape_type::Box, Vector3::Zero, Vector3::UnitScale);
+	nanRotation.rotation = Quaternion(nan, 0.0f, 0.0f, 0.0f);
+	CHECK(SanitizeCollisionShape(nanRotation).rotation.w == Approx(1.0f));
 }

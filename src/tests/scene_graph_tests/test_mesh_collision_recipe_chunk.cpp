@@ -138,3 +138,31 @@ TEST_CASE("A corrupt recipe chunk is reported and does not break the runtime loa
 	CollisionRecipe read;
 	CHECK(ReadRecipe(buffer, read) == collision_recipe_read::Corrupt);
 }
+
+TEST_CASE("A recipe chunk with a valid version and a garbage count is reported as corrupt", "[mesh_serializer]")
+{
+	std::vector<char> buffer = Serialize(MakeMeshWithCollision(), mesh_version::Latest, nullptr);
+
+	// Version 1, useRender, then an included-submesh count of 0xFFFFFFFF and nothing else.
+	AppendChunk(buffer, 'CSRC', { 1, 0, 0, 0, 1, char(0xFF), char(0xFF), char(0xFF), char(0xFF) });
+
+	bool ok = false;
+	const MeshPtr loaded = Deserialize(buffer, ok);
+	CHECK(ok);
+
+	CollisionRecipe read;
+	CHECK(ReadRecipe(buffer, read) == collision_recipe_read::Corrupt);
+}
+
+TEST_CASE("A recipe chunk claiming more bytes than the file has is reported as corrupt", "[mesh_serializer]")
+{
+	std::vector<char> buffer = Serialize(MakeMeshWithCollision(), mesh_version::Latest, nullptr);
+	{
+		io::VectorSink sink{ buffer };
+		io::Writer writer{ sink };
+		writer << io::write<uint32>('CSRC') << io::write<uint32>(0x7FFFFFFFu) << io::write<uint32>(CollisionRecipeVersion);
+	}
+
+	CollisionRecipe read;
+	CHECK(ReadRecipe(buffer, read) == collision_recipe_read::Corrupt);
+}

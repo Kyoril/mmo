@@ -149,3 +149,47 @@ TEST_CASE("Sanitizing a recipe drops submesh ids the mesh no longer has", "[coll
 	CHECK(recipe.includedSubMeshes.empty());
 	CHECK(recipe.shapes[0].surfaceSubMesh == 0);
 }
+
+TEST_CASE("Collision recipe with a huge submesh count fails without allocating it", "[collision_recipe]")
+{
+	std::vector<char> buffer;
+	io::VectorSink sink{ buffer };
+	io::Writer writer{ sink };
+	writer
+		<< io::write<uint32>(CollisionRecipeVersion)
+		<< io::write<uint8>(1)
+		<< io::write<uint32>(0xFFFFFFFFu);
+
+	CollisionRecipe loaded;
+	CHECK_FALSE(Read(buffer, loaded));
+	// A corrupt count must be rejected before the container is sized from it.
+	CHECK(loaded.includedSubMeshes.capacity() < 65536);
+}
+
+TEST_CASE("Collision recipe with a huge shape count fails", "[collision_recipe]")
+{
+	std::vector<char> buffer;
+	io::VectorSink sink{ buffer };
+	io::Writer writer{ sink };
+	writer
+		<< io::write<uint32>(CollisionRecipeVersion)
+		<< io::write<uint8>(1)
+		<< io::write<uint32>(0)
+		<< io::write<uint32>(0xFFFFFFFFu);
+
+	CollisionRecipe loaded;
+	CHECK_FALSE(Read(buffer, loaded));
+}
+
+TEST_CASE("A shape name longer than 255 bytes is truncated and the recipe stays readable", "[collision_recipe]")
+{
+	CollisionRecipe recipe = MakeRecipe();
+	recipe.shapes[0].name = String(300, 'x');
+
+	CollisionRecipe loaded;
+	REQUIRE(Read(Write(recipe), loaded));
+	REQUIRE(loaded.shapes.size() == 3);
+	CHECK(loaded.shapes[0].name == String(255, 'x'));
+	CHECK(loaded.shapes[1].name == "Steps");
+	CHECK(loaded.shapes[2].twoSided);
+}

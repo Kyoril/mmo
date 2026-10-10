@@ -6,6 +6,16 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Upper bound for any count in a recipe. Read counts are checked against it before anything is
+		/// sized from them, so a corrupt chunk fails fast instead of allocating gigabytes.
+		constexpr uint32 MaxRecipeElements = 65536;
+
+		/// Names are stored with a one-byte length.
+		constexpr size_t MaxShapeNameLength = 255;
+	}
+
 	io::Writer& operator<<(io::Writer& writer, const CollisionRecipe& recipe)
 	{
 		writer
@@ -16,10 +26,13 @@ namespace mmo
 
 		for (const CollisionShape& shape : recipe.shapes)
 		{
+			// A longer name would overflow the one-byte length and desync everything after it.
+			const size_t nameLength = std::min(shape.name.size(), MaxShapeNameLength);
+
 			writer
 				<< io::write<uint8>(shape.type)
 				<< io::write<uint8>(shape.op)
-				<< io::write_dynamic_range<uint8>(shape.name.begin(), shape.name.end())
+				<< io::write_dynamic_range<uint8>(shape.name.begin(), shape.name.begin() + nameLength)
 				<< shape.position
 				<< io::write<float>(shape.rotation.w)
 				<< io::write<float>(shape.rotation.x)
@@ -48,12 +61,26 @@ namespace mmo
 		}
 
 		uint8 useRender = 0;
-		uint32 shapeCount = 0;
-		reader
-			>> io::read<uint8>(useRender)
-			>> io::read_container<uint32>(recipe.includedSubMeshes)
-			>> io::read<uint32>(shapeCount);
+		uint32 subMeshCount = 0;
+		if (!(reader >> io::read<uint8>(useRender) >> io::read<uint32>(subMeshCount)) || subMeshCount > MaxRecipeElements)
+		{
+			reader.setFailure();
+			return reader;
+		}
+
 		recipe.useRenderGeometry = useRender != 0;
+		recipe.includedSubMeshes.resize(subMeshCount);
+		for (uint16& id : recipe.includedSubMeshes)
+		{
+			reader >> io::read<uint16>(id);
+		}
+
+		uint32 shapeCount = 0;
+		if (!(reader >> io::read<uint32>(shapeCount)) || shapeCount > MaxRecipeElements)
+		{
+			reader.setFailure();
+			return reader;
+		}
 
 		recipe.shapes.clear();
 		for (uint32 i = 0; reader && i < shapeCount; ++i)

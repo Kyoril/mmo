@@ -11,6 +11,11 @@ namespace mmo
 	{
 		constexpr float MinScale = 0.001f;
 
+		float FiniteOr(const float value, const float fallback)
+		{
+			return std::isfinite(value) ? value : fallback;
+		}
+
 		/// Collects local-space triangles, winding each so its normal agrees with an outward hint.
 		class LocalTriangles final
 		{
@@ -197,16 +202,34 @@ namespace mmo
 			sane.type = collision_shape_type::Box;
 		}
 
-		sane.scale = Vector3(
-			std::max(std::abs(shape.scale.x), MinScale),
-			std::max(std::abs(shape.scale.y), MinScale),
-			std::max(std::abs(shape.scale.z), MinScale));
+		// NaN and infinity pass std::max/std::clamp unchanged, and typed ImGui input or a damaged
+		// recipe can carry them; every baked vertex must stay finite.
+		const CollisionShape defaults;
+		sane.position = Vector3(
+			FiniteOr(shape.position.x, 0.0f),
+			FiniteOr(shape.position.y, 0.0f),
+			FiniteOr(shape.position.z, 0.0f));
 
-		sane.rotation.Normalize();
+		sane.scale = Vector3(
+			std::max(std::abs(FiniteOr(shape.scale.x, 1.0f)), MinScale),
+			std::max(std::abs(FiniteOr(shape.scale.y, 1.0f)), MinScale),
+			std::max(std::abs(FiniteOr(shape.scale.z, 1.0f)), MinScale));
+
+		const Quaternion& q = shape.rotation;
+		const float normSq = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
+		if (!std::isfinite(normSq) || normSq < 1.0e-12f)
+		{
+			sane.rotation = defaults.rotation;
+		}
+		else
+		{
+			sane.rotation.Normalize();
+		}
+
 		sane.segments = static_cast<uint16>(std::clamp<int>(shape.segments, 3, 256));
-		sane.innerRadius = std::clamp(shape.innerRadius, 0.05f, 0.95f);
-		sane.sweepDegrees = std::clamp(shape.sweepDegrees, 1.0f, 3600.0f);
-		sane.thickness = std::clamp(shape.thickness, 0.001f, 1.0f);
+		sane.innerRadius = std::clamp(FiniteOr(shape.innerRadius, defaults.innerRadius), 0.05f, 0.95f);
+		sane.sweepDegrees = std::clamp(FiniteOr(shape.sweepDegrees, defaults.sweepDegrees), 1.0f, 3600.0f);
+		sane.thickness = std::clamp(FiniteOr(shape.thickness, defaults.thickness), 0.001f, 1.0f);
 
 		if (!CollisionShapeSupportsCut(sane.type))
 		{
