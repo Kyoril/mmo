@@ -164,8 +164,9 @@ Floors: entrance hall and south yard y 1.2, Wake of the Dead and nave y 0.2, the
 
 | Sketch | World area (x, z) | Notes |
 |---|---|---|
-| Eingang | x 9..17, z -2..2 | |
-| 01 Vorhalle | x -21..9, z -6..5, plus the south yard x -25..11, z 5..30 | |
+| Eingang | x 9..17, z -2..2 | outside the door: the forecourt of the outdoor entrance (see below) |
+| 01 Vorhalle | x -21..9, z -6..5 | |
+| Skriptorium | x -25..11, z 6..30 (the former open south yard) | 3 x 2 rib-vaulted bays on pillars z 18, desks, lecterns, shelves |
 | 02 Totenwache | x -21..9, z -46..-7 | sarcophagus x -10..-3, z -33..-11 |
 | G1 | corridor x -32..-21, z -3..3 | seal at x -27 |
 | 03 Kirchenschiff | x -79..-32, z -12..12 | pillar rows z -6 and +6, pews x -70..-40 |
@@ -178,9 +179,18 @@ Floors: entrance hall and south yard y 1.2, Wake of the Dead and nave y 0.2, the
 | L Galerie | east walk y 13 (x -82..-76, z 18..36), west and south walks y 17 | stair from the courtyard: x -89..-83, from z 36 (y 5) north to a landing at z 18..24 (y 13) |
 | Krypta | landing x -130..-124, z 24..36 (y -3), corridor z 12..24, hall x -142..-112, z -12..12 | below the south-west stair; pillar rows z -6 and +6, burial niches, altar niche north |
 
-The nave, the apse, the Wake of the Dead and the passages have roofs (slabs on y 13 over the
-nave, the Wake's barrel vault on y 29); only the south yard and the cloister's courtyard are open
-to the sky.
+Every room is closed to the sky. The nave is vaulted in steps after the kit's demo hall: aisles
+under small domes (y 13), the central nave on a clerestory with rib vaults between transverse
+arches (y 21); the apse, sacristy, chapel, aisles of the Wake, cloister walks, cloister courtyard
+(y 27) and crypt have cross vaults (`Ceiling_01`).
+
+**View out of the entrance.** `Models/Dungeon/HollowChoir_Entrance_View.hwmo` is the forecourt of
+`HollowChoir_Entrance_Outdoor_001.hwmo` (everything in front of its facade), placed in the Test
+world in front of the dungeon door, so looking out shows the steps, graveyard and gate the
+player came through. Child WMO references are saved but never instantiated at runtime, and the
+outdoor model's full shell would run through the entrance hall, hence a separate placed model.
+Copy the matching outdoor terrain over with the world editor's region copy (Terrain > Region
+works across open worlds; area IDs stay the destination's unless "Paste area IDs too" is set).
 
 `tools/hollow_choir/survey_layout.py` renders the floor plan with the walkable navmesh;
 `tools/hollow_choir/author_spawns.py` places the spawns, checks them against the navmesh and the
