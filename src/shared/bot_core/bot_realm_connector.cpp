@@ -1960,7 +1960,18 @@ namespace mmo
 
 		if (BotUnit* self = GetSelfMutable())
 		{
-			self->SetLastCastFailed(spellId, result, GetAsyncTimeMs());
+			// A cast that fails validation gets two failures: the specific reason (not in front, say)
+			// from the cast state, then a generic FailedError from the cast request handler. Keep the
+			// specific one, or every validation failure reads as "failed:5".
+			const BotUnit::CastState& last = self->GetLastCastState();
+			const bool genericAfterSpecific = result == spell_cast_result::FailedError
+				&& last.status == BotUnit::CastState::Status::Failed
+				&& last.spellId == spellId
+				&& last.failureReason != spell_cast_result::FailedError;
+			if (!genericAfterSpecific)
+			{
+				self->SetLastCastFailed(spellId, result, GetAsyncTimeMs());
+			}
 			ClearSpellStateIssue();
 			UnitUpdated(*self);
 		}

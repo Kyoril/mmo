@@ -6,6 +6,14 @@
 local FIREBALL = 4
 local TRAINING_DUMMY = 40
 
+-- The character is shared: it starts wherever the previous scenario left it. Up the slope east of
+-- the spawn, the step aside below lands at the old height and the hill blocks line of sight to the
+-- dummy (failed:20). Start from the flat default spawn instead.
+local SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z = 0, 292.267, 5.33, 552.571
+GM.Worldport(SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z, 0)
+Assert(WaitUntil(function() return math.abs(GetPosX(Me()) - SPAWN_X) < 1 end, 10000, "at the spawn point"),
+	"player should start from the default spawn")
+
 GM.LearnSpell(FIREBALL)
 Assert(WaitUntil(function() return HasSpell(FIREBALL) end, 10000, "Fireball learned"),
 	"player should know Fireball after GM.LearnSpell")
