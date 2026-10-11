@@ -220,6 +220,19 @@ namespace mmo
 
 	typedef player_equipment_slots::Enum PlayerEquipmentSlots;
 
+	/// Resolves an inventory type name as returned by ItemInfo::GetItemInventoryTypeName.
+	/// @param name The inventory type name, e.g. "HEAD". May be nullptr.
+	/// @returns The inventory type, or inventory_type::NonEquip if the name is unknown.
+	inventory_type::Type GetInventoryTypeByName(const char* name);
+
+	/// Gets an equipment slot an item of the given inventory type can be worn in, used to find
+	/// the equipped item to compare it against. Rings, trinkets and one-handed weapons fit into
+	/// two slots, everything else into at most one.
+	/// @param type The inventory type of the item.
+	/// @param index Zero-based index of the candidate slot.
+	/// @returns The player_equipment_slots value, or -1 if there is no slot at this index.
+	int32 GetComparisonEquipmentSlot(inventory_type::Type type, uint32 index);
+
 	namespace player_inventory_slots
 	{
 		enum Enum

@@ -353,6 +353,11 @@ namespace mmo
 		return (Get()->Get<uint32>(object_fields::ItemFlags) & item_flags::Disabled) == 0;
 	}
 
+	bool ItemHandle::IsSameItem(const ItemHandle& other) const
+	{
+		return Get() != nullptr && Get() == other.Get();
+	}
+
 	bool ItemHandle::CheckNonNull() const
 	{
 		if (Get())
