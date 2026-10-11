@@ -32,6 +32,10 @@ The creature authoring surface in this repository spans multiple editor data fil
 
 - `model_data.data`
   Display and model IDs. `unit.maleModel` and `unit.femaleModel` point here.
+  Units always spawn with `maleModel` (even unique female NPCs, for now). Only units with
+  `random_gender = true` (editor: Visuals > "Random Gender") roll 50/50 per spawn between both
+  models — use it for generic units with a real female variant (e.g. unit 4 "Guard"), never for
+  named characters.
 </data_files>
 
 <live_defaults>
