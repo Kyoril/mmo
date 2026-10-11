@@ -79,6 +79,14 @@ namespace mmo
 
 		void ClearLastSpellVisual() { m_realm->ClearLastSpellVisual(); }
 
+		/// Whether the server told this client to play the sound entry since the last clear.
+		[[nodiscard]] bool HasHeardSound(const uint32 soundId) const { return m_realm->HasHeardSound(soundId); }
+
+		/// Guid of the unit a heard sound came from, or 0.
+		[[nodiscard]] uint64 GetHeardSoundSource(const uint32 soundId) const { return m_realm->GetHeardSoundSource(soundId); }
+
+		void ClearHeardSounds() { m_realm->ClearHeardSounds(); }
+
 		/// Runs the whole login -> realm -> character -> world flow again over the same connector
 		/// objects, exactly as the game client does when a displaced player logs back in.
 		///

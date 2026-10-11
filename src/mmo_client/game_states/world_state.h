@@ -397,6 +397,9 @@ namespace mmo
 
 		PacketParseResult OnPlaySoundById(game::IncomingPacket &packet);
 
+		/// Moves every unit-attached sound to its unit's current position and drops finished ones.
+		void UpdateUnitAttachedSounds(float deltaSeconds);
+
 		PacketParseResult OnPlaySpellVisual(game::IncomingPacket &packet);
 
 		/// Shows a spell zone (PersistentAreaAura) on the ground.
@@ -816,6 +819,18 @@ namespace mmo
 		PartyInfo &m_partyInfo;
 
 		SoundEntryPlayer &m_soundEntryPlayer;
+
+		/// A 3D sound that follows the unit it comes from, e.g. a creature's voice line.
+		struct UnitAttachedSound
+		{
+			ChannelIndex channel;
+			uint64 unitGuid;
+			/// Seconds until the sound has finished; the channel may be reused after that.
+			float remainingSeconds;
+		};
+
+		/// Sounds whose 3D position is moved along with their unit every frame.
+		std::vector<UnitAttachedSound> m_unitAttachedSounds;
 		/// Plays auto attack audio resolved from the equipped weapon and the victim's material.
 		CombatSoundPlayer m_combatSoundPlayer;
 		/// Crossfading zone background music slot, driven by ZoneEntry::music_sound.

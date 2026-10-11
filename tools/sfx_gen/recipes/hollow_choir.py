@@ -331,3 +331,43 @@ FINAL_ORDER = [
     "Veyr_ResonanceHum",
     "Loot_CoffinRotHit",
 ]
+
+# --- Boss yells -------------------------------------------------------------------------------
+#
+# Voice lines for the encounter yells (triggers 53-73, SoundEntry 157-168, see
+# tools/hollow_choir/author_triggers.py VOICE). Generated with creative_generate_speech on
+# eleven_v3, whose inline audio tags carry the delivery; two takes per line, take 1 shipped. Files
+# are localized assets: Locales/Locale_enUS/Voice/Npc/<Boss>/<Boss>_<Line>.wav, referenced
+# locale-relative as Voice/Npc/..., normalised to -4 dBFS by fetch.py like every voice line.
+#
+# Cast (library voices; look the ids up again with creative_list_voices before reusing):
+#   Brother Oswin  -- "Branok - Evil and Villainous"       ancient, gravelly, menacing
+#   Sister Mereth  -- "Minerva Nightshade"                 icy, venomous whispers, cracking grief
+#   Cantor Veyr    -- "Jerry B. - Dark Villain"            deep, theatrical, British
+# Veyr was first cast as "Medraut - Theatrical Villain"; v3 gave him a German accent, so every
+# Veyr prompt now opens with [British accent].
+#
+# The prompts keep the chat text word for word; only tags, ellipses and capitals are added.
+VOICE_CAST = {
+    "Oswin": "Vs5CmVCVJwW4odQS2pVf",
+    "Mereth": "fgDJOgmENIR82PueQrVs",
+    "Veyr": "NxGA8X3YhTrnf3TRQf6Q",
+}
+
+VOICE_PROMPTS = {
+    "Oswin_Aggro": "[deep voice] [angry] Who disturbs the vigil? [menacing] The dead are resting. "
+                   "[shouting] You will rest... WITH THEM!",
+    "Oswin_LastVigil": "[shouting] RISE, brothers! [raspy] [dramatically] Keep the vigil... with ME!",
+    "Oswin_Death": "[raspy] [breathless] The candles... [trembling voice] [whispers] are going out...",
+    "Mereth_Aggro": "[whispers] Hush. [sad] [menacing] Can you not hear them... weeping?",
+    "Mereth_Voices1": "[softly] Sing with me, sisters. [angry] [shouting] Sing them DOWN!",
+    "Mereth_Voices2": "[shouting] Louder! [crying] [shouting] Let the whole abbey GRIEVE!",
+    "Mereth_Death": "[trembling voice] [whispers] Silence... [sighs] at last...",
+    "Veyr_MerethFalls": "[British accent] [dramatically] A voice is missing from my choir. "
+                        "[menacing] Come, then. [mischievously] Take her place.",
+    "Veyr_Aggro": "[British accent] [sarcastic] You are late for the service. "
+                  "[dramatically] The hymn has already BEGUN.",
+    "Veyr_ChoirRises": "[British accent] [shouting] Voices! [dramatically] [shouting] Lift me UP!",
+    "Veyr_Finale": "[British accent] [shouting] The final verse! [dramatically] All of you... [shouting] SING!",
+    "Veyr_Death": "[British accent] [breathless] The choir... is... [whispers] hollow...",
+}

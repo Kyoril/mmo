@@ -16,9 +16,20 @@
 #include "assets/asset_registry.h"
 #include "binary_io/stream_source.h"
 #include "binary_io/reader.h"
+#include "graphics/material_instance.h"
+#include "scene_graph/sub_entity.h"
 
 namespace mmo
 {
+	namespace
+	{
+		/// Scalar material parameter a door material exposes to fade out instead of animating.
+		const String s_doorDissolveParameter = "Dissolve";
+
+		/// Seconds a door takes to fully dissolve (open) or reform (close).
+		constexpr float s_doorDissolveDuration = 1.6f;
+	}
+
 	GameWorldObjectC::GameWorldObjectC(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map)
 		: GameObjectC(scene, project, map)
 		, m_netDriver(netDriver)
@@ -206,6 +217,8 @@ namespace mmo
 			m_entity->SetMesh(MeshManager::Get().Load(meshFile));
 		}
 
+		SetupDoorDissolveMaterials();
+
 		// (Re)apply the door pose and collision to the new mesh without animating.
 		ApplyDoorState(false);
 	}
@@ -224,6 +237,15 @@ namespace mmo
 				m_doorAnimState = nullptr;
 			}
 		}
+
+		if (m_doorDissolve != m_doorDissolveTarget)
+		{
+			const float step = deltaTime / s_doorDissolveDuration;
+			m_doorDissolve = m_doorDissolve < m_doorDissolveTarget
+				? std::min(m_doorDissolve + step, m_doorDissolveTarget)
+				: std::max(m_doorDissolve - step, m_doorDissolveTarget);
+			ApplyDoorDissolve();
+		}
 	}
 
 	void GameWorldObjectC::ApplyDoorState(const bool animate)
@@ -239,6 +261,18 @@ namespace mmo
 		// players never bump into an opening door), back on the instant closing starts. This
 		// matches the server's line of sight blocking convention.
 		m_entity->SetCollisionEnabled(!open);
+
+		// Doors drawn by a dissolving material (magic barriers) fade instead of moving.
+		if (!m_doorDissolveMaterials.empty())
+		{
+			m_doorDissolveTarget = open ? 1.0f : 0.0f;
+			if (!animate)
+			{
+				m_doorDissolve = m_doorDissolveTarget;
+			}
+
+			ApplyDoorDissolve();
+		}
 
 		// Door meshes are authored closed at bind pose and ship an "Open" (and ideally "Close")
 		// clip. Without a skeleton or clips the door simply snaps (no visual change for closed).
@@ -285,6 +319,48 @@ namespace mmo
 		{
 			// Snap to the settled pose (end of the clip).
 			targetState->SetTimePosition(targetState->GetLength());
+		}
+	}
+
+	void GameWorldObjectC::SetupDoorDissolveMaterials()
+	{
+		m_doorDissolveMaterials.clear();
+
+		if (GetType() != GameWorldObjectType::Door || !m_entity)
+		{
+			return;
+		}
+
+		for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+		{
+			SubEntity* subEntity = m_entity->GetSubEntity(i);
+			if (!subEntity || !subEntity->GetMaterial())
+			{
+				continue;
+			}
+
+			float value = 0.0f;
+			if (!subEntity->GetMaterial()->GetScalarParameter(s_doorDissolveParameter, value))
+			{
+				continue;
+			}
+
+			auto instance = std::make_shared<MaterialInstance>(String(m_entity->GetName()) + "_Dissolve_" + std::to_string(i), subEntity->GetMaterial());
+			subEntity->SetMaterial(instance);
+			m_doorDissolveMaterials.push_back(std::move(instance));
+		}
+	}
+
+	void GameWorldObjectC::ApplyDoorDissolve()
+	{
+		for (const auto& material : m_doorDissolveMaterials)
+		{
+			material->SetScalarParameter(s_doorDissolveParameter, m_doorDissolve);
+		}
+
+		if (m_entity)
+		{
+			m_entity->SetVisible(m_doorDissolve < 1.0f);
 		}
 	}
 

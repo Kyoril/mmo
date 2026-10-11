@@ -16,7 +16,9 @@
 
 #include "catch.hpp"
 
+#include <chrono>
 #include <memory>
+#include <thread>
 
 using namespace mmo;
 using namespace mmo::test;
@@ -392,4 +394,74 @@ TEST_CASE("A periodic trigger without a cast target falls back to the caster's s
 	SpellTargetMap targetMap;
 	REQUIRE(aura.BuildTriggerSpellTargetMap(*caster, targetMap));
 	CHECK(targetMap.GetUnitTarget() == 0x30);
+}
+
+// ---------------------------------------------------------------------------
+// Final tick on removal
+// ---------------------------------------------------------------------------
+
+namespace
+{
+	/// A periodic damage aura of 7 per tick whose duration is long gone by the time the test
+	/// removes it, but whose first tick (1 s) never came: removal is what has to deal the tick.
+	std::shared_ptr<AuraContainer> MakeExpiredDamageAura(GamePlayerS& unit, proto::SpellEntry& spell)
+	{
+		spell = MakeSpell();
+		spell.set_id(501);
+		spell.set_baseid(501);
+		auto* effect = spell.add_effects();
+		effect->set_type(spell_effects::ApplyAura);
+		effect->set_aura(static_cast<uint32>(aura_type::PeriodicDamage));
+		effect->set_basepoints(7);
+		effect->set_amplitude(1000);
+		effect->set_targeta(spell_effect_targets::TargetEnemy);
+
+		auto container = std::make_shared<AuraContainer>(unit, /*casterId=*/0, spell, /*duration=*/20, /*itemGuid=*/0);
+		container->AddAuraEffect(spell.effects(0), 7);
+		container->SetApplied(true);
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(40));
+		REQUIRE(container->IsExpired());
+		return container;
+	}
+}
+
+TEST_CASE("An expired periodic damage aura deals its final tick when it is removed", "[aura_effect]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto unit = MakeUnit(project, timers);
+	unit->Set<uint32>(object_fields::Health, 1000);
+	unit->Set<uint32>(object_fields::MaxHealth, 1000);
+
+	proto::SpellEntry spell;
+	auto container = MakeExpiredDamageAura(*unit, spell);
+
+	container->SetApplied(false);
+
+	CHECK(unit->Get<uint32>(object_fields::Health) == 993);
+}
+
+TEST_CASE("Destroying an expired periodic damage aura neither ticks nor crashes", "[aura_effect]")
+{
+	// Regression: a unit despawning (GM destroy, corpse removal) destroys its auras, and
+	// ~AuraContainer unapplies them. An expired periodic aura used to run its final tick from
+	// there, and the tick's shared_from_this() on the container being destroyed threw
+	// bad_weak_ptr and aborted the world server.
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto unit = MakeUnit(project, timers);
+	unit->Set<uint32>(object_fields::Health, 1000);
+	unit->Set<uint32>(object_fields::MaxHealth, 1000);
+
+	proto::SpellEntry spell;
+	auto container = MakeExpiredDamageAura(*unit, spell);
+
+	container.reset();
+
+	CHECK(unit->Get<uint32>(object_fields::Health) == 1000);
 }

@@ -88,6 +88,9 @@ several objects of one entry, e.g. the Hollow Choir's seals),
 `IsAutoAttacking()` (own character; set by the broadcast `AttackStart`/`AttackStop`
 packets rather than by the requests we send, so it reports what the server acknowledged),
 `SpellGoCount(g, spellId)` (casts of `spellId` by `g` that went off, counted from SpellGo),
+`SoundSource(soundId)` (guid of the unit a `PlaySoundById` came from, `"0x0"` for a sound without a
+unit, `""` if not heard since `ClearHeardSounds()` or the session started; trigger voice lines
+come from their speaker),
 `IsChanneling(g)` (the server sent `g` a ChannelStart and no ChannelUpdate(0) since — what a
 real client believes), `ChannelStartCount(g)` (ChannelStart packets received for `g`),
 `IsSpellOnCooldown(spellId)` (own character, as the server's cooldown packets left it; the global
