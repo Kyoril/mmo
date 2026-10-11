@@ -14,7 +14,8 @@
 local MERETH, VEYR = 87, 88
 local MOURNING_CHORISTER, HOLLOW_CHORISTER = 90, 91
 local MOURNING_CHORUS, CHORAL_RESONANCE = 257, 265
-local SEAL = 14
+-- The stair seals G2_North/South are the magic barrier copy of the seal object (14).
+local SEAL = 15
 local G2_X, G2_Y, G2_Z = -85.5, 5.2, -3.0
 
 local SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z = 0, 292.267, 5.33, 552.571

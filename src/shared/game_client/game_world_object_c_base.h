@@ -12,6 +12,7 @@ namespace mmo
 	class ParticleSystem;
 	class SceneNode;
 	class AnimationState;
+	class MaterialInstance;
 
 	class GameWorldObjectC : public GameObjectC
 	{
@@ -74,6 +75,15 @@ namespace mmo
 		/// (initial spawn, mesh swap).
 		void ApplyDoorState(bool animate);
 
+		/// @brief Gives every sub entity whose material exposes the "Dissolve" scalar parameter its
+		/// own material instance, so doors drawn as e.g. magic barriers can fade per object instead
+		/// of playing an Open clip. Must run after every mesh change, which resets the materials.
+		void SetupDoorDissolveMaterials();
+
+		/// @brief Writes the current dissolve value to the door's material instances and hides the
+		/// entity once it has fully dissolved.
+		void ApplyDoorDissolve();
+
 	protected:
 		NetClient& m_netDriver;
 		const ObjectInfo* m_entry = nullptr;
@@ -85,5 +95,14 @@ namespace mmo
 
 		/// @brief Currently advancing door animation state (owned by the entity), if any.
 		AnimationState* m_doorAnimState = nullptr;
+
+		/// @brief Per-object instances of the door materials that expose the "Dissolve" parameter.
+		std::vector<std::shared_ptr<MaterialInstance>> m_doorDissolveMaterials;
+
+		/// @brief Current dissolve value: 0 = fully visible (closed), 1 = fully dissolved (open).
+		float m_doorDissolve = 0.0f;
+
+		/// @brief Dissolve value the door is animating towards.
+		float m_doorDissolveTarget = 0.0f;
 	};
 }

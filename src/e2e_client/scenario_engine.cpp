@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <memory>
 #include <algorithm>
@@ -1104,28 +1105,53 @@ namespace mmo
 					knownGuids.insert(unit.GetGuid());
 				});
 
+			// The server spawns the monster on the player's position. A world-spawned creature of the
+			// same entry can come into view at the same moment; taking it for the new one leaves the real
+			// spawn alive on the shared map, fighting every later scenario's character. A creature walking
+			// into view appears at the edge of the visibility range, so a new one near the player is taken
+			// at once. The client's own position may lag the server's by a few units (right after a
+			// MoveTo, say), hence the generous radius; a farther one is only the fallback at the deadline.
+			const BotUnit* selfUnit = self();
+			const Vector3 spawnPosition = selfUnit ? selfUnit->GetPosition() : Vector3::Zero;
+			constexpr float nearSpawnDistanceSq = 10.0f * 10.0f;
+
 			g_runtime->session->GetRealm().CheatCreateMonster(entry);
 
+			uint64 nearestGuid = 0;
 			const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(15);
-			while (std::chrono::steady_clock::now() < until)
+			while (true)
 			{
-				uint64 spawnedGuid = 0;
+				nearestGuid = 0;
+				float nearestDistanceSq = std::numeric_limits<float>::max();
 				objects.ForEachCreature([&](const BotUnit& unit)
 					{
-						if (spawnedGuid == 0 && unit.GetEntry() == entry && knownGuids.find(unit.GetGuid()) == knownGuids.end())
+						if (unit.GetEntry() != entry || knownGuids.find(unit.GetGuid()) != knownGuids.end())
 						{
-							spawnedGuid = unit.GetGuid();
+							return;
+						}
+
+						const float distanceSq = selfUnit ? unit.GetDistanceToSquared(spawnPosition) : 0.0f;
+						if (distanceSq < nearestDistanceSq)
+						{
+							nearestDistanceSq = distanceSq;
+							nearestGuid = unit.GetGuid();
 						}
 					});
 
-				if (spawnedGuid != 0)
+				const bool expired = std::chrono::steady_clock::now() >= until;
+				if (nearestGuid != 0 && (nearestDistanceSq <= nearSpawnDistanceSq || expired))
 				{
-					const std::string guidStr = guidToString(spawnedGuid);
+					const std::string guidStr = guidToString(nearestGuid);
 					if (g_runtime->transcript)
 					{
 						g_runtime->transcript->Action("GM.CreateMonster", { { "entry", entry }, { "guid", guidStr } });
 					}
 					return guidStr;
+				}
+
+				if (expired)
+				{
+					break;
 				}
 
 				pumpChecked();

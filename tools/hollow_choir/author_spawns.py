@@ -103,9 +103,14 @@ PATROLS = [
      [(-103.0, 26.0), (-103.0, 39.5), (-79.0, 39.5), (-79.0, 26.0)], RAISED, 3000),
 ]
 
-# Gates: (spawn name, centre x, y, z). Seals are FP_Wall_01 pieces, 6 wide, facing along X
-# (the client turns world objects by +90 degrees, so identity rotation blocks an X-running way).
+# Gates: (spawn name, centre x, y, z). Seals are Door_01 doors facing along X (the client turns
+# world objects by +90 degrees, so identity rotation blocks an X-running way).
 SEAL_ENTRY = 14
+# The stair up from the nave is sealed by a magic barrier instead: a copy of the seal entry on
+# MagicBarrier_01 (object display 9), whose material dissolves when the door opens.
+BARRIER_ENTRY = 15
+BARRIER_DISPLAY = 9
+BARRIER_GATES = {"HollowChoir_G2_North", "HollowChoir_G2_South"}
 GATES = [
     ("HollowChoir_G1", -27.0, HALL, 0.0, None),
     ("HollowChoir_G2_North", -85.5, RAISED, -3.0, None),
@@ -281,7 +286,7 @@ def main():
         seal.name = name
         seal.respawn = False
         seal.state = 0          # closed
-        seal.objectentry = SEAL_ENTRY
+        seal.objectentry = BARRIER_ENTRY if name in BARRIER_GATES else SEAL_ENTRY
         seal.isactive = True
         seal.location.positionx, seal.location.positiony, seal.location.positionz = x, y, z
         if rot:
@@ -292,8 +297,8 @@ def main():
         if not rot:
             seal.location.rotationy = 0.0
 
-    # The seal: a trigger-only door (NotInteractable) on the 6-wide FP_Wall_01 display. Art is a
-    # placeholder; the boss death triggers open it with SetWorldObjectState.
+    # The seal: a trigger-only door (NotInteractable) on the Door_01 display; the boss death
+    # triggers open it with SetWorldObjectState.
     import importlib
     objects_pb2 = importlib.import_module("objects_pb2")
     objects = objects_pb2.Objects()
@@ -303,11 +308,16 @@ def main():
     seal_entry.id = SEAL_ENTRY
     seal_entry.name = "Hollow Choir Seal"
     seal_entry.type = 1                 # door
-    seal_entry.displayid = 8            # FP_Wall_01, 6 x 4
+    seal_entry.displayid = 7            # Door_01
     seal_entry.factionid = 0
     seal_entry.scale = 1.0
     seal_entry.flags = 0x04             # NotInteractable: only triggers open it
     seal_entry.data.extend([3, 0, 0])   # door lock, no post-unlock lock, never auto-closes
+    barrier_entry = next((o for o in objects.entry if o.id == BARRIER_ENTRY), None) or objects.entry.add()
+    barrier_entry.CopyFrom(seal_entry)
+    barrier_entry.id = BARRIER_ENTRY
+    barrier_entry.name = "Hollow Choir Barrier"
+    barrier_entry.displayid = BARRIER_DISPLAY
 
     print(f"map {MAP_ID}: {len(dungeon.unitspawns)} creature spawns, {len(dungeon.objectspawns)} object spawns")
     if not args.apply:

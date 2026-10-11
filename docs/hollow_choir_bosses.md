@@ -258,7 +258,12 @@ Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua`, `hollow_choir_b
   the galleries.
 - **Cramped rooms:** the apse is small for a 20-unit player aggro radius; anything in it pulls
   Veyr.
-- **Gate art:** the seals are placeholder walls (FP_Wall_01). The sketch wants the singing to stop
+- **Gate art:** G1 and the G2 corridor seal are Door_01 doors (object 14). The stair seals
+  G2_North/South are magic barriers (object 15, display 9: `Models/Dungeon/MagicBarrier_01.hmsh`,
+  a 3 x 5 plane with the two-sided `MagicBarrier_01.hmat`). Any door whose material has a
+  `Dissolve` scalar parameter fades out over 1.6 s on opening instead of playing an Open clip,
+  and is hidden once gone (`GameWorldObjectC::ApplyDoorDissolve`); colours, opacity and pulse
+  are material parameters, so variants belong in an .hmi. The sketch wants the singing to stop
   audibly and the altar light to change when G2 opens; neither has a hook yet.
 - Re-point quests 58-61 (kill objectives on 81, 84, 85) at the new bosses.
 - Mourning Cantors log "validation failed" for Dirge of the Hollow Choir (242) when a pillar
