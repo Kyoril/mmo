@@ -75,7 +75,10 @@ namespace mmo
 			auto& executer = m_cast.GetExecuter();
 			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
 				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
-			m_activationResult = spell_cast_result::FailedError;
+			// Report the reason validation gave, so the caller can react to it: creature AI walks
+			// towards a victim it lost line of sight to only when told so. Validation paths that
+			// end without naming a reason still report a generic error.
+			m_activationResult = (m_endCastFailure != spell_cast_result::CastOkay) ? m_endCastFailure : spell_cast_result::FailedError;
 			m_hasFinished = true;
 			NotifyCastEnded(false);
 			return;
@@ -1199,6 +1202,11 @@ namespace mmo
 	{
 		auto& executer = m_cast.GetExecuter();
 		auto* worldInstance = m_context.GetWorldInstance();
+
+		if (result != spell_cast_result::CastOkay)
+		{
+			m_endCastFailure = result;
+		}
 
 		NotifyCastEnded(result == spell_cast_result::CastOkay);
 
