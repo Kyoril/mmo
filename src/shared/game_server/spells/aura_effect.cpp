@@ -67,7 +67,10 @@ namespace mmo
 
 	void AuraEffect::HandleEffect(bool apply)
 	{
-		if (!apply && m_isPeriodic && m_container.IsExpired())
+		// An expired aura deals the tick that was due at expiry. Not when the container is being
+		// destroyed (its owner despawning): the tick needs a strong reference to the container,
+		// which no longer exists, and a unit leaving the world takes no more damage.
+		if (!apply && m_isPeriodic && m_container.IsExpired() && !m_container.weak_from_this().expired())
 		{
 			OnTick();
 		}
