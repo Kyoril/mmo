@@ -114,6 +114,10 @@ message UnitEntry {
 	// Sound file played at the client when this creature detects a stealthed player and enters
 	// its alert state (e.g. "Sound/Creature/Wolf/WolfAlert.wav"). Empty = default alert sound.
 	optional string stealth_alert_sound = 86;
+
+	// When set, every spawn of this unit rolls its gender: 50/50 between maleModel and femaleModel
+	// (only if femaleModel is set). Off by default, so units always use maleModel.
+	optional bool random_gender = 87;
 }
 
 message Units {
