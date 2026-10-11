@@ -163,6 +163,9 @@ namespace mmo
 		bool m_channelStartSent { false };
 		/// Result of Activate(). CastOkay unless validation rejected the cast.
 		SpellCastResult m_activationResult { spell_cast_result::CastOkay };
+		/// The last failure passed to SendEndCast. Lets Activate() report why validation
+		/// rejected the cast instead of a generic error.
+		SpellCastResult m_endCastFailure { spell_cast_result::CastOkay };
 		std::shared_ptr<SingleCastState> m_selfHold;
 
 		void SendEndCast(SpellCastResult result);

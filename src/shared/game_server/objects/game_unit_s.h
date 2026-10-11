@@ -1092,6 +1092,15 @@ namespace mmo
 			return T(diff);
 		}
 
+		/// How far a "say" chat message carries.
+		static constexpr float SayRange = 25.0f;
+
+		/// How far a "yell" chat message carries.
+		static constexpr float YellRange = 300.0f;
+
+		/// How far an emote chat message carries.
+		static constexpr float EmoteRange = 50.0f;
+
 		/// Sends a chat message of type "say" from the unit.
 		/// @param message The base (English) message to send.
 		/// @param localizedText Optional per-locale overrides for @p message. When provided, each

@@ -958,6 +958,12 @@ namespace mmo
 		/// Makes the client play a SoundEntry (ClientDB sounds) at a world position.
 		void SendPlaySound(uint32 soundId, const Vector3& position);
 
+		/// Makes the client play a SoundEntry (ClientDB sounds) from a unit, following it while it plays.
+		/// @param soundId The SoundEntry to play.
+		/// @param sourceGuid The unit the sound comes from.
+		/// @param position The unit's current position, used if the client does not know the unit.
+		void SendPlaySound(uint32 soundId, uint64 sourceGuid, const Vector3& position);
+
 		void OnReviveOffer(uint64 casterGuid, uint32 spellId, uint32 reviveHealth, uint32 mapId, const Vector3& position, const Radian& facing) override;
 
 	private:

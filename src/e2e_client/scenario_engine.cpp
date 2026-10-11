@@ -273,6 +273,24 @@ namespace mmo
 			g_runtime->session->ClearLastSpellVisual();
 		}
 
+		/// A voice line has no gameplay side effect either: returns the guid of the unit a
+		/// PlaySoundById came from since the last clear, "0x0" for a sound without a unit, or "" if the
+		/// sound was not heard at all.
+		std::string luaSoundSource(const uint32 soundId)
+		{
+			if (!g_runtime->session->HasHeardSound(soundId))
+			{
+				return "";
+			}
+
+			return guidToString(g_runtime->session->GetHeardSoundSource(soundId));
+		}
+
+		void luaClearHeardSounds()
+		{
+			g_runtime->session->ClearHeardSounds();
+		}
+
 		bool luaIsSubsystemAvailable(const std::string& name)
 		{
 			game::Subsystem subsystem;
@@ -1562,6 +1580,8 @@ namespace mmo
 				luabind::def_lambda("LastSpellVisualTarget", &luaLastSpellVisualTarget),
 				luabind::def_lambda("LastSpellVisualEvent", &luaLastSpellVisualEvent),
 				luabind::def_lambda("ClearLastSpellVisual", &luaClearLastSpellVisual),
+				luabind::def_lambda("SoundSource", &luaSoundSource),
+				luabind::def_lambda("ClearHeardSounds", &luaClearHeardSounds),
 				luabind::def_lambda("IsSubsystemAvailable", &luaIsSubsystemAvailable),
 				luabind::def_lambda("SubsystemStatusCount", &luaSubsystemStatusCount),
 				luabind::def_lambda("LastBugReportResult", &luaLastBugReportResult),
