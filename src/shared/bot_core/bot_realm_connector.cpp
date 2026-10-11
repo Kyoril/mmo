@@ -121,6 +121,7 @@ namespace mmo
 			// A reason left over from a previous session must not be reported for this one.
 			m_kickReason.reset();
 			m_lastSpellVisual.reset();
+			m_heardSounds.clear();
 			m_subsystemStatus.fill(game::subsystem_status::Unavailable);
 			m_lastBugReportResult.clear();
 
@@ -131,6 +132,7 @@ namespace mmo
 			// finish authenticating.
 			RegisterPacketHandler(game::realm_client_packet::KickReason, *this, &BotRealmConnector::OnKickReason);
 			RegisterPacketHandler(game::realm_client_packet::PlaySpellVisual, *this, &BotRealmConnector::OnPlaySpellVisual);
+			RegisterPacketHandler(game::realm_client_packet::PlaySoundById, *this, &BotRealmConnector::OnPlaySoundById);
 			RegisterPacketHandler(game::realm_client_packet::SubsystemStatus, *this, &BotRealmConnector::OnSubsystemStatus);
 			RegisterPacketHandler(game::realm_client_packet::BugReportResult, *this, &BotRealmConnector::OnBugReportResult);
 		}
@@ -550,6 +552,25 @@ namespace mmo
 		}
 
 		m_lastSpellVisual = visual;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPlaySoundById(game::IncomingPacket& packet)
+	{
+		uint32 soundId = 0;
+		uint8 source = 0;
+		if (!(packet >> io::read<uint32>(soundId) >> io::read<uint8>(source)) || source > game::play_sound_source::Unit)
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		uint64 sourceGuid = 0;
+		if (source == game::play_sound_source::Unit && !(packet >> io::read_packed_guid(sourceGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_heardSounds[soundId] = sourceGuid;
 		return PacketParseResult::Pass;
 	}
 

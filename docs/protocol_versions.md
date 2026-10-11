@@ -117,6 +117,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 20 | 2026-10-11 | `PlaySoundById`'s position flag becomes a source byte: 0 = 2D, 1 = position, 2 = unit (packed guid + fallback position), so trigger Say/Yell voice lines play as 3D sound that follows the speaking creature |
 | 19 | 2026-10-08 | Spell zones on the ground (`PersistentAreaAura`): server `SpellZoneStart` (zone id, caster, spell, position, radius, remaining ms) and `SpellZoneEnd` (zone id, expired flag) |
 | 18 | 2026-10-04 | Scheduled realm shutdown: operator `GmShutdown` (start/cancel + delay, handled by the realm in all builds) and server `ShutdownCountdown` (remaining seconds, 0xFFFFFFFF = cancelled) |
 | 17 | 2026-10-03 | In-game bug reports: client `BugReport` (subject + comment + zlib compressed client JSON) and GM `CheatSetSubsystem`; server `BugReportResult` and `SubsystemStatus` (generic subsystem availability, full list on world enter, deltas afterwards) |
