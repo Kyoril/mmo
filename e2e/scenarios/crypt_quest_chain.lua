@@ -1,8 +1,8 @@
 -- e2e-own-character: cqc
 -- e2e-timeout: 300
 --
--- The Hollow Choir's quest chain: 57 "Whispers Under the Barrowfield" -> 58 "The Choir's Two Wings"
--- -> 59 "Silence the Coffinwright", all given and ended by Chaplain Osric Dawnmere.
+-- The Hollow Choir's quest chain: 57 "Whispers Under the Abbey" -> 58 "The Choir's Two Guardians"
+-- -> 59 "Silence the Cantor", all given and ended by Chaplain Osric Dawnmere.
 --
 -- This is what actually points a capped character at the dungeon, so it needs to be more than a
 -- proto round-trip: the chain is enforced by prevquestid back-links, the objectives name creatures
@@ -14,9 +14,9 @@
 -- depend on which of the eighteen live skeletons happens to be nearest.
 
 local SKELETON_WARRIOR = 18
-local OSSUAR = 84
-local VELL = 85
-local SEVRIN_WAX = 81
+local OSWIN = 86
+local MERETH = 87
+local VEYR = 88
 
 local SASH, BRACERS = 153, 154
 
@@ -64,16 +64,16 @@ KillFor(SKELETON_WARRIOR, 6, "Skeleton Warrior")
 TurnIn(57, 800, 0)
 GM.ClearInventory()
 
--- === 58: The Choir's Two Wings ===
+-- === 58: The Choir's Two Guardians ===
 GM.AcceptQuest(58)
-KillFor(OSSUAR, 1, "Ossuar")
-KillFor(VELL, 1, "Choirmistress Vell")
+KillFor(OSWIN, 1, "Brother Oswin")
+KillFor(MERETH, 1, "Sister Mereth")
 TurnIn(58, 1500, 0)
 GM.ClearInventory()
 
--- === 59: Silence the Coffinwright ===
+-- === 59: Silence the Cantor ===
 GM.AcceptQuest(59)
-KillFor(SEVRIN_WAX, 1, "Sevrin Wax")
+KillFor(VEYR, 1, "Cantor Veyr")
 
 -- The capstone is the only quest in the chain offering a choice. Take the first reward and check
 -- the chosen item is what actually arrives -- a choice quest that hands out the wrong index, or
