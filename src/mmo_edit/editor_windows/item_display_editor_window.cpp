@@ -18,6 +18,7 @@
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/material_layer.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
@@ -473,6 +474,11 @@ namespace mmo
 				}
 			}
 
+			for (const auto& layer : variant.material_layers())
+			{
+				if (auto mat = MaterialManager::Get().Load(layer.material())) ApplyMaterialLayer(*m_entity, layer.sub_entity(), layer.layer(), mat);
+			}
+
 			if (variant.has_mesh() && !variant.mesh().empty())
 			{
 				// Attach to the bone for the previewed draw state, matching runtime behavior.
@@ -804,6 +810,44 @@ namespace mmo
 						if (!removeKey.empty()) overrides->erase(removeKey);
 					}
 
+					if (ImGui::CollapsingHeader("Material Layers", ImGuiTreeNodeFlags_DefaultOpen))
+					{
+						ImGui::TextWrapped("Composites a material onto a layer slot of the sub entity's material instead of replacing it, "
+							"so the character's skin shows wherever the layer is transparent. Use for clothing painted in the body UV "
+							"layout (Pants_*, Chest_*_U, Gloves_*). Parameter P of the material fills the slot parameter <Layer>_P.");
+
+						static const char* knownLayers[] = { "Legs", "Chest", "Hands" };
+						static const auto& materialExtensions = asset_extensions::Materials;
+						int removeIndex = -1;
+						for (int layerIndex = 0; layerIndex < variant->material_layers_size(); ++layerIndex)
+						{
+							auto* layer = variant->mutable_material_layers(layerIndex);
+							ImGui::PushID(layerIndex);
+							ImGui::InputText("SubEntity", layer->mutable_sub_entity());
+							if (ImGui::BeginCombo("Layer", layer->layer().c_str()))
+							{
+								for (const char* knownLayer : knownLayers)
+								{
+									if (ImGui::Selectable(knownLayer, layer->layer() == knownLayer)) layer->set_layer(knownLayer);
+								}
+								ImGui::EndCombo();
+							}
+							std::string material = layer->material();
+							if (AssetPickerWidget::Draw("Material", material, materialExtensions, &m_previewManager, nullptr, 32.0f)) layer->set_material(material);
+							if (ImGui::SmallButton("Remove Layer")) removeIndex = layerIndex;
+							ImGui::Separator();
+							ImGui::PopID();
+						}
+						if (removeIndex >= 0) variant->mutable_material_layers()->DeleteSubrange(removeIndex, 1);
+						if (ImGui::Button("Add Layer"))
+						{
+							auto* layer = variant->add_material_layers();
+							layer->set_sub_entity("Naked_Legs");
+							layer->set_layer(knownLayers[0]);
+							layer->set_material("");
+						}
+					}
+
 					DrawSectionHeader("Attachment");
 					static const auto& meshExtensions = asset_extensions::Meshes;
 					std::string attachedMesh = variant->mesh();
@@ -816,7 +860,7 @@ namespace mmo
 					}
 
 					DrawSectionHeader("Validation");
-					if (variant->hidden_by_name_size() + variant->hidden_by_tag_size() + variant->shown_by_name_size() + variant->shown_by_tag_size() + variant->material_overrides_size() == 0 && variant->mesh().empty())
+					if (variant->hidden_by_name_size() + variant->hidden_by_tag_size() + variant->shown_by_name_size() + variant->shown_by_tag_size() + variant->material_overrides_size() + variant->material_layers_size() == 0 && variant->mesh().empty())
 						ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1), "This variant has no effect yet.");
 					if (!variant->mesh().empty() && (!variant->has_attached_bone_default() || variant->attached_bone_default().bone_name().empty()))
 						ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Attachment variant needs `Attached Bone Default -> Bone Name`.");
