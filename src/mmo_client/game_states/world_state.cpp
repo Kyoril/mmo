@@ -527,6 +527,7 @@ namespace mmo
 
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
+		m_unitAttachedSounds.clear();
 
 		// UpdateWaterVolume stops running once the world is left, so a low-pass applied while
 		// submerged would otherwise stay on the master bus through character select and login.
@@ -1072,6 +1073,8 @@ namespace mmo
 		{
 			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
 		}
+
+		UpdateUnitAttachedSounds(deltaSeconds);
 
 		// Update audio component to simulate 3d audio correctly from the player position
 		if (m_playerController->GetControlledUnit())
@@ -2965,14 +2968,28 @@ namespace mmo
 	PacketParseResult WorldState::OnPlaySoundById(game::IncomingPacket &packet)
 	{
 		uint32 soundId;
-		uint8 hasPosition;
-		if (!(packet >> io::read<uint32>(soundId) >> io::read<uint8>(hasPosition)))
+		uint8 source;
+		if (!(packet >> io::read<uint32>(soundId) >> io::read<uint8>(source)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
+		if (source > game::play_sound_source::Unit)
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		uint64 sourceGuid = 0;
+		if (source == game::play_sound_source::Unit)
+		{
+			if (!(packet >> io::read_packed_guid(sourceGuid)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
 		Vector3 position;
-		if (hasPosition != 0)
+		if (source != game::play_sound_source::None)
 		{
 			if (!(packet >> io::read<float>(position.x) >> io::read<float>(position.y) >> io::read<float>(position.z)))
 			{
@@ -2982,16 +2999,50 @@ namespace mmo
 
 		// Unknown sound ids are a data problem (e.g. outdated client data), never a protocol
 		// error - SoundEntryPlayer logs a warning and we simply stay silent.
-		if (hasPosition != 0)
-		{
-			m_soundEntryPlayer.PlayEntry(soundId, position);
-		}
-		else
+		if (source == game::play_sound_source::None)
 		{
 			m_soundEntryPlayer.PlayEntry(soundId);
+			return PacketParseResult::Pass;
+		}
+
+		// A unit we know is heard from where we see it; the server's position is only a fallback.
+		const auto unit = (source == game::play_sound_source::Unit) ? ObjectMgr::Get<GameUnitC>(sourceGuid) : nullptr;
+		if (unit)
+		{
+			position = unit->GetPosition();
+		}
+
+		const ChannelIndex channel = m_soundEntryPlayer.PlayEntry(soundId, position);
+		if (unit && channel != InvalidChannel && m_soundEntryPlayer.IsEntry3D(soundId))
+		{
+			m_unitAttachedSounds.push_back({ channel, sourceGuid, m_soundEntryPlayer.GetEntryLength(soundId) });
 		}
 
 		return PacketParseResult::Pass;
+	}
+
+	void WorldState::UpdateUnitAttachedSounds(const float deltaSeconds)
+	{
+		// Channels are recycled once a sound finishes, so an entry is dropped as soon as its sound
+		// should have ended rather than moving whatever plays on that channel next. A unit that left
+		// sight leaves its sound where it last was.
+		std::erase_if(m_unitAttachedSounds, [this, deltaSeconds](UnitAttachedSound& sound)
+			{
+				sound.remainingSeconds -= deltaSeconds;
+				if (sound.remainingSeconds <= 0.0f)
+				{
+					return true;
+				}
+
+				const auto unit = ObjectMgr::Get<GameUnitC>(sound.unitGuid);
+				if (!unit)
+				{
+					return true;
+				}
+
+				m_audio.Set3DPosition(sound.channel, unit->GetPosition());
+				return false;
+			});
 	}
 
 	PacketParseResult WorldState::OnPlaySpellVisual(game::IncomingPacket &packet)

@@ -7,12 +7,15 @@
 --   * his death opens the G1 seal to the nave (trigger 56),
 --   * and his novices leave once the fight is over (cleanup flag, trigger 58).
 --
+-- Each of his yells carries a voice line (SoundEntry 157-159) that the clients play from him.
+--
 -- The character is a fresh level-1 test character, so every creature in the hall aggroes on
 -- sight; godmode keeps it alive. Damage for the threshold comes from GM.DamageTarget.
 
 local OSWIN = 86
 local RISEN_NOVICE = 89
 local SEAL = 14
+local VOICE_AGGRO, VOICE_LAST_VIGIL, VOICE_DEATH = 157, 158, 159
 local G1_X, G1_Y, G1_Z = -27.0, 1.2, 0.0
 
 local SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z = 0, 292.267, 5.33, 552.571
@@ -47,6 +50,8 @@ FaceUnit(oswin)
 StartAttack(oswin)
 Assert(WaitUntil(function() return GetHealth(oswin) < maxHealth end, 30000, "Oswin pulled"),
 	"auto attacks should open the encounter")
+Assert(WaitUntil(function() return SoundSource(VOICE_AGGRO) == oswin end, 10000, "aggro voice"),
+	"Oswin's aggro yell should play its voice line from him (source '" .. SoundSource(VOICE_AGGRO) .. "')")
 Sleep(6000)
 
 -- Just under 50 %: Last Vigil raises two novices.
@@ -57,11 +62,14 @@ GM.DamageTarget(current - target)
 Assert(WaitUntil(function() return CountUnitsByEntry(RISEN_NOVICE) == 2 end, 15000, "novices rise"),
 	"Last Vigil at 50 % should raise two Risen Novices (saw " .. CountUnitsByEntry(RISEN_NOVICE) .. ")")
 Log("Last Vigil raised two novices")
+Assert(SoundSource(VOICE_LAST_VIGIL) == oswin, "the Last Vigil yell should play its voice line from Oswin")
 
 -- Death: the G1 seal opens and the novices leave.
 TargetUnit(oswin)
 GM.DamageTarget(GetHealth(oswin) + 100)
 Assert(WaitUntil(function() return not IsAlive(oswin) end, 20000, "Oswin dies"), "the killing blow should land")
+Assert(WaitUntil(function() return SoundSource(VOICE_DEATH) == oswin end, 10000, "death voice"),
+	"Oswin's death yell should play its voice line from him")
 StopAttack()
 Assert(WaitUntil(function() return CountUnitsByEntry(RISEN_NOVICE) == 0 end, 15000, "novices leave"),
 	"the Risen Novices should not outlive Oswin's fight")
