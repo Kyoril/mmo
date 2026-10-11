@@ -53,26 +53,29 @@ SOUNDS = {
         "comforting, building then dissolving into a gentle fade. Only the drone pad: no bell, "
         "no whoosh, no drums, no voice. Fantasy game spell sound.",
         duration=3.0, target_dbfs=-3.0, prompt_influence=0.8),
-    "Quest_Drums": SoundSpec(
-        "Deep tribal war drums: a quick rolling build of three heavy hits then one big final "
-        "boom with a short rumbling decay, adventurous and driving. Only the drums: no brass, "
-        "no horn, no voice, no melody, no music bed. Fantasy RPG quest start sound.",
-        duration=2.0, target_dbfs=-3.0, prompt_influence=0.8),
-    "Quest_Horn": SoundSpec(
-        "A short bold medieval brass fanfare: two or three trumpets and a horn playing a brief "
-        "adventurous call of three rising notes, the last held and bright, with a little hall "
-        "reverb. Only brass: no drums, no percussion, no voice, no music bed. Fantasy RPG "
-        "quest accepted sound.", duration=2.0, target_dbfs=-3.0, prompt_influence=0.8),
-    "Done_Trumpets": SoundSpec(
-        "A short cheerful victory fanfare: bright trumpets playing a quick joyful ascending "
-        "flourish of five notes ending on a bright resolved major chord, triumphant but brief. "
-        "Only trumpets and brass: no drums, no choir, no chimes, no voice. Fantasy RPG quest "
-        "completed sound.", duration=2.0, target_dbfs=-3.0, prompt_influence=0.8),
-    "Done_Sparkle": SoundSpec(
-        "A bright sparkling reward flourish: a quick upward harp glissando with twinkling "
-        "bells and a soft shimmering finish, warm and satisfying. Only harp and bells: no "
-        "brass, no drums, no voice, no coins. Fantasy RPG quest reward sound.",
-        duration=2.0, target_dbfs=-3.0, prompt_influence=0.8),
+    # v2 (2026-10-11): the first quest set (war drums + trumpet fanfare) was rejected as too
+    # annoying next to the WoW reference sounds (iQuestActivate/iQuestComplete): those are
+    # quiet, sparse, soft-attack swells with long tails, not dense front-loaded fanfares.
+    "QA_Thump": SoundSpec(
+        "A single soft low frame drum thump with a warm round tone and a short gentle decay, "
+        "muffled mallet, restrained and calm. Only the drum: no brass, no melody, no voice, no "
+        "music, no metal. Subtle fantasy RPG interface sound.",
+        duration=1.5, target_dbfs=-3.0, prompt_influence=0.8),
+    "QA_Swell": SoundSpec(
+        "A single mellow distant French horn note that swells in gently with a soft attack, "
+        "rises a little in pitch and fades away softly with light reverb, warm and noble. Only "
+        "the horn: no drums, no trumpet fanfare, no voice, no music bed. Subtle fantasy RPG "
+        "quest sound.", duration=2.5, target_dbfs=-3.0, prompt_influence=0.8),
+    "QC_Bells": SoundSpec(
+        "Three soft gentle ascending bell notes, like a music box or celesta played quietly, "
+        "warm and mellow, each note ringing softly into a long gentle fade. Only the bells: no "
+        "brass, no drums, no voice, no harsh attack. Subtle fantasy RPG quest reward sound.",
+        duration=3.0, target_dbfs=-3.0, prompt_influence=0.8),
+    "QC_Pad": SoundSpec(
+        "A warm soft orchestral string and choir pad that swells slowly and gently into a "
+        "hopeful major chord and then fades out softly with a long smooth tail, peaceful and "
+        "rewarding. Only the soft pad: no brass, no drums, no bells, no words. Subtle fantasy "
+        "RPG quest complete sound.", duration=4.0, target_dbfs=-3.0, prompt_influence=0.8),
 }
 
 MIXES = {
@@ -95,20 +98,20 @@ MIXES = {
             MixLayer("Bind_Bell", take=1, offset=0.55, gain_db=-1.5),
         ],
     },
-    # Drum hit and tail underneath, the brass call entering on the second beat.
+    # Soft thump, then a mellow horn swelling in over it. Quiet by design (volume 0.6).
     "QuestAccepted": {
         "target_dbfs": -3.0,
         "layers": [
-            MixLayer("Quest_Drums", take=2, offset=0.0, gain_db=-1.5),
-            MixLayer("Quest_Horn", take=2, offset=0.18, gain_db=-1.5),
+            MixLayer("QA_Thump", take=4, offset=0.0, gain_db=-2.0),
+            MixLayer("QA_Swell", take=4, offset=0.3, gain_db=-4.0),
         ],
     },
-    # Short and bright: the flourish, with a light sparkle landing on its resolve.
+    # A slow warm pad swell with soft bells blooming on top and a long tail.
     "QuestCompleted": {
         "target_dbfs": -3.0,
         "layers": [
-            MixLayer("Done_Trumpets", take=3, offset=0.0, gain_db=-1.0),
-            MixLayer("Done_Sparkle", take=4, offset=0.45, gain_db=-8.0),
+            MixLayer("QC_Pad", take=2, offset=0.0, gain_db=-3.0),
+            MixLayer("QC_Bells", take=3, offset=0.8, gain_db=-5.0),
         ],
     },
 }
