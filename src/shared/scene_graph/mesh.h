@@ -59,8 +59,12 @@ namespace mmo
 
 		SubMesh* GetSubMesh(const std::string& name);
 
+		/// Removes a sub mesh. Every later sub mesh moves down one index, and its name with it.
+		/// @param index Index of the sub mesh to remove.
 		void DestroySubMesh(uint16 index);
 
+		/// Removes a sub mesh by name. Does nothing if no sub mesh has this name.
+		/// @param name Name of the sub mesh to remove.
 		void DestroySubMesh(const std::string& name);
 
 		void SetBounds(const AABB& bounds);

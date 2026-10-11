@@ -2355,15 +2355,15 @@ namespace mmo
 		{
 		case ChatType::Say:
 		case ChatType::UnitSay:
-			chatDistance = 25.0f;
+			chatDistance = SayRange;
 			break;
 		case ChatType::Yell:
 		case ChatType::UnitYell:
-			chatDistance = 300.0f;
+			chatDistance = YellRange;
 			break;
 		case ChatType::Emote:
 		case ChatType::UnitEmote:
-			chatDistance = 50.0f;
+			chatDistance = EmoteRange;
 			break;
 		default:
 			return;

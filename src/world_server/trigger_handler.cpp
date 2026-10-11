@@ -325,10 +325,10 @@ namespace mmo
 		auto triggeringUnit = context.triggeringUnit.lock();
 		target->AsUnit().ChatSay(GetActionText(action, 0), &action.texts_loc());
 
-		// Eventually play sound file
+		// Optional voice line, heard as far as the chat line is
 		if (action.data_size() > 0)
 		{
-			PlaySoundEntry(action.data(0), target);
+			PlaySoundEntry(action.data(0), target, GameUnitS::SayRange);
 		}
 	}
 
@@ -357,10 +357,10 @@ namespace mmo
 		auto triggeringUnit = context.triggeringUnit.lock();
 		target->AsUnit().ChatYell(GetActionText(action, 0), &action.texts_loc());
 
-		// Eventually play sound file
+		// Optional voice line, heard as far as the chat line is
 		if (action.data_size() > 0)
 		{
-			PlaySoundEntry(action.data(0), target);
+			PlaySoundEntry(action.data(0), target, GameUnitS::YellRange);
 		}
 	}
 
@@ -388,10 +388,10 @@ namespace mmo
 
 		target->AsUnit().ChatEmote(GetActionText(action, 0), &action.texts_loc());
 
-		// Eventually play sound file
+		// Optional sound, heard as far as the emote text is
 		if (action.data_size() > 0)
 		{
-			PlaySoundEntry(action.data(0), target);
+			PlaySoundEntry(action.data(0), target, GameUnitS::EmoteRange);
 		}
 	}
 
@@ -1277,14 +1277,42 @@ namespace mmo
 		return world;
 	}
 
-	bool TriggerHandler::PlaySoundEntry(uint32 sound, GameObjectS* source)
+	bool TriggerHandler::PlaySoundEntry(const uint32 sound, GameObjectS* source, const float range)
 	{
-		if (sound)
+		if (sound == 0 || source == nullptr)
 		{
-			// TODO
+			return false;
 		}
 
-		return true;
+		WorldInstance* world = GetWorldInstance(source);
+		if (!world)
+		{
+			return false;
+		}
+
+		const Vector3 position = source->GetPosition();
+		const float rangeSquared = range * range;
+		const uint64 sourceGuid = source->GetGuid();
+
+		// Not GetPlayersInWorld: that skips dead players, and a wiped group should still hear the
+		// boss gloat over them.
+		bool sent = false;
+		world->ForEachObject([&](GameObjectS& obj)
+			{
+				if (!obj.IsPlayer() || (obj.GetPosition() - position).GetSquaredLength() > rangeSquared)
+				{
+					return true;
+				}
+
+				if (const auto player = m_playerManager.GetPlayerByCharacterGuid(obj.GetGuid()))
+				{
+					player->SendPlaySound(sound, sourceGuid, position);
+					sent = true;
+				}
+				return true;
+			});
+
+		return sent;
 	}
 
 	GameObjectS* TriggerHandler::GetActionTarget(const proto::TriggerAction& action, TriggerContext& context)
