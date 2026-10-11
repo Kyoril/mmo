@@ -91,6 +91,11 @@ namespace mmo
 		return (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
 	}
 
+	bool PlatformWin::IsAltKeyDown()
+	{
+		return (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+	}
+
 	std::pair<int, int> PlatformWin::GetPrimaryDisplayResolution()
 	{
 		return { GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };

@@ -422,6 +422,15 @@ namespace mmo
 				return FALSE;
 			}
 			break;
+		case WM_SYSCOMMAND:
+			// Releasing a bare Alt key would enter the window menu's modal loop, which stalls the frame
+			// loop until the next key press. Alt is a game modifier (item comparison), so swallow it.
+			// Alt+Space still opens the window menu, Alt+F4 still closes the window.
+			if ((WParam & 0xFFF0) == SC_KEYMENU && LParam == 0)
+			{
+				return 0;
+			}
+			break;
 		case WM_DESTROY:
 			if (window) window->Closed();
 			return 0;
