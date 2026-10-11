@@ -85,19 +85,22 @@ namespace mmo
 		// Remove sub mesh at the given index
 		m_subMeshes.erase(subMeshIt);
 
-		// Fix name index map
-		for (auto it = m_subMeshNames.begin(); it != m_subMeshNames.end(); ++it)
+		// Fix name index map. The map is unordered, so every entry has to be visited: names of
+		// later sub meshes may come before or after the removed one.
+		for (auto it = m_subMeshNames.begin(); it != m_subMeshNames.end(); )
 		{
 			if (it->second == index)
 			{
-				m_subMeshNames.erase(it);
-				break;
+				it = m_subMeshNames.erase(it);
+				continue;
 			}
-			
+
 			if (it->second > index)
 			{
 				it->second--;
 			}
+
+			++it;
 		}
 	}
 
@@ -105,8 +108,8 @@ namespace mmo
 	{
 		if (const auto index = m_subMeshNames.find(name); index != m_subMeshNames.end())
 		{
+			// The index overload erases the name entry itself, which invalidates the iterator.
 			DestroySubMesh(index->second);
-			m_subMeshNames.erase(index);
 		}
 	}
 
