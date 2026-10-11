@@ -53,29 +53,6 @@ SOUNDS = {
         "comforting, building then dissolving into a gentle fade. Only the drone pad: no bell, "
         "no whoosh, no drums, no voice. Fantasy game spell sound.",
         duration=3.0, target_dbfs=-3.0, prompt_influence=0.8),
-    # v2 (2026-10-11): the first quest set (war drums + trumpet fanfare) was rejected as too
-    # annoying next to the WoW reference sounds (iQuestActivate/iQuestComplete): those are
-    # quiet, sparse, soft-attack swells with long tails, not dense front-loaded fanfares.
-    "QA_Thump": SoundSpec(
-        "A single soft low frame drum thump with a warm round tone and a short gentle decay, "
-        "muffled mallet, restrained and calm. Only the drum: no brass, no melody, no voice, no "
-        "music, no metal. Subtle fantasy RPG interface sound.",
-        duration=1.5, target_dbfs=-3.0, prompt_influence=0.8),
-    "QA_Swell": SoundSpec(
-        "A single mellow distant French horn note that swells in gently with a soft attack, "
-        "rises a little in pitch and fades away softly with light reverb, warm and noble. Only "
-        "the horn: no drums, no trumpet fanfare, no voice, no music bed. Subtle fantasy RPG "
-        "quest sound.", duration=2.5, target_dbfs=-3.0, prompt_influence=0.8),
-    "QC_Bells": SoundSpec(
-        "Three soft gentle ascending bell notes, like a music box or celesta played quietly, "
-        "warm and mellow, each note ringing softly into a long gentle fade. Only the bells: no "
-        "brass, no drums, no voice, no harsh attack. Subtle fantasy RPG quest reward sound.",
-        duration=3.0, target_dbfs=-3.0, prompt_influence=0.8),
-    "QC_Pad": SoundSpec(
-        "A warm soft orchestral string and choir pad that swells slowly and gently into a "
-        "hopeful major chord and then fades out softly with a long smooth tail, peaceful and "
-        "rewarding. Only the soft pad: no brass, no drums, no bells, no words. Subtle fantasy "
-        "RPG quest complete sound.", duration=4.0, target_dbfs=-3.0, prompt_influence=0.8),
 }
 
 MIXES = {
@@ -98,20 +75,25 @@ MIXES = {
             MixLayer("Bind_Bell", take=1, offset=0.55, gain_db=-1.5),
         ],
     },
-    # Soft thump, then a mellow horn swelling in over it. Quiet by design (volume 0.6).
-    "QuestAccepted": {
-        "target_dbfs": -3.0,
-        "layers": [
-            MixLayer("QA_Thump", take=4, offset=0.0, gain_db=-2.0),
-            MixLayer("QA_Swell", take=4, offset=0.3, gain_db=-4.0),
-        ],
-    },
-    # A slow warm pad swell with soft bells blooming on top and a long tail.
-    "QuestCompleted": {
-        "target_dbfs": -3.0,
-        "layers": [
-            MixLayer("QC_Pad", take=2, offset=0.0, gain_db=-3.0),
-            MixLayer("QC_Bells", take=3, offset=0.8, gain_db=-5.0),
-        ],
-    },
+}
+
+# Quest accepted / completed are NOT layered mixes. After five rejected layered attempts (war
+# drums + trumpet blare "annoying"; soft thump/bells "far too soft", then "too simple" and "too
+# playful"; separately generated horns/strings/timpani "random notes, no common key"; a
+# generated drum rhythm that models cannot keep; a melody resampled from single notes "silly and
+# cheap") the winner was the ElevenLabs MUSIC model (eleven_music_v2_5, instrumental, 4 s,
+# ~106 credits/take), which plays a coherent orchestra. 4 takes per prompt, user picked by ear.
+# fetch.py -3 dBFS, then Sound/Interface/Quest{Accepted,Completed}.wav (volume 0.8, 2D).
+MUSIC = {
+    # take 1 chosen ("Accept_1")
+    "QuestAccepted": (
+        "Short epic orchestral fantasy stinger in the style of Warcraft: marching snare and "
+        "war drums playing a rhythmic call to arms, a noble French horn fanfare answering, "
+        "ending on a strong resolved chord. Heroic and cinematic but restrained, mid tempo, "
+        "medieval adventure."),
+    # prompt B, take 4 chosen ("Done_4")
+    "QuestCompleted": (
+        "Orchestral fantasy victory stinger: a gentle ascending strings and brass melody with "
+        "soft snare, timpani and a satisfying cadence ending on a sustained major chord. "
+        "Noble, uplifting and stylish, like a classic fantasy RPG quest reward, not bombastic."),
 }

@@ -34,8 +34,8 @@ HEARTH_ORANGE = (1.00, 0.70, 0.30)
 # id, name, file, category (3 = INTERFACE), is_3d, volume, min/max distance
 SOUNDS = [
     (169, "UI - Level Up", "Sound/Interface/LevelUp.wav", 3, False, 1.0),
-    (170, "UI - Quest Accepted", "Sound/Interface/QuestAccepted.wav", 3, False, 0.6),
-    (171, "UI - Quest Completed", "Sound/Interface/QuestCompleted.wav", 3, False, 0.6),
+    (170, "UI - Quest Accepted", "Sound/Interface/QuestAccepted.wav", 3, False, 0.8),
+    (171, "UI - Quest Completed", "Sound/Interface/QuestCompleted.wav", 3, False, 0.8),
     (172, "Spell - Bind", "Sound/Spells/Bind/Bind.wav", 0, True, 0.95),
 ]
 
