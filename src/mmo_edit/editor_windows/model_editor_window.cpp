@@ -19,6 +19,7 @@
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/material_layer.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
@@ -387,7 +388,7 @@ namespace mmo
 		}
 
 		/// Mirrors the client's ApplyItemDisplay (game_client/item_display_applier.cpp) for the
-		/// editor's proto types: sub entity visibility, material overrides and attached meshes.
+		/// editor's proto types: sub entity visibility, material overrides and layers and attached meshes.
 		void ApplyItemDisplays()
 		{
 			if (!m_entity || !m_currentEntry)
@@ -446,6 +447,14 @@ namespace mmo
 							{
 								subEntity->SetMaterial(material);
 							}
+						}
+					}
+
+					for (const auto& layer : variant.material_layers())
+					{
+						if (MaterialPtr material = MaterialManager::Get().Load(layer.material()))
+						{
+							ApplyMaterialLayer(*m_entity, layer.sub_entity(), layer.layer(), material);
 						}
 					}
 
