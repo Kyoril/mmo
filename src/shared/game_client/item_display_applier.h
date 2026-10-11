@@ -49,7 +49,7 @@ namespace mmo
 	void ApplyItemBoneTransform(TagPoint* tagPoint, const proto_client::ItemDisplayBoneAttachment& bone);
 
 	/// Applies the visual effects of a single item display entry to a character entity: sub entity
-	/// visibility changes, sub entity material overrides and attached meshes.
+	/// visibility changes, sub entity material overrides, material layers and attached meshes.
 	/// @param scene The scene the character entity lives in. Attachment entities are created here.
 	/// @param entity The character entity to apply the display data to.
 	/// @param modelDisplayId The display id of the character model. Variants are filtered by it: a

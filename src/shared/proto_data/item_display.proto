@@ -25,6 +25,18 @@ message ItemDisplayBoneAttachment {
 	optional float scale_z = 11 [default = 1.0];
 }
 
+message ItemDisplayMaterialLayer {
+	// Sub entity whose current material receives the layer.
+	required string sub_entity = 1;
+
+	// Layer slot in the sub entity's material, e.g. "Legs". Each parameter P of the source
+	// material is written to the target's parameter "<layer>_P".
+	required string layer = 2;
+
+	// Material (instance) providing the layer's parameters.
+	required string material = 3;
+}
+
 message ItemDisplayVariant {
 	required uint32 model = 1;
 
@@ -45,6 +57,10 @@ message ItemDisplayVariant {
 	optional ItemDisplayBoneAttachment attached_bone_sheath = 9;
 	
 	map<string, string> material_overrides = 10;
+
+	// Composited onto layer slots of the existing material instead of replacing it, so the
+	// skin chosen by character customization shows wherever the layer is transparent.
+	repeated ItemDisplayMaterialLayer material_layers = 11;
 }
 
 message ItemDisplayEntry {

@@ -8,6 +8,7 @@
 #include "game_server/loot_instance.h"
 #include "game_server/world/world_instance.h"
 #include "base/linear_set.h"
+#include "base/random.h"
 #include "game/quest.h"
 #include <vector>
 
@@ -86,6 +87,10 @@ namespace mmo
 		/// Changes the creatures entry index. Remember, that the creature always has to
 		/// have a valid base entry.
 		void SetEntry(const proto::UnitEntry& entry);
+
+		/// Picks the display id a new spawn of the given entry uses. Units always use the male
+		/// model unless random_gender is set and a female model exists; then it is a 50/50 roll.
+		static uint32 RollDisplayId(const proto::UnitEntry& entry, RandomnessGenerator& generator);
 
 		/// Updates the creatures loot recipient. Values of 0 mean no recipient.
 		void AddLootRecipient(uint64 guid);
