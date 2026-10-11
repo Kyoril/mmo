@@ -1,5 +1,5 @@
 -- e2e-class: 4
--- e2e-own-character: qct
+-- e2e-own-character: qc
 -- e2e-timeout: 150
 --
 -- Quick Cut (spell 163) is the Scout's off-global-cooldown filler: it does not trigger or respect
