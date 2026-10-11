@@ -647,6 +647,21 @@ namespace mmo
 
 				ImGui::EndCombo();
 			}
+
+			bool randomGender = currentEntry.random_gender();
+			if (ImGui::Checkbox("Random Gender", &randomGender))
+			{
+				currentEntry.set_random_gender(randomGender);
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Each spawn picks the male or female model at random (50/50).\nWhen off, the unit always spawns with the male model.");
+			}
+			if (randomGender && femaleModelEntry == nullptr)
+			{
+				ImGui::SameLine();
+				ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "No female model set - always male");
+			}
 		}
 
 		if (const auto section = ScopedEditorSection("Movement", ImGuiTreeNodeFlags_None))
