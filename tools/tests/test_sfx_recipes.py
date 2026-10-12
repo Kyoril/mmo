@@ -193,8 +193,10 @@ class CreatureCombatRecipeTest(unittest.TestCase):
     def test_npc_grunts_stay_wordless(self):
         # Effort and pain repeat dozens of times per fight; words wear out at that rate.
         for path, _, model, text in creature_combat.NPC_CLIPS:
-            if "_Effort_" in path or "_Pain_" in path:
-                self.assertEqual(model, creature_combat.MODEL_GRUNT, path)
+            if "_Effort_" in path or "_Pain_" in path or "_Aggro_" in path:
+                if "_Aggro_" not in path:
+                    self.assertEqual(model, creature_combat.MODEL_GRUNT, path)
+                text = re.sub(r"\[[^\]]*\]", "", text)
                 self.assertEqual(len(text.split()), 1, f"{path}: '{text}' is not a single grunt")
 
 

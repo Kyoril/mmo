@@ -24,10 +24,11 @@ shape of its call, and explicitly exclude music, speech and other sounds.
   for *your* hit landing.
 * *Death* is the reward. It is allowed the longest tail of the set.
 
-**Human NPCs speak, but barely.** The same reasoning as :mod:`combat_voice`: effort and pain
+**Human NPCs do not speak.** The same reasoning as :mod:`combat_voice`: effort and pain
 lines repeat dozens of times per fight, so they stay non-verbal and phonetically spelled.
-Only aggro -- rare, once per pull -- carries words, and those are generic enough for a bandit,
-a guard and a cultist alike, because models 3 and 4 are shared by all of them.
+Aggro is a surprised exclamation ("Ey!") and never a sentence: the first pass had "You'll
+regret that!" and the user rejected it -- a sentence is dialogue, and every bandit, guard and
+cultist sharing models 3 and 4 would say the same one.
 
 **Casting.** Male NPC = Brian, already the voice of every model-4 townsman's gossip lines, so
 the man you talked to in town sounds like himself when he fights. Female NPC = a new voice,
@@ -61,22 +62,28 @@ _ONLY = ("Fantasy MMO creature vocalisation, close and present, punchy and clear
 # creature -> event -> spec. Aggro sits hottest so a pull cuts through a fight already in
 # progress; attack and pain are the frequent ones and sit a little lower.
 CREATURES = {
+    # Second pass. The first boar set read as a cartoon creature (rejected by the user), so
+    # these describe a real hog's voice -- a farm pig recorded up close -- and the specific
+    # sound it makes, rather than an "angry wild boar" the model has to invent.
     "Boar": {
         "Aggro": CreatureSound(
-            f"An angry wild boar spotting an intruder: a sharp aggressive snort, then a loud "
-            f"rising squealing grunt of challenge as it gets ready to charge. {_ONLY}",
-            1.6, -3.0),
+            f"A real wild hog alarmed: a loud explosive huff through the snout, then a few "
+            f"deep rapid aggressive pig grunts. Natural animal recording of a large pig up "
+            f"close, gritty and throaty. {_ONLY}",
+            1.4, -3.0),
         "Attack": CreatureSound(
-            f"A wild boar lunging to gore with its tusks: one short explosive grunt-snort "
-            f"full of effort and aggression. {_ONLY}",
-            0.8, -5.0),
+            f"A real large pig ramming forward: one short deep forceful grunt through the "
+            f"snout, throaty and heavy. Natural animal recording up close. {_ONLY}",
+            0.6, -5.0),
         "Pain": CreatureSound(
-            f"A wild boar struck hard and hurt: one short sharp pained squeal-grunt. {_ONLY}",
-            0.8, -4.0),
+            f"A real pig startled by a hit: one short sharp high squeal that cuts off "
+            f"quickly. Natural farm animal recording up close. {_ONLY}",
+            0.6, -4.0),
         "Death": CreatureSound(
-            f"A wild boar dying: a long agonised squeal that breaks and fades into a final "
-            f"weak grunt and a last rattling breath. {_ONLY}",
-            2.2, -3.0),
+            f"A real large pig collapsing: a strained squeal that drops into low "
+            f"faltering grunts and a final heavy exhale through the snout. Natural animal "
+            f"recording up close. {_ONLY}",
+            1.8, -3.0),
     },
     "Rat": {
         "Aggro": CreatureSound(
@@ -133,9 +140,9 @@ FEMALE = "Voice/Npc/Human/Female/Combat/"
 # (locale relative path, voice key, model, spoken line)
 NPC_CLIPS = [
     # ------------------------------------------------------------------- male: aggro
-    (MALE + "NpcHumanMale_Aggro_01.wav", "brian", MODEL_EXPRESSIVE, "[shouting] Hey! You there!"),
-    (MALE + "NpcHumanMale_Aggro_02.wav", "brian", MODEL_EXPRESSIVE, "[angry] You'll regret that!"),
-    (MALE + "NpcHumanMale_Aggro_03.wav", "brian", MODEL_EXPRESSIVE, "[shouting] Come on, then!"),
+    (MALE + "NpcHumanMale_Aggro_01.wav", "brian", MODEL_EXPRESSIVE, "[surprised] Ey!"),
+    (MALE + "NpcHumanMale_Aggro_02.wav", "brian", MODEL_EXPRESSIVE, "[startled] Hm?!"),
+    (MALE + "NpcHumanMale_Aggro_03.wav", "brian", MODEL_EXPRESSIVE, "[angry] Hah!"),
     # ------------------------------------------------------------------ male: effort
     (MALE + "NpcHumanMale_Effort_01.wav", "brian", MODEL_GRUNT, "Hah!"),
     (MALE + "NpcHumanMale_Effort_02.wav", "brian", MODEL_GRUNT, "Hrrgh!"),
@@ -149,9 +156,9 @@ NPC_CLIPS = [
     (MALE + "NpcHumanMale_Death_02.wav", "brian", MODEL_EXPRESSIVE, "[groaning] Nnngh... no..."),
     (MALE + "NpcHumanMale_Death_03.wav", "brian", MODEL_EXPRESSIVE, "[pained gasp] Uhhh..."),
     # ----------------------------------------------------------------- female: aggro
-    (FEMALE + "NpcHumanFemale_Aggro_01.wav", "sarah", MODEL_EXPRESSIVE, "[shouting] Hey! You there!"),
-    (FEMALE + "NpcHumanFemale_Aggro_02.wav", "sarah", MODEL_EXPRESSIVE, "[angry] You'll regret that!"),
-    (FEMALE + "NpcHumanFemale_Aggro_03.wav", "sarah", MODEL_EXPRESSIVE, "[shouting] Come on, then!"),
+    (FEMALE + "NpcHumanFemale_Aggro_01.wav", "sarah", MODEL_EXPRESSIVE, "[surprised] Ey!"),
+    (FEMALE + "NpcHumanFemale_Aggro_02.wav", "sarah", MODEL_EXPRESSIVE, "[startled] Hm?!"),
+    (FEMALE + "NpcHumanFemale_Aggro_03.wav", "sarah", MODEL_EXPRESSIVE, "[angry] Hah!"),
     # ---------------------------------------------------------------- female: effort
     (FEMALE + "NpcHumanFemale_Effort_01.wav", "sarah", MODEL_GRUNT, "Hah!"),
     (FEMALE + "NpcHumanFemale_Effort_02.wav", "sarah", MODEL_GRUNT, "Hnngh!"),
