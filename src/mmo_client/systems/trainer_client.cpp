@@ -2,6 +2,7 @@
 #include "trainer_client.h"
 
 #include "frame_ui/frame_mgr.h"
+#include "game/talent_rank_gate.h"
 #include "game/vendor.h"
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
@@ -9,9 +10,10 @@
 
 namespace mmo
 {
-	TrainerClient::TrainerClient(RealmConnector& connector, const proto_client::SpellManager& spells)
+	TrainerClient::TrainerClient(RealmConnector& connector, const proto_client::SpellManager& spells, const proto_client::TalentManager& talents)
 		: m_realmConnector(connector)
 		, m_spells(spells)
+		, m_talents(talents)
 	{
 	}
 
@@ -88,10 +90,52 @@ namespace mmo
 			return;
 		}
 
+		// Follow-up ranks of a talent spell need the talent; the trainer list shows them locked.
+		if (!HasRequiredTalent(index))
+		{
+			return;
+		}
+
 		// TODO: Skill requirements checks
 
 		// Send buy packet
 		m_realmConnector.TrainerBuySpell(m_trainerGuid, m_trainerSpells[index].spell->id());
+	}
+
+	const proto_client::TalentEntry* TrainerClient::GetRequiredTalent(const uint32 index) const
+	{
+		if (index >= m_trainerSpells.size() || m_trainerSpells[index].spell == nullptr)
+		{
+			return nullptr;
+		}
+
+		return FindGatingTalent(*m_trainerSpells[index].spell, m_spells, m_talents);
+	}
+
+	bool TrainerClient::HasRequiredTalent(const uint32 index) const
+	{
+		const proto_client::TalentEntry* talent = GetRequiredTalent(index);
+		if (talent == nullptr)
+		{
+			return true;
+		}
+
+		const std::shared_ptr<GamePlayerC>& player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return false;
+		}
+
+		// A talent is learned when the player knows any of its rank spells (as TalentClient does).
+		for (const uint32 rankSpellId : talent->ranks())
+		{
+			if (player->HasSpell(rankSpellId))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	void TrainerClient::OnSpellLearned(const uint32 spellId)
