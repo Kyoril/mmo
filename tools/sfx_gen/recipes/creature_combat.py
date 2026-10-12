@@ -140,7 +140,7 @@ FEMALE = "Voice/Npc/Human/Female/Combat/"
 # (locale relative path, voice key, model, spoken line)
 NPC_CLIPS = [
     # ------------------------------------------------------------------- male: aggro
-    (MALE + "NpcHumanMale_Aggro_01.wav", "brian", MODEL_EXPRESSIVE, "[surprised] Ey!"),
+    (MALE + "NpcHumanMale_Aggro_01.wav", "brian", MODEL_EXPRESSIVE, "[angry] [shouting] Ey!"),
     (MALE + "NpcHumanMale_Aggro_02.wav", "brian", MODEL_EXPRESSIVE, "[startled] Hm?!"),
     (MALE + "NpcHumanMale_Aggro_03.wav", "brian", MODEL_EXPRESSIVE, "[angry] Hah!"),
     # ------------------------------------------------------------------ male: effort
@@ -156,7 +156,7 @@ NPC_CLIPS = [
     (MALE + "NpcHumanMale_Death_02.wav", "brian", MODEL_EXPRESSIVE, "[groaning] Nnngh... no..."),
     (MALE + "NpcHumanMale_Death_03.wav", "brian", MODEL_EXPRESSIVE, "[pained gasp] Uhhh..."),
     # ----------------------------------------------------------------- female: aggro
-    (FEMALE + "NpcHumanFemale_Aggro_01.wav", "sarah", MODEL_EXPRESSIVE, "[surprised] Ey!"),
+    (FEMALE + "NpcHumanFemale_Aggro_01.wav", "sarah", MODEL_EXPRESSIVE, "[angry] [shouting] Ey!"),
     (FEMALE + "NpcHumanFemale_Aggro_02.wav", "sarah", MODEL_EXPRESSIVE, "[startled] Hm?!"),
     (FEMALE + "NpcHumanFemale_Aggro_03.wav", "sarah", MODEL_EXPRESSIVE, "[angry] Hah!"),
     # ---------------------------------------------------------------- female: effort
