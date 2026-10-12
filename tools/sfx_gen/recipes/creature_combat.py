@@ -218,8 +218,11 @@ NPC_CLIPS = [
     (MALE + "NpcHumanMale_Pain_03.wav", "brian", MODEL_GRUNT, "Hnngh!"),
     # ------------------------------------------------------------------- male: death
     (MALE + "NpcHumanMale_Death_01.wav", "brian", MODEL_EXPRESSIVE, "[pained] Aaargh... [dying gasp]"),
-    (MALE + "NpcHumanMale_Death_02.wav", "brian", MODEL_EXPRESSIVE, "[groaning] Nnngh... no..."),
-    (MALE + "NpcHumanMale_Death_03.wav", "brian", MODEL_EXPRESSIVE, "[pained gasp] Uhhh..."),
+    # Death 02/03 were recast after the user heard them: "no..." and a soft "Uhhh..." sounded
+    # horribly wrong. Dying cries stay wordless. Male 03 keeps only the first half of its take
+    # (cut at 50%, 150 ms fade): the rattle's second half dragged on.
+    (MALE + "NpcHumanMale_Death_02.wav", "brian", MODEL_EXPRESSIVE, "[pained] Urrgh... [dying gasp]"),
+    (MALE + "NpcHumanMale_Death_03.wav", "brian", MODEL_EXPRESSIVE, "[choking] Hhkk... ahh... [dying gasp]"),
     # ----------------------------------------------------------------- female: aggro
     (FEMALE + "NpcHumanFemale_Aggro_01.wav", "sarah", MODEL_EXPRESSIVE, "[angry] [shouting] Ey!"),
     (FEMALE + "NpcHumanFemale_Aggro_02.wav", "sarah", MODEL_EXPRESSIVE, "[startled] Hm?!"),
@@ -236,8 +239,8 @@ NPC_CLIPS = [
     (FEMALE + "NpcHumanFemale_Pain_03.wav", "sarah", MODEL_GRUNT, "Hnk!"),
     # ----------------------------------------------------------------- female: death
     (FEMALE + "NpcHumanFemale_Death_01.wav", "sarah", MODEL_EXPRESSIVE, "[pained] Aaah... [dying gasp]"),
-    (FEMALE + "NpcHumanFemale_Death_02.wav", "sarah", MODEL_EXPRESSIVE, "[groaning] Nnh... no..."),
-    (FEMALE + "NpcHumanFemale_Death_03.wav", "sarah", MODEL_EXPRESSIVE, "[pained gasp] Uhhh..."),
+    (FEMALE + "NpcHumanFemale_Death_02.wav", "sarah", MODEL_EXPRESSIVE, "[pained] Aaah... [dying gasp]"),
+    (FEMALE + "NpcHumanFemale_Death_03.wav", "sarah", MODEL_EXPRESSIVE, "[choking] Hhkk... ahh... [dying gasp]"),
 ]
 
 # Takes generated per line; the best one is kept.
