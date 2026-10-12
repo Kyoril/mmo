@@ -655,8 +655,16 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 	return inventory_change_failure::InternalBagError;
 }	InventoryChangeFailure Inventory::CanStoreItems(const proto::ItemEntry &entry, uint16 amount) const
 	{
-		// Delegate to ValidateItemLimits which does the same checks
-		return ValidateItemLimits(entry, amount == 0 ? 1 : amount);
+		// Same checks CreateItems performs, so that a successful answer here means CreateItems cannot fail
+		// for lack of space (stackable items may already fill every stack and slot).
+		const uint16 count = (amount == 0 ? 1 : amount);
+		if (const auto result = ValidateItemLimits(entry, count); result != inventory_change_failure::Okay)
+		{
+			return result;
+		}
+
+		ItemSlotInfo slotInfo;
+		return FindAvailableSlots(entry, count, slotInfo);
 	}
 
 	uint16 Inventory::GetItemCount(const uint32 itemId) const noexcept
