@@ -70,14 +70,14 @@ spell 180.
 - Trainer 1 (mage class trainer): add spell 1427, `reqlevel = 6`, `spellcost = 450` (same as
   Frostbolt rank 2).
 
-### Expected result (simulation, level-6 fire mage, all attribute points in Intellect)
+### Measured result (simulation on the applied data, level-6 fire mage, all attribute points in Intellect, 2000 fights each)
 
 | Opponent | Today | Retune, Fireball rank 1 | Retune, Fireball rank 2 |
 |---|---|---|---|
-| Kingsroad Cutthroat L7 | 2% win | 99% / 33% HP left | 100% / 53% |
-| Roadside Marauder L7 | 0% | 58% / 18% | ~97% / ~30% |
-| Mire Prowler L8 | 5% | 87% / 22% | 100% / ~45% |
-| Mirewater Poacher L8 | 0% | 25% / 12% | ~85% / ~19% |
+| Kingsroad Cutthroat L7 | 2% win | 99% / 33% HP left | 100% / 54% |
+| Roadside Marauder L7 | 0% | 57% / 17% | 99.5% / 37% |
+| Mire Prowler L8 | 5% | 86% / 22% | 100% / 48% |
+| Mirewater Poacher L8 | 0% | 23% / 13% | 93% / 24% |
 
 Fire with rank 2 lands on par with a frost mage using Frostbolt rank 2 without talents.
 
