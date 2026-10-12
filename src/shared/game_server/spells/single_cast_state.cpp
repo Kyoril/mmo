@@ -7,6 +7,7 @@
 #include "game_server/objects/game_world_object_s.h"
 #include "game_server/spells/no_cast_state.h"
 #include "game_server/spells/spell_effects.h"
+#include "game_server/spells/spell_interrupt_rules.h"
 
 #include "base/utilities.h"
 #include "game_server/world/world_instance.h"
@@ -74,7 +75,10 @@ namespace mmo
 			auto& executer = m_cast.GetExecuter();
 			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
 				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
-			m_activationResult = spell_cast_result::FailedError;
+			// Report the reason validation gave, so the caller can react to it: creature AI walks
+			// towards a victim it lost line of sight to only when told so. Validation paths that
+			// end without naming a reason still report a generic error.
+			m_activationResult = (m_endCastFailure != spell_cast_result::CastOkay) ? m_endCastFailure : spell_cast_result::FailedError;
 			m_hasFinished = true;
 			NotifyCastEnded(false);
 			return;
@@ -312,6 +316,11 @@ namespace mmo
 		if (reason != spell_interrupt_flags::Any &&
 			reason != spell_interrupt_flags::Interrupt &&
 			(m_spell.interruptflags() & reason) == 0)
+		{
+			return;
+		}
+
+		if (reason == spell_interrupt_flags::Interrupt && IsUninterruptible(m_spell))
 		{
 			return;
 		}
@@ -1182,6 +1191,10 @@ namespace mmo
 		}
 
 		auto& container = (m_targetAuraContainers[targetGuid] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, duration, m_itemGuid));
+		if (m_target.HasUnitTarget())
+		{
+			container->SetSpellTargetGuid(m_target.GetUnitTarget());
+		}
 		return *container;
 	}
 
@@ -1189,6 +1202,11 @@ namespace mmo
 	{
 		auto& executer = m_cast.GetExecuter();
 		auto* worldInstance = m_context.GetWorldInstance();
+
+		if (result != spell_cast_result::CastOkay)
+		{
+			m_endCastFailure = result;
+		}
 
 		NotifyCastEnded(result == spell_cast_result::CastOkay);
 

@@ -99,6 +99,12 @@ namespace mmo
 		return m_audio.GetSoundLength(sound);
 	}
 
+	bool SoundEntryPlayer::IsEntry3D(const uint32 soundId) const
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		return entry && entry->is_3d();
+	}
+
 	float SoundEntryPlayer::GetEntryVolume(const uint32 soundId) const
 	{
 		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);

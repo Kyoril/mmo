@@ -80,7 +80,8 @@ Prerequisites:
 - `MMO_BUG_API_KEY` and `MMO_E2E_MYSQL_PASSWORD` as user environment variables, and
   `MMO_GATE_PYTHON` (the registration warns without it and falls back to `python` on PATH).
 - A configured main build (`<main checkout>/build`) with `protoc` for the game-data decoder.
-- Git push access to origin (ssh) and HTTPS access to the data submodule remotes.
+- Git push access to origin (ssh) and HTTPS push access to the data submodule repositories on
+  GitHub (the URLs in `.gitmodules`; Git Credential Manager must hold a token).
 
 Where the loop keeps its files is per machine, never in the repository:
 
@@ -175,6 +176,19 @@ not parked (see below). The loop consumes decisions before it does anything else
   the bug ("the circuit breaker is tripped"); decide again once it is cleared. Only the
   nightly freeze window queues the ship until the window ends; a second ship decision for a
   queued bug only adds a note.
+
+  Every ship (auto or decided) lands in the same order: each changed data submodule commit is
+  pushed, fast-forward only, to `master` of the submodule's repository on GitHub (the remote
+  `upstream` in the loop worktree's submodule, set on every prepare from the URL in the
+  committed `.gitmodules`), then `develop` is pushed to origin. Develop therefore never points at
+  a data commit GitHub does not have, and a rejected submodule push stops the ship before
+  develop moves. The URL never comes from the main checkout's `.git/config`, which may point a
+  submodule at the main checkout's own `data/client` (a non-bare repository with `master`
+  checked out: pushes there are refused, and nothing downstream fetches from it). The main
+  checkout's submodules are not updated; see Known limits. Because they can lag behind, a
+  `git submodule update` in the loop worktree that fails (a fresh worktree cloned its
+  submodules from the main checkout: "not our ref") fetches the `.gitmodules` remote and retries
+  once.
 - **Discard**: sets the bug to `wontfix` and deletes the branch.
 - **Implement as feature** (Feature request panel, only for `wontfix`/`not_a_bug` and
   `triaged`/`design_request` without a pending decision): the maintainer's description (at
@@ -342,8 +356,10 @@ hold set on top of the loop's own trip also ends the exemption.
   numeric), so item text fixes still work.
 - A fix in `data/client` or `data/editor` ships only if the submodule's `master` on GitHub has
   not moved past the commit the fix started from; otherwise it parks.
-- After an auto-ship, the local `develop` in `H:/mmo` is behind `origin/develop`. Pull before
-  pushing your own work.
+- After an auto-ship, the local `develop` in `H:/mmo` is behind `origin/develop`, and so is the
+  `master` of its data submodules. Pull before pushing your own work (`git pull` then
+  `git -C data/client pull` / `git -C data/editor pull`, or `git submodule update`). The loop
+  never writes into the main checkout's submodules.
 - After changing `prompts/triage.md`, run `tools/bugs/adversarial_check.py` (real model calls).
 
 ### What the guard cannot see

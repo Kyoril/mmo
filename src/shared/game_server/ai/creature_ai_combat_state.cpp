@@ -96,6 +96,8 @@ namespace mmo
 
 		// Initialize state
 		m_stuckCounter = 0;
+		m_unreachable.Reset();
+		m_unreachableVictim = 0;
 		m_movementState.Reset();
 		m_lastSpellCastTime = 0;
 
@@ -714,6 +716,12 @@ namespace mmo
 		const Vector3 currentLoc = mover.GetCurrentLocation();
 		const bool inAttackRange = target.GetSquaredDistanceTo(currentLoc, false) <= attackRangeSq;
 
+		if (m_unreachableVictim != target.GetGuid())
+		{
+			m_unreachable.Reset();
+			m_unreachableVictim = target.GetGuid();
+		}
+
 		// Collect the other units attacking the same target. They drive both the formation
 		// slotting (how many of us there are) and the reactive separation (where they stand).
 		std::vector<GameUnitS*> siblingAttackers;
@@ -765,7 +773,18 @@ namespace mmo
 			// between creatures here in exchange for stable, predictable positioning. De-stacking
 			// still happens naturally while creatures are *approaching* (the separation pass above
 			// only changes where an out-of-range creature stops).
+			m_unreachable.Update(false, GetAsyncTimeMs());
 			return true;
+		}
+		else if (m_unreachable.ShouldEvade(GetAsyncTimeMs()))
+		{
+			// The victim stands where our paths do not lead and has done so for a while: we
+			// would only wait at the edge of our area. Evade instead. Unlike leashing (m_canReset,
+			// off in instances), this applies everywhere: a boss that can be fought from where it
+			// cannot follow is an exploit in a dungeon as much as outside.
+			DLOG("Creature 0x" << std::hex << controlled.GetGuid() << std::dec << " cannot reach its victim, evading");
+			GetAI().Reset();
+			return false;
 		}
 		else if (!ShouldMoveToTarget(target))
 		{
@@ -793,6 +812,9 @@ namespace mmo
 			// recalculation gating still measures "how far has the target moved since we planned".
 			m_movementState.UpdateTarget(target.GetPosition(), attackRange);
 			m_stuckCounter = 0;
+
+			// A partial path is still a started move; note whether it actually gets us to the victim
+			m_unreachable.Update(UnreachableTargetTracker::EndsShortOfVictim(mover.GetTarget(), slotPosition, acceptance, target.GetPosition(), attackRange), GetAsyncTimeMs());
 			return true;
 		}
 
@@ -1058,9 +1080,19 @@ namespace mmo
 			return;
 		}
 
-		// Melee units: chase the target
+		// Melee units use their spells between swings (SelectBestSpell checks cooldown, power and
+		// range, so this only fires once a spell is ready and the victim is within its reach) and
+		// otherwise chase the target to keep the auto attack going.
 		if (!m_isCasting)
 		{
+			if (const CreatureSpell* bestSpell = SelectBestSpell(*victim))
+			{
+				if (CastSpell(*bestSpell, *victim))
+				{
+					return;
+				}
+			}
+
 			ChaseTarget(*victim);
 		}
 	}
@@ -1630,13 +1662,15 @@ namespace mmo
 		case CombatBehavior::Caster:
 		case CombatBehavior::Ranged:
 			{
-				const float minRangeSq = CASTER_MIN_RANGE * CASTER_MIN_RANGE;
-				const float maxRangeSq = CASTER_OPTIMAL_RANGE * CASTER_OPTIMAL_RANGE;
+				float minRange = 0.0f, optimalRange = 0.0f;
+				GetCasterRangeBand(minRange, optimalRange);
+				const float minRangeSq = minRange * minRange;
+				const float maxRangeSq = optimalRange * optimalRange;
 				const bool inRange = distanceSq >= minRangeSq && distanceSq <= maxRangeSq;
 				if (inRange)
 				{
 					const float distance = std::sqrt(distanceSq);
-					const float acceptanceRadius = CASTER_OPTIMAL_RANGE;
+					const float acceptanceRadius = optimalRange;
 					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
 						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
 				}
@@ -1645,6 +1679,24 @@ namespace mmo
 		}
 		
 		return false;
+	}
+
+	void CreatureAICombatState::GetCasterRangeBand(float& minRange, float& optimalRange) const
+	{
+		// A caster closes in to where its longest-reaching spell can be cast, but never stands
+		// farther off than CASTER_OPTIMAL_RANGE. Without this a caster whose spells reach less
+		// than CASTER_OPTIMAL_RANGE stood still out of range of all of them, doing nothing.
+		float longest = 0.0f;
+		for (const auto& creatureSpell : m_availableSpells)
+		{
+			longest = std::max(longest, creatureSpell.maxRange);
+		}
+
+		optimalRange = longest > 0.0f ? std::min(CASTER_OPTIMAL_RANGE, longest) : CASTER_OPTIMAL_RANGE;
+
+		// Backing off only makes sense up to half of that band, or the retreat would leave the
+		// caster's own reach.
+		minRange = std::min(CASTER_MIN_RANGE, optimalRange * 0.5f);
 	}
 
 	bool CreatureAICombatState::IsTargetInAnySpellRange(const GameUnitS& target) const
@@ -1715,8 +1767,10 @@ namespace mmo
 		case CombatBehavior::Caster:
 		case CombatBehavior::Ranged:
 			{
-				const float minRangeSq = CASTER_MIN_RANGE * CASTER_MIN_RANGE;
-				const float optimalRangeSq = CASTER_OPTIMAL_RANGE * CASTER_OPTIMAL_RANGE;
+				float minRange = 0.0f, optimalRange = 0.0f;
+				GetCasterRangeBand(minRange, optimalRange);
+				const float minRangeSq = minRange * minRange;
+				const float optimalRangeSq = optimalRange * optimalRange;
 
 				// If too close, move away
 				if (currentDistanceSq < minRangeSq)
@@ -1725,15 +1779,15 @@ namespace mmo
 					const Vector3 targetPos = target.GetPosition();
 					const Vector3 ourPos = currentPos;
 					const Vector3 direction = (ourPos - targetPos).NormalizedCopy();
-					Vector3 retreatPos = targetPos + direction * CASTER_OPTIMAL_RANGE;
+					Vector3 retreatPos = targetPos + direction * optimalRange;
 
 					// Apply separation logic to avoid stacking with nearby creatures
 					retreatPos = separationManager.AdjustTargetForSeparation(controlled, retreatPos, threatTargets);
 
-					const float retreatEngagementRange = CASTER_MIN_RANGE * COMBAT_RANGE_FACTOR;
+					const float retreatEngagementRange = minRange * COMBAT_RANGE_FACTOR;
 					if (mover.MoveTo(retreatPos, retreatEngagementRange))
 					{
-						m_movementState.UpdateTarget(retreatPos, CASTER_OPTIMAL_RANGE);
+						m_movementState.UpdateTarget(retreatPos, optimalRange);
 						m_stuckCounter = 0;
 						return true;
 					}
@@ -1757,10 +1811,10 @@ namespace mmo
 					// Apply separation logic to avoid stacking with nearby creatures
 					targetPosition = separationManager.AdjustTargetForSeparation(controlled, targetPosition, threatTargets);
 
-					const float approachEngagementRange = CASTER_OPTIMAL_RANGE * COMBAT_RANGE_FACTOR;
+					const float approachEngagementRange = optimalRange * COMBAT_RANGE_FACTOR;
 					if (mover.MoveTo(targetPosition, approachEngagementRange))
 					{
-						m_movementState.UpdateTarget(targetPosition, CASTER_OPTIMAL_RANGE);
+						m_movementState.UpdateTarget(targetPosition, optimalRange);
 						m_stuckCounter = 0;
 						return true;
 					}

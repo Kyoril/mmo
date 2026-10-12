@@ -197,10 +197,11 @@ class EmitterSim:
             height, base_radius = p.shape_extents[1], p.shape_extents[2]
             t = self.rng.random()
             theta = self.rng.uniform(0.0, 2.0 * math.pi)
-            off = np.array([base_radius * t * math.cos(theta), height * t, base_radius * t * math.sin(theta)])
-            n = np.linalg.norm(off)
-            direction = off / n if n > 1e-3 else np.array([0.0, 1.0, 0.0])
-            return off, direction
+            # Mirrors the engine: the direction follows the cone's surface line, whatever t is.
+            line = np.array([base_radius * math.cos(theta), height, base_radius * math.sin(theta)])
+            n = np.linalg.norm(line)
+            direction = line / n if n > 1e-3 else np.array([0.0, 1.0, 0.0])
+            return line * t, direction
         return np.zeros(3), np.array([0.0, 1.0, 0.0])
 
     def _spawn_one(self):

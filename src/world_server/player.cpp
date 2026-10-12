@@ -4339,7 +4339,7 @@ namespace mmo
 				packet.Start(game::realm_client_packet::PlaySoundById);
 				packet
 					<< io::write<uint32>(soundId)
-					<< io::write<uint8>(0);
+					<< io::write<uint8>(game::play_sound_source::None);
 				packet.Finish();
 			});
 	}
@@ -4351,7 +4351,23 @@ namespace mmo
 				packet.Start(game::realm_client_packet::PlaySoundById);
 				packet
 					<< io::write<uint32>(soundId)
-					<< io::write<uint8>(1)
+					<< io::write<uint8>(game::play_sound_source::Position)
+					<< io::write<float>(position.x)
+					<< io::write<float>(position.y)
+					<< io::write<float>(position.z);
+				packet.Finish();
+			});
+	}
+
+	void Player::SendPlaySound(const uint32 soundId, const uint64 sourceGuid, const Vector3& position)
+	{
+		SendPacket([soundId, sourceGuid, &position](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::PlaySoundById);
+				packet
+					<< io::write<uint32>(soundId)
+					<< io::write<uint8>(game::play_sound_source::Unit)
+					<< io::write_packed_guid(sourceGuid)
 					<< io::write<float>(position.x)
 					<< io::write<float>(position.y)
 					<< io::write<float>(position.z);

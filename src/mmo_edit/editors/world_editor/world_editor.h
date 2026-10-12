@@ -3,6 +3,7 @@
 #pragma once
 
 #include "editors/editor_base.h"
+#include "editors/world_editor/terrain_clipboard.h"
 
 #include "math/vector3.h"
 
@@ -39,6 +40,11 @@ namespace mmo
 		void SetPendingCameraTarget(const Path& asset, const Vector3& worldLocation) override;
 
 		proto::Project& GetProject() const { return m_project; }
+
+		/// @brief The terrain region clipboard shared by every open world, so terrain can be copied
+		///        from one world and pasted into another. Empty until something was copied.
+		[[nodiscard]] std::optional<TerrainClipboard>& GetTerrainClipboard() { return m_terrainClipboard; }
+
 	protected:
 		/// @copydoc EditorBase::DrawImpl
 		void DrawImpl() override;
@@ -62,5 +68,8 @@ namespace mmo
 		/// @brief A pending camera target (asset path + world location) applied to the next matching
 		///        instance that is opened. Set via SetPendingCameraTarget.
 		std::optional<std::pair<Path, Vector3>> m_pendingCameraTarget;
+
+		/// @brief See GetTerrainClipboard.
+		std::optional<TerrainClipboard> m_terrainClipboard;
 	};
 }

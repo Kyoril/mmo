@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 #include "creature_ai_state.h"
 #include "creature_combat_script.h"
+#include "unreachable_target.h"
 #include "base/countdown.h"
 #include "objects/game_unit_s.h"
 #include "math/vector3.h"
@@ -360,6 +361,14 @@ namespace mmo
 		CombatBehavior DetermineCombatBehavior() const;
 
 		/**
+		 * @brief The distance band a caster or ranged creature keeps to its victim.
+		 * @param minRange Receives the distance below which it backs off.
+		 * @param optimalRange Receives the distance it closes in to: the reach of its longest
+		 *        spell, capped at CASTER_OPTIMAL_RANGE.
+		 */
+		void GetCasterRangeBand(float& minRange, float& optimalRange) const;
+
+		/**
 		 * @brief Checks if the creature can cast spells (has mana/power and available spells).
 		 * @return True if the creature can cast spells.
 		 */
@@ -496,6 +505,10 @@ namespace mmo
 		Countdown m_nextActionCountdown;
 		Countdown m_recalculationCountdown;
 		uint32 m_stuckCounter;
+
+		/// Victim whose chase paths end short of it, and since when (see UnreachableTargetTracker).
+		UnreachableTargetTracker m_unreachable;
+		uint64 m_unreachableVictim { 0 };
 		
 		// === Flags ===
 		bool m_isCasting;

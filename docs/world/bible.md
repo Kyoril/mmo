@@ -308,13 +308,13 @@ Open [?]:
 | Milly Goldwyn | clothier | `oakenshire_hub` | 20 | – | [C] |
 | Old Harbin | innkeeper of the Oakenshire Inn | `hub_near_old_harbin` | 27 | 10 / 10 | [C] |
 | Lina Groveroot | herbalist; robbed on the south road | `hub_near_lina_groveroot` | 26 | 9 / 9 | [C] |
-| Guard-Corporal Rowan Hale | Oakenshire Watch, west gate | `oakenshire_west_gate` | 46 | 24, 54 / 24, 54 | [C] |
+| Guard-Corporal Rowan Hale | Oakenshire Watch, west gate | `oakenshire_west_gate` | 46 | 24, 54 / 24 | [C] |
 | Gatewarden Elias Rook | Oakenshire Watch, west gate | `briarwatch_west_gate` | 47 | 25 / – | [C] |
 | Armsmaster Theobald Kerrin | runs the Westwatch Training Yard | `haven` (placeholder) | 41 | 22 / 21, 22 | [E][C] |
 | Sergeant Bram Halford | veteran; final opponent of q22 | `haven` | 43 | – | [E][C] |
 | Thalric Stonehammer | foreman and master builder of the Briarwatch camp | `briarwatch_camp` | 36 | 19, 26, 27 / 19, 25, 26, 27 | [C] |
 | Quartermaster Harlan Pike | Briarwatch supplies | `briarwatch_camp` | 53 | 28, 55 / 28, 55 | [C] |
-| Scout Mirelle Voss | Briarwatch pathfinder | `briarwatch_camp` | 52 | 29, 30, 41 / 29, 30 | [C] |
+| Scout Mirelle Voss | Briarwatch pathfinder | `briarwatch_camp` | 52 | 29, 30, 41 / 29, 30, 54 | [C] |
 | Hearthkeeper Maida Thorn | soul binder | `briarwatch_camp` | 68 | – | [C] |
 | Wayfarer Captain Aldric Vane | holds the Kingsroad Waypost | `kingsroad_waypost` | 62 | 42, 43, 44 / 41, 42, 43 | [C] |
 | Expedition Leader Maren Duskvale | leads the Mirewater expedition | `mirewater_camp` | 63 | 45–48 / 44–47 | [C] |

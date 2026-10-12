@@ -90,6 +90,11 @@ namespace mmo
         return false;
     }
 
+    bool PlatformOsX::IsAltKeyDown()
+    {
+        return ([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0;
+    }
+
     std::pair<int, int> PlatformOsX::GetPrimaryDisplayResolution()
     {
         NSRect frame = [[NSScreen mainScreen] frame];

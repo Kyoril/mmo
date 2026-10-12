@@ -223,14 +223,19 @@ jobs:
 
       # Claude Code writes the notes with the maintainer's subscription token (`claude setup-token`,
       # repository secret CLAUDE_CODE_OAUTH_TOKEN); no paid API key. Never fails the release:
-      # without Claude, or without the data names, the notes fall back to the commit subjects
-      # (tools/release/patch_notes.py).
+      # without Claude, or without the data names, the notes fall back to a generic line
+      # (tools/release/patch_notes.py never shows commit subjects to players).
       - name: Write patch notes
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           python3 -m pip install --quiet grpcio-tools || echo "grpcio-tools unavailable; notes without data names"
-          npm install --global --silent @anthropic-ai/claude-code || echo "claude CLI unavailable; fallback notes"
+          # sudo: the global prefix of the runner's node is not writable. The CLI must be reachable
+          # afterwards, otherwise the notes silently fall back to generic text (it happened).
+          sudo npm install --global @anthropic-ai/claude-code || echo "::warning::claude CLI install failed; generic patch notes"
+          echo "$(npm prefix -g)/bin" >> "$GITHUB_PATH"
+          export PATH="$(npm prefix -g)/bin:$PATH"
+          claude --version || echo "::warning::claude CLI not runnable; generic patch notes"
           python3 tools/release/patch_notes.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
             --version "$VERSION" --out dist/patch_notes.json --markdown notes.md
 

@@ -192,7 +192,8 @@ namespace mmo
 		"Random Player",
 		"Nearest Player",
 		"Highest Threat (Tank)",
-		"All Players"
+		"All Players",
+		"Random Player (Not Victim)"
 	};
 
 	static_assert(std::size(s_actionTargetStrings) == trigger_action_target::Count_, "s_actionTargetStrings size mismatch");

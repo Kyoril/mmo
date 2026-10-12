@@ -91,6 +91,9 @@ namespace mmo
 		/// return false so the UI can render them as unusable.
 		[[nodiscard]] bool IsUsable() const;
 
+		/// Returns true if both handles refer to the same, still existing item instance.
+		[[nodiscard]] bool IsSameItem(const ItemHandle& other) const;
+
 	private:
 		[[nodiscard]] bool CheckNonNull() const;
 

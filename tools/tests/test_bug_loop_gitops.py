@@ -110,6 +110,38 @@ class GitopsTests(unittest.TestCase):
 		self.assertEqual(git(self.origin, "rev-parse", "develop"), result.commit)
 		self.assertEqual(self.wt.merged("bugfix/x"), result.commit)
 
+	def test_ship_lands_submodules_on_the_gitmodules_url_not_the_main_checkout(self):
+		# 2026-10-11: H:/mmo's .git/config points submodule.data/client.url at its own non-bare
+		# data/client (master checked out, with local commits). The loop pushed there and git
+		# refused ("branch is currently checked out", then "remote contains work that you do not
+		# have"); develop on GitHub would have referenced data commits only that checkout had.
+		local_sub = os.path.join(self.main, "data", "client")
+		git(local_sub, "checkout", "-B", "master")
+		write(os.path.join(local_sub, "local.txt"), "unpushed\n")
+		git(local_sub, "add", "-A")
+		git(local_sub, "commit", "-m", "local only")
+		local_master = git(local_sub, "rev-parse", "master")
+		git(self.main, "config", "submodule.data/client.url", local_sub)
+		# A remote left behind by a loop run before the fix must be corrected, not trusted.
+		self.wt.prepare()
+		sub_dir = self.wt.sub_path("data/client")
+		git(sub_dir, "remote", "set-url", self.wt.sub_remote, local_sub)
+
+		_, head = self.make_fix()
+		self.assertEqual(os.path.normcase(git(sub_dir, "remote", "get-url", self.wt.sub_remote)), os.path.normcase(self.sub_origin))
+		sub_head = self.wt.gitlinks(head)["data/client"]
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x (bug-loop, gate green at 1)", lambda: self.fail("no gate needed"))
+		self.assertTrue(result.ok, result.reason)
+		self.assertEqual(git(self.sub_origin, "rev-parse", "master"), sub_head)
+		self.assertEqual(git(self.origin, "rev-parse", "develop"), result.commit)
+		self.assertEqual(git(local_sub, "rev-parse", "master"), local_master)
+		self.assertEqual(git(local_sub, "symbolic-ref", "HEAD"), "refs/heads/master")
+		# The main checkout's data/client lacks the shipped data commit now; a fresh loop worktree
+		# (cloned from it through the overridden URL) must still reach origin/develop.
+		fresh = gitops.Worktree(self.main, os.path.join(self.root, "wt2"), submodules=("data/client",))
+		self.assertEqual(fresh.prepare(), result.commit)
+		self.assertEqual(git(fresh.sub_path("data/client"), "rev-parse", "HEAD"), sub_head)
+
 	def move_submodule_master(self, name, text):
 		"""Someone pushes data to the submodule's master without bumping develop's pointer."""
 		write(os.path.join(self.sub_seed, name), text)

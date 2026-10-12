@@ -1411,7 +1411,10 @@ namespace mmo
                 center /= static_cast<float>(info.vertexCount);
             }
 
-            Quaternion rotation(info.rotation[0], info.rotation[1], info.rotation[2], info.rotation[3]);
+            // Written as x, y, z, w (see Serialize); the constructor takes w first. Reading it in file
+            // order turned every portal's rotation into a different one on each load and save -
+            // invisible for axis-aligned rectangles, which map onto themselves, but not for others.
+            Quaternion rotation(info.rotation[3], info.rotation[0], info.rotation[1], info.rotation[2]);
             portal.SetTransform(center, rotation, Vector3::UnitScale);
             portal.SetDimensions(info.width, info.height);
         }

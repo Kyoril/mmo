@@ -30,5 +30,9 @@ namespace mmo
 	private:
 
 		scoped_connection m_onHomeReached;
+
+		/// How far from home a path home may end before the creature is teleported home instead:
+		/// spawn points sit up to about a unit off the navigation mesh.
+		static constexpr float HomeArrivalTolerance = 2.0f;
 	};
 }

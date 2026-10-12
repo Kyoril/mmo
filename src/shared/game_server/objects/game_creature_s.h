@@ -8,6 +8,7 @@
 #include "game_server/loot_instance.h"
 #include "game_server/world/world_instance.h"
 #include "base/linear_set.h"
+#include "base/random.h"
 #include "game/quest.h"
 #include <vector>
 
@@ -87,6 +88,10 @@ namespace mmo
 		/// have a valid base entry.
 		void SetEntry(const proto::UnitEntry& entry);
 
+		/// Picks the display id a new spawn of the given entry uses. Units always use the male
+		/// model unless random_gender is set and a female model exists; then it is a 50/50 roll.
+		static uint32 RollDisplayId(const proto::UnitEntry& entry, RandomnessGenerator& generator);
+
 		/// Updates the creatures loot recipient. Values of 0 mean no recipient.
 		void AddLootRecipient(uint64 guid);
 
@@ -98,6 +103,13 @@ namespace mmo
 
 		/// Determines whether this creature is tagged by a player or group.
 		bool IsTagged() const { return !m_lootRecipients.empty(); }
+
+		/// Whether killing this creature rewards anyone: experience, class experience, quest kill
+		/// credit or loot. False for summoned creatures, so a boss's adds cannot be farmed.
+		bool GrantsKillRewards() const { return m_grantsKillRewards; }
+
+		/// Turns kill rewards off (or back on). Called for every summoned creature.
+		void SetGrantsKillRewards(const bool grants) { m_grantsKillRewards = grants; }
 
 		void SetHealthPercent(float percent);
 
@@ -293,6 +305,7 @@ namespace mmo
 		/// Distance in world units kept to the followed unit.
 		float m_followDistance = 2.5f;
 		LootRecipients m_lootRecipients;
+		bool m_grantsKillRewards = true;
 		float m_healthPercent = 1.0f;
 		bool m_combatMovementEnabled = true;
 		/// Per-spawn additional triggers — appended to the template's trigger list at runtime.

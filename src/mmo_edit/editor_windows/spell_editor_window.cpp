@@ -1472,6 +1472,14 @@ namespace mmo
 						"'Not Seated' interrupt flag and so need a seated state to break out of.");
 				}
 
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Cannot Be Interrupted", spell_attributes_b::CannotBeInterrupted);
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Interrupt effects (kicks) cannot stop a cast or channel of this spell.\n"
+						"For boss abilities answered by positioning, such as a telegraphed cleave.");
+				}
+
 				ImGui::EndTable();
 			}
 

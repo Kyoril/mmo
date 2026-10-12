@@ -5,29 +5,14 @@
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
 
+#include <cstring>
+#include <iterator>
+
 namespace mmo
 {
-	const char* ItemInfo::GetItemClassName() const
+	namespace
 	{
-		// TODO: Resolve item class name
-		return nullptr;
-	}
-
-	const char* ItemInfo::GetItemSubClassName() const
-	{
-		// TODO: Resolve item subclass name
-		return nullptr;
-	}
-
-	uint32 ItemInfo::GetProficiency() const
-	{
-		// Return the required proficiency ID (0 means no proficiency required)
-		return requiredProficiency;
-	}
-
-	const char* ItemInfo::GetItemInventoryTypeName() const
-	{
-		static const char* s_inventoryTypeStrings[] = {
+		const char* s_inventoryTypeStrings[] = {
 			"NON_EQUIP",
 			"HEAD",
 			"NECK",
@@ -60,7 +45,128 @@ namespace mmo
 		};
 
 		static_assert(std::size(s_inventoryTypeStrings) == inventory_type::Count_, "InventoryType strings mismatch");
+	}
 
+	inventory_type::Type GetInventoryTypeByName(const char* name)
+	{
+		if (name == nullptr)
+		{
+			return inventory_type::NonEquip;
+		}
+
+		for (int32 type = 0; type < inventory_type::Count_; ++type)
+		{
+			if (std::strcmp(s_inventoryTypeStrings[type], name) == 0)
+			{
+				return static_cast<inventory_type::Type>(type);
+			}
+		}
+
+		return inventory_type::NonEquip;
+	}
+
+	int32 GetComparisonEquipmentSlot(const inventory_type::Type type, const uint32 index)
+	{
+		// Mirrors the slot rules of the server's EquipmentManager::ValidateSlotCompatibility.
+		int32 slots[2] = { -1, -1 };
+
+		switch (type)
+		{
+		case inventory_type::Head:
+			slots[0] = player_equipment_slots::Head;
+			break;
+		case inventory_type::Neck:
+			slots[0] = player_equipment_slots::Neck;
+			break;
+		case inventory_type::Shoulders:
+			slots[0] = player_equipment_slots::Shoulders;
+			break;
+		case inventory_type::Body:
+			slots[0] = player_equipment_slots::Body;
+			break;
+		case inventory_type::Chest:
+		case inventory_type::Robe:
+			slots[0] = player_equipment_slots::Chest;
+			break;
+		case inventory_type::Waist:
+			slots[0] = player_equipment_slots::Waist;
+			break;
+		case inventory_type::Legs:
+			slots[0] = player_equipment_slots::Legs;
+			break;
+		case inventory_type::Feet:
+			slots[0] = player_equipment_slots::Feet;
+			break;
+		case inventory_type::Wrists:
+			slots[0] = player_equipment_slots::Wrists;
+			break;
+		case inventory_type::Hands:
+			slots[0] = player_equipment_slots::Hands;
+			break;
+		case inventory_type::Finger:
+			slots[0] = player_equipment_slots::Finger1;
+			slots[1] = player_equipment_slots::Finger2;
+			break;
+		case inventory_type::Trinket:
+			slots[0] = player_equipment_slots::Trinket1;
+			slots[1] = player_equipment_slots::Trinket2;
+			break;
+		case inventory_type::Cloak:
+			slots[0] = player_equipment_slots::Back;
+			break;
+		case inventory_type::Weapon:
+			slots[0] = player_equipment_slots::Mainhand;
+			slots[1] = player_equipment_slots::Offhand;
+			break;
+		case inventory_type::TwoHandedWeapon:
+		case inventory_type::MainHandWeapon:
+			slots[0] = player_equipment_slots::Mainhand;
+			break;
+		case inventory_type::OffHandWeapon:
+		case inventory_type::Shield:
+		case inventory_type::Holdable:
+			slots[0] = player_equipment_slots::Offhand;
+			break;
+		case inventory_type::Ranged:
+		case inventory_type::Thrown:
+		case inventory_type::RangedRight:
+			slots[0] = player_equipment_slots::Ranged;
+			break;
+		case inventory_type::Tabard:
+			slots[0] = player_equipment_slots::Tabard;
+			break;
+		default:
+			break;
+		}
+
+		if (index >= std::size(slots))
+		{
+			return -1;
+		}
+
+		return slots[index];
+	}
+
+	const char* ItemInfo::GetItemClassName() const
+	{
+		// TODO: Resolve item class name
+		return nullptr;
+	}
+
+	const char* ItemInfo::GetItemSubClassName() const
+	{
+		// TODO: Resolve item subclass name
+		return nullptr;
+	}
+
+	uint32 ItemInfo::GetProficiency() const
+	{
+		// Return the required proficiency ID (0 means no proficiency required)
+		return requiredProficiency;
+	}
+
+	const char* ItemInfo::GetItemInventoryTypeName() const
+	{
 		ASSERT(inventoryType < inventory_type::Count_);
 		return s_inventoryTypeStrings[inventoryType];
 	}

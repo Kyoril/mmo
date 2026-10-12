@@ -12,6 +12,7 @@
 
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
+#include "editors/mesh_editor/mesh_collision_geometry.h"
 #include "base/chunk_writer.h"
 #include "frame_ui/color.h"
 #include "graphics/graphics_device.h"
@@ -143,7 +144,18 @@ namespace mmo
 	bool FbxImport::SaveMeshFile(const String& filename, const Path& assetPath) const
 	{
 		const std::filesystem::path p = (assetPath / filename).string() + ".hmsh";
-		
+
+		// Re-importing over an existing mesh keeps its authored collision: read the editor-only
+		// recipe before the file is replaced and rebake it against the new geometry.
+		CollisionRecipe recipe;
+		collision_recipe_read::Type recipeResult = collision_recipe_read::Absent;
+		const bool keepRecipe = LoadMeshCollisionRecipe(p.string(), recipe, recipeResult) && recipeResult == collision_recipe_read::Read;
+		if (keepRecipe)
+		{
+			RebuildMeshCollision(*m_mesh, recipe);
+			ILOG("Kept the collision recipe of " << p << " (" << recipe.shapes.size() << " shapes) and rebuilt its collision");
+		}
+
 		// Create the file name
 		const auto filePtr = AssetRegistry::CreateNewFile(p.string());
 		if (filePtr == nullptr)
@@ -157,7 +169,7 @@ namespace mmo
 		io::Writer writer{ sink };
 
 		MeshSerializer serializer;
-		serializer.Serialize(m_mesh, writer);
+		serializer.Serialize(m_mesh, writer, mesh_version::Latest, keepRecipe ? &recipe : nullptr);
 
 		return true;
 	}

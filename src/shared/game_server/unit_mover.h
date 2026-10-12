@@ -66,6 +66,13 @@ namespace mmo
 		/// Stops the current movement if any.
 		void StopMovement();
 
+		/// Puts the unit at a position on its map at once, ending any movement, and tells the
+		/// clients that see it. For units that have to get somewhere their paths do not lead.
+		/// Does not fire targetReached.
+		/// @param position Where the unit goes.
+		/// @param facing The unit's facing there.
+		void Teleport(const Vector3& position, const Radian& facing);
+
 		const Vector3& GetTarget() const
 		{
 			return m_target;

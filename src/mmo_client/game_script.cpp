@@ -1030,6 +1030,7 @@ namespace mmo
 							   .def("GetStartQuestId", &ItemHandle::GetStartQuestId)
 							   .def("IsBound", &ItemHandle::IsBound)
 							   .def("IsUsable", &ItemHandle::IsUsable)
+							   .def("IsSameItem", &ItemHandle::IsSameItem)
 							   .def("GetRequiredLevel", &ItemHandle::GetRequiredLevel)),
 
 						   luabind::scope(
@@ -1297,6 +1298,7 @@ namespace mmo
 					   luabind::def("print", &Script_Print),
 
 					   luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),
+					   luabind::def("IsAltKeyDown", Platform::IsAltKeyDown),
 
 					   luabind::def("UnitExists", &Script_UnitExists),
 					   luabind::def("IsMouseoverWorldObject", &Script_IsMouseoverWorldObject),
@@ -1370,6 +1372,18 @@ namespace mmo
 				}
 
 				return std::make_shared<ItemHandle>(*item, m_project); }),
+
+					   // Inventory slot id of an equipment slot an item of the given inventory type is compared
+					   // against (rings, trinkets and one-handed weapons have two, index 0 and 1), or -1.
+					   luabind::def<std::function<int32(const char *, uint32)>>("GetComparisonInventorySlot", [](const char *inventoryType, uint32 index)
+																			   {
+				const int32 equipmentSlot = GetComparisonEquipmentSlot(GetInventoryTypeByName(inventoryType), index);
+				if (equipmentSlot < 0)
+				{
+					return -1;
+				}
+
+				return static_cast<int32>((player_inventory_slots::Bag_0 << 8) | equipmentSlot); }),
 
 					   luabind::def("GetTime", &GetAsyncTimeMs),
 

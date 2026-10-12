@@ -8,6 +8,8 @@
 
 #include "spell_cast_context.h"
 #include "game/damage_school.h"
+#include "math/radian.h"
+#include "math/vector3.h"
 
 namespace mmo
 {
@@ -47,6 +49,18 @@ namespace mmo
 		/// SingleCastState::MarkAffectedTarget.
 		std::function<void(GameObjectS&)> markAffectedTarget;
 	};
+
+	/// Distance from the caster at which a Summon effect without a radius places its creatures.
+	constexpr float DefaultSummonDistance = 3.0f;
+
+	/// Positions for a Summon effect: count points spread evenly on a circle around the caster,
+	/// the first one on the caster's right. Two summons therefore stand on opposite sides.
+	/// @param origin The caster's position; the summons share its height.
+	/// @param facing The caster's facing.
+	/// @param count Number of creatures to place.
+	/// @param distance Radius of the circle.
+	/// @return One position per creature.
+	std::vector<Vector3> SummonPositions(const Vector3& origin, const Radian& facing, int32 count, float distance);
 
 	namespace SpellEffects
 	{

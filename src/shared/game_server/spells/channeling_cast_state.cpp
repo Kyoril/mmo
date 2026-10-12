@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "channeling_cast_state.h"
+#include "spell_interrupt_rules.h"
 
 #include "game_server/objects/game_unit_s.h"
 #include "game_server/spells/no_cast_state.h"
@@ -106,6 +107,11 @@ namespace mmo
 			return;
 		}
 
+		if (reason == spell_interrupt_flags::Interrupt && IsUninterruptible(m_spell))
+		{
+			return;
+		}
+
 		// Apply the interrupt lockout cooldown to the channeled spell so it cannot be
 		// recast immediately after being interrupted (mirrors SingleCastState::StopCast).
 		if (interruptCooldown > 0)
@@ -152,6 +158,15 @@ namespace mmo
 		m_countdown.Cancel();
 
 		SendChannelEnded();
+
+		// A channel's work runs through the aura it put on its caster (a periodic trigger, as in
+		// Fire Barrage or Dirge of the Grave). That aura lasts as long as the full channel, so an
+		// interrupted channel kept ticking to the end unless the aura is taken away here.
+		if (!succeeded)
+		{
+			GameUnitS& executer = m_cast.GetExecuter();
+			executer.RemoveAllAurasFromCaster(executer.GetGuid(), m_spell.id());
+		}
 
 		// Fire ended signal exactly once. Transition to NoCastState first, then
 		// release m_selfHold — the SetState call may drop external references so

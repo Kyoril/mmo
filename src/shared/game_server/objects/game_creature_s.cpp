@@ -132,7 +132,7 @@ namespace mmo
 		
 		Set<uint32>(object_fields::Entry, m_entry->id());
 		Set<float>(object_fields::Scale, m_entry->scale());
-		Set<uint32>(object_fields::DisplayId, m_entry->malemodel());	// TODO: gender roll
+		Set<uint32>(object_fields::DisplayId, RollDisplayId(*m_entry, randomGenerator));
 		Set<uint32>(object_fields::FactionTemplate, m_entry->factiontemplate());
 
 		// Creatures get their own base run speed (independent of the player default) so
@@ -161,6 +161,17 @@ namespace mmo
 		{
 			AddVariable(variable);
 		}
+	}
+
+	uint32 GameCreatureS::RollDisplayId(const proto::UnitEntry& entry, RandomnessGenerator& generator)
+	{
+		if (!entry.random_gender() || entry.femalemodel() == 0)
+		{
+			return entry.malemodel();
+		}
+
+		std::uniform_int_distribution genderDist(0, 1);
+		return genderDist(generator) == 0 ? entry.malemodel() : entry.femalemodel();
 	}
 
 	void GameCreatureS::AddLootRecipient(uint64 guid)

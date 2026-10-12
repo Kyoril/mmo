@@ -11,6 +11,9 @@
 
 #include <algorithm>
 #include <array>
+#include <map>
+#include <memory>
+#include <optional>
 #include <sstream>
 #include <imgui_internal.h>
 
@@ -26,6 +29,7 @@
 #include "scene_graph/scene_node.h"
 #include "scene_graph/world_model_serializer.h"
 #include "scene_graph/world_model_instance.h"
+#include "scene_graph/world_model_rooms.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
 #include "editors/world_editor/world_editor_instance.h"
@@ -53,6 +57,94 @@ namespace mmo
 		Quaternion rotation;
 		Vector3 scale;
 	};
+
+	namespace
+	{
+		/// Mesh bounds from the mesh manager, each mesh loaded once per lookup.
+		WorldModelMeshBoundsLookup MakeMeshManagerBoundsLookup()
+		{
+			auto cache = std::make_shared<std::map<String, std::optional<AABB>>>();
+			return [cache](const String& meshPath) -> const AABB*
+			{
+				auto it = cache->find(meshPath);
+				if (it == cache->end())
+				{
+					const MeshPtr mesh = MeshManager::Get().Load(meshPath);
+					it = cache->emplace(meshPath, mesh ? std::optional<AABB>(mesh->GetBounds()) : std::nullopt).first;
+					if (!mesh)
+					{
+						WLOG("Room volumes: cannot load mesh " << meshPath);
+					}
+				}
+				return it->second ? &*it->second : nullptr;
+			};
+		}
+
+		String FormatGroupList(const WorldModel& model, const std::vector<int32>& groups)
+		{
+			if (groups.empty())
+			{
+				return "none";
+			}
+
+			String text;
+			for (const int32 group : groups)
+			{
+				if (!text.empty())
+				{
+					text += ", ";
+				}
+				const String& name = model.GetGroup(group)->GetName();
+				text += name.empty() ? "#" + std::to_string(group) : name;
+			}
+			return text;
+		}
+
+		/// One report line per portal that is not fine (or one line saying all are); logs them as well.
+		std::vector<std::pair<String, bool>> DescribePortalFindings(const WorldModel& model, const std::vector<PortalLinkFinding>& findings, const bool fixed)
+		{
+			std::vector<std::pair<String, bool>> lines;
+			for (const PortalLinkFinding& finding : findings)
+			{
+				const String portal = "Portal " + std::to_string(finding.portalIndex) + ": ";
+				switch (finding.result)
+				{
+				case PortalLinkFinding::Result::Ok:
+					break;
+				case PortalLinkFinding::Result::Relinked:
+					{
+						std::vector<int32> sides{ finding.frontGroups.front(), finding.backGroups.front() };
+						std::sort(sides.begin(), sides.end());
+						lines.emplace_back(portal + "links " + FormatGroupList(model, finding.linkedGroups) + " but lies between "
+							+ FormatGroupList(model, sides) + (fixed ? " - relinked" : " - mislinked"), !fixed);
+					}
+					break;
+				case PortalLinkFinding::Result::Undecided:
+					lines.emplace_back(portal + "rooms in front: " + FormatGroupList(model, finding.frontGroups) + ", behind: "
+						+ FormatGroupList(model, finding.backGroups) + " - cannot tell which rooms it joins, links kept", true);
+					break;
+				}
+			}
+
+			if (lines.empty())
+			{
+				lines.emplace_back("All " + std::to_string(findings.size()) + " portals link the rooms on their sides.", false);
+			}
+
+			for (const auto& [text, warning] : lines)
+			{
+				if (warning)
+				{
+					WLOG(text);
+				}
+				else
+				{
+					ILOG(text);
+				}
+			}
+			return lines;
+		}
+	}
 
 	WorldModelEditorInstance::WorldModelEditorInstance(EditorHost& host, WorldModelEditor& editor, Path asset)
 		: EditorInstance(host, std::move(asset))
@@ -919,6 +1011,10 @@ namespace mmo
 				// Update the 3D visualization for containment volumes
 				UpdateContainmentVolumeVisualizations(groupIndex);
 			};
+			propCallbacks.onDeriveContainmentVolumes = [this](int32 groupIndex)
+			{
+				DeriveContainmentVolumes(groupIndex);
+			};
 
 			DrawPropertiesPanel(m_worldModel.get(), selectionState, propCallbacks);
 		}
@@ -1042,6 +1138,8 @@ namespace mmo
 					}
 					ImGui::Unindent();
 				}
+
+				DrawRoomsSection();
 			}
 		}
 		ImGui::End();
@@ -1616,6 +1714,161 @@ namespace mmo
 
 		ILOG("Successfully saved world model file " << GetAssetPath());
 		return true;
+	}
+
+	bool WorldModelEditorInstance::DeriveRoomsInFile(const String& assetPath)
+	{
+		WorldModel model;
+		{
+			const std::unique_ptr<std::istream> stream = AssetRegistry::OpenFile(assetPath);
+			if (!stream)
+			{
+				ELOG("Derive rooms: cannot open " << assetPath);
+				return false;
+			}
+
+			io::StreamSource source{ *stream };
+			io::Reader reader{ source };
+			WorldModelDeserializer deserializer(model);
+			if (!deserializer.Read(reader))
+			{
+				ELOG("Derive rooms: cannot read " << assetPath);
+				return false;
+			}
+		}
+
+		const size_t derived = DeriveAllRoomVolumes(model, MakeMeshManagerBoundsLookup());
+		ILOG("Derived room volumes for " << derived << " of " << model.GetGroupCount() << " groups of " << assetPath);
+		DescribePortalFindings(model, mmo::CheckPortalLinks(model, true), true);
+
+		// As Save() does
+		model.RecalculateBoundingBox();
+		const std::unique_ptr<std::ostream> out = AssetRegistry::CreateNewFile(assetPath);
+		if (!out)
+		{
+			ELOG("Derive rooms: cannot write " << assetPath);
+			return false;
+		}
+
+		io::StreamSink sink{ *out };
+		io::Writer writer{ sink };
+		WorldModelSerializer serializer;
+		serializer.Serialize(model, writer);
+		sink.Flush();
+
+		ILOG("Saved " << assetPath);
+		return true;
+	}
+
+	void WorldModelEditorInstance::DeriveContainmentVolumes(const int32 groupIndex)
+	{
+		if (!m_worldModel)
+		{
+			return;
+		}
+
+		m_roomsReport.clear();
+		m_portalLinksFixable = false;
+		const WorldModelMeshBoundsLookup meshBounds = MakeMeshManagerBoundsLookup();
+
+		for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+		{
+			if (groupIndex >= 0 && static_cast<size_t>(groupIndex) != i)
+			{
+				continue;
+			}
+
+			WorldModelGroup* group = m_worldModel->GetGroup(i);
+			std::vector<ContainmentVolume> volumes = DeriveRoomVolumes(*group, meshBounds);
+			const String name = group->GetName().empty() ? "#" + std::to_string(i) : group->GetName();
+			if (volumes.empty())
+			{
+				m_roomsReport.push_back({ name + ": no floor, platform or stair pieces - volumes kept", true });
+				continue;
+			}
+
+			m_roomsReport.push_back({ name + ": " + std::to_string(volumes.size()) + " volume(s) from its floors", false });
+			group->GetContainmentVolumes() = std::move(volumes);
+			UpdateContainmentVolumeVisualizations(static_cast<int32>(i));
+		}
+
+		for (const RoomsReportLine& line : m_roomsReport)
+		{
+			ILOG(line.text);
+		}
+	}
+
+	void WorldModelEditorInstance::CheckPortalLinks(const bool fix)
+	{
+		if (!m_worldModel)
+		{
+			return;
+		}
+
+		const std::vector<PortalLinkFinding> findings = mmo::CheckPortalLinks(*m_worldModel, fix);
+
+		m_roomsReport.clear();
+		for (auto& [text, warning] : DescribePortalFindings(*m_worldModel, findings, fix))
+		{
+			m_roomsReport.push_back({ std::move(text), warning });
+		}
+
+		m_portalLinksFixable = !fix && std::any_of(findings.begin(), findings.end(),
+			[](const PortalLinkFinding& finding) { return finding.result == PortalLinkFinding::Result::Relinked; });
+
+		if (fix)
+		{
+			UpdatePortalVisualizations();
+		}
+	}
+
+	void WorldModelEditorInstance::DrawRoomsSection()
+	{
+		ImGui::Separator();
+		ImGui::Text("Rooms");
+
+		if (ImGui::Button("Derive Room Volumes"))
+		{
+			DeriveContainmentVolumes(-1);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Replace every group's containment volumes with boxes over its floor, platform and stair pieces.\n"
+				"Portal culling finds the camera's room with these. Without them it uses the group bounds, which overlap\n"
+				"between neighbouring rooms and can hide the room the camera is in. Redo after moving floors.");
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Check Portal Links"))
+		{
+			CheckPortalLinks(false);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Check that every portal links the two rooms on its sides (found with the containment volumes).");
+		}
+
+		if (m_portalLinksFixable)
+		{
+			ImGui::SameLine();
+			if (ImGui::Button("Fix Portal Links"))
+			{
+				CheckPortalLinks(true);
+			}
+		}
+
+		for (const RoomsReportLine& line : m_roomsReport)
+		{
+			if (line.warning)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.3f, 1.0f));
+			}
+			ImGui::TextWrapped("%s", line.text.c_str());
+			if (line.warning)
+			{
+				ImGui::PopStyleColor();
+			}
+		}
 	}
 
 	void WorldModelEditorInstance::UpdateDebugAABB(const AABB& aabb)
@@ -3605,180 +3858,11 @@ namespace mmo
 		// Build debug info
 		std::ostringstream debugStream;
 		debugStream << "Groups: " << m_worldModel->GetGroupCount() << ", Portals: " << m_worldModel->GetPortals().size() << "\n";
+		debugStream << "Camera group: " << currentGroupIndex << "\n";
 
-		// Determine which groups are visible through portal culling
+		// The same culling the game runs, so the preview shows what players will see
 		std::vector<int32> visibleGroups;
-		std::vector<bool> visitedGroups(m_worldModel->GetGroupCount(), false);
-		
-		if (currentGroupIndex < 0)
-		{
-			// Camera is not in any group - show all exterior groups and any
-			// interior groups whose bounding box is visible in the camera frustum
-			std::vector<int32> groupsToProcess;
-			
-			int exteriorCount = 0;
-			int visibleBBoxCount = 0;
-			for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
-			{
-				const auto* group = m_worldModel->GetGroup(i);
-				if (group)
-				{
-					// Always include exterior groups
-					if (group->IsExterior())
-					{
-						exteriorCount++;
-						visibleGroups.push_back(static_cast<int32>(i));
-						visitedGroups[i] = true;
-						groupsToProcess.push_back(static_cast<int32>(i));
-					}
-					// Also include any group whose bounding box is visible in the frustum
-					else if (m_camera->IsVisible(group->GetBoundingBox()))
-					{
-						visibleBBoxCount++;
-						visibleGroups.push_back(static_cast<int32>(i));
-						visitedGroups[i] = true;
-						groupsToProcess.push_back(static_cast<int32>(i));
-					}
-				}
-			}
-			debugStream << "Outside: " << exteriorCount << " exterior, " << visibleBBoxCount << " bbox visible\n";
-			
-			// Now traverse through portals from visible groups to find more visible groups
-			while (!groupsToProcess.empty())
-			{
-				int32 groupIndex = groupsToProcess.back();
-				groupsToProcess.pop_back();
-
-				if (groupIndex < 0 || groupIndex >= static_cast<int32>(visitedGroups.size()))
-				{
-					continue;
-				}
-
-				// Get connected groups through portals
-				const auto* group = m_worldModel->GetGroup(groupIndex);
-				if (!group)
-				{
-					continue;
-				}
-
-				for (const auto& portalRef : group->GetPortalRefs())
-				{
-					int32 targetGroup = portalRef.groupIndex;
-					if (targetGroup >= 0 && targetGroup < static_cast<int32>(visitedGroups.size()) && !visitedGroups[targetGroup])
-					{
-						// Check if the portal is active
-						if (portalRef.portalIndex < m_worldModel->GetPortals().size())
-						{
-							const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
-							if (portal && portal->IsActive())
-							{
-								// For editor preview, show connected groups if the portal is visible
-								// OR if the target group's bounding box is visible
-								AABB portalBBox = portal->GetWorldBounds();
-								const auto* targetGroupPtr = m_worldModel->GetGroup(targetGroup);
-								
-								bool portalVisible = !portalBBox.IsNull() && m_camera->IsVisible(portalBBox);
-								bool targetVisible = targetGroupPtr && m_camera->IsVisible(targetGroupPtr->GetBoundingBox());
-								
-								if (portalVisible || targetVisible)
-								{
-									visitedGroups[targetGroup] = true;
-									visibleGroups.push_back(targetGroup);
-									groupsToProcess.push_back(targetGroup);
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		else
-		{
-			// Perform portal-based visibility culling from inside a group using frustum narrowing
-			const auto* currentGroup = m_worldModel->GetGroup(currentGroupIndex);
-			if (currentGroup)
-			{
-				debugStream << "Inside group " << currentGroupIndex << ": " << currentGroup->GetPortalRefs().size() << " portal refs\\n";
-			}
-
-			// Create initial frustum from camera
-			PortalFrustum cameraFrustum = PortalFrustum::FromCamera(*m_camera);
-
-			// Use a stack-based approach with frustum tracking for proper portal culling
-			struct CullEntry
-			{
-				int32 groupIndex;
-				PortalFrustum frustum;
-			};
-			
-			std::vector<CullEntry> groupsToProcess;
-			groupsToProcess.push_back({currentGroupIndex, cameraFrustum});
-
-			while (!groupsToProcess.empty())
-			{
-				CullEntry entry = groupsToProcess.back();
-				groupsToProcess.pop_back();
-
-				if (entry.groupIndex < 0 || entry.groupIndex >= static_cast<int32>(visitedGroups.size()))
-				{
-					continue;
-				}
-
-				if (visitedGroups[entry.groupIndex])
-				{
-					continue;
-				}
-
-				visitedGroups[entry.groupIndex] = true;
-				visibleGroups.push_back(entry.groupIndex);
-
-				// Get connected groups through portals
-				const auto* group = m_worldModel->GetGroup(entry.groupIndex);
-				if (!group)
-				{
-					continue;
-				}
-
-				for (const auto& portalRef : group->GetPortalRefs())
-				{
-					int32 targetGroup = portalRef.groupIndex;
-					if (targetGroup >= 0 && targetGroup < static_cast<int32>(visitedGroups.size()) && !visitedGroups[targetGroup])
-					{
-						// Check if the portal is active
-						if (portalRef.portalIndex < m_worldModel->GetPortals().size())
-						{
-							const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
-							if (portal && portal->IsActive())
-							{
-								// Get portal vertices in world space
-								std::vector<Vector3> portalVertices = portal->GetWorldVertices();
-
-								// Check if portal is visible through the current (possibly narrowed) frustum
-								bool portalVisible = !portalVertices.empty() && entry.frustum.IsPortalVisible(portalVertices);
-								
-								debugStream << "  Portal " << portalRef.portalIndex << " -> grp " << targetGroup 
-								           << " (pVis:" << portalVisible << ")\\n";
-								
-								if (portalVisible)
-								{
-									// Create a narrowed frustum through this portal
-									PortalFrustum narrowedFrustum = entry.frustum.ClipThroughPortal(portalVertices);
-									groupsToProcess.push_back({targetGroup, narrowedFrustum});
-								}
-							}
-							else
-							{
-								debugStream << "  Portal " << portalRef.portalIndex << " inactive\\n";
-							}
-						}
-						else
-						{
-							debugStream << "  Invalid portal index: " << portalRef.portalIndex << "\\n";
-						}
-					}
-				}
-			}
-		}
+		CollectVisiblePortalGroups(*m_worldModel, Matrix4::Identity, PortalFrustum::FromCamera(*m_camera), visibleGroups);
 
 		debugStream << "Visible: " << visibleGroups.size() << "/" << m_worldModel->GetGroupCount() << " groups";
 		m_portalCullingDebugInfo = debugStream.str();

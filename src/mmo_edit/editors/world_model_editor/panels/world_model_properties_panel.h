@@ -114,6 +114,10 @@ namespace mmo
 		/// @brief Called when containment volumes are modified for a group.
 		/// @param groupIndex The group index whose containment volumes were changed.
 		std::function<void(int32)> onUpdateContainmentVolumes;
+
+		/// @brief Called to replace a group's containment volumes with ones derived from its floor pieces.
+		/// @param groupIndex The group index.
+		std::function<void(int32)> onDeriveContainmentVolumes;
 	};
 
 	/// @brief Draws the properties panel UI.

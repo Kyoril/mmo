@@ -76,11 +76,13 @@ namespace mmo
 		/// @return A pointer to the target game object.
 		GameObjectS* GetActionTarget(const proto::TriggerAction& action, TriggerContext& context);
 
-		/// Plays a sound entry.
-		/// @param sound The ID of the sound to play.
+		/// Plays a sound entry from a game object for every player in its world instance within range,
+		/// dead or alive. The clients play it from the object and keep it attached while it moves.
+		/// @param sound The ID of the sound to play. 0 plays nothing.
 		/// @param source The source game object for the sound.
-		/// @return True if the sound was played successfully, false otherwise.
-		bool PlaySoundEntry(uint32 sound, GameObjectS* source);
+		/// @param range Players further away than this from the source do not hear it.
+		/// @return True if the sound was sent, false if there was nothing to play or nobody to hear it.
+		bool PlaySoundEntry(uint32 sound, GameObjectS* source, float range);
 
 	private:
 		// Action handlers

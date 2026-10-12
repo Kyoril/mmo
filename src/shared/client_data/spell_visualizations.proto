@@ -16,6 +16,11 @@ enum SpellVisualEvent
     // A channeled spell is being channeled: from ChannelStart until the channel ends
     // (ChannelUpdate with no time left). Looping kits here hold until then.
     CHANNELING = 9;
+    // A spell zone (PersistentAreaAura) lies on the ground: from SpellZoneStart until it ends.
+    // Kits play at the zone's position, not on a unit; looping kits hold until then.
+    GROUND_ACTIVE = 10;
+    // A spell zone ran its full duration (its detonation). One-shot kits at the zone's position.
+    GROUND_EXPIRED = 11;
 }
 
 // Scope defines which actor(s) the kit applies to
