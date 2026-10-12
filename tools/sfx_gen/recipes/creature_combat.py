@@ -143,6 +143,8 @@ NPC_CLIPS = [
     (MALE + "NpcHumanMale_Aggro_01.wav", "brian", MODEL_EXPRESSIVE, "[angry] [shouting] Ey!"),
     (MALE + "NpcHumanMale_Aggro_02.wav", "brian", MODEL_EXPRESSIVE, "[startled] Hm?!"),
     (MALE + "NpcHumanMale_Aggro_03.wav", "brian", MODEL_EXPRESSIVE, "[angry] Hah!"),
+    # A second take of the "Ey!" line; the user kept two of its four takes.
+    (MALE + "NpcHumanMale_Aggro_04.wav", "brian", MODEL_EXPRESSIVE, "[angry] [shouting] Ey!"),
     # ------------------------------------------------------------------ male: effort
     (MALE + "NpcHumanMale_Effort_01.wav", "brian", MODEL_GRUNT, "Hah!"),
     (MALE + "NpcHumanMale_Effort_02.wav", "brian", MODEL_GRUNT, "Hrrgh!"),
@@ -159,6 +161,8 @@ NPC_CLIPS = [
     (FEMALE + "NpcHumanFemale_Aggro_01.wav", "sarah", MODEL_EXPRESSIVE, "[angry] [shouting] Ey!"),
     (FEMALE + "NpcHumanFemale_Aggro_02.wav", "sarah", MODEL_EXPRESSIVE, "[startled] Hm?!"),
     (FEMALE + "NpcHumanFemale_Aggro_03.wav", "sarah", MODEL_EXPRESSIVE, "[angry] Hah!"),
+    # A second take of the "Ey!" line; the user kept two of its four takes.
+    (FEMALE + "NpcHumanFemale_Aggro_04.wav", "sarah", MODEL_EXPRESSIVE, "[angry] [shouting] Ey!"),
     # ---------------------------------------------------------------- female: effort
     (FEMALE + "NpcHumanFemale_Effort_01.wav", "sarah", MODEL_GRUNT, "Hah!"),
     (FEMALE + "NpcHumanFemale_Effort_02.wav", "sarah", MODEL_GRUNT, "Hnngh!"),
