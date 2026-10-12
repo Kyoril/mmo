@@ -36,6 +36,19 @@ namespace mmo
 			return static_cast<int32>(std::clamp(value, Int32Min, Int32Max));
 		}
 
+		bool IsPeriodicAura(const uint32 aura)
+		{
+			return aura == aura_type::PeriodicDamage ||
+				aura == aura_type::PeriodicHeal ||
+				aura == aura_type::PeriodicTriggerSpell ||
+				aura == aura_type::PeriodicEnergize;
+		}
+
+		bool IsDirectAmountEffect(const uint32 type)
+		{
+			return type == spell_effects::SchoolDamage || type == spell_effects::Heal;
+		}
+
 		/// Mirrors the server's base point calculation (shared ScaleSpellPointsByLevel), so the
 		/// tooltip shows what a cast rolls. Works in int64 so no data can overflow it.
 		void CalculateEffectBasePoints(const proto_client::SpellEffect& effect, const proto_client::SpellEntry& spell, const int32 level, int64& minBasePoints, int64& maxBasePoints)
