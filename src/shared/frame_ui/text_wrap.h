@@ -41,6 +41,11 @@ namespace mmo
 	/// @param advanceFn Returns the pixel advance for a codepoint.
 	std::vector<TextWrapLine> ComputeLineBreaks(const std::string& text, float maxWidth, const std::function<float(uint32_t)>& advanceFn);
 
+	/// Splits a UTF-8 string into the rendered content of each visual line, using the
+	/// break rules of ComputeLineBreaks.
+	/// @param advanceFn Returns the pixel advance for a codepoint.
+	std::vector<std::string> WrapTextToLines(const std::string& text, float maxWidth, const std::function<float(uint32_t)>& advanceFn);
+
 	/// Maps a plain-text caret index to its visual line and column. A caret sitting
 	/// exactly on a mid-word wrap boundary belongs to the start of the next line;
 	/// a caret on a consumed separator belongs to the end of the previous line.
