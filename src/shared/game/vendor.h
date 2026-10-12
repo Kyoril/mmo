@@ -27,7 +27,10 @@ namespace mmo
 			FailedNotEnoughMoney,
 
 			/// The trainer is a class trainer for a different class than the player's active class.
-			FailedWrongClass
+			FailedWrongClass,
+
+			/// The player's profession skill is below the skill required by the trainer spell.
+			FailedSkillTooLow
 		};
 	}
 }

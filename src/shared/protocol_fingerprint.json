@@ -131,8 +131,8 @@
 		]
 	},
 	"game": {
-		"version": 20,
-		"fingerprint": "sha256:b0b9dbf55beaa8e1ef014270e2fabc14f04628aab42ad9970ce578a575467d7e",
+		"version": 21,
+		"fingerprint": "sha256:484899d79239fc5accd3ce3ea6acba168e9f86527eec09664a55427ed95cb084",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -148,7 +148,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:1e90096678f5821a73e41851cb703ab9bf9d383dab0fc34cfde45750ce2bfac0"
+			"src/shared/game_protocol/game_protocol.h": "sha256:f15f5cd35093077a700115902b60cf46740932c8a86eacf23a1a50e1e2e007f9"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -585,7 +585,7 @@
 			"game::realm_client_packet::ChatMessage = 23",
 			"game::realm_client_packet::ClassXpUpdate = 168",
 			"game::realm_client_packet::CompressedUpdateObject = 9",
-			"game::realm_client_packet::Count_ = 181",
+			"game::realm_client_packet::Count_ = 183",
 			"game::realm_client_packet::CreatureMove = 38",
 			"game::realm_client_packet::CreatureQueryResult = 42",
 			"game::realm_client_packet::DebugLineOfSightResult = 149",
@@ -734,6 +734,8 @@
 			"game::realm_client_packet::TradeRequestResult = 144",
 			"game::realm_client_packet::TradeSessionClosed = 146",
 			"game::realm_client_packet::TradeSessionOpened = 145",
+			"game::realm_client_packet::TradeSkillUpdate = 182",
+			"game::realm_client_packet::TradeSkills = 181",
 			"game::realm_client_packet::TradeUpdate = 147",
 			"game::realm_client_packet::TrainerBuyError = 80",
 			"game::realm_client_packet::TrainerBuySucceeded = 81",
