@@ -5,7 +5,7 @@ Author the Hollow Choir encounter triggers (ids 53-76) and link them to their cr
     py -3 tools/hollow_choir/author_triggers.py            # validate only
     py -3 tools/hollow_choir/author_triggers.py --apply    # write triggers.data and units.data
 
-Run after author_bosses.py, author_spells.py and author_spawns.py. Idempotent: triggers are
+Run after author_bosses.py and author_spells.py. Idempotent: triggers are
 written by id, and each creature's trigger list is replaced by the one defined here.
 
 What the triggers do and what the creature AI does on its own:

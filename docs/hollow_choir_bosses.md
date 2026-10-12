@@ -192,9 +192,10 @@ outdoor model's full shell would run through the entrance hall, hence a separate
 Copy the matching outdoor terrain over with the world editor's region copy (Terrain > Region
 works across open worlds; area IDs stay the destination's unless "Paste area IDs too" is set).
 
-`tools/hollow_choir/survey_layout.py` renders the floor plan with the walkable navmesh;
-`tools/hollow_choir/author_spawns.py` places the spawns, checks them against the navmesh and the
-spacing rule, and renders `generated/hollow_choir/spawns.png`.
+`tools/hollow_choir/survey_layout.py` renders the floor plan with the walkable navmesh (`--spawns`
+overlays map 1's spawns and their aggro circles). The spawns themselves live in map 1's data and
+are edited in the editor; the one-off script that first placed them was removed once they had been
+tuned by hand.
 
 **Portal culling.** The six groups (rooms) carry containment volumes derived from their floors;
 without them the engine placed the camera by the groups' bounding boxes, which overlap across the
