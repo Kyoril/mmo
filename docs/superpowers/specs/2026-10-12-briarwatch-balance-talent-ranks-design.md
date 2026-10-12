@@ -58,7 +58,9 @@ spell 180.
 
 ### Fireball ranks
 
-- Spell 4 (Fireball, talent): set `rank = 1`, `baseid = 4`. Values unchanged.
+- Spell 4 (Fireball, talent): unchanged, stays `rank = 0`, `baseid = 0`. It is owned by
+  `tools/talent_trees/author_talent_trees.py`, which gives single-rank talent spells no rank line
+  (guarded by `tools/tests/test_talent_trees.py`). Rank 2's `baseid = 4` alone ties it to the talent.
 - New spell 1427, "Fireball" rank 2, copied from spell 4, with:
   - `rank = 2`, `baseid = 4`; same school, `familyflags` (8), icon, visualization, range, speed,
     attributes, so the fire talents (Burning Soul, Kindled Fury, Smoldering Wounds) apply.

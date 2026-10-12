@@ -12,7 +12,8 @@ blob, exactly what mmo_edit's ExportToClient does.
 Easy to undo by accident:
 * Fireball rank 2 keeps rank 1's familyflags (8): the fire talents select spells by family flags.
 * Rank 2's baseid (4) is what ties it to the Fireball talent on server and client; without it the
-  rank would stay usable after a talent reset.
+  rank would stay usable after a talent reset. Spell 4 itself stays rank 0 / baseid 0: it belongs to
+  the talent tree script, which gives single-rank talent spells no rank line.
 """
 
 import argparse
@@ -105,12 +106,10 @@ def retune_units(units, log):
 
 
 def author_fireball(spells, log):
+    # Rank 1 is the Fireball talent spell, owned by tools/talent_trees/author_talent_trees.py, which
+    # keeps single-rank talent spells at rank 0 / baseid 0. Rank 2's baseid alone ties it to the talent.
     rank1 = by_id(spells, FIREBALL)
     assert rank1 is not None and rank1.name == "Fireball"
-    if (rank1.rank, rank1.baseid) != (1, FIREBALL):
-        log.append(f"spell {FIREBALL}: rank/baseid {rank1.rank}/{rank1.baseid} -> 1/{FIREBALL}")
-    rank1.rank = 1
-    rank1.baseid = FIREBALL
 
     rank2 = by_id(spells, FIREBALL_R2)
     if rank2 is None:
