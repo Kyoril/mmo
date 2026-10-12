@@ -2846,6 +2846,7 @@ namespace mmo
 		}
 
 		m_characterData->knownClasses = character.GetKnownClasses();
+		m_characterData->tradeSkills = character.GetTradeSkills().GetAll();
 
 		// Seed a default action bar for every class that just became known (its class-change spell was
 		// learned, or it was switched into for the first time), mirroring character creation. This is
