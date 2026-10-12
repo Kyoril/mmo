@@ -5,6 +5,9 @@
 #include "base/typedefs.h"
 
 #include <algorithm>
+#include <cctype>
+#include <string>
+#include <string_view>
 
 namespace mmo::spell_visual
 {
@@ -122,5 +125,39 @@ namespace mmo::spell_visual
 		}
 
 		return RibbonPhase::Expired;
+	}
+
+	/// \brief Height, as a fraction of the model's height, at which an effect meant for a bone
+	/// sits on a model that lacks that bone.
+	///
+	/// Kits name humanoid sockets (``spine_03``, ``head``, ``hand_r``). A creature without them
+	/// -- a scarecrow training dummy, an unrigged prop -- used to get every such effect at its
+	/// feet; this keeps a chest impact at the chest and a stun above the head.
+	/// \param bone The bone name the kit asked for.
+	inline float MissingBoneHeightFraction(const std::string_view bone)
+	{
+		std::string lower(bone);
+		std::transform(lower.begin(), lower.end(), lower.begin(), [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		const auto has = [&lower](const char* part) { return lower.find(part) != std::string::npos; };
+
+		if (has("foot") || has("toe") || has("root"))
+		{
+			return 0.0f;
+		}
+		if (has("head"))
+		{
+			return 0.9f;
+		}
+		if (has("neck"))
+		{
+			return 0.82f;
+		}
+		if (has("spine") || has("chest") || has("torso"))
+		{
+			return 0.6f;
+		}
+
+		// Hands, arms, weapons and anything unknown: about where a held weapon is.
+		return 0.5f;
 	}
 }

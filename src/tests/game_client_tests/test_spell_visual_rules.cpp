@@ -94,3 +94,16 @@ TEST_CASE("Timed ribbons emit, then fade for one segment lifetime, then expire",
 	// A broken (negative) lifetime still lets the trail retire instead of leaking.
 	CHECK(spell_visual::TimedRibbonPhase(0.25f, emit, -1.0f) == RibbonPhase::Expired);
 }
+
+TEST_CASE("Effects for a missing bone sit at that bone's rough height", "[spell_visual]")
+{
+	// Kits name humanoid sockets; a model without them used to get every effect at its feet.
+	CHECK(spell_visual::MissingBoneHeightFraction("head") > spell_visual::MissingBoneHeightFraction("spine_03"));
+	CHECK(spell_visual::MissingBoneHeightFraction("spine_03") > spell_visual::MissingBoneHeightFraction("hand_r"));
+	CHECK(spell_visual::MissingBoneHeightFraction("Spine_03") == spell_visual::MissingBoneHeightFraction("spine_03"));
+	CHECK(spell_visual::MissingBoneHeightFraction("foot_l") == 0.0f);
+	CHECK(spell_visual::MissingBoneHeightFraction("head") < 1.0f);
+
+	// Unknown names land mid-body rather than on the ground.
+	CHECK(spell_visual::MissingBoneHeightFraction("weapon_socket") == 0.5f);
+}
