@@ -318,6 +318,8 @@ namespace mmo
 		std::vector<SceneNode*> m_kitEffectNodes;
 		/// @brief Ribbon trails spawned by kits.
 		std::vector<RibbonTrail*> m_kitRibbonTrails;
+		/// @brief Kit ribbons with an emit duration and the seconds until they stop emitting.
+		std::vector<std::pair<RibbonTrail*, float>> m_kitRibbonStops;
 
 		/// @brief Tracks a fading light with current and target intensity.
 		struct FadingLight
