@@ -171,7 +171,7 @@ Floors: entrance hall and south yard y 1.2, Wake of the Dead and nave y 0.2, the
 | G1 | corridor x -32..-21, z -3..3 | seal at x -27 |
 | 03 Kirchenschiff | x -79..-32, z -12..12 | pillar rows z -6 and +6, pews x -70..-40 |
 | Sakristei | niche x -40..-34, z -24..-17 | |
-| Treppe / G2 | x -86..-79, z -6..6 | seals at x -85.5 |
+| Treppe / G2 | x -86..-79, z -6..6 | seals at x -85.5: stair z +-2.85 (overlapping), side arches z +-9 |
 | 06 Apsis | round room x -104..-85, z -12..12 | podium at the centre, passages north and south |
 | Seitenkapelle | niche x -43..-31, z 12..22 | mirror of the sacristy, lectern and candlesticks |
 | G Durchgang | x -73..-67, z 12..30, then west to the cloister wall at x -76 | nave y 1, stair z 18..24 up to y 5, door into the cloister's east walk at z 27 |
@@ -192,9 +192,10 @@ outdoor model's full shell would run through the entrance hall, hence a separate
 Copy the matching outdoor terrain over with the world editor's region copy (Terrain > Region
 works across open worlds; area IDs stay the destination's unless "Paste area IDs too" is set).
 
-`tools/hollow_choir/survey_layout.py` renders the floor plan with the walkable navmesh;
-`tools/hollow_choir/author_spawns.py` places the spawns, checks them against the navmesh and the
-spacing rule, and renders `generated/hollow_choir/spawns.png`.
+`tools/hollow_choir/survey_layout.py` renders the floor plan with the walkable navmesh (`--spawns`
+overlays map 1's spawns and their aggro circles). The spawns themselves live in map 1's data and
+are edited in the editor; the one-off script that first placed them was removed once they had been
+tuned by hand.
 
 **Portal culling.** The six groups (rooms) carry containment volumes derived from their floors;
 without them the engine placed the camera by the groups' bounding boxes, which overlap across the
@@ -259,8 +260,11 @@ Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua`, `hollow_choir_b
 - **Cramped rooms:** the apse is small for a 20-unit player aggro radius; anything in it pulls
   Veyr.
 - **Gate art:** G1 and the G2 corridor seal are Door_01 doors (object 14). The stair seals
-  G2_North/South are magic barriers (object 15, display 9: `Models/Dungeon/MagicBarrier_01.hmsh`,
-  a 3 x 5 plane with the two-sided `MagicBarrier_01.hmat`). Any door whose material has a
+  G2_North/South and the arch seals beside the stair (G2_NorthArch/SouthArch, which players
+  otherwise reach by hopping the stair railing) are magic barriers (object 15, display 9:
+  `Models/Dungeon/MagicBarrier_01.hmsh`, a single-sided 6 x 7 plane with the two-sided
+  `MagicBarrier_01.hmat`). Server line of sight tests door and barrier collision from both
+  sides, so a single-sided plane blocks aggro and assist from Veyr's side too. Any door whose material has a
   `Dissolve` scalar parameter fades out over 1.6 s on opening instead of playing an Open clip,
   and is hidden once gone (`GameWorldObjectC::ApplyDoorDissolve`); colours, opacity and pulse
   are material parameters, so variants belong in an .hmi. The sketch wants the singing to stop

@@ -32,6 +32,10 @@ TRUNCATION_MARKER = "\n... (diff truncated for the web UI)"
 MAX_REFIX = 3
 # Every feature parks for the maintainer: only a hash-bound "ship" decision merges one.
 FEATURE_REASON = "feature: shipping needs the maintainer's approval"
+# A bug the loop gave up on (needs-info) and that only the maintainer can move on: the web UI lists
+# this category, the daily summary counts it. Setting the bug back to `new` triages it again.
+NEEDS_INFO_CATEGORY = "needs_info"
+NEEDS_INFO_HINT = "; waiting for the maintainer: set the status to new to retry, or close it"
 # Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
 BUG_ID = re.compile(r"^[0-9a-f]{24}$")
 # While develop is red in CI nothing but the emergency ticket ships; everything else queues.
@@ -357,6 +361,8 @@ class BugLoop:
 				if self.state.is_feature(bug_id) and not parked:
 					# An interrupted first feature run goes back to where `implement` can be chosen again.
 					self._release(bug_id, "triaged", note + "; decide again", triage={"category": "design_request"})
+				elif not parked and bug_id != self.state.emergency_ticket():
+					self._release(bug_id, "triaged", note + NEEDS_INFO_HINT, triage={"category": NEEDS_INFO_CATEGORY})
 				else:
 					self._release(bug_id, "pr_open" if parked else "triaged", note)
 				self._finish(bug_id, "interrupted")
@@ -386,7 +392,8 @@ class BugLoop:
 	def _triage_failed(self, bug_id, error):
 		self._write(bug_id, "triage_error.txt", str(error))
 		if self.state.triage_failed(bug_id) >= 2:
-			self._update(bug_id, status="triaged", triage={"category": "needs-human"}, note="triage failed twice: " + str(error)[:500])
+			self._update(bug_id, status="triaged", triage={"category": NEEDS_INFO_CATEGORY},
+				note="triage failed twice: " + str(error)[:500] + NEEDS_INFO_HINT)
 			self._finish(bug_id, "triage-invalid", reason=str(error)[:300])
 		else:
 			self._update(bug_id, note="triage-invalid, retrying once: " + str(error)[:500])
@@ -443,13 +450,22 @@ class BugLoop:
 			verdict = self._read(bug_id, "triage.json")
 		# A guided refix that fails goes back to the maintainer, who can only decide on parked bugs;
 		# a failed feature run goes back to where `implement` can be chosen again; a failed
-		# emergency run goes back to `triaged`, where the loop retries it while attempts remain.
+		# emergency run goes back to `triaged`, where the loop retries it while attempts remain;
+		# any other failed fix goes to the maintainer's needs-info list (the loop never polls `triaged`).
 		failed_status = "pr_open" if guidance else "triaged"
 		fresh_feature = bool(feature) and not guidance
-		failed_fields = {"triage": {"category": "design_request"}} if fresh_feature else {}
-		again = "; decide again" if fresh_feature else ""
-		if emergency is not None:
+		if fresh_feature:
+			failed_fields = {"triage": {"category": "design_request"}}
+			again = "; decide again"
+		elif emergency is not None:
+			failed_fields = {}
 			again = self._retry_note()
+		elif not guidance:
+			failed_fields = {"triage": {"category": NEEDS_INFO_CATEGORY}}
+			again = NEEDS_INFO_HINT
+		else:
+			failed_fields = {}
+			again = ""
 		resume = bool(guidance) or bool(emergency and emergency.get("resume"))
 		previous = self._previous_attempt(bug_id) if resume else None
 		try:
@@ -848,7 +864,12 @@ class BugLoop:
 		except Exception:
 			self.log(traceback.format_exc())
 			waiting = None
-		self.notifier.send(notify.daily_summary(snapshot, self.config.invocation_budget_per_day, waiting))
+		try:
+			needs_info = self.api.list(status="triaged", triage_category=NEEDS_INFO_CATEGORY, limit=1).get("pagination", {}).get("total", 0)
+		except Exception:
+			self.log(traceback.format_exc())
+			needs_info = None
+		self.notifier.send(notify.daily_summary(snapshot, self.config.invocation_budget_per_day, waiting, needs_info))
 
 	def _ship_blockers(self, by_maintainer=False):
 		blockers = []

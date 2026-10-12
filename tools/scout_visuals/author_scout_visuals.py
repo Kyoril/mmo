@@ -48,23 +48,24 @@ PARTICLE_DIR = "Particles/Scout/"
 CAST, IMPACT, AURA, AURA_TICK, AURA_IDLE = "3", "4", "5", "7", "8"
 
 # --- Sound catalog -------------------------------------------------------------------------
-# id, name, files, volume, pitch_min, pitch_max. Strikes repeat constantly, so they get the
+# id, name, files, volume, pitch_min, pitch_max. Ids 210-222 (178-200 are the creature
+# combat sounds). Strikes repeat constantly, so they get the
 # widest pitch spread and sit below the big cooldowns; Quick Cut (off the GCD, spammed) is a
 # two-file shuffle bag and the quietest.
 SOUND_ENTRIES = [
-    (180, "Scout - Wounding Strike", ["WoundingStrike.wav"], 0.85, 0.94, 1.06),
-    (181, "Scout - Ruthless Strike", ["RuthlessStrike.wav"], 0.90, 0.95, 1.05),
-    (182, "Scout - Quick Cut", ["QuickCut01.wav", "QuickCut02.wav"], 0.70, 0.92, 1.08),
-    (183, "Scout - Twin Slash", ["TwinSlash.wav"], 0.85, 0.95, 1.05),
-    (184, "Scout - Knockout", ["Knockout.wav"], 0.95, 0.97, 1.03),
-    (185, "Scout - Throwing Knife Throw", ["ThrowingKnifeThrow.wav"], 0.80, 0.94, 1.06),
-    (186, "Scout - Throwing Knife Impact", ["ThrowingKnifeImpact.wav"], 0.85, 0.94, 1.06),
-    (187, "Scout - Mark Weakness", ["MarkWeakness.wav"], 0.85, 0.98, 1.02),
-    (188, "Scout - Evasive Step", ["EvasiveStep.wav"], 0.80, 0.96, 1.04),
-    (189, "Scout - Smoke and Mirrors", ["SmokeAndMirrors.wav"], 0.95, 0.98, 1.02),
-    (190, "Scout - Sprint", ["Sprint.wav"], 0.80, 0.97, 1.03),
-    (191, "Scout - Fever Pitch", ["FeverPitch.wav"], 0.90, 0.98, 1.02),
-    (192, "Scout - Steady Hand", ["SteadyHand.wav"], 0.85, 0.98, 1.02),
+    (210, "Scout - Wounding Strike", ["WoundingStrike.wav"], 0.85, 0.94, 1.06),
+    (211, "Scout - Ruthless Strike", ["RuthlessStrike.wav"], 0.90, 0.95, 1.05),
+    (212, "Scout - Quick Cut", ["QuickCut01.wav", "QuickCut02.wav"], 0.70, 0.92, 1.08),
+    (213, "Scout - Twin Slash", ["TwinSlash.wav"], 0.85, 0.95, 1.05),
+    (214, "Scout - Knockout", ["Knockout.wav"], 0.95, 0.97, 1.03),
+    (215, "Scout - Throwing Knife Throw", ["ThrowingKnifeThrow.wav"], 0.80, 0.94, 1.06),
+    (216, "Scout - Throwing Knife Impact", ["ThrowingKnifeImpact.wav"], 0.85, 0.94, 1.06),
+    (217, "Scout - Mark Weakness", ["MarkWeakness.wav"], 0.85, 0.98, 1.02),
+    (218, "Scout - Evasive Step", ["EvasiveStep.wav"], 0.80, 0.96, 1.04),
+    (219, "Scout - Smoke and Mirrors", ["SmokeAndMirrors.wav"], 0.95, 0.98, 1.02),
+    (220, "Scout - Sprint", ["Sprint.wav"], 0.80, 0.97, 1.03),
+    (221, "Scout - Fever Pitch", ["FeverPitch.wav"], 0.90, 0.98, 1.02),
+    (222, "Scout - Steady Hand", ["SteadyHand.wav"], 0.85, 0.98, 1.02),
 ]
 SND = {name[len("Scout - "):]: sid for sid, name, *_ in SOUND_ENTRIES}
 
