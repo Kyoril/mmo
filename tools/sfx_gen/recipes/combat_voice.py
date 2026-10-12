@@ -40,6 +40,13 @@ VOICES = {
 
 MODEL_ID = "eleven_multilingual_v2"
 
+# Lines whose text starts with an ``[audio tag]`` were generated with V3_MODEL_ID instead.
+# multilingual_v2 reads consonant clusters like "Hnngh!", "Tsah!" or "Hnk!" as words, and
+# the female bank shipped an "Mhhh", a flat "Zah" and a spoken "Hanka". v3 takes a
+# description of the vocalisation in the tag plus a plain interjection, and stays in the
+# same voice. Use it for any re-take of a non-verbal bark.
+V3_MODEL_ID = "eleven_v3"
+
 MALE = "Voice/Player/Human/Male/Combat/"
 FEMALE = "Voice/Player/Human/Female/Combat/"
 
@@ -70,8 +77,8 @@ CLIPS = [
     # ----------------------------------------------------- female: effort on a swing
     (FEMALE + "HumanFemale_Effort_01.wav", "laura", "Hyah!"),
     (FEMALE + "HumanFemale_Effort_02.wav", "laura", "Hah!"),
-    (FEMALE + "HumanFemale_Effort_03.wav", "laura", "Hnngh!"),
-    (FEMALE + "HumanFemale_Effort_04.wav", "laura", "Tsah!"),
+    (FEMALE + "HumanFemale_Effort_03.wav", "laura", "[exerting effort, sharp grunt while swinging a sword] Hup!"),
+    (FEMALE + "HumanFemale_Effort_04.wav", "laura", "[fierce, strained effort, short battle grunt as she strikes hard] Hah-ya!"),
 
     # ----------------------------------------------- female: effort on a critical hit
     (FEMALE + "HumanFemale_EffortCrit_01.wav", "laura", "Yaaah!"),
@@ -81,8 +88,8 @@ CLIPS = [
     # -------------------------------------------------------- female: pain when struck
     (FEMALE + "HumanFemale_Pain_01.wav", "laura", "Ugh!"),
     (FEMALE + "HumanFemale_Pain_02.wav", "laura", "Aah!"),
-    (FEMALE + "HumanFemale_Pain_03.wav", "laura", "Hnk!"),
-    (FEMALE + "HumanFemale_Pain_04.wav", "laura", "Nngh!"),
+    (FEMALE + "HumanFemale_Pain_03.wav", "laura", "[sharp cry of pain, struck by a blade] Agh!"),
+    (FEMALE + "HumanFemale_Pain_04.wav", "laura", "[winded and hurt, knocked back by a heavy blow] Oof!"),
 
     # ---------------------------------------------- female: pain from a critical hit
     (FEMALE + "HumanFemale_PainCrit_01.wav", "laura", "Aaargh!"),
