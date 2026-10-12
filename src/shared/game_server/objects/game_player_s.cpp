@@ -1059,7 +1059,10 @@ namespace mmo
 			const auto result = m_inventory.CanStoreItems(*pair.first, pair.second);
 			if (result != inventory_change_failure::Okay)
 			{
-				// inventoryChangeFailure(result, nullptr, nullptr);
+				if (m_netPlayerWatcher)
+				{
+					m_netPlayerWatcher->OnInventoryError(result);
+				}
 				return false;
 			}
 		}

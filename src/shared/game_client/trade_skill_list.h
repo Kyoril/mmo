@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "game/trade_skill.h"
+#include "game/spell.h"
 #include "client_data/project.h"
 
 #include <map>
@@ -46,4 +47,12 @@ namespace mmo
 
 	/// Known TradeSpell spells whose skill() matches, in category sortorder then name order.
 	std::vector<RecipeInfo> BuildRecipeList(uint32 skillId, const std::vector<const proto_client::SpellEntry*>& knownSpells, const proto_client::SkillEntry& skill, uint32 skillValue);
+
+	/// Whether a known spell is listed in the spellbook. Recipes (TradeSpell) are shown in the
+	/// profession window instead, and client-side hidden spells never show up.
+	inline bool IsSpellBookVisible(const proto_client::SpellEntry& spell)
+	{
+		constexpr uint32 hiddenMask = static_cast<uint32>(spell_attributes::HiddenClientSide) | static_cast<uint32>(spell_attributes::TradeSpell);
+		return (spell.attributes(0) & hiddenMask) == 0;
+	}
 }

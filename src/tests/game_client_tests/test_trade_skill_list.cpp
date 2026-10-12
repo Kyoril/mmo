@@ -108,3 +108,34 @@ TEST_CASE("Unknown professions without packet state are still listed", "[trade_s
 	CHECK(professions[0].value == 0);
 	CHECK(professions[0].max == 75);
 }
+
+TEST_CASE("Recipes and client-hidden spells are kept out of the spellbook", "[trade_skill][spellbook]")
+{
+	SECTION("A recipe (TradeSpell) is not spellbook visible")
+	{
+		const auto recipe = MakeRecipe(1, 10, 1, 100);
+		CHECK_FALSE(IsSpellBookVisible(recipe));
+	}
+
+	SECTION("A client-side hidden spell is not spellbook visible")
+	{
+		proto_client::SpellEntry spell;
+		spell.add_attributes(spell_attributes::HiddenClientSide);
+		spell.add_attributes(0);
+		CHECK_FALSE(IsSpellBookVisible(spell));
+	}
+
+	SECTION("A plain spell is spellbook visible")
+	{
+		proto_client::SpellEntry spell;
+		spell.add_attributes(0);
+		spell.add_attributes(0);
+		CHECK(IsSpellBookVisible(spell));
+	}
+
+	SECTION("A profession unlock spell (passive, not a recipe) stays visible")
+	{
+		const auto unlock = MakeUnlock(2, 10, 75, "Tailoring");
+		CHECK(IsSpellBookVisible(unlock));
+	}
+}

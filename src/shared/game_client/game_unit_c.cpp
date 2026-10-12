@@ -27,6 +27,7 @@
 #include "game/aura.h"
 #include "game/emote_defs.h"
 #include "game/spell.h"
+#include "trade_skill_list.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
@@ -56,16 +57,6 @@
 
 namespace mmo
 {
-	namespace
-	{
-		/// Recipes (TradeSpell) are listed in the profession window and hidden spells never show up in the spellbook.
-		bool IsSpellBookVisible(const proto_client::SpellEntry &spell)
-		{
-			constexpr uint32 hiddenMask = static_cast<uint32>(spell_attributes::HiddenClientSide) | static_cast<uint32>(spell_attributes::TradeSpell);
-			return (spell.attributes(0) & hiddenMask) == 0;
-		}
-	}
-
 	SoundEntryPlayer* GameUnitC::s_soundEntryPlayer = nullptr;
 
 	void GameUnitC::SetSoundEntryPlayer(SoundEntryPlayer* player)

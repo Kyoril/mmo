@@ -935,6 +935,7 @@ namespace mmo
 		void OnObjectLoot() override;
 
 		void OnMailboxUsed(uint64 mailboxGuid) override;
+		void OnInventoryError(InventoryChangeFailure error) override { SendInventoryError(error); }
 
 		/// Sends a lightweight ClassXpUpdate packet. On a class level-up additionally refreshes the
 		/// full known-class list and persists the character (kills are too frequent to save on
