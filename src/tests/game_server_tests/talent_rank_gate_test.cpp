@@ -81,6 +81,38 @@ namespace
 			twoRank->add_ranks(TwoRankSecond);
 		}
 
+		std::shared_ptr<GamePlayerS> MakePlayer()
+		{
+			auto* cls = project.classes.getById(ClassId);
+			if (!cls)
+			{
+				cls = project.classes.add(ClassId);
+				cls->set_powertype(proto::ClassEntry_PowerType_MANA);
+				for (uint32 i = 0; i < 3; ++i)
+				{
+					auto* values = cls->add_levelbasevalues();
+					values->set_health(100);
+					values->set_mana(100);
+					values->set_stamina(10);
+					values->set_strength(10);
+					values->set_agility(10);
+					values->set_intellect(10);
+					values->set_spirit(10);
+					values->set_talentpoints(3);
+				}
+			}
+
+			static uint64 nextGuid = 0x2000;
+			auto player = std::make_shared<GamePlayerS>(project, timers);
+			player->Initialize();
+			// Unlearning spells removes their auras by caster guid, which must not be 0.
+			player->Set<uint64>(object_fields::Guid, ++nextGuid);
+			player->SetClass(*cls);
+			player->SetLevel(2);
+			player->Set<uint32>(object_fields::TalentPoints, 5);
+			return player;
+		}
+
 		const proto::SpellEntry& Spell(const uint32 id) const
 		{
 			const auto* spell = project.spells.getById(id);
@@ -108,4 +140,121 @@ TEST_CASE("Spells outside a talent rank chain are not gated", "[talent_gate]")
 	CHECK(FindGatingTalent(ctx.Spell(PlainRank2), ctx.project.spells, ctx.project.talents) == nullptr);
 	CHECK(FindGatingTalent(ctx.Spell(DanglingRank), ctx.project.spells, ctx.project.talents) == nullptr);
 	CHECK(FindGatingTalent(ctx.Spell(TwoRankSecond), ctx.project.spells, ctx.project.talents) == nullptr);
+}
+
+TEST_CASE("A known follow-up rank stays inactive without its talent", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	player->SetKnownSpells({ FollowUpRank });
+	CHECK_FALSE(player->HasSpell(FollowUpRank));
+	CHECK(player->GetKnownSpellIds().contains(FollowUpRank));
+	CHECK_FALSE(player->IsTalentGateSatisfied(ctx.Spell(FollowUpRank)));
+}
+
+TEST_CASE("Learning the talent activates a known follow-up rank", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	player->SetKnownSpells({ FollowUpRank });
+	REQUIRE(player->LearnTalent(GatedTalent, 0));
+	CHECK(player->HasSpell(FollowUpRank));
+	CHECK(player->IsTalentGateSatisfied(ctx.Spell(FollowUpRank)));
+}
+
+TEST_CASE("A talent reset deactivates follow-up ranks but keeps them known", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	REQUIRE(player->LearnTalent(GatedTalent, 0));
+	player->AddSpell(FollowUpRank);
+	REQUIRE(player->HasSpell(FollowUpRank));
+
+	player->ResetTalents();
+	CHECK_FALSE(player->HasSpell(FollowUpRank));
+	CHECK(player->GetKnownSpellIds().contains(FollowUpRank));
+}
+
+TEST_CASE("Learning the talent again restores follow-up ranks", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	REQUIRE(player->LearnTalent(GatedTalent, 0));
+	player->AddSpell(FollowUpRank);
+	player->ResetTalents();
+
+	REQUIRE(player->LearnTalent(GatedTalent, 0));
+	CHECK(player->HasSpell(FollowUpRank));
+}
+
+TEST_CASE("Follow-up ranks survive save and load and wait for the talents", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	REQUIRE(player->LearnTalent(GatedTalent, 0));
+	player->AddSpell(FollowUpRank);
+	const auto& known = player->GetKnownSpellIds();
+	const std::vector<uint32> saved(known.begin(), known.end());
+
+	// Login order on the world server: known spells first, talents on spawn.
+	auto loaded = ctx.MakePlayer();
+	loaded->SetKnownSpells(saved);
+	CHECK_FALSE(loaded->HasSpell(FollowUpRank));
+	loaded->InitializeTalents({ { GatedTalent, 0 } });
+	CHECK(loaded->HasSpell(FollowUpRank));
+}
+
+TEST_CASE("The class switch sequence re-activates follow-up ranks", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	REQUIRE(player->LearnTalent(GatedTalent, 0));
+	player->AddSpell(FollowUpRank);
+
+	// ChangeClass resets talents, then restores the target class's saved talents.
+	player->ResetTalents();
+	player->InitializeTalents({ { GatedTalent, 0 } });
+	CHECK(player->HasSpell(FollowUpRank));
+}
+
+TEST_CASE("A follow-up rank stays active when its talent advances to a higher rank", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	REQUIRE(player->LearnTalent(TwoRankTalent, 0));
+	player->AddSpell(TwoRankFollowUp);
+	REQUIRE(player->LearnTalent(TwoRankTalent, 1));
+	CHECK_FALSE(player->HasSpell(TwoRankFirst));
+	CHECK(player->HasSpell(TwoRankFollowUp));
+}
+
+TEST_CASE("Saved talents that no longer fit leave follow-up ranks inactive but known", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	player->SetKnownSpells({ FollowUpRank });
+	// Rank 5 does not exist: InitializeTalents resets all talents.
+	player->InitializeTalents({ { GatedTalent, 5 } });
+	CHECK_FALSE(player->HasSpell(FollowUpRank));
+	CHECK(player->GetKnownSpellIds().contains(FollowUpRank));
+}
+
+TEST_CASE("Ordinary rank chains do not depend on talents", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	player->SetKnownSpells({ PlainRank1, PlainRank2 });
+	CHECK(player->HasSpell(PlainRank2));
+	CHECK(player->IsTalentGateSatisfied(ctx.Spell(PlainRank2)));
+	player->ResetTalents();
+	CHECK(player->HasSpell(PlainRank2));
 }

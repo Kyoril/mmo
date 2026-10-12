@@ -17,6 +17,7 @@
 #include "game/emote_defs.h"
 #include "game/item.h"
 #include "game/spell.h"
+#include "game/talent_rank_gate.h"
 
 namespace mmo
 {
@@ -449,6 +450,9 @@ namespace mmo
 
 		// Clear talent data
 		m_talents.clear();
+
+		// Follow-up ranks of the removed talents are no longer usable (they stay known).
+		RefreshTalentGatedSpells();
 		RefreshStats();
 
 		talentsReset();
@@ -2177,6 +2181,9 @@ namespace mmo
 		// Update available points
 		UpdateTalentPoints();
 
+		// Follow-up ranks bought earlier become usable again.
+		RefreshTalentGatedSpells();
+
 		return true;
 	}
 
@@ -3061,7 +3068,56 @@ namespace mmo
 			return false;
 		}
 
+		// A follow-up rank of a talent spell (e.g. Fireball rank 2) is only usable while its talent is
+		// learned. It stays in the known-spell set, so learning the talent again restores it.
+		if (!IsTalentGateSatisfied(spell))
+		{
+			return false;
+		}
+
 		return true;
+	}
+
+	bool GamePlayerS::IsTalentGateSatisfied(const proto::SpellEntry& spell) const
+	{
+		const auto* talent = FindGatingTalent(spell, m_project.spells, m_project.talents);
+		return talent == nullptr || HasTalent(talent->id());
+	}
+
+	void GamePlayerS::RefreshTalentGatedSpells()
+	{
+		// Collect first: AddSpell and RemoveSpell modify the spell sets.
+		std::vector<uint32> toActivate;
+		std::vector<uint32> toDeactivate;
+		for (const uint32 spellId : m_knownSpellIds)
+		{
+			const auto* spell = m_project.spells.getById(spellId);
+			if (!spell || FindGatingTalent(*spell, m_project.spells, m_project.talents) == nullptr)
+			{
+				continue;
+			}
+
+			const bool isActive = m_spells.contains(spell);
+			const bool shouldBeActive = IsSpellActiveForCurrentClass(*spell);
+			if (shouldBeActive && !isActive)
+			{
+				toActivate.push_back(spellId);
+			}
+			else if (!shouldBeActive && isActive)
+			{
+				toDeactivate.push_back(spellId);
+			}
+		}
+
+		for (const uint32 spellId : toDeactivate)
+		{
+			RemoveSpell(spellId);
+		}
+
+		for (const uint32 spellId : toActivate)
+		{
+			AddSpell(spellId);
+		}
 	}
 
 	void GamePlayerS::SetKnownSpells(const std::vector<uint32>& spellIds)

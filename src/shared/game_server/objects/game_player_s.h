@@ -379,6 +379,14 @@ namespace mmo
 		/// @return true if the talent was learned, false otherwise.
 		bool LearnTalent(uint32 talentId, uint32 rank, bool enforceRequirements = true);
 
+		/// True unless the spell is a follow-up rank of a talent spell (see FindGatingTalent) whose
+		/// talent is not learned. Such ranks are bought from trainers but only usable with the talent.
+		[[nodiscard]] bool IsTalentGateSatisfied(const proto::SpellEntry& spell) const;
+
+		/// Activates known follow-up ranks whose talent is learned and deactivates those whose talent is
+		/// not. Deactivated ranks stay in the known-spell set, so learning the talent again restores them.
+		void RefreshTalentGatedSpells();
+
 		/// Determines if a rank of specific talent has been learned. If rank is 0 it basically checks if
 		/// the given talent is learned at all.
 		///
