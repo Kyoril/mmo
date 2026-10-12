@@ -21,6 +21,13 @@ namespace mmo
 		/// @return true when the line may play, false while the unit is still blocked.
 		bool TryPlay(ObjectGuid unit, GameTime now, GameTime blockDuration);
 
+		/// @brief Keeps the unit silent for at least the given duration, whether or not it is
+		///	blocked already. Used by lines that always play, such as aggro and death.
+		/// @param unit Guid of the unit.
+		/// @param now Current time in milliseconds.
+		/// @param blockDuration How long the unit stays silent, in milliseconds.
+		void Silence(ObjectGuid unit, GameTime now, GameTime blockDuration);
+
 		/// @brief Drops all per-unit state, for example on a world change.
 		void Clear();
 

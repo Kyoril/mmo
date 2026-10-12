@@ -19,7 +19,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sfx_gen"))
 
-from recipes import cleric, hollow_choir, human, mage, warrior
+from recipes import cleric, creature_combat, hollow_choir, human, mage, warrior
 
 
 class _RecipeChecks:
@@ -153,6 +153,49 @@ class HollowChoirRecipeTests(_RecipeChecks, unittest.TestCase):
     def test_every_final_is_built_exactly_once(self):
         built = list(hollow_choir.MIXES) + list(hollow_choir.SINGLES)
         self.assertEqual(sorted(built), sorted(hollow_choir.FINAL_ORDER))
+
+
+class CreatureCombatRecipeTest(unittest.TestCase):
+    """Creature vocalisations are one source per prompt, so the layer rule does not apply."""
+
+    def test_every_creature_covers_every_event(self):
+        for creature, events in creature_combat.CREATURES.items():
+            self.assertEqual(tuple(events), creature_combat.EVENTS, creature)
+
+    def test_every_prompt_fits_the_model_limit(self):
+        for creature, events in creature_combat.CREATURES.items():
+            for event, spec in events.items():
+                self.assertLessEqual(len(spec.prompt), creature_combat.MAX_PROMPT_CHARS,
+                                     f"{creature} {event}: the model fails silently above the cap")
+
+    def test_no_prompt_reintroduces_the_foley_clause(self):
+        banned = ("dry close-mic", "no reverb", "single isolated")
+        for creature, events in creature_combat.CREATURES.items():
+            for event, spec in events.items():
+                for phrase in banned:
+                    self.assertNotIn(phrase, spec.prompt.lower(), f"{creature} {event}")
+
+    def test_durations_and_levels_are_sane(self):
+        for creature, events in creature_combat.CREATURES.items():
+            for event, spec in events.items():
+                self.assertTrue(0.5 <= spec.duration <= 3.0, f"{creature} {event}")
+                self.assertTrue(-12.0 <= spec.target_dbfs <= 0.0, f"{creature} {event}")
+
+    def test_npc_lines_are_cast_and_unique(self):
+        paths = [path for path, _, _, _ in creature_combat.NPC_CLIPS]
+        self.assertEqual(len(paths), len(set(paths)))
+        for path, voice, model, _ in creature_combat.NPC_CLIPS:
+            self.assertIn(voice, creature_combat.VOICES, path)
+            self.assertIn(model, (creature_combat.MODEL_GRUNT, creature_combat.MODEL_EXPRESSIVE), path)
+            # Locale relative, see locale-asset-paths: never prefixed with Locales/.
+            self.assertTrue(path.startswith("Voice/"), path)
+
+    def test_npc_grunts_stay_wordless(self):
+        # Effort and pain repeat dozens of times per fight; words wear out at that rate.
+        for path, _, model, text in creature_combat.NPC_CLIPS:
+            if "_Effort_" in path or "_Pain_" in path:
+                self.assertEqual(model, creature_combat.MODEL_GRUNT, path)
+                self.assertEqual(len(text.split()), 1, f"{path}: '{text}' is not a single grunt")
 
 
 if __name__ == "__main__":
