@@ -209,3 +209,38 @@ TEST_CASE("GetCaretIndexAt clamps line and column", "[text_wrap]")
 	CHECK(GetCaretIndexAt(lines, 99, 0) == 4);
 	CHECK(GetCaretIndexAt(lines, 99, 99) == 6);
 }
+
+// ============================================================================
+// WrapTextToLines
+// ============================================================================
+
+TEST_CASE("WrapTextToLines splits a long comma separated list at the last space", "[text_wrap][console]")
+{
+	// The console's "list" output: one long line that must not run off the right edge.
+	const auto lines = WrapTextToLines("additem, benchmark, bind, checklos", 100.0f, fixedAdvance);
+
+	REQUIRE(lines.size() == 4);
+	CHECK(lines[0] == "additem,");
+	CHECK(lines[1] == "benchmark,");
+	CHECK(lines[2] == "bind,");
+	CHECK(lines[3] == "checklos");
+}
+
+TEST_CASE("WrapTextToLines keeps short text on one line", "[text_wrap][console]")
+{
+	const auto lines = WrapTextToLines("short", 100.0f, fixedAdvance);
+
+	REQUIRE(lines.size() == 1);
+	CHECK(lines[0] == "short");
+}
+
+TEST_CASE("WrapTextToLines breaks unbreakable words and honours newlines", "[text_wrap][console]")
+{
+	const auto lines = WrapTextToLines("abcdefghijkl\nxy", 50.0f, fixedAdvance);
+
+	REQUIRE(lines.size() == 4);
+	CHECK(lines[0] == "abcde");
+	CHECK(lines[1] == "fghij");
+	CHECK(lines[2] == "kl");
+	CHECK(lines[3] == "xy");
+}
