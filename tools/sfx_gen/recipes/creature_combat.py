@@ -119,6 +119,69 @@ CREATURES = {
     },
 }
 
+# Skeletons and undead: monsters, not people, so they are generated as sound effects like the
+# animals rather than voiced -- a voice actor asked for a zombie groan gives you an actor
+# doing a zombie impression. "Wordless" is in every prompt for the same reason.
+_UNDEAD = ("Dark fantasy MMO undead creature sound, close and present, punchy and clear. "
+           "Only the creature itself: no music, no words, no footsteps, no ambience.")
+
+CREATURES.update({
+    "Skeleton": {
+        "Aggro": CreatureSound(
+            f"An animated skeleton warrior rising to fight: a sharp dry clatter of rattling "
+            f"bones and a hollow, breathy ghostly hiss from an empty ribcage. {_UNDEAD}",
+            1.4, -3.0),
+        "Attack": CreatureSound(
+            f"An animated skeleton swinging a weapon: a quick rattle of bones with a short "
+            f"hollow raspy exhale. {_UNDEAD}",
+            0.6, -5.0),
+        "Pain": CreatureSound(
+            f"An animated skeleton struck hard: a sharp crack of bone and a brief rattle of "
+            f"loose bones. {_UNDEAD}",
+            0.6, -4.0),
+        "Death": CreatureSound(
+            f"An animated skeleton collapsing: bones clattering apart and tumbling onto "
+            f"stone, then a fading hollow ghostly sigh. {_UNDEAD}",
+            2.0, -3.0),
+    },
+    "UndeadMale": {
+        "Aggro": CreatureSound(
+            f"A rotting undead man noticing the living: a deep guttural raspy zombie snarl "
+            f"rising into a hungry growl. Inhuman and wordless. {_UNDEAD}",
+            1.4, -3.0),
+        "Attack": CreatureSound(
+            f"A rotting undead man lunging to strike: one short guttural raspy grunt. "
+            f"Inhuman and wordless. {_UNDEAD}",
+            0.6, -5.0),
+        "Pain": CreatureSound(
+            f"A rotting undead man struck: one short choked raspy groan. Inhuman and "
+            f"wordless. {_UNDEAD}",
+            0.6, -4.0),
+        "Death": CreatureSound(
+            f"A rotting undead man finally destroyed: a long rattling death groan that fades "
+            f"into a last dry wheeze. Inhuman and wordless. {_UNDEAD}",
+            2.0, -3.0),
+    },
+    "UndeadFemale": {
+        "Aggro": CreatureSound(
+            f"A rotting undead woman noticing the living: a hoarse rasping hiss rising into a "
+            f"shrill, ghastly shriek. Inhuman and wordless. {_UNDEAD}",
+            1.4, -3.0),
+        "Attack": CreatureSound(
+            f"A rotting undead woman lunging to strike: one short hoarse raspy snarl. "
+            f"Inhuman and wordless. {_UNDEAD}",
+            0.6, -5.0),
+        "Pain": CreatureSound(
+            f"A rotting undead woman struck: one short strangled raspy wail. Inhuman and "
+            f"wordless. {_UNDEAD}",
+            0.6, -4.0),
+        "Death": CreatureSound(
+            f"A rotting undead woman finally destroyed: a long hoarse dying wail that fades "
+            f"into a last dry rattle of breath. Inhuman and wordless. {_UNDEAD}",
+            2.0, -3.0),
+    },
+})
+
 TAKES_PER_SOUND = 4
 
 # ---------------------------------------------------------------------------------- humans
