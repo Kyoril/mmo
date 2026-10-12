@@ -126,8 +126,11 @@ The Master Tailor uses a `SKILL_TRAINER` trainer entry.
 
 - Realm migration `data/realm/updates/20261012_1_character_skills.sql`:
   `character_skills (character bigint, skill int unsigned, value smallint unsigned, max smallint
-  unsigned, PK(character, skill), FK → characters ON DELETE CASCADE)`. Additive. Also added to
-  `realm_db_schema_full.sql` with its history row.
+  unsigned, PK(character, skill), FK → characters ON DELETE CASCADE)`. Additive.
+  (`realm_db_schema_full.sql` only holds the base tables; migrations apply on top of it, so it
+  stays unchanged.)
+- Saved through a dedicated `IDatabase::UpdateCharacterTradeSkills` (like the aura persistence)
+  rather than another parameter on `UpdateCharacter`.
 - `CharacterData` gets `tradeSkills`; serialized at the end of the stream.
 - `GamePlayerS` stream operators append the map.
 - `World::OnCharacterData` → `IDatabase::UpdateCharacter` (new parameter), load in
@@ -190,7 +193,9 @@ The Master Tailor uses a `SKILL_TRAINER` trainer entry.
   2. "Needle and Thread" — buy Coarse Thread from Milly, sew a Patched Linen Pouch with the
      provided Practice Sewing Kit, deliver it.
   3. "The Test Piece" — the Master Tailor hands back the pouch as the quest's start item; take it
-     to Milly for appraisal and return; reward spell "Tailoring (Apprentice)".
+     to Milly for appraisal; Milly's turn-in rewards the spell "Tailoring (Apprentice)" and sends
+     the player back to the Master Tailor for further recipes (the quest system has no "talk to"
+     objective, so the chain ends at Milly).
   Quest 2 consumes the crafted pouch on turn-in; quest 3 provides its own copy, so the chain cannot
   stall on a lost item.
 - Loot: new base table "Humanoid Cloth - Level 1-12" (Linen Cloth). Linen groups removed from
