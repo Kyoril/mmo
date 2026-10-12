@@ -216,6 +216,26 @@ class InputTests(unittest.TestCase):
 		self.assertIn("Write FIX.json to: H:/mmo/artifacts/bug-loop/x/FIX.json", text)
 		self.assertIn("<<<BEGIN TRIAGE", text)
 
+	def test_fix_input_names_the_server_build_next_to_the_client_build(self):
+		bug = dict(BUG, serverBuild="0123abcd", worldNode="world-01", client={"build": "fedc9876"})
+		text = inputs.build_fix_input(bug, verdict(), "bugfix/x", "F.json", nonce="n")
+		self.assertIn("<<<BEGIN REPORT BUILDS [", text)
+		builds = text.split("<<<BEGIN REPORT BUILDS")[1].split("<<<END REPORT BUILDS")[0]
+		self.assertIn('"serverBuild": "0123abcd"', builds)
+		self.assertIn('"clientBuild": "fedc9876"', builds)
+		self.assertIn('"worldNode": "world-01"', builds)
+		# A report without either build says so instead of leaving the fixer to guess.
+		unknown = inputs.build_fix_input(dict(BUG, client="garbage"), verdict(), "bugfix/x", "F.json", nonce="n")
+		self.assertIn('"serverBuild": "(unknown)"', unknown)
+		self.assertIn('"clientBuild": "(unknown)"', unknown)
+
+	def test_fix_prompt_judges_server_behaviour_against_the_server_build(self):
+		path = os.path.join(os.path.dirname(inputs.__file__), "prompts", "fix.md")
+		with open(path, "r", encoding="utf-8") as handle:
+			prompt = handle.read()
+		self.assertIn("REPORT BUILDS", prompt)
+		self.assertIn("must be judged against `serverBuild`", prompt)
+
 	def test_review_input_never_contains_the_player_comment(self):
 		text = inputs.build_review_input(verdict(), fix(), "diff --git a/x b/x", ["guard: none"], nonce="n")
 		self.assertNotIn("disable admin checks", text)

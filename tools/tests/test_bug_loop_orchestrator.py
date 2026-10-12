@@ -95,11 +95,15 @@ class FakeApi:
 		self.review_diffs = []
 		self.system_creates = []
 
-	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False, awaiting_decision=False):
-		self.lists.append(dict(status=status, limit=limit, decision_pending=decision_pending, awaiting_decision=awaiting_decision))
+	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False, awaiting_decision=False,
+			triage_category=None):
+		self.lists.append(dict(status=status, limit=limit, decision_pending=decision_pending, awaiting_decision=awaiting_decision,
+			triage_category=triage_category))
 		result = list(self.bugs.values())
 		if status:
 			result = [bug for bug in result if bug["status"] == status]
+		if triage_category:
+			result = [bug for bug in result if (bug.get("triage") or {}).get("category") == triage_category]
 		if subject:
 			kind, _, ident = subject.partition(":")
 			result = [bug for bug in result if bug["subject"]["type"] == kind and str(bug["subject"]["id"]) == ident]
@@ -643,6 +647,13 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
 
+	def test_interrupted_fix_goes_to_the_needs_info_list(self):
+		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="bug-loop", triage={"category": "defect"})])
+		self.state.mark_attempted(BUG_ID, "fix-started")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
+
 	def test_interrupted_refix_is_released_to_pr_open(self):
 		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="bug-loop", prUrl="branch:" + BRANCH)])
 		self.state.mark_attempted(BUG_ID, "fix-started")
@@ -908,8 +919,19 @@ class LoopTests(unittest.TestCase):
 		self.make(bugs=[dict(BUG, _id="c" * 24, status="pr_open"), dict(BUG, _id="d" * 24, status="needs_decision"), pending])
 		self.api.lists.clear()
 		self.loop._send_daily_summary(self.state.data)
-		self.assertEqual(self.api.lists, [dict(status=None, limit=1, decision_pending=False, awaiting_decision=True)])
-		self.assertIn("waiting for a decision: 2", self.notifier.messages[-1])
+		self.assertEqual(self.api.lists[0], dict(status=None, limit=1, decision_pending=False, awaiting_decision=True,
+			triage_category=None))
+		self.assertIn("waiting for a decision: 2 parked, 0 needs-info", self.notifier.messages[-1])
+
+	def test_daily_summary_counts_needs_info_bugs(self):
+		self.make(bugs=[dict(BUG, _id="c" * 24, status="pr_open"),
+			dict(BUG, _id="d" * 24, status="triaged", triage={"category": "needs_info"}),
+			dict(BUG, _id="e" * 24, status="triaged", triage={"category": "design_request"})])
+		self.api.lists.clear()
+		self.loop._send_daily_summary(self.state.data)
+		self.assertIn(dict(status="triaged", limit=1, decision_pending=False, awaiting_decision=False,
+			triage_category="needs_info"), self.api.lists)
+		self.assertIn("waiting for a decision: 1 parked, 1 needs-info", self.notifier.messages[-1])
 
 	def test_daily_summary_survives_a_restart(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"), notify_status_changes=False)
@@ -981,7 +1003,8 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "new")
 		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
-		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs-human")
+		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
+		self.assertIn("set the status to new to retry", self.api.notes(BUG_ID)[-1])
 		self.assertEqual(self.outcomes(), ["triage-invalid"])
 
 	def test_green_fix_ships(self):
@@ -1040,7 +1063,35 @@ class LoopTests(unittest.TestCase):
 		self.worktree.head_ = "base1"
 		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
 		self.assertIn("needs-info", self.api.notes(BUG_ID)[-1])
+
+	def test_unfixed_outcomes_go_to_the_maintainers_needs_info_list(self):
+		"""The loop only polls `new`: a needs-info bug left with its triage category is never seen again."""
+		for outcome in ("not_reproducible", "no_root_cause"):
+			with self.subTest(outcome=outcome):
+				self.make(fix=dict(GOOD_FIX, outcome=outcome, root_cause="already fixed on develop"))
+				self.loop.poll_once()
+				bug = self.api.bugs[BUG_ID]
+				self.assertEqual(bug["status"], "triaged")
+				self.assertEqual(bug["triage"]["category"], "needs_info")
+				self.assertIsNone(bug.get("claimedBy"))
+				note = self.api.notes(BUG_ID)[-1]
+				self.assertIn("needs-info ({})".format(outcome), note)
+				self.assertIn("set the status to new to retry", note)
+				self.assertIn("needs-info", self.outcomes())
+				self.assertEqual(self.verifier.gates, [])
+
+	def test_needs_info_bug_reset_to_new_is_triaged_again(self):
+		self.make(fix=dict(GOOD_FIX, outcome="not_reproducible"))
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
+		self.api.bugs[BUG_ID]["status"] = "new"  # the maintainer's retry in the web UI
+		self.runner.fix = GOOD_FIX
+		self.loop.poll_once()
+		self.assertEqual(self.runner.calls.count("triage"), 2)
+		self.assertEqual(self.runner.calls.count("fix"), 2)
+		self.assertNotEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
 
 	def test_breaker_and_cap_park(self):
 		self.make()

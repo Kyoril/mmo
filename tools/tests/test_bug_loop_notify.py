@@ -118,6 +118,18 @@ class MessageTests(unittest.TestCase):
 		self.assertIn("waiting for a decision: 3", text)
 		self.assertIn("6462d2bc: review: chains without limit", text)
 
+	def test_daily_summary_lists_needs_info_as_waiting(self):
+		data = {"day": "2026-10-11", "invocations": 4, "outcomes": [
+			{"bug": "e" * 16 + "e34a31a4", "outcome": "needs-info", "reason": "not_reproducible"},
+		]}
+		text = notify.daily_summary(data, 40, 0, 2)
+		self.assertIn("needs-info 1", text)
+		self.assertIn("waiting for a decision: 0 parked, 2 needs-info", text)
+		self.assertIn("e34a31a4: needs-info: not_reproducible", text)
+		# An unreachable API leaves out what it could not count.
+		self.assertIn("waiting for a decision: 3 parked", notify.daily_summary(data, 40, 3, None))
+		self.assertNotIn("waiting for a decision", notify.daily_summary(data, 40, None, None))
+
 	def test_feature_ready(self):
 		notifier = notify.Notifier("", "https://ui.example")
 		text = notify.feature_ready_message(notifier, "a" * 24, "Bandits ignore stationary casters", "bugfix/aaaaaaaa")
