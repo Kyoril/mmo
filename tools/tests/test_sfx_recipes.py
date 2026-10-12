@@ -19,7 +19,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sfx_gen"))
 
-from recipes import cleric, hollow_choir, human, mage, warrior
+from recipes import cleric, hollow_choir, human, mage, scout, warrior
 
 
 class _RecipeChecks:
@@ -153,6 +153,39 @@ class HollowChoirRecipeTests(_RecipeChecks, unittest.TestCase):
     def test_every_final_is_built_exactly_once(self):
         built = list(hollow_choir.MIXES) + list(hollow_choir.SINGLES)
         self.assertEqual(sorted(built), sorted(hollow_choir.FINAL_ORDER))
+
+
+class ScoutRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = scout
+    count = 21
+
+    def test_every_prompt_names_its_layers(self):
+        # Layered by mixing (see human.py): each prompt is one element and must exclude the
+        # voice and the music, or a grunt or a score bed bleeds into every layer.
+        for name, spec in scout.SOUNDS.items():
+            lowered = spec.prompt.lower()
+            self.assertIn("no voice", lowered, f"{name}: must exclude the voice")
+            self.assertIn("no music", lowered, f"{name}: must exclude music")
+
+    def test_nothing_loops(self):
+        for name, spec in scout.SOUNDS.items():
+            self.assertFalse(spec.loop, name)
+
+    def test_mixes_reference_generated_layers(self):
+        for mix_name, mix in scout.MIXES.items():
+            self.assertGreaterEqual(len(mix["layers"]), 2, f"{mix_name}: a mix needs layers")
+            for entry in mix["layers"]:
+                self.assertIn(entry.sound, scout.SOUNDS, f"{mix_name}: unknown layer")
+                self.assertTrue(1 <= entry.take <= 3, f"{mix_name}: take {entry.take}")
+                self.assertGreaterEqual(entry.offset, 0.0)
+                self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
+
+    def test_every_final_has_its_file(self):
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+        if not os.path.isdir(os.path.join(root, scout.OUTPUT_DIR)):
+            self.skipTest("data/client submodule is not checked out")
+        for name in scout.FINAL_ORDER:
+            self.assertTrue(os.path.isfile(os.path.join(root, scout.OUTPUT_DIR, name + ".wav")), name)
 
 
 if __name__ == "__main__":
