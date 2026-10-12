@@ -183,9 +183,8 @@ def decode_mask(mask: int, catalogs_key: str, catalogs: dict[str, object]) -> li
     if mask <= 0:
         return result
     for entry in catalogs[catalogs_key].entry:
-        if entry.id <= 0:
-            continue
-        bit = 1 << (entry.id - 1)
+        # Same layout as IdMaskBit (src/shared/game/id_mask.h): id N -> bit N-1, id 0 -> bit 31.
+        bit = 1 << ((entry.id + 31) % 32)
         if mask & bit:
             result.append({"id": entry.id, "name": entry.name, "bit": bit})
     return result

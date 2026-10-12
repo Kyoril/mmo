@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "editor_imgui_helpers.h"
+#include "game/id_mask.h"
 #include "game/object_type_id.h"
 #include "game/quest.h"
 #include "log/default_log_levels.h"
@@ -488,13 +489,13 @@ namespace mmo
 					{
 						ImGui::TableNextColumn();
 
-						bool raceIncluded = (currentEntry.requiredraces() & (1 << (i - 1))) != 0;
+						bool raceIncluded = (currentEntry.requiredraces() & IdMaskBit(i)) != 0;
 						if (ImGui::Checkbox(race->name().c_str(), &raceIncluded))
 						{
 							if (raceIncluded)
-								currentEntry.set_requiredraces(currentEntry.requiredraces() | (1 << (i - 1)));
+								currentEntry.set_requiredraces(currentEntry.requiredraces() | IdMaskBit(i));
 							else
-								currentEntry.set_requiredraces(currentEntry.requiredraces() & ~(1 << (i - 1)));
+								currentEntry.set_requiredraces(currentEntry.requiredraces() & ~IdMaskBit(i));
 						}
 					}
 				}
@@ -514,13 +515,13 @@ namespace mmo
 					{
 						ImGui::TableNextColumn();
 
-						bool classIncluded = (currentEntry.requiredclasses() & (1 << (i - 1))) != 0;
+						bool classIncluded = (currentEntry.requiredclasses() & IdMaskBit(i)) != 0;
 						if (ImGui::Checkbox(classEntry->name().c_str(), &classIncluded))
 						{
 							if (classIncluded)
-								currentEntry.set_requiredclasses(currentEntry.requiredclasses() | (1 << (i - 1)));
+								currentEntry.set_requiredclasses(currentEntry.requiredclasses() | IdMaskBit(i));
 							else
-								currentEntry.set_requiredclasses(currentEntry.requiredclasses() & ~(1 << (i - 1)));
+								currentEntry.set_requiredclasses(currentEntry.requiredclasses() & ~IdMaskBit(i));
 						}
 					}
 				}

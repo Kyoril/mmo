@@ -514,8 +514,15 @@ namespace mmo
 			return (to - from).GetSquaredLength() < s_minLosSegmentLengthSq;
 		}
 
+		/// Static world geometry is closed, so its back faces are skipped. Dynamic instances
+		/// (doors, barriers) are tested from both sides: their art is often a single-sided
+		/// plane, and a closed door must block sight from the far side as well.
+		constexpr RaycastFlags s_staticRayFlags = raycast_flags::IgnoreBackface;
+		constexpr RaycastFlags s_dynamicRayFlags = raycast_flags::None;
+
 		/// Tests a single collision instance for any intersection with the given world ray.
-		bool instanceBlocksRay(const CollisionInstance& inst, const Ray& worldRay, const Vector3& from, const Vector3& to)
+		bool instanceBlocksRay(const CollisionInstance& inst, const Ray& worldRay, const Vector3& from, const Vector3& to,
+			const RaycastFlags flags)
 		{
 			// Fast world-AABB rejection.
 			const auto [aabbHit, aabbT] = worldRay.IntersectsAABB(inst.worldBounds);
@@ -535,12 +542,12 @@ namespace mmo
 
 			Ray localRay(localFrom, localTo);
 			return inst.tree->IntersectRay(localRay, nullptr,
-				static_cast<RaycastFlags>(raycast_flags::EarlyExit | raycast_flags::IgnoreBackface));
+				static_cast<RaycastFlags>(raycast_flags::EarlyExit | flags));
 		}
 
 		/// Tests a single collision instance and tracks the closest world-space hit.
 		void intersectInstanceEx(const CollisionInstance& inst, const Ray& worldRay, const Vector3& from,
-			const Vector3& to, const float worldLen, float& closestWorldT, Vector3& hitPoint, bool& blocked)
+			const Vector3& to, const float worldLen, const RaycastFlags flags, float& closestWorldT, Vector3& hitPoint, bool& blocked)
 		{
 			const auto [aabbHit, aabbT] = worldRay.IntersectsAABB(inst.worldBounds);
 			if (!aabbHit || aabbT > worldLen * closestWorldT)
@@ -557,8 +564,7 @@ namespace mmo
 			}
 
 			Ray localRay(localFrom, localTo);
-			if (!inst.tree->IntersectRay(localRay, nullptr,
-				static_cast<RaycastFlags>(raycast_flags::IgnoreBackface)))
+			if (!inst.tree->IntersectRay(localRay, nullptr, flags))
 			{
 				return;
 			}
@@ -595,7 +601,7 @@ namespace mmo
 
 		for (const auto& inst : m_instances)
 		{
-			if (instanceBlocksRay(inst, worldRay, from, to))
+			if (instanceBlocksRay(inst, worldRay, from, to, s_staticRayFlags))
 			{
 				return false; // blocked
 			}
@@ -603,7 +609,7 @@ namespace mmo
 
 		for (const auto& [handle, dyn] : m_dynamicInstances)
 		{
-			if (dyn.enabled && instanceBlocksRay(dyn.instance, worldRay, from, to))
+			if (dyn.enabled && instanceBlocksRay(dyn.instance, worldRay, from, to, s_dynamicRayFlags))
 			{
 				return false; // blocked
 			}
@@ -634,14 +640,14 @@ namespace mmo
 
 		for (const auto& inst : m_instances)
 		{
-			intersectInstanceEx(inst, worldRay, from, to, worldLen, closestWorldT, hitPoint, blocked);
+			intersectInstanceEx(inst, worldRay, from, to, worldLen, s_staticRayFlags, closestWorldT, hitPoint, blocked);
 		}
 
 		for (const auto& [handle, dyn] : m_dynamicInstances)
 		{
 			if (dyn.enabled)
 			{
-				intersectInstanceEx(dyn.instance, worldRay, from, to, worldLen, closestWorldT, hitPoint, blocked);
+				intersectInstanceEx(dyn.instance, worldRay, from, to, worldLen, s_dynamicRayFlags, closestWorldT, hitPoint, blocked);
 			}
 		}
 

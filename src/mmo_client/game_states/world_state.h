@@ -471,6 +471,13 @@ namespace mmo
 
 		PacketParseResult OnAttackerStateUpdate(game::IncomingPacket &packet);
 
+		/// @brief Plays a unit's aggro or death sound when a field update moved it into combat
+		///	or killed it.
+		/// @param unit The unit or player whose fields were just updated.
+		/// @param wasInCombat Whether the unit carried the combat flag before the update.
+		/// @param wasAlive Whether the unit had health left before the update.
+		void PlayUnitStateSounds(const GameObjectC& unit, bool wasInCombat, bool wasAlive);
+
 		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket &packet);
 
 		PacketParseResult OnMovementSpeedChanged(game::IncomingPacket &packet);

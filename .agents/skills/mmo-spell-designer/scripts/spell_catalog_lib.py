@@ -286,13 +286,14 @@ def decode_attribute_words(words: Iterable[int]) -> list[dict]:
 
 
 def make_mask_lookup(entries) -> dict[int, str]:
-    return {entry.id: entry.name for entry in entries if entry.id > 0}
+    return {entry.id: entry.name for entry in entries}
 
 
 def decode_id_mask(mask: int, lookup: dict[int, str]) -> list[dict]:
     result = []
     for entry_id, name in sorted(lookup.items()):
-        bit = 1 << (entry_id - 1)
+        # Same layout as IdMaskBit (src/shared/game/id_mask.h): id N -> bit N-1, id 0 -> bit 31.
+        bit = 1 << ((entry_id + 31) % 32)
         if mask & bit:
             result.append({"id": entry_id, "name": name, "bit": bit})
     return result
