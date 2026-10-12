@@ -1326,6 +1326,31 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::RemoveAurasFromOtherCasters()
+	{
+		std::vector<std::shared_ptr<AuraContainer>> aurasToRemove;
+		for (auto &aura : m_auras)
+		{
+			if (aura->GetSpell().attributes(0) & spell_attributes::Passive)
+			{
+				continue;
+			}
+
+			if (aura->GetCasterId() == GetGuid())
+			{
+				continue;
+			}
+
+			aurasToRemove.push_back(aura);
+		}
+
+		for (auto &aura : aurasToRemove)
+		{
+			aura->SetApplied(false);
+			RemoveAura(aura);
+		}
+	}
+
 	void GameUnitS::RemoveAura(const std::shared_ptr<AuraContainer> &aura)
 	{
 		ASSERT(aura);
