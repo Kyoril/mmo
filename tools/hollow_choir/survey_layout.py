@@ -184,7 +184,7 @@ def main():
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     image.save(out)
-    # The framing, so overlays (author_spawns.py) can map world positions onto this image.
+    # The framing, so overlays can map world positions onto this image.
     out.with_suffix(".json").write_text(json.dumps({"x0": x0, "z0": z0, "ppu": ppu}))
     print(f"world model at {entity.position}, bounds x {lo[0]:.1f}..{hi[0]:.1f} y {lo[1]:.1f}..{hi[1]:.1f} "
           f"z {lo[2]:.1f}..{hi[2]:.1f}; {walkable} walkable samples; wrote {out}")

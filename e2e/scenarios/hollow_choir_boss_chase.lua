@@ -13,7 +13,7 @@
 
 local SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z = 0, 292.267, 5.33, 552.571
 
--- entry, label, spawn (x, z) from tools/hollow_choir/author_spawns.py, landing point, where to
+-- entry, label, spawn (x, z) as in map 1's spawn data, landing point, where to
 -- walk after the boss has come up. A boss may notice us on landing and start walking before we
 -- can look, so distances are measured from its spawn.
 local BOSSES = {
