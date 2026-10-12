@@ -4,6 +4,7 @@
 
 #include "game/aura.h"
 #include "game/spell.h"
+#include "game/spell_points.h"
 
 #include <algorithm>
 #include <charconv>
@@ -35,42 +36,7 @@ namespace mmo
 			return static_cast<int32>(std::clamp(value, Int32Min, Int32Max));
 		}
 
-		/// Truncates towards zero like an implicit float to int conversion, but defined for NaN,
-		/// infinity and values outside the int32 range, which data can contain.
-		int64 TruncateToInt32Range(const float value)
-		{
-			if (std::isnan(value))
-			{
-				return 0;
-			}
-
-			if (value >= static_cast<float>(Int32Max))
-			{
-				return Int32Max;
-			}
-
-			if (value <= static_cast<float>(Int32Min))
-			{
-				return Int32Min;
-			}
-
-			return static_cast<int64>(value);
-		}
-
-		bool IsPeriodicAura(const uint32 aura)
-		{
-			return aura == aura_type::PeriodicDamage ||
-				aura == aura_type::PeriodicHeal ||
-				aura == aura_type::PeriodicTriggerSpell ||
-				aura == aura_type::PeriodicEnergize;
-		}
-
-		bool IsDirectAmountEffect(const uint32 type)
-		{
-			return type == spell_effects::SchoolDamage || type == spell_effects::Heal;
-		}
-
-		/// Mirrors the server's base point calculation, including its float precision, so the
+		/// Mirrors the server's base point calculation (shared ScaleSpellPointsByLevel), so the
 		/// tooltip shows what a cast rolls. Works in int64 so no data can overflow it.
 		void CalculateEffectBasePoints(const proto_client::SpellEffect& effect, const proto_client::SpellEntry& spell, const int32 level, int64& minBasePoints, int64& maxBasePoints)
 		{
@@ -85,9 +51,8 @@ namespace mmo
 			}
 			casterLevel -= spell.spelllevel();
 
-			const float levelFactor = static_cast<float>(casterLevel);
-			const int64 basePoints = TruncateToInt32Range(static_cast<float>(effect.basepoints()) + levelFactor * effect.pointsperlevel());
-			const int64 randomPoints = TruncateToInt32Range(static_cast<float>(effect.diesides()) + levelFactor * effect.diceperlevel());
+			const int64 basePoints = ScaleSpellPointsByLevel(effect.basepoints(), effect.pointsperlevel(), casterLevel);
+			const int64 randomPoints = ScaleSpellPointsByLevel(effect.diesides(), effect.diceperlevel(), casterLevel);
 
 			minBasePoints = basePoints + effect.basedice();
 			maxBasePoints = basePoints + randomPoints;

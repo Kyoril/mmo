@@ -10,6 +10,7 @@
 #include "game_server/objects/game_world_object_s.h"
 #include "game_server/spells/aura_container.h"
 #include "base/utilities.h"
+#include "game/spell_points.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/world/world_instance.h"
 #include "math/math_utils.h"
@@ -61,10 +62,9 @@ namespace mmo
 			level -= spell.spelllevel();
 
 			// Calculate the damage done
-			const float basePointsPerLevel = effect.pointsperlevel();
-			const float randomPointsPerLevel = effect.diceperlevel();
-			const int32_t basePoints = effect.basepoints() + level * static_cast<int32_t>(basePointsPerLevel);
-			const int32_t randomPoints = effect.diesides() + level * static_cast<int32_t>(randomPointsPerLevel);
+			// Multiply before truncating: fractional per-level factors must accumulate over levels.
+			const int32_t basePoints = ScaleSpellPointsByLevel(effect.basepoints(), effect.pointsperlevel(), level);
+			const int32_t randomPoints = ScaleSpellPointsByLevel(effect.diesides(), effect.diceperlevel(), level);
 			const int32_t comboDamage = static_cast<int32_t>(effect.pointspercombopoint()) * comboPoints;
 
 			std::uniform_int_distribution<int> distribution(effect.basedice(), randomPoints);
