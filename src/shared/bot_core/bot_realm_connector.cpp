@@ -1004,6 +1004,18 @@ namespace mmo
 		});
 	}
 
+	void BotRealmConnector::SwapInventoryItems(const uint8 srcSlot, const uint8 dstSlot)
+	{
+		sendSinglePacket([srcSlot, dstSlot](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::SwapInvItem);
+			packet
+				<< io::write<uint8>(srcSlot)
+				<< io::write<uint8>(dstSlot);
+			packet.Finish();
+		});
+	}
+
 	PacketParseResult BotRealmConnector::OnGroupList(game::IncomingPacket& packet)
 	{
 		uint8 groupType = 0;

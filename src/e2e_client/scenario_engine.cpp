@@ -50,6 +50,9 @@ namespace mmo
 			/// Health is not a substitute -- a creature can heal between swings.
 			std::map<uint64, uint32> meleeSwings;
 
+			/// The subset of meleeSwings that the off hand made (hit_info::LeftSwing), keyed by victim.
+			std::map<uint64, uint32> offhandSwings;
+
 			/// The last auto-attack swing error the server reported, and how many times it has
 			/// told us swings started landing again. The server reports swing outcomes as
 			/// transitions, so a scenario that provokes an error and then removes its cause reads
@@ -571,6 +574,14 @@ namespace mmo
 			return it == g_runtime->meleeSwings.end() ? 0 : static_cast<int32>(it->second);
 		}
 
+		/// Counts the off-hand swings among MeleeSwingCount(guid): only a character that may dual wield
+		/// and has a usable off-hand weapon swings it.
+		int32 luaOffhandSwingCount(const std::string& guid)
+		{
+			const auto it = g_runtime->offhandSwings.find(guidFromString(guid));
+			return it == g_runtime->offhandSwings.end() ? 0 : static_cast<int32>(it->second);
+		}
+
 		/// Whether the server has told us guid is channeling and not yet that the channel ended.
 		bool luaIsChanneling(const std::string& guid)
 		{
@@ -1045,6 +1056,27 @@ namespace mmo
 			if (g_runtime->transcript)
 			{
 				g_runtime->transcript->Action("EquipFromBackpack");
+			}
+		}
+
+		/// Moves the item in backpack slot packIndex (0-based) into equipment slot equipSlot, swapping
+		/// whatever was equipped there into the backpack. Unlike EquipFromBackpack this can target the
+		/// off hand (16), which auto-equip never picks for a one-handed weapon.
+		void luaEquipBackpackItemTo(const uint32 packIndex, const uint32 equipSlot)
+		{
+			if (packIndex >= player_inventory_pack_slots::End - player_inventory_pack_slots::Start ||
+				equipSlot >= player_equipment_slots::End)
+			{
+				abortScenario(bot_exit_code::ScenarioFailed, "EquipBackpackItemTo: slot out of range");
+			}
+
+			g_runtime->session->GetRealm().SwapInventoryItems(
+				static_cast<uint8>(player_inventory_pack_slots::Start + packIndex), static_cast<uint8>(equipSlot));
+
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("EquipBackpackItemTo",
+					{ { "pack_index", packIndex }, { "equip_slot", equipSlot } });
 			}
 		}
 
@@ -1601,6 +1633,7 @@ namespace mmo
 				luabind::def_lambda("GetMaxPower", &luaGetMaxPower),
 				luabind::def_lambda("IsAlive", &luaIsAlive),
 				luabind::def_lambda("MeleeSwingCount", &luaMeleeSwingCount),
+				luabind::def_lambda("OffhandSwingCount", &luaOffhandSwingCount),
 				luabind::def_lambda("IsAutoAttacking", &luaIsAutoAttacking),
 				luabind::def_lambda("IsChanneling", &luaIsChanneling),
 				luabind::def_lambda("ChannelStartCount", &luaChannelStartCount),
@@ -1651,6 +1684,7 @@ namespace mmo
 				luabind::def_lambda("AcceptPartyInvitation", &luaAcceptPartyInvitation),
 				luabind::def_lambda("LeaveParty", &luaLeaveParty),
 				luabind::def_lambda("EquipFromBackpack", &luaEquipFromBackpack),
+				luabind::def_lambda("EquipBackpackItemTo", &luaEquipBackpackItemTo),
 				luabind::def_lambda("IsInParty", &luaIsInParty),
 				luabind::def_lambda("HasPendingPartyInvitation", &luaHasPendingPartyInvitation),
 				luabind::def_lambda("GetPartyMemberCount", &luaGetPartyMemberCount),
@@ -1828,6 +1862,10 @@ namespace mmo
 				if (attacker == realm.GetSelectedGuid())
 				{
 					++runtime.meleeSwings[victim];
+					if ((hitInfo & hit_info::LeftSwing) != 0)
+					{
+						++runtime.offhandSwings[victim];
+					}
 				}
 
 				transcript.Event("attack_hit",
