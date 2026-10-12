@@ -212,6 +212,10 @@ namespace mmo
 			return;
 		}
 
+		// The restore may have stopped early and dropped all talents (point budget exceeded) after some
+		// talents already activated their follow-up ranks.
+		RefreshTalentGatedSpells();
+
 		DLOG("Initialize talents. Talent points spent: " << (m_totalTalentPointsAtLevel - talentPoints) << " / " << m_totalTalentPointsAtLevel);
 	}
 

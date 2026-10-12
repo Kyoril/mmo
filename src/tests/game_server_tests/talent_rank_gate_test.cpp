@@ -258,3 +258,29 @@ TEST_CASE("Ordinary rank chains do not depend on talents", "[talent_gate]")
 	player->ResetTalents();
 	CHECK(player->HasSpell(PlainRank2));
 }
+
+TEST_CASE("Saved talents over the point budget leave follow-up ranks inactive", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+
+	// A row-1 talent with ten ranks: its saved rank 9 costs 10 points, more than the budget left after
+	// the row-0 Fireball-like talent was restored. InitializeTalents then drops all talents.
+	constexpr uint32 ExpensiveTalent = 22;
+	auto* expensive = ctx.project.talents.add(ExpensiveTalent);
+	expensive->set_tab(TabId);
+	expensive->set_row(1);
+	expensive->set_column(0);
+	for (uint32 i = 0; i < 10; ++i)
+	{
+		AddSpell(ctx.project, 700 + i, 0, 0);
+		expensive->add_ranks(700 + i);
+	}
+
+	auto player = ctx.MakePlayer();
+	player->SetKnownSpells({ FollowUpRank });
+	player->InitializeTalents({ { GatedTalent, 0 }, { ExpensiveTalent, 9 } });
+	REQUIRE_FALSE(player->HasTalent(GatedTalent));
+	CHECK_FALSE(player->HasSpell(FollowUpRank));
+	CHECK(player->GetKnownSpellIds().contains(FollowUpRank));
+}

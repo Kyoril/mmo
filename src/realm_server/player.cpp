@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "player.h"
+#include "character_spell_cache.h"
 #include "player_manager.h"
 #include "world_manager.h"
 #include "world.h"
@@ -2862,16 +2863,7 @@ namespace mmo
 		// previous class's bar and load (and send to the client) the new class's bar.
 		SwitchActionBarClass(newActiveClassId);
 
-		m_characterData->spellIds.clear();
-		for (const auto &spell : character.GetSpells())
-		{
-			if (!spell)
-			{
-				continue;
-			}
-
-			m_characterData->spellIds.push_back(spell->id());
-		}
+		m_characterData->spellIds = CollectCachedSpellIds(character);
 
 		m_characterData->position = character.GetPosition();
 		m_characterData->facing = character.GetFacing();
