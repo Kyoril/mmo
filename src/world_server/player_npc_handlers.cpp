@@ -569,6 +569,15 @@ namespace mmo
 					return;
 				}
 
+				// Follow-up ranks of a talent spell need the talent. The client never asks for this (its
+				// trainer list shows the rank locked), so no error code is sent. Checked before any money
+				// is taken: a dormant rank the player already owns must not be sold twice.
+				if (!m_character->IsTalentGateSatisfied(*spellEntry))
+				{
+					WLOG("Player " << log_hex_digit(m_character->GetGuid()) << " tried to buy spell " << spellId << " without its required talent");
+					return;
+				}
+
 				// Class trainers gate their spells by the player's CLASS level (so a fresh class
 				// has to be leveled up first); other trainer types keep using the character level.
 				const bool useClassLevel = trainerEntry->type() == proto::TrainerEntry_TrainerType_CLASS_TRAINER;

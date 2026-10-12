@@ -1531,6 +1531,27 @@ namespace mmo
 															   }
 															   return static_cast<int32>(trainerSpells[slot].requiredLevel);
 														   }),
+					   luabind::def<std::function<void(int32, String &, bool &)>>("GetTrainerSpellRequiredTalent", [this](int32 slot, String &out_name, bool &out_learned)
+														   {
+															   out_name.clear();
+															   out_learned = true;
+															   if (slot < 0 || slot >= static_cast<int32>(this->m_trainerClient.GetNumTrainerSpells()))
+															   {
+																   return;
+															   }
+
+															   const auto* talent = this->m_trainerClient.GetRequiredTalent(static_cast<uint32>(slot));
+															   if (talent == nullptr || talent->ranks_size() == 0)
+															   {
+																   return;
+															   }
+
+															   if (const auto* rankSpell = this->m_project.spells.getById(talent->ranks(0)))
+															   {
+																   out_name = GetLocalizedString(rankSpell->name(), rankSpell->name_loc(), GetClientLocale());
+															   }
+															   out_learned = this->m_trainerClient.HasRequiredTalent(static_cast<uint32>(slot));
+														   }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 
 					   luabind::def<std::function<const char *(const ItemInfo *, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo *item, int32 index)
 																						  { return this->GetItemSpellTriggerType(item, index); }),
