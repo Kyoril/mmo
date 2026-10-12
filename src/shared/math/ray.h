@@ -131,7 +131,11 @@ namespace mmo
 			Vector3 p = rayDir.Cross(v2);
 			float det = v1.Dot(p);
 
-			if ((ignoreBackface && det < 1e-5) || std::abs(det) < 1e-5)
+			// det = |dir| * |v1| * |v2| * (sine terms): compare against the operands' scale so a
+			// ray running (numerically) inside the triangle's plane never counts as a hit.
+			// Squared on both sides (relative epsilon 1e-6) to keep square roots out of the hot loop.
+			const float parallelEpsilonSq = 1e-12f * rayDir.GetSquaredLength() * v1.GetSquaredLength() * v2.GetSquaredLength();
+			if ((ignoreBackface && det < 1e-5) || std::abs(det) < 1e-5 || det * det < parallelEpsilonSq)
 			{
 				return { false, 0.0f };
 			}

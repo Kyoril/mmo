@@ -2,6 +2,8 @@
 
 #include "combat_voice_gate.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	namespace
@@ -25,6 +27,17 @@ namespace mmo
 
 		m_nextAllowed[unit] = now + blockDuration;
 		return true;
+	}
+
+	void CombatVoiceGate::Silence(const ObjectGuid unit, const GameTime now, const GameTime blockDuration)
+	{
+		if (m_nextAllowed.size() >= pruneThreshold)
+		{
+			Prune(now);
+		}
+
+		GameTime& nextAllowed = m_nextAllowed[unit];
+		nextAllowed = std::max(nextAllowed, now + blockDuration);
 	}
 
 	void CombatVoiceGate::Clear()
