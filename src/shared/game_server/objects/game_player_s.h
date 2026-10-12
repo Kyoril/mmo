@@ -10,6 +10,7 @@
 #include "game_unit_s.h"
 #include "game_server/inventory.h"
 #include "game_server/character_data.h"
+#include "game_server/trade_skill_book.h"
 #include "game_server/quest_status_data.h"
 #include "game/quest.h"
 #include "game/group.h"
@@ -74,6 +75,11 @@ namespace mmo
 
 		/// Fired when the character unlocks a new emote (not fired for default-known emotes).
 		signal<void(uint32)> emoteLearned;
+
+		/// Fired when a trade skill is learned or its cap changes. Parameter: skill id.
+		signal<void(uint32 skillId)> tradeSkillLearned;
+		/// Fired when the value of a trade skill changes. Parameter: skill id.
+		signal<void(uint32 skillId)> tradeSkillChanged;
 
 		/// Fired when the character's spent talent points have been refunded (talents reset).
 		signal<void()> talentsReset;
@@ -257,6 +263,13 @@ namespace mmo
 		/// always been learned. Called on login so existing characters pick up emotes that
 		/// were flagged as always-granted after their creation.
 		void GrantDefaultEmotes();
+
+		/// Returns the learned trade skills.
+		[[nodiscard]] TradeSkillBook& GetTradeSkills() { return m_tradeSkills; }
+		/// Returns the learned trade skills.
+		[[nodiscard]] const TradeSkillBook& GetTradeSkills() const { return m_tradeSkills; }
+		/// Replaces the learned trade skills (e.g. when loading a character). Fires no signals.
+		void SetTradeSkills(const std::vector<TradeSkillData>& skills) { m_tradeSkills.SetAll(skills); }
 
 		/// Returns the set of unlocked emote ids (the persistence set).
 		[[nodiscard]] const std::set<uint32>& GetKnownEmoteIds() const { return m_knownEmoteIds; }
@@ -578,6 +591,8 @@ namespace mmo
 		/// Every emote the character has unlocked, including default-known emotes (which are
 		/// materialized into this set on login via GrantDefaultEmotes).
 		std::set<uint32> m_knownEmoteIds;
+		/// Learned trade skills (professions).
+		TradeSkillBook m_tradeSkills;
 		/// True while ChangeClass is rebuilding the character, so client-bound per-spell notifications
 		/// are suppressed (a single refresh is sent afterwards instead).
 		bool m_classSwitchInProgress = false;

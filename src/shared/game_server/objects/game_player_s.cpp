@@ -3596,6 +3596,14 @@ namespace mmo
 			w << io::write<uint32>(emoteId);
 		}
 
+		// Write the trade skills.
+		const std::vector<TradeSkillData> tradeSkills = object.m_tradeSkills.GetAll();
+		w << io::write<uint8>(static_cast<uint8>(tradeSkills.size()));
+		for (const TradeSkillData& skill : tradeSkills)
+		{
+			w << skill;
+		}
+
 		return w;
 	}
 
@@ -3693,6 +3701,29 @@ namespace mmo
 			r >> io::read<uint32>(emoteId);
 			object.m_knownEmoteIds.insert(emoteId);
 		}
+
+		// Read the trade skills. Tolerate a stream that ends here (written before they existed).
+		std::vector<TradeSkillData> tradeSkills;
+		uint8 tradeSkillCount = 0;
+		if (r >> io::read<uint8>(tradeSkillCount))
+		{
+			for (uint8 i = 0; i < tradeSkillCount; ++i)
+			{
+				TradeSkillData skill;
+				if (!(r >> skill))
+				{
+					break;
+				}
+
+				tradeSkills.push_back(skill);
+			}
+		}
+		else
+		{
+			r.setSuccess();
+		}
+
+		object.m_tradeSkills.SetAll(tradeSkills);
 
 		for (uint32 i = 0; i < 5; ++i)
 		{
