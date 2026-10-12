@@ -137,6 +137,8 @@ namespace mmo
 			ItemDisplayAttachment attachment;
 			attachment.variant = &variant;
 			attachment.entity = scene.CreateEntity(entity.GetName() + "_ITEM_" + std::to_string(itemDisplayId), variant.mesh());
+			// Worn and wielded items never block movement, whatever collision their mesh carries.
+			attachment.entity->SetCollisionEnabled(false);
 			attachment.attachment = entity.AttachObjectToBone(bone->bone_name(), *attachment.entity);
 			ApplyItemBoneTransform(attachment.attachment, *bone);
 			attachments[itemDisplayId] = attachment;
