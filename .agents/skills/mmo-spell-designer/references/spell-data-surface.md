@@ -145,7 +145,7 @@ Inspect these files when needed:
 <mask_rules>
 `racemask` and `classmask` are bitmasks, not direct IDs.
 
-- Bit position is `(entry.id - 1)`.
+- Bit position is `(entry.id - 1)`, except id `0` (Mage, Human), which uses bit 31 (`0x80000000`). Code uses `IdMaskBit` from `src/shared/game/id_mask.h`.
 - A zero mask means unrestricted.
 - Class and race restrictions are checked during cast validation and also when learning spells on players.
 
@@ -153,6 +153,8 @@ Examples:
 
 - Race ID `1` uses bit `1 << 0`
 - Class ID `3` uses bit `1 << 2`
+- Class ID `0` (Mage) uses bit `1 << 31`
+- Warrior (`1`) and Scout (`4`) together: `0x1 | 0x8 = 0x9`
 </mask_rules>
 
 <item_links>

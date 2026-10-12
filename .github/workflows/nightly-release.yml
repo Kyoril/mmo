@@ -154,9 +154,20 @@ jobs:
           token: ${{ github.token }}
           github-binarycache: true
 
+      # Discord rich presence is compiled in only when a Discord application id is configured
+      # (repository variable or secret DISCORD_APP_ID); without one the client builds without it.
       - name: Configure CMake
         shell: pwsh
+        env:
+          DISCORD_APP_ID: ${{ vars.DISCORD_APP_ID || secrets.DISCORD_APP_ID }}
         run: |
+          $discord = @()
+          if ($env:DISCORD_APP_ID) {
+            $discord = @('-DMMO_WITH_DISCORD_RPC=ON', "-DMMO_DISCORD_APP_ID=$($env:DISCORD_APP_ID.Trim())")
+            Write-Host "Discord RPC enabled"
+          } else {
+            Write-Host "DISCORD_APP_ID not set, building without Discord RPC"
+          }
           cmake -S . -B build `
             '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' `
             '-DMMO_BUILD_CLIENT=ON' `
@@ -167,7 +178,8 @@ jobs:
             '-DMMO_OPENSSL_STATIC=ON' `
             '-DOPENSSL_USE_STATIC_LIBS=TRUE' `
             '-DVCPKG_TARGET_TRIPLET=x64-windows-static-md' `
-            "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+            "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            @discord
 
       # This launcher build is only the fallback until a launcher-v* release exists: the deployer
       # swaps in the newest launcher release (.github/workflows/launcher-release.yml).

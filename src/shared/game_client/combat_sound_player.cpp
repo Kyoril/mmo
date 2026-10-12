@@ -15,6 +15,18 @@ namespace mmo
 		/// each other, matching what the cast error voice does.
 		constexpr GameTime voiceTailMs = 250;
 
+		/// How long a unit has to stay out of combat before entering it again counts as a new
+		/// pull. The server drops the combat flag whenever the last attacker stops swinging,
+		/// even mid-fight, and an aggro roar on every such flicker would wear out fast.
+		constexpr GameTime aggroRearmMs = 5000;
+
+		/// How long a dead unit stays silent beyond its death sound. Covers the pain react
+		/// of the killing blow, which waits for the weapon to visually connect.
+		constexpr GameTime deathSilenceMs = 3000;
+
+		/// Above this many tracked units, units that left combat long ago are forgotten.
+		constexpr size_t combatPruneThreshold = 256;
+
 		uint32 rollPercent()
 		{
 			static std::random_device rd;
@@ -60,9 +72,56 @@ namespace mmo
 		}
 	}
 
+	void CombatSoundPlayer::NotifyCombatState(const ObjectGuid unit, const uint32 displayId, const bool inCombat,
+		const Vector3& position)
+	{
+		const GameTime now = m_clock();
+
+		if (!inCombat)
+		{
+			if (m_inCombat.erase(unit) > 0)
+			{
+				if (m_leftCombatAt.size() >= combatPruneThreshold)
+				{
+					std::erase_if(m_leftCombatAt, [now](const auto& entry) { return now - entry.second >= aggroRearmMs; });
+				}
+
+				m_leftCombatAt[unit] = now;
+			}
+			return;
+		}
+
+		if (!m_inCombat.insert(unit).second)
+		{
+			return;
+		}
+
+		if (const auto it = m_leftCombatAt.find(unit); it != m_leftCombatAt.end())
+		{
+			const bool rearmed = now - it->second >= aggroRearmMs;
+			m_leftCombatAt.erase(it);
+			if (!rearmed)
+			{
+				return;
+			}
+		}
+
+		PlayForcedVoice(combat_sounds::ResolveAggroSound(m_project.models, displayId), unit, position, voiceTailMs);
+	}
+
+	void CombatSoundPlayer::PlayDeath(const ObjectGuid unit, const uint32 displayId, const Vector3& position)
+	{
+		m_inCombat.erase(unit);
+		m_leftCombatAt.erase(unit);
+
+		PlayForcedVoice(combat_sounds::ResolveDeathSound(m_project.models, displayId), unit, position, deathSilenceMs);
+	}
+
 	void CombatSoundPlayer::Clear()
 	{
 		m_voiceGate.Clear();
+		m_inCombat.clear();
+		m_leftCombatAt.clear();
 	}
 
 	void CombatSoundPlayer::SetRollProvider(std::function<uint32()> roll)
@@ -108,6 +167,20 @@ namespace mmo
 
 		const float length = m_soundPlayer.GetEntryLength(sound);
 		return static_cast<GameTime>(length * 1000.0f) + voiceTailMs;
+	}
+
+	void CombatSoundPlayer::PlayForcedVoice(const uint32 sound, const ObjectGuid unit, const Vector3& position,
+		const GameTime extraSilence)
+	{
+		if (sound == 0)
+		{
+			return;
+		}
+
+		const float length = m_soundPlayer.GetEntryLength(sound);
+		m_voiceGate.Silence(unit, m_clock(), static_cast<GameTime>(length * 1000.0f) + extraSilence);
+
+		Play(sound, position);
 	}
 
 	void CombatSoundPlayer::Play(const uint32 sound, const Vector3& position) const

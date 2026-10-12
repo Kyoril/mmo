@@ -15,6 +15,7 @@
 #include "proto_data/project.h"
 #include "proto_data/trigger_event_filter.h"
 #include "game/emote_defs.h"
+#include "game/id_mask.h"
 #include "game/item.h"
 #include "game/spell.h"
 #include "game/talent_rank_gate.h"
@@ -550,7 +551,7 @@ namespace mmo
 		ASSERT(m_raceEntry);
 		ASSERT(m_classEntry);
 
-		const uint32 charRaceBit = 1 << (m_raceEntry->id() - 1);
+		const uint32 charRaceBit = IdMaskBit(m_raceEntry->id());
 		if (entry->requiredraces() && (entry->requiredraces() & charRaceBit) == 0)
 		{
 			return quest_status::Unavailable;
@@ -3053,12 +3054,12 @@ namespace mmo
 			return true;
 		}
 
-		if (m_raceEntry && spell.racemask() != 0 && !(spell.racemask() & (1 << (m_raceEntry->id() - 1))))
+		if (m_raceEntry && spell.racemask() != 0 && !(spell.racemask() & IdMaskBit(m_raceEntry->id())))
 		{
 			return false;
 		}
 
-		if (m_classEntry && spell.classmask() != 0 && !(spell.classmask() & (1 << (m_classEntry->id() - 1))))
+		if (m_classEntry && spell.classmask() != 0 && !(spell.classmask() & IdMaskBit(m_classEntry->id())))
 		{
 			return false;
 		}

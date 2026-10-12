@@ -19,6 +19,8 @@ namespace
 	constexpr uint32 kSoundCritLayer = 502;
 	constexpr uint32 kSoundAttackVoice = 700;
 	constexpr uint32 kSoundHitVoice = 702;
+	constexpr uint32 kSoundAggro = 703;
+	constexpr uint32 kSoundDeath = 704;
 
 	/// Project slice plus doubles, wired the way the client wires them.
 	struct PlayerFixture
@@ -34,6 +36,8 @@ namespace
 			AddSound(kSoundCritLayer, "crit.wav");
 			AddSound(kSoundAttackVoice, "attack_voice.wav");
 			AddSound(kSoundHitVoice, "hit_voice.wav");
+			AddSound(kSoundAggro, "aggro.wav");
+			AddSound(kSoundDeath, "death.wav");
 
 			auto* sword = project.itemSubclasses.add(kSubclassSword);
 			sword->set_name("Sword");
@@ -53,6 +57,8 @@ namespace
 			sounds->set_hit_voice_sound(kSoundHitVoice);
 			sounds->set_hit_voice_chance(50);
 			sounds->set_voice_min_interval_ms(1000);
+			sounds->set_aggro_sound(kSoundAggro);
+			sounds->set_death_sound(kSoundDeath);
 		}
 
 		void AddSound(const uint32 id, const String& file)
@@ -236,4 +242,100 @@ TEST_CASE("The attacker and the victim are gated independently", "[combat_sound_
 	// Victim guid 2 has its own gate, so its pain react is not blocked by the attacker's line.
 	player.PlayOutcome(MakeAttacker(), MakeVictim(), outcome, 2, Vector3::Zero);
 	CHECK(fixture.Played("hit_voice.wav"));
+}
+
+TEST_CASE("Entering combat plays the aggro sound, staying in combat does not repeat it", "[combat_sound_player]")
+{
+	PlayerFixture fixture;
+	CombatSoundPlayer player(fixture.project, fixture.soundPlayer);
+	player.SetClock([] { return GameTime(0); });
+
+	player.NotifyCombatState(3, kModelHuman, true, Vector3::Zero);
+	CHECK(fixture.Played("aggro.wav"));
+
+	fixture.audio.playedFiles.clear();
+
+	player.NotifyCombatState(3, kModelHuman, true, Vector3::Zero);
+	CHECK_FALSE(fixture.Played("aggro.wav"));
+}
+
+TEST_CASE("A brief drop out of combat does not replay the aggro sound", "[combat_sound_player]")
+{
+	PlayerFixture fixture;
+	CombatSoundPlayer player(fixture.project, fixture.soundPlayer);
+
+	GameTime now = 0;
+	player.SetClock([&now] { return now; });
+
+	player.NotifyCombatState(3, kModelHuman, true, Vector3::Zero);
+	REQUIRE(fixture.Played("aggro.wav"));
+	fixture.audio.playedFiles.clear();
+
+	// The server drops the flag whenever the last attacker stops swinging, mid-fight.
+	now = 10000;
+	player.NotifyCombatState(3, kModelHuman, false, Vector3::Zero);
+	now = 14999;
+	player.NotifyCombatState(3, kModelHuman, true, Vector3::Zero);
+	CHECK_FALSE(fixture.Played("aggro.wav"));
+
+	// A real pull after a proper rest plays again.
+	now = 20000;
+	player.NotifyCombatState(3, kModelHuman, false, Vector3::Zero);
+	now = 25000;
+	player.NotifyCombatState(3, kModelHuman, true, Vector3::Zero);
+	CHECK(fixture.Played("aggro.wav"));
+}
+
+TEST_CASE("The aggro sound plays even while the unit's voice is throttled", "[combat_sound_player]")
+{
+	PlayerFixture fixture;
+	CombatSoundPlayer player(fixture.project, fixture.soundPlayer);
+	player.SetRollProvider([] { return 0u; });
+	player.SetClock([] { return GameTime(0); });
+
+	CombatSwingOutcome outcome;
+	outcome.landed = true;
+	player.PlayOutcome(MakeAttacker(), MakeVictim(), outcome, 2, Vector3::Zero);
+	REQUIRE(fixture.Played("hit_voice.wav"));
+
+	player.NotifyCombatState(2, kModelHuman, true, Vector3::Zero);
+	CHECK(fixture.Played("aggro.wav"));
+}
+
+TEST_CASE("A death plays the death sound and silences the pain react of the killing blow", "[combat_sound_player]")
+{
+	PlayerFixture fixture;
+	CombatSoundPlayer player(fixture.project, fixture.soundPlayer);
+	player.SetRollProvider([] { return 0u; });   // the pain react would always pass its roll
+
+	GameTime now = 0;
+	player.SetClock([&now] { return now; });
+
+	player.PlayDeath(2, kModelHuman, Vector3::Zero);
+	CHECK(fixture.Played("death.wav"));
+
+	// The killing blow's impact callback waits for the weapon to visually connect, so it
+	// can arrive after the health update that killed the unit.
+	now = 400;
+	CombatSwingOutcome outcome;
+	outcome.landed = true;
+	player.PlayOutcome(MakeAttacker(), MakeVictim(), outcome, 2, Vector3::Zero);
+	CHECK(fixture.Played("impact.wav"));
+	CHECK_FALSE(fixture.Played("hit_voice.wav"));
+}
+
+TEST_CASE("A model without aggro or death sounds stays silent", "[combat_sound_player]")
+{
+	PlayerFixture fixture;
+	auto* sounds = fixture.project.models.getById(kModelHuman)->mutable_combat_sounds();
+	sounds->clear_aggro_sound();
+	sounds->clear_death_sound();
+
+	CombatSoundPlayer player(fixture.project, fixture.soundPlayer);
+	player.SetClock([] { return GameTime(0); });
+
+	player.NotifyCombatState(3, kModelHuman, true, Vector3::Zero);
+	player.PlayDeath(3, kModelHuman, Vector3::Zero);
+
+	CHECK(fixture.audio.playedFiles.empty());
 }
