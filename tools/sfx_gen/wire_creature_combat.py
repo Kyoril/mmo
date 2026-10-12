@@ -46,6 +46,9 @@ ANIMAL_BANKS = [
     ("Grimtusk", "Boar", 0.78, 0.86, 181),
     ("Rat", "Rat", 0.95, 1.05, 185),
     ("Wolf", "Wolf", 0.94, 1.06, 189),
+    ("Skeleton", "Skeleton", 0.95, 1.05, 201),
+    ("Undead Male", "UndeadMale", 0.96, 1.04, 205),
+    ("Undead Female", "UndeadFemale", 0.96, 1.04, 209),
 ]
 
 # --- Human NPC banks: (bank name, recipe path prefix, file prefix, first entry id) ----------
@@ -70,16 +73,38 @@ MODEL_BANKS = {
     3: "NPC Human Female", 25: "NPC Human Female", 27: "NPC Human Female",
     29: "NPC Human Female", 31: "NPC Human Female", 34: "NPC Human Female",
     35: "NPC Human Female",
+    6: "Skeleton",             # every skeleton, including Barrow-King Morthas
+    36: "Undead Male",         # NPC copy of model 17, see NPC_MODEL_COPIES
+    37: "Undead Female",       # NPC copy of model 18
 }
+
+# Undead creatures used the playable Undead Human race's own models (17/18). A zombie snarl
+# on those would make every undead player character snarl too, so the creatures get NPC
+# copies of the models -- same look, own combat sounds. (copy id, source id, name)
+NPC_MODEL_COPIES = [
+    (36, 17, "Undead Human Male (NPC)"),
+    (37, 18, "Undead Human Female (NPC)"),
+]
 
 # The Cellar Rat unit used the Young Forest Boar model (1). Model 11 "Cellar Rat" is
 # byte-identical apart from its name and is what the rat was always meant to use; pointing
 # the unit at it gives the rat rat sounds without touching how it looks.
 UNIT_MODEL_FIXES = {28: 11}
 
+# Undead creature units moved onto the NPC model copies: unit -> (male model, female model).
+# The Hollow Choir bosses (81 Sevrin Wax, 84 Ossuar, 85 Vell, 86 Oswin, 87 Mereth, 88 Veyr)
+# stay on the player models on purpose: their pull is a scripted yell, and a generic snarl
+# on top would talk over it.
+UNIT_MODEL_PAIRS = {
+    58: (36, 37),   # Risen Laborer (both genders)
+    82: (36, 36), 83: (36, 36), 89: (36, 36), 91: (36, 36), 92: (36, 36), 94: (36, 36),
+    95: (36, 36),
+    90: (37, 37), 93: (37, 37),
+}
+
 # Play chances in percent. Animals vocalise more readily than people: a boar grunts on
 # nearly every charge, whereas a human grunting on every swing sounds like a parody.
-ANIMAL_CHANCES = dict(attack=30, attack_crit=75, hit=40, hit_crit=90)
+ANIMAL_CHANCES = dict(attack=30, attack_crit=75, hit=40, hit_crit=90)  # also undead
 HUMAN_CHANCES = dict(attack=18, attack_crit=65, hit=30, hit_crit=80)  # = player barks
 VOICE_MIN_INTERVAL_MS = 2500
 
@@ -186,6 +211,12 @@ def main():
 
     print("models:")
     models = read(mods["model_data"].ModelDatas, "model_data")
+    for copy_id, source_id, name in NPC_MODEL_COPIES:
+        source = next(e for e in models.entry if e.id == source_id)
+        copy = upsert(models, copy_id)
+        copy.CopyFrom(source)
+        copy.id = copy_id
+        copy.name = name
     for entry in models.entry:
         bank = MODEL_BANKS.get(entry.id)
         if not bank:
@@ -215,6 +246,12 @@ def main():
             if entry.maleModel != UNIT_MODEL_FIXES[entry.id]:
                 print(f"    {entry.id:3} {entry.name:32} model {entry.maleModel} -> {UNIT_MODEL_FIXES[entry.id]}")
             entry.maleModel = UNIT_MODEL_FIXES[entry.id]
+        if entry.id in UNIT_MODEL_PAIRS:
+            male, female = UNIT_MODEL_PAIRS[entry.id]
+            if (entry.maleModel, entry.femaleModel) != (male, female):
+                print(f"    {entry.id:3} {entry.name:32} models {entry.maleModel}/{entry.femaleModel} -> {male}/{female}")
+            entry.maleModel = male
+            entry.femaleModel = female
     write(units, "units", args.dry_run, client=False)
 
     print("\ndone.")

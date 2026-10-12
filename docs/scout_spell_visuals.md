@@ -54,7 +54,7 @@ Recipes: `tools/particle_gen/recipes/scout_{common,strikes,utility}.py`, output 
 
 Written by `tools/scout_visuals/author_scout_visuals.py` (validate by default, `--apply` writes the
 editor and ClientDB copies of `sounds.data`, `spell_visualizations.data` and `spells.data`; only
-`visualization_id` is touched in the spells). Visualizations 100-112, sound entries 210-222. The
+`visualization_id` is touched in the spells). Visualizations 100-112, sound entries 240-252. The
 superseded entries 4, 6, 18, 19 and 20 are left in place; 4 and 6 belonged to other classes'
 history and nothing scout points at them any more.
 
