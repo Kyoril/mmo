@@ -88,6 +88,7 @@ several objects of one entry, e.g. the Hollow Choir's seals),
 `GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open),
 `GetUnitFlags(g)` (the unit's replicated Flags field),
 `MeleeSwingCount(g)` (auto-attack swings the server resolved against `g`, hit or miss),
+`OffhandSwingCount(g)` (the off-hand swings among them, flagged `LeftSwing` by the server),
 `IsAutoAttacking()` (own character; set by the broadcast `AttackStart`/`AttackStop`
 packets rather than by the requests we send, so it reports what the server acknowledged),
 `SpellGoCount(g, spellId)` (casts of `spellId` by `g` that went off, counted from SpellGo),
@@ -111,6 +112,8 @@ the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 true: the realm disconnects a client that accepts with no invitation pending), `LeaveParty()`,
 `IsInParty()`, `GetPartyMemberCount()`, `EquipFromBackpack()` (asks the server to equip every
 backpack item; empty slots and unwearable items are rejected harmlessly),
+`EquipBackpackItemTo(packIndex, equipSlot)` (moves backpack slot `packIndex`, 0-based, into an
+equipment slot, e.g. 16 = off hand, which auto-equip never picks for a one-handed weapon),
 `LootUnit(g)` (opens the loot window on a corpse or world object; the character must
 be within loot range), `ReleaseLoot(g)` (closes it),
 `DoEmote(emoteId)` (emote 4 = Sit, a pose emote that toggles: performing it again

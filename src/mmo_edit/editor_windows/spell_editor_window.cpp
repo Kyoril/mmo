@@ -11,6 +11,7 @@
 #include "assets/asset_registry.h"
 #include "editor_imgui_helpers.h"
 #include "game/aura.h"
+#include "game/id_mask.h"
 #include "game/item.h"
 #include "game/spell.h"
 #include "game/trade_skill.h"
@@ -899,13 +900,13 @@ namespace mmo
 					{
 						ImGui::TableNextColumn();
 
-						bool raceIncluded = (currentEntry.racemask() & (1 << (i - 1))) != 0;
+						bool raceIncluded = (currentEntry.racemask() & IdMaskBit(i)) != 0;
 						if (ImGui::Checkbox(race->name().c_str(), &raceIncluded))
 						{
 							if (raceIncluded)
-								currentEntry.set_racemask(currentEntry.racemask() | (1 << (i - 1)));
+								currentEntry.set_racemask(currentEntry.racemask() | IdMaskBit(i));
 							else
-								currentEntry.set_racemask(currentEntry.racemask() & ~(1 << (i - 1)));
+								currentEntry.set_racemask(currentEntry.racemask() & ~IdMaskBit(i));
 						}
 					}
 				}
@@ -925,13 +926,13 @@ namespace mmo
 					{
 						ImGui::TableNextColumn();
 
-						bool classIncluded = (currentEntry.classmask() & (1 << (i - 1))) != 0;
+						bool classIncluded = (currentEntry.classmask() & IdMaskBit(i)) != 0;
 						if (ImGui::Checkbox(classEntry->name().c_str(), &classIncluded))
 						{
 							if (classIncluded)
-								currentEntry.set_classmask(currentEntry.classmask() | (1 << (i - 1)));
+								currentEntry.set_classmask(currentEntry.classmask() | IdMaskBit(i));
 							else
-								currentEntry.set_classmask(currentEntry.classmask() & ~(1 << (i - 1)));
+								currentEntry.set_classmask(currentEntry.classmask() & ~IdMaskBit(i));
 						}
 					}
 				}

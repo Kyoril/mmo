@@ -395,7 +395,15 @@ namespace mmo
 		// Only add to render queue if we have enough segments and a material
 		if (m_segments.size() >= 2 && m_material && m_renderable->IsReady())
 		{
-			queue.AddRenderable(*m_renderable, GetRenderQueueGroup(), 0);
+			// A translucent ribbon in an opaque queue group is drawn by the deferred geometry
+			// pass, which renders particle-style materials black. Same rule as ManualRenderObject.
+			uint8 queueId = GetRenderQueueGroup();
+			if (m_material->IsTranslucent() && queueId < RenderQueueGroupId::Transparent)
+			{
+				queueId = RenderQueueGroupId::Transparent;
+			}
+
+			queue.AddRenderable(*m_renderable, queueId, 0);
 		}
 	}
 

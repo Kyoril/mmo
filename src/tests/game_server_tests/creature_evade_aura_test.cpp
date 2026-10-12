@@ -129,21 +129,22 @@ namespace
 
 TEST_CASE_METHOD(EvadeFixture, "An evading creature drops the auras its attackers left on it", "[creature_ai][evade]")
 {
+	// The attacker's damage-over-time effect, its own buff and a passive aura. Declared before the
+	// creatures: an AuraContainer holds its SpellEntry by reference, and the bandit's destructor
+	// still reads it while tearing down the auras that survive the evade.
+	const proto::SpellEntry dot = MakeAuraSpell(600);
+	const proto::SpellEntry selfBuff = MakeAuraSpell(601);
+	proto::SpellEntry passive = MakeAuraSpell(602);
+	passive.set_attributes(0, spell_attributes::Passive);
+
 	auto bandit = Spawn(*banditEntry, Vector3(0.0f, 0.0f, 0.0f));
 	auto intruder = Spawn(*intruderEntry, Vector3(0.0f, 0.0f, 5.0f));
 
 	bandit->GetAI()->Idle();
 	RunPosted();
 
-	// The attacker's damage-over-time effect, its own buff and a passive aura.
-	const proto::SpellEntry dot = MakeAuraSpell(600);
 	bandit->ApplyAura(std::make_shared<AuraContainer>(*bandit, intruder->GetGuid(), dot, 30000, 0));
-
-	const proto::SpellEntry selfBuff = MakeAuraSpell(601);
 	bandit->ApplyAura(std::make_shared<AuraContainer>(*bandit, bandit->GetGuid(), selfBuff, 30000, 0));
-
-	proto::SpellEntry passive = MakeAuraSpell(602);
-	passive.set_attributes(0, spell_attributes::Passive);
 	bandit->ApplyAura(std::make_shared<AuraContainer>(*bandit, intruder->GetGuid(), passive, 0, 0));
 
 	REQUIRE(bandit->HasAuraSpell(600));

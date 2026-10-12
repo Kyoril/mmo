@@ -45,4 +45,12 @@ message CombatSounds
 	// Minimum gap between two voice lines from the same unit, in milliseconds.
 	// 0 = derive the gap from the played clip's length.
 	optional uint32 voice_min_interval_ms = 14;
+
+	// Played once when the unit enters combat after having been out of it for a while,
+	// so a player hears that something was pulled. Always plays, ignoring the voice gap.
+	optional uint32 aggro_sound = 15;
+
+	// Played when the unit dies. Always plays, and silences any pain react still queued
+	// behind the killing blow.
+	optional uint32 death_sound = 16;
 }

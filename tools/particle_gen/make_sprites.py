@@ -191,6 +191,83 @@ def flame(width=128, height=256):
     return rgba
 
 
+def slash(size=256, centre=1.0, arc=1.7, thickness=0.18):
+    """Crescent blade slash for melee impacts (`RENDER_BILLBOARD`, rolled by `rotation`).
+
+    An arc whose middle passes through the centre of the quad (its circle is centred
+    `centre` to the left), thickest in the middle and tapering to points at both tips, with a
+    bright cutting edge and a softer wake behind it. Because the cut crosses the quad centre,
+    two of them with different rolls cross each other at the impact point (an X), and a
+    random roll keeps every cut on the target. The curve is what reads as a swing.
+    """
+    xx, yy = _axes(size, size)
+    cx = xx + centre
+    r = np.sqrt(cx * cx + yy * yy)
+    theta = np.arctan2(yy, cx)
+    half = arc / 2.0
+    along = np.clip(1.0 - np.abs(theta) / half, 0.0, 1.0)      # 1 mid-arc, 0 at the tips
+    width = thickness * np.sin(along * np.pi / 2.0) ** 0.8
+    d = r - centre
+    edge = np.clip(1.0 - np.abs(d - width * 0.30) / (width * 0.35 + 1e-4), 0.0, 1.0) ** 1.3
+    wake = np.clip(1.0 - np.abs(d + width * 0.20) / (width + 1e-4), 0.0, 1.0) ** 2.0
+    a = np.clip(edge + 0.55 * wake, 0.0, 1.0) * (along > 0.0)
+    rr = np.sqrt(xx * xx + yy * yy)
+    a *= 1.0 - _smooth(0.92, 1.0, rr)
+    rgba = np.ones((size, size, 4))
+    rgba[..., 3] = a
+    return rgba
+
+
+def smoke(size=256, seed=7, lobes=9):
+    """Soft cloudy smoke puff: overlapping lobes with a wispy, uneven edge.
+
+    A round glow blob reads as light; smoke needs a lumpy silhouette and inner variation so
+    a cloud of them reads as billowing. Deterministic (fixed seed) so rebuilding does not
+    churn the texture bytes.
+    """
+    rng = np.random.default_rng(seed)
+    xx, yy = _axes(size, size)
+    a = np.zeros_like(xx)
+    for _ in range(lobes):
+        cx, cy = rng.uniform(-0.28, 0.28, 2)
+        rad = rng.uniform(0.32, 0.52)
+        rr2 = ((xx - cx) ** 2 + (yy - cy) ** 2) / (rad * rad)
+        a += np.exp(-2.2 * rr2) * rng.uniform(0.5, 1.0)
+    # Low-frequency turbulence so the inside is not a flat fill.
+    noise = np.zeros_like(xx)
+    for freq, amp in ((3.0, 0.5), (7.0, 0.3), (13.0, 0.2)):
+        px, py = rng.uniform(0, 6.28, 2)
+        noise += amp * np.sin(xx * freq + px) * np.cos(yy * freq * 1.3 + py)
+    a = 1.0 - np.exp(-0.75 * a * (0.65 + 0.35 * noise))
+    r = np.sqrt(xx * xx + yy * yy)
+    a = np.clip(a, 0.0, 1.0) * (1.0 - _smooth(0.85, 1.0, r))
+    rgba = np.ones((size, size, 4))
+    rgba[..., 3] = a
+    return rgba
+
+
+def crosshair(size=256):
+    """Hunter's mark: a broken ring with four inward-pointing ticks and a centre dot.
+
+    For a debuff marker hovering over a target. The gaps in the ring and the ticks are what
+    make it read as a reticle rather than as another shockwave ring.
+    """
+    xx, yy = _axes(size, size)
+    r = np.sqrt(xx * xx + yy * yy)
+    theta = np.arctan2(yy, xx)
+    ring_band = np.clip(1.0 - np.abs(r - 0.72) / 0.06, 0.0, 1.0) ** 1.4
+    gaps = _smooth(0.10, 0.22, np.abs(np.sin(theta * 2.0)))   # four gaps on the axes
+    a = ring_band * gaps
+    ax = np.minimum(np.abs(xx), np.abs(yy))
+    ticks = np.clip(1.0 - ax / 0.035, 0.0, 1.0) * _smooth(0.34, 0.40, r) * (1.0 - _smooth(0.84, 0.90, r))
+    a += ticks
+    a += np.clip(1.0 - r / 0.09, 0.0, 1.0) ** 1.2
+    a = np.clip(a, 0.0, 1.0) * (1.0 - _smooth(0.94, 1.0, r))
+    rgba = np.ones((size, size, 4))
+    rgba[..., 3] = a
+    return rgba
+
+
 SPRITES = {
     "T_Particle_Glow": glow,
     "T_Particle_Beam": beam,
@@ -199,6 +276,9 @@ SPRITES = {
     "T_Particle_Rays": rays,
     "T_Particle_Feather": feather,
     "T_Particle_Flame": flame,
+    "T_Particle_Slash": slash,
+    "T_Particle_Smoke": smoke,
+    "T_Particle_Crosshair": crosshair,
 }
 
 
@@ -210,6 +290,9 @@ MATERIALS = {
     "Particle_Rays": "T_Particle_Rays",
     "Particle_Feather": "T_Particle_Feather",
     "Particle_Flame": "T_Particle_Flame",
+    "Particle_Slash": "T_Particle_Slash",
+    "Particle_Smoke": "T_Particle_Smoke",
+    "Particle_Crosshair": "T_Particle_Crosshair",
 }
 
 

@@ -24,9 +24,11 @@ local function AssertVoice(soundId, speaker, label)
 	Assert(WaitUntil(function() return SoundSource(soundId) == speaker end, 10000, label),
 		label .. ": the yell should play its voice line from the boss (source '" .. SoundSource(soundId) .. "')")
 end
--- The stair seals G2_North/South are the magic barrier copy of the seal object (14).
+-- The stair seals G2_North/South and the arch seals beside the stair (G2_NorthArch/SouthArch) are
+-- the magic barrier copy of the seal object (14), all on one line at x -85.5.
 local SEAL = 15
-local G2_X, G2_Y, G2_Z = -85.5, 5.2, -3.0
+local G2_X, G2_Y = -85.5, 5.2
+local G2_SEALS = { { "G2_North", -2.85 }, { "G2_South", 2.85 }, { "G2_NorthArch", -9.0 }, { "G2_SouthArch", 9.0 } }
 
 local SPAWN_MAP, SPAWN_X, SPAWN_Y, SPAWN_Z = 0, 292.267, 5.33, 552.571
 
@@ -113,15 +115,18 @@ Assert(WaitUntil(function() local s = SoundSource(VEYR_MERETH_FALLS); return s ~
 	10000, "Veyr taunt"), "Veyr's taunt at Mereth's death should play its voice line from Veyr")
 local tauntSource = SoundSource(VEYR_MERETH_FALLS)
 
--- Veyr, in the apse. Landing next to the G2 seal also lets us read its state.
+-- Veyr, in the apse. Landing next to the G2 seals also lets us read their state.
 GM.Worldport(1, -98.0, 5.7, 0.0, 0)
 Sleep(3000)
 GM.Godmode(true)
-local seal = nil
-Assert(WaitUntil(function() seal = FindNearestObjectByEntry(SEAL, G2_X, G2_Y, G2_Z); return seal ~= nil end,
-	20000, "G2 seal visible"), "the G2 seal should be spawned")
-Assert(WaitUntil(function() return GetObjectState(seal) == 1 end, 10000, "G2 open"),
-	"Mereth's death should open the G2 seals")
+for _, entry in ipairs(G2_SEALS) do
+	local name, z = entry[1], entry[2]
+	local seal = nil
+	Assert(WaitUntil(function() seal = FindNearestObjectByEntry(SEAL, G2_X, G2_Y, z); return seal ~= nil end,
+		20000, name .. " visible"), "the " .. name .. " seal should be spawned")
+	Assert(WaitUntil(function() return GetObjectState(seal) == 1 end, 10000, name .. " open"),
+		"Mereth's death should open the " .. name .. " seal")
+end
 Log("G2 is open")
 
 local veyr, veyrMax = Pull(VEYR, "Veyr")

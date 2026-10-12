@@ -2737,11 +2737,22 @@ namespace mmo
 					return PacketParseResult::Disconnect;
 				}
 
+				// Units and players share the unit field layout, which carries the combat flag
+				// and health the aggro and death sounds are driven by.
+				const bool isUnit = obj->GetTypeId() == ObjectTypeId::Unit || obj->GetTypeId() == ObjectTypeId::Player;
+				const bool wasInCombat = isUnit && (obj->Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0;
+				const bool wasAlive = isUnit && obj->Get<uint32>(object_fields::Health) > 0;
+
 				obj->Deserialize(packet, creation);
 				if (!packet)
 				{
 					ELOG("Failed to read object fields of object update packet #" << i << " (Object guid: " << log_hex_digit(guid) << ")");
 					return PacketParseResult::Disconnect;
+				}
+
+				if (isUnit)
+				{
+					PlayUnitStateSounds(*obj, wasInCombat, wasAlive);
 				}
 
 				// Check if this was an item update for the active player
@@ -4555,6 +4566,26 @@ namespace mmo
 		TriggerCombatCameraShake(targetGuid, ObjectMgr::GetActivePlayerGuid(), amount, (flags & damage_flags::Crit) != 0);
 
 		return PacketParseResult::Pass;
+	}
+
+	void WorldState::PlayUnitStateSounds(const GameObjectC& unit, const bool wasInCombat, const bool wasAlive)
+	{
+		const uint32 displayId = unit.Get<uint32>(object_fields::DisplayId);
+		const bool isAlive = unit.Get<uint32>(object_fields::Health) > 0;
+
+		if (wasAlive && !isAlive)
+		{
+			m_combatSoundPlayer.PlayDeath(unit.GetGuid(), displayId, unit.GetPosition());
+			return;
+		}
+
+		// A corpse can still carry the combat flag for a moment, and dropping it must not
+		// rearm an aggro sound for a unit that is not going to fight again until it respawns.
+		const bool inCombat = isAlive && (unit.Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0;
+		if (inCombat != wasInCombat)
+		{
+			m_combatSoundPlayer.NotifyCombatState(unit.GetGuid(), displayId, inCombat, unit.GetPosition());
+		}
 	}
 
 	PacketParseResult WorldState::OnAttackerStateUpdate(game::IncomingPacket &packet)

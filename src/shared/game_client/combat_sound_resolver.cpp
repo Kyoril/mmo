@@ -204,5 +204,17 @@ namespace mmo
 			request.chance = sounds->hit_voice_chance();
 			return request;
 		}
+
+		uint32 ResolveAggroSound(const proto_client::ModelDataManager& models, const uint32 displayId)
+		{
+			const auto* sounds = findModelSounds(models, displayId);
+			return sounds ? sounds->aggro_sound() : 0;
+		}
+
+		uint32 ResolveDeathSound(const proto_client::ModelDataManager& models, const uint32 displayId)
+		{
+			const auto* sounds = findModelSounds(models, displayId);
+			return sounds ? sounds->death_sound() : 0;
+		}
 	}
 }

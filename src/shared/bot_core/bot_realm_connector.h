@@ -343,6 +343,13 @@ namespace mmo
 		/// @param slot The slot inside that bag.
 		void AutoEquipItem(uint8 bag, uint8 slot);
 
+		/// Swaps the contents of two slots of the character's own inventory (equipment, backpack and
+		/// bag slots, all relative to Bag_0), e.g. to equip a backpack item into a specific equipment
+		/// slot such as the off hand, which AutoEquipItem never picks for a one-handed weapon.
+		/// @param srcSlot The source slot.
+		/// @param dstSlot The destination slot.
+		void SwapInventoryItems(uint8 srcSlot, uint8 dstSlot);
+
 		// ============================================================
 		// Object Management Methods
 		// ============================================================

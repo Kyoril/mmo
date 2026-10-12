@@ -8,6 +8,7 @@
 #include "game_server/spells/no_cast_state.h"
 #include "game_server/spells/spell_effects.h"
 #include "game_server/spells/spell_interrupt_rules.h"
+#include "game/id_mask.h"
 #include "game_server/spells/trade_skill_cast_rules.h"
 
 #include "base/utilities.h"
@@ -441,13 +442,13 @@ namespace mmo
 			return true;
 		}
 
-		if (m_spell.racemask() != 0 && !(m_spell.racemask() & (1 << (playerCaster->GetRaceEntry()->id() - 1))))
+		if (m_spell.racemask() != 0 && !(m_spell.racemask() & IdMaskBit(playerCaster->GetRaceEntry()->id())))
 		{
 			SendEndCast(spell_cast_result::FailedError);
 			return false;
 		}
 
-		if (m_spell.classmask() != 0 && !(m_spell.classmask() & (1 << (playerCaster->GetClassEntry()->id() - 1))))
+		if (m_spell.classmask() != 0 && !(m_spell.classmask() & IdMaskBit(playerCaster->GetClassEntry()->id())))
 		{
 			SendEndCast(spell_cast_result::FailedError);
 			return false;

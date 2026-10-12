@@ -158,6 +158,7 @@ namespace mmo
 						trailConfig.final_b(), trailConfig.final_a());
 					ribbonParams.segmentLifetime = trailConfig.segment_lifetime();
 					ribbonParams.maxSegments = trailConfig.max_segments();
+					ribbonParams.segmentInterval = std::max(0.005f, trailConfig.segment_interval());
 					m_ribbonTrail->SetParameters(ribbonParams);
 
 					if (trailConfig.has_material_name() && !trailConfig.material_name().empty())
