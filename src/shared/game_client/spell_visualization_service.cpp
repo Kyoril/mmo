@@ -733,6 +733,34 @@ namespace mmo
 				}
 			}
 
+			// Timed ribbon trails (melee blade arcs) retire themselves: stop emitting after their
+			// emit duration, destroy once their last segment has faded.
+			for (auto ribbonIt = effectIt->ribbonTrails.begin(); ribbonIt != effectIt->ribbonTrails.end(); )
+			{
+				if (ribbonIt->emitDuration <= 0.0f)
+				{
+					++ribbonIt;
+					continue;
+				}
+
+				ribbonIt->elapsed += deltaTime;
+				const auto phase = spell_visual::TimedRibbonPhase(ribbonIt->elapsed, ribbonIt->emitDuration, ribbonIt->segmentLifetime);
+				if (phase == spell_visual::RibbonPhase::Expired)
+				{
+					ribbonIt->trail->Stop();
+					scene.DestroyRibbonTrail(*ribbonIt->trail);
+					ribbonIt = effectIt->ribbonTrails.erase(ribbonIt);
+					continue;
+				}
+
+				if (phase == spell_visual::RibbonPhase::Fading && ribbonIt->trail->IsPlaying())
+				{
+					ribbonIt->trail->Stop();
+				}
+
+				++ribbonIt;
+			}
+
 			if (effectIt->particles.empty() && effectIt->lights.empty() && effectIt->ribbonTrails.empty())
 			{
 				for (auto* node : effectIt->effectNodes)
@@ -1243,6 +1271,7 @@ namespace mmo
                 trailConfig.final_b(), trailConfig.final_a());
             params.segmentLifetime = trailConfig.segment_lifetime();
             params.maxSegments = trailConfig.max_segments();
+            params.segmentInterval = std::max(0.005f, trailConfig.segment_interval());
             trail->SetParameters(params);
 
             // Load material if specified
@@ -1282,7 +1311,12 @@ namespace mmo
             }
 
             trail->Play();
-            effect->ribbonTrails.push_back(trail);
+
+            EffectRibbon ribbon;
+            ribbon.trail = trail;
+            ribbon.emitDuration = std::max(0.0f, trailConfig.emit_duration());
+            ribbon.segmentLifetime = trailConfig.segment_lifetime();
+            effect->ribbonTrails.push_back(ribbon);
         }
         catch (const std::exception& e)
         {
@@ -1678,12 +1712,12 @@ namespace mmo
                         it->lights = remainingLights;
                     }
 
-                    for (auto* trail : it->ribbonTrails)
+                    for (const auto& ribbon : it->ribbonTrails)
                     {
-                        if (trail)
+                        if (ribbon.trail)
                         {
-                            trail->Stop();
-                            scene->DestroyRibbonTrail(*trail);
+                            ribbon.trail->Stop();
+                            scene->DestroyRibbonTrail(*ribbon.trail);
                         }
                     }
 

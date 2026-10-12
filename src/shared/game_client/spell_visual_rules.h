@@ -89,4 +89,38 @@ namespace mmo::spell_visual
 
 		return std::max(0.0f, (1.0f - t) / (1.0f - attack));
 	}
+
+	/// \brief Where a ribbon trail with an emit duration is in its life.
+	enum class RibbonPhase
+	{
+		/// Still adding segments.
+		Emitting,
+		/// Stopped adding segments; the ones it has are fading out.
+		Fading,
+		/// Every segment has faded; the trail can be destroyed.
+		Expired
+	};
+
+	/// \brief Phase of a ribbon trail with RibbonTrailConfig.emit_duration set.
+	///
+	/// A trail on a one-shot kit (a melee swing's blade arc) has no lifecycle event that would
+	/// tear it down, so it retires itself: it emits for its emit duration, then lives on for one
+	/// segment lifetime so the segments it already laid down fade instead of popping.
+	/// \param elapsedSeconds Time since the trail spawned.
+	/// \param emitDuration Seconds the trail adds segments. Must be > 0; 0 means "untimed".
+	/// \param segmentLifetime Seconds a single segment lives.
+	inline RibbonPhase TimedRibbonPhase(const float elapsedSeconds, const float emitDuration, const float segmentLifetime)
+	{
+		if (elapsedSeconds < emitDuration)
+		{
+			return RibbonPhase::Emitting;
+		}
+
+		if (elapsedSeconds < emitDuration + std::max(0.0f, segmentLifetime))
+		{
+			return RibbonPhase::Fading;
+		}
+
+		return RibbonPhase::Expired;
+	}
 }

@@ -1189,6 +1189,27 @@ namespace mmo
 						}
 						ribbon->set_max_segments(static_cast<uint32_t>(maxSeg));
 					}
+
+					float segInterval = ribbon->segment_interval();
+					if (ImGui::DragFloat("Segment Interval", &segInterval, 0.002f, 0.005f, 0.5f, "%.3f s"))
+					{
+						ribbon->set_segment_interval(segInterval);
+					}
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::SetTooltip("Seconds between two segments. Fast motion like a weapon swing needs ~0.01.");
+					}
+
+					float emitDuration = ribbon->emit_duration();
+					if (ImGui::DragFloat("Emit Duration", &emitDuration, 0.01f, 0.0f, 10.0f, "%.2f s"))
+					{
+						ribbon->set_emit_duration(emitDuration);
+					}
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::SetTooltip("0 = emit until the effect is torn down (cast end, aura removal).\n"
+							"> 0 = emit this long, then fade and retire: use for one-shot kits such as a blade arc.");
+					}
 				}
 
 				ImGui::TreePop();
