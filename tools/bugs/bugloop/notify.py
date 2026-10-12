@@ -103,7 +103,7 @@ STATUS_LABELS = {
 	"implement-started": "Feature implementation started",
 	"parked": "Parked for review",
 	"ship-queued": "Fix ready, ships after the freeze window",
-	"needs-info": "Needs info",
+	"needs-info": "Needs info, waiting for the maintainer",
 	"duplicate": "Duplicate",
 	"abuse": "Flagged as abuse (wontfix)",
 	"wontfix-not-a-bug": "Won't fix: not a bug",
@@ -146,7 +146,9 @@ def status_message(notifier, bug_id, outcome, summary, details):
 	return "\n".join(lines)
 
 
-def daily_summary(data, budget, waiting):
+def daily_summary(data, budget, waiting, needs_info=None):
+	"""`waiting` counts parked bugs without a decision, `needs_info` the bugs the loop gave up on;
+	either is None when the API could not be asked."""
 	counts = {}
 	for entry in data.get("outcomes", []):
 		counts[entry.get("outcome")] = counts.get(entry.get("outcome"), 0) + 1
@@ -157,9 +159,17 @@ def daily_summary(data, budget, waiting):
 			shipped, counts.get("parked", 0), counts.get("needs-info", 0), counts.get("abuse", 0), counts.get("discarded", 0)),
 		"Claude invocations: {} of {}".format(data.get("invocations", 0), budget),
 	]
+	waiting_parts = []
 	if waiting is not None:
-		lines.append("waiting for a decision: {}".format(waiting))
-	for entry in [entry for entry in data.get("outcomes", []) if entry.get("outcome") == "parked"][:10]:
-		reason = (entry.get("reasons") or ["?"])[0]
+		waiting_parts.append("{} parked".format(waiting))
+	if needs_info is not None:
+		waiting_parts.append("{} needs-info".format(needs_info))
+	if waiting_parts:
+		lines.append("waiting for a decision: " + ", ".join(waiting_parts))
+	for entry in [entry for entry in data.get("outcomes", []) if entry.get("outcome") in ("parked", "needs-info")][:10]:
+		if entry.get("outcome") == "parked":
+			reason = (entry.get("reasons") or ["?"])[0]
+		else:
+			reason = "needs-info: " + str(entry.get("reason") or "?")
 		lines.append("- {}: {}".format(str(entry.get("bug", ""))[-8:], str(reason)[:120]))
 	return "\n".join(lines)
