@@ -49,6 +49,7 @@
 #include "editor_windows/model_editor_window.h"
 #include "editor_windows/race_editor_window.h"
 #include "editor_windows/proficiency_editor_window.h"
+#include "editor_windows/skill_editor_window.h"
 #include "editor_windows/chat_channel_editor_window.h"
 #include "editor_windows/emote_editor_window.h"
 #include "editor_windows/item_subclass_editor_window.h"
@@ -256,6 +257,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::UnitClassEditorWindow>("Unit Class Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RaceEditorWindow>("Race Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ProficiencyEditorWindow>("Proficiency Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::SkillEditorWindow>("Skill Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ChatChannelEditorWindow>("Chat Channel Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::EmoteEditorWindow>("Emote Editor", project, mainWindow, previewProviderManager));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ModelEditorWindow>("Model Data Editor", project, mainWindow));

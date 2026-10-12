@@ -4,6 +4,7 @@
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
+#include <limits>
 #include <map>
 
 #include "asset_picker_widget.h"
@@ -12,6 +13,7 @@
 #include "game/aura.h"
 #include "game/item.h"
 #include "game/spell.h"
+#include "game/trade_skill.h"
 #include "game_server/spells/spell_cast.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
@@ -1143,6 +1145,151 @@ namespace mmo
 			}
 
 			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
+		}
+
+		if (ImGui::CollapsingHeader("Profession", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Indent();
+
+			// Skill (None = 0)
+			const proto::SkillEntry* selectedSkill = currentEntry.skill() != 0 ? m_project.skills.getById(currentEntry.skill()) : nullptr;
+			ImGui::SetNextItemWidth(250);
+			if (ImGui::BeginCombo("Skill", selectedSkill ? selectedSkill->name().c_str() : "None"))
+			{
+				if (ImGui::Selectable("None", currentEntry.skill() == 0))
+				{
+					currentEntry.set_skill(0);
+					currentEntry.set_craftcategory(0);
+				}
+
+				for (const auto& skill : m_project.skills.getTemplates().entry())
+				{
+					ImGui::PushID(static_cast<int>(skill.id()));
+					const bool isSelected = currentEntry.skill() == skill.id();
+					if (ImGui::Selectable(skill.name().c_str(), isSelected))
+					{
+						if (currentEntry.skill() != skill.id())
+						{
+							currentEntry.set_craftcategory(0);
+						}
+						currentEntry.set_skill(skill.id());
+					}
+					if (isSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+				ImGui::EndCombo();
+			}
+
+			// Category within the chosen skill
+			selectedSkill = currentEntry.skill() != 0 ? m_project.skills.getById(currentEntry.skill()) : nullptr;
+			const proto::SkillCategory* selectedCategory = nullptr;
+			if (selectedSkill)
+			{
+				for (const auto& category : selectedSkill->categories())
+				{
+					if (category.id() == currentEntry.craftcategory())
+					{
+						selectedCategory = &category;
+						break;
+					}
+				}
+			}
+
+			ImGui::SetNextItemWidth(250);
+			if (ImGui::BeginCombo("Category", selectedCategory ? selectedCategory->name().c_str() : "None"))
+			{
+				if (ImGui::Selectable("None", currentEntry.craftcategory() == 0))
+				{
+					currentEntry.set_craftcategory(0);
+				}
+
+				if (selectedSkill)
+				{
+					for (const auto& category : selectedSkill->categories())
+					{
+						ImGui::PushID(static_cast<int>(category.id()));
+						const bool isSelected = currentEntry.craftcategory() == category.id();
+						if (ImGui::Selectable(category.name().c_str(), isSelected))
+						{
+							currentEntry.set_craftcategory(category.id());
+						}
+						if (isSelected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+				}
+				ImGui::EndCombo();
+			}
+
+			uint32 skillRequired = currentEntry.skillrequired();
+			uint32 skillYellow = currentEntry.trivialskilllow();
+			uint32 skillGreen = currentEntry.skillgreen();
+			uint32 skillGrey = currentEntry.trivialskillhigh();
+			ImGui::SetNextItemWidth(150);
+			if (ImGui::InputScalar("Required (orange)", ImGuiDataType_U32, &skillRequired))
+			{
+				currentEntry.set_skillrequired(skillRequired);
+			}
+			ImGui::SetNextItemWidth(150);
+			if (ImGui::InputScalar("Yellow", ImGuiDataType_U32, &skillYellow))
+			{
+				currentEntry.set_trivialskilllow(skillYellow);
+			}
+			ImGui::SetNextItemWidth(150);
+			if (ImGui::InputScalar("Green", ImGuiDataType_U32, &skillGreen))
+			{
+				currentEntry.set_skillgreen(skillGreen);
+			}
+			ImGui::SetNextItemWidth(150);
+			if (ImGui::InputScalar("Grey", ImGuiDataType_U32, &skillGrey))
+			{
+				currentEntry.set_trivialskillhigh(skillGrey);
+			}
+
+			// Show the resulting colour bands. A grey of 0 means the recipe never turns trivial.
+			if (currentEntry.skill() != 0)
+			{
+				const TradeSkillThresholds thresholds = TradeSkillThresholdsOf(currentEntry);
+				if (thresholds.grey == std::numeric_limits<uint32>::max())
+				{
+					ImGui::TextDisabled("Grey is 0: the recipe is orange from Required and never turns trivial.");
+				}
+				else
+				{
+					struct Band
+					{
+						const char* name;
+						ImVec4 color;
+						TradeSkillDifficulty difficulty;
+					};
+					static const Band bands[] = {
+						{ "Orange", ImVec4(1.0f, 0.5f, 0.1f, 1.0f), trade_skill_difficulty::Orange },
+						{ "Yellow", ImVec4(1.0f, 1.0f, 0.2f, 1.0f), trade_skill_difficulty::Yellow },
+						{ "Green", ImVec4(0.3f, 0.9f, 0.3f, 1.0f), trade_skill_difficulty::Green },
+						{ "Grey", ImVec4(0.6f, 0.6f, 0.6f, 1.0f), trade_skill_difficulty::Grey },
+					};
+
+					for (const Band& band : bands)
+					{
+						// Find the first skill value (required..grey) at which this band starts.
+						for (uint32 value = thresholds.required; value <= thresholds.grey; ++value)
+						{
+							if (GetTradeSkillDifficulty(value, thresholds) == band.difficulty)
+							{
+								ImGui::TextColored(band.color, "%s from skill %u", band.name, value);
+								break;
+							}
+						}
+					}
+				}
+			}
+
 			ImGui::Unindent();
 		}
 

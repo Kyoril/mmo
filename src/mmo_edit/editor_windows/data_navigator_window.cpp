@@ -25,6 +25,7 @@
 #include "unit_class_editor_window.h"
 #include "race_editor_window.h"
 #include "proficiency_editor_window.h"
+#include "skill_editor_window.h"
 #include "chat_channel_editor_window.h"
 #include "emote_editor_window.h"
 #include "faction_editor_window.h"
@@ -81,7 +82,7 @@ namespace mmo
                 { "Maps", ICON_FA_MAP }, { "Objects", ICON_FA_CUBES }, { "Zones", ICON_FA_MAP_SIGNS },
                 { "Unit Loot", ICON_FA_GIFT }, { "Trainers", ICON_FA_GRADUATION_CAP }, { "Vendors", ICON_FA_SHOPPING_CART },
                 { "Gossip", ICON_FA_COMMENT }, { "Combat Settings", ICON_FA_COGS }, { "Variables", ICON_FA_CODE },
-                { "Chat Channels", ICON_FA_COMMENTS },
+                { "Chat Channels", ICON_FA_COMMENTS }, { "Skills", ICON_FA_SCISSORS },
             };
 
             const auto it = icons.find(name);
@@ -397,6 +398,13 @@ namespace mmo
             static_cast<int>(m_project.proficiencies.count())
         });
         
+        characterCategory.editors.push_back({
+            std::type_index(typeid(SkillEditorWindow)),
+            "Skills",
+            [this]() { OpenEditorWindow(std::type_index(typeid(SkillEditorWindow))); },
+            static_cast<int>(m_project.skills.count())
+        });
+
         characterCategory.editors.push_back({
             std::type_index(typeid(TalentEditorWindow)),
             "Talents",

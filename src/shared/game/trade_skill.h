@@ -9,6 +9,12 @@
 
 namespace mmo
 {
+	namespace skill_category
+	{
+		/// SkillEntry.category value of a profession.
+		constexpr int32 Profession = 1;
+	}
+
 	namespace trade_skill_difficulty
 	{
 		/// Difficulty colour of a recipe relative to the crafter's skill value.
