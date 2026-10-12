@@ -681,6 +681,20 @@ namespace mmo
 			return g_runtime->session->GetContext().HasKnownSpell(spellId);
 		}
 
+		int32 luaGetTradeSkill(const uint32 skillId)
+		{
+			const BotUnit* selfUnit = self();
+			const TradeSkillData* skill = selfUnit ? selfUnit->GetTradeSkill(skillId) : nullptr;
+			return skill ? static_cast<int32>(skill->value) : -1;
+		}
+
+		int32 luaGetTradeSkillMax(const uint32 skillId)
+		{
+			const BotUnit* selfUnit = self();
+			const TradeSkillData* skill = selfUnit ? selfUnit->GetTradeSkill(skillId) : nullptr;
+			return skill ? static_cast<int32>(skill->max) : -1;
+		}
+
 		int32 luaGetItemCount(const uint32 itemId)
 		{
 			return static_cast<int32>(g_runtime->session->GetRealm().GetObjectManager().GetItemCountByEntry(itemId));
@@ -1613,6 +1627,8 @@ namespace mmo
 				luabind::def_lambda("GetDistance", &luaGetDistance),
 				luabind::def_lambda("HasAura", &luaHasAura),
 				luabind::def_lambda("HasSpell", &luaHasSpell),
+				luabind::def_lambda("GetTradeSkill", &luaGetTradeSkill),
+				luabind::def_lambda("GetTradeSkillMax", &luaGetTradeSkillMax),
 				luabind::def_lambda("GetItemCount", &luaGetItemCount),
 				luabind::def_lambda("GetMoney", &luaGetMoney),
 				luabind::def_lambda("GetXp", &luaGetXp),

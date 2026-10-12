@@ -72,8 +72,11 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `Me()`, `UnitExists(g)`, `GetHealth(g)`, `GetMaxHealth(g)`, `GetLevel(g)`, `GetPower(g)`,
 `GetMaxPower(g)`, `IsAlive(g)`, `GetName(g)`, `GetPosX/Y/Z(g)`, `GetDistance(a, b)`,
 `HasAura(g, spellId)`, `HasSpell(spellId)`, `GetItemCount(itemId)`, `GetMoney()`,
+`GetTradeSkill(skillId)` / `GetTradeSkillMax(skillId)` (own profession skill value / cap, `-1`
+when the skill is not known),
 `GetXp()`, `GetNextLevelXp()` (own character only),
-`LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`),
+`LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`; crafting
+failures report the numeric reason, e.g. `failed:21` = skill too low, `failed:22` = inventory full),
 `LastSwingError()` (`"none" | "out_of_range" | "wrong_facing" | "target_dead" | ...`),
 `SwingErrorCount()`, `SwingRecoveryCount()` (swing outcomes are reported by the server as
 *transitions*, so these count changes, not swings: an attack that stays out of range reports
