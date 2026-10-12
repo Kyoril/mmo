@@ -437,6 +437,10 @@ namespace mmo
 
 		PacketParseResult OnKnownClasses(game::IncomingPacket &packet);
 
+		PacketParseResult OnTradeSkills(game::IncomingPacket &packet);
+
+		PacketParseResult OnTradeSkillUpdate(game::IncomingPacket &packet);
+
 		PacketParseResult OnClassXpUpdate(game::IncomingPacket &packet);
 
 		PacketParseResult OnCreatureMove(game::IncomingPacket &packet);

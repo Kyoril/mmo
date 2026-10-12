@@ -28,6 +28,7 @@
 #include "graphics_presets.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/spell_text_formatter.h"
+#include "game_client/trade_skill_list.h"
 #include "loading_screen.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
@@ -1063,6 +1064,154 @@ namespace mmo
 					   luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 					   luabind::def("GetCVar", &Script_GetConsoleVar),
 					   luabind::def("SetCVar", &Script_SetConsoleVar),
+
+					   // Returns the player's professions as an array of { skillId, name, icon, value, max },
+					   // sorted by name. Empty if there is no active player or no profession is known.
+					   luabind::def<std::function<luabind::object()>>("GetProfessions", [this]() -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   if (!player)
+						   {
+							   return result;
+						   }
+
+						   int i = 1;
+						   for (const ProfessionInfo& profession : BuildProfessionList(player->GetSpells(), m_project.skills, player->GetTradeSkills()))
+						   {
+							   const auto* skill = m_project.skills.getById(profession.skillId);
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["skillId"] = profession.skillId;
+							   entry["name"] = GetLocalizedString(skill->name(), skill->name_loc(), GetClientLocale());
+							   entry["icon"] = profession.unlockSpell->icon();
+							   entry["value"] = static_cast<int>(profession.value);
+							   entry["max"] = static_cast<int>(profession.max);
+							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
+
+					   // Returns the recipe categories of a profession as an array of { id, name }, sorted by sortorder.
+					   luabind::def<std::function<luabind::object(int)>>("GetProfessionCategories", [this](const int skillId) -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+
+						   const auto* skill = m_project.skills.getById(static_cast<uint32>(std::max(0, skillId)));
+						   if (skill == nullptr)
+						   {
+							   return result;
+						   }
+
+						   std::vector<const proto_client::SkillCategory*> categories;
+						   for (const auto& category : skill->categories())
+						   {
+							   categories.push_back(&category);
+						   }
+						   std::stable_sort(categories.begin(), categories.end(), [](const auto* a, const auto* b)
+						   {
+							   return a->sortorder() < b->sortorder();
+						   });
+
+						   int i = 1;
+						   for (const auto* category : categories)
+						   {
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["id"] = category->id();
+							   entry["name"] = GetLocalizedString(category->name(), category->name_loc(), GetClientLocale());
+							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
+
+					   // Returns the known recipes of a profession as an array of { spellId, name, icon, category,
+					   // difficulty ("orange"|"yellow"|"green"|"grey"|"impossible"), resultItemId, resultCount,
+					   // reagents = { { itemId, count }, ... } }, ordered by category, then name.
+					   luabind::def<std::function<luabind::object(int)>>("GetRecipes", [this](const int skillId) -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   const auto* skill = m_project.skills.getById(static_cast<uint32>(std::max(0, skillId)));
+						   if (!player || skill == nullptr)
+						   {
+							   return result;
+						   }
+
+						   uint32 skillValue = 0;
+						   const auto& tradeSkills = player->GetTradeSkills();
+						   if (const auto it = tradeSkills.find(skill->id()); it != tradeSkills.end())
+						   {
+							   skillValue = it->second.value;
+						   }
+
+						   int i = 1;
+						   for (const RecipeInfo& recipe : BuildRecipeList(skill->id(), player->GetSpells(), *skill, skillValue))
+						   {
+							   const char* difficulty = "grey";
+							   switch (recipe.difficulty)
+							   {
+							   case trade_skill_difficulty::Impossible: difficulty = "impossible"; break;
+							   case trade_skill_difficulty::Orange: difficulty = "orange"; break;
+							   case trade_skill_difficulty::Yellow: difficulty = "yellow"; break;
+							   case trade_skill_difficulty::Green: difficulty = "green"; break;
+							   default: break;
+							   }
+
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["spellId"] = recipe.spell->id();
+							   entry["name"] = Script_GetSpellName(*recipe.spell);
+							   entry["icon"] = recipe.spell->icon();
+							   entry["category"] = recipe.category;
+							   entry["difficulty"] = std::string(difficulty);
+							   entry["resultItemId"] = recipe.resultItemId;
+							   entry["resultCount"] = recipe.resultCount;
+
+							   luabind::object reagents = luabind::newtable(m_luaState.get());
+							   int r = 1;
+							   for (const auto& reagent : recipe.spell->reagents())
+							   {
+								   luabind::object reagentEntry = luabind::newtable(m_luaState.get());
+								   reagentEntry["itemId"] = reagent.item();
+								   reagentEntry["count"] = reagent.count();
+								   reagents[r++] = reagentEntry;
+							   }
+							   entry["reagents"] = reagents;
+
+							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
+
+					   // Returns whether the player knows at least one profession.
+					   luabind::def<std::function<bool()>>("HasProfessions", [this]() -> bool
+					   {
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   return player && !BuildProfessionList(player->GetSpells(), m_project.skills, player->GetTradeSkills()).empty();
+					   }),
+
+					   // Returns the current value and cap of a profession skill, or 0, 0 if it is unknown.
+					   luabind::def<std::function<void(int, int &, int &)>>("GetTradeSkillValue", [](const int skillId, int &out_value, int &out_max)
+					   {
+						   out_value = 0;
+						   out_max = 0;
+
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   if (!player)
+						   {
+							   return;
+						   }
+
+						   const auto& tradeSkills = player->GetTradeSkills();
+						   if (const auto it = tradeSkills.find(static_cast<uint32>(std::max(0, skillId))); it != tradeSkills.end())
+						   {
+							   out_value = it->second.value;
+							   out_max = it->second.max;
+						   }
+					   }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 
 					   // Returns the window resolutions available on a monitor (0-based index as in
 					   // GetDisplayMonitors), each entry being a table with { width, height, label = "WxH" },

@@ -56,6 +56,16 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Recipes (TradeSpell) are listed in the profession window and hidden spells never show up in the spellbook.
+		bool IsSpellBookVisible(const proto_client::SpellEntry &spell)
+		{
+			constexpr uint32 hiddenMask = static_cast<uint32>(spell_attributes::HiddenClientSide) | static_cast<uint32>(spell_attributes::TradeSpell);
+			return (spell.attributes(0) & hiddenMask) == 0;
+		}
+	}
+
 	SoundEntryPlayer* GameUnitC::s_soundEntryPlayer = nullptr;
 
 	void GameUnitC::SetSoundEntryPlayer(SoundEntryPlayer* player)
@@ -2217,7 +2227,7 @@ namespace mmo
 		m_spellBookSpells.clear();
 		for (const auto *spell : m_spells)
 		{
-			if ((spell->attributes(0) & static_cast<uint32>(spell_attributes::HiddenClientSide)) == 0)
+			if (IsSpellBookVisible(*spell))
 			{
 				m_spellBookSpells.push_back(spell);
 			}
@@ -2233,7 +2243,7 @@ namespace mmo
 			m_spells.push_back(spell);
 
 			// Visible?
-			if ((spell->attributes(0) & static_cast<uint32>(spell_attributes::HiddenClientSide)) == 0)
+			if (IsSpellBookVisible(*spell))
 			{
 				m_spellBookSpells.push_back(spell);
 			}
