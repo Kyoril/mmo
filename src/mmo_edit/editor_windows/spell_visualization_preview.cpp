@@ -1336,6 +1336,7 @@ namespace mmo
 			}
 		}
 		m_kitRibbonTrails.clear();
+		m_kitRibbonStops.clear();
 
 		// Clean up kit effect scene nodes
 		for (auto* node : m_kitEffectNodes)
@@ -1422,6 +1423,7 @@ namespace mmo
 				}
 			}
 			m_kitRibbonTrails.clear();
+			m_kitRibbonStops.clear();
 
 			for (auto* node : m_kitEffectNodes)
 			{
@@ -1557,6 +1559,21 @@ namespace mmo
 
 	void SpellVisualizationPreview::UpdatePendingKits(float deltaTime)
 	{
+		// Timed kit ribbons (blade arcs) stop emitting after their emit duration; the event
+		// cleanup destroys them like every other kit ribbon.
+		for (auto it = m_kitRibbonStops.begin(); it != m_kitRibbonStops.end(); )
+		{
+			it->second -= deltaTime;
+			if (it->second > 0.0f)
+			{
+				++it;
+				continue;
+			}
+
+			it->first->Stop();
+			it = m_kitRibbonStops.erase(it);
+		}
+
 		for (auto it = m_pendingKits.begin(); it != m_pendingKits.end(); )
 		{
 			it->remainingSeconds -= deltaTime;
@@ -1892,6 +1909,7 @@ namespace mmo
 			params.finalColor = Vector4(trailConfig.final_r(), trailConfig.final_g(), trailConfig.final_b(), trailConfig.final_a());
 			params.segmentLifetime = trailConfig.segment_lifetime();
 			params.maxSegments = trailConfig.max_segments();
+			params.segmentInterval = std::max(0.005f, trailConfig.segment_interval());
 			trail->SetParameters(params);
 
 			// Load material if specified
@@ -1932,6 +1950,10 @@ namespace mmo
 
 			trail->Play();
 			m_kitRibbonTrails.push_back(trail);
+			if (trailConfig.emit_duration() > 0.0f)
+			{
+				m_kitRibbonStops.push_back({ trail, trailConfig.emit_duration() });
+			}
 		}
 		catch (const std::exception& e)
 		{

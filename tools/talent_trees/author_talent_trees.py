@@ -1111,7 +1111,7 @@ SCOUT = {
             "CAP": talent(198, Spell(1409, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
                 "icon": ICONS + "T_Icon_Energy_70.htex", "duration": 15000, "cooldown": "180000",
-                "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 4,
+                "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 111,  # Scout - Fever Pitch
                 "effects": [aura(MOD_POWER_REGEN_PCT, 100, POWER_ENERGY)],
                 **text_fields(("Fieberrausch", "Fever Pitch", "Fièvre du combat", "Боевая лихорадка"),
                               ("Verdoppelt $D lang deine Energieregeneration.", "Doubles your Energy regeneration for $D.",
@@ -1171,7 +1171,7 @@ SCOUT = {
             "CAP": talent(205, Spell(1413, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
                 "icon": ICONS + "T_Icon_BloodCombat_05.htex", "duration": 20000, "cooldown": "90000",
-                "powertype": POWER_ENERGY, "cost": 0,
+                "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 112,  # Scout - Steady Hand
                 "effects": [mod(OP_CRIT, 0x53, 100)],
                 "procflags": DONE_MELEE_SPELL, "procchance": 100, "proccharges": 1,
                 **text_fields(("Ruhige Hand", "Steady Hand", "Main sûre", "Твёрдая рука"),
@@ -1231,7 +1231,7 @@ SCOUT = {
             "CAP": talent(212, Spell(1426, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
                 "icon": ICONS + "T_Icon_Energy_30.htex", "duration": 10000, "cooldown": "180000",
-                "powertype": POWER_ENERGY, "cost": 0,
+                "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 109,  # Scout - Smoke and Mirrors
                 "effects": [aura(MOD_DODGE, 50)],
                 **text_fields(("Rauch und Spiegel", "Smoke and Mirrors", "Écran de fumée", "Дым и зеркала"),
                               ("Erhöht $D lang deine Ausweichchance um $s0%.",

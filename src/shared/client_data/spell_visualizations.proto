@@ -72,6 +72,13 @@ message RibbonTrailConfig
 	optional float final_a = 11 [default = 0.0];
 	optional float segment_lifetime = 12 [default = 1.0];
 	optional uint32 max_segments = 13 [default = 64];
+	// Seconds the trail keeps adding segments after it spawned. 0 = until its effect is torn
+	// down. A trail with an emit duration retires itself once its last segment has faded, so
+	// one-shot kits (a melee swing's blade arc) can carry one. Kit trails only.
+	optional float emit_duration = 14 [default = 0.0];
+	// Seconds between two segments. Fast motion (a weapon swing) needs a short interval, or
+	// the arc turns into a visible polyline.
+	optional float segment_interval = 15 [default = 0.05];
 }
 
 // Projectile movement type

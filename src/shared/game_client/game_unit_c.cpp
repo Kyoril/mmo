@@ -1093,6 +1093,7 @@ namespace mmo
 		{
 			m_questGiverEntity = m_scene.CreateEntity(GetSceneNode()->GetName() + "_QuestStatus", meshName);
 			ASSERT(m_questGiverEntity);
+			m_questGiverEntity->SetCollisionEnabled(false);
 		}
 		else
 		{
@@ -2739,6 +2740,9 @@ namespace mmo
 			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), meshFile);
 			m_entity->SetUserObject(this);
 			m_entity->SetQueryFlags(0x00000002);
+			// Units never block movement, whatever collision their model was authored with (a
+			// scarecrow prop reused as the training dummy trapped the player inside it).
+			m_entity->SetCollisionEnabled(false);
 			m_entityOffsetNode->AttachObject(*m_entity);
 		}
 		else

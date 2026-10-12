@@ -75,3 +75,35 @@ TEST_CASE("Tint pulse envelope tolerates degenerate parameters", "[spell_visual]
 	// No attack: starts at full strength.
 	CHECK(spell_visual::TintPulseEnvelope(0.0f, 1.0f, 0.0f) == Approx(1.0f));
 }
+
+TEST_CASE("Timed ribbons emit, then fade for one segment lifetime, then expire", "[spell_visual]")
+{
+	using spell_visual::RibbonPhase;
+	constexpr float emit = 0.25f;
+	constexpr float lifetime = 0.3f;
+
+	CHECK(spell_visual::TimedRibbonPhase(0.0f, emit, lifetime) == RibbonPhase::Emitting);
+	CHECK(spell_visual::TimedRibbonPhase(0.24f, emit, lifetime) == RibbonPhase::Emitting);
+
+	// The segments laid down during the swing must get their full lifetime to fade; a trail
+	// destroyed the moment it stops emitting pops its whole arc off the screen.
+	CHECK(spell_visual::TimedRibbonPhase(0.25f, emit, lifetime) == RibbonPhase::Fading);
+	CHECK(spell_visual::TimedRibbonPhase(0.54f, emit, lifetime) == RibbonPhase::Fading);
+	CHECK(spell_visual::TimedRibbonPhase(0.55f, emit, lifetime) == RibbonPhase::Expired);
+
+	// A broken (negative) lifetime still lets the trail retire instead of leaking.
+	CHECK(spell_visual::TimedRibbonPhase(0.25f, emit, -1.0f) == RibbonPhase::Expired);
+}
+
+TEST_CASE("Effects for a missing bone sit at that bone's rough height", "[spell_visual]")
+{
+	// Kits name humanoid sockets; a model without them used to get every effect at its feet.
+	CHECK(spell_visual::MissingBoneHeightFraction("head") > spell_visual::MissingBoneHeightFraction("spine_03"));
+	CHECK(spell_visual::MissingBoneHeightFraction("spine_03") > spell_visual::MissingBoneHeightFraction("hand_r"));
+	CHECK(spell_visual::MissingBoneHeightFraction("Spine_03") == spell_visual::MissingBoneHeightFraction("spine_03"));
+	CHECK(spell_visual::MissingBoneHeightFraction("foot_l") == 0.0f);
+	CHECK(spell_visual::MissingBoneHeightFraction("head") < 1.0f);
+
+	// Unknown names land mid-body rather than on the ground.
+	CHECK(spell_visual::MissingBoneHeightFraction("weapon_socket") == 0.5f);
+}
