@@ -1070,6 +1070,7 @@ namespace mmo
 			{se::ResetTalents,           SpellEffects::HandleResetTalents},
 			{se::ChangeClass,            SpellEffects::HandleChangeClass},
 			{se::TeachEmote,             SpellEffects::HandleTeachEmote},
+			{se::TradeSkill,             SpellEffects::HandleTradeSkill},
 			{se::Proficiency,            SpellEffects::HandleProficiency},
 			{se::TriggerSpell,           SpellEffects::HandleTriggerSpell},
 		};
