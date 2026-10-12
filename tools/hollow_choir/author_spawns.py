@@ -110,11 +110,18 @@ SEAL_ENTRY = 14
 # MagicBarrier_01 (object display 9), whose material dissolves when the door opens.
 BARRIER_ENTRY = 15
 BARRIER_DISPLAY = 9
-BARRIER_GATES = {"HollowChoir_G2_North", "HollowChoir_G2_South"}
+BARRIER_GATES = {"HollowChoir_G2_North", "HollowChoir_G2_South",
+                 "HollowChoir_G2_NorthArch", "HollowChoir_G2_SouthArch"}
 GATES = [
     ("HollowChoir_G1", -27.0, HALL, 0.0, None),
-    ("HollowChoir_G2_North", -85.5, RAISED, -3.0, None),
-    ("HollowChoir_G2_South", -85.5, RAISED, 3.0, None),
+    # The two 6 m barriers overlap by 0.3 m at z = 0: placed edge to edge they left a visible
+    # seam, and a sight line along the shared edge could slip between them.
+    ("HollowChoir_G2_North", -85.5, RAISED, -2.85, None),
+    ("HollowChoir_G2_South", -85.5, RAISED, 2.85, None),
+    # The arches beside the stair (columns at z +-6.5 and +-12) open onto the raised floor too:
+    # players hop the stair railing into them. They are sealed with G2 as well.
+    ("HollowChoir_G2_NorthArch", -85.5, RAISED, -9.0, None),
+    ("HollowChoir_G2_SouthArch", -85.5, RAISED, 9.0, None),
     # Apse <-> cloister corridor, sealed at the cloister end (group J stands in the corridor on the
     # apse side). Opens with G2, so the cloister cannot be used to skip it.
     ("HollowChoir_G2_Corridor", -91.0, RAISED, 18.4, "rotated"),

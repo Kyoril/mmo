@@ -62,7 +62,8 @@ CLEANUP = {OSWIN: 2001, MERETH: 2002, VEYR: 2003}
 VEYR_FINALE = 2013
 
 SEAL_G1 = "HollowChoir_G1"
-SEALS_G2 = ["HollowChoir_G2_North", "HollowChoir_G2_South", "HollowChoir_G2_Corridor"]
+SEALS_G2 = ["HollowChoir_G2_North", "HollowChoir_G2_South", "HollowChoir_G2_NorthArch",
+            "HollowChoir_G2_SouthArch", "HollowChoir_G2_Corridor"]
 
 
 def act(action, target=None, data=None, texts=None, name=None):
