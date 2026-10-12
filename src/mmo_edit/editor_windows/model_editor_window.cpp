@@ -1145,6 +1145,14 @@ namespace mmo
 				currentEntry.mutable_combat_sounds()->set_voice_min_interval_ms(static_cast<uint32>(std::max(0, voiceInterval)));
 			}
 			ImGui::TextDisabled("Minimum silence between two voice lines. 0 = derive it from the clip's length.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Aggro Sound", combatSounds.aggro_sound(), m_aggroSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.mutable_combat_sounds()->set_aggro_sound(id); });
+			ImGui::TextDisabled("Played when the unit enters combat after at least 5 seconds out of it. Always plays.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Death Sound", combatSounds.death_sound(), m_deathSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.mutable_combat_sounds()->set_death_sound(id); });
+			ImGui::TextDisabled("Played when the unit dies. Always plays.");
 			ImGui::PopID();
 		}
 	}

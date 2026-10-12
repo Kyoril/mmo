@@ -595,7 +595,15 @@ namespace mmo
 
 			if (GameUnitS* caster = m_owner.GetWorldInstance()->FindByGuid<GameUnitS>(m_casterId))
 			{
-				m_caster = std::static_pointer_cast<GameUnitS>(caster->shared_from_this());
+				// The world can still list a caster that is being destroyed (e.g. the aura's own
+				// owner, clearing its auras in its destructor): shared_from_this would throw there.
+				auto strongFound = std::static_pointer_cast<GameUnitS>(caster->weak_from_this().lock());
+				if (!strongFound)
+				{
+					return nullptr;
+				}
+
+				m_caster = strongFound;
 				return caster;
 			}
 
