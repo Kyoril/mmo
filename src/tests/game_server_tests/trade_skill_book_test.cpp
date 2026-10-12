@@ -100,3 +100,64 @@ TEST_CASE("GamePlayerS round-trips trade skills", "[trade_skill]")
 	CHECK(other->GetTradeSkills().Get(1)->value == 5);
 	CHECK(other->GetTradeSkills().Get(1)->max == 75);
 }
+
+TEST_CASE("CharacterData without a trade skill trailer still parses", "[trade_skill]")
+{
+	CharacterData data;
+	data.level = 7;
+	data.tradeSkills = { { 1, 12, 75 }, { 3, 1, 75 } };
+
+	std::vector<char> buffer;
+	io::VectorSink sink(buffer);
+	io::Writer writer(sink);
+	writer << data;
+
+	// Drop exactly the trailer: count byte + entries of 8 bytes.
+	const size_t trailer = 1 + data.tradeSkills.size() * 8;
+	io::MemorySource source(buffer.data(), buffer.data() + buffer.size() - trailer);
+	io::Reader reader(source);
+	CharacterData read;
+	REQUIRE(reader >> read);
+	CHECK(read.level == 7);
+	CHECK(read.tradeSkills.empty());
+}
+
+TEST_CASE("GamePlayerS trade skill trailer is optional but earlier truncation fails", "[trade_skill]")
+{
+	proto::Project project;
+	asio::io_service io;
+	TimerQueue timers{ io };
+	auto player = test::MakeUnit(project, timers, 5);
+	player->SetTradeSkills({ { 1, 5, 75 }, { 2, 9, 75 } });
+
+	std::vector<char> buffer;
+	io::VectorSink sink(buffer);
+	io::Writer writer(sink);
+	writer << *player;
+
+	const size_t trailer = 1 + 2 * 8;
+	{
+		io::MemorySource source(buffer.data(), buffer.data() + buffer.size() - trailer);
+		io::Reader reader(source);
+		auto other = test::MakeUnit(project, timers);
+		other->SetTradeSkills({ { 9, 9, 9 } });
+		REQUIRE(reader >> *other);
+		CHECK(other->GetTradeSkills().GetAll().empty());
+	}
+
+	{
+		// Cut into the emote block before the trailer: the read must fail.
+		io::MemorySource source(buffer.data(), buffer.data() + buffer.size() - trailer - 1);
+		io::Reader reader(source);
+		auto other = test::MakeUnit(project, timers);
+		CHECK_FALSE(static_cast<bool>(reader >> *other));
+	}
+
+	{
+		// Cut well before it (inside the unit data).
+		io::MemorySource source(buffer.data(), buffer.data() + buffer.size() / 2);
+		io::Reader reader(source);
+		auto other = test::MakeUnit(project, timers);
+		CHECK_FALSE(static_cast<bool>(reader >> *other));
+	}
+}

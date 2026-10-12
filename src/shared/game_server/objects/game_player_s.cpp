@@ -3705,8 +3705,10 @@ namespace mmo
 		// Read the trade skills. Tolerate a stream that ends here (written before they existed).
 		std::vector<TradeSkillData> tradeSkills;
 		uint8 tradeSkillCount = 0;
+		const bool okBefore = static_cast<bool>(r);
 		if (r >> io::read<uint8>(tradeSkillCount))
 		{
+			// A truncated entry keeps the entries read so far; the read still fails.
 			for (uint8 i = 0; i < tradeSkillCount; ++i)
 			{
 				TradeSkillData skill;
@@ -3718,8 +3720,9 @@ namespace mmo
 				tradeSkills.push_back(skill);
 			}
 		}
-		else
+		else if (okBefore)
 		{
+			// Only a missing trailer is tolerated; an earlier failure must stay a failure.
 			r.setSuccess();
 		}
 
