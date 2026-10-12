@@ -395,13 +395,16 @@ def main():
     backup.mkdir(parents=True)
     for key, (path, _) in targets.items():
         shutil.copy2(path, backup / f"{key}_{path.name}")
-    # ClientDB sounds and spells are byte copies of the editor files (the client mirror tests
-    # compare bytes); re-serialising them through the client schema reorders fields. The
-    # visualizations are serialised per tree, like the mage and cleric scripts do.
+    # ClientDB files are byte copies of the editor files (the client mirror tests compare
+    # bytes): serialise each editor message once and write the same blob to both trees.
+    # Re-serialising through the client schema reorders fields, and the visualizations' map
+    # field has no stable order between two serialisations.
     data["sounds_client"] = data["sounds_editor"]
+    data["vis_client"] = data["vis_editor"]
     data["spells_client"] = data["spells_editor"]
+    blobs = {key: data[key].SerializeToString() for key in ("sounds_editor", "vis_editor", "spells_editor")}
     for key, (path, _) in targets.items():
-        path.write_bytes(data[key].SerializeToString())
+        path.write_bytes(blobs[key.split("_")[0] + "_editor"])
     print(f"wrote sounds, visualizations and spell links to both datasets. Backup: {backup}")
 
 
