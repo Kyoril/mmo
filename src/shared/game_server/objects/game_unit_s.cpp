@@ -14,6 +14,7 @@
 
 #include <map>
 #include <memory>
+#include "game/id_mask.h"
 #include "game/loot.h"
 #include "proto_data/project.h"
 #include "shared/proto_data/combat_settings.pb.h"
@@ -648,14 +649,14 @@ namespace mmo
 			if (IsPlayer())
 			{
 				GamePlayerS &playerCaster = AsPlayer();
-				if (spell->racemask() != 0 && !(spell->racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
+				if (spell->racemask() != 0 && !(spell->racemask() & IdMaskBit(playerCaster.GetRaceEntry()->id())))
 				{
 					WLOG("Spell " << spellId << " is not usable by the players race");
 					continue;
 				}
 
 				// Check class requirement
-				if (spell->classmask() != 0 && !(spell->classmask() & (1 << (playerCaster.GetClassEntry()->id() - 1))))
+				if (spell->classmask() != 0 && !(spell->classmask() & IdMaskBit(playerCaster.GetClassEntry()->id())))
 				{
 					WLOG("Spell " << spellId << " is not usable by the players class");
 					continue;
@@ -684,14 +685,14 @@ namespace mmo
 		if (IsPlayer())
 		{
 			GamePlayerS &playerCaster = AsPlayer();
-			if (spell->racemask() != 0 && !(spell->racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
+			if (spell->racemask() != 0 && !(spell->racemask() & IdMaskBit(playerCaster.GetRaceEntry()->id())))
 			{
 				WLOG("Spell " << spellId << " is not usable by the players race");
 				return;
 			}
 
 			// Check class requirement
-			if (spell->classmask() != 0 && !(spell->classmask() & (1 << (playerCaster.GetClassEntry()->id() - 1))))
+			if (spell->classmask() != 0 && !(spell->classmask() & IdMaskBit(playerCaster.GetClassEntry()->id())))
 			{
 				WLOG("Spell " << spellId << " is not usable by the players class");
 				return;
