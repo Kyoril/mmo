@@ -69,12 +69,24 @@ class Worktree:
 		return os.path.join(self.path, *sub.split("/"))
 
 	def _sync_submodules(self):
-		self.git("submodule", "update", "--init", "--force")
+		if run_git(self.path, "submodule", "update", "--init", "--force", check=False).returncode != 0:
+			# A submodule is cloned from the main checkout's URL, which can lag behind GitHub where
+			# ship() lands data ("not our ref"). Fetch the .gitmodules remote and try once more.
+			for sub in self.submodules:
+				if os.path.exists(os.path.join(self.sub_path(sub), ".git")):
+					self._ensure_sub_remote(sub)
+			self.git("submodule", "update", "--init", "--force")
 		for sub in self.submodules:
 			self.git("clean", "-fd", cwd=self.sub_path(sub))
 
 	def _ensure_sub_remote(self, sub):
-		url = run_git(self.main_repo, "config", "--get", "submodule.{}.url".format(sub)).stdout.strip()
+		"""Points `sub_remote` at the submodule URL committed in .gitmodules (GitHub), where
+		ship() lands data. Never the main checkout's .git/config URL: H:/mmo overrides it with its
+		own non-bare data/client, which refuses pushes to its checked-out master and is not where
+		CI, the nightly or another clone fetch develop's submodule commits from."""
+		url = self.git("config", "-f", ".gitmodules", "--get", "submodule.{}.url".format(sub))
+		if url.startswith(("./", "../")) or not url:
+			raise GitError("{}: .gitmodules has no absolute URL ({!r})".format(sub, url))
 		sub_dir = self.sub_path(sub)
 		if run_git(sub_dir, "remote", "get-url", self.sub_remote, check=False).returncode == 0:
 			self.git("remote", "set-url", self.sub_remote, url, cwd=sub_dir)
