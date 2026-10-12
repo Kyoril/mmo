@@ -280,3 +280,30 @@ TEST_CASE("ServerCollisionMap - instances sharing one tree are independent", "[s
 	REQUIRE(map.LineOfSight(frontPos, backPos));
 	REQUIRE_FALSE(map.LineOfSight(frontPos + Vector3(10.0f, 0.0f, 0.0f), backPos + Vector3(10.0f, 0.0f, 0.0f)));
 }
+
+TEST_CASE("ServerCollisionMap - single-sided dynamic plane blocks from both sides", "[server_collision_map]")
+{
+	// Barrier art (e.g. Hollow Choir's MagicBarrier_01) is one quad with a single winding.
+	// A closed barrier must hide units on either side, or a boss behind it aggros through it.
+	const std::vector<AABBTree::Vertex> verts = {
+		Vector3( 1.0f,  1.0f, 0.0f),
+		Vector3(-1.0f,  1.0f, 0.0f),
+		Vector3( 1.0f, -1.0f, 0.0f),
+		Vector3(-1.0f, -1.0f, 0.0f)
+	};
+	const std::vector<AABBTree::Index> indices = { 0, 1, 2, 1, 3, 2 };
+	auto tree = std::make_shared<AABBTree>();
+	tree->Build(verts, indices);
+
+	ServerCollisionMap map;
+	REQUIRE(map.AddDynamicInstance(tree, Matrix4::Identity, true) != 0);
+
+	REQUIRE_FALSE(map.LineOfSight(frontPos, backPos));
+	REQUIRE_FALSE(map.LineOfSight(backPos, frontPos));
+
+	Vector3 hit;
+	REQUIRE_FALSE(map.LineOfSightEx(frontPos, backPos, hit));
+	CHECK(hit.z == Approx(0.0f).margin(0.001f));
+	REQUIRE_FALSE(map.LineOfSightEx(backPos, frontPos, hit));
+	CHECK(hit.z == Approx(0.0f).margin(0.001f));
+}
