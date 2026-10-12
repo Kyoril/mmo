@@ -97,11 +97,25 @@ def build_triage_input(bug, related, nonce=None):
 	return "\n".join(parts)
 
 
+def _builds_text(bug):
+	"""Both builds of the report: server-side behaviour must be judged against the server build,
+	which the client's own build says nothing about."""
+	client = bug.get("client")
+	client_build = client.get("build", "") if isinstance(client, dict) else ""
+	return json_text({
+		"serverBuild": bug.get("serverBuild") or "(unknown)",
+		"worldNode": bug.get("worldNode", ""),
+		"clientBuild": client_build or "(unknown)",
+	}, limit=1000)
+
+
 def build_fix_input(bug, verdict, branch, fix_path, nonce=None, guidance=None, previous=None, feature=None):
 	nonce = nonce or new_nonce()
 	task = ("Bug id: {0}\nBranch: {1} (checked out in this worktree; data/client and data/editor are on a "
 		"branch of the same name)\nWrite FIX.json to: {2}\n".format(bug.get("_id"), branch, fix_path))
-	parts = [_header(nonce), task, block("TRIAGE", _TRIAGE_PROVENANCE, nonce, _triage_text(verdict))]
+	parts = [_header(nonce), task, block("TRIAGE", _TRIAGE_PROVENANCE, nonce, _triage_text(verdict)),
+		block("REPORT BUILDS", "serverBuild: the world server's git commit; clientBuild: client-reported, untrusted",
+			nonce, _builds_text(bug))]
 	parts += _player_blocks(bug, nonce)
 	if previous:
 		parts.append(block("PREVIOUS ATTEMPT", "model output and loop findings; verify, do not trust", nonce, json_text(previous)))
