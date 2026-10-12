@@ -929,6 +929,10 @@ namespace mmo
 		/// @param spellId If set to 0, all auras will be removed, otherwise only auras that match the spell id will be removed.
 		void RemoveAllAurasFromCaster(uint64 casterGuid, uint32 spellId = 0);
 
+		/// Removes all non-passive auras that were applied by other units (e.g. an attacker's
+		/// damage over time effects). Auras the unit applied to itself are kept.
+		void RemoveAurasFromOtherCasters();
+
 		/// Removes a specific aura from the unit.
 		/// @param aura The aura container to remove.
 		void RemoveAura(const std::shared_ptr<AuraContainer> &aura);
