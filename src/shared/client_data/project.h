@@ -27,6 +27,7 @@
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
 #include "shared/client_data/proto_client/area_triggers.pb.h"
 #include "shared/client_data/proto_client/proficiencies.pb.h"
+#include "shared/client_data/proto_client/skills.pb.h"
 #include "shared/client_data/proto_client/item_classes.pb.h"
 #include "shared/client_data/proto_client/item_subclasses.pb.h"
 #include "shared/client_data/proto_client/chat_channels.pb.h"
@@ -59,6 +60,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::SpellVisualizations, mmo::proto_client::SpellVisualization> SpellVisualizationManager;
 		typedef TemplateManager<mmo::proto_client::AreaTriggers, mmo::proto_client::AreaTriggerEntry> AreaTriggerManager;
 		typedef TemplateManager<mmo::proto_client::Proficiencies, mmo::proto_client::ProficiencyEntry> ProficiencyManager;
+		typedef TemplateManager<mmo::proto_client::Skills, mmo::proto_client::SkillEntry> SkillManager;
 		typedef TemplateManager<mmo::proto_client::ItemClasses, mmo::proto_client::ItemClassEntry> ItemClassManager;
 		typedef TemplateManager<mmo::proto_client::ItemSubclasses, mmo::proto_client::ItemSubclassEntry> ItemSubclassManager;
 		typedef TemplateManager<mmo::proto_client::ChatChannels, mmo::proto_client::ChatChannelEntry> ChatChannelManager;
@@ -103,6 +105,7 @@ namespace mmo
 			SpellVisualizationManager spellVisualizations;
 			AreaTriggerManager areaTriggers;
 			ProficiencyManager proficiencies;
+			SkillManager skills;
 			ItemClassManager itemClasses;
 			ItemSubclassManager itemSubclasses;
 			ChatChannelManager chatChannels;
@@ -182,6 +185,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("spell_visualizations", spellVisualizations));
 				managers.push_back(ManagerEntry("area_triggers", areaTriggers));
 				managers.push_back(ManagerEntry("proficiencies", proficiencies));
+				managers.push_back(ManagerEntry("skills", skills, true));
 				managers.push_back(ManagerEntry("item_classes", itemClasses));
 				managers.push_back(ManagerEntry("item_subclasses", itemSubclasses));
 				managers.push_back(ManagerEntry("chat_channels", chatChannels, true));
@@ -238,6 +242,7 @@ namespace mmo
 				managers.emplace_back("spell_visualizations", "spell_visualizations", spellVisualizations);
 				managers.emplace_back("area_triggers", "area_triggers", areaTriggers);
 				managers.emplace_back("proficiencies", "proficiencies", proficiencies);
+				managers.emplace_back("skills", "skills", skills);
 				managers.emplace_back("item_classes", "item_classes", itemClasses);
 				managers.emplace_back("item_subclasses", "item_subclasses", itemSubclasses);
 				managers.emplace_back("chat_channels", "chat_channels", chatChannels);

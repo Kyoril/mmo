@@ -588,6 +588,16 @@ namespace mmo
 					return;
 				}
 
+				if (trainerSpellEntry.reqskill() != 0)
+				{
+					const TradeSkillData* skill = m_character->GetTradeSkills().Get(trainerSpellEntry.reqskill());
+					if (!skill || skill->value < trainerSpellEntry.reqskillval())
+					{
+						SendTrainerBuyError(trainerGuid, trainer_result::FailedSkillTooLow);
+						return;
+					}
+				}
+
 				if (!m_character->ConsumeMoney(trainerSpellEntry.spellcost()))
 				{
 					SendTrainerBuyError(trainerGuid, trainer_result::FailedNotEnoughMoney);

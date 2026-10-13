@@ -120,6 +120,10 @@ namespace mmo
 		void HandleLearnSpell(SpellEffectContext& ctx);
 		/// Unlocks the emote id in miscvaluea for every player target (used by emote scroll items).
 		void HandleTeachEmote(SpellEffectContext& ctx);
+
+		/// Learns the profession miscvaluea for player targets or raises its cap to basePoints; first-time learning also teaches SkillEntry.spells.
+		/// @param ctx The spell effect context.
+		void HandleTradeSkill(SpellEffectContext& ctx);
 		void HandleScriptEffect(SpellEffectContext& ctx);
 		void HandleDispelMechanic(SpellEffectContext& ctx);
 		/// Prompts dead player targets to be revived, restoring an absolute amount of health

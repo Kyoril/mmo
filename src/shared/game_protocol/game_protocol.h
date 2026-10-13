@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000014;
+		constexpr uint32 ProtocolVersion = 0x00000015;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -853,6 +853,15 @@ namespace mmo
 				/// duration and clients play its GROUND_EXPIRED kits, 0 = it was removed early,
 				/// e.g. because its caster died).
 				SpellZoneEnd,
+
+				/// The character's full profession skill list. Sent on world entry and whenever a
+				/// profession is learned or its cap changes. Payload: uint8 count, then per skill
+				/// uint32 skillId, uint16 value, uint16 max.
+				TradeSkills,
+
+				/// One profession skill value changed (skill-up). Payload: uint32 skillId,
+				/// uint16 value, uint16 max.
+				TradeSkillUpdate,
 
 				/// Counter constant
 				Count_,

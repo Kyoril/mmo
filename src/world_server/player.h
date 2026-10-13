@@ -816,6 +816,13 @@ namespace mmo
 		/// Sends the active spellbook (current class + persistent spells) to the client.
 		void SendInitialSpells();
 
+		/// Sends the character's full profession skill list to the client.
+		void SendTradeSkills();
+
+		/// Sends the current value of a single profession skill to the client (skill-up).
+		/// @param skillId Id of the profession skill that changed.
+		void SendTradeSkillUpdate(uint32 skillId);
+
 		/// Notifies the client about a newly unlocked emote.
 		void OnEmoteLearned(uint32 emoteId);
 
@@ -928,6 +935,7 @@ namespace mmo
 		void OnObjectLoot() override;
 
 		void OnMailboxUsed(uint64 mailboxGuid) override;
+		void OnInventoryError(InventoryChangeFailure error) override { SendInventoryError(error); }
 
 		/// Sends a lightweight ClassXpUpdate packet. On a class level-up additionally refreshes the
 		/// full known-class list and persists the character (kills are too frequent to save on

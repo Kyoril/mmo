@@ -609,6 +609,8 @@ namespace mmo
 
 		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
 		PacketParseResult OnLearnedSpell(game::IncomingPacket& packet);
+		PacketParseResult OnTradeSkills(game::IncomingPacket& packet);
+		PacketParseResult OnTradeSkillUpdate(game::IncomingPacket& packet);
 		PacketParseResult OnUnlearnedSpell(game::IncomingPacket& packet);
 		PacketParseResult OnSpellStart(game::IncomingPacket& packet);
 		PacketParseResult OnSpellGo(game::IncomingPacket& packet);
