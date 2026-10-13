@@ -22,3 +22,35 @@ TEST_CASE("Ungrouped creators announce to nobody", "[item_notify]")
 	CHECK_FALSE(ShouldNotifyOfCreatedItem(100, 0, 101, 0));
 	CHECK_FALSE(ShouldNotifyOfCreatedItem(100, 0, 101, 5));
 }
+
+TEST_CASE("Created items split across slots are pushed once with the summed amount", "[item_notify]")
+{
+	SECTION("No items added")
+	{
+		CHECK_FALSE(AggregateAddedItems({}).has_value());
+		CHECK_FALSE(AggregateAddedItems({ { 23, 0 } }).has_value());
+	}
+
+	SECTION("Single slot")
+	{
+		const auto push = AggregateAddedItems({ { 23, 3 } });
+		REQUIRE(push.has_value());
+		CHECK(push->slot == 23);
+		CHECK(push->amount == 3);
+	}
+
+	SECTION("Topped off stack spilling into a new slot")
+	{
+		const auto push = AggregateAddedItems({ { 24, 2 }, { 23, 1 } });
+		REQUIRE(push.has_value());
+		CHECK(push->slot == 23);
+		CHECK(push->amount == 3);
+	}
+
+	SECTION("Amount is clamped to the wire field")
+	{
+		const auto push = AggregateAddedItems({ { 23, 0xFFFF }, { 24, 10 } });
+		REQUIRE(push.has_value());
+		CHECK(push->amount == 0xFFFF);
+	}
+}
