@@ -39,6 +39,7 @@ local PATH = {
 	{ q = 25 },                                          -- Briarwatch Dispatch
 	{ q = 26, kills = { { 44, 8 } } },                   -- Teeth at the Treeline
 	{ q = 6,  kills = { { 21, 1 } } },                   -- The Alpha of the Herd
+	{ q = 66 },                                          -- Report to the Gate (needs 6 and 10)
 	{ q = 28, items = { { 121, 5 }, { 142, 3 } } },      -- For Camp and Kettle
 	{ q = 54, kills = { { 67, 6 } } },                   -- Wolves at the Watch
 	{ q = 19, items = { { 66, 10 }, { 67, 12 } } },      -- Foundations of Progress
