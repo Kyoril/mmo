@@ -5,6 +5,7 @@
 #include <random>
 
 #include "tile.h"
+#include "instance_query_filter.h"
 
 #include "memory_source.h"
 #include "stream_source.h"
@@ -696,5 +697,56 @@ namespace mmo::nav
 		auto const tile = m_tiles.find({ tileX, tileY });
 
 		return tile == m_tiles.end() ? nullptr : tile->second.get();
+	}
+
+	std::vector<dtPolyRef> Map::FindDoorPolys(const DoorVolume& volume) const
+	{
+		std::vector<dtPolyRef> result;
+		if (!m_valid)
+		{
+			return result;
+		}
+
+		Vector3 min, max;
+		volume.GetWorldBounds(min, max);
+		const float center[3] = { (min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f, (min.z + max.z) * 0.5f };
+		const float halfExtents[3] = { (max.x - min.x) * 0.5f, (max.y - min.y) * 0.5f, (max.z - min.z) * 0.5f };
+
+		dtQueryFilter doorsOnly;
+		doorsOnly.setIncludeFlags(DoorPolyFlag);
+
+		dtPolyRef polys[MaxStackedPolys];
+		int polyCount = 0;
+		if (dtStatusFailed(m_navQuery.queryPolygons(center, halfExtents, &doorsOnly, polys, &polyCount, MaxStackedPolys)))
+		{
+			return result;
+		}
+
+		for (int i = 0; i < polyCount; ++i)
+		{
+			const dtMeshTile* tile = nullptr;
+			const dtPoly* poly = nullptr;
+			if (dtStatusFailed(m_navMesh.getTileAndPolyByRef(polys[i], &tile, &poly)) || poly->vertCount == 0)
+			{
+				continue;
+			}
+
+			Vector3 polyCenter = Vector3::Zero;
+			for (unsigned char v = 0; v < poly->vertCount; ++v)
+			{
+				const float* vert = &tile->verts[poly->verts[v] * 3];
+				polyCenter += Vector3(vert[0], vert[1], vert[2]);
+			}
+			polyCenter /= static_cast<float>(poly->vertCount);
+
+			// The box overlap above also catches door polys of a neighbouring door; the strip a
+			// door's own volume carved has its center inside that volume.
+			if (volume.ContainsXZ(polyCenter))
+			{
+				result.push_back(polys[i]);
+			}
+		}
+
+		return result;
 	}
 }

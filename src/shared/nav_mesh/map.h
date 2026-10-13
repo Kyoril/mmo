@@ -7,6 +7,7 @@
 #include "base/filesystem.h"
 #include "math/ray.h"
 #include "tile.h"
+#include "door_volume.h"
 
 #include "DetourNavMeshQuery.h"
 
@@ -138,6 +139,11 @@ namespace mmo::nav
 		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint, const dtQueryFilter* filter = nullptr) const;
 
 		//bool FindPointInBetweenVectors(const Vector3& start, const Vector3& end, const float distance, Vector3& inBetweenPoint) const;
+
+		/// @brief Finds the door polys (DoorPolyFlag) whose center lies inside a door volume.
+		/// @details Only searches installed pages: the caller must make sure the pages under the
+		/// volume are loaded. Returns an empty list on maps built without door data.
+		[[nodiscard]] std::vector<dtPolyRef> FindDoorPolys(const DoorVolume& volume) const;
 
 		[[nodiscard]] const dtNavMesh& GetNavMesh() const { return m_navMesh; }
 
