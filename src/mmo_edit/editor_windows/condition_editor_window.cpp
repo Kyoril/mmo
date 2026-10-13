@@ -75,6 +75,8 @@ namespace mmo
                 return 2;
             case proto::Condition_ConditionType_QUEST_CHECK:
                 return 2;
+            case proto::Condition_ConditionType_SKILL_CHECK:
+                return 3;
             case proto::Condition_ConditionType_NONE_TYPE:
                 return 0;
             }
@@ -85,7 +87,7 @@ namespace mmo
         const char* GetConditionTypeName(int type)
         {
             static const char* s_unknown = "Unknown";
-            static const char* conditionTypes[] = { "NONE", "CLASS_CHECK", "LEVEL_CHECK", "QUEST_CHECK" };
+            static const char* conditionTypes[] = { "NONE", "CLASS_CHECK", "LEVEL_CHECK", "QUEST_CHECK", "SKILL_CHECK" };
 
             if (type < 0 || type >= std::size(conditionTypes))
                 return s_unknown;
@@ -131,6 +133,18 @@ namespace mmo
                 ImGui::Text("Quest %d", condition.param1());
                 ImGui::SameLine();
                 ImGui::TextColored(valueColor, GetQuestParam2(condition.param2()));
+                break;
+            case proto::Condition_ConditionType_SKILL_CHECK:
+                ImGui::Text("Skill %d", condition.param1());
+                ImGui::SameLine();
+                if (condition.param3() > 0)
+                {
+                    ImGui::TextColored(valueColor, ">= %d && <= %d", condition.param2(), condition.param3());
+                }
+                else
+                {
+                    ImGui::TextColored(valueColor, ">= %d", condition.param2());
+                }
                 break;
             case proto::Condition_ConditionType_NONE_TYPE:
                 if (condition.logicoperator() == proto::Condition_LogicOperator_AND || condition.logicoperator() == proto::Condition_LogicOperator_OR)
@@ -236,7 +250,7 @@ namespace mmo
         // Condition Type Combo
         {
             // We'll build a small array of known ConditionType values
-            static const int conditionTypes[] = { 0, 1, 2, 3 };
+            static const int conditionTypes[] = { 0, 1, 2, 3, 4 };
 
             // and display them in a combo
             const char* preview = GetConditionTypeName(currentEntry.conditiontype());
@@ -283,7 +297,29 @@ namespace mmo
         if (paramCount >= 1)
         {
             uint32 param = currentEntry.param1();
-            if (ImGui::InputScalar("Param1", ImGuiDataType_U32, &param))
+            if (currentEntry.conditiontype() == proto::Condition_ConditionType_SKILL_CHECK)
+            {
+                const auto* currentSkill = m_project.skills.getById(param);
+                const String preview = currentSkill ? currentSkill->name() : String("<none> (") + std::to_string(param) + ")";
+                if (ImGui::BeginCombo("Skill", preview.c_str()))
+                {
+                    for (const auto& skill : m_project.skills.getTemplates().entry())
+                    {
+                        const bool isSelected = skill.id() == param;
+                        if (ImGui::Selectable(skill.name().c_str(), isSelected))
+                        {
+                            currentEntry.set_param1(skill.id());
+                            conditionChanged = true;
+                        }
+                        if (isSelected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            else if (ImGui::InputScalar("Param1", ImGuiDataType_U32, &param))
             {
                 currentEntry.set_param1(param);
                 conditionChanged = true;
@@ -295,6 +331,14 @@ namespace mmo
 				if (currentEntry.conditiontype() == proto::Condition_ConditionType_QUEST_CHECK)
 				{
                     conditionChanged = conditionChanged || RenderQuestParam2(currentEntry, param);
+				}
+				else if (currentEntry.conditiontype() == proto::Condition_ConditionType_SKILL_CHECK)
+				{
+                    if (ImGui::InputScalar("Min Skill Value (0/1 = known)", ImGuiDataType_U32, &param))
+                    {
+                        currentEntry.set_param2(param);
+                        conditionChanged = true;
+                    }
 				}
 				else
 				{
@@ -308,7 +352,8 @@ namespace mmo
                 if (paramCount >= 3)
                 {
                     param = currentEntry.param3();
-                    if (ImGui::InputScalar("Param3", ImGuiDataType_U32, &param))
+                    const char* param3Label = currentEntry.conditiontype() == proto::Condition_ConditionType_SKILL_CHECK ? "Max Skill Value (0 = none)" : "Param3";
+                    if (ImGui::InputScalar(param3Label, ImGuiDataType_U32, &param))
                     {
                         currentEntry.set_param3(param);
                         conditionChanged = true;

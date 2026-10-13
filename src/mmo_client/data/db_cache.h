@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "mmo_client/net/realm_connector.h"
 
@@ -30,6 +31,9 @@ namespace mmo
 		}
 
 	public:
+		/// Returns the cached entry, or requests it from the server and returns nullptr. A query is
+		/// sent at most once while it is in flight, so polling callers (tooltip retries, quest
+		/// tracker refreshes) do not flood the server with duplicate queries.
 		const T* Get(uint64 guid)
 		{
 			auto it = m_cache.find(guid);
@@ -38,9 +42,8 @@ namespace mmo
 				return &it->second;
 			}
 
-			// Enqueue pending request callback
-			const auto requestIt = m_pendingRequests.find(guid);
-			if (requestIt == m_pendingRequests.end())
+			// Only send a query if none is in flight for this entry yet
+			if (m_inFlight.insert(guid).second)
 			{
 				// Send request to server asking for entry
 				m_realmConnector.sendSinglePacket([guid](game::OutgoingPacket& packet)
@@ -75,8 +78,11 @@ namespace mmo
 			return m_cache.find(guid) != m_cache.end();
 		}
 
+		/// Stores a server answer and runs the callbacks waiting for it.
 		void NotifyObjectResponse(uint64 guid, const T& object)
 		{
+			m_inFlight.erase(guid);
+
 			m_cache[guid] = object;
 			const T& objectRef = m_cache[guid];
 
@@ -87,6 +93,20 @@ namespace mmo
 			}
 
 			m_pendingRequests.erase(range.first, range.second);
+		}
+
+		/// Marks a query as answered without data (e.g. unknown entry), so a later Get may query again.
+		/// Callbacks stay registered and run if a later query succeeds.
+		void NotifyQueryFailed(uint64 guid)
+		{
+			m_inFlight.erase(guid);
+		}
+
+		/// Forgets all in-flight queries, e.g. after the realm connection was left, as their answers
+		/// will never arrive. The next Get for such an entry queries again.
+		void ResetInFlightQueries()
+		{
+			m_inFlight.clear();
 		}
 
 		void Serialize(io::Writer& writer)
@@ -179,5 +199,6 @@ namespace mmo
 		RealmConnector& m_realmConnector;
 		std::unordered_map<uint64, T> m_cache;
 		std::unordered_multimap<uint64, QueryCallback> m_pendingRequests;
+		std::unordered_set<uint64> m_inFlight;
 	};
 }

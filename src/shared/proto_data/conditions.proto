@@ -15,6 +15,10 @@ message Condition
     LEVEL_CHECK = 2;
 
     QUEST_CHECK = 3;
+
+    // Profession check: param1 = skill id, param2 = minimum skill value (0 or 1 = just known),
+    // param3 = optional maximum skill value (0 = no maximum).
+    SKILL_CHECK = 4;
   }
   
   // If you want to combine sub-conditions with AND/OR logic,

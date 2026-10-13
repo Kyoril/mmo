@@ -25,6 +25,7 @@
 #include "binary_io/vector_sink.h"
 #include "binary_io/writer.h"
 #include "group_manager.h"
+#include "game_server/item_notify.h"
 #include "game_server/spells/aura_container.h"
 
 #include <algorithm>
@@ -4233,7 +4234,59 @@ namespace mmo
 					<< io::write<uint16>(totalCount);
 				packet.Finish();
 				});
+
+			if (wasCreated)
+			{
+				NotifyGroupOfCreatedItem(inst->GetEntry().id(), amount);
+			}
 		}
+	}
+
+	void Player::NotifyGroupOfCreatedItem(const uint32 itemId, const uint16 amount)
+	{
+		const uint64 groupId = m_character->GetGroupId();
+		if (groupId == 0)
+		{
+			return;
+		}
+
+		// Bag and slot belong to the creator's inventory and total count is not known for others,
+		// so they are sent as invalid markers - the client never uses them for other players.
+		m_character->ForEachSubscriberInSight([this, groupId, itemId, amount](TileSubscriber& subscriber)
+		{
+			if (!subscriber.GetGameUnit().IsPlayer())
+			{
+				return;
+			}
+
+			GamePlayerS& other = subscriber.GetGameUnit().AsPlayer();
+			if (!ShouldNotifyOfCreatedItem(m_character->GetGuid(), groupId, other.GetGuid(), other.GetGroupId()))
+			{
+				return;
+			}
+
+			const std::shared_ptr<Player> member = m_manager.GetPlayerByCharacterGuid(other.GetGuid());
+			if (!member)
+			{
+				return;
+			}
+
+			const uint64 creatorGuid = GetCharacterGuid();
+			member->SendPacket([creatorGuid, itemId, amount](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::ItemPushResult);
+				packet
+					<< io::write<uint64>(creatorGuid)
+					<< io::write<uint8>(0)
+					<< io::write<uint8>(1)
+					<< io::write<uint8>(0xFF)
+					<< io::write<uint8>(0xFF)
+					<< io::write<uint32>(itemId)
+					<< io::write<uint16>(amount)
+					<< io::write<uint16>(0);
+				packet.Finish();
+			});
+		});
 	}
 
 	void Player::OnObjectLoot()
