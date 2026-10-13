@@ -45,6 +45,10 @@ namespace mmo
 	public:
 		virtual ~MapData() = default;
 
+		/// @brief Height above a unit's position at which line of sight is tested. 1.8 m is used for
+		///        all unit types as a static approximation of eye level.
+		static constexpr float LineOfSightEyeHeight = 1.8f;
+
 		/// @brief Checks whether posA can see posB without obstruction.
 		virtual bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) = 0;
 
@@ -52,6 +56,7 @@ namespace mmo
 		/// @param posA Source position.
 		/// @param posB Destination position.
 		/// @param hitPoint Set to the obstruction point when returning false, or to posB when returning true.
+		///        Reported at the height of posA/posB, i.e. LineOfSightEyeHeight below the tested ray.
 		/// @return true when the ray reaches posB unobstructed.
 		virtual bool IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint) = 0;
 

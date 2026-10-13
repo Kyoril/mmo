@@ -6,7 +6,7 @@
 -- (Own character: the quests and the learned profession persist on the character, so it must
 -- not share progression with other scenarios.)
 
-local QUEST_GOOD_CLOTH, QUEST_NEEDLE, QUEST_TEST_PIECE = 66, 67, 68
+local QUEST_GOOD_CLOTH, QUEST_NEEDLE, QUEST_TEST_PIECE = 69, 70, 71
 local SPELL_TAILORING = 2000
 local SPELL_BOLT, SPELL_BAG, SPELL_ROBE = 2001, 2003, 2006
 local ITEM_LINEN, ITEM_THREAD, ITEM_BOLT, ITEM_BAG, ITEM_POUCH = 68, 155, 156, 157, 162

@@ -2925,38 +2925,22 @@ namespace mmo
 		}
 
 		// Check personal dungeon binding
-		const auto it = m_dungeonBindings.find(mapId);
-		if (it != m_dungeonBindings.end())
-		{
-			return it->second;
-		}
-
-		return {};
+		return m_dungeonBindings.Find(mapId);
 	}
 
 	void Player::SetDungeonBinding(const MapId mapId, const InstanceId instanceId)
 	{
-		m_dungeonBindings[mapId] = instanceId;
+		m_dungeonBindings.Set(mapId, instanceId);
 	}
 
 	void Player::ClearDungeonBinding(const MapId mapId)
 	{
-		m_dungeonBindings.erase(mapId);
+		m_dungeonBindings.Remove(mapId);
 	}
 
 	void Player::ClearDungeonBindingByInstanceId(const InstanceId instanceId)
 	{
-		for (auto it = m_dungeonBindings.begin(); it != m_dungeonBindings.end(); )
-		{
-			if (it->second == instanceId)
-			{
-				it = m_dungeonBindings.erase(it);
-			}
-			else
-			{
-				++it;
-			}
-		}
+		m_dungeonBindings.RemoveByInstanceId(instanceId);
 	}
 
 	void Player::SendAuthChallenge()
@@ -3545,6 +3529,12 @@ namespace mmo
 
 		m_characterData = characterData;
 		m_characterData->isGameMaster = (m_gmLevel > 0);
+
+		// This session may have hosted another character before (logging out returns the client to
+		// character selection without dropping the session). Dungeon bindings belong to a single
+		// character, so hand them over to the character entering the world now - otherwise it would
+		// be sent into the dungeon instance the previous character left behind.
+		m_dungeonBindings.SetOwner(m_characterData->characterId);
 
 		// Server-side guard: reject enter-world if the character's race or class is disabled
 		const auto* raceEntry = m_project.races.getById(m_characterData->raceId);

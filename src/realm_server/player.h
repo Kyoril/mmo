@@ -21,6 +21,7 @@
 #include <set>
 
 #include "login_connector.h"
+#include "dungeon_bindings.h"
 #include "game/action_button.h"
 #include "game/mail.h"
 #include "game/bug_report.h"
@@ -503,9 +504,9 @@ namespace mmo
 		/// Global ids of the chat channels this player is currently a member of.
 		std::set<uint32> m_chatChannels;
 
-		/// Per-player dungeon instance bindings (mapId -> instanceId).
-		/// Used when the player is solo (not in a group).
-		std::map<MapId, InstanceId> m_dungeonBindings;
+		/// Dungeon instance bindings of the character currently logged in on this session
+		/// (mapId -> instanceId). Used when the player is solo (not in a group).
+		DungeonBindings m_dungeonBindings;
 
 	private:
 		/// Closes the connection if still connected.
