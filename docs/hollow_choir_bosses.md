@@ -218,7 +218,9 @@ gallery) were too uneven for the climb limit, so its collision now has a ramp in
 (mesh editor, Collision > *Stairs to Ramp*, or `mmo_edit --stairs-to-ramp <mesh>`). Left over are
 four tiny islands players cannot reach (ledges outside the Wake's side walls, a niche behind the
 apse, the top of an object in the nave). Rebuild with
-`bin/Release/nav_builder.exe -d data/client -w Test -o data/editor` after changing geometry.
+`bin/Release/nav_builder.exe -d data/client -w Test -o data/editor -p data/editor/data` after
+changing geometry. `-p` bakes door spawns into the nav mesh; without it closed doors do not block
+creature paths.
 Creatures whose victim stands where their paths do not lead now evade after five seconds instead
 of waiting at the edge of their area (`UnreachableTargetTracker`), in dungeons too; a creature
 that cannot walk home is put home.
