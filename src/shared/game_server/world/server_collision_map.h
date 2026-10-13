@@ -89,6 +89,39 @@ namespace mmo
 		/// @brief Enables or disables a dynamic collision instance. Unknown handles are a safe no-op.
 		void SetDynamicInstanceEnabled(uint64 handle, bool enabled);
 
+	public:
+		/// @brief Height, in the foliage mesh's local space, above which foliage geometry no longer
+		///        blocks line of sight.
+		///
+		/// Foliage collision meshes include the whole canopy as solid geometry, while the rendered
+		/// leaves are alpha-tested and visibly see-through. Looking over trees on lower ground (or
+		/// under a wide crown) therefore failed line of sight although the target was in plain view.
+		/// Only the trunk keeps blocking. The value is in local mesh units, so it scales with the
+		/// instance: the crowns of the shipped trees start at about 5 m (Tree_02), and 4 m keeps the
+		/// whole trunk below that while dropping the crown. A fixed constant is used instead of
+		/// deriving a per-mesh crown height because trunk-only meshes (SM_Tree_05) have no crown to
+		/// detect, and a heuristic would silently change with every re-exported tree.
+		static constexpr float FoliageLineOfSightTrunkHeight = 4.0f;
+
+		/// @brief Registers a static, always-blocking collision instance (entity, world model part).
+		/// @return False when the instance was not registered, either because the tree is null or
+		///         empty or because MakeInstance rejected the transform.
+		bool AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName);
+
+		/// @brief Registers a static foliage instance. Only its trunk (see
+		///        FoliageLineOfSightTrunkHeight) blocks line of sight.
+		/// @param tree The full local-space collision tree of the foliage mesh. It is filtered here;
+		///        callers registering many instances of one mesh should filter once with
+		///        MakeFoliageLineOfSightTree and use AddInstance instead.
+		/// @return False when nothing was registered (no trunk geometry or a rejected transform).
+		bool AddFoliageInstance(const std::shared_ptr<AABBTree>& tree, const Matrix4& transform, const std::string& debugName);
+
+		/// @brief Builds the line of sight tree of a foliage mesh: only triangles with at least one
+		///        vertex below FoliageLineOfSightTrunkHeight are kept.
+		/// @return The input tree itself when nothing is above the trunk height, nullptr when no
+		///         triangle is below it, otherwise a new filtered tree.
+		static std::shared_ptr<AABBTree> MakeFoliageLineOfSightTree(const std::shared_ptr<AABBTree>& tree);
+
 	private:
 		/// Loads just the COLL chunk from a .mesh file into a shared AABBTree.
 		/// Returns nullptr if the file has no collision tree.
@@ -99,10 +132,6 @@ namespace mmo
 		/// per-mesh-ref transform.
 		void LoadWorldModelInstances(const std::string& hwmoPath,
 		                             const Matrix4& instanceTransform);
-
-		/// @return False when the instance was not registered, either because the tree is null or
-		///         empty or because MakeInstance rejected the transform.
-		bool AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName);
 
 		/// Builds a CollisionInstance (world bounds + inverse transform) from a tree and transform.
 		/// @param debugName Name of the source asset, used in the log message on rejection.
