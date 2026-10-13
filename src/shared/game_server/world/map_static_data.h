@@ -78,7 +78,9 @@ namespace mmo
 
 	/// @brief Hands out one MapStaticData per map directory, shared by all instances of that map.
 	/// @details Holds only weak references: the data is freed when the last instance using it is
-	/// destroyed, and loaded again by the next Acquire. World thread only.
+	/// destroyed, and loaded again by the next Acquire. A reset dungeon (destroyed and recreated)
+	/// therefore reloads its data unless another instance of the same map is still alive.
+	/// World thread only.
 	class MapStaticDataRegistry final : public NonCopyable
 	{
 	public:

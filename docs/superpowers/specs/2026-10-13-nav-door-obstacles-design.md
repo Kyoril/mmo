@@ -106,9 +106,10 @@ identical copies of read-only data in memory.
   - `ServerWaterMap`.
 - New `MapStaticDataRegistry`, owned by `WorldInstanceManager`, keyed by map directory. It
   stores `std::weak_ptr<MapStaticData>` and hands out `std::shared_ptr`. Creating an instance
-  of a map that is already loaded reuses the data; destroying the last instance frees it. An
-  already-alive entry is shared, so a dungeon that is reset (destroyed and recreated) does not
-  reload.
+  of a map that is already loaded reuses the data; destroying the last instance frees it. A
+  dungeon that is reset (destroyed and recreated) reuses the data only while another instance
+  of the same map is alive; when it was the last one, the data is freed and the new instance
+  loads it again.
 - `ServerCollisionMap` becomes the per-instance LOS view: a `shared_ptr<const StaticCollisionMap>`
   plus the existing dynamic-instance map, handles and mesh-tree cache. `LineOfSight(Ex)` tests
   static first, then dynamic, exactly as today. Its public API stays the same, so call sites do
