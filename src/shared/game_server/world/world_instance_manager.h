@@ -4,6 +4,7 @@
 
 #include "base/non_copyable.h"
 #include "world_instance.h"
+#include "map_static_data.h"
 #include "game/game.h"
 
 #include "asio.hpp"
@@ -40,6 +41,9 @@ namespace mmo
 			IdGenerator<uint64>& objectIdGenerator, ITriggerHandler& triggerHandler, const ConditionMgr& conditionMgr);
 
 	public:
+		/// Gets the registry of per-map static data shared by all instances of a map.
+		MapStaticDataRegistry& GetMapStaticData() { return m_mapStaticData; }
+
 		/// Creates a new world instance using a specific map id.
 		/// @param mapId The map id that is hosted.
 		WorldInstance& CreateInstance(MapId mapId);
@@ -98,6 +102,10 @@ namespace mmo
 
 		/// Set by Stop(). Keeps ScheduleNextUpdate from re-arming the tick during shutdown.
 		bool m_stopped = false;
+
+		/// Per-map nav mesh, static collision and water, shared by every instance of a map.
+		/// Declared before m_worldInstances so it is destroyed after the instances.
+		MapStaticDataRegistry m_mapStaticData;
 
 		WorldInstances m_worldInstances;
 

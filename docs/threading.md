@@ -87,3 +87,15 @@ a metric ran on ("Multiple" when a scope ran on several, e.g. ParallelFor bodies
 - **No general async asset loading** — streaming workers touch parse-phase data only.
 - **No lock-free queues / work stealing** — jobs are chunky (whole emitters, entities,
   tiles); a mutex+condvar queue is invisible in profiles and debuggable.
+
+## World server: shared nav data
+
+Not part of the client model above, recorded here because it constrains any future server
+threading work. The world server loads nav mesh, static collision and water once per map
+(`MapStaticData`, handed out by `WorldInstanceManager`'s `MapStaticDataRegistry`) and shares
+them between all instances of that map.
+
+- **One `dtNavMeshQuery` per map, shared by every instance.** Nav queries are therefore world
+  thread only. Raising the world tier's thread count needs a `dtNavMeshQuery` per thread.
+- **Door state is per instance** in a `nav::InstanceQueryFilter`, which blocks the baked door
+  polys of closed doors. The nav mesh itself never changes when a door opens or closes.

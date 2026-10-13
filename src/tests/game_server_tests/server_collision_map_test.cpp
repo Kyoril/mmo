@@ -3,6 +3,7 @@
 #include "catch.hpp"
 
 #include "game_server/world/server_collision_map.h"
+#include "math/aabb.h"
 #include "math/aabb_tree.h"
 #include "math/matrix4.h"
 #include "math/quaternion.h"
@@ -306,4 +307,40 @@ TEST_CASE("ServerCollisionMap - single-sided dynamic plane blocks from both side
 	CHECK(hit.z == Approx(0.0f).margin(0.001f));
 	REQUIRE_FALSE(map.LineOfSightEx(backPos, frontPos, hit));
 	CHECK(hit.z == Approx(0.0f).margin(0.001f));
+}
+
+TEST_CASE("ServerCollisionMap - shared static geometry blocks every instance view", "[server_collision_map]")
+{
+	auto shared = std::make_shared<ServerCollisionMap>();
+	REQUIRE(shared->AddInstance(buildWallTree(), Matrix4::Identity, "wall"));
+	const std::shared_ptr<const ServerCollisionMap> sharedStatic = shared;
+
+	ServerCollisionMap instanceA(sharedStatic);
+	ServerCollisionMap instanceB(sharedStatic);
+
+	CHECK(instanceA.IsLoaded());
+	CHECK_FALSE(instanceA.LineOfSight(frontPos, backPos));
+	CHECK_FALSE(instanceB.LineOfSight(frontPos, backPos));
+
+	Vector3 hit;
+	CHECK_FALSE(instanceA.LineOfSightEx(frontPos, backPos, hit));
+	CHECK(hit.z == Approx(0.0f).margin(0.01f));
+}
+
+TEST_CASE("ServerCollisionMap - dynamic instances stay with their instance view", "[server_collision_map]")
+{
+	const std::shared_ptr<const ServerCollisionMap> sharedStatic = std::make_shared<ServerCollisionMap>();
+	ServerCollisionMap instanceA(sharedStatic);
+	ServerCollisionMap instanceB(sharedStatic);
+
+	const uint64 handle = instanceA.AddDynamicInstance(buildWallTree(), Matrix4::Identity, true);
+	REQUIRE(handle != 0);
+
+	CHECK_FALSE(instanceA.LineOfSight(frontPos, backPos));
+	CHECK(instanceB.LineOfSight(frontPos, backPos));
+
+	AABB bounds;
+	REQUIRE(instanceA.GetDynamicInstanceLocalBounds(handle, bounds));
+	CHECK(bounds.max.x == Approx(1.0f));
+	CHECK_FALSE(instanceB.GetDynamicInstanceLocalBounds(handle, bounds));
 }

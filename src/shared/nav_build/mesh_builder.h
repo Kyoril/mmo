@@ -8,6 +8,7 @@
 #include "base/filesystem.h"
 
 #include "map.h"
+#include "nav_mesh/door_volume.h"
 
 #include <map>
 #include <mutex>
@@ -128,6 +129,10 @@ namespace mmo
 		///	@returns True if a tile was found, false otherwise.
 		[[nodiscard]] bool GetNextTile(TileIndex& tile);
 
+		/// @brief Sets the door footprints to cut out as door polys. Must be called before the
+		/// first BuildAndSerializeTerrainTile; the list is read concurrently by the worker threads.
+		void SetDoorVolumes(std::vector<nav::DoorVolume> doors) { m_doorVolumes = std::move(doors); }
+
 		/// Gets the number of completed tiles. Can be used to determine if the builder is finished.
 		///	@returns The number of completed tiles.
 		[[nodiscard]] size_t CompletedTiles() const { return m_completedTiles; }
@@ -178,6 +183,9 @@ namespace mmo
 
 		String m_outputPath;
 		String m_worldPath;
+
+		/// Door footprints, see SetDoorVolumes. Read-only once building starts.
+		std::vector<nav::DoorVolume> m_doorVolumes;
 
 		size_t m_totalTiles = 0;
 		volatile size_t m_completedTiles = 0;

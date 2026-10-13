@@ -97,6 +97,23 @@ namespace mmo
 		return true;
 	}
 
+	ServerCollisionMap::ServerCollisionMap(std::shared_ptr<const ServerCollisionMap> sharedStatic)
+		: m_sharedStatic(std::move(sharedStatic))
+	{
+	}
+
+	bool ServerCollisionMap::GetDynamicInstanceLocalBounds(const uint64 handle, AABB& out) const
+	{
+		const auto it = m_dynamicInstances.find(handle);
+		if (it == m_dynamicInstances.end() || !it->second.instance.tree)
+		{
+			return false;
+		}
+
+		out = it->second.instance.tree->GetBoundingBox();
+		return true;
+	}
+
 	bool ServerCollisionMap::AddFoliageInstance(const std::shared_ptr<AABBTree>& tree, const Matrix4& transform, const std::string& debugName)
 	{
 		return AddInstance(MakeFoliageLineOfSightTree(tree), transform, debugName);
@@ -639,7 +656,7 @@ namespace mmo
 
 	bool ServerCollisionMap::LineOfSight(const Vector3& from, const Vector3& to) const
 	{
-		if (m_instances.empty() && m_dynamicInstances.empty())
+		if (m_instances.empty() && m_dynamicInstances.empty() && !m_sharedStatic)
 		{
 			return true;
 		}
@@ -650,6 +667,11 @@ namespace mmo
 		}
 
 		const Ray worldRay(from, to);
+
+		if (m_sharedStatic && !m_sharedStatic->LineOfSight(from, to))
+		{
+			return false; // blocked by shared static geometry
+		}
 
 		for (const auto& inst : m_instances)
 		{
@@ -674,7 +696,7 @@ namespace mmo
 	{
 		hitPoint = to;
 
-		if (m_instances.empty() && m_dynamicInstances.empty())
+		if (m_instances.empty() && m_dynamicInstances.empty() && !m_sharedStatic)
 		{
 			return true;
 		}
@@ -689,6 +711,21 @@ namespace mmo
 
 		float closestWorldT = 1.0f;
 		bool blocked = false;
+
+		if (m_sharedStatic)
+		{
+			Vector3 sharedHit;
+			if (!m_sharedStatic->LineOfSightEx(from, to, sharedHit))
+			{
+				const float sharedT = worldLen > 0.f ? (sharedHit - from).GetLength() / worldLen : 0.f;
+				if (sharedT < closestWorldT)
+				{
+					closestWorldT = sharedT;
+					hitPoint = sharedHit;
+					blocked = true;
+				}
+			}
+		}
 
 		for (const auto& inst : m_instances)
 		{
