@@ -3,6 +3,7 @@
 #include "world_instance.h"
 #include "server_collision_map.h"
 #include "server_water_map.h"
+#include "map_static_data.h"
 
 #include "game_server/world/creature_spawner.h"
 #include "game_server/world/each_tile_in_sight.h"
@@ -69,37 +70,10 @@ namespace mmo
 		return true;
 	}
 
-	NavMapData::NavMapData(const proto::MapEntry& mapEntry)
+	NavMapData::NavMapData(std::shared_ptr<MapStaticData> staticData)
+		: m_staticData(std::move(staticData))
+		, m_collisionMap(std::make_unique<ServerCollisionMap>(m_staticData->GetStaticCollision()))
 	{
-		m_map = std::make_shared<nav::Map>(mapEntry.directory());
-
-		// Stream the nav mesh pages in instead of loading them all here: on a large map that
-		// held up the world thread for every instance created. Queries load what they touch on
-		// demand until streaming completes (see EnsureNavLoaded).
-		m_pageStreamer = std::make_unique<nav::PageStreamer>(*m_map);
-		m_navStreamStart = std::chrono::steady_clock::now();
-		DLOG("NavMapData: streaming " << m_pageStreamer->GetPageCount() << " nav page(s) for map '" << mapEntry.directory() << "'");
-
-		// Load world geometry for accurate 3D LOS. The collision map is kept even when no
-		// static geometry was found, so dynamic collision (e.g. doors) can still block LOS;
-		// the empty-map early-out keeps queries cheap in that case.
-		m_collisionMap = std::make_unique<ServerCollisionMap>(mapEntry.directory());
-		if (m_collisionMap->IsLoaded())
-		{
-			DLOG("NavMapData: using geometry-based LOS for map '" << mapEntry.directory() << "'");
-		}
-		else
-		{
-			WLOG("NavMapData: no static collision geometry for map '"
-				<< mapEntry.directory() << "' — only dynamic objects (e.g. doors) will block IsInLineOfSight");
-		}
-
-		// Load terrain water data for swim validation. Optional — null when the map has no water.
-		auto waterMap = std::make_unique<ServerWaterMap>(mapEntry.directory());
-		if (waterMap->IsLoaded())
-		{
-			m_waterMap = std::move(waterMap);
-		}
 	}
 
 	NavMapData::~NavMapData() = default;
@@ -161,35 +135,11 @@ namespace mmo
 		}
 	}
 
-	void NavMapData::Update()
-	{
-		if (!m_pageStreamer)
-		{
-			return;
-		}
-
-		// A slice of each 30 ms world tick. Reading the pages happens on the streamer's thread;
-		// this only pays for adding the read tiles to Detour, which is not thread-safe.
-		constexpr auto installBudget = std::chrono::milliseconds(4);
-		if (!m_pageStreamer->InstallReadyPages(installBudget))
-		{
-			return;
-		}
-
-		const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_navStreamStart);
-		DLOG("NavMapData: nav map '" << m_map->GetName() << "' complete, " << m_pageStreamer->GetPageCount() << " page(s) streamed in " << elapsed.count() << " ms"
-			<< (m_pageStreamer->GetFailedPageCount() > 0 ? " (" + std::to_string(m_pageStreamer->GetFailedPageCount()) + " failed)" : std::string()));
-		m_pageStreamer.reset();
-	}
-
 	void NavMapData::EnsureNavLoaded(const Vector3& a, const Vector3& b, const float margin) const
 	{
-		if (m_pageStreamer)
-		{
-			m_pageStreamer->EnsureLoaded(
-				std::min(a.x, b.x) - margin, std::min(a.z, b.z) - margin,
-				std::max(a.x, b.x) + margin, std::max(a.z, b.z) + margin);
-		}
+		m_staticData->EnsureNavLoaded(
+			std::min(a.x, b.x) - margin, std::min(a.z, b.z) - margin,
+			std::max(a.x, b.x) + margin, std::max(a.z, b.z) + margin);
 	}
 
 	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const
@@ -198,8 +148,8 @@ namespace mmo
 		constexpr float pathMargin = 64.0f;
 		EnsureNavLoaded(start, destination, pathMargin);
 
-		const bool found = m_map->FindPath(start, destination, out_path, true);
-		if (!found || !m_pageStreamer || out_path.empty())
+		const bool found = m_staticData->GetNavMap().FindPath(start, destination, out_path, true, &m_queryFilter);
+		if (!found || !m_staticData->IsNavStreaming() || out_path.empty())
 		{
 			return found;
 		}
@@ -217,29 +167,30 @@ namespace mmo
 
 		EnsureNavLoaded(start, destination, static_cast<float>(terrain::constants::PageSize));
 		out_path.clear();
-		return m_map->FindPath(start, destination, out_path, true);
+		return m_staticData->GetNavMap().FindPath(start, destination, out_path, true, &m_queryFilter);
 	}
 
 	bool NavMapData::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
 	{
 		EnsureNavLoaded(centerPosition, centerPosition, radius + 5.0f);
 
-		return m_map->FindRandomPointAroundCircle(centerPosition, radius, randomPoint);
+		return m_staticData->GetNavMap().FindRandomPointAroundCircle(centerPosition, radius, randomPoint, &m_queryFilter);
 	}
 
 	bool NavMapData::GetWaterSurface(const Vector3& pos, float& outSurfaceY) const
 	{
-		if (!m_waterMap)
+		const ServerWaterMap* waterMap = m_staticData->GetWaterMap();
+		if (!waterMap)
 		{
 			return false;
 		}
 
-		return m_waterMap->GetWaterSurface(pos.x, pos.z, outSurfaceY);
+		return waterMap->GetWaterSurface(pos.x, pos.z, outSurfaceY);
 	}
 
 	bool NavMapData::IsWaterDataAvailable() const
 	{
-		return m_waterMap != nullptr;
+		return m_staticData->GetWaterMap() != nullptr;
 	}
 
 	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler, const ConditionMgr& conditionMgr)
@@ -281,7 +232,7 @@ namespace mmo
 			}
 		}
 
-		m_mapData = std::make_unique<NavMapData>(*m_mapEntry);
+		m_mapData = std::make_unique<NavMapData>(m_manager.GetMapStaticData().Acquire(m_mapEntry->directory()));
 
 		// Add object spawners
 		for (int i = 0; i < m_mapEntry->objectspawns_size(); ++i)

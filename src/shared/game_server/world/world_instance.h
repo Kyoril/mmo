@@ -24,7 +24,7 @@
 #include "shared/proto_data/trigger_event_filter.h"
 
 #include "nav_mesh/map.h"
-#include "nav_mesh/page_streamer.h"
+#include "nav_mesh/instance_query_filter.h"
 
 namespace mmo
 {
@@ -130,12 +130,13 @@ namespace mmo
 	};
 
 	class ServerCollisionMap;
-	class ServerWaterMap;
+	class MapStaticData;
 
 	class NavMapData final : public MapData
 	{
 	public:
-		explicit NavMapData(const proto::MapEntry& mapEntry);
+		/// @param staticData The map's shared static data (nav mesh, static collision, water).
+		explicit NavMapData(std::shared_ptr<MapStaticData> staticData);
 		~NavMapData() override;
 
 		bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) override;
@@ -156,8 +157,8 @@ namespace mmo
 
 		void SetDynamicCollisionEnabled(uint64 handle, bool enabled) override;
 
-		/// @brief Installs nav mesh pages the background loader has read, within a time budget.
-		void Update() override;
+		/// @brief The map's shared static data.
+		[[nodiscard]] const MapStaticData& GetStaticData() const { return *m_staticData; }
 
 	private:
 		/// @brief Makes sure the nav mesh has every page overlapping the XZ rectangle spanned by
@@ -165,17 +166,12 @@ namespace mmo
 		void EnsureNavLoaded(const Vector3& a, const Vector3& b, float margin) const;
 
 	private:
-		std::shared_ptr<nav::Map> m_map;
-		/// Streams the nav mesh pages in while the instance is already running. Reset once every
-		/// page is installed. Declared after m_map, which it fills, so it is destroyed first.
-		std::unique_ptr<nav::PageStreamer> m_pageStreamer;
-		std::chrono::steady_clock::time_point m_navStreamStart;
-		/// Geometry-based collision map for accurate wall/object LOS. Always present so dynamic
-		/// collision (e.g. doors) works even on maps without static world geometry; nav mesh LOS
-		/// is used as fallback only when the pointer is null (allocation-free maps).
+		/// Shared by every instance of the map. Streaming is driven by MapStaticDataRegistry.
+		std::shared_ptr<MapStaticData> m_staticData;
+		/// This instance's LOS view: the shared static geometry plus this instance's doors.
 		std::unique_ptr<ServerCollisionMap> m_collisionMap;
-		/// Optional terrain water data for swim validation. Null when the map has no water.
-		std::unique_ptr<ServerWaterMap> m_waterMap;
+		/// This instance's door state on the shared nav mesh.
+		nav::InstanceQueryFilter m_queryFilter;
 	};
 
 	class Universe;
