@@ -34,6 +34,9 @@ The fight lengths in the brief (90-120 s, 120-150 s, 150-180 s) assume a group d
 
 Authoring: `tools/hollow_choir/author_bosses.py` (idempotent).
 
+Each of the three loot tables drops exactly one blue per kill, never two and never none — see
+[loot_design.md](loot_design.md). Table 28 additionally holds the dungeon's epic.
+
 ## Spells
 
 | Id | Boss | Name (brief) | Shape |
