@@ -124,6 +124,17 @@ namespace mmo
 
 	namespace
 	{
+		/// Forgets all DB cache queries still in flight, so the next Get for such an entry queries again.
+		void ResetInFlightCacheQueries(ICacheProvider& cache)
+		{
+			cache.GetItemCache().ResetInFlightQueries();
+			cache.GetCreatureCache().ResetInFlightQueries();
+			cache.GetQuestCache().ResetInFlightQueries();
+			cache.GetNameCache().ResetInFlightQueries();
+			cache.GetGuildCache().ResetInFlightQueries();
+			cache.GetObjectCache().ResetInFlightQueries();
+		}
+
 		static ConsoleVar *s_debugOutputPathVar = nullptr;
 
 		static ConsoleVar *s_renderShadowsVar = nullptr;
@@ -367,6 +378,9 @@ namespace mmo
 		// The game clock outlives the world state; it was not updated while we were out of the world
 		m_gameTime.ResetUpdateReference();
 
+		// Queries sent while out of the world never had a handler for their answers.
+		ResetInFlightCacheQueries(m_cache);
+
 		CombatVignette::Init();
 
 		ObjectMgr::Initialize(m_project, m_partyInfo);
@@ -539,14 +553,6 @@ namespace mmo
 
 		m_rayQuery.reset();
 
-		// Answers to queries still in flight are lost with the connection; let the caches query again.
-		m_cache.GetItemCache().ResetInFlightQueries();
-		m_cache.GetCreatureCache().ResetInFlightQueries();
-		m_cache.GetQuestCache().ResetInFlightQueries();
-		m_cache.GetNameCache().ResetInFlightQueries();
-		m_cache.GetGuildCache().ResetInFlightQueries();
-		m_cache.GetObjectCache().ResetInFlightQueries();
-
 		// Stop background loading thread
 		m_work.reset();
 		m_workQueue.stop();
@@ -575,6 +581,10 @@ namespace mmo
 		// clients there can still arm a goodbye line (e.g. QuestClient::Shutdown -> CloseQuest),
 		// so the reset that clears/cancels all pending state needs to happen afterwards.
 		UnitGossipVoice::Get().Reset();
+
+		// Answers to queries still in flight are dropped once the packet handlers are gone. This also
+		// runs after the subsystem shutdowns above, which can still query the caches through Lua.
+		ResetInFlightCacheQueries(m_cache);
 
 		RemoveGameplayCommands();
 
@@ -3315,6 +3325,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Unable to retrieve unit name for unit " << log_hex_digit(guid));
+			m_cache.GetNameCache().NotifyQueryFailed(guid);
 			return PacketParseResult::Pass;
 		}
 
