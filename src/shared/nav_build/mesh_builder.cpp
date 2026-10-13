@@ -7,6 +7,7 @@
 #include "DetourNavMeshBuilder.h"
 
 #include "common.h"
+#include "door_marking.h"
 #include "Recast.h"
 #include "recast_context.h"
 
@@ -148,7 +149,7 @@ namespace mmo
                 VertexToRecast(input[i], &output[i * 3]);
         }
 
-        bool SerializeMeshTile(rcContext& ctx, const rcConfig& config, int tileX, int tileY, rcHeightfield& solid, io::Writer& out)
+        bool SerializeMeshTile(rcContext& ctx, const rcConfig& config, int tileX, int tileY, rcHeightfield& solid, io::Writer& out, const std::vector<nav::DoorVolume>& doors)
         {
             // initialize compact height field
             SmartCompactHeightFieldPtr chf(rcAllocCompactHeightfield(), rcFreeCompactHeightfield);
@@ -171,6 +172,11 @@ namespace mmo
             {
                 return false;
             }
+
+            // Doors get their own poly strip so each world instance can block it while the door
+            // is closed (nav::InstanceQueryFilter). Marked after erosion so the strip keeps the
+            // eroded clearance, and before regions so Recast does not merge it into the floor.
+            MarkDoorAreas(ctx, *chf, doors);
 
             if (!rcBuildDistanceField(&ctx, *chf))
             {
@@ -506,7 +512,7 @@ namespace mmo
 
         // Serialize final navmesh tile
         const size_t meshStartPos = heightFieldSink.Position();
-        auto const result = SerializeMeshTile(ctx, config, tile.x, tile.y, *solid, heightFieldWriter);
+        auto const result = SerializeMeshTile(ctx, config, tile.x, tile.y, *solid, heightFieldWriter, m_doorVolumes);
 
         // Write final mesh size
         const size_t meshEndPos = heightFieldSink.Position();
