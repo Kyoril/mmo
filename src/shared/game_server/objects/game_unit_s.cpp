@@ -2538,15 +2538,45 @@ namespace mmo
 		return std::min(std::max(missChance, 0.0f), 100.0f);
 	}
 
-	float GameUnitS::CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const
+	float GameUnitS::GetBaseMeleeCritChance() const
 	{
 		// Base crit chance from agility and weapon skill
 		float critChance = 5.0f; // Base 5%
 
 		// Add agility contribution - formula approximates classic wow
 		// For most classes: 20 agi = 1% crit
-		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
+		const float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
 		critChance += agiContribution;
+
+		return critChance;
+	}
+
+	float GameUnitS::GetBaseSpellCritChance() const
+	{
+		// The same base chance spell effects roll against before per-spell talent modifiers.
+		return GetCombatSettings().spell_default_crit_chance();
+	}
+
+	float GameUnitS::GetManaRegenPerFiveSeconds() const
+	{
+		// Regeneration ticks every two seconds (see StartRegeneration), so five seconds are
+		// 2.5 ticks. The aura percentage modifier is applied per tick in RegeneratePower().
+		constexpr float ticksPerFiveSeconds = 5000.0f / static_cast<float>(constants::OneSecond * 2);
+		return static_cast<float>(GetEffectivePowerRegenPerTick(power_type::Mana, static_cast<int32>(m_manaRegenPerTick))) * ticksPerFiveSeconds;
+	}
+
+	void GameUnitS::UpdateCombatStatFields()
+	{
+		Set<float>(object_fields::SpellDamage, GetCalculatedModifierValue(unit_mods::SpellDamage));
+		Set<float>(object_fields::SpellHealing, GetCalculatedModifierValue(unit_mods::HealingDone));
+		Set<float>(object_fields::SpellCritChance, Clamp(GetBaseSpellCritChance(), 0.0f, 100.0f));
+		Set<float>(object_fields::MeleeCritChance, Clamp(GetBaseMeleeCritChance(), 0.0f, 100.0f));
+		Set<float>(object_fields::ManaRegen, GetManaRegenPerFiveSeconds());
+	}
+
+	float GameUnitS::CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const
+	{
+		float critChance = GetBaseMeleeCritChance();
 
 		// Add weapon skill contribution if applicable
 		// TODO: Add weapon skill bonuses when equipment system is implemented

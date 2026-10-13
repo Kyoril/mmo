@@ -117,6 +117,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 22 | 2026-10-13 | Character sheet caster stats: unit fields `SpellDamage`, `SpellHealing`, `SpellCritChance`, `MeleeCritChance` and `ManaRegen` are appended to `object_fields::UnitFields`, renumbering every player field after them |
 | 21 | 2026-10-12 | Professions: `TradeSkills`/`TradeSkillUpdate` server packets, spell cast results `FailedSkillTooLow`/`FailedInventoryFull`, trainer result `FailedSkillTooLow`, `CharacterData`/`GamePlayerS` trade skill list |
 | 20 | 2026-10-11 | `PlaySoundById`'s position flag becomes a source byte: 0 = 2D, 1 = position, 2 = unit (packed guid + fallback position), so trigger Say/Yell voice lines play as 3D sound that follows the speaking creature |
 | 19 | 2026-10-08 | Spell zones on the ground (`PersistentAreaAura`): server `SpellZoneStart` (zone id, caster, spell, position, radius, remaining ms) and `SpellZoneEnd` (zone id, expired flag) |
