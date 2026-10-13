@@ -845,9 +845,10 @@ namespace mmo
 		// Find the deepest enabled frame for the given point. It receives the mouse moved events.
 		const FramePtr enabledFrame = m_topFrame->GetChildFrameAt(position, false);
 
-		// Hover tracking (enter / leave, tooltips, IsHovered) also includes disabled frames, so that
-		// e.g. a locked button can still show a tooltip explaining why it is locked.
-		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, true);
+		// Hover tracking (enter / leave, tooltips, IsHovered) also includes disabled frames that are
+		// clickable, so that e.g. a locked button can still show a tooltip explaining why it is locked.
+		// Disabled, non-clickable frames stay transparent so hover lands on their parent (nameplates).
+		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, FrameHitTest::Hover);
 
 		// Trigger mouse moved events, skipping any frame already notified above as a pressed frame.
 		Frame* frame = enabledFrame.get();

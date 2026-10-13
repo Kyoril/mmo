@@ -141,3 +141,65 @@ TEST_CASE("Disabled frames take part in hover tracking", "[frame_input][disabled
 		CHECK(button->enterCount == 1);
 	}
 }
+
+TEST_CASE("Disabled non-clickable children are transparent to hover", "[frame_input][disabled_hover]")
+{
+	FrameManagerFixture fixture;
+
+	// Nameplate pattern: a clickable plate whose parts are disabled and non-clickable, so that hover
+	// and clicks land on the plate itself.
+	auto root = std::make_shared<RecordingFrame>("Root");
+	auto plate = std::make_shared<RecordingFrame>("Plate");
+	auto healthBar = std::make_shared<RecordingFrame>("Plate_Health");
+	root->AddChild(plate);
+	plate->AddChild(healthBar);
+	root->SetTestBounds(Rect(0, 0, 200, 200));
+	plate->SetTestBounds(Rect(0, 0, 100, 100));
+	healthBar->SetTestBounds(Rect(10, 10, 50, 50));
+	healthBar->SetClickable(false);
+	healthBar->SetEnabled(false);
+
+	FrameManager::Get().SetTopFrame(root);
+
+	FrameManager::Get().NotifyMouseMoved(Point(20, 20));
+	CHECK(FrameManager::Get().GetHoveredFrame() == plate);
+	CHECK(plate->IsHovered());
+	CHECK(plate->enterCount == 1);
+	CHECK_FALSE(healthBar->IsHovered());
+	CHECK(healthBar->enterCount == 0);
+
+	// The click on the part bubbles to the clickable plate.
+	FrameManager::Get().NotifyMouseDown(MouseButton::Left, Point(20, 20));
+	FrameManager::Get().NotifyMouseUp(MouseButton::Left, Point(20, 20));
+	CHECK(plate->mouseDownCount == 1);
+	CHECK(healthBar->mouseDownCount == 0);
+}
+
+TEST_CASE("Hit test modes treat disabled frames by clickability", "[frame_input][disabled_hover]")
+{
+	FrameManagerFixture fixture;
+
+	auto root = std::make_shared<RecordingFrame>("Root");
+	auto clickable = std::make_shared<RecordingFrame>("DisabledButton");
+	auto decoration = std::make_shared<RecordingFrame>("DisabledDecoration");
+	root->AddChild(clickable);
+	root->AddChild(decoration);
+	root->SetTestBounds(Rect(0, 0, 200, 200));
+	clickable->SetTestBounds(Rect(0, 0, 50, 50));
+	decoration->SetTestBounds(Rect(100, 100, 150, 150));
+	clickable->SetEnabled(false);
+	decoration->SetClickable(false);
+	decoration->SetEnabled(false);
+
+	CHECK(root->GetChildFrameAt(Point(10, 10), FrameHitTest::Hover) == clickable);
+	CHECK(root->GetChildFrameAt(Point(10, 10), FrameHitTest::EnabledOnly) == root);
+	CHECK(root->GetChildFrameAt(Point(10, 10), FrameHitTest::IncludeDisabled) == clickable);
+
+	CHECK(root->GetChildFrameAt(Point(110, 110), FrameHitTest::Hover) == root);
+	CHECK(root->GetChildFrameAt(Point(110, 110), FrameHitTest::EnabledOnly) == root);
+	CHECK(root->GetChildFrameAt(Point(110, 110), FrameHitTest::IncludeDisabled) == decoration);
+
+	// The bool overload keeps its old meaning.
+	CHECK(root->GetChildFrameAt(Point(110, 110), true) == decoration);
+	CHECK(root->GetChildFrameAt(Point(110, 110), false) == root);
+}
