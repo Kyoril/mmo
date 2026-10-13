@@ -539,6 +539,14 @@ namespace mmo
 
 		m_rayQuery.reset();
 
+		// Answers to queries still in flight are lost with the connection; let the caches query again.
+		m_cache.GetItemCache().ResetInFlightQueries();
+		m_cache.GetCreatureCache().ResetInFlightQueries();
+		m_cache.GetQuestCache().ResetInFlightQueries();
+		m_cache.GetNameCache().ResetInFlightQueries();
+		m_cache.GetGuildCache().ResetInFlightQueries();
+		m_cache.GetObjectCache().ResetInFlightQueries();
+
 		// Stop background loading thread
 		m_work.reset();
 		m_workQueue.stop();
@@ -3352,6 +3360,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetCreatureCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3359,6 +3368,7 @@ namespace mmo
 		if (!(packet >> io::read_string(entry.name) >> io::read_string(entry.subname) >> io::read_string(entry.stealthAlertSound)))
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetCreatureCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3378,6 +3388,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Item query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetItemCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3406,6 +3417,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Object query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetObjectCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
