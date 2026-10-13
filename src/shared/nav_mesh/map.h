@@ -104,7 +104,8 @@ namespace mmo::nav
 		/// @param output Receives the waypoints.
 		/// @param allowPartial Whether a path to the closest reachable point is accepted.
 		/// @param filter Query filter to use; nullptr uses the map's default filter.
-		/// @return true if a path was found.
+		/// @return true if a path was found. An end position lying off the end poly is clamped onto
+		///         it, for every filter (including the shortcut when start and end share a poly).
 		bool FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial = false, const dtQueryFilter* filter = nullptr) const;
 
 		/// @brief Checks whether two world positions have an unobstructed line of sight on the nav mesh.
