@@ -13,6 +13,7 @@
 #include "game_server/inventory.h"
 #include "game_server/quest_status_data.h"
 #include "game_server/persistent_aura.h"
+#include "game_server/trade_skill_book.h"
 
 namespace mmo
 {
@@ -172,6 +173,8 @@ namespace mmo
 		uint32 sitPoseEmote = 0;
 		/// Selected sleeping pose variant emote id (0 = default pose).
 		uint32 sleepPoseEmote = 0;
+		/// Learned trade skills (professions) with value and cap.
+		std::vector<TradeSkillData> tradeSkills;
 
 		/// Returns the per-class data for the currently active class, or nullptr if it is missing.
 		const CharacterClassData* GetActiveClass() const
@@ -348,6 +351,27 @@ namespace mmo
 			return reader;
 		}
 
+		// Trade skills are optional: a stream written before they existed simply ends here.
+		data.tradeSkills.clear();
+		uint8 numTradeSkills = 0;
+		if (!(reader >> io::read<uint8>(numTradeSkills)))
+		{
+			reader.setSuccess();
+			return reader;
+		}
+
+		data.tradeSkills.reserve(numTradeSkills);
+		for (uint8 i = 0; i < numTradeSkills; ++i)
+		{
+			TradeSkillData skill;
+			if (!(reader >> skill))
+			{
+				return reader;
+			}
+
+			data.tradeSkills.push_back(skill);
+		}
+
 		return reader;
 	}
 	
@@ -425,6 +449,12 @@ namespace mmo
 			<< io::write<uint32>(data.idlePoseEmote)
 			<< io::write<uint32>(data.sitPoseEmote)
 			<< io::write<uint32>(data.sleepPoseEmote);
+
+		writer << io::write<uint8>(static_cast<uint8>(data.tradeSkills.size()));
+		for (const TradeSkillData& skill : data.tradeSkills)
+		{
+			writer << skill;
+		}
 
 		return writer;
 	}

@@ -7,6 +7,7 @@
 #include "game/movement_type.h"
 #include "game/object_type_id.h"
 #include "game/spell.h"
+#include "game/trade_skill.h"
 #include "math/vector3.h"
 
 #include <array>
@@ -378,6 +379,15 @@ namespace mmo
 		/// @brief Replaces the known spellbook state.
 		void SetKnownSpells(const std::vector<uint32>& spellIds);
 
+		/// @brief Sets (or replaces) the value and cap of a trade skill (profession).
+		void SetTradeSkill(uint32 skillId, uint16 value, uint16 max);
+
+		/// @brief Gets the state of a trade skill, or nullptr if the skill is not known.
+		const TradeSkillData* GetTradeSkill(uint32 skillId) const;
+
+		/// @brief Forgets all trade skills.
+		void ClearTradeSkills();
+
 		/// @brief Learns a single spell if it is not already known.
 		void LearnSpell(uint32 spellId);
 
@@ -447,6 +457,7 @@ namespace mmo
 
 		// Spellbook & combat runtime state
 		std::unordered_set<uint32> m_knownSpells;
+		std::map<uint32, TradeSkillData> m_tradeSkills;
 		std::vector<AuraState> m_visibleAuras;
 		std::map<uint32, CooldownState> m_spellCooldowns;
 		CastState m_lastCastState;

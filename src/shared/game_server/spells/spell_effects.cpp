@@ -20,6 +20,7 @@
 #include "world/universe.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace mmo
 {
@@ -989,6 +990,51 @@ namespace mmo
 
 				ctx.markAffectedTarget(*targetObject);
 				static_cast<GamePlayerS&>(targetObject->AsUnit()).AddEmote(emoteId);
+			}
+		}
+
+		void HandleTradeSkill(SpellEffectContext& ctx)
+		{
+			const proto::Project& project = ctx.castContext.GetExecutor().GetProject();
+			const uint32 skillId = static_cast<uint32>(ctx.effect.miscvaluea());
+			const proto::SkillEntry* skill = project.skills.getById(skillId);
+			if (!skill)
+			{
+				ELOG("TradeSkill effect of spell " << ctx.castContext.GetSpell().id() << " references unknown skill " << skillId);
+				return;
+			}
+
+			if (ctx.basePoints <= 0)
+			{
+				WLOG("TradeSkill effect of spell " << ctx.castContext.GetSpell().id() << " has no skill cap");
+				return;
+			}
+
+			const uint16 cap = static_cast<uint16>(std::min<int32>(ctx.basePoints, std::numeric_limits<uint16>::max()));
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (targetObject->GetTypeId() != ObjectTypeId::Player)
+				{
+					continue;
+				}
+
+				ctx.markAffectedTarget(*targetObject);
+				auto& player = static_cast<GamePlayerS&>(targetObject->AsUnit());
+				const auto result = player.GetTradeSkills().LearnOrRaise(skillId, cap);
+				if (result == TradeSkillBook::LearnResult::Unchanged)
+				{
+					continue;
+				}
+
+				if (result == TradeSkillBook::LearnResult::Learned)
+				{
+					for (const uint32 spellId : skill->spells())
+					{
+						player.AddSpell(spellId, true);
+					}
+				}
+
+				player.tradeSkillLearned(skillId);
 			}
 		}
 

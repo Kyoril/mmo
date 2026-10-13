@@ -318,6 +318,22 @@ namespace mmo
 		}
 	}
 
+	void BotUnit::SetTradeSkill(const uint32 skillId, const uint16 value, const uint16 max)
+	{
+		m_tradeSkills[skillId] = TradeSkillData { skillId, value, max };
+	}
+
+	const TradeSkillData* BotUnit::GetTradeSkill(const uint32 skillId) const
+	{
+		const auto it = m_tradeSkills.find(skillId);
+		return it != m_tradeSkills.end() ? &it->second : nullptr;
+	}
+
+	void BotUnit::ClearTradeSkills()
+	{
+		m_tradeSkills.clear();
+	}
+
 	void BotUnit::LearnSpell(const uint32 spellId)
 	{
 		if (spellId != 0)

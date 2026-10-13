@@ -132,7 +132,9 @@ def author_fireball(spells, log):
     direct.basepoints = 29
     direct.diesides = 9
     direct.pointsperlevel = 0.6
-    periodic.basepoints = 4
+    # Rank 1 ticks for 3 + 0.621/level up to 5 at its cap (level 5); 6 continues that curve at
+    # level 6, so rank 2 never ticks for less than rank 1.
+    periodic.basepoints = 6
     if before and before != rank2.SerializeToString():
         log.append(f"spell {FIREBALL_R2}: updated Fireball rank 2")
 

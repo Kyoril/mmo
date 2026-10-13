@@ -78,6 +78,8 @@ namespace mmo
 		  public IEquipmentManagerContext,
 		  public IBagManagerContext
 	{
+		/// Test-only access to the private item bookkeeping (defined by the test suites that need it).
+		friend struct InventoryTestAccess;
 		friend io::Writer &operator<<(io::Writer &w, Inventory const &object);
 		friend io::Reader &operator>>(io::Reader &r, Inventory &object);
 

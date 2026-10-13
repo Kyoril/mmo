@@ -65,7 +65,7 @@ spell 180.
   - `rank = 2`, `baseid = 4`; same school, `familyflags` (8), icon, visualization, range, speed,
     attributes, so the fire talents (Burning Soul, Kindled Fury, Smoldering Wounds) apply.
   - Direct damage effect: `basepoints = 29`, `diesides = 9` (29-38).
-  - Periodic effect: `basepoints = 4` per tick, 2 ticks over 4 s (amplitude 2000, duration 4000).
+  - Periodic effect: `basepoints = 6` per tick (rank 1 caps at 5 per tick at level 5), 2 ticks over 4 s (amplitude 2000, duration 4000).
   - `casttime = 1800`, `cost = 45`, `spelllevel = 6`, `baselevel = 6`, `maxlevel = 10`.
   - `pointsperlevel` 0.6 on the direct effect (same as rank 1).
   - Localized name copied from spell 4.

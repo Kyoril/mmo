@@ -511,6 +511,9 @@ namespace mmo
 		/// @brief Returns the spell at the specified index of learned spells of this unit. Returns nullptr if index is out of bounds.
 		const proto_client::SpellEntry *GetVisibleSpell(uint32 index) const;
 
+		/// @brief Returns all known spells of this unit, including those hidden from the spellbook (e.g. recipes).
+		const std::vector<const proto_client::SpellEntry *> &GetSpells() const { return m_spells; }
+
 		/// @brief Returns the number of known spells of this unit.
 		uint32 GetSpellCount() const { return static_cast<uint32>(m_spells.size()); }
 

@@ -884,6 +884,15 @@ namespace mmo
 				}
 			}, &IDatabase::UpdateCharacterAuras, characterGuid, player.GetDeserializedAuras());
 
+		// Persist profession skill values and caps; the keyed queue preserves order per character.
+		m_database.asyncRequestKeyed(characterGuid, [characterGuid](bool result)
+			{
+				if (!result)
+				{
+					WLOG("Failed to persist trade skills for character " << log_hex_digit(characterGuid));
+				}
+			}, &IDatabase::UpdateCharacterTradeSkills, characterGuid, player.GetTradeSkills().GetAll());
+
 		// Persist cooldowns using realtime: convert each remaining-millisecond snapshot into an
 		// absolute wall-clock end timestamp (seconds) so offline time continues to elapse.
 		const GameTime nowSeconds = static_cast<GameTime>(std::time(nullptr));
