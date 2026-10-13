@@ -542,11 +542,18 @@ namespace mmo
 					return;
 				}
 
-				const InventoryChangeFailure result = playerTarget.GetInventory().CreateItems(*item, itemCount);
+				std::map<uint16, uint16> addedBySlot;
+				const InventoryChangeFailure result = playerTarget.GetInventory().CreateItems(*item, itemCount, &addedBySlot);
 				if (result != inventory_change_failure::Okay)
 				{
 					ELOG("Failed to add item: " << result);
 					return;
+				}
+
+				// Let the player (and their group) know about the created items
+				for (const auto& [slot, amount] : addedBySlot)
+				{
+					playerTarget.OnItemAdded(slot, amount, false, true);
 				}
 			}
 		}

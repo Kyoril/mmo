@@ -57,6 +57,7 @@
 #include "game/shutdown_countdown.h"
 #include "game/damage_school.h"
 #include "game_client/game_player_c.h"
+#include "game/trade_skill_announce.h"
 #include "game/spell_target_map.h"
 #include "game_client/game_item_c.h"
 #include "ui/chat_bubble_frame.h"
@@ -3761,12 +3762,18 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		bool skillIncreased = false;
 		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(m_playerController->GetControlledUnit()))
 		{
+			skillIncreased = ShouldAnnounceSkillIncrease(player->GetTradeSkills(), data);
 			player->SetTradeSkill(data);
 		}
 
 		FrameManager::Get().TriggerLuaEvent("TRADE_SKILL_UPDATE", data.skillId);
+		if (skillIncreased)
+		{
+			FrameManager::Get().TriggerLuaEvent("TRADE_SKILL_INCREASED", data.skillId, static_cast<int>(data.value));
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -5891,10 +5898,15 @@ namespace mmo
 
 	void WorldState::OnItemPushCallback(const ItemInfo &itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount)
 	{
-		// TODO: UI events for chat display
+		// Bag and subslot describe the pushing player's own inventory and are never used for other players.
 		if (characterGuid == ObjectMgr::GetActivePlayerGuid())
 		{
-			if (wasLooted)
+			if (wasCreated)
+			{
+				FrameManager::Get().TriggerLuaEvent("ITEM_CREATED", itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+				DLOG("You create item " << itemInfo.name << " x" << amount);
+			}
+			else if (wasLooted)
 			{
 				FrameManager::Get().TriggerLuaEvent("LOOT_ITEM_RECEIVED", itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 				DLOG("You receive loot: " << itemInfo.name << " x" << amount);
@@ -5913,7 +5925,12 @@ namespace mmo
 			if (unit)
 			{
 				const String &memberName = unit->GetName();
-				if (wasLooted)
+				if (wasCreated)
+				{
+					FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_CREATED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+					DLOG(memberName << " created item " << itemInfo.name << " x" << amount);
+				}
+				else if (wasLooted)
 				{
 					FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 					DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);
@@ -5928,9 +5945,14 @@ namespace mmo
 			{
 				// Unit not visible — look up the name asynchronously from the name cache.
 				m_cache.GetNameCache().Get(characterGuid,
-					[itemInfo, wasLooted, amount](uint64, const String &memberName)
+					[itemInfo, wasLooted, wasCreated, amount](uint64, const String &memberName)
 					{
-						if (wasLooted)
+						if (wasCreated)
+						{
+							FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_CREATED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+							DLOG(memberName << " created item " << itemInfo.name << " x" << amount);
+						}
+						else if (wasLooted)
 						{
 							FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 							DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);
