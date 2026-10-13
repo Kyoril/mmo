@@ -3,11 +3,15 @@
 #include "door_marking.h"
 
 #include "common.h"
+#include "nav_mesh/instance_query_filter.h"
 
 #include "Recast.h"
 
 namespace mmo
 {
+	static_assert(static_cast<uint16>(poly_flags::Door) == nav::DoorPolyFlag,
+		"The door area the nav builder bakes must be the poly flag world instances block");
+
 	namespace
 	{
 		/// Area id Recast writes under a door. Not a valid flag combination of its own: it is
