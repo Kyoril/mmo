@@ -87,10 +87,8 @@ namespace mmo
 			return true;
 		}
 
-		// Raise both points to approximate eye level.
-		// 1.8 m is used for all unit types as a static approximation;
-		// per-unit model height can be substituted here later.
-		static const Vector3 eyeOffset(0.f, 1.8f, 0.f);
+		// Raise both points to approximate eye level; per-unit model height can be substituted here later.
+		const Vector3 eyeOffset(0.f, LineOfSightEyeHeight, 0.f);
 		return m_collisionMap->LineOfSight(posA + eyeOffset, posB + eyeOffset);
 	}
 
@@ -103,7 +101,7 @@ namespace mmo
 			return true;
 		}
 
-		static const Vector3 eyeOffset(0.f, 1.8f, 0.f);
+		const Vector3 eyeOffset(0.f, LineOfSightEyeHeight, 0.f);
 		const bool result = m_collisionMap->LineOfSightEx(posA + eyeOffset, posB + eyeOffset, hitPoint);
 		// Lower the reported hit point back to ground level for consistent world-space display.
 		hitPoint -= eyeOffset;

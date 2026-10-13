@@ -312,7 +312,7 @@ TEST_CASE("ServerCollisionMap - single-sided dynamic plane blocks from both side
 TEST_CASE("ServerCollisionMap - shared static geometry blocks every instance view", "[server_collision_map]")
 {
 	auto shared = std::make_shared<ServerCollisionMap>();
-	REQUIRE(shared->AddStaticInstance(buildWallTree(), Matrix4::Identity, "wall"));
+	REQUIRE(shared->AddInstance(buildWallTree(), Matrix4::Identity, "wall"));
 	const std::shared_ptr<const ServerCollisionMap> sharedStatic = shared;
 
 	ServerCollisionMap instanceA(sharedStatic);

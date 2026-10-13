@@ -868,6 +868,14 @@ namespace mmo
 			hasLos = mapData->IsInLineOfSightEx(from, to, hitPoint);
 		}
 
+		// The check tests a ray between the two units' eyes, not their feet. Report that ray, so the
+		// drawn line does not cut through a hill the tested ray passed over, and the hit marker sits
+		// on what actually blocked it.
+		const Vector3 eyeOffset(0.0f, MapData::LineOfSightEyeHeight, 0.0f);
+		const Vector3 eyeFrom = from + eyeOffset;
+		const Vector3 eyeTo = to + eyeOffset;
+		const Vector3 eyeHit = hitPoint + eyeOffset;
+
 		DLOG("LOS check from " << m_characterData.name << " to guid " << log_hex_digit(targetGuid)
 			<< ": " << (hasLos ? "CLEAR" : "BLOCKED"));
 
@@ -876,9 +884,9 @@ namespace mmo
 			packet.Start(game::realm_client_packet::DebugLineOfSightResult);
 			packet
 				<< io::write<uint8>(hasLos ? 1 : 0)
-				<< io::write<float>(from.x)     << io::write<float>(from.y)     << io::write<float>(from.z)
-				<< io::write<float>(to.x)       << io::write<float>(to.y)       << io::write<float>(to.z)
-				<< io::write<float>(hitPoint.x) << io::write<float>(hitPoint.y) << io::write<float>(hitPoint.z);
+				<< io::write<float>(eyeFrom.x)     << io::write<float>(eyeFrom.y)     << io::write<float>(eyeFrom.z)
+				<< io::write<float>(eyeTo.x)       << io::write<float>(eyeTo.y)       << io::write<float>(eyeTo.z)
+				<< io::write<float>(eyeHit.x) << io::write<float>(eyeHit.y) << io::write<float>(eyeHit.z);
 			packet.Finish();
 		});
 	}

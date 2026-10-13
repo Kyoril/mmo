@@ -13,6 +13,7 @@
 #include "math/quaternion.h"
 #include "math/ray.h"
 
+#include <algorithm>
 #include <unordered_map>
 
 namespace mmo
@@ -101,11 +102,6 @@ namespace mmo
 	{
 	}
 
-	bool ServerCollisionMap::AddStaticInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName)
-	{
-		return AddInstance(std::move(tree), transform, debugName);
-	}
-
 	bool ServerCollisionMap::GetDynamicInstanceLocalBounds(const uint64 handle, AABB& out) const
 	{
 		const auto it = m_dynamicInstances.find(handle);
@@ -116,6 +112,52 @@ namespace mmo
 
 		out = it->second.instance.tree->GetBoundingBox();
 		return true;
+	}
+
+	bool ServerCollisionMap::AddFoliageInstance(const std::shared_ptr<AABBTree>& tree, const Matrix4& transform, const std::string& debugName)
+	{
+		return AddInstance(MakeFoliageLineOfSightTree(tree), transform, debugName);
+	}
+
+	std::shared_ptr<AABBTree> ServerCollisionMap::MakeFoliageLineOfSightTree(const std::shared_ptr<AABBTree>& tree)
+	{
+		if (!tree || tree->IsEmpty())
+		{
+			return nullptr;
+		}
+
+		const std::vector<AABBTree::Vertex>& vertices = tree->GetVertices();
+		const std::vector<AABBTree::Index>& indices = tree->GetIndices();
+
+		// Keep every triangle that reaches below the trunk height. A triangle spanning the cut
+		// is kept whole, so the trunk is never shortened.
+		std::vector<AABBTree::Index> trunkIndices;
+		trunkIndices.reserve(indices.size());
+		for (size_t i = 0; i + 2 < indices.size(); i += 3)
+		{
+			const float lowestY = std::min({ vertices[indices[i]].y, vertices[indices[i + 1]].y, vertices[indices[i + 2]].y });
+			if (lowestY < FoliageLineOfSightTrunkHeight)
+			{
+				trunkIndices.push_back(indices[i]);
+				trunkIndices.push_back(indices[i + 1]);
+				trunkIndices.push_back(indices[i + 2]);
+			}
+		}
+
+		if (trunkIndices.size() == indices.size())
+		{
+			return tree;
+		}
+
+		if (trunkIndices.empty())
+		{
+			return nullptr;
+		}
+
+		// Unreferenced vertices above the cut are harmless: the tree only visits indexed faces.
+		auto trunkTree = std::make_shared<AABBTree>();
+		trunkTree->Build(vertices, trunkIndices);
+		return trunkTree;
 	}
 
 	// ---------------------------------------------------------------------------
@@ -446,6 +488,9 @@ namespace mmo
 
 		uint32 foliageInstanceCount = 0, foliageWithCollision = 0;
 
+		// Line of sight trees of foliage meshes (trunk only), one per unique mesh path.
+		std::unordered_map<std::string, std::shared_ptr<AABBTree>> foliageLosCache;
+
 		for (const auto& foliageFilename : foliageFiles)
 		{
 			auto foliageFile = AssetRegistry::OpenFile(foliageFilename);
@@ -476,10 +521,12 @@ namespace mmo
 					continue;
 				}
 
-				auto it = meshCache.find(instance.meshName);
-				if (it == meshCache.end())
+				// Foliage only blocks line of sight with its trunk, so it gets its own cache of
+				// filtered trees: the same mesh placed as an entity still blocks with all of it.
+				auto it = foliageLosCache.find(instance.meshName);
+				if (it == foliageLosCache.end())
 				{
-					it = meshCache.emplace(instance.meshName, LoadMeshTree(instance.meshName)).first;
+					it = foliageLosCache.emplace(instance.meshName, MakeFoliageLineOfSightTree(LoadMeshTree(instance.meshName))).first;
 				}
 
 				if (!it->second || it->second->IsEmpty())
