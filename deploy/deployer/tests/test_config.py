@@ -23,6 +23,9 @@ class LoadConfig(unittest.TestCase):
 		self.assertEqual(cfg.portainer_stack_id, 7)
 		self.assertEqual(cfg.notify_format, "discord")
 		self.assertFalse(cfg.dry_run)
+		self.assertIsNone(cfg.nightly_at)
+		self.assertEqual(cfg.nightly_workflow, "nightly-release.yml")
+		self.assertEqual(cfg.nightly_ref, "develop")
 
 	def test_realm_urls_lose_trailing_slash(self):
 		cfg = load_config(BASE_ENV)
@@ -52,11 +55,20 @@ class LoadConfig(unittest.TestCase):
 		self.assertTrue(cfg.dry_run)
 		self.assertEqual(cfg.notify_format, "slack")
 
+	def test_nightly_dispatch(self):
+		cfg = load_config(dict(BASE_ENV, NIGHTLY_AT="23:00", GITHUB_TOKEN="tok"))
+		self.assertEqual(cfg.nightly_at, datetime.time(23, 0))
+
+	def test_nightly_dispatch_needs_a_token(self):
+		with self.assertRaises(ConfigError) as ctx:
+			load_config(dict(BASE_ENV, NIGHTLY_AT="23:00"))
+		self.assertIn("GITHUB_TOKEN", str(ctx.exception))
+
 	def test_bad_values(self):
-		for key, value in (("MAINTENANCE_AT", "25:99"), ("COUNTDOWN_S", "soon"), ("NOTIFY_FORMAT", "pigeon")):
+		for key, value in (("MAINTENANCE_AT", "25:99"), ("COUNTDOWN_S", "soon"), ("NOTIFY_FORMAT", "pigeon"), ("NIGHTLY_AT", "late")):
 			with self.subTest(key=key):
 				with self.assertRaises(ConfigError):
-					load_config(dict(BASE_ENV, **{key: value}))
+					load_config(dict(BASE_ENV, GITHUB_TOKEN="tok", **{key: value}))
 
 
 if __name__ == "__main__":

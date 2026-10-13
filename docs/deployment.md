@@ -4,7 +4,7 @@ Design: [docs/superpowers/specs/2026-10-06-nightly-deploy-design.md](superpowers
 
 ## 1. Overview
 
-1. 22:00 UTC (00:00 Berlin in summer, 23:00 in winter; the cron is UTC, while `MAINTENANCE_AT` 04:45 is in `TZ`, Europe/Berlin). The gate may take up to 180 min, then the client build and staging follow, so the release is staged well before 04:45: `.github/workflows/nightly-release.yml` gates `develop` on Linux (full gate incl. E2E), builds the images and client patch, writes player patch notes, and publishes a `nightly-<version>` release (with `release.json`). Versions, patch notes and the launcher's own release cycle are described in [versioning.md](versioning.md).
+1. 23:00 (Europe/Berlin, `NIGHTLY_AT`): the deployer starts the nightly workflow on `develop` through `workflow_dispatch`. The gate may take up to 180 min, the client build up to 120 min, then staging follows, so the release is staged before 04:45. The workflow's own GitHub schedule (22:00 UTC) stays as a fallback only: GitHub starts scheduled runs hours late on busy nights (up to 4 h 49 min observed), which once left nothing staged at 04:45. When both run, the second finds develop's head already released and skips (if develop moved in between, it releases the newer head, like any nightly). The workflow (`.github/workflows/nightly-release.yml`) gates `develop` on Linux (full gate incl. E2E), builds the images and client patch, writes player patch notes, and publishes a `nightly-<version>` release (with `release.json`). Versions, patch notes and the launcher's own release cycle are described in [versioning.md](versioning.md).
 2. The `mmo-deployer` container on the root server polls GitHub and stages the newest green release (patch files, data, `update_compiler`). The stager refuses a release whose `release.json` gate is not green. It ships the newest `launcher-v*` release's `Launcher.exe` instead of the nightly's build (`LAUNCHER_RELEASE_PREFIX`, default `launcher-v`).
 3. 04:45 (Europe/Berlin): maintenance. Preflight (login, realms, Portainer token), 15-minute realm shutdown countdown, DB backup, patch `current` flip, Portainer redeploy with `MMO_TAG=<sha>`.
 4. Verify: within 300 s there must be two consecutive rounds in which login and every realm answer `/uptime` and Portainer reports every `WAIT_SERVICES` container (default `realm_server_01,world_node_01`, so the world node too) as `running`. Otherwise the deployer rolls back to the previous release.
@@ -34,7 +34,7 @@ Order matters: the game stack is redeployed with the new `compose.yml` FIRST (it
    - Note the stack ID and endpoint ID from the Portainer URL (`#!/<endpoint>/docker/stacks/<name>?id=<stack>`).
    - The stack must be a web-editor stack, not a Git-backed one.
 4. **Portainer API token**: My account, Access tokens, add `mmo-deployer`. The deployer pings an authenticated endpoint in preflight, so a wrong token aborts the night before any shutdown.
-5. **GitHub token** (`GITHUB_TOKEN`): fine-grained, repository `Kyoril/mmo`, permission *Contents: read*. Not needed if the repo is public.
+5. **GitHub token** (`GITHUB_TOKEN`): fine-grained, repository `Kyoril/mmo`, permissions *Contents: read* and *Actions: read and write* (the latter to start the nightly at `NIGHTLY_AT`). Without `NIGHTLY_AT` only *Contents: read* is needed, and no token at all if the repo is public.
 6. **MySQL backup user**
    ```sql
    CREATE USER 'deployer'@'%' IDENTIFIED BY '<pw>';
@@ -69,7 +69,7 @@ docker exec mmo-deployer deployer status | pause | resume | stage-now | deploy-n
 
 (Pick one command per call.) Commands are queued as request files and applied within one tick. A request that crashes is dropped, never retried, and reported by notification.
 
-- `pause` / `resume`: skip or resume staging and maintenance.
+- `pause` / `resume`: skip or resume staging and maintenance. Starting the nightly at `NIGHTLY_AT` continues while paused; it changes nothing on the live stack.
 - `stage-now`: poll GitHub on the next tick.
 - `deploy-now [sha]`: run the maintenance now with the countdown. It runs even when paused and counts as that day's maintenance (no second run at 04:45).
 - `rollback`: return to the previous live release immediately.
@@ -80,6 +80,7 @@ Notifications:
 | Message | Meaning |
 |---|---|
 | `Deployer started (...)` | Service (re)started; shows live/staged/dry-run. |
+| `Could not start the nightly build (...)` | Dispatching the nightly workflow at `NIGHTLY_AT` failed (once a night); it retries every poll for an hour. A 403/404 usually means the token lacks *Actions: read and write*. Start it by hand in GitHub (Actions, Nightly Release, Run workflow) if it is still failing. |
 | `Staged <tag> (N changes)` | New release staged, goes live at the next 04:45. |
 | `Staging <tag> failed; retrying` | Staging error (once per release); live release unchanged. |
 | `[dry-run] would deploy ...; backup OK` / `backup FAILED: <error>` | Dry run; nothing changed on the stack, but a real backup was attempted. |
