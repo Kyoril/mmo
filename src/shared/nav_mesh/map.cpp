@@ -385,12 +385,14 @@ namespace mmo::nav
 	}
 
 
-	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial) const
+	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial, const dtQueryFilter* filter) const
 	{
 		if (!m_valid)
 		{
 			return false;
 		}
+
+		const dtQueryFilter* queryFilter = filter ? filter : &m_queryFilter;
 
 		constexpr float extents[] = { 5.f, 3.5f, 5.f };
 
@@ -398,7 +400,7 @@ namespace mmo::nav
 		float recastEnd[3] = { end.x, end.y, end.z };
 
 		dtPolyRef startPolyRef, endPolyRef;
-		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastStart, extents, &m_queryFilter,
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastStart, extents, queryFilter,
 			&startPolyRef, nullptr)))
 		{
 			return false;
@@ -409,7 +411,7 @@ namespace mmo::nav
 			return false;
 		}
 
-		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastEnd, extents, &m_queryFilter,
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastEnd, extents, queryFilter,
 			&endPolyRef, nullptr)))
 		{
 			return false;
@@ -423,8 +425,19 @@ namespace mmo::nav
 		// Just build a shortcut path?
 		if (startPolyRef == endPolyRef)
 		{
+			// An end position outside the poly resolved to it as the nearest open poly. This is
+			// the case for a target standing on a poly the filter rejects, so clamp it onto the
+			// poly instead of walking into the rejected one.
+			float closest[3];
+			bool overPoly = false;
+			Vector3 shortcutEnd = end;
+			if (dtStatusSucceed(m_navQuery.closestPointOnPoly(endPolyRef, recastEnd, closest, &overPoly)) && !overPoly)
+			{
+				shortcutEnd = Vector3(closest[0], closest[1], closest[2]);
+			}
+
 			output.push_back(start);
-			output.push_back(end);
+			output.push_back(shortcutEnd);
 			return true;
 		}
 
@@ -437,7 +450,7 @@ namespace mmo::nav
 		dtPolyRef polys[MaxPathPolys];
 		int npolys = 0;
 
-		if (!dtStatusSucceed(m_navQuery.findPath(startPolyRef, endPolyRef, startNearest, endNearest, &m_queryFilter, polys, &npolys, MaxPathPolys)) || npolys == 0)
+		if (!dtStatusSucceed(m_navQuery.findPath(startPolyRef, endPolyRef, startNearest, endNearest, queryFilter, polys, &npolys, MaxPathPolys)) || npolys == 0)
 		{
 			return false;
 		}
@@ -474,14 +487,14 @@ namespace mmo::nav
 
 		// Snap a position onto the nav-mesh surface so densified waypoints follow terrain height
 		// instead of cutting straight through hills between distant corners.
-		auto sampleHeight = [this](const Vector3& point) -> Vector3
+		auto sampleHeight = [this, queryFilter](const Vector3& point) -> Vector3
 		{
 			float pos[3] = { point.x, point.y, point.z };
 			constexpr float sampleExtents[] = { 2.f, 4.f, 2.f };
 
 			dtPolyRef ref;
 			float nearest[3];
-			if (dtStatusSucceed(m_navQuery.findNearestPoly(pos, sampleExtents, &m_queryFilter, &ref, nearest)) && ref)
+			if (dtStatusSucceed(m_navQuery.findNearestPoly(pos, sampleExtents, queryFilter, &ref, nearest)) && ref)
 			{
 				float height;
 				if (dtStatusSucceed(m_navQuery.getPolyHeight(ref, nearest, &height)))
@@ -540,12 +553,14 @@ namespace mmo::nav
 
 	} // anonymous namespace
 
-	bool Map::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
+	bool Map::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint, const dtQueryFilter* filter) const
 	{
 		if (!m_valid)
 		{
 			return false;
 		}
+
+		const dtQueryFilter* queryFilter = filter ? filter : &m_queryFilter;
 
 		constexpr int maxAttempts = 10;
 
@@ -555,7 +570,7 @@ namespace mmo::nav
 
 		// Find the nearest polygon to centerPosition.
 		dtPolyRef startRef;
-		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastCenter, extents, &m_queryFilter, &startRef, nullptr)))
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastCenter, extents, queryFilter, &startRef, nullptr)))
 			return false;
 
 		// Try multiple times to get a point that is truly within 'radius'.
@@ -569,7 +584,7 @@ namespace mmo::nav
 				startRef,
 				recastCenter,
 				radius,
-				&m_queryFilter,
+				queryFilter,
 				&random_between_0_and_1,  // your custom frand() or similar
 				&randomRef,
 				outputPoint)))
@@ -592,13 +607,13 @@ namespace mmo::nav
 		return false;
 	}
 
-	bool Map::LineOfSight(const Vector3& start, const Vector3& end) const
+	bool Map::LineOfSight(const Vector3& start, const Vector3& end, const dtQueryFilter* filter) const
 	{
 		Vector3 unused;
-		return LineOfSightEx(start, end, unused);
+		return LineOfSightEx(start, end, unused, filter);
 	}
 
-	bool Map::LineOfSightEx(const Vector3& start, const Vector3& end, Vector3& hitPoint) const
+	bool Map::LineOfSightEx(const Vector3& start, const Vector3& end, Vector3& hitPoint, const dtQueryFilter* filter) const
 	{
 		hitPoint = end;
 
@@ -607,6 +622,8 @@ namespace mmo::nav
 		{
 			return true;
 		}
+
+		const dtQueryFilter* queryFilter = filter ? filter : &m_queryFilter;
 
 		// Trivially clear when positions are identical.
 		const float dx = end.x - start.x;
@@ -628,7 +645,7 @@ namespace mmo::nav
 		constexpr float extents[] = { 2.f, 4.f, 2.f };
 
 		dtPolyRef startRef;
-		if (!dtStatusSucceed(m_navQuery.findNearestPoly(startPos, extents, &m_queryFilter, &startRef, nullptr)) || !startRef)
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(startPos, extents, queryFilter, &startRef, nullptr)) || !startRef)
 		{
 			// Can't locate start on nav mesh — assume clear.
 			return true;
@@ -640,7 +657,7 @@ namespace mmo::nav
 		int npolys = 0;
 
 		const dtStatus status = m_navQuery.raycast(
-			startRef, startPos, endPos, &m_queryFilter,
+			startRef, startPos, endPos, queryFilter,
 			&hitT, hitNormal, polys, &npolys, MaxPathPolys);
 
 		if (dtStatusFailed(status))
