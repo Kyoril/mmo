@@ -22,6 +22,7 @@
 #include "game_server/world/each_tile_in_region.h"
 #include "game_server/trigger_handler.h"
 #include "proto_data/project.h"
+#include "nav_mesh/door_volume.h"
 
 namespace mmo
 {
@@ -133,6 +134,71 @@ namespace mmo
 		{
 			m_collisionMap->SetDynamicInstanceEnabled(handle, enabled);
 		}
+	}
+
+	uint64 NavMapData::AddNavObstacle(const nav::DoorVolume& volume, const bool blocking)
+	{
+		// Doors spawn while pages may still be streaming: install the pages under the door first,
+		// or its polys are not there to be found.
+		Vector3 min, max;
+		volume.GetWorldBounds(min, max);
+		m_staticData->EnsureNavLoaded(min.x, min.z, max.x, max.z);
+
+		NavObstacle obstacle;
+		obstacle.polys = m_staticData->GetNavMap().FindDoorPolys(volume);
+		if (obstacle.polys.empty())
+		{
+			return 0;
+		}
+
+		obstacle.blocking = blocking;
+		if (blocking)
+		{
+			m_queryFilter.Block(obstacle.polys);
+		}
+
+		const uint64 handle = m_nextNavObstacle++;
+		m_navObstacles.emplace(handle, std::move(obstacle));
+		return handle;
+	}
+
+	void NavMapData::SetNavObstacleBlocking(const uint64 handle, const bool blocking)
+	{
+		const auto it = m_navObstacles.find(handle);
+		if (it == m_navObstacles.end() || it->second.blocking == blocking)
+		{
+			return;
+		}
+
+		it->second.blocking = blocking;
+		if (blocking)
+		{
+			m_queryFilter.Block(it->second.polys);
+		}
+		else
+		{
+			m_queryFilter.Unblock(it->second.polys);
+		}
+	}
+
+	void NavMapData::RemoveNavObstacle(const uint64 handle)
+	{
+		const auto it = m_navObstacles.find(handle);
+		if (it == m_navObstacles.end())
+		{
+			return;
+		}
+
+		if (it->second.blocking)
+		{
+			m_queryFilter.Unblock(it->second.polys);
+		}
+		m_navObstacles.erase(it);
+	}
+
+	bool NavMapData::GetDynamicCollisionLocalBounds(const uint64 handle, AABB& out) const
+	{
+		return m_collisionMap && handle != 0 && m_collisionMap->GetDynamicInstanceLocalBounds(handle, out);
 	}
 
 	void NavMapData::EnsureNavLoaded(const Vector3& a, const Vector3& b, const float margin) const
@@ -787,16 +853,7 @@ namespace mmo
 			object.Get<float>(object_fields::RotationX),
 			object.Get<float>(object_fields::RotationY),
 			object.Get<float>(object_fields::RotationZ));
-		const Quaternion entityYawOffset(Degree(90), Vector3::UnitY);
-
-		float scale = object.Get<float>(object_fields::Scale);
-		if (scale <= 0.0f)
-		{
-			scale = 1.0f;
-		}
-
-		Matrix4 transform;
-		transform.MakeTransform(object.GetPosition(), Vector3(scale, scale, scale), rotation * entityYawOffset);
+		const Matrix4 transform = nav::MakeDoorTransform(object.GetPosition(), rotation, object.Get<float>(object_fields::Scale));
 
 		const uint64 handle = m_mapData->AddDynamicCollision(display->filename(), transform, !object.IsOpen());
 		if (handle == 0)
@@ -808,10 +865,27 @@ namespace mmo
 
 		DoorCollision& door = m_doorCollisions[object.GetGuid()];
 		door.handle = handle;
-		door.stateChanged = object.stateChanged.connect([this, handle](GameWorldObjectS&, const uint32 newState)
+
+		// Closed doors also block pathfinding, through the polys the nav builder cut out under them.
+		AABB localBounds;
+		if (m_mapData->GetDynamicCollisionLocalBounds(handle, localBounds))
 		{
-			// Closed (state 0) doors block line of sight.
+			door.navObstacle = m_mapData->AddNavObstacle(nav::ComputeDoorVolume(localBounds, transform), !object.IsOpen());
+		}
+
+		if (door.navObstacle == 0 && m_warnedDoorsWithoutNav.insert(object.Get<uint32>(object_fields::Entry)).second)
+		{
+			WLOG("Door object entry " << object.Get<uint32>(object_fields::Entry) << " on map " << m_mapId
+				<< " has no door polys in the nav mesh - creatures can path through it while it is closed. "
+				"Rebuild the map's nav mesh with nav_builder --project");
+		}
+
+		const uint64 navObstacle = door.navObstacle;
+		door.stateChanged = object.stateChanged.connect([this, handle, navObstacle](GameWorldObjectS&, const uint32 newState)
+		{
+			// Closed (state 0) doors block line of sight and paths.
 			m_mapData->SetDynamicCollisionEnabled(handle, newState == 0);
+			m_mapData->SetNavObstacleBlocking(navObstacle, newState == 0);
 		});
 	}
 
@@ -826,6 +900,7 @@ namespace mmo
 		if (m_mapData)
 		{
 			m_mapData->RemoveDynamicCollision(it->second.handle);
+			m_mapData->RemoveNavObstacle(it->second.navObstacle);
 		}
 
 		// Erasing also drops the scoped stateChanged connection.

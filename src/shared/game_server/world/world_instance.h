@@ -18,12 +18,14 @@
 #include "base/id_generator.h"
 #include "base/countdown.h"
 #include "math/matrix4.h"
+#include "math/aabb.h"
 #include "shared/proto_data/maps.pb.h"
 #include "shared/proto_data/trigger_helper.h"
 #include "shared/proto_data/trigger_event_index.h"
 #include "shared/proto_data/trigger_event_filter.h"
 
 #include "nav_mesh/map.h"
+#include "nav_mesh/door_volume.h"
 #include "nav_mesh/instance_query_filter.h"
 
 namespace mmo
@@ -82,6 +84,22 @@ namespace mmo
 
 		/// @brief Enables or disables dynamic collision geometry. Handle 0 and unknown handles are a safe no-op.
 		virtual void SetDynamicCollisionEnabled(uint64 handle, bool enabled) {}
+
+		/// @brief Blocks pathfinding through a door's baked nav polys while the obstacle is blocking.
+		/// @param volume The door footprint (nav::ComputeDoorVolume), matching what the nav builder baked.
+		/// @param blocking Whether the obstacle initially blocks (door closed).
+		/// @return Handle for toggling/removal, or 0 when the map has no door polys inside the volume.
+		virtual uint64 AddNavObstacle(const nav::DoorVolume& volume, bool blocking) { return 0; }
+
+		/// @brief Makes a nav obstacle block or let paths pass. Handle 0 and unknown handles are a safe no-op.
+		virtual void SetNavObstacleBlocking(uint64 handle, bool blocking) {}
+
+		/// @brief Removes a nav obstacle, unblocking its polys. Handle 0 and unknown handles are a safe no-op.
+		virtual void RemoveNavObstacle(uint64 handle) {}
+
+		/// @brief Gets the mesh-space collision bounds of dynamic collision geometry.
+		/// @return False when unsupported or for unknown handles.
+		virtual bool GetDynamicCollisionLocalBounds(uint64 handle, AABB& out) const { return false; }
 
 		/// @brief Called once per world tick on the world thread, for map data that finishes
 		/// loading in the background.
@@ -157,6 +175,14 @@ namespace mmo
 
 		void SetDynamicCollisionEnabled(uint64 handle, bool enabled) override;
 
+		uint64 AddNavObstacle(const nav::DoorVolume& volume, bool blocking) override;
+
+		void SetNavObstacleBlocking(uint64 handle, bool blocking) override;
+
+		void RemoveNavObstacle(uint64 handle) override;
+
+		bool GetDynamicCollisionLocalBounds(uint64 handle, AABB& out) const override;
+
 		/// @brief The map's shared static data.
 		[[nodiscard]] const MapStaticData& GetStaticData() const { return *m_staticData; }
 
@@ -172,6 +198,17 @@ namespace mmo
 		std::unique_ptr<ServerCollisionMap> m_collisionMap;
 		/// This instance's door state on the shared nav mesh.
 		nav::InstanceQueryFilter m_queryFilter;
+
+		struct NavObstacle
+		{
+			std::vector<dtPolyRef> polys;
+			bool blocking = false;
+		};
+
+		/// This instance's door obstacles, by handle. Poly refs stay valid for the lifetime of the
+		/// MapStaticData: pages are never unloaded from a shared map.
+		std::unordered_map<uint64, NavObstacle> m_navObstacles;
+		uint64 m_nextNavObstacle = 1;
 	};
 
 	class Universe;
@@ -489,8 +526,13 @@ namespace mmo
 		struct DoorCollision
 		{
 			uint64 handle { 0 };
+			/// Nav obstacle of the door's baked polys, 0 when the nav mesh has none for it.
+			uint64 navObstacle { 0 };
 			scoped_connection stateChanged;
 		};
 		std::unordered_map<uint64, DoorCollision> m_doorCollisions;
+
+		/// Door entries already warned about for missing nav polys, so respawns do not repeat it.
+		std::unordered_set<uint32> m_warnedDoorsWithoutNav;
 	};
 }
