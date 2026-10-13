@@ -3,11 +3,13 @@
 #pragma once
 
 #include "base/non_copyable.h"
+#include "base/typedefs.h"
 
 #include <chrono>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace mmo
 {
@@ -57,6 +59,11 @@ namespace mmo
 		/// @brief Water data, or null when the map has no water.
 		[[nodiscard]] const ServerWaterMap* GetWaterMap() const { return m_waterMap.get(); }
 
+		/// @brief Records that a door entry was reported for having no door polys in this map's
+		/// nav mesh, so the report appears once per door entry and map, not once per instance.
+		/// @return True the first time for an entry.
+		bool MarkDoorWithoutNavPolysReported(uint32 entry) { return m_doorsWithoutNavPolysReported.insert(entry).second; }
+
 	private:
 		const std::string m_directory;
 		std::unique_ptr<nav::Map> m_navMap;
@@ -65,6 +72,8 @@ namespace mmo
 		std::chrono::steady_clock::time_point m_navStreamStart;
 		std::shared_ptr<const ServerCollisionMap> m_staticCollision;
 		std::unique_ptr<ServerWaterMap> m_waterMap;
+		/// Door entries already reported by MarkDoorWithoutNavPolysReported.
+		std::unordered_set<uint32> m_doorsWithoutNavPolysReported;
 	};
 
 	/// @brief Hands out one MapStaticData per map directory, shared by all instances of that map.

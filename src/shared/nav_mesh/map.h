@@ -145,6 +145,13 @@ namespace mmo::nav
 		/// volume are loaded. Returns an empty list on maps built without door data.
 		[[nodiscard]] std::vector<dtPolyRef> FindDoorPolys(const DoorVolume& volume) const;
 
+		/// @brief Whether any poly the default filter accepts overlaps a door volume's world bounds
+		/// (the same box FindDoorPolys searches), tested against the poly's vertex bounds.
+		/// @details Tells a door the nav builder never baked (walkable polys run under it, so
+		/// creatures can path through) from a door over ground the nav mesh does not cover at all.
+		/// Only searches installed pages, like FindDoorPolys.
+		[[nodiscard]] bool HasPolysIn(const DoorVolume& volume) const;
+
 		[[nodiscard]] const dtNavMesh& GetNavMesh() const { return m_navMesh; }
 
 		[[nodiscard]] const dtNavMeshQuery& GetNavMeshQuery() const { return m_navQuery; }

@@ -102,6 +102,16 @@ namespace mmo
 		/// @brief Removes a nav obstacle, unblocking its polys. Handle 0 and unknown handles are a safe no-op.
 		virtual void RemoveNavObstacle(uint64 handle) {}
 
+		/// @brief Whether walkable nav polys (default filter) lie inside a door volume. Used when
+		/// AddNavObstacle found no door polys: walkable polys there mean the nav mesh predates the
+		/// door, no polys mean there is nothing a creature could path through anyway.
+		/// @return False when unsupported.
+		virtual bool HasWalkableNavPolysIn(const nav::DoorVolume& volume) const { return false; }
+
+		/// @brief Records that a door entry was reported for having no door polys, once per map.
+		/// @return True the first time an entry is reported on this map (shared by all its instances).
+		virtual bool MarkDoorWithoutNavPolysReported(uint32 entry) { return true; }
+
 		/// @brief Gets the mesh-space collision bounds of dynamic collision geometry.
 		/// @return False when unsupported or for unknown handles.
 		virtual bool GetDynamicCollisionLocalBounds(uint64 handle, AABB& out) const { return false; }
@@ -185,6 +195,10 @@ namespace mmo
 		void SetNavObstacleBlocking(uint64 handle, bool blocking) override;
 
 		void RemoveNavObstacle(uint64 handle) override;
+
+		bool HasWalkableNavPolysIn(const nav::DoorVolume& volume) const override;
+
+		bool MarkDoorWithoutNavPolysReported(uint32 entry) override;
 
 		bool GetDynamicCollisionLocalBounds(uint64 handle, AABB& out) const override;
 
@@ -536,8 +550,5 @@ namespace mmo
 			scoped_connection stateChanged;
 		};
 		std::unordered_map<uint64, DoorCollision> m_doorCollisions;
-
-		/// Door entries already warned about for missing nav polys, so respawns do not repeat it.
-		std::unordered_set<uint32> m_warnedDoorsWithoutNav;
 	};
 }

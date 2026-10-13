@@ -161,3 +161,39 @@ TEST_CASE("A door on a map without door polys registers no nav obstacle", "[map_
 	CHECK(map.AddNavObstacle(MiddleDoor(), true) == 0);
 	CHECK(Reaches(map, West, East));
 }
+
+TEST_CASE("A door without door polys reports whether walkable polys run under it", "[map_static_data][door]")
+{
+	test_nav::SyntheticNavMap files({ { 32, 32 } });
+	MapStaticDataRegistry registry;
+	NavMapData map(registry.Acquire(test_nav::SyntheticNavMap::Name));
+
+	SECTION("Walkable floor under the door: the nav mesh predates the door")
+	{
+		REQUIRE(map.AddNavObstacle(MiddleDoor(), true) == 0);
+		CHECK(map.HasWalkableNavPolysIn(MiddleDoor()));
+	}
+
+	SECTION("No polys under the door: nothing to path through")
+	{
+		// The same footprint, high above the floor (e.g. an arch seal in a wall).
+		nav::DoorVolume raised = MiddleDoor();
+		raised.minY = 50.f;
+		raised.maxY = 52.f;
+		REQUIRE(map.AddNavObstacle(raised, true) == 0);
+		CHECK_FALSE(map.HasWalkableNavPolysIn(raised));
+	}
+}
+
+TEST_CASE("Doors without door polys are reported once per map", "[map_static_data][door]")
+{
+	test_nav::SyntheticNavMap files({ { 32, 32 } });
+	MapStaticDataRegistry registry;
+	NavMapData instanceA(registry.Acquire(test_nav::SyntheticNavMap::Name));
+	NavMapData instanceB(registry.Acquire(test_nav::SyntheticNavMap::Name));
+
+	CHECK(instanceA.MarkDoorWithoutNavPolysReported(15));
+	CHECK_FALSE(instanceA.MarkDoorWithoutNavPolysReported(15));
+	CHECK_FALSE(instanceB.MarkDoorWithoutNavPolysReported(15));
+	CHECK(instanceB.MarkDoorWithoutNavPolysReported(16));
+}

@@ -194,6 +194,19 @@ namespace mmo
 		m_navObstacles.erase(it);
 	}
 
+	bool NavMapData::HasWalkableNavPolysIn(const nav::DoorVolume& volume) const
+	{
+		Vector3 min, max;
+		volume.GetWorldBounds(min, max);
+		m_staticData->EnsureNavLoaded(min.x, min.z, max.x, max.z);
+		return m_staticData->GetNavMap().HasPolysIn(volume);
+	}
+
+	bool NavMapData::MarkDoorWithoutNavPolysReported(const uint32 entry)
+	{
+		return m_staticData->MarkDoorWithoutNavPolysReported(entry);
+	}
+
 	bool NavMapData::GetDynamicCollisionLocalBounds(const uint64 handle, AABB& out) const
 	{
 		return m_collisionMap && handle != 0 && m_collisionMap->GetDynamicInstanceLocalBounds(handle, out);
@@ -866,16 +879,29 @@ namespace mmo
 
 		// Closed doors also block pathfinding, through the polys the nav builder cut out under them.
 		AABB localBounds;
-		if (m_mapData->GetDynamicCollisionLocalBounds(handle, localBounds))
+		const bool hasBounds = m_mapData->GetDynamicCollisionLocalBounds(handle, localBounds);
+		const nav::DoorVolume volume = hasBounds ? nav::ComputeDoorVolume(localBounds, transform) : nav::DoorVolume();
+		if (hasBounds)
 		{
-			door.navObstacle = m_mapData->AddNavObstacle(nav::ComputeDoorVolume(localBounds, transform), !object.IsOpen());
+			door.navObstacle = m_mapData->AddNavObstacle(volume, !object.IsOpen());
 		}
 
-		if (door.navObstacle == 0 && m_warnedDoorsWithoutNav.insert(object.Get<uint32>(object_fields::Entry)).second)
+		const uint32 entry = object.Get<uint32>(object_fields::Entry);
+		if (door.navObstacle == 0 && m_mapData->MarkDoorWithoutNavPolysReported(entry))
 		{
-			WLOG("Door object entry " << object.Get<uint32>(object_fields::Entry) << " on map " << m_mapId
-				<< " has no door polys in the nav mesh - creatures can path through it while it is closed. "
-				"Rebuild the map's nav mesh with nav_builder --project");
+			// Without door polys a door only lets creatures through when walkable polys run under it
+			// (nav mesh built before the door existed). Over unwalkable ground there is no bypass.
+			if (!hasBounds || m_mapData->HasWalkableNavPolysIn(volume))
+			{
+				WLOG("Door object entry " << entry << " on map " << m_mapId
+					<< " has no door polys in the nav mesh - creatures can path through it while it is closed. "
+					"Rebuild the map's nav mesh with nav_builder --project");
+			}
+			else
+			{
+				DLOG("Door object entry " << entry << " on map " << m_mapId
+					<< " has no door polys and no walkable nav polys under it - nothing to block");
+			}
 		}
 
 		const uint64 navObstacle = door.navObstacle;

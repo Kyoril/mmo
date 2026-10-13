@@ -2,6 +2,8 @@
 #include "map.h"
 
 #include <DetourCommon.h>
+#include <algorithm>
+#include <cfloat>
 #include <random>
 
 #include "tile.h"
@@ -748,5 +750,55 @@ namespace mmo::nav
 		}
 
 		return result;
+	}
+
+	bool Map::HasPolysIn(const DoorVolume& volume) const
+	{
+		if (!m_valid)
+		{
+			return false;
+		}
+
+		Vector3 min, max;
+		volume.GetWorldBounds(min, max);
+		const float center[3] = { (min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f, (min.z + max.z) * 0.5f };
+		const float halfExtents[3] = { (max.x - min.x) * 0.5f, (max.y - min.y) * 0.5f, (max.z - min.z) * 0.5f };
+
+		dtPolyRef polys[MaxStackedPolys];
+		int polyCount = 0;
+		if (dtStatusFailed(m_navQuery.queryPolygons(center, halfExtents, &m_queryFilter, polys, &polyCount, MaxStackedPolys)))
+		{
+			return false;
+		}
+
+		// queryPolygons only tests coarse (quantized BV tree) bounds, which are loose in Y: a floor
+		// far below a door high up in a wall would still be reported. Check the actual vertices.
+		for (int i = 0; i < polyCount; ++i)
+		{
+			const dtMeshTile* tile = nullptr;
+			const dtPoly* poly = nullptr;
+			if (dtStatusFailed(m_navMesh.getTileAndPolyByRef(polys[i], &tile, &poly)) || poly->vertCount == 0)
+			{
+				continue;
+			}
+
+			Vector3 polyMin(FLT_MAX, FLT_MAX, FLT_MAX);
+			Vector3 polyMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+			for (unsigned char v = 0; v < poly->vertCount; ++v)
+			{
+				const float* vert = &tile->verts[poly->verts[v] * 3];
+				polyMin = Vector3(std::min(polyMin.x, vert[0]), std::min(polyMin.y, vert[1]), std::min(polyMin.z, vert[2]));
+				polyMax = Vector3(std::max(polyMax.x, vert[0]), std::max(polyMax.y, vert[1]), std::max(polyMax.z, vert[2]));
+			}
+
+			if (polyMin.x <= max.x && polyMax.x >= min.x &&
+				polyMin.y <= max.y && polyMax.y >= min.y &&
+				polyMin.z <= max.z && polyMax.z >= min.z)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
