@@ -288,12 +288,15 @@ matters:
   raw pointers: the manager's mutex protects the list, not the lifetime of what comes out of it.
 - **Realm and world servers** — single-threaded io, and they *depend* on it. Cross-session
   access uses raw `Player*` taken from the managers in ~30 places. Raising either tier's thread
-  count requires doing the login server's `shared_ptr` + `Post` work there first.
+  count requires doing the login server's `shared_ptr` + `Post` work there first. Raising the world tier's thread count also needs a `dtNavMeshQuery` per thread, because instances share one per map.
 - **Database** — one connection per tier behind one worker thread. Call sites rely on the
   implicit FIFO ordering that gives.
-- **Nav mesh streaming (world server)** — each new world instance starts a short-lived
-  `nav::PageStreamer` thread that only reads page files through the asset registry; the world
-  thread alone touches Detour, installing pages in 4 ms slices per tick. Until a map is
+- **Nav mesh streaming (world server)** — nav mesh, static collision and water are loaded once per
+  map (`MapStaticData`, handed out by `WorldInstanceManager`'s `MapStaticDataRegistry`) and shared by
+  every instance of it; the first instance of a map starts a short-lived `nav::PageStreamer` thread
+  that only reads page files through the asset registry, and the registry installs pages in 4 ms
+  slices per tick, once per map. All instances share one `dtNavMeshQuery`, so nav queries are world
+  thread only. Door state lives per instance in a `nav::InstanceQueryFilter`. Until a map is
   complete, `NavMapData` path/random-point queries load the pages they touch on demand, so
   any new nav query must go through `EnsureNavLoaded` first. The reader thread must not log
   (the log signal is main-thread-only and servers do not buffer off-thread entries).

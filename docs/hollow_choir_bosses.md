@@ -266,7 +266,7 @@ Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua`, `hollow_choir_b
   otherwise reach by hopping the stair railing) are magic barriers (object 15, display 9:
   `Models/Dungeon/MagicBarrier_01.hmsh`, a single-sided 6 x 7 plane with the two-sided
   `MagicBarrier_01.hmat`). Server line of sight tests door and barrier collision from both
-  sides, so a single-sided plane blocks aggro and assist from Veyr's side too. Any door whose material has a
+  sides, so a single-sided plane blocks aggro and assist from Veyr's side too. Closed seals also block creature pathfinding: `nav_builder -p` cuts their footprint out as door polys, and each instance blocks them while the seal is closed. Moving a seal means rebuilding the map's nav mesh. Any door whose material has a
   `Dissolve` scalar parameter fades out over 1.6 s on opening instead of playing an Open clip,
   and is hidden once gone (`GameWorldObjectC::ApplyDoorDissolve`); colours, opacity and pulse
   are material parameters, so variants belong in an .hmi. The sketch wants the singing to stop
