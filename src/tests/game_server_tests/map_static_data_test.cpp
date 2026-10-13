@@ -197,3 +197,25 @@ TEST_CASE("Doors without door polys are reported once per map", "[map_static_dat
 	CHECK_FALSE(instanceB.MarkDoorWithoutNavPolysReported(15));
 	CHECK(instanceB.MarkDoorWithoutNavPolysReported(16));
 }
+
+TEST_CASE("Floor ending in front of a door is no way through it", "[map_static_data][door]")
+{
+	// The tile's floor ends at x = TileSize; a zero-thickness door plane stands just beyond it, so
+	// the floor reaches into the inflated volume but never crosses the door itself. The corridor
+	// is the only tile with polys.
+	test_nav::SyntheticNavMap files({ { 32, 32 } }, {}, CorridorTile);
+	MapStaticDataRegistry registry;
+	NavMapData map(registry.Acquire(test_nav::SyntheticNavMap::Name));
+
+	nav::DoorVolume volume;
+	volume.center = Vector3(test_nav::TileSize + 0.3f, 0.f, test_nav::TileSize * 0.5f);
+	volume.halfX = nav::DoorVolumeInflate;
+	volume.halfZ = 2.f + nav::DoorVolumeInflate;
+	volume.minY = -1.f;
+	volume.maxY = 1.f;
+	CHECK_FALSE(map.HasWalkableNavPolysIn(volume));
+
+	// The same plane moved onto the floor is crossed by it.
+	volume.center.x = test_nav::TileSize - 1.f;
+	CHECK(map.HasWalkableNavPolysIn(volume));
+}

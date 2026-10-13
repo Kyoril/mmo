@@ -752,6 +752,82 @@ namespace mmo::nav
 		return result;
 	}
 
+	namespace
+	{
+		/// Whether a convex nav poly reaches into a door's own footprint: an oriented XZ rectangle
+		/// around the volume's center with half extents halfX/halfZ (separating axis test), within
+		/// the volume's Y range. A poly that only touches the footprint's edge does not count.
+		bool PolyEntersFootprint(const dtMeshTile& tile, const dtPoly& poly, const DoorVolume& volume, const float halfX, const float halfZ)
+		{
+			constexpr float epsilon = 0.01f;
+
+			float pointsX[DT_VERTS_PER_POLYGON];
+			float pointsZ[DT_VERTS_PER_POLYGON];
+			float minY = FLT_MAX;
+			float maxY = -FLT_MAX;
+			const int count = poly.vertCount;
+			for (int v = 0; v < count; ++v)
+			{
+				const float* vert = &tile.verts[poly.verts[v] * 3];
+				pointsX[v] = vert[0] - volume.center.x;
+				pointsZ[v] = vert[2] - volume.center.z;
+				minY = std::min(minY, vert[1]);
+				maxY = std::max(maxY, vert[1]);
+			}
+
+			if (minY > volume.maxY || maxY < volume.minY)
+			{
+				return false;
+			}
+
+			const auto project = [&](const float axisX, const float axisZ, float& outMin, float& outMax)
+			{
+				outMin = FLT_MAX;
+				outMax = -FLT_MAX;
+				for (int v = 0; v < count; ++v)
+				{
+					const float d = pointsX[v] * axisX + pointsZ[v] * axisZ;
+					outMin = std::min(outMin, d);
+					outMax = std::max(outMax, d);
+				}
+			};
+
+			// The footprint's own axes: the poly must overlap it by more than epsilon, so a floor
+			// ending at a zero-thickness door plane does not count as running through it.
+			float polyMin, polyMax;
+			project(volume.axisX.x, volume.axisX.z, polyMin, polyMax);
+			if (polyMax <= -halfX + epsilon || polyMin >= halfX - epsilon)
+			{
+				return false;
+			}
+
+			project(volume.axisZ.x, volume.axisZ.z, polyMin, polyMax);
+			if (polyMax <= -halfZ + epsilon || polyMin >= halfZ - epsilon)
+			{
+				return false;
+			}
+
+			// The poly's edge normals.
+			for (int v = 0; v < count; ++v)
+			{
+				const int next = (v + 1) % count;
+				const float normalX = -(pointsZ[next] - pointsZ[v]);
+				const float normalZ = pointsX[next] - pointsX[v];
+				project(normalX, normalZ, polyMin, polyMax);
+
+				const float boxExtent =
+					halfX * std::abs(volume.axisX.x * normalX + volume.axisX.z * normalZ) +
+					halfZ * std::abs(volume.axisZ.x * normalX + volume.axisZ.z * normalZ);
+				if (boxExtent <= polyMin || -boxExtent >= polyMax)
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+	}
+
 	bool Map::HasPolysIn(const DoorVolume& volume) const
 	{
 		if (!m_valid)
@@ -771,8 +847,11 @@ namespace mmo::nav
 			return false;
 		}
 
-		// queryPolygons only tests coarse (quantized BV tree) bounds, which are loose in Y: a floor
-		// far below a door high up in a wall would still be reported. Check the actual vertices.
+		// queryPolygons only tests coarse bounds, and the volume is grown by DoorVolumeInflate on
+		// each side: the floor in front of a door set into a wall ends inside that margin without
+		// passing the door. Only a poly reaching into the door's own footprint is a way through.
+		const float footprintHalfX = std::max(0.f, volume.halfX - DoorVolumeInflate);
+		const float footprintHalfZ = std::max(0.f, volume.halfZ - DoorVolumeInflate);
 		for (int i = 0; i < polyCount; ++i)
 		{
 			const dtMeshTile* tile = nullptr;
@@ -782,18 +861,7 @@ namespace mmo::nav
 				continue;
 			}
 
-			Vector3 polyMin(FLT_MAX, FLT_MAX, FLT_MAX);
-			Vector3 polyMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-			for (unsigned char v = 0; v < poly->vertCount; ++v)
-			{
-				const float* vert = &tile->verts[poly->verts[v] * 3];
-				polyMin = Vector3(std::min(polyMin.x, vert[0]), std::min(polyMin.y, vert[1]), std::min(polyMin.z, vert[2]));
-				polyMax = Vector3(std::max(polyMax.x, vert[0]), std::max(polyMax.y, vert[1]), std::max(polyMax.z, vert[2]));
-			}
-
-			if (polyMin.x <= max.x && polyMax.x >= min.x &&
-				polyMin.y <= max.y && polyMax.y >= min.y &&
-				polyMin.z <= max.z && polyMax.z >= min.z)
+			if (PolyEntersFootprint(*tile, *poly, volume, footprintHalfX, footprintHalfZ))
 			{
 				return true;
 			}
