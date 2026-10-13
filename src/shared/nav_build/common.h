@@ -17,6 +17,10 @@ namespace mmo
             Entity = 1 << 3,
 
             WorldModel = 1 << 4,
+
+            /// Cut out under a door's footprint, so world instances can block it while the door
+            /// is closed. Must equal nav::DoorPolyFlag.
+            Door = 1 << 5,
         };
     }
 }

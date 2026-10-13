@@ -1,5 +1,6 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+import dataclasses
 import datetime
 import json
 import tempfile
@@ -11,6 +12,7 @@ from mmo_deployer.app import Deployer, write_request
 from mmo_deployer.maintenance import Outcome
 from mmo_deployer.stage import StageError
 from mmo_deployer.state import State, load_state, save_state
+from mmo_deployer.web import HttpError
 
 from .fakes import FakeClock, FakeGitHub, FakeMaintenance, FakeNotifier, FakePatchDir, FakeStager, make_config
 
@@ -410,6 +412,94 @@ class AppTests(unittest.TestCase):
 		(requests / "1-broken.json").write_text("{nope", encoding="utf-8")
 		self.app.tick()
 		self.assertEqual(list(requests.glob("*.json")), [])
+
+
+class NightlyDispatchTests(unittest.TestCase):
+	def setUp(self):
+		self.tmp = tempfile.TemporaryDirectory()
+		self.cfg = make_config(self.tmp.name, nightly_at=datetime.time(23, 0), github_token="tok")
+		self.cfg.state_dir.mkdir(parents=True)
+		self.clock = FakeClock(at(22, 59))
+		self.github = FakeGitHub()
+		self.maintenance = FakeMaintenance()
+		self.notifier = FakeNotifier()
+		self.state_path = self.cfg.state_dir / "state.json"
+		save_state(self.state_path, State(live=OLD))
+		self.app = Deployer(self.cfg, self.github, FakeStager(), self.maintenance,
+			FakePatchDir(self.tmp.name, {OLD}, current=OLD), self.notifier, self.clock)
+
+	def tearDown(self):
+		self.tmp.cleanup()
+
+	def test_dispatches_once_at_nightly_at(self):
+		self.app.tick()
+		self.assertEqual(self.github.dispatches, [])
+		self.clock.current = at(23, 0)
+		self.app.tick()
+		self.clock.sleep(60)
+		self.app.tick()
+		self.assertEqual(self.github.dispatches, [("nightly-release.yml", "develop")])
+		state = load_state(self.state_path)
+		self.assertEqual(state.last_nightly_dispatch_date, "2026-10-07")
+		self.assertEqual(state.history[-1]["event"], "nightly_dispatched")
+
+	def test_dispatches_again_the_next_night(self):
+		self.clock.current = at(23, 0)
+		self.app.tick()
+		self.clock.current = at(23, 0, day=8)
+		self.app.tick()
+		self.assertEqual(len(self.github.dispatches), 2)
+
+	def test_restart_late_in_the_window_still_dispatches(self):
+		self.clock.current = at(23, 59)
+		self.app.tick()
+		self.assertEqual(len(self.github.dispatches), 1)
+
+	def test_no_dispatch_after_the_window(self):
+		self.clock.current = at(0, 0, day=8)
+		self.app.tick()
+		self.clock.current = at(4, 0, day=8)
+		self.app.tick()
+		self.assertEqual(self.github.dispatches, [])
+
+	def test_dispatches_while_paused(self):
+		save_state(self.state_path, State(live=OLD, paused=True))
+		self.clock.current = at(23, 0)
+		self.app.tick()
+		self.assertEqual(len(self.github.dispatches), 1)
+		self.assertEqual(self.maintenance.runs, [])
+
+	def test_disabled_without_nightly_at(self):
+		self.app.cfg = dataclasses.replace(self.cfg, nightly_at=None)
+		self.clock.current = at(23, 0)
+		self.app.tick()
+		self.assertEqual(self.github.dispatches, [])
+
+	def test_failure_retries_every_poll_and_notifies_once(self):
+		self.github.dispatch_error = HttpError(403, "Resource not accessible by personal access token", "x")
+		self.clock.current = at(23, 0)
+		self.app.tick()
+		self.clock.sleep(60)
+		self.app.tick()
+		self.assertEqual(len(self.github.dispatches), 1)
+		self.clock.current = at(23, 15)
+		self.app.tick()
+		self.assertEqual(len(self.github.dispatches), 2)
+		self.assertIsNone(load_state(self.state_path).last_nightly_dispatch_date)
+		self.assertEqual(sum("Could not start the nightly build" in m for m in self.notifier.messages), 1)
+		self.github.dispatch_error = None
+		self.clock.current = at(23, 30)
+		self.app.tick()
+		self.assertEqual(len(self.github.dispatches), 3)
+		self.assertEqual(load_state(self.state_path).last_nightly_dispatch_date, "2026-10-07")
+
+	def test_failure_notifies_again_the_next_night(self):
+		self.github.dispatch_error = OSError("dns")
+		self.clock.current = at(23, 0)
+		self.app.tick()
+		self.clock.current = at(23, 0, day=8)
+		self.app.tick()
+		self.assertEqual(sum("Could not start the nightly build" in m for m in self.notifier.messages), 2)
 
 
 if __name__ == "__main__":

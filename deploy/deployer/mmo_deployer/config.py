@@ -5,6 +5,7 @@ import datetime
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 REQUIRED = (
 	"GITHUB_REPO", "DATA_REPO_URL",
@@ -48,6 +49,10 @@ class Config:
 	mysql_password: str
 	backup_databases: tuple
 	maintenance_at: datetime.time
+	# When the deployer dispatches the nightly workflow itself; None leaves it to the GitHub schedule.
+	nightly_at: Optional[datetime.time]
+	nightly_workflow: str
+	nightly_ref: str
 	timezone: str
 	countdown_s: int
 	poll_interval_s: int
@@ -87,6 +92,9 @@ def load_config(env):
 	notify_format = env.get("NOTIFY_FORMAT", "discord")
 	if notify_format not in NOTIFY_FORMATS:
 		raise ConfigError("NOTIFY_FORMAT must be one of " + ", ".join(NOTIFY_FORMATS))
+	nightly_at = env.get("NIGHTLY_AT", "")
+	if nightly_at and not env.get("GITHUB_TOKEN"):
+		raise ConfigError("NIGHTLY_AT needs a GITHUB_TOKEN with Actions: write")
 	try:
 		return Config(
 			github_repo=env["GITHUB_REPO"],
@@ -109,6 +117,9 @@ def load_config(env):
 			mysql_password=env["MYSQL_PASSWORD"],
 			backup_databases=_csv(env["BACKUP_DATABASES"]),
 			maintenance_at=_parse_time(env.get("MAINTENANCE_AT", "04:45")),
+			nightly_at=_parse_time(nightly_at) if nightly_at else None,
+			nightly_workflow=env.get("NIGHTLY_WORKFLOW", "nightly-release.yml"),
+			nightly_ref=env.get("NIGHTLY_REF", "develop"),
 			timezone=env.get("TZ", "Europe/Berlin"),
 			countdown_s=int(env.get("COUNTDOWN_S", "900")),
 			poll_interval_s=int(env.get("POLL_INTERVAL_S", "900")),

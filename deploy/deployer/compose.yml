@@ -21,6 +21,8 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - BACKUP_DATABASES=mmo_login,mmo_realm_01
       - MAINTENANCE_AT=04:45
+      # Starts the nightly build; GITHUB_TOKEN then needs Actions: write (docs/deployment.md).
+      - NIGHTLY_AT=23:00
       - TZ=Europe/Berlin
       - COUNTDOWN_S=900
       - NOTIFY_WEBHOOK=${NOTIFY_WEBHOOK}

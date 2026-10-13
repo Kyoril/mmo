@@ -10,21 +10,90 @@
 
 #include "cxxopts/cxxopts.hpp"
 #include "graphics/graphics_device.h"
+#include "game/object_type_id.h"
+#include "nav_build/map.h"
 #include "nav_build/mesh_builder.h"
+#include "nav_mesh/door_volume.h"
+#include "proto_data/project.h"
 
 namespace mmo
 {
+	/// Collects the footprint of every door spawned on the map whose directory is the world name.
+	/// @param project The loaded editor project.
+	/// @param worldName The world being built (MapEntry::directory()).
+	std::vector<nav::DoorVolume> CollectDoorVolumes(const proto::Project& project, const std::string& worldName)
+	{
+		std::vector<nav::DoorVolume> doors;
+
+		const proto::MapEntry* map = nullptr;
+		for (const auto& entry : project.maps.getTemplates().entry())
+		{
+			if (entry.directory() == worldName)
+			{
+				map = &entry;
+				break;
+			}
+		}
+
+		if (!map)
+		{
+			WLOG("No map in the project uses directory '" << worldName << "' - no doors are baked into the nav mesh");
+			return doors;
+		}
+
+		std::map<std::string, std::unique_ptr<MapEntity>> meshes;
+		for (const auto& spawn : map->objectspawns())
+		{
+			const auto* object = project.objects.getById(spawn.objectentry());
+			if (!object || object->type() != game_world_object_type::Door)
+			{
+				continue;
+			}
+
+			const auto* display = project.objectDisplays.getById(object->displayid());
+			if (!display || display->filename().empty())
+			{
+				WLOG("Door spawn '" << spawn.name() << "' (object " << spawn.objectentry() << ") has no display mesh - skipped");
+				continue;
+			}
+
+			auto& mesh = meshes[display->filename()];
+			if (!mesh)
+			{
+				mesh = std::make_unique<MapEntity>(display->filename());
+			}
+
+			if (mesh->Vertices.empty())
+			{
+				WLOG("Door mesh '" << display->filename() << "' has no collision - door spawn '" << spawn.name() << "' skipped");
+				continue;
+			}
+
+			const auto& location = spawn.location();
+			const Matrix4 transform = nav::MakeDoorTransform(
+				Vector3(location.positionx(), location.positiony(), location.positionz()),
+				Quaternion(location.rotationw(), location.rotationx(), location.rotationy(), location.rotationz()),
+				object->scale());
+			doors.push_back(nav::ComputeDoorVolume(mesh->Bounds, transform));
+		}
+
+		ILOG("Baking " << doors.size() << " door(s) into the nav mesh of " << worldName);
+		return doors;
+	}
+
 	/// Runs the actual navigation builder process multithreaded. This method expects AssetRegistry to be already initialized.
 	///	@param worldName The name of the world to build. World will be located in the AssetRegistry using the schema: Worlds/<worldName>/<worldName>.hwld
 	///	@param directoryPath The target directory where the built tiles will be stored.
 	///	@param concurrentThreads The number of worker threads to use for building the tiles. Must be at least 1.
+	///	@param doors Door footprints to cut out as door polys.
 	///	@return 0 on success, 1 on failure. This should be thought of as the process exit code.
-	int32 run(const std::string& worldName, const std::string& directoryPath, size_t concurrentThreads)
+	int32 run(const std::string& worldName, const std::string& directoryPath, size_t concurrentThreads, std::vector<nav::DoorVolume> doors)
 	{
 		ASSERT(concurrentThreads > 0);
 
 		// Create a new mesh builder instance. This class is thread safe!
 		auto builder = std::make_unique<MeshBuilder>(directoryPath, worldName);
+		builder->SetDoorVolumes(std::move(doors));
 		ILOG("Building " << builder->GetTileCount() << " tiles for world " << worldName << " using " << concurrentThreads << " threads...");
 
 		std::atomic<bool> success { true };
@@ -117,6 +186,7 @@ int main(int argc, char* argv[])
 	mmo::String dataDirectory;
 	mmo::String worldName;
 	mmo::String directoryPath;
+	mmo::String projectPath;
 
 	// Per default, use all available threads
 	size_t concurrentThreads = std::thread::hardware_concurrency();
@@ -133,6 +203,7 @@ int main(int argc, char* argv[])
 		("d,data", "set data directory path", cxxopts::value<std::string>(dataDirectory))
 		("w,world", "sets world name to build", cxxopts::value<std::string>(worldName))
 		("o,out", "set target directory", cxxopts::value<std::string>(directoryPath))
+		("p,project", "editor data folder (e.g. data/editor/data) to read door spawns from", cxxopts::value<std::string>(projectPath))
 		("j,concurrency", "The number of threads used for building", cxxopts::value<size_t>(concurrentThreads))
 		;
 
@@ -161,8 +232,25 @@ int main(int argc, char* argv[])
 		std::vector<std::string> archives;
 		mmo::AssetRegistry::Initialize(dataDirectory, archives);
 
+		std::vector<mmo::nav::DoorVolume> doors;
+		if (projectPath.empty())
+		{
+			WLOG("No --project given: doors are not baked into the nav mesh, so closed doors will not block paths");
+		}
+		else
+		{
+			mmo::proto::Project project;
+			if (!project.load(projectPath))
+			{
+				ELOG("Failed to load the project from " << projectPath);
+				return 1;
+			}
+
+			doors = mmo::CollectDoorVolumes(project, worldName);
+		}
+
 		// Run the actual tool
-		return mmo::run(worldName, directoryPath, concurrentThreads);
+		return mmo::run(worldName, directoryPath, concurrentThreads, std::move(doors));
 	}
 	catch (const cxxopts::OptionException& e)
 	{

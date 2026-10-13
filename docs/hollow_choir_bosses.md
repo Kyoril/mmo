@@ -218,7 +218,9 @@ gallery) were too uneven for the climb limit, so its collision now has a ramp in
 (mesh editor, Collision > *Stairs to Ramp*, or `mmo_edit --stairs-to-ramp <mesh>`). Left over are
 four tiny islands players cannot reach (ledges outside the Wake's side walls, a niche behind the
 apse, the top of an object in the nave). Rebuild with
-`bin/Release/nav_builder.exe -d data/client -w Test -o data/editor` after changing geometry.
+`bin/Release/nav_builder.exe -d data/client -w Test -o data/editor -p data/editor/data` after
+changing geometry. `-p` bakes door spawns into the nav mesh; without it closed doors do not block
+creature paths.
 Creatures whose victim stands where their paths do not lead now evade after five seconds instead
 of waiting at the edge of their area (`UnreachableTargetTracker`), in dungeons too; a creature
 that cannot walk home is put home.
@@ -264,7 +266,7 @@ Covered by the E2E scenarios `hollow_choir_oswin_encounter.lua`, `hollow_choir_b
   otherwise reach by hopping the stair railing) are magic barriers (object 15, display 9:
   `Models/Dungeon/MagicBarrier_01.hmsh`, a single-sided 6 x 7 plane with the two-sided
   `MagicBarrier_01.hmat`). Server line of sight tests door and barrier collision from both
-  sides, so a single-sided plane blocks aggro and assist from Veyr's side too. Any door whose material has a
+  sides, so a single-sided plane blocks aggro and assist from Veyr's side too. Closed seals also block creature pathfinding: `nav_builder -p` cuts their footprint out as door polys, and each instance blocks them while the seal is closed. Moving a seal means rebuilding the map's nav mesh. Any door whose material has a
   `Dissolve` scalar parameter fades out over 1.6 s on opening instead of playing an Open clip,
   and is hidden once gone (`GameWorldObjectC::ApplyDoorDissolve`); colours, opacity and pulse
   are material parameters, so variants belong in an .hmi. The sketch wants the singing to stop

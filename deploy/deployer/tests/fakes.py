@@ -122,6 +122,13 @@ class FakeGitHub:
 		self.releases = []
 		self.assets = {}
 		self.list_error = None
+		self.dispatches = []
+		self.dispatch_error = None
+
+	def dispatch_workflow(self, workflow, ref):
+		self.dispatches.append((workflow, ref))
+		if self.dispatch_error:
+			raise self.dispatch_error
 
 	def add_release(self, tag, commit, assets, created_at):
 		release = {
