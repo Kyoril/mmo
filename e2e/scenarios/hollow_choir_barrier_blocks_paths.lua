@@ -10,7 +10,7 @@
 local VEYR, HOLLOW_CHORISTER = 88, 91
 local BARRIER_X = -85.5
 local NAVE_X, NAVE_Y, NAVE_Z = -75.0, 1.0, 0.0
-local STAIR_X, STAIR_Y = -84.5, 5.2
+local APSE_X, STAIR_Y = -91.0, 5.7
 
 GM.Godmode(true)
 GM.Worldport(1, NAVE_X, NAVE_Y, NAVE_Z, 0)
@@ -30,21 +30,29 @@ end
 
 -- A hostile Veyr ally, engaged on the nave side.
 local mob = GM.CreateMonster(HOLLOW_CHORISTER)
+-- The monster spawns on top of us and melee needs the in-front check to pass, so step aside
+-- (still inside melee reach) and face it.
+GM.Worldport(1, NAVE_X + 2, NAVE_Y, NAVE_Z, 0)
+Sleep(1000)
+FaceUnit(mob)
 TargetUnit(mob)
 StartAttack(mob)
 Assert(WaitUntil(function() return GetHealth(mob) < GetMaxHealth(mob) end, 15000, "mob engaged"),
 	"auto attacks should put the chorister in combat with us")
 
--- Stand right at the barrier, so the mob's chase slots fall on the far side, and hold there.
-MoveTo(STAIR_X, STAIR_Y, 0.0, 15000)
+-- Drag it: once it is fighting, teleport behind the barrier, out of melee reach of the mob's
+-- side. Without the door-aware nav filter the mob paths through the closed barrier (x -86.5
+-- measured); with it, there is no path and the mob stays put.
+GM.Worldport(1, APSE_X, STAIR_Y, 0.0, 0)
+Sleep(2000)
+GM.Godmode(true)
 local crossed = false
 local deadline = 40
-local zs = { -2.0, 2.0 }
 for i = 1, deadline do
-	if i % 8 == 0 then
-		MoveTo(STAIR_X, STAIR_Y, zs[(i / 8) % 2 + 1], 5000)
-	end
 	Sleep(1000)
+	if i % 4 == 0 then
+		Log(string.format("t=%d me=(%.1f, %.1f, %.1f) mob=(%.1f, %.1f, %.1f)", i, GetPosX(Me()), GetPosY(Me()), GetPosZ(Me()), GetPosX(mob), GetPosY(mob), GetPosZ(mob)))
+	end
 	if GetPosX(mob) < BARRIER_X - 0.3 then
 		crossed = true
 		break
