@@ -17,7 +17,10 @@ MESSAGE_LIMIT = 1900
 
 
 class GitHubClient:
-	"""Reads nightly releases. A read-only token is enough; a public repo needs none."""
+	"""Reads nightly releases and dispatches the nightly workflow.
+
+	Reading needs a read-only token (a public repo needs none); dispatching needs Actions: write.
+	"""
 
 	def __init__(self, repo, token, http, api="https://api.github.com"):
 		self.repo = repo
@@ -34,6 +37,11 @@ class GitHubClient:
 		releases = self.http.get_json(url, {"Accept": "application/vnd.github+json"}, self._auth())
 		matching = [r for r in releases if r["tag_name"].startswith(prefix) and not r.get("draft")]
 		return sorted(matching, key=lambda r: r["created_at"], reverse=True)
+
+	def dispatch_workflow(self, workflow, ref):
+		"""Starts a workflow_dispatch run of `workflow` (file name or id) on `ref`."""
+		url = "{}/repos/{}/actions/workflows/{}/dispatches".format(self.api, self.repo, urllib.parse.quote(workflow))
+		self.http.send_json("POST", url, {"ref": ref}, {"Accept": "application/vnd.github+json"}, self._auth())
 
 	def newest_versioned_release(self, prefix):
 		"""The published release of the highest `<prefix>X.Y.Z` tag, or None.
