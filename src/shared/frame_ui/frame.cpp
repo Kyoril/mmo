@@ -1854,7 +1854,7 @@ namespace mmo
 		if (m_isDragging)
 		{
 			FramePtr hovered = FrameManager::Get().GetHoveredFrame();
-			if (hovered && hovered->IsDropEnabled())
+			if (hovered && hovered->IsEnabled() && hovered->IsDropEnabled())
 			{
 				hovered->OnDrop(m_dragButton, position);
 			}
