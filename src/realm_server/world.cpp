@@ -667,6 +667,16 @@ namespace mmo
 			});
 	}
 
+	void World::RequestInstanceReset(const InstanceId& instanceId) const
+	{
+		GetConnection().sendSinglePacket([instanceId](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::ResetInstance);
+				outPacket << instanceId;
+				outPacket.Finish();
+			});
+	}
+
 	PacketParseResult World::OnPlayerCharacterJoined(auth::IncomingPacket& packet)
 	{
 		uint64 characterGuid = 0;

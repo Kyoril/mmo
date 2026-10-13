@@ -4,8 +4,8 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 8 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 21 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 9 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 22 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -117,6 +117,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 22 | 2026-10-13 | Instance reset: client `ResetInstances`, server `InstanceResetResult` (result byte + map name) and the realm->world `ResetInstance` request (auth 9) |
 | 21 | 2026-10-12 | Professions: `TradeSkills`/`TradeSkillUpdate` server packets, spell cast results `FailedSkillTooLow`/`FailedInventoryFull`, trainer result `FailedSkillTooLow`, `CharacterData`/`GamePlayerS` trade skill list |
 | 20 | 2026-10-11 | `PlaySoundById`'s position flag becomes a source byte: 0 = 2D, 1 = position, 2 = unit (packed guid + fallback position), so trigger Say/Yell voice lines play as 3D sound that follows the speaking creature |
 | 19 | 2026-10-08 | Spell zones on the ground (`PersistentAreaAura`): server `SpellZoneStart` (zone id, caster, spell, position, radius, remaining ms) and `SpellZoneEnd` (zone id, expired flag) |

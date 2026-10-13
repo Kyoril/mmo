@@ -226,6 +226,17 @@ namespace mmo
 		/// @param instanceId The instance id to clear.
 		void ClearDungeonBindingByInstanceId(InstanceId instanceId);
 
+		/// Determines whether this character is bound to a dungeon instance, either personally
+		/// or through its group.
+		/// @param instanceId The instance id to look for.
+		[[nodiscard]] bool IsBoundToInstance(const InstanceId& instanceId) const;
+
+		/// Sends the result of an instance reset request (or a notification about someone
+		/// else's) to the client, which turns it into a localized chat message.
+		/// @param result One of game::instance_reset_result.
+		/// @param mapName Name of the map the result refers to, empty if it refers to none.
+		void SendInstanceResetResult(uint8 result, const String& mapName);
+
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
 		void SendAuthChallenge();
@@ -551,6 +562,12 @@ namespace mmo
 
 		/// Handles a client request to change the group's loot method.
 		PacketParseResult OnSetLootMethod(game::IncomingPacket& packet);
+
+		/// Handles a client request to reset the dungeon instances this character is bound to.
+		PacketParseResult OnResetInstances(game::IncomingPacket& packet);
+
+		/// Gets the name of a map as defined in the game data, or an empty string if unknown.
+		[[nodiscard]] String GetMapName(MapId mapId) const;
 		PacketParseResult OnLogoutRequest(game::IncomingPacket &packet);
 
 		// Guild packet handlers

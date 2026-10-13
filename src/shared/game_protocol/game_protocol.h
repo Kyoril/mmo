@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000015;
+		constexpr uint32 ProtocolVersion = 0x00000016;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -458,6 +458,10 @@ namespace mmo
 				/// realm; available in every build, not only with dev commands. Payload: uint8 action
 				/// (gm_shutdown_action), uint32 delaySeconds (ignored for Cancel; 0 = immediately).
 				GmShutdown,
+
+				/// Sent by the client to reset the dungeon instances it is bound to (/resetinstance).
+				/// Handled by the realm. No payload.
+				ResetInstances,
 
 				/// Counter constant
 				Count_,
@@ -863,8 +867,33 @@ namespace mmo
 				/// uint16 value, uint16 max.
 				TradeSkillUpdate,
 
+				/// Result of a ResetInstances request, or a notification about someone else's.
+				/// Payload: uint8 result (see instance_reset_result), dynamic<uint8> map name
+				/// (empty when the result refers to no particular map).
+				InstanceResetResult,
+
 				/// Counter constant
 				Count_,
+			};
+		}
+
+		/// Result codes sent in an InstanceResetResult packet.
+		namespace instance_reset_result
+		{
+			enum Type : uint8
+			{
+				/// The instance of the named map was reset. Sent to everyone bound to it.
+				Success = 0,
+				/// The named map's instance could not be reset because characters are still
+				/// inside it. Sent to the character which requested the reset.
+				PlayersInside = 1,
+				/// The group leader tried to reset the named map's instance while this character
+				/// is still inside it. Sent to each character inside.
+				BlockedByYou = 2,
+				/// Only the group leader may reset the group's instances.
+				NotGroupLeader = 3,
+				/// The character is not bound to any dungeon instance.
+				NothingToReset = 4,
 			};
 		}
 

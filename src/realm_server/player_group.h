@@ -88,6 +88,9 @@ namespace mmo
 		/// Adds an instance binding for a map.
 		bool AddInstanceBinding(InstanceId instance, uint32 map);
 
+		/// Returns every instance binding of the group as map id -> instance id.
+		const InstancesByMap& GetInstanceBindings() const { return m_instances; }
+
 		/// Removes the instance binding for a specific map.
 		void RemoveInstanceBinding(uint32 map);
 
