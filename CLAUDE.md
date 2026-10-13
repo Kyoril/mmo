@@ -59,9 +59,11 @@ The following systems are fully implemented and should not be suggested as futur
   and `mmo-bugloop-runtime` (siblings of the main checkout unless `MMO_BUGLOOP_WORKTREE` /
   `MMO_BUGLOOP_RUNTIME` say otherwise); no session may use or edit them. It may push `develop` and the
   data submodules' `master` to origin on its auto-ship path only, and `bugfix/<id8>` branches of its own
-  CI emergency tickets for verification (deleted afterwards). Its merges are titled
+  CI emergency tickets for verification (deleted afterwards), plus a backup of every parked branch as
+  `refs/bugloop/bugfix/<id8>` (origin and the data repos; not a branch, so no CI run; deleted once
+  shipped, merged or discarded). Its merges are titled
   `Merge bugfix/<id8> (bug-loop, ...)`. Parked fixes are `bugfix/<id8>` branches: review them,
-  then `/ship`. Nothing in `tools/bugs/` may be changed by the loop itself; such changes go
+  then `/ship` (fetch `refs/bugloop/bugfix/<id8>` first if the loop parked it on another machine). Nothing in `tools/bugs/` may be changed by the loop itself; such changes go
   through a normal feature branch.
 - At session start, also surface: `artifacts/bug-loop/BREAKER` if it exists (quote it), and from
   the newest `tools/gate/reports/bugloop-*.json` (not `bugloop-dry-*`) the `parked` and `abuse`

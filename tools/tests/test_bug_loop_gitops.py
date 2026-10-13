@@ -313,6 +313,52 @@ class GitopsTests(unittest.TestCase):
 		self.wt.delete_remote_branch("bugfix/aaaaaaaa")
 		self.assertEqual(git(self.origin, "branch", "--list", "bugfix/aaaaaaaa"), "")
 
+	def test_backup_lets_another_machine_resume_a_parked_branch(self):
+		# 2026-10-13: the loop moved to a new machine; its parked branches were only local on the
+		# old one, so two maintainer refix decisions failed.
+		branch = "bugfix/0123abcd"
+		base = self.wt.prepare()
+		self.wt.start_branch(branch, base)
+		sub = self.wt.sub_path("data/client")
+		write(os.path.join(sub, "data.txt"), "two\n")
+		git(sub, "commit", "-am", "fix data")
+		git(self.wt.path, "add", "-A")
+		git(self.wt.path, "commit", "-m", "fix")
+		head = self.wt.head()
+		sub_head = git(sub, "rev-parse", "HEAD")
+		self.assertEqual(self.wt.backup_branch(branch), (True, ""))
+		self.assertEqual(git(self.origin, "rev-parse", "refs/bugloop/" + branch), head)
+		self.assertEqual(git(self.sub_origin, "rev-parse", "refs/bugloop/" + branch), sub_head)
+		self.assertEqual(git(self.origin, "branch", "--list"), "* develop")  # no branch, so no CI run
+
+		other_main = os.path.join(self.root, "other-main")
+		git(self.root, "clone", "--recurse-submodules", self.origin, other_main)
+		other = gitops.Worktree(other_main, os.path.join(self.root, "other-wt"), submodules=("data/client",))
+		other.prepare()
+		self.assertFalse(other.has_branch(branch))
+		self.assertTrue(other.restore_branch(branch))
+		self.assertFalse(other.restore_branch(branch))  # already here
+		self.assertEqual(other.resume_branch(branch), head)
+		self.assertEqual(git(other.sub_path("data/client"), "rev-parse", "HEAD"), sub_head)
+
+		other.delete_backup(branch)
+		self.assertEqual(gitops.run_git(self.origin, "rev-parse", "-q", "--verify", "refs/bugloop/" + branch, check=False).returncode, 1)
+		self.assertEqual(gitops.run_git(self.sub_origin, "rev-parse", "-q", "--verify", "refs/bugloop/" + branch, check=False).returncode, 1)
+
+	def test_restore_without_backup_is_false(self):
+		self.wt.prepare()
+		self.assertFalse(self.wt.restore_branch("bugfix/0123abcd"))
+		self.assertFalse(self.wt.has_branch("bugfix/0123abcd"))
+
+	def test_backups_are_limited_to_bugfix_branches(self):
+		worktree = gitops.Worktree("main", "wt")
+		with mock.patch.object(gitops, "run_git") as run:
+			self.assertFalse(worktree.backup_branch("develop")[0])
+			self.assertFalse(worktree.restore_branch("refs/heads/develop"))
+			with self.assertRaises(ValueError):
+				worktree.delete_backup("master")
+			run.assert_not_called()
+
 	def move_develop_submodule(self, name, text):
 		"""Someone else lands a data change: submodule master and develop's pointer move together."""
 		write(os.path.join(self.sub_seed, name), text)
