@@ -120,6 +120,31 @@ with an "interrupted" note and the category `needs_info` (see "Needs-info bugs")
 feature implement run goes back to `triaged` with the category `design_request` and "decide
 again" in the note, so "Implement as feature" can be chosen again.
 
+### Moving the loop to another machine
+
+The loop's local files (`artifacts/bug-loop/`, the worktree, its branches) do not have to move
+with it. Every park copies the branch to origin as `refs/bugloop/bugfix/<id8>`, and the data
+commits it points at to the same ref in the data repositories on GitHub (only those not already
+on their `master`). These refs are not branches: no workflow runs on them and they do not show
+up in the branch list. They are deleted when the fix ships, is merged by hand or discarded.
+
+On the new machine a decision on a bug parked elsewhere still works:
+
+- `report.json` is fetched from the API again, and `triage.json` is rebuilt from the triage
+  the API keeps (no new model call, so the category cannot change under the maintainer);
+- a refix restores the branch from its backup. Without a backup (parked before backups existed,
+  or never parked, e.g. a needs-info bug sent back with a refix), the guided refix starts a
+  fresh `bugfix/<id8>` from develop with the guidance;
+- a ship restores the branch, takes its tip as the candidate and rebuilds the review diff from
+  it, so the approved hash must still match what ships;
+- a feature's description, kept in `state.json`, is recovered from the bug history (the newest
+  `decision: implement: ...` entry with the actor `maintainer`).
+
+Still per machine: the daily counters, queued ships, the refix count and the CI phase. Stop the
+old task (`Disable-ScheduledTask -TaskName "MMO Bug Loop"`) before starting the new one; two live
+loops at once double the daily ship cap and both work the same red develop. To review a branch
+parked on another machine by hand: `git fetch origin refs/bugloop/bugfix/<id8>:bugfix/<id8>`.
+
 ## Where to look
 
 - `tools/gate/reports/bugloop-YYYY-MM-DD.json`: the day's outcomes, ships, parked branches,
@@ -138,8 +163,9 @@ Parked fixes are expected and normal: measured on 761 small historical server ed
 parks about 49%. They wait for review. The note on the bug names every reason it parked. Open
 the bug in the web UI first: the decision panel shows the candidate diff and takes the
 decision (see "Decisions and notifications"). The manual alternative still works: check out
-`bugfix/<id8>`, review it, and `/ship` it. The loop notices the merge and marks the bug
-resolved. To reject it by hand, set the bug to `wontfix` and delete the branch.
+`bugfix/<id8>`, review it, and `/ship` it (a branch parked on another machine:
+`git fetch origin refs/bugloop/bugfix/<id8>:bugfix/<id8>` first). The loop notices the merge and
+marks the bug resolved. To reject it by hand, set the bug to `wontfix` and delete the branch.
 
 ## Needs-info bugs
 
