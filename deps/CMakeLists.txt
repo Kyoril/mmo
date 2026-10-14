@@ -25,6 +25,9 @@ endif()
 set(RECASTNAVIGATION_DEMO OFF CACHE BOOL "")
 set(RECASTNAVIGATION_TESTS OFF CACHE BOOL "")
 set(RECASTNAVIGATION_EXAMPLES OFF CACHE BOOL "")
+# nav::InstanceQueryFilter overrides dtQueryFilter::passFilter to block the door polys of closed
+# doors per world instance. Detour exports the define PUBLIC, so every consumer sees the same layout.
+set(RECASTNAVIGATION_DT_VIRTUAL_QUERYFILTER ON CACHE BOOL "" FORCE)
 add_subdirectory(recastnavigation)
 	
 set_property(TARGET Recast PROPERTY FOLDER "deps")

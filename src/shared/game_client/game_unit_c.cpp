@@ -27,6 +27,7 @@
 #include "game/aura.h"
 #include "game/emote_defs.h"
 #include "game/spell.h"
+#include "trade_skill_list.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
@@ -2218,7 +2219,7 @@ namespace mmo
 		m_spellBookSpells.clear();
 		for (const auto *spell : m_spells)
 		{
-			if ((spell->attributes(0) & static_cast<uint32>(spell_attributes::HiddenClientSide)) == 0)
+			if (IsSpellBookVisible(*spell))
 			{
 				m_spellBookSpells.push_back(spell);
 			}
@@ -2234,7 +2235,7 @@ namespace mmo
 			m_spells.push_back(spell);
 
 			// Visible?
-			if ((spell->attributes(0) & static_cast<uint32>(spell_attributes::HiddenClientSide)) == 0)
+			if (IsSpellBookVisible(*spell))
 			{
 				m_spellBookSpells.push_back(spell);
 			}

@@ -50,8 +50,18 @@ namespace mmo
 		explicit ServerCollisionMap(const std::string& mapName);
 		~ServerCollisionMap() override = default;
 
+		/// @brief Creates a per-instance view over static geometry shared by every instance of a map.
+		/// @details Line of sight tests the shared static geometry and this view's own dynamic
+		/// instances. Dynamic instances added here are never visible to other views.
+		/// @param sharedStatic Static geometry, typically loaded once per map. May be null.
+		explicit ServerCollisionMap(std::shared_ptr<const ServerCollisionMap> sharedStatic);
+
 		/// @brief Returns true when at least one static collision instance was loaded.
-		[[nodiscard]] bool IsLoaded() const { return !m_instances.empty(); }
+		[[nodiscard]] bool IsLoaded() const { return !m_instances.empty() || (m_sharedStatic && m_sharedStatic->IsLoaded()); }
+
+		/// @brief Gets the mesh-space bounds of a dynamic instance's collision tree.
+		/// @return False for unknown handles.
+		[[nodiscard]] bool GetDynamicInstanceLocalBounds(uint64 handle, AABB& out) const;
 
 		/// @brief Returns true when the line from @p from to @p to is unobstructed.
 		/// Both points should already be at eye height. Points less than 1 cm apart are
@@ -104,6 +114,8 @@ namespace mmo
 		static constexpr float FoliageLineOfSightTrunkHeight = 4.0f;
 
 		/// @brief Registers a static, always-blocking collision instance (entity, world model part).
+		/// @details When a map's static geometry is shared between instances (see the shared-static
+		/// constructor), add static instances only while building it, before it is shared.
 		/// @return False when the instance was not registered, either because the tree is null or
 		///         empty or because MakeInstance rejected the transform.
 		bool AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName);
@@ -154,6 +166,8 @@ namespace mmo
 		};
 
 	private:
+		/// Static geometry shared by every instance of the map. Null for a standalone map.
+		std::shared_ptr<const ServerCollisionMap> m_sharedStatic;
 		std::vector<CollisionInstance> m_instances;
 		std::map<uint64, DynamicInstance> m_dynamicInstances;
 		uint64 m_nextDynamicHandle { 1 };

@@ -25,6 +25,7 @@
 #include "binary_io/vector_sink.h"
 #include "binary_io/writer.h"
 #include "group_manager.h"
+#include "game_server/item_notify.h"
 #include "game_server/spells/aura_container.h"
 
 #include <algorithm>
@@ -68,6 +69,23 @@ namespace mmo
 			m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned),
 			m_character->spellCooldownStarted.connect(*this, &Player::OnSpellCooldownStarted),
 			m_character->spellCooldownsReset.connect(*this, &Player::OnSpellCooldownsReset),
+
+			// Profession skill signals
+			m_character->tradeSkillLearned.connect([this](uint32)
+			{
+				if (m_spawned)
+				{
+					SendTradeSkills();
+					SaveCharacterData();
+				}
+			}),
+			m_character->tradeSkillChanged.connect([this](const uint32 skillId)
+			{
+				if (m_spawned)
+				{
+					SendTradeSkillUpdate(skillId);
+				}
+			}),
 
 			// Emote unlock signal
 			m_character->emoteLearned.connect(*this, &Player::OnEmoteLearned),
@@ -148,6 +166,8 @@ namespace mmo
 
 		// Load the full known-spell set (across all classes). Only spells usable by the active class are
 		// activated; the rest are preserved so switching back to their class restores them.
+		// Profession skills come first: passive unlock spells re-cast at spawn look them up.
+		m_character->SetTradeSkills(m_characterData.tradeSkills);
 		m_character->SetKnownSpells(m_characterData.spellIds);
 
 		// Load the unlocked emote set, then materialize any always-granted (default-known)
@@ -1556,6 +1576,9 @@ namespace mmo
 				m_character->CastSpell(target, *spell, 0, true, 0);
 			}
 		}
+
+		// Sent after the passives so the list is final
+		SendTradeSkills();
 
 		// Ensure the inventory is initialized
 		objects.clear();
@@ -3584,6 +3607,38 @@ namespace mmo
 		}, false);
 	}
 
+	void Player::SendTradeSkills()
+	{
+		const std::vector<TradeSkillData> skills = m_character->GetTradeSkills().GetAll();
+		SendPacket([skills](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::TradeSkills);
+			packet << io::write<uint8>(static_cast<uint8>(skills.size()));
+			for (const auto& skill : skills)
+			{
+				packet << skill;
+			}
+			packet.Finish();
+		}, false);
+	}
+
+	void Player::SendTradeSkillUpdate(const uint32 skillId)
+	{
+		const TradeSkillData* skill = m_character->GetTradeSkills().Get(skillId);
+		if (!skill)
+		{
+			return;
+		}
+
+		const TradeSkillData copy = *skill;
+		SendPacket([copy](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::TradeSkillUpdate);
+			packet << copy;
+			packet.Finish();
+		}, false);
+	}
+
 	void Player::OnClassXpGained(const uint32 classId, const uint32 xpGained, const uint8 classLevel, const uint32 classXp, const uint32 xpToNextLevel, const bool leveledUp)
 	{
 		if (!m_spawned)
@@ -4179,7 +4234,59 @@ namespace mmo
 					<< io::write<uint16>(totalCount);
 				packet.Finish();
 				});
+
+			if (wasCreated)
+			{
+				NotifyGroupOfCreatedItem(inst->GetEntry().id(), amount);
+			}
 		}
+	}
+
+	void Player::NotifyGroupOfCreatedItem(const uint32 itemId, const uint16 amount)
+	{
+		const uint64 groupId = m_character->GetGroupId();
+		if (groupId == 0)
+		{
+			return;
+		}
+
+		// Bag and slot belong to the creator's inventory and total count is not known for others,
+		// so they are sent as invalid markers - the client never uses them for other players.
+		m_character->ForEachSubscriberInSight([this, groupId, itemId, amount](TileSubscriber& subscriber)
+		{
+			if (!subscriber.GetGameUnit().IsPlayer())
+			{
+				return;
+			}
+
+			GamePlayerS& other = subscriber.GetGameUnit().AsPlayer();
+			if (!ShouldNotifyOfCreatedItem(m_character->GetGuid(), groupId, other.GetGuid(), other.GetGroupId()))
+			{
+				return;
+			}
+
+			const std::shared_ptr<Player> member = m_manager.GetPlayerByCharacterGuid(other.GetGuid());
+			if (!member)
+			{
+				return;
+			}
+
+			const uint64 creatorGuid = GetCharacterGuid();
+			member->SendPacket([creatorGuid, itemId, amount](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::ItemPushResult);
+				packet
+					<< io::write<uint64>(creatorGuid)
+					<< io::write<uint8>(0)
+					<< io::write<uint8>(1)
+					<< io::write<uint8>(0xFF)
+					<< io::write<uint8>(0xFF)
+					<< io::write<uint32>(itemId)
+					<< io::write<uint16>(amount)
+					<< io::write<uint16>(0);
+				packet.Finish();
+			});
+		});
 	}
 
 	void Player::OnObjectLoot()

@@ -48,6 +48,19 @@ namespace mmo
 		Visible,
 	};
 
+	/// Selects which frames a hit test (Frame::GetChildFrameAt) may descend into.
+	enum class FrameHitTest
+	{
+		/// Only enabled frames are hit (input dispatch: mouse moved, mouse wheel).
+		EnabledOnly,
+		/// Disabled frames are hit as well (mouse down, which then bubbles to a clickable ancestor).
+		IncludeDisabled,
+		/// Enabled frames, plus disabled frames that are clickable (e.g. a locked button that should
+		/// still show its tooltip). Disabled, non-clickable frames stay transparent, so that hover
+		/// lands on their parent (nameplate parts, chat bubbles).
+		Hover,
+	};
+
 	enum class FrameFlags
 	{
 		None = 0,
@@ -315,7 +328,14 @@ namespace mmo
 		void Invalidate(bool includeLayout = true);
 
 		/// Tries to retrieve a child frame at the given position, skipping MousePassThrough subtrees.
+		/// @param allowDisabled True to behave like FrameHitTest::IncludeDisabled, false like FrameHitTest::EnabledOnly.
 		Pointer GetChildFrameAt(const Point& position, bool allowDisabled = true);
+
+		/// Tries to retrieve the deepest child frame at the given position, skipping MousePassThrough subtrees.
+		/// @param position The position in screen pixels.
+		/// @param mode Which frames the hit test may descend into.
+		/// @returns The deepest matching frame, or this frame if no child matches.
+		Pointer GetChildFrameAt(const Point& position, FrameHitTest mode);
 
 		/// Makes this frame capture input events.
 		void CaptureInput();

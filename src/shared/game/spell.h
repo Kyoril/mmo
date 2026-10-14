@@ -277,6 +277,10 @@ namespace mmo
 			FailedUnitNotBehind,
 			FailedUnitNotInfront,
 			FailedLineOfSight,
+			/// The caster's profession skill is missing or below the recipe's requirement.
+			FailedSkillTooLow,
+			/// The caster's bags cannot hold the item the spell creates.
+			FailedInventoryFull,
 
 			/// Custom value used if no error occurred (will not be sent to the client)
 			CastOkay = 0xFF

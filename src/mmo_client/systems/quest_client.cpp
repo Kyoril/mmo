@@ -1204,6 +1204,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Quest query for id " << log_hex_digit(id) << " failed");
+			m_questCache.NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 

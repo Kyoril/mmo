@@ -194,6 +194,10 @@ namespace mmo
 	void WorldInstanceManager::Update(const RegularUpdate& update)
 	{
 		std::unique_lock lock{ m_worldInstanceMutex };
+
+		// Stream nav pages once per map, not once per instance sharing it.
+		m_mapStaticData.Update();
+
 		for (const auto& worldInstance : m_worldInstances)
 		{
 			worldInstance->Update(update);

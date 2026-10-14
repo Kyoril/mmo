@@ -1060,7 +1060,10 @@ namespace mmo
 			const auto result = m_inventory.CanStoreItems(*pair.first, pair.second);
 			if (result != inventory_change_failure::Okay)
 			{
-				// inventoryChangeFailure(result, nullptr, nullptr);
+				if (m_netPlayerWatcher)
+				{
+					m_netPlayerWatcher->OnInventoryError(result);
+				}
 				return false;
 			}
 		}
@@ -3597,6 +3600,14 @@ namespace mmo
 			w << io::write<uint32>(emoteId);
 		}
 
+		// Write the trade skills.
+		const std::vector<TradeSkillData> tradeSkills = object.m_tradeSkills.GetAll();
+		w << io::write<uint8>(static_cast<uint8>(tradeSkills.size()));
+		for (const TradeSkillData& skill : tradeSkills)
+		{
+			w << skill;
+		}
+
 		return w;
 	}
 
@@ -3606,11 +3617,11 @@ namespace mmo
 		r >> reinterpret_cast<GameUnitS &>(object);
 		r >> object.m_inventory;
 		r >> io::read_range(object.m_attributePointEnhancements);
-		// Read spells
-		uint32 spellCount;
+		// Read spells. Loops stop once the reader has failed so a truncated stream cannot spin on garbage counts.
+		uint32 spellCount = 0;
 		r >> io::read<uint32>(spellCount);
 		object.m_spells.clear();
-		for (uint32 i = 0; i < spellCount; ++i)
+		for (uint32 i = 0; i < spellCount && r; ++i)
 		{
 			uint32 spellId;
 			r >> io::read<uint32>(spellId);
@@ -3626,7 +3637,7 @@ namespace mmo
 		uint32 knownSpellCount = 0;
 		r >> io::read<uint32>(knownSpellCount);
 		object.m_knownSpellIds.clear();
-		for (uint32 i = 0; i < knownSpellCount; ++i)
+		for (uint32 i = 0; i < knownSpellCount && r; ++i)
 		{
 			uint32 spellId = 0;
 			r >> io::read<uint32>(spellId);
@@ -3634,10 +3645,10 @@ namespace mmo
 		}
 
 		// Read talent data
-		uint32 talentCount;
+		uint32 talentCount = 0;
 		r >> io::read<uint32>(talentCount);
 		object.m_talents.clear();
-		for (uint32 i = 0; i < talentCount; ++i)
+		for (uint32 i = 0; i < talentCount && r; ++i)
 		{
 			uint32 talentId;
 			uint8 rank;
@@ -3652,7 +3663,7 @@ namespace mmo
 		r >> io::read<uint8>(classCount);
 		object.m_knownClasses.clear();
 		object.m_knownClasses.reserve(classCount);
-		for (uint8 i = 0; i < classCount; ++i)
+		for (uint8 i = 0; i < classCount && r; ++i)
 		{
 			CharacterClassData classData;
 			r >> classData;
@@ -3665,7 +3676,7 @@ namespace mmo
 		r >> io::read<uint16>(auraCount);
 		object.m_deserializedAuras.clear();
 		object.m_deserializedAuras.reserve(auraCount);
-		for (uint16 i = 0; i < auraCount; ++i)
+		for (uint16 i = 0; i < auraCount && r; ++i)
 		{
 			PersistentAuraData aura;
 			r >> aura;
@@ -3677,7 +3688,7 @@ namespace mmo
 		r >> io::read<uint16>(cooldownCount);
 		object.m_deserializedCooldowns.clear();
 		object.m_deserializedCooldowns.reserve(cooldownCount);
-		for (uint16 i = 0; i < cooldownCount; ++i)
+		for (uint16 i = 0; i < cooldownCount && r; ++i)
 		{
 			PersistentCooldownData cooldown;
 			r >> cooldown;
@@ -3688,12 +3699,38 @@ namespace mmo
 		uint16 emoteCount = 0;
 		r >> io::read<uint16>(emoteCount);
 		object.m_knownEmoteIds.clear();
-		for (uint16 i = 0; i < emoteCount; ++i)
+		for (uint16 i = 0; i < emoteCount && r; ++i)
 		{
 			uint32 emoteId = 0;
 			r >> io::read<uint32>(emoteId);
 			object.m_knownEmoteIds.insert(emoteId);
 		}
+
+		// Read the trade skills. Tolerate a stream that ends here (written before they existed).
+		std::vector<TradeSkillData> tradeSkills;
+		uint8 tradeSkillCount = 0;
+		const bool okBefore = static_cast<bool>(r);
+		if (r >> io::read<uint8>(tradeSkillCount))
+		{
+			// A truncated entry keeps the entries read so far; the read still fails.
+			for (uint8 i = 0; i < tradeSkillCount; ++i)
+			{
+				TradeSkillData skill;
+				if (!(r >> skill))
+				{
+					break;
+				}
+
+				tradeSkills.push_back(skill);
+			}
+		}
+		else if (okBefore)
+		{
+			// Only a missing trailer is tolerated; an earlier failure must stay a failure.
+			r.setSuccess();
+		}
+
+		object.m_tradeSkills.SetAll(tradeSkills);
 
 		for (uint32 i = 0; i < 5; ++i)
 		{

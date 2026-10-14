@@ -16,6 +16,7 @@
 
 #include "game/action_button.h"
 #include "game/mail.h"
+#include "game/trade_skill.h"
 #include "game_server/character_data.h"
 #include "math/angle.h"
 
@@ -193,6 +194,9 @@ namespace mmo
 		/// Replaces the persisted auras of a character. Expiration is stored as remaining duration
 		/// (milliseconds), so offline time does not consume the aura.
 		virtual void UpdateCharacterAuras(uint64 characterId, const std::vector<PersistentAuraData>& auras) = 0;
+
+		/// Replaces the persisted profession (trade skill) values and caps of a character.
+		virtual void UpdateCharacterTradeSkills(uint64 characterId, const std::vector<TradeSkillData>& skills) = 0;
 
 		/// Replaces the persisted spell cooldowns of a character. Each entry is the spell id mapped
 		/// to the wall-clock end timestamp (unix seconds) at which the cooldown elapses.

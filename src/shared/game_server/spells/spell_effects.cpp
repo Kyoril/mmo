@@ -7,6 +7,7 @@
 
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_player_s.h"
+#include "game_server/item_notify.h"
 #include "game_server/objects/game_world_object_s.h"
 #include "game_server/spells/aura_container.h"
 #include "base/utilities.h"
@@ -20,6 +21,7 @@
 #include "world/universe.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace mmo
 {
@@ -541,11 +543,20 @@ namespace mmo
 					return;
 				}
 
-				const InventoryChangeFailure result = playerTarget.GetInventory().CreateItems(*item, itemCount);
+				std::map<uint16, uint16> addedBySlot;
+				const InventoryChangeFailure result = playerTarget.GetInventory().CreateItems(*item, itemCount, &addedBySlot);
 				if (result != inventory_change_failure::Okay)
 				{
 					ELOG("Failed to add item: " << result);
 					return;
+				}
+
+				// Let the player (and their group) know about the created items: one notification per
+				// created stack, even if it was split across several inventory slots. The client only
+				// uses the push for chat output, so the first slot stands for the whole stack.
+				if (const auto push = AggregateAddedItems(addedBySlot))
+				{
+					playerTarget.OnItemAdded(push->slot, push->amount, false, true);
 				}
 			}
 		}
@@ -989,6 +1000,51 @@ namespace mmo
 
 				ctx.markAffectedTarget(*targetObject);
 				static_cast<GamePlayerS&>(targetObject->AsUnit()).AddEmote(emoteId);
+			}
+		}
+
+		void HandleTradeSkill(SpellEffectContext& ctx)
+		{
+			const proto::Project& project = ctx.castContext.GetExecutor().GetProject();
+			const uint32 skillId = static_cast<uint32>(ctx.effect.miscvaluea());
+			const proto::SkillEntry* skill = project.skills.getById(skillId);
+			if (!skill)
+			{
+				ELOG("TradeSkill effect of spell " << ctx.castContext.GetSpell().id() << " references unknown skill " << skillId);
+				return;
+			}
+
+			if (ctx.basePoints <= 0)
+			{
+				WLOG("TradeSkill effect of spell " << ctx.castContext.GetSpell().id() << " has no skill cap");
+				return;
+			}
+
+			const uint16 cap = static_cast<uint16>(std::min<int32>(ctx.basePoints, std::numeric_limits<uint16>::max()));
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (targetObject->GetTypeId() != ObjectTypeId::Player)
+				{
+					continue;
+				}
+
+				ctx.markAffectedTarget(*targetObject);
+				auto& player = static_cast<GamePlayerS&>(targetObject->AsUnit());
+				const auto result = player.GetTradeSkills().LearnOrRaise(skillId, cap);
+				if (result == TradeSkillBook::LearnResult::Unchanged)
+				{
+					continue;
+				}
+
+				if (result == TradeSkillBook::LearnResult::Learned)
+				{
+					for (const uint32 spellId : skill->spells())
+					{
+						player.AddSpell(spellId, true);
+					}
+				}
+
+				player.tradeSkillLearned(skillId);
 			}
 		}
 

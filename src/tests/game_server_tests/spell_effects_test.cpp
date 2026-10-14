@@ -13,6 +13,7 @@
 #include "shared/proto_data/project.h"
 #include "shared/proto_data/spells.pb.h"
 #include "shared/proto_data/classes.pb.h"
+#include "shared/proto_data/skills.pb.h"
 #include "asio/io_service.hpp"
 
 #include <limits>
@@ -461,4 +462,63 @@ TEST_CASE("HandleEnergize does nothing for invalid power type", "[spell_effects]
 	SpellEffects::HandleEnergize(effCtx);
 
 	CHECK(ctx.target->Get<uint32>(object_fields::Mana) == 100u);
+}
+
+TEST_CASE("HandleTradeSkill learns the skill and its starter recipes", "[spell_effects][trade_skill]")
+{
+	TestCtx ctx;
+	auto* skill = ctx.project.skills.add(1);
+	skill->set_name("Tailoring");
+	skill->set_category(1);
+	skill->set_cost(0);
+	skill->add_spells(600);
+	auto* recipe = ctx.project.spells.add(600);
+	recipe->set_name("Bolt of Linen Cloth");
+	recipe->add_attributes(spell_attributes::TradeSpell);
+	recipe->add_attributes(0);
+	ctx.Init();
+
+	ctx.effect.set_type(spell_effects::TradeSkill);
+	ctx.effect.set_miscvaluea(1);
+	auto effCtx = ctx.MakeEffectCtx(75);
+	SpellEffects::HandleTradeSkill(effCtx);
+
+	const TradeSkillData* data = ctx.target->GetTradeSkills().Get(1);
+	REQUIRE(data != nullptr);
+	CHECK(data->value == 1);
+	CHECK(data->max == 75);
+	CHECK(ctx.target->HasSpell(600));
+}
+
+TEST_CASE("HandleTradeSkill on a known skill only raises the cap", "[spell_effects][trade_skill]")
+{
+	TestCtx ctx;
+	auto* skill = ctx.project.skills.add(1);
+	skill->set_name("Tailoring");
+	skill->set_category(1);
+	skill->set_cost(0);
+	ctx.Init();
+	ctx.target->SetTradeSkills({ { 1, 40, 75 } });
+
+	ctx.effect.set_type(spell_effects::TradeSkill);
+	ctx.effect.set_miscvaluea(1);
+	auto relogin = ctx.MakeEffectCtx(75);
+	SpellEffects::HandleTradeSkill(relogin);
+	CHECK(ctx.target->GetTradeSkills().Get(1)->value == 40);
+
+	auto journeyman = ctx.MakeEffectCtx(150);
+	SpellEffects::HandleTradeSkill(journeyman);
+	CHECK(ctx.target->GetTradeSkills().Get(1)->max == 150);
+	CHECK(ctx.target->GetTradeSkills().Get(1)->value == 40);
+}
+
+TEST_CASE("HandleTradeSkill ignores unknown skills and non-positive caps", "[spell_effects][trade_skill]")
+{
+	TestCtx ctx;
+	ctx.Init();
+	ctx.effect.set_type(spell_effects::TradeSkill);
+	ctx.effect.set_miscvaluea(42);
+	auto effCtx = ctx.MakeEffectCtx(75);
+	SpellEffects::HandleTradeSkill(effCtx);
+	CHECK_FALSE(ctx.target->GetTradeSkills().Has(42));
 }

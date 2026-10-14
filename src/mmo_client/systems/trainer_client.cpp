@@ -96,7 +96,17 @@ namespace mmo
 			return;
 		}
 
-		// TODO: Skill requirements checks
+		// Skill requirements (profession trainers): the player needs the profession at the required value.
+		if (m_trainerSpells[index].skill != 0)
+		{
+			const auto& tradeSkills = player->GetTradeSkills();
+			const auto skillIt = tradeSkills.find(m_trainerSpells[index].skill);
+			if (skillIt == tradeSkills.end() || skillIt->second.value < m_trainerSpells[index].skillValue)
+			{
+				FrameManager::Get().TriggerLuaEvent("TRAINER_BUY_ERROR", 3);
+				return;
+			}
+		}
 
 		// Send buy packet
 		m_realmConnector.TrainerBuySpell(m_trainerGuid, m_trainerSpells[index].spell->id());
@@ -228,6 +238,10 @@ namespace mmo
 
 		case trainer_result::FailedNotEnoughMoney:
 			FrameManager::Get().TriggerLuaEvent("TRAINER_BUY_ERROR", 1);
+			break;
+
+		case trainer_result::FailedSkillTooLow:
+			FrameManager::Get().TriggerLuaEvent("TRAINER_BUY_ERROR", 3);
 			break;
 
 		case trainer_result::FailedWrongClass:
