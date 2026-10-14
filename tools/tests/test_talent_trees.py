@@ -97,12 +97,19 @@ class TalentTreesTest(unittest.TestCase):
                 else:
                     self.assertGreater(len(spell.effects), 0, f"talent spell {spell.name} has no effects")
 
-    def test_single_rank_talents_have_rank_zero(self):
+    def test_single_rank_talents_have_rank_zero_unless_higher_ranks_continue_them(self):
+        # Higher ranks of a single-rank talent spell are trainer ranks (Fireball rank 2); retired
+        # rank spells of older trees keep their baseid but have no effects.
+        live_rank_spells = {spell_id for talent in self.talents.entry for spell_id in talent.ranks}
+        continued = {spell.baseid for spell in self.spells.entry
+                     if spell.baseid not in (0, spell.id) and spell.id not in live_rank_spells and spell.effects}
         for talent in self.talents.entry:
             if talent.tab not in self.class_tabs:
                 continue
             ranks = [self.spells_by_id[spell_id] for spell_id in talent.ranks]
-            if len(ranks) == 1:
+            if len(ranks) == 1 and ranks[0].id in continued:
+                self.assertEqual((ranks[0].rank, ranks[0].baseid), (1, ranks[0].id), ranks[0].name)
+            elif len(ranks) == 1:
                 self.assertEqual((ranks[0].rank, ranks[0].baseid), (0, 0), ranks[0].name)
             else:
                 self.assertEqual([spell.rank for spell in ranks], list(range(1, len(ranks) + 1)))

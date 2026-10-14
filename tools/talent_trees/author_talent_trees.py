@@ -21,7 +21,10 @@ Design rules that are easy to undo by accident:
 * Real talents use only mechanics the server runs: spell modifiers (matched by family flags),
   stat auras, ProcTriggerSpell and active spells. Anything else is a placeholder: shown in the
   tree with its planned effect, refused by the server, dimmed by the client.
-* Single-rank talent spells use rank 0 and baseid 0 (no "Rank 1" line in the tooltip).
+* A spell has rank info only when it has several ranks. Single-rank talent spells use rank 0 and
+  baseid 0, unless higher ranks continue them (a trainer rank whose baseid points at the talent
+  spell, e.g. Fireball rank 2, baseid 4): then the talent spell is rank 1 with baseid set to
+  itself. The talent tree's tooltip leaves the spell rank out (it shows the talent's points).
 * Descriptions use literal numbers for modifiers: the tooltip formatter prints $s raw, so a
   negative cast time modifier would read "-400".
 * Old rank spells that a talent no longer uses are neutered (effects removed). Characters who
@@ -1360,6 +1363,7 @@ def build(spells, talents, tabs):
     removed = [entry.id for entry in talents.entry if entry.tab in class_tabs and entry.id not in authored_talents]
 
     used_rank_spells = set()
+    single_rank_spells = set()
     labels = dict(UI_STRINGS)
     for cls in CLASSES:
         tab = tabs_by_id.get(cls["tab_id"])
@@ -1405,7 +1409,9 @@ def build(spells, talents, tabs):
                 for rank_index, rank in enumerate(ranks):
                     spell = apply_spell(spells_by_id, spells, rank, cls["classmask"])
                     if len(ranks) == 1:
+                        # Rank 1 instead when trainer ranks continue the spell (see below).
                         spell.rank, spell.baseid = 0, 0
+                        single_rank_spells.add(rank.id)
                     else:
                         spell.rank, spell.baseid = rank_index + 1, ranks[0].id
                     spell.prevspell = ranks[rank_index - 1].id if rank_index > 0 else 0
@@ -1440,6 +1446,15 @@ def build(spells, talents, tabs):
             spell.ClearField("description_loc")
             spell.ClearField("auratext_loc")
             neutered.append(spell_id)
+
+    # A single-rank talent spell that higher ranks continue (trainer ranks such as Fireball rank 2,
+    # whose baseid points at it) is rank 1 of that chain. Retired rank spells do not count: their
+    # baseid is left over from an older tree.
+    continued = {spell.baseid for spell in spells.entry
+                 if spell.baseid not in (0, spell.id) and spell.id not in candidates and spell.id not in used_rank_spells}
+    for spell_id in sorted(single_rank_spells & continued):
+        spell = spells_by_id[spell_id]
+        spell.rank, spell.baseid = 1, spell_id
 
     for talent_id in removed:
         index = next(i for i, entry in enumerate(talents.entry) if entry.id == talent_id)
