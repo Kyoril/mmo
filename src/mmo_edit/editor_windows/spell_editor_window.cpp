@@ -487,7 +487,7 @@ namespace mmo
 			ImGui::SameLine();
 			ImGui::Text("Rank");
 			ImGui::SameLine();
-			DrawHelpMarker("Spell rank (0 for base rank)");
+			DrawHelpMarker("Spell rank: 0 for a spell without further ranks; 1 for the first rank of a chain (Base ID = its own ID)");
 
 			int32 baseId = currentEntry.baseid();
 			ImGui::SetNextItemWidth(100);

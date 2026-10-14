@@ -36,8 +36,8 @@ class BriarwatchBalanceDataTest(unittest.TestCase):
         rank1 = self.abb.by_id(self.spells, self.abb.FIREBALL)
         rank2 = self.abb.by_id(self.spells, self.abb.FIREBALL_R2)
         self.assertIsNotNone(rank2)
-        # Spell 4 belongs to the talent tree script (single-rank talent spells use rank 0 / baseid 0).
-        self.assertEqual((rank1.rank, rank1.baseid), (0, 0))
+        # Spell 4 belongs to the talent tree script; rank 2 continuing it makes it rank 1.
+        self.assertEqual((rank1.rank, rank1.baseid), (1, self.abb.FIREBALL))
         self.assertEqual((rank2.rank, rank2.baseid), (2, self.abb.FIREBALL))
         self.assertEqual(rank2.familyflags, rank1.familyflags)
 
