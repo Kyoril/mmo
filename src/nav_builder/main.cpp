@@ -1,5 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+#include <atomic>
+#include <mutex>
 #include <thread>
 
 #include "assets/asset_registry.h"
@@ -18,6 +20,15 @@
 
 namespace mmo
 {
+	/// Orders the default log levels from chattiest to most severe. LogImportance cannot do this: Info and Warning share one.
+	int32 LogLevelRank(const LogLevel& level)
+	{
+		if (&level == &DebugLevel) return 0;
+		if (&level == &InfoLevel) return 1;
+		if (&level == &WarningLevel) return 2;
+		return 3;
+	}
+
 	/// Collects the footprint of every door spawned on the map whose directory is the world name.
 	/// @param project The loaded editor project.
 	/// @param worldName The world being built (MapEntry::directory()).
@@ -169,10 +180,25 @@ int main(int argc, char* argv[])
 {
 	auto logOptions = mmo::g_DefaultConsoleLogOptions;
 
+	// Entries below this level are not printed. Info keeps the progress output and hides the per-model debug noise
+	// that used to bury warnings; --log-level debug brings it back.
+	int32 minRank = mmo::LogLevelRank(mmo::InfoLevel);
+	std::atomic<uint32> warningCount{ 0 };
+
 	// Add cout to the list of log output streams and make logging thread safe, so we don't write garbage to the console window
 	std::mutex coutLogMutex;
 	// Scoped: the slot captures locals of main, so it must not outlive main into the static log's destruction.
-	const mmo::scoped_connection coutLogConnection{ mmo::g_DefaultLog.signal().connect([&coutLogMutex, &logOptions](const mmo::LogEntry& entry) {
+	const mmo::scoped_connection coutLogConnection{ mmo::g_DefaultLog.signal().connect([&coutLogMutex, &logOptions, &minRank, &warningCount](const mmo::LogEntry& entry) {
+		if (entry.level == &mmo::WarningLevel)
+		{
+			++warningCount;
+		}
+
+		if (mmo::LogLevelRank(*entry.level) < minRank)
+		{
+			return;
+		}
+
 		std::scoped_lock lock{ coutLogMutex };
 		printLogEntry(std::cout, entry, logOptions);
 		}) };
@@ -187,6 +213,8 @@ int main(int argc, char* argv[])
 	mmo::String worldName;
 	mmo::String directoryPath;
 	mmo::String projectPath;
+	mmo::String logLevel = "info";
+	bool noDoors = false;
 
 	// Per default, use all available threads
 	size_t concurrentThreads = std::thread::hardware_concurrency();
@@ -204,6 +232,8 @@ int main(int argc, char* argv[])
 		("w,world", "sets world name to build", cxxopts::value<std::string>(worldName))
 		("o,out", "set target directory", cxxopts::value<std::string>(directoryPath))
 		("p,project", "editor data folder (e.g. data/editor/data) to read door spawns from", cxxopts::value<std::string>(projectPath))
+		("no-doors", "build without door polys (scratch meshes only; never for data/editor)", cxxopts::value<bool>(noDoors))
+		("l,log-level", "error, warning, info (default, progress only) or debug (every rasterized model)", cxxopts::value<std::string>(logLevel))
 		("j,concurrency", "The number of threads used for building", cxxopts::value<size_t>(concurrentThreads))
 		;
 
@@ -225,6 +255,37 @@ int main(int argc, char* argv[])
 			ILOG(options.help());
 		}
 
+		if (logLevel == "error")
+		{
+			minRank = mmo::LogLevelRank(mmo::ErrorLevel);
+		}
+		else if (logLevel == "warning")
+		{
+			minRank = mmo::LogLevelRank(mmo::WarningLevel);
+		}
+		else if (logLevel == "info")
+		{
+			minRank = mmo::LogLevelRank(mmo::InfoLevel);
+		}
+		else if (logLevel == "debug")
+		{
+			minRank = mmo::LogLevelRank(mmo::DebugLevel);
+		}
+		else
+		{
+			ELOG("Unknown --log-level '" << logLevel << "' (expected error, warning, info or debug)");
+			return 1;
+		}
+
+		// A mesh built without door polys looks fine but lets creatures path through closed doors, and nothing
+		// at build time says so. Make leaving them out a deliberate choice.
+		if (projectPath.empty() && !noDoors)
+		{
+			ELOG("No --project given: the nav mesh would be built without door polys, so closed doors would not block creature paths. "
+				"Pass -p <editor data folder> (e.g. -p data/editor/data), or --no-doors for a scratch mesh.");
+			return 1;
+		}
+
 		// We always want at least a single worker thread
 		if (concurrentThreads == 0) concurrentThreads = 1;
 
@@ -233,11 +294,7 @@ int main(int argc, char* argv[])
 		mmo::AssetRegistry::Initialize(dataDirectory, archives);
 
 		std::vector<mmo::nav::DoorVolume> doors;
-		if (projectPath.empty())
-		{
-			WLOG("No --project given: doors are not baked into the nav mesh, so closed doors will not block paths");
-		}
-		else
+		if (!projectPath.empty())
 		{
 			mmo::proto::Project project;
 			if (!project.load(projectPath))
@@ -250,7 +307,13 @@ int main(int argc, char* argv[])
 		}
 
 		// Run the actual tool
-		return mmo::run(worldName, directoryPath, concurrentThreads, std::move(doors));
+		const int32 exitCode = mmo::run(worldName, directoryPath, concurrentThreads, std::move(doors));
+		if (warningCount > 0)
+		{
+			WLOG("The build logged " << warningCount.load() << " warning(s) - scroll up or use --log-level warning to read them");
+		}
+
+		return exitCode;
 	}
 	catch (const cxxopts::OptionException& e)
 	{

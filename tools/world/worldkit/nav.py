@@ -52,7 +52,7 @@ def build_nav(directory: str, out_root: Path, repo: Path = REPO, runner=subproce
     exe = tool_exe("nav_builder", repo)
     out_root.mkdir(parents=True, exist_ok=True)
     try:
-        proc = runner([str(exe), "-d", str(client_root(repo)), "-w", directory, "-o", str(out_root)],
+        proc = runner([str(exe), "-d", str(client_root(repo)), "-w", directory, "-o", str(out_root), "--no-doors"],
                       capture_output=True, text=True, errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         raise NavError(f"nav_builder took too long (over {timeout:g} s) for {directory}") from None
