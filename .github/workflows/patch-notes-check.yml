@@ -1,0 +1,38 @@
+name: Patch Notes Check
+
+# Writes the patch notes for the range between the two newest nightly tags with the real
+# CLAUDE_CODE_OAUTH_TOKEN, exactly as the nightly's publish job does, and publishes nothing.
+# Fails unless Claude wrote them, so a bad token shows up here instead of in a release.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Write patch notes
+        shell: bash
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          python3 -m pip install --quiet grpcio-tools || echo "grpcio-tools unavailable; notes without data names"
+          sudo npm install --global @anthropic-ai/claude-code
+          export PATH="$(npm prefix -g)/bin:$PATH"
+          claude --version
+          tags=($(git tag -l 'nightly-*' --sort=-creatordate | head -2))
+          commit=$(git rev-parse "${tags[0]:-HEAD}^{commit}")
+          previous=$(git rev-parse "${tags[1]:-HEAD~20}^{commit}")
+          echo "range ${tags[1]:-HEAD~20} .. ${tags[0]:-HEAD}"
+          mkdir -p dist
+          python3 tools/release/patch_notes.py --repo . --commit "$commit" --previous "$previous" \
+            --version check --out dist/patch_notes.json --markdown notes.md
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
+          python3 -c "import json,sys; s=json.load(open('dist/patch_notes.json'))['source']; print('source:', s); sys.exit(s != 'ai')"
