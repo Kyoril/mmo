@@ -197,6 +197,13 @@ class Generate(unittest.TestCase):
 		notes = patch_notes.generate(self.repo, self.first, self.head, use_model=False, run=FakeRun(json.dumps(GOOD)), log=self.logs.append)
 		self.assertEqual(notes["source"], "fallback")
 
+	def test_failure_names_the_cause_behind_the_usage_block(self):
+		stdout = json.dumps({"duration_api_ms": 0, "usage": {"input_tokens": 0, "padding": "x" * 400},
+			"is_error": True, "subtype": "error_during_execution", "result": "Invalid API key"})
+		patch_notes.generate(self.repo, self.first, self.head, run=FakeRun(stdout=stdout, returncode=1), log=self.logs.append)
+		self.assertIn("Invalid API key", self.logs[-1])
+		self.assertTrue(self.logs[-1].startswith("::warning::"))
+
 	@unittest.mock.patch("shutil.which", return_value="/usr/bin/claude")
 	def test_invocation_is_tool_less_with_our_prompt(self, _which):
 		run = FakeRun(json.dumps(GOOD))

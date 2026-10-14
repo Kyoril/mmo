@@ -286,11 +286,26 @@ def call_claude(context, model=DEFAULT_MODEL, run=subprocess.run):
 		result = run(_claude_command(model), input=context, capture_output=True, text=True,
 			encoding="utf-8", errors="replace", timeout=TIMEOUT_S, cwd=cwd)
 	if result.returncode != 0:
-		raise OSError("claude exited with {}: {}".format(result.returncode, (result.stderr or result.stdout or "").strip()[:300]))
+		raise OSError("claude exited with {}: {}".format(result.returncode, failure_reason(result)))
 	envelope = json.loads(result.stdout)
 	if envelope.get("is_error"):
 		raise ValueError("claude reported an error: {}".format(str(envelope.get("result"))[:300]))
 	return parse_answer(envelope["result"])
+
+
+def failure_reason(result):
+	"""Why a claude run failed. With --output-format json the cause is in the envelope's
+	`result`, far behind the usage block, so a plain prefix of stdout never shows it."""
+	stdout = (result.stdout or "").strip()
+	try:
+		envelope = json.loads(stdout)
+	except ValueError:
+		envelope = None
+	if isinstance(envelope, dict):
+		parts = [str(envelope.get(key)) for key in ("subtype", "api_error_status", "result") if envelope.get(key) not in (None, "")]
+		if parts:
+			return " | ".join(parts)[:500]
+	return ((result.stderr or "").strip() or stdout)[:500]
 
 
 def parse_answer(text):
@@ -361,7 +376,8 @@ def generate(repo, previous, commit, use_model=True, model=DEFAULT_MODEL, data=N
 			notes = validate_notes(call_claude(build_context(commits, data), model, run))
 			return dict(notes, source="ai", model=model)
 		except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
-			log("patch notes: model call failed, using commit subjects: {}: {}".format(type(error).__name__, error))
+			# A GitHub annotation, so a silent fallback shows up on the run summary.
+			log("::warning::patch notes: model call failed, using commit subjects: {}: {}".format(type(error).__name__, error))
 	else:
 		log("patch notes: model disabled, using commit subjects")
 	return dict(fallback_notes(commits), source="fallback", model=None)
