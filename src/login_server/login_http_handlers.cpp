@@ -195,7 +195,6 @@ namespace mmo
 		}
 
 		bool hasLetter = false;
-		bool hasDigit = false;
 		bool validChars = true;
 		for (const char c : id)
 		{
@@ -203,11 +202,7 @@ namespace mmo
 			{
 				hasLetter = true;
 			}
-			else if (std::isdigit(static_cast<unsigned char>(c)))
-			{
-				hasDigit = true;
-			}
-			else
+			else if (!std::isdigit(static_cast<unsigned char>(c)))
 			{
 				validChars = false;
 				break;
@@ -223,11 +218,11 @@ namespace mmo
 			return;
 		}
 
-		if (!hasLetter || !hasDigit)
+		if (!hasLetter)
 		{
 			response.setStatus(net::http::OutgoingAnswer::BadRequest);
 			jsonResponse["status"] = "INVALID_PARAMETER";
-			jsonResponse["message"] = "Account name must contain at least one letter and one digit";
+			jsonResponse["message"] = "Account name must contain at least one letter";
 			SendJsonResponse(response, jsonResponse);
 			return;
 		}
