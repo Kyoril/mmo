@@ -279,12 +279,22 @@ def _claude_command(model):
 		"--system-prompt", INSTRUCTIONS]
 
 
+def _claude_env():
+	"""The environment for claude, with the OAuth token trimmed: a secret pasted with a trailing
+	newline or quotes is rejected as a login, with no hint why."""
+	env = dict(os.environ)
+	token = env.get("CLAUDE_CODE_OAUTH_TOKEN")
+	if token is not None:
+		env["CLAUDE_CODE_OAUTH_TOKEN"] = token.strip().strip("\"'").strip()
+	return env
+
+
 def call_claude(context, model=DEFAULT_MODEL, run=subprocess.run):
 	"""The model's JSON answer as a dict. Raises on any process or format error."""
 	# A neutral working directory keeps any CLAUDE.md out of the prompt.
 	with tempfile.TemporaryDirectory() as cwd:
 		result = run(_claude_command(model), input=context, capture_output=True, text=True,
-			encoding="utf-8", errors="replace", timeout=TIMEOUT_S, cwd=cwd)
+			encoding="utf-8", errors="replace", timeout=TIMEOUT_S, cwd=cwd, env=_claude_env())
 	if result.returncode != 0:
 		raise OSError("claude exited with {}: {}".format(result.returncode, failure_reason(result)))
 	envelope = json.loads(result.stdout)
