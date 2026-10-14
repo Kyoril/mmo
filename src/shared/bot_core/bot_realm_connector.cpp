@@ -451,6 +451,8 @@ namespace mmo
 		// Spell/state packets
 		RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &BotRealmConnector::OnInitialSpells);
 		RegisterPacketHandler(game::realm_client_packet::LearnedSpell, *this, &BotRealmConnector::OnLearnedSpell);
+		RegisterPacketHandler(game::realm_client_packet::TradeSkills, *this, &BotRealmConnector::OnTradeSkills);
+		RegisterPacketHandler(game::realm_client_packet::TradeSkillUpdate, *this, &BotRealmConnector::OnTradeSkillUpdate);
 		RegisterPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &BotRealmConnector::OnUnlearnedSpell);
 		RegisterPacketHandler(game::realm_client_packet::SpellStart, *this, &BotRealmConnector::OnSpellStart);
 		RegisterPacketHandler(game::realm_client_packet::SpellGo, *this, &BotRealmConnector::OnSpellGo);
@@ -1880,6 +1882,62 @@ namespace mmo
 
 		self->LearnSpell(spellId);
 		ClearSpellStateIssue();
+		UnitUpdated(*self);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnTradeSkills(game::IncomingPacket& packet)
+	{
+		BotUnit* self = GetSelfMutable();
+		if (!self)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Pass;
+		}
+
+		std::vector<TradeSkillData> skills;
+		skills.reserve(count);
+		for (uint8 i = 0; i < count; ++i)
+		{
+			TradeSkillData data;
+			if (!(packet >> data))
+			{
+				return PacketParseResult::Pass;
+			}
+
+			skills.push_back(data);
+		}
+
+		self->ClearTradeSkills();
+		for (const TradeSkillData& data : skills)
+		{
+			self->SetTradeSkill(data.skillId, data.value, data.max);
+		}
+
+		UnitUpdated(*self);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnTradeSkillUpdate(game::IncomingPacket& packet)
+	{
+		BotUnit* self = GetSelfMutable();
+		if (!self)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		TradeSkillData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Pass;
+		}
+
+		self->SetTradeSkill(data.skillId, data.value, data.max);
 		UnitUpdated(*self);
 		return PacketParseResult::Pass;
 	}

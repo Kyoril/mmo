@@ -9,6 +9,7 @@
 #include "game_server/spells/spell_effects.h"
 #include "game_server/spells/spell_interrupt_rules.h"
 #include "game/id_mask.h"
+#include "game_server/spells/trade_skill_cast_rules.h"
 
 #include "base/utilities.h"
 #include "game_server/world/world_instance.h"
@@ -461,6 +462,18 @@ namespace mmo
 				SendEndCast(spell_cast_result::FailedReagents);
 				return false;
 			}
+		}
+
+		if (const SpellCastResult skillResult = CheckTradeSkillRequirement(m_spell, playerCaster->GetTradeSkills()); skillResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(skillResult);
+			return false;
+		}
+
+		if (const SpellCastResult spaceResult = CheckCreateItemSpace(m_spell, playerCaster->GetProject(), playerCaster->GetInventory()); spaceResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(spaceResult);
+			return false;
 		}
 
 		return true;
@@ -1071,6 +1084,7 @@ namespace mmo
 			{se::ResetTalents,           SpellEffects::HandleResetTalents},
 			{se::ChangeClass,            SpellEffects::HandleChangeClass},
 			{se::TeachEmote,             SpellEffects::HandleTeachEmote},
+			{se::TradeSkill,             SpellEffects::HandleTradeSkill},
 			{se::Proficiency,            SpellEffects::HandleProficiency},
 			{se::TriggerSpell,           SpellEffects::HandleTriggerSpell},
 		};
@@ -1342,6 +1356,16 @@ namespace mmo
 			return;
 		}
 
+		// Bags can fill up while a long craft is being cast; end the cast before anything is consumed.
+		if (GamePlayerS* playerCaster = m_context.GetPlayerExecutor())
+		{
+			if (const SpellCastResult spaceResult = CheckCreateItemSpace(m_spell, playerCaster->GetProject(), playerCaster->GetInventory()); spaceResult != spell_cast_result::CastOkay)
+			{
+				SendEndCast(spaceResult);
+				return;
+			}
+		}
+
 		if (!ConsumePower()) 
 		{
 			return;
@@ -1358,6 +1382,15 @@ namespace mmo
 		}
 
 		SendEndCast(spell_cast_result::CastOkay);
+
+		if (GamePlayerS* playerCaster = m_context.GetPlayerExecutor(); playerCaster && m_spell.skill() != 0)
+		{
+			std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+			if (ApplyTradeSkillUp(m_spell, playerCaster->GetTradeSkills(), distribution(randomGenerator)))
+			{
+				playerCaster->tradeSkillChanged(m_spell.skill());
+			}
+		}
 
 		if (m_spell.speed() > 0.0f)
 		{

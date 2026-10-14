@@ -982,6 +982,7 @@ namespace mmo
 			"spell_visualizations",
 			"area_triggers",
 			"proficiencies",
+			"skills",
 			"item_classes",
 			"item_subclasses",
 			"chat_channels",

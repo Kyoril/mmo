@@ -116,6 +116,12 @@ message SpellEntry {
 	optional uint32 skill = 55;
 	optional uint32 trivialskilllow = 56;
 	optional uint32 trivialskillhigh = 57;
+	/// Minimum profession skill to cast this recipe (orange from here).
+	optional uint32 skillrequired = 75;
+	/// Profession skill from which the recipe is green.
+	optional uint32 skillgreen = 76;
+	/// SkillCategory.id of the recipe within its skill.
+	optional uint32 craftcategory = 77;
 	optional uint32 racemask = 58;
 	optional uint32 classmask = 59;
 	repeated SpellReagent reagents = 60;

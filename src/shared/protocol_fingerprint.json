@@ -131,8 +131,8 @@
 		]
 	},
 	"game": {
-		"version": 20,
-		"fingerprint": "sha256:b0b9dbf55beaa8e1ef014270e2fabc14f04628aab42ad9970ce578a575467d7e",
+		"version": 21,
+		"fingerprint": "sha256:ce8a1c5ac278dd750f01a15d86c5d1469304f997e5984ed1ab59c4d2b082f05d",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -141,6 +141,7 @@
 			"src/shared/game/mail.h": "sha256:665ffaee5b569667ca8c8a264de39f333a3475b6779175b8223bc7eeab2e2c54",
 			"src/shared/game/movement_info.h": "sha256:76a78cd18e8906426a99759b10104a524dec328fddd92c36646f4dcd4f0ee976",
 			"src/shared/game/object_type_id.h": "sha256:e0f5aa67196461299cd23b8f84b06cf6f9ef3f7e4e49c0f43ded8ecbf24109d0",
+			"src/shared/game/trade_skill_data.h": "sha256:1bff308d1252a2e0a04b9ca4e54607fbcf381bb287497bdc71738bd93364afc5",
 			"src/shared/game_protocol/game_crypt.cpp": "sha256:0e29c28c573ee10abb08b313a9beaf1d1afd0f1064af07ad313ae69e6f32d9db",
 			"src/shared/game_protocol/game_crypt.h": "sha256:278f155eab32b2afb4bdbf5f2f1907c286458b355f86fa2e2c0563923c7a0e17",
 			"src/shared/game_protocol/game_incoming_packet.cpp": "sha256:42f34bd21cb0a5424626cb2444f5af0b634c7ceb92a178c4e994ca56d6742087",
@@ -148,7 +149,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:1e90096678f5821a73e41851cb703ab9bf9d383dab0fc34cfde45750ce2bfac0"
+			"src/shared/game_protocol/game_protocol.h": "sha256:f15f5cd35093077a700115902b60cf46740932c8a86eacf23a1a50e1e2e007f9"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -585,7 +586,7 @@
 			"game::realm_client_packet::ChatMessage = 23",
 			"game::realm_client_packet::ClassXpUpdate = 168",
 			"game::realm_client_packet::CompressedUpdateObject = 9",
-			"game::realm_client_packet::Count_ = 181",
+			"game::realm_client_packet::Count_ = 183",
 			"game::realm_client_packet::CreatureMove = 38",
 			"game::realm_client_packet::CreatureQueryResult = 42",
 			"game::realm_client_packet::DebugLineOfSightResult = 149",
@@ -734,6 +735,8 @@
 			"game::realm_client_packet::TradeRequestResult = 144",
 			"game::realm_client_packet::TradeSessionClosed = 146",
 			"game::realm_client_packet::TradeSessionOpened = 145",
+			"game::realm_client_packet::TradeSkillUpdate = 182",
+			"game::realm_client_packet::TradeSkills = 181",
 			"game::realm_client_packet::TradeUpdate = 147",
 			"game::realm_client_packet::TrainerBuyError = 80",
 			"game::realm_client_packet::TrainerBuySucceeded = 81",

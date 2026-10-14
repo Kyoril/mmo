@@ -68,6 +68,7 @@
 // Data categories / content
 #define ICON_FA_DATABASE               "\xEF\x87\x80"
 #define ICON_FA_MAGIC                  "\xEF\x83\x90"
+#define ICON_FA_SCISSORS               "\xEF\x83\x84"
 #define ICON_FA_BOLT                   "\xEF\x83\xA7"
 #define ICON_FA_FLASK                  "\xEF\x83\x83"
 #define ICON_FA_STAR                   "\xEF\x80\x85"

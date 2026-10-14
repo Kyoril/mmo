@@ -5,9 +5,11 @@
 #include "item_display_applier.h"
 #include "game/item.h"
 #include "game/movement_info.h"
+#include "game/trade_skill.h"
 #include "scene_graph/manual_render_object.h"
 
 #include <array>
+#include <map>
 
 namespace mmo
 {
@@ -132,6 +134,15 @@ namespace mmo
 		/// Returns the active class id reported by the last KnownClasses packet (0 if unknown).
 		[[nodiscard]] uint32 GetActiveKnownClassId() const { return m_activeKnownClassId; }
 
+		/// Replaces the cached profession skills (full TradeSkills packet).
+		void SetTradeSkills(std::map<uint32, TradeSkillData> skills) { m_tradeSkills = std::move(skills); }
+
+		/// Inserts or updates the cached state of one profession skill (TradeSkillUpdate packet).
+		void SetTradeSkill(const TradeSkillData& data) { m_tradeSkills[data.skillId] = data; }
+
+		/// Returns the cached profession skills by skill id.
+		[[nodiscard]] const std::map<uint32, TradeSkillData>& GetTradeSkills() const { return m_tradeSkills; }
+
 		/// Resolves the class definition for a known-class list entry, or nullptr if the index is out
 		/// of range or the class id is unknown to the client project.
 		[[nodiscard]] const proto_client::ClassEntry* GetKnownClassEntry(size_t index) const;
@@ -232,6 +243,9 @@ namespace mmo
 
 		/// Active class id reported by the last KnownClasses packet (0 if none received yet).
 		uint32 m_activeKnownClassId{ 0 };
+
+		/// Profession skills of the character by skill id, replicated via the TradeSkills packets.
+		std::map<uint32, TradeSkillData> m_tradeSkills;
 
 		/// Unlocked (non-default) emote ids, replicated via InitialEmotes / EmoteLearned.
 		std::set<uint32> m_knownEmoteIds;

@@ -46,6 +46,20 @@ class GitHub(unittest.TestCase):
 			self.assertEqual(api_request.headers["authorization"], "Bearer tok")
 			self.assertNotIn("authorization", stub.find("GET", "/storage/blob")[0].headers)
 
+	def test_dispatch_workflow_posts_ref(self):
+		with StubServer() as stub:
+			stub.route("POST", "/repos/Kyoril/mmo/actions/workflows/nightly-release.yml/dispatches", (204, None))
+			GitHubClient("Kyoril/mmo", "tok", Http(), stub.url).dispatch_workflow("nightly-release.yml", "develop")
+			request = stub.requests[0]
+			self.assertEqual(request.json(), {"ref": "develop"})
+			self.assertEqual(request.headers["authorization"], "Bearer tok")
+
+	def test_dispatch_workflow_errors_raise(self):
+		with StubServer() as stub:
+			stub.route("POST", "/repos/Kyoril/mmo/actions/workflows/nightly-release.yml/dispatches", (403, {"message": "Resource not accessible"}))
+			with self.assertRaises(HttpError):
+				GitHubClient("Kyoril/mmo", "tok", Http(), stub.url).dispatch_workflow("nightly-release.yml", "develop")
+
 	def test_newest_versioned_release_sorts_semver_and_skips_unreleased_tags(self):
 		with StubServer() as stub:
 			stub.route("GET", "/repos/Kyoril/mmo/git/matching-refs/tags/launcher-v", (200, [

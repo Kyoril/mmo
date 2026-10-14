@@ -57,6 +57,7 @@
 #include "game/shutdown_countdown.h"
 #include "game/damage_school.h"
 #include "game_client/game_player_c.h"
+#include "game/trade_skill_announce.h"
 #include "game/spell_target_map.h"
 #include "game_client/game_item_c.h"
 #include "ui/chat_bubble_frame.h"
@@ -123,6 +124,17 @@ namespace mmo
 
 	namespace
 	{
+		/// Forgets all DB cache queries still in flight, so the next Get for such an entry queries again.
+		void ResetInFlightCacheQueries(ICacheProvider& cache)
+		{
+			cache.GetItemCache().ResetInFlightQueries();
+			cache.GetCreatureCache().ResetInFlightQueries();
+			cache.GetQuestCache().ResetInFlightQueries();
+			cache.GetNameCache().ResetInFlightQueries();
+			cache.GetGuildCache().ResetInFlightQueries();
+			cache.GetObjectCache().ResetInFlightQueries();
+		}
+
 		static ConsoleVar *s_debugOutputPathVar = nullptr;
 
 		static ConsoleVar *s_renderShadowsVar = nullptr;
@@ -366,6 +378,9 @@ namespace mmo
 		// The game clock outlives the world state; it was not updated while we were out of the world
 		m_gameTime.ResetUpdateReference();
 
+		// Queries sent while out of the world never had a handler for their answers.
+		ResetInFlightCacheQueries(m_cache);
+
 		CombatVignette::Init();
 
 		ObjectMgr::Initialize(m_project, m_partyInfo);
@@ -566,6 +581,10 @@ namespace mmo
 		// clients there can still arm a goodbye line (e.g. QuestClient::Shutdown -> CloseQuest),
 		// so the reset that clears/cancels all pending state needs to happen afterwards.
 		UnitGossipVoice::Get().Reset();
+
+		// Answers to queries still in flight are dropped once the packet handlers are gone. This also
+		// runs after the subsystem shutdowns above, which can still query the caches through Lua.
+		ResetInFlightCacheQueries(m_cache);
 
 		RemoveGameplayCommands();
 
@@ -1876,6 +1895,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::Emote, *this, &WorldState::OnEmote);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::KnownClasses, *this, &WorldState::OnKnownClasses);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TradeSkills, *this, &WorldState::OnTradeSkills);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TradeSkillUpdate, *this, &WorldState::OnTradeSkillUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ClassXpUpdate, *this, &WorldState::OnClassXpUpdate);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
@@ -3304,6 +3325,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Unable to retrieve unit name for unit " << log_hex_digit(guid));
+			m_cache.GetNameCache().NotifyQueryFailed(guid);
 			return PacketParseResult::Pass;
 		}
 
@@ -3349,6 +3371,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetCreatureCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3356,6 +3379,7 @@ namespace mmo
 		if (!(packet >> io::read_string(entry.name) >> io::read_string(entry.subname) >> io::read_string(entry.stealthAlertSound)))
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetCreatureCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3375,6 +3399,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Item query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetItemCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3403,6 +3428,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Object query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetObjectCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3721,6 +3747,60 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnTradeSkills(game::IncomingPacket &packet)
+	{
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::map<uint32, TradeSkillData> skills;
+		for (uint8 i = 0; i < count; ++i)
+		{
+			TradeSkillData data;
+			if (!(packet >> data))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			skills[data.skillId] = data;
+		}
+
+		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(m_playerController->GetControlledUnit()))
+		{
+			player->SetTradeSkills(std::move(skills));
+		}
+
+		FrameManager::Get().TriggerLuaEvent("TRADE_SKILLS_CHANGED");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnTradeSkillUpdate(game::IncomingPacket &packet)
+	{
+		TradeSkillData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		bool skillIncreased = false;
+		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(m_playerController->GetControlledUnit()))
+		{
+			skillIncreased = ShouldAnnounceSkillIncrease(player->GetTradeSkills(), data);
+			player->SetTradeSkill(data);
+		}
+
+		FrameManager::Get().TriggerLuaEvent("TRADE_SKILL_UPDATE", data.skillId);
+		if (skillIncreased)
+		{
+			FrameManager::Get().TriggerLuaEvent("TRADE_SKILL_INCREASED", data.skillId, static_cast<int>(data.value));
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult WorldState::OnSpellLearnedOrUnlearned(game::IncomingPacket &packet)
 	{
 		uint32 spellId;
@@ -3736,6 +3816,16 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		// Learning or unlearning a profession or a recipe changes what the profession window shows.
+		bool affectsTradeSkills = (spell->attributes(0) & spell_attributes::TradeSpell) != 0;
+		for (const auto &effect : spell->effects())
+		{
+			if (effect.type() == spell_effects::TradeSkill)
+			{
+				affectsTradeSkills = true;
+			}
+		}
+
 		ASSERT(m_playerController->GetControlledUnit());
 		if (packet.GetId() == game::realm_client_packet::LearnedSpell)
 		{
@@ -3743,6 +3833,7 @@ namespace mmo
 
 			// Add this spell to the players action bar if there is any unassigned button in the main bar, but only if it is not a passive spell and its an ability
 			if ((spell->attributes(0) & spell_attributes::Passive) == 0 &&
+				(spell->attributes(0) & spell_attributes::TradeSpell) == 0 &&
 				(spell->attributes(0) & spell_attributes::Ability) != 0)
 			{
 				int32 emptySlot = -1;
@@ -3792,6 +3883,11 @@ namespace mmo
 			// (greyed out / made unusable) to reflect that the player no longer knows it.
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELLS_CHANGED");
 			FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
+		}
+
+		if (affectsTradeSkills)
+		{
+			FrameManager::Get().TriggerLuaEvent("TRADE_SKILLS_CHANGED");
 		}
 
 		return PacketParseResult::Pass;
@@ -4133,7 +4229,9 @@ namespace mmo
 			"SPELL_CAST_FAILED_TARGET_NOT_DEAD",
 			"SPELL_CAST_FAILED_UNIT_NOT_BEHIND",
 			"SPELL_CAST_FAILED_UNIT_NOT_INFRONT",
-			"SPELL_CAST_FAILED_LINE_OF_SIGHT"};
+			"SPELL_CAST_FAILED_LINE_OF_SIGHT",
+			"SPELL_CAST_FAILED_SKILL_TOO_LOW",
+			"SPELL_CAST_FAILED_INVENTORY_FULL"};
 
 		static const char *s_unknown = "UNKNOWN";
 
@@ -5823,10 +5921,15 @@ namespace mmo
 
 	void WorldState::OnItemPushCallback(const ItemInfo &itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount)
 	{
-		// TODO: UI events for chat display
+		// Bag and subslot describe the pushing player's own inventory and are never used for other players.
 		if (characterGuid == ObjectMgr::GetActivePlayerGuid())
 		{
-			if (wasLooted)
+			if (wasCreated)
+			{
+				FrameManager::Get().TriggerLuaEvent("ITEM_CREATED", itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+				DLOG("You create item " << itemInfo.name << " x" << amount);
+			}
+			else if (wasLooted)
 			{
 				FrameManager::Get().TriggerLuaEvent("LOOT_ITEM_RECEIVED", itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 				DLOG("You receive loot: " << itemInfo.name << " x" << amount);
@@ -5845,7 +5948,12 @@ namespace mmo
 			if (unit)
 			{
 				const String &memberName = unit->GetName();
-				if (wasLooted)
+				if (wasCreated)
+				{
+					FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_CREATED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+					DLOG(memberName << " created item " << itemInfo.name << " x" << amount);
+				}
+				else if (wasLooted)
 				{
 					FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 					DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);
@@ -5860,9 +5968,14 @@ namespace mmo
 			{
 				// Unit not visible — look up the name asynchronously from the name cache.
 				m_cache.GetNameCache().Get(characterGuid,
-					[itemInfo, wasLooted, amount](uint64, const String &memberName)
+					[itemInfo, wasLooted, wasCreated, amount](uint64, const String &memberName)
 					{
-						if (wasLooted)
+						if (wasCreated)
+						{
+							FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_CREATED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+							DLOG(memberName << " created item " << itemInfo.name << " x" << amount);
+						}
+						else if (wasLooted)
 						{
 							FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 							DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);

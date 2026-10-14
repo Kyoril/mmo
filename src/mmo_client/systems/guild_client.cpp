@@ -373,6 +373,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Unable to retrieve guild data for guild " << log_hex_digit(guid));
+			m_guildCache.NotifyQueryFailed(guid);
 			return PacketParseResult::Pass;
 		}
 

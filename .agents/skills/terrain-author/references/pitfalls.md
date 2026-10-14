@@ -30,7 +30,8 @@
   import, close and reopen the world. Pages already streamed in as blank stay blank
   until then.
 - **Rerun nav_builder** after terrain changes or server-side navigation still uses the
-  old shape: `nav_builder --data data/client --world <W> --out <navdir>`.
+  old shape: `bin/Release/nav_builder.exe -d data/client -w <World> -o data/editor -p data/editor/data`.
+  `-p` bakes door spawns into the nav mesh; without it closed doors do not block creature paths.
 - **nav_builder filename quirk**: it probes zero-padded page names (`05_05.tile`) while
   the engine writes non-padded ones (`5_5.tile`). Identical for pages ≥ 10 — keep zones
   in pages 10–54 (you should anyway; the world center is page 32).

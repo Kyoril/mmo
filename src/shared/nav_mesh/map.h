@@ -7,6 +7,7 @@
 #include "base/filesystem.h"
 #include "math/ray.h"
 #include "tile.h"
+#include "door_volume.h"
 
 #include "DetourNavMeshQuery.h"
 
@@ -97,20 +98,30 @@ namespace mmo::nav
 
 		void UnloadAllPages();
 
-		bool FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial = false) const;
+		/// @brief Finds a path between two world positions on the nav mesh.
+		/// @param start The source position.
+		/// @param end The destination position.
+		/// @param output Receives the waypoints.
+		/// @param allowPartial Whether a path to the closest reachable point is accepted.
+		/// @param filter Query filter to use; nullptr uses the map's default filter.
+		/// @return true if a path was found. An end position lying off the end poly is clamped onto
+		///         it, for every filter (including the shortcut when start and end share a poly).
+		bool FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial = false, const dtQueryFilter* filter = nullptr) const;
 
 		/// @brief Checks whether two world positions have an unobstructed line of sight on the nav mesh.
 		/// @param start The source position.
 		/// @param end The destination position.
+		/// @param filter Query filter to use; nullptr uses the map's default filter.
 		/// @return true if nothing on the nav mesh blocks the ray between start and end.
-		bool LineOfSight(const Vector3& start, const Vector3& end) const;
+		bool LineOfSight(const Vector3& start, const Vector3& end, const dtQueryFilter* filter = nullptr) const;
 
 		/// @brief Like LineOfSight but also reports where the ray was blocked.
 		/// @param start The source position.
 		/// @param end The destination position.
 		/// @param hitPoint Receives the world position of the first obstruction (equals end when unobstructed).
+		/// @param filter Query filter to use; nullptr uses the map's default filter.
 		/// @return true if the ray reaches end without obstruction.
-		bool LineOfSightEx(const Vector3& start, const Vector3& end, Vector3& hitPoint) const;
+		bool LineOfSightEx(const Vector3& start, const Vector3& end, Vector3& hitPoint, const dtQueryFilter* filter = nullptr) const;
 
 		//bool FindHeight(const Vector3& source, float x, float z, float& y) const;
 
@@ -120,9 +131,28 @@ namespace mmo::nav
 
 		//bool LineOfSight(const Vector3& start, const Vector3& stop, bool doodads) const;
 
-		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const;
+		/// @brief Picks a random point on the nav mesh around a center position.
+		/// @param centerPosition The center.
+		/// @param radius The search radius.
+		/// @param randomPoint Receives the point.
+		/// @param filter Query filter to use; nullptr uses the map's default filter.
+		/// @return true if a point was found.
+		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint, const dtQueryFilter* filter = nullptr) const;
 
 		//bool FindPointInBetweenVectors(const Vector3& start, const Vector3& end, const float distance, Vector3& inBetweenPoint) const;
+
+		/// @brief Finds the door polys (DoorPolyFlag) whose center lies inside a door volume.
+		/// @details Only searches installed pages: the caller must make sure the pages under the
+		/// volume are loaded. Returns an empty list on maps built without door data.
+		[[nodiscard]] std::vector<dtPolyRef> FindDoorPolys(const DoorVolume& volume) const;
+
+		/// @brief Whether a poly the default filter accepts reaches into a door's own footprint: the
+		/// volume without its DoorVolumeInflate margin, within its Y range.
+		/// @details Searches the same box as FindDoorPolys. Tells a door the nav builder never baked
+		/// (walkable polys run through it, so creatures can path past it) from a door with no
+		/// walkable ground under it, such as a seal set into a wall whose floor ends in front of it.
+		/// Only searches installed pages, like FindDoorPolys.
+		[[nodiscard]] bool HasPolysIn(const DoorVolume& volume) const;
 
 		[[nodiscard]] const dtNavMesh& GetNavMesh() const { return m_navMesh; }
 

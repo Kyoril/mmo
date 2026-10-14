@@ -1,12 +1,25 @@
 syntax = "proto2";
 package mmo.proto;
 
+import "localization.proto";
+
+message SkillCategory {
+	required uint32 id = 1;
+	required string name = 2;
+	optional uint32 sortorder = 3;
+	repeated LocalizedString name_loc = 200;
+}
+
 message SkillEntry {
 	required uint32 id = 1;
 	required string name = 2;
 	required int32 category = 3;
 	required uint32 cost = 4;
+	/// Spells learned automatically when the skill is first learned (starter recipes).
 	repeated uint32 spells = 5;
+	/// Recipe categories shown in the profession window.
+	repeated SkillCategory categories = 6;
+	repeated LocalizedString name_loc = 200;
 }
 
 message Skills {

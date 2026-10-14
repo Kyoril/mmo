@@ -210,6 +210,20 @@ namespace mmo
 			ExportField(entries, "emote", e.id(), 0, "textself", e.textself(), e.textself_loc());
 		}
 
+		// Skills (professions) and their recipe categories. 'sub' of a category is its category id.
+		const auto& skills = project.skills.getTemplates();
+		for (int i = 0; i < skills.entry_size(); ++i)
+		{
+			const auto& e = skills.entry(i);
+			ExportField(entries, "skill", e.id(), 0, "name", e.name(), e.name_loc());
+
+			for (int c = 0; c < e.categories_size(); ++c)
+			{
+				const auto& category = e.categories(c);
+				ExportField(entries, "skill_category", e.id(), category.id(), "name", category.name(), category.name_loc());
+			}
+		}
+
 		// Triggers (per-action Say / Yell / Emote text). 'sub' is the 1-based action index.
 		const auto& triggers = project.triggers.getTemplates();
 		for (int i = 0; i < triggers.entry_size(); ++i)
@@ -398,6 +412,27 @@ namespace mmo
 					if (field == "textnotarget") { loc = e->mutable_textnotarget_loc(); }
 					else if (field == "texttarget") { loc = e->mutable_texttarget_loc(); }
 					else if (field == "textself") { loc = e->mutable_textself_loc(); }
+				}
+			}
+			else if (type == "skill")
+			{
+				if (auto* e = project.skills.getById(id))
+				{
+					if (field == "name") { loc = e->mutable_name_loc(); }
+				}
+			}
+			else if (type == "skill_category")
+			{
+				if (auto* e = project.skills.getById(id))
+				{
+					for (int c = 0; c < e->categories_size(); ++c)
+					{
+						if (e->categories(c).id() == sub)
+						{
+							if (field == "name") { loc = e->mutable_categories(c)->mutable_name_loc(); }
+							break;
+						}
+					}
 				}
 			}
 			else if (type == "trigger")
