@@ -200,6 +200,9 @@ namespace mmo
 		/// Handles the realm-wide time of day sent by the realm after login and on every change.
 		PacketParseResult OnTimeOfDay(auth::IncomingPacket& packet);
 
+		/// Handles the realm's request to destroy an empty dungeon instance (instance reset).
+		PacketParseResult OnResetInstance(auth::IncomingPacket& packet);
+
 		/// Handles a bug report forwarded by the realm.
 		PacketParseResult OnBugReport(auth::IncomingPacket& packet);
 

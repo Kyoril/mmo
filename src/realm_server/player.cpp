@@ -9,6 +9,7 @@
 #include "database.h"
 #include "version.h"
 #include "shutdown_manager.h"
+#include "instance_reset.h"
 
 #include "base/random.h"
 #include "base/sha1.h"
@@ -1549,6 +1550,145 @@ namespace mmo
 		}
 
 		return PacketParseResult::Pass;
+	}
+
+	String Player::GetMapName(const MapId mapId) const
+	{
+		const proto::MapEntry* mapEntry = m_project.maps.getById(mapId);
+		return mapEntry ? mapEntry->name() : String();
+	}
+
+	PacketParseResult Player::OnResetInstances(game::IncomingPacket& packet)
+	{
+		if (!m_characterData)
+		{
+			ELOG("Player tried to reset instances without having character data");
+			return PacketParseResult::Disconnect;
+		}
+
+		const bool inGroup = m_group && m_group->IsCreated();
+		const bool isGroupLeader = !inGroup || m_group->GetLeader() == m_characterData->characterId;
+
+		// A character standing on a non-global map is inside the very instance it would release.
+		bool requesterInsideInstance = false;
+		if (!m_instanceId.is_nil())
+		{
+			const proto::MapEntry* currentMap = m_project.maps.getById(m_characterData->mapId);
+			requesterInsideInstance = currentMap && currentMap->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL;
+		}
+
+		// A group shares one set of bindings; a character outside of a group has its own.
+		const std::map<MapId, InstanceId> bindings = inGroup ? m_group->GetInstanceBindings() : m_dungeonBindings.GetAll();
+
+		const InstanceResetPlan plan = PlanInstanceReset(bindings, requesterInsideInstance, isGroupLeader,
+			[this](const InstanceId instanceId)
+			{
+				std::vector<uint64> occupants;
+				m_manager.ForEachPlayer([&instanceId, &occupants](Player& player)
+					{
+						if (player.HasCharacterGuid() && player.GetWorldInstanceId() == instanceId)
+						{
+							occupants.push_back(player.GetCharacterGuid());
+						}
+					});
+
+				return occupants;
+			});
+
+		switch (plan.rejection)
+		{
+		case instance_reset_rejection::NotGroupLeader:
+			SendInstanceResetResult(game::instance_reset_result::NotGroupLeader, String());
+			return PacketParseResult::Pass;
+		case instance_reset_rejection::InsideInstance:
+			SendInstanceResetResult(game::instance_reset_result::PlayersInside, GetMapName(m_characterData->mapId));
+			return PacketParseResult::Pass;
+		case instance_reset_rejection::NothingBound:
+			SendInstanceResetResult(game::instance_reset_result::NothingToReset, String());
+			return PacketParseResult::Pass;
+		default:
+			break;
+		}
+
+		for (const auto& entry : plan.blocked)
+		{
+			const String mapName = GetMapName(entry.mapId);
+
+			// The leader is told why nothing happened, everyone still inside is told to leave.
+			SendInstanceResetResult(game::instance_reset_result::PlayersInside, mapName);
+
+			for (const uint64 occupantGuid : entry.occupants)
+			{
+				if (Player* occupant = m_manager.GetPlayerByCharacterGuid(occupantGuid))
+				{
+					occupant->SendInstanceResetResult(game::instance_reset_result::BlockedByYou, mapName);
+				}
+			}
+		}
+
+		for (const auto& entry : plan.reset)
+		{
+			const String mapName = GetMapName(entry.mapId);
+
+			// Everyone bound to the instance has to learn about it before the bindings go away.
+			m_manager.ForEachPlayer([&entry, &mapName](Player& player)
+				{
+					if (player.HasCharacterGuid() && player.IsBoundToInstance(entry.instanceId))
+					{
+						player.SendInstanceResetResult(game::instance_reset_result::Success, mapName);
+					}
+				});
+
+			// Ask the hosting node to drop the instance. It is empty, so this only frees it
+			// earlier than the node's own idle timeout would; the binding is what actually makes
+			// the next entry create a fresh instance.
+			if (const std::shared_ptr<World> world = m_worldManager.GetWorldByInstanceId(entry.instanceId))
+			{
+				world->RequestInstanceReset(entry.instanceId);
+			}
+
+			m_manager.OnInstanceDestroyed(entry.instanceId);
+
+			ILOG("Character " << m_characterData->name << " reset instance " << entry.instanceId << " of map " << entry.mapId);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	bool Player::IsBoundToInstance(const InstanceId& instanceId) const
+	{
+		if (m_group && m_group->IsCreated())
+		{
+			for (const auto& [mapId, boundInstance] : m_group->GetInstanceBindings())
+			{
+				if (boundInstance == instanceId)
+				{
+					return true;
+				}
+			}
+		}
+
+		for (const auto& [mapId, boundInstance] : m_dungeonBindings.GetAll())
+		{
+			if (boundInstance == instanceId)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	void Player::SendInstanceResetResult(const uint8 result, const String& mapName)
+	{
+		SendPacket([result, &mapName](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::InstanceResetResult);
+				packet
+					<< io::write<uint8>(result)
+					<< io::write_dynamic_range<uint8>(mapName);
+				packet.Finish();
+			});
 	}
 
 	PacketParseResult Player::OnLogoutRequest(game::IncomingPacket &packet)
@@ -3237,6 +3377,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::GroupLeave, *this, &Player::OnGroupLeave);
 			RegisterPacketHandler(game::client_realm_packet::GroupDisband, *this, &Player::OnGroupDisband);
 			RegisterPacketHandler(game::client_realm_packet::SetLootMethod, *this, &Player::OnSetLootMethod);
+			RegisterPacketHandler(game::client_realm_packet::ResetInstances, *this, &Player::OnResetInstances);
 			RegisterPacketHandler(game::client_realm_packet::PartyPing, *this, &Player::OnPartyPing);
 			RegisterPacketHandler(game::client_realm_packet::ChannelJoin, *this, &Player::OnChannelJoin);
 			RegisterPacketHandler(game::client_realm_packet::ChannelLeave, *this, &Player::OnChannelLeave);

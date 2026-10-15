@@ -1952,6 +1952,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LevelUp, *this, &WorldState::OnLevelUp);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CharacterPointsReset, *this, &WorldState::OnCharacterPointsReset);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InstanceResetResult, *this, &WorldState::OnInstanceResetResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AuraUpdate, *this, &WorldState::OnAuraUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &WorldState::OnPeriodicAuraLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ActionButtons, *this, &WorldState::OnActionButtons);
@@ -5042,6 +5043,22 @@ namespace mmo
 
 		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM",
 			Localize(FrameManager::Get().GetLocalization(), localizationKey));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnInstanceResetResult(game::IncomingPacket &packet)
+	{
+		uint8 result;
+		String mapName;
+		if (!(packet >> io::read<uint8>(result) >> io::read_container<uint8>(mapName)))
+		{
+			ELOG("Failed to read InstanceResetResult packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// The result is turned into a message by the ui, which owns the wording per locale.
+		FrameManager::Get().TriggerLuaEvent("INSTANCE_RESET_RESULT", static_cast<int32>(result), mapName);
 
 		return PacketParseResult::Pass;
 	}

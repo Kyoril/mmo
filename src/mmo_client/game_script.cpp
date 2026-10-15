@@ -1890,6 +1890,9 @@ namespace mmo
 					   luabind::def<std::function<bool()>>("IsPartyLeader", [this]()
 														   { return m_partyInfo.GetLeaderGuid() == ObjectMgr::GetActivePlayerGuid(); }),
 
+				   luabind::def<std::function<void()>>("ResetInstances", [this]()
+														{ m_realmConnector.ResetInstances(); }),
+
 				   luabind::def<std::function<int32()>>("GetLootMethod", [this]()
 														{ return static_cast<int32>(m_partyInfo.GetLootMethod()); }),
 

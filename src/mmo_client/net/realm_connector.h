@@ -396,6 +396,10 @@ namespace mmo
 		/// @param threshold The item quality threshold for the loot method.
 		void SetGroupLootMethod(uint8 method, uint64 masterGuid, uint8 threshold);
 
+		/// Asks the realm to reset the dungeon instances the character is bound to. Only the
+		/// group leader may do this for a group, and only while nobody is inside.
+		void ResetInstances();
+
 		void AutoEquipItem(uint8 srcBag, uint8 srcSlot);
 
 		void SwapItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot);

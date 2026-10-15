@@ -47,6 +47,13 @@ namespace mmo
 			return it != m_bindings.end() ? it->second : InstanceId();
 		}
 
+		/// Gets every binding of the owning character.
+		/// @returns All bindings as map id -> instance id.
+		[[nodiscard]] const std::map<MapId, InstanceId>& GetAll() const
+		{
+			return m_bindings;
+		}
+
 		/// Removes the binding of a map, if any.
 		/// @param mapId The dungeon map id.
 		void Remove(const MapId mapId)

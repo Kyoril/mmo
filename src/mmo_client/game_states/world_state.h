@@ -494,6 +494,10 @@ namespace mmo
 
 		PacketParseResult OnCharacterPointsReset(game::IncomingPacket &packet);
 
+		/// Handles the result of an instance reset request (or a notification about the group
+		/// leader's) and turns it into a localized chat message.
+		PacketParseResult OnInstanceResetResult(game::IncomingPacket &packet);
+
 		PacketParseResult OnAuraUpdate(game::IncomingPacket &packet);
 
 		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket &packet);
