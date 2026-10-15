@@ -52,6 +52,15 @@ Order matters: the game stack is redeployed with the new `compose.yml` FIRST (it
 
 The patch is built from `deploy/patch/source.txt`, which packs every `data/client` folder the client loads, including `Particles` (`Particles.hpak`). `Cache` (a runtime cache the client fills itself) and `Editor` (editor-only assets) are intentionally not packed.
 
+Every top-level entry of `source.txt` is downloaded into the player's install folder, so it must
+also be listed in `[UninstallDelete]` of `deploy/installer/setup.iss`
+(`tools/tests/test_installer_uninstall_list.py` enforces this).
+
+The website's client download links to the setup of the newest launcher release:
+`https://github.com/Kyoril/mmo/releases/latest/download/AlestiaOnline-Setup.exe`. That URL
+resolves to the newest non-prerelease, so every release other than `launcher-v*` must stay a
+prerelease (the nightly workflow publishes with `--prerelease`).
+
 ## 3. Going live
 
 1. Watch at least one dry-run night: a "Staged ..." message, then a "[dry-run] would deploy ..." message at 04:45. Dry-run nights take a real database backup (and read the container states from Portainer), so that message must end in `backup OK`; `backup FAILED: <error>` means the MySQL user, its grants or the network path to MySQL needs fixing before going live. Dry-run backups land in `/state/backups/` like real ones and share the `KEEP_BACKUPS` retention.
@@ -127,5 +136,6 @@ Change `DEPLOYER_TAG` to a newer green SHA and redeploy its stack. It never upda
 ## 7. CI notes
 
 - The Linux gate runs on the runner's preinstalled MySQL (root/root). The CI run proving the pipeline has not happened yet; if Linux E2E fails, move the gate job to `windows-latest` and start MySQL 8.0 (root/root) with `shogo82148/actions-setup-mysql`.
+- `launcher-release.yml` installs Inno Setup via Chocolatey if the runner lacks it, then builds and smoke-tests the setup (install, upgrade, foreign-file, all-users, uninstall) before publishing.
 - `docker.yml` builds develop images only after "Linux Servers" passes.
 - `win-release.yml` (master) is unchanged.

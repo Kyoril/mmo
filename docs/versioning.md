@@ -96,8 +96,9 @@ so the launcher has its own release cycle:
   count (`MMO_LAUNCHER_VERSION_STR`). The launcher's version label, its file version and its
   About box show this version.
 - Pushing a `launcher-vX.Y.Z` tag runs `.github/workflows/launcher-release.yml`. It builds
-  `Launcher.exe` and publishes a release with the binary and `launcher-release.json`
-  (version, commit, sha256, size).
+  `Launcher.exe`, builds and smoke-tests `AlestiaOnline-Setup.exe` (see
+  [deploy/installer/README.md](../deploy/installer/README.md)), and publishes a release with the
+  binary, the setup and `launcher-release.json` (version, commit, sha256, size).
 - When it stages a nightly, the deployer looks up the highest `launcher-v*` tag that has a
   release. It uses the tag list, so the launcher release never drops off the release list.
   It replaces the nightly's `Launcher.exe` with that release's binary after checking the
