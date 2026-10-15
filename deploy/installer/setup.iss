@@ -33,7 +33,16 @@ ArchitecturesInstallIn64BitMode=x64compatible
 OutputBaseFilename=AlestiaOnline-Setup
 Compression=lzma2
 SolidCompression=yes
-WizardStyle=modern
+; Look: always dark (a game setup looks the same on every system), launcher brown behind
+; everything, the launcher splash as a darkened backdrop. Art in art/, made from
+; src/launcher/res/splash.png; sizes per DPI (100/150/200 %) from the Inno help. Setup picks
+; the best match. Uninstall gets the colour only (Inno shows no background image there).
+WizardStyle=modern dark hidebevels
+WizardBackColor=#1b1711
+WizardBackImageFile=art\back_100.png,art\back_150.png,art\back_200.png
+WizardImageFile=art\wizard_100.png,art\wizard_150.png,art\wizard_200.png
+WizardSmallImageFile=art\small_100.png,art\small_150.png,art\small_200.png
+DisableWelcomePage=no
 UninstallDisplayName=Alestia Online
 UninstallDisplayIcon={app}\Launcher.exe
 

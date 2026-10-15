@@ -7,6 +7,16 @@ installs to Program Files and makes the folder writable for Users so the launche
 
 Design: [docs/superpowers/specs/2026-10-15-client-setup-design.md](../../docs/superpowers/specs/2026-10-15-client-setup-design.md)
 
+## Look
+
+The setup is always dark (`WizardStyle=modern dark`, not following the system theme) on the
+launcher's brown (`WizardBackColor`, also used by the uninstaller), with a darkened crop of the
+launcher splash behind every page, the castle on the welcome and finish pages and a spire detail
+top right. The art lives in `art/` as PNG sets for 100/150/200 % DPI and was made by hand from
+`src/launcher/res/splash.png`; there is no generator in the repo, so regenerate it by hand if the
+splash changes (keep the sizes listed in the Inno help for `WizardBackImageFile`,
+`WizardImageFile` and `WizardSmallImageFile`).
+
 ## Build locally
 
 Install Inno Setup 6 once (`winget install --id JRSoftware.InnoSetup -e`), then:
