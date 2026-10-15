@@ -427,6 +427,7 @@ namespace mmo
 
 			UpdateArmor();
 			UpdateDamage();
+			UpdateCombatStatFields();
 		}
 	}
 
@@ -2481,6 +2482,10 @@ namespace mmo
 		m_manaRegenPerTick = std::max(m_manaRegenPerTick, 0.0f);
 
 		UpdateDamage();
+
+		// Replicate the derived combat values the character sheet shows. This has to run last:
+		// it reads the stat, regeneration and modifier values recomputed above.
+		UpdateCombatStatFields();
 	}
 
 	void GamePlayerS::SetLevel(uint32 newLevel)

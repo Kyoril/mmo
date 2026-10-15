@@ -96,6 +96,19 @@ namespace mmo
 			selfResult = player.GetQuestStatus(cond->param1()) == cond->param2();
 			break;
 
+		case proto::Condition_ConditionType_SKILL_CHECK:
+			// param1 = skill id, param2 = minimum value (0/1 = known), param3 = optional maximum (0 = none)
+		{
+			const TradeSkillData* skill = player.GetTradeSkills().Get(cond->param1());
+			if (skill)
+			{
+				const uint32 minValue = cond->param2();
+				const uint32 maxValue = cond->param3();
+				selfResult = skill->value >= minValue && (maxValue == 0 || skill->value <= maxValue);
+			}
+		}
+		break;
+
         default:
             // no known condition type
             break;

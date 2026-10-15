@@ -304,6 +304,65 @@ namespace mmo
 			return player->GetVisibleSpell(index);
 		}
 
+		/// Skill definitions used to localize profession names for Spell script methods (which cannot
+		/// reach the GameScript instance). Set when the script functions are registered.
+		const proto_client::SkillManager* g_scriptSkills = nullptr;
+
+		/// Spell:GetCreatedItem() -> itemId, count (0, 0 if the spell creates no item).
+		void Script_GetSpellCreatedItem(const proto_client::SpellEntry* spell, int32& outItemId, int32& outCount)
+		{
+			outItemId = 0;
+			outCount = 0;
+			uint32 itemId = 0;
+			if (spell != nullptr && GetSpellCreatedItem(*spell, itemId, outCount))
+			{
+				outItemId = static_cast<int32>(itemId);
+			}
+		}
+
+		/// Spell:GetNumReagents()
+		int32 Script_GetSpellNumReagents(const proto_client::SpellEntry* spell)
+		{
+			return spell != nullptr ? spell->reagents_size() : 0;
+		}
+
+		/// Spell:GetReagent(index) -> itemId, count with a 0-based index (0, 0 if out of range).
+		void Script_GetSpellReagent(const proto_client::SpellEntry* spell, int32 index, int32& outItemId, int32& outCount)
+		{
+			outItemId = 0;
+			outCount = 0;
+			if (spell == nullptr || index < 0 || index >= spell->reagents_size())
+			{
+				return;
+			}
+
+			outItemId = static_cast<int32>(spell->reagents(index).item());
+			outCount = static_cast<int32>(spell->reagents(index).count());
+		}
+
+		/// Spell:GetRequiredSkill() -> skillId, value, localized skill name (0, 0, "" if the spell
+		/// requires no profession skill, i.e. is not a TradeSpell).
+		void Script_GetSpellRequiredSkill(const proto_client::SpellEntry* spell, int32& outSkillId, int32& outValue, std::string& outName)
+		{
+			outSkillId = 0;
+			outValue = 0;
+			outName.clear();
+			if (spell == nullptr || spell->skill() == 0 || spell->attributes_size() == 0 || (spell->attributes(0) & spell_attributes::TradeSpell) == 0)
+			{
+				return;
+			}
+
+			outSkillId = static_cast<int32>(spell->skill());
+			outValue = static_cast<int32>(spell->skillrequired());
+			if (g_scriptSkills != nullptr)
+			{
+				if (const auto* skill = g_scriptSkills->getById(spell->skill()))
+				{
+					outName = GetLocalizedString(skill->name(), skill->name_loc(), GetClientLocale());
+				}
+			}
+		}
+
 		bool Script_IsSpellAbility(const proto_client::SpellEntry* spell)
 		{
 			if (!spell || spell->attributes_size() == 0)
@@ -970,6 +1029,11 @@ namespace mmo
 							   .def("GetMaxDamage", &UnitHandle::GetMaxDamage)
 							   .def("GetAttackTime", &UnitHandle::GetAttackTime)
 							   .def("GetAttackPower", &UnitHandle::GetAttackPower)
+							   .def("GetSpellDamage", &UnitHandle::GetSpellDamage)
+							   .def("GetSpellHealing", &UnitHandle::GetSpellHealing)
+							   .def("GetSpellCritChance", &UnitHandle::GetSpellCritChance)
+							   .def("GetMeleeCritChance", &UnitHandle::GetMeleeCritChance)
+							   .def("GetManaRegen", &UnitHandle::GetManaRegen)
 							   .def("GetArmor", &UnitHandle::GetArmor)
 							   .def("GetTalentPoints", &UnitHandle::GetTalentPoints)
 							   .def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)
@@ -1046,7 +1110,11 @@ namespace mmo
 							   .def_readonly("casttime", &proto_client::SpellEntry::casttime)
 							   .def_readonly("icon", &proto_client::SpellEntry::icon)
 							   .def("IsAbility", &Script_IsSpellAbility)
-							   .def("IsSkill", &Script_IsSpellSkill)),
+							   .def("IsSkill", &Script_IsSpellSkill)
+							   .def("GetCreatedItem", &Script_GetSpellCreatedItem, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>())
+							   .def("GetNumReagents", &Script_GetSpellNumReagents)
+							   .def("GetReagent", &Script_GetSpellReagent, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>())
+							   .def("GetRequiredSkill", &Script_GetSpellRequiredSkill, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>())),
 
 					   luabind::def("Quit", &Script_Quit),
 					   luabind::def<std::function<void()>>("Logout", [this]()
@@ -1680,6 +1748,25 @@ namespace mmo
 															   }
 															   return static_cast<int32>(trainerSpells[slot].requiredLevel);
 														   }),
+					   // Returns skillId, value, localized skill name required by a trainer entry (0, 0, "" if none).
+					   luabind::def<std::function<void(int32, int32 &, int32 &, String &)>>("GetTrainerSpellReqSkill", [this](int32 slot, int32 &out_skillId, int32 &out_value, String &out_name)
+														   {
+															   out_skillId = 0;
+															   out_value = 0;
+															   out_name.clear();
+															   const auto& trainerSpells = this->m_trainerClient.GetTrainerSpells();
+															   if (slot < 0 || slot >= static_cast<int32>(trainerSpells.size()) || trainerSpells[slot].skill == 0)
+															   {
+																   return;
+															   }
+
+															   out_skillId = static_cast<int32>(trainerSpells[slot].skill);
+															   out_value = static_cast<int32>(trainerSpells[slot].skillValue);
+															   if (const auto* skill = this->m_project.skills.getById(trainerSpells[slot].skill))
+															   {
+																   out_name = GetLocalizedString(skill->name(), skill->name_loc(), GetClientLocale());
+															   }
+														   }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 					   luabind::def<std::function<void(int32, String &, bool &)>>("GetTrainerSpellRequiredTalent", [this](int32 slot, String &out_name, bool &out_learned)
 														   {
 															   out_name.clear();
@@ -1965,6 +2052,7 @@ namespace mmo
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 		luabind::globals(m_luaState.get())["gameData"] = &m_project;
+		g_scriptSkills = &m_project.skills;
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;

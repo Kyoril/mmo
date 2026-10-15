@@ -78,6 +78,24 @@ namespace mmo
 		return result;
 	}
 
+	bool GetSpellCreatedItem(const proto_client::SpellEntry& spell, uint32& outItemId, int32& outCount)
+	{
+		outItemId = 0;
+		outCount = 0;
+
+		for (const auto& effect : spell.effects())
+		{
+			if (effect.type() == spell_effects::CreateItem)
+			{
+				outItemId = effect.itemtype();
+				outCount = effect.basepoints();
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	std::vector<RecipeInfo> BuildRecipeList(const uint32 skillId, const std::vector<const proto_client::SpellEntry*>& knownSpells, const proto_client::SkillEntry& skill, const uint32 skillValue)
 	{
 		std::map<uint32, uint32> sortOrder;

@@ -34,6 +34,9 @@ The fight lengths in the brief (90-120 s, 120-150 s, 150-180 s) assume a group d
 
 Authoring: `tools/hollow_choir/author_bosses.py` (idempotent).
 
+Each of the three loot tables drops exactly one blue per kill, never two and never none — see
+[loot_design.md](loot_design.md). Table 28 additionally holds the dungeon's epic.
+
 ## Spells
 
 | Id | Boss | Name (brief) | Shape |
@@ -219,8 +222,9 @@ gallery) were too uneven for the climb limit, so its collision now has a ramp in
 four tiny islands players cannot reach (ledges outside the Wake's side walls, a niche behind the
 apse, the top of an object in the nave). Rebuild with
 `bin/Release/nav_builder.exe -d data/client -w Test -o data/editor -p data/editor/data` after
-changing geometry. `-p` bakes door spawns into the nav mesh; without it closed doors do not block
-creature paths.
+changing geometry. `-p` bakes door spawns into the nav mesh and is required (the builder refuses to run without it;
+`--no-doors` is for scratch meshes only). Check the `Baking N door(s)` line in the output. The
+console shows progress, warnings and errors; `--log-level debug` also lists every rasterized model.
 Creatures whose victim stands where their paths do not lead now evade after five seconds instead
 of waiting at the edge of their area (`UnreachableTargetTracker`), in dungeons too; a creature
 that cannot walk home is put home.

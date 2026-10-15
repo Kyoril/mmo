@@ -7,6 +7,7 @@
 
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_player_s.h"
+#include "game_server/item_notify.h"
 #include "game_server/objects/game_world_object_s.h"
 #include "game_server/spells/aura_container.h"
 #include "base/utilities.h"
@@ -542,11 +543,20 @@ namespace mmo
 					return;
 				}
 
-				const InventoryChangeFailure result = playerTarget.GetInventory().CreateItems(*item, itemCount);
+				std::map<uint16, uint16> addedBySlot;
+				const InventoryChangeFailure result = playerTarget.GetInventory().CreateItems(*item, itemCount, &addedBySlot);
 				if (result != inventory_change_failure::Okay)
 				{
 					ELOG("Failed to add item: " << result);
 					return;
+				}
+
+				// Let the player (and their group) know about the created items: one notification per
+				// created stack, even if it was split across several inventory slots. The client only
+				// uses the push for chat output, so the first slot stands for the whole stack.
+				if (const auto push = AggregateAddedItems(addedBySlot))
+				{
+					playerTarget.OnItemAdded(push->slot, push->amount, false, true);
 				}
 			}
 		}

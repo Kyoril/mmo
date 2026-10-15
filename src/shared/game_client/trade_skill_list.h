@@ -48,6 +48,13 @@ namespace mmo
 	/// Known TradeSpell spells whose skill() matches, in category sortorder then name order.
 	std::vector<RecipeInfo> BuildRecipeList(uint32 skillId, const std::vector<const proto_client::SpellEntry*>& knownSpells, const proto_client::SkillEntry& skill, uint32 skillValue);
 
+	/// Finds the item a spell creates through its first CreateItem effect.
+	/// @param spell The (recipe) spell to inspect.
+	/// @param outItemId Receives the created item id (0 if none).
+	/// @param outCount Receives the number of created items (0 if none).
+	/// @return True if the spell has a CreateItem effect.
+	bool GetSpellCreatedItem(const proto_client::SpellEntry& spell, uint32& outItemId, int32& outCount);
+
 	/// Whether a known spell is listed in the spellbook. Recipes (TradeSpell) are shown in the
 	/// profession window instead, and client-side hidden spells never show up.
 	inline bool IsSpellBookVisible(const proto_client::SpellEntry& spell)

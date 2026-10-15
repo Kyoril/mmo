@@ -1298,6 +1298,27 @@ public:
 		/// @returns The critical hit chance as a float.
 		float CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const;
 
+		/// Gets the victim-independent part of the melee critical hit chance: the base chance plus
+		///	the agility contribution. This is what the character sheet shows; CriticalHitChance()
+		///	adds the per-attack terms (level difference, talents, the victim's vulnerability) on top.
+		/// @returns The critical hit chance in percent, not clamped.
+		[[nodiscard]] float GetBaseMeleeCritChance() const;
+
+		/// Gets the victim-independent part of the critical hit chance of a spell, which is the
+		///	configured default spell crit chance. Per-spell talent modifiers are applied at cast time.
+		/// @returns The critical hit chance in percent.
+		[[nodiscard]] float GetBaseSpellCritChance() const;
+
+		/// Gets the amount of mana this unit regenerates every five seconds while regenerating,
+		///	including aura percentage modifiers.
+		/// @returns The mana regenerated per five seconds.
+		[[nodiscard]] float GetManaRegenPerFiveSeconds() const;
+
+		/// Writes the derived combat values the client shows on the character sheet into the
+		///	replicated object fields. Called from RefreshStats(), which runs on every stat, level,
+		///	equipment and aura change.
+		void UpdateCombatStatFields();
+
 		/// Returns the dodge chance in percent, ranging from 0 to 100.0f. If the unit can't dodge at all, this will always return 0.
 		float DodgeChance() const;
 

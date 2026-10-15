@@ -94,6 +94,22 @@ TEST_CASE("Recipes are filtered by skill, sorted by category and coloured", "[tr
 	CHECK(recipes[0].resultCount == 1);
 }
 
+TEST_CASE("Created item is read from the CreateItem effect", "[trade_skill]")
+{
+	uint32 itemId = 99;
+	int32 count = 99;
+
+	const auto recipe = MakeRecipe(20, 1, 1, 700);
+	CHECK(GetSpellCreatedItem(recipe, itemId, count));
+	CHECK(itemId == 700);
+	CHECK(count == 1);
+
+	const auto unlock = MakeUnlock(10, 1, 75, "Tailoring");
+	CHECK_FALSE(GetSpellCreatedItem(unlock, itemId, count));
+	CHECK(itemId == 0);
+	CHECK(count == 0);
+}
+
 TEST_CASE("Unknown professions without packet state are still listed", "[trade_skill]")
 {
 	proto_client::SkillManager skills;

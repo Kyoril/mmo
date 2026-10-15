@@ -932,6 +932,11 @@ namespace mmo
 
 		void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated) override;
 
+		/// Tells the other in-sight members of the player's group that an item was created.
+		/// @param itemId Entry id of the created item.
+		/// @param amount Number of created items.
+		void NotifyGroupOfCreatedItem(uint32 itemId, uint16 amount);
+
 		void OnObjectLoot() override;
 
 		void OnMailboxUsed(uint64 mailboxGuid) override;

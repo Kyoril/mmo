@@ -842,11 +842,16 @@ namespace mmo
 			}
 		}
 
-		// Find the frame at the lowest level for the given point
-		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, false);
+		// Find the deepest enabled frame for the given point. It receives the mouse moved events.
+		const FramePtr enabledFrame = m_topFrame->GetChildFrameAt(position, false);
+
+		// Hover tracking (enter / leave, tooltips, IsHovered) also includes disabled frames that are
+		// clickable, so that e.g. a locked button can still show a tooltip explaining why it is locked.
+		// Disabled, non-clickable frames stay transparent so hover lands on their parent (nameplates).
+		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, FrameHitTest::Hover);
 
 		// Trigger mouse moved events, skipping any frame already notified above as a pressed frame.
-		Frame* frame = hoverFrame.get();
+		Frame* frame = enabledFrame.get();
 		while (frame)
 		{
 			bool alreadyNotified = false;
@@ -992,9 +997,16 @@ namespace mmo
 			}
 		}
 
-		// Otherwise dispatch to the hovered frame and let the event bubble up the parent chain
-		// until a frame consumes it (e.g. a ScrollingMessageFrame scrolling its contents).
-		Frame* frame = m_hoverFrame.get();
+		// Otherwise dispatch to the deepest enabled frame under the cursor (disabled frames can be
+		// hovered, but never receive input) and let the event bubble up the parent chain until a
+		// frame consumes it (e.g. a ScrollingMessageFrame scrolling its contents).
+		if (!m_topFrame)
+		{
+			return false;
+		}
+
+		const FramePtr wheelFrame = m_topFrame->GetChildFrameAt(m_mousePos, false);
+		Frame* frame = wheelFrame.get();
 		while (frame)
 		{
 			if (frame->OnMouseWheel(delta))
