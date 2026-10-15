@@ -106,6 +106,10 @@ namespace mmo
 		virtual void OnInputCaptured() override;
 		virtual void OnInputReleased() override;
 
+		/// A text field inserts typed characters into its text, so it owns every typed key
+		/// while it captures the keyboard.
+		virtual bool AcceptsTextInput() const override { return true; }
+
 	protected:
 		/// Executed when the text was changed.
 		virtual void OnTextChanged() override;

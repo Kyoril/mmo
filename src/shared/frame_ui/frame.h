@@ -355,6 +355,11 @@ namespace mmo
 		/// Whether this frame can receive the input focus.
 		inline bool IsFocusable() const { return m_focusable; }
 
+		/// Whether this frame turns typed characters into text while it captures the keyboard.
+		/// Focusable frames which only react to keys like enter or escape (buttons, or frames
+		/// with a script handler) return false, so a typed key still reaches the game.
+		virtual bool AcceptsTextInput() const { return false; }
+
 		/// Invalidates all children.
 		void InvalidateChildren(bool recursive = true);
 

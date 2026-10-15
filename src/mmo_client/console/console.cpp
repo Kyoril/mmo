@@ -688,9 +688,13 @@ namespace mmo
 		// Console key will toggle the console visibility
 		if (key == 0xC0 || key == 0xDC)
 		{
-			// While a ui frame (like the chat text field) captures keyboard input, the key
-			// belongs to that frame instead of toggling the console
-			if (!s_consoleVisible && FrameManager::Get().GetCaptureFrame())
+			// While a ui frame which turns typed characters into text (like the chat text field)
+			// captures keyboard input, the key belongs to that frame instead of toggling the
+			// console. Frames which merely hold the focus (buttons, or frames made focusable for
+			// their enter or escape handler) keep the capture until something else takes it, so
+			// they must not block the console key.
+			const FramePtr captureFrame = FrameManager::Get().GetCaptureFrame();
+			if (!s_consoleVisible && captureFrame && captureFrame->AcceptsTextInput())
 			{
 				return true;
 			}
