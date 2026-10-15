@@ -52,20 +52,27 @@ function Invoke-Uninstall([string]$dir)
 		if ((Get-Date) -gt $deadline) { throw "uninstall did not finish within 60 s ($dir)" }
 		if (-not (Test-Path $uninstaller) -and -not (Test-Path $data))
 		{
-			if (-not (Test-Path $dir)) { return }
+			if (-not (Test-Path $dir)) { break }
 			# The uninstaller may remove the folder between Test-Path and the listing.
 			$entries = Get-ChildItem -Recurse -Force -Name $dir -ErrorAction SilentlyContinue
-			if (-not (Test-Path $dir)) { return }
+			if (-not (Test-Path $dir)) { break }
 			$snapshot = ($entries | Sort-Object) -join "|"
 			if ($snapshot -eq $lastSnapshot)
 			{
-				if (((Get-Date) - $stableSince).TotalSeconds -ge 1) { return }
+				if (((Get-Date) - $stableSince).TotalSeconds -ge 1) { break }
 			}
 			else { $lastSnapshot = $snapshot; $stableSince = Get-Date }
 		}
 		Start-Sleep -Milliseconds 250
 	}
+	# Inno deletes the Apps & Features entry first; a manual test once saw it survive an uninstall
+	# that removed everything else (not reproduced), so the entry is part of the post-condition.
+	foreach ($root in "HKCU:", "HKLM:")
+	{
+		if (Test-Path "$root\$uninstallKey") { throw "Apps & Features entry left behind: $root\$uninstallKey" }
+	}
 }
+
 function Add-FakeDownload([string]$dir)
 {
 	# Stand-ins for what the launcher and client put into the folder.

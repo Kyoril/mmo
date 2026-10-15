@@ -45,6 +45,11 @@ WizardSmallImageFile=art\small_100.png,art\small_150.png,art\small_200.png
 DisableWelcomePage=no
 UninstallDisplayName=Alestia Online
 UninstallDisplayIcon={app}\Launcher.exe
+; Leave a log in %TEMP% for every install ("Setup Log <date> #NNN.txt") and for every uninstall
+; started from Apps & Features (Inno adds /LOG there; a double-clicked unins000.exe logs only
+; with /LOG): the only evidence when a player reports a broken install or uninstall.
+SetupLogging=yes
+UninstallLogging=yes
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
