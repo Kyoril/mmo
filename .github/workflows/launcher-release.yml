@@ -1,8 +1,9 @@
 name: Launcher Release
 
 # The launcher has its own release cycle (docs/versioning.md): pushing a launcher-vX.Y.Z tag
-# builds it and publishes a release the deployer ships with the next nightly patch. Nightly
-# builds never change the launcher players run, so launchers only update themselves on purpose.
+# builds it and publishes a release the deployer ships with the next nightly patch, plus
+# AlestiaOnline-Setup.exe for the website (docs/deployment.md). Nightly builds never change the
+# launcher players run, so launchers only update themselves on purpose.
 
 on:
   push:
@@ -80,6 +81,19 @@ jobs:
           $info | ConvertTo-Json | Set-Content -Encoding utf8NoBOM dist/launcher-release.json
           Compress-Archive -Path bin/Release/Launcher.pdb -DestinationPath dist/launcher-symbols.zip
 
+      - name: Build setup
+        shell: pwsh
+        run: |
+          $known = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue) -and -not (Test-Path $known)) {
+            choco install innosetup -y --no-progress
+          }
+          deploy/installer/build_setup.ps1 -Version "${{ steps.version.outputs.version }}" -Launcher bin/Release/Launcher.exe -OutDir dist
+
+      - name: Smoke-test setup
+        shell: pwsh
+        run: deploy/installer/smoke_test.ps1 -Setup dist/AlestiaOnline-Setup.exe -Launcher bin/Release/Launcher.exe -AllUsers
+
       - name: Publish release
         shell: bash
         env:
@@ -94,4 +108,4 @@ jobs:
             git log --no-merges --format='- %s' "$range" -- src/launcher | sed -E 's/^- [a-z]+(\([^)]*\))?!?: /- /' | head -50
           } > notes.md
           gh release create "$tag" --target "${{ github.sha }}" --title "Launcher ${{ steps.version.outputs.version }}" \
-            --notes-file notes.md dist/Launcher.exe dist/launcher-release.json dist/launcher-symbols.zip
+            --notes-file notes.md dist/Launcher.exe dist/launcher-release.json dist/launcher-symbols.zip dist/AlestiaOnline-Setup.exe
