@@ -9,6 +9,8 @@
 #include "ai/creature_ai_combat_state.h"
 #include "binary_io/vector_sink.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	GameCreatureS::GameCreatureS(
@@ -186,7 +188,22 @@ namespace mmo
 
 	bool GameCreatureS::IsLootRecipient(const GamePlayerS& character) const
 	{
-		return m_lootRecipients.contains(character.GetGuid());
+		if (m_lootRecipients.contains(character.GetGuid()))
+		{
+			return true;
+		}
+
+		// The tag list only ever holds the single player who first engaged this creature. Everybody
+		// who was rewarded for the kill - the tagger's nearby group members - is recorded on the
+		// loot instance when it is generated, and the corpse belongs to them just as much. Without
+		// this, a grouped player cannot loot anything a party mate happened to tag first.
+		if (m_loot)
+		{
+			const auto& recipients = m_loot->GetRecipients();
+			return std::find(recipients.begin(), recipients.end(), character.GetGuid()) != recipients.end();
+		}
+
+		return false;
 	}
 
 	void GameCreatureS::SetHealthPercent(const float percent)
