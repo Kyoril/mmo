@@ -3,6 +3,8 @@
 # Silent install / upgrade / uninstall checks for AlestiaOnline-Setup.exe. Exit 0 = all passed.
 #   pwsh deploy/installer/smoke_test.ps1 -Setup dist/AlestiaOnline-Setup.exe -Launcher bin/Release/Launcher.exe
 #   -AllUsers additionally installs for all users (needs an elevated shell; CI runners are).
+# The test uses the real AppId, so it refuses to run (exit 1) when a real Alestia Online install is
+# registered (HKCU, and HKLM with -AllUsers): uninstall that one first.
 
 param(
 	[Parameter(Mandatory)][string]$Setup,
@@ -15,6 +17,18 @@ $Setup = (Resolve-Path $Setup).Path
 $expectedHash = (Get-FileHash -Algorithm SHA256 (Resolve-Path $Launcher).Path).Hash
 $failures = 0
 
+$uninstallKey = "Software\Microsoft\Windows\CurrentVersion\Uninstall\{032178BC-35CD-47F5-BA65-309AF9F74D43}_is1"
+$existing = @("HKCU:\$uninstallKey")
+if ($AllUsers) { $existing += "HKLM:\$uninstallKey" }
+foreach ($key in $existing)
+{
+	if (Test-Path $key)
+	{
+		Write-Host "ABORT  a real Alestia Online install is registered ($key); the smoke test would overwrite it. Uninstall it first."
+		exit 1
+	}
+}
+
 function Invoke-Setup([string]$dir, [string]$scope)
 {
 	$p = Start-Process -FilePath $Setup -Wait -PassThru -ArgumentList @(
@@ -25,14 +39,30 @@ function Invoke-Setup([string]$dir, [string]$scope)
 function Invoke-Uninstall([string]$dir)
 {
 	$uninstaller = Join-Path $dir "unins000.exe"
+	$data = Join-Path $dir "unins000.dat"
 	if (-not (Test-Path $uninstaller)) { throw "no uninstaller in $dir" }
-	# unins000.exe copies itself to %TEMP% and returns at once; wait for its files to go.
+	# unins000.exe copies itself to %TEMP% and returns at once; wait for the real post-condition:
+	# uninstaller files gone and the folder either gone or no longer changing.
 	Start-Process -FilePath $uninstaller -Wait -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
 	$deadline = (Get-Date).AddSeconds(60)
-	while ((Test-Path $uninstaller) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
-	Start-Sleep -Seconds 1
+	$lastSnapshot = $null
+	$stableSince = $null
+	while ($true)
+	{
+		if ((Get-Date) -gt $deadline) { throw "uninstall did not finish within 60 s ($dir)" }
+		if (-not (Test-Path $uninstaller) -and -not (Test-Path $data))
+		{
+			if (-not (Test-Path $dir)) { return }
+			$snapshot = (Get-ChildItem -Recurse -Force -Name $dir | Sort-Object) -join "|"
+			if ($snapshot -eq $lastSnapshot)
+			{
+				if (((Get-Date) - $stableSince).TotalSeconds -ge 1) { return }
+			}
+			else { $lastSnapshot = $snapshot; $stableSince = Get-Date }
+		}
+		Start-Sleep -Milliseconds 250
+	}
 }
-
 function Add-FakeDownload([string]$dir)
 {
 	# Stand-ins for what the launcher and client put into the folder.

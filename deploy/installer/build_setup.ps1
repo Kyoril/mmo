@@ -31,7 +31,7 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 $outPath = (Resolve-Path $OutDir).Path
 $script = Join-Path $PSScriptRoot "setup.iss"
 
-& $iscc "/DAppVersion=$Version" "/DLauncherExe=$launcherPath" "/O$outPath" "/Q" $script
+& $iscc "/DAppVersion=$Version" "/DLauncherExe=$launcherPath" "/O$outPath" "/Q" $script | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
 
 $setup = Join-Path $outPath "AlestiaOnline-Setup.exe"
