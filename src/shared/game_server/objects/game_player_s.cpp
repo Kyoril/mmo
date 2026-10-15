@@ -746,7 +746,14 @@ namespace mmo
 					std::map<uint16, uint16> addedBySlot;
 					if (auto result = m_inventory.CreateItems(*srcItem, questEntry->srcitemcount(), &addedBySlot); result != inventory_change_failure::Okay)
 					{
-						// inventoryChangeFailure(result, nullptr, nullptr);
+						// The quest is offered as long as its status is Available, so the player
+						// sees an Accept button that refuses here. Tell them why, the same way
+						// RewardQuest reports a turn-in that does not fit.
+						if (m_netPlayerWatcher)
+						{
+							m_netPlayerWatcher->OnInventoryError(result);
+						}
+
 						return false;
 					}
 
