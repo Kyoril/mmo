@@ -96,8 +96,9 @@ so the launcher has its own release cycle:
   count (`MMO_LAUNCHER_VERSION_STR`). The launcher's version label, its file version and its
   About box show this version.
 - Pushing a `launcher-vX.Y.Z` tag runs `.github/workflows/launcher-release.yml`. It builds
-  `Launcher.exe` and publishes a release with the binary and `launcher-release.json`
-  (version, commit, sha256, size).
+  `Launcher.exe`, builds and smoke-tests `AlestiaOnline-Setup.exe` (see
+  [deploy/installer/README.md](../deploy/installer/README.md)), and publishes a release with the
+  binary, the setup and `launcher-release.json` (version, commit, sha256, size).
 - When it stages a nightly, the deployer looks up the highest `launcher-v*` tag that has a
   release. It uses the tag list, so the launcher release never drops off the release list.
   It replaces the nightly's `Launcher.exe` with that release's binary after checking the
@@ -112,3 +113,8 @@ git push origin launcher-v1.1.0
 
 The launcher reaches players with the next nightly patch. If develop has not moved, run the
 Nightly Release workflow with `force` to ship it sooner.
+
+Until that nightly ships, the patch server still serves the previous `Launcher.exe`. A player
+who installs with the new release's setup in between gets the new launcher, which then
+self-updates to the previous one, and back to the new one with the next nightly. That is
+harmless, only an extra download.

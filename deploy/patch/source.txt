@@ -1,3 +1,4 @@
+// Every top-level entry here is downloaded into the install folder; list it in [UninstallDelete] of deploy/installer/setup.iss too.
 version = 0
 root = (type = "fs", from = ".", to = "", entries =
 {
