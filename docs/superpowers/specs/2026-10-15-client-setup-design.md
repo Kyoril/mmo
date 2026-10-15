@@ -61,9 +61,22 @@ Success criteria:
   - per-user → `%LOCALAPPDATA%\Programs\Alestia Online`, no UAC;
   - all users → `%ProgramFiles%\Alestia Online`, UAC.
 - The directory page stays enabled (`DisableDirPage=no`); any folder is allowed.
-- `[Dirs] Name: "{app}"; Permissions: users-modify` grants the Users group write access, so
-  the launcher can patch an all-users install without elevation. It is harmless for
-  per-user installs.
+- `[Dirs] Name: "{app}"; Permissions: users-modify; Check: IsAdminInstallMode` grants the
+  Users group write access, so the launcher can patch an all-users install without
+  elevation. Only all-users installs get it: on a per-user install in the player's profile it
+  would let any other local account replace the player's `Launcher.exe`.
+- The uninstaller files of an all-users install would inherit that write access, and Apps &
+  Features runs the uninstaller elevated, so a standard user who replaced `unins000.exe` or
+  edited `unins000.dat` would get admin. At `CurStepChanged(ssPostInstall)` (after Inno has
+  saved the uninstaller and its log) the setup runs `icacls /inheritance:r` on both and grants
+  only Administrators and SYSTEM Full, Users Read & Execute. If that fails the setup logs it,
+  shows an error and exits with code 4; an exception would only be logged, and nothing can be
+  rolled back at that point.
+- A folder picked on the directory page that exists, is not empty and is not an Alestia
+  Online install (no `Launcher.exe`, no `unins000.dat`) gets an `Alestia Online` subfolder
+  appended, with a message, and the page stays open so the player sees the new path.
+  Uninstall deletes `Data`, `Logs`, `Config` and `Cache` recursively, and in a foreign folder
+  those may not be ours. A silent install keeps `/DIR` as given.
 - `DisableProgramGroupPage=yes`; a single Start menu entry is created.
 
 ### What gets installed
@@ -79,8 +92,10 @@ Success criteria:
 Reinstall/upgrade over an existing folder only replaces `Launcher.exe`; downloaded game
 files are kept and the launcher patches them as usual.
 
-`CloseApplications=yes` with `AppMutex` is not used (the launcher has no mutex); Inno's
-Restart Manager handles a running `Launcher.exe` on upgrade and uninstall.
+`AppMutex` is not used (the launcher has no mutex). On upgrade, Setup's Restart Manager
+support (`CloseApplications`, default `yes`) offers to close a running `Launcher.exe`. Inno's uninstaller does not use Restart Manager: the player has to
+close the launcher and the game before uninstalling, otherwise locked files are left behind
+(or removed after a reboot). The installer README says so.
 
 ### Uninstall
 

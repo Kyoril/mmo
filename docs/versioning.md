@@ -113,3 +113,8 @@ git push origin launcher-v1.1.0
 
 The launcher reaches players with the next nightly patch. If develop has not moved, run the
 Nightly Release workflow with `force` to ship it sooner.
+
+Until that nightly ships, the patch server still serves the previous `Launcher.exe`. A player
+who installs with the new release's setup in between gets the new launcher, which then
+self-updates to the previous one, and back to the new one with the next nightly. That is
+harmless, only an extra download.

@@ -53,7 +53,10 @@ function Invoke-Uninstall([string]$dir)
 		if (-not (Test-Path $uninstaller) -and -not (Test-Path $data))
 		{
 			if (-not (Test-Path $dir)) { return }
-			$snapshot = (Get-ChildItem -Recurse -Force -Name $dir | Sort-Object) -join "|"
+			# The uninstaller may remove the folder between Test-Path and the listing.
+			$entries = Get-ChildItem -Recurse -Force -Name $dir -ErrorAction SilentlyContinue
+			if (-not (Test-Path $dir)) { return }
+			$snapshot = ($entries | Sort-Object) -join "|"
 			if ($snapshot -eq $lastSnapshot)
 			{
 				if (((Get-Date) - $stableSince).TotalSeconds -ge 1) { return }
@@ -72,6 +75,25 @@ function Add-FakeDownload([string]$dir)
 		Set-Content -Path (Join-Path $dir $f) -Value "x"
 	}
 }
+
+function Get-AllowedRights([string]$path, [string]$sid, [switch]$ExplicitOnly)
+{
+	# Union of the Allow rights the ACL of $path grants the SID, optionally ignoring inherited ACEs.
+	$rights = [System.Security.AccessControl.FileSystemRights]0
+	$rules = (Get-Acl $path).GetAccessRules($true, -not $ExplicitOnly, [System.Security.Principal.SecurityIdentifier])
+	foreach ($rule in $rules)
+	{
+		if ($rule.IdentityReference.Value -eq $sid -and $rule.AccessControlType -eq "Allow")
+		{
+			$rights = $rights -bor $rule.FileSystemRights
+		}
+	}
+	return $rights
+}
+
+$usersSid = "S-1-5-32-545"   # BUILTIN\Users
+$modifyRight = [System.Security.AccessControl.FileSystemRights]::Modify
+$writeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor [System.Security.AccessControl.FileSystemRights]::Delete -bor [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor [System.Security.AccessControl.FileSystemRights]::TakeOwnership
 
 function Test-Scenario([string]$name, [scriptblock]$body)
 {
@@ -92,6 +114,8 @@ Test-Scenario "install, then uninstall removes everything" {
 	$installed = Join-Path $dir "Launcher.exe"
 	if (-not (Test-Path $installed)) { throw "Launcher.exe missing" }
 	if ((Get-FileHash -Algorithm SHA256 $installed).Hash -ne $expectedHash) { throw "Launcher.exe differs from the packaged binary" }
+	# Users-Modify is for all-users installs only: in a profile it would let other accounts swap Launcher.exe.
+	if (((Get-AllowedRights $dir $usersSid -ExplicitOnly) -band $writeRights) -ne 0) { throw "per-user install grants Users an explicit write right on $dir" }
 	Add-FakeDownload $dir
 	Invoke-Uninstall $dir
 	if (Test-Path $dir) { throw "folder left behind: $((Get-ChildItem -Recurse -Name $dir) -join ', ')" }
@@ -128,16 +152,18 @@ Test-Scenario "foreign file survives uninstall" {
 
 if ($AllUsers)
 {
-	Test-Scenario "all-users install is writable for Users" {
+	Test-Scenario "all-users install is writable for Users, its uninstaller is not" {
 		$dir = Join-Path $env:ProgramFiles "Alestia Online Smoke $([guid]::NewGuid().ToString('N').Substring(0, 6))"
 		Invoke-Setup $dir "/ALLUSERS"
-		$sid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-545")   # BUILTIN\Users
-		$rule = (Get-Acl $dir).Access | Where-Object {
-			$_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]) -eq $sid -and
-			$_.AccessControlType -eq "Allow" -and
-			($_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::Modify) -eq [System.Security.AccessControl.FileSystemRights]::Modify
+		if (((Get-AllowedRights $dir $usersSid) -band $modifyRight) -ne $modifyRight) { throw "Users have no Modify right on $dir" }
+		# Apps & Features runs the uninstaller elevated: a user who could replace it would get admin.
+		foreach ($f in "unins000.exe", "unins000.dat")
+		{
+			$path = Join-Path $dir $f
+			if (-not (Test-Path $path)) { throw "$f missing" }
+			$granted = (Get-AllowedRights $path $usersSid) -band $writeRights
+			if ($granted -ne 0) { throw "Users can write $f ($granted)" }
 		}
-		if (-not $rule) { throw "Users have no Modify right on $dir" }
 		Invoke-Uninstall $dir
 		if (Test-Path $dir) { throw "folder left behind" }
 	}
