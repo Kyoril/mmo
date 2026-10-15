@@ -13,6 +13,7 @@ for bin in Launcher.exe fmod.dll mmo_client.exe mmo_error.exe; do
 	echo "$bin" > "$work/deploy/patch/$bin"
 done
 cat > "$work/deploy/patch/source.txt" <<'EOF'
+// Every top-level entry here is downloaded into the install folder; list it in [UninstallDelete] of deploy/installer/setup.iss too.
 version = 0
 root = (type = "fs", from = ".", to = "", entries =
 {
