@@ -91,6 +91,10 @@ launcher puts into the game folder:
 - `{app}\mmo_client.exe`, `{app}\mmo_error.exe`, `{app}\fmod.dll`
 - `{app}\launcher.ini`
 - `{app}\Launcher.exe.*` (self-update leftovers)
+- `{app}\Logs`, `{app}\Config`, `{app}\Cache` (`filesandordirs`): created by the client
+  in its working directory (`client_application.cpp` creates `Logs` and `Config`;
+  `client_cache.cpp` writes `Cache/*.db`). `Config` holds the player's settings and key
+  bindings; uninstall removes them like any full game uninstall does.
 - `{app}` itself with `Type: dirifempty`
 
 The whole `{app}` folder is never deleted recursively: a player who installed into an
@@ -99,8 +103,8 @@ new top-level file, this list must be extended. `deploy/patch/source.txt` gets a
 pointing to `setup.iss` if the SFF format accepts comments; otherwise the note goes into
 `docs/deployment.md` next to the patch-source description.
 
-Logs and settings under `Documents\MMORPG` and the launcher's content cache under
-`%LOCALAPPDATA%\AlestiaOnline` are left alone.
+The launcher log under `Documents\MMORPG`, the launcher's content cache under
+`%LOCALAPPDATA%\AlestiaOnline` and client crash reports in `%TEMP%` are left alone.
 
 ### Build and publish
 
