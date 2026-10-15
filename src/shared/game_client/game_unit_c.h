@@ -458,6 +458,21 @@ namespace mmo
 
 		uint32 GetAttackTime() const { return Get<uint32>(object_fields::BaseAttackTime); }
 
+		/// Gets the flat spell power that is added to damaging spell effects.
+		float GetSpellDamage() const { return Get<float>(object_fields::SpellDamage); }
+
+		/// Gets the flat healing power that is added to healing spell effects.
+		float GetSpellHealing() const { return Get<float>(object_fields::SpellHealing); }
+
+		/// Gets the chance in percent for a spell to critically hit.
+		float GetSpellCritChance() const { return Get<float>(object_fields::SpellCritChance); }
+
+		/// Gets the chance in percent for a melee attack to critically hit.
+		float GetMeleeCritChance() const { return Get<float>(object_fields::MeleeCritChance); }
+
+		/// Gets the amount of mana restored every five seconds while regenerating.
+		float GetManaRegen() const { return Get<float>(object_fields::ManaRegen); }
+
 		int32 GetStat(int32 statId) const;
 
 		int32 GetPosStat(int32 statId) const;

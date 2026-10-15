@@ -115,6 +115,11 @@ namespace mmo
 		[[nodiscard]] virtual float GetMaxDamage() const;
 		[[nodiscard]] virtual uint32 GetAttackTime() const;
 		[[nodiscard]] virtual float GetAttackPower() const;
+		[[nodiscard]] virtual float GetSpellDamage() const;
+		[[nodiscard]] virtual float GetSpellHealing() const;
+		[[nodiscard]] virtual float GetSpellCritChance() const;
+		[[nodiscard]] virtual float GetMeleeCritChance() const;
+		[[nodiscard]] virtual float GetManaRegen() const;
 		[[nodiscard]] virtual int32 GetStat(int32 statId) const;
 		[[nodiscard]] virtual int32 GetPosStat(int32 statId) const;
 		[[nodiscard]] virtual int32 GetNegStat(int32 statId) const;

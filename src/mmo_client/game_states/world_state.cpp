@@ -2698,6 +2698,12 @@ namespace mmo
 					static_assert(object_fields::MinDamage == object_fields::BaseAttackTime + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::MaxDamage == object_fields::MinDamage + 1, "Order of fields is important for monitored unit mirror handlers");
 
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::SpellDamage, 5, *this, &WorldState::OnPlayerStatsChanged);
+					static_assert(object_fields::SpellHealing == object_fields::SpellDamage + 1, "Order of fields is important for monitored unit mirror handlers");
+					static_assert(object_fields::SpellCritChance == object_fields::SpellHealing + 1, "Order of fields is important for monitored unit mirror handlers");
+					static_assert(object_fields::MeleeCritChance == object_fields::SpellCritChance + 1, "Order of fields is important for monitored unit mirror handlers");
+					static_assert(object_fields::ManaRegen == object_fields::MeleeCritChance + 1, "Order of fields is important for monitored unit mirror handlers");
+
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Guild, 2, *this, &WorldState::OnPlayerGuildChanged);
 
 					// Old handlers for now
