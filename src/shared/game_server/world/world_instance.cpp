@@ -385,6 +385,7 @@ namespace mmo
 
 		// Update game time
 		m_gameTime.Update(update.GetTimestamp());
+		CheckHourOfDay();
 
 		// Check if we need to broadcast game time (every 5 minutes of real time)
 		constexpr GameTime TimeUpdateInterval = 5 * constants::OneMinute; // Every 5 minutes
