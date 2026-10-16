@@ -349,11 +349,25 @@ namespace mmo
 
 			// Update portal culling for all WorldModelInstances BEFORE FindVisibleObjects
 			// so that entity visibility is set correctly before octree traversal.
+			//
+			// A camera inside an interior room of one world model sees the rest of the world only
+			// through that room's doors: every other instance is then culled against the door frustums.
+			PortalInteriorView& interiorView = m_interiorView;
+			WorldModelInstance* interiorOwner = nullptr;
+			for (auto* wmi : m_worldModelInstances)
+			{
+				if (wmi && wmi->DetectInteriorView(camera, interiorView))
+				{
+					interiorOwner = wmi;
+					break;
+				}
+			}
+
 			for (auto* wmi : m_worldModelInstances)
 			{
 				if (wmi)
 				{
-					wmi->UpdatePortalCulling(camera);
+					wmi->UpdatePortalCulling(camera, (interiorOwner && wmi != interiorOwner) ? &interiorView : nullptr);
 				}
 			}
 

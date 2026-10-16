@@ -155,7 +155,16 @@ namespace mmo
         /// This should be called before the scene's FindVisibleObjects to ensure
         /// child entity visibility is set correctly before octree traversal.
         /// @param camera The camera to use for visibility calculations.
-        void UpdatePortalCulling(Camera& camera);
+        /// @param outsideView When the camera stands in an interior room of another world model, what
+        ///        that room lets it see of the outside: this instance then only shows the groups whose
+        ///        bounds lie in one of those frustums. Null when nothing restricts the view.
+        void UpdatePortalCulling(Camera& camera, const PortalInteriorView* outsideView = nullptr);
+
+        /// @brief Checks whether the camera stands in one of this world model's interior rooms.
+        /// @param camera The camera.
+        /// @param outView Receives what the room lets the camera see of the outside.
+        /// @return True when the camera is in an interior room of this instance.
+        bool DetectInteriorView(const Camera& camera, PortalInteriorView& outView) const;
 
     private:
         /// @brief One instanced draw call plus the data needed to rebuild its world matrices.

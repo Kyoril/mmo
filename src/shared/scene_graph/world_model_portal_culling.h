@@ -70,6 +70,20 @@ namespace mmo
     /// @return True if the point is in the doorway.
     bool IsInPortalDoorway(const Vector3& point, const std::vector<Vector3>& portalVertices);
 
+    /// @brief What a camera standing in a room can see of the world outside it.
+    /// @details Filled by CollectVisiblePortalGroups. When the eye starts in interior rooms only, the
+    ///          outside (every other world model, the town around a house) is visible solely through
+    ///          the portals that lead from those rooms to an exterior group; exteriorFrustums are the
+    ///          view frustums narrowed through exactly those portals, in world space.
+    struct PortalInteriorView
+    {
+        /// @brief Whether the eye stands in interior rooms only (no exterior group holds it).
+        bool eyeInInterior { false };
+
+        /// @brief Frustums through which an exterior group was reached. Empty when no way out is in view.
+        std::vector<PortalFrustum> exteriorFrustums;
+    };
+
     /// @brief Determines which groups (rooms) of a world model are visible through its portals.
     ///
     /// Traversal starts in every group whose containment volumes hold the eye, plus both groups of any
@@ -85,9 +99,12 @@ namespace mmo
     /// @param modelToWorld Transform from model space to world space (the instance's node transform).
     /// @param viewFrustum The eye's frustum in world space (see PortalFrustum::FromCamera).
     /// @param visibleGroups Receives the visible group indices, each once. Cleared first.
+    /// @param interiorView Optional. Receives whether the eye is in interior rooms and the frustums
+    ///        through which it sees out of them (see PortalInteriorView). Reset first.
     void CollectVisiblePortalGroups(
         const WorldModel& model,
         const Matrix4& modelToWorld,
         const PortalFrustum& viewFrustum,
-        std::vector<int32>& visibleGroups);
+        std::vector<int32>& visibleGroups,
+        PortalInteriorView* interiorView = nullptr);
 }
