@@ -750,6 +750,20 @@
       "radius": 7.5,
       "status": "canon",
       "source": "user"
+    },
+    {
+      "id": "oakenshire_market",
+      "name": "Oakenshire Market",
+      "kind": "hub",
+      "center": [
+        290.5,
+        587.0
+      ],
+      "radius": 14.0,
+      "description": "Open ground east of the Oakenshire Inn's front steps, where the road from the town centre comes down. Four traders (general goods, weapons, mail, leather) moved here from the buried old-Haven market.",
+      "status": "placeholder",
+      "ask": "Is this the right spot and name for Oakenshire's market?",
+      "source": "agent"
     }
   ],
   "roads": [

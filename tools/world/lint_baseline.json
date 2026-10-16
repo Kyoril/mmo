@@ -113,26 +113,6 @@
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:5:-:-15:21",
-      "message": "Eliza Thorne at (-15, 21): 3.7 m below the ground"
-    },
-    {
-      "map": 0,
-      "key": "height_delta|unit:0:6:-:-10:21",
-      "message": "Garret Blackwood at (-10, 21): 4.0 m below the ground"
-    },
-    {
-      "map": 0,
-      "key": "height_delta|unit:0:7:-:-21:22",
-      "message": "Roland Stonehelm at (-21, 22): 3.2 m below the ground"
-    },
-    {
-      "map": 0,
-      "key": "height_delta|unit:0:8:-:20:22",
-      "message": "Derrick Longstride at (20, 22): 3.6 m below the ground"
-    },
-    {
-      "map": 0,
       "key": "height_delta|unit:0:9:-:14:21",
       "message": "Mariana Silkspun at (14, 21): 3.8 m below the ground"
     },
