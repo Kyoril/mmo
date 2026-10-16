@@ -279,9 +279,9 @@ def umbral_bloom():
     smoke billows after them; a short column of violet streaks marks the centre."""
     # Ring sizes: the ring sprite's band sits at ~62% of the quad half-size, so a radius-8
     # edge needs a quad of ~26 (mage_spell_visuals).
-    edge = ac.ring("Bloom Edge", 2.0, 26.0, VOID, alpha=0.6, lifetime=0.75, hold=0.8)
-    edge2 = ac.ring("Bloom Edge Dark", 1.6, 22.0, UMBRA, alpha=0.55, lifetime=0.8, delay=0.08,
-                    hold=0.8)
+    edge = ac.ring("Bloom Edge", 2.0, 26.0, VOID, alpha=0.42, lifetime=0.7, hold=0.6)
+    edge2 = ac.ring("Bloom Edge Dark", 1.6, 22.0, UMBRA, alpha=0.45, lifetime=0.75, delay=0.08,
+                    hold=0.6)
     petals = e(name="Bloom Petals", simulation_space=hpar.SIM_WORLD, material_name=WISP,
                bursts=[Burst(0.0, 28), Burst(0.08, 16)],
                shape=hpar.SHAPE_BOX, shape_extents=(1.0, 0.25, 1.0),

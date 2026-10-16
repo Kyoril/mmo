@@ -315,7 +315,7 @@ def embrace_burst():
                    (1.00, rgba(UMBRA, 0.0))))
     return ParticleSystem(emitters=[
         ac.sigil("Dread Sigil", 3.6, DREAD, alpha=0.75, lifetime=1.6, spin=0.8, grow=1.1),
-        ac.ring("Dread Shockwave", 1.0, 9.0, DREAD, alpha=0.55, lifetime=0.6),
+        ac.ring("Dread Shockwave", 1.0, 9.0, DREAD, alpha=0.38, lifetime=0.55, hold=0.5),
         ac.dark_smoke("Dread Ground Smoke", 16, 0.6, 0.9, 1.0, alpha=0.45, speed=3.0, rise=0.2,
                       drag=3.5),
         ac.flash("Dread Flash", 2.0, DREAD, alpha=0.45, lifetime=0.3),
