@@ -8,6 +8,7 @@
 #include "vector_sink.h"
 #include "log/default_log_levels.h"
 #include "game/object_type_id.h"
+#include "game/hour_chime.h"
 #include "game_server/objects/game_object_s.h"
 
 #include <set>
@@ -66,5 +67,27 @@ namespace mmo
     {
         m_gameTime.SetTime(timeOfDay);
         BroadcastGameTime(transitionMs);
+
+        // A game master setting a full hour hears it struck right away, not on the next tick
+        CheckHourOfDay();
+    }
+
+    void WorldInstance::CheckHourOfDay()
+    {
+        // The authoritative time, not the blended one: a settime transition must not ring the
+        // hours the sky sweeps through on its way to the new time.
+        uint32 hour = 0;
+        if (!m_hourChime.Update(m_gameTime.GetTargetTime(), hour))
+        {
+            return;
+        }
+
+        // Nobody would hear it, and an empty open-world map must not keep trigger timers running
+        if (m_playerCount == 0)
+        {
+            return;
+        }
+
+        FireInstanceTriggerEvent(trigger_event::OnHourOfDay, nullptr, { GetHourOfDayEventValue(hour * constants::OneHour) });
     }
 }

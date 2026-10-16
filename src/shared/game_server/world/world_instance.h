@@ -12,6 +12,7 @@
 #include "unit_finder.h"
 #include "game/game.h"
 #include "game/game_time_component.h"
+#include "game/hour_chime.h"
 #include "visibility_grid.h"
 #include "world_object_spawner.h"
 #include "spell_zone_set.h"
@@ -410,6 +411,9 @@ namespace mmo
 		/// @param transitionMs How long clients should blend towards the new time, 0 = instantly.
 		void SetTimeOfDay(GameTime timeOfDay, uint32 transitionMs);
 
+		/// @brief Raises OnHourOfDay once the authoritative time of day reaches a full hour.
+		void CheckHourOfDay();
+
 		/// Sets the state of a named encounter slot for this instance.
 		void SetEncounterState(uint32 slotId, uint32 state);
 
@@ -498,6 +502,9 @@ namespace mmo
 		
 		/// Last time when game time update was broadcast to players
 		GameTime m_lastTimeUpdateBroadcast { 0 };
+
+		/// Decides when the time of day reaches a full hour, for the OnHourOfDay instance trigger.
+		HourChime m_hourChime;
 
 		std::map<uint64, std::shared_ptr<GameCreatureS>> m_temporaryCreatures;
 		std::map<uint64, std::shared_ptr<GameWorldObjectS>> m_temporaryObjects;

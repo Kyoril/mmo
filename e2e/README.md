@@ -95,6 +95,8 @@ packets rather than by the requests we send, so it reports what the server ackno
 `SoundSource(soundId)` (guid of the unit a `PlaySoundById` came from, `"0x0"` for a sound without a
 unit, `""` if not heard since `ClearHeardSounds()` or the session started; trigger voice lines
 come from their speaker),
+`SoundCount(soundId)` (how many `PlaySoundById` packets for `soundId` arrived since
+`ClearHeardSounds()` — counts repetitions such as the strikes of the hourly town bells),
 `IsChanneling(g)` (the server sent `g` a ChannelStart and no ChannelUpdate(0) since — what a
 real client believes), `ChannelStartCount(g)` (ChannelStart packets received for `g`),
 `IsSpellOnCooldown(spellId)` (own character, as the server's cooldown packets left it; the global

@@ -122,6 +122,7 @@ namespace mmo
 			m_kickReason.reset();
 			m_lastSpellVisual.reset();
 			m_heardSounds.clear();
+			m_heardSoundCounts.clear();
 			m_subsystemStatus.fill(game::subsystem_status::Unavailable);
 			m_lastBugReportResult.clear();
 
@@ -573,6 +574,7 @@ namespace mmo
 		}
 
 		m_heardSounds[soundId] = sourceGuid;
+		++m_heardSoundCounts[soundId];
 		return PacketParseResult::Pass;
 	}
 
