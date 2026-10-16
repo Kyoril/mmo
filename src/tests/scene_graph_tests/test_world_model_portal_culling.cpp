@@ -179,6 +179,28 @@ TEST_CASE("Portal culling still shuts the eye into an interior room inside an ex
 	CHECK(Visible(model, LookAlongX(Vector3(5.0f, 2.0f, 0.0f), 1.0f)) == std::vector<int32>{ static_cast<int32>(room) });
 }
 
+TEST_CASE("Portal culling does not shut the eye into an unflagged prop group", "[world_model_portal_culling]")
+{
+	// Props such as WoodLantern_A are a single group with no flags, no volume and no portals, and a
+	// bounding box reaching metres around the post. Counting that box as a room put the eye "inside a
+	// doorless room" whenever the camera came near a lantern, which hid every other world model in
+	// Oakenshire.
+	WorldModel model;
+	WorldModelGroup& lantern = model.AddGroup();
+	lantern.SetBoundingBox(AABB(Vector3(-5.0f, 0.0f, -5.0f), Vector3(5.0f, 5.0f, 5.0f)));
+
+	std::vector<int32> visible;
+	PortalInteriorView view;
+	CollectVisiblePortalGroups(model, Matrix4::Identity, LookAlongX(Vector3(-3.0f, 2.0f, 0.0f), 1.0f), visible, &view);
+	CHECK_FALSE(view.eyeInInterior);
+	CHECK(visible == std::vector<int32>{ 0 });
+
+	// An interior room without volumes still falls back to its bounding box
+	lantern.SetFlags(WorldModelGroupFlags::Interior);
+	CollectVisiblePortalGroups(model, Matrix4::Identity, LookAlongX(Vector3(-3.0f, 2.0f, 0.0f), 1.0f), visible, &view);
+	CHECK(view.eyeInInterior);
+}
+
 TEST_CASE("Portal culling reports what a room shows of the outside", "[world_model_portal_culling]")
 {
 	// A sealed room (0..10 on X) with one door at x = 10 onto an exterior yard (10..40)
