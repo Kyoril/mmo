@@ -6,6 +6,7 @@
 #include <DetourDebugDraw.h>
 #include <imgui_internal.h>
 
+#include <set>
 #include "editor_host.h"
 #include "icon_font.h"
 #include "scene_graph/prop_kit_manager.h"
@@ -3001,7 +3002,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				{
 					ImGui::PushID(i);
 
-					const PropKitPtr kit = PropKitManager::Get().Load(kitPaths[i]);
+					const PropKitPtr kit = PropKitManager::Get().Find(kitPaths[i]);
 
 					ImGui::BeginDisabled(i == 0);
 					if (ImGui::SmallButton("^"))
@@ -3078,6 +3079,10 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 						if (PropKitPtr kit = PropKitManager::Get().Load(kitPath))
 						{
 							kits.push_back(std::move(kit));
+						}
+						else
+						{
+							WLOG("Failed to load prop kit " << kitPath << " for world model " << mapEntity.GetUniqueId());
 						}
 					}
 
