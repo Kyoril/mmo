@@ -114,6 +114,7 @@ namespace mmo
         m_groupRenderables.clear();
 
         ClearBatches(scene);
+        m_mergedGeometry.reset();
 
         m_geometryCreated = false;
     }
@@ -181,6 +182,7 @@ namespace mmo
             child.instance->m_ancestors = chain;
             child.instance->SetQueryFlags(GetQueryFlags());
             child.instance->SetBatchingEnabled(m_batchingEnabled);
+            child.instance->SetMergingEnabled(m_mergingEnabled);
             child.instance->SetVisible(IsVisible());
             child.node->AttachObject(*child.instance);
 
@@ -533,7 +535,11 @@ namespace mmo
                 sceneNode->GetScene().RegisterWorldModelInstance(this);
 
                 // Create renderables for each group
-                if (m_batchingEnabled)
+                if (m_mergingEnabled)
+                {
+                    BuildMergedGeometry(sceneNode->GetScene());
+                }
+                else if (m_batchingEnabled)
                 {
                     BuildBatchedGeometry(sceneNode->GetScene());
                 }
