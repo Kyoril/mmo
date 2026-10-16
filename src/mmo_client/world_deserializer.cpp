@@ -254,6 +254,14 @@ namespace mmo
 			worldModelInstance->SetBatchingEnabled(batchVar->GetBoolValue());
 		}
 
+		// Static geometry merging: each group's meshes baked into one mesh per material. Takes
+		// precedence over batching where both are on.
+		if (const ConsoleVar* mergeVar = ConsoleVarMgr::RegisterConsoleVar("gxWorldModelMerging",
+			"Whether each world model group's static geometry is merged into one mesh per material (a few draw calls per group). Takes effect for world models loaded afterwards.", "1"))
+		{
+			worldModelInstance->SetMergingEnabled(mergeVar->GetBoolValue());
+		}
+
 		// Create scene node
 		SceneNode* node = m_rootNode.CreateChildSceneNode();
 		node->SetPosition(position);

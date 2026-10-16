@@ -2297,6 +2297,14 @@ namespace mmo
 			{
 				const auto &levelStats = m_classEntry->levelbasevalues(GetLevel() - 1);
 				const auto &nextLevelStats = m_classEntry->levelbasevalues(GetLevel());
+
+				// Once a class-level curve is configured, talent points come from class levels
+				// only (see UpdateTotalTalentPoints), so a character level grants none and the
+				// notification must not claim otherwise. The levelbasevalues talentPoints are
+				// still the source for legacy classes without such a curve.
+				const int32 talentPointsGained = m_classEntry->classlevels_size() > 0 ?
+					0 : static_cast<int32>(nextLevelStats.talentpoints());
+
 				m_netUnitWatcher->OnLevelUp(GetLevel() + 1,
 											static_cast<int32>(nextLevelStats.health()) - static_cast<int32>(levelStats.health()),
 											static_cast<int32>(nextLevelStats.mana()) - static_cast<int32>(levelStats.mana()),
@@ -2305,7 +2313,7 @@ namespace mmo
 											static_cast<int32>(nextLevelStats.agility()) - static_cast<int32>(levelStats.agility()),
 											static_cast<int32>(nextLevelStats.intellect()) - static_cast<int32>(levelStats.intellect()),
 											static_cast<int32>(nextLevelStats.spirit()) - static_cast<int32>(levelStats.spirit()),
-											nextLevelStats.talentpoints(),
+											talentPointsGained,
 											nextLevelStats.attributepoints());
 			}
 
@@ -2360,12 +2368,17 @@ namespace mmo
 		classData.classXp += xp;
 
 		bool leveledUp = false;
+		uint32 talentPointsGained = 0;
 		while (classData.classLevel < maxClassLevel &&
 			classData.classXp >= m_classEntry->classlevels(classData.classLevel - 1).xptonextlevel())
 		{
 			classData.classXp -= m_classEntry->classlevels(classData.classLevel - 1).xptonextlevel();
 			classData.classLevel++;
 			leveledUp = true;
+
+			// Talent points are granted AT the new class level, so they are read from the entry
+			// the class just reached. A single grant can cross several ranks: sum them all up.
+			talentPointsGained += m_classEntry->classlevels(classData.classLevel - 1).talentpoints();
 		}
 
 		// At the class cap there is no next level to progress towards: clear the remainder so the
@@ -2385,7 +2398,7 @@ namespace mmo
 		{
 			const uint32 xpToNextLevel = classData.classLevel < maxClassLevel ?
 				m_classEntry->classlevels(classData.classLevel - 1).xptonextlevel() : 0;
-			m_netPlayerWatcher->OnClassXpGained(m_classEntry->id(), xp, classData.classLevel, classData.classXp, xpToNextLevel, leveledUp);
+			m_netPlayerWatcher->OnClassXpGained(m_classEntry->id(), xp, classData.classLevel, classData.classXp, xpToNextLevel, leveledUp, talentPointsGained);
 		}
 	}
 

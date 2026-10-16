@@ -229,6 +229,35 @@ namespace mmo
 		}
 	}
 
+	void GameCreatureS::PrepareDynamicFieldsFor(const GamePlayerS& player)
+	{
+		// A corpse belongs to its loot recipients only - everybody else is refused by the loot
+		// handler. Serializing the Lootable flag to them anyway would promise loot the client
+		// advertises with the corpse sparkle and the loot cursor but can never deliver.
+		const uint32 flags = Get<uint32>(object_fields::Flags);
+		if ((flags & unit_flags::Lootable) == 0 || IsLootRecipient(player))
+		{
+			return;
+		}
+
+		m_lootableFlagSuppressed = true;
+
+		// Do not notify the world instance: this is a temporary per-player value, not an actual
+		// change of the creature that other subscribers need to hear about.
+		Set<uint32>(object_fields::Flags, flags & ~unit_flags::Lootable, false);
+	}
+
+	void GameCreatureS::ClearDynamicFields()
+	{
+		if (!m_lootableFlagSuppressed)
+		{
+			return;
+		}
+
+		m_lootableFlagSuppressed = false;
+		Set<uint32>(object_fields::Flags, Get<uint32>(object_fields::Flags) | unit_flags::Lootable, false);
+	}
+
 	QuestgiverStatus GameCreatureS::GetQuestGiverStatus(const GamePlayerS& player) const
 	{
 		QuestgiverStatus result = questgiver_status::None;

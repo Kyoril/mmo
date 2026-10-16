@@ -29,6 +29,7 @@
 #include "scene_graph/scene_node.h"
 #include "scene_graph/world_model_serializer.h"
 #include "scene_graph/world_model_instance.h"
+#include "scene_graph/world_model_manager.h"
 #include "scene_graph/world_model_rooms.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
@@ -2971,6 +2972,16 @@ namespace mmo
 		// Clear existing child WMO visualizations
 		for (auto& childViz : m_childWMOVisualizations)
 		{
+			if (childViz.instance)
+			{
+				childViz.instance->Destroy(m_scene);
+				if (childViz.node)
+				{
+					childViz.node->DetachObject(*childViz.instance);
+				}
+				childViz.instance.reset();
+			}
+
 			for (auto* entity : childViz.entities)
 			{
 				if (childViz.node)
@@ -3012,9 +3023,22 @@ namespace mmo
 			viz.node->SetScale(childRef.scale);
 			m_scene.GetRootSceneNode().AddChild(*viz.node);
 
-			// TODO: Load and display the child WMO
-			// For now, we'll just show a placeholder bounding box or similar
-			// Full implementation would recursively load the child WMO and display its geometry
+			// Display the referenced world model through the same instance class the game uses, so
+			// the preview matches in-game nesting, culling and lighting
+			if (WorldModelPtr childModel = WorldModelManager::Get().Load(childRef.wmoPath))
+			{
+				if (childModel == m_worldModel)
+				{
+					WLOG("Child WMO reference '" << childRef.name << "' points at the edited world model itself, not displayed");
+				}
+				else
+				{
+					viz.instance = std::make_shared<WorldModelInstance>(nodeName + "_Instance", childModel);
+					viz.instance->SetQueryFlags(0);
+					viz.node->AttachObject(*viz.instance);
+					viz.instance->SetVisible(viz.visible);
+				}
+			}
 
 			m_childWMOVisualizations.push_back(std::move(viz));
 		}
@@ -4452,6 +4476,10 @@ namespace mmo
 						if (ImGui::Checkbox("##vis", &visible))
 						{
 							m_childWMOVisualizations[i].visible = visible;
+							if (m_childWMOVisualizations[i].instance)
+							{
+								m_childWMOVisualizations[i].instance->SetVisible(visible);
+							}
 						}
 						ImGui::SameLine();
 					}

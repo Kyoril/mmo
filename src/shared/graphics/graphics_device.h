@@ -147,6 +147,23 @@ namespace mmo
 		Front,
 	};
 
+	/// @brief The face cull mode a draw with the given material and transform needs.
+	/// @details The engine's meshes are wound so that culling Front hides their inside. A transform
+	///          with a negative determinant (an odd number of negative scale axes) mirrors the mesh and
+	///          reverses its winding, so the other face has to be culled instead. Two-sided materials
+	///          cull nothing either way.
+	/// @param twoSided Whether the material is two-sided.
+	/// @param mirrored Whether the draw's world transform mirrors the geometry.
+	inline FaceCullMode GetMaterialCullMode(const bool twoSided, const bool mirrored)
+	{
+		if (twoSided)
+		{
+			return FaceCullMode::None;
+		}
+
+		return mirrored ? FaceCullMode::Back : FaceCullMode::Front;
+	}
+
 	enum class DepthTestMethod
 	{
 		Never,
