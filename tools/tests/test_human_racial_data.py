@@ -82,9 +82,13 @@ class HumanRacialDataTest(unittest.TestCase):
         self.assertEqual(list(human.racialSpells), list(self.ahr.SPELL_IDS))
 
     def test_client_db_mirrors_the_editor_blobs(self):
+        # Compared as messages, not bytes: protobuf map fields (RaceEntry.initialItems) have no
+        # defined wire order, so two saves of identical data can differ byte for byte.
         for name in ("spells", "races"):
-            editor = (ROOT / f"data/editor/data/{name}.data").read_bytes()
-            client = (ROOT / f"data/client/ClientDB/{name}.data").read_bytes()
+            proto, message = self.ahr.EDITOR_TYPES[name]
+            message_type = self.ahr.load_type(ROOT / "src/shared/proto_data", [proto], message)
+            editor = message_type.FromString(self.ahr.editor_path(name).read_bytes())
+            client = message_type.FromString(self.ahr.client_path(name).read_bytes())
             self.assertEqual(editor, client, f"ClientDB/{name}.data drifted from the editor")
 
     def test_call_of_the_watch_points_at_its_visualization(self):
