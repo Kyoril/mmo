@@ -651,6 +651,54 @@ namespace mmo
 		return true;
 	}
 
+	bool MeshEditorInstance::SetSubMeshMaterialInFile(const String& assetPath, const String& subMesh, const String& materialPath)
+	{
+		// Read the recipe first: saving without it would drop the mesh's collision shapes.
+		CollisionRecipe recipe;
+		collision_recipe_read::Type recipeResult = collision_recipe_read::Absent;
+		if (!LoadMeshCollisionRecipe(assetPath, recipe, recipeResult) || recipeResult == collision_recipe_read::Corrupt)
+		{
+			ELOG("Set submesh material: cannot read " << assetPath);
+			return false;
+		}
+
+		const MeshPtr mesh = MeshManager::Get().Load(assetPath);
+		if (!mesh)
+		{
+			ELOG("Set submesh material: cannot load " << assetPath);
+			return false;
+		}
+
+		int32 index = mesh->GetSubMeshIndex(subMesh);
+		if (index < 0 && !subMesh.empty() && std::all_of(subMesh.begin(), subMesh.end(), [](const char c) { return c >= '0' && c <= '9'; }))
+		{
+			index = std::stoi(subMesh);
+		}
+
+		if (index < 0 || index >= mesh->GetSubMeshCount())
+		{
+			ELOG("Set submesh material: " << assetPath << " has no submesh " << subMesh);
+			return false;
+		}
+
+		// A material that fails to load would be saved as Models/Default.hmat, so refuse it.
+		const MaterialPtr material = MaterialManager::Get().Load(materialPath);
+		if (!material || material->GetName() != materialPath)
+		{
+			ELOG("Set submesh material: cannot load material " << materialPath);
+			return false;
+		}
+
+		mesh->GetSubMesh(static_cast<uint16>(index)).SetMaterial(material);
+		if (!SaveMeshWithRecipe(mesh, assetPath, recipeResult == collision_recipe_read::Read ? &recipe : nullptr))
+		{
+			return false;
+		}
+
+		ILOG("Set submesh material: " << assetPath << " submesh " << index << " -> " << materialPath);
+		return true;
+	}
+
 	bool MeshEditorInstance::Save()
 	{
 		if (!SaveMeshWithRecipe(m_mesh, GetAssetPath().string(), m_collisionEditor->GetRecipeForSave()))

@@ -145,6 +145,13 @@ class MeshReaderTests(unittest.TestCase):
 		self.assertEqual(mesh.submeshes[0].indices.tolist(), [0, 1, 2])
 		self.assertEqual(mesh.submeshes[0].uvs[1].tolist(), [1.0, 0.0])
 
+	def test_version_0302_skips_the_collision_recipe_chunk(self):
+		# 0x0302 is what mmo_edit writes today; it may carry the editor-only CSRC recipe chunk.
+		data = fx.hmsh_bytes([("S", "M.hmi", [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)],
+							   None, [0, 1, 2], False)], version=0x302) + fx.chunk(b"CSRC", b"\x01\x00\x00\x00")
+		mesh = parse_hmsh(write(self.tmp, "r.hmsh", data))
+		self.assertEqual((mesh.version, mesh.submeshes[0].material, len(mesh.submeshes[0].indices)), (0x302, "M.hmi", 3))
+
 	def test_legacy_shared_vertex_layout(self):
 		mesh = parse_hmsh(write(self.tmp, "l.hmsh", fx.legacy_hmsh_bytes(fx.CUBE_POSITIONS, fx.CUBE_INDICES, "Old.hmi")))
 		self.assertEqual((mesh.version, mesh.submeshes[0].material, len(mesh.submeshes[0].indices)), (0x200, "Old.hmi", 36))

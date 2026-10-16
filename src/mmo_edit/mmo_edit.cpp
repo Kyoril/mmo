@@ -333,6 +333,8 @@ int main(int argc, char* arg[])
 	// collision with a ramp, saves them and exits.
 	// `--rebake-collision <asset.hmsh> [--rebake-collision ...]` rebuilds the meshes' collision trees
 	// from their stored collision recipes (editor-only CSRC chunk), saves them and exits.
+	// `--set-submesh-material <asset.hmsh> <submesh> <material> [...]` assigns a material to a
+	// submesh (by name, or index), saves the mesh with its collision recipe and exits.
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
@@ -435,6 +437,40 @@ int main(int argc, char* arg[])
 					{
 						allSaved = mmo::MeshEditorInstance::StairsToRampInFile(args[j + 1]) && allSaved;
 					}
+				}
+
+				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--set-submesh-material")
+			{
+				// `--set-submesh-material <asset.hmsh> <submesh name|index> <material> [...]`
+				static std::ofstream materialLog("set_submesh_material.log", std::ios::out | std::ios::trunc);
+				static std::mutex materialLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ materialLogMutex };
+					materialLog << entry.message << std::endl;
+				});
+
+				bool allSaved = true;
+				for (int j = 1; j < argCount; ++j)
+				{
+					if (std::string(args[j]) != "--set-submesh-material")
+					{
+						continue;
+					}
+
+					if (j + 3 >= argCount)
+					{
+						ELOG("--set-submesh-material needs <asset> <submesh> <material>");
+						allSaved = false;
+						break;
+					}
+
+					allSaved = mmo::MeshEditorInstance::SetSubMeshMaterialInFile(args[j + 1], args[j + 2], args[j + 3]) && allSaved;
+					j += 3;
 				}
 
 				PostQuitMessage(allSaved ? 0 : 1);
