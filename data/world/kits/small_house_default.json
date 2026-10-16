@@ -1,0 +1,21 @@
+{
+  "kit": "Kits/SmallHouse_Default.hkit",
+  "name": "Small House (default)",
+  "preview": "Models/FalwynPlains/Buildings/HouseTest.hwmo",
+  "props": [
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_DinnerTable_B.hmsh", "name": "SM_hc_DinnerTable_B", "position": [-4.0, 1.0, 0.0], "rotation": [1.0, 0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Chair_B.hmsh", "name": "SM_hc_Chair_01", "position": [-4.0, 1.0, -1.6120638847351074], "rotation": [0.7071068286895752, 0.0, 0.7071069478988647, 0.0], "scale": [1.0, 1.0, 1.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Chair_B.hmsh", "name": "SM_hc_Chair_02", "position": [-4.0, 1.0, 1.6393752098083496], "rotation": [0.7071068286895752, 0.0, -0.70710688829422, 0.0], "scale": [1.0, 1.0, 1.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Candle_A.hmsh", "name": "SM_hc_Candle_A", "position": [-4.0096049308776855, 1.791228175163269, 0.06981849670410156], "rotation": [1.0, 0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_LargeVineCasket.hmsh", "name": "SM_hc_LargeVineCasket", "position": [-6.0, 1.0, -6.0], "rotation": [1.0, 0.0, 0.0, 0.0], "scale": [0.5, 0.5, 0.5]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Bed_A.hmsh", "name": "SM_hc_Bed_A", "position": [-4.689599990844727, 1.0, 5.6889519691467285], "rotation": [1.0, 0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Bookcase_A.hmsh", "name": "SM_hc_Bookcase_A", "position": [-3.36529541015625, 1.0207217931747437, -6.403041362762451], "rotation": [0.7071068286895752, 0.0, 0.70710688829422, 0.0], "scale": [1.0, 1.0, 1.0]}
+  ],
+  "lights": [
+    {"type": "omni", "color": "ffce8115", "position": [-4.0, 2.0, 0.0], "intensity": 2.2, "range": 11.0}
+  ],
+  "assign": [
+    {"world": "Development", "uniqueId": "3134932674000232684", "kits": ["Kits/SmallHouse_Default.hkit"]}
+  ],
+  "removeMeshRefs": {"worldModel": "Models/FalwynPlains/Buildings/HouseTest.hwmo", "names": ["SM_hc_DinnerTable_B", "SM_hc_Chair_01", "SM_hc_Chair_02", "SM_hc_Candle_A", "SM_hc_LargeVineCasket", "SM_hc_Bed_A", "SM_hc_Bookcase_A"], "removeLights": true}
+}

@@ -1,0 +1,41 @@
+{
+  "kit": "Kits/SmallHouse_Farmhouse.hkit",
+  "name": "Small House (farmhouse)",
+  "preview": "Models/FalwynPlains/Buildings/HouseTest.hwmo",
+  "props": [
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_WorkBench.hmsh", "name": "Workbench", "position": [-3.4, 1.0, -6.3], "rotation": [0.707107, 0.0, 0.707107, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Food/SM_hc_Fruits_H.hmsh", "name": "Workbench Basket", "position": [-3.95, 2.03, -6.25], "rotation": [0.984808, 0.0, 0.173648, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Food/SM_hc_Bread_D.hmsh", "name": "Workbench Loaf", "position": [-2.85, 2.03, -6.35], "rotation": [0.965926, 0.0, -0.258819, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Bucket.hmsh", "name": "Bucket", "position": [-2.0, 1.0, -6.65], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh", "name": "Crate", "position": [-1.1, 1.0, -6.4], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh", "name": "Crate Stacked", "position": [-1.1, 1.91, -6.4], "rotation": [0.991445, 0.0, 0.130526, 0.0], "scale": 0.85},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Haystack_B.hmsh", "name": "Grain Sack Bin", "position": [-5.55, 1.0, -5.6], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Haystack_B.hmsh", "name": "Grain Sack Bin 2", "position": [-6.75, 1.0, -4.9], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh", "name": "Barrel", "position": [0.15, 1.0, -5.55], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh", "name": "Barrel 2", "position": [0.15, 1.0, -4.75], "rotation": [0.939693, 0.0, 0.34202, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh", "name": "Barrel 3", "position": [-0.6, 1.0, -5.2], "rotation": [0.793353, 0.0, 0.608761, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Stove.hmsh", "name": "Stove", "position": [-6.65, 1.0, 1.5], "rotation": [0.0, 0.0, 1.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Vase_B.hmsh", "name": "Clay Pot", "position": [-6.5, 1.0, -0.2], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_DinnerTable_A.hmsh", "name": "Kitchen Table", "position": [-4.3, 1.0, 0.9], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Chair_A.hmsh", "name": "Kitchen Chair N", "position": [-4.3, 1.0, -0.15], "rotation": [0.707107, 0.0, 0.707107, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Chair_A.hmsh", "name": "Kitchen Chair E", "position": [-3.25, 1.0, 0.9], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Chair_A.hmsh", "name": "Kitchen Chair S", "position": [-4.3, 1.0, 1.95], "rotation": [0.707107, 0.0, -0.707107, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Candlestick_A.hmsh", "name": "Table Candlestick", "position": [-4.3, 1.79, 0.9], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Food/SM_hc_Bread_B.hmsh", "name": "Table Bread", "position": [-4.55, 1.79, 0.6], "rotation": [0.965926, 0.0, 0.258819, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Food/SM_hc_Cheese_C.hmsh", "name": "Table Cheese", "position": [-4.0, 1.79, 1.15], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Bed_B.hmsh", "name": "Bunk Bed", "position": [-4.35, 1.0, 5.65], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Chest.hmsh", "name": "Bed Chest", "position": [-2.3, 1.0, 6.2], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Candle_C.hmsh", "name": "Chest Candle", "position": [-2.3, 1.72, 6.35], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Wardrobe.hmsh", "name": "Wardrobe", "position": [-6.85, 1.0, 4.65], "rotation": [0.0, 0.0, 1.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh", "name": "Crate SE", "position": [-0.55, 1.0, 5.55], "rotation": [0.996195, 0.0, -0.087156, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Bucket.hmsh", "name": "Bucket SE", "position": [-1.35, 1.0, 6.4], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_WallLamp.hmsh", "name": "Wall Lamp", "position": [0.58, 3.4, -4.6], "rotation": [1.0, 0.0, 0.0, 0.0]}
+  ],
+  "lights": [
+    {"type": "omni", "color": "ffce8115", "position": [-4.3, 2.4, 0.9], "intensity": 1.6, "range": 8.0},
+    {"type": "omni", "color": "ffe9aa10", "position": [0.3, 3.05, -4.6], "intensity": 1.4, "range": 7.0}
+  ],
+  "assign": [
+    {"world": "Development", "uniqueId": "8290733669967064449", "kits": ["Kits/SmallHouse_Farmhouse.hkit"]}
+  ]
+}

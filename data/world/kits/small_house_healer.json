@@ -1,0 +1,34 @@
+{
+  "kit": "Kits/SmallHouse_Healer.hkit",
+  "name": "Small House (healer)",
+  "preview": "Models/FalwynPlains/Buildings/HouseTest.hwmo",
+  "props": [
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Bookcase_A.hmsh", "name": "Bookcase", "position": [-3.2, 1.0, -6.2], "rotation": [0.707107, 0.0, 0.707107, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Bookcase_Small.hmsh", "name": "Small Bookcase", "position": [-5.25, 1.0, -6.17], "rotation": [0.707107, 0.0, 0.707107, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Commode.hmsh", "name": "Apothecary Drawers", "position": [-0.08, 1.0, -5.0], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Bed_A.hmsh", "name": "Patient Cot", "position": [-6.25, 1.0, -0.6], "rotation": [0.707107, 0.0, -0.707107, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_BedsideTable.hmsh", "name": "Bedside Table", "position": [-6.85, 1.0, 1.5], "rotation": [0.0, 0.0, 1.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Candle_A.hmsh", "name": "Bedside Candle", "position": [-6.85, 1.86, 1.5], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Dishes/SM_hc_Bottle_B.hmsh", "name": "Bedside Tonic", "position": [-6.75, 1.86, 1.3], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Cauldron_A.hmsh", "name": "Cauldron", "position": [-5.4, 1.0, 5.7], "rotation": [0.965926, 0.0, 0.258819, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Bucket.hmsh", "name": "Water Bucket", "position": [-4.2, 1.0, 6.45], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Vase_B.hmsh", "name": "Herb Jar", "position": [-6.85, 1.0, 4.95], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Vase_F.hmsh", "name": "Wide Herb Pot", "position": [-1.0, 1.0, 6.3], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_DinnerTable_C.hmsh", "name": "Herb Table", "position": [-2.9, 1.0, 6.35], "rotation": [0.707107, 0.0, 0.707107, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Dishes/SM_hc_Teapot.hmsh", "name": "Herb Teapot", "position": [-2.5, 1.82, 6.4], "rotation": [0.5, 0.0, 0.866025, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Food/SM_hc_Fruits_C.hmsh", "name": "Herbs", "position": [-3.2, 1.82, 6.3], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Dishes/SM_hc_Plate_A.hmsh", "name": "Herb Plate", "position": [-3.5, 1.82, 6.45], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_WritingTable.hmsh", "name": "Healer's Desk", "position": [-1.7, 1.0, 4.4], "rotation": [0.707107, 0.0, 0.707107, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Dishes/SM_hc_Bottle_A.hmsh", "name": "Desk Potion", "position": [-2.35, 2.01, 4.55], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Dishes/SM_hc_Bottle_C.hmsh", "name": "Desk Vial", "position": [-2.1, 2.01, 4.3], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Candle_B.hmsh", "name": "Desk Candle", "position": [-0.95, 2.01, 4.6], "rotation": [1.0, 0.0, 0.0, 0.0]},
+    {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_WallLamp.hmsh", "name": "Wall Lamp", "position": [-7.36, 3.4, 1.5], "rotation": [0.0, 0.0, 1.0, 0.0]}
+  ],
+  "lights": [
+    {"type": "omni", "color": "ffce8115", "position": [-1.7, 2.6, 4.3], "intensity": 1.6, "range": 7.0},
+    {"type": "omni", "color": "ffe9aa10", "position": [-7.05, 3.05, 1.5], "intensity": 1.4, "range": 7.0}
+  ],
+  "assign": [
+    {"world": "Development", "uniqueId": "1248239675558434552", "kits": ["Kits/SmallHouse_Healer.hkit"]}
+  ]
+}
