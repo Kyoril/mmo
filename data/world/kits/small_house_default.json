@@ -15,7 +15,8 @@
     {"type": "omni", "color": "ffce8115", "position": [-4.0, 2.0, 0.0], "intensity": 2.2, "range": 11.0}
   ],
   "assign": [
-    {"world": "Development", "uniqueId": "3134932674000232684", "kits": ["Kits/SmallHouse_Default.hkit"]}
+    {"world": "Development", "uniqueId": "3134932674000232684", "kits": ["Kits/SmallHouse_Default.hkit"]},
+    {"world": "Development", "uniqueId": "15506318760673951644", "kits": ["Kits/SmallHouse_Default.hkit"]}
   ],
   "removeMeshRefs": {"worldModel": "Models/FalwynPlains/Buildings/HouseTest.hwmo", "names": ["SM_hc_DinnerTable_B", "SM_hc_Chair_01", "SM_hc_Chair_02", "SM_hc_Candle_A", "SM_hc_LargeVineCasket", "SM_hc_Bed_A", "SM_hc_Bookcase_A"], "removeLights": true}
 }
