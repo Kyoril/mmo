@@ -438,6 +438,7 @@ namespace mmo
 
         std::unordered_set<std::uint32_t> rasterizedEntities;
         std::unordered_set<std::uint64_t> rasterizedWorldModels;
+        std::unordered_set<std::uint64_t> rasterizedPropKits;
 
         // incrementally rasterize mesh geometry into the height field, setting poly flags as appropriate
         for (auto const& chunk : chunks)
@@ -493,6 +494,30 @@ namespace mmo
                 }
 
                 rasterizedWorldModels.insert(worldModelId);
+            }
+
+            // Prop kit props of world model placements
+            for (auto const& placementId : chunk->m_propKitInstances)
+            {
+                if (rasterizedPropKits.contains(placementId))
+                {
+                    continue;
+                }
+
+                auto const propKitInstance = m_map->GetPropKitInstance(placementId);
+                ASSERT(propKitInstance);
+
+                std::vector<Vector3> vertices;
+                std::vector<int32> indices;
+
+                propKitInstance->BuildTriangles(vertices, indices);
+                if (!RasterizeNavTriangles(ctx, *solid, config.walkableSlopeAngle,
+                    vertices, indices, poly_flags::WorldModel, config.walkableClimb))
+                {
+                    return false;
+                }
+
+                rasterizedPropKits.insert(placementId);
             }
         }
 
