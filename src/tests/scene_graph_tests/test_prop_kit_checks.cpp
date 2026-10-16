@@ -69,3 +69,42 @@ TEST_CASE("Props without collision are ignored", "[prop_kit]")
 	const auto issues = FindPropsNearPortals(model, makeKit(Vector3(10.0f, 0.0f, 0.0f)), noCollision);
 	CHECK(issues.empty());
 }
+
+namespace
+{
+	WorldModelMeshRef namedRef(const String& name)
+	{
+		WorldModelMeshRef ref;
+		ref.meshPath = "Props/Crate.hmsh";
+		ref.name = name;
+		return ref;
+	}
+}
+
+TEST_CASE("Named mesh refs are removed from every group", "[prop_kit]")
+{
+	WorldModel model;
+	model.AddGroup().GetMeshRefs() = { namedRef("Table"), namedRef("Wall"), namedRef("Chair") };
+	model.AddGroup().GetMeshRefs() = { namedRef("Chair"), namedRef("Beam") };
+
+	const MeshRefRemoval removal = RemoveMeshRefsByName(model, { "Table", "Chair" });
+
+	CHECK(removal.removed == 3);
+	CHECK(removal.unmatchedNames.empty());
+	REQUIRE(model.GetGroup(0)->GetMeshRefs().size() == 1);
+	CHECK(model.GetGroup(0)->GetMeshRefs()[0].name == "Wall");
+	REQUIRE(model.GetGroup(1)->GetMeshRefs().size() == 1);
+	CHECK(model.GetGroup(1)->GetMeshRefs()[0].name == "Beam");
+}
+
+TEST_CASE("A re-run of a mesh ref removal removes nothing and names every miss", "[prop_kit]")
+{
+	WorldModel model;
+	model.AddGroup().GetMeshRefs() = { namedRef("Wall") };
+
+	const MeshRefRemoval removal = RemoveMeshRefsByName(model, { "Chair", "Table" });
+
+	CHECK(removal.removed == 0);
+	CHECK(removal.unmatchedNames == std::vector<String>{ "Chair", "Table" });
+	CHECK(model.GetGroup(0)->GetMeshRefs().size() == 1);
+}

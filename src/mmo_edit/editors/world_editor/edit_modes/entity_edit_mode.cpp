@@ -102,7 +102,7 @@ namespace mmo
 				position.z = std::round(position.z / gridSize) * gridSize;
 			}
 
-			// A mesh dropped while a building with an active kit is selected furnishes that building.
+			// A mesh dropped inside the selected building (with an active kit) furnishes that building.
 			if (!isWorldModel && m_worldEditor.AddMeshToActiveKit(*static_cast<String*>(payload->Data), position))
 			{
 				return;

@@ -151,6 +151,8 @@ namespace mmo
 		virtual uint32 GetSelectedFogVolumeId() const = 0;
 
 		/// @brief Offers a mesh dropped into the viewport to the active prop kit of the selected building.
+		/// Only a drop point inside the building's world bounds goes into the kit; a drop anywhere else
+		/// is declined so it creates an ordinary world entity.
 		/// @param meshPath The mesh asset (.hmsh).
 		/// @param worldPosition The drop point in world space.
 		/// @return true if the mesh was added to a kit, in which case no world entity must be created.

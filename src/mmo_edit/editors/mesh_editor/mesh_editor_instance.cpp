@@ -670,7 +670,9 @@ namespace mmo
 		}
 
 		int32 index = mesh->GetSubMeshIndex(subMesh);
-		if (index < 0 && !subMesh.empty() && std::all_of(subMesh.begin(), subMesh.end(), [](const char c) { return c >= '0' && c <= '9'; }))
+		// At most 5 digits: std::stoi throws on out-of-range input, and exceptions are disabled.
+		constexpr size_t maxIndexDigits = 5;
+		if (index < 0 && !subMesh.empty() && subMesh.size() <= maxIndexDigits && std::all_of(subMesh.begin(), subMesh.end(), [](const char c) { return c >= '0' && c <= '9'; }))
 		{
 			index = std::stoi(subMesh);
 		}

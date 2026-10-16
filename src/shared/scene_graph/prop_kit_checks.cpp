@@ -108,4 +108,42 @@ namespace mmo
 
 		return issues;
 	}
+
+	MeshRefRemoval RemoveMeshRefsByName(WorldModel& model, const std::set<String>& names)
+	{
+		MeshRefRemoval result;
+		std::set<String> matched;
+		for (size_t g = 0; g < model.GetGroupCount(); ++g)
+		{
+			WorldModelGroup* group = model.GetGroup(g);
+			if (!group)
+			{
+				continue;
+			}
+
+			auto& refs = group->GetMeshRefs();
+			const size_t before = refs.size();
+			refs.erase(std::remove_if(refs.begin(), refs.end(), [&names, &matched](const WorldModelMeshRef& ref)
+			{
+				if (!names.contains(ref.name))
+				{
+					return false;
+				}
+
+				matched.insert(ref.name);
+				return true;
+			}), refs.end());
+			result.removed += before - refs.size();
+		}
+
+		for (const String& name : names)
+		{
+			if (!matched.contains(name))
+			{
+				result.unmatchedNames.push_back(name);
+			}
+		}
+
+		return result;
+	}
 }

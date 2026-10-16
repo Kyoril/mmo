@@ -510,6 +510,7 @@ namespace mmo
 		m_backgroundLoader.join();
 
 		m_transformWidget.reset();
+		m_kitCollisionOverlay.reset();
 		m_mapEntities.clear();
 		// Destroy entity/world-model instances before clearing the scene — their
 		// destructors call DetachObject/DestroySceneNode which require live scene nodes.
@@ -697,6 +698,8 @@ namespace mmo
 		// Kit prop removals requested this frame (Delete key, details panel) are applied once the
 		// selection is no longer being iterated.
 		ApplyPendingKitPropRemovals();
+
+		UpdateKitCollisionOverlay();
 
 		DrawKitModals();
 
@@ -3124,6 +3127,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				{
 					mapEntity.SetKitPaths(std::move(kitPaths));
 					ApplyKits(mapEntity);
+					DeselectRemovedKitProps(mapEntity);
 				}
 
 				ImGui::Separator();
@@ -3173,6 +3177,18 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 				{
 					ImGui::SetTooltip("Writes the active kit's current props and lights to a new file and uses it for this building only.\nThe original kit file is not changed.");
+				}
+
+				bool showKitCollision = m_showKitCollision && m_kitCollisionPlacementId == mapEntity.GetUniqueId();
+				if (ImGui::Checkbox("Show kit collision", &showKitCollision))
+				{
+					m_showKitCollision = showKitCollision;
+					m_kitCollisionPlacementId = mapEntity.GetUniqueId();
+					m_kitCollisionDirty = true;
+				}
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Show the collision of this building's kit props (green: walkable, orange: too steep)");
 				}
 			}
 		}
@@ -4290,6 +4306,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		if (const auto it = m_dirtyKits.find(key); it != m_dirtyKits.end())
 		{
 			it->second.originPlacementId = originPlacementId;
+			it->second.editingPlacementIds.insert(originPlacementId);
 			return it->second.kit.get();
 		}
 
@@ -4305,6 +4322,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		DirtyKit &dirty = m_dirtyKits[key];
 		dirty.kit = std::make_shared<PropKit>(*cached);
 		dirty.originPlacementId = originPlacementId;
+		dirty.editingPlacementIds = { originPlacementId };
 		return dirty.kit.get();
 	}
 
@@ -4332,6 +4350,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		instance->SetPropKits(std::move(kits));
+		m_kitCollisionDirty = true;
 	}
 
 	void WorldEditorInstance::RefreshKitUsers(const String &kitPath)
@@ -4635,10 +4654,142 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		m_debugBoundingBox->SetVisible(true);
 	}
 
+	void WorldEditorInstance::UpdateKitCollisionOverlay()
+	{
+		const MapEntity *placement = GetSelectedPlacement();
+		const uint64 placementId = placement ? placement->GetUniqueId() : 0;
+		if (placementId != m_kitCollisionPlacementId)
+		{
+			// A different (or no) building is selected: its display starts switched off.
+			m_kitCollisionPlacementId = placementId;
+			m_showKitCollision = false;
+		}
+
+		if (!m_showKitCollision || !placement)
+		{
+			if (m_kitCollisionOverlay)
+			{
+				m_kitCollisionOverlay.reset();
+				m_kitCollisionVertices.clear();
+				m_kitCollisionIndices.clear();
+			}
+			return;
+		}
+
+		if (!m_kitCollisionOverlay)
+		{
+			m_kitCollisionOverlay = std::make_unique<CollisionOverlay>(m_scene, m_scene.GetRootSceneNode());
+			m_kitCollisionDirty = true;
+		}
+
+		const SceneNode &node = placement->GetSceneNode();
+		if (node.GetDerivedPosition() != m_kitCollisionPosition || node.GetDerivedOrientation() != m_kitCollisionOrientation || node.GetDerivedScale() != m_kitCollisionScale)
+		{
+			m_kitCollisionPosition = node.GetDerivedPosition();
+			m_kitCollisionOrientation = node.GetDerivedOrientation();
+			m_kitCollisionScale = node.GetDerivedScale();
+			m_kitCollisionDirty = true;
+		}
+
+		if (m_kitCollisionDirty)
+		{
+			RebuildKitCollisionOverlay(*placement);
+		}
+	}
+
+	void WorldEditorInstance::RebuildKitCollisionOverlay(const MapEntity &placement)
+	{
+		m_kitCollisionDirty = false;
+		m_kitCollisionVertices.clear();
+		m_kitCollisionIndices.clear();
+
+		for (const String &kitPath : placement.GetKitPaths())
+		{
+			const PropKitPtr kit = ResolveKit(kitPath);
+			if (!kit)
+			{
+				continue;
+			}
+
+			for (const WorldModelMeshRef &prop : kit->props)
+			{
+				if (!prop.visible || prop.meshPath.empty())
+				{
+					continue;
+				}
+
+				const MeshPtr mesh = MeshManager::Get().Load(prop.meshPath);
+				if (!mesh)
+				{
+					continue;
+				}
+
+				const AABBTree &tree = mesh->GetCollisionTree();
+				const auto &vertices = tree.GetVertices();
+				const auto &indices = tree.GetIndices();
+				if (vertices.empty() || indices.empty())
+				{
+					continue;
+				}
+
+				const Matrix4 transform = MakeKitPropWorldTransform(placement.GetSceneNode(), prop);
+				const uint32 base = static_cast<uint32>(m_kitCollisionVertices.size());
+				for (const Vector3 &vertex : vertices)
+				{
+					m_kitCollisionVertices.push_back(transform.TransformAffine(vertex));
+				}
+				for (const uint32 index : indices)
+				{
+					m_kitCollisionIndices.push_back(base + index);
+				}
+			}
+		}
+
+		CollisionOverlayData data;
+		if (!m_kitCollisionIndices.empty())
+		{
+			data.vertices = &m_kitCollisionVertices;
+			data.indices = &m_kitCollisionIndices;
+		}
+		m_kitCollisionOverlay->Rebuild(data);
+	}
+
+	void WorldEditorInstance::DeselectRemovedKitProps(const MapEntity &placement)
+	{
+		const std::vector<String> &kitPaths = placement.GetKitPaths();
+
+		std::vector<Selection::Index> stale;
+		Selection::Index index = 0;
+		for (const auto &selectable : m_selection.GetSelectedObjects())
+		{
+			const auto *selectedProp = dynamic_cast<const SelectedKitProp *>(selectable.get());
+			if (selectedProp && selectedProp->GetPlacementId() == placement.GetUniqueId() &&
+				std::none_of(kitPaths.begin(), kitPaths.end(), [selectedProp](const String &path) { return KitPathsEqual(path, selectedProp->GetKitPath()); }))
+			{
+				stale.push_back(index);
+			}
+
+			++index;
+		}
+
+		// Highest index first, so the indices still to remove stay valid.
+		for (auto it = stale.rbegin(); it != stale.rend(); ++it)
+		{
+			m_selection.RemoveSelectable(*it);
+		}
+	}
+
 	bool WorldEditorInstance::AddMeshToActiveKit(const String &meshPath, const Vector3 &worldPosition)
 	{
 		MapEntity *placement = GetSelectedPlacement();
 		if (!placement)
+		{
+			return false;
+		}
+
+		// Only a drop into the building furnishes it; a drop elsewhere in the world places a world entity.
+		const WorldModelInstance *instance = placement->GetWorldModelInstance();
+		if (!instance || !instance->GetWorldBoundingBox(true).Intersects(worldPosition))
 		{
 			return false;
 		}
@@ -4820,9 +4971,10 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		m_activeKits[placementId] = target;
 
 		// Edits to the source kit made on this building now live in the new kit, so the other
-		// buildings keep the saved source kit. Edits made on another building stay pending.
+		// buildings keep the saved source kit. If another building edited the working copy too, it
+		// stays dirty: those edits stay pending for the other buildings.
 		const String sourceKey = MakeKitKey(sourceKitPath);
-		if (const auto it = m_dirtyKits.find(sourceKey); it != m_dirtyKits.end() && it->second.originPlacementId == placementId)
+		if (const auto it = m_dirtyKits.find(sourceKey); it != m_dirtyKits.end() && it->second.editingPlacementIds == std::set<uint64>{ placementId })
 		{
 			ILOG("Discarded unsaved edits of prop kit " << sourceKey << "; they were saved to " << target);
 			m_dirtyKits.erase(it);

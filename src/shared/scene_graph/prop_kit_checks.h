@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace mmo
@@ -38,4 +39,21 @@ namespace mmo
 	/// @return One issue per prop/portal pair that violates the clearance.
 	std::vector<PortalClearanceIssue> FindPropsNearPortals(const WorldModel& model, const PropKit& kit,
 		const std::function<std::optional<AABB>(const String& meshPath)>& collisionBoundsOf, float margin = 0.6f);
+
+	/// @brief Outcome of RemoveMeshRefsByName.
+	struct MeshRefRemoval
+	{
+		/// @brief Number of mesh refs removed over all groups.
+		size_t removed = 0;
+
+		/// @brief Requested names that matched no mesh ref, in sorted order.
+		std::vector<String> unmatchedNames;
+	};
+
+	/// @brief Removes every mesh ref of every group whose name is in the given set, as the
+	///        default-kit migration does when it moves a building's furniture into a kit.
+	/// @param model The world model to edit in place.
+	/// @param names Exact mesh ref names to remove.
+	/// @return How many refs were removed and which names matched nothing.
+	MeshRefRemoval RemoveMeshRefsByName(WorldModel& model, const std::set<String>& names);
 }

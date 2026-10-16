@@ -47,6 +47,9 @@ namespace mmo
 		/// Radius around a light marker that picks the light.
 		constexpr float LightPickRadius = 0.35f;
 
+		/// Smallest scale component a gizmo scale may produce (the Details scale field's minimum).
+		constexpr float MinPropScale = 0.01f;
+
 		/// Half size of a light marker cross.
 		constexpr float LightMarkerSize = 0.25f;
 
@@ -117,7 +120,11 @@ namespace mmo
 			{
 				if (WorldModelMeshRef* prop = GetProp())
 				{
-					prop->scale += delta;
+					// The widget passes a multiplicative factor along the prop's own axes.
+					prop->scale = prop->scale * delta;
+					prop->scale.x = std::max(prop->scale.x, MinPropScale);
+					prop->scale.y = std::max(prop->scale.y, MinPropScale);
+					prop->scale.z = std::max(prop->scale.z, MinPropScale);
 					m_onChanged();
 					scaleChanged(*this);
 				}

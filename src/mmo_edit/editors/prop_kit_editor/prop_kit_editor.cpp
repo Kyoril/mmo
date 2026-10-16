@@ -12,6 +12,8 @@
 #include "scene_graph/prop_kit.h"
 #include "scene_graph/prop_kit_serializer.h"
 
+#include <algorithm>
+
 #include <imgui.h>
 #include "imgui/misc/cpp/imgui_stdlib.h"
 
@@ -55,7 +57,14 @@ namespace mmo
 			ImGui::SameLine();
 			ImGui::Text("%s", PropKitFileExtension.c_str());
 
-			ImGui::BeginDisabled(m_kitName.empty());
+			// Never overwrite an existing kit: buildings may already use it.
+			const bool exists = !m_kitName.empty() && AssetRegistry::HasFile(GetNewKitPath());
+			if (exists)
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "A file with this name already exists.");
+			}
+
+			ImGui::BeginDisabled(m_kitName.empty() || exists);
 			if (ImGui::Button("Create"))
 			{
 				CreateNewPropKit();
@@ -100,16 +109,31 @@ namespace mmo
 		});
 	}
 
-	void PropKitEditor::CreateNewPropKit()
+	String PropKitEditor::GetNewKitPath() const
 	{
 		Path assetPath = m_host.GetCurrentPath();
 		assetPath /= m_kitName + PropKitFileExtension;
+
+		// The asset registry keys files by forward-slash paths.
+		String path = assetPath.string();
+		std::replace(path.begin(), path.end(), '\\', '/');
+		return path;
+	}
+
+	void PropKitEditor::CreateNewPropKit()
+	{
+		const String assetPath = GetNewKitPath();
+		if (AssetRegistry::HasFile(assetPath))
+		{
+			ELOG("Prop kit " << assetPath << " already exists; not overwriting it");
+			return;
+		}
 
 		PropKit kit;
 		kit.name = m_kitName;
 		m_kitName.clear();
 
-		const auto file = AssetRegistry::CreateNewFile(assetPath.string());
+		const auto file = AssetRegistry::CreateNewFile(assetPath);
 		if (!file)
 		{
 			ELOG("Failed to create new prop kit " << assetPath);
@@ -126,5 +150,7 @@ namespace mmo
 
 		ILOG("Created prop kit " << assetPath);
 		m_host.assetImported(m_host.GetCurrentPath());
+
+		OpenAsset(assetPath);
 	}
 }

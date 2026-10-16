@@ -493,6 +493,13 @@ int main(int argc, char* arg[])
 					propKitLog << entry.message << std::endl;
 				});
 
+				if (i + 1 >= argCount)
+				{
+					ELOG("--apply-prop-kit needs <job.json>");
+					PostQuitMessage(1);
+					break;
+				}
+
 				PostQuitMessage(mmo::ApplyPropKitJob(args[i + 1]) ? 0 : 1);
 				break;
 			}

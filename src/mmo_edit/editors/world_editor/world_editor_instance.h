@@ -4,6 +4,7 @@
 
 #include "base/signal.h"
 #include <functional>
+#include <set>
 #include <imgui.h>
 #include <thread>
 #include <asio/io_service.hpp>
@@ -24,6 +25,7 @@
 #include "scene_graph/prop_kit.h"
 #include "base/utilities.h"
 #include "transform_widget.h"
+#include "editors/mesh_editor/collision_overlay.h"
 #include "selection.h"
 #include "selection_raycaster.h"
 #include "nav_mesh/map.h"
@@ -540,6 +542,17 @@ namespace mmo
 		/// @brief Shows the bounds of the most recently selected kit prop, if it is one.
 		void UpdateSelectedKitPropBounds();
 
+		/// @brief Shows, hides or rebuilds the kit collision display of the selected building as needed.
+		///        The display belongs to one building and switches off when the selection moves on.
+		void UpdateKitCollisionOverlay();
+
+		/// @brief Rebuilds the kit collision display from the kit props of a placement, in world space.
+		void RebuildKitCollisionOverlay(const MapEntity &placement);
+
+		/// @brief Deselects the selected kit props of a placement whose kit is no longer in its kit list.
+		/// @param placement The placement whose kit list just changed.
+		void DeselectRemovedKitProps(const MapEntity &placement);
+
 		/// @brief Notices kits that were replaced in the PropKitManager cache by someone else (the prop
 		///        kit editor's save) and refreshes the placements using them.
 		void PollKitCache();
@@ -832,6 +845,8 @@ namespace mmo
 			PropKitPtr kit;
 			/// @brief The placement the kit was last edited on; not counted as "other" in the save prompt.
 			uint64 originPlacementId{0};
+			/// @brief Every placement the working copy was edited on since it became dirty.
+			std::set<uint64> editingPlacementIds;
 		};
 
 		/// @brief Dirty kits by kit path (forward slashes, case-insensitive). Written on Save().
@@ -857,6 +872,23 @@ namespace mmo
 
 		/// @brief Dirty kits used by other loaded placements, waiting for the save prompt.
 		std::vector<String> m_pendingKitSaves;
+
+		/// @brief Collision display of the selected building's kit props; exists only while shown.
+		std::unique_ptr<CollisionOverlay> m_kitCollisionOverlay;
+		/// @brief World-space collision vertices of the displayed kit props.
+		std::vector<Vector3> m_kitCollisionVertices;
+		/// @brief Collision triangle list of the displayed kit props.
+		std::vector<uint32> m_kitCollisionIndices;
+		/// @brief Whether "Show kit collision" is ticked for m_kitCollisionPlacementId.
+		bool m_showKitCollision{false};
+		/// @brief Set when the displayed kits change, so the display is rebuilt.
+		bool m_kitCollisionDirty{true};
+		/// @brief The building the kit collision display belongs to (0: none).
+		uint64 m_kitCollisionPlacementId{0};
+		/// @brief Placement transform the display was built for; a moved building rebuilds it.
+		Vector3 m_kitCollisionPosition;
+		Quaternion m_kitCollisionOrientation;
+		Vector3 m_kitCollisionScale;
 
 		/// @brief Opens the shared-kit save prompt on the next Draw().
 		bool m_openKitSavePrompt{false};

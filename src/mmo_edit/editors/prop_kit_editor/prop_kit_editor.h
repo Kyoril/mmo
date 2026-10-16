@@ -45,8 +45,12 @@ namespace mmo
 		void CloseInstanceImpl(std::shared_ptr<EditorInstance>& instance) override;
 
 	private:
-		/// @brief Writes a valid, empty prop kit named m_kitName into the current asset browser folder.
+		/// @brief Writes a valid, empty prop kit named m_kitName into the current asset browser folder
+		///        and opens it. Refuses to overwrite an existing file.
 		void CreateNewPropKit();
+
+		/// @brief The asset path (forward slashes) a kit named m_kitName would be created at.
+		[[nodiscard]] String GetNewKitPath() const;
 
 	private:
 		PreviewProviderManager* m_previewManager { nullptr };

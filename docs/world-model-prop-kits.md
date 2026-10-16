@@ -22,7 +22,8 @@ sound content. `PropKitManager` caches loaded kits by path.
 Placements store the ordered kit list in an optional `WKIT` chunk of the `.wobj` (uint8 count, then
 uint16-length paths, at most 255; `src/shared/game_common/world_entity_loader.{h,cpp}`). The file
 version stays 3. No chunk means no kits; old readers ignore it. The Python reader is
-`tools/world/worldkit/formats/wobj.py`.
+`tools/world/worldkit/formats/wobj.py`. Older mmo_edit builds drop the `WKIT` chunk when they
+re-save a modified building placement, so do not edit kit-furnished worlds with them.
 
 ## Runtime
 
@@ -50,8 +51,11 @@ lights inside its preview building.
 
 **Unattended job:** `mmo_edit --apply-prop-kit <job.json>` applies a job and exits (exit code 1 on
 load or write failures, log in `prop_kit_job.log`). mmo_edit must not already be running. Committed
-examples are in `data/world/kits/*.json`. The whole job is parsed and validated before any asset is
-written. Top-level keys, all optional:
+examples are in `data/world/kits/*.json`. The kit (`kit`, `props`, `lights`) and the shape of the
+top-level keys are validated before any asset is written. Each `assign` entry and the
+`removeMeshRefs` object are validated only when they are applied, after the kit is written: a bad
+entry fails the job (exit code 1) with the kit and the steps before it already applied, so fix the
+entry and re-run the job. Top-level keys, all optional:
 
 ```json
 {
@@ -91,4 +95,6 @@ written. Top-level keys, all optional:
   kit file only warns; a missing placement fails.
 - `removeMeshRefs` strips mesh refs by name from every group of the world model, optionally
   clears all its lights (`removeLights`), recalculates the bounds and saves the `.hwmo`. Use it to
-  move baked furniture out of a model and into a kit.
+  move baked furniture out of a model and into a kit. Names that match no mesh ref are logged as
+  warnings; when nothing is removed and there are no lights to clear (a re-run), the `.hwmo` is not
+  rewritten.

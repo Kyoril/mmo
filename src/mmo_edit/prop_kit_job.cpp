@@ -520,28 +520,27 @@ namespace mmo
 				return false;
 			}
 
-			size_t removed = 0;
-			for (size_t g = 0; g < model.GetGroupCount(); ++g)
+			const MeshRefRemoval removal = RemoveMeshRefsByName(model, names);
+			for (const String& name : removal.unmatchedNames)
 			{
-				WorldModelGroup* group = model.GetGroup(g);
-				if (!group)
-				{
-					continue;
-				}
-
-				auto& refs = group->GetMeshRefs();
-				const size_t before = refs.size();
-				refs.erase(std::remove_if(refs.begin(), refs.end(), [&names](const WorldModelMeshRef& ref) { return names.contains(ref.name); }), refs.end());
-				removed += before - refs.size();
+				WLOG("Prop kit job: no mesh ref named '" << name << "' in " << path);
 			}
 
-			if (removeLights)
+			const bool clearsLights = removeLights && !model.GetLights().empty();
+			if (clearsLights)
 			{
 				ILOG("Prop kit job: clearing " << model.GetLights().size() << " light(s) of " << path);
 				model.GetLights().clear();
 			}
 
-			ILOG("Prop kit job: removed " << removed << " mesh ref(s) from " << path);
+			ILOG("Prop kit job: removed " << removal.removed << " mesh ref(s) from " << path);
+
+			// A re-run finds nothing left to remove: leave the file untouched.
+			if (removal.removed == 0 && !clearsLights)
+			{
+				ILOG("Prop kit job: " << path << " is unchanged, not rewriting it");
+				return true;
+			}
 
 			// As the world model editor's Save does
 			model.RecalculateBoundingBox();
