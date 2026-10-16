@@ -289,6 +289,13 @@ namespace mmo
 			return guidToString(g_runtime->session->GetHeardSoundSource(soundId));
 		}
 
+		/// How many times a PlaySoundById for the sound arrived since the last clear, so a scenario
+		/// can count repetitions such as the strikes of an hourly bell.
+		uint32 luaSoundCount(const uint32 soundId)
+		{
+			return g_runtime->session->GetHeardSoundCount(soundId);
+		}
+
 		void luaClearHeardSounds()
 		{
 			g_runtime->session->ClearHeardSounds();
@@ -1627,6 +1634,7 @@ namespace mmo
 				luabind::def_lambda("LastSpellVisualEvent", &luaLastSpellVisualEvent),
 				luabind::def_lambda("ClearLastSpellVisual", &luaClearLastSpellVisual),
 				luabind::def_lambda("SoundSource", &luaSoundSource),
+				luabind::def_lambda("SoundCount", &luaSoundCount),
 				luabind::def_lambda("ClearHeardSounds", &luaClearHeardSounds),
 				luabind::def_lambda("IsSubsystemAvailable", &luaIsSubsystemAvailable),
 				luabind::def_lambda("SubsystemStatusCount", &luaSubsystemStatusCount),

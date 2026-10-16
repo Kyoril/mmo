@@ -165,6 +165,7 @@ namespace mmo
 		/// Sound entry id -> guid of the unit it came from (0 for a sound without a source unit), for
 		/// every PlaySoundById since the last clear.
 		std::map<uint32, uint64> m_heardSounds;
+		std::map<uint32, uint32> m_heardSoundCounts;
 
 		// Party state
 		std::vector<BotPartyMember> m_partyMembers;
@@ -227,8 +228,19 @@ namespace mmo
 			return it != m_heardSounds.end() ? it->second : 0;
 		}
 
+		/// How often the server told this client to play the sound entry since the last clear.
+		[[nodiscard]] uint32 GetHeardSoundCount(const uint32 soundId) const
+		{
+			const auto it = m_heardSoundCounts.find(soundId);
+			return it != m_heardSoundCounts.end() ? it->second : 0;
+		}
+
 		/// Forgets every heard sound.
-		void ClearHeardSounds() { m_heardSounds.clear(); }
+		void ClearHeardSounds()
+		{
+			m_heardSounds.clear();
+			m_heardSoundCounts.clear();
+		}
 
 		/// Whether the realm announced the subsystem as available.
 		[[nodiscard]] bool IsSubsystemAvailable(game::Subsystem subsystem) const
