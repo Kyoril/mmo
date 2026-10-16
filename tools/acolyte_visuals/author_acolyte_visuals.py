@@ -70,7 +70,7 @@ SND = {name[len("Acolyte - "):]: sid for sid, name, *_ in SOUND_ENTRIES}
 
 # --- Kit helpers -----------------------------------------------------------------------------
 
-VOID_LIGHT = {"r": 0.62, "g": 0.30, "b": 1.0}
+VOID_LIGHT = {"r": 0.80, "g": 0.26, "b": 1.0}
 BLIGHT_LIGHT = {"r": 0.50, "g": 0.95, "b": 0.25}
 DREAD_LIGHT = {"r": 1.0, "g": 0.18, "b": 0.30}
 

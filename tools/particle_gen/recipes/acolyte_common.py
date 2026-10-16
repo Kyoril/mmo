@@ -53,10 +53,11 @@ WISP = "Particles/Particle_Wisp.hmi"
 VOID_SIGIL = "Particles/Particle_VoidSigil.hmi"
 
 # --- Palette -------------------------------------------------------------------------------
-VOID_HOT = (0.93, 0.80, 1.00)      # pale lilac core: the only near-white in the set
-VOID = (0.64, 0.30, 1.00)          # saturated violet rim
-VOID_DEEP = (0.38, 0.12, 0.70)
-UMBRA = (0.17, 0.09, 0.27)         # charcoal-violet smoke body: dark, but not black
+VOID_HOT = (0.97, 0.80, 1.00)      # pale lilac core: the only near-white in the set
+# In the engine (0.64, 0.30, 1.0) read as plain blue; violet needs red at ~0.8.
+VOID = (0.80, 0.26, 1.00)          # saturated violet rim
+VOID_DEEP = (0.50, 0.10, 0.74)
+UMBRA = (0.20, 0.08, 0.26)         # charcoal-violet smoke body: dark, but not black
 BLIGHT_HOT = (0.86, 1.00, 0.55)
 BLIGHT = (0.52, 0.92, 0.20)        # acid green
 BLIGHT_DEEP = (0.24, 0.50, 0.10)
