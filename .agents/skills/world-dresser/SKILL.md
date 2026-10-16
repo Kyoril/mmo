@@ -50,3 +50,10 @@ description: Dress confirmed world-atlas places with props and trees (quarries, 
 - A pass left `applying` (the process was killed mid-write) is undone the same way; items that were never written are listed as already gone.
 - Before writing, `apply` backs up every page `.hfol` it changes to `generated/world/passes/<id>/backup/`.
 </undo>
+
+<interiors>
+- Furnish building interiors with prop kits, never with `.wobj` props placed inside a building. A kit (`.hkit`) holds the furniture and lights of an interior; a placement lists its kits, so copies of one building can differ.
+- Write the kit and assign it with `mmo_edit --apply-prop-kit <job.json>` (mmo_edit must be closed). Copy a job from `data/world/kits/*.json`. Read the doorway warnings in `prop_kit_job.log`: a prop within 0.6 m of a portal blocks the way in.
+- Kit props enter the navmesh but not server line of sight; rebuild the navmesh after changing a placed kit (only when the user asked for it, see the `publish-nav` rule).
+- Format, job schema and editor workflow: `docs/world-model-prop-kits.md`.
+</interiors>

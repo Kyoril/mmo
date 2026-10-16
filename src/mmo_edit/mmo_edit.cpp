@@ -88,6 +88,8 @@
 #include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/world_model_editor/world_model_editor_instance.h"
+#include "editors/prop_kit_editor/prop_kit_editor.h"
+#include "prop_kit_job.h"
 #include "editors/mesh_editor/mesh_editor_instance.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
@@ -316,6 +318,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow, previewProviderManager, project));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow, project));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldModelEditor>(mainWindow, project));
+	mainWindow.AddEditor(std::make_unique<mmo::PropKitEditor>(mainWindow, &previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::ColorCurveEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ParticleSystemEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::GlobalShaderParametersEditor>(mainWindow));
@@ -335,6 +338,11 @@ int main(int argc, char* arg[])
 	// from their stored collision recipes (editor-only CSRC chunk), saves them and exits.
 	// `--build-collision <asset.hmsh> [--build-collision ...]` does the same, but gives meshes without a
 	// recipe the default one (all render triangles) first, like Collision > Build for a fresh import.
+	// `--set-submesh-material <asset.hmsh> <submesh> <material> [...]` assigns a material to a
+	// submesh (by name, or index), saves the mesh with its collision recipe and exits.
+	// `--apply-prop-kit <job.json>` writes a prop kit asset, assigns kits to world model placements
+	// and/or strips named mesh refs from a world model as the job describes, then exits (see
+	// prop_kit_job.h; log in prop_kit_job.log, exit code 1 on load or write failures).
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
@@ -444,6 +452,61 @@ int main(int argc, char* arg[])
 				}
 
 				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--set-submesh-material")
+			{
+				// `--set-submesh-material <asset.hmsh> <submesh name|index> <material> [...]`
+				static std::ofstream materialLog("set_submesh_material.log", std::ios::out | std::ios::trunc);
+				static std::mutex materialLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ materialLogMutex };
+					materialLog << entry.message << std::endl;
+				});
+
+				bool allSaved = true;
+				for (int j = 1; j < argCount; ++j)
+				{
+					if (std::string(args[j]) != "--set-submesh-material")
+					{
+						continue;
+					}
+
+					if (j + 3 >= argCount)
+					{
+						ELOG("--set-submesh-material needs <asset> <submesh> <material>");
+						allSaved = false;
+						break;
+					}
+
+					allSaved = mmo::MeshEditorInstance::SetSubMeshMaterialInFile(args[j + 1], args[j + 2], args[j + 3]) && allSaved;
+					j += 3;
+				}
+
+				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--apply-prop-kit")
+			{
+				static std::ofstream propKitLog("prop_kit_job.log", std::ios::out | std::ios::trunc);
+				static std::mutex propKitLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ propKitLogMutex };
+					propKitLog << entry.message << std::endl;
+				});
+
+				if (i + 1 >= argCount)
+				{
+					ELOG("--apply-prop-kit needs <job.json>");
+					PostQuitMessage(1);
+					break;
+				}
+
+				PostQuitMessage(mmo::ApplyPropKitJob(args[i + 1]) ? 0 : 1);
 				break;
 			}
 

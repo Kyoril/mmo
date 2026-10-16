@@ -5,6 +5,7 @@
 #include "world_model.h"
 #include "instanced_mesh_collision.h"
 #include "movable_object.h"
+#include "prop_kit.h"
 #include "world_model_batch.h"
 #include "world_model_batch_builder.h"
 #include "world_model_portal_culling.h"
@@ -116,6 +117,31 @@ namespace mmo
         /// @brief Gets a child world model instance by index, or null when out of range.
         [[nodiscard]] WorldModelInstance* GetChildInstance(size_t index) const;
 
+        /// @brief Sets the prop kits dressing this instance, in application order.
+        /// @details Kits are shared assets: several instances may hold the same PropKitPtr. Before
+        ///          the instance is attached the kits are only stored, and are realized on first attach
+        ///          after the doodads and before the child instances. Once geometry exists, the kit
+        ///          content (props, their batches and collision, and kit lights) is cleared and
+        ///          rebuilt; the shell, doodads, model lights and child instances are left alone.
+        /// @param kits The kits to apply. Null entries are ignored.
+        void SetPropKits(std::vector<PropKitPtr> kits);
+
+        /// @brief Gets the prop kits applied to this instance.
+        [[nodiscard]] const std::vector<PropKitPtr>& GetPropKits() const { return m_kits; }
+
+        /// @brief Gets the number of realized kit props, counting per-prop entities plus instances
+        ///        drawn through instanced batches. Zero until the instance has been attached.
+        [[nodiscard]] size_t GetKitPropInstanceCount() const;
+
+        /// @brief Gets the number of scene lights created from the applied kits.
+        [[nodiscard]] size_t GetKitLightCount() const;
+
+        /// @brief Gets the room a realized kit prop was derived into.
+        /// @param index Index of the prop among all visible props of all kits, in kit order.
+        /// @return The group index, or -1 when the prop lies in no room (so it is never culled) or
+        ///         the index is out of range.
+        [[nodiscard]] int32 GetKitPropGroup(size_t index) const;
+
         /// @brief Deepest nesting of child world models that is instantiated. A town that places
         ///        buildings that place props is depth 2; anything this deep is a content mistake.
         static constexpr uint32 MaxChildDepth = 8;
@@ -181,6 +207,10 @@ namespace mmo
 
             /// @brief Room this batch belongs to, or WorldModelNoGroup when it is never culled.
             size_t groupIndex { WorldModelNoGroup };
+
+            /// @brief Submesh this batch draws. Every submesh of a mesh gets its own batch holding
+            ///        the same placements, so counting placements must only look at submesh 0.
+            size_t submeshIndex { 0 };
         };
 
         /// @brief Collision geometry for placements whose entities were replaced by a batch.
@@ -200,6 +230,26 @@ namespace mmo
 
             /// @brief Placements relative to the world model.
             std::vector<WorldModelPlacementInput> placements;
+        };
+
+        /// @brief One per-placement entity of a doodad or kit prop.
+        struct DoodadInstance
+        {
+            Entity* entity { nullptr };
+            SceneNode* node { nullptr };
+
+            /// @brief Index of the room this doodad sits in, or -1 for "in no room".
+            /// @details Derived by point-in-group testing at load time. WorldModelGroup::GetDoodadRefs()
+            ///          exists but is never populated by the serializer or the editor, so it cannot be
+            ///          used for this.
+            int32 groupIndex { -1 };
+        };
+
+        /// @brief One scene light created from a world model or kit light.
+        struct LightInstance
+        {
+            Light* light { nullptr };
+            SceneNode* node { nullptr };
         };
 
         /// @brief Creates the renderable geometry for a group.
@@ -323,6 +373,45 @@ namespace mmo
         ///        so a mesh-ref batch and a doodad batch cannot end up with the same name.
         size_t m_batchNameCounter { 0 };
 
+        /// @brief Realizes placements as instanced batches, collision proxies and per-placement entities.
+        /// @details Shared by doodads and kit props. Every transform and material override is taken
+        ///          from the placement itself. With batching enabled, placements whose material
+        ///          override has no instanced variant, singletons and buckets that fail to batch fall
+        ///          back to per-placement entities.
+        /// @param scene The scene to create objects in.
+        /// @param placements The placements to realize, relative to the world model.
+        /// @param instances Receives the per-placement entities.
+        /// @param batches Receives the instanced batches.
+        /// @param proxies Receives the collision proxies of the batched placements.
+        void RealizePlacements(Scene& scene, const std::vector<WorldModelPlacementInput>& placements,
+            std::vector<DoodadInstance>& instances, std::vector<BatchEntry>& batches, std::vector<CollisionEntry>& proxies);
+
+        /// @brief Creates one scene light from a world model light and appends it to a list.
+        /// @details Ambient lights are skipped. Lights appended to m_kitLightInstances get a distinct
+        ///          name prefix so they never collide with the model's own lights.
+        /// @param scene The scene to create the light in.
+        /// @param light The light description, relative to the world model.
+        /// @param target The list to append the created light to.
+        void CreateLightFrom(Scene& scene, const WorldModelLight& light, std::vector<LightInstance>& target);
+
+        /// @brief Realizes the props and lights of every applied kit.
+        /// @param scene The scene to create objects in.
+        void CreateKitContent(Scene& scene);
+
+        /// @brief Destroys every object created for the applied kits.
+        /// @param scene The scene to destroy objects in (can be null).
+        void ClearKitContent(Scene* scene);
+
+        /// @brief Destroys a list of per-placement entities and their nodes.
+        /// @param instances The entities to destroy.
+        /// @param scene The scene to destroy objects in (can be null).
+        static void DestroyPlacementEntities(std::vector<DoodadInstance>& instances, Scene* scene);
+
+        /// @brief Destroys a list of scene lights and their nodes.
+        /// @param lights The lights to destroy.
+        /// @param scene The scene to destroy objects in (can be null).
+        static void DestroyLightInstances(std::vector<LightInstance>& lights, Scene* scene);
+
         /// @brief Creates doodad entities for the current doodad set.
         /// @param scene The scene to create entities in.
         void CreateDoodads(Scene& scene);
@@ -379,19 +468,7 @@ namespace mmo
             std::vector<MeshVisualization> meshVisualizations;
         };
         std::vector<GroupRenderable> m_groupRenderables;
-        
-        // Doodad instances
-        struct DoodadInstance
-        {
-            Entity* entity { nullptr };
-            SceneNode* node { nullptr };
 
-            /// @brief Index of the room this doodad sits in, or -1 for "in no room".
-            /// @details Derived by point-in-group testing at load time. WorldModelGroup::GetDoodadRefs()
-            ///          exists but is never populated by the serializer or the editor, so it cannot be
-            ///          used for this.
-            int32 groupIndex { -1 };
-        };
         std::vector<DoodadInstance> m_doodadInstances;
 
         std::vector<BatchEntry> m_batches;
@@ -420,13 +497,27 @@ namespace mmo
         ///        logged once per material rather than once per batch.
         std::set<String> m_warnedInstancingMaterials;
 
-        // Light instances
-        struct LightInstance
-        {
-            Light* light { nullptr };
-            SceneNode* node { nullptr };
-        };
         std::vector<LightInstance> m_lightInstances;
+
+        /// @brief Prop kits applied to this instance, in application order. Shared with other
+        ///        instances, never modified here.
+        std::vector<PropKitPtr> m_kits;
+
+        /// @brief Per-prop entities of kit props that were not batched.
+        std::vector<DoodadInstance> m_kitInstances;
+
+        /// @brief Instanced batches of kit props.
+        std::vector<BatchEntry> m_kitBatches;
+
+        /// @brief Collision for batched kit props. Separate from the other proxy lists so changing
+        ///        the kits rebuilds only the kit content.
+        std::vector<CollisionEntry> m_kitCollisionProxies;
+
+        /// @brief Scene lights created from kit lights.
+        std::vector<LightInstance> m_kitLightInstances;
+
+        /// @brief Derived room of every realized kit prop in kit order, or -1 for "in no room".
+        std::vector<int32> m_kitPropGroups;
 
         // Nested world models created from the model's child references
         struct ChildInstance

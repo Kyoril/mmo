@@ -207,6 +207,41 @@ namespace mmo
         lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.max.z), Vector3(aabb.min.x, aabb.max.y, aabb.max.z));
     }
 
+    float SelectionRaycaster::GetClosestEntityHitDistance(const float viewportX, const float viewportY)
+    {
+        const Ray ray = CreateRayFromViewport(viewportX, viewportY);
+        m_raySceneQuery.SetRay(ray);
+        m_raySceneQuery.SetSortByDistance(true);
+        m_raySceneQuery.SetQueryMask(SceneQueryFlags_Entity);
+        m_raySceneQuery.ClearResult();
+        m_raySceneQuery.Execute();
+
+        float closestDistance = std::numeric_limits<float>::max();
+        for (const auto &result : m_raySceneQuery.GetLastResult())
+        {
+            Entity *entity = dynamic_cast<Entity*>(result.movable);
+            float localDistance;
+            if (!entity || !IntersectMeshGeometry(ray, entity, localDistance))
+            {
+                continue;
+            }
+
+            // IntersectMeshGeometry measures in the entity's local space; convert the hit back to a
+            // world-space distance so it compares with other world-space picks.
+            const Matrix4 &worldTransform = entity->GetParentSceneNode()->GetFullTransform();
+            const Matrix4 invWorldTransform = worldTransform.Inverse();
+            const Ray localRay(invWorldTransform * ray.origin, invWorldTransform * ray.destination);
+            const Vector3 worldHit = worldTransform * localRay.GetPoint(localDistance);
+            const float hitDistance = (worldHit - ray.origin).GetLength();
+            if (hitDistance < closestDistance)
+            {
+                closestDistance = hitDistance;
+            }
+        }
+
+        return closestDistance;
+    }
+
     void SelectionRaycaster::PerformEntitySelection(float viewportX, float viewportY, bool allowMultiSelect)
     {
         const Ray ray = CreateRayFromViewport(viewportX, viewportY);

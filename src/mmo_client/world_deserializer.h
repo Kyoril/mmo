@@ -62,7 +62,7 @@ namespace mmo
 	protected:
 		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
 
-		WorldModelInstance* CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
+		WorldModelInstance* CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId, const std::vector<String>& kitPaths);
 
 		static uint16 BuildPageIndex(uint8 x, const uint8 y)
 		{

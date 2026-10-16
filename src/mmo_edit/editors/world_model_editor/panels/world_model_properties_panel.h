@@ -120,6 +120,59 @@ namespace mmo
 		std::function<void(int32)> onDeriveContainmentVolumes;
 	};
 
+	/// @brief Bit flags reporting what DrawMeshRefProperties changed in a frame.
+	namespace mesh_ref_edit
+	{
+		enum Type : uint32
+		{
+			/// @brief Nothing changed.
+			None = 0,
+			/// @brief The name changed.
+			Name = 1 << 0,
+			/// @brief The position changed.
+			Position = 1 << 1,
+			/// @brief The scale changed.
+			Scale = 1 << 2,
+			/// @brief The material override changed.
+			Material = 1 << 3,
+			/// @brief The delete button was clicked. The mesh ref itself is left untouched.
+			Delete = 1 << 4
+		};
+	}
+
+	/// @brief Bit flags reporting what DrawLightProperties changed in a frame.
+	namespace light_edit
+	{
+		enum Type : uint32
+		{
+			/// @brief Nothing changed.
+			None = 0,
+			/// @brief The light type changed.
+			LightType = 1 << 0,
+			/// @brief The position changed.
+			Position = 1 << 1,
+			/// @brief The direction of a spot light changed.
+			Rotation = 1 << 2,
+			/// @brief Color, intensity, range, cone or fog scattering changed.
+			Appearance = 1 << 3,
+			/// @brief The delete button was clicked. The light itself is left untouched.
+			Delete = 1 << 4
+		};
+	}
+
+	/// @brief Draws the editable properties of a single mesh reference and applies edits to it.
+	///        Shared by the world model editor and the prop kit editor.
+	/// @param meshRef The mesh reference to edit.
+	/// @return A combination of mesh_ref_edit::Type flags describing what changed.
+	uint32 DrawMeshRefProperties(WorldModelMeshRef& meshRef);
+
+	/// @brief Draws the editable properties of a single light and applies edits to it.
+	///        Shared by the world model editor and the prop kit editor.
+	/// @param light The light to edit.
+	/// @param lightIndex Index of the light, used for the heading only.
+	/// @return A combination of light_edit::Type flags describing what changed.
+	uint32 DrawLightProperties(WorldModelLight& light, int32 lightIndex);
+
 	/// @brief Draws the properties panel UI.
 	/// @param worldModel The world model being edited.
 	/// @param selectionState The current selection state.

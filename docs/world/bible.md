@@ -100,7 +100,8 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - In the game, Oakenshire is the first hub (levels 1–6). [C] It has:
   - a **Town Hall** whose ground floor holds the class trainers (q3, q4, q7, q23);
   - an **Inn** run by Old Harbin, with a rat-infested cellar (q10);
-  - a **west gate** held by the **Oakenshire Watch** (u46, u47).
+  - a **west gate** held by the **Oakenshire Watch** (u46, u47);
+  - a **market** east of the Inn's front steps (atlas `oakenshire_market`, placeholder) with Eliza Thorne (General Goods), Garret Blackwood (Weapons), Roland Stonehelm (Mail & Plate) and Derrick Longstride (Leather Armor). On 2026-10-16 the user had them moved here from the buried old-Haven market. [E]
 - Farms and woodcutters lie in the valley south-east of town, and boars trample them (q1, q5, q6). [C]
 - A bandit camp lies in the woods south of town (q9, q24, q31, q33). [C]
 - **Forest Camp** is where the human story begins, and the player starts there, not in a town. [E]
@@ -113,7 +114,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - A walled town and major human hub, reached around level 10. It has guards, vendors and class trainers. [E]
 - **Haven has no terrain yet.** The zone rows exist, but no terrain tile carries its area id. [C]
 - The data strongly suggests Haven once stood around the map origin:
-  - Five vendors stand at about (0, 21): Eliza Thorne (General Goods), Garret Blackwood (Weapons), Roland Stonehelm (Mail & Plate), Derrick Longstride (Leather Armor) and Mariana Silkspun (Clothier).
+  - Five vendors stood at about (0, 21). Four of them moved to the Oakenshire market on 2026-10-16 (section 3.2). Mariana Silkspun (Clothier) is still buried there; Milly Goldwyn sells the same cloth list in Oakenshire.
   - Injured Guards stand "north east of Haven" near (−55, −45) (q8).
   - Haven's binder is Magister Calloran (u25), who is not spawned.
   - All of these NPCs are buried 3–7 m below the current terrain. [C]
@@ -121,7 +122,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - The atlas pin `haven` is canon at (−781, 1249), radius about 310 m: a big walled city on flat, empty ground with no zone yet.
   - It is about 1.3 km from the Oakenshire Town Hall in a straight line.
 - The continent sketch shows Haven just **south** of Oakenshire. [E]
-- The buried Haven NPCs at the map origin are leftovers. They have to move to the new Haven, or be removed. [?]
+- The remaining buried Haven NPCs at the map origin are leftovers. They have to move to the new Haven, or be removed. [?]
 - The Westwatch Training Yard (q21: "not far from here") stands with them. Does it move into Haven, or stay near Oakenshire as a place of its own? [?]
 
 ### 3.4 Westwatch Training Yard
