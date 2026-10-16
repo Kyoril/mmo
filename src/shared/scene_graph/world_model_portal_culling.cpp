@@ -338,11 +338,21 @@ namespace mmo
         // "best" group would credit the eye to the wrong room there - and that room's portals would
         // then hide the one the eye is really in.
         const Vector3 localEye = modelToWorld.Inverse() * viewFrustum.origin;
+        //
+        // An exterior group without containment volumes is not a room: outdoor world models (a town)
+        // split their streets into exterior cells for frustum culling only, and a cell's bounding box
+        // must not shut the eye in and hide every other cell. Such groups are seeded below like
+        // anything else outside.
         std::vector<int32> seeds;
         for (size_t i = 0; i < groupCount; ++i)
         {
             const WorldModelGroup* group = model.GetGroup(i);
-            if (group && group->ContainsPoint(localEye))
+            if (!group || (group->IsExterior() && group->GetContainmentVolumes().empty()))
+            {
+                continue;
+            }
+
+            if (group->ContainsPoint(localEye))
             {
                 seeds.push_back(static_cast<int32>(i));
             }

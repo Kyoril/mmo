@@ -77,7 +77,9 @@ namespace mmo
     /// frustum through each visible portal. A group may be entered again through another portal, since
     /// the first path that reached it can have seen it through a narrower opening than a later one;
     /// only a group already on the current path is skipped. If the eye is in no group, every exterior
-    /// group and every group whose bounds are in view is a starting point instead.
+    /// group and every group whose bounds are in view is a starting point instead. Exterior groups
+    /// without containment volumes never count as holding the eye: they are outdoor culling cells,
+    /// not rooms, and always take the second path.
     ///
     /// @param model The world model.
     /// @param modelToWorld Transform from model space to world space (the instance's node transform).

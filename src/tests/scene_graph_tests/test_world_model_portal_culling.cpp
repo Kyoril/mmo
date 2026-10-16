@@ -150,6 +150,35 @@ TEST_CASE("Portal culling enters a room again through a wider door", "[world_mod
 	CHECK(visible == std::vector<int32>{ 0, 1, 2 });
 }
 
+TEST_CASE("Portal culling does not shut the eye into an exterior cell without a volume", "[world_model_portal_culling]")
+{
+	// Outdoor world models (a town) split their streets into exterior cells for frustum culling,
+	// without portals or containment volumes. A cell's bounding box must not count as a room the eye
+	// is shut in: standing inside cell A, looking into cell B, B stays visible.
+	WorldModel model;
+	for (const float minX : { 0.0f, 30.0f })
+	{
+		WorldModelGroup& cell = model.AddGroup();
+		cell.SetFlags(WorldModelGroupFlags::Exterior);
+		cell.SetBoundingBox(AABB(Vector3(minX, -2.0f, -15.0f), Vector3(minX + 30.0f, 20.0f, 15.0f)));
+	}
+
+	CHECK(Visible(model, LookAlongX(Vector3(25.0f, 2.0f, 0.0f), 1.0f)) == std::vector<int32>{ 0, 1 });
+}
+
+TEST_CASE("Portal culling still shuts the eye into an interior room inside an exterior cell", "[world_model_portal_culling]")
+{
+	// A sealed room sits inside a volume-less exterior cell. The room's volume is what the eye is
+	// in, so the cell (outside the room's walls) stays hidden.
+	WorldModel model;
+	WorldModelGroup& cell = model.AddGroup();
+	cell.SetFlags(WorldModelGroupFlags::Exterior);
+	cell.SetBoundingBox(AABB(Vector3(-50.0f, -2.0f, -50.0f), Vector3(50.0f, 20.0f, 50.0f)));
+	const size_t room = AddRoom(model, 0.0f, 10.0f);
+
+	CHECK(Visible(model, LookAlongX(Vector3(5.0f, 2.0f, 0.0f), 1.0f)) == std::vector<int32>{ static_cast<int32>(room) });
+}
+
 TEST_CASE("Portal culling outside every room draws the rooms in view", "[world_model_portal_culling]")
 {
 	WorldModel model;
