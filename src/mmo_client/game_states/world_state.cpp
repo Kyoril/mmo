@@ -3590,7 +3590,7 @@ namespace mmo
 
 	PacketParseResult WorldState::OnClassXpUpdate(game::IncomingPacket &packet)
 	{
-		uint32 classId = 0, xpGained = 0, classXp = 0, xpToNextLevel = 0;
+		uint32 classId = 0, xpGained = 0, classXp = 0, xpToNextLevel = 0, talentPointsGained = 0;
 		uint8 classLevel = 0, leveledUp = 0;
 		if (!(packet
 			>> io::read<uint32>(classId)
@@ -3598,7 +3598,8 @@ namespace mmo
 			>> io::read<uint8>(classLevel)
 			>> io::read<uint32>(classXp)
 			>> io::read<uint32>(xpToNextLevel)
-			>> io::read<uint8>(leveledUp)))
+			>> io::read<uint8>(leveledUp)
+			>> io::read<uint32>(talentPointsGained)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -3646,6 +3647,20 @@ namespace mmo
 			}
 
 			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
+
+			// Talent points are granted by the class rank, not by the character level, so the
+			// notice about them belongs here (see proto_data/classes.proto: ClassLevelEntry).
+			if (talentPointsGained > 0)
+			{
+				String pointsMessage = Localize(FrameManager::Get().GetLocalization(),
+					talentPointsGained > 1 ? "LEVEL_UP_CHAR_POINTS" : "LEVEL_UP_CHAR_POINTS_P1");
+				if (const size_t amountPlaceholder = pointsMessage.find("%d"); amountPlaceholder != String::npos)
+				{
+					pointsMessage.replace(amountPlaceholder, 2, std::to_string(talentPointsGained));
+				}
+
+				FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", pointsMessage);
+			}
 		}
 
 		return PacketParseResult::Pass;
