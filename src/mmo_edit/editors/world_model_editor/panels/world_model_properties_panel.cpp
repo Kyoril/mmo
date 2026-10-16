@@ -289,16 +289,9 @@ namespace mmo
 		ImGui::PopStyleColor(3);
 	}
 
-	/// @brief Draws the light properties section.
-	static void DrawLightProperties(WorldModel* worldModel, int32 lightIndex, const PropertiesPanelCallbacks& callbacks)
+	uint32 DrawLightProperties(WorldModelLight& light, const int32 lightIndex)
 	{
-		auto& lights = worldModel->GetLights();
-		if (lightIndex < 0 || lightIndex >= static_cast<int32>(lights.size()))
-		{
-			return;
-		}
-
-		auto& light = lights[lightIndex];
+		uint32 result = light_edit::None;
 
 		// Light type icon and label
 		const char* typeStr = (light.type == WorldModelLight::LightType::Spot) ? "Spot" : "Point";
@@ -316,10 +309,7 @@ namespace mmo
 		if (ImGui::Combo("##lightType", &typeInt, typeNames, 2))
 		{
 			light.type = (typeInt == 1) ? WorldModelLight::LightType::Spot : WorldModelLight::LightType::Omni;
-			if (callbacks.onUpdateLightVisualizations)
-			{
-				callbacks.onUpdateLightVisualizations();
-			}
+			result |= light_edit::LightType;
 		}
 		ImGui::PopStyleColor();
 
@@ -334,14 +324,7 @@ namespace mmo
 		if (ImGui::DragFloat3("Position##light", posArr, 0.1f))
 		{
 			light.position = Vector3(posArr[0], posArr[1], posArr[2]);
-			if (callbacks.onUpdateLightSceneNode)
-			{
-				callbacks.onUpdateLightSceneNode(lightIndex);
-			}
-			if (callbacks.onUpdateLightVisualizations)
-			{
-				callbacks.onUpdateLightVisualizations();
-			}
+			result |= light_edit::Position;
 		}
 
 		// Direction for spot lights
@@ -370,10 +353,7 @@ namespace mmo
 				Matrix3 newRotMat;
 				newRotMat.FromEulerAnglesYXZ(Degree(yawDeg), Degree(pitchDeg), Radian(0));
 				light.rotation.FromRotationMatrix(newRotMat);
-				if (callbacks.onUpdateLightVisualizations)
-				{
-					callbacks.onUpdateLightVisualizations();
-				}
+				result |= light_edit::Rotation;
 			}
 		}
 
@@ -395,19 +375,13 @@ namespace mmo
 			uint32 g = static_cast<uint32>(colorArr[1] * 255.0f) & 0xFF;
 			uint32 b = static_cast<uint32>(colorArr[2] * 255.0f) & 0xFF;
 			light.color = 0xFF000000 | (r << 16) | (g << 8) | b;
-			if (callbacks.onUpdateLightVisualizations)
-			{
-				callbacks.onUpdateLightVisualizations();
-			}
+			result |= light_edit::Appearance;
 		}
 
 		// Intensity
 		if (ImGui::DragFloat("Intensity##light", &light.intensity, 0.1f, 0.0f, 100.0f, "%.2f"))
 		{
-			if (callbacks.onUpdateLightVisualizations)
-			{
-				callbacks.onUpdateLightVisualizations();
-			}
+			result |= light_edit::Appearance;
 		}
 
 		// Range
@@ -417,10 +391,7 @@ namespace mmo
 			{
 				light.attenuationEnd = 0.1f;
 			}
-			if (callbacks.onUpdateLightVisualizations)
-			{
-				callbacks.onUpdateLightVisualizations();
-			}
+			result |= light_edit::Appearance;
 		}
 
 		// Spot cone
@@ -430,10 +401,7 @@ namespace mmo
 			{
 				light.outerConeAngle = std::clamp(light.outerConeAngle, light_math::MinConeAngle, light_math::MaxConeAngle);
 				light.innerConeAngle = std::min(light.innerConeAngle, light.outerConeAngle);
-				if (callbacks.onUpdateLightVisualizations)
-				{
-					callbacks.onUpdateLightVisualizations();
-				}
+				result |= light_edit::Appearance;
 			}
 			if (ImGui::IsItemHovered())
 			{
@@ -443,10 +411,7 @@ namespace mmo
 			if (ImGui::DragFloat("Inner Cone##light", &light.innerConeAngle, 0.5f, light_math::MinConeAngle, light.outerConeAngle, "%.1f deg"))
 			{
 				light.innerConeAngle = std::clamp(light.innerConeAngle, light_math::MinConeAngle, light.outerConeAngle);
-				if (callbacks.onUpdateLightVisualizations)
-				{
-					callbacks.onUpdateLightVisualizations();
-				}
+				result |= light_edit::Appearance;
 			}
 			if (ImGui::IsItemHovered())
 			{
@@ -458,10 +423,7 @@ namespace mmo
 		if (ImGui::DragFloat("Fog Scattering##light", &light.fogScattering, 0.05f, 0.0f, light_math::MaxFogScattering, "%.2f"))
 		{
 			light.fogScattering = std::clamp(light.fogScattering, 0.0f, light_math::MaxFogScattering);
-			if (callbacks.onUpdateLightVisualizations)
-			{
-				callbacks.onUpdateLightVisualizations();
-			}
+			result |= light_edit::Appearance;
 		}
 		if (ImGui::IsItemHovered())
 		{
@@ -476,12 +438,39 @@ namespace mmo
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
 		if (ImGui::Button("Delete Light", ImVec2(-1, 0)))
 		{
-			if (callbacks.onRemoveLight)
-			{
-				callbacks.onRemoveLight(lightIndex);
-			}
+			result |= light_edit::Delete;
 		}
 		ImGui::PopStyleColor(3);
+
+		return result;
+	}
+
+	/// @brief Draws the light properties section of a world model light and forwards edits to the callbacks.
+	static void DrawLightProperties(WorldModel* worldModel, int32 lightIndex, const PropertiesPanelCallbacks& callbacks)
+	{
+		auto& lights = worldModel->GetLights();
+		if (lightIndex < 0 || lightIndex >= static_cast<int32>(lights.size()))
+		{
+			return;
+		}
+
+		const uint32 changes = DrawLightProperties(lights[lightIndex], lightIndex);
+
+		if ((changes & light_edit::Position) != 0 && callbacks.onUpdateLightSceneNode)
+		{
+			callbacks.onUpdateLightSceneNode(lightIndex);
+		}
+
+		constexpr uint32 visualChanges = light_edit::LightType | light_edit::Position | light_edit::Rotation | light_edit::Appearance;
+		if ((changes & visualChanges) != 0 && callbacks.onUpdateLightVisualizations)
+		{
+			callbacks.onUpdateLightVisualizations();
+		}
+
+		if ((changes & light_edit::Delete) != 0 && callbacks.onRemoveLight)
+		{
+			callbacks.onRemoveLight(lightIndex);
+		}
 	}
 
 	/// @brief Draws the portal properties section.
@@ -735,7 +724,101 @@ namespace mmo
 		ImGui::PopStyleColor(3);
 	}
 
-	/// @brief Draws the mesh ref properties section.
+	uint32 DrawMeshRefProperties(WorldModelMeshRef& meshRef)
+	{
+		uint32 result = mesh_ref_edit::None;
+
+		// Get display label
+		String label = meshRef.name;
+		if (label.empty())
+		{
+			label = meshRef.meshPath;
+			size_t lastSlash = label.find_last_of("/\\");
+			if (lastSlash != String::npos)
+			{
+				label = label.substr(lastSlash + 1);
+			}
+		}
+
+		ImGui::Text("Mesh: %s", label.c_str());
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Name field
+		ImGui::Text("Name:");
+		ImGui::SameLine();
+		char nameBuffer[256];
+		std::strncpy(nameBuffer, meshRef.name.c_str(), sizeof(nameBuffer) - 1);
+		nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+		ImGui::SetNextItemWidth(-1);
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+		if (ImGui::InputText("##meshrefName", nameBuffer, sizeof(nameBuffer)))
+		{
+			meshRef.name = nameBuffer;
+			result |= mesh_ref_edit::Name;
+		}
+		ImGui::PopStyleColor();
+
+		ImGui::Spacing();
+
+		// Transform section
+		ImGui::Text("Transform");
+		ImGui::Separator();
+
+		// Position
+		float pos[3] = { meshRef.position.x, meshRef.position.y, meshRef.position.z };
+		if (ImGui::DragFloat3("Position##meshref", pos, 0.1f))
+		{
+			meshRef.position = Vector3(pos[0], pos[1], pos[2]);
+			result |= mesh_ref_edit::Position;
+		}
+
+		// Scale
+		float scl[3] = { meshRef.scale.x, meshRef.scale.y, meshRef.scale.z };
+		if (ImGui::DragFloat3("Scale##meshref", scl, 0.01f, 0.01f, 100.0f))
+		{
+			meshRef.scale = Vector3(scl[0], scl[1], scl[2]);
+			result |= mesh_ref_edit::Scale;
+		}
+
+		ImGui::Spacing();
+
+		// Material section
+		ImGui::Text("Material Override");
+		ImGui::Separator();
+		char matBuffer[512];
+		std::strncpy(matBuffer, meshRef.materialOverride.c_str(), sizeof(matBuffer) - 1);
+		matBuffer[sizeof(matBuffer) - 1] = '\0';
+		ImGui::SetNextItemWidth(-1);
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+		if (ImGui::InputText("##meshrefMat", matBuffer, sizeof(matBuffer)))
+		{
+			meshRef.materialOverride = matBuffer;
+			result |= mesh_ref_edit::Material;
+		}
+		ImGui::PopStyleColor();
+
+		ImGui::Spacing();
+
+		// Source mesh (read-only)
+		ImGui::TextDisabled("Source: %s", meshRef.meshPath.c_str());
+
+		ImGui::Spacing();
+
+		// Delete button
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+		if (ImGui::Button("Delete Mesh", ImVec2(-1, 0)))
+		{
+			result |= mesh_ref_edit::Delete;
+		}
+		ImGui::PopStyleColor(3);
+
+		return result;
+	}
+
+	/// @brief Draws the mesh ref properties section of a world model group's mesh ref and forwards edits to the callbacks.
 	static void DrawMeshRefProperties(WorldModel* worldModel, int32 groupIndex, int32 meshRefIndex, const PropertiesPanelCallbacks& callbacks)
 	{
 		if (groupIndex < 0 || groupIndex >= static_cast<int32>(worldModel->GetGroupCount()))
@@ -761,103 +844,27 @@ namespace mmo
 			return;
 		}
 
-		// Get display label
-		String label = selectedRef->name;
-		if (label.empty())
+		const uint32 changes = DrawMeshRefProperties(*selectedRef);
+
+		if ((changes & mesh_ref_edit::Position) != 0 && callbacks.onUpdateMeshRefPosition)
 		{
-			label = selectedRef->meshPath;
-			size_t lastSlash = label.find_last_of("/\\");
-			if (lastSlash != String::npos)
-			{
-				label = label.substr(lastSlash + 1);
-			}
+			callbacks.onUpdateMeshRefPosition(groupIndex, meshRefIndex, selectedRef->position);
 		}
 
-		ImGui::Text("Mesh: %s", label.c_str());
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		// Name field
-		ImGui::Text("Name:");
-		ImGui::SameLine();
-		char nameBuffer[256];
-		std::strncpy(nameBuffer, selectedRef->name.c_str(), sizeof(nameBuffer) - 1);
-		nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-		ImGui::SetNextItemWidth(-1);
-		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-		if (ImGui::InputText("##meshrefName", nameBuffer, sizeof(nameBuffer)))
+		if ((changes & mesh_ref_edit::Scale) != 0 && callbacks.onUpdateMeshRefScale)
 		{
-			selectedRef->name = nameBuffer;
-		}
-		ImGui::PopStyleColor();
-
-		ImGui::Spacing();
-
-		// Transform section
-		ImGui::Text("Transform");
-		ImGui::Separator();
-
-		// Position
-		float pos[3] = { selectedRef->position.x, selectedRef->position.y, selectedRef->position.z };
-		if (ImGui::DragFloat3("Position##meshref", pos, 0.1f))
-		{
-			selectedRef->position = Vector3(pos[0], pos[1], pos[2]);
-			if (callbacks.onUpdateMeshRefPosition)
-			{
-				callbacks.onUpdateMeshRefPosition(groupIndex, meshRefIndex, selectedRef->position);
-			}
+			callbacks.onUpdateMeshRefScale(groupIndex, meshRefIndex, selectedRef->scale);
 		}
 
-		// Scale
-		float scl[3] = { selectedRef->scale.x, selectedRef->scale.y, selectedRef->scale.z };
-		if (ImGui::DragFloat3("Scale##meshref", scl, 0.01f, 0.01f, 100.0f))
+		if ((changes & mesh_ref_edit::Material) != 0 && callbacks.onUpdateMeshRefMaterial)
 		{
-			selectedRef->scale = Vector3(scl[0], scl[1], scl[2]);
-			if (callbacks.onUpdateMeshRefScale)
-			{
-				callbacks.onUpdateMeshRefScale(groupIndex, meshRefIndex, selectedRef->scale);
-			}
+			callbacks.onUpdateMeshRefMaterial(groupIndex, meshRefIndex, selectedRef->materialOverride);
 		}
 
-		ImGui::Spacing();
-
-		// Material section
-		ImGui::Text("Material Override");
-		ImGui::Separator();
-		char matBuffer[512];
-		std::strncpy(matBuffer, selectedRef->materialOverride.c_str(), sizeof(matBuffer) - 1);
-		matBuffer[sizeof(matBuffer) - 1] = '\0';
-		ImGui::SetNextItemWidth(-1);
-		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-		if (ImGui::InputText("##meshrefMat", matBuffer, sizeof(matBuffer)))
+		if ((changes & mesh_ref_edit::Delete) != 0 && callbacks.onRemoveMeshRef)
 		{
-			selectedRef->materialOverride = matBuffer;
-			if (callbacks.onUpdateMeshRefMaterial)
-			{
-				callbacks.onUpdateMeshRefMaterial(groupIndex, meshRefIndex, selectedRef->materialOverride);
-			}
+			callbacks.onRemoveMeshRef(groupIndex, static_cast<size_t>(meshRefIndex));
 		}
-		ImGui::PopStyleColor();
-
-		ImGui::Spacing();
-
-		// Source mesh (read-only)
-		ImGui::TextDisabled("Source: %s", selectedRef->meshPath.c_str());
-
-		ImGui::Spacing();
-
-		// Delete button
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
-		if (ImGui::Button("Delete Mesh", ImVec2(-1, 0)))
-		{
-			if (callbacks.onRemoveMeshRef)
-			{
-				callbacks.onRemoveMeshRef(groupIndex, static_cast<size_t>(meshRefIndex));
-			}
-		}
-		ImGui::PopStyleColor(3);
 	}
 
 	void DrawPropertiesPanel(
