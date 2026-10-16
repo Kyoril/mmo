@@ -149,6 +149,12 @@ namespace mmo
 
 		/// @brief Gets the id of the currently selected fog volume, or 0 if none is selected.
 		virtual uint32 GetSelectedFogVolumeId() const = 0;
+
+		/// @brief Offers a mesh dropped into the viewport to the active prop kit of the selected building.
+		/// @param meshPath The mesh asset (.hmsh).
+		/// @param worldPosition The drop point in world space.
+		/// @return true if the mesh was added to a kit, in which case no world entity must be created.
+		virtual bool AddMeshToActiveKit(const String& meshPath, const Vector3& worldPosition) { return false; }
 	};
 
 	class WorldEditMode : public NonCopyable

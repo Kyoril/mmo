@@ -10,6 +10,12 @@
 #include "editor_host.h"
 #include "icon_font.h"
 #include "scene_graph/prop_kit_manager.h"
+#include "scene_graph/prop_kit_serializer.h"
+#include "selected_kit_prop.h"
+#include "editors/world_model_editor/panels/world_model_properties_panel.h"
+#include "imgui/misc/cpp/imgui_stdlib.h"
+#include "binary_io/writer.h"
+#include "math/matrix4.h"
 #include "editor_windows/asset_picker_widget.h"
 #include "environment_preview.h"
 #include "world_editor.h"
@@ -82,6 +88,41 @@ namespace mmo
 		private:
 			const terrain::Terrain& m_terrain;
 		};
+
+		/// Normalizes a kit asset path for cache keys and comparisons: registry paths use forward
+		/// slashes; case is handled by the case-insensitive maps and KitPathsEqual.
+		String MakeKitKey(String path)
+		{
+			std::replace(path.begin(), path.end(), '\\', '/');
+			return path;
+		}
+
+		/// Whether two kit asset paths name the same kit (slash style and case ignored).
+		bool KitPathsEqual(const String& a, const String& b)
+		{
+			const String keyA = MakeKitKey(a);
+			const String keyB = MakeKitKey(b);
+			return keyA.size() == keyB.size() && std::equal(keyA.begin(), keyA.end(), keyB.begin(), [](const char x, const char y)
+			{
+				return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
+			});
+		}
+
+		/// Builds the world transform of a kit prop placed on a building, composed the same way the
+		/// world model instance realizes it (see ComposeWorldTransform).
+		Matrix4 MakeKitPropWorldTransform(const SceneNode& placementNode, const WorldModelMeshRef& prop)
+		{
+			const Vector3 parentPosition = placementNode.GetDerivedPosition();
+			const Quaternion parentOrientation = placementNode.GetDerivedOrientation();
+			const Vector3 parentScale = placementNode.GetDerivedScale();
+
+			Matrix4 transform;
+			transform.MakeTransform(
+				parentPosition + parentOrientation * (parentScale * prop.position),
+				parentScale * prop.scale,
+				parentOrientation * prop.rotation);
+			return transform;
+		}
 	}
 }
 
@@ -619,6 +660,9 @@ namespace mmo
 
 		HandleKeyboardShortcuts();
 
+		// Pick up kits saved by the prop kit editor since the last frame.
+		PollKitCache();
+
 		WorldEditMode *availableModes[] = {
 			m_entityEditMode.get(),
 			m_foliageEditMode.get(),
@@ -649,6 +693,12 @@ namespace mmo
 
 		const String minimapId = "World Map##" + GetAssetPath().string();
 		DrawMinimapPanel(minimapId);
+
+		// Kit prop removals requested this frame (Delete key, details panel) are applied once the
+		// selection is no longer being iterated.
+		ApplyPendingKitPropRemovals();
+
+		DrawKitModals();
 
 		if (m_initDockLayout)
 		{
@@ -828,10 +878,15 @@ namespace mmo
 			{
 				if (!widgetWasActive && button == 0 && m_hovering)
 				{
-					m_selectionRaycaster->PerformEntitySelection(
-						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
-						ImGui::IsKeyPressed(ImGuiKey_LeftShift));
+					const float viewportX = (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x;
+					const float viewportY = (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y;
+					const bool allowMultiSelect = ImGui::IsKeyPressed(ImGuiKey_LeftShift);
+
+					// Inside a selected building, a click on one of its kit props selects that prop.
+					if (!TrySelectKitProp(viewportX, viewportY, allowMultiSelect))
+					{
+						m_selectionRaycaster->PerformEntitySelection(viewportX, viewportY, allowMultiSelect);
+					}
 				}
 			}
 			else if (m_editMode == m_spawnEditMode.get())
@@ -1245,6 +1300,9 @@ namespace mmo
 				}
 			}
 		}
+
+		// Write kits edited in place. Kits shared with other loaded buildings wait for confirmation.
+		SaveDirtyKits();
 
 		return true;
 	}
@@ -1780,6 +1838,7 @@ namespace mmo
 			const void* entry = nullptr;
 
 			void Visit(SelectedMapEntity&) override {}
+			void Visit(SelectedKitProp&) override {}
 			void Visit(SelectedTerrainTile&) override {}
 			void Visit(SelectedUnitSpawn& selectable) override { entry = &selectable.GetEntry(); }
 			void Visit(SelectedObjectSpawn& selectable) override { entry = &selectable.GetEntry(); }
@@ -2481,22 +2540,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 				// Apply the placement's prop kits. The paths are kept even when a kit
 				// fails to load, so a save does not silently drop them.
+				// Unsaved kit edits made in this world show up on freshly loaded placements too.
 				if (mapEntity && !entity.kitPaths.empty())
 				{
-					std::vector<PropKitPtr> kits;
-					for (const String &kitPath : entity.kitPaths)
-					{
-						if (PropKitPtr kit = PropKitManager::Get().Load(kitPath))
-						{
-							kits.push_back(std::move(kit));
-						}
-						else
-						{
-							WLOG("Failed to load prop kit " << kitPath << " for world model " << entity.uniqueId);
-						}
-					}
-					wmoInstance->SetPropKits(std::move(kits));
 					mapEntity->SetKitPaths(entity.kitPaths);
+					ApplyKits(*mapEntity);
 				}
 			}
 			else
@@ -3002,7 +3050,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				{
 					ImGui::PushID(i);
 
-					const PropKitPtr kit = PropKitManager::Get().Find(kitPaths[i]);
+					const PropKitPtr kit = ResolveKit(kitPaths[i]);
 
 					ImGui::BeginDisabled(i == 0);
 					if (ImGui::SmallButton("^"))
@@ -3028,10 +3076,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 					if (kit)
 					{
-						ImGui::TextUnformatted(kit->name.c_str());
+						const bool unsaved = m_dirtyKits.contains(MakeKitKey(kitPaths[i]));
+						ImGui::Text("%s%s", kit->name.c_str(), unsaved ? " *" : "");
 						if (ImGui::IsItemHovered())
 						{
-							ImGui::SetTooltip("%s", kitPaths[i].c_str());
+							ImGui::SetTooltip(unsaved ? "%s\nUnsaved changes, written when the world is saved" : "%s", kitPaths[i].c_str());
 						}
 					}
 					else
@@ -3073,24 +3122,57 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 				if (kitsChanged)
 				{
-					std::vector<PropKitPtr> kits;
-					for (const String &kitPath : kitPaths)
+					mapEntity.SetKitPaths(std::move(kitPaths));
+					ApplyKits(mapEntity);
+				}
+
+				ImGui::Separator();
+
+				// Active kit: where meshes dropped into the viewport go while this building is selected.
+				const String activeKit = GetActiveKit(mapEntity);
+				ImGui::BeginDisabled(mapEntity.GetKitPaths().empty());
+				if (ImGui::BeginCombo("Active kit", activeKit.empty() ? "None" : activeKit.c_str()))
+				{
+					if (ImGui::Selectable("None", activeKit.empty()))
 					{
-						if (PropKitPtr kit = PropKitManager::Get().Load(kitPath))
-						{
-							kits.push_back(std::move(kit));
-						}
-						else
-						{
-							WLOG("Failed to load prop kit " << kitPath << " for world model " << mapEntity.GetUniqueId());
-						}
+						m_activeKits[mapEntity.GetUniqueId()] = String();
 					}
 
-					mapEntity.SetKitPaths(std::move(kitPaths));
-					if (WorldModelInstance *instance = mapEntity.GetWorldModelInstance())
+					for (size_t i = 0; i < mapEntity.GetKitPaths().size(); ++i)
 					{
-						instance->SetPropKits(std::move(kits));
+						const String &kitPath = mapEntity.GetKitPaths()[i];
+						ImGui::PushID(static_cast<int>(i));
+						if (ImGui::Selectable(kitPath.c_str(), kitPath == activeKit))
+						{
+							m_activeKits[mapEntity.GetUniqueId()] = kitPath;
+						}
+						ImGui::PopID();
 					}
+
+					ImGui::EndCombo();
+				}
+				ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				{
+					ImGui::SetTooltip("Meshes dropped into the viewport while this building is selected are added to the active kit.\nClick a prop of a selected building to select and move it; that edits the kit it came from.");
+				}
+
+				ImGui::BeginDisabled(activeKit.empty());
+				if (ImGui::Button("Save as new kit..."))
+				{
+					const Path source(activeKit);
+					String target = (source.parent_path() / (source.stem().string() + "_" + std::to_string(mapEntity.GetUniqueId()) + ".hkit")).string();
+					std::replace(target.begin(), target.end(), '\\', '/');
+
+					m_saveAsNewKitPlacement = mapEntity.GetUniqueId();
+					m_saveAsNewKitSource = activeKit;
+					m_saveAsNewKitTarget = std::move(target);
+					m_openSaveAsNewKit = true;
+				}
+				ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				{
+					ImGui::SetTooltip("Writes the active kit's current props and lights to a new file and uses it for this building only.\nThe original kit file is not changed.");
 				}
 			}
 		}
@@ -4148,5 +4230,758 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		return false;
+	}
+
+	MapEntity *WorldEditorInstance::FindMapEntity(const uint64 uniqueId) const
+	{
+		for (const auto &mapEntity : m_mapEntities)
+		{
+			if (mapEntity->GetUniqueId() == uniqueId)
+			{
+				return mapEntity.get();
+			}
+		}
+
+		return nullptr;
+	}
+
+	PropKitPtr WorldEditorInstance::ResolveKit(const String &kitPath) const
+	{
+		const String key = MakeKitKey(kitPath);
+		if (const auto it = m_dirtyKits.find(key); it != m_dirtyKits.end())
+		{
+			return it->second.kit;
+		}
+
+		return PropKitManager::Get().Find(key);
+	}
+
+	PropKitPtr WorldEditorInstance::LoadKit(const String &kitPath)
+	{
+		const String key = MakeKitKey(kitPath);
+		if (const auto it = m_dirtyKits.find(key); it != m_dirtyKits.end())
+		{
+			return it->second.kit;
+		}
+
+		PropKitPtr kit = PropKitManager::Get().Load(key);
+		if (kit)
+		{
+			m_observedKits[key] = kit;
+		}
+
+		return kit;
+	}
+
+	const WorldModelMeshRef *WorldEditorInstance::FindKitProp(const String &kitPath, const size_t propIndex) const
+	{
+		const PropKitPtr kit = ResolveKit(kitPath);
+		if (!kit || propIndex >= kit->props.size())
+		{
+			return nullptr;
+		}
+
+		return &kit->props[propIndex];
+	}
+
+	PropKit *WorldEditorInstance::GetEditableKit(const String &kitPath, const uint64 originPlacementId)
+	{
+		const String key = MakeKitKey(kitPath);
+		if (const auto it = m_dirtyKits.find(key); it != m_dirtyKits.end())
+		{
+			it->second.originPlacementId = originPlacementId;
+			return it->second.kit.get();
+		}
+
+		// The cached kit is shared with the prop kit editor and other worlds, so edits go into a copy
+		// that only this world shows until it is saved.
+		const PropKitPtr cached = PropKitManager::Get().Load(key);
+		if (!cached)
+		{
+			ELOG("Unable to edit prop kit " << key << ": the kit could not be loaded");
+			return nullptr;
+		}
+
+		DirtyKit &dirty = m_dirtyKits[key];
+		dirty.kit = std::make_shared<PropKit>(*cached);
+		dirty.originPlacementId = originPlacementId;
+		return dirty.kit.get();
+	}
+
+	void WorldEditorInstance::ApplyKits(MapEntity &placement)
+	{
+		WorldModelInstance *instance = placement.GetWorldModelInstance();
+		if (!instance)
+		{
+			return;
+		}
+
+		// The paths are kept even when a kit fails to load, so a save does not silently drop them.
+		std::vector<PropKitPtr> kits;
+		kits.reserve(placement.GetKitPaths().size());
+		for (const String &kitPath : placement.GetKitPaths())
+		{
+			if (PropKitPtr kit = LoadKit(kitPath))
+			{
+				kits.push_back(std::move(kit));
+			}
+			else
+			{
+				WLOG("Failed to load prop kit " << kitPath << " for world model " << placement.GetUniqueId());
+			}
+		}
+
+		instance->SetPropKits(std::move(kits));
+	}
+
+	void WorldEditorInstance::RefreshKitUsers(const String &kitPath)
+	{
+		for (const auto &mapEntity : m_mapEntities)
+		{
+			if (!mapEntity->IsWorldModelEntity())
+			{
+				continue;
+			}
+
+			const auto &kitPaths = mapEntity->GetKitPaths();
+			if (std::any_of(kitPaths.begin(), kitPaths.end(), [&kitPath](const String &path) { return KitPathsEqual(path, kitPath); }))
+			{
+				ApplyKits(*mapEntity);
+			}
+		}
+	}
+
+	size_t WorldEditorInstance::CountKitUsers(const String &kitPath, const uint64 excludePlacementId) const
+	{
+		size_t count = 0;
+		for (const auto &mapEntity : m_mapEntities)
+		{
+			if (!mapEntity->IsWorldModelEntity() || (excludePlacementId != 0 && mapEntity->GetUniqueId() == excludePlacementId))
+			{
+				continue;
+			}
+
+			const auto &kitPaths = mapEntity->GetKitPaths();
+			if (std::any_of(kitPaths.begin(), kitPaths.end(), [&kitPath](const String &path) { return KitPathsEqual(path, kitPath); }))
+			{
+				++count;
+			}
+		}
+
+		return count;
+	}
+
+	String WorldEditorInstance::GetActiveKit(const MapEntity &placement) const
+	{
+		const auto &kitPaths = placement.GetKitPaths();
+
+		if (const auto it = m_activeKits.find(placement.GetUniqueId()); it != m_activeKits.end())
+		{
+			// "None" was picked explicitly
+			if (it->second.empty())
+			{
+				return String();
+			}
+
+			for (const String &kitPath : kitPaths)
+			{
+				if (KitPathsEqual(kitPath, it->second))
+				{
+					return kitPath;
+				}
+			}
+
+			// The picked kit was removed from the list; fall back to the default.
+		}
+
+		return kitPaths.empty() ? String() : kitPaths.front();
+	}
+
+	MapEntity *WorldEditorInstance::GetSelectedPlacement() const
+	{
+		if (m_selection.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		Selectable *selected = m_selection.GetSelectedObjects().back().get();
+		if (const auto *selectedEntity = dynamic_cast<SelectedMapEntity *>(selected))
+		{
+			MapEntity &entity = selectedEntity->GetEntity();
+			return entity.IsWorldModelEntity() ? &entity : nullptr;
+		}
+
+		if (const auto *selectedProp = dynamic_cast<SelectedKitProp *>(selected))
+		{
+			return FindMapEntity(selectedProp->GetPlacementId());
+		}
+
+		return nullptr;
+	}
+
+	void WorldEditorInstance::EditKitProp(const uint64 placementId, const String &kitPath, const size_t propIndex, const std::function<void(WorldModelMeshRef &)> &edit)
+	{
+		PropKit *kit = GetEditableKit(kitPath, placementId);
+		if (!kit || propIndex >= kit->props.size())
+		{
+			return;
+		}
+
+		edit(kit->props[propIndex]);
+
+		RefreshKitUsers(kitPath);
+		UpdateSelectedKitPropBounds();
+	}
+
+	void WorldEditorInstance::DuplicateKitProp(const uint64 placementId, const String &kitPath, const size_t propIndex)
+	{
+		PropKit *kit = GetEditableKit(kitPath, placementId);
+		if (!kit || propIndex >= kit->props.size())
+		{
+			return;
+		}
+
+		// Copy first: push_back may reallocate the vector the source lives in.
+		const WorldModelMeshRef copy = kit->props[propIndex];
+		kit->props.push_back(copy);
+
+		RefreshKitUsers(kitPath);
+	}
+
+	void WorldEditorInstance::QueueKitPropRemoval(const uint64 placementId, const String &kitPath, const size_t propIndex)
+	{
+		m_pendingKitPropRemovals.push_back({placementId, kitPath, propIndex});
+	}
+
+	void WorldEditorInstance::ApplyPendingKitPropRemovals()
+	{
+		if (m_pendingKitPropRemovals.empty())
+		{
+			return;
+		}
+
+		// Highest index first, so earlier removals do not shift the props still queued.
+		std::vector<PendingKitPropRemoval> removals = std::move(m_pendingKitPropRemovals);
+		m_pendingKitPropRemovals.clear();
+		std::sort(removals.begin(), removals.end(), [](const PendingKitPropRemoval &a, const PendingKitPropRemoval &b)
+		{
+			return a.propIndex > b.propIndex;
+		});
+
+		std::vector<String> changedKits;
+		std::set<std::pair<String, size_t>> removed;
+		for (const PendingKitPropRemoval &removal : removals)
+		{
+			const String key = MakeKitKey(removal.kitPath);
+			String lowerKey = key;
+			std::transform(lowerKey.begin(), lowerKey.end(), lowerKey.begin(), [](const char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+			if (!removed.emplace(lowerKey, removal.propIndex).second)
+			{
+				continue;
+			}
+
+			PropKit *kit = GetEditableKit(key, removal.placementId);
+			if (!kit || removal.propIndex >= kit->props.size())
+			{
+				continue;
+			}
+
+			kit->props.erase(kit->props.begin() + static_cast<std::ptrdiff_t>(removal.propIndex));
+			if (std::none_of(changedKits.begin(), changedKits.end(), [&key](const String &path) { return KitPathsEqual(path, key); }))
+			{
+				changedKits.push_back(key);
+			}
+		}
+
+		// Prop indices of the changed kits are stale now, so drop selected props of those kits.
+		const bool selectsChangedKit = std::any_of(m_selection.GetSelectedObjects().begin(), m_selection.GetSelectedObjects().end(), [&changedKits](const auto &selectable)
+		{
+			const auto *selectedProp = dynamic_cast<SelectedKitProp *>(selectable.get());
+			return selectedProp && std::any_of(changedKits.begin(), changedKits.end(), [selectedProp](const String &path) { return KitPathsEqual(path, selectedProp->GetKitPath()); });
+		});
+		if (selectsChangedKit)
+		{
+			ClearSelection();
+		}
+
+		for (const String &kitPath : changedKits)
+		{
+			RefreshKitUsers(kitPath);
+		}
+	}
+
+	bool WorldEditorInstance::TrySelectKitProp(const float viewportX, const float viewportY, const bool allowMultiSelect)
+	{
+		MapEntity *placement = GetSelectedPlacement();
+		if (!placement || placement->GetKitPaths().empty())
+		{
+			return false;
+		}
+
+		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
+
+		String bestKit;
+		size_t bestIndex = 0;
+		float bestDistance = std::numeric_limits<float>::max();
+
+		for (const String &kitPath : placement->GetKitPaths())
+		{
+			const PropKitPtr kit = ResolveKit(kitPath);
+			if (!kit)
+			{
+				continue;
+			}
+
+			for (size_t i = 0; i < kit->props.size(); ++i)
+			{
+				const WorldModelMeshRef &prop = kit->props[i];
+				if (!prop.visible || prop.meshPath.empty())
+				{
+					continue;
+				}
+
+				const MeshPtr mesh = MeshManager::Get().Load(prop.meshPath);
+				if (!mesh)
+				{
+					continue;
+				}
+
+				// Test the ray against the mesh bounds in the prop's local space (an oriented box).
+				const Matrix4 transform = MakeKitPropWorldTransform(placement->GetSceneNode(), prop);
+				if (!transform.IsAffine())
+				{
+					continue;
+				}
+
+				const Matrix4 inverse = transform.InverseAffine();
+				const Vector3 localStart = inverse.TransformAffine(ray.origin);
+				const Vector3 localEnd = inverse.TransformAffine(ray.destination);
+				if (localStart == localEnd)
+				{
+					continue;
+				}
+
+				const Ray localRay(localStart, localEnd);
+				const auto [hit, localDistance] = localRay.IntersectsAABB(mesh->GetBounds());
+				if (!hit)
+				{
+					continue;
+				}
+
+				const Vector3 hitPoint = transform.TransformAffine(localRay.GetPoint(std::max(localDistance, 0.0f)));
+				const float distance = (hitPoint - ray.origin).GetLength();
+				if (distance < bestDistance)
+				{
+					bestDistance = distance;
+					bestKit = kitPath;
+					bestIndex = i;
+				}
+			}
+		}
+
+		if (bestKit.empty())
+		{
+			return false;
+		}
+
+		// A wall in front of the prop wins: compare with the nearest real geometry under the cursor.
+		// A prop that is itself realized as an entity is hit at or behind its own bounds, so it never
+		// hides itself.
+		constexpr float occlusionTolerance = 0.05f;
+		if (bestDistance > m_selectionRaycaster->GetClosestEntityHitDistance(viewportX, viewportY) + occlusionTolerance)
+		{
+			return false;
+		}
+
+		if (!allowMultiSelect)
+		{
+			m_selection.Clear();
+		}
+
+		m_selection.AddSelectable(std::make_unique<SelectedKitProp>(*this, placement->GetUniqueId(), bestKit, bestIndex));
+		UpdateSelectedKitPropBounds();
+		return true;
+	}
+
+	void WorldEditorInstance::UpdateSelectedKitPropBounds()
+	{
+		if (m_selection.IsEmpty())
+		{
+			return;
+		}
+
+		const auto *selectedProp = dynamic_cast<SelectedKitProp *>(m_selection.GetSelectedObjects().back().get());
+		if (!selectedProp)
+		{
+			return;
+		}
+
+		const MapEntity *placement = FindMapEntity(selectedProp->GetPlacementId());
+		const WorldModelMeshRef *prop = FindKitProp(selectedProp->GetKitPath(), selectedProp->GetPropIndex());
+		if (!placement || !prop)
+		{
+			return;
+		}
+
+		const MeshPtr mesh = MeshManager::Get().Load(prop->meshPath);
+		if (!mesh)
+		{
+			return;
+		}
+
+		AABB bounds = mesh->GetBounds();
+		bounds.Transform(MakeKitPropWorldTransform(placement->GetSceneNode(), *prop));
+		m_selectionRaycaster->UpdateDebugAABB(bounds);
+		m_debugBoundingBox->SetVisible(true);
+	}
+
+	bool WorldEditorInstance::AddMeshToActiveKit(const String &meshPath, const Vector3 &worldPosition)
+	{
+		MapEntity *placement = GetSelectedPlacement();
+		if (!placement)
+		{
+			return false;
+		}
+
+		const String activeKit = GetActiveKit(*placement);
+		if (activeKit.empty())
+		{
+			return false;
+		}
+
+		PropKit *kit = GetEditableKit(activeKit, placement->GetUniqueId());
+		if (!kit)
+		{
+			return false;
+		}
+
+		// Kits are stored in building-local space: undo the placement's transform.
+		const SceneNode &node = placement->GetSceneNode();
+		const Vector3 scale = node.GetDerivedScale();
+		Vector3 localPosition = node.GetDerivedOrientation().UnitInverse() * (worldPosition - node.GetDerivedPosition());
+		constexpr float epsilon = 1.0e-6f;
+		localPosition.x = std::abs(scale.x) > epsilon ? localPosition.x / scale.x : localPosition.x;
+		localPosition.y = std::abs(scale.y) > epsilon ? localPosition.y / scale.y : localPosition.y;
+		localPosition.z = std::abs(scale.z) > epsilon ? localPosition.z / scale.z : localPosition.z;
+
+		WorldModelMeshRef prop;
+		prop.meshPath = meshPath;
+		prop.position = localPosition;
+		kit->props.push_back(std::move(prop));
+		const size_t propIndex = kit->props.size() - 1;
+
+		ILOG("Added " << meshPath << " to prop kit " << activeKit << " of world model " << placement->GetUniqueId());
+
+		RefreshKitUsers(activeKit);
+
+		m_selection.Clear();
+		m_selection.AddSelectable(std::make_unique<SelectedKitProp>(*this, placement->GetUniqueId(), activeKit, propIndex));
+		UpdateSelectedKitPropBounds();
+		return true;
+	}
+
+	void WorldEditorInstance::PollKitCache()
+	{
+		for (auto &[kitPath, observed] : m_observedKits)
+		{
+			const PropKitPtr cached = PropKitManager::Get().Find(kitPath);
+			if (!cached || cached == observed)
+			{
+				continue;
+			}
+
+			// The kit was saved elsewhere (the prop kit editor replaces the cached kit on save).
+			observed = cached;
+
+			if (m_dirtyKits.contains(kitPath))
+			{
+				WLOG("Prop kit " << kitPath << " was saved in another editor while this world has unsaved edits to it; saving the world will overwrite that version");
+				continue;
+			}
+
+			RefreshKitUsers(kitPath);
+		}
+	}
+
+	bool WorldEditorInstance::WriteKitFile(const String &kitPath, const PropKit &kit)
+	{
+		const std::unique_ptr<std::ostream> stream = AssetRegistry::CreateNewFile(kitPath);
+		if (!stream)
+		{
+			ELOG("Failed to save prop kit " << kitPath << ": unable to open file for writing");
+			return false;
+		}
+
+		io::StreamSink sink{*stream};
+		io::Writer writer{sink};
+
+		PropKitSerializer serializer;
+		serializer.Serialize(kit, writer);
+		sink.Flush();
+
+		return true;
+	}
+
+	void WorldEditorInstance::SaveDirtyKits()
+	{
+		std::vector<String> kitPaths;
+		kitPaths.reserve(m_dirtyKits.size());
+		for (const auto &[kitPath, dirty] : m_dirtyKits)
+		{
+			kitPaths.push_back(kitPath);
+		}
+
+		for (const String &kitPath : kitPaths)
+		{
+			const uint64 originPlacementId = m_dirtyKits[kitPath].originPlacementId;
+			if (CountKitUsers(kitPath, originPlacementId) == 0)
+			{
+				SaveDirtyKit(kitPath);
+				continue;
+			}
+
+			// Used by other buildings: ask first (one prompt per kit, see DrawKitModals).
+			if (std::none_of(m_pendingKitSaves.begin(), m_pendingKitSaves.end(), [&kitPath](const String &path) { return KitPathsEqual(path, kitPath); }))
+			{
+				m_pendingKitSaves.push_back(kitPath);
+			}
+			m_openKitSavePrompt = true;
+		}
+	}
+
+	void WorldEditorInstance::SaveDirtyKit(const String &kitPath)
+	{
+		const String key = MakeKitKey(kitPath);
+		const auto it = m_dirtyKits.find(key);
+		if (it == m_dirtyKits.end())
+		{
+			return;
+		}
+
+		if (!WriteKitFile(key, *it->second.kit))
+		{
+			// Stays dirty, so the next save tries again.
+			return;
+		}
+
+		// Replace the cached kit with a copy, so further unsaved edits here do not leak into it.
+		const PropKitPtr saved = std::make_shared<PropKit>(*it->second.kit);
+		PropKitManager::Get().Remove(key);
+		PropKitManager::Get().Insert(key, saved);
+		m_observedKits[key] = saved;
+
+		ILOG("Saved prop kit " << key << " (" << saved->props.size() << " props, " << saved->lights.size() << " lights)");
+
+		m_dirtyKits.erase(it);
+		RefreshKitUsers(key);
+		UpdateSelectedKitPropBounds();
+	}
+
+	void WorldEditorInstance::SaveKitAsNew(const uint64 placementId, const String &sourceKitPath, const String &targetKitPath)
+	{
+		MapEntity *placement = FindMapEntity(placementId);
+		if (!placement)
+		{
+			ELOG("Unable to save prop kit as new kit: world model " << placementId << " is no longer loaded");
+			return;
+		}
+
+		const PropKitPtr source = LoadKit(sourceKitPath);
+		if (!source)
+		{
+			ELOG("Unable to save prop kit " << sourceKitPath << " as new kit: the kit could not be loaded");
+			return;
+		}
+
+		const String target = MakeKitKey(targetKitPath);
+
+		PropKit copy = *source;
+		copy.name = Path(target).stem().string();
+		if (!WriteKitFile(target, copy))
+		{
+			return;
+		}
+
+		const PropKitPtr saved = std::make_shared<PropKit>(std::move(copy));
+		PropKitManager::Get().Remove(target);
+		PropKitManager::Get().Insert(target, saved);
+		m_observedKits[target] = saved;
+
+		// The new kit replaces the source kit in this building's list only.
+		std::vector<String> kitPaths = placement->GetKitPaths();
+		for (String &kitPath : kitPaths)
+		{
+			if (KitPathsEqual(kitPath, sourceKitPath))
+			{
+				kitPath = target;
+			}
+		}
+		placement->SetKitPaths(std::move(kitPaths));
+		m_activeKits[placementId] = target;
+
+		// Edits to the source kit made on this building now live in the new kit, so the other
+		// buildings keep the saved source kit. Edits made on another building stay pending.
+		const String sourceKey = MakeKitKey(sourceKitPath);
+		if (const auto it = m_dirtyKits.find(sourceKey); it != m_dirtyKits.end() && it->second.originPlacementId == placementId)
+		{
+			ILOG("Discarded unsaved edits of prop kit " << sourceKey << "; they were saved to " << target);
+			m_dirtyKits.erase(it);
+		}
+
+		// Selected props of the source kit on this building now belong to the new kit.
+		if (std::any_of(m_selection.GetSelectedObjects().begin(), m_selection.GetSelectedObjects().end(), [placementId, &sourceKitPath](const auto &selectable)
+		{
+			const auto *selectedProp = dynamic_cast<SelectedKitProp *>(selectable.get());
+			return selectedProp && selectedProp->GetPlacementId() == placementId && KitPathsEqual(selectedProp->GetKitPath(), sourceKitPath);
+		}))
+		{
+			ClearSelection();
+		}
+
+		ApplyKits(*placement);
+		RefreshKitUsers(sourceKitPath);
+
+		ILOG("Saved prop kit " << sourceKey << " as new kit " << target << " for world model " << placementId);
+		m_editor.GetHost().assetImported(Path(target).parent_path());
+	}
+
+	void WorldEditorInstance::DrawKitModals()
+	{
+		static const char *savePromptId = "Save Prop Kit##sharedKitSavePrompt";
+		static const char *saveAsNewId = "Save as New Prop Kit##saveAsNewKit";
+
+		if (m_openKitSavePrompt)
+		{
+			ImGui::OpenPopup(savePromptId);
+			m_openKitSavePrompt = false;
+		}
+
+		if (ImGui::BeginPopupModal(savePromptId, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			// Kits saved or discarded in the meantime need no answer.
+			std::erase_if(m_pendingKitSaves, [this](const String &kitPath) { return !m_dirtyKits.contains(kitPath); });
+
+			if (m_pendingKitSaves.empty())
+			{
+				ImGui::CloseCurrentPopup();
+			}
+			else
+			{
+				const String kitPath = m_pendingKitSaves.front();
+				const size_t otherUsers = CountKitUsers(kitPath, m_dirtyKits[kitPath].originPlacementId);
+
+				ImGui::Text("%s is used by %zu other %s. Save anyway?", kitPath.c_str(), otherUsers, otherUsers == 1 ? "building" : "buildings");
+				ImGui::Spacing();
+
+				bool answered = false;
+				if (ImGui::Button("Save", ImVec2(120.0f, 0.0f)))
+				{
+					SaveDirtyKit(kitPath);
+					answered = true;
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Don't save", ImVec2(120.0f, 0.0f)))
+				{
+					// The edits stay pending until the next world save.
+					answered = true;
+				}
+
+				if (answered)
+				{
+					m_pendingKitSaves.erase(m_pendingKitSaves.begin());
+					if (m_pendingKitSaves.empty())
+					{
+						ImGui::CloseCurrentPopup();
+					}
+				}
+			}
+
+			ImGui::EndPopup();
+		}
+
+		if (m_openSaveAsNewKit)
+		{
+			ImGui::OpenPopup(saveAsNewId);
+			m_openSaveAsNewKit = false;
+		}
+
+		if (ImGui::BeginPopupModal(saveAsNewId, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Writes %s, including unsaved edits, to a new kit used by this building only.", m_saveAsNewKitSource.c_str());
+			ImGui::TextUnformatted("The original kit file is not changed.");
+			ImGui::Spacing();
+
+			ImGui::SetNextItemWidth(400.0f);
+			ImGui::InputText("New kit path", &m_saveAsNewKitTarget);
+
+			String target = MakeKitKey(m_saveAsNewKitTarget);
+			if (!target.empty() && Path(target).extension() != ".hkit")
+			{
+				target += ".hkit";
+			}
+
+			const bool isSource = KitPathsEqual(target, m_saveAsNewKitSource);
+			const bool exists = !target.empty() && AssetRegistry::HasFile(target);
+			if (isSource || exists)
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "A file with this name already exists.");
+			}
+
+			ImGui::BeginDisabled(target.empty() || isSource || exists);
+			if (ImGui::Button("Save", ImVec2(120.0f, 0.0f)))
+			{
+				SaveKitAsNew(m_saveAsNewKitPlacement, m_saveAsNewKitSource, target);
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f)))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+	}
+
+	void WorldEditorInstance::Visit(SelectedKitProp &selectable)
+	{
+		const MapEntity *placement = FindMapEntity(selectable.GetPlacementId());
+		const WorldModelMeshRef *prop = FindKitProp(selectable.GetKitPath(), selectable.GetPropIndex());
+		if (!placement || !prop)
+		{
+			ImGui::TextDisabled("The selected kit prop no longer exists.");
+			return;
+		}
+
+		const bool unsaved = m_dirtyKits.contains(MakeKitKey(selectable.GetKitPath()));
+
+		ImGui::Text("Type: Kit Prop");
+		ImGui::Text("Building: %llu (%s)", placement->GetUniqueId(), placement->GetAssetName().c_str());
+		ImGui::Text("Kit: %s%s", selectable.GetKitPath().c_str(), unsaved ? " *" : "");
+
+		const size_t users = CountKitUsers(selectable.GetKitPath(), 0);
+		if (users > 1)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), ICON_FA_EXCLAMATION_TRIANGLE " This kit is used by %zu loaded buildings; edits change all of them.", users);
+		}
+
+		if (ImGui::CollapsingHeader("Prop", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			// Edit a copy, so merely showing the prop does not turn the kit into a working copy.
+			WorldModelMeshRef edited = *prop;
+			const uint32 changes = DrawMeshRefProperties(edited);
+			if ((changes & mesh_ref_edit::Delete) != 0)
+			{
+				QueueKitPropRemoval(selectable.GetPlacementId(), selectable.GetKitPath(), selectable.GetPropIndex());
+			}
+			else if (changes != mesh_ref_edit::None)
+			{
+				EditKitProp(selectable.GetPlacementId(), selectable.GetKitPath(), selectable.GetPropIndex(), [&edited](WorldModelMeshRef &target)
+				{
+					target = edited;
+				});
+			}
+		}
 	}
 }

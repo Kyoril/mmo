@@ -21,6 +21,8 @@
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/world_model_instance.h"
+#include "scene_graph/prop_kit.h"
+#include "base/utilities.h"
 #include "transform_widget.h"
 #include "selection.h"
 #include "selection_raycaster.h"
@@ -286,12 +288,17 @@ namespace mmo
 	{
 	};
 
+	class SelectedKitProp;
+
 	class SelectableVisitor
 	{
 	public:
 		virtual ~SelectableVisitor() = default;
 
 		virtual void Visit(SelectedMapEntity &selectable) = 0;
+
+		/// @brief Visits a prop of a prop kit applied to a placed world model.
+		virtual void Visit(SelectedKitProp &selectable) = 0;
 
 		virtual void Visit(SelectedTerrainTile &selectable) = 0;
 
@@ -358,6 +365,9 @@ namespace mmo
 		void EnsurePageIsLoaded(PagePosition pos);
 
 		void Visit(SelectedMapEntity &selectable) override;
+
+		/// @brief Draws the details of a selected kit prop (shared mesh reference properties).
+		void Visit(SelectedKitProp &selectable) override;
 
 		void Visit(SelectedTerrainTile &selectable) override;
 
@@ -450,6 +460,108 @@ namespace mmo
 		void RemoveFogVolume(uint32 volumeId) override;
 
 		uint32 GetSelectedFogVolumeId() const override;
+
+		/// @copydoc IWorldEditor::AddMeshToActiveKit
+		bool AddMeshToActiveKit(const String &meshPath, const Vector3 &worldPosition) override;
+
+	public:
+		// In-place furnishing: editing prop kits of placed world models
+
+		/// @brief Finds a loaded map entity by its unique id.
+		/// @param uniqueId The unique id of the entity.
+		/// @return The entity, or nullptr if no loaded entity has that id.
+		MapEntity *FindMapEntity(uint64 uniqueId) const;
+
+		/// @brief Gets a prop of a kit as the world editor currently sees it: the unsaved working copy
+		///        if the kit was edited here, otherwise the cached kit.
+		/// @param kitPath Asset path of the kit.
+		/// @param propIndex Index of the prop in the kit.
+		/// @return The prop, or nullptr if the kit is not loaded or the index is out of range. Only valid
+		///         until the kit is edited again.
+		const WorldModelMeshRef *FindKitProp(const String &kitPath, size_t propIndex) const;
+
+		/// @brief Edits one prop of a kit. The kit becomes an unsaved working copy (dirty) and every
+		///        loaded placement using it is refreshed.
+		/// @param placementId Id of the placement the edit was made on (counted out of the save prompt).
+		/// @param kitPath Asset path of the kit.
+		/// @param propIndex Index of the prop in the kit.
+		/// @param edit Callback applying the change to the prop.
+		void EditKitProp(uint64 placementId, const String &kitPath, size_t propIndex, const std::function<void(WorldModelMeshRef &)> &edit);
+
+		/// @brief Appends a copy of a kit prop to the same kit (dirty, refreshed like an edit).
+		/// @param placementId Id of the placement the edit was made on.
+		/// @param kitPath Asset path of the kit.
+		/// @param propIndex Index of the prop to copy.
+		void DuplicateKitProp(uint64 placementId, const String &kitPath, size_t propIndex);
+
+		/// @brief Queues a kit prop for removal. Removals are applied once per frame after the UI ran,
+		///        highest index first, so several props of one kit can be removed together.
+		/// @param placementId Id of the placement the edit was made on.
+		/// @param kitPath Asset path of the kit.
+		/// @param propIndex Index of the prop to remove.
+		void QueueKitPropRemoval(uint64 placementId, const String &kitPath, size_t propIndex);
+
+	private:
+		/// @brief Gets a kit for display: the dirty working copy if there is one, otherwise the cached
+		///        kit. Never loads.
+		PropKitPtr ResolveKit(const String &kitPath) const;
+
+		/// @brief Gets a kit for applying: the dirty working copy if there is one, otherwise the kit is
+		///        loaded through the PropKitManager and remembered so later saves are noticed.
+		PropKitPtr LoadKit(const String &kitPath);
+
+		/// @brief Gets the working copy of a kit for editing, creating it from the cached kit first.
+		/// @return The working copy, or nullptr if the kit cannot be loaded.
+		PropKit *GetEditableKit(const String &kitPath, uint64 originPlacementId);
+
+		/// @brief Rebuilds a placement's kit content from its kit list (SetPropKits).
+		void ApplyKits(MapEntity &placement);
+
+		/// @brief Calls ApplyKits on every loaded placement whose kit list contains the kit.
+		void RefreshKitUsers(const String &kitPath);
+
+		/// @brief Counts the loaded placements whose kit list contains the kit.
+		/// @param kitPath Asset path of the kit.
+		/// @param excludePlacementId Placement not to count (0 counts all).
+		size_t CountKitUsers(const String &kitPath, uint64 excludePlacementId) const;
+
+		/// @brief Gets the active kit of a placement (where dropped meshes go). Defaults to the first kit
+		///        of its list; empty when the placement has no kits or "None" was picked.
+		String GetActiveKit(const MapEntity &placement) const;
+
+		/// @brief Gets the building the current selection belongs to: a selected world model placement,
+		///        or the placement of a selected kit prop.
+		MapEntity *GetSelectedPlacement() const;
+
+		/// @brief Picks a kit prop of the selected building under the cursor and selects it.
+		/// @return true if a kit prop was selected.
+		bool TrySelectKitProp(float viewportX, float viewportY, bool allowMultiSelect);
+
+		/// @brief Shows the bounds of the most recently selected kit prop, if it is one.
+		void UpdateSelectedKitPropBounds();
+
+		/// @brief Notices kits that were replaced in the PropKitManager cache by someone else (the prop
+		///        kit editor's save) and refreshes the placements using them.
+		void PollKitCache();
+
+		/// @brief Applies queued kit prop removals.
+		void ApplyPendingKitPropRemovals();
+
+		/// @brief Writes a prop kit file.
+		static bool WriteKitFile(const String &kitPath, const PropKit &kit);
+
+		/// @brief Writes every dirty kit, or queues it behind the shared-kit prompt when other loaded
+		///        placements use it.
+		void SaveDirtyKits();
+
+		/// @brief Writes one dirty kit, updates the cache and refreshes its users.
+		void SaveDirtyKit(const String &kitPath);
+
+		/// @brief Writes the active kit of a placement to a new file and swaps it into the placement's list.
+		void SaveKitAsNew(uint64 placementId, const String &sourceKitPath, const String &targetKitPath);
+
+		/// @brief Draws the shared-kit save prompt and the "Save as new kit" dialog.
+		void DrawKitModals();
 
 	private:
 		/// @brief Returns the selected fog volume selectable, or nullptr if the selection is empty or its
@@ -712,6 +824,50 @@ namespace mmo
 		/// @brief Whether the minimap panel's world name has been set yet (deferred until first draw
 		///        because the asset path is known at construction but minimaps may not exist yet).
 		bool m_minimapWorldSet{ false };
+
+		/// @brief An unsaved working copy of a kit edited in this world.
+		struct DirtyKit
+		{
+			/// @brief The working copy every placement using the kit shows.
+			PropKitPtr kit;
+			/// @brief The placement the kit was last edited on; not counted as "other" in the save prompt.
+			uint64 originPlacementId{0};
+		};
+
+		/// @brief Dirty kits by kit path (forward slashes, case-insensitive). Written on Save().
+		std::map<String, DirtyKit, StrCaseIComp> m_dirtyKits;
+
+		/// @brief The cached kit last applied per kit path, to notice saves from the prop kit editor.
+		std::map<String, PropKitPtr, StrCaseIComp> m_observedKits;
+
+		/// @brief Active kit per placement id, as picked in the details panel. An empty string means
+		///        "None"; placements without an entry use their first kit.
+		std::map<uint64, String> m_activeKits;
+
+		/// @brief A queued kit prop removal.
+		struct PendingKitPropRemoval
+		{
+			uint64 placementId;
+			String kitPath;
+			size_t propIndex;
+		};
+
+		/// @brief Kit prop removals applied after the current frame's UI.
+		std::vector<PendingKitPropRemoval> m_pendingKitPropRemovals;
+
+		/// @brief Dirty kits used by other loaded placements, waiting for the save prompt.
+		std::vector<String> m_pendingKitSaves;
+
+		/// @brief Opens the shared-kit save prompt on the next Draw().
+		bool m_openKitSavePrompt{false};
+
+		/// @brief Opens the "Save as new kit" dialog on the next Draw().
+		bool m_openSaveAsNewKit{false};
+
+		/// @brief Placement, source kit and target path of the "Save as new kit" dialog.
+		uint64 m_saveAsNewKitPlacement{0};
+		String m_saveAsNewKitSource;
+		String m_saveAsNewKitTarget;
 	};
 }
 

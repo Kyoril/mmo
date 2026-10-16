@@ -1298,7 +1298,11 @@ namespace mmo
 
 	bool PropKitEditorInstance::Save()
 	{
-		const String path = GetAssetPath().string();
+		// Placements and the PropKitManager cache use registry paths with forward slashes. An asset
+		// path built with Path::operator/ carries a backslash on Windows, which would cache the
+		// saved kit under a second key that no placement looks up.
+		String path = GetAssetPath().string();
+		std::replace(path.begin(), path.end(), '\\', '/');
 
 		const std::unique_ptr<std::ostream> stream = AssetRegistry::CreateNewFile(path);
 		if (!stream)
