@@ -2,7 +2,7 @@
 --
 --   GM settime to a full hour (realm TimeOfDayManager -> world node -> WorldInstance::SetTimeOfDay)
 --     -> HourChime sees the first minute of an hour -> OnHourOfDay instance trigger of map 0
---     -> PlaySound action: SoundEntry 261 at the town square, once per hour on a 12-hour clock,
+--     -> PlaySound action: SoundEntry 263 at the town square, once per hour on a 12-hour clock,
 --        every 3.5 s, to the players inside the radius at the moment of each strike.
 --
 -- Counting strikes needs SoundCount, not SoundSource: the whole point of the feature is that the
@@ -10,7 +10,7 @@
 --
 -- The time of day is realm state that outlives this scenario, so it is always reset at the end.
 
-local BELL_SOUND = 261
+local BELL_SOUND = 263
 local STRIKE_INTERVAL_MS = 3500
 
 -- Oakenshire town square (a guard spawn); the trigger rings from (295, 5, 570) with radius 220.
