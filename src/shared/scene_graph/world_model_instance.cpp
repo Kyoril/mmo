@@ -11,6 +11,7 @@
 #include "sub_mesh.h"
 #include "material_manager.h"
 #include "light.h"
+#include "world_model_manager.h"
 #include "log/default_log_levels.h"
 
 #include <algorithm>
@@ -75,8 +76,10 @@ namespace mmo
             scene->UnregisterWorldModelInstance(this);
         }
 
+        ClearChildInstances(scene);
         ClearGeometry(scene);
         ClearDoodads(scene);
+        ClearKitContent(scene);
         ClearLights(scene);
     }
 
@@ -112,8 +115,123 @@ namespace mmo
         m_groupRenderables.clear();
 
         ClearBatches(scene);
+        m_mergedGeometry.reset();
 
         m_geometryCreated = false;
+    }
+
+    WorldModelInstance* WorldModelInstance::GetChildInstance(const size_t index) const
+    {
+        return index < m_childInstances.size() ? m_childInstances[index].instance.get() : nullptr;
+    }
+
+    void WorldModelInstance::CreateChildInstances(Scene& scene)
+    {
+        if (!m_worldModel || m_worldModel->GetChildRefs().empty())
+        {
+            return;
+        }
+
+        if (m_ancestors.size() >= MaxChildDepth)
+        {
+            WLOG("World model instance '" << m_name << "' is nested " << m_ancestors.size() << " levels deep, not instantiating its child world models");
+            return;
+        }
+
+        std::vector<const WorldModel*> chain = m_ancestors;
+        chain.push_back(m_worldModel.get());
+
+        const auto& childRefs = m_worldModel->GetChildRefs();
+        for (size_t i = 0; i < childRefs.size(); ++i)
+        {
+            const WorldModelChildRef& childRef = childRefs[i];
+            if (!childRef.visible || childRef.wmoPath.empty())
+            {
+                continue;
+            }
+
+            WorldModelPtr childModel = WorldModelManager::Get().Load(childRef.wmoPath);
+            if (!childModel)
+            {
+                continue;
+            }
+
+            if (std::find(chain.begin(), chain.end(), childModel.get()) != chain.end())
+            {
+                WLOG("World model instance '" << m_name << "': child reference '" << childRef.name << "' (" << childRef.wmoPath << ") would nest a world model inside itself, skipped");
+                continue;
+            }
+
+            ChildInstance child;
+            const String childName = m_name + "_child" + std::to_string(i);
+
+            child.node = &scene.CreateSceneNode(childName);
+            child.node->SetPosition(childRef.position);
+            child.node->SetOrientation(childRef.rotation);
+            child.node->SetScale(childRef.scale);
+            if (m_parentNode)
+            {
+                static_cast<SceneNode*>(m_parentNode)->AddChild(*child.node);
+            }
+            else
+            {
+                scene.GetRootSceneNode().AddChild(*child.node);
+            }
+
+            // Everything that has to be decided before the first attach, because geometry is built then
+            child.instance = std::make_unique<WorldModelInstance>(childName, std::move(childModel));
+            child.instance->m_ancestors = chain;
+            child.instance->SetQueryFlags(GetQueryFlags());
+            child.instance->SetBatchingEnabled(m_batchingEnabled);
+            child.instance->SetMergingEnabled(m_mergingEnabled);
+            child.instance->SetVisible(IsVisible());
+            child.node->AttachObject(*child.instance);
+
+            m_childInstances.push_back(std::move(child));
+        }
+    }
+
+    void WorldModelInstance::SetVisible(const bool visible)
+    {
+        MovableObject::SetVisible(visible);
+
+        for (const auto& child : m_childInstances)
+        {
+            if (child.instance)
+            {
+                child.instance->SetVisible(visible);
+            }
+        }
+    }
+
+    void WorldModelInstance::ClearChildInstances(Scene* scene)
+    {
+        for (auto& child : m_childInstances)
+        {
+            if (!child.instance)
+            {
+                continue;
+            }
+
+            if (scene)
+            {
+                child.instance->Destroy(*scene);
+            }
+
+            if (child.node)
+            {
+                child.node->DetachObject(*child.instance);
+                if (scene)
+                {
+                    scene->DestroySceneNode(*child.node);
+                }
+            }
+
+            child.instance.reset();
+            child.node = nullptr;
+        }
+
+        m_childInstances.clear();
     }
 
     void WorldModelInstance::SetActiveDoodadSet(uint32 setIndex)
@@ -133,6 +251,47 @@ namespace mmo
                 }
             }
         }
+    }
+
+    void WorldModelInstance::SetPropKits(std::vector<PropKitPtr> kits)
+    {
+        m_kits = std::move(kits);
+
+        // Before the first attach the kits are only stored; NotifyAttachmentChanged realizes them.
+        if (m_geometryCreated && m_parentNode)
+        {
+            auto* sceneNode = dynamic_cast<SceneNode*>(m_parentNode);
+            if (sceneNode)
+            {
+                ClearKitContent(&sceneNode->GetScene());
+                CreateKitContent(sceneNode->GetScene());
+            }
+        }
+    }
+
+    size_t WorldModelInstance::GetKitPropInstanceCount() const
+    {
+        size_t count = m_kitInstances.size();
+        for (const auto& entry : m_kitBatches)
+        {
+            // One batch per submesh, all holding the same placements
+            if (entry.batch && entry.submeshIndex == 0)
+            {
+                count += entry.placements.size();
+            }
+        }
+
+        return count;
+    }
+
+    size_t WorldModelInstance::GetKitLightCount() const
+    {
+        return m_kitLightInstances.size();
+    }
+
+    int32 WorldModelInstance::GetKitPropGroup(const size_t index) const
+    {
+        return index < m_kitPropGroups.size() ? m_kitPropGroups[index] : -1;
     }
 
     int32 WorldModelInstance::DetermineCurrentGroup(const Camera& camera) const
@@ -241,8 +400,10 @@ namespace mmo
         scene.UnregisterWorldModelInstance(this);
 
         // Clear all created scene objects
+        ClearChildInstances(&scene);
         ClearGeometry(&scene);
         ClearDoodads(&scene);
+        ClearKitContent(&scene);
         ClearLights(&scene);
     }
 
@@ -290,6 +451,14 @@ namespace mmo
                 entry.batch->VisitRenderables(visitor, debugRenderables);
             }
         }
+
+        for (const auto& entry : m_kitBatches)
+        {
+            if (entry.batch)
+            {
+                entry.batch->VisitRenderables(visitor, debugRenderables);
+            }
+        }
     }
 
     void WorldModelInstance::PopulateRenderQueue(RenderQueue& renderQueue)
@@ -304,7 +473,22 @@ namespace mmo
         // as the entities render themselves through the normal octree traversal.
     }
 
-    void WorldModelInstance::UpdatePortalCulling(Camera& camera)
+    bool WorldModelInstance::DetectInteriorView(const Camera& camera, PortalInteriorView& outView) const
+    {
+        outView.eyeInInterior = false;
+        outView.exteriorFrustums.clear();
+        if (!m_worldModel || !IsVisible())
+        {
+            return false;
+        }
+
+        std::vector<int32> groups;
+        CollectVisiblePortalGroups(*m_worldModel, m_parentNode ? m_parentNode->GetFullTransform() : Matrix4::Identity,
+            PortalFrustum::FromCamera(camera), groups, &outView);
+        return outView.eyeInInterior;
+    }
+
+    void WorldModelInstance::UpdatePortalCulling(Camera& camera, const PortalInteriorView* outsideView)
     {
         if (!m_worldModel)
         {
@@ -329,10 +513,37 @@ namespace mmo
         {
             // Update portal culling visibility
             m_visibleGroups.clear();
+            const Matrix4 modelToWorld = m_parentNode ? m_parentNode->GetFullTransform() : Matrix4::Identity;
 
-            m_currentGroup = DetermineCurrentGroup(camera);
-            CollectVisiblePortalGroups(*m_worldModel, m_parentNode ? m_parentNode->GetFullTransform() : Matrix4::Identity,
-                PortalFrustum::FromCamera(camera), m_visibleGroups);
+            if (outsideView)
+            {
+                // The camera is inside another world model's room: only what its doors show counts
+                m_currentGroup = -1;
+                for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+                {
+                    const WorldModelGroup* group = m_worldModel->GetGroup(i);
+                    if (!group)
+                    {
+                        continue;
+                    }
+
+                    AABB bounds = group->GetBoundingBox();
+                    bounds.Transform(modelToWorld);
+                    for (const auto& frustum : outsideView->exteriorFrustums)
+                    {
+                        if (frustum.IsVisible(bounds))
+                        {
+                            m_visibleGroups.push_back(static_cast<int32>(i));
+                            break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                m_currentGroup = DetermineCurrentGroup(camera);
+                CollectVisiblePortalGroups(*m_worldModel, modelToWorld, PortalFrustum::FromCamera(camera), m_visibleGroups);
+            }
         }
 
         // Update entity visibility based on portal culling.
@@ -385,6 +596,24 @@ namespace mmo
             }
         }
 
+        // Kit props follow the doodad rules: culled by their derived room, always visible outside one.
+        for (auto& prop : m_kitInstances)
+        {
+            if (prop.entity)
+            {
+                prop.entity->SetVisible(prop.groupIndex < 0 || IsGroupVisible(prop.groupIndex));
+            }
+        }
+
+        for (auto& entry : m_kitBatches)
+        {
+            if (entry.batch)
+            {
+                entry.batch->SetVisible(entry.groupIndex == WorldModelNoGroup ||
+                    IsGroupVisible(static_cast<int32>(entry.groupIndex)));
+            }
+        }
+
         // Collision proxies are deliberately NOT touched here. Collision must work regardless of what
         // the camera can see: the player stands on the floor of a room that portal culling has just
         // hidden, and camera collision queries run against geometry behind the camera.
@@ -417,7 +646,11 @@ namespace mmo
                 sceneNode->GetScene().RegisterWorldModelInstance(this);
 
                 // Create renderables for each group
-                if (m_batchingEnabled)
+                if (m_mergingEnabled)
+                {
+                    BuildMergedGeometry(sceneNode->GetScene());
+                }
+                else if (m_batchingEnabled)
                 {
                     BuildBatchedGeometry(sceneNode->GetScene());
                 }
@@ -434,6 +667,12 @@ namespace mmo
 
                 // Create lights
                 CreateLights(sceneNode->GetScene());
+
+                // Dress the shell with its prop kits, after the doodads and before the children
+                CreateKitContent(sceneNode->GetScene());
+
+                // Instantiate nested world models last, so they hang off a fully built parent
+                CreateChildInstances(sceneNode->GetScene());
 
                 m_geometryCreated = true;
             }
@@ -632,6 +871,7 @@ namespace mmo
         BatchEntry entry;
         entry.batch = std::make_shared<WorldModelBatch>(batchName, mesh, bucket.key.submeshIndex, material);
         entry.groupIndex = bucket.key.groupIndex;
+        entry.submeshIndex = bucket.key.submeshIndex;
         entry.placements = bucket.placements;
 
         // Upload before attaching, so the node's bounds are computed from real instance bounds the
@@ -756,8 +996,8 @@ namespace mmo
 
     void WorldModelInstance::RefreshBatchTransforms()
     {
-        if (m_batches.empty() && m_doodadBatches.empty() &&
-            m_collisionProxies.empty() && m_doodadCollisionProxies.empty())
+        if (m_batches.empty() && m_doodadBatches.empty() && m_kitBatches.empty() &&
+            m_collisionProxies.empty() && m_doodadCollisionProxies.empty() && m_kitCollisionProxies.empty())
         {
             return;
         }
@@ -805,9 +1045,11 @@ namespace mmo
 
         rebuild(m_batches);
         rebuild(m_doodadBatches);
+        rebuild(m_kitBatches);
 
         RefreshCollisionProxies(m_collisionProxies, parentPosition, parentOrientation, parentScale);
         RefreshCollisionProxies(m_doodadCollisionProxies, parentPosition, parentOrientation, parentScale);
+        RefreshCollisionProxies(m_kitCollisionProxies, parentPosition, parentOrientation, parentScale);
 
         m_lastBatchTransform = parentTransform;
         m_batchesDirty = false;
@@ -872,8 +1114,10 @@ namespace mmo
     {
         DestroyBatches(m_batches, scene);
         DestroyBatches(m_doodadBatches, scene);
+        DestroyBatches(m_kitBatches, scene);
         DestroyCollisionProxies(m_collisionProxies, scene);
         DestroyCollisionProxies(m_doodadCollisionProxies, scene);
+        DestroyCollisionProxies(m_kitCollisionProxies, scene);
 
         if (m_batchRootNode && scene)
         {
@@ -1181,12 +1425,36 @@ namespace mmo
             }
         }
 
+        RealizePlacements(scene, placements, m_doodadInstances, m_doodadBatches, m_doodadCollisionProxies);
+    }
+
+    void WorldModelInstance::RealizePlacements(Scene& scene, const std::vector<WorldModelPlacementInput>& placements,
+        std::vector<DoodadInstance>& instances, std::vector<BatchEntry>& batches, std::vector<CollisionEntry>& proxies)
+    {
         std::vector<WorldModelPlacementInput> unbatched;
 
         if (m_batchingEnabled)
         {
+            // An override replaces the material of every submesh, so it alone decides whether a
+            // placement can be instanced. Checked here rather than in the bucketer, which only knows
+            // mesh paths. Same rule BuildBatchedGeometry applies to the mesh references.
+            std::vector<WorldModelPlacementInput> eligible;
+            eligible.reserve(placements.size());
+            for (const auto& placement : placements)
+            {
+                if (!placement.materialOverride.empty() &&
+                    !MaterialSupportsInstancing(MaterialManager::Get().Load(placement.materialOverride)))
+                {
+                    WarnMissingInstancedVariant(placement.materialOverride);
+                    unbatched.push_back(placement);
+                    continue;
+                }
+
+                eligible.push_back(placement);
+            }
+
             std::vector<WorldModelBucket> buckets;
-            BuildWorldModelBuckets(placements, MakeMeshLookup(), kMinInstancesPerBatch, buckets, unbatched);
+            BuildWorldModelBuckets(eligible, MakeMeshLookup(), kMinInstancesPerBatch, buckets, unbatched);
 
             EnsureBatchRootNode(scene);
 
@@ -1195,32 +1463,34 @@ namespace mmo
 
             for (const auto& bucket : buckets)
             {
-                if (CreateBatch(scene, bucket, m_doodadBatches))
+                if (CreateBatch(scene, bucket, batches))
                 {
                     realizedBuckets.push_back(bucket);
                 }
                 else if (bucket.key.submeshIndex == 0)
                 {
-                    // Fall back to the per-doodad entity path rather than leaving this bucket with a
-                    // collision proxy and no geometry.
+                    // Fall back to the per-placement entity path rather than leaving this bucket with
+                    // a collision proxy and no geometry.
                     unbatched.insert(unbatched.end(), bucket.placements.begin(), bucket.placements.end());
                 }
             }
 
-            BuildCollisionProxies(scene, realizedBuckets, m_doodadCollisionProxies);
+            BuildCollisionProxies(scene, realizedBuckets, proxies);
             m_batchesDirty = true;
         }
         else
         {
-            unbatched = std::move(placements);
+            unbatched = placements;
         }
 
-        // Anything not batched keeps the ordinary one-entity-per-doodad path.
-        size_t doodadCounter = 0;
+        // Kit props and doodads share this path, so the node names must tell them apart.
+        const String namePrefix = m_name + (&instances == &m_kitInstances ? "_kitprop" : "_doodad");
+
+        // Anything not batched keeps the ordinary one-entity-per-placement path. Transform and
+        // material override come from the placement itself, never from the list it was built from.
+        size_t counter = instances.size();
         for (const auto& placement : unbatched)
         {
-            const auto& doodad = doodads[placement.sourceIndex];
-
             auto mesh = MeshManager::Get().Load(placement.meshPath);
             if (!mesh)
             {
@@ -1233,11 +1503,11 @@ namespace mmo
                 : static_cast<int32>(placement.groupIndex);
 
             // Create scene node
-            const String nodeName = m_name + "_doodad" + std::to_string(doodadCounter++);
+            const String nodeName = namePrefix + std::to_string(counter++);
             instance.node = &scene.CreateSceneNode(nodeName);
-            instance.node->SetPosition(doodad.position);
-            instance.node->SetOrientation(doodad.rotation);
-            instance.node->SetScale(Vector3(doodad.scale, doodad.scale, doodad.scale));
+            instance.node->SetPosition(placement.position);
+            instance.node->SetOrientation(placement.rotation);
+            instance.node->SetScale(placement.scale);
 
             // Attach to parent node
             if (m_parentNode)
@@ -1255,38 +1525,116 @@ namespace mmo
             {
                 instance.entity->SetQueryFlags(GetQueryFlags());
                 instance.node->AttachObject(*instance.entity);
+
+                if (!placement.materialOverride.empty())
+                {
+                    if (const auto material = MaterialManager::Get().Load(placement.materialOverride))
+                    {
+                        instance.entity->SetMaterial(material);
+                    }
+                }
             }
 
-            m_doodadInstances.push_back(std::move(instance));
+            instances.push_back(std::move(instance));
         }
+    }
+
+    void WorldModelInstance::CreateKitContent(Scene& scene)
+    {
+        m_kitPropGroups.clear();
+
+        std::vector<WorldModelPlacementInput> placements;
+        size_t propIndex = 0;
+
+        for (const auto& kit : m_kits)
+        {
+            if (!kit)
+            {
+                continue;
+            }
+
+            for (const auto& prop : kit->props)
+            {
+                if (!prop.visible || prop.meshPath.empty())
+                {
+                    continue;
+                }
+
+                // Same room derivation as the doodads: props outside every room are never culled.
+                const int32 groupIndex = FindGroupContaining(prop.position);
+                m_kitPropGroups.push_back(groupIndex);
+
+                WorldModelPlacementInput placement;
+                placement.groupIndex = groupIndex < 0 ? WorldModelNoGroup : static_cast<size_t>(groupIndex);
+                placement.sourceIndex = propIndex++;
+                placement.meshPath = prop.meshPath;
+                placement.materialOverride = prop.materialOverride;
+                placement.position = prop.position;
+                placement.rotation = prop.rotation;
+                placement.scale = prop.scale;
+
+                placements.push_back(std::move(placement));
+            }
+        }
+
+        if (!placements.empty())
+        {
+            RealizePlacements(scene, placements, m_kitInstances, m_kitBatches, m_kitCollisionProxies);
+        }
+
+        for (const auto& kit : m_kits)
+        {
+            if (!kit)
+            {
+                continue;
+            }
+
+            for (const auto& light : kit->lights)
+            {
+                CreateLightFrom(scene, light, m_kitLightInstances);
+            }
+        }
+    }
+
+    void WorldModelInstance::ClearKitContent(Scene* scene)
+    {
+        DestroyPlacementEntities(m_kitInstances, scene);
+        DestroyBatches(m_kitBatches, scene);
+        DestroyCollisionProxies(m_kitCollisionProxies, scene);
+        DestroyLightInstances(m_kitLightInstances, scene);
+        m_kitPropGroups.clear();
+    }
+
+    void WorldModelInstance::DestroyPlacementEntities(std::vector<DoodadInstance>& instances, Scene* scene)
+    {
+        for (auto& instance : instances)
+        {
+            if (instance.entity && instance.node)
+            {
+                instance.node->DetachObject(*instance.entity);
+            }
+
+            if (scene)
+            {
+                if (instance.entity)
+                {
+                    scene->DestroyEntity(*instance.entity);
+                }
+                if (instance.node)
+                {
+                    scene->DestroySceneNode(*instance.node);
+                }
+            }
+
+            instance.entity = nullptr;
+            instance.node = nullptr;
+        }
+        instances.clear();
     }
 
     void WorldModelInstance::ClearDoodads(Scene* scene)
     {
-        // Clean up entities and nodes
-        for (auto& doodad : m_doodadInstances)
-        {
-            if (doodad.entity && doodad.node)
-            {
-                doodad.node->DetachObject(*doodad.entity);
-            }
-            
-            if (scene)
-            {
-                if (doodad.entity)
-                {
-                    scene->DestroyEntity(*doodad.entity);
-                }
-                if (doodad.node)
-                {
-                    scene->DestroySceneNode(*doodad.node);
-                }
-            }
-            
-            doodad.entity = nullptr;
-            doodad.node = nullptr;
-        }
-        m_doodadInstances.clear();
+        DestroyPlacementEntities(m_doodadInstances, scene);
 
         // Batched doodads and their collision go too - changing the active doodad set rebuilds all
         // of it. The mesh references' batches and collision are deliberately left alone.
@@ -1303,119 +1651,123 @@ namespace mmo
             return;
         }
 
-        const auto& lights = m_worldModel->GetLights();
-        if (lights.empty())
+        for (const auto& wmoLight : m_worldModel->GetLights())
+        {
+            CreateLightFrom(scene, wmoLight, m_lightInstances);
+        }
+    }
+
+    void WorldModelInstance::CreateLightFrom(Scene& scene, const WorldModelLight& wmoLight, std::vector<LightInstance>& target)
+    {
+        // Skip ambient lights - they don't map to scene lights
+        if (wmoLight.type == WorldModelLight::LightType::Ambient)
         {
             return;
         }
 
-        const String baseName = m_parentNode ? m_parentNode->GetName() : "wmo";
-        uint32 lightIndex = 0;
-
-        for (const auto& wmoLight : lights)
+        // Map WMO light type to scene light type
+        LightType sceneType = LightType::Point;
+        switch (wmoLight.type)
         {
-            // Skip ambient lights - they don't map to scene lights
-            if (wmoLight.type == WorldModelLight::LightType::Ambient)
-            {
-                continue;
-            }
-
-            // Map WMO light type to scene light type
-            LightType sceneType = LightType::Point;
-            switch (wmoLight.type)
-            {
-            case WorldModelLight::LightType::Omni:
-                sceneType = LightType::Point;
-                break;
-            case WorldModelLight::LightType::Spot:
-                sceneType = LightType::Spot;
-                break;
-            case WorldModelLight::LightType::Direct:
-                sceneType = LightType::Directional;
-                break;
-            default:
-                break;
-            }
-
-            // Create a unique name for this light
-            String lightName = baseName + "_light_" + std::to_string(lightIndex++);
-
-            // Create scene node for the light
-            SceneNode& lightNode = scene.CreateSceneNode(lightName + "_node");
-
-            // Attach to parent node
-            if (m_parentNode)
-            {
-                static_cast<SceneNode*>(m_parentNode)->AddChild(lightNode);
-            }
-            else
-            {
-                scene.GetRootSceneNode().AddChild(lightNode);
-            }
-
-            // Set light position relative to parent
-            lightNode.SetPosition(wmoLight.position);
-            
-            // Only set orientation for spot/directional lights that actually use it
-            // Validate quaternion before using to avoid NaN issues
-            if (sceneType != LightType::Point)
-            {
-                Quaternion rotation = wmoLight.rotation;
-                const float lengthSq = rotation.x * rotation.x + rotation.y * rotation.y + 
-                                       rotation.z * rotation.z + rotation.w * rotation.w;
-                if (lengthSq > 0.001f)
-                {
-                    rotation.Normalize();
-                    lightNode.SetOrientation(rotation);
-                }
-            }
-
-            // Create the light
-            Light& light = scene.CreateLight(lightName, sceneType);
-
-            // Convert ARGB color to Vector4 (RGBA, normalized)
-            // Format: 0xAARRGGBB
-            const float r = static_cast<float>((wmoLight.color >> 16) & 0xFF) / 255.0f;
-            const float g = static_cast<float>((wmoLight.color >> 8) & 0xFF) / 255.0f;
-            const float b = static_cast<float>((wmoLight.color >> 0) & 0xFF) / 255.0f;
-            light.SetColor(Vector4(r, g, b, 1.0f));
-
-            // Set intensity - clamp to reasonable range to avoid over-brightening
-            const float clampedIntensity = std::min(wmoLight.intensity, 10.0f);
-            light.SetIntensity(clampedIntensity);
-
-            // Set range from attenuation end
-            if (wmoLight.useAttenuation && wmoLight.attenuationEnd > 0.0f)
-            {
-                light.SetRange(wmoLight.attenuationEnd);
-            }
-            else
-            {
-                // Default range if no attenuation
-                light.SetRange(50.0f);
-            }
-
-            if (sceneType == LightType::Spot)
-            {
-                light.SetOuterConeAngle(wmoLight.outerConeAngle);
-                light.SetInnerConeAngle(wmoLight.innerConeAngle);
-            }
-            light.SetFogScattering(wmoLight.fogScattering);
-
-            // Attach light to node
-            lightNode.AttachObject(light);
-
-            // Store the light instance
-            LightInstance instance;
-            instance.light = &light;
-            instance.node = &lightNode;
-            m_lightInstances.push_back(std::move(instance));
+        case WorldModelLight::LightType::Omni:
+            sceneType = LightType::Point;
+            break;
+        case WorldModelLight::LightType::Spot:
+            sceneType = LightType::Spot;
+            break;
+        case WorldModelLight::LightType::Direct:
+            sceneType = LightType::Directional;
+            break;
+        default:
+            break;
         }
+
+        // Create a unique name for this light. Kit lights get their own prefix so they can never
+        // collide with the model's own lights, which are numbered independently.
+        const String baseName = m_parentNode ? m_parentNode->GetName() : "wmo";
+        const char* prefix = &target == &m_kitLightInstances ? "_kitlight_" : "_light_";
+        const String lightName = baseName + prefix + std::to_string(target.size());
+
+        // Create scene node for the light
+        SceneNode& lightNode = scene.CreateSceneNode(lightName + "_node");
+
+        // Attach to parent node
+        if (m_parentNode)
+        {
+            static_cast<SceneNode*>(m_parentNode)->AddChild(lightNode);
+        }
+        else
+        {
+            scene.GetRootSceneNode().AddChild(lightNode);
+        }
+
+        // Set light position relative to parent
+        lightNode.SetPosition(wmoLight.position);
+
+        // Only set orientation for spot/directional lights that actually use it
+        // Validate quaternion before using to avoid NaN issues
+        if (sceneType != LightType::Point)
+        {
+            Quaternion rotation = wmoLight.rotation;
+            const float lengthSq = rotation.x * rotation.x + rotation.y * rotation.y +
+                                   rotation.z * rotation.z + rotation.w * rotation.w;
+            if (lengthSq > 0.001f)
+            {
+                rotation.Normalize();
+                lightNode.SetOrientation(rotation);
+            }
+        }
+
+        // Create the light
+        Light& light = scene.CreateLight(lightName, sceneType);
+
+        // Convert ARGB color to Vector4 (RGBA, normalized)
+        // Format: 0xAARRGGBB
+        const float r = static_cast<float>((wmoLight.color >> 16) & 0xFF) / 255.0f;
+        const float g = static_cast<float>((wmoLight.color >> 8) & 0xFF) / 255.0f;
+        const float b = static_cast<float>((wmoLight.color >> 0) & 0xFF) / 255.0f;
+        light.SetColor(Vector4(r, g, b, 1.0f));
+
+        // Set intensity - clamp to reasonable range to avoid over-brightening
+        const float clampedIntensity = std::min(wmoLight.intensity, 10.0f);
+        light.SetIntensity(clampedIntensity);
+
+        // Set range from attenuation end
+        if (wmoLight.useAttenuation && wmoLight.attenuationEnd > 0.0f)
+        {
+            light.SetRange(wmoLight.attenuationEnd);
+        }
+        else
+        {
+            // Default range if no attenuation
+            light.SetRange(50.0f);
+        }
+
+        if (sceneType == LightType::Spot)
+        {
+            light.SetOuterConeAngle(wmoLight.outerConeAngle);
+            light.SetInnerConeAngle(wmoLight.innerConeAngle);
+        }
+        light.SetFogScattering(wmoLight.fogScattering);
+
+        // Attach light to node
+        lightNode.AttachObject(light);
+
+        // Store the light instance
+        LightInstance instance;
+        instance.light = &light;
+        instance.node = &lightNode;
+        target.push_back(std::move(instance));
     }
 
     void WorldModelInstance::ClearLights(Scene* scene)
     {
-        for (auto& lightInstance : m_lightInstances)
+        DestroyLightInstances(m_lightInstances, scene);
+    }
+
+    void WorldModelInstance::DestroyLightInstances(std::vector<LightInstance>& lights, Scene* scene)
+    {
+        for (auto& lightInstance : lights)
         {
             if (lightInstance.light && lightInstance.node)
             {
@@ -1437,6 +1789,6 @@ namespace mmo
             lightInstance.light = nullptr;
             lightInstance.node = nullptr;
         }
-        m_lightInstances.clear();
+        lights.clear();
     }
 }

@@ -28,10 +28,16 @@ namespace mmo
 	void WorldModelBatch::ClearInstances()
 	{
 		m_instances.clear();
+		m_mirrored = false;
 	}
 
 	void WorldModelBatch::AddInstance(const MeshInstanceData& instance)
 	{
+		if (m_instances.empty())
+		{
+			m_mirrored = instance.worldMatrix.HasNegativeScale();
+		}
+
 		m_instances.push_back(instance);
 	}
 
@@ -157,6 +163,7 @@ namespace mmo
 
 		operation.instanceBuffer = m_instanceBuffer.get();
 		operation.instanceCount = static_cast<uint32>(m_instances.size());
+		operation.mirrored = m_mirrored;
 	}
 
 	const Matrix4& WorldModelBatch::GetWorldTransform() const

@@ -15,6 +15,7 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/instanced_foliage.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_model_instance.h"
@@ -220,7 +221,7 @@ namespace mmo
 		return entity;
 	}
 
-	WorldModelInstance* ClientWorldInstance::CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId)
+	WorldModelInstance* ClientWorldInstance::CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId, const std::vector<String>& kitPaths)
 	{
 		// Check if already exists
 		auto it = m_worldModels.find(uniqueId);
@@ -252,6 +253,34 @@ namespace mmo
 			"Whether world model geometry is rendered with hardware instancing instead of one draw call per mesh reference. Takes effect for world models loaded afterwards.", "1"))
 		{
 			worldModelInstance->SetBatchingEnabled(batchVar->GetBoolValue());
+		}
+
+		// Static geometry merging: each group's meshes baked into one mesh per material. Takes
+		// precedence over batching where both are on.
+		if (const ConsoleVar* mergeVar = ConsoleVarMgr::RegisterConsoleVar("gxWorldModelMerging",
+			"Whether each world model group's static geometry is merged into one mesh per material (a few draw calls per group). Takes effect for world models loaded afterwards.", "1"))
+		{
+			worldModelInstance->SetMergingEnabled(mergeVar->GetBoolValue());
+		}
+
+		// Prop kits are loaded here, on the main thread (this runs from the dispatcher-posted
+		// lambda), because resource managers must not be touched from the loader thread. They must
+		// be set before the node attach below - kit content is built with the geometry on first attach.
+		if (!kitPaths.empty())
+		{
+			std::vector<PropKitPtr> kits;
+			kits.reserve(kitPaths.size());
+			for (const String& kitPath : kitPaths)
+			{
+				PropKitPtr kit = PropKitManager::Get().Load(kitPath);
+				if (!kit)
+				{
+					WLOG("Placement " << uniqueId << ": prop kit " << kitPath << " failed to load");
+					continue;
+				}
+				kits.push_back(std::move(kit));
+			}
+			worldModelInstance->SetPropKits(std::move(kits));
 		}
 
 		// Create scene node
@@ -317,7 +346,8 @@ namespace mmo
 						entity.position,
 						entity.rotation,
 						entity.scale,
-						entity.uniqueId
+						entity.uniqueId,
+						entity.kitPaths
 					);
 				}
 				else

@@ -22,6 +22,7 @@
 #include "ribbon_trail.h"
 #include "scene_node.h"
 #include "math/ray.h"
+#include "world_model_portal_culling.h"
 
 #include <map>
 #include <memory>
@@ -747,6 +748,9 @@ namespace mmo
 
 		/// Registered WorldModelInstances for pre-render portal culling updates.
 		std::vector<WorldModelInstance*> m_worldModelInstances;
+
+		/// @brief What a camera inside a world model room sees of the outside; reused every pass.
+		PortalInteriorView m_interiorView;
 		
 		SceneQueuedRenderableVisitor m_renderableVisitor;
 

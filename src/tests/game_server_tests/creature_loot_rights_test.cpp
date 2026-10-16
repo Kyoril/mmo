@@ -120,3 +120,45 @@ TEST_CASE_METHOD(LootRightsFixture, "A player who neither tagged nor was rewarde
 
 	CHECK_FALSE(creature->IsLootRecipient(*stranger));
 }
+
+// The client turns the corpse's sparkle and the loot cursor on purely from unit_flags::Lootable
+// (GameUnitC::CanBeLooted). That flag used to be broadcast to everyone, so a corpse another player
+// had tagged advertised loot to bystanders whose loot attempt the server then refused.
+TEST_CASE_METHOD(LootRightsFixture, "A corpse is only flagged lootable for the players who own it", "[creature][loot_rights]")
+{
+	const auto tagger = MakePlayer(71);
+	const auto stranger = MakePlayer(99);
+
+	const auto creature = MakeCreature();
+	creature->AddLootRecipient(tagger->GetGuid());
+	creature->SetUnitLoot(MakeLoot(creature->GetGuid(), { tagger }));
+
+	REQUIRE((creature->Get<uint32>(object_fields::Flags) & unit_flags::Lootable) != 0);
+
+	// The field values a bystander receives must not advertise the corpse as lootable...
+	creature->PrepareDynamicFieldsFor(*stranger);
+	CHECK((creature->Get<uint32>(object_fields::Flags) & unit_flags::Lootable) == 0);
+	creature->ClearDynamicFields();
+
+	// ...while the owner of the corpse still gets the loot affordance...
+	creature->PrepareDynamicFieldsFor(*tagger);
+	CHECK((creature->Get<uint32>(object_fields::Flags) & unit_flags::Lootable) != 0);
+	creature->ClearDynamicFields();
+
+	// ...and the authoritative flag survives the per-player masking unchanged.
+	CHECK((creature->Get<uint32>(object_fields::Flags) & unit_flags::Lootable) != 0);
+}
+
+TEST_CASE_METHOD(LootRightsFixture, "Masking leaves a corpse without loot alone", "[creature][loot_rights]")
+{
+	const auto stranger = MakePlayer(99);
+
+	const auto creature = MakeCreature();
+	REQUIRE((creature->Get<uint32>(object_fields::Flags) & unit_flags::Lootable) == 0);
+
+	creature->PrepareDynamicFieldsFor(*stranger);
+	CHECK((creature->Get<uint32>(object_fields::Flags) & unit_flags::Lootable) == 0);
+	creature->ClearDynamicFields();
+
+	CHECK((creature->Get<uint32>(object_fields::Flags) & unit_flags::Lootable) == 0);
+}

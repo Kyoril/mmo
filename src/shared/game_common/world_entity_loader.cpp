@@ -1,6 +1,7 @@
 
 #include "world_entity_loader.h"
 
+#include <algorithm>
 #include <random>
 
 #include "base/chunk_writer.h"
@@ -11,6 +12,7 @@ namespace mmo
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
 	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
 	static ChunkMagic WorldEntityWMO = MakeChunkMagic('WWMO');
+	static ChunkMagic WorldEntityKits = MakeChunkMagic('WKIT');
 
 	uint64 GenerateUniqueId()
 	{
@@ -26,6 +28,56 @@ namespace mmo
 
 		// Format: 16 bits from timestamp + 48 bits random
 		return (timestamp & 0xFFFF) << 48 | random;
+	}
+
+	void WriteWorldModelKitChunk(io::Writer& writer, const std::vector<String>& kitPaths)
+	{
+		if (kitPaths.empty())
+		{
+			return;
+		}
+
+		const uint8 count = static_cast<uint8>(std::min<size_t>(kitPaths.size(), 255));
+
+		ChunkWriter chunkWriter(WorldEntityKits, writer);
+		writer << io::write<uint8>(count);
+		for (uint8 i = 0; i < count; ++i)
+		{
+			writer << io::write_dynamic_range<uint16>(kitPaths[i]);
+		}
+		chunkWriter.Finish();
+	}
+
+	void WriteWorldModelPlacement(io::Writer& writer, const WorldEntityLoader::MapEntity& entity)
+	{
+		// Version 3 supports world model entities
+		{
+			ChunkWriter chunkWriter(WorldEntityVersionChunk, writer);
+			writer << io::write<uint32>(3);
+			chunkWriter.Finish();
+		}
+
+		{
+			ChunkWriter chunkWriter(WorldEntityWMO, writer);
+			writer
+				<< io::write<uint64>(entity.uniqueId)
+				<< io::write_dynamic_range<uint16>(entity.meshName)
+				<< io::write<float>(entity.position.x)
+				<< io::write<float>(entity.position.y)
+				<< io::write<float>(entity.position.z)
+				<< io::write<float>(entity.rotation.w)
+				<< io::write<float>(entity.rotation.x)
+				<< io::write<float>(entity.rotation.y)
+				<< io::write<float>(entity.rotation.z)
+				<< io::write<float>(entity.scale.x)
+				<< io::write<float>(entity.scale.y)
+				<< io::write<float>(entity.scale.z)
+				<< io::write_dynamic_range<uint8>(entity.name)
+				<< io::write_dynamic_range<uint16>(entity.category);
+			chunkWriter.Finish();
+		}
+
+		WriteWorldModelKitChunk(writer, entity.kitPaths);
 	}
 
 	WorldEntityLoader::WorldEntityLoader()
@@ -184,6 +236,36 @@ namespace mmo
 
 		// World models don't have material overrides
 		m_entity.materialOverrides.clear();
+
+		// The prop kit list is an optional chunk following this one
+		m_entity.kitPaths.clear();
+		AddChunkHandler(*WorldEntityKits, false, *this, &WorldEntityLoader::OnKitChunk);
+
+		return reader;
+	}
+
+	bool WorldEntityLoader::OnKitChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *WorldEntityKits);
+
+		RemoveChunkHandler(*WorldEntityKits);
+
+		uint8 count = 0;
+		if (!(reader >> io::read<uint8>(count)))
+		{
+			ELOG("Failed to read world model kit count, unexpected end of file!");
+			return false;
+		}
+
+		m_entity.kitPaths.resize(count);
+		for (uint8 i = 0; i < count; ++i)
+		{
+			if (!(reader >> io::read_container<uint16>(m_entity.kitPaths[i])))
+			{
+				ELOG("Failed to read world model kit path, unexpected end of file!");
+				return false;
+			}
+		}
 
 		return reader;
 	}

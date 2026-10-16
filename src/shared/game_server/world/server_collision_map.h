@@ -141,9 +141,16 @@ namespace mmo
 
 		/// Reads all visible mesh refs from a .hwmo world model file and appends
 		/// CollisionInstances for each, combining the instance transform with the
-		/// per-mesh-ref transform.
+		/// per-mesh-ref transform. Visible child world model references (MCWR) are
+		/// loaded recursively with their transforms composed onto the instance's.
+		/// @param ancestors Paths of the world models above this one in the nesting
+		///        chain, used to refuse references that would recurse forever.
 		void LoadWorldModelInstances(const std::string& hwmoPath,
-		                             const Matrix4& instanceTransform);
+		                             const Matrix4& instanceTransform,
+		                             std::vector<std::string> ancestors = {});
+
+		/// Deepest nesting of child world models that is loaded, matching the client.
+		static constexpr size_t MaxWorldModelChildDepth = 8;
 
 		/// Builds a CollisionInstance (world bounds + inverse transform) from a tree and transform.
 		/// @param debugName Name of the source asset, used in the log message on rejection.

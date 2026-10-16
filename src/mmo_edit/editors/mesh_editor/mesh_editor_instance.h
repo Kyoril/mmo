@@ -52,6 +52,14 @@ namespace mmo
 		/// @return True if the ramp was built and the file saved.
 		static bool StairsToRampInFile(const String& assetPath);
 
+		/// @brief Assigns a material to one submesh of a mesh file and saves it, keeping its collision
+		/// recipe. Used by the unattended `mmo_edit --set-submesh-material <asset> <submesh> <material>` job.
+		/// @param assetPath The mesh's asset path.
+		/// @param subMesh The submesh's name, or its index when no submesh has that name.
+		/// @param materialPath The asset path of the material (.hmat or .hmi) to assign.
+		/// @return True if the submesh exists, the material loaded and the file was saved.
+		static bool SetSubMeshMaterialInFile(const String& assetPath, const String& subMesh, const String& materialPath);
+
 	private:
 		void SetAnimationState(AnimationState* animState);
 

@@ -203,6 +203,47 @@ namespace mmo
 		return true;
 	}
 
+	bool BuildMeshCollisionFile(const String& assetPath)
+	{
+		CollisionRecipe recipe;
+		collision_recipe_read::Type result = collision_recipe_read::Absent;
+		if (!LoadMeshCollisionRecipe(assetPath, recipe, result))
+		{
+			ELOG("Build collision: cannot open " << assetPath);
+			return false;
+		}
+
+		if (result == collision_recipe_read::Read)
+		{
+			return RebakeMeshCollisionFile(assetPath);
+		}
+
+		if (result != collision_recipe_read::Absent)
+		{
+			ELOG("Build collision: " << assetPath << " has a corrupt collision recipe");
+			return false;
+		}
+
+		const MeshPtr mesh = MeshManager::Get().Load(assetPath);
+		if (!mesh)
+		{
+			ELOG("Build collision: cannot load mesh " << assetPath);
+			return false;
+		}
+
+		recipe = CollisionRecipe{};
+		recipe.includedSubMeshes = AllSubMeshesWithIndexData(*mesh);
+
+		const CollisionBakeResult bake = RebuildMeshCollision(*mesh, recipe);
+		if (!SaveMeshWithRecipe(mesh, assetPath, &recipe))
+		{
+			return false;
+		}
+
+		ILOG("Build collision: " << assetPath << " - " << bake.indices.size() / 3 << " faces from " << recipe.includedSubMeshes.size() << " submeshes");
+		return true;
+	}
+
 	bool RebakeMeshCollisionFile(const String& assetPath)
 	{
 		CollisionRecipe recipe;

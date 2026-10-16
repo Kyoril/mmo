@@ -38,7 +38,7 @@ namespace mmo
 		const char* const ReportedConsoleVars[] = {
 			"gxResolution", "gxWindow", "gxMonitor", "gxVSync", "gxMaxFpsEnabled", "gxMaxFps", "gxTargetFpsEnabled", "gxTargetFps", "gxQuality", "gxApi", "gxRenderScale", "gxBloomQuality", "gxSsao", "gxSsaoQuality",
 			"gxAtmosphereQuality", "gxContactShadows", "gxContactShadowQuality", "gxDepthPrepass", "gxTerrainBatching",
-			"gxWorldModelBatching", "RenderShadows", "ShadowQuality", "ShadowTextureSize", "ViewDistance",
+			"gxWorldModelBatching", "gxWorldModelMerging", "RenderShadows", "ShadowQuality", "ShadowTextureSize", "ViewDistance",
 			"TerrainFarRadius", "TerrainLodEnabled", "FoliageEnabled", "FoliageDensity", "SoundEnabled", "MasterVolume"
 		};
 

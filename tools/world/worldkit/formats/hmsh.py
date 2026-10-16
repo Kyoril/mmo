@@ -1,9 +1,10 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 """Static mesh (.hmsh) geometry, mirroring src/shared/scene_graph/mesh_serializer.cpp.
 
-Chunks (magic as on disk): MESH (u32 version 0x100/0x200/0x300/0x301), VERT (shared vertices),
+Chunks (magic as on disk): MESH (u32 version 0x100/0x200/0x300/0x301/0x302), VERT (shared vertices),
 INDX (legacy shared indices, version < 0x300; a non-zero flag means 16-bit), LEKS (skeleton name),
-LLOC (collision BVH: only its presence matters here), SUBM (one per submesh), TAGS.
+LLOC (collision BVH: only its presence matters here), SUBM (one per submesh), TAGS, and from 0x302
+the editor-only collision recipe CSRC (skipped like every other unknown chunk).
 Vertices are 64 bytes from version 0x200 (position 3f @0, colour u32 @12, uv 2f @16, w @24, normal,
 binormal, tangent) and 40 bytes in 0x100. A v3 SUBM is: str8 name, str16 material, u8 shared,
 (0x301: u8 visible), own vertex block unless shared, u8 has indices [u32 count, u8 size (0 = 16-bit,
@@ -20,7 +21,7 @@ import numpy as np
 
 from .chunks import Cursor, FormatError, iter_chunks
 
-VERSIONS = (0x100, 0x200, 0x300, 0x301)
+VERSIONS = (0x100, 0x200, 0x300, 0x301, 0x302)
 
 
 @dataclass
