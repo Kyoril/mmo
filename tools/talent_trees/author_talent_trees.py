@@ -877,6 +877,7 @@ ACOLYTE = {
                 extra=[Spell(1306, {
                     "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "positive": 1,
                     "duration": 10000, "icon": ICONS + "T_Icon_Shadow_85.htex",
+                    "visualization_id": 136,  # Acolyte - Gloaming Trance
                     "effects": [mod(OP_CAST, 0x10, -100, pct=True)],
                     "procflags": DONE_MAGIC_NEG, "procchance": 100, "proccharges": 1, "procfamily": 0x10,
                     **text_fields(("Zwielichttrance", "Gloaming Trance", "Transe de la brune", "Сумеречный транс"),
@@ -907,7 +908,8 @@ ACOLYTE = {
             "CAP": talent(167, Spell(1309, {
                 "attributes": AOE_ACTIVE_ATTRS, "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "T_Icon_Shadow_58.htex",
                 "cooldown": "12000", "cost": 55, "rangetype": 4, "familyflags": str(0x20),
-                "maxlevel": 10, "baselevel": 0, "spelllevel": 0, "visualization_id": 55,
+                "maxlevel": 10, "baselevel": 0, "spelllevel": 0,
+                "visualization_id": 134,  # Acolyte - Umbral Bloom
                 "effects": [{"type": SCHOOL_DAMAGE, "basepoints": 28, "diesides": 8, "pointsperlevel": 1.2,
                              "targeta": T_SOURCE_AREA_ENEMY, "radius": 8.0, "powerbonusfactor": 0.3}],
                 **text_fields(("Schattenblüte", "Umbral Bloom", "Floraison ombrale", "Теневое цветение"),
@@ -960,6 +962,7 @@ ACOLYTE = {
                 extra=[Spell(1314, {
                     "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "positive": 1,
                     "icon": ICONS + "T_Icon_Unholy_27.htex", "maxlevel": 10, "baselevel": 1, "spelllevel": 1,
+                    "visualization_id": 137,  # Acolyte - Leeching Rot
                     "effects": [{"type": HEAL, "basepoints": 2, "pointsperlevel": 0.5, "targeta": T_CASTER}],
                     **text_fields(("Saugende Fäulnis", "Leeching Rot", "Pourriture sangsue", "Пиявочная гниль"),
                                   ("Heilt dich um $s0.", "Heals you for $s0.", "Vous rend $s0 points de vie.",
@@ -1033,7 +1036,8 @@ ACOLYTE = {
             "CAP": talent(181, Spell(1328, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_SHADOW, "positive": 1,
                 "icon": ICONS + "T_Icon_Shadow_118.htex", "duration": 20000, "cooldown": "120000",
-                "cost": 40, "visualization_id": 2,
+                "cost": 40,
+                "visualization_id": 135,  # Acolyte - Embrace of Dread
                 "effects": [mod(OP_DAMAGE, 0x1, 20, pct=True), aura(DMG_TAKEN_PCT, -10)],
                 **text_fields(("Umarmung des Grauens", "Embrace of Dread", "Étreinte de l'effroi", "Объятия ужаса"),
                               ("Du wirst $D lang zum Avatar des Grauens: 20% mehr Schattenschaden und 10% weniger erlittener Schaden.",
