@@ -253,6 +253,20 @@ namespace mmo
 			m_assetName = assetName;
 		}
 
+		/// @brief Gets the ordered prop kit asset paths of this entity (world models only).
+		const std::vector<String> &GetKitPaths() const
+		{
+			return m_kitPaths;
+		}
+
+		/// @brief Replaces the prop kit asset paths and marks the entity as modified.
+		/// @param kitPaths The new ordered list of prop kit asset paths.
+		void SetKitPaths(std::vector<String> kitPaths)
+		{
+			m_kitPaths = std::move(kitPaths);
+			m_modified = true;
+		}
+
 	private:
 		Scene &m_scene;
 		SceneNode &m_sceneNode;
@@ -265,6 +279,7 @@ namespace mmo
 		String m_name;
 		String m_category;
 		String m_assetName;  ///< Cached asset name for world model entities
+		std::vector<String> m_kitPaths;  ///< Ordered prop kit asset paths (world model entities)
 	};
 
 	struct WorldPage

@@ -7,6 +7,8 @@
 #include <imgui_internal.h>
 
 #include "editor_host.h"
+#include "icon_font.h"
+#include "scene_graph/prop_kit_manager.h"
 #include "editor_windows/asset_picker_widget.h"
 #include "environment_preview.h"
 #include "world_editor.h"
@@ -1082,7 +1084,7 @@ namespace mmo
 				placement.scale = scale;
 				placement.name = ent->GetDisplayName();
 				placement.category = ent->GetCategory();
-				// The editor has no kit storage yet, so no kits are written here
+				placement.kitPaths = ent->GetKitPaths();
 				WriteWorldModelPlacement(fileWriter, placement);
 			}
 			else
@@ -2475,6 +2477,26 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				}
 
 				mapEntity = wmoInstance->GetUserObject<MapEntity>();
+
+				// Apply the placement's prop kits. The paths are kept even when a kit
+				// fails to load, so a save does not silently drop them.
+				if (mapEntity && !entity.kitPaths.empty())
+				{
+					std::vector<PropKitPtr> kits;
+					for (const String &kitPath : entity.kitPaths)
+					{
+						if (PropKitPtr kit = PropKitManager::Get().Load(kitPath))
+						{
+							kits.push_back(std::move(kit));
+						}
+						else
+						{
+							WLOG("Failed to load prop kit " << kitPath << " for world model " << entity.uniqueId);
+						}
+					}
+					wmoInstance->SetPropKits(std::move(kits));
+					mapEntity->SetKitPaths(entity.kitPaths);
+				}
 			}
 			else
 			{
@@ -2966,6 +2988,106 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			// World model specific UI
 			ImGui::Text("Type: World Model");
 			ImGui::Text("Asset: %s", mapEntity.GetAssetName().c_str());
+
+			if (ImGui::CollapsingHeader("Prop Kits", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				std::vector<String> kitPaths = mapEntity.GetKitPaths();
+				bool kitsChanged = false;
+				int removeIndex = -1;
+				int moveUpIndex = -1;
+				int moveDownIndex = -1;
+
+				for (int i = 0; i < static_cast<int>(kitPaths.size()); ++i)
+				{
+					ImGui::PushID(i);
+
+					const PropKitPtr kit = PropKitManager::Get().Load(kitPaths[i]);
+
+					ImGui::BeginDisabled(i == 0);
+					if (ImGui::SmallButton("^"))
+					{
+						moveUpIndex = i;
+					}
+					ImGui::EndDisabled();
+					ImGui::SameLine();
+
+					ImGui::BeginDisabled(i + 1 >= static_cast<int>(kitPaths.size()));
+					if (ImGui::SmallButton("v"))
+					{
+						moveDownIndex = i;
+					}
+					ImGui::EndDisabled();
+					ImGui::SameLine();
+
+					if (ImGui::SmallButton(ICON_FA_TRASH))
+					{
+						removeIndex = i;
+					}
+					ImGui::SameLine();
+
+					if (kit)
+					{
+						ImGui::TextUnformatted(kit->name.c_str());
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::SetTooltip("%s", kitPaths[i].c_str());
+						}
+					}
+					else
+					{
+						ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), ICON_FA_EXCLAMATION_TRIANGLE " %s", kitPaths[i].c_str());
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::SetTooltip("Prop kit failed to load");
+						}
+					}
+
+					ImGui::PopID();
+				}
+
+				if (removeIndex >= 0)
+				{
+					kitPaths.erase(kitPaths.begin() + removeIndex);
+					kitsChanged = true;
+				}
+				else if (moveUpIndex > 0)
+				{
+					std::swap(kitPaths[moveUpIndex], kitPaths[moveUpIndex - 1]);
+					kitsChanged = true;
+				}
+				else if (moveDownIndex >= 0 && moveDownIndex + 1 < static_cast<int>(kitPaths.size()))
+				{
+					std::swap(kitPaths[moveDownIndex], kitPaths[moveDownIndex + 1]);
+					kitsChanged = true;
+				}
+
+				// Picker for a new kit: the pick is appended and the picker starts empty again
+				String newKitPath;
+				static const std::set<String> kitExtensions = { ".hkit" };
+				if (AssetPickerWidget::Draw("Add Prop Kit", newKitPath, kitExtensions) && !newKitPath.empty())
+				{
+					kitPaths.push_back(newKitPath);
+					kitsChanged = true;
+				}
+
+				if (kitsChanged)
+				{
+					std::vector<PropKitPtr> kits;
+					for (const String &kitPath : kitPaths)
+					{
+						if (PropKitPtr kit = PropKitManager::Get().Load(kitPath))
+						{
+							kits.push_back(std::move(kit));
+						}
+					}
+
+					mapEntity.SetKitPaths(std::move(kitPaths));
+					if (WorldModelInstance *instance = mapEntity.GetWorldModelInstance())
+					{
+						instance->SetPropKits(std::move(kits));
+					}
+				}
+			}
 		}
 		else if (Entity* entity = mapEntity.GetEntity())
 		{
