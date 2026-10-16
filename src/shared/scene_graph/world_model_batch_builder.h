@@ -83,6 +83,10 @@ namespace mmo
 		/// @brief Material override path, or empty for the submesh's own material.
 		String materialOverride;
 
+		/// @brief Whether the placements are mirrored. One draw call has one cull mode, and mirrored
+		///        geometry needs the opposite one, so mirrored and unmirrored placements never share.
+		bool mirrored { false };
+
 		/// @brief Orders keys so bucket output is deterministic across runs.
 		bool operator<(const WorldModelBatchKey& other) const;
 	};
@@ -112,6 +116,11 @@ namespace mmo
 
 	/// @brief Resolves a mesh path to its facts, or nullptr when the mesh cannot be loaded.
 	using WorldModelMeshLookup = std::function<const WorldModelMeshFacts*(const String&)>;
+
+	/// @brief Whether a placement's own scale mirrors its mesh (an odd number of negative axes).
+	/// @param placement The placement to test.
+	/// @return True when the placement reverses the mesh's winding.
+	bool IsMirroredPlacement(const WorldModelPlacementInput& placement);
 
 	/// @brief Groups placements into instanced-draw buckets.
 	/// @details Placements whose mesh cannot be resolved or is not batchable, and buckets that end up

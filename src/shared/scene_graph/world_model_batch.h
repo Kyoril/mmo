@@ -61,6 +61,11 @@ namespace mmo
 		/// @brief Gets the number of placements added so far.
 		[[nodiscard]] size_t GetInstanceCount() const { return m_instances.size(); }
 
+		/// @brief Whether the instances are drawn mirrored. Taken from the first instance: the
+		///        bucketer never mixes mirrored and unmirrored placements in one batch, and the world
+		///        model's own placement applies to every instance alike.
+		[[nodiscard]] bool IsMirrored() const { return m_mirrored; }
+
 		/// @brief (Re)creates the instance buffer from the current placements and recomputes bounds.
 		/// @remark Main thread only - it touches the graphics device. Must not be called from
 		///         PrepareRenderOperation or PreRender; see WorldModelInstance::RefreshBatchTransforms
@@ -118,6 +123,9 @@ namespace mmo
 
 		/// @brief CPU-side placements, rebuilt whenever the owning world model moves.
 		std::vector<MeshInstanceData> m_instances;
+
+		/// @brief Whether the instance matrices mirror the geometry. @see IsMirrored
+		bool m_mirrored { false };
 
 		/// @brief Per-instance vertex stream holding the data in m_instances.
 		VertexBufferPtr m_instanceBuffer;

@@ -40,7 +40,17 @@ namespace mmo
 			return submeshIndex < other.submeshIndex;
 		}
 
-		return materialOverride < other.materialOverride;
+		if (materialOverride != other.materialOverride)
+		{
+			return materialOverride < other.materialOverride;
+		}
+
+		return mirrored < other.mirrored;
+	}
+
+	bool IsMirroredPlacement(const WorldModelPlacementInput& placement)
+	{
+		return placement.scale.x * placement.scale.y * placement.scale.z < 0.0f;
 	}
 
 	void BuildWorldModelBuckets(
@@ -104,6 +114,7 @@ namespace mmo
 				key.meshPath = placement.meshPath;
 				key.submeshIndex = submeshIndex;
 				key.materialOverride = placement.materialOverride;
+				key.mirrored = IsMirroredPlacement(placement);
 
 				const auto [it, inserted] = bucketIndices.emplace(key, outBuckets.size());
 				if (inserted)

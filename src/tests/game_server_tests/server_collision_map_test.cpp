@@ -309,6 +309,48 @@ TEST_CASE("ServerCollisionMap - single-sided dynamic plane blocks from both side
 	CHECK(hit.z == Approx(0.0f).margin(0.001f));
 }
 
+TEST_CASE("ServerCollisionMap - mirrored static geometry still blocks line of sight", "[server_collision_map]")
+{
+	// Static geometry skips back faces, and mirrored placements (a negative scale axis) reverse a
+	// mesh's winding on screen. Rays are tested in the instance's local space, though, where the
+	// mirror is undone: a mirrored wall must keep blocking from the side it faces. Guards against
+	// "fixing" mirrored rendering by flipping winding in the collision path as well.
+	const std::vector<AABBTree::Vertex> verts = {
+		Vector3( 1.0f,  1.0f, 0.0f),
+		Vector3(-1.0f,  1.0f, 0.0f),
+		Vector3( 1.0f, -1.0f, 0.0f),
+		Vector3(-1.0f, -1.0f, 0.0f)
+	};
+	const std::vector<AABBTree::Index> indices = { 0, 1, 2, 1, 3, 2 };
+	auto tree = std::make_shared<AABBTree>();
+	tree->Build(verts, indices);
+
+	// Which side the unmirrored quad blocks from
+	ServerCollisionMap plain;
+	REQUIRE(plain.AddInstance(tree, Matrix4::Identity, "plain"));
+	const bool blocksFromFront = !plain.LineOfSight(frontPos, backPos);
+	const bool blocksFromBack = !plain.LineOfSight(backPos, frontPos);
+	REQUIRE(blocksFromFront != blocksFromBack);
+
+	Matrix4 mirror;
+	mirror.MakeTransform(Vector3::Zero, Vector3(-1.0f, 1.0f, 1.0f), Quaternion::Identity);
+	ServerCollisionMap mirrored;
+	REQUIRE(mirrored.AddInstance(tree, mirror, "mirrored"));
+
+	// The mirrored quad occupies the same plane and must block at least where the original did
+	if (blocksFromFront)
+	{
+		CHECK_FALSE(mirrored.LineOfSight(frontPos, backPos));
+	}
+	else
+	{
+		CHECK_FALSE(mirrored.LineOfSight(backPos, frontPos));
+	}
+
+	Vector3 hit;
+	CHECK_FALSE(mirrored.LineOfSightEx(blocksFromFront ? frontPos : backPos, blocksFromFront ? backPos : frontPos, hit));
+}
+
 TEST_CASE("ServerCollisionMap - shared static geometry blocks every instance view", "[server_collision_map]")
 {
 	auto shared = std::make_shared<ServerCollisionMap>();
