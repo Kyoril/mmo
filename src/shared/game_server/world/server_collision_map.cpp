@@ -25,6 +25,7 @@ namespace mmo
 	static const uint32 s_collMagic     = *MakeChunkMagic('COLL');
 	static const uint32 s_wmoGroupMagic = *MakeChunkMagic('MOGP');
 	static const uint32 s_wmoMeshMagic  = *MakeChunkMagic('MMRF');
+	static const uint32 s_wmoChildMagic = *MakeChunkMagic('MCWR');
 
 	// ---------------------------------------------------------------------------
 	// AddInstance — compute world AABB and inverse transform, then store.
@@ -271,8 +272,21 @@ namespace mmo
 	// ---------------------------------------------------------------------------
 
 	void ServerCollisionMap::LoadWorldModelInstances(const std::string& hwmoPath,
-	                                                  const Matrix4& instanceTransform)
+	                                                  const Matrix4& instanceTransform,
+	                                                  std::vector<std::string> ancestors)
 	{
+		if (std::find(ancestors.begin(), ancestors.end(), hwmoPath) != ancestors.end())
+		{
+			WLOG("ServerCollisionMap: world model " << hwmoPath << " references itself through its child world models, skipped");
+			return;
+		}
+
+		if (ancestors.size() >= MaxWorldModelChildDepth)
+		{
+			WLOG("ServerCollisionMap: world model " << hwmoPath << " is nested too deep, skipped");
+			return;
+		}
+
 		auto file = AssetRegistry::OpenFile(hwmoPath);
 		if (!file)
 		{
@@ -285,6 +299,9 @@ namespace mmo
 
 		// Cache mesh trees within this WMO to avoid re-loading the same mesh.
 		std::unordered_map<std::string, std::shared_ptr<AABBTree>> localMeshCache;
+
+		// Child world model references, loaded after this file is closed.
+		std::vector<std::pair<std::string, Matrix4>> children;
 
 		while (reader)
 		{
@@ -388,10 +405,62 @@ namespace mmo
 					}
 				}
 			}
+			else if (chunkId == s_wmoChildMagic)
+			{
+				uint32 count = 0;
+				reader >> io::read<uint32>(count);
+
+				for (uint32 i = 0; i < count && reader; ++i)
+				{
+					// wmoPath: uint32 pathLen, then (pathLen+1) bytes including null
+					uint32 pathLen = 0;
+					reader >> io::read<uint32>(pathLen);
+					std::string childPath(pathLen + 1, '\0');
+					reader.getSource()->read(&childPath[0], pathLen + 1);
+					childPath.resize(pathLen);
+
+					// name: skip
+					uint32 nameLen = 0;
+					reader >> io::read<uint32>(nameLen);
+					reader >> io::skip(nameLen + 1);
+
+					float px, py, pz, rw, rx, ry, rz, sx, sy, sz;
+					uint8 visible = 1;
+					reader
+						>> io::read<float>(px) >> io::read<float>(py) >> io::read<float>(pz)
+						>> io::read<float>(rw) >> io::read<float>(rx)
+						>> io::read<float>(ry) >> io::read<float>(rz)
+						>> io::read<float>(sx) >> io::read<float>(sy) >> io::read<float>(sz)
+						>> io::read<uint8>(visible);
+
+					if (!reader || !visible || childPath.empty())
+					{
+						continue;
+					}
+
+					Matrix4 childTransform;
+					childTransform.MakeTransform(Vector3(px, py, pz), Vector3(sx, sy, sz), Quaternion(rw, rx, ry, rz));
+					children.emplace_back(std::move(childPath), childTransform);
+				}
+
+				// Stay aligned with the chunk size no matter what the entries consumed
+				reader.getSource()->seek(chunkDataStart + chunkSize);
+			}
 			else
 			{
 				reader >> io::skip(chunkSize);
 			}
+		}
+
+		if (children.empty())
+		{
+			return;
+		}
+
+		ancestors.push_back(hwmoPath);
+		for (const auto& [childPath, childTransform] : children)
+		{
+			LoadWorldModelInstances(childPath, instanceTransform * childTransform, ancestors);
 		}
 	}
 
