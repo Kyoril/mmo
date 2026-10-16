@@ -120,6 +120,13 @@ namespace mmo
 			/// standing up included. Nothing needs to filter on standing up: auras flagged
 			/// NotSeated are already removed by SetStandState itself.
 			OnPlayerStandStateChanged,
+			/// Executed on the world instance when its game time of day reaches a full hour, so a map
+			/// trigger (MapEntry.instance_triggers) can mark the hour, e.g. with town bells. Also fires
+			/// when a game master sets the time of day to a full hour (settime 14), which is how the
+			/// hour is tested without waiting for it.
+			/// Data: [<HOUR:1-24>]; When given, only fires at that hour. Midnight is 24, because
+			/// event data treats zero as a wildcard.
+			OnHourOfDay,
 
 			Invalid,
 			Count_ = Invalid
@@ -272,6 +279,16 @@ namespace mmo
 			/// non-spell events (level up, quest completion) get a spell-quality visual.
 			/// Targets: UNIT; Data: <VISUALIZATION-ID>, [<EVENT:0-8, default 4 = IMPACT>]; Texts: NONE;
 			PlaySpellVisual = 37,
+
+			/// Plays a sound entry at a fixed position for every player within a radius of it,
+			/// optionally several times in a row. Every repetition looks for listeners anew, so a player
+			/// who walks into the radius halfway through still hears the remaining ones.
+			/// Targets: NONE; Data: <SOUND-ENTRY-ID>, <X>, <Y>, <Z>, <RADIUS>, [<COUNT>], [<INTERVAL-MS>];
+			/// Texts: NONE;
+			/// COUNT defaults to 1. A COUNT of -1 plays it once per hour of the world instance's time of
+			/// day on a 12-hour clock (1 to 12), which is how bells strike the hour. INTERVAL-MS is the
+			/// time between two starts and defaults to 3000.
+			PlaySound = 38,
 
 			Invalid,
 			Count_ = Invalid

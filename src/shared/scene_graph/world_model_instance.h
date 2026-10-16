@@ -90,6 +90,26 @@ namespace mmo
         /// @brief Gets whether hardware-instanced batching is enabled. @see SetBatchingEnabled
         [[nodiscard]] bool IsBatchingEnabled() const { return m_batchingEnabled; }
 
+        /// @brief Enables merging each group's static geometry into a few large meshes.
+        /// @details A group's mesh references are baked into world model space and concatenated per
+        ///          material, the way WoW world model groups ship their geometry: one draw per group and
+        ///          material instead of one per placement. Small placements (IsWorldModelDetail) go into
+        ///          a separate detail chunk that is only drawn up to WorldModelDetailDistance and casts
+        ///          no shadow. The merged meshes are built once per world model and shared by every
+        ///          instance of it. Collision keeps the per-mesh collision trees through proxies.
+        ///
+        ///          Takes precedence over batching. Meant for the client and the world editor; the world
+        ///          model editor keeps every placement separate so it can be moved.
+        /// @param enable Whether to merge. Like batching, must be set before the instance is attached.
+        void SetMergingEnabled(const bool enable) { m_mergingEnabled = enable; }
+
+        /// @brief Gets whether geometry merging is enabled. @see SetMergingEnabled
+        [[nodiscard]] bool IsMergingEnabled() const { return m_mergingEnabled; }
+
+        /// @brief Whether a mesh's geometry can be merged: no skeleton, and every submesh has index
+        ///        data and its own vertex data in the standard static mesh vertex layout.
+        static bool CanMergeMesh(const Mesh& mesh);
+
         /// @brief Gets the number of child world model instances created from the model's child
         ///        references. Zero until the instance has been attached to a scene node.
         [[nodiscard]] size_t GetChildInstanceCount() const { return m_childInstances.size(); }
@@ -161,7 +181,16 @@ namespace mmo
         /// This should be called before the scene's FindVisibleObjects to ensure
         /// child entity visibility is set correctly before octree traversal.
         /// @param camera The camera to use for visibility calculations.
-        void UpdatePortalCulling(Camera& camera);
+        /// @param outsideView When the camera stands in an interior room of another world model, what
+        ///        that room lets it see of the outside: this instance then only shows the groups whose
+        ///        bounds lie in one of those frustums. Null when nothing restricts the view.
+        void UpdatePortalCulling(Camera& camera, const PortalInteriorView* outsideView = nullptr);
+
+        /// @brief Checks whether the camera stands in one of this world model's interior rooms.
+        /// @param camera The camera.
+        /// @param outView Receives what the room lets the camera see of the outside.
+        /// @return True when the camera is in an interior room of this instance.
+        bool DetectInteriorView(const Camera& camera, PortalInteriorView& outView) const;
 
     private:
         /// @brief One instanced draw call plus the data needed to rebuild its world matrices.
@@ -239,6 +268,10 @@ namespace mmo
         /// @brief Builds instanced batches, demoted entities and collision proxies for all groups.
         /// @param scene The scene to create objects in.
         void BuildBatchedGeometry(Scene& scene);
+
+        /// @brief Builds merged group meshes, their entities, fallback entities and collision proxies.
+        /// @param scene The scene to create objects in.
+        void BuildMergedGeometry(Scene& scene);
 
         /// @brief Rebuilds and re-uploads instance matrices when the placement transform changed.
         /// @details Cheap no-op unless something marked the batches dirty. Must run on the main
@@ -452,6 +485,11 @@ namespace mmo
         SceneNode* m_batchRootNode { nullptr };
 
         bool m_batchingEnabled { false };
+        bool m_mergingEnabled { false };
+
+        /// @brief Merged geometry of this instance's world model, shared with every other instance of
+        ///        the same model. Held so the meshes outlive any one instance.
+        std::shared_ptr<const struct WorldModelMergedGeometry> m_mergedGeometry;
         bool m_batchesDirty { true };
         Matrix4 m_lastBatchTransform { Matrix4::Identity };
 

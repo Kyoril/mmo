@@ -85,6 +85,9 @@ namespace mmo
 		/// Guid of the unit a heard sound came from, or 0.
 		[[nodiscard]] uint64 GetHeardSoundSource(const uint32 soundId) const { return m_realm->GetHeardSoundSource(soundId); }
 
+		/// How often the sound entry was heard since the last clear.
+		[[nodiscard]] uint32 GetHeardSoundCount(const uint32 soundId) const { return m_realm->GetHeardSoundCount(soundId); }
+
 		void ClearHeardSounds() { m_realm->ClearHeardSounds(); }
 
 		/// Runs the whole login -> realm -> character -> world flow again over the same connector

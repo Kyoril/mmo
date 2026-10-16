@@ -255,6 +255,14 @@ namespace mmo
 			worldModelInstance->SetBatchingEnabled(batchVar->GetBoolValue());
 		}
 
+		// Static geometry merging: each group's meshes baked into one mesh per material. Takes
+		// precedence over batching where both are on.
+		if (const ConsoleVar* mergeVar = ConsoleVarMgr::RegisterConsoleVar("gxWorldModelMerging",
+			"Whether each world model group's static geometry is merged into one mesh per material (a few draw calls per group). Takes effect for world models loaded afterwards.", "1"))
+		{
+			worldModelInstance->SetMergingEnabled(mergeVar->GetBoolValue());
+		}
+
 		// Prop kits are loaded here, on the main thread (this runs from the dispatcher-posted
 		// lambda), because resource managers must not be touched from the loader thread. They must
 		// be set before the node attach below - kit content is built with the geometry on first attach.

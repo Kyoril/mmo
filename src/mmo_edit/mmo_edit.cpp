@@ -336,6 +336,8 @@ int main(int argc, char* arg[])
 	// collision with a ramp, saves them and exits.
 	// `--rebake-collision <asset.hmsh> [--rebake-collision ...]` rebuilds the meshes' collision trees
 	// from their stored collision recipes (editor-only CSRC chunk), saves them and exits.
+	// `--build-collision <asset.hmsh> [--build-collision ...]` does the same, but gives meshes without a
+	// recipe the default one (all render triangles) first, like Collision > Build for a fresh import.
 	// `--set-submesh-material <asset.hmsh> <submesh> <material> [...]` assigns a material to a
 	// submesh (by name, or index), saves the mesh with its collision recipe and exits.
 	// `--apply-prop-kit <job.json>` writes a prop kit asset, assigns kits to world model placements
@@ -372,7 +374,7 @@ int main(int argc, char* arg[])
 				break;
 			}
 
-			if (std::string(args[i]) == "--rebake-collision")
+			if (std::string(args[i]) == "--rebake-collision" || std::string(args[i]) == "--build-collision")
 			{
 				static std::ofstream rebakeLog("collision_rebake.log", std::ios::out | std::ios::trunc);
 				static std::mutex rebakeLogMutex;
@@ -396,6 +398,10 @@ int main(int argc, char* arg[])
 					if (std::string(args[j]) == "--rebake-collision")
 					{
 						allRebaked = mmo::RebakeMeshCollisionFile(args[j + 1]) && allRebaked;
+					}
+					else if (std::string(args[j]) == "--build-collision")
+					{
+						allRebaked = mmo::BuildMeshCollisionFile(args[j + 1]) && allRebaked;
 					}
 				}
 

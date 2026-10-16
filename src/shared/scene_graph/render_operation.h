@@ -32,6 +32,7 @@ namespace mmo
 			pixelConstantBuffers.clear();
 			instanceBuffer = nullptr;
 			instanceCount = 0;
+			mirrored = false;
 		}
 
 	public:
@@ -56,6 +57,11 @@ namespace mmo
 
 		/// @brief Number of instances to render when instanceBuffer is set.
 		uint32 instanceCount{ 0 };
+
+		/// @brief Whether the geometry is drawn mirrored (negative determinant), which reverses its
+		///        winding and flips the face to cull. Set by renderables whose instance matrices carry
+		///        the transform; the scene additionally flips it for a mirrored world transform.
+		bool mirrored{ false };
 
 		uint32 GetRenderGroupId() const { return m_renderGroupId; }
 

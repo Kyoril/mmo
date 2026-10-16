@@ -277,6 +277,7 @@ namespace mmo
 
         GlobalShaderParameters::Get().SetVector("SkyHorizonColor", horizonColor);
         GlobalShaderParameters::Get().SetVector("SkyZenithColor", zenithColor);
+        GlobalShaderParameters::Get().SetScalar("NightFactor", blendMoon);
 
         // Direction pointing TOWARD the light source, matching the convention the forward camera
         // constant buffer uses (Scene negates the raw light direction for the same reason).

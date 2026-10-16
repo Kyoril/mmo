@@ -1715,7 +1715,7 @@ namespace mmo
 			}
 		}
 
-		SetFaceCullMode(operation.material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
+		SetFaceCullMode(GetMaterialCullMode(operation.material->IsTwoSided(), operation.mirrored));
 		//SetBlendMode(operation.material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
 
 		// Handle instanced rendering

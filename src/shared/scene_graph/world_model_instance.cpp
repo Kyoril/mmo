@@ -115,6 +115,7 @@ namespace mmo
         m_groupRenderables.clear();
 
         ClearBatches(scene);
+        m_mergedGeometry.reset();
 
         m_geometryCreated = false;
     }
@@ -182,6 +183,7 @@ namespace mmo
             child.instance->m_ancestors = chain;
             child.instance->SetQueryFlags(GetQueryFlags());
             child.instance->SetBatchingEnabled(m_batchingEnabled);
+            child.instance->SetMergingEnabled(m_mergingEnabled);
             child.instance->SetVisible(IsVisible());
             child.node->AttachObject(*child.instance);
 
@@ -471,7 +473,22 @@ namespace mmo
         // as the entities render themselves through the normal octree traversal.
     }
 
-    void WorldModelInstance::UpdatePortalCulling(Camera& camera)
+    bool WorldModelInstance::DetectInteriorView(const Camera& camera, PortalInteriorView& outView) const
+    {
+        outView.eyeInInterior = false;
+        outView.exteriorFrustums.clear();
+        if (!m_worldModel || !IsVisible())
+        {
+            return false;
+        }
+
+        std::vector<int32> groups;
+        CollectVisiblePortalGroups(*m_worldModel, m_parentNode ? m_parentNode->GetFullTransform() : Matrix4::Identity,
+            PortalFrustum::FromCamera(camera), groups, &outView);
+        return outView.eyeInInterior;
+    }
+
+    void WorldModelInstance::UpdatePortalCulling(Camera& camera, const PortalInteriorView* outsideView)
     {
         if (!m_worldModel)
         {
@@ -496,10 +513,37 @@ namespace mmo
         {
             // Update portal culling visibility
             m_visibleGroups.clear();
+            const Matrix4 modelToWorld = m_parentNode ? m_parentNode->GetFullTransform() : Matrix4::Identity;
 
-            m_currentGroup = DetermineCurrentGroup(camera);
-            CollectVisiblePortalGroups(*m_worldModel, m_parentNode ? m_parentNode->GetFullTransform() : Matrix4::Identity,
-                PortalFrustum::FromCamera(camera), m_visibleGroups);
+            if (outsideView)
+            {
+                // The camera is inside another world model's room: only what its doors show counts
+                m_currentGroup = -1;
+                for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+                {
+                    const WorldModelGroup* group = m_worldModel->GetGroup(i);
+                    if (!group)
+                    {
+                        continue;
+                    }
+
+                    AABB bounds = group->GetBoundingBox();
+                    bounds.Transform(modelToWorld);
+                    for (const auto& frustum : outsideView->exteriorFrustums)
+                    {
+                        if (frustum.IsVisible(bounds))
+                        {
+                            m_visibleGroups.push_back(static_cast<int32>(i));
+                            break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                m_currentGroup = DetermineCurrentGroup(camera);
+                CollectVisiblePortalGroups(*m_worldModel, modelToWorld, PortalFrustum::FromCamera(camera), m_visibleGroups);
+            }
         }
 
         // Update entity visibility based on portal culling.
@@ -602,7 +646,11 @@ namespace mmo
                 sceneNode->GetScene().RegisterWorldModelInstance(this);
 
                 // Create renderables for each group
-                if (m_batchingEnabled)
+                if (m_mergingEnabled)
+                {
+                    BuildMergedGeometry(sceneNode->GetScene());
+                }
+                else if (m_batchingEnabled)
                 {
                     BuildBatchedGeometry(sceneNode->GetScene());
                 }

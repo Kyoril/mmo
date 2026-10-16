@@ -48,4 +48,10 @@ namespace mmo
 	/// @brief Unattended `mmo_edit --rebake-collision`: loads a mesh, rebakes its stored recipe and saves it.
 	/// @return False if the mesh has no (readable) recipe or could not be saved.
 	bool RebakeMeshCollisionFile(const String& assetPath);
+
+	/// @brief Unattended `mmo_edit --build-collision`: like RebakeMeshCollisionFile, but a mesh without a
+	///        stored recipe gets the default one first - the render triangles of every submesh, which is
+	///        what the mesh editor's Collision > Build does for a freshly imported mesh.
+	/// @return False if the mesh could not be loaded or saved, or its stored recipe is corrupt.
+	bool BuildMeshCollisionFile(const String& assetPath);
 }

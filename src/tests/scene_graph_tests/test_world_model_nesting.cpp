@@ -18,6 +18,9 @@
 #include "scene_graph/world_model_manager.h"
 #include "scene_graph/world_model_serializer.h"
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <vector>
 
@@ -26,6 +29,22 @@ using mmo::test::EnsureNullDevice;
 
 namespace
 {
+	/// Reads a shipped world model from data/client, or returns false when the submodule is missing.
+	bool LoadShippedWorldModel(const String& path, WorldModel& out)
+	{
+		std::ifstream file(MMO_SOURCE_DIR "/data/client/" + path, std::ios::binary);
+		if (!file)
+		{
+			return false;
+		}
+
+		const std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+		io::MemorySource memory{ buffer.data(), buffer.data() + buffer.size() };
+		io::Reader reader{ memory };
+		WorldModelDeserializer deserializer{ out };
+		return deserializer.Read(reader);
+	}
+
 	WorldModelChildRef MakeChildRef(const String& path, const Vector3& position, const Quaternion& rotation = Quaternion::Identity)
 	{
 		WorldModelChildRef ref;
@@ -188,5 +207,41 @@ TEST_CASE("World model instances refuse child references that recurse", "[world_
 		aInstance.Destroy(*scene);
 		selfNode->DetachObject(selfInstance);
 		aNode->DetachObject(aInstance);
+	}
+}
+
+TEST_CASE("Haven town places existing building world models", "[world_model_nesting]")
+{
+	// Haven_Town.hwmo is the town shell; every building and the keep are child world models, so a
+	// renamed or deleted building file would silently leave a hole in the town.
+	WorldModel town;
+	if (!LoadShippedWorldModel("Models/Haven/Haven_Town.hwmo", town))
+	{
+		WARN("data/client is not checked out, skipping");
+		return;
+	}
+
+	REQUIRE(town.GetGroupCount() > 0);
+	REQUIRE(town.GetChildRefs().size() >= 20);
+
+	for (const WorldModelChildRef& ref : town.GetChildRefs())
+	{
+		INFO("child " << ref.name << " -> " << ref.wmoPath);
+		CHECK(ref.visible);
+		CHECK(ref.wmoPath != "Models/Haven/Haven_Town.hwmo");
+
+		WorldModel building;
+		REQUIRE(LoadShippedWorldModel(ref.wmoPath, building));
+		CHECK(building.GetGroupCount() > 0);
+		CHECK(building.GetChildRefs().empty());
+
+		for (size_t g = 0; g < building.GetGroupCount(); ++g)
+		{
+			for (const WorldModelMeshRef& meshRef : building.GetGroup(g)->GetMeshRefs())
+			{
+				INFO("mesh " << meshRef.meshPath);
+				CHECK(std::filesystem::exists(MMO_SOURCE_DIR "/data/client/" + meshRef.meshPath));
+			}
+		}
 	}
 }
