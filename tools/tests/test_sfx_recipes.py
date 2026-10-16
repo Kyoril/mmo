@@ -19,7 +19,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sfx_gen"))
 
-from recipes import cleric, creature_combat, hollow_choir, human, mage, scout, warrior
+from recipes import acolyte, cleric, creature_combat, hollow_choir, human, mage, scout, warrior
 
 
 class _RecipeChecks:
@@ -186,6 +186,51 @@ class ScoutRecipeTests(_RecipeChecks, unittest.TestCase):
             self.skipTest("data/client submodule is not checked out")
         for name in scout.FINAL_ORDER:
             self.assertTrue(os.path.isfile(os.path.join(root, scout.OUTPUT_DIR, name + ".wav")), name)
+
+
+class AcolyteRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = acolyte
+    count = 16
+
+    def test_every_prompt_names_its_layers(self):
+        # Layered by mixing (see human.py): each prompt is one element and must exclude music,
+        # and either the voice or -- for the whisper and wail layers -- words.
+        for name, spec in acolyte.SOUNDS.items():
+            lowered = spec.prompt.lower()
+            self.assertIn("no music", lowered, f"{name}: must exclude music")
+            self.assertTrue("no voice" in lowered or "no words" in lowered,
+                            f"{name}: must exclude the voice or words")
+
+    def test_voice_layers_stay_wordless(self):
+        for name, spec in acolyte.SOUNDS.items():
+            lowered = spec.prompt.lower()
+            if re.search(r"(?<!no )\b(whisper\w*|wail|voices)\b", lowered):
+                self.assertIn("wordless", lowered, name)
+
+    def test_only_channel_singles_loop(self):
+        for final, (sound, take, _) in acolyte.SINGLES.items():
+            self.assertIn(sound, acolyte.SOUNDS)
+            self.assertTrue(1 <= take <= 4)
+            self.assertTrue(acolyte.SOUNDS[sound].loop, final)
+        looped = {name for name, spec in acolyte.SOUNDS.items() if spec.loop}
+        self.assertEqual(looped, {sound for sound, _, _ in acolyte.SINGLES.values()})
+
+    def test_mixes_reference_generated_layers(self):
+        for mix_name, mix in acolyte.MIXES.items():
+            self.assertGreaterEqual(len(mix["layers"]), 2, f"{mix_name}: a mix needs layers")
+            for entry in mix["layers"]:
+                self.assertIn(entry.sound, acolyte.SOUNDS, f"{mix_name}: unknown layer")
+                self.assertFalse(acolyte.SOUNDS[entry.sound].loop, mix_name)
+                self.assertTrue(1 <= entry.take <= 4, f"{mix_name}: take {entry.take}")
+                self.assertGreaterEqual(entry.offset, 0.0)
+                self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
+
+    def test_every_final_has_its_file(self):
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+        if not os.path.isdir(os.path.join(root, acolyte.OUTPUT_DIR)):
+            self.skipTest("data/client submodule is not checked out")
+        for name in acolyte.FINAL_ORDER:
+            self.assertTrue(os.path.isfile(os.path.join(root, acolyte.OUTPUT_DIR, name + ".wav")), name)
 
 
 class CreatureCombatRecipeTest(unittest.TestCase):
