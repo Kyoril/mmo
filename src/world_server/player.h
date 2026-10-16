@@ -945,7 +945,7 @@ namespace mmo
 		/// Sends a lightweight ClassXpUpdate packet. On a class level-up additionally refreshes the
 		/// full known-class list and persists the character (kills are too frequent to save on
 		/// every XP gain; between level-ups class XP is covered by the regular save points).
-		void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp) override;
+		void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp, uint32 talentPointsGained) override;
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
