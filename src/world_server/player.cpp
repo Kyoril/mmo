@@ -3671,14 +3671,14 @@ namespace mmo
 		}, false);
 	}
 
-	void Player::OnClassXpGained(const uint32 classId, const uint32 xpGained, const uint8 classLevel, const uint32 classXp, const uint32 xpToNextLevel, const bool leveledUp)
+	void Player::OnClassXpGained(const uint32 classId, const uint32 xpGained, const uint8 classLevel, const uint32 classXp, const uint32 xpToNextLevel, const bool leveledUp, const uint32 talentPointsGained)
 	{
 		if (!m_spawned)
 		{
 			return;
 		}
 
-		SendPacket([classId, xpGained, classLevel, classXp, xpToNextLevel, leveledUp](game::OutgoingPacket& packet)
+		SendPacket([classId, xpGained, classLevel, classXp, xpToNextLevel, leveledUp, talentPointsGained](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::ClassXpUpdate);
 			packet
@@ -3687,7 +3687,8 @@ namespace mmo
 				<< io::write<uint8>(classLevel)
 				<< io::write<uint32>(classXp)
 				<< io::write<uint32>(xpToNextLevel)
-				<< io::write<uint8>(leveledUp ? 1 : 0);
+				<< io::write<uint8>(leveledUp ? 1 : 0)
+				<< io::write<uint32>(talentPointsGained);
 			packet.Finish();
 		}, false);
 
