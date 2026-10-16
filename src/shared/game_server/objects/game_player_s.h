@@ -58,15 +58,16 @@ namespace mmo
 		{
 		}
 
-		/// Called when the character gained class XP for the active class. xpToNextLevel is 0 when
-		/// the class has reached its class max level.
 		/// Called when an inventory operation initiated by the player's own action (e.g. a quest turn-in)
 		/// failed and the player should be told why.
 		virtual void OnInventoryError(InventoryChangeFailure error)
 		{
 		}
 
-		virtual void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp)
+		/// Called when the character gained class XP for the active class. xpToNextLevel is 0 when
+		/// the class has reached its class max level. talentPointsGained is the number of talent
+		/// points the reached class rank(s) granted and is 0 unless leveledUp is true.
+		virtual void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp, uint32 talentPointsGained)
 		{
 		}
 	};
