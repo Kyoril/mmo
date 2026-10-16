@@ -355,15 +355,16 @@ namespace mmo
         // then hide the one the eye is really in.
         const Vector3 localEye = modelToWorld.Inverse() * viewFrustum.origin;
         //
-        // An exterior group without containment volumes is not a room: outdoor world models (a town)
-        // split their streets into exterior cells for frustum culling only, and a cell's bounding box
-        // must not shut the eye in and hide every other cell. Such groups are seeded below like
-        // anything else outside.
+        // A group without containment volumes is a room only when it is flagged interior. Outdoor
+        // world models (a town) split their streets into exterior cells for frustum culling only,
+        // and props (a lantern) often carry no flags at all: their bounding boxes must not shut the
+        // eye in - a lantern's box would otherwise count as a doorless room around the camera and
+        // hide every other world model. Such groups are seeded below like anything else outside.
         std::vector<int32> seeds;
         for (size_t i = 0; i < groupCount; ++i)
         {
             const WorldModelGroup* group = model.GetGroup(i);
-            if (!group || (group->IsExterior() && group->GetContainmentVolumes().empty()))
+            if (!group || (!group->IsInterior() && group->GetContainmentVolumes().empty()))
             {
                 continue;
             }
@@ -378,11 +379,12 @@ namespace mmo
         {
             if (interiorView)
             {
-                // The eye is in rooms; it is "inside" when none of them is an exterior group
-                interiorView->eyeInInterior = std::none_of(seeds.begin(), seeds.end(), [&model](const int32 seed)
+                // The eye is in rooms; it is "inside" - and the rest of the world is seen only through
+                // their doors - when every one of them is flagged interior
+                interiorView->eyeInInterior = std::all_of(seeds.begin(), seeds.end(), [&model](const int32 seed)
                 {
                     const WorldModelGroup* group = model.GetGroup(static_cast<size_t>(seed));
-                    return group && group->IsExterior();
+                    return group && group->IsInterior();
                 });
             }
 
