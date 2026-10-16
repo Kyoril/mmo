@@ -450,7 +450,7 @@ namespace mmo
 
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects)
 	{
-		// Prepare dynamic fields for world objects
+		// Prepare dynamic fields for world objects and creatures
 		for (const auto& object : objects)
 		{
 			if (object->GetTypeId() == ObjectTypeId::Object)
@@ -459,6 +459,14 @@ namespace mmo
 				if (worldObject)
 				{
 					worldObject->PrepareDynamicFieldsFor(*m_character);
+				}
+			}
+			else if (object->GetTypeId() == ObjectTypeId::Unit)
+			{
+				GameCreatureS* creature = dynamic_cast<GameCreatureS*>(object);
+				if (creature)
+				{
+					creature->PrepareDynamicFieldsFor(*m_character);
 				}
 			}
 		}
@@ -494,7 +502,7 @@ namespace mmo
 			}
 		}
 		
-		// Clear dynamic fields for world objects
+		// Clear dynamic fields for world objects and creatures
 		for (const auto& object : objects)
 		{
 			if (object->GetTypeId() == ObjectTypeId::Object)
@@ -503,6 +511,14 @@ namespace mmo
 				if (worldObject)
 				{
 					worldObject->ClearDynamicFields();
+				}
+			}
+			else if (object->GetTypeId() == ObjectTypeId::Unit)
+			{
+				GameCreatureS* creature = dynamic_cast<GameCreatureS*>(object);
+				if (creature)
+				{
+					creature->ClearDynamicFields();
 				}
 			}
 		}
@@ -551,7 +567,7 @@ namespace mmo
 			m_spawnedGuids.insert(guid);
 		}
 
-		// Prepare dynamic fields for world objects
+		// Prepare dynamic fields for world objects and creatures
 		for (const auto& object : objects)
 		{
 			if (object->GetTypeId() == ObjectTypeId::Object)
@@ -560,6 +576,14 @@ namespace mmo
 				if (worldObject)
 				{
 					worldObject->PrepareDynamicFieldsFor(*m_character);
+				}
+			}
+			else if (object->GetTypeId() == ObjectTypeId::Unit)
+			{
+				GameCreatureS* creature = dynamic_cast<GameCreatureS*>(object);
+				if (creature)
+				{
+					creature->PrepareDynamicFieldsFor(*m_character);
 				}
 			}
 		}
@@ -580,7 +604,7 @@ namespace mmo
 			SendObjectUpdate(body, true);
 		}
 
-		// Clear dynamic fields for world objects
+		// Clear dynamic fields for world objects and creatures
 		for (const auto& object : objects)
 		{
 			if (object->GetTypeId() == ObjectTypeId::Object)
@@ -589,6 +613,14 @@ namespace mmo
 				if (worldObject)
 				{
 					worldObject->ClearDynamicFields();
+				}
+			}
+			else if (object->GetTypeId() == ObjectTypeId::Unit)
+			{
+				GameCreatureS* creature = dynamic_cast<GameCreatureS*>(object);
+				if (creature)
+				{
+					creature->ClearDynamicFields();
 				}
 			}
 		}
