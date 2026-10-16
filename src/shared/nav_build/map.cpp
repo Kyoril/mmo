@@ -107,11 +107,42 @@ namespace mmo
     WorldModelEntity::WorldModelEntity(const std::string& path)
         : Filename(path)
     {
+        std::vector<std::string> ancestors;
+        if (!AppendWorldModel(path, Matrix4::Identity, ancestors))
+        {
+            return;
+        }
+
+        // Bounds cover the group boxes and every collision vertex, so the geometry of child world
+        // models and meshes that stick out of their group lie inside the area the tile builder visits
+        for (const auto& v : Vertices)
+        {
+            Bounds.Combine(v);
+        }
+
+        DLOG("Loaded world model " << path << " with " << Vertices.size() << " collision vertices and " << Indices.size() << " indices, bounds: " << Bounds.min << " - " << Bounds.max);
+    }
+
+    bool WorldModelEntity::AppendWorldModel(const std::string& path, const Matrix4& transform, std::vector<std::string>& ancestors)
+    {
+        if (std::find(ancestors.begin(), ancestors.end(), path) != ancestors.end())
+        {
+            WLOG("World model " << path << " references itself through its child world models, skipped");
+            return false;
+        }
+
+        // Matches WorldModelInstance::MaxChildDepth on the client
+        if (ancestors.size() >= 8)
+        {
+            WLOG("World model " << path << " is nested too deep, skipped");
+            return false;
+        }
+
         auto file = AssetRegistry::OpenFile(path);
         if (!file)
         {
             ELOG("Failed to load world model file " << path << ": File does not exist");
-            return;
+            return false;
         }
 
         io::StreamSource source{ *file };
@@ -122,14 +153,22 @@ namespace mmo
         if (!deserializer.Read(reader))
         {
             ELOG("Failed to deserialize world model file " << path);
-            return;
+            return false;
         }
 
         // Recalculate bounds from groups since the deserializer doesn't set the world model bounds
         worldModel.RecalculateBoundingBox();
-        Bounds = worldModel.GetBoundingBox();
-        
-        DLOG("World model " << path << " has " << worldModel.GetGroupCount() << " groups, bounds: " << Bounds.min << " - " << Bounds.max);
+        if (!worldModel.GetBoundingBox().IsNull())
+        {
+            Vector3 corners[8];
+            worldModel.GetBoundingBox().GetCorners(corners);
+            for (const Vector3& corner : corners)
+            {
+                Bounds.Combine(transform * corner);
+            }
+        }
+
+        DLOG("World model " << path << " has " << worldModel.GetGroupCount() << " groups and " << worldModel.GetChildRefs().size() << " child world models");
 
         // Collect collision data from all groups and their mesh references
         for (size_t groupIndex = 0; groupIndex < worldModel.GetGroupCount(); ++groupIndex)
@@ -140,27 +179,22 @@ namespace mmo
                 WLOG("World model " << path << " group " << groupIndex << " is null");
                 continue;
             }
-            
-            const auto& meshRefs = group->GetMeshRefs();
-            DLOG("World model " << path << " group " << groupIndex << " (" << group->GetName() << ") has " << meshRefs.size() << " mesh refs");
 
+            const auto& meshRefs = group->GetMeshRefs();
             for (size_t meshRefIdx = 0; meshRefIdx < meshRefs.size(); ++meshRefIdx)
             {
                 const auto& meshRef = meshRefs[meshRefIdx];
-                
+
                 if (meshRef.meshPath.empty())
                 {
                     WLOG("World model " << path << " group " << groupIndex << " mesh ref " << meshRefIdx << " has empty path");
                     continue;
                 }
-                
+
                 if (!meshRef.visible)
                 {
-                    DLOG("World model " << path << " group " << groupIndex << " mesh ref " << meshRefIdx << " (" << meshRef.meshPath << ") is not visible, skipping");
                     continue;
                 }
-
-                DLOG("Loading mesh for collision: " << meshRef.meshPath);
 
                 // Load the mesh to get collision data
                 auto meshFile = AssetRegistry::OpenFile(meshRef.meshPath);
@@ -183,12 +217,11 @@ namespace mmo
                     WLOG("Mesh " << meshRef.meshPath << " has no collision tree");
                     continue;
                 }
-                
-                DLOG("Mesh " << meshRef.meshPath << " has " << collisionTree.GetVertices().size() << " collision vertices");
 
-                // Build mesh ref transform matrix
+                // Mesh ref transform, composed onto the placement of the world model it belongs to
                 Matrix4 meshTransform;
                 meshTransform.MakeTransform(meshRef.position, meshRef.scale, meshRef.rotation);
+                meshTransform = transform * meshTransform;
 
                 // Get base index for this mesh's vertices
                 const int32 baseIndex = static_cast<int32>(Vertices.size());
@@ -206,19 +239,22 @@ namespace mmo
                 }
             }
         }
-        
-        // If we loaded collision data but bounds were null, compute bounds from vertices
-        if (Bounds.IsNull() && !Vertices.empty())
-        {
-            Bounds.SetNull();
-            for (const auto& v : Vertices)
-            {
-                Bounds.Combine(v);
-            }
-            DLOG("Computed world model bounds from vertices: " << Bounds.min << " - " << Bounds.max);
-        }
 
-        DLOG("Loaded world model " << path << " with " << Vertices.size() << " collision vertices and " << Indices.size() << " indices");
+        ancestors.push_back(path);
+        for (const WorldModelChildRef& childRef : worldModel.GetChildRefs())
+        {
+            if (!childRef.visible || childRef.wmoPath.empty())
+            {
+                continue;
+            }
+
+            Matrix4 childTransform;
+            childTransform.MakeTransform(childRef.position, childRef.scale, childRef.rotation);
+            AppendWorldModel(childRef.wmoPath, transform * childTransform, ancestors);
+        }
+        ancestors.pop_back();
+
+        return true;
     }
 
     WorldModelEntityInstance::WorldModelEntityInstance(

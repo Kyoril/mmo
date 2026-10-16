@@ -89,6 +89,17 @@ namespace mmo
         /// @brief Gets whether hardware-instanced batching is enabled. @see SetBatchingEnabled
         [[nodiscard]] bool IsBatchingEnabled() const { return m_batchingEnabled; }
 
+        /// @brief Gets the number of child world model instances created from the model's child
+        ///        references. Zero until the instance has been attached to a scene node.
+        [[nodiscard]] size_t GetChildInstanceCount() const { return m_childInstances.size(); }
+
+        /// @brief Gets a child world model instance by index, or null when out of range.
+        [[nodiscard]] WorldModelInstance* GetChildInstance(size_t index) const;
+
+        /// @brief Deepest nesting of child world models that is instantiated. A town that places
+        ///        buildings that place props is depth 2; anything this deep is a content mistake.
+        static constexpr uint32 MaxChildDepth = 8;
+
     public:
         // MovableObject overrides
         
@@ -109,6 +120,10 @@ namespace mmo
 
         /// @copydoc MovableObject::NotifyAttachmentChanged
         void NotifyAttachmentChanged(Node* parent, bool isTagPoint = false) override;
+
+        /// @copydoc MovableObject::SetVisible
+        /// @details Propagates to the nested child world model instances.
+        void SetVisible(bool visible) override;
 
         /// @copydoc MovableObject::NotifyMoved
         /// @details Batched instance matrices are world-space, so they have to be rebuilt whenever
@@ -295,6 +310,19 @@ namespace mmo
         /// @param scene The scene to destroy entities in (can be null).
         void ClearGeometry(Scene* scene);
 
+        /// @brief Creates one nested instance per visible child reference of the world model.
+        /// @details Each child hangs off its own scene node below this instance's placement node,
+        ///          carrying the reference's local transform, so it follows the parent wherever it is
+        ///          moved. Children are full instances: they register with the scene, run their own
+        ///          portal culling and build their own batches, doodads, lights and collision.
+        ///          References that would nest a world model inside itself are skipped.
+        /// @param scene The scene to create the children in.
+        void CreateChildInstances(Scene& scene);
+
+        /// @brief Destroys all nested child instances and their scene nodes.
+        /// @param scene The scene to destroy objects in (can be null).
+        void ClearChildInstances(Scene* scene);
+
     private:
         WorldModelPtr m_worldModel;
         uint32 m_activeDoodadSet;
@@ -361,6 +389,18 @@ namespace mmo
             SceneNode* node { nullptr };
         };
         std::vector<LightInstance> m_lightInstances;
+
+        // Nested world models created from the model's child references
+        struct ChildInstance
+        {
+            std::unique_ptr<WorldModelInstance> instance;
+            SceneNode* node { nullptr };
+        };
+        std::vector<ChildInstance> m_childInstances;
+
+        /// @brief World models above this instance in the nesting chain, outermost first. Used to
+        ///        refuse child references that would recurse forever.
+        std::vector<const WorldModel*> m_ancestors;
 
         // Visibility state (updated each frame)
         mutable std::vector<int32> m_visibleGroups;

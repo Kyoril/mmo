@@ -104,8 +104,18 @@ namespace mmo
         std::vector<int32> Indices;
 
         /// @brief Constructs a WorldModelEntity from a .hwmo file path.
+        /// @details Child world model references are folded in recursively, so a town that places
+        ///          building world models yields the collision of every building.
         /// @param path Path to the world model file.
         explicit WorldModelEntity(const std::string& path);
+
+    private:
+        /// @brief Appends the collision of one world model and its child world models.
+        /// @param path Path to the world model file.
+        /// @param transform Transform from that world model's space into this entity's space.
+        /// @param ancestors Paths above this world model in the nesting chain.
+        /// @return False when the file could not be loaded at all.
+        bool AppendWorldModel(const std::string& path, const Matrix4& transform, std::vector<std::string>& ancestors);
     };
 
     /// @brief Represents a placed instance of a world model entity in the world.

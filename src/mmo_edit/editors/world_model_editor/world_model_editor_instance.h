@@ -96,6 +96,10 @@ namespace mmo
 	{
 		SceneNode* node { nullptr };
 		std::vector<Entity*> entities;
+
+		/// @brief Live instance of the referenced world model, attached to node. Nested child
+		///        references of that model are instantiated by the instance itself.
+		std::shared_ptr<WorldModelInstance> instance;
 		size_t childRefIndex { 0 };
 		bool visible { true };
 	};

@@ -11,6 +11,7 @@
 #include "sub_mesh.h"
 #include "material_manager.h"
 #include "light.h"
+#include "world_model_manager.h"
 #include "log/default_log_levels.h"
 
 #include <algorithm>
@@ -75,6 +76,7 @@ namespace mmo
             scene->UnregisterWorldModelInstance(this);
         }
 
+        ClearChildInstances(scene);
         ClearGeometry(scene);
         ClearDoodads(scene);
         ClearLights(scene);
@@ -114,6 +116,119 @@ namespace mmo
         ClearBatches(scene);
 
         m_geometryCreated = false;
+    }
+
+    WorldModelInstance* WorldModelInstance::GetChildInstance(const size_t index) const
+    {
+        return index < m_childInstances.size() ? m_childInstances[index].instance.get() : nullptr;
+    }
+
+    void WorldModelInstance::CreateChildInstances(Scene& scene)
+    {
+        if (!m_worldModel || m_worldModel->GetChildRefs().empty())
+        {
+            return;
+        }
+
+        if (m_ancestors.size() >= MaxChildDepth)
+        {
+            WLOG("World model instance '" << m_name << "' is nested " << m_ancestors.size() << " levels deep, not instantiating its child world models");
+            return;
+        }
+
+        std::vector<const WorldModel*> chain = m_ancestors;
+        chain.push_back(m_worldModel.get());
+
+        const auto& childRefs = m_worldModel->GetChildRefs();
+        for (size_t i = 0; i < childRefs.size(); ++i)
+        {
+            const WorldModelChildRef& childRef = childRefs[i];
+            if (!childRef.visible || childRef.wmoPath.empty())
+            {
+                continue;
+            }
+
+            WorldModelPtr childModel = WorldModelManager::Get().Load(childRef.wmoPath);
+            if (!childModel)
+            {
+                continue;
+            }
+
+            if (std::find(chain.begin(), chain.end(), childModel.get()) != chain.end())
+            {
+                WLOG("World model instance '" << m_name << "': child reference '" << childRef.name << "' (" << childRef.wmoPath << ") would nest a world model inside itself, skipped");
+                continue;
+            }
+
+            ChildInstance child;
+            const String childName = m_name + "_child" + std::to_string(i);
+
+            child.node = &scene.CreateSceneNode(childName);
+            child.node->SetPosition(childRef.position);
+            child.node->SetOrientation(childRef.rotation);
+            child.node->SetScale(childRef.scale);
+            if (m_parentNode)
+            {
+                static_cast<SceneNode*>(m_parentNode)->AddChild(*child.node);
+            }
+            else
+            {
+                scene.GetRootSceneNode().AddChild(*child.node);
+            }
+
+            // Everything that has to be decided before the first attach, because geometry is built then
+            child.instance = std::make_unique<WorldModelInstance>(childName, std::move(childModel));
+            child.instance->m_ancestors = chain;
+            child.instance->SetQueryFlags(GetQueryFlags());
+            child.instance->SetBatchingEnabled(m_batchingEnabled);
+            child.instance->SetVisible(IsVisible());
+            child.node->AttachObject(*child.instance);
+
+            m_childInstances.push_back(std::move(child));
+        }
+    }
+
+    void WorldModelInstance::SetVisible(const bool visible)
+    {
+        MovableObject::SetVisible(visible);
+
+        for (const auto& child : m_childInstances)
+        {
+            if (child.instance)
+            {
+                child.instance->SetVisible(visible);
+            }
+        }
+    }
+
+    void WorldModelInstance::ClearChildInstances(Scene* scene)
+    {
+        for (auto& child : m_childInstances)
+        {
+            if (!child.instance)
+            {
+                continue;
+            }
+
+            if (scene)
+            {
+                child.instance->Destroy(*scene);
+            }
+
+            if (child.node)
+            {
+                child.node->DetachObject(*child.instance);
+                if (scene)
+                {
+                    scene->DestroySceneNode(*child.node);
+                }
+            }
+
+            child.instance.reset();
+            child.node = nullptr;
+        }
+
+        m_childInstances.clear();
     }
 
     void WorldModelInstance::SetActiveDoodadSet(uint32 setIndex)
@@ -241,6 +356,7 @@ namespace mmo
         scene.UnregisterWorldModelInstance(this);
 
         // Clear all created scene objects
+        ClearChildInstances(&scene);
         ClearGeometry(&scene);
         ClearDoodads(&scene);
         ClearLights(&scene);
@@ -434,6 +550,9 @@ namespace mmo
 
                 // Create lights
                 CreateLights(sceneNode->GetScene());
+
+                // Instantiate nested world models last, so they hang off a fully built parent
+                CreateChildInstances(sceneNode->GetScene());
 
                 m_geometryCreated = true;
             }
