@@ -91,7 +91,6 @@ namespace mmo
 
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
 	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
-	static ChunkMagic WorldEntityWMO = MakeChunkMagic('WWMO');
 
 	struct MapEntityChunkContent
 	{
@@ -1067,45 +1066,34 @@ namespace mmo
 			io::StreamSink fileSink{*filePtr};
 			io::Writer fileWriter{fileSink};
 
-			// Version 3 supports world model entities
-			{
-				ChunkWriter chunkWriter(WorldEntityVersionChunk, fileWriter);
-				fileWriter << io::write<uint32>(3);
-				chunkWriter.Finish();
-			}
-
 			const Vector3 position = ent->GetSceneNode().GetDerivedPosition();
 			const Vector3 scale = ent->GetSceneNode().GetScale();
 			const Quaternion rotation = ent->GetSceneNode().GetDerivedOrientation();
 
 			if (ent->IsWorldModelEntity())
 			{
-				// Save world model entity
-				ChunkWriter chunkWriter(WorldEntityWMO, fileWriter);
-				const String assetName = ent->GetAssetName();
-				fileWriter
-					<< io::write<uint64>(ent->GetUniqueId())
-					<< io::write_dynamic_range<uint16>(assetName)
-					<< io::write<float>(position.x)
-					<< io::write<float>(position.y)
-					<< io::write<float>(position.z)
-					<< io::write<float>(rotation.w)
-					<< io::write<float>(rotation.x)
-					<< io::write<float>(rotation.y)
-					<< io::write<float>(rotation.z)
-					<< io::write<float>(scale.x)
-					<< io::write<float>(scale.y)
-					<< io::write<float>(scale.z);
-
-				// Write name and category
-				fileWriter
-					<< io::write_dynamic_range<uint8>(ent->GetDisplayName())
-					<< io::write_dynamic_range<uint16>(ent->GetCategory());
-
-				chunkWriter.Finish();
+				// Save world model entity (version chunk, WWMO and the optional kit list)
+				WorldEntityLoader::MapEntity placement;
+				placement.entityType = WorldEntityType::WorldModel;
+				placement.meshName = ent->GetAssetName();
+				placement.uniqueId = ent->GetUniqueId();
+				placement.position = position;
+				placement.rotation = rotation;
+				placement.scale = scale;
+				placement.name = ent->GetDisplayName();
+				placement.category = ent->GetCategory();
+				// The editor has no kit storage yet, so no kits are written here
+				WriteWorldModelPlacement(fileWriter, placement);
 			}
 			else
 			{
+				// Version 3 supports world model entities
+				{
+					ChunkWriter versionWriter(WorldEntityVersionChunk, fileWriter);
+					fileWriter << io::write<uint32>(3);
+					versionWriter.Finish();
+				}
+
 				// Save mesh entity
 				ChunkWriter chunkWriter(WorldEntityMesh, fileWriter);
 				const String mesh = ent->GetEntity()->GetMesh()->GetName().data();

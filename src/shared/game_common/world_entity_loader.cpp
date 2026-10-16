@@ -48,6 +48,38 @@ namespace mmo
 		chunkWriter.Finish();
 	}
 
+	void WriteWorldModelPlacement(io::Writer& writer, const WorldEntityLoader::MapEntity& entity)
+	{
+		// Version 3 supports world model entities
+		{
+			ChunkWriter chunkWriter(WorldEntityVersionChunk, writer);
+			writer << io::write<uint32>(3);
+			chunkWriter.Finish();
+		}
+
+		{
+			ChunkWriter chunkWriter(WorldEntityWMO, writer);
+			writer
+				<< io::write<uint64>(entity.uniqueId)
+				<< io::write_dynamic_range<uint16>(entity.meshName)
+				<< io::write<float>(entity.position.x)
+				<< io::write<float>(entity.position.y)
+				<< io::write<float>(entity.position.z)
+				<< io::write<float>(entity.rotation.w)
+				<< io::write<float>(entity.rotation.x)
+				<< io::write<float>(entity.rotation.y)
+				<< io::write<float>(entity.rotation.z)
+				<< io::write<float>(entity.scale.x)
+				<< io::write<float>(entity.scale.y)
+				<< io::write<float>(entity.scale.z)
+				<< io::write_dynamic_range<uint8>(entity.name)
+				<< io::write_dynamic_range<uint16>(entity.category);
+			chunkWriter.Finish();
+		}
+
+		WriteWorldModelKitChunk(writer, entity.kitPaths);
+	}
+
 	WorldEntityLoader::WorldEntityLoader()
 	{
 		m_ignoreUnhandledChunks = true;

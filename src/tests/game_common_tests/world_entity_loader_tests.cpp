@@ -153,3 +153,45 @@ TEST_CASE("Mesh placement ignores a kit chunk", "[game_common][world_entity]")
 	CHECK(entity.meshName == "Models/Crate.hmsh");
 	CHECK(entity.kitPaths.empty());
 }
+
+TEST_CASE("WriteWorldModelPlacement is byte-identical to the legacy inline layout", "[game_common][world_entity]")
+{
+	WorldEntityLoader::MapEntity entity;
+	entity.entityType = WorldEntityType::WorldModel;
+	entity.meshName = "Models/Inn.hwmo";
+	entity.position = Vector3(1.0f, 2.0f, 3.0f);
+	entity.rotation = Quaternion(1.0f, 0.0f, 0.0f, 0.0f);
+	entity.scale = Vector3(1.0f, 1.0f, 1.0f);
+	entity.uniqueId = 42;
+	entity.name = "Inn";
+	entity.category = "Buildings";
+
+	std::vector<char> written;
+	{
+		io::VectorSink sink(written);
+		io::Writer writer(sink);
+		WriteWorldModelPlacement(writer, entity);
+	}
+
+	// The legacy layout, as WorldEditorInstance::Save wrote it before kits existed
+	CHECK(written == BuildFile(true, {}));
+
+	WorldEntityLoader loader;
+	REQUIRE(Load(written, loader));
+	CHECK(loader.GetEntity().uniqueId == 42);
+	CHECK(loader.GetEntity().kitPaths.empty());
+
+	entity.kitPaths = { "Kits/A.hkit", "Kits/B.hkit" };
+	written.clear();
+	{
+		io::VectorSink sink(written);
+		io::Writer writer(sink);
+		WriteWorldModelPlacement(writer, entity);
+	}
+	WorldEntityLoader loader2;
+	REQUIRE(Load(written, loader2));
+	REQUIRE(loader2.GetEntity().kitPaths.size() == 2);
+	CHECK(loader2.GetEntity().kitPaths[1] == "Kits/B.hkit");
+	CHECK(loader2.GetEntity().name == "Inn");
+	CHECK(loader2.GetEntity().category == "Buildings");
+}

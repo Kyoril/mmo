@@ -70,4 +70,11 @@ namespace mmo
 		uint32 m_version;
 		MapEntity m_entity;
 	};
+
+	/// @brief Writes a complete world model placement file (WVER, WWMO and, if the entity has kits, WKIT).
+	///        This is the single writer shared by the world editor's Save and unattended jobs.
+	/// @param writer Writer to write the file content to.
+	/// @param entity The world model placement (uses meshName as the .hwmo path, position, rotation,
+	///        scale, uniqueId, name, category and kitPaths).
+	void WriteWorldModelPlacement(io::Writer& writer, const WorldEntityLoader::MapEntity& entity);
 }

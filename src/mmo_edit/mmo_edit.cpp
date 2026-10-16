@@ -88,6 +88,7 @@
 #include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/world_model_editor/world_model_editor_instance.h"
+#include "prop_kit_job.h"
 #include "editors/mesh_editor/mesh_editor_instance.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
@@ -335,6 +336,9 @@ int main(int argc, char* arg[])
 	// from their stored collision recipes (editor-only CSRC chunk), saves them and exits.
 	// `--set-submesh-material <asset.hmsh> <submesh> <material> [...]` assigns a material to a
 	// submesh (by name, or index), saves the mesh with its collision recipe and exits.
+	// `--apply-prop-kit <job.json>` writes a prop kit asset, assigns kits to world model placements
+	// and/or strips named mesh refs from a world model as the job describes, then exits (see
+	// prop_kit_job.h; log in prop_kit_job.log, exit code 1 on load or write failures).
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
@@ -474,6 +478,20 @@ int main(int argc, char* arg[])
 				}
 
 				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--apply-prop-kit")
+			{
+				static std::ofstream propKitLog("prop_kit_job.log", std::ios::out | std::ios::trunc);
+				static std::mutex propKitLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ propKitLogMutex };
+					propKitLog << entry.message << std::endl;
+				});
+
+				PostQuitMessage(mmo::ApplyPropKitJob(args[i + 1]) ? 0 : 1);
 				break;
 			}
 
