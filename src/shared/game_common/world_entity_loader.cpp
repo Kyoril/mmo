@@ -1,6 +1,7 @@
 
 #include "world_entity_loader.h"
 
+#include <algorithm>
 #include <random>
 
 #include "base/chunk_writer.h"
@@ -11,6 +12,7 @@ namespace mmo
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
 	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
 	static ChunkMagic WorldEntityWMO = MakeChunkMagic('WWMO');
+	static ChunkMagic WorldEntityKits = MakeChunkMagic('WKIT');
 
 	uint64 GenerateUniqueId()
 	{
@@ -26,6 +28,24 @@ namespace mmo
 
 		// Format: 16 bits from timestamp + 48 bits random
 		return (timestamp & 0xFFFF) << 48 | random;
+	}
+
+	void WriteWorldModelKitChunk(io::Writer& writer, const std::vector<String>& kitPaths)
+	{
+		if (kitPaths.empty())
+		{
+			return;
+		}
+
+		const uint8 count = static_cast<uint8>(std::min<size_t>(kitPaths.size(), 255));
+
+		ChunkWriter chunkWriter(WorldEntityKits, writer);
+		writer << io::write<uint8>(count);
+		for (uint8 i = 0; i < count; ++i)
+		{
+			writer << io::write_dynamic_range<uint16>(kitPaths[i]);
+		}
+		chunkWriter.Finish();
 	}
 
 	WorldEntityLoader::WorldEntityLoader()
@@ -184,6 +204,36 @@ namespace mmo
 
 		// World models don't have material overrides
 		m_entity.materialOverrides.clear();
+
+		// The prop kit list is an optional chunk following this one
+		m_entity.kitPaths.clear();
+		AddChunkHandler(*WorldEntityKits, false, *this, &WorldEntityLoader::OnKitChunk);
+
+		return reader;
+	}
+
+	bool WorldEntityLoader::OnKitChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *WorldEntityKits);
+
+		RemoveChunkHandler(*WorldEntityKits);
+
+		uint8 count = 0;
+		if (!(reader >> io::read<uint8>(count)))
+		{
+			ELOG("Failed to read world model kit count, unexpected end of file!");
+			return false;
+		}
+
+		m_entity.kitPaths.resize(count);
+		for (uint8 i = 0; i < count; ++i)
+		{
+			if (!(reader >> io::read_container<uint16>(m_entity.kitPaths[i])))
+			{
+				ELOG("Failed to read world model kit path, unexpected end of file!");
+				return false;
+			}
+		}
 
 		return reader;
 	}

@@ -1,12 +1,20 @@
 #pragma once
 
 #include "base/chunk_reader.h"
+#include "binary_io/writer.h"
 #include "math/vector3.h"
 #include "math/quaternion.h"
 
 namespace mmo
 {
 	uint64 GenerateUniqueId();
+
+	/// @brief Writes the optional prop kit list chunk (WKIT) of a world model placement.
+	///        Writes nothing if the list is empty. Payload: u8 count, then str16 paths.
+	///        Must be called after the WWMO chunk was finished; older readers skip the chunk.
+	/// @param writer Writer to append the chunk to.
+	/// @param kitPaths Ordered prop kit asset paths (at most 255 are written).
+	void WriteWorldModelKitChunk(io::Writer& writer, const std::vector<String>& kitPaths);
 
 	/// @brief Type of world entity.
 	enum class WorldEntityType : uint8
@@ -37,6 +45,8 @@ namespace mmo
 			std::vector<MaterialOverride> materialOverrides;
 			String name;
 			String category;
+			/// @brief Ordered prop kit paths (world models only, from the optional WKIT chunk).
+			std::vector<String> kitPaths;
 		};
 
 	public:
@@ -53,6 +63,8 @@ namespace mmo
 		bool OnEntityMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool OnWorldModelChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool OnKitChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	private:
 		uint32 m_version;
