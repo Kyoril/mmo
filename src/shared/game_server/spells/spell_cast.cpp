@@ -69,6 +69,12 @@ namespace mmo
 			return spell_cast_result::FailedNotReady;
 		}
 
+		// An interrupt locks the school of the interrupted spell for a while
+		if (!isProc && m_executor.IsSpellSchoolLocked(spell.spellschool()))
+		{
+			return spell_cast_result::FailedNotReady;
+		}
+
 		// Check if we have enough resources for that spell
 		if (isProc)
 		{

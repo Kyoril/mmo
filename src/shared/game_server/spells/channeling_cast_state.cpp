@@ -112,11 +112,12 @@ namespace mmo
 			return;
 		}
 
-		// Apply the interrupt lockout cooldown to the channeled spell so it cannot be
+		// Apply the interrupt lockout to the channeled spell and its school so neither can be
 		// recast immediately after being interrupted (mirrors SingleCastState::StopCast).
 		if (interruptCooldown > 0)
 		{
 			m_cast.GetExecuter().SetCooldown(m_spell.id(), interruptCooldown);
+			m_cast.GetExecuter().LockSpellSchool(m_spell.spellschool(), interruptCooldown);
 		}
 
 		EndChanneling(false);
