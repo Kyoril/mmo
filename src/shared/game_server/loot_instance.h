@@ -48,6 +48,10 @@ namespace mmo
 		/// Stores the roll winner's GUID once a group roll has completed.
 		uint64 rollWinner = 0;
 
+		/// Indicates whether this item waits for the loot master to hand it to a party member (MasterLoot
+		/// items at or above the loot threshold). Nobody can loot such an item directly.
+		bool needsMasterAssignment = false;
+
 		/// Default constructor.
 		/// @param count The number of items in this loot item.
 		/// @param def The loot definition of this item.
@@ -111,7 +115,14 @@ namespace mmo
 		/// @param playerName The name of the voting player.
 		signal<void(uint64 lootGuid, uint8 slot, uint32 itemId, uint64 playerGuid, RollVote vote, uint8 rollValue, const String& playerName)> rollVoted;
 
+		/// This signal is triggered once when the group rolls of this loot instance were announced to the
+		/// party. The owner arms the roll timeout from it (see RollDuration and ExpireRolls).
+		signal<void()> rollsStarted;
+
 	public:
+		/// How long the party has to vote on a group roll before every missing vote counts as a pass.
+		static constexpr GameTime RollDuration = 60000;
+
 		typedef std::map<uint32, uint32> PlayerItemLootEntry;
 		typedef std::map<uint64, PlayerItemLootEntry> PlayerLootEntries;
 
@@ -213,6 +224,35 @@ namespace mmo
 		/// @param nearbyPlayers The nearby eligible players who may vote on the roll.
 		void SetupGroupRollItems(const std::set<uint64>& nearbyPlayers);
 
+		/// Marks items at or above the quality threshold as waiting for the loot master, who hands them to
+		/// one of the candidates. Items below the threshold are left to the round-robin looter.
+		/// @param candidates The nearby party members the loot master may hand items to.
+		/// @returns false (and marks nothing) if the loot master is not among the candidates: a loot master
+		///          who was not present for the kill must not lock the corpse for everybody else.
+		bool SetupMasterLootItems(const std::set<uint64>& candidates);
+
+		/// Gets the loot master of this loot instance (only meaningful for MasterLoot).
+		[[nodiscard]] uint64 GetLootMasterGuid() const noexcept { return m_lootMasterGuid; }
+
+		/// Gets the party members the loot master may hand items to.
+		[[nodiscard]] const std::set<uint64>& GetMasterLootCandidates() const noexcept { return m_masterLootCandidates; }
+
+		/// Determines whether the given assigner may hand the item in the given slot to the given target.
+		/// @param slot The server-side loot slot index.
+		/// @param assigner The player handing the item out; must be the loot master.
+		/// @param target The player receiving the item; must be a master loot candidate.
+		[[nodiscard]] bool CanAssignMasterLoot(uint8 slot, uint64 assigner, uint64 target) const;
+
+		/// Marks a master loot item as handed out. The caller is responsible for actually creating the item
+		/// in the target's inventory before calling this.
+		/// @returns true if the item was assigned, false if CanAssignMasterLoot refused it.
+		bool AssignMasterLoot(uint8 slot, uint64 assigner, uint64 target);
+
+		/// Resolves every pending group roll, counting each missing vote as a pass. Called when the roll
+		/// timer runs out so a party member who never votes (away, out of range, logged out) cannot hold an
+		/// item hostage until the corpse despawns.
+		void ExpireRolls();
+
 		/// Submits a loot-roll vote for a slot.
 		/// @param slot The slot being rolled on.
 		/// @param playerGuid The player casting the vote.
@@ -237,7 +277,11 @@ namespace mmo
 		[[nodiscard]] bool AreRollsStarted() const noexcept { return m_rollsStarted; }
 
 		/// Marks the active rolls as started so packets are only emitted once.
-		void MarkRollsStarted() noexcept { m_rollsStarted = true; }
+		void MarkRollsStarted()
+		{
+			m_rollsStarted = true;
+			rollsStarted();
+		}
 
 		void Serialize(io::Writer& writer, uint64 receiver) const;
 
@@ -251,6 +295,10 @@ namespace mmo
 		void GenerateItemsFromEntry(const proto::LootEntry& entry, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients);
 
 		[[nodiscard]] uint8 GetSlotType(uint8 slot, uint64 receiver) const;
+
+		/// @return true if the item is distributed by the party (roll or loot master): at or above the loot
+		///         threshold and not a party-shared item.
+		[[nodiscard]] bool IsThresholdItem(const LootItem& item) const;
 
 		/// @return true if the receiver already took its share of a party-shared (PartyLoot) item.
 		[[nodiscard]] bool HasLootedPartyItem(const LootItem& item, const proto::ItemEntry& entry, uint64 receiver) const;
@@ -272,5 +320,6 @@ namespace mmo
 		uint64 m_lootMasterGuid = 0;
 		std::map<uint8, LootRollData> m_rollData;
 		bool m_rollsStarted = false;
+		std::set<uint64> m_masterLootCandidates;
 	};
 }

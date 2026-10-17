@@ -1943,6 +1943,39 @@ namespace mmo
 						   return idx >= 0 ? idx + 1 : -1;
 					   }),
 
+				   // True if the local player hands out the party's master loot.
+				   luabind::def<std::function<bool()>>("IsLootMaster",
+					   [this]() -> bool
+					   {
+						   return m_partyInfo.GetMemberCount() > 0 &&
+							   m_partyInfo.GetLootMethod() == loot_method::MasterLoot &&
+							   m_partyInfo.GetLootMasterGuid() == ObjectMgr::GetActivePlayerGuid();
+					   }),
+
+				   // GiveMasterLoot(lootSlot, candidate) hands a master loot item to a party member:
+				   // candidate 0 is the local player, 1..GetPartySize() the party members.
+				   luabind::def<std::function<void(int32, int32)>>("GiveMasterLoot",
+					   [this](const int32 slot, const int32 candidate)
+					   {
+						   uint64 targetGuid = 0;
+						   if (candidate == 0)
+						   {
+							   targetGuid = ObjectMgr::GetActivePlayerGuid();
+						   }
+						   else if (const auto* member = m_partyInfo.GetMember(candidate - 1))
+						   {
+							   targetGuid = member->guid;
+						   }
+
+						   const int32 serverSlot = MapUISlotToServerSlot(slot);
+						   if (targetGuid == 0 || serverSlot < 0)
+						   {
+							   return;
+						   }
+
+						   m_lootClient.SendMasterLootItem(static_cast<uint8>(serverSlot), targetGuid);
+					   }),
+
 					   luabind::def<std::function<void(const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type)
 																					 { SendChatMessage(message, type, nullptr); }),
 					   luabind::def<std::function<void(const char *, const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type, const char *target)

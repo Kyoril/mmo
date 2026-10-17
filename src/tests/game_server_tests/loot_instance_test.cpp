@@ -64,15 +64,17 @@ TEST_CASE("LootInstance MasterLoot enforcement", "[loot_instance]")
 	auto* itemEntry = project.items.add(1);
 	itemEntry->set_id(1);
 	itemEntry->set_maxstack(20);
+	itemEntry->set_quality(item_quality::Rare);
 
 	ConditionMgr conditionMgr(project.conditions);
 
 	const uint64 masterGuid = 1001;
-	const uint64 nonMasterGuid = 1002;
+	const uint64 memberGuid = 1002;
+	const uint64 strangerGuid = 1003;
 
 	proto::LootEntry entry = MakeLootEntry(1);
 
-	// One item, MasterLoot mode — lootMasterGuid = masterGuid
+	// One item at the threshold, MasterLoot mode — lootMasterGuid = masterGuid
 	std::vector<std::weak_ptr<GamePlayerS>> recipients;
 	LootInstance loot(
 		project.items,
@@ -83,15 +85,149 @@ TEST_CASE("LootInstance MasterLoot enforcement", "[loot_instance]")
 		recipients,
 		loot_method::MasterLoot,
 		masterGuid);
+	loot.SetLootMethod(loot_method::MasterLoot, item_quality::Uncommon);
+	loot.SetRoundRobinLooter(memberGuid);
+	REQUIRE(loot.SetupMasterLootItems({ masterGuid, memberGuid }));
 
-	SECTION("LOOT-01: Non-master player is rejected")
+	SECTION("LOOT-01: Nobody can loot a master loot item directly, the loot master included")
 	{
-		REQUIRE(loot.TakeItem(0, nonMasterGuid) == false);
+		CHECK_FALSE(loot.TakeItem(0, memberGuid));
+		CHECK_FALSE(loot.TakeItem(0, masterGuid));
 	}
 
-	SECTION("LOOT-02: Loot master player is accepted")
+	SECTION("LOOT-02: The loot master hands the item to a candidate")
 	{
-		REQUIRE(loot.TakeItem(0, masterGuid) == true);
+		// Only the master can see something to do on this corpse
+		CHECK(loot.ContainsLootFor(masterGuid));
+		CHECK_FALSE(loot.ContainsLootFor(memberGuid));
+
+		CHECK_FALSE(loot.CanAssignMasterLoot(0, memberGuid, memberGuid));
+		CHECK_FALSE(loot.CanAssignMasterLoot(0, masterGuid, strangerGuid));
+
+		bool cleared = false;
+		const scoped_connection onCleared(loot.cleared.connect([&cleared]() { cleared = true; }));
+		REQUIRE(loot.AssignMasterLoot(0, masterGuid, memberGuid));
+		CHECK(cleared);
+		CHECK(loot.IsEmpty());
+
+		// Handed out once only
+		CHECK_FALSE(loot.AssignMasterLoot(0, masterGuid, masterGuid));
+	}
+}
+
+TEST_CASE("LootInstance MasterLoot leaves items below the threshold to the round robin looter", "[loot_instance]")
+{
+	asio::io_service ioService;
+	TimerQueue timerQueue(ioService);
+	proto::Project project;
+
+	auto* itemEntry = project.items.add(1);
+	itemEntry->set_id(1);
+	itemEntry->set_maxstack(20);
+	itemEntry->set_quality(item_quality::Common);
+
+	ConditionMgr conditionMgr(project.conditions);
+
+	const uint64 masterGuid = 1001;
+	const uint64 memberGuid = 1002;
+
+	proto::LootEntry entry = MakeLootEntry(1);
+	std::vector<std::weak_ptr<GamePlayerS>> recipients;
+	LootInstance loot(project.items, conditionMgr, 42ULL, &entry, 0, 0, recipients, loot_method::MasterLoot, masterGuid);
+	loot.SetLootMethod(loot_method::MasterLoot, item_quality::Uncommon);
+	loot.SetRoundRobinLooter(memberGuid);
+	REQUIRE(loot.SetupMasterLootItems({ masterGuid, memberGuid }));
+
+	CHECK_FALSE(loot.CanAssignMasterLoot(0, masterGuid, memberGuid));
+	CHECK_FALSE(loot.CanLootItem(0, masterGuid));
+	CHECK(loot.TakeItem(0, memberGuid));
+}
+
+TEST_CASE("LootInstance MasterLoot needs the loot master among the candidates", "[loot_instance]")
+{
+	asio::io_service ioService;
+	TimerQueue timerQueue(ioService);
+	proto::Project project;
+
+	auto* itemEntry = project.items.add(1);
+	itemEntry->set_id(1);
+	itemEntry->set_maxstack(20);
+	itemEntry->set_quality(item_quality::Epic);
+
+	ConditionMgr conditionMgr(project.conditions);
+
+	const uint64 absentMasterGuid = 1001;
+	const uint64 guidA = 1002;
+	const uint64 guidB = 1003;
+
+	proto::LootEntry entry = MakeLootEntry(1);
+	std::vector<std::weak_ptr<GamePlayerS>> recipients;
+	LootInstance loot(project.items, conditionMgr, 42ULL, &entry, 0, 0, recipients, loot_method::MasterLoot, absentMasterGuid);
+	loot.SetLootMethod(loot_method::MasterLoot, item_quality::Uncommon);
+	loot.SetRoundRobinLooter(guidA);
+
+	// The creature death state falls back to group rolls when this is refused
+	REQUIRE_FALSE(loot.SetupMasterLootItems({ guidA, guidB }));
+	CHECK_FALSE(loot.CanAssignMasterLoot(0, absentMasterGuid, guidA));
+
+	loot.SetupGroupRollItems({ guidA, guidB });
+	CHECK(loot.GetRollDataMap().contains(0));
+	CHECK(loot.ContainsLootFor(guidB));
+}
+
+TEST_CASE("LootInstance expired rolls count missing votes as passes", "[loot_instance]")
+{
+	asio::io_service ioService;
+	TimerQueue timerQueue(ioService);
+	proto::Project project;
+
+	auto* itemEntry = project.items.add(1);
+	itemEntry->set_id(1);
+	itemEntry->set_maxstack(20);
+	itemEntry->set_quality(item_quality::Rare);
+
+	ConditionMgr conditionMgr(project.conditions);
+
+	const uint64 guidA = 1001;
+	const uint64 guidB = 1002;
+	const uint64 guidC = 1003;
+
+	proto::LootEntry entry = MakeLootEntry(1);
+	std::vector<std::weak_ptr<GamePlayerS>> recipients;
+	LootInstance loot(project.items, conditionMgr, 42ULL, &entry, 0, 0, recipients, loot_method::GroupLoot, 0);
+	loot.SetLootMethod(loot_method::GroupLoot, item_quality::Uncommon);
+	loot.SetRoundRobinLooter(guidA);
+	loot.SetupGroupRollItems({ guidA, guidB, guidC });
+
+	bool started = false;
+	const scoped_connection onStarted(loot.rollsStarted.connect([&started]() { started = true; }));
+	loot.MarkRollsStarted();
+	CHECK(started);
+
+	uint64 winner = 0;
+	const scoped_connection onWon(loot.rollWon.connect([&winner](uint64, uint8, uint32, const uint64 winnerGuid, uint8, RollVote, const String&)
+	{
+		winner = winnerGuid;
+	}));
+
+	SECTION("LOOT-16: The only Need vote wins once the others time out")
+	{
+		REQUIRE(loot.SubmitRollVote(0, guidB, roll_vote::Need, "PlayerB"));
+		REQUIRE(loot.GetRollDataMap().contains(0));
+
+		loot.ExpireRolls();
+		CHECK_FALSE(loot.GetRollDataMap().contains(0));
+		CHECK(winner == guidB);
+		CHECK(loot.CanLootItem(0, guidB));
+		CHECK_FALSE(loot.CanLootItem(0, guidA));
+	}
+
+	SECTION("LOOT-17: Nobody voting leaves the item to anyone")
+	{
+		loot.ExpireRolls();
+		CHECK_FALSE(loot.HasActiveRolls());
+		CHECK(winner == 0);
+		CHECK(loot.CanLootItem(0, guidC));
 	}
 }
 
@@ -198,7 +334,7 @@ TEST_CASE("LootInstance strategy-aware slot visibility", "[loot_instance]")
 	auto playerB = MakePlayer(project, timerQueue, guidB);
 	std::vector<std::weak_ptr<GamePlayerS>> recipients = { playerA, playerB };
 
-	SECTION("LOOT-07: MasterLoot only exposes lootable slots to the master")
+	SECTION("LOOT-07: MasterLoot below the threshold only exposes slots to the round robin looter")
 	{
 		proto::LootEntry entry = MakeLootEntry(1);
 		LootInstance loot(
@@ -210,11 +346,13 @@ TEST_CASE("LootInstance strategy-aware slot visibility", "[loot_instance]")
 			recipients,
 			loot_method::MasterLoot,
 			guidA);
+		loot.SetRoundRobinLooter(guidB);
+		REQUIRE(loot.SetupMasterLootItems({ guidA, guidB }));
 
-		REQUIRE(loot.CanLootItem(0, guidA) == true);
-		REQUIRE(loot.CanLootItem(0, guidB) == false);
-		REQUIRE(loot.ContainsLootFor(guidA) == true);
-		REQUIRE(loot.ContainsLootFor(guidB) == false);
+		REQUIRE(loot.CanLootItem(0, guidA) == false);
+		REQUIRE(loot.CanLootItem(0, guidB) == true);
+		REQUIRE(loot.ContainsLootFor(guidA) == false);
+		REQUIRE(loot.ContainsLootFor(guidB) == true);
 	}
 
 	SECTION("LOOT-08: RoundRobin exposes only the designated looter's slots")
