@@ -2,6 +2,8 @@
 
 #include "material_compiler_d3d11.h"
 
+#include <algorithm>
+#include <cmath>
 #include <fstream>
 
 #include "assets/asset_registry.h"
@@ -14,6 +16,94 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// One component of the wave sum, relative to VertexWaveSettings.
+		struct WaveComponent
+		{
+			float angleOffsetDegrees;
+			float lengthScale;
+			float heightScale;
+			float steepness;
+		};
+
+		/// A dominant swell, two shorter crossing waves and a long slow one, so the sum never reads
+		/// as a single repeating sine. Steepness stays low: these are gentle optical waves.
+		constexpr WaveComponent s_waveComponents[] = {
+			{ 0.0f, 1.00f, 1.00f, 0.55f },
+			{ 28.0f, 0.62f, 0.55f, 0.45f },
+			{ -37.0f, 0.41f, 0.35f, 0.40f },
+			{ 71.0f, 1.70f, 0.60f, 0.25f },
+		};
+
+		/// Writes GerstnerWaves(), WaveShoreAttenuation() and RotateFromUp() for the default vertex
+		/// shader. The wave shape is baked in as literals; only the time comes from a cbuffer.
+		void WriteVertexWaveFunctions(std::ostream& stream, const VertexWaveSettings& settings)
+		{
+			constexpr float pi = 3.14159265f;
+			constexpr float gravity = 9.81f;
+
+			// Prefix of the scene's PsCameraConstantBuffer (scene.cpp), bound to the vertex stage too.
+			stream
+				<< "cbuffer CameraParameters : register(b" << kCameraParametersVsSlot << ")\n"
+				<< "{\n"
+				<< "\tfloat3 cameraPos;\n"
+				<< "\tfloat fogDensity;\n"
+				<< "\tfloat fogHeightFalloff;\n"
+				<< "\tfloat3 fogTint;\n"
+				<< "\trow_major matrix inverseCameraView;\n"
+				<< "\tfloat time;\n"
+				<< "};\n\n";
+
+			// Water vertices carry the depth over the terrain in vertex colour red over 0..8 units
+			// (terrain::water_mesh::MakeWaterVertexColor). Waves calm down in the shallows instead of
+			// lifting the surface over the beach. Other meshes (white vertex colour) get full waves.
+			stream
+				<< "float WaveShoreAttenuation(float4 color)\n"
+				<< "{\n"
+				<< "\treturn lerp(0.25, 1.0, saturate(color.r * 8.0 / 3.0));\n"
+				<< "}\n\n";
+
+			stream
+				<< "float3 GerstnerWaves(float2 xz, float attenuation, out float3 normal)\n"
+				<< "{\n"
+				<< "\tfloat3 offset = float3(0.0, 0.0, 0.0);\n"
+				<< "\tnormal = float3(0.0, 1.0, 0.0);\n"
+				<< "\tfloat2 dir;\n"
+				<< "\tfloat k, w, a, q, phase, s, c;\n";
+
+			const float length = std::max(settings.length, 1.0f);
+			for (const WaveComponent& wave : s_waveComponents)
+			{
+				const float angle = (settings.direction + wave.angleOffsetDegrees) * pi / 180.0f;
+				const float k = 2.0f * pi / (length * wave.lengthScale);
+				const float omega = std::sqrt(gravity * k) * settings.speed;
+				const float amplitude = settings.height * wave.heightScale;
+
+				stream
+					<< "\tdir = float2(" << std::cos(angle) << ", " << std::sin(angle) << ");\n"
+					<< "\tk = " << k << "; w = " << omega << "; a = " << amplitude << " * attenuation; q = " << wave.steepness << ";\n"
+					<< "\tphase = k * dot(dir, xz) - w * time;\n"
+					<< "\tsincos(phase, s, c);\n"
+					<< "\toffset += float3(q * a * dir.x * c, a * s, q * a * dir.y * c);\n"
+					<< "\tnormal -= float3(dir.x * k * a * c, q * k * a * s, dir.y * k * a * c);\n";
+			}
+
+			stream
+				<< "\tnormal = normalize(normal);\n"
+				<< "\treturn offset;\n"
+				<< "}\n\n";
+
+			// Rodrigues rotation taking +Y onto n, applied to any vector.
+			stream
+				<< "float3 RotateFromUp(float3 v, float3 n)\n"
+				<< "{\n"
+				<< "\tconst float3 axis = float3(n.z, 0.0, -n.x);\n"
+				<< "\treturn normalize(v * n.y + cross(axis, v) + axis * (dot(axis, v) / (1.0 + n.y)));\n"
+				<< "}\n\n";
+		}
+	}
+
 	void MaterialCompilerD3D11::AddGlobalFunction(const std::string_view name, const std::string_view code)
 	{
 		m_globalFunctions.emplace(name, code);
@@ -2090,6 +2180,11 @@ namespace mmo
 				<< "};\n\n";
 		}
 
+		if (m_vertexWaves && type == VertexShaderType::Default)
+		{
+			WriteVertexWaveFunctions(vertexShaderStream, m_vertexWaveSettings);
+		}
+
 		// Main procedure start
 		vertexShaderStream
 			<< "VertexOut main(VertexIn input)\n"
@@ -2149,8 +2244,19 @@ namespace mmo
 		}
 		else
 		{
+			const bool withWaves = m_vertexWaves && type == VertexShaderType::Default;
+
 			vertexShaderStream
-				<< "\toutput.pos = mul(transformedPos, matWorld);\n"
+				<< "\toutput.pos = mul(transformedPos, matWorld);\n";
+
+			if (withWaves)
+			{
+				vertexShaderStream
+					<< "\tfloat3 waveNormal;\n"
+					<< "\toutput.pos.xyz += GerstnerWaves(output.pos.xz, WaveShoreAttenuation(input.color), waveNormal);\n";
+			}
+
+			vertexShaderStream
 				<< "\toutput.worldPos = output.pos.xyz;\n"
 				<< "\toutput.viewDir = normalize(matInvView[3].xyz - output.worldPos);\n"
 				<< "\toutput.pos = mul(output.pos, matView);\n"
@@ -2164,6 +2270,16 @@ namespace mmo
 					<< "\toutput.binormal = normalize(mul(normalize(transformedBinormal), (float3x3)matWorld));\n"
 					<< "\toutput.tangent = normalize(mul(normalize(transformedTangent), (float3x3)matWorld));\n"
 					<< "\toutput.normal = normalize(mul(normalize(transformedNormal), (float3x3)matWorld));\n";
+
+				if (withWaves)
+				{
+					// Tilt the whole basis with the wave, so a tangent-space normal map rides on it and
+					// a flipped underside normal stays flipped.
+					vertexShaderStream
+						<< "\toutput.binormal = RotateFromUp(output.binormal, waveNormal);\n"
+						<< "\toutput.tangent = RotateFromUp(output.tangent, waveNormal);\n"
+						<< "\toutput.normal = RotateFromUp(output.normal, waveNormal);\n";
+				}
 			}
 		}
 

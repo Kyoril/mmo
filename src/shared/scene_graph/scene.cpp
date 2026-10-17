@@ -307,6 +307,10 @@ namespace mmo
 		// Update ps constant buffer
 		RefreshCameraBuffer(camera);
 
+		// Vertex wave materials read the time from it in the vertex shader. Nothing else binds this
+		// vertex register, and a D3D11 binding persists across draws, so once per pass is enough.
+		m_psCameraBuffer->BindToStage(ShaderType::VertexShader, kCameraParametersVsSlot);
+
 		m_renderableVisitor.targetScene = this;
 		m_renderableVisitor.scissoring = false;
 

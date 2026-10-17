@@ -6,6 +6,10 @@
 
 namespace mmo
 {
+    /// @brief Vertex shader register the scene binds its camera constant buffer to (the pixel
+    ///        shaders' CameraParameters). Vertex wave materials read the time from it.
+    constexpr uint32 kCameraParametersVsSlot = 11;
+
     /// @brief Enumerates available pixel shader types.
     enum class PixelShaderType : uint8
     {

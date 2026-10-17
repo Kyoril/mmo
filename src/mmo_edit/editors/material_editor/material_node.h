@@ -619,6 +619,11 @@ namespace mmo
 		bool m_translucent { false };
 		bool m_masked { false };
 		bool m_userInterface{ false };
+		bool m_vertexWaves { false };
+		float m_waveHeight { 0.18f };
+		float m_waveLength { 22.0f };
+		float m_waveSpeed { 1.0f };
+		float m_waveDirection { 35.0f };
 
 		BoolProperty m_litProperty { "Lit", m_lit };
 		BoolProperty m_isTwoSidedProp { "Is Two Sided", m_isTwoSided };
@@ -629,11 +634,17 @@ namespace mmo
 		BoolProperty m_translucentProperty { "Translucent", m_translucent };
 		BoolProperty m_userInterfaceProp { "User Interface", m_userInterface };
 		BoolProperty m_maskedProperty { "Masked", m_masked };
+		BoolProperty m_vertexWavesProperty { "Vertex Waves", m_vertexWaves };
+		FloatProperty m_waveHeightProperty { "Wave Height", m_waveHeight };
+		FloatProperty m_waveLengthProperty { "Wave Length", m_waveLength };
+		FloatProperty m_waveSpeedProperty { "Wave Speed", m_waveSpeed };
+		FloatProperty m_waveDirectionProperty { "Wave Direction", m_waveDirection };
 
-		// Note: m_maskedProperty is intentionally kept last so that materials saved before the
-		// masked flag existed (which serialized 8 properties) still deserialize positionally.
-		PropertyBase* m_surfaceProperties[9] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
-			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty, &m_userInterfaceProp, &m_maskedProperty };
+		// Note: properties are only ever appended, so that materials saved with fewer of them (8
+		// before the masked flag existed, 9 before vertex waves) still deserialize positionally.
+		PropertyBase* m_surfaceProperties[14] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
+			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty, &m_userInterfaceProp, &m_maskedProperty,
+			&m_vertexWavesProperty, &m_waveHeightProperty, &m_waveLengthProperty, &m_waveSpeedProperty, &m_waveDirectionProperty };
 		PropertyBase* m_userInterfaceProperties[1] = { &m_userInterfaceProp };
 
 	    MaterialPin m_baseColor = { this, "Base Color" };
