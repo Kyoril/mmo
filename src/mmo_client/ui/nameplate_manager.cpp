@@ -4,6 +4,7 @@
 
 #include "nameplate_frame.h"
 
+#include "client_setting_limits.h"
 #include "console/console_var.h"
 #include "frame_ui/frame_mgr.h"
 #include "game_client/game_player_c.h"
@@ -134,7 +135,7 @@ namespace mmo
 
 		if (const ConsoleVar* distanceVar = ConsoleVarMgr::FindConsoleVar("NameplateDistance"))
 		{
-			filters.maxDistance = distanceVar->GetFloatValue();
+			filters.maxDistance = ClampNameplateDistance(distanceVar->GetFloatValue());
 		}
 
 		return filters;

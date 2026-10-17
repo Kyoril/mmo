@@ -26,6 +26,9 @@ namespace mmo
 		TiledUnitFinder& m_finder;
 		Circle m_previousShape;
 		ConnectionsByTile m_connections;
+		/// Whether Start() has run. No tile is watched before it does, so a shape update
+		/// arriving earlier must not try to unwatch the tiles of the previous shape.
+		bool m_started = false;
 
 		TileArea GetTileIndexArea(const Circle& shape) const;
 		void WatchTile(Tile& tile);
