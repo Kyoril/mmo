@@ -980,6 +980,9 @@ namespace mmo
 		case game::client_realm_packet::LootRoll:
 			OnLootRoll(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::MasterLootItem:
+			OnMasterLootItem(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::SellItem:
 			OnSellItem(opCode, buffer.size(), reader);
@@ -1867,7 +1870,7 @@ namespace mmo
 					continue;
 				}
 
-				constexpr uint32 rollTime = 60000;
+				constexpr uint32 rollTime = static_cast<uint32>(LootInstance::RollDuration);
 				std::vector<char> buffer;
 				io::VectorSink sink(buffer);
 				game::OutgoingPacket rollPacket(sink);
@@ -4345,13 +4348,16 @@ namespace mmo
 			return;
 		}
 
+		// While it is somebody else's turn, a party member may still open the corpse for what the party
+		// shares: an item to roll on (opening starts the roll), gold (split anyway), or - as loot master -
+		// an item to hand out. Only a corpse holding nothing but the other member's items is refused.
 		const uint64 roundRobinLooter = loot->GetRoundRobinLooter();
-		if (roundRobinLooter != 0 && roundRobinLooter != m_character->GetGuid())
+		if (roundRobinLooter != 0 && roundRobinLooter != m_character->GetGuid() && !loot->ContainsLootFor(m_character->GetGuid()))
 		{
 			bool hasItemsForDesignatedLooter = false;
 			for (const auto& item : loot->GetItems())
 			{
-				if (!item.isLooted && !item.needsGroupRoll)
+				if (!item.isLooted && !item.needsGroupRoll && !item.needsMasterAssignment)
 				{
 					hasItemsForDesignatedLooter = true;
 					break;

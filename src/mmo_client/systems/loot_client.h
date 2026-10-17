@@ -61,6 +61,14 @@ namespace mmo
 		/// @param vote The vote type (0=Pass, 1=Need, 2=Greed).
 		void SendLootRollByRollId(uint32 rollId, uint8 vote);
 
+		/// Asks the server to hand a master loot item of the open loot to a party member (loot master only).
+		/// @param slot The server-side loot slot.
+		/// @param targetGuid The character guid of the receiving party member.
+		void SendMasterLootItem(uint8 slot, uint64 targetGuid);
+
+		/// Gets the localization key of the game error shown for a loot_error value.
+		static const char* GetLootErrorKey(uint8 lootError);
+
 		/// Returns a reference to the item cache.
 		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& GetItemCache() { return m_itemCache; }
 
@@ -84,6 +92,8 @@ namespace mmo
 		PacketParseResult OnLootAllPassed(game::IncomingPacket& packet);
 
 		PacketParseResult OnLootRollResult(game::IncomingPacket& packet);
+
+		PacketParseResult OnMasterLootResult(game::IncomingPacket& packet);
 
 	private:
 		RealmConnector& m_realmConnector;

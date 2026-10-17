@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000018;
+		constexpr uint32 ProtocolVersion = 0x00000019;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -462,6 +462,10 @@ namespace mmo
 				/// Sent by the client to reset the dungeon instances it is bound to (/resetinstance).
 				/// Handled by the realm. No payload.
 				ResetInstances,
+
+				/// Sent by the loot master to hand a master loot item of the open loot to a party member.
+				/// Proxied to the world node. Payload: uint8 loot slot, uint64 target character guid.
+				MasterLootItem,
 
 				/// Counter constant
 				Count_,
@@ -871,6 +875,9 @@ namespace mmo
 				/// Payload: uint8 result (see instance_reset_result), dynamic<uint8> map name
 				/// (empty when the result refers to no particular map).
 				InstanceResetResult,
+
+				/// Tells the loot master why a MasterLootItem request was refused. Payload: uint8 loot_error.
+				MasterLootResult,
 
 				/// Counter constant
 				Count_,

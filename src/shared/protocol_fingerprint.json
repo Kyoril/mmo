@@ -132,8 +132,8 @@
 		]
 	},
 	"game": {
-		"version": 24,
-		"fingerprint": "sha256:a3c9f5da8add8f27dbd0b796f8337c3c8f4706366e731ddc8d5537980458b55f",
+		"version": 25,
+		"fingerprint": "sha256:406b0766aa8f3aa17fac8ab0fcf67cb1edc70ec3845b7dbd64f6fecb3628d4b2",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -150,7 +150,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:a6663a648302a1d3f41017b59783ffe88e8ab8886b1976c7a91f6ffbac0474c9"
+			"src/shared/game_protocol/game_protocol.h": "sha256:2bc4ea8df46e33fe57f0482ac79ee1eaf19ce90d311f3505b7a6d095911886f6"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -236,7 +236,7 @@
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 171",
+			"game::client_realm_packet::Count_ = 172",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",
@@ -291,6 +291,7 @@
 			"game::client_realm_packet::MailMarkRead = 147",
 			"game::client_realm_packet::MailTakeItem = 150",
 			"game::client_realm_packet::MailTakeMoney = 149",
+			"game::client_realm_packet::MasterLootItem = 171",
 			"game::client_realm_packet::MoveChargeAck = 151",
 			"game::client_realm_packet::MoveDisorientAck = 108",
 			"game::client_realm_packet::MoveEnded = 77",
@@ -598,7 +599,7 @@
 			"game::realm_client_packet::ChatMessage = 23",
 			"game::realm_client_packet::ClassXpUpdate = 168",
 			"game::realm_client_packet::CompressedUpdateObject = 9",
-			"game::realm_client_packet::Count_ = 184",
+			"game::realm_client_packet::Count_ = 185",
 			"game::realm_client_packet::CreatureMove = 38",
 			"game::realm_client_packet::CreatureQueryResult = 42",
 			"game::realm_client_packet::DebugLineOfSightResult = 149",
@@ -662,6 +663,7 @@
 			"game::realm_client_packet::MailNotify = 165",
 			"game::realm_client_packet::MailSendResult = 163",
 			"game::realm_client_packet::MailTakeResult = 164",
+			"game::realm_client_packet::MasterLootResult = 184",
 			"game::realm_client_packet::MessageOfTheDay = 125",
 			"game::realm_client_packet::MoveCharge = 170",
 			"game::realm_client_packet::MoveDisorient = 130",

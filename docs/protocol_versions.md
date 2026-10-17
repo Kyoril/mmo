@@ -5,7 +5,7 @@ Two constants describe what a binary can say on the wire:
 | Constant | Defined in | Current |
 |---|---|---|
 | `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 9 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 22 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 25 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -118,6 +118,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 25 | 2026-10-17 | Master loot hand-out: client `MasterLootItem` (loot slot + target guid, proxied to the world node) and server `MasterLootResult` (`loot_error` byte). Master loot items are now sent with slot type `Master` to the loot master too, and `LootMoneyNotify` goes to every party member sharing a corpse's gold, looter included |
 | 24 | 2026-10-16 | `ClassXpUpdate` gains a trailing uint32 `talentPointsGained`, so the talent point notice is printed on the class rank up that grants the points instead of on the character level up that does not |
 | 23 | 2026-10-13 | Instance reset: client `ResetInstances`, server `InstanceResetResult` (result byte + map name) and the realm->world `ResetInstance` request (auth 9) |
 | 22 | 2026-10-13 | Character sheet caster stats: unit fields `SpellDamage`, `SpellHealing`, `SpellCritChance`, `MeleeCritChance` and `ManaRegen` are appended to `object_fields::UnitFields`, renumbering every player field after them |

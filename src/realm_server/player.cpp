@@ -202,8 +202,22 @@ namespace mmo
 
 		if (auto world = GetWorld())
 		{
-			world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
+			NotifyWorldOfGroup(*world);
 		}
+	}
+
+	void Player::NotifyWorldOfGroup(World& world) const
+	{
+		ASSERT(m_group);
+
+		const uint64 characterId = m_characterData->characterId;
+		const auto lootMethod = static_cast<uint8>(m_group->GetLootMethod());
+		const uint8 lootThreshold = m_group->GetLootThreshold();
+		world.NotifyPlayerGroupChanged(characterId, m_group->GetId(), lootMethod, lootThreshold);
+
+		// The group change carries no loot master. Without this, the world node of a member who joined
+		// or logged in knows master loot is on but not who the master is - and nobody could loot.
+		world.NotifyPlayerGroupLootMethodChanged(characterId, lootMethod, m_group->GetLootMasterGuid(), lootThreshold);
 	}
 
 	void Player::connectionLost()
@@ -1307,7 +1321,7 @@ namespace mmo
 					},
 					m_database.GetResultDispatcher() }, m_timerQueue);
 			m_group->Create(m_characterData->characterId, m_characterData->name);
-			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
+			NotifyWorldOfGroup(*GetWorld());
 		}
 		else if (!m_group->IsLeaderOrAssistant(m_characterData->characterId))
 		{
@@ -1401,7 +1415,7 @@ namespace mmo
 
 		const auto world = GetWorld();
 		ASSERT(world);
-		world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
+		NotifyWorldOfGroup(*world);
 
 		return PacketParseResult::Pass;
 	}
@@ -1524,12 +1538,23 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		if (method > loot_method::GroupLoot || lootThreshold > item_quality::Legendary)
+		{
+			WLOG("Player " << log_hex_digit(m_characterData->characterId) << " sent an invalid loot method " << static_cast<uint32>(method) << " / threshold " << static_cast<uint32>(lootThreshold));
+			return PacketParseResult::Pass;
+		}
+
 		const auto lootMethod = static_cast<LootMethod>(method);
 
-		// MasterLoot sentinel: GUID 0 means "leader self-assigns as loot master" (client sends 0 by design)
-		if (lootMethod == loot_method::MasterLoot && lootMasterGuid == 0)
+		// MasterLoot sentinel: GUID 0 means "leader self-assigns as loot master" (client sends 0 by design).
+		// A loot master who is not in the group could never hand anything out, so the leader takes over.
+		if (lootMethod == loot_method::MasterLoot && (lootMasterGuid == 0 || !m_group->IsMember(lootMasterGuid)))
 		{
 			lootMasterGuid = m_characterData->characterId;
+		}
+		else if (lootMethod != loot_method::MasterLoot)
+		{
+			lootMasterGuid = 0;
 		}
 
 		m_group->SetLootMethod(lootMethod, lootMasterGuid, lootThreshold);
@@ -3262,6 +3287,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::LootMoney, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::LootRelease, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::LootRoll, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MasterLootItem, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::GossipHello, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::SellItem, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::BuyItem, *this, &Player::OnProxyPacket);
@@ -3533,7 +3559,7 @@ namespace mmo
 
 				if (auto world = GetWorld())
 				{
-					world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
+					NotifyWorldOfGroup(*world);
 				}
 			}
 			else

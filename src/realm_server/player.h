@@ -527,6 +527,10 @@ namespace mmo
 
 		void OnGroupLoaded(PlayerGroup &group);
 
+		/// Tells the world node this character's group and its loot rules, loot master included.
+		/// @param world The world node the character is on. Requires m_group.
+		void NotifyWorldOfGroup(World& world) const;
+
 	private:
 		/// @copydoc mmo::auth::IConnectionListener::connectionLost()
 		void connectionLost() override;

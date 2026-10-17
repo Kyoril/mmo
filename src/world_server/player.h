@@ -429,6 +429,18 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packet content bytes.
 		void OnLootRoll(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the loot master handing a master loot item of the open loot to a party member.
+		/// @param opCode The op code of the packet.
+		/// @param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packet content bytes.
+		void OnMasterLootItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Tells the looter's party members in sight that the receiver got an item from a loot window.
+		/// @param receiver The character who received the item.
+		/// @param item The item that was received.
+		/// @param count The number of items received.
+		void NotifyGroupOfLootedItem(const GamePlayerS& receiver, const proto::ItemEntry& item, uint32 count);
+
 		/// Handles the client's request to use an item from his inventory or of an equipped item. This will trigger the item's
 		///	assigned spells with trigger type set to "On Use" if any.
 		///	@param opCode The op code of the packet.
