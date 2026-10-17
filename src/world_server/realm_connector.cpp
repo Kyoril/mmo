@@ -1021,7 +1021,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			return PacketParseResult::Pass;
 		}
 
-		player->UpdateCharacterGroup(groupId, lootMethod, lootThreshold);
+		player->UpdateCharacterGroup(groupId, std::make_pair(static_cast<LootMethod>(lootMethod), lootThreshold));
 		return PacketParseResult::Pass;
 	}
 

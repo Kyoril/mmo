@@ -3,6 +3,9 @@
 #pragma once
 
 #include "realm_connector.h"
+
+#include <optional>
+#include <utility>
 #include "vector_sink.h"
 #include "game_server/character_data.h"
 #include "game/bank.h"
@@ -171,9 +174,10 @@ namespace mmo
 
 		/// Updates the group data stored on this player's GamePlayerS and synchronized world-side group object.
 		/// @param groupId The new group GUID, or 0 if the player is no longer grouped.
-		/// @param lootMethod The group's loot method.
-		/// @param lootThreshold The group's loot quality threshold.
-		void UpdateCharacterGroup(uint64 groupId, uint8 lootMethod = 0, uint8 lootThreshold = 0);
+		/// @param lootRules The group's loot method and quality threshold, or nullopt to keep the rules this
+		///        node already knows for the group (a character spawning with its group id only: the realm
+		///        sends the rules separately, and the defaults must not overwrite the other members' rules).
+		void UpdateCharacterGroup(uint64 groupId, std::optional<std::pair<LootMethod, uint8>> lootRules = std::nullopt);
 
 		/// Sends a guild update to the realm server for this character.
 		void UpdateCharacterGuild(uint64 guildId);

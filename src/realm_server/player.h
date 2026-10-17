@@ -527,6 +527,10 @@ namespace mmo
 
 		void OnGroupLoaded(PlayerGroup &group);
 
+		/// Sets the group id in the character data sent to a world node to the group the character is
+		/// actually a member of right now.
+		void SyncCharacterGroupId();
+
 		/// Tells the world node this character's group and its loot rules, loot master included.
 		/// @param world The world node the character is on. Requires m_group.
 		void NotifyWorldOfGroup(World& world) const;
