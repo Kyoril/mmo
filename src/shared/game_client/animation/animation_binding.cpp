@@ -3,6 +3,7 @@
 #include "animation_binding.h"
 
 #include <iterator>
+#include <memory>
 
 #include "scene_graph/animation_state.h"
 #include "scene_graph/entity.h"
@@ -179,7 +180,15 @@ namespace mmo
 		m_offHandAttackStates.clear();
 		m_conditionMask = conditionMask;
 		m_fadeDuration = profile ? profile->fade_duration() : 0.25f;
-		m_sourceSet = entity ? entity->GetAllAnimationStates() : nullptr;
+
+		// Pin the set for the whole rebuild: m_sourceSet is a raw, non-owning pointer into an
+		// object Entity actually owns via shared_ptr, and every lookup below (resolveClip ->
+		// HasAnimationState/GetAnimationState) dereferences it. Without the pin, nothing stops
+		// the entity's mesh/animation state set from being destroyed out from under this call by
+		// the same class of hazard FlushDeferredAnimationNotifies already guards against for the
+		// notify-flush path.
+		const std::shared_ptr<AnimationStateSet> pinnedSourceSet = entity ? entity->GetAllAnimationStatesShared() : nullptr;
+		m_sourceSet = pinnedSourceSet.get();
 
 		if (!entity || !m_sourceSet)
 		{
