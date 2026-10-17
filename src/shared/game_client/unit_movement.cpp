@@ -2835,29 +2835,70 @@ namespace mmo
 
 	bool UnitMovement::SweepCapsuleAgainstCollidable(const Capsule& startCapsule, const Capsule& endCapsule, const ICollidable* collidable, std::vector<CollisionResult>& collisionResults) const
 	{
+		const Vector3 sweepDelta = endCapsule.GetPointA() - startCapsule.GetPointA();
+		const float totalDist = sweepDelta.GetLength();
+		const Vector3 moveDirection = (totalDist > 1e-6f) ? (sweepDelta / totalDist) : Vector3::Zero;
+
+		// Contacts the capsule already overlaps at the start position but is moving away from.
+		// Those must not block the move: a reported start penetration pins the capsule exactly
+		// where it is, so a character that ended up inside geometry - squeezed into the crease
+		// between a stair step and the wall beside it, for example - could otherwise never get
+		// out again in any direction, not even along the depenetration normal ResolvePenetration
+		// computes for it.
+		std::vector<CollisionResult> escapedContacts;
+
 		// First test starting position for penetration
 		std::vector<CollisionResult> startResults;
 		if (collidable->TestCapsuleCollision(startCapsule, startResults))
 		{
+			std::vector<CollisionResult> blockingResults;
 			for (auto& result : startResults)
 			{
+				if (!moveDirection.IsZero() && (result.contactNormal | moveDirection) > 0.0f)
+				{
+					escapedContacts.push_back(result);
+					continue;
+				}
+
 				result.distance = 0.0f;
 				// Mark as penetrating start
+				blockingResults.push_back(result);
 			}
-			collisionResults = startResults;
-			return true;
+
+			if (!blockingResults.empty())
+			{
+				collisionResults = std::move(blockingResults);
+				return true;
+			}
+
+			// Every start contact is one we are moving out of, so keep sweeping: anything new
+			// along the way must still stop us.
 		}
 
-		// Handle zero-distance case
-		const Vector3 sweepDelta = endCapsule.GetPointA() - startCapsule.GetPointA();
-		const float totalDist = sweepDelta.GetLength();
+		// Handle zero-distance case. The start capsule was already tested above, so anything it
+		// touches is either a blocking contact (returned there) or one we are escaping from.
 		if (totalDist < 0.0001f)
 		{
-			return collidable->TestCapsuleCollision(startCapsule, collisionResults);
+			return false;
 		}
 
 		const Vector3 capsuleAxis = startCapsule.GetPointB() - startCapsule.GetPointA();
 		const float radius = startCapsule.GetRadius();
+
+		// The surfaces we are escaping from stay ignored for the whole sweep, otherwise the very
+		// first sample would hit them again and stop the move before it made any progress.
+		const auto isEscapedContact = [&escapedContacts](const CollisionResult& result)
+		{
+			for (const CollisionResult& escaped : escapedContacts)
+			{
+				if (escaped.a == result.a && escaped.b == result.b && escaped.c == result.c)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		};
 
 		std::vector<CollisionResult> testResults;
 		const auto testAtTime = [&](const float t) -> bool
@@ -2865,7 +2906,17 @@ namespace mmo
 			const Vector3 testPos = startCapsule.GetPointA() + sweepDelta * t;
 			const Capsule testCapsule(testPos, testPos + capsuleAxis, radius);
 			testResults.clear();
-			return collidable->TestCapsuleCollision(testCapsule, testResults);
+			if (!collidable->TestCapsuleCollision(testCapsule, testResults))
+			{
+				return false;
+			}
+
+			if (!escapedContacts.empty())
+			{
+				testResults.erase(std::remove_if(testResults.begin(), testResults.end(), isEscapedContact), testResults.end());
+			}
+
+			return !testResults.empty();
 		};
 
 		// Conservative forward stepping: sample the sweep at intervals no larger than half the
