@@ -25,6 +25,7 @@ namespace mmo
 
 	void TiledUnitFinder::TiledUnitWatcher::Start()
 	{
+		m_started = true;
 		m_previousShape = GetShape();
 
 		const auto shapeArea = GetTileIndexArea(m_previousShape);
@@ -119,6 +120,15 @@ namespace mmo
 
 	void TiledUnitFinder::TiledUnitWatcher::OnShapeUpdated()
 	{
+		// Nothing is watched until Start() ran, so there is no previous area to unwatch: the
+		// tiles of the shape handed to the constructor were never connected. Just remember the
+		// new shape - Start() watches the tiles it covers.
+		if (!m_started)
+		{
+			m_previousShape = GetShape();
+			return;
+		}
+
 		const auto previousArea = GetTileIndexArea(m_previousShape);
 
 		m_previousShape = GetShape();

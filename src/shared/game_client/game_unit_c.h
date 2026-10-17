@@ -131,7 +131,7 @@ namespace mmo
 		void UpdateQuestGiverAndNameVisuals(const float deltaTime);
 
 		/// @brief Updates normal movement (not animation-based)
-		void UpdateNormalMovement(const float deltaTime);
+		void UpdateNormalMovement(const float deltaTime, bool isDead);
 
 		/// @brief Makes NPCs face their targets
 		void UpdateTargetTracking() const;
