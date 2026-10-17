@@ -599,7 +599,21 @@ namespace mmo
 					s_hooks.rotateCamera(s_benchmark.orbitDegrees / static_cast<float>(s_benchmark.segmentCount));
 				}
 
-				ApplyAssignments(variant.assignments);
+				// Every variant starts from the values before the comparison: a cvar that only another
+				// variant sets would otherwise leak into this one and blur both measurements.
+				std::vector<std::pair<std::string, std::string>> assignments;
+				for (const auto& [name, value] : s_benchmark.restoreValues)
+				{
+					const bool setByVariant = std::any_of(variant.assignments.begin(), variant.assignments.end(), [&name](const auto& entry) { return entry.first == name; });
+					const ConsoleVar* var = ConsoleVarMgr::FindConsoleVar(name);
+					if (!setByVariant && var && var->GetStringValue() != value)
+					{
+						assignments.emplace_back(name, value);
+					}
+				}
+
+				assignments.insert(assignments.end(), variant.assignments.begin(), variant.assignments.end());
+				ApplyAssignments(assignments);
 				s_benchmark.stepStart = timestamp;
 				s_benchmark.stepApplied = true;
 				return;

@@ -92,7 +92,8 @@ float3 ReconstructViewPos(ViewRayBasis basis, float2 uv, float radialDepth)
 }
 
 // atan2 approximation (max error ~0.0015 rad), far below the PI/32 sector width it feeds, at a
-// fraction of the cost of the intrinsic. Two of these run per march sample.
+// fraction of the cost of the intrinsic. Two of these run per march sample. Like atan2 it only
+// depends on the ratio of its arguments, so callers may pass unnormalized vectors.
 float FastAtan2(float y, float x)
 {
     float ax = abs(x);
@@ -223,6 +224,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     screenRadius *= min(1.0f, 0.15f / maxR);
 
     float noise = InterleavedGradientNoise(input.Position.xy);
+    const float radiusSq = Radius * Radius;
 
     float occlusion = 0.0f;
     float validSlices = 0.0f;
@@ -323,33 +325,31 @@ float4 main(PS_INPUT input) : SV_TARGET
 
                 float3 samplePos = ReconstructViewPos(rayBasis, sampleUv, sampleDepth);
                 float3 delta = samplePos - viewPos;
-                float dist = length(delta);
+                float distSq = dot(delta, delta);
 
-                if (dist < 0.0001f || dist > Radius)
+                if (distSq < 0.00000001f || distSq > radiusSq)
                 {
                     continue;
                 }
 
-                float3 frontDir = delta / dist;
+                // The angles only need the sample's coordinates in the (sliceTangent, viewDir)
+                // basis: FastAtan2 is scale-invariant, so the direction is never normalized.
+                float deltaT = dot(delta, sliceTangent);
+                float deltaV = dot(delta, viewDir);
 
                 // The back of the occluder: the sample pushed away from the camera by the
-                // assumed Thickness. The sectors between the front and back angles are what
-                // this sample actually blocks — this bounded range is the whole point of the
-                // technique, and what stops a thin railing occluding like a solid wall.
-                float3 backDir = normalize(delta - viewDir * Thickness);
-
+                // assumed Thickness, delta - viewDir * Thickness. sliceTangent is perpendicular to
+                // viewDir, so only the viewDir coordinate changes. The sectors between the front
+                // and back angles are what this sample actually blocks — this bounded range is the
+                // whole point of the technique, and what stops a thin railing occluding like a
+                // solid wall.
+                //
                 // Signed, in the same parametrization as nAngle and validMask, so which side of
-                // the view direction the occluder is on is preserved. `side` now genuinely
-                // separates the two march directions instead of only choosing sampleUv.
-                float angFront = FastAtan2(dot(frontDir, sliceTangent), dot(frontDir, viewDir));
-                float angBack = FastAtan2(dot(backDir, sliceTangent), dot(backDir, viewDir));
-
-                // A sample can sit behind the shading point relative to the view (|theta| > PI/2).
-                // Clamp into the representable range rather than letting the fraction saturate at a
-                // wrapped angle: clamping parks it on the mask boundary, where it contributes
-                // nothing, which is the correct limit.
-                angFront = clamp(angFront, -PI * 0.5f, PI * 0.5f);
-                angBack = clamp(angBack, -PI * 0.5f, PI * 0.5f);
+                // the view direction the occluder is on is preserved. A sample behind the shading
+                // point relative to the view (|theta| > PI/2) needs no clamp: SectorMask saturates
+                // it onto the mask boundary, where it contributes nothing — the correct limit.
+                float angFront = FastAtan2(deltaT, deltaV);
+                float angBack = FastAtan2(deltaT, deltaV - Thickness);
 
                 bitmask |= SectorMask(min(angFront, angBack), max(angFront, angBack));
             }

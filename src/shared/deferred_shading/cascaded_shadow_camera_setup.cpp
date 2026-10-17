@@ -209,8 +209,12 @@ namespace mmo
 
 			// Set orthographic projection to exactly fit the cascade
 			shadowCam.SetOrthoWindow(radius * 2.0f, radius * 2.0f);
+			// The far plane ends at the far side of the cascade's bounding sphere: nothing farther from the
+			// light can shadow a receiver inside it. Reaching further (it used to be another full
+			// extrusion distance) rasterized a long corridor of casters behind the cascade for nothing;
+			// with a low sun that corridor runs flat through whole forests.
 			shadowCam.SetNearClipDistance(0.1f);
-			shadowCam.SetFarClipDistance(extrusionDistance * 2.0f + radius);
+			shadowCam.SetFarClipDistance(extrusionDistance + radius);
 
 			shadowCam.InvalidateView();
 			shadowCam.InvalidateFrustum();
