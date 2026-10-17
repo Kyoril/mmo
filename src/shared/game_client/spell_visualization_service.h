@@ -15,6 +15,7 @@
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
 #include "shared/client_data/project.h"
 #include "math/vector3.h"
+#include "spell_visual_rules.h"
 
 namespace mmo
 {
@@ -342,6 +343,10 @@ namespace mmo
         
         /// \brief Map actor guid -> active spell animation for cancellation on same-spell events.
         mutable std::map<uint64, ActiveSpellAnimation> m_activeSpellAnimations;
+
+        /// \brief Which spell locked each actor's loop animation, so only that spell's
+        ///        terminating event releases it.
+        mutable spell_visual::CastLoopOwnership m_castLoopOwners;
 
         /// \brief A ribbon trail owned by an effect.
         struct EffectRibbon

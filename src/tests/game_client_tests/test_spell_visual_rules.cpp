@@ -107,3 +107,52 @@ TEST_CASE("Effects for a missing bone sit at that bone's rough height", "[spell_
 	// Unknown names land mid-body rather than on the ground.
 	CHECK(spell_visual::MissingBoneHeightFraction("weapon_socket") == 0.5f);
 }
+
+TEST_CASE("Only the spell that set a cast loop may release it", "[spell_visual]")
+{
+	constexpr uint64 acolyte = 3;
+	constexpr uint32 shadowbolt = 23;
+	constexpr uint32 leechingRotHeal = 1314;
+
+	spell_visual::CastLoopOwnership owners;
+
+	// Nothing locked the loop: a terminating event must not clear the slot at all.
+	CHECK_FALSE(owners.Release(acolyte, shadowbolt));
+
+	// Shadowbolt's CASTING kit locks its CastLoop while the cast bar runs.
+	owners.Set(acolyte, shadowbolt);
+
+	// The Leeching Rot proc heals its owner mid-cast and raises CastSucceeded on the very
+	// same unit. Releasing the slot there cut the casting animation the player was still
+	// casting with (docs/acolyte_spell_visuals.md: self-buffs never interrupt casting).
+	CHECK_FALSE(owners.Release(acolyte, leechingRotHeal));
+
+	// Another unit's cast ending leaves this one alone.
+	CHECK_FALSE(owners.Release(acolyte + 1, shadowbolt));
+
+	// Shadowbolt's own cast end still releases the loop, exactly once.
+	CHECK(owners.Release(acolyte, shadowbolt));
+	CHECK_FALSE(owners.Release(acolyte, shadowbolt));
+}
+
+TEST_CASE("A new cast loop takes ownership from the previous one", "[spell_visual]")
+{
+	constexpr uint64 actor = 7;
+
+	spell_visual::CastLoopOwnership owners;
+	owners.Set(actor, 23);
+	owners.Set(actor, 24);
+
+	// The slot holds one animation, so the spell that overwrote it owns it now.
+	CHECK_FALSE(owners.Release(actor, 23));
+	CHECK(owners.Release(actor, 24));
+
+	// Forget drops the record without releasing anything (channel end, leaving the world).
+	owners.Set(actor, 73);
+	owners.Forget(actor);
+	CHECK_FALSE(owners.Release(actor, 73));
+
+	owners.Set(actor, 73);
+	owners.Clear();
+	CHECK_FALSE(owners.Release(actor, 73));
+}
