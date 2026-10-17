@@ -16,8 +16,16 @@ namespace mmo
 	// (see GameUnitS::GetMeleeReach), giving a combined reach of ~5.0 yards. While
 	// both units are moving the auto-attack range is additionally widened by
 	// MELEE_CHASE_RANGE_BONUS (1.5 yards), so a creature can land hits from up to
-	// ~6.5 yards. The loot distance is therefore set to cover that full range.
-	constexpr float LootDistance = 6.5f;
+	// ~6.5 yards, which this distance has to cover.
+	//
+	// It must also be at least as large as the range of the "Open" spell family
+	// (gather nodes, chests, doors), which is the data-driven Melee Range of 7.0
+	// yards (range type 6 in data/editor/data/ranges.data). Both the client and the
+	// server validate such a cast against the spell's range, so a node presented as
+	// gatherable at up to 7.0 yards must still be within reach for the interaction
+	// the finished cast performs - otherwise the gather cast runs its full duration
+	// and the loot window is silently refused.
+	constexpr float LootDistance = 7.0f;
 
 	namespace loot_error
 	{

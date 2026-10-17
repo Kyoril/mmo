@@ -655,7 +655,9 @@ namespace mmo
 		// the interaction distance (GameUnitS::GetInteractionDistance) without telling the
 		// client - the five second gather cast completed and quietly did nothing. The castable
 		// range is therefore the spell's range capped by the interaction distance, so the cast
-		// and the interaction that follows it agree on what is within reach.
+		// and the interaction that follows it agree on what is within reach. The interaction
+		// distance covers the Open family's range (see LootDistance), so the cap only bites for
+		// spells reaching further than a player may interact at.
 		if (m_target.HasGOTarget())
 		{
 			GameObjectS* objectTarget = m_context.FindObjectByGuid(m_target.GetGOTarget());

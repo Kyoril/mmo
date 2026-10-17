@@ -4,8 +4,10 @@
 // no unit target, so SingleCastState's range validation never looked at them: the five second
 // gather cast started and finished from any distance. Using the object then runs into the
 // interaction path, which silently refuses everything beyond the interaction distance, so the
-// player saw the cast complete and nothing happen. The cast must be refused with
-// FailedOutOfRange instead.
+// player saw the cast complete and nothing happen. A cast out of the spell's range must be
+// refused with FailedOutOfRange, and - because both the client and the server present the node
+// as gatherable up to the spell's range - the interaction distance has to cover that range, so
+// that everything which may be cast can also be acted upon.
 
 #include "catch.hpp"
 
@@ -35,8 +37,9 @@ namespace
 	constexpr uint32 OpenSpell = 1;
 	constexpr uint32 HerbNodeEntry = 1;
 
-	/// The "Open" spell family uses Melee Range, which is slightly longer than the distance at
-	/// which the object may actually be interacted with.
+	/// The "Open" spell family uses Melee Range (range type 6 in data/editor/data/ranges.data).
+	/// This is the range both the client and the server validate a gather cast against, so it is
+	/// also the distance at which the node must actually be gatherable.
 	constexpr float OpenSpellRange = 7.0f;
 
 	struct NullTriggerHandler final : ITriggerHandler
@@ -139,15 +142,34 @@ namespace
 	};
 }
 
-TEST_CASE_METHOD(OpenLockRangeFixture, "An Open cast aimed at a world object out of reach is refused", "[spell][open_lock][cast_result]")
+TEST_CASE_METHOD(OpenLockRangeFixture, "The interaction distance covers the Open spell range", "[spell][open_lock][cast_result]")
 {
 	auto caster = SpawnGatherer(Vector3(0.0f, 0.0f, 0.0f));
 
-	// Inside the spell's own range, but further away than the object may be interacted with:
-	// this is the distance at which the gather cast used to run its full five seconds and then
-	// quietly do nothing.
-	const auto node = SpawnNode(Vector3(LootDistance + 0.25f, 0.0f, 0.0f));
-	REQUIRE(LootDistance + 0.25f < OpenSpellRange);
+	// The interaction / loot distance is what the interaction following a finished Open cast is
+	// validated against. If it were shorter than the spell's range there would be a band in
+	// which the node is presented as gatherable, the cast runs its full five seconds - and the
+	// interaction is then silently refused.
+	CHECK(caster->GetInteractionDistance() >= OpenSpellRange);
+}
+
+TEST_CASE_METHOD(OpenLockRangeFixture, "An Open cast aimed at a world object at the far end of the spell range is accepted", "[spell][open_lock][cast_result]")
+{
+	auto caster = SpawnGatherer(Vector3(0.0f, 0.0f, 0.0f));
+
+	// Just inside the spell's range: this is the distance at which the gather cast used to run
+	// its full five seconds and then quietly do nothing.
+	constexpr float distance = OpenSpellRange - 0.25f;
+	const auto node = SpawnNode(Vector3(distance, 0.0f, 0.0f));
+
+	CHECK(CastAt(*caster, *node) == spell_cast_result::CastOkay);
+	CHECK(caster->GetInteractionDistance() >= distance);
+}
+
+TEST_CASE_METHOD(OpenLockRangeFixture, "An Open cast aimed at a world object beyond the spell range is refused", "[spell][open_lock][cast_result]")
+{
+	auto caster = SpawnGatherer(Vector3(0.0f, 0.0f, 0.0f));
+	const auto node = SpawnNode(Vector3(OpenSpellRange + 0.5f, 0.0f, 0.0f));
 
 	CHECK(CastAt(*caster, *node) == spell_cast_result::FailedOutOfRange);
 }
