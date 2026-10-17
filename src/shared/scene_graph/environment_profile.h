@@ -60,6 +60,10 @@ namespace mmo
 		/// @brief Sun colour inside the fog (rgb) and light shaft multiplier (a).
 		ColorCurve sunScatter;
 
+		/// @brief Distance fog colour (rgb) and opacity at the end distance (a).
+		/// @remark Follows skyHorizon unless authored, so distant geometry melts into the horizon.
+		ColorCurve distanceFog;
+
 		/// @brief Base fog and shaft values the fog and sunScatter alphas multiply.
 		AtmosphereParameters atmosphere;
 

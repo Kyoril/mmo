@@ -26,7 +26,7 @@ namespace mmo
 	{
 	public:
 		/// @brief Number of day curves a profile has.
-		static constexpr size_t CurveCount = 8;
+		static constexpr size_t CurveCount = 9;
 
 	public:
 		explicit EnvironmentProfileEditorWindow(const String& name, proto::Project& project, EditorHost& host);

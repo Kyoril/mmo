@@ -25,6 +25,9 @@ TEST_CASE("EnvironmentProfile_Defaults_Match_Engine_Defaults", "[environment_pro
 	CHECK(profile.fog_base_height() == Approx(atmosphere.baseHeight));
 	CHECK(profile.fog_anisotropy() == Approx(atmosphere.anisotropy));
 	CHECK(profile.shaft_strength() == Approx(atmosphere.shaftStrength));
+	CHECK(profile.distance_fog_start() == Approx(atmosphere.distanceFogStart));
+	CHECK(profile.distance_fog_end() == Approx(atmosphere.distanceFogEnd));
+	CHECK(profile.distance_fog_sky_band() == Approx(atmosphere.distanceFogSkyBand));
 	CHECK(profile.exposure() == Approx(tonemap.exposure));
 	CHECK(profile.bloom_intensity() == Approx(bloom.intensity));
 	CHECK(profile.bloom_threshold() == Approx(bloom.threshold));

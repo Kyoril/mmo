@@ -1027,6 +1027,12 @@ namespace mmo
 			<< "\tfloat forwardExposure;\t// Exposure the TonemapPass applies; 1 outside its forward pass\n"
 			<< "\tfloat3 sunScatterColor;\n"
 			<< "\tfloat shaftStrength;\n"
+			<< "\tfloat3 distanceFogColor;\n"
+			<< "\tfloat distanceFogOpacity;\t// 0 = distance fog off\n"
+			<< "\tfloat distanceFogStart;\n"
+			<< "\tfloat distanceFogInverseRange;\n"
+			<< "\tfloat distanceFogSkyBand;\n"
+			<< "\tfloat _cameraPadding1;\n"
 			<< "};\n\n";
 
 		// Unlit forward materials author display-referred colour; inside DeferredRenderer's forward pass
@@ -1041,7 +1047,7 @@ namespace mmo
 
 		if (type == PixelShaderType::Forward)
 		{
-			// Height fog, identical to AtmosphereCommon.hlsli (and atmosphere_math.h). Change all three
+			// Height and distance fog, identical to AtmosphereCommon.hlsli (and atmosphere_math.h). Change all three
 			// together. Emitted after the cbuffer because the functions read its fields.
 			m_pixelShaderStream
 				// Fog below the base saturates at e^3 ~= 20x the base density instead of climbing
@@ -1068,7 +1074,9 @@ namespace mmo
 				<< "\tfloat3 dir = toPixel / max(dist, 1e-4);\n"
 				<< "\tfloat transmittance = exp(-FogOpticalDepth(cameraPos.y, dir.y, dist));\n"
 				<< "\tfloat3 source = fogTint + sunScatterColor * sunColor * sunIntensity * shaftStrength * FogScatterPhase(dot(dir, sunDirection));\n"
-				<< "\treturn color * transmittance + source * (1.0 - transmittance);\n"
+				<< "\tfloat3 fogged = color * transmittance + source * (1.0 - transmittance);\n"
+				<< "\tfloat distanceAmount = distanceFogOpacity * saturate((dist - distanceFogStart) * distanceFogInverseRange);\n"
+				<< "\treturn lerp(fogged, distanceFogColor, distanceAmount);\n"
 				<< "}\n\n";
 		}
 

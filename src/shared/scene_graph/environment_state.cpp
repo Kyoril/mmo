@@ -55,6 +55,12 @@ namespace mmo
 		state.timeOfDay.sunScatterColor[2] = scatter.z;
 		state.timeOfDay.shaftMultiplier = scatter.w;
 
+		const Vector4 distanceFog = profile.distanceFog.Evaluate(normalizedTime);
+		state.timeOfDay.distanceFogColor[0] = distanceFog.x;
+		state.timeOfDay.distanceFogColor[1] = distanceFog.y;
+		state.timeOfDay.distanceFogColor[2] = distanceFog.z;
+		state.timeOfDay.distanceFogOpacity = distanceFog.w;
+
 		state.atmosphere = profile.atmosphere;
 		state.exposure = profile.exposure;
 		state.bloomIntensity = profile.bloomIntensity;
@@ -97,11 +103,29 @@ namespace mmo
 		state.atmosphere.anisotropy = lerpFloat(a.atmosphere.anisotropy, b.atmosphere.anisotropy, t);
 		state.atmosphere.shaftStrength = lerpFloat(a.atmosphere.shaftStrength, b.atmosphere.shaftStrength, t);
 
+		// A profile without distance fog blends as one whose fog starts and ends at the far end of the
+		// other's ramp, so crossing into or out of a distance-fogged zone pushes the fog wall outward
+		// instead of popping it.
+		{
+			constexpr float farAway = 100000.0f;
+			const bool aOn = a.atmosphere.HasDistanceFog();
+			const bool bOn = b.atmosphere.HasDistanceFog();
+			const float aStart = aOn ? a.atmosphere.distanceFogStart : (bOn ? farAway : 0.0f);
+			const float aEnd = aOn ? a.atmosphere.distanceFogEnd : (bOn ? farAway * 2.0f : 0.0f);
+			const float bStart = bOn ? b.atmosphere.distanceFogStart : (aOn ? farAway : 0.0f);
+			const float bEnd = bOn ? b.atmosphere.distanceFogEnd : (aOn ? farAway * 2.0f : 0.0f);
+			state.atmosphere.distanceFogStart = lerpFloat(aStart, bStart, t);
+			state.atmosphere.distanceFogEnd = lerpFloat(aEnd, bEnd, t);
+			state.atmosphere.distanceFogSkyBand = lerpFloat(a.atmosphere.distanceFogSkyBand, b.atmosphere.distanceFogSkyBand, t);
+		}
+
 		for (int i = 0; i < 3; ++i)
 		{
 			state.timeOfDay.fogTint[i] = lerpFloat(a.timeOfDay.fogTint[i], b.timeOfDay.fogTint[i], t);
 			state.timeOfDay.sunScatterColor[i] = lerpFloat(a.timeOfDay.sunScatterColor[i], b.timeOfDay.sunScatterColor[i], t);
+			state.timeOfDay.distanceFogColor[i] = lerpFloat(a.timeOfDay.distanceFogColor[i], b.timeOfDay.distanceFogColor[i], t);
 		}
+		state.timeOfDay.distanceFogOpacity = lerpFloat(a.timeOfDay.distanceFogOpacity, b.timeOfDay.distanceFogOpacity, t);
 		state.timeOfDay.densityMultiplier = lerpFloat(a.timeOfDay.densityMultiplier, b.timeOfDay.densityMultiplier, t);
 		state.timeOfDay.shaftMultiplier = lerpFloat(a.timeOfDay.shaftMultiplier, b.timeOfDay.shaftMultiplier, t);
 

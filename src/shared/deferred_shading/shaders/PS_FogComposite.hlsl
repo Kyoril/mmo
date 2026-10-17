@@ -2,7 +2,7 @@
 
 // Applies the integrated fog volume to the lit opaque scene and continues with the closed-form height
 // fog (sun unshadowed) from the volume's far plane to the pixel. With the volume disabled the whole
-// ray uses the closed form.
+// ray uses the closed form. The distance fog is blended over the result last.
 
 #include "VolumetricFogCommon.hlsli"
 
@@ -71,5 +71,6 @@ float4 main(PS_INPUT input) : SV_TARGET
         return float4(saturate(sigma / max(FogDensity * 4.0f, 1e-6f)).xxx, 1.0f);
     }
 
-    return float4(scene.rgb * totalTransmittance + totalScattered, scene.a);
+    float distanceAmount = radialDepth <= 0.0f ? DistanceFogSkyAmount(ray.y) : DistanceFogAmount(sceneDistance);
+    return float4(ApplyDistanceFog(scene.rgb * totalTransmittance + totalScattered, distanceAmount), scene.a);
 }
