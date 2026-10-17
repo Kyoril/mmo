@@ -199,6 +199,10 @@ namespace mmo
 		/// Sends the complete friend list to the client.
 		void SendFriendListUpdate();
 
+		/// Refreshes this character's level in the friend list of everyone who befriended them and
+		/// sends those lists again, so online friends see the new level right away.
+		void NotifyFriendsOfLevelChange();
+
 		/// Sends the complete mail list to the client.
 		void SendMailList(std::vector<MailInfo> mails);
 
