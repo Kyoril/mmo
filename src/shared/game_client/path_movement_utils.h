@@ -168,4 +168,28 @@ namespace mmo
 		return horizontalDistanceToDestination <= arrivalThreshold &&
 			verticalDistanceToDestination <= arrivalHeightTolerance;
 	}
+
+	/// Decides whether the per-frame idle ground height correction of a server-driven unit
+	/// has to run this frame. Only applies to units which do not correct their own height
+	/// elsewhere, i.e. neither the locally controlled character nor a remote player.
+	///
+	/// A unit walking a movement path has its height corrected by the path update itself,
+	/// so the idle correction would only duplicate that work. A dead unit is different: the
+	/// path update no longer runs for it, so nothing moves it any more. Without the idle
+	/// correction the corpse keeps the height it died at, which comes from the server's nav
+	/// mesh and may sit noticeably above the client's ground geometry (the same error the
+	/// path arrival check tolerates) - the corpse would hover in the air.
+	///
+	/// @param isDead Whether the unit is dead, i.e. a corpse.
+	/// @param hasActivePath Whether the unit is currently following a server-driven movement path.
+	/// @return true if the idle ground height correction has to run.
+	inline bool ShouldCorrectIdleGroundHeight(const bool isDead, const bool hasActivePath)
+	{
+		if (isDead)
+		{
+			return true;
+		}
+
+		return !hasActivePath;
+	}
 }

@@ -433,10 +433,7 @@ namespace mmo
 		UpdateQuestGiverAndNameVisuals(deltaTime);
 
 		const bool isDead = (GetHealth() <= 0) || GetStandState() == unit_stand_state::Dead;
-		if (!isDead)
-		{
-			UpdateNormalMovement(deltaTime);
-		}
+		UpdateNormalMovement(deltaTime, isDead);
 
 		UpdateAnimation(deltaTime, isDead);
 
@@ -485,24 +482,31 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::UpdateNormalMovement(const float deltaTime)
+	void GameUnitC::UpdateNormalMovement(const float deltaTime, const bool isDead)
 	{
-		// Update target tracking for NPCs
-		UpdateTargetTracking();
+		const bool hasActivePath = IsFollowingPath();
 
-		// Update path-based movement if we have an active path
-		if (!m_movementPath.empty() && !m_pathCompleted)
+		// A corpse neither tracks a target nor walks its remaining path any further.
+		if (!isDead)
 		{
-			UpdatePathMovement(deltaTime);
+			// Update target tracking for NPCs
+			UpdateTargetTracking();
+
+			// Update path-based movement if we have an active path
+			if (hasActivePath)
+			{
+				UpdatePathMovement(deltaTime);
+			}
 		}
-		else if (!IsControlledByLocalPlayer() && !IsPlayer() && m_unitMovement)
+
+		if (!IsControlledByLocalPlayer() && !IsPlayer() && m_unitMovement &&
+			ShouldCorrectIdleGroundHeight(isDead, hasActivePath))
 		{
 			// For idle non-player units (NPCs without a path), correct ground height.
 			// Remote players apply ground correction inside UpdateRemoteMovement()
 			// after their dead-reckoning position is written to the scene node.
 			m_unitMovement->CorrectIdleGroundHeight(deltaTime);
 		}
-
 	}
 
 	void GameUnitC::UpdateTargetTracking() const
