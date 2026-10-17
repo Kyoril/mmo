@@ -206,6 +206,30 @@ namespace mmo
 		}
 	}
 
+	void Player::SyncCharacterGroupId()
+	{
+		ASSERT(m_characterData);
+
+		// groupId is only read from the database at login; joining, leaving or creating a group during
+		// the session never updates it. The world node spawns the character into that group, so a stale
+		// 0 after a map transfer left party members groupless in the new instance - solo loot rules.
+		// m_group is also set while an invitation is pending, so membership is checked explicitly.
+		if (!m_group)
+		{
+			m_characterData->groupId = 0;
+			return;
+		}
+
+		// A group still loading from the database at login has no leader yet; the id read from the
+		// database is right then, and OnGroupLoaded tells the world node the rest.
+		if (!m_group->IsCreated())
+		{
+			return;
+		}
+
+		m_characterData->groupId = m_group->IsMember(m_characterData->characterId) ? m_group->GetId() : 0;
+	}
+
 	void Player::NotifyWorldOfGroup(World& world) const
 	{
 		ASSERT(m_group);
@@ -1248,6 +1272,7 @@ namespace mmo
 
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
+		SyncCharacterGroupId();
 		world->Join(*m_characterData, m_accountFeatures, m_locale, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
 					{
 				const auto strongThis = weakThis.lock();
@@ -3597,6 +3622,13 @@ namespace mmo
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
 
+		// The character spawned with its group id only; the group's loot rules (loot master included)
+		// are not part of the character data, so the new instance must be told them as on login.
+		if (m_group && m_group->IsCreated() && m_characterData->groupId == m_group->GetId())
+		{
+			NotifyWorldOfGroup(*world);
+		}
+
 		// Store dungeon instance binding if applicable
 		const proto::MapEntry* transferMapEntry = m_project.maps.getById(m_characterData->mapId);
 		if (transferMapEntry && transferMapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
@@ -3802,6 +3834,7 @@ namespace mmo
 		// Send join request
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
+		SyncCharacterGroupId();
 		world->Join(*m_characterData, m_accountFeatures, m_locale, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
 					{
 			const auto strongThis = weakThis.lock();

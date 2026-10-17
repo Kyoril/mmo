@@ -315,14 +315,17 @@ namespace mmo
 		NotifyObjectsDespawned(objects);
 	}
 
-	void Player::UpdateCharacterGroup(uint64 groupId, uint8 lootMethod, uint8 lootThreshold)
+	void Player::UpdateCharacterGroup(uint64 groupId, const std::optional<std::pair<LootMethod, uint8>> lootRules)
 	{
 		if (m_character)
 		{
 			uint64 oldGroup = m_character->GetGroupId();
 			m_character->SetGroupId(groupId);
-			m_character->SetLootMethod(static_cast<LootMethod>(lootMethod));
-			m_character->SetLootThreshold(lootThreshold);
+			if (lootRules)
+			{
+				m_character->SetLootMethod(lootRules->first);
+				m_character->SetLootThreshold(lootRules->second);
+			}
 
 			GroupManager& groupManager = m_connector.GetGroupManager();
 			if (oldGroup != 0)
@@ -345,7 +348,10 @@ namespace mmo
 				if (groupObject)
 				{
 					groupObject->AddMember(m_character->GetGuid());
-					groupObject->SetLootMethod(static_cast<LootMethod>(lootMethod), lootThreshold);
+					if (lootRules)
+					{
+						groupObject->SetLootMethod(lootRules->first, lootRules->second);
+					}
 					m_character->SetGroup(groupObject.get());
 				}
 			}
