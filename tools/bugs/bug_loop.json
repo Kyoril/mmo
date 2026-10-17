@@ -2,7 +2,7 @@
 	"worker": "bug-loop",
 	"poll_seconds": 1800,
 	"autoship_cap_per_day": 5,
-	"invocation_budget_per_day": 40,
+	"invocation_budget_per_day": 400,
 	"freeze_start_utc": "21:30",
 	"freeze_end_utc": "23:59",
 	"max_changed_lines": 150,
