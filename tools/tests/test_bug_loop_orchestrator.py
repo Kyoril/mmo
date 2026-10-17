@@ -959,7 +959,7 @@ class LoopTests(unittest.TestCase):
 		self.assertIn("severity high", self.notifier.messages[0])
 		self.assertIn("Fix started", self.notifier.messages[1])
 		self.assertIn("Parked for review", self.notifier.messages[2])
-		self.assertIn("the full gate is red", self.notifier.messages[2])
+		self.assertIn("the fast gate is red", self.notifier.messages[2])
 		self.assertTrue(all(BUG_ID in m for m in self.notifier.messages))
 
 	def test_design_question_replaces_the_park_status_message(self):
@@ -1132,7 +1132,7 @@ class LoopTests(unittest.TestCase):
 		self.assertTrue(self.api.updates[-1][1]["release_claim"])
 		self.assertEqual(self.state.data["autoships"], 1)
 		self.assertEqual(self.worktree.deleted, [BRANCH])
-		self.assertEqual(self.verifier.gates, ["full"])
+		self.assertEqual(self.verifier.gates, ["fast"])
 		with open(os.path.join(self.reports, "bugloop-2026-10-07.json"), encoding="utf-8") as handle:
 			self.assertEqual(json.load(handle)["counts"]["shipped"], 1)
 
@@ -1155,13 +1155,20 @@ class LoopTests(unittest.TestCase):
 
 	def test_low_confidence_red_gate_failed_proof_and_bad_review_park(self):
 		for kwargs, fragment in (
-				({"fix": dict(GOOD_FIX, confidence="medium")}, "confidence is medium"),
-				({"gate_ok": False}, "full gate is red"),
+				({"fix": dict(GOOD_FIX, confidence="low")}, "confidence is low"),
+				({"fix": dict(GOOD_FIX, confidence="medium"), "proof_ok": False}, "confidence is medium"),
+				({"gate_ok": False}, "fast gate is red"),
 				({"proof_ok": False}, "proof:"),
 				({"review": dict(GOOD_REVIEW, reduces_security=True)}, "reduces a security")):
 			self.make(**kwargs)
 			self.loop.poll_once()
 			self.assertParked(fragment)
+
+	def test_medium_confidence_with_a_passing_proof_ships(self):
+		self.make(fix=dict(GOOD_FIX, confidence="medium"))
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 
 	def test_no_project_basis_is_wontfix(self):
 		self.make(fix=dict(GOOD_FIX, outcome="no_project_basis", expected_source=""))
