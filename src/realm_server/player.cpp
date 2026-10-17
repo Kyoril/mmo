@@ -3009,6 +3009,8 @@ namespace mmo
 
 	void Player::NotifyCharacterUpdate(uint32 mapId, InstanceId instanceId, const GamePlayerS &character)
 	{
+		const uint8 previousLevel = m_characterData->level;
+
 		m_characterData->mapId = mapId;
 		m_characterData->instanceId = instanceId;
 		m_characterData->level = static_cast<uint8>(character.GetLevel());
@@ -3070,6 +3072,32 @@ namespace mmo
 		// Carry persisted auras and cooldowns so a subsequent world-node transfer restores them.
 		m_characterData->auras = character.GetDeserializedAuras();
 		m_characterData->cooldowns = character.GetDeserializedCooldowns();
+
+		// Friend lists are database snapshots taken when a player logged in, so a level up only
+		// reaches everyone who befriended this character if their cached entry is refreshed and
+		// their list is sent again.
+		if (previousLevel != m_characterData->level)
+		{
+			NotifyFriendsOfLevelChange();
+		}
+	}
+
+	void Player::NotifyFriendsOfLevelChange()
+	{
+		const std::vector<uint64> changedCharacters = m_friendMgr.UpdateCachedFriendLevel(
+			m_characterData->characterId, m_characterData->level);
+
+		for (const uint64 characterGuid : changedCharacters)
+		{
+			Player* friendOfMine = m_manager.GetPlayerByCharacterGuid(characterGuid);
+			if (!friendOfMine)
+			{
+				continue;
+			}
+
+			friendOfMine->m_friendCache = m_friendMgr.GetCachedFriends(characterGuid);
+			friendOfMine->SendFriendListUpdate();
+		}
 	}
 
 	InstanceId Player::ResolveDungeonInstanceId(const MapId mapId) const

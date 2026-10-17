@@ -72,3 +72,52 @@ TEST_CASE("FriendMgr CanAddFriend returns true for character with no friends", "
     FriendMgrFixture f;
     REQUIRE(f.mgr.CanAddFriend(42));
 }
+
+TEST_CASE("FriendMgr GetCachedFriends returns the loaded list", "[friend_mgr]")
+{
+    FriendMgrFixture f;
+    f.mockDb.friendListToReturn = { FriendData{ 2, "Hippolytha", 4, 0, 3 } };
+
+    f.mgr.LoadCharacterFriends(1, [](const std::vector<FriendData>&) {});
+
+    const auto& cached = f.mgr.GetCachedFriends(1);
+    REQUIRE(cached.size() == 1);
+    REQUIRE(cached[0].level == 4);
+}
+
+TEST_CASE("FriendMgr GetCachedFriends is empty for a character which was never loaded", "[friend_mgr]")
+{
+    FriendMgrFixture f;
+    REQUIRE(f.mgr.GetCachedFriends(1234).empty());
+}
+
+TEST_CASE("FriendMgr UpdateCachedFriendLevel refreshes the level cached for a friend", "[friend_mgr]")
+{
+    FriendMgrFixture f;
+
+    // Character 1 has character 2 as a friend, who was level 4 when the list was loaded.
+    f.mockDb.friendListToReturn = { FriendData{ 2, "Hippolytha", 4, 0, 3 } };
+    f.mgr.LoadCharacterFriends(1, [](const std::vector<FriendData>&) {});
+
+    // Character 2 levels up while character 1 stays logged in.
+    const std::vector<uint64> affected = f.mgr.UpdateCachedFriendLevel(2, 5);
+
+    // Character 1's list must report the new level, and character 1 must be named as a
+    // character whose friend list needs to be sent again.
+    REQUIRE(affected == std::vector<uint64>{ 1 });
+    REQUIRE(f.mgr.GetCachedFriends(1)[0].level == 5);
+}
+
+TEST_CASE("FriendMgr UpdateCachedFriendLevel reports nobody when no cached list changes", "[friend_mgr]")
+{
+    FriendMgrFixture f;
+
+    f.mockDb.friendListToReturn = { FriendData{ 2, "Hippolytha", 4, 0, 3 } };
+    f.mgr.LoadCharacterFriends(1, [](const std::vector<FriendData>&) {});
+
+    // A level change of a character nobody has befriended changes no cached list.
+    REQUIRE(f.mgr.UpdateCachedFriendLevel(3, 5).empty());
+
+    // Neither does re-reporting the level a friend is already cached with.
+    REQUIRE(f.mgr.UpdateCachedFriendLevel(2, 4).empty());
+}

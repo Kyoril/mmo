@@ -126,4 +126,37 @@ namespace mmo
 
         m_asyncDatabase.asyncRequestKeyed(characterId, std::move(handler), &IFriendDatabase::LoadFriendList, characterId);
     }
+
+    const std::vector<FriendData> &FriendMgr::GetCachedFriends(uint64 characterId) const
+    {
+        static const std::vector<FriendData> empty;
+
+        const auto it = m_friendshipsByCharacter.find(characterId);
+        if (it == m_friendshipsByCharacter.end())
+        {
+            return empty;
+        }
+
+        return it->second;
+    }
+
+    std::vector<uint64> FriendMgr::UpdateCachedFriendLevel(uint64 characterGuid, uint32 level)
+    {
+        std::vector<uint64> changedCharacters;
+
+        for (auto &[ownerGuid, friends] : m_friendshipsByCharacter)
+        {
+            for (auto &friendData : friends)
+            {
+                if (friendData.guid == characterGuid && friendData.level != level)
+                {
+                    friendData.level = level;
+                    changedCharacters.push_back(ownerGuid);
+                    break;
+                }
+            }
+        }
+
+        return changedCharacters;
+    }
 }
