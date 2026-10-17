@@ -617,9 +617,12 @@ namespace mmo
 			return true;
 		}
 
-		if (const auto it2 = m_spellCategoryCooldowns.find(spellCategory); it2 != m_spellCategoryCooldowns.end() && it2->second > now)
+		if (spellCategory != 0)
 		{
-			return true;
+			if (const auto it2 = m_spellCategoryCooldowns.find(spellCategory); it2 != m_spellCategoryCooldowns.end() && it2->second > now)
+			{
+				return true;
+			}
 		}
 
 		return false;
@@ -826,6 +829,13 @@ namespace mmo
 
 	void GameUnitS::SetSpellCategoryCooldown(const uint32 spellCategory, const GameTime cooldownTimeMs)
 	{
+		// Category 0 is "no category". Storing a cooldown for it would put every uncategorised
+		// spell - almost all of them - on a shared cooldown.
+		if (spellCategory == 0)
+		{
+			return;
+		}
+
 		if (cooldownTimeMs == 0)
 		{
 			m_spellCategoryCooldowns.erase(spellCategory);
@@ -834,6 +844,24 @@ namespace mmo
 		{
 			m_spellCategoryCooldowns[spellCategory] = GetAsyncTimeMs() + cooldownTimeMs;
 		}
+	}
+
+	void GameUnitS::LockSpellSchool(const uint32 spellSchool, const GameTime durationMs)
+	{
+		if (durationMs == 0)
+		{
+			m_spellSchoolLockouts.erase(spellSchool);
+		}
+		else
+		{
+			m_spellSchoolLockouts[spellSchool] = GetAsyncTimeMs() + durationMs;
+		}
+	}
+
+	bool GameUnitS::IsSpellSchoolLocked(const uint32 spellSchool) const
+	{
+		const auto it = m_spellSchoolLockouts.find(spellSchool);
+		return it != m_spellSchoolLockouts.end() && it->second > GetAsyncTimeMs();
 	}
 
 	void GameUnitS::SetGlobalCooldown(const GameTime cooldownTimeMs)
@@ -859,6 +887,7 @@ namespace mmo
 
 		m_spellCooldowns.clear();
 		m_spellCategoryCooldowns.clear();
+		m_spellSchoolLockouts.clear();
 		m_globalCooldownEnd = 0;
 
 		OnCooldownsReset();
