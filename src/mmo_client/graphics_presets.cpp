@@ -85,17 +85,19 @@ namespace mmo
 				{ "gxAnisotropy", "8" },
 				{ "gxDepthPrepass", "1" },
 			},
-			// Ultra
+			// Ultra: High's shadow map size and half-resolution SSAO. 4096 shadow maps over a forest canopy
+			// and full-resolution SSAO cost 7 ms per frame at 2560x1440 on an RTX 2080 Ti (14.3 -> 7.7 ms)
+			// for little visible gain: the AO is blurred anyway and 2048 still matches screen density.
 			PresetTable{
 				{ "RenderShadows", "1" },
-				{ "ShadowTextureSize", "3" },
+				{ "ShadowTextureSize", "2" },
 				{ "ShadowQuality", "2" },
 				{ "gxShadowDistance", "400" },
 				{ "gxContactShadows", "1" },
 				{ "gxContactShadowQuality", "2" },
 				{ "gxSsao", "1" },
 				{ "gxSsaoQuality", "2" },
-				{ "gxSsaoHalfRes", "0" },
+				{ "gxSsaoHalfRes", "1" },
 				{ "gxAtmosphereQuality", "4" },
 				{ "gxBloomQuality", "2" },
 				{ "ViewDistance", "100000" },
@@ -139,6 +141,13 @@ namespace mmo
 			const int preset = GetRecommendedPreset();
 			ILOG("First launch: using the recommended graphics quality preset " << preset);
 			s_qualityVar->Set(std::to_string(preset));
+		}
+		else
+		{
+			// Changing any preset setting switches the quality to "custom", so a saved preset means "use
+			// that preset". Apply it again: the config holds the values the preset had when it was saved,
+			// and a client whose preset tables changed since must not keep the old ones.
+			ApplyPreset(ParsePreset(s_qualityVar->GetStringValue()));
 		}
 	}
 
