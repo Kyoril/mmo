@@ -14,7 +14,7 @@ test, and auto-ships low-risk fixes to `origin/develop`. Everything else is park
 | Review | `claude -p --tools Read,Grep,Glob` | read the branch; never sees the report |
 | Guard | `bugloop/guard.py` | protected paths, suspicious patterns, data field rules |
 | Proof | orchestrator | test fails on base, passes on the fix (E2E scenarios run here, under the gate lock) |
-| Gate | `verify.ps1 -Tier full` | build, unit, tool tests, Linux check (WSL), E2E |
+| Gate | `verify.ps1 -Tier fast` | build, unit, tool tests, Linux check (WSL); E2E runs in the nightly before deploy |
 
 Every Claude stage runs with `--strict-mcp-config` (no MCP servers) and a scrubbed environment:
 no stage gets `MMO_BUG_API_KEY` or `MMO_BUG_API_URL`; only the fixer gets
@@ -43,8 +43,10 @@ The guard is an allow-list: only paths under these roots (each with its own file
 
 The guard also parks: edits within 20 lines of a security-sensitive identifier or a rejection
 path; changed server-code lines containing economy words (xp, reward, loot, drop, credit,
-price, cost, ...) even without numbers; numeric literals in conditions or tuned values;
-added or removed preprocessor directives (including `#include`); Lua `require`, `dofile` and
+price, cost, ...) even without numbers; numeric literals in conditions or tuned values in server
+code (client code cannot cheat the server, and comment lines never count); added or removed
+preprocessor directives other than an `#include` of a header by a plain path and `#pragma once`
+in a header; Lua `require`, `dofile` and
 `loadstring`; an added `return true;` or `return PacketParseResult::...` in server code;
 control characters; unparseable diff headers; and submodule pointer changes.
 
@@ -63,10 +65,11 @@ The regression-proof waiver is decided by the diff, not the fixer's claim: a fix
 regression test only if it has at least one non-test change and all of its non-test changes are
 under `data/editor/data/`, `data/client/Locales/` or `data/client/Interface/`. Client UI Lua
 under `data/client/Interface/` needs no regression proof because it cannot cheat the server;
-the guard and the full gate still apply.
+the guard and the gate still apply.
 
-A fix auto-ships only with: a fixable category, fixer confidence `high`, a clean review, an
-empty guard, a passing proof (code fixes), a green full gate, fewer than 5 ships today, no
+A fix auto-ships only with: a fixable category, fixer confidence `high` (or `medium` with a
+passing regression proof), a clean review, an empty guard, a passing proof (code fixes), a green
+fast gate, fewer than `autoship_cap_per_day` (20) ships today, no
 breaker, and a time outside 21:30–23:59 UTC (fixes ready during the window ship after it).
 
 ## Running it

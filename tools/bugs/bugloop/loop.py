@@ -140,14 +140,16 @@ def decide(fix, review, guard_result, proof, gate):
 	"""Every reason that forbids auto-ship. Empty means eligible; the breaker, the daily cap
 	and the freeze window are checked at ship time."""
 	reasons = []
-	if fix.get("confidence") != "high":
+	# Medium confidence ships when a regression test proves the fix (fails before, passes after).
+	proven = proof is not None and proof["ok"]
+	if fix.get("confidence") != "high" and not (fix.get("confidence") == "medium" and proven):
 		reasons.append("fixer confidence is {}".format(fix.get("confidence")))
 	reasons.extend(verdicts.review_blockers(review))
 	reasons.extend("guard: " + reason for reason in guard_result["reasons"])
 	if proof is not None and not proof["ok"]:
 		reasons.append("proof: " + proof["reason"])
 	if not gate["ok"]:
-		reasons.append("the full gate is red")
+		reasons.append("the fast gate is red")
 	return reasons
 
 
@@ -598,7 +600,8 @@ class BugLoop:
 					proof = dict(proof, ok=True, waived="the test passed before the fix on Windows; the Linux CI run is the proof")
 				self._write(bug_id, "proof.json", proof)
 			self.worktree.checkout(head)
-			gate = self.verifier.gate("full")
+			# E2E needs the local MySQL and runs again in the nightly before anything is deployed.
+			gate = self.verifier.gate("fast")
 			self._write(bug_id, "gate.json", gate)
 		reasons = decide(fix, review, guard_result, proof, gate)
 		if emergency is not None:

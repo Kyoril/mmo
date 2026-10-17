@@ -2,7 +2,8 @@
 
 """Mechanical diff guard: decides, without any model, whether a bug-loop diff may ship without
 human review. A triage or fixer that was talked into something cannot talk its way past this
-file. Every rule errs towards parking: a parked fix costs a review, a bad ship costs players."""
+file. The rules park what could weaken security or the server's economy; ordinary client and
+gameplay code ships on the gates (fast gate here, full gate and E2E in the nightly before deploy)."""
 
 import collections
 import os
@@ -74,8 +75,7 @@ TEST_SUFFIXES = (
 HEADER_SUFFIXES = (".h", ".hpp", ".hxx", ".inl")
 # Server-authoritative code: here an edit to reward, loot or economy logic needs a human, literals or not.
 SERVER_ROOTS = ("src/shared/game/", "src/shared/game_server/", "src/world_server/", "src/realm_server/", "data/scripts/")
-# Client UI Lua cannot cheat the server, so a numeric condition alone does not park there.
-CLIENT_UI_ROOT = "data/client/Interface/"
+# The client cannot cheat the server, so tuned values and numeric conditions only park server code.
 
 
 def _word_pattern(words):
@@ -122,6 +122,7 @@ LUA_LOADER = re.compile(r"\b(require|dofile|loadstring|loadfile)\b|\bload\s*\(")
 GOTO = re.compile(r"\bgoto\b")
 # The one preprocessor directive a test may change: an include of a header by a plain path.
 TEST_INCLUDE = re.compile(r'^\s*#\s*include\s*(?:<([^<>"]+)>|"([^<>"]+)")\s*(?://.*)?$')
+PRAGMA_ONCE = re.compile(r"^\s*#\s*pragma\s+once\s*(?://.*)?$")
 # Line separators str.splitlines() honours, other control characters, and bidi overrides.
 CONTROL = re.compile("[\x00-\x08\x0a-\x1f\x7f\x85\u2028\u2029\u202a-\u202e\u2066-\u2069]")
 HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$")
@@ -280,6 +281,17 @@ def _plain_header(match):
 	return target.lower().endswith(HEADER_SUFFIXES) or (angle is not None and "." not in parts[-1])
 
 
+def _harmless_directive(path, line):
+	"""An include of a header by a plain path, or "#pragma once" in a header: every new header and
+	most fixes need one, and neither can disable code the way #if 0 or #define can."""
+	if not path.lower().endswith(C_FAMILY_SUFFIXES):
+		return False
+	if PRAGMA_ONCE.match(line):
+		return path.lower().endswith(HEADER_SUFFIXES)
+	include = TEST_INCLUDE.match(line)
+	return include is not None and _plain_header(include)
+
+
 def _test_line_reasons(hunk):
 	"""The rules a test hunk keeps: tests never ship to players, but they are compiled and run by the
 	gate and CI, so they must not pull in other files or hide text from the reviewer."""
@@ -355,7 +367,7 @@ def _line_reasons(hunk):
 		elif REJECTION.search(line):
 			reasons.append("{}: removed a rejection path: {}".format(path, _short(line)))
 	for line in removed_new + added_new:
-		if PREPROCESSOR.search(line):
+		if PREPROCESSOR.search(line) and not _harmless_directive(path, line):
 			reasons.append("{}: preprocessor directive changed: {}".format(path, _short(line)))
 		if lua and LUA_LOADER.search(line):
 			reasons.append("{}: loads code (require/dofile/load): {}".format(path, _short(line)))
@@ -379,11 +391,11 @@ def _line_reasons(hunk):
 		if path.lower().endswith(C_FAMILY_SUFFIXES) and line.rstrip().endswith("\\"):
 			reasons.append("{}: removed a line continuation: {}".format(path, _short(line)))
 	for line in removed_new + added_new:
-		if not NUMERIC_LITERAL.search(line):
+		if not server or not NUMERIC_LITERAL.search(line) or _comment_only(line, lua):
 			continue
 		if TUNED.search(line):
 			reasons.append("{}: changed a tuned value: {}".format(path, _short(line)))
-		elif not path.startswith(CLIENT_UI_ROOT) and CONDITION.search(CONDITION_NOISE.sub(" ", line)):
+		elif CONDITION.search(CONDITION_NOISE.sub(" ", line)):
 			reasons.append("{}: changed a numeric condition: {}".format(path, _short(line)))
 	return reasons
 
