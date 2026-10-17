@@ -15,6 +15,7 @@
 #include "game_server/world/world_instance.h"
 #include "proto_data/project.h"
 
+#include <algorithm>
 #include <unordered_map>
 
 namespace mmo
@@ -641,6 +642,39 @@ namespace mmo
 				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Range, m_spell.id(), range);
 
 				if (m_cast.GetExecuter().GetSquaredDistanceTo(unitTarget->GetPosition(), true) > range * range)
+				{
+					SendEndCast(spell_cast_result::FailedOutOfRange);
+					return false;
+				}
+			}
+		}
+
+		// World object targets (gather nodes, chests, doors) are not units, so the range check
+		// above never saw them: an Open cast could be started and finished from any distance.
+		// Using the object then runs into the interaction path, which refuses anything beyond
+		// the interaction distance (GameUnitS::GetInteractionDistance) without telling the
+		// client - the five second gather cast completed and quietly did nothing. The castable
+		// range is therefore the spell's range capped by the interaction distance, so the cast
+		// and the interaction that follows it agree on what is within reach.
+		if (m_target.HasGOTarget())
+		{
+			GameObjectS* objectTarget = m_context.FindObjectByGuid(m_target.GetGOTarget());
+			if (objectTarget && objectTarget->IsWorldObject())
+			{
+				float range = m_cast.GetExecuter().GetInteractionDistance();
+
+				if (m_spell.has_rangetype())
+				{
+					const proto::RangeType* rangeType = m_cast.GetExecuter().GetProject().ranges.getById(m_spell.rangetype());
+					if (rangeType && rangeType->range() > 0.0f)
+					{
+						float spellRange = rangeType->range();
+						m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Range, m_spell.id(), spellRange);
+						range = std::min(range, spellRange);
+					}
+				}
+
+				if (m_cast.GetExecuter().GetSquaredDistanceTo(objectTarget->GetPosition(), true) > range * range)
 				{
 					SendEndCast(spell_cast_result::FailedOutOfRange);
 					return false;
