@@ -1942,11 +1942,6 @@
   "reachability": [
     {
       "map": 0,
-      "key": "no_turn_in|quest:56",
-      "message": "Quest 56 'Out of the Barrowfield' has no NPC or object that accepts the turn-in"
-    },
-    {
-      "map": 0,
       "key": "source_far|quest:19:req1",
       "message": "Quest 19 'Foundations of Progress': nearest 'collect Foundation Stake' source is 250 m from the quest giver (> 250 m)"
     },

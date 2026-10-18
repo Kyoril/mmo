@@ -1062,10 +1062,18 @@ namespace mmo
 			}
 		}
 
-		// First loop to check if the items can be stored
-		for (auto &pair : rewardedItems)
+		// Check whether ALL rewards fit at once. Asking for each entry on its own would let a
+		// turn-in that only partially fits start handing out items and then abort half way
+		// through, leaving the quest open with part of its rewards already granted.
 		{
-			const auto result = m_inventory.CanStoreItems(*pair.first, pair.second);
+			std::vector<std::pair<const proto::ItemEntry *, uint16>> itemsToStore;
+			itemsToStore.reserve(rewardedItems.size());
+			for (auto &pair : rewardedItems)
+			{
+				itemsToStore.emplace_back(pair.first, pair.second);
+			}
+
+			const auto result = m_inventory.CanStoreItems(itemsToStore);
 			if (result != inventory_change_failure::Okay)
 			{
 				if (m_netPlayerWatcher)
