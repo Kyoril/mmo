@@ -236,7 +236,7 @@ RIVER_DEFAULTS = {
     "FlowCycle": 0.35, "FlowDistanceA": 0.6, "FlowDistanceB": 1.4, "FlowDistanceC": 0.3,
     "ShallowColor": (0.06, 0.075, 0.045, 1.0), "DeepColor": (0.012, 0.026, 0.02, 1.0),
     "AbsorptionRGB": (0.9, 0.55, 0.45, 1.0), "DeepDistance": 2.0, "CausticsStrength": 0.15,
-    "ReflectionStrength": 0.2, "ReflectionDistortion": 0.65, "NormalFarStrength": 0.5, "NormalFadeDistance": 140.0, "GlitterStrength": 1.2, "GlitterPower": 350.0,
+    "ReflectionStrength": 0.2, "ReflectionDistortion": 0.65, "NormalFarStrength": 0.7, "NormalFadeDistance": 220.0, "GlitterStrength": 1.2, "GlitterPower": 350.0,
     "StreakIntensity": 0.06, "StreakThreshold": 0.78, "FoamDistance": 0.6, "ShoreFoamDepth": 0.25, "ShoreFoamFade": 0.6,
 }
 
@@ -279,13 +279,21 @@ def build_graph(b, mode, variant="ocean"):
                 return sample_fn(b.sub(uvs, b.add("AppendNode", ins={"A": offset, "B": b.const(0.0)})))
             return b.lerp(at(phase_a), at(phase_b), phase_blend)
 
+        # Ripples keep a readable size in the distance: each layer cross-fades into a copy at a third of
+        # the frequency with view distance, instead of shrinking into per-pixel noise.
+        far_t = b.sat(b.div(b.add("PixelDepthNode"), b.scalar("FarTilingDistance", 70.0)))
+        far_scale = b.scalar("FarTilingScale", 0.33)
+
         def normal_layer(tiling_name, tiling, distance, strength):
             def sample(uvs):
                 node = b.add("TextureParameterNode",
                              {"Name": "Normal", "Texture": "Models/Engine/WaterNormal.htex", "Sampler Type": 1},
                              {"UVs": uvs})
                 return b.mask(b.out(node, "RGBA"), r=True, g=True)
-            return b.mul(flow_sample(b.mul(uv0, b.scalar(tiling_name, tiling)), distance, sample), strength)
+            tiled = b.mul(uv0, b.scalar(tiling_name, tiling))
+            near = flow_sample(tiled, distance, sample)
+            far = flow_sample(b.mul(tiled, far_scale), b.mul(distance, far_scale), sample)
+            return b.mul(b.lerp(near, far, far_t), strength)
 
     b.next_column()
     normal_strength = b.scalar("NormalStrength", 0.55)

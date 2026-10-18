@@ -695,7 +695,7 @@
         640.0
       ],
       "radius": 190.0,
-      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 6 - Farmlands & Hamlets in the valley. West of the river. Fenced fields, hedgerows, cypress rows along the Haven road and three farmsteads on the west bank between the bridge and Haven.",
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 6 - Farmlands & Hamlets in the valley. West of the river. Three farmsteads, each beside its own fenced fields (corn sprouts, stubble and plowed soil), hedges on the far sides, cypress rows along the Haven road.",
       "status": "placeholder",
       "ask": "Confirm the farmland on the west bank, and name the farmsteads if they matter.",
       "source": "agent",
@@ -871,6 +871,21 @@
       "description": "A broad bay of the river in front of Haven's north wall. Haven's main gate is reached over it: a stone bridge from the north bank onto an island with two houses and piers, and a second bridge from the island to a quay before the gate.",
       "status": "placeholder",
       "ask": "Name the bay and the island. Should the island become a riverfront quay with warehouses (concept option A) once there are assets for it?",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "haven_trading_basin",
+      "name": "Haven Trading Basin",
+      "kind": "landmark",
+      "center": [
+        -767.0,
+        885.0
+      ],
+      "radius": 60.0,
+      "description": "Stone-quayed basin at the west end of the harbour bay below Haven's north wall, with warehouses (Haven houses), piers and market stalls (concept option C).",
+      "status": "placeholder",
+      "ask": "Name it; should it get dockworkers, a harbourmaster or merchant NPCs?",
       "source": "agent",
       "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
     }
