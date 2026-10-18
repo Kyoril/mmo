@@ -3,6 +3,8 @@
 #include "swarm_host.h"
 
 #include "bot_ai/strategies/grind_strategy.h"
+#include "bot_chat/anthropic_chat_model.h"
+#include "bot_chat/offline_chat_model.h"
 #include "bot_core/bot_movement_controller.h"
 #include "bot_core/io_poll.h"
 #include "bot_core/bot_realm_connector.h"
@@ -15,6 +17,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
+#include <fstream>
+#include <iterator>
 #include <thread>
 #include <utility>
 
@@ -41,6 +46,14 @@ namespace mmo
 		/// character creation on first login plus a busy realm is several seconds, and the cost of
 		/// being wrong is a needless reconnect rather than a lost bot.
 		constexpr GameTime WorldEntryTimeoutMs = 60000;
+
+		/// How long a chat line waits for its sender's name before it is dropped.
+		constexpr GameTime ChatNameTimeoutMs = 10000;
+
+		/// How often each bot looks around for real players. Seeing one is what allows bots to
+		/// start conversations; without anyone around, unprompted chat would be spent on bots.
+		constexpr GameTime HumanScanIntervalMs = 10000;
+		constexpr float HumanScanRadius = 60.0f;
 	}
 
 	SwarmHost::SwarmHost(SwarmSettings settings)
@@ -71,6 +84,11 @@ namespace mmo
 		}
 
 		RegisterGrindStrategies(m_registry);
+
+		if (m_settings.chatEnabled && !SetupChat(*project))
+		{
+			return false;
+		}
 
 		for (const std::string& reference : m_registry.FindDanglingReferences())
 		{
@@ -147,6 +165,12 @@ namespace mmo
 			bot->brain = std::make_unique<BotBrain>(*bot->session, m_registry, entry.index);
 			bot->brain->SetGrindSpots(&m_grindSpots);
 
+			if (m_chatDirector)
+			{
+				bot->chat = std::make_unique<SwarmChatParticipant>(*bot->session, *bot->brain, bot->roster, m_navService->GetProject());
+				m_chatDirector->AddBot(entry.index, *bot->chat, entry.seed ^ 0x5bd1e995u);
+			}
+
 			WireBot(*bot);
 			m_bots.push_back(std::move(bot));
 		}
@@ -169,6 +193,10 @@ namespace mmo
 				if (to == BotAiState::Dead)
 				{
 					++m_telemetry.GetCounters().deaths;
+					if (m_chatDirector)
+					{
+						m_chatDirector->NoteEvent(index, "you just died", GetAsyncTimeMs());
+					}
 				}
 
 				m_telemetry.Event(index, "state_change",
@@ -176,9 +204,17 @@ namespace mmo
 			}));
 
 		bot.connections.emplace_back(bot.brain->TargetKilled.connect(
-			[this, index](const uint64 guid)
+			[this, index, botPtr = &bot](const uint64 guid)
 			{
 				++m_telemetry.GetCounters().kills;
+				if (m_chatDirector)
+				{
+					const BotUnit* victim = botPtr->session->GetContext().GetUnit(guid);
+					if (victim && !victim->GetName().empty())
+					{
+						m_chatDirector->NoteEvent(index, "you just killed a " + victim->GetName(), GetAsyncTimeMs());
+					}
+				}
 				m_telemetry.Event(index, "kill", { { "target", guid } });
 			}));
 
@@ -215,6 +251,34 @@ namespace mmo
 				++m_telemetry.GetCounters().swingErrors[static_cast<uint32>(event)];
 				m_telemetry.Event(index, "swing_error", { { "event", static_cast<uint32>(event) } });
 			}));
+
+		if (m_chatDirector)
+		{
+			bot.connections.emplace_back(bot.session->GetRealm().ChatMessageReceived.connect(
+				[this, botPtr = &bot](const BotChatMessage& message)
+				{
+					OnBotChat(*botPtr, message);
+				}));
+
+			bot.connections.emplace_back(bot.session->GetRealm().NameResolved.connect(
+				[this, botPtr = &bot](const uint64 guid, const std::string& name)
+				{
+					auto& waiting = botPtr->chatAwaitingName;
+					for (auto it = waiting.begin(); it != waiting.end();)
+					{
+						if (it->first.senderGuid == guid)
+						{
+							const BotChatMessage message = it->first;
+							it = waiting.erase(it);
+							DeliverChat(*botPtr, message, name);
+						}
+						else
+						{
+							++it;
+						}
+					}
+				}));
+		}
 
 		bot.connections.emplace_back(bot.session->GetMovementController().MovementStarted.connect(
 			[this, index](const BotMovementEvent& event)
@@ -311,6 +375,9 @@ namespace mmo
 			{ { "character", bot.roster.characterName }, { "level", bot.roster.targetLevel } });
 
 		bot.brain->Reset();
+
+		bot.generalJoinRequested = false;
+		m_botGuids.insert(bot.session->GetContext().GetSelectedCharacterGuid());
 
 		if (m_settings.applyLevelRoll && !bot.levelApplied && bot.roster.targetLevel > 1)
 		{
@@ -463,12 +530,154 @@ namespace mmo
 		{
 			++m_telemetry.GetCounters().levelUps;
 			m_telemetry.Event(bot.roster.index, "level_up", { { "level", level } });
+			if (m_chatDirector)
+			{
+				m_chatDirector->NoteEvent(bot.roster.index, "you just reached level " + std::to_string(level), nowMs);
+			}
 		}
 
 		bot.lastKnownLevel = level;
 
 		bot.brain->Update(nowMs);
 		CheckWatchdog(bot, nowMs);
+
+		if (m_chatDirector)
+		{
+			UpdateBotChat(bot, nowMs);
+		}
+	}
+
+	bool SwarmHost::SetupChat(const proto::Project& project)
+	{
+		ChatPricing pricing;
+		if (!LookupChatPricing(m_settings.chatModel, pricing))
+		{
+			ELOG("Bot chat: no known price for model '" << m_settings.chatModel
+				<< "', so its spend could not be capped. Use a model listed in bot_chat/chat_budget.cpp.");
+			return false;
+		}
+
+		if (m_settings.chatOffline)
+		{
+			// The canned model costs nothing; it must not use up the real ledger's hourly cap either.
+			m_chatBudget = std::make_unique<ChatBudget>(m_settings.chatLimits, pricing, std::string());
+			m_chatModel = std::make_unique<OfflineChatModel>(0xC0FFEEu);
+		}
+		else
+		{
+			if (m_settings.chatApiKey.empty())
+			{
+				ELOG("Bot chat: ANTHROPIC_API_KEY is not set. Set it, or pass --chat-offline to try chat without the model.");
+				return false;
+			}
+
+			if (m_settings.chatLedgerPath.empty())
+			{
+				ELOG("Bot chat: a spend ledger path is required, or the caps would reset with every restart");
+				return false;
+			}
+
+			m_chatBudget = std::make_unique<ChatBudget>(m_settings.chatLimits, pricing, m_settings.chatLedgerPath);
+			m_chatModel = std::make_unique<AnthropicChatModel>(m_settings.chatApiKey, m_settings.chatModel);
+		}
+
+		ChatDirectorSettings settings;
+		settings.seed = 0xA11CE5u;
+		settings.gameFacts = BuildGameFacts(project);
+
+		if (!m_settings.chatFactsPath.empty())
+		{
+			std::ifstream file(m_settings.chatFactsPath);
+			if (!file)
+			{
+				ELOG("Bot chat: cannot read facts file " << m_settings.chatFactsPath);
+				return false;
+			}
+
+			settings.gameFacts += '\n';
+			settings.gameFacts.append(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+		}
+
+		m_chatDirector = std::make_unique<ChatDirector>(settings, *m_chatModel, *m_chatBudget,
+			[]() { return std::time(nullptr); });
+
+		m_chatConnections.emplace_back(m_chatDirector->ChatSent.connect(
+			[this](const uint32 botIndex, const ChatType type, const std::string& target, const std::string& text)
+			{
+				m_telemetry.Event(botIndex, "chat_out",
+					{ { "chat_type", static_cast<uint32>(type) }, { "target", target }, { "text", text } });
+			}));
+
+		m_chatConnections.emplace_back(m_chatDirector->RequestFailed.connect(
+			[this](const uint32 botIndex, const std::string& reason)
+			{
+				m_telemetry.Event(botIndex, "chat_error", { { "reason", reason } });
+			}));
+
+		ILOG("Bot chat enabled: model " << m_settings.chatModel << (m_settings.chatOffline ? " (offline, canned lines)" : "")
+			<< ", caps $" << m_settings.chatLimits.dailyUsd << "/day, $" << m_settings.chatLimits.monthlyUsd
+			<< "/month, " << m_settings.chatLimits.maxRequestsPerHour << " requests/hour; spent today so far $"
+			<< m_chatBudget->GetSpentToday());
+		return true;
+	}
+
+	void SwarmHost::OnBotChat(Bot& bot, const BotChatMessage& message)
+	{
+		if (message.senderGuid == 0 || message.type == ChatType::System || message.type == ChatType::TextEmote)
+		{
+			return;
+		}
+
+		BotRealmConnector& realm = bot.session->GetRealm();
+		if (const std::string* name = realm.GetCachedName(message.senderGuid))
+		{
+			DeliverChat(bot, message, *name);
+			return;
+		}
+
+		bot.chatAwaitingName.emplace_back(message, GetAsyncTimeMs());
+		realm.QueryName(message.senderGuid);
+	}
+
+	void SwarmHost::DeliverChat(Bot& bot, const BotChatMessage& message, const std::string& senderName)
+	{
+		++m_telemetry.GetCounters().chatLinesHeard;
+		m_chatDirector->OnChatReceived(bot.roster.index, message.type, senderName, message.message,
+			message.channelId, GetAsyncTimeMs());
+	}
+
+	void SwarmHost::UpdateBotChat(Bot& bot, const GameTime nowMs)
+	{
+		BotRealmConnector& realm = bot.session->GetRealm();
+
+		// Characters are normally put into General on login. One that is not joins it, once per
+		// session; a realm without a General channel answers DoesNotExist and that is the end of it.
+		if (!bot.generalJoinRequested && realm.HasChatChannelList() && realm.FindChatChannelId(GeneralChannelName) == 0)
+		{
+			realm.JoinChatChannel(GeneralChannelName);
+			bot.generalJoinRequested = true;
+		}
+
+		auto& waiting = bot.chatAwaitingName;
+		waiting.erase(std::remove_if(waiting.begin(), waiting.end(), [nowMs](const auto& entry)
+			{
+				return nowMs - entry.second > ChatNameTimeoutMs;
+			}), waiting.end());
+
+		if (nowMs < bot.nextHumanScanMs)
+		{
+			return;
+		}
+
+		bot.nextHumanScanMs = nowMs + HumanScanIntervalMs;
+		for (const BotUnit* player : bot.session->GetContext().GetNearbyPlayers(HumanScanRadius))
+		{
+			if (m_botGuids.count(player->GetGuid()) == 0)
+			{
+				m_chatDirector->NoteHumanSeen(nowMs);
+				break;
+			}
+		}
 	}
 
 	void SwarmHost::Run()
@@ -514,6 +723,11 @@ namespace mmo
 				}
 			}
 
+			if (m_chatDirector)
+			{
+				m_chatDirector->Update(frameStartMs);
+			}
+
 			SwarmCounters& counters = m_telemetry.GetCounters();
 			counters.peakOnline = std::max(counters.peakOnline, online);
 
@@ -525,6 +739,20 @@ namespace mmo
 		}
 
 		ILOG("Swarm stopping, shutting down " << m_bots.size() << " sessions");
+
+		if (m_chatModel)
+		{
+			// Joins the worker. A request in flight is abandoned; its reservation stays charged.
+			m_chatModel->Stop();
+
+			const ChatDirectorStats& chat = m_chatDirector->GetStats();
+			SwarmCounters& counters = m_telemetry.GetCounters();
+			counters.chatLinesSent = chat.linesSent;
+			counters.chatRequests = chat.requestsSubmitted;
+			counters.chatBudgetDenied = chat.budgetDenied;
+			counters.chatModelErrors = chat.modelErrors;
+			counters.chatSpentTodayUsd = m_chatBudget->GetSpentToday();
+		}
 
 		for (auto& bot : m_bots)
 		{

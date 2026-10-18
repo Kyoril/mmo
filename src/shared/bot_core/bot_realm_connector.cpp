@@ -17,6 +17,7 @@
 #include "log/default_log_levels.h"
 
 #include <algorithm>
+#include <cctype>
 #include <iomanip>
 #include <mutex>
 #include <vector>
@@ -149,6 +150,13 @@ namespace mmo
 	{
 		ELOG("Lost connection to the realm server...");
 		ClearPacketHandlers();
+
+		// Questions asked on the old connection will never be answered, and the next session
+		// announces its own channel memberships.
+		m_pendingNameQueries.clear();
+		m_chatChannels.clear();
+		m_hasChatChannelList = false;
+
 		Disconnected();
 	}
 
@@ -238,6 +246,58 @@ namespace mmo
 				}
 				packet.Finish();
 			});
+	}
+
+	void BotRealmConnector::QueryName(const uint64 guid)
+	{
+		if (guid == 0 || m_nameCache.count(guid) != 0 || !m_pendingNameQueries.insert(guid).second)
+		{
+			return;
+		}
+
+		sendSinglePacket([guid](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::NameQuery);
+				packet << io::write_packed_guid(guid);
+				packet.Finish();
+			});
+	}
+
+	const std::string* BotRealmConnector::GetCachedName(const uint64 guid) const
+	{
+		const auto it = m_nameCache.find(guid);
+		return it != m_nameCache.end() ? &it->second : nullptr;
+	}
+
+	void BotRealmConnector::JoinChatChannel(const std::string& name)
+	{
+		sendSinglePacket([&name](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::ChannelJoin);
+				packet << io::write_dynamic_range<uint8>(name);
+				packet.Finish();
+			});
+	}
+
+	uint32 BotRealmConnector::FindChatChannelId(const std::string& name) const
+	{
+		const auto equalsIgnoreCase = [](const std::string& a, const std::string& b)
+		{
+			return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](const char x, const char y)
+				{
+					return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
+				});
+		};
+
+		for (const auto& [id, channelName] : m_chatChannels)
+		{
+			if (equalsIgnoreCase(channelName, name))
+			{
+				return id;
+			}
+		}
+
+		return 0;
 	}
 
 	void BotRealmConnector::SendMovementUpdate(uint64 characterId, uint16 opCode, const MovementInfo& info)
@@ -432,6 +492,9 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &BotRealmConnector::OnDestroyObjects);
 		RegisterPacketHandler(game::realm_client_packet::DebugLineOfSightResult, *this, &BotRealmConnector::OnDebugLineOfSightResult);
 		RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
+		RegisterPacketHandler(game::realm_client_packet::ChatMessage, *this, &BotRealmConnector::OnChatMessage);
+		RegisterPacketHandler(game::realm_client_packet::ChannelList, *this, &BotRealmConnector::OnChannelList);
+		RegisterPacketHandler(game::realm_client_packet::ChannelNotify, *this, &BotRealmConnector::OnChannelNotify);
 
 		// Movement packets - these contain position updates for other units
 		RegisterPacketHandler(game::realm_client_packet::MoveStartForward, *this, &BotRealmConnector::OnMovementPacket);
@@ -1369,13 +1432,17 @@ namespace mmo
 
 	PacketParseResult BotRealmConnector::OnNameQueryResult(game::IncomingPacket& packet)
 	{
+		// Same layout the game client reads: packed guid, success flag, then a
+		// zero-terminated name.
 		uint64 guid;
 		uint8 found;
-		if (!(packet >> io::read<uint64>(guid) >> io::read<uint8>(found)))
+		if (!(packet >> io::read_packed_guid(guid) >> io::read<uint8>(found)))
 		{
 			ELOG("Failed to read NameQueryResult header");
 			return PacketParseResult::Disconnect;
 		}
+
+		m_pendingNameQueries.erase(guid);
 
 		if (found == 0)
 		{
@@ -1384,17 +1451,99 @@ namespace mmo
 		}
 
 		String name;
-		if (!(packet >> io::read_container<uint8>(name)))
+		if (!(packet >> io::read_string(name)))
 		{
 			ELOG("Failed to read player name from NameQueryResult");
 			return PacketParseResult::Disconnect;
 		}
+
+		m_nameCache[guid] = name;
 
 		// Update the unit's name if we have it
 		if (BotUnit* unit = m_objectManager.GetUnitMutable(guid))
 		{
 			unit->SetName(name);
 			UnitUpdated(*unit);
+		}
+
+		NameResolved(guid, name);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChatMessage(game::IncomingPacket& packet)
+	{
+		BotChatMessage chat;
+		uint8 flags = 0;
+		if (!(packet >> io::read_packed_guid(chat.senderGuid) >> io::read<uint8>(chat.type)
+			>> io::read_limited_string<512>(chat.message) >> io::read<uint8>(flags)))
+		{
+			ELOG("Failed to read ChatMessage");
+			return PacketParseResult::Disconnect;
+		}
+
+		// NPC speech carries the speaker's name after the flags and is never anyone talking to
+		// the bot; nothing listening for chat wants it.
+		if (chat.type == ChatType::UnitSay || chat.type == ChatType::UnitYell || chat.type == ChatType::UnitEmote)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		if (chat.type == ChatType::Channel && !(packet >> io::read<uint32>(chat.channelId)))
+		{
+			ELOG("Failed to read channel id of ChatMessage");
+			return PacketParseResult::Disconnect;
+		}
+
+		ChatMessageReceived(chat);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChannelList(game::IncomingPacket& packet)
+	{
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_chatChannels.clear();
+		for (uint8 i = 0; i < count; ++i)
+		{
+			uint32 id = 0;
+			std::string name;
+			uint32 flags = 0;
+			if (!(packet >> io::read<uint32>(id) >> io::read_container<uint8>(name) >> io::read<uint32>(flags)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			m_chatChannels.emplace_back(id, std::move(name));
+		}
+
+		m_hasChatChannelList = true;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChannelNotify(game::IncomingPacket& packet)
+	{
+		uint8 notifyType = 0;
+		uint32 channelId = 0;
+		std::string channelName;
+		if (!(packet >> io::read<uint8>(notifyType) >> io::read<uint32>(channelId) >> io::read_container<uint8>(channelName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto existing = std::find_if(m_chatChannels.begin(), m_chatChannels.end(),
+			[channelId](const auto& entry) { return entry.first == channelId; });
+
+		if (notifyType == game::channel_notify::Joined && existing == m_chatChannels.end())
+		{
+			m_chatChannels.emplace_back(channelId, std::move(channelName));
+		}
+		else if (notifyType == game::channel_notify::Left && existing != m_chatChannels.end())
+		{
+			m_chatChannels.erase(existing);
 		}
 
 		return PacketParseResult::Pass;

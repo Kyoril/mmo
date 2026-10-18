@@ -24,6 +24,7 @@
 
 #include <map>
 #include <optional>
+#include <set>
 
 namespace mmo
 {
@@ -48,6 +49,17 @@ namespace mmo
 		bool hasPosition { false };
 	};
 
+	/// A chat line the realm delivered to this bot. NPC speech is not reported.
+	struct BotChatMessage
+	{
+		/// Character guid of the speaker; 0 for system messages.
+		uint64 senderGuid { 0 };
+		ChatType type { ChatType::Unknown };
+		std::string message;
+		/// Global channel id for ChatType::Channel, otherwise 0.
+		uint32 channelId { 0 };
+	};
+
 	/// Minimal realm connector variant that tolerates unknown packets and exposes the hooks needed for the bot.
 	class BotRealmConnector final
 		: public game::Connector
@@ -67,6 +79,14 @@ namespace mmo
 		signal<void(uint64, uint32)> PartyJoined;
 		/// @brief Emitted when the bot leaves or is removed from a party.
 		signal<void()> PartyLeft;
+
+		/// @brief Emitted for every player or system chat line the realm delivers.
+		signal<void(const BotChatMessage&)> ChatMessageReceived;
+
+		/// @brief Emitted when the answer to a QueryName call arrives.
+		/// @param guid The character guid that was queried.
+		/// @param name The character name.
+		signal<void(uint64, const std::string&)> NameResolved;
 
 		/// @brief Emitted when a new unit is spawned in the world.
 		signal<void(const BotUnit&)> UnitSpawned;
@@ -166,6 +186,12 @@ namespace mmo
 		/// every PlaySoundById since the last clear.
 		std::map<uint32, uint64> m_heardSounds;
 		std::map<uint32, uint32> m_heardSoundCounts;
+
+		// Chat state
+		std::map<uint64, std::string> m_nameCache;
+		std::set<uint64> m_pendingNameQueries;
+		std::vector<std::pair<uint32, std::string>> m_chatChannels;
+		bool m_hasChatChannelList { false };
 
 		// Party state
 		std::vector<BotPartyMember> m_partyMembers;
@@ -284,6 +310,22 @@ namespace mmo
 		void RequestCharEnum();
 
 		void SendChatMessage(const String& message, ChatType chatType, const String& target);
+
+		/// Asks the realm for a character name. The answer is cached and announced through
+		/// NameResolved; a guid already cached or already asked for is not asked for again.
+		void QueryName(uint64 guid);
+
+		/// The cached name of a character, or null if it was never resolved.
+		[[nodiscard]] const std::string* GetCachedName(uint64 guid) const;
+
+		/// Asks the realm to add this character to a chat channel by name.
+		void JoinChatChannel(const std::string& name);
+
+		/// Global id of a joined chat channel by case-insensitive name, or 0 if not a member.
+		[[nodiscard]] uint32 FindChatChannelId(const std::string& name) const;
+
+		/// Whether the realm has sent the channel membership list for this session yet.
+		[[nodiscard]] bool HasChatChannelList() const { return m_hasChatChannelList; }
 
 		void SendMovementUpdate(uint64 characterId, uint16 opCode, const MovementInfo& info);
 
@@ -609,6 +651,9 @@ namespace mmo
 		PacketParseResult OnShutdownCountdown(game::IncomingPacket& packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
+		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
+		PacketParseResult OnChannelList(game::IncomingPacket& packet);
+		PacketParseResult OnChannelNotify(game::IncomingPacket& packet);
 
 		/// @brief Handles movement packets from other units.
 		PacketParseResult OnMovementPacket(game::IncomingPacket& packet);

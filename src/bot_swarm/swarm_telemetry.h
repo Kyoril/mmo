@@ -54,6 +54,15 @@ namespace mmo
 		/// can be told apart from "this spawn has no mesh under it".
 		std::map<std::string, uint32> pathFailuresByReason;
 
+		/// Chat lines heard from others and sent by bots, model requests made, and what they
+		/// cost. All zero when chat is off.
+		uint64 chatLinesHeard { 0 };
+		uint64 chatLinesSent { 0 };
+		uint64 chatRequests { 0 };
+		uint64 chatBudgetDenied { 0 };
+		uint64 chatModelErrors { 0 };
+		double chatSpentTodayUsd { 0.0 };
+
 		/// Actions executed, by name. The cheapest possible answer to what the swarm spent its
 		/// time doing, and the first thing to look at when a run produces no kills.
 		std::map<std::string, uint32> actionCounts;

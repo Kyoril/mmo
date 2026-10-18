@@ -3,11 +3,15 @@
 #pragma once
 
 #include "bot_roster.h"
+#include "swarm_chat.h"
 #include "swarm_telemetry.h"
 
 #include "bot_ai/bot_ai_registry.h"
 #include "bot_ai/bot_brain.h"
 #include "bot_ai/grind_spot_index.h"
+#include "bot_chat/chat_budget.h"
+#include "bot_chat/chat_director.h"
+#include "bot_chat/chat_model.h"
 #include "bot_core/bot_nav_service.h"
 #include "bot_core/bot_session.h"
 
@@ -18,7 +22,9 @@
 #include "asio/io_service.hpp"
 
 #include <memory>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace mmo
@@ -62,6 +68,29 @@ namespace mmo
 		std::string rosterPath;
 		std::string telemetryPath;
 		std::string repoRoot;
+
+		/// Bots talk in chat through a language model. Off unless asked for, because it costs
+		/// money; see docs/bot-chat.md.
+		bool chatEnabled { false };
+
+		/// Answers with canned lines instead of calling the model: the whole chat path, no spend.
+		bool chatOffline { false };
+
+		/// Model id. Must be one whose price is known, or the budget could not be enforced.
+		std::string chatModel { "claude-haiku-5-5" };
+
+		/// Read from the environment by the caller; never from the command line, where it would
+		/// end up in process listings and shell history.
+		std::string chatApiKey;
+
+		ChatBudgetLimits chatLimits;
+
+		/// Spend ledger. Shared by every run that uses it, which is what makes the caps hold
+		/// across restarts.
+		std::string chatLedgerPath;
+
+		/// Optional text file with extra facts about the game for the prompt.
+		std::string chatFactsPath;
 	};
 
 	/// Runs many bots in one process against a live server stack.
@@ -115,6 +144,15 @@ namespace mmo
 			/// Position and time the stuck watchdog last saw progress at.
 			Vector3 watchdogPosition { Vector3::Zero };
 			GameTime watchdogSinceMs { 0 };
+
+			/// This bot as the chat director sees it; null when chat is off.
+			std::unique_ptr<SwarmChatParticipant> chat;
+
+			/// Chat lines waiting for their sender's name, with the time they arrived.
+			std::vector<std::pair<BotChatMessage, GameTime>> chatAwaitingName;
+
+			bool generalJoinRequested { false };
+			GameTime nextHumanScanMs { 0 };
 		};
 
 		void CreateBots();
@@ -133,6 +171,16 @@ namespace mmo
 		/// Brings a bot back once its scheduled time arrives.
 		void ServiceReconnect(Bot& bot, GameTime nowMs);
 
+		/// Creates the chat model, budget and director. Returns false if chat was asked for but
+		/// cannot run safely - no key, or a model whose price is unknown.
+		[[nodiscard]] bool SetupChat(const proto::Project& project);
+
+		void OnBotChat(Bot& bot, const BotChatMessage& message);
+		void DeliverChat(Bot& bot, const BotChatMessage& message, const std::string& senderName);
+
+		/// Joins General, notices nearby real players and expires lines whose sender never resolved.
+		void UpdateBotChat(Bot& bot, GameTime nowMs);
+
 	private:
 		SwarmSettings m_settings;
 		asio::io_service m_io;
@@ -143,6 +191,14 @@ namespace mmo
 		std::vector<BotRosterEntry> m_roster;
 		std::vector<std::unique_ptr<Bot>> m_bots;
 		bool m_grindSpotsBuilt { false };
+
+		std::unique_ptr<IChatModel> m_chatModel;
+		std::unique_ptr<ChatBudget> m_chatBudget;
+		std::unique_ptr<ChatDirector> m_chatDirector;
+		std::vector<scoped_connection> m_chatConnections;
+
+		/// Character guids of every bot that entered the world, to tell real players from bots.
+		std::set<uint64> m_botGuids;
 		GameTime m_nextLoginMs { 0 };
 		std::size_t m_nextLoginIndex { 0 };
 		bool m_stopRequested { false };
