@@ -119,12 +119,15 @@ def lint_levels(records: list[SpawnRecord], query: WorldQuery, unit_levels: dict
             if poi is not None and not contains(poi, x, z):
                 found.append(Violation("outside_poi", "warning", record.key,
                                        f"{_label(record, names)} at ({x:.0f}, {z:.0f}) is named for '{poi['name']}' but stands outside it", x, z))
-        levels = None if record.entry in service_units else unit_levels.get(record.entry)
-        band = atlas.band_for(x, z, query.area_at(x, z)) if levels else None
-        if band and (levels[1] < band[0] or levels[0] > band[1]):
-            found.append(Violation("level_band", "warning", record.key,
-                                   f"{_label(record, names)} at ({x:.0f}, {z:.0f}) is level {levels[0]}-{levels[1]}, "
-                                   f"outside the {band[2]} band {band[0]}-{band[1]}", x, z))
+        # A mixed spawn is checked for every unit it can spawn.
+        for entry in record.spawned_entries:
+            levels = None if entry in service_units else unit_levels.get(entry)
+            band = atlas.band_for(x, z, query.area_at(x, z)) if levels else None
+            if band and (levels[1] < band[0] or levels[0] > band[1]):
+                label = _label(record, names) if entry == record.entry else (names or {}).get(("unit", entry), f"unit {entry}")
+                found.append(Violation("level_band", "warning", record.key,
+                                       f"{label} at ({x:.0f}, {z:.0f}) is level {levels[0]}-{levels[1]}, "
+                                       f"outside the {band[2]} band {band[0]}-{band[1]}", x, z))
     return found
 
 

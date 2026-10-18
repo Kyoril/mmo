@@ -12,6 +12,7 @@
 #include "editor_imgui_helpers.h"
 #include "environment_preview.h"
 #include "environment_profile_combo.h"
+#include "unit_spawn_label.h"
 
 namespace mmo
 {
@@ -307,6 +308,7 @@ namespace mmo
 				{
 					stream << " - " << unitEntry->name();
 				}
+				stream << MixedSpawnLabelSuffix(spawn);
 
 				if (ImGui::Selectable(stream.str().c_str(), isSelected))
 				{
@@ -370,11 +372,22 @@ namespace mmo
 					}, &m_project.units.getTemplates(), m_project.units.count(), -1))
 				{
 					spawn->set_unitentry(m_project.units.getTemplates().entry(unitEntryIdx).id());
+
+					// unitentry mirrors the first entry of a mixed spawn
+					if (spawn->unitentries_size() > 0)
+					{
+						spawn->mutable_unitentries(0)->set_unitentry(spawn->unitentry());
+					}
 				}
 				ImGui::SameLine();
 				ImGui::Text("Unit Entry");
 				ImGui::SameLine();
 				DrawHelpMarker("The creature that will spawn at this location");
+
+				if (spawn->unitentries_size() > 0)
+				{
+					ImGui::TextDisabled("Mixed spawn: %d weighted entries (edit them in the world editor's spawn properties)", spawn->unitentries_size());
+				}
 
 				ImGui::Spacing();
 

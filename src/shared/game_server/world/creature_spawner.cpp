@@ -10,7 +10,7 @@
 #include "log/default_log_levels.h"
 #include "base/utilities.h"
 #include "shared/proto_data/maps.pb.h"
-#include "shared/proto_data/units.pb.h"
+#include "shared/proto_data/project.h"
 
 namespace mmo
 {
@@ -51,9 +51,11 @@ namespace mmo
 
 	CreatureSpawner::CreatureSpawner(
 		WorldInstance& world,
+		const proto::Project& project,
 		const proto::UnitEntry& entry,
 		const proto::UnitSpawnEntry& spawnEntry)
 		: m_world(world)
+		, m_project(project)
 		, m_entry(entry)
 		, m_spawnEntry(spawnEntry)
 		, m_active(spawnEntry.isactive())
@@ -62,6 +64,14 @@ namespace mmo
 		, m_respawnCountdown(world.GetUniverse().GetTimers())
 		, m_location(spawnEntry.positionx(), spawnEntry.positiony(), spawnEntry.positionz())
 	{
+		for (const auto& candidate : m_spawnEntry.unitentries())
+		{
+			if (!m_project.units.getById(candidate.unitentry()))
+			{
+				WLOG("Unit spawn '" << m_spawnEntry.name() << "' lists unknown unit entry " << candidate.unitentry() << " - it falls back to unit entry " << m_entry.id() << " when rolled");
+			}
+		}
+
 		if (m_active)
 		{
 			for (size_t i = 0; i < m_spawnEntry.maxcount(); ++i)
@@ -76,6 +86,46 @@ namespace mmo
 	CreatureSpawner::~CreatureSpawner()
 	= default;
 
+	uint32 CreatureSpawner::RollUnitEntryId(const proto::UnitSpawnEntry& spawnEntry, RandomnessGenerator& generator)
+	{
+		uint64 totalWeight = 0;
+		for (const auto& candidate : spawnEntry.unitentries())
+		{
+			totalWeight += candidate.weight();
+		}
+
+		if (totalWeight == 0)
+		{
+			return spawnEntry.unitentry();
+		}
+
+		std::uniform_int_distribution<uint64> distribution(0, totalWeight - 1);
+		uint64 roll = distribution(generator);
+		for (const auto& candidate : spawnEntry.unitentries())
+		{
+			if (roll < candidate.weight())
+			{
+				return candidate.unitentry();
+			}
+
+			roll -= candidate.weight();
+		}
+
+		UNREACHABLE();
+		return spawnEntry.unitentry();
+	}
+
+	const proto::UnitEntry& CreatureSpawner::NextEntry() const
+	{
+		if (m_spawnEntry.unitentries_size() == 0)
+		{
+			return m_entry;
+		}
+
+		const proto::UnitEntry* rolled = m_project.units.getById(RollUnitEntryId(m_spawnEntry, RandomGenerator));
+		return rolled ? *rolled : m_entry;
+	}
+
 	void CreatureSpawner::SpawnOne()
 	{
 		// TODO: Generate random point and if needed, random rotation
@@ -83,7 +133,7 @@ namespace mmo
 		const float o = m_spawnEntry.rotation();
 
 		// Spawn a new creature
-		auto spawned = m_world.CreateCreature(m_entry, location, o, m_spawnEntry.radius());
+		auto spawned = m_world.CreateCreature(NextEntry(), location, o, m_spawnEntry.radius());
 		spawned->ClearFieldChanges();
 
 		const CreatureMovement movement = ConvertSpawnMovement(m_spawnEntry);

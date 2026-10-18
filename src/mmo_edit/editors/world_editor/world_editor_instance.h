@@ -382,6 +382,9 @@ namespace mmo
 		void Visit(SelectedFogVolume &selectable) override;
 
 	private:
+		/// Draws the weighted unit entry table of a mixed unit spawn (UnitSpawnEntry::unitentries).
+		void DrawMixedUnitSpawnEntries(SelectedUnitSpawn &selectable);
+
 		bool ReadMVERChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMeshChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);

@@ -82,6 +82,13 @@ Important `UnitEntry` fields for this project:
 - `unitentry`
   Points at the base `UnitEntry`.
 
+- `unitentries`
+  Optional mixed spawn: a list of `{unitentry, weight}`. Every spawn and respawn rolls one entry
+  with chance weight / total weight (weight 0 is never rolled; no entry with weight > 0 means
+  `unitentry` spawns). `unitentry` stays required and mirrors the first entry. Loot, kill credit,
+  AI and level all come from the rolled unit, so each entry needs its own complete `UnitEntry`.
+  Format and validation rules: `npc-json-format.md`.
+
 - `movement`
   `0 = STATIONARY`, `1 = RANDOM`, `2 = PATROL`.
 

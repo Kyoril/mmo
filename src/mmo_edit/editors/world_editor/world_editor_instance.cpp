@@ -3312,6 +3312,144 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 	}
 
+	void WorldEditorInstance::DrawMixedUnitSpawnEntries(SelectedUnitSpawn &selectable)
+	{
+		proto::UnitSpawnEntry &spawn = selectable.GetEntry();
+		const auto &units = m_editor.GetProject().units;
+
+		const String header = spawn.unitentries_size() > 0
+			? "Mixed Spawn (" + std::to_string(spawn.unitentries_size()) + " entries)###MixedSpawn"
+			: String("Mixed Spawn###MixedSpawn");
+		if (!ImGui::TreeNode(header.c_str()))
+		{
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Spawn one of several units, rolled by weight on every spawn and respawn.\nEmpty: the spawn always spawns 'Unit'.");
+			}
+			return;
+		}
+
+		if (spawn.unitentries_size() == 0)
+		{
+			ImGui::TextDisabled("Plain spawn: always spawns 'Unit'.");
+			if (ImGui::Button(ICON_FA_PLUS " Make Mixed Spawn"))
+			{
+				// Seed with the current unit so it stays the first (preview) entry.
+				auto *first = spawn.add_unitentries();
+				first->set_unitentry(spawn.unitentry());
+				first->set_weight(1);
+			}
+
+			ImGui::TreePop();
+			return;
+		}
+
+		uint64 totalWeight = 0;
+		for (const auto &candidate : spawn.unitentries())
+		{
+			totalWeight += candidate.weight();
+		}
+
+		int removeIndex = -1;
+		if (ImGui::BeginTable("##mixedSpawnEntries", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("Unit", ImGuiTableColumnFlags_WidthStretch, 3.0f);
+			ImGui::TableSetupColumn("Weight", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+			ImGui::TableSetupColumn("Chance", ImGuiTableColumnFlags_WidthFixed, 56.0f);
+			ImGui::TableSetupColumn("##remove", ImGuiTableColumnFlags_WidthFixed, 24.0f);
+			ImGui::TableHeadersRow();
+
+			for (int i = 0; i < spawn.unitentries_size(); ++i)
+			{
+				proto::UnitSpawnWeightedEntry &candidate = *spawn.mutable_unitentries(i);
+				ImGui::PushID(i);
+				ImGui::TableNextRow();
+
+				ImGui::TableNextColumn();
+				const proto::UnitEntry *candidateUnit = units.getById(candidate.unitentry());
+				const String preview = candidateUnit
+					? candidateUnit->name() + " (#" + std::to_string(candidate.unitentry()) + ")"
+					: "<unknown #" + std::to_string(candidate.unitentry()) + ">";
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::BeginCombo("##unit", preview.c_str()))
+				{
+					for (const auto &unit : units.getTemplates().entry())
+					{
+						ImGui::PushID(unit.id());
+						if (ImGui::Selectable(unit.name().c_str(), &unit == candidateUnit))
+						{
+							candidate.set_unitentry(unit.id());
+							if (i == 0)
+							{
+								// unitentry mirrors the first entry: fallback and editor preview
+								spawn.set_unitentry(unit.id());
+								selectable.RefreshEntity();
+							}
+						}
+						ImGui::PopID();
+					}
+					ImGui::EndCombo();
+				}
+
+				ImGui::TableNextColumn();
+				uint32 weight = candidate.weight();
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::InputScalar("##weight", ImGuiDataType_U32, &weight))
+				{
+					candidate.set_weight(weight);
+				}
+
+				ImGui::TableNextColumn();
+				if (candidate.weight() == 0 || totalWeight == 0)
+				{
+					ImGui::TextDisabled("never");
+				}
+				else
+				{
+					ImGui::Text("%.1f%%", 100.0 * static_cast<double>(candidate.weight()) / static_cast<double>(totalWeight));
+				}
+
+				ImGui::TableNextColumn();
+				if (ImGui::SmallButton(ICON_FA_TRASH))
+				{
+					removeIndex = i;
+				}
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Remove this entry");
+				}
+
+				ImGui::PopID();
+			}
+
+			ImGui::EndTable();
+		}
+
+		if (removeIndex >= 0)
+		{
+			spawn.mutable_unitentries()->DeleteSubrange(removeIndex, 1);
+			if (removeIndex == 0 && spawn.unitentries_size() > 0)
+			{
+				spawn.set_unitentry(spawn.unitentries(0).unitentry());
+				selectable.RefreshEntity();
+			}
+		}
+
+		if (ImGui::Button(ICON_FA_PLUS " Add Entry"))
+		{
+			auto *added = spawn.add_unitentries();
+			added->set_unitentry(spawn.unitentry());
+			added->set_weight(1);
+		}
+
+		if (totalWeight == 0)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "All weights are 0: the spawn falls back to 'Unit'.");
+		}
+
+		ImGui::TreePop();
+	}
+
 	void WorldEditorInstance::Visit(SelectedUnitSpawn &selectable)
 	{
 		// Notify the spawn edit mode which spawn is currently shown so it can
@@ -3334,6 +3472,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					if (ImGui::Selectable(unit.name().c_str(), &unit == selectedUnit))
 					{
 						selectable.GetEntry().set_unitentry(unit.id());
+
+						// unitentry mirrors the first entry of a mixed spawn
+						if (selectable.GetEntry().unitentries_size() > 0)
+						{
+							selectable.GetEntry().mutable_unitentries(0)->set_unitentry(unit.id());
+						}
 						selectable.RefreshEntity();
 					}
 					ImGui::PopID();
@@ -3341,6 +3485,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 				ImGui::EndCombo();
 			}
+
+			DrawMixedUnitSpawnEntries(selectable);
 
 			bool isActive = selectable.GetEntry().isactive();
 			if (ImGui::Checkbox("Is Active", &isActive))
