@@ -332,7 +332,11 @@ def build_graph(b, mode):
     view_distance = b.add("PixelDepthNode")
     distance_t = b.sat(b.div(view_distance, b.scalar("NormalFadeDistance", 90.0)))
     distance_factor = b.lerp(b.const(1.0), b.scalar("NormalFarStrength", 0.2), distance_t)
-    slope = b.mul(b.addn(b.addn(layer_a, layer_b), layer_c), distance_factor)
+    # The surface shape is the procedural swell (the same one the sun glint uses, so surface and
+    # glint agree); the ripple texture only adds weaker fine detail on top of it.
+    swell_slope = build_glint_wave_slope(b)
+    ripples = b.mul(b.addn(b.addn(layer_a, layer_b), layer_c), b.scalar("RippleDetailStrength", 0.4))
+    slope = b.mul(b.addn(b.mul(swell_slope, b.scalar("SurfaceSwellStrength", 1.0)), ripples), distance_factor)
     tangent_normal = b.add("NormalizeNode", ins={"m_input": b.add("AppendNode", ins={"A": slope, "B": b.const(1.0)})})
     world_normal = b.add("NormalizeNode", ins={"m_input": b.add(
         "TransformVectorNode", {"Source Space": SPACE_TANGENT, "Target Space": SPACE_WORLD}, {"Vector": tangent_normal})})
@@ -486,7 +490,7 @@ def build_graph(b, mode):
         # the hue and pushes the saturation; GlitterTint warms it, so even a near-white noon sun
         # glints gold. ACES bleaches strong values toward white, which is why the glow and flakes
         # stay moderate and only the small core goes hot.
-        coarse_slope = b.mul(build_glint_wave_slope(b), distance_factor)
+        coarse_slope = b.mul(swell_slope, distance_factor)
         glitter = build_sun_glitter(b, sun_color, sun_dir, coarse_slope)
         above_water = b.addn(b.lerp(water, foam_lit, foam_mask),
                              b.mul(glitter, b.add("OneMinusNode", ins={"m_input": foam_mask})))
