@@ -189,3 +189,16 @@ TEST_CASE_METHOD(OpenLockRangeFixture, "An Open cast aimed at a world object in 
 
 	CHECK(CastAt(*caster, *node) == spell_cast_result::CastOkay);
 }
+
+TEST_CASE_METHOD(OpenLockRangeFixture, "Every interaction path shares the distance covering the Open spell range", "[spell][open_lock][cast_result]")
+{
+	auto caster = SpawnGatherer(Vector3(0.0f, 0.0f, 0.0f));
+
+	// Corpse looting, trading and vendor / trainer / banker / mailbox interaction all validate
+	// against this one constant (see src/world_server/player*.cpp), and so does the interaction
+	// a finished Open cast performs (GameUnitS::GetInteractionDistance). They are deliberately
+	// the same arm's reach, so the shared constant itself - not just the object interaction
+	// path - has to cover the Open spell's range.
+	CHECK(LootDistance >= OpenSpellRange);
+	CHECK(caster->GetInteractionDistance() == LootDistance);
+}
