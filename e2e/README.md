@@ -109,7 +109,7 @@ Actions:
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
 the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 `MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing),
-`SendChat(msg [, channel])` (channel `"say"` (default), `"party"`, `"yell"` or `"emote"`),
+`SendChat(msg [, channel [, target]])` (channel `"say"` (default), `"party"`, `"yell"`, `"emote"` or `"whisper"`, which needs the target name), `GetWhisperCount()` and `GetLastWhisper()` for whispers received,
 `InviteToParty(name)`, `AcceptPartyInvitation()` (only once `HasPendingPartyInvitation()` is
 true: the realm disconnects a client that accepts with no invitation pending), `LeaveParty()`,
 `IsInParty()`, `GetPartyMemberCount()`, `EquipFromBackpack()` (asks the server to equip every

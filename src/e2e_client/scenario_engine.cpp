@@ -68,6 +68,9 @@ namespace mmo
 			std::map<uint64, uint32> channelStarts;
 			std::set<uint64> channeling;
 
+			/// Whispers received, oldest first.
+			std::vector<std::string> whispers;
+
 			/// Casts that went off (SpellGo) per caster and spell.
 			std::map<std::pair<uint64, uint32>, uint32> spellGos;
 
@@ -1006,9 +1009,24 @@ namespace mmo
 			return reached;
 		}
 
-		void luaSendChat(const std::string& message, const std::string& channel)
+		void luaSendChat(const std::string& message, const std::string& channel, const std::string& target)
 		{
 			ChatType type = ChatType::Say;
+			if (channel == "whisper")
+			{
+				if (target.empty())
+				{
+					abortScenario(bot_exit_code::ScenarioFailed, "SendChat: a whisper needs a target name");
+				}
+
+				g_runtime->session->GetContext().SendChatMessage(message, ChatType::Whisper, target);
+				if (g_runtime->transcript)
+				{
+					g_runtime->transcript->Action("SendChat", { { "message", message }, { "channel", channel }, { "target", target } });
+				}
+				return;
+			}
+
 			if (channel == "party")
 			{
 				type = ChatType::Group;
@@ -1023,7 +1041,7 @@ namespace mmo
 			}
 			else if (channel != "say")
 			{
-				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell or emote)");
+				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell, emote or whisper)");
 			}
 
 			g_runtime->session->GetContext().SendChatMessage(message, type);
@@ -1704,6 +1722,8 @@ namespace mmo
 				luabind::def_lambda("MoveToImpl", &luaMoveTo),
 				luabind::def_lambda("SendAreaTrigger", &luaSendAreaTrigger),
 				luabind::def_lambda("SendChatImpl", &luaSendChat),
+				luabind::def_lambda("GetWhisperCount", []() { return static_cast<uint32>(g_runtime->whispers.size()); }),
+				luabind::def_lambda("GetLastWhisper", []() { return g_runtime->whispers.empty() ? std::string() : g_runtime->whispers.back(); }),
 				luabind::def_lambda("InviteToParty", &luaInviteToParty),
 				luabind::def_lambda("AcceptPartyInvitation", &luaAcceptPartyInvitation),
 				luabind::def_lambda("LeaveParty", &luaLeaveParty),
@@ -1757,7 +1777,7 @@ namespace mmo
 			function Assert(cond, msg) AssertImpl(not not cond, msg or "assertion failed") end
 			function WaitUntil(fn, timeoutMs, desc) return WaitUntilImpl(fn, timeoutMs or 10000, desc or "condition") end
 			function CastSpell(spellId, target) return CastSpellImpl(spellId, target or "") end
-			function SendChat(message, channel) SendChatImpl(message, channel or "say") end
+			function SendChat(message, channel, target) SendChatImpl(message, channel or "say", target or "") end
 			function MoveTo(x, y, z, timeoutMs) return MoveToImpl(x, y, z, timeoutMs or 30000) end
 			function LoginElsewhere(timeoutMs) return LoginElsewhereImpl(timeoutMs or 15000) end
 			function Reconnect(timeoutMs) return ReconnectImpl(timeoutMs or 30000) end
@@ -1902,6 +1922,18 @@ namespace mmo
 			{
 				++runtime.spellGos[{ caster, spellId }];
 				transcript.Event("spell_go", { { "caster", guidToString(caster) }, { "spell_id", spellId } });
+			}) };
+		const scoped_connection chatRecorder { realm.ChatMessageReceived.connect(
+			[&transcript, &runtime](const BotChatMessage& message)
+			{
+				if (message.type == ChatType::Whisper)
+				{
+					runtime.whispers.push_back(message.message);
+				}
+
+				transcript.Event("chat_received",
+					{ { "sender", guidToString(message.senderGuid) }, { "chat_type", static_cast<uint32>(message.type) },
+					  { "message", message.message } });
 			}) };
 		const scoped_connection channelStartedRecorder { realm.ChannelStarted.connect(
 			[&transcript, &runtime](const uint64 caster, const uint32 spellId, const int32 durationMs)
