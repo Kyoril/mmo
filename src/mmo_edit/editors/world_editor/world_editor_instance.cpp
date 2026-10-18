@@ -55,6 +55,7 @@
 #include "graphics/render_texture.h"
 
 #include "stb_dxt.h"
+#include "minimap_baker.h"
 #include "terrain_lod_baker.h"
 
 namespace mmo
@@ -2160,316 +2161,107 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		return stats.failed == 0;
 	}
 
-	void WorldEditorInstance::GenerateMinimaps()
+	bool WorldEditorInstance::GenerateMinimaps(const bool onlyStale, const MinimapBaker::Region& region)
 	{
 		if (!m_terrain || !m_hasTerrain)
 		{
 			ELOG("Cannot generate minimaps: no terrain available");
-			return;
+			return false;
 		}
 
-		// Minimap configuration
-		const uint32 minimapSize = 256; // render resolution per page tile
-		const float pageSize = terrain::constants::PageSize;
-
-		auto &gx = GraphicsDevice::Get();
-		gx.CaptureState();
-
-		// -----------------------------------------------------------------------
-		// Hide editor-only support objects so they don't appear in the minimap.
-		// We record their previous visibility so we can restore it afterwards.
-		// -----------------------------------------------------------------------
-		const bool gridWasVisible = m_worldGrid && m_worldGrid->IsVisible();
-		if (m_worldGrid) m_worldGrid->SetVisible(false);
-
-		const bool debugBBWasVisible = m_debugBoundingBox && m_debugBoundingBox->IsVisible();
-		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(false);
-
-		// Hide all area-trigger render objects
-		std::vector<bool> areaTriggerWasVisible;
-		areaTriggerWasVisible.reserve(m_areaTriggerRenderObjects.size());
-		for (ManualRenderObject *ro : m_areaTriggerRenderObjects)
+		// World models (WMOs) are drawn onto the minimap; static meshes, units, foliage and every
+		// editor helper are left out by the baker, which keeps only the terrain and these subtrees.
+		// Entities only exist for streamed-in pages, so each page's neighbourhood is loaded on demand.
+		MinimapBaker::Stats stats;
 		{
-			areaTriggerWasVisible.push_back(ro ? ro->IsVisible() : false);
-			if (ro) ro->SetVisible(false);
+			MinimapBaker baker(m_scene, *m_terrain, m_assetPath.filename().replace_extension().string(),
+				[this](const uint32 x, const uint32 z) { return PrepareMinimapBakeEntities(x, z); },
+				[this]() { return m_dispatcher.poll_one() > 0; });
+			stats = baker.BakeAll(onlyStale, region);
 		}
 
-		// Hide all fog volume wireframes
-		std::vector<std::pair<ManualRenderObject *, bool>> fogVolumeWasVisible;
-		fogVolumeWasVisible.reserve(m_fogVolumeVisuals.size());
-		for (const auto &[volumeId, visual] : m_fogVolumeVisuals)
-		{
-			fogVolumeWasVisible.emplace_back(visual.second, visual.second->IsVisible());
-			visual.second->SetVisible(false);
-		}
-
-		// Hide debug / preview entity (e.g. placement ghost)
-		const bool debugEntityWasVisible = m_debugEntity && m_debugEntity->IsVisible();
-		if (m_debugEntity) m_debugEntity->SetVisible(false);
-
-		// Hide authored tree foliage so it does not appear on the minimap.
-		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
-		if (m_foliage) m_foliage->SetVisible(false);
-
-		Camera *renderCam = m_scene.CreateCamera("MinimapCamera");
-		renderCam->SetProjectionType(ProjectionType::Orthographic);
-		renderCam->SetOrthoWindow(pageSize, pageSize);
-
-		// Set appropriate clip distances for top-down orthographic view
-		// Near plane should be close to capture terrain details
-		renderCam->SetNearClipDistance(0.1f);
-		// Far plane should be generous to capture tall entities
-		renderCam->SetFarClipDistance(500.0f);
-
-		SceneNode *camNode = m_scene.GetRootSceneNode().CreateChildSceneNode("MinimapCameraNode");
-		camNode->AttachObject(*renderCam);
-
-		// Create render texture for minimap generation
-		RenderTexturePtr minimapRT = gx.CreateRenderTexture("MinimapGeneration", minimapSize, minimapSize,
-															RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer,
-															PixelFormat::R8G8B8A8, PixelFormat::D32F);
-
-		if (!minimapRT)
-		{
-			ELOG("Failed to create render texture for minimap generation");
-		}
-		else
-		{
-			// Iterate through all terrain pages
-			uint32 processedPages = 0;
-
-			for (uint32 pageX = 0; pageX < m_terrain->GetWidth(); ++pageX)
-			{
-				for (uint32 pageY = 0; pageY < m_terrain->GetHeight(); ++pageY)
-				{
-					// Get the terrain page
-					terrain::Page *page = m_terrain->GetPage(pageX, pageY);
-
-					// Ensure page is loaded for rendering
-					if (!page->IsLoaded())
-					{
-						continue;
-					}
-
-					// Switch this page's water to an opaque, solid-colour material so it shows up on
-					// the minimap. The normal water material samples scene depth/refraction textures
-					// that are not bound during minimap generation and would otherwise be invisible.
-					page->SetMinimapWaterMode(true);
-
-					// Calculate world position for page centers
-					const float worldX = page->GetSceneNode()->GetDerivedPosition().x + pageSize * 0.5f;
-					const float worldZ = page->GetSceneNode()->GetDerivedPosition().z + pageSize * 0.5f;
-
-					// Get terrain height at page center for camera positioning
-					float terrainHeight = page->GetBoundingBox().GetExtents().y;
-
-					// Get the maximum height in this page to ensure we capture all entities
-					float maxHeight = terrainHeight;
-
-					// Check all map entities in this page to find the maximum height.
-					// Only consider WMO (WorldModel) entities — static mesh entities are
-					// excluded from the minimap entirely.
-					for (const auto &mapEntity : m_mapEntities)
-					{
-						if (mapEntity && &mapEntity->GetSceneNode())
-						{
-							// Skip non-WMO entities (static meshes, etc.)
-							if (!mapEntity->IsWorldModelEntity())
-							{
-								continue;
-							}
-
-							const Vector3 &entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
-
-							// Check if this entity is within the current page bounds
-							if (entityPos.x >= page->GetSceneNode()->GetDerivedPosition().x &&
-								entityPos.x < page->GetSceneNode()->GetDerivedPosition().x + pageSize &&
-								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
-								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
-							{
-								// Get the movable object's bounding box to determine its height
-								MovableObject *movable = mapEntity->GetMovableObject();
-								if (movable)
-								{
-									const AABB &entityBounds = movable->GetBoundingBox();
-									if (!entityBounds.IsNull())
-									{
-										const Vector3 entityWorldPos = mapEntity->GetSceneNode().GetDerivedPosition();
-										const Vector3 entityScale = mapEntity->GetSceneNode().GetDerivedScale();
-
-										// Calculate the actual world-space top of the entity
-										float entityTop = entityWorldPos.y + (entityBounds.max.y * entityScale.y);
-										maxHeight = std::max(maxHeight, entityTop);
-									}
-								}
-							}
-						}
-					}
-
-					// Position camera high enough above the highest object in the page
-					// Add extra margin to ensure we capture everything
-					const Vector3 cameraPos(worldX, maxHeight + 50.0f, worldZ);
-					renderCam->GetParentSceneNode()->SetPosition(cameraPos);
-
-					// Set up camera to look straight down (negative Y direction)
-					// Camera's default forward is -Z, so we need to rotate 90 degrees around X to look down -Y
-					// This creates a top-down orthographic view where the camera looks down at the XZ terrain plane
-					const Quaternion topDownOrientation = Quaternion(Degree(-90.0f), Vector3::UnitX);
-					renderCam->GetParentSceneNode()->SetOrientation(topDownOrientation);
-					renderCam->InvalidateFrustum();
-					renderCam->InvalidateView();
-
-					// Setup render target and projection
-					minimapRT->Activate();
-					minimapRT->Clear(ClearFlags::All);
-
-					// Temporarily change entity render queue groups to match terrain for consistent rendering.
-					// Only WMO (WorldModel) entities are considered; static mesh entities are hidden so
-					// they don't appear in the minimap at all.
-					std::vector<std::pair<MovableObject *, uint8>> originalRenderQueues;
-					std::vector<std::pair<MovableObject *, bool>> hiddenMeshEntities;
-					for (const auto &mapEntity : m_mapEntities)
-					{
-						if (mapEntity && &mapEntity->GetSceneNode())
-						{
-							const Vector3 &entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
-							if (entityPos.x >= page->GetSceneNode()->GetDerivedPosition().x &&
-								entityPos.x < page->GetSceneNode()->GetDerivedPosition().x + pageSize &&
-								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
-								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
-							{
-								MovableObject *movable = mapEntity->GetMovableObject();
-								if (movable)
-								{
-									if (mapEntity->IsWorldModelEntity())
-									{
-										// WMOs: move to terrain render queue so they render correctly
-										originalRenderQueues.emplace_back(movable, movable->GetRenderQueueGroup());
-										movable->SetRenderQueueGroup(WorldGeometry1); // Same as terrain
-									}
-									else
-									{
-										// Static mesh entities: hide them for this render pass
-										const bool wasVisible = movable->IsVisible();
-										hiddenMeshEntities.emplace_back(movable, wasVisible);
-										movable->SetVisible(false);
-									}
-								}
-							}
-						}
-					}
-
-					// Render the scene (terrain and objects in this page)
-					// Minimap tiles are a top-down map, not a view through the atmosphere. (The old
-					// SetFogRange here was never undone and silently removed the viewport fog.)
-					const bool fogWasEnabled = m_scene.IsFogEnabled();
-					m_scene.SetFogEnabled(false);
-					m_scene.Render(*renderCam, PixelShaderType::Forward);
-					m_scene.SetFogEnabled(fogWasEnabled);
-					minimapRT->Update();
-
-					// Restore original render queue groups
-					for (const auto &[movable, originalQueue] : originalRenderQueues)
-					{
-						movable->SetRenderQueueGroup(originalQueue);
-					}
-
-					// Restore visibility of hidden mesh entities
-					for (const auto &[movable, wasVisible] : hiddenMeshEntities)
-					{
-						movable->SetVisible(wasVisible);
-					}
-
-					// Restore the page's normal (translucent) water material now that the tile is rendered.
-					page->SetMinimapWaterMode(false);
-
-					// Create texture from render target
-					TexturePtr minimapTexture = minimapRT->StoreToTexture();
-					if (!minimapTexture)
-					{
-						WLOG("Failed to store minimap texture for page (" << pageX << ", " << pageY << ")");
-						continue;
-					}
-
-					// Generate filename with encoded coordinates
-					const uint16 pageIndex = BuildPageIndex(static_cast<uint8>(pageX), static_cast<uint8>(pageY));
-					const String minimapFilename = "Textures/Minimaps/" + m_assetPath.filename().replace_extension().string() + "/" + std::to_string(pageIndex) + ".htex";
-
-					// Save texture to AssetRegistry
-					try
-					{
-						std::unique_ptr<std::ostream> outStream = AssetRegistry::CreateNewFile(minimapFilename);
-						if (outStream)
-						{
-							// Save texture using the engine's texture format.
-							// We use uncompressed RGBA instead of DXT1 to preserve maximum quality:
-							// DXT1 is lossy and introduces visible block artefacts on the fine details
-							// of terrain/WMO colours, while the file-size increase for a 256×256 tile
-							// is only ~32 KB per page — an acceptable trade-off.
-							io::StreamSink sink(*outStream);
-							tex::v1_0::Header header(tex::Version_1_0);
-							header.width = minimapSize;
-							header.height = minimapSize;
-							header.format = tex::v1_0::RGBA;
-							header.hasMips = false;
-
-							tex::v1_0::HeaderSaver saver(sink, header);
-
-							header.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
-
-							// Copy raw pixel data from render texture (4 bytes per pixel, RGBA)
-							const uint32 pixelDataSize = minimapSize * minimapSize * 4;
-							std::vector<uint8> pixelData(pixelDataSize);
-							minimapTexture->CopyPixelDataTo(pixelData.data());
-
-							// Write uncompressed RGBA data directly — no lossy block compression
-							header.mipmapLengths[0] = pixelDataSize;
-							sink.Write(reinterpret_cast<const char *>(pixelData.data()), pixelDataSize);
-							saver.finish();
-
-							processedPages++;
-							ILOG("Generated minimap for page (" << pageX << ", " << pageY << ") -> " << minimapFilename);
-						}
-						else
-						{
-							WLOG("Failed to create file for minimap: " << minimapFilename);
-						}
-					}
-					catch (const std::exception &e)
-					{
-						ELOG("Error saving minimap for page (" << pageX << ", " << pageY << "): " << e.what());
-					}
-				}
-			}
-
-			ILOG("Minimap generation completed. Processed " << processedPages << " terrain pages.");
-		}
-
-		// Cleanup
-		m_scene.DestroyCamera(*renderCam);
-		m_scene.DestroySceneNode(*camNode);
-
-		// Restore visibility of editor support objects that were hidden during minimap generation
-		if (m_worldGrid) m_worldGrid->SetVisible(gridWasVisible);
-		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(debugBBWasVisible);
-		for (size_t i = 0; i < m_areaTriggerRenderObjects.size(); ++i)
-		{
-			if (m_areaTriggerRenderObjects[i])
-			{
-				m_areaTriggerRenderObjects[i]->SetVisible(areaTriggerWasVisible[i]);
-			}
-		}
-		for (const auto &[renderObject, wasVisible] : fogVolumeWasVisible)
-		{
-			renderObject->SetVisible(wasVisible);
-		}
-		if (m_debugEntity) m_debugEntity->SetVisible(debugEntityWasVisible);
-		if (m_foliage) m_foliage->SetVisible(foliageWasVisible);
-
-		gx.RestoreState();
+		ReleaseMinimapBakeEntities();
 
 		// Force the minimap teleport panel to reload the freshly generated tiles.
 		m_minimapPanel.Refresh();
+
+		return stats.failed == 0;
+	}
+
+	std::vector<const SceneNode*> WorldEditorInstance::PrepareMinimapBakeEntities(const uint32 x, const uint32 z)
+	{
+		// A world model is stored with the page its origin lies in but can reach into the neighbours.
+		const auto isNeighbour = [x, z](const uint32 px, const uint32 pz)
+		{
+			return std::abs(static_cast<int32>(px) - static_cast<int32>(x)) <= 1 &&
+				std::abs(static_cast<int32>(pz) - static_cast<int32>(z)) <= 1;
+		};
+
+		// Drop what earlier pages needed and this one does not, so a full-world bake stays small.
+		std::vector<uint16> stale;
+		for (const uint16 pageIndex : m_bakeEntityPages)
+		{
+			uint8 px, pz;
+			if (GetPageCoordinatesFromIndex(pageIndex, px, pz) && !isNeighbour(px, pz))
+			{
+				stale.push_back(pageIndex);
+			}
+		}
+
+		for (const uint16 pageIndex : stale)
+		{
+			uint8 px, pz;
+			GetPageCoordinatesFromIndex(pageIndex, px, pz);
+			UnloadPageEntities(px, pz);
+		}
+
+		for (int32 dz = -1; dz <= 1; ++dz)
+		{
+			for (int32 dx = -1; dx <= 1; ++dx)
+			{
+				const int32 px = static_cast<int32>(x) + dx;
+				const int32 pz = static_cast<int32>(z) + dz;
+				if (px < 0 || pz < 0 || px >= static_cast<int32>(m_terrain->GetWidth()) || pz >= static_cast<int32>(m_terrain->GetHeight()))
+				{
+					continue;
+				}
+
+				const uint16 pageIndex = BuildPageIndex(static_cast<uint8>(px), static_cast<uint8>(pz));
+				if (m_entityPages.contains(pageIndex))
+				{
+					continue;
+				}
+
+				LoadPageEntities(static_cast<uint8>(px), static_cast<uint8>(pz));
+				m_bakeEntityPages.insert(pageIndex);
+			}
+		}
+
+		std::vector<const SceneNode*> modelNodes;
+		for (const auto& mapEntity : m_mapEntities)
+		{
+			if (mapEntity && mapEntity->IsWorldModelEntity())
+			{
+				modelNodes.push_back(&mapEntity->GetSceneNode());
+			}
+		}
+
+		return modelNodes;
+	}
+
+	void WorldEditorInstance::ReleaseMinimapBakeEntities()
+	{
+		const std::vector<uint16> pages(m_bakeEntityPages.begin(), m_bakeEntityPages.end());
+		for (const uint16 pageIndex : pages)
+		{
+			uint8 px, pz;
+			if (GetPageCoordinatesFromIndex(pageIndex, px, pz))
+			{
+				UnloadPageEntities(px, pz);
+			}
+		}
+
+		m_bakeEntityPages.clear();
 	}
 
 	Camera &WorldEditorInstance::GetCamera() const
@@ -2497,6 +2289,14 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::LoadPageEntities(const uint8 x, const uint8 y)
 	{
+		const uint16 pageIndex = BuildPageIndex(x, y);
+		if (!m_entityPages.insert(pageIndex).second)
+		{
+			// Already loaded (the minimap bake got here first): streaming owns the page from now on.
+			m_bakeEntityPages.erase(pageIndex);
+			return;
+		}
+
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(x, y))).string();
 		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c)
 					   { return c == '\\' ? '/' : c; });
@@ -2590,6 +2390,9 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::UnloadPageEntities(uint8 x, uint8 y)
 	{
+		m_entityPages.erase(BuildPageIndex(x, y));
+		m_bakeEntityPages.erase(BuildPageIndex(x, y));
+
 		const PagePosition targetPos(x, y);
 
 		// Collect WMO raw pointers BEFORE erasing so we can release factory ownership
