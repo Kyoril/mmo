@@ -775,10 +775,10 @@
       "name": "River Meadows",
       "kind": "landmark",
       "center": [
-        -300.0,
-        660.0
+        -277.8,
+        669.2
       ],
-      "radius": 110.0,
+      "radius": 80.0,
       "description": "Open floodplain meadows inside the river's eastern meander, with lone oaks and wildflowers.",
       "status": "placeholder",
       "ask": "Confirm the name and whether quests or creatures belong here.",
