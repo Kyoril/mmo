@@ -240,7 +240,7 @@ namespace mmo
 	{
 		context.discord = std::make_unique<Discord>();
 		context.discord->Initialize();
-		context.minimap = std::make_unique<Minimap>(256);
+		context.minimap = std::make_unique<Minimap>(512);
 
 		context.charCreateInfo = std::make_unique<CharCreateInfo>(*context.project, realmConnector);
 		context.charSelect = std::make_unique<CharSelect>(*context.project, realmConnector);

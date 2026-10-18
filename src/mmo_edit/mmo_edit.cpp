@@ -550,6 +550,59 @@ int main(int argc, char* arg[])
 				}
 				break;
 			}
+
+			if (std::string(args[i]) == "--bake-minimaps")
+			{
+				// Unattended like --bake-terrain-lod: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("minimap_bake.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("minimap_bake_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				{
+					bool onlyStale = false;
+					mmo::MinimapBaker::Region region;
+					for (int j = 1; j < argCount; ++j)
+					{
+						onlyStale = onlyStale || std::string(args[j]) == "--only-stale";
+
+						// --region minX,minZ,maxX,maxZ (inclusive page coordinates) rebakes just an area.
+						if (std::string(args[j]) == "--region" && j + 1 < argCount)
+						{
+							unsigned minX = 0, minZ = 0, maxX = 0, maxZ = 0;
+							if (std::sscanf(args[j + 1], "%u,%u,%u,%u", &minX, &minZ, &maxX, &maxZ) == 4)
+							{
+								region = mmo::MinimapBaker::Region{ minX, minZ, maxX, maxZ };
+							}
+							else
+							{
+								ELOG("--region expects minX,minZ,maxX,maxZ");
+							}
+						}
+					}
+
+					// Exit code 1 when any page failed, for scripted use.
+					const bool baked = mmo::WorldEditorInstance::GetLastCreated()->GenerateMinimaps(onlyStale, region);
+					PostQuitMessage(baked ? 0 : 1);
+				}
+				else
+				{
+					ELOG("--bake-minimaps: failed to open " << args[i + 1]);
+					PostQuitMessage(1);
+				}
+				break;
+			}
 		}
 		GlobalFree(args);
 	}
