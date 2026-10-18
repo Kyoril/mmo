@@ -424,3 +424,45 @@ TEST_CASE("Most questions from players in General get an answer", "[chat_directo
 	INFO("answered " << answered << " of " << Rounds);
 	CHECK(answered >= 50);
 }
+
+TEST_CASE("The prompt says what the bot really did with a player, and no more", "[chat_director]")
+{
+	Fixture f;
+
+	SECTION("someone it just met")
+	{
+		f.director->OnChatReceived(0, ChatType::Whisper, "Steve", "hi", 0, 1000);
+		f.Run(1000, 5000);
+		REQUIRE_FALSE(f.model.submitted.empty());
+		const std::string& prompt = f.model.submitted.back().prompt;
+		CHECK(prompt.find("Steve: you first talked just now") != std::string::npos);
+		CHECK(prompt.find("never been in a group together") != std::string::npos);
+		CHECK(prompt.find("not fought anything together yet") != std::string::npos);
+	}
+
+	SECTION("someone it grouped and fought with")
+	{
+		f.director->OnChatReceived(0, ChatType::Whisper, "Steve", "hi", 0, 1000);
+		f.Run(1000, 10000);
+		f.alice.party = { "Steve" };
+		f.Run(11050, 1000);
+		f.director->NoteKill(0, "Forest Wolf", 12100);
+		f.director->NoteKill(0, "Forest Wolf", 12200);
+
+		f.director->OnChatReceived(0, ChatType::Group, "Steve", "ty", 0, 3 * Minute);
+		for (GameTime t = 3 * Minute; t < 4 * Minute && f.model.submitted.size() < 2; t += 50)
+		{
+			f.director->Update(t);
+			// Party lines are answered most of the time; keep offering one until one is.
+			if (t % 20000 == 0)
+			{
+				f.director->OnChatReceived(0, ChatType::Group, "Steve", "ty " + std::to_string(t), 0, t);
+			}
+		}
+
+		REQUIRE(f.model.submitted.size() >= 2);
+		const std::string& prompt = f.model.submitted.back().prompt;
+		CHECK(prompt.find("in your group since 2 minutes ago") != std::string::npos);
+		CHECK(prompt.find("you killed 2 mobs together") != std::string::npos);
+	}
+}

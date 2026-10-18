@@ -31,12 +31,12 @@ namespace mmo
 		};
 
 		const WritingStyle writingStyles[] = {
-			{ "all lowercase, lots of abbreviations like u, ur, lol, ty, np, idk", true, true, 0.06f },
-			{ "mostly lowercase, skips punctuation, uses lol and xd", true, false, 0.05f },
-			{ "normal capitalization but short and to the point", false, false, 0.02f },
-			{ "lowercase, types fast and sloppy, sometimes drops small words", true, true, 0.09f },
-			{ "proper capitalization, short plain sentences, an occasional :)", false, false, 0.015f },
-			{ "terse, few words, rarely more than five", true, false, 0.03f },
+			{ "all lowercase, lots of abbreviations like u, ur, lol, ty, np, idk", true, true, 0.015f },
+			{ "mostly lowercase, skips punctuation, uses lol and xd", true, false, 0.012f },
+			{ "normal capitalization but short and to the point", false, false, 0.005f },
+			{ "lowercase, types fast and sloppy, sometimes drops small words", true, true, 0.025f },
+			{ "proper capitalization, short plain sentences, an occasional :)", false, false, 0.004f },
+			{ "terse, few words, rarely more than five", true, false, 0.008f },
 		};
 	}
 
@@ -54,7 +54,7 @@ namespace mmo
 		persona.typing.dropApostrophes = style.dropApostrophes;
 		persona.typing.dropTrailingPeriod = true;
 		persona.typing.typoChancePerWord = style.typoChance;
-		persona.typing.correctionChance = 0.25f;
+		persona.typing.correctionChance = 0.3f;
 		persona.chattiness = std::uniform_real_distribution<float>(0.5f, 1.5f)(rng);
 		return persona;
 	}

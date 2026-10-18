@@ -155,6 +155,10 @@ namespace mmo
 		/// Reports that a real player is standing near this bot, which lets it talk in /say.
 		void NoteHumanNearby(uint32 botIndex, GameTime nowMs);
 
+		/// Reports that the bot killed something. Counted as a shared fight with every real
+		/// player in its party at the time, so that the bot knows what it actually did with them.
+		void NoteKill(uint32 botIndex, const std::string& victimName, GameTime nowMs);
+
 		/// Remembers something that happened to a bot ("died to a Forest Wolf"), for it to talk about.
 		void NoteEvent(uint32 botIndex, const std::string& event, GameTime nowMs);
 
@@ -194,6 +198,25 @@ namespace mmo
 			GameTime atMs { 0 };
 		};
 
+		/// What a bot knows about one real player. The model invents shared history ("you were a
+		/// beast that last pull") unless it is told exactly what the history is.
+		struct Acquaintance
+		{
+			/// Name as the player spells it.
+			std::string name;
+			GameTime firstMetMs { 0 };
+			GameTime lastTalkedMs { 0 };
+
+			/// Since when they share a party; zero when they do not.
+			GameTime groupedSinceMs { 0 };
+
+			/// Times they were in a party together before the current one.
+			uint32 pastGroups { 0 };
+
+			/// Kills the bot made while grouped with them, over all groups.
+			uint32 killsTogether { 0 };
+		};
+
 		struct BotState
 		{
 			uint32 index { 0 };
@@ -209,6 +232,9 @@ namespace mmo
 
 			/// When this bot last invited someone, by lower-case name.
 			std::map<std::string, GameTime> lastInviteMs;
+
+			/// Real players this bot has dealt with, by lower-case name.
+			std::map<std::string, Acquaintance> acquaintances;
 			bool lastPostWasReply { false };
 		};
 
@@ -271,6 +297,16 @@ namespace mmo
 		/// whisper, the last player to speak in /say or a channel, if the bot is free to invite
 		/// and has not invited them recently.
 		[[nodiscard]] std::string FindInviteCandidate(const BotState& bot, const Conversation& conversation, GameTime nowMs) const;
+
+		/// Finds or creates what the bot knows about a real player.
+		Acquaintance& Acquaint(BotState& bot, const std::string& name, GameTime nowMs);
+
+		/// Brings group membership in the acquaintances up to date with the bot's party.
+		void TrackParty(BotState& bot, GameTime nowMs);
+
+		/// "What you know about the people here" for the prompt: every real player in the
+		/// conversation or the party, and nothing the bot did not actually do with them.
+		[[nodiscard]] std::string DescribeAcquaintances(const BotState& bot, const Conversation& conversation, GameTime nowMs) const;
 
 		/// Asks the model for the bot's next line in a conversation.
 		/// @param topic For an unprompted post, the idea to build it on; empty for a reply.

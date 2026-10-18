@@ -210,10 +210,7 @@ namespace mmo
 				if (m_chatDirector)
 				{
 					const BotUnit* victim = botPtr->session->GetContext().GetUnit(guid);
-					if (victim && !victim->GetName().empty())
-					{
-						m_chatDirector->NoteEvent(index, "you just killed a " + victim->GetName(), GetAsyncTimeMs());
-					}
+					m_chatDirector->NoteKill(index, victim ? victim->GetName() : std::string(), GetAsyncTimeMs());
 				}
 				m_telemetry.Event(index, "kill", { { "target", guid } });
 			}));

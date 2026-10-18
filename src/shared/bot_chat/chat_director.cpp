@@ -236,6 +236,7 @@ namespace mmo
 		if (!fromBot)
 		{
 			NoteHumanSeen(nowMs);
+			Acquaint(*bot, senderName, nowMs).lastTalkedMs = nowMs;
 			if (type == ChatType::Guild)
 			{
 				bot->lastHumanGuildMs = nowMs;
@@ -292,6 +293,151 @@ namespace mmo
 		{
 			bot->events.pop_front();
 		}
+	}
+
+	ChatDirector::Acquaintance& ChatDirector::Acquaint(BotState& bot, const std::string& name, const GameTime nowMs)
+	{
+		Acquaintance& acquaintance = bot.acquaintances[toLower(name)];
+		if (acquaintance.firstMetMs == 0)
+		{
+			acquaintance.name = name;
+			acquaintance.firstMetMs = nowMs;
+		}
+
+		return acquaintance;
+	}
+
+	void ChatDirector::TrackParty(BotState& bot, const GameTime nowMs)
+	{
+		std::set<std::string> inParty;
+		for (const std::string& name : bot.participant->GetPartyMemberNames())
+		{
+			if (IsBotName(name))
+			{
+				continue;
+			}
+
+			inParty.insert(toLower(name));
+			Acquaintance& acquaintance = Acquaint(bot, name, nowMs);
+			if (acquaintance.groupedSinceMs == 0)
+			{
+				acquaintance.groupedSinceMs = nowMs;
+			}
+		}
+
+		for (auto& [key, acquaintance] : bot.acquaintances)
+		{
+			if (acquaintance.groupedSinceMs != 0 && inParty.count(key) == 0)
+			{
+				acquaintance.groupedSinceMs = 0;
+				++acquaintance.pastGroups;
+			}
+		}
+	}
+
+	void ChatDirector::NoteKill(const uint32 botIndex, const std::string& victimName, const GameTime nowMs)
+	{
+		BotState* bot = FindBot(botIndex);
+		if (!bot)
+		{
+			return;
+		}
+
+		bool grouped = false;
+		for (auto& [key, acquaintance] : bot->acquaintances)
+		{
+			if (acquaintance.groupedSinceMs != 0)
+			{
+				++acquaintance.killsTogether;
+				grouped = true;
+			}
+		}
+
+		if (!victimName.empty())
+		{
+			NoteEvent(botIndex, (grouped ? "your group just killed a " : "you just killed a ") + victimName, nowMs);
+		}
+	}
+
+	std::string ChatDirector::DescribeAcquaintances(const BotState& bot, const Conversation& conversation, const GameTime nowMs) const
+	{
+		const auto ago = [nowMs](const GameTime since)
+		{
+			const GameTime minutes = elapsed(nowMs, since) / 60000;
+			if (minutes < 1)
+			{
+				return std::string("just now");
+			}
+			if (minutes < 90)
+			{
+				return std::to_string(minutes) + (minutes == 1 ? " minute ago" : " minutes ago");
+			}
+			return "about " + std::to_string((minutes + 30) / 60) + " hours ago";
+		};
+
+		// Everyone the model might talk about: the people speaking here and the party.
+		std::set<std::string> people;
+		for (const Line& line : conversation.lines)
+		{
+			if (line.speaker != "you" && !IsBotName(line.speaker))
+			{
+				people.insert(toLower(line.speaker));
+			}
+		}
+		if (conversation.replyType == ChatType::Whisper && !conversation.target.empty())
+		{
+			people.insert(toLower(conversation.target));
+		}
+		for (const auto& [key, acquaintance] : bot.acquaintances)
+		{
+			if (acquaintance.groupedSinceMs != 0)
+			{
+				people.insert(key);
+			}
+		}
+
+		std::ostringstream out;
+		for (const std::string& key : people)
+		{
+			const auto it = bot.acquaintances.find(key);
+			if (it == bot.acquaintances.end())
+			{
+				continue;
+			}
+
+			const Acquaintance& acquaintance = it->second;
+			out << "- " << acquaintance.name << ": you first talked " << ago(acquaintance.firstMetMs);
+			if (acquaintance.groupedSinceMs != 0)
+			{
+				out << "; in your group since " << ago(acquaintance.groupedSinceMs);
+			}
+			else if (acquaintance.pastGroups > 0)
+			{
+				out << "; you grouped with them before, not right now";
+			}
+			else
+			{
+				out << "; you have never been in a group together";
+			}
+
+			if (acquaintance.killsTogether == 0)
+			{
+				out << "; you have not fought anything together yet";
+			}
+			else
+			{
+				out << "; you killed " << acquaintance.killsTogether << " mobs together";
+			}
+			out << ".\n";
+		}
+
+		const std::string list = out.str();
+		if (list.empty())
+		{
+			return list;
+		}
+
+		return "What you know about these players, and nothing more - you have no other history with them:\n" + list;
 	}
 
 	void ChatDirector::NoteHumanNearby(const uint32 botIndex, const GameTime nowMs)
@@ -371,6 +517,7 @@ namespace mmo
 
 		for (auto& [index, bot] : m_bots)
 		{
+			TrackParty(bot, nowMs);
 			ServiceProactive(bot, nowMs);
 			ServiceProactiveSay(bot, nowMs);
 
@@ -876,6 +1023,8 @@ namespace mmo
 			"- Keep it friendly and PG-13: no slurs, no harassment, no real-world politics, no links, no personal information. "
 			"Never ask for or share passwords or account details.\n"
 			"- If you are unsure about a game detail, stay vague rather than invent specifics.\n"
+			"- Never invent things you did with someone. Only the history listed for a player happened; "
+			"if nothing is listed, you have just met them. A thank-you for an invite gets a simple \"np\", not praise for a fight.\n"
 			"- If the message does not need an answer from you, or a real player would ignore it, reply with exactly: SKIP\n";
 
 		return out.str();
@@ -935,6 +1084,8 @@ namespace mmo
 		{
 			out << ".\n";
 		}
+
+		out << DescribeAcquaintances(bot, conversation, nowMs);
 
 		if (!inviteCandidate.empty())
 		{
