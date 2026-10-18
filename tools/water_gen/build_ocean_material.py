@@ -232,11 +232,11 @@ class GraphBuilder:
 # Per-variant starting values of the exposed parameters (tuning belongs in .hmi instances).
 RIVER_DEFAULTS = {
     # Murky, sediment-laden river: the colour takes over within a metre or two, little sky mirror.
-    "NormalStrength": 0.7, "SwellStrength": 0.35, "NormalTilingA": 2.2, "NormalTilingB": 5.5, "SwellTiling": 0.8,
+    "NormalStrength": 0.7, "SwellStrength": 0.5, "NormalTilingA": 2.2, "NormalTilingB": 5.5, "SwellTiling": 0.8,
     "FlowCycle": 0.35, "FlowDistanceA": 0.6, "FlowDistanceB": 1.4, "FlowDistanceC": 0.3,
     "ShallowColor": (0.06, 0.075, 0.045, 1.0), "DeepColor": (0.012, 0.026, 0.02, 1.0),
     "AbsorptionRGB": (0.9, 0.55, 0.45, 1.0), "DeepDistance": 2.0, "CausticsStrength": 0.15,
-    "ReflectionStrength": 0.2, "ReflectionDistortion": 0.65, "NormalFarStrength": 0.7, "NormalFadeDistance": 220.0, "GlitterStrength": 1.2, "GlitterPower": 350.0,
+    "ReflectionStrength": 0.2, "ReflectionDistortion": 0.65, "NormalFarStrength": 0.85, "NormalFadeDistance": 300.0, "GlitterStrength": 1.2, "GlitterPower": 350.0,
     "StreakIntensity": 0.06, "StreakThreshold": 0.78, "FoamDistance": 0.6, "ShoreFoamDepth": 0.25, "ShoreFoamFade": 0.6,
 }
 
@@ -279,29 +279,36 @@ def build_graph(b, mode, variant="ocean"):
                 return sample_fn(b.sub(uvs, b.add("AppendNode", ins={"A": offset, "B": b.const(0.0)})))
             return b.lerp(at(phase_a), at(phase_b), phase_blend)
 
-        # Ripples keep a readable size in the distance: each layer cross-fades into a copy at a third of
-        # the frequency with view distance, instead of shrinking into per-pixel noise.
-        far_t = b.sat(b.div(b.add("PixelDepthNode"), b.scalar("FarTilingDistance", 70.0)))
-        far_scale = b.scalar("FarTilingScale", 0.33)
+        # Away from the current (bays, lakes, the basin: low speed) the flow-aligned UVs stretch and
+        # swirl, so there the ripples cross-fade to the ocean's world-space panning instead.
+        world_uv = b.mul(b.mask(b.add("WorldPositionNode"), r=True, b=True), constant=1.0 / 16.0)
+        still_t = b.sat(b.mul(b.sub(flow_speed, b.scalar("StillWaterSpeed", 0.12)), constant=5.0))
+        view_depth = b.add("PixelDepthNode")
 
-        def normal_layer(tiling_name, tiling, distance, strength):
+        def normal_layer(tiling_name, tiling, distance, strength, still_speed, fade_name, fade_distance, fade_floor):
             def sample(uvs):
                 node = b.add("TextureParameterNode",
                              {"Name": "Normal", "Texture": "Models/Engine/WaterNormal.htex", "Sampler Type": 1},
                              {"UVs": uvs})
                 return b.mask(b.out(node, "RGBA"), r=True, g=True)
-            tiled = b.mul(uv0, b.scalar(tiling_name, tiling))
-            near = flow_sample(tiled, distance, sample)
-            far = flow_sample(b.mul(tiled, far_scale), b.mul(distance, far_scale), sample)
-            return b.mul(b.lerp(near, far, far_t), strength)
+            tiling_value = b.scalar(tiling_name, tiling)
+            flowing = flow_sample(b.mul(uv0, tiling_value), distance, sample)
+            still = sample(b.panner(b.mul(world_uv, tiling_value), *still_speed))
+            # Per-layer detail fade: fine layers calm down first, so the distance shows the broad
+            # pattern instead of shrinking every layer into noise.
+            fade = b.lerp(b.const(1.0), b.const(fade_floor), b.sat(b.div(view_depth, b.scalar(fade_name, fade_distance))))
+            return b.mul(b.mul(b.lerp(still, flowing, still_t), strength), fade)
 
     b.next_column()
     normal_strength = b.scalar("NormalStrength", 0.55)
     swell_strength = b.scalar("SwellStrength", 0.35)
     if river:
-        layer_a = normal_layer("NormalTilingA", 1.0, b.scalar("FlowDistanceA", 0.4), normal_strength)
-        layer_b = normal_layer("NormalTilingB", 2.7, b.scalar("FlowDistanceB", 1.0), normal_strength)
-        layer_c = normal_layer("SwellTiling", 0.3, b.scalar("FlowDistanceC", 0.15), swell_strength)
+        layer_a = normal_layer("NormalTilingA", 1.0, b.scalar("FlowDistanceA", 0.4), normal_strength,
+                               (0.020, 0.012), "DetailFadeA", 120.0, 0.35)
+        layer_b = normal_layer("NormalTilingB", 2.7, b.scalar("FlowDistanceB", 1.0), normal_strength,
+                               (-0.017, 0.025), "DetailFadeB", 45.0, 0.0)
+        layer_c = normal_layer("SwellTiling", 0.3, b.scalar("FlowDistanceC", 0.15), swell_strength,
+                               (0.006, -0.004), "DetailFadeC", 400.0, 0.8)
     else:
         layer_a = normal_layer("NormalTilingA", 1.0, (0.020, 0.012), normal_strength)
         layer_b = normal_layer("NormalTilingB", 2.7, (-0.017, 0.025), normal_strength)
