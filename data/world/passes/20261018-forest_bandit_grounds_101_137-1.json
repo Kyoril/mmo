@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "pass_id": "20261018-forest_bandit_grounds_101_137-1",
+  "map": 0,
+  "world": "Development",
+  "poi": "forest_bandit_grounds_101_137",
+  "template": "bandit_camp_extension_briarwatch",
+  "seed": 1,
+  "anchor": [
+    -101.0,
+    137.0
+  ],
+  "keep_away": [],
+  "entry": [
+    -101.0,
+    137.0
+  ],
+  "created": "2026-10-18T19:23:40",
+  "world_fingerprint": "c887bea6b64f4fa551b3d9177dc8514299c71a55",
+  "items": [
+    {
+      "role": "North tent",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        -90.0,
+        4.82,
+        187.0
+      ],
+      "yaw": 355.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x9aadc62db44fb5c7",
+      "file": "Worlds/Development/Development/Entities/7968/11145782552412796359.wobj",
+      "written_hash": "0e4eecbb1bf7390b01a7e4c3022fa2fee2ed09b6"
+    },
+    {
+      "role": "North fire",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_CampFire_A.hmsh",
+      "store": "wobj",
+      "position": [
+        -96.0,
+        5.09,
+        186.5
+      ],
+      "yaw": 0.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0x9aad192ac36c78df",
+      "file": "Worlds/Development/Development/Entities/7968/11145592324269832415.wobj",
+      "written_hash": "9210d7f5a31d10a2ee5e3784bcc7bf34716f650b"
+    },
+    {
+      "role": "South tent",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        -111.8,
+        9.59,
+        109.0
+      ],
+      "yaw": 169.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x9aad509c5af6dbf3",
+      "file": "Worlds/Development/Development/Entities/7968/11145653285283093491.wobj",
+      "written_hash": "3d79a149d9e858e74030470943564e2f73a82b64"
+    },
+    {
+      "role": "East tent",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        -75.0,
+        3.96,
+        124.0
+      ],
+      "yaw": 144.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x9aad051f564035cc",
+      "file": "Worlds/Development/Development/Entities/7968/11145570284961019340.wobj",
+      "written_hash": "42ebd9f6e31af96f44ed28379a231467e97c8ec2"
+    },
+    {
+      "role": "East fire",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_CampFire_A.hmsh",
+      "store": "wobj",
+      "position": [
+        -70.9,
+        3.48,
+        127.0
+      ],
+      "yaw": 0.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0x9aadbff5208a22f7",
+      "file": "Worlds/Development/Development/Entities/7968/11145775712345662199.wobj",
+      "written_hash": "43dd5d8a07068c833bf33cdba86cc04f4dbff0c2"
+    },
+    {
+      "role": "North-west tent",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        -117.0,
+        7.1,
+        166.0
+      ],
+      "yaw": 280.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x9aad66b63af10c0c",
+      "file": "Worlds/Development/Development/Entities/7968/11145677585670802444.wobj",
+      "written_hash": "039e40589d2cd89a09837d9b4d3ea044d3125761"
+    }
+  ],
+  "gaps": [],
+  "notes": [
+    "Hand-placed for one site (plan it with the --anchor below): every role is at_anchor with an exact offset. The spots keep clear of the bandit spawn packs, so moving one means re-checking spawn spacing."
+  ],
+  "checks": {
+    "placement": [],
+    "walkability": [],
+    "items_hash": "bdd43c0c89110b6bc59fd89d4dbe1273adfe97d3"
+  },
+  "status": "applied",
+  "backups": [],
+  "created_files": [],
+  "applied": "2026-10-18T19:27:11",
+  "nav": {
+    "path": "generated/world/nav"
+  }
+}
