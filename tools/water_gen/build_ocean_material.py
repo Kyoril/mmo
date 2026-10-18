@@ -231,10 +231,13 @@ class GraphBuilder:
 
 # Per-variant starting values of the exposed parameters (tuning belongs in .hmi instances).
 RIVER_DEFAULTS = {
-    "NormalStrength": 0.4, "SwellStrength": 0.12, "ShallowColor": (0.035, 0.085, 0.07, 1.0),
-    "DeepColor": (0.008, 0.03, 0.032, 1.0), "AbsorptionRGB": (0.55, 0.26, 0.2, 1.0), "DeepDistance": 3.5,
-    "CausticsStrength": 0.35, "FoamDistance": 1.0, "ReflectionStrength": 0.5,
-    "StreakIntensity": 0.12, "StreakThreshold": 0.8,
+    # Murky, sediment-laden river: the colour takes over within a metre or two, little sky mirror.
+    "NormalStrength": 0.7, "SwellStrength": 0.35, "NormalTilingA": 2.2, "NormalTilingB": 5.5, "SwellTiling": 0.8,
+    "FlowCycle": 0.35, "FlowDistanceA": 0.6, "FlowDistanceB": 1.4, "FlowDistanceC": 0.3,
+    "ShallowColor": (0.06, 0.075, 0.045, 1.0), "DeepColor": (0.012, 0.026, 0.02, 1.0),
+    "AbsorptionRGB": (0.9, 0.55, 0.45, 1.0), "DeepDistance": 2.0, "CausticsStrength": 0.15,
+    "ReflectionStrength": 0.2, "ReflectionDistortion": 0.65, "NormalFarStrength": 0.5, "NormalFadeDistance": 140.0, "GlitterStrength": 1.2, "GlitterPower": 350.0,
+    "StreakIntensity": 0.06, "StreakThreshold": 0.78, "FoamDistance": 0.6, "ShoreFoamDepth": 0.25, "ShoreFoamFade": 0.6,
 }
 
 
@@ -426,6 +429,9 @@ def build_graph(b, mode, variant="ocean"):
             b.sub(shore_depth, b.scalar("ShoreFoamDepth", 0.75)), b.scalar("ShoreFoamFade", 1.5)))})
         shore_foam = b.mul(b.sat(b.mul(b.sub(b.addn(foam_tex, band), constant=1.0), b.scalar("FoamSharpness", 4.0))),
                            shore_mask)
+        if river:
+            # Rivers have no surf: only a faint scum line where the water meets the bank.
+            shore_foam = b.mul(shore_foam, b.scalar("ShoreFoamIntensity", 0.2))
 
         if river:
             # Foam streaks drifting with the current: the foam texture stretched along the flow.
@@ -483,7 +489,12 @@ def build_graph(b, mode, variant="ocean"):
         final = b.lerp(above_water, underside, below)
 
         root_inputs["Emissive Color"] = final
-        root_inputs["Opacity"] = b.sat(b.div(thickness, b.scalar("EdgeFadeDistance", 0.5)))
+        opacity = b.sat(b.div(thickness, b.scalar("EdgeFadeDistance", 0.5)))
+        if river:
+            # Fade out over the real water depth at the bank (vertex colour red), so the edge is
+            # soft from every view angle instead of a hard rim where the screen depth jumps.
+            opacity = b.mul(opacity, b.sat(b.div(shore_depth, b.scalar("EdgeFadeDepth", 0.9))))
+        root_inputs["Opacity"] = opacity
         root_inputs["Roughness"] = b.scalar("Roughness", 0.1)
 
     b.next_column()
