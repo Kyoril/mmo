@@ -237,9 +237,19 @@ GLINT_WAVES = ((0.0, 7.0), (-38.0, 4.6), (27.0, 3.1), (-71.0, 2.2), (55.0, 1.6))
 def build_glint_wave_slope(b):
     """Tangent-space XY slope (u along +X, v along +Z) of the procedural glint swell."""
     position = b.add("WorldPositionNode")
-    scale = b.div(b.const(1.0), b.scalar("GlintWaveScale", 1.0))
-    x = b.mul(b.mask(position, r=True), scale)
-    z = b.mul(b.mask(position, b=True), scale)
+    scale = b.div(b.const(1.0), b.scalar("GlintWaveScale", 0.45))
+    # Plain sines line up into a visible grid. Warping the coordinates with smooth, slowly
+    # drifting noise bends every crest differently, so the pattern stops reading as procedural.
+    warp_uv = b.mul(b.mul(b.mask(position, r=True, b=True), scale), b.scalar("GlintWarpTiling", 0.03))
+
+    def warp(speed_x, speed_y, uv):
+        noise = b.out(b.add("TextureParameterNode",
+                            {"Name": "GlintNoise", "Texture": "Textures/WaterNoise_01.htex", "Sampler Type": 0},
+                            {"UVs": b.panner(uv, speed_x, speed_y)}), "R")
+        return b.mul(b.sub(noise, constant=0.5), b.scalar("GlintWarpStrength", 9.0))
+
+    x = b.addn(b.mul(b.mask(position, r=True), scale), warp(0.004, 0.0027, warp_uv))
+    z = b.addn(b.mul(b.mask(position, b=True), scale), warp(-0.0031, 0.0042, b.mul(warp_uv, constant=1.31)))
     time = b.mul(b.add("TimeNode"), b.scalar("GlintWaveSpeed", 1.0))
     main = math.radians(ROOT_WAVE_PROPERTIES["Wave Direction"])
     slope_x = slope_z = None
@@ -259,9 +269,10 @@ def build_glint_wave_slope(b):
     return b.mul(b.add("AppendNode", ins={"A": slope_x, "B": slope_z}), steepness)
 
 
-def build_sun_glitter(b, sun_color, sun_dir, coarse_slope, glow_normal):
+def build_sun_glitter(b, sun_color, sun_dir, coarse_slope):
     """The sun's reflection, shared by every water material. coarse_slope is a tangent-space
-    XY slope without the finest ripple layer; glow_normal a calm world-space normal."""
+    XY slope (the procedural glint swell). Nothing here samples the ripple texture, so its
+    pattern never shows through the glint."""
     sun_rgb = b.out(sun_color, "RGB")
     sun_peak = b.add("MaxNode", {"Value 2": 0.001}, {"A": b.add("MaxNode", ins={
         "A": b.mask(sun_rgb, r=True), "B": b.add("MaxNode", ins={"A": b.mask(sun_rgb, g=True), "B": b.mask(sun_rgb, b=True)})})})
@@ -282,7 +293,8 @@ def build_sun_glitter(b, sun_color, sun_dir, coarse_slope, glow_normal):
     coarse_world = b.add("NormalizeNode", ins={"m_input": b.add(
         "TransformVectorNode", {"Source Space": SPACE_TANGENT, "Target Space": SPACE_WORLD}, {"Vector": coarse_tangent})})
     flake_dot = sun_dot(coarse_world)
-    glow_dot = sun_dot(glow_normal)
+    # The glow follows the same swell, halfway flattened toward the (vertex-wave) surface normal.
+    glow_dot = sun_dot(b.add("NormalizeNode", ins={"m_input": b.lerp(b.add("VertexNormalNode"), coarse_world, b.const(0.5))}))
 
     glow = band(b.scalar("GlitterGlowEdge", 0.978), b.const(1.0), glow_dot)
     flakes = band(b.scalar("GlitterEdge", 0.9945), b.scalar("GlitterEdgeHard", 0.9952), flake_dot)
@@ -462,7 +474,7 @@ def build_graph(b, mode):
 
         # Sun glitter in the style of classic WoW: a very bright, deeply saturated reflection of
         # the sun that glows, broken into a few large crisp shapes rather than fine sparkle.
-        #   * glow:   a broad soft band on the calm reflection normal - the saturated sun path
+        #   * glow:   a broad soft band on a calmer copy of the swell - the saturated sun path
         #             the flakes sit in, so the reflection reads as glowing even below bloom.
         #   * flakes: a narrow SmoothStep (hard edges, not a power curve) on the procedural
         #             glint swell rather than the ripple texture, so the shapes are big, smooth
@@ -475,7 +487,7 @@ def build_graph(b, mode):
         # glints gold. ACES bleaches strong values toward white, which is why the glow and flakes
         # stay moderate and only the small core goes hot.
         coarse_slope = b.mul(build_glint_wave_slope(b), distance_factor)
-        glitter = build_sun_glitter(b, sun_color, sun_dir, coarse_slope, reflection_normal)
+        glitter = build_sun_glitter(b, sun_color, sun_dir, coarse_slope)
         above_water = b.addn(b.lerp(water, foam_lit, foam_mask),
                              b.mul(glitter, b.add("OneMinusNode", ins={"m_input": foam_mask})))
 
