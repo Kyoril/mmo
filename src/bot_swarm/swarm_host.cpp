@@ -567,7 +567,7 @@ namespace mmo
 		{
 			if (m_settings.chatApiKey.empty())
 			{
-				ELOG("Bot chat: ANTHROPIC_API_KEY is not set. Set it, or pass --chat-offline to try chat without the model.");
+				ELOG("Bot chat: neither " << ChatApiKeyVariable << " nor ANTHROPIC_API_KEY is set. Set one, or pass --chat-offline to try chat without the model.");
 				return false;
 			}
 

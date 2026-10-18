@@ -19,6 +19,9 @@ namespace mmo
 		class Project;
 	}
 
+	/// Environment variable holding the API key for bot chat. ANTHROPIC_API_KEY is the fallback.
+	constexpr const char* ChatApiKeyVariable = "MMO_BOTSWARM_CLAUDE_API_TOKEN";
+
 	/// Name of the public channel bots talk in.
 	constexpr const char* GeneralChannelName = "General";
 

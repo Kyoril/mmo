@@ -10,7 +10,7 @@ Chat is **off by default** because it costs money. The spend has a hard cap.
 ## Quick start
 
 ```powershell
-$env:ANTHROPIC_API_KEY = "<your key>"
+$env:MMO_BOTSWARM_CLAUDE_API_TOKEN = "<your key>"
 
 # One request, printed with its cost (about $0.0001). Checks the key without a server.
 bin/Debug/bot_swarm.exe --chat-probe
@@ -22,7 +22,9 @@ bin/Debug/bot_swarm.exe --bots 20 --chat
 bin/Debug/bot_swarm.exe --bots 20 --chat --chat-offline
 ```
 
-The key is read from `ANTHROPIC_API_KEY` only. There is no command-line flag for it, because a
+The key is read from the environment: `MMO_BOTSWARM_CLAUDE_API_TOKEN`, falling back to
+`ANTHROPIC_API_KEY`. The swarm's own variable wins, so a general-purpose key on the machine is
+not spent on bot chat when the swarm has one of its own. There is no command-line flag for it, because a
 key on the command line ends up in process listings and shell history. The key never goes into
 a prompt and is never logged.
 

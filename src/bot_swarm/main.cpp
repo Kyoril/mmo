@@ -88,7 +88,7 @@ namespace mmo
 
 			if (settings.chatApiKey.empty())
 			{
-				ELOG("ANTHROPIC_API_KEY is not set");
+				ELOG("Neither " << ChatApiKeyVariable << " nor ANTHROPIC_API_KEY is set");
 				return 2;
 			}
 
@@ -181,7 +181,7 @@ int main(int argc, char** argv)
 		("no-level-roll", "Do not cheat bots to their rolled level; make them earn it")
 		("repo-root", "Repository root holding data/editor; empty resolves from the working directory",
 			cxxopts::value<std::string>()->default_value(""))
-		("chat", "Let bots chat through a language model (reads ANTHROPIC_API_KEY; costs money, capped below)")
+		("chat", "Let bots chat through a language model (key from MMO_BOTSWARM_CLAUDE_API_TOKEN or ANTHROPIC_API_KEY; costs money, capped below)")
 		("chat-offline", "With --chat: answer with canned lines instead of calling the model, at no cost")
 		("chat-model", "Model id; must be one with a known price", cxxopts::value<std::string>()->default_value("claude-haiku-5-5"))
 		("chat-daily-usd", "Hard cap on chat spend per UTC day", cxxopts::value<double>()->default_value("0.25"))
@@ -225,10 +225,16 @@ int main(int argc, char** argv)
 	settings.chatFactsPath = result["chat-facts"].as<std::string>();
 
 	// From the environment only: a key on the command line ends up in process listings and
-	// shell history.
-	if (const char* apiKey = std::getenv("ANTHROPIC_API_KEY"))
+	// shell history. The swarm's own variable wins, so that a machine-wide ANTHROPIC_API_KEY
+	// meant for something else is not spent on bot chat when the swarm has a key of its own.
+	for (const char* variable : { ChatApiKeyVariable, "ANTHROPIC_API_KEY" })
 	{
-		settings.chatApiKey = apiKey;
+		const char* apiKey = std::getenv(variable);
+		if (apiKey && *apiKey)
+		{
+			settings.chatApiKey = apiKey;
+			break;
+		}
 	}
 
 	if (result.count("chat-probe"))
