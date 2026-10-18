@@ -11,6 +11,7 @@
 #include "world_model_portal_culling.h"
 #include "math/plane.h"
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -109,6 +110,28 @@ namespace mmo
         /// @brief Whether a mesh's geometry can be merged: no skeleton, and every submesh has index
         ///        data and its own vertex data in the standard static mesh vertex layout.
         static bool CanMergeMesh(const Mesh& mesh);
+
+        /// @brief Builds (or finds) the merged geometry of a world model without instantiating it.
+        /// @details Lets a streaming caller do the merge in steps of its own, so instantiating the model
+        ///          later only creates entities. Loads the model's meshes if they are not loaded yet. A
+        ///          merge left unfinished is completed by the next call, or by the first instance.
+        /// @param maxGroups How many more groups to merge in this call (at least one).
+        /// @return A handle that keeps the merged geometry alive while held, once every group is merged;
+        ///         null while groups remain, or for a null model.
+        static std::shared_ptr<const void> PrewarmMergedGeometry(const WorldModelPtr& model, size_t maxGroups = std::numeric_limits<size_t>::max());
+
+        /// @brief Appends the meshes an instance of the model loads for itself: the visible mesh
+        ///        references of its groups and the doodads of its default set. Child world models and
+        ///        prop kits are not followed; their callers collect them separately.
+        /// @details Lets a streaming caller load the meshes one at a time ahead of instantiating.
+        static void CollectMeshDependencies(const WorldModel& model, std::vector<String>& outMeshPaths);
+
+        /// @brief Sets how many bytes of merged geometry no instance uses any more are kept around.
+        /// @details By default (0) merged geometry dies with the last instance using it, so a world
+        ///          model that streams out and back in is merged again, GPU readbacks included. The
+        ///          client keeps recently released geometry up to this budget, evicting the least
+        ///          recently used first. Editors keep 0: they change world models in place.
+        static void SetMergedGeometryRetention(size_t bytes);
 
         /// @brief Gets the number of child world model instances created from the model's child
         ///        references. Zero until the instance has been attached to a scene node.

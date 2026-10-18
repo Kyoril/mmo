@@ -78,6 +78,21 @@ namespace mmo
 
 		void InternalLoadPageEntity(uint16 pageIndex, const String& filename);
 
+		/// @brief A streamed world model placement whose resources are loaded one step at a time.
+		struct WorldModelPreparation;
+
+		/// @brief Starts preparing a streamed world model placement. Main thread only.
+		/// @details Instantiating a world model the first time loads its file, every child world model,
+		///          prop kit, mesh, material and texture, and merges its geometry - hundreds of
+		///          milliseconds for a town. Each of those becomes its own dispatcher step instead, so the
+		///          streaming budget spreads them over frames; the final step only creates the instance.
+		void BeginWorldModelEntity(uint16 pageIndex, const WorldEntityLoader::MapEntity& entity);
+
+		/// @brief Runs one step of a preparation and queues the next one, or creates the instance.
+		void ContinueWorldModelEntity(const std::shared_ptr<WorldModelPreparation>& preparation);
+
+		void PostPreparationStep(const std::shared_ptr<WorldModelPreparation>& preparation);
+
 		/// @brief Loads the instanced foliage (.hfol) file for the given page, if present.
 		void LoadPageFoliage(uint8 x, uint8 y);
 
