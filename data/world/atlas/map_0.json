@@ -706,8 +706,8 @@
       "name": "Crossroads Inn",
       "kind": "hub",
       "center": [
-        -560.0,
-        452.0
+        -600.0,
+        440.0
       ],
       "radius": 35.0,
       "description": "Inn just past the Old Stone Bridge on the west bank, where the Haven road and the outpost road part (Oakenshire_Inn_001 model with its kit). No NPCs yet.",
@@ -979,7 +979,8 @@
         ]
       ],
       "status": "canon",
-      "source": "user"
+      "source": "user",
+      "notes": "2026-10-18: graded through a wooded pass between the camp and the waypost, ends at the Old Stone Bridge (-440, 363)."
     },
     {
       "id": "haven_road",
