@@ -392,12 +392,35 @@ def build_graph(b, mode):
                                  b.sat(b.out(sun_dir, "G"))), constant=0.45)
         foam_lit = b.mul(b.vector("FoamColor", (0.92, 0.97, 1.0, 1.0)), sun_light)
 
-        # Sun glitter: a very tight highlight along the FULL ripple normal, so it breaks up into
-        # the separate sparkles of a sunlit sea instead of the engine's one smooth GGX lobe.
+        # Sun glitter, the hard, saturated look of classic WoW water: the sun's reflection along
+        # the FULL ripple normal, cut with a narrow SmoothStep instead of a power curve, so the
+        # ripples break it into crisp-edged flakes rather than one soft blob. The engine's GGX
+        # lobe is switched off (Specular 0 below) because it is exactly that soft blob.
+        #
+        # Colour: the sun colour normalised to its brightest channel and raised to a power, which
+        # keeps the hue and pushes the saturation (an orange evening sun gives deep gold flakes).
+        # ACES bleaches anything far above 1.0 toward white, so the flakes stay near 1.0 and only
+        # a small core inside each one goes hotter, in the same hue.
+        sun_rgb = b.out(sun_color, "RGB")
+        sun_peak = b.add("MaxNode", {"Value 2": 0.001}, {"A": b.add("MaxNode", ins={
+            "A": b.mask(sun_rgb, r=True), "B": b.add("MaxNode", ins={"A": b.mask(sun_rgb, g=True), "B": b.mask(sun_rgb, b=True)})})})
+        # GlitterTint warms it further: a near-white noon sun still glints gold, as in classic WoW.
+        sun_tint = b.mul(b.add("PowerNode", ins={"Base": b.div(sun_rgb, sun_peak), "Exp": b.scalar("GlitterSaturation", 3.0)}),
+                         b.vector("GlitterTint", (1.0, 0.62, 0.18, 1.0)))
+        # The sun's own light level (low at dusk, zero at night) still scales the glint.
+        sun_visible = b.sat(b.mul(sun_strength, constant=1.5))
+
         glitter_dir = b.add("ReflectionVectorNode", ins={"Normal": world_normal})
         glitter_dot = b.sat(b.add("DotNode", ins={"A": glitter_dir, "B": b.out(sun_dir, "RGB")}))
-        glitter = b.mul(b.mul(b.out(sun_color, "RGB"), b.mul(b.out(sun_color, "A"), b.scalar("GlitterStrength", 5.0))),
-                        b.add("PowerNode", ins={"Base": glitter_dot, "Exp": b.scalar("GlitterPower", 900.0)}))
+
+        def sun_band(edge0, edge1):
+            return b.add("SmoothStepNode", ins={"Edge 0 (Min)": edge0, "Edge 1 (Max)": edge1, "Value": glitter_dot})
+
+        flakes = sun_band(b.scalar("GlitterEdge", 0.992), b.scalar("GlitterEdgeHard", 0.9935))
+        core = sun_band(b.scalar("GlitterCoreEdge", 0.9985), b.scalar("GlitterCoreEdgeHard", 0.999))
+        glitter = b.mul(b.addn(b.mul(sun_tint, b.mul(flakes, b.scalar("GlitterStrength", 1.7))),
+                               b.mul(sun_tint, b.mul(core, b.scalar("GlitterCoreStrength", 1.6)))),
+                        sun_visible)
         above_water = b.addn(b.lerp(water, foam_lit, foam_mask),
                              b.mul(glitter, b.add("OneMinusNode", ins={"m_input": foam_mask})))
 
@@ -426,7 +449,8 @@ def build_graph(b, mode):
     b.next_column()
     root_inputs["Base Color"] = b.const_rgb((0.0, 0.0, 0.0, 1.0))
     root_inputs["Metallic"] = b.scalar("Metallic", 0.0)
-    root_inputs["Specular"] = b.scalar("Specular", 0.5)
+    # 0 turns off the engine's GGX sun lobe: the glitter above replaces it.
+    root_inputs["Specular"] = b.scalar("Specular", 0.0)
     root_inputs["Normal"] = tangent_normal
 
     for candidate in b.root["inputs"]:

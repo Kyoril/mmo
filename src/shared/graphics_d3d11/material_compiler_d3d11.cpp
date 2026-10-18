@@ -1765,7 +1765,10 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\tfloat3 numerator    = NDF * G * F;\n"
 						<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;\n"
-						<< "\tfloat3 specularity = numerator / denominator;\n";
+						<< "\tfloat3 specularity = numerator / denominator;\n"
+						// Scaled by the Specular pin exactly like the deferred lighting pass, so a
+						// forward material can turn the GGX sun lobe off (water draws its own glint).
+						<< "\tspecularity *= specular;\n";
 
 					m_pixelShaderStream
 						<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
