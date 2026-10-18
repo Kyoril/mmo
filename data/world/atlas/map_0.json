@@ -725,7 +725,7 @@
         620.0
       ],
       "radius": 60.0,
-      "description": "Rerouted 2026-10-18 after the green-valley concept: leaves the old course south of the Mirewater, crosses the King's Road under the Old Stone Bridge, meanders east past the river meadows and back west into a broad bay with an island in front of Haven's north wall, then follows Haven's east wall into a lake. The old straight channel south of z 300 is filled in.",
+      "description": "Rerouted 2026-10-18 after the green-valley concept: leaves the old course south of the Mirewater, crosses the King's Road under the Old Stone Bridge, meanders east past the river meadows and back west into a broad bay with an island in front of Haven's north wall, then follows Haven's east wall into a lake. The old straight channel south of z 300 is filled in. At Haven it splits: one arm leaves the harbour bay past Haven's east wall into a lake south-east of the town, the other runs from the trading basin past the north-west and west walls into a lake south-west of it. Stone bridges cross both arms in front of Haven's east and west gates.",
       "status": "placeholder",
       "ask": "Name the river.",
       "source": "agent",
@@ -888,6 +888,20 @@
       "ask": "Name it; should it get dockworkers, a harbourmaster or merchant NPCs?",
       "source": "agent",
       "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "haven_west_lake",
+      "name": "Haven West Lake",
+      "kind": "landmark",
+      "center": [
+        -1140.0,
+        1680.0
+      ],
+      "radius": 85.0,
+      "description": "Lake south-west of Haven where the river's western arm ends.",
+      "status": "placeholder",
+      "ask": "Name the lake, or say where the western arm should flow on to.",
+      "source": "agent"
     }
   ],
   "roads": [

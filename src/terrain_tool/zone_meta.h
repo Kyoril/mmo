@@ -113,6 +113,10 @@ namespace mmo
 		///	       with water gets flow-aligned water UVs and a flow speed from it.
 		std::vector<FlowPoint> flowPath;
 
+		/// @brief Further flow paths (branches). Each point takes its flow from the nearest path;
+		///	       a branch's distance downstream starts at 0.
+		std::vector<std::vector<FlowPoint>> flowBranches;
+
 		/// @brief Water UV units per world unit along and across the flow (the world mapping uses 1/16).
 		float flowUVScale = 1.0f / 16.0f;
 

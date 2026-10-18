@@ -288,8 +288,20 @@ namespace mmo
 				{
 					for (uint32 x = 0; x < gridWidth; ++x)
 					{
-						const FlowCoordinate c = ProjectOntoFlowPath(meta.flowPath,
-							originX + static_cast<float>(x) * vertexSpacing, originZ + static_cast<float>(z) * vertexSpacing);
+						const float wx = originX + static_cast<float>(x) * vertexSpacing;
+						const float wz = originZ + static_cast<float>(z) * vertexSpacing;
+						FlowCoordinate c = ProjectOntoFlowPath(meta.flowPath, wx, wz);
+						float distance = std::max(0.0f, std::abs(c.across) - c.halfWidth);
+						for (const auto &branch : meta.flowBranches)
+						{
+							const FlowCoordinate b = ProjectOntoFlowPath(branch, wx, wz);
+							const float bd = std::max(0.0f, std::abs(b.across) - b.halfWidth);
+							if (bd < distance || (bd == distance && std::abs(b.across) < std::abs(c.across)))
+							{
+								c = b;
+								distance = bd;
+							}
+						}
 						const size_t i = static_cast<size_t>(z) * gridWidth + x;
 						flowAlong[i] = c.along;
 						flowAcross[i] = c.across;

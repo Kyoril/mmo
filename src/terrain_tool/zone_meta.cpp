@@ -98,6 +98,30 @@ namespace mmo
 					out.flowPath.push_back(flowPoint);
 				}
 			}
+			if (const auto branches = flow->find("branches"); branches != flow->end() && branches->is_array())
+			{
+				for (const auto &branch : *branches)
+				{
+					std::vector<ZoneMeta::FlowPoint> points;
+					for (const auto &point : branch)
+					{
+						if (!point.is_array() || point.size() < 2)
+						{
+							ELOG("Zone metadata waterFlow branch points must be [x, z] or [x, z, halfWidth]!");
+							return false;
+						}
+						ZoneMeta::FlowPoint flowPoint;
+						flowPoint.x = point[0].get<float>();
+						flowPoint.z = point[1].get<float>();
+						flowPoint.halfWidth = point.size() > 2 ? point[2].get<float>() : 10.0f;
+						points.push_back(flowPoint);
+					}
+					if (points.size() >= 2)
+					{
+						out.flowBranches.push_back(std::move(points));
+					}
+				}
+			}
 			if (out.flowPath.size() < 2)
 			{
 				ELOG("Zone metadata waterFlow needs a path of at least two points!");
