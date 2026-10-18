@@ -661,11 +661,11 @@
       "name": "Old Stone Bridge",
       "kind": "landmark",
       "center": [
-        -514.0,
-        376.0
+        -458.0,
+        366.0
       ],
       "radius": 40.0,
-      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 4 - Old Stone Bridge. Terrain: where the painted road meets the river (7 m deep); a house (HouseTest) and two piers stand by it. Five-arch stone bridge (Bridge_01) carrying the Old King's Road over the river onto the west bank.",
+      "description": "Four-arch stone bridge (Bridge_01) where the Old King's Road crosses the rerouted river onto the west bank (moved 2026-10-18 with the river).",
       "status": "placeholder",
       "ask": "Confirm the bridge as the Old Stone Bridge and its place where the King's Road meets the river.",
       "source": "agent",
@@ -692,9 +692,9 @@
       "kind": "hub",
       "center": [
         -790.0,
-        660.0
+        640.0
       ],
-      "radius": 170.0,
+      "radius": 190.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 6 - Farmlands & Hamlets in the valley. West of the river. Fenced fields, hedgerows, cypress rows along the Haven road and three farmsteads on the west bank between the bridge and Haven.",
       "status": "placeholder",
       "ask": "Confirm the farmland on the west bank, and name the farmsteads if they matter.",
@@ -706,11 +706,11 @@
       "name": "Crossroads Inn",
       "kind": "hub",
       "center": [
-        -676.0,
-        410.0
+        -560.0,
+        452.0
       ],
       "radius": 35.0,
-      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 7 - Crossroads Inn on the Haven road. West of the river. Inn at the crossroads west of the Old Stone Bridge, where the Haven road leaves the outpost road (Oakenshire_Inn_001 model with its kit). No NPCs yet.",
+      "description": "Inn just past the Old Stone Bridge on the west bank, where the Haven road and the outpost road part (Oakenshire_Inn_001 model with its kit). No NPCs yet.",
       "status": "placeholder",
       "ask": "Confirm the inn here (the concept puts it just past the bridge), and decide whether it needs its own model and an innkeeper.",
       "source": "agent",
@@ -721,11 +721,11 @@
       "name": "The river (unnamed)",
       "kind": "landmark",
       "center": [
-        -560.0,
-        600.0
+        -350.0,
+        620.0
       ],
       "radius": 60.0,
-      "description": "Terrain: a river 30-50 m wide and about 7 m deep running north-south at x -520 from z -450 to z 920, with a loop at its north end, a branch east at z 50 and a shallow ford (2 m) at z 150-200. The layout sketch has it west of Oakenshire, flowing south past Haven. Since 2026-10-18 it no longer ends at z 920: it bends east just in front of Haven's north wall and follows its east wall south into a lake at (-345, 1480).",
+      "description": "Rerouted 2026-10-18 after the green-valley concept: leaves the old course south of the Mirewater, crosses the King's Road under the Old Stone Bridge, meanders east past the river meadows and back west into a broad bay with an island in front of Haven's north wall, then follows Haven's east wall into a lake. The old straight channel south of z 300 is filled in.",
       "status": "placeholder",
       "ask": "Name the river.",
       "source": "agent",
@@ -775,11 +775,11 @@
       "name": "River Meadows",
       "kind": "landmark",
       "center": [
-        -480.0,
-        650.0
+        -300.0,
+        660.0
       ],
       "radius": 110.0,
-      "description": "Open meadows on the east bank between the woodland and the river, with lone oaks and wildflowers.",
+      "description": "Open floodplain meadows inside the river's eastern meander, with lone oaks and wildflowers.",
       "status": "placeholder",
       "ask": "Confirm the name and whether quests or creatures belong here.",
       "source": "agent",
@@ -850,12 +850,27 @@
       "name": "Concept view: Briarwatch, the green valley",
       "kind": "note",
       "center": [
-        -250.0,
-        120.0
+        -80.0,
+        80.0
       ],
       "radius": 20.0,
-      "description": "Editor viewpoint matching the concept. World Settings > View: paste \"-250,300,120,184,-30,55,0.42\" and press Go. Unattended: mmo_edit --capture-view Worlds/Development/Development.hwld --view \"-250,300,120,184,-30,55,0.42\" --out shot.png --size 1586x992 --fog --grass --far-radius 6",
+      "description": "Editor viewpoint matching the concept (gate bottom-left, Haven upper right). World Settings > View: paste \"-80,300,80,161,-30,50,0.33\" and press Go. Unattended: mmo_edit --capture-view Worlds/Development/Development.hwld --view \"-80,300,80,161,-30,50,0.33\" --out shot.png --size 1586x992 --grass --far-radius 6 [--fog]",
       "status": "note",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "haven_harbour",
+      "name": "Haven Harbour",
+      "kind": "landmark",
+      "center": [
+        -575.0,
+        884.0
+      ],
+      "radius": 175.0,
+      "description": "A broad bay of the river in front of Haven's north wall, with a small island carrying two houses and a pier.",
+      "status": "placeholder",
+      "ask": "Name the bay and the island; decide whether the island needs a bridge or a ferry.",
       "source": "agent",
       "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
     }
@@ -971,48 +986,40 @@
       "name": "Haven Road",
       "points": [
         [
-          -553.0,
-          376.0
+          -476.0,
+          359.0
         ],
         [
-          -585.0,
-          384.0
+          -520.0,
+          372.0
         ],
         [
-          -618.0,
-          398.0
+          -552.0,
+          420.0
         ],
         [
-          -650.0,
-          440.0
+          -580.0,
+          480.0
         ],
         [
-          -676.0,
-          500.0
+          -640.0,
+          560.0
         ],
         [
-          -694.0,
-          580.0
-        ],
-        [
-          -706.0,
-          680.0
+          -690.0,
+          640.0
         ],
         [
           -716.0,
-          780.0
+          740.0
         ],
         [
-          -712.0,
-          860.0
+          -740.0,
+          820.0
         ],
         [
-          -698.0,
-          915.0
-        ],
-        [
-          -689.0,
-          940.0
+          -735.0,
+          880.0
         ]
       ],
       "status": "placeholder",
@@ -1029,28 +1036,24 @@
           468.0
         ],
         [
-          -176.0,
+          -180.0,
           540.0
         ],
         [
-          -204.0,
+          -200.0,
           620.0
         ],
         [
-          -248.0,
+          -215.0,
           700.0
         ],
         [
-          -262.0,
-          760.0
+          -205.0,
+          780.0
         ],
         [
-          -242.0,
-          840.0
-        ],
-        [
-          -208.0,
-          905.0
+          -195.0,
+          860.0
         ],
         [
           -190.0,
@@ -1067,24 +1070,16 @@
       "name": "Meadow Trail",
       "points": [
         [
-          -262.0,
-          760.0
+          -215.0,
+          700.0
         ],
         [
-          -318.0,
-          778.0
+          -250.0,
+          690.0
         ],
         [
-          -385.0,
-          772.0
-        ],
-        [
-          -448.0,
-          792.0
-        ],
-        [
-          -498.0,
-          824.0
+          -275.0,
+          660.0
         ]
       ],
       "status": "placeholder",
@@ -1161,12 +1156,12 @@
       "name": "Outpost Road",
       "points": [
         [
-          -618.0,
-          398.0
+          -552.0,
+          420.0
         ],
         [
-          -626.0,
-          350.0
+          -600.0,
+          380.0
         ],
         [
           -622.0,
