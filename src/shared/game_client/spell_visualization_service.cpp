@@ -220,13 +220,16 @@ namespace mmo
             // Barrage) arrive mid-channel. EndChannel releases them.
             const bool casterChanneling = IsChanneling(caster->GetGuid());
 
-            // Clear any locked loop animation (e.g. cast channel animation)
-            if (!casterChanneling)
+            const uint64 casterGuid = caster->GetGuid();
+
+            // Clear the locked loop animation (e.g. cast channel animation), but only when it
+            // belongs to the spell that is ending: a proc healing its owner mid-cast raises
+            // CastSucceeded on the casting unit and must not cut its casting animation.
+            if (!casterChanneling && m_castLoopOwners.Release(casterGuid, spellId))
             {
                 caster->SetLockedLoopAnimation(nullptr);
             }
 
-            const uint64 casterGuid = caster->GetGuid();
             auto animIt = m_activeSpellAnimations.find(casterGuid);
             if (animIt != m_activeSpellAnimations.end() && animIt->second.spellId == spellId)
             {
@@ -534,6 +537,9 @@ namespace mmo
         {
             // For looped animations, lock as the target state so movement animations can't evict it
             actor.SetLockedLoopAnimation(animState);
+
+            // Remember who owns the slot, so only this spell's terminating event releases it.
+            m_castLoopOwners.Set(actor.GetGuid(), spellId);
         }
         else
         {
@@ -594,6 +600,7 @@ namespace mmo
         m_loopedSounds.clear();
         m_fadingSounds.clear();
         m_activeSpellAnimations.clear();
+        m_castLoopOwners.Clear();
         m_activeEffects.clear();
         m_fadingLights.clear();
         m_tintPulses.clear();
@@ -666,6 +673,8 @@ namespace mmo
         m_channels.erase(channelIt);
 
         const uint32 channelKey = spell_visual::ChannelKey(channel.spellId);
+        m_castLoopOwners.Forget(casterGuid);
+
         if (const auto actor = ObjectMgr::Get<GameUnitC>(casterGuid))
         {
             actor->SetLockedLoopAnimation(nullptr);

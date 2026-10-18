@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <map>
 #include <string>
 #include <string_view>
 
@@ -55,6 +56,55 @@ namespace mmo::spell_visual
 	{
 		return spellId | ChannelKeyBit;
 	}
+
+	/// \brief Which spell locked each unit's loop animation slot (the CASTING cast-bar loop).
+	///
+	/// A unit has exactly one locked loop animation, so the terminating events CastSucceeded
+	/// and CancelCast must only release it when they belong to the spell that set it. A proc
+	/// resolving mid-cast -- Leeching Rot healing its owner on every Corrupting Touch tick --
+	/// raises CastSucceeded on the casting unit itself, and releasing the slot there cut the
+	/// casting animation off while the cast bar kept running.
+	class CastLoopOwnership final
+	{
+	public:
+		/// \brief Records that a spell locked the actor's loop animation, replacing any
+		///	previous owner (the slot holds one animation).
+		void Set(const uint64 actorGuid, const uint32 spellId)
+		{
+			m_owners[actorGuid] = spellId;
+		}
+
+		/// \brief Whether a spell's terminating event may clear the actor's locked loop, and
+		///	drops the record when it may.
+		/// \return True only when this spell is the recorded owner of the actor's loop.
+		bool Release(const uint64 actorGuid, const uint32 spellId)
+		{
+			const auto it = m_owners.find(actorGuid);
+			if (it == m_owners.end() || it->second != spellId)
+			{
+				return false;
+			}
+
+			m_owners.erase(it);
+			return true;
+		}
+
+		/// \brief Drops an actor's record without releasing anything, for paths that clear the
+		///	loop themselves (a channel ending).
+		void Forget(const uint64 actorGuid)
+		{
+			m_owners.erase(actorGuid);
+		}
+
+		/// \brief Drops every record (leaving the world).
+		void Clear()
+		{
+			m_owners.clear();
+		}
+
+	private:
+		std::map<uint64, uint32> m_owners;
+	};
 
 	/// \brief Bit marking a tint key as a timed pulse (ColorTint.duration_ms).
 	///
