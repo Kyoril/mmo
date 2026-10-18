@@ -608,6 +608,12 @@ namespace mmo
 					{ { "chat_type", static_cast<uint32>(type) }, { "target", target }, { "text", text } });
 			}));
 
+		m_chatConnections.emplace_back(m_chatDirector->ReplyDiscarded.connect(
+			[this](const uint32 botIndex, const std::string& rawText)
+			{
+				m_telemetry.Event(botIndex, "chat_discarded", { { "raw", rawText.substr(0, 300) } });
+			}));
+
 		m_chatConnections.emplace_back(m_chatDirector->RequestFailed.connect(
 			[this](const uint32 botIndex, const std::string& reason)
 			{
@@ -661,7 +667,9 @@ namespace mmo
 		auto& waiting = bot.chatAwaitingName;
 		waiting.erase(std::remove_if(waiting.begin(), waiting.end(), [nowMs](const auto& entry)
 			{
-				return nowMs - entry.second > ChatNameTimeoutMs;
+				// Not nowMs - entry.second: a line read during this frame's poll is stamped later
+				// than the frame start, and the subtraction would wrap and drop it at once.
+				return nowMs > entry.second + ChatNameTimeoutMs;
 			}), waiting.end());
 
 		if (nowMs < bot.nextHumanScanMs)

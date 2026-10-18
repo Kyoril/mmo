@@ -177,6 +177,14 @@ namespace mmo
 
 		if (text.size() > MaxBotChatLength)
 		{
+			// Models that ignore the length rule tend to write several sentences; the first ones
+			// make a complete message, a cut mid-sentence does not.
+			const auto sentenceEnd = text.find_last_of(".!?", MaxBotChatLength - 1);
+			if (sentenceEnd != std::string::npos && sentenceEnd >= MaxBotChatLength / 4)
+			{
+				return trim(text.substr(0, sentenceEnd + 1));
+			}
+
 			auto cut = text.rfind(' ', MaxBotChatLength);
 			if (cut == std::string::npos || cut < MaxBotChatLength / 2)
 			{

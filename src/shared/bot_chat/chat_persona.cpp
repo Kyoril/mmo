@@ -35,7 +35,7 @@ namespace mmo
 			{ "mostly lowercase, skips punctuation, uses lol and xd", true, false, 0.05f },
 			{ "normal capitalization but short and to the point", false, false, 0.02f },
 			{ "lowercase, types fast and sloppy, sometimes drops small words", true, true, 0.09f },
-			{ "proper sentences most of the time, occasional :) or :D", false, false, 0.015f },
+			{ "proper capitalization, short plain sentences, an occasional :)", false, false, 0.015f },
 			{ "terse, few words, rarely more than five", true, false, 0.03f },
 		};
 	}

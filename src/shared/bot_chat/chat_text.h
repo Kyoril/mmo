@@ -11,12 +11,13 @@
 namespace mmo
 {
 	/// Longest line a bot posts. Real players rarely type more in one go.
-	constexpr std::size_t MaxBotChatLength = 200;
+	constexpr std::size_t MaxBotChatLength = 120;
 
 	/// Turns raw model output into a chat line, or rejects it.
 	///
 	/// Keeps the first line, strips quotes and a "Name:" prefix the model sometimes echoes, drops
-	/// anything outside printable ASCII and shortens to MaxBotChatLength at a word boundary.
+	/// anything outside printable ASCII and shortens to MaxBotChatLength, at the end of a sentence
+	/// where there is one and at a word boundary otherwise.
 	///
 	/// @param raw The model's answer.
 	/// @param speakerName The bot's own name, stripped if the answer starts with it.

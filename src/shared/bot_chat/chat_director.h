@@ -52,7 +52,7 @@ namespace mmo
 	struct ChatDirectorSettings final
 	{
 		/// The model's max_tokens. A chat line needs a few dozen at most.
-		uint32 maxOutputTokens { 60 };
+		uint32 maxOutputTokens { 40 };
 
 		/// How long after the last sign of a real player bots keep posting unprompted. Without
 		/// a human around, unprompted chat is money spent on an audience of bots.
@@ -107,6 +107,10 @@ namespace mmo
 	public:
 		/// A bot posted a line. For telemetry.
 		signal<void(uint32 botIndex, ChatType type, const std::string& target, const std::string& text)> ChatSent;
+
+		/// The model answered, but with nothing to send: it chose to stay silent, or the answer
+		/// was rejected by SanitizeChatReply. For telemetry, with the raw answer.
+		signal<void(uint32 botIndex, const std::string& rawText)> ReplyDiscarded;
 
 		/// A request failed or was refused. For telemetry; the reason never contains the API key.
 		signal<void(uint32 botIndex, const std::string& reason)> RequestFailed;

@@ -71,6 +71,14 @@ namespace mmo
 			return text;
 		}
 
+		/// Time from `since` to `now`, zero if `since` is later. Chat arrives stamped with the
+		/// time it was read off the socket, which can be after the start of the frame the
+		/// director is updated with; a plain subtraction would wrap around to "ages ago".
+		GameTime elapsed(const GameTime now, const GameTime since)
+		{
+			return now > since ? now - since : 0;
+		}
+
 		bool isChannelReply(const ChatType type)
 		{
 			return type == ChatType::Channel;
@@ -267,7 +275,7 @@ namespace mmo
 
 	bool ChatDirector::HumanActive(const GameTime nowMs) const
 	{
-		return m_humanEverSeen && nowMs - m_lastHumanSeenMs <= m_settings.humanActivityWindowMs;
+		return m_humanEverSeen && elapsed(nowMs, m_lastHumanSeenMs) <= m_settings.humanActivityWindowMs;
 	}
 
 	float ChatDirector::Roll()
@@ -285,7 +293,7 @@ namespace mmo
 		{
 			ServiceProactive(bot, nowMs);
 
-			while (!bot.events.empty() && nowMs - bot.events.front().atMs > EventLifetimeMs)
+			while (!bot.events.empty() && elapsed(nowMs, bot.events.front().atMs) > EventLifetimeMs)
 			{
 				bot.events.pop_front();
 			}
@@ -294,8 +302,8 @@ namespace mmo
 			{
 				const Conversation& conversation = it->second;
 				if (!conversation.inFlight && !conversation.unanswered
-					&& nowMs - conversation.lastHeardMs > ConversationLifetimeMs
-					&& nowMs - conversation.windowStartMs > ConversationLifetimeMs)
+					&& elapsed(nowMs, conversation.lastHeardMs) > ConversationLifetimeMs
+					&& elapsed(nowMs, conversation.windowStartMs) > ConversationLifetimeMs)
 				{
 					it = bot.conversations.erase(it);
 				}
@@ -359,6 +367,7 @@ namespace mmo
 			if (!line)
 			{
 				++m_stats.repliesSkipped;
+				ReplyDiscarded(request.botIndex, result.text);
 				continue;
 			}
 
@@ -384,7 +393,7 @@ namespace mmo
 	{
 		for (auto it = m_pending.begin(); it != m_pending.end();)
 		{
-			if (nowMs - it->second.createdMs < DecisionSettleMs)
+			if (elapsed(nowMs, it->second.createdMs) < DecisionSettleMs)
 			{
 				++it;
 				continue;
@@ -410,7 +419,7 @@ namespace mmo
 		}
 
 		const bool channel = isChannelReply(decision.type);
-		if (channel && nowMs - m_lastGeneralReplyMs < m_settings.generalReplyGapMs && m_lastGeneralReplyMs != 0)
+		if (channel && elapsed(nowMs, m_lastGeneralReplyMs) < m_settings.generalReplyGapMs && m_lastGeneralReplyMs != 0)
 		{
 			return;
 		}
@@ -506,7 +515,7 @@ namespace mmo
 					continue;
 				}
 
-				if (nowMs - conversation.lastHeardMs < WhisperCoalesceMs)
+				if (elapsed(nowMs, conversation.lastHeardMs) < WhisperCoalesceMs)
 				{
 					continue;
 				}
@@ -516,7 +525,7 @@ namespace mmo
 					continue;
 				}
 
-				if (conversation.windowStartMs == 0 || nowMs - conversation.windowStartMs >= m_settings.whisperWindowMs)
+				if (conversation.windowStartMs == 0 || elapsed(nowMs, conversation.windowStartMs) >= m_settings.whisperWindowMs)
 				{
 					conversation.windowStartMs = nowMs;
 					conversation.repliesInWindow = 0;
@@ -575,14 +584,14 @@ namespace mmo
 			options.emplace_back("party", 3);
 		}
 
-		if (bot.lastHumanGuildMs != 0 && nowMs - bot.lastHumanGuildMs <= m_settings.humanActivityWindowMs)
+		if (bot.lastHumanGuildMs != 0 && elapsed(nowMs, bot.lastHumanGuildMs) <= m_settings.humanActivityWindowMs)
 		{
 			options.emplace_back("guild", 1);
 		}
 
 		const uint32 generalId = bot.participant->GetGeneralChannelId();
-		const bool generalProactiveDue = !m_generalProactiveEver || nowMs - m_lastGeneralProactiveMs >= m_settings.generalProactiveGapMs;
-		const bool generalQuiet = m_lastGeneralReplyMs == 0 || nowMs - m_lastGeneralReplyMs >= m_settings.generalReplyGapMs;
+		const bool generalProactiveDue = !m_generalProactiveEver || elapsed(nowMs, m_lastGeneralProactiveMs) >= m_settings.generalProactiveGapMs;
+		const bool generalQuiet = m_lastGeneralReplyMs == 0 || elapsed(nowMs, m_lastGeneralReplyMs) >= m_settings.generalReplyGapMs;
 		if (generalId != 0 && generalProactiveDue && generalQuiet)
 		{
 			options.emplace_back("c:" + std::to_string(generalId), 2);
@@ -705,9 +714,12 @@ namespace mmo
 		}
 
 		out << "\nRules:\n"
-			"- Reply with only the chat message itself: one line, no quotes, no name in front. Usually under 12 words, never more than 25.\n"
-			"- Sound like a player, not a helper: casual and short, abbreviations are fine, little punctuation. "
-			"Don't be overly polite or eager, and don't end every message with a question.\n"
+			"- Reply with only the chat message itself: one line, no quotes, no name in front.\n"
+			"- Keep it short like real game chat: usually 3 to 10 words, never more than 20. One thought per message.\n"
+			"- Sound like a player, not a helper: casual, abbreviations are fine, little punctuation, no emoji. "
+			"Don't greet people by name with exclamation marks, don't be overly polite or eager, and don't end every message with a question.\n"
+			"- You can only type in chat. Never promise to do something in the game for someone - sending an invite, trading, "
+			"coming over, meeting up, helping with a quest. If asked, stay noncommittal like a busy player would (\"maybe later\", \"kinda busy rn\").\n"
 			"- Talk about the game: your class, leveling, mobs, loot, quests, zones, grouping, what you are doing right now.\n"
 			"- You are a human player. Never say or hint that you are an AI, a bot, a program or a language model. "
 			"If someone asks, brush it off casually like a person would.\n"
@@ -762,7 +774,7 @@ namespace mmo
 		bool firstEvent = true;
 		for (const Event& event : bot.events)
 		{
-			if (nowMs - event.atMs > EventLifetimeMs)
+			if (elapsed(nowMs, event.atMs) > EventLifetimeMs)
 			{
 				continue;
 			}

@@ -152,3 +152,13 @@ TEST_CASE("Errors and refusals yield no text", "[anthropic]")
 	CHECK_FALSE(garbage.succeeded);
 	CHECK(garbage.reachedModel);
 }
+
+TEST_CASE("Long replies are cut after a whole sentence", "[chat_text]")
+{
+	const std::string reply = "Oakenshire, nice! I'm on my way, just gotta dodge the boars on the road. "
+		"Mages are fun, you'll be blasting stuff in no time once you get your next few spells";
+
+	const auto result = SanitizeChatReply(reply, "Borin");
+	REQUIRE(result);
+	CHECK(*result == "Oakenshire, nice! I'm on my way, just gotta dodge the boars on the road.");
+}

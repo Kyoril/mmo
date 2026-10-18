@@ -4,6 +4,7 @@
 
 #include "bot_chat/chat_director.h"
 
+#include <algorithm>
 #include <deque>
 #include <memory>
 
@@ -267,4 +268,35 @@ TEST_CASE("A bot that went offline drops its pending line", "[chat_director]")
 	f.Run(3050, 30000);
 	CHECK(f.alice.sent.empty());
 	CHECK(f.director->GetStats().linesDropped >= 1);
+}
+
+TEST_CASE("Lines stamped later than the frame still wait for every listener", "[chat_director]")
+{
+	// The host stamps chat with the time it was read off the socket, which is later than the
+	// frame start it updates the director with. That must not make a decision resolve at once,
+	// or a second bot hearing the same line a moment later would answer it again.
+	Fixture f;
+	std::size_t worstRound = 0;
+
+	for (int round = 0; round < 30; ++round)
+	{
+		const GameTime frame = 1000 + round * 10 * Minute;
+		const std::string line = "Alice Bob where do i train? " + std::to_string(round);
+		const std::size_t before = f.model.submitted.size();
+
+		f.director->OnChatReceived(0, ChatType::Channel, "Steve", line, 1, frame + 20);
+		f.director->Update(frame);
+		f.director->OnChatReceived(1, ChatType::Channel, "Steve", line, 1, frame + 70);
+		f.Run(frame + 50, 1000);
+
+		std::size_t answers = 0;
+		for (std::size_t i = before; i < f.model.submitted.size(); ++i)
+		{
+			const std::string& prompt = f.model.submitted[i].prompt;
+			answers += (prompt.rfind("Chat:", 0) == 0 && prompt.find(line) != std::string::npos) ? 1 : 0;
+		}
+		worstRound = std::max(worstRound, answers);
+	}
+
+	CHECK(worstRound <= 1);
 }
