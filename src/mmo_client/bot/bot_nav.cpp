@@ -7,7 +7,6 @@
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
 #include "nav_mesh/map.h"
-#include "terrain/constants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,17 +23,6 @@ namespace mmo
 
 		/// Extra margin (yards) around a random-point search circle.
 		constexpr float RandomPointPageMargin = 5.0f;
-
-		constexpr int32 MaxPages = static_cast<int32>(terrain::constants::MaxPages);
-
-		/// Copy of WorldToPage in nav_mesh/page_streamer.cpp: the nav mesh origin sits at -32
-		/// pages on both axes, page x runs along world X and page y along world Z.
-		int32 WorldToPage(const float coordinate)
-		{
-			constexpr double origin = -32.0 * terrain::constants::PageSize;
-			const double page = std::floor((coordinate - origin) / terrain::constants::PageSize);
-			return static_cast<int32>(std::clamp(page, 0.0, static_cast<double>(MaxPages - 1)));
-		}
 
 		bool IsFinite(const Vector3& v)
 		{
@@ -181,10 +169,10 @@ namespace mmo
 			return;
 		}
 
-		const int32 firstX = WorldToPage(std::min(a.x, b.x) - margin);
-		const int32 lastX = WorldToPage(std::max(a.x, b.x) + margin);
-		const int32 firstY = WorldToPage(std::min(a.z, b.z) - margin);
-		const int32 lastY = WorldToPage(std::max(a.z, b.z) + margin);
+		const int32 firstX = nav::WorldToPage(std::min(a.x, b.x) - margin);
+		const int32 lastX = nav::WorldToPage(std::max(a.x, b.x) + margin);
+		const int32 firstY = nav::WorldToPage(std::min(a.z, b.z) - margin);
+		const int32 lastY = nav::WorldToPage(std::max(a.z, b.z) + margin);
 
 		for (int32 y = firstY; y <= lastY; ++y)
 		{

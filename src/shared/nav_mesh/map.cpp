@@ -4,6 +4,7 @@
 #include <DetourCommon.h>
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <random>
 
 #include "tile.h"
@@ -23,6 +24,12 @@ namespace mmo::nav
 	static constexpr uint32 FileVersion = '0001';
 	static constexpr uint32 FilePage = 'PAGE';
 	static constexpr uint32 FileMap = 'MAP1';
+
+	int32 WorldToPage(const float coordinate)
+	{
+		const double page = std::floor((coordinate - MapOrigin) / terrain::constants::PageSize);
+		return static_cast<int32>(std::clamp(page, 0.0, static_cast<double>(terrain::constants::MaxPages - 1)));
+	}
 
 	bool MapHeader::Verify(std::ostream& reason) const
 	{
@@ -117,12 +124,11 @@ namespace mmo::nav
 
 		dtNavMeshParams params;
 
-		constexpr float mapOrigin = -32.f * terrain::constants::PageSize;
 		constexpr int maxTiles = terrain::constants::MaxPages * terrain::constants::TilesPerPage * terrain::constants::MaxPages * terrain::constants::TilesPerPage;
 
-		params.orig[0] = mapOrigin;
+		params.orig[0] = static_cast<float>(MapOrigin);
 		params.orig[1] = 0.f;
-		params.orig[2] = mapOrigin;
+		params.orig[2] = static_cast<float>(MapOrigin);
 		params.tileHeight = params.tileWidth = terrain::constants::TileSize;
 		params.maxTiles = maxTiles;
 		params.maxPolys = 1 << DT_POLY_BITS;

@@ -13,16 +13,6 @@ namespace mmo::nav
 	namespace
 	{
 		constexpr int32 MaxPages = static_cast<int32>(terrain::constants::MaxPages);
-
-		/// Page column/row containing a world X or Z coordinate, clamped to the page grid. The
-		/// nav mesh origin sits at -32 pages on both axes (see Map's constructor); page x runs
-		/// along world X and page y along world Z.
-		int32 WorldToPage(const float coordinate)
-		{
-			constexpr double origin = -32.0 * terrain::constants::PageSize;
-			const double page = std::floor((coordinate - origin) / terrain::constants::PageSize);
-			return static_cast<int32>(std::clamp(page, 0.0, static_cast<double>(MaxPages - 1)));
-		}
 	}
 
 	PageStreamer::PageStreamer(Map& map)
