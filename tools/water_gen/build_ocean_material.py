@@ -250,9 +250,9 @@ def build_sun_glitter(b, sun_color, sun_dir, coarse_slope, glow_normal):
     flake_dot = sun_dot(coarse_world)
     glow_dot = sun_dot(glow_normal)
 
-    glow = band(b.scalar("GlitterGlowEdge", 0.86), b.const(1.0), glow_dot)
-    flakes = band(b.scalar("GlitterEdge", 0.975), b.scalar("GlitterEdgeHard", 0.978), flake_dot)
-    core = band(b.scalar("GlitterCoreEdge", 0.993), b.scalar("GlitterCoreEdgeHard", 0.995), flake_dot)
+    glow = band(b.scalar("GlitterGlowEdge", 0.95), b.const(1.0), glow_dot)
+    flakes = band(b.scalar("GlitterEdge", 0.988), b.scalar("GlitterEdgeHard", 0.9895), flake_dot)
+    core = band(b.scalar("GlitterCoreEdge", 0.9965), b.scalar("GlitterCoreEdgeHard", 0.9975), flake_dot)
     return b.mul(b.mul(sun_tint, b.addn(b.addn(
         b.mul(b.mul(glow, glow), b.scalar("GlitterGlowStrength", 0.8)),
         b.mul(flakes, b.scalar("GlitterStrength", 2.0))),
