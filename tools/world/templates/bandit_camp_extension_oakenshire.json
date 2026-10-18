@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "name": "bandit_camp_extension_oakenshire",
+  "description": "Forest Bandit grounds (Oakenshire) extension, anchor (245, 768): a back row of tents round a second fire, an east tent pair, a practice target and a broken wagon at the west approach. Reuses the camp's own tent, fire and target models and camp A's wagon.",
+  "entry": "anchor",
+  "clear": [],
+  "notes": [
+    "Hand-placed for one site (plan it with the --anchor below): every role is at_anchor with an exact offset. The spots keep clear of the bandit spawn packs, so moving one means re-checking spawn spacing."
+  ],
+  "roles": [
+    {
+      "name": "Back tent west",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          -18,
+          14
+        ]
+      },
+      "yaw": [
+        192,
+        192
+      ]
+    },
+    {
+      "name": "Back tent far west",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          -29,
+          14
+        ]
+      },
+      "yaw": [
+        215,
+        215
+      ]
+    },
+    {
+      "name": "Back tent centre",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          11,
+          6
+        ]
+      },
+      "yaw": [
+        23,
+        23
+      ]
+    },
+    {
+      "name": "East tent",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          26,
+          0
+        ]
+      },
+      "yaw": [
+        337,
+        337
+      ]
+    },
+    {
+      "name": "East flank tent",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          47,
+          -10
+        ]
+      },
+      "yaw": [
+        8,
+        8
+      ]
+    },
+    {
+      "name": "Back fire",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_CampFire_A.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          4,
+          9
+        ]
+      },
+      "yaw": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "East target",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Target_C.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          38,
+          -11
+        ]
+      },
+      "yaw": [
+        240,
+        240
+      ]
+    },
+    {
+      "name": "West approach wagon",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Furniture/SM_hc_WagonDamaged.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          -33,
+          -16
+        ]
+      },
+      "yaw": [
+        35,
+        35
+      ]
+    }
+  ]
+}

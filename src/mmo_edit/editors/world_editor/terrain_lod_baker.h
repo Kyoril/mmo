@@ -22,9 +22,6 @@ namespace mmo
 		class Terrain;
 	}
 
-	/// @brief Converts an IEEE 754 half-precision value (as read back from an RGBA16F target) to float.
-	float HalfToFloat(uint16 half);
-
 	/// @brief Bakes the distant-terrain data of a world's terrain pages: the .tlod geometry and the
 	///	       top-down, unlit colour texture the client's FarTerrain draws beyond the streamed pages.
 	/// @details The colour is the G-buffer albedo (+ emissive, which is where unlit materials such as

@@ -178,6 +178,21 @@
     },
     {
       "map": 0,
+      "key": "over_hole|unit:0:28:Oakenshire Inn Cellar - Cellar Rat 01:264:605",
+      "message": "Oakenshire Inn Cellar - Cellar Rat 01 at (264, 605): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:Oakenshire Inn Cellar - Cellar Rat 02:260:597",
+      "message": "Oakenshire Inn Cellar - Cellar Rat 02 at (260, 597): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:28:Oakenshire Inn Cellar - Cellar Rat 03:266:602",
+      "message": "Oakenshire Inn Cellar - Cellar Rat 03 at (266, 602): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
       "key": "steep_slope|object:0:7:-:-79:113",
       "message": "Copper Vein at (-79, 113): slope 48° exceeds 35°"
     },

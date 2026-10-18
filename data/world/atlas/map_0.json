@@ -209,34 +209,17 @@
       "source": "agent-bootstrap"
     },
     {
-      "id": "briarwatch",
-      "name": "Briarwatch",
-      "kind": "camp",
-      "center": [
-        -122.8,
-        435.0
-      ],
-      "radius": 50.0,
-      "areaId": 8,
-      "levelMin": 5,
-      "levelMax": 6,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
-    },
-    {
       "id": "briarwatch_camp",
       "name": "Briarwatch Camp",
       "kind": "hub",
       "center": [
-        -60.0,
-        517.7
+        -60.8,
+        540.0
       ],
-      "radius": 30.0,
+      "radius": 39.5,
       "areaId": 9,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "briarwatch_west_gate",
@@ -342,10 +325,10 @@
       "name": "Haven",
       "kind": "hub",
       "center": [
-        -780.6,
-        1249.1
+        -692.2,
+        1277.1
       ],
-      "radius": 311.5,
+      "radius": 347.5,
       "status": "canon",
       "source": "user"
     },
@@ -396,19 +379,6 @@
       ],
       "radius": 25.0,
       "status": "canon",
-      "source": "agent-bootstrap"
-    },
-    {
-      "id": "falwyn_forest_hub",
-      "name": "Falwyn Forest hub",
-      "kind": "hub",
-      "center": [
-        -2.6,
-        21.5
-      ],
-      "radius": 35.0,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
       "source": "agent-bootstrap"
     },
     {
@@ -486,10 +456,10 @@
       "name": "Young Forest Wolf grounds",
       "kind": "camp",
       "center": [
-        3.9,
-        542.7
+        17.5,
+        557.4
       ],
-      "radius": 65.0,
+      "radius": 40.0,
       "levelMin": 3,
       "levelMax": 4,
       "status": "canon",
@@ -500,8 +470,8 @@
       "name": "Young Forest Wolf grounds (12, 458)",
       "kind": "camp",
       "center": [
-        1.8,
-        439.9
+        -6.9,
+        426.2
       ],
       "radius": 64.5,
       "levelMin": 3,
@@ -514,15 +484,15 @@
       "name": "Forest Wolf grounds",
       "kind": "camp",
       "center": [
-        -202.3,
-        337.3
+        -166.5,
+        353.1
       ],
       "radius": 80.0,
       "levelMin": 3,
       "levelMax": 8,
       "status": "placeholder",
       "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "source": "user"
     },
     {
       "id": "kingsroad_cutthroat_grounds",
@@ -661,75 +631,52 @@
       "name": "Old Stone Bridge",
       "kind": "landmark",
       "center": [
-        -466.0,
-        375.0
+        -472.7,
+        376.5
       ],
-      "radius": 40.0,
-      "description": "Four-arch stone bridge (Bridge_01) where the Old King's Road crosses the rerouted river onto the west bank (moved 2026-10-18 with the river).",
-      "status": "placeholder",
-      "ask": "Confirm the bridge as the Old Stone Bridge and its place where the King's Road meets the river.",
-      "source": "agent",
-      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+      "radius": 25.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 4 - Old Stone Bridge. Terrain: where the painted road meets the river (7 m deep); today a house (HouseTest) and two piers stand here.",
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "river_valley",
       "name": "River Valley",
       "kind": "landmark",
       "center": [
-        -560.0,
-        700.0
+        -508.7,
+        656.2
       ],
-      "radius": 200.0,
+      "radius": 170.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 5 - River Valley opens up; views get wider, terrain gets softer. Terrain: flat ground on both banks south of the bridge, no zone yet.",
-      "status": "placeholder",
-      "ask": "Is \"River Valley\" the same place as the river meadows, or a name for the whole valley down to Haven?",
-      "source": "agent",
-      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "farmlands_and_hamlets",
       "name": "Farmlands and Hamlets",
-      "kind": "hub",
+      "kind": "landmark",
       "center": [
-        -790.0,
-        640.0
+        -825.4,
+        560.9
       ],
-      "radius": 190.0,
-      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 6 - Farmlands & Hamlets in the valley. West of the river. Three farmsteads, each beside its own fenced fields (corn sprouts, stubble and plowed soil), hedges on the far sides, cypress rows along the Haven road.",
-      "status": "placeholder",
-      "ask": "Confirm the farmland on the west bank, and name the farmsteads if they matter.",
-      "source": "agent",
-      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+      "radius": 110.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 6 - Farmlands & Hamlets in the valley. West of the river. Flat, empty ground today.",
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "crossroads_inn",
       "name": "Crossroads Inn",
       "kind": "hub",
       "center": [
-        -600.0,
-        440.0
+        -561.4,
+        450.2
       ],
-      "radius": 35.0,
-      "description": "Inn just past the Old Stone Bridge on the west bank, where the Haven road and the outpost road part (Oakenshire_Inn_001 model with its kit). No NPCs yet.",
-      "status": "placeholder",
-      "ask": "Confirm the inn here (the concept puts it just past the bridge), and decide whether it needs its own model and an innkeeper.",
-      "source": "agent",
-      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
-    },
-    {
-      "id": "the_river",
-      "name": "The river (unnamed)",
-      "kind": "landmark",
-      "center": [
-        -350.0,
-        620.0
-      ],
-      "radius": 60.0,
-      "description": "Rerouted 2026-10-18 after the green-valley concept: leaves the old course south of the Mirewater, crosses the King's Road under the Old Stone Bridge, meanders east past the river meadows and back west into a broad bay with an island in front of Haven's north wall, then follows Haven's east wall into a lake. The old straight channel south of z 300 is filled in. At Haven it splits: one arm leaves the harbour bay past Haven's east wall into a lake south-east of the town, the other runs from the trading basin past the north-west and west walls into a lake south-west of it. Stone bridges cross both arms in front of Haven's east and west gates.",
-      "status": "placeholder",
-      "ask": "Name the river.",
-      "source": "agent",
-      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+      "radius": 37.0,
+      "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 7 - Crossroads Inn on the Haven road. West of the river. Which roads cross here is open.",
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "east_of_the_ring",
@@ -769,6 +716,18 @@
       "status": "placeholder",
       "ask": "Is this the right spot and name for Oakenshire's market?",
       "source": "agent"
+    },
+    {
+      "id": "new_place_2",
+      "name": "Farmlands and Hamlets",
+      "kind": "landmark",
+      "center": [
+        -838.9,
+        775.3
+      ],
+      "radius": 114.0,
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "river_meadows",
@@ -950,16 +909,15 @@
       "name": "Northroad",
       "points": [
         [
-          -56.4,
-          408.0
+          48.9,
+          362.5
         ],
         [
-          -23.9,
-          116.5
+          11.3,
+          171.1
         ]
       ],
-      "status": "placeholder",
-      "ask": "Drag the start and end of the Northroad, add points where it bends, then confirm.",
+      "status": "canon",
       "source": "user"
     },
     {
@@ -979,95 +937,73 @@
           496.4
         ],
         [
-          -117.2,
-          469.1
+          -99.1,
+          440.6
         ],
         [
-          -170.9,
-          460.3
+          -58.4,
+          312.7
         ],
         [
-          -252.4,
-          467.1
+          -124.5,
+          252.9
         ],
         [
-          -300.0,
-          432.0
+          -336.9,
+          253.7
         ],
         [
-          -390.0,
-          396.0
+          -358.6,
+          345.4
         ],
         [
-          -440.0,
-          372.0
+          -391.6,
+          391.5
         ],
         [
-          -495.0,
-          355.0
+          -445.6,
+          364.5
         ]
       ],
       "status": "canon",
-      "source": "user",
-      "notes": "2026-10-18: graded through a wooded pass between the camp and the waypost, ends at the Old Stone Bridge (-440, 363)."
+      "source": "user"
     },
     {
       "id": "haven_road",
       "name": "Haven Road",
       "points": [
         [
-          -491.0,
-          387.0
+          -489.3,
+          387.5
         ],
         [
-          -522.0,
-          401.0
+          -553.1,
+          400.3
         ],
         [
-          -552.0,
-          420.0
+          -600.2,
+          420.3
         ],
         [
-          -580.0,
-          480.0
+          -593.2,
+          491.9
         ],
         [
-          -640.0,
-          560.0
+          -705.0,
+          700.0
         ],
         [
-          -690.0,
-          640.0
+          -684.8,
+          841.1
         ],
         [
-          -716.0,
-          740.0
-        ],
-        [
-          -708.0,
-          800.0
-        ],
-        [
-          -683.0,
-          834.0
-        ],
-        [
-          -683.0,
-          868.0
-        ],
-        [
-          -683.0,
-          901.0
-        ],
-        [
-          -683.0,
-          952.0
+          -685.1,
+          952.1
         ]
       ],
       "status": "placeholder",
-      "ask": "Layout sketch: 8 - Haven Road (south-west), from the Old Stone Bridge down the valley past the farmlands and the Crossroads Inn to Haven. Painted on the terrain 2026-10-18 from the bridge past the Crossroads Inn to Haven's north gate. Confirm the route.",
-      "source": "agent",
-      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+      "ask": "Layout sketch: 8 - Haven Road (south-west), from the Old Stone Bridge down the valley past the farmlands and the Crossroads Inn to Haven. Only if Haven goes south-west. Drag the bends, then confirm.",
+      "source": "user"
     },
     {
       "id": "woodland_trail",

@@ -307,16 +307,16 @@ Open [?]:
 |---|---|---|---|---|---|
 | Farmer Haldor | farmer; boars threaten his fields | `forest_camp` | 15 | 1, 5, 6 / 1, 5, 6 | [E][C] |
 | Healer Mirenna | healer; sells minor potions after q2 | `forest_camp` | 16 | 2, 7 / 2 | [E][C] |
-| Guard Emrik | camp guard; sends new adventurers to their trainers, and on to the west gate once the farm work is done (q66) | `forest_camp` | 17 | 3, 4, 23, 66 / – | [E][C] |
+| Guard Emrik | camp guard; sends new adventurers to their trainers, and on to the west gate once Haldor's young boars are dealt with (q66) | `forest_camp` | 17 | 3, 4, 23, 72, 66 / – | [E][C] |
 | Aralin the Kindling | Oakenshire binder | `forest_camp` | 24 | – | [C] |
 | Baldric Steelheart | warrior trainer | `oakenshire_hub` (Town Hall) | 10 | 21, 31, 32 / 3, 31, 32 | [E][C] |
 | Vivienne Emberglow | mage trainer | `oakenshire_hub` | 11 | 33, 34 / 4, 33, 34 | [C] |
 | Clarissa Whiteshield | cleric trainer | `oakenshire_hub` | 12 | 8, 35, 36 / 7, 8, 35, 36 | [C] |
-| Malrik Duskwright | shadowmancer trainer | `oakenshire_hub` | 13 | 37, 38 / 37, 38 | [C] |
+| Malrik Duskwright | shadowmancer trainer | `oakenshire_hub` | 13 | 37, 38 / 37, 38, 72 | [C] |
 | Elira Hawke | scout trainer | `oakenshire_hub` | 38 | 39, 40 / 23, 39, 40 | [C] |
 | Milly Goldwyn | clothier | `oakenshire_hub` | 20 | – | [C] |
 | Old Harbin | innkeeper of the Oakenshire Inn | `hub_near_old_harbin` | 27 | 10 / 10 | [C] |
-| Lina Groveroot | herbalist; robbed on the south road | `hub_near_lina_groveroot` | 26 | 9 / 9 | [C] |
+| Lina Groveroot | herbalist; robbed on the trail south of town | `hub_near_lina_groveroot` | 26 | 9 / 9 | [C] |
 | Guard-Corporal Rowan Hale | Oakenshire Watch, west gate | `oakenshire_west_gate` | 46 | 24, 54 / 24, 66 | [C] |
 | Gatewarden Elias Rook | Oakenshire Watch, west gate | `briarwatch_west_gate` | 47 | 25 / – | [C] |
 | Armsmaster Theobald Kerrin | runs the Westwatch Training Yard | `haven` (placeholder) | 41 | 22 / 21, 22 | [E][C] |
@@ -335,7 +335,7 @@ Open [?]:
 | Sevrin Wax, the Coffinwright | Warden of the Hollow Choir | map 1 | 81 | – | [C] |
 | Ossuar, the Bonebinder | Keeper of the North Ossuary | map 1 | 84 | – | [C] |
 | Choirmistress Vell | Voice of the Second Verse | map 1 | 85 | – | [C] |
-| Magister Calloran | Haven binder | not spawned | 25 | – / 20 | [C] |
+| Magister Calloran | Haven binder | not spawned | 25 | – / – | [C] |
 | Captain Arlen, Brakk the Redhand | draft names without a place | not in data | – | – | [?] |
 
 Class trainers also stand at the Briarwatch camp and the Barrowfront camp:
@@ -468,7 +468,9 @@ Derived from the names already in the game. [C]
 ### Errors in the game data found while building this bible
 
 7. **q21 "The Warrior's Trial":** the reward text says "So. **Garrick** sent you", but the quest comes from Baldric Steelheart.
+   **Resolved 2026-10-18:** the text now names Baldric.
 8. **q8 "Hands of the Light":** it tells the player to return "to Clarissa Whiteshield **in Haven**", but she teaches in Oakenshire Town Hall.
+   **Resolved 2026-10-18:** the objective now says "in Oakenshire".
 9. **Compass directions:** some quests have north and south swapped. North is −Z (the minimap).
    - q29 says the Deepwood fringe is "south-west of camp"; the objective is **north-west**.
    - q30 says the broken ground is "south of camp"; it is **north-west**.

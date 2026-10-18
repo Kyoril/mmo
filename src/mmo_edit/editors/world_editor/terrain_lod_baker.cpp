@@ -2,6 +2,8 @@
 
 #include "terrain_lod_baker.h"
 
+#include "page_bake_utils.h"
+
 #include "assets/asset_registry.h"
 #include "binary_io/writer.h"
 #include "deferred_shading/deferred_renderer.h"
@@ -10,180 +12,20 @@
 #include "graphics/render_texture.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
-#include "scene_graph/movable_object.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
-#include "stb_dxt.h"
 #include "stream_sink.h"
 #include "terrain/constants.h"
 #include "terrain/page.h"
 #include "terrain/terrain.h"
 #include "terrain_io/page_lod.h"
-#include "tex_v1_0/header_save.h"
 
 #include <algorithm>
-#include <chrono>
-#include <thread>
 #include <cmath>
-#include <cstring>
 #include <utility>
 
 namespace mmo
 {
-	float HalfToFloat(const uint16 half)
-	{
-		const uint32 sign = (half & 0x8000u) << 16;
-		const uint32 exponent = (half >> 10) & 0x1fu;
-		const uint32 mantissa = half & 0x3ffu;
-
-		uint32 bits;
-		if (exponent == 0)
-		{
-			if (mantissa == 0)
-			{
-				bits = sign;
-			}
-			else
-			{
-				// Subnormal: renormalise.
-				uint32 m = mantissa;
-				int32 e = -1;
-				do
-				{
-					++e;
-					m <<= 1;
-				} while ((m & 0x400u) == 0);
-
-				bits = sign | (static_cast<uint32>(127 - 15 - e) << 23) | ((m & 0x3ffu) << 13);
-			}
-		}
-		else if (exponent == 0x1f)
-		{
-			bits = sign | 0x7f800000u | (mantissa << 13);
-		}
-		else
-		{
-			bits = sign | ((exponent + 127 - 15) << 23) | (mantissa << 13);
-		}
-
-		float result;
-		std::memcpy(&result, &bits, sizeof(result));
-		return result;
-	}
-
-	namespace
-	{
-		/// Hides every movable object outside the terrain's scene graph and restores it on destruction.
-		class ScopedTerrainOnlyScene final
-		{
-		public:
-			ScopedTerrainOnlyScene(SceneNode& root, const SceneNode* terrainNode)
-			{
-				Hide(root, terrainNode);
-			}
-
-			~ScopedTerrainOnlyScene()
-			{
-				for (const auto& [object, visible] : m_hidden)
-				{
-					object->SetVisible(visible);
-				}
-			}
-
-		private:
-			void Hide(SceneNode& node, const SceneNode* terrainNode)
-			{
-				if (&node == terrainNode)
-				{
-					return;
-				}
-
-				for (uint32 i = 0; i < node.GetNumAttachedObjects(); ++i)
-				{
-					// Cameras are never drawn; leave the bake camera (and everyone else's) alone.
-					MovableObject* object = node.GetAttachedObject(i);
-					if (object && object->IsVisible() && !dynamic_cast<Camera*>(object))
-					{
-						m_hidden.emplace_back(object, true);
-						object->SetVisible(false);
-					}
-				}
-
-				for (uint32 i = 0; i < node.GetNumChildren(); ++i)
-				{
-					if (auto* child = dynamic_cast<SceneNode*>(node.GetChild(i)))
-					{
-						Hide(*child, terrainNode);
-					}
-				}
-			}
-
-			std::vector<std::pair<MovableObject*, bool>> m_hidden;
-		};
-
-		/// Box-filters an RGBA8 image to half its size.
-		std::vector<uint8> Downsample(const std::vector<uint8>& source, const uint32 size)
-		{
-			const uint32 half = size / 2;
-			std::vector<uint8> result(half * half * 4);
-			for (uint32 y = 0; y < half; ++y)
-			{
-				for (uint32 x = 0; x < half; ++x)
-				{
-					for (uint32 c = 0; c < 4; ++c)
-					{
-						const uint32 sum =
-							source[((y * 2) * size + x * 2) * 4 + c] +
-							source[((y * 2) * size + x * 2 + 1) * 4 + c] +
-							source[((y * 2 + 1) * size + x * 2) * 4 + c] +
-							source[((y * 2 + 1) * size + x * 2 + 1) * 4 + c];
-						result[(y * half + x) * 4 + c] = static_cast<uint8>((sum + 2) / 4);
-					}
-				}
-			}
-
-			return result;
-		}
-
-		/// Writes an RGBA8 image as a DXT1 .htex with a mip chain down to 4x4.
-		bool WriteDxt1Texture(const String& filename, std::vector<uint8> rgba, uint32 size)
-		{
-			const auto file = AssetRegistry::CreateNewFile(filename);
-			if (!file)
-			{
-				ELOG("Failed to create " << filename);
-				return false;
-			}
-
-			io::StreamSink sink(*file);
-
-			tex::v1_0::Header header(tex::Version_1_0);
-			header.width = static_cast<uint16>(size);
-			header.height = static_cast<uint16>(size);
-			header.format = tex::v1_0::DXT1;
-			header.hasMips = true;
-
-			tex::v1_0::HeaderSaver saver(sink, header);
-
-			for (uint32 mip = 0; mip < header.mipmapOffsets.size() && size >= 4; ++mip)
-			{
-				std::vector<uint8> compressed(size * size / 2);
-				rygCompress(compressed.data(), rgba.data(), static_cast<int>(size), static_cast<int>(size), 0);
-
-				header.mipmapOffsets[mip] = static_cast<uint32>(sink.Position());
-				header.mipmapLengths[mip] = static_cast<uint32>(compressed.size());
-				sink.Write(reinterpret_cast<const char*>(compressed.data()), compressed.size());
-
-				rgba = Downsample(rgba, size);
-				size /= 2;
-			}
-
-			saver.finish();
-			file->flush();
-			return true;
-		}
-	}
-
 	TerrainLodBaker::TerrainLodBaker(Scene& scene, terrain::Terrain& terrain, std::function<bool()> pumpStreaming)
 		: m_scene(scene)
 		, m_terrain(terrain)
@@ -223,7 +65,7 @@ namespace mmo
 		m_terrain.SetLodEnabled(false);
 
 		{
-			ScopedTerrainOnlyScene terrainOnly(m_scene.GetRootSceneNode(), m_terrain.GetNode());
+			page_bake::ScopedVisibleSubtrees terrainOnly(m_scene.GetRootSceneNode(), { m_terrain.GetNode() });
 
 			for (uint32 z = 0; z < m_terrain.GetHeight(); ++z)
 			{
@@ -275,46 +117,11 @@ namespace mmo
 
 	bool TerrainLodBaker::BakePage(terrain::Page& page, const uint32 x, const uint32 z)
 	{
-		// A page the streaming is preparing right now completes on the streaming's main-thread queue;
-		// Prepare() would just report it as busy. The parse itself may still be running on the
-		// streaming thread, so an idle queue means wait, not done.
-		const auto waitStart = std::chrono::steady_clock::now();
-		while (page.IsPreparing() && m_pumpStreaming && std::chrono::steady_clock::now() - waitStart < std::chrono::seconds(30))
-		{
-			if (!m_pumpStreaming())
-			{
-				std::this_thread::sleep_for(std::chrono::milliseconds(1));
-			}
-		}
-
-		if (page.IsPreparing())
-		{
-			WLOG("Terrain LOD bake: page " << x << "x" << z << " is still being streamed in, skipped");
-			return false;
-		}
-
-		const bool wasPrepared = page.IsPrepared();
-		const bool wasLoaded = page.IsLoaded();
 		ILOG("Baking terrain LOD of page " << x << "x" << z);
 
-		if (!wasPrepared && !page.Prepare())
+		const page_bake::ScopedPageLoad load(page, x, z, m_pumpStreaming);
+		if (!load.IsLoaded())
 		{
-			WLOG("Terrain LOD bake: failed to prepare page " << x << "x" << z);
-			return false;
-		}
-
-		// Load() creates one tile per call.
-		while (page.IsLoadable() && !page.Load())
-		{
-		}
-
-		if (!page.IsLoaded())
-		{
-			WLOG("Terrain LOD bake: failed to load page " << x << "x" << z);
-			if (!wasPrepared)
-			{
-				page.Destroy();
-			}
 			return false;
 		}
 
@@ -337,22 +144,7 @@ namespace mmo
 
 		std::vector<uint8> color;
 		success = success && RenderColor(page, color);
-		success = success && WriteDxt1Texture(m_terrain.GetPageLodTextureFilename(x, z), std::move(color), TextureSize);
-
-		// Leave the page the way the editor's streaming had it.
-		if (!wasLoaded)
-		{
-			page.Unload();
-		}
-
-		if (!wasPrepared)
-		{
-			page.Destroy();
-		}
-
-		// D3D11 only frees released resources once the context is flushed, which presenting a frame
-		// does. The command line bake never presents, so without this every page's buffers pile up.
-		GraphicsDevice::Get().FlushCommands();
+		success = success && page_bake::WriteDxt1Texture(m_terrain.GetPageLodTextureFilename(x, z), std::move(color), TextureSize);
 
 		return success;
 	}
@@ -408,7 +200,7 @@ namespace mmo
 		{
 			for (uint32 c = 0; c < 3; ++c)
 			{
-				const float linear = std::clamp(HalfToFloat(albedo[i * 4 + c]) + HalfToFloat(emissive[i * 4 + c]), 0.0f, 1.0f);
+				const float linear = std::clamp(page_bake::HalfToFloat(albedo[i * 4 + c]) + page_bake::HalfToFloat(emissive[i * 4 + c]), 0.0f, 1.0f);
 				srgb[i * 4 + c] = static_cast<uint8>(std::lround(std::pow(linear, 1.0f / 2.2f) * 255.0f));
 			}
 
@@ -421,7 +213,7 @@ namespace mmo
 		uint32 covered = 0;
 		for (uint32 i = 0; i < pixelCount; ++i)
 		{
-			if (HalfToFloat(albedo[i * 4 + 3]) > 0.5f)
+			if (page_bake::HalfToFloat(albedo[i * 4 + 3]) > 0.5f)
 			{
 				sum[0] += srgb[i * 4 + 0];
 				sum[1] += srgb[i * 4 + 1];
@@ -434,7 +226,7 @@ namespace mmo
 		{
 			for (uint32 i = 0; i < pixelCount; ++i)
 			{
-				if (HalfToFloat(albedo[i * 4 + 3]) <= 0.5f)
+				if (page_bake::HalfToFloat(albedo[i * 4 + 3]) <= 0.5f)
 				{
 					for (uint32 c = 0; c < 3; ++c)
 					{

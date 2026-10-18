@@ -1,0 +1,1309 @@
+{
+  "version": 1,
+  "pass_id": "20261018-briarwatch_camp-4",
+  "map": 0,
+  "world": "Development",
+  "poi": "briarwatch_camp",
+  "template": "briarwatch_camp_rework",
+  "seed": 18,
+  "anchor": [
+    -60.8,
+    540
+  ],
+  "keep_away": [],
+  "entry": [
+    -66,
+    520
+  ],
+  "created": "2026-10-18T18:29:34",
+  "world_fingerprint": "c01cb969b65c461d4e327a8794258e43175ed7bc",
+  "items": [
+    {
+      "role": "Foreman shelter",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        -60,
+        0.63,
+        557
+      ],
+      "yaw": 180,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x528603196f560909",
+      "file": "Worlds/Development/Development/Entities/7969/5946443765766293769.wobj",
+      "written_hash": "efc7608c85ad24b6f72643ce7650cbf6f639889c"
+    },
+    {
+      "role": "Sleeping tent blue",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_D.hmsh",
+      "store": "wobj",
+      "position": [
+        -73,
+        0.22,
+        553
+      ],
+      "yaw": 155,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52861dfdc8a48989",
+      "file": "Worlds/Development/Development/Entities/7969/5946473333819476361.wobj",
+      "written_hash": "ed3e877041b868c69c3e54079170b8087e084fd4"
+    },
+    {
+      "role": "Sleeping tent green",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_C.hmsh",
+      "store": "wobj",
+      "position": [
+        -47,
+        0.88,
+        553
+      ],
+      "yaw": 205,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52869f40e7c217f9",
+      "file": "Worlds/Development/Development/Entities/7969/5946615459104299001.wobj",
+      "written_hash": "352cf88f5f1fc2a9ffc2c52728684760ddc4c714"
+    },
+    {
+      "role": "Shared fire",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_CampFire_A.hmsh",
+      "store": "wobj",
+      "position": [
+        -61,
+        0.39,
+        540
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": false,
+      "unique_id": "0x5286fca975706050",
+      "file": "Worlds/Development/Development/Entities/7969/5946718162739290192.wobj",
+      "written_hash": "e7ed1a2ca491bf52d58267e94ac94163fd62923e"
+    },
+    {
+      "role": "Fire bench west",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Bench.hmsh",
+      "store": "wobj",
+      "position": [
+        -65,
+        0.57,
+        539
+      ],
+      "yaw": 90,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52865a76a246e229",
+      "file": "Worlds/Development/Development/Entities/7969/5946539823564513833.wobj",
+      "written_hash": "97dc48bc5b55d4e191a8d756571511de8a3b0e0f"
+    },
+    {
+      "role": "Fire bench east",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Bench.hmsh",
+      "store": "wobj",
+      "position": [
+        -57,
+        0.46,
+        540
+      ],
+      "yaw": 90,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52862a35738ff668",
+      "file": "Worlds/Development/Development/Entities/7969/5946486767049766504.wobj",
+      "written_hash": "f5bdfff225949a39a8ab01def872b33c3e81d814"
+    },
+    {
+      "role": "Cooking pot",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Cauldron_A.hmsh",
+      "store": "wobj",
+      "position": [
+        -61,
+        0.79,
+        544
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.7,
+      "collides": true,
+      "unique_id": "0x528662c10615ee33",
+      "file": "Worlds/Development/Development/Entities/7969/5946548939159629363.wobj",
+      "written_hash": "4bd33768f4c35412099669380b127b02dff068d4"
+    },
+    {
+      "role": "Water bucket",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Bucket.hmsh",
+      "store": "wobj",
+      "position": [
+        -63,
+        0.77,
+        544
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": false,
+      "unique_id": "0x5286a0075902588d",
+      "file": "Worlds/Development/Development/Entities/7969/5946616311407859853.wobj",
+      "written_hash": "61f231f9d4625d58143620b1e48903f4277011f2"
+    },
+    {
+      "role": "Repair workbench",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_WorkBench.hmsh",
+      "store": "wobj",
+      "position": [
+        -39,
+        1.0,
+        539
+      ],
+      "yaw": 90,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52860f718883f79b",
+      "file": "Worlds/Development/Development/Entities/7969/5946457338285389723.wobj",
+      "written_hash": "3279d9dc5220686e33d41da98735758cbfd03738"
+    },
+    {
+      "role": "Repair anvil",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Anvil.hmsh",
+      "store": "wobj",
+      "position": [
+        -43,
+        0.94,
+        535
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52866c24b3f7a8e3",
+      "file": "Worlds/Development/Development/Entities/7969/5946559262883293411.wobj",
+      "written_hash": "ce17239cce708d5ac8f048bf6bd08219ca35c625"
+    },
+    {
+      "role": "Chopping stump",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_WoodcutterStump.hmsh",
+      "store": "wobj",
+      "position": [
+        -42,
+        1.17,
+        545
+      ],
+      "yaw": 30,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52861eb923bb2e7e",
+      "file": "Worlds/Development/Development/Entities/7969/5946474138506571390.wobj",
+      "written_hash": "3cf4fb1117fc852b1d8999a0f4c6b5bd2e34e915"
+    },
+    {
+      "role": "Wagon under repair",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_WagonDamaged.hmsh",
+      "store": "wobj",
+      "position": [
+        -36,
+        1.09,
+        546
+      ],
+      "yaw": 180,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52869735c6acc50d",
+      "file": "Worlds/Development/Development/Entities/7969/5946606615211590925.wobj",
+      "written_hash": "cedaf1cf731e636fa8fa133352d4ed3451be2ab6"
+    },
+    {
+      "role": "Unloading wagon",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Wagon_Big.hmsh",
+      "store": "wobj",
+      "position": [
+        -78,
+        0.04,
+        524
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52864e8c08931fd3",
+      "file": "Worlds/Development/Development/Entities/7968/5946526721335566291.wobj",
+      "written_hash": "4c24b7f425ba4548559477517e067267c31e4d0f"
+    },
+    {
+      "role": "Supply crate 1",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        -80,
+        0.52,
+        530
+      ],
+      "yaw": 5,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52867436307eb591",
+      "file": "Worlds/Development/Development/Entities/7968/5946568134079985041.wobj",
+      "written_hash": "833a5f127d4000234f02ab3c9ea9b97604edf619"
+    },
+    {
+      "role": "Supply crate 2",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        -82,
+        0.57,
+        530
+      ],
+      "yaw": -8,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x5286c383bca6d735",
+      "file": "Worlds/Development/Development/Entities/7968/5946655328562501429.wobj",
+      "written_hash": "d6ff236ce38b4feee0cd67e1c62fc6111c72cbaf"
+    },
+    {
+      "role": "Supply crate 3",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        -80,
+        0.48,
+        532
+      ],
+      "yaw": 10,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x528635db4b6f4f73",
+      "file": "Worlds/Development/Development/Entities/7968/5946499573969014643.wobj",
+      "written_hash": "31bb12051a4b390ea8f69cf62c90e19e247acdd1"
+    },
+    {
+      "role": "Supply crate 4",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        -57,
+        0.91,
+        553
+      ],
+      "yaw": 5,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52864c180f545c92",
+      "file": "Worlds/Development/Development/Entities/7969/5946524024209431698.wobj",
+      "written_hash": "65782670db5d2c54b150f1f38205d8af62924cda"
+    },
+    {
+      "role": "Supply barrel 1",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        -83,
+        0.56,
+        527
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x5286fc4f99f9a565",
+      "file": "Worlds/Development/Development/Entities/7968/5946717776805209445.wobj",
+      "written_hash": "2cffce293222f68b176dccb64fa1722f25bb1faf"
+    },
+    {
+      "role": "Supply barrel 2",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        -82,
+        0.51,
+        533
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x528663da6706ab79",
+      "file": "Worlds/Development/Development/Entities/7968/5946550147671829369.wobj",
+      "written_hash": "2fa099ad700a4dcb13802480a2700f48718d2ddd"
+    },
+    {
+      "role": "Supply barrel 3",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        -56,
+        0.89,
+        555
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x528665620faa0cf0",
+      "file": "Worlds/Development/Development/Entities/7969/5946551829833321712.wobj",
+      "written_hash": "ee9b11393cdd5e1f3d0bd191eecffa1a04c45ee6"
+    },
+    {
+      "role": "Foreman chest",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Chest.hmsh",
+      "store": "wobj",
+      "position": [
+        -64,
+        0.57,
+        553
+      ],
+      "yaw": 180,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x528647271c7bb0c6",
+      "file": "Worlds/Development/Development/Entities/7969/5946518591296483526.wobj",
+      "written_hash": "b494bb2804ef01738e676237830e406ce0138426"
+    },
+    {
+      "role": "Entrance lantern",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodLantern_A.hmsh",
+      "store": "wobj",
+      "position": [
+        -69,
+        0.18,
+        518
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x528626aa76ead790",
+      "file": "Worlds/Development/Development/Entities/7968/5946482871570716560.wobj",
+      "written_hash": "6213fe6179b30464e8025b70dad163fff86d4306"
+    },
+    {
+      "role": "Foreman lantern",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodLantern_B.hmsh",
+      "store": "wobj",
+      "position": [
+        -54,
+        0.95,
+        551
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x528741101acdc47f",
+      "file": "Worlds/Development/Development/Entities/7969/5946793370391004287.wobj",
+      "written_hash": "41b0b61b340178058e51ea27ab74776f12f7e2fe"
+    },
+    {
+      "role": "Short boundary fence 1",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_Fence_01.hmsh",
+      "store": "wobj",
+      "position": [
+        -85,
+        0.49,
+        526
+      ],
+      "yaw": 90,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52875c1f21fafbd3",
+      "file": "Worlds/Development/Development/Entities/7968/5946823121749867475.wobj",
+      "written_hash": "fd0f8da918b285abba5a0e73c8028f3ae861c47c"
+    },
+    {
+      "role": "Short boundary fence 2",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_Fence_01.hmsh",
+      "store": "wobj",
+      "position": [
+        -85,
+        0.65,
+        531
+      ],
+      "yaw": 90,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52879c37148933f5",
+      "file": "Worlds/Development/Development/Entities/7968/5946893593347699701.wobj",
+      "written_hash": "4d53e685586fe0ce6587cf57655f52bb2cca01b9"
+    },
+    {
+      "role": "Short boundary fence 3",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_Fence_01.hmsh",
+      "store": "wobj",
+      "position": [
+        -78,
+        0.52,
+        535
+      ],
+      "yaw": 0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x52871c8b3652bae5",
+      "file": "Worlds/Development/Development/Entities/7969/5946753217203452645.wobj",
+      "written_hash": "c376d805f3c9e72a97c0d323e66676bb7539c61f"
+    },
+    {
+      "role": "Short boundary fence 4",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_Fence_01.hmsh",
+      "store": "wobj",
+      "position": [
+        -34,
+        0.97,
+        541
+      ],
+      "yaw": 90,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x528727be81282c68",
+      "file": "Worlds/Development/Development/Entities/7969/5946765532130192488.wobj",
+      "written_hash": "1b8e98cda90fa905ac7cca7f82a13deb743c5ff2"
+    },
+    {
+      "role": "Binding stone - Maida Thorn",
+      "asset": "Models/RuneStone/Runestone_01_Unstable.hmsh",
+      "store": "wobj",
+      "position": [
+        -87,
+        1.13,
+        546
+      ],
+      "yaw": 180,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1,
+      "collides": true,
+      "unique_id": "0x5287b5deaed496af",
+      "file": "Worlds/Development/Development/Entities/7969/5946921800986564271.wobj",
+      "written_hash": "aa59a80089836205f72707f828ac4199d7b9899b"
+    },
+    {
+      "role": "Timber work stock 1",
+      "asset": "Models/Swamp/SM_log_01.hmsh",
+      "store": "wobj",
+      "position": [
+        -39,
+        1.32,
+        550
+      ],
+      "yaw": 90,
+      "tilt": [
+        -0.73,
+        1.78
+      ],
+      "scale": 0.55,
+      "collides": true,
+      "unique_id": "0x5287dc65272d723b",
+      "file": "Worlds/Development/Development/Entities/7969/5946964159973126715.wobj",
+      "written_hash": "3330ac7701f6de090499508adbf4166e479676fc"
+    },
+    {
+      "role": "Timber work stock 2",
+      "asset": "Models/Swamp/SM_log_01.hmsh",
+      "store": "wobj",
+      "position": [
+        -41,
+        1.26,
+        550
+      ],
+      "yaw": 90,
+      "tilt": [
+        -0.27,
+        1.59
+      ],
+      "scale": 0.55,
+      "collides": true,
+      "unique_id": "0x52876e13444b7d0d",
+      "file": "Worlds/Development/Development/Entities/7969/5946842861995261197.wobj",
+      "written_hash": "cef58d1ee115430302ec724c91d68a067432b6ee"
+    }
+  ],
+  "gaps": [],
+  "notes": [
+    "Replaces category Briarwatch Camp only; originals backed up separately.",
+    "Local terrain scope 31/32 x 32/33; distant unsupported page excluded."
+  ],
+  "checks": {
+    "placement": [],
+    "walkability": [],
+    "items_hash": "7d87e77448db436e3e964de2518b5473a778c9f6"
+  },
+  "status": "applied",
+  "replacement_backup": [
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16694248192238717563.wobj",
+      "sha256": "98edee6c4cc7f5df45cc4fe0b4e74deff6ddd4cfd6ab135068bb1e3d08c9a793",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAB7ipjqR+Kt5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9DYW1wL1NNX2hjX0NhbXB0ZW50X0IuaG1zaAAAtMIfvCE/AAAFROb2Gz8AAAAAUQFLvwAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16694685665103162060.wobj",
+      "sha256": "0c47ce528e16a942c6a558f75172d0f38e1c12aeb5f591c61d9ab52afa4d5024",
+      "base64": "UkVWVwQAAAADAAAASFNNV34AAADMqkcBKXCv5zkATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01faGNfV29vZEJhcnJlbC5obXNoAAAQwvKYhD8AgPRDXFR7vwAAAABqtUI+AAAAAAAAgD8AAIA/AACAPwAADwBCcmlhcndhdGNoIENhbXA="
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16694753634756282650.wobj",
+      "sha256": "9a4de23362fc3973af4e68001f5ef2cf8c5b65515660cd11149b7eb16c5ba0c8",
+      "base64": "UkVWVwQAAAADAAAASFNNV30AAAAaSU9s+q2v5zgATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9GdXJuaXR1cmUvU01faGNfV2Fnb25fQmlnLmhtc2gAALTCSismvwAA+kPLJnQ/AAAAABz2mT4AAAAAAACAPwAAgD8AAIA/AAAPAEJyaWFyd2F0Y2ggQ2FtcA=="
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16695006635105063161.wobj",
+      "sha256": "bed4cbc8acf50b84aa33ad28b4799366a82ea9207473b27cfa231fa128e7b787",
+      "base64": "UkVWVwQAAAADAAAASFNNV34AAAD5EDqoFJSw5zkATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01faGNfV29vZEJhcnJlbC5obXNoAAB4whmeuz8AAPND2/ExPwAAAADmCjg/AAAAAAAAgD8AAIA/AACAPwAADwBCcmlhcndhdGNoIENhbXA="
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16695033834561324842.wobj",
+      "sha256": "89476e5e49303189fb58f97e8aaad776462cf84a88b17abc6130b77297bf5e38",
+      "base64": "UkVWVwQAAAADAAAASFNNV34AAAAqxyeG0ayw5zkATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01faGNfV29vZEJhcnJlbC5obXNoAAAGwr6MlT8AwPRD4ByIvQAAAAAab38/AAAAAAAAgD8AAIA/AACAPwAADwBCcmlhcndhdGNoIENhbXA="
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16695060122614327288.wobj",
+      "sha256": "b5fb1d2a459a0985a54d69736fa44118091ba56fc6195cab98cec6b178b2694e",
+      "base64": "UkVWVwQAAAADAAAASFNNV34AAAD4ZzcwusSw5zkATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01faGNfV29vZEJhcnJlbC5obXNoAACAwoD3oz8AwPJDUhcxPwAAAAA33Tg/AAAAAAAAgD8AAIA/AACAPwAADwBCcmlhcndhdGNoIENhbXA="
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16696772033902668389.wobj",
+      "sha256": "a9ae13791084aba7473e5754575c43f34333088707f753e6a7b05d30cee201ee",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAABl6nGYs9m25zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaIIw68KSoMA/CjYERFYMKj96fwE7f1w/P2Am5joAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16696783541464777603.wobj",
+      "sha256": "2477758657a74d08c9066242d2efb8ee62476b2c3f157c793d7bec1c7f0b2119",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAACDw5joKuS25zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaGVC6sJeXtU/pAAFRFqMJD9w/wS81xdEP6s037sAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16696869572364706044.wobj",
+      "sha256": "2b6f037574d7d03b1e498e3b564a4a7ed53fbf5982f356383511d5e95f17afc2",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAD8oNOJaTK35zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaOHe68IPQd8/u9ABRDNKOT9QOiM8YJswP75AKzwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16696950806382804670.wobj",
+      "sha256": "8050345cca326131e5982aa5ea9bbbbeb477e3535735c36de17c8ffc5558de9d",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAC+fp5OS3y35zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDMuaG1zaGxk68KRItw/hwQBRL3ZPT94kRQ8IrMrPxVGJDwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697006817487113002.wobj",
+      "sha256": "152ceca1c5aa07be77cd1bffe69d2db9bc6a6fcc2e95201285edce223ba2bb5a",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAAqS5hoPK+35zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaOLE68KiR8E/HGoDROYZLz/GLto8B4Q6P4XUzDwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697010266114934161.wobj",
+      "sha256": "87c02f9e89b60b83b41245b5ddb44f994170c720c14f4489443aefc3ff636167",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAACRxdRaX7K35zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDMuaG1zaBH/68J/CtQ/d50CRFohND+r5vs81ZA1P9bo+TwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697260129560279381.wobj",
+      "sha256": "5de8b7e87909030c45e06b3ae8e38deb9fff639bd1a1082b1e12208d8462b0df",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAABVubs4n5W45zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaKXM48JGLsA/OUr6Q+PgUz8SBxi8up0PP7xJYLwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697268183899104356.wobj",
+      "sha256": "d7c70da17b5e8a0b073061195c780db384a8f9143bac5b52ab57c142bbd9518e",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAABk5LyE8py45zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaHVi6cKvBNg/auD+Q8hMRz8wrpe65KsgP7QlvLoAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697306969006158032.wobj",
+      "sha256": "81cd78d5fd0d389d6f47b9fd17bfdc6debd0334027a3f53641c9f9dad122f421",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADQMEThOMC45zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaITc58IZYMY/pFL9Q8pvSz+7pe26N2YbPwSOG7sAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697365451235175876.wobj",
+      "sha256": "133906b64abd4d375e18cdb191641f8402858dac470f9a0eb8296d726b4a5dad",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADErcBVafW45zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaG7/5cIyjcI/2Mr7Q2zCTz/smji7UZEVP+c2gLsAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697410649410053865.wobj",
+      "sha256": "5588f35d8ea6e7783331cc132fb361f638f954fbfab732567c522c78d3443745",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADpJunahB655zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDMuaG1zaBlt3sJMljY/J2P3Qz9eWj+IRU+9azgDP7h2rL0AAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697481235594380242.wobj",
+      "sha256": "2597f814bf0e46b5c00adb319d1955cfaea8883eefda2ca9789ab260d5e8bddf",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADSg1p7t1655zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaIVE28Jy3tS7+P71Q3a8XT/if1S90Br6PnxlvL0AAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697523447685094637.wobj",
+      "sha256": "2772c8f4b95b41f7f540897eeab305d3eb566d790dbaaed06b1fa7c09145ee16",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADtnAbAG4W55zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaJvO18KIoe6+eab0QwPhYT94G/u8W5nuPmm4bb0AAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697551472046047918.wobj",
+      "sha256": "96c92750a0e55207cc6a62ad41a2b1ac70ffb45b5165e4f407b6a49a9f0cd4b0",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAACuAhuumJ655zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaOFF4cJxeKs/8dH4Q/lyVz8ak9i8wbEJP6hvKb0AAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697718937483631389.wobj",
+      "sha256": "a7ef4d89917684c27b8f0a82fa6a0b4ec84618915a5551a92d5c48554b9d2b14",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAAdWwbE5za65zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaMgF0MKXneO+tRzyQ6edaD8lqSe8BGrVPu2+trwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16697811871857320034.wobj",
+      "sha256": "85ee771bea331b2912ce283e079178f7bdf720ec3e34a12851dc9f895bdd6e6d",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAABiIFu8bYu65zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaA0O1MIUuRK/t1rzQ6F5ZT/lZ0S8/YfiPlD1xrwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16698184593070284411.wobj",
+      "sha256": "ecbcedf2018f471b58b9bb52b07e73c582150e56d2567c3883d9282493254587",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAB73tqnat675zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaAywssKVxd+/PfzrQ2bzdj+vGIK7obSGPkCAbrwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16698350419739738037.wobj",
+      "sha256": "0eda6812c2fcbb73768882d2d509cf82386ce835d31df99a9c0c19aa76d382d4",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAC1/5QvPHW85zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaOtPp8L79dq/koXqQ8Epej/Xtws83VhVPhPUIz0AAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16698406158543925627.wobj",
+      "sha256": "e0aa253b5c9d54e9375024497352e7ce8471159413bce8043138cefc119865cb",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAB7sTTj7ae85zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaKkUrcIKWO6/3DbrQyCQeD9U3Bg8uKpxPv44HT0AAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7968/16698467783624267205.wobj",
+      "sha256": "44e6672bc3ea046c1f815c063642e4e3dc8a84aebac3b9ffbdaac102d15d2b0d",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADFlToY+t+85zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaFJmocLddru/6OjpQ25Aez8nYSs8n2k7PtfBZT0AAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16693696575312312089.wobj",
+      "sha256": "3050e03f49f1997c0c1e4b7d4e5322685fb0317b3e8fb9f22a4d54adf7a8ae4e",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAAZN6WXluyr5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9DYW1wL1NNX2hjX0NhbXBGaXJlX0EuaG1zaAAAcMKUXeo+AAAHRAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16693758663293754152.wobj",
+      "sha256": "d20e673d9f0e49a747ab266d41a27c14ef35b6569c1526d80aef78970cad4168",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAAoW7mTDiWs5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9DYW1wL1NNX2hjX0NhbXB0ZW50X0IuaG1zaAAArMLp17c+AAAJRH3sTT8AAAAAEBcYvwAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16693831825218135026.wobj",
+      "sha256": "19d2323aa7f70f57944948b2607252f39094087bb5127221357fb45c2cc56f56",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADy4zzqmGes5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9DYW1wL1NNX2hjX0NhbXB0ZW50X0IuaG1zaAAAmMI6dMg8AMAMROhEdD8AAAAAmjaZvgAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16693894806925098794.wobj",
+      "sha256": "5712ab7f72f7c0347a0c427f4b153fb8d5aad67c2270d154a7c75d4ed32243f6",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAAqP4L84KCs5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9DYW1wL1NNX2hjX0NhbXB0ZW50X0IuaG1zaAAAcMJm55o/AAAORAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16694126261561292506.wobj",
+      "sha256": "b2acde53413a93043cfaebf006fc32e2bf5bae6a8ead9902785eb17b21928732",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADaduG3YnOt5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9DYW1wL1NNX2hjX0NhbXB0ZW50X0IuaG1zaAAAMML9KJc/AMAMROhEdD8AAAAAmjaZPgAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16694255045196638341.wobj",
+      "sha256": "ad363d7f30a5622f35801ef5cbc8c18c64844eb6fb1de0f5441220961073fd78",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAACF6Ld+g+it5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9DYW1wL1NNX2hjX0NhbXB0ZW50X0IuaG1zaAAACMLrRpg/AAAJRH3sTT8AAAAAEBcYPwAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16694382142874729113.wobj",
+      "sha256": "4c34becf9a30a72b2f805176a555fca62b43eb6419c9c6ad89df55c63fac394a",
+      "base64": "UkVWVwQAAAADAAAASFNNV3YAAACZOqy6G1yu5zEATW9kZWxzL0ZhbHd5blBsYWlucy9CdWlsZGluZ3MvTWFya2V0X1RlbnRfMDEuaG1zaAAAOMJCKvQ+AMAFRFwcfD8AAAAA1NAxPgAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16694396331441141329.wobj",
+      "sha256": "814aa79f2c11b2a24ac9f2dc22df834dbd983d7091c7806d3b551e0f58d3dc0c",
+      "base64": "UkVWVwQAAAADAAAASFNNV3YAAABRNiJDA2mu5zEATW9kZWxzL0ZhbHd5blBsYWlucy9CdWlsZGluZ3MvTWFya2V0X1RlbnRfMDMuaG1zaKmAP8JWZj4/AIAHRKDBfz8AAAAAPqoyvQAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16694841366110215108.wobj",
+      "sha256": "2a1cf1334f050d58fc4468f04b868d9467a62f4ecf87fb68b4052b3393561b2a",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADEG3/4xP2v5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9GdXJuaXR1cmUvU01faGNfV2Fnb24uaG1zaAAAVMJI2nM/9ccIRH0bRD8AAAAAu40kPwAAAAAAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695055029168840638.wobj",
+      "sha256": "91cdb527ee7f8c35167a602632b72365aeaecbca78d5b3ec49858bf5ab9a974e",
+      "base64": "UkVWVwQAAAADAAAASFNNV2AAAAC+HzVHGMCw5xsATW9kZWxzL1N3YW1wL1NNX2xvZ18wMS5obXNoAADQwigHiz8AgAhEngZ/PwAAAAC2frI9AAAAAAAAgD8AAIA/AACAPwAADwBCcmlhcndhdGNoIENhbXA="
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695148464436781036.wobj",
+      "sha256": "00fb99d2edfd08f5b6fb847f809a3ad6f968ddbf916c05af677531ef5942a15b",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADsnynfEhWx5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaKGsn8KSIP4+JCAQRGspMj60jRq9k+d7P2ee2rsAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695180183732861734.wobj",
+      "sha256": "b0ce2d17f13a00473e5bc3aec5ebee77156eae0c12b1cca71d5d5fe41f58402b",
+      "base64": "UkVWVwQAAAADAAAASFNNV2AAAAAmu4kY7DGx5xsATW9kZWxzL1N3YW1wL1NNX2xvZ18wMS5obXNoAADQwkBqoD8AQAlE/Zh+PwAAAAAFE9Y9AAAAAAAAgD8AAIA/AACAPwAADwBCcmlhcndhdGNoIENhbXA="
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695195156518764255.wobj",
+      "sha256": "57adde8dd61e21fe52a0be5f9211e292dd20a2c4eb65cebcf8aeae2be0166320",
+      "base64": "UkVWVwQAAAADAAAASFNNV2AAAADffh84ij+x5xsATW9kZWxzL1N3YW1wL1NNX2xvZ18wMS5obXNoAADOwoT1nj8AAApEXGB/PwAAAAB73I49AAAAAAAAgD8AAIA/AACAPwAADwBCcmlhcndhdGNoIENhbXA="
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695428624799810824.wobj",
+      "sha256": "0f49259ce599d9fa552d5a30a643f34dc23a0e508d1f6411a3f67beae8176c71",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAAIxRTK4BOy5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaM2StsIDZzA/oLUORJNYkD6IrEi7RJ11P6Lea7oAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695435171801625963.wobj",
+      "sha256": "95ecbca7914d245d1e2673a78518a933a8d200d2da0e992ee073c6ecb35334e7",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAABrdcwh1Rmy5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaIoXscINqAw/Sh8PROJegj4TAh28gox3PxtgJbsAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695633507651279253.wobj",
+      "sha256": "7e671159d776b18977be605c04a6f5bc9d94241cb210566e97ea8527cd4e26ac",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAACV2anLN86y5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaP2fpcJIxP0+0tQPRMe2Tj4PgBe9C4t6P57++bsAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695670424295286344.wobj",
+      "sha256": "efd293a7e573e42145cf8abb0e871168f3ce821c6feb16c6c7e31bfa598b554b",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAABIph0fy++y5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaM1vq8JP7wU/Hn8PRHfJaD7+qvO8tCx5P3ek47sAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695701320840108764.wobj",
+      "sha256": "4ebd84ea2ebc2d0500635111c67b099e4c691197f7957880b2d888653ab68c77",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADc2rHI5Auz5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaPRvysL4xMk/gLMMRBEUxT7yYtg8ZClsP2yTNDwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695707185208703727.wobj",
+      "sha256": "2512b53ba52bfd889d8dc91a1ee08898d9d9588546fb320383f6346120980657",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADvOk0wOhGz5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaMTPxcImYaU//0ANRGTHuD6grh49l4JuP23edTwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695751861349971164.wobj",
+      "sha256": "3131b331160838d96bd40e56ad40d2a5af006629c1326eb64aa6f05cda687cc2",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADc9NQp3Dmz5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDMuaG1zaPTywMKKaYM/HsYNRHgEqz5H2s48FTNxPx2qEjwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16695905688320764853.wobj",
+      "sha256": "fea949ec75af5d521b7d3d826dec4750c130de5b40d77eb1e9215a74f52c48b1",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAC1a8jLw8Wz5zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaFDdu8Lah1A/dEIORJYsnT655zM8D59zP2giaDsAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696061755144287182.wobj",
+      "sha256": "2f86e78a125acffff256af1c3d2948ce598f9d5d112be26665100b3f979f1ed7",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADOM1zvtFO05zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaEDs0sJh5fE/HoELRGJ03j6SJjy8GI1mPwyLtbsAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696084348375349543.wobj",
+      "sha256": "6ca9a311942ab577d6cad00ef235fdf741ffd619784822ab1279f729a24338ba",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAAnOd9UQWi05zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaMDB1sL8rOg/K90KRHuF6z6X8+a8ViljP3Fzb7wAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696113926971014399.wobj",
+      "sha256": "b0c9b79b861f0d2446112f4c0e1a380dd896ebdbd50e59e803f98df53515777d",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAD/PI8iKIO05zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDMuaG1zaOvPzsJfeeE/Dh4MROtU0j53Z4o8YFppP/t/+TsAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696159355368598865.wobj",
+      "sha256": "862a24d61b3c329a99ca32ad28d826727c40847429bd18d9bc762642a89b909e",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAABRbQ9Ceay05zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDEuaG1zaG1N2sLlIds/szIKRBA5+D4B+QA73OZfP3H7jjoAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696360111762156852.wobj",
+      "sha256": "0f831655954811cd236b778432c881b969bf5af01382e5563bfabdc679c5e0d2",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAA0rZV/D2O15zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaB5c58KnqNk/YY8GRKw8GT+4+mA9MFFMP8y7KD0AAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696407893637020013.wobj",
+      "sha256": "c080d64efb95846cfd75f185cc38c94a3e624caef9010bac65f6d9229a88d6af",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAABtOUOVhI615zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaBMb48L0970/ehEIRIzxDT+e7xA9JcRUPyliwTwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696408086215186616.wobj",
+      "sha256": "fef82cb70f12877984e4cdaeb08a84f20083d15bb9c3a9eb0c699bf23164ad0e",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAAC42NBrsY615zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaIWM3cJ4Gc4/PIIJRKzvAT9xslK8SopcPxhG+LsAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696411958925733198.wobj",
+      "sha256": "bcb2cd50de9b80a7fbb47e446400c5543bd9c9f702f645e8a2a55d5f967f40b0",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAABOLVobN5K15zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDIuaG1zaH984MIgdcM/T8wIRNkiCD9gv0c8NMVYPxfk+jsAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696459244098237157.wobj",
+      "sha256": "58b4ba3c7b8d0ed0e45e1e37f912ad7e0d900f7393d2bcbbf978c7a11b6ed050",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADlMkOLOL215zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDQuaG1zaDZm5cJC9MQ/TlIHRO2YEz/z9FI99YpQP1BOFT0AAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    },
+    {
+      "path": "data/client/Worlds/Development/Development/Entities/7969/16696703188121870534.wobj",
+      "sha256": "cbec8816996b39168fafe9f57fe87a7291e55b14cca38fb09c787a05ed48a311",
+      "base64": "UkVWVwQAAAADAAAASFNNV3kAAADG4CIwFpu25zQATW9kZWxzL0ZhbHd5blBsYWlucy9Qcm9wcy9Xb29kUHJvcHMvU01fRmVuY2VfMDMuaG1zaET76MKynug/SskFRFwSHz9zPPc8PVZIP4pPxDwAAIA/AACAPwAAgD8AAA8AQnJpYXJ3YXRjaCBDYW1w"
+    }
+  ],
+  "npc_changes": [
+    {
+      "index": 29,
+      "unit": 36,
+      "name": "Thalric Stonehammer",
+      "before": {
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -58.0,
+        "positiony": 0.48,
+        "positionz": 500.0,
+        "rotation": 0.0,
+        "maxcount": 1,
+        "unitentry": 36,
+        "isactive": true,
+        "movement": "STATIONARY"
+      },
+      "after": {
+        "name": "Briarwatch Camp - Thalric Stonehammer",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -60.0,
+        "positiony": 0.91,
+        "positionz": 551.0,
+        "rotation": 1.66,
+        "maxcount": 1,
+        "unitentry": 36,
+        "isactive": true,
+        "movement": "STATIONARY"
+      }
+    },
+    {
+      "index": 143,
+      "unit": 52,
+      "name": "Scout Mirelle Voss",
+      "before": {
+        "name": "Thalrics Camp - Scout Mirelle Voss",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -72.0,
+        "positiony": 0.21,
+        "positionz": 507.0,
+        "rotation": 1.2,
+        "maxcount": 1,
+        "unitentry": 52,
+        "isactive": true,
+        "movement": "STATIONARY"
+      },
+      "after": {
+        "name": "Thalrics Camp - Scout Mirelle Voss",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -72.0,
+        "positiony": 0.17,
+        "positionz": 521.0,
+        "rotation": 1.57,
+        "maxcount": 1,
+        "unitentry": 52,
+        "isactive": true,
+        "movement": "STATIONARY"
+      }
+    },
+    {
+      "index": 144,
+      "unit": 53,
+      "name": "Quartermaster Harlan Pike",
+      "before": {
+        "name": "Thalrics Camp - Quartermaster Harlan Pike",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -46.0,
+        "positiony": 0.33,
+        "positionz": 492.0,
+        "rotation": 3.5,
+        "maxcount": 1,
+        "unitentry": 53,
+        "isactive": true,
+        "movement": "STATIONARY"
+      },
+      "after": {
+        "name": "Thalrics Camp - Quartermaster Harlan Pike",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -77.0,
+        "positiony": 0.59,
+        "positionz": 529.0,
+        "rotation": 5.68,
+        "maxcount": 1,
+        "unitentry": 53,
+        "isactive": true,
+        "movement": "STATIONARY"
+      }
+    },
+    {
+      "index": 221,
+      "unit": 68,
+      "name": "Hearthkeeper Maida Thorn",
+      "before": {
+        "name": "Briarwatch Camp - Maida Thorn",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -50.0,
+        "positiony": 0.97,
+        "positionz": 505.0,
+        "rotation": 3.8,
+        "maxcount": 1,
+        "unitentry": 68,
+        "isactive": true,
+        "movement": "STATIONARY"
+      },
+      "after": {
+        "name": "Briarwatch Camp - Maida Thorn",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -87.0,
+        "positiony": 0.59,
+        "positionz": 543.0,
+        "rotation": 1.57,
+        "maxcount": 1,
+        "unitentry": 68,
+        "isactive": true,
+        "movement": "STATIONARY"
+      }
+    },
+    {
+      "index": 223,
+      "unit": 70,
+      "name": "Battlemage Serah Wren",
+      "before": {
+        "name": "Briarwatch Camp - Serah Wren",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -70.0,
+        "positiony": 0.29,
+        "positionz": 516.0,
+        "rotation": 5.0,
+        "maxcount": 1,
+        "unitentry": 70,
+        "isactive": true,
+        "movement": "STATIONARY"
+      },
+      "after": {
+        "name": "Briarwatch Camp - Serah Wren",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -48.0,
+        "positiony": 1.01,
+        "positionz": 548.0,
+        "rotation": 2.59,
+        "maxcount": 1,
+        "unitentry": 70,
+        "isactive": true,
+        "movement": "STATIONARY"
+      }
+    },
+    {
+      "index": 224,
+      "unit": 71,
+      "name": "Drillmaster Coren Ashfield",
+      "before": {
+        "name": "Briarwatch Camp - Coren Ashfield",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -66.0,
+        "positiony": 0.5,
+        "positionz": 519.0,
+        "rotation": 5.0,
+        "maxcount": 1,
+        "unitentry": 71,
+        "isactive": true,
+        "movement": "STATIONARY"
+      },
+      "after": {
+        "name": "Briarwatch Camp - Coren Ashfield",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -43.0,
+        "positiony": 1.14,
+        "positionz": 532.0,
+        "rotation": 3.56,
+        "maxcount": 1,
+        "unitentry": 71,
+        "isactive": true,
+        "movement": "STATIONARY"
+      }
+    },
+    {
+      "index": 225,
+      "unit": 72,
+      "name": "Sister Almira Deene",
+      "before": {
+        "name": "Briarwatch Camp - Almira Deene",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -62.0,
+        "positiony": 0.78,
+        "positionz": 521.0,
+        "rotation": 5.0,
+        "maxcount": 1,
+        "unitentry": 72,
+        "isactive": true,
+        "movement": "STATIONARY"
+      },
+      "after": {
+        "name": "Briarwatch Camp - Almira Deene",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -72.0,
+        "positiony": 0.26,
+        "positionz": 548.0,
+        "rotation": 0.63,
+        "maxcount": 1,
+        "unitentry": 72,
+        "isactive": true,
+        "movement": "STATIONARY"
+      }
+    },
+    {
+      "index": 226,
+      "unit": 73,
+      "name": "Duskscholar Veslin Marr",
+      "before": {
+        "name": "Briarwatch Camp - Veslin Marr",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -58.0,
+        "positiony": 0.58,
+        "positionz": 522.0,
+        "rotation": 5.0,
+        "maxcount": 1,
+        "unitentry": 73,
+        "isactive": true,
+        "movement": "STATIONARY"
+      },
+      "after": {
+        "name": "Briarwatch Camp - Veslin Marr",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -80.0,
+        "positiony": 0.49,
+        "positionz": 541.0,
+        "rotation": 0.05,
+        "maxcount": 1,
+        "unitentry": 73,
+        "isactive": true,
+        "movement": "STATIONARY"
+      }
+    },
+    {
+      "index": 227,
+      "unit": 74,
+      "name": "Trailmaster Joren Slate",
+      "before": {
+        "name": "Briarwatch Camp - Joren Slate",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -54.0,
+        "positiony": 0.12,
+        "positionz": 523.0,
+        "rotation": 5.0,
+        "maxcount": 1,
+        "unitentry": 74,
+        "isactive": true,
+        "movement": "STATIONARY"
+      },
+      "after": {
+        "name": "Briarwatch Camp - Joren Slate",
+        "respawn": true,
+        "respawndelay": "30000",
+        "positionx": -43.0,
+        "positiony": 1.18,
+        "positionz": 542.0,
+        "rotation": 3.03,
+        "maxcount": 1,
+        "unitentry": 74,
+        "isactive": true,
+        "movement": "STATIONARY"
+      }
+    }
+  ],
+  "backups": [],
+  "created_files": [],
+  "applied": "2026-10-18T18:30:05",
+  "npc_changes_json": "[{\"index\": 29, \"unit\": 36, \"name\": \"Thalric Stonehammer\", \"before\": {\"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -58.0, \"positiony\": 0.47842154, \"positionz\": 500.0, \"rotation\": 0.0, \"maxcount\": 1, \"unitentry\": 36, \"isactive\": true, \"movement\": \"STATIONARY\"}, \"after\": {\"name\": \"Briarwatch Camp - Thalric Stonehammer\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -60.0, \"positiony\": 0.91033447, \"positionz\": 551.0, \"rotation\": 1.6614562, \"maxcount\": 1, \"unitentry\": 36, \"isactive\": true, \"movement\": \"STATIONARY\"}}, {\"index\": 143, \"unit\": 52, \"name\": \"Scout Mirelle Voss\", \"before\": {\"name\": \"Thalrics Camp - Scout Mirelle Voss\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -72.0, \"positiony\": 0.20702499, \"positionz\": 507.0, \"rotation\": 1.2, \"maxcount\": 1, \"unitentry\": 52, \"isactive\": true, \"movement\": \"STATIONARY\"}, \"after\": {\"name\": \"Thalrics Camp - Scout Mirelle Voss\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -72.0, \"positiony\": 0.16980691, \"positionz\": 521.0, \"rotation\": 1.5707964, \"maxcount\": 1, \"unitentry\": 52, \"isactive\": true, \"movement\": \"STATIONARY\"}}, {\"index\": 144, \"unit\": 53, \"name\": \"Quartermaster Harlan Pike\", \"before\": {\"name\": \"Thalrics Camp - Quartermaster Harlan Pike\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -46.0, \"positiony\": 0.33246562, \"positionz\": 492.0, \"rotation\": 3.5, \"maxcount\": 1, \"unitentry\": 53, \"isactive\": true, \"movement\": \"STATIONARY\"}, \"after\": {\"name\": \"Thalrics Camp - Quartermaster Harlan Pike\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -77.0, \"positiony\": 0.59363586, \"positionz\": 529.0, \"rotation\": 5.680898, \"maxcount\": 1, \"unitentry\": 53, \"isactive\": true, \"movement\": \"STATIONARY\"}}, {\"index\": 221, \"unit\": 68, \"name\": \"Hearthkeeper Maida Thorn\", \"before\": {\"name\": \"Briarwatch Camp - Maida Thorn\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -50.0, \"positiony\": 0.9659, \"positionz\": 505.0, \"rotation\": 3.8, \"maxcount\": 1, \"unitentry\": 68, \"isactive\": true, \"movement\": \"STATIONARY\"}, \"after\": {\"name\": \"Briarwatch Camp - Maida Thorn\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -87.0, \"positiony\": 0.59061366, \"positionz\": 543.0, \"rotation\": 1.5707964, \"maxcount\": 1, \"unitentry\": 68, \"isactive\": true, \"movement\": \"STATIONARY\"}}, {\"index\": 223, \"unit\": 70, \"name\": \"Battlemage Serah Wren\", \"before\": {\"name\": \"Briarwatch Camp - Serah Wren\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -70.0, \"positiony\": 0.2913, \"positionz\": 516.0, \"rotation\": 5.0, \"maxcount\": 1, \"unitentry\": 70, \"isactive\": true, \"movement\": \"STATIONARY\"}, \"after\": {\"name\": \"Briarwatch Camp - Serah Wren\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -48.0, \"positiony\": 1.0121143, \"positionz\": 548.0, \"rotation\": 2.5899377, \"maxcount\": 1, \"unitentry\": 70, \"isactive\": true, \"movement\": \"STATIONARY\"}}, {\"index\": 224, \"unit\": 71, \"name\": \"Drillmaster Coren Ashfield\", \"before\": {\"name\": \"Briarwatch Camp - Coren Ashfield\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -66.0, \"positiony\": 0.4989, \"positionz\": 519.0, \"rotation\": 5.0, \"maxcount\": 1, \"unitentry\": 71, \"isactive\": true, \"movement\": \"STATIONARY\"}, \"after\": {\"name\": \"Briarwatch Camp - Coren Ashfield\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -43.0, \"positiony\": 1.144907, \"positionz\": 532.0, \"rotation\": 3.559817, \"maxcount\": 1, \"unitentry\": 71, \"isactive\": true, \"movement\": \"STATIONARY\"}}, {\"index\": 225, \"unit\": 72, \"name\": \"Sister Almira Deene\", \"before\": {\"name\": \"Briarwatch Camp - Almira Deene\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -62.0, \"positiony\": 0.7793, \"positionz\": 521.0, \"rotation\": 5.0, \"maxcount\": 1, \"unitentry\": 72, \"isactive\": true, \"movement\": \"STATIONARY\"}, \"after\": {\"name\": \"Briarwatch Camp - Almira Deene\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -72.0, \"positiony\": 0.2643032, \"positionz\": 548.0, \"rotation\": 0.6287963, \"maxcount\": 1, \"unitentry\": 72, \"isactive\": true, \"movement\": \"STATIONARY\"}}, {\"index\": 226, \"unit\": 73, \"name\": \"Duskscholar Veslin Marr\", \"before\": {\"name\": \"Briarwatch Camp - Veslin Marr\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -58.0, \"positiony\": 0.5826, \"positionz\": 522.0, \"rotation\": 5.0, \"maxcount\": 1, \"unitentry\": 73, \"isactive\": true, \"movement\": \"STATIONARY\"}, \"after\": {\"name\": \"Briarwatch Camp - Veslin Marr\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -80.0, \"positiony\": 0.48995164, \"positionz\": 541.0, \"rotation\": 0.05258306, \"maxcount\": 1, \"unitentry\": 73, \"isactive\": true, \"movement\": \"STATIONARY\"}}, {\"index\": 227, \"unit\": 74, \"name\": \"Trailmaster Joren Slate\", \"before\": {\"name\": \"Briarwatch Camp - Joren Slate\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -54.0, \"positiony\": 0.1208, \"positionz\": 523.0, \"rotation\": 5.0, \"maxcount\": 1, \"unitentry\": 74, \"isactive\": true, \"movement\": \"STATIONARY\"}, \"after\": {\"name\": \"Briarwatch Camp - Joren Slate\", \"respawn\": true, \"respawndelay\": \"30000\", \"positionx\": -43.0, \"positiony\": 1.1799836, \"positionz\": 542.0, \"rotation\": 3.0309355, \"maxcount\": 1, \"unitentry\": 74, \"isactive\": true, \"movement\": \"STATIONARY\"}}]",
+  "nav": {
+    "scope": "Four supported local terrain pages; NPC reachability from camp entrance. Global protected routes not checked.",
+    "path": "H:\\mmo\\generated\\world\\review\\briarwatch-camp-rework\\scratch_nav\\nav",
+    "npc_results": [
+      {
+        "npc": "Thalric Stonehammer",
+        "entry": 36,
+        "position": [
+          -60.0,
+          0.9103344678878784,
+          551.0
+        ],
+        "on_mesh_distance": 0.14,
+        "path_from_entrance": 35.27
+      },
+      {
+        "npc": "Scout Mirelle Voss",
+        "entry": 52,
+        "position": [
+          -72.0,
+          0.16980691254138947,
+          521.0
+        ],
+        "on_mesh_distance": 0.21,
+        "path_from_entrance": 6.74
+      },
+      {
+        "npc": "Quartermaster Harlan Pike",
+        "entry": 53,
+        "position": [
+          -77.0,
+          0.5936358571052551,
+          529.0
+        ],
+        "on_mesh_distance": 0.04,
+        "path_from_entrance": 15.57
+      },
+      {
+        "npc": "Hearthkeeper Maida Thorn",
+        "entry": 68,
+        "position": [
+          -87.0,
+          0.5906136631965637,
+          543.0
+        ],
+        "on_mesh_distance": 0.04,
+        "path_from_entrance": 32.67
+      },
+      {
+        "npc": "Battlemage Serah Wren",
+        "entry": 70,
+        "position": [
+          -48.0,
+          1.0121142864227295,
+          548.0
+        ],
+        "on_mesh_distance": 0.12,
+        "path_from_entrance": 35.32
+      },
+      {
+        "npc": "Drillmaster Coren Ashfield",
+        "entry": 71,
+        "position": [
+          -43.0,
+          1.144906997680664,
+          532.0
+        ],
+        "on_mesh_distance": 0.18,
+        "path_from_entrance": 26.93
+      },
+      {
+        "npc": "Sister Almira Deene",
+        "entry": 72,
+        "position": [
+          -72.0,
+          0.26430320739746094,
+          548.0
+        ],
+        "on_mesh_distance": 0.25,
+        "path_from_entrance": 30.62
+      },
+      {
+        "npc": "Duskscholar Veslin Marr",
+        "entry": 73,
+        "position": [
+          -80.0,
+          0.48995164036750793,
+          541.0
+        ],
+        "on_mesh_distance": 0.08,
+        "path_from_entrance": 27.02
+      },
+      {
+        "npc": "Trailmaster Joren Slate",
+        "entry": 74,
+        "position": [
+          -43.0,
+          1.1799836158752441,
+          542.0
+        ],
+        "on_mesh_distance": 0.15,
+        "path_from_entrance": 33.34
+      }
+    ]
+  }
+}

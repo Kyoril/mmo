@@ -134,7 +134,7 @@ def _add_named_places(atlas: Atlas, data, query, records, giver_units, levels) -
             area = query.area_at(*centre)
             if area:
                 fields["areaId"] = area
-            bands = [levels[r.entry] for r in group if r.kind == "unit" and r.entry in levels]
+            bands = [levels[e] for r in group if r.kind == "unit" for e in r.spawned_entries if e in levels]
             if bands and not has_giver:
                 fields["levelMin"] = min(b[0] for b in bands)
                 fields["levelMax"] = max(b[1] for b in bands)
@@ -203,11 +203,12 @@ def _add_creature_grounds(atlas: Atlas, data, units, giver_units, levels) -> Non
         centre = _centre(xs, zs)
         counts: dict[int, int] = {}
         for r in group:
-            counts[r.entry] = counts.get(r.entry, 0) + 1
+            for entry in r.spawned_entries:
+                counts[entry] = counts.get(entry, 0) + 1
         dominant = data.units.get(max(counts, key=counts.get))
         base = f"{dominant.name if dominant is not None else 'Creature'} grounds"
         name = base if not atlas.poi_by_name(base) else f"{base} ({centre[0]:.0f}, {centre[1]:.0f})"
-        bands = [levels[r.entry] for r in group if r.entry in levels]
+        bands = [levels[e] for r in group for e in r.spawned_entries if e in levels]
         atlas.add_poi(name=name, kind="camp", center=centre, radius=_radius(centre, xs, zs, NAMED_MIN_RADIUS),
                       levelMin=min(b[0] for b in bands) if bands else None,
                       levelMax=max(b[1] for b in bands) if bands else None,
