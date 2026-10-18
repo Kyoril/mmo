@@ -269,6 +269,75 @@ namespace mmo
 				return false;
 			};
 
+			// River flow coordinates for the whole rect at once, then smoothed: the nearest path segment
+			// switches on the inside of bends, which makes "along" jump by a little, and every jump
+			// shows as a seam in the panned ripples. The rect-wide grid also keeps page borders exact.
+			std::vector<float> flowAlong;
+			std::vector<float> flowAcross;
+			std::vector<float> flowSpeed;
+			if (meta.flowPath.size() >= 2)
+			{
+				const float vertexSpacing = terrain::constants::PageSize / static_cast<float>(VerticesPerPageEdge);
+				const float originX = static_cast<float>(meta.pageX0 - 32) * terrain::constants::PageSize;
+				const float originZ = static_cast<float>(meta.pageZ0 - 32) * terrain::constants::PageSize;
+				const size_t count = static_cast<size_t>(gridWidth) * gridHeight;
+				flowAlong.resize(count);
+				flowAcross.resize(count);
+				flowSpeed.resize(count);
+				for (uint32 z = 0; z < gridHeight; ++z)
+				{
+					for (uint32 x = 0; x < gridWidth; ++x)
+					{
+						const FlowCoordinate c = ProjectOntoFlowPath(meta.flowPath,
+							originX + static_cast<float>(x) * vertexSpacing, originZ + static_cast<float>(z) * vertexSpacing);
+						const size_t i = static_cast<size_t>(z) * gridWidth + x;
+						flowAlong[i] = c.along;
+						flowAcross[i] = c.across;
+						const float beyondBank = std::max(0.0f, std::abs(c.across) - c.halfWidth);
+						flowSpeed[i] = std::clamp(1.0f - beyondBank / std::max(meta.flowFalloff, 1.0f), meta.flowMinSpeed, 1.0f);
+					}
+				}
+
+				// Three separable box blurs of radius 3 approximate a Gaussian of about 3 vertices (12 m).
+				const auto blur = [&](std::vector<float> &values)
+				{
+					std::vector<float> scratch(values.size());
+					constexpr int32 radius = 3;
+					for (int pass = 0; pass < 3; ++pass)
+					{
+						for (uint32 z = 0; z < gridHeight; ++z)
+						{
+							for (uint32 x = 0; x < gridWidth; ++x)
+							{
+								float sum = 0.0f;
+								for (int32 k = -radius; k <= radius; ++k)
+								{
+									const int32 sx = std::clamp(static_cast<int32>(x) + k, 0, static_cast<int32>(gridWidth) - 1);
+									sum += values[static_cast<size_t>(z) * gridWidth + sx];
+								}
+								scratch[static_cast<size_t>(z) * gridWidth + x] = sum / static_cast<float>(radius * 2 + 1);
+							}
+						}
+						for (uint32 z = 0; z < gridHeight; ++z)
+						{
+							for (uint32 x = 0; x < gridWidth; ++x)
+							{
+								float sum = 0.0f;
+								for (int32 k = -radius; k <= radius; ++k)
+								{
+									const int32 sz = std::clamp(static_cast<int32>(z) + k, 0, static_cast<int32>(gridHeight) - 1);
+									sum += scratch[static_cast<size_t>(sz) * gridWidth + x];
+								}
+								values[static_cast<size_t>(z) * gridWidth + x] = sum / static_cast<float>(radius * 2 + 1);
+							}
+						}
+					}
+				};
+				blur(flowAlong);
+				blur(flowAcross);
+				blur(flowSpeed);
+			}
+
 			uint32 savedPages = 0;
 			uint32 changedVertices = 0;
 			uint32 addedWaterQuads = 0;
@@ -403,23 +472,15 @@ namespace mmo
 					{
 						page.waterFlowUVs.assign(static_cast<size_t>(OuterSide) * OuterSide * 2, 0.0f);
 						page.waterFlowSpeeds.assign(static_cast<size_t>(OuterSide) * OuterSide, 0);
-						const float pageOriginX = static_cast<float>(pageX - 32) * terrain::constants::PageSize;
-						const float pageOriginZ = static_cast<float>(pageZ - 32) * terrain::constants::PageSize;
-						const float vertexSpacing = terrain::constants::PageSize / static_cast<float>(VerticesPerPageEdge);
 						for (uint32 vz = 0; vz < OuterSide; ++vz)
 						{
 							for (uint32 vx = 0; vx < OuterSide; ++vx)
 							{
-								const float wx = pageOriginX + static_cast<float>(vx) * vertexSpacing;
-								const float wz = pageOriginZ + static_cast<float>(vz) * vertexSpacing;
-								const FlowCoordinate coordinate = ProjectOntoFlowPath(meta.flowPath, wx, wz);
+								const size_t g = static_cast<size_t>(baseZ + vz) * gridWidth + (baseX + vx);
 								const size_t index = static_cast<size_t>(vz) * OuterSide + vx;
-								page.waterFlowUVs[index * 2] = coordinate.along * meta.flowUVScale;
-								page.waterFlowUVs[index * 2 + 1] = coordinate.across * meta.flowUVScale;
-
-								const float beyondBank = std::max(0.0f, std::abs(coordinate.across) - coordinate.halfWidth);
-								const float speed = std::clamp(1.0f - beyondBank / std::max(meta.flowFalloff, 1.0f), meta.flowMinSpeed, 1.0f);
-								page.waterFlowSpeeds[index] = static_cast<uint8>(std::lround(speed * 255.0f));
+								page.waterFlowUVs[index * 2] = flowAlong[g] * meta.flowUVScale;
+								page.waterFlowUVs[index * 2 + 1] = flowAcross[g] * meta.flowUVScale;
+								page.waterFlowSpeeds[index] = static_cast<uint8>(std::lround(std::clamp(flowSpeed[g], 0.0f, 1.0f) * 255.0f));
 							}
 						}
 						pageChanged = true;
