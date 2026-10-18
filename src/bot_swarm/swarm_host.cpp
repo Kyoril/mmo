@@ -3,6 +3,7 @@
 #include "swarm_host.h"
 
 #include "bot_ai/strategies/grind_strategy.h"
+#include "bot_ai/strategies/party_strategy.h"
 #include "bot_chat/anthropic_chat_model.h"
 #include "bot_chat/offline_chat_model.h"
 #include "bot_core/bot_movement_controller.h"
@@ -84,6 +85,7 @@ namespace mmo
 		}
 
 		RegisterGrindStrategies(m_registry);
+		RegisterPartyStrategies(m_registry);
 
 		if (m_settings.chatEnabled && !SetupChat(*project))
 		{
@@ -552,6 +554,7 @@ namespace mmo
 
 		bot.lastKnownLevel = level;
 
+		UpdatePartyFollow(bot);
 		bot.brain->Update(nowMs);
 		CheckWatchdog(bot, nowMs);
 
@@ -559,6 +562,46 @@ namespace mmo
 		{
 			UpdateBotChat(bot, nowMs);
 		}
+	}
+
+	void SwarmHost::UpdatePartyFollow(Bot& bot)
+	{
+		BotRealmConnector& realm = bot.session->GetRealm();
+		const uint64 selfGuid = bot.session->GetContext().GetSelectedCharacterGuid();
+		const auto isPlayer = [this, selfGuid](const uint64 guid)
+		{
+			return guid != 0 && guid != selfGuid && m_botGuids.count(guid) == 0;
+		};
+
+		// Follow a real player: the party leader if that is one, otherwise the first one in the
+		// party. A party of bots alone has nobody worth following, so they keep grinding.
+		uint64 leader = 0;
+		if (realm.IsInParty())
+		{
+			if (isPlayer(realm.GetPartyLeaderGuid()))
+			{
+				leader = realm.GetPartyLeaderGuid();
+			}
+			else
+			{
+				for (const uint64 guid : realm.GetPartyMemberGuids())
+				{
+					if (isPlayer(guid))
+					{
+						leader = guid;
+						break;
+					}
+				}
+			}
+		}
+
+		if (bot.brain->IsFollowing() != (leader != 0))
+		{
+			m_telemetry.Event(bot.roster.index, leader != 0 ? "party_follow_start" : "party_follow_stop",
+				{ { "leader", leader } });
+		}
+
+		bot.brain->SetFollowTarget(leader);
 	}
 
 	bool SwarmHost::SetupChat(const proto::Project& project)

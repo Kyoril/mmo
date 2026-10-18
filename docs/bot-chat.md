@@ -103,8 +103,25 @@ Bots can act on chat, not just talk about it:
 - **Inviting a bot.** With chat on, a bot accepts a real player's invite after 2 to 6 seconds and
   remembers "you joined X's group" for the conversation. Invites from other bots are declined.
 
-The bots still grind on their own after grouping. They don't follow the player or quest
-together; the prompt keeps them from promising that.
+## Playing in a party
+
+A bot in a party with a real player stops grinding alone and plays with them (whether or not
+chat is on). The host picks whom to follow: the party leader if that is a real player, otherwise
+the first real player in the party. A party of bots only keeps grinding.
+
+- **Following**: out of combat the bot's `grind_world` strategy is swapped for `party_world`. It
+  walks after the player once they are more than 7 yards away, re-pathing at most every 0.7 s
+  while they move, and rests only when it has caught up.
+- **Fighting together**: when the player is fighting something (the mob targets them or the
+  bot, or is already hurt), the bot targets it too and attacks with its normal rotation. A
+  hostile the player merely clicked on is left alone, so looking at a mob is not a pull. In
+  combat, `party_combat` is layered over `grind_combat`: the bot switches to the player's target,
+  and breaks off to catch up if the player gets more than 30 yards away.
+- **Leaving**: when the player leaves or the party ends, the bot goes back to `grind_world` and
+  picks a fresh grind spot.
+
+Telemetry has `party_follow_start` and `party_follow_stop` events. The distances are in
+`bot_ai/strategies/party_strategy.h`.
 
 Each bot has a persona rolled from its roster seed: temperament, writing style and typo rate.
 Its prompt contains its level, race, class, map and current activity, a few recent events
@@ -119,7 +136,8 @@ as `chat_in`, answers that were thrown away as `chat_discarded`, failures as `ch
 
 ## Limits
 
-- Grouping is chat-deep: a bot in a player's party keeps grinding by itself.
+- Party bots follow and fight, but don't quest: they don't talk to quest givers, loot quest
+  items or pick up the player's quests.
 
 - Bots only know they are in a guild once they have seen guild chat in the session. They never
   start guild conversations before that.

@@ -176,6 +176,9 @@ namespace mmo
 		/// Brings a bot back once its scheduled time arrives.
 		void ServiceReconnect(Bot& bot, GameTime nowMs);
 
+		/// Has the bot follow and fight alongside a real player it is grouped with, or play alone.
+		void UpdatePartyFollow(Bot& bot);
+
 		/// Creates the chat model, budget and director. Returns false if chat was asked for but
 		/// cannot run safely - no key, or a model whose price is unknown.
 		[[nodiscard]] bool SetupChat(const proto::Project& project);

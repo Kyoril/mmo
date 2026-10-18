@@ -21,6 +21,20 @@ namespace mmo
 	class BotContext;
 	class GrindSpotIndex;
 
+	/// A bot playing in a party: whom it follows and fights alongside.
+	struct BotFollowState final
+	{
+		/// The party member to follow; 0 while the bot plays alone.
+		uint64 leaderGuid { 0 };
+
+		/// Where the bot was last sent to keep up, and when. A moving leader is chased by
+		/// re-pathing now and then, not on every decision.
+		Vector3 destination { Vector3::Zero };
+		GameTime pathMs { 0 };
+
+		[[nodiscard]] bool IsFollowing() const { return leaderGuid != 0; }
+	};
+
 	/// Per-bot state the engine, its triggers and its actions all read and write.
 	///
 	/// Everything a bot decides with lives here; the engine, strategies, triggers and actions are
@@ -104,6 +118,10 @@ namespace mmo
 
 		void ClearSwingError() { m_lastSwingErrorMs = 0; }
 
+		/// Whom the bot follows in a party, and how it is keeping up with them.
+		[[nodiscard]] BotFollowState& GetFollowState() { return m_follow; }
+		[[nodiscard]] const BotFollowState& GetFollowState() const { return m_follow; }
+
 		/// Name of the last action the engine executed. Diagnostics and telemetry.
 		[[nodiscard]] const std::string& GetLastAction() const { return m_lastAction; }
 		void SetLastAction(std::string action) { m_lastAction = std::move(action); }
@@ -122,5 +140,6 @@ namespace mmo
 		AttackSwingEvent m_lastSwingError { attack_swing_event::Unknown };
 		GameTime m_lastSwingErrorMs { 0 };
 		std::string m_lastAction;
+		BotFollowState m_follow;
 	};
 }

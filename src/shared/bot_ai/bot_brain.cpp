@@ -6,6 +6,7 @@
 #include "base/clock.h"
 
 #include "bot_core/bot_context.h"
+#include "bot_core/bot_movement_controller.h"
 #include "bot_core/bot_realm_connector.h"
 #include "bot_core/bot_session.h"
 #include "bot_core/bot_unit.h"
@@ -65,6 +66,49 @@ namespace mmo
 	void BotBrain::SetGrindSpots(const GrindSpotIndex* spots)
 	{
 		m_context.SetGrindSpots(spots);
+	}
+
+	void BotBrain::SetFollowTarget(const uint64 guid)
+	{
+		BotFollowState& follow = m_context.GetFollowState();
+		const bool wasFollowing = follow.IsFollowing();
+		follow.leaderGuid = guid;
+
+		if (wasFollowing == follow.IsFollowing())
+		{
+			return;
+		}
+
+		follow.pathMs = 0;
+
+		BotEngine& nonCombat = m_engines.GetEngine(BotAiState::NonCombat);
+		BotEngine& combat = m_engines.GetEngine(BotAiState::Combat);
+		nonCombat.ClearStrategies();
+		combat.ClearStrategies();
+		combat.AddStrategy(m_settings.combatStrategy);
+
+		if (follow.IsFollowing())
+		{
+			nonCombat.AddStrategy(m_settings.partyNonCombatStrategy);
+			combat.AddStrategy(m_settings.partyCombatStrategy);
+		}
+		else
+		{
+			nonCombat.AddStrategy(m_settings.nonCombatStrategy);
+		}
+
+		// A grind spot picked before the party is not where the party is going, and one picked
+		// while following is wherever the leader happened to stand.
+		m_context.GetGrindState().ClearSpot();
+
+		if (BotSession* session = m_context.GetSession())
+		{
+			BotMovementController& mover = session->GetMovementController();
+			if (mover.IsActive())
+			{
+				mover.Stop(session->GetContext(), follow.IsFollowing() ? "joined_party" : "left_party");
+			}
+		}
 	}
 
 	void BotBrain::Reset()
