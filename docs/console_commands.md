@@ -94,6 +94,10 @@ See [rendering-atmosphere.md](rendering-atmosphere.md) for the fog model.
 - `ShadowSlopeBias` - Shadow slope bias setting (default: 0.25)
 - `ShadowClampBias` - Shadow clamp bias setting (default: 0.005)
 
+### Bot CVars (dev builds with `MMO_WITH_CLIENT_BOT_API` only)
+- `botApiEnabled` - Enables the Lua bot API; with 0 every bot function does nothing (default: 0). See [playtest-bot.md](playtest-bot.md)
+- `botNavPath` - Nav data folder for the bot API, absolute or relative to `dataPath` (default: ../editor/nav)
+
 ## Notes
 
 1. Console commands can be executed by pressing the tilde (~) or backslash (\) key to open the console.

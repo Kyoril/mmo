@@ -60,6 +60,9 @@
 namespace mmo
 {
 	class ConsoleVar;
+#ifdef MMO_WITH_CLIENT_BOT_API
+	class BotApi;
+#endif
 }
 
 namespace mmo
@@ -862,6 +865,12 @@ namespace mmo
 		Discord &m_discord;
 
 		std::unique_ptr<DebugPathVisualizer> m_debugPathVisualizer;
+
+#ifdef MMO_WITH_CLIENT_BOT_API
+		/// Dev-only Lua bot API. Lives as long as the world state, so the Lua functions it
+		/// registers never outlive it.
+		std::unique_ptr<BotApi> m_botApi;
+#endif
 
 		/// Foliage system for rendering grass and other vegetation
 		std::unique_ptr<Foliage> m_foliage;

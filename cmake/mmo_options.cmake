@@ -21,6 +21,10 @@ mark_as_advanced(MMO_UNITY_FILES_PER_UNIT)
 # on a public server to avoid GM power abuse, but which you might need on development servers to test certain things quickly).
 option(MMO_WITH_DEV_COMMANDS "If checked, developer commands will be available." OFF)
 
+# The Lua bot API in the game client, used to let a bot play the real client for playtest automation.
+# Separate from MMO_WITH_DEV_COMMANDS because the client players receive is built with dev commands on.
+option(MMO_WITH_CLIENT_BOT_API "Builds the dev-only Lua bot API into the game client (playtest automation). Requires MMO_WITH_DEV_COMMANDS. Never enable for player builds." OFF)
+
 if (WIN32)
 	option(MMO_BUILD_CLIENT "If checked, will try to build the client." ON)
 else()
@@ -77,6 +81,13 @@ set(MMO_SRP6_g "07" CACHE STRING "Hex representation of a prime number for srp6a
 if(MMO_WITH_DEV_COMMANDS)
 	add_definitions("-DMMO_WITH_DEV_COMMANDS")
 endif(MMO_WITH_DEV_COMMANDS)
+
+if (MMO_WITH_CLIENT_BOT_API)
+	if (NOT MMO_WITH_DEV_COMMANDS)
+		message(FATAL_ERROR "MMO_WITH_CLIENT_BOT_API requires MMO_WITH_DEV_COMMANDS.")
+	endif()
+	add_definitions("-DMMO_WITH_CLIENT_BOT_API")
+endif()
 
 if (MMO_WITH_RELEASE_ASSERTS)
 	add_definitions("-DMMO_ALWAYS_ASSERT")

@@ -12,6 +12,10 @@
 #include "game_client/spell_cast_rules.h"
 #include "net/realm_connector.h"
 
+#ifdef MMO_WITH_CLIENT_BOT_API
+#	include "bot/bot_api.h"
+#endif
+
 namespace mmo
 {
 	namespace
@@ -22,6 +26,18 @@ namespace mmo
 		{
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorKey);
 			CastErrorVoice::Get().OnCastError(errorKey);
+		}
+
+		/// Reports a cast error that players only see in the log. The bot API needs every
+		/// failure as an event to react to, so it is raised only while that API is enabled.
+		void NotifyBotCastFailed([[maybe_unused]] const char* errorKey)
+		{
+#ifdef MMO_WITH_CLIENT_BOT_API
+			if (bot_api::IsEnabled())
+			{
+				NotifyCastFailed(errorKey);
+			}
+#endif
 		}
 	}
 
@@ -274,6 +290,7 @@ namespace mmo
 		if (!spell)
 		{
 			ELOG("Unknown spell " << spellId);
+			NotifyBotCastFailed("SPELL_CAST_FAILED_NOT_KNOWN");
 			return;
 		}
 
@@ -281,6 +298,7 @@ namespace mmo
 		if ((spell->attributes(0) & spell_attributes::Passive) != 0)
 		{
 			ELOG("Can't cast passive spells!");
+			NotifyBotCastFailed("SPELL_CAST_FAILED_PASSIVE");
 			return;
 		}
 
@@ -419,6 +437,7 @@ namespace mmo
 		if (spell_cast_rules::IsBlockedByMovement(spell->interruptflags(), spell->attributes(0), effectiveCastTime, unit->GetMovementInfo().IsChangingPosition()))
 		{
 			ELOG("Can't cast spell while moving");
+			NotifyBotCastFailed("SPELL_CAST_FAILED_MOVING");
 			return;
 		}
 
@@ -426,6 +445,7 @@ namespace mmo
 			unit->IsInCombat())
 		{
 			ELOG("Spell not castable while in combat!");
+			NotifyBotCastFailed("SPELL_CAST_FAILED_AFFECTING_COMBAT");
 			return;
 		}
 

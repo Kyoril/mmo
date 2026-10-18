@@ -29,6 +29,9 @@ namespace mmo
 		/// Initializes the asset registry.
 		static void Initialize(const std::filesystem::path& basePath, const std::vector<std::string>& archives);
 
+		/// Mounts another archive (an hpak file or a plain directory) behind the ones already
+		/// loaded. Files already provided by an earlier archive keep their source.
+		/// @param path Path of the archive, relative to the base path or absolute.
 		static void AddArchivePackage(const std::filesystem::path& path);
 
 		/// Destroys the asset registry.

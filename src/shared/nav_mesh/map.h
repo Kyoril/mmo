@@ -52,6 +52,14 @@ namespace mmo::nav
 	};
 #pragma pack(pop)
 
+	/// @brief World X and Z of the nav mesh origin: page (0, 0) starts here on both axes.
+	constexpr double MapOrigin = -32.0 * terrain::constants::PageSize;
+
+	/// @brief Page column or row containing a world X or Z coordinate, clamped to the page grid.
+	///	Page x runs along world X and page y along world Z.
+	/// @param coordinate A finite world coordinate: converting NaN or a huge value is undefined.
+	[[nodiscard]] int32 WorldToPage(float coordinate);
+
 	class Map final : public NonCopyable
 	{
 		friend class Tile;

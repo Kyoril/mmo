@@ -95,6 +95,9 @@ namespace mmo
 
 	void AssetRegistry::AddArchivePackage(const std::filesystem::path& path)
 	{
+		// The client mounts packages while its background loader is reading files.
+		std::unique_lock lock { s_fileLock };
+
 		std::shared_ptr<IArchive> archive;
 
 		auto archivePath = s_basePath / path;
