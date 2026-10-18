@@ -21,6 +21,7 @@
 #include "scene_graph/mesh_manager.h"
 #include "terrain_io/page_chunks.h"
 #include "terrain_io/page_io.h"
+#include "base/profiler.h"
 
 namespace mmo
 {
@@ -281,6 +282,7 @@ namespace mmo
 
 		bool Page::FinalizePrepare()
 		{
+			PROFILE_SCOPE("Stream: TerrainPage::FinalizePrepare");
 			ASSERT(m_preparing);
 
 			// Resolve the material names collected during parsing. This must happen on the main
@@ -325,6 +327,7 @@ namespace mmo
 
 		bool Page::Load()
 		{
+			PROFILE_SCOPE("Stream: TerrainPage::Load");
 			if (m_unloadRequested)
 			{
 				m_unloadRequested = false;
@@ -449,6 +452,7 @@ namespace mmo
 
 		void Page::CreateTerrainBatches()
 		{
+			PROFILE_SCOPE("Stream: CreateTerrainBatches");
 			ASSERT(m_loaded);
 			ASSERT(m_batches.empty());
 
@@ -535,6 +539,7 @@ namespace mmo
 
 		void Page::Unload()
 		{
+			PROFILE_SCOPE("Stream: TerrainPage::Unload");
 			if (!m_loaded)
 			{
 				m_unloadRequested = true;
