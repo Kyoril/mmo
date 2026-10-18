@@ -67,7 +67,8 @@ The following systems are fully implemented and should not be suggested as futur
   through a normal feature branch.
 - At session start, also surface: `artifacts/bug-loop/BREAKER` if it exists (quote it), and from
   the newest `tools/gate/reports/bugloop-*.json` (not `bugloop-dry-*`) the `parked` and `abuse`
-  outcomes.
+  outcomes. `python tools/bugs/bug_loop.py status` (from the main checkout) shows what the loop is
+  doing right now, its busy/idle/paused mode, and whether its process still runs.
 
 ## Network Protocol Changes
 
