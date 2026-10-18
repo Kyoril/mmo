@@ -64,7 +64,8 @@ def build_canon_markdown(data, map_entry, query) -> str:
     lines += ["## Characters", "", "| Unit | Name | Subname | Level | Where | Gives | Ends |", "|---|---|---|---|---|---|---|"]
     spawns_by_unit: dict[int, list] = {}
     for record in unit_spawn_records(map_entry):
-        spawns_by_unit.setdefault(record.entry, []).append(record)
+        for entry in record.spawned_entries:
+            spawns_by_unit.setdefault(entry, []).append(record)
     for unit_id in sorted(data.units):
         unit = data.units[unit_id]
         records = spawns_by_unit.get(unit_id, [])

@@ -33,7 +33,10 @@ Design against the real world, never in a vacuum. Before designing new content:
    (height, slope, water, holes, terrain kind, nearby props, containing places, placeable).
 4. Place spawns like a level designer: packs of 3-6 scattered irregularly around a place's features
    (never on a grid), a mix of stationary and random movement, a few patrols along roads, varied
-   respawn delays, spawn names `<Place> - <Unit name> NN` using the atlas place name. The validator
+   respawn delays, spawn names `<Place> - <Unit name> NN` using the atlas place name. For a camp
+   that should mostly spawn one unit and sometimes another (bandits with the odd bandit mage), give
+   spawn points weighted `unitentries` instead of placing the rare unit at fixed points
+   (references/npc-json-format.md, "Mixed spawn"). The validator
    runs the world placement lint on every draft and fails on new placement errors (buried,
    floating, deep water, cliffs, terrain edge); check drafts early with
    `python tools/world/lint.py --map 0 --draft <draft.json>`.
