@@ -297,8 +297,12 @@ def build_sun_glitter(b, sun_color, sun_dir, coarse_slope):
     glow_dot = sun_dot(b.add("NormalizeNode", ins={"m_input": b.lerp(b.add("VertexNormalNode"), coarse_world, b.const(0.5))}))
 
     glow = band(b.scalar("GlitterGlowEdge", 0.978), b.const(1.0), glow_dot)
-    flakes = band(b.scalar("GlitterEdge", 0.9945), b.scalar("GlitterEdgeHard", 0.9952), flake_dot)
-    core = band(b.scalar("GlitterCoreEdge", 0.9993), b.scalar("GlitterCoreEdgeHard", 0.9996), flake_dot)
+    # Flakes only inside the sun path seen on the calm surface. Without this, looking down at the
+    # water, the steep flanks of the swell still catch a low sun and scatter hot specks all over.
+    sun_path = band(b.scalar("GlitterPathEdge", 0.9), b.scalar("GlitterPathEdgeHard", 0.985),
+                    sun_dot(b.add("VertexNormalNode")))
+    flakes = b.mul(band(b.scalar("GlitterEdge", 0.9945), b.scalar("GlitterEdgeHard", 0.9952), flake_dot), sun_path)
+    core = b.mul(band(b.scalar("GlitterCoreEdge", 0.9993), b.scalar("GlitterCoreEdgeHard", 0.9996), flake_dot), sun_path)
     return b.mul(b.mul(sun_tint, b.addn(b.addn(
         b.mul(b.mul(glow, glow), b.scalar("GlitterGlowStrength", 0.8)),
         b.mul(flakes, b.scalar("GlitterStrength", 2.0))),
