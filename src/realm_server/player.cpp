@@ -2,6 +2,7 @@
 
 #include "player.h"
 #include "character_spell_cache.h"
+#include "character_start.h"
 #include "player_manager.h"
 #include "world_manager.h"
 #include "world.h"
@@ -569,7 +570,7 @@ namespace mmo
 		const uint32 level = 1;
 		const uint32 map = raceEntry->startmap();
 		const Vector3 position(raceEntry->startposx(), raceEntry->startposy(), raceEntry->startposz());
-		const Angle rotation(raceEntry->startrotation());
+		const Degree rotation(GetRaceStartFacing(*raceEntry));
 
 		// Setup a temporary player object
 		GamePlayerS player(m_project, m_timerQueue);
