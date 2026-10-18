@@ -22,7 +22,7 @@ TILE_COUNT = TILES_PER_PAGE * TILES_PER_PAGE
 
 # Chunks the engine writes. Rendering-only chunks (normals, vertex colours) are recognised and
 # skipped. Anything else is an unknown format change and is rejected, never guessed around.
-_IGNORED = {b"MCNM", b"MCNI", b"MCVS", b"MCSI"}
+_IGNORED = {b"MCNM", b"MCNI", b"MCVS", b"MCSI", b"WLFW"}  # WLFW: river flow (render-only)
 _KNOWN = {b"MVER", b"MCMT", b"MCVT", b"MCVI", b"MCLY", b"MCAR", b"MHOL", b"MCWQ", b"MLCW"} | _IGNORED
 
 

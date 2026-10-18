@@ -661,8 +661,8 @@
       "name": "Old Stone Bridge",
       "kind": "landmark",
       "center": [
-        -458.0,
-        366.0
+        -466.0,
+        375.0
       ],
       "radius": 40.0,
       "description": "Four-arch stone bridge (Bridge_01) where the Old King's Road crosses the rerouted river onto the west bank (moved 2026-10-18 with the river).",
@@ -864,13 +864,13 @@
       "name": "Haven Harbour",
       "kind": "landmark",
       "center": [
-        -575.0,
-        884.0
+        -640.0,
+        882.0
       ],
       "radius": 175.0,
-      "description": "A broad bay of the river in front of Haven's north wall, with a small island carrying two houses and a pier.",
+      "description": "A broad bay of the river in front of Haven's north wall. Haven's main gate is reached over it: a stone bridge from the north bank onto an island with two houses and piers, and a second bridge from the island to a quay before the gate.",
       "status": "placeholder",
-      "ask": "Name the bay and the island; decide whether the island needs a bridge or a ferry.",
+      "ask": "Name the bay and the island. Should the island become a riverfront quay with warehouses (concept option A) once there are assets for it?",
       "source": "agent",
       "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
     }
@@ -986,12 +986,12 @@
       "name": "Haven Road",
       "points": [
         [
-          -476.0,
-          359.0
+          -491.0,
+          387.0
         ],
         [
-          -520.0,
-          372.0
+          -522.0,
+          401.0
         ],
         [
           -552.0,
@@ -1014,12 +1014,24 @@
           740.0
         ],
         [
-          -740.0,
-          820.0
+          -708.0,
+          800.0
         ],
         [
-          -735.0,
-          880.0
+          -683.0,
+          834.0
+        ],
+        [
+          -683.0,
+          868.0
+        ],
+        [
+          -683.0,
+          901.0
+        ],
+        [
+          -683.0,
+          952.0
         ]
       ],
       "status": "placeholder",
