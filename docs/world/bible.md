@@ -319,7 +319,7 @@ Open [?]:
 | Hearthkeeper Maida Thorn | soul binder | `briarwatch_camp` | 68 | – | [C] |
 | Wayfarer Captain Aldric Vane | holds the Kingsroad Waypost | `kingsroad_waypost` | 62 | 42, 43, 44 / 41, 42, 43 | [C] |
 | Expedition Leader Maren Duskvale | leads the Mirewater expedition | `mirewater_camp` | 63 | 45–48 / 44–47 | [C] |
-| Surveyor Wick Farrow | expedition surveyor; escort in the Barrowfield | `barrowfield` | 80 | 56 / – | [C] |
+| Surveyor Wick Farrow | expedition surveyor; escort in the Barrowfield | `barrowfield` | 80 | 56 / 56 | [C] |
 | Chaplain Osric Dawnmere | holds the Barrowfront Camp | `barrowfront_camp` | 64 | 49, 50, 53, 57–62 / 48–50, 53, 57–62 | [C] |
 | Scout Brialla Fenn | Barrowfront scout | `barrowfront_camp` | 65 | 51, 52, 63–65 / same | [C] |
 | Lanternkeeper Edran Mosswick | soul binder | `barrowfront_camp` | 69 | – | [C] |
@@ -468,7 +468,8 @@ Derived from the names already in the game. [C]
    - q55 says the Mirewater is "to the south"; it is **north-west**.
    - q56 says the Barrowfront palisade is "just north of here"; it is **south**.
    The Oakenshire quests (5, 6, 9, 24, 31, 33) are correct.
-10. **q56 "Out of the Barrowfield"** has no NPC that accepts the turn-in (the escort cannot be completed). The content report lists it.
+10. **q56 "Out of the Barrowfield"** had no NPC that accepts the turn-in (the escort could not be completed).
+    **Resolved 2026-10-18:** Wick Farrow ends his own escort quest, like the other exploration quests (q8, q22); the quest's reward trigger 27 then stops him following and despawns him.
 11. **q26:** the young wolves are "around the ruined cottages farther west". The nearest Young Forest Wolves spawn 45–70 m **east** of Thalric's camp, around (−15, 515). The Ruined Cottages (zone 10) lie about 200 m west.
 
 ### World facts that need a decision
