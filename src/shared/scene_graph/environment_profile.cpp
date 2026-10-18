@@ -103,6 +103,10 @@ namespace mmo
 			{ 1.0f, Vector4(0.3f, 0.4f, 0.65f, 0.3f) },     // Night (moon)
 		});
 
+		// rgb = distance fog colour, a = opacity. Off by default (end <= start); when a profile turns it
+		// on without authoring a curve, distant geometry fades into the horizon colour.
+		profile.distanceFog = profile.skyHorizon;
+
 		return profile;
 	}
 

@@ -594,7 +594,8 @@ namespace mmo
 		compiler.SetDepthTestEnabled(m_depthTest);
 		compiler.SetTwoSided(m_isTwoSided);
 		compiler.SetIsUserInterface(m_userInterface);
-		
+		compiler.SetVertexWaves(m_vertexWaves, VertexWaveSettings{ m_waveHeight, m_waveLength, m_waveSpeed, m_waveDirection });
+
 		if (m_baseColor.IsLinked())
 		{
 			const ExpressionIndex baseColorExpression = m_baseColor.GetLink()->GetNode()->Compile(compiler, m_baseColor.GetLink());

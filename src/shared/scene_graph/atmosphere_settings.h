@@ -30,6 +30,17 @@ namespace mmo
 		///         in the thin default fog, but low enough that the tonemapper keeps their tint.
 		float shaftStrength = 1.25f;
 
+		/// @brief Distance from the camera, in metres, where the distance fog starts.
+		float distanceFogStart = 0.0f;
+
+		/// @brief Distance from the camera, in metres, where the distance fog reaches its full opacity.
+		/// @remark Distance fog is off while this is not greater than distanceFogStart.
+		float distanceFogEnd = 0.0f;
+
+		/// @brief How far up the sky the distance fog reaches, as the Y component of the view ray
+		///        (0.2 ~ 11.5 degrees above the horizon). 0 leaves the sky untouched.
+		float distanceFogSkyBand = 0.2f;
+
 		/// @brief Sets the base density, clamped to [0, 1].
 		void SetDensity(const float value) { density = Clamp(value, 0.0f, 1.0f); }
 
@@ -44,6 +55,18 @@ namespace mmo
 
 		/// @brief Sets the shaft strength, clamped to [0, 16].
 		void SetShaftStrength(const float value) { shaftStrength = Clamp(value, 0.0f, 16.0f); }
+
+		/// @brief Sets the distance fog start, clamped to [0, 100000].
+		void SetDistanceFogStart(const float value) { distanceFogStart = Clamp(value, 0.0f, 100000.0f); }
+
+		/// @brief Sets the distance fog end, clamped to [0, 100000].
+		void SetDistanceFogEnd(const float value) { distanceFogEnd = Clamp(value, 0.0f, 100000.0f); }
+
+		/// @brief Sets the distance fog sky band, clamped to [0, 1].
+		void SetDistanceFogSkyBand(const float value) { distanceFogSkyBand = Clamp(value, 0.0f, 1.0f); }
+
+		/// @brief Whether the start/end pair describes an active distance fog.
+		[[nodiscard]] bool HasDistanceFog() const { return distanceFogEnd > distanceFogStart; }
 
 	private:
 		static float Clamp(const float value, const float minValue, const float maxValue)
@@ -76,6 +99,12 @@ namespace mmo
 
 		/// @brief Multiplier on AtmosphereParameters::shaftStrength.
 		float shaftMultiplier = 1.0f;
+
+		/// @brief Colour distant geometry fades into, linear RGB.
+		float distanceFogColor[3]{ 0.5f, 0.7f, 1.0f };
+
+		/// @brief Opacity of the distance fog at and beyond its end distance, [0, 1].
+		float distanceFogOpacity = 1.0f;
 	};
 
 	/// @brief The final per-frame fog values uploaded to the camera constant buffer.
@@ -88,12 +117,28 @@ namespace mmo
 		float fogTint[3]{ 0.0f, 0.0f, 0.0f };
 		float sunScatterColor[3]{ 0.0f, 0.0f, 0.0f };
 		float shaftStrength = 0.0f;
+
+		/// @brief Distance fog colour, linear RGB.
+		float distanceFogColor[3]{ 0.0f, 0.0f, 0.0f };
+
+		/// @brief Distance fog opacity at its end distance; 0 = distance fog off.
+		float distanceFogOpacity = 0.0f;
+
+		/// @brief Distance where the distance fog starts.
+		float distanceFogStart = 0.0f;
+
+		/// @brief 1 / (end - start); 0 while the distance fog is off.
+		float distanceFogInverseRange = 0.0f;
+
+		/// @brief View-ray Y up to which the sky receives distance fog; 0 = sky untouched.
+		float distanceFogSkyBand = 0.0f;
 	};
 
 	/// @brief Combines base parameters with the time-of-day values.
 	/// @param parameters Base values from the active zone's environment profile.
 	/// @param timeOfDay Curve values for the current hour.
-	/// @param fogEnabled When false, density is zero, which makes every fog term vanish.
+	/// @param fogEnabled When false, density and distance fog opacity are zero, which makes every fog
+	///        term vanish.
 	[[nodiscard]] inline AtmosphereConstants CombineAtmosphere(const AtmosphereParameters& parameters,
 		const AtmosphereTimeOfDay& timeOfDay, const bool fogEnabled)
 	{
@@ -110,6 +155,16 @@ namespace mmo
 		{
 			constants.fogTint[i] = nonNegative(timeOfDay.fogTint[i]);
 			constants.sunScatterColor[i] = nonNegative(timeOfDay.sunScatterColor[i]);
+			constants.distanceFogColor[i] = nonNegative(timeOfDay.distanceFogColor[i]);
+		}
+
+		if (fogEnabled && parameters.HasDistanceFog())
+		{
+			const float opacity = timeOfDay.distanceFogOpacity;
+			constants.distanceFogOpacity = opacity < 0.0f ? 0.0f : (opacity > 1.0f ? 1.0f : opacity);
+			constants.distanceFogStart = parameters.distanceFogStart;
+			constants.distanceFogInverseRange = 1.0f / (parameters.distanceFogEnd - parameters.distanceFogStart);
+			constants.distanceFogSkyBand = parameters.distanceFogSkyBand;
 		}
 
 		return constants;

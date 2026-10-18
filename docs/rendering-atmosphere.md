@@ -65,6 +65,8 @@ Depth slices are spaced exponentially from 0.5 m, so cells near the camera are t
 
 **Scattered light:** per metre, the fog scatters `σ · (FogTint + SunScatterColor · SunColor · SunIntensity · shaft_strength · Phase(cosθ) · shadow)` toward the camera. Phase is Henyey-Greenstein (g = `fog_anisotropy`) blended 80/20 with isotropic.
 
+**Distance fog:** after the height fog, the colour is blended toward the `distance_fog` curve colour by `opacity · saturate((d − distance_fog_start) / (distance_fog_end − distance_fog_start))`, where d is the distance from the camera and opacity the curve's alpha. It makes far geometry vanish regardless of height (the height fog thins above its base, so distant mountains never disappear in it alone). Sky pixels get `opacity · (1 − smoothstep(0, distance_fog_sky_band, ray.y))`, so fogged terrain meets a horizon of the same colour and the sky above stays visible. Off while end ≤ start (the default). It is applied in `PS_FogComposite` and the forward materials, not inside the froxel volume, and the atmosphere pass now also runs when only the distance fog is active.
+
 ### Point and spot lights
 
 - Every point and spot light the deferred renderer gathers for the frame also scatters into the froxel fog; directional lights do not (the sun has its own term above).
@@ -90,7 +92,7 @@ Depth slices are spaced exponentially from 0.5 m, so cells near the camera are t
 - Debug view 3 (density) includes the volumes.
 - The math lives in `deferred_shading/fog_volume_math.h` (unit-tested) and is mirrored in `shaders/FogVolumeCommon.hlsli`; `GpuFogVolume` mirrors `struct FogVolume` there.
 
-**Formula copies:** the closed-form formulas exist three times and must change together: `shaders/AtmosphereCommon.hlsli`, the forward fog emitted by `MaterialCompilerD3D11`, and `deferred_shading/atmosphere_math.h`. The camera cbuffer (b1, 176 bytes) is declared three times as well; changing it requires **Tools → Rebuild All Materials**.
+**Formula copies:** the closed-form formulas exist three times and must change together: `shaders/AtmosphereCommon.hlsli`, the forward fog emitted by `MaterialCompilerD3D11`, and `deferred_shading/atmosphere_math.h`. The camera cbuffer (b1, 208 bytes) is declared three times as well; changing it requires **Tools → Rebuild All Materials**.
 
 ## Environment profiles and wind
 
@@ -104,8 +106,10 @@ editor's Environment Profile Editor):
 | `sun`, `moon` | light colour | intensity |
 | `fog` | fog ambient radiance | density multiplier |
 | `sun_scatter` | sun colour inside fog | shaft multiplier |
+| `distance_fog` | colour far geometry fades into (unauthored = follows `sky_horizon`) | opacity at the end distance |
 
 **Fixed values:**
+- distance fog: start and end distance (metres; off while end ≤ start), sky band (view-ray Y up to which the sky is fogged, 0 = sky untouched). Blending into or out of a profile without distance fog pushes the fog range out to 100 km instead of popping it.
 - fog: density, height falloff, base height, anisotropy, light scattering (zone multiplier on point/spot light scattering in the fog, `DeferredRenderer::SetFogLightScattering`, 0–8)
 - light: shaft strength, exposure, bloom intensity, bloom threshold
 - blending: transition seconds

@@ -63,9 +63,17 @@ namespace mmo
 		// Sun light inside the fog.
 		Vector3 sunScatterColor;
 		float shaftStrength;
+
+		// Distance fog, blended over the height fog.
+		Vector3 distanceFogColor;
+		float distanceFogOpacity;	// 0 = off
+		float distanceFogStart;
+		float distanceFogInverseRange;
+		float distanceFogSkyBand;
+		float _cameraPadding1;
 	};
 
-	static_assert(sizeof(PsCameraConstantBuffer) == 176, "PsCameraConstantBuffer must match the 176-byte HLSL CameraBuffer layout");
+	static_assert(sizeof(PsCameraConstantBuffer) == 208, "PsCameraConstantBuffer must match the 208-byte HLSL CameraBuffer layout");
 
 	Scene::Scene()
 	{
@@ -306,6 +314,10 @@ namespace mmo
 
 		// Update ps constant buffer
 		RefreshCameraBuffer(camera);
+
+		// Vertex wave materials read the time from it in the vertex shader. Nothing else binds this
+		// vertex register, and a D3D11 binding persists across draws, so once per pass is enough.
+		m_psCameraBuffer->BindToStage(ShaderType::VertexShader, kCameraParametersVsSlot);
 
 		m_renderableVisitor.targetScene = this;
 		m_renderableVisitor.scissoring = false;
@@ -1248,12 +1260,24 @@ namespace mmo
 		buffer.sunScatterColor = Vector3(atmosphere.sunScatterColor[0], atmosphere.sunScatterColor[1], atmosphere.sunScatterColor[2]);
 		buffer.shaftStrength = atmosphere.shaftStrength;
 
+		buffer.distanceFogColor = Vector3(atmosphere.distanceFogColor[0], atmosphere.distanceFogColor[1], atmosphere.distanceFogColor[2]);
+		buffer.distanceFogOpacity = atmosphere.distanceFogOpacity;
+		buffer.distanceFogStart = atmosphere.distanceFogStart;
+		buffer.distanceFogInverseRange = atmosphere.distanceFogInverseRange;
+		buffer.distanceFogSkyBand = atmosphere.distanceFogSkyBand;
+		buffer._cameraPadding1 = 0.0f;
+
 		m_psCameraBuffer->Update(&buffer);
 	}
 
 	float Scene::GetCombinedFogDensity() const
 	{
 		return CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled).density;
+	}
+
+	bool Scene::HasActiveDistanceFog() const
+	{
+		return CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled).distanceFogOpacity > 0.0f;
 	}
 
 	std::unique_ptr<SceneNode> Scene::CreateSceneNodeImpl()

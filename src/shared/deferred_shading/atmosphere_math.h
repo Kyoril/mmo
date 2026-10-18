@@ -86,6 +86,32 @@ namespace mmo::atmosphere
 		return length * (sigmaStart - sigmaEnd) / k;
 	}
 
+	/// @brief Opacity of the distance fog for geometry at a distance from the camera.
+	/// @param distance Distance from the camera in metres.
+	/// @param opacity Opacity at and beyond the end distance; 0 = off.
+	/// @param start Distance where the fog starts.
+	/// @param inverseRange 1 / (end - start).
+	inline float DistanceFogAmount(const float distance, const float opacity, const float start, const float inverseRange)
+	{
+		return opacity * std::clamp((distance - start) * inverseRange, 0.0f, 1.0f);
+	}
+
+	/// @brief Opacity of the distance fog for a sky pixel: full at and below the horizon, fading out
+	///        with a smoothstep over the sky band above it.
+	/// @param rayY Y component of the normalised view ray.
+	/// @param opacity Opacity at the horizon; 0 = off.
+	/// @param skyBand View-ray Y where the fog has faded out; 0 leaves the sky untouched.
+	inline float DistanceFogSkyAmount(const float rayY, const float opacity, const float skyBand)
+	{
+		if (skyBand <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		const float t = std::clamp(rayY / skyBand, 0.0f, 1.0f);
+		return opacity * (1.0f - t * t * (3.0f - 2.0f * t));
+	}
+
 	/// @brief Scattering phase normalised so an isotropic medium yields 1: a Henyey-Greenstein lobe
 	///        blended 80/20 with the isotropic term.
 	/// @param anisotropy Henyey-Greenstein g in [0, 1).
