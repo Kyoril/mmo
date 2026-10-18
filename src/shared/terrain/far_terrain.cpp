@@ -158,6 +158,7 @@ namespace mmo
 		{
 			m_visiblePageCount = 0;
 			m_readyPageCount = 0;
+			m_loadingPageCount = 0;
 			if (m_radius == 0)
 			{
 				return;
@@ -188,12 +189,17 @@ namespace mmo
 				if (it == m_entries.end())
 				{
 					RequestPage(coord.x, coord.z);
+					++m_loadingPageCount;
 					continue;
 				}
 
 				Entry& entry = it->second;
 				if (entry.state != EntryState::Ready)
 				{
+					if (entry.state == EntryState::Loading)
+					{
+						++m_loadingPageCount;
+					}
 					continue;
 				}
 

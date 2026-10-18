@@ -67,6 +67,30 @@ namespace mmo
 		///	       waterLevel). Every page of the rect must already exist.
 		bool applyAsDelta = false;
 
+		/// @brief With applyAsDelta: give every written page that holds water the waterMaterial,
+		///	       replacing its current surface material (e.g. to unify a river across pages).
+		bool setWaterMaterial = false;
+
+		/// @brief With applyAsDelta: optional 16-bit grey mask with one pixel per water quad of the rect
+		///	       ((pages x · 128) × (pages z · 128)); quads under white pixels lose their water.
+		std::filesystem::path clearWaterMask;
+
+		/// @brief One splat layer painted by a delta import.
+		struct PaintLayer
+		{
+			/// @brief 16-bit grey mask at splat resolution of the rect ((pages x · 1008 + 1) square); white paints fully.
+			std::filesystem::path mask;
+
+			/// @brief Splat layer (0..3) the mask paints.
+			uint8 layer = 0;
+
+			/// @brief Scales the mask (0..1).
+			float strength = 1.0f;
+		};
+
+		/// @brief With applyAsDelta: splat layers to paint over the existing weights, in order.
+		std::vector<PaintLayer> paint;
+
 		/// @brief Optional list of pages (x, z) to write. Empty = every page of the rect. Pages
 		///	       outside this list are neither written nor touched.
 		std::vector<std::pair<int32, int32>> pages;

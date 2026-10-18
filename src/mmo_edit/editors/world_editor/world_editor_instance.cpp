@@ -1935,6 +1935,10 @@ namespace mmo
 		m_cameraVelocity = Vector3::Zero;
 
 		m_camera->SetFOVy(Degree(std::clamp(viewpoint.fovDegrees, 5.0f, 150.0f)));
+
+		// Derived transforms are refreshed lazily during rendering; page streaming reads the camera's
+		// derived position before the next frame, so bring it up to date now.
+		m_cameraAnchor->Update(true, true);
 		m_camera->InvalidateView();
 
 		if (viewpoint.timeOfDay >= 0.0f && m_skyComponent)
@@ -2032,8 +2036,10 @@ namespace mmo
 							continue;
 						}
 
+						// Every page with a tile file must finish loading; pages that have not even
+						// started streaming yet count as not loaded.
 						terrain::Page* page = m_terrain->GetPage(x, z);
-						if (page && page->IsLoadable() && !page->IsLoaded())
+						if (page && !page->IsLoaded() && AssetRegistry::HasFile(m_terrain->GetPageFilename(x, z)))
 						{
 							pagesLoaded = false;
 							break;
@@ -2042,17 +2048,33 @@ namespace mmo
 				}
 			}
 
-			const bool farLoaded = !m_farTerrain || m_farTerrain->GetRadius() == 0 ||
-				m_farTerrain->GetReadyPageCount() >= m_farTerrain->GetVisiblePageCount();
+			const bool farLoaded = !m_farTerrain || m_farTerrain->GetRadius() == 0 || m_farTerrain->GetLoadingPageCount() == 0;
 
 			if (pagesLoaded && farLoaded)
 			{
+				ILOG("Streaming ready around page " << center.x() << "," << center.y() << " ("
+					<< (m_farTerrain ? m_farTerrain->GetReadyPageCount() : 0) << " distant pages)");
 				return true;
 			}
 
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		}
 
+		const PagePosition center = GetPagePositionFromCamera();
+		for (int32 z = static_cast<int32>(center.y()) - 1; z <= static_cast<int32>(center.y()) + 1; ++z)
+		{
+			for (int32 x = static_cast<int32>(center.x()) - 1; x <= static_cast<int32>(center.x()) + 1; ++x)
+			{
+				if (terrain::Page* page = m_terrain ? m_terrain->GetPage(x, z) : nullptr)
+				{
+					if (!page->IsLoaded())
+					{
+						WLOG("Page " << x << "," << z << " not loaded (prepared " << page->IsPrepared() << ", file "
+							<< AssetRegistry::HasFile(m_terrain->GetPageFilename(x, z)) << ")");
+					}
+				}
+			}
+		}
 		WLOG("Streaming did not finish within " << timeoutSeconds << " seconds; capturing what is loaded");
 		return false;
 	}

@@ -683,6 +683,9 @@ namespace mmo
 		/// @brief Sets how many pages around the camera the distant terrain covers (0 turns it off).
 		void SetFarTerrainRadius(uint32 radius) { m_farTerrainRadius = std::min<uint32>(radius, 16); }
 
+		/// @brief Turns the scene's fog and atmosphere on or off, like the World Settings "Show Fog" box.
+		void SetFogEnabled(const bool enabled) { m_scene.SetFogEnabled(enabled); }
+
 		/// @brief Gets how many pages around the camera the distant terrain covers.
 		[[nodiscard]] uint32 GetFarTerrainRadius() const { return m_farTerrainRadius; }
 

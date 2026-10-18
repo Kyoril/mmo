@@ -138,6 +138,40 @@ namespace mmo
 				return 1;
 			}
 
+			constexpr uint32 splatSide = terrain::constants::PixelsPerPage;
+			const uint32 splatWidth = static_cast<uint32>(meta.GetPageCountX()) * (splatSide - 1) + 1;
+			const uint32 splatHeight = static_cast<uint32>(meta.GetPageCountZ()) * (splatSide - 1) + 1;
+			std::vector<GrayImage16> paintMasks(meta.paint.size());
+			for (size_t i = 0; i < meta.paint.size(); ++i)
+			{
+				if (!LoadGray16Png(meta.paint[i].mask, paintMasks[i]))
+				{
+					return 1;
+				}
+				if (paintMasks[i].width != splatWidth || paintMasks[i].height != splatHeight)
+				{
+					ELOG("Paint mask '" << meta.paint[i].mask.string() << "' is " << paintMasks[i].width << "x" << paintMasks[i].height
+						<< " but must be " << splatWidth << "x" << splatHeight);
+					return 1;
+				}
+			}
+
+			GrayImage16 clearWater;
+			if (!meta.clearWaterMask.empty())
+			{
+				if (!LoadGray16Png(meta.clearWaterMask, clearWater))
+				{
+					return 1;
+				}
+				const uint32 quadsWide = static_cast<uint32>(meta.GetPageCountX()) * VerticesPerPageEdge;
+				const uint32 quadsHigh = static_cast<uint32>(meta.GetPageCountZ()) * VerticesPerPageEdge;
+				if (clearWater.width != quadsWide || clearWater.height != quadsHigh)
+				{
+					ELOG("Clear-water mask must hold one pixel per water quad (" << quadsWide << "x" << quadsHigh << ")");
+					return 1;
+				}
+			}
+
 			// Offsets this small are quantization noise of a zero delta.
 			constexpr float changeEpsilon = 0.0005f;
 
@@ -176,6 +210,7 @@ namespace mmo
 			uint32 savedPages = 0;
 			uint32 changedVertices = 0;
 			uint32 addedWaterQuads = 0;
+			uint32 removedWaterQuads = 0;
 			terrain_io::PageData page;
 			for (int32 pageZ = meta.pageZ0; pageZ <= meta.pageZ1; ++pageZ)
 			{
@@ -228,6 +263,98 @@ namespace mmo
 						}
 					}
 
+					// Paint: blend each layer's weight towards the mask, keeping the four weights summing to 255.
+					for (size_t i = 0; i < meta.paint.size(); ++i)
+					{
+						const GrayImage16 &mask = paintMasks[i];
+						const uint32 target = meta.paint[i].layer;
+						const uint32 maskX = static_cast<uint32>(pageX - meta.pageX0) * (splatSide - 1);
+						const uint32 maskZ = static_cast<uint32>(pageZ - meta.pageZ0) * (splatSide - 1);
+						for (uint32 z = 0; z < splatSide; ++z)
+						{
+							for (uint32 x = 0; x < splatSide; ++x)
+							{
+								const float weight = std::clamp(meta.paint[i].strength *
+									static_cast<float>(mask.pixels[static_cast<size_t>(maskZ + z) * mask.width + maskX + x]) / 65535.0f, 0.0f, 1.0f);
+								if (weight <= 0.0f)
+								{
+									continue;
+								}
+
+								uint32 &packed = page.layers[static_cast<size_t>(z) * splatSide + x];
+								uint32 bytes[4];
+								uint32 others = 0;
+								for (uint32 c = 0; c < 4; ++c)
+								{
+									const float old = static_cast<float>((packed >> (c * 8)) & 0xFF);
+									const float blended = old * (1.0f - weight) + (c == target ? 255.0f * weight : 0.0f);
+									bytes[c] = static_cast<uint32>(std::lround(blended));
+									if (c != target)
+									{
+										others += bytes[c];
+									}
+								}
+								// Rounding can push the other layers one over 255 when the weight is tiny.
+								while (others > 255)
+								{
+									uint32 largest = target == 0 ? 1 : 0;
+									for (uint32 c = 0; c < 4; ++c)
+									{
+										if (c != target && bytes[c] > bytes[largest])
+										{
+											largest = c;
+										}
+									}
+									--bytes[largest];
+									--others;
+								}
+								bytes[target] = 255 - others;
+
+								const uint32 repacked = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);
+								if (repacked != packed)
+								{
+									packed = repacked;
+									pageChanged = true;
+								}
+							}
+						}
+					}
+
+					// Remove water from the quads the clear-water mask marks, wherever it came from.
+					if (!clearWater.pixels.empty())
+					{
+						constexpr uint32 quadsPerTileSide = 8;
+						for (uint32 quadZ = 0; quadZ < VerticesPerPageEdge; ++quadZ)
+						{
+							for (uint32 quadX = 0; quadX < VerticesPerPageEdge; ++quadX)
+							{
+								if (clearWater.pixels[static_cast<size_t>(baseZ + quadZ) * clearWater.width + baseX + quadX] < 32768)
+								{
+									continue;
+								}
+
+								const uint32 tileIndex = quadX / quadsPerTileSide + (quadZ / quadsPerTileSide) * TilesPerPage;
+								const uint64 bit = uint64(1) << (quadX % quadsPerTileSide + (quadZ % quadsPerTileSide) * quadsPerTileSide);
+								if (page.waterQuadMasks[tileIndex] & bit)
+								{
+									page.waterQuadMasks[tileIndex] &= ~bit;
+									if (page.waterQuadMasks[tileIndex] == 0)
+									{
+										page.waterTypes[tileIndex] = 0;
+									}
+									++removedWaterQuads;
+									pageChanged = true;
+								}
+							}
+						}
+					}
+
+					if (meta.setWaterMaterial && page.waterMaterialName != meta.waterMaterial &&
+						std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
+					{
+						pageChanged = true;
+					}
+
 					if (!pageChanged)
 					{
 						continue;
@@ -259,78 +386,104 @@ namespace mmo
 						}
 					}
 
-					// New water: flag quads that now dip below the level. Existing water is never removed,
-					// and water heights already in use by existing quads are left alone.
+					// Water of reshaped quads follows the new ground: a reshaped quad holds water exactly
+					// where it dips below the level. Quads the delta left alone keep their water as it is,
+					// and water heights still used by untouched quads are not moved.
 					if (meta.HasWaterLevel())
 					{
 						constexpr uint32 quadsPerTileSide = 8;
-						std::vector<uint8> vertexUsed(static_cast<size_t>(OuterSide) * OuterSide, 0);
+						const auto quadChanged = [&](const uint32 vertX, const uint32 vertZ)
+						{
+							const size_t g00 = static_cast<size_t>(baseZ + vertZ) * gridWidth + (baseX + vertX);
+							return changed[g00] || changed[g00 + 1] || changed[g00 + gridWidth] || changed[g00 + gridWidth + 1];
+						};
+
+						std::vector<uint8> vertexKept(static_cast<size_t>(OuterSide) * OuterSide, 0);
 						for (uint32 tileIndex = 0; tileIndex < TilesPerPage * TilesPerPage; ++tileIndex)
 						{
 							const uint64 mask = page.waterQuadMasks[tileIndex];
 							for (uint32 quad = 0; mask != 0 && quad < 64; ++quad)
 							{
-								if ((mask >> quad) & 1)
+								const uint32 vertX = (tileIndex % TilesPerPage) * quadsPerTileSide + quad % quadsPerTileSide;
+								const uint32 vertZ = (tileIndex / TilesPerPage) * quadsPerTileSide + quad / quadsPerTileSide;
+								if (((mask >> quad) & 1) && !quadChanged(vertX, vertZ))
 								{
-									const uint32 vertX = (tileIndex % TilesPerPage) * quadsPerTileSide + quad % quadsPerTileSide;
-									const uint32 vertZ = (tileIndex / TilesPerPage) * quadsPerTileSide + quad / quadsPerTileSide;
-									vertexUsed[vertZ * OuterSide + vertX] = 1;
-									vertexUsed[vertZ * OuterSide + vertX + 1] = 1;
-									vertexUsed[(vertZ + 1) * OuterSide + vertX] = 1;
-									vertexUsed[(vertZ + 1) * OuterSide + vertX + 1] = 1;
+									vertexKept[vertZ * OuterSide + vertX] = 1;
+									vertexKept[vertZ * OuterSide + vertX + 1] = 1;
+									vertexKept[(vertZ + 1) * OuterSide + vertX] = 1;
+									vertexKept[(vertZ + 1) * OuterSide + vertX + 1] = 1;
 								}
 							}
 						}
 
-						bool addedWater = false;
 						for (uint32 tileZ = 0; tileZ < TilesPerPage; ++tileZ)
 						{
 							for (uint32 tileX = 0; tileX < TilesPerPage; ++tileX)
 							{
 								const uint32 tileIndex = tileX + tileZ * TilesPerPage;
+								const bool hadWater = page.waterQuadMasks[tileIndex] != 0;
 								for (uint32 quadZ = 0; quadZ < quadsPerTileSide; ++quadZ)
 								{
 									for (uint32 quadX = 0; quadX < quadsPerTileSide; ++quadX)
 									{
-										const uint64 bit = uint64(1) << (quadX + quadZ * quadsPerTileSide);
-										if (page.waterQuadMasks[tileIndex] & bit)
+										const uint32 vertX = tileX * quadsPerTileSide + quadX;
+										const uint32 vertZ = tileZ * quadsPerTileSide + quadZ;
+										if (!quadChanged(vertX, vertZ))
 										{
 											continue;
 										}
 
-										const uint32 vertX = tileX * quadsPerTileSide + quadX;
-										const uint32 vertZ = tileZ * quadsPerTileSide + quadZ;
+										const uint64 bit = uint64(1) << (quadX + quadZ * quadsPerTileSide);
 										const size_t c00 = static_cast<size_t>(vertZ) * OuterSide + vertX;
 										const float lowest = std::min(std::min(page.heightmap[c00], page.heightmap[c00 + 1]),
 											std::min(page.heightmap[c00 + OuterSide], page.heightmap[c00 + OuterSide + 1]));
-										if (lowest >= meta.waterLevel)
+										const bool wantWater = lowest < meta.waterLevel;
+										const bool hasWater = (page.waterQuadMasks[tileIndex] & bit) != 0;
+										if (wantWater == hasWater)
 										{
 											continue;
 										}
 
-										if (page.waterQuadMasks[tileIndex] == 0)
+										if (wantWater)
 										{
-											page.waterTypes[tileIndex] = meta.waterType;
-										}
-										page.waterQuadMasks[tileIndex] |= bit;
-										for (const size_t corner : { c00, c00 + 1, c00 + OuterSide, c00 + OuterSide + 1 })
-										{
-											if (!vertexUsed[corner])
+											page.waterQuadMasks[tileIndex] |= bit;
+											for (const size_t corner : { c00, c00 + 1, c00 + OuterSide, c00 + OuterSide + 1 })
 											{
-												page.waterVertexHeights[corner] = meta.waterLevel;
+												if (!vertexKept[corner])
+												{
+													page.waterVertexHeights[corner] = meta.waterLevel;
+												}
 											}
+											++addedWaterQuads;
 										}
-										++addedWaterQuads;
-										addedWater = true;
+										else
+										{
+											page.waterQuadMasks[tileIndex] &= ~bit;
+											++removedWaterQuads;
+										}
 									}
+								}
+
+								if (!hadWater && page.waterQuadMasks[tileIndex] != 0)
+								{
+									page.waterTypes[tileIndex] = meta.waterType;
+								}
+								else if (page.waterQuadMasks[tileIndex] == 0)
+								{
+									page.waterTypes[tileIndex] = 0;
 								}
 							}
 						}
+					}
 
-						if (addedWater && page.waterMaterialName.empty())
-						{
-							page.waterMaterialName = meta.waterMaterial;
-						}
+					// Optionally give every reshaped page that holds water the configured surface material.
+					if (meta.setWaterMaterial && std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
+					{
+						page.waterMaterialName = meta.waterMaterial;
+					}
+					else if (page.waterMaterialName.empty() && std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
+					{
+						page.waterMaterialName = meta.waterMaterial;
 					}
 
 					if (!zoneMap.pixels.empty())
@@ -347,8 +500,8 @@ namespace mmo
 				}
 			}
 
-			ILOG("Delta import changed " << changedVertices << " vertices on " << savedPages << " pages"
-				<< (meta.HasWaterLevel() ? ", added " + std::to_string(addedWaterQuads) + " water quads" : String()));
+			ILOG("Delta import changed " << changedVertices << " vertices on " << savedPages << " pages" << (meta.paint.empty() ? String() : " (with " + std::to_string(meta.paint.size()) + " painted layers)")
+				<< (meta.HasWaterLevel() || !clearWater.pixels.empty() ? ", water quads +" + std::to_string(addedWaterQuads) + " -" + std::to_string(removedWaterQuads) : String()));
 			ILOG("Note: rebake the distant terrain (mmo_edit --bake-terrain-lod) and the nav mesh of the changed pages");
 			return 0;
 		}

@@ -513,7 +513,7 @@ int main(int argc, char* arg[])
 			if (std::string(args[i]) == "--capture-view")
 			{
 				// mmo_edit --capture-view <world.hwld> --view <x,y,z,yaw,pitch[,fov[,time]]> --out <file.png>
-				//          [--view ... --out ...] [--size <w>x<h>] [--grass] [--far-radius <pages>] [--warmup <frames>]
+				//          [--view ... --out ...] [--size <w>x<h>] [--grass] [--fog] [--far-radius <pages>] [--warmup <frames>]
 				// Renders each viewpoint of the world into a PNG, for comparing a zone against concept art.
 				static std::ofstream captureLog("capture_view.log", std::ios::out | std::ios::trunc);
 				static std::mutex captureLogMutex;
@@ -542,6 +542,7 @@ int main(int argc, char* arg[])
 				uint32 width = 1920, height = 1080, warmup = 24;
 				int32 farRadius = -1;
 				bool grass = false;
+				bool fog = false;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount; ++j)
 				{
@@ -583,6 +584,10 @@ int main(int argc, char* arg[])
 					{
 						grass = true;
 					}
+					else if (arg == "--fog")
+					{
+						fog = true;
+					}
 				}
 
 				if (argumentsValid && (views.empty() || views.size() != outputs.size()))
@@ -599,6 +604,7 @@ int main(int argc, char* arg[])
 					{
 						world->SetFarTerrainRadius(static_cast<uint32>(farRadius));
 					}
+					world->SetFogEnabled(fog);
 
 					captured = true;
 					for (size_t v = 0; v < views.size(); ++v)

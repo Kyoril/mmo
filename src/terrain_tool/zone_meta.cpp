@@ -76,6 +76,30 @@ namespace mmo
 		out.skipExistingPages = json.value("skipExistingPages", false);
 		out.fillExistingZones = json.value("fillExistingZones", false);
 		out.applyAsDelta = json.value("applyAsDelta", false);
+		out.setWaterMaterial = json.value("setWaterMaterial", false);
+		if (const String clearWater = json.value("clearWaterMask", String()); !clearWater.empty())
+		{
+			out.clearWaterMask = std::filesystem::path(clearWater).is_absolute() ? std::filesystem::path(clearWater) : path.parent_path() / clearWater;
+		}
+
+		out.paint.clear();
+		if (const auto paint = json.find("paint"); paint != json.end() && paint->is_array())
+		{
+			for (const auto &entry : *paint)
+			{
+				ZoneMeta::PaintLayer layer;
+				const String mask = entry.value("mask", String());
+				layer.mask = std::filesystem::path(mask).is_absolute() ? std::filesystem::path(mask) : path.parent_path() / mask;
+				layer.layer = static_cast<uint8>(entry.value("layer", 0));
+				layer.strength = entry.value("strength", 1.0f);
+				if (mask.empty() || layer.layer > 3)
+				{
+					ELOG("Zone metadata paint entries need a mask and a layer from 0 to 3!");
+					return false;
+				}
+				out.paint.push_back(layer);
+			}
+		}
 
 		if (const String zoneMap = json.value("zoneMap", String()); !zoneMap.empty())
 		{
