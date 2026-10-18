@@ -1027,6 +1027,22 @@ namespace mmo
 				return;
 			}
 
+			if (channel == "general")
+			{
+				const uint32 channelId = g_runtime->session->GetRealm().FindChatChannelId("General");
+				if (channelId == 0)
+				{
+					abortScenario(bot_exit_code::ScenarioFailed, "SendChat: not a member of the General channel");
+				}
+
+				g_runtime->session->GetContext().SendChatMessage(message, ChatType::Channel, std::to_string(channelId));
+				if (g_runtime->transcript)
+				{
+					g_runtime->transcript->Action("SendChat", { { "message", message }, { "channel", channel } });
+				}
+				return;
+			}
+
 			if (channel == "party")
 			{
 				type = ChatType::Group;
@@ -1041,7 +1057,7 @@ namespace mmo
 			}
 			else if (channel != "say")
 			{
-				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell, emote or whisper)");
+				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell, emote, general or whisper)");
 			}
 
 			g_runtime->session->GetContext().SendChatMessage(message, type);

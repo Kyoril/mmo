@@ -260,6 +260,23 @@ namespace mmo
 					OnBotChat(*botPtr, message);
 				}));
 
+			bot.connections.emplace_back(bot.session->GetRealm().PartyInvitationReceived.connect(
+				[this, botPtr = &bot](const std::string& inviter)
+				{
+					// A player who invites a bot it was chatting with expects it to join; one that
+					// never answers is the giveaway. Bots inviting bots are turned down, as nothing
+					// in the swarm asks for bot parties.
+					if (m_chatDirector->IsBotName(inviter))
+					{
+						botPtr->session->GetRealm().DeclinePartyInvitation();
+						return;
+					}
+
+					botPtr->pendingInviter = inviter;
+					botPtr->acceptInviteAtMs = GetAsyncTimeMs()
+						+ std::uniform_int_distribution<GameTime>(2000, 6000)(m_chatRng);
+				}));
+
 			bot.connections.emplace_back(bot.session->GetRealm().NameResolved.connect(
 				[this, botPtr = &bot](const uint64 guid, const std::string& name)
 				{
@@ -608,6 +625,12 @@ namespace mmo
 					{ { "chat_type", static_cast<uint32>(type) }, { "target", target }, { "text", text } });
 			}));
 
+		m_chatConnections.emplace_back(m_chatDirector->InviteSent.connect(
+			[this](const uint32 botIndex, const std::string& name)
+			{
+				m_telemetry.Event(botIndex, "party_invite", { { "invitee", name } });
+			}));
+
 		m_chatConnections.emplace_back(m_chatDirector->ReplyDiscarded.connect(
 			[this](const uint32 botIndex, const std::string& rawText)
 			{
@@ -648,6 +671,16 @@ namespace mmo
 	void SwarmHost::DeliverChat(Bot& bot, const BotChatMessage& message, const std::string& senderName)
 	{
 		++m_telemetry.GetCounters().chatLinesHeard;
+
+		// Only lines from players: bot chatter is already in the stream as chat_out, and every
+		// bot hearing every bot would multiply the stream by the population.
+		if (!m_chatDirector->IsBotName(senderName))
+		{
+			m_telemetry.Event(bot.roster.index, "chat_in",
+				{ { "chat_type", static_cast<uint32>(message.type) }, { "sender", senderName },
+				  { "channel", message.channelId }, { "text", message.message } });
+		}
+
 		m_chatDirector->OnChatReceived(bot.roster.index, message.type, senderName, message.message,
 			message.channelId, GetAsyncTimeMs());
 	}
@@ -662,6 +695,17 @@ namespace mmo
 		{
 			realm.JoinChatChannel(GeneralChannelName);
 			bot.generalJoinRequested = true;
+		}
+
+		if (bot.acceptInviteAtMs != 0 && nowMs >= bot.acceptInviteAtMs)
+		{
+			bot.acceptInviteAtMs = 0;
+			if (realm.HasPendingPartyInvitation())
+			{
+				realm.AcceptPartyInvitation();
+				m_chatDirector->NoteEvent(bot.roster.index, "you joined " + bot.pendingInviter + "'s group", nowMs);
+				m_telemetry.Event(bot.roster.index, "party_accept", { { "inviter", bot.pendingInviter } });
+			}
 		}
 
 		auto& waiting = bot.chatAwaitingName;
@@ -682,7 +726,7 @@ namespace mmo
 		{
 			if (m_botGuids.count(player->GetGuid()) == 0)
 			{
-				m_chatDirector->NoteHumanSeen(nowMs);
+				m_chatDirector->NoteHumanNearby(bot.roster.index, nowMs);
 				break;
 			}
 		}

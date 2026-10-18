@@ -37,6 +37,8 @@ namespace mmo
 		[[nodiscard]] std::vector<std::string> GetPartyMemberNames() const override;
 		[[nodiscard]] uint32 GetGeneralChannelId() const override;
 		void SendChat(ChatType type, const std::string& text, const std::string& target) override;
+		[[nodiscard]] bool CanInvite() const override;
+		void InviteToParty(const std::string& name) override;
 
 	private:
 		BotSession& m_session;

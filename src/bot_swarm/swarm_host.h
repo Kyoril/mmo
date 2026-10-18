@@ -22,6 +22,7 @@
 #include "asio/io_service.hpp"
 
 #include <memory>
+#include <random>
 #include <set>
 #include <string>
 #include <utility>
@@ -153,6 +154,10 @@ namespace mmo
 
 			bool generalJoinRequested { false };
 			GameTime nextHumanScanMs { 0 };
+
+			/// A real player's party invite this bot is about to accept, after a human pause.
+			std::string pendingInviter;
+			GameTime acceptInviteAtMs { 0 };
 		};
 
 		void CreateBots();
@@ -196,6 +201,9 @@ namespace mmo
 		std::unique_ptr<ChatBudget> m_chatBudget;
 		std::unique_ptr<ChatDirector> m_chatDirector;
 		std::vector<scoped_connection> m_chatConnections;
+
+		/// Randomness of the host's own chat behaviour, such as how long a bot takes to accept.
+		std::mt19937 m_chatRng { 0x1EAF5u };
 
 		/// Character guids of every bot that entered the world, to tell real players from bots.
 		std::set<uint64> m_botGuids;

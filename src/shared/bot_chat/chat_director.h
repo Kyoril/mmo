@@ -47,6 +47,13 @@ namespace mmo
 		/// Sends a chat line. For ChatType::Whisper the target is a character name, for
 		/// ChatType::Channel the global channel id as a string.
 		virtual void SendChat(ChatType type, const std::string& text, const std::string& target) = 0;
+
+		/// Whether the character may invite someone into its party right now: not in one, or
+		/// leading one with room left.
+		[[nodiscard]] virtual bool CanInvite() const = 0;
+
+		/// Invites a character into the party by name.
+		virtual void InviteToParty(const std::string& name) = 0;
 	};
 
 	struct ChatDirectorSettings final
@@ -77,6 +84,18 @@ namespace mmo
 		/// itself answering, so bot conversations stop after one exchange regardless.
 		float botToBotScale { 1.0f };
 
+		/// Interval between one bot's unprompted /say lines while a real player stands near it,
+		/// rolled between these, and the minimum gap between any two across the swarm.
+		GameTime sayMinIntervalMs { 4 * 60 * 1000 };
+		GameTime sayMaxIntervalMs { 15 * 60 * 1000 };
+		GameTime sayGapMs { 90 * 1000 };
+
+		/// How long after a real player was last seen near a bot it still counts as nearby.
+		GameTime humanNearbyWindowMs { 60 * 1000 };
+
+		/// A bot invites the same person at most once per this long.
+		GameTime inviteCooldownMs { 10 * 60 * 1000 };
+
 		/// Extra facts about the game world for the system prompt: zone names, classes, notable
 		/// features. Optional.
 		std::string gameFacts;
@@ -94,6 +113,7 @@ namespace mmo
 		uint64 linesSent { 0 };
 		uint64 linesDropped { 0 };
 		uint64 whispersThrottled { 0 };
+		uint64 invitesSent { 0 };
 	};
 
 	/// Decides which bot says what in chat, and when, for a whole swarm.
@@ -115,6 +135,9 @@ namespace mmo
 		/// A request failed or was refused. For telemetry; the reason never contains the API key.
 		signal<void(uint32 botIndex, const std::string& reason)> RequestFailed;
 
+		/// A bot invited someone into its party because the conversation called for it.
+		signal<void(uint32 botIndex, const std::string& name)> InviteSent;
+
 		/// @param wallClock Source of wall clock time for the budget's day and hour boundaries.
 		ChatDirector(ChatDirectorSettings settings, IChatModel& model, ChatBudget& budget,
 			std::function<std::time_t()> wallClock);
@@ -128,6 +151,9 @@ namespace mmo
 
 		/// Reports that a real player was seen, e.g. a player unit near a bot that is not a bot.
 		void NoteHumanSeen(GameTime nowMs);
+
+		/// Reports that a real player is standing near this bot, which lets it talk in /say.
+		void NoteHumanNearby(uint32 botIndex, GameTime nowMs);
 
 		/// Remembers something that happened to a bot ("died to a Forest Wolf"), for it to talk about.
 		void NoteEvent(uint32 botIndex, const std::string& event, GameTime nowMs);
@@ -178,6 +204,11 @@ namespace mmo
 			std::deque<Event> events;
 			GameTime nextProactiveMs { 0 };
 			GameTime lastHumanGuildMs { 0 };
+			GameTime lastHumanNearbyMs { 0 };
+			GameTime nextSayMs { 0 };
+
+			/// When this bot last invited someone, by lower-case name.
+			std::map<std::string, GameTime> lastInviteMs;
 			bool lastPostWasReply { false };
 		};
 
@@ -197,6 +228,9 @@ namespace mmo
 			std::string conversationKey;
 			double reservedUsd { 0.0 };
 			bool isReply { true };
+
+			/// Whom the model was told it may invite; empty if nobody.
+			std::string inviteCandidate;
 		};
 
 		struct OutgoingLine
@@ -204,9 +238,14 @@ namespace mmo
 			GameTime sendAtMs { 0 };
 			uint32 botIndex { 0 };
 			std::string conversationKey;
+
+			/// Empty for an invite without words.
 			std::string text;
 			bool isReply { true };
 			bool record { true };
+
+			/// Invited right after the line is sent; empty for none.
+			std::string inviteTarget;
 		};
 
 	private:
@@ -223,7 +262,15 @@ namespace mmo
 		void ResolveDecision(const PendingDecision& decision, GameTime nowMs);
 		void ServiceWhispers(GameTime nowMs);
 		void ServiceProactive(BotState& bot, GameTime nowMs);
+
+		/// Unprompted /say lines while a real player stands nearby.
+		void ServiceProactiveSay(BotState& bot, GameTime nowMs);
 		void FlushOutbox(GameTime nowMs);
+
+		/// The person the bot may invite from this conversation, or empty: the partner of a
+		/// whisper, the last player to speak in /say or a channel, if the bot is free to invite
+		/// and has not invited them recently.
+		[[nodiscard]] std::string FindInviteCandidate(const BotState& bot, const Conversation& conversation, GameTime nowMs) const;
 
 		/// Asks the model for the bot's next line in a conversation.
 		/// @param topic For an unprompted post, the idea to build it on; empty for a reply.
@@ -231,7 +278,7 @@ namespace mmo
 
 		[[nodiscard]] std::string BuildSystemPrompt(const BotState& bot) const;
 		[[nodiscard]] std::string BuildPrompt(const BotState& bot, const Conversation& conversation,
-			const std::string& topic, GameTime nowMs) const;
+			const std::string& topic, const std::string& inviteCandidate, GameTime nowMs) const;
 
 		[[nodiscard]] bool HumanActive(GameTime nowMs) const;
 		[[nodiscard]] float Roll();
@@ -256,6 +303,8 @@ namespace mmo
 		GameTime m_lastGeneralReplyMs { 0 };
 		GameTime m_lastGeneralProactiveMs { 0 };
 		bool m_generalProactiveEver { false };
+		GameTime m_lastProactiveSayMs { 0 };
+		bool m_proactiveSayEver { false };
 
 		/// After the budget says no, it is not asked again before this. Asking re-reads the
 		/// ledger file, and a capped swarm would otherwise do that every frame.

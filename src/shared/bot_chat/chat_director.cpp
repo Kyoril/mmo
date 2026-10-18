@@ -79,6 +79,27 @@ namespace mmo
 			return now > since ? now - since : 0;
 		}
 
+		/// What the model appends to an answer to have the bot invite the person it talks to.
+		constexpr const char* InviteTag = "[invite]";
+
+		/// Removes every occurrence of a tag, ignoring case. Returns whether there was one.
+		bool takeTag(std::string& text, const std::string& tag)
+		{
+			bool found = false;
+			for (;;)
+			{
+				const std::string lower = toLower(text);
+				const auto position = lower.find(tag);
+				if (position == std::string::npos)
+				{
+					return found;
+				}
+
+				text.erase(position, tag.size());
+				found = true;
+			}
+		}
+
 		bool isChannelReply(const ChatType type)
 		{
 			return type == ChatType::Channel;
@@ -273,6 +294,65 @@ namespace mmo
 		}
 	}
 
+	void ChatDirector::NoteHumanNearby(const uint32 botIndex, const GameTime nowMs)
+	{
+		NoteHumanSeen(nowMs);
+		if (BotState* bot = FindBot(botIndex))
+		{
+			bot->lastHumanNearbyMs = std::max(bot->lastHumanNearbyMs, nowMs);
+		}
+	}
+
+	std::string ChatDirector::FindInviteCandidate(const BotState& bot, const Conversation& conversation, const GameTime nowMs) const
+	{
+		if (!bot.participant->CanInvite())
+		{
+			return std::string();
+		}
+
+		std::string candidate;
+		switch (conversation.replyType)
+		{
+		case ChatType::Whisper:
+			candidate = conversation.target;
+			break;
+		case ChatType::Say:
+		case ChatType::Channel:
+			for (auto line = conversation.lines.rbegin(); line != conversation.lines.rend(); ++line)
+			{
+				if (line->speaker != "you")
+				{
+					candidate = line->speaker;
+					break;
+				}
+			}
+			break;
+		default:
+			break;
+		}
+
+		// Bots inviting bots would quietly assemble bot parties no player asked for.
+		if (candidate.empty() || IsBotName(candidate))
+		{
+			return std::string();
+		}
+
+		const std::vector<std::string> party = bot.participant->GetPartyMemberNames();
+		const std::string lower = toLower(candidate);
+		if (std::any_of(party.begin(), party.end(), [&lower](const std::string& name) { return toLower(name) == lower; }))
+		{
+			return std::string();
+		}
+
+		const auto last = bot.lastInviteMs.find(lower);
+		if (last != bot.lastInviteMs.end() && elapsed(nowMs, last->second) < m_settings.inviteCooldownMs)
+		{
+			return std::string();
+		}
+
+		return candidate;
+	}
+
 	bool ChatDirector::HumanActive(const GameTime nowMs) const
 	{
 		return m_humanEverSeen && elapsed(nowMs, m_lastHumanSeenMs) <= m_settings.humanActivityWindowMs;
@@ -292,6 +372,7 @@ namespace mmo
 		for (auto& [index, bot] : m_bots)
 		{
 			ServiceProactive(bot, nowMs);
+			ServiceProactiveSay(bot, nowMs);
 
 			while (!bot.events.empty() && elapsed(nowMs, bot.events.front().atMs) > EventLifetimeMs)
 			{
@@ -363,15 +444,21 @@ namespace mmo
 				continue;
 			}
 
-			const std::optional<std::string> line = SanitizeChatReply(result.text, bot->participant->GetCharacterName());
-			if (!line)
+			// The model asks for an invite by tagging its answer. Honoured only when the prompt
+			// offered one, so that a player cannot talk a bot into inviting someone else.
+			std::string answer = result.text;
+			const bool wantsInvite = takeTag(answer, InviteTag);
+			const std::string inviteTarget = wantsInvite ? request.inviteCandidate : std::string();
+
+			const std::optional<std::string> line = SanitizeChatReply(answer, bot->participant->GetCharacterName());
+			if (!line && inviteTarget.empty())
 			{
 				++m_stats.repliesSkipped;
 				ReplyDiscarded(request.botIndex, result.text);
 				continue;
 			}
 
-			const HumanizedChat typed = HumanizeChat(*line, bot->persona.typing, bot->rng);
+			const HumanizedChat typed = line ? HumanizeChat(*line, bot->persona.typing, bot->rng) : HumanizedChat();
 
 			// Time to notice the message, then to type the answer at a few characters a second.
 			std::uniform_int_distribution<GameTime> reaction(1200, 4000);
@@ -379,7 +466,7 @@ namespace mmo
 			const GameTime typing = std::min<GameTime>(14000, typed.text.size() * perChar(bot->rng));
 			const GameTime sendAt = nowMs + reaction(bot->rng) + typing;
 
-			m_outbox.push_back({ sendAt, request.botIndex, request.conversationKey, typed.text, request.isReply, true });
+			m_outbox.push_back({ sendAt, request.botIndex, request.conversationKey, typed.text, request.isReply, true, inviteTarget });
 
 			if (typed.correction)
 			{
@@ -431,13 +518,16 @@ namespace mmo
 		{
 		case ChatType::Group:
 		case ChatType::Raid:
-			baseChance = fromBot ? 0.12f : 0.55f;
+			baseChance = fromBot ? 0.12f : 0.85f;
 			break;
 		case ChatType::Guild:
 			baseChance = fromBot ? 0.10f : 0.30f;
 			break;
 		case ChatType::Channel:
-			baseChance = fromBot ? 0.06f : (question ? 0.25f : 0.08f);
+			// A player asking General something and hearing nothing back is what makes a server
+			// feel empty, so questions are usually answered. Only one bot ever answers a line and
+			// General replies are spaced out swarm-wide, so this cannot turn into a flood.
+			baseChance = fromBot ? 0.06f : (question ? 0.7f : 0.3f);
 			break;
 		case ChatType::Say:
 		case ChatType::Yell:
@@ -649,6 +739,63 @@ namespace mmo
 		}
 	}
 
+	void ChatDirector::ServiceProactiveSay(BotState& bot, const GameTime nowMs)
+	{
+		const bool humanNearby = bot.lastHumanNearbyMs != 0
+			&& elapsed(nowMs, bot.lastHumanNearbyMs) <= m_settings.humanNearbyWindowMs;
+		if (!humanNearby)
+		{
+			// Re-armed from scratch when the next player walks up, rather than firing the moment
+			// they arrive because a timer ran out while nobody was there.
+			bot.nextSayMs = 0;
+			return;
+		}
+
+		const GameTime minInterval = m_settings.sayMinIntervalMs;
+		const GameTime maxInterval = std::max(m_settings.sayMaxIntervalMs, minInterval);
+
+		if (bot.nextSayMs == 0)
+		{
+			// A little while after someone walks up, not the instant they do.
+			bot.nextSayMs = nowMs + std::uniform_int_distribution<GameTime>(20 * 1000, minInterval)(bot.rng);
+			return;
+		}
+
+		if (nowMs < bot.nextSayMs)
+		{
+			return;
+		}
+
+		bot.nextSayMs = nowMs + static_cast<GameTime>(
+			std::uniform_int_distribution<GameTime>(minInterval, maxInterval)(bot.rng) / std::max(0.1f, bot.persona.chattiness));
+
+		// One bot speaking up near a player now and then; a crowd of bots all doing it at once
+		// is what gives them away.
+		if (m_proactiveSayEver && elapsed(nowMs, m_lastProactiveSayMs) < m_settings.sayGapMs)
+		{
+			return;
+		}
+
+		if (!bot.participant->IsInWorld())
+		{
+			return;
+		}
+
+		std::string key;
+		Conversation* conversation = GetConversation(bot, ChatType::Say, std::string(), 0, key);
+		if (!conversation || conversation->inFlight)
+		{
+			return;
+		}
+
+		const std::string topic = topics[std::uniform_int_distribution<std::size_t>(0, std::size(topics) - 1)(bot.rng)];
+		if (Request(bot, key, topic, nowMs))
+		{
+			m_lastProactiveSayMs = nowMs;
+			m_proactiveSayEver = true;
+		}
+	}
+
 	bool ChatDirector::Request(BotState& bot, const std::string& conversationKey, const std::string& topic, const GameTime nowMs)
 	{
 		Conversation& conversation = bot.conversations[conversationKey];
@@ -663,7 +810,8 @@ namespace mmo
 
 		ChatCompletionRequest request;
 		request.system = BuildSystemPrompt(bot);
-		request.prompt = BuildPrompt(bot, conversation, topic, nowMs);
+		const std::string inviteCandidate = FindInviteCandidate(bot, conversation, nowMs);
+		request.prompt = BuildPrompt(bot, conversation, topic, inviteCandidate, nowMs);
 		request.maxOutputTokens = m_settings.maxOutputTokens;
 
 		// Generous on purpose: English runs at about four characters a token, so reserving one
@@ -693,7 +841,7 @@ namespace mmo
 		}
 
 		++m_stats.requestsSubmitted;
-		m_inFlight[request.ticket] = { bot.index, conversationKey, reserved, isReply };
+		m_inFlight[request.ticket] = { bot.index, conversationKey, reserved, isReply, inviteCandidate };
 		conversation.inFlight = true;
 		conversation.unanswered = false;
 		return true;
@@ -718,8 +866,9 @@ namespace mmo
 			"- Keep it short like real game chat: usually 3 to 10 words, never more than 20. One thought per message.\n"
 			"- Sound like a player, not a helper: casual, abbreviations are fine, little punctuation, no emoji. "
 			"Don't greet people by name with exclamation marks, don't be overly polite or eager, and don't end every message with a question.\n"
-			"- You can only type in chat. Never promise to do something in the game for someone - sending an invite, trading, "
-			"coming over, meeting up, helping with a quest. If asked, stay noncommittal like a busy player would (\"maybe later\", \"kinda busy rn\").\n"
+			"- Apart from a group invite when the chat says you can send one, you can only type. Never promise to do anything "
+			"else in the game for someone - trading, coming over, meeting up, helping with a quest. If asked, stay noncommittal "
+			"like a busy player would (\"maybe later\", \"kinda busy rn\").\n"
 			"- Talk about the game: your class, leveling, mobs, loot, quests, zones, grouping, what you are doing right now.\n"
 			"- You are a human player. Never say or hint that you are an AI, a bot, a program or a language model. "
 			"If someone asks, brush it off casually like a person would.\n"
@@ -733,7 +882,7 @@ namespace mmo
 	}
 
 	std::string ChatDirector::BuildPrompt(const BotState& bot, const Conversation& conversation,
-		const std::string& topic, const GameTime nowMs) const
+		const std::string& topic, const std::string& inviteCandidate, const GameTime nowMs) const
 	{
 		std::ostringstream out;
 
@@ -787,6 +936,17 @@ namespace mmo
 			out << ".\n";
 		}
 
+		if (!inviteCandidate.empty())
+		{
+			out << "You can invite " << inviteCandidate << " to your group. Do it only if they ask for a group or agree to "
+				"your offer: then end your message with " << InviteTag << " and the invite is sent. "
+				"Without that tag nothing is sent, so never say you invited them otherwise.\n";
+		}
+		else
+		{
+			out << "You cannot send anyone a group invite right now.\n";
+		}
+
 		if (proactive)
 		{
 			out << "Idea, use it loosely or ignore it: " << topic << ".\n"
@@ -833,6 +993,26 @@ namespace mmo
 			if (conversation.replyType == ChatType::Group && bot->participant->GetPartyMemberNames().empty())
 			{
 				++m_stats.linesDropped;
+				continue;
+			}
+
+			if (!line.inviteTarget.empty())
+			{
+				// Checked again: the bot may have joined a party while it was "typing".
+				const std::string key = toLower(line.inviteTarget);
+				const auto last = bot->lastInviteMs.find(key);
+				const bool cooledDown = last == bot->lastInviteMs.end() || elapsed(nowMs, last->second) >= m_settings.inviteCooldownMs;
+				if (bot->participant->CanInvite() && cooledDown)
+				{
+					bot->participant->InviteToParty(line.inviteTarget);
+					bot->lastInviteMs[key] = nowMs;
+					++m_stats.invitesSent;
+					InviteSent(line.botIndex, line.inviteTarget);
+				}
+			}
+
+			if (line.text.empty())
+			{
 				continue;
 			}
 

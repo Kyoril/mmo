@@ -70,6 +70,9 @@ namespace
 			sent.push_back({ type, text, target });
 		}
 
+		bool CanInvite() const override { return canInvite; }
+		void InviteToParty(const std::string& name) override { invited.push_back(name); }
+
 		struct Sent
 		{
 			ChatType type;
@@ -78,7 +81,9 @@ namespace
 		};
 
 		bool inWorld { true };
+		bool canInvite { true };
 		std::vector<std::string> party;
+		std::vector<std::string> invited;
 		std::vector<Sent> sent;
 
 	private:
@@ -299,4 +304,123 @@ TEST_CASE("Lines stamped later than the frame still wait for every listener", "[
 	}
 
 	CHECK(worstRound <= 1);
+}
+
+TEST_CASE("An invite tag invites the whisper partner and is not said aloud", "[chat_director]")
+{
+	Fixture f;
+	f.model.reply = "sure, sec [invite]";
+	f.director->OnChatReceived(0, ChatType::Whisper, "Steve", "can u invite me?", 0, 1000);
+	f.Run(1000, 30000);
+
+	REQUIRE(f.alice.invited.size() == 1);
+	CHECK(f.alice.invited.front() == "Steve");
+	REQUIRE_FALSE(f.alice.sent.empty());
+	CHECK(f.alice.sent.front().text.find("invite") == std::string::npos);
+	CHECK(f.director->GetStats().invitesSent == 1);
+
+	// The model was told it may invite, and whom.
+	CHECK(f.model.submitted.front().prompt.find("You can invite Steve") != std::string::npos);
+
+	SECTION("and the same person is not invited again right away")
+	{
+		f.director->OnChatReceived(0, ChatType::Whisper, "Steve", "again pls", 0, 40000);
+		f.Run(40000, 30000);
+		CHECK(f.alice.invited.size() == 1);
+		CHECK(f.model.submitted.back().prompt.find("You cannot send anyone a group invite") != std::string::npos);
+	}
+}
+
+TEST_CASE("An invite tag does nothing when the bot cannot invite", "[chat_director]")
+{
+	Fixture f;
+	f.alice.canInvite = false;
+	f.model.reply = "sure [invite]";
+	f.director->OnChatReceived(0, ChatType::Whisper, "Steve", "inv?", 0, 1000);
+	f.Run(1000, 30000);
+
+	CHECK(f.alice.invited.empty());
+	CHECK(f.model.submitted.front().prompt.find("You cannot send anyone a group invite") != std::string::npos);
+}
+
+TEST_CASE("Bots never invite other bots", "[chat_director]")
+{
+	Fixture f;
+	f.model.reply = "ok [invite]";
+	f.director->NoteHumanSeen(1000);
+	f.director->OnChatReceived(0, ChatType::Say, "Bob", "Alice wanna group?", 0, 1000);
+	f.Run(1000, 30000);
+
+	CHECK(f.alice.invited.empty());
+}
+
+TEST_CASE("Bots talk in /say only while a real player is near, one at a time", "[chat_director]")
+{
+	Fixture f;
+	f.Run(0, 30 * Minute);
+	const auto sayRequests = [&f]()
+	{
+		std::size_t count = 0;
+		for (const ChatCompletionRequest& request : f.model.submitted)
+		{
+			count += request.prompt.find("/say") != std::string::npos ? 1 : 0;
+		}
+		return count;
+	};
+	CHECK(sayRequests() == 0);
+
+	// A player stands next to both bots for an hour.
+	GameTime now = 30 * Minute;
+	GameTime lastSay = 0;
+	GameTime closestGap = 60 * Minute;
+	std::size_t seen = 0;
+	for (; now < 90 * Minute; now += 1000)
+	{
+		f.director->NoteHumanNearby(0, now);
+		f.director->NoteHumanNearby(1, now);
+		f.director->Update(now);
+
+		if (sayRequests() > seen)
+		{
+			if (lastSay != 0)
+			{
+				closestGap = std::min(closestGap, now - lastSay);
+			}
+			lastSay = now;
+			seen = sayRequests();
+		}
+	}
+
+	CHECK(seen >= 2);
+	CHECK(closestGap >= 90 * 1000);
+}
+
+TEST_CASE("Most questions from players in General get an answer", "[chat_director]")
+{
+	Fixture f;
+	int answered = 0;
+	constexpr int Rounds = 100;
+
+	for (int round = 0; round < Rounds; ++round)
+	{
+		const GameTime start = 1000 + round * 10 * Minute;
+		const std::string line = "anyone know where to get a better staff? " + std::to_string(round);
+		f.director->OnChatReceived(0, ChatType::Channel, "Steve", line, 1, start);
+		f.director->OnChatReceived(1, ChatType::Channel, "Steve", line, 1, start);
+
+		const std::size_t before = f.model.submitted.size();
+		f.Run(start, 1000);
+		for (std::size_t i = before; i < f.model.submitted.size(); ++i)
+		{
+			const std::string& prompt = f.model.submitted[i].prompt;
+			if (prompt.rfind("Chat:", 0) == 0 && prompt.find(line) != std::string::npos)
+			{
+				++answered;
+				break;
+			}
+		}
+	}
+
+	INFO("answered " << answered << " of " << Rounds);
+	CHECK(answered >= 50);
 }

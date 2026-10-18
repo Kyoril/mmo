@@ -144,6 +144,20 @@ namespace mmo
 		m_session.GetRealm().SendChatMessage(text, type, target);
 	}
 
+	bool SwarmChatParticipant::CanInvite() const
+	{
+		// The realm caps a normal party at five (PlayerGroup::IsFull).
+		constexpr uint32 MaxPartySize = 5;
+
+		const BotRealmConnector& realm = m_session.GetRealm();
+		return !realm.IsInParty() || (realm.IsPartyLeader() && realm.GetPartyMemberCount() < MaxPartySize);
+	}
+
+	void SwarmChatParticipant::InviteToParty(const std::string& name)
+	{
+		m_session.GetRealm().InviteToParty(name);
+	}
+
 	std::string BuildGameFacts(const proto::Project& project)
 	{
 		std::ostringstream out;

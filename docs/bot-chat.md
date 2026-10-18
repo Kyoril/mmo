@@ -77,7 +77,7 @@ chat therefore cannot turn into a burst of parallel spend.
   then goes quiet on them, so nobody can spend the budget by spamming a bot.
 - **Party, guild, `/say` and General**: all bots in the channel hear a line, and at most one of
   them answers. A bot whose name is mentioned answers about 90% of the time. Otherwise the
-  chance depends on the channel (party about 55%, General about 8%, or 25% for a question) and on
+  chance depends on the channel (party about 85%, General about 30%, or 70% for a question) and on
   the bot's chattiness. Bot replies in General are at least 45 seconds apart across the swarm.
 - **Bots and bots**: bots never answer another bot's whisper, and only sometimes reply to a
   bot's unprompted post. They never answer a bot that was itself replying, so bot-to-bot
@@ -86,6 +86,25 @@ chat therefore cannot turn into a burst of parallel spend.
   one in General every 4 minutes across the swarm. They are made only while a real player has
   been seen in the last 30 minutes, either through chat or as a non-bot player near any bot. A
   server with nobody on it costs nothing.
+- **/say near players**: while a real player stands within 60 yards of a bot, that bot says
+  something in /say every 4 to 15 minutes. Across the swarm at most one bot does so every 90
+  seconds, so a player walking into a crowd of bots doesn't get a chorus.
+
+## Party invites
+
+Bots can act on chat, not just talk about it:
+
+- **Asking a bot for an invite.** When the bot is free to invite (not in a party, or leading one
+  with room), its prompt says it may invite the person it is talking to: the whisper partner, or
+  the last player who spoke in /say or General. The model then ends its answer with `[invite]`.
+  The tag is stripped from the line, and the invite is sent right after the line goes out. A bot
+  invites the same person at most once every 10 minutes, and never invites other bots. When it
+  can't invite, the prompt says so, and the model is told never to claim an invite it didn't send.
+- **Inviting a bot.** With chat on, a bot accepts a real player's invite after 2 to 6 seconds and
+  remembers "you joined X's group" for the conversation. Invites from other bots are declined.
+
+The bots still grind on their own after grouping. They don't follow the player or quest
+together; the prompt keeps them from promising that.
 
 Each bot has a persona rolled from its roster seed: temperament, writing style and typo rate.
 Its prompt contains its level, race, class, map and current activity, a few recent events
@@ -93,11 +112,14 @@ Its prompt contains its level, race, class, map and current activity, a few rece
 about places that exist. The model can answer `SKIP` to stay silent. Replies are cut to one line
 of at most 200 characters, and lines with links or AI tell-tales are dropped.
 
-Bot chat goes to the telemetry stream as `chat_out` events (with the text) and `chat_error`
-events. The summary has `chat_lines_heard`, `chat_lines_sent`, `chat_requests`,
+Bot chat goes to the telemetry stream as `chat_out` events (with the text), lines from players
+as `chat_in`, answers that were thrown away as `chat_discarded`, failures as `chat_error`, and invites as
+`party_invite` (sent) and `party_accept` (accepted). The summary has `chat_lines_heard`, `chat_lines_sent`, `chat_requests`,
 `chat_budget_denied`, `chat_model_errors` and `chat_spent_today_usd`.
 
 ## Limits
+
+- Grouping is chat-deep: a bot in a player's party keeps grinding by itself.
 
 - Bots only know they are in a guild once they have seen guild chat in the session. They never
   start guild conversations before that.
