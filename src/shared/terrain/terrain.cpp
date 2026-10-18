@@ -20,6 +20,20 @@ namespace mmo
 {
 	namespace terrain
 	{
+		namespace
+		{
+			/// Converts a world coordinate into the coordinate local to the page that
+			/// GetPageIndexByWorldPosition picked, in [0, PageSize]. Subtracting the page origin keeps
+			/// it non-negative everywhere; the old `fmod(x + PageSize * pageIndex, PageSize)` went
+			/// negative wherever x < -PageSize * pageIndex (the west and south quarter of a map), which
+			/// turned into vertex index -1 inside the page.
+			float PageLocalCoordinate(const float world, const int32 pageIndex, const uint32 pageCount)
+			{
+				const double origin = (static_cast<double>(pageIndex) - static_cast<double>(pageCount / 2)) * constants::PageSize;
+				return static_cast<float>(std::clamp(static_cast<double>(world) - origin, 0.0, constants::PageSize));
+			}
+		}
+
 		Terrain::Terrain(Scene &scene, Camera *camera, const uint32 width, const uint32 height)
 			: m_pages(width, height), m_scene(scene), m_terrainNode(nullptr), m_camera(camera), m_width(width), m_height(height), m_lastX(255), m_lastZ(255)
 		{
@@ -274,8 +288,8 @@ namespace mmo
 			}
 
 			const float value = page->GetSmoothHeightAt(
-				fmod(x + constants::PageSize * pageX, terrain::constants::PageSize),
-				fmod(z + constants::PageSize * pageY, terrain::constants::PageSize));
+				PageLocalCoordinate(x, pageX, m_width),
+				PageLocalCoordinate(z, pageY, m_height));
 
 			return value;
 		}
@@ -295,8 +309,8 @@ namespace mmo
 			}
 
 			outHeight = page->GetSmoothHeightAt(
-				fmod(x + constants::PageSize * pageX, terrain::constants::PageSize),
-				fmod(z + constants::PageSize * pageY, terrain::constants::PageSize));
+				PageLocalCoordinate(x, pageX, m_width),
+				PageLocalCoordinate(z, pageY, m_height));
 
 			return true;
 		}
@@ -367,8 +381,8 @@ namespace mmo
 			}
 
 			return page->GetSmoothNormalAt(
-				fmod(x + constants::PageSize * pageX, terrain::constants::PageSize),
-				fmod(z + constants::PageSize * pageY, terrain::constants::PageSize));
+				PageLocalCoordinate(x, pageX, m_width),
+				PageLocalCoordinate(z, pageY, m_height));
 		}
 
 		Vector4 Terrain::GetSmoothColorAt(const float x, const float z)
@@ -386,8 +400,8 @@ namespace mmo
 			}
 
 			return page->GetSmoothColorAt(
-				fmod(x + constants::PageSize * pageX, terrain::constants::PageSize),
-				fmod(z + constants::PageSize * pageY, terrain::constants::PageSize));
+				PageLocalCoordinate(x, pageX, m_width),
+				PageLocalCoordinate(z, pageY, m_height));
 		}
 
 		Vector3 Terrain::GetTangentAt(uint32 x, uint32 z)

@@ -1,6 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 //
-// View matrices, the camera constant buffer and the height-fog model shared by the deferred
+// View matrices, the camera constant buffer and the height/distance-fog model shared by the deferred
 // lighting and atmosphere shaders. The generated forward material shaders carry a copy of the fog
 // functions (MaterialCompilerD3D11), and deferred_shading/atmosphere_math.h mirrors them in C++ for
 // the unit tests - change all three together.
@@ -39,6 +39,12 @@ cbuffer CameraBuffer : register(b1)
     float ForwardExposure;          // exposure the TonemapPass applies; 1 outside the forward pass
     float3 SunScatterColor;
     float ShaftStrength;
+    float3 DistanceFogColor;        // linear radiance distant geometry fades into
+    float DistanceFogOpacity;       // opacity at the end distance; 0 = distance fog off
+    float DistanceFogStart;
+    float DistanceFogInverseRange;  // 1 / (end - start)
+    float DistanceFogSkyBand;       // view-ray Y up to which the sky is fogged; 0 = sky untouched
+    float _CameraPadding1;
 };
 
 // Upper bound of the height-fog density exponent. Keeps rays that reach far below the base height
@@ -80,6 +86,30 @@ float ScatterPhase(float cosTheta)
 float3 FogSource(float cosTheta, float sunVisibility)
 {
     return FogTint + SunScatterColor * SunColor * SunIntensity * ShaftStrength * ScatterPhase(cosTheta) * sunVisibility;
+}
+
+// Opacity of the distance fog for geometry at the given distance from the camera.
+float DistanceFogAmount(float distance)
+{
+    return DistanceFogOpacity * saturate((distance - DistanceFogStart) * DistanceFogInverseRange);
+}
+
+// Opacity of the distance fog for a sky pixel: full at and below the horizon, fading out over the
+// sky band above it, so distant fogged terrain meets a horizon of the same colour.
+float DistanceFogSkyAmount(float rayY)
+{
+    if (DistanceFogSkyBand <= 0.0f)
+    {
+        return 0.0f;
+    }
+
+    return DistanceFogOpacity * (1.0f - smoothstep(0.0f, DistanceFogSkyBand, rayY));
+}
+
+// Blends an already height-fogged colour toward the distance fog colour.
+float3 ApplyDistanceFog(float3 color, float amount)
+{
+    return lerp(color, DistanceFogColor, amount);
 }
 
 // World-space, normalised view ray through a screen UV.

@@ -383,6 +383,10 @@ namespace mmo
 		///         disabled.
 		[[nodiscard]] float GetCombinedFogDensity() const;
 
+		/// @brief Whether the combined atmosphere has a visible distance fog (fog enabled, end beyond
+		///        start and a non-zero opacity).
+		[[nodiscard]] bool HasActiveDistanceFog() const;
+
 		const ConstantBufferPtr& GetCameraBuffer() const { return m_psCameraBuffer; }
 
 		void RefreshCameraBuffer(const Camera& camera);

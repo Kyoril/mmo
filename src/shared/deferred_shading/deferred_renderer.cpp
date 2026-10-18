@@ -468,11 +468,12 @@ namespace mmo
         // Froxel volumetric fog over the lit opaque scene. The composite reads m_renderTexture and
         // writes m_sceneColorCopy, which stays the refraction source; the single CopyResource below
         // then carries the fogged scene back into m_renderTexture for the forward pass. Skipped while
-        // submerged (the underwater pass has its own fog), with fog turned off, when the combined
-        // density is zero, or without a shadow sampler; the copy then runs in its old direction and
+        // submerged (the underwater pass has its own fog), with fog turned off, when neither the
+        // height fog (combined density zero) nor the distance fog is visible, or without a shadow
+        // sampler; the copy then runs in its old direction and
         // the fog history is discarded so it does not reproject a stale frame later.
         const bool runAtmosphere = scene.IsFogEnabled() && !m_underwaterState.active
-            && scene.GetCombinedFogDensity() > 0.0f && m_shadowSampler != nullptr;
+            && (scene.GetCombinedFogDensity() > 0.0f || scene.HasActiveDistanceFog()) && m_shadowSampler != nullptr;
         if (runAtmosphere)
         {
             m_volumetricFogPass->Render(camera, scene.GetWind(), *m_renderTexture, m_gBuffer.GetNormalRT(), *m_sceneColorCopy,

@@ -58,6 +58,18 @@ PROPERTY_DEFAULTS = {
 }
 
 
+# Optical swell displaced in the vertex shader (MaterialNode "Vertex Waves"). Gentle on purpose:
+# swimming and collision do not see it, so it must never look like it should move the player.
+# Wave shape is compiled into the shader; changing it needs a material rebuild, not an .hmi.
+ROOT_WAVE_PROPERTIES = {
+    "Vertex Waves": True,
+    "Wave Height": 0.18,
+    "Wave Length": 22.0,
+    "Wave Speed": 1.0,
+    "Wave Direction": 35.0,
+}
+
+
 def run_tool(*args):
     subprocess.run([sys.executable, MATERIAL_TOOL, "--source-root", REPO_ROOT, *args], check=True)
 
@@ -248,9 +260,11 @@ def build_graph(b, mode):
     # Reflections use a much flatter normal than lighting. With the full ripple normal, a small
     # tilt swings the reflected ray between hitting the scene and missing into the sky, so
     # neighbouring pixels flip between the two and the reflection shatters into hard fragments.
-    up = b.const_rgb((0.0, 1.0, 0.0, 1.0))
+    # The flat base is the vertex normal, which the root's Vertex Waves tilt with the swell, so
+    # reflections roll with the waves instead of sitting on a mirror-flat plane.
+    wave_normal = b.add("VertexNormalNode")
     reflection_normal = b.add("NormalizeNode", ins={"m_input": b.lerp(
-        up, world_normal, b.scalar("ReflectionDistortion", 0.3))})
+        wave_normal, world_normal, b.scalar("ReflectionDistortion", 0.3))})
 
     # --- Water column ----------------------------------------------------------------------
     b.next_column()
@@ -287,17 +301,43 @@ def build_graph(b, mode):
         refraction_strength = b.scalar("RefractionStrength", 30.0)
         shallow_fade = b.sat(b.div(thickness, constant=2.0))
         offset = b.mul(b.mul(b.mask(tangent_normal, r=True, g=True), refraction_strength), shallow_fade)
-        refracted = b.out(b.add("SceneColorNode", ins={"UV Offset (px)": offset}), "Scene Color")
+        refracted_scene = b.out(b.add("SceneColorNode", ins={"UV Offset (px)": offset}), "Scene Color")
 
-        absorption = b.vector("AbsorptionRGB", (0.45, 0.16, 0.08, 1.0))
+        # Caustics on the ground under the water. G-buffer depth is radial, so the floor point
+        # seen through this pixel is exactly camera + direction * scene depth. Two panned copies of
+        # the caustic web combined with Min give the slowly shifting, never repeating network of
+        # light lines seen on the sand in shallow water.
+        sun_color = b.add("GlobalVectorParameterNode", {"Name": "SunColor"})
+        sun_dir = b.add("GlobalVectorParameterNode", {"Name": "SunDirection"})
+        camera_pos = b.add("CameraPositionNode")
+        view_dir = b.add("NormalizeNode", ins={"m_input": b.sub(b.add("WorldPositionNode"), camera_pos)})
+        floor_pos = b.addn(camera_pos, b.mul(view_dir, scene_depth))
+        floor_uv = b.mul(b.mask(floor_pos, r=True, b=True), b.scalar("CausticsTiling", 0.22))
+
+        def caustic_layer(uvs):
+            return b.out(b.add("TextureParameterNode",
+                               {"Name": "Caustics", "Texture": "Textures/Caustics_01.htex", "Sampler Type": 0},
+                               {"UVs": uvs}), "R")
+
+        caustic = b.add("MinNode", ins={
+            "A": caustic_layer(b.panner(floor_uv, 0.021, 0.013)),
+            "B": caustic_layer(b.panner(b.mul(floor_uv, constant=1.37), -0.016, 0.012)),
+        })
+        caustic_depth = b.add("OneMinusNode", ins={"m_input": b.sat(b.div(thickness, b.scalar("CausticsDepth", 4.0)))})
+        sun_strength = b.mul(b.out(sun_color, "A"), b.sat(b.out(sun_dir, "G")))
+        caustic_light = b.mul(b.mul(b.mul(caustic, b.scalar("CausticsStrength", 1.4)), caustic_depth),
+                              b.mul(sun_strength, has_scene))
+        refracted = b.addn(refracted_scene, b.mul(b.mul(refracted_scene, b.out(sun_color, "RGB")), caustic_light))
+
+        absorption = b.vector("AbsorptionRGB", (0.24, 0.08, 0.065, 1.0))
         exponent = b.mul(b.mul(absorption, thickness), constant=-1.0)
         euler = b.const_rgb((2.718282, 2.718282, 2.718282, 1.0))
         extinction = b.add("PowerNode", ins={"Base": euler, "Exp": exponent})
 
         b.next_column()
-        deep_t = b.sat(b.div(thickness, b.scalar("DeepDistance", 8.0)))
-        scatter = b.lerp(b.vector("ShallowColor", (0.05, 0.40, 0.50, 1.0)),
-                         b.vector("DeepColor", (0.01, 0.06, 0.15, 1.0)), deep_t)
+        deep_t = b.sat(b.div(thickness, b.scalar("DeepDistance", 7.0)))
+        scatter = b.lerp(b.vector("ShallowColor", (0.055, 0.17, 0.165, 1.0)),
+                         b.vector("DeepColor", (0.012, 0.05, 0.06, 1.0)), deep_t)
         body = b.addn(b.mul(refracted, extinction),
                       b.mul(scatter, b.add("OneMinusNode", ins={"m_input": extinction})))
 
@@ -308,7 +348,7 @@ def build_graph(b, mode):
         horizon = b.out(b.add("GlobalVectorParameterNode", {"Name": "SkyHorizonColor"}), "RGB")
         zenith = b.out(b.add("GlobalVectorParameterNode", {"Name": "SkyZenithColor"}), "RGB")
         sky = b.lerp(horizon, zenith, sky_t)
-        reflection = b.mul(b.lerp(sky, ssr_color, ssr_mask), b.scalar("ReflectionStrength", 0.75))
+        reflection = b.mul(b.lerp(sky, ssr_color, ssr_mask), b.scalar("ReflectionStrength", 0.5))
         fresnel = b.add("FresnelNode", {"Exponent": 5.0, "Base Reflect Fraction": 0.02}, {"Normal": reflection_normal})
         water = b.lerp(body, reflection, fresnel)
 
@@ -348,12 +388,18 @@ def build_graph(b, mode):
         foam_mask = b.sat(b.addn(shore_foam, caps))
 
         b.next_column()
-        sun_color = b.add("GlobalVectorParameterNode", {"Name": "SunColor"})
-        sun_dir = b.add("GlobalVectorParameterNode", {"Name": "SunDirection"})
         sun_light = b.addn(b.mul(b.mul(b.out(sun_color, "RGB"), b.out(sun_color, "A")),
                                  b.sat(b.out(sun_dir, "G"))), constant=0.45)
         foam_lit = b.mul(b.vector("FoamColor", (0.92, 0.97, 1.0, 1.0)), sun_light)
-        above_water = b.lerp(water, foam_lit, foam_mask)
+
+        # Sun glitter: a very tight highlight along the FULL ripple normal, so it breaks up into
+        # the separate sparkles of a sunlit sea instead of the engine's one smooth GGX lobe.
+        glitter_dir = b.add("ReflectionVectorNode", ins={"Normal": world_normal})
+        glitter_dot = b.sat(b.add("DotNode", ins={"A": glitter_dir, "B": b.out(sun_dir, "RGB")}))
+        glitter = b.mul(b.mul(b.out(sun_color, "RGB"), b.mul(b.out(sun_color, "A"), b.scalar("GlitterStrength", 5.0))),
+                        b.add("PowerNode", ins={"Base": glitter_dot, "Exp": b.scalar("GlitterPower", 900.0)}))
+        above_water = b.addn(b.lerp(water, foam_lit, foam_mask),
+                             b.mul(glitter, b.add("OneMinusNode", ins={"m_input": foam_mask})))
 
         # --- Underside --------------------------------------------------------------------------
         # Seen from below, none of the above applies. There is no sky to reflect - and the Fresnel
@@ -369,13 +415,13 @@ def build_graph(b, mode):
         view_up = b.mask(to_surface, g=True)
         below = b.sat(b.mul(view_up, constant=50.0))
         grazing = b.add("OneMinusNode", ins={"m_input": b.sat(b.div(view_up, b.scalar("UndersideClearAngle", 0.35)))})
-        underside = b.lerp(refracted, b.vector("UndersideTint", (0.04, 0.22, 0.28, 1.0)),
+        underside = b.lerp(refracted_scene, b.vector("UndersideTint", (0.04, 0.22, 0.28, 1.0)),
                            b.mul(grazing, b.scalar("UndersideReflection", 0.55)))
         final = b.lerp(above_water, underside, below)
 
         root_inputs["Emissive Color"] = final
         root_inputs["Opacity"] = b.sat(b.div(thickness, b.scalar("EdgeFadeDistance", 0.5)))
-        root_inputs["Roughness"] = b.scalar("Roughness", 0.12)
+        root_inputs["Roughness"] = b.scalar("Roughness", 0.1)
 
     b.next_column()
     root_inputs["Base Color"] = b.const_rgb((0.0, 0.0, 0.0, 1.0))
@@ -409,6 +455,19 @@ def main():
 
         graph = document["graph"]
         root = next(n for n in graph["nodes"] if n["id"] == graph["root_node_id"])
+
+        # Materials saved before a root property existed store fewer of them; add the rest.
+        root_spec = next(entry for entry in catalog if entry["type_name"] == "MaterialNode")
+        stored = {prop["name"] for prop in root["properties"]}
+        for prop in root_spec["properties"]:
+            if prop["name"] not in stored:
+                root["properties"].append({"name": prop["name"], "type": prop["type"],
+                                           "value": default_property("MaterialNode", prop)})
+
+        for prop in root["properties"]:
+            if prop["name"] in ROOT_WAVE_PROPERTIES:
+                prop["value"] = ROOT_WAVE_PROPERTIES[prop["name"]]
+
         for prop in root["properties"]:
             if prop["name"] in ("Lit", "Translucent", "Is Two Sided", "Receives Shadows"):
                 prop["value"] = True
