@@ -15,6 +15,7 @@
 #include "game_server/world/world_instance.h"
 #include "proto_data/project.h"
 
+#include <algorithm>
 #include <unordered_map>
 
 namespace mmo
@@ -343,9 +344,13 @@ namespace mmo
 		m_countdown.Cancel();
 		m_hasFinished = true;
 
+		// An interrupt puts the spell on cooldown and locks its whole school. It deliberately does
+		// not use the spell's category cooldown: most spells have category 0, so that locked out
+		// nearly every spell of the target instead of just the interrupted school.
 		if (interruptCooldown)
 		{
-			ApplyCooldown(interruptCooldown, interruptCooldown);
+			m_cast.GetExecuter().SetCooldown(m_spell.id(), interruptCooldown);
+			m_cast.GetExecuter().LockSpellSchool(m_spell.spellschool(), interruptCooldown);
 		}
 
 		// Notify client that the cast was cancelled. SendEndCast sends SpellFailure and
@@ -641,6 +646,41 @@ namespace mmo
 				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Range, m_spell.id(), range);
 
 				if (m_cast.GetExecuter().GetSquaredDistanceTo(unitTarget->GetPosition(), true) > range * range)
+				{
+					SendEndCast(spell_cast_result::FailedOutOfRange);
+					return false;
+				}
+			}
+		}
+
+		// World object targets (gather nodes, chests, doors) are not units, so the range check
+		// above never saw them: an Open cast could be started and finished from any distance.
+		// Using the object then runs into the interaction path, which refuses anything beyond
+		// the interaction distance (GameUnitS::GetInteractionDistance) without telling the
+		// client - the five second gather cast completed and quietly did nothing. The castable
+		// range is therefore the spell's range capped by the interaction distance, so the cast
+		// and the interaction that follows it agree on what is within reach. The interaction
+		// distance covers the Open family's range (see LootDistance), so the cap only bites for
+		// spells reaching further than a player may interact at.
+		if (m_target.HasGOTarget())
+		{
+			GameObjectS* objectTarget = m_context.FindObjectByGuid(m_target.GetGOTarget());
+			if (objectTarget && objectTarget->IsWorldObject())
+			{
+				float range = m_cast.GetExecuter().GetInteractionDistance();
+
+				if (m_spell.has_rangetype())
+				{
+					const proto::RangeType* rangeType = m_cast.GetExecuter().GetProject().ranges.getById(m_spell.rangetype());
+					if (rangeType && rangeType->range() > 0.0f)
+					{
+						float spellRange = rangeType->range();
+						m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Range, m_spell.id(), spellRange);
+						range = std::min(range, spellRange);
+					}
+				}
+
+				if (m_cast.GetExecuter().GetSquaredDistanceTo(objectTarget->GetPosition(), true) > range * range)
 				{
 					SendEndCast(spell_cast_result::FailedOutOfRange);
 					return false;
@@ -980,9 +1020,22 @@ namespace mmo
 
 		if (!m_delayedCast)
 		{
+			// Evaluate every effect's gating condition up front, against the state the targets
+			// were in when the spell hit. An earlier effect can change that state - Ice Lance's
+			// first damage effect breaks the Frost Nova root its second effect is conditioned on.
+			std::vector<bool> conditionsMet;
+			conditionsMet.reserve(m_spell.effects_size());
 			for (int index = 0; index < m_spell.effects_size(); ++index)
 			{
-				ApplyEffect(m_spell.effects(index));
+				conditionsMet.push_back(EvaluateEffectCondition(m_spell.effects(index)));
+			}
+
+			for (int index = 0; index < m_spell.effects_size(); ++index)
+			{
+				if (conditionsMet[index])
+				{
+					ApplyEffect(m_spell.effects(index));
+				}
 			}
 			m_delayedCast = true;
 		}
@@ -1092,13 +1145,8 @@ namespace mmo
 		const auto it = kHandlers.find(effect.type());
 		if (it == kHandlers.end()) return;
 
-		// Data-driven conditional gating: skip the effect entirely when its
-		// condition (if any) is not satisfied. No targets are resolved and the
-		// handler is never invoked.
-		if (!EvaluateEffectCondition(effect))
-		{
-			return;
-		}
+		// Data-driven conditional gating is evaluated by ApplyAllEffects before the first
+		// effect runs, so effects skipped by their condition never reach this point.
 
 		std::vector<GameObjectS*> targets;
 		GetEffectTargets(effect, targets);

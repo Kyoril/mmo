@@ -921,6 +921,14 @@ namespace mmo
 
 			const proto::SpellEntry& spell = ctx.castContext.GetSpell();
 
+			// The lockout is the spell's duration. Interrupts create no aura, so the Duration spell
+			// mod (e.g. Silencing Glyph) has to be applied here rather than in the aura container.
+			GameTime lockoutDuration = spell.duration();
+			if (lockoutDuration != 0)
+			{
+				ctx.castContext.GetExecutor().ApplySpellMod(spell_mod_op::Duration, spell.id(), lockoutDuration);
+			}
+
 			for (auto* targetObject : ctx.effectTargets)
 			{
 				if (!targetObject->IsUnit())
@@ -929,7 +937,7 @@ namespace mmo
 				}
 
 				// Interrupt spell cast (and apply cooldown)
-				targetObject->AsUnit().CancelCast(spell_interrupt_flags::Interrupt, spell.duration());
+				targetObject->AsUnit().CancelCast(spell_interrupt_flags::Interrupt, lockoutDuration);
 			}
 		}
 

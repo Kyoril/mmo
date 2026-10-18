@@ -105,6 +105,8 @@ namespace mmo
 		void ApplyCooldown(GameTime cooldownTimeMs, GameTime categoryCooldownTimeMs);
 
 		void ApplyAllEffects();
+		/// Applies a single effect. Does not evaluate the effect's gating condition; ApplyAllEffects
+		/// does that for every effect before the first one runs.
 		void ApplyEffect(const proto::SpellEffect& effect);
 
 		int32 CalculateEffectBasePoints(const proto::SpellEffect& effect);
