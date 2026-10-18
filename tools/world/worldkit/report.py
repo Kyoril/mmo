@@ -63,7 +63,8 @@ def _active_positions(records, activated: set[tuple[str, str]] | frozenset = fro
     positions: dict[int, list[tuple[float, float]]] = {}
     for record in records:
         if _is_live(record, activated):
-            positions.setdefault(record.entry, []).append((record.x, record.z))
+            for entry in record.spawned_entries:
+                positions.setdefault(entry, []).append((record.x, record.z))
     return positions
 
 
@@ -234,13 +235,14 @@ def summarize(data, map_entry, query) -> dict:
     givers_outside = []
     giver_units = {unit_id for unit_id, unit in data.units.items() if len(unit.quests)}
     for record in unit_spawn_records(map_entry):
-        levels = unit_levels.get(record.entry, (0, 0))
         area = query.area_at(record.x, record.z) or 0
-        zones.setdefault(area, []).append(levels)
         pois = query.atlas.pois_at(record.x, record.z) if query.atlas else []
-        if pois:
-            places.setdefault(pois[0]["name"], []).append(levels)
-        elif query.atlas and record.entry in giver_units:
+        for entry in record.spawned_entries:
+            levels = unit_levels.get(entry, (0, 0))
+            zones.setdefault(area, []).append(levels)
+            if pois:
+                places.setdefault(pois[0]["name"], []).append(levels)
+        if not pois and query.atlas and record.entry in giver_units:
             givers_outside.append(f"{data.units[record.entry].name} at ({record.x:.0f}, {record.z:.0f})")
     present_areas = set(np.unique(query.snapshot.area).tolist())
     no_terrain = sorted(zone.name for zone_id, zone in data.zones.items()

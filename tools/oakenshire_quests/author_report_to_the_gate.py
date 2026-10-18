@@ -1,7 +1,8 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 """
-Author quest 66 "Report to the Gate": Guard Emrik sends a player who has finished the
-Oakenshire farm quests to Guard-Corporal Rowan Hale at the west gate (bug 6acc8c0d).
+Author quest 66 "Report to the Gate": Guard Emrik sends a player who has dealt with Farmer
+Haldor's young boars to Guard-Corporal Rowan Hale at the west gate (bug 6acc8c0d; re-gated as an
+early breadcrumb in the Oakenshire first-hour pass, 2026-10-18).
 
     py tools/oakenshire_quests/author_report_to_the_gate.py            # validate only
     py tools/oakenshire_quests/author_report_to_the_gate.py --apply    # write editor data
@@ -10,11 +11,11 @@ Idempotent: re-running replaces quest 66 and re-asserts the same wiring.
 
 Design notes that are easy to undo by accident:
 
-* The quest needs BOTH the final boar quest (6, "The Alpha of the Herd") and the cellar rat
-  quest (10, "Rat Troubles"). A quest has a single prevquestid, so the second prerequisite
-  is the nextquestid back-link 10 -> 66: GamePlayerS::GetQuestStatus requires prevquestid to be
-  rewarded AND (IsQuestLockedByBackLinks) at least one quest naming 66 as its nextquestid.
-  nextquestid has no other runtime effect.
+* The quest needs only the first boar quest (1, "The Boar Problem"), from level 2, so new
+  players reach the west gate (Rowan Hale, Lina Groveroot) early instead of after the whole
+  farm chain. No quest may name 66 as its nextquestid: GamePlayerS::GetQuestStatus also
+  requires (IsQuestLockedByBackLinks) at least one such back-link quest to be rewarded, so a
+  back-link would silently add a second prerequisite. The old 10 -> 66 link is removed.
 * A plain "go to x" breadcrumb: minimum reward, rewardxp == rewardclassxp == 45 like the
   trainer breadcrumbs Emrik already hands out (quests 3, 4, 23). No money, no items.
 * Human-only (racemask 0x80000000) and class-independent, like the rest of Oakenshire.
@@ -40,8 +41,8 @@ OUT = ROOT / "generated/oakenshire_quests"
 
 QUEST_ID = 66
 QUEST_NAME = "Report to the Gate"
-BOAR_FINAL_QUEST = 6      # The Alpha of the Herd
-RAT_QUEST = 10            # Rat Troubles
+BOAR_FIRST_QUEST = 1      # The Boar Problem
+MIN_LEVEL = 2
 GUARD_EMRIK = 17
 ROWAN_HALE = 46
 HUMAN_RACEMASK = 0x80000000
@@ -58,33 +59,32 @@ def loc(de, en, fr, ru):
 NAME = ("Meldung am Tor", QUEST_NAME, "Au rapport à la porte", "Доклад у ворот")
 
 DETAILS = (
-    "Haldors Felder sind wieder ruhig, und wie ich höre, ist der Keller des alten Harbin endlich "
-    "frei von Ratten. So etwas spricht sich in einem Lager wie diesem herum, $N.\n\n"
-    "Innerhalb der Palisade gibt es nicht mehr viel zu tun für jemanden mit Eurem Mut. Der wahre "
-    "Ärger wartet jenseits der Mauern. Wachkorporal Rowan Hale hält das Westtor von Oakenshire, "
-    "und der Wache fehlt es immer an fähigen Händen. Folgt der Weststraße durch die Stadt und "
-    "meldet Euch bei ihm.",
+    "Mit Haldors Ebern seid Ihr gut fertig geworden, $N. So etwas spricht sich in einem Lager "
+    "wie diesem herum.\n\n"
+    "Wenn Ihr mehr ehrliche Arbeit sucht: Der Wache fehlt es immer an fähigen Händen. "
+    "Wachkorporal Rowan Hale hält das Westtor von Oakenshire. Folgt der Weststraße durch die "
+    "Stadt und meldet Euch bei ihm. Lina Hainwurz, unsere Kräuterkundige, ist meist ganz in "
+    "seiner Nähe, und wie ich höre, könnte auch sie etwas Hilfe gebrauchen.",
 
-    "Haldor's fields are quiet again, and I hear Old Harbin's cellar is finally free of rats. "
-    "Word gets around a camp like this, $N.\n\n"
-    "There's not much left inside the palisade for someone with your nerve. The real trouble "
-    "waits beyond the walls. Guard-Corporal Rowan Hale holds Oakenshire's west gate, and the "
-    "Watch is always short of capable hands. Follow the Westroad through town and report to him.",
+    "You handled Haldor's boars well, $N. Word gets around a camp like this.\n\n"
+    "If you want more honest work, the Watch is always short of capable hands. Guard-Corporal "
+    "Rowan Hale holds Oakenshire's west gate; follow the Westroad through town and report to "
+    "him. Lina Groveroot, our herbalist, is usually somewhere near him, and from what I hear "
+    "she could use some help as well.",
 
-    "Les champs de Haldor sont de nouveau calmes, et j'ai entendu dire que la cave du vieux "
-    "Harbin est enfin débarrassée de ses rats. Ce genre de nouvelle circule vite dans un camp "
-    "comme celui-ci, $N.\n\n"
-    "Il ne reste plus grand-chose à faire à l'intérieur de la palissade pour quelqu'un de votre "
-    "trempe. Les vrais ennuis vous attendent au-delà des murs. Le caporal-garde Rowan Hale tient "
-    "la porte ouest d'Oakenshire, et la Garde manque toujours de bras capables. Suivez la route "
-    "de l'ouest à travers la ville et présentez-vous à lui.",
+    "Vous vous êtes bien occupé des sangliers de Haldor, $N. Ce genre de nouvelle circule vite "
+    "dans un camp comme celui-ci.\n\n"
+    "Si vous cherchez encore du travail honnête, la Garde manque toujours de bras capables. Le "
+    "caporal-garde Rowan Hale tient la porte ouest d'Oakenshire ; suivez la route de l'ouest à "
+    "travers la ville et présentez-vous à lui. Lina Racine-de-Bosquet, notre herboriste, se "
+    "trouve généralement non loin de lui, et d'après ce que j'entends, elle aurait elle aussi "
+    "besoin d'aide.",
 
-    "На полях Хальдора снова тихо, и, говорят, подвал Старого Харбина наконец-то избавлен от "
-    "крыс. В таком лагере слухи расходятся быстро, $N.\n\n"
-    "Внутри частокола для человека с вашей смелостью дел почти не осталось. Настоящие "
-    "неприятности ждут за стенами. Капрал гвардии Роуэн Хейл охраняет западные ворота "
-    "Океншира, а Дозору всегда не хватает умелых рук. Идите по Западной дороге через город и "
-    "доложите ему.",
+    "Вы хорошо разобрались с кабанами Хальдора, $N. В таком лагере слухи расходятся быстро.\n\n"
+    "Если вам нужна честная работа, Дозору всегда не хватает умелых рук. Капрал гвардии Роуэн "
+    "Хейл охраняет западные ворота Океншира. Идите по Западной дороге через город и доложите "
+    "ему. Лина Рощекорень, наша травница, обычно где-то рядом с ним, и, говорят, ей тоже не "
+    "помешала бы помощь.",
 )
 
 OBJECTIVES = (
@@ -95,25 +95,27 @@ OBJECTIVES = (
 )
 
 OFFER_REWARD = (
-    "Emrik schickt Euch? Dann habt Ihr Grimtusks Herde zerschlagen und Harbins Keller "
-    "gesäubert. Gut.\n\n"
-    "Die Straße hinter diesem Tor ist kein Bauernhof, $N. Haltet Eure Klinge griffbereit und die "
-    "Augen offen, dann wird die Wache reichlich Verwendung für Euch finden.",
+    "Emrik schickt Euch? Gut. Die Wache kann immer noch ein Paar Hände gebrauchen.\n\n"
+    "Banditen haben sich südlich der Stadt eingenistet und sind dreist genug geworden, dieses "
+    "Tor zu beobachten. Haltet Eure Klinge griffbereit und die Augen offen, $N, dann wird die "
+    "Wache reichlich Verwendung für Euch finden. Und wenn Lina Euch zu sich winkt, hört sie an. "
+    "Diese Schläger haben ihr etwas gestohlen.",
 
-    "Emrik sent you? Then you're the one who broke Grimtusk's herd and cleared Harbin's cellar. "
-    "Good.\n\n"
-    "The road beyond this gate is no farmyard, $N. Keep your blade close and your eyes open, and "
-    "the Watch will find plenty of use for you.",
+    "Emrik sent you? Good. The Watch can always use another pair of hands.\n\n"
+    "Bandits have dug in south of town, and they have grown bold enough to watch this gate. "
+    "Keep your blade close and your eyes open, $N, and the Watch will find plenty of use for "
+    "you. And if Lina waves you over, hear her out. Those thugs took something of hers.",
 
-    "Emrik vous envoie ? Alors c'est vous qui avez dispersé le troupeau de Grimtusk et nettoyé la "
-    "cave de Harbin. Bien.\n\n"
-    "La route au-delà de cette porte n'a rien d'une basse-cour, $N. Gardez votre lame à portée de "
-    "main et les yeux ouverts, et la Garde saura vous trouver de quoi faire.",
+    "Emrik vous envoie ? Bien. La Garde a toujours besoin de bras supplémentaires.\n\n"
+    "Des bandits se sont installés au sud de la ville, et ils sont devenus assez audacieux pour "
+    "surveiller cette porte. Gardez votre lame à portée de main et les yeux ouverts, $N, et la "
+    "Garde saura vous trouver de quoi faire. Et si Lina vous fait signe, écoutez-la. Ces voyous "
+    "lui ont pris quelque chose.",
 
-    "Вас прислал Эмрик? Значит, это вы разогнали стадо Мрачноклыка и очистили подвал Харбина. "
-    "Хорошо.\n\n"
-    "Дорога за этими воротами — не скотный двор, $N. Держите клинок под рукой и смотрите в оба, "
-    "и Дозор найдёт вам достойное дело.",
+    "Вас прислал Эмрик? Хорошо. Дозору всегда пригодится ещё одна пара рук.\n\n"
+    "Бандиты засели к югу от города и обнаглели настолько, что следят за этими воротами. "
+    "Держите клинок под рукой и смотрите в оба, $N, и Дозор найдёт вам достойное дело. А если "
+    "Лина позовёт вас, выслушайте её. Эти головорезы кое-что у неё отняли.",
 )
 
 
@@ -122,14 +124,14 @@ def quest_definition():
     return {
         "id": QUEST_ID,
         "name": NAME[1],
-        "minlevel": 4,
-        "questlevel": 4,
+        "minlevel": MIN_LEVEL,
+        "questlevel": MIN_LEVEL,
         "detailstext": DETAILS[1],
         "objectivestext": OBJECTIVES[1],
         "offerrewardtext": OFFER_REWARD[1],
         "requestitemstext": "",
         "endtext": "",
-        "prevquestid": BOAR_FINAL_QUEST,
+        "prevquestid": BOAR_FIRST_QUEST,
         "type": 0,
         "requiredraces": HUMAN_RACEMASK,
         "rewardxp": REWARD_XP,
@@ -191,12 +193,11 @@ def upsert_quest(quests):
     json_format.ParseDict(quest_definition(), target)
 
 
-def link_rat_quest(quests):
-    rats = by_id(quests, RAT_QUEST)
-    _require(rats is not None and rats.name == "Rat Troubles", f"quest {RAT_QUEST} is not 'Rat Troubles'")
-    _require(rats.nextquestid in (0, QUEST_ID),
-             f"quest {RAT_QUEST} already unlocks quest {rats.nextquestid}, refusing to repoint it")
-    rats.nextquestid = QUEST_ID
+def unlink_back_links(quests):
+    """Drops every nextquestid back-link to this quest (each would add a prerequisite)."""
+    for quest in quests.entry:
+        if quest.id != QUEST_ID and quest.nextquestid == QUEST_ID:
+            quest.nextquestid = 0
 
 
 def wire_units(units):
@@ -220,8 +221,7 @@ def wire_units(units):
 def validate(quests, units):
     ids = [quest.id for quest in quests.entry]
     _require(len(ids) == len(set(ids)), "duplicate quest ids")
-    for prerequisite in (BOAR_FINAL_QUEST, RAT_QUEST):
-        _require(prerequisite in ids, f"prerequisite quest {prerequisite} missing")
+    _require(BOAR_FIRST_QUEST in ids, f"prerequisite quest {BOAR_FIRST_QUEST} missing")
     _require(quests.IsInitialized(), "quests dataset is missing required fields")
     _require(units.IsInitialized(), "units dataset is missing required fields")
 
@@ -230,7 +230,7 @@ def plan(protoc=None):
     quests = load_editor("quests", protoc)
     units = load_editor("units", protoc)
     upsert_quest(quests)
-    link_rat_quest(quests)
+    unlink_back_links(quests)
     wire_units(units)
     validate(quests, units)
     return quests, units

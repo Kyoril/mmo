@@ -62,6 +62,7 @@
 #include "spawn_palette_panel.h"
 #include "spawn_list_panel.h"
 #include "entity_factory.h"
+#include "minimap_baker.h"
 #include "minimap_grid_view.h"
 
 namespace mmo
@@ -382,6 +383,9 @@ namespace mmo
 		void Visit(SelectedFogVolume &selectable) override;
 
 	private:
+		/// Draws the weighted unit entry table of a mixed unit spawn (UnitSpawnEntry::unitentries).
+		void DrawMixedUnitSpawnEntries(SelectedUnitSpawn &selectable);
+
 		bool ReadMVERChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMeshChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
@@ -606,6 +610,14 @@ namespace mmo
 
 		void UnloadPageEntities(uint8 x, uint8 y);
 
+		/// @brief Makes sure the entities of the pages around a page are loaded, for the minimap bake,
+		///        and unloads the ones a previous call loaded that are no longer around it.
+		/// @return The scene nodes of every loaded world model (WMO) entity.
+		std::vector<const SceneNode*> PrepareMinimapBakeEntities(uint32 x, uint32 z);
+
+		/// @brief Unloads every page's entities PrepareMinimapBakeEntities loaded.
+		void ReleaseMinimapBakeEntities();
+
 		/// @brief Loads the authored foliage (.hfol) of a terrain page into the editor's foliage renderer.
 		/// @param x Page X coordinate.
 		/// @param y Page Y coordinate.
@@ -632,11 +644,12 @@ namespace mmo
 		/// @return Pointer to the deferred renderer, or nullptr if not available.
 		DeferredRenderer* GetDeferredRenderer() const { return m_deferredRenderer.get(); }
 
-		/// @brief Generates minimap images for all terrain pages and saves them to the AssetRegistry.
-		/// This method renders each terrain page from above using an orthographic camera and
-		/// render-to-texture, then saves the result as a texture file in the "minimaps" folder.
-		/// Filenames are encoded using page coordinates: (x << 8) | y.
-		void GenerateMinimaps();
+		/// @brief Bakes the minimap tiles of every terrain page (see MinimapBaker) into
+		///        Textures/Minimaps/<world>/<(x << 8) | z>.htex.
+		/// @param onlyStale Skip pages whose tile is newer than their .tile file.
+		/// @param region Only pages inside this inclusive page rectangle are baked.
+		/// @return False when any page failed.
+		bool GenerateMinimaps(bool onlyStale = false, const MinimapBaker::Region& region = MinimapBaker::Region{});
 
 		/// @brief Bakes the distant-terrain data (.tlod + colour texture) the client draws beyond its
 		///        streamed pages. See TerrainLodBaker.
@@ -834,6 +847,10 @@ namespace mmo
 
 		/// @brief Minimap grid used by the "World Map" panel to teleport the camera.
 		MinimapGridView m_minimapPanel;
+		/// @brief Page indices whose entities are currently loaded (by streaming or the minimap bake).
+		std::set<uint16> m_entityPages;
+		/// @brief Page indices whose entities only the minimap bake loaded.
+		std::set<uint16> m_bakeEntityPages;
 		/// @brief Whether the minimap panel's world name has been set yet (deferred until first draw
 		///        because the asset path is known at construction but minimaps may not exist yet).
 		bool m_minimapWorldSet{ false };

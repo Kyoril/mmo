@@ -25,6 +25,13 @@ message ObjectSpawnLocation {
 	optional float rotationz = 7;
 }
 
+// One candidate of a mixed unit spawn point (see UnitSpawnEntry.unitentries).
+message UnitSpawnWeightedEntry {
+	required uint32 unitentry = 1;
+	// Relative chance. Entries with weight 0 are never picked.
+	optional uint32 weight = 2 [default = 1];
+}
+
 message UnitSpawnEntry {
 	optional string name = 1;
 	optional bool respawn = 2 [default = true];
@@ -54,6 +61,11 @@ message UnitSpawnEntry {
 
 	optional float health_percent = 17 [default = 1.0];
 	repeated uint32 additional_trigger_ids = 18;
+
+	// Optional mixed spawn: when this list has an entry with weight > 0, every spawn and respawn
+	// rolls one of these entries by weight instead of using unitentry. unitentry stays required:
+	// it is the fallback and the editor preview, by convention the first list entry.
+	repeated UnitSpawnWeightedEntry unitentries = 19;
 }
 
 message ObjectSpawnEntry {
