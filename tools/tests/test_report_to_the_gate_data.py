@@ -4,8 +4,8 @@ Guards quest 66 "Report to the Gate", the breadcrumb from Guard Emrik to Guard-C
 Rowan Hale at Oakenshire's west gate.
 
 * The authoring script finds nothing left to change: the editor data is what it writes.
-* It is only offered after BOTH the final boar quest (prevquestid 6) and the cellar rat quest
-  (nextquestid back-link 10 -> 66), from level 4, to Humans of any class.
+* It is an early breadcrumb: only the first boar quest (prevquestid 1) is required, no quest
+  back-links to it, and it is offered from level 2 to Humans of any class.
 * Minimum "go to x" reward: 40-45 XP and the same amount of class XP, nothing else.
 * Only Emrik offers it, only Rowan Hale ends it, and every text carries all four locales.
 
@@ -37,16 +37,16 @@ class ReportToTheGateDataTest(unittest.TestCase):
         self.assertEqual(self.planned_quests.SerializeToString(), self.quests.SerializeToString())
         self.assertEqual(self.planned_units.SerializeToString(), self.units.SerializeToString())
 
-    def test_requires_both_the_boar_and_the_rat_quests(self):
+    def test_requires_only_the_first_boar_quest(self):
         self.assertIsNotNone(self.quest)
-        self.assertEqual(self.quest.prevquestid, self.art.BOAR_FINAL_QUEST)
-        # Back-links are OR-ed: a second quest naming 66 as nextquestid would drop the rat requirement.
+        self.assertEqual(self.quest.prevquestid, self.art.BOAR_FIRST_QUEST)
+        # A quest naming 66 as nextquestid would add a second prerequisite (back-link gating).
         back_links = [entry.id for entry in self.quests.entry if entry.nextquestid == self.art.QUEST_ID]
-        self.assertEqual(back_links, [self.art.RAT_QUEST])
+        self.assertEqual(back_links, [])
 
     def test_level_and_availability(self):
-        self.assertEqual(self.quest.minlevel, 4)
-        self.assertEqual(self.quest.questlevel, 4)
+        self.assertEqual(self.quest.minlevel, 2)
+        self.assertEqual(self.quest.questlevel, 2)
         self.assertEqual(self.quest.requiredraces, self.art.HUMAN_RACEMASK)
         self.assertEqual(self.quest.requiredclasses, 0)
         self.assertFalse(self.quest.HasField("unlocksclass"))
