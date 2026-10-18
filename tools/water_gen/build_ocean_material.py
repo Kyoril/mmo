@@ -32,6 +32,7 @@ graph chunk and cannot compile shaders.
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -223,6 +224,39 @@ class GraphBuilder:
 
     def panner(self, uvs, speed_x, speed_y):
         return self.add("PannerNode", {"Speed X": float(speed_x), "Speed Y": float(speed_y)}, {"UVs": uvs})
+
+
+# Procedural swell for the glint: a few directional sine waves around a main direction, with
+# wavelengths spread so they never line up. Their slopes are analytic, so the glint shapes are
+# smooth and rounded instead of following the texels of a normal map, and the whole pattern is
+# driven by parameters (GlintWave*) that a per-area .hmi can change. Each tuple is
+# (direction offset in degrees, wavelength in metres).
+GLINT_WAVES = ((0.0, 7.0), (-38.0, 4.6), (27.0, 3.1), (-71.0, 2.2), (55.0, 1.6))
+
+
+def build_glint_wave_slope(b):
+    """Tangent-space XY slope (u along +X, v along +Z) of the procedural glint swell."""
+    position = b.add("WorldPositionNode")
+    scale = b.div(b.const(1.0), b.scalar("GlintWaveScale", 1.0))
+    x = b.mul(b.mask(position, r=True), scale)
+    z = b.mul(b.mask(position, b=True), scale)
+    time = b.mul(b.add("TimeNode"), b.scalar("GlintWaveSpeed", 1.0))
+    main = math.radians(ROOT_WAVE_PROPERTIES["Wave Direction"])
+    slope_x = slope_z = None
+    for offset, length in GLINT_WAVES:
+        angle = main + math.radians(offset)
+        dx, dz = math.cos(angle), math.sin(angle)
+        k = 2.0 * math.pi / length
+        omega = math.sqrt(9.81 * k)
+        phase = b.addn(b.addn(b.mul(x, constant=dx * k), b.mul(z, constant=dz * k)), b.mul(time, constant=omega))
+        # Equal steepness per wave: amplitude * k is the same for every wavelength.
+        c = b.add("CosineNode", ins={"m_inputPin": phase})
+        sx = b.mul(c, constant=-dx)
+        sz = b.mul(c, constant=-dz)
+        slope_x = sx if slope_x is None else b.addn(slope_x, sx)
+        slope_z = sz if slope_z is None else b.addn(slope_z, sz)
+    steepness = b.scalar("GlintWaveSteepness", 0.07)
+    return b.mul(b.add("AppendNode", ins={"A": slope_x, "B": slope_z}), steepness)
 
 
 def build_sun_glitter(b, sun_color, sun_dir, coarse_slope, glow_normal):
@@ -430,9 +464,9 @@ def build_graph(b, mode):
         # the sun that glows, broken into a few large crisp shapes rather than fine sparkle.
         #   * glow:   a broad soft band on the calm reflection normal - the saturated sun path
         #             the flakes sit in, so the reflection reads as glowing even below bloom.
-        #   * flakes: a narrow SmoothStep (hard edges, not a power curve) on a COARSE normal -
-        #             the swell plus a damped large ripple layer, without the fine one, so the
-        #             shapes are big and stylized instead of hundreds of specks.
+        #   * flakes: a narrow SmoothStep (hard edges, not a power curve) on the procedural
+        #             glint swell rather than the ripple texture, so the shapes are big, smooth
+        #             and stylized instead of hundreds of texel-shaped specks.
         #   * core:   the hottest part of each flake, far above 1.0 so bloom haloes it.
         # The engine's GGX lobe is switched off (Specular 0 below): it is the soft white blob.
         #
@@ -440,7 +474,7 @@ def build_graph(b, mode):
         # the hue and pushes the saturation; GlitterTint warms it, so even a near-white noon sun
         # glints gold. ACES bleaches strong values toward white, which is why the glow and flakes
         # stay moderate and only the small core goes hot.
-        coarse_slope = b.mul(b.addn(b.mul(layer_a, b.scalar("GlitterRippleStrength", 0.6)), layer_c), distance_factor)
+        coarse_slope = b.mul(build_glint_wave_slope(b), distance_factor)
         glitter = build_sun_glitter(b, sun_color, sun_dir, coarse_slope, reflection_normal)
         above_water = b.addn(b.lerp(water, foam_lit, foam_mask),
                              b.mul(glitter, b.add("OneMinusNode", ins={"m_input": foam_mask})))
