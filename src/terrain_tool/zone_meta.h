@@ -60,6 +60,13 @@ namespace mmo
 		///	       from the zone map. Everything else in those pages stays untouched. Only v2 pages can be updated.
 		bool fillExistingZones = false;
 
+		/// @brief When set, the heightmap holds height offsets (minY..maxY) that are added to the
+		///	       existing pages instead of replacing them. Everything else in those pages (painted
+		///	       layers, holes, zones, colours, materials, water) is kept; normals are recomputed
+		///	       only where the terrain changed, and water quads are only ever added (with
+		///	       waterLevel). Every page of the rect must already exist.
+		bool applyAsDelta = false;
+
 		/// @brief Optional list of pages (x, z) to write. Empty = every page of the rect. Pages
 		///	       outside this list are neither written nor touched.
 		std::vector<std::pair<int32, int32>> pages;

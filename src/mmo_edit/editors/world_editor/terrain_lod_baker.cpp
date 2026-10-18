@@ -30,50 +30,49 @@
 
 namespace mmo
 {
-	namespace
+	float HalfToFloat(const uint16 half)
 	{
-		/// IEEE 754 half to float (the G-buffer targets are RGBA16F).
-		float HalfToFloat(const uint16 half)
+		const uint32 sign = (half & 0x8000u) << 16;
+		const uint32 exponent = (half >> 10) & 0x1fu;
+		const uint32 mantissa = half & 0x3ffu;
+
+		uint32 bits;
+		if (exponent == 0)
 		{
-			const uint32 sign = (half & 0x8000u) << 16;
-			const uint32 exponent = (half >> 10) & 0x1fu;
-			const uint32 mantissa = half & 0x3ffu;
-
-			uint32 bits;
-			if (exponent == 0)
+			if (mantissa == 0)
 			{
-				if (mantissa == 0)
-				{
-					bits = sign;
-				}
-				else
-				{
-					// Subnormal: renormalise.
-					uint32 m = mantissa;
-					int32 e = -1;
-					do
-					{
-						++e;
-						m <<= 1;
-					} while ((m & 0x400u) == 0);
-
-					bits = sign | (static_cast<uint32>(127 - 15 - e) << 23) | ((m & 0x3ffu) << 13);
-				}
-			}
-			else if (exponent == 0x1f)
-			{
-				bits = sign | 0x7f800000u | (mantissa << 13);
+				bits = sign;
 			}
 			else
 			{
-				bits = sign | ((exponent + 127 - 15) << 23) | (mantissa << 13);
-			}
+				// Subnormal: renormalise.
+				uint32 m = mantissa;
+				int32 e = -1;
+				do
+				{
+					++e;
+					m <<= 1;
+				} while ((m & 0x400u) == 0);
 
-			float result;
-			std::memcpy(&result, &bits, sizeof(result));
-			return result;
+				bits = sign | (static_cast<uint32>(127 - 15 - e) << 23) | ((m & 0x3ffu) << 13);
+			}
+		}
+		else if (exponent == 0x1f)
+		{
+			bits = sign | 0x7f800000u | (mantissa << 13);
+		}
+		else
+		{
+			bits = sign | ((exponent + 127 - 15) << 23) | (mantissa << 13);
 		}
 
+		float result;
+		std::memcpy(&result, &bits, sizeof(result));
+		return result;
+	}
+
+	namespace
+	{
 		/// Hides every movable object outside the terrain's scene graph and restores it on destruction.
 		class ScopedTerrainOnlyScene final
 		{

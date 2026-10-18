@@ -510,6 +510,111 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--capture-view")
+			{
+				// mmo_edit --capture-view <world.hwld> --view <x,y,z,yaw,pitch[,fov[,time]]> --out <file.png>
+				//          [--view ... --out ...] [--size <w>x<h>] [--grass] [--far-radius <pages>] [--warmup <frames>]
+				// Renders each viewpoint of the world into a PNG, for comparing a zone against concept art.
+				static std::ofstream captureLog("capture_view.log", std::ios::out | std::ios::trunc);
+				static std::mutex captureLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ captureLogMutex };
+					captureLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE captureAssertFile = CreateFileA("capture_view_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, captureAssertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, captureAssertFile);
+#endif
+
+				if (i + 1 >= argCount)
+				{
+					ELOG("--capture-view needs <world.hwld>");
+					PostQuitMessage(1);
+					break;
+				}
+
+				std::vector<mmo::EditorViewpoint> views;
+				std::vector<std::string> outputs;
+				uint32 width = 1920, height = 1080, warmup = 24;
+				int32 farRadius = -1;
+				bool grass = false;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					const std::string arg = args[j];
+					const bool hasValue = j + 1 < argCount;
+					if (arg == "--view" && hasValue)
+					{
+						const auto viewpoint = mmo::EditorViewpoint::Parse(args[++j]);
+						if (!viewpoint)
+						{
+							ELOG("--capture-view: cannot read viewpoint '" << args[j] << "'");
+							argumentsValid = false;
+							break;
+						}
+						views.push_back(*viewpoint);
+					}
+					else if (arg == "--out" && hasValue)
+					{
+						outputs.emplace_back(args[++j]);
+					}
+					else if (arg == "--size" && hasValue)
+					{
+						if (std::sscanf(args[++j], "%ux%u", &width, &height) != 2)
+						{
+							ELOG("--capture-view: --size expects <width>x<height>");
+							argumentsValid = false;
+							break;
+						}
+					}
+					else if (arg == "--warmup" && hasValue)
+					{
+						warmup = static_cast<uint32>(std::atoi(args[++j]));
+					}
+					else if (arg == "--far-radius" && hasValue)
+					{
+						farRadius = std::atoi(args[++j]);
+					}
+					else if (arg == "--grass")
+					{
+						grass = true;
+					}
+				}
+
+				if (argumentsValid && (views.empty() || views.size() != outputs.size()))
+				{
+					ELOG("--capture-view needs one --out per --view");
+					argumentsValid = false;
+				}
+
+				bool captured = false;
+				if (argumentsValid && mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				{
+					auto* world = mmo::WorldEditorInstance::GetLastCreated();
+					if (farRadius >= 0)
+					{
+						world->SetFarTerrainRadius(static_cast<uint32>(farRadius));
+					}
+
+					captured = true;
+					for (size_t v = 0; v < views.size(); ++v)
+					{
+						captured = world->CaptureViewpoint(views[v], width, height, outputs[v], grass, warmup) && captured;
+					}
+				}
+				else if (argumentsValid)
+				{
+					ELOG("--capture-view: failed to open " << args[i + 1]);
+				}
+
+				PostQuitMessage(captured ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--bake-terrain-lod")
 			{
 				// Nobody watches an unattended run: keep its log, and let failed debug assertions

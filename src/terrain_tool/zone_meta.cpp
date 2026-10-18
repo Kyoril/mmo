@@ -75,6 +75,7 @@ namespace mmo
 		out.waterType = static_cast<uint8>(json.value("waterType", 1));
 		out.skipExistingPages = json.value("skipExistingPages", false);
 		out.fillExistingZones = json.value("fillExistingZones", false);
+		out.applyAsDelta = json.value("applyAsDelta", false);
 
 		if (const String zoneMap = json.value("zoneMap", String()); !zoneMap.empty())
 		{
