@@ -85,6 +85,18 @@ class ReachabilityTests(unittest.TestCase):
 		map_entry.unitspawns[1].unitentry = 3   # only the proxy is spawned; it credits unit 2
 		self.assertEqual({f.rule for f in check_reachability(data, map_entry)}, set())
 
+	def test_mixed_spawn_counts_every_weighted_entry(self):
+		data, map_entry = build()
+		bandit = data.modules["units"].UnitEntry(id=4, name="Bandit", minlevel=2, maxlevel=3)
+		data.units[4] = bandit
+		spawn = map_entry.unitspawns[1]
+		spawn.unitentry = 4   # mostly bandits, sometimes the boar the quest needs
+		spawn.unitentries.add(unitentry=4, weight=3)
+		spawn.unitentries.add(unitentry=2, weight=1)
+		self.assertEqual({f.rule for f in check_reachability(data, map_entry)}, set())
+		spawn.unitentries[1].weight = 0   # weight 0 is never spawned
+		self.assertEqual({f.rule for f in check_reachability(data, map_entry)}, {"no_active_source"})
+
 	def test_quest_links(self):
 		data, map_entry = build()
 		self.assertEqual(quest_links(data, map_entry), [(10, (0.0, 0.0), (100.0, 0.0))])

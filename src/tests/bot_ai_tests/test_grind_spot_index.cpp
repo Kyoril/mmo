@@ -251,3 +251,32 @@ TEST_CASE("An enemy entry outranks a friend entry for friendliness too", "[bot_a
     CHECK_FALSE(IsFactionFriendly(data.project, 70, HostileFactionTemplate));
     CHECK(IsFactionHostile(data.project, 70, HostileFactionTemplate));
 }
+
+TEST_CASE("A mixed spawn point is a spot for each weighted entry it can spawn", "[bot_ai][grind]")
+{
+	TestProject data;
+
+	data.AddUnit(100, 4, 6, HostileFactionTemplate);
+	data.AddUnit(101, 5, 7, HostileFactionTemplate);
+	data.AddUnit(102, 5, 7, HostileFactionTemplate);
+	data.AddSpawn(0, 100, Vector3(10.0f, 0.0f, 0.0f));
+
+	auto* spawn = const_cast<proto::MapEntry*>(data.project.maps.getById(0))->mutable_unitspawns(0);
+	auto* bandit = spawn->add_unitentries();
+	bandit->set_unitentry(101);
+	bandit->set_weight(3);
+	auto* mage = spawn->add_unitentries();
+	mage->set_unitentry(102);
+	mage->set_weight(1);
+	auto* disabled = spawn->add_unitentries();
+	disabled->set_unitentry(100);
+	disabled->set_weight(0);
+
+	GrindSpotIndex index;
+	index.Build(data.project, PlayerFactionTemplate);
+
+	// unitentry (100) is only the fallback and has weight 0 in the list, so it is never spawned.
+	REQUIRE(index.GetSpotCount() == 2);
+	CHECK(index.GetSpot(0).unitEntry == 101);
+	CHECK(index.GetSpot(1).unitEntry == 102);
+}

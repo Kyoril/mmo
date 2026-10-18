@@ -362,6 +362,7 @@ namespace mmo
 
 			auto spawner = std::make_unique<CreatureSpawner>(
 				*this,
+				m_project,
 				*unitEntry,
 				spawn);
 

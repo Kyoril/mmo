@@ -136,10 +136,21 @@ def list_builtin_combat_scripts(project_root: Path) -> list[str]:
     return sorted(set(scripts))
 
 
+def spawn_unit_ids(spawn) -> list[int]:
+    """Unit entries a spawn can spawn, like CreatureSpawner::RollUnitEntryId: the weighted
+    unitentries with weight > 0 (a mixed spawn), otherwise just unitentry."""
+    ids = []
+    for candidate in spawn.unitentries:
+        if candidate.weight > 0 and candidate.unitentry not in ids:
+            ids.append(candidate.unitentry)
+    return ids or [spawn.unitentry]
+
+
 def iter_spawns_for_unit(catalogs: dict[str, object], unit_id: int):
+    """Spawns that can spawn the unit, including mixed spawns that list it as a weighted entry."""
     for map_entry in catalogs["maps"].entry:
         for spawn in map_entry.unitspawns:
-            if spawn.unitentry == unit_id:
+            if spawn.unitentry == unit_id or unit_id in spawn_unit_ids(spawn):
                 yield map_entry, spawn
 
 
@@ -246,6 +257,16 @@ def summarize_spawn(map_entry, spawn, map_spawn_index: int | None = None) -> dic
     }
     if replace_mode == "replace_by_map_and_index" and map_spawn_index is not None:
         summary["match_index"] = map_spawn_index
+    if len(spawn.unitentries):
+        total = sum(candidate.weight for candidate in spawn.unitentries)
+        summary["mixed_spawn"] = [
+            {
+                "unitentry": candidate.unitentry,
+                "weight": candidate.weight,
+                "chance_percent": round(100.0 * candidate.weight / total, 1) if total else 0.0,
+            }
+            for candidate in spawn.unitentries
+        ]
     return summary
 
 
@@ -292,7 +313,9 @@ def summarize_unit_entry(unit, catalogs: dict[str, object], indexes: dict[str, d
     spawns = []
     for map_entry in catalogs["maps"].entry:
         for spawn_index, spawn in enumerate(map_entry.unitspawns):
-            if spawn.unitentry == unit.id:
+            # Mixed spawns that roll this unit as a secondary entry are listed too; they are
+            # authored (and exported) with the document of their unitentry.
+            if spawn.unitentry == unit.id or unit.id in spawn_unit_ids(spawn):
                 spawns.append(summarize_spawn(map_entry, spawn, spawn_index))
     creature_spells = []
     for spell in unit.creaturespells:

@@ -2,6 +2,8 @@
 """Flat, position-resolved spawn records with stable identity keys.
 
 A record is one placement: a unit spawn with several `locations` yields one record per location.
+A mixed unit spawn (weighted `unitentries`) keeps `entry` = its unitentry, so keys do not change
+when a spawn becomes mixed; `entries` lists every unit it can spawn.
 The key survives re-ordering of the spawn list (it does not use the list index) and changes when
 the spawn moves, which is what the lint baseline needs: moving a buried spawn resolves it.
 """
@@ -30,6 +32,12 @@ class SpawnRecord:
     movement: int             # 0 stationary, 1 random, 2 patrol
     respawn_delay_ms: int
     waypoints: tuple
+    entries: tuple = ()       # every unit entry the spawn can spawn; empty means (entry,)
+
+    @property
+    def spawned_entries(self) -> tuple:
+        """Unit entries this spawn can spawn: its weighted entries, or just `entry`."""
+        return self.entries or (self.entry,)
 
     @property
     def poi_prefix(self) -> str | None:
@@ -41,6 +49,23 @@ class SpawnRecord:
 
 def spawn_key(kind: str, map_id: int, entry: int, name: str, x: float, z: float) -> str:
     return f"{kind}:{map_id}:{entry}:{name or '-'}:{int(round(x))}:{int(round(z))}"
+
+
+def mixed_entries(spawn) -> tuple:
+    """Distinct unit entries a spawn rolls between (weight > 0), in list order; () for a plain spawn.
+
+    Mirrors CreatureSpawner::RollUnitEntryId: without an entry of weight > 0 the spawn always
+    spawns unitentry. Works on the proto message and on an npc-designer JSON spawn dict.
+    """
+    if isinstance(spawn, dict):
+        candidates = [(int(c.get("unitentry", 0)), int(c.get("weight", 1))) for c in spawn.get("unitentries") or []]
+    else:
+        candidates = [(c.unitentry, c.weight) for c in spawn.unitentries]
+    entries = []
+    for entry, weight in candidates:
+        if weight > 0 and entry not in entries:
+            entries.append(entry)
+    return tuple(entries)
 
 
 def _positions(spawn) -> list[tuple[float, float, float]]:
@@ -56,7 +81,8 @@ def unit_spawn_records(map_entry) -> list[SpawnRecord]:
         for location, (x, y, z) in enumerate(_positions(spawn)):
             records.append(SpawnRecord(spawn_key("unit", map_entry.id, spawn.unitentry, spawn.name, x, z),
                                        map_entry.id, "unit", spawn.unitentry, index, location, spawn.name, x, y, z,
-                                       spawn.isactive, int(spawn.movement), int(spawn.respawndelay), waypoints))
+                                       spawn.isactive, int(spawn.movement), int(spawn.respawndelay), waypoints,
+                                       mixed_entries(spawn)))
     return records
 
 
@@ -89,7 +115,7 @@ def records_from_npc_draft(doc: dict) -> list[SpawnRecord]:
             x, y, z = float(loc.get("positionx", 0.0)), float(loc.get("positiony", 0.0)), float(loc.get("positionz", 0.0))
             records.append(SpawnRecord(spawn_key("unit", map_id, entry, name, x, z), map_id, "unit", entry, index,
                                        location, name, x, y, z, bool(spawn.get("isactive", True)), movement,
-                                       int(spawn.get("respawndelay", 0) or 0), waypoints))
+                                       int(spawn.get("respawndelay", 0) or 0), waypoints, mixed_entries(spawn)))
     return records
 
 
