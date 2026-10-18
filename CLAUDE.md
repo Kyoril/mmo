@@ -126,6 +126,7 @@ cmake --build build -t <targetname>           # build a specific target, e.g. wo
 | `MMO_BUILD_TOOLS` | OFF | Build hpak_tool, nav_builder, update_compiler |
 | `MMO_BUILD_TESTS` | ON | Build Catch2 unit tests |
 | `MMO_WITH_DEV_COMMANDS` | OFF | Enable GM dev commands in servers |
+| `MMO_WITH_CLIENT_BOT_API` | OFF | Dev-only Lua bot API in the client (playtest bots); requires dev commands, never for player builds |
 | `MMO_UNITY_BUILD` | OFF | Batch .cpp files to speed up distribution builds |
 | `MMO_DISABLE_ITERATOR_DEBUG` | ON | Disable MSVC iterator debugging (faster debug builds) |
 

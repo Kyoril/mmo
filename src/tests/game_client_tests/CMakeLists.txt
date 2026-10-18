@@ -14,6 +14,7 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/remote_movement_queue.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/remote_movement_renderer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/attack_error_voice_gate.cpp
+	${CMAKE_SOURCE_DIR}/src/mmo_client/bot/bot_path_follower.cpp
 )
 
 # test_console_var.cpp reaches into the client executable's headers; it supplies its own
@@ -22,7 +23,7 @@ target_include_directories(game_client_tests PRIVATE
 	${CMAKE_SOURCE_DIR}/src/mmo_client
 )
 
-# The CrossfadingSoundLoop and spell text tests exercise sources which need the
+# The CrossfadingSoundLoop, spell text and bot spell info tests exercise sources which need the
 # client_data protobuf library -- only built alongside the client or the editor.
 if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	target_sources(game_client_tests PRIVATE
@@ -32,6 +33,7 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/combat_sound_player.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/spell_text_formatter.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/trade_skill_list.cpp
+		${CMAKE_SOURCE_DIR}/src/mmo_client/bot/bot_spell_info.cpp
 	)
 	target_link_libraries(game_client_tests client_data)
 else()
@@ -42,6 +44,7 @@ else()
 		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_sound_player.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_spell_text_formatter.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_trade_skill_list.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_bot_spell_info.cpp
 		PROPERTIES HEADER_FILE_ONLY TRUE
 	)
 endif()

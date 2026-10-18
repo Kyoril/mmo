@@ -20,6 +20,7 @@ This document provides a comprehensive reference of all Lua functions available 
 - [Character Selection Functions](#character-selection-functions)
 - [Loot Functions](#loot-functions)
 - [Utility Functions](#utility-functions)
+- [Bot Functions (dev builds only)](#bot-functions-dev-builds-only)
 - [Global Objects](#global-objects)
 
 ---
@@ -820,6 +821,99 @@ The following bindings are exposed by the FrameUI system (`src/shared/frame_ui/f
 **Parameters:** `slot` (number) - The action bar slot index  
 **Returns:** Item - The item, or nil if not found  
 **Description:** Returns the item at the specified action button slot.
+
+## Bot Functions (dev builds only)
+
+These functions exist only in clients built with `-DMMO_WITH_DEV_COMMANDS=ON -DMMO_WITH_CLIENT_BOT_API=ON`, never in player builds. Even there they are inert until the console variable `botApiEnabled` is `1`: until then every function except `IsBotApiEnabled` does nothing and returns `nil`. Scripts should check `IsBotApiEnabled ~= nil` before calling them. The playtest bot built on them is described in [playtest-bot.md](playtest-bot.md).
+
+Unit arguments accept the tokens `"player"` and `"target"`. Distances are in yards.
+
+### IsBotApiEnabled
+**Parameters:** None  
+**Returns:** boolean - True when the bot API is compiled in and `botApiEnabled` is 1  
+**Description:** The one bot function that also answers while the API is switched off.
+
+### UnitPosition
+**Parameters:** `unit` (string) - `"player"` or `"target"`  
+**Returns:** table `{x, y, z}`, or nil if the unit does not exist  
+**Description:** Returns the unit's world position.
+
+### UnitFacing
+**Parameters:** `unit` (string)  
+**Returns:** number - Facing in radians, in [0, 2π), or nil  
+**Description:** Returns the direction the unit faces.
+
+### UnitDistance
+**Parameters:** `unit` (string)  
+**Returns:** number - 3D distance from the player, or nil  
+**Description:** The same distance the client's spell range check uses.
+
+### UnitAffectingCombat
+**Parameters:** `unit` (string)  
+**Returns:** boolean, or nil  
+**Description:** Whether the unit is in combat.
+
+### GetNearbyUnits
+**Parameters:** `radius` (number) - Search radius, clamped to [0, 200]  
+**Returns:** array of tables, nearest first, without the player  
+**Description:** Each entry holds `guid` (decimal string), `name`, `entry`, `level`, `x`, `y`, `z`, `distance`, `alive`, `hostile` (not friendly to the player), `isPlayer`, `lootable`, `inCombat` and `targetingPlayer`.
+
+### TargetUnitByGuid
+**Parameters:** `guid` (string) - A unit guid as returned by `GetNearbyUnits`  
+**Returns:** boolean - False if no such unit is known  
+**Description:** Selects the unit, exactly as targeting it with the mouse does.
+
+### FaceTarget
+**Parameters:** None  
+**Returns:** boolean - False without a target  
+**Description:** Turns the player towards the current target.
+
+### MoveTo
+**Parameters:** `x`, `y`, `z` (number) - The destination  
+**Returns:** boolean - True if a path was found and the player started moving  
+**Description:** Walks the player there over the nav mesh, steering like a player would. A destination that cannot be reached is approached as closely as possible. Follow progress with `GetMoveStatus`.
+
+### MoveToTarget
+**Parameters:** `range` (number, optional) - How close to get; default 3  
+**Returns:** boolean - True if the player started moving or is already in range  
+**Description:** Walks towards the current target and keeps following it until the 3D distance is at most `range`.
+
+### StopMoving
+**Parameters:** None  
+**Returns:** None  
+**Description:** Stops a move started by `MoveTo` or `MoveToTarget`. The player's own key presses are left alone.
+
+### GetMoveStatus
+**Parameters:** None  
+**Returns:** string - One of:
+- `"idle"` - no move requested, or the move was stopped
+- `"moving"` - on the way
+- `"arrived"` - the destination or target range was reached
+- `"no_path"` - no path leads there, or the path ended short of the goal
+- `"no_navmesh"` - there is no nav data for this map (or the nav folder `botNavPath` is missing)
+- `"stuck"` - the player made no progress for two seconds
+
+### FindRandomNavPoint
+**Parameters:** `radius` (number) - Search radius around the player, clamped to [0, 200]  
+**Returns:** table `{x, y, z}` on the nav mesh, or nil  
+**Description:** Picks a random walkable point near the player.
+
+### InteractWithTarget
+**Parameters:** None  
+**Returns:** boolean - False without a target  
+**Description:** Does what right-clicking the target does: attack an enemy, loot a corpse, talk to a vendor, trainer or quest giver.
+
+### GetCurrentMapId
+**Parameters:** None  
+**Returns:** number - The id of the map the player is on
+
+### GetBotSpellInfo
+**Parameters:** `spellId` (number)  
+**Returns:** table, or nil for an unknown spell  
+**Description:** What a rotation needs to know about a spell: `offensive` (damages an enemy, not passive, not meant for friends), `maxRange` (0 means no limit), `castTime` (ms), `cost`, `powerType` and `score` (rough damage per second of cast time, for ordering only).
+
+### Cast failure events
+While the bot API is enabled, `PLAYER_SPELL_CAST_FAILED` is also raised for the failures that are otherwise only logged: `SPELL_CAST_FAILED_NOT_KNOWN` (unknown spell), `SPELL_CAST_FAILED_PASSIVE`, `SPELL_CAST_FAILED_MOVING` and `SPELL_CAST_FAILED_AFFECTING_COMBAT`.
 
 ## Global Objects
 

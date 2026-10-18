@@ -2,6 +2,10 @@
 
 #include "world_state.h"
 #include "client_context.h"
+
+#ifdef MMO_WITH_CLIENT_BOT_API
+#	include "bot/bot_api.h"
+#endif
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "client.h"
@@ -369,6 +373,10 @@ namespace mmo
 				m_playerController->InteractWithObject(unit);
 			}
 		});
+
+#ifdef MMO_WITH_CLIENT_BOT_API
+		m_botApi = std::make_unique<BotApi>(m_realmConnector, m_project);
+#endif
 	}
 
 	void WorldState::OnEnter()
@@ -529,6 +537,10 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+#ifdef MMO_WITH_CLIENT_BOT_API
+		m_botApi->Reset();
+#endif
+
 		PerfCapture::ClearWorldHooks();
 
 		CombatVignette::Destroy();
@@ -675,6 +687,15 @@ namespace mmo
 		// Override/extend Lua globals that need WorldState context
 		RegisterWorldLuaFunctions();
 
+#ifdef MMO_WITH_CLIENT_BOT_API
+		// The bot addon sits outside the packed folders, so player data never contains it.
+		// Loaded after the bot API it calls is registered.
+		if (AssetRegistry::HasFile("DevAddOns/Bot/Bot.toc"))
+		{
+			FrameManager::Get().LoadUIFile("DevAddOns/Bot/Bot.toc");
+		}
+#endif
+
 		if (ObjectMgr::GetActivePlayerGuid())
 		{
 			FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
@@ -760,6 +781,10 @@ namespace mmo
 				}
 			})
 		];
+
+#ifdef MMO_WITH_CLIENT_BOT_API
+		m_botApi->RegisterLuaFunctions(L);
+#endif
 	}
 
 	void WorldState::OnTargetSelectionChanged(uint64 monitoredGuid)
@@ -1112,6 +1137,9 @@ namespace mmo
 		// Only update when world loading is ready
 		if (m_worldLoaded && m_timeSyncResponseSent)
 		{
+#ifdef MMO_WITH_CLIENT_BOT_API
+			m_botApi->Update(GetAsyncTimeMs());
+#endif
 			m_playerController->Update(deltaSeconds);
 			ObjectMgr::UpdateObjects(deltaSeconds);
 		}
@@ -2156,6 +2184,10 @@ namespace mmo
 
 	void WorldState::RegisterGameplayCommands()
 	{
+#ifdef MMO_WITH_CLIENT_BOT_API
+		bot_api::RegisterConsoleVars();
+#endif
+
 		s_debugOutputPathVar = ConsoleVarMgr::RegisterConsoleVar("DebugTargetPath", "", "0");
 		s_renderShadowsVar = ConsoleVarMgr::RegisterConsoleVar("RenderShadows", "Determines whether or not shadows should be rendered", "1");
 		m_cvarChangedSignals += s_renderShadowsVar->Changed.connect(this, &WorldState::OnRenderShadowsChanged);

@@ -51,6 +51,15 @@ include_directories(${PROJECT_BINARY_DIR})  # Include directory where version.h 
 add_gui_exe_recurse(mmo_client ${imgui_src} ${imgui_platform_src})
 target_sources(mmo_client PRIVATE ${sysSrcFiles})
 
+# The bot API is only compiled with MMO_WITH_CLIENT_BOT_API; the files stay visible in the IDE.
+file(GLOB botSrcFiles "bot/*.cpp" "bot/*.h")
+source_group(src\\bot FILES ${botSrcFiles})
+if (MMO_WITH_CLIENT_BOT_API)
+	target_link_libraries(mmo_client nav_mesh)
+else()
+	set_source_files_properties(${botSrcFiles} PROPERTIES HEADER_FILE_ONLY TRUE)
+endif()
+
 IF(APPLE)
     SET_TARGET_PROPERTIES(mmo_client PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info-CMake.plist")
     SET(MACOSX_BUNDLE_INFO_STRING "")
