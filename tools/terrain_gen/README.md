@@ -70,13 +70,25 @@ pages, and everything else in them is kept. Every page of the rect must exist.
 - `"paint": [{"mask": "m.png", "layer": 1, "strength": 1.0}, ...]`: 16-bit grey masks at
   splat resolution (`nx·1008+1`) blended into the existing layer weights, in order.
 
-A zero image with only `paint` or `clearWaterMask` is a paint-only patch. Rebake the distant
+- `"paint"` entries with `"mode": "remove"` move that layer's weight back to layer 0 instead.
+- `"tileMaterials": {"mask": "tiles.png", "materials": ["Models/Terrain/X.hmi", ...]}`: 16-bit grey
+  mask with one pixel per terrain tile (`nx·16 × nz·16`); value k > 0 gives the tile `materials[k-1]`.
+  Use it for material variants that swap layer textures (e.g. `Briarwatch_Farmland_*.hmi`).
+- `"waterFlow": {"path": [[x, z, halfWidth], ...], "uvScale": 0.0625, "falloff": 60, "minSpeed": 0.08}`:
+  river flow, downstream order. Every written page with water gets the optional `WFLW` chunk: per
+  water vertex a flow-aligned UV (u = distance downstream, v = across) and a speed that falls off
+  beyond the channel. `Worlds/Water_River.hmat` (`tools/water_gen/build_ocean_material.py --variant
+  river`) pans its normals and foam streaks along it. Pages without the chunk keep world UVs.
+
+A zero image with only `paint`, `tileMaterials`, `waterFlow` or `clearWaterMask` is a data-only patch. Rebake the distant
 terrain afterwards (`mmo_edit --bake-terrain-lod <world.hwld>`), rebuild the nav mesh, and move
 placements (trees, props, spawns) by the same offsets.
 
 To judge the result in context, `mmo_edit --capture-view <world.hwld> --view
 "x,y,z,yaw,pitch,fov,time" --out shot.png [--size WxH] [--fog] [--grass] [--far-radius N]`
 renders a viewpoint to PNG; the World Settings panel's View section copies the current one.
+`mmo_edit --import-texture <asset folder> <image>... [--normal | --grayscale] [--compress] [--height-map]`
+imports textures the same way the editor's import dialog does.
 
 `collision_rock_poc.py` generates the single-page Collision rock study in
 `generated/terrain/collision-rock-poc/`. Its README records assets, import and

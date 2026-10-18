@@ -86,10 +86,41 @@ namespace mmo
 
 			/// @brief Scales the mask (0..1).
 			float strength = 1.0f;
+
+			/// @brief When set, the mask removes this layer instead (its weight moves to layer 0).
+			bool remove = false;
 		};
 
 		/// @brief With applyAsDelta: splat layers to paint over the existing weights, in order.
 		std::vector<PaintLayer> paint;
+
+		/// @brief With applyAsDelta: optional 16-bit grey mask with one pixel per terrain tile of the rect
+		///	       ((pages x · 16) × (pages z · 16)). A value k > 0 gives the tile tileMaterials[k - 1].
+		std::filesystem::path tileMaterialMask;
+
+		/// @brief Material asset names referenced by tileMaterialMask.
+		std::vector<String> tileMaterials;
+
+		/// @brief One point of a river's flow path: position and half width of the channel there.
+		struct FlowPoint
+		{
+			float x = 0.0f;
+			float z = 0.0f;
+			float halfWidth = 10.0f;
+		};
+
+		/// @brief With applyAsDelta: optional river flow path, downstream order. Every written page
+		///	       with water gets flow-aligned water UVs and a flow speed from it.
+		std::vector<FlowPoint> flowPath;
+
+		/// @brief Water UV units per world unit along and across the flow (the world mapping uses 1/16).
+		float flowUVScale = 1.0f / 16.0f;
+
+		/// @brief Distance beyond the channel's half width over which the flow slows to flowMinSpeed.
+		float flowFalloff = 60.0f;
+
+		/// @brief Slowest flow (0..1), used for still water off the channel such as bays and ponds.
+		float flowMinSpeed = 0.08f;
 
 		/// @brief Optional list of pages (x, z) to write. Empty = every page of the rect. Pages
 		///	       outside this list are neither written nor touched.

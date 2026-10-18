@@ -77,6 +77,45 @@ namespace mmo
 		out.fillExistingZones = json.value("fillExistingZones", false);
 		out.applyAsDelta = json.value("applyAsDelta", false);
 		out.setWaterMaterial = json.value("setWaterMaterial", false);
+		if (const auto flow = json.find("waterFlow"); flow != json.end() && flow->is_object())
+		{
+			out.flowUVScale = flow->value("uvScale", 1.0f / 16.0f);
+			out.flowFalloff = flow->value("falloff", 60.0f);
+			out.flowMinSpeed = flow->value("minSpeed", 0.08f);
+			if (const auto path = flow->find("path"); path != flow->end() && path->is_array())
+			{
+				for (const auto &point : *path)
+				{
+					if (!point.is_array() || point.size() < 2)
+					{
+						ELOG("Zone metadata waterFlow path points must be [x, z] or [x, z, halfWidth]!");
+						return false;
+					}
+					ZoneMeta::FlowPoint flowPoint;
+					flowPoint.x = point[0].get<float>();
+					flowPoint.z = point[1].get<float>();
+					flowPoint.halfWidth = point.size() > 2 ? point[2].get<float>() : 10.0f;
+					out.flowPath.push_back(flowPoint);
+				}
+			}
+			if (out.flowPath.size() < 2)
+			{
+				ELOG("Zone metadata waterFlow needs a path of at least two points!");
+				return false;
+			}
+		}
+
+		if (const auto tiles = json.find("tileMaterials"); tiles != json.end() && tiles->is_object())
+		{
+			const String mask = tiles->value("mask", String());
+			out.tileMaterialMask = std::filesystem::path(mask).is_absolute() ? std::filesystem::path(mask) : path.parent_path() / mask;
+			out.tileMaterials = tiles->value("materials", std::vector<String>());
+			if (mask.empty() || out.tileMaterials.empty())
+			{
+				ELOG("Zone metadata tileMaterials needs a mask and at least one material!");
+				return false;
+			}
+		}
 		if (const String clearWater = json.value("clearWaterMask", String()); !clearWater.empty())
 		{
 			out.clearWaterMask = std::filesystem::path(clearWater).is_absolute() ? std::filesystem::path(clearWater) : path.parent_path() / clearWater;
@@ -92,6 +131,7 @@ namespace mmo
 				layer.mask = std::filesystem::path(mask).is_absolute() ? std::filesystem::path(mask) : path.parent_path() / mask;
 				layer.layer = static_cast<uint8>(entry.value("layer", 0));
 				layer.strength = entry.value("strength", 1.0f);
+				layer.remove = entry.value("mode", String()) == "remove";
 				if (mask.empty() || layer.layer > 3)
 				{
 					ELOG("Zone metadata paint entries need a mask and a layer from 0 to 3!");

@@ -1,5 +1,5 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
-"""Builds the Water_Ocean material graph from code and writes it into the .hmat.
+"""Builds the Water_Ocean (and the flowing Water_River) material graph from code and writes it into the .hmat.
 
 Why a generator instead of hand-editing the graph: the look needs many iterations, every
 iteration has to survive a compile in mmo_edit, and a script keeps the whole graph reviewable
@@ -25,6 +25,9 @@ Design rules the graph follows (each one fixes a defect of the Water_Base graph 
 Usage:
     python tools/water_gen/build_ocean_material.py               # the ocean look
     python tools/water_gen/build_ocean_material.py --mode ssr    # debug: SSR hits vs misses
+    python tools/water_gen/build_ocean_material.py --variant river
+        # Water_River.hmat: no swell; normals and foam streaks travel along the page's flow UVs
+        # (u runs downstream, see terrain_io WaterFlowChunk) at the speed in vertex colour green.
 
 After running, open the material in mmo_edit and save it: the material tool rewrites only the
 graph chunk and cannot compile shaders.
@@ -40,6 +43,7 @@ import tempfile
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MATERIAL_TOOL = os.path.join(REPO_ROOT, ".claude", "skills", "mmo-material-editor", "scripts", "material_tool.py")
 DEFAULT_TARGET = os.path.join("data", "client", "Worlds", "Water_Ocean.hmat")
+RIVER_TARGET = os.path.join("data", "client", "Worlds", "Water_River.hmat")
 
 # Space enum from graphics/material_compiler.h.
 SPACE_WORLD = 1
@@ -225,9 +229,24 @@ class GraphBuilder:
         return self.add("PannerNode", {"Speed X": float(speed_x), "Speed Y": float(speed_y)}, {"UVs": uvs})
 
 
-def build_graph(b, mode):
+# Per-variant starting values of the exposed parameters (tuning belongs in .hmi instances).
+RIVER_DEFAULTS = {
+    "NormalStrength": 0.4, "SwellStrength": 0.12, "ShallowColor": (0.035, 0.085, 0.07, 1.0),
+    "DeepColor": (0.008, 0.03, 0.032, 1.0), "AbsorptionRGB": (0.55, 0.26, 0.2, 1.0), "DeepDistance": 3.5,
+    "CausticsStrength": 0.35, "FoamDistance": 1.0, "ReflectionStrength": 0.5,
+    "StreakIntensity": 0.12, "StreakThreshold": 0.8,
+}
+
+
+def build_graph(b, mode, variant="ocean"):
     """Wires the ocean. Remember the compiler's typing rule: Add, Subtract and Divide take the
     type of their FIRST operand, so the wider operand always goes into A."""
+
+    river = variant == "river"
+    if river:
+        plain_scalar, plain_vector = b.scalar, b.vector
+        b.scalar = lambda name, value: plain_scalar(name, RIVER_DEFAULTS.get(name, value))
+        b.vector = lambda name, rgba: plain_vector(name, RIVER_DEFAULTS.get(name, rgba))
 
     # --- Normals (tangent space) ------------------------------------------------------------
     uv0 = b.add("TextureCoordNode", {"UV Coordinate Index": 0})
@@ -239,12 +258,43 @@ def build_graph(b, mode):
                        {"UVs": uvs})
         return b.mul(b.mask(b.out(sample, "RGBA"), r=True, g=True), strength)
 
+    # River flow: the page carries flow-aligned UVs (u downstream) and the local speed in vertex colour
+    # green. Two copies of each layer slide downstream on phases half a cycle apart and cross-fade, so
+    # differing speeds never shear the pattern apart over time (the classic flow-map scheme).
+    flow_speed = None
+    if river:
+        flow_speed = b.mask(b.out(b.add("VertexColorNode"), "m_coordinates"), g=True)
+        flow_t = b.mul(b.out(b.add("TimeNode"), "Time"), b.scalar("FlowCycle", 0.25))
+        phase_a = b.add("FracNode", ins={"m_inputPin": flow_t})
+        phase_b = b.add("FracNode", ins={"m_inputPin": b.addn(flow_t, constant=0.5)})
+        # 1 where phase A restarts: there only B is shown.
+        phase_blend = b.add("AbsNode", ins={"m_input": b.sub(b.mul(phase_a, constant=2.0), constant=1.0)})
+
+        def flow_sample(uvs, distance, sample_fn):
+            def at(phase):
+                offset = b.mul(b.mul(phase, flow_speed), distance)
+                return sample_fn(b.sub(uvs, b.add("AppendNode", ins={"A": offset, "B": b.const(0.0)})))
+            return b.lerp(at(phase_a), at(phase_b), phase_blend)
+
+        def normal_layer(tiling_name, tiling, distance, strength):
+            def sample(uvs):
+                node = b.add("TextureParameterNode",
+                             {"Name": "Normal", "Texture": "Models/Engine/WaterNormal.htex", "Sampler Type": 1},
+                             {"UVs": uvs})
+                return b.mask(b.out(node, "RGBA"), r=True, g=True)
+            return b.mul(flow_sample(b.mul(uv0, b.scalar(tiling_name, tiling)), distance, sample), strength)
+
     b.next_column()
     normal_strength = b.scalar("NormalStrength", 0.55)
     swell_strength = b.scalar("SwellStrength", 0.35)
-    layer_a = normal_layer("NormalTilingA", 1.0, (0.020, 0.012), normal_strength)
-    layer_b = normal_layer("NormalTilingB", 2.7, (-0.017, 0.025), normal_strength)
-    layer_c = normal_layer("SwellTiling", 0.3, (0.006, -0.004), swell_strength)
+    if river:
+        layer_a = normal_layer("NormalTilingA", 1.0, b.scalar("FlowDistanceA", 0.4), normal_strength)
+        layer_b = normal_layer("NormalTilingB", 2.7, b.scalar("FlowDistanceB", 1.0), normal_strength)
+        layer_c = normal_layer("SwellTiling", 0.3, b.scalar("FlowDistanceC", 0.15), swell_strength)
+    else:
+        layer_a = normal_layer("NormalTilingA", 1.0, (0.020, 0.012), normal_strength)
+        layer_b = normal_layer("NormalTilingB", 2.7, (-0.017, 0.025), normal_strength)
+        layer_c = normal_layer("SwellTiling", 0.3, (0.006, -0.004), swell_strength)
 
     b.next_column()
     # Ripples fade toward a calmer surface with distance. Full-strength normals at grazing angles
@@ -377,14 +427,27 @@ def build_graph(b, mode):
         shore_foam = b.mul(b.sat(b.mul(b.sub(b.addn(foam_tex, band), constant=1.0), b.scalar("FoamSharpness", 4.0))),
                            shore_mask)
 
-        cap_uv = b.panner(b.mul(uv0, b.scalar("WhitecapTiling", 0.25)), 0.004, 0.006)
-        cap_tex = b.out(b.add("TextureParameterNode",
-                              {"Name": "Foam", "Texture": "Textures/Foam_01_C.htex", "Sampler Type": 0},
-                              {"UVs": cap_uv}), "R")
-        # Whitecaps fade with distance too: perspective squashes them into white streaks.
-        caps = b.mul(b.mul(b.sat(b.mul(b.sub(cap_tex, b.scalar("WhitecapThreshold", 0.86)), constant=6.0)),
-                           b.scalar("WhitecapIntensity", 0.18)),
-                     b.add("OneMinusNode", ins={"m_input": distance_t}))
+        if river:
+            # Foam streaks drifting with the current: the foam texture stretched along the flow.
+            def foam_sample(uvs):
+                return b.out(b.add("TextureParameterNode",
+                                   {"Name": "Foam", "Texture": "Textures/Foam_01_C.htex", "Sampler Type": 0},
+                                   {"UVs": uvs}), "R")
+            streak_tiling = b.add("AppendNode", ins={"A": b.scalar("StreakTilingAlong", 0.35),
+                                                     "B": b.scalar("StreakTilingAcross", 2.2)})
+            streak_tex = flow_sample(b.mul(uv0, streak_tiling), b.scalar("StreakFlowDistance", 0.25), foam_sample)
+            caps = b.mul(b.mul(b.mul(b.sat(b.mul(b.sub(streak_tex, b.scalar("StreakThreshold", 0.72)), constant=4.0)),
+                                     b.scalar("StreakIntensity", 0.22)), flow_speed),
+                         b.add("OneMinusNode", ins={"m_input": distance_t}))
+        else:
+            cap_uv = b.panner(b.mul(uv0, b.scalar("WhitecapTiling", 0.25)), 0.004, 0.006)
+            cap_tex = b.out(b.add("TextureParameterNode",
+                                  {"Name": "Foam", "Texture": "Textures/Foam_01_C.htex", "Sampler Type": 0},
+                                  {"UVs": cap_uv}), "R")
+            # Whitecaps fade with distance too: perspective squashes them into white streaks.
+            caps = b.mul(b.mul(b.sat(b.mul(b.sub(cap_tex, b.scalar("WhitecapThreshold", 0.86)), constant=6.0)),
+                               b.scalar("WhitecapIntensity", 0.18)),
+                         b.add("OneMinusNode", ins={"m_input": distance_t}))
         foam_mask = b.sat(b.addn(shore_foam, caps))
 
         b.next_column()
@@ -438,8 +501,11 @@ def build_graph(b, mode):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=("full", "ssr"), default="full")
-    parser.add_argument("--target", default=DEFAULT_TARGET)
+    parser.add_argument("--variant", choices=("ocean", "river"), default="ocean")
+    parser.add_argument("--target", default=None)
     args = parser.parse_args()
+    if args.target is None:
+        args.target = RIVER_TARGET if args.variant == "river" else DEFAULT_TARGET
 
     target = os.path.join(REPO_ROOT, args.target)
 
@@ -467,6 +533,8 @@ def main():
         for prop in root["properties"]:
             if prop["name"] in ROOT_WAVE_PROPERTIES:
                 prop["value"] = ROOT_WAVE_PROPERTIES[prop["name"]]
+            if args.variant == "river" and prop["name"] == "Vertex Waves":
+                prop["value"] = False   # rivers do not swell
 
         for prop in root["properties"]:
             if prop["name"] in ("Lit", "Translucent", "Is Two Sided", "Receives Shadows"):
@@ -477,7 +545,7 @@ def main():
                 prop["value"] = True
 
         builder = GraphBuilder(catalog, root)
-        build_graph(builder, args.mode)
+        build_graph(builder, args.mode, args.variant)
 
         graph["nodes"] = builder.nodes
         graph["node_count"] = len(builder.nodes)

@@ -15,6 +15,7 @@
 #include "terrain_io/page_io.h"
 
 #include <algorithm>
+#include <limits>
 #include <cmath>
 #include <set>
 
@@ -98,6 +99,52 @@ namespace mmo
 			return true;
 		}
 
+		/// @brief Flow coordinate of a point relative to a river path: distance downstream along the
+		///	       path, signed distance across it (positive to the left of the flow seen from above, so
+		///	       the mapping is a rotation of the world mapping), and the channel half width there.
+		struct FlowCoordinate
+		{
+			float along = 0.0f;
+			float across = 0.0f;
+			float halfWidth = 0.0f;
+		};
+
+		FlowCoordinate ProjectOntoFlowPath(const std::vector<ZoneMeta::FlowPoint> &path, const float x, const float z)
+		{
+			FlowCoordinate best;
+			float bestDistance = std::numeric_limits<float>::max();
+			float start = 0.0f;
+			for (size_t i = 0; i + 1 < path.size(); ++i)
+			{
+				const ZoneMeta::FlowPoint &a = path[i];
+				const ZoneMeta::FlowPoint &b = path[i + 1];
+				const float dx = b.x - a.x;
+				const float dz = b.z - a.z;
+				const float length = std::sqrt(dx * dx + dz * dz);
+				if (length <= 0.0f)
+				{
+					continue;
+				}
+
+				const float t = std::clamp(((x - a.x) * dx + (z - a.z) * dz) / (length * length), 0.0f, 1.0f);
+				const float px = a.x + dx * t;
+				const float pz = a.z + dz * t;
+				const float distance = std::hypot(x - px, z - pz);
+				if (distance < bestDistance)
+				{
+					bestDistance = distance;
+					best.along = start + t * length;
+					// Left of the flow direction (dx, dz) is (-dz, dx): for flow along +X that is +Z,
+					// matching v = z of the world mapping.
+					best.across = ((x - px) * -dz + (z - pz) * dx) / length;
+					best.halfWidth = a.halfWidth + (b.halfWidth - a.halfWidth) * t;
+				}
+				start += length;
+			}
+
+			return best;
+		}
+
 		/// @brief Loads an existing terrain page.
 		bool LoadExistingPage(const String &filename, terrain_io::PageData &page)
 		{
@@ -152,6 +199,21 @@ namespace mmo
 				{
 					ELOG("Paint mask '" << meta.paint[i].mask.string() << "' is " << paintMasks[i].width << "x" << paintMasks[i].height
 						<< " but must be " << splatWidth << "x" << splatHeight);
+					return 1;
+				}
+			}
+
+			GrayImage16 tileMaterialMask;
+			if (!meta.tileMaterialMask.empty())
+			{
+				if (!LoadGray16Png(meta.tileMaterialMask, tileMaterialMask))
+				{
+					return 1;
+				}
+				if (tileMaterialMask.width != static_cast<uint32>(meta.GetPageCountX()) * TilesPerPage ||
+					tileMaterialMask.height != static_cast<uint32>(meta.GetPageCountZ()) * TilesPerPage)
+				{
+					ELOG("Tile material mask must hold one pixel per tile");
 					return 1;
 				}
 			}
@@ -282,6 +344,22 @@ namespace mmo
 								}
 
 								uint32 &packed = page.layers[static_cast<size_t>(z) * splatSide + x];
+								if (meta.paint[i].remove)
+								{
+									// Move this layer's weight onto layer 0 (grass).
+									uint32 b[4] = { packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF, packed >> 24 };
+									const uint32 moved = static_cast<uint32>(std::lround(static_cast<float>(b[target]) * weight));
+									if (moved == 0 || target == 0)
+									{
+										continue;
+									}
+									b[target] -= moved;
+									b[0] += moved;
+									packed = b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24);
+									pageChanged = true;
+									continue;
+								}
+
 								uint32 bytes[4];
 								uint32 others = 0;
 								for (uint32 c = 0; c < 4; ++c)
@@ -314,6 +392,57 @@ namespace mmo
 								if (repacked != packed)
 								{
 									packed = repacked;
+									pageChanged = true;
+								}
+							}
+						}
+					}
+
+					// River flow: every vertex of a page with water gets its flow-aligned UV and speed.
+					if (meta.flowPath.size() >= 2 && std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
+					{
+						page.waterFlowUVs.assign(static_cast<size_t>(OuterSide) * OuterSide * 2, 0.0f);
+						page.waterFlowSpeeds.assign(static_cast<size_t>(OuterSide) * OuterSide, 0);
+						const float pageOriginX = static_cast<float>(pageX - 32) * terrain::constants::PageSize;
+						const float pageOriginZ = static_cast<float>(pageZ - 32) * terrain::constants::PageSize;
+						const float vertexSpacing = terrain::constants::PageSize / static_cast<float>(VerticesPerPageEdge);
+						for (uint32 vz = 0; vz < OuterSide; ++vz)
+						{
+							for (uint32 vx = 0; vx < OuterSide; ++vx)
+							{
+								const float wx = pageOriginX + static_cast<float>(vx) * vertexSpacing;
+								const float wz = pageOriginZ + static_cast<float>(vz) * vertexSpacing;
+								const FlowCoordinate coordinate = ProjectOntoFlowPath(meta.flowPath, wx, wz);
+								const size_t index = static_cast<size_t>(vz) * OuterSide + vx;
+								page.waterFlowUVs[index * 2] = coordinate.along * meta.flowUVScale;
+								page.waterFlowUVs[index * 2 + 1] = coordinate.across * meta.flowUVScale;
+
+								const float beyondBank = std::max(0.0f, std::abs(coordinate.across) - coordinate.halfWidth);
+								const float speed = std::clamp(1.0f - beyondBank / std::max(meta.flowFalloff, 1.0f), meta.flowMinSpeed, 1.0f);
+								page.waterFlowSpeeds[index] = static_cast<uint8>(std::lround(speed * 255.0f));
+							}
+						}
+						pageChanged = true;
+					}
+
+					// Per-tile materials
+					if (!tileMaterialMask.pixels.empty())
+					{
+						for (uint32 tileZ = 0; tileZ < TilesPerPage; ++tileZ)
+						{
+							for (uint32 tileX = 0; tileX < TilesPerPage; ++tileX)
+							{
+								const uint32 mx = static_cast<uint32>(pageX - meta.pageX0) * TilesPerPage + tileX;
+								const uint32 mz = static_cast<uint32>(pageZ - meta.pageZ0) * TilesPerPage + tileZ;
+								const uint32 k = tileMaterialMask.pixels[static_cast<size_t>(mz) * tileMaterialMask.width + mx];
+								if (k == 0 || k > meta.tileMaterials.size())
+								{
+									continue;
+								}
+								String &name = page.materialNames[tileX + tileZ * TilesPerPage];
+								if (name != meta.tileMaterials[k - 1])
+								{
+									name = meta.tileMaterials[k - 1];
 									pageChanged = true;
 								}
 							}
