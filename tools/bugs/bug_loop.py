@@ -5,6 +5,7 @@
 
     python tools/bugs/bug_loop.py [--repo <main checkout>] watch [--dry-run] [--once]
     python tools/bugs/bug_loop.py [--repo <main checkout>] breaker on|off|status [--reason "..."]
+    python tools/bugs/bug_loop.py [--repo <main checkout>] status [--json] [--dry-run]
 
 Environment: MMO_BUG_API_KEY (reader key, required), MMO_BUG_API_URL (optional),
 MMO_E2E_MYSQL_PASSWORD (the gate's E2E step), MMO_BUGLOOP_GITHUB_TOKEN (optional: the CI watch;
@@ -25,7 +26,7 @@ RUNTIME_ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import bugs  # noqa: E402
-from bugloop import ci, claude, config as loop_config, data_diff, github, gitops, loop, notify, state as loop_state, verification, winlock  # noqa: E402
+from bugloop import ci, claude, config as loop_config, data_diff, github, gitops, loop, notify, state as loop_state, status as loop_status, verification, winlock  # noqa: E402
 
 
 def _logger(path):
@@ -115,6 +116,9 @@ def main(argv=None):
 	p_breaker = sub.add_parser("breaker", help="the auto-ship circuit breaker")
 	p_breaker.add_argument("action", choices=("on", "off", "status"))
 	p_breaker.add_argument("--reason", default="tripped by hand")
+	p_status = sub.add_parser("status", help="what the running loop is doing right now")
+	p_status.add_argument("--json", action="store_true", help="print the raw status.json")
+	p_status.add_argument("--dry-run", action="store_true", help="the shadow loop's status")
 	args = parser.parse_args(argv)
 
 	repo = os.path.abspath(args.repo)
@@ -127,6 +131,14 @@ def main(argv=None):
 			loop_state.reset_breaker(artifacts)
 		print("breaker: " + ("tripped" if loop_state.breaker_active(artifacts) else "clear"))
 		return 0
+	if args.command == "status":
+		snapshot = loop_status.read(artifacts, loop_status.DRY_STATUS_FILE if args.dry_run else loop_status.STATUS_FILE)
+		if args.json:
+			print(json.dumps(snapshot, indent=1, sort_keys=True))
+			return 0
+		alive = snapshot is not None and loop_status.pid_alive(snapshot.get("pid"))
+		print(loop_status.render(snapshot, now, alive))
+		return 0 if alive else 1
 
 	api_key = os.environ.get("MMO_BUG_API_KEY")
 	if not api_key:
@@ -160,6 +172,7 @@ def main(argv=None):
 		artifacts, os.path.join(repo, "tools", "gate", "reports"), lock=winlock.named_mutex, dry_run=args.dry_run, log=log,
 		notifier=make_notifier(os.environ, log), github=gh, nightly=ci.github_nightly(repo))
 	log("bug loop started ({}, {})".format("dry run" if args.dry_run else "live", HERE))
+	bug_loop._stage("starting")
 	log(notifications_status(bug_loop.notifier, args.dry_run))
 	warning = stored_phase_warning(state, gh)
 	if warning:
