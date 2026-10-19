@@ -140,6 +140,7 @@ namespace mmo
 		for (const auto& file : files)
 		{
 			std::weak_ptr weak = weak_from_this();
+			++m_pendingEntityFiles;
 			m_workQueue.post([weak, pageIndex, file]()
 				{
 					const auto strong = weak.lock();
@@ -361,6 +362,7 @@ namespace mmo
 		if (!filePtr)
 		{
 			ELOG("Failed to open file " << filename << "!");
+			--m_pendingEntityFiles;
 			return;
 		}
 
@@ -370,6 +372,7 @@ namespace mmo
 		if (!loader.Read(reader))
 		{
 			ELOG("Failed to read file " << filename << "!");
+			--m_pendingEntityFiles;
 			return;
 		}
 
@@ -383,6 +386,8 @@ namespace mmo
 				{
 					return;
 				}
+
+				--strong->m_pendingEntityFiles;
 
 				if (!strong->m_loadedPages.contains(pageIndex))
 				{
@@ -442,6 +447,8 @@ namespace mmo
 			preparation->merging = mergeVar->GetBoolValue();
 		}
 
+		// Released by ContinueWorldModelEntity once the instance exists or the preparation is dropped
+		++m_pendingWorldModels;
 		ContinueWorldModelEntity(preparation);
 	}
 
@@ -464,6 +471,7 @@ namespace mmo
 		// The page streamed out again before the placement was ready: whatever was loaded stays cached
 		if (!m_loadedPages.contains(preparation->pageIndex))
 		{
+			--m_pendingWorldModels;
 			return;
 		}
 
@@ -538,6 +546,7 @@ namespace mmo
 		{
 			// Everything is cached now, so this only creates the instances and their entities
 			CreateWorldModelEntity(prep.entity.meshName, prep.entity.position, prep.entity.rotation, prep.entity.scale, prep.entity.uniqueId, prep.entity.kitPaths);
+			--m_pendingWorldModels;
 			return;
 		}
 
