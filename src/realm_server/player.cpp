@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "player.h"
+#include "character_name.h"
 #include "character_spell_cache.h"
 #include "character_start.h"
 #include "player_manager.h"
@@ -418,7 +419,7 @@ namespace mmo
 		}
 
 		// Check input parameters for invalid values
-		if (characterName.empty() || characterName.size() > 12 || gender > 1)
+		if (gender > 1)
 		{
 			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
 											 {
@@ -428,9 +429,9 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Reject names that contain anything other than letters (no spaces, digits, symbols)
-		if (characterName.size() < 3 ||
-			!std::all_of(characterName.begin(), characterName.end(), [](unsigned char c) { return std::isalpha(c); }))
+		// Reject names that contain anything other than letters (no spaces, digits, symbols).
+		// The name is UTF-8: a German umlaut is two bytes but counts as one letter.
+		if (!IsValidCharacterName(characterName))
 		{
 			WLOG("Character creation rejected: invalid name '" << characterName << "'");
 			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
