@@ -17,6 +17,14 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Horizontal distance from the dying creature within which a player still earns the kill's
+		/// experience. The group scan below uses the same radius to decide which party members of a
+		/// tagger share in the rewards, so this is what "being at the kill" means here.
+		constexpr float KillRewardDistance = 100.0f;
+	}
+
 	CreatureAIDeathState::CreatureAIDeathState(CreatureAI& ai)
 		: CreatureAIState(ai)
 		, m_rollTimeout(ai.GetControlled().GetTimers())
@@ -81,7 +89,7 @@ namespace mmo
 					const Vector3 location(controlled.GetPosition());
 
 					// Find nearby group members and make them loot recipients, too
-					controlled.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(location.x, location.z, 100.0f), [&lootRecipients, &controlled, groupId, &maxLevelCharacter, &sumLevel](GameUnitS& unit) -> bool
+					controlled.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(location.x, location.z, KillRewardDistance), [&lootRecipients, &controlled, groupId, &maxLevelCharacter, &sumLevel](GameUnitS& unit) -> bool
 						{
 							// Not even a player? Only players get rewards
 							if (!unit.IsPlayer())
@@ -196,6 +204,15 @@ namespace mmo
 			for (const auto& character : lootRecipients)
 			{
 				if (!character.second->IsAlive())
+				{
+					continue;
+				}
+
+				// Experience is earned at the kill. Group members are only picked up within
+				// KillRewardDistance of the corpse above, and the player who tagged the creature is
+				// no different: once it has died and released to its bind point, or was teleported
+				// away, it is not there to earn anything either.
+				if (character.second->GetSquaredDistanceTo(controlled.GetPosition(), false) > KillRewardDistance * KillRewardDistance)
 				{
 					continue;
 				}
