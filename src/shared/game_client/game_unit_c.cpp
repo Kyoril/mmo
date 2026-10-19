@@ -1765,6 +1765,13 @@ namespace mmo
 		// so the animation controller can run and animations reset properly.
 		if (m_pathTotalLength <= 0.0f)
 		{
+			// We already stand on the destination, so a target facing still applies: a creature
+			// evading home from its own spawn spot (stationary guards) or teleported home sends one.
+			if (m_targetRotation.has_value())
+			{
+				SetFacing(m_targetRotation.value());
+			}
+
 			m_serverGroundPosition = m_movementPath.back();
 			CompleteMovementPath(false);
 			return;
