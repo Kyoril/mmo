@@ -162,18 +162,20 @@ namespace mmo
 
 	void MovableObject::SetCurrentCamera(Camera& cam)
 	{
-		m_beyondFarDistance = false;
-
-		if (m_parentNode)
-		{
-			const float squaredDist = m_parentNode->GetSquaredViewDepth(cam);
-			if (m_upperDistance > 0)
-			{
-				m_beyondFarDistance = squaredDist > m_squaredUpperDistance;
-			}
-		}
+		UpdateRenderingDistanceCull(cam);
 
         m_renderingDisabled = !objectRendering(*this, cam);
+	}
+
+	void MovableObject::UpdateRenderingDistanceCull(const Camera& camera, const float distanceScale)
+	{
+		m_beyondFarDistance = false;
+
+		if (m_parentNode && m_upperDistance > 0)
+		{
+			const float squaredDist = m_parentNode->GetSquaredViewDepth(camera);
+			m_beyondFarDistance = squaredDist > m_squaredUpperDistance * distanceScale * distanceScale;
+		}
 	}
 
 	const AABB& MovableObject::GetWorldBoundingBox(bool derive) const

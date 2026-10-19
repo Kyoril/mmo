@@ -102,6 +102,7 @@ namespace mmo
 		bool fog = true;			// --nofog: judge the surface shadows alone
 		int32 shadowQuality = -1;	// -1 keeps the renderer default (High)
 		int32 shadowMapSize = 0;	// 0 keeps the renderer default
+		float renderDistance = 0.0f;	// > 0: rendering distance of every box, like the client's world doodads (256 m)
 	};
 
 	static FogReproOptions g_repro;
@@ -141,6 +142,7 @@ namespace mmo
 				else if (token == "--nofog") { options.fog = false; }
 				else if (const char* v = value("--shadowq=")) { options.shadowQuality = std::atoi(v); }
 				else if (const char* v = value("--shadowsize=")) { options.shadowMapSize = std::atoi(v); }
+				else if (const char* v = value("--renderdist=")) { options.renderDistance = static_cast<float>(std::atof(v)); }
 				else if (const char* v = value("--scene=")) { options.scene = v; }
 				else if (const char* v = value("--suntaps=")) { options.sunTapsXY = std::atoi(v); }
 				else if (const char* v = value("--suntapsz=")) { options.sunTapsZ = std::atoi(v); }
@@ -273,6 +275,10 @@ namespace mmo
 				node->AttachObject(*entity);
 				node->SetScale(Vector3(size.x / extent.x, size.y / extent.y, size.z / extent.z));
 				node->SetPosition(position - (bounds.min + extent * 0.5f) * Vector3(size.x / extent.x, size.y / extent.y, size.z / extent.z) + Vector3(0.0f, size.y * 0.5f, 0.0f));
+				if (g_repro.renderDistance > 0.0f)
+				{
+					entity->SetRenderingDistance(g_repro.renderDistance);
+				}
 				g_reproEntities.push_back(entity);
 				g_reproNodes.push_back(node);
 			};

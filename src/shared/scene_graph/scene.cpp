@@ -829,7 +829,7 @@ namespace mmo
 		}
 	}
 
-	void Scene::RenderShadowCasters(Camera& cascadeCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius)
+	void Scene::RenderShadowCasters(Camera& cascadeCamera, const Camera& viewCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius)
 	{
 		PROFILE_SCOPE("Scene::RenderShadowCasters");
 
@@ -852,6 +852,12 @@ namespace mmo
 			for (MovableObject* caster : casters)
 			{
 				caster->SetCurrentCamera(cascadeCamera);
+
+				// The rendering-distance cut-off is measured from the player's camera: the cascade camera
+				// sits hundreds of metres toward the sun and moves with every step, so measured from it the
+				// cut-off swept through the shadowed area and trees popped in and out of the shadow maps
+				// (light shafts flickered while walking, not while turning).
+				caster->UpdateRenderingDistanceCull(viewCamera, ShadowCasterDistanceScale);
 			}
 
 			// Snapshot the cascade frustum on the main thread: Camera::IsVisible is NOT a

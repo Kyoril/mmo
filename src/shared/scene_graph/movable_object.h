@@ -139,7 +139,16 @@ namespace mmo
 		virtual void NotifyMoved();
 
 		virtual void SetCurrentCamera(Camera& cam);
-		
+
+		/// @brief Re-decides the rendering-distance cull (SetRenderingDistance) against another camera than
+		///        the one passed to SetCurrentCamera.
+		/// @param camera The camera whose distance counts, normally the player's view camera.
+		/// @param distanceScale Multiplier on the rendering distance.
+		/// @remark Shadow cascades use this: their own camera sits hundreds of metres toward the sun and
+		///         slides with every step the player takes, so measuring from it swept the cut-off through
+		///         the shadowed area and trees popped in and out of the shadow maps while walking.
+		void UpdateRenderingDistanceCull(const Camera& camera, float distanceScale = 1.0f);
+
 		[[nodiscard]] virtual const AABB& GetBoundingBox() const = 0;
 
 		[[nodiscard]] virtual float GetBoundingRadius() const = 0;

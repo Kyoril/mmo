@@ -988,7 +988,7 @@ namespace mmo
             // grows with cascade distance, so distant cascades naturally skip more tiny casters while
             // the near cascade keeps virtually everything.
             const float minCasterWorldRadius = cascades[i].worldTexelSize * 0.5f;
-            scene.RenderShadowCasters(*m_shadowCameras[i], m_shadowCasterCache, minCasterWorldRadius);
+            scene.RenderShadowCasters(*m_shadowCameras[i], camera, m_shadowCasterCache, minCasterWorldRadius);
 
             m_cascadeShadowMaps[i]->Update();
             m_device.EndGpuScope();
