@@ -1,10 +1,13 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 //
 // Kill rewards belong to the players who are at the kill: the death state only reaches group
-// members of a tagger within the reward radius around the corpse, and it skips recipients who
-// are dead. The tagger itself bypassed the radius entirely, so a player who had died, released
-// and respawned at the bind point - hundreds of yards away - still collected the experience
-// when the creature it had tagged died afterwards.
+// members of a tagger within the reward radius around the corpse. The tagger itself bypassed the
+// radius entirely, so a player who had died, released and respawned at the bind point - hundreds
+// of yards away - still collected the experience, the quest kill credit and the corpse when the
+// creature it had tagged died afterwards.
+//
+// The radius applies to all three. Being dead only costs the experience: a player who died to the
+// creature it was killing keeps its quest kill credit and may loot the corpse once it is up again.
 
 #include "catch.hpp"
 
@@ -30,10 +33,32 @@ namespace
 {
 	constexpr uint32 PreyTemplate = 1;
 	constexpr uint32 CreatureXp = 100;
+	constexpr uint32 KillQuestId = 500;
 
 	struct NullTriggerHandler final : ITriggerHandler
 	{
 		void ExecuteTrigger(const proto::TriggerEntry&, TriggerContext, uint32, bool) override {}
+	};
+
+	/// Counts the quest kill credits the player is told about, which is what a quest objective
+	/// advancing looks like from outside GamePlayerS.
+	struct KillCreditWatcher final : NetPlayerWatcher
+	{
+		void OnQuestKillCredit(const proto::QuestEntry&, uint64, uint32, uint32, uint32) override { ++killCredits; }
+
+		void OnQuestItemCredit(const proto::QuestEntry&, uint32, uint32, uint32) override {}
+
+		void OnQuestObjectRequirementMet(uint32) override {}
+
+		void OnQuestDataChanged(uint32, const QuestStatusData&) override {}
+
+		void OnQuestCompleted(uint64, uint32, uint32, uint32) override {}
+
+		void OnItemAdded(uint16, uint16, bool, bool) override {}
+
+		void OnObjectLoot() override {}
+
+		uint32 killCredits = 0;
 	};
 
 	struct KillRewardFixture
@@ -44,12 +69,17 @@ namespace
 		Universe universe{ io, timers };
 		IdGenerator<uint64> objectIds{ 1 };
 		NullTriggerHandler triggerHandler;
+
+		// Declared before the world instance, so it outlives the players registered in it.
+		KillCreditWatcher watcher;
+
 		std::unique_ptr<ConditionMgr> conditionMgr;
 		std::unique_ptr<WorldInstanceManager> manager;
 		WorldInstance* world = nullptr;
 
 		proto::UnitEntry* preyEntry = nullptr;
 		proto::ClassEntry* classEntry = nullptr;
+		proto::RaceEntry* raceEntry = nullptr;
 		uint64 nextPlayerGuid = 0x4000;
 
 		KillRewardFixture()
@@ -93,6 +123,20 @@ namespace
 				classEntry->add_xptonextlevel(100000);
 			}
 
+			// Race and faction are irrelevant here, but GetQuestStatus asserts on a race entry.
+			// Leaving its faction template unset keeps the players where they were before.
+			raceEntry = project.races.add(1);
+			raceEntry->set_name("Test Race");
+
+			// Two kills needed, so a single kill only advances the objective instead of completing
+			// the quest: this suite is about who gets credited, not about turning anything in.
+			auto* quest = project.quests.add(KillQuestId);
+			quest->set_name("Cull the Prey");
+			quest->set_minlevel(1);
+			auto* requirement = quest->add_requirements();
+			requirement->set_creatureid(1);
+			requirement->set_creaturecount(2);
+
 			// No map files exist for this directory: no nav mesh, no collision, LOS is unblocked.
 			auto* map = project.maps.add(0);
 			map->set_name("Kill Reward Test");
@@ -120,9 +164,20 @@ namespace
 			player->Initialize();
 			player->Set<uint64>(object_fields::Guid, nextPlayerGuid++, false);
 			player->SetClass(*classEntry);
+			player->SetRace(*raceEntry);
 			player->SetLevel(1);
 			player->Relocate(position, Radian(0.0f));
 			world->AddGameObject(*player);
+			return player;
+		}
+
+		/// Adds a solo player which has taken the kill quest and reports its credits to the
+		/// fixture's watcher.
+		std::shared_ptr<GamePlayerS> SpawnQuestingPlayer(const Vector3& position)
+		{
+			auto player = SpawnPlayer(position);
+			player->SetPlayerWatcher(&watcher);
+			REQUIRE(player->AcceptQuest(KillQuestId));
 			return player;
 		}
 
@@ -180,4 +235,56 @@ TEST_CASE_METHOD(KillRewardFixture, "A dead player earns no experience from the 
 	RunPosted();
 
 	CHECK(player->Get<uint32>(object_fields::Xp) == 0);
+}
+
+TEST_CASE_METHOD(KillRewardFixture, "A player at the kill owns the corpse and earns its quest kill credit", "[kill_reward][quest][loot]")
+{
+	const auto player = SpawnQuestingPlayer(Vector3(2.0f, 0.0f, 0.0f));
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	prey->Damage(prey->GetHealth(), 0, player.get(), damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK(watcher.killCredits == 1);
+	CHECK(prey->IsLootRecipient(*player));
+}
+
+TEST_CASE_METHOD(KillRewardFixture, "A dead player at the kill keeps its quest kill credit and the corpse", "[kill_reward][quest][loot]")
+{
+	const auto player = SpawnQuestingPlayer(Vector3(2.0f, 0.0f, 0.0f));
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	// Killed by the very creature it was fighting: the objective was still worked for, and the
+	// corpse has to be lootable once the player is back on its feet.
+	player->Set<uint32>(object_fields::Health, 0);
+	REQUIRE_FALSE(player->IsAlive());
+
+	prey->Damage(prey->GetHealth(), 0, nullptr, damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK(watcher.killCredits == 1);
+	CHECK(prey->IsLootRecipient(*player));
+	CHECK(player->Get<uint32>(object_fields::Xp) == 0);
+}
+
+TEST_CASE_METHOD(KillRewardFixture, "A player far away when the creature dies earns no quest kill credit", "[kill_reward][quest]")
+{
+	const auto player = SpawnQuestingPlayer(Vector3(400.0f, 0.0f, 0.0f));
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	prey->Damage(prey->GetHealth(), 0, nullptr, damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK(watcher.killCredits == 0);
+}
+
+TEST_CASE_METHOD(KillRewardFixture, "A player far away when the creature dies does not own the corpse", "[kill_reward][loot]")
+{
+	const auto player = SpawnPlayer(Vector3(400.0f, 0.0f, 0.0f));
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	prey->Damage(prey->GetHealth(), 0, nullptr, damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK_FALSE(prey->IsLootRecipient(*player));
 }
