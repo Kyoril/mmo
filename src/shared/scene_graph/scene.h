@@ -24,6 +24,7 @@
 #include "math/ray.h"
 #include "world_model_portal_culling.h"
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -417,6 +418,13 @@ namespace mmo
 		/// re-rendering opaque geometry in the transparent pass.
 		void SetForwardTransparentOnly(bool value) { m_forwardTransparentOnly = value; }
 
+		/// @brief Further restricts a forward-transparent-only pass to render queue groups in
+		///        [firstGroup, endGroup). Lets the deferred renderer split its forward pass, e.g. to
+		///        draw editor overlays after bloom. Reset to the full range when done.
+		/// @param firstGroup First group id that is rendered.
+		/// @param endGroup Group id one past the last rendered group.
+		void SetForwardGroupRange(const uint32 firstGroup, const uint32 endGroup) { m_forwardGroupFirst = firstGroup; m_forwardGroupEnd = endGroup; }
+
 		/// @brief Makes forward materials write linear HDR instead of tone-mapped display colour.
 		/// @remark Only DeferredRenderer sets this, around its own forward pass, because its
 		///         TonemapPass tone maps the whole frame afterwards. Every standalone forward render
@@ -788,6 +796,10 @@ namespace mmo
 		/// that opaque groups (already in the GBuffer) are not re-rendered.
 		/// Never set this in non-deferred contexts (editor, model viewer).
 		bool m_forwardTransparentOnly = false;
+
+		/// @brief See SetForwardGroupRange. Only applies while m_forwardTransparentOnly is set.
+		uint32 m_forwardGroupFirst = 0;
+		uint32 m_forwardGroupEnd = std::numeric_limits<uint32>::max();
 
 		/// @brief See SetForwardOutputLinear.
 		bool m_forwardOutputLinear = false;

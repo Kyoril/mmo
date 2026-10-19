@@ -3,13 +3,23 @@
 #include "minimap_grid_view.h"
 
 #include "assets/asset_registry.h"
+#include "binary_io/reader.h"
+#include "binary_io/stream_source.h"
+#include "binary_io/string_sink.h"
 #include "graphics/graphics_device.h"
 #include "terrain/constants.h"
+#include "tex/pre_header.h"
+#include "tex/pre_header_load.h"
+#include "tex_v1_0/header.h"
+#include "tex_v1_0/header_load.h"
+#include "tex_v1_0/header_save.h"
 #include "log/default_log_levels.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <sstream>
 
 namespace mmo
 {
@@ -26,6 +36,23 @@ namespace mmo
 		/// @brief Minimum / maximum zoom (pixels per tile).
 		constexpr float MinTileSize = 8.0f;
 		constexpr float MaxTileSize = 1024.0f;
+
+		/// @brief Time per frame that may be spent loading tile textures.
+		constexpr std::chrono::milliseconds TileLoadBudget{ 8 };
+
+		/// @brief Smallest mip edge length that is loaded. The D3D11 texture loader cannot create
+		///        DXT1 textures narrower than 8 pixels.
+		constexpr uint32 MinTileMipSize = 8;
+
+		uint32 NextPowerOfTwo(const uint32 value)
+		{
+			uint32 result = 1;
+			while (result < value)
+			{
+				result <<= 1;
+			}
+			return result;
+		}
 
 		uint16 BuildPageIndex(const int32 x, const int32 y)
 		{
@@ -61,7 +88,7 @@ namespace mmo
 	void MinimapGridView::RescanTiles()
 	{
 		m_availablePages.clear();
-		m_textures.clear();
+		m_tiles.clear();
 		m_hasTiles = false;
 		m_minX = m_minY = m_maxX = m_maxY = 0;
 
@@ -116,27 +143,86 @@ namespace mmo
 		}
 	}
 
-	TexturePtr MinimapGridView::GetTileTexture(const uint16 pageIndex)
+	MinimapGridView::TileTexture& MinimapGridView::LoadTile(const uint16 pageIndex, const uint32 desiredSize)
 	{
-		const auto it = m_textures.find(pageIndex);
-		if (it != m_textures.end())
-		{
-			return it->second;
-		}
+		// The entry is kept even when loading fails so the tile is not retried every frame.
+		TileTexture& tile = m_tiles[pageIndex];
 
-		TexturePtr texture;
+		// Should this load fail, whatever is loaded counts as the best available, so that a failed
+		// upgrade keeps the current texture and is not retried every frame either.
+		tile.fullSize = tile.size;
+
 		const String filename = "Textures/Minimaps/" + m_worldName + "/" + std::to_string(pageIndex) + ".htex";
-
 		auto file = AssetRegistry::OpenFile(filename);
-		if (file)
+		if (!file)
 		{
-			texture = GraphicsDevice::Get().CreateTexture();
-			texture->Load(file);
+			return tile;
 		}
 
-		// Cache the result (even a nullptr) so we don't try to load it again every frame.
-		m_textures[pageIndex] = texture;
-		return texture;
+		io::StreamSource source{ *file };
+		io::Reader reader{ source };
+
+		tex::PreHeader preHeader;
+		tex::v1_0::Header header(tex::Version_1_0);
+		if (!tex::loadPreHeader(preHeader, reader) || preHeader.version != tex::Version_1_0 || !tex::v1_0::loadHeader(header, reader)
+			|| header.mipmapLengths[0] == 0)
+		{
+			WLOG("Invalid minimap tile " << filename);
+			return tile;
+		}
+
+		// Smallest mip level that is still at least as large as the tile on screen.
+		uint32 level = 0;
+		while (level + 1 < header.mipmapLengths.size() && header.mipmapLengths[level + 1] != 0
+			&& (static_cast<uint32>(header.width) >> (level + 1)) >= std::max(desiredSize, MinTileMipSize)
+			&& (static_cast<uint32>(header.height) >> (level + 1)) >= MinTileMipSize)
+		{
+			++level;
+		}
+
+		std::string mipData(header.mipmapLengths[level], '\0');
+		file->seekg(header.mipmapOffsets[level], std::ios::beg);
+		file->read(mipData.data(), static_cast<std::streamsize>(mipData.size()));
+		if (!*file)
+		{
+			WLOG("Failed to read minimap tile " << filename);
+			return tile;
+		}
+
+		// Repackage the one mip level as a texture of its own, so that only it is uploaded.
+		tex::v1_0::Header mipHeader(tex::Version_1_0);
+		mipHeader.format = header.format;
+		mipHeader.hasMips = false;
+		mipHeader.width = static_cast<uint16>(header.width >> level);
+		mipHeader.height = static_cast<uint16>(header.height >> level);
+		mipHeader.mipmapOffsets.fill(0);
+		mipHeader.mipmapLengths.fill(0);
+
+		std::string buffer;
+		buffer.reserve(256 + mipData.size());
+		{
+			io::StringSink sink(buffer);
+			tex::v1_0::HeaderSaver saver(sink, mipHeader);
+			mipHeader.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
+			mipHeader.mipmapLengths[0] = static_cast<uint32>(mipData.size());
+			sink.Write(mipData.data(), mipData.size());
+			saver.finish();
+		}
+
+		std::unique_ptr<std::istream> stream = std::make_unique<std::istringstream>(std::move(buffer), std::ios::binary);
+		TexturePtr texture = GraphicsDevice::Get().CreateTexture();
+		texture->Load(stream);
+
+		// The replaced texture may already be in this frame's ImGui draw list, so it has to outlive it.
+		if (tile.texture)
+		{
+			m_retiredTextures.push_back(std::move(tile.texture));
+		}
+
+		tile.texture = std::move(texture);
+		tile.size = mipHeader.width;
+		tile.fullSize = header.width;
+		return tile;
 	}
 
 	void MinimapGridView::GetSelectedWorldCenter(float& outWorldX, float& outWorldZ) const
@@ -147,6 +233,9 @@ namespace mmo
 
 	bool MinimapGridView::Draw(const ImVec2& size)
 	{
+		// Last frame's draw list has been rendered by now.
+		m_retiredTextures.clear();
+
 		ImVec2 canvasSize = size;
 		const ImVec2 avail = ImGui::GetContentRegionAvail();
 		if (canvasSize.x <= 0.0f)
@@ -265,6 +354,23 @@ namespace mmo
 			m_selectedY = hoveredY;
 		}
 
+		// Tile textures load lazily under a per-frame time budget so that opening a world with
+		// many minimap pages does not stall the editor; tiles not loaded yet are drawn as pending
+		// and fill in over the following frames.
+		const auto loadDeadline = std::chrono::steady_clock::now() + TileLoadBudget;
+		bool anyPending = false;
+
+		// Each tile only needs the mip level matching its size on screen. Tiles shown blurrier than
+		// that are refined after the missing ones are loaded, closest to the canvas centre first.
+		const uint32 desiredSize = NextPowerOfTwo(static_cast<uint32>(std::ceil(m_tileSize)));
+		struct Upgrade
+		{
+			uint16 pageIndex;
+			float distanceSq;
+		};
+		std::vector<Upgrade> upgrades;
+		const ImVec2 canvasCenter((canvasMin.x + canvasMax.x) * 0.5f, (canvasMin.y + canvasMax.y) * 0.5f);
+
 		// Draw the grid tiles.
 		for (int32 py = originY; py <= endY; ++py)
 		{
@@ -282,23 +388,59 @@ namespace mmo
 
 				const uint16 pageIndex = BuildPageIndex(px, py);
 				bool drewTexture = false;
+				bool pending = false;
 				if (m_availablePages.find(pageIndex) != m_availablePages.end())
 				{
-					const TexturePtr texture = GetTileTexture(pageIndex);
-					if (texture && texture->GetTextureObject())
+					const TileTexture* tile = nullptr;
+					if (const auto it = m_tiles.find(pageIndex); it != m_tiles.end())
 					{
-						drawList->AddImage(texture->GetTextureObject(), p0, p1);
+						tile = &it->second;
+						if (tile->texture && tile->size < std::min(desiredSize, tile->fullSize))
+						{
+							const float dx = (p0.x + p1.x) * 0.5f - canvasCenter.x;
+							const float dy = (p0.y + p1.y) * 0.5f - canvasCenter.y;
+							upgrades.push_back({ pageIndex, dx * dx + dy * dy });
+						}
+					}
+					else if (std::chrono::steady_clock::now() < loadDeadline)
+					{
+						tile = &LoadTile(pageIndex, desiredSize);
+					}
+					else
+					{
+						pending = true;
+					}
+
+					if (tile && tile->texture && tile->texture->GetTextureObject())
+					{
+						drawList->AddImage(tile->texture->GetTextureObject(), p0, p1);
 						drewTexture = true;
 					}
 				}
 
 				if (!drewTexture)
 				{
-					drawList->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
+					drawList->AddRectFilled(p0, p1, pending ? IM_COL32(45, 45, 55, 255) : IM_COL32(0, 0, 0, 255));
+					anyPending |= pending;
 				}
 
 				// Grid outline.
 				drawList->AddRect(p0, p1, IM_COL32(70, 70, 80, 255));
+			}
+		}
+
+		// Spend what is left of the budget on sharper mip levels. They show from the next frame on.
+		if (!anyPending && !upgrades.empty())
+		{
+			std::sort(upgrades.begin(), upgrades.end(), [](const Upgrade& a, const Upgrade& b) { return a.distanceSq < b.distanceSq; });
+			for (const Upgrade& upgrade : upgrades)
+			{
+				if (std::chrono::steady_clock::now() >= loadDeadline)
+				{
+					break;
+				}
+
+				LoadTile(upgrade.pageIndex, desiredSize);
 			}
 		}
 
@@ -329,6 +471,11 @@ namespace mmo
 			const ImVec2 p1(p0.x + m_tileSize, p0.y + m_tileSize);
 			drawList->AddRectFilled(p0, p1, IM_COL32(255, 210, 60, 50));
 			drawList->AddRect(p0, p1, IM_COL32(255, 210, 60, 255), 0.0f, 0, 2.5f);
+		}
+
+		if (anyPending)
+		{
+			drawList->AddText(ImVec2(canvasMin.x + 6.0f, canvasMin.y + 4.0f), IM_COL32(200, 200, 200, 255), "Loading minimaps...");
 		}
 
 		drawList->PopClipRect();

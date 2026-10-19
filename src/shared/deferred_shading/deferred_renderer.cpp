@@ -530,13 +530,9 @@ namespace mmo
         // (unlit effects, scene-colour samples) need that pass's exposure to invert it correctly.
         scene.SetForwardOutputLinear(true);
         scene.SetForwardExposure(m_tonemapPass->GetSettings().exposure);
+        scene.SetForwardGroupRange(0, m_bloomExcludedGroupStart);
         scene.Render(camera, PixelShaderType::Forward);
-        scene.SetForwardOutputLinear(false);
-        scene.SetForwardTransparentOnly(false);
-
-        // Release the scene SRVs so they do not collide with render targets bound in next frame.
-        m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneColorTextureSlot);
-        m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneDepthTextureSlot);
+        scene.SetForwardGroupRange(0, std::numeric_limits<uint32>::max());
 
 #ifdef _WIN32
         if (m_gpuTimingActiveThisFrame) { GpuTimerMark(7); } // after forward
@@ -554,6 +550,29 @@ namespace mmo
             bloom = m_bloomPass->GetResult();
             bloomScale = m_bloomPass->GetResultScale();
         }
+
+        // Bloom-excluded groups (editor tooling) draw into the HDR scene only now, so they are still
+        // tone mapped like everything else but the bloom pass above never saw them. The queue built
+        // by the G-Buffer pass is reused, exactly like the forward pass did.
+        if (m_bloomExcludedGroupStart <= RenderQueueGroupId::Max)
+        {
+            RenderTexturePtr forwardColor = m_renderTexture;
+            m_device.SetRenderTargetsWithDepthStencil(&forwardColor, 1, m_gBuffer.GetDepthRTPtr());
+            m_device.SetViewport(0, 0, m_gBuffer.GetWidth(), m_gBuffer.GetHeight(), 0.0f, 1.0f);
+            m_gBuffer.GetNormalRT().Bind(ShaderType::PixelShader, kSceneDepthTextureSlot);
+            m_sceneColorCopy->Bind(ShaderType::PixelShader, kSceneColorTextureSlot);
+
+            scene.SetForwardGroupRange(m_bloomExcludedGroupStart, std::numeric_limits<uint32>::max());
+            scene.Render(camera, PixelShaderType::Forward);
+            scene.SetForwardGroupRange(0, std::numeric_limits<uint32>::max());
+        }
+
+        scene.SetForwardOutputLinear(false);
+        scene.SetForwardTransparentOnly(false);
+
+        // Release the scene SRVs so they do not collide with render targets bound in next frame.
+        m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneColorTextureSlot);
+        m_device.BindTexture(nullptr, ShaderType::PixelShader, kSceneDepthTextureSlot);
 
 #ifdef _WIN32
         if (m_gpuTimingActiveThisFrame) { GpuTimerMark(8); } // after bloom
