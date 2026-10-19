@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/chunk_reader.h"
+#include <atomic>
 #include <vector>
 #include <string>
 #include <functional>
@@ -58,6 +59,12 @@ namespace mmo
 		void UnloadPageEntities(uint8 x, uint8 y);
 
 		void UnloadAllEntities();
+
+		/// @brief Whether page entities are still being read or world models still being prepared.
+		/// @details World models are created over several dispatcher steps, so a caller that must see
+		///          the finished world (the loading screen) keeps pumping the work queue and dispatcher
+		///          until this returns false.
+		bool HasPendingEntityLoads() const { return m_pendingEntityFiles.load() > 0 || m_pendingWorldModels > 0; }
 
 	protected:
 		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
@@ -126,6 +133,12 @@ namespace mmo
 		std::map<uint64, WorldModelPlacement> m_worldModels;
 
 		std::set<uint16> m_loadedPages;
+
+		/// @brief Entity files posted to the work queue whose result has not been handled on the main thread yet.
+		std::atomic<uint32> m_pendingEntityFiles{ 0 };
+
+		/// @brief World model preparations that have neither created their instance nor been dropped yet.
+		uint32 m_pendingWorldModels = 0;
 
 		/// @brief Hardware-instanced renderer for authored foliage (trees) loaded per page.
 		std::unique_ptr<InstancedFoliage> m_foliage;

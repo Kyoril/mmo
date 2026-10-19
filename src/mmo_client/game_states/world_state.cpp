@@ -2572,17 +2572,45 @@ namespace mmo
 				
 				m_worldInstance->LoadPageEntities(page.x(), page.y()); });
 
+		// Entity files are read on the work queue (here and on the background loader) and world models
+		// are then prepared over several dispatcher steps. Units placed on a building floor snap to the
+		// ground they find, so the buildings must exist before the loading screen hides - otherwise
+		// NPCs drop through to the terrain underneath and stay there.
 		size_t dispatched = 0;
-		while (m_dispatcher.poll_one())
-		{
-			dispatched++;
-		}
-
-		// Poll one time
 		size_t jobsDone = 0;
-		while (m_workQueue.poll_one())
+		const auto waitStart = std::chrono::steady_clock::now();
+		while (true)
 		{
-			jobsDone++;
+			bool progressed = false;
+			if (m_dispatcher.poll_one())
+			{
+				dispatched++;
+				progressed = true;
+			}
+			if (m_workQueue.poll_one())
+			{
+				jobsDone++;
+				progressed = true;
+			}
+
+			if (progressed)
+			{
+				continue;
+			}
+
+			if (!m_worldInstance->HasPendingEntityLoads())
+			{
+				break;
+			}
+
+			if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60))
+			{
+				WLOG("World loading: gave up waiting for world entities after 60 seconds");
+				break;
+			}
+
+			// A file is still being read on the background loader thread
+			std::this_thread::yield();
 		}
 
 		m_foliage->RebuildAll();
