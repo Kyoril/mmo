@@ -907,12 +907,6 @@ namespace mmo
             return;
         }
 
-        // Diagnostic freeze: keep the last frame's maps, matrices and shadow buffer (after they exist).
-        if (m_shadowsFrozen && m_shadowFrameCounter > NUM_SHADOW_CASCADES)
-        {
-            return;
-        }
-
         const uint32 activeCascades = m_cascadedShadowSetup->GetConfig().GetActiveCascadeCount();
 
         // Feed the light-direction quantizer (see CascadedShadowConfig::lightStepDegrees). Between
@@ -949,12 +943,38 @@ namespace mmo
         // Setup the cascades scheduled to refresh this frame (others keep their cached camera matrix).
         m_cascadedShadowSetup->SetupCascades(scene, camera, *m_shadowCastingDirectionalLight, m_shadowCameras, updateMask);
 
-        // The volumetric fog's coarse shadow map (see m_fogShadowMap), every frame while the fog volume runs.
-        const bool renderFogShadow = m_fogShadowMap && m_fogShadowCamera && m_volumetricFogPass->GetSettings().IsVolumeEnabled();
+        // The volumetric fog's coarse shadow map (see m_fogShadowMap) while the fog volume runs. It is texel-snapped,
+        // so for a static world its content only changes when the snap moves it by a whole texel (every ~20 frames
+        // at walking speed with its 1-2 m texels, never while standing) or the quantized light direction steps.
+        // It is re-rendered then and every FogShadowRefreshInterval frames (moving units' shadows); in between the
+        // fog keeps sampling the last map with the matrix it was rendered with, which still match each other.
+        const bool fogShadowWanted = m_fogShadowMap && m_fogShadowCamera && m_volumetricFogPass->GetSettings().IsVolumeEnabled();
+        bool renderFogShadow = false;
         float fogShadowTexelSize = 0.0f;
-        if (renderFogShadow)
+        if (fogShadowWanted)
         {
             fogShadowTexelSize = m_cascadedShadowSetup->SetupFogShadowCamera(scene, camera, m_volumetricFogPass->GetSettings().range, FogShadowMapSize, *m_fogShadowCamera);
+            const Matrix4 viewProj = m_fogShadowCamera->GetProjectionMatrix() * m_fogShadowCamera->GetViewMatrix();
+
+            // Rows 0 and 1 hold the map's light-space x and y: the rotation and scale (columns 0-2) only change on
+            // a light step or a new window size, the translation (column 3, NDC) on a snap. Row 2 (depth) follows
+            // the camera continuously and does not change which texel holds which caster.
+            bool moved = !m_fogShadowValid || lightStepped;
+            for (int row = 0; row < 2 && !moved; ++row)
+            {
+                for (int column = 0; column < 3 && !moved; ++column)
+                {
+                    moved = std::abs(viewProj[row][column] - m_fogShadowViewProj[row][column]) > 1e-6f * std::max(1.0f, std::abs(viewProj[row][column]));
+                }
+                const float texelShift = std::abs(viewProj[row][3] - m_fogShadowViewProj[row][3]) * 0.5f * static_cast<float>(FogShadowMapSize);
+                moved = moved || texelShift > 0.5f;
+            }
+
+            renderFogShadow = moved || m_shadowFrameCounter % FogShadowRefreshInterval == 0;
+        }
+        else
+        {
+            m_fogShadowValid = false;
         }
 
         // Get cascade data
@@ -1035,7 +1055,6 @@ namespace mmo
             m_device.EndGpuScope();
         }
 
-        m_fogShadowValid = false;
         if (renderFogShadow)
         {
             m_device.BeginGpuScope("GPU: Fog shadow map");

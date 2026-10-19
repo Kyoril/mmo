@@ -168,10 +168,6 @@ namespace mmo
 		static ConsoleVar *s_atmosphereQualityVar = nullptr;
 		static ConsoleVar *s_volumetricFogRangeVar = nullptr;
 		static ConsoleVar *s_volumetricFogHistoryVar = nullptr;
-		static ConsoleVar *s_volumetricFogSunTapsVar = nullptr;
-		static ConsoleVar *s_shadowFreezeVar = nullptr;
-		static ConsoleVar *s_fogDiagVar = nullptr;
-		static ConsoleVar *s_playerShadowVar = nullptr;
 		static ConsoleVar *s_atmosphereDebugVar = nullptr;
 		static ConsoleVar *s_bloomQualityVar = nullptr;
 		static ConsoleVar *s_exposureVar = nullptr;
@@ -1059,11 +1055,6 @@ namespace mmo
 	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
 		PROFILE_SCOPE("WorldState::OnIdle");
-
-		if (s_playerShadowVar && m_playerController && m_playerController->GetControlledUnit() && m_playerController->GetControlledUnit()->GetEntity())
-		{
-			m_playerController->GetControlledUnit()->GetEntity()->SetCastShadows(s_playerShadowVar->GetIntValue() != 0);
-		}
 
 		if (m_debugPathVisualizer)
 		{
@@ -2271,24 +2262,7 @@ namespace mmo
 		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 		s_volumetricFogHistoryVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogHistory", "How much of the previous frame the volumetric fog keeps (0 to 0.95). Higher values smooth out sampling noise and aliasing; lower values react faster and stay sharper while the camera moves. 0 (default) disables the history: the fog is then a pure function of the camera pose.", "0");
 		m_cvarChangedSignals += s_volumetricFogHistoryVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-		s_volumetricFogSunTapsVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogSunTaps", "Sun shadow taps per volumetric fog cell as 'xy,z' (e.g. 4,16), for diagnosing shaft flicker. 0 uses the quality preset.", "0");
-		m_cvarChangedSignals += s_volumetricFogSunTapsVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-		s_fogDiagVar = ConsoleVarMgr::RegisterConsoleVar("gxFogDiag", "Diagnostic bit mask for the volumetric fog: 1 no depth culling, 2 no sun shafts, 4 sun ignores shadows, 8 constant density (no wind noise).", "0");
-		m_cvarChangedSignals += s_fogDiagVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-		s_playerShadowVar = ConsoleVarMgr::RegisterConsoleVar("gxPlayerShadow", "Diagnostic: 0 stops the controlled character from casting sun shadows (its shadow volume runs through the view when walking toward a low sun).", "1");
-		ConsoleVarMgr::RegisterConsoleVar("gxFogPath", "Diagnostic: the next N frames render from a straight 10 cm-per-frame path starting at the current camera pose and are recorded to capture/ (exact A/B comparisons).", "0");
-		ConsoleVarMgr::RegisterConsoleVar("gxFogPathStep", "Diagnostic: metres per frame of the gxFogPath camera path.", "0.1");
-		ConsoleVarMgr::RegisterConsoleVar("gxFogPathJitter", "Diagnostic: 1 adds real-walk unevenness to the gxFogPath steps.", "0");
-		ConsoleVarMgr::RegisterConsoleVar("gxCameraLog", "Diagnostic: logs the camera pose of the next N frames to capture/camera.txt.", "0");
-		ConsoleVarMgr::RegisterConsoleVar("gxFogPathRecord", "Diagnostic: 0 plays the gxFogPath camera path at full frame rate without recording it.", "1");
-		ConsoleVarMgr::RegisterConsoleVar("gxCaptureFast", "Diagnostic: records the next N frames at full frame rate (quarter-size luminance) to capture/fast_*.bin.", "0");
-		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogSunHistory", "Diagnostic: history weight of the fog's sun scattering (0 = none).", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogSunMode", "Volumetric fog sun filtering: 0 box filter (fixed taps, no history), 1 temporal (one blue-noise jittered tap, clamped history, fog shadow map), 2 temporal with the surface cascades.", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogGrid", "Diagnostic: overrides the fog grid as 'tilePixels,slices' (0 = quality preset).", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-		ConsoleVarMgr::RegisterConsoleVar("gxShadowDump", "Diagnostic: dumps the fog shadow map depth and matrix for the next N frames to capture/.", "0");
-		ConsoleVarMgr::RegisterConsoleVar("gxCaptureFrames", "Diagnostic: writes the next N rendered scene frames (raw) and camera poses to capture/ next to the client.", "0");
-		s_shadowFreezeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowFreeze", "Diagnostic: 1 stops updating the sun's shadow maps (they keep the last frame's), to tell shadow map changes from fog sampling while moving a few steps.", "0");
-		m_cvarChangedSignals += s_shadowFreezeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
 		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
@@ -2467,21 +2441,7 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogRange");
 		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogHistory");
-		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogSunTaps");
-		ConsoleVarMgr::UnregisterConsoleVar("ShadowFreeze");
-		ConsoleVarMgr::UnregisterConsoleVar("gxCaptureFrames");
-		ConsoleVarMgr::UnregisterConsoleVar("gxFogPath");
-		ConsoleVarMgr::UnregisterConsoleVar("gxShadowDump");
-		ConsoleVarMgr::UnregisterConsoleVar("gxFogSunHistory");
 		ConsoleVarMgr::UnregisterConsoleVar("gxFogSunMode");
-		ConsoleVarMgr::UnregisterConsoleVar("gxFogGrid");
-		ConsoleVarMgr::UnregisterConsoleVar("gxCaptureFast");
-		ConsoleVarMgr::UnregisterConsoleVar("gxFogPathRecord");
-		ConsoleVarMgr::UnregisterConsoleVar("gxCameraLog");
-		ConsoleVarMgr::UnregisterConsoleVar("gxFogPathStep");
-		ConsoleVarMgr::UnregisterConsoleVar("gxFogPathJitter");
-		ConsoleVarMgr::UnregisterConsoleVar("gxFogDiag");
-		ConsoleVarMgr::UnregisterConsoleVar("gxPlayerShadow");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
@@ -6878,33 +6838,9 @@ namespace mmo
 		renderer->SetVolumetricFogRange(s_volumetricFogRangeVar->GetFloatValue());
 		renderer->SetVolumetricFogHistory(s_volumetricFogHistoryVar->GetFloatValue());
 		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
-
-		uint32 sunTapsXY = 0;
-		uint32 sunTapsZ = 0;
-		if (std::sscanf(s_volumetricFogSunTapsVar->GetStringValue().c_str(), "%u,%u", &sunTapsXY, &sunTapsZ) == 2 && sunTapsXY > 0)
-		{
-			renderer->GetVolumetricFogSettings().SetSunTaps(sunTapsXY, sunTapsZ);
-		}
-
-		renderer->SetShadowsFrozen(s_shadowFreezeVar->GetIntValue() != 0);
-		renderer->GetVolumetricFogSettings().diagFlags = static_cast<uint32>(std::max(0, s_fogDiagVar->GetIntValue()));
-		if (ConsoleVar* sunHistoryVar = ConsoleVarMgr::FindConsoleVar("gxFogSunHistory"))
-		{
-			renderer->GetVolumetricFogSettings().sunHistoryWeight = std::clamp(sunHistoryVar->GetFloatValue(), 0.0f, 0.95f);
-		}
 		if (ConsoleVar* sunModeVar = ConsoleVarMgr::FindConsoleVar("gxFogSunMode"))
 		{
 			renderer->GetVolumetricFogSettings().SetSunMode(sunModeVar->GetIntValue());
-		}
-		if (ConsoleVar* gridVar = ConsoleVarMgr::FindConsoleVar("gxFogGrid"))
-		{
-			uint32 tile = 0;
-			uint32 slices = 0;
-			if (std::sscanf(gridVar->GetStringValue().c_str(), "%u,%u", &tile, &slices) == 2 && tile > 0 && slices > 0)
-			{
-				renderer->GetVolumetricFogSettings().tileSize = tile;
-				renderer->GetVolumetricFogSettings().sliceCount = slices;
-			}
 		}
 	}
 

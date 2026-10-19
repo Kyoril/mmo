@@ -90,10 +90,10 @@ namespace mmo
 
 			Matrix4 fogShadowViewProj;
 
-			uint32 diagFlags;
 			float sunTemporalBlend;
 			uint32 sunMode;
 			float goldenJitter;
+			float fogShadowMapSize;
 		};
 
 		static_assert(sizeof(VolumetricFogConstants) == 336, "VolumetricFogConstants must match the HLSL layout");
@@ -327,7 +327,7 @@ namespace mmo
 		// let a neighbourhood-clamped history average it over frames, for the ambient fog as well as the sun.
 		const bool temporalSun = m_settings.IsSunTemporal();
 		const float historyWeight = temporalSun ? VolumetricFogSettings::TemporalSunHistoryWeight : m_settings.historyWeight;
-		const float sunHistoryWeight = temporalSun ? VolumetricFogSettings::TemporalSunHistoryWeight : m_settings.sunHistoryWeight;
+		const float sunHistoryWeight = temporalSun ? VolumetricFogSettings::TemporalSunHistoryWeight : 0.0f;
 
 		VolumetricFogConstants constants{};
 		constants.inverseViewProj = viewProj.Inverse();
@@ -364,8 +364,8 @@ namespace mmo
 		constants.sunTapsXY = temporalSun ? 1u : std::clamp(m_settings.sunTapsXY, 1u, VolumetricFogSettings::MaxSunTapsXY);
 		constants.sunTapsZ = temporalSun ? 1u : std::clamp(m_settings.sunTapsZ, 1u, VolumetricFogSettings::MaxSunTapsZ);
 		constants.fogShadowValid = fogShadowMap ? 1u : 0u;
+		constants.fogShadowMapSize = fogShadowMap ? static_cast<float>(fogShadowMap->RenderTarget::GetWidth()) : 0.0f;
 		constants.fogShadowViewProj = fogShadowViewProj;
-		constants.diagFlags = m_settings.diagFlags;
 		const bool sunHistory = sunHistoryWeight > 0.0f;
 		constants.sunTemporalBlend = sunHistory ? sunHistoryWeight : 0.0f;
 		constants.sunMode = m_settings.sunMode;

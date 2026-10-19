@@ -294,3 +294,30 @@ TEST_CASE("Golden jitter covers the unit interval evenly and never repeats a sho
 	}
 	CHECK(largestGap < 2.0f / 16.0f);
 }
+
+TEST_CASE("Fog shadow depth taps step about two shadow texels and one noise texel along the froxel", "[volumetric_fog]")
+{
+	using volumetric_fog::FogShadowDepthTaps;
+	constexpr float mapSize = 256.0f;
+	constexpr float noNoise = 1.0e6f;	// a noise tile this large never asks for a tap
+
+	// A near froxel 0.2 m deep barely crosses a texel: the minimum covers it.
+	CHECK(FogShadowDepthTaps(0.2f, 0.01f, mapSize, 1.0f, noNoise) == VolumetricFogSettings::MinFogShadowTapsZ);
+
+	// 20 m deep, moving 0.006 shadow NDC per metre: 20 * 0.006 * 128 = 15.36 texels = 7.68 two-texel steps -> 8 taps.
+	CHECK(FogShadowDepthTaps(20.0f, 0.006f, mapSize, 1.0f, noNoise) == 8u);
+
+	// A deeper froxel needs more taps, but never more than the supported maximum.
+	CHECK(FogShadowDepthTaps(40.0f, 0.006f, mapSize, 1.0f, noNoise) == 16u);
+	CHECK(FogShadowDepthTaps(500.0f, 0.01f, mapSize, 1.0f, noNoise) == VolumetricFogSettings::MaxSunTapsZ);
+
+	// Looking straight along the light the froxel stays on one texel: only the minimum.
+	CHECK(FogShadowDepthTaps(50.0f, 0.0f, mapSize, 1.0f, noNoise) == VolumetricFogSettings::MinFogShadowTapsZ);
+
+	// The noise asks for one tap per noise texel along the ray: 2 m on a 32 m tile of 64 texels = 4 texels.
+	CHECK(FogShadowDepthTaps(2.0f, 0.0f, mapSize, 1.0f, 32.0f) == 4u);
+	CHECK(FogShadowDepthTaps(2.0f, 0.0f, mapSize, 1.5f, 32.0f) == 6u);
+
+	// The count grows with the map resolution (same froxel, finer texels).
+	CHECK(FogShadowDepthTaps(20.0f, 0.006f, 512.0f, 1.0f, noNoise) > FogShadowDepthTaps(20.0f, 0.006f, mapSize, 1.0f, noNoise));
+}

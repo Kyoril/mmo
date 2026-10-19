@@ -39,10 +39,10 @@ cbuffer VolumetricFogBuffer : register(b2)
     uint SunTapsZ;              // sun shadow taps per froxel along its depth
     uint FogShadowValid;        // 1 when FogShadowMap (t12) holds this frame's coarse fog shadow map
     column_major matrix FogShadowViewProj;
-    uint DiagFlags;             // diagnostic (gxFogDiag): 1 no depth culling, 2 no sun, 4 sun unshadowed, 8 constant density
     float SunTemporalBlend;     // history weight of the sun scattering volume (0 = no sun history)
     uint SunMode;               // VolumetricFogSettings::SunMode: 0 box filter, 1 temporal (fog shadow map), 2 temporal (cascades)
     float GoldenJitter;         // [0, 1) per-frame offset added to every froxel's blue-noise jitter (temporal sun modes)
+    float FogShadowMapSize;     // edge length of FogShadowMap in texels (when FogShadowValid)
 };
 
 // Edge length of the blue noise jitter texture. Mirrors VolumetricFogSettings::BlueNoiseResolution.

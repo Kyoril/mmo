@@ -68,12 +68,6 @@ namespace mmo
 		///        while the history is on; without history jitter is pure per-frame noise.
 		bool jitterEnabled = true;
 
-		/// @brief Diagnostic switches (gxFogDiag): 1 no depth culling, 2 no sun, 4 sun unshadowed, 8 constant density.
-		uint32 diagFlags = 0;
-
-		/// @brief History weight of the sun's scattering volume (0 = none). Needs historyWeight > 0 for the jitter.
-		float sunHistoryWeight = 0.0f;
-
 		/// @brief How the sun's shadowed scattering is filtered (gxFogSunMode).
 		enum SunMode : uint32
 		{
@@ -110,6 +104,9 @@ namespace mmo
 
 		/// @brief Largest sun shadow tap count along a froxel's depth.
 		static constexpr uint32 MaxSunTapsZ = 16;
+
+		/// @brief Fewest depth taps per froxel when the box filter samples the fog shadow map (FogShadowDepthTaps).
+		static constexpr uint32 MinFogShadowTapsZ = 2;
 
 		/// @brief Sun shadow taps along each screen axis of a froxel. The sun's visibility is box-filtered
 		///        over the whole cell with a fixed pattern every frame and gets no history at all: a light
@@ -312,6 +309,29 @@ namespace mmo
 			}
 
 			return std::clamp((slice01 * static_cast<float>(sliceCount) - 0.5f) / static_cast<float>(sliceCount), 0.0f, 1.0f);
+		}
+
+		/// @brief Sun shadow taps along a froxel's depth when it samples the fog shadow map (box filter mode): enough
+		///        that consecutive taps land about two shadow texels apart (each tap is a tent over 4x4 texels) and
+		///        one fog noise texel apart along the ray, between VolumetricFogSettings::MinFogShadowTapsZ and
+		///        MaxSunTapsZ. A far froxel is a needle several metres long whose shadow-space projection crosses many
+		///        texels; with fewer taps they skip across shadow edges and the shafts flicker back and forth as the
+		///        cells slide through the world while walking. A near froxel is a few centimetres deep and needs only
+		///        the minimum. Mirrored by FogShadowDepthTaps in CS_FogInject.hlsl.
+		/// @param cellDepth View depth the froxel spans in metres.
+		/// @param shadowNdcPerDepth How far the froxel's ray moves across the shadow map per metre of view depth, in
+		///        shadow NDC units (the map spans 2 of them).
+		/// @param mapSize Edge length of the fog shadow map in texels.
+		/// @param rayLengthPerDepth World length of the froxel's ray per metre of view depth (1 / cos of its angle
+		///        to the view axis).
+		/// @param noiseTileSize Metres per fog noise tile (the noise volume spans NoiseResolution texels per tile).
+		[[nodiscard]] inline uint32 FogShadowDepthTaps(const float cellDepth, const float shadowNdcPerDepth, const float mapSize,
+			const float rayLengthPerDepth, const float noiseTileSize)
+		{
+			const float twoTexelSteps = cellDepth * shadowNdcPerDepth * 0.25f * mapSize;
+			const float noiseSteps = cellDepth * rayLengthPerDepth * static_cast<float>(VolumetricFogSettings::NoiseResolution) / std::max(noiseTileSize, 1e-3f);
+			const uint32 taps = static_cast<uint32>(std::ceil(std::max({ twoTexelSteps, noiseSteps, 0.0f })));
+			return std::clamp(taps, VolumetricFogSettings::MinFogShadowTapsZ, VolumetricFogSettings::MaxSunTapsZ);
 		}
 	}
 }
