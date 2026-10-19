@@ -24,6 +24,7 @@
 #include "base/profiler.h"
 #include "client_data/project.h"
 #include "frame_ui/font_mgr.h"
+#include "graphics/graphics_device.h"
 #include "game/aura.h"
 #include "game/emote_defs.h"
 #include "game/spell.h"
@@ -479,6 +480,21 @@ namespace mmo
 			{
 				m_nameComponentNode->SetFixedYawAxis(true);
 				m_nameComponentNode->LookAt(cam->GetDerivedPosition(), TransformSpace::World, Vector3::UnitZ);
+
+				// The name is a world-space quad sampled from a fixed-size font atlas. Close to the
+				// camera it would cover more screen pixels than the atlas has texels and turn blocky,
+				// so shrink it there to keep the glyphs at (at most) their native pixel size.
+				int32 viewportHeight = 0;
+				GraphicsDevice::Get().GetViewport(nullptr, nullptr, nullptr, &viewportHeight);
+				if (viewportHeight <= 0)
+				{
+					viewportHeight = 1080;
+				}
+
+				const float distance = (m_nameComponentNode->GetDerivedPosition() - cam->GetDerivedPosition()).GetLength();
+				const float worldUnitsPerScreenPixel = 2.0f * distance * std::tan(cam->GetFOVy().GetValueRadians() * 0.5f) / static_cast<float>(viewportHeight);
+				const float nameScale = std::clamp(worldUnitsPerScreenPixel / WorldTextComponent::WorldUnitsPerFontPixel, 0.05f, 1.0f);
+				m_nameComponentNode->SetScale(Vector3::UnitScale * nameScale);
 			}
 		}
 	}
