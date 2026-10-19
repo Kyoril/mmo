@@ -50,7 +50,7 @@ Order matters: the game stack is redeployed with the new `compose.yml` FIRST (it
    - `REALMS=[{"name":"realm01","url":"http://mmo-dev-realm-01:8092","password":"<WEB_API_PASSWORD>"}]`
    - Keep `DRY_RUN=1` (also the default in the compose file). Other defaults (maintenance time, countdown, retention `KEEP_RELEASES=3` / `KEEP_BACKUPS=7`) live in `deploy/deployer/mmo_deployer/config.py`.
 
-The patch is built from `deploy/patch/source.txt`, which packs every `data/client` folder the client loads, including `Particles` (`Particles.hpak`). `Cache` (a runtime cache the client fills itself) and `Editor` (editor-only assets) are intentionally not packed.
+The patch is built from `deploy/patch/source.txt`, which packs every `data/client` folder the client loads, including `Particles` (`Particles.hpak`) and `Kits` (`Kits.hpak`). A new top-level folder needs an entry there and in the client's archive list in `src/mmo_client/console/console.cpp`; `tools/tests/test_client_data_packing.py` fails the gate when either is missing. `Cache` (a runtime cache the client fills itself) and `Editor` (editor-only assets) are intentionally not packed.
 
 Every top-level entry of `source.txt` is downloaded into the player's install folder, so it must
 also be listed in `[UninstallDelete]` of `deploy/installer/setup.iss`
