@@ -175,10 +175,12 @@ namespace mmo
 			const float snapTexelSize = m_config.GetCascadeTexelSize(radius * 2.0f, i);
 			m_cascades[i].worldTexelSize = snapTexelSize;
 
-			// Position the shadow camera
-			// Use a larger extrusion distance based on the cascade size to capture shadow casters
+			// Position the shadow camera. The near plane must lie beyond every caster whose shadow can
+			// reach the cascade: anything closer to the light that falls outside gets sliced by the near
+			// plane, and since the plane moves with the camera, a low sun's long tree shadows (and the
+			// light shafts between them) popped in and out while walking. See GetLightwardReach.
 			const float baseExtrusionDistance = scene.GetShadowDirectionalLightExtrusionDistance();
-			const float extrusionDistance = std::max(baseExtrusionDistance, radius * 2.0f + 100.0f);
+			const float extrusionDistance = std::max({ baseExtrusionDistance, radius * 2.0f + 100.0f, radius + m_config.GetLightwardReach(lightDir) });
 			Vector3 shadowCamPos = frustumCenter - lightDir * extrusionDistance;
 
 			// The exact light-space basis the texel snap below works in. The camera orientation must

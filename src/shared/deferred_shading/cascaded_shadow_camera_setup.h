@@ -7,7 +7,9 @@
 #include "math/matrix4.h"
 #include "math/aabb.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace mmo
 {
@@ -74,6 +76,28 @@ namespace mmo
 		///        (shadow quality setting).
 		uint32 fullResolutionCascades = 2;
 
+		/// @brief Height of the tallest shadow caster that must still shade a cascade from outside it
+		///        (trees, buildings), in world units.
+		float casterHeight = 50.0f;
+
+		/// @brief Upper bound for GetLightwardReach, in world units.
+		float maxLightwardReach = 800.0f;
+
+		/// @brief How far toward the light a cascade must reach beyond its bounding sphere so a caster
+		///        casterHeight tall can still shade it: casterHeight / tan(sun elevation), clamped to
+		///        [0, maxLightwardReach]. A low sun throws a tree's shadow hundreds of metres.
+		/// @param lightDir Normalised direction the light travels (y < 0 for a sun above the horizon).
+		[[nodiscard]] float GetLightwardReach(const Vector3& lightDir) const
+		{
+			const float sinElevation = -lightDir.y;
+			if (sinElevation <= 0.0f)
+			{
+				return maxLightwardReach;
+			}
+
+			const float cosElevation = std::sqrt(std::max(0.0f, 1.0f - sinElevation * sinElevation));
+			return std::min(casterHeight * cosElevation / sinElevation, maxLightwardReach);
+		}
 		/// @brief Edge length in texels of the depth map a cascade is rendered to. Cascades past
 		///        fullResolutionCascades use half of shadowMapSize (at least 256).
 		[[nodiscard]] uint16 GetCascadeMapSize(const uint32 cascadeIndex) const

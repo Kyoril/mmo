@@ -4,6 +4,8 @@
 
 #include "deferred_shading/cascaded_shadow_camera_setup.h"
 
+#include <cmath>
+
 using namespace mmo;
 
 TEST_CASE("Near cascades render at the full shadow map size", "[cascaded_shadows]")
@@ -57,4 +59,24 @@ TEST_CASE("Lower shadow qualities render more cascades at half size and snap the
 	CHECK(config.GetCascadeMapSize(0) == 1024);
 	CHECK(config.GetCascadeMapSize(1) == 512);
 	CHECK(config.GetCascadeTexelSize(100.0f, 1) == 100.0f / 512.0f);
+}
+
+TEST_CASE("Cascades reach toward a low sun as far as a tall caster's shadow", "[cascaded_shadows]")
+{
+	// A tree beyond the cascade's near plane gets sliced by it, and the plane moves with the camera: long
+	// low-sun shadows popped while walking. The reach covers casterHeight / tan(elevation).
+	CascadedShadowConfig config;
+	config.casterHeight = 50.0f;
+	config.maxLightwardReach = 800.0f;
+
+	const auto sunAt = [](const float elevationDegrees)
+	{
+		const float elevation = elevationDegrees * 3.14159265f / 180.0f;
+		return Vector3(0.0f, -std::sin(elevation), std::cos(elevation));
+	};
+
+	CHECK(config.GetLightwardReach(sunAt(45.0f)) == Approx(50.0f).margin(0.01f));
+	CHECK(config.GetLightwardReach(sunAt(10.0f)) == Approx(50.0f / std::tan(10.0f * 3.14159265f / 180.0f)).margin(0.1f));
+	CHECK(config.GetLightwardReach(sunAt(1.0f)) == Approx(800.0f));
+	CHECK(config.GetLightwardReach(Vector3(0.0f, 0.2f, 1.0f).NormalizedCopy()) == Approx(800.0f));
 }

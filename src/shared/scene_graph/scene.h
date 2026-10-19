@@ -496,15 +496,9 @@ namespace mmo
 		///        through the same (frame-cached) animation code as the main view pass.
 		/// @param cascadeCamera The orthographic shadow camera for this cascade.
 		/// @param casters The list produced by GatherShadowCasters.
-		/// @param viewCamera The player's view camera. Rendering distances (SetRenderingDistance) are measured
-		///        from it, scaled by ShadowCasterDistanceScale, never from the cascade camera.
 		/// @param minCasterWorldRadius Skip casters whose world half-extent is smaller than this (0 = keep all).
-		void RenderShadowCasters(Camera& cascadeCamera, const Camera& viewCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius);
-
-		/// @brief How much farther than its rendering distance an object still casts sun shadows. A low sun
-		///        throws a tree's shadow well over 100 m, so trees just past the visible cut-off still shade the
-		///        ground and the light shafts in view.
-		static constexpr float ShadowCasterDistanceScale = 1.5f;
+		/// @remark Rendering distances (SetRenderingDistance) do not apply to shadow casters.
+		void RenderShadowCasters(Camera& cascadeCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius);
 
 		ManualRenderObject* CreateManualRenderObject(const String& name);
 

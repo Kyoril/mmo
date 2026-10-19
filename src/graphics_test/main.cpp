@@ -102,6 +102,11 @@ namespace mmo
 		bool fog = true;			// --nofog: judge the surface shadows alone
 		int32 shadowQuality = -1;	// -1 keeps the renderer default (High)
 		int32 shadowMapSize = 0;	// 0 keeps the renderer default
+		float density = 0.006f;	// height fog density
+		float forestNear = -10.0f;	// forest scene: nearest and farthest tree distance toward the sun
+		float forestFar = 330.0f;
+		bool stagger = true;		// --nostagger: every cascade renders every frame
+		float sunElevation = 0.0f;	// > 0: sun elevation in degrees (default: the low sun straight ahead)
 		float renderDistance = 0.0f;	// > 0: rendering distance of every box, like the client's world doodads (256 m)
 	};
 
@@ -142,6 +147,10 @@ namespace mmo
 				else if (token == "--nofog") { options.fog = false; }
 				else if (const char* v = value("--shadowq=")) { options.shadowQuality = std::atoi(v); }
 				else if (const char* v = value("--shadowsize=")) { options.shadowMapSize = std::atoi(v); }
+				else if (token == "--nostagger") { options.stagger = false; }
+				else if (const char* v = value("--forest=")) { std::sscanf(v, "%f,%f", &options.forestNear, &options.forestFar); }
+				else if (const char* v = value("--density=")) { options.density = static_cast<float>(std::atof(v)); }
+				else if (const char* v = value("--sunelev=")) { options.sunElevation = static_cast<float>(std::atof(v)); }
 				else if (const char* v = value("--renderdist=")) { options.renderDistance = static_cast<float>(std::atof(v)); }
 				else if (const char* v = value("--scene=")) { options.scene = v; }
 				else if (const char* v = value("--suntaps=")) { options.sunTapsXY = std::atoi(v); }
@@ -253,9 +262,15 @@ namespace mmo
 
 			// Low sun straight ahead of the camera, so the pillars' shadows run toward it as shafts.
 			g_sunLight->SetDirection(Vector3(0.12f, -0.22f, 1.0f).NormalizedCopy());
+			if (g_repro.sunElevation > 0.0f)
+			{
+				const float elevation = g_repro.sunElevation * 3.14159265f / 180.0f;
+				g_sunLight->SetDirection(Vector3(0.12f * std::cos(elevation), -std::sin(elevation), std::cos(elevation)).NormalizedCopy());
+			}
+			g_deferredRenderer->SetTemporalShadowsEnabled(g_repro.stagger);
 
 			AtmosphereParameters atmosphere;
-			atmosphere.SetDensity(0.006f);
+			atmosphere.SetDensity(g_repro.density);
 			atmosphere.SetHeightFalloff(0.05f);
 			atmosphere.SetBaseHeight(0.0f);
 			atmosphere.SetAnisotropy(g_repro.anisotropy);
@@ -304,6 +319,36 @@ namespace mmo
 					addBox(Vector3(-12.0f + offset.x * 9.0f, 13.0f + offset.y * 4.5f, -30.0f + offset.z * 5.0f), Vector3(0.7f, 0.5f, 0.7f));
 				}
 				addBox(Vector3(0.0f, 0.0f, -60.0f), Vector3(120.0f, 6.0f, 1.0f));
+			}
+			else if (g_repro.scene == "forest")
+			{
+				// A forest spread over the whole shadow range toward the sun: trees far beyond the near cascades
+				// throw long low-sun shadows through the air in front of the camera, as in the client's woods.
+				uint32 state = 4242u;
+				const auto random = [&state]()
+				{
+					state = state * 1664525u + 1013904223u;
+					return static_cast<float>(state >> 8) / static_cast<float>(1u << 24);
+				};
+				for (int32 tree = 0; tree < 48; ++tree)
+				{
+					const float x = random() * 240.0f - 120.0f;
+					const float z = -(g_repro.forestNear + random() * (g_repro.forestFar - g_repro.forestNear));
+					if (std::abs(x + 6.0f) < 8.0f && z > 0.0f)
+					{
+						continue;
+					}
+					addBox(Vector3(x, 0.0f, z), Vector3(1.0f, 12.0f, 1.0f));
+					for (int32 i = 0; i < 160; ++i)
+					{
+						Vector3 offset(random() * 2.0f - 1.0f, random() * 2.0f - 1.0f, random() * 2.0f - 1.0f);
+						if (offset.GetSquaredLength() > 1.0f)
+						{
+							continue;
+						}
+						addBox(Vector3(x + offset.x * 6.0f, 14.0f + offset.y * 4.0f, z + offset.z * 6.0f), Vector3(1.0f, 0.6f, 1.0f));
+					}
+				}
 			}
 			else
 			{
