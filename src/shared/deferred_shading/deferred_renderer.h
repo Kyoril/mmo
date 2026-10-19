@@ -21,6 +21,7 @@
 #include "math/vector2.h"
 
 #include <array>
+#include <limits>
 #include <vector>
 
 #ifdef _WIN32
@@ -174,6 +175,13 @@ namespace mmo
         ///         expensive G-Buffer shader only runs on visible (front-most) pixels — a large win
         ///         in scenes with heavy opaque overdraw (e.g. overlapping alpha-tested foliage).
         void SetDepthPrepassEnabled(bool enabled) { m_depthPrepassEnabled = enabled; }
+
+        /// @brief Draws render queue groups from the given id upwards after bloom instead of in the
+        ///        regular forward pass, so they are still tone mapped but never glow. Meant for editor
+        ///        tooling (transform gizmo, selection overlays) whose saturated unlit colours would
+        ///        otherwise bloom. Pass a value above RenderQueueGroupId::Max to disable (the default).
+        /// @param firstGroupId The first render queue group id that is excluded from bloom.
+        void SetBloomExcludedGroupStart(const uint32 firstGroupId) { m_bloomExcludedGroupStart = firstGroupId; }
 
         /// @brief Returns whether the opaque depth pre-pass is enabled.
         [[nodiscard]] bool IsDepthPrepassEnabled() const { return m_depthPrepassEnabled; }
@@ -467,6 +475,7 @@ namespace mmo
         uint32 m_pcfSampleCount = 16;         // PCF taps per shadow lookup (shadow quality preset)
         uint32 m_fullResolutionCascades = 2;  // Cascades rendered at the full shadow map size; the rest use half
         bool m_depthPrepassEnabled = false;   // Opaque depth pre-pass before the G-Buffer pass
+        uint32 m_bloomExcludedGroupStart = std::numeric_limits<uint32>::max(); // See SetBloomExcludedGroupStart
 
         /// @brief Cached light render statistics from the last frame.
         Scene::LightRenderStats m_lastLightStats;

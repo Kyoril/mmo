@@ -745,7 +745,7 @@ namespace mmo
 			// We detect the deferred context via m_forwardTransparentOnly, which the
 			// deferred renderer sets before calling scene.Render with Forward.
 			if (m_pixelShaderType == PixelShaderType::Forward && m_forwardTransparentOnly
-				&& groupId < RenderQueueGroupId::Transparent)
+				&& (groupId < RenderQueueGroupId::Transparent || groupId < m_forwardGroupFirst || groupId >= m_forwardGroupEnd))
 			{
 				continue;
 			}
