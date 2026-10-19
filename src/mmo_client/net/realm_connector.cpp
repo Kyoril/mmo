@@ -647,6 +647,24 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::CheatInvisible(bool enable)
+	{
+		sendSinglePacket([enable](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatInvisible);
+			packet << io::write<uint8>(enable ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::CheatGhost(const String& playerName)
+	{
+		sendSinglePacket([&playerName](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatGhost);
+			packet << io::write_dynamic_range<uint8>(playerName);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::CheatDamage(uint32 amount)
 	{
 		sendSinglePacket([amount](game::OutgoingPacket& packet) {

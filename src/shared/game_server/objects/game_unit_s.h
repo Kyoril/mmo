@@ -925,6 +925,15 @@ namespace mmo
 		/// @brief Whether this unit currently ignores all incoming damage.
 		bool IsGodmode() const { return m_godmode; }
 
+		/// @brief Enables or disables game master invisibility. While enabled the unit's visibility
+		///        is forced to unit_visibility::Off regardless of stealth or invisibility auras, so it
+		///        is hidden from players and creatures and only other game masters see it.
+		/// @param enable True to hide the unit.
+		void SetGmInvisible(bool enable);
+
+		/// @brief Whether game master invisibility is enabled on this unit.
+		bool IsGmInvisible() const { return m_gmInvisible; }
+
 		/// Stops the regeneration countdown.
 		void StopRegeneration() const;
 
@@ -1919,6 +1928,8 @@ public:
 		// Developer/test cheat: when true, Damage() absorbs everything without touching
 		// health, threat or procs. Only ever set by the dev-command handler.
 		bool m_godmode = false;
+
+		bool m_gmInvisible = false;
 		// Maps base spell id → the previous target that had a SingleTargetPerCaster aura from our caster.
 		// Key: casterGuid*100000 + baseSpellId would be complex; instead keyed by (casterGuid ^ spellBaseId).
 		// Actually keyed by spellId → weak_ptr<GameUnitS> of previous target for SingleTargetPerCaster eviction.

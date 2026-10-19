@@ -379,6 +379,9 @@ namespace mmo
 	{
 		LoadingScreen::Show();
 
+		// A transfer cut short by a disconnect must not swallow the next session's transfers.
+		m_transferPending = false;
+
 		// The game clock outlives the world state; it was not updated while we were out of the world
 		m_gameTime.ResetUpdateReference();
 
@@ -2064,6 +2067,10 @@ namespace mmo
 								 { Command_Revive(cmd, args); }, ConsoleCommandCategory::Gm, "Revives the selected dead unit at its current position (or yourself if nothing is selected).");
 		Console::RegisterCommand("godmode", [this](const std::string &cmd, const std::string &args)
 								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
+		Console::RegisterCommand("invis", [this](const std::string &cmd, const std::string &args)
+								 { Command_Invisible(cmd, args); }, ConsoleCommandCategory::Gm, "Makes your character invisible to everybody except game masters. Persists across map changes and relogs. 'invis' or 'invis 1' enables it, 'invis 0' disables it.");
+		Console::RegisterCommand("ghost", [this](const std::string &cmd, const std::string &args)
+								 { Command_Ghost(cmd, args); }, ConsoleCommandCategory::Gm, "Ghosts the named online player: you join them and follow them into every instance they enter, without being in their group, until one of you logs out. 'ghost' without a name stops ghosting.");
 		Console::RegisterCommand("damage", [this](const std::string &cmd, const std::string &args)
 								 { Command_Damage(cmd, args); }, ConsoleCommandCategory::Gm, "Deals the given amount of raw damage to your current target. Used to walk a boss to its next phase threshold.");
 		Console::RegisterCommand("resetcooldowns", [this](const std::string &cmd, const std::string &args)
@@ -2104,6 +2111,8 @@ namespace mmo
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
+		Console::UnregisterCommand("invis");
+		Console::UnregisterCommand("ghost");
 		Console::UnregisterCommand("damage");
 		Console::UnregisterCommand("resetcooldowns");
 		Console::UnregisterCommand("heal");
@@ -5318,11 +5327,13 @@ namespace mmo
 		}
 
 		ILOG("Transfer pending to map " << mapId << "...");
-		if (g_mapId == mapId)
+		if (m_transferPending)
 		{
+			// A transfer is already in progress; the realm only ever starts one at a time.
 			return PacketParseResult::Pass;
 		}
 
+		m_transferPending = true;
 		LoadingScreen::Show();
 
 		g_mapId = mapId;
@@ -5358,6 +5369,8 @@ namespace mmo
 			ELOG("Failed to read NewWorld packet!");
 			return PacketParseResult::Disconnect;
 		}
+
+		m_transferPending = false;
 
 		ILOG("Transfer to map " << mapId << " completed! Loading map...");
 		g_mapId = mapId;

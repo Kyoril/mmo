@@ -611,9 +611,9 @@ namespace mmo
 			});
 	}
 
-	void World::SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing)
+	void World::SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing, const InstanceId& instanceId)
 	{
-		GetConnection().sendSinglePacket([characterId, mapId, &position, &facing](auth::OutgoingPacket& outPacket)
+		GetConnection().sendSinglePacket([characterId, mapId, &position, &facing, instanceId](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::TeleportRequest);
 				outPacket
@@ -622,7 +622,8 @@ namespace mmo
 					<< io::write<float>(position.x)
 					<< io::write<float>(position.y)
 					<< io::write<float>(position.z)
-					<< io::write<float>(facing.GetValueRadians());
+					<< io::write<float>(facing.GetValueRadians())
+					<< instanceId;
 				outPacket.Finish();
 			});
 	}

@@ -4,8 +4,8 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 9 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 25 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 10 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 27 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -104,6 +104,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 10 | 2026-10-19 | GM observation: CharacterData carries uint8 gmFlags after isGameMaster; realm→world TeleportRequest carries the target InstanceId |
 | 9 | 2026-10-13 | Instance reset: realm→world `ResetInstance` request |
 | 8 | 2026-10-04 | Scheduled realm shutdown: realm→world `Shutdown` opcode; `session_kick_reason::RealmShutdown` |
 | 7 | 2026-10-03 | In-game bug reports and subsystem status: realm→world `BugReport` (identity + client payload) and `SetSubsystemEnabled`, world→realm `BugReportResult` and `SubsystemStatus` |
@@ -118,6 +119,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 27 | 2026-10-19 | GM observation: client `CheatInvisible` (uint8 enable), handled by the realm (persisted) and forwarded to the world node; client `CheatGhost` (uint8-length target name, empty = stop), handled by the realm |
 | 26 | 2026-10-19 | Casting mana regeneration: unit field `ManaRegenCasting` (mana per five seconds within five seconds after spending mana) is appended to `object_fields::UnitFields` after `ManaRegen`, renumbering every player field after it |
 | 25 | 2026-10-17 | Master loot hand-out: client `MasterLootItem` (loot slot + target guid, proxied to the world node) and server `MasterLootResult` (`loot_error` byte). Master loot items are now sent with slot type `Master` to the loot master too, and `LootMoneyNotify` goes to every party member sharing a corpse's gold, looter included |
 | 24 | 2026-10-16 | `ClassXpUpdate` gains a trailing uint32 `talentPointsGained`, so the talent point notice is printed on the class rank up that grants the points instead of on the character level up that does not |

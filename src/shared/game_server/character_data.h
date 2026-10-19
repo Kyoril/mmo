@@ -153,6 +153,9 @@ namespace mmo
 		uint64 guildId = 0;
 		bool isGameMaster = false;
 
+		/// Persistent game master state (gm_flags::Type bits). Owned by the realm.
+		uint8 gmFlags = 0;
+
 		uint32 timePlayed = 0;
 
 		/// Number of purchased bank bag slots.
@@ -242,6 +245,7 @@ namespace mmo
 			>> io::read<uint64>(data.guildId)
 			>> data.configuration
 			>> io::read<uint8>(data.isGameMaster)
+			>> io::read<uint8>(data.gmFlags)
 			>> io::read<uint32>(data.timePlayed)
 			>> io::read<uint8>(data.bankBagSlotCount)))
 		{
@@ -408,6 +412,7 @@ namespace mmo
 			<< io::write<uint64>(data.guildId)
 			<< data.configuration
 			<< io::write<uint8>(data.isGameMaster)
+			<< io::write<uint8>(data.gmFlags)
 			<< io::write<uint32>(data.timePlayed)
 			<< io::write<uint8>(data.bankBagSlotCount);
 

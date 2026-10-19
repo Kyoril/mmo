@@ -608,6 +608,10 @@ namespace mmo
 
 		void Command_Godmode(const std::string &cmd, const std::string &args) const;
 
+		void Command_Invisible(const std::string &cmd, const std::string &args) const;
+
+		void Command_Ghost(const std::string &cmd, const std::string &args) const;
+
 		void Command_Damage(const std::string &cmd, const std::string &args) const;
 
 		void Command_ResetCooldowns(const std::string &cmd, const std::string &args) const;
@@ -905,6 +909,9 @@ namespace mmo
 		std::unique_ptr<WorldPingVisualizer> m_worldPingVisualizer;
 
 		bool m_timeSyncResponseSent = false;
+
+		/// True between TransferPending and NewWorld; later TransferPending packets for the same transfer are ignored.
+		bool m_transferPending = false;
 
 		AreaTriggerManager m_areaTriggerManager;
 
