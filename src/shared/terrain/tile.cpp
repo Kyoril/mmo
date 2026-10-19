@@ -277,7 +277,8 @@ namespace mmo
 
 			queue.AddRenderable(*this, m_renderQueueId);
 
-			if (m_page.GetTerrain().IsWireframeVisible())
+			// The grid overlay floats slightly above the surface, so it must not cast shadows onto it.
+			if (m_page.GetTerrain().IsWireframeVisible() && !m_page.GetTerrain().GetScene().IsShadowCasterPass())
 			{
 				queue.AddRenderable(*this, WireframeRenderGroupId);
 			}

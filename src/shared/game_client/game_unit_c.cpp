@@ -298,6 +298,7 @@ namespace mmo
 		{
 			m_sceneNode->SetDerivedPosition(m_movementInfo.position);
 			m_sceneNode->SetDerivedOrientation(Quaternion(m_movementInfo.facing, Vector3::UnitY));
+			m_serverGroundPosition = m_movementInfo.position;
 
 			// Seed the remote movement queue with the spawn snapshot so the queue
 			// always has at least one anchor before the first movement packet arrives.
@@ -505,7 +506,8 @@ namespace mmo
 			// For idle non-player units (NPCs without a path), correct ground height.
 			// Remote players apply ground correction inside UpdateRemoteMovement()
 			// after their dead-reckoning position is written to the scene node.
-			m_unitMovement->CorrectIdleGroundHeight(deltaTime);
+			m_unitMovement->CorrectIdleGroundHeight(deltaTime,
+				IdleGroundReferenceHeight(m_serverGroundPosition, m_sceneNode->GetDerivedPosition()));
 		}
 	}
 
@@ -629,6 +631,7 @@ namespace mmo
 		// extrapolation continues until the next packet arrives.
 		GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
+		m_serverGroundPosition = movementInfo.position;
 
 		if (IsControlledByLocalPlayer())
 		{
@@ -1762,6 +1765,7 @@ namespace mmo
 		// so the animation controller can run and animations reset properly.
 		if (m_pathTotalLength <= 0.0f)
 		{
+			m_serverGroundPosition = m_movementPath.back();
 			CompleteMovementPath(false);
 			return;
 		}
@@ -1819,9 +1823,10 @@ namespace mmo
 			// matches the server's expected movement target (the height is kept and follows
 			// the client's ground geometry).
 			m_sceneNode->SetPosition(Vector3(finalDestination.x, currentPosition.y, finalDestination.z));
+			m_serverGroundPosition = finalDestination;
 			if (m_unitMovement)
 			{
-				m_unitMovement->CorrectGroundHeight();
+				m_unitMovement->CorrectGroundHeight(5.0f, finalDestination.y);
 			}
 
 			CompleteMovementPath(true);

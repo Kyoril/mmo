@@ -5,6 +5,8 @@
 #include "base/typedefs.h"
 #include "math/vector3.h"
 
+#include <cmath>
+#include <optional>
 #include <vector>
 
 namespace mmo
@@ -191,5 +193,37 @@ namespace mmo
 		}
 
 		return !hasActivePath;
+	}
+
+	/// Picks the server-authoritative height the idle ground correction searches up to.
+	///
+	/// The idle correction casts its ray from just above the unit. A unit that dropped below a
+	/// floor which did not exist yet - its building was still streaming in - would never find
+	/// that floor again. Searching up to the height the server placed it at fixes that, but only
+	/// while the unit still stands where the server put it: a creature that died mid-path stands
+	/// between server positions, and an old height could pull its corpse onto unrelated geometry.
+	///
+	/// @param serverPosition The last position the server placed the unit at, if any.
+	/// @param currentPosition The unit's current scene position.
+	/// @param maxHorizontalDistance How far the unit may have drifted horizontally from it.
+	/// @return The server height, or nothing if the unit is elsewhere or no position is known.
+	inline std::optional<float> IdleGroundReferenceHeight(
+		const std::optional<Vector3>& serverPosition,
+		const Vector3& currentPosition,
+		const float maxHorizontalDistance = 1.0f)
+	{
+		if (!serverPosition)
+		{
+			return std::nullopt;
+		}
+
+		const float dx = serverPosition->x - currentPosition.x;
+		const float dz = serverPosition->z - currentPosition.z;
+		if (dx * dx + dz * dz > maxHorizontalDistance * maxHorizontalDistance)
+		{
+			return std::nullopt;
+		}
+
+		return serverPosition->y;
 	}
 }

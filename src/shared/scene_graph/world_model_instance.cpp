@@ -13,6 +13,7 @@
 #include "light.h"
 #include "world_model_manager.h"
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 
 #include <algorithm>
 #include <cmath>
@@ -118,6 +119,42 @@ namespace mmo
         m_mergedGeometry.reset();
 
         m_geometryCreated = false;
+    }
+
+    void WorldModelInstance::CollectMeshDependencies(const WorldModel& model, std::vector<String>& outMeshPaths)
+    {
+        for (size_t groupIndex = 0; groupIndex < model.GetGroupCount(); ++groupIndex)
+        {
+            const WorldModelGroup* group = model.GetGroup(groupIndex);
+            if (!group)
+            {
+                continue;
+            }
+
+            for (const WorldModelMeshRef& meshRef : group->GetMeshRefs())
+            {
+                if (meshRef.visible && !meshRef.meshPath.empty())
+                {
+                    outMeshPaths.push_back(meshRef.meshPath);
+                }
+            }
+        }
+
+        // The default doodad set, the one CreateDoodads always loads
+        const auto& doodadSets = model.GetDoodadSets();
+        const auto& doodads = model.GetDoodads();
+        const auto& doodadNames = model.GetDoodadNames();
+        if (!doodadSets.empty())
+        {
+            for (uint32 i = 0; i < doodadSets[0].count; ++i)
+            {
+                const uint32 doodadIndex = doodadSets[0].startIndex + i;
+                if (doodadIndex < doodads.size() && doodads[doodadIndex].nameIndex < doodadNames.size())
+                {
+                    outMeshPaths.push_back(doodadNames[doodads[doodadIndex].nameIndex]);
+                }
+            }
+        }
     }
 
     WorldModelInstance* WorldModelInstance::GetChildInstance(const size_t index) const
@@ -721,6 +758,7 @@ namespace mmo
 
     void WorldModelInstance::CreateMeshRefEntity(const size_t groupIndex, const size_t refIndex, Scene& scene)
     {
+        PROFILE_SCOPE("WMO: CreateMeshRefEntity");
         const auto* group = m_worldModel ? m_worldModel->GetGroup(groupIndex) : nullptr;
         if (!group || groupIndex >= m_groupRenderables.size())
         {
@@ -903,6 +941,7 @@ namespace mmo
 
     void WorldModelInstance::BuildCollisionProxies(Scene& scene, const std::vector<WorldModelBucket>& buckets, std::vector<CollisionEntry>& target)
     {
+        PROFILE_SCOPE("WMO: BuildCollisionProxies");
         // One proxy per (mesh, material override) across the whole world model, not per room and not
         // per submesh: a proxy walks the mesh's collision tree once for all its instances, so a proxy
         // per submesh would report the same hit once per submesh.
@@ -1259,6 +1298,7 @@ namespace mmo
 
     void WorldModelInstance::BuildBatchedGeometry(Scene& scene)
     {
+        PROFILE_SCOPE("WMO: BuildBatchedGeometry");
         if (!m_worldModel)
         {
             return;
@@ -1363,6 +1403,7 @@ namespace mmo
 
     void WorldModelInstance::CreateDoodads(Scene& scene)
     {
+        PROFILE_SCOPE("WMO: CreateDoodads");
         if (!m_worldModel)
         {
             return;
@@ -1541,6 +1582,7 @@ namespace mmo
 
     void WorldModelInstance::CreateKitContent(Scene& scene)
     {
+        PROFILE_SCOPE("WMO: CreateKitContent");
         m_kitPropGroups.clear();
 
         std::vector<WorldModelPlacementInput> placements;
@@ -1644,6 +1686,7 @@ namespace mmo
 
     void WorldModelInstance::CreateLights(Scene& scene)
     {
+        PROFILE_SCOPE("WMO: CreateLights");
         ClearLights(&scene);
 
         if (!m_worldModel)

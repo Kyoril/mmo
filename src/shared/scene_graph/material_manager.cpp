@@ -7,6 +7,7 @@
 #include "assets/asset_registry.h"
 #include "graphics/material_instance.h"
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 
 namespace mmo
 {
@@ -24,6 +25,7 @@ namespace mmo
 
 	MaterialPtr MaterialManager::Load(std::string_view filename)
 	{
+		PROFILE_SCOPE("Load: Material");
 		const auto it = m_materials.find(String(filename));
 		if (it != m_materials.end())
 		{

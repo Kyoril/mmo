@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 
 
 namespace mmo
@@ -20,6 +21,7 @@ namespace mmo
 
 	TexturePtr TextureManager::CreateOrRetrieve(const std::string & filename)
 	{
+		PROFILE_SCOPE("Load: Texture");
 		// Try to find the texture by name and see if it is still loaded
 		auto it = m_texturesByName.find(filename);
 		if (it != m_texturesByName.end())

@@ -29,8 +29,9 @@ namespace mmo
 		const Matrix3 normalMatrix = linear.Inverse().Transpose();
 		const bool mirrored = transform.HasNegativeScale();
 
+		// No exact-size reserve here: this is called once per placement on the same buffers, and an
+		// exact reserve defeats the vector's geometric growth, copying the whole buffer every call.
 		const uint32 base = static_cast<uint32>(outVertices.size());
-		outVertices.reserve(outVertices.size() + vertexCount);
 		for (size_t i = 0; i < vertexCount; ++i)
 		{
 			WorldModelMergeVertex v = vertices[i];
@@ -41,7 +42,6 @@ namespace mmo
 			outVertices.push_back(v);
 		}
 
-		outIndices.reserve(outIndices.size() + indexCount);
 		for (size_t i = 0; i + 2 < indexCount; i += 3)
 		{
 			outIndices.push_back(base + indices[i]);

@@ -29,6 +29,7 @@
 #include "game/object_type_id.h"
 
 #include <algorithm>
+#include <chrono>
 #include <vector>
 #include <zstr/zstr.hpp>
 #include <zlib.h>
@@ -183,6 +184,7 @@ namespace mmo
 		static ConsoleVar *s_terrainLodEnabledVar = nullptr;
 		static ConsoleVar *s_terrainOcclusionCullingVar = nullptr;
 		static ConsoleVar *s_terrainFarRadiusVar = nullptr;
+		static ConsoleVar *s_streamingBudgetVar = nullptr;
 
 		static ConsoleVar *s_chatBubblesSayVar = nullptr;
 		static ConsoleVar *s_chatBubblesYellVar = nullptr;
@@ -1065,9 +1067,15 @@ namespace mmo
 
 		{
 			PROFILE_SCOPE("OnIdle::StreamingDispatch");
-			for (size_t i = 0; i < 20; ++i)
+
+			// Streamed content is finished here one job at a time until the frame's budget is spent.
+			// Jobs are small steps (a terrain tile, one world model resource, ...), so a budget keeps a
+			// burst of them - crossing into a town - from piling into a single frame.
+			const double budgetMs = s_streamingBudgetVar ? std::max(0.0f, s_streamingBudgetVar->GetFloatValue()) : 4.0;
+			const auto start = std::chrono::steady_clock::now();
+			while (m_dispatcher.poll_one())
 			{
-				if (!m_dispatcher.poll_one())
+				if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= budgetMs)
 				{
 					break;
 				}
@@ -1699,6 +1707,7 @@ namespace mmo
 
 	void WorldState::RegisterPageFoliage(const uint32 pageX, const uint32 pageY)
 	{
+		PROFILE_SCOPE("Stream: RegisterPageFoliage");
 		if (!m_foliage || !m_worldInstance || !m_worldInstance->HasTerrain())
 		{
 			return;
@@ -2288,6 +2297,8 @@ namespace mmo
 		m_cvarChangedSignals += s_terrainOcclusionCullingVar->Changed.connect(this, &WorldState::OnTerrainOcclusionCullingChanged);
 
 		// Read each frame in OnIdle, so no change handler is required.
+		s_streamingBudgetVar = ConsoleVarMgr::RegisterConsoleVar("StreamingBudgetMs", "Milliseconds per frame the main thread spends finishing streamed world content (terrain tiles, world models, entities, foliage). Content streams in over more frames when lower; at least one step runs every frame.", "4");
+
 		s_terrainFarRadiusVar = ConsoleVarMgr::RegisterConsoleVar("TerrainFarRadius", "Radius in terrain pages (533 m each) of the baked low-resolution distant terrain around the camera. 0 disables it and restores the 1000 m view distance.", "4");
 
 		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
@@ -2430,6 +2441,8 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("TerrainFarRadius");
+		ConsoleVarMgr::UnregisterConsoleVar("StreamingBudgetMs");
+		s_streamingBudgetVar = nullptr;
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesSay");
@@ -2559,17 +2572,46 @@ namespace mmo
 				
 				m_worldInstance->LoadPageEntities(page.x(), page.y()); });
 
+		// Entity files are read on the work queue (here and on the background loader) and world models
+		// are then prepared over several dispatcher steps. Units placed on a building floor snap to the
+		// ground they find, so the buildings must exist before the loading screen hides - otherwise
+		// NPCs drop through to the terrain underneath and stay there.
 		size_t dispatched = 0;
-		while (m_dispatcher.poll_one())
-		{
-			dispatched++;
-		}
-
-		// Poll one time
 		size_t jobsDone = 0;
-		while (m_workQueue.poll_one())
+		const auto waitStart = std::chrono::steady_clock::now();
+		while (true)
 		{
-			jobsDone++;
+			bool progressed = false;
+			if (m_dispatcher.poll_one())
+			{
+				dispatched++;
+				progressed = true;
+			}
+			if (m_workQueue.poll_one())
+			{
+				jobsDone++;
+				progressed = true;
+			}
+
+			// Checked on every pass: a step that keeps re-posting itself would otherwise hold the loading screen forever
+			if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60))
+			{
+				WLOG("World loading: gave up waiting for world entities after 60 seconds");
+				break;
+			}
+
+			if (progressed)
+			{
+				continue;
+			}
+
+			if (!m_worldInstance->HasPendingEntityLoads())
+			{
+				break;
+			}
+
+			// A file is still being read on the background loader thread
+			std::this_thread::yield();
 		}
 
 		m_foliage->RebuildAll();
