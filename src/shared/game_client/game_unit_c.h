@@ -473,6 +473,10 @@ namespace mmo
 		/// Gets the amount of mana restored every five seconds while regenerating.
 		float GetManaRegen() const { return Get<float>(object_fields::ManaRegen); }
 
+		/// Gets the amount of mana restored every five seconds while casting (within five seconds
+		///	after mana was spent).
+		float GetManaRegenCasting() const { return Get<float>(object_fields::ManaRegenCasting); }
+
 		int32 GetStat(int32 statId) const;
 
 		int32 GetPosStat(int32 statId) const;

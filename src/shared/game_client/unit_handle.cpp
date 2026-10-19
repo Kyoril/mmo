@@ -415,6 +415,12 @@ namespace mmo
 		return Get()->GetManaRegen();
 	}
 
+	float UnitHandle::GetManaRegenCasting() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetManaRegenCasting();
+	}
+
 	float UnitHandle::GetArmorReductionFactor() const
 	{
 		if (!CheckNonNull()) return 0.0f;

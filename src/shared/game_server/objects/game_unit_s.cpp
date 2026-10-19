@@ -2594,6 +2594,20 @@ namespace mmo
 		return static_cast<float>(GetEffectivePowerRegenPerTick(power_type::Mana, static_cast<int32>(m_manaRegenPerTick))) * ticksPerFiveSeconds;
 	}
 
+	float GameUnitS::GetCastingManaRegenPercent() const
+	{
+		return Clamp(GetCombatSettings().casting_mana_regen_percent() + m_castingManaRegenPctBonus, 0.0f, 100.0f);
+	}
+
+	float GameUnitS::GetCastingManaRegenPerFiveSeconds() const
+	{
+		// Same tick math as GetManaRegenPerFiveSeconds, but without truncating to whole points:
+		// RegeneratePower() carries the fraction over, so over time the casting share is exact.
+		constexpr float ticksPerFiveSeconds = 5000.0f / static_cast<float>(constants::OneSecond * 2);
+		const float powerRegenScale = 1.0f + m_powerRegenPctBonus[static_cast<uint8>(power_type::Mana)] / 100.0f;
+		return GetCastingManaRegenPerTick() * powerRegenScale * ticksPerFiveSeconds;
+	}
+
 	void GameUnitS::UpdateCombatStatFields()
 	{
 		Set<float>(object_fields::SpellDamage, GetCalculatedModifierValue(unit_mods::SpellDamage));
@@ -2601,6 +2615,7 @@ namespace mmo
 		Set<float>(object_fields::SpellCritChance, Clamp(GetBaseSpellCritChance(), 0.0f, 100.0f));
 		Set<float>(object_fields::MeleeCritChance, Clamp(GetBaseMeleeCritChance(), 0.0f, 100.0f));
 		Set<float>(object_fields::ManaRegen, GetManaRegenPerFiveSeconds());
+		Set<float>(object_fields::ManaRegenCasting, GetCastingManaRegenPerFiveSeconds());
 	}
 
 	float GameUnitS::CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const
@@ -3677,12 +3692,21 @@ namespace mmo
 			amount += 20;
 			break;
 		case power_type::Mana:
-			// Don't regen mana if we used mana in the last 5 seconds
+			// Within five seconds after spending mana only the casting share of the normal
+			// regeneration flows. The fraction of a point it leaves is carried to the next tick.
 			if (GetAsyncTimeMs() - m_lastManaUse < 5000)
 			{
-				break;
+				// The aura percentage modifier is applied before the carry here instead of by
+				// GetEffectivePowerRegenPerTick below, which would truncate the whole points again.
+				m_castingManaRegenRemainder += GetCastingManaRegenPerTick()
+					* (1.0f + m_powerRegenPctBonus[static_cast<uint8>(power_type::Mana)] / 100.0f);
+				const float wholePoints = std::floor(m_castingManaRegenRemainder);
+				m_castingManaRegenRemainder -= wholePoints;
+				AddPower(powerType, static_cast<int32>(wholePoints));
+				return;
 			}
 
+			m_castingManaRegenRemainder = 0.0f;
 			amount += static_cast<int32>(m_manaRegenPerTick);
 			break;
 		}

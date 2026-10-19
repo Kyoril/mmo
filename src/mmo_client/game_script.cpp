@@ -1035,6 +1035,7 @@ namespace mmo
 							   .def("GetSpellCritChance", &UnitHandle::GetSpellCritChance)
 							   .def("GetMeleeCritChance", &UnitHandle::GetMeleeCritChance)
 							   .def("GetManaRegen", &UnitHandle::GetManaRegen)
+							   .def("GetManaRegenCasting", &UnitHandle::GetManaRegenCasting)
 							   .def("GetArmor", &UnitHandle::GetArmor)
 							   .def("GetTalentPoints", &UnitHandle::GetTalentPoints)
 							   .def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)

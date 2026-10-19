@@ -3,6 +3,7 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <memory>
 #include <set>
 #include <unordered_map>
@@ -1325,6 +1326,17 @@ public:
 		/// @returns The mana regenerated per five seconds.
 		[[nodiscard]] float GetManaRegenPerFiveSeconds() const;
 
+		/// Gets the share of normal mana regeneration that keeps flowing while casting (within
+		///	five seconds after mana was spent): combat_settings.casting_mana_regen_percent plus
+		///	ModCastingManaRegenPercent auras, clamped to 0..100.
+		/// @returns The share in percent.
+		[[nodiscard]] float GetCastingManaRegenPercent() const;
+
+		/// Gets the amount of mana this unit regenerates every five seconds while casting,
+		///	including aura percentage modifiers.
+		/// @returns The mana regenerated per five seconds while casting.
+		[[nodiscard]] float GetCastingManaRegenPerFiveSeconds() const;
+
 		/// Writes the derived combat values the client shows on the character sheet into the
 		///	replicated object fields. Called from RefreshStats(), which runs on every stat, level,
 		///	equipment and aura change.
@@ -1416,6 +1428,12 @@ public:
 		///	@param apply true to add the bonus, false to remove it again.
 		void ModifyCritChanceTakenBonus(float amount, bool apply) { m_critChanceTakenBonus += apply ? amount : -amount; }
 
+		/// Adds or removes percentage points to the share of normal mana regeneration that keeps
+		///	flowing while casting, driven by the ModCastingManaRegenPercent aura.
+		///	@param amount The bonus in percentage points (e.g. 10.0f for +10% of normal regeneration).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyCastingManaRegenPercentBonus(float amount, bool apply) { m_castingManaRegenPctBonus += apply ? amount : -amount; }
+
 		/// Gets the accumulated bonus in percentage points to any attacker's chance to
 		///	critically hit this unit.
 		[[nodiscard]] float GetCritChanceTakenBonus() const { return m_critChanceTakenBonus; }
@@ -1437,6 +1455,16 @@ public:
 		[[nodiscard]] float GetManaRegenPerTick() const
 		{
 			return m_manaRegenPerTick;
+		}
+
+		/// Gets the raw mana regenerated per tick while casting (within five seconds after mana
+		///	was spent), before the ModPowerRegenPercent aura modifier.
+		///	It is a share of the whole points normal regeneration restores per tick, so the
+		///	character sheet's casting value is exactly that share of its normal value.
+		///	@remark Public for the same testability reason as GetManaRegenPerTick().
+		[[nodiscard]] float GetCastingManaRegenPerTick() const
+		{
+			return std::floor(m_manaRegenPerTick) * GetCastingManaRegenPercent() / 100.0f;
 		}
 
 		/// Applies the aura percentage modifier for a power type to a per-tick amount.
@@ -1930,6 +1958,15 @@ public:
 
 		/// Accumulated bonus in percentage points to any attacker's chance to crit this unit.
 		float m_critChanceTakenBonus = 0.0f;
+
+		/// Accumulated percentage points added to the casting mana regeneration share
+		///	(ModCastingManaRegenPercent).
+		float m_castingManaRegenPctBonus = 0.0f;
+
+		/// Fraction of a mana point left over by casting regeneration ticks. The casting share of
+		///	a small per-tick regeneration is often below one point, and dropping the fraction
+		///	every tick would make the configured percentage meaningless at low levels.
+		float m_castingManaRegenRemainder = 0.0f;
 
 		std::map<uint8, float> m_baseSpeeds;
 

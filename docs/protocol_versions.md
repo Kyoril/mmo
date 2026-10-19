@@ -118,6 +118,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 26 | 2026-10-19 | Casting mana regeneration: unit field `ManaRegenCasting` (mana per five seconds within five seconds after spending mana) is appended to `object_fields::UnitFields` after `ManaRegen`, renumbering every player field after it |
 | 25 | 2026-10-17 | Master loot hand-out: client `MasterLootItem` (loot slot + target guid, proxied to the world node) and server `MasterLootResult` (`loot_error` byte). Master loot items are now sent with slot type `Master` to the loot master too, and `LootMoneyNotify` goes to every party member sharing a corpse's gold, looter included |
 | 24 | 2026-10-16 | `ClassXpUpdate` gains a trailing uint32 `talentPointsGained`, so the talent point notice is printed on the class rank up that grants the points instead of on the character level up that does not |
 | 23 | 2026-10-13 | Instance reset: client `ResetInstances`, server `InstanceResetResult` (result byte + map name) and the realm->world `ResetInstance` request (auth 9) |
