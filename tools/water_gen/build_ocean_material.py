@@ -276,8 +276,11 @@ def build_sun_glitter(b, sun_color, sun_dir, coarse_slope):
     sun_rgb = b.out(sun_color, "RGB")
     sun_peak = b.add("MaxNode", {"Value 2": 0.001}, {"A": b.add("MaxNode", ins={
         "A": b.mask(sun_rgb, r=True), "B": b.add("MaxNode", ins={"A": b.mask(sun_rgb, g=True), "B": b.mask(sun_rgb, b=True)})})})
-    sun_tint = b.mul(b.add("PowerNode", ins={"Base": b.div(sun_rgb, sun_peak), "Exp": b.scalar("GlitterSaturation", 3.0)}),
-                     b.vector("GlitterTint", (1.0, 0.42, 0.06, 1.0)))
+    # SunColor is the environment's blended sun/moon light colour, so the glint follows the time of
+    # day on its own (white at noon, gold at dusk, cool under the moon). Saturation 1 and a white
+    # tint reproduce that hue exactly; raise them only to push or shift it per material.
+    sun_tint = b.mul(b.add("PowerNode", ins={"Base": b.div(sun_rgb, sun_peak), "Exp": b.scalar("GlitterSaturation", 1.0)}),
+                     b.vector("GlitterTint", (1.0, 1.0, 1.0, 1.0)))
     # The sun's own light level (low at dusk, zero at night) still scales the glint.
     sun_strength = b.mul(b.out(sun_color, "A"), b.sat(b.out(sun_dir, "G")))
     sun_visible = b.sat(b.mul(sun_strength, constant=1.5))
@@ -490,9 +493,8 @@ def build_graph(b, mode):
         #   * core:   the hottest part of each flake, far above 1.0 so bloom haloes it.
         # The engine's GGX lobe is switched off (Specular 0 below): it is the soft white blob.
         #
-        # Colour: the sun colour normalised to its brightest channel and raised to a power keeps
-        # the hue and pushes the saturation; GlitterTint warms it, so even a near-white noon sun
-        # glints gold. ACES bleaches strong values toward white, which is why the glow and flakes
+        # Colour: the sun/moon light colour normalised to its brightest channel, so the glint has
+        # the light's hue at any time of day (see build_sun_glitter). ACES bleaches strong values toward white, which is why the glow and flakes
         # stay moderate and only the small core goes hot.
         coarse_slope = b.mul(swell_slope, distance_factor)
         glitter = build_sun_glitter(b, sun_color, sun_dir, coarse_slope)
