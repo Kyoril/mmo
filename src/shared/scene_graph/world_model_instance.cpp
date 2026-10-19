@@ -586,6 +586,12 @@ namespace mmo
         // Update entity visibility based on portal culling.
         // This is called BEFORE the octree traverses scene nodes, so the visibility
         // will be set correctly when entities are processed.
+        //
+        // SetHiddenByPortalCulling, not SetVisible: what is culled here is what *this camera*
+        // sees. Shadow casters are gathered for the cascade frusta, which reach well outside the
+        // view frustum on purpose, so geometry hidden from the view must keep casting - otherwise
+        // a roof's shadow blinks out of the street below the moment the player turns away from the
+        // house (see MovableObject::IsVisibleForShadows).
         for (size_t i = 0; i < m_groupRenderables.size(); ++i)
         {
             const bool isVisible = IsGroupVisible(static_cast<int32>(i));
@@ -595,7 +601,7 @@ namespace mmo
             {
                 if (meshViz.entity)
                 {
-                    meshViz.entity->SetVisible(isVisible);
+                    meshViz.entity->SetHiddenByPortalCulling(!isVisible);
                 }
             }
         }
@@ -607,8 +613,8 @@ namespace mmo
                 // Same NoGroup guard as the doodad batches below. Mesh references always carry a real
                 // group index today, but without this a NoGroup batch would cast to -1 and become
                 // permanently invisible rather than permanently visible.
-                entry.batch->SetVisible(entry.groupIndex == WorldModelNoGroup ||
-                    IsGroupVisible(static_cast<int32>(entry.groupIndex)));
+                entry.batch->SetHiddenByPortalCulling(!(entry.groupIndex == WorldModelNoGroup ||
+                    IsGroupVisible(static_cast<int32>(entry.groupIndex))));
             }
         }
 
@@ -620,7 +626,7 @@ namespace mmo
         {
             if (doodad.entity)
             {
-                doodad.entity->SetVisible(doodad.groupIndex < 0 || IsGroupVisible(doodad.groupIndex));
+                doodad.entity->SetHiddenByPortalCulling(!(doodad.groupIndex < 0 || IsGroupVisible(doodad.groupIndex)));
             }
         }
 
@@ -628,8 +634,8 @@ namespace mmo
         {
             if (entry.batch)
             {
-                entry.batch->SetVisible(entry.groupIndex == WorldModelNoGroup ||
-                    IsGroupVisible(static_cast<int32>(entry.groupIndex)));
+                entry.batch->SetHiddenByPortalCulling(!(entry.groupIndex == WorldModelNoGroup ||
+                    IsGroupVisible(static_cast<int32>(entry.groupIndex))));
             }
         }
 
@@ -638,7 +644,7 @@ namespace mmo
         {
             if (prop.entity)
             {
-                prop.entity->SetVisible(prop.groupIndex < 0 || IsGroupVisible(prop.groupIndex));
+                prop.entity->SetHiddenByPortalCulling(!(prop.groupIndex < 0 || IsGroupVisible(prop.groupIndex)));
             }
         }
 
@@ -646,8 +652,8 @@ namespace mmo
         {
             if (entry.batch)
             {
-                entry.batch->SetVisible(entry.groupIndex == WorldModelNoGroup ||
-                    IsGroupVisible(static_cast<int32>(entry.groupIndex)));
+                entry.batch->SetHiddenByPortalCulling(!(entry.groupIndex == WorldModelNoGroup ||
+                    IsGroupVisible(static_cast<int32>(entry.groupIndex))));
             }
         }
 

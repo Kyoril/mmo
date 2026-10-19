@@ -873,7 +873,9 @@ namespace mmo
 				{
 					const MovableObject* caster = casters[i];
 
-					if (!caster->IsVisible() || !caster->IsCastingShadows())
+					// IsVisibleForShadows, not IsVisible: portal culling hides what the view camera
+					// does not show, and a caster outside the view still shadows what is inside it.
+					if (!caster->IsVisibleForShadows() || !caster->IsCastingShadows())
 					{
 						continue;
 					}

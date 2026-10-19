@@ -89,6 +89,7 @@ namespace mmo
 		mutable Sphere m_worldBoundingSphere;
 		mutable bool m_worldAABBDirty{ true };
 		bool m_renderingDisabled;
+		bool m_hiddenByPortalCulling{ false };
 		bool m_castShadows{ true };
 		void* m_userObject{ nullptr };
 
@@ -171,9 +172,29 @@ namespace mmo
 
 		virtual void SetVisible(bool visible);
 
+		/// @brief Whether this object is visible at all, ignoring everything a camera decides.
+		///        This is what the shadow caster gather filters on (Scene::GatherShadowCasters).
 		[[nodiscard]] virtual bool ShouldBeVisible() const;
 
 		[[nodiscard]] virtual bool IsVisible() const;
+
+		/// @brief Hides this object from the view camera without stopping it from casting shadows.
+		/// @details Portal culling decides once per frame what the *view* camera sees, and hides every
+		///          world model group it does not show. The sun does not care where the camera looks:
+		///          a house behind the camera still throws its roof's shadow across the street in
+		///          front of it, and the shadow cascades gather casters from a region that reaches
+		///          well outside the view frustum on purpose. So this flag is kept apart from
+		///          SetVisible (which hides an object outright, shadow included) and ignored by
+		///          IsVisibleForShadows.
+		/// @param hidden True to hide the object from the view camera.
+		void SetHiddenByPortalCulling(const bool hidden) { m_hiddenByPortalCulling = hidden; }
+
+		/// @brief Whether portal culling currently hides this object from the view camera.
+		[[nodiscard]] bool IsHiddenByPortalCulling() const { return m_hiddenByPortalCulling; }
+
+		/// @brief Like IsVisible, but ignores view-dependent portal culling. The predicate the
+		///        shadow passes use once a caster has been gathered (Scene::RenderShadowCasters).
+		[[nodiscard]] virtual bool IsVisibleForShadows() const;
 
 		virtual void SetRenderingDistance(const float dist)
 		{

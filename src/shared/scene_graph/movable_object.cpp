@@ -246,9 +246,19 @@ namespace mmo
 
 	bool MovableObject::IsVisible() const
 	{
+		 if (m_hiddenByPortalCulling)
+		 {
+			return false;
+		 }
+
+		 return IsVisibleForShadows();
+	}
+
+	bool MovableObject::IsVisibleForShadows() const
+	{
 		 if (!m_visible || m_beyondFarDistance || m_renderingDisabled)
 		 {
-			return false; 
+			return false;
 		 }
 
 		 // TODO: Visibility Flags for scene
