@@ -995,6 +995,10 @@ namespace mmo
 		/// Used to ensure position consistency between stop and start packets.
 		Vector3 m_syncedPosition;
 
+		/// @brief The last position the server placed this unit at (spawn, teleport, end of a path).
+		/// Its height lets the idle ground correction find a floor that streamed in after the unit.
+		std::optional<Vector3> m_serverGroundPosition;
+
 		/// @brief Map of active spell tints (spellId -> tint color).
 		std::map<uint32, Vector4> m_spellTints;
 

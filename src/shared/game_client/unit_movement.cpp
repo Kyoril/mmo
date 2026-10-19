@@ -3471,7 +3471,7 @@ namespace mmo
 		return true;
 	}
 
-	bool UnitMovement::CorrectIdleGroundHeight(const float deltaTime)
+	bool UnitMovement::CorrectIdleGroundHeight(const float deltaTime, const std::optional<float> referenceHeight)
 	{
 		// An idle NPC re-ran a full octree query plus ray tests every frame for a result that
 		// cannot change while nothing moves - with ~25 NPCs that was a fifth of the client's
@@ -3495,7 +3495,7 @@ namespace mmo
 			m_idleGroundRecheckTimer = idleGroundRecheckInterval * static_cast<float>(m_movedUnit.GetGuid() % 16) / 16.0f;
 		}
 
-		m_idleGroundValid = CorrectGroundHeight();
+		m_idleGroundValid = CorrectGroundHeight(5.0f, referenceHeight);
 		if (m_idleGroundValid)
 		{
 			m_idleGroundPosition = GetUpdatedNode().GetPosition();

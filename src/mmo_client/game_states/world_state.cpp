@@ -2593,6 +2593,13 @@ namespace mmo
 				progressed = true;
 			}
 
+			// Checked on every pass: a step that keeps re-posting itself would otherwise hold the loading screen forever
+			if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60))
+			{
+				WLOG("World loading: gave up waiting for world entities after 60 seconds");
+				break;
+			}
+
 			if (progressed)
 			{
 				continue;
@@ -2600,12 +2607,6 @@ namespace mmo
 
 			if (!m_worldInstance->HasPendingEntityLoads())
 			{
-				break;
-			}
-
-			if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60))
-			{
-				WLOG("World loading: gave up waiting for world entities after 60 seconds");
 				break;
 			}
 
