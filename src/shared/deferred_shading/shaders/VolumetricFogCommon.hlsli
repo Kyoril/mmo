@@ -33,9 +33,11 @@ cbuffer VolumetricFogBuffer : register(b2)
     float VolumeEnabled;        // 0 when the froxel volume is off (analytic fog only)
     uint LightCount;            // entries in the deferred renderer's light buffer (t9)
     float LightScatterStrength; // zone multiplier on point and spot light scattering
-    float2 _LightPadding;
+    float2 ScreenJitter;        // [0, 1) offset of this frame's samples within their froxel, in cells
     uint FogVolumeCount;        // entries in the local fog volume buffer (t10)
-    float3 _FogVolumePadding;
+    uint SunTapsXY;             // sun shadow taps per froxel along each screen axis
+    uint SunTapsZ;              // sun shadow taps per froxel along its depth
+    float _FogPadding;
 };
 
 // View depth of a normalized slice coordinate, exponential between NearDistance and FarDistance.

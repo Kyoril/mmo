@@ -12,6 +12,7 @@
 #include "log/default_log.h"
 #include "log/default_log_levels.h"
 #include "log/log_entry.h"
+#include "base/profiler.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/particle_emitter.h"
 #include "scene_graph/ribbon_trail.h"
@@ -20,6 +21,19 @@
 
 #include "scene_graph/foliage.h"
 #include "scene_graph/mesh_manager.h"
+
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#ifdef _WIN32
+#	include <d3d11.h>
+#	include "graphics_d3d11/graphics_device_d3d11.h"
+#endif
 
 namespace mmo
 {
@@ -62,12 +76,329 @@ namespace mmo
 
 	std::unique_ptr<Foliage> g_foliage = nullptr;
 
+	/// Scripted volumetric fog reproduction (`--fog-repro`): a low sun shining through a row of pillars
+	/// into the fog toward a camera that follows a fixed path at a fixed step per frame. Every captured
+	/// frame is written as raw RGBA8 to the output directory, so fog motion can be measured offline
+	/// against exactly known camera motion.
+	struct FogReproOptions
+	{
+		bool enabled = false;
+		int32 debugMode = 0;
+		float history = 0.9f;
+		int32 quality = 3;
+		int32 tileSize = 0;			// > 0 overrides the preset grid (ground-truth renders)
+		int32 sliceCount = 0;
+		int32 poses = 120;			// camera poses along the path
+		int32 settle = 1;			// frames rendered per pose; > 1 lets the fog converge (reference renders)
+		float step = 0.1f;			// metres (or degrees for yaw) the camera moves per pose
+		std::string motion = "strafe";
+		std::string outDir = "fog_repro";
+		bool jitter = true;
+		float anisotropy = 0.7f;
+		bool perf = false;			// average the GPU pass timings into <out>/perf.txt (use a Release build)
+		std::string scene = "pillars";	// pillars | canopy (a tree crown of small blocks with many small gaps)
+		int32 sunTapsXY = -1;		// -1 keeps the quality preset's sun shadow taps
+		int32 sunTapsZ = -1;
+		bool fog = true;			// --nofog: judge the surface shadows alone
+		int32 shadowQuality = -1;	// -1 keeps the renderer default (High)
+		int32 shadowMapSize = 0;	// 0 keeps the renderer default
+	};
+
+	static FogReproOptions g_repro;
+	static int32 g_reproFrame = 0;
+	static std::vector<SceneNode*> g_reproNodes;
+	static std::vector<Entity*> g_reproEntities;
+	static std::map<std::string, std::pair<double, int32>> g_reproPerf;
+
+	namespace
+	{
+		FogReproOptions ParseFogReproOptions(const std::string& commandLine)
+		{
+			FogReproOptions options;
+			std::istringstream stream(commandLine);
+			std::string token;
+			while (stream >> token)
+			{
+				const auto value = [&token](const char* key) -> const char*
+				{
+					const size_t length = std::strlen(key);
+					return token.compare(0, length, key) == 0 ? token.c_str() + length : nullptr;
+				};
+
+				if (token == "--fog-repro") { options.enabled = true; }
+				else if (const char* v = value("--debug=")) { options.debugMode = std::atoi(v); }
+				else if (const char* v = value("--history=")) { options.history = static_cast<float>(std::atof(v)); }
+				else if (const char* v = value("--quality=")) { options.quality = std::atoi(v); }
+				else if (const char* v = value("--tile=")) { options.tileSize = std::atoi(v); }
+				else if (const char* v = value("--slices=")) { options.sliceCount = std::atoi(v); }
+				else if (const char* v = value("--poses=")) { options.poses = std::atoi(v); }
+				else if (const char* v = value("--settle=")) { options.settle = std::max(1, std::atoi(v)); }
+				else if (const char* v = value("--step=")) { options.step = static_cast<float>(std::atof(v)); }
+				else if (const char* v = value("--motion=")) { options.motion = v; }
+				else if (const char* v = value("--out=")) { options.outDir = v; }
+				else if (token == "--nojitter") { options.jitter = false; }
+				else if (token == "--perf") { options.perf = true; }
+				else if (token == "--nofog") { options.fog = false; }
+				else if (const char* v = value("--shadowq=")) { options.shadowQuality = std::atoi(v); }
+				else if (const char* v = value("--shadowsize=")) { options.shadowMapSize = std::atoi(v); }
+				else if (const char* v = value("--scene=")) { options.scene = v; }
+				else if (const char* v = value("--suntaps=")) { options.sunTapsXY = std::atoi(v); }
+				else if (const char* v = value("--suntapsz=")) { options.sunTapsZ = std::atoi(v); }
+				else if (const char* v = value("--aniso=")) { options.anisotropy = static_cast<float>(std::atof(v)); }
+			}
+
+			return options;
+		}
+
+		/// Camera pose for a pose index along the scripted path.
+		void ApplyReproPose(const int32 pose)
+		{
+			const float t = static_cast<float>(pose) * g_repro.step;
+			Vector3 position(-6.0f, 2.5f, 25.0f);
+			Radian yaw(0.0f);
+			if (g_repro.motion == "strafe")
+			{
+				position.x += t;
+			}
+			else if (g_repro.motion == "forward")
+			{
+				position.z -= t;
+			}
+			else if (g_repro.motion == "yaw")
+			{
+				yaw = Degree(t);
+			}
+			else if (g_repro.motion == "orbit")
+			{
+				// Third-person camera: orbit a pivot 6 m in front of the start position, like the client's
+				// camera anchor turning around the character.
+				yaw = Degree(t);
+				const Vector3 pivot = position + Vector3(0.0f, 0.0f, -6.0f);
+				position = pivot + Quaternion(yaw, Vector3::UnitY) * Vector3(0.0f, 0.0f, 6.0f);
+			}
+
+			g_cameraNode->SetPosition(position);
+			g_cameraNode->SetOrientation(Quaternion(yaw, Vector3::UnitY) * Quaternion(Degree(4.0f), Vector3::UnitX));
+		}
+
+		void CaptureFinalTarget(const int32 index)
+		{
+#ifdef _WIN32
+			const TexturePtr target = g_deferredRenderer->GetFinalRenderTarget();
+			auto* source = static_cast<ID3D11Texture2D*>(target ? target->GetRawTexture() : nullptr);
+			if (!source)
+			{
+				ELOG("fog repro: final render target has no D3D11 texture");
+				return;
+			}
+
+			auto& device = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
+			ID3D11Device& d3dDevice = device;
+			ID3D11DeviceContext& context = device;
+
+			D3D11_TEXTURE2D_DESC desc;
+			source->GetDesc(&desc);
+			desc.Usage = D3D11_USAGE_STAGING;
+			desc.BindFlags = 0;
+			desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+			desc.MiscFlags = 0;
+			desc.MipLevels = 1;
+			desc.ArraySize = 1;
+			desc.SampleDesc.Count = 1;
+
+			ID3D11Texture2D* staging = nullptr;
+			if (FAILED(d3dDevice.CreateTexture2D(&desc, nullptr, &staging)))
+			{
+				ELOG("fog repro: could not create staging texture");
+				return;
+			}
+
+			context.CopyResource(staging, source);
+
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(context.Map(staging, 0, D3D11_MAP_READ, 0, &mapped)))
+			{
+				if (index == 0)
+				{
+					std::ofstream meta(g_repro.outDir + "/meta.txt");
+					meta << desc.Width << " " << desc.Height << " " << static_cast<int>(desc.Format) << "\n";
+				}
+
+				char name[64];
+				std::snprintf(name, sizeof(name), "/%04d.bin", index);
+				std::ofstream file(g_repro.outDir + name, std::ios::binary);
+				const uint32 bytesPerPixel = desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8 : 4;
+				for (UINT y = 0; y < desc.Height; ++y)
+				{
+					file.write(static_cast<const char*>(mapped.pData) + y * mapped.RowPitch, desc.Width * bytesPerPixel);
+				}
+				context.Unmap(staging, 0);
+			}
+
+			staging->Release();
+#endif
+		}
+
+		void SetupFogRepro()
+		{
+			// Keep only what the fog needs: no animated or light-emitting props that change over time.
+			g_particleEmitter->Stop();
+			g_ribbonTrail->Stop();
+			g_pointLight->SetVisible(false);
+			g_pointLight2->SetVisible(false);
+			g_lightDebugEnt->SetVisible(false);
+			g_boarEntity->SetVisible(false);
+
+			// Low sun straight ahead of the camera, so the pillars' shadows run toward it as shafts.
+			g_sunLight->SetDirection(Vector3(0.12f, -0.22f, 1.0f).NormalizedCopy());
+
+			AtmosphereParameters atmosphere;
+			atmosphere.SetDensity(0.006f);
+			atmosphere.SetHeightFalloff(0.05f);
+			atmosphere.SetBaseHeight(0.0f);
+			atmosphere.SetAnisotropy(g_repro.anisotropy);
+			atmosphere.SetShaftStrength(1.25f);
+			g_scene->SetAtmosphereParameters(atmosphere);
+			g_scene->SetFogEnabled(g_repro.fog);
+
+			// A row of tall pillars with gaps (the shaft casters) and a wall far behind them (a sharp
+			// geometric reference at a known depth).
+			const auto addBox = [](const Vector3& position, const Vector3& size)
+			{
+				Entity* entity = g_scene->CreateEntity("ReproBox" + std::to_string(g_reproEntities.size()), "Models/Cube/Cube.hmsh");
+				ASSERT(entity);
+				const AABB& bounds = entity->GetMesh()->GetBounds();
+				const Vector3 extent = bounds.max - bounds.min;
+				SceneNode* node = g_scene->GetRootSceneNode().CreateChildSceneNode();
+				node->AttachObject(*entity);
+				node->SetScale(Vector3(size.x / extent.x, size.y / extent.y, size.z / extent.z));
+				node->SetPosition(position - (bounds.min + extent * 0.5f) * Vector3(size.x / extent.x, size.y / extent.y, size.z / extent.z) + Vector3(0.0f, size.y * 0.5f, 0.0f));
+				g_reproEntities.push_back(entity);
+				g_reproNodes.push_back(node);
+			};
+
+			if (g_repro.scene == "canopy")
+			{
+				// A tree crown: small blocks scattered through an ellipsoid on a trunk, leaving many gaps
+				// a fraction of a froxel wide, like the foliage the fog shafts come through in the client.
+				uint32 state = 12345u;
+				const auto random = [&state]()
+				{
+					state = state * 1664525u + 1013904223u;
+					return static_cast<float>(state >> 8) / static_cast<float>(1u << 24);
+				};
+				addBox(Vector3(-12.0f, 0.0f, -30.0f), Vector3(1.2f, 11.0f, 1.2f));
+				for (int32 i = 0; i < 700; ++i)
+				{
+					Vector3 offset(random() * 2.0f - 1.0f, random() * 2.0f - 1.0f, random() * 2.0f - 1.0f);
+					if (offset.GetSquaredLength() > 1.0f)
+					{
+						continue;
+					}
+					addBox(Vector3(-12.0f + offset.x * 9.0f, 13.0f + offset.y * 4.5f, -30.0f + offset.z * 5.0f), Vector3(0.7f, 0.5f, 0.7f));
+				}
+				addBox(Vector3(0.0f, 0.0f, -60.0f), Vector3(120.0f, 6.0f, 1.0f));
+			}
+			else
+			{
+				for (int32 i = -12; i <= 12; ++i)
+				{
+					addBox(Vector3(static_cast<float>(i) * 4.0f, 0.0f, -35.0f), Vector3(1.5f, 16.0f, 1.5f));
+				}
+				addBox(Vector3(0.0f, 0.0f, -38.0f), Vector3(120.0f, 1.0f, 1.0f));
+				addBox(Vector3(0.0f, 16.0f, -35.0f), Vector3(120.0f, 1.0f, 3.0f));
+			}
+
+			g_deferredRenderer->SetAtmosphereQuality(g_repro.quality);
+			if (g_repro.shadowQuality >= 0)
+			{
+				g_deferredRenderer->SetShadowQuality(g_repro.shadowQuality);
+			}
+			if (g_repro.shadowMapSize > 0)
+			{
+				g_deferredRenderer->SetShadowMapSize(static_cast<uint16>(g_repro.shadowMapSize));
+			}
+			VolumetricFogSettings& fog = g_deferredRenderer->GetVolumetricFogSettings();
+			if (g_repro.tileSize > 0)
+			{
+				fog.tileSize = static_cast<uint32>(g_repro.tileSize);
+			}
+			if (g_repro.sliceCount > 0)
+			{
+				fog.sliceCount = static_cast<uint32>(g_repro.sliceCount);
+			}
+			fog.SetHistoryWeight(g_repro.history);
+			fog.jitterEnabled = g_repro.jitter;
+			fog.SetSunTaps(g_repro.sunTapsXY >= 0 ? static_cast<uint32>(g_repro.sunTapsXY) : fog.sunTapsXY,
+				g_repro.sunTapsZ >= 0 ? static_cast<uint32>(g_repro.sunTapsZ) : fog.sunTapsZ);
+			fog.debugMode = static_cast<uint32>(g_repro.debugMode);
+			fog.SetRange(200.0f);
+
+			std::filesystem::create_directories(g_repro.outDir);
+			if (g_repro.perf)
+			{
+				Profiler::GetInstance().SetEnabled(true);
+			}
+			ApplyReproPose(0);
+		}
+	}
+
 	void RenderScene()
 	{
 		GraphicsDevice::Get().Reset();
 
+		if (g_repro.perf)
+		{
+			Profiler::GetInstance().BeginFrame();
+		}
+
 		// Use deferred renderer to render the scene
 		g_deferredRenderer->Render(*g_scene, *g_camera);
+
+		if (g_repro.perf)
+		{
+			Profiler::GetInstance().EndFrame();
+
+			// GPU timestamps arrive a few frames late; skip the warm-up.
+			if (g_reproFrame >= 30)
+			{
+				for (const PerformanceMetric& metric : Profiler::GetInstance().GetMetrics())
+				{
+					if (metric.name.rfind("GPU: ", 0) == 0)
+					{
+						auto& [total, count] = g_reproPerf[metric.name];
+						total += metric.totalTimeMs;
+						++count;
+					}
+				}
+			}
+		}
+
+		if (g_repro.enabled)
+		{
+			// Capture the last frame of every pose, then move on; exit after the last pose.
+			const int32 pose = g_reproFrame / g_repro.settle;
+			if (g_reproFrame % g_repro.settle == g_repro.settle - 1)
+			{
+				CaptureFinalTarget(pose);
+				if (pose + 1 >= g_repro.poses)
+				{
+					if (g_repro.perf)
+					{
+						std::ofstream perf(g_repro.outDir + "/perf.txt");
+						for (const auto& [name, entry] : g_reproPerf)
+						{
+							perf << name << ": " << (entry.first / std::max(entry.second, 1)) << " ms (" << entry.second << " frames)\n";
+						}
+					}
+
+					EventLoop::Terminate(0);
+				}
+			}
+
+			++g_reproFrame;
+			ApplyReproPose(g_reproFrame / g_repro.settle);
+		}
 
 		GraphicsDevice::Get().GetAutoCreatedWindow()->Activate();
 
@@ -87,6 +418,12 @@ namespace mmo
 
 	void OnIdle(float elapsedTime, GameTime time)
 	{
+		if (g_repro.enabled)
+		{
+			// Deterministic: nothing but the scripted camera may change between frames.
+			return;
+		}
+
 		// Update scene objects and stuff
 		if (g_pointLightRotator)
 		{
@@ -133,6 +470,10 @@ namespace mmo
 
 	bool InitializeGlobal()
 	{
+#ifdef _WIN32
+		g_repro = ParseFogReproOptions(GetCommandLineA());
+#endif
+
         // Describe our graphics device
         GraphicsDeviceDesc desc {};
         desc.width = 1920;
@@ -496,6 +837,11 @@ namespace mmo
 
 		// Add to foliage system
 		g_foliage->AddLayer(grassLayer);
+
+		if (g_repro.enabled)
+		{
+			SetupFogRepro();
+		}
 
 		return true;
 	}

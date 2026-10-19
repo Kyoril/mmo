@@ -4,7 +4,9 @@
 
 #include "deferred_shading/volumetric_fog_settings.h"
 
+#include <algorithm>
 #include <set>
+#include <utility>
 
 using namespace mmo;
 
@@ -134,6 +136,45 @@ TEST_CASE("Halton jitter starts at the radical inverse and stays in [0, 1)", "[v
 	CHECK(volumetric_fog::JitterForFrame(VolumetricFogSettings::JitterSequenceLength) == Approx(volumetric_fog::JitterForFrame(0)));
 }
 
+TEST_CASE("Halton radical inverse in bases 3 and 5", "[volumetric_fog]")
+{
+	CHECK(volumetric_fog::Halton(1, 3) == Approx(1.0f / 3.0f));
+	CHECK(volumetric_fog::Halton(2, 3) == Approx(2.0f / 3.0f));
+	CHECK(volumetric_fog::Halton(3, 3) == Approx(1.0f / 9.0f));
+	CHECK(volumetric_fog::Halton(1, 5) == Approx(0.2f));
+	CHECK(volumetric_fog::Halton(6, 5) == Approx(0.2f + 1.0f / 25.0f));
+	CHECK(volumetric_fog::Halton(5, 2) == Approx(volumetric_fog::HaltonBase2(5)));
+}
+
+TEST_CASE("Screen jitter covers the whole froxel and is independent of the depth jitter", "[volumetric_fog]")
+{
+	// A froxel sampled only at its screen centre aliases the shadow map in a pattern locked to the grid,
+	// which the temporal blend drags along behind the camera. Over one sequence the screen samples must
+	// spread across the cell in both axes, and differ from the depth jitter's pattern.
+	float minX = 1.0f, maxX = 0.0f, minY = 1.0f, maxY = 0.0f;
+	std::set<std::pair<float, float>> points;
+	bool differsFromDepth = false;
+	for (uint64 frame = 0; frame < VolumetricFogSettings::JitterSequenceLength; ++frame)
+	{
+		const auto [x, y] = volumetric_fog::ScreenJitterForFrame(frame);
+		CHECK(x >= 0.0f);
+		CHECK(x < 1.0f);
+		CHECK(y >= 0.0f);
+		CHECK(y < 1.0f);
+		minX = std::min(minX, x);
+		maxX = std::max(maxX, x);
+		minY = std::min(minY, y);
+		maxY = std::max(maxY, y);
+		points.insert({ x, y });
+		differsFromDepth |= x != volumetric_fog::JitterForFrame(frame);
+	}
+
+	CHECK(points.size() == VolumetricFogSettings::JitterSequenceLength);
+	CHECK(maxX - minX > 0.75f);
+	CHECK(maxY - minY > 0.75f);
+	CHECK(differsFromDepth);
+}
+
 TEST_CASE("Integrated texel coordinate maps a slice's end to its texel centre", "[volumetric_fog]")
 {
 	constexpr uint32 sliceCount = 64;
@@ -171,4 +212,43 @@ TEST_CASE("Noise density factor keeps the average density", "[volumetric_fog]")
 
 		CHECK(sum / samples == Approx(1.0).epsilon(1e-3));
 	}
+}
+
+TEST_CASE("History weight defaults to the shipped blend and clamps to its range", "[volumetric_fog]")
+{
+	VolumetricFogSettings settings;
+	CHECK(settings.historyWeight == Approx(VolumetricFogSettings::DefaultHistoryWeight));
+
+	settings.SetHistoryWeight(0.5f);
+	CHECK(settings.historyWeight == Approx(0.5f));
+
+	settings.SetHistoryWeight(1.0f);
+	CHECK(settings.historyWeight == Approx(VolumetricFogSettings::MaxHistoryWeight));
+
+	settings.SetHistoryWeight(-1.0f);
+	CHECK(settings.historyWeight == Approx(0.0f));
+}
+
+TEST_CASE("Every volumetric fog quality preset box-filters the sun over the cell with several depth taps", "[volumetric_fog]")
+{
+	// Two depth taps band visibly across the shafts; the cell is a needle several metres long at mid range.
+	VolumetricFogSettings settings;
+	for (int level = 1; level <= 4; ++level)
+	{
+		settings.ApplyQualityLevel(level);
+		CHECK(settings.sunTapsXY >= 2u);
+		CHECK(settings.sunTapsZ >= 4u);
+	}
+}
+
+TEST_CASE("Volumetric fog sun taps clamp to the supported range", "[volumetric_fog]")
+{
+	VolumetricFogSettings settings;
+	settings.SetSunTaps(0, 0);
+	CHECK(settings.sunTapsXY == 1u);
+	CHECK(settings.sunTapsZ == 1u);
+
+	settings.SetSunTaps(100, 100);
+	CHECK(settings.sunTapsXY == VolumetricFogSettings::MaxSunTapsXY);
+	CHECK(settings.sunTapsZ == VolumetricFogSettings::MaxSunTapsZ);
 }

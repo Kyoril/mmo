@@ -110,7 +110,19 @@ namespace mmo
 		VolumeTexturePtr m_injectVolume;
 		std::array<VolumeTexturePtr, 2> m_historyVolumes;
 
-		/// @brief Index into m_historyVolumes written this frame; the other one holds last frame.
+		/// @brief The sun's shadowed scattering (rgb = scattering coefficient x sun visibility), kept apart
+		///        from m_injectVolume/m_historyVolumes WITHOUT the phase function: the phase depends on the
+		///        view direction, so baking it in let the history carry the sun glow and shafts as seen from
+		///        where the camera was ~10 frames ago - they visibly trailed every camera move. The integrate
+		///        step applies the phase for the current view rays. It has no history: the inject step box-filters
+		///        the sun's shadow over each cell on a fixed pattern, so the value is stable without one.
+		VolumeTexturePtr m_injectSunVolume;
+
+		/// @brief One slice, grid width x height: the farthest scene depth seen through each grid column
+		///        (CS_FogDepthTiles). Cells behind it skip the sun's shadow taps.
+		VolumeTexturePtr m_columnFarDepth;
+
+		/// @brief Index into m_historyVolumes written this frame; the other holds last frame.
 		uint32 m_historyIndex = 0;
 		bool m_historyValid = false;
 		uint64 m_frameIndex = 0;
@@ -145,6 +157,7 @@ namespace mmo
 		/// @brief Number of valid entries in m_fogVolumeBuffer.
 		uint32 m_fogVolumeCount = 0;
 
+		ShaderPtr m_depthTilesCs;
 		ShaderPtr m_injectCs;
 		ShaderPtr m_temporalCs;
 		ShaderPtr m_integrateCs;

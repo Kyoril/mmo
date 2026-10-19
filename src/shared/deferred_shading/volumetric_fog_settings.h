@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace mmo
 {
@@ -26,8 +27,12 @@ namespace mmo
 		///        farther fogs the sky at its far clip instead.
 		static constexpr float SkyDistance = 2000.0f;
 
-		/// @brief Weight of the reprojected history in the temporal blend.
-		static constexpr float TemporalBlend = 0.9f;
+		/// @brief Default weight of the reprojected history in the temporal blend.
+		static constexpr float DefaultHistoryWeight = 0.9f;
+
+		/// @brief Largest allowed history weight. Every frame re-reads the history between texels, so a
+		///        weight near 1 accumulates that resampling into a softer image while moving.
+		static constexpr float MaxHistoryWeight = 0.95f;
 
 		/// @brief A camera jump longer than this within one frame discards the history.
 		static constexpr float HistoryResetDistance = 50.0f;
@@ -56,6 +61,29 @@ namespace mmo
 		/// @brief Multiplier on point and spot light scattering (the zone's light_scattering).
 		float lightScatterStrength = 1.0f;
 
+		/// @brief Weight of the reprojected history in the temporal blend, [0, MaxHistoryWeight].
+		float historyWeight = DefaultHistoryWeight;
+
+		/// @brief Whether samples are jittered within their froxel from frame to frame. Only takes effect
+		///        while the history is on; without history jitter is pure per-frame noise.
+		bool jitterEnabled = true;
+
+		/// @brief Largest sun shadow tap count along one screen axis of a froxel.
+		static constexpr uint32 MaxSunTapsXY = 4;
+
+		/// @brief Largest sun shadow tap count along a froxel's depth.
+		static constexpr uint32 MaxSunTapsZ = 16;
+
+		/// @brief Sun shadow taps along each screen axis of a froxel. The sun's visibility is box-filtered
+		///        over the whole cell with a fixed pattern every frame and gets no history at all: a light
+		///        shaft then depends only on where the cell is right now, so it can neither lag behind the
+		///        camera nor flicker with a per-frame jitter.
+		uint32 sunTapsXY = 2;
+
+		/// @brief Sun shadow taps along a froxel's depth (a froxel is a needle several metres long at
+		///        mid range; too few taps show as bands across the shafts).
+		uint32 sunTapsZ = 6;
+
 		/// @brief Applies a quality preset. Out-of-range values clamp.
 		void ApplyQualityLevel(int level)
 		{
@@ -71,20 +99,35 @@ namespace mmo
 			case 1:
 				tileSize = 24;
 				sliceCount = 32;
+				sunTapsXY = 2;
+				sunTapsZ = 4;
 				break;
 			case 2:
 				tileSize = 16;
 				sliceCount = 48;
+				sunTapsXY = 2;
+				sunTapsZ = 6;
 				break;
 			case 3:
 				tileSize = 12;
 				sliceCount = 64;
+				sunTapsXY = 2;
+				sunTapsZ = 6;
 				break;
 			default:
 				tileSize = 8;
 				sliceCount = 96;
+				sunTapsXY = 2;
+				sunTapsZ = 6;
 				break;
 			}
+		}
+
+		/// @brief Sets the sun shadow taps per froxel, clamped to [1, MaxSunTapsXY] and [1, MaxSunTapsZ].
+		void SetSunTaps(const uint32 xy, const uint32 z)
+		{
+			sunTapsXY = std::clamp(xy, 1u, MaxSunTapsXY);
+			sunTapsZ = std::clamp(z, 1u, MaxSunTapsZ);
 		}
 
 		/// @brief Sets the grid range, clamped to [MinRange, MaxRange].
@@ -97,6 +140,12 @@ namespace mmo
 		void SetDebugMode(const int mode)
 		{
 			debugMode = static_cast<uint32>(std::clamp(mode, 0, 4));
+		}
+
+		/// @brief Sets the temporal history weight, clamped to [0, MaxHistoryWeight]. 0 disables the history.
+		void SetHistoryWeight(const float value)
+		{
+			historyWeight = std::clamp(value, 0.0f, MaxHistoryWeight);
 		}
 
 		/// @brief Sets the point and spot light scattering strength, clamped to [0, 8].
@@ -160,10 +209,34 @@ namespace mmo
 			return result;
 		}
 
+		/// @brief Radical inverse of index in any base >= 2 (Halton sequence).
+		[[nodiscard]] inline float Halton(uint32 index, const uint32 base)
+		{
+			float result = 0.0f;
+			float fraction = 1.0f / static_cast<float>(base);
+			while (index > 0)
+			{
+				result += static_cast<float>(index % base) * fraction;
+				index /= base;
+				fraction /= static_cast<float>(base);
+			}
+
+			return result;
+		}
+
 		/// @brief Depth jitter in [0, 1) for a frame number, repeating every JitterSequenceLength frames.
 		[[nodiscard]] inline float JitterForFrame(const uint64 frame)
 		{
 			return HaltonBase2(static_cast<uint32>(frame % VolumetricFogSettings::JitterSequenceLength) + 1u);
+		}
+
+		/// @brief Screen-space jitter in [0, 1)^2 within a froxel for a frame number (Halton bases 3 and 5,
+		///        so it does not correlate with the base-2 depth jitter). Jittering across the cell lets the
+		///        history converge to the cell's average instead of its centre sample.
+		[[nodiscard]] inline std::pair<float, float> ScreenJitterForFrame(const uint64 frame)
+		{
+			const uint32 index = static_cast<uint32>(frame % VolumetricFogSettings::JitterSequenceLength) + 1u;
+			return { Halton(index, 3), Halton(index, 5) };
 		}
 
 		/// @brief Multiplier noise applies to the height-fog density. Averages 1 over uniformly distributed

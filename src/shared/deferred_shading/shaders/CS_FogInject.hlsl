@@ -1,10 +1,13 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 // Fills every froxel with this frame's fog: extinction from height fog times wind-scrolled noise, and
-// the light scattered toward the camera (fog ambient + shadowed sun + unshadowed point and spot
-// lights). Output rgb = radiance * sigmaScatter, a = sigmaTotal: sigmaTotal is the zone fog's sigma plus
-// every local fog volume's density at the froxel, sigmaScatter the same sum with each volume's density
-// tinted by its colour. Local volumes share the zone fog's lighting.
+// the light scattered toward the camera. u0: rgb = (fog ambient + unshadowed point and spot lights) *
+// sigmaScatter, a = sigmaTotal; jittered and accumulated by CS_FogTemporal. u1: rgb = sigmaScatter * sun
+// visibility - the shadowed sun WITHOUT its phase function, which CS_FogIntegrate applies for the current
+// view rays. u1 is deterministic per cell and bypasses the history.
+// sigmaTotal is the zone fog's sigma plus every local fog volume's density at the froxel, sigmaScatter
+// the same sum with each volume's density tinted by its colour. Local volumes share the zone fog's
+// lighting.
 //
 // Point and spot lights come from the deferred renderer's light buffer (t9), local fog volumes from the
 // fog volume buffer (t10). Each 8x8x8 thread group culls the frame's lights and volumes once against its
@@ -41,9 +44,11 @@ cbuffer ShadowBuffer : register(b3)
 };
 
 RWTexture3D<float4> InjectOutput : register(u0);
+RWTexture3D<float4> InjectSunOutput : register(u1);
 
 StructuredBuffer<Light> Lights : register(t9);
 StructuredBuffer<FogVolume> FogVolumes : register(t10);
+Texture3D<float4> ColumnFarDepth : register(t11);  // r = farthest depth seen through each grid column (CS_FogDepthTiles)
 
 static const uint FOG_GROUP_SIZE = 8;
 static const uint FOG_GROUP_THREADS = FOG_GROUP_SIZE * FOG_GROUP_SIZE * FOG_GROUP_SIZE;
@@ -55,46 +60,101 @@ groupshared uint s_blockLights[MAX_BLOCK_LIGHTS];    // indices into Lights
 groupshared uint s_blockVolumeHits;                  // fog volumes that reach the block (may exceed the capacity)
 groupshared uint s_blockVolumes[MAX_BLOCK_VOLUMES];  // indices into FogVolumes
 
-// One hardware-PCF tap in the cascade covering this distance. 1 = lit.
-// viewDepth: distance along the camera's forward axis (not radial distance to the camera) - matches
-// how CascadeSplitDistances is built (the lighting shader also selects cascades by view depth).
-float SampleSunVisibility(float3 worldPos, float viewDepth)
+// Sums the cell's sun shadow taps in one cascade. A tap's world position is
+// CameraPosition + depth * (ray + sub.x * cellX + sub.y * cellY) (all per metre of view depth) and the
+// cascade projection is orthographic, so its shadow-space position is affine in the tap's sub-cell offset
+// and depth: a few multiply-adds and one bilinear comparison lookup per tap.
+float SumCascadeTaps(Texture2D shadowMap, float3 lightOrigin, float3 lightRay, float3 lightX, float3 lightY, uint3 id)
+{
+    float compareBias = ShadowBias;
+    float sum = 0.0f;
+    [loop]
+    for (uint k = 0; k < SunTapsZ; ++k)
+    {
+        float depth = SliceToDepth((float(id.z) + (float(k) + 0.5f) / float(SunTapsZ)) / float(GridDepth));
+
+        // Each depth layer shifts its xy strata by an R2 sequence step, so the layers do not stack their
+        // taps in the same columns and together cover the cell's cross-section evenly.
+        float2 layerOffset = frac(0.5f + float(k) * float2(0.7548777f, 0.5698403f));
+        [loop]
+        for (uint j = 0; j < SunTapsXY; ++j)
+        {
+            [loop]
+            for (uint i = 0; i < SunTapsXY; ++i)
+            {
+                float2 sub = (float2(i, j) + layerOffset) / float(SunTapsXY) - 0.5f;
+                float3 light = lightOrigin + depth * (lightRay + sub.x * lightX + sub.y * lightY);
+                float2 uv = light.xy * float2(0.5f, -0.5f) + 0.5f;
+                if (any(uv < 0.0f) || any(uv > 1.0f) || light.z < 0.0f || light.z > 1.0f)
+                {
+                    sum += 1.0f;
+                }
+                else
+                {
+                    sum += shadowMap.SampleCmpLevelZero(ShadowSampler, uv, light.z - compareBias);
+                }
+            }
+        }
+    }
+
+    return sum / float(SunTapsXY * SunTapsXY * SunTapsZ);
+}
+
+// Direction through a screen UV scaled to one metre of view depth.
+float3 RayPerDepth(float2 uv)
+{
+    float3 ray = FogWorldRay(uv);
+    return ray / max(dot(ray, CameraForward), 1e-4f);
+}
+
+// Sun visibility of froxel id, box-filtered over the whole cell (SunTapsXY^2 x SunTapsZ taps on a fixed
+// pattern) with the same taps every frame. 1 = lit.
+//
+// A single shadow tap per froxel resolves canopy detail far finer than the grid (a leaf gap is a fraction
+// of a 12 px cell at 50 m), so which cells read "lit" depends on exactly where the sample lands - and every
+// camera move moves the grid. Jittering the sample and averaging through the temporal history hides that
+// at rest but smears and lags while moving. The box filter is the value the cell should have; it changes
+// only as fast as the cell actually slides over the shadow, so this volume needs no history at all.
+//
+// One cascade per cell, chosen by the cell centre's view depth (the lighting shader selects by view depth
+// too); taps outside it count as lit.
+float CellSunVisibility(uint3 id)
 {
     if (CascadeCount == 0)
     {
         return 1.0f;
     }
 
+    float2 cell = 1.0f / float2(GridWidth, GridHeight);
+    float2 uv = (float2(id.xy) + 0.5f) * cell;
+    float centerDepth = SliceToDepth((float(id.z) + 0.5f) / float(GridDepth));
+
     uint cascade = CascadeCount - 1;
-    for (uint i = 0; i < CascadeCount; ++i)
+    for (uint c = 0; c < CascadeCount; ++c)
     {
-        if (viewDepth <= CascadeSplitDistances[i])
+        if (centerDepth <= CascadeSplitDistances[c])
         {
-            cascade = i;
+            cascade = c;
             break;
         }
     }
 
-    float4 lightSpace = mul(float4(worldPos, 1.0f), CascadeViewProj[cascade]);
-    if (lightSpace.w <= 0.0f)
-    {
-        return 1.0f;
-    }
+    float3 rayPerDepth = RayPerDepth(uv);
+    float3 cellX = RayPerDepth(uv + float2(cell.x * 0.5f, 0.0f)) - RayPerDepth(uv - float2(cell.x * 0.5f, 0.0f));
+    float3 cellY = RayPerDepth(uv + float2(0.0f, cell.y * 0.5f)) - RayPerDepth(uv - float2(0.0f, cell.y * 0.5f));
 
-    float3 ndc = lightSpace.xyz / lightSpace.w;
-    float2 uv = ndc.xy * float2(1.0f, -1.0f) * 0.5f + 0.5f;
-    if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f || ndc.z < 0.0f || ndc.z > 1.0f)
-    {
-        return 1.0f;
-    }
+    float4x4 m = CascadeViewProj[cascade];
+    float3 lightOrigin = mul(float4(CameraPosition, 1.0f), m).xyz;
+    float3 lightRay = mul(float4(rayPerDepth, 0.0f), m).xyz;
+    float3 lightX = mul(float4(cellX, 0.0f), m).xyz;
+    float3 lightY = mul(float4(cellY, 0.0f), m).xyz;
 
-    float compareDepth = ndc.z - ShadowBias;
     switch (cascade)
     {
-        case 0: return ShadowMapCascade0.SampleCmpLevelZero(ShadowSampler, uv, compareDepth);
-        case 1: return ShadowMapCascade1.SampleCmpLevelZero(ShadowSampler, uv, compareDepth);
-        case 2: return ShadowMapCascade2.SampleCmpLevelZero(ShadowSampler, uv, compareDepth);
-        default: return ShadowMapCascade3.SampleCmpLevelZero(ShadowSampler, uv, compareDepth);
+        case 0: return SumCascadeTaps(ShadowMapCascade0, lightOrigin, lightRay, lightX, lightY, id);
+        case 1: return SumCascadeTaps(ShadowMapCascade1, lightOrigin, lightRay, lightX, lightY, id);
+        case 2: return SumCascadeTaps(ShadowMapCascade2, lightOrigin, lightRay, lightX, lightY, id);
+        default: return SumCascadeTaps(ShadowMapCascade3, lightOrigin, lightRay, lightX, lightY, id);
     }
 }
 
@@ -254,11 +314,31 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
 
         const float debugSigma = 0.02f;
         InjectOutput[id] = float4(color * debugSigma, debugSigma);
+        InjectSunOutput[id] = float4(0.0f, 0.0f, 0.0f, 0.0f);
         return;
     }
 
+    // A cell that starts behind the farthest surface seen by every pixel that samples it (its own column and,
+    // through the composite's bilinear lookup, its neighbours) never shows its sun term: skip its shadow taps.
+    // Behind the ground or a tree trunk that is most of the grid.
+    float farDepth = 0.0f;
+    [unroll]
+    for (int dy = -1; dy <= 1; ++dy)
+    {
+        [unroll]
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+            int2 column = clamp(int2(id.xy) + int2(dx, dy), int2(0, 0), int2(GridWidth, GridHeight) - 1);
+            farDepth = max(farDepth, ColumnFarDepth.Load(int4(column, 0, 0)).r);
+        }
+    }
+    // The half-float far depth may round down by a few centimetres; the margin keeps the test conservative.
+    bool hiddenCell = SliceToDepth(float(id.z) / float(GridDepth)) > farDepth * 1.002f;
+
     // 2. This froxel.
-    float2 uv = (float2(id.xy) + 0.5f) / float2(GridWidth, GridHeight);
+    // Jittered across the whole cell, not just in depth, so the history converges to the cell's average
+    // rather than its centre sample (less aliasing of shadow detail in the settled image).
+    float2 uv = (float2(id.xy) + ScreenJitter) / float2(GridWidth, GridHeight);
     float3 ray = FogWorldRay(uv);
     float viewDepth = SliceToDepth((float(id.z) + Jitter) / float(GridDepth));
     float3 worldPos = FogWorldPosition(ray, viewDepth);
@@ -268,9 +348,10 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
     float noise = NoiseVolume.SampleLevel(NoiseSampler, noiseUvw, 0.0f);
 
     float sigma = FogDensityAt(worldPos.y) * NoiseDensityFactor(noise, NoiseAmount);
-    float visibility = SampleSunVisibility(worldPos, viewDepth);
-    float3 radiance = FogSource(dot(ray, SunDirection), visibility);
-    radiance += BlockLightScattering(worldPos, ray, blockLightCount);
+    // The sun's phase function is NOT applied here: it depends on the view direction, and the temporal
+    // history would keep it as seen from where the camera used to be. Only the view-independent parts go
+    // into the volumes; CS_FogIntegrate applies the sun phase for the current rays.
+    float3 radiance = FogTint + BlockLightScattering(worldPos, ray, blockLightCount);
 
     uint blockVolumeCount = min(s_blockVolumeHits, MAX_BLOCK_VOLUMES);
     float sigmaTotal = sigma;
@@ -278,4 +359,16 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
     AccumulateFogVolumes(worldPos, blockVolumeCount, sigmaTotal, sigmaScatter);
 
     InjectOutput[id] = float4(radiance * sigmaScatter, sigmaTotal);
+
+    // 3. The sun, which skips the history (see CellSunVisibility): its scattering coefficient comes from
+    //    the unjittered cell centre, so nothing in this volume varies from frame to frame on its own.
+    float2 centerUv = (float2(id.xy) + 0.5f) / float2(GridWidth, GridHeight);
+    float3 centerPos = FogWorldPosition(FogWorldRay(centerUv), SliceToDepth((float(id.z) + 0.5f) / float(GridDepth)));
+    float3 centerNoiseUvw = float3(centerPos.x / NoiseSize - WindOffset.x, centerPos.y / NoiseSize, centerPos.z / NoiseSize - WindOffset.y);
+    float centerSigma = FogDensityAt(centerPos.y) * NoiseDensityFactor(NoiseVolume.SampleLevel(NoiseSampler, centerNoiseUvw, 0.0f), NoiseAmount);
+    float centerSigmaTotal = centerSigma;
+    float3 centerSigmaScatter = centerSigma.xxx;
+    AccumulateFogVolumes(centerPos, blockVolumeCount, centerSigmaTotal, centerSigmaScatter);
+
+    InjectSunOutput[id] = hiddenCell ? float4(0.0f, 0.0f, 0.0f, 0.0f) : float4(centerSigmaScatter * CellSunVisibility(id), 0.0f);
 }

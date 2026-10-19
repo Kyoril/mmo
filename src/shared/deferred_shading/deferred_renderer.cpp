@@ -182,9 +182,12 @@ namespace mmo
             m_shadowCameraNodes[i]->AttachObject(*m_shadowCameras[i]);
         }
 
-        // Anisotropic comparison with a white border: shadow edges fade to lit instead of darkening.
+        // Bilinear comparison with a white border: shadow edges fade to lit instead of darkening. The
+        // lighting shader's tent filter is built from bilinear taps and relies on exactly 2x2 texel
+        // weights per tap (anisotropic filtering has no derivatives under SampleCmpLevelZero, so what
+        // it does there is up to the driver).
         SamplerDesc shadowSamplerDesc;
-        shadowSamplerDesc.filter = SamplerFilter::ComparisonAnisotropic;
+        shadowSamplerDesc.filter = SamplerFilter::ComparisonLinear;
         shadowSamplerDesc.address = SamplerAddress::Border;
         shadowSamplerDesc.comparison = SamplerComparison::LessEqual;
         for (float& channel : shadowSamplerDesc.borderColor)
@@ -1036,20 +1039,20 @@ namespace mmo
     {
         switch (level)
         {
-        case 0: // Low: 2 cascades, 4 PCF taps, only the nearest at full size
+        case 0: // Low: 2 cascades, 3x3 tent PCF (4 taps), only the nearest at full size
             m_cascadedShadowSetup->GetConfig().activeCascadeCount = 2;
             m_pcfSampleCount = 4;
-            m_fullResolutionCascades = 1;
+            m_cascadedShadowSetup->GetConfig().fullResolutionCascades = 1;
             break;
-        case 1: // Medium: 3 cascades, 8 PCF taps, only the nearest at full size
+        case 1: // Medium: 3 cascades, 5x5 tent PCF (9 taps), only the nearest at full size
             m_cascadedShadowSetup->GetConfig().activeCascadeCount = 3;
-            m_pcfSampleCount = 8;
-            m_fullResolutionCascades = 1;
+            m_pcfSampleCount = 9;
+            m_cascadedShadowSetup->GetConfig().fullResolutionCascades = 1;
             break;
-        default: // High: 4 cascades, 16 PCF taps, the two nearest at full size
+        default: // High: 4 cascades, 7x7 tent PCF (16 taps), the two nearest at full size
             m_cascadedShadowSetup->GetConfig().activeCascadeCount = NUM_SHADOW_CASCADES;
             m_pcfSampleCount = 16;
-            m_fullResolutionCascades = 2;
+            m_cascadedShadowSetup->GetConfig().fullResolutionCascades = 2;
             break;
         }
 
@@ -1085,13 +1088,10 @@ namespace mmo
         // Resizing invalidates the cached cascade depth maps; force a full refresh of every cascade.
         m_shadowFrameCounter = 0;
 
+        // Update the CSM config first: GetCascadeShadowMapSize reads the per-cascade size from it.
+        m_cascadedShadowSetup->GetConfig().shadowMapSize = size;
+
         // Resize all cascade shadow maps (distant cascades use a reduced resolution).
         ResizeCascadeShadowMaps();
-
-        // Update CSM config
-        if (m_cascadedShadowSetup)
-        {
-            m_cascadedShadowSetup->GetConfig().shadowMapSize = size;
-        }
     }
 }

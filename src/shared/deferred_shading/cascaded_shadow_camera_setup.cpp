@@ -172,7 +172,7 @@ namespace mmo
 			// below MUST use exactly this value: snapping to any other grid spacing (e.g. the one
 			// ComputeCascadeMatrix derives from a differently-rounded radius) leaves sub-texel
 			// drift whenever the camera moves.
-			const float snapTexelSize = (radius * 2.0f) / static_cast<float>(m_config.shadowMapSize);
+			const float snapTexelSize = m_config.GetCascadeTexelSize(radius * 2.0f, i);
 			m_cascades[i].worldTexelSize = snapTexelSize;
 
 			// Position the shadow camera

@@ -69,6 +69,32 @@ namespace mmo
 			return activeCascadeCount < 1u ? 1u :
 				(activeCascadeCount > NUM_SHADOW_CASCADES ? NUM_SHADOW_CASCADES : activeCascadeCount);
 		}
+
+		/// @brief Number of near cascades rendered at the full shadowMapSize; the rest use half of it
+		///        (shadow quality setting).
+		uint32 fullResolutionCascades = 2;
+
+		/// @brief Edge length in texels of the depth map a cascade is rendered to. Cascades past
+		///        fullResolutionCascades use half of shadowMapSize (at least 256).
+		[[nodiscard]] uint16 GetCascadeMapSize(const uint32 cascadeIndex) const
+		{
+			if (cascadeIndex < fullResolutionCascades)
+			{
+				return shadowMapSize;
+			}
+
+			const uint16 halfSize = shadowMapSize / 2;
+			return halfSize < 256 ? 256 : halfSize;
+		}
+
+		/// @brief World size of one texel of a cascade rendered with the given ortho window size. The
+		///        texel snap must use exactly this: snapping a half-resolution cascade on the full-size
+		///        grid moves its window by half a texel as the camera moves, which re-rasterizes every
+		///        shadow edge at a new offset (thin light gaps open and close; god rays flicker).
+		[[nodiscard]] float GetCascadeTexelSize(const float windowSize, const uint32 cascadeIndex) const
+		{
+			return windowSize / static_cast<float>(GetCascadeMapSize(cascadeIndex));
+		}
 	};
 
 	/// @brief Advanced shadow camera setup implementing Cascaded Shadow Maps (CSM).
