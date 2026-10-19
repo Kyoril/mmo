@@ -132,8 +132,8 @@
 		]
 	},
 	"game": {
-		"version": 26,
-		"fingerprint": "sha256:ccbcc7ee408d83567e4c19bc48f642e60a0d32e3a21ac62f998a193937aaa27a",
+		"version": 27,
+		"fingerprint": "sha256:8ce664bb4e921cefab62cd8fd55b258d265e3241fa82c37895ef1f05571a08be",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -141,7 +141,7 @@
 			"src/shared/game/game.h": "sha256:701905ce17b3c5650c9e82cd50555cba21271b2a1c6a95efda9ad9ebe752e8a5",
 			"src/shared/game/mail.h": "sha256:665ffaee5b569667ca8c8a264de39f333a3475b6779175b8223bc7eeab2e2c54",
 			"src/shared/game/movement_info.h": "sha256:76a78cd18e8906426a99759b10104a524dec328fddd92c36646f4dcd4f0ee976",
-			"src/shared/game/object_type_id.h": "sha256:38a83ab441961d5916e0b9de78c4e9f7c812c31bc7785d6ac8d15abd4b33195d",
+			"src/shared/game/object_type_id.h": "sha256:84019bb6272f40184089187b067fffa717923cff18d64403c6619d8f779b1f10",
 			"src/shared/game/trade_skill_data.h": "sha256:1bff308d1252a2e0a04b9ca4e54607fbcf381bb287497bdc71738bd93364afc5",
 			"src/shared/game_protocol/game_crypt.cpp": "sha256:0e29c28c573ee10abb08b313a9beaf1d1afd0f1064af07ad313ae69e6f32d9db",
 			"src/shared/game_protocol/game_crypt.h": "sha256:278f155eab32b2afb4bdbf5f2f1907c286458b355f86fa2e2c0563923c7a0e17",
@@ -518,6 +518,7 @@
 			"game::object_fields::UnitFields::Level = ObjectFieldCount",
 			"game::object_fields::UnitFields::Mana = ObjectFieldCount+7",
 			"game::object_fields::UnitFields::ManaRegen = TargetUnit + 2+17",
+			"game::object_fields::UnitFields::ManaRegenCasting = TargetUnit + 2+18",
 			"game::object_fields::UnitFields::MaxDamage = TargetUnit + 2+2",
 			"game::object_fields::UnitFields::MaxEnergy = ObjectFieldCount+12",
 			"game::object_fields::UnitFields::MaxHealth = ObjectFieldCount+5",
@@ -554,7 +555,7 @@
 			"game::object_fields::UnitFields::StatStamina = ObjectFieldCount+14",
 			"game::object_fields::UnitFields::StatStrength = ObjectFieldCount+15",
 			"game::object_fields::UnitFields::TargetUnit = ObjectFieldCount+33",
-			"game::object_fields::UnitFields::UnitFieldCount = ManaRegen + 1",
+			"game::object_fields::UnitFields::UnitFieldCount = ManaRegenCasting + 1",
 			"game::object_fields::UnitFields::VirtualItem0 = TargetUnit + 2+6",
 			"game::object_fields::UnitFields::VirtualItem1 = TargetUnit + 2+7",
 			"game::object_fields::UnitFields::VirtualItem2 = TargetUnit + 2+8",

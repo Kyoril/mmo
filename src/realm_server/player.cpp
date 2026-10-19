@@ -13,6 +13,7 @@
 #include "shutdown_manager.h"
 #include "instance_reset.h"
 
+#include "base/chat_text.h"
 #include "base/random.h"
 #include "base/sha1.h"
 #include "log/default_log_levels.h"
@@ -914,6 +915,14 @@ namespace mmo
 			{
 				return PacketParseResult::Disconnect;
 			}
+		}
+
+		// Never trust the client's text: drop malformed UTF-8 and invisible tricks before the
+		// message reaches other players or the database, and ignore messages with nothing left.
+		message = SanitizeChatText(message);
+		if (message.empty())
+		{
+			return PacketParseResult::Pass;
 		}
 
 		// Switch chat type

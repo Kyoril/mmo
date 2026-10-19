@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
+#include "base/chat_text.h"
 #include "base/localization.h"
 #include "client_locale.h"
 #include "console/console.h"
@@ -1035,6 +1036,7 @@ namespace mmo
 							   .def("GetSpellCritChance", &UnitHandle::GetSpellCritChance)
 							   .def("GetMeleeCritChance", &UnitHandle::GetMeleeCritChance)
 							   .def("GetManaRegen", &UnitHandle::GetManaRegen)
+							   .def("GetManaRegenCasting", &UnitHandle::GetManaRegenCasting)
 							   .def("GetArmor", &UnitHandle::GetArmor)
 							   .def("GetTalentPoints", &UnitHandle::GetTalentPoints)
 							   .def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)
@@ -2213,13 +2215,22 @@ namespace mmo
 			return;
 		}
 
-		m_realmConnector.SendChatMessage(message, chatType, target ? target : s_emptyTarget);
+		// A message of only blanks or leftovers of deleted input would show up as an empty line
+		// (and an empty chat bubble) for everyone, so it is not sent at all. The realm cleans
+		// the text the same way, this just saves the round trip.
+		const String text = SanitizeChatText(message);
+		if (text.empty())
+		{
+			return;
+		}
+
+		m_realmConnector.SendChatMessage(text, chatType, target ? target : s_emptyTarget);
 
 		if (chatType == ChatType::Whisper)
 		{
 			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_WHISPER_INFORM",
 				std::string(target ? target : ""),
-				std::string(message));
+				text);
 		}
 	}
 
