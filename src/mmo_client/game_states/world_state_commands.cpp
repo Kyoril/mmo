@@ -513,6 +513,13 @@ namespace mmo
 		ILOG("GM invisibility " << (enable ? "enabled" : "disabled"));
 	}
 
+	void WorldState::Command_Ghost(const std::string &cmd, const std::string &args) const
+	{
+		// No name stops ghosting; the realm answers with a system message either way.
+		const auto tokens = ParseCommandArgs(args);
+		m_realmConnector.CheatGhost(tokens.empty() ? String() : tokens[0]);
+	}
+
 	void WorldState::Command_Damage(const std::string &cmd, const std::string &args) const
 	{
 		if (args.empty())

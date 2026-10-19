@@ -610,6 +610,8 @@ namespace mmo
 
 		void Command_Invisible(const std::string &cmd, const std::string &args) const;
 
+		void Command_Ghost(const std::string &cmd, const std::string &args) const;
+
 		void Command_Damage(const std::string &cmd, const std::string &args) const;
 
 		void Command_ResetCooldowns(const std::string &cmd, const std::string &args) const;

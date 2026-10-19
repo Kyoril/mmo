@@ -41,3 +41,20 @@ TEST_CASE("Nil override instance is never used", "[instance_override]")
 	CHECK_FALSE(ConsumeInstanceOverride(pending, 1).has_value());
 	CHECK_FALSE(pending.has_value());
 }
+
+TEST_CASE("Ghost joins the target's instance on the target's map", "[instance_override][ghost]")
+{
+	const auto joined = GhostInstanceFor(1, MakeId(), 1);
+	REQUIRE(joined.has_value());
+	CHECK(*joined == MakeId());
+}
+
+TEST_CASE("Ghost entering another map than the target keeps its own resolution", "[instance_override][ghost]")
+{
+	CHECK_FALSE(GhostInstanceFor(1, MakeId(), 0).has_value());
+}
+
+TEST_CASE("Ghost target in transfer (nil instance) is not followed", "[instance_override][ghost]")
+{
+	CHECK_FALSE(GhostInstanceFor(1, InstanceId{}, 1).has_value());
+}

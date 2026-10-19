@@ -38,4 +38,19 @@ namespace mmo
 
 		return taken->instanceId;
 	}
+
+	/// Resolves the instance a ghosting game master joins when transferring to transferMap.
+	/// @param targetMap The map the ghosted player is currently on.
+	/// @param targetInstance The instance the ghosted player is currently in (nil while in transfer).
+	/// @param transferMap The map the game master is being transferred to.
+	/// @returns The ghosted player's instance if the game master is entering its map, otherwise nothing.
+	inline std::optional<InstanceId> GhostInstanceFor(const MapId targetMap, const InstanceId& targetInstance, const MapId transferMap)
+	{
+		if (targetMap != transferMap || targetInstance.is_nil())
+		{
+			return std::nullopt;
+		}
+
+		return targetInstance;
+	}
 }

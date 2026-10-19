@@ -2067,8 +2067,10 @@ namespace mmo
 								 { Command_Revive(cmd, args); }, ConsoleCommandCategory::Gm, "Revives the selected dead unit at its current position (or yourself if nothing is selected).");
 		Console::RegisterCommand("godmode", [this](const std::string &cmd, const std::string &args)
 								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
-		Console::RegisterCommand("invisible", [this](const std::string &cmd, const std::string &args)
-								 { Command_Invisible(cmd, args); }, ConsoleCommandCategory::Gm, "Hides your character from players and creatures (other GMs still see you). Persists across map changes and relogs. 'invisible' or 'invisible 1' enables it, 'invisible 0' disables it.");
+		Console::RegisterCommand("invis", [this](const std::string &cmd, const std::string &args)
+								 { Command_Invisible(cmd, args); }, ConsoleCommandCategory::Gm, "Makes your character invisible to everybody except game masters. Persists across map changes and relogs. 'invis' or 'invis 1' enables it, 'invis 0' disables it.");
+		Console::RegisterCommand("ghost", [this](const std::string &cmd, const std::string &args)
+								 { Command_Ghost(cmd, args); }, ConsoleCommandCategory::Gm, "Ghosts the named online player: you join them and follow them into every instance they enter, without being in their group, until one of you logs out. 'ghost' without a name stops ghosting.");
 		Console::RegisterCommand("damage", [this](const std::string &cmd, const std::string &args)
 								 { Command_Damage(cmd, args); }, ConsoleCommandCategory::Gm, "Deals the given amount of raw damage to your current target. Used to walk a boss to its next phase threshold.");
 		Console::RegisterCommand("resetcooldowns", [this](const std::string &cmd, const std::string &args)
@@ -2109,7 +2111,8 @@ namespace mmo
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
-		Console::UnregisterCommand("invisible");
+		Console::UnregisterCommand("invis");
+		Console::UnregisterCommand("ghost");
 		Console::UnregisterCommand("damage");
 		Console::UnregisterCommand("resetcooldowns");
 		Console::UnregisterCommand("heal");

@@ -106,6 +106,9 @@ namespace mmo
 			DeclineGroupInvite();
 		}
 
+		// GMs ghosting this character lose their link with it
+		EndGhostLinksToMe();
+
 		// Notify the group that the player is leaving
 		if (m_group && m_characterData)
 		{
@@ -1251,7 +1254,15 @@ namespace mmo
 
 		// Resolve the correct instance id based on map type
 		InstanceId targetInstanceId{};
-		const std::optional<InstanceId> overrideInstance = ConsumeInstanceOverride(m_pendingInstanceOverride, m_transferMap);
+		std::optional<InstanceId> overrideInstance = ConsumeInstanceOverride(m_pendingInstanceOverride, m_transferMap);
+		if (!overrideInstance && m_ghostTargetGuid != 0)
+		{
+			// A ghosting GM entering the target's map joins the target's instance, whatever way they got there.
+			if (Player* target = m_manager.GetPlayerByCharacterGuid(m_ghostTargetGuid); target && target->HasCharacterGuid())
+			{
+				overrideInstance = GhostInstanceFor(target->GetCharacterData().mapId, target->GetWorldInstanceId(), m_transferMap);
+			}
+		}
 		m_joinedByInstanceOverride = overrideInstance.has_value();
 		const proto::MapEntry* mapEntry = m_project.maps.getById(m_transferMap);
 		if (overrideInstance)
@@ -2570,48 +2581,17 @@ namespace mmo
 		m_database.asyncRequestKeyed(GetCharacterGuid(), std::move(handler), &IDatabase::GetUnreadMailCount, GetCharacterGuid());
 	}
 
-#ifdef MMO_WITH_DEV_COMMANDS
-	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket &packet)
+	void Player::TeleportIntoPlayerInstance(const String &targetName)
 	{
-		// Require GM level 1 for teleport commands
-		if (!HasGMLevel(gm_level::Gm))
+		Player *player = m_manager.GetPlayerByCharacterName(targetName);
+		if (!player || !player->HasCharacterGuid())
 		{
-			WLOG("Player " << m_characterData->name << " attempted to use teleport command without sufficient privileges");
-			return PacketParseResult::Pass;
+			return;
 		}
 
-		String playerName;
-		if (!(packet >> io::read_container<uint8>(playerName)))
-		{
-			return PacketParseResult::Disconnect;
-		}
+		const String playerName = targetName;
 
-		// Resolve player by name
-		Player *player = m_manager.GetPlayerByCharacterName(playerName);
-		if (!player)
-		{
-			// We could not find a player currently online with the given name, so we ask the database and teleport to the location the character logged out
-			std::weak_ptr weakThis{shared_from_this()};
-			auto handler = [weakThis, playerName](const std::optional<CharacterLocationData> &result)
-			{
-				if (auto strongThis = weakThis.lock())
-				{
-					if (!result)
-					{
-						WLOG("Failed to teleport to player because no character named '" << playerName << "' exists!");
-						return;
-					}
-
-					strongThis->SendTeleportRequest(result->map, result->position, result->facing);
-				}
-			};
-
-			// Execute
-			m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterLocationDataByName, playerName);
-			return PacketParseResult::Pass;
-		}
-
-		// Player is currently connected, so we need to get the players location data first by asking the world node the player is currently connected to
+		// The player is connected, so ask its world node for its current location first
 		std::weak_ptr weakThis{shared_from_this()};
 		player->FetchCharacterLocationAsync([weakThis, playerName](bool succeeded, uint32 mapId, Vector3 position, Radian facing)
 											{
@@ -2657,6 +2637,155 @@ namespace mmo
 				// Teleport player to the location
 				DLOG("Teleporting player to map " << mapId << ", instance " << targetInstance << ", location " << position << "...");
 				strongThis->SendTeleportRequest(mapId, position, facing, targetInstance); });
+	}
+
+	void Player::EndGhostLinksToMe()
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		const uint64 myGuid = m_characterData->characterId;
+		const String myName = m_characterData->name;
+		m_manager.ForEachPlayer([this, myGuid, &myName](Player &ghost)
+		{
+			if (&ghost == this || ghost.m_ghostTargetGuid != myGuid)
+			{
+				return;
+			}
+
+			ghost.m_ghostTargetGuid = 0;
+			ghost.SendSystemMessage(myName + " logged out. You are no longer ghosting them.");
+		});
+	}
+
+	void Player::PullGhostsAlong()
+	{
+		if (!m_characterData || m_instanceId.is_nil())
+		{
+			return;
+		}
+
+		const uint64 myGuid = m_characterData->characterId;
+		const String myName = m_characterData->name;
+		const InstanceId myInstance = m_instanceId;
+
+		// Collect first: the teleport looks players up by name, which takes the manager's lock again.
+		std::vector<Player*> ghosts;
+		m_manager.ForEachPlayer([this, myGuid, &myInstance, &ghosts](Player &ghost)
+		{
+			// Already there (ghosting each other, or followed in by hand): nothing to do.
+			if (&ghost != this && ghost.m_ghostTargetGuid == myGuid && ghost.HasCharacterGuid() && ghost.m_instanceId != myInstance)
+			{
+				ghosts.push_back(&ghost);
+			}
+		});
+
+		for (Player *ghost : ghosts)
+		{
+			ghost->TeleportIntoPlayerInstance(myName);
+		}
+	}
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	PacketParseResult Player::OnCheatGhost(game::IncomingPacket &packet)
+	{
+		if (!HasGMLevel(gm_level::Gm))
+		{
+			WLOG("Player " << m_characterData->name << " attempted to use ghost command without sufficient privileges");
+			return PacketParseResult::Pass;
+		}
+
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// No name: cancel the current ghost link.
+		if (playerName.empty())
+		{
+			if (m_ghostTargetGuid == 0)
+			{
+				SendSystemMessage("You are not ghosting anyone.");
+				return PacketParseResult::Pass;
+			}
+
+			const Player *target = m_manager.GetPlayerByCharacterGuid(m_ghostTargetGuid);
+			const String targetName = (target && target->HasCharacterGuid()) ? target->GetCharacterData().name : String("your target");
+			m_ghostTargetGuid = 0;
+			SendSystemMessage("You are no longer ghosting " + targetName + ".");
+			return PacketParseResult::Pass;
+		}
+
+		Player *target = m_manager.GetPlayerByCharacterName(playerName);
+		if (!target || !target->HasCharacterGuid())
+		{
+			SendSystemMessage("No player named " + playerName + " is online.");
+			return PacketParseResult::Pass;
+		}
+
+		if (target == this)
+		{
+			SendSystemMessage("You cannot ghost yourself.");
+			return PacketParseResult::Pass;
+		}
+
+		m_ghostTargetGuid = target->GetCharacterGuid();
+		SendSystemMessage("You are now ghosting " + target->GetCharacterData().name + ". You follow them into every instance they enter until one of you logs out or you type 'ghost'.");
+
+		// Join them right away, unless we already share their instance.
+		if (target->GetWorldInstanceId() != m_instanceId)
+		{
+			TeleportIntoPlayerInstance(target->GetCharacterData().name);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket &packet)
+	{
+		// Require GM level 1 for teleport commands
+		if (!HasGMLevel(gm_level::Gm))
+		{
+			WLOG("Player " << m_characterData->name << " attempted to use teleport command without sufficient privileges");
+			return PacketParseResult::Pass;
+		}
+
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Resolve player by name
+		Player *player = m_manager.GetPlayerByCharacterName(playerName);
+		if (!player)
+		{
+			// We could not find a player currently online with the given name, so we ask the database and teleport to the location the character logged out
+			std::weak_ptr weakThis{shared_from_this()};
+			auto handler = [weakThis, playerName](const std::optional<CharacterLocationData> &result)
+			{
+				if (auto strongThis = weakThis.lock())
+				{
+					if (!result)
+					{
+						WLOG("Failed to teleport to player because no character named '" << playerName << "' exists!");
+						return;
+					}
+
+					strongThis->SendTeleportRequest(result->map, result->position, result->facing);
+				}
+			};
+
+			// Execute
+			m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterLocationDataByName, playerName);
+			return PacketParseResult::Pass;
+		}
+
+		// Player is currently connected: follow it into its instance
+		TeleportIntoPlayerInstance(playerName);
 
 		return PacketParseResult::Pass;
 	}
@@ -3606,6 +3735,7 @@ namespace mmo
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatSetSubsystem, *this, &Player::OnCheatSetSubsystem);
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
+			RegisterPacketHandler(game::client_realm_packet::CheatGhost, *this, &Player::OnCheatGhost);
 			RegisterPacketHandler(game::client_realm_packet::CheatSummon, *this, &Player::OnCheatSummon);
 			RegisterPacketHandler(game::client_realm_packet::CheatSetTimeOfDay, *this, &Player::OnCheatSetTimeOfDay);
 			RegisterPacketHandler(game::client_realm_packet::GuildCreate, *this, &Player::OnGuildCreate);
@@ -3643,6 +3773,7 @@ namespace mmo
 #if MMO_WITH_DEV_COMMANDS
 			ClearPacketHandler(game::client_realm_packet::CheatSetSubsystem);
 			ClearPacketHandler(game::client_realm_packet::CheatTeleportToPlayer);
+			ClearPacketHandler(game::client_realm_packet::CheatGhost);
 			ClearPacketHandler(game::client_realm_packet::CheatSummon);
 			ClearPacketHandler(game::client_realm_packet::CheatSetTimeOfDay);
 			ClearPacketHandler(game::client_realm_packet::GuildCreate);
@@ -3679,6 +3810,7 @@ namespace mmo
 		// session may redirect this one's transfers.
 		m_joinedByInstanceOverride = false;
 		m_pendingInstanceOverride.reset();
+		m_ghostTargetGuid = 0;
 
 		// Store dungeon instance binding if applicable
 		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
@@ -3828,6 +3960,9 @@ namespace mmo
 				DLOG("Stored personal dungeon instance binding on map " << m_characterData->mapId);
 			}
 		}
+
+		// GMs ghosting this character follow it into its new instance.
+		PullGhostsAlong();
 	}
 
 	void Player::OnWorldJoinFailed(const game::player_login_response::Type response)
@@ -3867,6 +4002,9 @@ namespace mmo
 		switch (reason)
 		{
 		case auth::world_left_reason::Logout:
+			// A ghost link lasts until either character logs out.
+			EndGhostLinksToMe();
+			m_ghostTargetGuid = 0;
 			m_characterData.reset();
 			// Clear group and invite state so a fresh EnterWorld starts with no stale membership.
 			m_group.reset();
