@@ -2439,7 +2439,7 @@ namespace mmo
 			// threshold mirrors the client's SWIM_START_DEPTH, with tolerance for surface jitter.
 			// Only enforced when the server actually has water data for this map; otherwise we trust
 			// the client (graceful degradation instead of rejecting all swimming).
-			constexpr float swimStartDepth = 1.0f;
+			constexpr float swimStartDepth = 1.2f;
 			constexpr float depthTolerance = 0.5f;
 
 			MapData* mapData = m_worldInstance->GetMapData();
