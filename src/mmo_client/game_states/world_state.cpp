@@ -168,6 +168,7 @@ namespace mmo
 		static ConsoleVar *s_contactShadowDebugVar = nullptr;
 		static ConsoleVar *s_atmosphereQualityVar = nullptr;
 		static ConsoleVar *s_volumetricFogRangeVar = nullptr;
+		static ConsoleVar *s_volumetricFogHistoryVar = nullptr;
 		static ConsoleVar *s_atmosphereDebugVar = nullptr;
 		static ConsoleVar *s_bloomQualityVar = nullptr;
 		static ConsoleVar *s_exposureVar = nullptr;
@@ -2260,6 +2261,9 @@ namespace mmo
 
 		s_volumetricFogRangeVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogRange", "How many metres in front of the camera the volumetric fog covers (50 to 300, the shadow range). Fog beyond uses a smooth closed-form estimate.", "200");
 		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		s_volumetricFogHistoryVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogHistory", "How much of the previous frame the volumetric fog keeps (0 to 0.95). Higher values smooth out sampling noise and aliasing; lower values react faster and stay sharper while the camera moves. 0 (default) disables the history: the fog is then a pure function of the camera pose.", "0");
+		m_cvarChangedSignals += s_volumetricFogHistoryVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogSunMode", "Volumetric fog sun filtering: 0 box filter (fixed taps, no history), 1 temporal (one blue-noise jittered tap, clamped history, fog shadow map), 2 temporal with the surface cascades.", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
 		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
@@ -2437,6 +2441,8 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogRange");
+		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogHistory");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFogSunMode");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
@@ -6844,7 +6850,12 @@ namespace mmo
 
 		renderer->SetAtmosphereQuality(s_atmosphereQualityVar->GetIntValue());
 		renderer->SetVolumetricFogRange(s_volumetricFogRangeVar->GetFloatValue());
+		renderer->SetVolumetricFogHistory(s_volumetricFogHistoryVar->GetFloatValue());
 		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
+		if (ConsoleVar* sunModeVar = ConsoleVarMgr::FindConsoleVar("gxFogSunMode"))
+		{
+			renderer->GetVolumetricFogSettings().SetSunMode(sunModeVar->GetIntValue());
+		}
 	}
 
 	void WorldState::OnBloomChanged(ConsoleVar &var, const std::string &oldValue)

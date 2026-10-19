@@ -7,7 +7,9 @@
 #include "math/matrix4.h"
 #include "math/aabb.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace mmo
 {
@@ -69,6 +71,54 @@ namespace mmo
 			return activeCascadeCount < 1u ? 1u :
 				(activeCascadeCount > NUM_SHADOW_CASCADES ? NUM_SHADOW_CASCADES : activeCascadeCount);
 		}
+
+		/// @brief Number of near cascades rendered at the full shadowMapSize; the rest use half of it
+		///        (shadow quality setting).
+		uint32 fullResolutionCascades = 2;
+
+		/// @brief Height of the tallest shadow caster that must still shade a cascade from outside it
+		///        (trees, buildings), in world units.
+		float casterHeight = 50.0f;
+
+		/// @brief Upper bound for GetLightwardReach, in world units.
+		float maxLightwardReach = 800.0f;
+
+		/// @brief How far toward the light a cascade must reach beyond its bounding sphere so a caster
+		///        casterHeight tall can still shade it: casterHeight / tan(sun elevation), clamped to
+		///        [0, maxLightwardReach]. A low sun throws a tree's shadow hundreds of metres.
+		/// @param lightDir Normalised direction the light travels (y < 0 for a sun above the horizon).
+		[[nodiscard]] float GetLightwardReach(const Vector3& lightDir) const
+		{
+			const float sinElevation = -lightDir.y;
+			if (sinElevation <= 0.0f)
+			{
+				return maxLightwardReach;
+			}
+
+			const float cosElevation = std::sqrt(std::max(0.0f, 1.0f - sinElevation * sinElevation));
+			return std::min(casterHeight * cosElevation / sinElevation, maxLightwardReach);
+		}
+		/// @brief Edge length in texels of the depth map a cascade is rendered to. Cascades past
+		///        fullResolutionCascades use half of shadowMapSize (at least 256).
+		[[nodiscard]] uint16 GetCascadeMapSize(const uint32 cascadeIndex) const
+		{
+			if (cascadeIndex < fullResolutionCascades)
+			{
+				return shadowMapSize;
+			}
+
+			const uint16 halfSize = shadowMapSize / 2;
+			return halfSize < 256 ? 256 : halfSize;
+		}
+
+		/// @brief World size of one texel of a cascade rendered with the given ortho window size. The
+		///        texel snap must use exactly this: snapping a half-resolution cascade on the full-size
+		///        grid moves its window by half a texel as the camera moves, which re-rasterizes every
+		///        shadow edge at a new offset (thin light gaps open and close; god rays flicker).
+		[[nodiscard]] float GetCascadeTexelSize(const float windowSize, const uint32 cascadeIndex) const
+		{
+			return windowSize / static_cast<float>(GetCascadeMapSize(cascadeIndex));
+		}
 	};
 
 	/// @brief Advanced shadow camera setup implementing Cascaded Shadow Maps (CSM).
@@ -104,6 +154,12 @@ namespace mmo
 		///        map for them (temporal cascade staggering). Split distances are always refreshed.
 		void SetupCascades(Scene& scene, Camera& camera, Light& light, std::array<Camera*, NUM_SHADOW_CASCADES>& shadowCameras, uint32 updateMask = 0xFFFFFFFFu);
 
+		/// @brief Fits the volumetric fog's own shadow camera around the view frustum from the near plane to
+		///        range, snapped and extended toward the light exactly like a cascade. Call after SetupCascades
+		///        (it uses the light direction quantized there).
+		/// @return World size of one texel of the fog shadow map.
+		float SetupFogShadowCamera(Scene& scene, Camera& camera, float range, uint16 mapSize, Camera& fogShadowCamera);
+
 		/// @brief Gets the cascade data for shader consumption.
 		[[nodiscard]] const std::array<ShadowCascade, NUM_SHADOW_CASCADES>& GetCascades() const { return m_cascades; }
 
@@ -117,6 +173,11 @@ namespace mmo
 		void SetConfig(const CascadedShadowConfig& config) { m_config = config; }
 
 	private:
+		/// @brief Places an orthographic shadow camera around a frustum section: bounding sphere with a
+		///        quantized radius, texel snap on the grid of a mapSize map, near plane GetLightwardReach toward
+		///        the light. Returns the world texel size.
+		float PlaceShadowCamera(Scene& scene, const std::array<Vector3, 8>& frustumCorners, const Vector3& lightDir, uint16 mapSize, Camera& shadowCam) const;
+
 		/// @brief Calculates the cascade split distances.
 		void CalculateSplitDistances(float nearClip, float farClip);
 

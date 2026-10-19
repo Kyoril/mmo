@@ -139,7 +139,12 @@ namespace mmo
 		virtual void NotifyMoved();
 
 		virtual void SetCurrentCamera(Camera& cam);
-		
+
+		/// @brief Lifts the rendering-distance cull (SetRenderingDistance) decided by the last SetCurrentCamera.
+		/// @remark Shadow cascades use this: their frustum bounds the casters, and a distance cut-off that moves
+		///         with the camera made low-sun shadows and light shafts pop while walking.
+		void ClearRenderingDistanceCull() { m_beyondFarDistance = false; }
+
 		[[nodiscard]] virtual const AABB& GetBoundingBox() const = 0;
 
 		[[nodiscard]] virtual float GetBoundingRadius() const = 0;
