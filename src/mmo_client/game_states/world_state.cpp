@@ -2262,7 +2262,7 @@ namespace mmo
 
 		s_volumetricFogRangeVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogRange", "How many metres in front of the camera the volumetric fog covers (50 to 300, the shadow range). Fog beyond uses a smooth closed-form estimate.", "200");
 		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-		s_volumetricFogHistoryVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogHistory", "How much of the previous frame the volumetric fog keeps (0 to 0.95). Higher values smooth out sampling noise and aliasing; lower values react faster and stay sharper while the camera moves. 0 disables the history.", "0.9");
+		s_volumetricFogHistoryVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogHistory", "How much of the previous frame the volumetric fog keeps (0 to 0.95). Higher values smooth out sampling noise and aliasing; lower values react faster and stay sharper while the camera moves. 0 (default) disables the history: the fog is then a pure function of the camera pose.", "0");
 		m_cvarChangedSignals += s_volumetricFogHistoryVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 		s_volumetricFogSunTapsVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogSunTaps", "Sun shadow taps per volumetric fog cell as 'xy,z' (e.g. 4,16), for diagnosing shaft flicker. 0 uses the quality preset.", "0");
 		m_cvarChangedSignals += s_volumetricFogSunTapsVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);

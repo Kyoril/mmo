@@ -72,11 +72,12 @@ float ZoneSigmaAt(float3 worldPos)
 // Box-filters the sun's shadowed scattering over a cell with one tap pattern. A tap's world position is
 // CameraPosition + depth * (ray + sub.x * cellX + sub.y * cellY) (all per metre of view depth); the cascade
 // projection is orthographic, so its shadow-space position is the same affine expression in light space.
-// Returns x = mean(visibility * zone sigma), y = mean(visibility). shadowed = false treats every tap as lit.
-float2 SumCellSunTaps(Texture2D shadowMap, bool shadowed, float3 lightOrigin, float3 lightRay, float3 lightX, float3 lightY,
+// Returns x = mean(visibility * zone sigma), y = mean(visibility), z = mean(zone sigma). shadowed = false treats
+// every tap as lit.
+float3 SumCellSunTaps(Texture2D shadowMap, bool shadowed, float3 lightOrigin, float3 lightRay, float3 lightX, float3 lightY,
     float3 rayPerDepth, float3 cellX, float3 cellY, uint3 id)
 {
-    float2 sum = float2(0.0f, 0.0f);
+    float3 sum = float3(0.0f, 0.0f, 0.0f);
     [loop]
     for (uint k = 0; k < SunTapsZ; ++k)
     {
@@ -104,7 +105,8 @@ float2 SumCellSunTaps(Texture2D shadowMap, bool shadowed, float3 lightOrigin, fl
                 // The fog density is filtered with the same taps: a single noise sample per cell slides
                 // through noise features smaller than the cell as the camera moves, and the shafts show it.
                 float3 worldPos = CameraPosition + depth * (rayPerDepth + sub.x * cellX + sub.y * cellY);
-                sum += float2(visibility * ZoneSigmaAt(worldPos), visibility);
+                float zoneSigma = ZoneSigmaAt(worldPos);
+                sum += float3(visibility * zoneSigma, visibility, zoneSigma);
             }
         }
     }
@@ -121,7 +123,8 @@ float3 RayPerDepth(float2 uv)
 
 // The sun's shadowed scattering of froxel id, box-filtered over the whole cell (SunTapsXY^2 x SunTapsZ taps
 // on a fixed pattern) with the same taps every frame: x = mean(visibility * zone fog sigma), y = mean
-// visibility (for the local fog volumes, which are evaluated at the cell centre only).
+// visibility (for the local fog volumes, which are evaluated at the cell centre only), z = mean zone fog sigma
+// (the cell's extinction, so it is as deterministic as the shafts it dims).
 //
 // A single shadow tap per froxel resolves canopy detail far finer than the grid (a leaf gap is a fraction
 // of a 12 px cell at 50 m), so which cells read "lit" depends on exactly where the sample lands - and every
@@ -134,7 +137,7 @@ float3 RayPerDepth(float2 uv)
 // resolve single leaves, far finer than these taps can sample, so with them the taps hit a different random set
 // of leaf gaps after every step and the shafts rearranged while walking. Without it, one cascade per cell,
 // chosen by the cell centre's view depth. Taps outside the map count as lit.
-float2 CellSunScattering(uint3 id)
+float3 CellSunScattering(uint3 id)
 {
     float2 cell = 1.0f / float2(GridWidth, GridHeight);
     float2 uv = (float2(id.xy) + 0.5f) * cell;
@@ -356,15 +359,18 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
     // The half-float far depth may round down by a few centimetres; the margin keeps the test conservative.
     bool hiddenCell = SliceToDepth(float(id.z) / float(GridDepth)) > farDepth * 1.002f;
 
-    // 2. This froxel.
-    // Jittered across the whole cell, not just in depth, so the history converges to the cell's average
-    // rather than its centre sample (less aliasing of shadow detail in the settled image).
+    // 2. This froxel. Visible cells take their zone fog density from the same fixed taps as the sun (cell
+    //    average, see CellSunScattering): a single sample per cell, jittered and blended through the history,
+    //    made the extinction - and with it every shaft behind it - change noisily from frame to frame while
+    //    walking. Hidden cells (behind every surface) keep the cheap single sample.
     float2 uv = (float2(id.xy) + ScreenJitter) / float2(GridWidth, GridHeight);
     float3 ray = FogWorldRay(uv);
     float viewDepth = SliceToDepth((float(id.z) + Jitter) / float(GridDepth));
     float3 worldPos = FogWorldPosition(ray, viewDepth);
 
-    float sigma = ZoneSigmaAt(worldPos);
+    float3 sun = hiddenCell ? float3(0.0f, 0.0f, 0.0f) : CellSunScattering(id);
+    float sigma = hiddenCell ? ZoneSigmaAt(worldPos) : sun.z;
+
     // The sun's phase function is NOT applied here: it depends on the view direction, and the temporal
     // history would keep it as seen from where the camera used to be. Only the view-independent parts go
     // into the volumes; CS_FogIntegrate applies the sun phase for the current rays.
@@ -377,23 +383,12 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
 
     InjectOutput[id] = float4(radiance * sigmaScatter, sigmaTotal);
 
-    // 3. The sun, which skips the history (see CellSunScattering): the zone fog's shadowed scattering is
-    //    box-filtered over the cell with fixed taps, so nothing in this volume varies from frame to frame on its
-    //    own. Local fog volumes are evaluated at the cell centre and scaled by the cell's mean visibility.
+    // 3. The sun's shadowed scattering: the zone fog's part box-filtered over the cell with fixed taps; local fog
+    //    volumes from the froxel sample, scaled by the cell's mean visibility.
     float3 sunScatter = float3(0.0f, 0.0f, 0.0f);
     if (!hiddenCell)
     {
-        float2 sun = CellSunScattering(id);
-        sunScatter = sun.x.xxx;
-        if (blockVolumeCount > 0)
-        {
-            float2 centerUv = (float2(id.xy) + 0.5f) / float2(GridWidth, GridHeight);
-            float3 centerPos = FogWorldPosition(FogWorldRay(centerUv), SliceToDepth((float(id.z) + 0.5f) / float(GridDepth)));
-            float volumeSigmaTotal = 0.0f;
-            float3 volumeSigmaScatter = float3(0.0f, 0.0f, 0.0f);
-            AccumulateFogVolumes(centerPos, blockVolumeCount, volumeSigmaTotal, volumeSigmaScatter);
-            sunScatter += volumeSigmaScatter * sun.y;
-        }
+        sunScatter = sun.x.xxx + (sigmaScatter - sigma.xxx) * sun.y;
     }
 
     InjectSunOutput[id] = float4(sunScatter, 0.0f);

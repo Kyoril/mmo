@@ -28,7 +28,7 @@ namespace mmo
 		static constexpr float SkyDistance = 2000.0f;
 
 		/// @brief Default weight of the reprojected history in the temporal blend.
-		static constexpr float DefaultHistoryWeight = 0.9f;
+		static constexpr float DefaultHistoryWeight = 0.0f;
 
 		/// @brief Largest allowed history weight. Every frame re-reads the history between texels, so a
 		///        weight near 1 accumulates that resampling into a softer image while moving.
