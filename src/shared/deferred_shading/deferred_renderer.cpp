@@ -168,6 +168,9 @@ namespace mmo
                 RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
         }
         
+        m_fogShadowMap = m_device.CreateRenderTexture("FogShadowMap", FogShadowMapSize, FogShadowMapSize,
+            RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
+
         // Keep a reference to the first cascade for legacy single-shadow-map code paths
 		m_shadowMapRT = m_cascadeShadowMaps[0];
 
@@ -181,6 +184,9 @@ namespace mmo
             m_shadowCameras[i] = m_scene.CreateCamera("__DeferredShadowCamera_" + instanceTag + "_" + std::to_string(i) + "__");
             m_shadowCameraNodes[i]->AttachObject(*m_shadowCameras[i]);
         }
+        m_fogShadowCameraNode = m_scene.GetRootSceneNode().CreateChildSceneNode("__FogShadowCameraNode_" + instanceTag + "__");
+        m_fogShadowCamera = m_scene.CreateCamera("__FogShadowCamera_" + instanceTag + "__");
+        m_fogShadowCameraNode->AttachObject(*m_fogShadowCamera);
 
         // Bilinear comparison with a white border: shadow edges fade to lit instead of darkening. The
         // lighting shader's tent filter is built from bilinear taps and relies on exactly 2x2 texel
@@ -200,6 +206,18 @@ namespace mmo
 
     DeferredRenderer::~DeferredRenderer()
     {
+        if (m_fogShadowCamera)
+        {
+            m_scene.DestroyCamera(*m_fogShadowCamera);
+            m_fogShadowCamera = nullptr;
+        }
+
+        if (m_fogShadowCameraNode)
+        {
+            m_scene.DestroySceneNode(*m_fogShadowCameraNode);
+            m_fogShadowCameraNode = nullptr;
+        }
+
         for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
         {
             if (m_shadowCameras[i])
@@ -403,6 +421,7 @@ namespace mmo
             // cascadeCount = 0 gates every cascade lookup in the shader - but the buffer still
             // carries the lighting-pass settings that have nothing to do with shadow maps (the SSAO
             // debug view, the contact shadow parameters), so they must be filled here too.
+            m_fogShadowValid = false;
             ShadowBuffer buffer{};
             FillShadowBufferCommonSettings(buffer);
             buffer.cascadeCount = 0;
@@ -480,7 +499,7 @@ namespace mmo
         if (runAtmosphere)
         {
             m_volumetricFogPass->Render(camera, scene.GetWind(), *m_renderTexture, m_gBuffer.GetNormalRT(), *m_sceneColorCopy,
-                m_cascadeShadowMaps, *m_shadowBuffer, *scene.GetCameraBuffer(), *m_lightStructuredBuffer,
+                m_cascadeShadowMaps, m_fogShadowValid ? m_fogShadowMap.get() : nullptr, m_fogShadowViewProj, *m_shadowBuffer, *scene.GetCameraBuffer(), *m_lightStructuredBuffer,
                 static_cast<uint32>(m_shaderLights.size()), *m_shadowSampler, *m_quadBuffer, *m_deferredLightVs);
         }
         else
@@ -888,6 +907,12 @@ namespace mmo
             return;
         }
 
+        // Diagnostic freeze: keep the last frame's maps, matrices and shadow buffer (after they exist).
+        if (m_shadowsFrozen && m_shadowFrameCounter > NUM_SHADOW_CASCADES)
+        {
+            return;
+        }
+
         const uint32 activeCascades = m_cascadedShadowSetup->GetConfig().GetActiveCascadeCount();
 
         // Feed the light-direction quantizer (see CascadedShadowConfig::lightStepDegrees). Between
@@ -924,6 +949,14 @@ namespace mmo
         // Setup the cascades scheduled to refresh this frame (others keep their cached camera matrix).
         m_cascadedShadowSetup->SetupCascades(scene, camera, *m_shadowCastingDirectionalLight, m_shadowCameras, updateMask);
 
+        // The volumetric fog's coarse shadow map (see m_fogShadowMap), every frame while the fog volume runs.
+        const bool renderFogShadow = m_fogShadowMap && m_fogShadowCamera && m_volumetricFogPass->GetSettings().IsVolumeEnabled();
+        float fogShadowTexelSize = 0.0f;
+        if (renderFogShadow)
+        {
+            fogShadowTexelSize = m_cascadedShadowSetup->SetupFogShadowCamera(scene, camera, m_volumetricFogPass->GetSettings().range, FogShadowMapSize, *m_fogShadowCamera);
+        }
+
         // Get cascade data
         const auto& cascades = m_cascadedShadowSetup->GetCascades();
         const auto& config = m_cascadedShadowSetup->GetConfig();
@@ -944,6 +977,14 @@ namespace mmo
             }
 
             const Vector3* corners = m_shadowCameras[i]->GetWorldSpaceCorners();
+            for (int c = 0; c < 8; ++c)
+            {
+                gatherRegion.Combine(corners[c]);
+            }
+        }
+        if (renderFogShadow)
+        {
+            const Vector3* corners = m_fogShadowCamera->GetWorldSpaceCorners();
             for (int c = 0; c < 8; ++c)
             {
                 gatherRegion.Combine(corners[c]);
@@ -992,6 +1033,20 @@ namespace mmo
 
             m_cascadeShadowMaps[i]->Update();
             m_device.EndGpuScope();
+        }
+
+        m_fogShadowValid = false;
+        if (renderFogShadow)
+        {
+            m_device.BeginGpuScope("GPU: Fog shadow map");
+            m_fogShadowMap->Activate();
+            m_fogShadowMap->Clear(ClearFlags::Depth);
+            scene.RenderShadowCasters(*m_fogShadowCamera, m_shadowCasterCache, fogShadowTexelSize * 0.5f);
+            m_fogShadowMap->Update();
+            m_device.EndGpuScope();
+
+            m_fogShadowViewProj = m_fogShadowCamera->GetProjectionMatrix() * m_fogShadowCamera->GetViewMatrix();
+            m_fogShadowValid = true;
         }
 
         // Update the shadow buffer with cascade data

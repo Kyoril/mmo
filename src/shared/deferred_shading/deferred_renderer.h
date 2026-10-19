@@ -101,6 +101,10 @@ namespace mmo
         ///        frames instead of every frame). Disabling refreshes every cascade every frame.
         void SetTemporalShadowsEnabled(bool enabled) { m_temporalShadows = enabled; m_shadowFrameCounter = 0; }
 
+        /// @brief Diagnostic: while frozen the cascades are neither set up nor rendered, so the last shadow maps
+        ///        and matrices stay as they were. Tells shadow map changes apart from fog sampling while moving.
+        void SetShadowsFrozen(bool frozen) { if (m_shadowsFrozen && !frozen) { m_shadowFrameCounter = 0; } m_shadowsFrozen = frozen; }
+
         /// @brief Checks whether temporal cascade staggering is enabled.
         [[nodiscard]] bool IsTemporalShadowsEnabled() const { return m_temporalShadows; }
 
@@ -438,6 +442,20 @@ namespace mmo
         /// @brief Shadow cameras for each cascade.
         std::array<Camera*, NUM_SHADOW_CASCADES> m_shadowCameras{};
 
+        /// @brief Edge length of the volumetric fog's shadow map.
+        static constexpr uint16 FogShadowMapSize = 1024;
+
+        /// @brief The volumetric fog's own shadow map: one coarse, texel-snapped map over the whole fog range
+        ///        (~0.5 m texels at the default 200 m). The cascades resolve single leaves (~2 cm near the
+        ///        camera), far finer than a fog cell's shadow taps can sample, so the taps landed on a different
+        ///        random set of leaf gaps after every step and the shafts rearranged while walking. Detail this
+        ///        coarse is resolved by the taps everywhere in the fog's near and middle range.
+        RenderTexturePtr m_fogShadowMap;
+        SceneNode* m_fogShadowCameraNode = nullptr;
+        Camera* m_fogShadowCamera = nullptr;
+        Matrix4 m_fogShadowViewProj = Matrix4::Identity;
+        bool m_fogShadowValid = false;
+
         /// @brief Cascade comparison sampler (lighting pass s1, fog inject s1). Null on backends
         ///        without explicit sampler objects.
         SamplerStatePtr m_shadowSampler;
@@ -455,6 +473,7 @@ namespace mmo
         ///        cascade is always refreshed. Large GPU saving with only a small lag for distant
         ///        moving-object shadows.
         bool m_temporalShadows = true;
+        bool m_shadowsFrozen = false;
 
         /// @brief Monotonic frame counter used to schedule which cascades refresh each frame.
         uint32 m_shadowFrameCounter = 0;

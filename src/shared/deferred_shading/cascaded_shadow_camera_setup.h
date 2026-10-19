@@ -154,6 +154,12 @@ namespace mmo
 		///        map for them (temporal cascade staggering). Split distances are always refreshed.
 		void SetupCascades(Scene& scene, Camera& camera, Light& light, std::array<Camera*, NUM_SHADOW_CASCADES>& shadowCameras, uint32 updateMask = 0xFFFFFFFFu);
 
+		/// @brief Fits the volumetric fog's own shadow camera around the view frustum from the near plane to
+		///        range, snapped and extended toward the light exactly like a cascade. Call after SetupCascades
+		///        (it uses the light direction quantized there).
+		/// @return World size of one texel of the fog shadow map.
+		float SetupFogShadowCamera(Scene& scene, Camera& camera, float range, uint16 mapSize, Camera& fogShadowCamera);
+
 		/// @brief Gets the cascade data for shader consumption.
 		[[nodiscard]] const std::array<ShadowCascade, NUM_SHADOW_CASCADES>& GetCascades() const { return m_cascades; }
 
@@ -167,6 +173,11 @@ namespace mmo
 		void SetConfig(const CascadedShadowConfig& config) { m_config = config; }
 
 	private:
+		/// @brief Places an orthographic shadow camera around a frustum section: bounding sphere with a
+		///        quantized radius, texel snap on the grid of a mapSize map, near plane GetLightwardReach toward
+		///        the light. Returns the world texel size.
+		float PlaceShadowCamera(Scene& scene, const std::array<Vector3, 8>& frustumCorners, const Vector3& lightDir, uint16 mapSize, Camera& shadowCam) const;
+
 		/// @brief Calculates the cascade split distances.
 		void CalculateSplitDistances(float nearClip, float farClip);
 

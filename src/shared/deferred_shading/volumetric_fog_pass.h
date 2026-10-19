@@ -55,6 +55,8 @@ namespace mmo
 		/// @param gbufferNormalRT G-Buffer normal target (a = radial depth).
 		/// @param output Full-resolution target receiving the fogged scene. Must differ from sceneColor.
 		/// @param cascadeShadowMaps The cascade depth maps.
+		/// @param fogShadowMap The fog's own coarse shadow map over its whole range, or null to sample the cascades.
+		/// @param fogShadowViewProj View-projection fogShadowMap was rendered with.
 		/// @param shadowBuffer The ShadowBuffer cbuffer already filled for this frame.
 		/// @param cameraBuffer The scene camera cbuffer already refreshed for this camera.
 		/// @param lights The deferred renderer's light buffer (ShaderLight entries).
@@ -63,7 +65,8 @@ namespace mmo
 		/// @param quad The fullscreen quad vertex buffer.
 		/// @param fullscreenVs The pass-through fullscreen vertex shader.
 		void Render(Camera& camera, const WindState& wind, RenderTexture& sceneColor, RenderTexture& gbufferNormalRT, RenderTexture& output,
-			const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, ConstantBuffer& shadowBuffer,
+			const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, RenderTexture* fogShadowMap, const Matrix4& fogShadowViewProj,
+			ConstantBuffer& shadowBuffer,
 			ConstantBuffer& cameraBuffer, StructuredBuffer& lights, uint32 lightCount, SamplerState& shadowSampler, VertexBuffer& quad,
 			ShaderBase& fullscreenVs);
 

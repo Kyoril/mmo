@@ -48,7 +48,8 @@ RWTexture3D<float4> InjectSunOutput : register(u1);
 
 StructuredBuffer<Light> Lights : register(t9);
 StructuredBuffer<FogVolume> FogVolumes : register(t10);
-Texture3D<float4> ColumnFarDepth : register(t11);  // r = farthest depth seen through each grid column (CS_FogDepthTiles)
+Texture3D<float4> ColumnFarDepth : register(t11);
+Texture2D FogShadowMap : register(t12);  // coarse sun shadow over the whole fog range (FogShadowViewProj), when FogShadowValid  // r = farthest depth seen through each grid column (CS_FogDepthTiles)
 
 static const uint FOG_GROUP_SIZE = 8;
 static const uint FOG_GROUP_THREADS = FOG_GROUP_SIZE * FOG_GROUP_SIZE * FOG_GROUP_SIZE;
@@ -129,8 +130,10 @@ float3 RayPerDepth(float2 uv)
 // is the value the cell should have; it changes only as fast as the cell actually slides through the shadow
 // and the noise, so this volume needs no history at all.
 //
-// One cascade per cell, chosen by the cell centre's view depth (the lighting shader selects by view depth
-// too); taps outside it count as lit.
+// The shadow comes from the fog's own coarse shadow map when there is one (FogShadowValid): the cascades
+// resolve single leaves, far finer than these taps can sample, so with them the taps hit a different random set
+// of leaf gaps after every step and the shafts rearranged while walking. Without it, one cascade per cell,
+// chosen by the cell centre's view depth. Taps outside the map count as lit.
 float2 CellSunScattering(uint3 id)
 {
     float2 cell = 1.0f / float2(GridWidth, GridHeight);
@@ -155,11 +158,16 @@ float2 CellSunScattering(uint3 id)
     float3 cellX = RayPerDepth(uv + float2(cell.x * 0.5f, 0.0f)) - RayPerDepth(uv - float2(cell.x * 0.5f, 0.0f));
     float3 cellY = RayPerDepth(uv + float2(0.0f, cell.y * 0.5f)) - RayPerDepth(uv - float2(0.0f, cell.y * 0.5f));
 
-    float4x4 m = CascadeViewProj[cascade];
+    float4x4 m = FogShadowValid != 0 ? FogShadowViewProj : CascadeViewProj[cascade];
     float3 lightOrigin = mul(float4(CameraPosition, 1.0f), m).xyz;
     float3 lightRay = mul(float4(rayPerDepth, 0.0f), m).xyz;
     float3 lightX = mul(float4(cellX, 0.0f), m).xyz;
     float3 lightY = mul(float4(cellY, 0.0f), m).xyz;
+
+    if (FogShadowValid != 0)
+    {
+        return SumCellSunTaps(FogShadowMap, true, lightOrigin, lightRay, lightX, lightY, rayPerDepth, cellX, cellY, id);
+    }
 
     bool shadowed = CascadeCount > 0;
     switch (cascade)

@@ -37,7 +37,8 @@ cbuffer VolumetricFogBuffer : register(b2)
     uint FogVolumeCount;        // entries in the local fog volume buffer (t10)
     uint SunTapsXY;             // sun shadow taps per froxel along each screen axis
     uint SunTapsZ;              // sun shadow taps per froxel along its depth
-    float _FogPadding;
+    uint FogShadowValid;        // 1 when FogShadowMap (t12) holds this frame's coarse fog shadow map
+    column_major matrix FogShadowViewProj;
 };
 
 // View depth of a normalized slice coordinate, exponential between NearDistance and FarDistance.

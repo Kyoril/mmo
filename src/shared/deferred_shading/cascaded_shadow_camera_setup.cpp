@@ -107,11 +107,6 @@ namespace mmo
 
 			Camera& shadowCam = *shadowCameras[i];
 
-			// Reset custom matrices
-			shadowCam.SetCustomViewMatrix(false);
-			shadowCam.SetCustomProjMatrix(false);
-			shadowCam.SetProjectionType(ProjectionType::Orthographic);
-
 			// Get frustum corners for this cascade
 			std::array<Vector3, 8> frustumCorners;
 			GetFrustumCornersWorldSpace(camera, m_splitDistances[i], m_splitDistances[i + 1], frustumCorners);
@@ -120,107 +115,121 @@ namespace mmo
 			Matrix4 viewProj;
 			float worldTexelSize;
 			ComputeCascadeMatrix(lightDir, frustumCorners, i, viewProj, worldTexelSize);
-
-			// Store cascade data (worldTexelSize is set below, from the final ortho window size)
 			m_cascades[i].viewProjection = viewProj;
 
-			// Set up the shadow camera
-			// Extract the view matrix from the combined view-projection (we need separate matrices)
-			// For shadow rendering, we'll use a custom view-projection matrix
-
-			// Calculate frustum center for camera position
-			Vector3 frustumCenter(0.0f, 0.0f, 0.0f);
-			for (const auto& corner : frustumCorners)
-			{
-				frustumCenter += corner;
-			}
-			frustumCenter /= 8.0f;
-
-			// Build look-at vectors
-			Vector3 up = Vector3::UnitY;
-			if (std::abs(up.Dot(lightDir)) >= 0.99f)
-			{
-				up = Vector3::UnitZ;
-			}
-
-			Vector3 right = up.Cross(lightDir);
-			right.Normalize();
-			up = lightDir.Cross(right);
-			up.Normalize();
-
-			// Calculate the bounding sphere radius for the cascade
-			float radius = 0.0f;
-			for (const auto& corner : frustumCorners)
-			{
-				float distance = (corner - frustumCenter).GetLength();
-				radius = std::max(radius, distance);
-			}
-
-			// Quantize the radius so the ortho window is piecewise constant. The corner math above
-			// re-derives the radius from camera state every frame, and its float noise would rescale
-			// the texel grid slightly each frame — a whole-map sub-texel shimmer that no position
-			// snap can fix. (The previous code rounded the radius "up to the nearest texel", but
-			// texelSize was itself defined as radius / (mapSize / 2), which makes that rounding an
-			// exact no-op.) Half a world unit is far coarser than the noise and widens the window by
-			// at most ~2.5% on the nearest cascade.
-			if (m_config.stableCascades)
-			{
-				radius = std::ceil(radius * 2.0f) * 0.5f;
-			}
-
-			// The texel size of the map as actually rendered with this window. The position snap
-			// below MUST use exactly this value: snapping to any other grid spacing (e.g. the one
-			// ComputeCascadeMatrix derives from a differently-rounded radius) leaves sub-texel
-			// drift whenever the camera moves.
-			const float snapTexelSize = m_config.GetCascadeTexelSize(radius * 2.0f, i);
-			m_cascades[i].worldTexelSize = snapTexelSize;
-
-			// Position the shadow camera. The near plane must lie beyond every caster whose shadow can
-			// reach the cascade: anything closer to the light that falls outside gets sliced by the near
-			// plane, and since the plane moves with the camera, a low sun's long tree shadows (and the
-			// light shafts between them) popped in and out while walking. See GetLightwardReach.
-			const float baseExtrusionDistance = scene.GetShadowDirectionalLightExtrusionDistance();
-			const float extrusionDistance = std::max({ baseExtrusionDistance, radius * 2.0f + 100.0f, radius + m_config.GetLightwardReach(lightDir) });
-			Vector3 shadowCamPos = frustumCenter - lightDir * extrusionDistance;
-
-			// The exact light-space basis the texel snap below works in. The camera orientation must
-			// use this same basis: deriving it any other way (e.g. LookAt, whose roll comes from the
-			// node's previous orientation) rotates the rendered texel grid out of alignment with the
-			// grid we snapped to, silently defeating the stabilization.
-			Quaternion lightRotation;
-			lightRotation.FromAxes(right, up, lightDir);
-
-			// Snap to texel grid to prevent shadow swimming
-			if (m_config.stableCascades)
-			{
-				// Transform position to light space
-				Vector3 lightSpacePos = lightRotation.Inverse() * shadowCamPos;
-
-				// Snap to texel grid
-				lightSpacePos.x = std::floor(lightSpacePos.x / snapTexelSize) * snapTexelSize;
-				lightSpacePos.y = std::floor(lightSpacePos.y / snapTexelSize) * snapTexelSize;
-
-				// Transform back to world space
-				shadowCamPos = lightRotation * lightSpacePos;
-			}
-
-			// Set camera parameters. Orientation comes straight from the snap basis (local +Z is the
-			// render direction for the orthographic projection, exactly along the light).
-			shadowCam.GetParentNode()->SetPosition(shadowCamPos);
-			shadowCam.GetParentSceneNode()->SetOrientation(lightRotation);
-
-			// Set orthographic projection to exactly fit the cascade
-			shadowCam.SetOrthoWindow(radius * 2.0f, radius * 2.0f);
-			// The far plane ends at the far side of the cascade's bounding sphere: nothing farther from the
-			// light can shadow a receiver inside it. Reaching further (it used to be another full
-			// extrusion distance) rasterized a long corridor of casters behind the cascade for nothing;
-			// with a low sun that corridor runs flat through whole forests.
-			shadowCam.SetNearClipDistance(0.1f);
-			shadowCam.SetFarClipDistance(extrusionDistance + radius);
-
-			shadowCam.InvalidateView();
-			shadowCam.InvalidateFrustum();
+			m_cascades[i].worldTexelSize = PlaceShadowCamera(scene, frustumCorners, lightDir, m_config.GetCascadeMapSize(i), shadowCam);
 		}
+	}
+
+	float CascadedShadowCameraSetup::SetupFogShadowCamera(Scene& scene, Camera& camera, const float range, const uint16 mapSize, Camera& fogShadowCamera)
+	{
+		// One map over the whole fog volume (near plane to range), placed exactly like a cascade so it is
+		// texel-snapped and reaches as far toward the sun. Uses the light direction the cascades were set up
+		// with this frame (SetupCascades runs first).
+		std::array<Vector3, 8> frustumCorners;
+		GetFrustumCornersWorldSpace(camera, camera.GetNearClipDistance(), range, frustumCorners);
+		return PlaceShadowCamera(scene, frustumCorners, m_quantizedLightDir, mapSize, fogShadowCamera);
+	}
+
+	float CascadedShadowCameraSetup::PlaceShadowCamera(Scene& scene, const std::array<Vector3, 8>& frustumCorners, const Vector3& lightDir, const uint16 mapSize, Camera& shadowCam) const
+	{
+		shadowCam.SetCustomViewMatrix(false);
+		shadowCam.SetCustomProjMatrix(false);
+		shadowCam.SetProjectionType(ProjectionType::Orthographic);
+
+		// Calculate frustum center for camera position
+		Vector3 frustumCenter(0.0f, 0.0f, 0.0f);
+		for (const auto& corner : frustumCorners)
+		{
+			frustumCenter += corner;
+		}
+		frustumCenter /= 8.0f;
+
+		// Build look-at vectors
+		Vector3 up = Vector3::UnitY;
+		if (std::abs(up.Dot(lightDir)) >= 0.99f)
+		{
+			up = Vector3::UnitZ;
+		}
+
+		Vector3 right = up.Cross(lightDir);
+		right.Normalize();
+		up = lightDir.Cross(right);
+		up.Normalize();
+
+		// Calculate the bounding sphere radius for the cascade
+		float radius = 0.0f;
+		for (const auto& corner : frustumCorners)
+		{
+			float distance = (corner - frustumCenter).GetLength();
+			radius = std::max(radius, distance);
+		}
+
+		// Quantize the radius so the ortho window is piecewise constant. The corner math above
+		// re-derives the radius from camera state every frame, and its float noise would rescale
+		// the texel grid slightly each frame — a whole-map sub-texel shimmer that no position
+		// snap can fix. (The previous code rounded the radius "up to the nearest texel", but
+		// texelSize was itself defined as radius / (mapSize / 2), which makes that rounding an
+		// exact no-op.) Half a world unit is far coarser than the noise and widens the window by
+		// at most ~2.5% on the nearest cascade.
+		if (m_config.stableCascades)
+		{
+			radius = std::ceil(radius * 2.0f) * 0.5f;
+		}
+
+		// The texel size of the map as actually rendered with this window. The position snap
+		// below MUST use exactly this value: snapping to any other grid spacing (e.g. the one
+		// ComputeCascadeMatrix derives from a differently-rounded radius) leaves sub-texel
+		// drift whenever the camera moves.
+		const float snapTexelSize = (radius * 2.0f) / static_cast<float>(mapSize);
+
+		// Position the shadow camera. The near plane must lie beyond every caster whose shadow can
+		// reach the cascade: anything closer to the light that falls outside gets sliced by the near
+		// plane, and since the plane moves with the camera, a low sun's long tree shadows (and the
+		// light shafts between them) popped in and out while walking. See GetLightwardReach.
+		const float baseExtrusionDistance = scene.GetShadowDirectionalLightExtrusionDistance();
+		const float extrusionDistance = std::max({ baseExtrusionDistance, radius * 2.0f + 100.0f, radius + m_config.GetLightwardReach(lightDir) });
+		Vector3 shadowCamPos = frustumCenter - lightDir * extrusionDistance;
+
+		// The exact light-space basis the texel snap below works in. The camera orientation must
+		// use this same basis: deriving it any other way (e.g. LookAt, whose roll comes from the
+		// node's previous orientation) rotates the rendered texel grid out of alignment with the
+		// grid we snapped to, silently defeating the stabilization.
+		Quaternion lightRotation;
+		lightRotation.FromAxes(right, up, lightDir);
+
+		// Snap to texel grid to prevent shadow swimming
+		if (m_config.stableCascades)
+		{
+			// Transform position to light space
+			Vector3 lightSpacePos = lightRotation.Inverse() * shadowCamPos;
+
+			// Snap to texel grid
+			lightSpacePos.x = std::floor(lightSpacePos.x / snapTexelSize) * snapTexelSize;
+			lightSpacePos.y = std::floor(lightSpacePos.y / snapTexelSize) * snapTexelSize;
+
+			// Transform back to world space
+			shadowCamPos = lightRotation * lightSpacePos;
+		}
+
+		// Set camera parameters. Orientation comes straight from the snap basis (local +Z is the
+		// render direction for the orthographic projection, exactly along the light).
+		shadowCam.GetParentNode()->SetPosition(shadowCamPos);
+		shadowCam.GetParentSceneNode()->SetOrientation(lightRotation);
+
+		// Set orthographic projection to exactly fit the cascade
+		shadowCam.SetOrthoWindow(radius * 2.0f, radius * 2.0f);
+		// The far plane ends at the far side of the cascade's bounding sphere: nothing farther from the
+		// light can shadow a receiver inside it. Reaching further (it used to be another full
+		// extrusion distance) rasterized a long corridor of casters behind the cascade for nothing;
+		// with a low sun that corridor runs flat through whole forests.
+		shadowCam.SetNearClipDistance(0.1f);
+		shadowCam.SetFarClipDistance(extrusionDistance + radius);
+
+		shadowCam.InvalidateView();
+		shadowCam.InvalidateFrustum();
+
+		return snapTexelSize;
 	}
 
 	void CascadedShadowCameraSetup::CalculateSplitDistances(float nearClip, float farClip)

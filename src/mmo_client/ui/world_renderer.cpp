@@ -9,14 +9,90 @@
 #include "frame_ui/geometry_helper.h"
 
 #include "base/profiler.h"
+#include "base/clock.h"
 #include "math/clamp.h"
 #include "console/console_var.h"
 #include "frame_pacing.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+
+#ifdef _WIN32
+#	include <d3d11.h>
+#	include "graphics_d3d11/graphics_device_d3d11.h"
+#endif
 
 namespace mmo
 {
+	namespace
+	{
+		/// Diagnostic frame capture (cvar gxCaptureFrames N): writes the next N final scene targets as raw
+		/// texels to capture/NNNN.bin plus camera poses and timestamps to capture/frames.txt, so motion
+		/// artefacts the eye reports can be measured offline. Reads back synchronously; expect a frame drop.
+		void CaptureSceneFrame(DeferredRenderer& renderer, const Camera& camera)
+		{
+#ifdef _WIN32
+			static int32 s_index = 0;
+			const TexturePtr target = renderer.GetFinalRenderTarget();
+			auto* source = static_cast<ID3D11Texture2D*>(target ? target->GetRawTexture() : nullptr);
+			if (!source)
+			{
+				return;
+			}
+
+			auto& device = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
+			ID3D11Device& d3dDevice = device;
+			ID3D11DeviceContext& context = device;
+
+			D3D11_TEXTURE2D_DESC desc;
+			source->GetDesc(&desc);
+			desc.Usage = D3D11_USAGE_STAGING;
+			desc.BindFlags = 0;
+			desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+			desc.MiscFlags = 0;
+			desc.MipLevels = 1;
+			desc.ArraySize = 1;
+			desc.SampleDesc.Count = 1;
+
+			ID3D11Texture2D* staging = nullptr;
+			if (FAILED(d3dDevice.CreateTexture2D(&desc, nullptr, &staging)))
+			{
+				return;
+			}
+
+			context.CopyResource(staging, source);
+
+			std::filesystem::create_directories("capture");
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			if (SUCCEEDED(context.Map(staging, 0, D3D11_MAP_READ, 0, &mapped)))
+			{
+				const uint32 bytesPerPixel = desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8 : 4;
+				std::ofstream("capture/meta.txt") << desc.Width << " " << desc.Height << " " << static_cast<int>(desc.Format) << "\n";
+
+				char name[64];
+				std::snprintf(name, sizeof(name), "capture/%04d.bin", s_index);
+				std::ofstream file(name, std::ios::binary);
+				for (UINT y = 0; y < desc.Height; ++y)
+				{
+					file.write(static_cast<const char*>(mapped.pData) + y * mapped.RowPitch, desc.Width * bytesPerPixel);
+				}
+				context.Unmap(staging, 0);
+
+				const Vector3 position = camera.GetDerivedPosition();
+				const Vector3 direction = camera.GetDerivedDirection();
+				std::ofstream log("capture/frames.txt", std::ios::app);
+				log << s_index << " " << GetAsyncTimeMs() << " " << position.x << " " << position.y << " " << position.z
+					<< " " << direction.x << " " << direction.y << " " << direction.z << "\n";
+				++s_index;
+			}
+
+			staging->Release();
+#endif
+		}
+	}
+
 	WorldRenderer::WorldRenderer(const std::string & name, Scene& worldScene)
 		: FrameRenderer(name)
 		, m_worldFrame(nullptr)
@@ -74,6 +150,17 @@ namespace mmo
 		{
 			m_camera->SetAspectRatio(frameRect.GetWidth() / frameRect.GetHeight());
 			m_deferredRenderer->Render(m_worldScene, *m_camera);
+
+			static ConsoleVar* s_captureVar = nullptr;
+			if (!s_captureVar)
+			{
+				s_captureVar = ConsoleVarMgr::FindConsoleVar("gxCaptureFrames");
+			}
+			if (s_captureVar && s_captureVar->GetIntValue() > 0)
+			{
+				CaptureSceneFrame(*m_deferredRenderer, *m_camera);
+				s_captureVar->Set(s_captureVar->GetIntValue() - 1);
+			}
 		}
 
 		// Restore state before drawing the frame's geometry buffer

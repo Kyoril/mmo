@@ -168,6 +168,8 @@ namespace mmo
 		static ConsoleVar *s_atmosphereQualityVar = nullptr;
 		static ConsoleVar *s_volumetricFogRangeVar = nullptr;
 		static ConsoleVar *s_volumetricFogHistoryVar = nullptr;
+		static ConsoleVar *s_volumetricFogSunTapsVar = nullptr;
+		static ConsoleVar *s_shadowFreezeVar = nullptr;
 		static ConsoleVar *s_atmosphereDebugVar = nullptr;
 		static ConsoleVar *s_bloomQualityVar = nullptr;
 		static ConsoleVar *s_exposureVar = nullptr;
@@ -2262,6 +2264,11 @@ namespace mmo
 		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 		s_volumetricFogHistoryVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogHistory", "How much of the previous frame the volumetric fog keeps (0 to 0.95). Higher values smooth out sampling noise and aliasing; lower values react faster and stay sharper while the camera moves. 0 disables the history.", "0.9");
 		m_cvarChangedSignals += s_volumetricFogHistoryVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		s_volumetricFogSunTapsVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogSunTaps", "Sun shadow taps per volumetric fog cell as 'xy,z' (e.g. 4,16), for diagnosing shaft flicker. 0 uses the quality preset.", "0");
+		m_cvarChangedSignals += s_volumetricFogSunTapsVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		ConsoleVarMgr::RegisterConsoleVar("gxCaptureFrames", "Diagnostic: writes the next N rendered scene frames (raw) and camera poses to capture/ next to the client.", "0");
+		s_shadowFreezeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowFreeze", "Diagnostic: 1 stops updating the sun's shadow maps (they keep the last frame's), to tell shadow map changes from fog sampling while moving a few steps.", "0");
+		m_cvarChangedSignals += s_shadowFreezeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
 		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
@@ -2440,6 +2447,9 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogRange");
 		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogHistory");
+		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogSunTaps");
+		ConsoleVarMgr::UnregisterConsoleVar("ShadowFreeze");
+		ConsoleVarMgr::UnregisterConsoleVar("gxCaptureFrames");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
@@ -6836,6 +6846,15 @@ namespace mmo
 		renderer->SetVolumetricFogRange(s_volumetricFogRangeVar->GetFloatValue());
 		renderer->SetVolumetricFogHistory(s_volumetricFogHistoryVar->GetFloatValue());
 		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
+
+		uint32 sunTapsXY = 0;
+		uint32 sunTapsZ = 0;
+		if (std::sscanf(s_volumetricFogSunTapsVar->GetStringValue().c_str(), "%u,%u", &sunTapsXY, &sunTapsZ) == 2 && sunTapsXY > 0)
+		{
+			renderer->GetVolumetricFogSettings().SetSunTaps(sunTapsXY, sunTapsZ);
+		}
+
+		renderer->SetShadowsFrozen(s_shadowFreezeVar->GetIntValue() != 0);
 	}
 
 	void WorldState::OnBloomChanged(ConsoleVar &var, const std::string &oldValue)

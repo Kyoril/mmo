@@ -86,10 +86,12 @@ namespace mmo
 			uint32 fogVolumeCount;
 			uint32 sunTapsXY;
 			uint32 sunTapsZ;
-			float fogPadding;
+			uint32 fogShadowValid;
+
+			Matrix4 fogShadowViewProj;
 		};
 
-		static_assert(sizeof(VolumetricFogConstants) == 256, "VolumetricFogConstants must match the HLSL layout");
+		static_assert(sizeof(VolumetricFogConstants) == 320, "VolumetricFogConstants must match the HLSL layout");
 
 		uint32 groupCount(const uint32 cells)
 		{
@@ -267,7 +269,8 @@ namespace mmo
 	}
 
 	void VolumetricFogPass::Render(Camera& camera, const WindState& wind, RenderTexture& sceneColor, RenderTexture& gbufferNormalRT, RenderTexture& output,
-		const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, ConstantBuffer& shadowBuffer,
+		const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, RenderTexture* fogShadowMap, const Matrix4& fogShadowViewProj,
+		ConstantBuffer& shadowBuffer,
 		ConstantBuffer& cameraBuffer, StructuredBuffer& lights, const uint32 lightCount, SamplerState& shadowSampler, VertexBuffer& quad,
 		ShaderBase& fullscreenVs)
 	{
@@ -334,6 +337,8 @@ namespace mmo
 		constants.fogVolumeCount = m_fogVolumeCount;
 		constants.sunTapsXY = std::clamp(m_settings.sunTapsXY, 1u, VolumetricFogSettings::MaxSunTapsXY);
 		constants.sunTapsZ = std::clamp(m_settings.sunTapsZ, 1u, VolumetricFogSettings::MaxSunTapsZ);
+		constants.fogShadowValid = fogShadowMap ? 1u : 0u;
+		constants.fogShadowViewProj = fogShadowViewProj;
 		m_fogBuffer->Update(&constants);
 
 		if (volumeEnabled)
@@ -367,6 +372,10 @@ namespace mmo
 				m_fogVolumeBuffer->BindToStage(ShaderType::ComputeShader, 10);
 			}
 			m_columnFarDepth->Bind(ShaderType::ComputeShader, 11);
+			if (fogShadowMap)
+			{
+				fogShadowMap->Bind(ShaderType::ComputeShader, 12);
+			}
 			m_injectVolume->BindWritable(0);
 			m_injectSunVolume->BindWritable(1);
 			m_injectCs->Set();
