@@ -1895,6 +1895,10 @@ namespace mmo
 		// Experience fields are player-only and used by scenario assertions.
 		if (typeId == ObjectTypeId::Player)
 		{
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::TalentPoints))
+			{
+				unit.SetTalentPoints(fieldMap.GetFieldValue<uint32>(object_fields::TalentPoints));
+			}
 			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Class))
 			{
 				unit.SetClassId(fieldMap.GetFieldValue<uint32>(object_fields::Class));
@@ -2894,6 +2898,24 @@ namespace mmo
 		sendSinglePacket([vendorGuid, itemId, count](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::BuyItem);
 			packet << io::write<uint64>(vendorGuid) << io::write<uint32>(itemId) << io::write<uint8>(count);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::TrainerBuySpell(const uint64 trainerGuid, const uint32 spellId)
+	{
+		sendSinglePacket([trainerGuid, spellId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TrainerBuySpell);
+			packet << io::write<uint64>(trainerGuid) << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::LearnTalent(const uint32 talentId, const uint8 rank)
+	{
+		sendSinglePacket([talentId, rank](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LearnTalent);
+			packet << io::write<uint32>(talentId) << io::write<uint8>(rank);
 			packet.Finish();
 			});
 	}

@@ -5,6 +5,8 @@
 #include "bot_ai/strategies/grind_strategy.h"
 #include "bot_ai/strategies/economy_strategy.h"
 #include "bot_ai/strategies/party_strategy.h"
+#include "bot_ai/strategies/progression_strategy.h"
+#include "bot_ai/strategies/support_strategy.h"
 #include "bot_chat/anthropic_chat_model.h"
 #include "bot_chat/offline_chat_model.h"
 #include "bot_core/bot_movement_controller.h"
@@ -21,6 +23,7 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <thread>
@@ -90,6 +93,20 @@ namespace mmo
 		RegisterGrindStrategies(m_registry);
 		RegisterPartyStrategies(m_registry);
 		RegisterEconomyStrategies(m_registry);
+		RegisterProgressionStrategies(m_registry);
+		RegisterSupportStrategies(m_registry);
+
+		// Behaviour data next to the game data: data/bots beside data/editor.
+		const std::filesystem::path botData = m_navService->GetProjectDataPath().parent_path().parent_path() / "bots";
+		const std::filesystem::path talentBuilds = botData / "talent_builds.json";
+		if (m_talentBuilds.Load(talentBuilds.string()))
+		{
+			ILOG("Loaded " << m_talentBuilds.GetCount() << " talent builds from " << talentBuilds.string());
+		}
+		else
+		{
+			WLOG("No talent builds at " << talentBuilds.string() << "; bots will not spend talent points");
+		}
 
 		if (m_settings.chatEnabled && !SetupChat(*project))
 		{
@@ -173,6 +190,8 @@ namespace mmo
 			bot->brain = std::make_unique<BotBrain>(*bot->session, m_registry, entry.index);
 			bot->brain->SetGrindSpots(&m_grindSpots);
 			bot->brain->SetNpcIndex(&m_npcs);
+			bot->brain->SetGrindClaims(&m_grindClaims);
+			bot->brain->SetRole(entry.role, &m_talentBuilds);
 
 			if (m_chatDirector)
 			{
@@ -601,6 +620,19 @@ namespace mmo
 
 		UpdatePartyFollow(bot);
 		bot.brain->Update(nowMs);
+
+		// A status line a minute: enough to see a bot progress (levels, talents, money, the
+		// spells its rotation found) without reading its every action.
+		if (nowMs >= bot.nextStatusMs && self)
+		{
+			bot.nextStatusMs = nowMs + 60 * 1000;
+			const BotRotation& rotation = bot.brain->GetContext().GetRotation();
+			m_telemetry.Event(bot.roster.index, "status",
+				{ { "level", self->GetLevel() }, { "class", self->GetClassId() }, { "role", bot.roster.role },
+				  { "talent_points", self->GetTalentPoints() }, { "money", self->GetMoney() },
+				  { "spells", rotation.GetSpells().size() }, { "heals", rotation.GetHeals().size() },
+				  { "buffs", rotation.GetBuffs().size() }, { "free_slots", bot.brain->GetContext().GetPerception().freeBagSlots } });
+		}
 		CheckWatchdog(bot, nowMs);
 
 		if (m_chatDirector)

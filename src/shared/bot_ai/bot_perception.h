@@ -47,6 +47,9 @@ namespace mmo
 		/// have rests forever.
 		bool hasPower { false };
 
+		/// Whether the power is mana, the only kind that resting restores.
+		bool powerIsMana { false };
+
 		bool moving { false };
 
 		/// The unit we have selected, if it still exists.

@@ -23,6 +23,7 @@
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -40,6 +41,9 @@ namespace mmo
 		/// How long after a failed or finished trip the bot considers selling again.
 		constexpr GameTime SellRetryMs = 60 * 1000;
 		constexpr GameTime SellUnreachableRetryMs = 5 * 60 * 1000;
+
+		/// How long a bot that could afford nothing at its trainer waits before checking again.
+		constexpr GameTime TrainRetryMs = 3 * 60 * 1000;
 
 		class EconomyTrigger final : public BotTrigger
 		{
@@ -232,6 +236,50 @@ namespace mmo
 			return !waitingForLevel || context.GetEconomyState().unusableItems.count(item.entry) != 0;
 		}
 
+		/// Spells the bot's class trainer would sell it now: not known yet, its level is high
+		/// enough and it can pay for them. Cheapest first, within the money it has.
+		std::vector<uint32> spellsToBuy(BotSession& session, const uint32 trainerId)
+		{
+			std::vector<uint32> spells;
+
+			const proto::Project* project = projectOf(session);
+			const proto::TrainerEntry* trainer = project ? project->trainers.getById(trainerId) : nullptr;
+			const BotUnit* self = session.GetContext().GetSelf();
+			if (!trainer || !self)
+			{
+				return spells;
+			}
+
+			std::vector<std::pair<uint32, uint32>> affordable;
+			for (int i = 0; i < trainer->spells_size(); ++i)
+			{
+				const proto::TrainerSpellEntry& entry = trainer->spells(i);
+				if (entry.reqlevel() > self->GetLevel() || entry.reqskill() != 0
+					|| session.GetContext().HasKnownSpell(entry.spell()))
+				{
+					continue;
+				}
+
+				affordable.emplace_back(entry.spellcost(), entry.spell());
+			}
+
+			std::sort(affordable.begin(), affordable.end());
+
+			uint32 money = self->GetMoney();
+			for (const auto& [cost, spell] : affordable)
+			{
+				if (cost > money)
+				{
+					break;
+				}
+
+				money -= cost;
+				spells.push_back(spell);
+			}
+
+			return spells;
+		}
+
 		bool hasSellable(const BotAiContext& context, BotSession& session, const BotInventory& inventory)
 		{
 			for (const BotInventoryItem& item : inventory.GetItems())
@@ -287,7 +335,7 @@ namespace mmo
 					return true;
 				}
 
-				if (perception.IsInCombat() || context.GetFollowState().IsFollowing() || !context.GetNpcIndex()
+				if (perception.IsInCombat() || context.GetFollowState().IsFollowing() || !context.GetNpcIndex() || economy.training
 					|| perception.totalBagSlots == 0 || perception.freeBagSlots > BotSellAtFreeSlots
 					|| context.GetNow() < economy.nextSellAttemptMs)
 				{
@@ -298,7 +346,47 @@ namespace mmo
 				return hasSellable(context, session, inventory);
 			}, 1000);
 
-		addAction("loot_corpse", [](BotAiContext& context, BotSession& session)
+		addTrigger("spells_at_trainer", [](BotAiContext& context, BotSession& session)
+			{
+				const BotPerception& perception = context.GetPerception();
+				BotEconomyState& economy = context.GetEconomyState();
+				if (economy.training)
+				{
+					return true;
+				}
+
+				if (perception.IsInCombat() || context.GetFollowState().IsFollowing() || economy.selling
+					|| !context.GetNpcIndex() || context.GetNow() < economy.nextTrainAttemptMs)
+				{
+					return false;
+				}
+
+				uint32 classId = 0;
+				uint32 level = 0;
+				if (!selfClassAndLevel(session, classId, level) || level <= economy.trainedAtLevel)
+				{
+					return false;
+				}
+
+				const std::optional<BotNpcSpot> trainer = context.GetNpcIndex()->FindNearestClassTrainer(perception.mapId, perception.position, classId);
+				if (!trainer)
+				{
+					economy.trainedAtLevel = level;
+					return false;
+				}
+
+				if (spellsToBuy(session, trainer->trainerId).empty())
+				{
+					// Nothing affordable yet; more money comes with every kill, so look again in a
+					// while rather than waiting for the next level.
+					economy.nextTrainAttemptMs = context.GetNow() + TrainRetryMs;
+					return false;
+				}
+
+				return true;
+			}, 5000);
+
+		addAction("loot_corpse",[](BotAiContext& context, BotSession& session)
 			{
 				const BotPerception& perception = context.GetPerception();
 				BotEconomyState& economy = context.GetEconomyState();
@@ -472,11 +560,110 @@ namespace mmo
 				return true;
 			});
 
+		addAction("train_at_trainer", [](BotAiContext& context, BotSession& session)
+			{
+				BotEconomyState& economy = context.GetEconomyState();
+				BotContext& world = session.GetContext();
+				const BotPerception& perception = context.GetPerception();
+
+				const auto finish = [&economy, &context](const GameTime retryMs, const char* reason)
+				{
+					DLOG("Bot " << context.GetBotIndex() << " stops training: " << reason);
+					economy.training = false;
+					economy.nextTrainAttemptMs = context.GetNow() + retryMs;
+					return false;
+				};
+
+				uint32 classId = 0;
+				uint32 level = 0;
+				if (!selfClassAndLevel(session, classId, level))
+				{
+					return false;
+				}
+
+				if (!economy.training)
+				{
+					const std::optional<BotNpcSpot> trainer = context.GetNpcIndex()
+						? context.GetNpcIndex()->FindNearestClassTrainer(perception.mapId, perception.position, classId)
+						: std::nullopt;
+					if (!trainer)
+					{
+						return finish(SellUnreachableRetryMs, "no trainer for the class on this map");
+					}
+
+					economy.training = true;
+					economy.trainerEntry = trainer->unitEntry;
+					economy.trainerId = trainer->trainerId;
+					economy.trainerMapId = trainer->mapId;
+					economy.trainerPosition = trainer->position;
+					economy.trainingSinceMs = context.GetNow();
+					context.GetGrindState().ClearSpot();
+				}
+
+				if (perception.mapId != economy.trainerMapId || context.GetNow() - economy.trainingSinceMs > BotSellTripTimeoutMs)
+				{
+					return finish(SellUnreachableRetryMs, "trip took too long");
+				}
+
+				BotMovementController& mover = session.GetMovementController();
+				if (PlanarDistance(world.GetPosition(), economy.trainerPosition) > BotVendorApproachRange + 1.0f)
+				{
+					if (mover.IsActive())
+					{
+						return true;
+					}
+
+					if (!mover.MoveTo(world, economy.trainerPosition, BotVendorApproachRange))
+					{
+						return finish(SellUnreachableRetryMs, "no path to the trainer");
+					}
+
+					return true;
+				}
+
+				const BotUnit* trainer = nullptr;
+				for (const BotUnit* unit : world.GetNearbyUnits(BotVendorSearchRange))
+				{
+					if (unit->GetEntry() == economy.trainerEntry && unit->IsAlive())
+					{
+						trainer = unit;
+						break;
+					}
+				}
+
+				if (!trainer)
+				{
+					return finish(SellUnreachableRetryMs, "trainer not at its spawn");
+				}
+
+				if (PlanarDistance(world.GetPosition(), trainer->GetPosition()) > BotVendorApproachRange + 1.0f)
+				{
+					if (!mover.IsActive() && !mover.MoveTo(world, trainer->GetPosition(), BotVendorApproachRange))
+					{
+						return finish(SellUnreachableRetryMs, "no path to the trainer itself");
+					}
+
+					return true;
+				}
+
+				const std::vector<uint32> spells = spellsToBuy(session, economy.trainerId);
+				for (const uint32 spell : spells)
+				{
+					session.GetRealm().TrainerBuySpell(trainer->GetGuid(), spell);
+				}
+
+				ILOG("Bot " << context.GetBotIndex() << " bought " << spells.size() << " spells from trainer " << economy.trainerId);
+				economy.trainedAtLevel = level;
+				finish(SellRetryMs, "done");
+				return true;
+			});
+
 		// Out of combat, over the grind or party strategy. Selling outranks travelling to a grind
 		// spot, or a bot with full bags would never leave for the vendor; looting outranks picking
 		// the next fight, so corpses are emptied before the bot moves on.
 		registry.RegisterStrategy(std::make_unique<EconomyStrategy>("economy_world", std::vector<BotTriggerNode> {
 			{ "bags_nearly_full", { { "sell_at_vendor", bot_relevance::Move + 2 } } },
+			{ "spells_at_trainer", { { "train_at_trainer", bot_relevance::Move + 1 } } },
 			{ "gear_upgrade_in_bags", { { "equip_upgrade", bot_relevance::High + 5 } } },
 			{ "lootable_corpse_nearby", { { "loot_corpse", bot_relevance::Normal + 3 } } },
 		}));

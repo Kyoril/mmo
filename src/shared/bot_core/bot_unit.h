@@ -340,6 +340,12 @@ namespace mmo
 		/// @brief Gets the active class id (players only).
 		uint32 GetClassId() const { return m_classId; }
 
+		/// @brief Sets the unspent talent points (the bot's own player only).
+		void SetTalentPoints(uint32 points) { m_talentPoints = points; }
+
+		/// @brief Gets the unspent talent points (the bot's own player only).
+		uint32 GetTalentPoints() const { return m_talentPoints; }
+
 		/// @brief Gets the current experience points (players only).
 		uint32 GetXp() const { return m_xp; }
 
@@ -446,6 +452,7 @@ namespace mmo
 		uint32 m_money = 0;
 		uint32 m_xp = 0;
 		uint32 m_classId = 0;
+		uint32 m_talentPoints = 0;
 		uint32 m_nextLevelXp = 0;
 		uint32 m_maxHealth = 0;
 		PowerType m_powerType = power_type::Invalid_;
