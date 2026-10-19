@@ -85,6 +85,7 @@
 #include "frame_ui/font_mgr.h"
 #include "game/group.h"
 #include "game_client/game_world_object_c_base.h"
+#include "game_client/world_streaming_utils.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
@@ -1616,7 +1617,7 @@ namespace mmo
 		};
 
 		const PagePosition pos = GetPagePositionFromCamera();
-		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
+		m_visibleSection = std::make_unique<LoadedPageSection>(pos, static_cast<std::size_t>(LoadedPageRadius), *this);
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
 
 		PagePosition worldSize(64, 64);
@@ -5003,12 +5004,25 @@ namespace mmo
 
 		m_playerController->StopAllMovement();
 
+		const Vector3 previousPosition = unit->GetPosition();
+
 		// Teleport player
 		DLOG("Received teleport notification to " << movementInfo.position << ": Applying...");
 		unit->ApplyMovementInfo(movementInfo);
 
 		// Send ack to the server
 		m_realmConnector.SendMoveTeleportAck(ackId, unit->GetMovementInfo());
+
+		// A teleport on the same map does not go through TransferPending, so nothing loaded the
+		// world around the destination. Only the pages around the player are streamed in, and the
+		// teleport puts the character into falling state: landing outside that square means
+		// dropping through terrain which is still streaming in. Load the destination behind the
+		// loading screen first, exactly like entering a world does.
+		if (TeleportNeedsWorldLoad(previousPosition, unit->GetPosition()))
+		{
+			LoadingScreen::Show();
+			WaitForWorldLoading();
+		}
 
 		return PacketParseResult::Pass;
 	}
