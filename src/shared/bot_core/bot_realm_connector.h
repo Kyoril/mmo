@@ -24,6 +24,7 @@
 
 #include <map>
 #include <optional>
+#include <set>
 
 namespace mmo
 {
@@ -48,6 +49,36 @@ namespace mmo
 		bool hasPosition { false };
 	};
 
+	/// A chat line the realm delivered to this bot. NPC speech is not reported.
+	struct BotChatMessage
+	{
+		/// Character guid of the speaker; 0 for system messages.
+		uint64 senderGuid { 0 };
+		ChatType type { ChatType::Unknown };
+		std::string message;
+		/// Global channel id for ChatType::Channel, otherwise 0.
+		uint32 channelId { 0 };
+	};
+
+	/// One item in an open loot window.
+	struct BotLootItem
+	{
+		uint8 slot { 0 };
+		uint32 itemId { 0 };
+		uint32 count { 0 };
+
+		/// loot_slot_type: only AllowLoot (0) may be taken directly.
+		uint8 slotType { 0 };
+	};
+
+	/// The loot window the server opened for the bot.
+	struct BotLootWindow
+	{
+		uint64 lootGuid { 0 };
+		uint32 money { 0 };
+		std::vector<BotLootItem> items;
+	};
+
 	/// Minimal realm connector variant that tolerates unknown packets and exposes the hooks needed for the bot.
 	class BotRealmConnector final
 		: public game::Connector
@@ -67,6 +98,25 @@ namespace mmo
 		signal<void(uint64, uint32)> PartyJoined;
 		/// @brief Emitted when the bot leaves or is removed from a party.
 		signal<void()> PartyLeft;
+
+		/// @brief Emitted when the server opens a loot window for the bot.
+		signal<void(const BotLootWindow&)> LootOpened;
+
+		/// @brief Emitted when a loot request is refused.
+		/// @param lootGuid The corpse or object the bot tried to loot.
+		/// @param error The loot_error code.
+		signal<void(uint64, uint8)> LootFailed;
+
+		/// @brief Emitted for every inventory error the server reports (bag full, cannot sell...).
+		signal<void(uint8)> InventoryErrorReceived;
+
+		/// @brief Emitted for every player or system chat line the realm delivers.
+		signal<void(const BotChatMessage&)> ChatMessageReceived;
+
+		/// @brief Emitted when the answer to a QueryName call arrives.
+		/// @param guid The character guid that was queried.
+		/// @param name The character name.
+		signal<void(uint64, const std::string&)> NameResolved;
 
 		/// @brief Emitted when a new unit is spawned in the world.
 		signal<void(const BotUnit&)> UnitSpawned;
@@ -166,6 +216,12 @@ namespace mmo
 		/// every PlaySoundById since the last clear.
 		std::map<uint32, uint64> m_heardSounds;
 		std::map<uint32, uint32> m_heardSoundCounts;
+
+		// Chat state
+		std::map<uint64, std::string> m_nameCache;
+		std::set<uint64> m_pendingNameQueries;
+		std::vector<std::pair<uint32, std::string>> m_chatChannels;
+		bool m_hasChatChannelList { false };
 
 		// Party state
 		std::vector<BotPartyMember> m_partyMembers;
@@ -284,6 +340,22 @@ namespace mmo
 		void RequestCharEnum();
 
 		void SendChatMessage(const String& message, ChatType chatType, const String& target);
+
+		/// Asks the realm for a character name. The answer is cached and announced through
+		/// NameResolved; a guid already cached or already asked for is not asked for again.
+		void QueryName(uint64 guid);
+
+		/// The cached name of a character, or null if it was never resolved.
+		[[nodiscard]] const std::string* GetCachedName(uint64 guid) const;
+
+		/// Asks the realm to add this character to a chat channel by name.
+		void JoinChatChannel(const std::string& name);
+
+		/// Global id of a joined chat channel by case-insensitive name, or 0 if not a member.
+		[[nodiscard]] uint32 FindChatChannelId(const std::string& name) const;
+
+		/// Whether the realm has sent the channel membership list for this session yet.
+		[[nodiscard]] bool HasChatChannelList() const { return m_hasChatChannelList; }
 
 		void SendMovementUpdate(uint64 characterId, uint16 opCode, const MovementInfo& info);
 
@@ -502,6 +574,18 @@ namespace mmo
 		/// @param lootObjectGuid Guid of the unit or object being looted.
 		void LootRelease(uint64 lootObjectGuid);
 
+		/// @brief Takes one item from the open loot window into the bags.
+		void AutoStoreLootItem(uint8 lootSlot);
+
+		/// @brief Takes the money from the open loot window.
+		void LootMoney();
+
+		/// @brief Sells a whole item stack to a vendor the bot stands next to.
+		void SellItem(uint64 vendorGuid, uint64 itemGuid);
+
+		/// @brief Buys items from a vendor the bot stands next to.
+		void BuyItem(uint64 vendorGuid, uint32 itemId, uint8 count);
+
 		/// GAME MASTER only. Toggles damage immunity on the sender's character.
 		void CheatGodmode(bool enable);
 
@@ -609,6 +693,11 @@ namespace mmo
 		PacketParseResult OnShutdownCountdown(game::IncomingPacket& packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
+		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
+		PacketParseResult OnLootResponse(game::IncomingPacket& packet);
+		PacketParseResult OnInventoryError(game::IncomingPacket& packet);
+		PacketParseResult OnChannelList(game::IncomingPacket& packet);
+		PacketParseResult OnChannelNotify(game::IncomingPacket& packet);
 
 		/// @brief Handles movement packets from other units.
 		PacketParseResult OnMovementPacket(game::IncomingPacket& packet);

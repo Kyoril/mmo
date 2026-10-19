@@ -117,25 +117,38 @@ namespace mmo
 
 				const BotPersonality& personality = context.GetPersonality();
 
-				const std::vector<std::size_t> candidates = index->FindCandidates(
-					perception.mapId,
-					perception.position,
-					minLevel,
-					perception.level + BotGrindLevelsAbove,
-					BotGrindSearchRadius * personality.searchRadiusScale,
-					personality.candidateChoices * 4);
-
 				std::vector<std::size_t> usable;
 				usable.reserve(personality.candidateChoices);
-				for (const std::size_t candidate : candidates)
+
+				// The nearest spots first, then further afield if every one of them is blacklisted.
+				// A cluster of unreachable spawns - rats in a cellar the mesh does not connect -
+				// otherwise blacklists everything within reach and the bot wanders on the spot for
+				// the five minutes until the first entry expires.
+				for (const uint32 widening : { 1u, 4u, 16u })
 				{
-					if (context.GetGrindState().IsBlacklisted(candidate, context.GetNow()))
+					const std::vector<std::size_t> candidates = index->FindCandidates(
+						perception.mapId,
+						perception.position,
+						minLevel,
+						perception.level + BotGrindLevelsAbove,
+						BotGrindSearchRadius * personality.searchRadiusScale * (widening == 16u ? 2.0f : 1.0f),
+						personality.candidateChoices * 4 * widening);
+
+					for (const std::size_t candidate : candidates)
 					{
-						continue;
+						if (context.GetGrindState().IsBlacklisted(candidate, context.GetNow()))
+						{
+							continue;
+						}
+
+						usable.push_back(candidate);
+						if (usable.size() >= personality.candidateChoices)
+						{
+							break;
+						}
 					}
 
-					usable.push_back(candidate);
-					if (usable.size() >= personality.candidateChoices)
+					if (!usable.empty())
 					{
 						break;
 					}
@@ -271,8 +284,24 @@ namespace mmo
 				// up on anything.
 				if (perception.targetDistance <= BotMeleeRange)
 				{
-					grind.ClearApproachFailures();
-					return true;
+					if (perception.targetHeightDifference <= BotMeleeHeightTolerance)
+					{
+						grind.ClearApproachFailures();
+						return true;
+					}
+
+					// Right above or below it - a floor in between. Walking there again would arrive
+					// at once and change nothing, so this is a failed approach like any other, and
+					// enough of them write the target off.
+					if (grind.NoteApproachFailure(perception.targetGuid) >= BotApproachFailureLimit)
+					{
+						grind.MarkUnreachable(perception.targetGuid, context.GetNow(), BotUnreachableUnitMs);
+						grind.ClearApproachFailures();
+						world.GetRealmConnector()->SetSelection(0);
+						world.StopAutoAttack();
+					}
+
+					return false;
 				}
 
 				BotMovementController& mover = session.GetMovementController();

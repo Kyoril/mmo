@@ -334,6 +334,12 @@ namespace mmo
 		/// @brief Sets the current experience points (players only).
 		void SetXp(uint32 xp) { m_xp = xp; }
 
+		/// @brief Sets the active class id (players only; 0 mage, 1 warrior, 2 cleric, ...).
+		void SetClassId(uint32 classId) { m_classId = classId; }
+
+		/// @brief Gets the active class id (players only).
+		uint32 GetClassId() const { return m_classId; }
+
 		/// @brief Gets the current experience points (players only).
 		uint32 GetXp() const { return m_xp; }
 
@@ -439,6 +445,7 @@ namespace mmo
 		uint32 m_health = 0;
 		uint32 m_money = 0;
 		uint32 m_xp = 0;
+		uint32 m_classId = 0;
 		uint32 m_nextLevelXp = 0;
 		uint32 m_maxHealth = 0;
 		PowerType m_powerType = power_type::Invalid_;

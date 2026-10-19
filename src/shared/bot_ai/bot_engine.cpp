@@ -58,6 +58,15 @@ namespace mmo
 		}
 	}
 
+	void BotEngine::ClearStrategies()
+	{
+		m_strategyNames.clear();
+		m_triggerSlots.clear();
+		m_defaultActions.clear();
+		m_multipliers.clear();
+		m_queue.Clear();
+	}
+
 	void BotEngine::Reset()
 	{
 		m_queue.Clear();

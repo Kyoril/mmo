@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "bot_economy_state.h"
 #include "bot_grind_state.h"
 #include "bot_personality.h"
 #include "bot_perception.h"
@@ -20,6 +21,21 @@ namespace mmo
 	class BotSession;
 	class BotContext;
 	class GrindSpotIndex;
+	class NpcIndex;
+
+	/// A bot playing in a party: whom it follows and fights alongside.
+	struct BotFollowState final
+	{
+		/// The party member to follow; 0 while the bot plays alone.
+		uint64 leaderGuid { 0 };
+
+		/// Where the bot was last sent to keep up, and when. A moving leader is chased by
+		/// re-pathing now and then, not on every decision.
+		Vector3 destination { Vector3::Zero };
+		GameTime pathMs { 0 };
+
+		[[nodiscard]] bool IsFollowing() const { return leaderGuid != 0; }
+	};
 
 	/// Per-bot state the engine, its triggers and its actions all read and write.
 	///
@@ -46,6 +62,10 @@ namespace mmo
 		[[nodiscard]] uint32 GetBotIndex() const { return m_botIndex; }
 
 		[[nodiscard]] const BotPerception& GetPerception() const { return m_perception; }
+
+		/// Replaces the perception with a given one, for tests that check how triggers read a
+		/// situation without building a world for it. RefreshPerception overwrites it again.
+		void SetPerception(const BotPerception& perception) { m_perception = perception; }
 
 		/// Re-reads the world. Called once per AI tick, before any trigger runs.
 		void RefreshPerception();
@@ -83,6 +103,13 @@ namespace mmo
 		[[nodiscard]] BotGrindState& GetGrindState() { return m_grindState; }
 		[[nodiscard]] const BotGrindState& GetGrindState() const { return m_grindState; }
 
+		[[nodiscard]] BotEconomyState& GetEconomyState() { return m_economy; }
+		[[nodiscard]] const BotEconomyState& GetEconomyState() const { return m_economy; }
+
+		/// The shared index of vendors and other service NPCs, or nullptr if the host built none.
+		[[nodiscard]] const NpcIndex* GetNpcIndex() const { return m_npcIndex; }
+		void SetNpcIndex(const NpcIndex* index) { m_npcIndex = index; }
+
 		/// The shared, read-only spawn index every bot picks its grind spots from, or nullptr if
 		/// the host did not build one.
 		[[nodiscard]] const GrindSpotIndex* GetGrindSpots() const { return m_grindSpots; }
@@ -104,6 +131,10 @@ namespace mmo
 
 		void ClearSwingError() { m_lastSwingErrorMs = 0; }
 
+		/// Whom the bot follows in a party, and how it is keeping up with them.
+		[[nodiscard]] BotFollowState& GetFollowState() { return m_follow; }
+		[[nodiscard]] const BotFollowState& GetFollowState() const { return m_follow; }
+
 		/// Name of the last action the engine executed. Diagnostics and telemetry.
 		[[nodiscard]] const std::string& GetLastAction() const { return m_lastAction; }
 		void SetLastAction(std::string action) { m_lastAction = std::move(action); }
@@ -113,6 +144,8 @@ namespace mmo
 		uint32 m_botIndex { 0 };
 		BotPerception m_perception;
 		BotGrindState m_grindState;
+		BotEconomyState m_economy;
+		const NpcIndex* m_npcIndex { nullptr };
 		BotPersonality m_personality;
 		BotRotation m_rotation;
 		const GrindSpotIndex* m_grindSpots { nullptr };
@@ -122,5 +155,6 @@ namespace mmo
 		AttackSwingEvent m_lastSwingError { attack_swing_event::Unknown };
 		GameTime m_lastSwingErrorMs { 0 };
 		std::string m_lastAction;
+		BotFollowState m_follow;
 	};
 }
