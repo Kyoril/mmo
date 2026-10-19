@@ -34,11 +34,11 @@ namespace mmo
 
 	/// Submersion (water surface above feet) required before the player starts swimming.
 	/// Intended to scale with unit height later.
-	constexpr float SWIM_START_DEPTH = 1.2f;
+	constexpr float SWIM_START_DEPTH = 1.5f;
 
 	/// While swimming, if submersion drops below this AND the unit is resting on walkable floor,
 	/// the player stops swimming and resumes walking (shallow water / wading out).
-	constexpr float SWIM_STOP_DEPTH = 0.9f;
+	constexpr float SWIM_STOP_DEPTH = 1.2f;
 
 	/// Minimum submersion kept when the swimmer reaches the surface. The body cannot rise above
 	/// this depth (capped here), but may dive freely below. The swim clip lays the body out
@@ -46,7 +46,7 @@ namespace mmo
 	/// torso sits in the water with only head and shoulders above it — at 0.9 the whole back
 	/// floated above the surface. Kept close to SWIM_START_DEPTH so wading in does not snap the
 	/// body down when swimming starts.
-	constexpr float SWIM_SURFACE_MARGIN = 1.25f;
+	constexpr float SWIM_SURFACE_MARGIN = 1.5f;
 
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
