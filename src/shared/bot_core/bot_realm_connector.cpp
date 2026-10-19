@@ -1012,11 +1012,12 @@ namespace mmo
 			return;
 		}
 
-		// Send GroupUninvite with empty name to leave
+		// GroupLeave, as the game client sends it. A GroupUninvite with an empty name is a kick
+		// of nobody: the realm answers a member with YouNotLeader and a leader with
+		// NotInYourParty, and the bot never left.
 		sendSinglePacket([](game::OutgoingPacket& packet)
 		{
-			packet.Start(game::client_realm_packet::GroupUninvite);
-			packet << io::write_dynamic_range<uint8>(std::string{});
+			packet.Start(game::client_realm_packet::GroupLeave);
 			packet.Finish();
 		});
 

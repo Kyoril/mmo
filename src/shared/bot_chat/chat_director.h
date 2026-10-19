@@ -66,8 +66,8 @@ namespace mmo
 		GameTime humanActivityWindowMs { 30 * 60 * 1000 };
 
 		/// Interval between one bot's unprompted posts, rolled between these.
-		GameTime proactiveMinIntervalMs { 25 * 60 * 1000 };
-		GameTime proactiveMaxIntervalMs { 90 * 60 * 1000 };
+		GameTime proactiveMinIntervalMs { 12 * 60 * 1000 };
+		GameTime proactiveMaxIntervalMs { 40 * 60 * 1000 };
 
 		/// Minimum gap between any two unprompted posts in General, across the whole swarm.
 		GameTime generalProactiveGapMs { 4 * 60 * 1000 };

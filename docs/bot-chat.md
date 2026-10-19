@@ -82,7 +82,7 @@ chat therefore cannot turn into a burst of parallel spend.
 - **Bots and bots**: bots never answer another bot's whisper, and only sometimes reply to a
   bot's unprompted post. They never answer a bot that was itself replying, so bot-to-bot
   exchanges end after one round.
-- **Unprompted posts** happen every 25 to 90 minutes per bot (scaled by chattiness), with at most
+- **Unprompted posts** happen every 12 to 40 minutes per bot, scaled by chattiness (the first one 3 to 40 minutes after login), with at most
   one in General every 4 minutes across the swarm. They are made only while a real player has
   been seen in the last 30 minutes, either through chat or as a non-bot player near any bot. A
   server with nobody on it costs nothing.
