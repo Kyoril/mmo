@@ -779,6 +779,7 @@ namespace mmo
 		m_hoverFrame = nullptr;
 		m_inputCapture = nullptr;
 		m_mouseDownFrames.clear();
+		m_consumedPressButtons = 0;
 		m_framesByName.clear();
 		m_pressedKeys.clear();
 		m_inputCapture.reset();
@@ -904,6 +905,10 @@ namespace mmo
 	{
 		bool consumed = false;
 
+		// Every press decides anew whether the ui owns this button, so a release which never
+		// arrived (e.g. because the window lost focus) can not swallow a later world click.
+		m_consumedPressButtons &= ~static_cast<int32>(button);
+
 		if (const auto activeCombo = m_activeComboBox.lock())
 		{
 			// Determine whether the click is inside the ComboBox widget itself or its popup frame.
@@ -948,7 +953,18 @@ namespace mmo
 				{
 					m_mouseDownFrames[button] = clickableFrame->shared_from_this();
 					m_pressedButtons |= static_cast<int32>(button);
-					consumed = clickableFrame->OnMouseDown(button, m_pressedButtons, position);
+					const bool handled = clickableFrame->OnMouseDown(button, m_pressedButtons, position);
+
+					// The ui swallows a press which landed on one of its elements, so the game world
+					// never acts on it as well (which would clear the player's target). A press on the
+					// top frame means there was no ui element under the cursor, and a frame which
+					// declines the press (the world frame) wants it to reach the game world.
+					consumed = handled && clickableFrame != m_topFrame.get();
+					if (consumed)
+					{
+						m_consumedPressButtons |= static_cast<int32>(button);
+						abort_emission();
+					}
 				}
 			}
 		}
@@ -959,6 +975,11 @@ namespace mmo
 	bool FrameManager::NotifyMouseUp(MouseButton button, const Point & position)
 	{
 		bool consumed = false;
+
+		// The release belongs to whoever got the press: a click whose press was swallowed by the ui
+		// must not act on the game world when the button comes back up either.
+		const bool pressConsumed = (m_consumedPressButtons & static_cast<int32>(button)) != 0;
+		m_consumedPressButtons &= ~static_cast<int32>(button);
 
 		// For mouse button up, we want to notify the same frame that received the corresponding
 		// MouseDown event, even if the new position doesn't hit the old frame. This is done so
@@ -979,7 +1000,13 @@ namespace mmo
 				m_mouseDownFrames.erase(it);
 			}
 		}
-		
+
+		if (pressConsumed)
+		{
+			abort_emission();
+			consumed = true;
+		}
+
 		return consumed;
 	}
 
