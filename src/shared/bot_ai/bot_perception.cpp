@@ -2,6 +2,8 @@
 
 #include "bot_perception.h"
 
+#include <cmath>
+
 #include "bot_core/bot_context.h"
 #include "bot_ai/grind_spot_index.h"
 #include "bot_core/bot_movement_math.h"
@@ -60,6 +62,7 @@ namespace mmo
 				targetExists = true;
 				targetAlive = target->IsAlive();
 				targetDistance = PlanarDistance(position, target->GetPosition());
+				targetHeightDifference = std::abs(position.y - target->GetPosition().y);
 			}
 		}
 

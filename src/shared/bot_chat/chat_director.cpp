@@ -100,6 +100,50 @@ namespace mmo
 			}
 		}
 
+		/// Whether a line greets people. A greeting nobody returns is what makes a server feel empty.
+		bool isGreeting(const std::string& message)
+		{
+			static const char* const greetings[] = {
+				"hi", "hey", "hello", "heya", "hiya", "yo", "sup", "morning", "evening", "gm", "howdy", "greetings",
+			};
+
+			std::string word;
+			int words = 0;
+			const std::string lower = toLower(message);
+			for (std::size_t i = 0; i <= lower.size(); ++i)
+			{
+				const bool letter = i < lower.size() && std::isalpha(static_cast<unsigned char>(lower[i])) != 0;
+				if (letter)
+				{
+					word.push_back(lower[i]);
+					continue;
+				}
+
+				if (word.empty())
+				{
+					continue;
+				}
+
+				// Only near the start of the line: "hey" opening a message greets, "they" or a
+				// "hi" in the middle of a sentence does not.
+				for (const char* greeting : greetings)
+				{
+					if (word == greeting)
+					{
+						return true;
+					}
+				}
+
+				word.clear();
+				if (++words >= 3)
+				{
+					return false;
+				}
+			}
+
+			return false;
+		}
+
 		bool isChannelReply(const ChatType type)
 		{
 			return type == ChatType::Channel;
@@ -659,6 +703,7 @@ namespace mmo
 		}
 
 		const bool question = decision.message.find('?') != std::string::npos;
+		const bool greeting = isGreeting(decision.message);
 
 		float baseChance = 0.0f;
 		switch (decision.type)
@@ -674,14 +719,19 @@ namespace mmo
 			// A player asking General something and hearing nothing back is what makes a server
 			// feel empty, so questions are usually answered. Only one bot ever answers a line and
 			// General replies are spaced out swarm-wide, so this cannot turn into a flood.
-			baseChance = fromBot ? 0.06f : (question ? 0.7f : 0.3f);
+			baseChance = fromBot ? 0.06f : (question ? 0.75f : (greeting ? 0.6f : 0.3f));
 			break;
 		case ChatType::Say:
 		case ChatType::Yell:
-			baseChance = fromBot ? 0.08f : 0.35f;
+			baseChance = fromBot ? 0.08f : (greeting ? 0.6f : 0.35f);
 			break;
 		default:
 			return;
+		}
+
+		if (decision.type == ChatType::Guild && !fromBot && (question || greeting))
+		{
+			baseChance = 0.6f;
 		}
 
 		const float mentionChance = fromBot ? 0.35f : 0.9f;
@@ -721,12 +771,27 @@ namespace mmo
 				responder = named;
 			}
 		}
-		else if (!candidates.empty())
+		else if (!candidates.empty() && Roll() < baseChance * botScale)
 		{
-			BotState* picked = candidates[std::uniform_int_distribution<std::size_t>(0, candidates.size() - 1)(m_rng)];
-			if (Roll() < baseChance * botScale * picked->persona.chattiness)
+			// Whether anyone answers depends on the line; who answers on how chatty each bot is.
+			// Rolling a single random bot against its own chattiness made a quiet bot the reason
+			// nobody said good morning back.
+			float totalWeight = 0.0f;
+			for (const BotState* candidate : candidates)
 			{
-				responder = picked;
+				totalWeight += candidate->persona.chattiness;
+			}
+
+			float pick = std::uniform_real_distribution<float>(0.0f, totalWeight)(m_rng);
+			responder = candidates.back();
+			for (BotState* candidate : candidates)
+			{
+				pick -= candidate->persona.chattiness;
+				if (pick <= 0.0f)
+				{
+					responder = candidate;
+					break;
+				}
 			}
 		}
 

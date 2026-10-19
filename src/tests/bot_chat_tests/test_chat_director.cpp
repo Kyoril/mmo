@@ -466,3 +466,33 @@ TEST_CASE("The prompt says what the bot really did with a player, and no more", 
 		CHECK(prompt.find("you killed 2 mobs together") != std::string::npos);
 	}
 }
+
+TEST_CASE("A player's greeting in General is usually returned", "[chat_director]")
+{
+	Fixture f;
+	int answered = 0;
+	constexpr int Rounds = 100;
+
+	for (int round = 0; round < Rounds; ++round)
+	{
+		const GameTime start = 1000 + round * 10 * Minute;
+		const std::string line = "Good morning together " + std::to_string(round);
+		f.director->OnChatReceived(0, ChatType::Channel, "Steve", line, 1, start);
+		f.director->OnChatReceived(1, ChatType::Channel, "Steve", line, 1, start);
+
+		const std::size_t before = f.model.submitted.size();
+		f.Run(start, 1000);
+		for (std::size_t i = before; i < f.model.submitted.size(); ++i)
+		{
+			const std::string& prompt = f.model.submitted[i].prompt;
+			if (prompt.rfind("Chat:", 0) == 0 && prompt.find(line) != std::string::npos)
+			{
+				++answered;
+				break;
+			}
+		}
+	}
+
+	INFO("answered " << answered << " of " << Rounds);
+	CHECK(answered >= 45);
+}

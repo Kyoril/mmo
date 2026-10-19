@@ -60,6 +60,11 @@ namespace mmo
 		/// again - forever, never swinging.
 		float targetDistance { 0.0f };
 
+		/// Absolute height difference to the target. Kept apart from targetDistance for the reason
+		/// above, and needed beside it: a creature in the cellar directly below the bot is at a
+		/// planar distance of zero, and without this the bot fought it through the floor.
+		float targetHeightDifference { 0.0f };
+
 		/// Nearest creature we could attack, whether or not it is our current target.
 		uint64 nearestAttackableGuid { 0 };
 		float nearestAttackableDistance { 0.0f };

@@ -10,6 +10,7 @@
 #include "bot_core/io_poll.h"
 #include "bot_core/bot_realm_connector.h"
 #include "bot_core/bot_unit.h"
+#include "game/group.h"
 
 #include "base/clock.h"
 
@@ -568,9 +569,24 @@ namespace mmo
 	{
 		BotRealmConnector& realm = bot.session->GetRealm();
 		const uint64 selfGuid = bot.session->GetContext().GetSelectedCharacterGuid();
-		const auto isPlayer = [this, selfGuid](const uint64 guid)
+		// Only an online player is worth following. A group outlives its members' sessions, and a
+		// bot following someone who logged off has nowhere to go and stands there all day.
+		const auto isPlayer = [this, selfGuid, &realm, &bot](const uint64 guid)
 		{
-			return guid != 0 && guid != selfGuid && m_botGuids.count(guid) == 0;
+			if (guid == 0 || guid == selfGuid || m_botGuids.count(guid) != 0)
+			{
+				return false;
+			}
+
+			const BotPartyMember* member = realm.GetPartyMemberByGuid(guid);
+			if (!member || (member->status & group_member_status::Online) == 0)
+			{
+				return false;
+			}
+
+			// ...and only one the bot can find: in sight, or with a position the realm reported.
+			// A party member on another map has neither.
+			return member->hasPosition || bot.session->GetContext().GetUnit(guid) != nullptr;
 		};
 
 		// Follow a real player: the party leader if that is one, otherwise the first one in the

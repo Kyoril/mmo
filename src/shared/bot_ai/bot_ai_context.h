@@ -61,6 +61,10 @@ namespace mmo
 
 		[[nodiscard]] const BotPerception& GetPerception() const { return m_perception; }
 
+		/// Replaces the perception with a given one, for tests that check how triggers read a
+		/// situation without building a world for it. RefreshPerception overwrites it again.
+		void SetPerception(const BotPerception& perception) { m_perception = perception; }
+
 		/// Re-reads the world. Called once per AI tick, before any trigger runs.
 		void RefreshPerception();
 

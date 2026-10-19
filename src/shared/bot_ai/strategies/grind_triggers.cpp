@@ -71,13 +71,16 @@ namespace mmo
 		add(registry, "target_out_of_melee", [](BotAiContext& context)
 			{
 				const BotPerception& perception = context.GetPerception();
-				return hasLiveTarget(perception) && perception.targetDistance > BotMeleeRange;
+				return hasLiveTarget(perception)
+					&& (perception.targetDistance > BotMeleeRange || perception.targetHeightDifference > BotMeleeHeightTolerance);
 			});
 
 		add(registry, "target_in_melee", [](BotAiContext& context)
 			{
 				const BotPerception& perception = context.GetPerception();
-				return hasLiveTarget(perception) && perception.targetDistance <= BotMeleeRange;
+				return hasLiveTarget(perception)
+					&& perception.targetDistance <= BotMeleeRange
+					&& perception.targetHeightDifference <= BotMeleeHeightTolerance;
 			});
 
 		add(registry, "attackable_nearby", [](BotAiContext& context)

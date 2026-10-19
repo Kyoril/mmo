@@ -75,3 +75,40 @@ TEST_CASE("Clearing an engine's strategies swaps its behaviour", "[bot_ai][party
 	CHECK(fixture.log.executed == std::vector<std::string>{ "follow" });
 	CHECK(engine.GetStrategyNames() == std::vector<std::string>{ "party" });
 }
+
+TEST_CASE("A target below the floor is not in melee range, however close in plan", "[bot_ai][melee]")
+{
+	BotAiRegistry registry;
+	RegisterGrindStrategies(registry);
+
+	BotAiContext context(nullptr, 0);
+	BotPerception perception;
+	perception.valid = true;
+	perception.alive = true;
+	perception.targetGuid = 7;
+	perception.targetExists = true;
+	perception.targetAlive = true;
+	perception.targetDistance = 0.5f;
+
+	const BotTrigger* inMelee = registry.FindTrigger("target_in_melee");
+	const BotTrigger* outOfMelee = registry.FindTrigger("target_out_of_melee");
+	REQUIRE(inMelee != nullptr);
+	REQUIRE(outOfMelee != nullptr);
+
+	SECTION("on a slope it is in reach")
+	{
+		perception.targetHeightDifference = 1.5f;
+		context.SetPerception(perception);
+		CHECK(inMelee->IsActive(context));
+		CHECK_FALSE(outOfMelee->IsActive(context));
+	}
+
+	SECTION("a storey below it is not")
+	{
+		// The cellar under an inn: right below the bot, nine yards down.
+		perception.targetHeightDifference = 8.9f;
+		context.SetPerception(perception);
+		CHECK_FALSE(inMelee->IsActive(context));
+		CHECK(outOfMelee->IsActive(context));
+	}
+}
