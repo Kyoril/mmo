@@ -100,14 +100,10 @@ bolt), Candlebearer (leaves a fire zone on death).
 Interrupts available at 10: warrior Skullbash (15 s), mage Arcane Disruption (25 s). Clerics,
 acolytes and scouts have none, so a group needs a warrior and a mage, or a rotation of the two.
 
-## Decisions needed
+## Decisions (2026-10-19)
 
-1. **Order.** Proposed: 1 → 2 → 4 → 3 → 5 (the dungeon before questing, since grinding already
-   reaches level 10). Questing first gives a more natural world; the dungeon first reaches the
-   group goal sooner.
-2. **Format for behaviour data** (talent builds, quest routes, dungeon tactics): JSON files
-   under `data/bots/` read by the swarm (simple, diffable, no new code generation), a new proto
-   in `src/shared/proto_data` edited in the editor (consistent with all other game data, more
-   work), or Lua (the registry was designed for it, the most flexible, the most work).
-3. **Repair:** add the missing repair packet on the servers now (small protocol change with a
-   version bump), or let bots live without repairs for now.
+1. **Order:** 1 → 2 → 4 → 3 → 5. The dungeon comes before questing, since grinding already
+   reaches level 10.
+2. **Behaviour data** (talent builds, quest routes, dungeon tactics) lives in JSON files under
+   `data/bots/`, read by the swarm.
+3. **Repair** is left for a separate server task; bots live without it for now.
