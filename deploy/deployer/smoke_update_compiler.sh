@@ -5,7 +5,7 @@
 set -eu
 work=$(mktemp -d)
 mkdir -p "$work/deploy/patch"
-for dir in Config Fonts Interface Models Sound Textures ClientDB Worlds Particles 	Locales/Locale_deDE Locales/Locale_enUS Locales/Locale_frFR Locales/Locale_ruRU; do
+for dir in Config Fonts Interface Models Sound Textures ClientDB Worlds Particles Kits 	Locales/Locale_deDE Locales/Locale_enUS Locales/Locale_frFR Locales/Locale_ruRU; do
 	mkdir -p "$work/data/client/$dir"
 	echo "smoke" > "$work/data/client/$dir/file.txt"
 done
@@ -31,6 +31,7 @@ root = (type = "fs", from = ".", to = "", entries =
 		(type = "hpak2", from = "ClientDB", to = "ClientDB.hpak", sub = "ClientDB")
 		(type = "hpak2", from = "Worlds", to = "Worlds.hpak", sub = "Worlds")
 		(type = "hpak2", from = "Particles", to = "Particles.hpak", sub = "Particles")
+		(type = "hpak2", from = "Kits", to = "Kits.hpak", sub = "Kits")
 		(type = "fs", from = "Locales", to = "Locales", entries =
 		{
 			(type = "hpak2", from = "Locale_deDE", to = "Locale_deDE.hpak")
