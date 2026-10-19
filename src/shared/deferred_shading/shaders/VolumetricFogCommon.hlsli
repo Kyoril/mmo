@@ -39,6 +39,9 @@ cbuffer VolumetricFogBuffer : register(b2)
     uint SunTapsZ;              // sun shadow taps per froxel along its depth
     uint FogShadowValid;        // 1 when FogShadowMap (t12) holds this frame's coarse fog shadow map
     column_major matrix FogShadowViewProj;
+    uint DiagFlags;             // diagnostic (gxFogDiag): 1 no depth culling, 2 no sun, 4 sun unshadowed, 8 constant density
+    float SunTemporalBlend;     // history weight of the sun scattering volume (0 = no sun history)
+    float2 _DiagPadding;
 };
 
 // View depth of a normalized slice coordinate, exponential between NearDistance and FarDistance.

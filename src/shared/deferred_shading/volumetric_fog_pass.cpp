@@ -89,9 +89,13 @@ namespace mmo
 			uint32 fogShadowValid;
 
 			Matrix4 fogShadowViewProj;
+
+			uint32 diagFlags;
+			float sunTemporalBlend;
+			float diagPadding[2];
 		};
 
-		static_assert(sizeof(VolumetricFogConstants) == 320, "VolumetricFogConstants must match the HLSL layout");
+		static_assert(sizeof(VolumetricFogConstants) == 336, "VolumetricFogConstants must match the HLSL layout");
 
 		uint32 groupCount(const uint32 cells)
 		{
@@ -190,6 +194,8 @@ namespace mmo
 		m_historyVolumes[0].reset();
 		m_historyVolumes[1].reset();
 		m_injectSunVolume.reset();
+		m_historySunVolumes[0].reset();
+		m_historySunVolumes[1].reset();
 		m_columnFarDepth.reset();
 		m_gridWidth = 0;
 		m_gridHeight = 0;
@@ -233,9 +239,11 @@ namespace mmo
 		VolumeTexturePtr historyVolume0 = create();
 		VolumeTexturePtr historyVolume1 = create();
 		VolumeTexturePtr injectSunVolume = create();
+		VolumeTexturePtr historySunVolume0 = create();
+		VolumeTexturePtr historySunVolume1 = create();
 		VolumeTexturePtr columnFarDepth = m_device.CreateVolumeTexture(static_cast<uint16>(gridWidth), static_cast<uint16>(gridHeight), 1, VolumeFormat::RGBA16F, true);
 
-		if (!injectVolume || !historyVolume0 || !historyVolume1 || !injectSunVolume || !columnFarDepth)
+		if (!injectVolume || !historyVolume0 || !historyVolume1 || !injectSunVolume || !historySunVolume0 || !historySunVolume1 || !columnFarDepth)
 		{
 			// Allocation failure (e.g. exhausted VRAM at a high quality preset): fall back to no volume
 			// rather than leaving a partially-populated set of volumes for Render to bind. Render treats
@@ -259,6 +267,8 @@ namespace mmo
 		m_historyVolumes[0] = std::move(historyVolume0);
 		m_historyVolumes[1] = std::move(historyVolume1);
 		m_injectSunVolume = std::move(injectSunVolume);
+		m_historySunVolumes[0] = std::move(historySunVolume0);
+		m_historySunVolumes[1] = std::move(historySunVolume1);
 		m_columnFarDepth = std::move(columnFarDepth);
 
 		m_gridWidth = gridWidth;
@@ -339,6 +349,9 @@ namespace mmo
 		constants.sunTapsZ = std::clamp(m_settings.sunTapsZ, 1u, VolumetricFogSettings::MaxSunTapsZ);
 		constants.fogShadowValid = fogShadowMap ? 1u : 0u;
 		constants.fogShadowViewProj = fogShadowViewProj;
+		constants.diagFlags = m_settings.diagFlags;
+		const bool sunHistory = m_settings.sunHistoryWeight > 0.0f;
+		constants.sunTemporalBlend = sunHistory ? m_settings.sunHistoryWeight : 0.0f;
 		m_fogBuffer->Update(&constants);
 
 		if (volumeEnabled)
@@ -391,6 +404,13 @@ namespace mmo
 			history->Bind(ShaderType::ComputeShader, 1);
 			m_linearClampSampler->Bind(ShaderType::ComputeShader, 0);
 			temporalTarget->BindWritable(0);
+			const VolumeTexturePtr& temporalSunTarget = m_historySunVolumes[m_historyIndex];
+			if (sunHistory)
+			{
+				m_injectSunVolume->Bind(ShaderType::ComputeShader, 2);
+				m_historySunVolumes[1 - m_historyIndex]->Bind(ShaderType::ComputeShader, 3);
+				temporalSunTarget->BindWritable(1);
+			}
 			m_temporalCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), groupCount(m_gridDepth));
 			m_device.ClearComputeBindings();
@@ -400,7 +420,7 @@ namespace mmo
 			// integrate step writes its front-to-back accumulation back into it instead of a fourth
 			// volume.
 			temporalTarget->Bind(ShaderType::ComputeShader, 0);
-			m_injectSunVolume->Bind(ShaderType::ComputeShader, 1);
+			(sunHistory ? temporalSunTarget : m_injectSunVolume)->Bind(ShaderType::ComputeShader, 1);
 			m_injectVolume->BindWritable(0);
 			m_integrateCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), 1);

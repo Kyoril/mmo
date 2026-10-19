@@ -10,6 +10,9 @@ Texture3D<float4> CurrentVolume : register(t0);
 Texture3D<float4> HistoryVolume : register(t1);
 SamplerState LinearClampSampler : register(s0);
 RWTexture3D<float4> TemporalOutput : register(u0);
+Texture3D<float4> CurrentSunVolume : register(t2);   // only bound while SunTemporalBlend > 0
+Texture3D<float4> HistorySunVolume : register(t3);
+RWTexture3D<float4> TemporalSunOutput : register(u1);
 
 // Catmull-Rom history lookup across the screen axes (linear across slices), from nine bilinear taps. A
 // plain bilinear lookup blurs the history a little every frame the camera moves, and at a high history
@@ -81,8 +84,18 @@ void main(uint3 id : SV_DispatchThreadID)
     if (!reproject)
     {
         TemporalOutput[id] = CurrentVolume.Load(int4(id, 0));
+        if (SunTemporalBlend > 0.0f)
+        {
+            TemporalSunOutput[id] = CurrentSunVolume.Load(int4(id, 0));
+        }
         return;
     }
 
     TemporalOutput[id] = Blend(CurrentVolume, HistoryVolume, id, prevUvw);
+    if (SunTemporalBlend > 0.0f)
+    {
+        // The sun volume holds no view-dependent term (its phase is applied in CS_FogIntegrate), so its history
+        // reprojects without trailing; it averages the jittered shadow taps over frames.
+        TemporalSunOutput[id] = lerp(CurrentSunVolume.Load(int4(id, 0)), SampleHistoryCatmullRom(HistorySunVolume, prevUvw), SunTemporalBlend);
+    }
 }

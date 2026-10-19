@@ -68,6 +68,12 @@ namespace mmo
 		///        while the history is on; without history jitter is pure per-frame noise.
 		bool jitterEnabled = true;
 
+		/// @brief Diagnostic switches (gxFogDiag): 1 no depth culling, 2 no sun, 4 sun unshadowed, 8 constant density.
+		uint32 diagFlags = 0;
+
+		/// @brief History weight of the sun's scattering volume (0 = none). Needs historyWeight > 0 for the jitter.
+		float sunHistoryWeight = 0.0f;
+
 		/// @brief Largest sun shadow tap count along one screen axis of a froxel.
 		static constexpr uint32 MaxSunTapsXY = 4;
 

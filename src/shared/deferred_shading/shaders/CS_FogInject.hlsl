@@ -64,6 +64,11 @@ groupshared uint s_blockVolumes[MAX_BLOCK_VOLUMES];  // indices into FogVolumes
 // Zone fog extinction at a world position: height fog times the wind-scrolled noise.
 float ZoneSigmaAt(float3 worldPos)
 {
+    if ((DiagFlags & 8u) != 0)
+    {
+        return FogDensityAt(worldPos.y);
+    }
+
     // The pattern moves with the wind: the noise at p now is the noise that was at p - offset.
     float3 noiseUvw = float3(worldPos.x / NoiseSize - WindOffset.x, worldPos.y / NoiseSize, worldPos.z / NoiseSize - WindOffset.y);
     return FogDensityAt(worldPos.y) * NoiseDensityFactor(NoiseVolume.SampleLevel(NoiseSampler, noiseUvw, 0.0f), NoiseAmount);
@@ -81,11 +86,12 @@ float3 SumCellSunTaps(Texture2D shadowMap, bool shadowed, float3 lightOrigin, fl
     [loop]
     for (uint k = 0; k < SunTapsZ; ++k)
     {
-        float depth = SliceToDepth((float(id.z) + (float(k) + 0.5f) / float(SunTapsZ)) / float(GridDepth));
+        // With a history the pattern is jittered per frame (Jitter/ScreenJitter, 0.5 = centred otherwise).
+        float depth = SliceToDepth((float(id.z) + (float(k) + Jitter) / float(SunTapsZ)) / float(GridDepth));
 
         // Each depth layer shifts its xy strata by an R2 sequence step, so the layers do not stack their
         // taps in the same columns and together cover the cell's cross-section evenly.
-        float2 layerOffset = frac(0.5f + float(k) * float2(0.7548777f, 0.5698403f));
+        float2 layerOffset = frac(ScreenJitter + float(k) * float2(0.7548777f, 0.5698403f));
         [loop]
         for (uint j = 0; j < SunTapsXY; ++j)
         {
@@ -97,7 +103,7 @@ float3 SumCellSunTaps(Texture2D shadowMap, bool shadowed, float3 lightOrigin, fl
                 float visibility = 1.0f;
                 float3 light = lightOrigin + depth * (lightRay + sub.x * lightX + sub.y * lightY);
                 float2 uv = light.xy * float2(0.5f, -0.5f) + 0.5f;
-                if (shadowed && all(uv >= 0.0f) && all(uv <= 1.0f) && light.z >= 0.0f && light.z <= 1.0f)
+                if (shadowed && (DiagFlags & 4u) == 0 && all(uv >= 0.0f) && all(uv <= 1.0f) && light.z >= 0.0f && light.z <= 1.0f)
                 {
                     visibility = shadowMap.SampleCmpLevelZero(ShadowSampler, uv, light.z - ShadowBias);
                 }
@@ -357,7 +363,7 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
         }
     }
     // The half-float far depth may round down by a few centimetres; the margin keeps the test conservative.
-    bool hiddenCell = SliceToDepth(float(id.z) / float(GridDepth)) > farDepth * 1.002f;
+    bool hiddenCell = (DiagFlags & 1u) == 0 && SliceToDepth(float(id.z) / float(GridDepth)) > farDepth * 1.002f;
 
     // 2. This froxel. Visible cells take their zone fog density from the same fixed taps as the sun (cell
     //    average, see CellSunScattering): a single sample per cell, jittered and blended through the history,
@@ -391,5 +397,5 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
         sunScatter = sun.x.xxx + (sigmaScatter - sigma.xxx) * sun.y;
     }
 
-    InjectSunOutput[id] = float4(sunScatter, 0.0f);
+    InjectSunOutput[id] = (DiagFlags & 2u) != 0 ? float4(0.0f, 0.0f, 0.0f, 0.0f) : float4(sunScatter, 0.0f);
 }

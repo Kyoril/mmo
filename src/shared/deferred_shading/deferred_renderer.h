@@ -103,6 +103,10 @@ namespace mmo
 
         /// @brief Diagnostic: while frozen the cascades are neither set up nor rendered, so the last shadow maps
         ///        and matrices stay as they were. Tells shadow map changes apart from fog sampling while moving.
+        /// @brief Diagnostic access to the fog's own shadow map and its view-projection (null when not rendered).
+        [[nodiscard]] RenderTexture* GetFogShadowMap() const { return m_fogShadowValid ? m_fogShadowMap.get() : nullptr; }
+        [[nodiscard]] const Matrix4& GetFogShadowViewProj() const { return m_fogShadowViewProj; }
+
         void SetShadowsFrozen(bool frozen) { if (m_shadowsFrozen && !frozen) { m_shadowFrameCounter = 0; } m_shadowsFrozen = frozen; }
 
         /// @brief Checks whether temporal cascade staggering is enabled.

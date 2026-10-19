@@ -120,6 +120,7 @@ namespace mmo
 		///        step applies the phase for the current view rays. It has no history: the inject step box-filters
 		///        the sun's shadow over each cell on a fixed pattern, so the value is stable without one.
 		VolumeTexturePtr m_injectSunVolume;
+		std::array<VolumeTexturePtr, 2> m_historySunVolumes;
 
 		/// @brief One slice, grid width x height: the farthest scene depth seen through each grid column
 		///        (CS_FogDepthTiles). Cells behind it skip the sun's shadow taps.
