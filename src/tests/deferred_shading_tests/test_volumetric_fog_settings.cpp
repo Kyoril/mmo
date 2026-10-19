@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <set>
 #include <utility>
+#include <vector>
 
 using namespace mmo;
 
@@ -251,4 +252,45 @@ TEST_CASE("Volumetric fog sun taps clamp to the supported range", "[volumetric_f
 	settings.SetSunTaps(100, 100);
 	CHECK(settings.sunTapsXY == VolumetricFogSettings::MaxSunTapsXY);
 	CHECK(settings.sunTapsZ == VolumetricFogSettings::MaxSunTapsZ);
+}
+
+TEST_CASE("Volumetric fog sun mode defaults to the box filter and clamps to the known modes", "[volumetric_fog]")
+{
+	VolumetricFogSettings settings;
+	CHECK(settings.sunMode == VolumetricFogSettings::SunModeBoxFilter);
+	CHECK_FALSE(settings.IsSunTemporal());
+
+	settings.SetSunMode(1);
+	CHECK(settings.sunMode == VolumetricFogSettings::SunModeTemporal);
+	CHECK(settings.IsSunTemporal());
+
+	settings.SetSunMode(9);
+	CHECK(settings.sunMode == VolumetricFogSettings::SunModeTemporalCascades);
+
+	settings.SetSunMode(-3);
+	CHECK(settings.sunMode == VolumetricFogSettings::SunModeBoxFilter);
+}
+
+TEST_CASE("Golden jitter covers the unit interval evenly and never repeats a short cycle", "[volumetric_fog]")
+{
+	CHECK(volumetric_fog::GoldenJitterForFrame(0) == Approx(0.0f));
+	CHECK(volumetric_fog::GoldenJitterForFrame(1) == Approx(0.618034f).margin(1e-5));
+
+	// The golden ratio's three-gap property bounds the largest gap between any 16 consecutive offsets below 2/16.
+	std::vector<float> offsets;
+	for (uint64 frame = 1000; frame < 1016; ++frame)
+	{
+		const float offset = volumetric_fog::GoldenJitterForFrame(frame);
+		REQUIRE(offset >= 0.0f);
+		REQUIRE(offset < 1.0f);
+		offsets.push_back(offset);
+	}
+
+	std::sort(offsets.begin(), offsets.end());
+	float largestGap = offsets.front() + 1.0f - offsets.back();
+	for (size_t i = 1; i < offsets.size(); ++i)
+	{
+		largestGap = std::max(largestGap, offsets[i] - offsets[i - 1]);
+	}
+	CHECK(largestGap < 2.0f / 16.0f);
 }

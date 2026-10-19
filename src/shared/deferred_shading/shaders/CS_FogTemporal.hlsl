@@ -47,12 +47,46 @@ float4 SampleHistoryCatmullRom(Texture3D<float4> history, float3 uvw)
     return max(result, 0.0f);
 }
 
-// This frame's value blended with the reprojected history at prevUvw.
-float4 Blend(Texture3D<float4> currentVolume, Texture3D<float4> historyVolume, uint3 id, float3 prevUvw)
+// Clamps a history value into the range this frame's 3x3x3 neighbourhood of id spans, per channel. History
+// that the scene has moved away from (a shaft the camera walked past, a cell that turned from lit to shadowed)
+// lies outside that range and is pulled back to it at once, so a high history weight averages the per-froxel
+// jitter noise without trailing behind the camera. Values that agree with the neighbourhood pass untouched.
+float4 ClampToNeighbourhood(Texture3D<float4> currentVolume, uint3 id, float4 history)
+{
+    int3 last = int3(GridWidth, GridHeight, GridDepth) - 1;
+    float4 low = float4(1e30f, 1e30f, 1e30f, 1e30f);
+    float4 high = float4(-1e30f, -1e30f, -1e30f, -1e30f);
+    [unroll]
+    for (int dz = -1; dz <= 1; ++dz)
+    {
+        [unroll]
+        for (int dy = -1; dy <= 1; ++dy)
+        {
+            [unroll]
+            for (int dx = -1; dx <= 1; ++dx)
+            {
+                float4 value = currentVolume.Load(int4(clamp(int3(id) + int3(dx, dy, dz), int3(0, 0, 0), last), 0));
+                low = min(low, value);
+                high = max(high, value);
+            }
+        }
+    }
+
+    return clamp(history, low, high);
+}
+
+// This frame's value blended with the reprojected history at prevUvw. The temporal sun modes clamp the
+// history to the current neighbourhood first (see ClampToNeighbourhood).
+float4 Blend(Texture3D<float4> currentVolume, Texture3D<float4> historyVolume, uint3 id, float3 prevUvw, float weight)
 {
     float4 current = currentVolume.Load(int4(id, 0));
     float4 history = SampleHistoryCatmullRom(historyVolume, prevUvw);
-    return lerp(current, history, TemporalBlend);
+    if (SunMode != 0)
+    {
+        history = ClampToNeighbourhood(currentVolume, id, history);
+    }
+
+    return lerp(current, history, weight);
 }
 
 [numthreads(8, 8, 8)]
@@ -91,11 +125,11 @@ void main(uint3 id : SV_DispatchThreadID)
         return;
     }
 
-    TemporalOutput[id] = Blend(CurrentVolume, HistoryVolume, id, prevUvw);
+    TemporalOutput[id] = Blend(CurrentVolume, HistoryVolume, id, prevUvw, TemporalBlend);
     if (SunTemporalBlend > 0.0f)
     {
         // The sun volume holds no view-dependent term (its phase is applied in CS_FogIntegrate), so its history
         // reprojects without trailing; it averages the jittered shadow taps over frames.
-        TemporalSunOutput[id] = lerp(CurrentSunVolume.Load(int4(id, 0)), SampleHistoryCatmullRom(HistorySunVolume, prevUvw), SunTemporalBlend);
+        TemporalSunOutput[id] = Blend(CurrentSunVolume, HistorySunVolume, id, prevUvw, SunTemporalBlend);
     }
 }

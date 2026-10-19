@@ -2283,6 +2283,7 @@ namespace mmo
 		ConsoleVarMgr::RegisterConsoleVar("gxFogPathRecord", "Diagnostic: 0 plays the gxFogPath camera path at full frame rate without recording it.", "1");
 		ConsoleVarMgr::RegisterConsoleVar("gxCaptureFast", "Diagnostic: records the next N frames at full frame rate (quarter-size luminance) to capture/fast_*.bin.", "0");
 		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogSunHistory", "Diagnostic: history weight of the fog's sun scattering (0 = none).", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogSunMode", "Volumetric fog sun filtering: 0 box filter (fixed taps, no history), 1 temporal (one blue-noise jittered tap, clamped history, fog shadow map), 2 temporal with the surface cascades.", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogGrid", "Diagnostic: overrides the fog grid as 'tilePixels,slices' (0 = quality preset).", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 		ConsoleVarMgr::RegisterConsoleVar("gxShadowDump", "Diagnostic: dumps the fog shadow map depth and matrix for the next N frames to capture/.", "0");
 		ConsoleVarMgr::RegisterConsoleVar("gxCaptureFrames", "Diagnostic: writes the next N rendered scene frames (raw) and camera poses to capture/ next to the client.", "0");
@@ -2472,6 +2473,7 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxFogPath");
 		ConsoleVarMgr::UnregisterConsoleVar("gxShadowDump");
 		ConsoleVarMgr::UnregisterConsoleVar("gxFogSunHistory");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFogSunMode");
 		ConsoleVarMgr::UnregisterConsoleVar("gxFogGrid");
 		ConsoleVarMgr::UnregisterConsoleVar("gxCaptureFast");
 		ConsoleVarMgr::UnregisterConsoleVar("gxFogPathRecord");
@@ -6889,6 +6891,10 @@ namespace mmo
 		if (ConsoleVar* sunHistoryVar = ConsoleVarMgr::FindConsoleVar("gxFogSunHistory"))
 		{
 			renderer->GetVolumetricFogSettings().sunHistoryWeight = std::clamp(sunHistoryVar->GetFloatValue(), 0.0f, 0.95f);
+		}
+		if (ConsoleVar* sunModeVar = ConsoleVarMgr::FindConsoleVar("gxFogSunMode"))
+		{
+			renderer->GetVolumetricFogSettings().SetSunMode(sunModeVar->GetIntValue());
 		}
 		if (ConsoleVar* gridVar = ConsoleVarMgr::FindConsoleVar("gxFogGrid"))
 		{

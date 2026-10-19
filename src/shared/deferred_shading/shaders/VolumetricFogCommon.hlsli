@@ -41,8 +41,12 @@ cbuffer VolumetricFogBuffer : register(b2)
     column_major matrix FogShadowViewProj;
     uint DiagFlags;             // diagnostic (gxFogDiag): 1 no depth culling, 2 no sun, 4 sun unshadowed, 8 constant density
     float SunTemporalBlend;     // history weight of the sun scattering volume (0 = no sun history)
-    float2 _DiagPadding;
+    uint SunMode;               // VolumetricFogSettings::SunMode: 0 box filter, 1 temporal (fog shadow map), 2 temporal (cascades)
+    float GoldenJitter;         // [0, 1) per-frame offset added to every froxel's blue-noise jitter (temporal sun modes)
 };
+
+// Edge length of the blue noise jitter texture. Mirrors VolumetricFogSettings::BlueNoiseResolution.
+static const uint BLUE_NOISE_SIZE = 64;
 
 // View depth of a normalized slice coordinate, exponential between NearDistance and FarDistance.
 float SliceToDepth(float slice01)

@@ -53,6 +53,11 @@ Depth slices are spaced exponentially from 0.5 m, so cells near the camera are t
 - Cost control: CS_FogDepthTiles first stores the farthest depth seen through each grid column; cells starting behind the farthest depth of their 3×3 column neighbourhood (everything the composite's bilinear lookup can reach) skip the shadow taps, losslessly. Doing that gather inside CS_FogInject instead cost more than it saved (it repeats per 8-slice block and contends on group-shared atomics).
 - Release, 1080p, canopy scene (2026-10-19): fog pass 0.25 ms Low, 0.34 ms Medium, 0.52 ms High (0.36 ms with one tap per cell), ~1.2 ms Ultra.
 
+**Sun shafts, temporal alternative (`gxFogSunMode` 1 / 2, off by default):**
+- One shadow tap per cell instead of the box filter, at a per-froxel offset read from a 64² blue noise rank map (`GenerateBlueNoise`, void-and-cluster) and advanced by the golden ratio every frame, so neighbouring froxels sample different parts of their cells in the same frame instead of the whole grid shifting in step. Both volumes then keep 0.95 of a history that is first clamped to the min/max of this frame's 3×3×3 neighbourhood, which pulls back history the scene has moved away from. Mode 1 shadows from the coarse fog shadow map, mode 2 from the surface cascades.
+- Measured against the box filter with `gxVolumetricFogHistory 0` (2026-10-19, `graphics_test --fog-repro`, 1080p High, canopy and forest scenes): the converged image of mode 1 matches the box filter (mean difference 0.0003); sub-centimetre steps change the image slightly more (canopy strafe 0.000116 vs 0.000096, forward 0.000070 vs 0.000033); a still camera keeps a faint residual noise (0.00006, the box filter has none); at walking speed (0.1 m/frame) the frame-to-frame change equals the box filter's, and the image trails its converged value by 0.0003–0.0009 (the box filter cannot trail). Mode 2 gives visibly sharper shafts (it resolves the cascades' detail) with about twice mode 1's noise. Fog pass 2.42 ms (mode 1) vs 2.61 ms (box) in the harness: the 27-tap clamp costs most of what the single shadow tap saves.
+- In the harness the box filter is therefore at least as stable. The modes stay as a switch for the client, where the walking-only shaft jumps (in step with the fog shadow map's texel snaps) do not reproduce in the harness.
+
 **Jitter and history (ambient fog and point/spot lights):**
 - Each frame samples every cell at a Halton-jittered position inside it: depth (base 2) and across the cell on screen (bases 3 and 5).
 - The temporal step keeps `gxVolumetricFogHistory` (default 0.9) of the reprojected history, which removes the jitter noise. The history is read with a Catmull-Rom filter; a bilinear read blurs it a little every frame the camera moves, and at 0.9 that compounds into soft shafts.
@@ -141,6 +146,7 @@ editor's Environment Profile Editor):
 | `gxAtmosphereQuality` | 3 | 0 Off, 1 Low, 2 Medium, 3 High, 4 Ultra (grid size) |
 | `gxVolumetricFogRange` | 200 | metres of view depth covered by the fog volume (50–300) |
 | `gxVolumetricFogHistory` | 0.9 | history weight of the ambient fog and point/spot lights (0–0.95; 0 also disables the jitter). The sun shafts never use history |
+| `gxFogSunMode` | 0 | sun filtering: 0 box filter (above), 1 temporal (one blue-noise jittered tap per cell, neighbourhood-clamped 0.95 history, fog shadow map), 2 temporal with the surface cascades. 1 and 2 also run the ambient fog at 0.95 history with the same clamp and jitter |
 | `gxAtmosphereDebug` | 0 | 1 scattered light, 2 transmittance, 3 fog density, 4 lights per fog block |
 | `gxBloomQuality` | 2 | 0 Off, 1 Low, 2 High |
 | `gxExposure` | 1.0 | player brightness, multiplies the profile exposure |

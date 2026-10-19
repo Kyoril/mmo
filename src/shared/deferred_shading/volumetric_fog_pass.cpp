@@ -92,7 +92,8 @@ namespace mmo
 
 			uint32 diagFlags;
 			float sunTemporalBlend;
-			float diagPadding[2];
+			uint32 sunMode;
+			float goldenJitter;
 		};
 
 		static_assert(sizeof(VolumetricFogConstants) == 336, "VolumetricFogConstants must match the HLSL layout");
@@ -156,6 +157,14 @@ namespace mmo
 			const std::vector<uint8> noise = GenerateFogNoise(noiseSize, noiseSeed);
 			m_noiseVolume->Upload(noise.data(), noise.size());
 		}
+
+		constexpr uint32 blueNoiseSize = VolumetricFogSettings::BlueNoiseResolution;
+		m_blueNoise = m_device.CreateVolumeTexture(blueNoiseSize, blueNoiseSize, 1, VolumeFormat::R8, false);
+		if (m_blueNoise)
+		{
+			const std::vector<uint8> blueNoise = GenerateBlueNoise(blueNoiseSize, noiseSeed);
+			m_blueNoise->Upload(blueNoise.data(), blueNoise.size());
+		}
 	}
 
 	void VolumetricFogPass::Resize(const uint32 width, const uint32 height)
@@ -185,7 +194,7 @@ namespace mmo
 
 	bool VolumetricFogPass::SupportsVolume() const
 	{
-		return m_depthTilesCs && m_injectCs && m_temporalCs && m_integrateCs && m_noiseVolume && m_linearClampSampler && m_noiseSampler;
+		return m_depthTilesCs && m_injectCs && m_temporalCs && m_integrateCs && m_noiseVolume && m_blueNoise && m_linearClampSampler && m_noiseSampler;
 	}
 
 	void VolumetricFogPass::ReleaseVolumes()
@@ -308,10 +317,17 @@ namespace mmo
 		const float clampedRange = std::max(m_settings.range, VolumetricFogSettings::MinRange);
 
 		const float resetDistance = VolumetricFogSettings::HistoryResetDistance;
-		if ((cameraPosition - m_prevCameraPosition).GetSquaredLength() > resetDistance * resetDistance || clampedRange != m_prevRange)
+		if ((cameraPosition - m_prevCameraPosition).GetSquaredLength() > resetDistance * resetDistance || clampedRange != m_prevRange
+			|| m_settings.sunMode != m_prevSunMode)
 		{
 			m_historyValid = false;
 		}
+
+		// The temporal sun modes replace the box filter's many fixed taps with one jittered tap per froxel and
+		// let a neighbourhood-clamped history average it over frames, for the ambient fog as well as the sun.
+		const bool temporalSun = m_settings.IsSunTemporal();
+		const float historyWeight = temporalSun ? VolumetricFogSettings::TemporalSunHistoryWeight : m_settings.historyWeight;
+		const float sunHistoryWeight = temporalSun ? VolumetricFogSettings::TemporalSunHistoryWeight : m_settings.sunHistoryWeight;
 
 		VolumetricFogConstants constants{};
 		constants.inverseViewProj = viewProj.Inverse();
@@ -319,10 +335,10 @@ namespace mmo
 		copyVector(cameraForward, constants.cameraForward);
 		// Jitter only pays off when the history accumulates it; without history it is pure per-frame noise,
 		// so the samples stay at the froxel centres.
-		const bool jittered = m_settings.jitterEnabled && m_settings.historyWeight > 0.0f;
+		const bool jittered = m_settings.jitterEnabled && historyWeight > 0.0f;
 		constants.jitter = jittered ? volumetric_fog::JitterForFrame(m_frameIndex) : 0.5f;
 		copyVector(m_prevCameraPosition, constants.prevCameraPosition);
-		constants.temporalBlend = m_settings.historyWeight;
+		constants.temporalBlend = historyWeight;
 		copyVector(m_prevCameraForward, constants.prevCameraForward);
 		constants.historyValid = m_historyValid ? 1.0f : 0.0f;
 		constants.gridWidth = m_gridWidth;
@@ -345,13 +361,15 @@ namespace mmo
 		constants.screenJitter[0] = jittered ? screenJitterX : 0.5f;
 		constants.screenJitter[1] = jittered ? screenJitterY : 0.5f;
 		constants.fogVolumeCount = m_fogVolumeCount;
-		constants.sunTapsXY = std::clamp(m_settings.sunTapsXY, 1u, VolumetricFogSettings::MaxSunTapsXY);
-		constants.sunTapsZ = std::clamp(m_settings.sunTapsZ, 1u, VolumetricFogSettings::MaxSunTapsZ);
+		constants.sunTapsXY = temporalSun ? 1u : std::clamp(m_settings.sunTapsXY, 1u, VolumetricFogSettings::MaxSunTapsXY);
+		constants.sunTapsZ = temporalSun ? 1u : std::clamp(m_settings.sunTapsZ, 1u, VolumetricFogSettings::MaxSunTapsZ);
 		constants.fogShadowValid = fogShadowMap ? 1u : 0u;
 		constants.fogShadowViewProj = fogShadowViewProj;
 		constants.diagFlags = m_settings.diagFlags;
-		const bool sunHistory = m_settings.sunHistoryWeight > 0.0f;
-		constants.sunTemporalBlend = sunHistory ? m_settings.sunHistoryWeight : 0.0f;
+		const bool sunHistory = sunHistoryWeight > 0.0f;
+		constants.sunTemporalBlend = sunHistory ? sunHistoryWeight : 0.0f;
+		constants.sunMode = m_settings.sunMode;
+		constants.goldenJitter = volumetric_fog::GoldenJitterForFrame(m_frameIndex);
 		m_fogBuffer->Update(&constants);
 
 		if (volumeEnabled)
@@ -389,6 +407,7 @@ namespace mmo
 			{
 				fogShadowMap->Bind(ShaderType::ComputeShader, 12);
 			}
+			m_blueNoise->Bind(ShaderType::ComputeShader, 13);
 			m_injectVolume->BindWritable(0);
 			m_injectSunVolume->BindWritable(1);
 			m_injectCs->Set();
@@ -491,6 +510,7 @@ namespace mmo
 		m_prevCameraPosition = cameraPosition;
 		m_prevCameraForward = cameraForward;
 		m_prevRange = clampedRange;
+		m_prevSunMode = m_settings.sunMode;
 		++m_frameIndex;
 	}
 }

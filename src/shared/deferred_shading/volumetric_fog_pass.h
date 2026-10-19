@@ -107,6 +107,9 @@ namespace mmo
 
 		VolumeTexturePtr m_noiseVolume;
 
+		/// @brief BlueNoiseResolution^2 x 1 blue noise rank map: per-froxel jitter of the temporal sun modes.
+		VolumeTexturePtr m_blueNoise;
+
 		/// @brief Inject step's output. The temporal step is its only reader, so once that step has run
 		///        this frame the integrate step reuses it as its own output volume instead of a fourth
 		///        allocation.
@@ -149,6 +152,7 @@ namespace mmo
 		Vector3 m_prevCameraPosition;
 		Vector3 m_prevCameraForward;
 		float m_prevRange = 0.0f;
+		uint32 m_prevSunMode = 0;
 
 		ConstantBufferPtr m_fogBuffer;
 

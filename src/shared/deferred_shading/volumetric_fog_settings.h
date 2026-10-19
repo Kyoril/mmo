@@ -74,6 +74,37 @@ namespace mmo
 		/// @brief History weight of the sun's scattering volume (0 = none). Needs historyWeight > 0 for the jitter.
 		float sunHistoryWeight = 0.0f;
 
+		/// @brief How the sun's shadowed scattering is filtered (gxFogSunMode).
+		enum SunMode : uint32
+		{
+			/// @brief Fixed box filter of sunTapsXY^2 x sunTapsZ taps per cell, no history.
+			SunModeBoxFilter = 0,
+			/// @brief One tap per cell at a per-froxel blue-noise position that changes every frame,
+			///        accumulated by a neighbourhood-clamped history (TemporalSunHistoryWeight). Shadow from the
+			///        coarse fog shadow map.
+			SunModeTemporal = 1,
+			/// @brief SunModeTemporal, but the shadow comes from the surface cascades.
+			SunModeTemporalCascades = 2
+		};
+
+		/// @brief History weight of both fog volumes while a temporal sun mode is active.
+		static constexpr float TemporalSunHistoryWeight = 0.95f;
+
+		/// @brief Edge length of the per-froxel blue noise jitter texture in texels.
+		static constexpr uint32 BlueNoiseResolution = 64;
+
+		/// @brief Current SunMode.
+		uint32 sunMode = SunModeBoxFilter;
+
+		/// @brief Sets the sun mode, clamped to [SunModeBoxFilter, SunModeTemporalCascades].
+		void SetSunMode(const int mode)
+		{
+			sunMode = static_cast<uint32>(std::clamp(mode, static_cast<int>(SunModeBoxFilter), static_cast<int>(SunModeTemporalCascades)));
+		}
+
+		/// @brief Whether a temporal sun mode is active.
+		[[nodiscard]] bool IsSunTemporal() const { return sunMode != SunModeBoxFilter; }
+
 		/// @brief Largest sun shadow tap count along one screen axis of a froxel.
 		static constexpr uint32 MaxSunTapsXY = 4;
 
@@ -243,6 +274,16 @@ namespace mmo
 		{
 			const uint32 index = static_cast<uint32>(frame % VolumetricFogSettings::JitterSequenceLength) + 1u;
 			return { Halton(index, 3), Halton(index, 5) };
+		}
+
+		/// @brief Per-frame offset added to every froxel's blue-noise jitter, in [0, 1): frame * (golden ratio - 1),
+		///        wrapped. Consecutive frames then move each froxel's sample by an irrational step, so any run
+		///        of frames covers its cell evenly without the whole grid moving in lockstep.
+		[[nodiscard]] inline float GoldenJitterForFrame(const uint64 frame)
+		{
+			constexpr double goldenStep = 0.6180339887498949;
+			const double value = static_cast<double>(frame % 1000000u) * goldenStep;
+			return static_cast<float>(value - std::floor(value));
 		}
 
 		/// @brief Multiplier noise applies to the height-fog density. Averages 1 over uniformly distributed

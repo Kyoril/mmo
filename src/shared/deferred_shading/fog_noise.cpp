@@ -65,6 +65,95 @@ namespace mmo
 
 			return lerp(lerp(c00, c10, ty), lerp(c01, c11, ty), tz);
 		}
+
+		/// Void-and-cluster state over a toroidal size x size grid: which texels hold a point and each texel's
+		/// Gaussian-weighted closeness to all points (high = cluster, low = void).
+		class BlueNoiseField
+		{
+		public:
+			explicit BlueNoiseField(const uint32 size)
+				: m_size(size)
+				, m_kernel(static_cast<size_t>(size) * size)
+				, m_points(static_cast<size_t>(size) * size, 0)
+				, m_energy(static_cast<size_t>(size) * size, 0.0f)
+			{
+				constexpr float sigma = 1.5f;
+				for (uint32 y = 0; y < size; ++y)
+				{
+					for (uint32 x = 0; x < size; ++x)
+					{
+						const float dx = static_cast<float>(std::min(x, size - x));
+						const float dy = static_cast<float>(std::min(y, size - y));
+						m_kernel[static_cast<size_t>(y) * size + x] = std::exp(-(dx * dx + dy * dy) / (2.0f * sigma * sigma));
+					}
+				}
+			}
+
+			[[nodiscard]] bool HasPoint(const size_t index) const { return m_points[index] != 0; }
+
+			void Set(const size_t index, const bool point)
+			{
+				if (HasPoint(index) == point)
+				{
+					return;
+				}
+
+				m_points[index] = point ? 1 : 0;
+				const float sign = point ? 1.0f : -1.0f;
+				const uint32 px = static_cast<uint32>(index % m_size);
+				const uint32 py = static_cast<uint32>(index / m_size);
+				for (uint32 y = 0; y < m_size; ++y)
+				{
+					const size_t kernelRow = static_cast<size_t>((y + m_size - py) % m_size) * m_size;
+					for (uint32 x = 0; x < m_size; ++x)
+					{
+						m_energy[static_cast<size_t>(y) * m_size + x] += sign * m_kernel[kernelRow + (x + m_size - px) % m_size];
+					}
+				}
+			}
+
+			/// The point with the most energy: the centre of the tightest cluster.
+			[[nodiscard]] size_t TightestCluster() const
+			{
+				size_t best = 0;
+				float bestEnergy = -1.0f;
+				for (size_t i = 0; i < m_points.size(); ++i)
+				{
+					if (m_points[i] != 0 && m_energy[i] > bestEnergy)
+					{
+						bestEnergy = m_energy[i];
+						best = i;
+					}
+				}
+
+				return best;
+			}
+
+			/// The empty texel with the least energy: the centre of the largest void.
+			[[nodiscard]] size_t LargestVoid() const
+			{
+				size_t best = 0;
+				float bestEnergy = 0.0f;
+				bool found = false;
+				for (size_t i = 0; i < m_points.size(); ++i)
+				{
+					if (m_points[i] == 0 && (!found || m_energy[i] < bestEnergy))
+					{
+						bestEnergy = m_energy[i];
+						best = i;
+						found = true;
+					}
+				}
+
+				return best;
+			}
+
+		private:
+			uint32 m_size;
+			std::vector<float> m_kernel;
+			std::vector<uint8> m_points;
+			std::vector<float> m_energy;
+		};
 	}
 
 	std::vector<uint8> GenerateFogNoise(const uint32 size, const uint32 seed)
@@ -141,6 +230,72 @@ namespace mmo
 			{
 				texels[i] = static_cast<uint8>(std::lround(normalized[i] * 255.0f));
 			}
+		}
+
+		return texels;
+	}
+
+	std::vector<uint8> GenerateBlueNoise(const uint32 size, const uint32 seed)
+	{
+		const size_t texelCount = static_cast<size_t>(size) * size;
+		if (texelCount == 0)
+		{
+			return {};
+		}
+
+		// 1. A random tenth of the texels as the initial points.
+		BlueNoiseField initial(size);
+		const size_t initialCount = std::max<size_t>(1, texelCount / 10);
+		size_t placed = 0;
+		for (uint32 attempt = 0; placed < initialCount; ++attempt)
+		{
+			const size_t index = hashLattice(attempt, 0, 0, 0xB1u, seed) % texelCount;
+			if (!initial.HasPoint(index))
+			{
+				initial.Set(index, true);
+				++placed;
+			}
+		}
+
+		// 2. Relax them: move the point of the tightest cluster into the largest void until it would land
+		//    where it came from.
+		for (size_t iteration = 0; iteration < texelCount; ++iteration)
+		{
+			const size_t cluster = initial.TightestCluster();
+			initial.Set(cluster, false);
+			const size_t emptiest = initial.LargestVoid();
+			initial.Set(emptiest, true);
+			if (emptiest == cluster)
+			{
+				break;
+			}
+		}
+
+		std::vector<uint32> rank(texelCount, 0);
+
+		// 3. Rank the initial points: the tightest cluster is removed first and gets the highest rank below
+		//    the initial count.
+		BlueNoiseField removal = initial;
+		for (size_t count = initialCount; count > 0; --count)
+		{
+			const size_t cluster = removal.TightestCluster();
+			removal.Set(cluster, false);
+			rank[cluster] = static_cast<uint32>(count - 1);
+		}
+
+		// 4. Rank the rest by filling the largest void each time.
+		BlueNoiseField insertion = initial;
+		for (size_t count = initialCount; count < texelCount; ++count)
+		{
+			const size_t emptiest = insertion.LargestVoid();
+			insertion.Set(emptiest, true);
+			rank[emptiest] = static_cast<uint32>(count);
+		}
+
+		std::vector<uint8> texels(texelCount, 0);
+		for (size_t i = 0; i < texelCount; ++i)
+		{
+			texels[i] = static_cast<uint8>((static_cast<uint64>(rank[i]) * 256u) / texelCount);
 		}
 
 		return texels;

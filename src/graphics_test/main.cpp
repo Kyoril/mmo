@@ -99,6 +99,7 @@ namespace mmo
 		std::string scene = "pillars";	// pillars | canopy (a tree crown of small blocks with many small gaps)
 		int32 sunTapsXY = -1;		// -1 keeps the quality preset's sun shadow taps
 		int32 sunTapsZ = -1;
+		int32 sunMode = 0;			// VolumetricFogSettings::SunMode: 0 box filter, 1 temporal, 2 temporal (cascades)
 		bool fog = true;			// --nofog: judge the surface shadows alone
 		int32 shadowQuality = -1;	// -1 keeps the renderer default (High)
 		int32 shadowMapSize = 0;	// 0 keeps the renderer default
@@ -155,6 +156,7 @@ namespace mmo
 				else if (const char* v = value("--scene=")) { options.scene = v; }
 				else if (const char* v = value("--suntaps=")) { options.sunTapsXY = std::atoi(v); }
 				else if (const char* v = value("--suntapsz=")) { options.sunTapsZ = std::atoi(v); }
+				else if (const char* v = value("--sunmode=")) { options.sunMode = std::atoi(v); }
 				else if (const char* v = value("--aniso=")) { options.anisotropy = static_cast<float>(std::atof(v)); }
 			}
 
@@ -382,6 +384,7 @@ namespace mmo
 			fog.jitterEnabled = g_repro.jitter;
 			fog.SetSunTaps(g_repro.sunTapsXY >= 0 ? static_cast<uint32>(g_repro.sunTapsXY) : fog.sunTapsXY,
 				g_repro.sunTapsZ >= 0 ? static_cast<uint32>(g_repro.sunTapsZ) : fog.sunTapsZ);
+			fog.SetSunMode(g_repro.sunMode);
 			fog.debugMode = static_cast<uint32>(g_repro.debugMode);
 			fog.SetRange(200.0f);
 
