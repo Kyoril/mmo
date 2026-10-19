@@ -1148,9 +1148,10 @@ namespace mmo
 			std::ostringstream strm;
 			strm << GetName();
 
-			if (!m_creatureInfo.subname.empty())
+			const String subtitle = GetSubtitle();
+			if (!subtitle.empty())
 			{
-				strm << "\n<" << m_creatureInfo.subname << ">";
+				strm << "\n" << subtitle;
 			}
 
 			m_nameComponent->SetText(strm.str());

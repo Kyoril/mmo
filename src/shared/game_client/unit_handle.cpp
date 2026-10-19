@@ -325,6 +325,12 @@ namespace mmo
 		return Get()->GetName();
 	}
 
+	std::string UnitHandle::GetSubtitle() const
+	{
+		if (!CheckNonNull()) return std::string();
+		return Get()->GetSubtitle();
+	}
+
 	int32 UnitHandle::GetPowerType() const
 	{
 		if (!CheckNonNull()) return -1;

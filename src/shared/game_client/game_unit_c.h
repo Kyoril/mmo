@@ -595,6 +595,10 @@ namespace mmo
 
 		const String &GetName() const override;
 
+		/// @brief The subtitle line of this unit's creature entry, as in "<General Goods>".
+		/// @return The bracketed subname, or an empty string when the unit has no subname.
+		String GetSubtitle() const { return m_creatureInfo.GetSubtitle(); }
+
 		/// @brief Plays a one-shot animation.
 		/// @param animState The animation state to play.
 		/// @param suppressIfBusy When true and another one-shot is still in its first half, the
