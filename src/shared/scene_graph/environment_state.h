@@ -98,4 +98,20 @@ namespace mmo
 
 	/// @brief Unit xz vector for a wind direction in degrees clockwise from +Z (0 = +Z, 90 = +X).
 	[[nodiscard]] Vector3 WindDirectionFromDegrees(float degrees);
+
+	/// @brief Default brightness lift while the sun is up.
+	constexpr float DefaultDayBrightness = 1.1f;
+
+	/// @brief Default brightness lift at night, where the world reads darkest.
+	constexpr float DefaultNightBrightness = 1.55f;
+
+	/// @brief The brightness every view of the world gets on top of the zone profile's exposure,
+	///        before the player's own brightness setting.
+	/// @remark The authored look was too dark on an average monitor, night most of all, so the lift
+	///         is larger at night than during the day. It is applied where the exposure reaches the
+	///         renderer, not in EvaluateEnvironment, so authored profiles and their blending keep
+	///         meaning exactly what they say.
+	/// @param normalizedTime 0 = midnight, 0.5 = noon. Values outside [0, 1) wrap.
+	/// @return A multiplier between DefaultDayBrightness and DefaultNightBrightness.
+	[[nodiscard]] float DefaultEnvironmentBrightness(float normalizedTime);
 }

@@ -1545,7 +1545,8 @@ namespace mmo
 		if (DeferredRenderer* renderer = GetDeferredRenderer())
 		{
 			const EnvironmentState& state = m_environment.GetState();
-			renderer->SetExposure(state.exposure);
+			// Same default lift the client applies, so the editor keeps showing what players see.
+			renderer->SetExposure(state.exposure * DefaultEnvironmentBrightness(m_skyComponent->GetNormalizedTimeOfDay()));
 			renderer->SetBloomIntensity(state.bloomIntensity);
 			renderer->SetBloomThreshold(state.bloomThreshold);
 			renderer->SetFogLightScattering(state.lightScattering);

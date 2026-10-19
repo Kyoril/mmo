@@ -133,6 +133,8 @@ editor's Environment Profile Editor):
 | `gxBloomQuality` | 2 | 0 Off, 1 Low, 2 High |
 | `gxExposure` | 1.0 | player brightness, multiplies the profile exposure |
 
+**Default brightness:** the exposure that reaches the renderer is the profile exposure times `gxExposure` times `DefaultEnvironmentBrightness(timeOfDay)` (`src/shared/scene_graph/environment_state.h`): a fixed lift of 1.1 by day rising to 1.55 at night, smoothstepped across the 0.2–0.3 and 0.7–0.8 twilight bands. The authored look read too dark on an average monitor, night most of all. It is applied at the two `SetExposure` call sites (client and world editor) rather than in `EvaluateEnvironment`, so profiles, their blending and the editor's curve preview keep showing the authored values.
+
 ## Known limitations
 
 - Water, particles and glass get closed-form fog only: no noise, no shafts.

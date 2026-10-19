@@ -6854,8 +6854,9 @@ namespace mmo
 
 		const EnvironmentState& state = m_environment.GetState();
 		const float brightness = s_exposureVar ? s_exposureVar->GetFloatValue() : 1.0f;
+		const float defaultBrightness = m_skyComponent ? DefaultEnvironmentBrightness(m_skyComponent->GetNormalizedTimeOfDay()) : DefaultDayBrightness;
 
-		renderer->SetExposure(state.exposure * brightness);
+		renderer->SetExposure(state.exposure * brightness * defaultBrightness);
 		renderer->SetBloomIntensity(state.bloomIntensity);
 		renderer->SetBloomThreshold(state.bloomThreshold);
 		renderer->SetFogLightScattering(state.lightScattering);
