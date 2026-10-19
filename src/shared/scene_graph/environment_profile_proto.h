@@ -107,6 +107,10 @@ namespace mmo
 		LoadColorCurve(profile.moon(), result.moon);
 		LoadColorCurve(profile.fog(), result.fog);
 		LoadColorCurve(profile.sun_scatter(), result.sunScatter);
+		if (!LoadColorCurve(profile.distance_fog(), result.distanceFog))
+		{
+			result.distanceFog = result.skyHorizon;
+		}
 
 		// Unset optional fields return their proto defaults, which equal the engine defaults.
 		result.atmosphere.SetDensity(profile.fog_density());
@@ -114,6 +118,9 @@ namespace mmo
 		result.atmosphere.SetBaseHeight(profile.fog_base_height());
 		result.atmosphere.SetAnisotropy(profile.fog_anisotropy());
 		result.atmosphere.SetShaftStrength(profile.shaft_strength());
+		result.atmosphere.SetDistanceFogStart(profile.distance_fog_start());
+		result.atmosphere.SetDistanceFogEnd(profile.distance_fog_end());
+		result.atmosphere.SetDistanceFogSkyBand(profile.distance_fog_sky_band());
 
 		result.exposure = std::clamp(profile.exposure(), 0.1f, 8.0f);
 		result.bloomIntensity = std::clamp(profile.bloom_intensity(), 0.0f, 1.0f);

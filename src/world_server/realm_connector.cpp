@@ -535,6 +535,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::BugReport, *this, &RealmConnector::OnBugReport);
 				RegisterPacketHandler(auth::realm_world_packet::SetSubsystemEnabled, *this, &RealmConnector::OnSetSubsystemEnabled);
 				RegisterPacketHandler(auth::realm_world_packet::Shutdown, *this, &RealmConnector::OnShutdown);
+				RegisterPacketHandler(auth::realm_world_packet::ResetInstance, *this, &RealmConnector::OnResetInstance);
 
 				m_loggedIn = true;
 				if (m_subsystems)
@@ -1038,7 +1039,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			return PacketParseResult::Pass;
 		}
 
-		player->UpdateCharacterGroup(groupId, lootMethod, lootThreshold);
+		player->UpdateCharacterGroup(groupId, std::make_pair(static_cast<LootMethod>(lootMethod), lootThreshold));
 		return PacketParseResult::Pass;
 	}
 
@@ -1158,6 +1159,35 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		}
 
 		m_worldInstanceManager.SetTimeOfDay(timeOfDay, transitionMs);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnResetInstance(auth::IncomingPacket& packet)
+	{
+		InstanceId instanceId;
+		if (!(packet >> instanceId))
+		{
+			ELOG("Failed to read ResetInstance packet from realm");
+			return PacketParseResult::Disconnect;
+		}
+
+		WorldInstance* instance = m_worldInstanceManager.GetInstanceById(instanceId);
+		if (!instance)
+		{
+			// Already gone, which is exactly what the realm asked for.
+			return PacketParseResult::Pass;
+		}
+
+		// The realm decides on what it knows about its sessions; this node knows for certain.
+		if (instance->HasPlayers())
+		{
+			WLOG("Refusing to reset instance " << instanceId << ": players are still inside");
+			return PacketParseResult::Pass;
+		}
+
+		ILOG("Resetting instance " << instanceId << " on request of the realm");
+		m_worldInstanceManager.DestroyInstance(instanceId);
+
 		return PacketParseResult::Pass;
 	}
 

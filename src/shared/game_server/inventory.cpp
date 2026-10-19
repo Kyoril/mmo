@@ -655,8 +655,55 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 	return inventory_change_failure::InternalBagError;
 }	InventoryChangeFailure Inventory::CanStoreItems(const proto::ItemEntry &entry, uint16 amount) const
 	{
-		// Delegate to ValidateItemLimits which does the same checks
-		return ValidateItemLimits(entry, amount == 0 ? 1 : amount);
+		// Same checks CreateItems performs, so that a successful answer here means CreateItems cannot fail
+		// for lack of space (stackable items may already fill every stack and slot).
+		const uint16 count = (amount == 0 ? 1 : amount);
+		if (const auto result = ValidateItemLimits(entry, count); result != inventory_change_failure::Okay)
+		{
+			return result;
+		}
+
+		ItemSlotInfo slotInfo;
+		return FindAvailableSlots(entry, count, slotInfo);
+	}
+
+	InventoryChangeFailure Inventory::CanStoreItems(const std::vector<std::pair<const proto::ItemEntry *, uint16>> &items) const
+	{
+		uint32 requiredEmptySlots = 0;
+
+		for (const auto &pair : items)
+		{
+			const proto::ItemEntry *entry = pair.first;
+			ASSERT(entry);
+
+			const uint16 count = (pair.second == 0 ? 1 : pair.second);
+			if (const auto result = ValidateItemLimits(*entry, count); result != inventory_change_failure::Okay)
+			{
+				return result;
+			}
+
+			ItemSlotInfo slotInfo;
+			if (const auto result = FindAvailableSlots(*entry, count, slotInfo); result != inventory_change_failure::Okay)
+			{
+				return result;
+			}
+
+			// Two different entries never share a stack, so the empty slots are the only resource
+			// they compete for: count how many of them this entry still needs once its existing
+			// stacks have been topped up.
+			const uint16 maxStack = (entry->maxstack() == 0 ? 1 : static_cast<uint16>(entry->maxstack()));
+			const uint32 emptySlotStacks = static_cast<uint32>(slotInfo.emptySlots.size()) * maxStack;
+			const uint32 existingStackSpace = (slotInfo.availableStacks > emptySlotStacks ? slotInfo.availableStacks - emptySlotStacks : 0);
+			const uint32 remaining = (count > existingStackSpace ? count - existingStackSpace : 0);
+			requiredEmptySlots += (remaining + maxStack - 1) / maxStack;
+		}
+
+		if (requiredEmptySlots > m_slotManager->CountFreeSlots())
+		{
+			return inventory_change_failure::InventoryFull;
+		}
+
+		return inventory_change_failure::Okay;
 	}
 
 	uint16 Inventory::GetItemCount(const uint32 itemId) const noexcept

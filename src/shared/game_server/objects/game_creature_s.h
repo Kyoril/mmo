@@ -8,6 +8,7 @@
 #include "game_server/loot_instance.h"
 #include "game_server/world/world_instance.h"
 #include "base/linear_set.h"
+#include "base/random.h"
 #include "game/quest.h"
 #include <vector>
 
@@ -87,6 +88,10 @@ namespace mmo
 		/// have a valid base entry.
 		void SetEntry(const proto::UnitEntry& entry);
 
+		/// Picks the display id a new spawn of the given entry uses. Units always use the male
+		/// model unless random_gender is set and a female model exists; then it is a 50/50 roll.
+		static uint32 RollDisplayId(const proto::UnitEntry& entry, RandomnessGenerator& generator);
+
 		/// Updates the creatures loot recipient. Values of 0 mean no recipient.
 		void AddLootRecipient(uint64 guid);
 
@@ -109,6 +114,15 @@ namespace mmo
 		void SetHealthPercent(float percent);
 
 		void SetUnitLoot(std::unique_ptr<LootInstance> unitLoot);
+
+		/// @brief Prepares per-player dynamic fields before serialization. The Lootable flag is
+		///	       what makes the client show the corpse sparkle and the loot cursor, so it has to
+		///	       be hidden from everybody who is not allowed to loot this corpse.
+		/// @param player The player who will receive the field data.
+		void PrepareDynamicFieldsFor(const GamePlayerS& player);
+
+		/// @brief Restores the authoritative field values changed by PrepareDynamicFieldsFor.
+		void ClearDynamicFields();
 
 		/// Gets the number of loot recipients.
 		uint32 GetLootRecipientCount() const { return m_lootRecipients.size(); }
@@ -301,6 +315,7 @@ namespace mmo
 		float m_followDistance = 2.5f;
 		LootRecipients m_lootRecipients;
 		bool m_grantsKillRewards = true;
+		bool m_lootableFlagSuppressed = false;
 		float m_healthPercent = 1.0f;
 		bool m_combatMovementEnabled = true;
 		/// Per-spawn additional triggers — appended to the template's trigger list at runtime.

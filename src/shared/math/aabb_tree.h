@@ -105,7 +105,10 @@ namespace mmo
 		/// submesh data or loaded from legacy files.
 		const std::vector<uint16>& GetFaceSubMeshes() const { return m_faceSubMeshes; }
 
-		bool IsEmpty() const { return m_nodes.empty() && m_vertices.empty() && m_indices.empty(); }
+		/// Whether the tree has no faces and therefore nothing to collide with. Legacy files can
+		/// carry node padding for a tree built from zero faces, so the nodes alone do not count.
+		/// @returns true if the tree holds no faces.
+		bool IsEmpty() const { return m_indices.size() < 3; }
 
 	private:
 

@@ -361,6 +361,14 @@ namespace mmo
 		CombatBehavior DetermineCombatBehavior() const;
 
 		/**
+		 * @brief The distance band a caster or ranged creature keeps to its victim.
+		 * @param minRange Receives the distance below which it backs off.
+		 * @param optimalRange Receives the distance it closes in to: the reach of its longest
+		 *        spell, capped at CASTER_OPTIMAL_RANGE.
+		 */
+		void GetCasterRangeBand(float& minRange, float& optimalRange) const;
+
+		/**
 		 * @brief Checks if the creature can cast spells (has mana/power and available spells).
 		 * @return True if the creature can cast spells.
 		 */

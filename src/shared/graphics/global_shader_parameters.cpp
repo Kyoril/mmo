@@ -307,6 +307,20 @@ namespace mmo
 		// Published by the host's WindSimulation every frame: xyz is the unit direction the wind blows
 		// toward (y = 0), w the current speed in m/s including gusts.
 		DefineVector("WindDirection", Vector4(0.70710678f, 0.0f, 0.70710678f, 0.0f));
+
+		// Published by SkyComponent every frame: 0 in full daylight, 1 at night, blending through dusk
+		// and dawn. SunDirection cannot tell day from night - after dusk it follows the moon, which
+		// rides the same arc - so materials that change with the time of day (lit windows) read this.
+		DefineScalar("NightFactor", 0.0f);
+
+		// Published by SkyComponent every frame from the environment's sun scatter curve: the hue the sun
+		// visibly has at this time of day (deep orange at sunrise and sunset, warm white at noon, the
+		// moon's blue at night). The sun light colour (SunColor) stays near white all day, so reflections
+		// of the sun disc read this instead. Three scalars, defined last, because the cbuffer packs every
+		// vector before every scalar: a new vector would move NightFactor under every compiled material.
+		DefineScalar("SunScatterR", 1.0f);
+		DefineScalar("SunScatterG", 0.93f);
+		DefineScalar("SunScatterB", 0.8f);
 	}
 
 	bool GlobalShaderParameters::LoadFromAsset(const std::string_view assetPath)

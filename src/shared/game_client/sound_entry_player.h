@@ -39,6 +39,9 @@ namespace mmo
 		/// @brief Gets the length of the (first) sound file of an entry in seconds.
 		float GetEntryLength(uint32 soundId) const;
 
+		/// Whether the entry plays as a positional (3D) sound. False for unknown ids.
+		bool IsEntry3D(uint32 soundId) const;
+
 		/// @brief Gets the configured base volume [0, 1] of an entry (1.0 if unknown).
 		float GetEntryVolume(uint32 soundId) const;
 

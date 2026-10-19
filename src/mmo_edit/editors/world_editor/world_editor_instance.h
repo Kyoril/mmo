@@ -4,6 +4,7 @@
 
 #include "base/signal.h"
 #include <functional>
+#include <set>
 #include <imgui.h>
 #include <thread>
 #include <asio/io_service.hpp>
@@ -21,7 +22,10 @@
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/world_model_instance.h"
+#include "scene_graph/prop_kit.h"
+#include "base/utilities.h"
 #include "transform_widget.h"
+#include "editors/mesh_editor/collision_overlay.h"
 #include "selection.h"
 #include "selection_raycaster.h"
 #include "nav_mesh/map.h"
@@ -58,6 +62,7 @@
 #include "spawn_palette_panel.h"
 #include "spawn_list_panel.h"
 #include "entity_factory.h"
+#include "minimap_baker.h"
 #include "minimap_grid_view.h"
 
 namespace mmo
@@ -253,6 +258,20 @@ namespace mmo
 			m_assetName = assetName;
 		}
 
+		/// @brief Gets the ordered prop kit asset paths of this entity (world models only).
+		const std::vector<String> &GetKitPaths() const
+		{
+			return m_kitPaths;
+		}
+
+		/// @brief Replaces the prop kit asset paths and marks the entity as modified.
+		/// @param kitPaths The new ordered list of prop kit asset paths.
+		void SetKitPaths(std::vector<String> kitPaths)
+		{
+			m_kitPaths = std::move(kitPaths);
+			m_modified = true;
+		}
+
 	private:
 		Scene &m_scene;
 		SceneNode &m_sceneNode;
@@ -265,11 +284,14 @@ namespace mmo
 		String m_name;
 		String m_category;
 		String m_assetName;  ///< Cached asset name for world model entities
+		std::vector<String> m_kitPaths;  ///< Ordered prop kit asset paths (world model entities)
 	};
 
 	struct WorldPage
 	{
 	};
+
+	class SelectedKitProp;
 
 	class SelectableVisitor
 	{
@@ -277,6 +299,9 @@ namespace mmo
 		virtual ~SelectableVisitor() = default;
 
 		virtual void Visit(SelectedMapEntity &selectable) = 0;
+
+		/// @brief Visits a prop of a prop kit applied to a placed world model.
+		virtual void Visit(SelectedKitProp &selectable) = 0;
 
 		virtual void Visit(SelectedTerrainTile &selectable) = 0;
 
@@ -344,6 +369,9 @@ namespace mmo
 
 		void Visit(SelectedMapEntity &selectable) override;
 
+		/// @brief Draws the details of a selected kit prop (shared mesh reference properties).
+		void Visit(SelectedKitProp &selectable) override;
+
 		void Visit(SelectedTerrainTile &selectable) override;
 
 		void Visit(SelectedUnitSpawn &selectable) override;
@@ -355,6 +383,9 @@ namespace mmo
 		void Visit(SelectedFogVolume &selectable) override;
 
 	private:
+		/// Draws the weighted unit entry table of a mixed unit spawn (UnitSpawnEntry::unitentries).
+		void DrawMixedUnitSpawnEntries(SelectedUnitSpawn &selectable);
+
 		bool ReadMVERChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMeshChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
@@ -436,6 +467,119 @@ namespace mmo
 
 		uint32 GetSelectedFogVolumeId() const override;
 
+		/// @copydoc IWorldEditor::AddMeshToActiveKit
+		bool AddMeshToActiveKit(const String &meshPath, const Vector3 &worldPosition) override;
+
+	public:
+		// In-place furnishing: editing prop kits of placed world models
+
+		/// @brief Finds a loaded map entity by its unique id.
+		/// @param uniqueId The unique id of the entity.
+		/// @return The entity, or nullptr if no loaded entity has that id.
+		MapEntity *FindMapEntity(uint64 uniqueId) const;
+
+		/// @brief Gets a prop of a kit as the world editor currently sees it: the unsaved working copy
+		///        if the kit was edited here, otherwise the cached kit.
+		/// @param kitPath Asset path of the kit.
+		/// @param propIndex Index of the prop in the kit.
+		/// @return The prop, or nullptr if the kit is not loaded or the index is out of range. Only valid
+		///         until the kit is edited again.
+		const WorldModelMeshRef *FindKitProp(const String &kitPath, size_t propIndex) const;
+
+		/// @brief Edits one prop of a kit. The kit becomes an unsaved working copy (dirty) and every
+		///        loaded placement using it is refreshed.
+		/// @param placementId Id of the placement the edit was made on (counted out of the save prompt).
+		/// @param kitPath Asset path of the kit.
+		/// @param propIndex Index of the prop in the kit.
+		/// @param edit Callback applying the change to the prop.
+		void EditKitProp(uint64 placementId, const String &kitPath, size_t propIndex, const std::function<void(WorldModelMeshRef &)> &edit);
+
+		/// @brief Appends a copy of a kit prop to the same kit (dirty, refreshed like an edit).
+		/// @param placementId Id of the placement the edit was made on.
+		/// @param kitPath Asset path of the kit.
+		/// @param propIndex Index of the prop to copy.
+		void DuplicateKitProp(uint64 placementId, const String &kitPath, size_t propIndex);
+
+		/// @brief Queues a kit prop for removal. Removals are applied once per frame after the UI ran,
+		///        highest index first, so several props of one kit can be removed together.
+		/// @param placementId Id of the placement the edit was made on.
+		/// @param kitPath Asset path of the kit.
+		/// @param propIndex Index of the prop to remove.
+		void QueueKitPropRemoval(uint64 placementId, const String &kitPath, size_t propIndex);
+
+	private:
+		/// @brief Gets a kit for display: the dirty working copy if there is one, otherwise the cached
+		///        kit. Never loads.
+		PropKitPtr ResolveKit(const String &kitPath) const;
+
+		/// @brief Gets a kit for applying: the dirty working copy if there is one, otherwise the kit is
+		///        loaded through the PropKitManager and remembered so later saves are noticed.
+		PropKitPtr LoadKit(const String &kitPath);
+
+		/// @brief Gets the working copy of a kit for editing, creating it from the cached kit first.
+		/// @return The working copy, or nullptr if the kit cannot be loaded.
+		PropKit *GetEditableKit(const String &kitPath, uint64 originPlacementId);
+
+		/// @brief Rebuilds a placement's kit content from its kit list (SetPropKits).
+		void ApplyKits(MapEntity &placement);
+
+		/// @brief Calls ApplyKits on every loaded placement whose kit list contains the kit.
+		void RefreshKitUsers(const String &kitPath);
+
+		/// @brief Counts the loaded placements whose kit list contains the kit.
+		/// @param kitPath Asset path of the kit.
+		/// @param excludePlacementId Placement not to count (0 counts all).
+		size_t CountKitUsers(const String &kitPath, uint64 excludePlacementId) const;
+
+		/// @brief Gets the active kit of a placement (where dropped meshes go). Defaults to the first kit
+		///        of its list; empty when the placement has no kits or "None" was picked.
+		String GetActiveKit(const MapEntity &placement) const;
+
+		/// @brief Gets the building the current selection belongs to: a selected world model placement,
+		///        or the placement of a selected kit prop.
+		MapEntity *GetSelectedPlacement() const;
+
+		/// @brief Picks a kit prop of the selected building under the cursor and selects it.
+		/// @return true if a kit prop was selected.
+		bool TrySelectKitProp(float viewportX, float viewportY, bool allowMultiSelect);
+
+		/// @brief Shows the bounds of the most recently selected kit prop, if it is one.
+		void UpdateSelectedKitPropBounds();
+
+		/// @brief Shows, hides or rebuilds the kit collision display of the selected building as needed.
+		///        The display belongs to one building and switches off when the selection moves on.
+		void UpdateKitCollisionOverlay();
+
+		/// @brief Rebuilds the kit collision display from the kit props of a placement, in world space.
+		void RebuildKitCollisionOverlay(const MapEntity &placement);
+
+		/// @brief Deselects the selected kit props of a placement whose kit is no longer in its kit list.
+		/// @param placement The placement whose kit list just changed.
+		void DeselectRemovedKitProps(const MapEntity &placement);
+
+		/// @brief Notices kits that were replaced in the PropKitManager cache by someone else (the prop
+		///        kit editor's save) and refreshes the placements using them.
+		void PollKitCache();
+
+		/// @brief Applies queued kit prop removals.
+		void ApplyPendingKitPropRemovals();
+
+		/// @brief Writes a prop kit file.
+		static bool WriteKitFile(const String &kitPath, const PropKit &kit);
+
+		/// @brief Writes every dirty kit, or queues it behind the shared-kit prompt when other loaded
+		///        placements use it.
+		void SaveDirtyKits();
+
+		/// @brief Writes one dirty kit, updates the cache and refreshes its users.
+		void SaveDirtyKit(const String &kitPath);
+
+		/// @brief Writes the active kit of a placement to a new file and swaps it into the placement's list.
+		void SaveKitAsNew(uint64 placementId, const String &sourceKitPath, const String &targetKitPath);
+
+		/// @brief Draws the shared-kit save prompt and the "Save as new kit" dialog.
+		void DrawKitModals();
+
 	private:
 		/// @brief Returns the selected fog volume selectable, or nullptr if the selection is empty or its
 		///        last-added entry is not a fog volume. With a mixed selection (e.g. a fog volume plus a
@@ -466,6 +610,14 @@ namespace mmo
 
 		void UnloadPageEntities(uint8 x, uint8 y);
 
+		/// @brief Makes sure the entities of the pages around a page are loaded, for the minimap bake,
+		///        and unloads the ones a previous call loaded that are no longer around it.
+		/// @return The scene nodes of every loaded world model (WMO) entity.
+		std::vector<const SceneNode*> PrepareMinimapBakeEntities(uint32 x, uint32 z);
+
+		/// @brief Unloads every page's entities PrepareMinimapBakeEntities loaded.
+		void ReleaseMinimapBakeEntities();
+
 		/// @brief Loads the authored foliage (.hfol) of a terrain page into the editor's foliage renderer.
 		/// @param x Page X coordinate.
 		/// @param y Page Y coordinate.
@@ -492,11 +644,12 @@ namespace mmo
 		/// @return Pointer to the deferred renderer, or nullptr if not available.
 		DeferredRenderer* GetDeferredRenderer() const { return m_deferredRenderer.get(); }
 
-		/// @brief Generates minimap images for all terrain pages and saves them to the AssetRegistry.
-		/// This method renders each terrain page from above using an orthographic camera and
-		/// render-to-texture, then saves the result as a texture file in the "minimaps" folder.
-		/// Filenames are encoded using page coordinates: (x << 8) | y.
-		void GenerateMinimaps();
+		/// @brief Bakes the minimap tiles of every terrain page (see MinimapBaker) into
+		///        Textures/Minimaps/<world>/<(x << 8) | z>.htex.
+		/// @param onlyStale Skip pages whose tile is newer than their .tile file.
+		/// @param region Only pages inside this inclusive page rectangle are baked.
+		/// @return False when any page failed.
+		bool GenerateMinimaps(bool onlyStale = false, const MinimapBaker::Region& region = MinimapBaker::Region{});
 
 		/// @brief Bakes the distant-terrain data (.tlod + colour texture) the client draws beyond its
 		///        streamed pages. See TerrainLodBaker.
@@ -694,9 +847,76 @@ namespace mmo
 
 		/// @brief Minimap grid used by the "World Map" panel to teleport the camera.
 		MinimapGridView m_minimapPanel;
+		/// @brief Page indices whose entities are currently loaded (by streaming or the minimap bake).
+		std::set<uint16> m_entityPages;
+		/// @brief Page indices whose entities only the minimap bake loaded.
+		std::set<uint16> m_bakeEntityPages;
 		/// @brief Whether the minimap panel's world name has been set yet (deferred until first draw
 		///        because the asset path is known at construction but minimaps may not exist yet).
 		bool m_minimapWorldSet{ false };
+
+		/// @brief An unsaved working copy of a kit edited in this world.
+		struct DirtyKit
+		{
+			/// @brief The working copy every placement using the kit shows.
+			PropKitPtr kit;
+			/// @brief The placement the kit was last edited on; not counted as "other" in the save prompt.
+			uint64 originPlacementId{0};
+			/// @brief Every placement the working copy was edited on since it became dirty.
+			std::set<uint64> editingPlacementIds;
+		};
+
+		/// @brief Dirty kits by kit path (forward slashes, case-insensitive). Written on Save().
+		std::map<String, DirtyKit, StrCaseIComp> m_dirtyKits;
+
+		/// @brief The cached kit last applied per kit path, to notice saves from the prop kit editor.
+		std::map<String, PropKitPtr, StrCaseIComp> m_observedKits;
+
+		/// @brief Active kit per placement id, as picked in the details panel. An empty string means
+		///        "None"; placements without an entry use their first kit.
+		std::map<uint64, String> m_activeKits;
+
+		/// @brief A queued kit prop removal.
+		struct PendingKitPropRemoval
+		{
+			uint64 placementId;
+			String kitPath;
+			size_t propIndex;
+		};
+
+		/// @brief Kit prop removals applied after the current frame's UI.
+		std::vector<PendingKitPropRemoval> m_pendingKitPropRemovals;
+
+		/// @brief Dirty kits used by other loaded placements, waiting for the save prompt.
+		std::vector<String> m_pendingKitSaves;
+
+		/// @brief Collision display of the selected building's kit props; exists only while shown.
+		std::unique_ptr<CollisionOverlay> m_kitCollisionOverlay;
+		/// @brief World-space collision vertices of the displayed kit props.
+		std::vector<Vector3> m_kitCollisionVertices;
+		/// @brief Collision triangle list of the displayed kit props.
+		std::vector<uint32> m_kitCollisionIndices;
+		/// @brief Whether "Show kit collision" is ticked for m_kitCollisionPlacementId.
+		bool m_showKitCollision{false};
+		/// @brief Set when the displayed kits change, so the display is rebuilt.
+		bool m_kitCollisionDirty{true};
+		/// @brief The building the kit collision display belongs to (0: none).
+		uint64 m_kitCollisionPlacementId{0};
+		/// @brief Placement transform the display was built for; a moved building rebuilds it.
+		Vector3 m_kitCollisionPosition;
+		Quaternion m_kitCollisionOrientation;
+		Vector3 m_kitCollisionScale;
+
+		/// @brief Opens the shared-kit save prompt on the next Draw().
+		bool m_openKitSavePrompt{false};
+
+		/// @brief Opens the "Save as new kit" dialog on the next Draw().
+		bool m_openSaveAsNewKit{false};
+
+		/// @brief Placement, source kit and target path of the "Save as new kit" dialog.
+		uint64 m_saveAsNewKitPlacement{0};
+		String m_saveAsNewKitSource;
+		String m_saveAsNewKitTarget;
 	};
 }
 

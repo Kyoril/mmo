@@ -12,19 +12,22 @@
 #include "unit_finder.h"
 #include "game/game.h"
 #include "game/game_time_component.h"
+#include "game/hour_chime.h"
 #include "visibility_grid.h"
 #include "world_object_spawner.h"
 #include "spell_zone_set.h"
 #include "base/id_generator.h"
 #include "base/countdown.h"
 #include "math/matrix4.h"
+#include "math/aabb.h"
 #include "shared/proto_data/maps.pb.h"
 #include "shared/proto_data/trigger_helper.h"
 #include "shared/proto_data/trigger_event_index.h"
 #include "shared/proto_data/trigger_event_filter.h"
 
 #include "nav_mesh/map.h"
-#include "nav_mesh/page_streamer.h"
+#include "nav_mesh/door_volume.h"
+#include "nav_mesh/instance_query_filter.h"
 
 namespace mmo
 {
@@ -45,6 +48,10 @@ namespace mmo
 	public:
 		virtual ~MapData() = default;
 
+		/// @brief Height above a unit's position at which line of sight is tested. 1.8 m is used for
+		///        all unit types as a static approximation of eye level.
+		static constexpr float LineOfSightEyeHeight = 1.8f;
+
 		/// @brief Checks whether posA can see posB without obstruction.
 		virtual bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) = 0;
 
@@ -52,6 +59,7 @@ namespace mmo
 		/// @param posA Source position.
 		/// @param posB Destination position.
 		/// @param hitPoint Set to the obstruction point when returning false, or to posB when returning true.
+		///        Reported at the height of posA/posB, i.e. LineOfSightEyeHeight below the tested ray.
 		/// @return true when the ray reaches posB unobstructed.
 		virtual bool IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint) = 0;
 
@@ -82,6 +90,32 @@ namespace mmo
 
 		/// @brief Enables or disables dynamic collision geometry. Handle 0 and unknown handles are a safe no-op.
 		virtual void SetDynamicCollisionEnabled(uint64 handle, bool enabled) {}
+
+		/// @brief Blocks pathfinding through a door's baked nav polys while the obstacle is blocking.
+		/// @param volume The door footprint (nav::ComputeDoorVolume), matching what the nav builder baked.
+		/// @param blocking Whether the obstacle initially blocks (door closed).
+		/// @return Handle for toggling/removal, or 0 when the map has no door polys inside the volume.
+		virtual uint64 AddNavObstacle(const nav::DoorVolume& volume, bool blocking) { return 0; }
+
+		/// @brief Makes a nav obstacle block or let paths pass. Handle 0 and unknown handles are a safe no-op.
+		virtual void SetNavObstacleBlocking(uint64 handle, bool blocking) {}
+
+		/// @brief Removes a nav obstacle, unblocking its polys. Handle 0 and unknown handles are a safe no-op.
+		virtual void RemoveNavObstacle(uint64 handle) {}
+
+		/// @brief Whether walkable nav polys (default filter) lie inside a door volume. Used when
+		/// AddNavObstacle found no door polys: walkable polys there mean the nav mesh predates the
+		/// door, no polys mean there is nothing a creature could path through anyway.
+		/// @return False when unsupported.
+		virtual bool HasWalkableNavPolysIn(const nav::DoorVolume& volume) const { return false; }
+
+		/// @brief Records that a door entry was reported for having no door polys, once per map.
+		/// @return True the first time an entry is reported on this map (shared by all its instances).
+		virtual bool MarkDoorWithoutNavPolysReported(uint32 entry) { return true; }
+
+		/// @brief Gets the mesh-space collision bounds of dynamic collision geometry.
+		/// @return False when unsupported or for unknown handles.
+		virtual bool GetDynamicCollisionLocalBounds(uint64 handle, AABB& out) const { return false; }
 
 		/// @brief Called once per world tick on the world thread, for map data that finishes
 		/// loading in the background.
@@ -130,12 +164,13 @@ namespace mmo
 	};
 
 	class ServerCollisionMap;
-	class ServerWaterMap;
+	class MapStaticData;
 
 	class NavMapData final : public MapData
 	{
 	public:
-		explicit NavMapData(const proto::MapEntry& mapEntry);
+		/// @param staticData The map's shared static data (nav mesh, static collision, water).
+		explicit NavMapData(std::shared_ptr<MapStaticData> staticData);
 		~NavMapData() override;
 
 		bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) override;
@@ -156,8 +191,20 @@ namespace mmo
 
 		void SetDynamicCollisionEnabled(uint64 handle, bool enabled) override;
 
-		/// @brief Installs nav mesh pages the background loader has read, within a time budget.
-		void Update() override;
+		uint64 AddNavObstacle(const nav::DoorVolume& volume, bool blocking) override;
+
+		void SetNavObstacleBlocking(uint64 handle, bool blocking) override;
+
+		void RemoveNavObstacle(uint64 handle) override;
+
+		bool HasWalkableNavPolysIn(const nav::DoorVolume& volume) const override;
+
+		bool MarkDoorWithoutNavPolysReported(uint32 entry) override;
+
+		bool GetDynamicCollisionLocalBounds(uint64 handle, AABB& out) const override;
+
+		/// @brief The map's shared static data.
+		[[nodiscard]] const MapStaticData& GetStaticData() const { return *m_staticData; }
 
 	private:
 		/// @brief Makes sure the nav mesh has every page overlapping the XZ rectangle spanned by
@@ -165,17 +212,23 @@ namespace mmo
 		void EnsureNavLoaded(const Vector3& a, const Vector3& b, float margin) const;
 
 	private:
-		std::shared_ptr<nav::Map> m_map;
-		/// Streams the nav mesh pages in while the instance is already running. Reset once every
-		/// page is installed. Declared after m_map, which it fills, so it is destroyed first.
-		std::unique_ptr<nav::PageStreamer> m_pageStreamer;
-		std::chrono::steady_clock::time_point m_navStreamStart;
-		/// Geometry-based collision map for accurate wall/object LOS. Always present so dynamic
-		/// collision (e.g. doors) works even on maps without static world geometry; nav mesh LOS
-		/// is used as fallback only when the pointer is null (allocation-free maps).
+		/// Shared by every instance of the map. Streaming is driven by MapStaticDataRegistry.
+		std::shared_ptr<MapStaticData> m_staticData;
+		/// This instance's LOS view: the shared static geometry plus this instance's doors.
 		std::unique_ptr<ServerCollisionMap> m_collisionMap;
-		/// Optional terrain water data for swim validation. Null when the map has no water.
-		std::unique_ptr<ServerWaterMap> m_waterMap;
+		/// This instance's door state on the shared nav mesh.
+		nav::InstanceQueryFilter m_queryFilter;
+
+		struct NavObstacle
+		{
+			std::vector<dtPolyRef> polys;
+			bool blocking = false;
+		};
+
+		/// This instance's door obstacles, by handle. Poly refs stay valid for the lifetime of the
+		/// MapStaticData: pages are never unloaded from a shared map.
+		std::unordered_map<uint64, NavObstacle> m_navObstacles;
+		uint64 m_nextNavObstacle = 1;
 	};
 
 	class Universe;
@@ -358,6 +411,9 @@ namespace mmo
 		/// @param transitionMs How long clients should blend towards the new time, 0 = instantly.
 		void SetTimeOfDay(GameTime timeOfDay, uint32 transitionMs);
 
+		/// @brief Raises OnHourOfDay once the authoritative time of day reaches a full hour.
+		void CheckHourOfDay();
+
 		/// Sets the state of a named encounter slot for this instance.
 		void SetEncounterState(uint32 slotId, uint32 state);
 
@@ -447,6 +503,9 @@ namespace mmo
 		/// Last time when game time update was broadcast to players
 		GameTime m_lastTimeUpdateBroadcast { 0 };
 
+		/// Decides when the time of day reaches a full hour, for the OnHourOfDay instance trigger.
+		HourChime m_hourChime;
+
 		std::map<uint64, std::shared_ptr<GameCreatureS>> m_temporaryCreatures;
 		std::map<uint64, std::shared_ptr<GameWorldObjectS>> m_temporaryObjects;
 		ITriggerHandler& m_triggerHandler;
@@ -496,6 +555,8 @@ namespace mmo
 		struct DoorCollision
 		{
 			uint64 handle { 0 };
+			/// Nav obstacle of the door's baked polys, 0 when the nav mesh has none for it.
+			uint64 navObstacle { 0 };
 			scoped_connection stateChanged;
 		};
 		std::unordered_map<uint64, DoorCollision> m_doorCollisions;

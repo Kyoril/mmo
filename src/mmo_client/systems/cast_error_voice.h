@@ -6,6 +6,7 @@
 #include "base/typedefs.h"
 
 #include "client_data/project.h"
+#include "game_client/attack_error_voice_gate.h"
 
 #include <string>
 
@@ -43,6 +44,8 @@ namespace mmo
 
 		/// @brief Notifies the service about a failed auto attack swing, playing a voice line
 		/// if one is configured for the active character and the throttle window has passed.
+		/// Auto attack repeats its error for as long as the condition holds, so a repeat of
+		/// the same line is held back for a few seconds; a different line is not.
 		/// @param errorEvent The attack swing error event name (e.g. "ATTACK_SWING_TARGET_DEAD").
 		void OnAttackSwingError(const std::string& errorEvent);
 
@@ -58,7 +61,8 @@ namespace mmo
 		[[nodiscard]] uint32 ResolveAttackSoundId(uint32 attackEvent) const;
 
 		/// @brief Plays a resolved voice line unless the throttle window is still open.
-		void PlayThrottled(uint32 soundId);
+		/// @return true when the line was actually started.
+		bool PlayThrottled(uint32 soundId);
 
 		/// @brief Returns the VoiceLineSet of the active character, or nullptr when the race
 		/// or gender has none configured.
@@ -70,5 +74,6 @@ namespace mmo
 		uint32 m_raceId = 0;
 		uint8 m_gender = 0;
 		GameTime m_blockedUntil = 0;
+		AttackErrorVoiceGate m_attackVoiceGate;
 	};
 }

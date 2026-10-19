@@ -271,7 +271,22 @@ namespace mmo
 			/// @brief 32 bit emote entry id of the selected sleeping pose variant, 0 = default.
 			SleepPoseEmote,
 
-			UnitFieldCount = SleepPoseEmote + 1,
+			/// @brief float flat spell power added to damaging spell effects.
+			SpellDamage,
+
+			/// @brief float flat healing power added to healing spell effects.
+			SpellHealing,
+
+			/// @brief float chance in percent for a spell to critically hit.
+			SpellCritChance,
+
+			/// @brief float chance in percent for a melee attack to critically hit.
+			MeleeCritChance,
+
+			/// @brief float amount of mana restored every five seconds while regenerating.
+			ManaRegen,
+
+			UnitFieldCount = ManaRegen + 1,
 		};
 
 #define VISIBLE_ITEM_FIELDS(index, offset) \

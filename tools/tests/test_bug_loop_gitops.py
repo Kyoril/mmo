@@ -110,6 +110,38 @@ class GitopsTests(unittest.TestCase):
 		self.assertEqual(git(self.origin, "rev-parse", "develop"), result.commit)
 		self.assertEqual(self.wt.merged("bugfix/x"), result.commit)
 
+	def test_ship_lands_submodules_on_the_gitmodules_url_not_the_main_checkout(self):
+		# 2026-10-11: H:/mmo's .git/config points submodule.data/client.url at its own non-bare
+		# data/client (master checked out, with local commits). The loop pushed there and git
+		# refused ("branch is currently checked out", then "remote contains work that you do not
+		# have"); develop on GitHub would have referenced data commits only that checkout had.
+		local_sub = os.path.join(self.main, "data", "client")
+		git(local_sub, "checkout", "-B", "master")
+		write(os.path.join(local_sub, "local.txt"), "unpushed\n")
+		git(local_sub, "add", "-A")
+		git(local_sub, "commit", "-m", "local only")
+		local_master = git(local_sub, "rev-parse", "master")
+		git(self.main, "config", "submodule.data/client.url", local_sub)
+		# A remote left behind by a loop run before the fix must be corrected, not trusted.
+		self.wt.prepare()
+		sub_dir = self.wt.sub_path("data/client")
+		git(sub_dir, "remote", "set-url", self.wt.sub_remote, local_sub)
+
+		_, head = self.make_fix()
+		self.assertEqual(os.path.normcase(git(sub_dir, "remote", "get-url", self.wt.sub_remote)), os.path.normcase(self.sub_origin))
+		sub_head = self.wt.gitlinks(head)["data/client"]
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x (bug-loop, gate green at 1)", lambda: self.fail("no gate needed"))
+		self.assertTrue(result.ok, result.reason)
+		self.assertEqual(git(self.sub_origin, "rev-parse", "master"), sub_head)
+		self.assertEqual(git(self.origin, "rev-parse", "develop"), result.commit)
+		self.assertEqual(git(local_sub, "rev-parse", "master"), local_master)
+		self.assertEqual(git(local_sub, "symbolic-ref", "HEAD"), "refs/heads/master")
+		# The main checkout's data/client lacks the shipped data commit now; a fresh loop worktree
+		# (cloned from it through the overridden URL) must still reach origin/develop.
+		fresh = gitops.Worktree(self.main, os.path.join(self.root, "wt2"), submodules=("data/client",))
+		self.assertEqual(fresh.prepare(), result.commit)
+		self.assertEqual(git(fresh.sub_path("data/client"), "rev-parse", "HEAD"), sub_head)
+
 	def move_submodule_master(self, name, text):
 		"""Someone pushes data to the submodule's master without bumping develop's pointer."""
 		write(os.path.join(self.sub_seed, name), text)
@@ -280,6 +312,52 @@ class GitopsTests(unittest.TestCase):
 		self.assertEqual(len(self.wt.log_lines("", head)), 2)
 		self.wt.delete_remote_branch("bugfix/aaaaaaaa")
 		self.assertEqual(git(self.origin, "branch", "--list", "bugfix/aaaaaaaa"), "")
+
+	def test_backup_lets_another_machine_resume_a_parked_branch(self):
+		# 2026-10-13: the loop moved to a new machine; its parked branches were only local on the
+		# old one, so two maintainer refix decisions failed.
+		branch = "bugfix/0123abcd"
+		base = self.wt.prepare()
+		self.wt.start_branch(branch, base)
+		sub = self.wt.sub_path("data/client")
+		write(os.path.join(sub, "data.txt"), "two\n")
+		git(sub, "commit", "-am", "fix data")
+		git(self.wt.path, "add", "-A")
+		git(self.wt.path, "commit", "-m", "fix")
+		head = self.wt.head()
+		sub_head = git(sub, "rev-parse", "HEAD")
+		self.assertEqual(self.wt.backup_branch(branch), (True, ""))
+		self.assertEqual(git(self.origin, "rev-parse", "refs/bugloop/" + branch), head)
+		self.assertEqual(git(self.sub_origin, "rev-parse", "refs/bugloop/" + branch), sub_head)
+		self.assertEqual(git(self.origin, "branch", "--list"), "* develop")  # no branch, so no CI run
+
+		other_main = os.path.join(self.root, "other-main")
+		git(self.root, "clone", "--recurse-submodules", self.origin, other_main)
+		other = gitops.Worktree(other_main, os.path.join(self.root, "other-wt"), submodules=("data/client",))
+		other.prepare()
+		self.assertFalse(other.has_branch(branch))
+		self.assertTrue(other.restore_branch(branch))
+		self.assertFalse(other.restore_branch(branch))  # already here
+		self.assertEqual(other.resume_branch(branch), head)
+		self.assertEqual(git(other.sub_path("data/client"), "rev-parse", "HEAD"), sub_head)
+
+		other.delete_backup(branch)
+		self.assertEqual(gitops.run_git(self.origin, "rev-parse", "-q", "--verify", "refs/bugloop/" + branch, check=False).returncode, 1)
+		self.assertEqual(gitops.run_git(self.sub_origin, "rev-parse", "-q", "--verify", "refs/bugloop/" + branch, check=False).returncode, 1)
+
+	def test_restore_without_backup_is_false(self):
+		self.wt.prepare()
+		self.assertFalse(self.wt.restore_branch("bugfix/0123abcd"))
+		self.assertFalse(self.wt.has_branch("bugfix/0123abcd"))
+
+	def test_backups_are_limited_to_bugfix_branches(self):
+		worktree = gitops.Worktree("main", "wt")
+		with mock.patch.object(gitops, "run_git") as run:
+			self.assertFalse(worktree.backup_branch("develop")[0])
+			self.assertFalse(worktree.restore_branch("refs/heads/develop"))
+			with self.assertRaises(ValueError):
+				worktree.delete_backup("master")
+			run.assert_not_called()
 
 	def move_develop_submodule(self, name, text):
 		"""Someone else lands a data change: submodule master and develop's pointer move together."""

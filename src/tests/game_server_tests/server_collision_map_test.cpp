@@ -3,6 +3,7 @@
 #include "catch.hpp"
 
 #include "game_server/world/server_collision_map.h"
+#include "math/aabb.h"
 #include "math/aabb_tree.h"
 #include "math/matrix4.h"
 #include "math/quaternion.h"
@@ -279,4 +280,109 @@ TEST_CASE("ServerCollisionMap - instances sharing one tree are independent", "[s
 	map.RemoveDynamicInstance(first);
 	REQUIRE(map.LineOfSight(frontPos, backPos));
 	REQUIRE_FALSE(map.LineOfSight(frontPos + Vector3(10.0f, 0.0f, 0.0f), backPos + Vector3(10.0f, 0.0f, 0.0f)));
+}
+
+TEST_CASE("ServerCollisionMap - single-sided dynamic plane blocks from both sides", "[server_collision_map]")
+{
+	// Barrier art (e.g. Hollow Choir's MagicBarrier_01) is one quad with a single winding.
+	// A closed barrier must hide units on either side, or a boss behind it aggros through it.
+	const std::vector<AABBTree::Vertex> verts = {
+		Vector3( 1.0f,  1.0f, 0.0f),
+		Vector3(-1.0f,  1.0f, 0.0f),
+		Vector3( 1.0f, -1.0f, 0.0f),
+		Vector3(-1.0f, -1.0f, 0.0f)
+	};
+	const std::vector<AABBTree::Index> indices = { 0, 1, 2, 1, 3, 2 };
+	auto tree = std::make_shared<AABBTree>();
+	tree->Build(verts, indices);
+
+	ServerCollisionMap map;
+	REQUIRE(map.AddDynamicInstance(tree, Matrix4::Identity, true) != 0);
+
+	REQUIRE_FALSE(map.LineOfSight(frontPos, backPos));
+	REQUIRE_FALSE(map.LineOfSight(backPos, frontPos));
+
+	Vector3 hit;
+	REQUIRE_FALSE(map.LineOfSightEx(frontPos, backPos, hit));
+	CHECK(hit.z == Approx(0.0f).margin(0.001f));
+	REQUIRE_FALSE(map.LineOfSightEx(backPos, frontPos, hit));
+	CHECK(hit.z == Approx(0.0f).margin(0.001f));
+}
+
+TEST_CASE("ServerCollisionMap - mirrored static geometry still blocks line of sight", "[server_collision_map]")
+{
+	// Static geometry skips back faces, and mirrored placements (a negative scale axis) reverse a
+	// mesh's winding on screen. Rays are tested in the instance's local space, though, where the
+	// mirror is undone: a mirrored wall must keep blocking from the side it faces. Guards against
+	// "fixing" mirrored rendering by flipping winding in the collision path as well.
+	const std::vector<AABBTree::Vertex> verts = {
+		Vector3( 1.0f,  1.0f, 0.0f),
+		Vector3(-1.0f,  1.0f, 0.0f),
+		Vector3( 1.0f, -1.0f, 0.0f),
+		Vector3(-1.0f, -1.0f, 0.0f)
+	};
+	const std::vector<AABBTree::Index> indices = { 0, 1, 2, 1, 3, 2 };
+	auto tree = std::make_shared<AABBTree>();
+	tree->Build(verts, indices);
+
+	// Which side the unmirrored quad blocks from
+	ServerCollisionMap plain;
+	REQUIRE(plain.AddInstance(tree, Matrix4::Identity, "plain"));
+	const bool blocksFromFront = !plain.LineOfSight(frontPos, backPos);
+	const bool blocksFromBack = !plain.LineOfSight(backPos, frontPos);
+	REQUIRE(blocksFromFront != blocksFromBack);
+
+	Matrix4 mirror;
+	mirror.MakeTransform(Vector3::Zero, Vector3(-1.0f, 1.0f, 1.0f), Quaternion::Identity);
+	ServerCollisionMap mirrored;
+	REQUIRE(mirrored.AddInstance(tree, mirror, "mirrored"));
+
+	// The mirrored quad occupies the same plane and must block at least where the original did
+	if (blocksFromFront)
+	{
+		CHECK_FALSE(mirrored.LineOfSight(frontPos, backPos));
+	}
+	else
+	{
+		CHECK_FALSE(mirrored.LineOfSight(backPos, frontPos));
+	}
+
+	Vector3 hit;
+	CHECK_FALSE(mirrored.LineOfSightEx(blocksFromFront ? frontPos : backPos, blocksFromFront ? backPos : frontPos, hit));
+}
+
+TEST_CASE("ServerCollisionMap - shared static geometry blocks every instance view", "[server_collision_map]")
+{
+	auto shared = std::make_shared<ServerCollisionMap>();
+	REQUIRE(shared->AddInstance(buildWallTree(), Matrix4::Identity, "wall"));
+	const std::shared_ptr<const ServerCollisionMap> sharedStatic = shared;
+
+	ServerCollisionMap instanceA(sharedStatic);
+	ServerCollisionMap instanceB(sharedStatic);
+
+	CHECK(instanceA.IsLoaded());
+	CHECK_FALSE(instanceA.LineOfSight(frontPos, backPos));
+	CHECK_FALSE(instanceB.LineOfSight(frontPos, backPos));
+
+	Vector3 hit;
+	CHECK_FALSE(instanceA.LineOfSightEx(frontPos, backPos, hit));
+	CHECK(hit.z == Approx(0.0f).margin(0.01f));
+}
+
+TEST_CASE("ServerCollisionMap - dynamic instances stay with their instance view", "[server_collision_map]")
+{
+	const std::shared_ptr<const ServerCollisionMap> sharedStatic = std::make_shared<ServerCollisionMap>();
+	ServerCollisionMap instanceA(sharedStatic);
+	ServerCollisionMap instanceB(sharedStatic);
+
+	const uint64 handle = instanceA.AddDynamicInstance(buildWallTree(), Matrix4::Identity, true);
+	REQUIRE(handle != 0);
+
+	CHECK_FALSE(instanceA.LineOfSight(frontPos, backPos));
+	CHECK(instanceB.LineOfSight(frontPos, backPos));
+
+	AABB bounds;
+	REQUIRE(instanceA.GetDynamicInstanceLocalBounds(handle, bounds));
+	CHECK(bounds.max.x == Approx(1.0f));
+	CHECK_FALSE(instanceB.GetDynamicInstanceLocalBounds(handle, bounds));
 }

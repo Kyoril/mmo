@@ -5,6 +5,10 @@
 #include "base/typedefs.h"
 
 #include <algorithm>
+#include <cctype>
+#include <map>
+#include <string>
+#include <string_view>
 
 namespace mmo::spell_visual
 {
@@ -53,6 +57,55 @@ namespace mmo::spell_visual
 		return spellId | ChannelKeyBit;
 	}
 
+	/// \brief Which spell locked each unit's loop animation slot (the CASTING cast-bar loop).
+	///
+	/// A unit has exactly one locked loop animation, so the terminating events CastSucceeded
+	/// and CancelCast must only release it when they belong to the spell that set it. A proc
+	/// resolving mid-cast -- Leeching Rot healing its owner on every Corrupting Touch tick --
+	/// raises CastSucceeded on the casting unit itself, and releasing the slot there cut the
+	/// casting animation off while the cast bar kept running.
+	class CastLoopOwnership final
+	{
+	public:
+		/// \brief Records that a spell locked the actor's loop animation, replacing any
+		///	previous owner (the slot holds one animation).
+		void Set(const uint64 actorGuid, const uint32 spellId)
+		{
+			m_owners[actorGuid] = spellId;
+		}
+
+		/// \brief Whether a spell's terminating event may clear the actor's locked loop, and
+		///	drops the record when it may.
+		/// \return True only when this spell is the recorded owner of the actor's loop.
+		bool Release(const uint64 actorGuid, const uint32 spellId)
+		{
+			const auto it = m_owners.find(actorGuid);
+			if (it == m_owners.end() || it->second != spellId)
+			{
+				return false;
+			}
+
+			m_owners.erase(it);
+			return true;
+		}
+
+		/// \brief Drops an actor's record without releasing anything, for paths that clear the
+		///	loop themselves (a channel ending).
+		void Forget(const uint64 actorGuid)
+		{
+			m_owners.erase(actorGuid);
+		}
+
+		/// \brief Drops every record (leaving the world).
+		void Clear()
+		{
+			m_owners.clear();
+		}
+
+	private:
+		std::map<uint64, uint32> m_owners;
+	};
+
 	/// \brief Bit marking a tint key as a timed pulse (ColorTint.duration_ms).
 	///
 	/// Timed pulses are tracked under their own key so a pulse expiring never removes a
@@ -88,5 +141,73 @@ namespace mmo::spell_visual
 		}
 
 		return std::max(0.0f, (1.0f - t) / (1.0f - attack));
+	}
+
+	/// \brief Where a ribbon trail with an emit duration is in its life.
+	enum class RibbonPhase
+	{
+		/// Still adding segments.
+		Emitting,
+		/// Stopped adding segments; the ones it has are fading out.
+		Fading,
+		/// Every segment has faded; the trail can be destroyed.
+		Expired
+	};
+
+	/// \brief Phase of a ribbon trail with RibbonTrailConfig.emit_duration set.
+	///
+	/// A trail on a one-shot kit (a melee swing's blade arc) has no lifecycle event that would
+	/// tear it down, so it retires itself: it emits for its emit duration, then lives on for one
+	/// segment lifetime so the segments it already laid down fade instead of popping.
+	/// \param elapsedSeconds Time since the trail spawned.
+	/// \param emitDuration Seconds the trail adds segments. Must be > 0; 0 means "untimed".
+	/// \param segmentLifetime Seconds a single segment lives.
+	inline RibbonPhase TimedRibbonPhase(const float elapsedSeconds, const float emitDuration, const float segmentLifetime)
+	{
+		if (elapsedSeconds < emitDuration)
+		{
+			return RibbonPhase::Emitting;
+		}
+
+		if (elapsedSeconds < emitDuration + std::max(0.0f, segmentLifetime))
+		{
+			return RibbonPhase::Fading;
+		}
+
+		return RibbonPhase::Expired;
+	}
+
+	/// \brief Height, as a fraction of the model's height, at which an effect meant for a bone
+	/// sits on a model that lacks that bone.
+	///
+	/// Kits name humanoid sockets (``spine_03``, ``head``, ``hand_r``). A creature without them
+	/// -- a scarecrow training dummy, an unrigged prop -- used to get every such effect at its
+	/// feet; this keeps a chest impact at the chest and a stun above the head.
+	/// \param bone The bone name the kit asked for.
+	inline float MissingBoneHeightFraction(const std::string_view bone)
+	{
+		std::string lower(bone);
+		std::transform(lower.begin(), lower.end(), lower.begin(), [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		const auto has = [&lower](const char* part) { return lower.find(part) != std::string::npos; };
+
+		if (has("foot") || has("toe") || has("root"))
+		{
+			return 0.0f;
+		}
+		if (has("head"))
+		{
+			return 0.9f;
+		}
+		if (has("neck"))
+		{
+			return 0.82f;
+		}
+		if (has("spine") || has("chest") || has("torso"))
+		{
+			return 0.6f;
+		}
+
+		// Hands, arms, weapons and anything unknown: about where a held weapon is.
+		return 0.5f;
 	}
 }

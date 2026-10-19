@@ -76,11 +76,13 @@ namespace mmo
 		/// @return A pointer to the target game object.
 		GameObjectS* GetActionTarget(const proto::TriggerAction& action, TriggerContext& context);
 
-		/// Plays a sound entry.
-		/// @param sound The ID of the sound to play.
+		/// Plays a sound entry from a game object for every player in its world instance within range,
+		/// dead or alive. The clients play it from the object and keep it attached while it moves.
+		/// @param sound The ID of the sound to play. 0 plays nothing.
 		/// @param source The source game object for the sound.
-		/// @return True if the sound was played successfully, false otherwise.
-		bool PlaySoundEntry(uint32 sound, GameObjectS* source);
+		/// @param range Players further away than this from the source do not hear it.
+		/// @return True if the sound was sent, false if there was nothing to play or nobody to hear it.
+		bool PlaySoundEntry(uint32 sound, GameObjectS* source, float range);
 
 	private:
 		// Action handlers
@@ -241,6 +243,13 @@ namespace mmo
 		/// Plays a spell visualization on the target unit for everyone who can see it.
 		void HandlePlaySpellVisual(const proto::TriggerAction& action, TriggerContext& context);
 
+		/// Plays a sound entry at a position for every player in range, possibly repeated.
+		void HandlePlaySound(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Sends a positional sound entry to every player of a world instance within a radius.
+		/// @returns Number of players the sound was sent to.
+		uint32 PlaySoundAtPosition(WorldInstance& world, uint32 sound, const Vector3& position, float radius);
+
 		/// Collects all alive players currently in the given world instance.
 		/// @param world The world instance to enumerate. May be nullptr.
 		/// @param includeObservers If true, invisible GMs are included. Target selection must leave this
@@ -282,11 +291,25 @@ namespace mmo
 			InstanceId worldInstanceId{}; ///< Id of the world instance the captured context refers to.
 		};
 
+		/// The outstanding repetitions of a PlaySound action that plays more than once.
+		struct SoundRepetition
+		{
+			std::unique_ptr<Countdown> countdown; ///< Timer driving the next repetition.
+			InstanceId worldInstanceId{}; ///< World instance the sound plays in.
+			WorldInstance* world = nullptr; ///< Valid until OnWorldInstanceDestroyed drops this entry.
+			uint32 soundId = 0;
+			Vector3 position;
+			float radius = 0.0f;
+			uint32 remaining = 0; ///< Repetitions still to play.
+			GameTime interval = 0;
+		};
+
 	private:
 		proto::Project& m_project; ///< Reference to the project containing static game data.
 		PlayerManager& m_playerManager; ///< Reference to the player manager.
 		TimerQueue& m_timers; ///< Reference to the timer queue.
 		std::list<DelayedTrigger> m_delays; ///< Pending delayed trigger continuations.
+		std::list<SoundRepetition> m_soundRepetitions; ///< PlaySound actions still repeating.
 	};
 	
 }

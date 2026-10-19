@@ -10,6 +10,8 @@
 #include "binary_io/memory_source.h"
 #include "binary_io/reader.h"
 
+#include <limits>
+
 using namespace mmo;
 
 namespace
@@ -45,6 +47,44 @@ namespace
 		REQUIRE(faceIndex < tree.GetFaceSubMeshes().size());
 		return tree.GetFaceSubMeshes()[faceIndex];
 	}
+}
+
+TEST_CASE("AABBTree built from no faces is empty", "[aabb_tree]")
+{
+	AABBTree tree;
+	tree.Build({}, {});
+
+	CHECK(tree.IsEmpty());
+	CHECK(tree.GetNodes().empty());
+}
+
+TEST_CASE("AABBTree loaded from a legacy file without faces is empty", "[aabb_tree]")
+{
+	// Older exports wrote the node padding of a tree built from zero faces: a root with inverted
+	// bounds and children == 0 followed by default nodes. Such a tree has nothing to collide
+	// with, but a traversal that trusts its nodes revisits the root forever.
+	std::vector<char> buffer;
+	io::VectorSink sink{ buffer };
+	io::Writer writer{ sink };
+
+	const float lowest = std::numeric_limits<float>::lowest();
+	const float highest = std::numeric_limits<float>::max();
+	writer
+		<< io::write<uint32>('BVH1')
+		<< io::write<uint32>(0)		// vertices
+		<< io::write<uint32>(0)		// indices
+		<< io::write<uint32>(2)		// nodes
+		<< io::write<uint8>(0) << io::write<uint32>(0) << AABB(Vector3(highest, highest, highest), Vector3(lowest, lowest, lowest))
+		<< io::write<uint8>(0) << io::write<uint32>(0) << AABB(Vector3::Zero, Vector3::Zero)
+		<< io::write<uint32>('FOOB');
+
+	io::MemorySource source{ buffer };
+	io::Reader reader{ source };
+	AABBTree loaded;
+	reader >> loaded;
+	REQUIRE(reader);
+
+	CHECK(loaded.IsEmpty());
 }
 
 TEST_CASE("AABBTree maps hit faces to their source submesh", "[aabb_tree]")

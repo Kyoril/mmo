@@ -7,6 +7,7 @@
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/material_layer.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh.h"
 #include "scene_graph/scene.h"
@@ -100,6 +101,15 @@ namespace mmo
 				}
 			}
 
+			// After the overrides, so a layer composites onto whatever material the sub entity ends up with.
+			for (const auto& layer : variant.material_layers())
+			{
+				if (MaterialPtr material = MaterialManager::Get().Load(layer.material()))
+				{
+					ApplyMaterialLayer(entity, layer.sub_entity(), layer.layer(), material);
+				}
+			}
+
 			// Do we already have that item display attached?
 			if (attachments.contains(itemDisplayId))
 			{
@@ -127,6 +137,8 @@ namespace mmo
 			ItemDisplayAttachment attachment;
 			attachment.variant = &variant;
 			attachment.entity = scene.CreateEntity(entity.GetName() + "_ITEM_" + std::to_string(itemDisplayId), variant.mesh());
+			// Worn and wielded items never block movement, whatever collision their mesh carries.
+			attachment.entity->SetCollisionEnabled(false);
 			attachment.attachment = entity.AttachObjectToBone(bone->bone_name(), *attachment.entity);
 			ApplyItemBoneTransform(attachment.attachment, *bone);
 			attachments[itemDisplayId] = attachment;

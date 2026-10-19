@@ -71,9 +71,13 @@ namespace mmo
 			return 10;
 		}
 
-		/// @brief Calculates the zoom factor based on the zoom level.
-		/// @return The zoom factor (1.0f = no zoom, 2.0f = 200% zoom).
-		float GetZoomFactor() const;
+		/// @brief Gets the edge length of the square world area the minimap shows at the current zoom level.
+		/// @return The covered width (and height) in world units.
+		float GetWorldCoverage() const;
+
+		/// @brief Gets the scale applied to marker quads (player arrow, party, quest and ping dots) so they
+		///        keep their on-screen size at every zoom level.
+		float GetMarkerScale() const;
 
 		void NotifyWorldChanged(const String& worldName);
 
@@ -174,6 +178,12 @@ namespace mmo
 
 		/// @brief The maximum distance (in tiles) for loading textures around the player.
 		static constexpr int32 s_maxLoadDistance = 2;
+
+		/// @brief World units shown across the minimap fully zoomed out (zoom level 0).
+		static constexpr float s_maxWorldCoverage = 450.0f;
+
+		/// @brief World units shown across the minimap fully zoomed in.
+		static constexpr float s_minWorldCoverage = 120.0f;
 
 		String m_worldName;
 

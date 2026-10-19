@@ -12,6 +12,7 @@
 #include "frame_ui/font_mgr.h"
 #include "frame_ui/frame_mgr.h"
 #include "frame_ui/geometry_buffer.h"
+#include "frame_ui/text_wrap.h"
 #include "graphics/graphics_device.h"
 #include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
@@ -53,6 +54,8 @@ namespace mmo
 	static int32 s_lastViewportHeight = 0;
 	/// Scroll offset of the console text in lines.
 	static int32 s_consoleScrollOffset = 0;
+	/// Width in pixels at which console text lines are wrapped.
+	static float s_consoleWrapWidth = 0.0f;
 	/// Reference to the layer that has been registered for rendering the client console.
 	static ScreenLayerIt s_consoleLayer;
 	/// A vertex buffer that is used to render the console geometry (except the text).
@@ -249,25 +252,47 @@ namespace mmo
 	// Console helpers
 	namespace
 	{
+		/// Splits a console log message into the lines it occupies on screen at the current wrap width.
+		std::vector<std::string> WrapConsoleMessage(const std::string& message)
+		{
+			return WrapTextToLines(message, s_consoleWrapWidth, [](uint32_t codepoint)
+			{
+				const FontGlyph* glyph = s_consoleFont->GetGlyphData(codepoint);
+				return glyph ? glyph->GetAdvance(1.0f) : 0.0f;
+			});
+		}
+
+		/// Counts the lines all console log messages occupy on screen at the current wrap width.
+		int32 CountConsoleLines()
+		{
+			int32 lineCount = 0;
+			for (const auto& entry : s_consoleLog)
+			{
+				lineCount += static_cast<int32>(WrapConsoleMessage(entry.message).size());
+			}
+
+			return lineCount;
+		}
+
 		/// Changes the console scrolling value by an amount and ensures that the scroll index
 		/// stays in the expected range so that no overflow / underflow occurrs.
 		inline void ApplyConsoleScrolling(int32 Amount)
 		{
 			AssignOnExit<bool> invalidateGraphics{ s_consoleTextDirty, true };
-			
+
 			s_consoleScrollOffset += Amount;
 			s_consoleScrollOffset = std::max(0, s_consoleScrollOffset);
-			
-			const int32 maxVisibleEntries = s_consoleWindowHeight / s_consoleFont->GetHeight();
-			
-			if (s_consoleLog.size() < maxVisibleEntries)
+
+			const int32 maxVisibleLines = s_consoleWindowHeight / s_consoleFont->GetHeight();
+			const int32 lineCount = CountConsoleLines();
+
+			if (lineCount < maxVisibleLines)
 			{
 				s_consoleScrollOffset = 0;
 				return;
 			}
-			
-			s_consoleScrollOffset = std::min(s_consoleScrollOffset, 
-				static_cast<int32>(s_consoleLog.size()) - maxVisibleEntries);
+
+			s_consoleScrollOffset = std::min(s_consoleScrollOffset, lineCount - maxVisibleLines);
 		}
 
 		void ExtractResolution(const std::string& resolutionString, uint16& out_width, uint16& out_height)
@@ -365,6 +390,7 @@ namespace mmo
 				"Worlds.hpak",
 				"Sound.hpak",
 				"Particles.hpak",
+				"Kits.hpak",
 				localeArchive,
 				localeArchive + ".hpak",
 			});
@@ -663,9 +689,13 @@ namespace mmo
 		// Console key will toggle the console visibility
 		if (key == 0xC0 || key == 0xDC)
 		{
-			// While a ui frame (like the chat text field) captures keyboard input, the key
-			// belongs to that frame instead of toggling the console
-			if (!s_consoleVisible && FrameManager::Get().GetCaptureFrame())
+			// While a ui frame which turns typed characters into text (like the chat text field)
+			// captures keyboard input, the key belongs to that frame instead of toggling the
+			// console. Frames which merely hold the focus (buttons, or frames made focusable for
+			// their enter or escape handler) keep the capture until something else takes it, so
+			// they must not block the console key.
+			const FramePtr captureFrame = FrameManager::Get().GetCaptureFrame();
+			if (!s_consoleVisible && captureFrame && captureFrame->AcceptsTextInput())
 			{
 				return true;
 			}
@@ -939,6 +969,16 @@ namespace mmo
 			}
 		}
 
+		auto vpWidth = 0, vpHeight = 0;
+		gx.GetViewport(nullptr, nullptr, &vpWidth, &vpHeight, nullptr, nullptr);
+
+		// Rewrap the console text when the screen width changes
+		if (static_cast<float>(vpWidth) != s_consoleWrapWidth)
+		{
+			s_consoleWrapWidth = static_cast<float>(vpWidth);
+			ApplyConsoleScrolling(0);
+		}
+
 		if (s_consoleTextDirty)
 		{
 			s_consoleTextGeom->Reset();
@@ -952,34 +992,39 @@ namespace mmo
 
 			auto index = 0;
 
-			// Determine max visible entries in console window
-			const int32 maxVisibleEntries = s_consoleWindowHeight / s_consoleFont->GetHeight();
 			for (auto& it : s_consoleLog)
 			{
-				// Skip as many items as required to reach the console scroll offset
-				if (index++ < s_consoleScrollOffset)
+				// Entries are drawn bottom-up, so the wrapped lines of an entry are too
+				const std::vector<std::string> lines = WrapConsoleMessage(it.message);
+				for (auto line = lines.rbegin(); line != lines.rend(); ++line)
 				{
-					continue;
+					// Skip as many lines as required to reach the console scroll offset
+					if (index++ < s_consoleScrollOffset)
+					{
+						continue;
+					}
+
+					// Reduce line by one
+					startPoint.y -= s_consoleFont->GetHeight();
+
+					// Draw line of text
+					s_consoleFont->DrawText(*line, startPoint, *s_consoleTextGeom, 1.0f, it.color);
+
+					// Stop it here
+					if (startPoint.y < 0.0f)
+					{
+						break;
+					}
 				}
 
-				// Reduce line by one
-				startPoint.y -= s_consoleFont->GetHeight();
-
-				// Draw line of text
-				s_consoleFont->DrawText(it.message, startPoint, *s_consoleTextGeom, 1.0f, it.color);
-
-				// Stop it here
 				if (startPoint.y < 0.0f)
 				{
 					break;
 				}
 			}
-			
+
 			s_consoleTextDirty = false;
 		}
-
-		auto vpWidth = 0, vpHeight = 0;
-		gx.GetViewport(nullptr, nullptr, &vpWidth, &vpHeight, nullptr, nullptr);
 
 		if (s_consoleVisible)
 		{

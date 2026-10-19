@@ -15,8 +15,10 @@
 #include "proto_data/project.h"
 #include "proto_data/trigger_event_filter.h"
 #include "game/emote_defs.h"
+#include "game/id_mask.h"
 #include "game/item.h"
 #include "game/spell.h"
+#include "game/talent_rank_gate.h"
 
 namespace mmo
 {
@@ -210,6 +212,10 @@ namespace mmo
 			ResetTalents();
 			return;
 		}
+
+		// The restore may have stopped early and dropped all talents (point budget exceeded) after some
+		// talents already activated their follow-up ranks.
+		RefreshTalentGatedSpells();
 
 		DLOG("Initialize talents. Talent points spent: " << (m_totalTalentPointsAtLevel - talentPoints) << " / " << m_totalTalentPointsAtLevel);
 	}
@@ -421,6 +427,7 @@ namespace mmo
 
 			UpdateArmor();
 			UpdateDamage();
+			UpdateCombatStatFields();
 		}
 	}
 
@@ -449,6 +456,9 @@ namespace mmo
 
 		// Clear talent data
 		m_talents.clear();
+
+		// Follow-up ranks of the removed talents are no longer usable (they stay known).
+		RefreshTalentGatedSpells();
 		RefreshStats();
 
 		talentsReset();
@@ -542,7 +552,7 @@ namespace mmo
 		ASSERT(m_raceEntry);
 		ASSERT(m_classEntry);
 
-		const uint32 charRaceBit = 1 << (m_raceEntry->id() - 1);
+		const uint32 charRaceBit = IdMaskBit(m_raceEntry->id());
 		if (entry->requiredraces() && (entry->requiredraces() & charRaceBit) == 0)
 		{
 			return quest_status::Unavailable;
@@ -736,7 +746,14 @@ namespace mmo
 					std::map<uint16, uint16> addedBySlot;
 					if (auto result = m_inventory.CreateItems(*srcItem, questEntry->srcitemcount(), &addedBySlot); result != inventory_change_failure::Okay)
 					{
-						// inventoryChangeFailure(result, nullptr, nullptr);
+						// The quest is offered as long as its status is Available, so the player
+						// sees an Accept button that refuses here. Tell them why, the same way
+						// RewardQuest reports a turn-in that does not fit.
+						if (m_netPlayerWatcher)
+						{
+							m_netPlayerWatcher->OnInventoryError(result);
+						}
+
 						return false;
 					}
 
@@ -1045,13 +1062,24 @@ namespace mmo
 			}
 		}
 
-		// First loop to check if the items can be stored
-		for (auto &pair : rewardedItems)
+		// Check whether ALL rewards fit at once. Asking for each entry on its own would let a
+		// turn-in that only partially fits start handing out items and then abort half way
+		// through, leaving the quest open with part of its rewards already granted.
 		{
-			const auto result = m_inventory.CanStoreItems(*pair.first, pair.second);
+			std::vector<std::pair<const proto::ItemEntry *, uint16>> itemsToStore;
+			itemsToStore.reserve(rewardedItems.size());
+			for (auto &pair : rewardedItems)
+			{
+				itemsToStore.emplace_back(pair.first, pair.second);
+			}
+
+			const auto result = m_inventory.CanStoreItems(itemsToStore);
 			if (result != inventory_change_failure::Okay)
 			{
-				// inventoryChangeFailure(result, nullptr, nullptr);
+				if (m_netPlayerWatcher)
+				{
+					m_netPlayerWatcher->OnInventoryError(result);
+				}
 				return false;
 			}
 		}
@@ -2177,6 +2205,9 @@ namespace mmo
 		// Update available points
 		UpdateTalentPoints();
 
+		// Follow-up ranks bought earlier become usable again.
+		RefreshTalentGatedSpells();
+
 		return true;
 	}
 
@@ -2274,6 +2305,14 @@ namespace mmo
 			{
 				const auto &levelStats = m_classEntry->levelbasevalues(GetLevel() - 1);
 				const auto &nextLevelStats = m_classEntry->levelbasevalues(GetLevel());
+
+				// Once a class-level curve is configured, talent points come from class levels
+				// only (see UpdateTotalTalentPoints), so a character level grants none and the
+				// notification must not claim otherwise. The levelbasevalues talentPoints are
+				// still the source for legacy classes without such a curve.
+				const int32 talentPointsGained = m_classEntry->classlevels_size() > 0 ?
+					0 : static_cast<int32>(nextLevelStats.talentpoints());
+
 				m_netUnitWatcher->OnLevelUp(GetLevel() + 1,
 											static_cast<int32>(nextLevelStats.health()) - static_cast<int32>(levelStats.health()),
 											static_cast<int32>(nextLevelStats.mana()) - static_cast<int32>(levelStats.mana()),
@@ -2282,7 +2321,7 @@ namespace mmo
 											static_cast<int32>(nextLevelStats.agility()) - static_cast<int32>(levelStats.agility()),
 											static_cast<int32>(nextLevelStats.intellect()) - static_cast<int32>(levelStats.intellect()),
 											static_cast<int32>(nextLevelStats.spirit()) - static_cast<int32>(levelStats.spirit()),
-											nextLevelStats.talentpoints(),
+											talentPointsGained,
 											nextLevelStats.attributepoints());
 			}
 
@@ -2337,12 +2376,17 @@ namespace mmo
 		classData.classXp += xp;
 
 		bool leveledUp = false;
+		uint32 talentPointsGained = 0;
 		while (classData.classLevel < maxClassLevel &&
 			classData.classXp >= m_classEntry->classlevels(classData.classLevel - 1).xptonextlevel())
 		{
 			classData.classXp -= m_classEntry->classlevels(classData.classLevel - 1).xptonextlevel();
 			classData.classLevel++;
 			leveledUp = true;
+
+			// Talent points are granted AT the new class level, so they are read from the entry
+			// the class just reached. A single grant can cross several ranks: sum them all up.
+			talentPointsGained += m_classEntry->classlevels(classData.classLevel - 1).talentpoints();
 		}
 
 		// At the class cap there is no next level to progress towards: clear the remainder so the
@@ -2362,7 +2406,7 @@ namespace mmo
 		{
 			const uint32 xpToNextLevel = classData.classLevel < maxClassLevel ?
 				m_classEntry->classlevels(classData.classLevel - 1).xptonextlevel() : 0;
-			m_netPlayerWatcher->OnClassXpGained(m_classEntry->id(), xp, classData.classLevel, classData.classXp, xpToNextLevel, leveledUp);
+			m_netPlayerWatcher->OnClassXpGained(m_classEntry->id(), xp, classData.classLevel, classData.classXp, xpToNextLevel, leveledUp, talentPointsGained);
 		}
 	}
 
@@ -2466,6 +2510,10 @@ namespace mmo
 		m_manaRegenPerTick = std::max(m_manaRegenPerTick, 0.0f);
 
 		UpdateDamage();
+
+		// Replicate the derived combat values the character sheet shows. This has to run last:
+		// it reads the stat, regeneration and modifier values recomputed above.
+		UpdateCombatStatFields();
 	}
 
 	void GamePlayerS::SetLevel(uint32 newLevel)
@@ -3042,12 +3090,12 @@ namespace mmo
 			return true;
 		}
 
-		if (m_raceEntry && spell.racemask() != 0 && !(spell.racemask() & (1 << (m_raceEntry->id() - 1))))
+		if (m_raceEntry && spell.racemask() != 0 && !(spell.racemask() & IdMaskBit(m_raceEntry->id())))
 		{
 			return false;
 		}
 
-		if (m_classEntry && spell.classmask() != 0 && !(spell.classmask() & (1 << (m_classEntry->id() - 1))))
+		if (m_classEntry && spell.classmask() != 0 && !(spell.classmask() & IdMaskBit(m_classEntry->id())))
 		{
 			return false;
 		}
@@ -3061,7 +3109,56 @@ namespace mmo
 			return false;
 		}
 
+		// A follow-up rank of a talent spell (e.g. Fireball rank 2) is only usable while its talent is
+		// learned. It stays in the known-spell set, so learning the talent again restores it.
+		if (!IsTalentGateSatisfied(spell))
+		{
+			return false;
+		}
+
 		return true;
+	}
+
+	bool GamePlayerS::IsTalentGateSatisfied(const proto::SpellEntry& spell) const
+	{
+		const auto* talent = FindGatingTalent(spell, m_project.spells, m_project.talents);
+		return talent == nullptr || HasTalent(talent->id());
+	}
+
+	void GamePlayerS::RefreshTalentGatedSpells()
+	{
+		// Collect first: AddSpell and RemoveSpell modify the spell sets.
+		std::vector<uint32> toActivate;
+		std::vector<uint32> toDeactivate;
+		for (const uint32 spellId : m_knownSpellIds)
+		{
+			const auto* spell = m_project.spells.getById(spellId);
+			if (!spell || FindGatingTalent(*spell, m_project.spells, m_project.talents) == nullptr)
+			{
+				continue;
+			}
+
+			const bool isActive = m_spells.contains(spell);
+			const bool shouldBeActive = IsSpellActiveForCurrentClass(*spell);
+			if (shouldBeActive && !isActive)
+			{
+				toActivate.push_back(spellId);
+			}
+			else if (!shouldBeActive && isActive)
+			{
+				toDeactivate.push_back(spellId);
+			}
+		}
+
+		for (const uint32 spellId : toDeactivate)
+		{
+			RemoveSpell(spellId);
+		}
+
+		for (const uint32 spellId : toActivate)
+		{
+			AddSpell(spellId);
+		}
 	}
 
 	void GamePlayerS::SetKnownSpells(const std::vector<uint32>& spellIds)
@@ -3536,6 +3633,14 @@ namespace mmo
 			w << io::write<uint32>(emoteId);
 		}
 
+		// Write the trade skills.
+		const std::vector<TradeSkillData> tradeSkills = object.m_tradeSkills.GetAll();
+		w << io::write<uint8>(static_cast<uint8>(tradeSkills.size()));
+		for (const TradeSkillData& skill : tradeSkills)
+		{
+			w << skill;
+		}
+
 		return w;
 	}
 
@@ -3545,11 +3650,11 @@ namespace mmo
 		r >> reinterpret_cast<GameUnitS &>(object);
 		r >> object.m_inventory;
 		r >> io::read_range(object.m_attributePointEnhancements);
-		// Read spells
-		uint32 spellCount;
+		// Read spells. Loops stop once the reader has failed so a truncated stream cannot spin on garbage counts.
+		uint32 spellCount = 0;
 		r >> io::read<uint32>(spellCount);
 		object.m_spells.clear();
-		for (uint32 i = 0; i < spellCount; ++i)
+		for (uint32 i = 0; i < spellCount && r; ++i)
 		{
 			uint32 spellId;
 			r >> io::read<uint32>(spellId);
@@ -3565,7 +3670,7 @@ namespace mmo
 		uint32 knownSpellCount = 0;
 		r >> io::read<uint32>(knownSpellCount);
 		object.m_knownSpellIds.clear();
-		for (uint32 i = 0; i < knownSpellCount; ++i)
+		for (uint32 i = 0; i < knownSpellCount && r; ++i)
 		{
 			uint32 spellId = 0;
 			r >> io::read<uint32>(spellId);
@@ -3573,10 +3678,10 @@ namespace mmo
 		}
 
 		// Read talent data
-		uint32 talentCount;
+		uint32 talentCount = 0;
 		r >> io::read<uint32>(talentCount);
 		object.m_talents.clear();
-		for (uint32 i = 0; i < talentCount; ++i)
+		for (uint32 i = 0; i < talentCount && r; ++i)
 		{
 			uint32 talentId;
 			uint8 rank;
@@ -3591,7 +3696,7 @@ namespace mmo
 		r >> io::read<uint8>(classCount);
 		object.m_knownClasses.clear();
 		object.m_knownClasses.reserve(classCount);
-		for (uint8 i = 0; i < classCount; ++i)
+		for (uint8 i = 0; i < classCount && r; ++i)
 		{
 			CharacterClassData classData;
 			r >> classData;
@@ -3604,7 +3709,7 @@ namespace mmo
 		r >> io::read<uint16>(auraCount);
 		object.m_deserializedAuras.clear();
 		object.m_deserializedAuras.reserve(auraCount);
-		for (uint16 i = 0; i < auraCount; ++i)
+		for (uint16 i = 0; i < auraCount && r; ++i)
 		{
 			PersistentAuraData aura;
 			r >> aura;
@@ -3616,7 +3721,7 @@ namespace mmo
 		r >> io::read<uint16>(cooldownCount);
 		object.m_deserializedCooldowns.clear();
 		object.m_deserializedCooldowns.reserve(cooldownCount);
-		for (uint16 i = 0; i < cooldownCount; ++i)
+		for (uint16 i = 0; i < cooldownCount && r; ++i)
 		{
 			PersistentCooldownData cooldown;
 			r >> cooldown;
@@ -3627,12 +3732,38 @@ namespace mmo
 		uint16 emoteCount = 0;
 		r >> io::read<uint16>(emoteCount);
 		object.m_knownEmoteIds.clear();
-		for (uint16 i = 0; i < emoteCount; ++i)
+		for (uint16 i = 0; i < emoteCount && r; ++i)
 		{
 			uint32 emoteId = 0;
 			r >> io::read<uint32>(emoteId);
 			object.m_knownEmoteIds.insert(emoteId);
 		}
+
+		// Read the trade skills. Tolerate a stream that ends here (written before they existed).
+		std::vector<TradeSkillData> tradeSkills;
+		uint8 tradeSkillCount = 0;
+		const bool okBefore = static_cast<bool>(r);
+		if (r >> io::read<uint8>(tradeSkillCount))
+		{
+			// A truncated entry keeps the entries read so far; the read still fails.
+			for (uint8 i = 0; i < tradeSkillCount; ++i)
+			{
+				TradeSkillData skill;
+				if (!(r >> skill))
+				{
+					break;
+				}
+
+				tradeSkills.push_back(skill);
+			}
+		}
+		else if (okBefore)
+		{
+			// Only a missing trailer is tolerated; an earlier failure must stay a failure.
+			r.setSuccess();
+		}
+
+		object.m_tradeSkills.SetAll(tradeSkills);
 
 		for (uint32 i = 0; i < 5; ++i)
 		{

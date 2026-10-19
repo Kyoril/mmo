@@ -22,7 +22,7 @@ namespace mmo
 		};
 
 	public:
-		TrainerClient(RealmConnector& connector, const proto_client::SpellManager& spells);
+		TrainerClient(RealmConnector& connector, const proto_client::SpellManager& spells, const proto_client::TalentManager& talents);
 		~TrainerClient() override;
 
 	public:
@@ -54,6 +54,12 @@ namespace mmo
 
 		void BuySpell(uint32 index) const;
 
+		/// Returns the talent the trainer entry's spell depends on, or nullptr if it needs none.
+		[[nodiscard]] const proto_client::TalentEntry* GetRequiredTalent(uint32 index) const;
+
+		/// True when the entry needs no talent or the active player has learned any rank of it.
+		[[nodiscard]] bool HasRequiredTalent(uint32 index) const;
+
 		void OnSpellLearned(uint32 spellId);
 
 	private:
@@ -66,6 +72,7 @@ namespace mmo
 	private:
 		RealmConnector& m_realmConnector;
 		const proto_client::SpellManager& m_spells;
+		const proto_client::TalentManager& m_talents;
 		RealmConnector::PacketHandlerHandleContainer m_packetHandlerConnections;
 
 		std::vector<TrainerSpellEntry> m_trainerSpells;

@@ -5,6 +5,8 @@
 #include "base/typedefs.h"
 #include "math/vector3.h"
 
+#include <cmath>
+#include <optional>
 #include <vector>
 
 namespace mmo
@@ -167,5 +169,61 @@ namespace mmo
 
 		return horizontalDistanceToDestination <= arrivalThreshold &&
 			verticalDistanceToDestination <= arrivalHeightTolerance;
+	}
+
+	/// Decides whether the per-frame idle ground height correction of a server-driven unit
+	/// has to run this frame. Only applies to units which do not correct their own height
+	/// elsewhere, i.e. neither the locally controlled character nor a remote player.
+	///
+	/// A unit walking a movement path has its height corrected by the path update itself,
+	/// so the idle correction would only duplicate that work. A dead unit is different: the
+	/// path update no longer runs for it, so nothing moves it any more. Without the idle
+	/// correction the corpse keeps the height it died at, which comes from the server's nav
+	/// mesh and may sit noticeably above the client's ground geometry (the same error the
+	/// path arrival check tolerates) - the corpse would hover in the air.
+	///
+	/// @param isDead Whether the unit is dead, i.e. a corpse.
+	/// @param hasActivePath Whether the unit is currently following a server-driven movement path.
+	/// @return true if the idle ground height correction has to run.
+	inline bool ShouldCorrectIdleGroundHeight(const bool isDead, const bool hasActivePath)
+	{
+		if (isDead)
+		{
+			return true;
+		}
+
+		return !hasActivePath;
+	}
+
+	/// Picks the server-authoritative height the idle ground correction searches up to.
+	///
+	/// The idle correction casts its ray from just above the unit. A unit that dropped below a
+	/// floor which did not exist yet - its building was still streaming in - would never find
+	/// that floor again. Searching up to the height the server placed it at fixes that, but only
+	/// while the unit still stands where the server put it: a creature that died mid-path stands
+	/// between server positions, and an old height could pull its corpse onto unrelated geometry.
+	///
+	/// @param serverPosition The last position the server placed the unit at, if any.
+	/// @param currentPosition The unit's current scene position.
+	/// @param maxHorizontalDistance How far the unit may have drifted horizontally from it.
+	/// @return The server height, or nothing if the unit is elsewhere or no position is known.
+	inline std::optional<float> IdleGroundReferenceHeight(
+		const std::optional<Vector3>& serverPosition,
+		const Vector3& currentPosition,
+		const float maxHorizontalDistance = 1.0f)
+	{
+		if (!serverPosition)
+		{
+			return std::nullopt;
+		}
+
+		const float dx = serverPosition->x - currentPosition.x;
+		const float dz = serverPosition->z - currentPosition.z;
+		if (dx * dx + dz * dz > maxHorizontalDistance * maxHorizontalDistance)
+		{
+			return std::nullopt;
+		}
+
+		return serverPosition->y;
 	}
 }

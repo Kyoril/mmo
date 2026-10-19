@@ -3,6 +3,9 @@
 #pragma once
 
 #include "realm_connector.h"
+
+#include <optional>
+#include <utility>
 #include "vector_sink.h"
 #include "game_server/character_data.h"
 #include "game/bank.h"
@@ -171,9 +174,10 @@ namespace mmo
 
 		/// Updates the group data stored on this player's GamePlayerS and synchronized world-side group object.
 		/// @param groupId The new group GUID, or 0 if the player is no longer grouped.
-		/// @param lootMethod The group's loot method.
-		/// @param lootThreshold The group's loot quality threshold.
-		void UpdateCharacterGroup(uint64 groupId, uint8 lootMethod = 0, uint8 lootThreshold = 0);
+		/// @param lootRules The group's loot method and quality threshold, or nullopt to keep the rules this
+		///        node already knows for the group (a character spawning with its group id only: the realm
+		///        sends the rules separately, and the defaults must not overwrite the other members' rules).
+		void UpdateCharacterGroup(uint64 groupId, std::optional<std::pair<LootMethod, uint8>> lootRules = std::nullopt);
 
 		/// Sends a guild update to the realm server for this character.
 		void UpdateCharacterGuild(uint64 guildId);
@@ -428,6 +432,18 @@ namespace mmo
 		/// @param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packet content bytes.
 		void OnLootRoll(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the loot master handing a master loot item of the open loot to a party member.
+		/// @param opCode The op code of the packet.
+		/// @param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packet content bytes.
+		void OnMasterLootItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Tells the looter's party members in sight that the receiver got an item from a loot window.
+		/// @param receiver The character who received the item.
+		/// @param item The item that was received.
+		/// @param count The number of items received.
+		void NotifyGroupOfLootedItem(const GamePlayerS& receiver, const proto::ItemEntry& item, uint32 count);
 
 		/// Handles the client's request to use an item from his inventory or of an equipped item. This will trigger the item's
 		///	assigned spells with trigger type set to "On Use" if any.
@@ -822,6 +838,13 @@ namespace mmo
 		/// Sends the active spellbook (current class + persistent spells) to the client.
 		void SendInitialSpells();
 
+		/// Sends the character's full profession skill list to the client.
+		void SendTradeSkills();
+
+		/// Sends the current value of a single profession skill to the client (skill-up).
+		/// @param skillId Id of the profession skill that changed.
+		void SendTradeSkillUpdate(uint32 skillId);
+
 		/// Notifies the client about a newly unlocked emote.
 		void OnEmoteLearned(uint32 emoteId);
 
@@ -938,14 +961,20 @@ namespace mmo
 
 		void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated) override;
 
+		/// Tells the other in-sight members of the player's group that an item was created.
+		/// @param itemId Entry id of the created item.
+		/// @param amount Number of created items.
+		void NotifyGroupOfCreatedItem(uint32 itemId, uint16 amount);
+
 		void OnObjectLoot() override;
 
 		void OnMailboxUsed(uint64 mailboxGuid) override;
+		void OnInventoryError(InventoryChangeFailure error) override { SendInventoryError(error); }
 
 		/// Sends a lightweight ClassXpUpdate packet. On a class level-up additionally refreshes the
 		/// full known-class list and persists the character (kills are too frequent to save on
 		/// every XP gain; between level-ups class XP is covered by the regular save points).
-		void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp) override;
+		void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp, uint32 talentPointsGained) override;
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
@@ -970,6 +999,12 @@ namespace mmo
 
 		/// Makes the client play a SoundEntry (ClientDB sounds) at a world position.
 		void SendPlaySound(uint32 soundId, const Vector3& position);
+
+		/// Makes the client play a SoundEntry (ClientDB sounds) from a unit, following it while it plays.
+		/// @param soundId The SoundEntry to play.
+		/// @param sourceGuid The unit the sound comes from.
+		/// @param position The unit's current position, used if the client does not know the unit.
+		void SendPlaySound(uint32 soundId, uint64 sourceGuid, const Vector3& position);
 
 		void OnReviveOffer(uint64 casterGuid, uint32 spellId, uint32 reviveHealth, uint32 mapId, const Vector3& position, const Radian& facing) override;
 

@@ -80,7 +80,8 @@ Prerequisites:
 - `MMO_BUG_API_KEY` and `MMO_E2E_MYSQL_PASSWORD` as user environment variables, and
   `MMO_GATE_PYTHON` (the registration warns without it and falls back to `python` on PATH).
 - A configured main build (`<main checkout>/build`) with `protoc` for the game-data decoder.
-- Git push access to origin (ssh) and HTTPS access to the data submodule remotes.
+- Git push access to origin (ssh) and HTTPS push access to the data submodule repositories on
+  GitHub (the URLs in `.gitmodules`; Git Credential Manager must hold a token).
 
 Where the loop keeps its files is per machine, never in the repository:
 
@@ -115,9 +116,34 @@ Nothing the fixer writes can change how later diffs are decoded. If protoc or th
 missing, the loop logs a warning and runs without a decoder: every `.data` change then parks.
 
 Stale claims: if the loop is killed mid-fix, the next live poll releases the bug as `triaged`
-with an "interrupted" note. An interrupted guided refix goes back to `pr_open`; an interrupted
+with an "interrupted" note and the category `needs_info` (see "Needs-info bugs"). An interrupted guided refix goes back to `pr_open`; an interrupted
 feature implement run goes back to `triaged` with the category `design_request` and "decide
 again" in the note, so "Implement as feature" can be chosen again.
+
+### Moving the loop to another machine
+
+The loop's local files (`artifacts/bug-loop/`, the worktree, its branches) do not have to move
+with it. Every park copies the branch to origin as `refs/bugloop/bugfix/<id8>`, and the data
+commits it points at to the same ref in the data repositories on GitHub (only those not already
+on their `master`). These refs are not branches: no workflow runs on them and they do not show
+up in the branch list. They are deleted when the fix ships, is merged by hand or discarded.
+
+On the new machine a decision on a bug parked elsewhere still works:
+
+- `report.json` is fetched from the API again, and `triage.json` is rebuilt from the triage
+  the API keeps (no new model call, so the category cannot change under the maintainer);
+- a refix restores the branch from its backup. Without a backup (parked before backups existed,
+  or never parked, e.g. a needs-info bug sent back with a refix), the guided refix starts a
+  fresh `bugfix/<id8>` from develop with the guidance;
+- a ship restores the branch, takes its tip as the candidate and rebuilds the review diff from
+  it, so the approved hash must still match what ships;
+- a feature's description, kept in `state.json`, is recovered from the bug history (the newest
+  `decision: implement: ...` entry with the actor `maintainer`).
+
+Still per machine: the daily counters, queued ships, the refix count and the CI phase. Stop the
+old task (`Disable-ScheduledTask -TaskName "MMO Bug Loop"`) before starting the new one; two live
+loops at once double the daily ship cap and both work the same red develop. To review a branch
+parked on another machine by hand: `git fetch origin refs/bugloop/bugfix/<id8>:bugfix/<id8>`.
 
 ## Where to look
 
@@ -137,8 +163,34 @@ Parked fixes are expected and normal: measured on 761 small historical server ed
 parks about 49%. They wait for review. The note on the bug names every reason it parked. Open
 the bug in the web UI first: the decision panel shows the candidate diff and takes the
 decision (see "Decisions and notifications"). The manual alternative still works: check out
-`bugfix/<id8>`, review it, and `/ship` it. The loop notices the merge and marks the bug
-resolved. To reject it by hand, set the bug to `wontfix` and delete the branch.
+`bugfix/<id8>`, review it, and `/ship` it (a branch parked on another machine:
+`git fetch origin refs/bugloop/bugfix/<id8>:bugfix/<id8>` first). The loop notices the merge and
+marks the bug resolved. To reject it by hand, set the bug to `wontfix` and delete the branch.
+
+## Needs-info bugs
+
+The loop only polls `new`, so a bug it gives up on must land where the maintainer sees it. A
+first fix attempt that ends without a commit to judge (the fixer answers `not_reproducible` or
+`no_root_cause`, the fix stage fails, the build cannot be configured, the fixer leaves no clean
+commit or moves the branch), an interrupted first attempt, and a report whose triage failed
+twice are released as `triaged` with the triage category `needs_info`. Their note gives the
+reason and ends with "waiting for the maintainer". The web UI lists them under the "Needs info"
+filter (`status=triaged&triageCategory=needs_info`) and marks them with a chip; the daily summary
+counts them under "waiting for a decision" and lists the day's needs-info outcomes with their
+reason.
+
+To act on one, read the note and the artifacts (`FIX.json` holds the fixer's reasoning), then
+either set the status back to `new` (the loop forgets its earlier attempt, triages the report
+again and, for a defect, tries a fresh fix) or close it (`wontfix`, `resolved`, `duplicate`).
+Failed guided refixes, feature runs and emergency attempts keep their own paths: back to
+`pr_open`, back to `design_request`, and retried by the CI watch.
+
+The fixer sees both builds of a report in a REPORT BUILDS block: `serverBuild` (the world
+server's git commit, from the server) and `clientBuild` (from the player's client, untrusted).
+Server-side behaviour is judged against `serverBuild`: a supposed fix that is already an
+ancestor of it did not fix the bug. (On 2026-10-11 the fixer called a Hollow Choir boss skip
+"already fixed on develop" by comparing against the client build; the server already had the
+supposed fix.)
 
 ## Decisions and notifications
 
@@ -175,6 +227,19 @@ not parked (see below). The loop consumes decisions before it does anything else
   the bug ("the circuit breaker is tripped"); decide again once it is cleared. Only the
   nightly freeze window queues the ship until the window ends; a second ship decision for a
   queued bug only adds a note.
+
+  Every ship (auto or decided) lands in the same order: each changed data submodule commit is
+  pushed, fast-forward only, to `master` of the submodule's repository on GitHub (the remote
+  `upstream` in the loop worktree's submodule, set on every prepare from the URL in the
+  committed `.gitmodules`), then `develop` is pushed to origin. Develop therefore never points at
+  a data commit GitHub does not have, and a rejected submodule push stops the ship before
+  develop moves. The URL never comes from the main checkout's `.git/config`, which may point a
+  submodule at the main checkout's own `data/client` (a non-bare repository with `master`
+  checked out: pushes there are refused, and nothing downstream fetches from it). The main
+  checkout's submodules are not updated; see Known limits. Because they can lag behind, a
+  `git submodule update` in the loop worktree that fails (a fresh worktree cloned its
+  submodules from the main checkout: "not our ref") fetches the `.gitmodules` remote and retries
+  once.
 - **Discard**: sets the bug to `wontfix` and deletes the branch.
 - **Implement as feature** (Feature request panel, only for `wontfix`/`not_a_bug` and
   `triaged`/`design_request` without a pending decision): the maintainer's description (at
@@ -228,7 +293,8 @@ webhook nothing is sent. Messages:
   (shipped, refix limit, design decision needed, feature ready) are not repeated. Each message
   links the bug and quotes the triage summary;
 - a daily summary (outcomes, Claude invocations against the budget, bugs waiting for a
-  decision), sent once per UTC day when the day rolls over; it is persisted, so the restart at
+  decision: parked ones without a decision and `needs_info` ones, plus the day's parked and
+  needs-info outcomes with their first reason), sent once per UTC day when the day rolls over; it is persisted, so the restart at
   the day boundary does not send it twice or lose it;
 - the launcher's stop notice, "Bug loop stopped with exit code N", sent when the launcher
   itself ends abnormally (any exit code other than 0, the day-boundary restart 75 or 3 for a
@@ -342,8 +408,10 @@ hold set on top of the loop's own trip also ends the exemption.
   numeric), so item text fixes still work.
 - A fix in `data/client` or `data/editor` ships only if the submodule's `master` on GitHub has
   not moved past the commit the fix started from; otherwise it parks.
-- After an auto-ship, the local `develop` in `H:/mmo` is behind `origin/develop`. Pull before
-  pushing your own work.
+- After an auto-ship, the local `develop` in `H:/mmo` is behind `origin/develop`, and so is the
+  `master` of its data submodules. Pull before pushing your own work (`git pull` then
+  `git -C data/client pull` / `git -C data/editor pull`, or `git submodule update`). The loop
+  never writes into the main checkout's submodules.
 - After changing `prompts/triage.md`, run `tools/bugs/adversarial_check.py` (real model calls).
 
 ### What the guard cannot see

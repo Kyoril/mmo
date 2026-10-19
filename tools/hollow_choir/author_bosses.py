@@ -37,6 +37,11 @@ RETIRED_TRIGGERS = set(range(29, 51))
 FACTION_HOSTILE_UNDEAD = 4
 MODEL_UNDEAD_MALE = 17
 MODEL_UNDEAD_FEMALE = 18
+# NPC copies of 17/18 that carry undead combat sounds (tools/sfx_gen/wire_creature_combat.py).
+# Adds and trash use them; the bosses keep the player models so no generic snarl talks over
+# their scripted pull yells.
+MODEL_UNDEAD_MALE_NPC = 36
+MODEL_UNDEAD_FEMALE_NPC = 37
 CLASS_WARRIOR, CLASS_MAGE, CLASS_DUNGEON_BOSS = 1, 2, 3
 
 # Spells every creature in this project carries as its melee auto attack.
@@ -50,24 +55,24 @@ BOSSES = [
     dict(id=86, name="Brother Oswin", subname="Keeper of the Vigil", level=12,
          model=MODEL_UNDEAD_MALE, elite=3.5, attack_time=2400, loot=29,
          gold=(1100, 1600), xp=420, armor=(160, 40.0), dmg_per_level=1.1,
-         spells=[(251, 9500, 10500, 0.0, 8.0)]),
+         spells=[(251, 9500, 10500, 0.0, 5.0)]),
     dict(id=87, name="Sister Mereth", subname="The Mourning Voice", level=13,
          model=MODEL_UNDEAD_FEMALE, elite=3.8, attack_time=2800, loot=30,
          gold=(1300, 1900), xp=480, armor=(140, 34.0), dmg_per_level=1.0,
-         spells=[(255, 18000, 18000, 0.0, 40.0)]),
+         spells=[(255, 18000, 18000, 0.0, 5.0)]),
     dict(id=88, name="Cantor Veyr", subname="The Hollow Choir", level=14,
          model=MODEL_UNDEAD_MALE, elite=4.2, attack_time=3000, loot=28,
          gold=(1900, 2700), xp=560, armor=(175, 42.0), dmg_per_level=1.2,
-         spells=[(262, 25000, 25000, 0.0, 40.0)]),
+         spells=[(262, 25000, 25000, 0.0, 5.0)]),
 ]
 
 # Adds give no XP and no loot: they are part of a boss's fight, not farmable trash.
 ADDS = [
-    dict(id=89, name="Risen Novice", level=11, model=MODEL_UNDEAD_MALE, cls=CLASS_WARRIOR,
+    dict(id=89, name="Risen Novice", level=11, model=MODEL_UNDEAD_MALE_NPC, cls=CLASS_WARRIOR,
          elite=1.2, attack_time=2000, armor=(90, 18.0)),
-    dict(id=90, name="Mourning Chorister", level=12, model=MODEL_UNDEAD_FEMALE, cls=CLASS_MAGE,
+    dict(id=90, name="Mourning Chorister", level=12, model=MODEL_UNDEAD_FEMALE_NPC, cls=CLASS_MAGE,
          elite=0.8, attack_time=2400, armor=(60, 12.0)),
-    dict(id=91, name="Hollow Chorister", level=12, model=MODEL_UNDEAD_MALE, cls=CLASS_MAGE,
+    dict(id=91, name="Hollow Chorister", level=12, model=MODEL_UNDEAD_MALE_NPC, cls=CLASS_MAGE,
          elite=1.0, attack_time=2400, armor=(60, 12.0)),
 ]
 
@@ -76,18 +81,18 @@ ADDS = [
 TRASH_LOOT = [20, 18]
 TRASH = [
     # Gravewarden: slow telegraphed frontal cleave (Warden's Cleave), the tank turns it away.
-    dict(id=92, name="Gravewarden", level=11, model=MODEL_UNDEAD_MALE, cls=CLASS_WARRIOR,
+    dict(id=92, name="Gravewarden", level=11, model=MODEL_UNDEAD_MALE_NPC, cls=CLASS_WARRIOR,
          elite=2.0, attack_time=2400, armor=(120, 30.0), xp=260, gold=(60, 110),
          spells=[(266, 10000, 14000, 0.0, 0.0)]),
     # Mourning Cantor: ranged caster with an interruptible group-damage dirge.
-    dict(id=93, name="Mourning Cantor", level=11, model=MODEL_UNDEAD_FEMALE, cls=CLASS_MAGE,
+    dict(id=93, name="Mourning Cantor", level=11, model=MODEL_UNDEAD_FEMALE_NPC, cls=CLASS_MAGE,
          elite=1.6, attack_time=2400, armor=(70, 14.0), xp=220, gold=(60, 110),
          spells=[(267, 15000, 20000, 0.0, 30.0), (242, 3000, 5000, 0.0, 25.0)]),
     # Candlebearer: weak melee; its death leaves a short-lived flame (trigger, Spilled Wax).
-    dict(id=94, name="Candlebearer", level=11, model=MODEL_UNDEAD_MALE, cls=CLASS_WARRIOR,
+    dict(id=94, name="Candlebearer", level=11, model=MODEL_UNDEAD_MALE_NPC, cls=CLASS_WARRIOR,
          elite=1.0, attack_time=2000, armor=(80, 16.0), xp=120, gold=(30, 70), spells=[]),
     # Restless Novice: plain melee.
-    dict(id=95, name="Restless Novice", level=11, model=MODEL_UNDEAD_MALE, cls=CLASS_WARRIOR,
+    dict(id=95, name="Restless Novice", level=11, model=MODEL_UNDEAD_MALE_NPC, cls=CLASS_WARRIOR,
          elite=1.4, attack_time=2000, armor=(90, 18.0), xp=160, gold=(40, 80), spells=[]),
 ]
 
@@ -129,7 +134,10 @@ def make_unit(units_pb, spec, unit_class, xp, gold, loot):
 
 def set_spells(unit, spells):
     """Creature spells (id, min cooldown, max cooldown, min range, max range), placed before
-    the auto attack (37) so the AI weighs them first. Encounter abilities aimed at random
+    the auto attack (37) so the AI weighs them first. Keep the bosses' max ranges within melee
+    reach + 5: a creature with more longer-reaching spells than short ones becomes a Caster, which
+    stands off instead of chasing and meleeing its victim. Lament and Dirge hit everyone around the
+    boss anyway, so casting them only with the tank in melee costs nothing. Encounter abilities aimed at random
     players are cast by triggers instead: the AI only ever targets its victim."""
     auto_attack = list(unit.creaturespells)
     del unit.creaturespells[:]

@@ -15,6 +15,7 @@
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
 #include "shared/client_data/project.h"
 #include "math/vector3.h"
+#include "spell_visual_rules.h"
 
 namespace mmo
 {
@@ -343,6 +344,22 @@ namespace mmo
         /// \brief Map actor guid -> active spell animation for cancellation on same-spell events.
         mutable std::map<uint64, ActiveSpellAnimation> m_activeSpellAnimations;
 
+        /// \brief Which spell locked each actor's loop animation, so only that spell's
+        ///        terminating event releases it.
+        mutable spell_visual::CastLoopOwnership m_castLoopOwners;
+
+        /// \brief A ribbon trail owned by an effect.
+        struct EffectRibbon
+        {
+            RibbonTrail* trail{ nullptr };
+            /// Seconds since the trail spawned.
+            float elapsed{ 0.0f };
+            /// RibbonTrailConfig.emit_duration. 0 = the trail lives until its effect is torn down;
+            /// otherwise it retires itself (see spell_visual::TimedRibbonPhase).
+            float emitDuration{ 0.0f };
+            float segmentLifetime{ 0.0f };
+        };
+
         /// \brief Structure to track active visual effects (particles, lights, ribbon trails) per actor.
         struct ActiveSpellEffect
         {
@@ -352,7 +369,7 @@ namespace mmo
             bool castPhase{ false };
             std::vector<ParticleSystem*> particles;
             std::vector<Light*> lights;
-            std::vector<RibbonTrail*> ribbonTrails;
+            std::vector<EffectRibbon> ribbonTrails;
             std::vector<SceneNode*> effectNodes;
         };
 

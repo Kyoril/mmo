@@ -3,6 +3,7 @@
 #include "catch.hpp"
 
 #include "game_server/spells/spell_effects.h"
+#include "game/spell_points.h"
 #include "game_server/spells/spell_cast_context.h"
 #include "game_server/spells/spell_cast.h"
 #include "game_server/objects/game_player_s.h"
@@ -12,8 +13,10 @@
 #include "shared/proto_data/project.h"
 #include "shared/proto_data/spells.pb.h"
 #include "shared/proto_data/classes.pb.h"
+#include "shared/proto_data/skills.pb.h"
 #include "asio/io_service.hpp"
 
+#include <limits>
 #include <memory>
 
 using namespace mmo;
@@ -177,6 +180,89 @@ TEST_CASE("CalculateBasePoints clamps level to baselevel", "[spell_effects]")
 	const int32_t result = SpellEffects::CalculateBasePoints(ctx, effect);
 	// 1 < 10 → level=10; level-=0 → 10; basePoints=0+10*3=30
 	CHECK(result == 30);
+}
+
+TEST_CASE("CalculateBasePoints accumulates fractional points per level before truncating", "[spell_effects]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+	auto unit = MakeUnit(project, timers, 11);
+
+	proto::SpellEntry spell;
+	spell.set_spelllevel(1);
+	spell.set_baselevel(1);
+	spell.set_maxlevel(0);
+
+	proto::SpellEffect effect;
+	effect.set_basepoints(14);
+	effect.set_basedice(0);
+	effect.set_diesides(0);
+	effect.set_pointsperlevel(0.6f);
+	effect.set_diceperlevel(0.0f);
+
+	SpellTargetMap targetMap;
+	SpellCast cast(timers, *unit);
+	SpellCastContext ctx(cast, spell, targetMap);
+
+	// Level delta 10: 14 + trunc(10 * 0.6) = 20. Truncating 0.6 first gave 14 at every level.
+	CHECK(SpellEffects::CalculateBasePoints(ctx, effect) == 20);
+
+	// 1.5 per level keeps its fraction: 14 + trunc(10 * 1.5) = 29, not 14 + 10 * 1 = 24.
+	effect.set_pointsperlevel(1.5f);
+	CHECK(SpellEffects::CalculateBasePoints(ctx, effect) == 29);
+}
+
+TEST_CASE("CalculateBasePoints scales dice sides by fractional dice per level", "[spell_effects]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+	auto unit = MakeUnit(project, timers, 11);
+
+	proto::SpellEntry spell;
+	spell.set_spelllevel(1);
+	spell.set_baselevel(1);
+	spell.set_maxlevel(0);
+
+	proto::SpellEffect effect;
+	effect.set_basepoints(0);
+	effect.set_basedice(10);
+	effect.set_diesides(5);
+	effect.set_pointsperlevel(0.0f);
+	effect.set_diceperlevel(0.75f);
+
+	SpellTargetMap targetMap;
+	SpellCast cast(timers, *unit);
+	SpellCastContext ctx(cast, spell, targetMap);
+
+	// Dice range is [basedice, diesides + trunc(10 * 0.75)] = [10, 12]. Truncating 0.75 first
+	// left the upper bound at 5, below basedice, which collapsed every roll to exactly 10.
+	bool sawAboveBaseDice = false;
+	for (int i = 0; i < 200; ++i)
+	{
+		const int32_t result = SpellEffects::CalculateBasePoints(ctx, effect);
+		CHECK(result >= 10);
+		CHECK(result <= 12);
+		sawAboveBaseDice = sawAboveBaseDice || result > 10;
+	}
+	CHECK(sawAboveBaseDice);
+}
+
+TEST_CASE("ScaleSpellPointsByLevel truncates the sum towards zero and saturates", "[spell_effects]")
+{
+	CHECK(ScaleSpellPointsByLevel(14, 0.6f, 0) == 14);
+	CHECK(ScaleSpellPointsByLevel(14, 0.6f, 1) == 14);
+	CHECK(ScaleSpellPointsByLevel(14, 0.6f, 2) == 15);
+	CHECK(ScaleSpellPointsByLevel(14, 1.12f, 10) == 25);
+
+	// The whole sum is truncated, matching the client tooltip: -10 + 2.5 = -7.5 -> -7.
+	CHECK(ScaleSpellPointsByLevel(-10, 0.5f, 5) == -7);
+
+	CHECK(ScaleSpellPointsByLevel(5, std::numeric_limits<float>::quiet_NaN(), 3) == 0);
+	CHECK(ScaleSpellPointsByLevel(5, std::numeric_limits<float>::infinity(), 3) == std::numeric_limits<int32>::max());
+	CHECK(ScaleSpellPointsByLevel(5, -std::numeric_limits<float>::infinity(), 3) == std::numeric_limits<int32>::min());
+	CHECK(ScaleSpellPointsByLevel(1, 1.0e9f, 100) == std::numeric_limits<int32>::max());
 }
 
 // ---------------------------------------------------------------------------
@@ -376,4 +462,63 @@ TEST_CASE("HandleEnergize does nothing for invalid power type", "[spell_effects]
 	SpellEffects::HandleEnergize(effCtx);
 
 	CHECK(ctx.target->Get<uint32>(object_fields::Mana) == 100u);
+}
+
+TEST_CASE("HandleTradeSkill learns the skill and its starter recipes", "[spell_effects][trade_skill]")
+{
+	TestCtx ctx;
+	auto* skill = ctx.project.skills.add(1);
+	skill->set_name("Tailoring");
+	skill->set_category(1);
+	skill->set_cost(0);
+	skill->add_spells(600);
+	auto* recipe = ctx.project.spells.add(600);
+	recipe->set_name("Bolt of Linen Cloth");
+	recipe->add_attributes(spell_attributes::TradeSpell);
+	recipe->add_attributes(0);
+	ctx.Init();
+
+	ctx.effect.set_type(spell_effects::TradeSkill);
+	ctx.effect.set_miscvaluea(1);
+	auto effCtx = ctx.MakeEffectCtx(75);
+	SpellEffects::HandleTradeSkill(effCtx);
+
+	const TradeSkillData* data = ctx.target->GetTradeSkills().Get(1);
+	REQUIRE(data != nullptr);
+	CHECK(data->value == 1);
+	CHECK(data->max == 75);
+	CHECK(ctx.target->HasSpell(600));
+}
+
+TEST_CASE("HandleTradeSkill on a known skill only raises the cap", "[spell_effects][trade_skill]")
+{
+	TestCtx ctx;
+	auto* skill = ctx.project.skills.add(1);
+	skill->set_name("Tailoring");
+	skill->set_category(1);
+	skill->set_cost(0);
+	ctx.Init();
+	ctx.target->SetTradeSkills({ { 1, 40, 75 } });
+
+	ctx.effect.set_type(spell_effects::TradeSkill);
+	ctx.effect.set_miscvaluea(1);
+	auto relogin = ctx.MakeEffectCtx(75);
+	SpellEffects::HandleTradeSkill(relogin);
+	CHECK(ctx.target->GetTradeSkills().Get(1)->value == 40);
+
+	auto journeyman = ctx.MakeEffectCtx(150);
+	SpellEffects::HandleTradeSkill(journeyman);
+	CHECK(ctx.target->GetTradeSkills().Get(1)->max == 150);
+	CHECK(ctx.target->GetTradeSkills().Get(1)->value == 40);
+}
+
+TEST_CASE("HandleTradeSkill ignores unknown skills and non-positive caps", "[spell_effects][trade_skill]")
+{
+	TestCtx ctx;
+	ctx.Init();
+	ctx.effect.set_type(spell_effects::TradeSkill);
+	ctx.effect.set_miscvaluea(42);
+	auto effCtx = ctx.MakeEffectCtx(75);
+	SpellEffects::HandleTradeSkill(effCtx);
+	CHECK_FALSE(ctx.target->GetTradeSkills().Has(42));
 }

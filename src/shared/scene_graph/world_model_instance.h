@@ -5,11 +5,13 @@
 #include "world_model.h"
 #include "instanced_mesh_collision.h"
 #include "movable_object.h"
+#include "prop_kit.h"
 #include "world_model_batch.h"
 #include "world_model_batch_builder.h"
 #include "world_model_portal_culling.h"
 #include "math/plane.h"
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -89,6 +91,84 @@ namespace mmo
         /// @brief Gets whether hardware-instanced batching is enabled. @see SetBatchingEnabled
         [[nodiscard]] bool IsBatchingEnabled() const { return m_batchingEnabled; }
 
+        /// @brief Enables merging each group's static geometry into a few large meshes.
+        /// @details A group's mesh references are baked into world model space and concatenated per
+        ///          material, the way WoW world model groups ship their geometry: one draw per group and
+        ///          material instead of one per placement. Small placements (IsWorldModelDetail) go into
+        ///          a separate detail chunk that is only drawn up to WorldModelDetailDistance and casts
+        ///          no shadow. The merged meshes are built once per world model and shared by every
+        ///          instance of it. Collision keeps the per-mesh collision trees through proxies.
+        ///
+        ///          Takes precedence over batching. Meant for the client and the world editor; the world
+        ///          model editor keeps every placement separate so it can be moved.
+        /// @param enable Whether to merge. Like batching, must be set before the instance is attached.
+        void SetMergingEnabled(const bool enable) { m_mergingEnabled = enable; }
+
+        /// @brief Gets whether geometry merging is enabled. @see SetMergingEnabled
+        [[nodiscard]] bool IsMergingEnabled() const { return m_mergingEnabled; }
+
+        /// @brief Whether a mesh's geometry can be merged: no skeleton, and every submesh has index
+        ///        data and its own vertex data in the standard static mesh vertex layout.
+        static bool CanMergeMesh(const Mesh& mesh);
+
+        /// @brief Builds (or finds) the merged geometry of a world model without instantiating it.
+        /// @details Lets a streaming caller do the merge in steps of its own, so instantiating the model
+        ///          later only creates entities. Loads the model's meshes if they are not loaded yet. A
+        ///          merge left unfinished is completed by the next call, or by the first instance.
+        /// @param maxGroups How many more groups to merge in this call (at least one).
+        /// @return A handle that keeps the merged geometry alive while held, once every group is merged;
+        ///         null while groups remain, or for a null model.
+        static std::shared_ptr<const void> PrewarmMergedGeometry(const WorldModelPtr& model, size_t maxGroups = std::numeric_limits<size_t>::max());
+
+        /// @brief Appends the meshes an instance of the model loads for itself: the visible mesh
+        ///        references of its groups and the doodads of its default set. Child world models and
+        ///        prop kits are not followed; their callers collect them separately.
+        /// @details Lets a streaming caller load the meshes one at a time ahead of instantiating.
+        static void CollectMeshDependencies(const WorldModel& model, std::vector<String>& outMeshPaths);
+
+        /// @brief Sets how many bytes of merged geometry no instance uses any more are kept around.
+        /// @details By default (0) merged geometry dies with the last instance using it, so a world
+        ///          model that streams out and back in is merged again, GPU readbacks included. The
+        ///          client keeps recently released geometry up to this budget, evicting the least
+        ///          recently used first. Editors keep 0: they change world models in place.
+        static void SetMergedGeometryRetention(size_t bytes);
+
+        /// @brief Gets the number of child world model instances created from the model's child
+        ///        references. Zero until the instance has been attached to a scene node.
+        [[nodiscard]] size_t GetChildInstanceCount() const { return m_childInstances.size(); }
+
+        /// @brief Gets a child world model instance by index, or null when out of range.
+        [[nodiscard]] WorldModelInstance* GetChildInstance(size_t index) const;
+
+        /// @brief Sets the prop kits dressing this instance, in application order.
+        /// @details Kits are shared assets: several instances may hold the same PropKitPtr. Before
+        ///          the instance is attached the kits are only stored, and are realized on first attach
+        ///          after the doodads and before the child instances. Once geometry exists, the kit
+        ///          content (props, their batches and collision, and kit lights) is cleared and
+        ///          rebuilt; the shell, doodads, model lights and child instances are left alone.
+        /// @param kits The kits to apply. Null entries are ignored.
+        void SetPropKits(std::vector<PropKitPtr> kits);
+
+        /// @brief Gets the prop kits applied to this instance.
+        [[nodiscard]] const std::vector<PropKitPtr>& GetPropKits() const { return m_kits; }
+
+        /// @brief Gets the number of realized kit props, counting per-prop entities plus instances
+        ///        drawn through instanced batches. Zero until the instance has been attached.
+        [[nodiscard]] size_t GetKitPropInstanceCount() const;
+
+        /// @brief Gets the number of scene lights created from the applied kits.
+        [[nodiscard]] size_t GetKitLightCount() const;
+
+        /// @brief Gets the room a realized kit prop was derived into.
+        /// @param index Index of the prop among all visible props of all kits, in kit order.
+        /// @return The group index, or -1 when the prop lies in no room (so it is never culled) or
+        ///         the index is out of range.
+        [[nodiscard]] int32 GetKitPropGroup(size_t index) const;
+
+        /// @brief Deepest nesting of child world models that is instantiated. A town that places
+        ///        buildings that place props is depth 2; anything this deep is a content mistake.
+        static constexpr uint32 MaxChildDepth = 8;
+
     public:
         // MovableObject overrides
         
@@ -110,6 +190,10 @@ namespace mmo
         /// @copydoc MovableObject::NotifyAttachmentChanged
         void NotifyAttachmentChanged(Node* parent, bool isTagPoint = false) override;
 
+        /// @copydoc MovableObject::SetVisible
+        /// @details Propagates to the nested child world model instances.
+        void SetVisible(bool visible) override;
+
         /// @copydoc MovableObject::NotifyMoved
         /// @details Batched instance matrices are world-space, so they have to be rebuilt whenever
         ///          the placement transform changes. This only flags them; the rebuild happens in
@@ -120,7 +204,16 @@ namespace mmo
         /// This should be called before the scene's FindVisibleObjects to ensure
         /// child entity visibility is set correctly before octree traversal.
         /// @param camera The camera to use for visibility calculations.
-        void UpdatePortalCulling(Camera& camera);
+        /// @param outsideView When the camera stands in an interior room of another world model, what
+        ///        that room lets it see of the outside: this instance then only shows the groups whose
+        ///        bounds lie in one of those frustums. Null when nothing restricts the view.
+        void UpdatePortalCulling(Camera& camera, const PortalInteriorView* outsideView = nullptr);
+
+        /// @brief Checks whether the camera stands in one of this world model's interior rooms.
+        /// @param camera The camera.
+        /// @param outView Receives what the room lets the camera see of the outside.
+        /// @return True when the camera is in an interior room of this instance.
+        bool DetectInteriorView(const Camera& camera, PortalInteriorView& outView) const;
 
     private:
         /// @brief One instanced draw call plus the data needed to rebuild its world matrices.
@@ -137,6 +230,10 @@ namespace mmo
 
             /// @brief Room this batch belongs to, or WorldModelNoGroup when it is never culled.
             size_t groupIndex { WorldModelNoGroup };
+
+            /// @brief Submesh this batch draws. Every submesh of a mesh gets its own batch holding
+            ///        the same placements, so counting placements must only look at submesh 0.
+            size_t submeshIndex { 0 };
         };
 
         /// @brief Collision geometry for placements whose entities were replaced by a batch.
@@ -158,6 +255,26 @@ namespace mmo
             std::vector<WorldModelPlacementInput> placements;
         };
 
+        /// @brief One per-placement entity of a doodad or kit prop.
+        struct DoodadInstance
+        {
+            Entity* entity { nullptr };
+            SceneNode* node { nullptr };
+
+            /// @brief Index of the room this doodad sits in, or -1 for "in no room".
+            /// @details Derived by point-in-group testing at load time. WorldModelGroup::GetDoodadRefs()
+            ///          exists but is never populated by the serializer or the editor, so it cannot be
+            ///          used for this.
+            int32 groupIndex { -1 };
+        };
+
+        /// @brief One scene light created from a world model or kit light.
+        struct LightInstance
+        {
+            Light* light { nullptr };
+            SceneNode* node { nullptr };
+        };
+
         /// @brief Creates the renderable geometry for a group.
         /// @param groupIndex The group index to create geometry for.
         /// @param scene The scene to create entities in.
@@ -174,6 +291,10 @@ namespace mmo
         /// @brief Builds instanced batches, demoted entities and collision proxies for all groups.
         /// @param scene The scene to create objects in.
         void BuildBatchedGeometry(Scene& scene);
+
+        /// @brief Builds merged group meshes, their entities, fallback entities and collision proxies.
+        /// @param scene The scene to create objects in.
+        void BuildMergedGeometry(Scene& scene);
 
         /// @brief Rebuilds and re-uploads instance matrices when the placement transform changed.
         /// @details Cheap no-op unless something marked the batches dirty. Must run on the main
@@ -275,6 +396,45 @@ namespace mmo
         ///        so a mesh-ref batch and a doodad batch cannot end up with the same name.
         size_t m_batchNameCounter { 0 };
 
+        /// @brief Realizes placements as instanced batches, collision proxies and per-placement entities.
+        /// @details Shared by doodads and kit props. Every transform and material override is taken
+        ///          from the placement itself. With batching enabled, placements whose material
+        ///          override has no instanced variant, singletons and buckets that fail to batch fall
+        ///          back to per-placement entities.
+        /// @param scene The scene to create objects in.
+        /// @param placements The placements to realize, relative to the world model.
+        /// @param instances Receives the per-placement entities.
+        /// @param batches Receives the instanced batches.
+        /// @param proxies Receives the collision proxies of the batched placements.
+        void RealizePlacements(Scene& scene, const std::vector<WorldModelPlacementInput>& placements,
+            std::vector<DoodadInstance>& instances, std::vector<BatchEntry>& batches, std::vector<CollisionEntry>& proxies);
+
+        /// @brief Creates one scene light from a world model light and appends it to a list.
+        /// @details Ambient lights are skipped. Lights appended to m_kitLightInstances get a distinct
+        ///          name prefix so they never collide with the model's own lights.
+        /// @param scene The scene to create the light in.
+        /// @param light The light description, relative to the world model.
+        /// @param target The list to append the created light to.
+        void CreateLightFrom(Scene& scene, const WorldModelLight& light, std::vector<LightInstance>& target);
+
+        /// @brief Realizes the props and lights of every applied kit.
+        /// @param scene The scene to create objects in.
+        void CreateKitContent(Scene& scene);
+
+        /// @brief Destroys every object created for the applied kits.
+        /// @param scene The scene to destroy objects in (can be null).
+        void ClearKitContent(Scene* scene);
+
+        /// @brief Destroys a list of per-placement entities and their nodes.
+        /// @param instances The entities to destroy.
+        /// @param scene The scene to destroy objects in (can be null).
+        static void DestroyPlacementEntities(std::vector<DoodadInstance>& instances, Scene* scene);
+
+        /// @brief Destroys a list of scene lights and their nodes.
+        /// @param lights The lights to destroy.
+        /// @param scene The scene to destroy objects in (can be null).
+        static void DestroyLightInstances(std::vector<LightInstance>& lights, Scene* scene);
+
         /// @brief Creates doodad entities for the current doodad set.
         /// @param scene The scene to create entities in.
         void CreateDoodads(Scene& scene);
@@ -294,6 +454,19 @@ namespace mmo
         /// @brief Clears all geometry.
         /// @param scene The scene to destroy entities in (can be null).
         void ClearGeometry(Scene* scene);
+
+        /// @brief Creates one nested instance per visible child reference of the world model.
+        /// @details Each child hangs off its own scene node below this instance's placement node,
+        ///          carrying the reference's local transform, so it follows the parent wherever it is
+        ///          moved. Children are full instances: they register with the scene, run their own
+        ///          portal culling and build their own batches, doodads, lights and collision.
+        ///          References that would nest a world model inside itself are skipped.
+        /// @param scene The scene to create the children in.
+        void CreateChildInstances(Scene& scene);
+
+        /// @brief Destroys all nested child instances and their scene nodes.
+        /// @param scene The scene to destroy objects in (can be null).
+        void ClearChildInstances(Scene* scene);
 
     private:
         WorldModelPtr m_worldModel;
@@ -318,19 +491,7 @@ namespace mmo
             std::vector<MeshVisualization> meshVisualizations;
         };
         std::vector<GroupRenderable> m_groupRenderables;
-        
-        // Doodad instances
-        struct DoodadInstance
-        {
-            Entity* entity { nullptr };
-            SceneNode* node { nullptr };
 
-            /// @brief Index of the room this doodad sits in, or -1 for "in no room".
-            /// @details Derived by point-in-group testing at load time. WorldModelGroup::GetDoodadRefs()
-            ///          exists but is never populated by the serializer or the editor, so it cannot be
-            ///          used for this.
-            int32 groupIndex { -1 };
-        };
         std::vector<DoodadInstance> m_doodadInstances;
 
         std::vector<BatchEntry> m_batches;
@@ -347,6 +508,11 @@ namespace mmo
         SceneNode* m_batchRootNode { nullptr };
 
         bool m_batchingEnabled { false };
+        bool m_mergingEnabled { false };
+
+        /// @brief Merged geometry of this instance's world model, shared with every other instance of
+        ///        the same model. Held so the meshes outlive any one instance.
+        std::shared_ptr<const struct WorldModelMergedGeometry> m_mergedGeometry;
         bool m_batchesDirty { true };
         Matrix4 m_lastBatchTransform { Matrix4::Identity };
 
@@ -354,13 +520,39 @@ namespace mmo
         ///        logged once per material rather than once per batch.
         std::set<String> m_warnedInstancingMaterials;
 
-        // Light instances
-        struct LightInstance
+        std::vector<LightInstance> m_lightInstances;
+
+        /// @brief Prop kits applied to this instance, in application order. Shared with other
+        ///        instances, never modified here.
+        std::vector<PropKitPtr> m_kits;
+
+        /// @brief Per-prop entities of kit props that were not batched.
+        std::vector<DoodadInstance> m_kitInstances;
+
+        /// @brief Instanced batches of kit props.
+        std::vector<BatchEntry> m_kitBatches;
+
+        /// @brief Collision for batched kit props. Separate from the other proxy lists so changing
+        ///        the kits rebuilds only the kit content.
+        std::vector<CollisionEntry> m_kitCollisionProxies;
+
+        /// @brief Scene lights created from kit lights.
+        std::vector<LightInstance> m_kitLightInstances;
+
+        /// @brief Derived room of every realized kit prop in kit order, or -1 for "in no room".
+        std::vector<int32> m_kitPropGroups;
+
+        // Nested world models created from the model's child references
+        struct ChildInstance
         {
-            Light* light { nullptr };
+            std::unique_ptr<WorldModelInstance> instance;
             SceneNode* node { nullptr };
         };
-        std::vector<LightInstance> m_lightInstances;
+        std::vector<ChildInstance> m_childInstances;
+
+        /// @brief World models above this instance in the nesting chain, outermost first. Used to
+        ///        refuse child references that would recurse forever.
+        std::vector<const WorldModel*> m_ancestors;
 
         // Visibility state (updated each frame)
         mutable std::vector<int32> m_visibleGroups;

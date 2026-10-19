@@ -26,6 +26,10 @@ namespace mmo
 		controlled.RemoveLootRecipients();
 		controlled.SetTarget(0);
 
+		// Drop what attackers left on us: a damage over time effect still ticking once we are home
+		// would pull us straight back into combat.
+		controlled.RemoveAurasFromOtherCasters();
+
 		// Enter idle mode when home point was reached
 		m_onHomeReached = controlled.GetMover().targetReached.connect([this]() {
 			auto& ai = GetAI();

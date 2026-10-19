@@ -129,6 +129,20 @@ namespace mmo
 		return lines;
 	}
 
+	std::vector<std::string> WrapTextToLines(const std::string& text, float maxWidth, const std::function<float(uint32_t)>& advanceFn)
+	{
+		const std::vector<TextWrapLine> lineBreaks = ComputeLineBreaks(text, maxWidth, advanceFn);
+
+		std::vector<std::string> lines;
+		lines.reserve(lineBreaks.size());
+		for (const TextWrapLine& line : lineBreaks)
+		{
+			lines.emplace_back(text.substr(line.startByte, line.endByte - line.startByte));
+		}
+
+		return lines;
+	}
+
 	TextCaretLocation GetCaretLocation(const std::vector<TextWrapLine>& lines, std::size_t caretCharIndex)
 	{
 		if (lines.empty())

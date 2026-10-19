@@ -226,8 +226,10 @@ namespace mmo
 			// Item not looted?
 			if (!item.isLooted)
 			{
+				// The loot master cannot take a master loot item, but has to open the corpse to hand it out.
 				const uint8 slotType = GetSlotType(slot, receiver);
-				if (slotType != loot_slot_type::AllowLoot && slotType != loot_slot_type::Owner && slotType != loot_slot_type::RollOngoing)
+				const bool isMasterItemForMaster = slotType == loot_slot_type::Master && receiver == m_lootMasterGuid;
+				if (slotType != loot_slot_type::AllowLoot && slotType != loot_slot_type::Owner && slotType != loot_slot_type::RollOngoing && !isMasterItemForMaster)
 				{
 					continue;
 				}
@@ -284,28 +286,31 @@ namespace mmo
 		return slotType == loot_slot_type::AllowLoot || slotType == loot_slot_type::Owner;
 	}
 
-	void LootInstance::SetupGroupRollItems(const std::set<uint64>& nearbyPlayers)
+	bool LootInstance::IsThresholdItem(const LootItem& item) const
 	{
-		if (m_lootMethod != loot_method::GroupLoot)
+		const auto* entry = m_itemManager.getById(item.definition.item());
+		if (!entry)
 		{
-			return;
+			return false;
 		}
 
+		// Party-shared items (quest drops) are handed to everybody once and never distributed.
+		if (entry->flags() & item_flags::PartyLoot)
+		{
+			return false;
+		}
+
+		return entry->quality() >= m_lootThreshold;
+	}
+
+	void LootInstance::SetupGroupRollItems(const std::set<uint64>& nearbyPlayers)
+	{
+		// Not restricted to GroupLoot: MasterLoot falls back to rolls when the loot master was not
+		// around for the kill.
 		for (uint8 slot = 0; slot < m_items.size(); ++slot)
 		{
 			auto& item = m_items[slot];
-			const auto* entry = m_itemManager.getById(item.definition.item());
-			if (!entry)
-			{
-				continue;
-			}
-
-			if (entry->flags() & item_flags::PartyLoot)
-			{
-				continue;
-			}
-
-			if (entry->quality() < m_lootThreshold)
+			if (item.needsMasterAssignment || !IsThresholdItem(item))
 			{
 				continue;
 			}
@@ -317,6 +322,88 @@ namespace mmo
 			LootRollData data;
 			data.eligiblePlayers = nearbyPlayers;
 			m_rollData[slot] = std::move(data);
+		}
+	}
+
+	bool LootInstance::SetupMasterLootItems(const std::set<uint64>& candidates)
+	{
+		if (m_lootMasterGuid == 0 || !candidates.contains(m_lootMasterGuid))
+		{
+			return false;
+		}
+
+		m_masterLootCandidates = candidates;
+		for (auto& item : m_items)
+		{
+			if (IsThresholdItem(item))
+			{
+				item.needsMasterAssignment = true;
+			}
+		}
+
+		return true;
+	}
+
+	bool LootInstance::CanAssignMasterLoot(const uint8 slot, const uint64 assigner, const uint64 target) const
+	{
+		if (slot >= m_items.size())
+		{
+			return false;
+		}
+
+		const LootItem& item = m_items[slot];
+		return item.needsMasterAssignment &&
+			!item.isLooted &&
+			assigner == m_lootMasterGuid &&
+			m_masterLootCandidates.contains(target);
+	}
+
+	bool LootInstance::AssignMasterLoot(const uint8 slot, const uint64 assigner, const uint64 target)
+	{
+		if (!CanAssignMasterLoot(slot, assigner, target))
+		{
+			return false;
+		}
+
+		m_items[slot].isLooted = true;
+		itemRemoved(slot);
+
+		if (IsEmpty())
+		{
+			cleared();
+		}
+
+		return true;
+	}
+
+	void LootInstance::ExpireRolls()
+	{
+		// ResolveRoll erases from m_rollData and its signal handlers may hand the item out, so work on a
+		// snapshot of the pending slots.
+		std::vector<uint8> pendingSlots;
+		pendingSlots.reserve(m_rollData.size());
+		for (const auto& [slot, rollData] : m_rollData)
+		{
+			pendingSlots.push_back(slot);
+		}
+
+		for (const uint8 slot : pendingSlots)
+		{
+			auto rollIt = m_rollData.find(slot);
+			if (rollIt == m_rollData.end())
+			{
+				continue;
+			}
+
+			for (const uint64 playerGuid : rollIt->second.eligiblePlayers)
+			{
+				if (!rollIt->second.votes.contains(playerGuid))
+				{
+					rollIt->second.votes[playerGuid] = roll_vote::Pass;
+				}
+			}
+
+			ResolveRoll(slot);
 		}
 	}
 
@@ -636,6 +723,12 @@ namespace mmo
 			return loot_slot_type::AllowLoot;
 		}
 
+		// Shown as such to everybody, the loot master included: it is handed out, never looted.
+		if (item.needsMasterAssignment)
+		{
+			return loot_slot_type::Master;
+		}
+
 		const auto* itemEntry = m_itemManager.getById(item.definition.item());
 		if (itemEntry && (itemEntry->flags() & item_flags::PartyLoot))
 		{
@@ -644,15 +737,11 @@ namespace mmo
 			return HasLootedPartyItem(item, *itemEntry, receiver) ? loot_slot_type::Locked : loot_slot_type::AllowLoot;
 		}
 
+		// Everything that is neither rolled on nor handed out by the loot master belongs to the party
+		// member whose turn it is (in a group, the creature death state always designates one).
 		switch (m_lootMethod)
 		{
 		case loot_method::MasterLoot:
-			if (receiver != m_lootMasterGuid)
-			{
-				return loot_slot_type::Master;
-			}
-			break;
-
 		case loot_method::RoundRobin:
 		case loot_method::GroupLoot:
 			if (m_roundRobinLooter != 0 && receiver != m_roundRobinLooter)

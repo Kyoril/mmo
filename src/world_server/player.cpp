@@ -25,6 +25,7 @@
 #include "binary_io/vector_sink.h"
 #include "binary_io/writer.h"
 #include "group_manager.h"
+#include "game_server/item_notify.h"
 #include "game_server/spells/aura_container.h"
 
 #include <algorithm>
@@ -68,6 +69,23 @@ namespace mmo
 			m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned),
 			m_character->spellCooldownStarted.connect(*this, &Player::OnSpellCooldownStarted),
 			m_character->spellCooldownsReset.connect(*this, &Player::OnSpellCooldownsReset),
+
+			// Profession skill signals
+			m_character->tradeSkillLearned.connect([this](uint32)
+			{
+				if (m_spawned)
+				{
+					SendTradeSkills();
+					SaveCharacterData();
+				}
+			}),
+			m_character->tradeSkillChanged.connect([this](const uint32 skillId)
+			{
+				if (m_spawned)
+				{
+					SendTradeSkillUpdate(skillId);
+				}
+			}),
 
 			// Emote unlock signal
 			m_character->emoteLearned.connect(*this, &Player::OnEmoteLearned),
@@ -148,6 +166,8 @@ namespace mmo
 
 		// Load the full known-spell set (across all classes). Only spells usable by the active class are
 		// activated; the rest are preserved so switching back to their class restores them.
+		// Profession skills come first: passive unlock spells re-cast at spawn look them up.
+		m_character->SetTradeSkills(m_characterData.tradeSkills);
 		m_character->SetKnownSpells(m_characterData.spellIds);
 
 		// Load the unlocked emote set, then materialize any always-granted (default-known)
@@ -295,14 +315,17 @@ namespace mmo
 		NotifyObjectsDespawned(objects);
 	}
 
-	void Player::UpdateCharacterGroup(uint64 groupId, uint8 lootMethod, uint8 lootThreshold)
+	void Player::UpdateCharacterGroup(uint64 groupId, const std::optional<std::pair<LootMethod, uint8>> lootRules)
 	{
 		if (m_character)
 		{
 			uint64 oldGroup = m_character->GetGroupId();
 			m_character->SetGroupId(groupId);
-			m_character->SetLootMethod(static_cast<LootMethod>(lootMethod));
-			m_character->SetLootThreshold(lootThreshold);
+			if (lootRules)
+			{
+				m_character->SetLootMethod(lootRules->first);
+				m_character->SetLootThreshold(lootRules->second);
+			}
 
 			GroupManager& groupManager = m_connector.GetGroupManager();
 			if (oldGroup != 0)
@@ -325,7 +348,10 @@ namespace mmo
 				if (groupObject)
 				{
 					groupObject->AddMember(m_character->GetGuid());
-					groupObject->SetLootMethod(static_cast<LootMethod>(lootMethod), lootThreshold);
+					if (lootRules)
+					{
+						groupObject->SetLootMethod(lootRules->first, lootRules->second);
+					}
 					m_character->SetGroup(groupObject.get());
 				}
 			}
@@ -430,7 +456,7 @@ namespace mmo
 
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects)
 	{
-		// Prepare dynamic fields for world objects
+		// Prepare dynamic fields for world objects and creatures
 		for (const auto& object : objects)
 		{
 			if (object->GetTypeId() == ObjectTypeId::Object)
@@ -439,6 +465,14 @@ namespace mmo
 				if (worldObject)
 				{
 					worldObject->PrepareDynamicFieldsFor(*m_character);
+				}
+			}
+			else if (object->GetTypeId() == ObjectTypeId::Unit)
+			{
+				GameCreatureS* creature = dynamic_cast<GameCreatureS*>(object);
+				if (creature)
+				{
+					creature->PrepareDynamicFieldsFor(*m_character);
 				}
 			}
 		}
@@ -474,7 +508,7 @@ namespace mmo
 			}
 		}
 		
-		// Clear dynamic fields for world objects
+		// Clear dynamic fields for world objects and creatures
 		for (const auto& object : objects)
 		{
 			if (object->GetTypeId() == ObjectTypeId::Object)
@@ -483,6 +517,14 @@ namespace mmo
 				if (worldObject)
 				{
 					worldObject->ClearDynamicFields();
+				}
+			}
+			else if (object->GetTypeId() == ObjectTypeId::Unit)
+			{
+				GameCreatureS* creature = dynamic_cast<GameCreatureS*>(object);
+				if (creature)
+				{
+					creature->ClearDynamicFields();
 				}
 			}
 		}
@@ -531,7 +573,7 @@ namespace mmo
 			m_spawnedGuids.insert(guid);
 		}
 
-		// Prepare dynamic fields for world objects
+		// Prepare dynamic fields for world objects and creatures
 		for (const auto& object : objects)
 		{
 			if (object->GetTypeId() == ObjectTypeId::Object)
@@ -540,6 +582,14 @@ namespace mmo
 				if (worldObject)
 				{
 					worldObject->PrepareDynamicFieldsFor(*m_character);
+				}
+			}
+			else if (object->GetTypeId() == ObjectTypeId::Unit)
+			{
+				GameCreatureS* creature = dynamic_cast<GameCreatureS*>(object);
+				if (creature)
+				{
+					creature->PrepareDynamicFieldsFor(*m_character);
 				}
 			}
 		}
@@ -560,7 +610,7 @@ namespace mmo
 			SendObjectUpdate(body, true);
 		}
 
-		// Clear dynamic fields for world objects
+		// Clear dynamic fields for world objects and creatures
 		for (const auto& object : objects)
 		{
 			if (object->GetTypeId() == ObjectTypeId::Object)
@@ -569,6 +619,14 @@ namespace mmo
 				if (worldObject)
 				{
 					worldObject->ClearDynamicFields();
+				}
+			}
+			else if (object->GetTypeId() == ObjectTypeId::Unit)
+			{
+				GameCreatureS* creature = dynamic_cast<GameCreatureS*>(object);
+				if (creature)
+				{
+					creature->ClearDynamicFields();
 				}
 			}
 		}
@@ -930,6 +988,9 @@ namespace mmo
 			break;
 		case game::client_realm_packet::LootRoll:
 			OnLootRoll(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::MasterLootItem:
+			OnMasterLootItem(opCode, buffer.size(), reader);
 			break;
 
 		case game::client_realm_packet::SellItem:
@@ -1574,6 +1635,9 @@ namespace mmo
 			}
 		}
 
+		// Sent after the passives so the list is final
+		SendTradeSkills();
+
 		// Ensure the inventory is initialized
 		objects.clear();
 		m_character->GetInventory().ConstructFromRealmData(objects);
@@ -1829,7 +1893,7 @@ namespace mmo
 					continue;
 				}
 
-				constexpr uint32 rollTime = 60000;
+				constexpr uint32 rollTime = static_cast<uint32>(LootInstance::RollDuration);
 				std::vector<char> buffer;
 				io::VectorSink sink(buffer);
 				game::OutgoingPacket rollPacket(sink);
@@ -2392,7 +2456,7 @@ namespace mmo
 			// threshold mirrors the client's SWIM_START_DEPTH, with tolerance for surface jitter.
 			// Only enforced when the server actually has water data for this map; otherwise we trust
 			// the client (graceful degradation instead of rejecting all swimming).
-			constexpr float swimStartDepth = 1.0f;
+			constexpr float swimStartDepth = 1.2f;
 			constexpr float depthTolerance = 0.5f;
 
 			MapData* mapData = m_worldInstance->GetMapData();
@@ -3601,14 +3665,46 @@ namespace mmo
 		}, false);
 	}
 
-	void Player::OnClassXpGained(const uint32 classId, const uint32 xpGained, const uint8 classLevel, const uint32 classXp, const uint32 xpToNextLevel, const bool leveledUp)
+	void Player::SendTradeSkills()
+	{
+		const std::vector<TradeSkillData> skills = m_character->GetTradeSkills().GetAll();
+		SendPacket([skills](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::TradeSkills);
+			packet << io::write<uint8>(static_cast<uint8>(skills.size()));
+			for (const auto& skill : skills)
+			{
+				packet << skill;
+			}
+			packet.Finish();
+		}, false);
+	}
+
+	void Player::SendTradeSkillUpdate(const uint32 skillId)
+	{
+		const TradeSkillData* skill = m_character->GetTradeSkills().Get(skillId);
+		if (!skill)
+		{
+			return;
+		}
+
+		const TradeSkillData copy = *skill;
+		SendPacket([copy](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::TradeSkillUpdate);
+			packet << copy;
+			packet.Finish();
+		}, false);
+	}
+
+	void Player::OnClassXpGained(const uint32 classId, const uint32 xpGained, const uint8 classLevel, const uint32 classXp, const uint32 xpToNextLevel, const bool leveledUp, const uint32 talentPointsGained)
 	{
 		if (!m_spawned)
 		{
 			return;
 		}
 
-		SendPacket([classId, xpGained, classLevel, classXp, xpToNextLevel, leveledUp](game::OutgoingPacket& packet)
+		SendPacket([classId, xpGained, classLevel, classXp, xpToNextLevel, leveledUp, talentPointsGained](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::ClassXpUpdate);
 			packet
@@ -3617,7 +3713,8 @@ namespace mmo
 				<< io::write<uint8>(classLevel)
 				<< io::write<uint32>(classXp)
 				<< io::write<uint32>(xpToNextLevel)
-				<< io::write<uint8>(leveledUp ? 1 : 0);
+				<< io::write<uint8>(leveledUp ? 1 : 0)
+				<< io::write<uint32>(talentPointsGained);
 			packet.Finish();
 		}, false);
 
@@ -4201,7 +4298,59 @@ namespace mmo
 					<< io::write<uint16>(totalCount);
 				packet.Finish();
 				});
+
+			if (wasCreated)
+			{
+				NotifyGroupOfCreatedItem(inst->GetEntry().id(), amount);
+			}
 		}
+	}
+
+	void Player::NotifyGroupOfCreatedItem(const uint32 itemId, const uint16 amount)
+	{
+		const uint64 groupId = m_character->GetGroupId();
+		if (groupId == 0)
+		{
+			return;
+		}
+
+		// Bag and slot belong to the creator's inventory and total count is not known for others,
+		// so they are sent as invalid markers - the client never uses them for other players.
+		m_character->ForEachSubscriberInSight([this, groupId, itemId, amount](TileSubscriber& subscriber)
+		{
+			if (!subscriber.GetGameUnit().IsPlayer())
+			{
+				return;
+			}
+
+			GamePlayerS& other = subscriber.GetGameUnit().AsPlayer();
+			if (!ShouldNotifyOfCreatedItem(m_character->GetGuid(), groupId, other.GetGuid(), other.GetGroupId()))
+			{
+				return;
+			}
+
+			const std::shared_ptr<Player> member = m_manager.GetPlayerByCharacterGuid(other.GetGuid());
+			if (!member)
+			{
+				return;
+			}
+
+			const uint64 creatorGuid = GetCharacterGuid();
+			member->SendPacket([creatorGuid, itemId, amount](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::ItemPushResult);
+				packet
+					<< io::write<uint64>(creatorGuid)
+					<< io::write<uint8>(0)
+					<< io::write<uint8>(1)
+					<< io::write<uint8>(0xFF)
+					<< io::write<uint8>(0xFF)
+					<< io::write<uint32>(itemId)
+					<< io::write<uint16>(amount)
+					<< io::write<uint16>(0);
+				packet.Finish();
+			});
+		});
 	}
 
 	void Player::OnObjectLoot()
@@ -4227,13 +4376,16 @@ namespace mmo
 			return;
 		}
 
+		// While it is somebody else's turn, a party member may still open the corpse for what the party
+		// shares: an item to roll on (opening starts the roll), gold (split anyway), or - as loot master -
+		// an item to hand out. Only a corpse holding nothing but the other member's items is refused.
 		const uint64 roundRobinLooter = loot->GetRoundRobinLooter();
-		if (roundRobinLooter != 0 && roundRobinLooter != m_character->GetGuid())
+		if (roundRobinLooter != 0 && roundRobinLooter != m_character->GetGuid() && !loot->ContainsLootFor(m_character->GetGuid()))
 		{
 			bool hasItemsForDesignatedLooter = false;
 			for (const auto& item : loot->GetItems())
 			{
-				if (!item.isLooted && !item.needsGroupRoll)
+				if (!item.isLooted && !item.needsGroupRoll && !item.needsMasterAssignment)
 				{
 					hasItemsForDesignatedLooter = true;
 					break;
@@ -4361,7 +4513,7 @@ namespace mmo
 				packet.Start(game::realm_client_packet::PlaySoundById);
 				packet
 					<< io::write<uint32>(soundId)
-					<< io::write<uint8>(0);
+					<< io::write<uint8>(game::play_sound_source::None);
 				packet.Finish();
 			});
 	}
@@ -4373,7 +4525,23 @@ namespace mmo
 				packet.Start(game::realm_client_packet::PlaySoundById);
 				packet
 					<< io::write<uint32>(soundId)
-					<< io::write<uint8>(1)
+					<< io::write<uint8>(game::play_sound_source::Position)
+					<< io::write<float>(position.x)
+					<< io::write<float>(position.y)
+					<< io::write<float>(position.z);
+				packet.Finish();
+			});
+	}
+
+	void Player::SendPlaySound(const uint32 soundId, const uint64 sourceGuid, const Vector3& position)
+	{
+		SendPacket([soundId, sourceGuid, &position](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::PlaySoundById);
+				packet
+					<< io::write<uint32>(soundId)
+					<< io::write<uint8>(game::play_sound_source::Unit)
+					<< io::write_packed_guid(sourceGuid)
 					<< io::write<float>(position.x)
 					<< io::write<float>(position.y)
 					<< io::write<float>(position.z);

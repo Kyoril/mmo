@@ -22,7 +22,9 @@
 #include "ribbon_trail.h"
 #include "scene_node.h"
 #include "math/ray.h"
+#include "world_model_portal_culling.h"
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -382,6 +384,10 @@ namespace mmo
 		///         disabled.
 		[[nodiscard]] float GetCombinedFogDensity() const;
 
+		/// @brief Whether the combined atmosphere has a visible distance fog (fog enabled, end beyond
+		///        start and a non-zero opacity).
+		[[nodiscard]] bool HasActiveDistanceFog() const;
+
 		const ConstantBufferPtr& GetCameraBuffer() const { return m_psCameraBuffer; }
 
 		void RefreshCameraBuffer(const Camera& camera);
@@ -411,6 +417,13 @@ namespace mmo
 		/// render queue groups (< Transparent). Used by the deferred renderer to avoid
 		/// re-rendering opaque geometry in the transparent pass.
 		void SetForwardTransparentOnly(bool value) { m_forwardTransparentOnly = value; }
+
+		/// @brief Further restricts a forward-transparent-only pass to render queue groups in
+		///        [firstGroup, endGroup). Lets the deferred renderer split its forward pass, e.g. to
+		///        draw editor overlays after bloom. Reset to the full range when done.
+		/// @param firstGroup First group id that is rendered.
+		/// @param endGroup Group id one past the last rendered group.
+		void SetForwardGroupRange(const uint32 firstGroup, const uint32 endGroup) { m_forwardGroupFirst = firstGroup; m_forwardGroupEnd = endGroup; }
 
 		/// @brief Makes forward materials write linear HDR instead of tone-mapped display colour.
 		/// @remark Only DeferredRenderer sets this, around its own forward pass, because its
@@ -484,6 +497,7 @@ namespace mmo
 		/// @param cascadeCamera The orthographic shadow camera for this cascade.
 		/// @param casters The list produced by GatherShadowCasters.
 		/// @param minCasterWorldRadius Skip casters whose world half-extent is smaller than this (0 = keep all).
+		/// @remark Rendering distances (SetRenderingDistance) do not apply to shadow casters.
 		void RenderShadowCasters(Camera& cascadeCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius);
 
 		ManualRenderObject* CreateManualRenderObject(const String& name);
@@ -747,6 +761,9 @@ namespace mmo
 
 		/// Registered WorldModelInstances for pre-render portal culling updates.
 		std::vector<WorldModelInstance*> m_worldModelInstances;
+
+		/// @brief What a camera inside a world model room sees of the outside; reused every pass.
+		PortalInteriorView m_interiorView;
 		
 		SceneQueuedRenderableVisitor m_renderableVisitor;
 
@@ -780,6 +797,10 @@ namespace mmo
 		/// that opaque groups (already in the GBuffer) are not re-rendered.
 		/// Never set this in non-deferred contexts (editor, model viewer).
 		bool m_forwardTransparentOnly = false;
+
+		/// @brief See SetForwardGroupRange. Only applies while m_forwardTransparentOnly is set.
+		uint32 m_forwardGroupFirst = 0;
+		uint32 m_forwardGroupEnd = std::numeric_limits<uint32>::max();
 
 		/// @brief See SetForwardOutputLinear.
 		bool m_forwardOutputLinear = false;

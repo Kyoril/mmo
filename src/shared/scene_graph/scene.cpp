@@ -63,9 +63,17 @@ namespace mmo
 		// Sun light inside the fog.
 		Vector3 sunScatterColor;
 		float shaftStrength;
+
+		// Distance fog, blended over the height fog.
+		Vector3 distanceFogColor;
+		float distanceFogOpacity;	// 0 = off
+		float distanceFogStart;
+		float distanceFogInverseRange;
+		float distanceFogSkyBand;
+		float _cameraPadding1;
 	};
 
-	static_assert(sizeof(PsCameraConstantBuffer) == 176, "PsCameraConstantBuffer must match the 176-byte HLSL CameraBuffer layout");
+	static_assert(sizeof(PsCameraConstantBuffer) == 208, "PsCameraConstantBuffer must match the 208-byte HLSL CameraBuffer layout");
 
 	Scene::Scene()
 	{
@@ -307,6 +315,10 @@ namespace mmo
 		// Update ps constant buffer
 		RefreshCameraBuffer(camera);
 
+		// Vertex wave materials read the time from it in the vertex shader. Nothing else binds this
+		// vertex register, and a D3D11 binding persists across draws, so once per pass is enough.
+		m_psCameraBuffer->BindToStage(ShaderType::VertexShader, kCameraParametersVsSlot);
+
 		m_renderableVisitor.targetScene = this;
 		m_renderableVisitor.scissoring = false;
 
@@ -349,11 +361,25 @@ namespace mmo
 
 			// Update portal culling for all WorldModelInstances BEFORE FindVisibleObjects
 			// so that entity visibility is set correctly before octree traversal.
+			//
+			// A camera inside an interior room of one world model sees the rest of the world only
+			// through that room's doors: every other instance is then culled against the door frustums.
+			PortalInteriorView& interiorView = m_interiorView;
+			WorldModelInstance* interiorOwner = nullptr;
+			for (auto* wmi : m_worldModelInstances)
+			{
+				if (wmi && wmi->DetectInteriorView(camera, interiorView))
+				{
+					interiorOwner = wmi;
+					break;
+				}
+			}
+
 			for (auto* wmi : m_worldModelInstances)
 			{
 				if (wmi)
 				{
-					wmi->UpdatePortalCulling(camera);
+					wmi->UpdatePortalCulling(camera, (interiorOwner && wmi != interiorOwner) ? &interiorView : nullptr);
 				}
 			}
 
@@ -719,7 +745,7 @@ namespace mmo
 			// We detect the deferred context via m_forwardTransparentOnly, which the
 			// deferred renderer sets before calling scene.Render with Forward.
 			if (m_pixelShaderType == PixelShaderType::Forward && m_forwardTransparentOnly
-				&& groupId < RenderQueueGroupId::Transparent)
+				&& (groupId < RenderQueueGroupId::Transparent || groupId < m_forwardGroupFirst || groupId >= m_forwardGroupEnd))
 			{
 				continue;
 			}
@@ -826,6 +852,13 @@ namespace mmo
 			for (MovableObject* caster : casters)
 			{
 				caster->SetCurrentCamera(cascadeCamera);
+
+				// No rendering-distance cut-off for shadow casters: the cascade frustum already bounds what
+				// can shade the cascade (CascadedShadowConfig::GetLightwardReach), and a cut-off measured from
+				// any moving camera sweeps through the forest as the player walks, so a low sun's shafts popped
+				// in and out with every step (worse from the cascade camera, which sits hundreds of metres
+				// toward the sun).
+				caster->ClearRenderingDistanceCull();
 			}
 
 			// Snapshot the cascade frustum on the main thread: Camera::IsVisible is NOT a
@@ -1011,6 +1044,12 @@ namespace mmo
 		}
 
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
+
+		// A mirrored transform reverses the winding, so the device has to cull the other face
+		if (renderable.GetWorldTransform().HasNegativeScale())
+		{
+			op.mirrored = !op.mirrored;
+		}
 
 		// Reserve space to avoid heap allocation on push_back
 		ASSERT(m_psCameraBuffer);
@@ -1228,12 +1267,24 @@ namespace mmo
 		buffer.sunScatterColor = Vector3(atmosphere.sunScatterColor[0], atmosphere.sunScatterColor[1], atmosphere.sunScatterColor[2]);
 		buffer.shaftStrength = atmosphere.shaftStrength;
 
+		buffer.distanceFogColor = Vector3(atmosphere.distanceFogColor[0], atmosphere.distanceFogColor[1], atmosphere.distanceFogColor[2]);
+		buffer.distanceFogOpacity = atmosphere.distanceFogOpacity;
+		buffer.distanceFogStart = atmosphere.distanceFogStart;
+		buffer.distanceFogInverseRange = atmosphere.distanceFogInverseRange;
+		buffer.distanceFogSkyBand = atmosphere.distanceFogSkyBand;
+		buffer._cameraPadding1 = 0.0f;
+
 		m_psCameraBuffer->Update(&buffer);
 	}
 
 	float Scene::GetCombinedFogDensity() const
 	{
 		return CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled).density;
+	}
+
+	bool Scene::HasActiveDistanceFog() const
+	{
+		return CombineAtmosphere(m_atmosphereParameters, m_atmosphereTimeOfDay, m_fogEnabled).distanceFogOpacity > 0.0f;
 	}
 
 	std::unique_ptr<SceneNode> Scene::CreateSceneNodeImpl()

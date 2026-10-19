@@ -767,6 +767,15 @@ namespace mmo
 		if (codepoint == 0x8)   // VK_BACKSPACE
 			return;
 
+		// Windows turns a Ctrl shortcut into a WM_CHAR carrying a C0 control character right
+		// after the key down which already handled it, so Ctrl+V would append a 0x16 to the very
+		// text it just pasted. Control characters are not text and must never reach the field.
+		// Tab and line break got their meaning assigned above and are let through here.
+		if ((codepoint < 0x20 && codepoint != '\t' && codepoint != '\n') || codepoint == 0x7F)
+		{
+			return;
+		}
+
 		// Don't insert text inside hyperlinks
 		int hyperlinkIndex = FindHyperlinkAtPosition(m_cursor);
 		if (hyperlinkIndex >= 0)

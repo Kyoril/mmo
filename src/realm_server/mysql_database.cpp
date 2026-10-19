@@ -649,6 +649,26 @@ namespace mmo
 					throw mysql::Exception("Could not load character emotes");
 				}
 
+				// Load profession (trade skill) values and caps
+				if (mysql::Select skillSelect(m_connection, "SELECT `skill`, `value`, `max` FROM `character_skills` WHERE `character` = " + std::to_string(characterId)); skillSelect.Success())
+				{
+					mysql::Row skillRow(skillSelect);
+					while (skillRow)
+					{
+						TradeSkillData skill;
+						skillRow.GetField(0, skill.skillId);
+						skillRow.GetField(1, skill.value);
+						skillRow.GetField(2, skill.max);
+						result.tradeSkills.push_back(skill);
+						skillRow = mysql::Row::Next(skillSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character trade skills");
+				}
+
 				// Load item data
 				mysql::Select itemSelect(m_connection,
 					"SELECT `entry`, `slot`, `creator`, `count`, `durability`, `flags` FROM `character_items` WHERE `owner`=" + std::to_string(characterId));
@@ -1311,6 +1331,52 @@ namespace mmo
 			{
 				PrintDatabaseError();
 				throw mysql::Exception("Could not update character aura effect data!");
+			}
+		}
+
+		transaction.Commit();
+	}
+
+	void MySQLDatabase::UpdateCharacterTradeSkills(uint64 characterId, const std::vector<TradeSkillData>& skills)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		mysql::Transaction transaction(m_connection);
+
+		// Replace the full trade skill set for this character.
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_skills` WHERE `character`={0};", characterId)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character trade skill data!");
+		}
+
+		if (!skills.empty())
+		{
+			std::ostringstream strm;
+			strm << "INSERT INTO `character_skills` (`character`, `skill`, `value`, `max`) VALUES ";
+
+			bool isFirst = true;
+			for (const auto& skill : skills)
+			{
+				if (!isFirst)
+				{
+					strm << ",";
+				}
+				isFirst = false;
+
+				strm << "(" << characterId
+					<< "," << skill.skillId
+					<< "," << skill.value
+					<< "," << skill.max
+					<< ")";
+			}
+			strm << ";";
+
+			if (!m_connection.Execute(strm.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character trade skill data!");
 			}
 		}
 

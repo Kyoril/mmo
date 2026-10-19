@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <memory>
 #include <algorithm>
@@ -49,6 +50,9 @@ namespace mmo
 			/// Health is not a substitute -- a creature can heal between swings.
 			std::map<uint64, uint32> meleeSwings;
 
+			/// The subset of meleeSwings that the off hand made (hit_info::LeftSwing), keyed by victim.
+			std::map<uint64, uint32> offhandSwings;
+
 			/// The last auto-attack swing error the server reported, and how many times it has
 			/// told us swings started landing again. The server reports swing outcomes as
 			/// transitions, so a scenario that provokes an error and then removes its cause reads
@@ -63,6 +67,9 @@ namespace mmo
 			/// believes, which only ever learns that a channel is over from that packet.
 			std::map<uint64, uint32> channelStarts;
 			std::set<uint64> channeling;
+
+			/// Casts that went off (SpellGo) per caster and spell.
+			std::map<std::pair<uint64, uint32>, uint32> spellGos;
 
 			/// A second session on the same account, created by LoginElsewhere. Kept alive for the
 			/// rest of the scenario so its connection is not torn down while the first session is
@@ -267,6 +274,31 @@ namespace mmo
 		void luaClearLastSpellVisual()
 		{
 			g_runtime->session->ClearLastSpellVisual();
+		}
+
+		/// A voice line has no gameplay side effect either: returns the guid of the unit a
+		/// PlaySoundById came from since the last clear, "0x0" for a sound without a unit, or "" if the
+		/// sound was not heard at all.
+		std::string luaSoundSource(const uint32 soundId)
+		{
+			if (!g_runtime->session->HasHeardSound(soundId))
+			{
+				return "";
+			}
+
+			return guidToString(g_runtime->session->GetHeardSoundSource(soundId));
+		}
+
+		/// How many times a PlaySoundById for the sound arrived since the last clear, so a scenario
+		/// can count repetitions such as the strikes of an hourly bell.
+		uint32 luaSoundCount(const uint32 soundId)
+		{
+			return g_runtime->session->GetHeardSoundCount(soundId);
+		}
+
+		void luaClearHeardSounds()
+		{
+			g_runtime->session->ClearHeardSounds();
 		}
 
 		bool luaIsSubsystemAvailable(const std::string& name)
@@ -549,6 +581,14 @@ namespace mmo
 			return it == g_runtime->meleeSwings.end() ? 0 : static_cast<int32>(it->second);
 		}
 
+		/// Counts the off-hand swings among MeleeSwingCount(guid): only a character that may dual wield
+		/// and has a usable off-hand weapon swings it.
+		int32 luaOffhandSwingCount(const std::string& guid)
+		{
+			const auto it = g_runtime->offhandSwings.find(guidFromString(guid));
+			return it == g_runtime->offhandSwings.end() ? 0 : static_cast<int32>(it->second);
+		}
+
 		/// Whether the server has told us guid is channeling and not yet that the channel ended.
 		bool luaIsChanneling(const std::string& guid)
 		{
@@ -567,6 +607,13 @@ namespace mmo
 		{
 			const auto it = g_runtime->channelStarts.find(guidFromString(guid));
 			return it == g_runtime->channelStarts.end() ? 0 : static_cast<int32>(it->second);
+		}
+
+		/// How many times guid's cast of spellId went off (SpellGo packets received).
+		int32 luaSpellGoCount(const std::string& guid, const uint32 spellId)
+		{
+			const auto it = g_runtime->spellGos.find({ guidFromString(guid), spellId });
+			return it == g_runtime->spellGos.end() ? 0 : static_cast<int32>(it->second);
 		}
 
 		/// Name of the last swing error the server reported ("out_of_range", ...), or "none".
@@ -650,6 +697,20 @@ namespace mmo
 		bool luaHasSpell(const uint32 spellId)
 		{
 			return g_runtime->session->GetContext().HasKnownSpell(spellId);
+		}
+
+		int32 luaGetTradeSkill(const uint32 skillId)
+		{
+			const BotUnit* selfUnit = self();
+			const TradeSkillData* skill = selfUnit ? selfUnit->GetTradeSkill(skillId) : nullptr;
+			return skill ? static_cast<int32>(skill->value) : -1;
+		}
+
+		int32 luaGetTradeSkillMax(const uint32 skillId)
+		{
+			const BotUnit* selfUnit = self();
+			const TradeSkillData* skill = selfUnit ? selfUnit->GetTradeSkill(skillId) : nullptr;
+			return skill ? static_cast<int32>(skill->max) : -1;
 		}
 
 		int32 luaGetItemCount(const uint32 itemId)
@@ -1019,6 +1080,27 @@ namespace mmo
 			}
 		}
 
+		/// Moves the item in backpack slot packIndex (0-based) into equipment slot equipSlot, swapping
+		/// whatever was equipped there into the backpack. Unlike EquipFromBackpack this can target the
+		/// off hand (16), which auto-equip never picks for a one-handed weapon.
+		void luaEquipBackpackItemTo(const uint32 packIndex, const uint32 equipSlot)
+		{
+			if (packIndex >= player_inventory_pack_slots::End - player_inventory_pack_slots::Start ||
+				equipSlot >= player_equipment_slots::End)
+			{
+				abortScenario(bot_exit_code::ScenarioFailed, "EquipBackpackItemTo: slot out of range");
+			}
+
+			g_runtime->session->GetRealm().SwapInventoryItems(
+				static_cast<uint8>(player_inventory_pack_slots::Start + packIndex), static_cast<uint8>(equipSlot));
+
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("EquipBackpackItemTo",
+					{ { "pack_index", packIndex }, { "equip_slot", equipSlot } });
+			}
+		}
+
 		bool luaHasPendingPartyInvitation()
 		{
 			return g_runtime->session->GetRealm().HasPendingPartyInvitation();
@@ -1094,28 +1176,53 @@ namespace mmo
 					knownGuids.insert(unit.GetGuid());
 				});
 
+			// The server spawns the monster on the player's position. A world-spawned creature of the
+			// same entry can come into view at the same moment; taking it for the new one leaves the real
+			// spawn alive on the shared map, fighting every later scenario's character. A creature walking
+			// into view appears at the edge of the visibility range, so a new one near the player is taken
+			// at once. The client's own position may lag the server's by a few units (right after a
+			// MoveTo, say), hence the generous radius; a farther one is only the fallback at the deadline.
+			const BotUnit* selfUnit = self();
+			const Vector3 spawnPosition = selfUnit ? selfUnit->GetPosition() : Vector3::Zero;
+			constexpr float nearSpawnDistanceSq = 10.0f * 10.0f;
+
 			g_runtime->session->GetRealm().CheatCreateMonster(entry);
 
+			uint64 nearestGuid = 0;
 			const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(15);
-			while (std::chrono::steady_clock::now() < until)
+			while (true)
 			{
-				uint64 spawnedGuid = 0;
+				nearestGuid = 0;
+				float nearestDistanceSq = std::numeric_limits<float>::max();
 				objects.ForEachCreature([&](const BotUnit& unit)
 					{
-						if (spawnedGuid == 0 && unit.GetEntry() == entry && knownGuids.find(unit.GetGuid()) == knownGuids.end())
+						if (unit.GetEntry() != entry || knownGuids.find(unit.GetGuid()) != knownGuids.end())
 						{
-							spawnedGuid = unit.GetGuid();
+							return;
+						}
+
+						const float distanceSq = selfUnit ? unit.GetDistanceToSquared(spawnPosition) : 0.0f;
+						if (distanceSq < nearestDistanceSq)
+						{
+							nearestDistanceSq = distanceSq;
+							nearestGuid = unit.GetGuid();
 						}
 					});
 
-				if (spawnedGuid != 0)
+				const bool expired = std::chrono::steady_clock::now() >= until;
+				if (nearestGuid != 0 && (nearestDistanceSq <= nearSpawnDistanceSq || expired))
 				{
-					const std::string guidStr = guidToString(spawnedGuid);
+					const std::string guidStr = guidToString(nearestGuid);
 					if (g_runtime->transcript)
 					{
 						g_runtime->transcript->Action("GM.CreateMonster", { { "entry", entry }, { "guid", guidStr } });
 					}
 					return guidStr;
+				}
+
+				if (expired)
+				{
+					break;
 				}
 
 				pumpChecked();
@@ -1535,6 +1642,9 @@ namespace mmo
 				luabind::def_lambda("LastSpellVisualTarget", &luaLastSpellVisualTarget),
 				luabind::def_lambda("LastSpellVisualEvent", &luaLastSpellVisualEvent),
 				luabind::def_lambda("ClearLastSpellVisual", &luaClearLastSpellVisual),
+				luabind::def_lambda("SoundSource", &luaSoundSource),
+				luabind::def_lambda("SoundCount", &luaSoundCount),
+				luabind::def_lambda("ClearHeardSounds", &luaClearHeardSounds),
 				luabind::def_lambda("IsSubsystemAvailable", &luaIsSubsystemAvailable),
 				luabind::def_lambda("SubsystemStatusCount", &luaSubsystemStatusCount),
 				luabind::def_lambda("LastBugReportResult", &luaLastBugReportResult),
@@ -1554,9 +1664,11 @@ namespace mmo
 				luabind::def_lambda("GetMaxPower", &luaGetMaxPower),
 				luabind::def_lambda("IsAlive", &luaIsAlive),
 				luabind::def_lambda("MeleeSwingCount", &luaMeleeSwingCount),
+				luabind::def_lambda("OffhandSwingCount", &luaOffhandSwingCount),
 				luabind::def_lambda("IsAutoAttacking", &luaIsAutoAttacking),
 				luabind::def_lambda("IsChanneling", &luaIsChanneling),
 				luabind::def_lambda("ChannelStartCount", &luaChannelStartCount),
+				luabind::def_lambda("SpellGoCount", &luaSpellGoCount),
 				luabind::def_lambda("IsSpellOnCooldown", &luaIsSpellOnCooldown),
 				luabind::def_lambda("GetName", &luaGetName),
 				luabind::def_lambda("GetPosX", &luaGetPosX),
@@ -1565,6 +1677,8 @@ namespace mmo
 				luabind::def_lambda("GetDistance", &luaGetDistance),
 				luabind::def_lambda("HasAura", &luaHasAura),
 				luabind::def_lambda("HasSpell", &luaHasSpell),
+				luabind::def_lambda("GetTradeSkill", &luaGetTradeSkill),
+				luabind::def_lambda("GetTradeSkillMax", &luaGetTradeSkillMax),
 				luabind::def_lambda("GetItemCount", &luaGetItemCount),
 				luabind::def_lambda("GetMoney", &luaGetMoney),
 				luabind::def_lambda("GetXp", &luaGetXp),
@@ -1603,6 +1717,7 @@ namespace mmo
 				luabind::def_lambda("AcceptPartyInvitation", &luaAcceptPartyInvitation),
 				luabind::def_lambda("LeaveParty", &luaLeaveParty),
 				luabind::def_lambda("EquipFromBackpack", &luaEquipFromBackpack),
+				luabind::def_lambda("EquipBackpackItemTo", &luaEquipBackpackItemTo),
 				luabind::def_lambda("IsInParty", &luaIsInParty),
 				luabind::def_lambda("HasPendingPartyInvitation", &luaHasPendingPartyInvitation),
 				luabind::def_lambda("GetPartyMemberCount", &luaGetPartyMemberCount),
@@ -1782,6 +1897,10 @@ namespace mmo
 				if (attacker == realm.GetSelectedGuid())
 				{
 					++runtime.meleeSwings[victim];
+					if ((hitInfo & hit_info::LeftSwing) != 0)
+					{
+						++runtime.offhandSwings[victim];
+					}
 				}
 
 				transcript.Event("attack_hit",
@@ -1789,6 +1908,12 @@ namespace mmo
 					  { "damage", damage }, { "hit_info", hitInfo }, { "victim_state", victimState } });
 			}) };
 
+		const scoped_connection spellWentOffRecorder { realm.SpellWentOff.connect(
+			[&transcript, &runtime](const uint64 caster, const uint32 spellId)
+			{
+				++runtime.spellGos[{ caster, spellId }];
+				transcript.Event("spell_go", { { "caster", guidToString(caster) }, { "spell_id", spellId } });
+			}) };
 		const scoped_connection channelStartedRecorder { realm.ChannelStarted.connect(
 			[&transcript, &runtime](const uint64 caster, const uint32 spellId, const int32 durationMs)
 			{

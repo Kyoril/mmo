@@ -178,13 +178,10 @@ namespace mmo
 		m_minimapRenderTexture->Activate();
 		m_minimapRenderTexture->Clear(ClearFlags::All);
 
-		// Calculate zoom factor and world coverage
-		const float zoomFactor = GetZoomFactor();
 		constexpr float tileSize = terrain::constants::PageSize;
-		
-		// Calculate world area that the minimap covers based on zoom
-		// Base coverage is the minimap size in world units, scaled by zoom
-		const float worldCoverage = static_cast<float>(m_minimapSize) / zoomFactor;
+
+		// World area the minimap covers at the current zoom; independent of the render texture size.
+		const float worldCoverage = GetWorldCoverage();
 		const float halfCoverage = worldCoverage * 0.5f;
 
 		// Set up orthographic projection that maps from world coordinates to screen coordinates
@@ -223,11 +220,14 @@ namespace mmo
 			}
 		}
 
+		// The tiles are mip-mapped and usually drawn smaller than their texel density; trilinear keeps
+		// them from shimmering while the player moves.
+		gx.SetTextureFilter(TextureFilter::Trilinear);
 		m_geometryBuffer.Draw();
 
 		if (m_partyMemberTexture && !m_partyPositions.empty())
 		{
-			const float dotScale = 1.0f / GetZoomFactor();
+			const float dotScale = GetMarkerScale();
 			for (const PartyMemberDot& member : m_partyPositions)
 			{
 				Matrix4 world = Matrix4::Identity;
@@ -241,7 +241,7 @@ namespace mmo
 		// Render quest giver dots
 		if (!m_questGiverDots.empty())
 		{
-			const float dotScale = 1.0f / GetZoomFactor();
+			const float dotScale = GetMarkerScale();
 			for (const QuestGiverDot& dot : m_questGiverDots)
 			{
 				GeometryBuffer& geom = (dot.type == QuestDotType::Available) ? m_questAvailableGeom : m_questCompletableGeom;
@@ -259,7 +259,7 @@ namespace mmo
 			Matrix4 world = Matrix4::Identity;
 			world = world * Matrix4::GetTrans(Vector3(m_playerPosition.x, m_playerPosition.z, 0.0f));
 			world = world * Quaternion(m_playerOrientation, Vector3::NegativeUnitZ);
-			world = world * Matrix4::GetScale(Vector3(1.0f / GetZoomFactor(), 1.0f / GetZoomFactor(), 1.0f));
+			world = world * Matrix4::GetScale(Vector3(GetMarkerScale(), GetMarkerScale(), 1.0f));
 			gx.SetTransformMatrix(World, world);
 			m_playerGeom.Draw();
 		}
@@ -267,7 +267,7 @@ namespace mmo
 		// Render active pings (orange dots, alpha fades with remainingTime)
 		if (m_pingTexture && !m_pings.empty())
 		{
-			const float dotScale = 1.0f / GetZoomFactor();
+			const float dotScale = GetMarkerScale();
 			for (const PingDot& ping : m_pings)
 			{
 				const float alpha = std::clamp(ping.remainingTime / kPingDuration, 0.0f, 1.0f);
@@ -293,11 +293,18 @@ namespace mmo
 		m_zoomLevel = std::clamp(zoomLevel, 0, GetMaxZoomLevel());
 	}
 
-	float Minimap::GetZoomFactor() const
+	float Minimap::GetWorldCoverage() const
 	{
-		// Each zoom level increases by 10%: 1.0, 1.1, 1.21, 1.331, etc.
-		// Formula: 1.0 * (1.1 ^ zoomLevel)
-		return std::pow(1.1f, static_cast<float>(m_zoomLevel));
+		// Geometric steps from fully zoomed out to fully zoomed in, so every step feels the same.
+		const float t = static_cast<float>(m_zoomLevel) / static_cast<float>(GetMaxZoomLevel());
+		return s_maxWorldCoverage * std::pow(s_minWorldCoverage / s_maxWorldCoverage, t);
+	}
+
+	float Minimap::GetMarkerScale() const
+	{
+		// Marker quads are authored for a 256 m view; scaling with the coverage keeps them the same
+		// size on screen at every zoom level.
+		return GetWorldCoverage() / 256.0f;
 	}
 
 	void Minimap::NotifyWorldChanged(const String& worldName)
@@ -337,8 +344,7 @@ namespace mmo
 	luabind::object Minimap::GetMinimapObjectsAt(lua_State* L, float u, float v) const
 	{
 		// Convert UV [0,1] to world position using current view bounds
-		const float zoomFactor = GetZoomFactor();
-		const float worldCoverage = static_cast<float>(m_minimapSize) / zoomFactor;
+		const float worldCoverage = GetWorldCoverage();
 		const float halfCoverage = worldCoverage * 0.5f;
 
 		const float worldX = (m_playerPosition.x - halfCoverage) + u * worldCoverage;
@@ -347,7 +353,7 @@ namespace mmo
 
 		// Hit radius: dot is +-10 logical pixels; scale to world units
 		constexpr float kDotHalfSize = 10.0f;
-		const float hitRadius = kDotHalfSize / zoomFactor;
+		const float hitRadius = kDotHalfSize * GetMarkerScale();
 		const float hitRadiusSq = hitRadius * hitRadius;
 
 		auto distSq = [&](const Vector3& pos) -> float

@@ -32,6 +32,12 @@ TRUNCATION_MARKER = "\n... (diff truncated for the web UI)"
 MAX_REFIX = 3
 # Every feature parks for the maintainer: only a hash-bound "ship" decision merges one.
 FEATURE_REASON = "feature: shipping needs the maintainer's approval"
+# A bug the loop gave up on (needs-info) and that only the maintainer can move on: the web UI lists
+# this category, the daily summary counts it. Setting the bug back to `new` triages it again.
+NEEDS_INFO_CATEGORY = "needs_info"
+NEEDS_INFO_HINT = "; waiting for the maintainer: set the status to new to retry, or close it"
+# How the bug API records a maintainer's "Implement as feature" decision in the bug history.
+IMPLEMENT_HISTORY_PREFIX = "decision: implement: "
 # Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
 BUG_ID = re.compile(r"^[0-9a-f]{24}$")
 # While develop is red in CI nothing but the emergency ticket ships; everything else queues.
@@ -357,6 +363,8 @@ class BugLoop:
 				if self.state.is_feature(bug_id) and not parked:
 					# An interrupted first feature run goes back to where `implement` can be chosen again.
 					self._release(bug_id, "triaged", note + "; decide again", triage={"category": "design_request"})
+				elif not parked and bug_id != self.state.emergency_ticket():
+					self._release(bug_id, "triaged", note + NEEDS_INFO_HINT, triage={"category": NEEDS_INFO_CATEGORY})
 				else:
 					self._release(bug_id, "pr_open" if parked else "triaged", note)
 				self._finish(bug_id, "interrupted")
@@ -386,7 +394,8 @@ class BugLoop:
 	def _triage_failed(self, bug_id, error):
 		self._write(bug_id, "triage_error.txt", str(error))
 		if self.state.triage_failed(bug_id) >= 2:
-			self._update(bug_id, status="triaged", triage={"category": "needs-human"}, note="triage failed twice: " + str(error)[:500])
+			self._update(bug_id, status="triaged", triage={"category": NEEDS_INFO_CATEGORY},
+				note="triage failed twice: " + str(error)[:500] + NEEDS_INFO_HINT)
 			self._finish(bug_id, "triage-invalid", reason=str(error)[:300])
 		else:
 			self._update(bug_id, note="triage-invalid, retrying once: " + str(error)[:500])
@@ -439,17 +448,27 @@ class BugLoop:
 			bug = {"_id": bug_id}
 			verdict = EMERGENCY_VERDICT
 		else:
+			self._ensure_artifacts(bug_id)
 			bug = self._read(bug_id, "report.json")
 			verdict = self._read(bug_id, "triage.json")
 		# A guided refix that fails goes back to the maintainer, who can only decide on parked bugs;
 		# a failed feature run goes back to where `implement` can be chosen again; a failed
-		# emergency run goes back to `triaged`, where the loop retries it while attempts remain.
+		# emergency run goes back to `triaged`, where the loop retries it while attempts remain;
+		# any other failed fix goes to the maintainer's needs-info list (the loop never polls `triaged`).
 		failed_status = "pr_open" if guidance else "triaged"
 		fresh_feature = bool(feature) and not guidance
-		failed_fields = {"triage": {"category": "design_request"}} if fresh_feature else {}
-		again = "; decide again" if fresh_feature else ""
-		if emergency is not None:
+		if fresh_feature:
+			failed_fields = {"triage": {"category": "design_request"}}
+			again = "; decide again"
+		elif emergency is not None:
+			failed_fields = {}
 			again = self._retry_note()
+		elif not guidance:
+			failed_fields = {"triage": {"category": NEEDS_INFO_CATEGORY}}
+			again = NEEDS_INFO_HINT
+		else:
+			failed_fields = {}
+			again = ""
 		resume = bool(guidance) or bool(emergency and emergency.get("resume"))
 		previous = self._previous_attempt(bug_id) if resume else None
 		try:
@@ -476,6 +495,11 @@ class BugLoop:
 			self._finish(bug_id, "needs-info", reason="build configure failed")
 			return
 		start = None
+		if resume and emergency is None and not self._branch_available(branch):
+			# Parked on another machine before backups existed, or never parked (a needs-info bug
+			# the maintainer sent back with guidance): the guidance starts a fresh branch.
+			self.log("bug {}: no {} here or on origin; the guided refix starts from develop".format(bug_id, branch))
+			resume = False
 		if resume:
 			try:
 				start = self.worktree.resume_branch(branch)
@@ -621,6 +645,7 @@ class BugLoop:
 		self._update(bug_id, status="needs_decision" if question else "pr_open", prUrl="branch:" + branch,
 			designQuestion=question, note="parked for review: " + "; ".join(reasons)[:1800], release_claim=True)
 		self._upload_diff(bug_id)
+		self._backup_branch(bug_id, branch)
 		self._finish(bug_id, "parked", announce=announce, branch=branch, reasons=reasons[:10], decision_needed=bool(question))
 		if question:
 			self.notifier.send(notify.design_question_message(self.notifier, bug_id, self._summary(bug_id), question, branch))
@@ -712,6 +737,7 @@ class BugLoop:
 	def _discard(self, bug_id, guidance):
 		self._drop_queued_ship(bug_id)
 		self.worktree.delete_branch("bugfix/" + short_id(bug_id))
+		self._delete_backup("bugfix/" + short_id(bug_id))
 		if bug_id == self.state.emergency_ticket():
 			# No more automatic attempts on a ticket the maintainer discarded.
 			self.state.ci_phase()["parked"] = True
@@ -728,13 +754,89 @@ class BugLoop:
 			self._finish(bug_id, "refix-limit")
 			return
 		self.state.count_refix(bug_id)
+		self._recover_feature(bug_id)
 		# A feature accepted before descriptions were kept has none; it still parks via is_feature.
 		feature = self.state.feature_description(bug_id) if self.state.is_feature(bug_id) else None
 		self._fix(bug_id, guidance=guidance, feature=feature)
 
 	def _has_triage_artifacts(self, bug_id):
+		try:
+			self._ensure_artifacts(bug_id)
+		except Exception:
+			self.log(traceback.format_exc())
 		folder = os.path.join(self.artifacts_dir, bug_id)
 		return all(os.path.exists(os.path.join(folder, name)) for name in ("report.json", "triage.json"))
+
+	# ---- state another machine's loop left behind
+
+	def _ensure_artifacts(self, bug_id):
+		"""report.json and triage.json are local files; a bug triaged by a loop on another machine
+		has neither here. The report comes from the API again, the triage verdict is rebuilt from the
+		triage the API keeps (no new model call, so the category cannot change under the maintainer)."""
+		folder = os.path.join(self.artifacts_dir, bug_id)
+		report_path = os.path.join(folder, "report.json")
+		triage_path = os.path.join(folder, "triage.json")
+		if os.path.exists(report_path) and os.path.exists(triage_path):
+			return
+		bug = self.api.show(bug_id)
+		if not os.path.exists(report_path):
+			self._write(bug_id, "report.json", bug)
+		triage = bug.get("triage") if isinstance(bug.get("triage"), dict) else {}
+		if not os.path.exists(triage_path) and triage.get("category"):
+			summary = str(triage.get("summary") or "")
+			self._write(bug_id, "triage.json", {
+				"category": triage.get("category"), "severity": triage.get("severity") or "medium",
+				"component": triage.get("component") or "unknown", "observed": summary,
+				"expected_claim": "(not kept; triaged on another machine, see the triage summary)",
+				"duplicate_of": None, "abuse_evidence": "", "reasoning": "(not kept; triaged on another machine)",
+				"recovered_from_api": True})
+
+	def _recover_feature(self, bug_id):
+		"""A feature's description lives in the state of the loop that accepted it. Elsewhere it is
+		taken from the bug's history: the newest "implement" decision the maintainer key wrote."""
+		if self.state.is_feature(bug_id):
+			return
+		try:
+			bug = self.api.show(bug_id)
+		except Exception:
+			self.log(traceback.format_exc())
+			return
+		if (bug.get("triage") or {}).get("category") != "feature":
+			return
+		description = None
+		for entry in bug.get("history") or []:
+			change = entry.get("change") if isinstance(entry, dict) else None
+			if entry.get("actor") == "maintainer" and isinstance(change, str) and change.startswith(IMPLEMENT_HISTORY_PREFIX):
+				description = change[len(IMPLEMENT_HISTORY_PREFIX):].strip()[:4000] or None
+		self.state.add_feature(bug_id, description)
+		self.state.save()
+		self.log("bug {}: feature description {} from the bug history".format(bug_id, "recovered" if description else "not found"))
+
+	def _branch_available(self, branch):
+		"""The fix branch exists here, or is restored from its backup on origin."""
+		try:
+			return self.worktree.has_branch(branch) or self.worktree.restore_branch(branch)
+		except Exception:
+			self.log(traceback.format_exc())
+			return False
+
+	def _backup_branch(self, bug_id, branch):
+		if self.dry_run:
+			return
+		try:
+			ok, reason = self.worktree.backup_branch(branch)
+			if not ok:
+				self.log("bug {}: {}".format(bug_id, reason))
+		except Exception:  # a backup is a convenience for another machine, never a reason to stop
+			self.log(traceback.format_exc())
+
+	def _delete_backup(self, branch):
+		if self.dry_run:
+			return
+		try:
+			self.worktree.delete_backup(branch)
+		except Exception:
+			self.log(traceback.format_exc())
 
 	def _implement(self, bug_id, description):
 		"""The maintainer accepted a rejected report as a feature: implement it, never auto-ship it.
@@ -746,7 +848,7 @@ class BugLoop:
 		try:
 			head = self._read(bug_id, "decision.json").get("head")
 		except (OSError, ValueError):
-			head = None
+			head = self._recover_candidate(bug_id, branch)
 		try:
 			current = self.worktree.head(branch)
 		except Exception:
@@ -780,6 +882,17 @@ class BugLoop:
 			self._announce(bug_id, "ship-queued", {"branch": branch})
 			return
 		self._ship(bug_id, branch, summary, head, by_maintainer=True)
+
+	def _recover_candidate(self, bug_id, branch):
+		"""A bug parked on another machine has no decision.json and no diff.patch here. Its branch
+		comes from the backup on origin; the candidate is the branch tip and the review diff is
+		rebuilt from it, so the approved hash still has to match what is shipped."""
+		if not self._branch_available(branch):
+			return None
+		head = self.worktree.head(branch)
+		self._write(bug_id, "diff.patch", self.worktree.unified_diff(self.worktree.fork_point(branch), head))
+		self._write(bug_id, "decision.json", {"reasons": ["recovered from the branch backup on origin"], "head": head})
+		return head
 
 	def _previous_attempt(self, bug_id):
 		previous = {}
@@ -848,7 +961,12 @@ class BugLoop:
 		except Exception:
 			self.log(traceback.format_exc())
 			waiting = None
-		self.notifier.send(notify.daily_summary(snapshot, self.config.invocation_budget_per_day, waiting))
+		try:
+			needs_info = self.api.list(status="triaged", triage_category=NEEDS_INFO_CATEGORY, limit=1).get("pagination", {}).get("total", 0)
+		except Exception:
+			self.log(traceback.format_exc())
+			needs_info = None
+		self.notifier.send(notify.daily_summary(snapshot, self.config.invocation_budget_per_day, waiting, needs_info))
 
 	def _ship_blockers(self, by_maintainer=False):
 		blockers = []
@@ -940,6 +1058,7 @@ class BugLoop:
 		# The merge is on develop now: nothing below may undo that by releasing the bug.
 		try:
 			self.worktree.delete_branch(branch)
+			self._delete_backup(branch)
 			if emergency:
 				self._update(bug_id, status="resolved", release_claim=True,
 					note="emergency fix shipped by the bug loop in {} after {} was green on {}; waiting for CI on develop".format(
@@ -1535,6 +1654,7 @@ class BugLoop:
 				commit = self.worktree.merged(pr[len("branch:"):])
 				if commit:
 					self._update(bug["_id"], status="resolved", note="merged into develop in " + commit)
+					self._delete_backup(pr[len("branch:"):])
 					self.state.record(bug["_id"], "merged-by-user", commit=commit)
 					self._announce(bug["_id"], "merged-by-user", {"commit": commit})
 

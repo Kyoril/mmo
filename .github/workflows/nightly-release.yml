@@ -2,8 +2,9 @@ name: Nightly Release
 
 on:
   schedule:
-    # 22:00 UTC = 00:00 Berlin in summer, 23:00 in winter: the gate (<= 180 min), client build
-    # and staging finish well before the 04:45 maintenance.
+    # Fallback only: mmo-deployer dispatches this workflow at NIGHTLY_AT (23:00 Berlin), because
+    # GitHub starts scheduled runs hours late on busy nights (up to 4h49m observed), too late for
+    # the 04:45 maintenance. If the deployer's run already released develop's head, this one skips.
     - cron: "0 22 * * *"
   workflow_dispatch:
     inputs:
@@ -154,9 +155,20 @@ jobs:
           token: ${{ github.token }}
           github-binarycache: true
 
+      # Discord rich presence is compiled in only when a Discord application id is configured
+      # (repository variable or secret DISCORD_APP_ID); without one the client builds without it.
       - name: Configure CMake
         shell: pwsh
+        env:
+          DISCORD_APP_ID: ${{ vars.DISCORD_APP_ID || secrets.DISCORD_APP_ID }}
         run: |
+          $discord = @()
+          if ($env:DISCORD_APP_ID) {
+            $discord = @('-DMMO_WITH_DISCORD_RPC=ON', "-DMMO_DISCORD_APP_ID=$($env:DISCORD_APP_ID.Trim())")
+            Write-Host "Discord RPC enabled"
+          } else {
+            Write-Host "DISCORD_APP_ID not set, building without Discord RPC"
+          }
           cmake -S . -B build `
             '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' `
             '-DMMO_BUILD_CLIENT=ON' `
@@ -167,7 +179,8 @@ jobs:
             '-DMMO_OPENSSL_STATIC=ON' `
             '-DOPENSSL_USE_STATIC_LIBS=TRUE' `
             '-DVCPKG_TARGET_TRIPLET=x64-windows-static-md' `
-            "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+            "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            @discord
 
       # This launcher build is only the fallback until a launcher-v* release exists: the deployer
       # swaps in the newest launcher release (.github/workflows/launcher-release.yml).
@@ -223,14 +236,19 @@ jobs:
 
       # Claude Code writes the notes with the maintainer's subscription token (`claude setup-token`,
       # repository secret CLAUDE_CODE_OAUTH_TOKEN); no paid API key. Never fails the release:
-      # without Claude, or without the data names, the notes fall back to the commit subjects
-      # (tools/release/patch_notes.py).
+      # without Claude, or without the data names, the notes fall back to a generic line
+      # (tools/release/patch_notes.py never shows commit subjects to players).
       - name: Write patch notes
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           python3 -m pip install --quiet grpcio-tools || echo "grpcio-tools unavailable; notes without data names"
-          npm install --global --silent @anthropic-ai/claude-code || echo "claude CLI unavailable; fallback notes"
+          # sudo: the global prefix of the runner's node is not writable. The CLI must be reachable
+          # afterwards, otherwise the notes silently fall back to generic text (it happened).
+          sudo npm install --global @anthropic-ai/claude-code || echo "::warning::claude CLI install failed; generic patch notes"
+          echo "$(npm prefix -g)/bin" >> "$GITHUB_PATH"
+          export PATH="$(npm prefix -g)/bin:$PATH"
+          claude --version || echo "::warning::claude CLI not runnable; generic patch notes"
           python3 tools/release/patch_notes.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
             --version "$VERSION" --out dist/patch_notes.json --markdown notes.md
 

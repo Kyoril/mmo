@@ -19,7 +19,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sfx_gen"))
 
-from recipes import cleric, hollow_choir, human, mage, warrior
+from recipes import acolyte, cleric, creature_combat, hollow_choir, human, mage, scout, warrior
 
 
 class _RecipeChecks:
@@ -119,7 +119,7 @@ class HumanRecipeTests(_RecipeChecks, unittest.TestCase):
 
 class HollowChoirRecipeTests(_RecipeChecks, unittest.TestCase):
     recipe = hollow_choir
-    count = 26
+    count = 29
 
     def test_every_prompt_names_its_layers(self):
         # Layered by mixing (see human.py): each prompt is one element and must exclude music,
@@ -153,6 +153,129 @@ class HollowChoirRecipeTests(_RecipeChecks, unittest.TestCase):
     def test_every_final_is_built_exactly_once(self):
         built = list(hollow_choir.MIXES) + list(hollow_choir.SINGLES)
         self.assertEqual(sorted(built), sorted(hollow_choir.FINAL_ORDER))
+
+
+class ScoutRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = scout
+    count = 21
+
+    def test_every_prompt_names_its_layers(self):
+        # Layered by mixing (see human.py): each prompt is one element and must exclude the
+        # voice and the music, or a grunt or a score bed bleeds into every layer.
+        for name, spec in scout.SOUNDS.items():
+            lowered = spec.prompt.lower()
+            self.assertIn("no voice", lowered, f"{name}: must exclude the voice")
+            self.assertIn("no music", lowered, f"{name}: must exclude music")
+
+    def test_nothing_loops(self):
+        for name, spec in scout.SOUNDS.items():
+            self.assertFalse(spec.loop, name)
+
+    def test_mixes_reference_generated_layers(self):
+        for mix_name, mix in scout.MIXES.items():
+            self.assertGreaterEqual(len(mix["layers"]), 2, f"{mix_name}: a mix needs layers")
+            for entry in mix["layers"]:
+                self.assertIn(entry.sound, scout.SOUNDS, f"{mix_name}: unknown layer")
+                self.assertTrue(1 <= entry.take <= 3, f"{mix_name}: take {entry.take}")
+                self.assertGreaterEqual(entry.offset, 0.0)
+                self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
+
+    def test_every_final_has_its_file(self):
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+        if not os.path.isdir(os.path.join(root, scout.OUTPUT_DIR)):
+            self.skipTest("data/client submodule is not checked out")
+        for name in scout.FINAL_ORDER:
+            self.assertTrue(os.path.isfile(os.path.join(root, scout.OUTPUT_DIR, name + ".wav")), name)
+
+
+class AcolyteRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = acolyte
+    count = 16
+
+    def test_every_prompt_names_its_layers(self):
+        # Layered by mixing (see human.py): each prompt is one element and must exclude music,
+        # and either the voice or -- for the whisper and wail layers -- words.
+        for name, spec in acolyte.SOUNDS.items():
+            lowered = spec.prompt.lower()
+            self.assertIn("no music", lowered, f"{name}: must exclude music")
+            self.assertTrue("no voice" in lowered or "no words" in lowered,
+                            f"{name}: must exclude the voice or words")
+
+    def test_voice_layers_stay_wordless(self):
+        for name, spec in acolyte.SOUNDS.items():
+            lowered = spec.prompt.lower()
+            if re.search(r"(?<!no )\b(whisper\w*|wail|voices)\b", lowered):
+                self.assertIn("wordless", lowered, name)
+
+    def test_only_channel_singles_loop(self):
+        for final, (sound, take, _) in acolyte.SINGLES.items():
+            self.assertIn(sound, acolyte.SOUNDS)
+            self.assertTrue(1 <= take <= 4)
+            self.assertTrue(acolyte.SOUNDS[sound].loop, final)
+        looped = {name for name, spec in acolyte.SOUNDS.items() if spec.loop}
+        self.assertEqual(looped, {sound for sound, _, _ in acolyte.SINGLES.values()})
+
+    def test_mixes_reference_generated_layers(self):
+        for mix_name, mix in acolyte.MIXES.items():
+            self.assertGreaterEqual(len(mix["layers"]), 2, f"{mix_name}: a mix needs layers")
+            for entry in mix["layers"]:
+                self.assertIn(entry.sound, acolyte.SOUNDS, f"{mix_name}: unknown layer")
+                self.assertFalse(acolyte.SOUNDS[entry.sound].loop, mix_name)
+                self.assertTrue(1 <= entry.take <= 4, f"{mix_name}: take {entry.take}")
+                self.assertGreaterEqual(entry.offset, 0.0)
+                self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
+
+    def test_every_final_has_its_file(self):
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+        if not os.path.isdir(os.path.join(root, acolyte.OUTPUT_DIR)):
+            self.skipTest("data/client submodule is not checked out")
+        for name in acolyte.FINAL_ORDER:
+            self.assertTrue(os.path.isfile(os.path.join(root, acolyte.OUTPUT_DIR, name + ".wav")), name)
+
+
+class CreatureCombatRecipeTest(unittest.TestCase):
+    """Creature vocalisations are one source per prompt, so the layer rule does not apply."""
+
+    def test_every_creature_covers_every_event(self):
+        for creature, events in creature_combat.CREATURES.items():
+            self.assertEqual(tuple(events), creature_combat.EVENTS, creature)
+
+    def test_every_prompt_fits_the_model_limit(self):
+        for creature, events in creature_combat.CREATURES.items():
+            for event, spec in events.items():
+                self.assertLessEqual(len(spec.prompt), creature_combat.MAX_PROMPT_CHARS,
+                                     f"{creature} {event}: the model fails silently above the cap")
+
+    def test_no_prompt_reintroduces_the_foley_clause(self):
+        banned = ("dry close-mic", "no reverb", "single isolated")
+        for creature, events in creature_combat.CREATURES.items():
+            for event, spec in events.items():
+                for phrase in banned:
+                    self.assertNotIn(phrase, spec.prompt.lower(), f"{creature} {event}")
+
+    def test_durations_and_levels_are_sane(self):
+        for creature, events in creature_combat.CREATURES.items():
+            for event, spec in events.items():
+                self.assertTrue(0.5 <= spec.duration <= 3.0, f"{creature} {event}")
+                self.assertTrue(-12.0 <= spec.target_dbfs <= 0.0, f"{creature} {event}")
+
+    def test_npc_lines_are_cast_and_unique(self):
+        paths = [path for path, _, _, _ in creature_combat.NPC_CLIPS]
+        self.assertEqual(len(paths), len(set(paths)))
+        for path, voice, model, _ in creature_combat.NPC_CLIPS:
+            self.assertIn(voice, creature_combat.VOICES, path)
+            self.assertIn(model, (creature_combat.MODEL_GRUNT, creature_combat.MODEL_EXPRESSIVE), path)
+            # Locale relative, see locale-asset-paths: never prefixed with Locales/.
+            self.assertTrue(path.startswith("Voice/"), path)
+
+    def test_npc_grunts_stay_wordless(self):
+        # Effort and pain repeat dozens of times per fight; words wear out at that rate.
+        for path, _, model, text in creature_combat.NPC_CLIPS:
+            if "_Effort_" in path or "_Pain_" in path or "_Aggro_" in path:
+                if "_Aggro_" not in path:
+                    self.assertEqual(model, creature_combat.MODEL_GRUNT, path)
+                text = re.sub(r"\[[^\]]*\]", "", text)
+                self.assertEqual(len(text.split()), 1, f"{path}: '{text}' is not a single grunt")
 
 
 if __name__ == "__main__":

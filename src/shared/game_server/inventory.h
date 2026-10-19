@@ -23,6 +23,8 @@
 
 #include <memory>
 #include <map>
+#include <utility>
+#include <vector>
 
 namespace io
 {
@@ -78,6 +80,8 @@ namespace mmo
 		  public IEquipmentManagerContext,
 		  public IBagManagerContext
 	{
+		/// Test-only access to the private item bookkeeping (defined by the test suites that need it).
+		friend struct InventoryTestAccess;
 		friend io::Writer &operator<<(io::Writer &w, Inventory const &object);
 		friend io::Reader &operator>>(io::Reader &r, Inventory &object);
 
@@ -141,6 +145,14 @@ namespace mmo
 
 		/// Determines whether the specified items can be stored.
 		InventoryChangeFailure CanStoreItems(const proto::ItemEntry &entry, uint16 amount = 1) const;
+
+		/// Determines whether all of the given items can be stored at the same time. Asking for
+		/// each entry on its own is not enough, because the entries compete for the same empty
+		/// slots: a successful answer here means none of the matching CreateItems calls can fail
+		/// for lack of space.
+		/// @param items The item entries (must not be null) and the amount of each to store.
+		/// @returns game::inventory_change_failure::Okay if all of them fit.
+		InventoryChangeFailure CanStoreItems(const std::vector<std::pair<const proto::ItemEntry *, uint16>> &items) const;
 
 		/// Gets a reference of the owner of this inventory.
 		GamePlayerS &GetOwner()

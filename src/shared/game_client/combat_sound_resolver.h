@@ -97,5 +97,13 @@ namespace mmo
 
 		/// @brief Resolves the victim's pain react voice for a landed hit.
 		CombatVoiceRequest ResolveHitVoice(const proto_client::ModelDataManager& models, uint32 displayId, bool crit);
+
+		/// @brief Resolves the sound a unit makes when it enters combat.
+		/// @return SoundEntry id, or 0.
+		uint32 ResolveAggroSound(const proto_client::ModelDataManager& models, uint32 displayId);
+
+		/// @brief Resolves the sound a unit makes when it dies.
+		/// @return SoundEntry id, or 0.
+		uint32 ResolveDeathSound(const proto_client::ModelDataManager& models, uint32 displayId);
 	}
 }

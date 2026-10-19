@@ -100,7 +100,8 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - In the game, Oakenshire is the first hub (levels 1–6). [C] It has:
   - a **Town Hall** whose ground floor holds the class trainers (q3, q4, q7, q23);
   - an **Inn** run by Old Harbin, with a rat-infested cellar (q10);
-  - a **west gate** held by the **Oakenshire Watch** (u46, u47).
+  - a **west gate** held by the **Oakenshire Watch** (u46, u47);
+  - a **market** east of the Inn's front steps (atlas `oakenshire_market`, placeholder) with Eliza Thorne (General Goods), Garret Blackwood (Weapons), Roland Stonehelm (Mail & Plate) and Derrick Longstride (Leather Armor). On 2026-10-16 the user had them moved here from the buried old-Haven market. [E]
 - Farms and woodcutters lie in the valley south-east of town, and boars trample them (q1, q5, q6). [C]
 - A bandit camp lies in the woods south of town (q9, q24, q31, q33). [C]
 - **Forest Camp** is where the human story begins, and the player starts there, not in a town. [E]
@@ -113,7 +114,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - A walled town and major human hub, reached around level 10. It has guards, vendors and class trainers. [E]
 - **Haven has no terrain yet.** The zone rows exist, but no terrain tile carries its area id. [C]
 - The data strongly suggests Haven once stood around the map origin:
-  - Five vendors stand at about (0, 21): Eliza Thorne (General Goods), Garret Blackwood (Weapons), Roland Stonehelm (Mail & Plate), Derrick Longstride (Leather Armor) and Mariana Silkspun (Clothier).
+  - Five vendors stood at about (0, 21). Four of them moved to the Oakenshire market on 2026-10-16 (section 3.2). Mariana Silkspun (Clothier) is still buried there; Milly Goldwyn sells the same cloth list in Oakenshire.
   - Injured Guards stand "north east of Haven" near (−55, −45) (q8).
   - Haven's binder is Magister Calloran (u25), who is not spawned.
   - All of these NPCs are buried 3–7 m below the current terrain. [C]
@@ -121,7 +122,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - The atlas pin `haven` is canon at (−781, 1249), radius about 310 m: a big walled city on flat, empty ground with no zone yet.
   - It is about 1.3 km from the Oakenshire Town Hall in a straight line.
 - The continent sketch shows Haven just **south** of Oakenshire. [E]
-- The buried Haven NPCs at the map origin are leftovers. They have to move to the new Haven, or be removed. [?]
+- The remaining buried Haven NPCs at the map origin are leftovers. They have to move to the new Haven, or be removed. [?]
 - The Westwatch Training Yard (q21: "not far from here") stands with them. Does it move into Haven, or stay near Oakenshire as a place of its own? [?]
 
 ### 3.4 Westwatch Training Yard
@@ -298,27 +299,27 @@ Open [?]:
 |---|---|---|---|---|---|
 | Farmer Haldor | farmer; boars threaten his fields | `forest_camp` | 15 | 1, 5, 6 / 1, 5, 6 | [E][C] |
 | Healer Mirenna | healer; sells minor potions after q2 | `forest_camp` | 16 | 2, 7 / 2 | [E][C] |
-| Guard Emrik | camp guard; sends new adventurers to their trainers | `forest_camp` | 17 | 3, 4, 23 / – | [E][C] |
+| Guard Emrik | camp guard; sends new adventurers to their trainers, and on to the west gate once Haldor's young boars are dealt with (q66) | `forest_camp` | 17 | 3, 4, 23, 72, 66 / – | [E][C] |
 | Aralin the Kindling | Oakenshire binder | `forest_camp` | 24 | – | [C] |
 | Baldric Steelheart | warrior trainer | `oakenshire_hub` (Town Hall) | 10 | 21, 31, 32 / 3, 31, 32 | [E][C] |
 | Vivienne Emberglow | mage trainer | `oakenshire_hub` | 11 | 33, 34 / 4, 33, 34 | [C] |
 | Clarissa Whiteshield | cleric trainer | `oakenshire_hub` | 12 | 8, 35, 36 / 7, 8, 35, 36 | [C] |
-| Malrik Duskwright | shadowmancer trainer | `oakenshire_hub` | 13 | 37, 38 / 37, 38 | [C] |
+| Malrik Duskwright | shadowmancer trainer | `oakenshire_hub` | 13 | 37, 38 / 37, 38, 72 | [C] |
 | Elira Hawke | scout trainer | `oakenshire_hub` | 38 | 39, 40 / 23, 39, 40 | [C] |
 | Milly Goldwyn | clothier | `oakenshire_hub` | 20 | – | [C] |
 | Old Harbin | innkeeper of the Oakenshire Inn | `hub_near_old_harbin` | 27 | 10 / 10 | [C] |
-| Lina Groveroot | herbalist; robbed on the south road | `hub_near_lina_groveroot` | 26 | 9 / 9 | [C] |
-| Guard-Corporal Rowan Hale | Oakenshire Watch, west gate | `oakenshire_west_gate` | 46 | 24, 54 / 24, 54 | [C] |
+| Lina Groveroot | herbalist; robbed on the trail south of town | `hub_near_lina_groveroot` | 26 | 9 / 9 | [C] |
+| Guard-Corporal Rowan Hale | Oakenshire Watch, west gate | `oakenshire_west_gate` | 46 | 24, 54 / 24, 66 | [C] |
 | Gatewarden Elias Rook | Oakenshire Watch, west gate | `briarwatch_west_gate` | 47 | 25 / – | [C] |
 | Armsmaster Theobald Kerrin | runs the Westwatch Training Yard | `haven` (placeholder) | 41 | 22 / 21, 22 | [E][C] |
 | Sergeant Bram Halford | veteran; final opponent of q22 | `haven` | 43 | – | [E][C] |
 | Thalric Stonehammer | foreman and master builder of the Briarwatch camp | `briarwatch_camp` | 36 | 19, 26, 27 / 19, 25, 26, 27 | [C] |
 | Quartermaster Harlan Pike | Briarwatch supplies | `briarwatch_camp` | 53 | 28, 55 / 28, 55 | [C] |
-| Scout Mirelle Voss | Briarwatch pathfinder | `briarwatch_camp` | 52 | 29, 30, 41 / 29, 30 | [C] |
+| Scout Mirelle Voss | Briarwatch pathfinder | `briarwatch_camp` | 52 | 29, 30, 41 / 29, 30, 54 | [C] |
 | Hearthkeeper Maida Thorn | soul binder | `briarwatch_camp` | 68 | – | [C] |
 | Wayfarer Captain Aldric Vane | holds the Kingsroad Waypost | `kingsroad_waypost` | 62 | 42, 43, 44 / 41, 42, 43 | [C] |
 | Expedition Leader Maren Duskvale | leads the Mirewater expedition | `mirewater_camp` | 63 | 45–48 / 44–47 | [C] |
-| Surveyor Wick Farrow | expedition surveyor; escort in the Barrowfield | `barrowfield` | 80 | 56 / – | [C] |
+| Surveyor Wick Farrow | expedition surveyor; escort in the Barrowfield | `barrowfield` | 80 | 56 / 56 | [C] |
 | Chaplain Osric Dawnmere | holds the Barrowfront Camp | `barrowfront_camp` | 64 | 49, 50, 53, 57–62 / 48–50, 53, 57–62 | [C] |
 | Scout Brialla Fenn | Barrowfront scout | `barrowfront_camp` | 65 | 51, 52, 63–65 / same | [C] |
 | Lanternkeeper Edran Mosswick | soul binder | `barrowfront_camp` | 69 | – | [C] |
@@ -326,7 +327,7 @@ Open [?]:
 | Sevrin Wax, the Coffinwright | Warden of the Hollow Choir | map 1 | 81 | – | [C] |
 | Ossuar, the Bonebinder | Keeper of the North Ossuary | map 1 | 84 | – | [C] |
 | Choirmistress Vell | Voice of the Second Verse | map 1 | 85 | – | [C] |
-| Magister Calloran | Haven binder | not spawned | 25 | – / 20 | [C] |
+| Magister Calloran | Haven binder | not spawned | 25 | – / – | [C] |
 | Captain Arlen, Brakk the Redhand | draft names without a place | not in data | – | – | [?] |
 
 Class trainers also stand at the Briarwatch camp and the Barrowfront camp:
@@ -459,7 +460,9 @@ Derived from the names already in the game. [C]
 ### Errors in the game data found while building this bible
 
 7. **q21 "The Warrior's Trial":** the reward text says "So. **Garrick** sent you", but the quest comes from Baldric Steelheart.
+   **Resolved 2026-10-18:** the text now names Baldric.
 8. **q8 "Hands of the Light":** it tells the player to return "to Clarissa Whiteshield **in Haven**", but she teaches in Oakenshire Town Hall.
+   **Resolved 2026-10-18:** the objective now says "in Oakenshire".
 9. **Compass directions:** some quests have north and south swapped. North is −Z (the minimap).
    - q29 says the Deepwood fringe is "south-west of camp"; the objective is **north-west**.
    - q30 says the broken ground is "south of camp"; it is **north-west**.
@@ -467,7 +470,8 @@ Derived from the names already in the game. [C]
    - q55 says the Mirewater is "to the south"; it is **north-west**.
    - q56 says the Barrowfront palisade is "just north of here"; it is **south**.
    The Oakenshire quests (5, 6, 9, 24, 31, 33) are correct.
-10. **q56 "Out of the Barrowfield"** has no NPC that accepts the turn-in (the escort cannot be completed). The content report lists it.
+10. **q56 "Out of the Barrowfield"** had no NPC that accepts the turn-in (the escort could not be completed).
+    **Resolved 2026-10-18:** Wick Farrow ends his own escort quest, like the other exploration quests (q8, q22); the quest's reward trigger 27 then stops him following and despawns him.
 11. **q26:** the young wolves are "around the ruined cottages farther west". The nearest Young Forest Wolves spawn 45–70 m **east** of Thalric's camp, around (−15, 515). The Ruined Cottages (zone 10) lie about 200 m west.
 
 ### World facts that need a decision

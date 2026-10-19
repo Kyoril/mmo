@@ -204,6 +204,25 @@ SOUNDS = {
         "fading in about one second, slightly eerie. Only the hum: no voice, no impact, no "
         "music. Fantasy game buff sound.",
         duration=1.5, target_dbfs=-3.0),
+
+    # --- Loot: Coffin Nail Dagger proc (Coffin Rot, spell 274) ---------------------------------
+    # Fires on a melee hit, so it sits on top of the swing sound: short, dark, and quieter than
+    # the boss sounds (the final goes out at -6 dBFS).
+    "Loot_Rot_Nail": SoundSpec(
+        "A single short sharp puncture: an old rusty iron nail driven hard into rotten wet wood, "
+        "a quick crunchy splintering stab with very fast decay. Only the nail puncture: no "
+        "magic, no voice, no music. " + _CRYPT,
+        duration=1.0, target_dbfs=-3.0),
+    "Loot_Rot_Shadow": SoundSpec(
+        "A short dark magical shadow burst: a hollow cold ghostly exhale, a low breathy whoosh "
+        "of dark energy that swells and fades quickly. Only the dark whoosh: no impact, no "
+        "voice, no music. " + _CRYPT,
+        duration=1.2, target_dbfs=-3.0),
+    "Loot_Rot_Hiss": SoundSpec(
+        "A short sickly wet hiss of rot and decay: tiny bubbling, festering fizz and spores "
+        "puffing out, fading away quickly. Only the rot hiss: no impact, no whoosh, no voice, "
+        "no music. " + _CRYPT,
+        duration=1.2, target_dbfs=-3.0),
 }
 
 # Finals that are a single generated take, postprocessed: final name -> (layer, take, dBFS).
@@ -283,6 +302,16 @@ MIXES = {
     },
     # The swell prompt still peaks around 40% of the clip, so the crescendo is built by the mix:
     # the riser carries the build and the choir lands on its burst.
+    # Coffin Nail Dagger proc. Three variants went to audition (balanced / darker / punchy);
+    # the balanced one is in until the user picks. Quieter than the boss sounds.
+    "Loot_CoffinRotHit": {
+        "target_dbfs": -6.0,
+        "layers": [
+            MixLayer("Loot_Rot_Nail", take=2, offset=0.0, gain_db=0.0),
+            MixLayer("Loot_Rot_Shadow", take=1, offset=0.02, gain_db=-3.0),
+            MixLayer("Loot_Rot_Hiss", take=3, offset=0.05, gain_db=-8.0, length=0.7),
+        ],
+    },
     "Veyr_ChoirRisesCast": {
         "target_dbfs": -4.0,
         "layers": [
@@ -300,4 +329,45 @@ FINAL_ORDER = [
     "Mereth_SilentLoop",
     "Veyr_DissonanceMark", "Veyr_DissonanceWave", "Veyr_DirgeLoop", "Veyr_ChoirRisesCast",
     "Veyr_ResonanceHum",
+    "Loot_CoffinRotHit",
 ]
+
+# --- Boss yells -------------------------------------------------------------------------------
+#
+# Voice lines for the encounter yells (triggers 53-73, SoundEntry 157-168, see
+# tools/hollow_choir/author_triggers.py VOICE). Generated with creative_generate_speech on
+# eleven_v3, whose inline audio tags carry the delivery; two takes per line, take 1 shipped. Files
+# are localized assets: Locales/Locale_enUS/Voice/Npc/<Boss>/<Boss>_<Line>.wav, referenced
+# locale-relative as Voice/Npc/..., normalised to -4 dBFS by fetch.py like every voice line.
+#
+# Cast (library voices; look the ids up again with creative_list_voices before reusing):
+#   Brother Oswin  -- "Branok - Evil and Villainous"       ancient, gravelly, menacing
+#   Sister Mereth  -- "Minerva Nightshade"                 icy, venomous whispers, cracking grief
+#   Cantor Veyr    -- "Jerry B. - Dark Villain"            deep, theatrical, British
+# Veyr was first cast as "Medraut - Theatrical Villain"; v3 gave him a German accent, so every
+# Veyr prompt now opens with [British accent].
+#
+# The prompts keep the chat text word for word; only tags, ellipses and capitals are added.
+VOICE_CAST = {
+    "Oswin": "Vs5CmVCVJwW4odQS2pVf",
+    "Mereth": "fgDJOgmENIR82PueQrVs",
+    "Veyr": "NxGA8X3YhTrnf3TRQf6Q",
+}
+
+VOICE_PROMPTS = {
+    "Oswin_Aggro": "[deep voice] [angry] Who disturbs the vigil? [menacing] The dead are resting. "
+                   "[shouting] You will rest... WITH THEM!",
+    "Oswin_LastVigil": "[shouting] RISE, brothers! [raspy] [dramatically] Keep the vigil... with ME!",
+    "Oswin_Death": "[raspy] [breathless] The candles... [trembling voice] [whispers] are going out...",
+    "Mereth_Aggro": "[whispers] Hush. [sad] [menacing] Can you not hear them... weeping?",
+    "Mereth_Voices1": "[softly] Sing with me, sisters. [angry] [shouting] Sing them DOWN!",
+    "Mereth_Voices2": "[shouting] Louder! [crying] [shouting] Let the whole abbey GRIEVE!",
+    "Mereth_Death": "[trembling voice] [whispers] Silence... [sighs] at last...",
+    "Veyr_MerethFalls": "[British accent] [dramatically] A voice is missing from my choir. "
+                        "[menacing] Come, then. [mischievously] Take her place.",
+    "Veyr_Aggro": "[British accent] [sarcastic] You are late for the service. "
+                  "[dramatically] The hymn has already BEGUN.",
+    "Veyr_ChoirRises": "[British accent] [shouting] Voices! [dramatically] [shouting] Lift me UP!",
+    "Veyr_Finale": "[British accent] [shouting] The final verse! [dramatically] All of you... [shouting] SING!",
+    "Veyr_Death": "[British accent] [breathless] The choir... is... [whispers] hollow...",
+}

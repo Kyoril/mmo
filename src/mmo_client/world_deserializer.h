@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/chunk_reader.h"
+#include <atomic>
 #include <vector>
 #include <string>
 #include <functional>
@@ -59,10 +60,16 @@ namespace mmo
 
 		void UnloadAllEntities();
 
+		/// @brief Whether page entities are still being read or world models still being prepared.
+		/// @details World models are created over several dispatcher steps, so a caller that must see
+		///          the finished world (the loading screen) keeps pumping the work queue and dispatcher
+		///          until this returns false.
+		bool HasPendingEntityLoads() const { return m_pendingEntityFiles.load() > 0 || m_pendingWorldModels > 0; }
+
 	protected:
 		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
 
-		WorldModelInstance* CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
+		WorldModelInstance* CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId, const std::vector<String>& kitPaths);
 
 		static uint16 BuildPageIndex(uint8 x, const uint8 y)
 		{
@@ -77,6 +84,21 @@ namespace mmo
 		}
 
 		void InternalLoadPageEntity(uint16 pageIndex, const String& filename);
+
+		/// @brief A streamed world model placement whose resources are loaded one step at a time.
+		struct WorldModelPreparation;
+
+		/// @brief Starts preparing a streamed world model placement. Main thread only.
+		/// @details Instantiating a world model the first time loads its file, every child world model,
+		///          prop kit, mesh, material and texture, and merges its geometry - hundreds of
+		///          milliseconds for a town. Each of those becomes its own dispatcher step instead, so the
+		///          streaming budget spreads them over frames; the final step only creates the instance.
+		void BeginWorldModelEntity(uint16 pageIndex, const WorldEntityLoader::MapEntity& entity);
+
+		/// @brief Runs one step of a preparation and queues the next one, or creates the instance.
+		void ContinueWorldModelEntity(const std::shared_ptr<WorldModelPreparation>& preparation);
+
+		void PostPreparationStep(const std::shared_ptr<WorldModelPreparation>& preparation);
 
 		/// @brief Loads the instanced foliage (.hfol) file for the given page, if present.
 		void LoadPageFoliage(uint8 x, uint8 y);
@@ -111,6 +133,12 @@ namespace mmo
 		std::map<uint64, WorldModelPlacement> m_worldModels;
 
 		std::set<uint16> m_loadedPages;
+
+		/// @brief Entity files posted to the work queue whose result has not been handled on the main thread yet.
+		std::atomic<uint32> m_pendingEntityFiles{ 0 };
+
+		/// @brief World model preparations that have neither created their instance nor been dropped yet.
+		uint32 m_pendingWorldModels = 0;
 
 		/// @brief Hardware-instanced renderer for authored foliage (trees) loaded per page.
 		std::unique_ptr<InstancedFoliage> m_foliage;

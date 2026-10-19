@@ -14,6 +14,7 @@
 
 #include <map>
 #include <memory>
+#include "game/id_mask.h"
 #include "game/loot.h"
 #include "proto_data/project.h"
 #include "shared/proto_data/combat_settings.pb.h"
@@ -616,9 +617,12 @@ namespace mmo
 			return true;
 		}
 
-		if (const auto it2 = m_spellCategoryCooldowns.find(spellCategory); it2 != m_spellCategoryCooldowns.end() && it2->second > now)
+		if (spellCategory != 0)
 		{
-			return true;
+			if (const auto it2 = m_spellCategoryCooldowns.find(spellCategory); it2 != m_spellCategoryCooldowns.end() && it2->second > now)
+			{
+				return true;
+			}
 		}
 
 		return false;
@@ -648,14 +652,14 @@ namespace mmo
 			if (IsPlayer())
 			{
 				GamePlayerS &playerCaster = AsPlayer();
-				if (spell->racemask() != 0 && !(spell->racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
+				if (spell->racemask() != 0 && !(spell->racemask() & IdMaskBit(playerCaster.GetRaceEntry()->id())))
 				{
 					WLOG("Spell " << spellId << " is not usable by the players race");
 					continue;
 				}
 
 				// Check class requirement
-				if (spell->classmask() != 0 && !(spell->classmask() & (1 << (playerCaster.GetClassEntry()->id() - 1))))
+				if (spell->classmask() != 0 && !(spell->classmask() & IdMaskBit(playerCaster.GetClassEntry()->id())))
 				{
 					WLOG("Spell " << spellId << " is not usable by the players class");
 					continue;
@@ -684,14 +688,14 @@ namespace mmo
 		if (IsPlayer())
 		{
 			GamePlayerS &playerCaster = AsPlayer();
-			if (spell->racemask() != 0 && !(spell->racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
+			if (spell->racemask() != 0 && !(spell->racemask() & IdMaskBit(playerCaster.GetRaceEntry()->id())))
 			{
 				WLOG("Spell " << spellId << " is not usable by the players race");
 				return;
 			}
 
 			// Check class requirement
-			if (spell->classmask() != 0 && !(spell->classmask() & (1 << (playerCaster.GetClassEntry()->id() - 1))))
+			if (spell->classmask() != 0 && !(spell->classmask() & IdMaskBit(playerCaster.GetClassEntry()->id())))
 			{
 				WLOG("Spell " << spellId << " is not usable by the players class");
 				return;
@@ -825,6 +829,13 @@ namespace mmo
 
 	void GameUnitS::SetSpellCategoryCooldown(const uint32 spellCategory, const GameTime cooldownTimeMs)
 	{
+		// Category 0 is "no category". Storing a cooldown for it would put every uncategorised
+		// spell - almost all of them - on a shared cooldown.
+		if (spellCategory == 0)
+		{
+			return;
+		}
+
 		if (cooldownTimeMs == 0)
 		{
 			m_spellCategoryCooldowns.erase(spellCategory);
@@ -833,6 +844,24 @@ namespace mmo
 		{
 			m_spellCategoryCooldowns[spellCategory] = GetAsyncTimeMs() + cooldownTimeMs;
 		}
+	}
+
+	void GameUnitS::LockSpellSchool(const uint32 spellSchool, const GameTime durationMs)
+	{
+		if (durationMs == 0)
+		{
+			m_spellSchoolLockouts.erase(spellSchool);
+		}
+		else
+		{
+			m_spellSchoolLockouts[spellSchool] = GetAsyncTimeMs() + durationMs;
+		}
+	}
+
+	bool GameUnitS::IsSpellSchoolLocked(const uint32 spellSchool) const
+	{
+		const auto it = m_spellSchoolLockouts.find(spellSchool);
+		return it != m_spellSchoolLockouts.end() && it->second > GetAsyncTimeMs();
 	}
 
 	void GameUnitS::SetGlobalCooldown(const GameTime cooldownTimeMs)
@@ -858,6 +887,7 @@ namespace mmo
 
 		m_spellCooldowns.clear();
 		m_spellCategoryCooldowns.clear();
+		m_spellSchoolLockouts.clear();
 		m_globalCooldownEnd = 0;
 
 		OnCooldownsReset();
@@ -1323,6 +1353,31 @@ namespace mmo
 			{
 				++it;
 			}
+		}
+	}
+
+	void GameUnitS::RemoveAurasFromOtherCasters()
+	{
+		std::vector<std::shared_ptr<AuraContainer>> aurasToRemove;
+		for (auto &aura : m_auras)
+		{
+			if (aura->GetSpell().attributes(0) & spell_attributes::Passive)
+			{
+				continue;
+			}
+
+			if (aura->GetCasterId() == GetGuid())
+			{
+				continue;
+			}
+
+			aurasToRemove.push_back(aura);
+		}
+
+		for (auto &aura : aurasToRemove)
+		{
+			aura->SetApplied(false);
+			RemoveAura(aura);
 		}
 	}
 
@@ -2369,15 +2424,15 @@ namespace mmo
 		{
 		case ChatType::Say:
 		case ChatType::UnitSay:
-			chatDistance = 25.0f;
+			chatDistance = SayRange;
 			break;
 		case ChatType::Yell:
 		case ChatType::UnitYell:
-			chatDistance = 300.0f;
+			chatDistance = YellRange;
 			break;
 		case ChatType::Emote:
 		case ChatType::UnitEmote:
-			chatDistance = 50.0f;
+			chatDistance = EmoteRange;
 			break;
 		default:
 			return;
@@ -2526,15 +2581,45 @@ namespace mmo
 		return std::min(std::max(missChance, 0.0f), 100.0f);
 	}
 
-	float GameUnitS::CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const
+	float GameUnitS::GetBaseMeleeCritChance() const
 	{
 		// Base crit chance from agility and weapon skill
 		float critChance = 5.0f; // Base 5%
 
 		// Add agility contribution - formula approximates classic wow
 		// For most classes: 20 agi = 1% crit
-		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
+		const float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
 		critChance += agiContribution;
+
+		return critChance;
+	}
+
+	float GameUnitS::GetBaseSpellCritChance() const
+	{
+		// The same base chance spell effects roll against before per-spell talent modifiers.
+		return GetCombatSettings().spell_default_crit_chance();
+	}
+
+	float GameUnitS::GetManaRegenPerFiveSeconds() const
+	{
+		// Regeneration ticks every two seconds (see StartRegeneration), so five seconds are
+		// 2.5 ticks. The aura percentage modifier is applied per tick in RegeneratePower().
+		constexpr float ticksPerFiveSeconds = 5000.0f / static_cast<float>(constants::OneSecond * 2);
+		return static_cast<float>(GetEffectivePowerRegenPerTick(power_type::Mana, static_cast<int32>(m_manaRegenPerTick))) * ticksPerFiveSeconds;
+	}
+
+	void GameUnitS::UpdateCombatStatFields()
+	{
+		Set<float>(object_fields::SpellDamage, GetCalculatedModifierValue(unit_mods::SpellDamage));
+		Set<float>(object_fields::SpellHealing, GetCalculatedModifierValue(unit_mods::HealingDone));
+		Set<float>(object_fields::SpellCritChance, Clamp(GetBaseSpellCritChance(), 0.0f, 100.0f));
+		Set<float>(object_fields::MeleeCritChance, Clamp(GetBaseMeleeCritChance(), 0.0f, 100.0f));
+		Set<float>(object_fields::ManaRegen, GetManaRegenPerFiveSeconds());
+	}
+
+	float GameUnitS::CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const
+	{
+		float critChance = GetBaseMeleeCritChance();
 
 		// Add weapon skill contribution if applicable
 		// TODO: Add weapon skill bonuses when equipment system is implemented

@@ -72,6 +72,12 @@ namespace mmo
         /// @param allowMultiSelect Whether to allow multi-selection (Shift key held).
         void PerformEntitySelection(float viewportX, float viewportY, bool allowMultiSelect);
 
+        /// @brief Gets the distance to the nearest entity triangle under the cursor, without selecting.
+        /// @param viewportX Normalized viewport X coordinate (0-1).
+        /// @param viewportY Normalized viewport Y coordinate (0-1).
+        /// @return The distance along the picking ray, or the float maximum when nothing is hit.
+        float GetClosestEntityHitDistance(float viewportX, float viewportY);
+
         /// @brief Performs a raycast to select spawns (units or objects).
         /// @param viewportX Normalized viewport X coordinate (0-1).
         /// @param viewportY Normalized viewport Y coordinate (0-1).

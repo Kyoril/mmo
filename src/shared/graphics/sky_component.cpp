@@ -277,6 +277,7 @@ namespace mmo
 
         GlobalShaderParameters::Get().SetVector("SkyHorizonColor", horizonColor);
         GlobalShaderParameters::Get().SetVector("SkyZenithColor", zenithColor);
+        GlobalShaderParameters::Get().SetScalar("NightFactor", blendMoon);
 
         // Direction pointing TOWARD the light source, matching the convention the forward camera
         // constant buffer uses (Scene negates the raw light direction for the same reason).
@@ -290,5 +291,10 @@ namespace mmo
         // the full contribution from a single parameter.
         GlobalShaderParameters::Get().SetVector("SunColor",
             Vector4(blendedColor.x, blendedColor.y, blendedColor.z, blendedIntensity));
+
+        // The sun's visible hue for reflections of its disc (see GlobalShaderParameters::EnsureEngineDefaults).
+        GlobalShaderParameters::Get().SetScalar("SunScatterR", m_environment.timeOfDay.sunScatterColor[0]);
+        GlobalShaderParameters::Get().SetScalar("SunScatterG", m_environment.timeOfDay.sunScatterColor[1]);
+        GlobalShaderParameters::Get().SetScalar("SunScatterB", m_environment.timeOfDay.sunScatterColor[2]);
     }
 }

@@ -120,7 +120,8 @@ namespace mmo
 
 		void Update(float elapsedSeconds);
 		
-		/// Gets the currently hovered frame.
+		/// Gets the currently hovered frame. Disabled frames can be hovered (so they can show
+		/// tooltips), but they never receive clicks, drops or mouse wheel events.
 		inline FramePtr GetHoveredFrame() const { return m_hoverFrame; }
 
 		/// Gets the frame that is currently capturing input events.

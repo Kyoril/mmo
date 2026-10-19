@@ -85,19 +85,19 @@ class Classification(unittest.TestCase):
 
 
 class Context(unittest.TestCase):
-	def test_data_changes_first_and_internal_commits_last(self):
+	def test_data_changes_first_and_internal_commits_left_out(self):
 		commits = [_commit_dict("ci: cache vcpkg", files=[".github/x.yml"]), _commit_dict("feat: new mount")]
 		data = {"catalogs": {"quests": {"added": ["The Lost Hymn"], "renamed": [], "added_total": 1}},
 			"editor_commits": [{"subject": "Sentinel item displays", "body": "- Item displays 184-215"}]}
 		context = patch_notes.build_context(commits, data)
 		self.assertLess(context.index("The Lost Hymn"), context.index("New mount"))
-		self.assertLess(context.index("New mount"), context.index("Cache vcpkg"))
+		self.assertNotIn("vcpkg", context.lower())
 		self.assertIn("Sentinel item displays", context)
 		self.assertIn("Gameplay (server): 1", context)
 
-	def test_internal_commits_carry_no_bodies(self):
+	def test_internal_commits_never_reach_the_model(self):
 		context = patch_notes.build_context([_commit_dict("fix(deployer): retry", files=["deploy/a.py"], body="secret detail")], {})
-		self.assertIn("Retry", context)
+		self.assertNotIn("Retry", context)
 		self.assertNotIn("secret detail", context)
 
 	def test_budget_drops_bodies_then_commits(self):
@@ -127,17 +127,17 @@ class Validation(unittest.TestCase):
 
 
 class Fallback(unittest.TestCase):
-	def test_groups_features_and_fixes(self):
-		notes = patch_notes.fallback_notes([_commit_dict("feat: new zone"), _commit_dict("fix(ui): tooltip overlaps"),
-			_commit_dict("test: more tests", files=["src/tests/a.cpp"])])
-		self.assertEqual(notes["headline"], "2 improvements and fixes.")
-		self.assertEqual(notes["sections"], [{"title": "General", "bullets": ["New zone"]},
-			{"title": "Bug Fixes", "bullets": ["Tooltip overlaps"]}])
-
-	def test_only_internal_commits_give_maintenance_note(self):
-		notes = patch_notes.fallback_notes([_commit_dict("ci: x", files=[".github/a"])])
+	def test_never_leaks_commit_subjects(self):
+		notes = patch_notes.fallback_notes([_commit_dict("feat: navmesh span merge"), _commit_dict("fix(ui): tooltip overlaps")])
+		self.assertNotIn("navmesh", json.dumps(notes).lower())
 		self.assertEqual(notes["sections"][0]["title"], "General")
-		self.assertIn("maintenance", notes["headline"].lower())
+
+	def test_validation_drops_workshop_talk(self):
+		raw = {"headline": "h", "sections": [
+			{"title": "Dungeons", "bullets": ["The crypt is open.", "Rebuilt the navigation mesh with the editor."]},
+			{"title": "Behind the Scenes", "bullets": ["The night watch has a new lantern."]}]}
+		notes = patch_notes.validate_notes(raw)
+		self.assertEqual(notes["sections"], [{"title": "Dungeons", "bullets": ["The crypt is open."]}])
 
 	def test_render_markdown(self):
 		self.assertEqual(patch_notes.render_markdown({"headline": "h", "sections": [{"title": "General", "bullets": ["a", "b"]}]}),
@@ -193,9 +193,22 @@ class Generate(unittest.TestCase):
 				FakeRun("Not logged in", is_error=True), timeout, missing):
 			notes = patch_notes.generate(self.repo, self.first, self.head, run=run, log=self.logs.append)
 			self.assertEqual(notes["source"], "fallback")
-			self.assertEqual(notes["sections"], [{"title": "General", "bullets": ["Add parry"]}])
+			self.assertNotIn("parry", json.dumps(notes).lower())
 		notes = patch_notes.generate(self.repo, self.first, self.head, use_model=False, run=FakeRun(json.dumps(GOOD)), log=self.logs.append)
 		self.assertEqual(notes["source"], "fallback")
+
+	def test_token_is_trimmed_for_the_cli(self):
+		run = FakeRun(json.dumps(GOOD))
+		with unittest.mock.patch.dict(os.environ, {"CLAUDE_CODE_OAUTH_TOKEN": ' "sk-ant-oat01-abc"\n'}):
+			patch_notes.generate(self.repo, self.first, self.head, run=run, log=self.logs.append)
+		self.assertEqual(run.calls[0][1]["env"]["CLAUDE_CODE_OAUTH_TOKEN"], "sk-ant-oat01-abc")
+
+	def test_failure_names_the_cause_behind_the_usage_block(self):
+		stdout = json.dumps({"duration_api_ms": 0, "usage": {"input_tokens": 0, "padding": "x" * 400},
+			"is_error": True, "subtype": "error_during_execution", "result": "Invalid API key"})
+		patch_notes.generate(self.repo, self.first, self.head, run=FakeRun(stdout=stdout, returncode=1), log=self.logs.append)
+		self.assertIn("Invalid API key", self.logs[-1])
+		self.assertTrue(self.logs[-1].startswith("::warning::"))
 
 	@unittest.mock.patch("shutil.which", return_value="/usr/bin/claude")
 	def test_invocation_is_tool_less_with_our_prompt(self, _which):

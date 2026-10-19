@@ -13,6 +13,7 @@
 #include "math/quaternion.h"
 #include "math/ray.h"
 
+#include <algorithm>
 #include <unordered_map>
 
 namespace mmo
@@ -24,6 +25,7 @@ namespace mmo
 	static const uint32 s_collMagic     = *MakeChunkMagic('COLL');
 	static const uint32 s_wmoGroupMagic = *MakeChunkMagic('MOGP');
 	static const uint32 s_wmoMeshMagic  = *MakeChunkMagic('MMRF');
+	static const uint32 s_wmoChildMagic = *MakeChunkMagic('MCWR');
 
 	// ---------------------------------------------------------------------------
 	// AddInstance — compute world AABB and inverse transform, then store.
@@ -94,6 +96,69 @@ namespace mmo
 
 		m_instances.push_back(std::move(inst));
 		return true;
+	}
+
+	ServerCollisionMap::ServerCollisionMap(std::shared_ptr<const ServerCollisionMap> sharedStatic)
+		: m_sharedStatic(std::move(sharedStatic))
+	{
+	}
+
+	bool ServerCollisionMap::GetDynamicInstanceLocalBounds(const uint64 handle, AABB& out) const
+	{
+		const auto it = m_dynamicInstances.find(handle);
+		if (it == m_dynamicInstances.end() || !it->second.instance.tree)
+		{
+			return false;
+		}
+
+		out = it->second.instance.tree->GetBoundingBox();
+		return true;
+	}
+
+	bool ServerCollisionMap::AddFoliageInstance(const std::shared_ptr<AABBTree>& tree, const Matrix4& transform, const std::string& debugName)
+	{
+		return AddInstance(MakeFoliageLineOfSightTree(tree), transform, debugName);
+	}
+
+	std::shared_ptr<AABBTree> ServerCollisionMap::MakeFoliageLineOfSightTree(const std::shared_ptr<AABBTree>& tree)
+	{
+		if (!tree || tree->IsEmpty())
+		{
+			return nullptr;
+		}
+
+		const std::vector<AABBTree::Vertex>& vertices = tree->GetVertices();
+		const std::vector<AABBTree::Index>& indices = tree->GetIndices();
+
+		// Keep every triangle that reaches below the trunk height. A triangle spanning the cut
+		// is kept whole, so the trunk is never shortened.
+		std::vector<AABBTree::Index> trunkIndices;
+		trunkIndices.reserve(indices.size());
+		for (size_t i = 0; i + 2 < indices.size(); i += 3)
+		{
+			const float lowestY = std::min({ vertices[indices[i]].y, vertices[indices[i + 1]].y, vertices[indices[i + 2]].y });
+			if (lowestY < FoliageLineOfSightTrunkHeight)
+			{
+				trunkIndices.push_back(indices[i]);
+				trunkIndices.push_back(indices[i + 1]);
+				trunkIndices.push_back(indices[i + 2]);
+			}
+		}
+
+		if (trunkIndices.size() == indices.size())
+		{
+			return tree;
+		}
+
+		if (trunkIndices.empty())
+		{
+			return nullptr;
+		}
+
+		// Unreferenced vertices above the cut are harmless: the tree only visits indexed faces.
+		auto trunkTree = std::make_shared<AABBTree>();
+		trunkTree->Build(vertices, trunkIndices);
+		return trunkTree;
 	}
 
 	// ---------------------------------------------------------------------------
@@ -207,8 +272,21 @@ namespace mmo
 	// ---------------------------------------------------------------------------
 
 	void ServerCollisionMap::LoadWorldModelInstances(const std::string& hwmoPath,
-	                                                  const Matrix4& instanceTransform)
+	                                                  const Matrix4& instanceTransform,
+	                                                  std::vector<std::string> ancestors)
 	{
+		if (std::find(ancestors.begin(), ancestors.end(), hwmoPath) != ancestors.end())
+		{
+			WLOG("ServerCollisionMap: world model " << hwmoPath << " references itself through its child world models, skipped");
+			return;
+		}
+
+		if (ancestors.size() >= MaxWorldModelChildDepth)
+		{
+			WLOG("ServerCollisionMap: world model " << hwmoPath << " is nested too deep, skipped");
+			return;
+		}
+
 		auto file = AssetRegistry::OpenFile(hwmoPath);
 		if (!file)
 		{
@@ -221,6 +299,9 @@ namespace mmo
 
 		// Cache mesh trees within this WMO to avoid re-loading the same mesh.
 		std::unordered_map<std::string, std::shared_ptr<AABBTree>> localMeshCache;
+
+		// Child world model references, loaded after this file is closed.
+		std::vector<std::pair<std::string, Matrix4>> children;
 
 		while (reader)
 		{
@@ -324,10 +405,62 @@ namespace mmo
 					}
 				}
 			}
+			else if (chunkId == s_wmoChildMagic)
+			{
+				uint32 count = 0;
+				reader >> io::read<uint32>(count);
+
+				for (uint32 i = 0; i < count && reader; ++i)
+				{
+					// wmoPath: uint32 pathLen, then (pathLen+1) bytes including null
+					uint32 pathLen = 0;
+					reader >> io::read<uint32>(pathLen);
+					std::string childPath(pathLen + 1, '\0');
+					reader.getSource()->read(&childPath[0], pathLen + 1);
+					childPath.resize(pathLen);
+
+					// name: skip
+					uint32 nameLen = 0;
+					reader >> io::read<uint32>(nameLen);
+					reader >> io::skip(nameLen + 1);
+
+					float px, py, pz, rw, rx, ry, rz, sx, sy, sz;
+					uint8 visible = 1;
+					reader
+						>> io::read<float>(px) >> io::read<float>(py) >> io::read<float>(pz)
+						>> io::read<float>(rw) >> io::read<float>(rx)
+						>> io::read<float>(ry) >> io::read<float>(rz)
+						>> io::read<float>(sx) >> io::read<float>(sy) >> io::read<float>(sz)
+						>> io::read<uint8>(visible);
+
+					if (!reader || !visible || childPath.empty())
+					{
+						continue;
+					}
+
+					Matrix4 childTransform;
+					childTransform.MakeTransform(Vector3(px, py, pz), Vector3(sx, sy, sz), Quaternion(rw, rx, ry, rz));
+					children.emplace_back(std::move(childPath), childTransform);
+				}
+
+				// Stay aligned with the chunk size no matter what the entries consumed
+				reader.getSource()->seek(chunkDataStart + chunkSize);
+			}
 			else
 			{
 				reader >> io::skip(chunkSize);
 			}
+		}
+
+		if (children.empty())
+		{
+			return;
+		}
+
+		ancestors.push_back(hwmoPath);
+		for (const auto& [childPath, childTransform] : children)
+		{
+			LoadWorldModelInstances(childPath, instanceTransform * childTransform, ancestors);
 		}
 	}
 
@@ -424,6 +557,9 @@ namespace mmo
 
 		uint32 foliageInstanceCount = 0, foliageWithCollision = 0;
 
+		// Line of sight trees of foliage meshes (trunk only), one per unique mesh path.
+		std::unordered_map<std::string, std::shared_ptr<AABBTree>> foliageLosCache;
+
 		for (const auto& foliageFilename : foliageFiles)
 		{
 			auto foliageFile = AssetRegistry::OpenFile(foliageFilename);
@@ -454,10 +590,12 @@ namespace mmo
 					continue;
 				}
 
-				auto it = meshCache.find(instance.meshName);
-				if (it == meshCache.end())
+				// Foliage only blocks line of sight with its trunk, so it gets its own cache of
+				// filtered trees: the same mesh placed as an entity still blocks with all of it.
+				auto it = foliageLosCache.find(instance.meshName);
+				if (it == foliageLosCache.end())
 				{
-					it = meshCache.emplace(instance.meshName, LoadMeshTree(instance.meshName)).first;
+					it = foliageLosCache.emplace(instance.meshName, MakeFoliageLineOfSightTree(LoadMeshTree(instance.meshName))).first;
 				}
 
 				if (!it->second || it->second->IsEmpty())
@@ -514,8 +652,15 @@ namespace mmo
 			return (to - from).GetSquaredLength() < s_minLosSegmentLengthSq;
 		}
 
+		/// Static world geometry is closed, so its back faces are skipped. Dynamic instances
+		/// (doors, barriers) are tested from both sides: their art is often a single-sided
+		/// plane, and a closed door must block sight from the far side as well.
+		constexpr RaycastFlags s_staticRayFlags = raycast_flags::IgnoreBackface;
+		constexpr RaycastFlags s_dynamicRayFlags = raycast_flags::None;
+
 		/// Tests a single collision instance for any intersection with the given world ray.
-		bool instanceBlocksRay(const CollisionInstance& inst, const Ray& worldRay, const Vector3& from, const Vector3& to)
+		bool instanceBlocksRay(const CollisionInstance& inst, const Ray& worldRay, const Vector3& from, const Vector3& to,
+			const RaycastFlags flags)
 		{
 			// Fast world-AABB rejection.
 			const auto [aabbHit, aabbT] = worldRay.IntersectsAABB(inst.worldBounds);
@@ -535,12 +680,12 @@ namespace mmo
 
 			Ray localRay(localFrom, localTo);
 			return inst.tree->IntersectRay(localRay, nullptr,
-				static_cast<RaycastFlags>(raycast_flags::EarlyExit | raycast_flags::IgnoreBackface));
+				static_cast<RaycastFlags>(raycast_flags::EarlyExit | flags));
 		}
 
 		/// Tests a single collision instance and tracks the closest world-space hit.
 		void intersectInstanceEx(const CollisionInstance& inst, const Ray& worldRay, const Vector3& from,
-			const Vector3& to, const float worldLen, float& closestWorldT, Vector3& hitPoint, bool& blocked)
+			const Vector3& to, const float worldLen, const RaycastFlags flags, float& closestWorldT, Vector3& hitPoint, bool& blocked)
 		{
 			const auto [aabbHit, aabbT] = worldRay.IntersectsAABB(inst.worldBounds);
 			if (!aabbHit || aabbT > worldLen * closestWorldT)
@@ -557,8 +702,7 @@ namespace mmo
 			}
 
 			Ray localRay(localFrom, localTo);
-			if (!inst.tree->IntersectRay(localRay, nullptr,
-				static_cast<RaycastFlags>(raycast_flags::IgnoreBackface)))
+			if (!inst.tree->IntersectRay(localRay, nullptr, flags))
 			{
 				return;
 			}
@@ -581,7 +725,7 @@ namespace mmo
 
 	bool ServerCollisionMap::LineOfSight(const Vector3& from, const Vector3& to) const
 	{
-		if (m_instances.empty() && m_dynamicInstances.empty())
+		if (m_instances.empty() && m_dynamicInstances.empty() && !m_sharedStatic)
 		{
 			return true;
 		}
@@ -593,9 +737,14 @@ namespace mmo
 
 		const Ray worldRay(from, to);
 
+		if (m_sharedStatic && !m_sharedStatic->LineOfSight(from, to))
+		{
+			return false; // blocked by shared static geometry
+		}
+
 		for (const auto& inst : m_instances)
 		{
-			if (instanceBlocksRay(inst, worldRay, from, to))
+			if (instanceBlocksRay(inst, worldRay, from, to, s_staticRayFlags))
 			{
 				return false; // blocked
 			}
@@ -603,7 +752,7 @@ namespace mmo
 
 		for (const auto& [handle, dyn] : m_dynamicInstances)
 		{
-			if (dyn.enabled && instanceBlocksRay(dyn.instance, worldRay, from, to))
+			if (dyn.enabled && instanceBlocksRay(dyn.instance, worldRay, from, to, s_dynamicRayFlags))
 			{
 				return false; // blocked
 			}
@@ -616,7 +765,7 @@ namespace mmo
 	{
 		hitPoint = to;
 
-		if (m_instances.empty() && m_dynamicInstances.empty())
+		if (m_instances.empty() && m_dynamicInstances.empty() && !m_sharedStatic)
 		{
 			return true;
 		}
@@ -632,16 +781,31 @@ namespace mmo
 		float closestWorldT = 1.0f;
 		bool blocked = false;
 
+		if (m_sharedStatic)
+		{
+			Vector3 sharedHit;
+			if (!m_sharedStatic->LineOfSightEx(from, to, sharedHit))
+			{
+				const float sharedT = worldLen > 0.f ? (sharedHit - from).GetLength() / worldLen : 0.f;
+				if (sharedT < closestWorldT)
+				{
+					closestWorldT = sharedT;
+					hitPoint = sharedHit;
+					blocked = true;
+				}
+			}
+		}
+
 		for (const auto& inst : m_instances)
 		{
-			intersectInstanceEx(inst, worldRay, from, to, worldLen, closestWorldT, hitPoint, blocked);
+			intersectInstanceEx(inst, worldRay, from, to, worldLen, s_staticRayFlags, closestWorldT, hitPoint, blocked);
 		}
 
 		for (const auto& [handle, dyn] : m_dynamicInstances)
 		{
 			if (dyn.enabled)
 			{
-				intersectInstanceEx(dyn.instance, worldRay, from, to, worldLen, closestWorldT, hitPoint, blocked);
+				intersectInstanceEx(dyn.instance, worldRay, from, to, worldLen, s_dynamicRayFlags, closestWorldT, hitPoint, blocked);
 			}
 		}
 

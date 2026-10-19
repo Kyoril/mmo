@@ -739,6 +739,11 @@ namespace mmo
 
 	Frame::Pointer Frame::GetChildFrameAt(const Point & position, bool allowDisabled)
 	{
+		return GetChildFrameAt(position, allowDisabled ? FrameHitTest::IncludeDisabled : FrameHitTest::EnabledOnly);
+	}
+
+	Frame::Pointer Frame::GetChildFrameAt(const Point& position, const FrameHitTest mode)
+	{
 		// Iterate through all children
 		for (auto childIt = m_children.rbegin(); childIt != m_children.rend(); ++childIt)
 		{
@@ -752,11 +757,28 @@ namespace mmo
 
 			// Check the rectangle
 			const Rect childRect = child->GetAbsoluteFrameRect();
-			if (childRect.IsPointInRect(position) &&
-				child->IsVisible() &&
-				(allowDisabled || child->IsEnabled()))
+			if (!childRect.IsPointInRect(position) || !child->IsVisible())
 			{
-				return child->GetChildFrameAt(position, allowDisabled);
+				continue;
+			}
+
+			bool hittable = true;
+			switch (mode)
+			{
+			case FrameHitTest::EnabledOnly:
+				hittable = child->IsEnabled();
+				break;
+			case FrameHitTest::IncludeDisabled:
+				hittable = true;
+				break;
+			case FrameHitTest::Hover:
+				hittable = child->IsEnabled() || child->IsClickable();
+				break;
+			}
+
+			if (hittable)
+			{
+				return child->GetChildFrameAt(position, mode);
 			}
 		}
 
@@ -1854,7 +1876,7 @@ namespace mmo
 		if (m_isDragging)
 		{
 			FramePtr hovered = FrameManager::Get().GetHoveredFrame();
-			if (hovered && hovered->IsDropEnabled())
+			if (hovered && hovered->IsEnabled() && hovered->IsDropEnabled())
 			{
 				hovered->OnDrop(m_dragButton, position);
 			}

@@ -19,6 +19,53 @@ namespace mmo
 		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LootRollWon, *this, &LootClient::OnLootRollWon);
 		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LootAllPassed, *this, &LootClient::OnLootAllPassed);
 		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LootRollResult, *this, &LootClient::OnLootRollResult);
+		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MasterLootResult, *this, &LootClient::OnMasterLootResult);
+	}
+
+	const char* LootClient::GetLootErrorKey(const uint8 lootError)
+	{
+		switch (lootError)
+		{
+		case loot_error::DidntKill:			return "ERR_LOOT_DIDNT_KILL";
+		case loot_error::TooFar:			return "ERR_TOO_FAR_AWAY_TO_LOOT";
+		case loot_error::BadFacing:			return "ERR_LOOT_BAD_FACING";
+		case loot_error::NotStanding:		return "ERR_LOOT_NOT_STANDING";
+		case loot_error::Stunned:			return "ERR_LOOT_STUNNED";
+		case loot_error::PlayerNotFound:	return "ERR_LOOT_PLAYER_NOT_FOUND";
+		case loot_error::MasterInvFull:		return "ERR_LOOT_MASTER_INV_FULL";
+		case loot_error::MasterUniqueItem:	return "ERR_LOOT_MASTER_UNIQUE_ITEM";
+		case loot_error::MasterOther:		return "ERR_LOOT_MASTER_OTHER";
+		default:							return "ERR_LOOT_LOCKED";
+		}
+	}
+
+	void LootClient::SendMasterLootItem(const uint8 slot, const uint64 targetGuid)
+	{
+		if (m_requestedLootObject == 0)
+		{
+			return;
+		}
+
+		m_realmConnector.sendSinglePacket([slot, targetGuid](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::MasterLootItem);
+			packet
+				<< io::write<uint8>(slot)
+				<< io::write<uint64>(targetGuid);
+			packet.Finish();
+		});
+	}
+
+	PacketParseResult LootClient::OnMasterLootResult(game::IncomingPacket& packet)
+	{
+		uint8 lootError = 0;
+		if (!(packet >> io::read<uint8>(lootError)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		FrameManager::Get().TriggerLuaEvent("GAME_ERROR", GetLootErrorKey(lootError));
+		return PacketParseResult::Pass;
 	}
 
 	void LootClient::Shutdown()
@@ -65,8 +112,8 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
-			// TODO: Display game error
-			ELOG("Failed to loot object " << log_hex_digit(objectGuid) << ": " << log_hex_digit(lootError));
+			DLOG("Failed to loot object " << log_hex_digit(objectGuid) << ": " << log_hex_digit(lootError));
+			FrameManager::Get().TriggerLuaEvent("GAME_ERROR", GetLootErrorKey(lootError));
 			return PacketParseResult::Pass;
 		}
 

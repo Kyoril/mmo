@@ -150,6 +150,88 @@ TEST_CASE("Portal culling enters a room again through a wider door", "[world_mod
 	CHECK(visible == std::vector<int32>{ 0, 1, 2 });
 }
 
+TEST_CASE("Portal culling does not shut the eye into an exterior cell without a volume", "[world_model_portal_culling]")
+{
+	// Outdoor world models (a town) split their streets into exterior cells for frustum culling,
+	// without portals or containment volumes. A cell's bounding box must not count as a room the eye
+	// is shut in: standing inside cell A, looking into cell B, B stays visible.
+	WorldModel model;
+	for (const float minX : { 0.0f, 30.0f })
+	{
+		WorldModelGroup& cell = model.AddGroup();
+		cell.SetFlags(WorldModelGroupFlags::Exterior);
+		cell.SetBoundingBox(AABB(Vector3(minX, -2.0f, -15.0f), Vector3(minX + 30.0f, 20.0f, 15.0f)));
+	}
+
+	CHECK(Visible(model, LookAlongX(Vector3(25.0f, 2.0f, 0.0f), 1.0f)) == std::vector<int32>{ 0, 1 });
+}
+
+TEST_CASE("Portal culling still shuts the eye into an interior room inside an exterior cell", "[world_model_portal_culling]")
+{
+	// A sealed room sits inside a volume-less exterior cell. The room's volume is what the eye is
+	// in, so the cell (outside the room's walls) stays hidden.
+	WorldModel model;
+	WorldModelGroup& cell = model.AddGroup();
+	cell.SetFlags(WorldModelGroupFlags::Exterior);
+	cell.SetBoundingBox(AABB(Vector3(-50.0f, -2.0f, -50.0f), Vector3(50.0f, 20.0f, 50.0f)));
+	const size_t room = AddRoom(model, 0.0f, 10.0f);
+
+	CHECK(Visible(model, LookAlongX(Vector3(5.0f, 2.0f, 0.0f), 1.0f)) == std::vector<int32>{ static_cast<int32>(room) });
+}
+
+TEST_CASE("Portal culling does not shut the eye into an unflagged prop group", "[world_model_portal_culling]")
+{
+	// Props such as WoodLantern_A are a single group with no flags, no volume and no portals, and a
+	// bounding box reaching metres around the post. Counting that box as a room put the eye "inside a
+	// doorless room" whenever the camera came near a lantern, which hid every other world model in
+	// Oakenshire.
+	WorldModel model;
+	WorldModelGroup& lantern = model.AddGroup();
+	lantern.SetBoundingBox(AABB(Vector3(-5.0f, 0.0f, -5.0f), Vector3(5.0f, 5.0f, 5.0f)));
+
+	std::vector<int32> visible;
+	PortalInteriorView view;
+	CollectVisiblePortalGroups(model, Matrix4::Identity, LookAlongX(Vector3(-3.0f, 2.0f, 0.0f), 1.0f), visible, &view);
+	CHECK_FALSE(view.eyeInInterior);
+	CHECK(visible == std::vector<int32>{ 0 });
+
+	// An interior room without volumes still falls back to its bounding box
+	lantern.SetFlags(WorldModelGroupFlags::Interior);
+	CollectVisiblePortalGroups(model, Matrix4::Identity, LookAlongX(Vector3(-3.0f, 2.0f, 0.0f), 1.0f), visible, &view);
+	CHECK(view.eyeInInterior);
+}
+
+TEST_CASE("Portal culling reports what a room shows of the outside", "[world_model_portal_culling]")
+{
+	// A sealed room (0..10 on X) with one door at x = 10 onto an exterior yard (10..40)
+	WorldModel model;
+	const size_t room = AddRoom(model, 0.0f, 10.0f);
+	WorldModelGroup& yard = model.AddGroup();
+	yard.SetFlags(WorldModelGroupFlags::Exterior);
+	yard.SetBoundingBox(AABB(Vector3(10.0f, 0.0f, -10.0f), Vector3(40.0f, 4.0f, 10.0f)));
+	const size_t yardIndex = model.GetGroupCount() - 1;
+	AddPortal(model, 10.0f, 0.0f, 2.0f, room, yardIndex);
+
+	std::vector<int32> visible;
+	PortalInteriorView view;
+
+	// Facing the door from inside: in a room, and the outside is seen through one narrowed frustum
+	CollectVisiblePortalGroups(model, Matrix4::Identity, LookAlongX(Vector3(2.0f, 2.0f, 0.0f), 1.0f), visible, &view);
+	CHECK(view.eyeInInterior);
+	REQUIRE(view.exteriorFrustums.size() == 1);
+	CHECK(view.exteriorFrustums[0].IsPointInside(Vector3(30.0f, 2.0f, 0.0f)));
+	CHECK_FALSE(view.exteriorFrustums[0].IsPointInside(Vector3(30.0f, 2.0f, 9.0f)));
+
+	// Facing away from the door: still inside, and nothing outside is visible at all
+	CollectVisiblePortalGroups(model, Matrix4::Identity, LookAlongX(Vector3(5.0f, 2.0f, 0.0f), -1.0f), visible, &view);
+	CHECK(view.eyeInInterior);
+	CHECK(view.exteriorFrustums.empty());
+
+	// Out in the yard: not inside a room
+	CollectVisiblePortalGroups(model, Matrix4::Identity, LookAlongX(Vector3(30.0f, 2.0f, 0.0f), -1.0f), visible, &view);
+	CHECK_FALSE(view.eyeInInterior);
+}
+
 TEST_CASE("Portal culling outside every room draws the rooms in view", "[world_model_portal_culling]")
 {
 	WorldModel model;

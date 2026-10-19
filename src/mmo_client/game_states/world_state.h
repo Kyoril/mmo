@@ -397,6 +397,9 @@ namespace mmo
 
 		PacketParseResult OnPlaySoundById(game::IncomingPacket &packet);
 
+		/// Moves every unit-attached sound to its unit's current position and drops finished ones.
+		void UpdateUnitAttachedSounds(float deltaSeconds);
+
 		PacketParseResult OnPlaySpellVisual(game::IncomingPacket &packet);
 
 		/// Shows a spell zone (PersistentAreaAura) on the ground.
@@ -434,6 +437,10 @@ namespace mmo
 
 		PacketParseResult OnKnownClasses(game::IncomingPacket &packet);
 
+		PacketParseResult OnTradeSkills(game::IncomingPacket &packet);
+
+		PacketParseResult OnTradeSkillUpdate(game::IncomingPacket &packet);
+
 		PacketParseResult OnClassXpUpdate(game::IncomingPacket &packet);
 
 		PacketParseResult OnCreatureMove(game::IncomingPacket &packet);
@@ -468,6 +475,13 @@ namespace mmo
 
 		PacketParseResult OnAttackerStateUpdate(game::IncomingPacket &packet);
 
+		/// @brief Plays a unit's aggro or death sound when a field update moved it into combat
+		///	or killed it.
+		/// @param unit The unit or player whose fields were just updated.
+		/// @param wasInCombat Whether the unit carried the combat flag before the update.
+		/// @param wasAlive Whether the unit had health left before the update.
+		void PlayUnitStateSounds(const GameObjectC& unit, bool wasInCombat, bool wasAlive);
+
 		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket &packet);
 
 		PacketParseResult OnMovementSpeedChanged(game::IncomingPacket &packet);
@@ -479,6 +493,10 @@ namespace mmo
 		PacketParseResult OnLevelUp(game::IncomingPacket &packet);
 
 		PacketParseResult OnCharacterPointsReset(game::IncomingPacket &packet);
+
+		/// Handles the result of an instance reset request (or a notification about the group
+		/// leader's) and turns it into a localized chat message.
+		PacketParseResult OnInstanceResetResult(game::IncomingPacket &packet);
 
 		PacketParseResult OnAuraUpdate(game::IncomingPacket &packet);
 
@@ -818,6 +836,18 @@ namespace mmo
 		PartyInfo &m_partyInfo;
 
 		SoundEntryPlayer &m_soundEntryPlayer;
+
+		/// A 3D sound that follows the unit it comes from, e.g. a creature's voice line.
+		struct UnitAttachedSound
+		{
+			ChannelIndex channel;
+			uint64 unitGuid;
+			/// Seconds until the sound has finished; the channel may be reused after that.
+			float remainingSeconds;
+		};
+
+		/// Sounds whose 3D position is moved along with their unit every frame.
+		std::vector<UnitAttachedSound> m_unitAttachedSounds;
 		/// Plays auto attack audio resolved from the equipped weapon and the victim's material.
 		CombatSoundPlayer m_combatSoundPlayer;
 		/// Crossfading zone background music slot, driven by ZoneEntry::music_sound.

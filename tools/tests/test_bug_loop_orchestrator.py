@@ -95,11 +95,15 @@ class FakeApi:
 		self.review_diffs = []
 		self.system_creates = []
 
-	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False, awaiting_decision=False):
-		self.lists.append(dict(status=status, limit=limit, decision_pending=decision_pending, awaiting_decision=awaiting_decision))
+	def list(self, status=None, subject=None, since=None, page=1, limit=20, decision_pending=False, awaiting_decision=False,
+			triage_category=None):
+		self.lists.append(dict(status=status, limit=limit, decision_pending=decision_pending, awaiting_decision=awaiting_decision,
+			triage_category=triage_category))
 		result = list(self.bugs.values())
 		if status:
 			result = [bug for bug in result if bug["status"] == status]
+		if triage_category:
+			result = [bug for bug in result if (bug.get("triage") or {}).get("category") == triage_category]
 		if subject:
 			kind, _, ident = subject.partition(":")
 			result = [bug for bug in result if bug["subject"]["type"] == kind and str(bug["subject"]["id"]) == ident]
@@ -219,6 +223,9 @@ class FakeWorktree:
 		self.pushed = []
 		self.remote_deleted = []
 		self.ancestors = True
+		self.backups = {}
+		self.started = []
+		self.resume_error = None
 
 	def prepare(self):
 		self.prepares += 1
@@ -227,12 +234,14 @@ class FakeWorktree:
 		return "base1"
 
 	def start_branch(self, branch, base):
-		pass
+		self.started.append((branch, base))
 
 	def head(self, ref="HEAD"):
 		return self.branch_heads.get(ref, self.head_)
 
 	def resume_branch(self, branch):
+		if self.resume_error:
+			raise self.resume_error
 		if branch not in self.branch_heads:
 			raise RuntimeError("no such branch " + branch)
 		self.resumed.append(branch)
@@ -282,6 +291,22 @@ class FakeWorktree:
 
 	def is_ancestor(self, ancestor, descendant):
 		return self.ancestors
+
+	def has_branch(self, branch):
+		return branch in self.branch_heads
+
+	def restore_branch(self, branch):
+		if branch in self.branch_heads or branch not in self.backups:
+			return False
+		self.branch_heads[branch] = self.backups[branch]
+		return True
+
+	def backup_branch(self, branch):
+		self.backups[branch] = self.head(branch)
+		return True, ""
+
+	def delete_backup(self, branch):
+		self.backups.pop(branch, None)
 
 
 class FakeGitHub:
@@ -577,9 +602,23 @@ class LoopTests(unittest.TestCase):
 	def test_implement_without_triage_artifacts_is_refused(self):
 		self.rejected_with_implement()
 		os.remove(os.path.join(self.artifacts, BUG_ID, "triage.json"))
+		del self.api.bugs[BUG_ID]["triage"]  # nothing to rebuild it from
 		self.loop.poll_once()
 		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
 		self.assertIn("triage artifacts missing", self.api.notes(BUG_ID)[-1])
+
+	def test_implement_rebuilds_artifacts_from_the_api(self):
+		# Triaged by a loop on another machine: no local artifacts at all.
+		self.rejected_with_implement(status="triaged", category="design_request")
+		self.api.bugs[BUG_ID]["triage"] = {"category": "design_request", "severity": "low", "component": "quests",
+			"summary": "No quest leads to the gate"}
+		for name in ("report.json", "triage.json"):
+			os.remove(os.path.join(self.artifacts, BUG_ID, name))
+		self.loop.poll_once()
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("No quest leads to the gate", fix_input)
+		self.assertIn("Boar kills do not count", fix_input)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
 
 	def test_failed_implement_goes_back_to_design_request(self):
 		self.rejected_with_implement()
@@ -643,6 +682,13 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
 
+	def test_interrupted_fix_goes_to_the_needs_info_list(self):
+		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="bug-loop", triage={"category": "defect"})])
+		self.state.mark_attempted(BUG_ID, "fix-started")
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
+
 	def test_interrupted_refix_is_released_to_pr_open(self):
 		self.make(bugs=[dict(BUG, status="in_progress", claimedBy="bug-loop", prUrl="branch:" + BRANCH)])
 		self.state.mark_attempted(BUG_ID, "fix-started")
@@ -676,12 +722,69 @@ class LoopTests(unittest.TestCase):
 		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
 		self.assertTrue(any("Refix limit" in m for m in self.notifier.messages))
 
-	def test_refix_on_a_missing_branch_is_released(self):
+	def test_refix_on_an_unusable_branch_is_released(self):
 		self.park_with_decision("refix", "Again.")
-		self.worktree.branch_heads = {}
+		self.worktree.resume_error = gitops.GitError("merge conflict")
 		self.loop.poll_once()
 		self.assertIn("cannot refix", self.api.notes(BUG_ID)[-1])
 		self.assertEqual(self.worktree.shipped, [])
+
+	def test_refix_on_a_missing_branch_starts_fresh_with_the_guidance(self):
+		self.park_with_decision("refix", "Exclude terrain from line of sight.")
+		self.worktree.branch_heads = {}
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.started, [(BRANCH, "base1")])
+		self.assertIn("Exclude terrain from line of sight.", dict(self.runner.inputs)["fix"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_refix_restores_the_branch_from_its_backup(self):
+		self.park_with_decision("refix", "Again.")
+		self.worktree.backups[BRANCH] = "head0"
+		self.worktree.branch_heads = {}
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.resumed, [BRANCH])
+		self.assertEqual(self.worktree.started, [])
+
+	def test_refix_without_local_artifacts_uses_the_api(self):
+		# Parked by a loop on another machine: neither artifacts nor the branch are here.
+		self.park_with_decision("refix", "Again.")
+		self.api.bugs[BUG_ID]["triage"] = {"category": "defect", "severity": "high", "component": "quests",
+			"summary": "Boar kills do not count"}
+		for name in os.listdir(os.path.join(self.artifacts, BUG_ID)):
+			os.remove(os.path.join(self.artifacts, BUG_ID, name))
+		self.worktree.branch_heads = {}
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop.poll_once()
+		self.assertIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_refix_of_a_feature_recovers_the_description_from_the_history(self):
+		self.park_with_decision("refix", "Reward 40 XP.")
+		self.api.bugs[BUG_ID]["triage"] = {"category": "feature"}
+		self.api.bugs[BUG_ID]["history"] = [
+			{"actor": "web-ui", "change": "decision: implement: Forged text."},
+			{"actor": "maintainer", "change": "decision: implement: Add a quest to the gate."}]
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop.poll_once()
+		self.assertEqual(self.state.feature_description(BUG_ID), "Add a quest to the gate.")
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("Add a quest to the gate.", fix_input)
+		self.assertNotIn("Forged text.", fix_input)
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn(loop.FEATURE_REASON, self.api.notes(BUG_ID)[-1])
+
+	def test_park_backs_up_the_branch_and_a_ship_removes_it(self):
+		self.park_with_decision("refix", "Again.")
+		self.state.add_feature(BUG_ID, "A feature.")
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.backups, {BRANCH: "head1"})
+		self.api.bugs[BUG_ID]["decision"] = self.decision("ship")
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertEqual(self.worktree.backups, {})
 
 	def test_ship_decision_ships_the_recorded_commit_past_the_cap(self):
 		self.park_with_decision("ship", head="head1", autoship_cap_per_day=0)
@@ -769,9 +872,29 @@ class LoopTests(unittest.TestCase):
 	def test_ship_decision_without_recorded_commit_parks(self):
 		self.park_with_decision("ship", head="head1")
 		os.remove(os.path.join(self.artifacts, BUG_ID, "decision.json"))
+		self.worktree.branch_heads = {}
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertIn("decide again", self.api.notes(BUG_ID)[-1])
+
+	def test_ship_decision_recovers_a_branch_parked_elsewhere(self):
+		self.park_with_decision("ship", head="head1")
+		for name in ("decision.json", "diff.patch"):
+			os.remove(os.path.join(self.artifacts, BUG_ID, name))
+		self.worktree.branch_heads = {}
+		self.worktree.backups[BRANCH] = "head1"
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+
+	def test_ship_decision_after_recovery_still_checks_the_diff(self):
+		self.park_with_decision("ship", head="head1", diff_sha="0" * 64)
+		for name in ("decision.json", "diff.patch"):
+			os.remove(os.path.join(self.artifacts, BUG_ID, name))
+		self.worktree.branch_heads = {}
+		self.worktree.backups[BRANCH] = "head1"
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("does not match", self.api.notes(BUG_ID)[-1])
 
 	def test_ship_decision_respects_breaker_and_freeze(self):
 		self.park_with_decision("ship", head="head1")
@@ -908,8 +1031,19 @@ class LoopTests(unittest.TestCase):
 		self.make(bugs=[dict(BUG, _id="c" * 24, status="pr_open"), dict(BUG, _id="d" * 24, status="needs_decision"), pending])
 		self.api.lists.clear()
 		self.loop._send_daily_summary(self.state.data)
-		self.assertEqual(self.api.lists, [dict(status=None, limit=1, decision_pending=False, awaiting_decision=True)])
-		self.assertIn("waiting for a decision: 2", self.notifier.messages[-1])
+		self.assertEqual(self.api.lists[0], dict(status=None, limit=1, decision_pending=False, awaiting_decision=True,
+			triage_category=None))
+		self.assertIn("waiting for a decision: 2 parked, 0 needs-info", self.notifier.messages[-1])
+
+	def test_daily_summary_counts_needs_info_bugs(self):
+		self.make(bugs=[dict(BUG, _id="c" * 24, status="pr_open"),
+			dict(BUG, _id="d" * 24, status="triaged", triage={"category": "needs_info"}),
+			dict(BUG, _id="e" * 24, status="triaged", triage={"category": "design_request"})])
+		self.api.lists.clear()
+		self.loop._send_daily_summary(self.state.data)
+		self.assertIn(dict(status="triaged", limit=1, decision_pending=False, awaiting_decision=False,
+			triage_category="needs_info"), self.api.lists)
+		self.assertIn("waiting for a decision: 1 parked, 1 needs-info", self.notifier.messages[-1])
 
 	def test_daily_summary_survives_a_restart(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"), notify_status_changes=False)
@@ -981,7 +1115,8 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "new")
 		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
-		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs-human")
+		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
+		self.assertIn("set the status to new to retry", self.api.notes(BUG_ID)[-1])
 		self.assertEqual(self.outcomes(), ["triage-invalid"])
 
 	def test_green_fix_ships(self):
@@ -1040,7 +1175,35 @@ class LoopTests(unittest.TestCase):
 		self.worktree.head_ = "base1"
 		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
 		self.assertIn("needs-info", self.api.notes(BUG_ID)[-1])
+
+	def test_unfixed_outcomes_go_to_the_maintainers_needs_info_list(self):
+		"""The loop only polls `new`: a needs-info bug left with its triage category is never seen again."""
+		for outcome in ("not_reproducible", "no_root_cause"):
+			with self.subTest(outcome=outcome):
+				self.make(fix=dict(GOOD_FIX, outcome=outcome, root_cause="already fixed on develop"))
+				self.loop.poll_once()
+				bug = self.api.bugs[BUG_ID]
+				self.assertEqual(bug["status"], "triaged")
+				self.assertEqual(bug["triage"]["category"], "needs_info")
+				self.assertIsNone(bug.get("claimedBy"))
+				note = self.api.notes(BUG_ID)[-1]
+				self.assertIn("needs-info ({})".format(outcome), note)
+				self.assertIn("set the status to new to retry", note)
+				self.assertIn("needs-info", self.outcomes())
+				self.assertEqual(self.verifier.gates, [])
+
+	def test_needs_info_bug_reset_to_new_is_triaged_again(self):
+		self.make(fix=dict(GOOD_FIX, outcome="not_reproducible"))
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
+		self.api.bugs[BUG_ID]["status"] = "new"  # the maintainer's retry in the web UI
+		self.runner.fix = GOOD_FIX
+		self.loop.poll_once()
+		self.assertEqual(self.runner.calls.count("triage"), 2)
+		self.assertEqual(self.runner.calls.count("fix"), 2)
+		self.assertNotEqual(self.api.bugs[BUG_ID]["triage"]["category"], "needs_info")
 
 	def test_breaker_and_cap_park(self):
 		self.make()

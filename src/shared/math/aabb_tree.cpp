@@ -74,6 +74,14 @@ namespace mmo
 
 		size_t numFaces = indices.size() / 3;
 
+		// Without faces there is nothing to partition: BuildRecursive would leave a padded node
+		// array behind whose root has inverted bounds and points at itself as its own child.
+		if (numFaces == 0)
+		{
+			Clear();
+			return;
+		}
+
 		// Discard a stale face-submesh mapping from a previous build (the 3-argument
 		// Build overload assigns it right before delegating here).
 		if (m_faceSubMeshes.size() != numFaces)

@@ -9,6 +9,7 @@
 #include "game_server/player_group.h"
 #include "game_server/inventory_types.h"
 #include "game_server/world/tile_subscriber.h"
+#include "base/clock.h"
 #include "binary_io/vector_sink.h"
 #include "game/experience.h"
 #include "log/default_log_levels.h"
@@ -18,6 +19,7 @@ namespace mmo
 {
 	CreatureAIDeathState::CreatureAIDeathState(CreatureAI& ai)
 		: CreatureAIState(ai)
+		, m_rollTimeout(ai.GetControlled().GetTimers())
 	{
 	}
 
@@ -242,7 +244,13 @@ namespace mmo
 			}
 
 			std::unique_ptr<LootInstance> loot;
-			LootMethod groupLootMethod = loot_method::FreeForAll;
+
+			// The party of whoever tagged the creature decides how its loot is shared. Only a group has
+			// loot rules: a solo tagger loots everything, whatever loot method a previous group left on
+			// the character.
+			PlayerGroup* lootGroup = primaryLootRecipient ? primaryLootRecipient->GetGroup() : nullptr;
+			const LootMethod groupLootMethod = lootGroup ? lootGroup->GetLootMethod() : loot_method::FreeForAll;
+			const uint64 lootMasterGuid = lootGroup ? lootGroup->GetLootMasterGuid() : 0;
 			if (!lootEntries.empty())
 			{
 				// Generate loot
@@ -250,25 +258,6 @@ namespace mmo
 				for (const auto& recipient : lootRecipients)
 				{
 					weakRecipients.push_back(recipient.second);
-				}
-
-				// Read loot method from first recipient — must be done here; LootInstance has no auth context.
-				uint64 lootMasterGuid = 0;
-				if (!weakRecipients.empty())
-				{
-					if (const auto firstPlayer = weakRecipients.front().lock())
-					{
-						if (PlayerGroup* group = firstPlayer->GetGroup())
-						{
-							groupLootMethod = group->GetLootMethod();
-							lootMasterGuid = group->GetLootMasterGuid();
-						}
-						else
-						{
-							groupLootMethod = firstPlayer->GetLootMethod();
-							lootMasterGuid = firstPlayer->GetLootMasterGuid();
-						}
-					}
 				}
 
 				ASSERT(controlled.GetWorldInstance());
@@ -291,17 +280,11 @@ namespace mmo
 
 			if (loot)
 			{
-				if (primaryLootRecipient)
+				if (primaryLootRecipient && lootGroup)
 				{
-					uint8 lootThreshold = primaryLootRecipient->GetLootThreshold();
-					if (PlayerGroup* group = primaryLootRecipient->GetGroup())
-					{
-						lootThreshold = group->GetLootThreshold();
-					}
+					loot->SetLootMethod(groupLootMethod, lootGroup->GetLootThreshold());
 
-					loot->SetLootMethod(groupLootMethod, lootThreshold);
-
-					if ((groupLootMethod == loot_method::RoundRobin || groupLootMethod == loot_method::GroupLoot) && primaryLootRecipient->GetGroupId() != 0)
+					if (groupLootMethod != loot_method::FreeForAll)
 					{
 						std::vector<uint64> nearbyGroupMembers;
 						std::set<uint64> nearbyGroupMemberSet;
@@ -316,18 +299,22 @@ namespace mmo
 							nearbyGroupMemberSet.insert(recipient.first);
 						}
 
-						if (PlayerGroup* group = primaryLootRecipient->GetGroup())
-						{
-							loot->SetRoundRobinLooter(group->GetNextRoundRobinRecipient(nearbyGroupMembers));
-						}
-						else
-						{
-							loot->SetRoundRobinLooter(primaryLootRecipient->GetGuid());
-						}
+						// Round robin, group loot and master loot all hand whatever the party does not
+						// distribute to the member whose turn it is.
+						loot->SetRoundRobinLooter(lootGroup->GetNextRoundRobinRecipient(nearbyGroupMembers));
 
 						if (groupLootMethod == loot_method::GroupLoot)
 						{
 							loot->SetupGroupRollItems(nearbyGroupMemberSet);
+						}
+						else if (groupLootMethod == loot_method::MasterLoot)
+						{
+							// A loot master who was not around for the kill cannot hand anything out, so
+							// the party rolls for it instead of the corpse staying locked.
+							if (!loot->SetupMasterLootItems(nearbyGroupMemberSet))
+							{
+								loot->SetupGroupRollItems(nearbyGroupMemberSet);
+							}
 						}
 					}
 				}
@@ -541,6 +528,21 @@ namespace mmo
 						});
 					});
 
+				// Once the party was asked to roll, the vote ends after RollDuration whether or not
+				// everybody answered.
+				m_onRollsStarted = loot->rollsStarted.connect([this]()
+					{
+						m_rollTimeout.SetEnd(GetAsyncTimeMs() + LootInstance::RollDuration);
+					});
+				m_onRollTimeout = m_rollTimeout.ended.connect([&controlled]()
+					{
+						// Hold a reference: handing out an expired roll may clear the loot.
+						if (const std::shared_ptr<LootInstance> lootInstance = controlled.GetLoot())
+						{
+							lootInstance->ExpireRolls();
+						}
+					});
+
 				controlled.SetUnitLoot(std::move(loot));
 			}
 		}
@@ -551,6 +553,8 @@ namespace mmo
 
 	void CreatureAIDeathState::OnLeave()
 	{
+		m_rollTimeout.Cancel();
+
 		CreatureAIState::OnLeave();
 	}
 }

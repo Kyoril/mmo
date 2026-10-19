@@ -37,10 +37,10 @@ The nightly `publish` job runs `tools/release/patch_notes.py`. It builds a conte
 2. Commit messages from the `data/editor` and `data/client` repositories.
 3. Changed files per area.
 4. Player-facing commit subjects and bodies.
-5. Internal commit subjects only, for a short "Behind the Scenes" section. These are `ci`,
-   `test`, `docs`, `chore`, `build`, `refactor` and `style` commits, scopes such as `gate`,
-   `deployer`, `e2e` and `bug-loop`, and commits that only touch `tools/`, `deploy/`,
-   `.github/`, `docs/` or tests.
+
+Internal commits (`ci`, `test`, `docs`, `chore`, `build`, `refactor` and `style` commits, scopes
+such as `gate`, `deployer`, `e2e` and `bug-loop`, and commits that only touch `tools/`,
+`deploy/`, `.github/`, `docs/` or tests) are not sent to the model at all.
 
 Claude writes the notes: `claude -p` (Claude Code, installed by the job with npm), no tools,
 our instructions as the system prompt, run in an empty directory so no `CLAUDE.md` leaks in.
@@ -52,13 +52,19 @@ GitHub Models, the earlier free generator, was shut down on 2026-07-30. Its endp
 every request with a plain `OK`, which is why the first versioned nightlies only had fallback
 notes.
 
-The voice is the hand-written "Night Watch" entry of 2026-10-07, kept in the script as
-`STYLE_SAMPLE`: in-world, wry, addressed to "Adventurers", one dry aside on every second or
-third bullet at most, nothing technical, nothing invented. The answer is JSON with a `title`
-(the update's theme, such as "The Night Watch"), a `headline`, an `intro` of one or two short
-paragraphs, and `sections`, ending with "Bug Fixes" and "Behind the Scenes". Anything
-unusable, a missing token, or any process error falls back to notes built from the cleaned
-commit subjects. A release never fails because of its notes.
+The audience is players, and the model is the classic vanilla World of Warcraft patch notes:
+concrete changes with numbers, sections such as Dungeons, Classes, Creatures and NPCs, Items,
+Quests and User Interface, a dry aside every second or third bullet, real excitement for big
+news. Editor and level-building work, tooling, deployment and the bug-reporting helpers never
+appear, and there is no "Behind the Scenes" section. `STYLE_SAMPLE` in the script is an
+invented example (made-up names) of the structure. The answer is JSON with a `title`, a
+`headline`, an `intro` and `sections`. `validate_notes` drops bullets that contain workshop
+words (navmesh, editor, server, file names, hashes ...) and any "Behind the Scenes" section.
+Anything unusable, a missing token, a CLI that cannot be found or any process error falls back
+to one generic line ("Assorted fixes and improvements."): commit subjects are written for
+developers and never reach players. The workflow prints a warning annotation when the CLI is
+missing, so a generic entry in the launcher means the Claude step failed. A release never
+fails because of its notes.
 
 The notes are stored in `release.json` as `patch_notes`, together with `version`, and also
 become the GitHub release body. At promotion the deployer writes them to `launcher.json`:
@@ -90,8 +96,9 @@ so the launcher has its own release cycle:
   count (`MMO_LAUNCHER_VERSION_STR`). The launcher's version label, its file version and its
   About box show this version.
 - Pushing a `launcher-vX.Y.Z` tag runs `.github/workflows/launcher-release.yml`. It builds
-  `Launcher.exe` and publishes a release with the binary and `launcher-release.json`
-  (version, commit, sha256, size).
+  `Launcher.exe`, builds and smoke-tests `AlestiaOnline-Setup.exe` (see
+  [deploy/installer/README.md](../deploy/installer/README.md)), and publishes a release with the
+  binary, the setup and `launcher-release.json` (version, commit, sha256, size).
 - When it stages a nightly, the deployer looks up the highest `launcher-v*` tag that has a
   release. It uses the tag list, so the launcher release never drops off the release list.
   It replaces the nightly's `Launcher.exe` with that release's binary after checking the
@@ -106,3 +113,8 @@ git push origin launcher-v1.1.0
 
 The launcher reaches players with the next nightly patch. If develop has not moved, run the
 Nightly Release workflow with `force` to ship it sooner.
+
+Until that nightly ships, the patch server still serves the previous `Launcher.exe`. A player
+who installs with the new release's setup in between gets the new launcher, which then
+self-updates to the previous one, and back to the new one with the next nightly. That is
+harmless, only an extra download.

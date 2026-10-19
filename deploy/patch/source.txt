@@ -1,3 +1,4 @@
+// Every top-level entry here is downloaded into the install folder; list it in [UninstallDelete] of deploy/installer/setup.iss too.
 version = 0
 root = (type = "fs", from = ".", to = "", entries =
 {
@@ -15,6 +16,7 @@ root = (type = "fs", from = ".", to = "", entries =
 		(type = "hpak2", from = "ClientDB", to = "ClientDB.hpak", sub = "ClientDB")
 		(type = "hpak2", from = "Worlds", to = "Worlds.hpak", sub = "Worlds")
 		(type = "hpak2", from = "Particles", to = "Particles.hpak", sub = "Particles")
+		(type = "hpak2", from = "Kits", to = "Kits.hpak", sub = "Kits")
 		(type = "fs", from = "Locales", to = "Locales", entries =
 		{
 			(type = "hpak2", from = "Locale_deDE", to = "Locale_deDE.hpak")

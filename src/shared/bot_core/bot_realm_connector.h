@@ -22,6 +22,7 @@
 
 #include "asio/io_service.hpp"
 
+#include <map>
 #include <optional>
 
 namespace mmo
@@ -95,6 +96,11 @@ namespace mmo
 		/// @param durationMs The channel's duration in milliseconds.
 		signal<void(uint64, uint32, int32)> ChannelStarted;
 
+		/// @brief Emitted when a unit in sight finishes a cast (SpellGo), ours or anyone else's.
+		/// @param casterGuid The GUID of the casting unit.
+		/// @param spellId The spell that went off.
+		signal<void(uint64, uint32)> SpellWentOff;
+
 		/// @brief Emitted on ChannelUpdate. A remaining time of 0 is the server's only signal that
 		///		a channel has ended, whether it ran out, was interrupted or never got going.
 		/// @param casterGuid The GUID of the channeling unit.
@@ -156,6 +162,11 @@ namespace mmo
 		};
 		std::optional<SpellVisual> m_lastSpellVisual;
 
+		/// Sound entry id -> guid of the unit it came from (0 for a sound without a source unit), for
+		/// every PlaySoundById since the last clear.
+		std::map<uint32, uint64> m_heardSounds;
+		std::map<uint32, uint32> m_heardSoundCounts;
+
 		// Party state
 		std::vector<BotPartyMember> m_partyMembers;
 		uint64 m_partyLeaderGuid { 0 };
@@ -206,6 +217,30 @@ namespace mmo
 
 		/// Forgets the last observed spell visual, so a scenario can wait for the next one.
 		void ClearLastSpellVisual() { m_lastSpellVisual.reset(); }
+
+		/// Whether the server told this client to play the sound entry since the last clear.
+		[[nodiscard]] bool HasHeardSound(const uint32 soundId) const { return m_heardSounds.contains(soundId); }
+
+		/// Guid of the unit a heard sound came from, or 0 if it had none or was not heard.
+		[[nodiscard]] uint64 GetHeardSoundSource(const uint32 soundId) const
+		{
+			const auto it = m_heardSounds.find(soundId);
+			return it != m_heardSounds.end() ? it->second : 0;
+		}
+
+		/// How often the server told this client to play the sound entry since the last clear.
+		[[nodiscard]] uint32 GetHeardSoundCount(const uint32 soundId) const
+		{
+			const auto it = m_heardSoundCounts.find(soundId);
+			return it != m_heardSoundCounts.end() ? it->second : 0;
+		}
+
+		/// Forgets every heard sound.
+		void ClearHeardSounds()
+		{
+			m_heardSounds.clear();
+			m_heardSoundCounts.clear();
+		}
 
 		/// Whether the realm announced the subsystem as available.
 		[[nodiscard]] bool IsSubsystemAvailable(game::Subsystem subsystem) const
@@ -319,6 +354,13 @@ namespace mmo
 		/// @param bag The bag index (255 for the backpack).
 		/// @param slot The slot inside that bag.
 		void AutoEquipItem(uint8 bag, uint8 slot);
+
+		/// Swaps the contents of two slots of the character's own inventory (equipment, backpack and
+		/// bag slots, all relative to Bag_0), e.g. to equip a backpack item into a specific equipment
+		/// slot such as the off hand, which AutoEquipItem never picks for a one-handed weapon.
+		/// @param srcSlot The source slot.
+		/// @param dstSlot The destination slot.
+		void SwapInventoryItems(uint8 srcSlot, uint8 dstSlot);
 
 		// ============================================================
 		// Object Management Methods
@@ -515,6 +557,8 @@ namespace mmo
 
 		PacketParseResult OnPlaySpellVisual(game::IncomingPacket& packet);
 
+		PacketParseResult OnPlaySoundById(game::IncomingPacket& packet);
+
 		PacketParseResult OnSubsystemStatus(game::IncomingPacket& packet);
 
 		PacketParseResult OnBugReportResult(game::IncomingPacket& packet);
@@ -580,6 +624,8 @@ namespace mmo
 
 		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
 		PacketParseResult OnLearnedSpell(game::IncomingPacket& packet);
+		PacketParseResult OnTradeSkills(game::IncomingPacket& packet);
+		PacketParseResult OnTradeSkillUpdate(game::IncomingPacket& packet);
 		PacketParseResult OnUnlearnedSpell(game::IncomingPacket& packet);
 		PacketParseResult OnSpellStart(game::IncomingPacket& packet);
 		PacketParseResult OnSpellGo(game::IncomingPacket& packet);

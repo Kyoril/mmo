@@ -13,6 +13,7 @@
 #include "scene_graph/scene_node.h"
 #include "mmo_client/systems/loot_client.h"
 #include "mmo_client/systems/trainer_client.h"
+#include "mmo_client/client_setting_limits.h"
 #include "mmo_client/ui/nameplate_frame.h"
 #include "game_client/movement_event.h"
 
@@ -339,8 +340,7 @@ namespace mmo
 		ASSERT(s_maxCameraZoomCVar);
 		ASSERT(s_cameraZoomCVar);
 
-		const float maxZoom = Clamp<float>(s_maxCameraZoomCVar->GetFloatValue(), 2.0f, 15.0f);
-		const float newZoom = Clamp<float>(s_cameraZoomCVar->GetFloatValue(), 0.0f, maxZoom);
+		const float newZoom = ClampCameraZoom(s_cameraZoomCVar->GetFloatValue(), s_maxCameraZoomCVar->GetFloatValue());
 		m_desiredCameraLocation = m_cameraNode->GetOrientation() * (Vector3::UnitZ * newZoom);
 	}
 
@@ -369,7 +369,7 @@ namespace mmo
 
 	void PlayerController::HandleCameraCollision()
 	{
-		float zoom = s_cameraZoomCVar->GetFloatValue();
+		float zoom = ClampCameraZoom(s_cameraZoomCVar->GetFloatValue(), s_maxCameraZoomCVar->GetFloatValue());
 		if (zoom <= 0.0f)
 		{
 			return;
@@ -1266,7 +1266,7 @@ namespace mmo
 		ASSERT(m_cameraNode);
 
 		const float currentZoom = s_cameraZoomCVar->GetFloatValue();
-		const float maxZoom = s_maxCameraZoomCVar->GetFloatValue();
+		const float maxZoom = ClampMaxCameraZoom(s_maxCameraZoomCVar->GetFloatValue());
 		s_cameraZoomCVar->Set(std::max(0.0f, std::min(currentZoom - static_cast<float>(delta), maxZoom)));
 	}
 		

@@ -2,9 +2,12 @@
 #include "map.h"
 
 #include <DetourCommon.h>
+#include <algorithm>
+#include <cfloat>
 #include <random>
 
 #include "tile.h"
+#include "instance_query_filter.h"
 
 #include "memory_source.h"
 #include "stream_source.h"
@@ -385,12 +388,14 @@ namespace mmo::nav
 	}
 
 
-	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial) const
+	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial, const dtQueryFilter* filter) const
 	{
 		if (!m_valid)
 		{
 			return false;
 		}
+
+		const dtQueryFilter* queryFilter = filter ? filter : &m_queryFilter;
 
 		constexpr float extents[] = { 5.f, 3.5f, 5.f };
 
@@ -398,7 +403,7 @@ namespace mmo::nav
 		float recastEnd[3] = { end.x, end.y, end.z };
 
 		dtPolyRef startPolyRef, endPolyRef;
-		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastStart, extents, &m_queryFilter,
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastStart, extents, queryFilter,
 			&startPolyRef, nullptr)))
 		{
 			return false;
@@ -409,7 +414,7 @@ namespace mmo::nav
 			return false;
 		}
 
-		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastEnd, extents, &m_queryFilter,
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastEnd, extents, queryFilter,
 			&endPolyRef, nullptr)))
 		{
 			return false;
@@ -423,8 +428,19 @@ namespace mmo::nav
 		// Just build a shortcut path?
 		if (startPolyRef == endPolyRef)
 		{
+			// An end position outside the poly resolved to it as the nearest open poly. This is
+			// the case for a target standing on a poly the filter rejects, so clamp it onto the
+			// poly instead of walking into the rejected one.
+			float closest[3];
+			bool overPoly = false;
+			Vector3 shortcutEnd = end;
+			if (dtStatusSucceed(m_navQuery.closestPointOnPoly(endPolyRef, recastEnd, closest, &overPoly)) && !overPoly)
+			{
+				shortcutEnd = Vector3(closest[0], closest[1], closest[2]);
+			}
+
 			output.push_back(start);
-			output.push_back(end);
+			output.push_back(shortcutEnd);
 			return true;
 		}
 
@@ -437,7 +453,7 @@ namespace mmo::nav
 		dtPolyRef polys[MaxPathPolys];
 		int npolys = 0;
 
-		if (!dtStatusSucceed(m_navQuery.findPath(startPolyRef, endPolyRef, startNearest, endNearest, &m_queryFilter, polys, &npolys, MaxPathPolys)) || npolys == 0)
+		if (!dtStatusSucceed(m_navQuery.findPath(startPolyRef, endPolyRef, startNearest, endNearest, queryFilter, polys, &npolys, MaxPathPolys)) || npolys == 0)
 		{
 			return false;
 		}
@@ -474,14 +490,14 @@ namespace mmo::nav
 
 		// Snap a position onto the nav-mesh surface so densified waypoints follow terrain height
 		// instead of cutting straight through hills between distant corners.
-		auto sampleHeight = [this](const Vector3& point) -> Vector3
+		auto sampleHeight = [this, queryFilter](const Vector3& point) -> Vector3
 		{
 			float pos[3] = { point.x, point.y, point.z };
 			constexpr float sampleExtents[] = { 2.f, 4.f, 2.f };
 
 			dtPolyRef ref;
 			float nearest[3];
-			if (dtStatusSucceed(m_navQuery.findNearestPoly(pos, sampleExtents, &m_queryFilter, &ref, nearest)) && ref)
+			if (dtStatusSucceed(m_navQuery.findNearestPoly(pos, sampleExtents, queryFilter, &ref, nearest)) && ref)
 			{
 				float height;
 				if (dtStatusSucceed(m_navQuery.getPolyHeight(ref, nearest, &height)))
@@ -540,12 +556,14 @@ namespace mmo::nav
 
 	} // anonymous namespace
 
-	bool Map::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
+	bool Map::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint, const dtQueryFilter* filter) const
 	{
 		if (!m_valid)
 		{
 			return false;
 		}
+
+		const dtQueryFilter* queryFilter = filter ? filter : &m_queryFilter;
 
 		constexpr int maxAttempts = 10;
 
@@ -555,7 +573,7 @@ namespace mmo::nav
 
 		// Find the nearest polygon to centerPosition.
 		dtPolyRef startRef;
-		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastCenter, extents, &m_queryFilter, &startRef, nullptr)))
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(recastCenter, extents, queryFilter, &startRef, nullptr)))
 			return false;
 
 		// Try multiple times to get a point that is truly within 'radius'.
@@ -569,7 +587,7 @@ namespace mmo::nav
 				startRef,
 				recastCenter,
 				radius,
-				&m_queryFilter,
+				queryFilter,
 				&random_between_0_and_1,  // your custom frand() or similar
 				&randomRef,
 				outputPoint)))
@@ -592,13 +610,13 @@ namespace mmo::nav
 		return false;
 	}
 
-	bool Map::LineOfSight(const Vector3& start, const Vector3& end) const
+	bool Map::LineOfSight(const Vector3& start, const Vector3& end, const dtQueryFilter* filter) const
 	{
 		Vector3 unused;
-		return LineOfSightEx(start, end, unused);
+		return LineOfSightEx(start, end, unused, filter);
 	}
 
-	bool Map::LineOfSightEx(const Vector3& start, const Vector3& end, Vector3& hitPoint) const
+	bool Map::LineOfSightEx(const Vector3& start, const Vector3& end, Vector3& hitPoint, const dtQueryFilter* filter) const
 	{
 		hitPoint = end;
 
@@ -607,6 +625,8 @@ namespace mmo::nav
 		{
 			return true;
 		}
+
+		const dtQueryFilter* queryFilter = filter ? filter : &m_queryFilter;
 
 		// Trivially clear when positions are identical.
 		const float dx = end.x - start.x;
@@ -628,7 +648,7 @@ namespace mmo::nav
 		constexpr float extents[] = { 2.f, 4.f, 2.f };
 
 		dtPolyRef startRef;
-		if (!dtStatusSucceed(m_navQuery.findNearestPoly(startPos, extents, &m_queryFilter, &startRef, nullptr)) || !startRef)
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(startPos, extents, queryFilter, &startRef, nullptr)) || !startRef)
 		{
 			// Can't locate start on nav mesh — assume clear.
 			return true;
@@ -640,7 +660,7 @@ namespace mmo::nav
 		int npolys = 0;
 
 		const dtStatus status = m_navQuery.raycast(
-			startRef, startPos, endPos, &m_queryFilter,
+			startRef, startPos, endPos, queryFilter,
 			&hitT, hitNormal, polys, &npolys, MaxPathPolys);
 
 		if (dtStatusFailed(status))
@@ -679,5 +699,174 @@ namespace mmo::nav
 		auto const tile = m_tiles.find({ tileX, tileY });
 
 		return tile == m_tiles.end() ? nullptr : tile->second.get();
+	}
+
+	std::vector<dtPolyRef> Map::FindDoorPolys(const DoorVolume& volume) const
+	{
+		std::vector<dtPolyRef> result;
+		if (!m_valid)
+		{
+			return result;
+		}
+
+		Vector3 min, max;
+		volume.GetWorldBounds(min, max);
+		const float center[3] = { (min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f, (min.z + max.z) * 0.5f };
+		const float halfExtents[3] = { (max.x - min.x) * 0.5f, (max.y - min.y) * 0.5f, (max.z - min.z) * 0.5f };
+
+		dtQueryFilter doorsOnly;
+		doorsOnly.setIncludeFlags(DoorPolyFlag);
+
+		dtPolyRef polys[MaxStackedPolys];
+		int polyCount = 0;
+		if (dtStatusFailed(m_navQuery.queryPolygons(center, halfExtents, &doorsOnly, polys, &polyCount, MaxStackedPolys)))
+		{
+			return result;
+		}
+
+		for (int i = 0; i < polyCount; ++i)
+		{
+			const dtMeshTile* tile = nullptr;
+			const dtPoly* poly = nullptr;
+			if (dtStatusFailed(m_navMesh.getTileAndPolyByRef(polys[i], &tile, &poly)) || poly->vertCount == 0)
+			{
+				continue;
+			}
+
+			Vector3 polyCenter = Vector3::Zero;
+			for (unsigned char v = 0; v < poly->vertCount; ++v)
+			{
+				const float* vert = &tile->verts[poly->verts[v] * 3];
+				polyCenter += Vector3(vert[0], vert[1], vert[2]);
+			}
+			polyCenter /= static_cast<float>(poly->vertCount);
+
+			// The box overlap above also catches door polys of a neighbouring door; the strip a
+			// door's own volume carved has its center inside that volume.
+			if (volume.ContainsXZ(polyCenter))
+			{
+				result.push_back(polys[i]);
+			}
+		}
+
+		return result;
+	}
+
+	namespace
+	{
+		/// Whether a convex nav poly reaches into a door's own footprint: an oriented XZ rectangle
+		/// around the volume's center with half extents halfX/halfZ (separating axis test), within
+		/// the volume's Y range. A poly that only touches the footprint's edge does not count.
+		bool PolyEntersFootprint(const dtMeshTile& tile, const dtPoly& poly, const DoorVolume& volume, const float halfX, const float halfZ)
+		{
+			constexpr float epsilon = 0.01f;
+
+			float pointsX[DT_VERTS_PER_POLYGON];
+			float pointsZ[DT_VERTS_PER_POLYGON];
+			float minY = FLT_MAX;
+			float maxY = -FLT_MAX;
+			const int count = poly.vertCount;
+			for (int v = 0; v < count; ++v)
+			{
+				const float* vert = &tile.verts[poly.verts[v] * 3];
+				pointsX[v] = vert[0] - volume.center.x;
+				pointsZ[v] = vert[2] - volume.center.z;
+				minY = std::min(minY, vert[1]);
+				maxY = std::max(maxY, vert[1]);
+			}
+
+			if (minY > volume.maxY || maxY < volume.minY)
+			{
+				return false;
+			}
+
+			const auto project = [&](const float axisX, const float axisZ, float& outMin, float& outMax)
+			{
+				outMin = FLT_MAX;
+				outMax = -FLT_MAX;
+				for (int v = 0; v < count; ++v)
+				{
+					const float d = pointsX[v] * axisX + pointsZ[v] * axisZ;
+					outMin = std::min(outMin, d);
+					outMax = std::max(outMax, d);
+				}
+			};
+
+			// The footprint's own axes: the poly must overlap it by more than epsilon, so a floor
+			// ending at a zero-thickness door plane does not count as running through it.
+			float polyMin, polyMax;
+			project(volume.axisX.x, volume.axisX.z, polyMin, polyMax);
+			if (polyMax <= -halfX + epsilon || polyMin >= halfX - epsilon)
+			{
+				return false;
+			}
+
+			project(volume.axisZ.x, volume.axisZ.z, polyMin, polyMax);
+			if (polyMax <= -halfZ + epsilon || polyMin >= halfZ - epsilon)
+			{
+				return false;
+			}
+
+			// The poly's edge normals.
+			for (int v = 0; v < count; ++v)
+			{
+				const int next = (v + 1) % count;
+				const float normalX = -(pointsZ[next] - pointsZ[v]);
+				const float normalZ = pointsX[next] - pointsX[v];
+				project(normalX, normalZ, polyMin, polyMax);
+
+				const float boxExtent =
+					halfX * std::abs(volume.axisX.x * normalX + volume.axisX.z * normalZ) +
+					halfZ * std::abs(volume.axisZ.x * normalX + volume.axisZ.z * normalZ);
+				if (boxExtent <= polyMin || -boxExtent >= polyMax)
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+	}
+
+	bool Map::HasPolysIn(const DoorVolume& volume) const
+	{
+		if (!m_valid)
+		{
+			return false;
+		}
+
+		Vector3 min, max;
+		volume.GetWorldBounds(min, max);
+		const float center[3] = { (min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f, (min.z + max.z) * 0.5f };
+		const float halfExtents[3] = { (max.x - min.x) * 0.5f, (max.y - min.y) * 0.5f, (max.z - min.z) * 0.5f };
+
+		dtPolyRef polys[MaxStackedPolys];
+		int polyCount = 0;
+		if (dtStatusFailed(m_navQuery.queryPolygons(center, halfExtents, &m_queryFilter, polys, &polyCount, MaxStackedPolys)))
+		{
+			return false;
+		}
+
+		// queryPolygons only tests coarse bounds, and the volume is grown by DoorVolumeInflate on
+		// each side: the floor in front of a door set into a wall ends inside that margin without
+		// passing the door. Only a poly reaching into the door's own footprint is a way through.
+		const float footprintHalfX = std::max(0.f, volume.halfX - DoorVolumeInflate);
+		const float footprintHalfZ = std::max(0.f, volume.halfZ - DoorVolumeInflate);
+		for (int i = 0; i < polyCount; ++i)
+		{
+			const dtMeshTile* tile = nullptr;
+			const dtPoly* poly = nullptr;
+			if (dtStatusFailed(m_navMesh.getTileAndPolyByRef(polys[i], &tile, &poly)) || poly->vertCount == 0)
+			{
+				continue;
+			}
+
+			if (PolyEntersFootprint(*tile, *poly, volume, footprintHalfX, footprintHalfZ))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

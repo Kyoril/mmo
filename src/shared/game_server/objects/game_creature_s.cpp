@@ -9,6 +9,8 @@
 #include "ai/creature_ai_combat_state.h"
 #include "binary_io/vector_sink.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	GameCreatureS::GameCreatureS(
@@ -132,7 +134,7 @@ namespace mmo
 		
 		Set<uint32>(object_fields::Entry, m_entry->id());
 		Set<float>(object_fields::Scale, m_entry->scale());
-		Set<uint32>(object_fields::DisplayId, m_entry->malemodel());	// TODO: gender roll
+		Set<uint32>(object_fields::DisplayId, RollDisplayId(*m_entry, randomGenerator));
 		Set<uint32>(object_fields::FactionTemplate, m_entry->factiontemplate());
 
 		// Creatures get their own base run speed (independent of the player default) so
@@ -163,6 +165,17 @@ namespace mmo
 		}
 	}
 
+	uint32 GameCreatureS::RollDisplayId(const proto::UnitEntry& entry, RandomnessGenerator& generator)
+	{
+		if (!entry.random_gender() || entry.femalemodel() == 0)
+		{
+			return entry.malemodel();
+		}
+
+		std::uniform_int_distribution genderDist(0, 1);
+		return genderDist(generator) == 0 ? entry.malemodel() : entry.femalemodel();
+	}
+
 	void GameCreatureS::AddLootRecipient(uint64 guid)
 	{
 		m_lootRecipients.add(guid);
@@ -175,7 +188,22 @@ namespace mmo
 
 	bool GameCreatureS::IsLootRecipient(const GamePlayerS& character) const
 	{
-		return m_lootRecipients.contains(character.GetGuid());
+		if (m_lootRecipients.contains(character.GetGuid()))
+		{
+			return true;
+		}
+
+		// The tag list only ever holds the single player who first engaged this creature. Everybody
+		// who was rewarded for the kill - the tagger's nearby group members - is recorded on the
+		// loot instance when it is generated, and the corpse belongs to them just as much. Without
+		// this, a grouped player cannot loot anything a party mate happened to tag first.
+		if (m_loot)
+		{
+			const auto& recipients = m_loot->GetRecipients();
+			return std::find(recipients.begin(), recipients.end(), character.GetGuid()) != recipients.end();
+		}
+
+		return false;
 	}
 
 	void GameCreatureS::SetHealthPercent(const float percent)
@@ -199,6 +227,35 @@ namespace mmo
 		{
 			RemoveFlag<uint32>(object_fields::Flags, unit_flags::Lootable);
 		}
+	}
+
+	void GameCreatureS::PrepareDynamicFieldsFor(const GamePlayerS& player)
+	{
+		// A corpse belongs to its loot recipients only - everybody else is refused by the loot
+		// handler. Serializing the Lootable flag to them anyway would promise loot the client
+		// advertises with the corpse sparkle and the loot cursor but can never deliver.
+		const uint32 flags = Get<uint32>(object_fields::Flags);
+		if ((flags & unit_flags::Lootable) == 0 || IsLootRecipient(player))
+		{
+			return;
+		}
+
+		m_lootableFlagSuppressed = true;
+
+		// Do not notify the world instance: this is a temporary per-player value, not an actual
+		// change of the creature that other subscribers need to hear about.
+		Set<uint32>(object_fields::Flags, flags & ~unit_flags::Lootable, false);
+	}
+
+	void GameCreatureS::ClearDynamicFields()
+	{
+		if (!m_lootableFlagSuppressed)
+		{
+			return;
+		}
+
+		m_lootableFlagSuppressed = false;
+		Set<uint32>(object_fields::Flags, Get<uint32>(object_fields::Flags) | unit_flags::Lootable, false);
 	}
 
 	QuestgiverStatus GameCreatureS::GetQuestGiverStatus(const GamePlayerS& player) const

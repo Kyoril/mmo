@@ -130,17 +130,20 @@ GM.Heal()
 GM.Godmode(true)
 resetMyCooldowns()
 castAndWait(LAST_VIGIL, nil)
-Assert(WaitUntil(function() return FindUnitByEntry(RISEN_NOVICE) ~= nil end, 5000, "novices rise"),
-	"Last Vigil should raise a Risen Novice")
+Assert(WaitUntil(function() return CountUnitsByEntry(RISEN_NOVICE) == 2 end, 5000, "novices rise"),
+	"Last Vigil should raise two Risen Novices (saw " .. CountUnitsByEntry(RISEN_NOVICE) .. ")")
 local novice = FindUnitByEntry(RISEN_NOVICE)
 Assert(GetDistance(me, novice) < 12, "the novices should rise next to the caster")
 
 -- Clean up both novices and the dummy, so later scenarios on the shared map 0 do not find them.
-for _ = 1, 2 do
+-- A destroyed unit stays visible until its despawn arrives, so wait for each one to go before
+-- looking up the next: otherwise the same novice is destroyed twice and the other one survives,
+-- attacking every character that enters map 0 after this scenario.
+while CountUnitsByEntry(RISEN_NOVICE) > 0 do
 	local guid = FindUnitByEntry(RISEN_NOVICE)
-	if guid then
-		GM.DestroyMonster(guid)
-	end
+	GM.DestroyMonster(guid)
+	Assert(WaitUntil(function() return FindUnitByEntry(RISEN_NOVICE) ~= guid end, 5000, "novice despawns"),
+		"a destroyed Risen Novice should despawn")
 end
 GM.DestroyMonster(dummy)
 GM.Godmode(false)

@@ -4,7 +4,7 @@ Design: [docs/superpowers/specs/2026-10-06-nightly-deploy-design.md](superpowers
 
 ## 1. Overview
 
-1. 22:00 UTC (00:00 Berlin in summer, 23:00 in winter; the cron is UTC, while `MAINTENANCE_AT` 04:45 is in `TZ`, Europe/Berlin). The gate may take up to 180 min, then the client build and staging follow, so the release is staged well before 04:45: `.github/workflows/nightly-release.yml` gates `develop` on Linux (full gate incl. E2E), builds the images and client patch, writes player patch notes, and publishes a `nightly-<version>` release (with `release.json`). Versions, patch notes and the launcher's own release cycle are described in [versioning.md](versioning.md).
+1. 23:00 (Europe/Berlin, `NIGHTLY_AT`): the deployer starts the nightly workflow on `develop` through `workflow_dispatch`. The gate may take up to 180 min, the client build up to 120 min, then staging follows, so the release is staged before 04:45. The workflow's own GitHub schedule (22:00 UTC) stays as a fallback only: GitHub starts scheduled runs hours late on busy nights (up to 4 h 49 min observed), which once left nothing staged at 04:45. When both run, the second finds develop's head already released and skips (if develop moved in between, it releases the newer head, like any nightly). The workflow (`.github/workflows/nightly-release.yml`) gates `develop` on Linux (full gate incl. E2E), builds the images and client patch, writes player patch notes, and publishes a `nightly-<version>` release (with `release.json`). Versions, patch notes and the launcher's own release cycle are described in [versioning.md](versioning.md).
 2. The `mmo-deployer` container on the root server polls GitHub and stages the newest green release (patch files, data, `update_compiler`). The stager refuses a release whose `release.json` gate is not green. It ships the newest `launcher-v*` release's `Launcher.exe` instead of the nightly's build (`LAUNCHER_RELEASE_PREFIX`, default `launcher-v`).
 3. 04:45 (Europe/Berlin): maintenance. Preflight (login, realms, Portainer token), 15-minute realm shutdown countdown, DB backup, patch `current` flip, Portainer redeploy with `MMO_TAG=<sha>`.
 4. Verify: within 300 s there must be two consecutive rounds in which login and every realm answer `/uptime` and Portainer reports every `WAIT_SERVICES` container (default `realm_server_01,world_node_01`, so the world node too) as `running`. Otherwise the deployer rolls back to the previous release.
@@ -34,7 +34,7 @@ Order matters: the game stack is redeployed with the new `compose.yml` FIRST (it
    - Note the stack ID and endpoint ID from the Portainer URL (`#!/<endpoint>/docker/stacks/<name>?id=<stack>`).
    - The stack must be a web-editor stack, not a Git-backed one.
 4. **Portainer API token**: My account, Access tokens, add `mmo-deployer`. The deployer pings an authenticated endpoint in preflight, so a wrong token aborts the night before any shutdown.
-5. **GitHub token** (`GITHUB_TOKEN`): fine-grained, repository `Kyoril/mmo`, permission *Contents: read*. Not needed if the repo is public.
+5. **GitHub token** (`GITHUB_TOKEN`): fine-grained, repository `Kyoril/mmo`, permissions *Contents: read* and *Actions: read and write* (the latter to start the nightly at `NIGHTLY_AT`). Without `NIGHTLY_AT` only *Contents: read* is needed, and no token at all if the repo is public.
 6. **MySQL backup user**
    ```sql
    CREATE USER 'deployer'@'%' IDENTIFIED BY '<pw>';
@@ -50,7 +50,16 @@ Order matters: the game stack is redeployed with the new `compose.yml` FIRST (it
    - `REALMS=[{"name":"realm01","url":"http://mmo-dev-realm-01:8092","password":"<WEB_API_PASSWORD>"}]`
    - Keep `DRY_RUN=1` (also the default in the compose file). Other defaults (maintenance time, countdown, retention `KEEP_RELEASES=3` / `KEEP_BACKUPS=7`) live in `deploy/deployer/mmo_deployer/config.py`.
 
-The patch is built from `deploy/patch/source.txt`, which packs every `data/client` folder the client loads, including `Particles` (`Particles.hpak`). `Cache` (a runtime cache the client fills itself) and `Editor` (editor-only assets) are intentionally not packed.
+The patch is built from `deploy/patch/source.txt`, which packs every `data/client` folder the client loads, including `Particles` (`Particles.hpak`) and `Kits` (`Kits.hpak`). A new top-level folder needs an entry there and in the client's archive list in `src/mmo_client/console/console.cpp`; `tools/tests/test_client_data_packing.py` fails the gate when either is missing. `Cache` (a runtime cache the client fills itself) and `Editor` (editor-only assets) are intentionally not packed.
+
+Every top-level entry of `source.txt` is downloaded into the player's install folder, so it must
+also be listed in `[UninstallDelete]` of `deploy/installer/setup.iss`
+(`tools/tests/test_installer_uninstall_list.py` enforces this).
+
+The website's client download links to the setup of the newest launcher release:
+`https://github.com/Kyoril/mmo/releases/latest/download/AlestiaOnline-Setup.exe`. That URL
+resolves to the newest non-prerelease, so every release other than `launcher-v*` must stay a
+prerelease (the nightly workflow publishes with `--prerelease`).
 
 ## 3. Going live
 
@@ -69,7 +78,7 @@ docker exec mmo-deployer deployer status | pause | resume | stage-now | deploy-n
 
 (Pick one command per call.) Commands are queued as request files and applied within one tick. A request that crashes is dropped, never retried, and reported by notification.
 
-- `pause` / `resume`: skip or resume staging and maintenance.
+- `pause` / `resume`: skip or resume staging and maintenance. Starting the nightly at `NIGHTLY_AT` continues while paused; it changes nothing on the live stack.
 - `stage-now`: poll GitHub on the next tick.
 - `deploy-now [sha]`: run the maintenance now with the countdown. It runs even when paused and counts as that day's maintenance (no second run at 04:45).
 - `rollback`: return to the previous live release immediately.
@@ -80,6 +89,7 @@ Notifications:
 | Message | Meaning |
 |---|---|
 | `Deployer started (...)` | Service (re)started; shows live/staged/dry-run. |
+| `Could not start the nightly build (...)` | Dispatching the nightly workflow at `NIGHTLY_AT` failed (once a night); it retries every poll for an hour. A 403/404 usually means the token lacks *Actions: read and write*. Start it by hand in GitHub (Actions, Nightly Release, Run workflow) if it is still failing. |
 | `Staged <tag> (N changes)` | New release staged, goes live at the next 04:45. |
 | `Staging <tag> failed; retrying` | Staging error (once per release); live release unchanged. |
 | `[dry-run] would deploy ...; backup OK` / `backup FAILED: <error>` | Dry run; nothing changed on the stack, but a real backup was attempted. |
@@ -126,5 +136,6 @@ Change `DEPLOYER_TAG` to a newer green SHA and redeploy its stack. It never upda
 ## 7. CI notes
 
 - The Linux gate runs on the runner's preinstalled MySQL (root/root). The CI run proving the pipeline has not happened yet; if Linux E2E fails, move the gate job to `windows-latest` and start MySQL 8.0 (root/root) with `shogo82148/actions-setup-mysql`.
+- `launcher-release.yml` installs Inno Setup via Chocolatey if the runner lacks it, then builds and smoke-tests the setup (install, upgrade, foreign-file, all-users, uninstall) before publishing.
 - `docker.yml` builds develop images only after "Linux Servers" passes.
 - `win-release.yml` (master) is unchanged.

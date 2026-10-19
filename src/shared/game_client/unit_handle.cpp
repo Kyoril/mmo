@@ -325,6 +325,12 @@ namespace mmo
 		return Get()->GetName();
 	}
 
+	std::string UnitHandle::GetSubtitle() const
+	{
+		if (!CheckNonNull()) return std::string();
+		return Get()->GetSubtitle();
+	}
+
 	int32 UnitHandle::GetPowerType() const
 	{
 		if (!CheckNonNull()) return -1;
@@ -377,6 +383,36 @@ namespace mmo
 	{
 		if (!CheckNonNull()) return 0;
 		return Get()->GetArmor();
+	}
+
+	float UnitHandle::GetSpellDamage() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetSpellDamage();
+	}
+
+	float UnitHandle::GetSpellHealing() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetSpellHealing();
+	}
+
+	float UnitHandle::GetSpellCritChance() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetSpellCritChance();
+	}
+
+	float UnitHandle::GetMeleeCritChance() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetMeleeCritChance();
+	}
+
+	float UnitHandle::GetManaRegen() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetManaRegen();
 	}
 
 	float UnitHandle::GetArmorReductionFactor() const

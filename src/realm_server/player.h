@@ -22,6 +22,7 @@
 
 #include "login_connector.h"
 #include "instance_override.h"
+#include "dungeon_bindings.h"
 #include "game/action_button.h"
 #include "game/mail.h"
 #include "game/bug_report.h"
@@ -108,6 +109,9 @@ namespace mmo
 		/// Returns true while the character is in an instance it joined through a GM port override
 		/// (observing someone else's run). Such an instance must never become a group binding.
 		[[nodiscard]] bool IsVisitingInstance() const { return m_joinedByInstanceOverride; }
+
+		/// Gets the character guid of the player this game master is ghosting, or 0 if none.
+		[[nodiscard]] uint64 GetGhostTargetGuid() const { return m_ghostTargetGuid; }
 
 		/// Gets the active character guid, or 0 if not set.
 		[[nodiscard]] uint64 GetCharacterGuid() const { return m_characterData.has_value() ? m_characterData.value().characterId : 0; }
@@ -203,6 +207,10 @@ namespace mmo
 		/// Sends the complete friend list to the client.
 		void SendFriendListUpdate();
 
+		/// Refreshes this character's level in the friend list of everyone who befriended them and
+		/// sends those lists again, so online friends see the new level right away.
+		void NotifyFriendsOfLevelChange();
+
 		/// Sends the complete mail list to the client.
 		void SendMailList(std::vector<MailInfo> mails);
 
@@ -229,6 +237,17 @@ namespace mmo
 		/// Clears any dungeon instance binding matching a specific instance id.
 		/// @param instanceId The instance id to clear.
 		void ClearDungeonBindingByInstanceId(InstanceId instanceId);
+
+		/// Determines whether this character is bound to a dungeon instance, either personally
+		/// or through its group.
+		/// @param instanceId The instance id to look for.
+		[[nodiscard]] bool IsBoundToInstance(const InstanceId& instanceId) const;
+
+		/// Sends the result of an instance reset request (or a notification about someone
+		/// else's) to the client, which turns it into a localized chat message.
+		/// @param result One of game::instance_reset_result.
+		/// @param mapName Name of the map the result refers to, empty if it refers to none.
+		void SendInstanceResetResult(uint8 result, const String& mapName);
 
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
@@ -264,6 +283,16 @@ namespace mmo
 
 		/// Informs a game master about the persistent GM flags that are active for the character.
 		void SendGmFlagStatus();
+
+		/// Ends the ghost link of every game master ghosting this character (it is logging out).
+		void EndGhostLinksToMe();
+
+		/// Takes every game master ghosting this character along into its current instance.
+		void PullGhostsAlong();
+
+		/// Teleports the character next to an online player, into that player's instance.
+		/// @param targetName Name of the online player to follow.
+		void TeleportIntoPlayerInstance(const String &targetName);
 
 		/// Sends the answer to a bug report to the client.
 		void SendBugReportResult(game::BugReportResult result);
@@ -492,6 +521,11 @@ namespace mmo
 		/// binding is stored for it, so a visiting GM never rebinds their own group or themselves.
 		bool m_joinedByInstanceOverride = false;
 
+		/// Character guid of the player this game master is ghosting, or 0. While set, every transfer
+		/// onto the target's map joins the target's instance, and the target's own instance changes
+		/// take the GM along. Session state only: ends when either character logs out.
+		uint64 m_ghostTargetGuid = 0;
+
 		Vector3 m_transferPosition{};
 		float m_transferFacing = 0.0f;
 		std::shared_ptr<PlayerGroup> m_group;
@@ -530,9 +564,9 @@ namespace mmo
 		/// Global ids of the chat channels this player is currently a member of.
 		std::set<uint32> m_chatChannels;
 
-		/// Per-player dungeon instance bindings (mapId -> instanceId).
-		/// Used when the player is solo (not in a group).
-		std::map<MapId, InstanceId> m_dungeonBindings;
+		/// Dungeon instance bindings of the character currently logged in on this session
+		/// (mapId -> instanceId). Used when the player is solo (not in a group).
+		DungeonBindings m_dungeonBindings;
 
 	private:
 		/// Closes the connection if still connected.
@@ -541,6 +575,14 @@ namespace mmo
 		void DoCharEnum();
 
 		void OnGroupLoaded(PlayerGroup &group);
+
+		/// Sets the group id in the character data sent to a world node to the group the character is
+		/// actually a member of right now.
+		void SyncCharacterGroupId();
+
+		/// Tells the world node this character's group and its loot rules, loot master included.
+		/// @param world The world node the character is on. Requires m_group.
+		void NotifyWorldOfGroup(World& world) const;
 
 	private:
 		/// @copydoc mmo::auth::IConnectionListener::connectionLost()
@@ -577,6 +619,12 @@ namespace mmo
 
 		/// Handles a client request to change the group's loot method.
 		PacketParseResult OnSetLootMethod(game::IncomingPacket& packet);
+
+		/// Handles a client request to reset the dungeon instances this character is bound to.
+		PacketParseResult OnResetInstances(game::IncomingPacket& packet);
+
+		/// Gets the name of a map as defined in the game data, or an empty string if unknown.
+		[[nodiscard]] String GetMapName(MapId mapId) const;
 		PacketParseResult OnLogoutRequest(game::IncomingPacket &packet);
 
 		// Guild packet handlers
@@ -641,6 +689,7 @@ namespace mmo
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSummon(game::IncomingPacket &packet);
 		PacketParseResult OnCheatGmFlag(game::IncomingPacket &packet);
+		PacketParseResult OnCheatGhost(game::IncomingPacket &packet);
 
 		/// Sends the character's current godmode and invisibility flags to the world node it just
 		/// joined. A toggle made while the join was in flight was persisted but could not be

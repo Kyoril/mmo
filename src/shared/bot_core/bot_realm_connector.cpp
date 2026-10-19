@@ -121,6 +121,8 @@ namespace mmo
 			// A reason left over from a previous session must not be reported for this one.
 			m_kickReason.reset();
 			m_lastSpellVisual.reset();
+			m_heardSounds.clear();
+			m_heardSoundCounts.clear();
 			m_subsystemStatus.fill(game::subsystem_status::Unavailable);
 			m_lastBugReportResult.clear();
 
@@ -131,6 +133,7 @@ namespace mmo
 			// finish authenticating.
 			RegisterPacketHandler(game::realm_client_packet::KickReason, *this, &BotRealmConnector::OnKickReason);
 			RegisterPacketHandler(game::realm_client_packet::PlaySpellVisual, *this, &BotRealmConnector::OnPlaySpellVisual);
+			RegisterPacketHandler(game::realm_client_packet::PlaySoundById, *this, &BotRealmConnector::OnPlaySoundById);
 			RegisterPacketHandler(game::realm_client_packet::SubsystemStatus, *this, &BotRealmConnector::OnSubsystemStatus);
 			RegisterPacketHandler(game::realm_client_packet::BugReportResult, *this, &BotRealmConnector::OnBugReportResult);
 		}
@@ -449,6 +452,8 @@ namespace mmo
 		// Spell/state packets
 		RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &BotRealmConnector::OnInitialSpells);
 		RegisterPacketHandler(game::realm_client_packet::LearnedSpell, *this, &BotRealmConnector::OnLearnedSpell);
+		RegisterPacketHandler(game::realm_client_packet::TradeSkills, *this, &BotRealmConnector::OnTradeSkills);
+		RegisterPacketHandler(game::realm_client_packet::TradeSkillUpdate, *this, &BotRealmConnector::OnTradeSkillUpdate);
 		RegisterPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &BotRealmConnector::OnUnlearnedSpell);
 		RegisterPacketHandler(game::realm_client_packet::SpellStart, *this, &BotRealmConnector::OnSpellStart);
 		RegisterPacketHandler(game::realm_client_packet::SpellGo, *this, &BotRealmConnector::OnSpellGo);
@@ -550,6 +555,26 @@ namespace mmo
 		}
 
 		m_lastSpellVisual = visual;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPlaySoundById(game::IncomingPacket& packet)
+	{
+		uint32 soundId = 0;
+		uint8 source = 0;
+		if (!(packet >> io::read<uint32>(soundId) >> io::read<uint8>(source)) || source > game::play_sound_source::Unit)
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		uint64 sourceGuid = 0;
+		if (source == game::play_sound_source::Unit && !(packet >> io::read_packed_guid(sourceGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_heardSounds[soundId] = sourceGuid;
+		++m_heardSoundCounts[soundId];
 		return PacketParseResult::Pass;
 	}
 
@@ -979,6 +1004,18 @@ namespace mmo
 			packet
 				<< io::write<uint8>(bag)
 				<< io::write<uint8>(slot);
+			packet.Finish();
+		});
+	}
+
+	void BotRealmConnector::SwapInventoryItems(const uint8 srcSlot, const uint8 dstSlot)
+	{
+		sendSinglePacket([srcSlot, dstSlot](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::SwapInvItem);
+			packet
+				<< io::write<uint8>(srcSlot)
+				<< io::write<uint8>(dstSlot);
 			packet.Finish();
 		});
 	}
@@ -1851,6 +1888,62 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult BotRealmConnector::OnTradeSkills(game::IncomingPacket& packet)
+	{
+		BotUnit* self = GetSelfMutable();
+		if (!self)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Pass;
+		}
+
+		std::vector<TradeSkillData> skills;
+		skills.reserve(count);
+		for (uint8 i = 0; i < count; ++i)
+		{
+			TradeSkillData data;
+			if (!(packet >> data))
+			{
+				return PacketParseResult::Pass;
+			}
+
+			skills.push_back(data);
+		}
+
+		self->ClearTradeSkills();
+		for (const TradeSkillData& data : skills)
+		{
+			self->SetTradeSkill(data.skillId, data.value, data.max);
+		}
+
+		UnitUpdated(*self);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnTradeSkillUpdate(game::IncomingPacket& packet)
+	{
+		BotUnit* self = GetSelfMutable();
+		if (!self)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		TradeSkillData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Pass;
+		}
+
+		self->SetTradeSkill(data.skillId, data.value, data.max);
+		UnitUpdated(*self);
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult BotRealmConnector::OnUnlearnedSpell(game::IncomingPacket& packet)
 	{
 		BotUnit* self = GetSelfMutable();
@@ -1919,6 +2012,8 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		SpellWentOff(casterGuid, spellId);
+
 		if (casterGuid != m_selectedCharacterGuid)
 		{
 			return PacketParseResult::Pass;
@@ -1958,7 +2053,18 @@ namespace mmo
 
 		if (BotUnit* self = GetSelfMutable())
 		{
-			self->SetLastCastFailed(spellId, result, GetAsyncTimeMs());
+			// A cast that fails validation gets two failures: the specific reason (not in front, say)
+			// from the cast state, then a generic FailedError from the cast request handler. Keep the
+			// specific one, or every validation failure reads as "failed:5".
+			const BotUnit::CastState& last = self->GetLastCastState();
+			const bool genericAfterSpecific = result == spell_cast_result::FailedError
+				&& last.status == BotUnit::CastState::Status::Failed
+				&& last.spellId == spellId
+				&& last.failureReason != spell_cast_result::FailedError;
+			if (!genericAfterSpecific)
+			{
+				self->SetLastCastFailed(spellId, result, GetAsyncTimeMs());
+			}
 			ClearSpellStateIssue();
 			UnitUpdated(*self);
 		}

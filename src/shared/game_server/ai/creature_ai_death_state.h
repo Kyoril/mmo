@@ -4,6 +4,7 @@
 
 #include "creature_ai_state.h"
 #include "base/signal.h"
+#include "base/countdown.h"
 
 namespace mmo
 {
@@ -27,8 +28,14 @@ namespace mmo
 		virtual void OnLeave() override;
 
 	private:
+		/// Ends the group rolls of the corpse's loot LootInstance::RollDuration after they were started.
+		/// Declared before the connections so it outlives the one connected to it.
+		Countdown m_rollTimeout;
+
 		scoped_connection m_onLootCleared;
 		scoped_connection m_onRollWon;
 		scoped_connection m_onRollVoted;
+		scoped_connection m_onRollsStarted;
+		scoped_connection m_onRollTimeout;
 	};
 }

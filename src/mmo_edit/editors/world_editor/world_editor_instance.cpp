@@ -6,7 +6,16 @@
 #include <DetourDebugDraw.h>
 #include <imgui_internal.h>
 
+#include <set>
 #include "editor_host.h"
+#include "icon_font.h"
+#include "scene_graph/prop_kit_manager.h"
+#include "scene_graph/prop_kit_serializer.h"
+#include "selected_kit_prop.h"
+#include "editors/world_model_editor/panels/world_model_properties_panel.h"
+#include "imgui/misc/cpp/imgui_stdlib.h"
+#include "binary_io/writer.h"
+#include "math/matrix4.h"
 #include "editor_windows/asset_picker_widget.h"
 #include "environment_preview.h"
 #include "world_editor.h"
@@ -46,6 +55,7 @@
 #include "graphics/render_texture.h"
 
 #include "stb_dxt.h"
+#include "minimap_baker.h"
 #include "terrain_lod_baker.h"
 
 namespace mmo
@@ -79,6 +89,41 @@ namespace mmo
 		private:
 			const terrain::Terrain& m_terrain;
 		};
+
+		/// Normalizes a kit asset path for cache keys and comparisons: registry paths use forward
+		/// slashes; case is handled by the case-insensitive maps and KitPathsEqual.
+		String MakeKitKey(String path)
+		{
+			std::replace(path.begin(), path.end(), '\\', '/');
+			return path;
+		}
+
+		/// Whether two kit asset paths name the same kit (slash style and case ignored).
+		bool KitPathsEqual(const String& a, const String& b)
+		{
+			const String keyA = MakeKitKey(a);
+			const String keyB = MakeKitKey(b);
+			return keyA.size() == keyB.size() && std::equal(keyA.begin(), keyA.end(), keyB.begin(), [](const char x, const char y)
+			{
+				return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
+			});
+		}
+
+		/// Builds the world transform of a kit prop placed on a building, composed the same way the
+		/// world model instance realizes it (see ComposeWorldTransform).
+		Matrix4 MakeKitPropWorldTransform(const SceneNode& placementNode, const WorldModelMeshRef& prop)
+		{
+			const Vector3 parentPosition = placementNode.GetDerivedPosition();
+			const Quaternion parentOrientation = placementNode.GetDerivedOrientation();
+			const Vector3 parentScale = placementNode.GetDerivedScale();
+
+			Matrix4 transform;
+			transform.MakeTransform(
+				parentPosition + parentOrientation * (parentScale * prop.position),
+				parentScale * prop.scale,
+				parentOrientation * prop.rotation);
+			return transform;
+		}
 	}
 }
 
@@ -91,7 +136,6 @@ namespace mmo
 
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
 	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
-	static ChunkMagic WorldEntityWMO = MakeChunkMagic('WWMO');
 
 	struct MapEntityChunkContent
 	{
@@ -257,7 +301,8 @@ namespace mmo
 		m_environmentProfiles = std::make_unique<EnvironmentProfileCache<proto::EnvironmentProfileManager>>(m_editor.GetProject().environmentProfiles);
 
 		// Setup edit modes
-		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
+		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera,
+			m_editor.GetTerrainClipboard(), m_assetPath.string());
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
 
 		// Create scene outline window
@@ -306,6 +351,8 @@ namespace mmo
 
 		// Initialize deferred renderer BEFORE viewport panel since viewport panel takes a reference to it
 		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
+		// Gizmos and other editor overlays must stay readable: tone mapped, but never blooming.
+		m_deferredRenderer->SetBloomExcludedGroupStart(Overlay - 1);
 
 		// Create viewport panel
 		m_viewportPanel = std::make_unique<ViewportPanel>(
@@ -466,6 +513,7 @@ namespace mmo
 		m_backgroundLoader.join();
 
 		m_transformWidget.reset();
+		m_kitCollisionOverlay.reset();
 		m_mapEntities.clear();
 		// Destroy entity/world-model instances before clearing the scene — their
 		// destructors call DetachObject/DestroySceneNode which require live scene nodes.
@@ -616,6 +664,9 @@ namespace mmo
 
 		HandleKeyboardShortcuts();
 
+		// Pick up kits saved by the prop kit editor since the last frame.
+		PollKitCache();
+
 		WorldEditMode *availableModes[] = {
 			m_entityEditMode.get(),
 			m_foliageEditMode.get(),
@@ -646,6 +697,14 @@ namespace mmo
 
 		const String minimapId = "World Map##" + GetAssetPath().string();
 		DrawMinimapPanel(minimapId);
+
+		// Kit prop removals requested this frame (Delete key, details panel) are applied once the
+		// selection is no longer being iterated.
+		ApplyPendingKitPropRemovals();
+
+		UpdateKitCollisionOverlay();
+
+		DrawKitModals();
 
 		if (m_initDockLayout)
 		{
@@ -825,10 +884,15 @@ namespace mmo
 			{
 				if (!widgetWasActive && button == 0 && m_hovering)
 				{
-					m_selectionRaycaster->PerformEntitySelection(
-						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
-						ImGui::IsKeyPressed(ImGuiKey_LeftShift));
+					const float viewportX = (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x;
+					const float viewportY = (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y;
+					const bool allowMultiSelect = ImGui::IsKeyPressed(ImGuiKey_LeftShift);
+
+					// Inside a selected building, a click on one of its kit props selects that prop.
+					if (!TrySelectKitProp(viewportX, viewportY, allowMultiSelect))
+					{
+						m_selectionRaycaster->PerformEntitySelection(viewportX, viewportY, allowMultiSelect);
+					}
 				}
 			}
 			else if (m_editMode == m_spawnEditMode.get())
@@ -1066,45 +1130,34 @@ namespace mmo
 			io::StreamSink fileSink{*filePtr};
 			io::Writer fileWriter{fileSink};
 
-			// Version 3 supports world model entities
-			{
-				ChunkWriter chunkWriter(WorldEntityVersionChunk, fileWriter);
-				fileWriter << io::write<uint32>(3);
-				chunkWriter.Finish();
-			}
-
 			const Vector3 position = ent->GetSceneNode().GetDerivedPosition();
 			const Vector3 scale = ent->GetSceneNode().GetScale();
 			const Quaternion rotation = ent->GetSceneNode().GetDerivedOrientation();
 
 			if (ent->IsWorldModelEntity())
 			{
-				// Save world model entity
-				ChunkWriter chunkWriter(WorldEntityWMO, fileWriter);
-				const String assetName = ent->GetAssetName();
-				fileWriter
-					<< io::write<uint64>(ent->GetUniqueId())
-					<< io::write_dynamic_range<uint16>(assetName)
-					<< io::write<float>(position.x)
-					<< io::write<float>(position.y)
-					<< io::write<float>(position.z)
-					<< io::write<float>(rotation.w)
-					<< io::write<float>(rotation.x)
-					<< io::write<float>(rotation.y)
-					<< io::write<float>(rotation.z)
-					<< io::write<float>(scale.x)
-					<< io::write<float>(scale.y)
-					<< io::write<float>(scale.z);
-
-				// Write name and category
-				fileWriter
-					<< io::write_dynamic_range<uint8>(ent->GetDisplayName())
-					<< io::write_dynamic_range<uint16>(ent->GetCategory());
-
-				chunkWriter.Finish();
+				// Save world model entity (version chunk, WWMO and the optional kit list)
+				WorldEntityLoader::MapEntity placement;
+				placement.entityType = WorldEntityType::WorldModel;
+				placement.meshName = ent->GetAssetName();
+				placement.uniqueId = ent->GetUniqueId();
+				placement.position = position;
+				placement.rotation = rotation;
+				placement.scale = scale;
+				placement.name = ent->GetDisplayName();
+				placement.category = ent->GetCategory();
+				placement.kitPaths = ent->GetKitPaths();
+				WriteWorldModelPlacement(fileWriter, placement);
 			}
 			else
 			{
+				// Version 3 supports world model entities
+				{
+					ChunkWriter versionWriter(WorldEntityVersionChunk, fileWriter);
+					fileWriter << io::write<uint32>(3);
+					versionWriter.Finish();
+				}
+
 				// Save mesh entity
 				ChunkWriter chunkWriter(WorldEntityMesh, fileWriter);
 				const String mesh = ent->GetEntity()->GetMesh()->GetName().data();
@@ -1253,6 +1306,9 @@ namespace mmo
 				}
 			}
 		}
+
+		// Write kits edited in place. Kits shared with other loaded buildings wait for confirmation.
+		SaveDirtyKits();
 
 		return true;
 	}
@@ -1788,6 +1844,7 @@ namespace mmo
 			const void* entry = nullptr;
 
 			void Visit(SelectedMapEntity&) override {}
+			void Visit(SelectedKitProp&) override {}
 			void Visit(SelectedTerrainTile&) override {}
 			void Visit(SelectedUnitSpawn& selectable) override { entry = &selectable.GetEntry(); }
 			void Visit(SelectedObjectSpawn& selectable) override { entry = &selectable.GetEntry(); }
@@ -2106,316 +2163,107 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		return stats.failed == 0;
 	}
 
-	void WorldEditorInstance::GenerateMinimaps()
+	bool WorldEditorInstance::GenerateMinimaps(const bool onlyStale, const MinimapBaker::Region& region)
 	{
 		if (!m_terrain || !m_hasTerrain)
 		{
 			ELOG("Cannot generate minimaps: no terrain available");
-			return;
+			return false;
 		}
 
-		// Minimap configuration
-		const uint32 minimapSize = 256; // render resolution per page tile
-		const float pageSize = terrain::constants::PageSize;
-
-		auto &gx = GraphicsDevice::Get();
-		gx.CaptureState();
-
-		// -----------------------------------------------------------------------
-		// Hide editor-only support objects so they don't appear in the minimap.
-		// We record their previous visibility so we can restore it afterwards.
-		// -----------------------------------------------------------------------
-		const bool gridWasVisible = m_worldGrid && m_worldGrid->IsVisible();
-		if (m_worldGrid) m_worldGrid->SetVisible(false);
-
-		const bool debugBBWasVisible = m_debugBoundingBox && m_debugBoundingBox->IsVisible();
-		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(false);
-
-		// Hide all area-trigger render objects
-		std::vector<bool> areaTriggerWasVisible;
-		areaTriggerWasVisible.reserve(m_areaTriggerRenderObjects.size());
-		for (ManualRenderObject *ro : m_areaTriggerRenderObjects)
+		// World models (WMOs) are drawn onto the minimap; static meshes, units, foliage and every
+		// editor helper are left out by the baker, which keeps only the terrain and these subtrees.
+		// Entities only exist for streamed-in pages, so each page's neighbourhood is loaded on demand.
+		MinimapBaker::Stats stats;
 		{
-			areaTriggerWasVisible.push_back(ro ? ro->IsVisible() : false);
-			if (ro) ro->SetVisible(false);
+			MinimapBaker baker(m_scene, *m_terrain, m_assetPath.filename().replace_extension().string(),
+				[this](const uint32 x, const uint32 z) { return PrepareMinimapBakeEntities(x, z); },
+				[this]() { return m_dispatcher.poll_one() > 0; });
+			stats = baker.BakeAll(onlyStale, region);
 		}
 
-		// Hide all fog volume wireframes
-		std::vector<std::pair<ManualRenderObject *, bool>> fogVolumeWasVisible;
-		fogVolumeWasVisible.reserve(m_fogVolumeVisuals.size());
-		for (const auto &[volumeId, visual] : m_fogVolumeVisuals)
-		{
-			fogVolumeWasVisible.emplace_back(visual.second, visual.second->IsVisible());
-			visual.second->SetVisible(false);
-		}
-
-		// Hide debug / preview entity (e.g. placement ghost)
-		const bool debugEntityWasVisible = m_debugEntity && m_debugEntity->IsVisible();
-		if (m_debugEntity) m_debugEntity->SetVisible(false);
-
-		// Hide authored tree foliage so it does not appear on the minimap.
-		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
-		if (m_foliage) m_foliage->SetVisible(false);
-
-		Camera *renderCam = m_scene.CreateCamera("MinimapCamera");
-		renderCam->SetProjectionType(ProjectionType::Orthographic);
-		renderCam->SetOrthoWindow(pageSize, pageSize);
-
-		// Set appropriate clip distances for top-down orthographic view
-		// Near plane should be close to capture terrain details
-		renderCam->SetNearClipDistance(0.1f);
-		// Far plane should be generous to capture tall entities
-		renderCam->SetFarClipDistance(500.0f);
-
-		SceneNode *camNode = m_scene.GetRootSceneNode().CreateChildSceneNode("MinimapCameraNode");
-		camNode->AttachObject(*renderCam);
-
-		// Create render texture for minimap generation
-		RenderTexturePtr minimapRT = gx.CreateRenderTexture("MinimapGeneration", minimapSize, minimapSize,
-															RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer,
-															PixelFormat::R8G8B8A8, PixelFormat::D32F);
-
-		if (!minimapRT)
-		{
-			ELOG("Failed to create render texture for minimap generation");
-		}
-		else
-		{
-			// Iterate through all terrain pages
-			uint32 processedPages = 0;
-
-			for (uint32 pageX = 0; pageX < m_terrain->GetWidth(); ++pageX)
-			{
-				for (uint32 pageY = 0; pageY < m_terrain->GetHeight(); ++pageY)
-				{
-					// Get the terrain page
-					terrain::Page *page = m_terrain->GetPage(pageX, pageY);
-
-					// Ensure page is loaded for rendering
-					if (!page->IsLoaded())
-					{
-						continue;
-					}
-
-					// Switch this page's water to an opaque, solid-colour material so it shows up on
-					// the minimap. The normal water material samples scene depth/refraction textures
-					// that are not bound during minimap generation and would otherwise be invisible.
-					page->SetMinimapWaterMode(true);
-
-					// Calculate world position for page centers
-					const float worldX = page->GetSceneNode()->GetDerivedPosition().x + pageSize * 0.5f;
-					const float worldZ = page->GetSceneNode()->GetDerivedPosition().z + pageSize * 0.5f;
-
-					// Get terrain height at page center for camera positioning
-					float terrainHeight = page->GetBoundingBox().GetExtents().y;
-
-					// Get the maximum height in this page to ensure we capture all entities
-					float maxHeight = terrainHeight;
-
-					// Check all map entities in this page to find the maximum height.
-					// Only consider WMO (WorldModel) entities — static mesh entities are
-					// excluded from the minimap entirely.
-					for (const auto &mapEntity : m_mapEntities)
-					{
-						if (mapEntity && &mapEntity->GetSceneNode())
-						{
-							// Skip non-WMO entities (static meshes, etc.)
-							if (!mapEntity->IsWorldModelEntity())
-							{
-								continue;
-							}
-
-							const Vector3 &entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
-
-							// Check if this entity is within the current page bounds
-							if (entityPos.x >= page->GetSceneNode()->GetDerivedPosition().x &&
-								entityPos.x < page->GetSceneNode()->GetDerivedPosition().x + pageSize &&
-								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
-								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
-							{
-								// Get the movable object's bounding box to determine its height
-								MovableObject *movable = mapEntity->GetMovableObject();
-								if (movable)
-								{
-									const AABB &entityBounds = movable->GetBoundingBox();
-									if (!entityBounds.IsNull())
-									{
-										const Vector3 entityWorldPos = mapEntity->GetSceneNode().GetDerivedPosition();
-										const Vector3 entityScale = mapEntity->GetSceneNode().GetDerivedScale();
-
-										// Calculate the actual world-space top of the entity
-										float entityTop = entityWorldPos.y + (entityBounds.max.y * entityScale.y);
-										maxHeight = std::max(maxHeight, entityTop);
-									}
-								}
-							}
-						}
-					}
-
-					// Position camera high enough above the highest object in the page
-					// Add extra margin to ensure we capture everything
-					const Vector3 cameraPos(worldX, maxHeight + 50.0f, worldZ);
-					renderCam->GetParentSceneNode()->SetPosition(cameraPos);
-
-					// Set up camera to look straight down (negative Y direction)
-					// Camera's default forward is -Z, so we need to rotate 90 degrees around X to look down -Y
-					// This creates a top-down orthographic view where the camera looks down at the XZ terrain plane
-					const Quaternion topDownOrientation = Quaternion(Degree(-90.0f), Vector3::UnitX);
-					renderCam->GetParentSceneNode()->SetOrientation(topDownOrientation);
-					renderCam->InvalidateFrustum();
-					renderCam->InvalidateView();
-
-					// Setup render target and projection
-					minimapRT->Activate();
-					minimapRT->Clear(ClearFlags::All);
-
-					// Temporarily change entity render queue groups to match terrain for consistent rendering.
-					// Only WMO (WorldModel) entities are considered; static mesh entities are hidden so
-					// they don't appear in the minimap at all.
-					std::vector<std::pair<MovableObject *, uint8>> originalRenderQueues;
-					std::vector<std::pair<MovableObject *, bool>> hiddenMeshEntities;
-					for (const auto &mapEntity : m_mapEntities)
-					{
-						if (mapEntity && &mapEntity->GetSceneNode())
-						{
-							const Vector3 &entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
-							if (entityPos.x >= page->GetSceneNode()->GetDerivedPosition().x &&
-								entityPos.x < page->GetSceneNode()->GetDerivedPosition().x + pageSize &&
-								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
-								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
-							{
-								MovableObject *movable = mapEntity->GetMovableObject();
-								if (movable)
-								{
-									if (mapEntity->IsWorldModelEntity())
-									{
-										// WMOs: move to terrain render queue so they render correctly
-										originalRenderQueues.emplace_back(movable, movable->GetRenderQueueGroup());
-										movable->SetRenderQueueGroup(WorldGeometry1); // Same as terrain
-									}
-									else
-									{
-										// Static mesh entities: hide them for this render pass
-										const bool wasVisible = movable->IsVisible();
-										hiddenMeshEntities.emplace_back(movable, wasVisible);
-										movable->SetVisible(false);
-									}
-								}
-							}
-						}
-					}
-
-					// Render the scene (terrain and objects in this page)
-					// Minimap tiles are a top-down map, not a view through the atmosphere. (The old
-					// SetFogRange here was never undone and silently removed the viewport fog.)
-					const bool fogWasEnabled = m_scene.IsFogEnabled();
-					m_scene.SetFogEnabled(false);
-					m_scene.Render(*renderCam, PixelShaderType::Forward);
-					m_scene.SetFogEnabled(fogWasEnabled);
-					minimapRT->Update();
-
-					// Restore original render queue groups
-					for (const auto &[movable, originalQueue] : originalRenderQueues)
-					{
-						movable->SetRenderQueueGroup(originalQueue);
-					}
-
-					// Restore visibility of hidden mesh entities
-					for (const auto &[movable, wasVisible] : hiddenMeshEntities)
-					{
-						movable->SetVisible(wasVisible);
-					}
-
-					// Restore the page's normal (translucent) water material now that the tile is rendered.
-					page->SetMinimapWaterMode(false);
-
-					// Create texture from render target
-					TexturePtr minimapTexture = minimapRT->StoreToTexture();
-					if (!minimapTexture)
-					{
-						WLOG("Failed to store minimap texture for page (" << pageX << ", " << pageY << ")");
-						continue;
-					}
-
-					// Generate filename with encoded coordinates
-					const uint16 pageIndex = BuildPageIndex(static_cast<uint8>(pageX), static_cast<uint8>(pageY));
-					const String minimapFilename = "Textures/Minimaps/" + m_assetPath.filename().replace_extension().string() + "/" + std::to_string(pageIndex) + ".htex";
-
-					// Save texture to AssetRegistry
-					try
-					{
-						std::unique_ptr<std::ostream> outStream = AssetRegistry::CreateNewFile(minimapFilename);
-						if (outStream)
-						{
-							// Save texture using the engine's texture format.
-							// We use uncompressed RGBA instead of DXT1 to preserve maximum quality:
-							// DXT1 is lossy and introduces visible block artefacts on the fine details
-							// of terrain/WMO colours, while the file-size increase for a 256×256 tile
-							// is only ~32 KB per page — an acceptable trade-off.
-							io::StreamSink sink(*outStream);
-							tex::v1_0::Header header(tex::Version_1_0);
-							header.width = minimapSize;
-							header.height = minimapSize;
-							header.format = tex::v1_0::RGBA;
-							header.hasMips = false;
-
-							tex::v1_0::HeaderSaver saver(sink, header);
-
-							header.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
-
-							// Copy raw pixel data from render texture (4 bytes per pixel, RGBA)
-							const uint32 pixelDataSize = minimapSize * minimapSize * 4;
-							std::vector<uint8> pixelData(pixelDataSize);
-							minimapTexture->CopyPixelDataTo(pixelData.data());
-
-							// Write uncompressed RGBA data directly — no lossy block compression
-							header.mipmapLengths[0] = pixelDataSize;
-							sink.Write(reinterpret_cast<const char *>(pixelData.data()), pixelDataSize);
-							saver.finish();
-
-							processedPages++;
-							ILOG("Generated minimap for page (" << pageX << ", " << pageY << ") -> " << minimapFilename);
-						}
-						else
-						{
-							WLOG("Failed to create file for minimap: " << minimapFilename);
-						}
-					}
-					catch (const std::exception &e)
-					{
-						ELOG("Error saving minimap for page (" << pageX << ", " << pageY << "): " << e.what());
-					}
-				}
-			}
-
-			ILOG("Minimap generation completed. Processed " << processedPages << " terrain pages.");
-		}
-
-		// Cleanup
-		m_scene.DestroyCamera(*renderCam);
-		m_scene.DestroySceneNode(*camNode);
-
-		// Restore visibility of editor support objects that were hidden during minimap generation
-		if (m_worldGrid) m_worldGrid->SetVisible(gridWasVisible);
-		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(debugBBWasVisible);
-		for (size_t i = 0; i < m_areaTriggerRenderObjects.size(); ++i)
-		{
-			if (m_areaTriggerRenderObjects[i])
-			{
-				m_areaTriggerRenderObjects[i]->SetVisible(areaTriggerWasVisible[i]);
-			}
-		}
-		for (const auto &[renderObject, wasVisible] : fogVolumeWasVisible)
-		{
-			renderObject->SetVisible(wasVisible);
-		}
-		if (m_debugEntity) m_debugEntity->SetVisible(debugEntityWasVisible);
-		if (m_foliage) m_foliage->SetVisible(foliageWasVisible);
-
-		gx.RestoreState();
+		ReleaseMinimapBakeEntities();
 
 		// Force the minimap teleport panel to reload the freshly generated tiles.
 		m_minimapPanel.Refresh();
+
+		return stats.failed == 0;
+	}
+
+	std::vector<const SceneNode*> WorldEditorInstance::PrepareMinimapBakeEntities(const uint32 x, const uint32 z)
+	{
+		// A world model is stored with the page its origin lies in but can reach into the neighbours.
+		const auto isNeighbour = [x, z](const uint32 px, const uint32 pz)
+		{
+			return std::abs(static_cast<int32>(px) - static_cast<int32>(x)) <= 1 &&
+				std::abs(static_cast<int32>(pz) - static_cast<int32>(z)) <= 1;
+		};
+
+		// Drop what earlier pages needed and this one does not, so a full-world bake stays small.
+		std::vector<uint16> stale;
+		for (const uint16 pageIndex : m_bakeEntityPages)
+		{
+			uint8 px, pz;
+			if (GetPageCoordinatesFromIndex(pageIndex, px, pz) && !isNeighbour(px, pz))
+			{
+				stale.push_back(pageIndex);
+			}
+		}
+
+		for (const uint16 pageIndex : stale)
+		{
+			uint8 px, pz;
+			GetPageCoordinatesFromIndex(pageIndex, px, pz);
+			UnloadPageEntities(px, pz);
+		}
+
+		for (int32 dz = -1; dz <= 1; ++dz)
+		{
+			for (int32 dx = -1; dx <= 1; ++dx)
+			{
+				const int32 px = static_cast<int32>(x) + dx;
+				const int32 pz = static_cast<int32>(z) + dz;
+				if (px < 0 || pz < 0 || px >= static_cast<int32>(m_terrain->GetWidth()) || pz >= static_cast<int32>(m_terrain->GetHeight()))
+				{
+					continue;
+				}
+
+				const uint16 pageIndex = BuildPageIndex(static_cast<uint8>(px), static_cast<uint8>(pz));
+				if (m_entityPages.contains(pageIndex))
+				{
+					continue;
+				}
+
+				LoadPageEntities(static_cast<uint8>(px), static_cast<uint8>(pz));
+				m_bakeEntityPages.insert(pageIndex);
+			}
+		}
+
+		std::vector<const SceneNode*> modelNodes;
+		for (const auto& mapEntity : m_mapEntities)
+		{
+			if (mapEntity && mapEntity->IsWorldModelEntity())
+			{
+				modelNodes.push_back(&mapEntity->GetSceneNode());
+			}
+		}
+
+		return modelNodes;
+	}
+
+	void WorldEditorInstance::ReleaseMinimapBakeEntities()
+	{
+		const std::vector<uint16> pages(m_bakeEntityPages.begin(), m_bakeEntityPages.end());
+		for (const uint16 pageIndex : pages)
+		{
+			uint8 px, pz;
+			if (GetPageCoordinatesFromIndex(pageIndex, px, pz))
+			{
+				UnloadPageEntities(px, pz);
+			}
+		}
+
+		m_bakeEntityPages.clear();
 	}
 
 	Camera &WorldEditorInstance::GetCamera() const
@@ -2443,6 +2291,14 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::LoadPageEntities(const uint8 x, const uint8 y)
 	{
+		const uint16 pageIndex = BuildPageIndex(x, y);
+		if (!m_entityPages.insert(pageIndex).second)
+		{
+			// Already loaded (the minimap bake got here first): streaming owns the page from now on.
+			m_bakeEntityPages.erase(pageIndex);
+			return;
+		}
+
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(x, y))).string();
 		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c)
 					   { return c == '\\' ? '/' : c; });
@@ -2486,6 +2342,15 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				}
 
 				mapEntity = wmoInstance->GetUserObject<MapEntity>();
+
+				// Apply the placement's prop kits. The paths are kept even when a kit
+				// fails to load, so a save does not silently drop them.
+				// Unsaved kit edits made in this world show up on freshly loaded placements too.
+				if (mapEntity && !entity.kitPaths.empty())
+				{
+					mapEntity->SetKitPaths(entity.kitPaths);
+					ApplyKits(*mapEntity);
+				}
 			}
 			else
 			{
@@ -2527,6 +2392,9 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::UnloadPageEntities(uint8 x, uint8 y)
 	{
+		m_entityPages.erase(BuildPageIndex(x, y));
+		m_bakeEntityPages.erase(BuildPageIndex(x, y));
+
 		const PagePosition targetPos(x, y);
 
 		// Collect WMO raw pointers BEFORE erasing so we can release factory ownership
@@ -2977,6 +2845,157 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			// World model specific UI
 			ImGui::Text("Type: World Model");
 			ImGui::Text("Asset: %s", mapEntity.GetAssetName().c_str());
+
+			if (ImGui::CollapsingHeader("Prop Kits", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				std::vector<String> kitPaths = mapEntity.GetKitPaths();
+				bool kitsChanged = false;
+				int removeIndex = -1;
+				int moveUpIndex = -1;
+				int moveDownIndex = -1;
+
+				for (int i = 0; i < static_cast<int>(kitPaths.size()); ++i)
+				{
+					ImGui::PushID(i);
+
+					const PropKitPtr kit = ResolveKit(kitPaths[i]);
+
+					ImGui::BeginDisabled(i == 0);
+					if (ImGui::SmallButton("^"))
+					{
+						moveUpIndex = i;
+					}
+					ImGui::EndDisabled();
+					ImGui::SameLine();
+
+					ImGui::BeginDisabled(i + 1 >= static_cast<int>(kitPaths.size()));
+					if (ImGui::SmallButton("v"))
+					{
+						moveDownIndex = i;
+					}
+					ImGui::EndDisabled();
+					ImGui::SameLine();
+
+					if (ImGui::SmallButton(ICON_FA_TRASH))
+					{
+						removeIndex = i;
+					}
+					ImGui::SameLine();
+
+					if (kit)
+					{
+						const bool unsaved = m_dirtyKits.contains(MakeKitKey(kitPaths[i]));
+						ImGui::Text("%s%s", kit->name.c_str(), unsaved ? " *" : "");
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::SetTooltip(unsaved ? "%s\nUnsaved changes, written when the world is saved" : "%s", kitPaths[i].c_str());
+						}
+					}
+					else
+					{
+						ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), ICON_FA_EXCLAMATION_TRIANGLE " %s", kitPaths[i].c_str());
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::SetTooltip("Prop kit failed to load");
+						}
+					}
+
+					ImGui::PopID();
+				}
+
+				if (removeIndex >= 0)
+				{
+					kitPaths.erase(kitPaths.begin() + removeIndex);
+					kitsChanged = true;
+				}
+				else if (moveUpIndex > 0)
+				{
+					std::swap(kitPaths[moveUpIndex], kitPaths[moveUpIndex - 1]);
+					kitsChanged = true;
+				}
+				else if (moveDownIndex >= 0 && moveDownIndex + 1 < static_cast<int>(kitPaths.size()))
+				{
+					std::swap(kitPaths[moveDownIndex], kitPaths[moveDownIndex + 1]);
+					kitsChanged = true;
+				}
+
+				// Picker for a new kit: the pick is appended and the picker starts empty again
+				String newKitPath;
+				static const std::set<String> kitExtensions = { ".hkit" };
+				if (AssetPickerWidget::Draw("Add Prop Kit", newKitPath, kitExtensions) && !newKitPath.empty())
+				{
+					kitPaths.push_back(newKitPath);
+					kitsChanged = true;
+				}
+
+				if (kitsChanged)
+				{
+					mapEntity.SetKitPaths(std::move(kitPaths));
+					ApplyKits(mapEntity);
+					DeselectRemovedKitProps(mapEntity);
+				}
+
+				ImGui::Separator();
+
+				// Active kit: where meshes dropped into the viewport go while this building is selected.
+				const String activeKit = GetActiveKit(mapEntity);
+				ImGui::BeginDisabled(mapEntity.GetKitPaths().empty());
+				if (ImGui::BeginCombo("Active kit", activeKit.empty() ? "None" : activeKit.c_str()))
+				{
+					if (ImGui::Selectable("None", activeKit.empty()))
+					{
+						m_activeKits[mapEntity.GetUniqueId()] = String();
+					}
+
+					for (size_t i = 0; i < mapEntity.GetKitPaths().size(); ++i)
+					{
+						const String &kitPath = mapEntity.GetKitPaths()[i];
+						ImGui::PushID(static_cast<int>(i));
+						if (ImGui::Selectable(kitPath.c_str(), kitPath == activeKit))
+						{
+							m_activeKits[mapEntity.GetUniqueId()] = kitPath;
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+				ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				{
+					ImGui::SetTooltip("Meshes dropped into the viewport while this building is selected are added to the active kit.\nClick a prop of a selected building to select and move it; that edits the kit it came from.");
+				}
+
+				ImGui::BeginDisabled(activeKit.empty());
+				if (ImGui::Button("Save as new kit..."))
+				{
+					const Path source(activeKit);
+					String target = (source.parent_path() / (source.stem().string() + "_" + std::to_string(mapEntity.GetUniqueId()) + ".hkit")).string();
+					std::replace(target.begin(), target.end(), '\\', '/');
+
+					m_saveAsNewKitPlacement = mapEntity.GetUniqueId();
+					m_saveAsNewKitSource = activeKit;
+					m_saveAsNewKitTarget = std::move(target);
+					m_openSaveAsNewKit = true;
+				}
+				ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				{
+					ImGui::SetTooltip("Writes the active kit's current props and lights to a new file and uses it for this building only.\nThe original kit file is not changed.");
+				}
+
+				bool showKitCollision = m_showKitCollision && m_kitCollisionPlacementId == mapEntity.GetUniqueId();
+				if (ImGui::Checkbox("Show kit collision", &showKitCollision))
+				{
+					m_showKitCollision = showKitCollision;
+					m_kitCollisionPlacementId = mapEntity.GetUniqueId();
+					m_kitCollisionDirty = true;
+				}
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Show the collision of this building's kit props (green: walkable, orange: too steep)");
+				}
+			}
 		}
 		else if (Entity* entity = mapEntity.GetEntity())
 		{
@@ -3098,6 +3117,144 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 	}
 
+	void WorldEditorInstance::DrawMixedUnitSpawnEntries(SelectedUnitSpawn &selectable)
+	{
+		proto::UnitSpawnEntry &spawn = selectable.GetEntry();
+		const auto &units = m_editor.GetProject().units;
+
+		const String header = spawn.unitentries_size() > 0
+			? "Mixed Spawn (" + std::to_string(spawn.unitentries_size()) + " entries)###MixedSpawn"
+			: String("Mixed Spawn###MixedSpawn");
+		if (!ImGui::TreeNode(header.c_str()))
+		{
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Spawn one of several units, rolled by weight on every spawn and respawn.\nEmpty: the spawn always spawns 'Unit'.");
+			}
+			return;
+		}
+
+		if (spawn.unitentries_size() == 0)
+		{
+			ImGui::TextDisabled("Plain spawn: always spawns 'Unit'.");
+			if (ImGui::Button(ICON_FA_PLUS " Make Mixed Spawn"))
+			{
+				// Seed with the current unit so it stays the first (preview) entry.
+				auto *first = spawn.add_unitentries();
+				first->set_unitentry(spawn.unitentry());
+				first->set_weight(1);
+			}
+
+			ImGui::TreePop();
+			return;
+		}
+
+		uint64 totalWeight = 0;
+		for (const auto &candidate : spawn.unitentries())
+		{
+			totalWeight += candidate.weight();
+		}
+
+		int removeIndex = -1;
+		if (ImGui::BeginTable("##mixedSpawnEntries", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("Unit", ImGuiTableColumnFlags_WidthStretch, 3.0f);
+			ImGui::TableSetupColumn("Weight", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+			ImGui::TableSetupColumn("Chance", ImGuiTableColumnFlags_WidthFixed, 56.0f);
+			ImGui::TableSetupColumn("##remove", ImGuiTableColumnFlags_WidthFixed, 24.0f);
+			ImGui::TableHeadersRow();
+
+			for (int i = 0; i < spawn.unitentries_size(); ++i)
+			{
+				proto::UnitSpawnWeightedEntry &candidate = *spawn.mutable_unitentries(i);
+				ImGui::PushID(i);
+				ImGui::TableNextRow();
+
+				ImGui::TableNextColumn();
+				const proto::UnitEntry *candidateUnit = units.getById(candidate.unitentry());
+				const String preview = candidateUnit
+					? candidateUnit->name() + " (#" + std::to_string(candidate.unitentry()) + ")"
+					: "<unknown #" + std::to_string(candidate.unitentry()) + ">";
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::BeginCombo("##unit", preview.c_str()))
+				{
+					for (const auto &unit : units.getTemplates().entry())
+					{
+						ImGui::PushID(unit.id());
+						if (ImGui::Selectable(unit.name().c_str(), &unit == candidateUnit))
+						{
+							candidate.set_unitentry(unit.id());
+							if (i == 0)
+							{
+								// unitentry mirrors the first entry: fallback and editor preview
+								spawn.set_unitentry(unit.id());
+								selectable.RefreshEntity();
+							}
+						}
+						ImGui::PopID();
+					}
+					ImGui::EndCombo();
+				}
+
+				ImGui::TableNextColumn();
+				uint32 weight = candidate.weight();
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::InputScalar("##weight", ImGuiDataType_U32, &weight))
+				{
+					candidate.set_weight(weight);
+				}
+
+				ImGui::TableNextColumn();
+				if (candidate.weight() == 0 || totalWeight == 0)
+				{
+					ImGui::TextDisabled("never");
+				}
+				else
+				{
+					ImGui::Text("%.1f%%", 100.0 * static_cast<double>(candidate.weight()) / static_cast<double>(totalWeight));
+				}
+
+				ImGui::TableNextColumn();
+				if (ImGui::SmallButton(ICON_FA_TRASH))
+				{
+					removeIndex = i;
+				}
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Remove this entry");
+				}
+
+				ImGui::PopID();
+			}
+
+			ImGui::EndTable();
+		}
+
+		if (removeIndex >= 0)
+		{
+			spawn.mutable_unitentries()->DeleteSubrange(removeIndex, 1);
+			if (removeIndex == 0 && spawn.unitentries_size() > 0)
+			{
+				spawn.set_unitentry(spawn.unitentries(0).unitentry());
+				selectable.RefreshEntity();
+			}
+		}
+
+		if (ImGui::Button(ICON_FA_PLUS " Add Entry"))
+		{
+			auto *added = spawn.add_unitentries();
+			added->set_unitentry(spawn.unitentry());
+			added->set_weight(1);
+		}
+
+		if (totalWeight == 0)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "All weights are 0: the spawn falls back to 'Unit'.");
+		}
+
+		ImGui::TreePop();
+	}
+
 	void WorldEditorInstance::Visit(SelectedUnitSpawn &selectable)
 	{
 		// Notify the spawn edit mode which spawn is currently shown so it can
@@ -3120,6 +3277,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					if (ImGui::Selectable(unit.name().c_str(), &unit == selectedUnit))
 					{
 						selectable.GetEntry().set_unitentry(unit.id());
+
+						// unitentry mirrors the first entry of a mixed spawn
+						if (selectable.GetEntry().unitentries_size() > 0)
+						{
+							selectable.GetEntry().mutable_unitentries(0)->set_unitentry(unit.id());
+						}
 						selectable.RefreshEntity();
 					}
 					ImGui::PopID();
@@ -3127,6 +3290,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 				ImGui::EndCombo();
 			}
+
+			DrawMixedUnitSpawnEntries(selectable);
 
 			bool isActive = selectable.GetEntry().isactive();
 			if (ImGui::Checkbox("Is Active", &isActive))
@@ -4032,5 +4197,894 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		return false;
+	}
+
+	MapEntity *WorldEditorInstance::FindMapEntity(const uint64 uniqueId) const
+	{
+		for (const auto &mapEntity : m_mapEntities)
+		{
+			if (mapEntity->GetUniqueId() == uniqueId)
+			{
+				return mapEntity.get();
+			}
+		}
+
+		return nullptr;
+	}
+
+	PropKitPtr WorldEditorInstance::ResolveKit(const String &kitPath) const
+	{
+		const String key = MakeKitKey(kitPath);
+		if (const auto it = m_dirtyKits.find(key); it != m_dirtyKits.end())
+		{
+			return it->second.kit;
+		}
+
+		return PropKitManager::Get().Find(key);
+	}
+
+	PropKitPtr WorldEditorInstance::LoadKit(const String &kitPath)
+	{
+		const String key = MakeKitKey(kitPath);
+		if (const auto it = m_dirtyKits.find(key); it != m_dirtyKits.end())
+		{
+			return it->second.kit;
+		}
+
+		PropKitPtr kit = PropKitManager::Get().Load(key);
+		if (kit)
+		{
+			m_observedKits[key] = kit;
+		}
+
+		return kit;
+	}
+
+	const WorldModelMeshRef *WorldEditorInstance::FindKitProp(const String &kitPath, const size_t propIndex) const
+	{
+		const PropKitPtr kit = ResolveKit(kitPath);
+		if (!kit || propIndex >= kit->props.size())
+		{
+			return nullptr;
+		}
+
+		return &kit->props[propIndex];
+	}
+
+	PropKit *WorldEditorInstance::GetEditableKit(const String &kitPath, const uint64 originPlacementId)
+	{
+		const String key = MakeKitKey(kitPath);
+		if (const auto it = m_dirtyKits.find(key); it != m_dirtyKits.end())
+		{
+			it->second.originPlacementId = originPlacementId;
+			it->second.editingPlacementIds.insert(originPlacementId);
+			return it->second.kit.get();
+		}
+
+		// The cached kit is shared with the prop kit editor and other worlds, so edits go into a copy
+		// that only this world shows until it is saved.
+		const PropKitPtr cached = PropKitManager::Get().Load(key);
+		if (!cached)
+		{
+			ELOG("Unable to edit prop kit " << key << ": the kit could not be loaded");
+			return nullptr;
+		}
+
+		DirtyKit &dirty = m_dirtyKits[key];
+		dirty.kit = std::make_shared<PropKit>(*cached);
+		dirty.originPlacementId = originPlacementId;
+		dirty.editingPlacementIds = { originPlacementId };
+		return dirty.kit.get();
+	}
+
+	void WorldEditorInstance::ApplyKits(MapEntity &placement)
+	{
+		WorldModelInstance *instance = placement.GetWorldModelInstance();
+		if (!instance)
+		{
+			return;
+		}
+
+		// The paths are kept even when a kit fails to load, so a save does not silently drop them.
+		std::vector<PropKitPtr> kits;
+		kits.reserve(placement.GetKitPaths().size());
+		for (const String &kitPath : placement.GetKitPaths())
+		{
+			if (PropKitPtr kit = LoadKit(kitPath))
+			{
+				kits.push_back(std::move(kit));
+			}
+			else
+			{
+				WLOG("Failed to load prop kit " << kitPath << " for world model " << placement.GetUniqueId());
+			}
+		}
+
+		instance->SetPropKits(std::move(kits));
+		m_kitCollisionDirty = true;
+	}
+
+	void WorldEditorInstance::RefreshKitUsers(const String &kitPath)
+	{
+		for (const auto &mapEntity : m_mapEntities)
+		{
+			if (!mapEntity->IsWorldModelEntity())
+			{
+				continue;
+			}
+
+			const auto &kitPaths = mapEntity->GetKitPaths();
+			if (std::any_of(kitPaths.begin(), kitPaths.end(), [&kitPath](const String &path) { return KitPathsEqual(path, kitPath); }))
+			{
+				ApplyKits(*mapEntity);
+			}
+		}
+	}
+
+	size_t WorldEditorInstance::CountKitUsers(const String &kitPath, const uint64 excludePlacementId) const
+	{
+		size_t count = 0;
+		for (const auto &mapEntity : m_mapEntities)
+		{
+			if (!mapEntity->IsWorldModelEntity() || (excludePlacementId != 0 && mapEntity->GetUniqueId() == excludePlacementId))
+			{
+				continue;
+			}
+
+			const auto &kitPaths = mapEntity->GetKitPaths();
+			if (std::any_of(kitPaths.begin(), kitPaths.end(), [&kitPath](const String &path) { return KitPathsEqual(path, kitPath); }))
+			{
+				++count;
+			}
+		}
+
+		return count;
+	}
+
+	String WorldEditorInstance::GetActiveKit(const MapEntity &placement) const
+	{
+		const auto &kitPaths = placement.GetKitPaths();
+
+		if (const auto it = m_activeKits.find(placement.GetUniqueId()); it != m_activeKits.end())
+		{
+			// "None" was picked explicitly
+			if (it->second.empty())
+			{
+				return String();
+			}
+
+			for (const String &kitPath : kitPaths)
+			{
+				if (KitPathsEqual(kitPath, it->second))
+				{
+					return kitPath;
+				}
+			}
+
+			// The picked kit was removed from the list; fall back to the default.
+		}
+
+		return kitPaths.empty() ? String() : kitPaths.front();
+	}
+
+	MapEntity *WorldEditorInstance::GetSelectedPlacement() const
+	{
+		if (m_selection.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		Selectable *selected = m_selection.GetSelectedObjects().back().get();
+		if (const auto *selectedEntity = dynamic_cast<SelectedMapEntity *>(selected))
+		{
+			MapEntity &entity = selectedEntity->GetEntity();
+			return entity.IsWorldModelEntity() ? &entity : nullptr;
+		}
+
+		if (const auto *selectedProp = dynamic_cast<SelectedKitProp *>(selected))
+		{
+			return FindMapEntity(selectedProp->GetPlacementId());
+		}
+
+		return nullptr;
+	}
+
+	void WorldEditorInstance::EditKitProp(const uint64 placementId, const String &kitPath, const size_t propIndex, const std::function<void(WorldModelMeshRef &)> &edit)
+	{
+		PropKit *kit = GetEditableKit(kitPath, placementId);
+		if (!kit || propIndex >= kit->props.size())
+		{
+			return;
+		}
+
+		edit(kit->props[propIndex]);
+
+		RefreshKitUsers(kitPath);
+		UpdateSelectedKitPropBounds();
+	}
+
+	void WorldEditorInstance::DuplicateKitProp(const uint64 placementId, const String &kitPath, const size_t propIndex)
+	{
+		PropKit *kit = GetEditableKit(kitPath, placementId);
+		if (!kit || propIndex >= kit->props.size())
+		{
+			return;
+		}
+
+		// Copy first: push_back may reallocate the vector the source lives in.
+		const WorldModelMeshRef copy = kit->props[propIndex];
+		kit->props.push_back(copy);
+
+		RefreshKitUsers(kitPath);
+	}
+
+	void WorldEditorInstance::QueueKitPropRemoval(const uint64 placementId, const String &kitPath, const size_t propIndex)
+	{
+		m_pendingKitPropRemovals.push_back({placementId, kitPath, propIndex});
+	}
+
+	void WorldEditorInstance::ApplyPendingKitPropRemovals()
+	{
+		if (m_pendingKitPropRemovals.empty())
+		{
+			return;
+		}
+
+		// Highest index first, so earlier removals do not shift the props still queued.
+		std::vector<PendingKitPropRemoval> removals = std::move(m_pendingKitPropRemovals);
+		m_pendingKitPropRemovals.clear();
+		std::sort(removals.begin(), removals.end(), [](const PendingKitPropRemoval &a, const PendingKitPropRemoval &b)
+		{
+			return a.propIndex > b.propIndex;
+		});
+
+		std::vector<String> changedKits;
+		std::set<std::pair<String, size_t>> removed;
+		for (const PendingKitPropRemoval &removal : removals)
+		{
+			const String key = MakeKitKey(removal.kitPath);
+			String lowerKey = key;
+			std::transform(lowerKey.begin(), lowerKey.end(), lowerKey.begin(), [](const char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+			if (!removed.emplace(lowerKey, removal.propIndex).second)
+			{
+				continue;
+			}
+
+			PropKit *kit = GetEditableKit(key, removal.placementId);
+			if (!kit || removal.propIndex >= kit->props.size())
+			{
+				continue;
+			}
+
+			kit->props.erase(kit->props.begin() + static_cast<std::ptrdiff_t>(removal.propIndex));
+			if (std::none_of(changedKits.begin(), changedKits.end(), [&key](const String &path) { return KitPathsEqual(path, key); }))
+			{
+				changedKits.push_back(key);
+			}
+		}
+
+		// Prop indices of the changed kits are stale now, so drop selected props of those kits.
+		const bool selectsChangedKit = std::any_of(m_selection.GetSelectedObjects().begin(), m_selection.GetSelectedObjects().end(), [&changedKits](const auto &selectable)
+		{
+			const auto *selectedProp = dynamic_cast<SelectedKitProp *>(selectable.get());
+			return selectedProp && std::any_of(changedKits.begin(), changedKits.end(), [selectedProp](const String &path) { return KitPathsEqual(path, selectedProp->GetKitPath()); });
+		});
+		if (selectsChangedKit)
+		{
+			ClearSelection();
+		}
+
+		for (const String &kitPath : changedKits)
+		{
+			RefreshKitUsers(kitPath);
+		}
+	}
+
+	bool WorldEditorInstance::TrySelectKitProp(const float viewportX, const float viewportY, const bool allowMultiSelect)
+	{
+		MapEntity *placement = GetSelectedPlacement();
+		if (!placement || placement->GetKitPaths().empty())
+		{
+			return false;
+		}
+
+		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
+
+		String bestKit;
+		size_t bestIndex = 0;
+		float bestDistance = std::numeric_limits<float>::max();
+
+		for (const String &kitPath : placement->GetKitPaths())
+		{
+			const PropKitPtr kit = ResolveKit(kitPath);
+			if (!kit)
+			{
+				continue;
+			}
+
+			for (size_t i = 0; i < kit->props.size(); ++i)
+			{
+				const WorldModelMeshRef &prop = kit->props[i];
+				if (!prop.visible || prop.meshPath.empty())
+				{
+					continue;
+				}
+
+				const MeshPtr mesh = MeshManager::Get().Load(prop.meshPath);
+				if (!mesh)
+				{
+					continue;
+				}
+
+				// Test the ray against the mesh bounds in the prop's local space (an oriented box).
+				const Matrix4 transform = MakeKitPropWorldTransform(placement->GetSceneNode(), prop);
+				if (!transform.IsAffine())
+				{
+					continue;
+				}
+
+				const Matrix4 inverse = transform.InverseAffine();
+				const Vector3 localStart = inverse.TransformAffine(ray.origin);
+				const Vector3 localEnd = inverse.TransformAffine(ray.destination);
+				if (localStart == localEnd)
+				{
+					continue;
+				}
+
+				const Ray localRay(localStart, localEnd);
+				const auto [hit, localDistance] = localRay.IntersectsAABB(mesh->GetBounds());
+				if (!hit)
+				{
+					continue;
+				}
+
+				const Vector3 hitPoint = transform.TransformAffine(localRay.GetPoint(std::max(localDistance, 0.0f)));
+				const float distance = (hitPoint - ray.origin).GetLength();
+				if (distance < bestDistance)
+				{
+					bestDistance = distance;
+					bestKit = kitPath;
+					bestIndex = i;
+				}
+			}
+		}
+
+		if (bestKit.empty())
+		{
+			return false;
+		}
+
+		// A wall in front of the prop wins: compare with the nearest real geometry under the cursor.
+		// A prop that is itself realized as an entity is hit at or behind its own bounds, so it never
+		// hides itself.
+		constexpr float occlusionTolerance = 0.05f;
+		if (bestDistance > m_selectionRaycaster->GetClosestEntityHitDistance(viewportX, viewportY) + occlusionTolerance)
+		{
+			return false;
+		}
+
+		if (!allowMultiSelect)
+		{
+			m_selection.Clear();
+		}
+
+		m_selection.AddSelectable(std::make_unique<SelectedKitProp>(*this, placement->GetUniqueId(), bestKit, bestIndex));
+		UpdateSelectedKitPropBounds();
+		return true;
+	}
+
+	void WorldEditorInstance::UpdateSelectedKitPropBounds()
+	{
+		if (m_selection.IsEmpty())
+		{
+			return;
+		}
+
+		const auto *selectedProp = dynamic_cast<SelectedKitProp *>(m_selection.GetSelectedObjects().back().get());
+		if (!selectedProp)
+		{
+			return;
+		}
+
+		const MapEntity *placement = FindMapEntity(selectedProp->GetPlacementId());
+		const WorldModelMeshRef *prop = FindKitProp(selectedProp->GetKitPath(), selectedProp->GetPropIndex());
+		if (!placement || !prop)
+		{
+			return;
+		}
+
+		const MeshPtr mesh = MeshManager::Get().Load(prop->meshPath);
+		if (!mesh)
+		{
+			return;
+		}
+
+		AABB bounds = mesh->GetBounds();
+		bounds.Transform(MakeKitPropWorldTransform(placement->GetSceneNode(), *prop));
+		m_selectionRaycaster->UpdateDebugAABB(bounds);
+		m_debugBoundingBox->SetVisible(true);
+	}
+
+	void WorldEditorInstance::UpdateKitCollisionOverlay()
+	{
+		const MapEntity *placement = GetSelectedPlacement();
+		const uint64 placementId = placement ? placement->GetUniqueId() : 0;
+		if (placementId != m_kitCollisionPlacementId)
+		{
+			// A different (or no) building is selected: its display starts switched off.
+			m_kitCollisionPlacementId = placementId;
+			m_showKitCollision = false;
+		}
+
+		if (!m_showKitCollision || !placement)
+		{
+			if (m_kitCollisionOverlay)
+			{
+				m_kitCollisionOverlay.reset();
+				m_kitCollisionVertices.clear();
+				m_kitCollisionIndices.clear();
+			}
+			return;
+		}
+
+		if (!m_kitCollisionOverlay)
+		{
+			m_kitCollisionOverlay = std::make_unique<CollisionOverlay>(m_scene, m_scene.GetRootSceneNode());
+			m_kitCollisionDirty = true;
+		}
+
+		const SceneNode &node = placement->GetSceneNode();
+		if (node.GetDerivedPosition() != m_kitCollisionPosition || node.GetDerivedOrientation() != m_kitCollisionOrientation || node.GetDerivedScale() != m_kitCollisionScale)
+		{
+			m_kitCollisionPosition = node.GetDerivedPosition();
+			m_kitCollisionOrientation = node.GetDerivedOrientation();
+			m_kitCollisionScale = node.GetDerivedScale();
+			m_kitCollisionDirty = true;
+		}
+
+		if (m_kitCollisionDirty)
+		{
+			RebuildKitCollisionOverlay(*placement);
+		}
+	}
+
+	void WorldEditorInstance::RebuildKitCollisionOverlay(const MapEntity &placement)
+	{
+		m_kitCollisionDirty = false;
+		m_kitCollisionVertices.clear();
+		m_kitCollisionIndices.clear();
+
+		for (const String &kitPath : placement.GetKitPaths())
+		{
+			const PropKitPtr kit = ResolveKit(kitPath);
+			if (!kit)
+			{
+				continue;
+			}
+
+			for (const WorldModelMeshRef &prop : kit->props)
+			{
+				if (!prop.visible || prop.meshPath.empty())
+				{
+					continue;
+				}
+
+				const MeshPtr mesh = MeshManager::Get().Load(prop.meshPath);
+				if (!mesh)
+				{
+					continue;
+				}
+
+				const AABBTree &tree = mesh->GetCollisionTree();
+				const auto &vertices = tree.GetVertices();
+				const auto &indices = tree.GetIndices();
+				if (vertices.empty() || indices.empty())
+				{
+					continue;
+				}
+
+				const Matrix4 transform = MakeKitPropWorldTransform(placement.GetSceneNode(), prop);
+				const uint32 base = static_cast<uint32>(m_kitCollisionVertices.size());
+				for (const Vector3 &vertex : vertices)
+				{
+					m_kitCollisionVertices.push_back(transform.TransformAffine(vertex));
+				}
+				for (const uint32 index : indices)
+				{
+					m_kitCollisionIndices.push_back(base + index);
+				}
+			}
+		}
+
+		CollisionOverlayData data;
+		if (!m_kitCollisionIndices.empty())
+		{
+			data.vertices = &m_kitCollisionVertices;
+			data.indices = &m_kitCollisionIndices;
+		}
+		m_kitCollisionOverlay->Rebuild(data);
+	}
+
+	void WorldEditorInstance::DeselectRemovedKitProps(const MapEntity &placement)
+	{
+		const std::vector<String> &kitPaths = placement.GetKitPaths();
+
+		std::vector<Selection::Index> stale;
+		Selection::Index index = 0;
+		for (const auto &selectable : m_selection.GetSelectedObjects())
+		{
+			const auto *selectedProp = dynamic_cast<const SelectedKitProp *>(selectable.get());
+			if (selectedProp && selectedProp->GetPlacementId() == placement.GetUniqueId() &&
+				std::none_of(kitPaths.begin(), kitPaths.end(), [selectedProp](const String &path) { return KitPathsEqual(path, selectedProp->GetKitPath()); }))
+			{
+				stale.push_back(index);
+			}
+
+			++index;
+		}
+
+		// Highest index first, so the indices still to remove stay valid.
+		for (auto it = stale.rbegin(); it != stale.rend(); ++it)
+		{
+			m_selection.RemoveSelectable(*it);
+		}
+	}
+
+	bool WorldEditorInstance::AddMeshToActiveKit(const String &meshPath, const Vector3 &worldPosition)
+	{
+		MapEntity *placement = GetSelectedPlacement();
+		if (!placement)
+		{
+			return false;
+		}
+
+		// Only a drop into the building furnishes it; a drop elsewhere in the world places a world entity.
+		const WorldModelInstance *instance = placement->GetWorldModelInstance();
+		if (!instance || !instance->GetWorldBoundingBox(true).Intersects(worldPosition))
+		{
+			return false;
+		}
+
+		const String activeKit = GetActiveKit(*placement);
+		if (activeKit.empty())
+		{
+			return false;
+		}
+
+		PropKit *kit = GetEditableKit(activeKit, placement->GetUniqueId());
+		if (!kit)
+		{
+			return false;
+		}
+
+		// Kits are stored in building-local space: undo the placement's transform.
+		const SceneNode &node = placement->GetSceneNode();
+		const Vector3 scale = node.GetDerivedScale();
+		Vector3 localPosition = node.GetDerivedOrientation().UnitInverse() * (worldPosition - node.GetDerivedPosition());
+		constexpr float epsilon = 1.0e-6f;
+		localPosition.x = std::abs(scale.x) > epsilon ? localPosition.x / scale.x : localPosition.x;
+		localPosition.y = std::abs(scale.y) > epsilon ? localPosition.y / scale.y : localPosition.y;
+		localPosition.z = std::abs(scale.z) > epsilon ? localPosition.z / scale.z : localPosition.z;
+
+		WorldModelMeshRef prop;
+		prop.meshPath = meshPath;
+		prop.position = localPosition;
+		kit->props.push_back(std::move(prop));
+		const size_t propIndex = kit->props.size() - 1;
+
+		ILOG("Added " << meshPath << " to prop kit " << activeKit << " of world model " << placement->GetUniqueId());
+
+		RefreshKitUsers(activeKit);
+
+		m_selection.Clear();
+		m_selection.AddSelectable(std::make_unique<SelectedKitProp>(*this, placement->GetUniqueId(), activeKit, propIndex));
+		UpdateSelectedKitPropBounds();
+		return true;
+	}
+
+	void WorldEditorInstance::PollKitCache()
+	{
+		for (auto &[kitPath, observed] : m_observedKits)
+		{
+			const PropKitPtr cached = PropKitManager::Get().Find(kitPath);
+			if (!cached || cached == observed)
+			{
+				continue;
+			}
+
+			// The kit was saved elsewhere (the prop kit editor replaces the cached kit on save).
+			observed = cached;
+
+			if (m_dirtyKits.contains(kitPath))
+			{
+				WLOG("Prop kit " << kitPath << " was saved in another editor while this world has unsaved edits to it; saving the world will overwrite that version");
+				continue;
+			}
+
+			RefreshKitUsers(kitPath);
+		}
+	}
+
+	bool WorldEditorInstance::WriteKitFile(const String &kitPath, const PropKit &kit)
+	{
+		const std::unique_ptr<std::ostream> stream = AssetRegistry::CreateNewFile(kitPath);
+		if (!stream)
+		{
+			ELOG("Failed to save prop kit " << kitPath << ": unable to open file for writing");
+			return false;
+		}
+
+		io::StreamSink sink{*stream};
+		io::Writer writer{sink};
+
+		PropKitSerializer serializer;
+		serializer.Serialize(kit, writer);
+		sink.Flush();
+
+		return true;
+	}
+
+	void WorldEditorInstance::SaveDirtyKits()
+	{
+		std::vector<String> kitPaths;
+		kitPaths.reserve(m_dirtyKits.size());
+		for (const auto &[kitPath, dirty] : m_dirtyKits)
+		{
+			kitPaths.push_back(kitPath);
+		}
+
+		for (const String &kitPath : kitPaths)
+		{
+			const uint64 originPlacementId = m_dirtyKits[kitPath].originPlacementId;
+			if (CountKitUsers(kitPath, originPlacementId) == 0)
+			{
+				SaveDirtyKit(kitPath);
+				continue;
+			}
+
+			// Used by other buildings: ask first (one prompt per kit, see DrawKitModals).
+			if (std::none_of(m_pendingKitSaves.begin(), m_pendingKitSaves.end(), [&kitPath](const String &path) { return KitPathsEqual(path, kitPath); }))
+			{
+				m_pendingKitSaves.push_back(kitPath);
+			}
+			m_openKitSavePrompt = true;
+		}
+	}
+
+	void WorldEditorInstance::SaveDirtyKit(const String &kitPath)
+	{
+		const String key = MakeKitKey(kitPath);
+		const auto it = m_dirtyKits.find(key);
+		if (it == m_dirtyKits.end())
+		{
+			return;
+		}
+
+		if (!WriteKitFile(key, *it->second.kit))
+		{
+			// Stays dirty, so the next save tries again.
+			return;
+		}
+
+		// Replace the cached kit with a copy, so further unsaved edits here do not leak into it.
+		const PropKitPtr saved = std::make_shared<PropKit>(*it->second.kit);
+		PropKitManager::Get().Remove(key);
+		PropKitManager::Get().Insert(key, saved);
+		m_observedKits[key] = saved;
+
+		ILOG("Saved prop kit " << key << " (" << saved->props.size() << " props, " << saved->lights.size() << " lights)");
+
+		m_dirtyKits.erase(it);
+		RefreshKitUsers(key);
+		UpdateSelectedKitPropBounds();
+	}
+
+	void WorldEditorInstance::SaveKitAsNew(const uint64 placementId, const String &sourceKitPath, const String &targetKitPath)
+	{
+		MapEntity *placement = FindMapEntity(placementId);
+		if (!placement)
+		{
+			ELOG("Unable to save prop kit as new kit: world model " << placementId << " is no longer loaded");
+			return;
+		}
+
+		const PropKitPtr source = LoadKit(sourceKitPath);
+		if (!source)
+		{
+			ELOG("Unable to save prop kit " << sourceKitPath << " as new kit: the kit could not be loaded");
+			return;
+		}
+
+		const String target = MakeKitKey(targetKitPath);
+
+		PropKit copy = *source;
+		copy.name = Path(target).stem().string();
+		if (!WriteKitFile(target, copy))
+		{
+			return;
+		}
+
+		const PropKitPtr saved = std::make_shared<PropKit>(std::move(copy));
+		PropKitManager::Get().Remove(target);
+		PropKitManager::Get().Insert(target, saved);
+		m_observedKits[target] = saved;
+
+		// The new kit replaces the source kit in this building's list only.
+		std::vector<String> kitPaths = placement->GetKitPaths();
+		for (String &kitPath : kitPaths)
+		{
+			if (KitPathsEqual(kitPath, sourceKitPath))
+			{
+				kitPath = target;
+			}
+		}
+		placement->SetKitPaths(std::move(kitPaths));
+		m_activeKits[placementId] = target;
+
+		// Edits to the source kit made on this building now live in the new kit, so the other
+		// buildings keep the saved source kit. If another building edited the working copy too, it
+		// stays dirty: those edits stay pending for the other buildings.
+		const String sourceKey = MakeKitKey(sourceKitPath);
+		if (const auto it = m_dirtyKits.find(sourceKey); it != m_dirtyKits.end() && it->second.editingPlacementIds == std::set<uint64>{ placementId })
+		{
+			ILOG("Discarded unsaved edits of prop kit " << sourceKey << "; they were saved to " << target);
+			m_dirtyKits.erase(it);
+		}
+
+		// Selected props of the source kit on this building now belong to the new kit.
+		if (std::any_of(m_selection.GetSelectedObjects().begin(), m_selection.GetSelectedObjects().end(), [placementId, &sourceKitPath](const auto &selectable)
+		{
+			const auto *selectedProp = dynamic_cast<SelectedKitProp *>(selectable.get());
+			return selectedProp && selectedProp->GetPlacementId() == placementId && KitPathsEqual(selectedProp->GetKitPath(), sourceKitPath);
+		}))
+		{
+			ClearSelection();
+		}
+
+		ApplyKits(*placement);
+		RefreshKitUsers(sourceKitPath);
+
+		ILOG("Saved prop kit " << sourceKey << " as new kit " << target << " for world model " << placementId);
+		m_editor.GetHost().assetImported(Path(target).parent_path());
+	}
+
+	void WorldEditorInstance::DrawKitModals()
+	{
+		static const char *savePromptId = "Save Prop Kit##sharedKitSavePrompt";
+		static const char *saveAsNewId = "Save as New Prop Kit##saveAsNewKit";
+
+		if (m_openKitSavePrompt)
+		{
+			ImGui::OpenPopup(savePromptId);
+			m_openKitSavePrompt = false;
+		}
+
+		if (ImGui::BeginPopupModal(savePromptId, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			// Kits saved or discarded in the meantime need no answer.
+			std::erase_if(m_pendingKitSaves, [this](const String &kitPath) { return !m_dirtyKits.contains(kitPath); });
+
+			if (m_pendingKitSaves.empty())
+			{
+				ImGui::CloseCurrentPopup();
+			}
+			else
+			{
+				const String kitPath = m_pendingKitSaves.front();
+				const size_t otherUsers = CountKitUsers(kitPath, m_dirtyKits[kitPath].originPlacementId);
+
+				ImGui::Text("%s is used by %zu other %s. Save anyway?", kitPath.c_str(), otherUsers, otherUsers == 1 ? "building" : "buildings");
+				ImGui::Spacing();
+
+				bool answered = false;
+				if (ImGui::Button("Save", ImVec2(120.0f, 0.0f)))
+				{
+					SaveDirtyKit(kitPath);
+					answered = true;
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Don't save", ImVec2(120.0f, 0.0f)))
+				{
+					// The edits stay pending until the next world save.
+					answered = true;
+				}
+
+				if (answered)
+				{
+					m_pendingKitSaves.erase(m_pendingKitSaves.begin());
+					if (m_pendingKitSaves.empty())
+					{
+						ImGui::CloseCurrentPopup();
+					}
+				}
+			}
+
+			ImGui::EndPopup();
+		}
+
+		if (m_openSaveAsNewKit)
+		{
+			ImGui::OpenPopup(saveAsNewId);
+			m_openSaveAsNewKit = false;
+		}
+
+		if (ImGui::BeginPopupModal(saveAsNewId, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Writes %s, including unsaved edits, to a new kit used by this building only.", m_saveAsNewKitSource.c_str());
+			ImGui::TextUnformatted("The original kit file is not changed.");
+			ImGui::Spacing();
+
+			ImGui::SetNextItemWidth(400.0f);
+			ImGui::InputText("New kit path", &m_saveAsNewKitTarget);
+
+			String target = MakeKitKey(m_saveAsNewKitTarget);
+			if (!target.empty() && Path(target).extension() != ".hkit")
+			{
+				target += ".hkit";
+			}
+
+			const bool isSource = KitPathsEqual(target, m_saveAsNewKitSource);
+			const bool exists = !target.empty() && AssetRegistry::HasFile(target);
+			if (isSource || exists)
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "A file with this name already exists.");
+			}
+
+			ImGui::BeginDisabled(target.empty() || isSource || exists);
+			if (ImGui::Button("Save", ImVec2(120.0f, 0.0f)))
+			{
+				SaveKitAsNew(m_saveAsNewKitPlacement, m_saveAsNewKitSource, target);
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f)))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+	}
+
+	void WorldEditorInstance::Visit(SelectedKitProp &selectable)
+	{
+		const MapEntity *placement = FindMapEntity(selectable.GetPlacementId());
+		const WorldModelMeshRef *prop = FindKitProp(selectable.GetKitPath(), selectable.GetPropIndex());
+		if (!placement || !prop)
+		{
+			ImGui::TextDisabled("The selected kit prop no longer exists.");
+			return;
+		}
+
+		const bool unsaved = m_dirtyKits.contains(MakeKitKey(selectable.GetKitPath()));
+
+		ImGui::Text("Type: Kit Prop");
+		ImGui::Text("Building: %llu (%s)", placement->GetUniqueId(), placement->GetAssetName().c_str());
+		ImGui::Text("Kit: %s%s", selectable.GetKitPath().c_str(), unsaved ? " *" : "");
+
+		const size_t users = CountKitUsers(selectable.GetKitPath(), 0);
+		if (users > 1)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), ICON_FA_EXCLAMATION_TRIANGLE " This kit is used by %zu loaded buildings; edits change all of them.", users);
+		}
+
+		if (ImGui::CollapsingHeader("Prop", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			// Edit a copy, so merely showing the prop does not turn the kit into a working copy.
+			WorldModelMeshRef edited = *prop;
+			const uint32 changes = DrawMeshRefProperties(edited);
+			if ((changes & mesh_ref_edit::Delete) != 0)
+			{
+				QueueKitPropRemoval(selectable.GetPlacementId(), selectable.GetKitPath(), selectable.GetPropIndex());
+			}
+			else if (changes != mesh_ref_edit::None)
+			{
+				EditKitProp(selectable.GetPlacementId(), selectable.GetKitPath(), selectable.GetPropIndex(), [&edited](WorldModelMeshRef &target)
+				{
+					target = edited;
+				});
+			}
+		}
 	}
 }

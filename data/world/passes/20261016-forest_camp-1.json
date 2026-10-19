@@ -1,0 +1,882 @@
+{
+  "version": 1,
+  "pass_id": "20261016-forest_camp-1",
+  "map": 0,
+  "world": "Development",
+  "poi": "forest_camp",
+  "template": "hand:oakenshire_town",
+  "seed": 0,
+  "anchor": [
+    290.0,
+    565.0
+  ],
+  "keep_away": [],
+  "entry": [
+    290.0,
+    565.0
+  ],
+  "created": "2026-10-16T10:02:51",
+  "world_fingerprint": "7799ceef0059df99b797d8712cd89ee2a0473fe8",
+  "items": [
+    {
+      "role": "stall_goods",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_DinnerTable_A.hmsh",
+      "store": "wobj",
+      "position": [
+        283.39,
+        0.52,
+        587.0
+      ],
+      "yaw": 176.8,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc13e5ccaf18bd32",
+      "file": "Worlds/Development/Development/Entities/8225/15858271380175371570.wobj",
+      "written_hash": "157f24ad958327f74ce7ba38d3b3656a4b0f1bb9"
+    },
+    {
+      "role": "stall_goods",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        282.04,
+        0.51,
+        586.92
+      ],
+      "yaw": 184.8,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc1318cc009d2435",
+      "file": "Worlds/Development/Development/Entities/8225/15858045977364341813.wobj",
+      "written_hash": "28007d77f8e7ae97c252a8120021391b94e48063"
+    },
+    {
+      "role": "stall_goods",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        284.64,
+        0.55,
+        587.07
+      ],
+      "yaw": 176.8,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc13745b8df55828",
+      "file": "Worlds/Development/Development/Entities/8225/15858146649474160680.wobj",
+      "written_hash": "58fff7c96cf5f6ad70774de87207154390ad4781"
+    },
+    {
+      "role": "stall_goods",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Bucket.hmsh",
+      "store": "wobj",
+      "position": [
+        284.73,
+        0.57,
+        586.37
+      ],
+      "yaw": 176.8,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xdc1491cce20b2fa4",
+      "file": "Worlds/Development/Development/Entities/8225/15858460497030098852.wobj",
+      "written_hash": "61fe9b32134a28739c4b551314a16b91a9e30874"
+    },
+    {
+      "role": "stall_weapons",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_WorkBench.hmsh",
+      "store": "wobj",
+      "position": [
+        288.61,
+        0.56,
+        590.4
+      ],
+      "yaw": 287.7,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc1467b04db37048",
+      "file": "Worlds/Development/Development/Entities/8225/15858414194793869384.wobj",
+      "written_hash": "5c02f43a8b165be40b14fe6a4679bb3f931b43a4"
+    },
+    {
+      "role": "stall_weapons",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Anvil.hmsh",
+      "store": "wobj",
+      "position": [
+        286.8,
+        0.56,
+        590.98
+      ],
+      "yaw": 272.7,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc147d7b238556c5",
+      "file": "Worlds/Development/Development/Entities/8225/15858438155708749509.wobj",
+      "written_hash": "8893ce39d6523c1e12ff369d58432fd7e374ad8f"
+    },
+    {
+      "role": "stall_weapons",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        290.96,
+        0.64,
+        589.66
+      ],
+      "yaw": 185.7,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc14cc3b08189286",
+      "file": "Worlds/Development/Development/Entities/8225/15858524741789323910.wobj",
+      "written_hash": "3aabcb27d01c4f8539e27f1566c91bc6341961aa"
+    },
+    {
+      "role": "stall_mail",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Mannequin_A.hmsh",
+      "store": "wobj",
+      "position": [
+        293.23,
+        0.83,
+        591.27
+      ],
+      "yaw": 214.7,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc147121c9c070e0",
+      "file": "Worlds/Development/Development/Entities/8225/15858424577811050720.wobj",
+      "written_hash": "29e5529cfb59628b559d3f9864ffa7e3a488430f"
+    },
+    {
+      "role": "stall_mail",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Mannequin_B.hmsh",
+      "store": "wobj",
+      "position": [
+        295.04,
+        0.95,
+        590.02
+      ],
+      "yaw": 214.7,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc140bb9dace9b43",
+      "file": "Worlds/Development/Development/Entities/8225/15858313080746187587.wobj",
+      "written_hash": "b942d42f681c727a31f0b2a0f2915d3930a2fdda"
+    },
+    {
+      "role": "stall_mail",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Chest.hmsh",
+      "store": "wobj",
+      "position": [
+        294.48,
+        0.79,
+        591.14
+      ],
+      "yaw": 304.7,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc145a24e745ab95",
+      "file": "Worlds/Development/Development/Entities/8225/15858399302423784341.wobj",
+      "written_hash": "4309cd26e79492cdc9ea6476f2d9ed18c96246ee"
+    },
+    {
+      "role": "stall_leather",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Wagon_Small.hmsh",
+      "store": "wobj",
+      "position": [
+        300.3,
+        0.98,
+        590.9
+      ],
+      "yaw": 323.5,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc1425c61526a8fb",
+      "file": "Worlds/Development/Development/Entities/8225/15858341720566966523.wobj",
+      "written_hash": "75e61c7ec1319e101398d2aecedf1cc447707529"
+    },
+    {
+      "role": "stall_leather",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        296.6,
+        0.89,
+        591.2
+      ],
+      "yaw": 263.5,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc14851e0d8eb026",
+      "file": "Worlds/Development/Development/Entities/8225/15858446552001327142.wobj",
+      "written_hash": "5c4c41c6f679f7fc8332ec2a9e41ccc1615704d9"
+    },
+    {
+      "role": "lights",
+      "asset": "Models/FalwynPlains/Props/WoodProps/WoodLantern_A.hwmo",
+      "store": "wobj",
+      "position": [
+        279.6,
+        0.67,
+        589.6
+      ],
+      "yaw": 135.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc143c2a41521319",
+      "file": "Worlds/Development/Development/Entities/8225/15858366340060549913.wobj",
+      "written_hash": "9cbc29274a13458e22703ab46efcbf45c73187b3"
+    },
+    {
+      "role": "lights",
+      "asset": "Models/FalwynPlains/Props/WoodProps/WoodLantern_A.hwmo",
+      "store": "wobj",
+      "position": [
+        302.6,
+        2.26,
+        583.4
+      ],
+      "yaw": 225.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc14b3837e581148",
+      "file": "Worlds/Development/Development/Entities/8225/15858497565220147528.wobj",
+      "written_hash": "a147e5ffe337d2111b579bccb347244440eacd24"
+    },
+    {
+      "role": "inn_yard",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Bench.hmsh",
+      "store": "wobj",
+      "position": [
+        273.2,
+        0.91,
+        588.6
+      ],
+      "yaw": 90.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc148a56706a680e",
+      "file": "Worlds/Development/Development/Entities/8225/15858452291736201230.wobj",
+      "written_hash": "60b1d8248af10546c5c4b9bde403022e7a722bbb"
+    },
+    {
+      "role": "inn_yard",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Drinker.hmsh",
+      "store": "wobj",
+      "position": [
+        274.8,
+        0.31,
+        585.2
+      ],
+      "yaw": 0.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc1464dae5d75cbf",
+      "file": "Worlds/Development/Development/Entities/8225/15858411079200103615.wobj",
+      "written_hash": "4d49346594bf3af6e40f03b6a33491cb6226e342"
+    },
+    {
+      "role": "inn_yard",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        251.7,
+        0.98,
+        590.2
+      ],
+      "yaw": 20.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc145ebdf4c42e97",
+      "file": "Worlds/Development/Development/Entities/8225/15858404357826686615.wobj",
+      "written_hash": "5928e6f70d696b2897f9203ec99acb7c8273f5b3"
+    },
+    {
+      "role": "inn_yard",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        252.6,
+        1.0,
+        590.6
+      ],
+      "yaw": 75.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc149641d682fc30",
+      "file": "Worlds/Development/Development/Entities/8225/15858465397394308144.wobj",
+      "written_hash": "fe97889a37e6d9d7f1c390a15113818eee9f2a43"
+    },
+    {
+      "role": "inn_yard",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        251.4,
+        0.94,
+        589.0
+      ],
+      "yaw": 10.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc142b920f90df24",
+      "file": "Worlds/Development/Development/Entities/8225/15858348094204731172.wobj",
+      "written_hash": "a201203711efd2136f288f1beb8eb60c1342acf5"
+    },
+    {
+      "role": "lights",
+      "asset": "Models/FalwynPlains/Props/WoodProps/WoodLantern_A.hwmo",
+      "store": "wobj",
+      "position": [
+        258.8,
+        0.82,
+        575.6
+      ],
+      "yaw": 0.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc14bf7608b5d698",
+      "file": "Worlds/Development/Development/Entities/8225/15858510701551539864.wobj",
+      "written_hash": "4b3a9cdf445d6cb0fdb9be42bcd1b13d984e7b76"
+    },
+    {
+      "role": "hall",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Brazier_A.hmsh",
+      "store": "wobj",
+      "position": [
+        323.2,
+        9.02,
+        569.6
+      ],
+      "yaw": 0.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.4,
+      "collides": false,
+      "unique_id": "0xdc1413b92be4a9d0",
+      "file": "Worlds/Development/Development/Entities/8225/15858321873904642512.wobj",
+      "written_hash": "97c1a0dfa44c9d1f5e4bdbd00358b280ec779c59"
+    },
+    {
+      "role": "hall",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Brazier_A.hmsh",
+      "store": "wobj",
+      "position": [
+        321.2,
+        9.2,
+        566.2
+      ],
+      "yaw": 0.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.4,
+      "collides": false,
+      "unique_id": "0xdc145653d7394f30",
+      "file": "Worlds/Development/Development/Entities/8225/15858395105971490608.wobj",
+      "written_hash": "8d73e0e64b24e06230b1c4239148ccb65b0a999c"
+    },
+    {
+      "role": "house_woodcutter",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_WoodcutterStump.hmsh",
+      "store": "wobj",
+      "position": [
+        234.0,
+        1.59,
+        541.0
+      ],
+      "yaw": 80.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc1495b3e87f266e",
+      "file": "Worlds/Development/Development/Entities/8225/15858464787810690670.wobj",
+      "written_hash": "2339751060d63103a8d5823a8ad609f9dd8dc1e8"
+    },
+    {
+      "role": "house_woodcutter",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodCrate.hmsh",
+      "store": "wobj",
+      "position": [
+        233.9,
+        1.58,
+        543.3
+      ],
+      "yaw": 10.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc1451659b936e7a",
+      "file": "Worlds/Development/Development/Entities/8225/15858389684722036346.wobj",
+      "written_hash": "287543a2fb1cc941827fa6349c97dced9bb71f11"
+    },
+    {
+      "role": "house_woodcutter",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        234.8,
+        1.55,
+        544.3
+      ],
+      "yaw": 0.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc14e4f8521421d4",
+      "file": "Worlds/Development/Development/Entities/8225/15858551943058432468.wobj",
+      "written_hash": "07831ac37d1b3cf14981053c68108b136e2f9d09"
+    },
+    {
+      "role": "house_farm",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Haystack_A.hmsh",
+      "store": "wobj",
+      "position": [
+        270.51,
+        3.25,
+        520.33
+      ],
+      "yaw": 274.89,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.6,
+      "collides": false,
+      "unique_id": "0xdc145b8200914801",
+      "file": "Worlds/Development/Development/Entities/8224/15858400801791756289.wobj",
+      "written_hash": "fb11cea4568c13332605a844e8603500e73674e9"
+    },
+    {
+      "role": "house_farm",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Bucket.hmsh",
+      "store": "wobj",
+      "position": [
+        270.64,
+        3.6,
+        523.82
+      ],
+      "yaw": 244.89,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0xdc14ccb52c910b75",
+      "file": "Worlds/Development/Development/Entities/8224/15858525266387209077.wobj",
+      "written_hash": "d806df97ffd602d2025a0dedabe8bd3bd9728ff7"
+    },
+    {
+      "role": "house_farm",
+      "asset": "Models/FalwynPlains/Props/WoodProps/SM_hc_WoodBarrel.hmsh",
+      "store": "wobj",
+      "position": [
+        269.85,
+        3.45,
+        524.33
+      ],
+      "yaw": 244.89,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc14d2a7ee1a1c69",
+      "file": "Worlds/Development/Development/Entities/8224/15858531806574419049.wobj",
+      "written_hash": "ae8e67206102ea41a1491ea1e14e42c4831f8c09"
+    },
+    {
+      "role": "house_healer",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Vase_A.hmsh",
+      "store": "wobj",
+      "position": [
+        289.26,
+        5.36,
+        544.14
+      ],
+      "yaw": 238.57,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 0.8,
+      "collides": true,
+      "unique_id": "0xdc147151dad3af15",
+      "file": "Worlds/Development/Development/Entities/8225/15858424784255954709.wobj",
+      "written_hash": "300b814bd092d8d1d13c4b7a50dd0f0fa13c78f7"
+    },
+    {
+      "role": "house_healer",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_Vase_C.hmsh",
+      "store": "wobj",
+      "position": [
+        296.77,
+        5.67,
+        548.72
+      ],
+      "yaw": 238.57,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0xdc15b1ace6cf548a",
+      "file": "Worlds/Development/Development/Entities/8225/15858777019019908234.wobj",
+      "written_hash": "0bc351b8dc7a54466ac36577878bca0ddf3ed542"
+    }
+  ],
+  "gaps": [],
+  "notes": [
+    "Hand-authored town dressing: market stalls behind the four traders, lanterns, Inn yard, Town Hall braziers, house clutter. Interiors wait for prop kits."
+  ],
+  "checks": {
+    "placement": [
+      {
+        "key": "prop_on_road|20261016-forest_camp-1:20",
+        "rule": "prop_on_road",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:20",
+        "message": "SM_hc_Brazier_A.hmsh at (323.2, 569.6): stands on or next to a road",
+        "x": 323.2,
+        "z": 569.6
+      },
+      {
+        "key": "prop_on_road|20261016-forest_camp-1:21",
+        "rule": "prop_on_road",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:21",
+        "message": "SM_hc_Brazier_A.hmsh at (321.2, 566.2): stands on or next to a road",
+        "x": 321.2,
+        "z": 566.2
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:0",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:0",
+        "message": "SM_hc_DinnerTable_A.hmsh at (283.4, 587.0): outside the place 'forest_camp'",
+        "x": 283.39,
+        "z": 587.0
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:1",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:1",
+        "message": "SM_hc_WoodCrate.hmsh at (282.0, 586.9): outside the place 'forest_camp'",
+        "x": 282.04,
+        "z": 586.92
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:10",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:10",
+        "message": "SM_hc_Wagon_Small.hmsh at (300.3, 590.9): outside the place 'forest_camp'",
+        "x": 300.3,
+        "z": 590.9
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:11",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:11",
+        "message": "SM_hc_WoodCrate.hmsh at (296.6, 591.2): outside the place 'forest_camp'",
+        "x": 296.6,
+        "z": 591.2
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:12",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:12",
+        "message": "WoodLantern_A.hwmo at (279.6, 589.6): outside the place 'forest_camp'",
+        "x": 279.6,
+        "z": 589.6
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:14",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:14",
+        "message": "SM_hc_Bench.hmsh at (273.2, 588.6): outside the place 'forest_camp'",
+        "x": 273.2,
+        "z": 588.6
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:15",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:15",
+        "message": "SM_hc_Drinker.hmsh at (274.8, 585.2): outside the place 'forest_camp'",
+        "x": 274.8,
+        "z": 585.2
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:16",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:16",
+        "message": "SM_hc_WoodBarrel.hmsh at (251.7, 590.2): outside the place 'forest_camp'",
+        "x": 251.7,
+        "z": 590.2
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:17",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:17",
+        "message": "SM_hc_WoodBarrel.hmsh at (252.6, 590.6): outside the place 'forest_camp'",
+        "x": 252.6,
+        "z": 590.6
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:18",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:18",
+        "message": "SM_hc_WoodCrate.hmsh at (251.4, 589.0): outside the place 'forest_camp'",
+        "x": 251.4,
+        "z": 589.0
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:19",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:19",
+        "message": "WoodLantern_A.hwmo at (258.8, 575.6): outside the place 'forest_camp'",
+        "x": 258.8,
+        "z": 575.6
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:2",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:2",
+        "message": "SM_hc_WoodBarrel.hmsh at (284.6, 587.1): outside the place 'forest_camp'",
+        "x": 284.64,
+        "z": 587.07
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:22",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:22",
+        "message": "SM_hc_WoodcutterStump.hmsh at (234.0, 541.0): outside the place 'forest_camp'",
+        "x": 234.0,
+        "z": 541.0
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:23",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:23",
+        "message": "SM_hc_WoodCrate.hmsh at (233.9, 543.3): outside the place 'forest_camp'",
+        "x": 233.9,
+        "z": 543.3
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:24",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:24",
+        "message": "SM_hc_WoodBarrel.hmsh at (234.8, 544.3): outside the place 'forest_camp'",
+        "x": 234.8,
+        "z": 544.3
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:25",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:25",
+        "message": "SM_hc_Haystack_A.hmsh at (270.5, 520.3): outside the place 'forest_camp'",
+        "x": 270.51,
+        "z": 520.33
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:26",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:26",
+        "message": "SM_hc_Bucket.hmsh at (270.6, 523.8): outside the place 'forest_camp'",
+        "x": 270.64,
+        "z": 523.82
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:27",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:27",
+        "message": "SM_hc_WoodBarrel.hmsh at (269.9, 524.3): outside the place 'forest_camp'",
+        "x": 269.85,
+        "z": 524.33
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:3",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:3",
+        "message": "SM_hc_Bucket.hmsh at (284.7, 586.4): outside the place 'forest_camp'",
+        "x": 284.73,
+        "z": 586.37
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:4",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:4",
+        "message": "SM_hc_WorkBench.hmsh at (288.6, 590.4): outside the place 'forest_camp'",
+        "x": 288.61,
+        "z": 590.4
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:5",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:5",
+        "message": "SM_hc_Anvil.hmsh at (286.8, 591.0): outside the place 'forest_camp'",
+        "x": 286.8,
+        "z": 590.98
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:6",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:6",
+        "message": "SM_hc_WoodCrate.hmsh at (291.0, 589.7): outside the place 'forest_camp'",
+        "x": 290.96,
+        "z": 589.66
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:7",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:7",
+        "message": "SM_hc_Mannequin_A.hmsh at (293.2, 591.3): outside the place 'forest_camp'",
+        "x": 293.23,
+        "z": 591.27
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:8",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:8",
+        "message": "SM_hc_Mannequin_B.hmsh at (295.0, 590.0): outside the place 'forest_camp'",
+        "x": 295.04,
+        "z": 590.02
+      },
+      {
+        "key": "prop_outside_poi|20261016-forest_camp-1:9",
+        "rule": "prop_outside_poi",
+        "severity": "warning",
+        "subject": "20261016-forest_camp-1:9",
+        "message": "SM_hc_Chest.hmsh at (294.5, 591.1): outside the place 'forest_camp'",
+        "x": 294.48,
+        "z": 591.14
+      }
+    ],
+    "walkability": [],
+    "items_hash": "8fbc21e749b3a71d33bc91398fddd09ab15c2cce"
+  },
+  "status": "applied",
+  "backups": [],
+  "created_files": [],
+  "applied": "2026-10-16T10:03:33",
+  "nav": {
+    "path": "generated/world/nav"
+  }
+}

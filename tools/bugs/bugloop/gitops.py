@@ -14,6 +14,8 @@ _EMERGENCY_BRANCH = re.compile(r"bugfix/[0-9a-f]{8}")
 _FULL_SHA = re.compile(r"[0-9a-f]{40}")
 _SHORT_SHA = re.compile(r"[0-9a-f]{7,40}")
 SUBMODULES = ("data/client", "data/editor")
+# Where parked fix branches are kept on origin (and their data commits on the submodule remotes).
+BACKUP_PREFIX = "refs/bugloop/"
 ShipResult = collections.namedtuple("ShipResult", "ok commit reason")
 
 
@@ -69,12 +71,24 @@ class Worktree:
 		return os.path.join(self.path, *sub.split("/"))
 
 	def _sync_submodules(self):
-		self.git("submodule", "update", "--init", "--force")
+		if run_git(self.path, "submodule", "update", "--init", "--force", check=False).returncode != 0:
+			# A submodule is cloned from the main checkout's URL, which can lag behind GitHub where
+			# ship() lands data ("not our ref"). Fetch the .gitmodules remote and try once more.
+			for sub in self.submodules:
+				if os.path.exists(os.path.join(self.sub_path(sub), ".git")):
+					self._ensure_sub_remote(sub)
+			self.git("submodule", "update", "--init", "--force")
 		for sub in self.submodules:
 			self.git("clean", "-fd", cwd=self.sub_path(sub))
 
 	def _ensure_sub_remote(self, sub):
-		url = run_git(self.main_repo, "config", "--get", "submodule.{}.url".format(sub)).stdout.strip()
+		"""Points `sub_remote` at the submodule URL committed in .gitmodules (GitHub), where
+		ship() lands data. Never the main checkout's .git/config URL: H:/mmo overrides it with its
+		own non-bare data/client, which refuses pushes to its checked-out master and is not where
+		CI, the nightly or another clone fetch develop's submodule commits from."""
+		url = self.git("config", "-f", ".gitmodules", "--get", "submodule.{}.url".format(sub))
+		if url.startswith(("./", "../")) or not url:
+			raise GitError("{}: .gitmodules has no absolute URL ({!r})".format(sub, url))
 		sub_dir = self.sub_path(sub)
 		if run_git(sub_dir, "remote", "get-url", self.sub_remote, check=False).returncode == 0:
 			self.git("remote", "set-url", self.sub_remote, url, cwd=sub_dir)
@@ -319,6 +333,60 @@ class Worktree:
 		if not _EMERGENCY_BRANCH.fullmatch(branch):
 			raise ValueError("refusing to delete " + branch)
 		run_git(self.path, "push", "--delete", "--", self.remote, branch, check=False)
+
+	def has_branch(self, branch):
+		return run_git(self.main_repo, "rev-parse", "--verify", "-q", "refs/heads/{}^{{commit}}".format(branch), check=False).returncode == 0
+
+	def backup_branch(self, branch):
+		"""Copies a parked fix branch to origin as refs/bugloop/<branch>, and the data commits it
+		points at to the same ref in each submodule's GitHub repository, so another machine's loop
+		can restore it. Outside refs/heads and refs/tags: no workflow runs, no branch appears.
+		Returns (ok, reason)."""
+		if not _EMERGENCY_BRANCH.fullmatch(branch):
+			return False, "refusing to back up " + branch
+		head = self.head(branch)
+		ref = BACKUP_PREFIX + branch
+		links = self.gitlinks(head)
+		for sub in self.submodules:
+			sha = links.get(sub)
+			if not sha:
+				continue
+			sub_dir = self.sub_path(sub)
+			master = "{}/{}".format(self.sub_remote, self.master)
+			if self._is_ancestor(sub_dir, sha, master):
+				continue  # already on GitHub
+			push = run_git(sub_dir, "push", "--force", "--", self.sub_remote, "{}:{}".format(sha, ref), check=False)
+			if push.returncode != 0:
+				return False, "backup of {} to {} failed: {}".format(sha[:8], sub, push.stderr.strip()[-300:])
+		push = run_git(self.main_repo, "push", "--force", "--", self.remote, "{}:{}".format(head, ref), check=False)
+		if push.returncode != 0:
+			return False, "backup of {} failed: {}".format(branch, push.stderr.strip()[-300:])
+		return True, ""
+
+	def restore_branch(self, branch):
+		"""Recreates a missing local fix branch from its backup on origin (see backup_branch),
+		fetching the backed-up data commits into the worktree's submodules. False without a backup."""
+		if not _EMERGENCY_BRANCH.fullmatch(branch) or self.has_branch(branch):
+			return False
+		ref = BACKUP_PREFIX + branch
+		if run_git(self.main_repo, "fetch", self.remote, "+{}:refs/heads/{}".format(ref, branch), check=False).returncode != 0:
+			return False
+		for sub in self.submodules:
+			sub_dir = self.sub_path(sub)
+			if os.path.exists(os.path.join(sub_dir, ".git")):
+				# No backup ref when the data commit was already on GitHub; that is fine.
+				run_git(sub_dir, "fetch", self.sub_remote, "+{0}:{0}".format(ref), check=False)
+		return True
+
+	def delete_backup(self, branch):
+		if not _EMERGENCY_BRANCH.fullmatch(branch):
+			raise ValueError("refusing to delete the backup of " + branch)
+		ref = BACKUP_PREFIX + branch
+		run_git(self.main_repo, "push", "--delete", "--", self.remote, ref, check=False)
+		for sub in self.submodules:
+			sub_dir = self.sub_path(sub)
+			if os.path.exists(os.path.join(sub_dir, ".git")):
+				run_git(sub_dir, "push", "--delete", "--", self.sub_remote, ref, check=False)
 
 	def is_ancestor(self, ancestor, descendant):
 		"""True when commit `ancestor` is `descendant` or one of its ancestors. Only hex ids are

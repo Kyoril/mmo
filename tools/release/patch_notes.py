@@ -38,6 +38,12 @@ HEADLINE_LIMIT = 200
 INTRO_LIMIT = 1200
 
 _PREFIX = re.compile(r"^(\w+)(\(([^)]*)\))?!?:\s*")
+# Words that mean the model leaked workshop talk into player notes; such bullets are dropped.
+_TECHNICAL = re.compile(r"\b(navmesh|nav mesh|navigation mesh|collision|gizmo|submodule|editor|commit|hotfix|refactor|"
+	r"cmake|json|proto|packet|thread|cache|api|database|sql|server|docker|pipeline|workflow|nightly|"
+	r"launcher\.json|script|shader|hpak|asset|import(?:ed|s)?|night watch|record keepers?|apprentice)\b"
+	r"|--\w|\b[0-9a-f]{8,}\b|\.(?:cpp|h|lua|proto|hmat|hpar|json|py)\b", re.IGNORECASE)
+_HIDDEN_SECTIONS = {"behind the scenes", "behind the scene", "development", "technical"}
 _SECTION_TITLE = re.compile(r"[A-Z][A-Za-z0-9 ,&':/-]{1,47}")
 _INTERNAL_TYPES = {"ci", "test", "tests", "build", "chore", "docs", "style", "refactor"}
 _INTERNAL_SCOPES = {"gate", "ci", "deployer", "docker", "e2e", "tests", "test", "release", "nightly", "tools", "skills", "worldkit", "bots", "version", "bug-loop", "bugloop", "bugs"}
@@ -59,57 +65,74 @@ _AREAS = (
 	("data/scripts/", "Server scripts"),
 )
 
-# The approved voice: the hand-written notes of 2026-10-07. Shown to the model as a sample of
-# tone, never as content.
-STYLE_SAMPLE = """Title: The Night Watch
-Headline: A test update to make sure the realm's new night shift is awake. Few changes you will notice, many you hopefully never will.
+# Shown to the model as a sample of tone and structure, never as content. Every name in it is made up.
+STYLE_SAMPLE = """Title: The Hollow Bell
+Headline: A new dungeon opens beneath the old chapel, wolves learn to cooperate, and the Warrior finally gets a proper reason to be angry.
 
-Adventurers, today's update was a test run. Somewhere behind the walls of the realm, a brand new night watch has taken up its post: it gathers each day's work, checks it twice and delivers it to the realm while most of you are asleep. This update was mostly about making sure the watchman knows where the doors are.
+Adventurers, the bell beneath Emberfall Chapel has been ringing for three nights. Nobody has volunteered to find out why. Yet.
 
-If you noticed a brief maintenance today, that was him practising.
+## Dungeons
+- The Hollow Bell is now open to adventurers of level 12 to 15. Three bosses, one very unhappy choir and a staircase that is longer than it looks.
+- The first boss no longer reaches through walls to hit you. We understand it was unpopular. It was also unfair.
 
-## General
-- When the realm needs to restart for an update, a 15-minute countdown warns everyone in game first. Finish your fight, sell your grey items, find an inn.
-- Character data is backed up and the backup is now actually checked every night. A backup nobody has ever opened is just a hopeful box.
+## Classes: Warrior
+- Rend now deals 15% more damage. Bleeding is back in fashion.
+- Charge no longer sends you spinning in circles when the target is standing on a slope.
 
-## Spell Effects
-- The package containing spell and particle effects is now included with the game download. Fireballs that arrive without their fire were deemed "underwhelming" by the Mage community.
+## Classes: Mage
+- Frost Nova now lasts 6 seconds, up from 4. Wolves report feeling "unusually cold".
+- Fireball's casting time increased from 2.5 to 3 seconds. This one is not a mistake, only a lesson.
 
-## Realm Stability
-- The realm now confirms the world itself is actually running before declaring an update a success. "The gates are open" no longer counts if there is nothing behind them.
-- Old update archives are cleaned up regularly. The storage cellar had begun to resemble a dragon's hoard, minus the gold.
+## Creatures and NPCs
+- Wolves in Greywood Hollow now howl for help when attacked. Expect company. Possibly a lot of it.
+- Old Marta the innkeeper has been given a new apron. She says it changes nothing.
+
+## Items
+- Ashen Cloak of the Watch now grants +4 Spirit instead of +2 Stamina.
+- Wolfhide Gloves can now be sold to vendors. Previously they could only be admired.
+
+## Quests
+- "The Missing Lantern" can be completed again if you abandoned it. The lantern was never really missing.
+- Fixed an issue where "A Wolf at the Door" did not credit the final kill if the wolf died to a damage-over-time effect.
+
+## User Interface
+- Action bar buttons now visibly sink when you press them. Your keyboard was always doing something.
 
 ## Bug Fixes
-- Test adventurers who were knocked off the realm can now find their way back in, instead of standing confused outside the gates.
+- Fixed an issue where talking to a vendor while mounted could leave your character floating politely in mid-air."""
 
-## Behind the Scenes
-- New rule for the realm's record keepers: changes to the archives may only ever add, never tear pages out. This keeps your characters safe even if an update has to be rolled back."""
-
-INSTRUCTIONS = """You are the chronicler of "Alestia Online", a fantasy MMORPG, and write the notes for tonight's update. They appear in the game launcher and are read by players.
+INSTRUCTIONS = """You write the patch notes of "Alestia Online", a fantasy MMORPG, in the spirit of the classic Blizzard patch notes of vanilla World of Warcraft. They appear in the game launcher and are read by PLAYERS. Players want to know what changed in the game: content, mechanics, classes, balance, items, quests, creatures, dungeons, interface. They do not care how it was made.
 
 VOICE
-- Warm, wry, in-world. Speak to "Adventurers". The realm, its Game Masters, record keepers, smiths and night watch are the people who do the work; servers, databases and pipelines are described as what they mean in the world (gates, archives, cellars, messengers, lanterns), never by their technical names.
-- Every bullet first says plainly what changed for the player. About every second or third bullet may add one short, dry joke or in-world aside. Never more than one per bullet, never at the player's expense.
-- Short sentences, British-neutral English, no emojis, no exclamation-mark salesmanship, no "we're excited".
+- Classic patch-note energy: short, concrete, confident, with real numbers where the input has them ("Rend now deals 15%% more damage"). Exciting where something is exciting (a new dungeon, a new class ability, a new zone), matter-of-fact everywhere else.
+- Humour is dry and well placed: a short wry aside in roughly every second or third bullet, the best ones in the lighter sections (creatures, NPCs, items, quests, interface). Never in a bullet about a serious bug, never at the player's expense, never more than one aside per bullet. Big news (a new dungeon, a new boss, a new class ability) gets a line of genuine excitement, like a classic Blizzard announcement. A joke must never suggest something that did not happen.
+- Speak to "Adventurers" in the intro only. British-neutral English, no emojis, no exclamation-mark salesmanship, no marketing talk, no "we're excited".
+
+WHAT PLAYERS CARE ABOUT (this is the whole list)
+- New and changed dungeons, bosses, zones, creatures, NPCs, quests, items, spells, talents, classes, races, professions, vendors, loot, sounds, music, animations, visual effects, the interface and options (graphics, sound, controls), and bug fixes players would have noticed.
+- Name the things: boss names, quest names, item names, spell names, zone names from the input. Say what is different for the player: who is stronger or weaker, what drops where, what is new to do.
+
+WHAT PLAYERS NEVER SEE (leave it out completely, do not translate it into metaphors)
+- Editor and tooling changes, level-building and authoring work (rooms, portals, collision, navigation meshes, imported art kits, terrain copy/paste tools), build, test, deployment, backup and server operations, the bug-reporting helpers, the launcher's internals, data migrations, anything about "the night watch", "record keepers" or other stand-ins for infrastructure. No "Behind the Scenes" section. If a change has no effect a player could notice, it does not appear. If the dungeon's rooms were only rebuilt, say at most that the dungeon is now more complete, and only if the input shows it is playable.
+- Never mention commit hashes, file names, ids, command-line flags, code identifiers, or programming and tooling terms (thread, packet, cache, API, CI, tests, refactor, branch, merge, Docker, database, server, editor, navmesh, collision shape, gizmo, submodule, import, script). Spell and item ids in the input are for your understanding only; never print them.
 
 TRUTH
-- Only describe what the input supports. Do not invent features, numbers, names, zones, classes or lore. Jokes must not suggest something that did not happen.
-- Prefer concrete names from the game data changes (quests, items, spells, creatures, zones).
-- Never mention commit hashes, file names, code identifiers, programming terms (thread, packet, cache, API, CI, tests, refactor, branch, merge, webhook, Docker, database, server), AI models or tools.
+- Only describe what the input supports. Do not invent features, numbers, names, zones, classes or lore. If the input does not give a number, give no number.
+- When a fix is described from the developer's side, rewrite it from the player's side: what used to go wrong, what happens now.
+- Merge related changes into one bullet. Twenty commits about one dungeon become a few bullets about what players will experience in it.
+- If very little player-facing change is in the input, write a short, honest update. Never pad it. Never invent content to fill sections.
 
 STRUCTURE
-- "title": a short evocative name for this update, 2 to 5 words, drawn from its biggest theme (for example "The Night Watch", "Of Wolves and Allies").
-- "headline": one or two sentences, at most 160 characters, the most noticeable change, in voice.
-- "intro": one or two short paragraphs (at most 600 characters together) that set the scene for this update. Separate paragraphs with a blank line.
-- "sections": player-facing sections first, using titles such as General, Classes: <Class>, Combat, Creatures and NPCs, Quests, Items, World, Dungeons, User Interface, Spell Effects, Audio and Visuals, Launcher, Realm Stability. Then "Bug Fixes" (each bullet "Fixed an issue where ..." or "<Thing> now ..."), then "Behind the Scenes" last.
-- Merge related commits into one bullet. Many commits about the same machinery become one or two bullets, not twenty.
-- Work the players never see (tooling, testing, deployment, the bug-reporting helpers) goes into "Behind the Scenes" as at most four bullets, translated into in-world terms. Leave it out entirely if it is trivial.
-- At most %d bullets per section, at most %d sections, at most 4500 characters in total.
+- "title": a short evocative name for this update, 2 to 5 words, from its biggest theme.
+- "headline": one or two sentences, at most 160 characters, the most exciting change, in voice.
+- "intro": one or two short paragraphs, at most 500 characters in total, scene-setting and teasing the biggest change. Separate paragraphs with a blank line. May be empty for a tiny update.
+- "sections": use the headings of classic patch notes where they fit: Dungeons, World, Classes: <Class>, Combat, Creatures and NPCs, Quests, Items, Spells and Talents, User Interface, Audio and Visuals, Bug Fixes. Biggest news first, "Bug Fixes" last. Bullets in "Bug Fixes" begin "Fixed an issue where ..." or "<Thing> now ...".
+- At most %d bullets per section, at most %d sections, at most 3500 characters in total.
 
 Answer with one JSON object and nothing else:
 {"title": "...", "headline": "...", "intro": "...", "sections": [{"title": "...", "bullets": ["...", "..."]}]}
 
-STYLE SAMPLE (an earlier update; copy its tone, never its jokes or content):
+STYLE SAMPLE (every name and number is made up; copy its tone and structure, never its content or jokes):
 %s
 """ % (MAX_BULLETS, MAX_SECTIONS, STYLE_SAMPLE)
 
@@ -202,9 +225,8 @@ def _fit(head, title, commits, with_bodies, budget):
 
 def build_context(commits, data, budget=CONTEXT_BUDGET):
 	"""The model input, condensed to `budget` characters: data changes, player-facing commits,
-	then the internal ones (subjects only, for "Behind the Scenes")."""
+	(tooling, testing and deployment commits are left out: players never see them)."""
 	player = [c for c in commits if not is_internal(c)]
-	internal = [c for c in commits if is_internal(c)]
 	parts = []
 	catalogs = data.get("catalogs") or {}
 	if catalogs:
@@ -228,19 +250,43 @@ def build_context(commits, data, budget=CONTEXT_BUDGET):
 	order = {"feat": 0, "fix": 1}
 	ranked = sorted(player, key=lambda c: order.get(commit_kind(c["subject"])[0], 2))
 	head = (head + "\n\n" + _fit(head, "Player-facing changes", ranked, True, budget)).strip()
-	if internal:
-		head += "\n\n" + _fit(head, "Behind the scenes (tooling, testing, deployment; players never see these)", internal, False, budget)
 	return head[:budget]
+
+
+def find_claude():
+	"""The claude executable: on PATH, else in the usual npm and installer locations."""
+	found = shutil.which("claude")
+	if found:
+		return found
+	candidates = [os.path.expanduser("~/.local/bin"), os.path.expanduser("~/.claude/local"), "/usr/local/bin", "/usr/bin"]
+	for command in (["npm", "prefix", "-g"],):
+		try:
+			prefix = subprocess.run(command, capture_output=True, text=True, timeout=30).stdout.strip()
+		except (OSError, subprocess.SubprocessError):
+			prefix = ""
+		if prefix:
+			candidates += [os.path.join(prefix, "bin"), prefix]
+	return shutil.which("claude", path=os.pathsep.join(candidates))
 
 
 def _claude_command(model):
 	"""argv for a one-shot, tool-less `claude -p` run with our instructions as the system prompt."""
-	executable = shutil.which("claude")
+	executable = find_claude()
 	if not executable:
-		raise OSError("claude CLI not found on PATH")
+		raise OSError("claude CLI not found on PATH or in the npm prefix")
 	return [executable, "-p", "--model", model, "--output-format", "json", "--tools", "",
 		"--strict-mcp-config", "--setting-sources", "", "--no-session-persistence",
 		"--system-prompt", INSTRUCTIONS]
+
+
+def _claude_env():
+	"""The environment for claude, with the OAuth token trimmed: a secret pasted with a trailing
+	newline or quotes is rejected as a login, with no hint why."""
+	env = dict(os.environ)
+	token = env.get("CLAUDE_CODE_OAUTH_TOKEN")
+	if token is not None:
+		env["CLAUDE_CODE_OAUTH_TOKEN"] = token.strip().strip("\"'").strip()
+	return env
 
 
 def call_claude(context, model=DEFAULT_MODEL, run=subprocess.run):
@@ -248,13 +294,28 @@ def call_claude(context, model=DEFAULT_MODEL, run=subprocess.run):
 	# A neutral working directory keeps any CLAUDE.md out of the prompt.
 	with tempfile.TemporaryDirectory() as cwd:
 		result = run(_claude_command(model), input=context, capture_output=True, text=True,
-			encoding="utf-8", errors="replace", timeout=TIMEOUT_S, cwd=cwd)
+			encoding="utf-8", errors="replace", timeout=TIMEOUT_S, cwd=cwd, env=_claude_env())
 	if result.returncode != 0:
-		raise OSError("claude exited with {}: {}".format(result.returncode, (result.stderr or result.stdout or "").strip()[:300]))
+		raise OSError("claude exited with {}: {}".format(result.returncode, failure_reason(result)))
 	envelope = json.loads(result.stdout)
 	if envelope.get("is_error"):
 		raise ValueError("claude reported an error: {}".format(str(envelope.get("result"))[:300]))
 	return parse_answer(envelope["result"])
+
+
+def failure_reason(result):
+	"""Why a claude run failed. With --output-format json the cause is in the envelope's
+	`result`, far behind the usage block, so a plain prefix of stdout never shows it."""
+	stdout = (result.stdout or "").strip()
+	try:
+		envelope = json.loads(stdout)
+	except ValueError:
+		envelope = None
+	if isinstance(envelope, dict):
+		parts = [str(envelope.get(key)) for key in ("subtype", "api_error_status", "result") if envelope.get(key) not in (None, "")]
+		if parts:
+			return " | ".join(parts)[:500]
+	return ((result.stderr or "").strip() or stdout)[:500]
 
 
 def parse_answer(text):
@@ -282,7 +343,10 @@ def validate_notes(raw):
 		if not isinstance(section, dict):
 			continue
 		title = _one_line(section.get("title", ""), 48)
-		bullets = [_one_line(b, BULLET_LIMIT) for b in section.get("bullets") or [] if str(b).strip()]
+		bullets = [_one_line(b, BULLET_LIMIT) for b in section.get("bullets") or []
+			if str(b).strip() and not _TECHNICAL.search(str(b))]
+		if title.lower() in _HIDDEN_SECTIONS:
+			continue
 		if _SECTION_TITLE.fullmatch(title) and bullets:
 			sections.append({"title": title, "bullets": bullets[:MAX_BULLETS]})
 	if not sections:
@@ -297,17 +361,11 @@ def validate_notes(raw):
 
 
 def fallback_notes(commits):
-	"""Notes from the cleaned subjects of the player-facing commits."""
-	player = [c for c in commits if not is_internal(c)]
-	general = [clean_subject(c["subject"]) for c in player if commit_kind(c["subject"])[0] != "fix"]
-	fixes = [clean_subject(c["subject"]) for c in player if commit_kind(c["subject"])[0] == "fix"]
-	sections = [{"title": t, "bullets": b[:MAX_BULLETS]} for t, b in (("General", general), ("Bug Fixes", fixes)) if b]
-	if not sections:
-		return {"title": "", "headline": "Maintenance and stability improvements.", "intro": "",
-			"sections": [{"title": "General", "bullets": ["Behind-the-scenes maintenance and stability improvements."]}]}
-	count = len(player)
-	headline = clean_subject(player[0]["subject"]) if count == 1 else "{} improvements and fixes.".format(count)
-	return {"title": "", "headline": headline, "intro": "", "sections": sections}
+	"""Notes for when the model is unavailable. Commit subjects are written for developers and
+	must never reach players, so these only say that an update happened."""
+	return {"title": "", "headline": "Assorted fixes and improvements.", "intro": "",
+		"sections": [{"title": "General", "bullets": ["Assorted fixes and improvements to the game world and the game client."]}]}
+
 
 
 def render_markdown(notes):
@@ -328,7 +386,8 @@ def generate(repo, previous, commit, use_model=True, model=DEFAULT_MODEL, data=N
 			notes = validate_notes(call_claude(build_context(commits, data), model, run))
 			return dict(notes, source="ai", model=model)
 		except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
-			log("patch notes: model call failed, using commit subjects: {}: {}".format(type(error).__name__, error))
+			# A GitHub annotation, so a silent fallback shows up on the run summary.
+			log("::warning::patch notes: model call failed, using commit subjects: {}: {}".format(type(error).__name__, error))
 	else:
 		log("patch notes: model disabled, using commit subjects")
 	return dict(fallback_notes(commits), source="fallback", model=None)

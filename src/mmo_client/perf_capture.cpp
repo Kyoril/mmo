@@ -162,6 +162,7 @@ namespace mmo
 		PerfCaptureWorldHooks s_hooks;
 		BenchmarkState s_benchmark;
 		scoped_connection s_idleConnection;
+		ConsoleVar* s_hitchVar = nullptr;
 
 		/// A console command waiting for the world (see ConsoleCommand_InWorld).
 		struct PendingWorldCommand
@@ -599,7 +600,21 @@ namespace mmo
 					s_hooks.rotateCamera(s_benchmark.orbitDegrees / static_cast<float>(s_benchmark.segmentCount));
 				}
 
-				ApplyAssignments(variant.assignments);
+				// Every variant starts from the values before the comparison: a cvar that only another
+				// variant sets would otherwise leak into this one and blur both measurements.
+				std::vector<std::pair<std::string, std::string>> assignments;
+				for (const auto& [name, value] : s_benchmark.restoreValues)
+				{
+					const bool setByVariant = std::any_of(variant.assignments.begin(), variant.assignments.end(), [&name](const auto& entry) { return entry.first == name; });
+					const ConsoleVar* var = ConsoleVarMgr::FindConsoleVar(name);
+					if (!setByVariant && var && var->GetStringValue() != value)
+					{
+						assignments.emplace_back(name, value);
+					}
+				}
+
+				assignments.insert(assignments.end(), variant.assignments.begin(), variant.assignments.end());
+				ApplyAssignments(assignments);
 				s_benchmark.stepStart = timestamp;
 				s_benchmark.stepApplied = true;
 				return;
@@ -680,8 +695,43 @@ namespace mmo
 			s_pendingWorldCommands.push_back(std::move(pending));
 		}
 
+		/// Logs the costliest profiler scopes of the last frame if its CPU time exceeded perfHitchMs.
+		void LogHitch()
+		{
+			if (!s_hitchVar || s_hitchVar->GetFloatValue() <= 0.0f)
+			{
+				return;
+			}
+
+			const Profiler& profiler = Profiler::GetInstance();
+			if (!profiler.IsEnabled() || profiler.GetCpuFrameTimeMs() < s_hitchVar->GetFloatValue())
+			{
+				return;
+			}
+
+			std::ostringstream strm;
+			strm << std::fixed << std::setprecision(1) << "Hitch: cpu " << profiler.GetCpuFrameTimeMs() << " ms, frame " << profiler.GetFrameTimeMs() << " ms:";
+
+			// Metrics are sorted by cost; scopes nest, so the list reads as inclusive times.
+			size_t logged = 0;
+			for (const PerformanceMetric& metric : profiler.GetMetrics())
+			{
+				if (metric.totalTimeMs < 0.5 || logged >= 14)
+				{
+					break;
+				}
+
+				strm << " [" << metric.name << " " << metric.totalTimeMs << " ms x" << metric.callCount << "]";
+				++logged;
+			}
+
+			WLOG(strm.str());
+		}
+
 		void OnIdle(const float deltaSeconds, const GameTime timestamp)
 		{
+			LogHitch();
+
 			if (!s_pendingWorldCommands.empty())
 			{
 				RunPendingWorldCommands(timestamp);
@@ -843,12 +893,16 @@ namespace mmo
 		Console::RegisterCommand("inworld", ConsoleCommand_InWorld, ConsoleCommandCategory::Debug,
 			"Runs a console command once the world is loaded. Usage: inworld [delaySeconds] <command>");
 
+		s_hitchVar = ConsoleVarMgr::RegisterConsoleVar("perfHitchMs", "Logs the costliest profiler scopes of every frame whose CPU time exceeds this many milliseconds (needs perf 1). 0 disables.", "0");
+
 		s_idleConnection = EventLoop::Idle.connect(&OnIdle);
 	}
 
 	void PerfCapture::Destroy()
 	{
 		s_idleConnection.disconnect();
+		ConsoleVarMgr::UnregisterConsoleVar("perfHitchMs");
+		s_hitchVar = nullptr;
 		s_benchmark = BenchmarkState{};
 
 		s_pendingWorldCommands.clear();

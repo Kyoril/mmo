@@ -856,6 +856,15 @@ namespace mmo
 		});
 	}
 
+	void RealmConnector::ResetInstances()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::ResetInstances);
+			packet.Finish();
+		});
+	}
+
 	void RealmConnector::AutoEquipItem(uint8 srcBag, uint8 srcSlot)
 	{
 		sendSinglePacket([srcBag, srcSlot](game::OutgoingPacket& packet) {

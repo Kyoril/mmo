@@ -72,8 +72,11 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `Me()`, `UnitExists(g)`, `GetHealth(g)`, `GetMaxHealth(g)`, `GetLevel(g)`, `GetPower(g)`,
 `GetMaxPower(g)`, `IsAlive(g)`, `GetName(g)`, `GetPosX/Y/Z(g)`, `GetDistance(a, b)`,
 `HasAura(g, spellId)`, `HasSpell(spellId)`, `GetItemCount(itemId)`, `GetMoney()`,
+`GetTradeSkill(skillId)` / `GetTradeSkillMax(skillId)` (own profession skill value / cap, `-1`
+when the skill is not known),
 `GetXp()`, `GetNextLevelXp()` (own character only),
-`LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`),
+`LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`; crafting
+failures report the numeric reason, e.g. `failed:21` = skill too low, `failed:22` = inventory full),
 `LastSwingError()` (`"none" | "out_of_range" | "wrong_facing" | "target_dead" | ...`),
 `SwingErrorCount()`, `SwingRecoveryCount()` (swing outcomes are reported by the server as
 *transitions*, so these count changes, not swings: an attack that stays out of range reports
@@ -85,8 +88,15 @@ several objects of one entry, e.g. the Hollow Choir's seals),
 `GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open),
 `GetUnitFlags(g)` (the unit's replicated Flags field),
 `MeleeSwingCount(g)` (auto-attack swings the server resolved against `g`, hit or miss),
+`OffhandSwingCount(g)` (the off-hand swings among them, flagged `LeftSwing` by the server),
 `IsAutoAttacking()` (own character; set by the broadcast `AttackStart`/`AttackStop`
 packets rather than by the requests we send, so it reports what the server acknowledged),
+`SpellGoCount(g, spellId)` (casts of `spellId` by `g` that went off, counted from SpellGo),
+`SoundSource(soundId)` (guid of the unit a `PlaySoundById` came from, `"0x0"` for a sound without a
+unit, `""` if not heard since `ClearHeardSounds()` or the session started; trigger voice lines
+come from their speaker),
+`SoundCount(soundId)` (how many `PlaySoundById` packets for `soundId` arrived since
+`ClearHeardSounds()` — counts repetitions such as the strikes of the hourly town bells),
 `IsChanneling(g)` (the server sent `g` a ChannelStart and no ChannelUpdate(0) since — what a
 real client believes), `ChannelStartCount(g)` (ChannelStart packets received for `g`),
 `IsSpellOnCooldown(spellId)` (own character, as the server's cooldown packets left it; the global
@@ -104,6 +114,8 @@ the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 true: the realm disconnects a client that accepts with no invitation pending), `LeaveParty()`,
 `IsInParty()`, `GetPartyMemberCount()`, `EquipFromBackpack()` (asks the server to equip every
 backpack item; empty slots and unwearable items are rejected harmlessly),
+`EquipBackpackItemTo(packIndex, equipSlot)` (moves backpack slot `packIndex`, 0-based, into an
+equipment slot, e.g. 16 = off hand, which auto-equip never picks for a one-handed weapon),
 `LootUnit(g)` (opens the loot window on a corpse or world object; the character must
 be within loot range), `ReleaseLoot(g)` (closes it),
 `DoEmote(emoteId)` (emote 4 = Sit, a pose emote that toggles: performing it again

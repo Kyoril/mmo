@@ -9,6 +9,7 @@
 #include "terrain/constants.h"
 #include "page_coverage.h"
 
+#include <functional>
 #include <memory>
 #include <vector>
 #include <mutex>
@@ -18,6 +19,9 @@
 
 namespace mmo
 {
+    class AABBTree;
+    struct PropKit;
+
 #pragma pack(push, 1)
     struct PageChunkLocation
     {
@@ -50,6 +54,9 @@ namespace mmo
         std::vector<uint32> m_mapEntityInstances;
         std::vector<uint64> m_worldModelInstances;
 
+        /// @brief Ids (world model placement ids) of the prop kit instances overlapping this chunk.
+        std::vector<uint64> m_propKitInstances;
+
         uint32 m_areaId = 0;
         uint32 m_zoneId = 0;
 
@@ -59,14 +66,35 @@ namespace mmo
 
     struct MapEntity
     {
-        uint32 RootId;
+        uint32 RootId = 0;
         std::vector<Vector3> Vertices;
         std::vector<int32> Indices;
         String Filename;
         AABB Bounds;
 
         MapEntity(const std::string& path);
+
+        /// @brief Creates an entity from triangles that were already assembled, such as the props of the
+        ///        prop kits applied to one world model placement.
+        /// @param name Name used for logging.
+        /// @param vertices Collision vertices.
+        /// @param indices Collision indices, three per triangle.
+        MapEntity(String name, std::vector<Vector3> vertices, std::vector<int32> indices);
     };
+
+    /// @brief Appends the collision triangles of every prop of a prop kit.
+    /// @details Invisible props and props whose mesh has no (or an empty) collision tree add nothing. Each
+    ///          vertex is transformed by placementTransform * propTransform, where the prop transform is
+    ///          built from the prop's position, rotation and scale. Indices are offset past the vertices
+    ///          already in the output.
+    /// @param kit The prop kit.
+    /// @param placementTransform Transform of the world model placement the kit is applied to.
+    /// @param collisionOf Returns the collision tree of a mesh path, or nullptr when it has none.
+    /// @param vertices Output vertices, appended to.
+    /// @param indices Output indices, appended to.
+    void AppendPropKitTriangles(const PropKit& kit, const Matrix4& placementTransform,
+        const std::function<const AABBTree*(const String& meshPath)>& collisionOf,
+        std::vector<Vector3>& vertices, std::vector<int32>& indices);
 
 
     class MapEntityInstance
@@ -104,8 +132,18 @@ namespace mmo
         std::vector<int32> Indices;
 
         /// @brief Constructs a WorldModelEntity from a .hwmo file path.
+        /// @details Child world model references are folded in recursively, so a town that places
+        ///          building world models yields the collision of every building.
         /// @param path Path to the world model file.
         explicit WorldModelEntity(const std::string& path);
+
+    private:
+        /// @brief Appends the collision of one world model and its child world models.
+        /// @param path Path to the world model file.
+        /// @param transform Transform from that world model's space into this entity's space.
+        /// @param ancestors Paths above this world model in the nesting chain.
+        /// @return False when the file could not be loaded at all.
+        bool AppendWorldModel(const std::string& path, const Matrix4& transform, std::vector<std::string>& ancestors);
     };
 
     /// @brief Represents a placed instance of a world model entity in the world.
@@ -224,6 +262,23 @@ namespace mmo
         /// @param out_instanceIds Output vector of instance IDs.
         void GetWorldModelEntityInstancesInArea(const AABB& bounds, std::vector<uint64>& out_instanceIds) const;
 
+        /// @brief Inserts the prop kit collision of a world model placement.
+        /// @details Kept apart from the map entity instances: those are keyed by 32 bit ids shared with
+        ///          mesh placements and foliage, so a placement id could collide there.
+        /// @param placementId Unique id of the world model placement the kits are applied to.
+        /// @param instance The instance holding the kit props' triangles.
+        void InsertPropKitInstance(uint64 placementId, std::unique_ptr<MapEntityInstance> instance);
+
+        /// @brief Gets the prop kit collision of a world model placement.
+        /// @param placementId Unique id of the world model placement.
+        /// @return Pointer to the instance, or nullptr if the placement has no kit collision.
+        const MapEntityInstance* GetPropKitInstance(uint64 placementId) const;
+
+        /// @brief Gets the placement ids of prop kit instances that intersect with the given bounds.
+        /// @param bounds The bounds to check.
+        /// @param out_placementIds Output vector of placement ids.
+        void GetPropKitInstancesInArea(const AABB& bounds, std::vector<uint64>& out_placementIds) const;
+
 		bool HasTerrain() const { return m_hasTerrain; }
 
 		void Serialize(io::Writer& writer) const;
@@ -238,6 +293,17 @@ namespace mmo
         bool ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
         bool ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+        /// @brief Prop kit files and kit prop meshes loaded so far while reading the placements.
+        struct PropKitLoadCache;
+
+        /// @brief Loads the prop kits applied to a world model placement and inserts their props' collision
+        ///        as the prop kit instance of that placement. Kits that cannot be loaded are skipped.
+        /// @param placementId Unique id of the world model placement.
+        /// @param kitPaths Paths of the prop kits (.hkit) applied to the placement.
+        /// @param placementTransform Transform of the placement.
+        /// @param cache Kits and meshes already loaded.
+        void LoadPropKitInstance(uint64 placementId, const std::vector<String>& kitPaths, const Matrix4& placementTransform, PropKitLoadCache& cache);
 
     private:
         uint32 m_version = 0;
@@ -268,6 +334,10 @@ namespace mmo
         mutable std::mutex m_worldModelMutex;
         std::vector<std::unique_ptr<const WorldModelEntity>> m_loadedWorldModelEntities;
         std::map<uint64, std::unique_ptr<const WorldModelEntityInstance>> m_loadedWorldModelEntityInstances;
+
+        mutable std::mutex m_propKitMutex;
+        std::vector<std::unique_ptr<const MapEntity>> m_loadedPropKitEntities;
+        std::map<uint64, std::unique_ptr<const MapEntityInstance>> m_loadedPropKitInstances;
 
         friend TerrainPage::TerrainPage(const Map*, int, int);
 

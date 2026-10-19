@@ -49,6 +49,7 @@
 #include "editor_windows/model_editor_window.h"
 #include "editor_windows/race_editor_window.h"
 #include "editor_windows/proficiency_editor_window.h"
+#include "editor_windows/skill_editor_window.h"
 #include "editor_windows/chat_channel_editor_window.h"
 #include "editor_windows/emote_editor_window.h"
 #include "editor_windows/item_subclass_editor_window.h"
@@ -87,6 +88,8 @@
 #include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/world_model_editor/world_model_editor_instance.h"
+#include "editors/prop_kit_editor/prop_kit_editor.h"
+#include "prop_kit_job.h"
 #include "editors/mesh_editor/mesh_editor_instance.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
@@ -256,6 +259,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::UnitClassEditorWindow>("Unit Class Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RaceEditorWindow>("Race Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ProficiencyEditorWindow>("Proficiency Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::SkillEditorWindow>("Skill Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ChatChannelEditorWindow>("Chat Channel Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::EmoteEditorWindow>("Emote Editor", project, mainWindow, previewProviderManager));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ModelEditorWindow>("Model Data Editor", project, mainWindow));
@@ -314,6 +318,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow, previewProviderManager, project));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow, project));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldModelEditor>(mainWindow, project));
+	mainWindow.AddEditor(std::make_unique<mmo::PropKitEditor>(mainWindow, &previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::ColorCurveEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ParticleSystemEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::GlobalShaderParametersEditor>(mainWindow));
@@ -331,6 +336,13 @@ int main(int argc, char* arg[])
 	// collision with a ramp, saves them and exits.
 	// `--rebake-collision <asset.hmsh> [--rebake-collision ...]` rebuilds the meshes' collision trees
 	// from their stored collision recipes (editor-only CSRC chunk), saves them and exits.
+	// `--build-collision <asset.hmsh> [--build-collision ...]` does the same, but gives meshes without a
+	// recipe the default one (all render triangles) first, like Collision > Build for a fresh import.
+	// `--set-submesh-material <asset.hmsh> <submesh> <material> [...]` assigns a material to a
+	// submesh (by name, or index), saves the mesh with its collision recipe and exits.
+	// `--apply-prop-kit <job.json>` writes a prop kit asset, assigns kits to world model placements
+	// and/or strips named mesh refs from a world model as the job describes, then exits (see
+	// prop_kit_job.h; log in prop_kit_job.log, exit code 1 on load or write failures).
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
@@ -362,7 +374,7 @@ int main(int argc, char* arg[])
 				break;
 			}
 
-			if (std::string(args[i]) == "--rebake-collision")
+			if (std::string(args[i]) == "--rebake-collision" || std::string(args[i]) == "--build-collision")
 			{
 				static std::ofstream rebakeLog("collision_rebake.log", std::ios::out | std::ios::trunc);
 				static std::mutex rebakeLogMutex;
@@ -386,6 +398,10 @@ int main(int argc, char* arg[])
 					if (std::string(args[j]) == "--rebake-collision")
 					{
 						allRebaked = mmo::RebakeMeshCollisionFile(args[j + 1]) && allRebaked;
+					}
+					else if (std::string(args[j]) == "--build-collision")
+					{
+						allRebaked = mmo::BuildMeshCollisionFile(args[j + 1]) && allRebaked;
 					}
 				}
 
@@ -439,6 +455,61 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--set-submesh-material")
+			{
+				// `--set-submesh-material <asset.hmsh> <submesh name|index> <material> [...]`
+				static std::ofstream materialLog("set_submesh_material.log", std::ios::out | std::ios::trunc);
+				static std::mutex materialLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ materialLogMutex };
+					materialLog << entry.message << std::endl;
+				});
+
+				bool allSaved = true;
+				for (int j = 1; j < argCount; ++j)
+				{
+					if (std::string(args[j]) != "--set-submesh-material")
+					{
+						continue;
+					}
+
+					if (j + 3 >= argCount)
+					{
+						ELOG("--set-submesh-material needs <asset> <submesh> <material>");
+						allSaved = false;
+						break;
+					}
+
+					allSaved = mmo::MeshEditorInstance::SetSubMeshMaterialInFile(args[j + 1], args[j + 2], args[j + 3]) && allSaved;
+					j += 3;
+				}
+
+				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--apply-prop-kit")
+			{
+				static std::ofstream propKitLog("prop_kit_job.log", std::ios::out | std::ios::trunc);
+				static std::mutex propKitLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ propKitLogMutex };
+					propKitLog << entry.message << std::endl;
+				});
+
+				if (i + 1 >= argCount)
+				{
+					ELOG("--apply-prop-kit needs <job.json>");
+					PostQuitMessage(1);
+					break;
+				}
+
+				PostQuitMessage(mmo::ApplyPropKitJob(args[i + 1]) ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--bake-terrain-lod")
 			{
 				// Nobody watches an unattended run: keep its log, and let failed debug assertions
@@ -475,6 +546,59 @@ int main(int argc, char* arg[])
 				else
 				{
 					ELOG("--bake-terrain-lod: failed to open " << args[i + 1]);
+					PostQuitMessage(1);
+				}
+				break;
+			}
+
+			if (std::string(args[i]) == "--bake-minimaps")
+			{
+				// Unattended like --bake-terrain-lod: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("minimap_bake.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("minimap_bake_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				{
+					bool onlyStale = false;
+					mmo::MinimapBaker::Region region;
+					for (int j = 1; j < argCount; ++j)
+					{
+						onlyStale = onlyStale || std::string(args[j]) == "--only-stale";
+
+						// --region minX,minZ,maxX,maxZ (inclusive page coordinates) rebakes just an area.
+						if (std::string(args[j]) == "--region" && j + 1 < argCount)
+						{
+							unsigned minX = 0, minZ = 0, maxX = 0, maxZ = 0;
+							if (std::sscanf(args[j + 1], "%u,%u,%u,%u", &minX, &minZ, &maxX, &maxZ) == 4)
+							{
+								region = mmo::MinimapBaker::Region{ minX, minZ, maxX, maxZ };
+							}
+							else
+							{
+								ELOG("--region expects minX,minZ,maxX,maxZ");
+							}
+						}
+					}
+
+					// Exit code 1 when any page failed, for scripted use.
+					const bool baked = mmo::WorldEditorInstance::GetLastCreated()->GenerateMinimaps(onlyStale, region);
+					PostQuitMessage(baked ? 0 : 1);
+				}
+				else
+				{
+					ELOG("--bake-minimaps: failed to open " << args[i + 1]);
 					PostQuitMessage(1);
 				}
 				break;

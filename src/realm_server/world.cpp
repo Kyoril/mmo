@@ -668,6 +668,16 @@ namespace mmo
 			});
 	}
 
+	void World::RequestInstanceReset(const InstanceId& instanceId) const
+	{
+		GetConnection().sendSinglePacket([instanceId](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::ResetInstance);
+				outPacket << instanceId;
+				outPacket.Finish();
+			});
+	}
+
 	PacketParseResult World::OnPlayerCharacterJoined(auth::IncomingPacket& packet)
 	{
 		uint64 characterGuid = 0;
@@ -884,6 +894,15 @@ namespace mmo
 					WLOG("Failed to persist auras for character " << log_hex_digit(characterGuid));
 				}
 			}, &IDatabase::UpdateCharacterAuras, characterGuid, player.GetDeserializedAuras());
+
+		// Persist profession skill values and caps; the keyed queue preserves order per character.
+		m_database.asyncRequestKeyed(characterGuid, [characterGuid](bool result)
+			{
+				if (!result)
+				{
+					WLOG("Failed to persist trade skills for character " << log_hex_digit(characterGuid));
+				}
+			}, &IDatabase::UpdateCharacterTradeSkills, characterGuid, player.GetTradeSkills().GetAll());
 
 		// Persist cooldowns using realtime: convert each remaining-millisecond snapshot into an
 		// absolute wall-clock end timestamp (seconds) so offline time continues to elapse.

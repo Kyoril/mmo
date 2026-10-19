@@ -5,7 +5,7 @@ Author the Hollow Choir encounter triggers (ids 53-76) and link them to their cr
     py -3 tools/hollow_choir/author_triggers.py            # validate only
     py -3 tools/hollow_choir/author_triggers.py --apply    # write triggers.data and units.data
 
-Run after author_bosses.py, author_spells.py and author_spawns.py. Idempotent: triggers are
+Run after author_bosses.py and author_spells.py. Idempotent: triggers are
 written by id, and each creature's trigger list is replaced by the one defined here.
 
 What the triggers do and what the creature AI does on its own:
@@ -26,6 +26,7 @@ What the triggers do and what the creature AI does on its own:
 """
 
 import argparse
+import importlib
 import shutil
 import sys
 from datetime import datetime
@@ -61,7 +62,8 @@ CLEANUP = {OSWIN: 2001, MERETH: 2002, VEYR: 2003}
 VEYR_FINALE = 2013
 
 SEAL_G1 = "HollowChoir_G1"
-SEALS_G2 = ["HollowChoir_G2_North", "HollowChoir_G2_South", "HollowChoir_G2_Corridor"]
+SEALS_G2 = ["HollowChoir_G2_North", "HollowChoir_G2_South", "HollowChoir_G2_NorthArch",
+            "HollowChoir_G2_SouthArch", "HollowChoir_G2_Corridor"]
 
 
 def act(action, target=None, data=None, texts=None, name=None):
@@ -77,8 +79,19 @@ def act(action, target=None, data=None, texts=None, name=None):
     return entry
 
 
-def yell(text):
-    return act(YELL, OWNER, texts=text)
+# Voice lines for the yells (SoundEntry ids, category Voice, 3D). The audio lives in the enUS locale
+# folder under Voice/Npc/<Boss>/; the cast and the prompts are in tools/sfx_gen/recipes/hollow_choir.py.
+VOICE = {
+    "Oswin_Aggro": 157, "Oswin_LastVigil": 158, "Oswin_Death": 159,
+    "Mereth_Aggro": 160, "Mereth_Voices1": 161, "Mereth_Voices2": 162, "Mereth_Death": 163,
+    "Veyr_MerethFalls": 164, "Veyr_Aggro": 165, "Veyr_ChoirRises": 166, "Veyr_Finale": 167,
+    "Veyr_Death": 168,
+}
+
+
+def yell(text, voice=None, target=OWNER, name=None):
+    """A yell; data[0] of a Yell action is the SoundEntry the clients play from the speaker."""
+    return act(YELL, target, data=[VOICE[voice]] if voice else None, texts=text, name=name)
 
 
 def broadcast(text):
@@ -125,19 +138,19 @@ TRIGGERS = {
     # --- Brother Oswin -------------------------------------------------------------------------
     OSWIN: [
         trigger(53, "Oswin - On Aggro", [ev(ON_AGGRO)],
-                [yell("Who disturbs the vigil? The dead are resting. You will rest with them.")]
+                [yell("Who disturbs the vigil? The dead are resting. You will rest with them.", "Oswin_Aggro")]
                 + fight_start(OSWIN)),
         trigger(54, "Oswin - Guttering Candle", [ev(ON_TIMER, 14000, 16000)],
                 [act(APPLY_AURA, RANDOM_PLAYER, data=[253])],
                 flags=ABORT_ON_DEATH | ONLY_IN_COMBAT),
         trigger(55, "Oswin - Last Vigil (50%)", [ev(ON_HEALTH_BELOW, 50)],
                 [broadcast("Brother Oswin calls the dead from their biers!"),
-                 yell("Rise, brothers. Keep the vigil with me."),
+                 yell("Rise, brothers. Keep the vigil with me.", "Oswin_LastVigil"),
                  act(CANCEL_CAST, OWNER),
                  act(CAST_SPELL, OWNER, data=[252, AT_CASTER])],
                 flags=ABORT_ON_DEATH),
         trigger(56, "Oswin - On Killed", [ev(ON_KILLED)],
-                [yell("The candles... are going out..."),
+                [yell("The candles... are going out...", "Oswin_Death"),
                  act(SET_OBJECT_STATE, NAMED_OBJECT, data=[1], name=SEAL_G1),
                  broadcast("The seal to the nave breaks.")]
                 + fight_end(OSWIN, DONE)),
@@ -147,13 +160,13 @@ TRIGGERS = {
     # --- Sister Mereth -------------------------------------------------------------------------
     MERETH: [
         trigger(61, "Mereth - On Aggro", [ev(ON_AGGRO)],
-                [yell("Hush. Can you not hear them weeping?")] + fight_start(MERETH)),
+                [yell("Hush. Can you not hear them weeping?", "Mereth_Aggro")] + fight_start(MERETH)),
         trigger(62, "Mereth - Silent Place", [ev(ON_TIMER, 15000, 19000)],
                 [act(APPLY_AURA, RANDOM_PLAYER_NOT_VICTIM, data=[258])],
                 flags=ABORT_ON_DEATH | ONLY_IN_COMBAT),
         trigger(63, "Mereth - Mourning Voices (65%)", [ev(ON_HEALTH_BELOW, 65)],
                 [broadcast("Sister Mereth calls the mourning voices!"),
-                 yell("Sing with me, sisters. Sing them down."),
+                 yell("Sing with me, sisters. Sing them down.", "Mereth_Voices1"),
                  act(CANCEL_CAST, OWNER),
                  act(CAST_SPELL, OWNER, data=[256, AT_CASTER]),
                  act(DELAY, data=[2000]),
@@ -161,7 +174,7 @@ TRIGGERS = {
                 flags=ABORT_ON_DEATH),
         trigger(64, "Mereth - Mourning Voices (30%)", [ev(ON_HEALTH_BELOW, 30)],
                 [broadcast("Sister Mereth calls the mourning voices!"),
-                 yell("Louder! Let the whole abbey grieve!"),
+                 yell("Louder! Let the whole abbey grieve!", "Mereth_Voices2"),
                  act(CANCEL_CAST, OWNER),
                  act(CAST_SPELL, OWNER, data=[256, AT_CASTER]),
                  act(DELAY, data=[2000]),
@@ -173,11 +186,11 @@ TRIGGERS = {
                  act(EMOTE, OWNER, texts="falters as the last voice beside her breaks.")],
                 condition=living_equals(MOURNING_CHORISTER, 0)),
         trigger(66, "Mereth - On Killed", [ev(ON_KILLED)],
-                [yell("Silence... at last..."),
+                [yell("Silence... at last...", "Mereth_Death"),
                  *[act(SET_OBJECT_STATE, NAMED_OBJECT, data=[1], name=seal) for seal in SEALS_G2],
                  broadcast("The Mourning Voice falls silent. The way to the apse lies open."),
-                 act(YELL, NAMED_CREATURE, name="HollowChoir_Veyr",
-                     texts="A voice is missing from my choir. Come, then. Take her place.")]
+                 yell("A voice is missing from my choir. Come, then. Take her place.", "Veyr_MerethFalls",
+                      target=NAMED_CREATURE, name="HollowChoir_Veyr")]
                 + fight_end(MERETH, DONE)),
         trigger(67, "Mereth - On Reset", [ev(ON_RESET)],
                 [act(REMOVE_AURA, OWNER, data=[257])] + fight_end(MERETH, NOT_STARTED)),
@@ -186,7 +199,7 @@ TRIGGERS = {
     # --- Cantor Veyr ---------------------------------------------------------------------------
     VEYR: [
         trigger(68, "Veyr - On Aggro", [ev(ON_AGGRO)],
-                [yell("You are late for the service. The hymn has already begun."),
+                [yell("You are late for the service. The hymn has already begun.", "Veyr_Aggro"),
                  act(SET_INSTANCE_VAR, data=[VEYR_FINALE, 0])] + fight_start(VEYR)),
         trigger(69, "Veyr - Dissonance", [ev(ON_TIMER, 12000)],
                 [act(APPLY_AURA, RANDOM_PLAYER, data=[260])],
@@ -197,19 +210,19 @@ TRIGGERS = {
                 flags=ABORT_ON_DEATH | ONLY_IN_COMBAT, condition=var_equals(VEYR_FINALE, 1)),
         trigger(71, "Veyr - The Choir Rises (60%)", [ev(ON_HEALTH_BELOW, 60)],
                 [broadcast("The Hollow Choir rises!"),
-                 yell("Voices! Lift me up!"),
+                 yell("Voices! Lift me up!", "Veyr_ChoirRises"),
                  act(CANCEL_CAST, OWNER),
                  act(CAST_SPELL, OWNER, data=[264, AT_CASTER])],
                 flags=ABORT_ON_DEATH),
         trigger(72, "Veyr - Finale (30%)", [ev(ON_HEALTH_BELOW, 30)],
                 [broadcast("Cantor Veyr begins the final verse!"),
-                 yell("The final verse! All of you, SING!"),
+                 yell("The final verse! All of you, SING!", "Veyr_Finale"),
                  act(SET_INSTANCE_VAR, data=[VEYR_FINALE, 1]),
                  act(CANCEL_CAST, OWNER),
                  act(CAST_SPELL, OWNER, data=[264, AT_CASTER])],
                 flags=ABORT_ON_DEATH),
         trigger(73, "Veyr - On Killed", [ev(ON_KILLED)],
-                [yell("The choir... is... hollow..."),
+                [yell("The choir... is... hollow...", "Veyr_Death"),
                  broadcast("Cantor Veyr is silenced. The Hollow Choir falls quiet.")]
                 + fight_end(VEYR, DONE)),
         trigger(74, "Veyr - On Reset", [ev(ON_RESET)],
@@ -255,6 +268,9 @@ def main():
     spells = mods["spells"].Spells()
     spells.ParseFromString((EDITOR / "spells.data").read_bytes())
     spell_ids = {s.id for s in spells.entry}
+    sounds = importlib.import_module("sounds_pb2").Sounds()  # compiled by load_modules, not in its map
+    sounds.ParseFromString((EDITOR / "sounds.data").read_bytes())
+    sound_ids = {s.id for s in sounds.entry}
     by_id = {t.id: t for t in triggers.entry}
 
     ours = set()
@@ -265,6 +281,8 @@ def main():
             for action in entry.actions:
                 if action.action in (CAST_SPELL, APPLY_AURA, REMOVE_AURA) and action.data[0] not in spell_ids:
                     sys.exit(f"trigger {entry.id}: unknown spell {action.data[0]}")
+                if action.action == YELL and action.data and action.data[0] not in sound_ids:
+                    sys.exit(f"trigger {entry.id}: unknown sound {action.data[0]} (run the voice wiring first)")
             if entry.id in by_id:
                 if not by_id[entry.id].name.startswith(("Oswin", "Mereth", "Veyr", "Hollow Ch", "Candlebearer")):
                     sys.exit(f"trigger id {entry.id} is taken by {by_id[entry.id].name!r}")

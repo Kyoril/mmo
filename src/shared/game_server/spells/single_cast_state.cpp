@@ -8,11 +8,14 @@
 #include "game_server/spells/no_cast_state.h"
 #include "game_server/spells/spell_effects.h"
 #include "game_server/spells/spell_interrupt_rules.h"
+#include "game/id_mask.h"
+#include "game_server/spells/trade_skill_cast_rules.h"
 
 #include "base/utilities.h"
 #include "game_server/world/world_instance.h"
 #include "proto_data/project.h"
 
+#include <algorithm>
 #include <unordered_map>
 
 namespace mmo
@@ -75,7 +78,10 @@ namespace mmo
 			auto& executer = m_cast.GetExecuter();
 			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
 				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
-			m_activationResult = spell_cast_result::FailedError;
+			// Report the reason validation gave, so the caller can react to it: creature AI walks
+			// towards a victim it lost line of sight to only when told so. Validation paths that
+			// end without naming a reason still report a generic error.
+			m_activationResult = (m_endCastFailure != spell_cast_result::CastOkay) ? m_endCastFailure : spell_cast_result::FailedError;
 			m_hasFinished = true;
 			NotifyCastEnded(false);
 			return;
@@ -338,9 +344,13 @@ namespace mmo
 		m_countdown.Cancel();
 		m_hasFinished = true;
 
+		// An interrupt puts the spell on cooldown and locks its whole school. It deliberately does
+		// not use the spell's category cooldown: most spells have category 0, so that locked out
+		// nearly every spell of the target instead of just the interrupted school.
 		if (interruptCooldown)
 		{
-			ApplyCooldown(interruptCooldown, interruptCooldown);
+			m_cast.GetExecuter().SetCooldown(m_spell.id(), interruptCooldown);
+			m_cast.GetExecuter().LockSpellSchool(m_spell.spellschool(), interruptCooldown);
 		}
 
 		// Notify client that the cast was cancelled. SendEndCast sends SpellFailure and
@@ -437,13 +447,13 @@ namespace mmo
 			return true;
 		}
 
-		if (m_spell.racemask() != 0 && !(m_spell.racemask() & (1 << (playerCaster->GetRaceEntry()->id() - 1))))
+		if (m_spell.racemask() != 0 && !(m_spell.racemask() & IdMaskBit(playerCaster->GetRaceEntry()->id())))
 		{
 			SendEndCast(spell_cast_result::FailedError);
 			return false;
 		}
 
-		if (m_spell.classmask() != 0 && !(m_spell.classmask() & (1 << (playerCaster->GetClassEntry()->id() - 1))))
+		if (m_spell.classmask() != 0 && !(m_spell.classmask() & IdMaskBit(playerCaster->GetClassEntry()->id())))
 		{
 			SendEndCast(spell_cast_result::FailedError);
 			return false;
@@ -457,6 +467,18 @@ namespace mmo
 				SendEndCast(spell_cast_result::FailedReagents);
 				return false;
 			}
+		}
+
+		if (const SpellCastResult skillResult = CheckTradeSkillRequirement(m_spell, playerCaster->GetTradeSkills()); skillResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(skillResult);
+			return false;
+		}
+
+		if (const SpellCastResult spaceResult = CheckCreateItemSpace(m_spell, playerCaster->GetProject(), playerCaster->GetInventory()); spaceResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(spaceResult);
+			return false;
 		}
 
 		return true;
@@ -624,6 +646,41 @@ namespace mmo
 				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Range, m_spell.id(), range);
 
 				if (m_cast.GetExecuter().GetSquaredDistanceTo(unitTarget->GetPosition(), true) > range * range)
+				{
+					SendEndCast(spell_cast_result::FailedOutOfRange);
+					return false;
+				}
+			}
+		}
+
+		// World object targets (gather nodes, chests, doors) are not units, so the range check
+		// above never saw them: an Open cast could be started and finished from any distance.
+		// Using the object then runs into the interaction path, which refuses anything beyond
+		// the interaction distance (GameUnitS::GetInteractionDistance) without telling the
+		// client - the five second gather cast completed and quietly did nothing. The castable
+		// range is therefore the spell's range capped by the interaction distance, so the cast
+		// and the interaction that follows it agree on what is within reach. The interaction
+		// distance covers the Open family's range (see LootDistance), so the cap only bites for
+		// spells reaching further than a player may interact at.
+		if (m_target.HasGOTarget())
+		{
+			GameObjectS* objectTarget = m_context.FindObjectByGuid(m_target.GetGOTarget());
+			if (objectTarget && objectTarget->IsWorldObject())
+			{
+				float range = m_cast.GetExecuter().GetInteractionDistance();
+
+				if (m_spell.has_rangetype())
+				{
+					const proto::RangeType* rangeType = m_cast.GetExecuter().GetProject().ranges.getById(m_spell.rangetype());
+					if (rangeType && rangeType->range() > 0.0f)
+					{
+						float spellRange = rangeType->range();
+						m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Range, m_spell.id(), spellRange);
+						range = std::min(range, spellRange);
+					}
+				}
+
+				if (m_cast.GetExecuter().GetSquaredDistanceTo(objectTarget->GetPosition(), true) > range * range)
 				{
 					SendEndCast(spell_cast_result::FailedOutOfRange);
 					return false;
@@ -963,9 +1020,22 @@ namespace mmo
 
 		if (!m_delayedCast)
 		{
+			// Evaluate every effect's gating condition up front, against the state the targets
+			// were in when the spell hit. An earlier effect can change that state - Ice Lance's
+			// first damage effect breaks the Frost Nova root its second effect is conditioned on.
+			std::vector<bool> conditionsMet;
+			conditionsMet.reserve(m_spell.effects_size());
 			for (int index = 0; index < m_spell.effects_size(); ++index)
 			{
-				ApplyEffect(m_spell.effects(index));
+				conditionsMet.push_back(EvaluateEffectCondition(m_spell.effects(index)));
+			}
+
+			for (int index = 0; index < m_spell.effects_size(); ++index)
+			{
+				if (conditionsMet[index])
+				{
+					ApplyEffect(m_spell.effects(index));
+				}
 			}
 			m_delayedCast = true;
 		}
@@ -1067,6 +1137,7 @@ namespace mmo
 			{se::ResetTalents,           SpellEffects::HandleResetTalents},
 			{se::ChangeClass,            SpellEffects::HandleChangeClass},
 			{se::TeachEmote,             SpellEffects::HandleTeachEmote},
+			{se::TradeSkill,             SpellEffects::HandleTradeSkill},
 			{se::Proficiency,            SpellEffects::HandleProficiency},
 			{se::TriggerSpell,           SpellEffects::HandleTriggerSpell},
 		};
@@ -1074,13 +1145,8 @@ namespace mmo
 		const auto it = kHandlers.find(effect.type());
 		if (it == kHandlers.end()) return;
 
-		// Data-driven conditional gating: skip the effect entirely when its
-		// condition (if any) is not satisfied. No targets are resolved and the
-		// handler is never invoked.
-		if (!EvaluateEffectCondition(effect))
-		{
-			return;
-		}
+		// Data-driven conditional gating is evaluated by ApplyAllEffects before the first
+		// effect runs, so effects skipped by their condition never reach this point.
 
 		std::vector<GameObjectS*> targets;
 		GetEffectTargets(effect, targets);
@@ -1199,6 +1265,11 @@ namespace mmo
 	{
 		auto& executer = m_cast.GetExecuter();
 		auto* worldInstance = m_context.GetWorldInstance();
+
+		if (result != spell_cast_result::CastOkay)
+		{
+			m_endCastFailure = result;
+		}
 
 		NotifyCastEnded(result == spell_cast_result::CastOkay);
 
@@ -1333,6 +1404,16 @@ namespace mmo
 			return;
 		}
 
+		// Bags can fill up while a long craft is being cast; end the cast before anything is consumed.
+		if (GamePlayerS* playerCaster = m_context.GetPlayerExecutor())
+		{
+			if (const SpellCastResult spaceResult = CheckCreateItemSpace(m_spell, playerCaster->GetProject(), playerCaster->GetInventory()); spaceResult != spell_cast_result::CastOkay)
+			{
+				SendEndCast(spaceResult);
+				return;
+			}
+		}
+
 		if (!ConsumePower()) 
 		{
 			return;
@@ -1349,6 +1430,15 @@ namespace mmo
 		}
 
 		SendEndCast(spell_cast_result::CastOkay);
+
+		if (GamePlayerS* playerCaster = m_context.GetPlayerExecutor(); playerCaster && m_spell.skill() != 0)
+		{
+			std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+			if (ApplyTradeSkillUp(m_spell, playerCaster->GetTradeSkills(), distribution(randomGenerator)))
+			{
+				playerCaster->tradeSkillChanged(m_spell.skill());
+			}
+		}
 
 		if (m_spell.speed() > 0.0f)
 		{

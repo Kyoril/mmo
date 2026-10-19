@@ -12,6 +12,7 @@
 #include "shared/proto_data/triggers.pb.h"
 #include "shared/proto_data/spell_visualizations.pb.h"
 #include "proto_data/trigger_helper.h"
+#include "game/hour_chime.h"
 #include "player_manager.h"
 #include "player.h"
 
@@ -147,6 +148,7 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(SetFollowTarget)
 				MMO_HANDLE_TRIGGER_ACTION(ClearFollowTarget)
 				MMO_HANDLE_TRIGGER_ACTION(PlaySpellVisual)
+				MMO_HANDLE_TRIGGER_ACTION(PlaySound)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -325,10 +327,10 @@ namespace mmo
 		auto triggeringUnit = context.triggeringUnit.lock();
 		target->AsUnit().ChatSay(GetActionText(action, 0), &action.texts_loc());
 
-		// Eventually play sound file
+		// Optional voice line, heard as far as the chat line is
 		if (action.data_size() > 0)
 		{
-			PlaySoundEntry(action.data(0), target);
+			PlaySoundEntry(action.data(0), target, GameUnitS::SayRange);
 		}
 	}
 
@@ -357,10 +359,10 @@ namespace mmo
 		auto triggeringUnit = context.triggeringUnit.lock();
 		target->AsUnit().ChatYell(GetActionText(action, 0), &action.texts_loc());
 
-		// Eventually play sound file
+		// Optional voice line, heard as far as the chat line is
 		if (action.data_size() > 0)
 		{
-			PlaySoundEntry(action.data(0), target);
+			PlaySoundEntry(action.data(0), target, GameUnitS::YellRange);
 		}
 	}
 
@@ -388,10 +390,10 @@ namespace mmo
 
 		target->AsUnit().ChatEmote(GetActionText(action, 0), &action.texts_loc());
 
-		// Eventually play sound file
+		// Optional sound, heard as far as the emote text is
 		if (action.data_size() > 0)
 		{
-			PlaySoundEntry(action.data(0), target);
+			PlaySoundEntry(action.data(0), target, GameUnitS::EmoteRange);
 		}
 	}
 
@@ -1241,6 +1243,11 @@ namespace mmo
 				++it;
 			}
 		}
+
+		m_soundRepetitions.remove_if([instanceId](const SoundRepetition& repetition)
+			{
+				return repetition.worldInstanceId == instanceId;
+			});
 	}
 
 	WorldInstance* TriggerHandler::GetWorldInstance(GameObjectS* owner) const
@@ -1277,14 +1284,146 @@ namespace mmo
 		return world;
 	}
 
-	bool TriggerHandler::PlaySoundEntry(uint32 sound, GameObjectS* source)
+	void TriggerHandler::HandlePlaySound(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		if (sound)
+		const uint32 soundId = static_cast<uint32>(GetActionData(action, 0));
+		if (soundId == 0 || !m_project.sounds.getById(soundId))
 		{
-			// TODO
+			ELOG("TRIGGER_ACTION_PLAY_SOUND: Unknown sound entry " << soundId);
+			return;
 		}
 
-		return true;
+		WorldInstance* world = GetWorldInstance(context);
+		if (!world)
+		{
+			return;
+		}
+
+		const Vector3 position(
+			static_cast<float>(GetActionData(action, 1)),
+			static_cast<float>(GetActionData(action, 2)),
+			static_cast<float>(GetActionData(action, 3)));
+		const float radius = static_cast<float>(GetActionData(action, 4));
+		if (radius <= 0.0f)
+		{
+			ELOG("TRIGGER_ACTION_PLAY_SOUND: Radius must be greater than zero");
+			return;
+		}
+
+		// Count: 1 by default, -1 strikes the hour of the instance's time of day
+		const int32 countData = action.data_size() > 5 ? GetActionData(action, 5) : 1;
+		uint32 count = 1;
+		if (countData == -1)
+		{
+			count = GetClockStrikeCount(world->GetGameTime().GetTargetTime());
+		}
+		else if (countData > 0)
+		{
+			count = static_cast<uint32>(countData);
+		}
+
+		constexpr int32 DefaultInterval = 3000;
+		const int32 intervalData = action.data_size() > 6 ? GetActionData(action, 6) : DefaultInterval;
+		const GameTime interval = static_cast<GameTime>(intervalData > 0 ? intervalData : DefaultInterval);
+
+		PlaySoundAtPosition(*world, soundId, position, radius);
+		if (count <= 1)
+		{
+			return;
+		}
+
+		// Repetitions that have played out are dropped here rather than from their own timer
+		// callback, which must not destroy the Countdown that is calling it.
+		m_soundRepetitions.remove_if([](const SoundRepetition& repetition)
+			{
+				return repetition.remaining == 0;
+			});
+
+		SoundRepetition& repetition = m_soundRepetitions.emplace_back();
+		repetition.countdown = std::make_unique<Countdown>(m_timers);
+		repetition.worldInstanceId = world->GetId();
+		repetition.world = world;
+		repetition.soundId = soundId;
+		repetition.position = position;
+		repetition.radius = radius;
+		repetition.remaining = count - 1;
+		repetition.interval = interval;
+
+		// std::list keeps the element's address stable, and OnWorldInstanceDestroyed drops the
+		// entry (cancelling the timer) before its world pointer could dangle.
+		SoundRepetition* repetitionPtr = &repetition;
+		repetition.countdown->ended.connect([this, repetitionPtr]()
+			{
+				// Look for listeners anew: whoever entered the radius since the last one hears this one
+				PlaySoundAtPosition(*repetitionPtr->world, repetitionPtr->soundId, repetitionPtr->position, repetitionPtr->radius);
+
+				if (--repetitionPtr->remaining > 0)
+				{
+					repetitionPtr->countdown->SetEnd(GetAsyncTimeMs() + repetitionPtr->interval);
+				}
+			});
+		repetition.countdown->SetEnd(GetAsyncTimeMs() + interval);
+	}
+
+	uint32 TriggerHandler::PlaySoundAtPosition(WorldInstance& world, const uint32 sound, const Vector3& position, const float radius)
+	{
+		const float radiusSquared = radius * radius;
+
+		uint32 listeners = 0;
+		world.ForEachObject([&](GameObjectS& obj)
+			{
+				if (!obj.IsPlayer() || (obj.GetPosition() - position).GetSquaredLength() > radiusSquared)
+				{
+					return true;
+				}
+
+				if (const auto player = m_playerManager.GetPlayerByCharacterGuid(obj.GetGuid()))
+				{
+					player->SendPlaySound(sound, position);
+					++listeners;
+				}
+				return true;
+			});
+
+		return listeners;
+	}
+
+	bool TriggerHandler::PlaySoundEntry(const uint32 sound, GameObjectS* source, const float range)
+	{
+		if (sound == 0 || source == nullptr)
+		{
+			return false;
+		}
+
+		WorldInstance* world = GetWorldInstance(source);
+		if (!world)
+		{
+			return false;
+		}
+
+		const Vector3 position = source->GetPosition();
+		const float rangeSquared = range * range;
+		const uint64 sourceGuid = source->GetGuid();
+
+		// Not GetPlayersInWorld: that skips dead players, and a wiped group should still hear the
+		// boss gloat over them.
+		bool sent = false;
+		world->ForEachObject([&](GameObjectS& obj)
+			{
+				if (!obj.IsPlayer() || (obj.GetPosition() - position).GetSquaredLength() > rangeSquared)
+				{
+					return true;
+				}
+
+				if (const auto player = m_playerManager.GetPlayerByCharacterGuid(obj.GetGuid()))
+				{
+					player->SendPlaySound(sound, sourceGuid, position);
+					sent = true;
+				}
+				return true;
+			});
+
+		return sent;
 	}
 
 	GameObjectS* TriggerHandler::GetActionTarget(const proto::TriggerAction& action, TriggerContext& context)

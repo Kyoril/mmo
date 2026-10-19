@@ -86,6 +86,16 @@ message EnvironmentProfile
 	optional float color_filter_r = 29 [default = 1];
 	optional float color_filter_g = 30 [default = 1];
 	optional float color_filter_b = 31 [default = 1];
+
+	// Distance fog, blended over the height fog: geometry fades linearly into the distance fog
+	// colour between start and end (metres from the camera). Off while end <= start.
+	// rgb colour, a opacity at the end distance. Empty = follow the sky horizon curve.
+	optional ColorCurveData distance_fog = 32;
+	optional float distance_fog_start = 33 [default = 0];
+	optional float distance_fog_end = 34 [default = 0];
+	// How far up the sky the distance fog reaches, as the view ray's Y (0.2 ~ 11.5 degrees above
+	// the horizon). 0 leaves the sky untouched.
+	optional float distance_fog_sky_band = 35 [default = 0.2];
 }
 
 message EnvironmentProfiles

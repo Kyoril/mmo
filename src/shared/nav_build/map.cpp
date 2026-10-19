@@ -15,6 +15,7 @@
 #include "game_common/world_foliage.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/mesh_serializer.h"
+#include "scene_graph/prop_kit_serializer.h"
 #include "scene_graph/world_model.h"
 #include "scene_graph/world_model_serializer.h"
 
@@ -35,6 +36,15 @@ namespace mmo
     {
         return static_cast<uint16>(terrain::constants::OuterVerticesPerTile + (x + y * terrain::constants::InnerVerticesPerTileSide));
     }
+
+    struct Map::PropKitLoadCache
+    {
+        /// Loaded kits by path; null when the kit could not be loaded.
+        std::map<String, std::unique_ptr<PropKit>> kits;
+
+        /// Loaded kit prop meshes by path; null when the mesh could not be loaded.
+        std::map<String, MeshPtr> meshes;
+    };
 
     MapEntity::MapEntity(const std::string& path)
 		: Filename(path)
@@ -73,6 +83,24 @@ namespace mmo
 		Bounds = collisionTree.GetBoundingBox();
     }
 
+    MapEntity::MapEntity(String name, std::vector<Vector3> vertices, std::vector<int32> indices)
+        : Vertices(std::move(vertices))
+        , Indices(std::move(indices))
+        , Filename(std::move(name))
+    {
+        // Start at the first vertex: combining into the default (zero) box would stretch the bounds to the origin
+        if (Vertices.empty())
+        {
+            return;
+        }
+
+        Bounds = AABB(Vertices.front(), Vertices.front());
+        for (const Vector3& vertex : Vertices)
+        {
+            Bounds.Combine(vertex);
+        }
+    }
+
     MapEntityInstance::MapEntityInstance(const MapEntity* entity, AABB bounds, const Matrix4& transformMatrix)
 		: TransformMatrix(transformMatrix)
 		, Bounds(std::move(bounds))
@@ -107,11 +135,42 @@ namespace mmo
     WorldModelEntity::WorldModelEntity(const std::string& path)
         : Filename(path)
     {
+        std::vector<std::string> ancestors;
+        if (!AppendWorldModel(path, Matrix4::Identity, ancestors))
+        {
+            return;
+        }
+
+        // Bounds cover the group boxes and every collision vertex, so the geometry of child world
+        // models and meshes that stick out of their group lie inside the area the tile builder visits
+        for (const auto& v : Vertices)
+        {
+            Bounds.Combine(v);
+        }
+
+        DLOG("Loaded world model " << path << " with " << Vertices.size() << " collision vertices and " << Indices.size() << " indices, bounds: " << Bounds.min << " - " << Bounds.max);
+    }
+
+    bool WorldModelEntity::AppendWorldModel(const std::string& path, const Matrix4& transform, std::vector<std::string>& ancestors)
+    {
+        if (std::find(ancestors.begin(), ancestors.end(), path) != ancestors.end())
+        {
+            WLOG("World model " << path << " references itself through its child world models, skipped");
+            return false;
+        }
+
+        // Matches WorldModelInstance::MaxChildDepth on the client
+        if (ancestors.size() >= 8)
+        {
+            WLOG("World model " << path << " is nested too deep, skipped");
+            return false;
+        }
+
         auto file = AssetRegistry::OpenFile(path);
         if (!file)
         {
             ELOG("Failed to load world model file " << path << ": File does not exist");
-            return;
+            return false;
         }
 
         io::StreamSource source{ *file };
@@ -122,14 +181,22 @@ namespace mmo
         if (!deserializer.Read(reader))
         {
             ELOG("Failed to deserialize world model file " << path);
-            return;
+            return false;
         }
 
         // Recalculate bounds from groups since the deserializer doesn't set the world model bounds
         worldModel.RecalculateBoundingBox();
-        Bounds = worldModel.GetBoundingBox();
-        
-        DLOG("World model " << path << " has " << worldModel.GetGroupCount() << " groups, bounds: " << Bounds.min << " - " << Bounds.max);
+        if (!worldModel.GetBoundingBox().IsNull())
+        {
+            Vector3 corners[8];
+            worldModel.GetBoundingBox().GetCorners(corners);
+            for (const Vector3& corner : corners)
+            {
+                Bounds.Combine(transform * corner);
+            }
+        }
+
+        DLOG("World model " << path << " has " << worldModel.GetGroupCount() << " groups and " << worldModel.GetChildRefs().size() << " child world models");
 
         // Collect collision data from all groups and their mesh references
         for (size_t groupIndex = 0; groupIndex < worldModel.GetGroupCount(); ++groupIndex)
@@ -140,27 +207,22 @@ namespace mmo
                 WLOG("World model " << path << " group " << groupIndex << " is null");
                 continue;
             }
-            
-            const auto& meshRefs = group->GetMeshRefs();
-            DLOG("World model " << path << " group " << groupIndex << " (" << group->GetName() << ") has " << meshRefs.size() << " mesh refs");
 
+            const auto& meshRefs = group->GetMeshRefs();
             for (size_t meshRefIdx = 0; meshRefIdx < meshRefs.size(); ++meshRefIdx)
             {
                 const auto& meshRef = meshRefs[meshRefIdx];
-                
+
                 if (meshRef.meshPath.empty())
                 {
                     WLOG("World model " << path << " group " << groupIndex << " mesh ref " << meshRefIdx << " has empty path");
                     continue;
                 }
-                
+
                 if (!meshRef.visible)
                 {
-                    DLOG("World model " << path << " group " << groupIndex << " mesh ref " << meshRefIdx << " (" << meshRef.meshPath << ") is not visible, skipping");
                     continue;
                 }
-
-                DLOG("Loading mesh for collision: " << meshRef.meshPath);
 
                 // Load the mesh to get collision data
                 auto meshFile = AssetRegistry::OpenFile(meshRef.meshPath);
@@ -183,12 +245,11 @@ namespace mmo
                     WLOG("Mesh " << meshRef.meshPath << " has no collision tree");
                     continue;
                 }
-                
-                DLOG("Mesh " << meshRef.meshPath << " has " << collisionTree.GetVertices().size() << " collision vertices");
 
-                // Build mesh ref transform matrix
+                // Mesh ref transform, composed onto the placement of the world model it belongs to
                 Matrix4 meshTransform;
                 meshTransform.MakeTransform(meshRef.position, meshRef.scale, meshRef.rotation);
+                meshTransform = transform * meshTransform;
 
                 // Get base index for this mesh's vertices
                 const int32 baseIndex = static_cast<int32>(Vertices.size());
@@ -206,19 +267,22 @@ namespace mmo
                 }
             }
         }
-        
-        // If we loaded collision data but bounds were null, compute bounds from vertices
-        if (Bounds.IsNull() && !Vertices.empty())
-        {
-            Bounds.SetNull();
-            for (const auto& v : Vertices)
-            {
-                Bounds.Combine(v);
-            }
-            DLOG("Computed world model bounds from vertices: " << Bounds.min << " - " << Bounds.max);
-        }
 
-        DLOG("Loaded world model " << path << " with " << Vertices.size() << " collision vertices and " << Indices.size() << " indices");
+        ancestors.push_back(path);
+        for (const WorldModelChildRef& childRef : worldModel.GetChildRefs())
+        {
+            if (!childRef.visible || childRef.wmoPath.empty())
+            {
+                continue;
+            }
+
+            Matrix4 childTransform;
+            childTransform.MakeTransform(childRef.position, childRef.scale, childRef.rotation);
+            AppendWorldModel(childRef.wmoPath, transform * childTransform, ancestors);
+        }
+        ancestors.pop_back();
+
+        return true;
     }
 
     WorldModelEntityInstance::WorldModelEntityInstance(
@@ -400,7 +464,8 @@ namespace mmo
                 tileBounds.max.y = FLT_MAX;
                 map->GetMapEntityInstancesInArea(tileBounds, m_chunks[y][x]->m_mapEntityInstances);
                 map->GetWorldModelEntityInstancesInArea(tileBounds, m_chunks[y][x]->m_worldModelInstances);
-                
+                map->GetPropKitInstancesInArea(tileBounds, m_chunks[y][x]->m_propKitInstances);
+
                 if (!m_chunks[y][x]->m_worldModelInstances.empty())
                 {
                     DLOG("Chunk (" << x << ", " << y << ") on page (" << X << ", " << Y << ") has " << m_chunks[y][x]->m_worldModelInstances.size() << " world model instances");
@@ -426,6 +491,22 @@ namespace mmo
                 for (const auto& uniqueId : m_chunks[y][x]->m_worldModelInstances)
                 {
                     const auto* instance = map->GetWorldModelEntityInstance(uniqueId);
+
+                    const float minY = std::min(instance->Bounds.min.y, m_chunks[y][x]->m_minY);
+                    const float maxY = std::max(instance->Bounds.max.y, m_chunks[y][x]->m_maxY);
+
+                    m_chunks[y][x]->m_minY = std::min(m_chunks[y][x]->m_minY, minY);
+                    m_chunks[y][x]->m_maxY = std::max(m_chunks[y][x]->m_maxY, maxY);
+
+                    // Adjust tile bounds
+                    Bounds.min.y = std::min(Bounds.min.y, minY);
+                    Bounds.max.y = std::max(Bounds.max.y, maxY);
+                }
+
+                // Adjust min and max Y values based on prop kit props
+                for (const auto& placementId : m_chunks[y][x]->m_propKitInstances)
+                {
+                    const auto* instance = map->GetPropKitInstance(placementId);
 
                     const float minY = std::min(instance->Bounds.min.y, m_chunks[y][x]->m_minY);
                     const float maxY = std::max(instance->Bounds.max.y, m_chunks[y][x]->m_maxY);
@@ -481,6 +562,10 @@ namespace mmo
         // Load entities
         DLOG("Loading map entities...");
 		const std::vector<std::string> entities = AssetRegistry::ListFiles("Worlds/" + Name + "/" + Name + "/Entities/", "wobj");
+
+        // Prop kits and their meshes are shared by many placements, so each file is loaded once
+        PropKitLoadCache kitCache;
+
         for (const auto& entityFilename : entities)
         {
 			std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(entityFilename);
@@ -513,6 +598,13 @@ namespace mmo
                 {
                     WLOG("Duplicate world model entity id found: " << placement.uniqueId);
                     continue;
+                }
+
+                // Kit props are per placement: the cached world model entity is shared by every placement of
+                // the same file, so the kits get their own instance instead of being baked into it
+                if (!placement.kitPaths.empty())
+                {
+                    LoadPropKitInstance(placement.uniqueId, placement.kitPaths, transform, kitCache);
                 }
 
                 const WorldModelEntity* entity = GetWorldModelEntity(placement.meshName);
@@ -554,7 +646,8 @@ namespace mmo
             }
         }
 
-		DLOG("Loaded " << m_loadedMapEntityInstances.size() << " map entities and " << m_loadedWorldModelEntityInstances.size() << " world model entities!");
+		DLOG("Loaded " << m_loadedMapEntityInstances.size() << " map entities, " << m_loadedWorldModelEntityInstances.size() << " world model entities and "
+            << m_loadedPropKitInstances.size() << " placements with prop kit collision!");
 
         // Load instanced foliage (trees). Each .hfol page file holds many instances which are
         // treated exactly like mesh entities for navmesh generation.
@@ -632,6 +725,11 @@ namespace mmo
                 {
                     geometryBounds.push_back(instance->Bounds);
                 }
+            }
+
+            for (const auto& [placementId, instance] : m_loadedPropKitInstances)
+            {
+                geometryBounds.push_back(instance->Bounds);
             }
 
             const uint32 pageCount = MarkPagesCoveredByBounds(geometryBounds, m_hasPage);
@@ -757,6 +855,125 @@ namespace mmo
             if (bounds.Intersects(instance->Bounds))
             {
                 out_instanceIds.push_back(uniqueId);
+            }
+        }
+    }
+
+    void Map::LoadPropKitInstance(const uint64 placementId, const std::vector<String>& kitPaths, const Matrix4& placementTransform, PropKitLoadCache& cache)
+    {
+        if (GetPropKitInstance(placementId) != nullptr)
+        {
+            WLOG("Duplicate world model entity id found for prop kits: " << placementId);
+            return;
+        }
+
+        const auto collisionOf = [&cache](const String& meshPath) -> const AABBTree*
+        {
+            auto it = cache.meshes.find(meshPath);
+            if (it == cache.meshes.end())
+            {
+                MeshPtr mesh;
+
+                auto meshFile = AssetRegistry::OpenFile(meshPath);
+                if (meshFile)
+                {
+                    io::StreamSource meshSource{ *meshFile };
+                    io::Reader meshReader{ meshSource };
+
+                    mesh = std::make_shared<Mesh>(meshPath);
+                    MeshDeserializer meshDeserializer(*mesh);
+                    meshDeserializer.Read(meshReader);
+                }
+                else
+                {
+                    WLOG("Failed to load prop kit mesh file " << meshPath);
+                }
+
+                it = cache.meshes.emplace(meshPath, std::move(mesh)).first;
+            }
+
+            return it->second ? &it->second->GetCollisionTree() : nullptr;
+        };
+
+        std::vector<Vector3> vertices;
+        std::vector<int32> indices;
+
+        for (const String& kitPath : kitPaths)
+        {
+            auto it = cache.kits.find(kitPath);
+            if (it == cache.kits.end())
+            {
+                std::unique_ptr<PropKit> kit;
+
+                auto kitFile = AssetRegistry::OpenFile(kitPath);
+                if (kitFile)
+                {
+                    io::StreamSource kitSource{ *kitFile };
+                    io::Reader kitReader{ kitSource };
+
+                    kit = std::make_unique<PropKit>();
+                    PropKitDeserializer deserializer(*kit);
+                    if (!deserializer.Read(kitReader))
+                    {
+                        WLOG("Failed to read prop kit file " << kitPath);
+                        kit.reset();
+                    }
+                }
+                else
+                {
+                    WLOG("Failed to load prop kit file " << kitPath << ": File does not exist");
+                }
+
+                it = cache.kits.emplace(kitPath, std::move(kit)).first;
+            }
+
+            if (it->second)
+            {
+                AppendPropKitTriangles(*it->second, placementTransform, collisionOf, vertices, indices);
+            }
+        }
+
+        if (indices.empty())
+        {
+            return;
+        }
+
+        // The triangles are already in world space, so the instance needs no transform of its own
+        std::unique_ptr<const MapEntity> entity = std::make_unique<MapEntity>("prop kits of placement " + std::to_string(placementId), std::move(vertices), std::move(indices));
+        const AABB bounds = entity->Bounds;
+        auto instance = std::make_unique<MapEntityInstance>(entity.get(), bounds, Matrix4::Identity);
+
+        {
+            std::lock_guard guard(m_propKitMutex);
+            m_loadedPropKitEntities.push_back(std::move(entity));
+        }
+
+        InsertPropKitInstance(placementId, std::move(instance));
+    }
+
+    void Map::InsertPropKitInstance(const uint64 placementId, std::unique_ptr<MapEntityInstance> instance)
+    {
+        std::lock_guard guard(m_propKitMutex);
+        m_loadedPropKitInstances[placementId] = std::move(instance);
+    }
+
+    const MapEntityInstance* Map::GetPropKitInstance(const uint64 placementId) const
+    {
+        std::lock_guard guard(m_propKitMutex);
+
+        auto const itr = m_loadedPropKitInstances.find(placementId);
+        return itr == m_loadedPropKitInstances.end() ? nullptr : itr->second.get();
+    }
+
+    void Map::GetPropKitInstancesInArea(const AABB& bounds, std::vector<uint64>& out_placementIds) const
+    {
+        std::lock_guard guard(m_propKitMutex);
+
+        for (auto const& [placementId, instance] : m_loadedPropKitInstances)
+        {
+            if (bounds.Intersects(instance->Bounds))
+            {
+                out_placementIds.push_back(placementId);
             }
         }
     }

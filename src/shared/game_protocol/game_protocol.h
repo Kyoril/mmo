@@ -66,6 +66,22 @@ namespace mmo
 			};
 		}
 
+		/// Where a PlaySoundById sound comes from.
+		namespace play_sound_source
+		{
+			enum Type
+			{
+				/// Not positioned: played as a 2D sound.
+				None = 0,
+
+				/// A fixed world position.
+				Position = 1,
+
+				/// A unit, followed while the sound plays. Carries the unit's position as a fallback.
+				Unit = 2,
+			};
+		}
+
 		constexpr uint32 MAX_FRIENDS = 50;
 
 		/// Version of the game protocol this binary speaks.
@@ -81,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000014;
+		constexpr uint32 ProtocolVersion = 0x0000001A;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -443,10 +459,24 @@ namespace mmo
 				/// (gm_shutdown_action), uint32 delaySeconds (ignored for Cancel; 0 = immediately).
 				GmShutdown,
 
+				/// Sent by the client to reset the dungeon instances it is bound to (/resetinstance).
+				/// Handled by the realm. No payload.
+				ResetInstances,
+
+				/// Sent by the loot master to hand a master loot item of the open loot to a party member.
+				/// Proxied to the world node. Payload: uint8 loot slot, uint64 target character guid.
+				MasterLootItem,
+
 				/// GAME MASTER. Toggles game master invisibility on the sender's character: hidden from
 				/// players and creatures, visible to other game masters. Persisted by the realm.
 				/// Payload: uint8 (0/1).
 				CheatInvisible, // GAME MASTER
+
+				/// GAME MASTER. Ghosts an online player: every transfer of the sender onto the target's
+				/// map joins the target's instance, and the target's instance changes take the sender
+				/// along, without a group. Lasts until either character logs out. Handled by the realm.
+				/// Payload: uint8-length string target name (empty = stop ghosting).
+				CheatGhost, // GAME MASTER
 
 				/// Counter constant
 				Count_,
@@ -782,7 +812,10 @@ namespace mmo
 				ClassXpUpdate,
 
 				/// Sent to the client to play a SoundEntry (ClientDB sounds) by id.
-				/// Payload: uint32 soundId, uint8 hasPosition, [3 x float position if hasPosition = 1].
+				/// Payload: uint32 soundId, uint8 source (see play_sound_source), then
+				/// [3 x float position] for Position, or [packed guid + 3 x float position] for Unit.
+				/// A Unit sound follows that unit while it plays; the position is where it stood when
+				/// the server sent it, used when the client does not know the unit.
 				PlaySoundById,
 
 				/// Sent to the controlled client before the server starts moving the character
@@ -840,8 +873,45 @@ namespace mmo
 				/// e.g. because its caster died).
 				SpellZoneEnd,
 
+				/// The character's full profession skill list. Sent on world entry and whenever a
+				/// profession is learned or its cap changes. Payload: uint8 count, then per skill
+				/// uint32 skillId, uint16 value, uint16 max.
+				TradeSkills,
+
+				/// One profession skill value changed (skill-up). Payload: uint32 skillId,
+				/// uint16 value, uint16 max.
+				TradeSkillUpdate,
+
+				/// Result of a ResetInstances request, or a notification about someone else's.
+				/// Payload: uint8 result (see instance_reset_result), dynamic<uint8> map name
+				/// (empty when the result refers to no particular map).
+				InstanceResetResult,
+
+				/// Tells the loot master why a MasterLootItem request was refused. Payload: uint8 loot_error.
+				MasterLootResult,
+
 				/// Counter constant
 				Count_,
+			};
+		}
+
+		/// Result codes sent in an InstanceResetResult packet.
+		namespace instance_reset_result
+		{
+			enum Type : uint8
+			{
+				/// The instance of the named map was reset. Sent to everyone bound to it.
+				Success = 0,
+				/// The named map's instance could not be reset because characters are still
+				/// inside it. Sent to the character which requested the reset.
+				PlayersInside = 1,
+				/// The group leader tried to reset the named map's instance while this character
+				/// is still inside it. Sent to each character inside.
+				BlockedByYou = 2,
+				/// Only the group leader may reset the group's instances.
+				NotGroupLeader = 3,
+				/// The character is not bound to any dungeon instance.
+				NothingToReset = 4,
 			};
 		}
 

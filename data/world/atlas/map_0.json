@@ -209,34 +209,17 @@
       "source": "agent-bootstrap"
     },
     {
-      "id": "briarwatch",
-      "name": "Briarwatch",
-      "kind": "camp",
-      "center": [
-        -122.8,
-        435.0
-      ],
-      "radius": 50.0,
-      "areaId": 8,
-      "levelMin": 5,
-      "levelMax": 6,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
-    },
-    {
       "id": "briarwatch_camp",
       "name": "Briarwatch Camp",
       "kind": "hub",
       "center": [
-        -60.0,
-        517.7
+        -60.8,
+        540.0
       ],
-      "radius": 30.0,
+      "radius": 39.5,
       "areaId": 9,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "briarwatch_west_gate",
@@ -342,10 +325,10 @@
       "name": "Haven",
       "kind": "hub",
       "center": [
-        -780.6,
-        1249.1
+        -692.2,
+        1277.1
       ],
-      "radius": 311.5,
+      "radius": 347.5,
       "status": "canon",
       "source": "user"
     },
@@ -396,19 +379,6 @@
       ],
       "radius": 25.0,
       "status": "canon",
-      "source": "agent-bootstrap"
-    },
-    {
-      "id": "falwyn_forest_hub",
-      "name": "Falwyn Forest hub",
-      "kind": "hub",
-      "center": [
-        -2.6,
-        21.5
-      ],
-      "radius": 35.0,
-      "status": "placeholder",
-      "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
       "source": "agent-bootstrap"
     },
     {
@@ -486,10 +456,10 @@
       "name": "Young Forest Wolf grounds",
       "kind": "camp",
       "center": [
-        3.9,
-        542.7
+        17.5,
+        557.4
       ],
-      "radius": 65.0,
+      "radius": 40.0,
       "levelMin": 3,
       "levelMax": 4,
       "status": "canon",
@@ -500,8 +470,8 @@
       "name": "Young Forest Wolf grounds (12, 458)",
       "kind": "camp",
       "center": [
-        1.8,
-        439.9
+        -6.9,
+        426.2
       ],
       "radius": 64.5,
       "levelMin": 3,
@@ -514,15 +484,15 @@
       "name": "Forest Wolf grounds",
       "kind": "camp",
       "center": [
-        -202.3,
-        337.3
+        -166.5,
+        353.1
       ],
       "radius": 80.0,
       "levelMin": 3,
       "levelMax": 8,
       "status": "placeholder",
       "ask": "Name this place, check its kind (hub/camp/ruin/lair/landmark/resource), level band and radius, then confirm.",
-      "source": "agent-bootstrap"
+      "source": "user"
     },
     {
       "id": "kingsroad_cutthroat_grounds",
@@ -661,70 +631,52 @@
       "name": "Old Stone Bridge",
       "kind": "landmark",
       "center": [
-        -495.0,
-        355.0
+        -472.7,
+        376.5
       ],
       "radius": 25.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 4 - Old Stone Bridge. Terrain: where the painted road meets the river (7 m deep); today a house (HouseTest) and two piers stand here.",
-      "status": "placeholder",
-      "ask": "Is this the crossing? A stone bridge prop is needed (today there are only piers). Then confirm.",
-      "source": "agent"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "river_valley",
       "name": "River Valley",
       "kind": "landmark",
       "center": [
-        -600.0,
-        650.0
+        -508.7,
+        656.2
       ],
       "radius": 170.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 5 - River Valley opens up; views get wider, terrain gets softer. Terrain: flat ground on both banks south of the bridge, no zone yet.",
-      "status": "placeholder",
-      "ask": "Name and level band of this stretch? Then confirm.",
-      "source": "agent"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "farmlands_and_hamlets",
       "name": "Farmlands and Hamlets",
-      "kind": "hub",
+      "kind": "landmark",
       "center": [
-        -690.0,
-        560.0
+        -825.4,
+        560.9
       ],
       "radius": 110.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 6 - Farmlands & Hamlets in the valley. West of the river. Flat, empty ground today.",
-      "status": "placeholder",
-      "ask": "Hamlet name(s) and level band? Then confirm.",
-      "source": "agent"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "crossroads_inn",
       "name": "Crossroads Inn",
       "kind": "hub",
       "center": [
-        -720.0,
-        820.0
+        -561.4,
+        450.2
       ],
-      "radius": 30.0,
+      "radius": 37.0,
       "description": "Layout sketch (docs/world/reference/oakenshire-layout-sketch.webp): 7 - Crossroads Inn on the Haven road. West of the river. Which roads cross here is open.",
-      "status": "placeholder",
-      "ask": "Which roads cross at the inn (the Northroad?), and its name? Then confirm.",
-      "source": "agent"
-    },
-    {
-      "id": "the_river",
-      "name": "The river (unnamed)",
-      "kind": "landmark",
-      "center": [
-        -520.0,
-        500.0
-      ],
-      "radius": 40.0,
-      "description": "Terrain: a river 30-50 m wide and about 7 m deep running north-south at x -520 from z -450 to z 920, with a loop at its north end, a branch east at z 50 and a shallow ford (2 m) at z 150-200. The layout sketch has it west of Oakenshire, flowing south past Haven.",
-      "status": "placeholder",
-      "ask": "Name the river. Then confirm.",
-      "source": "agent"
+      "status": "canon",
+      "source": "user"
     },
     {
       "id": "east_of_the_ring",
@@ -748,6 +700,32 @@
         530.4
       ],
       "radius": 7.5,
+      "status": "canon",
+      "source": "user"
+    },
+    {
+      "id": "oakenshire_market",
+      "name": "Oakenshire Market",
+      "kind": "hub",
+      "center": [
+        290.5,
+        587.0
+      ],
+      "radius": 14.0,
+      "description": "Open ground east of the Oakenshire Inn's front steps, where the road from the town centre comes down. Four traders (general goods, weapons, mail, leather) moved here from the buried old-Haven market.",
+      "status": "placeholder",
+      "ask": "Is this the right spot and name for Oakenshire's market?",
+      "source": "agent"
+    },
+    {
+      "id": "new_place_2",
+      "name": "Farmlands and Hamlets",
+      "kind": "landmark",
+      "center": [
+        -838.9,
+        775.3
+      ],
+      "radius": 114.0,
       "status": "canon",
       "source": "user"
     }
@@ -798,16 +776,15 @@
       "name": "Northroad",
       "points": [
         [
-          -56.4,
-          408.0
+          48.9,
+          362.5
         ],
         [
-          -23.9,
-          116.5
+          11.3,
+          171.1
         ]
       ],
-      "status": "placeholder",
-      "ask": "Drag the start and end of the Northroad, add points where it bends, then confirm.",
+      "status": "canon",
       "source": "user"
     },
     {
@@ -827,32 +804,32 @@
           496.4
         ],
         [
-          -117.2,
-          469.1
+          -99.1,
+          440.6
         ],
         [
-          -170.9,
-          460.3
+          -58.4,
+          312.7
         ],
         [
-          -252.4,
-          467.1
+          -124.5,
+          252.9
         ],
         [
-          -300.0,
-          432.0
+          -336.9,
+          253.7
         ],
         [
-          -390.0,
-          396.0
+          -358.6,
+          345.4
         ],
         [
-          -440.0,
-          372.0
+          -391.6,
+          391.5
         ],
         [
-          -495.0,
-          355.0
+          -445.6,
+          364.5
         ]
       ],
       "status": "canon",
@@ -863,37 +840,37 @@
       "name": "Haven Road",
       "points": [
         [
-          -495.0,
-          355.0
+          -489.3,
+          387.5
         ],
         [
-          -580.0,
-          370.0
+          -553.1,
+          400.3
         ],
         [
-          -660.0,
-          470.0
+          -600.2,
+          420.3
         ],
         [
-          -690.0,
-          560.0
+          -593.2,
+          491.9
         ],
         [
           -705.0,
           700.0
         ],
         [
-          -720.0,
-          820.0
+          -684.8,
+          841.1
         ],
         [
-          -705.0,
-          960.0
+          -685.1,
+          952.1
         ]
       ],
       "status": "placeholder",
       "ask": "Layout sketch: 8 - Haven Road (south-west), from the Old Stone Bridge down the valley past the farmlands and the Crossroads Inn to Haven. Only if Haven goes south-west. Drag the bends, then confirm.",
-      "source": "agent"
+      "source": "user"
     }
   ]
 }

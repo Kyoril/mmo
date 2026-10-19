@@ -147,6 +147,24 @@ class WobjParserTests(unittest.TestCase):
 		with self.assertRaises(FormatError):
 			wobj.parse_wobj(write(self.tmp, "7.wobj", fx.wobj_bytes(version=4)))
 
+	def _wmo_bytes(self, **kwargs):
+		return wobj.wobj_bytes(kind="wmo", unique_id=9, asset="Models/Haven_001.hwmo", position=(1.0, 2.0, 3.0),
+							   rotation=(1.0, 0.0, 0.0, 0.0), scale=(1.0, 1.0, 1.0), name="Inn", category="Buildings", **kwargs)
+
+	def test_wmo_kit_chunk(self):
+		entity = wobj.parse_wobj(write(self.tmp, "k.wobj", self._wmo_bytes(kits=("Kits/A.hkit", "Kits/B.hkit"))))
+		self.assertEqual(entity.kits, ("Kits/A.hkit", "Kits/B.hkit"))
+		self.assertEqual((entity.asset, entity.name), ("Models/Haven_001.hwmo", "Inn"))
+
+	def test_wmo_without_kits(self):
+		entity = wobj.parse_wobj(write(self.tmp, "n.wobj", self._wmo_bytes()))
+		self.assertEqual(entity.kits, ())
+
+	def test_unknown_third_chunk_rejected(self):
+		data = self._wmo_bytes() + fx.chunk(b"XXXX", b"")
+		with self.assertRaises(FormatError):
+			wobj.parse_wobj(write(self.tmp, "x.wobj", data))
+
 
 class HwldParserTests(unittest.TestCase):
 	def test_header(self):

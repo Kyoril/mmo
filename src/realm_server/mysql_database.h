@@ -80,6 +80,9 @@ namespace mmo
 		/// @copydoc IDatabase::UpdateCharacterAuras
 		void UpdateCharacterAuras(uint64 characterId, const std::vector<PersistentAuraData>& auras) override;
 
+		/// @copydoc IDatabase::UpdateCharacterTradeSkills
+		void UpdateCharacterTradeSkills(uint64 characterId, const std::vector<TradeSkillData>& skills) override;
+
 		/// @copydoc IDatabase::UpdateCharacterCooldowns
 		void UpdateCharacterCooldowns(uint64 characterId, const std::vector<std::pair<uint32, GameTime>>& cooldownEnds) override;
 

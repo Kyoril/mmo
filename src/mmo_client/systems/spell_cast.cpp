@@ -9,6 +9,7 @@
 #include "game/spell_target_map.h"
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
+#include "game_client/spell_cast_rules.h"
 #include "net/realm_connector.h"
 
 namespace mmo
@@ -412,13 +413,13 @@ namespace mmo
 			}
 		}
 
-		if ((spell->interruptflags() & spell_interrupt_flags::Movement) != 0)
+		// Movement only interrupts a cast in progress, so a spell made instant by spell mods (talents)
+		// may be cast on the run. Same effective cast time as GetSpellEffectiveCastTime.
+		const int32 effectiveCastTime = std::max(0, unit->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::CastTime), static_cast<int32>(spell->casttime()), spell->familyflags()));
+		if (spell_cast_rules::IsBlockedByMovement(spell->interruptflags(), spell->attributes(0), effectiveCastTime, unit->GetMovementInfo().IsChangingPosition()))
 		{
-			if (unit->GetMovementInfo().IsChangingPosition())
-			{
-				ELOG("Can't cast spell while moving");
-				return;
-			}
+			ELOG("Can't cast spell while moving");
+			return;
 		}
 
 		if ((spell->attributes(0) & spell_attributes::NotInCombat) != 0 &&

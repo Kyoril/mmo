@@ -29,6 +29,7 @@
 #include "game/object_type_id.h"
 
 #include <algorithm>
+#include <chrono>
 #include <vector>
 #include <zstr/zstr.hpp>
 #include <zlib.h>
@@ -57,6 +58,7 @@
 #include "game/shutdown_countdown.h"
 #include "game/damage_school.h"
 #include "game_client/game_player_c.h"
+#include "game/trade_skill_announce.h"
 #include "game/spell_target_map.h"
 #include "game_client/game_item_c.h"
 #include "ui/chat_bubble_frame.h"
@@ -84,6 +86,7 @@
 #include "frame_ui/font_mgr.h"
 #include "game/group.h"
 #include "game_client/game_world_object_c_base.h"
+#include "game_client/world_streaming_utils.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
@@ -123,6 +126,17 @@ namespace mmo
 
 	namespace
 	{
+		/// Forgets all DB cache queries still in flight, so the next Get for such an entry queries again.
+		void ResetInFlightCacheQueries(ICacheProvider& cache)
+		{
+			cache.GetItemCache().ResetInFlightQueries();
+			cache.GetCreatureCache().ResetInFlightQueries();
+			cache.GetQuestCache().ResetInFlightQueries();
+			cache.GetNameCache().ResetInFlightQueries();
+			cache.GetGuildCache().ResetInFlightQueries();
+			cache.GetObjectCache().ResetInFlightQueries();
+		}
+
 		static ConsoleVar *s_debugOutputPathVar = nullptr;
 
 		static ConsoleVar *s_renderShadowsVar = nullptr;
@@ -154,6 +168,7 @@ namespace mmo
 		static ConsoleVar *s_contactShadowDebugVar = nullptr;
 		static ConsoleVar *s_atmosphereQualityVar = nullptr;
 		static ConsoleVar *s_volumetricFogRangeVar = nullptr;
+		static ConsoleVar *s_volumetricFogHistoryVar = nullptr;
 		static ConsoleVar *s_atmosphereDebugVar = nullptr;
 		static ConsoleVar *s_bloomQualityVar = nullptr;
 		static ConsoleVar *s_exposureVar = nullptr;
@@ -171,6 +186,7 @@ namespace mmo
 		static ConsoleVar *s_terrainLodEnabledVar = nullptr;
 		static ConsoleVar *s_terrainOcclusionCullingVar = nullptr;
 		static ConsoleVar *s_terrainFarRadiusVar = nullptr;
+		static ConsoleVar *s_streamingBudgetVar = nullptr;
 
 		static ConsoleVar *s_chatBubblesSayVar = nullptr;
 		static ConsoleVar *s_chatBubblesYellVar = nullptr;
@@ -369,6 +385,9 @@ namespace mmo
 		// The game clock outlives the world state; it was not updated while we were out of the world
 		m_gameTime.ResetUpdateReference();
 
+		// Queries sent while out of the world never had a handler for their answers.
+		ResetInFlightCacheQueries(m_cache);
+
 		CombatVignette::Init();
 
 		ObjectMgr::Initialize(m_project, m_partyInfo);
@@ -530,6 +549,7 @@ namespace mmo
 
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
+		m_unitAttachedSounds.clear();
 
 		// UpdateWaterVolume stops running once the world is left, so a low-pass applied while
 		// submerged would otherwise stay on the master bus through character select and login.
@@ -568,6 +588,10 @@ namespace mmo
 		// clients there can still arm a goodbye line (e.g. QuestClient::Shutdown -> CloseQuest),
 		// so the reset that clears/cancels all pending state needs to happen afterwards.
 		UnitGossipVoice::Get().Reset();
+
+		// Answers to queries still in flight are dropped once the packet handlers are gone. This also
+		// runs after the subsystem shutdowns above, which can still query the caches through Lua.
+		ResetInFlightCacheQueries(m_cache);
 
 		RemoveGameplayCommands();
 
@@ -1048,9 +1072,15 @@ namespace mmo
 
 		{
 			PROFILE_SCOPE("OnIdle::StreamingDispatch");
-			for (size_t i = 0; i < 20; ++i)
+
+			// Streamed content is finished here one job at a time until the frame's budget is spent.
+			// Jobs are small steps (a terrain tile, one world model resource, ...), so a budget keeps a
+			// burst of them - crossing into a town - from piling into a single frame.
+			const double budgetMs = s_streamingBudgetVar ? std::max(0.0f, s_streamingBudgetVar->GetFloatValue()) : 4.0;
+			const auto start = std::chrono::steady_clock::now();
+			while (m_dispatcher.poll_one())
 			{
-				if (!m_dispatcher.poll_one())
+				if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= budgetMs)
 				{
 					break;
 				}
@@ -1075,6 +1105,8 @@ namespace mmo
 		{
 			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
 		}
+
+		UpdateUnitAttachedSounds(deltaSeconds);
 
 		// Update audio component to simulate 3d audio correctly from the player position
 		if (m_playerController->GetControlledUnit())
@@ -1597,7 +1629,7 @@ namespace mmo
 		};
 
 		const PagePosition pos = GetPagePositionFromCamera();
-		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
+		m_visibleSection = std::make_unique<LoadedPageSection>(pos, static_cast<std::size_t>(LoadedPageRadius), *this);
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
 
 		PagePosition worldSize(64, 64);
@@ -1680,6 +1712,7 @@ namespace mmo
 
 	void WorldState::RegisterPageFoliage(const uint32 pageX, const uint32 pageY)
 	{
+		PROFILE_SCOPE("Stream: RegisterPageFoliage");
 		if (!m_foliage || !m_worldInstance || !m_worldInstance->HasTerrain())
 		{
 			return;
@@ -1876,6 +1909,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::Emote, *this, &WorldState::OnEmote);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::KnownClasses, *this, &WorldState::OnKnownClasses);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TradeSkills, *this, &WorldState::OnTradeSkills);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TradeSkillUpdate, *this, &WorldState::OnTradeSkillUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ClassXpUpdate, *this, &WorldState::OnClassXpUpdate);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
@@ -1931,6 +1966,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LevelUp, *this, &WorldState::OnLevelUp);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CharacterPointsReset, *this, &WorldState::OnCharacterPointsReset);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InstanceResetResult, *this, &WorldState::OnInstanceResetResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AuraUpdate, *this, &WorldState::OnAuraUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &WorldState::OnPeriodicAuraLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ActionButtons, *this, &WorldState::OnActionButtons);
@@ -2231,6 +2267,9 @@ namespace mmo
 
 		s_volumetricFogRangeVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogRange", "How many metres in front of the camera the volumetric fog covers (50 to 300, the shadow range). Fog beyond uses a smooth closed-form estimate.", "200");
 		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		s_volumetricFogHistoryVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogHistory", "How much of the previous frame the volumetric fog keeps (0 to 0.95). Higher values smooth out sampling noise and aliasing; lower values react faster and stay sharper while the camera moves. 0 (default) disables the history: the fog is then a pure function of the camera pose.", "0");
+		m_cvarChangedSignals += s_volumetricFogHistoryVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogSunMode", "Volumetric fog sun filtering: 0 box filter (fixed taps, no history), 1 temporal (one blue-noise jittered tap, clamped history, fog shadow map), 2 temporal with the surface cascades.", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
 		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
@@ -2269,6 +2308,8 @@ namespace mmo
 		m_cvarChangedSignals += s_terrainOcclusionCullingVar->Changed.connect(this, &WorldState::OnTerrainOcclusionCullingChanged);
 
 		// Read each frame in OnIdle, so no change handler is required.
+		s_streamingBudgetVar = ConsoleVarMgr::RegisterConsoleVar("StreamingBudgetMs", "Milliseconds per frame the main thread spends finishing streamed world content (terrain tiles, world models, entities, foliage). Content streams in over more frames when lower; at least one step runs every frame.", "4");
+
 		s_terrainFarRadiusVar = ConsoleVarMgr::RegisterConsoleVar("TerrainFarRadius", "Radius in terrain pages (533 m each) of the baked low-resolution distant terrain around the camera. 0 disables it and restores the 1000 m view distance.", "4");
 
 		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
@@ -2406,11 +2447,15 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogRange");
+		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogHistory");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFogSunMode");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("TerrainFarRadius");
+		ConsoleVarMgr::UnregisterConsoleVar("StreamingBudgetMs");
+		s_streamingBudgetVar = nullptr;
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesSay");
@@ -2540,17 +2585,46 @@ namespace mmo
 				
 				m_worldInstance->LoadPageEntities(page.x(), page.y()); });
 
+		// Entity files are read on the work queue (here and on the background loader) and world models
+		// are then prepared over several dispatcher steps. Units placed on a building floor snap to the
+		// ground they find, so the buildings must exist before the loading screen hides - otherwise
+		// NPCs drop through to the terrain underneath and stay there.
 		size_t dispatched = 0;
-		while (m_dispatcher.poll_one())
-		{
-			dispatched++;
-		}
-
-		// Poll one time
 		size_t jobsDone = 0;
-		while (m_workQueue.poll_one())
+		const auto waitStart = std::chrono::steady_clock::now();
+		while (true)
 		{
-			jobsDone++;
+			bool progressed = false;
+			if (m_dispatcher.poll_one())
+			{
+				dispatched++;
+				progressed = true;
+			}
+			if (m_workQueue.poll_one())
+			{
+				jobsDone++;
+				progressed = true;
+			}
+
+			// Checked on every pass: a step that keeps re-posting itself would otherwise hold the loading screen forever
+			if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60))
+			{
+				WLOG("World loading: gave up waiting for world entities after 60 seconds");
+				break;
+			}
+
+			if (progressed)
+			{
+				continue;
+			}
+
+			if (!m_worldInstance->HasPendingEntityLoads())
+			{
+				break;
+			}
+
+			// A file is still being read on the background loader thread
+			std::this_thread::yield();
 		}
 
 		m_foliage->RebuildAll();
@@ -2680,6 +2754,12 @@ namespace mmo
 					static_assert(object_fields::MinDamage == object_fields::BaseAttackTime + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::MaxDamage == object_fields::MinDamage + 1, "Order of fields is important for monitored unit mirror handlers");
 
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::SpellDamage, 5, *this, &WorldState::OnPlayerStatsChanged);
+					static_assert(object_fields::SpellHealing == object_fields::SpellDamage + 1, "Order of fields is important for monitored unit mirror handlers");
+					static_assert(object_fields::SpellCritChance == object_fields::SpellHealing + 1, "Order of fields is important for monitored unit mirror handlers");
+					static_assert(object_fields::MeleeCritChance == object_fields::SpellCritChance + 1, "Order of fields is important for monitored unit mirror handlers");
+					static_assert(object_fields::ManaRegen == object_fields::MeleeCritChance + 1, "Order of fields is important for monitored unit mirror handlers");
+
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Guild, 2, *this, &WorldState::OnPlayerGuildChanged);
 
 					// Old handlers for now
@@ -2738,11 +2818,22 @@ namespace mmo
 					return PacketParseResult::Disconnect;
 				}
 
+				// Units and players share the unit field layout, which carries the combat flag
+				// and health the aggro and death sounds are driven by.
+				const bool isUnit = obj->GetTypeId() == ObjectTypeId::Unit || obj->GetTypeId() == ObjectTypeId::Player;
+				const bool wasInCombat = isUnit && (obj->Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0;
+				const bool wasAlive = isUnit && obj->Get<uint32>(object_fields::Health) > 0;
+
 				obj->Deserialize(packet, creation);
 				if (!packet)
 				{
 					ELOG("Failed to read object fields of object update packet #" << i << " (Object guid: " << log_hex_digit(guid) << ")");
 					return PacketParseResult::Disconnect;
+				}
+
+				if (isUnit)
+				{
+					PlayUnitStateSounds(*obj, wasInCombat, wasAlive);
 				}
 
 				// Check if this was an item update for the active player
@@ -2971,14 +3062,28 @@ namespace mmo
 	PacketParseResult WorldState::OnPlaySoundById(game::IncomingPacket &packet)
 	{
 		uint32 soundId;
-		uint8 hasPosition;
-		if (!(packet >> io::read<uint32>(soundId) >> io::read<uint8>(hasPosition)))
+		uint8 source;
+		if (!(packet >> io::read<uint32>(soundId) >> io::read<uint8>(source)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
+		if (source > game::play_sound_source::Unit)
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		uint64 sourceGuid = 0;
+		if (source == game::play_sound_source::Unit)
+		{
+			if (!(packet >> io::read_packed_guid(sourceGuid)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
 		Vector3 position;
-		if (hasPosition != 0)
+		if (source != game::play_sound_source::None)
 		{
 			if (!(packet >> io::read<float>(position.x) >> io::read<float>(position.y) >> io::read<float>(position.z)))
 			{
@@ -2988,16 +3093,50 @@ namespace mmo
 
 		// Unknown sound ids are a data problem (e.g. outdated client data), never a protocol
 		// error - SoundEntryPlayer logs a warning and we simply stay silent.
-		if (hasPosition != 0)
-		{
-			m_soundEntryPlayer.PlayEntry(soundId, position);
-		}
-		else
+		if (source == game::play_sound_source::None)
 		{
 			m_soundEntryPlayer.PlayEntry(soundId);
+			return PacketParseResult::Pass;
+		}
+
+		// A unit we know is heard from where we see it; the server's position is only a fallback.
+		const auto unit = (source == game::play_sound_source::Unit) ? ObjectMgr::Get<GameUnitC>(sourceGuid) : nullptr;
+		if (unit)
+		{
+			position = unit->GetPosition();
+		}
+
+		const ChannelIndex channel = m_soundEntryPlayer.PlayEntry(soundId, position);
+		if (unit && channel != InvalidChannel && m_soundEntryPlayer.IsEntry3D(soundId))
+		{
+			m_unitAttachedSounds.push_back({ channel, sourceGuid, m_soundEntryPlayer.GetEntryLength(soundId) });
 		}
 
 		return PacketParseResult::Pass;
+	}
+
+	void WorldState::UpdateUnitAttachedSounds(const float deltaSeconds)
+	{
+		// Channels are recycled once a sound finishes, so an entry is dropped as soon as its sound
+		// should have ended rather than moving whatever plays on that channel next. A unit that left
+		// sight leaves its sound where it last was.
+		std::erase_if(m_unitAttachedSounds, [this, deltaSeconds](UnitAttachedSound& sound)
+			{
+				sound.remainingSeconds -= deltaSeconds;
+				if (sound.remainingSeconds <= 0.0f)
+				{
+					return true;
+				}
+
+				const auto unit = ObjectMgr::Get<GameUnitC>(sound.unitGuid);
+				if (!unit)
+				{
+					return true;
+				}
+
+				m_audio.Set3DPosition(sound.channel, unit->GetPosition());
+				return false;
+			});
 	}
 
 	PacketParseResult WorldState::OnPlaySpellVisual(game::IncomingPacket &packet)
@@ -3248,6 +3387,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Unable to retrieve unit name for unit " << log_hex_digit(guid));
+			m_cache.GetNameCache().NotifyQueryFailed(guid);
 			return PacketParseResult::Pass;
 		}
 
@@ -3293,6 +3433,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetCreatureCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3300,6 +3441,7 @@ namespace mmo
 		if (!(packet >> io::read_string(entry.name) >> io::read_string(entry.subname) >> io::read_string(entry.stealthAlertSound)))
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetCreatureCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3319,6 +3461,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Item query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetItemCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3347,6 +3490,7 @@ namespace mmo
 		if (!succeeded)
 		{
 			ELOG("Object query for id " << log_hex_digit(id) << " failed");
+			m_cache.GetObjectCache().NotifyQueryFailed(id);
 			return PacketParseResult::Pass;
 		}
 
@@ -3501,7 +3645,7 @@ namespace mmo
 
 	PacketParseResult WorldState::OnClassXpUpdate(game::IncomingPacket &packet)
 	{
-		uint32 classId = 0, xpGained = 0, classXp = 0, xpToNextLevel = 0;
+		uint32 classId = 0, xpGained = 0, classXp = 0, xpToNextLevel = 0, talentPointsGained = 0;
 		uint8 classLevel = 0, leveledUp = 0;
 		if (!(packet
 			>> io::read<uint32>(classId)
@@ -3509,7 +3653,8 @@ namespace mmo
 			>> io::read<uint8>(classLevel)
 			>> io::read<uint32>(classXp)
 			>> io::read<uint32>(xpToNextLevel)
-			>> io::read<uint8>(leveledUp)))
+			>> io::read<uint8>(leveledUp)
+			>> io::read<uint32>(talentPointsGained)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -3557,6 +3702,20 @@ namespace mmo
 			}
 
 			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
+
+			// Talent points are granted by the class rank, not by the character level, so the
+			// notice about them belongs here (see proto_data/classes.proto: ClassLevelEntry).
+			if (talentPointsGained > 0)
+			{
+				String pointsMessage = Localize(FrameManager::Get().GetLocalization(),
+					talentPointsGained > 1 ? "LEVEL_UP_CHAR_POINTS" : "LEVEL_UP_CHAR_POINTS_P1");
+				if (const size_t amountPlaceholder = pointsMessage.find("%d"); amountPlaceholder != String::npos)
+				{
+					pointsMessage.replace(amountPlaceholder, 2, std::to_string(talentPointsGained));
+				}
+
+				FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", pointsMessage);
+			}
 		}
 
 		return PacketParseResult::Pass;
@@ -3665,6 +3824,60 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnTradeSkills(game::IncomingPacket &packet)
+	{
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::map<uint32, TradeSkillData> skills;
+		for (uint8 i = 0; i < count; ++i)
+		{
+			TradeSkillData data;
+			if (!(packet >> data))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			skills[data.skillId] = data;
+		}
+
+		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(m_playerController->GetControlledUnit()))
+		{
+			player->SetTradeSkills(std::move(skills));
+		}
+
+		FrameManager::Get().TriggerLuaEvent("TRADE_SKILLS_CHANGED");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnTradeSkillUpdate(game::IncomingPacket &packet)
+	{
+		TradeSkillData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		bool skillIncreased = false;
+		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(m_playerController->GetControlledUnit()))
+		{
+			skillIncreased = ShouldAnnounceSkillIncrease(player->GetTradeSkills(), data);
+			player->SetTradeSkill(data);
+		}
+
+		FrameManager::Get().TriggerLuaEvent("TRADE_SKILL_UPDATE", data.skillId);
+		if (skillIncreased)
+		{
+			FrameManager::Get().TriggerLuaEvent("TRADE_SKILL_INCREASED", data.skillId, static_cast<int>(data.value));
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult WorldState::OnSpellLearnedOrUnlearned(game::IncomingPacket &packet)
 	{
 		uint32 spellId;
@@ -3680,6 +3893,16 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		// Learning or unlearning a profession or a recipe changes what the profession window shows.
+		bool affectsTradeSkills = (spell->attributes(0) & spell_attributes::TradeSpell) != 0;
+		for (const auto &effect : spell->effects())
+		{
+			if (effect.type() == spell_effects::TradeSkill)
+			{
+				affectsTradeSkills = true;
+			}
+		}
+
 		ASSERT(m_playerController->GetControlledUnit());
 		if (packet.GetId() == game::realm_client_packet::LearnedSpell)
 		{
@@ -3687,6 +3910,7 @@ namespace mmo
 
 			// Add this spell to the players action bar if there is any unassigned button in the main bar, but only if it is not a passive spell and its an ability
 			if ((spell->attributes(0) & spell_attributes::Passive) == 0 &&
+				(spell->attributes(0) & spell_attributes::TradeSpell) == 0 &&
 				(spell->attributes(0) & spell_attributes::Ability) != 0)
 			{
 				int32 emptySlot = -1;
@@ -3736,6 +3960,11 @@ namespace mmo
 			// (greyed out / made unusable) to reflect that the player no longer knows it.
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELLS_CHANGED");
 			FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
+		}
+
+		if (affectsTradeSkills)
+		{
+			FrameManager::Get().TriggerLuaEvent("TRADE_SKILLS_CHANGED");
 		}
 
 		return PacketParseResult::Pass;
@@ -4077,7 +4306,9 @@ namespace mmo
 			"SPELL_CAST_FAILED_TARGET_NOT_DEAD",
 			"SPELL_CAST_FAILED_UNIT_NOT_BEHIND",
 			"SPELL_CAST_FAILED_UNIT_NOT_INFRONT",
-			"SPELL_CAST_FAILED_LINE_OF_SIGHT"};
+			"SPELL_CAST_FAILED_LINE_OF_SIGHT",
+			"SPELL_CAST_FAILED_SKILL_TOO_LOW",
+			"SPELL_CAST_FAILED_INVENTORY_FULL"};
 
 		static const char *s_unknown = "UNKNOWN";
 
@@ -4444,6 +4675,26 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	void WorldState::PlayUnitStateSounds(const GameObjectC& unit, const bool wasInCombat, const bool wasAlive)
+	{
+		const uint32 displayId = unit.Get<uint32>(object_fields::DisplayId);
+		const bool isAlive = unit.Get<uint32>(object_fields::Health) > 0;
+
+		if (wasAlive && !isAlive)
+		{
+			m_combatSoundPlayer.PlayDeath(unit.GetGuid(), displayId, unit.GetPosition());
+			return;
+		}
+
+		// A corpse can still carry the combat flag for a moment, and dropping it must not
+		// rearm an aggro sound for a unit that is not going to fight again until it respawns.
+		const bool inCombat = isAlive && (unit.Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0;
+		if (inCombat != wasInCombat)
+		{
+			m_combatSoundPlayer.NotifyCombatState(unit.GetGuid(), displayId, inCombat, unit.GetPosition());
+		}
+	}
+
 	PacketParseResult WorldState::OnAttackerStateUpdate(game::IncomingPacket &packet)
 	{
 		uint64 attackerGuid, attackedGuid;
@@ -4807,12 +5058,25 @@ namespace mmo
 
 		m_playerController->StopAllMovement();
 
+		const Vector3 previousPosition = unit->GetPosition();
+
 		// Teleport player
 		DLOG("Received teleport notification to " << movementInfo.position << ": Applying...");
 		unit->ApplyMovementInfo(movementInfo);
 
 		// Send ack to the server
 		m_realmConnector.SendMoveTeleportAck(ackId, unit->GetMovementInfo());
+
+		// A teleport on the same map does not go through TransferPending, so nothing loaded the
+		// world around the destination. Only the pages around the player are streamed in, and the
+		// teleport puts the character into falling state: landing outside that square means
+		// dropping through terrain which is still streaming in. Load the destination behind the
+		// loading screen first, exactly like entering a world does.
+		if (TeleportNeedsWorldLoad(previousPosition, unit->GetPosition()))
+		{
+			LoadingScreen::Show();
+			WaitForWorldLoading();
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -4862,6 +5126,22 @@ namespace mmo
 
 		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM",
 			Localize(FrameManager::Get().GetLocalization(), localizationKey));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnInstanceResetResult(game::IncomingPacket &packet)
+	{
+		uint8 result;
+		String mapName;
+		if (!(packet >> io::read<uint8>(result) >> io::read_container<uint8>(mapName)))
+		{
+			ELOG("Failed to read InstanceResetResult packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// The result is turned into a message by the ui, which owns the wording per locale.
+		FrameManager::Get().TriggerLuaEvent("INSTANCE_RESET_RESULT", static_cast<int32>(result), mapName);
 
 		return PacketParseResult::Pass;
 	}
@@ -5751,10 +6031,15 @@ namespace mmo
 
 	void WorldState::OnItemPushCallback(const ItemInfo &itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount)
 	{
-		// TODO: UI events for chat display
+		// Bag and subslot describe the pushing player's own inventory and are never used for other players.
 		if (characterGuid == ObjectMgr::GetActivePlayerGuid())
 		{
-			if (wasLooted)
+			if (wasCreated)
+			{
+				FrameManager::Get().TriggerLuaEvent("ITEM_CREATED", itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+				DLOG("You create item " << itemInfo.name << " x" << amount);
+			}
+			else if (wasLooted)
 			{
 				FrameManager::Get().TriggerLuaEvent("LOOT_ITEM_RECEIVED", itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 				DLOG("You receive loot: " << itemInfo.name << " x" << amount);
@@ -5773,7 +6058,12 @@ namespace mmo
 			if (unit)
 			{
 				const String &memberName = unit->GetName();
-				if (wasLooted)
+				if (wasCreated)
+				{
+					FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_CREATED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+					DLOG(memberName << " created item " << itemInfo.name << " x" << amount);
+				}
+				else if (wasLooted)
 				{
 					FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 					DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);
@@ -5788,9 +6078,14 @@ namespace mmo
 			{
 				// Unit not visible — look up the name asynchronously from the name cache.
 				m_cache.GetNameCache().Get(characterGuid,
-					[itemInfo, wasLooted, amount](uint64, const String &memberName)
+					[itemInfo, wasLooted, wasCreated, amount](uint64, const String &memberName)
 					{
-						if (wasLooted)
+						if (wasCreated)
+						{
+							FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_CREATED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+							DLOG(memberName << " created item " << itemInfo.name << " x" << amount);
+						}
+						else if (wasLooted)
 						{
 							FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 							DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);
@@ -6565,7 +6860,12 @@ namespace mmo
 
 		renderer->SetAtmosphereQuality(s_atmosphereQualityVar->GetIntValue());
 		renderer->SetVolumetricFogRange(s_volumetricFogRangeVar->GetFloatValue());
+		renderer->SetVolumetricFogHistory(s_volumetricFogHistoryVar->GetFloatValue());
 		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
+		if (ConsoleVar* sunModeVar = ConsoleVarMgr::FindConsoleVar("gxFogSunMode"))
+		{
+			renderer->GetVolumetricFogSettings().SetSunMode(sunModeVar->GetIntValue());
+		}
 	}
 
 	void WorldState::OnBloomChanged(ConsoleVar &var, const std::string &oldValue)

@@ -37,7 +37,13 @@ namespace mmo
 			{ "Moon", "intensity", &proto::EnvironmentProfile::has_moon, &proto::EnvironmentProfile::moon, &proto::EnvironmentProfile::mutable_moon, &proto::EnvironmentProfile::clear_moon, &EnvironmentProfile::moon },
 			{ "Fog", "density multiplier", &proto::EnvironmentProfile::has_fog, &proto::EnvironmentProfile::fog, &proto::EnvironmentProfile::mutable_fog, &proto::EnvironmentProfile::clear_fog, &EnvironmentProfile::fog },
 			{ "Sun Scatter (Shafts)", "shaft multiplier", &proto::EnvironmentProfile::has_sun_scatter, &proto::EnvironmentProfile::sun_scatter, &proto::EnvironmentProfile::mutable_sun_scatter, &proto::EnvironmentProfile::clear_sun_scatter, &EnvironmentProfile::sunScatter },
+			{ "Distance Fog", "opacity", &proto::EnvironmentProfile::has_distance_fog, &proto::EnvironmentProfile::distance_fog, &proto::EnvironmentProfile::mutable_distance_fog, &proto::EnvironmentProfile::clear_distance_fog, &EnvironmentProfile::distanceFog },
 		} };
+
+		// An unauthored Distance Fog curve follows the profile's own Sky Horizon curve, like
+		// LoadEnvironmentProfile does at runtime.
+		constexpr size_t s_skyHorizonSlot = 0;
+		constexpr size_t s_distanceFogSlot = 8;
 
 		std::unique_ptr<ColorCurveImGuiEditor> makeCurveEditor(const char* label, ColorCurve& curve)
 		{
@@ -106,7 +112,7 @@ namespace mmo
 		for (size_t i = 0; i < CurveCount; ++i)
 		{
 			const CurveSlot& slot = s_curveSlots[i];
-			m_curves[i] = defaults.*slot.defaultCurve;
+			m_curves[i] = i == s_distanceFogSlot ? m_curves[s_skyHorizonSlot] : defaults.*slot.defaultCurve;
 			LoadColorCurve((entry.*slot.get)(), m_curves[i]);
 			m_curveEditors[i] = makeCurveEditor(slot.label, m_curves[i]);
 		}
@@ -292,6 +298,29 @@ namespace mmo
 				changed = true;
 			}
 
+			float distanceRange[2] = { entry.distance_fog_start(), entry.distance_fog_end() };
+			if (ImGui::DragFloat2("Distance Fog Start / End", distanceRange, 5.0f, 0.0f, 100000.0f, "%.0f m"))
+			{
+				entry.set_distance_fog_start(std::clamp(distanceRange[0], 0.0f, 100000.0f));
+				entry.set_distance_fog_end(std::clamp(distanceRange[1], 0.0f, 100000.0f));
+				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Distant geometry fades into the Distance Fog curve's colour between these distances from the camera, on top of the height fog. Off while End <= Start. The curve's alpha is the opacity at End.");
+			}
+
+			float skyBand = entry.distance_fog_sky_band();
+			if (ImGui::SliderFloat("Distance Fog Sky Band", &skyBand, 0.0f, 1.0f, "%.2f"))
+			{
+				entry.set_distance_fog_sky_band(skyBand);
+				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("How far up the sky the distance fog reaches (0.2 ~ 11.5 degrees above the horizon). 0 leaves the sky untouched.");
+			}
+
 			float exposure = entry.exposure();
 			if (ImGui::DragFloat("Exposure", &exposure, 0.01f, 0.1f, 8.0f, "%.2f"))
 			{
@@ -465,7 +494,7 @@ namespace mmo
 				if (ImGui::Button("Reset to Default"))
 				{
 					(entry.*slot.clear)();
-					m_curves[i] = defaults.*slot.defaultCurve;
+					m_curves[i] = i == s_distanceFogSlot ? m_curves[s_skyHorizonSlot] : defaults.*slot.defaultCurve;
 					m_curveEditors[i] = makeCurveEditor(slot.label, m_curves[i]);
 					GetEnvironmentPreview().NotifyChanged();
 				}

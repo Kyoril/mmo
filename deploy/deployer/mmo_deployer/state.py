@@ -22,6 +22,8 @@ class State:
 	bad: list = field(default_factory=list)
 	paused: bool = False
 	last_maintenance_date: Optional[str] = None
+	# Local date on which the deployer last dispatched the nightly workflow (NIGHTLY_AT).
+	last_nightly_dispatch_date: Optional[str] = None
 	# {"commit": sha, "started": iso time} while a maintenance runs; set at startup means it was interrupted.
 	maintenance_in_progress: Optional[dict] = None
 	history: list = field(default_factory=list)

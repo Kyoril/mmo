@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "name": "bandit_camp_extension_briarwatch",
+  "description": "Forest Bandit grounds (-101, 137) extension, anchor (-101, 137): tents and fires for the new north, south, east and north-west bandit packs. Reuses the camp's own tent and fire models.",
+  "entry": "anchor",
+  "clear": [],
+  "notes": [
+    "Hand-placed for one site (plan it with the --anchor below): every role is at_anchor with an exact offset. The spots keep clear of the bandit spawn packs, so moving one means re-checking spawn spacing."
+  ],
+  "roles": [
+    {
+      "name": "North tent",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          11,
+          50
+        ]
+      },
+      "yaw": [
+        355,
+        355
+      ]
+    },
+    {
+      "name": "North fire",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_CampFire_A.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          5,
+          49.5
+        ]
+      },
+      "yaw": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "South tent",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          -10.8,
+          -28
+        ]
+      },
+      "yaw": [
+        169,
+        169
+      ]
+    },
+    {
+      "name": "East tent",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          26,
+          -13
+        ]
+      },
+      "yaw": [
+        144,
+        144
+      ]
+    },
+    {
+      "name": "East fire",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_CampFire_A.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          30.1,
+          -10
+        ]
+      },
+      "yaw": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "North-west tent",
+      "query": {
+        "assets": [
+          "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh"
+        ]
+      },
+      "count": [
+        1,
+        1
+      ],
+      "spacing": 0,
+      "store": "wobj",
+      "rule": {
+        "type": "at_anchor",
+        "offset": [
+          -16,
+          29
+        ]
+      },
+      "yaw": [
+        280,
+        280
+      ]
+    }
+  ]
+}

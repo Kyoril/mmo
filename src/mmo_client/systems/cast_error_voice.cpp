@@ -126,6 +126,7 @@ namespace mmo
 		m_player = player;
 		m_races = races;
 		m_blockedUntil = 0;
+		m_attackVoiceGate.Clear();
 	}
 
 	void CastErrorVoice::SetCharacter(const uint32 raceId, const uint8 gender)
@@ -163,14 +164,34 @@ namespace mmo
 			return;
 		}
 
-		PlayThrottled(ResolveAttackSoundId(attackEvent));
-	}
-
-	void CastErrorVoice::PlayThrottled(const uint32 soundId)
-	{
+		const uint32 soundId = ResolveAttackSoundId(attackEvent);
 		if (soundId == 0)
 		{
 			return;
+		}
+
+		// Auto attack re-reports its error on every swing attempt for as long as the
+		// condition holds, so the same line would be spoken every couple of seconds. Hold a
+		// repeat of the *same* line back; a different line still plays at once, because it
+		// tells the player something new. Spell cast errors do not go through this gate --
+		// they answer a single deliberate player action.
+		const GameTime now = GetAsyncTimeMs();
+		if (!m_attackVoiceGate.CanPlay(soundId, now))
+		{
+			return;
+		}
+
+		if (PlayThrottled(soundId))
+		{
+			m_attackVoiceGate.NotifyPlayed(soundId, now, attackErrorVoiceRepeatCooldownMs);
+		}
+	}
+
+	bool CastErrorVoice::PlayThrottled(const uint32 soundId)
+	{
+		if (soundId == 0)
+		{
+			return false;
 		}
 
 		// Don't stack voice lines when errors are spammed: block until the previous line
@@ -181,16 +202,17 @@ namespace mmo
 		const GameTime now = GetAsyncTimeMs();
 		if (now < m_blockedUntil)
 		{
-			return;
+			return false;
 		}
 
 		if (m_player->PlayEntry(soundId) == InvalidChannel)
 		{
-			return;
+			return false;
 		}
 
 		constexpr GameTime extraGapMs = 250;
 		m_blockedUntil = now + static_cast<GameTime>(m_player->GetEntryLength(soundId) * 1000.0f) + extraGapMs;
+		return true;
 	}
 
 	const proto_client::VoiceLineSet* CastErrorVoice::GetVoiceSet() const

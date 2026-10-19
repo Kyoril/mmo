@@ -50,8 +50,18 @@ namespace mmo
 		explicit ServerCollisionMap(const std::string& mapName);
 		~ServerCollisionMap() override = default;
 
+		/// @brief Creates a per-instance view over static geometry shared by every instance of a map.
+		/// @details Line of sight tests the shared static geometry and this view's own dynamic
+		/// instances. Dynamic instances added here are never visible to other views.
+		/// @param sharedStatic Static geometry, typically loaded once per map. May be null.
+		explicit ServerCollisionMap(std::shared_ptr<const ServerCollisionMap> sharedStatic);
+
 		/// @brief Returns true when at least one static collision instance was loaded.
-		[[nodiscard]] bool IsLoaded() const { return !m_instances.empty(); }
+		[[nodiscard]] bool IsLoaded() const { return !m_instances.empty() || (m_sharedStatic && m_sharedStatic->IsLoaded()); }
+
+		/// @brief Gets the mesh-space bounds of a dynamic instance's collision tree.
+		/// @return False for unknown handles.
+		[[nodiscard]] bool GetDynamicInstanceLocalBounds(uint64 handle, AABB& out) const;
 
 		/// @brief Returns true when the line from @p from to @p to is unobstructed.
 		/// Both points should already be at eye height. Points less than 1 cm apart are
@@ -89,6 +99,41 @@ namespace mmo
 		/// @brief Enables or disables a dynamic collision instance. Unknown handles are a safe no-op.
 		void SetDynamicInstanceEnabled(uint64 handle, bool enabled);
 
+	public:
+		/// @brief Height, in the foliage mesh's local space, above which foliage geometry no longer
+		///        blocks line of sight.
+		///
+		/// Foliage collision meshes include the whole canopy as solid geometry, while the rendered
+		/// leaves are alpha-tested and visibly see-through. Looking over trees on lower ground (or
+		/// under a wide crown) therefore failed line of sight although the target was in plain view.
+		/// Only the trunk keeps blocking. The value is in local mesh units, so it scales with the
+		/// instance: the crowns of the shipped trees start at about 5 m (Tree_02), and 4 m keeps the
+		/// whole trunk below that while dropping the crown. A fixed constant is used instead of
+		/// deriving a per-mesh crown height because trunk-only meshes (SM_Tree_05) have no crown to
+		/// detect, and a heuristic would silently change with every re-exported tree.
+		static constexpr float FoliageLineOfSightTrunkHeight = 4.0f;
+
+		/// @brief Registers a static, always-blocking collision instance (entity, world model part).
+		/// @details When a map's static geometry is shared between instances (see the shared-static
+		/// constructor), add static instances only while building it, before it is shared.
+		/// @return False when the instance was not registered, either because the tree is null or
+		///         empty or because MakeInstance rejected the transform.
+		bool AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName);
+
+		/// @brief Registers a static foliage instance. Only its trunk (see
+		///        FoliageLineOfSightTrunkHeight) blocks line of sight.
+		/// @param tree The full local-space collision tree of the foliage mesh. It is filtered here;
+		///        callers registering many instances of one mesh should filter once with
+		///        MakeFoliageLineOfSightTree and use AddInstance instead.
+		/// @return False when nothing was registered (no trunk geometry or a rejected transform).
+		bool AddFoliageInstance(const std::shared_ptr<AABBTree>& tree, const Matrix4& transform, const std::string& debugName);
+
+		/// @brief Builds the line of sight tree of a foliage mesh: only triangles with at least one
+		///        vertex below FoliageLineOfSightTrunkHeight are kept.
+		/// @return The input tree itself when nothing is above the trunk height, nullptr when no
+		///         triangle is below it, otherwise a new filtered tree.
+		static std::shared_ptr<AABBTree> MakeFoliageLineOfSightTree(const std::shared_ptr<AABBTree>& tree);
+
 	private:
 		/// Loads just the COLL chunk from a .mesh file into a shared AABBTree.
 		/// Returns nullptr if the file has no collision tree.
@@ -96,13 +141,16 @@ namespace mmo
 
 		/// Reads all visible mesh refs from a .hwmo world model file and appends
 		/// CollisionInstances for each, combining the instance transform with the
-		/// per-mesh-ref transform.
+		/// per-mesh-ref transform. Visible child world model references (MCWR) are
+		/// loaded recursively with their transforms composed onto the instance's.
+		/// @param ancestors Paths of the world models above this one in the nesting
+		///        chain, used to refuse references that would recurse forever.
 		void LoadWorldModelInstances(const std::string& hwmoPath,
-		                             const Matrix4& instanceTransform);
+		                             const Matrix4& instanceTransform,
+		                             std::vector<std::string> ancestors = {});
 
-		/// @return False when the instance was not registered, either because the tree is null or
-		///         empty or because MakeInstance rejected the transform.
-		bool AddInstance(std::shared_ptr<AABBTree> tree, const Matrix4& transform, const std::string& debugName);
+		/// Deepest nesting of child world models that is loaded, matching the client.
+		static constexpr size_t MaxWorldModelChildDepth = 8;
 
 		/// Builds a CollisionInstance (world bounds + inverse transform) from a tree and transform.
 		/// @param debugName Name of the source asset, used in the log message on rejection.
@@ -125,6 +173,8 @@ namespace mmo
 		};
 
 	private:
+		/// Static geometry shared by every instance of the map. Null for a standalone map.
+		std::shared_ptr<const ServerCollisionMap> m_sharedStatic;
 		std::vector<CollisionInstance> m_instances;
 		std::map<uint64, DynamicInstance> m_dynamicInstances;
 		uint64 m_nextDynamicHandle { 1 };

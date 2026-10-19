@@ -191,6 +191,198 @@ def flame(width=128, height=256):
     return rgba
 
 
+def slash(size=256, centre=1.0, arc=1.7, thickness=0.18):
+    """Crescent blade slash for melee impacts (`RENDER_BILLBOARD`, rolled by `rotation`).
+
+    An arc whose middle passes through the centre of the quad (its circle is centred
+    `centre` to the left), thickest in the middle and tapering to points at both tips, with a
+    bright cutting edge and a softer wake behind it. Because the cut crosses the quad centre,
+    two of them with different rolls cross each other at the impact point (an X), and a
+    random roll keeps every cut on the target. The curve is what reads as a swing.
+    """
+    xx, yy = _axes(size, size)
+    cx = xx + centre
+    r = np.sqrt(cx * cx + yy * yy)
+    theta = np.arctan2(yy, cx)
+    half = arc / 2.0
+    along = np.clip(1.0 - np.abs(theta) / half, 0.0, 1.0)      # 1 mid-arc, 0 at the tips
+    width = thickness * np.sin(along * np.pi / 2.0) ** 0.8
+    d = r - centre
+    edge = np.clip(1.0 - np.abs(d - width * 0.30) / (width * 0.35 + 1e-4), 0.0, 1.0) ** 1.3
+    wake = np.clip(1.0 - np.abs(d + width * 0.20) / (width + 1e-4), 0.0, 1.0) ** 2.0
+    a = np.clip(edge + 0.55 * wake, 0.0, 1.0) * (along > 0.0)
+    rr = np.sqrt(xx * xx + yy * yy)
+    a *= 1.0 - _smooth(0.92, 1.0, rr)
+    rgba = np.ones((size, size, 4))
+    rgba[..., 3] = a
+    return rgba
+
+
+def smoke(size=256, seed=7, lobes=9):
+    """Soft cloudy smoke puff: overlapping lobes with a wispy, uneven edge.
+
+    A round glow blob reads as light; smoke needs a lumpy silhouette and inner variation so
+    a cloud of them reads as billowing. Deterministic (fixed seed) so rebuilding does not
+    churn the texture bytes.
+    """
+    rng = np.random.default_rng(seed)
+    xx, yy = _axes(size, size)
+    a = np.zeros_like(xx)
+    for _ in range(lobes):
+        cx, cy = rng.uniform(-0.28, 0.28, 2)
+        rad = rng.uniform(0.32, 0.52)
+        rr2 = ((xx - cx) ** 2 + (yy - cy) ** 2) / (rad * rad)
+        a += np.exp(-2.2 * rr2) * rng.uniform(0.5, 1.0)
+    # Low-frequency turbulence so the inside is not a flat fill.
+    noise = np.zeros_like(xx)
+    for freq, amp in ((3.0, 0.5), (7.0, 0.3), (13.0, 0.2)):
+        px, py = rng.uniform(0, 6.28, 2)
+        noise += amp * np.sin(xx * freq + px) * np.cos(yy * freq * 1.3 + py)
+    a = 1.0 - np.exp(-0.75 * a * (0.65 + 0.35 * noise))
+    r = np.sqrt(xx * xx + yy * yy)
+    a = np.clip(a, 0.0, 1.0) * (1.0 - _smooth(0.85, 1.0, r))
+    rgba = np.ones((size, size, 4))
+    rgba[..., 3] = a
+    return rgba
+
+
+def crosshair(size=256):
+    """Hunter's mark: a broken ring with four inward-pointing ticks and a centre dot.
+
+    For a debuff marker hovering over a target. The gaps in the ring and the ticks are what
+    make it read as a reticle rather than as another shockwave ring.
+    """
+    xx, yy = _axes(size, size)
+    r = np.sqrt(xx * xx + yy * yy)
+    theta = np.arctan2(yy, xx)
+    ring_band = np.clip(1.0 - np.abs(r - 0.72) / 0.06, 0.0, 1.0) ** 1.4
+    gaps = _smooth(0.10, 0.22, np.abs(np.sin(theta * 2.0)))   # four gaps on the axes
+    a = ring_band * gaps
+    ax = np.minimum(np.abs(xx), np.abs(yy))
+    ticks = np.clip(1.0 - ax / 0.035, 0.0, 1.0) * _smooth(0.34, 0.40, r) * (1.0 - _smooth(0.84, 0.90, r))
+    a += ticks
+    a += np.clip(1.0 - r / 0.09, 0.0, 1.0) ** 1.2
+    a = np.clip(a, 0.0, 1.0) * (1.0 - _smooth(0.94, 1.0, r))
+    rgba = np.ones((size, size, 4))
+    rgba[..., 3] = a
+    return rgba
+
+
+def skull(size=256):
+    """A grinning skull for dread and fear effects (`RENDER_BILLBOARD`, no roll).
+
+    Cranium, cheekbones and a narrower jaw with a row of teeth; the eye sockets and the nose
+    are cut out of the alpha, so a tinted skull reads as a spectral face with hollow eyes. A
+    faint halo around the silhouette keeps it soft at low alpha without blurring the holes.
+    """
+    xx, yy = _axes(size, size)
+    yy = -yy  # +y up
+    px = 2.0 / size
+
+    def ellipse(cx, cy, rx, ry):
+        d = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
+        return np.clip((1.0 - d) / (px * 3.0 / min(rx, ry)), 0.0, 1.0)
+
+    cranium = ellipse(0.0, 0.22, 0.58, 0.58)
+    cheeks = ellipse(0.0, -0.12, 0.50, 0.30)
+    jaw = ellipse(0.0, -0.46, 0.30, 0.24)
+    head = np.maximum(np.maximum(cranium, cheeks), jaw)
+    # Hollow temples between cheekbones and jaw, so the jaw reads as a separate bone.
+    for side in (-1.0, 1.0):
+        head *= _smooth(0.9, 1.0, np.sqrt(((xx - 0.40 * side) / 0.14) ** 2 + ((yy + 0.40) / 0.16) ** 2))
+    # Teeth: a band across the jaw broken by vertical gaps, under a dark mouth line.
+    teeth_gaps = np.clip(np.abs(np.sin(xx * 26.0)) / 0.35, 0.0, 1.0)
+    teeth_band = _smooth(0.0, 0.02, -0.34 - yy) * _smooth(0.0, 0.02, yy + 0.54) * (np.abs(xx) < 0.22)
+    head *= 1.0 - teeth_band * (1.0 - teeth_gaps)
+    head *= 1.0 - np.clip(1.0 - np.abs(yy + 0.33) / 0.03, 0.0, 1.0) * (np.abs(xx) < 0.25)
+    # Eye sockets: large and round, their tops cut by a brow line that drops towards the
+    # nose -- the scowl.
+    for side in (-1.0, 1.0):
+        ex, ey = 0.23 * side, 0.0
+        rx = xx - ex
+        socket = np.sqrt((rx / 0.19) ** 2 + ((yy - ey) / 0.18) ** 2)
+        brow = ey + 0.10 + 0.45 * rx * side          # lower on the inner side
+        hole = (1.0 - _smooth(0.85, 1.0, socket)) * _smooth(-0.01, 0.01, brow - yy)
+        head *= 1.0 - hole
+    nose = (np.abs(xx) < 0.075 * (yy + 0.22) / 0.14) * (yy > -0.22) * (yy < -0.08)
+    head *= 1.0 - nose.astype(float)
+    # Slightly thinner inside than at the rim, so a tinted skull glows at its edges.
+    head *= 0.80 + 0.20 * np.clip(np.sqrt(xx * xx + (yy - 0.05) ** 2) / 0.55, 0.0, 1.0)
+    r = np.sqrt(xx * xx + yy * yy)
+    # The halo only lives outside the silhouette, so the cut-out eyes stay hollow.
+    outside = 1.0 - np.maximum(np.maximum(cranium, cheeks), jaw)
+    halo = 0.22 * np.clip(1.0 - r / 0.95, 0.0, 1.0) ** 2.0 * outside
+    a = np.clip(np.maximum(head, halo), 0.0, 1.0) * (1.0 - _smooth(0.92, 1.0, r))
+    rgba = np.ones((size, size, 4))
+    rgba[..., 3] = a
+    return rgba
+
+
+def wisp(width=128, height=256):
+    """A ghostly wisp: a soft round head trailing a long S-curved tail that thins to nothing.
+
+    Billboarded with a random roll a cloud of these reads as restless spirits or tendrils of
+    shadow curling off a body; stretched along velocity the head leads and the tail streams
+    behind. Head at the top of the image.
+    """
+    xx, yy = _axes(width, height)
+    yy = -yy
+    t = (1.0 - yy) * 0.5                     # 0 at the head (top), 1 at the tail tip
+    centre_x = 0.30 * np.sin(t * np.pi * 1.5) * t
+    half = 0.62 * (1.0 - t) ** 1.25 + 0.04
+    body = np.clip(1.0 - np.abs(xx - centre_x) / half, 0.0, 1.0) ** 1.2
+    head_d = np.sqrt((xx / 0.62) ** 2 + ((yy - 0.62) / 0.34) ** 2)
+    head = np.clip(1.0 - head_d, 0.0, 1.0) ** 0.8
+    a = np.maximum(body * (yy < 0.62), head)
+    a *= 0.75 + 0.25 * np.cos(t * 14.0 + xx * 3.0)   # faint striations along the tail
+    a *= _smooth(0.0, 0.10, 1.0 - t + 0.02) * (1.0 - _smooth(0.94, 1.0, t))
+    a *= 1.0 - _smooth(0.94, 1.0, np.abs(xx))
+    rgba = np.ones((height, width, 4))
+    rgba[..., 3] = np.clip(a, 0.0, 1.0)
+    return rgba
+
+
+def void_sigil(size=512):
+    """Occult ground circle for shadow magic (`RENDER_HORIZONTAL`).
+
+    Unlike the holy `sigil` (concentric bands, a four-point star) this one is broken and
+    sharp: an outer ring cut into arcs, a seven-pointed star of straight chords, inward
+    thorns, and small rune notches -- drawn darkness rather than consecrated light.
+    """
+    xx, yy = _axes(size, size)
+    r = np.sqrt(xx * xx + yy * yy)
+    theta = np.arctan2(yy, xx)
+
+    def band(radius, width):
+        return np.clip(1.0 - np.abs(r - radius) / width, 0.0, 1.0) ** 1.5
+
+    arcs = _smooth(0.12, 0.30, np.abs(np.sin(theta * 3.5)))          # seven gaps
+    a = band(0.88, 0.035) * arcs + 0.75 * band(0.80, 0.014)
+    # Heptagram {7/3}: chords between every third vertex of a heptagon at radius 0.78.
+    n, step, rad = 7, 3, 0.78
+    for i in range(n):
+        a0 = 2.0 * np.pi * i / n + np.pi / 2.0
+        a1 = 2.0 * np.pi * ((i + step) % n) / n + np.pi / 2.0
+        x0, y0 = rad * np.cos(a0), rad * np.sin(a0)
+        x1, y1 = rad * np.cos(a1), rad * np.sin(a1)
+        dx, dy = x1 - x0, y1 - y0
+        length2 = dx * dx + dy * dy
+        tt = np.clip(((xx - x0) * dx + (yy - y0) * dy) / length2, 0.0, 1.0)
+        dist = np.sqrt((xx - x0 - tt * dx) ** 2 + (yy - y0 - tt * dy) ** 2)
+        a += 0.85 * np.clip(1.0 - dist / 0.018, 0.0, 1.0) ** 1.3
+    # Inward thorns from the outer ring, between the star points.
+    thorn_phase = np.abs(np.sin(theta * 7.0 + np.pi / 2.0))
+    thorn_width = 0.16 * np.clip((r - 0.62) / 0.24, 0.0, 1.0)
+    a += 0.8 * np.clip(1.0 - thorn_phase / (thorn_width + 1e-4), 0.0, 1.0) * _smooth(0.62, 0.66, r) * (1.0 - _smooth(0.84, 0.87, r))
+    # Rune notches riding a thin inner ring, and a hollow centre eye.
+    notches = np.clip(1.0 - np.abs(np.sin(theta * 14.0)) / 0.18, 0.0, 1.0) * np.clip(1.0 - np.abs(r - 0.30) / 0.04, 0.0, 1.0)
+    a += 0.7 * band(0.30, 0.012) + 0.6 * notches + 0.8 * band(0.12, 0.03)
+    a = np.clip(a, 0.0, 1.0) * (1.0 - _smooth(0.94, 1.0, r))
+    rgba = np.ones((size, size, 4))
+    rgba[..., 3] = a
+    return rgba
+
+
 SPRITES = {
     "T_Particle_Glow": glow,
     "T_Particle_Beam": beam,
@@ -199,6 +391,12 @@ SPRITES = {
     "T_Particle_Rays": rays,
     "T_Particle_Feather": feather,
     "T_Particle_Flame": flame,
+    "T_Particle_Slash": slash,
+    "T_Particle_Smoke": smoke,
+    "T_Particle_Crosshair": crosshair,
+    "T_Particle_Skull": skull,
+    "T_Particle_Wisp": wisp,
+    "T_Particle_VoidSigil": void_sigil,
 }
 
 
@@ -210,6 +408,12 @@ MATERIALS = {
     "Particle_Rays": "T_Particle_Rays",
     "Particle_Feather": "T_Particle_Feather",
     "Particle_Flame": "T_Particle_Flame",
+    "Particle_Slash": "T_Particle_Slash",
+    "Particle_Smoke": "T_Particle_Smoke",
+    "Particle_Crosshair": "T_Particle_Crosshair",
+    "Particle_Skull": "T_Particle_Skull",
+    "Particle_Wisp": "T_Particle_Wisp",
+    "Particle_VoidSigil": "T_Particle_VoidSigil",
 }
 
 

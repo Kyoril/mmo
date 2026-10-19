@@ -121,6 +121,11 @@ namespace mmo
         auto worldModelInstance = std::make_unique<WorldModelInstance>(uniqueId, worldModel);
         worldModelInstance->SetQueryFlags(SceneQueryFlags_Entity);
 
+        // Same merged geometry as the client: the world editor places and moves whole world models,
+        // never their pieces (that is the world model editor's job, which never merges), and picking
+        // still hits the merged entities, which hang below this instance's node.
+        worldModelInstance->SetMergingEnabled(true);
+
         // Create scene node
         auto &node = m_scene.CreateSceneNode(uniqueId);
         m_scene.GetRootSceneNode().AddChild(node);

@@ -28,6 +28,7 @@
 #include "graphics_presets.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/spell_text_formatter.h"
+#include "game_client/trade_skill_list.h"
 #include "loading_screen.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
@@ -301,6 +302,65 @@ namespace mmo
 			}
 
 			return player->GetVisibleSpell(index);
+		}
+
+		/// Skill definitions used to localize profession names for Spell script methods (which cannot
+		/// reach the GameScript instance). Set when the script functions are registered.
+		const proto_client::SkillManager* g_scriptSkills = nullptr;
+
+		/// Spell:GetCreatedItem() -> itemId, count (0, 0 if the spell creates no item).
+		void Script_GetSpellCreatedItem(const proto_client::SpellEntry* spell, int32& outItemId, int32& outCount)
+		{
+			outItemId = 0;
+			outCount = 0;
+			uint32 itemId = 0;
+			if (spell != nullptr && GetSpellCreatedItem(*spell, itemId, outCount))
+			{
+				outItemId = static_cast<int32>(itemId);
+			}
+		}
+
+		/// Spell:GetNumReagents()
+		int32 Script_GetSpellNumReagents(const proto_client::SpellEntry* spell)
+		{
+			return spell != nullptr ? spell->reagents_size() : 0;
+		}
+
+		/// Spell:GetReagent(index) -> itemId, count with a 0-based index (0, 0 if out of range).
+		void Script_GetSpellReagent(const proto_client::SpellEntry* spell, int32 index, int32& outItemId, int32& outCount)
+		{
+			outItemId = 0;
+			outCount = 0;
+			if (spell == nullptr || index < 0 || index >= spell->reagents_size())
+			{
+				return;
+			}
+
+			outItemId = static_cast<int32>(spell->reagents(index).item());
+			outCount = static_cast<int32>(spell->reagents(index).count());
+		}
+
+		/// Spell:GetRequiredSkill() -> skillId, value, localized skill name (0, 0, "" if the spell
+		/// requires no profession skill, i.e. is not a TradeSpell).
+		void Script_GetSpellRequiredSkill(const proto_client::SpellEntry* spell, int32& outSkillId, int32& outValue, std::string& outName)
+		{
+			outSkillId = 0;
+			outValue = 0;
+			outName.clear();
+			if (spell == nullptr || spell->skill() == 0 || spell->attributes_size() == 0 || (spell->attributes(0) & spell_attributes::TradeSpell) == 0)
+			{
+				return;
+			}
+
+			outSkillId = static_cast<int32>(spell->skill());
+			outValue = static_cast<int32>(spell->skillrequired());
+			if (g_scriptSkills != nullptr)
+			{
+				if (const auto* skill = g_scriptSkills->getById(spell->skill()))
+				{
+					outName = GetLocalizedString(skill->name(), skill->name_loc(), GetClientLocale());
+				}
+			}
 		}
 
 		bool Script_IsSpellAbility(const proto_client::SpellEntry* spell)
@@ -964,11 +1024,17 @@ namespace mmo
 							   .def("GetAuraCount", &UnitHandle::GetAuraCount)
 							   .def("GetAura", &UnitHandle::GetAura)
 							   .def("GetName", &UnitHandle::GetName)
+							   .def("GetSubtitle", &UnitHandle::GetSubtitle)
 							   .def("GetPowerType", &UnitHandle::GetPowerType)
 							   .def("GetMinDamage", &UnitHandle::GetMinDamage)
 							   .def("GetMaxDamage", &UnitHandle::GetMaxDamage)
 							   .def("GetAttackTime", &UnitHandle::GetAttackTime)
 							   .def("GetAttackPower", &UnitHandle::GetAttackPower)
+							   .def("GetSpellDamage", &UnitHandle::GetSpellDamage)
+							   .def("GetSpellHealing", &UnitHandle::GetSpellHealing)
+							   .def("GetSpellCritChance", &UnitHandle::GetSpellCritChance)
+							   .def("GetMeleeCritChance", &UnitHandle::GetMeleeCritChance)
+							   .def("GetManaRegen", &UnitHandle::GetManaRegen)
 							   .def("GetArmor", &UnitHandle::GetArmor)
 							   .def("GetTalentPoints", &UnitHandle::GetTalentPoints)
 							   .def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)
@@ -1030,6 +1096,7 @@ namespace mmo
 							   .def("GetStartQuestId", &ItemHandle::GetStartQuestId)
 							   .def("IsBound", &ItemHandle::IsBound)
 							   .def("IsUsable", &ItemHandle::IsUsable)
+							   .def("IsSameItem", &ItemHandle::IsSameItem)
 							   .def("GetRequiredLevel", &ItemHandle::GetRequiredLevel)),
 
 						   luabind::scope(
@@ -1044,7 +1111,11 @@ namespace mmo
 							   .def_readonly("casttime", &proto_client::SpellEntry::casttime)
 							   .def_readonly("icon", &proto_client::SpellEntry::icon)
 							   .def("IsAbility", &Script_IsSpellAbility)
-							   .def("IsSkill", &Script_IsSpellSkill)),
+							   .def("IsSkill", &Script_IsSpellSkill)
+							   .def("GetCreatedItem", &Script_GetSpellCreatedItem, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>())
+							   .def("GetNumReagents", &Script_GetSpellNumReagents)
+							   .def("GetReagent", &Script_GetSpellReagent, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>())
+							   .def("GetRequiredSkill", &Script_GetSpellRequiredSkill, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>())),
 
 					   luabind::def("Quit", &Script_Quit),
 					   luabind::def<std::function<void()>>("Logout", [this]()
@@ -1062,6 +1133,154 @@ namespace mmo
 					   luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 					   luabind::def("GetCVar", &Script_GetConsoleVar),
 					   luabind::def("SetCVar", &Script_SetConsoleVar),
+
+					   // Returns the player's professions as an array of { skillId, name, icon, value, max },
+					   // sorted by name. Empty if there is no active player or no profession is known.
+					   luabind::def<std::function<luabind::object()>>("GetProfessions", [this]() -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   if (!player)
+						   {
+							   return result;
+						   }
+
+						   int i = 1;
+						   for (const ProfessionInfo& profession : BuildProfessionList(player->GetSpells(), m_project.skills, player->GetTradeSkills()))
+						   {
+							   const auto* skill = m_project.skills.getById(profession.skillId);
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["skillId"] = profession.skillId;
+							   entry["name"] = GetLocalizedString(skill->name(), skill->name_loc(), GetClientLocale());
+							   entry["icon"] = profession.unlockSpell->icon();
+							   entry["value"] = static_cast<int>(profession.value);
+							   entry["max"] = static_cast<int>(profession.max);
+							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
+
+					   // Returns the recipe categories of a profession as an array of { id, name }, sorted by sortorder.
+					   luabind::def<std::function<luabind::object(int)>>("GetProfessionCategories", [this](const int skillId) -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+
+						   const auto* skill = m_project.skills.getById(static_cast<uint32>(std::max(0, skillId)));
+						   if (skill == nullptr)
+						   {
+							   return result;
+						   }
+
+						   std::vector<const proto_client::SkillCategory*> categories;
+						   for (const auto& category : skill->categories())
+						   {
+							   categories.push_back(&category);
+						   }
+						   std::stable_sort(categories.begin(), categories.end(), [](const auto* a, const auto* b)
+						   {
+							   return a->sortorder() < b->sortorder();
+						   });
+
+						   int i = 1;
+						   for (const auto* category : categories)
+						   {
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["id"] = category->id();
+							   entry["name"] = GetLocalizedString(category->name(), category->name_loc(), GetClientLocale());
+							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
+
+					   // Returns the known recipes of a profession as an array of { spellId, name, icon, category,
+					   // difficulty ("orange"|"yellow"|"green"|"grey"|"impossible"), resultItemId, resultCount,
+					   // reagents = { { itemId, count }, ... } }, ordered by category, then name.
+					   luabind::def<std::function<luabind::object(int)>>("GetRecipes", [this](const int skillId) -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   const auto* skill = m_project.skills.getById(static_cast<uint32>(std::max(0, skillId)));
+						   if (!player || skill == nullptr)
+						   {
+							   return result;
+						   }
+
+						   uint32 skillValue = 0;
+						   const auto& tradeSkills = player->GetTradeSkills();
+						   if (const auto it = tradeSkills.find(skill->id()); it != tradeSkills.end())
+						   {
+							   skillValue = it->second.value;
+						   }
+
+						   int i = 1;
+						   for (const RecipeInfo& recipe : BuildRecipeList(skill->id(), player->GetSpells(), *skill, skillValue))
+						   {
+							   const char* difficulty = "grey";
+							   switch (recipe.difficulty)
+							   {
+							   case trade_skill_difficulty::Impossible: difficulty = "impossible"; break;
+							   case trade_skill_difficulty::Orange: difficulty = "orange"; break;
+							   case trade_skill_difficulty::Yellow: difficulty = "yellow"; break;
+							   case trade_skill_difficulty::Green: difficulty = "green"; break;
+							   default: break;
+							   }
+
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["spellId"] = recipe.spell->id();
+							   entry["name"] = Script_GetSpellName(*recipe.spell);
+							   entry["icon"] = recipe.spell->icon();
+							   entry["category"] = recipe.category;
+							   entry["difficulty"] = std::string(difficulty);
+							   entry["resultItemId"] = recipe.resultItemId;
+							   entry["resultCount"] = recipe.resultCount;
+
+							   luabind::object reagents = luabind::newtable(m_luaState.get());
+							   int r = 1;
+							   for (const auto& reagent : recipe.spell->reagents())
+							   {
+								   luabind::object reagentEntry = luabind::newtable(m_luaState.get());
+								   reagentEntry["itemId"] = reagent.item();
+								   reagentEntry["count"] = reagent.count();
+								   reagents[r++] = reagentEntry;
+							   }
+							   entry["reagents"] = reagents;
+
+							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
+
+					   // Returns whether the player knows at least one profession.
+					   luabind::def<std::function<bool()>>("HasProfessions", [this]() -> bool
+					   {
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   return player && !BuildProfessionList(player->GetSpells(), m_project.skills, player->GetTradeSkills()).empty();
+					   }),
+
+					   // Returns the current value and cap of a profession skill, or 0, 0 if it is unknown.
+					   luabind::def<std::function<void(int, int &, int &)>>("GetTradeSkillValue", [](const int skillId, int &out_value, int &out_max)
+					   {
+						   out_value = 0;
+						   out_max = 0;
+
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   if (!player)
+						   {
+							   return;
+						   }
+
+						   const auto& tradeSkills = player->GetTradeSkills();
+						   if (const auto it = tradeSkills.find(static_cast<uint32>(std::max(0, skillId))); it != tradeSkills.end())
+						   {
+							   out_value = it->second.value;
+							   out_max = it->second.max;
+						   }
+					   }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 
 					   // Returns the window resolutions available on a monitor (0-based index as in
 					   // GetDisplayMonitors), each entry being a table with { width, height, label = "WxH" },
@@ -1297,6 +1516,7 @@ namespace mmo
 					   luabind::def("print", &Script_Print),
 
 					   luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),
+					   luabind::def("IsAltKeyDown", Platform::IsAltKeyDown),
 
 					   luabind::def("UnitExists", &Script_UnitExists),
 					   luabind::def("IsMouseoverWorldObject", &Script_IsMouseoverWorldObject),
@@ -1370,6 +1590,18 @@ namespace mmo
 				}
 
 				return std::make_shared<ItemHandle>(*item, m_project); }),
+
+					   // Inventory slot id of an equipment slot an item of the given inventory type is compared
+					   // against (rings, trinkets and one-handed weapons have two, index 0 and 1), or -1.
+					   luabind::def<std::function<int32(const char *, uint32)>>("GetComparisonInventorySlot", [](const char *inventoryType, uint32 index)
+																			   {
+				const int32 equipmentSlot = GetComparisonEquipmentSlot(GetInventoryTypeByName(inventoryType), index);
+				if (equipmentSlot < 0)
+				{
+					return -1;
+				}
+
+				return static_cast<int32>((player_inventory_slots::Bag_0 << 8) | equipmentSlot); }),
 
 					   luabind::def("GetTime", &GetAsyncTimeMs),
 
@@ -1517,6 +1749,46 @@ namespace mmo
 															   }
 															   return static_cast<int32>(trainerSpells[slot].requiredLevel);
 														   }),
+					   // Returns skillId, value, localized skill name required by a trainer entry (0, 0, "" if none).
+					   luabind::def<std::function<void(int32, int32 &, int32 &, String &)>>("GetTrainerSpellReqSkill", [this](int32 slot, int32 &out_skillId, int32 &out_value, String &out_name)
+														   {
+															   out_skillId = 0;
+															   out_value = 0;
+															   out_name.clear();
+															   const auto& trainerSpells = this->m_trainerClient.GetTrainerSpells();
+															   if (slot < 0 || slot >= static_cast<int32>(trainerSpells.size()) || trainerSpells[slot].skill == 0)
+															   {
+																   return;
+															   }
+
+															   out_skillId = static_cast<int32>(trainerSpells[slot].skill);
+															   out_value = static_cast<int32>(trainerSpells[slot].skillValue);
+															   if (const auto* skill = this->m_project.skills.getById(trainerSpells[slot].skill))
+															   {
+																   out_name = GetLocalizedString(skill->name(), skill->name_loc(), GetClientLocale());
+															   }
+														   }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+					   luabind::def<std::function<void(int32, String &, bool &)>>("GetTrainerSpellRequiredTalent", [this](int32 slot, String &out_name, bool &out_learned)
+														   {
+															   out_name.clear();
+															   out_learned = true;
+															   if (slot < 0 || slot >= static_cast<int32>(this->m_trainerClient.GetNumTrainerSpells()))
+															   {
+																   return;
+															   }
+
+															   const auto* talent = this->m_trainerClient.GetRequiredTalent(static_cast<uint32>(slot));
+															   if (talent == nullptr || talent->ranks_size() == 0)
+															   {
+																   return;
+															   }
+
+															   if (const auto* rankSpell = this->m_project.spells.getById(talent->ranks(0)))
+															   {
+																   out_name = GetLocalizedString(rankSpell->name(), rankSpell->name_loc(), GetClientLocale());
+															   }
+															   out_learned = this->m_trainerClient.HasRequiredTalent(static_cast<uint32>(slot));
+														   }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 
 					   luabind::def<std::function<const char *(const ItemInfo *, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo *item, int32 index)
 																						  { return this->GetItemSpellTriggerType(item, index); }),
@@ -1619,6 +1891,9 @@ namespace mmo
 					   luabind::def<std::function<bool()>>("IsPartyLeader", [this]()
 														   { return m_partyInfo.GetLeaderGuid() == ObjectMgr::GetActivePlayerGuid(); }),
 
+				   luabind::def<std::function<void()>>("ResetInstances", [this]()
+														{ m_realmConnector.ResetInstances(); }),
+
 				   luabind::def<std::function<int32()>>("GetLootMethod", [this]()
 														{ return static_cast<int32>(m_partyInfo.GetLootMethod()); }),
 
@@ -1667,6 +1942,39 @@ namespace mmo
 						   if (guid == 0) { return -1; }
 						   const int32 idx = m_partyInfo.GetMemberIndexByGuid(guid);
 						   return idx >= 0 ? idx + 1 : -1;
+					   }),
+
+				   // True if the local player hands out the party's master loot.
+				   luabind::def<std::function<bool()>>("IsLootMaster",
+					   [this]() -> bool
+					   {
+						   return m_partyInfo.GetMemberCount() > 0 &&
+							   m_partyInfo.GetLootMethod() == loot_method::MasterLoot &&
+							   m_partyInfo.GetLootMasterGuid() == ObjectMgr::GetActivePlayerGuid();
+					   }),
+
+				   // GiveMasterLoot(lootSlot, candidate) hands a master loot item to a party member:
+				   // candidate 0 is the local player, 1..GetPartySize() the party members.
+				   luabind::def<std::function<void(int32, int32)>>("GiveMasterLoot",
+					   [this](const int32 slot, const int32 candidate)
+					   {
+						   uint64 targetGuid = 0;
+						   if (candidate == 0)
+						   {
+							   targetGuid = ObjectMgr::GetActivePlayerGuid();
+						   }
+						   else if (const auto* member = m_partyInfo.GetMember(candidate - 1))
+						   {
+							   targetGuid = member->guid;
+						   }
+
+						   const int32 serverSlot = MapUISlotToServerSlot(slot);
+						   if (targetGuid == 0 || serverSlot < 0)
+						   {
+							   return;
+						   }
+
+						   m_lootClient.SendMasterLootItem(static_cast<uint8>(serverSlot), targetGuid);
 					   }),
 
 					   luabind::def<std::function<void(const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type)
@@ -1778,6 +2086,7 @@ namespace mmo
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 		luabind::globals(m_luaState.get())["gameData"] = &m_project;
+		g_scriptSkills = &m_project.skills;
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;

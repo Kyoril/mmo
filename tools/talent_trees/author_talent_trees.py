@@ -21,7 +21,10 @@ Design rules that are easy to undo by accident:
 * Real talents use only mechanics the server runs: spell modifiers (matched by family flags),
   stat auras, ProcTriggerSpell and active spells. Anything else is a placeholder: shown in the
   tree with its planned effect, refused by the server, dimmed by the client.
-* Single-rank talent spells use rank 0 and baseid 0 (no "Rank 1" line in the tooltip).
+* A spell has rank info only when it has several ranks. Single-rank talent spells use rank 0 and
+  baseid 0, unless higher ranks continue them (a trainer rank whose baseid points at the talent
+  spell, e.g. Fireball rank 2, baseid 4): then the talent spell is rank 1 with baseid set to
+  itself. The talent tree's tooltip leaves the spell rank out (it shows the talent's points).
 * Descriptions use literal numbers for modifiers: the tooltip formatter prints $s raw, so a
   negative cast time modifier would read "-400".
 * Old rank spells that a talent no longer uses are neutered (effects removed). Characters who
@@ -692,6 +695,9 @@ CLERIC = {
             "CAP": talent(143, Spell(1203, {
                 "attributes": HEAL_ACTIVE_ATTRS, "spellSchool": SCHOOL_HOLY, "positive": 1,
                 "icon": ICONS + "T_Icon_Gold_88.htex", "casttime": 2500, "cost": 80,
+                # Movement | Interrupt, like every other player spell with a cast time:
+                # without it the cast survives the caster running away.
+                "interruptflags": 5,
                 "cooldown": "1500", "visualization_id": 70, "rangetype": 5,
                 "maxlevel": 10, "baselevel": 1, "spelllevel": 1,
                 "effects": [{"type": HEAL, "basepoints": 30, "diesides": 8, "pointsperlevel": 1.5,
@@ -874,6 +880,7 @@ ACOLYTE = {
                 extra=[Spell(1306, {
                     "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "positive": 1,
                     "duration": 10000, "icon": ICONS + "T_Icon_Shadow_85.htex",
+                    "visualization_id": 136,  # Acolyte - Gloaming Trance
                     "effects": [mod(OP_CAST, 0x10, -100, pct=True)],
                     "procflags": DONE_MAGIC_NEG, "procchance": 100, "proccharges": 1, "procfamily": 0x10,
                     **text_fields(("Zwielichttrance", "Gloaming Trance", "Transe de la brune", "Сумеречный транс"),
@@ -904,7 +911,8 @@ ACOLYTE = {
             "CAP": talent(167, Spell(1309, {
                 "attributes": AOE_ACTIVE_ATTRS, "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "T_Icon_Shadow_58.htex",
                 "cooldown": "12000", "cost": 55, "rangetype": 4, "familyflags": str(0x20),
-                "maxlevel": 10, "baselevel": 0, "spelllevel": 0, "visualization_id": 55,
+                "maxlevel": 10, "baselevel": 0, "spelllevel": 0,
+                "visualization_id": 134,  # Acolyte - Umbral Bloom
                 "effects": [{"type": SCHOOL_DAMAGE, "basepoints": 28, "diesides": 8, "pointsperlevel": 1.2,
                              "targeta": T_SOURCE_AREA_ENEMY, "radius": 8.0, "powerbonusfactor": 0.3}],
                 **text_fields(("Schattenblüte", "Umbral Bloom", "Floraison ombrale", "Теневое цветение"),
@@ -957,6 +965,7 @@ ACOLYTE = {
                 extra=[Spell(1314, {
                     "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "positive": 1,
                     "icon": ICONS + "T_Icon_Unholy_27.htex", "maxlevel": 10, "baselevel": 1, "spelllevel": 1,
+                    "visualization_id": 137,  # Acolyte - Leeching Rot
                     "effects": [{"type": HEAL, "basepoints": 2, "pointsperlevel": 0.5, "targeta": T_CASTER}],
                     **text_fields(("Saugende Fäulnis", "Leeching Rot", "Pourriture sangsue", "Пиявочная гниль"),
                                   ("Heilt dich um $s0.", "Heals you for $s0.", "Vous rend $s0 points de vie.",
@@ -1030,7 +1039,8 @@ ACOLYTE = {
             "CAP": talent(181, Spell(1328, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_SHADOW, "positive": 1,
                 "icon": ICONS + "T_Icon_Shadow_118.htex", "duration": 20000, "cooldown": "120000",
-                "cost": 40, "visualization_id": 2,
+                "cost": 40,
+                "visualization_id": 135,  # Acolyte - Embrace of Dread
                 "effects": [mod(OP_DAMAGE, 0x1, 20, pct=True), aura(DMG_TAKEN_PCT, -10)],
                 **text_fields(("Umarmung des Grauens", "Embrace of Dread", "Étreinte de l'effroi", "Объятия ужаса"),
                               ("Du wirst $D lang zum Avatar des Grauens: 20% mehr Schattenschaden und 10% weniger erlittener Schaden.",
@@ -1111,7 +1121,7 @@ SCOUT = {
             "CAP": talent(198, Spell(1409, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
                 "icon": ICONS + "T_Icon_Energy_70.htex", "duration": 15000, "cooldown": "180000",
-                "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 4,
+                "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 111,  # Scout - Fever Pitch
                 "effects": [aura(MOD_POWER_REGEN_PCT, 100, POWER_ENERGY)],
                 **text_fields(("Fieberrausch", "Fever Pitch", "Fièvre du combat", "Боевая лихорадка"),
                               ("Verdoppelt $D lang deine Energieregeneration.", "Doubles your Energy regeneration for $D.",
@@ -1171,7 +1181,7 @@ SCOUT = {
             "CAP": talent(205, Spell(1413, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
                 "icon": ICONS + "T_Icon_BloodCombat_05.htex", "duration": 20000, "cooldown": "90000",
-                "powertype": POWER_ENERGY, "cost": 0,
+                "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 112,  # Scout - Steady Hand
                 "effects": [mod(OP_CRIT, 0x53, 100)],
                 "procflags": DONE_MELEE_SPELL, "procchance": 100, "proccharges": 1,
                 **text_fields(("Ruhige Hand", "Steady Hand", "Main sûre", "Твёрдая рука"),
@@ -1231,7 +1241,7 @@ SCOUT = {
             "CAP": talent(212, Spell(1426, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
                 "icon": ICONS + "T_Icon_Energy_30.htex", "duration": 10000, "cooldown": "180000",
-                "powertype": POWER_ENERGY, "cost": 0,
+                "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 109,  # Scout - Smoke and Mirrors
                 "effects": [aura(MOD_DODGE, 50)],
                 **text_fields(("Rauch und Spiegel", "Smoke and Mirrors", "Écran de fumée", "Дым и зеркала"),
                               ("Erhöht $D lang deine Ausweichchance um $s0%.",
@@ -1360,6 +1370,7 @@ def build(spells, talents, tabs):
     removed = [entry.id for entry in talents.entry if entry.tab in class_tabs and entry.id not in authored_talents]
 
     used_rank_spells = set()
+    single_rank_spells = set()
     labels = dict(UI_STRINGS)
     for cls in CLASSES:
         tab = tabs_by_id.get(cls["tab_id"])
@@ -1405,7 +1416,9 @@ def build(spells, talents, tabs):
                 for rank_index, rank in enumerate(ranks):
                     spell = apply_spell(spells_by_id, spells, rank, cls["classmask"])
                     if len(ranks) == 1:
+                        # Rank 1 instead when trainer ranks continue the spell (see below).
                         spell.rank, spell.baseid = 0, 0
+                        single_rank_spells.add(rank.id)
                     else:
                         spell.rank, spell.baseid = rank_index + 1, ranks[0].id
                     spell.prevspell = ranks[rank_index - 1].id if rank_index > 0 else 0
@@ -1440,6 +1453,15 @@ def build(spells, talents, tabs):
             spell.ClearField("description_loc")
             spell.ClearField("auratext_loc")
             neutered.append(spell_id)
+
+    # A single-rank talent spell that higher ranks continue (trainer ranks such as Fireball rank 2,
+    # whose baseid points at it) is rank 1 of that chain. Retired rank spells do not count: their
+    # baseid is left over from an older tree.
+    continued = {spell.baseid for spell in spells.entry
+                 if spell.baseid not in (0, spell.id) and spell.id not in candidates and spell.id not in used_rank_spells}
+    for spell_id in sorted(single_rank_spells & continued):
+        spell = spells_by_id[spell_id]
+        spell.rank, spell.baseid = 1, spell_id
 
     for talent_id in removed:
         index = next(i for i, entry in enumerate(talents.entry) if entry.id == talent_id)

@@ -61,6 +61,20 @@ namespace mmo
 	/// @brief Typedef for a material expression index.
 	using ExpressionIndex = int32;
 
+	/// @brief Shape of the optical surface waves a material root can enable. They only move the
+	///	       rendered surface; nothing on the CPU (collision, swimming) knows about them.
+	struct VertexWaveSettings
+	{
+		/// @brief Crest height of the largest wave in world units. The full sum stays below ~2x this.
+		float height { 0.18f };
+		/// @brief Wavelength of the dominant wave in world units. Keep well above the mesh spacing.
+		float length { 22.0f };
+		/// @brief Multiplier on the deep-water dispersion speed.
+		float speed { 1.0f };
+		/// @brief Main travel direction in degrees, 0 = +X, 90 = +Z.
+		float direction { 35.0f };
+	};
+
 	/// @brief Base class of a material compiler which is expected to generate high level shader code
 	///	       based on material expressions, which should then be able to be sent to a shader compiler
 	///		   to create actual binary shader code.
@@ -403,6 +417,11 @@ namespace mmo
 
 		void SetIsUserInterface(const bool enable) { m_userInterface = enable; }
 
+		/// @brief Enables optical Gerstner waves, displaced in the default vertex shader variant.
+		/// @param enable Whether the default vertex shader displaces its vertices.
+		/// @param settings Wave shape, baked into the shader as literals.
+		void SetVertexWaves(const bool enable, const VertexWaveSettings& settings) { m_vertexWaves = enable; m_vertexWaveSettings = settings; }
+
 	protected:
 		/// @brief Called to generate the vertex shader code.
 		virtual void GenerateVertexShaderCode(VertexShaderType type) = 0;
@@ -447,6 +466,8 @@ namespace mmo
 		bool m_masked{ false };
 		bool m_twoSided { false };
 		bool m_userInterface{ false };
+		bool m_vertexWaves { false };
+		VertexWaveSettings m_vertexWaveSettings;
 
 		/// @brief Whether this material references at least one global shader parameter and thus
 		///        needs the shared GlobalParameters constant buffer declared in its shader.

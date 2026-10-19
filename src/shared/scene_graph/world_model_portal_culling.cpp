@@ -218,9 +218,11 @@ namespace mmo
         class PortalGroupCollector final
         {
         public:
-            PortalGroupCollector(const WorldModel& model, const Matrix4& modelToWorld, std::vector<int32>& visibleGroups)
+            PortalGroupCollector(const WorldModel& model, const Matrix4& modelToWorld, std::vector<int32>& visibleGroups,
+                std::vector<PortalFrustum>* exteriorFrustums)
                 : m_model(model)
                 , m_visibleGroups(visibleGroups)
+                , m_exteriorFrustums(exteriorFrustums)
                 , m_visible(model.GetGroupCount(), false)
                 , m_onPath(model.GetGroupCount(), false)
             {
@@ -260,7 +262,7 @@ namespace mmo
                 return m_portalVertices[portalIndex];
             }
 
-            void Traverse(const int32 groupIndex, const PortalFrustum& frustum)
+            void Traverse(const int32 groupIndex, const PortalFrustum& frustum, const bool viaPortal = false)
             {
                 if (groupIndex < 0 || groupIndex >= static_cast<int32>(m_onPath.size()) || m_onPath[groupIndex])
                 {
@@ -271,6 +273,13 @@ namespace mmo
                 if (!group)
                 {
                     return;
+                }
+
+                // Reaching the outside through a portal: everything beyond this world model is seen
+                // through this frustum
+                if (viaPortal && m_exteriorFrustums && group->IsExterior())
+                {
+                    m_exteriorFrustums->push_back(frustum);
                 }
 
                 MarkVisible(groupIndex);
@@ -295,12 +304,12 @@ namespace mmo
                     {
                         // Standing in the opening: narrowing through it would be degenerate
                         ++m_traversals;
-                        Traverse(target, frustum);
+                        Traverse(target, frustum, true);
                     }
                     else if (frustum.IsPortalVisible(vertices))
                     {
                         ++m_traversals;
-                        Traverse(target, frustum.ClipThroughPortal(vertices));
+                        Traverse(target, frustum.ClipThroughPortal(vertices), true);
                     }
                 }
 
@@ -310,6 +319,7 @@ namespace mmo
         private:
             const WorldModel& m_model;
             std::vector<int32>& m_visibleGroups;
+            std::vector<PortalFrustum>* m_exteriorFrustums;
             std::vector<bool> m_visible;
             std::vector<bool> m_onPath;
             std::vector<std::vector<Vector3>> m_portalVertices;
@@ -321,9 +331,15 @@ namespace mmo
         const WorldModel& model,
         const Matrix4& modelToWorld,
         const PortalFrustum& viewFrustum,
-        std::vector<int32>& visibleGroups)
+        std::vector<int32>& visibleGroups,
+        PortalInteriorView* interiorView)
     {
         visibleGroups.clear();
+        if (interiorView)
+        {
+            interiorView->eyeInInterior = false;
+            interiorView->exteriorFrustums.clear();
+        }
 
         const size_t groupCount = model.GetGroupCount();
         if (groupCount == 0)
@@ -331,18 +347,29 @@ namespace mmo
             return;
         }
 
-        PortalGroupCollector collector(model, modelToWorld, visibleGroups);
+        PortalGroupCollector collector(model, modelToWorld, visibleGroups, interiorView ? &interiorView->exteriorFrustums : nullptr);
 
         // The eye's rooms: every group containing it, and both sides of any doorway it stands in.
         // Group volumes are authored per room and may overlap where rooms meet, so picking a single
         // "best" group would credit the eye to the wrong room there - and that room's portals would
         // then hide the one the eye is really in.
         const Vector3 localEye = modelToWorld.Inverse() * viewFrustum.origin;
+        //
+        // A group without containment volumes is a room only when it is flagged interior. Outdoor
+        // world models (a town) split their streets into exterior cells for frustum culling only,
+        // and props (a lantern) often carry no flags at all: their bounding boxes must not shut the
+        // eye in - a lantern's box would otherwise count as a doorless room around the camera and
+        // hide every other world model. Such groups are seeded below like anything else outside.
         std::vector<int32> seeds;
         for (size_t i = 0; i < groupCount; ++i)
         {
             const WorldModelGroup* group = model.GetGroup(i);
-            if (group && group->ContainsPoint(localEye))
+            if (!group || (!group->IsInterior() && group->GetContainmentVolumes().empty()))
+            {
+                continue;
+            }
+
+            if (group->ContainsPoint(localEye))
             {
                 seeds.push_back(static_cast<int32>(i));
             }
@@ -350,6 +377,17 @@ namespace mmo
 
         if (!seeds.empty())
         {
+            if (interiorView)
+            {
+                // The eye is in rooms; it is "inside" - and the rest of the world is seen only through
+                // their doors - when every one of them is flagged interior
+                interiorView->eyeInInterior = std::all_of(seeds.begin(), seeds.end(), [&model](const int32 seed)
+                {
+                    const WorldModelGroup* group = model.GetGroup(static_cast<size_t>(seed));
+                    return group && group->IsInterior();
+                });
+            }
+
             for (size_t i = 0; i < groupCount; ++i)
             {
                 const WorldModelGroup* group = model.GetGroup(i);

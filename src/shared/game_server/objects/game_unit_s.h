@@ -802,10 +802,21 @@ namespace mmo
 		/// @param spell The spell whose (mod-adjusted) cooldown should now begin.
 		void StartDeferredSpellCooldown(const proto::SpellEntry& spell);
 
-		/// Sets the cooldown for a spell category.
+		/// Sets the cooldown for a spell category. Category 0 means "no category" and is ignored,
+		/// so spells without a category never share a cooldown.
 		/// @param spellCategory The category of the spell.
 		/// @param cooldownTimeMs The cooldown time in milliseconds.
 		void SetSpellCategoryCooldown(uint32 spellCategory, GameTime cooldownTimeMs);
+
+		/// Prevents casting any spell of the given school, as an interrupt does.
+		/// @param spellSchool The school to lock (SpellSchool value, not a mask).
+		/// @param durationMs How long the lockout lasts in milliseconds. 0 lifts it.
+		void LockSpellSchool(uint32 spellSchool, GameTime durationMs);
+
+		/// Checks whether spells of the given school are currently locked out.
+		/// @param spellSchool The school to check (SpellSchool value, not a mask).
+		/// @returns true if casting spells of that school is currently prevented.
+		[[nodiscard]] bool IsSpellSchoolLocked(uint32 spellSchool) const;
 
 		/// Sets the global spell cooldown shared by global-cooldown spells.
 		/// @param cooldownTimeMs The cooldown time in milliseconds.
@@ -937,6 +948,10 @@ namespace mmo
 		/// @param casterGuid The GUID of the caster.
 		/// @param spellId If set to 0, all auras will be removed, otherwise only auras that match the spell id will be removed.
 		void RemoveAllAurasFromCaster(uint64 casterGuid, uint32 spellId = 0);
+
+		/// Removes all non-passive auras that were applied by other units (e.g. an attacker's
+		/// damage over time effects). Auras the unit applied to itself are kept.
+		void RemoveAurasFromOtherCasters();
 
 		/// Removes a specific aura from the unit.
 		/// @param aura The aura container to remove.
@@ -1100,6 +1115,15 @@ namespace mmo
 
 			return T(diff);
 		}
+
+		/// How far a "say" chat message carries.
+		static constexpr float SayRange = 25.0f;
+
+		/// How far a "yell" chat message carries.
+		static constexpr float YellRange = 300.0f;
+
+		/// How far an emote chat message carries.
+		static constexpr float EmoteRange = 50.0f;
 
 		/// Sends a chat message of type "say" from the unit.
 		/// @param message The base (English) message to send.
@@ -1293,6 +1317,27 @@ public:
 		/// @param attackType The type of weapon attack.
 		/// @returns The critical hit chance as a float.
 		float CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const;
+
+		/// Gets the victim-independent part of the melee critical hit chance: the base chance plus
+		///	the agility contribution. This is what the character sheet shows; CriticalHitChance()
+		///	adds the per-attack terms (level difference, talents, the victim's vulnerability) on top.
+		/// @returns The critical hit chance in percent, not clamped.
+		[[nodiscard]] float GetBaseMeleeCritChance() const;
+
+		/// Gets the victim-independent part of the critical hit chance of a spell, which is the
+		///	configured default spell crit chance. Per-spell talent modifiers are applied at cast time.
+		/// @returns The critical hit chance in percent.
+		[[nodiscard]] float GetBaseSpellCritChance() const;
+
+		/// Gets the amount of mana this unit regenerates every five seconds while regenerating,
+		///	including aura percentage modifiers.
+		/// @returns The mana regenerated per five seconds.
+		[[nodiscard]] float GetManaRegenPerFiveSeconds() const;
+
+		/// Writes the derived combat values the client shows on the character sheet into the
+		///	replicated object fields. Called from RefreshStats(), which runs on every stat, level,
+		///	equipment and aura change.
+		void UpdateCombatStatFields();
 
 		/// Returns the dodge chance in percent, ranging from 0 to 100.0f. If the unit can't dodge at all, this will always return 0.
 		float DodgeChance() const;
@@ -1834,6 +1879,7 @@ public:
 
 		std::map<uint32, GameTime> m_spellCooldowns;
 		std::map<uint32, GameTime> m_spellCategoryCooldowns;
+		std::map<uint32, GameTime> m_spellSchoolLockouts;
 		GameTime m_globalCooldownEnd = 0;
 
 		AttackingUnitSet m_attackingUnits;

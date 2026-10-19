@@ -131,7 +131,7 @@ namespace mmo
 		void UpdateQuestGiverAndNameVisuals(const float deltaTime);
 
 		/// @brief Updates normal movement (not animation-based)
-		void UpdateNormalMovement(const float deltaTime);
+		void UpdateNormalMovement(const float deltaTime, bool isDead);
 
 		/// @brief Makes NPCs face their targets
 		void UpdateTargetTracking() const;
@@ -458,6 +458,21 @@ namespace mmo
 
 		uint32 GetAttackTime() const { return Get<uint32>(object_fields::BaseAttackTime); }
 
+		/// Gets the flat spell power that is added to damaging spell effects.
+		float GetSpellDamage() const { return Get<float>(object_fields::SpellDamage); }
+
+		/// Gets the flat healing power that is added to healing spell effects.
+		float GetSpellHealing() const { return Get<float>(object_fields::SpellHealing); }
+
+		/// Gets the chance in percent for a spell to critically hit.
+		float GetSpellCritChance() const { return Get<float>(object_fields::SpellCritChance); }
+
+		/// Gets the chance in percent for a melee attack to critically hit.
+		float GetMeleeCritChance() const { return Get<float>(object_fields::MeleeCritChance); }
+
+		/// Gets the amount of mana restored every five seconds while regenerating.
+		float GetManaRegen() const { return Get<float>(object_fields::ManaRegen); }
+
 		int32 GetStat(int32 statId) const;
 
 		int32 GetPosStat(int32 statId) const;
@@ -510,6 +525,9 @@ namespace mmo
 
 		/// @brief Returns the spell at the specified index of learned spells of this unit. Returns nullptr if index is out of bounds.
 		const proto_client::SpellEntry *GetVisibleSpell(uint32 index) const;
+
+		/// @brief Returns all known spells of this unit, including those hidden from the spellbook (e.g. recipes).
+		const std::vector<const proto_client::SpellEntry *> &GetSpells() const { return m_spells; }
 
 		/// @brief Returns the number of known spells of this unit.
 		uint32 GetSpellCount() const { return static_cast<uint32>(m_spells.size()); }
@@ -576,6 +594,10 @@ namespace mmo
 		void SetCreatureInfo(const CreatureInfo &creatureInfo);
 
 		const String &GetName() const override;
+
+		/// @brief The subtitle line of this unit's creature entry, as in "<General Goods>".
+		/// @return The bracketed subname, or an empty string when the unit has no subname.
+		String GetSubtitle() const { return m_creatureInfo.GetSubtitle(); }
 
 		/// @brief Plays a one-shot animation.
 		/// @param animState The animation state to play.
@@ -976,6 +998,10 @@ namespace mmo
 		/// @brief The last position that was sent to the server.
 		/// Used to ensure position consistency between stop and start packets.
 		Vector3 m_syncedPosition;
+
+		/// @brief The last position the server placed this unit at (spawn, teleport, end of a path).
+		/// Its height lets the idle ground correction find a floor that streamed in after the unit.
+		std::optional<Vector3> m_serverGroundPosition;
 
 		/// @brief Map of active spell tints (spellId -> tint color).
 		std::map<uint32, Vector4> m_spellTints;

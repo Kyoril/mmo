@@ -147,6 +147,11 @@ namespace mmo
 		/// @param lootThreshold The group's loot quality threshold.
 		void NotifyPlayerGroupLootMethodChanged(uint64 characterId, uint8 lootMethod, uint64 lootMasterGuid, uint8 lootThreshold);
 
+		/// Tells the world node to destroy a dungeon instance, so the next group entering its map
+		/// gets a fresh one. The node refuses while the instance still holds players.
+		/// @param instanceId The instance to destroy.
+		void RequestInstanceReset(const InstanceId& instanceId) const;
+
 		/// The availability of the world-owned subsystems as last reported by this node.
 		const SubsystemStatusArray& GetSubsystemStatus() const { return m_subsystemStatus; }
 

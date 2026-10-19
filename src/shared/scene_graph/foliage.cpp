@@ -8,6 +8,8 @@
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 
 namespace mmo
@@ -187,23 +189,49 @@ namespace mmo
 		// Update active chunks based on camera position
 		UpdateActiveChunks(camera);
 
-		// Build/rebuild any chunks that need it
-		size_t chunksRebuilt = 0;
-		for (auto& chunk : m_activeChunks)
+		// Build/rebuild the chunks that need it, nearest first and within the time budget. A page
+		// streaming in marks a whole layer dirty, and regenerating every chunk of it at once stalled
+		// the frame for 70-100 ms; stale chunks keep their old instances until their turn.
+		m_pendingRebuilds.clear();
+		for (const auto& chunk : m_activeChunks)
 		{
-			if (chunk->NeedsRebuild())
+			if (chunk->NeedsRebuild() && chunk->GetLayer())
 			{
-				const auto& layer = chunk->GetLayer();
-				if (layer)
-				{
-					chunk->ClearInstances();
-					GenerateChunkInstances(*chunk, *layer);
-					chunk->BuildBuffers(m_device);
-					chunksRebuilt++;
-				}
+				m_pendingRebuilds.push_back(chunk.get());
 			}
 		}
 
+		if (m_pendingRebuilds.empty())
+		{
+			return;
+		}
+
+		int32 cameraChunkX, cameraChunkZ;
+		WorldToChunk(camera.GetDerivedPosition(), cameraChunkX, cameraChunkZ);
+		const auto distanceSq = [cameraChunkX, cameraChunkZ](const FoliageChunk* chunk)
+		{
+			const int32 dx = chunk->GetChunkX() - cameraChunkX;
+			const int32 dz = chunk->GetChunkZ() - cameraChunkZ;
+			return dx * dx + dz * dz;
+		};
+		std::stable_sort(m_pendingRebuilds.begin(), m_pendingRebuilds.end(), [&distanceSq](const FoliageChunk* a, const FoliageChunk* b)
+		{
+			return distanceSq(a) < distanceSq(b);
+		});
+
+		const auto start = std::chrono::steady_clock::now();
+		for (FoliageChunk* chunk : m_pendingRebuilds)
+		{
+			chunk->ClearInstances();
+			GenerateChunkInstances(*chunk, *chunk->GetLayer());
+			chunk->BuildBuffers(m_device);
+
+			if (m_settings.rebuildBudgetMs > 0.0f &&
+				std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count() >= m_settings.rebuildBudgetMs)
+			{
+				break;
+			}
+		}
 	}
 
 	void Foliage::RebuildAll()

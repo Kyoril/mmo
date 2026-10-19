@@ -10,6 +10,7 @@
 #include "game_unit_s.h"
 #include "game_server/inventory.h"
 #include "game_server/character_data.h"
+#include "game_server/trade_skill_book.h"
 #include "game_server/quest_status_data.h"
 #include "game/quest.h"
 #include "game/group.h"
@@ -57,9 +58,16 @@ namespace mmo
 		{
 		}
 
+		/// Called when an inventory operation initiated by the player's own action (e.g. a quest turn-in)
+		/// failed and the player should be told why.
+		virtual void OnInventoryError(InventoryChangeFailure error)
+		{
+		}
+
 		/// Called when the character gained class XP for the active class. xpToNextLevel is 0 when
-		/// the class has reached its class max level.
-		virtual void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp)
+		/// the class has reached its class max level. talentPointsGained is the number of talent
+		/// points the reached class rank(s) granted and is 0 unless leveledUp is true.
+		virtual void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp, uint32 talentPointsGained)
 		{
 		}
 	};
@@ -74,6 +82,11 @@ namespace mmo
 
 		/// Fired when the character unlocks a new emote (not fired for default-known emotes).
 		signal<void(uint32)> emoteLearned;
+
+		/// Fired when a trade skill is learned or its cap changes. Parameter: skill id.
+		signal<void(uint32 skillId)> tradeSkillLearned;
+		/// Fired when the value of a trade skill changes. Parameter: skill id.
+		signal<void(uint32 skillId)> tradeSkillChanged;
 
 		/// Fired when the character's spent talent points have been refunded (talents reset).
 		signal<void()> talentsReset;
@@ -258,6 +271,13 @@ namespace mmo
 		/// were flagged as always-granted after their creation.
 		void GrantDefaultEmotes();
 
+		/// Returns the learned trade skills.
+		[[nodiscard]] TradeSkillBook& GetTradeSkills() { return m_tradeSkills; }
+		/// Returns the learned trade skills.
+		[[nodiscard]] const TradeSkillBook& GetTradeSkills() const { return m_tradeSkills; }
+		/// Replaces the learned trade skills (e.g. when loading a character). Fires no signals.
+		void SetTradeSkills(const std::vector<TradeSkillData>& skills) { m_tradeSkills.SetAll(skills); }
+
 		/// Returns the set of unlocked emote ids (the persistence set).
 		[[nodiscard]] const std::set<uint32>& GetKnownEmoteIds() const { return m_knownEmoteIds; }
 
@@ -378,6 +398,14 @@ namespace mmo
 		///        gameplay gates are skipped while existence, rank validity and point budget still apply.
 		/// @return true if the talent was learned, false otherwise.
 		bool LearnTalent(uint32 talentId, uint32 rank, bool enforceRequirements = true);
+
+		/// True unless the spell is a follow-up rank of a talent spell (see FindGatingTalent) whose
+		/// talent is not learned. Such ranks are bought from trainers but only usable with the talent.
+		[[nodiscard]] bool IsTalentGateSatisfied(const proto::SpellEntry& spell) const;
+
+		/// Activates known follow-up ranks whose talent is learned and deactivates those whose talent is
+		/// not. Deactivated ranks stay in the known-spell set, so learning the talent again restores them.
+		void RefreshTalentGatedSpells();
 
 		/// Determines if a rank of specific talent has been learned. If rank is 0 it basically checks if
 		/// the given talent is learned at all.
@@ -570,6 +598,8 @@ namespace mmo
 		/// Every emote the character has unlocked, including default-known emotes (which are
 		/// materialized into this set on login via GrantDefaultEmotes).
 		std::set<uint32> m_knownEmoteIds;
+		/// Learned trade skills (professions).
+		TradeSkillBook m_tradeSkills;
 		/// True while ChangeClass is rebuilding the character, so client-bound per-spell notifications
 		/// are suppressed (a single refresh is sent afterwards instead).
 		bool m_classSwitchInProgress = false;

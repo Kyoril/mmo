@@ -1,5 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+#include <atomic>
+#include <mutex>
 #include <thread>
 
 #include "assets/asset_registry.h"
@@ -10,21 +12,99 @@
 
 #include "cxxopts/cxxopts.hpp"
 #include "graphics/graphics_device.h"
+#include "game/object_type_id.h"
+#include "nav_build/map.h"
 #include "nav_build/mesh_builder.h"
+#include "nav_mesh/door_volume.h"
+#include "proto_data/project.h"
 
 namespace mmo
 {
+	/// Orders the default log levels from chattiest to most severe. LogImportance cannot do this: Info and Warning share one.
+	int32 LogLevelRank(const LogLevel& level)
+	{
+		if (&level == &DebugLevel) return 0;
+		if (&level == &InfoLevel) return 1;
+		if (&level == &WarningLevel) return 2;
+		return 3;
+	}
+
+	/// Collects the footprint of every door spawned on the map whose directory is the world name.
+	/// @param project The loaded editor project.
+	/// @param worldName The world being built (MapEntry::directory()).
+	std::vector<nav::DoorVolume> CollectDoorVolumes(const proto::Project& project, const std::string& worldName)
+	{
+		std::vector<nav::DoorVolume> doors;
+
+		const proto::MapEntry* map = nullptr;
+		for (const auto& entry : project.maps.getTemplates().entry())
+		{
+			if (entry.directory() == worldName)
+			{
+				map = &entry;
+				break;
+			}
+		}
+
+		if (!map)
+		{
+			WLOG("No map in the project uses directory '" << worldName << "' - no doors are baked into the nav mesh");
+			return doors;
+		}
+
+		std::map<std::string, std::unique_ptr<MapEntity>> meshes;
+		for (const auto& spawn : map->objectspawns())
+		{
+			const auto* object = project.objects.getById(spawn.objectentry());
+			if (!object || object->type() != game_world_object_type::Door)
+			{
+				continue;
+			}
+
+			const auto* display = project.objectDisplays.getById(object->displayid());
+			if (!display || display->filename().empty())
+			{
+				WLOG("Door spawn '" << spawn.name() << "' (object " << spawn.objectentry() << ") has no display mesh - skipped");
+				continue;
+			}
+
+			auto& mesh = meshes[display->filename()];
+			if (!mesh)
+			{
+				mesh = std::make_unique<MapEntity>(display->filename());
+			}
+
+			if (mesh->Vertices.empty())
+			{
+				WLOG("Door mesh '" << display->filename() << "' has no collision - door spawn '" << spawn.name() << "' skipped");
+				continue;
+			}
+
+			const auto& location = spawn.location();
+			const Matrix4 transform = nav::MakeDoorTransform(
+				Vector3(location.positionx(), location.positiony(), location.positionz()),
+				Quaternion(location.rotationw(), location.rotationx(), location.rotationy(), location.rotationz()),
+				object->scale());
+			doors.push_back(nav::ComputeDoorVolume(mesh->Bounds, transform));
+		}
+
+		ILOG("Baking " << doors.size() << " door(s) into the nav mesh of " << worldName);
+		return doors;
+	}
+
 	/// Runs the actual navigation builder process multithreaded. This method expects AssetRegistry to be already initialized.
 	///	@param worldName The name of the world to build. World will be located in the AssetRegistry using the schema: Worlds/<worldName>/<worldName>.hwld
 	///	@param directoryPath The target directory where the built tiles will be stored.
 	///	@param concurrentThreads The number of worker threads to use for building the tiles. Must be at least 1.
+	///	@param doors Door footprints to cut out as door polys.
 	///	@return 0 on success, 1 on failure. This should be thought of as the process exit code.
-	int32 run(const std::string& worldName, const std::string& directoryPath, size_t concurrentThreads)
+	int32 run(const std::string& worldName, const std::string& directoryPath, size_t concurrentThreads, std::vector<nav::DoorVolume> doors)
 	{
 		ASSERT(concurrentThreads > 0);
 
 		// Create a new mesh builder instance. This class is thread safe!
 		auto builder = std::make_unique<MeshBuilder>(directoryPath, worldName);
+		builder->SetDoorVolumes(std::move(doors));
 		ILOG("Building " << builder->GetTileCount() << " tiles for world " << worldName << " using " << concurrentThreads << " threads...");
 
 		std::atomic<bool> success { true };
@@ -100,10 +180,25 @@ int main(int argc, char* argv[])
 {
 	auto logOptions = mmo::g_DefaultConsoleLogOptions;
 
+	// Entries below this level are not printed. Info keeps the progress output and hides the per-model debug noise
+	// that used to bury warnings; --log-level debug brings it back.
+	int32 minRank = mmo::LogLevelRank(mmo::InfoLevel);
+	std::atomic<uint32> warningCount{ 0 };
+
 	// Add cout to the list of log output streams and make logging thread safe, so we don't write garbage to the console window
 	std::mutex coutLogMutex;
 	// Scoped: the slot captures locals of main, so it must not outlive main into the static log's destruction.
-	const mmo::scoped_connection coutLogConnection{ mmo::g_DefaultLog.signal().connect([&coutLogMutex, &logOptions](const mmo::LogEntry& entry) {
+	const mmo::scoped_connection coutLogConnection{ mmo::g_DefaultLog.signal().connect([&coutLogMutex, &logOptions, &minRank, &warningCount](const mmo::LogEntry& entry) {
+		if (entry.level == &mmo::WarningLevel)
+		{
+			++warningCount;
+		}
+
+		if (mmo::LogLevelRank(*entry.level) < minRank)
+		{
+			return;
+		}
+
 		std::scoped_lock lock{ coutLogMutex };
 		printLogEntry(std::cout, entry, logOptions);
 		}) };
@@ -117,6 +212,9 @@ int main(int argc, char* argv[])
 	mmo::String dataDirectory;
 	mmo::String worldName;
 	mmo::String directoryPath;
+	mmo::String projectPath;
+	mmo::String logLevel = "info";
+	bool noDoors = false;
 
 	// Per default, use all available threads
 	size_t concurrentThreads = std::thread::hardware_concurrency();
@@ -133,6 +231,9 @@ int main(int argc, char* argv[])
 		("d,data", "set data directory path", cxxopts::value<std::string>(dataDirectory))
 		("w,world", "sets world name to build", cxxopts::value<std::string>(worldName))
 		("o,out", "set target directory", cxxopts::value<std::string>(directoryPath))
+		("p,project", "editor data folder (e.g. data/editor/data) to read door spawns from", cxxopts::value<std::string>(projectPath))
+		("no-doors", "build without door polys (scratch meshes only; never for data/editor)", cxxopts::value<bool>(noDoors))
+		("l,log-level", "error, warning, info (default, progress only) or debug (every rasterized model)", cxxopts::value<std::string>(logLevel))
 		("j,concurrency", "The number of threads used for building", cxxopts::value<size_t>(concurrentThreads))
 		;
 
@@ -154,6 +255,37 @@ int main(int argc, char* argv[])
 			ILOG(options.help());
 		}
 
+		if (logLevel == "error")
+		{
+			minRank = mmo::LogLevelRank(mmo::ErrorLevel);
+		}
+		else if (logLevel == "warning")
+		{
+			minRank = mmo::LogLevelRank(mmo::WarningLevel);
+		}
+		else if (logLevel == "info")
+		{
+			minRank = mmo::LogLevelRank(mmo::InfoLevel);
+		}
+		else if (logLevel == "debug")
+		{
+			minRank = mmo::LogLevelRank(mmo::DebugLevel);
+		}
+		else
+		{
+			ELOG("Unknown --log-level '" << logLevel << "' (expected error, warning, info or debug)");
+			return 1;
+		}
+
+		// A mesh built without door polys looks fine but lets creatures path through closed doors, and nothing
+		// at build time says so. Make leaving them out a deliberate choice.
+		if (projectPath.empty() && !noDoors)
+		{
+			ELOG("No --project given: the nav mesh would be built without door polys, so closed doors would not block creature paths. "
+				"Pass -p <editor data folder> (e.g. -p data/editor/data), or --no-doors for a scratch mesh.");
+			return 1;
+		}
+
 		// We always want at least a single worker thread
 		if (concurrentThreads == 0) concurrentThreads = 1;
 
@@ -161,8 +293,27 @@ int main(int argc, char* argv[])
 		std::vector<std::string> archives;
 		mmo::AssetRegistry::Initialize(dataDirectory, archives);
 
+		std::vector<mmo::nav::DoorVolume> doors;
+		if (!projectPath.empty())
+		{
+			mmo::proto::Project project;
+			if (!project.load(projectPath))
+			{
+				ELOG("Failed to load the project from " << projectPath);
+				return 1;
+			}
+
+			doors = mmo::CollectDoorVolumes(project, worldName);
+		}
+
 		// Run the actual tool
-		return mmo::run(worldName, directoryPath, concurrentThreads);
+		const int32 exitCode = mmo::run(worldName, directoryPath, concurrentThreads, std::move(doors));
+		if (warningCount > 0)
+		{
+			WLOG("The build logged " << warningCount.load() << " warning(s) - scroll up or use --log-level warning to read them");
+		}
+
+		return exitCode;
 	}
 	catch (const cxxopts::OptionException& e)
 	{

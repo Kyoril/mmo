@@ -30,6 +30,41 @@ namespace mmo
 
         /// Longest a ground effect may take to fade out before it is destroyed regardless.
         constexpr float GroundEffectMaxFadeSeconds = 4.0f;
+
+        /// Attaches a kit effect (particles, light, ribbon) to the bone the kit names. When the
+        /// model lacks that bone or has no skeleton at all, the effect goes on a child node at
+        /// the height the bone would roughly have (spell_visual::MissingBoneHeightFraction)
+        /// instead of the model's feet. Kits without a bone attach at the actor's origin.
+        void AttachToKitBone(const proto_client::SpellKit& kit, Entity& entity, SceneNode& sceneNode,
+            MovableObject& object, const String& nodeName, std::vector<SceneNode*>& effectNodes)
+        {
+            const bool wantsBone = kit.has_attach_bone() && !kit.attach_bone().empty();
+            if (wantsBone && entity.HasSkeleton())
+            {
+                const auto skeleton = entity.GetSkeleton();
+                if (skeleton && skeleton->HasBone(kit.attach_bone()))
+                {
+                    entity.AttachObjectToBone(kit.attach_bone(), object);
+                    return;
+                }
+            }
+
+            SceneNode* childNode = sceneNode.CreateChildSceneNode(nodeName + "_Node");
+            if (wantsBone)
+            {
+                const AABB& bounds = entity.GetWorldBoundingBox(true);
+                const float height = bounds.max.y - bounds.min.y;
+                const float scaleY = sceneNode.GetDerivedScale().y;
+                if (height > 0.0f && scaleY > 0.0f)
+                {
+                    const float targetY = bounds.min.y + height * spell_visual::MissingBoneHeightFraction(kit.attach_bone());
+                    childNode->SetPosition(Vector3(0.0f, (targetY - sceneNode.GetDerivedPosition().y) / scaleY, 0.0f));
+                }
+            }
+
+            childNode->AttachObject(object);
+            effectNodes.push_back(childNode);
+        }
     }
 
     SpellVisualizationService& SpellVisualizationService::Get()
@@ -185,13 +220,16 @@ namespace mmo
             // Barrage) arrive mid-channel. EndChannel releases them.
             const bool casterChanneling = IsChanneling(caster->GetGuid());
 
-            // Clear any locked loop animation (e.g. cast channel animation)
-            if (!casterChanneling)
+            const uint64 casterGuid = caster->GetGuid();
+
+            // Clear the locked loop animation (e.g. cast channel animation), but only when it
+            // belongs to the spell that is ending: a proc healing its owner mid-cast raises
+            // CastSucceeded on the casting unit and must not cut its casting animation.
+            if (!casterChanneling && m_castLoopOwners.Release(casterGuid, spellId))
             {
                 caster->SetLockedLoopAnimation(nullptr);
             }
 
-            const uint64 casterGuid = caster->GetGuid();
             auto animIt = m_activeSpellAnimations.find(casterGuid);
             if (animIt != m_activeSpellAnimations.end() && animIt->second.spellId == spellId)
             {
@@ -499,6 +537,9 @@ namespace mmo
         {
             // For looped animations, lock as the target state so movement animations can't evict it
             actor.SetLockedLoopAnimation(animState);
+
+            // Remember who owns the slot, so only this spell's terminating event releases it.
+            m_castLoopOwners.Set(actor.GetGuid(), spellId);
         }
         else
         {
@@ -559,6 +600,7 @@ namespace mmo
         m_loopedSounds.clear();
         m_fadingSounds.clear();
         m_activeSpellAnimations.clear();
+        m_castLoopOwners.Clear();
         m_activeEffects.clear();
         m_fadingLights.clear();
         m_tintPulses.clear();
@@ -631,6 +673,8 @@ namespace mmo
         m_channels.erase(channelIt);
 
         const uint32 channelKey = spell_visual::ChannelKey(channel.spellId);
+        m_castLoopOwners.Forget(casterGuid);
+
         if (const auto actor = ObjectMgr::Get<GameUnitC>(casterGuid))
         {
             actor->SetLockedLoopAnimation(nullptr);
@@ -731,6 +775,34 @@ namespace mmo
 				{
 					++particleIt;
 				}
+			}
+
+			// Timed ribbon trails (melee blade arcs) retire themselves: stop emitting after their
+			// emit duration, destroy once their last segment has faded.
+			for (auto ribbonIt = effectIt->ribbonTrails.begin(); ribbonIt != effectIt->ribbonTrails.end(); )
+			{
+				if (ribbonIt->emitDuration <= 0.0f)
+				{
+					++ribbonIt;
+					continue;
+				}
+
+				ribbonIt->elapsed += deltaTime;
+				const auto phase = spell_visual::TimedRibbonPhase(ribbonIt->elapsed, ribbonIt->emitDuration, ribbonIt->segmentLifetime);
+				if (phase == spell_visual::RibbonPhase::Expired)
+				{
+					ribbonIt->trail->Stop();
+					scene.DestroyRibbonTrail(*ribbonIt->trail);
+					ribbonIt = effectIt->ribbonTrails.erase(ribbonIt);
+					continue;
+				}
+
+				if (phase == spell_visual::RibbonPhase::Fading && ribbonIt->trail->IsPlaying())
+				{
+					ribbonIt->trail->Stop();
+				}
+
+				++ribbonIt;
 			}
 
 			if (effectIt->particles.empty() && effectIt->lights.empty() && effectIt->ribbonTrails.empty())
@@ -1086,27 +1158,8 @@ namespace mmo
                     }
                 }
 
-                // Attach to bone if specified
-                if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity->HasSkeleton())
-                {
-                    auto skeleton = entity->GetSkeleton();
-                    if (skeleton && skeleton->HasBone(kit.attach_bone()))
-                    {
-                        entity->AttachObjectToBone(kit.attach_bone(), *emitter);
-                    }
-                    else
-                    {
-                        SceneNode* childNode = sceneNode->CreateChildSceneNode(emitterName + "_Node");
-                        childNode->AttachObject(*emitter);
-                        effect->effectNodes.push_back(childNode);
-                    }
-                }
-                else
-                {
-                    SceneNode* childNode = sceneNode->CreateChildSceneNode(emitterName + "_Node");
-                    childNode->AttachObject(*emitter);
-                    effect->effectNodes.push_back(childNode);
-                }
+                // Attach to the bone if specified (or to where it would be on a model without it)
+                AttachToKitBone(kit, *entity, *sceneNode, *emitter, emitterName, effect->effectNodes);
 
                 emitter->Play();
                 effect->particles.push_back(emitter);
@@ -1161,27 +1214,8 @@ namespace mmo
                 light.SetIntensity(targetIntensity);
             }
 
-            // Attach to bone if specified
-            if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity->HasSkeleton())
-            {
-                auto skeleton = entity->GetSkeleton();
-                if (skeleton && skeleton->HasBone(kit.attach_bone()))
-                {
-                    entity->AttachObjectToBone(kit.attach_bone(), light);
-                }
-                else
-                {
-                    SceneNode* childNode = sceneNode->CreateChildSceneNode(lightName + "_Node");
-                    childNode->AttachObject(light);
-                    effect->effectNodes.push_back(childNode);
-                }
-            }
-            else
-            {
-                SceneNode* childNode = sceneNode->CreateChildSceneNode(lightName + "_Node");
-                childNode->AttachObject(light);
-                effect->effectNodes.push_back(childNode);
-            }
+            // Attach to the bone if specified (or to where it would be on a model without it)
+            AttachToKitBone(kit, *entity, *sceneNode, light, lightName, effect->effectNodes);
 
             effect->lights.push_back(&light);
 
@@ -1243,6 +1277,7 @@ namespace mmo
                 trailConfig.final_b(), trailConfig.final_a());
             params.segmentLifetime = trailConfig.segment_lifetime();
             params.maxSegments = trailConfig.max_segments();
+            params.segmentInterval = std::max(0.005f, trailConfig.segment_interval());
             trail->SetParameters(params);
 
             // Load material if specified
@@ -1259,30 +1294,16 @@ namespace mmo
                 trail->SetMaterial(RibbonTrail::GetDefaultMaterial(true));
             }
 
-            // Attach to bone if specified
-            if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity->HasSkeleton())
-            {
-                auto skeleton = entity->GetSkeleton();
-                if (skeleton && skeleton->HasBone(kit.attach_bone()))
-                {
-                    entity->AttachObjectToBone(kit.attach_bone(), *trail);
-                }
-                else
-                {
-                    SceneNode* childNode = sceneNode->CreateChildSceneNode(trailName + "_Node");
-                    childNode->AttachObject(*trail);
-                    effect->effectNodes.push_back(childNode);
-                }
-            }
-            else
-            {
-                SceneNode* childNode = sceneNode->CreateChildSceneNode(trailName + "_Node");
-                childNode->AttachObject(*trail);
-                effect->effectNodes.push_back(childNode);
-            }
+            // Attach to the bone if specified (or to where it would be on a model without it)
+            AttachToKitBone(kit, *entity, *sceneNode, *trail, trailName, effect->effectNodes);
 
             trail->Play();
-            effect->ribbonTrails.push_back(trail);
+
+            EffectRibbon ribbon;
+            ribbon.trail = trail;
+            ribbon.emitDuration = std::max(0.0f, trailConfig.emit_duration());
+            ribbon.segmentLifetime = trailConfig.segment_lifetime();
+            effect->ribbonTrails.push_back(ribbon);
         }
         catch (const std::exception& e)
         {
@@ -1678,12 +1699,12 @@ namespace mmo
                         it->lights = remainingLights;
                     }
 
-                    for (auto* trail : it->ribbonTrails)
+                    for (const auto& ribbon : it->ribbonTrails)
                     {
-                        if (trail)
+                        if (ribbon.trail)
                         {
-                            trail->Stop();
-                            scene->DestroyRibbonTrail(*trail);
+                            ribbon.trail->Stop();
+                            scene->DestroyRibbonTrail(*ribbon.trail);
                         }
                     }
 

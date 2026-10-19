@@ -1,5 +1,5 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
-"""The deployer loop: stage new releases, run the nightly maintenance, apply CLI requests.
+"""The deployer loop: start the nightly build, stage new releases, run the nightly maintenance, apply CLI requests.
 
 Only this loop writes state.json. CLI commands drop request files that the next tick
 applies, so a command can never be overwritten by a tick that was already running.
@@ -23,6 +23,9 @@ log = logging.getLogger("deployer")
 
 TICK_S = 10
 MAINTENANCE_WINDOW_S = 3600
+# GitHub's own schedule starts the nightly hours late on busy nights, so the deployer dispatches
+# it at NIGHTLY_AT and keeps retrying for this long; the schedule remains as a fallback.
+NIGHTLY_DISPATCH_WINDOW_S = 3600
 
 
 def _short(sha):
@@ -50,6 +53,8 @@ class Deployer:
 		self.state_path = Path(cfg.state_dir) / "state.json"
 		self.requests_dir = Path(cfg.state_dir) / "requests"
 		self.next_poll = None
+		self.next_dispatch_try = None
+		self.dispatch_failure_date = None
 		self.stage_failures = set()
 		self.state_unreadable = False
 		# The interrupted-maintenance check runs on the first readable state.json.
@@ -116,6 +121,11 @@ class Deployer:
 			self.stage_newest(state)
 			save_state(self.state_path, state)
 		now = self.clock.now()
+		# Independent of pause: building a nightly changes nothing on the live stack.
+		if self.nightly_dispatch_due(state, now):
+			self.dispatch_nightly(state, now)
+			save_state(self.state_path, state)
+		now = self.clock.now()
 		if self.maintenance_due(state, now):
 			state.last_maintenance_date = now.date().isoformat()
 			# Saved first, so a crash mid-maintenance cannot repeat it the same night.
@@ -130,6 +140,33 @@ class Deployer:
 			return False
 		start = now.replace(hour=self.cfg.maintenance_at.hour, minute=self.cfg.maintenance_at.minute, second=0, microsecond=0)
 		return start <= now < start + datetime.timedelta(seconds=MAINTENANCE_WINDOW_S)
+
+	def nightly_dispatch_due(self, state, now):
+		if self.cfg.nightly_at is None or state.last_nightly_dispatch_date == now.date().isoformat():
+			return False
+		if self.next_dispatch_try is not None and now < self.next_dispatch_try:
+			return False
+		start = now.replace(hour=self.cfg.nightly_at.hour, minute=self.cfg.nightly_at.minute, second=0, microsecond=0)
+		return start <= now < start + datetime.timedelta(seconds=NIGHTLY_DISPATCH_WINDOW_S)
+
+	def dispatch_nightly(self, state, now):
+		"""Starts the nightly workflow; a failure retries every poll interval and notifies once a night."""
+		try:
+			self.github.dispatch_workflow(self.cfg.nightly_workflow, self.cfg.nightly_ref)
+		except (HttpError, OSError, ValueError) as error:
+			log.error("dispatching %s failed: %s", self.cfg.nightly_workflow, error)
+			self.next_dispatch_try = now + datetime.timedelta(seconds=self.cfg.poll_interval_s)
+			today = now.date().isoformat()
+			if self.dispatch_failure_date != today:
+				self.dispatch_failure_date = today
+				self.notifier.send("Could not start the nightly build ({} on {}); retrying every poll for an hour, then only GitHub's own schedule is left: {}".format(
+					self.cfg.nightly_workflow, self.cfg.nightly_ref, error))
+			return False
+		self.next_dispatch_try = None
+		state.last_nightly_dispatch_date = now.date().isoformat()
+		record(state, now, "nightly_dispatched", workflow=self.cfg.nightly_workflow, ref=self.cfg.nightly_ref)
+		log.info("dispatched %s on %s", self.cfg.nightly_workflow, self.cfg.nightly_ref)
+		return True
 
 	def stage_newest(self, state):
 		try:

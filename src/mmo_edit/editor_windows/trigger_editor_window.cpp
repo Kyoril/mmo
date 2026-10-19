@@ -88,7 +88,8 @@ namespace mmo
 		"Unit - On Summoned Unit Died",
 		"Instance - On Encounter State Changed",
 		"Player - On Level Up",
-		"Player - On Stand State Changed"
+		"Player - On Stand State Changed",
+		"Instance - On Hour Of Day"
 	};
 
 	static_assert(std::size(s_eventTypeNames) == trigger_event::Count_, "s_eventTypeNames size mismatch");
@@ -105,7 +106,7 @@ namespace mmo
 		"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
 		"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
 		"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget",
-		"PlaySpellVisual"
+		"PlaySpellVisual", "PlaySound"
 	};
 
 	static_assert(std::size(s_actionTypeNames) == trigger_actions::Count_, "s_actionTypeNames size mismatch");
@@ -416,6 +417,13 @@ namespace mmo
 					return buffer;
 				}
 				return "Player changed stand state";
+			case trigger_event::OnHourOfDay:
+				if (const int hour = GetEventDataValue(event, 0); hour > 0)
+				{
+					snprintf(buffer, sizeof(buffer), "Time of day reached %02d:00", hour % 24);
+					return buffer;
+				}
+				return "Every full hour";
 			default:
 				return "";
 			}
@@ -488,6 +496,21 @@ namespace mmo
 				return DescribeEntryRef(project.maps, GetActionDataValue(action, 0));
 			case trigger_actions::PlaySpellVisual:
 				return DescribeEntryRef(project.spellVisualizations, GetActionDataValue(action, 0));
+			case trigger_actions::PlaySound:
+			{
+				const int count = GetActionDataValue(action, 5);
+				const String sound = DescribeEntryRef(project.sounds, GetActionDataValue(action, 0));
+				if (count == -1)
+				{
+					return sound + " (strikes the hour)";
+				}
+				if (count > 1)
+				{
+					snprintf(buffer, sizeof(buffer), " x%d", count);
+					return sound + buffer;
+				}
+				return sound;
+			}
 			case trigger_actions::SetVariable:
 				return DescribeEntryRef(project.variables, GetActionDataValue(action, 0));
 			case trigger_actions::Delay:
@@ -677,6 +700,13 @@ namespace mmo
 					DrawEventDataEnum(event, 0, "##StandStateChangedState", "Stand State",
 						s_standStateFilterNames, static_cast<int>(std::size(s_standStateFilterNames)),
 						"Requires the trigger's 'Player Trigger' flag, since players carry no trigger list of their own.");
+					break;
+				}
+				case trigger_event::OnHourOfDay:
+				{
+					// Data: [<HOUR:1-24>]; zero is the usual event-data wildcard, so midnight is 24.
+					DrawEventDataInt(event, 0, "##HourOfDay", "Hour (1-24, 0 = every hour)", 150.0f,
+						"Fires on the map's instance triggers when the time of day reaches a full hour, and when a game master sets it to one (settime 14). Midnight is 24.");
 					break;
 				}
 			default:
@@ -1211,6 +1241,33 @@ namespace mmo
 						SetActionDataValue(action, 1, visualEvent);
 					}
 					ImGui::TextDisabled("Plays a spell visualization on the unit target for every client that can see it.");
+					break;
+				}
+				case trigger_actions::PlaySound:
+				{
+					// Data: <SOUND-ENTRY-ID>, <X>, <Y>, <Z>, <RADIUS>, [<COUNT>], [<INTERVAL-MS>]
+					DrawActionDataPicker(action, 0, "##PlaySoundId", "Sound", project.sounds,
+						"Make it a 3D sound entry so it is heard from the position, with its own min/max distance.");
+					DrawActionDataInt(action, 1, "##PlaySoundX", "X");
+					DrawActionDataInt(action, 2, "##PlaySoundY", "Y");
+					DrawActionDataInt(action, 3, "##PlaySoundZ", "Z");
+					DrawActionDataInt(action, 4, "##PlaySoundRadius", "Radius", 150.0f,
+						"Players within this distance of the position are sent the sound.");
+
+					bool strikeHour = GetActionDataValue(action, 5) == -1;
+					if (ImGui::Checkbox("Strike the hour", &strikeHour))
+					{
+						SetActionDataValue(action, 5, strikeHour ? -1 : 1);
+					}
+					ImGui::SameLine();
+					DrawHelpMarker("Plays the sound once per hour of the map's time of day on a 12-hour clock: once at 1 and 13 o'clock, twelve times at noon and midnight.");
+
+					if (!strikeHour)
+					{
+						DrawActionDataInt(action, 5, "##PlaySoundCount", "Count (0 = once)");
+					}
+					DrawActionDataInt(action, 6, "##PlaySoundInterval", "Interval ms (0 = 3000)", 150.0f,
+						"Time between two starts. Every repetition looks for listeners again, so players entering the radius late still hear the rest.");
 					break;
 				}
 				default:

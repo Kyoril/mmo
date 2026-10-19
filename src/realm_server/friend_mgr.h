@@ -58,6 +58,20 @@ namespace mmo
         /// @param callback Function called with the friend list after loading.
         void LoadCharacterFriends(uint64 characterId, std::function<void(const std::vector<FriendData> &)> callback);
 
+        /// Gets a character's cached friend list as it was last loaded from the database.
+        /// @param characterId The character's guid.
+        /// @return The cached friend list, or an empty list if the character's list was never loaded.
+        const std::vector<FriendData> &GetCachedFriends(uint64 characterId) const;
+
+        /// Applies a character's current level to every cached friend entry which refers to them.
+        /// Friend entries are database snapshots taken when a character's list was loaded, so
+        /// without this they keep reporting the level a friend had back then.
+        /// @param characterGuid The character whose level changed.
+        /// @param level The character's new level.
+        /// @return The guids of the characters whose cached friend list changed. Their friend list
+        ///         has to be sent again for the new level to reach them.
+        std::vector<uint64> UpdateCachedFriendLevel(uint64 characterGuid, uint32 level);
+
     private:
         AsyncFriendDatabase &m_asyncDatabase;
         PlayerManager &m_playerManager;

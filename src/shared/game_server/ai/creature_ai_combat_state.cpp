@@ -1080,9 +1080,19 @@ namespace mmo
 			return;
 		}
 
-		// Melee units: chase the target
+		// Melee units use their spells between swings (SelectBestSpell checks cooldown, power and
+		// range, so this only fires once a spell is ready and the victim is within its reach) and
+		// otherwise chase the target to keep the auto attack going.
 		if (!m_isCasting)
 		{
+			if (const CreatureSpell* bestSpell = SelectBestSpell(*victim))
+			{
+				if (CastSpell(*bestSpell, *victim))
+				{
+					return;
+				}
+			}
+
 			ChaseTarget(*victim);
 		}
 	}
@@ -1652,13 +1662,15 @@ namespace mmo
 		case CombatBehavior::Caster:
 		case CombatBehavior::Ranged:
 			{
-				const float minRangeSq = CASTER_MIN_RANGE * CASTER_MIN_RANGE;
-				const float maxRangeSq = CASTER_OPTIMAL_RANGE * CASTER_OPTIMAL_RANGE;
+				float minRange = 0.0f, optimalRange = 0.0f;
+				GetCasterRangeBand(minRange, optimalRange);
+				const float minRangeSq = minRange * minRange;
+				const float maxRangeSq = optimalRange * optimalRange;
 				const bool inRange = distanceSq >= minRangeSq && distanceSq <= maxRangeSq;
 				if (inRange)
 				{
 					const float distance = std::sqrt(distanceSq);
-					const float acceptanceRadius = CASTER_OPTIMAL_RANGE;
+					const float acceptanceRadius = optimalRange;
 					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
 						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
 				}
@@ -1667,6 +1679,24 @@ namespace mmo
 		}
 		
 		return false;
+	}
+
+	void CreatureAICombatState::GetCasterRangeBand(float& minRange, float& optimalRange) const
+	{
+		// A caster closes in to where its longest-reaching spell can be cast, but never stands
+		// farther off than CASTER_OPTIMAL_RANGE. Without this a caster whose spells reach less
+		// than CASTER_OPTIMAL_RANGE stood still out of range of all of them, doing nothing.
+		float longest = 0.0f;
+		for (const auto& creatureSpell : m_availableSpells)
+		{
+			longest = std::max(longest, creatureSpell.maxRange);
+		}
+
+		optimalRange = longest > 0.0f ? std::min(CASTER_OPTIMAL_RANGE, longest) : CASTER_OPTIMAL_RANGE;
+
+		// Backing off only makes sense up to half of that band, or the retreat would leave the
+		// caster's own reach.
+		minRange = std::min(CASTER_MIN_RANGE, optimalRange * 0.5f);
 	}
 
 	bool CreatureAICombatState::IsTargetInAnySpellRange(const GameUnitS& target) const
@@ -1737,8 +1767,10 @@ namespace mmo
 		case CombatBehavior::Caster:
 		case CombatBehavior::Ranged:
 			{
-				const float minRangeSq = CASTER_MIN_RANGE * CASTER_MIN_RANGE;
-				const float optimalRangeSq = CASTER_OPTIMAL_RANGE * CASTER_OPTIMAL_RANGE;
+				float minRange = 0.0f, optimalRange = 0.0f;
+				GetCasterRangeBand(minRange, optimalRange);
+				const float minRangeSq = minRange * minRange;
+				const float optimalRangeSq = optimalRange * optimalRange;
 
 				// If too close, move away
 				if (currentDistanceSq < minRangeSq)
@@ -1747,15 +1779,15 @@ namespace mmo
 					const Vector3 targetPos = target.GetPosition();
 					const Vector3 ourPos = currentPos;
 					const Vector3 direction = (ourPos - targetPos).NormalizedCopy();
-					Vector3 retreatPos = targetPos + direction * CASTER_OPTIMAL_RANGE;
+					Vector3 retreatPos = targetPos + direction * optimalRange;
 
 					// Apply separation logic to avoid stacking with nearby creatures
 					retreatPos = separationManager.AdjustTargetForSeparation(controlled, retreatPos, threatTargets);
 
-					const float retreatEngagementRange = CASTER_MIN_RANGE * COMBAT_RANGE_FACTOR;
+					const float retreatEngagementRange = minRange * COMBAT_RANGE_FACTOR;
 					if (mover.MoveTo(retreatPos, retreatEngagementRange))
 					{
-						m_movementState.UpdateTarget(retreatPos, CASTER_OPTIMAL_RANGE);
+						m_movementState.UpdateTarget(retreatPos, optimalRange);
 						m_stuckCounter = 0;
 						return true;
 					}
@@ -1779,10 +1811,10 @@ namespace mmo
 					// Apply separation logic to avoid stacking with nearby creatures
 					targetPosition = separationManager.AdjustTargetForSeparation(controlled, targetPosition, threatTargets);
 
-					const float approachEngagementRange = CASTER_OPTIMAL_RANGE * COMBAT_RANGE_FACTOR;
+					const float approachEngagementRange = optimalRange * COMBAT_RANGE_FACTOR;
 					if (mover.MoveTo(targetPosition, approachEngagementRange))
 					{
-						m_movementState.UpdateTarget(targetPosition, CASTER_OPTIMAL_RANGE);
+						m_movementState.UpdateTarget(targetPosition, optimalRange);
 						m_stuckCounter = 0;
 						return true;
 					}

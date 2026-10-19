@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include "base/typedefs.h"
+#include "unit_spawn_label.h"
 
 namespace mmo
 {
@@ -87,7 +88,20 @@ namespace mmo
 					const auto* unit = mode->GetUnits().getById(spawn.unitentry());
 					const String unitName = unit ? unit->name() : String("<unknown unit>");
 
-					if (!passesFilter(unitName, spawn.unitentry()))
+					// A mixed spawn is found by any of the units it can spawn.
+					bool passes = passesFilter(unitName, spawn.unitentry());
+					for (const auto& candidate : spawn.unitentries())
+					{
+						if (passes)
+						{
+							break;
+						}
+
+						const auto* candidateUnit = mode->GetUnits().getById(candidate.unitentry());
+						passes = passesFilter(candidateUnit ? candidateUnit->name() : String(), candidate.unitentry());
+					}
+
+					if (!passes)
 					{
 						continue;
 					}
@@ -96,7 +110,7 @@ namespace mmo
 					ImGui::PushID(widgetId++);
 
 					std::ostringstream labelStream;
-					labelStream << "[Unit] " << unitName << " (#" << spawn.unitentry() << ")";
+					labelStream << "[Unit] " << unitName << " (#" << spawn.unitentry() << ")" << MixedSpawnLabelSuffix(spawn);
 
 					const bool isSelected = (selectedEntry == &spawn);
 					if (ImGui::Selectable(labelStream.str().c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick))
