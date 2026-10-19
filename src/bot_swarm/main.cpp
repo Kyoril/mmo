@@ -190,6 +190,8 @@ int main(int argc, char** argv)
 		("chat-ledger", "Spend ledger shared by every run, so the caps hold across restarts",
 			cxxopts::value<std::string>()->default_value("e2e/runtime/bots/chat_ledger.json"))
 		("chat-facts", "Optional text file with facts about the game for the bots to know", cxxopts::value<std::string>()->default_value(""))
+		("debug-fill-bags", "Debug: give every bot this many grey items on login (GM accounts), to watch selling",
+			cxxopts::value<uint32>()->default_value("0"))
 		("chat-probe", "Send one chat request through the budget, print the answer and its cost, and exit")
 		("h,help", "Print help");
 
@@ -223,6 +225,7 @@ int main(int argc, char** argv)
 	settings.chatLimits.maxRequestsPerHour = result["chat-max-per-hour"].as<uint32>();
 	settings.chatLedgerPath = result["chat-ledger"].as<std::string>();
 	settings.chatFactsPath = result["chat-facts"].as<std::string>();
+	settings.debugFillBags = result["debug-fill-bags"].as<uint32>();
 
 	// From the environment only: a key on the command line ends up in process listings and
 	// shell history. The swarm's own variable wins, so that a machine-wide ANTHROPIC_API_KEY

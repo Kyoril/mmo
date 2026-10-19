@@ -10,6 +10,7 @@
 namespace mmo
 {
 	class BotContext;
+	struct BotEconomyState;
 
 	/// Everything the strategies need to know about the world right now, gathered once per AI
 	/// tick and then read many times.
@@ -74,6 +75,14 @@ namespace mmo
 		uint32 attackerCount { 0 };
 		bool autoAttacking { false };
 
+		/// Nearest dead creature with loot for the bot that it has not looted yet.
+		uint64 nearestLootableGuid { 0 };
+		float nearestLootableDistance { 0.0f };
+
+		/// Free and total slots in the backpack and equipped bags.
+		uint32 freeBagSlots { 0 };
+		uint32 totalBagSlots { 0 };
+
 		[[nodiscard]] bool IsInCombat() const { return attackerCount > 0 || autoAttacking; }
 
 		/// Reads the current world state out of the session's context.
@@ -81,6 +90,6 @@ namespace mmo
 		/// The grind state is needed because "nearest attackable" has to mean "nearest attackable
 		/// we have not already established we cannot reach" - otherwise the bot keeps being told
 		/// about the same unreachable creature and picks it again every tick.
-		void Refresh(const BotContext& world, const BotGrindState& grind, GameTime nowMs);
+		void Refresh(const BotContext& world, const BotGrindState& grind, const BotEconomyState& economy, GameTime nowMs);
 	};
 }

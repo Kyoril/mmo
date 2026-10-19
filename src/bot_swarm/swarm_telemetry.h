@@ -56,6 +56,10 @@ namespace mmo
 
 		/// Chat lines heard from others and sent by bots, model requests made, and what they
 		/// cost. All zero when chat is off.
+		/// Loot windows the bots opened and the items in them.
+		uint32 lootWindows { 0 };
+		uint32 lootedItems { 0 };
+
 		uint64 chatLinesHeard { 0 };
 		uint64 chatLinesSent { 0 };
 		uint64 chatRequests { 0 };

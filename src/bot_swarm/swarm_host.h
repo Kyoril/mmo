@@ -9,6 +9,7 @@
 #include "bot_ai/bot_ai_registry.h"
 #include "bot_ai/bot_brain.h"
 #include "bot_ai/grind_spot_index.h"
+#include "bot_ai/npc_index.h"
 #include "bot_chat/chat_budget.h"
 #include "bot_chat/chat_director.h"
 #include "bot_chat/chat_model.h"
@@ -92,6 +93,10 @@ namespace mmo
 
 		/// Optional text file with extra facts about the game for the prompt.
 		std::string chatFactsPath;
+
+		/// Debug aid: grey items handed to every bot on entering the world, so that selling can be
+		/// watched without grinding the bags full first. Needs GM accounts, like the level roll.
+		uint32 debugFillBags { 0 };
 	};
 
 	/// Runs many bots in one process against a live server stack.
@@ -176,6 +181,9 @@ namespace mmo
 		/// Brings a bot back once its scheduled time arrives.
 		void ServiceReconnect(Bot& bot, GameTime nowMs);
 
+		/// Grey item handed out by debugFillBags, picked from the item data once; 0 when there is none.
+		uint32 m_debugJunkItem { 0 };
+
 		/// Has the bot follow and fight alongside a real player it is grouped with, or play alone.
 		void UpdatePartyFollow(Bot& bot);
 
@@ -194,6 +202,7 @@ namespace mmo
 		asio::io_service m_io;
 		std::shared_ptr<BotNavService> m_navService;
 		GrindSpotIndex m_grindSpots;
+		NpcIndex m_npcs;
 		BotAiRegistry m_registry;
 		SwarmTelemetry m_telemetry;
 		std::vector<BotRosterEntry> m_roster;

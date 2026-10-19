@@ -5,6 +5,7 @@
 #include "version.h"
 #include "game/field_map.h"
 #include "game/group.h"
+#include "game/loot.h"
 #include "game/movement_info.h"
 #include "game/object_type_id.h"
 
@@ -493,6 +494,8 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::DebugLineOfSightResult, *this, &BotRealmConnector::OnDebugLineOfSightResult);
 		RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
 		RegisterPacketHandler(game::realm_client_packet::ChatMessage, *this, &BotRealmConnector::OnChatMessage);
+		RegisterPacketHandler(game::realm_client_packet::LootResponse, *this, &BotRealmConnector::OnLootResponse);
+		RegisterPacketHandler(game::realm_client_packet::InventoryError, *this, &BotRealmConnector::OnInventoryError);
 		RegisterPacketHandler(game::realm_client_packet::ChannelList, *this, &BotRealmConnector::OnChannelList);
 		RegisterPacketHandler(game::realm_client_packet::ChannelNotify, *this, &BotRealmConnector::OnChannelNotify);
 
@@ -1657,12 +1660,65 @@ namespace mmo
 		// Track item and container objects so scenarios can assert on inventory contents.
 		if (typeId == ObjectTypeId::Item || typeId == ObjectTypeId::Container)
 		{
-			BotItemState item;
+			// Field by field: an update carries only what changed, and zero is a real value for
+			// most of these - an emptied bag slot, a broken item.
+			const BotItemState* known = m_objectManager.GetItem(guid);
+			BotItemState item = known ? *known : BotItemState{};
 			item.guid = guid;
-			item.entry = fieldMap.GetFieldValue<uint32>(object_fields::Entry);
-			item.stackCount = fieldMap.GetFieldValue<uint32>(object_fields::StackCount);
-			item.ownerGuid = fieldMap.GetFieldValue<uint64>(object_fields::ItemOwner);
-			m_objectManager.AddOrUpdateItem(item);
+
+			const auto changed = [&fieldMap, creation](const uint32 field, const bool is64Bit = false)
+			{
+				const auto index = static_cast<FieldMap<uint32>::FieldIndexType>(field);
+				return creation || fieldMap.IsFieldMarkedAsChanged(index)
+					|| (is64Bit && fieldMap.IsFieldMarkedAsChanged(static_cast<FieldMap<uint32>::FieldIndexType>(field + 1)));
+			};
+
+			if (changed(object_fields::Entry))
+			{
+				item.entry = fieldMap.GetFieldValue<uint32>(object_fields::Entry);
+			}
+			if (changed(object_fields::StackCount))
+			{
+				item.stackCount = fieldMap.GetFieldValue<uint32>(object_fields::StackCount);
+			}
+			if (changed(object_fields::ItemOwner, true))
+			{
+				item.ownerGuid = fieldMap.GetFieldValue<uint64>(object_fields::ItemOwner);
+			}
+			if (changed(object_fields::Contained, true))
+			{
+				item.containerGuid = fieldMap.GetFieldValue<uint64>(object_fields::Contained);
+			}
+			if (changed(object_fields::Durability))
+			{
+				item.durability = fieldMap.GetFieldValue<uint32>(object_fields::Durability);
+			}
+			if (changed(object_fields::MaxDurability))
+			{
+				item.maxDurability = fieldMap.GetFieldValue<uint32>(object_fields::MaxDurability);
+			}
+
+			if (typeId == ObjectTypeId::Container)
+			{
+				constexpr uint32 MaxBagSlots = 36;
+				item.slots.resize(MaxBagSlots, 0);
+
+				if (changed(object_fields::NumSlots))
+				{
+					item.numSlots = std::min(fieldMap.GetFieldValue<uint32>(object_fields::NumSlots), MaxBagSlots);
+				}
+
+				for (uint32 slot = 0; slot < MaxBagSlots; ++slot)
+				{
+					const uint32 field = object_fields::Slot_1 + slot * 2;
+					if (changed(field, true))
+					{
+						item.slots[slot] = fieldMap.GetFieldValue<uint64>(static_cast<FieldMap<uint32>::FieldIndexType>(field));
+					}
+				}
+			}
+
+			m_objectManager.SetItem(item);
 			return true;
 		}
 
@@ -1813,6 +1869,22 @@ namespace mmo
 			unit.SetPower(powerType, power, maxPower);
 		}
 
+		// The bot's own equipment, bag and backpack slots. Only its own player object carries
+		// them; for everyone else the server leaves them out.
+		if (typeId == ObjectTypeId::Player && guid == m_selectedCharacterGuid)
+		{
+			for (uint32 slot = 0; slot < player_inventory_pack_slots::End; ++slot)
+			{
+				const uint32 field = object_fields::InvSlotHead + slot * 2;
+				const auto low = static_cast<FieldMap<uint32>::FieldIndexType>(field);
+				const auto high = static_cast<FieldMap<uint32>::FieldIndexType>(field + 1);
+				if (creation || fieldMap.IsFieldMarkedAsChanged(low) || fieldMap.IsFieldMarkedAsChanged(high))
+				{
+					m_objectManager.SetSelfInventorySlot(static_cast<uint8>(slot), fieldMap.GetFieldValue<uint64>(low));
+				}
+			}
+		}
+
 		// Money is a player-only field used by scenario assertions.
 		if (typeId == ObjectTypeId::Player &&
 			(creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Money)))
@@ -1823,6 +1895,10 @@ namespace mmo
 		// Experience fields are player-only and used by scenario assertions.
 		if (typeId == ObjectTypeId::Player)
 		{
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Class))
+			{
+				unit.SetClassId(fieldMap.GetFieldValue<uint32>(object_fields::Class));
+			}
 			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Xp))
 			{
 				unit.SetXp(fieldMap.GetFieldValue<uint32>(object_fields::Xp));
@@ -2785,6 +2861,94 @@ namespace mmo
 			packet << io::write<uint64>(lootObjectGuid);
 			packet.Finish();
 			});
+	}
+
+	void BotRealmConnector::AutoStoreLootItem(const uint8 lootSlot)
+	{
+		sendSinglePacket([lootSlot](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AutoStoreLootItem);
+			packet << io::write<uint8>(lootSlot);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::LootMoney()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LootMoney);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::SellItem(const uint64 vendorGuid, const uint64 itemGuid)
+	{
+		sendSinglePacket([vendorGuid, itemGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SellItem);
+			packet << io::write<uint64>(vendorGuid) << io::write<uint64>(itemGuid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::BuyItem(const uint64 vendorGuid, const uint32 itemId, const uint8 count)
+	{
+		sendSinglePacket([vendorGuid, itemId, count](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::BuyItem);
+			packet << io::write<uint64>(vendorGuid) << io::write<uint32>(itemId) << io::write<uint8>(count);
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnLootResponse(game::IncomingPacket& packet)
+	{
+		BotLootWindow window;
+		uint8 lootType = 0;
+		if (!(packet >> io::read<uint64>(window.lootGuid) >> io::read<uint8>(lootType)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (lootType == loot_type::None)
+		{
+			uint8 error = 0;
+			if (!(packet >> io::read<uint8>(error)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			LootFailed(window.lootGuid, error);
+			return PacketParseResult::Pass;
+		}
+
+		uint8 itemCount = 0;
+		if (!(packet >> io::read<uint32>(window.money) >> io::read<uint8>(itemCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		window.items.resize(itemCount);
+		for (BotLootItem& item : window.items)
+		{
+			if (!(packet >> io::read<uint8>(item.slot) >> io::read<uint32>(item.itemId) >> io::read<uint32>(item.count)
+				>> io::skip<uint32>() >> io::skip<uint32>() >> io::skip<uint32>() >> io::read<uint8>(item.slotType)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		LootOpened(window);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnInventoryError(game::IncomingPacket& packet)
+	{
+		uint8 error = 0;
+		if (!(packet >> io::read<uint8>(error)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		InventoryErrorReceived(error);
+		return PacketParseResult::Pass;
 	}
 
 	void BotRealmConnector::CheatGodmode(const bool enable)

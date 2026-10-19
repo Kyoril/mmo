@@ -28,7 +28,15 @@ Choir as a group". Status as of 2026-10-19, on branch `feature/bot-swarm-ai-chat
 Each phase ships on its own, is verified live against the dev stack and goes through the
 gate. Later phases depend on earlier ones as noted.
 
-### Phase 1: Inventory, looting, selling (foundation)
+### Phase 1: Inventory, looting, selling (foundation) - done
+
+Done 2026-10-19: bots track their bags (`BotInventory`), loot their corpses, equip upgrades and
+bags (`bot_gear`: per-class item score), and walk to the nearest vendor to sell grey items and
+unused gear once two bag slots are left (`economy_world` strategy, `NpcIndex`). Verified live:
+every bot sold at a vendor, looted and equipped. `--debug-fill-bags N` hands each bot N grey
+items on login to watch selling without a long grind. Found on the way: NPC flags and faction
+template 0 meant "unknown" to the bots, so guards, trainers and quest givers counted as grind
+targets; fixed.
 Everything after this needs the bot to know what it carries.
 
 - Track the bot's own bags and slots: player `InvSlot`/`PackSlot` fields, bag `NumSlots`/`Slot_N`,

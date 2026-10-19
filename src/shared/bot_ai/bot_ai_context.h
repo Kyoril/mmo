@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "bot_economy_state.h"
 #include "bot_grind_state.h"
 #include "bot_personality.h"
 #include "bot_perception.h"
@@ -20,6 +21,7 @@ namespace mmo
 	class BotSession;
 	class BotContext;
 	class GrindSpotIndex;
+	class NpcIndex;
 
 	/// A bot playing in a party: whom it follows and fights alongside.
 	struct BotFollowState final
@@ -101,6 +103,13 @@ namespace mmo
 		[[nodiscard]] BotGrindState& GetGrindState() { return m_grindState; }
 		[[nodiscard]] const BotGrindState& GetGrindState() const { return m_grindState; }
 
+		[[nodiscard]] BotEconomyState& GetEconomyState() { return m_economy; }
+		[[nodiscard]] const BotEconomyState& GetEconomyState() const { return m_economy; }
+
+		/// The shared index of vendors and other service NPCs, or nullptr if the host built none.
+		[[nodiscard]] const NpcIndex* GetNpcIndex() const { return m_npcIndex; }
+		void SetNpcIndex(const NpcIndex* index) { m_npcIndex = index; }
+
 		/// The shared, read-only spawn index every bot picks its grind spots from, or nullptr if
 		/// the host did not build one.
 		[[nodiscard]] const GrindSpotIndex* GetGrindSpots() const { return m_grindSpots; }
@@ -135,6 +144,8 @@ namespace mmo
 		uint32 m_botIndex { 0 };
 		BotPerception m_perception;
 		BotGrindState m_grindState;
+		BotEconomyState m_economy;
+		const NpcIndex* m_npcIndex { nullptr };
 		BotPersonality m_personality;
 		BotRotation m_rotation;
 		const GrindSpotIndex* m_grindSpots { nullptr };

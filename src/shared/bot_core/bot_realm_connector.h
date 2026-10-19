@@ -60,6 +60,25 @@ namespace mmo
 		uint32 channelId { 0 };
 	};
 
+	/// One item in an open loot window.
+	struct BotLootItem
+	{
+		uint8 slot { 0 };
+		uint32 itemId { 0 };
+		uint32 count { 0 };
+
+		/// loot_slot_type: only AllowLoot (0) may be taken directly.
+		uint8 slotType { 0 };
+	};
+
+	/// The loot window the server opened for the bot.
+	struct BotLootWindow
+	{
+		uint64 lootGuid { 0 };
+		uint32 money { 0 };
+		std::vector<BotLootItem> items;
+	};
+
 	/// Minimal realm connector variant that tolerates unknown packets and exposes the hooks needed for the bot.
 	class BotRealmConnector final
 		: public game::Connector
@@ -79,6 +98,17 @@ namespace mmo
 		signal<void(uint64, uint32)> PartyJoined;
 		/// @brief Emitted when the bot leaves or is removed from a party.
 		signal<void()> PartyLeft;
+
+		/// @brief Emitted when the server opens a loot window for the bot.
+		signal<void(const BotLootWindow&)> LootOpened;
+
+		/// @brief Emitted when a loot request is refused.
+		/// @param lootGuid The corpse or object the bot tried to loot.
+		/// @param error The loot_error code.
+		signal<void(uint64, uint8)> LootFailed;
+
+		/// @brief Emitted for every inventory error the server reports (bag full, cannot sell...).
+		signal<void(uint8)> InventoryErrorReceived;
 
 		/// @brief Emitted for every player or system chat line the realm delivers.
 		signal<void(const BotChatMessage&)> ChatMessageReceived;
@@ -544,6 +574,18 @@ namespace mmo
 		/// @param lootObjectGuid Guid of the unit or object being looted.
 		void LootRelease(uint64 lootObjectGuid);
 
+		/// @brief Takes one item from the open loot window into the bags.
+		void AutoStoreLootItem(uint8 lootSlot);
+
+		/// @brief Takes the money from the open loot window.
+		void LootMoney();
+
+		/// @brief Sells a whole item stack to a vendor the bot stands next to.
+		void SellItem(uint64 vendorGuid, uint64 itemGuid);
+
+		/// @brief Buys items from a vendor the bot stands next to.
+		void BuyItem(uint64 vendorGuid, uint32 itemId, uint8 count);
+
 		/// GAME MASTER only. Toggles damage immunity on the sender's character.
 		void CheatGodmode(bool enable);
 
@@ -652,6 +694,8 @@ namespace mmo
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
+		PacketParseResult OnLootResponse(game::IncomingPacket& packet);
+		PacketParseResult OnInventoryError(game::IncomingPacket& packet);
 		PacketParseResult OnChannelList(game::IncomingPacket& packet);
 		PacketParseResult OnChannelNotify(game::IncomingPacket& packet);
 

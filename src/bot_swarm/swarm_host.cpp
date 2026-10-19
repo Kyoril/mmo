@@ -3,6 +3,7 @@
 #include "swarm_host.h"
 
 #include "bot_ai/strategies/grind_strategy.h"
+#include "bot_ai/strategies/economy_strategy.h"
 #include "bot_ai/strategies/party_strategy.h"
 #include "bot_chat/anthropic_chat_model.h"
 #include "bot_chat/offline_chat_model.h"
@@ -82,11 +83,13 @@ namespace mmo
 		if (m_settings.playerFactionTemplate != 0)
 		{
 			m_grindSpots.Build(*project, m_settings.playerFactionTemplate);
+			m_npcs.Build(*project, m_settings.playerFactionTemplate);
 			m_grindSpotsBuilt = true;
 		}
 
 		RegisterGrindStrategies(m_registry);
 		RegisterPartyStrategies(m_registry);
+		RegisterEconomyStrategies(m_registry);
 
 		if (m_settings.chatEnabled && !SetupChat(*project))
 		{
@@ -169,6 +172,7 @@ namespace mmo
 			bot->session = std::make_unique<BotSession>(m_io, m_navService, std::move(config));
 			bot->brain = std::make_unique<BotBrain>(*bot->session, m_registry, entry.index);
 			bot->brain->SetGrindSpots(&m_grindSpots);
+			bot->brain->SetNpcIndex(&m_npcs);
 
 			if (m_chatDirector)
 			{
@@ -299,6 +303,20 @@ namespace mmo
 				}));
 		}
 
+		bot.connections.emplace_back(bot.session->GetRealm().LootOpened.connect(
+			[this, index](const BotLootWindow& window)
+			{
+				++m_telemetry.GetCounters().lootWindows;
+				m_telemetry.GetCounters().lootedItems += static_cast<uint32>(window.items.size());
+				m_telemetry.Event(index, "loot", { { "money", window.money }, { "items", window.items.size() } });
+			}));
+
+		bot.connections.emplace_back(bot.session->GetRealm().InventoryErrorReceived.connect(
+			[this, index](const uint8 error)
+			{
+				m_telemetry.Event(index, "inventory_error", { { "error", error } });
+			}));
+
 		bot.connections.emplace_back(bot.session->GetMovementController().MovementStarted.connect(
 			[this, index](const BotMovementEvent& event)
 			{
@@ -377,7 +395,9 @@ namespace mmo
 		// produces an empty index and a swarm that silently never fights anything.
 		m_settings.playerFactionTemplate = self->GetFactionTemplate();
 		m_grindSpots.Build(*project, m_settings.playerFactionTemplate);
+		m_npcs.Build(*project, m_settings.playerFactionTemplate);
 		m_grindSpotsBuilt = true;
+		ILOG("Bots know " << m_grindSpots.GetSpotCount() << " grind spots and " << m_npcs.GetVendorCount() << " vendors");
 
 		if (m_grindSpots.GetSpotCount() == 0)
 		{
@@ -405,6 +425,28 @@ namespace mmo
 			const uint32 levels = bot.roster.targetLevel - 1;
 			bot.session->GetRealm().CheatLevelUp(static_cast<uint8>(std::min<uint32>(levels, 255)));
 			bot.levelApplied = true;
+		}
+
+		if (m_settings.debugFillBags > 0 && m_debugJunkItem == 0)
+		{
+			// The first grey item with a price: something a vendor takes and nothing else wants.
+			const auto& items = m_navService->GetProject()->items.getTemplates();
+			for (int i = 0; i < items.entry_size() && m_debugJunkItem == 0; ++i)
+			{
+				const proto::ItemEntry& item = items.entry(i);
+				if (item.quality() == 0 && item.sellprice() > 0 && item.maxstack() <= 1)
+				{
+					m_debugJunkItem = item.id();
+				}
+			}
+		}
+
+		if (m_settings.debugFillBags > 0 && m_debugJunkItem != 0)
+		{
+			for (uint32 i = 0; i < m_settings.debugFillBags; ++i)
+			{
+				bot.session->GetRealm().CheatAddItem(m_debugJunkItem, 1);
+			}
 		}
 	}
 

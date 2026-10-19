@@ -70,6 +70,8 @@ namespace mmo
 		json["swing_errors"] = counters.swingErrors;
 		json["path_failures"] = counters.pathFailuresByReason;
 		json["actions"] = counters.actionCounts;
+		json["loot_windows"] = counters.lootWindows;
+		json["looted_items"] = counters.lootedItems;
 		json["chat_lines_heard"] = counters.chatLinesHeard;
 		json["chat_lines_sent"] = counters.chatLinesSent;
 		json["chat_requests"] = counters.chatRequests;

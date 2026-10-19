@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "bot_perception.h"
+#include "bot_core/bot_inventory.h"
+#include "bot_economy_state.h"
 
 #include <cmath>
 
@@ -22,7 +24,7 @@ namespace mmo
 		constexpr float DefaultScanRange = 40.0f;
 	}
 
-	void BotPerception::Refresh(const BotContext& world, const BotGrindState& grind, const GameTime nowMs)
+	void BotPerception::Refresh(const BotContext& world, const BotGrindState& grind, const BotEconomyState& economy, const GameTime nowMs)
 	{
 		*this = BotPerception{};
 
@@ -93,5 +95,26 @@ namespace mmo
 		}
 
 		attackerCount = static_cast<uint32>(world.GetUnitsTargetingSelf(DefaultScanRange).size());
+
+		// Corpses with loot for us. The server sets the Lootable flag only for those who may loot,
+		// so this is the bot's own loot, not everyone's.
+		world.ForEachUnit([this, &economy, nowMs](const BotUnit& unit)
+			{
+				if (unit.IsAlive() || (unit.GetUnitFlags() & unit_flags::Lootable) == 0 || economy.WasLooted(unit.GetGuid(), nowMs))
+				{
+					return;
+				}
+
+				const float distance = PlanarDistance(position, unit.GetPosition());
+				if (distance <= DefaultScanRange && (nearestLootableGuid == 0 || distance < nearestLootableDistance))
+				{
+					nearestLootableGuid = unit.GetGuid();
+					nearestLootableDistance = distance;
+				}
+			});
+
+		const BotInventory inventory = BotInventory::Snapshot(world.GetObjectManager());
+		freeBagSlots = inventory.GetFreeSlots();
+		totalBagSlots = inventory.GetTotalSlots();
 	}
 }
