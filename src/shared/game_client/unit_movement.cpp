@@ -3470,6 +3470,44 @@ namespace mmo
 		return true;
 	}
 
+	bool UnitMovement::SettleOnFloor()
+	{
+		FindFloorResult floorResult;
+		FindFloor(GetUpdatedNode().GetPosition(), floorResult, nullptr);
+
+		if (!floorResult.IsWalkableFloor())
+		{
+			return false;
+		}
+
+		m_currentFloor = floorResult;
+		AdjustFloorHeight();
+
+		return true;
+	}
+
+	bool UnitMovement::CorrectRemoteGroundHeight(const float maxCorrectionDistance, const std::optional<float> referenceHeight)
+	{
+		// The capsule is what decides where the owning client stands this character, so it is also
+		// what decides where we have to draw it. Only when there is no floor within the capsule's
+		// reach does the coarse ray search have to pull the unit back to a surface first.
+		if (SettleOnFloor())
+		{
+			return true;
+		}
+
+		if (!CorrectGroundHeight(maxCorrectionDistance, referenceHeight))
+		{
+			return false;
+		}
+
+		// The ray search leaves the feet on the surface itself. Settle on it right away so the
+		// recovered unit matches the owning client in this frame rather than in the next one.
+		SettleOnFloor();
+
+		return true;
+	}
+
 	bool UnitMovement::CorrectIdleGroundHeight(const float deltaTime)
 	{
 		// An idle NPC re-ran a full octree query plus ray tests every frame for a result that

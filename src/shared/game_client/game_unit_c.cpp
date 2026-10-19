@@ -741,7 +741,11 @@ namespace mmo
 			// overwrites the dead-reckoning target, a snap onto the wrong surface
 			// (terrain running underneath a raised building floor) would otherwise
 			// re-capture the unit below the floor every frame with no way back up.
-			if (m_unitMovement->CorrectGroundHeight(5.0f, m_remoteMovementRenderer.GetAuthoritativeY()))
+			// The correction settles the collision capsule on the floor rather than
+			// dropping the feet onto the surface point below the unit's centre, so
+			// the character stands at the height its own client reports instead of
+			// sinking into slopes, stairs and ledges.
+			if (m_unitMovement->CorrectRemoteGroundHeight(5.0f, m_remoteMovementRenderer.GetAuthoritativeY()))
 			{
 				m_remoteMovementRenderer.SetRenderedY(GetSceneNode()->GetDerivedPosition().y);
 			}
