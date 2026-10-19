@@ -124,6 +124,7 @@ namespace mmo
 		[[nodiscard]] virtual float GetSpellCritChance() const;
 		[[nodiscard]] virtual float GetMeleeCritChance() const;
 		[[nodiscard]] virtual float GetManaRegen() const;
+		[[nodiscard]] virtual float GetManaRegenCasting() const;
 		[[nodiscard]] virtual int32 GetStat(int32 statId) const;
 		[[nodiscard]] virtual int32 GetPosStat(int32 statId) const;
 		[[nodiscard]] virtual int32 GetNegStat(int32 statId) const;
