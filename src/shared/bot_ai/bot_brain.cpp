@@ -23,6 +23,9 @@ namespace mmo
 	{
 		m_engines.GetEngine(BotAiState::NonCombat).AddStrategy(m_settings.nonCombatStrategy);
 		m_engines.GetEngine(BotAiState::NonCombat).AddStrategy(m_settings.economyStrategy);
+		m_engines.GetEngine(BotAiState::NonCombat).AddStrategy(m_settings.progressionStrategy);
+		m_engines.GetEngine(BotAiState::NonCombat).AddStrategy(m_settings.supportNonCombatStrategy);
+		m_engines.GetEngine(BotAiState::Combat).AddStrategy(m_settings.supportCombatStrategy);
 		m_engines.GetEngine(BotAiState::Combat).AddStrategy(m_settings.combatStrategy);
 		m_engines.GetEngine(BotAiState::Dead).AddStrategy(m_settings.deadStrategy);
 
@@ -124,6 +127,17 @@ namespace mmo
 		m_context.SetGrindSpots(spots);
 	}
 
+	void BotBrain::SetRole(const std::string& role, const TalentBuildBook* builds)
+	{
+		m_context.SetRole(role);
+		m_context.SetTalentBuilds(builds);
+	}
+
+	void BotBrain::SetGrindClaims(GrindSpotClaims* claims)
+	{
+		m_context.SetGrindClaims(claims);
+	}
+
 	void BotBrain::SetNpcIndex(const NpcIndex* npcs)
 	{
 		m_context.SetNpcIndex(npcs);
@@ -158,6 +172,9 @@ namespace mmo
 			nonCombat.AddStrategy(m_settings.nonCombatStrategy);
 		}
 		nonCombat.AddStrategy(m_settings.economyStrategy);
+		nonCombat.AddStrategy(m_settings.progressionStrategy);
+		nonCombat.AddStrategy(m_settings.supportNonCombatStrategy);
+		combat.AddStrategy(m_settings.supportCombatStrategy);
 
 		// A grind spot picked before the party is not where the party is going, and one picked
 		// while following is wherever the leader happened to stand.

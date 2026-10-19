@@ -53,6 +53,7 @@ namespace mmo
 		healthFraction = self->GetHealthPercent();
 		powerFraction = world.GetSelfPowerPercent();
 		hasPower = world.GetSelfMaxPower() > 0;
+		powerIsMana = world.GetSelfPowerType() == PowerType::Mana;
 		moving = world.IsMoving();
 		autoAttacking = world.IsAutoAttacking();
 

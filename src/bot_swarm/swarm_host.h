@@ -9,7 +9,9 @@
 #include "bot_ai/bot_ai_registry.h"
 #include "bot_ai/bot_brain.h"
 #include "bot_ai/grind_spot_index.h"
+#include "bot_ai/grind_spot_claims.h"
 #include "bot_ai/npc_index.h"
+#include "bot_ai/bot_talent_builds.h"
 #include "bot_chat/chat_budget.h"
 #include "bot_chat/chat_director.h"
 #include "bot_chat/chat_model.h"
@@ -158,6 +160,9 @@ namespace mmo
 			std::vector<std::pair<BotChatMessage, GameTime>> chatAwaitingName;
 
 			bool generalJoinRequested { false };
+
+			/// When this bot next writes its status line to the telemetry.
+			GameTime nextStatusMs { 0 };
 			GameTime nextHumanScanMs { 0 };
 
 			/// A real player's party invite this bot is about to accept, after a human pause.
@@ -203,6 +208,8 @@ namespace mmo
 		std::shared_ptr<BotNavService> m_navService;
 		GrindSpotIndex m_grindSpots;
 		NpcIndex m_npcs;
+		GrindSpotClaims m_grindClaims;
+		TalentBuildBook m_talentBuilds;
 		BotAiRegistry m_registry;
 		SwarmTelemetry m_telemetry;
 		std::vector<BotRosterEntry> m_roster;

@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "grind_actions.h"
+
+#include "bot_ai/grind_spot_claims.h"
 #include "grind_triggers.h"
 
 #include "bot_ai/bot_ai_context.h"
@@ -142,7 +144,7 @@ namespace mmo
 						}
 
 						usable.push_back(candidate);
-						if (usable.size() >= personality.candidateChoices)
+						if (usable.size() >= personality.candidateChoices * 3)
 						{
 							break;
 						}
@@ -159,12 +161,34 @@ namespace mmo
 					return false;
 				}
 
-				// Random among the nearest few rather than strictly nearest, so that bots in the
-				// same region spread out instead of queueing at one spawn.
-				const std::size_t chosen = usable[context.RollRange(0, static_cast<uint32>(usable.size() - 1))];
+				// Weighed rather than nearest: a spot other bots already work counts as further away,
+				// and so does one well below the bot's level, so that the swarm spreads over the
+				// world and moves on to new areas as it levels instead of crowding the nearest spawn.
+				// Random among the best few, so that bots in one region still do not all agree.
+				const GrindSpotClaims* claims = context.GetGrindClaims();
+				std::vector<std::pair<float, std::size_t>> scored;
+				scored.reserve(usable.size());
+				for (const std::size_t candidate : usable)
+				{
+					const GrindSpot& spot = index->GetSpot(candidate);
+					const float distance = (spot.position - perception.position).GetLength();
+					const float crowding = claims ? static_cast<float>(claims->GetCount(candidate)) : 0.0f;
+					const float levelsBelow = spot.maxLevel < perception.level
+						? static_cast<float>(perception.level - spot.maxLevel)
+						: 0.0f;
+					scored.emplace_back(distance + crowding * BotGrindCrowdingCost + levelsBelow * BotGrindLevelGapCost, candidate);
+				}
+
+				std::sort(scored.begin(), scored.end());
+				const std::size_t best = std::min<std::size_t>(personality.candidateChoices, scored.size());
+				const std::size_t chosen = scored[context.RollRange(0, static_cast<uint32>(best - 1))].second;
 
 				BotGrindState& grind = context.GetGrindState();
 				grind.spotIndex = chosen;
+				if (GrindSpotClaims* sharedClaims = context.GetMutableGrindClaims())
+				{
+					sharedClaims->Claim(context.GetBotIndex(), chosen);
+				}
 
 				// Offset from the spawn point, not onto it. Every bot working a spot would otherwise
 				// walk to the identical coordinate and stand inside the others already there.

@@ -144,8 +144,11 @@ namespace mmo
 
 				// A class with no power pool is never short of power. Treating an absent pool as an
 				// empty one would leave such a bot resting for the rest of its life.
-				const bool powerLow = perception.hasPower && perception.powerFraction < BotRestPowerFraction;
-				const bool powerRested = !perception.hasPower || perception.powerFraction >= BotRestedPowerFraction;
+				// Only mana comes back by resting. Rage starts empty and fills in a fight, energy refills
+				// on its own; counting either had a warrior rest from the moment it logged in.
+				const bool restoresPower = perception.hasPower && perception.powerIsMana;
+				const bool powerLow = restoresPower && perception.powerFraction < BotRestPowerFraction;
+				const bool powerRested = !restoresPower || perception.powerFraction >= BotRestedPowerFraction;
 
 				BotGrindState& grind = context.GetGrindState();
 

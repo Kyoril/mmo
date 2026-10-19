@@ -50,7 +50,21 @@ Everything after this needs the bot to know what it carries.
   and class; `AutoEquipItem` already exists.
 - Repair is left out until the server has a repair packet (separate, small server task).
 
-### Phase 2: Spreading out and levelling properly
+### Phase 2: Spreading out and levelling properly - done
+
+Done 2026-10-19:
+- Grind spots are weighed by distance, crowding (a shared claim table) and level fit, so bots
+  spread out and move on as they level.
+- Bots walk to their class trainer when it has spells they can afford, and spend talent points
+  along a build from `data/bots/talent_builds.json` (class, role, preferred tree columns;
+  resolved against the live talent data).
+- Every bot has a role in the roster (tank, healer, dps). Heals and self-buffs are derived from
+  the spell data (by effect and target, since the data leaves the "positive" flag unset):
+  healers heal themselves and the party early, anyone else with a heal keeps itself alive, and
+  long self-buffs are kept up out of combat.
+- Fixed on the way: a warrior rested forever, because rest waited for rage to refill.
+- Taunts and interrupts moved to phase 4, where the dungeon data says who to taunt and what to
+  interrupt.
 - Grind spot choice weighted by level band and by how many bots already work a spot, so the
   swarm spreads over the world instead of clustering around the starting town.
 - Trainers: walk to the class trainer on level-up, buy new spells (`TrainerBuySpell`).

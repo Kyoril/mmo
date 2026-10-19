@@ -22,6 +22,8 @@ namespace mmo
 	class BotContext;
 	class GrindSpotIndex;
 	class NpcIndex;
+	class GrindSpotClaims;
+	class TalentBuildBook;
 
 	/// A bot playing in a party: whom it follows and fights alongside.
 	struct BotFollowState final
@@ -110,10 +112,21 @@ namespace mmo
 		[[nodiscard]] const NpcIndex* GetNpcIndex() const { return m_npcIndex; }
 		void SetNpcIndex(const NpcIndex* index) { m_npcIndex = index; }
 
+		/// The bot's role in a group ("tank", "healer", "dps") and the shared talent builds.
+		[[nodiscard]] const std::string& GetRole() const { return m_role; }
+		void SetRole(std::string role) { m_role = std::move(role); }
+		[[nodiscard]] const TalentBuildBook* GetTalentBuilds() const { return m_talentBuilds; }
+		void SetTalentBuilds(const TalentBuildBook* builds) { m_talentBuilds = builds; }
+
 		/// The shared, read-only spawn index every bot picks its grind spots from, or nullptr if
 		/// the host did not build one.
 		[[nodiscard]] const GrindSpotIndex* GetGrindSpots() const { return m_grindSpots; }
 		void SetGrindSpots(const GrindSpotIndex* spots) { m_grindSpots = spots; }
+
+		/// Which bot works which grind spot, shared by the swarm; nullptr if the host keeps none.
+		[[nodiscard]] const GrindSpotClaims* GetGrindClaims() const { return m_grindClaims; }
+		[[nodiscard]] GrindSpotClaims* GetMutableGrindClaims() const { return m_grindClaims; }
+		void SetGrindClaims(GrindSpotClaims* claims) { m_grindClaims = claims; }
 
 		/// Records a swing the server refused, and why.
 		///
@@ -146,6 +159,9 @@ namespace mmo
 		BotGrindState m_grindState;
 		BotEconomyState m_economy;
 		const NpcIndex* m_npcIndex { nullptr };
+		GrindSpotClaims* m_grindClaims { nullptr };
+		std::string m_role { "dps" };
+		const TalentBuildBook* m_talentBuilds { nullptr };
 		BotPersonality m_personality;
 		BotRotation m_rotation;
 		const GrindSpotIndex* m_grindSpots { nullptr };

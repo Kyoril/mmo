@@ -586,6 +586,13 @@ namespace mmo
 		/// @brief Buys items from a vendor the bot stands next to.
 		void BuyItem(uint64 vendorGuid, uint32 itemId, uint8 count);
 
+		/// @brief Buys a spell from a trainer the bot stands next to.
+		void TrainerBuySpell(uint64 trainerGuid, uint32 spellId);
+
+		/// @brief Spends talent points on a talent.
+		/// @param rank Zero-based rank to learn.
+		void LearnTalent(uint32 talentId, uint8 rank);
+
 		/// GAME MASTER only. Toggles damage immunity on the sender's character.
 		void CheatGodmode(bool enable);
 

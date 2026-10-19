@@ -41,6 +41,25 @@ namespace mmo
 		/// The bot could not sell the last time it tried; it does not start another trip until then.
 		GameTime nextSellAttemptMs { 0 };
 
+		/// A trip to the class trainer to buy spells.
+		bool training { false };
+		uint32 trainerEntry { 0 };
+		uint32 trainerId { 0 };
+		uint32 trainerMapId { 0 };
+		Vector3 trainerPosition { Vector3::Zero };
+		GameTime trainingSinceMs { 0 };
+
+		/// The level the bot last trained at, and when it may look again regardless.
+		uint32 trainedAtLevel { 0 };
+		GameTime nextTrainAttemptMs { 0 };
+
+		/// When the bot last asked to learn a talent.
+		GameTime lastTalentMs { 0 };
+
+		/// When the bot last cast each self-buff, so that one the server refuses is not recast
+		/// on every global cooldown.
+		std::unordered_map<uint32, GameTime> lastBuffAttemptMs;
+
 		[[nodiscard]] bool WasLooted(const uint64 guid, const GameTime nowMs) const
 		{
 			const auto it = lootedCorpses.find(guid);

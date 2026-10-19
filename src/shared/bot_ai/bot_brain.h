@@ -18,6 +18,8 @@ namespace mmo
 	class BotAiRegistry;
 	class GrindSpotIndex;
 	class NpcIndex;
+	class GrindSpotClaims;
+	class TalentBuildBook;
 
 	struct BotBrainSettings final
 	{
@@ -42,6 +44,13 @@ namespace mmo
 
 		/// Looting, equipping and selling, layered over whichever out-of-combat strategy runs.
 		std::string economyStrategy { "economy_world" };
+
+		/// Talents and other character progression, also out of combat.
+		std::string progressionStrategy { "progression_world" };
+
+		/// Heals and buffs from the bot's own spell book, layered over both engines.
+		std::string supportNonCombatStrategy { "support_world" };
+		std::string supportCombatStrategy { "support_combat" };
 	};
 
 	/// One bot's decision making: the context it thinks with, the engines it thinks in, and the
@@ -71,6 +80,12 @@ namespace mmo
 
 		/// Points the bot at the shared index of vendors and other service NPCs.
 		void SetNpcIndex(const NpcIndex* npcs);
+
+		/// Points the bot at the swarm's shared table of who works which grind spot.
+		void SetGrindClaims(GrindSpotClaims* claims);
+
+		/// Sets the bot's group role and the shared talent builds it picks talents from.
+		void SetRole(const std::string& role, const TalentBuildBook* builds);
 
 		/// Makes the bot follow and fight alongside a party member, or - with 0 - go back to
 		/// playing alone. Swaps the engines' strategies only when the answer changes, so it is

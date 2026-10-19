@@ -148,3 +148,24 @@ TEST_CASE("The inventory snapshot reads equipment, backpack and bags", "[bot_cor
 	}
 	CHECK(foundInBag);
 }
+
+#include "bot_ai/grind_spot_claims.h"
+
+TEST_CASE("Grind spot claims count bots per spot and follow them as they move", "[bot_ai][grind]")
+{
+	GrindSpotClaims claims;
+	claims.Claim(1, 10);
+	claims.Claim(2, 10);
+	claims.Claim(3, 11);
+	CHECK(claims.GetCount(10) == 2);
+	CHECK(claims.GetCount(11) == 1);
+
+	// A bot moving on frees its old spot.
+	claims.Claim(1, 11);
+	CHECK(claims.GetCount(10) == 1);
+	CHECK(claims.GetCount(11) == 2);
+
+	claims.Release(2);
+	claims.Release(2);
+	CHECK(claims.GetCount(10) == 0);
+}
