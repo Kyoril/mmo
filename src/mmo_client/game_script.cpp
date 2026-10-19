@@ -1024,6 +1024,7 @@ namespace mmo
 							   .def("GetAuraCount", &UnitHandle::GetAuraCount)
 							   .def("GetAura", &UnitHandle::GetAura)
 							   .def("GetName", &UnitHandle::GetName)
+							   .def("GetSubtitle", &UnitHandle::GetSubtitle)
 							   .def("GetPowerType", &UnitHandle::GetPowerType)
 							   .def("GetMinDamage", &UnitHandle::GetMinDamage)
 							   .def("GetMaxDamage", &UnitHandle::GetMaxDamage)
