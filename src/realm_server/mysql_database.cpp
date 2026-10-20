@@ -44,6 +44,14 @@ namespace mmo
 
 	bool MySQLDatabase::Connect()
 	{
+		// READ COMMITTED, because the realm saves per-character collections as "DELETE WHERE owner,
+		// then INSERT", on several pooled connections at once. Under the default REPEATABLE READ the
+		// DELETE also gap-locks the key range up to the next character's rows, so two characters with
+		// adjacent ids saving together deadlock (1213) and one save is rolled back and lost. The only
+		// locking reads (mail, FOR UPDATE by primary key) take record locks either way, and ordering
+		// per character comes from the pool's keyed queues, not from snapshot reads.
+		m_connectionInfo.initCommand = "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED";
+
 		if (!m_connection.Connect(m_connectionInfo, true))
 		{
 			ELOG("Could not connect to the realm database");
