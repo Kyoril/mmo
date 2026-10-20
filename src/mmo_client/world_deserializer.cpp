@@ -8,6 +8,7 @@
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
 #include "console/console_var.h"
+#include "game_client/ambient_sound_emitters.h"
 #include "game_common/world_entity_loader.h"
 #include "game_common/world_foliage.h"
 #include "game_states/login_state.h"
@@ -16,6 +17,7 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/instanced_foliage.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/mesh.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/scene_node.h"
@@ -37,6 +39,17 @@ namespace mmo
 		{
 			return ConsoleVarMgr::RegisterConsoleVar("gxWorldModelMerging",
 				"Whether each world model group's static geometry is merged into one mesh per material (a few draw calls per group). Takes effect for world models loaded afterwards.", "1");
+		}
+
+		std::vector<AmbientSoundSource> ToAmbientSources(const std::vector<PlacedSoundEmitter>& emitters)
+		{
+			std::vector<AmbientSoundSource> sources;
+			sources.reserve(emitters.size());
+			for (const PlacedSoundEmitter& emitter : emitters)
+			{
+				sources.push_back(AmbientSoundSource{ emitter.soundEntryId, emitter.position, emitter.volume, emitter.maxDistance });
+			}
+			return sources;
 		}
 	}
 
@@ -172,6 +185,8 @@ namespace mmo
 				continue;
 			}
 
+			RemoveAmbientSounds(ambient_sound_owner::MapEntity, it->first);
+
 			Entity* entity = it->second.entity;
 			SceneNode* node = it->second.node;
 			entity->DetachFromParent();
@@ -188,6 +203,8 @@ namespace mmo
 				++it;
 				continue;
 			}
+
+			RemoveAmbientSounds(ambient_sound_owner::WorldModel, it->first);
 
 			if (it->second.instance)
 			{
@@ -214,6 +231,8 @@ namespace mmo
 		// Unload regular entities
 		for (auto it = m_entities.begin(); it != m_entities.end();)
 		{
+			RemoveAmbientSounds(ambient_sound_owner::MapEntity, it->first);
+
 			Entity* entity = it->second.entity;
 			SceneNode* node = it->second.node;
 			entity->DetachFromParent();
@@ -225,6 +244,8 @@ namespace mmo
 		// Unload world models
 		for (auto it = m_worldModels.begin(); it != m_worldModels.end();)
 		{
+			RemoveAmbientSounds(ambient_sound_owner::WorldModel, it->first);
+
 			if (it->second.instance)
 			{
 				it->second.instance->Destroy(m_scene);
@@ -243,6 +264,14 @@ namespace mmo
 		}
 
 		m_loadedPages.clear();
+	}
+
+	void ClientWorldInstance::RemoveAmbientSounds(const uint8 ownerKind, const uint64 uniqueId) const
+	{
+		if (m_ambientSounds)
+		{
+			m_ambientSounds->Remove(static_cast<ambient_sound_owner::Type>(ownerKind), uniqueId);
+		}
 	}
 
 	Entity* ClientWorldInstance::CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId)
@@ -270,6 +299,13 @@ namespace mmo
 
 		const PagePosition page = GetPagePosition(position);
 		m_entities.emplace(uniqueId, EntityPlacement{ .pageIndex= BuildPageIndex(page.x(), page.y()), .entity= entity, .node= node });
+
+		if (m_ambientSounds && entity->GetMesh() && !entity->GetMesh()->GetSoundEmitters().empty())
+		{
+			std::vector<PlacedSoundEmitter> emitters;
+			AppendPlacedSoundEmitters(*entity->GetMesh(), position, orientation, scale, emitters);
+			m_ambientSounds->Add(ambient_sound_owner::MapEntity, uniqueId, ToAmbientSources(emitters));
+		}
 
 		return entity;
 	}
@@ -342,6 +378,17 @@ namespace mmo
 		node->SetOrientation(orientation);
 		node->SetScale(scale);
 		node->AttachObject(*worldModelInstance);
+
+		// The placement transform comes from the node, so this has to follow the attach above
+		if (m_ambientSounds)
+		{
+			std::vector<PlacedSoundEmitter> emitters;
+			worldModelInstance->CollectSoundEmitters(emitters);
+			if (!emitters.empty())
+			{
+				m_ambientSounds->Add(ambient_sound_owner::WorldModel, uniqueId, ToAmbientSources(emitters));
+			}
+		}
 
 		// Get the raw pointer before moving ownership
 		WorldModelInstance* rawInstance = worldModelInstance.get();

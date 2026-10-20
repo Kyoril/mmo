@@ -85,6 +85,8 @@ namespace mmo
 		void SetVolume(float volume) override;
 		float GetVolume() const override;
 
+		void SetPlaybackPosition(float seconds) override;
+
 		// Add sound tracking
 		SoundIndex GetSoundIndex() const;
 		void SetSoundIndex(SoundIndex soundIndex);
