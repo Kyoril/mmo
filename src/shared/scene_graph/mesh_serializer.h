@@ -196,6 +196,7 @@ namespace mmo
 		bool ReadBoneChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadCollisionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 		bool ReadTagsChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadSoundEmittersChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	protected:
 		void CalculateBinormalsAndTangents();

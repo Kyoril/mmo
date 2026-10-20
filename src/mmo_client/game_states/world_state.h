@@ -44,6 +44,7 @@
 #include "ui/world_text_frame.h"
 
 #include "game_client/net_client.h"
+#include "game_client/ambient_sound_emitters.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/combat_sound_player.h"
 #include "deferred_shading/water_volume_system.h"
@@ -856,6 +857,8 @@ namespace mmo
 		CrossfadingSoundLoop m_zoneMusic;
 		/// Crossfading zone ambience slot, driven by ZoneEntry::ambience_sound.
 		CrossfadingSoundLoop m_zoneAmbience;
+		/// Looping sounds of placed meshes (torches, campfires, portals) near the player.
+		AmbientSoundEmitters m_ambientSounds;
 
 		CharSelect &m_charSelect;
 		GuildClient &m_guildClient;

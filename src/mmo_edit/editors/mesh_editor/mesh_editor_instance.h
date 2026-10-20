@@ -60,10 +60,23 @@ namespace mmo
 		/// @return True if the submesh exists, the material loaded and the file was saved.
 		static bool SetSubMeshMaterialInFile(const String& assetPath, const String& subMesh, const String& materialPath);
 
+		/// @brief Replaces the looping sounds of a mesh file and saves it, keeping its collision recipe.
+		/// Used by the unattended `mmo_edit --set-mesh-sounds <asset> <spec>` job.
+		/// @param assetPath The mesh's asset path.
+		/// @param spec The emitters in ParseMeshSoundEmitterSpec syntax; empty removes all sounds.
+		/// @return True if the spec parsed and the file was saved.
+		static bool SetSoundEmittersInFile(const String& assetPath, const String& spec);
+
 	private:
 		void SetAnimationState(AnimationState* animState);
 
 		void DrawDetails(const String& id);
+
+		/// @brief Draws the "Sounds" section of the details panel: the mesh's looping sound emitters.
+		void DrawSoundEmitters();
+
+		/// @brief Moves the marker axis onto the selected sound emitter, or hides it.
+		void UpdateSoundEmitterMarker();
 
 		void DrawAnimations(const String& id);
 
@@ -106,6 +119,11 @@ namespace mmo
 		Camera* m_camera { nullptr };
 		std::unique_ptr<AxisDisplay> m_axisDisplay;
 		std::unique_ptr<WorldGrid> m_worldGrid;
+
+		/// @brief Marks the selected sound emitter in the viewport.
+		std::unique_ptr<AxisDisplay> m_soundEmitterAxis;
+		SceneNode* m_soundEmitterNode { nullptr };
+		int32 m_selectedSoundEmitter { -1 };
 		int16 m_lastMouseX { 0 }, m_lastMouseY { 0 };
 		bool m_leftButtonPressed { false };
 		ImVec2 m_viewportImageMin {};

@@ -123,6 +123,7 @@ namespace mmo
 		static const char *s_toggleTerrainDebug = "ToggleTerrainDebug";
 		static const char *s_freezeCulling = "ToggleCullingFreeze";
 		static const char *s_reload = "reload";
+		static const char *s_ambientSounds = "AmbientSounds";
 	}
 
 	namespace
@@ -339,6 +340,7 @@ namespace mmo
 		, m_combatSoundPlayer(m_project, soundEntryPlayer)
 		, m_zoneMusic(soundEntryPlayer, audio)
 		, m_zoneAmbience(soundEntryPlayer, audio)
+		, m_ambientSounds(soundEntryPlayer, audio)
 		, m_gameTime(gameTime)
 		, m_cache(cache)
 		, m_project(project)
@@ -550,6 +552,7 @@ namespace mmo
 
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
+		m_ambientSounds.Clear();
 		m_unitAttachedSounds.clear();
 
 		// UpdateWaterVolume stops running once the world is left, so a low-pass applied while
@@ -1113,6 +1116,9 @@ namespace mmo
 		if (m_playerController->GetControlledUnit())
 		{
 			m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+
+			// Mesh sounds are selected around the same position the 3D listener sits at
+			m_ambientSounds.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
 		}
 
 		// Advance zone music / ambience crossfades
@@ -2349,6 +2355,17 @@ namespace mmo
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
 								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
 
+		Console::RegisterCommand(command_names::s_ambientSounds, [this](const std::string &, const std::string &)
+								 {
+									 const GameUnitC *unit = m_playerController->GetControlledUnit().get();
+									 const Vector3 listener = unit ? unit->GetPosition() : Vector3::Zero;
+									 ILOG("Ambient sounds: " << m_ambientSounds.GetSourceCount() << " sources, " << m_ambientSounds.GetActiveVoiceCount() << " active voices");
+									 for (const auto &voice : m_ambientSounds.GetVoices())
+									 {
+										 ILOG("  sound " << voice.soundEntryId << " at " << voice.position << ", " << std::sqrt(listener.GetSquaredDistanceTo(voice.position)) << " m, fade " << voice.fade << (voice.retiring ? " (fading out)" : ""));
+									 }
+								 }, ConsoleCommandCategory::Sound, "Lists the looping mesh sounds near the player.");
+
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string &, const std::string &)
 								 { ToggleAxisVisibility(); }, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
 
@@ -2486,7 +2503,8 @@ namespace mmo
 			command_names::s_toggleTerrainLOD,
 			command_names::s_toggleTerrainDebug,
 			command_names::s_freezeCulling,
-			command_names::s_reload};
+			command_names::s_reload,
+			command_names::s_ambientSounds};
 
 		for (const auto &command : commandsToRemove)
 		{
@@ -5894,6 +5912,9 @@ namespace mmo
 	{
 		// The distant terrain belongs to the old world's terrain.
 		m_farTerrain.reset();
+
+		// The old world's placements do not remove their mesh sounds when it is destroyed
+		m_ambientSounds.Clear();
 		m_worldInstance.reset();
 
 		m_worldLoaded = false;
@@ -5906,6 +5927,7 @@ namespace mmo
 		DLOG("Loading map " << assetPath << ".hwld...");
 
 		m_worldInstance = std::make_shared<ClientWorldInstance>(*m_scene, *m_worldRootNode, assetPath, m_workQueue, m_dispatcher);
+		m_worldInstance->SetAmbientSounds(&m_ambientSounds);
 
 		const std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath + ".hwld");
 		if (!streamPtr)
