@@ -67,6 +67,14 @@ namespace mmo
 		/// Set while a pending connection attempt should be discarded once it resolves (user cancelled).
 		bool m_cancelled = false;
 
+		/// Set between connectionEstablished(true) and connectionLost(): a receive is in flight, so
+		/// closing the socket is guaranteed to end in connectionLost().
+		bool m_sessionActive = false;
+
+		/// Realm to connect to once the current session has finished closing (realm switch from the
+		/// character screen). While set, the closing session does not fire Disconnected.
+		std::optional<RealmData> m_pendingRealm;
+
 		/// Reason the realm gave for terminating this session, if any. Cleared on each new connect.
 		std::optional<auth::SessionKickReason> m_kickReason;
 
