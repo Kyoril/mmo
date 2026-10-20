@@ -115,6 +115,17 @@ namespace mmo
 		return static_cast<size_t>(std::count_if(m_voices.begin(), m_voices.end(), [](const Voice& voice) { return !voice.retiring; }));
 	}
 
+	std::vector<AmbientSoundEmitters::VoiceInfo> AmbientSoundEmitters::GetVoices() const
+	{
+		std::vector<VoiceInfo> voices;
+		voices.reserve(m_voices.size());
+		for (const Voice& voice : m_voices)
+		{
+			voices.push_back(VoiceInfo{ voice.soundEntryId, voice.position, voice.fade, voice.retiring });
+		}
+		return voices;
+	}
+
 	void AmbientSoundEmitters::Update(const Vector3& listener, const float deltaSeconds)
 	{
 		m_reselectTimer -= deltaSeconds;
@@ -223,6 +234,7 @@ namespace mmo
 		Voice voice;
 		voice.sourceId = sourceId;
 		voice.soundEntryId = source.soundEntryId;
+		voice.position = source.position;
 		voice.channel = m_player.PlayEntry(source.soundEntryId, source.position);
 		if (voice.channel == InvalidChannel)
 		{

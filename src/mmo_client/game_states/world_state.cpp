@@ -122,6 +122,7 @@ namespace mmo
 		static const char *s_toggleTerrainDebug = "ToggleTerrainDebug";
 		static const char *s_freezeCulling = "ToggleCullingFreeze";
 		static const char *s_reload = "reload";
+		static const char *s_ambientSounds = "AmbientSounds";
 	}
 
 	namespace
@@ -2353,6 +2354,17 @@ namespace mmo
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
 								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
 
+		Console::RegisterCommand(command_names::s_ambientSounds, [this](const std::string &, const std::string &)
+								 {
+									 const GameUnitC *unit = m_playerController->GetControlledUnit().get();
+									 const Vector3 listener = unit ? unit->GetPosition() : Vector3::Zero;
+									 ILOG("Ambient sounds: " << m_ambientSounds.GetSourceCount() << " sources, " << m_ambientSounds.GetActiveVoiceCount() << " active voices");
+									 for (const auto &voice : m_ambientSounds.GetVoices())
+									 {
+										 ILOG("  sound " << voice.soundEntryId << " at " << voice.position << ", " << std::sqrt(listener.GetSquaredDistanceTo(voice.position)) << " m, fade " << voice.fade << (voice.retiring ? " (fading out)" : ""));
+									 }
+								 }, ConsoleCommandCategory::Sound, "Lists the looping mesh sounds near the player.");
+
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string &, const std::string &)
 								 { ToggleAxisVisibility(); }, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
 
@@ -2490,7 +2502,8 @@ namespace mmo
 			command_names::s_toggleTerrainLOD,
 			command_names::s_toggleTerrainDebug,
 			command_names::s_freezeCulling,
-			command_names::s_reload};
+			command_names::s_reload,
+			command_names::s_ambientSounds};
 
 		for (const auto &command : commandsToRemove)
 		{

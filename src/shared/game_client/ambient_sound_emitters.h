@@ -116,6 +116,19 @@ namespace mmo
 		/// @brief Number of voices that are playing or fading in (not those fading out).
 		[[nodiscard]] size_t GetActiveVoiceCount() const;
 
+		/// @brief A voice as reported for debugging.
+		struct VoiceInfo
+		{
+			uint32 soundEntryId = 0;
+			Vector3 position = Vector3::Zero;
+			/// Normalized fade in [0, 1].
+			float fade = 0.0f;
+			bool retiring = false;
+		};
+
+		/// @brief Lists every voice, including those fading out.
+		[[nodiscard]] std::vector<VoiceInfo> GetVoices() const;
+
 	private:
 		using OwnerKey = std::pair<uint8, uint64>;
 
@@ -123,6 +136,7 @@ namespace mmo
 		{
 			uint64 sourceId = 0;
 			uint32 soundEntryId = 0;
+			Vector3 position = Vector3::Zero;
 			ChannelIndex channel = InvalidChannel;
 			float baseVolume = 1.0f;
 			/// Normalized fade in [0, 1].
