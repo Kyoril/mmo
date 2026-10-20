@@ -2,6 +2,7 @@
 
 #include "catch.hpp"
 
+#include "base/chunk_writer.h"
 #include "base/typedefs.h"
 #include "scene_graph/mesh.h"
 #include "scene_graph/mesh_serializer.h"
@@ -46,11 +47,24 @@ namespace
 		}
 	}
 
-	bool ContainsMagic(const std::vector<char>& buffer, const char* magic)
+	/// Whether the buffer holds the SNDS chunk. MakeChunkMagic magics land little-endian, so the
+	/// bytes on disk read "SDNS" - searching for the literal text would never match.
+	bool ContainsSoundChunk(const std::vector<char>& buffer)
 	{
+		const ChunkMagic magic = MakeChunkMagic('SNDS');
 		const std::string_view bytes{ buffer.data(), buffer.size() };
-		return bytes.find(std::string_view{ magic, 4 }) != std::string_view::npos;
+		return bytes.find(std::string_view{ magic.data(), magic.size() }) != std::string_view::npos;
 	}
+}
+
+TEST_CASE("A mesh with sound emitters writes the SNDS chunk", "[mesh_serializer][mesh_sounds]")
+{
+	// Guards the two negative tests below against searching for the wrong bytes
+	auto mesh = std::make_shared<Mesh>("Loud");
+	MeshSoundEmitter emitter;
+	emitter.soundEntryId = 5;
+	mesh->SetSoundEmitters({ emitter });
+	CHECK(ContainsSoundChunk(Serialize(mesh)));
 }
 
 TEST_CASE("Mesh sound emitters survive a save and load", "[mesh_serializer][mesh_sounds]")
@@ -87,7 +101,7 @@ TEST_CASE("Mesh sound emitters survive a save and load", "[mesh_serializer][mesh
 TEST_CASE("A mesh without sound emitters writes no SNDS chunk", "[mesh_serializer][mesh_sounds]")
 {
 	const auto mesh = std::make_shared<Mesh>("Silent");
-	CHECK_FALSE(ContainsMagic(Serialize(mesh), "SNDS"));
+	CHECK_FALSE(ContainsSoundChunk(Serialize(mesh)));
 }
 
 TEST_CASE("Sound emitters are not written into pre-0x0302 meshes", "[mesh_serializer][mesh_sounds]")
@@ -98,7 +112,7 @@ TEST_CASE("Sound emitters are not written into pre-0x0302 meshes", "[mesh_serial
 	emitter.soundEntryId = 5;
 	mesh->SetSoundEmitters({ emitter });
 
-	CHECK_FALSE(ContainsMagic(Serialize(mesh, mesh_version::Version_0_3_1), "SNDS"));
+	CHECK_FALSE(ContainsSoundChunk(Serialize(mesh, mesh_version::Version_0_3_1)));
 }
 
 TEST_CASE("A sound emitter chunk with an unknown layout is skipped, not fatal", "[mesh_serializer][mesh_sounds]")
