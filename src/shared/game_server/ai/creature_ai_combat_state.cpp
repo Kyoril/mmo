@@ -773,8 +773,26 @@ namespace mmo
 			// between creatures here in exchange for stable, predictable positioning. De-stacking
 			// still happens naturally while creatures are *approaching* (the separation pass above
 			// only changes where an out-of-range creature stops).
-			m_unreachable.Update(false, GetAsyncTimeMs());
-			return true;
+			//
+			// In range is not reachable while something blocks the view -- a closed door between
+			// us: no swing lands through it and no path leads through it, so the fight could never
+			// end. Keep the unreachable streak running so we evade below like any other victim we
+			// cannot get to.
+			if (controlled.IsInLineOfSightOf(target))
+			{
+				m_unreachable.Update(false, GetAsyncTimeMs());
+				return true;
+			}
+
+			m_unreachable.Update(true, GetAsyncTimeMs());
+			if (!m_unreachable.ShouldEvade(GetAsyncTimeMs()))
+			{
+				return true;
+			}
+
+			DLOG("Creature 0x" << std::hex << controlled.GetGuid() << std::dec << " has no line of sight to its victim in melee range, evading");
+			GetAI().Reset();
+			return false;
 		}
 		else if (m_unreachable.ShouldEvade(GetAsyncTimeMs()))
 		{

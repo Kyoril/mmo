@@ -5991,6 +5991,10 @@ namespace mmo
 		case attack_swing_event::OutOfRange:
 			errorEvent = "ATTACK_SWING_OUT_OF_RANGE";
 			break;
+		case attack_swing_event::NotInLineOfSight:
+			// Same message as a spell blocked by line of sight
+			errorEvent = "SPELL_CAST_FAILED_LINE_OF_SIGHT";
+			break;
 		default:
 			errorEvent = "UNKNOWN";
 			break;

@@ -143,6 +143,7 @@ namespace mmo
 			case attack_swing_event::CantAttack: return "cant_attack";
 			case attack_swing_event::WrongFacing: return "wrong_facing";
 			case attack_swing_event::TargetDead: return "target_dead";
+			case attack_swing_event::NotInLineOfSight: return "line_of_sight";
 			case attack_swing_event::Success: return "success";
 			default: return "unknown";
 			}
