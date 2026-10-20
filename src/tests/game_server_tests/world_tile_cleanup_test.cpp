@@ -148,3 +148,45 @@ TEST_CASE_METHOD(TileCleanupFixture, "A removed object that moved off the grid l
 
 	CHECK(CountTilesHolding(*unit) == 0);
 }
+
+TEST_CASE_METHOD(TileCleanupFixture, "A creature moved before it is added to the world is not filed in a tile", "[world][visibility]")
+{
+	// CreateCreature points the creature at the world before AddGameObject files it. A move in
+	// between used to file it in a tile (and spawn it to nearby players) ahead of the add.
+	auto creature = world->CreateCreature(*unitEntry, Vector3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f);
+	creature->Relocate(Vector3(500.0f, 0.0f, 500.0f), Radian(0.0f));
+
+	CHECK(CountTilesHolding(*creature) == 0);
+
+	world->AddGameObject(*creature);
+	CHECK(CountTilesHolding(*creature) == 1);
+
+	world->RemoveGameObject(*creature);
+	CHECK(CountTilesHolding(*creature) == 0);
+}
+
+TEST_CASE_METHOD(TileCleanupFixture, "An object filed under the wrong tile ends up in exactly one tile when it moves on", "[world][visibility]")
+{
+	auto unit = Spawn(Vector3(0.0f, 0.0f, 0.0f));
+
+	const TileIndex2D home = TileOf(unit->GetPosition());
+	const TileIndex2D elsewhere = TileOf(Vector3(500.0f, 0.0f, 500.0f));
+	REQUIRE(home != elsewhere);
+
+	world->GetGrid().GetTile(home)->GetGameObjects().remove(unit.get());
+	world->GetGrid().GetTile(elsewhere)->GetGameObjects().add(unit.get());
+
+	unit->Relocate(Vector3(-500.0f, 0.0f, -500.0f), Radian(0.0f));
+
+	CHECK(CountTilesHolding(*unit) == 1);
+	CHECK(world->GetGrid().GetTile(TileOf(unit->GetPosition()))->GetGameObjects().contains(unit.get()));
+}
+
+TEST_CASE_METHOD(TileCleanupFixture, "Adding an object twice files it once", "[world][visibility]")
+{
+	auto unit = Spawn(Vector3(0.0f, 0.0f, 0.0f));
+
+	world->AddGameObject(*unit);
+
+	CHECK(CountTilesHolding(*unit) == 1);
+}

@@ -559,7 +559,13 @@ namespace mmo
 	void WorldInstance::AddGameObject(GameObjectS& added)
 	{
 		ASSERT(!m_updating);
-		m_objectsByGuid.emplace(added.GetGuid(), &added);
+		if (!m_objectsByGuid.emplace(added.GetGuid(), &added).second)
+		{
+			// A second add would file the object in a second tile and spawn it twice.
+			ELOG("Object " << log_hex_digit(added.GetGuid()) << " (type " << static_cast<int32>(added.GetTypeId())
+				<< ") is added to world instance " << m_id << " while it is already in it - ignored");
+			return;
+		}
 
 		// No need for visibility updates for item objects
 		if (added.GetTypeId() == ObjectTypeId::Item ||
@@ -733,7 +739,7 @@ namespace mmo
 					// the object is freed, and the next unit walking past that tile crashes on it.
 					if (!tile->GetGameObjects().optionalRemove(&remove))
 					{
-						ForgetObjectInAllTiles(remove, gridIndex);
+						ForgetObjectInAllTiles(remove, gridIndex, "removed");
 					}
 
 					ForEachTileInSight(
@@ -789,7 +795,7 @@ namespace mmo
 		}
 	}
 
-	void WorldInstance::ForgetObjectInAllTiles(GameObjectS& object, const TileIndex2D& expectedTile)
+	void WorldInstance::ForgetObjectInAllTiles(GameObjectS& object, const TileIndex2D& expectedTile, const char* context) const
 	{
 		std::ostringstream foundIn;
 		m_visibilityGrid->ForEachExistingTile([&object, &foundIn](VisibilityTile& tile)
@@ -802,7 +808,7 @@ namespace mmo
 
 		const std::string found = foundIn.str();
 		ELOG("Object " << log_hex_digit(object.GetGuid()) << " (type " << static_cast<int32>(object.GetTypeId())
-			<< ", map " << m_mapId << ") removed at " << object.GetPosition()
+			<< ", map " << m_mapId << ") " << context << " at " << object.GetPosition()
 			<< " was not in its tile (" << expectedTile[0] << ", " << expectedTile[1] << "); found in:"
 			<< (found.empty() ? std::string(" no tile") : found));
 	}
@@ -1002,6 +1008,17 @@ namespace mmo
 	void WorldInstance::NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo,
 		const MovementInfo& newMovementInfo) const
 	{
+		// CreateCreature and SpawnWorldObject point the object at this world before AddGameObject
+		// files it (so passives can be cast). A move in that window used to file it in a tile and
+		// spawn it to nearby players ahead of AddGameObject: players then got it twice, and an
+		// object that never got added stayed in the tile after it was freed. Only objects that are
+		// actually in this world have tiles to change.
+		const auto it = m_objectsByGuid.find(object.GetGuid());
+		if (it == m_objectsByGuid.end() || it->second != &object)
+		{
+			return;
+		}
+
 		OnObjectMoved(object, previousMovementInfo);
 
 		if (GameUnitS* unit = dynamic_cast<GameUnitS*>(&object))
@@ -1144,8 +1161,14 @@ namespace mmo
 				return;
 			}
 
-			// Remove the object
-			oldTile->GetGameObjects().remove(&object);
+			// Remove the object. Not finding it where its previous position maps to means it moved
+			// without the grid being told: wherever it really is, it would stay there as well as
+			// in the new tile, be sent twice to players (the client crashes on a double spawn) and
+			// outlive its own removal as a dangling pointer. Take it out of every tile instead.
+			if (!oldTile->GetGameObjects().optionalRemove(&object))
+			{
+				ForgetObjectInAllTiles(object, oldIndex, "moved on");
+			}
 
 			const std::vector objects{ &object };
 

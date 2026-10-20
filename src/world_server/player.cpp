@@ -555,23 +555,33 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects)
+	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& requested)
 	{
-		// Assert that none of these GUIDs are already known to the client — receiving a
-		// second creation packet for the same GUID crashes the client (duplicate entity name
-		// in Scene::CreateEntity).  If this fires, the server sent a spawn without a prior despawn.
-		for (const auto* object : objects)
+		// None of these GUIDs may already be known to the client — receiving a second creation
+		// packet for the same GUID crashes the client (duplicate entity name in
+		// Scene::CreateEntity). A known one means the server's view bookkeeping went wrong
+		// somewhere (a spawn without a prior despawn): log it, and leave that object out rather
+		// than crash the client, or - through an assert - the whole world node.
+		std::vector<GameObjectS*> objects;
+		objects.reserve(requested.size());
+		for (auto* object : requested)
 		{
 			const uint64 guid = object->GetGuid();
-			if (m_spawnedGuids.contains(guid))
+			if (!m_spawnedGuids.insert(guid).second)
 			{
 				ELOG("Double-spawn detected: GUID " << log_hex_digit(guid)
-					<< " (type=" << static_cast<int>(object->GetTypeId()) << ")"
+					<< " (type=" << static_cast<int>(object->GetTypeId()) << ", at " << object->GetPosition() << ")"
 					<< " is already known to client " << log_hex_digit(m_character->GetGuid())
-					<< " — server sent creation without prior destroy");
-				ASSERT(false && "Double-spawn: object already spawned at client without prior despawn");
+					<< " (at " << m_character->GetPosition() << ") — creation skipped");
+				continue;
 			}
-			m_spawnedGuids.insert(guid);
+
+			objects.push_back(object);
+		}
+
+		if (objects.empty())
+		{
+			return;
 		}
 
 		// Prepare dynamic fields for world objects and creatures
