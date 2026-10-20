@@ -903,7 +903,9 @@ namespace mmo
 					   luabind::scope(
 						   luabind::class_<mmo::RealmData>("RealmData")
 							   .def_readonly("id", &mmo::RealmData::id)
-							   .def_readonly("name", &mmo::RealmData::name)),
+							   .def_readonly("name", &mmo::RealmData::name)
+							   .def_readonly("population", &mmo::RealmData::population)
+							   .def_readonly("playerCount", &mmo::RealmData::playerCount)),
 
 					   luabind::scope(
 						   luabind::class_<mmo::CharacterView>("CharacterView")

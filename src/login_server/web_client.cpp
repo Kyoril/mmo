@@ -121,6 +121,11 @@ namespace mmo
 			m_handlers.HandleSetRealmFeatureRequirement(req, response);
 		});
 
+		RegisterRoute(Type::Post, "/realm-capacity", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleSetRealmCapacity(req, response);
+		});
+
 		RegisterRoute(Type::Post, "/remove-realm-feature-requirement", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
 		{
 			m_handlers.HandleRemoveRealmFeatureRequirement(req, response);

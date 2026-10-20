@@ -385,6 +385,7 @@ namespace mmo
 					strongThis->m_realmName = result->name;
 					strongThis->m_realmListAddress = result->ipAddress;
 					strongThis->m_realmListPort = result->port;
+					strongThis->SetCapacity(result->capacity);
 
 					// We are NOT banned so continue
 					authResult = auth::auth_result::Success;

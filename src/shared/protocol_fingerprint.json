@@ -7,15 +7,15 @@
 	],
 	"_format": 3,
 	"auth": {
-		"version": 10,
-		"fingerprint": "sha256:877ca1b8cd9e76a51cfb89311f83efded7b119bc3ff307386eecc311c7926e18",
+		"version": 11,
+		"fingerprint": "sha256:b76b17d59755436d19a1b0561e652578fa6350601ffa84efa73edaf44b9e429d",
 		"files": {
 			"src/shared/auth_protocol/auth_incoming_packet.cpp": "sha256:0e23f09921b76939917c9f7e660deab2977ba79eaa03c9e7ea92e38764f7d5ff",
 			"src/shared/auth_protocol/auth_incoming_packet.h": "sha256:324112379d24eacb03fc3f2984a5180e741ddb95978d1c91616ce43fa68a0745",
 			"src/shared/auth_protocol/auth_outgoing_packet.cpp": "sha256:7003aee85725f5955505c74037f0bcdfb89fd4ebd647257d2edc9d4b06268ca1",
 			"src/shared/auth_protocol/auth_outgoing_packet.h": "sha256:eff0a023adf8133bf02c2df220b97cb364e7b91b82b45470da2cbec34307926c",
 			"src/shared/auth_protocol/auth_protocol.cpp": "sha256:3ae02697539b108be5892fb3288d1480749c9a720e5d4545e2efbfb5601de224",
-			"src/shared/auth_protocol/auth_protocol.h": "sha256:6413493be051962bb56984fd445f10ca8dc246c47462a5b28610366f4ccb32cc"
+			"src/shared/auth_protocol/auth_protocol.h": "sha256:c094f179534a8f1d35fcc2d251bb571ccdbadffa3687052420bad0f739fffe26"
 		},
 		"symbols": [
 			"auth::AuthLocale::Default = 0",
@@ -79,6 +79,11 @@
 			"auth::realm_login_packet::LogonChallenge = 0",
 			"auth::realm_login_packet::LogonProof = 1",
 			"auth::realm_login_packet::Ping = 3",
+			"auth::realm_population::Count_ = 4",
+			"auth::realm_population::Full = 3",
+			"auth::realm_population::High = 2",
+			"auth::realm_population::Low = 0",
+			"auth::realm_population::Medium = 1",
 			"auth::realm_world_packet::BugReport = 16",
 			"auth::realm_world_packet::FetchCharacterLocation = 6",
 			"auth::realm_world_packet::InventoryOperationResult = 11",

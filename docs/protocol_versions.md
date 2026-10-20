@@ -4,7 +4,7 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 10 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 11 |
 | `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 27 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
@@ -104,6 +104,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 11 | 2026-10-20 | Realm selection redesign: every `RealmList` entry carries a trailing uint8 `realm_population` band and a uint32 player count, which is exact only for GM accounts and `HiddenRealmPlayerCount` (0xFFFFFFFF) for everyone else |
 | 10 | 2026-10-19 | GM observation: CharacterData carries uint8 gmFlags after isGameMaster; realm→world TeleportRequest carries the target InstanceId |
 | 9 | 2026-10-13 | Instance reset: realm→world `ResetInstance` request |
 | 8 | 2026-10-04 | Scheduled realm shutdown: realm→world `Shutdown` opcode; `session_kick_reason::RealmShutdown` |

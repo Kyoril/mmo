@@ -9,6 +9,7 @@
 #include "auth_protocol/auth_connection.h"
 #include "base/signal.h"
 #include "base/big_number.h"
+#include <atomic>
 #include <memory>
 #include <functional>
 #include <map>
@@ -67,6 +68,10 @@ namespace mmo
 		inline uint16 GetRealmListPort() const { return m_realmListPort; }
 		/// Gets the number of players currently connected to this realm, as last reported via ping.
 		inline uint32 GetPlayerCount() const { return m_playerCount; }
+		/// Gets the player capacity the realm list population is measured against.
+		inline uint32 GetCapacity() const { return m_capacity.load(std::memory_order_relaxed); }
+		/// Sets the capacity, e.g. after an administrator changed it. Safe to call from any thread.
+		inline void SetCapacity(const uint32 capacity) { m_capacity.store(capacity, std::memory_order_relaxed); }
 
 	public:
 		/// Tells this realm to drop every session belonging to an account, and why. Does nothing if
@@ -139,6 +144,7 @@ namespace mmo
 
 		GameTime m_lastPing = 0;
 		uint32 m_playerCount = 0;				// Players connected to this realm, reported via ping
+		std::atomic<uint32> m_capacity{ DefaultRealmCapacity };	// Read by player sessions and REST handlers
 
 		/// Number of bytes used to store m_s.
 		static constexpr int ByteCountS = 32;
