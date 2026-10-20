@@ -4,6 +4,7 @@
 #include "math/math_utils.h"
 
 #include "player_manager.h"
+#include "base/crash_context.h"
 #include "base/utilities.h"
 #include "game_server/world/each_tile_in_region.h"
 #include "game_server/world/each_tile_in_sight.h"
@@ -554,23 +555,33 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects)
+	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& requested)
 	{
-		// Assert that none of these GUIDs are already known to the client — receiving a
-		// second creation packet for the same GUID crashes the client (duplicate entity name
-		// in Scene::CreateEntity).  If this fires, the server sent a spawn without a prior despawn.
-		for (const auto* object : objects)
+		// None of these GUIDs may already be known to the client — receiving a second creation
+		// packet for the same GUID crashes the client (duplicate entity name in
+		// Scene::CreateEntity). A known one means the server's view bookkeeping went wrong
+		// somewhere (a spawn without a prior despawn): log it, and leave that object out rather
+		// than crash the client, or - through an assert - the whole world node.
+		std::vector<GameObjectS*> objects;
+		objects.reserve(requested.size());
+		for (auto* object : requested)
 		{
 			const uint64 guid = object->GetGuid();
-			if (m_spawnedGuids.contains(guid))
+			if (!m_spawnedGuids.insert(guid).second)
 			{
 				ELOG("Double-spawn detected: GUID " << log_hex_digit(guid)
-					<< " (type=" << static_cast<int>(object->GetTypeId()) << ")"
+					<< " (type=" << static_cast<int>(object->GetTypeId()) << ", at " << object->GetPosition() << ")"
 					<< " is already known to client " << log_hex_digit(m_character->GetGuid())
-					<< " — server sent creation without prior destroy");
-				ASSERT(false && "Double-spawn: object already spawned at client without prior despawn");
+					<< " (at " << m_character->GetPosition() << ") — creation skipped");
+				continue;
 			}
-			m_spawnedGuids.insert(guid);
+
+			objects.push_back(object);
+		}
+
+		if (objects.empty())
+		{
+			return;
 		}
 
 		// Prepare dynamic fields for world objects and creatures
@@ -827,6 +838,12 @@ namespace mmo
 
 	void Player::HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer)
 	{
+		// Names the player and packet in a crash report, which the stack alone cannot.
+		const CrashContextScope crashContext("client packet 0x%04x (%zu bytes) from character 0x%016llx '%s' on map %u, instance %s",
+			static_cast<uint32>(opCode), buffer.size(), static_cast<unsigned long long>(m_character->GetGuid()),
+			m_character->GetName().c_str(), m_character->GetMapId(),
+			m_worldInstance ? m_worldInstance->GetId().to_string().c_str() : "none");
+
 		io::MemorySource source(reinterpret_cast<char*>(buffer.data()), reinterpret_cast<char*>(buffer.data() + buffer.size()));
 		io::Reader reader(source);
 
@@ -2763,6 +2780,15 @@ namespace mmo
 
 				// Never leak movement of units the watcher's client currently can't see (stealth)
 				if (watcher->IsObjectHiddenForClient(characterGuid))
+				{
+					continue;
+				}
+
+				// The tiles in sight are those of the position before this move. A move that changed
+				// tiles has just despawned the unit for watchers it left behind, and an invisible unit
+				// was never spawned to anyone: their clients do not know it and only warn about the
+				// packet. Watchers that newly see it got its current position in the spawn instead.
+				if (!watcher->IsObjectKnown(characterGuid))
 				{
 					continue;
 				}

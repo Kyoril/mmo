@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "player.h"
+#include "base/crash_context.h"
 #include "database.h"
 #include "realm_manager.h"
 #include "player_manager.h"
@@ -110,6 +111,8 @@ namespace mmo
 	PacketParseResult Player::connectionPacketReceived(auth::IncomingPacket & packet)
 	{
 		const auto packetId = packet.GetId();
+		const CrashContextScope crashContext("client packet 0x%02x from %s, account '%s'",
+			static_cast<uint32>(packetId), m_address.c_str(), m_accountName.c_str());
 		bool isValid = true;
 
 		PacketHandler handler = nullptr;

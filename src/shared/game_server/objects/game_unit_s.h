@@ -1581,6 +1581,11 @@ public:
 		/// @returns The melee reach as a float.
 		float GetMeleeReach() const;
 
+		/// Checks whether static geometry or a closed door blocks the line of sight to another unit.
+		/// @param other The unit to check against.
+		/// @returns true if nothing blocks the view, or if there is no world or collision data to ask.
+		bool IsInLineOfSightOf(const GameUnitS& other);
+
 		/// Adds an attacking unit to the list of attackers.
 		/// @param attacker The unit that is attacking.
 		void AddAttackingUnit(const GameUnitS &attacker);

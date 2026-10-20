@@ -9,7 +9,8 @@ endif()
 # Enable C++20 standard
 set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
-list(APPEND CMAKE_CXX_FLAGS "-std=c++2a -pthread")
+# A string append: list(APPEND) would join a user-supplied CMAKE_CXX_FLAGS (the Docker builds pass -g) with ";".
+string(APPEND CMAKE_CXX_FLAGS " -std=c++2a -pthread")
 
 add_compile_options(-msse4.1)
 #add_compile_options(-fno-exceptions -fno-rtti)

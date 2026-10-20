@@ -31,6 +31,7 @@
 #include <thread>
 
 #include "base/server_crash_handler.h"
+#include "crash_upload/crash_report_sender.h"
 #include "base/filesystem.h"
 #include "base/timer_queue.h"
 #include "network/shutdown_signals.h"
@@ -84,6 +85,7 @@ namespace mmo
 		// File log setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
+		std::string logFilePath;
 		scoped_connection genericLogConnection;
 		if (config.isLogActive)
 		{
@@ -91,7 +93,8 @@ namespace mmo
 			logOptions.alwaysFlush = !config.isLogFileBuffering;
 
 			// Setup the log file connection after opening the log file
-			m_logFile.open(generateLogFileName(config.logFileName).c_str(), std::ios::app);
+			logFilePath = generateLogFileName(config.logFileName);
+			m_logFile.open(logFilePath.c_str(), std::ios::app);
 			if (m_logFile)
 			{
 				genericLogConnection = g_DefaultLog.signal().connect(
@@ -108,11 +111,20 @@ namespace mmo
 
 		// Installed once the log file exists so the handler can flush it, and torn down when this
 		// scope ends so the flush callback never outlives the stream it captured.
-		const ServerCrashHandlerScope crashHandlerScope{ "login_server", config.logFileName, m_logFile };
+		std::ostringstream versionText;
+		versionText << Major << "." << Minor << "." << Build << "." << Revision << " (Commit: " << GitCommit << ")";
+		const ServerCrashHandlerScope crashHandlerScope{ "login_server", config.logFileName, m_logFile, logFilePath, versionText.str() };
 
 		// Display version infos
-		ILOG("Version " << Major << "." << Minor << "." << Build << "." << Revision << " (Commit: " << GitCommit << ")");
+		ILOG("Version " << versionText.str());
 		ILOG("Last Change: " << GitLastChange);
+
+		// Hand the reports of earlier crashes to the crash API. Declared after the io_service the
+		// outcomes are posted to, so its worker is joined before that service goes away.
+		CrashReportSender crashReportSender{ CrashReportSender::Config{ config.crashReportEnabled, config.crashReportApiUrl, "login_server",
+			ServerCrashHandlerScope::GetReportDirectory(config.logFileName), versionText.str(), std::string() },
+			[&ioService](std::function<void()> work) { ioService.post(std::move(work)); } };
+		crashReportSender.Start();
 
 
 

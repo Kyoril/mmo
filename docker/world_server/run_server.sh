@@ -54,6 +54,11 @@ bugReport =
 	apiUrl = "${BUG_REPORT_API_URL:-https://error.mmo-dev.net}"
 	apiKey = "${BUG_REPORT_API_KEY}"
 )
+crashReport =
+(
+	enabled = ${CRASH_REPORT_ENABLED:-1}
+	apiUrl = "${CRASH_REPORT_API_URL:-https://error.mmo-dev.net}"
+)
 EOF
 
 # Start the server

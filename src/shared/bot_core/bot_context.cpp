@@ -44,24 +44,13 @@ namespace mmo
 	void BotContext::SetCurrentMapId(const uint32 mapId)
 	{
 		m_currentMapId = mapId;
-		m_hasCurrentMapId = mapId != 0;
+		m_hasCurrentMapId = true;
 	}
 
 	void BotContext::UpdateCurrentMapIdFromWorldSync(const uint32 mapId)
 	{
-		if (mapId != 0)
-		{
-			SetCurrentMapId(mapId);
-			return;
-		}
-
-		if (m_hasCurrentMapId && m_currentMapId != 0)
-		{
-			return;
-		}
-
-		m_currentMapId = 0;
-		m_hasCurrentMapId = false;
+		// The realm names the map the player is on, and 0 is a real map (the continent), not "unknown".
+		SetCurrentMapId(mapId);
 	}
 
 	void BotContext::SendChatMessage(const std::string& message, ChatType chatType, const std::string& target)

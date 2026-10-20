@@ -75,6 +75,8 @@ $scriptsDir = (Join-Path $s.RepoRoot "data/scripts") -replace '\\', '/'
 $bugReportDir = (Join-Path $s.RuntimeDir "bugs") -replace '\\', '/'
 if (Test-Path $bugReportDir) { Remove-Item -Recurse -Force $bugReportDir }
 New-Item -ItemType Directory -Force -Path $bugReportDir | Out-Null
+# Crash reports of earlier runs are "uploaded" here instead of to the live crash API.
+$crashReportDir = (Join-Path $s.RuntimeDir "crashes") -replace '\\', '/'
 $loginUpdates = (Join-Path $s.RepoRoot "data/login/updates") -replace '\\', '/'
 $realmUpdates = (Join-Path $s.RepoRoot "data/realm/updates") -replace '\\', '/'
 
@@ -120,6 +122,12 @@ log =
 	active = 1
 	fileName = "logs/login"
 	buffering = 0
+)
+
+crashReport =
+(
+	enabled = 1
+	apiUrl = "file://$crashReportDir"
 )
 "@
 
@@ -175,6 +183,12 @@ log =
 	active = 1
 	fileName = "logs/realm"
 	buffering = 0
+)
+
+crashReport =
+(
+	enabled = 1
+	apiUrl = "file://$crashReportDir"
 )
 "@
 
@@ -234,6 +248,12 @@ log =
 	active = 1
 	fileName = "logs/world"
 	buffering = 0
+)
+
+crashReport =
+(
+	enabled = 1
+	apiUrl = "file://$crashReportDir"
 )
 "@
 

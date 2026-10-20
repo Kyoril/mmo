@@ -93,6 +93,21 @@ endif()
 mmo_version_from_tag("v" MMO_VERSION)
 mmo_version_from_tag("launcher-v" MMO_LAUNCHER_VERSION)
 
+# Builds without .git (the Docker images) pass the build's identity in. The commit is what
+# tools/fetch_server_symbols.ps1 and tools/symbolicate_crash.ps1 look a Linux crash report up by.
+#   -DMMO_BUILD_COMMIT=<sha> -DMMO_BUILD_VERSION=MAJOR.MINOR.PATCH.REVISION
+if(MMO_BUILD_COMMIT)
+	set(MMO_GIT_COMMIT "${MMO_BUILD_COMMIT}")
+endif()
+if(MMO_BUILD_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+	set(MMO_VERSION_MAJOR ${CMAKE_MATCH_1})
+	set(MMO_VERSION_MINOR ${CMAKE_MATCH_2})
+	set(MMO_VERSION_PATCH ${CMAKE_MATCH_3})
+	set(MMO_GIT_REVISION ${CMAKE_MATCH_4})
+elseif(MMO_BUILD_VERSION)
+	message(WARNING "MMO_BUILD_VERSION '${MMO_BUILD_VERSION}' is not MAJOR.MINOR.PATCH.REVISION; ignored")
+endif()
+
 # Setup config files (skipped by tools/tests/test_release_version.py, which runs this in script mode)
 if(NOT MMO_VERSION_PRINT_ONLY)
 	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${PROJECT_BINARY_DIR}/version.h @ONLY)

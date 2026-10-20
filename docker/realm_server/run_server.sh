@@ -52,6 +52,11 @@ log =
 	fileName = "logs/logs"
 	buffering = 0
 )
+crashReport =
+(
+	enabled = ${CRASH_REPORT_ENABLED:-1}
+	apiUrl = "${CRASH_REPORT_API_URL:-https://error.mmo-dev.net}"
+)
 EOF
 
 # Start the server
