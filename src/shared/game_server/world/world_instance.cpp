@@ -16,6 +16,7 @@
 #include "log/default_log_levels.h"
 #include "game_server/world/visibility_grid.h"
 #include "game_server/world/visibility_tile.h"
+#include "base/crash_context.h"
 #include "base/utilities.h"
 #include "binary_io/vector_sink.h"
 #include "game_server/objects/game_object_s.h"
@@ -379,6 +380,9 @@ namespace mmo
 
 	void WorldInstance::Update(const RegularUpdate& update)
 	{
+		const CrashContextScope crashContext("world instance update: map %u, instance %s",
+			static_cast<uint32>(m_mapId), m_id.to_string().c_str());
+
 		m_updating = true;
 
 		if (m_mapData)

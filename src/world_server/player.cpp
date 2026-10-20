@@ -4,6 +4,7 @@
 #include "math/math_utils.h"
 
 #include "player_manager.h"
+#include "base/crash_context.h"
 #include "base/utilities.h"
 #include "game_server/world/each_tile_in_region.h"
 #include "game_server/world/each_tile_in_sight.h"
@@ -827,6 +828,12 @@ namespace mmo
 
 	void Player::HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer)
 	{
+		// Names the player and packet in a crash report, which the stack alone cannot.
+		const CrashContextScope crashContext("client packet 0x%04x (%zu bytes) from character 0x%016llx '%s' on map %u, instance %s",
+			static_cast<uint32>(opCode), buffer.size(), static_cast<unsigned long long>(m_character->GetGuid()),
+			m_character->GetName().c_str(), m_character->GetMapId(),
+			m_worldInstance ? m_worldInstance->GetId().to_string().c_str() : "none");
+
 		io::MemorySource source(reinterpret_cast<char*>(buffer.data()), reinterpret_cast<char*>(buffer.data() + buffer.size()));
 		io::Reader reader(source);
 
