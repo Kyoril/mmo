@@ -258,7 +258,7 @@ namespace mmo
 		}
 
 		uint32 mapId = context.GetCurrentMapId();
-		if (mapId == 0)
+		if (!context.HasCurrentMapId())
 		{
 			if (const auto inferredMapId = navService->InferMapId(start, target); inferredMapId.has_value())
 			{

@@ -202,7 +202,11 @@ character, like godmode)
   extends the 120s default for long scenarios, and `-- e2e-own-character: <letters>`
   gives the scenario a dedicated character so it does not share progression state with
   other scenarios of the same class (see `quest_path_1_to_10.lua`, which must start
-  at level 1).
+  at level 1). Both directives append letters to one shared character name, so the
+  `e2e-own-character` letters must be unique among scenarios *and* must not be a single
+  letter that a class id already claims (class `<id>` appends `char(97 + id)`, so `b`, `c`
+  and `e` are taken by the classes in use). A collision silently hands the scenario
+  another scenario's character.
 - The runner retries a scenario **once** on infrastructure failures (exit 2/3/4 —
   connect, timeout, disconnect) because a reconnect within ~1s of the previous
   session can race server-side session cleanup. Assertion failures (exit 1) are

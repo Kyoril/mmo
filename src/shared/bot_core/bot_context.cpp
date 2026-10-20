@@ -44,24 +44,17 @@ namespace mmo
 	void BotContext::SetCurrentMapId(const uint32 mapId)
 	{
 		m_currentMapId = mapId;
-		m_hasCurrentMapId = mapId != 0;
+		m_hasCurrentMapId = true;
 	}
 
 	void BotContext::UpdateCurrentMapIdFromWorldSync(const uint32 mapId)
 	{
-		if (mapId != 0)
-		{
-			SetCurrentMapId(mapId);
-			return;
-		}
-
-		if (m_hasCurrentMapId && m_currentMapId != 0)
-		{
-			return;
-		}
-
-		m_currentMapId = 0;
-		m_hasCurrentMapId = false;
+		// Map 0 is a real map - the default world every character starts on - so it is recorded
+		// like any other. Whether a map is known at all is carried by m_hasCurrentMapId, never by
+		// the id itself: treating 0 as "unknown" sent the movement controller guessing its map
+		// from the navigation mesh, and a guess can land on another map whose mesh also covers
+		// the start and the target.
+		SetCurrentMapId(mapId);
 	}
 
 	void BotContext::SendChatMessage(const std::string& message, ChatType chatType, const std::string& target)
