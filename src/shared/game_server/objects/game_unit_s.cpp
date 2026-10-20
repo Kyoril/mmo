@@ -3179,6 +3179,18 @@ namespace mmo
 		return reach;
 	}
 
+	bool GameUnitS::IsInLineOfSightOf(const GameUnitS& other)
+	{
+		WorldInstance* world = GetWorldInstance();
+		if (!world)
+		{
+			return true;
+		}
+
+		MapData* mapData = world->GetMapData();
+		return !mapData || mapData->IsInLineOfSight(GetPosition(), other.GetPosition());
+	}
+
 	void GameUnitS::AddAttackingUnit(const GameUnitS &attacker)
 	{
 		m_attackingUnits.add(&attacker);
@@ -4079,7 +4091,20 @@ namespace mmo
 			return;
 		}
 
-		// The swing has passed all pre-conditions (alive, in range, facing) and is going to
+		// Target must be in line of sight. Auto-attack spells are cast as procs, which skip the
+		// spell LoS check, and melee reach easily spans a closed door: without this a swing landed
+		// through the door and pulled the creatures behind it into a fight neither side could reach.
+		if (!IsInLineOfSightOf(*victim))
+		{
+			if (!isOffhand)
+			{
+				OnAttackSwingEvent(AttackSwingEvent::NotInLineOfSight);
+			}
+			swingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
+			return;
+		}
+
+		// The swing has passed all pre-conditions (alive, in range, facing, LoS) and is going to
 		// connect. Remove any auras that are interrupted by attacking (e.g. "removed when attacking").
 		RemoveAurasByInterrupt(spell_aura_interrupt_flags::Attack);
 
