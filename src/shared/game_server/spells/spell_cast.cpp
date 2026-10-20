@@ -100,22 +100,34 @@ namespace mmo
 	void SpellCast::AbandonCast()
 	{
 		ASSERT(m_castState);
-		m_castState->AbandonCast();
+		const auto current = m_castState;
+		current->AbandonCast();
 
 		// Back to idle so nothing can reach the abandoned state through this cast any more.
 		m_castState = std::make_shared<NoCastState>();
 
-		// A proc still resolving reaches the caster through this cast just the same, e.g. when
-		// its projectile lands.
-		auto procCasts = std::move(m_procCasts);
-		m_procCasts.clear();
-		for (const auto& weakProc : procCasts)
+		// A proc still resolving, or an earlier cast whose projectile is still in flight, reaches the
+		// caster through this cast just the same when it lands - by then possibly a freed one.
+		auto detachedCasts = std::move(m_detachedCasts);
+		m_detachedCasts.clear();
+		for (const auto& weakCast : detachedCasts)
 		{
-			if (const auto procCast = weakProc.lock())
+			const auto detachedCast = weakCast.lock();
+			if (detachedCast && detachedCast != current)
 			{
-				procCast->AbandonCast();
+				detachedCast->AbandonCast();
 			}
 		}
+	}
+
+	void SpellCast::TrackDetachedCast(const std::shared_ptr<CastState>& castState)
+	{
+		m_detachedCasts.erase(
+			std::remove_if(m_detachedCasts.begin(), m_detachedCasts.end(),
+				[](const std::weak_ptr<CastState>& weakCast) { return weakCast.expired(); }),
+			m_detachedCasts.end());
+
+		m_detachedCasts.push_back(castState);
 	}
 
 	void SpellCast::StartProcCast(const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const uint64 itemGuid)
@@ -124,13 +136,8 @@ namespace mmo
 		// casting or channeling something else - a channel's own periodic trigger does so on every
 		// tick - and installing the proc there swapped that cast out: it kept running on its own
 		// timer, but movement, interrupts and control effects reached the finished proc instead.
-		m_procCasts.erase(
-			std::remove_if(m_procCasts.begin(), m_procCasts.end(),
-				[](const std::weak_ptr<CastState>& weakProc) { return weakProc.expired(); }),
-			m_procCasts.end());
-
 		auto procCast = std::make_shared<SingleCastState>(*this, spell, target, castTime, true, itemGuid);
-		m_procCasts.push_back(procCast);
+		TrackDetachedCast(procCast);
 
 		// The state holds itself from here until it has resolved.
 		procCast->Activate();
