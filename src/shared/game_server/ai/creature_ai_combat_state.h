@@ -429,6 +429,13 @@ namespace mmo
 		bool IsTargetInAnySpellRange(const GameUnitS& target) const;
 
 		/**
+		 * @brief Returns true if no available spell could be cast right now regardless of cooldown
+		 *        and range: each one has its school locked by an interrupt, lacks power or is disabled.
+		 *        Casters fight in melee while this holds. False when the creature has no spells.
+		 */
+		bool AreAllSpellsBlocked() const;
+
+		/**
 		 * @brief Moves to optimal range based on combat behavior.
 		 * @param target The target to position for.
 		 * @return True if movement was initiated successfully.

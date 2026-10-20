@@ -264,7 +264,6 @@ namespace mmo
 	 * This method is called when a spell casting operation completes, either
 	 * successfully or with failure. It performs the following actions:
 	 * - Resets the internal casting state
-	 * - For failed caster spells with low mana, considers temporary melee mode
 	 * - Schedules the next combat action immediately
 	 * 
 	 * @param succeeded Whether the spell cast completed successfully.
@@ -274,17 +273,9 @@ namespace mmo
 		// Clear casting state
 		m_isCasting = false;
 		m_castingTimeoutEnd = 0;
-		
-		// If spell casting failed and we're a caster with no mana, consider switching to melee
-		if (!succeeded && m_combatBehavior == CombatBehavior::Caster)
-		{
-			const auto& controlled = GetControlled();
-			if (controlled.GetPower() < 10) // Very low mana threshold
-			{
-				// Temporarily switch to melee mode until mana recovers
-				// This could be expanded with a more sophisticated state system
-			}
-		}
+
+		// A caster left without a castable spell (interrupted, out of mana) falls back to melee
+		// in ChooseNextAction, scheduled below.
 
 		// Notify the script
 		if (m_script)
@@ -1074,7 +1065,8 @@ namespace mmo
 		// === Default AI logic (runs when no script, or script returned false) ===
 
 		// Casters and ranged units always return from this block — they never fall
-		// through to the melee chase below, even when all spells are on cooldown.
+		// through to the melee chase below. They only close to melee while every
+		// spell is blocked; spells merely on cooldown keep them at range.
 		if (m_combatBehavior == CombatBehavior::Caster || m_combatBehavior == CombatBehavior::Ranged)
 		{
 			if (!m_isCasting)
@@ -1087,9 +1079,18 @@ namespace mmo
 					return;
 				}
 
+				// Every spell is blocked (school locked by an interrupt, or not enough power):
+				// standing at range would leave the caster idle until the block lifts, so fight
+				// in melee meanwhile. Once a spell becomes castable again it is picked above.
+				if (AreAllSpellsBlocked())
+				{
+					ChaseTarget(*victim);
+					return;
+				}
+
 				// No spell castable right now. Reposition ONLY if the target is genuinely
-				// out of range for every spell. If spells are just on cooldown or there is
-				// no power, stand still and wait — do not needlessly close distance.
+				// out of range for every spell. If spells are just on cooldown, stand still
+				// and wait — do not needlessly close distance.
 				if (!IsTargetInAnySpellRange(*victim))
 				{
 					MoveToOptimalRange(*victim);
@@ -1445,7 +1446,14 @@ namespace mmo
 			{
 				continue;
 			}
-			
+
+			// An interrupt locks the spell's school. Casting it anyway fails validation and still
+			// burns the spell's cooldown (applied before the cast).
+			if (controlled.IsSpellSchoolLocked(creatureSpell.spell->spellschool()))
+			{
+				continue;
+			}
+
 			// Check range
 			const float minRangeSq = creatureSpell.minRange * creatureSpell.minRange;
 			const float maxRangeSq = creatureSpell.maxRange * creatureSpell.maxRange;
@@ -1736,6 +1744,28 @@ namespace mmo
 		}
 
 		return false;
+	}
+
+	bool CreatureAICombatState::AreAllSpellsBlocked() const
+	{
+		if (m_availableSpells.empty())
+		{
+			return false;
+		}
+
+		const auto& controlled = GetControlled();
+		const uint32 currentPower = controlled.GetPower();
+		for (const auto& creatureSpell : m_availableSpells)
+		{
+			if (creatureSpell.canCast &&
+				currentPower >= creatureSpell.spell->cost() &&
+				!controlled.IsSpellSchoolLocked(creatureSpell.spell->spellschool()))
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**
