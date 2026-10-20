@@ -139,7 +139,8 @@ namespace mmo
 			"WHEN banned = 1 AND (ban_expiration IS NULL) THEN 2 "
 			"WHEN banned = 1 AND (ban_expiration >= NOW()) THEN 1 "
 			"ELSE 0 "
-			"END AS ban_state "
+			"END AS ban_state, "
+			"IFNULL(gm_level, 0) "
 			"FROM account WHERE username='" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
@@ -153,6 +154,7 @@ namespace mmo
 				row.GetField(2, data.s);
 				row.GetField(3, data.v);
 				row.GetField<BanState, uint32>(4, data.banned);
+				data.gmLevel = static_cast<uint8>(std::atoi(row.GetField(5)));
 				return data;
 			}
 		}
@@ -169,7 +171,7 @@ namespace mmo
 	{
 		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
 
-		mysql::Select select(m_connection, "SELECT id,name,s,v,address,port FROM realm WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
+		mysql::Select select(m_connection, "SELECT id,name,s,v,address,port,capacity FROM realm WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
 			mysql::Row row(select);
@@ -183,6 +185,7 @@ namespace mmo
 				row.GetField(3, data.v);
 				row.GetField(4, data.ipAddress);
 				row.GetField(5, data.port);
+				row.GetField(6, data.capacity);
 				return data;
 			}
 		}
@@ -528,7 +531,8 @@ namespace mmo
 			"SELECT id, name, address, port, "
 			"IFNULL(DATE_FORMAT(last_login,'%Y-%m-%dT%H:%i:%sZ'),'') AS last_login, "
 			"IFNULL(last_ip,'') AS last_ip, "
-			"IFNULL(last_build,'') AS last_build "
+			"IFNULL(last_build,'') AS last_build, "
+			"capacity "
 			"FROM `realm` ORDER BY id");
 
 		if (!select.Success())
@@ -548,6 +552,7 @@ namespace mmo
 			entry.last_login = row.GetField(4) ? row.GetField(4) : "";
 			entry.last_ip = row.GetField(5) ? row.GetField(5) : "";
 			entry.last_build = row.GetField(6) ? row.GetField(6) : "";
+			entry.capacity = row.GetField(7) ? static_cast<uint32>(std::strtoul(row.GetField(7), nullptr, 10)) : DefaultRealmCapacity;
 			entry.is_online = false;  // Filled in by the HTTP handler via RealmManager.
 			realms.push_back(std::move(entry));
 			row = mysql::Row(select);
@@ -770,6 +775,35 @@ namespace mmo
 			"ON DUPLICATE KEY UPDATE require_visibility = VALUES(require_visibility), require_login = VALUES(require_login)";
 
 		if (!m_connection.Execute(query.str()))
+		{
+			PrintDatabaseError();
+			return false;
+		}
+
+		return true;
+	}
+
+	bool MySQLDatabase::SetRealmCapacity(uint32 realmId, uint32 capacity)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		// Checked first: an UPDATE that does not change the value affects 0 rows, which is not a failure.
+		{
+			mysql::Select select(m_connection, "SELECT 1 FROM `realm` WHERE id = " + std::to_string(realmId) + " LIMIT 1");
+			if (!select.Success())
+			{
+				PrintDatabaseError();
+				return false;
+			}
+
+			mysql::Row row(select);
+			if (!row)
+			{
+				return false;
+			}
+		}
+
+		if (!m_connection.Execute("UPDATE `realm` SET capacity = " + std::to_string(capacity) + " WHERE id = " + std::to_string(realmId) + " LIMIT 1"))
 		{
 			PrintDatabaseError();
 			return false;

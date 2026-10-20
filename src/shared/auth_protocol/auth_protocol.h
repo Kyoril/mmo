@@ -31,7 +31,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000000A;
+		constexpr uint32 ProtocolVersion = 0x0000000B;
 
 		/// Largest payload, in bytes, that a single incoming auth packet may announce.
 		///
@@ -399,6 +399,50 @@ namespace mmo
 		}
 
 		typedef session_kick_reason::Type SessionKickReason;
+
+		/// Coarse realm population shown to every player in the realm list. The login server
+		/// derives it from the realm's connected player count, so the exact count never has to
+		/// leave the server for regular accounts.
+		namespace realm_population
+		{
+			enum Type
+			{
+				Low = 0,
+				Medium = 1,
+				High = 2,
+				Full = 3,
+
+				/// Counter constant: receivers clamp anything at or above it to Full.
+				Count_
+			};
+		}
+
+		typedef realm_population::Type RealmPopulation;
+
+		/// Sent in a realm list entry's player count field to accounts that may not see it.
+		constexpr uint32 HiddenRealmPlayerCount = 0xFFFFFFFF;
+
+		/// Maps a realm's connected player count to the population band shown in the realm list,
+		/// relative to the realm's capacity: below 25 % Low, below 60 % Medium, below 90 % High,
+		/// otherwise Full. A capacity of 0 always reads as Full.
+		inline RealmPopulation GetRealmPopulation(const uint32 playerCount, const uint32 capacity)
+		{
+			const uint64 load = static_cast<uint64>(playerCount) * 100;
+			const uint64 cap = capacity;
+			if (load < cap * 25)
+			{
+				return realm_population::Low;
+			}
+			if (load < cap * 60)
+			{
+				return realm_population::Medium;
+			}
+			if (load < cap * 90)
+			{
+				return realm_population::High;
+			}
+			return realm_population::Full;
+		}
 
 		inline io::Reader& operator>>(io::Reader& reader, AuthLocale& out_locale)
 		{

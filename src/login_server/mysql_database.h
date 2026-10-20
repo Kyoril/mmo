@@ -100,6 +100,7 @@ namespace mmo
 		bool RemoveRealmFeatureRequirement(uint32 realmId, uint32 featureId) override;
 		std::vector<RealmFeatureRequirement> GetRealmFeatureRequirements(uint32 realmId) override;
 		std::optional<uint32> GetRealmIdByName(const std::string& name) override;
+		bool SetRealmCapacity(uint32 realmId, uint32 capacity) override;
 		std::optional<AccountAuthData> GetAccountAuthData(std::string accountName) override;
 		StatsSummary GetStatsSummary() override;
 		std::vector<StatsBucket> GetLoginTimeSeries(StatsRange range) override;

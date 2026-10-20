@@ -54,6 +54,9 @@ namespace mmo
 		/// them from the database. Does nothing if the realm is not currently connected.
 		void NotifyRealmRequirementsChanged(uint32 realmId);
 
+		/// Applies a changed capacity to the realm with this id, if it is connected.
+		void NotifyRealmCapacityChanged(uint32 realmId, uint32 capacity);
+
 		/// Disconnects every managed realm link. Used at shutdown. Safe to call from any thread.
 		void DisconnectAll();
 
