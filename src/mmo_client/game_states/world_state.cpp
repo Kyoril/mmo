@@ -38,6 +38,7 @@
 #include "systems/quest_client.h"
 #include "systems/cooldown_manager.h"
 #include "game_client/object_mgr.h"
+#include "game_client/object_update_skip.h"
 #include "game_common/projectile_target.h"
 #include "game_common/world_fog_volumes.h"
 #include "deferred_shading/fog_volume_selection.h"
@@ -2818,8 +2819,18 @@ namespace mmo
 				const auto obj = ObjectMgr::Get<GameObjectC>(guid);
 				if (!obj)
 				{
-					ELOG("Failed to find updated object with guid " << log_hex_digit(guid));
-					return PacketParseResult::Disconnect;
+					// The server's view of what this client knows went wrong somewhere; one stale
+					// update is no reason to drop the session. Read past it so the blocks after it
+					// still apply - only a block that cannot be read leaves the stream unusable.
+					if (!SkipObjectValueUpdate(packet, typeId))
+					{
+						ELOG("Failed to skip update of unknown object with guid " << log_hex_digit(guid) << " (type " << static_cast<int32>(typeId) << ")");
+						return PacketParseResult::Disconnect;
+					}
+
+					WLOG("Ignored update of unknown object with guid " << log_hex_digit(guid) << " (type " << static_cast<int32>(typeId) << ")");
+					result = PacketParseResult::Pass;
+					continue;
 				}
 
 				// Units and players share the unit field layout, which carries the combat flag

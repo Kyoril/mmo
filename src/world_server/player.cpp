@@ -1389,9 +1389,12 @@ namespace mmo
 	{
 		ASSERT(m_worldInstance);
 
+		// The movement snapshot, as the grid files the character and moves this watcher between
+		// tiles - not GetPosition, which is the mover's interpolated location during a
+		// server-controlled move (charge, fear) and can lie in the next tile already.
 		TileIndex2D position;
 		m_worldInstance->GetGrid().GetTilePosition(
-			m_character->GetPosition(), position[0], position[1]);
+			m_character->GetMovementInfo().position, position[0], position[1]);
 
 		return position;
 	}
