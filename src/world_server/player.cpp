@@ -2784,6 +2784,15 @@ namespace mmo
 					continue;
 				}
 
+				// The tiles in sight are those of the position before this move. A move that changed
+				// tiles has just despawned the unit for watchers it left behind, and an invisible unit
+				// was never spawned to anyone: their clients do not know it and only warn about the
+				// packet. Watchers that newly see it got its current position in the spawn instead.
+				if (!watcher->IsObjectKnown(characterGuid))
+				{
+					continue;
+				}
+
 				// Info is a copy here so we can modify it per watcher without any issues
 				copy.timestamp = watcher->ServerToClientTime(info.timestamp);
 
