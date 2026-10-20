@@ -310,6 +310,12 @@ namespace mmo
 
 		bool OnKeyUp(int32 key);
 
+		/// Builds the binding key name for a virtual key code, prefixed with the modifiers currently
+		/// held (ALT-, CTRL-, SHIFT-) when that combination is actually bound or a key capture is
+		/// pending. Unbound combinations keep the plain key name, so holding a modifier never swallows
+		/// an existing binding.
+		[[nodiscard]] String ResolveBindingKeyName(int32 key) const;
+
 		void OnIdle(float deltaSeconds, GameTime timestamp);
 
 		/// Called when the screen layer should be painted. Should paint the scene.
@@ -798,6 +804,11 @@ namespace mmo
 		uint32 m_attackSwingErrorGeneration{0};
 
 		Bindings m_bindings;
+
+		/// Binding key name a held key was pressed with, by virtual key code. The key up event has to
+		/// reach the same binding as the key down event even if the player let go of a modifier in
+		/// between, or action buttons would stay stuck in their pushed state.
+		std::map<int32, String> m_pressedKeyBindings;
 
 		std::vector<std::unique_ptr<WorldTextFrame>> m_worldTextFrames;
 

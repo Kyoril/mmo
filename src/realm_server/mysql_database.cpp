@@ -1439,6 +1439,14 @@ namespace mmo
 				uint8 slot = 0;
 				row.GetField<uint8, uint16>(0, slot);
 
+				// Rows of a build with more action bars than this one must not write past the array.
+				if (slot >= buttons.size())
+				{
+					WLOG("Ignoring action button in unknown slot " << static_cast<uint32>(slot) << " of character " << characterId);
+					row = mysql::Row::Next(select);
+					continue;
+				}
+
 				ActionButton& button = buttons[slot];
 				row.GetField(1, button.action);
 				row.GetField<ActionButtonType, uint16>(2, button.type);
