@@ -89,25 +89,53 @@ function Get-PdbIdFromBinary([string]$path) {
     return $null
 }
 
-# llvm-symbolizer emits, per address: function line, then "file:line:col", then a blank line.
-# Returns a map of "RVA -> 'func | file:line'".
-function ConvertFrom-SymbolizerOutput($out, [string[]]$rvas) {
+# llvm-symbolizer emits, per address, "function" / "file:line:col" line pairs, then a blank line.
+# An address inside inlined code gets one pair per inlining level, innermost first.
+# Returns a map of "RVA -> 'func | file:line'", plus "(inlined into func | file:line ...)" for the
+# outer levels. $mapPath, when given, rewrites each file path (build machine -> this checkout).
+function ConvertFrom-SymbolizerOutput($out, [string[]]$rvas, [scriptblock]$mapPath) {
     $map = @{}
     $i = 0
+    $pairs = @()
     $func = $null
-    foreach ($o in @($out)) {
-        $o = [string]$o
-        if ($o.Trim() -eq '') {
-            if ($i -lt $rvas.Count) { $i++ }
+    foreach ($o in (@($out) + @(''))) {
+        $o = ([string]$o).Trim()
+        if ($o -eq '') {
+            if ($pairs.Count -gt 0 -and $i -lt $rvas.Count) {
+                $text = $pairs[0]
+                if ($pairs.Count -gt 1) { $text += "  (inlined into " + (($pairs | Select-Object -Skip 1) -join ', ') + ")" }
+                $map[$rvas[$i]] = $text
+            }
+            if ($pairs.Count -gt 0 -or $null -ne $func) { $i++ }
+            $pairs = @()
             $func = $null
             continue
         }
-        if ($null -eq $func) { $func = $o.Trim() }
+        if ($null -eq $func) { $func = $o }
         else {
-            if ($i -lt $rvas.Count) { $map[$rvas[$i]] = "$func | $($o.Trim())" }
+            if ($mapPath) { $o = & $mapPath $o }
+            $pairs += "$func | $o"
+            $func = $null
         }
     }
     return $map
+}
+
+# Linux builds record the build machine's paths (/app/src/... in the Docker images). Map a path
+# onto this checkout when the part after one of its "/src/" segments exists under src\ here.
+function Convert-BuildPath([string]$location) {
+    $m = [regex]::Match($location, '^(.*?)(:\d+(:\d+)?)?$')
+    $path = $m.Groups[1].Value.Replace('\', '/')
+    $suffix = $m.Groups[2].Value
+    $at = 0
+    while (($at = $path.IndexOf('/src/', $at)) -ge 0) {
+        $rest = $path.Substring($at + 5)
+        $local = Join-Path (Join-Path $repoRoot 'src') $rest
+        if (Test-Path -LiteralPath $local -PathType Leaf) { return ((Resolve-Path -LiteralPath $local).Path + $suffix) }
+        # By one, not five: in ".../src/src/shared" the second "/src/" starts on the first one's "/".
+        $at += 1
+    }
+    return $location
 }
 
 # --- Parse the crash report: module pdbids + frames ---------------------------------------------
@@ -156,22 +184,42 @@ foreach ($mod in ($frames.Module | Select-Object -Unique)) {
     if (-not $pdbid) { Emit "[$mod] no pdbid in MODULES section - cannot symbolicate."; continue }
 
     # Linux server builds carry no PDB id. The ELF binary of the exact commit is the only object
-    # that resolves their offsets: <store>\<mod>.elf\<commit>\<mod>, e.g. copied out of the
-    # nightly image (docker create kyoril/mmo_world_server:<tag>, then docker cp <id>:/app/world_server).
+    # that resolves their offsets: <store>\<mod>.elf\<commit>\<mod>. Each nightly release carries
+    # the unstripped binaries (server-symbols.zip); tools\fetch_server_symbols.ps1 puts them there.
     if ($pdbid -eq 'elf') {
         $elf = $null
         if ($reportCommit) {
             $candidate = Join-Path $SymbolStore "$mod.elf\$reportCommit\$mod"
+            if (-not (Test-Path -LiteralPath $candidate) -and $reportCommit -match '^[0-9a-fA-F]{40}$') {
+                try {
+                    & (Join-Path $repoRoot 'tools/fetch_server_symbols.ps1') -Commit $reportCommit -Store $SymbolStore -Modules $mod | Out-Host
+                } catch {
+                    Emit "[$mod] fetch_server_symbols: $($_.Exception.Message)"
+                }
+            }
             if (Test-Path -LiteralPath $candidate) { $elf = $candidate }
         }
         if (-not $elf) {
-            Emit "[$mod] Linux build (commit '$reportCommit'): no ELF binary at $SymbolStore\$mod.elf\<commit>\$mod - cannot symbolicate."
+            Emit "[$mod] Linux build (commit '$reportCommit'): no ELF binary at $SymbolStore\$mod.elf\<commit>\$mod - cannot symbolicate. Run tools\fetch_server_symbols.ps1 -Commit <sha> (or -FromImage for function names only)."
             continue
         }
 
-        $rvas = @($frames | Where-Object Module -eq $mod | Select-Object -ExpandProperty Rva -Unique)
-        $out = ($rvas -join "`n") | & $Llvm --obj=$elf --demangle 2>&1
-        $resolvedByModule[$mod] = ConvertFrom-SymbolizerOutput $out $rvas
+        # backtrace() gives return addresses, which point past the call and often resolve to the
+        # next line (or the destructor run after it). Look up address - 1, except for frame 2: the
+        # signal handler is frame 0 and the kernel's signal trampoline frame 1, so frame 2 is the
+        # faulting instruction itself.
+        $mine = @($frames | Where-Object Module -eq $mod)
+        $lookups = @($mine | ForEach-Object {
+            $value = [Convert]::ToUInt64($_.Rva.Substring(2), 16)
+            if ($_.Index -ne 2 -and $value -gt 0) { $value = [uint64]($value - 1) }
+            '0x' + $value.ToString('x')
+        })
+        $byLookup = ConvertFrom-SymbolizerOutput (($lookups -join "`n") | & $Llvm --obj=$elf --demangle 2>&1) $lookups ${function:Convert-BuildPath}
+        $map = @{}
+        for ($k = 0; $k -lt $mine.Count; $k++) {
+            if ($byLookup.ContainsKey($lookups[$k])) { $map[$mine[$k].Rva] = $byLookup[$lookups[$k]] }
+        }
+        $resolvedByModule[$mod] = $map
         continue
     }
 
