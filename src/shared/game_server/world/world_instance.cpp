@@ -24,6 +24,8 @@
 #include "proto_data/project.h"
 #include "nav_mesh/door_volume.h"
 
+#include <sstream>
+
 namespace mmo
 {
 	namespace update_type
@@ -705,12 +707,15 @@ namespace mmo
 			// exact use-after-free the hook exists to prevent.
 			remove.OnDespawn();
 
+			// GetTilePosition always yields a usable (clamped) index, and it is the same index
+			// OnObjectMoved files an object under when it moves off the grid. Skipping the cleanup for
+			// such a position left the object in its edge tile after it was destroyed.
 			TileIndex2D gridIndex;
 			if (!m_visibilityGrid->GetTilePosition(remove.GetPosition(), gridIndex[0], gridIndex[1]))
 			{
-				ELOG("Could not resolve grid location for object " << log_hex_digit(remove.GetGuid()) << " during removal — skipping tile cleanup");
+				WLOG("Object " << log_hex_digit(remove.GetGuid()) << " is removed at " << remove.GetPosition() << ", outside the visibility grid - using the edge tile");
 			}
-			else
+
 			{
 				auto* tile = m_visibilityGrid->GetTile(gridIndex);
 				if (!tile)
@@ -719,7 +724,13 @@ namespace mmo
 				}
 				else
 				{
-					tile->GetGameObjects().remove(&remove);
+					// An object that is not where its position says was moved without the grid being
+					// told. Leaving it in whatever tile still holds it is a dangling pointer the moment
+					// the object is freed, and the next unit walking past that tile crashes on it.
+					if (!tile->GetGameObjects().optionalRemove(&remove))
+					{
+						ForgetObjectInAllTiles(remove, gridIndex);
+					}
 
 					ForEachTileInSight(
 						*m_visibilityGrid,
@@ -772,6 +783,24 @@ namespace mmo
 				}
 			}
 		}
+	}
+
+	void WorldInstance::ForgetObjectInAllTiles(GameObjectS& object, const TileIndex2D& expectedTile)
+	{
+		std::ostringstream foundIn;
+		m_visibilityGrid->ForEachExistingTile([&object, &foundIn](VisibilityTile& tile)
+		{
+			if (tile.GetGameObjects().optionalRemove(&object))
+			{
+				foundIn << " (" << tile.GetPosition()[0] << ", " << tile.GetPosition()[1] << ")";
+			}
+		});
+
+		const std::string found = foundIn.str();
+		ELOG("Object " << log_hex_digit(object.GetGuid()) << " (type " << static_cast<int32>(object.GetTypeId())
+			<< ", map " << m_mapId << ") removed at " << object.GetPosition()
+			<< " was not in its tile (" << expectedTile[0] << ", " << expectedTile[1] << "); found in:"
+			<< (found.empty() ? std::string(" no tile") : found));
 	}
 
 	void WorldInstance::NotifyStealthStateChanged(GameUnitS& unit, const bool stealthed)
