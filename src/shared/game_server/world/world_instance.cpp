@@ -37,10 +37,15 @@ namespace mmo
 		};
 	}
 
+	/// The tile the visibility grid files an object under: always the tile of its stored movement
+	/// snapshot, never of GetPosition. For a unit GetPosition is the mover's interpolated location,
+	/// which runs ahead of the snapshot while the unit walks. OnObjectMoved takes the old tile from
+	/// the previous snapshot, so filing by anything else leaves the object in a tile the next move
+	/// does not look in, and sends its updates to watchers that were never sent the object.
 	static TileIndex2D GetObjectTile(const GameObjectS& object, const VisibilityGrid& grid)
 	{
 		TileIndex2D gridIndex;
-		grid.GetTilePosition(object.GetPosition(), gridIndex[0], gridIndex[1]);
+		grid.GetTilePosition(object.GetMovementInfo().position, gridIndex[0], gridIndex[1]);
 
 		return gridIndex;
 	}
@@ -574,7 +579,8 @@ namespace mmo
 			return;
 		}
 
-		const auto& position = added.GetPosition();
+		// The snapshot, as GetObjectTile files it - not the interpolated GetPosition.
+		const auto& position = added.GetMovementInfo().position;
 
 		TileIndex2D gridIndex;
 		if (!m_visibilityGrid->GetTilePosition(position, gridIndex[0], gridIndex[1]))
@@ -721,7 +727,7 @@ namespace mmo
 			// OnObjectMoved files an object under when it moves off the grid. Skipping the cleanup for
 			// such a position left the object in its edge tile after it was destroyed.
 			TileIndex2D gridIndex;
-			if (!m_visibilityGrid->GetTilePosition(remove.GetPosition(), gridIndex[0], gridIndex[1]))
+			if (!m_visibilityGrid->GetTilePosition(remove.GetMovementInfo().position, gridIndex[0], gridIndex[1]))
 			{
 				WLOG("Object " << log_hex_digit(remove.GetGuid()) << " is removed at " << remove.GetPosition() << ", outside the visibility grid - using the edge tile");
 			}
@@ -1129,6 +1135,14 @@ namespace mmo
 					(!object.AsUnit().CanBeSeenBy(character) || subscriber.IsObjectHiddenForClient(object.GetGuid())))
 				{
 					return; // Skip subscribers that cannot see this unit right now
+				}
+
+				// A client cannot apply a value update for an object it was never sent, or has had
+				// destroyed, and drops the session over it. Its own unit is the one object a client
+				// knows without a spawn.
+				if (character.GetGuid() != object.GetGuid() && !subscriber.IsObjectKnown(object.GetGuid()))
+				{
+					return;
 				}
 
 				subscriber.NotifyObjectsUpdated(objects);

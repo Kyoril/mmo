@@ -151,7 +151,9 @@ namespace mmo
 			}
 
 			TileIndex2D tileIndex;
-			m_worldInstance->GetGrid().GetTilePosition(GetPosition(), tileIndex[0], tileIndex[1]);
+			// The tile the grid files this object under (see GetTileIndex), so the receivers are
+			// the watchers that were sent the object.
+			m_worldInstance->GetGrid().GetTilePosition(m_movementInfo.position, tileIndex[0], tileIndex[1]);
 
 			::mmo::ForEachSubscriberInSight(m_worldInstance->GetGrid(), tileIndex, callback);
 		}
