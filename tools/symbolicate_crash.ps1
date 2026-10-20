@@ -21,7 +21,7 @@ param(
     [string]$OutFile,
     [string]$Llvm,
     # Only symbolicate frames from these modules (our own code is what we can fix).
-    [string[]]$Modules = @('mmo_client')
+    [string[]]$Modules = @('mmo_client', 'login_server', 'realm_server', 'world_server')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -89,9 +89,35 @@ function Get-PdbIdFromBinary([string]$path) {
     return $null
 }
 
+# llvm-symbolizer emits, per address: function line, then "file:line:col", then a blank line.
+# Returns a map of "RVA -> 'func | file:line'".
+function ConvertFrom-SymbolizerOutput($out, [string[]]$rvas) {
+    $map = @{}
+    $i = 0
+    $func = $null
+    foreach ($o in @($out)) {
+        $o = [string]$o
+        if ($o.Trim() -eq '') {
+            if ($i -lt $rvas.Count) { $i++ }
+            $func = $null
+            continue
+        }
+        if ($null -eq $func) { $func = $o.Trim() }
+        else {
+            if ($i -lt $rvas.Count) { $map[$rvas[$i]] = "$func | $($o.Trim())" }
+        }
+    }
+    return $map
+}
+
 # --- Parse the crash report: module pdbids + frames ---------------------------------------------
 $text = Get-Content -LiteralPath $CrashFile -Raw
 $lines = $text -split "`r?`n"
+
+# Server reports name their build ("Version: 0.1.0.42 (Commit: <sha>)"); Linux frames resolve by it.
+$reportCommit = $null
+$commitMatch = [regex]::Match($text, '(?m)^Version:.*\(Commit: ([0-9a-fA-F]+)\)')
+if ($commitMatch.Success) { $reportCommit = $commitMatch.Groups[1].Value }
 
 $modulePdbId = @{}   # module name -> pdbid
 foreach ($line in $lines) {
@@ -129,22 +155,61 @@ foreach ($mod in ($frames.Module | Select-Object -Unique)) {
     $pdbid = $modulePdbId[$mod]
     if (-not $pdbid) { Emit "[$mod] no pdbid in MODULES section - cannot symbolicate."; continue }
 
-    $pdb = Join-Path $SymbolStore "$mod.pdb\$pdbid\$mod.pdb"
-    if (-not (Test-Path -LiteralPath $pdb)) {
-        Emit "[$mod] no PDB for pdbid $pdbid in store. Run tools\archive_symbols on that exact build."
+    # Linux server builds carry no PDB id. The ELF binary of the exact commit is the only object
+    # that resolves their offsets: <store>\<mod>.elf\<commit>\<mod>, e.g. copied out of the
+    # nightly image (docker create kyoril/mmo_world_server:<tag>, then docker cp <id>:/app/world_server).
+    if ($pdbid -eq 'elf') {
+        $elf = $null
+        if ($reportCommit) {
+            $candidate = Join-Path $SymbolStore "$mod.elf\$reportCommit\$mod"
+            if (Test-Path -LiteralPath $candidate) { $elf = $candidate }
+        }
+        if (-not $elf) {
+            Emit "[$mod] Linux build (commit '$reportCommit'): no ELF binary at $SymbolStore\$mod.elf\<commit>\$mod - cannot symbolicate."
+            continue
+        }
+
+        $rvas = @($frames | Where-Object Module -eq $mod | Select-Object -ExpandProperty Rva -Unique)
+        $out = ($rvas -join "`n") | & $Llvm --obj=$elf --demangle 2>&1
+        $resolvedByModule[$mod] = ConvertFrom-SymbolizerOutput $out $rvas
         continue
     }
 
-    # Find the matching EXE (same pdbid) so llvm-symbolizer has an object to work with.
+    $pdb = Join-Path $SymbolStore "$mod.pdb\$pdbid\$mod.pdb"
     $exe = $null
-    $exeRoot = Join-Path $SymbolStore "$mod.exe"
-    if (Test-Path -LiteralPath $exeRoot) {
-        foreach ($cand in (Get-ChildItem -LiteralPath $exeRoot -Recurse -Filter "$mod.exe" -ErrorAction SilentlyContinue)) {
-            if ((Get-PdbIdFromBinary $cand.FullName) -eq $pdbid) { $exe = $cand.FullName; break }
+    if (Test-Path -LiteralPath $pdb) {
+        # Find the matching EXE (same pdbid) so llvm-symbolizer has an object to work with.
+        $exeRoot = Join-Path $SymbolStore "$mod.exe"
+        if (Test-Path -LiteralPath $exeRoot) {
+            foreach ($cand in (Get-ChildItem -LiteralPath $exeRoot -Recurse -Filter "$mod.exe" -ErrorAction SilentlyContinue)) {
+                if ((Get-PdbIdFromBinary $cand.FullName) -eq $pdbid) { $exe = $cand.FullName; break }
+            }
         }
     }
+
+    # Not archived: a crash of a local dev build still has its exact EXE + PDB pair in bin\<config>.
     if (-not $exe) {
-        Emit "[$mod] found the PDB but no matching EXE (pdbid $pdbid) in the store. Re-run archive_symbols WITHOUT -NoBinary on that build."
+        $binRoot = Join-Path $repoRoot 'bin'
+        if (Test-Path -LiteralPath $binRoot) {
+            foreach ($cand in (Get-ChildItem -LiteralPath $binRoot -Directory -ErrorAction SilentlyContinue)) {
+                $candExe = Join-Path $cand.FullName "$mod.exe"
+                $candPdb = Join-Path $cand.FullName "$mod.pdb"
+                if ((Test-Path -LiteralPath $candExe) -and (Test-Path -LiteralPath $candPdb) -and ((Get-PdbIdFromBinary $candExe) -eq $pdbid)) {
+                    $exe = $candExe
+                    $pdb = $candPdb
+                    Emit "[$mod] not archived; using the matching local build in $($cand.FullName)"
+                    break
+                }
+            }
+        }
+    }
+
+    if (-not $exe) {
+        if (Test-Path -LiteralPath $pdb) {
+            Emit "[$mod] found the PDB but no matching EXE (pdbid $pdbid) in the store. Re-run archive_symbols WITHOUT -NoBinary on that build."
+        } else {
+            Emit "[$mod] no PDB for pdbid $pdbid in store or bin\. Run tools\archive_symbols -Binary bin\<config>\$mod.exe on that exact build."
+        }
         continue
     }
 
@@ -160,23 +225,7 @@ foreach ($mod in ($frames.Module | Select-Object -Unique)) {
         $addrInput = ($rvas -join "`n")
         $out = $addrInput | & $Llvm --obj=$tmpExe --relative-address --demangle 2>&1
 
-        # llvm-symbolizer emits, per address: function line, then "file:line:col", then a blank line.
-        $map = @{}
-        $i = 0
-        $func = $null
-        foreach ($o in @($out)) {
-            $o = [string]$o
-            if ($o.Trim() -eq '') {
-                if ($i -lt $rvas.Count) { $i++ }
-                $func = $null
-                continue
-            }
-            if ($null -eq $func) { $func = $o.Trim() }
-            else {
-                if ($i -lt $rvas.Count) { $map[$rvas[$i]] = "$func | $($o.Trim())" }
-            }
-        }
-        $resolvedByModule[$mod] = $map
+        $resolvedByModule[$mod] = ConvertFrom-SymbolizerOutput $out $rvas
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }

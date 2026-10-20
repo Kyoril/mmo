@@ -41,14 +41,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\symbolicate_crash.ps1 
 ```
 
 Read `symbolized.txt`. The "OUR SOURCE LOCATIONS" section lists frames resolved under `src/` — those
-are your starting points. If nothing resolved (no matching PDB/EXE in `artifacts\symbols`), the build
+are your starting points. Server reports (`login_server`, `realm_server`, `world_server`) symbolicate the same
+way as client ones; when the build was never archived, the script falls back to a matching EXE + PDB pair in
+the local `bin\<config>\` (a dev build that crashed on this machine). Reports from the Linux servers
+(`pdbid=elf` in MODULES) resolve only against the ELF binary of the exact commit named in the report's
+`Version:` line, placed at `artifacts\symbols\<module>.elf\<commit>\<module>` (copy it out of the nightly image:
+`docker create kyoril/mmo_world_server:<tag>`, then `docker cp <id>:/app/world_server`). If nothing resolved (no matching PDB/EXE in `artifacts\symbols`), the build
 that crashed was never archived: document that in `FINDINGS.md`, set `STATUS` to `needs-info`, and stop
 (tell the user to run `tools\archive_symbols` on the matching build).
 
 ## Step 4 — Investigate
 
 Read `crash.txt` (exception type, full trace, PLAYER DATA, attached client log) and `report.json`
-(appVersion, osVersion, user comment). Open the resolved source files at the reported lines. Build a
+(appVersion, osVersion, user comment). Server reports are uploaded automatically by the next start of the crashed tier:
+`report.json` has `errorMessage` "<tier> crash: <reason>" and `deviceModel` "<tier> @ <node>", and `crash.txt` holds
+the report followed by the tail of that run's server log. Their `Context N:` lines name what the crashing thread
+was doing, outermost first — the packet, the character (guid, name, map, instance) and the world instance tick —
+and `Version:` names the exact build and commit. Open the resolved source files at the reported lines. Build a
 concrete root-cause hypothesis: what was null/out-of-bounds/uninitialized, and under what conditions.
 Cross-reference the client log tail for the sequence that led there.
 
@@ -60,7 +69,8 @@ If you have a confident, minimal fix:
 2. Make the smallest correct change that addresses the root cause. Match surrounding code style
    (Allman braces, tabs, `m_camelCase`, PascalCase methods — see CLAUDE.md).
 3. Best-effort compile check of the affected target:
-   `cmake --build build --config Release -t mmo_client` (note success/failure; don't block on a slow
+   `cmake --build build --config Release -t mmo_client` for a client crash, or the crashed tier's target
+   (`login_server`, `realm_server`, `world_server`) for a server crash (note success/failure; don't block on a slow
    build — if it's clearly unrelated or too long, say so).
 4. `git add -A && git commit` the change (local only — **no push**) with a message referencing the
    crash and root cause. End the commit body with:

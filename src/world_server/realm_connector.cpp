@@ -1,5 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+#include "base/crash_context.h"
 #include "game/gm_flags.h"
 #include "realm_connector.h"
 
@@ -1276,6 +1277,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 
 	PacketParseResult RealmConnector::connectionPacketReceived(auth::IncomingPacket& packet)
 	{
+		const CrashContextScope crashContext("realm packet 0x%02x", static_cast<uint32>(packet.GetId()));
 		return HandleIncomingPacket(packet);
 	}
 

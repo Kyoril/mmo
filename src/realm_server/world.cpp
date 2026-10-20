@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world.h"
+#include "base/crash_context.h"
 #include "database.h"
 
 #include "base/random.h"
@@ -85,6 +86,8 @@ namespace mmo
 	PacketParseResult World::connectionPacketReceived(auth::IncomingPacket & packet)
 	{
 		const auto packetId = packet.GetId();
+		const CrashContextScope crashContext("world node packet 0x%02x from %s",
+			static_cast<uint32>(packetId), m_address.c_str());
 		bool isValid = true;
 
 		PacketHandler handler = nullptr;

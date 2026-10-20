@@ -14,6 +14,7 @@
 #include "instance_reset.h"
 
 #include "base/chat_text.h"
+#include "base/crash_context.h"
 #include "base/random.h"
 #include "base/sha1.h"
 #include "log/default_log_levels.h"
@@ -273,6 +274,9 @@ namespace mmo
 	PacketParseResult Player::connectionPacketReceived(game::IncomingPacket &packet)
 	{
 		const auto packetId = packet.GetId();
+		const CrashContextScope crashContext("client packet 0x%04x from account %llu '%s', character 0x%016llx",
+			static_cast<uint32>(packetId), static_cast<unsigned long long>(m_accountId), m_accountName.c_str(),
+			static_cast<unsigned long long>(GetCharacterGuid()));
 		bool isValid = true;
 
 		PacketHandler handler = nullptr;
