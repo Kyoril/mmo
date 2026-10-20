@@ -8,14 +8,14 @@
 	"_format": 3,
 	"auth": {
 		"version": 11,
-		"fingerprint": "sha256:b88e28d89382eeeb54d3069699d39e1b576fd3cea75a18171f9363ed571bfb38",
+		"fingerprint": "sha256:b76b17d59755436d19a1b0561e652578fa6350601ffa84efa73edaf44b9e429d",
 		"files": {
 			"src/shared/auth_protocol/auth_incoming_packet.cpp": "sha256:0e23f09921b76939917c9f7e660deab2977ba79eaa03c9e7ea92e38764f7d5ff",
 			"src/shared/auth_protocol/auth_incoming_packet.h": "sha256:324112379d24eacb03fc3f2984a5180e741ddb95978d1c91616ce43fa68a0745",
 			"src/shared/auth_protocol/auth_outgoing_packet.cpp": "sha256:7003aee85725f5955505c74037f0bcdfb89fd4ebd647257d2edc9d4b06268ca1",
 			"src/shared/auth_protocol/auth_outgoing_packet.h": "sha256:eff0a023adf8133bf02c2df220b97cb364e7b91b82b45470da2cbec34307926c",
 			"src/shared/auth_protocol/auth_protocol.cpp": "sha256:3ae02697539b108be5892fb3288d1480749c9a720e5d4545e2efbfb5601de224",
-			"src/shared/auth_protocol/auth_protocol.h": "sha256:4f538e27045cc9e317b68dfd01ba0ec29f41567f187207e34b4bb74a686aec06"
+			"src/shared/auth_protocol/auth_protocol.h": "sha256:c094f179534a8f1d35fcc2d251bb571ccdbadffa3687052420bad0f739fffe26"
 		},
 		"symbols": [
 			"auth::AuthLocale::Default = 0",
