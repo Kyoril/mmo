@@ -474,6 +474,13 @@ namespace mmo
 		/// Removes the dynamic collision registered for the given door, if any.
 		void UnregisterDoorCollision(uint64 guid);
 
+		/// Removes an object from every visibility tile still holding it. Used when an object being
+		/// removed is missing from the tile its position maps to; logs where it was found, since
+		/// that means it moved without the grid being told.
+		/// @param object The object being removed.
+		/// @param expectedTile The tile its position maps to.
+		void ForgetObjectInAllTiles(GameObjectS& object, const TileIndex2D& expectedTile);
+
 	private:
 		Universe& m_universe;
 		IdGenerator<uint64>& m_objectIdGenerator;

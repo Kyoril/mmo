@@ -18,6 +18,8 @@ namespace mmo
 		VisibilityTile *GetTile(const TileIndex2D &position) override;
 		VisibilityTile &RequireTile(const TileIndex2D &position) override;
 
+		void ForEachExistingTile(const std::function<void(VisibilityTile&)>& handler) override;
+
 	private:
 
 		typedef Grid<std::unique_ptr<VisibilityTile>> Tiles;
