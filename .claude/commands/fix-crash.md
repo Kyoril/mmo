@@ -45,8 +45,10 @@ are your starting points. Server reports (`login_server`, `realm_server`, `world
 way as client ones; when the build was never archived, the script falls back to a matching EXE + PDB pair in
 the local `bin\<config>\` (a dev build that crashed on this machine). Reports from the Linux servers
 (`pdbid=elf` in MODULES) resolve only against the ELF binary of the exact commit named in the report's
-`Version:` line, placed at `artifacts\symbols\<module>.elf\<commit>\<module>` (copy it out of the nightly image:
-`docker create kyoril/mmo_world_server:<tag>`, then `docker cp <id>:/app/world_server`). If nothing resolved (no matching PDB/EXE in `artifacts\symbols`), the build
+`Version:` line, placed at `artifacts\symbols\<module>.elf\<commit>\<module>`. The script fetches it from that
+nightly's `server-symbols.zip` release asset when it is missing (`tools\fetch_server_symbols.ps1 -Commit <sha>`; needs
+`gh`). A commit with no such release (older than the asset, or not a nightly): `fetch_server_symbols.ps1 -FromImage`
+copies the binary out of the Docker image, which gives function names but no file:line. If nothing resolved (no matching PDB/EXE in `artifacts\symbols`), the build
 that crashed was never archived: document that in `FINDINGS.md`, set `STATUS` to `needs-info`, and stop
 (tell the user to run `tools\archive_symbols` on the matching build).
 

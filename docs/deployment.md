@@ -135,7 +135,15 @@ Disk budget: plan for roughly `KEEP_RELEASES + 1` compressed client data sets un
   and leaves a `.sent` marker next to it; `/fix-crash` picks it up from there. The report's `Context N:` lines
   name the packet, character and world instance the crashing thread was on. `CRASH_REPORT_ENABLED=0` (or
   `crashReport.enabled = 0` in the config) turns uploading off; `CRASH_REPORT_API_URL` points it elsewhere.
-  Reports live in the container's file system: recreating the container before it restarted loses them.
+  `compose.yml` keeps each server's `/app/logs` on a named volume (`login-logs`, `realm-01-logs`,
+  `world-01-logs`), so a report survives the container being recreated before it restarted; paste the new
+  `compose.yml` into the Portainer game stack once for that to take effect (without the volumes, recreating the
+  container loses the report). Nothing prunes those volumes.
+  The images ship stripped binaries. Each nightly release carries the unstripped ones as `server-symbols.zip`
+  (laid out `<tier>.elf/<commit>/<tier>`); `tools\symbolicate_crash.ps1` fetches them on its own through
+  `tools\fetch_server_symbols.ps1 -Commit <sha>`, keyed by the commit on the report's `Version:` line. Images
+  built before this have `Commit: UNKNOWN` (the Docker context has no `.git`; the commit now goes in as a build
+  arg) and cannot be matched.
 
 ## 6. Updating the deployer itself
 
