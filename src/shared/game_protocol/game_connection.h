@@ -181,10 +181,10 @@ namespace mmo
 
 				m_isClosedOnParsing = true;
 
-				// Null-checked, matching IsConnected() and Disconnected(). Dropping a malformed
-				// peer releases the socket outright while this object stays alive and reachable --
-				// the UI can still call close() from a cancel button, and state teardown calls it
-				// unconditionally. Without the check that is a null dereference.
+				// Null-checked, matching IsConnected() and Disconnected(). The socket can already be
+				// closed by DropPeer() while this object stays alive and reachable -- the UI can
+				// still call close() from a cancel button, and state teardown calls it
+				// unconditionally.
 				if (m_socket && m_socket->is_open())
 				{
 					m_socket->close();
@@ -269,6 +269,10 @@ namespace mmo
 			{
 				if (error.code())
 				{
+					// The write is dead. Leaving it in m_sending would make flush() treat it as still
+					// in flight forever, so a connector reconnecting through this object could never
+					// send its handshake reply.
+					m_sending.clear();
 					Disconnected();
 					return;
 				}
@@ -380,13 +384,8 @@ namespace mmo
 								case PacketParseResult::Block:
 									break;
 								case PacketParseResult::Disconnect:
-									m_socket.reset();
-									if (m_listener)
-									{
-										m_listener->connectionMalformedPacket();
-										m_listener = nullptr;
-									}
-									break;
+									DropPeer();
+									return;
 								}
 							}
 
@@ -404,13 +403,7 @@ namespace mmo
 						
 						break;
 					case receive_state::Malformed:
-						m_socket.reset();
-						if (m_listener)
-						{
-							m_listener->connectionMalformedPacket();
-							m_listener = nullptr;
-							m_decryptedUntil = 0;
-						}
+						DropPeer();
 						return;
 					}
 				} while (nextPacket);
@@ -436,31 +429,42 @@ namespace mmo
 				{
 					ELOG("Peer exceeded the maximum receive buffer size (" << m_received.size()
 						<< " > " << m_maxReceiveBufferSize << " bytes) - dropping connection");
-
-					if (m_listener)
-					{
-						m_listener->connectionMalformedPacket();
-						m_listener = nullptr;
-					}
-
-					m_received.clear();
-					m_decryptedUntil = 0;
-
-					// close(), not reset(): releasing the socket while a write is still in flight
-					// leaves that write's completion handler to route into Disconnected(), which
-					// would then be looking at a socket that no longer exists. Closing keeps the
-					// pointer valid for whatever handlers are still queued. (Disconnected() also
-					// null-checks now, but that is the backstop, not the design.)
-					if (m_socket && m_socket->is_open())
-					{
-						asio::error_code error;
-						m_socket->close(error);
-					}
-
+					DropPeer();
 					return;
 				}
 
 				BeginReceive();
+			}
+
+			/// Ends the session because the peer sent something unusable: a malformed packet, a
+			/// packet a handler rejected with PacketParseResult::Disconnect, or more data than the
+			/// receive cap allows. The listener hears about it through connectionMalformedPacket()
+			/// only -- connectionLost() does NOT follow, because the listener is detached here -- so
+			/// every listener must treat that callback as the end of its session.
+			///
+			/// The socket is closed, never released. A connector reconnects through this same object
+			/// (the game client keeps one realm connector for the whole process), and connect() needs
+			/// a socket to reopen; releasing it left the next login dereferencing null. Closing also
+			/// keeps the pointer valid for a write completion that is still queued. No receive is
+			/// re-armed afterwards: its aborted completion could otherwise land on the next session.
+			void DropPeer()
+			{
+				m_received.clear();
+				m_decryptedUntil = 0;
+
+				if (m_socket && m_socket->is_open())
+				{
+					asio::error_code error;
+					m_socket->close(error);
+				}
+
+				// Detach before notifying: the callback may tear the session down and attach a new
+				// listener for the next one, which must not be wiped out afterwards.
+				if (Listener* const listener = m_listener)
+				{
+					m_listener = nullptr;
+					listener->connectionMalformedPacket();
+				}
 			}
 
 			void Disconnected()
@@ -471,10 +475,10 @@ namespace mmo
 					m_listener = nullptr;
 				}
 
-				// Null-checked, matching IsConnected(). Several teardown paths in this class
-				// release m_socket outright, and any handler still in flight when that happens --
-				// a write completing with an error, above all -- lands here afterwards. Without
-				// the check that is a null dereference on a path a peer can provoke.
+				// Null-checked, matching IsConnected(). Nothing in this class releases m_socket any
+				// more (DropPeer() closes it instead), but a handler still in flight -- a write
+				// completing with an error, above all -- lands here after teardown, and a null
+				// dereference on a path a peer can provoke is not worth the saved branch.
 				if (m_socket && m_socket->is_open())
 				{
 					asio::error_code error;

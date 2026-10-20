@@ -373,6 +373,11 @@ namespace mmo
 	void RealmConnector::connectionMalformedPacket()
 	{
 		ELOG("Received a malformed packet");
+
+		// The connection has already closed the socket and detached us, so connectionLost() will
+		// not follow. Treat it as one: otherwise the world state keeps rendering a world that no
+		// longer receives anything, which looks exactly like a hung server.
+		connectionLost();
 	}
 
 	PacketParseResult RealmConnector::connectionPacketReceived(game::IncomingPacket & packet)
