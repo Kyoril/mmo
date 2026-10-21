@@ -17,9 +17,13 @@ Outputs (data/client/Interface/GlueUI/):
   GlueSkinButton<State>.htex   512x128  DXT1   button fill, stretched into the 14-unit inset
                                                (Normal, Hovered, Pushed, Disabled, Checked)
   GlueSkinFieldFill.htex       512x128  DXT1   text field fill, same inset
+  GlueSkinArrow<Dir>.htex      128x128  DXT5   neutral (grey) copies of the gold arrow icons, tinted
+                                               per button state in XML (GlueArrowButton)
+                                               (Up, Down, Left, Right)
 
 Usage:
   python tools/glue_skin/make_glue_skin.py [--keep-png DIR] [--preview OUT.png] [--no-import]
+                                           [--only NAME[,NAME...]]
 
 Requires texconv.exe through the item icon importer, like tools/sky_moon/make_moon.py.
 """
@@ -44,7 +48,14 @@ SOURCES = {
 	"panel": "Interface/GameUI/Alestia/WindowPanel.htex",
 	"steel": "Interface/GameUI/fg4_borders_stone_edges_result.htex",
 	"stone": "Interface/GameUI/fg4_borders_stone_bg_01_result.htex",
+	"arrowUp": "Interface/Icons/IconGold_ArrowUp.htex",
+	"arrowDown": "Interface/Icons/IconGold_ArrowDown.htex",
+	"arrowLeft": "Interface/Icons/fg4_iconsGold_leftArrow.htex",
+	"arrowRight": "Interface/Icons/fg4_iconsGold_rightArrow.htex",
 }
+
+# Textures with an alpha channel (DXT5); everything else is opaque DXT1.
+ALPHA_TEXTURES = ("GlueSkinSteelFrame", "GlueSkinArrowUp", "GlueSkinArrowDown", "GlueSkinArrowLeft", "GlueSkinArrowRight")
 
 FILL_SIZE = (512, 128)
 BUTTON_TOP = (78, 102, 132)     # #4E6684
@@ -57,6 +68,19 @@ PANEL_BORDER = 64
 STEEL_BORDER = 36
 FILL_INSET = 14
 FIELD_TEXT_OFFSET = (34, 36, 34, 36)  # GlueTextField_ApplySkin (GlueParent.lua), fields are 128 tall
+
+# GlueDialog.xml / GlueDialog_Layout (GlueDialog.lua): width, label side inset, vertical layout.
+DIALOG_WIDTH = 1600
+DIALOG_LABEL_INSET = 80
+DIALOG_PADDING_TOP = 64
+DIALOG_PADDING_BOTTOM = 56
+DIALOG_TEXT_BUTTON_SPACING = 40
+DIALOG_BUTTON_HEIGHT = 128
+DIALOG_MIN_HEIGHT = 2 * PANEL_BORDER
+
+# GlueArrowButton icon tints per state (GlueTemplates.xml).
+ARROW_TINTS = {"Normal": (243, 238, 226, 255), "Hovered": (255, 255, 255, 255),
+	"Pushed": (210, 206, 196, 255), "Disabled": (138, 134, 126, 160)}
 
 
 def decode_sources(work: str) -> dict[str, Image.Image]:
@@ -130,6 +154,20 @@ def field_fill(stone: Image.Image) -> Image.Image:
 	return ImageEnhance.Brightness(stone_grain(stone, w, h)).enhance(0.25)
 
 
+def neutral_icon(icon: Image.Image) -> Image.Image:
+	"""Grey copy of a gold icon, brightest facet at white, so an XML tint sets its colour.
+
+	A tint multiplies, so it cannot turn gold into ivory; a grey source takes any palette colour.
+	"""
+	rgba = icon.convert("RGBA")
+	lum = rgba.convert("L")
+	alpha = rgba.getchannel("A")
+	opaque = [l for l, a in zip(lum.tobytes(), alpha.tobytes()) if a > 128]
+	peak = sorted(opaque)[int(len(opaque) * 0.98)] if opaque else 255
+	lum = lum.point(lambda v: min(255, int(round(v * 255.0 / max(peak, 1)))))
+	return Image.merge("RGBA", (lum, lum, lum, alpha))
+
+
 def build(images: dict[str, Image.Image]) -> dict[str, Image.Image]:
 	stone = images["stone"]
 	out = {
@@ -143,16 +181,20 @@ def build(images: dict[str, Image.Image]) -> dict[str, Image.Image]:
 		"GlueSkinFieldFill": field_fill(stone),
 	}
 	for name, img in out.items():
-		if name != "GlueSkinSteelFrame":
+		if name not in ALPHA_TEXTURES:
 			img.putalpha(255)
+	for direction in ("Up", "Down", "Left", "Right"):
+		out["GlueSkinArrow" + direction] = neutral_icon(images["arrow" + direction])
 	return out
 
 
-def import_all(textures: dict[str, Image.Image], png_dir: str) -> None:
+def import_all(textures: dict[str, Image.Image], png_dir: str, only=None) -> None:
 	for name, img in textures.items():
+		if only and name not in only:
+			continue
 		png = os.path.join(png_dir, name + ".png")
 		img.save(png)
-		fmt = "dxt5" if name == "GlueSkinSteelFrame" else "dxt1"
+		fmt = "dxt5" if name in ALPHA_TEXTURES else "dxt1"
 		subprocess.run([sys.executable, IMPORTER, png, os.path.join(OUT_DIR, name + ".htex"), "--format", fmt],
 			check=True)
 
@@ -233,7 +275,7 @@ def preview(textures: dict[str, Image.Image], out_path: str, scale: float = 0.5)
 			d.rectangle((cx, area[1], cx + 1, area[3] - 1), fill=(255, 255, 255, 255))
 
 	bg_path = os.path.join(REPO_ROOT, ".superpowers", "sdd", "2026-10-21-plaza-character-select", "shots", "v3_boot_login.png")
-	canvas = Image.new("RGBA", (1500, 1000), (24, 26, 30, 255))
+	canvas = Image.new("RGBA", (1580, 1100), (24, 26, 30, 255))
 	if os.path.isfile(bg_path):
 		bg = Image.open(bg_path).convert("RGBA").crop((560, 320, 1360, 820))
 		canvas.alpha_composite(bg, (0, 0))
@@ -263,15 +305,62 @@ def preview(textures: dict[str, Image.Image], out_path: str, scale: float = 0.5)
 	button(canvas, x0, yy, 396, 104, "Human", "Checked")
 	button(canvas, x0 + px(396) + 16, yy, 396, 104, "Orc", "Normal")
 	d.text((x0 + px(396) * 2 + 32, yy + 14), "Checked", font=small, fill=ivory)
-	button(canvas, x0, yy + 72, 80, 80, "<")
-	field(canvas, x0 + px(80) + 16, yy + 72, 600, 128, "Aldric", caret=True)
+	field(canvas, x0, yy + 72, 600, 128, "Aldric", caret=True)
 
-	# Glue dialog: 1600x490 with label and one button (GlueDialog.xml), drawn at 1080p.
-	dw, dh = px(1600), px(490)
-	dx, dy = 10, 560
-	canvas.alpha_composite(nine(panel, PANEL_BORDER, dw, dh, scale), (dx, dy))
-	text(canvas, (dx, dy + px(60), dx + dw, dy + px(60) + 30), "Connecting...", header, ivory)
-	button(canvas, dx + (dw - px(440)) // 2, dy + dh - px(40) - px(128), 440, 128, "Cancel")
+	# GlueArrowButton: 80x80, neutral arrow tinted per state (icon inset 20).
+	ax = x0 + px(600) + 24
+	for i, (direction, state) in enumerate((("Left", "Normal"), ("Right", "Hovered"), ("Up", "Pushed"), ("Down", "Disabled"))):
+		bx, by = ax + i * (px(80) + 8), yy + 72 + (px(128) - px(80)) // 2
+		button(canvas, bx, by, 80, 80, "", state)
+		icon = textures["GlueSkinArrow" + direction].resize((px(40), px(40)), Image.LANCZOS)
+		tint = ARROW_TINTS[state]
+		r, g, b, a = icon.split()
+		icon = Image.merge("RGBA", (r.point(lambda v: v * tint[0] // 255), g.point(lambda v: v * tint[1] // 255),
+			b.point(lambda v: v * tint[2] // 255), a.point(lambda v: v * tint[3] // 255)))
+		canvas.alpha_composite(icon, (bx + px(20), by + px(20)))
+
+	# Glue dialogs at their content height (GlueDialog_Layout), drawn at 1080p.
+	NEWLINE = chr(10)  # Localization.txt line breaks, as Font::GetLineCount sees them
+	asc, desc = header.getmetrics()
+	line_px = asc + desc  # Font::GetHeight: ascender to descender, one line
+
+	def wrap(message, width_px):
+		"""Font::GetLineCount: hard breaks at newlines, soft breaks between words."""
+		lines = []
+		for paragraph in message.split(NEWLINE):
+			current = ""
+			for word in paragraph.split(" "):
+				candidate = word if not current else current + " " + word
+				if current and d.textlength(candidate, font=header) > width_px:
+					lines.append(current)
+					current = word
+				else:
+					current = candidate
+			lines.append(current)
+		return lines
+
+	def dialog(img, x, y, message, button_label):
+		lines = wrap(message, px(DIALOG_WIDTH - 2 * DIALOG_LABEL_INSET))
+		text_h_ui = len(lines) * line_px / scale
+		h_ui = DIALOG_PADDING_TOP + text_h_ui + DIALOG_PADDING_BOTTOM
+		if button_label:
+			h_ui += DIALOG_TEXT_BUTTON_SPACING + DIALOG_BUTTON_HEIGHT
+		h_ui = max(h_ui, DIALOG_MIN_HEIGHT)
+		dw, dh = px(DIALOG_WIDTH), px(h_ui)
+		img.alpha_composite(nine(panel, PANEL_BORDER, dw, dh, scale), (x, y))
+		top = y + px(DIALOG_PADDING_TOP)
+		for i, line in enumerate(lines):
+			text(img, (x, top + i * line_px, x + dw, top + (i + 1) * line_px), line, header, ivory)
+		if button_label:
+			bh = px(DIALOG_BUTTON_HEIGHT)
+			button(img, x + (dw - px(440)) // 2, y + dh - px(DIALOG_PADDING_BOTTOM) - bh, 440, DIALOG_BUTTON_HEIGHT, button_label)
+		d.text((x + dw + 12, y + 8), "%d UI" % round(h_ui), font=small, fill=ivory)
+		return dh
+
+	dy = 560
+	dy += dialog(canvas, 10, dy, "Connecting...", "Cancel") + 24
+	dialog(canvas, 10, dy, "You have used up your prepaid time for this account." + NEWLINE +
+		"Please purchase more to continue playing.", "Okay")
 
 	# 2x zoom of a text field (text + caret) and a button so padding and the frame/fill seam can be judged.
 	zoom_src = Image.new("RGBA", (px(600) + 20, 2 * px(128) + 30), (40, 30, 22, 255))
@@ -279,7 +368,7 @@ def preview(textures: dict[str, Image.Image], out_path: str, scale: float = 0.5)
 	zoom_src.alpha_composite(framed(textures["GlueSkinButtonNormal"], steel, px(600), px(128), scale), (10, 20 + px(128)))
 	text(zoom_src, (10, 20 + px(128), 10 + px(600), 20 + 2 * px(128)), "Login", small, ivory)
 	zoom = zoom_src.resize((zoom_src.width * 2, zoom_src.height * 2), Image.NEAREST)
-	canvas.alpha_composite(zoom, (836, 560))
+	canvas.alpha_composite(zoom, (916, 560))
 
 	canvas.convert("RGB").save(out_path)
 
@@ -289,7 +378,9 @@ def main() -> int:
 	parser.add_argument("--keep-png", default=None, help="Directory to keep the generated PNGs in")
 	parser.add_argument("--preview", default=None, help="Write an offline 1080p preview to this PNG")
 	parser.add_argument("--no-import", action="store_true", help="Skip writing HTEX files")
+	parser.add_argument("--only", default=None, help="Comma-separated texture names to import (default: all)")
 	args = parser.parse_args()
+	only = set(args.only.split(",")) if args.only else None
 
 	with tempfile.TemporaryDirectory(prefix="glue_skin_") as work:
 		textures = build(decode_sources(work))
@@ -299,7 +390,7 @@ def main() -> int:
 			for name, img in textures.items():
 				img.save(os.path.join(png_dir, name + ".png"))
 		else:
-			import_all(textures, png_dir)
+			import_all(textures, png_dir, only)
 		if args.preview:
 			preview(textures, args.preview)
 			print("preview: " + args.preview)
