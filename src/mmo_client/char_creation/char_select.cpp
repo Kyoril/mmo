@@ -2,6 +2,7 @@
 
 #include "char_select.h"
 
+#include "base/macros.h"
 #include "console/console_var.h"
 #include "glue/glue_scene.h"
 #include "glue/plaza_avatars.h"
@@ -68,10 +69,7 @@ namespace mmo
 				{
 					if (m_glueScene && index >= 0 && index < GetNumCharacters())
 					{
-						EnsureOrder();
-						PlazaAvatars& plaza = m_glueScene->GetPlazaAvatars();
-						plaza.SetCharacters(GetOrderedCharacters());
-						plaza.Leave(index);
+						SyncPlaza().Leave(index);
 					}
 				}),
 
@@ -167,6 +165,7 @@ namespace mmo
 		// dropping the pointer is all that is needed when the scene goes away.
 		m_glueScene = scene;
 		m_plazaPlaced = false;
+		m_plazaRealmId.reset();
 	}
 
 	void CharSelect::OnCharacterListUpdated()
@@ -176,6 +175,9 @@ namespace mmo
 
 		if (m_glueScene)
 		{
+			// A list from another realm drops the previous realm's avatars right away.
+			CheckPlazaRealm();
+
 			// Characters that were sent away and are still listed were not deleted after all.
 			m_glueScene->GetPlazaAvatars().ForgetLeaving();
 		}
@@ -190,10 +192,9 @@ namespace mmo
 			return;
 		}
 
-		PlazaAvatars& plaza = m_glueScene->GetPlazaAvatars();
-
-		// Cheap when the roster did not change: avatars are only rebuilt for new characters.
-		plaza.SetCharacters(GetOrderedCharacters());
+		// Cheap when the roster did not change: avatars are only rebuilt for new characters, for
+		// characters that look different, and for all of them after a realm change.
+		PlazaAvatars& plaza = SyncPlaza();
 
 		if (index >= 0 && index < GetNumCharacters())
 		{
@@ -268,8 +269,7 @@ namespace mmo
 		}
 
 		// Characters dragged into or out of the top spots walk in or out right away.
-		PlazaAvatars& plaza = m_glueScene->GetPlazaAvatars();
-		plaza.SetCharacters(GetOrderedCharacters());
+		PlazaAvatars& plaza = SyncPlaza();
 		if (m_selectedCharacter >= 0)
 		{
 			plaza.Select(m_selectedCharacter, m_plazaPlaced);
@@ -374,6 +374,34 @@ namespace mmo
 		}
 
 		return ordered;
+	}
+
+	void CharSelect::CheckPlazaRealm()
+	{
+		ASSERT(m_glueScene);
+
+		const uint32 realmId = m_realmConnector.GetRealmId();
+		if (m_plazaRealmId == realmId)
+		{
+			return;
+		}
+
+		// Another realm's characters may share guids with the avatars standing there: start
+		// over, and place the new realm's first selection instantly.
+		m_glueScene->GetPlazaAvatars().Clear();
+		m_plazaPlaced = false;
+		m_plazaRealmId = realmId;
+	}
+
+	PlazaAvatars& CharSelect::SyncPlaza()
+	{
+		ASSERT(m_glueScene);
+
+		CheckPlazaRealm();
+
+		PlazaAvatars& plaza = m_glueScene->GetPlazaAvatars();
+		plaza.SetCharacters(GetOrderedCharacters());
+		return plaza;
 	}
 
 	bool CharSelect::ProjectToUi(const Vector3& worldPosition, float& x, float& y) const

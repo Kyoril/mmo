@@ -7,6 +7,28 @@
 
 namespace mmo
 {
+	bool PlazaAppearance::operator==(const PlazaAppearance& other) const
+	{
+		return displayId == other.displayId &&
+			raceId == other.raceId &&
+			gender == other.gender &&
+			equipmentDisplayIds == other.equipmentDisplayIds &&
+			chosenOptionPerGroup == other.chosenOptionPerGroup &&
+			scalarValues == other.scalarValues;
+	}
+
+	PlazaAppearance MakePlazaAppearance(const CharacterView& view)
+	{
+		PlazaAppearance appearance;
+		appearance.displayId = view.GetDisplayId();
+		appearance.raceId = view.GetRaceId();
+		appearance.gender = view.GetGender();
+		appearance.chosenOptionPerGroup = view.GetConfiguration().chosenOptionPerGroup;
+		appearance.scalarValues = view.GetConfiguration().scalarValues;
+		appearance.equipmentDisplayIds = view.GetEquipmentDisplayIds();
+		return appearance;
+	}
+
 	namespace
 	{
 		bool parseDecimal(const String& text, uint64& out)

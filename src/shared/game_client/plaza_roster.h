@@ -3,12 +3,36 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "game/character_view.h"
 
 #include <array>
+#include <unordered_map>
 #include <vector>
 
 namespace mmo
 {
+	/// Everything of a character view that changes how its plaza model looks, so an avatar can be
+	/// rebuilt when a character with the same guid looks different (a changed appearance, other
+	/// gear, or another realm's character with a colliding guid).
+	struct PlazaAppearance
+	{
+		uint32 displayId = 0;
+		uint32 raceId = 0;
+		uint8 gender = 0;
+		std::unordered_map<uint32, uint32> chosenOptionPerGroup;
+		std::unordered_map<uint32, float> scalarValues;
+		std::array<uint32, player_equipment_slots::Count_> equipmentDisplayIds{};
+
+		/// Whether both describe the same model.
+		[[nodiscard]] bool operator==(const PlazaAppearance& other) const;
+
+		/// Whether the models differ.
+		[[nodiscard]] bool operator!=(const PlazaAppearance& other) const { return !(*this == other); }
+	};
+
+	/// Takes the appearance of a character view.
+	[[nodiscard]] PlazaAppearance MakePlazaAppearance(const CharacterView& view);
+
 	/// Number of fixed standing spots on the plaza.
 	constexpr int32 PlazaSpotCount = 5;
 

@@ -8,6 +8,7 @@
 #include "game/character_view.h"
 #include "game_client/glue_scene_definition.h"
 #include "game_client/item_display_applier.h"
+#include "game_client/plaza_roster.h"
 #include "math/vector3.h"
 
 #include <memory>
@@ -44,11 +45,17 @@ namespace mmo
 
 	public:
 		/// Sets the characters in roster order. Avatars of characters that are still in the list
-		/// are kept; new characters get a new, hidden avatar until the next Select; avatars of
+		/// and look the same (see PlazaAppearance) are kept; new characters, and characters whose
+		/// appearance changed, get a new, hidden avatar until the next Select; avatars of
 		/// removed characters are destroyed, unless they are walking out (see Leave), in which
 		/// case they are destroyed when they reach the entrance.
 		/// @param ordered The characters in roster order.
 		void SetCharacters(const std::vector<CharacterView>& ordered);
+
+		/// Destroys every avatar, including those walking out, and forgets the front character's
+		/// rotation and the characters sent away. Used when the realm changes: guids are only
+		/// unique per realm, so no avatar of the previous realm may be reused.
+		void Clear();
 
 		/// Places the characters for a selection.
 		/// @param orderIndex Order index of the selected character, or -1 for none.
@@ -87,6 +94,9 @@ namespace mmo
 		{
 			uint64 guid = 0;
 
+			/// What the model was built from, to rebuild it when the character looks different.
+			PlazaAppearance appearance;
+
 			/// Positioned and turned by the facing.
 			SceneNode* node = nullptr;
 
@@ -121,6 +131,10 @@ namespace mmo
 
 		/// Clears the item attachments, then destroys the entity and the nodes.
 		void DestroyAvatar(Avatar& avatar);
+
+		/// Takes over another avatar's position, facing, walk, front flag, animation and
+		/// visibility, for a model rebuilt in place of an older one of the same character.
+		void AdoptPlacement(Avatar& avatar, const Avatar& from);
 
 		/// Shows or hides the avatar including its item meshes.
 		void SetVisible(Avatar& avatar, bool visible);

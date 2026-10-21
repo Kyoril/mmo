@@ -47,17 +47,7 @@ namespace mmo
 
 	PlazaAvatars::~PlazaAvatars()
 	{
-		for (const auto& avatar : m_avatars)
-		{
-			DestroyAvatar(*avatar);
-		}
-		m_avatars.clear();
-
-		for (const auto& avatar : m_departing)
-		{
-			DestroyAvatar(*avatar);
-		}
-		m_departing.clear();
+		Clear();
 	}
 
 	void PlazaAvatars::SetCharacters(const std::vector<CharacterView>& ordered)
@@ -73,15 +63,26 @@ namespace mmo
 					return avatar && avatar->guid == view.GetGuid();
 				});
 
-			if (it != previous.end())
-			{
-				m_avatars.push_back(std::move(*it));
-				previous.erase(it);
-			}
-			else
+			if (it == previous.end())
 			{
 				m_avatars.push_back(CreateAvatar(view));
+				continue;
 			}
+
+			std::unique_ptr<Avatar> existing = std::move(*it);
+			previous.erase(it);
+
+			if (existing->appearance == MakePlazaAppearance(view))
+			{
+				m_avatars.push_back(std::move(existing));
+				continue;
+			}
+
+			// Same character, different look: rebuild the model where the old one stood.
+			std::unique_ptr<Avatar> rebuilt = CreateAvatar(view);
+			AdoptPlacement(*rebuilt, *existing);
+			DestroyAvatar(*existing);
+			m_avatars.push_back(std::move(rebuilt));
 		}
 
 		// A character that left and is no longer in the roster needs no protection anymore.
@@ -101,6 +102,25 @@ namespace mmo
 
 			DestroyAvatar(*avatar);
 		}
+	}
+
+	void PlazaAvatars::Clear()
+	{
+		for (const auto& avatar : m_avatars)
+		{
+			DestroyAvatar(*avatar);
+		}
+		m_avatars.clear();
+
+		for (const auto& avatar : m_departing)
+		{
+			DestroyAvatar(*avatar);
+		}
+		m_departing.clear();
+
+		m_leavingGuids.clear();
+		m_frontGuid = 0;
+		m_frontRotationDegrees = 0.0f;
 	}
 
 	void PlazaAvatars::Select(int32 orderIndex, const bool animate)
@@ -315,6 +335,7 @@ namespace mmo
 	{
 		auto avatar = std::make_unique<Avatar>();
 		avatar->guid = view.GetGuid();
+		avatar->appearance = MakePlazaAppearance(view);
 
 		const String id = std::to_string(m_nextEntityId++);
 
@@ -359,6 +380,26 @@ namespace mmo
 			m_scene.DestroySceneNode(*avatar.node);
 			avatar.node = nullptr;
 		}
+	}
+
+	void PlazaAvatars::AdoptPlacement(Avatar& avatar, const Avatar& from)
+	{
+		avatar.position = from.position;
+		avatar.facingDegrees = from.facingDegrees;
+		avatar.walking = from.walking;
+		avatar.walkTarget = from.walkTarget;
+		avatar.arrivalFacingDegrees = from.arrivalFacingDegrees;
+		avatar.arrivalPose = from.arrivalPose;
+		avatar.hideOnArrival = from.hideOnArrival;
+		avatar.atFront = from.atFront;
+		ApplyTransform(avatar);
+
+		if (!from.animationName.empty())
+		{
+			PlayAnimation(avatar, from.animationName);
+		}
+
+		SetVisible(avatar, from.visible);
 	}
 
 	void PlazaAvatars::SetVisible(Avatar& avatar, const bool visible)

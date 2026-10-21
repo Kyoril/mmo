@@ -7,6 +7,7 @@
 #include "game/character_view.h"
 #include "math/vector3.h"
 
+#include <optional>
 #include <vector>
 
 struct lua_State;
@@ -14,6 +15,7 @@ struct lua_State;
 namespace mmo
 {
 	class GlueScene;
+	class PlazaAvatars;
 	class RealmConnector;
 
 	namespace proto_client
@@ -96,6 +98,16 @@ namespace mmo
 		/// Gets the characters in local roster order.
 		std::vector<CharacterView> GetOrderedCharacters() const;
 
+		/// Clears the plaza when the connected realm differs from the one its avatars were built
+		/// for (guids are only unique per realm), so the next selection places them instantly.
+		/// Requires a glue scene.
+		void CheckPlazaRealm();
+
+		/// Brings the plaza's avatars in line with the connected realm and the local roster order.
+		/// Requires a glue scene.
+		/// @return The plaza.
+		PlazaAvatars& SyncPlaza();
+
 		/// Gets the screen position of a world position in UI units.
 		/// @return False when the position is not on screen or there is no glue scene.
 		bool ProjectToUi(const Vector3& worldPosition, float& x, float& y) const;
@@ -113,6 +125,10 @@ namespace mmo
 		/// Whether a valid selection was placed on the plaza since the glue scene was set, so
 		/// further selections animate.
 		bool m_plazaPlaced = false;
+
+		/// The realm the plaza's avatars belong to; nullopt while it holds none since the glue
+		/// scene was set.
+		std::optional<uint32> m_plazaRealmId;
 
 		int32 m_selectedCharacter = -1;
 
