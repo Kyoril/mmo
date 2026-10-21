@@ -1371,6 +1371,64 @@ namespace mmo
 		}
 	}
 
+	uint32 WorldState::ResolveZoneSound(const proto_client::ZoneEntry *zone, const bool music) const
+	{
+		// An unset sound (0) falls back along the parent zone chain unless a zone in between
+		// explicitly opts out via inherit_parent_audio = false. Depth guard against parent zone
+		// cycles in broken data.
+		for (int depth = 0; zone && depth < 8; ++depth)
+		{
+			if (const uint32 soundId = music ? zone->music_sound() : zone->ambience_sound(); soundId != 0)
+			{
+				return soundId;
+			}
+
+			if (!zone->inherit_parent_audio() || zone->parentzone() == 0)
+			{
+				return 0;
+			}
+
+			zone = m_project.zones.getById(zone->parentzone());
+		}
+
+		return 0;
+	}
+
+	void WorldState::PrefetchPageZoneSounds(const uint32 pageX, const uint32 pageY)
+	{
+		const terrain::Page *page = m_worldInstance->GetTerrain()->GetPage(pageX, pageY);
+		if (!page)
+		{
+			return;
+		}
+
+		// Zone music and ambience are large files opened the moment the player crosses into the
+		// zone. Reading them while the zone's pages stream in keeps that open off the frame. Files
+		// already read ahead or opened are skipped by the registry, so every page may ask again.
+		std::set<uint32> zoneIds;
+		std::vector<String> files;
+		for (uint32 tileY = 0; tileY < terrain::constants::TilesPerPage; ++tileY)
+		{
+			for (uint32 tileX = 0; tileX < terrain::constants::TilesPerPage; ++tileX)
+			{
+				const uint32 zoneId = page->GetArea(tileX, tileY);
+				if (!zoneIds.insert(zoneId).second)
+				{
+					continue;
+				}
+
+				const proto_client::ZoneEntry *zone = m_project.zones.getById(zoneId);
+				m_soundEntryPlayer.GetEntryFiles(ResolveZoneSound(zone, true), files);
+				m_soundEntryPlayer.GetEntryFiles(ResolveZoneSound(zone, false), files);
+			}
+		}
+
+		for (String &file : files)
+		{
+			m_workQueue.post([file = std::move(file)]() { AssetRegistry::Prefetch(file); });
+		}
+	}
+
 	void WorldState::CheckForZoneUpdate()
 	{
 		const auto unit = m_playerController->GetControlledUnit();
@@ -1397,7 +1455,10 @@ namespace mmo
 			return;
 		}
 
-		UpdateEnvironmentTarget(zoneId, pos);
+		{
+			PROFILE_SCOPE("Zone: EnvironmentTarget");
+			UpdateEnvironmentTarget(zoneId, pos);
+		}
 
 		if (zoneId != m_lastZoneId)
 		{
@@ -1423,31 +1484,8 @@ namespace mmo
 					s_subZoneName.clear();
 				}
 
-				// Resolve zone audio: an unset sound (0) falls back along the parent zone chain
-				// unless a zone in between explicitly opts out via inherit_parent_audio = false.
-				const auto resolveZoneSound = [this](const proto_client::ZoneEntry *zone, const auto &getSoundId) -> uint32
-				{
-					// Depth guard against parent zone cycles in broken data.
-					for (int depth = 0; zone && depth < 8; ++depth)
-					{
-						if (const uint32 soundId = getSoundId(*zone); soundId != 0)
-						{
-							return soundId;
-						}
-
-						if (!zone->inherit_parent_audio() || zone->parentzone() == 0)
-						{
-							return 0;
-						}
-
-						zone = m_project.zones.getById(zone->parentzone());
-					}
-
-					return 0;
-				};
-
-				musicSoundId = resolveZoneSound(zone, [](const proto_client::ZoneEntry &z) { return z.music_sound(); });
-				ambienceSoundId = resolveZoneSound(zone, [](const proto_client::ZoneEntry &z) { return z.ambience_sound(); });
+				musicSoundId = ResolveZoneSound(zone, true);
+				ambienceSoundId = ResolveZoneSound(zone, false);
 			}
 			else
 			{
@@ -1455,11 +1493,22 @@ namespace mmo
 			}
 
 			// Crossfade zone music / ambience if the effective sounds changed.
-			m_zoneMusic.SetSound(musicSoundId);
-			m_zoneAmbience.SetSound(ambienceSoundId);
-
-			m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
-			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
+			{
+				PROFILE_SCOPE("Zone: Music");
+				m_zoneMusic.SetSound(musicSoundId);
+			}
+			{
+				PROFILE_SCOPE("Zone: Ambience");
+				m_zoneAmbience.SetSound(ambienceSoundId);
+			}
+			{
+				PROFILE_SCOPE("Zone: Discord");
+				m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
+			}
+			{
+				PROFILE_SCOPE("Zone: Lua ZONE_CHANGED");
+				FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
+			}
 		}
 	}
 
@@ -6485,6 +6534,7 @@ namespace mmo
 		{
 			// Tile materials are now available; (re)register this page's data-driven foliage.
 			RegisterPageFoliage(pos.x(), pos.y());
+			PrefetchPageZoneSounds(pos.x(), pos.y());
 		}
 	}
 
