@@ -44,6 +44,10 @@ namespace mmo
 		/// Height above the front spot the push-in moves towards, in metres (about chest height).
 		constexpr float pushInTargetHeight = 1.4f;
 
+		/// Milliseconds after loading of the gate (resp. the plaza) began when it counts as ready
+		/// even if it is not loaded, so neither the fade nor the flight input lock lasts forever.
+		constexpr GameTime readinessTimeoutMs = 8000;
+
 		/// Overrides the camera path parameter while >= 0, to inspect points of the flight path.
 		ConsoleVar* s_glueCameraPathVar = nullptr;
 	}
@@ -91,6 +95,7 @@ namespace mmo
 			});
 
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
+		m_dispatcherWork = std::make_unique<asio::io_service::work>(m_dispatcher);
 		auto& workQueue = m_workQueue;
 		m_loaderThread = std::thread([&workQueue]()
 			{
@@ -118,6 +123,7 @@ namespace mmo
 		m_plazaAvatars.reset();
 
 		m_work.reset();
+		m_dispatcherWork.reset();
 		m_workQueue.stop();
 		m_dispatcher.stop();
 		if (m_loaderThread.joinable())
@@ -298,21 +304,29 @@ namespace mmo
 
 		if (m_renderer)
 		{
-			const ConsoleVar* exposureVar = ConsoleVarMgr::FindConsoleVar("gxExposure");
-			const float brightness = exposureVar ? exposureVar->GetFloatValue() : 1.0f;
+			if (m_exposureVar == nullptr)
+			{
+				// Looked up until it is registered, then kept: unregistering only flags a cvar, so
+				// the pointer stays valid (IsValid tells whether it is registered right now).
+				m_exposureVar = ConsoleVarMgr::FindConsoleVar("gxExposure");
+			}
+
+			const float brightness = (m_exposureVar && m_exposureVar->IsValid()) ? m_exposureVar->GetFloatValue() : 1.0f;
 			ApplyEnvironmentStateToRenderer(*m_renderer, m_environment.GetState(), brightness);
 		}
 	}
 
 	void GlueScene::UpdatePageLoading()
 	{
+		ApplyReadinessTimeout();
+
 		// The gate becomes ready before any plaza page starts, so the plaza's entities cannot hold
 		// back the gate view.
 		if (!m_gateReady && m_nextPage >= m_gatePageCount)
 		{
 			if (!m_worldInstance || !m_worldInstance->HasPendingEntityLoads())
 			{
-				m_gateReady = true;
+				MarkGateReady();
 			}
 
 			return;
@@ -330,8 +344,47 @@ namespace mmo
 			if (!m_worldInstance || !m_worldInstance->HasPendingEntityLoads())
 			{
 				m_plazaReady = true;
+				DLOG("Glue scene: plaza pages loaded after " << (GetAsyncTimeMs() - m_plazaLoadStartMs) << " ms");
 			}
 		}
+	}
+
+	void GlueScene::ApplyReadinessTimeout()
+	{
+		const GameTime now = GetAsyncTimeMs();
+
+		if (!m_pageLoadingStarted)
+		{
+			// The pages load one per Update, so the gate's clock starts with the first one, not at
+			// construction (the login screen may take a while to set up before its first frame).
+			m_pageLoadingStarted = true;
+			m_gateLoadStartMs = now;
+		}
+
+		if (!m_gateReady)
+		{
+			if (now - m_gateLoadStartMs >= readinessTimeoutMs)
+			{
+				WLOG("Glue scene: gate view not loaded after " << (now - m_gateLoadStartMs) << " ms, showing it anyway");
+				MarkGateReady();
+			}
+
+			// The plaza's clock starts when the gate is ready.
+			return;
+		}
+
+		if (!m_plazaReady && now - m_plazaLoadStartMs >= readinessTimeoutMs)
+		{
+			WLOG("Glue scene: plaza not loaded after " << (now - m_plazaLoadStartMs) << " ms, showing it anyway");
+			m_plazaReady = true;
+		}
+	}
+
+	void GlueScene::MarkGateReady()
+	{
+		m_gateReady = true;
+		m_plazaLoadStartMs = GetAsyncTimeMs();
+		DLOG("Glue scene: gate pages loaded after " << (m_plazaLoadStartMs - m_gateLoadStartMs) << " ms");
 	}
 
 	void GlueScene::LoadPage(const uint8 x, const uint8 y)

@@ -22,6 +22,7 @@ namespace mmo
 {
 	class Camera;
 	class ClientWorldInstance;
+	class ConsoleVar;
 	class DeferredRenderer;
 	class IAudio;
 	class PlazaAvatars;
@@ -53,10 +54,13 @@ namespace mmo
 		/// @param deltaSeconds Real time since the last update.
 		void Update(float deltaSeconds);
 
-		/// Whether the gate pages and every entity on them are loaded.
+		/// Whether the gate pages and every entity on them are loaded, or loading them took longer
+		/// than the readiness timeout (8 s), so no fade waits for the gate forever.
 		[[nodiscard]] bool IsGateReady() const { return m_gateReady; }
 
-		/// Whether the plaza pages (after the gate pages) and every entity on them are loaded.
+		/// Whether the plaza pages (after the gate pages) and every entity on them are loaded, or
+		/// loading them took longer than the readiness timeout (8 s after the gate became ready),
+		/// so neither a held fade nor the flight input lock lasts forever.
 		[[nodiscard]] bool IsPlazaReady() const { return m_plazaReady; }
 
 		/// Gets the scene, for the frame renderer.
@@ -107,7 +111,7 @@ namespace mmo
 		/// @param x Receives the horizontal position, 0 (left) to 1 (right).
 		/// @param y Receives the vertical position, 0 (top) to 1 (bottom).
 		/// @return False when the position is behind the camera or off screen.
-		bool ProjectToScreen(const Vector3& worldPosition, float& x, float& y) const;
+		[[nodiscard]] bool ProjectToScreen(const Vector3& worldPosition, float& x, float& y) const;
 
 	private:
 		/// Loads the world file and creates the world instance.
@@ -115,6 +119,13 @@ namespace mmo
 
 		/// Loads the next queued page, if any, and updates the ready flags.
 		void UpdatePageLoading();
+
+		/// Starts the gate's readiness clock on the first call, then marks the gate, and after it
+		/// the plaza, ready when loading it took longer than the timeout.
+		void ApplyReadinessTimeout();
+
+		/// Marks the gate ready and starts the plaza's readiness clock.
+		void MarkGateReady();
 
 		/// Synchronously prepares and loads one terrain page, then starts loading its entities.
 		void LoadPage(uint8 x, uint8 y);
@@ -150,6 +161,18 @@ namespace mmo
 		bool m_gateReady = false;
 		bool m_plazaReady = false;
 
+		/// Whether the first Update started loading pages (and the gate's readiness clock).
+		bool m_pageLoadingStarted = false;
+
+		/// When loading the gate pages began (the first Update), in GetAsyncTimeMs milliseconds.
+		GameTime m_gateLoadStartMs = 0;
+
+		/// When loading the plaza pages began (the gate became ready), in GetAsyncTimeMs milliseconds.
+		GameTime m_plazaLoadStartMs = 0;
+
+		/// The gxExposure cvar, once it is registered (the renderer registers it).
+		const ConsoleVar* m_exposureVar = nullptr;
+
 		bool m_flightFinished = false;
 		float m_driftSeconds = 0.0f;
 
@@ -166,6 +189,11 @@ namespace mmo
 		asio::io_service m_workQueue;
 		asio::io_service m_dispatcher;
 		std::unique_ptr<asio::io_service::work> m_work;
+
+		/// Keeps m_dispatcher from stopping when a poll finds it empty. Without it asio stops the
+		/// dispatcher after the first empty poll, and every later poll runs at most one handler
+		/// (Windows) or none at all (macOS), so the world instance's preparation chains stall.
+		std::unique_ptr<asio::io_service::work> m_dispatcherWork;
 		std::thread m_loaderThread;
 
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;
