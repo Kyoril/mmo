@@ -126,10 +126,16 @@ screen reminds anyone of WoW.
   references, too much for a glue screen.
 - Lighting and sky use the existing shared `SkyComponent` / `EnvironmentController`, with an
   environment profile chosen for the scene.
-- **Time of day:** *my call:* follow the player's local wall-clock time of day, because the
-  client has no server game time before entering the world (game time is sent by the world
-  server on enter). A fixed, hand-picked "golden hour" is the fallback if local time looks bad
-  at some hours.
+- **Time of day:** *my call:* match the world's time of day.
+  - The realm already owns a realm-wide time of day (`TimeOfDayManager`: UTC system clock plus
+    a GM offset). It appends that time to the character list, inside the same protocol bump.
+  - Before a realm is chosen (login and realm screens), the client uses the UTC system time of
+    day, which is the realm's default when no GM has overridden it.
+  - A fixed, hand-picked "golden hour" is the fallback if some hours look bad.
+- **First implementation of "simplified" (plan decision):** load only the terrain and entity
+  pages around the gate and plaza from the real map 0 world, with no foliage, far terrain or
+  units. If that is not ready within ~3 s, a cut-down world gets authored in mmo_edit; only the
+  scene definition file changes.
 - Town ambience and music play. *My call:* reuse Haven/login music and ambience entries that
   already exist; no new audio is part of this project.
 
