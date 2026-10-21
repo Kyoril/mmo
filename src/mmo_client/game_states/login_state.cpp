@@ -435,8 +435,10 @@ namespace mmo
 	{
 		if (m_glueScene && m_glueScene->IsFlightActive())
 		{
-			// Any key skips a flight, and does nothing else: Enter must not enter the world from
-			// the middle of a flight.
+			// Any key skips a flight, and the login state does nothing else with it: Enter must
+			// not enter the world from the middle of a flight, and no GLUE_KEY_DOWN is sent. The
+			// key is not swallowed, though: the frame UI's own KeyDown handler still receives it
+			// (a focused edit box keeps typing), since the return value does not stop the signal.
 			if (!repeat)
 			{
 				m_glueScene->GetDirector().Skip();

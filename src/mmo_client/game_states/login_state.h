@@ -115,7 +115,8 @@ namespace mmo
 		void TryEnterWorld();
 
 		/// Enter on the character screen enters the world, like clicking the button. While the glue
-		/// camera flies, any key only skips the flight.
+		/// camera flies, any key skips the flight and the login state ignores it otherwise (the
+		/// frame UI still receives it through its own KeyDown handler).
 		bool OnKeyDown(int32 key, bool repeat);
 
 		/// A click that no frame took skips a glue camera flight.
