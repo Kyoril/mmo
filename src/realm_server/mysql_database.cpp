@@ -153,7 +153,7 @@ namespace mmo
 	{
 		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
 
-		mysql::Select select(m_connection, "SELECT `id`, `name`, `level`, `map`, `zone`, `race`, `class`, `gender`, `flags` FROM `characters` WHERE `account_id`=" + std::to_string(accountId));
+		mysql::Select select(m_connection, "SELECT `id`, `name`, `level`, `map`, `zone`, `race`, `class`, `gender`, `flags` FROM `characters` WHERE `account_id`=" + std::to_string(accountId) + " ORDER BY (`sort_index` = 0), `sort_index`, `id`");
 		if (select.Success())
 		{
 			std::vector<CharacterView> result;
@@ -403,6 +403,24 @@ namespace mmo
 			PrintDatabaseError();
 			throw mysql::Exception("Could not update characters table");
 		}
+	}
+
+	void MySQLDatabase::SetCharacterOrder(const uint64 accountId, std::vector<uint64> orderedGuids)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		mysql::Transaction transaction(m_connection);
+		for (size_t i = 0; i < orderedGuids.size(); ++i)
+		{
+			const String query = "UPDATE `characters` SET `sort_index` = " + std::to_string(i + 1) + " WHERE `id` = " + std::to_string(orderedGuids[i]) + " AND `account_id` = " + std::to_string(accountId);
+			if (!m_connection.Execute(query))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character order");
+			}
+		}
+
+		transaction.Commit();
 	}
 
 	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration, const std::vector<ItemData>& items)

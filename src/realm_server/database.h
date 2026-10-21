@@ -181,6 +181,11 @@ namespace mmo
 		/// Deletes a character by GUID.
 		virtual void DeleteCharacter(uint64 characterGuid) = 0;
 
+		/// Persists the order in which the characters of an account are listed.
+		/// @param accountId The owning account. Characters of other accounts are never touched.
+		/// @param orderedGuids The account's character guids in the desired order.
+		virtual void SetCharacterOrder(uint64 accountId, std::vector<uint64> orderedGuids) = 0;
+
 		/// Creates a new character.
 		virtual std::optional<CharCreateResult> CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration,
 			const std::vector<ItemData>& items) = 0;

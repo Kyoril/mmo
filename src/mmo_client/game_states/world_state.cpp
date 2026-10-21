@@ -47,6 +47,7 @@
 #include "systems/vendor_client.h"
 #include "systems/bank_client.h"
 #include "systems/mail_client.h"
+#include "environment_apply.h"
 #include "world_deserializer.h"
 #include "scene_graph/instanced_foliage.h"
 #include "base/erase_by_move.h"
@@ -7075,19 +7076,8 @@ namespace mmo
 			return;
 		}
 
-		const EnvironmentState& state = m_environment.GetState();
 		const float brightness = s_exposureVar ? s_exposureVar->GetFloatValue() : 1.0f;
-
-		renderer->SetExposure(state.exposure * brightness);
-		renderer->SetBloomIntensity(state.bloomIntensity);
-		renderer->SetBloomThreshold(state.bloomThreshold);
-		renderer->SetFogLightScattering(state.lightScattering);
-
-		ColorGradingSettings grading;
-		grading.SetSaturation(state.saturation);
-		grading.SetContrast(state.contrast);
-		grading.SetColorFilter(state.colorFilter);
-		renderer->SetColorGrading(grading, state.colorLut, state.colorLutFrom, state.colorLutBlend);
+		ApplyEnvironmentStateToRenderer(*renderer, m_environment.GetState(), brightness);
 
 		// Selected fresh every frame (and pushed even when empty) so a map without any fog
 		// volumes -- or one whose volumes just faded out -- doesn't keep rendering the last

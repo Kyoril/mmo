@@ -30,8 +30,9 @@ namespace mmo
 
 	void WorldRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
-		// Anything to render here?
-		if (!m_deferredRenderer || !m_worldFrame)
+		// Anything to render here? Any frame can host the world, not just a WorldFrame: the glue
+		// screens render their scene into a plain frame.
+		if (!m_deferredRenderer || !m_frame)
 		{
 			return;
 		}

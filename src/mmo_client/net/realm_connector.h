@@ -245,6 +245,10 @@ namespace mmo
 		/// Sends the command to delete a character to the realm.
 		void DeleteCharacter(const CharacterView& character);
 
+		/// Saves the order of the account's characters on the realm and reorders the local list to match.
+		/// @param orderedGuids Every character guid of the account exactly once, in the desired order.
+		void SetCharacterOrder(const std::vector<uint64>& orderedGuids);
+
 		/// Gets the name of the currently connected realm.
 		const std::string& GetRealmName() const { return m_realmName; }
 
@@ -643,6 +647,9 @@ namespace mmo
 		/// Gets a constant list of character views.
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }
 
+		/// Gets the realm wide time of day (milliseconds since midnight) as of the last character list.
+		GameTime GetRealmTimeOfDay() const { return m_realmTimeOfDay; }
+
 		/// Returns true if the given race ID is disabled on this realm.
 		bool IsRaceDisabled(uint32 raceId) const { return m_disabledRaces.count(raceId) > 0; }
 
@@ -652,6 +659,7 @@ namespace mmo
 	private:
 		/// A list of character views.
 		std::vector<CharacterView> m_characterViews;
+		GameTime m_realmTimeOfDay = 0;
 
 		/// Set of race IDs that are disabled on this realm.
 		std::unordered_set<uint32> m_disabledRaces;

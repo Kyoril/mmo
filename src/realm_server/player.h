@@ -535,6 +535,10 @@ namespace mmo
 		std::mutex m_charViewMutex;
 		std::map<uint64, CharacterView> m_characterViews;
 
+		/// Character guids in the roster order last sent with CharEnum or last saved by
+		/// OnSetCharacterOrder, so an unchanged order is not written again. Guarded by m_charViewMutex.
+		std::vector<uint64> m_characterOrder;
+
 		std::weak_ptr<World> m_world;
 
 		std::optional<CharacterData> m_characterData;
@@ -600,6 +604,7 @@ namespace mmo
 		PacketParseResult OnEnterWorld(game::IncomingPacket &packet);
 		PacketParseResult OnCreateChar(game::IncomingPacket &packet);
 		PacketParseResult OnDeleteChar(game::IncomingPacket &packet);
+		PacketParseResult OnSetCharacterOrder(game::IncomingPacket &packet);
 		PacketParseResult OnProxyPacket(game::IncomingPacket &packet);
 		PacketParseResult OnChatMessage(game::IncomingPacket &packet);
 		PacketParseResult OnNameQuery(game::IncomingPacket &packet);

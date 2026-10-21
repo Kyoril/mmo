@@ -2,6 +2,7 @@
 
 #include "player.h"
 #include "character_name.h"
+#include "character_order.h"
 #include "character_spell_cache.h"
 #include "character_start.h"
 #include "player_manager.h"
@@ -162,12 +163,24 @@ namespace mmo
 		{
 			if (auto strongThis = weakThis.lock())
 			{
+				// The query failed (database error, or a schema the migrations have not caught up
+				// with). There is no error variant of CharEnum, and an empty list would tell the
+				// player their characters are gone, so end the session instead: the client shows its
+				// realm-disconnected dialog rather than waiting for a list that never comes.
+				if (!result)
+				{
+					ELOG("Failed to load the character list for account " << strongThis->GetAccountId() << ", disconnecting the session");
+					strongThis->Kick(std::nullopt);
+					return;
+				}
+
 				// Lock around m_characterViews
 				{
 					std::scoped_lock lock{strongThis->m_charViewMutex};
 
 					// Copy character view data
 					strongThis->m_characterViews.clear();
+					strongThis->m_characterOrder.clear();
 					for (auto &charView : result.value())
 					{
 						// Resolve display id from race/class (TODO: Maybe do this somewhere else or differently? This seems like a wrong place to do this, but it works :/)
@@ -177,14 +190,16 @@ namespace mmo
 						}
 
 						strongThis->m_characterViews[charView.GetGuid()] = charView;
+						strongThis->m_characterOrder.push_back(charView.GetGuid());
 					}
 				}
 
 				// Send result data to requesting client
-				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket &outPacket)
+				strongThis->GetConnection().sendSinglePacket([&result, &strongThis](game::OutgoingPacket &outPacket)
 															 {
 						outPacket.Start(game::realm_client_packet::CharEnum);
 						outPacket << io::write_dynamic_range<uint8>(*result);
+						outPacket << io::write<uint64>(strongThis->m_timeOfDayManager.GetTimeOfDay());
 						outPacket.Finish(); });
 			}
 			else
@@ -816,6 +831,62 @@ namespace mmo
 		DLOG("Deleting character 0x" << std::hex << charGuid << " from account 0x" << std::hex << m_accountId << "...");
 		m_database.asyncRequestKeyed<void>(charGuid, [charGuid](auto &&database)
 									  { database->DeleteCharacter(charGuid); }, std::move(handler));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnSetCharacterOrder(game::IncomingPacket &packet)
+	{
+		ASSERT(IsAuthenticated());
+
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<uint64> orderedGuids(count);
+		for (uint64 &guid : orderedGuids)
+		{
+			if (!(packet >> io::read<uint64>(guid)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		{
+			// Lock around m_characterViews
+			std::scoped_lock lock{m_charViewMutex};
+
+			std::set<uint64> owned;
+			for (const auto &entry : m_characterViews)
+			{
+				owned.insert(entry.first);
+			}
+
+			if (!IsValidCharacterOrder(orderedGuids, owned))
+			{
+				WLOG("Received an invalid character order from account 0x" << std::hex << m_accountId);
+				return PacketParseResult::Pass;
+			}
+
+			if (orderedGuids == m_characterOrder)
+			{
+				// Already the stored order: nothing to write.
+				return PacketParseResult::Pass;
+			}
+
+			m_characterOrder = orderedGuids;
+		}
+
+		const uint64 accountId = m_accountId;
+		m_database.asyncRequestKeyed<void>(accountId, [accountId, orderedGuids = std::move(orderedGuids)](auto &&database)
+										   { database->SetCharacterOrder(accountId, orderedGuids); }, [](const bool success)
+										   {
+			if (!success)
+			{
+				ELOG("Failed to save character order!");
+			} });
 
 		return PacketParseResult::Pass;
 	}
@@ -3517,6 +3588,7 @@ namespace mmo
 		RegisterPacketHandler(game::client_realm_packet::CharEnum, *this, &Player::OnCharEnum);
 		RegisterPacketHandler(game::client_realm_packet::CreateChar, *this, &Player::OnCreateChar);
 		RegisterPacketHandler(game::client_realm_packet::DeleteChar, *this, &Player::OnDeleteChar);
+		RegisterPacketHandler(game::client_realm_packet::SetCharacterOrder, *this, &Player::OnSetCharacterOrder);
 		RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
 	}
 
