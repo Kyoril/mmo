@@ -15,6 +15,9 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/remote_movement_renderer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/attack_error_voice_gate.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/object_update_skip.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_roster.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glue_camera_director.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glue_scene_definition.cpp
 )
 
 # test_console_var.cpp reaches into the client executable's headers; it supplies its own
