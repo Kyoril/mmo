@@ -110,6 +110,8 @@ namespace mmo
 		GameTime m_moveStart, m_moveEnd;
 		bool m_customSpeed;
 		bool m_debugOutputEnabled;
+		/// Whether the current movement ends in water deep enough to swim in.
+		bool m_swimmingAtTarget;
 		MovementPath m_path;
 		std::optional<Radian> m_customFacing;
 	};

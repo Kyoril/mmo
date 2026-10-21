@@ -486,6 +486,19 @@ namespace mmo
 		/// @return True if ground was found and position was corrected, false otherwise
 		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f, std::optional<float> referenceHeight = std::nullopt);
 
+		/// @brief Floats a unit this client does not simulate at the water surface while it is in
+		/// water deep enough to swim in, and keeps its swimming movement flag in sync.
+		/// @details The navigation mesh the server paths creatures on is baked on the ground, so
+		///          the server lifts the paths of creatures which can swim into the water surface
+		///          band. Without this the per-frame ground correction would pull them straight
+		///          back down and they would walk along the bottom of the water, fully submerged.
+		/// @param position The unit's current node position, which the ground search started at.
+		/// @param groundY Height of the ground found below the unit, if any.
+		/// @param hasGround Whether any ground was found below the unit at all.
+		/// @return True when the unit is swimming and its height was set to the surface band, so
+		///         no ground correction applies.
+		bool UpdateRemoteSwimState(const Vector3& position, float groundY, bool hasGround);
+
 		/// @brief Corrects the height of a remotely simulated player so it comes to rest where the
 		/// player's own client puts it.
 		/// @details The owning client stands its character on the floor with the collision capsule
