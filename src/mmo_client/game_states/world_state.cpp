@@ -1395,41 +1395,6 @@ namespace mmo
 		return 0;
 	}
 
-	void WorldState::PrefetchPageZoneSounds(const uint32 pageX, const uint32 pageY)
-	{
-		const terrain::Page *page = m_worldInstance->GetTerrain()->GetPage(pageX, pageY);
-		if (!page)
-		{
-			return;
-		}
-
-		// Zone music and ambience are large files opened the moment the player crosses into the
-		// zone. Reading them while the zone's pages stream in keeps that open off the frame. Files
-		// already read ahead or opened are skipped by the registry, so every page may ask again.
-		std::set<uint32> zoneIds;
-		std::vector<String> files;
-		for (uint32 tileY = 0; tileY < terrain::constants::TilesPerPage; ++tileY)
-		{
-			for (uint32 tileX = 0; tileX < terrain::constants::TilesPerPage; ++tileX)
-			{
-				const uint32 zoneId = page->GetArea(tileX, tileY);
-				if (!zoneIds.insert(zoneId).second)
-				{
-					continue;
-				}
-
-				const proto_client::ZoneEntry *zone = m_project.zones.getById(zoneId);
-				m_soundEntryPlayer.GetEntryFiles(ResolveZoneSound(zone, true), files);
-				m_soundEntryPlayer.GetEntryFiles(ResolveZoneSound(zone, false), files);
-			}
-		}
-
-		for (String &file : files)
-		{
-			m_workQueue.post([file = std::move(file)]() { AssetRegistry::Prefetch(file); });
-		}
-	}
-
 	void WorldState::CheckForZoneUpdate()
 	{
 		const auto unit = m_playerController->GetControlledUnit();
@@ -6566,7 +6531,6 @@ namespace mmo
 		{
 			// Tile materials are now available; (re)register this page's data-driven foliage.
 			RegisterPageFoliage(pos.x(), pos.y());
-			PrefetchPageZoneSounds(pos.x(), pos.y());
 		}
 	}
 
