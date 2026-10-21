@@ -1267,10 +1267,25 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		{
 			WLOG("Inventory operation " << operationName << " FAILED for character " << log_hex_digit(characterGuid)
 				<< " (operationId: " << operationId << ")");
-		}
 
-		// TODO: Notify WorldServerInventoryRepository via callback/signal
-		// For now, we just log the result
+			// Every save is a full snapshot that the realm writes as delete-all-then-insert, and the
+			// inventory cleared its dirty flag as soon as the snapshot was sent. Flagging it dirty
+			// again makes the next periodic, map-transfer or logout save resend the current state,
+			// which supersedes the lost one. A stale failure that arrives after a later good save
+			// only causes one redundant resend.
+			if (const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
+			{
+				player->GetCharacter().GetInventory().MarkDirty();
+				WLOG("Inventory of character " << log_hex_digit(characterGuid) << " will be saved again");
+			}
+			else
+			{
+				// The player left this node (logout or map transfer) before the result arrived, and its
+				// last snapshot left with it: the database keeps the state of the last successful save.
+				ELOG("Inventory save for character " << log_hex_digit(characterGuid)
+					<< " failed after the player left this world node - the unsaved inventory changes are lost");
+			}
+		}
 
 		return PacketParseResult::Pass;
 	}

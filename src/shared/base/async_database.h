@@ -33,6 +33,15 @@ namespace mmo
 				catch (const std::exception &ex)
 				{
 					defaultLogException(ex);
+
+					// A bool result is a success flag, so a thrown request is a failure the
+					// caller must hear about: realm inventory saves, for one, report it to the
+					// world server. Other result types have no value that means "failed", so
+					// their handlers are still skipped.
+					if constexpr (std::is_same_v<Result, bool>)
+					{
+						dispatcher(std::bind<void>(handler, false));
+					}
 					return;
 				}
 
@@ -48,6 +57,8 @@ namespace mmo
 				const Request &request,
 				const ResultHandler &handler) const
 			{
+				// A void request reports its outcome as a bool: true when it returned, false when
+				// it threw. The handler runs either way, so a failed save is never silent.
 				bool succeeded = false;
 				try
 				{
@@ -57,7 +68,6 @@ namespace mmo
 				catch (const std::exception &ex)
 				{
 					defaultLogException(ex);
-					return;
 				}
 
 				dispatcher(std::bind<void>(handler, succeeded));
