@@ -145,7 +145,6 @@ namespace mmo
 		/// Removed from the roster while walking out; destroyed on arrival.
 		std::vector<std::unique_ptr<Avatar>> m_departing;
 
-		int32 m_selected = -1;
 		/// The character at the front, so the rotation is reset when it changes. 0 for none.
 		uint64 m_frontGuid = 0;
 		float m_frontRotationDegrees = 0.0f;

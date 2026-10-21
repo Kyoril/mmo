@@ -47,9 +47,23 @@ namespace mmo
 		// Cheap when the roster did not change: avatars are only rebuilt for new characters.
 		plaza.SetCharacters(m_realmConnector.GetCharacterViews());
 
-		const int32 selected = (index >= 0 && index < GetNumCharacters()) ? index : -1;
-		plaza.Select(selected, m_plazaPlaced);
-		m_plazaPlaced = true;
+		if (index >= 0 && index < GetNumCharacters())
+		{
+			plaza.Select(index, m_plazaPlaced);
+			m_plazaPlaced = true;
+			return;
+		}
+
+		if (GetNumCharacters() == 0)
+		{
+			// Nobody left to show (e.g. every character was deleted).
+			plaza.Select(-1, false);
+			m_plazaPlaced = false;
+		}
+
+		// Otherwise "no selection" is a transient state of the character screen (it clears the
+		// selection before picking one): leave the plaza as it is, so the front character neither
+		// walks back to its spot nor restarts its pose, and the first real selection stays instant.
 	}
 
 	int32 CharSelect::GetNumCharacters() const

@@ -34,8 +34,11 @@ namespace mmo
 		/// @param scene The glue scene, or nullptr.
 		void SetGlueScene(GlueScene* scene);
 
-		/// Selects a character and places the characters on the plaza for it. The first selection
-		/// after the glue scene was set places everyone instantly; later ones make them walk.
+		/// Selects a character and places the characters on the plaza for it. The first valid
+		/// selection after the glue scene was set (or after the roster became empty) places everyone
+		/// instantly; later ones make them walk. An invalid index (-1) only records the selection
+		/// and leaves the plaza untouched, unless the roster is empty, in which case the plaza is
+		/// cleared.
 		/// @param index Order index of the character, or -1 for none.
 		void SelectCharacter(int32 index);
 
@@ -57,7 +60,8 @@ namespace mmo
 		/// Not owned. Null while no login state is active.
 		GlueScene* m_glueScene = nullptr;
 
-		/// Whether the plaza was placed since the glue scene was set, so selections animate.
+		/// Whether a valid selection was placed on the plaza since the glue scene was set, so
+		/// further selections animate.
 		bool m_plazaPlaced = false;
 
 		int32 m_selectedCharacter = -1;

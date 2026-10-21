@@ -95,11 +95,6 @@ namespace mmo
 
 			DestroyAvatar(*avatar);
 		}
-
-		if (m_selected >= static_cast<int32>(m_avatars.size()))
-		{
-			m_selected = -1;
-		}
 	}
 
 	void PlazaAvatars::Select(int32 orderIndex, const bool animate)
@@ -109,8 +104,6 @@ namespace mmo
 		{
 			orderIndex = -1;
 		}
-
-		m_selected = orderIndex;
 
 		const PlazaAssignment assignment = AssignPlaza(numCharacters, orderIndex);
 
