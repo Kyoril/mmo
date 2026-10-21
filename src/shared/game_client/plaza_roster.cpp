@@ -193,11 +193,14 @@ namespace mmo
 
 	GlueArrival DecideGlueArrival(bool plazaReady, bool returningFromWorld)
 	{
-		if (!plazaReady)
+		// Back from the world the player has seen the flight already: always a cut. A fresh login
+		// always flies, even when the list beats the scene (common with auto-login): the fade
+		// stays up until the scene is ready, so the gate and the flight are never skipped.
+		if (returningFromWorld)
 		{
-			return GlueArrival::FadeWhenReady;
+			return plazaReady ? GlueArrival::Snap : GlueArrival::SnapWhenReady;
 		}
 
-		return returningFromWorld ? GlueArrival::Snap : GlueArrival::FlyIn;
+		return plazaReady ? GlueArrival::FlyIn : GlueArrival::FlyInWhenReady;
 	}
 }

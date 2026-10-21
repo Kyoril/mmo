@@ -70,11 +70,20 @@ namespace mmo
 	/// How the glue camera arrives at the plaza.
 	enum class GlueArrival
 	{
+		/// Lift the fade on the gate view and fly to the plaza now.
 		FlyIn,
-		FadeWhenReady,
-		Snap
+		/// Keep the scene covered until gate and plaza are ready (or their readiness timeouts
+		/// fire), then lift the fade on the gate view and fly to the plaza.
+		FlyInWhenReady,
+		/// Cut straight to the plaza now (back from the world).
+		Snap,
+		/// Keep the scene covered until the plaza is ready, then cut straight to it (back from
+		/// the world).
+		SnapWhenReady
 	};
 
-	/// Decides how the glue scene should be presented.
+	/// Decides how the glue scene should be presented when the character list arrives.
+	/// @param plazaReady Whether the plaza view is ready (it only becomes ready after the gate).
+	/// @param returningFromWorld Whether the player just left the world; that path never flies.
 	GlueArrival DecideGlueArrival(bool plazaReady, bool returningFromWorld);
 }

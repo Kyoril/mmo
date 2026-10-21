@@ -165,15 +165,37 @@ namespace mmo
 		return finished;
 	}
 
-	void GlueScene::FadeToPlazaWhenReady()
+	void GlueScene::SnapToPlazaWhenReady()
 	{
-		m_plazaSnapPending = true;
+		m_pendingArrival = PendingArrival::Snap;
+	}
+
+	void GlueScene::FlyInWhenReady()
+	{
+		m_pendingArrival = PendingArrival::FlyIn;
+	}
+
+	bool GlueScene::ConsumeDeferredFlightStarted()
+	{
+		const bool started = m_deferredFlightStarted;
+		m_deferredFlightStarted = false;
+		return started;
+	}
+
+	void GlueScene::SkipFlight()
+	{
+		if (m_pendingArrival == PendingArrival::FlyIn)
+		{
+			m_pendingArrival = PendingArrival::Snap;
+		}
+
+		m_director.Skip();
 	}
 
 	bool GlueScene::IsFlightActive() const
 	{
 		const GlueCameraMode mode = m_director.GetMode();
-		return m_plazaSnapPending || mode == GlueCameraMode::FlyingIn || mode == GlueCameraMode::FlyingOut;
+		return m_pendingArrival != PendingArrival::None || mode == GlueCameraMode::FlyingIn || mode == GlueCameraMode::FlyingOut;
 	}
 
 	void GlueScene::SnapToGate()
@@ -185,7 +207,8 @@ namespace mmo
 		(void)m_director.ConsumeFlightFinished();
 		m_flightFinished = false;
 
-		m_plazaSnapPending = false;
+		m_pendingArrival = PendingArrival::None;
+		m_deferredFlightStarted = false;
 		m_pushInSeconds = 0.0f;
 		m_pushInElapsed = 0.0f;
 		m_pushInFinished = false;
@@ -281,12 +304,26 @@ namespace mmo
 			m_flightFinished = true;
 		}
 
-		if (m_plazaSnapPending && m_plazaReady)
+		// The plaza only becomes ready after the gate (or when both readiness timeouts fired), so
+		// this also means the gate view the fly-in starts from is ready.
+		if (m_pendingArrival != PendingArrival::None && m_plazaReady)
 		{
-			// The flight was skipped because the plaza was not ready: cut straight to it.
-			m_plazaSnapPending = false;
-			m_director.SnapToPlaza();
-			m_flightFinished = true;
+			if (m_pendingArrival == PendingArrival::FlyIn)
+			{
+				// The list beat the scene on a fresh login: the fade held until now, and the flight
+				// starts from the gate as it lifts.
+				m_director.SnapToGate();
+				m_director.FlyIn();
+				m_deferredFlightStarted = true;
+			}
+			else
+			{
+				// Back from the world, or a skip arrived while waiting: cut straight to the plaza.
+				m_director.SnapToPlaza();
+				m_flightFinished = true;
+			}
+
+			m_pendingArrival = PendingArrival::None;
 		}
 
 		UpdateCamera(deltaSeconds);

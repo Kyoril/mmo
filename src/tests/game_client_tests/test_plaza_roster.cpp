@@ -62,10 +62,14 @@ TEST_CASE("Last character is remembered per realm", "[plaza]")
 
 TEST_CASE("Arrival depends on readiness and origin", "[plaza]")
 {
+	// A fresh login always shows the gate and the flight, waiting under the fade if the list
+	// arrives before the scene is ready.
 	CHECK(DecideGlueArrival(true, false) == GlueArrival::FlyIn);
-	CHECK(DecideGlueArrival(false, false) == GlueArrival::FadeWhenReady);
+	CHECK(DecideGlueArrival(false, false) == GlueArrival::FlyInWhenReady);
+
+	// Coming back from the world never flies.
 	CHECK(DecideGlueArrival(true, true) == GlueArrival::Snap);
-	CHECK(DecideGlueArrival(false, true) == GlueArrival::FadeWhenReady);
+	CHECK(DecideGlueArrival(false, true) == GlueArrival::SnapWhenReady);
 }
 
 TEST_CASE("Plaza appearance of identical views is equal", "[plaza]")

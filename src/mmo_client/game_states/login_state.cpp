@@ -133,9 +133,17 @@ namespace mmo
 			ILOG("Glue scene: plaza view ready after " << (GetAsyncTimeMs() - m_enterTime) << " ms");
 		}
 
+		if (m_glueScene->ConsumeDeferredFlightStarted())
+		{
+			// The character list arrived before the scene was ready: the fade held until now and
+			// lifts on the gate view while the fly-in starts. The screens keep their chrome hidden
+			// until GLUE_FLIGHT_FINISHED, as for any fly-in.
+			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+		}
+
 		if (m_glueScene->ConsumeFlightFinished())
 		{
-			// Lifts a held fade (the plaza snap after FadeWhenReady counts as a flight) and tells the
+			// Lifts a held fade (the plaza snap after SnapWhenReady counts as a flight) and tells the
 			// screens where the camera is now.
 			const bool atPlaza = m_glueScene->GetDirector().GetMode() == GlueCameraMode::Plaza;
 			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
@@ -384,9 +392,15 @@ namespace mmo
 				m_glueScene->GetDirector().SnapToPlaza();
 				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
 				break;
-			case GlueArrival::FadeWhenReady:
+			case GlueArrival::FlyInWhenReady:
+				// Covered until the scene is ready, then the fade lifts on the gate and the camera
+				// flies in (see OnIdle).
+				m_glueScene->FlyInWhenReady();
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_HOLD");
+				break;
+			case GlueArrival::SnapWhenReady:
 				// Covered until the plaza is ready, then cut to it (see OnIdle).
-				m_glueScene->FadeToPlazaWhenReady();
+				m_glueScene->SnapToPlazaWhenReady();
 				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_HOLD");
 				break;
 			}
@@ -420,8 +434,9 @@ namespace mmo
 		{
 			// The character screen ignores the request until the plaza shows. Keep it pending: skip
 			// a running flight (it ends on the next update) and retry when GLUE_FLIGHT_FINISHED
-			// fires in OnIdle; a pending plaza snap is waited for the same way.
-			m_glueScene->GetDirector().Skip();
+			// fires in OnIdle. A fly-in still waiting for the scene turns into a plaza snap, which
+			// is waited for the same way.
+			m_glueScene->SkipFlight();
 			return;
 		}
 

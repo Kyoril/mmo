@@ -188,9 +188,14 @@ screen reminds anyone of WoW.
 - **Gate view not ready at startup:** the login UI is shown over a dark, calm fill and the
   scene fades in once the gate view is ready. No static image fallback is kept. The gate view
   is small, so this should take a moment at most.
-- **Plaza not ready when the list arrives:** the flight is skipped. The screen fades from the
-  gate view straight onto the plaza once the plaza is ready. Loading the plaza from client
-  start should make this rare.
+- **Plaza not ready when the list arrives** (user decision 2026-10-21): on a fresh login the
+  flight is not skipped. This is common with auto-login, where the list arrives in 1-2 s and
+  the scene needs about 3 s. The dark fade stays up until the scene is ready (gate and plaza,
+  or the 8 s readiness timeouts), then fades in on the gate view while the normal fly-in to
+  the plaza plays. It can still be skipped by any click or key, and the character screen
+  chrome stays hidden until `GLUE_FLIGHT_FINISHED`. An `enterworld` request skips the flight
+  as before (a fly-in still waiting for the scene becomes a cut to the plaza). Coming back
+  from the world is unchanged: covered until the plaza is ready, then a direct cut to it.
 - **Scene lifetime:** the glue scene (gate + street + plaza) is owned by the login state and
   released when entering the world. Logging out rebuilds it behind a short fade. The
   simplified scene is small enough for that, and it avoids keeping a second scene resident

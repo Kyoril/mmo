@@ -86,17 +86,29 @@ namespace mmo
 		void SetRenderer(DeferredRenderer* renderer) { m_renderer = renderer; }
 
 		/// Whether a flight ended since the last call. Latched from the director every Update, and
-		/// also set when a pending FadeToPlazaWhenReady snapped to the plaza.
+		/// also set when a pending SnapToPlazaWhenReady snapped to the plaza.
 		[[nodiscard]] bool ConsumeFlightFinished();
 
 		/// Snaps the camera to the plaza as soon as the plaza is ready. Until then IsFlightActive
 		/// is true; the snap counts as a finished flight (see ConsumeFlightFinished).
-		void FadeToPlazaWhenReady();
+		void SnapToPlazaWhenReady();
 
-		/// Whether the camera is flying, or waiting for the plaza to snap to it.
+		/// Starts the fly-in from the gate as soon as gate and plaza are ready (or their readiness
+		/// timeouts fired). Until then IsFlightActive is true; when the flight starts,
+		/// ConsumeDeferredFlightStarted reports it once so the fade can lift on the gate view.
+		void FlyInWhenReady();
+
+		/// Whether a deferred fly-in (FlyInWhenReady) started since the last call.
+		[[nodiscard]] bool ConsumeDeferredFlightStarted();
+
+		/// Skips a running flight. A fly-in still waiting for the scene becomes a plaza snap when
+		/// the scene is ready, so a skip requested early (enterworld) still lands on the plaza.
+		void SkipFlight();
+
+		/// Whether the camera is flying, or waiting for the scene to fly or snap to the plaza.
 		[[nodiscard]] bool IsFlightActive() const;
 
-		/// Jumps to the gate, dropping a pending plaza snap and the push-in.
+		/// Jumps to the gate, dropping a pending plaza arrival and the push-in.
 		void SnapToGate();
 
 		/// Eases the camera part of the way towards the front character, then holds it there.
@@ -176,8 +188,21 @@ namespace mmo
 		bool m_flightFinished = false;
 		float m_driftSeconds = 0.0f;
 
-		/// Set by FadeToPlazaWhenReady until the plaza is ready.
-		bool m_plazaSnapPending = false;
+		/// A plaza arrival waiting for the scene to be ready.
+		enum class PendingArrival
+		{
+			None,
+			/// SnapToPlazaWhenReady: cut to the plaza.
+			Snap,
+			/// FlyInWhenReady: fly in from the gate.
+			FlyIn
+		};
+
+		/// Set by SnapToPlazaWhenReady or FlyInWhenReady until the plaza is ready.
+		PendingArrival m_pendingArrival = PendingArrival::None;
+
+		/// Latched when a deferred fly-in starts, until ConsumeDeferredFlightStarted.
+		bool m_deferredFlightStarted = false;
 
 		/// Duration of the push-in, or 0 while there is none.
 		float m_pushInSeconds = 0.0f;
