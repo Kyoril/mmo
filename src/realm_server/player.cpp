@@ -169,6 +169,7 @@ namespace mmo
 
 					// Copy character view data
 					strongThis->m_characterViews.clear();
+					strongThis->m_characterOrder.clear();
 					for (auto &charView : result.value())
 					{
 						// Resolve display id from race/class (TODO: Maybe do this somewhere else or differently? This seems like a wrong place to do this, but it works :/)
@@ -178,6 +179,7 @@ namespace mmo
 						}
 
 						strongThis->m_characterViews[charView.GetGuid()] = charView;
+						strongThis->m_characterOrder.push_back(charView.GetGuid());
 					}
 				}
 
@@ -856,6 +858,14 @@ namespace mmo
 				WLOG("Received an invalid character order from account 0x" << std::hex << m_accountId);
 				return PacketParseResult::Pass;
 			}
+
+			if (orderedGuids == m_characterOrder)
+			{
+				// Already the stored order: nothing to write.
+				return PacketParseResult::Pass;
+			}
+
+			m_characterOrder = orderedGuids;
 		}
 
 		const uint64 accountId = m_accountId;

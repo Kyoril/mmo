@@ -535,6 +535,10 @@ namespace mmo
 		std::mutex m_charViewMutex;
 		std::map<uint64, CharacterView> m_characterViews;
 
+		/// Character guids in the roster order last sent with CharEnum or last saved by
+		/// OnSetCharacterOrder, so an unchanged order is not written again. Guarded by m_charViewMutex.
+		std::vector<uint64> m_characterOrder;
+
 		std::weak_ptr<World> m_world;
 
 		std::optional<CharacterData> m_characterData;
