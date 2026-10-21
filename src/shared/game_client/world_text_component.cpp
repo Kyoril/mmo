@@ -161,9 +161,7 @@ void WorldTextComponent::SetFontColor(const Color& color)
 		std::vector<VertexStruct> vertices;
 		vertices.reserve(m_text.size() * 6);  // 6 verts per glyph
 
-		// Decide how big or small you want the text to be.
-		// E.g. 0.01f if you are in "world" space units.
-		constexpr float scale = 0.005f;
+		constexpr float scale = WorldUnitsPerFontPixel;
 
 		// Start drawing at some "anchor" point
 		// (You can make this your baseline or top-left; adjust as needed.)

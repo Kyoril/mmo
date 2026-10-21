@@ -7,6 +7,7 @@
 #include "log/default_log_levels.h"
 #include "nav_mesh/map.h"
 
+#include <cmath>
 #include <limits>
 #include <sstream>
 
@@ -16,6 +17,10 @@ namespace mmo
 {
 	namespace
 	{
+		/// How far above or below the requested target a path may end and still count as
+		/// reaching it. Steps and slopes stay well under this; a storey does not.
+		constexpr float MaxPathEndHeightGap = 3.0f;
+
 		std::string ToLogPath(const fs::path& path)
 		{
 			return path.lexically_normal().generic_string();
@@ -230,6 +235,18 @@ namespace mmo
 		if (result.points.size() < 2)
 		{
 			return FailPath(mapId, std::move(mapDirectory), "invalid_path", "phase=find_path status=malformed_path point_count=" + std::to_string(result.points.size()), false);
+		}
+
+		// A partial path ends at the reachable point closest to the target, and for a target on
+		// another level - a rat in a closed-off cellar - that is the spot on the floor right above
+		// it. Following it put bots on top of what they meant to fight, and in plan they were
+		// standing on it. Falling short on the same level is still worth walking; arriving on the
+		// wrong floor is not a path to the target at all.
+		const float endHeightGap = std::abs(result.points.back().y - end.y);
+		if (endHeightGap > MaxPathEndHeightGap)
+		{
+			return FailPath(mapId, std::move(mapDirectory), "other_level",
+				"phase=find_path status=ends_on_other_level height_gap=" + std::to_string(endHeightGap), false);
 		}
 
 		result.success = true;

@@ -15,6 +15,11 @@ namespace mmo
 	/// standing slightly too far makes every swing fail with an out-of-range error.
 	constexpr float BotMeleeRange = 3.0f;
 
+	/// Height difference up to which a target in melee range counts as reachable. Generous for
+	/// slopes and stairs, well under one storey: a target above or below a floor is not in reach,
+	/// however close it is in plan.
+	constexpr float BotMeleeHeightTolerance = 2.5f;
+
 	/// How close the bot has to get to a grind spot before it stops travelling and starts
 	/// looking around. Well inside the range at which the server keeps units visible, so that
 	/// the object manager already knows about the creatures when the bot arrives.

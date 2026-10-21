@@ -3,10 +3,17 @@
 #include "swarm_host.h"
 
 #include "bot_ai/strategies/grind_strategy.h"
+#include "bot_ai/strategies/economy_strategy.h"
+#include "bot_ai/strategies/party_strategy.h"
+#include "bot_ai/strategies/progression_strategy.h"
+#include "bot_ai/strategies/support_strategy.h"
+#include "bot_chat/anthropic_chat_model.h"
+#include "bot_chat/offline_chat_model.h"
 #include "bot_core/bot_movement_controller.h"
 #include "bot_core/io_poll.h"
 #include "bot_core/bot_realm_connector.h"
 #include "bot_core/bot_unit.h"
+#include "game/group.h"
 
 #include "base/clock.h"
 
@@ -15,6 +22,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <thread>
 #include <utility>
 
@@ -41,6 +52,14 @@ namespace mmo
 		/// character creation on first login plus a busy realm is several seconds, and the cost of
 		/// being wrong is a needless reconnect rather than a lost bot.
 		constexpr GameTime WorldEntryTimeoutMs = 60000;
+
+		/// How long a chat line waits for its sender's name before it is dropped.
+		constexpr GameTime ChatNameTimeoutMs = 10000;
+
+		/// How often each bot looks around for real players. Seeing one is what allows bots to
+		/// start conversations; without anyone around, unprompted chat would be spent on bots.
+		constexpr GameTime HumanScanIntervalMs = 10000;
+		constexpr float HumanScanRadius = 60.0f;
 	}
 
 	SwarmHost::SwarmHost(SwarmSettings settings)
@@ -67,10 +86,32 @@ namespace mmo
 		if (m_settings.playerFactionTemplate != 0)
 		{
 			m_grindSpots.Build(*project, m_settings.playerFactionTemplate);
+			m_npcs.Build(*project, m_settings.playerFactionTemplate);
 			m_grindSpotsBuilt = true;
 		}
 
 		RegisterGrindStrategies(m_registry);
+		RegisterPartyStrategies(m_registry);
+		RegisterEconomyStrategies(m_registry);
+		RegisterProgressionStrategies(m_registry);
+		RegisterSupportStrategies(m_registry);
+
+		// Behaviour data next to the game data: data/bots beside data/editor.
+		const std::filesystem::path botData = m_navService->GetProjectDataPath().parent_path().parent_path() / "bots";
+		const std::filesystem::path talentBuilds = botData / "talent_builds.json";
+		if (m_talentBuilds.Load(talentBuilds.string()))
+		{
+			ILOG("Loaded " << m_talentBuilds.GetCount() << " talent builds from " << talentBuilds.string());
+		}
+		else
+		{
+			WLOG("No talent builds at " << talentBuilds.string() << "; bots will not spend talent points");
+		}
+
+		if (m_settings.chatEnabled && !SetupChat(*project))
+		{
+			return false;
+		}
 
 		for (const std::string& reference : m_registry.FindDanglingReferences())
 		{
@@ -91,9 +132,11 @@ namespace mmo
 		// others were provisioned against - and those accounts still exist on the login server.
 		if (m_roster.size() < m_settings.botCount)
 		{
+			// Every playable class, round-robin. Passing 1 here once made the whole swarm mages.
+			const auto classCount = static_cast<uint32>(project->classes.getTemplates().entry_size());
 			const std::vector<BotRosterEntry> full = BuildRoster(m_settings.botCount,
 				m_settings.accountPrefix, m_settings.accountPassword,
-				m_settings.minLevel, m_settings.maxLevel, 1);
+				m_settings.minLevel, m_settings.maxLevel, classCount);
 
 			for (std::size_t index = m_roster.size(); index < full.size(); ++index)
 			{
@@ -146,6 +189,15 @@ namespace mmo
 			bot->session = std::make_unique<BotSession>(m_io, m_navService, std::move(config));
 			bot->brain = std::make_unique<BotBrain>(*bot->session, m_registry, entry.index);
 			bot->brain->SetGrindSpots(&m_grindSpots);
+			bot->brain->SetNpcIndex(&m_npcs);
+			bot->brain->SetGrindClaims(&m_grindClaims);
+			bot->brain->SetRole(entry.role, &m_talentBuilds);
+
+			if (m_chatDirector)
+			{
+				bot->chat = std::make_unique<SwarmChatParticipant>(*bot->session, *bot->brain, bot->roster, m_navService->GetProject());
+				m_chatDirector->AddBot(entry.index, *bot->chat, entry.seed ^ 0x5bd1e995u);
+			}
 
 			WireBot(*bot);
 			m_bots.push_back(std::move(bot));
@@ -169,6 +221,10 @@ namespace mmo
 				if (to == BotAiState::Dead)
 				{
 					++m_telemetry.GetCounters().deaths;
+					if (m_chatDirector)
+					{
+						m_chatDirector->NoteEvent(index, "you just died", GetAsyncTimeMs());
+					}
 				}
 
 				m_telemetry.Event(index, "state_change",
@@ -176,9 +232,14 @@ namespace mmo
 			}));
 
 		bot.connections.emplace_back(bot.brain->TargetKilled.connect(
-			[this, index](const uint64 guid)
+			[this, index, botPtr = &bot](const uint64 guid)
 			{
 				++m_telemetry.GetCounters().kills;
+				if (m_chatDirector)
+				{
+					const BotUnit* victim = botPtr->session->GetContext().GetUnit(guid);
+					m_chatDirector->NoteKill(index, victim ? victim->GetName() : std::string(), GetAsyncTimeMs());
+				}
 				m_telemetry.Event(index, "kill", { { "target", guid } });
 			}));
 
@@ -214,6 +275,65 @@ namespace mmo
 			{
 				++m_telemetry.GetCounters().swingErrors[static_cast<uint32>(event)];
 				m_telemetry.Event(index, "swing_error", { { "event", static_cast<uint32>(event) } });
+			}));
+
+		if (m_chatDirector)
+		{
+			bot.connections.emplace_back(bot.session->GetRealm().ChatMessageReceived.connect(
+				[this, botPtr = &bot](const BotChatMessage& message)
+				{
+					OnBotChat(*botPtr, message);
+				}));
+
+			bot.connections.emplace_back(bot.session->GetRealm().PartyInvitationReceived.connect(
+				[this, botPtr = &bot](const std::string& inviter)
+				{
+					// A player who invites a bot it was chatting with expects it to join; one that
+					// never answers is the giveaway. Bots inviting bots are turned down, as nothing
+					// in the swarm asks for bot parties.
+					if (m_chatDirector->IsBotName(inviter))
+					{
+						botPtr->session->GetRealm().DeclinePartyInvitation();
+						return;
+					}
+
+					botPtr->pendingInviter = inviter;
+					botPtr->acceptInviteAtMs = GetAsyncTimeMs()
+						+ std::uniform_int_distribution<GameTime>(2000, 6000)(m_chatRng);
+				}));
+
+			bot.connections.emplace_back(bot.session->GetRealm().NameResolved.connect(
+				[this, botPtr = &bot](const uint64 guid, const std::string& name)
+				{
+					auto& waiting = botPtr->chatAwaitingName;
+					for (auto it = waiting.begin(); it != waiting.end();)
+					{
+						if (it->first.senderGuid == guid)
+						{
+							const BotChatMessage message = it->first;
+							it = waiting.erase(it);
+							DeliverChat(*botPtr, message, name);
+						}
+						else
+						{
+							++it;
+						}
+					}
+				}));
+		}
+
+		bot.connections.emplace_back(bot.session->GetRealm().LootOpened.connect(
+			[this, index](const BotLootWindow& window)
+			{
+				++m_telemetry.GetCounters().lootWindows;
+				m_telemetry.GetCounters().lootedItems += static_cast<uint32>(window.items.size());
+				m_telemetry.Event(index, "loot", { { "money", window.money }, { "items", window.items.size() } });
+			}));
+
+		bot.connections.emplace_back(bot.session->GetRealm().InventoryErrorReceived.connect(
+			[this, index](const uint8 error)
+			{
+				m_telemetry.Event(index, "inventory_error", { { "error", error } });
 			}));
 
 		bot.connections.emplace_back(bot.session->GetMovementController().MovementStarted.connect(
@@ -294,7 +414,9 @@ namespace mmo
 		// produces an empty index and a swarm that silently never fights anything.
 		m_settings.playerFactionTemplate = self->GetFactionTemplate();
 		m_grindSpots.Build(*project, m_settings.playerFactionTemplate);
+		m_npcs.Build(*project, m_settings.playerFactionTemplate);
 		m_grindSpotsBuilt = true;
+		ILOG("Bots know " << m_grindSpots.GetSpotCount() << " grind spots and " << m_npcs.GetVendorCount() << " vendors");
 
 		if (m_grindSpots.GetSpotCount() == 0)
 		{
@@ -312,6 +434,9 @@ namespace mmo
 
 		bot.brain->Reset();
 
+		bot.generalJoinRequested = false;
+		m_botGuids.insert(bot.session->GetContext().GetSelectedCharacterGuid());
+
 		if (m_settings.applyLevelRoll && !bot.levelApplied && bot.roster.targetLevel > 1)
 		{
 			// Levelling up front rather than starting everyone at one is what puts the whole
@@ -319,6 +444,28 @@ namespace mmo
 			const uint32 levels = bot.roster.targetLevel - 1;
 			bot.session->GetRealm().CheatLevelUp(static_cast<uint8>(std::min<uint32>(levels, 255)));
 			bot.levelApplied = true;
+		}
+
+		if (m_settings.debugFillBags > 0 && m_debugJunkItem == 0)
+		{
+			// The first grey item with a price: something a vendor takes and nothing else wants.
+			const auto& items = m_navService->GetProject()->items.getTemplates();
+			for (int i = 0; i < items.entry_size() && m_debugJunkItem == 0; ++i)
+			{
+				const proto::ItemEntry& item = items.entry(i);
+				if (item.quality() == 0 && item.sellprice() > 0 && item.maxstack() <= 1)
+				{
+					m_debugJunkItem = item.id();
+				}
+			}
+		}
+
+		if (m_settings.debugFillBags > 0 && m_debugJunkItem != 0)
+		{
+			for (uint32 i = 0; i < m_settings.debugFillBags; ++i)
+			{
+				bot.session->GetRealm().CheatAddItem(m_debugJunkItem, 1);
+			}
 		}
 	}
 
@@ -463,12 +610,258 @@ namespace mmo
 		{
 			++m_telemetry.GetCounters().levelUps;
 			m_telemetry.Event(bot.roster.index, "level_up", { { "level", level } });
+			if (m_chatDirector)
+			{
+				m_chatDirector->NoteEvent(bot.roster.index, "you just reached level " + std::to_string(level), nowMs);
+			}
 		}
 
 		bot.lastKnownLevel = level;
 
+		UpdatePartyFollow(bot);
 		bot.brain->Update(nowMs);
+
+		// A status line a minute: enough to see a bot progress (levels, talents, money, the
+		// spells its rotation found) without reading its every action.
+		if (nowMs >= bot.nextStatusMs && self)
+		{
+			bot.nextStatusMs = nowMs + 60 * 1000;
+			const BotRotation& rotation = bot.brain->GetContext().GetRotation();
+			m_telemetry.Event(bot.roster.index, "status",
+				{ { "level", self->GetLevel() }, { "class", self->GetClassId() }, { "role", bot.roster.role },
+				  { "talent_points", self->GetTalentPoints() }, { "money", self->GetMoney() },
+				  { "spells", rotation.GetSpells().size() }, { "heals", rotation.GetHeals().size() },
+				  { "buffs", rotation.GetBuffs().size() }, { "free_slots", bot.brain->GetContext().GetPerception().freeBagSlots } });
+		}
 		CheckWatchdog(bot, nowMs);
+
+		if (m_chatDirector)
+		{
+			UpdateBotChat(bot, nowMs);
+		}
+	}
+
+	void SwarmHost::UpdatePartyFollow(Bot& bot)
+	{
+		BotRealmConnector& realm = bot.session->GetRealm();
+		const uint64 selfGuid = bot.session->GetContext().GetSelectedCharacterGuid();
+		// Only an online player is worth following. A group outlives its members' sessions, and a
+		// bot following someone who logged off has nowhere to go and stands there all day.
+		const auto isPlayer = [this, selfGuid, &realm, &bot](const uint64 guid)
+		{
+			if (guid == 0 || guid == selfGuid || m_botGuids.count(guid) != 0)
+			{
+				return false;
+			}
+
+			const BotPartyMember* member = realm.GetPartyMemberByGuid(guid);
+			if (!member || (member->status & group_member_status::Online) == 0)
+			{
+				return false;
+			}
+
+			// ...and only one the bot can find: in sight, or with a position the realm reported.
+			// A party member on another map has neither.
+			return member->hasPosition || bot.session->GetContext().GetUnit(guid) != nullptr;
+		};
+
+		// Follow a real player: the party leader if that is one, otherwise the first one in the
+		// party. A party of bots alone has nobody worth following, so they keep grinding.
+		uint64 leader = 0;
+		if (realm.IsInParty())
+		{
+			if (isPlayer(realm.GetPartyLeaderGuid()))
+			{
+				leader = realm.GetPartyLeaderGuid();
+			}
+			else
+			{
+				for (const uint64 guid : realm.GetPartyMemberGuids())
+				{
+					if (isPlayer(guid))
+					{
+						leader = guid;
+						break;
+					}
+				}
+			}
+		}
+
+		if (bot.brain->IsFollowing() != (leader != 0))
+		{
+			m_telemetry.Event(bot.roster.index, leader != 0 ? "party_follow_start" : "party_follow_stop",
+				{ { "leader", leader } });
+		}
+
+		bot.brain->SetFollowTarget(leader);
+	}
+
+	bool SwarmHost::SetupChat(const proto::Project& project)
+	{
+		ChatPricing pricing;
+		if (!LookupChatPricing(m_settings.chatModel, pricing))
+		{
+			ELOG("Bot chat: no known price for model '" << m_settings.chatModel
+				<< "', so its spend could not be capped. Use a model listed in bot_chat/chat_budget.cpp.");
+			return false;
+		}
+
+		if (m_settings.chatOffline)
+		{
+			// The canned model costs nothing; it must not use up the real ledger's hourly cap either.
+			m_chatBudget = std::make_unique<ChatBudget>(m_settings.chatLimits, pricing, std::string());
+			m_chatModel = std::make_unique<OfflineChatModel>(0xC0FFEEu);
+		}
+		else
+		{
+			if (m_settings.chatApiKey.empty())
+			{
+				ELOG("Bot chat: neither " << ChatApiKeyVariable << " nor ANTHROPIC_API_KEY is set. Set one, or pass --chat-offline to try chat without the model.");
+				return false;
+			}
+
+			if (m_settings.chatLedgerPath.empty())
+			{
+				ELOG("Bot chat: a spend ledger path is required, or the caps would reset with every restart");
+				return false;
+			}
+
+			m_chatBudget = std::make_unique<ChatBudget>(m_settings.chatLimits, pricing, m_settings.chatLedgerPath);
+			m_chatModel = std::make_unique<AnthropicChatModel>(m_settings.chatApiKey, m_settings.chatModel);
+		}
+
+		ChatDirectorSettings settings;
+		settings.seed = 0xA11CE5u;
+		settings.gameFacts = BuildGameFacts(project);
+
+		if (!m_settings.chatFactsPath.empty())
+		{
+			std::ifstream file(m_settings.chatFactsPath);
+			if (!file)
+			{
+				ELOG("Bot chat: cannot read facts file " << m_settings.chatFactsPath);
+				return false;
+			}
+
+			settings.gameFacts += '\n';
+			settings.gameFacts.append(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+		}
+
+		m_chatDirector = std::make_unique<ChatDirector>(settings, *m_chatModel, *m_chatBudget,
+			[]() { return std::time(nullptr); });
+
+		m_chatConnections.emplace_back(m_chatDirector->ChatSent.connect(
+			[this](const uint32 botIndex, const ChatType type, const std::string& target, const std::string& text)
+			{
+				m_telemetry.Event(botIndex, "chat_out",
+					{ { "chat_type", static_cast<uint32>(type) }, { "target", target }, { "text", text } });
+			}));
+
+		m_chatConnections.emplace_back(m_chatDirector->InviteSent.connect(
+			[this](const uint32 botIndex, const std::string& name)
+			{
+				m_telemetry.Event(botIndex, "party_invite", { { "invitee", name } });
+			}));
+
+		m_chatConnections.emplace_back(m_chatDirector->ReplyDiscarded.connect(
+			[this](const uint32 botIndex, const std::string& rawText)
+			{
+				m_telemetry.Event(botIndex, "chat_discarded", { { "raw", rawText.substr(0, 300) } });
+			}));
+
+		m_chatConnections.emplace_back(m_chatDirector->RequestFailed.connect(
+			[this](const uint32 botIndex, const std::string& reason)
+			{
+				m_telemetry.Event(botIndex, "chat_error", { { "reason", reason } });
+			}));
+
+		ILOG("Bot chat enabled: model " << m_settings.chatModel << (m_settings.chatOffline ? " (offline, canned lines)" : "")
+			<< ", caps $" << m_settings.chatLimits.dailyUsd << "/day, $" << m_settings.chatLimits.monthlyUsd
+			<< "/month, " << m_settings.chatLimits.maxRequestsPerHour << " requests/hour; spent today so far $"
+			<< m_chatBudget->GetSpentToday());
+		return true;
+	}
+
+	void SwarmHost::OnBotChat(Bot& bot, const BotChatMessage& message)
+	{
+		if (message.senderGuid == 0 || message.type == ChatType::System || message.type == ChatType::TextEmote)
+		{
+			return;
+		}
+
+		BotRealmConnector& realm = bot.session->GetRealm();
+		if (const std::string* name = realm.GetCachedName(message.senderGuid))
+		{
+			DeliverChat(bot, message, *name);
+			return;
+		}
+
+		bot.chatAwaitingName.emplace_back(message, GetAsyncTimeMs());
+		realm.QueryName(message.senderGuid);
+	}
+
+	void SwarmHost::DeliverChat(Bot& bot, const BotChatMessage& message, const std::string& senderName)
+	{
+		++m_telemetry.GetCounters().chatLinesHeard;
+
+		// Only lines from players: bot chatter is already in the stream as chat_out, and every
+		// bot hearing every bot would multiply the stream by the population.
+		if (!m_chatDirector->IsBotName(senderName))
+		{
+			m_telemetry.Event(bot.roster.index, "chat_in",
+				{ { "chat_type", static_cast<uint32>(message.type) }, { "sender", senderName },
+				  { "channel", message.channelId }, { "text", message.message } });
+		}
+
+		m_chatDirector->OnChatReceived(bot.roster.index, message.type, senderName, message.message,
+			message.channelId, GetAsyncTimeMs());
+	}
+
+	void SwarmHost::UpdateBotChat(Bot& bot, const GameTime nowMs)
+	{
+		BotRealmConnector& realm = bot.session->GetRealm();
+
+		// Characters are normally put into General on login. One that is not joins it, once per
+		// session; a realm without a General channel answers DoesNotExist and that is the end of it.
+		if (!bot.generalJoinRequested && realm.HasChatChannelList() && realm.FindChatChannelId(GeneralChannelName) == 0)
+		{
+			realm.JoinChatChannel(GeneralChannelName);
+			bot.generalJoinRequested = true;
+		}
+
+		if (bot.acceptInviteAtMs != 0 && nowMs >= bot.acceptInviteAtMs)
+		{
+			bot.acceptInviteAtMs = 0;
+			if (realm.HasPendingPartyInvitation())
+			{
+				realm.AcceptPartyInvitation();
+				m_chatDirector->NoteEvent(bot.roster.index, "you joined " + bot.pendingInviter + "'s group", nowMs);
+				m_telemetry.Event(bot.roster.index, "party_accept", { { "inviter", bot.pendingInviter } });
+			}
+		}
+
+		auto& waiting = bot.chatAwaitingName;
+		waiting.erase(std::remove_if(waiting.begin(), waiting.end(), [nowMs](const auto& entry)
+			{
+				// Not nowMs - entry.second: a line read during this frame's poll is stamped later
+				// than the frame start, and the subtraction would wrap and drop it at once.
+				return nowMs > entry.second + ChatNameTimeoutMs;
+			}), waiting.end());
+
+		if (nowMs < bot.nextHumanScanMs)
+		{
+			return;
+		}
+
+		bot.nextHumanScanMs = nowMs + HumanScanIntervalMs;
+		for (const BotUnit* player : bot.session->GetContext().GetNearbyPlayers(HumanScanRadius))
+		{
+			if (m_botGuids.count(player->GetGuid()) == 0)
+			{
+				m_chatDirector->NoteHumanNearby(bot.roster.index, nowMs);
+				break;
+			}
+		}
 	}
 
 	void SwarmHost::Run()
@@ -514,6 +907,11 @@ namespace mmo
 				}
 			}
 
+			if (m_chatDirector)
+			{
+				m_chatDirector->Update(frameStartMs);
+			}
+
 			SwarmCounters& counters = m_telemetry.GetCounters();
 			counters.peakOnline = std::max(counters.peakOnline, online);
 
@@ -525,6 +923,20 @@ namespace mmo
 		}
 
 		ILOG("Swarm stopping, shutting down " << m_bots.size() << " sessions");
+
+		if (m_chatModel)
+		{
+			// Joins the worker. A request in flight is abandoned; its reservation stays charged.
+			m_chatModel->Stop();
+
+			const ChatDirectorStats& chat = m_chatDirector->GetStats();
+			SwarmCounters& counters = m_telemetry.GetCounters();
+			counters.chatLinesSent = chat.linesSent;
+			counters.chatRequests = chat.requestsSubmitted;
+			counters.chatBudgetDenied = chat.budgetDenied;
+			counters.chatModelErrors = chat.modelErrors;
+			counters.chatSpentTodayUsd = m_chatBudget->GetSpentToday();
+		}
 
 		for (auto& bot : m_bots)
 		{

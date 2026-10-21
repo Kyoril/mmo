@@ -234,6 +234,26 @@ jobs:
           name: gate-summary
           path: gate
 
+      # Unstripped login/realm/world ELFs from the image builds, laid out as the symbol store
+      # expects (<module>.elf/<commit>/<module>), so a Linux crash report of this release can be
+      # symbolicated: tools/fetch_server_symbols.ps1 -Commit <sha> unpacks it into artifacts/symbols.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: server-symbols-*
+          path: server-symbols-raw
+          merge-multiple: true
+
+      - name: Pack server symbols
+        run: |
+          mkdir -p server-symbols
+          for module in login_server realm_server world_server; do
+            test -f "server-symbols-raw/$module" || { echo "::error::missing unstripped $module"; exit 1; }
+            mkdir -p "server-symbols/$module.elf/$COMMIT"
+            mv "server-symbols-raw/$module" "server-symbols/$module.elf/$COMMIT/$module"
+          done
+          (cd server-symbols && python3 -m zipfile -c ../dist/server-symbols.zip login_server.elf realm_server.elf world_server.elf)
+          ls -la dist/server-symbols.zip
+
       # Claude Code writes the notes with the maintainer's subscription token (`claude setup-token`,
       # repository secret CLAUDE_CODE_OAUTH_TOKEN); no paid API key. Never fails the release:
       # without Claude, or without the data names, the notes fall back to a generic line
@@ -267,4 +287,4 @@ jobs:
           # A forced re-release of the same commit has the same version.
           if gh release view "$tag" > /dev/null 2>&1; then tag="${tag}-$(date -u +%Y%m%d%H%M)"; fi
           gh release create "$tag" --target "$COMMIT" --prerelease --title "Patch ${VERSION}" --notes-file notes.md \
-            dist/client-bin.zip dist/symbols.zip dist/release.json
+            dist/client-bin.zip dist/symbols.zip dist/server-symbols.zip dist/release.json

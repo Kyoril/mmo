@@ -7,6 +7,7 @@
 #include "binary_io/reader.h"
 #include "binary_io/stream_source.h"
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 
 namespace mmo
 {
@@ -18,6 +19,7 @@ namespace mmo
 
 	PropKitPtr PropKitManager::Load(const String& path)
 	{
+		PROFILE_SCOPE("Load: PropKit");
 		const auto it = m_kits.find(path);
 		if (it != m_kits.end())
 		{

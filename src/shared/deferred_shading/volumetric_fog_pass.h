@@ -55,6 +55,8 @@ namespace mmo
 		/// @param gbufferNormalRT G-Buffer normal target (a = radial depth).
 		/// @param output Full-resolution target receiving the fogged scene. Must differ from sceneColor.
 		/// @param cascadeShadowMaps The cascade depth maps.
+		/// @param fogShadowMap The fog's own coarse shadow map over its whole range, or null to sample the cascades.
+		/// @param fogShadowViewProj View-projection fogShadowMap was rendered with.
 		/// @param shadowBuffer The ShadowBuffer cbuffer already filled for this frame.
 		/// @param cameraBuffer The scene camera cbuffer already refreshed for this camera.
 		/// @param lights The deferred renderer's light buffer (ShaderLight entries).
@@ -63,7 +65,8 @@ namespace mmo
 		/// @param quad The fullscreen quad vertex buffer.
 		/// @param fullscreenVs The pass-through fullscreen vertex shader.
 		void Render(Camera& camera, const WindState& wind, RenderTexture& sceneColor, RenderTexture& gbufferNormalRT, RenderTexture& output,
-			const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, ConstantBuffer& shadowBuffer,
+			const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, RenderTexture* fogShadowMap, const Matrix4& fogShadowViewProj,
+			ConstantBuffer& shadowBuffer,
 			ConstantBuffer& cameraBuffer, StructuredBuffer& lights, uint32 lightCount, SamplerState& shadowSampler, VertexBuffer& quad,
 			ShaderBase& fullscreenVs);
 
@@ -104,13 +107,29 @@ namespace mmo
 
 		VolumeTexturePtr m_noiseVolume;
 
+		/// @brief BlueNoiseResolution^2 x 1 blue noise rank map: per-froxel jitter of the temporal sun modes.
+		VolumeTexturePtr m_blueNoise;
+
 		/// @brief Inject step's output. The temporal step is its only reader, so once that step has run
 		///        this frame the integrate step reuses it as its own output volume instead of a fourth
 		///        allocation.
 		VolumeTexturePtr m_injectVolume;
 		std::array<VolumeTexturePtr, 2> m_historyVolumes;
 
-		/// @brief Index into m_historyVolumes written this frame; the other one holds last frame.
+		/// @brief The sun's shadowed scattering (rgb = scattering coefficient x sun visibility), kept apart
+		///        from m_injectVolume/m_historyVolumes WITHOUT the phase function: the phase depends on the
+		///        view direction, so baking it in let the history carry the sun glow and shafts as seen from
+		///        where the camera was ~10 frames ago - they visibly trailed every camera move. The integrate
+		///        step applies the phase for the current view rays. It has no history: the inject step box-filters
+		///        the sun's shadow over each cell on a fixed pattern, so the value is stable without one.
+		VolumeTexturePtr m_injectSunVolume;
+		std::array<VolumeTexturePtr, 2> m_historySunVolumes;
+
+		/// @brief One slice, grid width x height: the farthest scene depth seen through each grid column
+		///        (CS_FogDepthTiles). Cells behind it skip the sun's shadow taps.
+		VolumeTexturePtr m_columnFarDepth;
+
+		/// @brief Index into m_historyVolumes written this frame; the other holds last frame.
 		uint32 m_historyIndex = 0;
 		bool m_historyValid = false;
 		uint64 m_frameIndex = 0;
@@ -133,6 +152,7 @@ namespace mmo
 		Vector3 m_prevCameraPosition;
 		Vector3 m_prevCameraForward;
 		float m_prevRange = 0.0f;
+		uint32 m_prevSunMode = 0;
 
 		ConstantBufferPtr m_fogBuffer;
 
@@ -145,6 +165,7 @@ namespace mmo
 		/// @brief Number of valid entries in m_fogVolumeBuffer.
 		uint32 m_fogVolumeCount = 0;
 
+		ShaderPtr m_depthTilesCs;
 		ShaderPtr m_injectCs;
 		ShaderPtr m_temporalCs;
 		ShaderPtr m_integrateCs;

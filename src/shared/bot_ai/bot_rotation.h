@@ -38,7 +38,8 @@ namespace mmo
 		uint32 castTimeMs { 0 };
 
 		/// Rough expected damage, used only to order the rotation. Comparing spells is all this
-		/// has to do, so the estimate does not have to match what the server rolls.
+		/// has to do, so the estimate does not have to match what the server rolls. For heals,
+		/// the rough amount healed.
 		float estimatedDamage { 0.0f };
 	};
 
@@ -64,7 +65,16 @@ namespace mmo
 		/// Id of the spell SelectSpellEntry would pick, or 0.
 		[[nodiscard]] uint32 SelectSpell(const BotContext& world, float targetDistance) const;
 
+		/// The biggest heal that is off cooldown, affordable and in range of a target at the given
+		/// distance (0 for the bot itself), or nullptr.
+		[[nodiscard]] const BotRotationSpell* SelectHeal(const BotContext& world, float targetDistance) const;
+
+		/// A self-buff the bot knows, can afford and does not wear, or nullptr.
+		[[nodiscard]] const BotRotationSpell* SelectMissingBuff(const BotContext& world) const;
+
 		[[nodiscard]] const std::vector<BotRotationSpell>& GetSpells() const { return m_spells; }
+		[[nodiscard]] const std::vector<BotRotationSpell>& GetHeals() const { return m_heals; }
+		[[nodiscard]] const std::vector<BotRotationSpell>& GetBuffs() const { return m_buffs; }
 		[[nodiscard]] bool IsEmpty() const { return m_spells.empty(); }
 
 		/// Number of known spells the rotation was built from. The cheapest way to notice that
@@ -72,13 +82,26 @@ namespace mmo
 		[[nodiscard]] std::size_t GetSourceSpellCount() const { return m_sourceSpellCount; }
 
 	private:
+		[[nodiscard]] bool IsUsable(const BotContext& world, const BotRotationSpell& spell, float targetDistance) const;
+
+	private:
 		std::vector<BotRotationSpell> m_spells;
+		std::vector<BotRotationSpell> m_heals;
+		std::vector<BotRotationSpell> m_buffs;
 		std::size_t m_sourceSpellCount { 0 };
 	};
 
 	/// Whether this spell is something a bot would cast at an enemy: it damages, it is not
 	/// passive, and it is not a beneficial effect aimed at a friend.
 	[[nodiscard]] bool IsOffensiveBotSpell(const proto::SpellEntry& spell);
+
+	/// Whether a bot would cast this spell to heal: positive, not passive, heals and deals no damage.
+	[[nodiscard]] bool IsHealBotSpell(const proto::SpellEntry& spell);
+
+	/// Whether a bot would keep this spell up on itself: a positive, non-passive aura lasting at
+	/// least a minute, on a short or no cooldown, that does nothing else - no heal, damage, summon,
+	/// class change or teaching a spell.
+	[[nodiscard]] bool IsSelfBuffBotSpell(const proto::SpellEntry& spell);
 
 	/// Rough expected damage of a spell, for ordering only.
 	[[nodiscard]] float EstimateBotSpellDamage(const proto::SpellEntry& spell);

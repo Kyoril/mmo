@@ -158,6 +158,8 @@ namespace mmo
 		mutable std::string m_maskText;
 		/// Cursor index.
 		int32 m_cursor;
+		/// First half of a UTF-16 surrogate pair typed via OnKeyChar, 0 if none is pending.
+		uint16 m_pendingHighSurrogate{ 0 };
 
 		HorizontalAlignment m_horzAlign;
 

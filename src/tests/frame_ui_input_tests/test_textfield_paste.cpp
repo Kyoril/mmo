@@ -90,3 +90,27 @@ TEST_CASE("A single line text field rejects tabs and line breaks but keeps them 
 	tabField->OnKeyChar('\t');
 	CHECK(tabField->GetText() == "abc\t");
 }
+
+TEST_CASE("Typed UTF-16 surrogate pairs become one valid UTF-8 character", "[frame_input][textfield_paste]")
+{
+	TextFieldFixture fixture;
+
+	const auto textField = std::make_shared<TextField>("TextField", "SurrogateTestField");
+	textField->SetText("gg");
+
+	// U+1F600 arrives from WM_CHAR as D83D DE00
+	textField->OnKeyChar(0xD83D);
+	CHECK(textField->GetText() == "gg");
+	textField->OnKeyChar(0xDE00);
+	CHECK(textField->GetText() == "gg\xF0\x9F\x98\x80");
+
+	// Half a pair is dropped instead of being encoded as an invalid three byte sequence
+	textField->SetText("a");
+	textField->OnKeyChar(0xDE00);
+	CHECK(textField->GetText() == "a");
+	textField->OnKeyChar(0xD83D);
+	textField->OnKeyChar('b');
+	CHECK(textField->GetText() == "ab");
+	textField->OnKeyChar(0xDE00);
+	CHECK(textField->GetText() == "ab");
+}

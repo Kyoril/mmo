@@ -509,8 +509,10 @@ namespace mmo
 		/// changes underneath (a page streaming in, a door closing) is still picked up. Any
 		/// movement, or a failed search, falls back to a correction on every call.
 		/// @param deltaTime Seconds since the previous call.
+		/// @param referenceHeight Server-authoritative height of the unit, see CorrectGroundHeight.
+		///        Lets a unit that dropped below a floor which streamed in later climb back onto it.
 		/// @return True if the unit is grounded.
-		bool CorrectIdleGroundHeight(float deltaTime);
+		bool CorrectIdleGroundHeight(float deltaTime, std::optional<float> referenceHeight = std::nullopt);
 
 	public:
 		/// @brief Calculates velocity based on input parameters and applies friction

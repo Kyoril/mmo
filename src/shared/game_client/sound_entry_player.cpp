@@ -105,6 +105,18 @@ namespace mmo
 		return entry && entry->is_3d();
 	}
 
+	bool SoundEntryPlayer::IsEntryLooped(const uint32 soundId) const
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		return entry && entry->looped();
+	}
+
+	float SoundEntryPlayer::GetEntryMaxDistance(const uint32 soundId) const
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		return entry ? entry->max_distance() : 0.0f;
+	}
+
 	float SoundEntryPlayer::GetEntryVolume(const uint32 soundId) const
 	{
 		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);

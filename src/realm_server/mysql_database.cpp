@@ -44,6 +44,14 @@ namespace mmo
 
 	bool MySQLDatabase::Connect()
 	{
+		// READ COMMITTED, because the realm saves per-character collections as "DELETE WHERE owner,
+		// then INSERT", on several pooled connections at once. Under the default REPEATABLE READ the
+		// DELETE also gap-locks the key range up to the next character's rows, so two characters with
+		// adjacent ids saving together deadlock (1213) and one save is rolled back and lost. The only
+		// locking reads (mail, FOR UPDATE by primary key) take record locks either way, and ordering
+		// per character comes from the pool's keyed queues, not from snapshot reads.
+		m_connectionInfo.initCommand = "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED";
+
 		if (!m_connection.Connect(m_connectionInfo, true))
 		{
 			ELOG("Could not connect to the realm database");
@@ -554,7 +562,7 @@ namespace mmo
 
 		const GameTime startTime = GetAsyncTimeMs();
 
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bank_bag_slots, bind_map, bind_x, bind_y, bind_z, bind_o, last_group, mood_emote, idle_pose, sit_pose, sleep_pose FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bank_bag_slots, bind_map, bind_x, bind_y, bind_z, bind_o, last_group, mood_emote, idle_pose, sit_pose, sleep_pose, gm_flags FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -607,6 +615,7 @@ namespace mmo
 				row.GetField(index++, result.idlePoseEmote);
 				row.GetField(index++, result.sitPoseEmote);
 				row.GetField(index++, result.sleepPoseEmote);
+				row.GetField<uint8, uint16>(index++, result.gmFlags);
 
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);
@@ -2260,6 +2269,21 @@ namespace mmo
 		}
 
 		return result;
+	}
+
+	void MySQLDatabase::SetCharacterGmFlags(const uint64 characterId, const uint8 flags)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		if (!m_connection.Execute(std::format(
+			"UPDATE `characters` SET `gm_flags` = '{0}' WHERE `id` = '{1}' LIMIT 1"
+			, static_cast<uint32>(flags)
+			, characterId
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
 	}
 
 	void MySQLDatabase::SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status)

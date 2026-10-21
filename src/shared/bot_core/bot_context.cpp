@@ -43,25 +43,18 @@ namespace mmo
 
 	void BotContext::SetCurrentMapId(const uint32 mapId)
 	{
+		// Map 0 is a map like any other - "Development" on the dev realm - not "unknown". Treating
+		// it as unknown made the movement controller guess the map from whichever nav mesh offered
+		// the shortest path, and bots on map 0 walked another map's mesh: through the walls of an
+		// inn that mesh knows nothing about, and onto the floor above rats in its cellar.
 		m_currentMapId = mapId;
-		m_hasCurrentMapId = mapId != 0;
+		m_hasCurrentMapId = true;
 	}
 
 	void BotContext::UpdateCurrentMapIdFromWorldSync(const uint32 mapId)
 	{
-		if (mapId != 0)
-		{
-			SetCurrentMapId(mapId);
-			return;
-		}
-
-		if (m_hasCurrentMapId && m_currentMapId != 0)
-		{
-			return;
-		}
-
-		m_currentMapId = 0;
-		m_hasCurrentMapId = false;
+		// The world server says where the character is; there is nothing better to go by.
+		SetCurrentMapId(mapId);
 	}
 
 	void BotContext::SendChatMessage(const std::string& message, ChatType chatType, const std::string& target)

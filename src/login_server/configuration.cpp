@@ -131,6 +131,12 @@ namespace mmo
 				logFileName = log->getString("fileName", logFileName);
 				isLogFileBuffering = log->getInteger("buffering", static_cast<unsigned>(isLogFileBuffering)) != 0;
 			}
+
+			if (const Table* const crashReport = global.getTable("crashReport"))
+			{
+				crashReportEnabled = crashReport->getInteger("enabled", static_cast<unsigned>(crashReportEnabled)) != 0;
+				crashReportApiUrl = crashReport->getString("apiUrl", crashReportApiUrl);
+			}
 		}
 		catch (const sff::read::ParseException<Iterator> &e)
 		{
@@ -218,6 +224,15 @@ namespace mmo
 			log.addKey("fileName", logFileName);
 			log.addKey("buffering", isLogFileBuffering);
 			log.Finish();
+		}
+
+		global.writer.newLine();
+
+		{
+			sff::write::Table<Char> crashReport(global, "crashReport", sff::write::MultiLine);
+			crashReport.addKey("enabled", static_cast<unsigned>(crashReportEnabled));
+			crashReport.addKey("apiUrl", crashReportApiUrl);
+			crashReport.Finish();
 		}
 
 		return true;

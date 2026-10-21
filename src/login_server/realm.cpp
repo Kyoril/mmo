@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "realm.h"
+#include "base/crash_context.h"
 #include "database.h"
 #include "strand_bound_database.h"
 
@@ -95,6 +96,8 @@ namespace mmo
 
 	PacketParseResult Realm::connectionPacketReceived(auth::IncomingPacket & packet)
 	{
+		const CrashContextScope crashContext("realm packet 0x%02x from %s, realm '%s'",
+			static_cast<uint32>(packet.GetId()), m_address.c_str(), m_realmName.c_str());
 		const auto packetId = packet.GetId();
 		bool isValid = true;
 
@@ -382,6 +385,7 @@ namespace mmo
 					strongThis->m_realmName = result->name;
 					strongThis->m_realmListAddress = result->ipAddress;
 					strongThis->m_realmListPort = result->port;
+					strongThis->SetCapacity(result->capacity);
 
 					// We are NOT banned so continue
 					authResult = auth::auth_result::Success;

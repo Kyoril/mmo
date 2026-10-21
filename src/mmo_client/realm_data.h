@@ -19,5 +19,9 @@ namespace mmo
 		std::string address;
 		/// Realm port.
 		uint16 port;
+		/// Coarse population band (auth::realm_population), shown to every player.
+		uint8 population = 0;
+		/// Players connected to the realm. Only sent to game masters; auth::HiddenRealmPlayerCount otherwise.
+		uint32 playerCount = 0xFFFFFFFF;
 	};
 }

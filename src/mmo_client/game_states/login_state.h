@@ -125,5 +125,8 @@ namespace mmo
 
 		/// Whether the character list has arrived since this state was entered.
 		bool m_charListReceived = false;
+
+		/// Set on a successful login: the next realm list may auto-connect to the last used realm.
+		bool m_autoConnectToLastRealm = false;
 	};
 }

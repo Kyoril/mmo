@@ -6,6 +6,16 @@
 
 namespace mmo
 {
+	String CreatureInfo::GetSubtitle() const
+	{
+		if (subname.empty())
+		{
+			return String();
+		}
+
+		return "<" + subname + ">";
+	}
+
 	io::Writer& operator<<(io::Writer& writer, const CreatureInfo& info)
 	{
 		writer << io::write<uint64>(info.id)

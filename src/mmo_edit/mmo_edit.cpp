@@ -340,6 +340,8 @@ int main(int argc, char* arg[])
 	// recipe the default one (all render triangles) first, like Collision > Build for a fresh import.
 	// `--set-submesh-material <asset.hmsh> <submesh> <material> [...]` assigns a material to a
 	// submesh (by name, or index), saves the mesh with its collision recipe and exits.
+	// `--set-mesh-sounds <asset.hmsh> "<id>:<x>,<y>,<z>[:<volume>[:<maxDistance>]];..." [...]` replaces
+	// the mesh's looping sound emitters ("" removes them), saves it with its collision recipe and exits.
 	// `--apply-prop-kit <job.json>` writes a prop kit asset, assigns kits to world model placements
 	// and/or strips named mesh refs from a world model as the job describes, then exits (see
 	// prop_kit_job.h; log in prop_kit_job.log, exit code 1 on load or write failures).
@@ -483,6 +485,40 @@ int main(int argc, char* arg[])
 
 					allSaved = mmo::MeshEditorInstance::SetSubMeshMaterialInFile(args[j + 1], args[j + 2], args[j + 3]) && allSaved;
 					j += 3;
+				}
+
+				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--set-mesh-sounds")
+			{
+				// `--set-mesh-sounds <asset.hmsh> <spec> [...]`
+				static std::ofstream soundsLog("set_mesh_sounds.log", std::ios::out | std::ios::trunc);
+				static std::mutex soundsLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ soundsLogMutex };
+					soundsLog << entry.message << std::endl;
+				});
+
+				bool allSaved = true;
+				for (int j = 1; j < argCount; ++j)
+				{
+					if (std::string(args[j]) != "--set-mesh-sounds")
+					{
+						continue;
+					}
+
+					if (j + 2 >= argCount)
+					{
+						ELOG("--set-mesh-sounds needs <asset> <spec>");
+						allSaved = false;
+						break;
+					}
+
+					allSaved = mmo::MeshEditorInstance::SetSoundEmittersInFile(args[j + 1], args[j + 2]) && allSaved;
+					j += 2;
 				}
 
 				PostQuitMessage(allSaved ? 0 : 1);

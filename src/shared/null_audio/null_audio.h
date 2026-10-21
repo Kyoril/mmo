@@ -62,6 +62,7 @@ namespace mmo
         float GetPitch() const override;
 		void SetVolume(float volume) override;
 		float GetVolume() const override;
+		void SetPlaybackPosition(float) override {}
 	};
 
 	

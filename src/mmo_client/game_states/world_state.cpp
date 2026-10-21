@@ -29,6 +29,7 @@
 #include "game/object_type_id.h"
 
 #include <algorithm>
+#include <chrono>
 #include <vector>
 #include <zstr/zstr.hpp>
 #include <zlib.h>
@@ -37,6 +38,7 @@
 #include "systems/quest_client.h"
 #include "systems/cooldown_manager.h"
 #include "game_client/object_mgr.h"
+#include "game_client/object_update_skip.h"
 #include "game_common/projectile_target.h"
 #include "game_common/world_fog_volumes.h"
 #include "deferred_shading/fog_volume_selection.h"
@@ -85,6 +87,7 @@
 #include "frame_ui/font_mgr.h"
 #include "game/group.h"
 #include "game_client/game_world_object_c_base.h"
+#include "game_client/world_streaming_utils.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
@@ -120,6 +123,7 @@ namespace mmo
 		static const char *s_toggleTerrainDebug = "ToggleTerrainDebug";
 		static const char *s_freezeCulling = "ToggleCullingFreeze";
 		static const char *s_reload = "reload";
+		static const char *s_ambientSounds = "AmbientSounds";
 	}
 
 	namespace
@@ -166,6 +170,7 @@ namespace mmo
 		static ConsoleVar *s_contactShadowDebugVar = nullptr;
 		static ConsoleVar *s_atmosphereQualityVar = nullptr;
 		static ConsoleVar *s_volumetricFogRangeVar = nullptr;
+		static ConsoleVar *s_volumetricFogHistoryVar = nullptr;
 		static ConsoleVar *s_atmosphereDebugVar = nullptr;
 		static ConsoleVar *s_bloomQualityVar = nullptr;
 		static ConsoleVar *s_exposureVar = nullptr;
@@ -183,6 +188,7 @@ namespace mmo
 		static ConsoleVar *s_terrainLodEnabledVar = nullptr;
 		static ConsoleVar *s_terrainOcclusionCullingVar = nullptr;
 		static ConsoleVar *s_terrainFarRadiusVar = nullptr;
+		static ConsoleVar *s_streamingBudgetVar = nullptr;
 
 		static ConsoleVar *s_chatBubblesSayVar = nullptr;
 		static ConsoleVar *s_chatBubblesYellVar = nullptr;
@@ -334,6 +340,7 @@ namespace mmo
 		, m_combatSoundPlayer(m_project, soundEntryPlayer)
 		, m_zoneMusic(soundEntryPlayer, audio)
 		, m_zoneAmbience(soundEntryPlayer, audio)
+		, m_ambientSounds(soundEntryPlayer, audio)
 		, m_gameTime(gameTime)
 		, m_cache(cache)
 		, m_project(project)
@@ -374,6 +381,9 @@ namespace mmo
 	void WorldState::OnEnter()
 	{
 		LoadingScreen::Show();
+
+		// A transfer cut short by a disconnect must not swallow the next session's transfers.
+		m_transferPending = false;
 
 		// The game clock outlives the world state; it was not updated while we were out of the world
 		m_gameTime.ResetUpdateReference();
@@ -542,6 +552,7 @@ namespace mmo
 
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
+		m_ambientSounds.Clear();
 		m_unitAttachedSounds.clear();
 
 		// UpdateWaterVolume stops running once the world is left, so a low-pass applied while
@@ -1065,9 +1076,15 @@ namespace mmo
 
 		{
 			PROFILE_SCOPE("OnIdle::StreamingDispatch");
-			for (size_t i = 0; i < 20; ++i)
+
+			// Streamed content is finished here one job at a time until the frame's budget is spent.
+			// Jobs are small steps (a terrain tile, one world model resource, ...), so a budget keeps a
+			// burst of them - crossing into a town - from piling into a single frame.
+			const double budgetMs = s_streamingBudgetVar ? std::max(0.0f, s_streamingBudgetVar->GetFloatValue()) : 4.0;
+			const auto start = std::chrono::steady_clock::now();
+			while (m_dispatcher.poll_one())
 			{
-				if (!m_dispatcher.poll_one())
+				if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= budgetMs)
 				{
 					break;
 				}
@@ -1099,6 +1116,9 @@ namespace mmo
 		if (m_playerController->GetControlledUnit())
 		{
 			m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+
+			// Mesh sounds are selected around the same position the 3D listener sits at
+			m_ambientSounds.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
 		}
 
 		// Advance zone music / ambience crossfades
@@ -1616,7 +1636,7 @@ namespace mmo
 		};
 
 		const PagePosition pos = GetPagePositionFromCamera();
-		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
+		m_visibleSection = std::make_unique<LoadedPageSection>(pos, static_cast<std::size_t>(LoadedPageRadius), *this);
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
 
 		PagePosition worldSize(64, 64);
@@ -1699,6 +1719,7 @@ namespace mmo
 
 	void WorldState::RegisterPageFoliage(const uint32 pageX, const uint32 pageY)
 	{
+		PROFILE_SCOPE("Stream: RegisterPageFoliage");
 		if (!m_foliage || !m_worldInstance || !m_worldInstance->HasTerrain())
 		{
 			return;
@@ -2053,6 +2074,10 @@ namespace mmo
 								 { Command_Revive(cmd, args); }, ConsoleCommandCategory::Gm, "Revives the selected dead unit at its current position (or yourself if nothing is selected).");
 		Console::RegisterCommand("godmode", [this](const std::string &cmd, const std::string &args)
 								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
+		Console::RegisterCommand("invis", [this](const std::string &cmd, const std::string &args)
+								 { Command_Invisible(cmd, args); }, ConsoleCommandCategory::Gm, "Makes your character invisible to everybody except game masters. Persists across map changes and relogs. 'invis' or 'invis 1' enables it, 'invis 0' disables it.");
+		Console::RegisterCommand("ghost", [this](const std::string &cmd, const std::string &args)
+								 { Command_Ghost(cmd, args); }, ConsoleCommandCategory::Gm, "Ghosts the named online player: you join them and follow them into every instance they enter, without being in their group, until one of you logs out. 'ghost' without a name stops ghosting.");
 		Console::RegisterCommand("damage", [this](const std::string &cmd, const std::string &args)
 								 { Command_Damage(cmd, args); }, ConsoleCommandCategory::Gm, "Deals the given amount of raw damage to your current target. Used to walk a boss to its next phase threshold.");
 		Console::RegisterCommand("resetcooldowns", [this](const std::string &cmd, const std::string &args)
@@ -2093,6 +2118,8 @@ namespace mmo
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
+		Console::UnregisterCommand("invis");
+		Console::UnregisterCommand("ghost");
 		Console::UnregisterCommand("damage");
 		Console::UnregisterCommand("resetcooldowns");
 		Console::UnregisterCommand("heal");
@@ -2250,6 +2277,9 @@ namespace mmo
 
 		s_volumetricFogRangeVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogRange", "How many metres in front of the camera the volumetric fog covers (50 to 300, the shadow range). Fog beyond uses a smooth closed-form estimate.", "200");
 		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		s_volumetricFogHistoryVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogHistory", "How much of the previous frame the volumetric fog keeps (0 to 0.95). Higher values smooth out sampling noise and aliasing; lower values react faster and stay sharper while the camera moves. 0 (default) disables the history: the fog is then a pure function of the camera pose.", "0");
+		m_cvarChangedSignals += s_volumetricFogHistoryVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogSunMode", "Volumetric fog sun filtering: 0 box filter (fixed taps, no history), 1 temporal (one blue-noise jittered tap, clamped history, fog shadow map), 2 temporal with the surface cascades.", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
 		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
@@ -2288,6 +2318,8 @@ namespace mmo
 		m_cvarChangedSignals += s_terrainOcclusionCullingVar->Changed.connect(this, &WorldState::OnTerrainOcclusionCullingChanged);
 
 		// Read each frame in OnIdle, so no change handler is required.
+		s_streamingBudgetVar = ConsoleVarMgr::RegisterConsoleVar("StreamingBudgetMs", "Milliseconds per frame the main thread spends finishing streamed world content (terrain tiles, world models, entities, foliage). Content streams in over more frames when lower; at least one step runs every frame.", "4");
+
 		s_terrainFarRadiusVar = ConsoleVarMgr::RegisterConsoleVar("TerrainFarRadius", "Radius in terrain pages (533 m each) of the baked low-resolution distant terrain around the camera. 0 disables it and restores the 1000 m view distance.", "4");
 
 		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
@@ -2322,6 +2354,17 @@ namespace mmo
 
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
 								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
+
+		Console::RegisterCommand(command_names::s_ambientSounds, [this](const std::string &, const std::string &)
+								 {
+									 const GameUnitC *unit = m_playerController->GetControlledUnit().get();
+									 const Vector3 listener = unit ? unit->GetPosition() : Vector3::Zero;
+									 ILOG("Ambient sounds: " << m_ambientSounds.GetSourceCount() << " sources, " << m_ambientSounds.GetActiveVoiceCount() << " active voices");
+									 for (const auto &voice : m_ambientSounds.GetVoices())
+									 {
+										 ILOG("  sound " << voice.soundEntryId << " at " << voice.position << ", " << std::sqrt(listener.GetSquaredDistanceTo(voice.position)) << " m, fade " << voice.fade << (voice.retiring ? " (fading out)" : ""));
+									 }
+								 }, ConsoleCommandCategory::Sound, "Lists the looping mesh sounds near the player.");
 
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string &, const std::string &)
 								 { ToggleAxisVisibility(); }, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
@@ -2425,11 +2468,15 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogRange");
+		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogHistory");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFogSunMode");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("TerrainFarRadius");
+		ConsoleVarMgr::UnregisterConsoleVar("StreamingBudgetMs");
+		s_streamingBudgetVar = nullptr;
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesSay");
@@ -2456,7 +2503,8 @@ namespace mmo
 			command_names::s_toggleTerrainLOD,
 			command_names::s_toggleTerrainDebug,
 			command_names::s_freezeCulling,
-			command_names::s_reload};
+			command_names::s_reload,
+			command_names::s_ambientSounds};
 
 		for (const auto &command : commandsToRemove)
 		{
@@ -2559,17 +2607,46 @@ namespace mmo
 				
 				m_worldInstance->LoadPageEntities(page.x(), page.y()); });
 
+		// Entity files are read on the work queue (here and on the background loader) and world models
+		// are then prepared over several dispatcher steps. Units placed on a building floor snap to the
+		// ground they find, so the buildings must exist before the loading screen hides - otherwise
+		// NPCs drop through to the terrain underneath and stay there.
 		size_t dispatched = 0;
-		while (m_dispatcher.poll_one())
-		{
-			dispatched++;
-		}
-
-		// Poll one time
 		size_t jobsDone = 0;
-		while (m_workQueue.poll_one())
+		const auto waitStart = std::chrono::steady_clock::now();
+		while (true)
 		{
-			jobsDone++;
+			bool progressed = false;
+			if (m_dispatcher.poll_one())
+			{
+				dispatched++;
+				progressed = true;
+			}
+			if (m_workQueue.poll_one())
+			{
+				jobsDone++;
+				progressed = true;
+			}
+
+			// Checked on every pass: a step that keeps re-posting itself would otherwise hold the loading screen forever
+			if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60))
+			{
+				WLOG("World loading: gave up waiting for world entities after 60 seconds");
+				break;
+			}
+
+			if (progressed)
+			{
+				continue;
+			}
+
+			if (!m_worldInstance->HasPendingEntityLoads())
+			{
+				break;
+			}
+
+			// A file is still being read on the background loader thread
+			std::this_thread::yield();
 		}
 
 		m_foliage->RebuildAll();
@@ -2699,11 +2776,12 @@ namespace mmo
 					static_assert(object_fields::MinDamage == object_fields::BaseAttackTime + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::MaxDamage == object_fields::MinDamage + 1, "Order of fields is important for monitored unit mirror handlers");
 
-					m_playerObservers += object->RegisterMirrorHandler(object_fields::SpellDamage, 5, *this, &WorldState::OnPlayerStatsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::SpellDamage, 6, *this, &WorldState::OnPlayerStatsChanged);
 					static_assert(object_fields::SpellHealing == object_fields::SpellDamage + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::SpellCritChance == object_fields::SpellHealing + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::MeleeCritChance == object_fields::SpellCritChance + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::ManaRegen == object_fields::MeleeCritChance + 1, "Order of fields is important for monitored unit mirror handlers");
+					static_assert(object_fields::ManaRegenCasting == object_fields::ManaRegen + 1, "Order of fields is important for monitored unit mirror handlers");
 
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Guild, 2, *this, &WorldState::OnPlayerGuildChanged);
 
@@ -2759,8 +2837,18 @@ namespace mmo
 				const auto obj = ObjectMgr::Get<GameObjectC>(guid);
 				if (!obj)
 				{
-					ELOG("Failed to find updated object with guid " << log_hex_digit(guid));
-					return PacketParseResult::Disconnect;
+					// The server's view of what this client knows went wrong somewhere; one stale
+					// update is no reason to drop the session. Read past it so the blocks after it
+					// still apply - only a block that cannot be read leaves the stream unusable.
+					if (!SkipObjectValueUpdate(packet, typeId))
+					{
+						ELOG("Failed to skip update of unknown object with guid " << log_hex_digit(guid) << " (type " << static_cast<int32>(typeId) << ")");
+						return PacketParseResult::Disconnect;
+					}
+
+					WLOG("Ignored update of unknown object with guid " << log_hex_digit(guid) << " (type " << static_cast<int32>(typeId) << ")");
+					result = PacketParseResult::Pass;
+					continue;
 				}
 
 				// Units and players share the unit field layout, which carries the combat flag
@@ -5003,12 +5091,25 @@ namespace mmo
 
 		m_playerController->StopAllMovement();
 
+		const Vector3 previousPosition = unit->GetPosition();
+
 		// Teleport player
 		DLOG("Received teleport notification to " << movementInfo.position << ": Applying...");
 		unit->ApplyMovementInfo(movementInfo);
 
 		// Send ack to the server
 		m_realmConnector.SendMoveTeleportAck(ackId, unit->GetMovementInfo());
+
+		// A teleport on the same map does not go through TransferPending, so nothing loaded the
+		// world around the destination. Only the pages around the player are streamed in, and the
+		// teleport puts the character into falling state: landing outside that square means
+		// dropping through terrain which is still streaming in. Load the destination behind the
+		// loading screen first, exactly like entering a world does.
+		if (TeleportNeedsWorldLoad(previousPosition, unit->GetPosition()))
+		{
+			LoadingScreen::Show();
+			WaitForWorldLoading();
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -5255,11 +5356,13 @@ namespace mmo
 		}
 
 		ILOG("Transfer pending to map " << mapId << "...");
-		if (g_mapId == mapId)
+		if (m_transferPending)
 		{
+			// A transfer is already in progress; the realm only ever starts one at a time.
 			return PacketParseResult::Pass;
 		}
 
+		m_transferPending = true;
 		LoadingScreen::Show();
 
 		g_mapId = mapId;
@@ -5295,6 +5398,8 @@ namespace mmo
 			ELOG("Failed to read NewWorld packet!");
 			return PacketParseResult::Disconnect;
 		}
+
+		m_transferPending = false;
 
 		ILOG("Transfer to map " << mapId << " completed! Loading map...");
 		g_mapId = mapId;
@@ -5807,6 +5912,9 @@ namespace mmo
 	{
 		// The distant terrain belongs to the old world's terrain.
 		m_farTerrain.reset();
+
+		// The old world's placements do not remove their mesh sounds when it is destroyed
+		m_ambientSounds.Clear();
 		m_worldInstance.reset();
 
 		m_worldLoaded = false;
@@ -5819,6 +5927,7 @@ namespace mmo
 		DLOG("Loading map " << assetPath << ".hwld...");
 
 		m_worldInstance = std::make_shared<ClientWorldInstance>(*m_scene, *m_worldRootNode, assetPath, m_workQueue, m_dispatcher);
+		m_worldInstance->SetAmbientSounds(&m_ambientSounds);
 
 		const std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath + ".hwld");
 		if (!streamPtr)
@@ -5914,6 +6023,10 @@ namespace mmo
 			break;
 		case attack_swing_event::OutOfRange:
 			errorEvent = "ATTACK_SWING_OUT_OF_RANGE";
+			break;
+		case attack_swing_event::NotInLineOfSight:
+			// Same message as a spell blocked by line of sight
+			errorEvent = "SPELL_CAST_FAILED_LINE_OF_SIGHT";
 			break;
 		default:
 			errorEvent = "UNKNOWN";
@@ -6788,7 +6901,12 @@ namespace mmo
 
 		renderer->SetAtmosphereQuality(s_atmosphereQualityVar->GetIntValue());
 		renderer->SetVolumetricFogRange(s_volumetricFogRangeVar->GetFloatValue());
+		renderer->SetVolumetricFogHistory(s_volumetricFogHistoryVar->GetFloatValue());
 		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
+		if (ConsoleVar* sunModeVar = ConsoleVarMgr::FindConsoleVar("gxFogSunMode"))
+		{
+			renderer->GetVolumetricFogSettings().SetSunMode(sunModeVar->GetIntValue());
+		}
 	}
 
 	void WorldState::OnBloomChanged(ConsoleVar &var, const std::string &oldValue)
