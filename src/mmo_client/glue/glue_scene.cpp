@@ -21,6 +21,7 @@
 #include "terrain/page.h"
 #include "terrain/terrain.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 
@@ -36,6 +37,12 @@ namespace mmo
 
 		/// Seconds of one idle drift cycle at the gate.
 		constexpr float driftPeriodSeconds = 20.0f;
+
+		/// Share of the way from the plaza camera to the front character covered by the push-in.
+		constexpr float pushInFraction = 0.4f;
+
+		/// Height above the front spot the push-in moves towards, in metres (about chest height).
+		constexpr float pushInTargetHeight = 1.4f;
 
 		/// Overrides the camera path parameter while >= 0, to inspect points of the flight path.
 		ConsoleVar* s_glueCameraPathVar = nullptr;
@@ -148,6 +155,64 @@ namespace mmo
 		return finished;
 	}
 
+	void GlueScene::FadeToPlazaWhenReady()
+	{
+		m_plazaSnapPending = true;
+	}
+
+	bool GlueScene::IsFlightActive() const
+	{
+		const GlueCameraMode mode = m_director.GetMode();
+		return m_plazaSnapPending || mode == GlueCameraMode::FlyingIn || mode == GlueCameraMode::FlyingOut;
+	}
+
+	void GlueScene::SnapToGate()
+	{
+		m_director.SnapToGate();
+		m_plazaSnapPending = false;
+		m_pushInSeconds = 0.0f;
+		m_pushInElapsed = 0.0f;
+		m_pushInFinished = false;
+	}
+
+	void GlueScene::PushIn(const float seconds)
+	{
+		if (seconds <= 0.0f)
+		{
+			// Finished at once: hold the end of the push-in.
+			m_pushInSeconds = 1.0f;
+			m_pushInElapsed = 1.0f;
+			m_pushInFinished = true;
+			return;
+		}
+
+		m_pushInSeconds = seconds;
+		m_pushInElapsed = 0.0f;
+		m_pushInFinished = false;
+	}
+
+	bool GlueScene::ConsumePushInFinished()
+	{
+		const bool finished = m_pushInFinished;
+		m_pushInFinished = false;
+		return finished;
+	}
+
+	bool GlueScene::ProjectToScreen(const Vector3& worldPosition, float& x, float& y) const
+	{
+		x = 0.0f;
+		y = 0.0f;
+
+		const Vector3 cameraToPosition = worldPosition - m_camera->GetDerivedPosition();
+		if (cameraToPosition.Dot(m_camera->GetDerivedDirection()) <= 0.0f)
+		{
+			return false;
+		}
+
+		m_camera->GetNormalizedScreenPosition(worldPosition, x, y);
+		return x >= 0.0f && x <= 1.0f && y >= 0.0f && y <= 1.0f;
+	}
+
 	bool GlueScene::LoadWorld()
 	{
 		const String& assetPath = m_definition.world;
@@ -197,6 +262,14 @@ namespace mmo
 		m_director.Update(deltaSeconds);
 		if (m_director.ConsumeFlightFinished())
 		{
+			m_flightFinished = true;
+		}
+
+		if (m_plazaSnapPending && m_plazaReady)
+		{
+			// The flight was skipped because the plaza was not ready: cut straight to it.
+			m_plazaSnapPending = false;
+			m_director.SnapToPlaza();
 			m_flightFinished = true;
 		}
 
@@ -317,6 +390,23 @@ namespace mmo
 				right.Normalize();
 				position += right * (driftAmplitude * std::sin(m_driftSeconds / driftPeriodSeconds * 2.0f * Pi));
 			}
+		}
+
+		if (m_pushInSeconds > 0.0f)
+		{
+			if (m_pushInElapsed < m_pushInSeconds)
+			{
+				m_pushInElapsed = std::min(m_pushInElapsed + deltaSeconds, m_pushInSeconds);
+				if (m_pushInElapsed >= m_pushInSeconds)
+				{
+					m_pushInFinished = true;
+				}
+			}
+
+			const float t = m_pushInElapsed / m_pushInSeconds;
+			const float eased = t * t * (3.0f - 2.0f * t);
+			const Vector3 target = m_definition.front.position + Vector3(0.0f, pushInTargetHeight, 0.0f);
+			position += (target - position) * (pushInFraction * eased);
 		}
 
 		m_cameraNode->SetPosition(position);

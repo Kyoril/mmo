@@ -114,8 +114,12 @@ namespace mmo
 		/// Hands a pending enter world request to the character screen once the list has arrived.
 		void TryEnterWorld();
 
-		/// Enter on the character screen enters the world, like clicking the button.
+		/// Enter on the character screen enters the world, like clicking the button. While the glue
+		/// camera flies, any key only skips the flight.
 		bool OnKeyDown(int32 key, bool repeat);
+
+		/// A click that no frame took skips a glue camera flight.
+		bool OnMouseDown();
 
 		/// Advances the glue scene and reports when its gate view is ready.
 		void OnIdle(float deltaSeconds, GameTime timestamp);
@@ -145,6 +149,10 @@ namespace mmo
 
 		/// Whether the character list has arrived since this state was entered.
 		bool m_charListReceived = false;
+
+		/// Set when this state was entered from the world with the realm still connected, until the
+		/// first character list arrives: that one lands on the plaza without a flight.
+		bool m_returningFromWorld = false;
 
 		/// Set on a successful login: the next realm list may auto-connect to the last used realm.
 		bool m_autoConnectToLastRealm = false;

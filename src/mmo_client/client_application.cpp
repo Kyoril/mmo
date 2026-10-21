@@ -243,7 +243,7 @@ namespace mmo
 		context.minimap = std::make_unique<Minimap>(512);
 
 		context.charCreateInfo = std::make_unique<CharCreateInfo>(*context.project, realmConnector);
-		context.charSelect = std::make_unique<CharSelect>(realmConnector);
+		context.charSelect = std::make_unique<CharSelect>(realmConnector, *context.project);
 		context.lootClient = std::make_unique<LootClient>(realmConnector, context.clientCache->GetItemCache());
 		context.vendorClient = std::make_unique<VendorClient>(realmConnector, context.clientCache->GetItemCache());
 		context.bankClient = std::make_unique<BankClient>(realmConnector);

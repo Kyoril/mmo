@@ -357,6 +357,7 @@ namespace mmo
 		// path is then theirs to keep working.
 		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", "Data");
 		s_lastRealmVar = ConsoleVarMgr::RegisterConsoleVar("lastRealm", "Id of the last realm connected to.", "-1");
+		ConsoleVarMgr::RegisterConsoleVar("lastCharacters", "Last played character per realm, as realmId:characterGuid;realmId:characterGuid.", "");
 		
 		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
 

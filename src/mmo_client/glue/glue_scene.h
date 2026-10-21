@@ -81,8 +81,33 @@ namespace mmo
 		/// Sets the renderer the environment is applied to, or null for none.
 		void SetRenderer(DeferredRenderer* renderer) { m_renderer = renderer; }
 
-		/// Whether a flight ended since the last call. Latched from the director every Update.
+		/// Whether a flight ended since the last call. Latched from the director every Update, and
+		/// also set when a pending FadeToPlazaWhenReady snapped to the plaza.
 		[[nodiscard]] bool ConsumeFlightFinished();
+
+		/// Snaps the camera to the plaza as soon as the plaza is ready. Until then IsFlightActive
+		/// is true; the snap counts as a finished flight (see ConsumeFlightFinished).
+		void FadeToPlazaWhenReady();
+
+		/// Whether the camera is flying, or waiting for the plaza to snap to it.
+		[[nodiscard]] bool IsFlightActive() const;
+
+		/// Jumps to the gate, dropping a pending plaza snap and the push-in.
+		void SnapToGate();
+
+		/// Eases the camera part of the way towards the front character, then holds it there.
+		/// @param seconds Duration of the push-in. 0 or less finishes it at once.
+		void PushIn(float seconds);
+
+		/// Whether a push-in finished since the last call.
+		[[nodiscard]] bool ConsumePushInFinished();
+
+		/// Projects a world position onto the screen.
+		/// @param worldPosition The position to project.
+		/// @param x Receives the horizontal position, 0 (left) to 1 (right).
+		/// @param y Receives the vertical position, 0 (top) to 1 (bottom).
+		/// @return False when the position is behind the camera or off screen.
+		bool ProjectToScreen(const Vector3& worldPosition, float& x, float& y) const;
 
 	private:
 		/// Loads the world file and creates the world instance.
@@ -127,6 +152,14 @@ namespace mmo
 
 		bool m_flightFinished = false;
 		float m_driftSeconds = 0.0f;
+
+		/// Set by FadeToPlazaWhenReady until the plaza is ready.
+		bool m_plazaSnapPending = false;
+
+		/// Duration of the push-in, or 0 while there is none.
+		float m_pushInSeconds = 0.0f;
+		float m_pushInElapsed = 0.0f;
+		bool m_pushInFinished = false;
 
 		// Declared after the scene: destroyed first, so handlers still queued in them (which may
 		// hold the world instance) are released while the scene is alive.

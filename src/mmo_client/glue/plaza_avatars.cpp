@@ -84,6 +84,12 @@ namespace mmo
 			}
 		}
 
+		// A character that left and is no longer in the roster needs no protection anymore.
+		m_leavingGuids.erase(std::remove_if(m_leavingGuids.begin(), m_leavingGuids.end(), [&ordered](const uint64 guid)
+			{
+				return std::none_of(ordered.begin(), ordered.end(), [guid](const CharacterView& view) { return view.GetGuid() == guid; });
+			}), m_leavingGuids.end());
+
 		for (auto& avatar : previous)
 		{
 			if (avatar->walking && avatar->hideOnArrival)
@@ -117,6 +123,13 @@ namespace mmo
 		for (int32 index = 0; index < numCharacters; ++index)
 		{
 			Avatar& avatar = *m_avatars[index];
+
+			if (IsLeaving(avatar.guid))
+			{
+				// Walking out before a delete: it must not come back while the list is refreshed.
+				avatar.atFront = false;
+				continue;
+			}
 
 			const GlueSpot* target = nullptr;
 			const bool isFront = index == assignment.frontCharacter;
@@ -201,6 +214,12 @@ namespace mmo
 
 		Avatar& avatar = *m_avatars[orderIndex];
 		avatar.atFront = false;
+
+		if (!IsLeaving(avatar.guid))
+		{
+			m_leavingGuids.push_back(avatar.guid);
+		}
+
 		if (!avatar.visible)
 		{
 			return;
@@ -450,6 +469,11 @@ namespace mmo
 		}
 
 		return true;
+	}
+
+	bool PlazaAvatars::IsLeaving(const uint64 guid) const
+	{
+		return std::find(m_leavingGuids.begin(), m_leavingGuids.end(), guid) != m_leavingGuids.end();
 	}
 
 	void PlazaAvatars::ApplyTransform(Avatar& avatar)

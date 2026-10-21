@@ -15,6 +15,7 @@
 #include "net/realm_connector.h"
 #include "char_creation/char_select.h"
 #include "glue/glue_scene.h"
+#include "game_client/plaza_roster.h"
 #include "ui/world_renderer.h"
 
 #include "assets/asset_registry.h"
@@ -131,6 +132,20 @@ namespace mmo
 			m_plazaReadyLogged = true;
 			ILOG("Glue scene: plaza view ready after " << (GetAsyncTimeMs() - m_enterTime) << " ms");
 		}
+
+		if (m_glueScene->ConsumeFlightFinished())
+		{
+			// Lifts a held fade (the plaza snap after FadeWhenReady counts as a flight) and tells the
+			// screens where the camera is now.
+			const bool atPlaza = m_glueScene->GetDirector().GetMode() == GlueCameraMode::Plaza;
+			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+			FrameManager::Get().TriggerLuaEvent("GLUE_FLIGHT_FINISHED", atPlaza ? "plaza" : "gate");
+		}
+
+		if (m_glueScene->ConsumePushInFinished())
+		{
+			FrameManager::Get().TriggerLuaEvent("GLUE_PUSHIN_FINISHED");
+		}
 	}
 
 	void LoginState::OnEnter()
@@ -200,13 +215,23 @@ namespace mmo
 			}, ConsoleCommandCategory::Debug, "Enters the world with the selected character as soon as the character list is shown.");
 
 		m_loginConnections += EventLoop::KeyDown.connect(this, &LoginState::OnKeyDown);
+		m_loginConnections += EventLoop::MouseDown.connect([this](EMouseButton, int32, int32) { return OnMouseDown(); });
 		m_loginConnections += EventLoop::Idle.connect(this, &LoginState::OnIdle);
 
+		m_returningFromWorld = false;
 		if (m_realmConnector.IsConnected())
 		{
 			// Request a fresh character list from the server; the UI shows a loading dialog
 			// while waiting. On EnterWorldFailed, an error will be shown once the list loads.
 			m_realmConnector.RequestCharacterList();
+
+			// Back from the world: the plaza appears without a flight, so the scene stays covered
+			// (and the gate view is never shown) until the plaza is ready.
+			m_returningFromWorld = true;
+			if (m_glueScene)
+			{
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_HOLD");
+			}
 
 			switch (s_returnReason)
 			{
@@ -332,6 +357,40 @@ namespace mmo
 
 	void LoginState::OnCharListUpdated()
 	{
+		m_charSelect.OnCharacterListUpdated();
+
+		const bool returningFromWorld = m_returningFromWorld;
+		m_returningFromWorld = false;
+
+		if (m_glueScene)
+		{
+			m_glueScene->SetTimeOfDay(m_realmConnector.GetRealmTimeOfDay());
+
+			// Also runs for the refreshes after creating or deleting a character, where the camera
+			// already is at the plaza: FlyIn and SnapToPlaza do nothing there.
+			switch (DecideGlueArrival(m_glueScene->IsPlazaReady(), returningFromWorld))
+			{
+			case GlueArrival::FlyIn:
+				m_glueScene->GetDirector().FlyIn();
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+				break;
+			case GlueArrival::Snap:
+				m_glueScene->GetDirector().SnapToPlaza();
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+				break;
+			case GlueArrival::FadeWhenReady:
+				// Covered until the plaza is ready, then cut to it (see OnIdle).
+				m_glueScene->FadeToPlazaWhenReady();
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_HOLD");
+				break;
+			}
+		}
+		else
+		{
+			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+		}
+
+		// After the camera decision, so the screen sees whether a flight is running.
 		FrameManager::Get().TriggerLuaEvent("CHAR_LIST");
 
 		m_charListReceived = true;
@@ -359,6 +418,17 @@ namespace mmo
 
 	bool LoginState::OnKeyDown(const int32 key, bool repeat)
 	{
+		if (m_glueScene && m_glueScene->IsFlightActive())
+		{
+			// Any key skips a flight, and does nothing else: Enter must not enter the world from
+			// the middle of a flight.
+			if (!repeat)
+			{
+				m_glueScene->GetDirector().Skip();
+			}
+			return true;
+		}
+
 		constexpr int32 enterKey = 0x0D;
 		if (key == enterKey && !repeat && m_charListReceived && m_realmConnector.IsConnected())
 		{
@@ -368,6 +438,17 @@ namespace mmo
 		// Screens without a focused text field (the realm list) drive keyboard navigation from Lua.
 		FrameManager::Get().TriggerLuaEvent("GLUE_KEY_DOWN", key, repeat);
 
+		return true;
+	}
+
+	bool LoginState::OnMouseDown()
+	{
+		if (!m_glueScene || !m_glueScene->IsFlightActive())
+		{
+			return false;
+		}
+
+		m_glueScene->GetDirector().Skip();
 		return true;
 	}
 
@@ -391,6 +472,14 @@ namespace mmo
 	void LoginState::OnRealmDisconnected()
 	{
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CharCreateResponse);
+
+		// Back to the login screen at the gate, without a flight.
+		m_returningFromWorld = false;
+		if (m_glueScene)
+		{
+			m_glueScene->SnapToGate();
+			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+		}
 
 		// The realm tells us why before closing the connection when it terminated the session
 		// deliberately. Nothing to pass on for an ordinary drop.

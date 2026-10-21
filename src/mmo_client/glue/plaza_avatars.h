@@ -57,9 +57,15 @@ namespace mmo
 		///        back to the entrance and is then hidden.
 		void Select(int32 orderIndex, bool animate);
 
-		/// Walks a character to the entrance, where it is hidden. Used before a delete.
+		/// Walks a character to the entrance, where it is hidden. Used before a delete. Until
+		/// SetCharacters drops the character (or ForgetLeaving is called), Select leaves it alone,
+		/// so a selection made before the refreshed character list arrives does not bring it back.
 		/// @param orderIndex Order index of the character.
 		void Leave(int32 orderIndex);
+
+		/// Lets Select place characters that were sent away with Leave again, for when the
+		/// character list arrived and still holds them (the delete failed).
+		void ForgetLeaving() { m_leavingGuids.clear(); }
 
 		/// Turns the front character.
 		/// @param degrees Yaw to add, in degrees.
@@ -134,6 +140,9 @@ namespace mmo
 		/// Applies position and facing to the node; the front character also gets the rotation.
 		void ApplyTransform(Avatar& avatar);
 
+		/// Whether the character was sent away with Leave.
+		[[nodiscard]] bool IsLeaving(uint64 guid) const;
+
 	private:
 		Scene& m_scene;
 		const GlueSceneDefinition& m_definition;
@@ -144,6 +153,9 @@ namespace mmo
 
 		/// Removed from the roster while walking out; destroyed on arrival.
 		std::vector<std::unique_ptr<Avatar>> m_departing;
+
+		/// Characters sent away with Leave that are still in the roster.
+		std::vector<uint64> m_leavingGuids;
 
 		/// The character at the front, so the rotation is reset when it changes. 0 for none.
 		uint64 m_frontGuid = 0;
