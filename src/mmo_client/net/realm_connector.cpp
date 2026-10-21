@@ -197,6 +197,12 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		// The realm's current time of day follows the list
+		if (!(packet >> io::read<uint64>(m_realmTimeOfDay)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
 		// Notify about character list update
 		CharListUpdated();
 
@@ -467,6 +473,36 @@ namespace mmo
 		sendSinglePacket([guid](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::DeleteChar);
 			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SetCharacterOrder(const std::vector<uint64>& orderedGuids)
+	{
+		// Reorder the local list right away so the UI does not have to wait for a refresh
+		std::vector<CharacterView> reordered;
+		reordered.reserve(m_characterViews.size());
+		for (const uint64 guid : orderedGuids)
+		{
+			const auto it = std::find_if(m_characterViews.begin(), m_characterViews.end(), [guid](const CharacterView& view) { return view.GetGuid() == guid; });
+			if (it != m_characterViews.end())
+			{
+				reordered.push_back(*it);
+			}
+		}
+
+		if (reordered.size() == m_characterViews.size())
+		{
+			m_characterViews = std::move(reordered);
+		}
+
+		sendSinglePacket([&orderedGuids](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SetCharacterOrder);
+			packet << io::write<uint8>(static_cast<uint8>(orderedGuids.size()));
+			for (const uint64 guid : orderedGuids)
+			{
+				packet << io::write<uint64>(guid);
+			}
 			packet.Finish();
 			});
 	}

@@ -24,6 +24,7 @@ target_sources(realm_server_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/shutdown_manager.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/character_spell_cache.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/character_name.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/character_order.cpp
 )
 
 target_include_directories(realm_server_tests PRIVATE

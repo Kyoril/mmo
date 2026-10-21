@@ -600,6 +600,7 @@ namespace mmo
 		PacketParseResult OnEnterWorld(game::IncomingPacket &packet);
 		PacketParseResult OnCreateChar(game::IncomingPacket &packet);
 		PacketParseResult OnDeleteChar(game::IncomingPacket &packet);
+		PacketParseResult OnSetCharacterOrder(game::IncomingPacket &packet);
 		PacketParseResult OnProxyPacket(game::IncomingPacket &packet);
 		PacketParseResult OnChatMessage(game::IncomingPacket &packet);
 		PacketParseResult OnNameQuery(game::IncomingPacket &packet);

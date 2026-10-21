@@ -2,6 +2,7 @@
 
 #include "player.h"
 #include "character_name.h"
+#include "character_order.h"
 #include "character_spell_cache.h"
 #include "character_start.h"
 #include "player_manager.h"
@@ -181,10 +182,11 @@ namespace mmo
 				}
 
 				// Send result data to requesting client
-				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket &outPacket)
+				strongThis->GetConnection().sendSinglePacket([&result, &strongThis](game::OutgoingPacket &outPacket)
 															 {
 						outPacket.Start(game::realm_client_packet::CharEnum);
 						outPacket << io::write_dynamic_range<uint8>(*result);
+						outPacket << io::write<uint64>(strongThis->m_timeOfDayManager.GetTimeOfDay());
 						outPacket.Finish(); });
 			}
 			else
@@ -565,7 +567,7 @@ namespace mmo
 					return;
 				}
 
-				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket &outPacket)
+				strongThis->GetConnection().sendSinglePacket([&result, &strongThis](game::OutgoingPacket &outPacket)
 															 {
 						// TODO: This is not correct because we don't know if NameInUse is really the exact error
 						outPacket.Start(game::realm_client_packet::CharCreateResponse);
@@ -816,6 +818,54 @@ namespace mmo
 		DLOG("Deleting character 0x" << std::hex << charGuid << " from account 0x" << std::hex << m_accountId << "...");
 		m_database.asyncRequestKeyed<void>(charGuid, [charGuid](auto &&database)
 									  { database->DeleteCharacter(charGuid); }, std::move(handler));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnSetCharacterOrder(game::IncomingPacket &packet)
+	{
+		ASSERT(IsAuthenticated());
+
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<uint64> orderedGuids(count);
+		for (uint64 &guid : orderedGuids)
+		{
+			if (!(packet >> io::read<uint64>(guid)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		{
+			// Lock around m_characterViews
+			std::scoped_lock lock{m_charViewMutex};
+
+			std::set<uint64> owned;
+			for (const auto &entry : m_characterViews)
+			{
+				owned.insert(entry.first);
+			}
+
+			if (!IsValidCharacterOrder(orderedGuids, owned))
+			{
+				WLOG("Received an invalid character order from account 0x" << std::hex << m_accountId);
+				return PacketParseResult::Pass;
+			}
+		}
+
+		const uint64 accountId = m_accountId;
+		m_database.asyncRequestKeyed<void>(accountId, [accountId, orderedGuids = std::move(orderedGuids)](auto &&database)
+										   { database->SetCharacterOrder(accountId, orderedGuids); }, [](const bool success)
+										   {
+			if (!success)
+			{
+				ELOG("Failed to save character order!");
+			} });
 
 		return PacketParseResult::Pass;
 	}
@@ -3517,6 +3567,7 @@ namespace mmo
 		RegisterPacketHandler(game::client_realm_packet::CharEnum, *this, &Player::OnCharEnum);
 		RegisterPacketHandler(game::client_realm_packet::CreateChar, *this, &Player::OnCreateChar);
 		RegisterPacketHandler(game::client_realm_packet::DeleteChar, *this, &Player::OnDeleteChar);
+		RegisterPacketHandler(game::client_realm_packet::SetCharacterOrder, *this, &Player::OnSetCharacterOrder);
 		RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
 	}
 
