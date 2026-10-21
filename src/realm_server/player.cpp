@@ -567,7 +567,7 @@ namespace mmo
 					return;
 				}
 
-				strongThis->GetConnection().sendSinglePacket([&result, &strongThis](game::OutgoingPacket &outPacket)
+				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket &outPacket)
 															 {
 						// TODO: This is not correct because we don't know if NameInUse is really the exact error
 						outPacket.Start(game::realm_client_packet::CharCreateResponse);
