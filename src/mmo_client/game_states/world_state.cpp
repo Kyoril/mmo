@@ -566,6 +566,7 @@ namespace mmo
 
 		// Stop background loading thread
 		m_minimap.SetPrefetchHandler(nullptr);
+		GameUnitC::SetModelFilePrefetcher(nullptr);
 		m_work.reset();
 		m_workQueue.stop();
 		m_dispatcher.stop();
@@ -2856,6 +2857,22 @@ namespace mmo
 				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
 				{
 					ObjectMgr::SetActivePlayer(object->GetGuid());
+
+					// From here on, units spawning with a model never loaded before read its files on the
+					// streaming thread first and show it a few frames later. Not before: the own player
+					// (set up before it becomes the active player) must have its model at once.
+					GameUnitC::SetModelFilePrefetcher([&workQueue = m_workQueue, &dispatcher = m_dispatcher](std::vector<String> files, std::function<void()> onReady)
+					{
+						workQueue.post([&dispatcher, files = std::move(files), onReady = std::move(onReady)]()
+						{
+							for (const String &file : files)
+							{
+								AssetRegistry::Prefetch(file);
+							}
+
+							dispatcher.post(onReady);
+						});
+					});
 
 					// Register player field change observers
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::TargetUnit, 2, *this, &WorldState::OnTargetSelectionChanged);

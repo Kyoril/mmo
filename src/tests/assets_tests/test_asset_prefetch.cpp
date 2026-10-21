@@ -100,6 +100,16 @@ TEST_CASE_METHOD(PrefetchFixture, "Files opened before are not prefetched again"
 	CHECK(Read("Textures/Rock.htex") == "changed");
 }
 
+TEST_CASE_METHOD(PrefetchFixture, "Opened files are remembered, prefetched ones are not", "[asset_prefetch]")
+{
+	AssetRegistry::Prefetch("Textures/Rock.htex");
+	CHECK_FALSE(AssetRegistry::WasOpened("Textures/Rock.htex"));
+
+	Read("Textures/Rock.htex");
+	CHECK(AssetRegistry::WasOpened("Textures/Rock.htex"));
+	CHECK(AssetRegistry::WasOpened("Textures\\Rock.htex"));
+}
+
 TEST_CASE_METHOD(PrefetchFixture, "Cleared prefetches are read from disk again", "[asset_prefetch]")
 {
 	AssetRegistry::Prefetch("Textures/Rock.htex");

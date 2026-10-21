@@ -14,7 +14,8 @@ namespace mmo
 	/// @brief Determines whether the asset references of a file are worth scanning for.
 	/// @param filename Name of the asset file.
 	/// @return true for formats that reference other assets by name (world entities, world models, prop kits,
-	///	foliage, terrain pages, meshes, materials, material instances and material functions).
+	///	foliage, terrain pages, meshes, materials, material instances, material functions and customizable
+	///	avatar definitions).
 	bool CanReferenceAssets(std::string_view filename);
 
 	/// @brief Finds the names of the assets a binary asset file references.

@@ -203,6 +203,27 @@ namespace mmo
 		}
 	}
 
+	void CollectItemDisplayFiles(const proto_client::ItemDisplayEntry& display, std::vector<String>& outFiles)
+	{
+		for (const auto& variant : display.variants())
+		{
+			if (!variant.mesh().empty())
+			{
+				outFiles.push_back(variant.mesh());
+			}
+
+			for (const auto& [subEntity, material] : variant.material_overrides())
+			{
+				outFiles.push_back(material);
+			}
+
+			for (const auto& layer : variant.material_layers())
+			{
+				outFiles.push_back(layer.material());
+			}
+		}
+	}
+
 	void ClearItemDisplayAttachments(Scene& scene, Entity& entity, ItemDisplayAttachmentMap& attachments)
 	{
 		for (const auto& [displayId, attachment] : attachments)

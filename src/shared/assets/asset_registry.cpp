@@ -406,6 +406,14 @@ namespace mmo
 		s_prefetchStats = {};
 	}
 
+	bool AssetRegistry::WasOpened(const std::string& filename)
+	{
+		const String name = NormalizeFileName(filename);
+
+		std::unique_lock lock{ s_prefetchLock };
+		return s_openedFiles.contains(name);
+	}
+
 	AssetRegistry::PrefetchStats AssetRegistry::GetPrefetchStats()
 	{
 		std::unique_lock lock{ s_prefetchLock };

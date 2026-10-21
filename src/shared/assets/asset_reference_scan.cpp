@@ -18,8 +18,8 @@ namespace mmo
 		};
 
 		/// Extensions of the formats that reference other assets, without the dot.
-		constexpr std::array<std::string_view, 9> ReferencingExtensions = {
-			"wobj", "hwmo", "hkit", "hfol", "tile", "hmsh", "hmat", "hmi", "hmf"
+		constexpr std::array<std::string_view, 10> ReferencingExtensions = {
+			"wobj", "hwmo", "hkit", "hfol", "tile", "hmsh", "hmat", "hmi", "hmf", "char"
 		};
 
 		bool IsPathCharacter(const char c)

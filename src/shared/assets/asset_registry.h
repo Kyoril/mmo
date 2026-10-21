@@ -54,6 +54,9 @@ namespace mmo
 		/// @brief Drops all prefetched content.
 		static void ClearPrefetched();
 
+		/// @brief Determines whether a file was opened before, so whatever loaded it likely still holds it.
+		static bool WasOpened(const std::string& filename);
+
 		/// @brief Counts of OpenFile calls since the last ClearPrefetched.
 		struct PrefetchStats
 		{

@@ -81,6 +81,7 @@ TEST_CASE("Only formats that reference assets are worth scanning", "[asset_refer
 	CHECK(CanReferenceAssets("Models/House.HWMO"));
 	CHECK(CanReferenceAssets("Models/Rock.hmsh"));
 	CHECK(CanReferenceAssets("Models/Rock.hmi"));
+	CHECK(CanReferenceAssets("Models/Wolf/Wolf.char"));
 	CHECK_FALSE(CanReferenceAssets("Textures/Rock.htex"));
 	CHECK_FALSE(CanReferenceAssets("Sound/Bell.wav"));
 	CHECK_FALSE(CanReferenceAssets("NoExtension"));
