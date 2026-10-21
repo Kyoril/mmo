@@ -497,6 +497,7 @@ namespace mmo
 		/// @param cascadeCamera The orthographic shadow camera for this cascade.
 		/// @param casters The list produced by GatherShadowCasters.
 		/// @param minCasterWorldRadius Skip casters whose world half-extent is smaller than this (0 = keep all).
+		/// @remark Rendering distances (SetRenderingDistance) do not apply to shadow casters.
 		void RenderShadowCasters(Camera& cascadeCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius);
 
 		ManualRenderObject* CreateManualRenderObject(const String& name);

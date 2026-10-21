@@ -251,7 +251,7 @@ class CorpusBlocked(unittest.TestCase):
 
 	def test_R2_1_more_preprocessor_directives(self):
 		path = "src/world_server/world_instance.cpp"
-		for line in ('#include "x.h"', "#pragma once", '#line 1 "fake.cpp"', "#import <x>", '%:include "x.h"',
+		for line in ('#include "../../evil.txt"', "#include <C:/x.h>", "#pragma pack(1)", '#line 1 "fake.cpp"', "#import <x>", '%:include "x.h"',
 				'_Pragma("GCC diagnostic ignored")'):
 			for removed, added in (([], [line]), ([line], [])):
 				text = raw_diff(path, (50, len(removed), 50, len(added), removed, added))
@@ -313,8 +313,31 @@ class CorpusBlocked(unittest.TestCase):
 		text = raw_diff(path, (10, 0, 10, 1, [], ["\t--m_charges;"]))
 		self.assertBlocked(verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader), "reward or economy logic")
 
+	def test_client_tuned_values_and_numeric_conditions_ship(self):
+		for path in ("src/shared/game_client/unit_movement.cpp", "src/mmo_client/client_setting_limits.h",
+				"src/shared/frame_ui/textfield.cpp", "data/client/Interface/GameUI/x.lua"):
+			for line in ("\tconstexpr float MaxCameraZoom = 15.0f;", "\tif (totalDist > 1e-6f)"):
+				text = raw_diff(path, (50, 0, 50, 1, [], [line]))
+				result = verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader)
+				self.assertTrue(result["auto_ship_allowed"], (path, line, result["reasons"]))
+
+	def test_server_comment_mentioning_a_range_ships(self):
+		path = "src/shared/game/loot.h"
+		text = raw_diff(path, (50, 0, 50, 1, [], ["\t// the Open spell reaches about 7 yards"]))
+		result = verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader)
+		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
+
+	def test_plain_include_and_pragma_once_ship(self):
+		header = "src/shared/game_client/attack_error_voice_gate.h"
+		text = raw_diff(header, (0, 0, 1, 3, [], ["#pragma once", "#include <unordered_map>", '#include "base/typedefs.h"']), old=None)
+		result = verdict_of([FileChange(header, 3, 0, False)], text, load_data=plain_loader)
+		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
+		source = "src/shared/game_client/attack_error_voice_gate.cpp"
+		text = raw_diff(source, (0, 0, 1, 1, [], ["#pragma once"]), old=None)
+		self.assertBlocked(verdict_of([FileChange(source, 1, 0, False)], text, load_data=plain_loader), "preprocessor directive")
+
 	def test_R2_2_tuned_word_anchoring(self):
-		path = "src/shared/game_client/x.cpp"
+		path = "src/shared/game_server/x.cpp"
 		for line in ("\tm_xp = 10;", "\tconst float kRate = 2.0f;", "\tm_cap = 3;", "\tstatic constexpr int kXpBonus = 5;"):
 			text = raw_diff(path, (50, 0, 50, 1, [], [line]))
 			self.assertBlocked(verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader), "changed a tuned value")

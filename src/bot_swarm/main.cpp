@@ -2,6 +2,9 @@
 
 #include "swarm_host.h"
 
+#include "bot_chat/anthropic_chat_model.h"
+#include "bot_chat/chat_budget.h"
+
 #include "base/typedefs.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
@@ -9,12 +12,16 @@
 #include "nlohmann/json.hpp"
 #include <cxxopts/cxxopts.hpp>
 
+#include <chrono>
 #include <csignal>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -67,6 +74,83 @@ namespace mmo
 			outConfig.realmName = data.value("realmName", outConfig.realmName);
 			return true;
 		}
+
+		/// One real request through the real budget, without a game server: checks the key, the
+		/// network path and the prompt shape for a fraction of a cent.
+		int runChatProbe(const SwarmSettings& settings)
+		{
+			ChatPricing pricing;
+			if (!LookupChatPricing(settings.chatModel, pricing))
+			{
+				ELOG("No known price for model '" << settings.chatModel << "'");
+				return 2;
+			}
+
+			if (settings.chatApiKey.empty())
+			{
+				ELOG("Neither " << ChatApiKeyVariable << " nor ANTHROPIC_API_KEY is set");
+				return 2;
+			}
+
+			ChatBudget budget(settings.chatLimits, pricing, settings.chatLedgerPath);
+			AnthropicChatModel model(settings.chatApiKey, settings.chatModel);
+
+			ChatCompletionRequest request;
+			request.ticket = 1;
+			request.maxOutputTokens = 60;
+			request.system = "You are a real person playing an online fantasy MMORPG, typing in the in-game chat. "
+				"Reply with only the chat message: one short casual line, lowercase, like a player would type.";
+			request.prompt = "Chat: General channel.\nRecent messages, oldest first:\nSteve: anyone know where to level at 8?\n"
+				"Write your next message in this chat.";
+
+			double reserved = 0.0;
+			if (!budget.TryReserve(static_cast<uint32>((request.system.size() + request.prompt.size()) / 3 + 32),
+				request.maxOutputTokens, std::time(nullptr), reserved))
+			{
+				ELOG("The budget refused the probe: $" << budget.GetSpentToday() << " spent today, "
+					<< budget.GetRequestsThisHour() << " requests this hour");
+				return 1;
+			}
+
+			if (!model.Submit(request))
+			{
+				budget.Settle(reserved, 0.0, std::time(nullptr));
+				ELOG("The model did not accept the probe");
+				return 1;
+			}
+
+			std::vector<ChatCompletionResult> results;
+			const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+			while (results.empty() && std::chrono::steady_clock::now() < deadline)
+			{
+				model.Poll(results);
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			}
+			model.Stop();
+
+			if (results.empty())
+			{
+				ELOG("No answer within 60 seconds; the reservation of $" << reserved << " stays charged");
+				return 1;
+			}
+
+			const ChatCompletionResult& answer = results.front();
+			const double actual = answer.reachedModel
+				? ((answer.inputTokens || answer.outputTokens) ? pricing.CostUsd(answer.inputTokens, answer.outputTokens) : reserved)
+				: 0.0;
+			budget.Settle(reserved, actual, std::time(nullptr));
+
+			if (!answer.succeeded)
+			{
+				ELOG("Probe failed: " << answer.error);
+				return 1;
+			}
+
+			ILOG("Probe answer: " << answer.text);
+			ILOG("Tokens " << answer.inputTokens << " in / " << answer.outputTokens << " out, cost $" << actual
+				<< "; spent today $" << budget.GetSpentToday() << " of $" << settings.chatLimits.dailyUsd);
+			return 0;
+		}
 	}
 }
 
@@ -97,6 +181,18 @@ int main(int argc, char** argv)
 		("no-level-roll", "Do not cheat bots to their rolled level; make them earn it")
 		("repo-root", "Repository root holding data/editor; empty resolves from the working directory",
 			cxxopts::value<std::string>()->default_value(""))
+		("chat", "Let bots chat through a language model (key from MMO_BOTSWARM_CLAUDE_API_TOKEN or ANTHROPIC_API_KEY; costs money, capped below)")
+		("chat-offline", "With --chat: answer with canned lines instead of calling the model, at no cost")
+		("chat-model", "Model id; must be one with a known price", cxxopts::value<std::string>()->default_value("claude-haiku-5-5"))
+		("chat-daily-usd", "Hard cap on chat spend per UTC day", cxxopts::value<double>()->default_value("0.25"))
+		("chat-monthly-usd", "Hard cap on chat spend per UTC month", cxxopts::value<double>()->default_value("5"))
+		("chat-max-per-hour", "Hard cap on model requests per UTC hour", cxxopts::value<uint32>()->default_value("120"))
+		("chat-ledger", "Spend ledger shared by every run, so the caps hold across restarts",
+			cxxopts::value<std::string>()->default_value("e2e/runtime/bots/chat_ledger.json"))
+		("chat-facts", "Optional text file with facts about the game for the bots to know", cxxopts::value<std::string>()->default_value(""))
+		("debug-fill-bags", "Debug: give every bot this many grey items on login (GM accounts), to watch selling",
+			cxxopts::value<uint32>()->default_value("0"))
+		("chat-probe", "Send one chat request through the budget, print the answer and its cost, and exit")
 		("h,help", "Print help");
 
 	auto result = options.parse(argc, argv);
@@ -121,12 +217,40 @@ int main(int argc, char** argv)
 	settings.applyLevelRoll = result.count("no-level-roll") == 0;
 	settings.repoRoot = result["repo-root"].as<std::string>();
 
+	settings.chatEnabled = result.count("chat") != 0;
+	settings.chatOffline = result.count("chat-offline") != 0;
+	settings.chatModel = result["chat-model"].as<std::string>();
+	settings.chatLimits.dailyUsd = result["chat-daily-usd"].as<double>();
+	settings.chatLimits.monthlyUsd = result["chat-monthly-usd"].as<double>();
+	settings.chatLimits.maxRequestsPerHour = result["chat-max-per-hour"].as<uint32>();
+	settings.chatLedgerPath = result["chat-ledger"].as<std::string>();
+	settings.chatFactsPath = result["chat-facts"].as<std::string>();
+	settings.debugFillBags = result["debug-fill-bags"].as<uint32>();
+
+	// From the environment only: a key on the command line ends up in process listings and
+	// shell history. The swarm's own variable wins, so that a machine-wide ANTHROPIC_API_KEY
+	// meant for something else is not spent on bot chat when the swarm has a key of its own.
+	for (const char* variable : { ChatApiKeyVariable, "ANTHROPIC_API_KEY" })
+	{
+		const char* apiKey = std::getenv(variable);
+		if (apiKey && *apiKey)
+		{
+			settings.chatApiKey = apiKey;
+			break;
+		}
+	}
+
+	if (result.count("chat-probe"))
+	{
+		return runChatProbe(settings);
+	}
+
 	if (!loadConnectionConfig(result["config"].as<std::string>(), settings.connectionTemplate))
 	{
 		return 2;
 	}
 
-	for (const std::string& path : { settings.rosterPath, settings.telemetryPath })
+	for (const std::string& path : { settings.rosterPath, settings.telemetryPath, settings.chatLedgerPath })
 	{
 		if (path.empty())
 		{

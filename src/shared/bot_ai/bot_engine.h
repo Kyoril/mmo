@@ -70,6 +70,10 @@ namespace mmo
 		/// BotAiRegistry::FindDanglingReferences rather than failing here.
 		void AddStrategy(const std::string& name);
 
+		/// Removes every strategy, for an engine whose whole behaviour is being swapped, such as
+		/// a bot going from playing alone to following its party.
+		void ClearStrategies();
+
 		[[nodiscard]] const std::vector<std::string>& GetStrategyNames() const { return m_strategyNames; }
 
 		/// Evaluates triggers and runs at most one action.

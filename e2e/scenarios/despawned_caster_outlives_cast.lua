@@ -1,4 +1,4 @@
--- e2e-own-character: c
+-- e2e-own-character: dco
 --
 -- Regression: a unit that leaves the world must not leave a live spell cast behind.
 --

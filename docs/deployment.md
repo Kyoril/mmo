@@ -129,6 +129,22 @@ Disk budget: plan for roughly `KEEP_RELEASES + 1` compressed client data sets un
 
 - **Deployer restarted during maintenance** (notification `MANUAL INTERVENTION REQUIRED: the deployer restarted during maintenance for <sha>`): `state.json` still carried the in-progress marker at startup, so the deployer cannot know how far the night got (servers may be shut down, `current` may point at either release, the stack may run either tag). It pauses and does nothing else. The release is not marked bad and stays staged; `live` still names the last good release. Follow the manual recovery steps above (1 to 4) to bring the stack back on `live`, then `resume`: the staged release is retried at the next 04:45 (or `deploy-now` it while watching). If you suspect the release itself, stay paused until a newer nightly is published; after `resume` the next poll stages the newest release in its place.
 
+- **A server crashed**: each tier writes `logs/<tier>_crash_<YYYYMMDD>_<HHMMSS>.txt` next to its log and
+  exits non-zero, so `restart: on-failure` brings it back. That next start uploads the report together with the
+  log tail to the crash API (`https://error.mmo-dev.net/api/reports`, the one the client's crash reporter uses)
+  and leaves a `.sent` marker next to it; `/fix-crash` picks it up from there. The report's `Context N:` lines
+  name the packet, character and world instance the crashing thread was on. `CRASH_REPORT_ENABLED=0` (or
+  `crashReport.enabled = 0` in the config) turns uploading off; `CRASH_REPORT_API_URL` points it elsewhere.
+  `compose.yml` keeps each server's `/app/logs` on a named volume (`login-logs`, `realm-01-logs`,
+  `world-01-logs`), so a report survives the container being recreated before it restarted; paste the new
+  `compose.yml` into the Portainer game stack once for that to take effect (without the volumes, recreating the
+  container loses the report). Nothing prunes those volumes.
+  The images ship stripped binaries. Each nightly release carries the unstripped ones as `server-symbols.zip`
+  (laid out `<tier>.elf/<commit>/<tier>`); `tools\symbolicate_crash.ps1` fetches them on its own through
+  `tools\fetch_server_symbols.ps1 -Commit <sha>`, keyed by the commit on the report's `Version:` line. Images
+  built before this have `Commit: UNKNOWN` (the Docker context has no `.git`; the commit now goes in as a build
+  arg) and cannot be matched.
+
 ## 6. Updating the deployer itself
 
 Change `DEPLOYER_TAG` to a newer green SHA and redeploy its stack. It never updates itself.

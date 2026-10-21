@@ -4,7 +4,10 @@
 
 #include "deferred_shading/volumetric_fog_settings.h"
 
+#include <algorithm>
 #include <set>
+#include <utility>
+#include <vector>
 
 using namespace mmo;
 
@@ -134,6 +137,45 @@ TEST_CASE("Halton jitter starts at the radical inverse and stays in [0, 1)", "[v
 	CHECK(volumetric_fog::JitterForFrame(VolumetricFogSettings::JitterSequenceLength) == Approx(volumetric_fog::JitterForFrame(0)));
 }
 
+TEST_CASE("Halton radical inverse in bases 3 and 5", "[volumetric_fog]")
+{
+	CHECK(volumetric_fog::Halton(1, 3) == Approx(1.0f / 3.0f));
+	CHECK(volumetric_fog::Halton(2, 3) == Approx(2.0f / 3.0f));
+	CHECK(volumetric_fog::Halton(3, 3) == Approx(1.0f / 9.0f));
+	CHECK(volumetric_fog::Halton(1, 5) == Approx(0.2f));
+	CHECK(volumetric_fog::Halton(6, 5) == Approx(0.2f + 1.0f / 25.0f));
+	CHECK(volumetric_fog::Halton(5, 2) == Approx(volumetric_fog::HaltonBase2(5)));
+}
+
+TEST_CASE("Screen jitter covers the whole froxel and is independent of the depth jitter", "[volumetric_fog]")
+{
+	// A froxel sampled only at its screen centre aliases the shadow map in a pattern locked to the grid,
+	// which the temporal blend drags along behind the camera. Over one sequence the screen samples must
+	// spread across the cell in both axes, and differ from the depth jitter's pattern.
+	float minX = 1.0f, maxX = 0.0f, minY = 1.0f, maxY = 0.0f;
+	std::set<std::pair<float, float>> points;
+	bool differsFromDepth = false;
+	for (uint64 frame = 0; frame < VolumetricFogSettings::JitterSequenceLength; ++frame)
+	{
+		const auto [x, y] = volumetric_fog::ScreenJitterForFrame(frame);
+		CHECK(x >= 0.0f);
+		CHECK(x < 1.0f);
+		CHECK(y >= 0.0f);
+		CHECK(y < 1.0f);
+		minX = std::min(minX, x);
+		maxX = std::max(maxX, x);
+		minY = std::min(minY, y);
+		maxY = std::max(maxY, y);
+		points.insert({ x, y });
+		differsFromDepth |= x != volumetric_fog::JitterForFrame(frame);
+	}
+
+	CHECK(points.size() == VolumetricFogSettings::JitterSequenceLength);
+	CHECK(maxX - minX > 0.75f);
+	CHECK(maxY - minY > 0.75f);
+	CHECK(differsFromDepth);
+}
+
 TEST_CASE("Integrated texel coordinate maps a slice's end to its texel centre", "[volumetric_fog]")
 {
 	constexpr uint32 sliceCount = 64;
@@ -171,4 +213,111 @@ TEST_CASE("Noise density factor keeps the average density", "[volumetric_fog]")
 
 		CHECK(sum / samples == Approx(1.0).epsilon(1e-3));
 	}
+}
+
+TEST_CASE("History weight defaults to the shipped blend and clamps to its range", "[volumetric_fog]")
+{
+	VolumetricFogSettings settings;
+	CHECK(settings.historyWeight == Approx(VolumetricFogSettings::DefaultHistoryWeight));
+
+	settings.SetHistoryWeight(0.5f);
+	CHECK(settings.historyWeight == Approx(0.5f));
+
+	settings.SetHistoryWeight(1.0f);
+	CHECK(settings.historyWeight == Approx(VolumetricFogSettings::MaxHistoryWeight));
+
+	settings.SetHistoryWeight(-1.0f);
+	CHECK(settings.historyWeight == Approx(0.0f));
+}
+
+TEST_CASE("Every volumetric fog quality preset box-filters the sun over the cell with several depth taps", "[volumetric_fog]")
+{
+	// Two depth taps band visibly across the shafts; the cell is a needle several metres long at mid range.
+	VolumetricFogSettings settings;
+	for (int level = 1; level <= 4; ++level)
+	{
+		settings.ApplyQualityLevel(level);
+		CHECK(settings.sunTapsXY >= 2u);
+		CHECK(settings.sunTapsZ >= 4u);
+	}
+}
+
+TEST_CASE("Volumetric fog sun taps clamp to the supported range", "[volumetric_fog]")
+{
+	VolumetricFogSettings settings;
+	settings.SetSunTaps(0, 0);
+	CHECK(settings.sunTapsXY == 1u);
+	CHECK(settings.sunTapsZ == 1u);
+
+	settings.SetSunTaps(100, 100);
+	CHECK(settings.sunTapsXY == VolumetricFogSettings::MaxSunTapsXY);
+	CHECK(settings.sunTapsZ == VolumetricFogSettings::MaxSunTapsZ);
+}
+
+TEST_CASE("Volumetric fog sun mode defaults to the box filter and clamps to the known modes", "[volumetric_fog]")
+{
+	VolumetricFogSettings settings;
+	CHECK(settings.sunMode == VolumetricFogSettings::SunModeBoxFilter);
+	CHECK_FALSE(settings.IsSunTemporal());
+
+	settings.SetSunMode(1);
+	CHECK(settings.sunMode == VolumetricFogSettings::SunModeTemporal);
+	CHECK(settings.IsSunTemporal());
+
+	settings.SetSunMode(9);
+	CHECK(settings.sunMode == VolumetricFogSettings::SunModeTemporalCascades);
+
+	settings.SetSunMode(-3);
+	CHECK(settings.sunMode == VolumetricFogSettings::SunModeBoxFilter);
+}
+
+TEST_CASE("Golden jitter covers the unit interval evenly and never repeats a short cycle", "[volumetric_fog]")
+{
+	CHECK(volumetric_fog::GoldenJitterForFrame(0) == Approx(0.0f));
+	CHECK(volumetric_fog::GoldenJitterForFrame(1) == Approx(0.618034f).margin(1e-5));
+
+	// The golden ratio's three-gap property bounds the largest gap between any 16 consecutive offsets below 2/16.
+	std::vector<float> offsets;
+	for (uint64 frame = 1000; frame < 1016; ++frame)
+	{
+		const float offset = volumetric_fog::GoldenJitterForFrame(frame);
+		REQUIRE(offset >= 0.0f);
+		REQUIRE(offset < 1.0f);
+		offsets.push_back(offset);
+	}
+
+	std::sort(offsets.begin(), offsets.end());
+	float largestGap = offsets.front() + 1.0f - offsets.back();
+	for (size_t i = 1; i < offsets.size(); ++i)
+	{
+		largestGap = std::max(largestGap, offsets[i] - offsets[i - 1]);
+	}
+	CHECK(largestGap < 2.0f / 16.0f);
+}
+
+TEST_CASE("Fog shadow depth taps step about two shadow texels and one noise texel along the froxel", "[volumetric_fog]")
+{
+	using volumetric_fog::FogShadowDepthTaps;
+	constexpr float mapSize = 256.0f;
+	constexpr float noNoise = 1.0e6f;	// a noise tile this large never asks for a tap
+
+	// A near froxel 0.2 m deep barely crosses a texel: the minimum covers it.
+	CHECK(FogShadowDepthTaps(0.2f, 0.01f, mapSize, 1.0f, noNoise) == VolumetricFogSettings::MinFogShadowTapsZ);
+
+	// 20 m deep, moving 0.006 shadow NDC per metre: 20 * 0.006 * 128 = 15.36 texels = 7.68 two-texel steps -> 8 taps.
+	CHECK(FogShadowDepthTaps(20.0f, 0.006f, mapSize, 1.0f, noNoise) == 8u);
+
+	// A deeper froxel needs more taps, but never more than the supported maximum.
+	CHECK(FogShadowDepthTaps(40.0f, 0.006f, mapSize, 1.0f, noNoise) == 16u);
+	CHECK(FogShadowDepthTaps(500.0f, 0.01f, mapSize, 1.0f, noNoise) == VolumetricFogSettings::MaxSunTapsZ);
+
+	// Looking straight along the light the froxel stays on one texel: only the minimum.
+	CHECK(FogShadowDepthTaps(50.0f, 0.0f, mapSize, 1.0f, noNoise) == VolumetricFogSettings::MinFogShadowTapsZ);
+
+	// The noise asks for one tap per noise texel along the ray: 2 m on a 32 m tile of 64 texels = 4 texels.
+	CHECK(FogShadowDepthTaps(2.0f, 0.0f, mapSize, 1.0f, 32.0f) == 4u);
+	CHECK(FogShadowDepthTaps(2.0f, 0.0f, mapSize, 1.5f, 32.0f) == 6u);
+
+	// The count grows with the map resolution (same froxel, finer texels).
+	CHECK(FogShadowDepthTaps(20.0f, 0.006f, 512.0f, 1.0f, noNoise) > FogShadowDepthTaps(20.0f, 0.006f, mapSize, 1.0f, noNoise));
 }

@@ -108,6 +108,7 @@ namespace mmo
 			{ AuraType::ModHealthRegenPercent, [](AuraEffect& self, bool apply){ self.HandleModHealthRegenPercent(apply); } },
 			{ AuraType::ModPowerRegenPercent,  [](AuraEffect& self, bool apply){ self.HandleModPowerRegenPercent(apply); } },
 			{ AuraType::ModCritChanceTaken,    [](AuraEffect& self, bool apply){ self.HandleModCritChanceTaken(apply); } },
+			{ AuraType::ModCastingManaRegenPercent, [](AuraEffect& self, bool apply){ self.HandleModCastingManaRegenPercent(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -564,12 +565,25 @@ namespace mmo
 		// Base points are the percentage bonus applied to that power's regeneration per tick.
 		m_container.GetOwner().ModifyPowerRegenPercentBonus(
 			static_cast<PowerType>(powerType), static_cast<float>(GetBasePoints()), apply);
+
+		// The character sheet shows mana regeneration, and this scalar does not go through
+		// RefreshStats().
+		m_container.GetOwner().UpdateCombatStatFields();
 	}
 
 	void AuraEffect::HandleModCritChanceTaken(const bool apply) const
 	{
 		// Base points are flat percentage points added to any attacker's crit chance.
 		m_container.GetOwner().ModifyCritChanceTakenBonus(static_cast<float>(GetBasePoints()), apply);
+	}
+
+	void AuraEffect::HandleModCastingManaRegenPercent(const bool apply) const
+	{
+		// Base points are percentage points of normal mana regeneration added to the casting share.
+		m_container.GetOwner().ModifyCastingManaRegenPercentBonus(static_cast<float>(GetBasePoints()), apply);
+
+		// Not part of RefreshStats(), so refresh the character sheet value here.
+		m_container.GetOwner().UpdateCombatStatFields();
 	}
 
 	void AuraEffect::HandlePeriodicDamage() const

@@ -7,10 +7,21 @@ RUN apt-get update && apt-get install -y software-properties-common && add-apt-r
 
 ENV CC=gcc-13
 ENV CXX=g++-13
+# The nightly passes the build identity in (the context has no .git); a crash report names it,
+# and tools/fetch_server_symbols.ps1 finds the matching unstripped binary by the commit.
+ARG MMO_COMMIT=
+ARG MMO_VERSION=
 RUN mkdir -p docker-build && \
 	cd docker-build && \
-	cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_OPENSSL_STATIC=OFF -DMMO_WITH_DEV_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release /app && \
-	make -j4 login_server
+	cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_OPENSSL_STATIC=OFF -DMMO_WITH_DEV_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_C_FLAGS=-g -DCMAKE_CXX_FLAGS=-g "-DMMO_BUILD_COMMIT=${MMO_COMMIT}" "-DMMO_BUILD_VERSION=${MMO_VERSION}" /app && \
+	make -j4 login_server && \
+	strip --strip-debug -o /app/bin/login_server.stripped /app/bin/login_server
+
+# The unstripped binary, for symbolicating crash reports: docker-build.yml exports this stage
+# (--target symbols) and the nightly attaches it to its release as server-symbols.zip.
+FROM scratch AS symbols
+COPY --from=builder /app/bin/login_server /login_server
 
 
 FROM ubuntu:latest
@@ -20,7 +31,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y libmariadb-dev-compat libssl-dev uuid-dev
 
 RUN mkdir -p /app/config
-COPY --from=builder /app/bin/login_server /app/login_server
+# Release optimised, debug info stripped; same code layout as the binary in the symbols stage.
+COPY --from=builder /app/bin/login_server.stripped /app/login_server
 COPY --from=builder /app/data/login/updates /app/updates/login
 COPY --from=builder /app/docker/login_server/run_server.sh /app/run_server.sh
 

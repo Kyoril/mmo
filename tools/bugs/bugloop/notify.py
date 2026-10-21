@@ -3,6 +3,7 @@
 """Discord notifications of the bug loop. Delivery is best effort: a failure is logged by its
 exception class only (never the webhook URL) and never stops the loop."""
 
+import datetime
 import json
 import urllib.request
 
@@ -88,6 +89,34 @@ def worktree_down_message(minutes, error):
 
 def worktree_up_message():
 	return "**Bug loop resumed** — the fix worktree works again"
+
+
+def _duration(previous, now):
+	try:
+		seconds = max(0, int((now - datetime.datetime.fromisoformat(previous.get("since"))).total_seconds()))
+	except (TypeError, ValueError):
+		return ""
+	if seconds < 7200:
+		return "{} min".format(seconds // 60)
+	return "{:.1f} h".format(seconds / 3600)
+
+
+def mode_message(name, previous, now, queue, reason, poll_minutes):
+	"""The loop changed between busy, idle and paused. `previous` is the mode it left; leaving
+	busy reports what that stretch finished."""
+	if name == "busy":
+		return "**Bug loop busy** — {} bug(s) queued; working through them without waiting".format(queue)
+	if name == "paused":
+		return "**Bug loop paused** — {}; {} bug(s) wait".format(reason, queue)
+	text = "**Bug loop idle** — the fix queue is empty; polling for new reports every {} min".format(poll_minutes)
+	counts = previous.get("counts") or {}
+	if previous.get("name") == "busy" and counts:
+		shipped = counts.get("shipped", 0) + counts.get("shipped-by-maintainer", 0)
+		done = ["shipped {}".format(shipped), "parked {}".format(counts.get("parked", 0)),
+			"needs-info {}".format(counts.get("needs-info", 0))]
+		duration = _duration(previous, now)
+		text += "\nThis busy stretch{}: {}".format(" ({})".format(duration) if duration else "", ", ".join(done))
+	return text
 
 
 def ci_green_message(workflow_names):

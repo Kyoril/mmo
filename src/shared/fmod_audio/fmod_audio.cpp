@@ -1,6 +1,7 @@
 
 #include "fmod_audio.h"
 
+#include <algorithm>
 #include <unordered_set>
 
 #ifdef _WIN32
@@ -150,6 +151,24 @@ namespace mmo
 			return volume;
 		}
 		return 1.0f;
+	}
+
+	void FMODChannelInstance::SetPlaybackPosition(const float seconds)
+	{
+		if (!m_channel)
+		{
+			return;
+		}
+
+		FMOD::Sound* sound = nullptr;
+		unsigned int lengthMs = 0;
+		if (m_channel->getCurrentSound(&sound) != FMOD_OK || !sound || sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS) != FMOD_OK || lengthMs == 0)
+		{
+			return;
+		}
+
+		const auto positionMs = static_cast<unsigned int>(std::max(0.0f, seconds) * 1000.0f) % lengthMs;
+		m_channel->setPosition(positionMs, FMOD_TIMEUNIT_MS);
 	}
 
 	SoundIndex FMODChannelInstance::GetSoundIndex() const

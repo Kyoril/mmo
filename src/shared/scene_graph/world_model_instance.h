@@ -4,6 +4,7 @@
 
 #include "world_model.h"
 #include "instanced_mesh_collision.h"
+#include "mesh.h"
 #include "movable_object.h"
 #include "prop_kit.h"
 #include "world_model_batch.h"
@@ -164,6 +165,14 @@ namespace mmo
         /// @return The group index, or -1 when the prop lies in no room (so it is never culled) or
         ///         the index is out of range.
         [[nodiscard]] int32 GetKitPropGroup(size_t index) const;
+
+        /// @brief Appends the sound emitters of every mesh this instance places, in world space:
+        ///        the group mesh references, the doodads of the active sets, the kit props and,
+        ///        recursively, the child world models.
+        /// @details Walks the model data rather than the scene, so it gives the same result whether
+        ///          the geometry is batched, merged or one entity per mesh. Meaningful once the
+        ///          instance is attached, because the placement transform comes from its node.
+        void CollectSoundEmitters(std::vector<PlacedSoundEmitter>& out) const;
 
         /// @brief Deepest nesting of child world models that is instantiated. A town that places
         ///        buildings that place props is depth 2; anything this deep is a content mistake.
@@ -438,6 +447,10 @@ namespace mmo
         /// @brief Creates doodad entities for the current doodad set.
         /// @param scene The scene to create entities in.
         void CreateDoodads(Scene& scene);
+
+        /// @brief Gets the indices of the doodads that are placed: the global set 0 plus the
+        ///        active set, skipping indices out of range or without a valid name.
+        [[nodiscard]] std::vector<uint32> GetActiveDoodadIndices() const;
 
         /// @brief Creates lights from the world model.
         /// @param scene The scene to create lights in.

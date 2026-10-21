@@ -51,7 +51,12 @@ namespace mmo
 		std::string v;
 
 		BanState banned;
+		/// GM level of the account; 0 for regular players.
+		uint8 gmLevel = 0;
 	};
+
+	/// Realm capacity used when the database has none (matches the column default).
+	constexpr uint32 DefaultRealmCapacity = 1000;
 
 	/// Contains data used by a realm for authentification.
 	struct RealmAuthData
@@ -68,6 +73,8 @@ namespace mmo
 		std::string ipAddress;
 		/// The port of the realm server.
 		uint16 port;
+		/// Player capacity the realm list population is measured against.
+		uint32 capacity = DefaultRealmCapacity;
 	};
 
 	/// Parameters for paginated account list queries.
@@ -189,7 +196,10 @@ namespace mmo
 		std::string last_login;
 		std::string last_ip;
 		std::string last_build;
+		uint32 capacity = DefaultRealmCapacity;
 		bool is_online = false;
+		/// Connected players as last reported by the realm; only meaningful while is_online.
+		uint32 player_count = 0;
 	};
 
 	/// Basic interface for a database system used by the login server.
@@ -306,6 +316,9 @@ namespace mmo
 
 		/// Returns the realm id by name. @returns The realm id or empty optional if not found.
 		virtual std::optional<uint32> GetRealmIdByName(const std::string& name) = 0;
+
+		/// Sets the player capacity of a realm. @returns true if the realm exists and was updated.
+		virtual bool SetRealmCapacity(uint32 realmId, uint32 capacity) = 0;
 
 		/// Retrieves all data needed to validate and finish a client auth session, including the
 		/// account's active feature keys.

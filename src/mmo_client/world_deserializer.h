@@ -21,6 +21,7 @@ namespace mmo
 	class Scene;
 	class WorldModelInstance;
 	class InstancedFoliage;
+	class AmbientSoundEmitters;
 
 	namespace world_version
 	{
@@ -66,10 +67,19 @@ namespace mmo
 		///          until this returns false.
 		bool HasPendingEntityLoads() const { return m_pendingEntityFiles.load() > 0 || m_pendingWorldModels > 0; }
 
+		/// @brief Sets where placements register the looping sounds of their meshes, or null for none.
+		/// @details Placements created from then on register; unloading a placement removes its
+		///          sounds again. The instance never touches the target from its destructor, so the
+		///          owner clears it when it drops the world.
+		void SetAmbientSounds(AmbientSoundEmitters* ambientSounds) { m_ambientSounds = ambientSounds; }
+
 	protected:
 		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
 
 		WorldModelInstance* CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId, const std::vector<String>& kitPaths);
+
+		/// @brief Removes the mesh sounds a placement registered, if any.
+		void RemoveAmbientSounds(uint8 ownerKind, uint64 uniqueId) const;
 
 		static uint16 BuildPageIndex(uint8 x, const uint8 y)
 		{
@@ -142,6 +152,9 @@ namespace mmo
 
 		/// @brief Hardware-instanced renderer for authored foliage (trees) loaded per page.
 		std::unique_ptr<InstancedFoliage> m_foliage;
+
+		/// @brief Receives the mesh sounds of streamed placements. Not owned; may be null.
+		AmbientSoundEmitters* m_ambientSounds = nullptr;
 	};
 
 	/// @brief Supports deserializing a world from a file.

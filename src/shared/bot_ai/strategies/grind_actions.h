@@ -18,6 +18,12 @@ namespace mmo
 	constexpr uint32 BotGrindLevelsBelow = 3;
 	constexpr uint32 BotGrindLevelsAbove = 1;
 
+	/// How many yards one other bot already working a spot adds to its distance when choosing.
+	constexpr float BotGrindCrowdingCost = 60.0f;
+
+	/// How many yards each level a spot lies below the bot adds to its distance when choosing.
+	constexpr float BotGrindLevelGapCost = 40.0f;
+
 	/// Nearest candidates a bot picks from at random. Always taking the closest one would pile
 	/// every bot in a region onto the same spawn.
 	constexpr std::size_t BotGrindCandidateChoices = 5;

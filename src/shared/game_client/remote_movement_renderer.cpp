@@ -53,8 +53,6 @@ namespace mmo
 		}
 
 		const float corrLen = (info.position - m_renderedPos).GetLength();
-		DLOG("[RemoteMovement] auth update corr=" << corrLen
-		    << "m flags=" << log_hex_digit(info.movementFlags));
 
 		// Reset dead-reckoning to the authoritative position.
 		// m_scenePos (scene node) is NOT snapped here — the proportional correction

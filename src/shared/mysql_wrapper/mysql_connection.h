@@ -20,6 +20,9 @@ namespace mmo
 			String password;
 			String database;
 			String updatePath;
+			/// SQL run by the client library on every connect, including its automatic reconnects.
+			/// Use this rather than a one-off SET SESSION, which a silent reconnect discards. Empty runs nothing.
+			String initCommand;
 
 
 			DatabaseInfo();

@@ -21,6 +21,7 @@
 #include <set>
 
 #include "login_connector.h"
+#include "instance_override.h"
 #include "dungeon_bindings.h"
 #include "game/action_button.h"
 #include "game/mail.h"
@@ -104,6 +105,13 @@ namespace mmo
 
 		/// Gets the character data for the active character.
 		[[nodiscard]] const CharacterData& GetCharacterData() const { return m_characterData.value(); }
+
+		/// Returns true while the character is in an instance it joined through a GM port override
+		/// (observing someone else's run). Such an instance must never become a group binding.
+		[[nodiscard]] bool IsVisitingInstance() const { return m_joinedByInstanceOverride; }
+
+		/// Gets the character guid of the player this game master is ghosting, or 0 if none.
+		[[nodiscard]] uint64 GetGhostTargetGuid() const { return m_ghostTargetGuid; }
 
 		/// Gets the active character guid, or 0 if not set.
 		[[nodiscard]] uint64 GetCharacterGuid() const { return m_characterData.has_value() ? m_characterData.value().characterId : 0; }
@@ -264,6 +272,28 @@ namespace mmo
 		/// Sends the availability of every subsystem for the player's current world node.
 		void SendFullSubsystemStatus();
 
+		/// Sends a plain system chat message to the client.
+		/// @param message The message text.
+		void SendSystemMessage(const String &message);
+
+		/// Forwards an opcode and raw payload to the world node as a proxied client packet.
+		/// @param opCode The client opcode the world node should handle.
+		/// @param payload The packet payload.
+		void ForwardProxyPayload(uint16 opCode, const std::vector<uint8> &payload);
+
+		/// Informs a game master about the persistent GM flags that are active for the character.
+		void SendGmFlagStatus();
+
+		/// Ends the ghost link of every game master ghosting this character (it is logging out).
+		void EndGhostLinksToMe();
+
+		/// Takes every game master ghosting this character along into its current instance.
+		void PullGhostsAlong();
+
+		/// Teleports the character next to an online player, into that player's instance.
+		/// @param targetName Name of the online player to follow.
+		void TeleportIntoPlayerInstance(const String &targetName);
+
 		/// Sends the answer to a bug report to the client.
 		void SendBugReportResult(game::BugReportResult result);
 
@@ -331,7 +361,9 @@ namespace mmo
 
 		void FetchCharacterLocationAsync(CharacterLocationAsyncCallback &&callback);
 
-		void SendTeleportRequest(uint32 mapId, const Vector3 &position, const Radian &facing) const;
+		/// Asks the current world node to teleport the character.
+		/// @param instanceId Instance the character should end up in, or nil to let the world node decide.
+		void SendTeleportRequest(uint32 mapId, const Vector3 &position, const Radian &facing, const InstanceId &instanceId = {}) const;
 
 		void SendPartyOperationResult(PartyOperation operation, PartyResult result, const String &playerName);
 
@@ -481,6 +513,19 @@ namespace mmo
 		uint32 m_actionButtonClassId = 0;
 		InstanceId m_instanceId{};
 		uint32 m_transferMap = 0;
+
+		/// Instance the next transfer must join (GM port to a player), consumed by OnMoveWorldPortAck.
+		std::optional<InstanceOverride> m_pendingInstanceOverride;
+
+		/// True while the character is in an instance it joined through an override: no dungeon
+		/// binding is stored for it, so a visiting GM never rebinds their own group or themselves.
+		bool m_joinedByInstanceOverride = false;
+
+		/// Character guid of the player this game master is ghosting, or 0. While set, every transfer
+		/// onto the target's map joins the target's instance, and the target's own instance changes
+		/// take the GM along. Session state only: ends when either character logs out.
+		uint64 m_ghostTargetGuid = 0;
+
 		Vector3 m_transferPosition{};
 		float m_transferFacing = 0.0f;
 		std::shared_ptr<PlayerGroup> m_group;
@@ -643,6 +688,13 @@ namespace mmo
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSummon(game::IncomingPacket &packet);
+		PacketParseResult OnCheatGmFlag(game::IncomingPacket &packet);
+		PacketParseResult OnCheatGhost(game::IncomingPacket &packet);
+
+		/// Sends the character's current godmode and invisibility flags to the world node it just
+		/// joined. A toggle made while the join was in flight was persisted but could not be
+		/// forwarded (no world yet); the world side applies the values idempotently.
+		void ForwardGmFlagsToWorld();
 		PacketParseResult OnCheatSetTimeOfDay(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetSubsystem(game::IncomingPacket &packet);
 		PacketParseResult OnGuildCreate(game::IncomingPacket &packet);

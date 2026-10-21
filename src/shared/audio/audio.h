@@ -72,6 +72,10 @@ namespace mmo
 
 		virtual void SetVolume(float volume) = 0;
 		virtual float GetVolume() const = 0;
+
+		/// @brief Moves playback to the given time. Looped sounds wrap it into their length, so
+		///        identical loops started together can be desynchronized with a random offset.
+		virtual void SetPlaybackPosition(float seconds) = 0;
 	};
 
 	class IAudio

@@ -26,7 +26,11 @@ namespace mmo
 	static const ChunkMagic MeshBoneChunk = MakeChunkMagic('BONE');
 	static const ChunkMagic MeshCollisionChunk = MakeChunkMagic('COLL');
 	static const ChunkMagic MeshCollisionRecipeChunk = MakeChunkMagic('CSRC');
-	
+	static const ChunkMagic MeshSoundEmittersChunk = MakeChunkMagic('SNDS');
+
+	/// Layout version of the SNDS chunk payload, written as its first byte.
+	static constexpr uint8 SoundEmittersChunkVersion = 1;
+
 	void WriteVertexData(const VertexData& vertexData, io::Writer& writer)
 	{
 		writer << io::write<uint32>(vertexData.vertexCount);
@@ -171,6 +175,27 @@ namespace mmo
 			recipeChunk.Finish();
 		}
 
+		// Looping positional sounds. Readers from 0x0302 on skip chunks they do not know, so older
+		// clients and the servers load these meshes unchanged.
+		if (!mesh->GetSoundEmitters().empty() && version >= mesh_version::Version_0_3_2)
+		{
+			ChunkWriter soundChunk{ MeshSoundEmittersChunk, writer };
+			writer
+				<< io::write<uint8>(SoundEmittersChunkVersion)
+				<< io::write<uint16>(mesh->GetSoundEmitters().size());
+			for (const MeshSoundEmitter& emitter : mesh->GetSoundEmitters())
+			{
+				writer
+					<< io::write<uint32>(emitter.soundEntryId)
+					<< io::write<float>(emitter.offset.x)
+					<< io::write<float>(emitter.offset.y)
+					<< io::write<float>(emitter.offset.z)
+					<< io::write<float>(emitter.volume)
+					<< io::write<float>(emitter.maxDistance);
+			}
+			soundChunk.Finish();
+		}
+
 		// Write submesh chunks
 		bool hasTags = false;
 		uint16 submeshIndex = 0;
@@ -309,6 +334,7 @@ namespace mmo
 								chunkReader >> io::skip(chunkSize);
 								return static_cast<bool>(chunkReader);
 							});
+							AddChunkHandler(*MeshSoundEmittersChunk, false, *this, &MeshDeserializer::ReadSoundEmittersChunk);
 							SetIgnoreUnhandledChunks(true);
 						}
 					}
@@ -751,6 +777,46 @@ namespace mmo
 	{
 		reader >> m_mesh.m_collisionTree;
 		return reader;
+	}
+
+	bool MeshDeserializer::ReadSoundEmittersChunk(io::Reader& reader, uint32 chunkHeader, const uint32 chunkSize)
+	{
+		const size_t chunkStart = reader.getSource()->position();
+
+		uint8 layoutVersion = 0;
+		uint16 count = 0;
+		if (!(reader >> io::read<uint8>(layoutVersion) >> io::read<uint16>(count)))
+		{
+			ELOG("Mesh '" << m_mesh.GetName() << "': truncated sound emitter chunk");
+			return false;
+		}
+
+		// A newer layout is not an error: the mesh just plays no sounds in this build.
+		if (layoutVersion != SoundEmittersChunkVersion)
+		{
+			WLOG("Mesh '" << m_mesh.GetName() << "': unsupported sound emitter layout " << static_cast<uint32>(layoutVersion) << ", skipping");
+			reader >> io::skip(chunkSize - (reader.getSource()->position() - chunkStart));
+			return static_cast<bool>(reader);
+		}
+
+		std::vector<MeshSoundEmitter> emitters(count);
+		for (MeshSoundEmitter& emitter : emitters)
+		{
+			if (!(reader
+				>> io::read<uint32>(emitter.soundEntryId)
+				>> io::read<float>(emitter.offset.x)
+				>> io::read<float>(emitter.offset.y)
+				>> io::read<float>(emitter.offset.z)
+				>> io::read<float>(emitter.volume)
+				>> io::read<float>(emitter.maxDistance)))
+			{
+				ELOG("Mesh '" << m_mesh.GetName() << "': truncated sound emitter chunk");
+				return false;
+			}
+		}
+
+		m_mesh.SetSoundEmitters(std::move(emitters));
+		return true;
 	}
 
 	bool MeshDeserializer::ReadTagsChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)

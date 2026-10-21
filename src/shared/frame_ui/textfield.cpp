@@ -748,12 +748,38 @@ namespace mmo
 	{
 		abort_emission();
 
-		if (!AcceptsTab() && codepoint == 0x09)     // VK_TAB
+		// WM_CHAR delivers UTF-16 code units: a character beyond U+FFFF (most emoji) arrives as a
+		// high surrogate followed by a low one. Keep the first half until the second arrives, as
+		// encoding either half on its own produces invalid UTF-8.
+		uint32 character = codepoint;
+		if (codepoint >= 0xD800 && codepoint <= 0xDBFF)
+		{
+			m_pendingHighSurrogate = codepoint;
+			return;
+		}
+
+		if (codepoint >= 0xDC00 && codepoint <= 0xDFFF)
+		{
+			const uint16 highSurrogate = m_pendingHighSurrogate;
+			m_pendingHighSurrogate = 0;
+			if (highSurrogate == 0)
+			{
+				return;
+			}
+
+			character = 0x10000 + ((static_cast<uint32>(highSurrogate) - 0xD800) << 10) + (codepoint - 0xDC00);
+		}
+		else
+		{
+			m_pendingHighSurrogate = 0;
+		}
+
+		if (!AcceptsTab() && character == 0x09)     // VK_TAB
 		{
 			return;
 		}
 
-		if (codepoint == 0x0D || codepoint == 0x0A)  // VK_RETURN / line feed
+		if (character == 0x0D || character == 0x0A)  // VK_RETURN / line feed
 		{
 			if (!IsMultiLine())
 			{
@@ -761,17 +787,17 @@ namespace mmo
 			}
 
 			// Insert a hard line break
-			codepoint = '\n';
+			character = '\n';
 		}
 
-		if (codepoint == 0x8)   // VK_BACKSPACE
+		if (character == 0x8)   // VK_BACKSPACE
 			return;
 
 		// Windows turns a Ctrl shortcut into a WM_CHAR carrying a C0 control character right
 		// after the key down which already handled it, so Ctrl+V would append a 0x16 to the very
 		// text it just pasted. Control characters are not text and must never reach the field.
 		// Tab and line break got their meaning assigned above and are let through here.
-		if ((codepoint < 0x20 && codepoint != '\t' && codepoint != '\n') || codepoint == 0x7F)
+		if ((character < 0x20 && character != '\t' && character != '\n') || character == 0x7F)
 		{
 			return;
 		}
@@ -785,9 +811,9 @@ namespace mmo
 			m_cursor = static_cast<int32>(m_parsedText.hyperlinks[hyperlinkIndex].plainTextEnd);
 		}
 
-		// Convert the 16-bit codepoint to UTF-8 and insert it at the cursor position
+		// Convert the character to UTF-8 and insert it at the cursor position
 		std::string utf8Char;
-		utf8::append_codepoint(utf8Char, codepoint);
+		utf8::append_codepoint(utf8Char, character);
 		
 		// For simplicity and reliability, always append to the end when there's no markup
 		// This avoids complex text rebuilding issues

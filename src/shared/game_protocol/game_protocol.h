@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000019;
+		constexpr uint32 ProtocolVersion = 0x0000001B;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -466,6 +466,17 @@ namespace mmo
 				/// Sent by the loot master to hand a master loot item of the open loot to a party member.
 				/// Proxied to the world node. Payload: uint8 loot slot, uint64 target character guid.
 				MasterLootItem,
+
+				/// GAME MASTER. Toggles game master invisibility on the sender's character: hidden from
+				/// players and creatures, visible to other game masters. Persisted by the realm.
+				/// Payload: uint8 (0/1).
+				CheatInvisible, // GAME MASTER
+
+				/// GAME MASTER. Ghosts an online player: every transfer of the sender onto the target's
+				/// map joins the target's instance, and the target's instance changes take the sender
+				/// along, without a group. Lasts until either character logs out. Handled by the realm.
+				/// Payload: uint8-length string target name (empty = stop ghosting).
+				CheatGhost, // GAME MASTER
 
 				/// Counter constant
 				Count_,

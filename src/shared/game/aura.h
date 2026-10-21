@@ -154,6 +154,13 @@ namespace mmo
 			/// points are flat percentage points (100 = every landed attack crits).
 			ModCritChanceTaken    = 40,
 
+			/// Raises the share of the owner's normal mana regeneration that keeps flowing
+			/// while it is casting (the five seconds after it last spent mana). The aura's base
+			/// points are percentage points added to combat_settings.casting_mana_regen_percent
+			/// (10 = +10% of normal regeneration). Accumulated into a cached scalar like
+			/// ModHealthRegenPercent.
+			ModCastingManaRegenPercent = 41,
+
 			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,

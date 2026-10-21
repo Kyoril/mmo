@@ -5,6 +5,7 @@
 #include "version.h"
 #include "game/field_map.h"
 #include "game/group.h"
+#include "game/loot.h"
 #include "game/movement_info.h"
 #include "game/object_type_id.h"
 
@@ -17,6 +18,7 @@
 #include "log/default_log_levels.h"
 
 #include <algorithm>
+#include <cctype>
 #include <iomanip>
 #include <mutex>
 #include <vector>
@@ -149,6 +151,13 @@ namespace mmo
 	{
 		ELOG("Lost connection to the realm server...");
 		ClearPacketHandlers();
+
+		// Questions asked on the old connection will never be answered, and the next session
+		// announces its own channel memberships.
+		m_pendingNameQueries.clear();
+		m_chatChannels.clear();
+		m_hasChatChannelList = false;
+
 		Disconnected();
 	}
 
@@ -238,6 +247,58 @@ namespace mmo
 				}
 				packet.Finish();
 			});
+	}
+
+	void BotRealmConnector::QueryName(const uint64 guid)
+	{
+		if (guid == 0 || m_nameCache.count(guid) != 0 || !m_pendingNameQueries.insert(guid).second)
+		{
+			return;
+		}
+
+		sendSinglePacket([guid](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::NameQuery);
+				packet << io::write_packed_guid(guid);
+				packet.Finish();
+			});
+	}
+
+	const std::string* BotRealmConnector::GetCachedName(const uint64 guid) const
+	{
+		const auto it = m_nameCache.find(guid);
+		return it != m_nameCache.end() ? &it->second : nullptr;
+	}
+
+	void BotRealmConnector::JoinChatChannel(const std::string& name)
+	{
+		sendSinglePacket([&name](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::ChannelJoin);
+				packet << io::write_dynamic_range<uint8>(name);
+				packet.Finish();
+			});
+	}
+
+	uint32 BotRealmConnector::FindChatChannelId(const std::string& name) const
+	{
+		const auto equalsIgnoreCase = [](const std::string& a, const std::string& b)
+		{
+			return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](const char x, const char y)
+				{
+					return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
+				});
+		};
+
+		for (const auto& [id, channelName] : m_chatChannels)
+		{
+			if (equalsIgnoreCase(channelName, name))
+			{
+				return id;
+			}
+		}
+
+		return 0;
 	}
 
 	void BotRealmConnector::SendMovementUpdate(uint64 characterId, uint16 opCode, const MovementInfo& info)
@@ -432,6 +493,11 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &BotRealmConnector::OnDestroyObjects);
 		RegisterPacketHandler(game::realm_client_packet::DebugLineOfSightResult, *this, &BotRealmConnector::OnDebugLineOfSightResult);
 		RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
+		RegisterPacketHandler(game::realm_client_packet::ChatMessage, *this, &BotRealmConnector::OnChatMessage);
+		RegisterPacketHandler(game::realm_client_packet::LootResponse, *this, &BotRealmConnector::OnLootResponse);
+		RegisterPacketHandler(game::realm_client_packet::InventoryError, *this, &BotRealmConnector::OnInventoryError);
+		RegisterPacketHandler(game::realm_client_packet::ChannelList, *this, &BotRealmConnector::OnChannelList);
+		RegisterPacketHandler(game::realm_client_packet::ChannelNotify, *this, &BotRealmConnector::OnChannelNotify);
 
 		// Movement packets - these contain position updates for other units
 		RegisterPacketHandler(game::realm_client_packet::MoveStartForward, *this, &BotRealmConnector::OnMovementPacket);
@@ -949,11 +1015,12 @@ namespace mmo
 			return;
 		}
 
-		// Send GroupUninvite with empty name to leave
+		// GroupLeave, as the game client sends it. A GroupUninvite with an empty name is a kick
+		// of nobody: the realm answers a member with YouNotLeader and a leader with
+		// NotInYourParty, and the bot never left.
 		sendSinglePacket([](game::OutgoingPacket& packet)
 		{
-			packet.Start(game::client_realm_packet::GroupUninvite);
-			packet << io::write_dynamic_range<uint8>(std::string{});
+			packet.Start(game::client_realm_packet::GroupLeave);
 			packet.Finish();
 		});
 
@@ -1369,13 +1436,17 @@ namespace mmo
 
 	PacketParseResult BotRealmConnector::OnNameQueryResult(game::IncomingPacket& packet)
 	{
+		// Same layout the game client reads: packed guid, success flag, then a
+		// zero-terminated name.
 		uint64 guid;
 		uint8 found;
-		if (!(packet >> io::read<uint64>(guid) >> io::read<uint8>(found)))
+		if (!(packet >> io::read_packed_guid(guid) >> io::read<uint8>(found)))
 		{
 			ELOG("Failed to read NameQueryResult header");
 			return PacketParseResult::Disconnect;
 		}
+
+		m_pendingNameQueries.erase(guid);
 
 		if (found == 0)
 		{
@@ -1384,17 +1455,99 @@ namespace mmo
 		}
 
 		String name;
-		if (!(packet >> io::read_container<uint8>(name)))
+		if (!(packet >> io::read_string(name)))
 		{
 			ELOG("Failed to read player name from NameQueryResult");
 			return PacketParseResult::Disconnect;
 		}
+
+		m_nameCache[guid] = name;
 
 		// Update the unit's name if we have it
 		if (BotUnit* unit = m_objectManager.GetUnitMutable(guid))
 		{
 			unit->SetName(name);
 			UnitUpdated(*unit);
+		}
+
+		NameResolved(guid, name);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChatMessage(game::IncomingPacket& packet)
+	{
+		BotChatMessage chat;
+		uint8 flags = 0;
+		if (!(packet >> io::read_packed_guid(chat.senderGuid) >> io::read<uint8>(chat.type)
+			>> io::read_limited_string<512>(chat.message) >> io::read<uint8>(flags)))
+		{
+			ELOG("Failed to read ChatMessage");
+			return PacketParseResult::Disconnect;
+		}
+
+		// NPC speech carries the speaker's name after the flags and is never anyone talking to
+		// the bot; nothing listening for chat wants it.
+		if (chat.type == ChatType::UnitSay || chat.type == ChatType::UnitYell || chat.type == ChatType::UnitEmote)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		if (chat.type == ChatType::Channel && !(packet >> io::read<uint32>(chat.channelId)))
+		{
+			ELOG("Failed to read channel id of ChatMessage");
+			return PacketParseResult::Disconnect;
+		}
+
+		ChatMessageReceived(chat);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChannelList(game::IncomingPacket& packet)
+	{
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_chatChannels.clear();
+		for (uint8 i = 0; i < count; ++i)
+		{
+			uint32 id = 0;
+			std::string name;
+			uint32 flags = 0;
+			if (!(packet >> io::read<uint32>(id) >> io::read_container<uint8>(name) >> io::read<uint32>(flags)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			m_chatChannels.emplace_back(id, std::move(name));
+		}
+
+		m_hasChatChannelList = true;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnChannelNotify(game::IncomingPacket& packet)
+	{
+		uint8 notifyType = 0;
+		uint32 channelId = 0;
+		std::string channelName;
+		if (!(packet >> io::read<uint8>(notifyType) >> io::read<uint32>(channelId) >> io::read_container<uint8>(channelName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto existing = std::find_if(m_chatChannels.begin(), m_chatChannels.end(),
+			[channelId](const auto& entry) { return entry.first == channelId; });
+
+		if (notifyType == game::channel_notify::Joined && existing == m_chatChannels.end())
+		{
+			m_chatChannels.emplace_back(channelId, std::move(channelName));
+		}
+		else if (notifyType == game::channel_notify::Left && existing != m_chatChannels.end())
+		{
+			m_chatChannels.erase(existing);
 		}
 
 		return PacketParseResult::Pass;
@@ -1507,12 +1660,65 @@ namespace mmo
 		// Track item and container objects so scenarios can assert on inventory contents.
 		if (typeId == ObjectTypeId::Item || typeId == ObjectTypeId::Container)
 		{
-			BotItemState item;
+			// Field by field: an update carries only what changed, and zero is a real value for
+			// most of these - an emptied bag slot, a broken item.
+			const BotItemState* known = m_objectManager.GetItem(guid);
+			BotItemState item = known ? *known : BotItemState{};
 			item.guid = guid;
-			item.entry = fieldMap.GetFieldValue<uint32>(object_fields::Entry);
-			item.stackCount = fieldMap.GetFieldValue<uint32>(object_fields::StackCount);
-			item.ownerGuid = fieldMap.GetFieldValue<uint64>(object_fields::ItemOwner);
-			m_objectManager.AddOrUpdateItem(item);
+
+			const auto changed = [&fieldMap, creation](const uint32 field, const bool is64Bit = false)
+			{
+				const auto index = static_cast<FieldMap<uint32>::FieldIndexType>(field);
+				return creation || fieldMap.IsFieldMarkedAsChanged(index)
+					|| (is64Bit && fieldMap.IsFieldMarkedAsChanged(static_cast<FieldMap<uint32>::FieldIndexType>(field + 1)));
+			};
+
+			if (changed(object_fields::Entry))
+			{
+				item.entry = fieldMap.GetFieldValue<uint32>(object_fields::Entry);
+			}
+			if (changed(object_fields::StackCount))
+			{
+				item.stackCount = fieldMap.GetFieldValue<uint32>(object_fields::StackCount);
+			}
+			if (changed(object_fields::ItemOwner, true))
+			{
+				item.ownerGuid = fieldMap.GetFieldValue<uint64>(object_fields::ItemOwner);
+			}
+			if (changed(object_fields::Contained, true))
+			{
+				item.containerGuid = fieldMap.GetFieldValue<uint64>(object_fields::Contained);
+			}
+			if (changed(object_fields::Durability))
+			{
+				item.durability = fieldMap.GetFieldValue<uint32>(object_fields::Durability);
+			}
+			if (changed(object_fields::MaxDurability))
+			{
+				item.maxDurability = fieldMap.GetFieldValue<uint32>(object_fields::MaxDurability);
+			}
+
+			if (typeId == ObjectTypeId::Container)
+			{
+				constexpr uint32 MaxBagSlots = 36;
+				item.slots.resize(MaxBagSlots, 0);
+
+				if (changed(object_fields::NumSlots))
+				{
+					item.numSlots = std::min(fieldMap.GetFieldValue<uint32>(object_fields::NumSlots), MaxBagSlots);
+				}
+
+				for (uint32 slot = 0; slot < MaxBagSlots; ++slot)
+				{
+					const uint32 field = object_fields::Slot_1 + slot * 2;
+					if (changed(field, true))
+					{
+						item.slots[slot] = fieldMap.GetFieldValue<uint64>(static_cast<FieldMap<uint32>::FieldIndexType>(field));
+					}
+				}
+			}
+
+			m_objectManager.SetItem(item);
 			return true;
 		}
 
@@ -1663,6 +1869,22 @@ namespace mmo
 			unit.SetPower(powerType, power, maxPower);
 		}
 
+		// The bot's own equipment, bag and backpack slots. Only its own player object carries
+		// them; for everyone else the server leaves them out.
+		if (typeId == ObjectTypeId::Player && guid == m_selectedCharacterGuid)
+		{
+			for (uint32 slot = 0; slot < player_inventory_pack_slots::End; ++slot)
+			{
+				const uint32 field = object_fields::InvSlotHead + slot * 2;
+				const auto low = static_cast<FieldMap<uint32>::FieldIndexType>(field);
+				const auto high = static_cast<FieldMap<uint32>::FieldIndexType>(field + 1);
+				if (creation || fieldMap.IsFieldMarkedAsChanged(low) || fieldMap.IsFieldMarkedAsChanged(high))
+				{
+					m_objectManager.SetSelfInventorySlot(static_cast<uint8>(slot), fieldMap.GetFieldValue<uint64>(low));
+				}
+			}
+		}
+
 		// Money is a player-only field used by scenario assertions.
 		if (typeId == ObjectTypeId::Player &&
 			(creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Money)))
@@ -1673,6 +1895,14 @@ namespace mmo
 		// Experience fields are player-only and used by scenario assertions.
 		if (typeId == ObjectTypeId::Player)
 		{
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::TalentPoints))
+			{
+				unit.SetTalentPoints(fieldMap.GetFieldValue<uint32>(object_fields::TalentPoints));
+			}
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Class))
+			{
+				unit.SetClassId(fieldMap.GetFieldValue<uint32>(object_fields::Class));
+			}
 			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Xp))
 			{
 				unit.SetXp(fieldMap.GetFieldValue<uint32>(object_fields::Xp));
@@ -2637,10 +2867,125 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::AutoStoreLootItem(const uint8 lootSlot)
+	{
+		sendSinglePacket([lootSlot](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AutoStoreLootItem);
+			packet << io::write<uint8>(lootSlot);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::LootMoney()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LootMoney);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::SellItem(const uint64 vendorGuid, const uint64 itemGuid)
+	{
+		sendSinglePacket([vendorGuid, itemGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SellItem);
+			packet << io::write<uint64>(vendorGuid) << io::write<uint64>(itemGuid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::BuyItem(const uint64 vendorGuid, const uint32 itemId, const uint8 count)
+	{
+		sendSinglePacket([vendorGuid, itemId, count](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::BuyItem);
+			packet << io::write<uint64>(vendorGuid) << io::write<uint32>(itemId) << io::write<uint8>(count);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::TrainerBuySpell(const uint64 trainerGuid, const uint32 spellId)
+	{
+		sendSinglePacket([trainerGuid, spellId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TrainerBuySpell);
+			packet << io::write<uint64>(trainerGuid) << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::LearnTalent(const uint32 talentId, const uint8 rank)
+	{
+		sendSinglePacket([talentId, rank](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LearnTalent);
+			packet << io::write<uint32>(talentId) << io::write<uint8>(rank);
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnLootResponse(game::IncomingPacket& packet)
+	{
+		BotLootWindow window;
+		uint8 lootType = 0;
+		if (!(packet >> io::read<uint64>(window.lootGuid) >> io::read<uint8>(lootType)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (lootType == loot_type::None)
+		{
+			uint8 error = 0;
+			if (!(packet >> io::read<uint8>(error)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			LootFailed(window.lootGuid, error);
+			return PacketParseResult::Pass;
+		}
+
+		uint8 itemCount = 0;
+		if (!(packet >> io::read<uint32>(window.money) >> io::read<uint8>(itemCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		window.items.resize(itemCount);
+		for (BotLootItem& item : window.items)
+		{
+			if (!(packet >> io::read<uint8>(item.slot) >> io::read<uint32>(item.itemId) >> io::read<uint32>(item.count)
+				>> io::skip<uint32>() >> io::skip<uint32>() >> io::skip<uint32>() >> io::read<uint8>(item.slotType)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		LootOpened(window);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnInventoryError(game::IncomingPacket& packet)
+	{
+		uint8 error = 0;
+		if (!(packet >> io::read<uint8>(error)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		InventoryErrorReceived(error);
+		return PacketParseResult::Pass;
+	}
+
 	void BotRealmConnector::CheatGodmode(const bool enable)
 	{
 		sendSinglePacket([enable](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatGodmode);
+			packet << io::write<uint8>(enable ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatInvisible(const bool enable)
+	{
+		sendSinglePacket([enable](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatInvisible);
 			packet << io::write<uint8>(enable ? 1 : 0);
 			packet.Finish();
 			});

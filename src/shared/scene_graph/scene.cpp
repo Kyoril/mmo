@@ -852,6 +852,13 @@ namespace mmo
 			for (MovableObject* caster : casters)
 			{
 				caster->SetCurrentCamera(cascadeCamera);
+
+				// No rendering-distance cut-off for shadow casters: the cascade frustum already bounds what
+				// can shade the cascade (CascadedShadowConfig::GetLightwardReach), and a cut-off measured from
+				// any moving camera sweeps through the forest as the player walks, so a low sun's shafts popped
+				// in and out with every step (worse from the cascade camera, which sits hundreds of metres
+				// toward the sun).
+				caster->ClearRenderingDistanceCull();
 			}
 
 			// Snapshot the cascade frustum on the main thread: Camera::IsVisible is NOT a

@@ -266,8 +266,14 @@ namespace mmo
         /// @brief Sets the view depth the fog volume covers in metres (clamped to [50, 300]).
         void SetVolumetricFogRange(float range) { m_volumetricFogPass->GetSettings().SetRange(range); }
 
+        /// @brief Sets the weight of the volumetric fog's reprojected history, clamped to [0, 0.95].
+        void SetVolumetricFogHistory(float weight) { m_volumetricFogPass->GetSettings().SetHistoryWeight(weight); }
+
         /// @brief Gets the view depth the fog volume covers in metres.
         [[nodiscard]] float GetVolumetricFogRange() const { return m_volumetricFogPass->GetSettings().range; }
+
+        /// @brief Direct access to the volumetric fog settings (grid size, history, debug view) for tools and tests.
+        [[nodiscard]] VolumetricFogSettings& GetVolumetricFogSettings() { return m_volumetricFogPass->GetSettings(); }
 
         /// @brief Sets the fog debug view: 0 off, 1 scattered light, 2 transmittance, 3 density, 4 lights per fog block.
         void SetAtmosphereDebugMode(int mode) { m_volumetricFogPass->GetSettings().SetDebugMode(mode); }
@@ -329,21 +335,16 @@ namespace mmo
         /// @brief Binds the cascade comparison sampler at pixel shader slot s1.
         void BindShadowSampler();
 
-        /// @brief Returns the shadow-map resolution to use for a given cascade index. Distant cascades
-        ///        (index >= 2) render at half the base resolution (floored at 256) to cut shadow fill,
-        ///        since their large world coverage per texel makes the resolution loss hard to notice.
         /// @brief Resizes every cascade shadow map to its current GetCascadeShadowMapSize.
         void ResizeCascadeShadowMaps();
 
+        /// @brief Returns the shadow-map resolution to use for a given cascade index. Cascades past the
+        ///        quality level's full-resolution count render at half the base resolution (floored at 256).
         [[nodiscard]] uint16 GetCascadeShadowMapSize(uint32 cascadeIndex) const
         {
-            if (cascadeIndex < m_fullResolutionCascades)
-            {
-                return m_shadowMapSize;
-            }
-
-            const uint16 halfSize = m_shadowMapSize / 2;
-            return halfSize < 256 ? 256 : halfSize;
+            // The cascade setup snaps each cascade to this same size's texel grid, so both read it
+            // from the one config.
+            return m_cascadedShadowSetup->GetConfig().GetCascadeMapSize(cascadeIndex);
         }
 
 #ifdef _WIN32
@@ -437,6 +438,26 @@ namespace mmo
         /// @brief Shadow cameras for each cascade.
         std::array<Camera*, NUM_SHADOW_CASCADES> m_shadowCameras{};
 
+        /// @brief Edge length of the volumetric fog's shadow map: texels of roughly 1-2 m over the fog range. Measured
+        ///        in the client, a 1024 map carried canopy detail far finer than a fog cell, and the shafts flickered
+        ///        back and forth while walking however many taps a cell took.
+        static constexpr uint16 FogShadowMapSize = 256;
+
+        /// @brief Frames between refreshes of the fog shadow map while it neither snaps nor sees a light step:
+        ///        only moving casters (units) change it then, and their shadows in the fog update at this rate.
+        static constexpr uint32 FogShadowRefreshInterval = 4;
+
+        /// @brief The volumetric fog's own shadow map: one coarse, texel-snapped map over the whole fog range.
+        ///        The cascades resolve single leaves (~2 cm near the camera), far finer than a fog cell's shadow
+        ///        taps can sample, so the taps landed on a different random set of leaf gaps after every step and
+        ///        the shafts rearranged while walking. CS_FogInject also tent-filters every tap over 4x4 of these
+        ///        texels and takes enough taps along a cell's depth to step about one texel at a time.
+        RenderTexturePtr m_fogShadowMap;
+        SceneNode* m_fogShadowCameraNode = nullptr;
+        Camera* m_fogShadowCamera = nullptr;
+        Matrix4 m_fogShadowViewProj = Matrix4::Identity;
+        bool m_fogShadowValid = false;
+
         /// @brief Cascade comparison sampler (lighting pass s1, fog inject s1). Null on backends
         ///        without explicit sampler objects.
         SamplerStatePtr m_shadowSampler;
@@ -473,7 +494,6 @@ namespace mmo
         float m_lightSize = 0.0268f;           // Size of the virtual light (smaller = sharper shadows)
         uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
         uint32 m_pcfSampleCount = 16;         // PCF taps per shadow lookup (shadow quality preset)
-        uint32 m_fullResolutionCascades = 2;  // Cascades rendered at the full shadow map size; the rest use half
         bool m_depthPrepassEnabled = false;   // Opaque depth pre-pass before the G-Buffer pass
         uint32 m_bloomExcludedGroupStart = std::numeric_limits<uint32>::max(); // See SetBloomExcludedGroupStart
 
