@@ -163,6 +163,17 @@ namespace mmo
 		{
 			if (auto strongThis = weakThis.lock())
 			{
+				// The query failed (database error, or a schema the migrations have not caught up
+				// with). There is no error variant of CharEnum, and an empty list would tell the
+				// player their characters are gone, so end the session instead: the client shows its
+				// realm-disconnected dialog rather than waiting for a list that never comes.
+				if (!result)
+				{
+					ELOG("Failed to load the character list for account " << strongThis->GetAccountId() << ", disconnecting the session");
+					strongThis->Kick(std::nullopt);
+					return;
+				}
+
 				// Lock around m_characterViews
 				{
 					std::scoped_lock lock{strongThis->m_charViewMutex};
