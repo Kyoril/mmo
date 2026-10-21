@@ -4,6 +4,7 @@
 # else has to keep working on the headless Linux server build.
 
 add_subdirectory(auth_protocol_tests)
+add_subdirectory(assets_tests)
 add_subdirectory(base64_tests)
 add_subdirectory(base_tests)
 add_subdirectory(crash_upload_tests)

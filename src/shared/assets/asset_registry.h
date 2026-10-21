@@ -35,7 +35,36 @@ namespace mmo
 		static void Destroy();
 
 		/// Opens a file for reading. Returns nullptr if the files doesn't exist.
+		/// @remark A file prefetched earlier is served from memory, and its prefetched copy is released.
 		static std::unique_ptr<std::istream> OpenFile(std::string filename);
+
+		/// @brief Reads a file and every asset it references, recursively, into memory ahead of use.
+		/// @details Meant for streaming threads: the first open of an asset on disk costs milliseconds of
+		///	file system latency, which the main thread would otherwise pay inside its frame when the asset is
+		///	first loaded. Files opened before are skipped (their resource managers already hold them), and so is
+		///	everything once the prefetch memory limit is reached. Prefetched content not opened within a few
+		///	minutes is dropped.
+		/// @param filename Name of the asset to prefetch.
+		static void Prefetch(const std::string& filename);
+
+		/// @brief Like Prefetch, but for a file the caller has just read itself: only what it references is
+		///	read into memory.
+		static void PrefetchReferences(const std::string& filename);
+
+		/// @brief Drops all prefetched content.
+		static void ClearPrefetched();
+
+		/// @brief Counts of OpenFile calls since the last ClearPrefetched.
+		struct PrefetchStats
+		{
+			/// Opens served from prefetched content.
+			size_t hits = 0;
+			/// All opens.
+			size_t opens = 0;
+		};
+
+		/// @brief Gets how many opens prefetching served since the last ClearPrefetched.
+		static PrefetchStats GetPrefetchStats();
 
 		/// Determines whether a given file name is already taken.
 		static bool HasFile(const std::string& filename);
