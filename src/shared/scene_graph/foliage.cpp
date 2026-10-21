@@ -236,6 +236,8 @@ namespace mmo
 
 	void Foliage::RebuildAll()
 	{
+		PROFILE_SCOPE("Foliage::RebuildAll");
+
 		// Clear all existing chunks
 		for (auto& [key, chunk] : m_chunks)
 		{
@@ -532,6 +534,8 @@ namespace mmo
 
 	void Foliage::UpdateActiveChunks(Camera& camera)
 	{
+		PROFILE_SCOPE("Foliage::UpdateActiveChunks");
+
 		const Vector3 cameraPos = camera.GetDerivedPosition();
 
 		// Get camera's chunk coordinates

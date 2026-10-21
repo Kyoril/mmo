@@ -189,6 +189,9 @@ namespace mmo
 
 		void OnDisplayIdChanged() override;
 
+		/// Re-applies equipment and the collider once a model whose loading was deferred is in place.
+		void OnDeferredDisplayApplied() override;
+
 		void OnEquipmentChanged(uint64);
 
 		void RefreshDisplay();

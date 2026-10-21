@@ -257,6 +257,8 @@ namespace mmo
 			return false;
 		}
 
+		// Guessed only while the server has not said which map the character is on. Once it has,
+		// its word stands - including map 0, which is a real map.
 		uint32 mapId = context.GetCurrentMapId();
 		if (!context.HasCurrentMapId())
 		{

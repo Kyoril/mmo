@@ -220,6 +220,12 @@ namespace mmo
 		/// Logs the last database error to the default logger.
 		void PrintDatabaseError();
 
+		/// Runs `statements` in one transaction, retrying the whole transaction a bounded number of
+		/// times when InnoDB rolls it back for lock contention (deadlock 1213, lock wait timeout 1205).
+		/// Throws mysql::Exception when a statement fails for any other reason or retries run out.
+		/// @param what Short description of the operation, used in log output and the exception.
+		void ExecuteTransactionWithLockRetry(const char* what, uint64 characterId, const std::vector<String>& statements);
+
 	private:
 		const proto::Project& m_project;
 		mysql::DatabaseInfo m_connectionInfo;

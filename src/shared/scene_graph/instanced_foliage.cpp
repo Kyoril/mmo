@@ -10,6 +10,7 @@
 #include "math/ray.h"
 #include "math/aabb.h"
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 
 #include <cmath>
 #include <limits>
@@ -249,6 +250,8 @@ namespace mmo
 		{
 			return;
 		}
+
+		PROFILE_SCOPE("InstancedFoliage::RebuildDirtyCells");
 
 		for (const CellCoord& coord : m_dirtyCells)
 		{

@@ -4,14 +4,21 @@
 # else has to keep working on the headless Linux server build.
 
 add_subdirectory(auth_protocol_tests)
+add_subdirectory(assets_tests)
 add_subdirectory(base64_tests)
 add_subdirectory(base_tests)
 add_subdirectory(crash_upload_tests)
 add_subdirectory(binary_io_tests)
 if (MMO_BUILD_BOTS)
 	add_subdirectory(bot_ai_tests)
+	add_subdirectory(bot_chat_tests)
 endif()
 add_subdirectory(bot_movement_tests)
+# client_ui_tests runs the shipped UI scripts from the data/client submodule. The Linux gate
+# copies the source tree without data/, so the suite only exists where the scripts do.
+if (EXISTS "${CMAKE_SOURCE_DIR}/data/client/Interface/GameUI")
+	add_subdirectory(client_ui_tests)
+endif()
 add_subdirectory(deferred_shading_tests)
 add_subdirectory(frame_ui_tests)
 add_subdirectory(game_client_tests)

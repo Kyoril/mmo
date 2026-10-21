@@ -1,6 +1,7 @@
 #include "client_application.h"
 
 #include "assets/asset_registry.h"
+#include "base/profiler.h"
 #include "base/task_system.h"
 #include "base/timer_queue.h"
 #include "char_creation/char_create_info.h"
@@ -179,6 +180,8 @@ namespace mmo
 				auto& localContext = GetClientContext();
 				if (localContext.runtime)
 				{
+					// Packet handlers run here, spawning units (and loading their models) included.
+					PROFILE_SCOPE("Net: PollNetwork");
 					localContext.runtime->PollNetwork();
 				}
 

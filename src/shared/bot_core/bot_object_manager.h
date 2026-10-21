@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <unordered_map>
+#include <array>
 #include <vector>
 
 namespace mmo
@@ -18,6 +19,17 @@ namespace mmo
 		uint32 entry { 0 };
 		uint32 stackCount { 0 };
 		uint64 ownerGuid { 0 };
+
+		/// The bag this item sits in, or the owning player for items in the backpack and
+		/// equipment slots.
+		uint64 containerGuid { 0 };
+
+		uint32 durability { 0 };
+		uint32 maxDurability { 0 };
+
+		/// Containers only: how many slots the bag has, and the item in each (0 for empty).
+		uint32 numSlots { 0 };
+		std::vector<uint64> slots;
 	};
 
 	/// @brief Lightweight state of a world object (chest, door, ...) known to the bot.
@@ -254,6 +266,19 @@ namespace mmo
 		///        update are ignored so partial field updates don't wipe known data.
 		void AddOrUpdateItem(const BotItemState& item);
 
+		/// @brief Stores an item as given, replacing whatever was known about it. For callers
+		///        that already merged a partial update themselves, where zero is a real value.
+		void SetItem(const BotItemState& item);
+
+		/// @brief Records which item sits in one of the bot's own inventory slots.
+		/// @param slot Absolute slot within the main bag: equipment 0-18, bag slots 19-22,
+		///        backpack 23-38.
+		/// @param itemGuid The item there, or 0 for an empty slot.
+		void SetSelfInventorySlot(uint8 slot, uint64 itemGuid);
+
+		/// @brief The item in one of the bot's own inventory slots (see SetSelfInventorySlot), or 0.
+		uint64 GetSelfInventorySlot(uint8 slot) const;
+
 		/// @brief Removes an item by GUID.
 		/// @param guid The GUID of the item to remove.
 		/// @return True if the item was found and removed.
@@ -350,6 +375,9 @@ namespace mmo
 
 		/// @brief Map of GUIDs to known item/container objects.
 		std::unordered_map<uint64, BotItemState> m_items;
+
+		/// Item guids in the bot's own equipment, bag and backpack slots, indexed by absolute slot.
+		std::array<uint64, 39> m_selfInventorySlots {};
 
 		/// @brief Map of GUIDs to known world objects (chests, doors, ...).
 		std::unordered_map<uint64, BotWorldObjectState> m_worldObjects;

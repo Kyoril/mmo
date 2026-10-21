@@ -1,5 +1,6 @@
 ﻿
 #include "world_text_component.h"
+#include "world_text_layout.h"
 
 #include <algorithm>
 
@@ -172,10 +173,12 @@ void WorldTextComponent::SetFontColor(const Color& color)
 
 		const uint32 color = m_fontColor.GetABGR();
 
-		for (size_t i = 0; i < m_text.length(); ++i)
+		// Lay the text out codepoint by codepoint. Walking the raw bytes instead would hand
+		// the font each byte of a multi-byte character on its own - as a signed char those
+		// sign-extend far beyond the font's codepoint range, so every byte of a localized
+		// name or subtitle was dropped as a missing glyph.
+		for (const uint32 c : BuildWorldTextCodepoints(m_text))
 		{
-			char c = m_text[i];
-
 			if (c == '\n')
 			{
 				lineStarts.push_back(vertices.size());

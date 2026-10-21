@@ -23,6 +23,10 @@ namespace mmo
 		std::string characterName;
 		uint8 race { 0 };
 		uint8 characterClass { 1 };
+
+		/// What the bot plays as in a group: "tank", "healer" or "dps". Decides its talents now
+		/// and its place in a dungeon group later.
+		std::string role { "dps" };
 		uint8 gender { 0 };
 
 		/// Level the bot is cheated to on entering the world. Rolled once, then kept.
@@ -55,6 +59,10 @@ namespace mmo
 	/// Generates a pronounceable name from a seed. Letters only, 3 to 12 characters, which is
 	/// what the realm accepts.
 	[[nodiscard]] std::string GenerateBotName(uint32 seed);
+
+	/// The role a bot of the given class and index plays: clerics heal, every other warrior
+	/// tanks, everyone else deals damage.
+	[[nodiscard]] std::string DefaultBotRole(uint8 characterClass, uint32 index);
 
 	/// Reads a roster written by SaveRoster. Returns false if the file does not exist or cannot
 	/// be parsed; the caller then builds a fresh one.

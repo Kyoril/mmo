@@ -2762,84 +2762,59 @@ namespace mmo
 	{
 		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
 
-		try
+		std::vector<String> statements;
+
+		// CRITICAL: First, delete ALL existing items for this character
+		// This ensures items that were sold/destroyed are removed
+		// Buyback slots are never saved, so they won't be affected
+		std::ostringstream deleteStrm;
+		deleteStrm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << ";";
+		statements.push_back(deleteStrm.str());
+
+		// Now insert the current inventory state
+		// Use INSERT instead of REPLACE since we just deleted everything
+		std::ostringstream insertStrm;
+		insertStrm << "INSERT INTO `character_items` (`owner`, `slot`, `entry`, `creator`, `count`, `durability`, `flags`) VALUES ";
+
+		bool isFirstItem = true;
+		for (const auto& item : items)
 		{
-			mysql::Transaction transaction(m_connection);
-
-			// CRITICAL: First, delete ALL existing items for this character
-			// This ensures items that were sold/destroyed are removed
-			// Buyback slots are never saved, so they won't be affected
-			std::ostringstream deleteStrm;
-			deleteStrm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << ";";
-			
-			if (!m_connection.Execute(deleteStrm.str()))
+			// Don't save buyback slots into the database!
+			if (InventorySlot::FromAbsolute(item.slot).IsBuyBack())
 			{
-				PrintDatabaseError();
-				throw mysql::Exception("Could not delete existing inventory items!");
+				continue;
 			}
 
-			// If no items to save (empty inventory), we're done after deletion
-			if (items.empty())
-			{
-				transaction.Commit();
-				return;
-			}
-
-			// Now insert the current inventory state
-			// Use INSERT instead of REPLACE since we just deleted everything
-			std::ostringstream insertStrm;
-			insertStrm << "INSERT INTO `character_items` (`owner`, `slot`, `entry`, `creator`, `count`, `durability`, `flags`) VALUES ";
-
-			bool isFirstItem = true;
-			for (const auto& item : items)
-			{
-				// Don't save buyback slots into the database!
-				if (InventorySlot::FromAbsolute(item.slot).IsBuyBack())
-				{
-					continue;
-				}
-
-				if (!isFirstItem)
-				{
-					insertStrm << ",";
-				}
-				else
-				{
-					isFirstItem = false;
-				}
-
-				insertStrm << "(" << characterId << "," << item.slot << "," << item.entry << ",";
-				if (item.creator == 0)
-				{
-					insertStrm << "NULL";
-				}
-				else
-				{
-					insertStrm << item.creator;
-				}
-				insertStrm << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << "," << item.flags << ")";
-			}
-
-			insertStrm << ";";
-
-			// Only execute if we have items to save (after filtering buyback slots)
 			if (!isFirstItem)
 			{
-				if (!m_connection.Execute(insertStrm.str()))
-				{
-					PrintDatabaseError();
-					throw mysql::Exception("Could not save inventory items!");
-				}
-				ILOG("Successfully saved inventory items for character " << characterId);
+				insertStrm << ",";
+			}
+			else
+			{
+				isFirstItem = false;
 			}
 
-			transaction.Commit();
+			insertStrm << "(" << characterId << "," << item.slot << "," << item.entry << ",";
+			if (item.creator == 0)
+			{
+				insertStrm << "NULL";
+			}
+			else
+			{
+				insertStrm << item.creator;
+			}
+			insertStrm << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << "," << item.flags << ")";
 		}
-		catch (const mysql::Exception& e)
+
+		insertStrm << ";";
+
+		// Only insert if we have items to save (after filtering buyback slots)
+		if (!isFirstItem)
 		{
-			ELOG("Failed to save inventory items for character " << characterId << ": " << e.what());
-			throw;
+			statements.push_back(insertStrm.str());
 		}
+
+		ExecuteTransactionWithLockRetry("save inventory items", characterId, statements);
 	}
 
 	void MySQLDatabase::DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots)
@@ -2851,43 +2826,76 @@ namespace mmo
 			return;
 		}
 
-		try
+		// Build DELETE query with IN clause for bulk deletion
+		std::ostringstream strm;
+		strm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << " AND `slot` IN (";
+
+		bool isFirstSlot = true;
+		for (const auto slot : slots)
 		{
-			mysql::Transaction transaction(m_connection);
-
-			// Build DELETE query with IN clause for bulk deletion
-			std::ostringstream strm;
-			strm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << " AND `slot` IN (";
-
-			bool isFirstSlot = true;
-			for (const auto slot : slots)
+			if (!isFirstSlot)
 			{
-				if (!isFirstSlot)
-				{
-					strm << ",";
-				}
-				else
-				{
-					isFirstSlot = false;
-				}
-
-				strm << slot;
+				strm << ",";
+			}
+			else
+			{
+				isFirstSlot = false;
 			}
 
-			strm << ");";
-
-			if (!m_connection.Execute(strm.str()))
-			{
-				PrintDatabaseError();
-				throw mysql::Exception("Could not delete inventory items!");
-			}
-
-			transaction.Commit();
+			strm << slot;
 		}
-		catch (const mysql::Exception& e)
+
+		strm << ");";
+
+		ExecuteTransactionWithLockRetry("delete inventory items", characterId, { strm.str() });
+	}
+
+	void MySQLDatabase::ExecuteTransactionWithLockRetry(const char* what, const uint64 characterId, const std::vector<String>& statements)
+	{
+		// InnoDB rolls a transaction back on deadlock (1213), and a lock wait timeout (1205) fails
+		// the statement; both are contention with another connection, not a fault in the statement,
+		// so running the whole transaction again is safe. Bounded, because 1205 already waited
+		// innodb_lock_wait_timeout and this holds the character's pool slot meanwhile.
+		constexpr int lockWaitTimeout = 1205;
+		constexpr int lockDeadlock = 1213;
+		constexpr int maxAttempts = 3;
+
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		for (int attempt = 1; ; ++attempt)
 		{
-			ELOG("Failed to delete inventory items for character " << characterId << ": " << e.what());
-			throw;
+			// Returns the error code of the failed statement, or 0 once committed. The code is read
+			// before the transaction's destructor issues ROLLBACK, which would reset it.
+			const int errorCode = [this, &statements]()
+			{
+				mysql::Transaction transaction(m_connection);
+				for (const auto& statement : statements)
+				{
+					if (!m_connection.Execute(statement))
+					{
+						PrintDatabaseError();
+						return m_connection.GetErrorCode();
+					}
+				}
+
+				transaction.Commit();
+				return 0;
+			}();
+
+			if (errorCode == 0)
+			{
+				return;
+			}
+
+			const bool isLockContention = errorCode == lockDeadlock || errorCode == lockWaitTimeout;
+			if (!isLockContention || attempt >= maxAttempts)
+			{
+				ELOG("Failed to " << what << " for character " << characterId << " after " << attempt << " attempt(s), error " << errorCode);
+				throw mysql::Exception(String("Could not ") + what + "!");
+			}
+
+			WLOG("Lock contention (error " << errorCode << ") trying to " << what << " for character " << characterId
+				<< ", retrying (attempt " << (attempt + 1) << " of " << maxAttempts << ")");
 		}
 	}
 

@@ -65,6 +65,71 @@ namespace mmo
 		s_soundEntryPlayer = player;
 	}
 
+	GameUnitC::ModelFilePrefetcher GameUnitC::s_modelFilePrefetcher;
+
+	void GameUnitC::SetModelFilePrefetcher(ModelFilePrefetcher prefetcher)
+	{
+		s_modelFilePrefetcher = std::move(prefetcher);
+	}
+
+	void GameUnitC::RequestDisplayUpdate()
+	{
+		if (m_pendingDisplayRequest != 0)
+		{
+			// The request in flight applies whatever display id is current once its files are read.
+			return;
+		}
+
+		std::vector<String> files;
+		if (!s_modelFilePrefetcher || ObjectMgr::GetActivePlayerGuid() == GetGuid() ||
+			!CollectUnloadedModelFiles(Get<uint32>(object_fields::DisplayId), files))
+		{
+			OnDisplayIdChanged();
+			return;
+		}
+
+		static uint64 s_lastRequest = 0;
+		const uint64 request = ++s_lastRequest;
+		m_pendingDisplayRequest = request;
+
+		s_modelFilePrefetcher(std::move(files), [guid = GetGuid(), request]()
+		{
+			const std::shared_ptr<GameUnitC> unit = ObjectMgr::Get<GameUnitC>(guid);
+			if (!unit || unit->m_pendingDisplayRequest != request)
+			{
+				// Despawned while its files were read
+				return;
+			}
+
+			PROFILE_SCOPE("Unit: deferred model");
+			unit->m_pendingDisplayRequest = 0;
+			unit->OnDisplayIdChanged();
+			unit->OnDeferredDisplayApplied();
+		});
+	}
+
+	bool GameUnitC::CollectUnloadedModelFiles(const uint32 displayId, std::vector<String>& outFiles) const
+	{
+		const proto_client::ModelDataEntry* modelEntry = ObjectMgr::GetModelData(displayId);
+		if (!modelEntry || modelEntry->filename().empty() || AssetRegistry::WasOpened(modelEntry->filename()))
+		{
+			return false;
+		}
+
+		// The mesh or avatar definition; reading it ahead follows its materials, textures and skeleton.
+		outFiles.push_back(modelEntry->filename());
+
+		for (const uint32 itemDisplayId : modelEntry->item_displays())
+		{
+			if (const proto_client::ItemDisplayEntry* display = m_project.itemDisplays.getById(itemDisplayId))
+			{
+				CollectItemDisplayFiles(*display, outFiles);
+			}
+		}
+
+		return true;
+	}
+
 	GameUnitC::GameUnitC(Scene &scene, NetClient &netDriver, const proto_client::Project &project, uint32 map) : GameObjectC(scene, project, map), m_netDriver(netDriver), m_unitSpeed{0.0f}, m_creatureInfo()
 	{
 		m_unitMovement = std::make_unique<UnitMovement>(*this);
@@ -238,7 +303,7 @@ namespace mmo
 
 			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::DisplayId))
 			{
-				OnDisplayIdChanged();
+				RequestDisplayUpdate();
 			}
 
 			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::Scale))
@@ -760,7 +825,11 @@ namespace mmo
 			// overwrites the dead-reckoning target, a snap onto the wrong surface
 			// (terrain running underneath a raised building floor) would otherwise
 			// re-capture the unit below the floor every frame with no way back up.
-			if (m_unitMovement->CorrectGroundHeight(5.0f, m_remoteMovementRenderer.GetAuthoritativeY()))
+			// The correction settles the collision capsule on the floor rather than
+			// dropping the feet onto the surface point below the unit's centre, so
+			// the character stands at the height its own client reports instead of
+			// sinking into slopes, stairs and ledges.
+			if (m_unitMovement->CorrectRemoteGroundHeight(5.0f, m_remoteMovementRenderer.GetAuthoritativeY()))
 			{
 				m_remoteMovementRenderer.SetRenderedY(GetSceneNode()->GetDerivedPosition().y);
 			}
@@ -1003,7 +1072,7 @@ namespace mmo
 		RefreshUnitName();
 
 		// Setup object display
-		OnDisplayIdChanged();
+		RequestDisplayUpdate();
 	}
 
 	void GameUnitC::OnEntryChanged()
@@ -2484,7 +2553,7 @@ namespace mmo
 			const proto_client::EmoteEntry* entry = ResolvePoseEmoteEntry(standState);
 
 			AnimationState* poseState = nullptr;
-			if (entry)
+			if (entry && m_entity)
 			{
 				poseState = m_entity->GetAnimationState(entry->animation());
 			}
@@ -2947,6 +3016,12 @@ namespace mmo
 
 	void GameUnitC::Apply(const VisibilitySetPropertyGroup &group, const AvatarConfiguration &configuration)
 	{
+		// No model yet (still being read): it is applied with the model.
+		if (!m_entity)
+		{
+			return;
+		}
+
 		// First, hide all sub entities with the given visibility set tag
 		if (!group.subEntityTag.empty())
 		{
@@ -3002,6 +3077,11 @@ namespace mmo
 
 	void GameUnitC::Apply(const MaterialOverridePropertyGroup &group, const AvatarConfiguration &configuration)
 	{
+		if (!m_entity)
+		{
+			return;
+		}
+
 		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
 		if (it == configuration.chosenOptionPerGroup.end())
 		{
@@ -3057,7 +3137,7 @@ namespace mmo
 
 	void GameUnitC::CreateCapsuleDebugVisualization()
 	{
-		if (m_capsuleDebugObject || !m_sceneNode)
+		if (m_capsuleDebugObject || !m_sceneNode || !m_entity)
 		{
 			return;
 		}

@@ -41,7 +41,7 @@ namespace mmo
 				ELOG("Failed to read player configuration");
 			}
 
-			OnDisplayIdChanged();
+			RequestDisplayUpdate();
 
 			m_equipmentChangedHandler = RegisterMirrorHandler(object_fields::InvSlotHead, player_inventory_pack_slots::Start * 2, *this, &GamePlayerC::OnEquipmentChanged);
 			OnEquipmentChanged(GetGuid());
@@ -233,10 +233,7 @@ namespace mmo
 	{
 		GameUnitC::SetupSceneObjects();
 
-		// TODO: For now we attach a shield to all player characters. This should be done based on the player's equipment though.
-		ASSERT(m_entity);
-
-		// Register footstep handlers for animations
+		// Register footstep handlers for animations (no-op while a deferred model is still being read)
 		RegisterFootstepHandlers();
 
 		// Refresh collider
@@ -249,6 +246,13 @@ namespace mmo
 
 		// We need to ensure our footstep handlers are registered for the new model
 		RegisterFootstepHandlers();
+	}
+
+	void GamePlayerC::OnDeferredDisplayApplied()
+	{
+		// Equipment and collider were set up against no model while it was read; redo both on it.
+		OnEquipmentChanged(GetGuid());
+		UpdateCollider();
 	}
 
 	void GamePlayerC::RefreshDisplay()

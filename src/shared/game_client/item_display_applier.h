@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 
 #include <unordered_map>
+#include <vector>
 
 namespace mmo
 {
@@ -61,6 +62,13 @@ namespace mmo
 	///	       here does not create a second attachment mesh.
 	void ApplyItemDisplay(Scene& scene, Entity& entity, uint32 modelDisplayId, uint32 itemDisplayId,
 		const proto_client::ItemDisplayEntry& display, bool weaponsDrawn, ItemDisplayAttachmentMap& attachments);
+
+	/// Appends the mesh and material files every variant of an item display entry can use, for reading
+	/// them ahead of ApplyItemDisplay. Variants are not filtered by model: matching one needs the model's
+	/// avatar definition loaded, which is what reading ahead avoids doing on the main thread.
+	/// @param display The item display entry.
+	/// @param outFiles Receives the file names. May contain duplicates.
+	void CollectItemDisplayFiles(const proto_client::ItemDisplayEntry& display, std::vector<String>& outFiles);
 
 	/// Detaches and destroys every attachment mesh in the given map and clears the map.
 	/// @param scene The scene the attachment entities were created in.

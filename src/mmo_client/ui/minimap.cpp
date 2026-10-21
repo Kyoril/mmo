@@ -9,6 +9,8 @@
 #include "luabind_lambda.h"
 #include "luabind/luabind.hpp"
 
+#include <cstdlib>
+
 namespace mmo
 {
 	/// Duration in seconds that a ping remains visible (fading out).
@@ -153,6 +155,23 @@ namespace mmo
 						if (const TexturePtr texture = LoadMinimapTexture(x, y))
 						{
 							m_loadedTextures[tileKey] = texture;
+						}
+					}
+				}
+			}
+
+			// Read the ring of tiles one step further out ahead, so the next tile change finds them in memory
+			if (m_prefetch)
+			{
+				constexpr int32 prefetchDistance = s_maxLoadDistance + 1;
+				for (int32 x = newTileX - prefetchDistance; x <= newTileX + prefetchDistance; ++x)
+				{
+					for (int32 y = newTileY - prefetchDistance; y <= newTileY + prefetchDistance; ++y)
+					{
+						const bool onRing = std::abs(x - newTileX) == prefetchDistance || std::abs(y - newTileY) == prefetchDistance;
+						if (onRing && !m_loadedTextures.contains(static_cast<uint64>(x) + static_cast<uint64>(y) * 65536))
+						{
+							m_prefetch(GetMinimapTextureFilename(x, y));
 						}
 					}
 				}
@@ -446,6 +465,11 @@ namespace mmo
 				++it;
 			}
 		}
+	}
+
+	void Minimap::SetPrefetchHandler(std::function<void(const String&)> prefetch)
+	{
+		m_prefetch = std::move(prefetch);
 	}
 
 	String Minimap::GetMinimapTextureFilename(const int32 tileX, const int32 tileY) const
