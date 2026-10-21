@@ -169,6 +169,12 @@ namespace mmo
 	void GlueScene::SnapToGate()
 	{
 		m_director.SnapToGate();
+
+		// A flight that ended (or was skipped) since the last Update must not be reported after
+		// the jump: drop both the director's flag and the latch.
+		(void)m_director.ConsumeFlightFinished();
+		m_flightFinished = false;
+
 		m_plazaSnapPending = false;
 		m_pushInSeconds = 0.0f;
 		m_pushInElapsed = 0.0f;

@@ -140,6 +140,12 @@ namespace mmo
 			const bool atPlaza = m_glueScene->GetDirector().GetMode() == GlueCameraMode::Plaza;
 			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
 			FrameManager::Get().TriggerLuaEvent("GLUE_FLIGHT_FINISHED", atPlaza ? "plaza" : "gate");
+
+			// An enterworld request that arrived during the flight acts now that the plaza shows.
+			if (atPlaza)
+			{
+				TryEnterWorld();
+			}
 		}
 
 		if (m_glueScene->ConsumePushInFinished())
@@ -410,6 +416,15 @@ namespace mmo
 			return;
 		}
 
+		if (m_glueScene && m_glueScene->IsFlightActive())
+		{
+			// The character screen ignores the request until the plaza shows. Keep it pending: skip
+			// a running flight (it ends on the next update) and retry when GLUE_FLIGHT_FINISHED
+			// fires in OnIdle; a pending plaza snap is waited for the same way.
+			m_glueScene->GetDirector().Skip();
+			return;
+		}
+
 		m_enterWorldRequested = false;
 
 		// The character screen decides: it knows the selection and whether that character may enter.
@@ -558,6 +573,10 @@ namespace mmo
 		else
 		{
 			m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CharCreateResponse, *this, &LoginState::OnCharCreationResponse);
+
+			// A fresh realm connection (e.g. after cancelling the character list request that
+			// followed a logout) arrives from the realm list: its character list flies in.
+			m_returningFromWorld = false;
 
 			ASSERT(s_lastRealmVar);
 			s_lastRealmVar->Set(static_cast<int32>(m_realmConnector.GetRealmId()));
