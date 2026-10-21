@@ -6,6 +6,7 @@
 
 #include "base/constants.h"
 #include "base/localization.h"
+#include "base/macros.h"
 #include "base/random.h"
 #include "base/sha1.h"
 #include "console/console_var.h"
@@ -479,6 +480,9 @@ namespace mmo
 
 	void RealmConnector::SetCharacterOrder(const std::vector<uint64>& orderedGuids)
 	{
+		// The packet carries the count as uint8.
+		ASSERT(orderedGuids.size() <= 0xFF);
+
 		// Reorder the local list right away so the UI does not have to wait for a refresh
 		std::vector<CharacterView> reordered;
 		reordered.reserve(m_characterViews.size());
