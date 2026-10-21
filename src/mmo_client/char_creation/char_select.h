@@ -1,70 +1,65 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
 #pragma once
 
 #include "base/non_copyable.h"
+#include "base/typedefs.h"
 #include "game/character_view.h"
-#include "game/character_customization/customizable_avatar_definition.h"
-#include "game_client/item_display_applier.h"
-
-#include <unordered_map>
 
 struct lua_State;
 
 namespace mmo
 {
-	class Entity;
-	class TagPoint;
-	class Frame;
-	class ModelFrame;
+	class GlueScene;
 	class RealmConnector;
 
-	namespace proto_client
-	{
-		class ModelDataEntry;
-		class Project;
-	}
-
-	class CharSelect final : public NonCopyable, public CustomizationPropertyGroupApplier
+	/// The character selection: which character of the character list is selected, shown on the
+	/// Haven plaza of the glue scene.
+	/// @remark Lives for the whole application, longer than any glue scene.
+	class CharSelect final : public NonCopyable
 	{
 	public:
-		explicit CharSelect(const proto_client::Project& project, RealmConnector& realmConnector);
+		/// Creates the character selection.
+		/// @param realmConnector Provides the character list.
+		explicit CharSelect(RealmConnector& realmConnector);
 
-		~CharSelect() override = default;
+		~CharSelect() = default;
 
 	public:
+		/// Registers the character selection's Lua functions.
 		void RegisterScriptFunctions(lua_State* lua);
 
-		void SetModelFrame(Frame* frame);
+		/// Sets the glue scene whose plaza shows the characters. Called with the scene when the
+		/// login state is entered and with nullptr before the scene is destroyed.
+		/// @param scene The glue scene, or nullptr.
+		void SetGlueScene(GlueScene* scene);
 
+		/// Selects a character and places the characters on the plaza for it. The first selection
+		/// after the glue scene was set places everyone instantly; later ones make them walk.
+		/// @param index Order index of the character, or -1 for none.
 		void SelectCharacter(int32 index);
 
+		/// Gets the number of characters in the character list.
 		int32 GetNumCharacters() const;
 
+		/// Gets a character of the character list, or nullptr for an invalid index.
 		const mmo::CharacterView* GetCharacterView(int32 index) const;
 
+		/// Gets the order index of the selected character, or -1.
 		int32 GetSelectedCharacter() const { return m_selectedCharacter; }
 
 		/// Returns true when the character at the given index has a disabled race or class.
 		[[nodiscard]] bool IsCharacterDisabled(int32 index) const;
 
-	public:
-		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
-
-		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
-
-		void Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration) override;
-
 	private:
-		void ClearItemAttachments();
-
-	private:
-		const proto_client::Project& m_project;
-
 		RealmConnector& m_realmConnector;
 
-		ModelFrame* m_modelFrame = nullptr;
+		/// Not owned. Null while no login state is active.
+		GlueScene* m_glueScene = nullptr;
+
+		/// Whether the plaza was placed since the glue scene was set, so selections animate.
+		bool m_plazaPlaced = false;
 
 		int32 m_selectedCharacter = -1;
-
-		ItemDisplayAttachmentMap m_itemAttachments;
 	};
 }

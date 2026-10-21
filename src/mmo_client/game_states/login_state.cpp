@@ -13,6 +13,7 @@
 #include "game_client/sound_entry_player.h"
 #include "net/login_connector.h"
 #include "net/realm_connector.h"
+#include "char_creation/char_select.h"
 #include "glue/glue_scene.h"
 #include "ui/world_renderer.h"
 
@@ -52,7 +53,7 @@ namespace mmo
 	}
 
 	LoginState::LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector,
-		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord, const proto_client::Project& project)
+		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord, const proto_client::Project& project, CharSelect& charSelect)
 		: GameState(gameStateManager)
 		, m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
@@ -61,6 +62,7 @@ namespace mmo
 		, m_soundEntryPlayer(soundEntryPlayer)
 		, m_discord(discord)
 		, m_project(project)
+		, m_charSelect(charSelect)
 	{
 	}
 
@@ -157,6 +159,9 @@ namespace mmo
 					return std::make_unique<WorldRenderer>(name, glueScene->GetScene());
 				});
 		}
+
+		// Before the UI loads, so the character screen's first selection already finds the plaza.
+		m_charSelect.SetGlueScene(m_glueScene.get());
 
 		// Load ui file
 		frameMgr.LoadUIFile("Interface/GlueUI/GlueUI.toc");
@@ -284,6 +289,9 @@ namespace mmo
 		}
 
 		FrameManager::Get().ResetTopFrame();
+
+		// The plaza characters live in the scene: the character screen must not reach them anymore.
+		m_charSelect.SetGlueScene(nullptr);
 		m_glueScene.reset();
 	}
 

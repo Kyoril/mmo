@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "glue_scene.h"
+#include "plaza_avatars.h"
 
 #include "environment_apply.h"
 #include "world_deserializer.h"
@@ -67,6 +68,8 @@ namespace mmo
 
 		m_worldRootNode = m_scene->GetRootSceneNode().CreateChildSceneNode();
 
+		m_plazaAvatars = std::make_unique<PlazaAvatars>(*m_scene, m_project, m_definition);
+
 		// Water pages resolve their surface material through this static hook. WorldState sets the
 		// same resolver, but the glue scene is shown before any world was ever entered.
 		terrain::Page::SetWaterMaterialResolver([&project = m_project](const terrain::WaterType waterType) -> String
@@ -104,6 +107,9 @@ namespace mmo
 
 	GlueScene::~GlueScene()
 	{
+		// Characters and their item meshes go before anything else touches the scene.
+		m_plazaAvatars.reset();
+
 		m_work.reset();
 		m_workQueue.stop();
 		m_dispatcher.stop();
@@ -195,6 +201,8 @@ namespace mmo
 		}
 
 		UpdateCamera(deltaSeconds);
+
+		m_plazaAvatars->Update(deltaSeconds);
 
 		const Vector3 cameraPosition = m_camera->GetDerivedPosition();
 		if (m_worldInstance && m_worldInstance->HasTerrain())

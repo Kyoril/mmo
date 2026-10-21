@@ -24,6 +24,7 @@ namespace mmo
 	class ClientWorldInstance;
 	class DeferredRenderer;
 	class IAudio;
+	class PlazaAvatars;
 	class Scene;
 	class SceneNode;
 	class SkyComponent;
@@ -47,8 +48,8 @@ namespace mmo
 		~GlueScene();
 
 	public:
-		/// Loads the next page, pumps the dispatcher with a 4 ms budget, advances the director
-		/// and the camera, then the sky and the environment.
+		/// Loads the next page, pumps the dispatcher with a 4 ms budget, advances the director,
+		/// the camera and the plaza characters, then the sky and the environment.
 		/// @param deltaSeconds Real time since the last update.
 		void Update(float deltaSeconds);
 
@@ -60,6 +61,9 @@ namespace mmo
 
 		/// Gets the scene, for the frame renderer.
 		[[nodiscard]] Scene& GetScene();
+
+		/// Gets the characters standing on the plaza.
+		[[nodiscard]] PlazaAvatars& GetPlazaAvatars() { return *m_plazaAvatars; }
 
 		/// Gets the camera director.
 		[[nodiscard]] GlueCameraDirector& GetDirector() { return m_director; }
@@ -103,6 +107,9 @@ namespace mmo
 		SceneNode* m_cameraNode = nullptr;
 		Camera* m_camera = nullptr;
 		std::unique_ptr<SkyComponent> m_sky;
+
+		/// The characters on the plaza. Reset explicitly before the scene is cleared.
+		std::unique_ptr<PlazaAvatars> m_plazaAvatars;
 
 		EnvironmentController m_environment;
 		EnvironmentProfileCache<proto_client::EnvironmentProfileManager> m_environmentProfiles;

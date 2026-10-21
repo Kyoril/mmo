@@ -25,6 +25,7 @@ namespace mmo
 	class Discord;
 	class SoundEntryPlayer;
 	class GlueScene;
+	class CharSelect;
 	class DeferredRenderer;
 
 	namespace proto_client
@@ -49,7 +50,7 @@ namespace mmo
 		: public GameState
 	{
 	public:
-		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord, const proto_client::Project& project);
+		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord, const proto_client::Project& project, CharSelect& charSelect);
 
 		~LoginState() override;
 
@@ -149,6 +150,9 @@ namespace mmo
 		bool m_autoConnectToLastRealm = false;
 
 		const proto_client::Project& m_project;
+
+		/// Shows the characters on the glue scene's plaza; told about the scene on enter and leave.
+		CharSelect& m_charSelect;
 
 		/// The 3D scene behind the glue screens. Lives while this state is active.
 		std::unique_ptr<GlueScene> m_glueScene;

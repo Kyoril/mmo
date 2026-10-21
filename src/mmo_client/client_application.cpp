@@ -243,7 +243,7 @@ namespace mmo
 		context.minimap = std::make_unique<Minimap>(512);
 
 		context.charCreateInfo = std::make_unique<CharCreateInfo>(*context.project, realmConnector);
-		context.charSelect = std::make_unique<CharSelect>(*context.project, realmConnector);
+		context.charSelect = std::make_unique<CharSelect>(realmConnector);
 		context.lootClient = std::make_unique<LootClient>(realmConnector, context.clientCache->GetItemCache());
 		context.vendorClient = std::make_unique<VendorClient>(realmConnector, context.clientCache->GetItemCache());
 		context.bankClient = std::make_unique<BankClient>(realmConnector);
@@ -269,7 +269,7 @@ namespace mmo
 	void ClientApplication::InitializeStatesAndScripts(ClientContext& context, LoginConnector& loginConnector, RealmConnector& realmConnector)
 	{
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
-		const auto loginState = std::make_shared<LoginState>(gameStateMgr, loginConnector, realmConnector, *context.timerQueue, *context.audio, *context.soundEntryPlayer, *context.discord, *context.project);
+		const auto loginState = std::make_shared<LoginState>(gameStateMgr, loginConnector, realmConnector, *context.timerQueue, *context.audio, *context.soundEntryPlayer, *context.discord, *context.project, *context.charSelect);
 		gameStateMgr.AddGameState(loginState);
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, realmConnector, *context.project, *context.timerQueue, *context.lootClient, *context.vendorClient,
