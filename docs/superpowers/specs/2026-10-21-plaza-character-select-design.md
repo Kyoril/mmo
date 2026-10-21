@@ -37,7 +37,8 @@ screen reminds anyone of WoW.
 
 - Character creation's layout and scene. It stays its own screen with its current layout and
   backdrop for now; it only picks up the new glue styling. (User decision.)
-- Login and realm selection screens keep their layout and flow; only their styling changes.
+- Login and realm selection screens keep their layout and flow. They change only in styling
+  and in that they sit over the gate scene instead of a static image.
 - No hard character limit is introduced by this project. There is currently no per-realm
   character cap in the code, and this design does not add one.
 - Loading the real Haven map. The scene is a cut-down glue-screen scene.
@@ -55,7 +56,10 @@ screen reminds anyone of WoW.
 
 - Setting: Haven, simplified so it loads quickly, rather than the full town.
 - When the flight starts: after a realm is chosen **and** the character list has been
-  received. Login/realm screens stay as they are.
+  received.
+- Login and realm selection already show the Haven gate scene. Their static background images
+  go away.
+- "Change realm" flies back out through the gate; choosing a realm flies back in.
 - 5 characters on the plaza. Additional characters are reachable through a UI roster, and the
   player can sort the roster to decide which 5 are shown by default.
 - A character from outside the 5 walks in and takes the front spot.
@@ -67,17 +71,28 @@ screen reminds anyone of WoW.
 
 ### Flow
 
-1. Login → realm selection (unchanged).
-2. While the player is logging in and choosing a realm, the plaza scene starts loading in the
-   background.
-3. Character list arrives → camera starts outside Haven's gate and flies through it to the
-   plaza (~4–6 s, eased). Plaza characters are already in place when the camera arrives. Any
-   click or key skips straight to the end of the flight.
-4. On the plaza: the selected character stands at the front spot (in front of the fountain or
+1. **Login and realm selection are shown in front of Haven's gates (user decision).** From the
+   moment the login screen appears, the 3D scene is already rendering, with the camera outside
+   the gate. The login and realm UI sit over it.
+   - The static background images of these screens (`BackgroundPH.htex` and similar) are no
+     longer drawn.
+   - The camera idles gently at the gate: slow drift, ambience, music.
+   - Their layout and flow are otherwise unchanged apart from the glue restyle.
+2. The gate view loads first, at client start. The street and plaza continue loading in the
+   background while the player logs in and picks a realm.
+3. Character list arrives → the camera flies from the gate view through the gate to the plaza
+   (~4–6 s, eased). Plaza characters are already in place when the camera arrives. Any click
+   or key skips straight to the end of the flight.
+4. **"Change realm" flies back out (user decision):** from the plaza, the camera flies back out
+   through the gate to the gate view, and the realm list appears there. Choosing a realm
+   (again) flies back in once its character list arrives. This flight is also skippable.
+5. Logging out fully, or a disconnect, returns to the login screen at the gate view.
+   - *My call:* there is no flight for these; it is a cut or fade to the gate view.
+6. On the plaza: the selected character stands at the front spot (in front of the fountain or
    the plaza's focal point). The other plaza characters idle at their spots.
-5. Enter World → camera pushes in on the selected character, fade, then the normal loading
+7. Enter World → camera pushes in on the selected character, fade, then the normal loading
    screen and `WorldState`.
-6. Logging out from the world back to character select lands **directly on the plaza**, with
+8. Logging out from the world back to character select lands **directly on the plaza**, with
    no flight. The flight is for arriving from the realm screen.
 
 ### The plaza
@@ -164,12 +179,16 @@ screen reminds anyone of WoW.
   out right away. That needs simple choreography: walks are staggered and one character at a
   time is fine. The order is saved once, when the roster panel closes or on Enter World, not
   per drop. This avoids per-drag packets to the single-threaded realm.
-- **Scene not ready when the list arrives:** the flight is skipped. The screen fades from the
-  realm screen straight onto the plaza once the scene is ready, with no static-backdrop
-  fallback. Preloading during login/realm selection should make this rare.
-- **Scene lifetime:** the plaza scene is owned by the login state and released when entering
-  the world. Logging out rebuilds it behind a short fade. The simplified scene is small enough
-  for that, and it avoids keeping a second scene resident during play.
+- **Gate view not ready at startup:** the login UI is shown over a dark, calm fill and the
+  scene fades in once the gate view is ready. No static image fallback is kept. The gate view
+  is small, so this should take a moment at most.
+- **Plaza not ready when the list arrives:** the flight is skipped. The screen fades from the
+  gate view straight onto the plaza once the plaza is ready. Loading the plaza from client
+  start should make this rare.
+- **Scene lifetime:** the glue scene (gate + street + plaza) is owned by the login state and
+  released when entering the world. Logging out rebuilds it behind a short fade. The
+  simplified scene is small enough for that, and it avoids keeping a second scene resident
+  during play.
 - **Dead characters** appear normally on the plaza, with no ghost look. The zone line in the
   nameplate can say they are dead if the existing UI already did.
 
