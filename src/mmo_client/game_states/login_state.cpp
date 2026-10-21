@@ -13,11 +13,15 @@
 #include "game_client/sound_entry_player.h"
 #include "net/login_connector.h"
 #include "net/realm_connector.h"
+#include "glue/glue_scene.h"
+#include "ui/world_renderer.h"
 
 #include "assets/asset_registry.h"
 #include "base/clock.h"
 #include "base/timer_queue.h"
 #include "frame_ui/frame_mgr.h"
+
+#include <chrono>
 
 
 namespace mmo
@@ -48,7 +52,7 @@ namespace mmo
 	}
 
 	LoginState::LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector,
-		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord)
+		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord, const proto_client::Project& project)
 		: GameState(gameStateManager)
 		, m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
@@ -56,7 +60,75 @@ namespace mmo
 		, m_audio(audio)
 		, m_soundEntryPlayer(soundEntryPlayer)
 		, m_discord(discord)
+		, m_project(project)
 	{
+	}
+
+	LoginState::~LoginState() = default;
+
+	void LoginState::CreateGlueScene()
+	{
+		constexpr const char* definitionFile = "Interface/GlueUI/GlueScene.json";
+
+		const std::unique_ptr<std::istream> stream = AssetRegistry::OpenFile(definitionFile);
+		if (!stream)
+		{
+			ELOG("Glue scene: could not open " << definitionFile);
+			return;
+		}
+
+		const String text{ std::istreambuf_iterator<char>(*stream), std::istreambuf_iterator<char>() };
+		std::optional<GlueSceneDefinition> definition = ParseGlueSceneDefinition(text);
+		if (!definition)
+		{
+			ELOG("Glue scene: " << definitionFile << " is not a valid scene definition");
+			return;
+		}
+
+		m_glueScene = std::make_unique<GlueScene>(m_project, std::move(*definition), m_soundEntryPlayer, m_audio);
+
+		// Before a realm is chosen, the realm's default time applies: UTC time of day.
+		const auto sinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+		m_glueScene->SetTimeOfDay(static_cast<GameTime>(sinceEpoch.count()) % constants::OneDay);
+	}
+
+	DeferredRenderer* LoginState::FindGlueSceneRenderer() const
+	{
+		const FramePtr frame = FrameManager::Get().Find("GlueSceneFrame");
+		if (!frame)
+		{
+			return nullptr;
+		}
+
+		const auto* renderer = dynamic_cast<const WorldRenderer*>(frame->GetRenderer());
+		return renderer ? renderer->GetDeferredRenderer() : nullptr;
+	}
+
+	void LoginState::OnIdle(const float deltaSeconds, GameTime timestamp)
+	{
+		if (!m_glueScene)
+		{
+			return;
+		}
+
+		m_glueScene->SetRenderer(FindGlueSceneRenderer());
+		m_glueScene->Update(deltaSeconds);
+
+		// The 3D listener sits at the camera, so the placed town ambience is heard from there.
+		m_audio.Update(m_glueScene->GetCameraPosition(), deltaSeconds);
+
+		if (!m_glueSceneReadySent && m_glueScene->IsGateReady())
+		{
+			m_glueSceneReadySent = true;
+			ILOG("Glue scene: gate view ready after " << (GetAsyncTimeMs() - m_enterTime) << " ms");
+			FrameManager::Get().TriggerLuaEvent("GLUE_SCENE_READY");
+		}
+
+		if (!m_plazaReadyLogged && m_glueScene->IsPlazaReady())
+		{
+			m_plazaReadyLogged = true;
+			ILOG("Glue scene: plaza view ready after " << (GetAsyncTimeMs() - m_enterTime) << " ms");
+		}
 	}
 
 	void LoginState::OnEnter()
@@ -71,8 +143,30 @@ namespace mmo
 		topFrame->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
 		frameMgr.SetTopFrame(topFrame);
 
+		// The scene behind the glue screens. Its renderer must be known before the UI loads, as
+		// GlueParent.xml creates the frame that uses it.
+		m_enterTime = GetAsyncTimeMs();
+		m_glueSceneReadySent = false;
+		m_plazaReadyLogged = false;
+		CreateGlueScene();
+		if (m_glueScene)
+		{
+			GlueScene* const glueScene = m_glueScene.get();
+			frameMgr.RegisterFrameRenderer("GlueSceneRenderer", [glueScene](const std::string& name)
+				{
+					return std::make_unique<WorldRenderer>(name, glueScene->GetScene());
+				});
+		}
+
 		// Load ui file
 		frameMgr.LoadUIFile("Interface/GlueUI/GlueUI.toc");
+
+		if (!m_glueScene)
+		{
+			// Without a scene there is nothing to wait for: lift the dark fill at once.
+			m_glueSceneReadySent = true;
+			frameMgr.TriggerLuaEvent("GLUE_SCENE_READY");
+		}
 
 		// Register drawing of the login ui
 		m_paintLayer = Screen::AddLayer(std::bind(&LoginState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
@@ -101,6 +195,7 @@ namespace mmo
 			}, ConsoleCommandCategory::Debug, "Enters the world with the selected character as soon as the character list is shown.");
 
 		m_loginConnections += EventLoop::KeyDown.connect(this, &LoginState::OnKeyDown);
+		m_loginConnections += EventLoop::Idle.connect(this, &LoginState::OnIdle);
 
 		if (m_realmConnector.IsConnected())
 		{
@@ -180,8 +275,16 @@ namespace mmo
 
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
-		
+
+		// The frames own the renderer that draws the scene: it goes with them, the scene after them.
+		FrameManager::Get().RemoveFrameRenderer("GlueSceneRenderer");
+		if (m_glueScene)
+		{
+			m_glueScene->SetRenderer(nullptr);
+		}
+
 		FrameManager::Get().ResetTopFrame();
+		m_glueScene.reset();
 	}
 
 	std::string_view LoginState::GetName() const

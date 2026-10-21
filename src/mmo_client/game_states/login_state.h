@@ -13,6 +13,7 @@
 #include "base/signal.h"
 #include "frame_ui/frame_mgr.h"
 
+#include <memory>
 #include <optional>
 
 namespace mmo
@@ -23,6 +24,13 @@ namespace mmo
 	class RealmConnector;
 	class Discord;
 	class SoundEntryPlayer;
+	class GlueScene;
+	class DeferredRenderer;
+
+	namespace proto_client
+	{
+		class Project;
+	}
 
 	/// Reason for returning to the login/character-select screen.
 	enum class LoginReturnReason
@@ -41,7 +49,9 @@ namespace mmo
 		: public GameState
 	{
 	public:
-		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord);
+		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord, const proto_client::Project& project);
+
+		~LoginState() override;
 
 	public:
 		/// The default name of the login state
@@ -106,6 +116,15 @@ namespace mmo
 		/// Enter on the character screen enters the world, like clicking the button.
 		bool OnKeyDown(int32 key, bool repeat);
 
+		/// Advances the glue scene and reports when its gate view is ready.
+		void OnIdle(float deltaSeconds, GameTime timestamp);
+
+		/// Creates the glue scene from its definition file. Leaves m_glueScene empty on failure.
+		void CreateGlueScene();
+
+		/// Gets the deferred renderer of the frame showing the glue scene, if it exists.
+		DeferredRenderer* FindGlueSceneRenderer() const;
+
 	private:
 
 		LoginConnector& m_loginConnector;
@@ -128,5 +147,19 @@ namespace mmo
 
 		/// Set on a successful login: the next realm list may auto-connect to the last used realm.
 		bool m_autoConnectToLastRealm = false;
+
+		const proto_client::Project& m_project;
+
+		/// The 3D scene behind the glue screens. Lives while this state is active.
+		std::unique_ptr<GlueScene> m_glueScene;
+
+		/// When OnEnter ran, for the readiness log lines.
+		GameTime m_enterTime = 0;
+
+		/// Whether GLUE_SCENE_READY was fired since this state was entered.
+		bool m_glueSceneReadySent = false;
+
+		/// Whether the plaza readiness was logged since this state was entered.
+		bool m_plazaReadyLogged = false;
 	};
 }

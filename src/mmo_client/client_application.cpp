@@ -269,7 +269,7 @@ namespace mmo
 	void ClientApplication::InitializeStatesAndScripts(ClientContext& context, LoginConnector& loginConnector, RealmConnector& realmConnector)
 	{
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
-		const auto loginState = std::make_shared<LoginState>(gameStateMgr, loginConnector, realmConnector, *context.timerQueue, *context.audio, *context.soundEntryPlayer, *context.discord);
+		const auto loginState = std::make_shared<LoginState>(gameStateMgr, loginConnector, realmConnector, *context.timerQueue, *context.audio, *context.soundEntryPlayer, *context.discord, *context.project);
 		gameStateMgr.AddGameState(loginState);
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, realmConnector, *context.project, *context.timerQueue, *context.lootClient, *context.vendorClient,
