@@ -44,6 +44,9 @@ BUG_ID = re.compile(r"^[0-9a-f]{24}$")
 RED_REASON = "develop is red"
 # The pre-ship CI check failed (not GitHub: the bug API, say): the CI state is unknown, so nothing ships.
 CI_UNKNOWN_REASON = "CI check failed"
+# The breaker stops every ship. A maintainer's ship decision waits for it in the ship queue instead
+# of being used up; an auto-ship parks.
+BREAKER_REASON = "the circuit breaker is tripped"
 # The emergency ticket auto-ships only through its CI-verified path (_check_pending_ci).
 EMERGENCY_REASON = "emergency fix: ships only after a green Linux CI run or on the maintainer's decision"
 # Statuses of a GitHub run that has not finished yet.
@@ -971,16 +974,18 @@ class BugLoop:
 		if not approved or uploaded is None or hashlib.sha256(uploaded.encode("utf-8")).hexdigest() != approved:
 			self._park(bug_id, branch, ["the diff you approved does not match the candidate commit; decide again"])
 			return
-		if loop_state.breaker_active(self.artifacts_dir):
-			self._park(bug_id, branch, ["the circuit breaker is tripped"])
-			return
 		summary = self._summary(bug_id)
 		if any(item.get("bug") == bug_id for item in self.state.data["ship_queue"]):
-			self._update(bug_id, note="already queued to ship after the freeze window")
+			self._update(bug_id, note="already queued to ship")
+			return
+		if loop_state.breaker_active(self.artifacts_dir):
+			# The decision stays valid: it ships once the breaker is cleared (by hand, or by the next
+			# green nightly when the loop tripped it), so the maintainer never has to decide again.
+			self._queue_held(bug_id, branch, summary, head, BREAKER_REASON, "maintainer approved {}".format(branch), by_maintainer=True)
 			return
 		reason = self._ci_hold(bug_id)
 		if reason:
-			self._queue_for_ci(bug_id, branch, summary, head, reason, "maintainer approved {}".format(branch), by_maintainer=True)
+			self._queue_held(bug_id, branch, summary, head, reason, "maintainer approved {}".format(branch), by_maintainer=True)
 			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=True)
@@ -1079,7 +1084,7 @@ class BugLoop:
 	def _ship_blockers(self, by_maintainer=False):
 		blockers = []
 		if loop_state.breaker_active(self.artifacts_dir):
-			blockers.append("the circuit breaker is tripped")
+			blockers.append(BREAKER_REASON)
 		if not by_maintainer and not self.state.autoship_left(self.config.autoship_cap_per_day):
 			blockers.append("the daily auto-ship cap is reached")
 		return blockers
@@ -1100,7 +1105,7 @@ class BugLoop:
 			return
 		reason = self._ci_hold(bug_id)
 		if reason:
-			self._queue_for_ci(bug_id, branch, summary, head, reason, "fix ready on {}".format(branch))
+			self._queue_held(bug_id, branch, summary, head, reason, "fix ready on {}".format(branch))
 			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head)
@@ -1129,12 +1134,15 @@ class BugLoop:
 			return RED_REASON
 		return ""
 
-	def _queue_for_ci(self, bug_id, branch, summary, head, reason, what, by_maintainer=False):
+	def _queue_held(self, bug_id, branch, summary, head, reason, what, by_maintainer=False):
 		self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=by_maintainer)
 		self.state.mark_attempted(bug_id, "ship-queued")
 		self.state.record(bug_id, "ship-queued", branch=branch, reason=reason)
 		self.state.save()
-		when = "ships once CI is green" if reason == RED_REASON else "ships once CI is confirmed green"
+		if reason == BREAKER_REASON:
+			when = "ships once the breaker is cleared"
+		else:
+			when = "ships once CI is green" if reason == RED_REASON else "ships once CI is confirmed green"
 		try:
 			self._update(bug_id, note="{}; {}: {}".format(what, reason, when))
 		except Exception:  # the fix is queued; a lost note must not throw it away
@@ -1209,6 +1217,9 @@ class BugLoop:
 					elif not by_maintainer and self.state.is_feature(item["bug"]):
 						# Defence in depth: only a maintainer decision ships a feature.
 						self._park(item["bug"], item["branch"], [FEATURE_REASON])
+					elif blockers and by_maintainer:
+						# Only the breaker holds a maintainer's ship: it keeps its place until the breaker is cleared.
+						kept.append(item)
 					elif blockers:
 						self._park(item["bug"], item["branch"], blockers)
 					else:
@@ -1777,6 +1788,15 @@ class BugLoop:
 			# The maintainer reset the breaker: what tripped it last time is history.
 			self.state.data["breaker_source"] = None
 			self.state.save()
+		if name and report and report.get("passed") and self._breaker_tripped_by_loop() 				and _nightly_run_id(name) != self.state.data["breaker_source"]["nightly_run"]:
+			# A newer Nightly Release is green: develop no longer has what tripped the breaker. Only
+			# the loop's own trip clears itself; a hold set by hand (or on top of the trip) stays.
+			tripped_by = self.state.data["breaker_source"]["nightly_run"]
+			loop_state.reset_breaker(self.artifacts_dir)
+			self.state.data["breaker_source"] = None
+			self.state.save()
+			self.log("circuit breaker cleared: {} is green (tripped by nightly run {})".format(name, tripped_by))
+			self.notifier.send(notify.breaker_cleared_message("{} is green".format(name)))
 		if name and name not in self.state.data["seen_red_reports"] and loop_state.red_nightly_blames_loop(report):
 			self.state.data["seen_red_reports"].append(name)
 			if loop_state.trip_breaker(self.artifacts_dir, "nightly {} is red and includes bug-loop merges".format(name), now):
@@ -1793,14 +1813,20 @@ class BugLoop:
 		itself for a red Nightly Release run that belongs to the current red phase, so the fix
 		repairs exactly what tripped it. A manual trip, a trip for another run, or a breaker file
 		rewritten since the trip keeps blocking."""
+		if not self._breaker_tripped_by_loop():
+			return False
+		run_id = self.state.data["breaker_source"]["nightly_run"]
+		phase = self.state.ci_phase()
+		return phase is not None and run_id in (phase.get("nightly_red_runs") or [])
+
+	def _breaker_tripped_by_loop(self):
+		"""True when the breaker is tripped and the loop tripped it itself for a red Nightly Release
+		run, with nothing added since: a manual trip, or a breaker file rewritten (`breaker on` on
+		top of the trip, a reset and a new trip) is the maintainer's."""
 		if not loop_state.breaker_active(self.artifacts_dir):
 			return False
 		source = self.state.data.get("breaker_source") or {}
-		run_id = source.get("nightly_run")
-		if run_id is None or source.get("text") != loop_state.breaker_text(self.artifacts_dir):
-			return False
-		phase = self.state.ci_phase()
-		return phase is not None and run_id in (phase.get("nightly_red_runs") or [])
+		return source.get("nightly_run") is not None and source.get("text") == loop_state.breaker_text(self.artifacts_dir)
 
 	def _write_daily_report(self):
 		day = self.state.data["day"]

@@ -57,6 +57,10 @@ def breaker_message(reason):
 	return "**Bug loop circuit breaker tripped** — auto-shipping stopped: {}".format(reason[:500])
 
 
+def breaker_cleared_message(reason):
+	return "**Bug loop circuit breaker cleared** — auto-shipping resumes: {}".format(reason[:500])
+
+
 def shipped_message(notifier, bug_id, commit, by_maintainer):
 	return "Shipped {} in `{}`{}".format(notifier.bug_link(bug_id), commit[:8], " (maintainer decision)" if by_maintainer else "")
 

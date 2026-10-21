@@ -267,10 +267,10 @@ not parked (see below). The loop consumes decisions before it does anything else
   recorded commit, otherwise it re-parks ("the diff you approved does not match the candidate
   commit; decide again") and uploads the real diff. The API refuses a new review diff while a
   decision is pending, the UI proxy refuses review-diff uploads altogether, and "Ship as is" is
-  disabled until a diff is uploaded. An active circuit breaker also re-parks
-  the bug ("the circuit breaker is tripped"); decide again once it is cleared. Only the
-  nightly freeze window queues the ship until the window ends; a second ship decision for a
-  queued bug only adds a note.
+  disabled until a diff is uploaded. An active circuit breaker queues the ship
+  ("the circuit breaker is tripped; ships once the breaker is cleared"), and so do the nightly
+  freeze window and a red develop: the decision is never used up by a hold, and the ship goes
+  out on its own once the hold ends. A second ship decision for a queued bug only adds a note.
 
   Every ship (auto or decided) lands in the same order: each changed data submodule commit is
   pushed, fast-forward only, to `master` of the submodule's repository on GitHub (the remote
@@ -429,6 +429,14 @@ when the newest finished GitHub "Nightly Release" run on develop failed and a `M
 landed on develop since the last successful run (read through `gh` in the user's login, see
 `bugloop/ci.py`). If `gh` cannot be reached, the loop logs it and keeps going without the check.
 After a deploy rollback, trip it by hand. Only clear it once the cause is understood.
+
+A breaker the loop tripped itself clears itself once a newer Nightly Release on develop is
+green (Discord: "circuit breaker cleared"): the trip is a correlation (a red nightly with a
+bug-loop merge in it), and a green nightly after it shows develop no longer has the fault.
+On 2026-10-20 a red nightly caused by a bot change held seven ship decisions after the next
+nightly was already green. A breaker set by hand, or `breaker on` on top of the loop's trip,
+never clears itself. Ship decisions wait in the ship queue while the breaker is tripped and
+ship when it clears; auto-ship candidates still park.
 
 The one exemption: when the loop tripped the breaker for a red nightly run, it records that run
 id (`breaker_source` in `state.json`, together with the breaker file's text). A green emergency
