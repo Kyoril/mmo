@@ -48,9 +48,23 @@ the local `bin\<config>\` (a dev build that crashed on this machine). Reports fr
 `Version:` line, placed at `artifacts\symbols\<module>.elf\<commit>\<module>`. The script fetches it from that
 nightly's `server-symbols.zip` release asset when it is missing (`tools\fetch_server_symbols.ps1 -Commit <sha>`; needs
 `gh`). A commit with no such release (older than the asset, or not a nightly): `fetch_server_symbols.ps1 -FromImage`
-copies the binary out of the Docker image, which gives function names but no file:line. If nothing resolved (no matching PDB/EXE in `artifacts\symbols`), the build
-that crashed was never archived: document that in `FINDINGS.md`, set `STATUS` to `needs-info`, and stop
-(tell the user to run `tools\archive_symbols` on the matching build).
+copies the binary out of the Docker image, which gives function names but no file:line.
+
+Client reports (`mmo_client`) are identified by **version**, not commit — report.json's
+`appVersion` (e.g. `0.3.0.4140`) names the published build. When no matching PDB is archived
+locally, the script automatically runs `tools\fetch_client_symbols.ps1 -Version <appVersion>`,
+which finds the GitHub release tagged for that version (`nightly-<version>`,
+https://github.com/Kyoril/mmo/releases) and downloads its `symbols.zip` (PDBs) and
+`client-bin.zip` (the EXE) assets, then archives the matching pair via `tools\archive_symbols.ps1`
+(needs `gh`). This only works for builds that were actually published as a release — a crash from
+an unreleased local build still needs a matching EXE+PDB in `bin\<config>\`, or a manual
+`tools\archive_symbols.ps1 -Binary <path>`.
+
+If nothing resolved (no matching PDB/EXE in `artifacts\symbols`, no local `bin\` match, and no
+GitHub release for that version/commit — or `gh` itself is unavailable), the build that crashed
+could not be symbolicated: document that in `FINDINGS.md`, set `STATUS` to `needs-info`, and stop
+(tell the user which build is missing and how to supply it — either run `tools\archive_symbols`
+on the matching build, or make sure `gh` is authenticated so the fetch can run next time).
 
 ## Step 4 — Investigate
 
