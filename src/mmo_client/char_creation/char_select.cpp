@@ -136,7 +136,7 @@ namespace mmo
 				{
 					if (m_glueScene)
 					{
-						m_glueScene->GetDirector().Skip();
+						m_glueScene->SkipFlight();
 					}
 				}),
 

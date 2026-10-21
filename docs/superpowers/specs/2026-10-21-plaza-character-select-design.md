@@ -193,8 +193,9 @@ screen reminds anyone of WoW.
   the scene needs about 3 s. The dark fade stays up until the scene is ready (gate and plaza,
   or the 8 s readiness timeouts), then fades in on the gate view while the normal fly-in to
   the plaza plays. It can still be skipped by any click or key, and the character screen
-  chrome stays hidden until `GLUE_FLIGHT_FINISHED`. An `enterworld` request skips the flight
-  as before (a fly-in still waiting for the scene becomes a cut to the plaza). Coming back
+  chrome stays hidden until `GLUE_FLIGHT_FINISHED`. A click, a key or an `enterworld` request
+  during the dark wait turns the pending fly-in into a cut to the plaza, so the fade lifts
+  straight onto the plaza; once the flight runs they skip it as usual. Coming back
   from the world is unchanged: covered until the plaza is ready, then a direct cut to it.
 - **Scene lifetime:** the glue scene (gate + street + plaza) is owned by the login state and
   released when entering the world. Logging out rebuilds it behind a short fade. The

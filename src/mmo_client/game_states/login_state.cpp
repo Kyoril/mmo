@@ -454,9 +454,11 @@ namespace mmo
 			// not enter the world from the middle of a flight, and no GLUE_KEY_DOWN is sent. The
 			// key is not swallowed, though: the frame UI's own KeyDown handler still receives it
 			// (a focused edit box keeps typing), since the return value does not stop the signal.
+			// During the dark wait of a deferred fly-in, SkipFlight turns it into a plaza snap, so the
+			// fade lifts straight onto the plaza (via the finished-flight path in OnIdle).
 			if (!repeat)
 			{
-				m_glueScene->GetDirector().Skip();
+				m_glueScene->SkipFlight();
 			}
 			return true;
 		}
@@ -480,7 +482,7 @@ namespace mmo
 			return false;
 		}
 
-		m_glueScene->GetDirector().Skip();
+		m_glueScene->SkipFlight();
 		return true;
 	}
 
