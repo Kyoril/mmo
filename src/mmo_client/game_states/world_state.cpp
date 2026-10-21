@@ -1477,7 +1477,22 @@ namespace mmo
 
 	// Defined here rather than in the header so TerrainWaterQuery, declared just above, is a
 	// complete type at the point unique_ptr's deleter is instantiated.
-	WorldState::~WorldState() = default;
+	//
+	// OnLeave() normally stops and joins m_backgroundLoader. If this instance is ever destroyed
+	// without an OnLeave first - e.g. left registered in GameStateMgr but not the current state
+	// when the client shuts down - std::thread's destructor calls std::terminate() on a still
+	// joinable thread, aborting the whole process. Join it here too so destruction is safe either
+	// way; this is a no-op once OnLeave has already joined it.
+	WorldState::~WorldState()
+	{
+		if (m_backgroundLoader.joinable())
+		{
+			m_work.reset();
+			m_workQueue.stop();
+			m_dispatcher.stop();
+			m_backgroundLoader.join();
+		}
+	}
 
 	void WorldState::OnUnderwaterGodRaysChanged(ConsoleVar &var, const std::string &oldValue)
 	{
