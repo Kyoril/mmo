@@ -896,12 +896,35 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertIn("does not match", self.api.notes(BUG_ID)[-1])
 
-	def test_ship_decision_respects_breaker_and_freeze(self):
+	def test_ship_decision_waits_for_the_breaker_instead_of_being_used_up(self):
 		self.park_with_decision("ship", head="head1")
 		loop_state.trip_breaker(self.artifacts, "test", self.now)
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped, [])
-		self.assertIn("circuit breaker", self.api.notes(BUG_ID)[-1])
+		self.assertIn("ships once the breaker is cleared", self.api.notes(BUG_ID)[-1])
+		self.assertTrue(self.state.data["ship_queue"][0]["by_maintainer"])
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		loop_state.reset_breaker(self.artifacts)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+		self.assertEqual(self.state.data["ship_queue"], [])
+
+	def test_ship_decision_queued_for_the_freeze_waits_for_a_breaker_tripped_meanwhile(self):
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		loop_state.trip_breaker(self.artifacts, "test", self.now)
+		self.now = utc("2026-10-08 01:00")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.assertNotIn("parked", self.outcomes())
+		loop_state.reset_breaker(self.artifacts)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+
+	def test_ship_decision_respects_freeze(self):
 		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped, [])
@@ -1281,6 +1304,48 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 		self.assertIn("abc123", self.api.notes(BUG_ID)[-1])
+
+	BLAMING_RED = {"passed": False, "merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]}
+
+	def test_newer_green_nightly_clears_the_breaker_the_loop_tripped(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertFalse(loop_state.breaker_active(self.artifacts))
+		self.assertIsNone(self.state.data["breaker_source"])
+		self.assertTrue(any("breaker cleared" in m and "nightly run 8" in m for m in self.notifier.messages))
+		# The red run stays seen: it cannot trip the breaker a second time.
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		self.assertFalse(loop_state.breaker_active(self.artifacts))
+
+	def test_green_nightly_keeps_a_breaker_set_by_hand(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		loop_state.trip_breaker(self.artifacts, "rollback of nightly-x", self.now, by_hand=True)
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+
+	def test_green_nightly_keeps_a_hold_set_on_top_of_the_loops_trip(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		loop_state.trip_breaker(self.artifacts, "hold everything", self.now, by_hand=True)
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+
+	def test_cleared_breaker_ships_the_waiting_ship_decision(self):
+		self.park_with_decision("ship", head="head1")
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
 
 	def test_red_nightly_with_loop_merge_trips_breaker_once(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
