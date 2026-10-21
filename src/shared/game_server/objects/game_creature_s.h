@@ -111,6 +111,16 @@ namespace mmo
 		/// Turns kill rewards off (or back on). Called for every summoned creature.
 		void SetGrantsKillRewards(const bool grants) { m_grantsKillRewards = grants; }
 
+		/// The share of the damage this creature has taken that players dealt themselves, between
+		/// 0 and 1. Damage without an instigator (environment, a caster that is already gone) counts
+		/// for nobody, and a creature that has taken no attributable damage at all counts as fully
+		/// player-killed, so a scripted or GM kill still rewards normally.
+		[[nodiscard]] float GetPlayerDamageShare() const;
+
+		/// Forgets who dealt the damage taken so far. Called when the creature evades, which ends
+		/// the fight and heals it back up.
+		void ResetDamageContributions();
+
 		void SetHealthPercent(float percent);
 
 		void SetUnitLoot(std::unique_ptr<LootInstance> unitLoot);
@@ -282,6 +292,8 @@ namespace mmo
 		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
 		const proto::SpellEntry* GetAutoAttackSpell(WeaponAttack attackType) const override;
 
+		void OnDamageTaken(GameUnitS* instigator, uint32 damage) override;
+
 	private:
 
 		/// Calculates and applies stats using the new stat-based system
@@ -314,6 +326,11 @@ namespace mmo
 		/// Distance in world units kept to the followed unit.
 		float m_followDistance = 2.5f;
 		LootRecipients m_lootRecipients;
+		/// Damage dealt to this creature by players themselves since the fight began.
+		uint64 m_playerDamageTaken = 0;
+		/// Damage dealt to this creature by non-player units (guards, other creatures) since the
+		/// fight began.
+		uint64 m_npcDamageTaken = 0;
 		bool m_grantsKillRewards = true;
 		bool m_lootableFlagSuppressed = false;
 		float m_healthPercent = 1.0f;

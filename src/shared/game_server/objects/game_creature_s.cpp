@@ -186,6 +186,44 @@ namespace mmo
 		m_lootRecipients.clear();
 	}
 
+	void GameCreatureS::OnDamageTaken(GameUnitS* instigator, const uint32 damage)
+	{
+		GameUnitS::OnDamageTaken(instigator, damage);
+
+		// Damage nobody is responsible for - falling, a lava pool, a caster that already left the
+		// world - belongs to neither side and must not tip the kill reward balance either way.
+		if (damage == 0 || !instigator)
+		{
+			return;
+		}
+
+		if (instigator->IsPlayer())
+		{
+			m_playerDamageTaken += damage;
+		}
+		else
+		{
+			m_npcDamageTaken += damage;
+		}
+	}
+
+	float GameCreatureS::GetPlayerDamageShare() const
+	{
+		const uint64 attributedDamage = m_playerDamageTaken + m_npcDamageTaken;
+		if (attributedDamage == 0)
+		{
+			return 1.0f;
+		}
+
+		return static_cast<float>(m_playerDamageTaken) / static_cast<float>(attributedDamage);
+	}
+
+	void GameCreatureS::ResetDamageContributions()
+	{
+		m_playerDamageTaken = 0;
+		m_npcDamageTaken = 0;
+	}
+
 	bool GameCreatureS::IsLootRecipient(const GamePlayerS& character) const
 	{
 		if (m_lootRecipients.contains(character.GetGuid()))

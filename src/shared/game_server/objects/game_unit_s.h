@@ -1702,6 +1702,12 @@ public:
 		const Radian &GetBindFacing() const { return m_bindFacing; }
 
 	protected:
+		/// Called whenever this unit actually lost health to damage, after the new health value was
+		/// applied. Lets subclasses keep track of who wore this unit down.
+		/// @param instigator The unit that dealt the damage, or nullptr for environmental damage.
+		/// @param damage The amount of health that was actually lost.
+		virtual void OnDamageTaken(GameUnitS *instigator, uint32 damage) {}
+
 		/// Called when the unit is killed.
 		/// @param killer The unit that killed this unit.
 		virtual void OnKilled(GameUnitS *killer);
