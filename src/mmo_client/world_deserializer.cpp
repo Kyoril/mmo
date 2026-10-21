@@ -148,6 +148,8 @@ namespace mmo
 		String baseFileName = (std::filesystem::path(m_name) / "Entities" / std::to_string(pageIndex)).string();
 		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
 
+		PROFILE_SCOPE("Stream: LoadPageEntities");
+
 		auto files = AssetRegistry::ListFiles(baseFileName, ".wobj");
 
 		for (const auto& file : files)
@@ -423,6 +425,10 @@ namespace mmo
 			return;
 		}
 
+		// Read the entity's meshes, world model, materials and textures here, so the main thread does not
+		// pay the disk latency of each first open inside its frame when it creates the entity.
+		AssetRegistry::PrefetchReferences(filename);
+
 		const auto& entity = loader.GetEntity();
 
 		std::weak_ptr weak = weak_from_this();
@@ -638,6 +644,9 @@ namespace mmo
 			return;
 		}
 
+		// The tree meshes, their materials and textures, read ahead of the main thread's cell rebuild.
+		AssetRegistry::PrefetchReferences(filename);
+
 		auto instances = std::make_shared<std::vector<FoliageInstance>>(loader.TakeInstances());
 
 		std::weak_ptr weak = weak_from_this();
@@ -653,6 +662,8 @@ namespace mmo
 				{
 					return;
 				}
+
+				PROFILE_SCOPE("Stream: PageTrees");
 
 				for (const auto& source : *instances)
 				{

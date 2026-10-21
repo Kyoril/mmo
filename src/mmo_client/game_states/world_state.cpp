@@ -565,10 +565,17 @@ namespace mmo
 		m_rayQuery.reset();
 
 		// Stop background loading thread
+		m_minimap.SetPrefetchHandler(nullptr);
+		GameUnitC::SetModelFilePrefetcher(nullptr);
 		m_work.reset();
 		m_workQueue.stop();
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
+
+		// Content read ahead for the world just left
+		const AssetRegistry::PrefetchStats prefetchStats = AssetRegistry::GetPrefetchStats();
+		ILOG("Asset prefetch served " << prefetchStats.hits << " of " << prefetchStats.opens << " file opens in this world");
+		AssetRegistry::ClearPrefetched();
 
 		m_workQueue.reset();
 		m_dispatcher.reset();
@@ -1091,48 +1098,70 @@ namespace mmo
 			}
 		}
 
-		// Day/night clock, then the zone environment for the new hour, then the lights and sky.
-		m_skyComponent->Update(deltaSeconds, timestamp);
-		m_environment.Update(deltaSeconds, m_skyComponent->GetNormalizedTimeOfDay());
-		m_skyComponent->ApplyEnvironment(m_environment.GetState());
-		ApplyEnvironmentToRenderer();
-
-		m_wind.Update(deltaSeconds, m_environment.GetState());
-		if (m_scene)
 		{
-			m_scene->SetWind(m_wind.GetState());
-		}
-		PublishWindShaderParameters(m_wind.GetState());
+			PROFILE_SCOPE("OnIdle::SkyEnvironmentWind");
 
-		// Set the sky dome position to follow the player
-		if (m_playerController->GetRootNode())
+			// Day/night clock, then the zone environment for the new hour, then the lights and sky.
+			m_skyComponent->Update(deltaSeconds, timestamp);
+			m_environment.Update(deltaSeconds, m_skyComponent->GetNormalizedTimeOfDay());
+			m_skyComponent->ApplyEnvironment(m_environment.GetState());
+			ApplyEnvironmentToRenderer();
+
+			m_wind.Update(deltaSeconds, m_environment.GetState());
+			if (m_scene)
+			{
+				m_scene->SetWind(m_wind.GetState());
+			}
+			PublishWindShaderParameters(m_wind.GetState());
+
+			// Set the sky dome position to follow the player
+			if (m_playerController->GetRootNode())
+			{
+				m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
+			}
+		}
+
 		{
-			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
+			PROFILE_SCOPE("OnIdle::UnitAttachedSounds");
+			UpdateUnitAttachedSounds(deltaSeconds);
 		}
-
-		UpdateUnitAttachedSounds(deltaSeconds);
 
 		// Update audio component to simulate 3d audio correctly from the player position
 		if (m_playerController->GetControlledUnit())
 		{
-			m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+			{
+				PROFILE_SCOPE("OnIdle::Audio");
+				m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+			}
 
 			// Mesh sounds are selected around the same position the 3D listener sits at
+			PROFILE_SCOPE("OnIdle::AmbientSounds");
 			m_ambientSounds.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
 		}
 
-		// Advance zone music / ambience crossfades
-		m_zoneMusic.Update(deltaSeconds);
-		m_zoneAmbience.Update(deltaSeconds);
+		{
+			PROFILE_SCOPE("OnIdle::ZoneMusicAmbience");
 
-		// Submersion state for the underwater post-process and the audio low-pass. Runs after the
-		// audio update so the cutoff it sets is not overwritten within the same frame.
-		UpdateWaterVolume(deltaSeconds);
+			// Advance zone music / ambience crossfades
+			m_zoneMusic.Update(deltaSeconds);
+			m_zoneAmbience.Update(deltaSeconds);
+		}
+
+		{
+			PROFILE_SCOPE("OnIdle::WaterVolume");
+
+			// Submersion state for the underwater post-process and the audio low-pass. Runs after the
+			// audio update so the cutoff it sets is not overwritten within the same frame.
+			UpdateWaterVolume(deltaSeconds);
+		}
 
 		// Only update when world loading is ready
 		if (m_worldLoaded && m_timeSyncResponseSent)
 		{
-			m_playerController->Update(deltaSeconds);
+			{
+				PROFILE_SCOPE("OnIdle::PlayerController");
+				m_playerController->Update(deltaSeconds);
+			}
 			ObjectMgr::UpdateObjects(deltaSeconds);
 		}
 
@@ -1204,17 +1233,21 @@ namespace mmo
 			m_minimap.UpdatePings(m_activePings);
 		}
 
-		// Update projectiles
-		if (m_projectileManager)
 		{
-			m_projectileManager->Update(deltaSeconds);
+			PROFILE_SCOPE("OnIdle::ProjectilesSpellVisuals");
+
+			// Update projectiles
+			if (m_projectileManager)
+			{
+				m_projectileManager->Update(deltaSeconds);
+			}
+
+			// Update spell visualization service (audio fading, etc.)
+			SpellVisualizationService::Get().Update(deltaSeconds);
+
+			// Update pending projectiles (animation notify fallback)
+			UpdatePendingProjectiles();
 		}
-
-		// Update spell visualization service (audio fading, etc.)
-		SpellVisualizationService::Get().Update(deltaSeconds);
-
-		// Update pending projectiles (animation notify fallback)
-		UpdatePendingProjectiles();
 
 		// Update foliage system
 		if (m_foliage && m_worldLoaded)
@@ -1227,6 +1260,7 @@ namespace mmo
 		// reloads, and the cull itself only touches chunks whose visibility actually changed.
 		if (m_worldLoaded && m_worldInstance)
 		{
+			PROFILE_SCOPE("OnIdle::TreeViewDistance");
 			if (InstancedFoliage* trees = m_worldInstance->GetInstancedFoliage())
 			{
 				trees->SetViewDistance(s_viewDistanceVar ? s_viewDistanceVar->GetFloatValue() : 0.0f);
@@ -1242,46 +1276,60 @@ namespace mmo
 				m_playerController->GetCamera().GetDerivedPosition());
 		}
 
-		const auto pos = GetPagePositionFromCamera();
-		m_memoryPointOfView->UpdateCenter(pos);
-		m_visibleSection->UpdateCenter(pos);
-
-		UpdateFarTerrain();
-
-		CheckForZoneUpdate();
-
-		// Update world text frames then remove expired ones
-		for (auto &frame : m_worldTextFrames)
 		{
-			frame->Update(deltaSeconds);
-		}
-		m_worldTextFrames.erase(
-			std::remove_if(m_worldTextFrames.begin(), m_worldTextFrames.end(),
-				[](const std::unique_ptr<WorldTextFrame> &frame) { return frame->IsExpired(); }),
-			m_worldTextFrames.end());
+			PROFILE_SCOPE("Stream: PageCenterUpdate");
 
-		for (auto& frame : m_chatBubbleFrames)
-		{
-			frame->Animate(deltaSeconds);
+			const auto pos = GetPagePositionFromCamera();
+			m_memoryPointOfView->UpdateCenter(pos);
+			m_visibleSection->UpdateCenter(pos);
 		}
 
-		const size_t chatBubblesBefore = m_chatBubbleFrames.size();
-		m_chatBubbleFrames.erase(
-			std::remove_if(m_chatBubbleFrames.begin(), m_chatBubbleFrames.end(),
-				[this](const std::shared_ptr<ChatBubbleFrame>& frame)
-				{
-					return frame->IsExpired() || !AreChatBubblesEnabled(frame->GetChatType());
-				}),
-			m_chatBubbleFrames.end());
-
-		// If any bubbles were removed, rebuild the layer's children so the removed frames are
-		// released (Frame has no single-child removal). This only happens when a bubble expires.
-		if (m_chatBubbleFrames.size() != chatBubblesBefore && m_chatBubbleLayer)
 		{
-			m_chatBubbleLayer->RemoveAllChildren();
-			for (const auto& frame : m_chatBubbleFrames)
+			PROFILE_SCOPE("Stream: UpdateFarTerrain");
+			UpdateFarTerrain();
+		}
+
+		{
+			PROFILE_SCOPE("OnIdle::ZoneUpdate");
+			CheckForZoneUpdate();
+		}
+
+		{
+			PROFILE_SCOPE("OnIdle::WorldTextChatBubbles");
+
+			// Update world text frames then remove expired ones
+			for (auto &frame : m_worldTextFrames)
 			{
-				m_chatBubbleLayer->AddChild(frame);
+				frame->Update(deltaSeconds);
+			}
+			m_worldTextFrames.erase(
+				std::remove_if(m_worldTextFrames.begin(), m_worldTextFrames.end(),
+					[](const std::unique_ptr<WorldTextFrame> &frame) { return frame->IsExpired(); }),
+				m_worldTextFrames.end());
+
+			for (auto& frame : m_chatBubbleFrames)
+			{
+				frame->Animate(deltaSeconds);
+			}
+
+			const size_t chatBubblesBefore = m_chatBubbleFrames.size();
+			m_chatBubbleFrames.erase(
+				std::remove_if(m_chatBubbleFrames.begin(), m_chatBubbleFrames.end(),
+					[this](const std::shared_ptr<ChatBubbleFrame>& frame)
+					{
+						return frame->IsExpired() || !AreChatBubblesEnabled(frame->GetChatType());
+					}),
+				m_chatBubbleFrames.end());
+
+			// If any bubbles were removed, rebuild the layer's children so the removed frames are
+			// released (Frame has no single-child removal). This only happens when a bubble expires.
+			if (m_chatBubbleFrames.size() != chatBubblesBefore && m_chatBubbleLayer)
+			{
+				m_chatBubbleLayer->RemoveAllChildren();
+				for (const auto& frame : m_chatBubbleFrames)
+				{
+					m_chatBubbleLayer->AddChild(frame);
+				}
 			}
 		}
 
@@ -1296,6 +1344,7 @@ namespace mmo
 		// TaskSystem worker pool.
 		if (m_scene)
 		{
+			PROFILE_SCOPE("OnIdle::SceneSimulation");
 			m_scene->UpdateSimulation();
 		}
 	}
@@ -1320,6 +1369,64 @@ namespace mmo
 
 			// Chat bubbles are NOT drawn here: they live in the frame tree under the WorldFrame
 			// (see m_chatBubbleLayer) so they render above the 3D world but beneath the rest of the UI.
+		}
+	}
+
+	uint32 WorldState::ResolveZoneSound(const proto_client::ZoneEntry *zone, const bool music) const
+	{
+		// An unset sound (0) falls back along the parent zone chain unless a zone in between
+		// explicitly opts out via inherit_parent_audio = false. Depth guard against parent zone
+		// cycles in broken data.
+		for (int depth = 0; zone && depth < 8; ++depth)
+		{
+			if (const uint32 soundId = music ? zone->music_sound() : zone->ambience_sound(); soundId != 0)
+			{
+				return soundId;
+			}
+
+			if (!zone->inherit_parent_audio() || zone->parentzone() == 0)
+			{
+				return 0;
+			}
+
+			zone = m_project.zones.getById(zone->parentzone());
+		}
+
+		return 0;
+	}
+
+	void WorldState::PrefetchPageZoneSounds(const uint32 pageX, const uint32 pageY)
+	{
+		const terrain::Page *page = m_worldInstance->GetTerrain()->GetPage(pageX, pageY);
+		if (!page)
+		{
+			return;
+		}
+
+		// Zone music and ambience are large files opened the moment the player crosses into the
+		// zone. Reading them while the zone's pages stream in keeps that open off the frame. Files
+		// already read ahead or opened are skipped by the registry, so every page may ask again.
+		std::set<uint32> zoneIds;
+		std::vector<String> files;
+		for (uint32 tileY = 0; tileY < terrain::constants::TilesPerPage; ++tileY)
+		{
+			for (uint32 tileX = 0; tileX < terrain::constants::TilesPerPage; ++tileX)
+			{
+				const uint32 zoneId = page->GetArea(tileX, tileY);
+				if (!zoneIds.insert(zoneId).second)
+				{
+					continue;
+				}
+
+				const proto_client::ZoneEntry *zone = m_project.zones.getById(zoneId);
+				m_soundEntryPlayer.GetEntryFiles(ResolveZoneSound(zone, true), files);
+				m_soundEntryPlayer.GetEntryFiles(ResolveZoneSound(zone, false), files);
+			}
+		}
+
+		for (String &file : files)
+		{
+			m_workQueue.post([file = std::move(file)]() { AssetRegistry::Prefetch(file); });
 		}
 	}
 
@@ -1349,7 +1456,10 @@ namespace mmo
 			return;
 		}
 
-		UpdateEnvironmentTarget(zoneId, pos);
+		{
+			PROFILE_SCOPE("Zone: EnvironmentTarget");
+			UpdateEnvironmentTarget(zoneId, pos);
+		}
 
 		if (zoneId != m_lastZoneId)
 		{
@@ -1375,31 +1485,8 @@ namespace mmo
 					s_subZoneName.clear();
 				}
 
-				// Resolve zone audio: an unset sound (0) falls back along the parent zone chain
-				// unless a zone in between explicitly opts out via inherit_parent_audio = false.
-				const auto resolveZoneSound = [this](const proto_client::ZoneEntry *zone, const auto &getSoundId) -> uint32
-				{
-					// Depth guard against parent zone cycles in broken data.
-					for (int depth = 0; zone && depth < 8; ++depth)
-					{
-						if (const uint32 soundId = getSoundId(*zone); soundId != 0)
-						{
-							return soundId;
-						}
-
-						if (!zone->inherit_parent_audio() || zone->parentzone() == 0)
-						{
-							return 0;
-						}
-
-						zone = m_project.zones.getById(zone->parentzone());
-					}
-
-					return 0;
-				};
-
-				musicSoundId = resolveZoneSound(zone, [](const proto_client::ZoneEntry &z) { return z.music_sound(); });
-				ambienceSoundId = resolveZoneSound(zone, [](const proto_client::ZoneEntry &z) { return z.ambience_sound(); });
+				musicSoundId = ResolveZoneSound(zone, true);
+				ambienceSoundId = ResolveZoneSound(zone, false);
 			}
 			else
 			{
@@ -1407,11 +1494,22 @@ namespace mmo
 			}
 
 			// Crossfade zone music / ambience if the effective sounds changed.
-			m_zoneMusic.SetSound(musicSoundId);
-			m_zoneAmbience.SetSound(ambienceSoundId);
-
-			m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
-			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
+			{
+				PROFILE_SCOPE("Zone: Music");
+				m_zoneMusic.SetSound(musicSoundId);
+			}
+			{
+				PROFILE_SCOPE("Zone: Ambience");
+				m_zoneAmbience.SetSound(ambienceSoundId);
+			}
+			{
+				PROFILE_SCOPE("Zone: Discord");
+				m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
+			}
+			{
+				PROFILE_SCOPE("Zone: Lua ZONE_CHANGED");
+				FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
+			}
 		}
 	}
 
@@ -1640,6 +1738,11 @@ namespace mmo
 		auto &dispatcher = m_dispatcher;
 		m_backgroundLoader = std::thread([&workQueue]()
 										 { workQueue.run(); });
+
+		m_minimap.SetPrefetchHandler([&workQueue](const String &filename)
+		{
+			workQueue.post([filename]() { AssetRegistry::Prefetch(filename); });
+		});
 
 		const auto addWork = [&workQueue](const WorldPageLoader::Work &work)
 		{
@@ -2769,6 +2872,22 @@ namespace mmo
 				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
 				{
 					ObjectMgr::SetActivePlayer(object->GetGuid());
+
+					// From here on, units spawning with a model never loaded before read its files on the
+					// streaming thread first and show it a few frames later. Not before: the own player
+					// (set up before it becomes the active player) must have its model at once.
+					GameUnitC::SetModelFilePrefetcher([&workQueue = m_workQueue, &dispatcher = m_dispatcher](std::vector<String> files, std::function<void()> onReady)
+					{
+						workQueue.post([&dispatcher, files = std::move(files), onReady = std::move(onReady)]()
+						{
+							for (const String &file : files)
+							{
+								AssetRegistry::Prefetch(file);
+							}
+
+							dispatcher.post(onReady);
+						});
+					});
 
 					// Register player field change observers
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::TargetUnit, 2, *this, &WorldState::OnTargetSelectionChanged);
@@ -6302,9 +6421,16 @@ namespace mmo
 					// used to run synchronously here and hitched the main thread on every
 					// page-boundary crossing. Only material resolution and tile creation (spread
 					// over frames by EnsurePageIsLoaded) remain on the main thread.
-					m_workQueue.post([this, pos, page]()
+					const String pageFileName = m_worldInstance->GetTerrain()->GetBaseFileName() + "/" + std::to_string(pos.x()) + "_" + std::to_string(pos.y()) + ".tile";
+					m_workQueue.post([this, pos, page, pageFileName]()
 					{
 						const bool parsed = page->PrepareParse();
+
+						// The page's materials and their textures, which FinalizePrepare loads on the main thread.
+						if (parsed)
+						{
+							AssetRegistry::PrefetchReferences(pageFileName);
+						}
 
 						m_dispatcher.post([this, pos, page, parsed]()
 						{
@@ -6333,7 +6459,12 @@ namespace mmo
 			}
 			else
 			{
+				PROFILE_SCOPE("Stream: UnregisterPageFoliage");
 				UnregisterPageFoliage(pos.x(), pos.y());
+			}
+
+			if (!isAvailable)
+			{
 				page->Unload();
 			}
 		}
@@ -6435,6 +6566,7 @@ namespace mmo
 		{
 			// Tile materials are now available; (re)register this page's data-driven foliage.
 			RegisterPageFoliage(pos.x(), pos.y());
+			PrefetchPageZoneSounds(pos.x(), pos.y());
 		}
 	}
 
