@@ -22,7 +22,9 @@ RESTART_EXIT_CODE = 75
 # A change set is exempt from the regression-proof requirement only when every non-test path is
 # data; the fixer's own `data_only` claim is never trusted.
 # Client UI Lua under data/client/Interface/ cannot cheat the server, so it needs no proof either.
-DATA_ONLY_ROOTS = ("data/editor/data/", "data/client/Locales/", "data/client/Interface/")
+DATA_ONLY_ROOTS = ("data/editor/data/", "data/client/Locales/", "data/client/Interface/", "data/client/ClientDB/")
+# Prose a fix may carry along; it neither needs nor provides a regression proof.
+DOC_ROOTS = ("docs/", "e2e/README.md")
 # Statuses of bugs parked for the maintainer.
 PARKED_STATUSES = ("pr_open", "needs_decision")
 # The web UI shows the candidate diff; the API stores at most this much.
@@ -85,8 +87,28 @@ def valid_bug_id(bug_id):
 
 
 def proof_exempt(changes):
-	production = [change for change in changes if guard.is_production(change.path)]
+	production = [change for change in changes if guard.is_production(change.path) and not change.path.startswith(DOC_ROOTS)]
 	return bool(production) and all(change.path.startswith(DATA_ONLY_ROOTS) for change in production)
+
+
+# Park reasons the fixer can repair on its own branch: what the reviewer found, a regression proof
+# that failed or is missing, a red gate, a fixer that was only fairly sure. Everything else (the
+# guard, a design question, a weakened security property, an unusable review) needs the maintainer.
+SELF_CORRECTABLE = ("proof: ", "the fast gate is red", "fixer confidence is medium")
+NOT_SELF_CORRECTABLE = ("review: design question", "review: the diff reduces a security")
+
+
+def self_correctable(reasons):
+	"""True when every reason (the feature approval aside) is one a further fix round can repair."""
+	relevant = [reason for reason in reasons if reason != FEATURE_REASON]
+	if not relevant:
+		return False
+	for reason in relevant:
+		if reason.startswith(NOT_SELF_CORRECTABLE):
+			return False
+		if not (reason.startswith(SELF_CORRECTABLE) or reason.startswith("review: ")):
+			return False
+	return True
 
 
 def short_id(bug_id):
@@ -148,7 +170,9 @@ def decide(fix, review, guard_result, proof, gate):
 	reasons = []
 	# Medium confidence ships when a regression test proves the fix (fails before, passes after).
 	proven = proof is not None and proof["ok"]
-	if fix.get("confidence") != "high" and not (fix.get("confidence") == "medium" and proven):
+	# A data or UI fix has no regression proof to give (proof None: exempt); a clean review is its proof.
+	reviewed = proof is None and not verdicts.review_blockers(review)
+	if fix.get("confidence") != "high" and not (fix.get("confidence") == "medium" and (proven or reviewed)):
 		reasons.append("fixer confidence is {}".format(fix.get("confidence")))
 	reasons.extend(verdicts.review_blockers(review))
 	reasons.extend("guard: " + reason for reason in guard_result["reasons"])
@@ -524,9 +548,11 @@ class BugLoop:
 
 	# ---- fix
 
-	def _fix(self, bug_id, guidance=None, feature=None, emergency=None):
+	def _fix(self, bug_id, guidance=None, feature=None, emergency=None, self_correct=False):
 		"""`emergency` is the CI context of the red phase when bug_id is its emergency ticket: the
-		fixer then sees only the loop's CI task and log, and a locally green fix goes to CI, not develop."""
+		fixer then sees only the loop's CI task and log, and a locally green fix goes to CI, not develop.
+		`self_correct`: an automatic round on the candidate's branch; the fixer sees the park reasons
+		of the previous round as untrusted findings (PREVIOUS ATTEMPT), never as maintainer guidance."""
 		if not valid_bug_id(bug_id):
 			self.state.drop_fix(bug_id)
 			self.log("dropping a queued fix with a malformed bug id: {!r}".format(bug_id)[:200])
@@ -552,21 +578,24 @@ class BugLoop:
 		# a failed feature run goes back to where `implement` can be chosen again; a failed
 		# emergency run goes back to `triaged`, where the loop retries it while attempts remain;
 		# any other failed fix goes to the maintainer's needs-info list (the loop never polls `triaged`).
-		failed_status = "pr_open" if guidance else "triaged"
-		fresh_feature = bool(feature) and not guidance
+		failed_status = "pr_open" if guidance or self_correct else "triaged"
+		fresh_feature = bool(feature) and not guidance and not self_correct
 		if fresh_feature:
 			failed_fields = {"triage": {"category": "design_request"}}
 			again = "; decide again"
 		elif emergency is not None:
 			failed_fields = {}
 			again = self._retry_note()
+		elif self_correct:
+			failed_fields = {}
+			again = "; the earlier candidate on the branch waits for a decision"
 		elif not guidance:
 			failed_fields = {"triage": {"category": NEEDS_INFO_CATEGORY}}
 			again = NEEDS_INFO_HINT
 		else:
 			failed_fields = {}
 			again = ""
-		resume = bool(guidance) or bool(emergency and emergency.get("resume"))
+		resume = bool(guidance) or self_correct or bool(emergency and emergency.get("resume"))
 		previous = self._previous_attempt(bug_id) if resume else None
 		try:
 			self.api.claim(bug_id, self.config.worker)
@@ -620,8 +649,8 @@ class BugLoop:
 			fix_input = inputs.build_emergency_fix_input(bug_id, emergency, branch, fix_path, previous=previous)
 		else:
 			fix_input = inputs.build_fix_input(bug, verdict, branch, fix_path, guidance=guidance, previous=previous, feature=feature)
-		self._stage("fixing", bug_id, branch, detail="guided refix" if guidance else "feature" if feature else
-			"emergency fix" if emergency is not None else "")
+		self._stage("fixing", bug_id, branch, detail="guided refix" if guidance else "self-correcting" if self_correct else
+			"feature" if feature else "emergency fix" if emergency is not None else "")
 		try:
 			result = self.runner.agent(self.prompts["fix"], fix_input,
 				self.worktree.path, self.config.fix_timeout_seconds, self.config.fix_max_usd)
@@ -727,6 +756,8 @@ class BugLoop:
 		else:
 			green = False
 		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
+		if reasons and self._self_correct(bug_id, branch, reasons, guidance, feature):
+			return
 		if reasons:
 			ready = green and feature and not guidance
 			# The "Feature ready" ping replaces the status message of this park.
@@ -736,6 +767,29 @@ class BugLoop:
 				self.notifier.send(notify.feature_ready_message(self.notifier, bug_id, self._summary(bug_id), branch))
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
+
+	def _self_correct(self, bug_id, branch, reasons, guidance, feature):
+		"""Runs another fix round on the branch instead of parking, when the fixer can repair every
+		reason itself and rounds and budget are left. True when it took over the bug."""
+		if not self_correctable(reasons):
+			return False
+		if self.state.self_correct_count(bug_id) >= self.config.self_correct_rounds:
+			return False
+		if not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+			return False
+		self.state.count_self_correct(bug_id)
+		round_no = self.state.self_correct_count(bug_id)
+		self.state.record(bug_id, "self-correcting", branch=branch, round=round_no, reasons=reasons[:10])
+		self.state.save()
+		self.log("bug {}: self-correcting, round {} of {}: {}".format(bug_id, round_no, self.config.self_correct_rounds,
+			"; ".join(reasons)[:500]))
+		# Parked on paper first: an interrupted or failed round leaves a reviewable candidate behind.
+		self._update(bug_id, status="pr_open", prUrl="branch:" + branch, release_claim=True,
+			note="self-correcting (round {} of {}): {}".format(round_no, self.config.self_correct_rounds, "; ".join(reasons))[:1800])
+		self._upload_diff(bug_id)
+		self._backup_branch(bug_id, branch)
+		self._fix(bug_id, guidance=guidance, feature=feature, self_correct=True)
+		return True
 
 	def _review(self, bug_id, verdict, fix, diff_text, guard_reasons, guidance=None, feature=None, ci_failure=None):
 		try:
@@ -865,6 +919,8 @@ class BugLoop:
 			self._finish(bug_id, "refix-limit")
 			return
 		self.state.count_refix(bug_id)
+		# The maintainer's guidance starts a new candidate: it gets its own self-correction rounds.
+		self.state.reset_self_correct(bug_id)
 		self._recover_feature(bug_id)
 		# A feature accepted before descriptions were kept has none; it still parks via is_feature.
 		feature = self.state.feature_description(bug_id) if self.state.is_feature(bug_id) else None

@@ -40,6 +40,15 @@ The guard is an allow-list: only paths under these roots (each with its own file
 - `src/world_server/`, `src/realm_server/`, `src/mmo_client/` (C/C++ files)
 - `data/client/Interface/` (`.lua`, `.xml`, `.toc`), `data/client/Locales/` (`.txt`)
 - `data/editor/data/` (`.data`), `data/scripts/` (`.lua`)
+- `src/shared/{bot_core,bot_ai,bot_chat}/` (C/C++; bots can do nothing a player client cannot)
+- `docs/` and `e2e/README.md` (`.md` only; prose nothing builds or loads)
+- `data/client/ClientDB/<name>.data`, but only together with `data/editor/data/<name>.data`: the
+  client copy is exported from the editor file, and the guard decodes and judges that one
+- `src/tests/CMakeLists.txt` and `src/tests/<suite>/CMakeLists.txt`, line by line: only the shapes
+  that register a suite (`mmo_add_test`, `add_subdirectory`, `target_sources`/`..._include_directories`/
+  `..._compile_definitions(<target> PRIVATE` with source, directory and `MMO_*="${CMAKE_SOURCE_DIR}/..."`
+  lines, `if (MMO_...)`, `if (EXISTS "${CMAKE_SOURCE_DIR}/...")`, `else()`, `endif()`, comments). Any other
+  CMake line parks; every other `CMakeLists.txt` stays protected
 
 The guard also parks: edits within 20 lines of a security-sensitive identifier or a rejection
 path; changed server-code lines containing economy words (xp, reward, loot, drop, credit,
@@ -75,9 +84,31 @@ anything is pushed. Emergency fixes and features always run the gate, because th
 "Feature ready" ping rely on a green result.
 
 A fix auto-ships only with: a fixable category, fixer confidence `high` (or `medium` with a
-passing regression proof), a clean review, an empty guard, a passing proof (code fixes), a green
+passing regression proof, or `medium` on a data or UI fix that needs no proof and has a clean
+review), a clean review, an empty guard, a passing proof (code fixes), a green
 fast gate, fewer than `autoship_cap_per_day` (20) ships today, no
 breaker, and a time outside 21:30–23:59 UTC (fixes ready during the window ship after it).
+
+The reviewer splits what it finds: `blocking_issues` (the diff is wrong, unsafe or breaks a build
+or test) park the fix, `advisory_notes` (follow-ups, other entries with the same gap, nice-to-have
+audits, style) are kept in `review.json` and never park it.
+
+### Self-correction
+
+A candidate that would park only for reasons the fixer can repair itself does not go to the
+maintainer yet. The loop runs another fix round on the same branch, up to `self_correct_rounds`
+(2) per bug, each needing 2 invocations of budget. Repairable are: the reviewer's blocking issues
+and its "does not fix the symptom", "not supported by the source", "out of scope" and "guidance not
+followed" answers; a failed or missing regression proof; a red fast gate; fixer confidence
+`medium`. Never repairable, so parked at once: any guard reason, a design question, a weakened
+security property, an unusable review, a diff too large to review, emergency tickets (they have
+their own attempts). A feature self-corrects the same way and still parks for approval at the end.
+
+The fixer sees the previous round's reasons in its PREVIOUS ATTEMPT block, as untrusted findings,
+never as maintainer guidance; a guided refix keeps its guidance in the rounds after it. Before a
+round starts, the bug is parked on paper (`pr_open`, the branch, the uploaded diff, the backup),
+so an interrupted or failed round leaves the last candidate reviewable. A maintainer refix starts
+the count again.
 
 ## Running it
 

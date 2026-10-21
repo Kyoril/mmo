@@ -165,6 +165,19 @@ class RealDataTests(unittest.TestCase):
 		self.assertIsNotNone(message)
 		self.assertTrue(data_diff.leaf_items(message))
 
+	def test_every_game_data_file_has_a_schema(self):
+		# A file the decoder cannot read parks every fix to it ("no schema to decode it"):
+		# item_displays.data did until SCHEMA_ALIASES named item_display.proto for it.
+		decoder = data_diff.DataDecoder(REPO_ROOT, protoc=PROTOC)
+		folder = os.path.dirname(ZONES)
+		for name in sorted(os.listdir(folder)):
+			stem, suffix = os.path.splitext(name)
+			# npc_texts.data is a leftover no code reads and no schema describes.
+			if suffix != ".data" or stem == "npc_texts":
+				continue
+			with open(os.path.join(folder, name), "rb") as handle:
+				self.assertIsNotNone(decoder.decode(stem, handle.read()), name)
+
 
 if __name__ == "__main__":
 	unittest.main()
