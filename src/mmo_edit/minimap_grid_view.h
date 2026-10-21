@@ -12,6 +12,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace mmo
 {
@@ -22,6 +23,8 @@ namespace mmo
 	/// Minimap tiles are loaded from "Textures/Minimaps/{world}/{pageIndex}.htex" where the page
 	/// index is encoded as (pageX << 8) | pageY (see Minimap::BuildPageIndex). The widget keeps its
 	/// own texture cache so that it can be refreshed after minimaps have been (re-)generated.
+	/// Like a web map, each tile only loads the mip level that matches its size on screen, and
+	/// visible tiles are swapped for sharper mip levels as the user zooms in.
 	class MinimapGridView final : public NonCopyable
 	{
 	public:
@@ -74,9 +77,25 @@ namespace mmo
 		///        bounding box. Also drops cached textures.
 		void RescanTiles();
 
-		/// @brief Lazily loads (and caches) the minimap texture for the given page index.
-		/// @return The loaded texture, or nullptr if it could not be loaded.
-		TexturePtr GetTileTexture(uint16 pageIndex);
+		/// @brief A cached minimap tile texture, loaded at a single mip level of the source file.
+		struct TileTexture
+		{
+			/// @brief The texture holding only the loaded mip level, or nullptr if loading failed.
+			TexturePtr texture;
+
+			/// @brief Edge length in pixels of the loaded mip level.
+			uint32 size{ 0 };
+
+			/// @brief Edge length in pixels of the source file's largest mip level.
+			uint32 fullSize{ 0 };
+		};
+
+		/// @brief Loads the smallest mip level of a tile that is at least the given size, replacing
+		///        whatever is cached for that tile. Only that mip level's bytes are read and uploaded.
+		/// @param pageIndex The page index of the tile.
+		/// @param desiredSize The on-screen edge length in pixels the tile should be sharp at.
+		/// @return The cache entry. Its texture is nullptr if the file could not be loaded.
+		TileTexture& LoadTile(uint16 pageIndex, uint32 desiredSize);
 
 	private:
 		String m_worldName;
@@ -84,9 +103,12 @@ namespace mmo
 		/// @brief Page indices for which a minimap file exists on disk.
 		std::set<uint16> m_availablePages;
 
-		/// @brief Cached textures by page index. A present key with a null value means a load was
-		///        attempted but failed.
-		std::map<uint16, TexturePtr> m_textures;
+		/// @brief Cached tile textures by page index.
+		std::map<uint16, TileTexture> m_tiles;
+
+		/// @brief Textures replaced by sharper mip levels during the current frame, kept alive until
+		///        the next Draw because ImGui renders the draw list referencing them later.
+		std::vector<TexturePtr> m_retiredTextures;
 
 		/// @brief Inclusive bounding box of available tiles, in page coordinates.
 		int32 m_minX{ 0 };

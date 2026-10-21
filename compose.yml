@@ -28,6 +28,13 @@ version: "3.7"
 volumes:
   data-volume:
     name: mmo-shared-data
+  # /app/logs of each server: its log and, after a crash, the crash report that the next start
+  # uploads. On a volume the report survives the container being recreated (a redeploy, a
+  # rollback) before that restart happened. Uploaded reports keep a ".sent" marker and are not
+  # sent twice. Nothing prunes old logs here.
+  login-logs:
+  realm-01-logs:
+  world-01-logs:
 
 services:
   data-service:
@@ -59,6 +66,8 @@ services:
       host.docker.internal: "172.17.0.1"
     networks:
       - mmo_game_servers
+    volumes:
+      - login-logs:/app/logs
     restart: on-failure
 
   realm_server_01:
@@ -69,6 +78,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - data-volume:/server-data
+      - realm-01-logs:/app/logs
     environment:
       - LOGIN_HOST_NAME=mmo-dev-login
       - LOGIN_REALM_NAME=REALM_NAME
@@ -109,6 +119,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - data-volume:/server-data
+      - world-01-logs:/app/logs
     environment:
       - MYSQL_DATABASE=mmo_world_01
       - MYSQL_HOST_NAME=host.docker.internal

@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "graphics/graphics_device.h"
+#include "base/profiler.h"
 
 
 namespace mmo
@@ -21,6 +22,7 @@ namespace mmo
 
 	MeshPtr MeshManager::Load(const std::string & filename)
 	{
+		PROFILE_SCOPE("Load: Mesh");
 		// Try to find the mesh first before trying to load it again
 		const auto it = m_meshes.find(filename);
 		if (it != m_meshes.end())

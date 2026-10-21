@@ -13,6 +13,7 @@
 #include "light.h"
 #include "world_model_manager.h"
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 
 #include <algorithm>
 #include <cmath>
@@ -118,6 +119,42 @@ namespace mmo
         m_mergedGeometry.reset();
 
         m_geometryCreated = false;
+    }
+
+    void WorldModelInstance::CollectMeshDependencies(const WorldModel& model, std::vector<String>& outMeshPaths)
+    {
+        for (size_t groupIndex = 0; groupIndex < model.GetGroupCount(); ++groupIndex)
+        {
+            const WorldModelGroup* group = model.GetGroup(groupIndex);
+            if (!group)
+            {
+                continue;
+            }
+
+            for (const WorldModelMeshRef& meshRef : group->GetMeshRefs())
+            {
+                if (meshRef.visible && !meshRef.meshPath.empty())
+                {
+                    outMeshPaths.push_back(meshRef.meshPath);
+                }
+            }
+        }
+
+        // The default doodad set, the one CreateDoodads always loads
+        const auto& doodadSets = model.GetDoodadSets();
+        const auto& doodads = model.GetDoodads();
+        const auto& doodadNames = model.GetDoodadNames();
+        if (!doodadSets.empty())
+        {
+            for (uint32 i = 0; i < doodadSets[0].count; ++i)
+            {
+                const uint32 doodadIndex = doodadSets[0].startIndex + i;
+                if (doodadIndex < doodads.size() && doodads[doodadIndex].nameIndex < doodadNames.size())
+                {
+                    outMeshPaths.push_back(doodadNames[doodads[doodadIndex].nameIndex]);
+                }
+            }
+        }
     }
 
     WorldModelInstance* WorldModelInstance::GetChildInstance(const size_t index) const
@@ -721,6 +758,7 @@ namespace mmo
 
     void WorldModelInstance::CreateMeshRefEntity(const size_t groupIndex, const size_t refIndex, Scene& scene)
     {
+        PROFILE_SCOPE("WMO: CreateMeshRefEntity");
         const auto* group = m_worldModel ? m_worldModel->GetGroup(groupIndex) : nullptr;
         if (!group || groupIndex >= m_groupRenderables.size())
         {
@@ -903,6 +941,7 @@ namespace mmo
 
     void WorldModelInstance::BuildCollisionProxies(Scene& scene, const std::vector<WorldModelBucket>& buckets, std::vector<CollisionEntry>& target)
     {
+        PROFILE_SCOPE("WMO: BuildCollisionProxies");
         // One proxy per (mesh, material override) across the whole world model, not per room and not
         // per submesh: a proxy walks the mesh's collision tree once for all its instances, so a proxy
         // per submesh would report the same hit once per submesh.
@@ -1259,6 +1298,7 @@ namespace mmo
 
     void WorldModelInstance::BuildBatchedGeometry(Scene& scene)
     {
+        PROFILE_SCOPE("WMO: BuildBatchedGeometry");
         if (!m_worldModel)
         {
             return;
@@ -1363,9 +1403,47 @@ namespace mmo
 
     void WorldModelInstance::CreateDoodads(Scene& scene)
     {
+        PROFILE_SCOPE("WMO: CreateDoodads");
         if (!m_worldModel)
         {
             return;
+        }
+
+        const auto& doodads = m_worldModel->GetDoodads();
+        const auto& doodadNames = m_worldModel->GetDoodadNames();
+
+        // Gather the doodads of the active sets, deriving the room each one sits in.
+        //
+        // The room has to be derived by point-in-group testing: WorldModelGroup::GetDoodadRefs()
+        // looks like it exists for exactly this, but nothing in the serializer or the editor ever
+        // populates it, so it is always empty.
+        std::vector<WorldModelPlacementInput> placements;
+
+        for (const uint32 doodadIndex : GetActiveDoodadIndices())
+        {
+            const auto& doodad = doodads[doodadIndex];
+            const int32 groupIndex = FindGroupContaining(doodad.position);
+
+            WorldModelPlacementInput placement;
+            placement.groupIndex = groupIndex < 0 ? WorldModelNoGroup : static_cast<size_t>(groupIndex);
+            placement.sourceIndex = doodadIndex;
+            placement.meshPath = doodadNames[doodad.nameIndex];
+            placement.position = doodad.position;
+            placement.rotation = doodad.rotation;
+            placement.scale = Vector3(doodad.scale, doodad.scale, doodad.scale);
+
+            placements.push_back(std::move(placement));
+        }
+
+        RealizePlacements(scene, placements, m_doodadInstances, m_doodadBatches, m_doodadCollisionProxies);
+    }
+
+    std::vector<uint32> WorldModelInstance::GetActiveDoodadIndices() const
+    {
+        std::vector<uint32> indices;
+        if (!m_worldModel)
+        {
+            return indices;
         }
 
         const auto& doodadSets = m_worldModel->GetDoodadSets();
@@ -1388,44 +1466,104 @@ namespace mmo
             setsToLoad.push_back({activeSet.startIndex, activeSet.count});
         }
 
-        // Gather the doodads of the active sets, deriving the room each one sits in.
-        //
-        // The room has to be derived by point-in-group testing: WorldModelGroup::GetDoodadRefs()
-        // looks like it exists for exactly this, but nothing in the serializer or the editor ever
-        // populates it, so it is always empty.
-        std::vector<WorldModelPlacementInput> placements;
-
         for (const auto& [startIndex, count] : setsToLoad)
         {
             for (uint32 i = 0; i < count; ++i)
             {
                 const uint32 doodadIndex = startIndex + i;
-                if (doodadIndex >= doodads.size())
+                if (doodadIndex < doodads.size() && doodads[doodadIndex].nameIndex < doodadNames.size())
                 {
-                    continue;
+                    indices.push_back(doodadIndex);
                 }
-
-                const auto& doodad = doodads[doodadIndex];
-                if (doodad.nameIndex >= doodadNames.size())
-                {
-                    continue;
-                }
-
-                const int32 groupIndex = FindGroupContaining(doodad.position);
-
-                WorldModelPlacementInput placement;
-                placement.groupIndex = groupIndex < 0 ? WorldModelNoGroup : static_cast<size_t>(groupIndex);
-                placement.sourceIndex = doodadIndex;
-                placement.meshPath = doodadNames[doodad.nameIndex];
-                placement.position = doodad.position;
-                placement.rotation = doodad.rotation;
-                placement.scale = Vector3(doodad.scale, doodad.scale, doodad.scale);
-
-                placements.push_back(std::move(placement));
             }
         }
 
-        RealizePlacements(scene, placements, m_doodadInstances, m_doodadBatches, m_doodadCollisionProxies);
+        return indices;
+    }
+
+    void WorldModelInstance::CollectSoundEmitters(std::vector<PlacedSoundEmitter>& out) const
+    {
+        if (!m_worldModel)
+        {
+            return;
+        }
+
+        Vector3 placementPosition;
+        Quaternion placementOrientation;
+        Vector3 placementScale;
+        GetPlacementTransform(placementPosition, placementOrientation, placementScale);
+
+        // A mesh placed in model space, inside a placement in world space. Composed point by point
+        // rather than as one transform, which a non-uniform placement scale would distort.
+        const auto addMesh = [&](const String& meshPath, const Vector3& position, const Quaternion& rotation, const Vector3& scale)
+        {
+            if (meshPath.empty())
+            {
+                return;
+            }
+
+            // Cached: every mesh of the instance was loaded when its geometry was created
+            const MeshPtr mesh = MeshManager::Get().Load(meshPath);
+            if (!mesh || mesh->GetSoundEmitters().empty())
+            {
+                return;
+            }
+
+            std::vector<PlacedSoundEmitter> local;
+            AppendPlacedSoundEmitters(*mesh, position, rotation, scale, local);
+            for (PlacedSoundEmitter& emitter : local)
+            {
+                const Vector3 scaled(emitter.position.x * placementScale.x, emitter.position.y * placementScale.y, emitter.position.z * placementScale.z);
+                emitter.position = placementPosition + placementOrientation * scaled;
+                out.push_back(emitter);
+            }
+        };
+
+        for (size_t groupIndex = 0; groupIndex < m_worldModel->GetGroupCount(); ++groupIndex)
+        {
+            if (const auto* group = m_worldModel->GetGroup(groupIndex))
+            {
+                for (const WorldModelMeshRef& meshRef : group->GetMeshRefs())
+                {
+                    if (meshRef.visible)
+                    {
+                        addMesh(meshRef.meshPath, meshRef.position, meshRef.rotation, meshRef.scale);
+                    }
+                }
+            }
+        }
+
+        const auto& doodads = m_worldModel->GetDoodads();
+        const auto& doodadNames = m_worldModel->GetDoodadNames();
+        for (const uint32 doodadIndex : GetActiveDoodadIndices())
+        {
+            const auto& doodad = doodads[doodadIndex];
+            addMesh(doodadNames[doodad.nameIndex], doodad.position, doodad.rotation, Vector3(doodad.scale, doodad.scale, doodad.scale));
+        }
+
+        for (const auto& kit : m_kits)
+        {
+            if (!kit)
+            {
+                continue;
+            }
+
+            for (const WorldModelMeshRef& prop : kit->props)
+            {
+                if (prop.visible)
+                {
+                    addMesh(prop.meshPath, prop.position, prop.rotation, prop.scale);
+                }
+            }
+        }
+
+        for (const ChildInstance& child : m_childInstances)
+        {
+            if (child.instance)
+            {
+                child.instance->CollectSoundEmitters(out);
+            }
+        }
     }
 
     void WorldModelInstance::RealizePlacements(Scene& scene, const std::vector<WorldModelPlacementInput>& placements,
@@ -1541,6 +1679,7 @@ namespace mmo
 
     void WorldModelInstance::CreateKitContent(Scene& scene)
     {
+        PROFILE_SCOPE("WMO: CreateKitContent");
         m_kitPropGroups.clear();
 
         std::vector<WorldModelPlacementInput> placements;
@@ -1644,6 +1783,7 @@ namespace mmo
 
     void WorldModelInstance::CreateLights(Scene& scene)
     {
+        PROFILE_SCOPE("WMO: CreateLights");
         ClearLights(&scene);
 
         if (!m_worldModel)

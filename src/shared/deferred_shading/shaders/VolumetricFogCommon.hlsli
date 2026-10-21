@@ -33,10 +33,20 @@ cbuffer VolumetricFogBuffer : register(b2)
     float VolumeEnabled;        // 0 when the froxel volume is off (analytic fog only)
     uint LightCount;            // entries in the deferred renderer's light buffer (t9)
     float LightScatterStrength; // zone multiplier on point and spot light scattering
-    float2 _LightPadding;
+    float2 ScreenJitter;        // [0, 1) offset of this frame's samples within their froxel, in cells
     uint FogVolumeCount;        // entries in the local fog volume buffer (t10)
-    float3 _FogVolumePadding;
+    uint SunTapsXY;             // sun shadow taps per froxel along each screen axis
+    uint SunTapsZ;              // sun shadow taps per froxel along its depth
+    uint FogShadowValid;        // 1 when FogShadowMap (t12) holds this frame's coarse fog shadow map
+    column_major matrix FogShadowViewProj;
+    float SunTemporalBlend;     // history weight of the sun scattering volume (0 = no sun history)
+    uint SunMode;               // VolumetricFogSettings::SunMode: 0 box filter, 1 temporal (fog shadow map), 2 temporal (cascades)
+    float GoldenJitter;         // [0, 1) per-frame offset added to every froxel's blue-noise jitter (temporal sun modes)
+    float FogShadowMapSize;     // edge length of FogShadowMap in texels (when FogShadowValid)
 };
+
+// Edge length of the blue noise jitter texture. Mirrors VolumetricFogSettings::BlueNoiseResolution.
+static const uint BLUE_NOISE_SIZE = 64;
 
 // View depth of a normalized slice coordinate, exponential between NearDistance and FarDistance.
 float SliceToDepth(float slice01)

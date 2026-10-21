@@ -209,6 +209,11 @@ namespace mmo
 			// Setup realm connector for connection
 			m_realmConnector.SetLoginData(m_loginConnector.GetAccountName(), m_loginConnector.GetSessionKey());
 
+			// Only the first realm list after a login may jump straight into the last realm. Later
+			// lists are periodic refreshes of a realm list the player is looking at (for example after
+			// cancelling that very connection attempt) and must not pull them out of it.
+			m_autoConnectToLastRealm = true;
+
 			// Successfully authenticated
 			FrameManager::Get().TriggerLuaEvent("AUTH_SUCCESS");
 		}
@@ -248,6 +253,9 @@ namespace mmo
 		{
 			FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_REQUESTED");
 		}
+
+		// Screens without a focused text field (the realm list) drive keyboard navigation from Lua.
+		FrameManager::Get().TriggerLuaEvent("GLUE_KEY_DOWN", key, repeat);
 
 		return true;
 	}
@@ -311,8 +319,11 @@ namespace mmo
 
 	void LoginState::OnRealmListUpdated()
 	{
+		const bool autoConnect = m_autoConnectToLastRealm;
+		m_autoConnectToLastRealm = false;
+
 		const int32 lastRealmId = s_lastRealmVar == nullptr ? -1 : s_lastRealmVar->GetIntValue();
-		if (lastRealmId >= 0)
+		if (autoConnect && lastRealmId >= 0)
 		{
 			const auto& realms = m_loginConnector.GetRealms();
 			const auto it = std::find_if(realms.begin(), realms.end(), [lastRealmId](const RealmData& realm)

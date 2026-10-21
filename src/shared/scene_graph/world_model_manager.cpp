@@ -8,6 +8,7 @@
 #include "binary_io/stream_source.h"
 #include "base/macros.h"
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 
 namespace mmo
 {
@@ -19,6 +20,7 @@ namespace mmo
 
 	WorldModelPtr WorldModelManager::Load(const std::string& filename)
 	{
+		PROFILE_SCOPE("Load: WorldModel");
 		// Try to find the world model first before trying to load it again
 		const auto it = m_worldModels.find(filename);
 		if (it != m_worldModels.end())

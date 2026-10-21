@@ -390,6 +390,7 @@ namespace mmo
 				"Worlds.hpak",
 				"Sound.hpak",
 				"Particles.hpak",
+				"Kits.hpak",
 				localeArchive,
 				localeArchive + ".hpak",
 			});

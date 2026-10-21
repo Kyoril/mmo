@@ -1485,6 +1485,15 @@ namespace mmo
 							}
 						});
 
+					// The caster may start its next cast before this one lands, which replaces this
+					// state as the current one. AbandonCast must still reach the projectile, or it
+					// lands on a caster that has left the world in the meantime. Procs are tracked
+					// from the start.
+					if (!m_isProc)
+					{
+						m_cast.TrackDetachedCast(shared_from_this());
+					}
+
 					m_projectileStart = GetAsyncTimeMs();
 					m_projectileEnd = m_projectileStart + travelTimeMs;
 					m_projectileOrigin = m_cast.GetExecuter().GetPosition();

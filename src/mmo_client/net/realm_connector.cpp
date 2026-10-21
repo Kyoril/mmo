@@ -307,6 +307,8 @@ namespace mmo
 			// A reason left over from a previous session must not be shown for this one.
 			m_kickReason.reset();
 
+			m_sessionActive = true;
+
 			// Generate a new client seed
 			std::uniform_int_distribution<uint32> dist;
 			m_clientSeed = dist(RandomGenerator);
@@ -328,11 +330,34 @@ namespace mmo
 
 	void RealmConnector::connectionLost()
 	{
-		// Log this event
-		ELOG("Lost connection to the realm server...");
+		m_sessionActive = false;
 
 		// Clear packet handlers
 		ClearPacketHandlers();
+
+		if (m_pendingRealm)
+		{
+			// We closed this session on purpose to switch realms. Connect from a fresh handler: the
+			// caller detaches the listener and closes the socket after this returns.
+			ILOG("Left realm " << m_realmName << ", switching to " << m_pendingRealm->name << "...");
+
+			const std::weak_ptr<RealmConnector> weakThis = std::static_pointer_cast<RealmConnector>(shared_from_this());
+			m_ioService.post([weakThis]()
+			{
+				const auto strongThis = weakThis.lock();
+				if (!strongThis || !strongThis->m_pendingRealm)
+				{
+					return;
+				}
+
+				const RealmData realm = *strongThis->m_pendingRealm;
+				strongThis->ConnectToRealm(realm);
+			});
+			return;
+		}
+
+		// Log this event
+		ELOG("Lost connection to the realm server...");
 
 		Disconnected();
 	}
@@ -355,12 +380,25 @@ namespace mmo
 
 	void RealmConnector::ConnectToRealm(const RealmData & data)
 	{
+		m_cancelled = false;
+
+		// Switching realms from the character screen: the old session is still open. Reconnecting the
+		// socket in place would let the old session's aborted receive report connectionLost() against
+		// the new attempt, which fires Disconnected and detaches the listener, so the new connection
+		// never completes. Close the old session first and connect once it reports that it is gone.
+		if (m_sessionActive)
+		{
+			m_pendingRealm = data;
+			close();
+			return;
+		}
+
+		m_pendingRealm.reset();
+
 		m_realmId = data.id;
 		m_realmAddress = data.address;
 		m_realmPort = data.port;
 		m_realmName = data.name;
-
-		m_cancelled = false;
 
 		// Connect to the server
 		connect(m_realmAddress, m_realmPort, *this, m_ioService);
@@ -382,6 +420,7 @@ namespace mmo
 
 	void RealmConnector::CancelConnect()
 	{
+		m_pendingRealm.reset();
 		m_cancelled = true;
 		close();
 	}
@@ -643,6 +682,24 @@ namespace mmo
 		sendSinglePacket([enable](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatGodmode);
 			packet << io::write<uint8>(enable ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::CheatInvisible(bool enable)
+	{
+		sendSinglePacket([enable](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatInvisible);
+			packet << io::write<uint8>(enable ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::CheatGhost(const String& playerName)
+	{
+		sendSinglePacket([&playerName](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatGhost);
+			packet << io::write_dynamic_range<uint8>(playerName);
 			packet.Finish();
 			});
 	}

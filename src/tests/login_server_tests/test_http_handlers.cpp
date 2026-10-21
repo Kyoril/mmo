@@ -497,4 +497,66 @@ TEST_CASE("HandleSetGMLevel", "[http_handlers]")
     }
 }
 
-} // namespace mmo
+// ---------------------------------------------------------------------------
+// HandleSetRealmCapacity
+// ---------------------------------------------------------------------------
+
+TEST_CASE("HandleSetRealmCapacity", "[http_handlers]")
+{
+    MockDatabase db;
+    RealmManager realmMgr(0);
+    PlayerManager playerMgr(0);
+    LoginHttpHandlers handlers(db, realmMgr, playerMgr);
+
+    auto post = [&](const std::string& body)
+    {
+        net::http::IncomingRequest req;
+        makePost("/realm-capacity", body, req);
+        return captureResponse(
+            [&](const net::http::IncomingRequest& r, web::WebResponse& w){ handlers.HandleSetRealmCapacity(r, w); }, req);
+    };
+
+    SECTION("Realm id and capacity are written")
+    {
+        std::string resp = post("realm=3&capacity=250");
+        REQUIRE(resp.find("HTTP/1.1 200") != std::string::npos);
+        REQUIRE(db.lastRealmCapacity.has_value());
+        CHECK(db.lastRealmCapacity->first == 3);
+        CHECK(db.lastRealmCapacity->second == 250);
+    }
+
+    SECTION("Realm name is resolved to its id")
+    {
+        db.realmIdByName = 7;
+        std::string resp = post("realm=LOCALHOST&capacity=1000");
+        REQUIRE(resp.find("HTTP/1.1 200") != std::string::npos);
+        REQUIRE(db.lastRealmCapacity.has_value());
+        CHECK(db.lastRealmCapacity->first == 7);
+    }
+
+    SECTION("Unknown realm returns 404")
+    {
+        std::string resp = post("realm=NOPE&capacity=1000");
+        REQUIRE(resp.find("404") != std::string::npos);
+        REQUIRE(resp.find("REALM_DOES_NOT_EXIST") != std::string::npos);
+    }
+
+    SECTION("Missing capacity returns 400")
+    {
+        std::string resp = post("realm=3");
+        REQUIRE(resp.find("400") != std::string::npos);
+        REQUIRE(resp.find("MISSING_PARAMETER") != std::string::npos);
+    }
+
+    SECTION("Zero, negative, fractional and oversized capacities return 400")
+    {
+        for (const char* value : { "0", "-5", "1.5", "abc", "1000001", "99999999999" })
+        {
+            std::string resp = post(std::string("realm=3&capacity=") + value);
+            CHECK(resp.find("INVALID_PARAMETER") != std::string::npos);
+        }
+        CHECK_FALSE(db.lastRealmCapacity.has_value());
+    }
+}
+
+}

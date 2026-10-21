@@ -340,6 +340,8 @@ int main(int argc, char* arg[])
 	// recipe the default one (all render triangles) first, like Collision > Build for a fresh import.
 	// `--set-submesh-material <asset.hmsh> <submesh> <material> [...]` assigns a material to a
 	// submesh (by name, or index), saves the mesh with its collision recipe and exits.
+	// `--set-mesh-sounds <asset.hmsh> "<id>:<x>,<y>,<z>[:<volume>[:<maxDistance>]];..." [...]` replaces
+	// the mesh's looping sound emitters ("" removes them), saves it with its collision recipe and exits.
 	// `--apply-prop-kit <job.json>` writes a prop kit asset, assigns kits to world model placements
 	// and/or strips named mesh refs from a world model as the job describes, then exits (see
 	// prop_kit_job.h; log in prop_kit_job.log, exit code 1 on load or write failures).
@@ -489,6 +491,40 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--set-mesh-sounds")
+			{
+				// `--set-mesh-sounds <asset.hmsh> <spec> [...]`
+				static std::ofstream soundsLog("set_mesh_sounds.log", std::ios::out | std::ios::trunc);
+				static std::mutex soundsLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ soundsLogMutex };
+					soundsLog << entry.message << std::endl;
+				});
+
+				bool allSaved = true;
+				for (int j = 1; j < argCount; ++j)
+				{
+					if (std::string(args[j]) != "--set-mesh-sounds")
+					{
+						continue;
+					}
+
+					if (j + 2 >= argCount)
+					{
+						ELOG("--set-mesh-sounds needs <asset> <spec>");
+						allSaved = false;
+						break;
+					}
+
+					allSaved = mmo::MeshEditorInstance::SetSoundEmittersInFile(args[j + 1], args[j + 2]) && allSaved;
+					j += 2;
+				}
+
+				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--apply-prop-kit")
 			{
 				static std::ofstream propKitLog("prop_kit_job.log", std::ios::out | std::ios::trunc);
@@ -546,6 +582,59 @@ int main(int argc, char* arg[])
 				else
 				{
 					ELOG("--bake-terrain-lod: failed to open " << args[i + 1]);
+					PostQuitMessage(1);
+				}
+				break;
+			}
+
+			if (std::string(args[i]) == "--bake-minimaps")
+			{
+				// Unattended like --bake-terrain-lod: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("minimap_bake.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("minimap_bake_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				{
+					bool onlyStale = false;
+					mmo::MinimapBaker::Region region;
+					for (int j = 1; j < argCount; ++j)
+					{
+						onlyStale = onlyStale || std::string(args[j]) == "--only-stale";
+
+						// --region minX,minZ,maxX,maxZ (inclusive page coordinates) rebakes just an area.
+						if (std::string(args[j]) == "--region" && j + 1 < argCount)
+						{
+							unsigned minX = 0, minZ = 0, maxX = 0, maxZ = 0;
+							if (std::sscanf(args[j + 1], "%u,%u,%u,%u", &minX, &minZ, &maxX, &maxZ) == 4)
+							{
+								region = mmo::MinimapBaker::Region{ minX, minZ, maxX, maxZ };
+							}
+							else
+							{
+								ELOG("--region expects minX,minZ,maxX,maxZ");
+							}
+						}
+					}
+
+					// Exit code 1 when any page failed, for scripted use.
+					const bool baked = mmo::WorldEditorInstance::GetLastCreated()->GenerateMinimaps(onlyStale, region);
+					PostQuitMessage(baked ? 0 : 1);
+				}
+				else
+				{
+					ELOG("--bake-minimaps: failed to open " << args[i + 1]);
 					PostQuitMessage(1);
 				}
 				break;

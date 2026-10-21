@@ -114,7 +114,16 @@ namespace mmo
                     ++char_count;
                 ++byte_idx;
             }
-            
+
+            // The loop stops right after the lead byte of the last counted character. Skip its
+            // continuation bytes too, or the index points into the middle of a multi-byte
+            // character and an erase or insert there tears it apart (a backspace after 'ü' used
+            // to delete only the 0xC3 lead byte and leave an orphaned 0xBC behind).
+            while (byte_idx < str.size() && (static_cast<unsigned char>(str[byte_idx]) & 0xC0) == 0x80)
+            {
+                ++byte_idx;
+            }
+
             return byte_idx;
         }
 

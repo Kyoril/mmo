@@ -84,6 +84,17 @@ class FromRepo(unittest.TestCase):
 			check=True, capture_output=True, text=True)
 		self.assertEqual(result.stderr.strip().splitlines()[-1], "0.2.1.3 1.4.0")
 
+	@unittest.skipUnless(shutil.which("cmake"), "cmake not on PATH")
+	def test_cmake_build_version_override_without_git(self):
+		# The Docker builds have no .git and pass the version docker-build.yml computed with version.py.
+		script = os.path.join(REPO_ROOT, "cmake", "mmo_version.cmake")
+		with tempfile.TemporaryDirectory() as nogit:
+			result = subprocess.run(
+				["cmake", "-DMMO_VERSION_PRINT_ONLY=ON", "-DMMO_VERSION_SOURCE_DIR=" + nogit,
+					"-DMMO_BUILD_VERSION=" + version.game_version(self.repo), "-P", script],
+				check=True, capture_output=True, text=True)
+		self.assertEqual(result.stderr.strip().splitlines()[-1].split(" ")[0], "0.2.1.3")
+
 
 if __name__ == "__main__":
 	unittest.main()

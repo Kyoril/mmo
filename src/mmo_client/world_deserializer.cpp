@@ -2,11 +2,13 @@
 #include "world_deserializer.h"
 
 #include <filesystem>
+#include <set>
 #include <utility>
 
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
 #include "console/console_var.h"
+#include "game_client/ambient_sound_emitters.h"
 #include "game_common/world_entity_loader.h"
 #include "game_common/world_foliage.h"
 #include "game_states/login_state.h"
@@ -15,11 +17,14 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/instanced_foliage.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/mesh.h"
+#include "scene_graph/mesh_manager.h"
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_model_instance.h"
 #include "scene_graph/world_model_manager.h"
+#include "base/profiler.h"
 
 namespace mmo
 {
@@ -27,6 +32,60 @@ namespace mmo
 	static const ChunkMagic MeshNamesChunkMagic = MakeChunkMagic('MESH');
 	static const ChunkMagic EntityChunkMagic = MakeChunkMagic('MENT');
 	static const ChunkMagic TerrainChunkMagic = MakeChunkMagic('RRET');
+
+	namespace
+	{
+		ConsoleVar* GetWorldModelMergingVar()
+		{
+			return ConsoleVarMgr::RegisterConsoleVar("gxWorldModelMerging",
+				"Whether each world model group's static geometry is merged into one mesh per material (a few draw calls per group). Takes effect for world models loaded afterwards.", "1");
+		}
+
+		std::vector<AmbientSoundSource> ToAmbientSources(const std::vector<PlacedSoundEmitter>& emitters)
+		{
+			std::vector<AmbientSoundSource> sources;
+			sources.reserve(emitters.size());
+			for (const PlacedSoundEmitter& emitter : emitters)
+			{
+				sources.push_back(AmbientSoundSource{ emitter.soundEntryId, emitter.position, emitter.volume, emitter.maxDistance });
+			}
+			return sources;
+		}
+	}
+
+	struct ClientWorldInstance::WorldModelPreparation
+	{
+		uint16 pageIndex = 0;
+		WorldEntityLoader::MapEntity entity;
+		bool merging = true;
+
+		/// World models still to load: the placed one, then its children, depth first.
+		std::vector<String> pendingModels;
+		std::set<String> knownModels;
+
+		/// Loaded world models, in load order, waiting for their merged geometry.
+		std::vector<WorldModelPtr> models;
+		size_t nextMerge = 0;
+
+		/// Keeps the merged geometry alive until the instance holds it itself.
+		std::vector<std::shared_ptr<const void>> mergedGeometry;
+
+		std::vector<String> pendingKits;
+
+		std::vector<String> pendingMeshes;
+		std::set<String> knownMeshes;
+
+		void QueueMeshes(const std::vector<String>& meshPaths)
+		{
+			for (const String& path : meshPaths)
+			{
+				if (knownMeshes.insert(path).second)
+				{
+					pendingMeshes.push_back(path);
+				}
+			}
+		}
+	};
 
 	ClientWorldInstanceDeserializer::ClientWorldInstanceDeserializer(ClientWorldInstance& world)
 		: ChunkReader()
@@ -76,6 +135,10 @@ namespace mmo
 		// Authored foliage (trees) is rendered through hardware-instanced cells that are a few
 		// terrain tiles wide so that each cell batches enough instances to be worth instancing.
 		m_foliage = std::make_unique<InstancedFoliage>(scene, GraphicsDevice::Get(), static_cast<float>(terrain::constants::PageSize) / 4.0f);
+
+		// Keep the merged geometry of world models that streamed out, so walking back into a town does
+		// not merge it again (GPU readbacks of every mesh included). The source meshes stay cached anyway.
+		WorldModelInstance::SetMergedGeometryRetention(256 * 1024 * 1024);
 	}
 
 	void ClientWorldInstance::LoadPageEntities(uint8 x, uint8 y)
@@ -90,6 +153,7 @@ namespace mmo
 		for (const auto& file : files)
 		{
 			std::weak_ptr weak = weak_from_this();
+			++m_pendingEntityFiles;
 			m_workQueue.post([weak, pageIndex, file]()
 				{
 					const auto strong = weak.lock();
@@ -109,6 +173,7 @@ namespace mmo
 
 	void ClientWorldInstance::UnloadPageEntities(uint8 x, uint8 y)
 	{
+		PROFILE_SCOPE("Stream: UnloadPageEntities");
 		const uint16 pageIndex = BuildPageIndex(x, y);
 
 		// Unload regular entities
@@ -119,6 +184,8 @@ namespace mmo
 				++it;
 				continue;
 			}
+
+			RemoveAmbientSounds(ambient_sound_owner::MapEntity, it->first);
 
 			Entity* entity = it->second.entity;
 			SceneNode* node = it->second.node;
@@ -136,6 +203,8 @@ namespace mmo
 				++it;
 				continue;
 			}
+
+			RemoveAmbientSounds(ambient_sound_owner::WorldModel, it->first);
 
 			if (it->second.instance)
 			{
@@ -162,6 +231,8 @@ namespace mmo
 		// Unload regular entities
 		for (auto it = m_entities.begin(); it != m_entities.end();)
 		{
+			RemoveAmbientSounds(ambient_sound_owner::MapEntity, it->first);
+
 			Entity* entity = it->second.entity;
 			SceneNode* node = it->second.node;
 			entity->DetachFromParent();
@@ -173,6 +244,8 @@ namespace mmo
 		// Unload world models
 		for (auto it = m_worldModels.begin(); it != m_worldModels.end();)
 		{
+			RemoveAmbientSounds(ambient_sound_owner::WorldModel, it->first);
+
 			if (it->second.instance)
 			{
 				it->second.instance->Destroy(m_scene);
@@ -193,8 +266,17 @@ namespace mmo
 		m_loadedPages.clear();
 	}
 
+	void ClientWorldInstance::RemoveAmbientSounds(const uint8 ownerKind, const uint64 uniqueId) const
+	{
+		if (m_ambientSounds)
+		{
+			m_ambientSounds->Remove(static_cast<ambient_sound_owner::Type>(ownerKind), uniqueId);
+		}
+	}
+
 	Entity* ClientWorldInstance::CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId)
 	{
+		PROFILE_SCOPE("Stream: CreateMapEntity");
 		const String entityName = "Entity_" + std::to_string(uniqueId);
 		if (m_scene.HasEntity(entityName))
 		{
@@ -218,11 +300,19 @@ namespace mmo
 		const PagePosition page = GetPagePosition(position);
 		m_entities.emplace(uniqueId, EntityPlacement{ .pageIndex= BuildPageIndex(page.x(), page.y()), .entity= entity, .node= node });
 
+		if (m_ambientSounds && entity->GetMesh() && !entity->GetMesh()->GetSoundEmitters().empty())
+		{
+			std::vector<PlacedSoundEmitter> emitters;
+			AppendPlacedSoundEmitters(*entity->GetMesh(), position, orientation, scale, emitters);
+			m_ambientSounds->Add(ambient_sound_owner::MapEntity, uniqueId, ToAmbientSources(emitters));
+		}
+
 		return entity;
 	}
 
 	WorldModelInstance* ClientWorldInstance::CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId, const std::vector<String>& kitPaths)
 	{
+		PROFILE_SCOPE("Stream: CreateWorldModelEntity");
 		// Check if already exists
 		auto it = m_worldModels.find(uniqueId);
 		if (it != m_worldModels.end())
@@ -257,8 +347,7 @@ namespace mmo
 
 		// Static geometry merging: each group's meshes baked into one mesh per material. Takes
 		// precedence over batching where both are on.
-		if (const ConsoleVar* mergeVar = ConsoleVarMgr::RegisterConsoleVar("gxWorldModelMerging",
-			"Whether each world model group's static geometry is merged into one mesh per material (a few draw calls per group). Takes effect for world models loaded afterwards.", "1"))
+		if (const ConsoleVar* mergeVar = GetWorldModelMergingVar())
 		{
 			worldModelInstance->SetMergingEnabled(mergeVar->GetBoolValue());
 		}
@@ -290,6 +379,17 @@ namespace mmo
 		node->SetScale(scale);
 		node->AttachObject(*worldModelInstance);
 
+		// The placement transform comes from the node, so this has to follow the attach above
+		if (m_ambientSounds)
+		{
+			std::vector<PlacedSoundEmitter> emitters;
+			worldModelInstance->CollectSoundEmitters(emitters);
+			if (!emitters.empty())
+			{
+				m_ambientSounds->Add(ambient_sound_owner::WorldModel, uniqueId, ToAmbientSources(emitters));
+			}
+		}
+
 		// Get the raw pointer before moving ownership
 		WorldModelInstance* rawInstance = worldModelInstance.get();
 
@@ -309,6 +409,7 @@ namespace mmo
 		if (!filePtr)
 		{
 			ELOG("Failed to open file " << filename << "!");
+			--m_pendingEntityFiles;
 			return;
 		}
 
@@ -318,6 +419,7 @@ namespace mmo
 		if (!loader.Read(reader))
 		{
 			ELOG("Failed to read file " << filename << "!");
+			--m_pendingEntityFiles;
 			return;
 		}
 
@@ -332,6 +434,8 @@ namespace mmo
 					return;
 				}
 
+				--strong->m_pendingEntityFiles;
+
 				if (!strong->m_loadedPages.contains(pageIndex))
 				{
 					return;
@@ -340,15 +444,8 @@ namespace mmo
 				// Handle different entity types
 				if (entity.entityType == WorldEntityType::WorldModel)
 				{
-					// Create world model entity
-					strong->CreateWorldModelEntity(
-						entity.meshName,
-						entity.position,
-						entity.rotation,
-						entity.scale,
-						entity.uniqueId,
-						entity.kitPaths
-					);
+					// Loads its resources over several steps before the instance is created
+					strong->BeginWorldModelEntity(pageIndex, entity);
 				}
 				else
 				{
@@ -377,6 +474,130 @@ namespace mmo
 					}
 				}
 			});
+	}
+
+	void ClientWorldInstance::BeginWorldModelEntity(const uint16 pageIndex, const WorldEntityLoader::MapEntity& entity)
+	{
+		if (m_worldModels.contains(entity.uniqueId))
+		{
+			return;
+		}
+
+		auto preparation = std::make_shared<WorldModelPreparation>();
+		preparation->pageIndex = pageIndex;
+		preparation->entity = entity;
+		preparation->pendingModels.push_back(entity.meshName);
+		preparation->knownModels.insert(entity.meshName);
+		preparation->pendingKits = entity.kitPaths;
+		if (const ConsoleVar* mergeVar = GetWorldModelMergingVar())
+		{
+			preparation->merging = mergeVar->GetBoolValue();
+		}
+
+		// Released by ContinueWorldModelEntity once the instance exists or the preparation is dropped
+		++m_pendingWorldModels;
+		ContinueWorldModelEntity(preparation);
+	}
+
+	void ClientWorldInstance::PostPreparationStep(const std::shared_ptr<WorldModelPreparation>& preparation)
+	{
+		std::weak_ptr weak = weak_from_this();
+		m_dispatcher.post([weak, preparation]()
+			{
+				if (const auto strong = weak.lock())
+				{
+					strong->ContinueWorldModelEntity(preparation);
+				}
+			});
+	}
+
+	void ClientWorldInstance::ContinueWorldModelEntity(const std::shared_ptr<WorldModelPreparation>& preparation)
+	{
+		PROFILE_SCOPE("Stream: WorldModel step");
+
+		// The page streamed out again before the placement was ready: whatever was loaded stays cached
+		if (!m_loadedPages.contains(preparation->pageIndex))
+		{
+			--m_pendingWorldModels;
+			return;
+		}
+
+		WorldModelPreparation& prep = *preparation;
+		if (!prep.pendingModels.empty())
+		{
+			const String path = std::move(prep.pendingModels.back());
+			prep.pendingModels.pop_back();
+
+			// A missing child is reported by WorldModelManager and skipped by the instance as well
+			if (WorldModelPtr model = WorldModelManager::Get().Load(path))
+			{
+				std::vector<String> meshPaths;
+				WorldModelInstance::CollectMeshDependencies(*model, meshPaths);
+				prep.QueueMeshes(meshPaths);
+
+				for (const WorldModelChildRef& childRef : model->GetChildRefs())
+				{
+					if (childRef.visible && !childRef.wmoPath.empty() && prep.knownModels.insert(childRef.wmoPath).second)
+					{
+						prep.pendingModels.push_back(childRef.wmoPath);
+					}
+				}
+
+				prep.models.push_back(std::move(model));
+			}
+		}
+		else if (!prep.pendingKits.empty())
+		{
+			const String path = std::move(prep.pendingKits.back());
+			prep.pendingKits.pop_back();
+
+			if (const PropKitPtr kit = PropKitManager::Get().Load(path))
+			{
+				std::vector<String> meshPaths;
+				for (const WorldModelMeshRef& prop : kit->props)
+				{
+					if (prop.visible && !prop.meshPath.empty())
+					{
+						meshPaths.push_back(prop.meshPath);
+					}
+				}
+				prep.QueueMeshes(meshPaths);
+			}
+		}
+		else if (!prep.pendingMeshes.empty())
+		{
+			// Meshes already in the cache cost nothing, so a step continues until one actually loads
+			while (!prep.pendingMeshes.empty())
+			{
+				const String path = std::move(prep.pendingMeshes.back());
+				prep.pendingMeshes.pop_back();
+
+				const bool cached = MeshManager::Get().Find(path) != nullptr;
+				MeshManager::Get().Load(path);
+				if (!cached)
+				{
+					break;
+				}
+			}
+		}
+		else if (prep.merging && prep.nextMerge < prep.models.size())
+		{
+			// A group per step: a town shell alone merges for ~100 ms
+			if (auto merged = WorldModelInstance::PrewarmMergedGeometry(prep.models[prep.nextMerge], 1))
+			{
+				prep.mergedGeometry.push_back(std::move(merged));
+				++prep.nextMerge;
+			}
+		}
+		else
+		{
+			// Everything is cached now, so this only creates the instances and their entities
+			CreateWorldModelEntity(prep.entity.meshName, prep.entity.position, prep.entity.rotation, prep.entity.scale, prep.entity.uniqueId, prep.entity.kitPaths);
+			--m_pendingWorldModels;
+			return;
+		}
+
+		PostPreparationStep(preparation);
 	}
 
 	void ClientWorldInstance::LoadPageFoliage(const uint8 x, const uint8 y)

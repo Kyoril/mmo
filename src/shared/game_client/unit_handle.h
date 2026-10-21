@@ -110,6 +110,10 @@ namespace mmo
 		[[nodiscard]] virtual uint32 GetAuraCount() const;
 		[[nodiscard]] virtual std::shared_ptr<AuraHandle> GetAura(uint32 index) const;
 		[[nodiscard]] virtual const std::string& GetName() const;
+
+		/// Gets the subtitle line of the unit's creature entry, as in "<General Goods>".
+		/// @return The bracketed subname, or an empty string when the unit has no subname.
+		[[nodiscard]] virtual std::string GetSubtitle() const;
 		[[nodiscard]] virtual int32 GetPowerType() const;
 		[[nodiscard]] virtual float GetMinDamage() const;
 		[[nodiscard]] virtual float GetMaxDamage() const;
@@ -120,6 +124,7 @@ namespace mmo
 		[[nodiscard]] virtual float GetSpellCritChance() const;
 		[[nodiscard]] virtual float GetMeleeCritChance() const;
 		[[nodiscard]] virtual float GetManaRegen() const;
+		[[nodiscard]] virtual float GetManaRegenCasting() const;
 		[[nodiscard]] virtual int32 GetStat(int32 statId) const;
 		[[nodiscard]] virtual int32 GetPosStat(int32 statId) const;
 		[[nodiscard]] virtual int32 GetNegStat(int32 statId) const;

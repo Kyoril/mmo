@@ -596,6 +596,9 @@ namespace mmo
 		/// GAME MASTER only. Toggles damage immunity on the sender's character.
 		void CheatGodmode(bool enable);
 
+		/// GAME MASTER only. Toggles game master invisibility on the sender's character.
+		void CheatInvisible(bool enable);
+
 		/// GAME MASTER only. Sets an instance-scoped variable in the world instance the character is
 		///	in, so a scenario can put an encounter into a given state without having to reach it
 		///	through gameplay.

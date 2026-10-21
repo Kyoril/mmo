@@ -32,6 +32,7 @@ graph chunk and cannot compile shaders.
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -225,6 +226,96 @@ class GraphBuilder:
         return self.add("PannerNode", {"Speed X": float(speed_x), "Speed Y": float(speed_y)}, {"UVs": uvs})
 
 
+# Procedural swell for the glint: a few directional sine waves around a main direction, with
+# wavelengths spread so they never line up. Their slopes are analytic, so the glint shapes are
+# smooth and rounded instead of following the texels of a normal map, and the whole pattern is
+# driven by parameters (GlintWave*) that a per-area .hmi can change. Each tuple is
+# (direction offset in degrees, wavelength in metres).
+GLINT_WAVES = ((0.0, 7.0), (-38.0, 4.6), (27.0, 3.1), (-71.0, 2.2), (55.0, 1.6))
+
+
+def build_glint_wave_slope(b):
+    """Tangent-space XY slope (u along +X, v along +Z) of the procedural glint swell."""
+    position = b.add("WorldPositionNode")
+    scale = b.div(b.const(1.0), b.scalar("GlintWaveScale", 0.45))
+    # Plain sines line up into a visible grid. Warping the coordinates with smooth, slowly
+    # drifting noise bends every crest differently, so the pattern stops reading as procedural.
+    warp_uv = b.mul(b.mul(b.mask(position, r=True, b=True), scale), b.scalar("GlintWarpTiling", 0.03))
+
+    def warp(speed_x, speed_y, uv):
+        noise = b.out(b.add("TextureParameterNode",
+                            {"Name": "GlintNoise", "Texture": "Textures/WaterNoise_01.htex", "Sampler Type": 0},
+                            {"UVs": b.panner(uv, speed_x, speed_y)}), "R")
+        return b.mul(b.sub(noise, constant=0.5), b.scalar("GlintWarpStrength", 9.0))
+
+    x = b.addn(b.mul(b.mask(position, r=True), scale), warp(0.004, 0.0027, warp_uv))
+    z = b.addn(b.mul(b.mask(position, b=True), scale), warp(-0.0031, 0.0042, b.mul(warp_uv, constant=1.31)))
+    time = b.mul(b.add("TimeNode"), b.scalar("GlintWaveSpeed", 1.0))
+    main = math.radians(ROOT_WAVE_PROPERTIES["Wave Direction"])
+    slope_x = slope_z = None
+    for offset, length in GLINT_WAVES:
+        angle = main + math.radians(offset)
+        dx, dz = math.cos(angle), math.sin(angle)
+        k = 2.0 * math.pi / length
+        omega = math.sqrt(9.81 * k)
+        phase = b.addn(b.addn(b.mul(x, constant=dx * k), b.mul(z, constant=dz * k)), b.mul(time, constant=omega))
+        # Equal steepness per wave: amplitude * k is the same for every wavelength.
+        c = b.add("CosineNode", ins={"m_inputPin": phase})
+        sx = b.mul(c, constant=-dx)
+        sz = b.mul(c, constant=-dz)
+        slope_x = sx if slope_x is None else b.addn(slope_x, sx)
+        slope_z = sz if slope_z is None else b.addn(slope_z, sz)
+    steepness = b.scalar("GlintWaveSteepness", 0.07)
+    return b.mul(b.add("AppendNode", ins={"A": slope_x, "B": slope_z}), steepness)
+
+
+def build_sun_glitter(b, sun_color, sun_dir, coarse_slope):
+    """The sun's reflection, shared by every water material. coarse_slope is a tangent-space
+    XY slope (the procedural glint swell). Nothing here samples the ripple texture, so its
+    pattern never shows through the glint."""
+    # The hue comes from the environment's sun scatter curve (SunScatterR/G/B), not from SunColor:
+    # the sun light colour stays near white all day, while the scatter colour is the hue the sun
+    # visibly has (deep orange at sunrise and sunset, warm white at noon, the moon's blue at night).
+    def scatter(channel):
+        return b.add("GlobalScalarParameterNode", {"Name": "SunScatter" + channel})
+    sun_rgb = b.add("AppendNode", ins={"A": b.add("AppendNode", ins={"A": scatter("R"), "B": scatter("G")}), "B": scatter("B")})
+    sun_peak = b.add("MaxNode", {"Value 2": 0.001}, {"A": b.add("MaxNode", ins={
+        "A": b.mask(sun_rgb, r=True), "B": b.add("MaxNode", ins={"A": b.mask(sun_rgb, g=True), "B": b.mask(sun_rgb, b=True)})})})
+    # Normalised to the brightest channel and raised a little, so ACES does not bleach the dusk
+    # orange of the bright core to white. GlitterTint stays white; change it only to shift the hue.
+    sun_tint = b.mul(b.add("PowerNode", ins={"Base": b.div(sun_rgb, sun_peak), "Exp": b.scalar("GlitterSaturation", 1.5)}),
+                     b.vector("GlitterTint", (1.0, 1.0, 1.0, 1.0)))
+    # The sun's own light level (low at dusk, zero at night) still scales the glint.
+    sun_strength = b.mul(b.out(sun_color, "A"), b.sat(b.out(sun_dir, "G")))
+    sun_visible = b.sat(b.mul(sun_strength, constant=1.5))
+    to_sun = b.out(sun_dir, "RGB")
+
+    def sun_dot(normal):
+        return b.sat(b.add("DotNode", ins={"A": b.add("ReflectionVectorNode", ins={"Normal": normal}), "B": to_sun}))
+
+    def band(edge0, edge1, value):
+        return b.add("SmoothStepNode", ins={"Edge 0 (Min)": edge0, "Edge 1 (Max)": edge1, "Value": value})
+
+    coarse_tangent = b.add("NormalizeNode", ins={"m_input": b.add("AppendNode", ins={"A": coarse_slope, "B": b.const(1.0)})})
+    coarse_world = b.add("NormalizeNode", ins={"m_input": b.add(
+        "TransformVectorNode", {"Source Space": SPACE_TANGENT, "Target Space": SPACE_WORLD}, {"Vector": coarse_tangent})})
+    flake_dot = sun_dot(coarse_world)
+    # The glow follows the same swell, halfway flattened toward the (vertex-wave) surface normal.
+    glow_dot = sun_dot(b.add("NormalizeNode", ins={"m_input": b.lerp(b.add("VertexNormalNode"), coarse_world, b.const(0.5))}))
+
+    glow = band(b.scalar("GlitterGlowEdge", 0.978), b.const(1.0), glow_dot)
+    # Flakes only inside the sun path seen on the calm surface. Without this, looking down at the
+    # water, the steep flanks of the swell still catch a low sun and scatter hot specks all over.
+    sun_path = band(b.scalar("GlitterPathEdge", 0.9), b.scalar("GlitterPathEdgeHard", 0.985),
+                    sun_dot(b.add("VertexNormalNode")))
+    flakes = b.mul(band(b.scalar("GlitterEdge", 0.9945), b.scalar("GlitterEdgeHard", 0.9952), flake_dot), sun_path)
+    core = b.mul(band(b.scalar("GlitterCoreEdge", 0.9993), b.scalar("GlitterCoreEdgeHard", 0.9996), flake_dot), sun_path)
+    return b.mul(b.mul(sun_tint, b.addn(b.addn(
+        b.mul(b.mul(glow, glow), b.scalar("GlitterGlowStrength", 0.8)),
+        b.mul(flakes, b.scalar("GlitterStrength", 2.0))),
+        b.mul(core, b.scalar("GlitterCoreStrength", 6.0)))), sun_visible)
+
+
 def build_graph(b, mode):
     """Wires the ocean. Remember the compiler's typing rule: Add, Subtract and Divide take the
     type of their FIRST operand, so the wider operand always goes into A."""
@@ -252,7 +343,11 @@ def build_graph(b, mode):
     view_distance = b.add("PixelDepthNode")
     distance_t = b.sat(b.div(view_distance, b.scalar("NormalFadeDistance", 90.0)))
     distance_factor = b.lerp(b.const(1.0), b.scalar("NormalFarStrength", 0.2), distance_t)
-    slope = b.mul(b.addn(b.addn(layer_a, layer_b), layer_c), distance_factor)
+    # The surface shape is the procedural swell (the same one the sun glint uses, so surface and
+    # glint agree); the ripple texture only adds weaker fine detail on top of it.
+    swell_slope = build_glint_wave_slope(b)
+    ripples = b.mul(b.addn(b.addn(layer_a, layer_b), layer_c), b.scalar("RippleDetailStrength", 0.4))
+    slope = b.mul(b.addn(b.mul(swell_slope, b.scalar("SurfaceSwellStrength", 1.0)), ripples), distance_factor)
     tangent_normal = b.add("NormalizeNode", ins={"m_input": b.add("AppendNode", ins={"A": slope, "B": b.const(1.0)})})
     world_normal = b.add("NormalizeNode", ins={"m_input": b.add(
         "TransformVectorNode", {"Source Space": SPACE_TANGENT, "Target Space": SPACE_WORLD}, {"Vector": tangent_normal})})
@@ -392,12 +487,21 @@ def build_graph(b, mode):
                                  b.sat(b.out(sun_dir, "G"))), constant=0.45)
         foam_lit = b.mul(b.vector("FoamColor", (0.92, 0.97, 1.0, 1.0)), sun_light)
 
-        # Sun glitter: a very tight highlight along the FULL ripple normal, so it breaks up into
-        # the separate sparkles of a sunlit sea instead of the engine's one smooth GGX lobe.
-        glitter_dir = b.add("ReflectionVectorNode", ins={"Normal": world_normal})
-        glitter_dot = b.sat(b.add("DotNode", ins={"A": glitter_dir, "B": b.out(sun_dir, "RGB")}))
-        glitter = b.mul(b.mul(b.out(sun_color, "RGB"), b.mul(b.out(sun_color, "A"), b.scalar("GlitterStrength", 5.0))),
-                        b.add("PowerNode", ins={"Base": glitter_dot, "Exp": b.scalar("GlitterPower", 900.0)}))
+        # Sun glitter in the style of classic WoW: a very bright, deeply saturated reflection of
+        # the sun that glows, broken into a few large crisp shapes rather than fine sparkle.
+        #   * glow:   a broad soft band on a calmer copy of the swell - the saturated sun path
+        #             the flakes sit in, so the reflection reads as glowing even below bloom.
+        #   * flakes: a narrow SmoothStep (hard edges, not a power curve) on the procedural
+        #             glint swell rather than the ripple texture, so the shapes are big, smooth
+        #             and stylized instead of hundreds of texel-shaped specks.
+        #   * core:   the hottest part of each flake, far above 1.0 so bloom haloes it.
+        # The engine's GGX lobe is switched off (Specular 0 below): it is the soft white blob.
+        #
+        # Colour: the sun's visible hue from the environment's sun scatter curve, so the glint is
+        # orange at dawn and dusk and warm white at noon (see build_sun_glitter). ACES bleaches strong values toward white, which is why the glow and flakes
+        # stay moderate and only the small core goes hot.
+        coarse_slope = b.mul(swell_slope, distance_factor)
+        glitter = build_sun_glitter(b, sun_color, sun_dir, coarse_slope)
         above_water = b.addn(b.lerp(water, foam_lit, foam_mask),
                              b.mul(glitter, b.add("OneMinusNode", ins={"m_input": foam_mask})))
 
@@ -426,7 +530,8 @@ def build_graph(b, mode):
     b.next_column()
     root_inputs["Base Color"] = b.const_rgb((0.0, 0.0, 0.0, 1.0))
     root_inputs["Metallic"] = b.scalar("Metallic", 0.0)
-    root_inputs["Specular"] = b.scalar("Specular", 0.5)
+    # 0 turns off the engine's GGX sun lobe: the glitter above replaces it.
+    root_inputs["Specular"] = b.scalar("Specular", 0.0)
     root_inputs["Normal"] = tangent_normal
 
     for candidate in b.root["inputs"]:

@@ -335,6 +335,19 @@ namespace mmo
 			}
 		}
 
+		// === Mana Regeneration ===
+		if (const auto section = ScopedEditorSection("Mana Regeneration", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::TextDisabled("Mana regeneration within five seconds after mana was spent (while casting).");
+			ImGui::Spacing();
+
+			float castingRegen = settings.casting_mana_regen_percent();
+			if (DrawFloatSetting("Casting Regen % of Normal##ManaRegen", castingRegen, defaults.casting_mana_regen_percent()))
+			{
+				settings.set_casting_mana_regen_percent(castingRegen);
+			}
+		}
+
 		// === Spell Weapon Damage ===
 		if (const auto section = ScopedEditorSection("Spell Weapon Damage", ImGuiTreeNodeFlags_DefaultOpen))
 		{

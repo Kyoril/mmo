@@ -151,41 +151,58 @@ namespace mmo
 					continue;
 				}
 
-				const proto::UnitEntry* unit = project.units.getById(spawn.unitentry());
-				if (!unit)
+				// A mixed spawn point spawns any of its weighted entries, so each of them is a spot.
+				std::vector<uint32> unitEntryIds;
+				for (const auto& candidate : spawn.unitentries())
 				{
-					continue;
+					if (candidate.weight() > 0 && std::find(unitEntryIds.begin(), unitEntryIds.end(), candidate.unitentry()) == unitEntryIds.end())
+					{
+						unitEntryIds.push_back(candidate.unitentry());
+					}
+				}
+				if (unitEntryIds.empty())
+				{
+					unitEntryIds.push_back(spawn.unitentry());
 				}
 
-				// Anything with an NPC flag is a vendor, questgiver, trainer or similar. The
-				// runtime target picker refuses to attack them, so a spot full of them would
-				// send the bot somewhere it can do nothing.
-				if (EffectiveNpcFlags(*unit) != 0)
+				for (const uint32 unitEntryId : unitEntryIds)
 				{
-					continue;
+					const proto::UnitEntry* unit = project.units.getById(unitEntryId);
+					if (!unit)
+					{
+						continue;
+					}
+
+					// Anything with an NPC flag is a vendor, questgiver, trainer or similar. The
+					// runtime target picker refuses to attack them, so a spot full of them would
+					// send the bot somewhere it can do nothing.
+					if (EffectiveNpcFlags(*unit) != 0)
+					{
+						continue;
+					}
+
+					if (unit->rank() != NormalRank)
+					{
+						continue;
+					}
+
+					if (m_factionFiltered && !IsFactionHostile(project, playerFactionTemplate, unit->factiontemplate()))
+					{
+						continue;
+					}
+
+					GrindSpot spot;
+					spot.mapId = map.id();
+					spot.unitEntry = unit->id();
+					spot.position = Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz());
+					spot.minLevel = unit->minlevel();
+					spot.maxLevel = unit->maxlevel();
+					spot.factionTemplate = unit->factiontemplate();
+					spot.maxCount = std::max<uint32>(1, spawn.maxcount());
+
+					m_spotsByMap[spot.mapId].push_back(m_spots.size());
+					m_spots.push_back(spot);
 				}
-
-				if (unit->rank() != NormalRank)
-				{
-					continue;
-				}
-
-				if (m_factionFiltered && !IsFactionHostile(project, playerFactionTemplate, unit->factiontemplate()))
-				{
-					continue;
-				}
-
-				GrindSpot spot;
-				spot.mapId = map.id();
-				spot.unitEntry = unit->id();
-				spot.position = Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz());
-				spot.minLevel = unit->minlevel();
-				spot.maxLevel = unit->maxlevel();
-				spot.factionTemplate = unit->factiontemplate();
-				spot.maxCount = std::max<uint32>(1, spawn.maxcount());
-
-				m_spotsByMap[spot.mapId].push_back(m_spots.size());
-				m_spots.push_back(spot);
 			}
 		}
 

@@ -695,6 +695,9 @@ CLERIC = {
             "CAP": talent(143, Spell(1203, {
                 "attributes": HEAL_ACTIVE_ATTRS, "spellSchool": SCHOOL_HOLY, "positive": 1,
                 "icon": ICONS + "T_Icon_Gold_88.htex", "casttime": 2500, "cost": 80,
+                # Movement | Interrupt, like every other player spell with a cast time:
+                # without it the cast survives the caster running away.
+                "interruptflags": 5,
                 "cooldown": "1500", "visualization_id": 70, "rangetype": 5,
                 "maxlevel": 10, "baselevel": 1, "spelllevel": 1,
                 "effects": [{"type": HEAL, "basepoints": 30, "diesides": 8, "pointsperlevel": 1.5,

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace mmo
 {
@@ -26,8 +27,12 @@ namespace mmo
 		///        farther fogs the sky at its far clip instead.
 		static constexpr float SkyDistance = 2000.0f;
 
-		/// @brief Weight of the reprojected history in the temporal blend.
-		static constexpr float TemporalBlend = 0.9f;
+		/// @brief Default weight of the reprojected history in the temporal blend.
+		static constexpr float DefaultHistoryWeight = 0.0f;
+
+		/// @brief Largest allowed history weight. Every frame re-reads the history between texels, so a
+		///        weight near 1 accumulates that resampling into a softer image while moving.
+		static constexpr float MaxHistoryWeight = 0.95f;
 
 		/// @brief A camera jump longer than this within one frame discards the history.
 		static constexpr float HistoryResetDistance = 50.0f;
@@ -56,6 +61,63 @@ namespace mmo
 		/// @brief Multiplier on point and spot light scattering (the zone's light_scattering).
 		float lightScatterStrength = 1.0f;
 
+		/// @brief Weight of the reprojected history in the temporal blend, [0, MaxHistoryWeight].
+		float historyWeight = DefaultHistoryWeight;
+
+		/// @brief Whether samples are jittered within their froxel from frame to frame. Only takes effect
+		///        while the history is on; without history jitter is pure per-frame noise.
+		bool jitterEnabled = true;
+
+		/// @brief How the sun's shadowed scattering is filtered (gxFogSunMode).
+		enum SunMode : uint32
+		{
+			/// @brief Fixed box filter of sunTapsXY^2 x sunTapsZ taps per cell, no history.
+			SunModeBoxFilter = 0,
+			/// @brief One tap per cell at a per-froxel blue-noise position that changes every frame,
+			///        accumulated by a neighbourhood-clamped history (TemporalSunHistoryWeight). Shadow from the
+			///        coarse fog shadow map.
+			SunModeTemporal = 1,
+			/// @brief SunModeTemporal, but the shadow comes from the surface cascades.
+			SunModeTemporalCascades = 2
+		};
+
+		/// @brief History weight of both fog volumes while a temporal sun mode is active.
+		static constexpr float TemporalSunHistoryWeight = 0.95f;
+
+		/// @brief Edge length of the per-froxel blue noise jitter texture in texels.
+		static constexpr uint32 BlueNoiseResolution = 64;
+
+		/// @brief Current SunMode.
+		uint32 sunMode = SunModeBoxFilter;
+
+		/// @brief Sets the sun mode, clamped to [SunModeBoxFilter, SunModeTemporalCascades].
+		void SetSunMode(const int mode)
+		{
+			sunMode = static_cast<uint32>(std::clamp(mode, static_cast<int>(SunModeBoxFilter), static_cast<int>(SunModeTemporalCascades)));
+		}
+
+		/// @brief Whether a temporal sun mode is active.
+		[[nodiscard]] bool IsSunTemporal() const { return sunMode != SunModeBoxFilter; }
+
+		/// @brief Largest sun shadow tap count along one screen axis of a froxel.
+		static constexpr uint32 MaxSunTapsXY = 4;
+
+		/// @brief Largest sun shadow tap count along a froxel's depth.
+		static constexpr uint32 MaxSunTapsZ = 16;
+
+		/// @brief Fewest depth taps per froxel when the box filter samples the fog shadow map (FogShadowDepthTaps).
+		static constexpr uint32 MinFogShadowTapsZ = 2;
+
+		/// @brief Sun shadow taps along each screen axis of a froxel. The sun's visibility is box-filtered
+		///        over the whole cell with a fixed pattern every frame and gets no history at all: a light
+		///        shaft then depends only on where the cell is right now, so it can neither lag behind the
+		///        camera nor flicker with a per-frame jitter.
+		uint32 sunTapsXY = 2;
+
+		/// @brief Sun shadow taps along a froxel's depth (a froxel is a needle several metres long at
+		///        mid range; too few taps show as bands across the shafts).
+		uint32 sunTapsZ = 6;
+
 		/// @brief Applies a quality preset. Out-of-range values clamp.
 		void ApplyQualityLevel(int level)
 		{
@@ -71,20 +133,35 @@ namespace mmo
 			case 1:
 				tileSize = 24;
 				sliceCount = 32;
+				sunTapsXY = 2;
+				sunTapsZ = 4;
 				break;
 			case 2:
 				tileSize = 16;
 				sliceCount = 48;
+				sunTapsXY = 2;
+				sunTapsZ = 6;
 				break;
 			case 3:
 				tileSize = 12;
 				sliceCount = 64;
+				sunTapsXY = 2;
+				sunTapsZ = 6;
 				break;
 			default:
 				tileSize = 8;
 				sliceCount = 96;
+				sunTapsXY = 2;
+				sunTapsZ = 6;
 				break;
 			}
+		}
+
+		/// @brief Sets the sun shadow taps per froxel, clamped to [1, MaxSunTapsXY] and [1, MaxSunTapsZ].
+		void SetSunTaps(const uint32 xy, const uint32 z)
+		{
+			sunTapsXY = std::clamp(xy, 1u, MaxSunTapsXY);
+			sunTapsZ = std::clamp(z, 1u, MaxSunTapsZ);
 		}
 
 		/// @brief Sets the grid range, clamped to [MinRange, MaxRange].
@@ -97,6 +174,12 @@ namespace mmo
 		void SetDebugMode(const int mode)
 		{
 			debugMode = static_cast<uint32>(std::clamp(mode, 0, 4));
+		}
+
+		/// @brief Sets the temporal history weight, clamped to [0, MaxHistoryWeight]. 0 disables the history.
+		void SetHistoryWeight(const float value)
+		{
+			historyWeight = std::clamp(value, 0.0f, MaxHistoryWeight);
 		}
 
 		/// @brief Sets the point and spot light scattering strength, clamped to [0, 8].
@@ -160,10 +243,44 @@ namespace mmo
 			return result;
 		}
 
+		/// @brief Radical inverse of index in any base >= 2 (Halton sequence).
+		[[nodiscard]] inline float Halton(uint32 index, const uint32 base)
+		{
+			float result = 0.0f;
+			float fraction = 1.0f / static_cast<float>(base);
+			while (index > 0)
+			{
+				result += static_cast<float>(index % base) * fraction;
+				index /= base;
+				fraction /= static_cast<float>(base);
+			}
+
+			return result;
+		}
+
 		/// @brief Depth jitter in [0, 1) for a frame number, repeating every JitterSequenceLength frames.
 		[[nodiscard]] inline float JitterForFrame(const uint64 frame)
 		{
 			return HaltonBase2(static_cast<uint32>(frame % VolumetricFogSettings::JitterSequenceLength) + 1u);
+		}
+
+		/// @brief Screen-space jitter in [0, 1)^2 within a froxel for a frame number (Halton bases 3 and 5,
+		///        so it does not correlate with the base-2 depth jitter). Jittering across the cell lets the
+		///        history converge to the cell's average instead of its centre sample.
+		[[nodiscard]] inline std::pair<float, float> ScreenJitterForFrame(const uint64 frame)
+		{
+			const uint32 index = static_cast<uint32>(frame % VolumetricFogSettings::JitterSequenceLength) + 1u;
+			return { Halton(index, 3), Halton(index, 5) };
+		}
+
+		/// @brief Per-frame offset added to every froxel's blue-noise jitter, in [0, 1): frame * (golden ratio - 1),
+		///        wrapped. Consecutive frames then move each froxel's sample by an irrational step, so any run
+		///        of frames covers its cell evenly without the whole grid moving in lockstep.
+		[[nodiscard]] inline float GoldenJitterForFrame(const uint64 frame)
+		{
+			constexpr double goldenStep = 0.6180339887498949;
+			const double value = static_cast<double>(frame % 1000000u) * goldenStep;
+			return static_cast<float>(value - std::floor(value));
 		}
 
 		/// @brief Multiplier noise applies to the height-fog density. Averages 1 over uniformly distributed
@@ -192,6 +309,29 @@ namespace mmo
 			}
 
 			return std::clamp((slice01 * static_cast<float>(sliceCount) - 0.5f) / static_cast<float>(sliceCount), 0.0f, 1.0f);
+		}
+
+		/// @brief Sun shadow taps along a froxel's depth when it samples the fog shadow map (box filter mode): enough
+		///        that consecutive taps land about two shadow texels apart (each tap is a tent over 4x4 texels) and
+		///        one fog noise texel apart along the ray, between VolumetricFogSettings::MinFogShadowTapsZ and
+		///        MaxSunTapsZ. A far froxel is a needle several metres long whose shadow-space projection crosses many
+		///        texels; with fewer taps they skip across shadow edges and the shafts flicker back and forth as the
+		///        cells slide through the world while walking. A near froxel is a few centimetres deep and needs only
+		///        the minimum. Mirrored by FogShadowDepthTaps in CS_FogInject.hlsl.
+		/// @param cellDepth View depth the froxel spans in metres.
+		/// @param shadowNdcPerDepth How far the froxel's ray moves across the shadow map per metre of view depth, in
+		///        shadow NDC units (the map spans 2 of them).
+		/// @param mapSize Edge length of the fog shadow map in texels.
+		/// @param rayLengthPerDepth World length of the froxel's ray per metre of view depth (1 / cos of its angle
+		///        to the view axis).
+		/// @param noiseTileSize Metres per fog noise tile (the noise volume spans NoiseResolution texels per tile).
+		[[nodiscard]] inline uint32 FogShadowDepthTaps(const float cellDepth, const float shadowNdcPerDepth, const float mapSize,
+			const float rayLengthPerDepth, const float noiseTileSize)
+		{
+			const float twoTexelSteps = cellDepth * shadowNdcPerDepth * 0.25f * mapSize;
+			const float noiseSteps = cellDepth * rayLengthPerDepth * static_cast<float>(VolumetricFogSettings::NoiseResolution) / std::max(noiseTileSize, 1e-3f);
+			const uint32 taps = static_cast<uint32>(std::ceil(std::max({ twoTexelSteps, noiseSteps, 0.0f })));
+			return std::clamp(taps, VolumetricFogSettings::MinFogShadowTapsZ, VolumetricFogSettings::MaxSunTapsZ);
 		}
 	}
 }

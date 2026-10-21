@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "pass_id": "20261018-forest_bandit_grounds-1",
+  "map": 0,
+  "world": "Development",
+  "poi": "forest_bandit_grounds",
+  "template": "bandit_camp_extension_oakenshire",
+  "seed": 1,
+  "anchor": [
+    245.0,
+    768.0
+  ],
+  "keep_away": [],
+  "entry": [
+    245.0,
+    768.0
+  ],
+  "created": "2026-10-18T19:22:05",
+  "world_fingerprint": "3afbbb945ffe3a175bd188aa0b98f71ad124dae6",
+  "items": [
+    {
+      "role": "Back tent west",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        227.0,
+        18.18,
+        782.0
+      ],
+      "yaw": 192.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x367c85f8c830d356",
+      "file": "Worlds/Development/Development/Entities/8225/3926160278717256534.wobj",
+      "written_hash": "8d91eec6876b14aec7de169384acfeb3460bbe2f"
+    },
+    {
+      "role": "Back tent far west",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        216.0,
+        17.82,
+        782.0
+      ],
+      "yaw": 215.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x367cad6a23247add",
+      "file": "Worlds/Development/Development/Entities/8225/3926203646527961821.wobj",
+      "written_hash": "ba78b084f846b9d1d67330aa975a90c06618a24b"
+    },
+    {
+      "role": "Back tent centre",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        256.0,
+        16.31,
+        774.0
+      ],
+      "yaw": 23.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x367d9e82d72780a3",
+      "file": "Worlds/Development/Development/Entities/8225/3926468734929567907.wobj",
+      "written_hash": "04fc778c2d8718a8a2eca87306aa14d6534daeeb"
+    },
+    {
+      "role": "East tent",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        271.0,
+        15.2,
+        768.0
+      ],
+      "yaw": 337.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x367dd6ccdb021e4b",
+      "file": "Worlds/Development/Development/Entities/8225/3926530625472962123.wobj",
+      "written_hash": "bd56ca31faddd3ba8db9ddb148c419cda51e985a"
+    },
+    {
+      "role": "East flank tent",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Camptent_B.hmsh",
+      "store": "wobj",
+      "position": [
+        292.0,
+        12.02,
+        758.0
+      ],
+      "yaw": 8.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x367d5adaa1bf025b",
+      "file": "Worlds/Development/Development/Entities/8225/3926394345199960667.wobj",
+      "written_hash": "298c36646b6a7523eb28286e77b95dc2193af95f"
+    },
+    {
+      "role": "Back fire",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_CampFire_A.hmsh",
+      "store": "wobj",
+      "position": [
+        249.0,
+        16.97,
+        777.0
+      ],
+      "yaw": 0.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": false,
+      "unique_id": "0x367d16cf6b7380be",
+      "file": "Worlds/Development/Development/Entities/8225/3926319530253713598.wobj",
+      "written_hash": "0db324ebb1b439cc5ef8ef6c908de0693068acaa"
+    },
+    {
+      "role": "East target",
+      "asset": "Models/FalwynPlains/Props/Camp/SM_hc_Target_C.hmsh",
+      "store": "wobj",
+      "position": [
+        283.0,
+        12.98,
+        757.0
+      ],
+      "yaw": 240.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x367df6c13b304261",
+      "file": "Worlds/Development/Development/Entities/8225/3926565759919080033.wobj",
+      "written_hash": "d04a186e13a351e3aa2752948170c6dfac8cc3a1"
+    },
+    {
+      "role": "West approach wagon",
+      "asset": "Models/FalwynPlains/Props/Furniture/SM_hc_WagonDamaged.hmsh",
+      "store": "wobj",
+      "position": [
+        212.0,
+        12.94,
+        752.0
+      ],
+      "yaw": 35.0,
+      "tilt": [
+        0.0,
+        0.0
+      ],
+      "scale": 1.0,
+      "collides": true,
+      "unique_id": "0x367d173bbc93e2ce",
+      "file": "Worlds/Development/Development/Entities/8225/3926319995471258318.wobj",
+      "written_hash": "845865f2642ce7b927ef6355fea739e11d29c500"
+    }
+  ],
+  "gaps": [],
+  "notes": [
+    "Hand-placed for one site (plan it with the --anchor below): every role is at_anchor with an exact offset. The spots keep clear of the bandit spawn packs, so moving one means re-checking spawn spacing."
+  ],
+  "checks": {
+    "placement": [],
+    "walkability": [],
+    "items_hash": "396fa7e4a41f97d6641d977c1c05bab8ea5952ed"
+  },
+  "status": "applied",
+  "backups": [],
+  "created_files": [],
+  "applied": "2026-10-18T19:26:45",
+  "nav": {
+    "path": "generated/world/nav"
+  }
+}

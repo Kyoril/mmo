@@ -41,6 +41,8 @@ namespace mmo
 		void HandleRevokeFeature(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void HandleGetAccountFeatures(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void HandleSetRealmFeatureRequirement(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		/// POST /realm-capacity: sets a realm's player capacity (form fields realm = id or name, capacity).
+		void HandleSetRealmCapacity(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void HandleRemoveRealmFeatureRequirement(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void HandleGetRealmFeatureRequirements(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 

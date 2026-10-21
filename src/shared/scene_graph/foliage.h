@@ -75,6 +75,11 @@ namespace mmo
 
 		/// @brief Global density multiplier (0.0 to 1.0).
 		float globalDensityMultiplier = 1.0f;
+
+		/// @brief Milliseconds per Update spent regenerating chunks, nearest to the camera first. At
+		///        least one chunk is rebuilt per Update; the rest keep their old instances until their turn.
+		///        0 rebuilds every pending chunk at once.
+		float rebuildBudgetMs = 2.0f;
 	};
 
 	/// @brief Key for identifying a chunk by its coordinates.
@@ -257,6 +262,9 @@ namespace mmo
 
 		/// @brief Currently active (visible) chunks.
 		std::vector<FoliageChunkPtr> m_activeChunks;
+
+		/// @brief Scratch list of active chunks waiting for a rebuild, kept to reuse its storage.
+		std::vector<FoliageChunk*> m_pendingRebuilds;
 
 		/// @brief World bounds for foliage generation.
 		AABB m_bounds;

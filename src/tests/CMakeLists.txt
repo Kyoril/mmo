@@ -6,6 +6,7 @@
 add_subdirectory(auth_protocol_tests)
 add_subdirectory(base64_tests)
 add_subdirectory(base_tests)
+add_subdirectory(crash_upload_tests)
 add_subdirectory(binary_io_tests)
 if (MMO_BUILD_BOTS)
 	add_subdirectory(bot_ai_tests)

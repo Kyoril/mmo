@@ -286,7 +286,11 @@ namespace mmo
 			/// @brief float amount of mana restored every five seconds while regenerating.
 			ManaRegen,
 
-			UnitFieldCount = ManaRegen + 1,
+			/// @brief float amount of mana restored every five seconds while casting, i.e.
+			///	within five seconds after mana was spent.
+			ManaRegenCasting,
+
+			UnitFieldCount = ManaRegenCasting + 1,
 		};
 
 #define VISIBLE_ITEM_FIELDS(index, offset) \

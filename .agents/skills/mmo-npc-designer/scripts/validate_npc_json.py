@@ -36,6 +36,36 @@ def add_error(errors: list[str], message: str) -> None:
     errors.append(message)
 
 
+def validate_mixed_spawn(errors: list[str], prefix: str, spawn_payload: dict, unit_id: int, indexes: dict) -> None:
+    """A mixed spawn's unitentries: every entry a known unit (or the document's unit) with weight > 0.
+
+    The world server skips weight 0 entries and falls back to unitentry for unknown ids, both of
+    which silently change what a camp spawns, so they are errors here. unitentry mirrors the first
+    entry (the editor's preview and the server's fallback).
+    """
+    candidates = spawn_payload.get("unitentries")
+    if candidates is None:
+        return
+    if not isinstance(candidates, list):
+        add_error(errors, f"{prefix}.unitentries must be an array")
+        return
+    for candidate_index, candidate in enumerate(candidates):
+        label = f"{prefix}.unitentries[{candidate_index}]"
+        if not isinstance(candidate, dict):
+            add_error(errors, f"{label} must be an object")
+            continue
+        entry = candidate.get("unitentry")
+        if not isinstance(entry, int) or isinstance(entry, bool) or entry <= 0:
+            add_error(errors, f"{label}.unitentry must be a positive integer")
+        elif entry != unit_id and entry not in indexes["units"]:
+            add_error(errors, f"{label}.unitentry {entry} is not present in project data")
+        weight = candidate.get("weight", 1)
+        if not isinstance(weight, int) or isinstance(weight, bool) or weight <= 0:
+            add_error(errors, f"{label}.weight must be an integer > 0 (got {weight!r}); remove the entry instead of weighting it 0")
+    if candidates and isinstance(candidates[0], dict) and candidates[0].get("unitentry") != unit_id:
+        add_error(errors, f"{prefix}.unitentries[0].unitentry must be the document's unit {unit_id} (unitentry mirrors the first entry)")
+
+
 def validate_document(doc: dict, project_root: Path) -> list[str]:
     errors: list[str] = []
     modules, catalogs, indexes = load_catalog_bundle(project_root)
@@ -283,6 +313,8 @@ def validate_document(doc: dict, project_root: Path) -> list[str]:
                 if not isinstance(spawn_payload, dict):
                     add_error(errors, f"spawns[{spawn_index}].spawn must be an object")
                     continue
+                # Before parsing: a negative weight would only surface as a protobuf range error.
+                validate_mixed_spawn(errors, f"spawns[{spawn_index}].spawn", spawn_payload, unit_message.id, indexes)
                 try:
                     spawn_message = parse_message_dict(modules["maps"].UnitSpawnEntry, spawn_payload)
                 except Exception as exc:

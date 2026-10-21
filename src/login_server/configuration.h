@@ -53,6 +53,12 @@ namespace mmo
 		/// the file, which could be more efficient..
 		bool isLogFileBuffering;
 
+		/// Whether crash reports left by earlier runs are uploaded to the crash API on start.
+		bool crashReportEnabled{ true };
+		/// Base url of the crash API (https://host[:port][/prefix]); reports go to <prefix>/api/reports.
+		/// file://<dir> writes each upload into that directory instead (tests).
+		String crashReportApiUrl{ "https://error.mmo-dev.net" };
+
 		/// The port to be used for a web connection.
 		uint16 webPort;
 		/// The port to be used for an ssl web connection.

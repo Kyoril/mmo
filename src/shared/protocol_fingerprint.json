@@ -7,15 +7,15 @@
 	],
 	"_format": 3,
 	"auth": {
-		"version": 9,
-		"fingerprint": "sha256:877ca1b8cd9e76a51cfb89311f83efded7b119bc3ff307386eecc311c7926e18",
+		"version": 11,
+		"fingerprint": "sha256:b76b17d59755436d19a1b0561e652578fa6350601ffa84efa73edaf44b9e429d",
 		"files": {
 			"src/shared/auth_protocol/auth_incoming_packet.cpp": "sha256:0e23f09921b76939917c9f7e660deab2977ba79eaa03c9e7ea92e38764f7d5ff",
 			"src/shared/auth_protocol/auth_incoming_packet.h": "sha256:324112379d24eacb03fc3f2984a5180e741ddb95978d1c91616ce43fa68a0745",
 			"src/shared/auth_protocol/auth_outgoing_packet.cpp": "sha256:7003aee85725f5955505c74037f0bcdfb89fd4ebd647257d2edc9d4b06268ca1",
 			"src/shared/auth_protocol/auth_outgoing_packet.h": "sha256:eff0a023adf8133bf02c2df220b97cb364e7b91b82b45470da2cbec34307926c",
 			"src/shared/auth_protocol/auth_protocol.cpp": "sha256:3ae02697539b108be5892fb3288d1480749c9a720e5d4545e2efbfb5601de224",
-			"src/shared/auth_protocol/auth_protocol.h": "sha256:6413493be051962bb56984fd445f10ca8dc246c47462a5b28610366f4ccb32cc"
+			"src/shared/auth_protocol/auth_protocol.h": "sha256:c094f179534a8f1d35fcc2d251bb571ccdbadffa3687052420bad0f739fffe26"
 		},
 		"symbols": [
 			"auth::AuthLocale::Default = 0",
@@ -79,6 +79,11 @@
 			"auth::realm_login_packet::LogonChallenge = 0",
 			"auth::realm_login_packet::LogonProof = 1",
 			"auth::realm_login_packet::Ping = 3",
+			"auth::realm_population::Count_ = 4",
+			"auth::realm_population::Full = 3",
+			"auth::realm_population::High = 2",
+			"auth::realm_population::Low = 0",
+			"auth::realm_population::Medium = 1",
 			"auth::realm_world_packet::BugReport = 16",
 			"auth::realm_world_packet::FetchCharacterLocation = 6",
 			"auth::realm_world_packet::InventoryOperationResult = 11",
@@ -132,8 +137,8 @@
 		]
 	},
 	"game": {
-		"version": 25,
-		"fingerprint": "sha256:406b0766aa8f3aa17fac8ab0fcf67cb1edc70ec3845b7dbd64f6fecb3628d4b2",
+		"version": 27,
+		"fingerprint": "sha256:8ce664bb4e921cefab62cd8fd55b258d265e3241fa82c37895ef1f05571a08be",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -141,7 +146,7 @@
 			"src/shared/game/game.h": "sha256:701905ce17b3c5650c9e82cd50555cba21271b2a1c6a95efda9ad9ebe752e8a5",
 			"src/shared/game/mail.h": "sha256:665ffaee5b569667ca8c8a264de39f333a3475b6779175b8223bc7eeab2e2c54",
 			"src/shared/game/movement_info.h": "sha256:76a78cd18e8906426a99759b10104a524dec328fddd92c36646f4dcd4f0ee976",
-			"src/shared/game/object_type_id.h": "sha256:38a83ab441961d5916e0b9de78c4e9f7c812c31bc7785d6ac8d15abd4b33195d",
+			"src/shared/game/object_type_id.h": "sha256:84019bb6272f40184089187b067fffa717923cff18d64403c6619d8f779b1f10",
 			"src/shared/game/trade_skill_data.h": "sha256:1bff308d1252a2e0a04b9ca4e54607fbcf381bb287497bdc71738bd93364afc5",
 			"src/shared/game_protocol/game_crypt.cpp": "sha256:0e29c28c573ee10abb08b313a9beaf1d1afd0f1064af07ad313ae69e6f32d9db",
 			"src/shared/game_protocol/game_crypt.h": "sha256:278f155eab32b2afb4bdbf5f2f1907c286458b355f86fa2e2c0563923c7a0e17",
@@ -150,7 +155,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:2bc4ea8df46e33fe57f0482ac79ee1eaf19ce90d311f3505b7a6d095911886f6"
+			"src/shared/game_protocol/game_protocol.h": "sha256:fb767b60a727489b0f5ff3d000b17d1d7753655d9701299e048949da1ab654f0"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -216,9 +221,11 @@
 			"game::client_realm_packet::CheatDestroyMonster = 20",
 			"game::client_realm_packet::CheatFaceMe = 33",
 			"game::client_realm_packet::CheatFollowMe = 32",
+			"game::client_realm_packet::CheatGhost = 173",
 			"game::client_realm_packet::CheatGiveMoney = 60",
 			"game::client_realm_packet::CheatGodmode = 160",
 			"game::client_realm_packet::CheatHeal = 165",
+			"game::client_realm_packet::CheatInvisible = 172",
 			"game::client_realm_packet::CheatKill = 134",
 			"game::client_realm_packet::CheatLearnEmote = 154",
 			"game::client_realm_packet::CheatLearnSpell = 29",
@@ -236,7 +243,7 @@
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 172",
+			"game::client_realm_packet::Count_ = 174",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",
@@ -516,6 +523,7 @@
 			"game::object_fields::UnitFields::Level = ObjectFieldCount",
 			"game::object_fields::UnitFields::Mana = ObjectFieldCount+7",
 			"game::object_fields::UnitFields::ManaRegen = TargetUnit + 2+17",
+			"game::object_fields::UnitFields::ManaRegenCasting = TargetUnit + 2+18",
 			"game::object_fields::UnitFields::MaxDamage = TargetUnit + 2+2",
 			"game::object_fields::UnitFields::MaxEnergy = ObjectFieldCount+12",
 			"game::object_fields::UnitFields::MaxHealth = ObjectFieldCount+5",
@@ -552,7 +560,7 @@
 			"game::object_fields::UnitFields::StatStamina = ObjectFieldCount+14",
 			"game::object_fields::UnitFields::StatStrength = ObjectFieldCount+15",
 			"game::object_fields::UnitFields::TargetUnit = ObjectFieldCount+33",
-			"game::object_fields::UnitFields::UnitFieldCount = ManaRegen + 1",
+			"game::object_fields::UnitFields::UnitFieldCount = ManaRegenCasting + 1",
 			"game::object_fields::UnitFields::VirtualItem0 = TargetUnit + 2+6",
 			"game::object_fields::UnitFields::VirtualItem1 = TargetUnit + 2+7",
 			"game::object_fields::UnitFields::VirtualItem2 = TargetUnit + 2+8",
