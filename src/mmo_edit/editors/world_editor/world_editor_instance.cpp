@@ -351,6 +351,8 @@ namespace mmo
 
 		// Initialize deferred renderer BEFORE viewport panel since viewport panel takes a reference to it
 		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
+		// Gizmos and other editor overlays must stay readable: tone mapped, but never blooming.
+		m_deferredRenderer->SetBloomExcludedGroupStart(Overlay - 1);
 
 		// Create viewport panel
 		m_viewportPanel = std::make_unique<ViewportPanel>(

@@ -4,6 +4,7 @@
 
 #include "world_model.h"
 #include "instanced_mesh_collision.h"
+#include "mesh.h"
 #include "movable_object.h"
 #include "prop_kit.h"
 #include "world_model_batch.h"
@@ -11,6 +12,7 @@
 #include "world_model_portal_culling.h"
 #include "math/plane.h"
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -110,6 +112,28 @@ namespace mmo
         ///        data and its own vertex data in the standard static mesh vertex layout.
         static bool CanMergeMesh(const Mesh& mesh);
 
+        /// @brief Builds (or finds) the merged geometry of a world model without instantiating it.
+        /// @details Lets a streaming caller do the merge in steps of its own, so instantiating the model
+        ///          later only creates entities. Loads the model's meshes if they are not loaded yet. A
+        ///          merge left unfinished is completed by the next call, or by the first instance.
+        /// @param maxGroups How many more groups to merge in this call (at least one).
+        /// @return A handle that keeps the merged geometry alive while held, once every group is merged;
+        ///         null while groups remain, or for a null model.
+        static std::shared_ptr<const void> PrewarmMergedGeometry(const WorldModelPtr& model, size_t maxGroups = std::numeric_limits<size_t>::max());
+
+        /// @brief Appends the meshes an instance of the model loads for itself: the visible mesh
+        ///        references of its groups and the doodads of its default set. Child world models and
+        ///        prop kits are not followed; their callers collect them separately.
+        /// @details Lets a streaming caller load the meshes one at a time ahead of instantiating.
+        static void CollectMeshDependencies(const WorldModel& model, std::vector<String>& outMeshPaths);
+
+        /// @brief Sets how many bytes of merged geometry no instance uses any more are kept around.
+        /// @details By default (0) merged geometry dies with the last instance using it, so a world
+        ///          model that streams out and back in is merged again, GPU readbacks included. The
+        ///          client keeps recently released geometry up to this budget, evicting the least
+        ///          recently used first. Editors keep 0: they change world models in place.
+        static void SetMergedGeometryRetention(size_t bytes);
+
         /// @brief Gets the number of child world model instances created from the model's child
         ///        references. Zero until the instance has been attached to a scene node.
         [[nodiscard]] size_t GetChildInstanceCount() const { return m_childInstances.size(); }
@@ -141,6 +165,14 @@ namespace mmo
         /// @return The group index, or -1 when the prop lies in no room (so it is never culled) or
         ///         the index is out of range.
         [[nodiscard]] int32 GetKitPropGroup(size_t index) const;
+
+        /// @brief Appends the sound emitters of every mesh this instance places, in world space:
+        ///        the group mesh references, the doodads of the active sets, the kit props and,
+        ///        recursively, the child world models.
+        /// @details Walks the model data rather than the scene, so it gives the same result whether
+        ///          the geometry is batched, merged or one entity per mesh. Meaningful once the
+        ///          instance is attached, because the placement transform comes from its node.
+        void CollectSoundEmitters(std::vector<PlacedSoundEmitter>& out) const;
 
         /// @brief Deepest nesting of child world models that is instantiated. A town that places
         ///        buildings that place props is depth 2; anything this deep is a content mistake.
@@ -415,6 +447,10 @@ namespace mmo
         /// @brief Creates doodad entities for the current doodad set.
         /// @param scene The scene to create entities in.
         void CreateDoodads(Scene& scene);
+
+        /// @brief Gets the indices of the doodads that are placed: the global set 0 plus the
+        ///        active set, skipping indices out of range or without a valid name.
+        [[nodiscard]] std::vector<uint32> GetActiveDoodadIndices() const;
 
         /// @brief Creates lights from the world model.
         /// @param scene The scene to create lights in.

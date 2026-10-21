@@ -34,18 +34,19 @@ namespace mmo
 
 	/// Submersion (water surface above feet) required before the player starts swimming.
 	/// Intended to scale with unit height later.
-	constexpr float SWIM_START_DEPTH = 1.0f;
+	constexpr float SWIM_START_DEPTH = 1.5f;
 
 	/// While swimming, if submersion drops below this AND the unit is resting on walkable floor,
 	/// the player stops swimming and resumes walking (shallow water / wading out).
-	constexpr float SWIM_STOP_DEPTH = 0.7f;
+	constexpr float SWIM_STOP_DEPTH = 1.2f;
 
 	/// Minimum submersion kept when the swimmer reaches the surface. The body cannot rise above
-	/// this depth (capped here), but may dive freely below. Kept close to SWIM_START_DEPTH so the
-	/// surfaced waterline matches the depth at which the player begins swimming when wading in —
-	/// otherwise ascending or dropping into the water would leave the body floating too high
-	/// (waterline at the knees instead of the thighs).
-	constexpr float SWIM_SURFACE_MARGIN = 0.9f;
+	/// this depth (capped here), but may dive freely below. The swim clip lays the body out
+	/// horizontally at roughly hip height above the feet, so this must be deep enough that the
+	/// torso sits in the water with only head and shoulders above it — at 0.9 the whole back
+	/// floated above the surface. Kept close to SWIM_START_DEPTH so wading in does not snap the
+	/// body down when swimming starts.
+	constexpr float SWIM_SURFACE_MARGIN = 1.5f;
 
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
@@ -3470,7 +3471,7 @@ namespace mmo
 		return true;
 	}
 
-	bool UnitMovement::CorrectIdleGroundHeight(const float deltaTime)
+	bool UnitMovement::CorrectIdleGroundHeight(const float deltaTime, const std::optional<float> referenceHeight)
 	{
 		// An idle NPC re-ran a full octree query plus ray tests every frame for a result that
 		// cannot change while nothing moves - with ~25 NPCs that was a fifth of the client's
@@ -3494,7 +3495,7 @@ namespace mmo
 			m_idleGroundRecheckTimer = idleGroundRecheckInterval * static_cast<float>(m_movedUnit.GetGuid() % 16) / 16.0f;
 		}
 
-		m_idleGroundValid = CorrectGroundHeight();
+		m_idleGroundValid = CorrectGroundHeight(5.0f, referenceHeight);
 		if (m_idleGroundValid)
 		{
 			m_idleGroundPosition = GetUpdatedNode().GetPosition();

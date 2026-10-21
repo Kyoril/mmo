@@ -473,6 +473,10 @@ namespace mmo
 		/// Gets the amount of mana restored every five seconds while regenerating.
 		float GetManaRegen() const { return Get<float>(object_fields::ManaRegen); }
 
+		/// Gets the amount of mana restored every five seconds while casting (within five seconds
+		///	after mana was spent).
+		float GetManaRegenCasting() const { return Get<float>(object_fields::ManaRegenCasting); }
+
 		int32 GetStat(int32 statId) const;
 
 		int32 GetPosStat(int32 statId) const;
@@ -594,6 +598,10 @@ namespace mmo
 		void SetCreatureInfo(const CreatureInfo &creatureInfo);
 
 		const String &GetName() const override;
+
+		/// @brief The subtitle line of this unit's creature entry, as in "<General Goods>".
+		/// @return The bracketed subname, or an empty string when the unit has no subname.
+		String GetSubtitle() const { return m_creatureInfo.GetSubtitle(); }
 
 		/// @brief Plays a one-shot animation.
 		/// @param animState The animation state to play.
@@ -994,6 +1002,10 @@ namespace mmo
 		/// @brief The last position that was sent to the server.
 		/// Used to ensure position consistency between stop and start packets.
 		Vector3 m_syncedPosition;
+
+		/// @brief The last position the server placed this unit at (spawn, teleport, end of a path).
+		/// Its height lets the idle ground correction find a floor that streamed in after the unit.
+		std::optional<Vector3> m_serverGroundPosition;
 
 		/// @brief Map of active spell tints (spellId -> tint color).
 		std::map<uint32, Vector4> m_spellTints;

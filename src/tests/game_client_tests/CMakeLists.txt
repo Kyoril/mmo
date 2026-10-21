@@ -14,6 +14,7 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/remote_movement_queue.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/remote_movement_renderer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/attack_error_voice_gate.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/object_update_skip.cpp
 )
 
 # test_console_var.cpp reaches into the client executable's headers; it supplies its own
@@ -22,11 +23,12 @@ target_include_directories(game_client_tests PRIVATE
 	${CMAKE_SOURCE_DIR}/src/mmo_client
 )
 
-# The CrossfadingSoundLoop and spell text tests exercise sources which need the
+# The CrossfadingSoundLoop, ambient sound and spell text tests exercise sources which need the
 # client_data protobuf library -- only built alongside the client or the editor.
 if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	target_sources(game_client_tests PRIVATE
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/sound_entry_player.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/ambient_sound_emitters.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/combat_sound_resolver.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/combat_voice_gate.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/combat_sound_player.cpp
@@ -37,6 +39,7 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 else()
 	set_source_files_properties(
 		${CMAKE_CURRENT_SOURCE_DIR}/test_crossfading_sound_loop.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_ambient_sound_emitters.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_sound_resolver.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_voice_gate.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_sound_player.cpp

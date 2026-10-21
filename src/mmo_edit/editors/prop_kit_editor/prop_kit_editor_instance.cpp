@@ -329,6 +329,8 @@ namespace mmo
 		m_lightNode->AttachObject(*m_mainLight);
 
 		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 1920, 1080);
+		// Gizmos and other editor overlays must stay readable: tone mapped, but never blooming.
+		m_deferredRenderer->SetBloomExcludedGroupStart(Overlay - 1);
 
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(0);

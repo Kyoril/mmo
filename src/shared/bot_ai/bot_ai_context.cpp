@@ -30,7 +30,7 @@ namespace mmo
 	{
 		if (const BotContext* world = GetWorld())
 		{
-			m_perception.Refresh(*world, m_grindState, m_nowMs);
+			m_perception.Refresh(*world, m_grindState, m_economy, m_nowMs);
 			return;
 		}
 

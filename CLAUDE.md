@@ -67,7 +67,8 @@ The following systems are fully implemented and should not be suggested as futur
   through a normal feature branch.
 - At session start, also surface: `artifacts/bug-loop/BREAKER` if it exists (quote it), and from
   the newest `tools/gate/reports/bugloop-*.json` (not `bugloop-dry-*`) the `parked` and `abuse`
-  outcomes.
+  outcomes. `python tools/bugs/bug_loop.py status` (from the main checkout) shows what the loop is
+  doing right now, its busy/idle/paused mode, and whether its process still runs.
 
 ## Network Protocol Changes
 
@@ -291,8 +292,11 @@ matters:
 - **Realm and world servers** — single-threaded io, and they *depend* on it. Cross-session
   access uses raw `Player*` taken from the managers in ~30 places. Raising either tier's thread
   count requires doing the login server's `shared_ptr` + `Post` work there first. Raising the world tier's thread count also needs a `dtNavMeshQuery` per thread, because instances share one per map.
-- **Database** — one connection per tier behind one worker thread. Call sites rely on the
-  implicit FIFO ordering that gives.
+- **Database** — login and realm use a `DatabasePool` (`src/shared/base/database_pool.h`,
+  `poolSize` connections, one thread each). Work is routed by key: same key, same FIFO queue,
+  so per-character/account ordering holds, but different keys run concurrently on separate
+  connections and can contend in InnoDB. Realm connections use READ COMMITTED to avoid gap-lock
+  deadlocks in "DELETE WHERE owner, then INSERT" saves; keep new multi-row saves keyed by owner.
 - **Nav mesh streaming (world server)** — nav mesh, static collision and water are loaded once per
   map (`MapStaticData`, handed out by `WorldInstanceManager`'s `MapStaticDataRegistry`) and shared by
   every instance of it; the first instance of a map starts a short-lived `nav::PageStreamer` thread

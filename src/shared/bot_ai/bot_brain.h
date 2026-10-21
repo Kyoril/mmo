@@ -17,6 +17,9 @@ namespace mmo
 	class BotSession;
 	class BotAiRegistry;
 	class GrindSpotIndex;
+	class NpcIndex;
+	class GrindSpotClaims;
+	class TalentBuildBook;
 
 	struct BotBrainSettings final
 	{
@@ -33,6 +36,21 @@ namespace mmo
 		std::string nonCombatStrategy { "grind_world" };
 		std::string combatStrategy { "grind_combat" };
 		std::string deadStrategy { "grind_dead" };
+
+		/// Strategies while the bot is in a party with someone it follows. The party combat
+		/// strategy is layered over the ordinary combat one rather than replacing it.
+		std::string partyNonCombatStrategy { "party_world" };
+		std::string partyCombatStrategy { "party_combat" };
+
+		/// Looting, equipping and selling, layered over whichever out-of-combat strategy runs.
+		std::string economyStrategy { "economy_world" };
+
+		/// Talents and other character progression, also out of combat.
+		std::string progressionStrategy { "progression_world" };
+
+		/// Heals and buffs from the bot's own spell book, layered over both engines.
+		std::string supportNonCombatStrategy { "support_world" };
+		std::string supportCombatStrategy { "support_combat" };
 	};
 
 	/// One bot's decision making: the context it thinks with, the engines it thinks in, and the
@@ -59,6 +77,22 @@ namespace mmo
 		/// Points the bot at the shared spawn index. Without one it can still fight what walks
 		/// into it, but it will never go looking.
 		void SetGrindSpots(const GrindSpotIndex* spots);
+
+		/// Points the bot at the shared index of vendors and other service NPCs.
+		void SetNpcIndex(const NpcIndex* npcs);
+
+		/// Points the bot at the swarm's shared table of who works which grind spot.
+		void SetGrindClaims(GrindSpotClaims* claims);
+
+		/// Sets the bot's group role and the shared talent builds it picks talents from.
+		void SetRole(const std::string& role, const TalentBuildBook* builds);
+
+		/// Makes the bot follow and fight alongside a party member, or - with 0 - go back to
+		/// playing alone. Swaps the engines' strategies only when the answer changes, so it is
+		/// cheap to call every frame.
+		void SetFollowTarget(uint64 guid);
+
+		[[nodiscard]] bool IsFollowing() const { return m_context.GetFollowState().IsFollowing(); }
 
 		/// Runs one decision if enough time has passed since the last one. Cheap to call every
 		/// frame; that is how it is meant to be used.
@@ -88,5 +122,8 @@ namespace mmo
 		uint64 m_lastLiveTargetGuid { 0 };
 		scoped_connection m_swingErrorConnection;
 		scoped_connection m_swingRecoveredConnection;
+		scoped_connection m_lootOpenedConnection;
+		scoped_connection m_lootFailedConnection;
+		scoped_connection m_inventoryErrorConnection;
 	};
 }

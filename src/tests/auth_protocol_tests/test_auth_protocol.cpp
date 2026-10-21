@@ -106,3 +106,24 @@ TEST_CASE("AuthPacketAcceptsMaximumSizeAnnouncement", "[auth_protocol]")
 	// Incomplete, not Malformed: the size is legal, the body simply has not arrived.
 	CHECK(auth::IncomingPacket::Start(packet, src) == ReceiveState::Incomplete);
 }
+
+TEST_CASE("RealmPopulationBandsAreRelativeToCapacity", "[auth_protocol]")
+{
+	// Capacity 1000: Low below 250, Medium below 600, High below 900, Full from 900.
+	CHECK(auth::GetRealmPopulation(0, 1000) == auth::realm_population::Low);
+	CHECK(auth::GetRealmPopulation(249, 1000) == auth::realm_population::Low);
+	CHECK(auth::GetRealmPopulation(250, 1000) == auth::realm_population::Medium);
+	CHECK(auth::GetRealmPopulation(599, 1000) == auth::realm_population::Medium);
+	CHECK(auth::GetRealmPopulation(600, 1000) == auth::realm_population::High);
+	CHECK(auth::GetRealmPopulation(899, 1000) == auth::realm_population::High);
+	CHECK(auth::GetRealmPopulation(900, 1000) == auth::realm_population::Full);
+	CHECK(auth::GetRealmPopulation(5000, 1000) == auth::realm_population::Full);
+
+	// The same count reads differently on a smaller realm.
+	CHECK(auth::GetRealmPopulation(30, 100) == auth::realm_population::Medium);
+
+	// No capacity means full; huge counts must not overflow into a lower band.
+	CHECK(auth::GetRealmPopulation(0, 0) == auth::realm_population::Full);
+	CHECK(auth::GetRealmPopulation(0xFFFFFFFF, 0xFFFFFFFF) == auth::realm_population::Full);
+	CHECK(auth::GetRealmPopulation(0xFFFFFFFF, 1000000) == auth::realm_population::Full);
+}

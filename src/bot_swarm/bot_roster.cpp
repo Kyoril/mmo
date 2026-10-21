@@ -78,6 +78,25 @@ namespace mmo
 		return name;
 	}
 
+	std::string DefaultBotRole(const uint8 characterClass, const uint32 index)
+	{
+		// Class ids from the class data: 1 warrior, 2 cleric.
+		constexpr uint8 Warrior = 1;
+		constexpr uint8 Cleric = 2;
+
+		if (characterClass == Cleric)
+		{
+			return "healer";
+		}
+
+		if (characterClass == Warrior)
+		{
+			return (index / 5) % 2 == 0 ? "tank" : "dps";
+		}
+
+		return "dps";
+	}
+
 	std::vector<BotRosterEntry> BuildRoster(
 		const uint32 count,
 		const std::string& accountPrefix,
@@ -109,6 +128,7 @@ namespace mmo
 			} while (!usedNames.insert(entry.characterName).second && attempt < 64);
 
 			entry.characterClass = static_cast<uint8>(classCount == 0 ? 1 : (index % classCount));
+			entry.role = DefaultBotRole(entry.characterClass, index);
 			entry.gender = static_cast<uint8>((entry.seed >> 3) & 1u);
 			entry.race = 0;
 
@@ -165,6 +185,7 @@ namespace mmo
 			entry.characterName = item.value("characterName", std::string());
 			entry.race = static_cast<uint8>(item.value("race", 0u));
 			entry.characterClass = static_cast<uint8>(item.value("class", 1u));
+			entry.role = item.value("role", DefaultBotRole(entry.characterClass, entry.index));
 			entry.gender = static_cast<uint8>(item.value("gender", 0u));
 			entry.targetLevel = item.value("targetLevel", 1u);
 			entry.seed = item.value("seed", 0u);
@@ -193,6 +214,7 @@ namespace mmo
 			item["characterName"] = entry.characterName;
 			item["race"] = entry.race;
 			item["class"] = entry.characterClass;
+			item["role"] = entry.role;
 			item["gender"] = entry.gender;
 			item["targetLevel"] = entry.targetLevel;
 			item["seed"] = entry.seed;

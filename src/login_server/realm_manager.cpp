@@ -130,4 +130,18 @@ namespace mmo
 			}
 		}
 	}
+
+	void RealmManager::NotifyRealmCapacityChanged(uint32 realmId, uint32 capacity)
+	{
+		std::scoped_lock scopedLock{ m_realmsMutex };
+
+		for (const auto& realm : m_realms)
+		{
+			if (realm->IsAuthentificated() && realm->GetRealmId() == realmId)
+			{
+				realm->SetCapacity(capacity);
+				break;
+			}
+		}
+	}
 }

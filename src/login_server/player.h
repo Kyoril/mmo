@@ -133,6 +133,7 @@ namespace mmo
 		// Published once the session key is in place. See IsAuthenticated for why this exists
 		// rather than a check on m_sessionKey.
 		std::atomic<bool> m_authenticated{ false };
+		uint8 m_gmLevel = 0;					// GM level of the account (set on logon challenge)
 		std::set<uint32> m_accountFeatureIds;	// Active account feature ids (loaded after login; used for realm visibility)
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;

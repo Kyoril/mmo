@@ -114,6 +114,7 @@ AURA_TYPE_NAMES = {
     38: "ModHealthRegenPercent",
     39: "ModPowerRegenPercent",
     40: "ModCritChanceTaken",
+    41: "ModCastingManaRegenPercent",
 }
 
 SPELL_ATTRIBUTE_FLAGS_0 = {

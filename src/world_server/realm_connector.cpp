@@ -1,5 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
+#include "base/crash_context.h"
+#include "game/gm_flags.h"
 #include "realm_connector.h"
 
 #include "player.h"
@@ -773,6 +775,12 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		characterObject->Set<uint32>(object_fields::Energy, characterData.energy);
 		characterObject->SetIsGameMaster(characterData.isGameMaster);
 
+		// Persistent GM state (the realm already cleared it for accounts without a gm level). Applied
+		// before the character enters the instance so an invisible observer is never spawned to
+		// other players and never counted as an instance player.
+		characterObject->SetGodmode((characterData.gmFlags & gm_flags::Godmode) != 0);
+		characterObject->SetGmInvisible((characterData.gmFlags & gm_flags::Invisible) != 0);
+
 		characterObject->ClearFieldChanges();
 
 		// Create a new player object
@@ -975,12 +983,14 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		uint32 mapId;
 		Vector3 position;
 		float facingRadianValue;
+		InstanceId instanceId{};
 
 		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint32>(mapId)
 			>> io::read<float>(position.x)
 			>> io::read<float>(position.y)
 			>> io::read<float>(position.z)
-			>> io::read<float>(facingRadianValue)))
+			>> io::read<float>(facingRadianValue)
+			>> instanceId))
 		{
 			ELOG("Failed to read CHARACTER_LOCATION_REQUEST packet");
 			return PacketParseResult::Disconnect;
@@ -991,6 +1001,15 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		if (!player)
 		{
 			WLOG("Received teleport request for non-connected player character " << log_hex_digit(characterId));
+			return PacketParseResult::Pass;
+		}
+
+		// A GM following a player into another copy of the same dungeon map: the in-instance
+		// relocation would keep them in their own copy, so force a real transfer.
+		const WorldInstance* current = player->GetGameUnit().GetWorldInstance();
+		if (!instanceId.is_nil() && current && current->GetMapId() == mapId && current->GetId() != instanceId)
+		{
+			player->BeginMapTransfer(mapId, position, Radian(facingRadianValue));
 			return PacketParseResult::Pass;
 		}
 
@@ -1258,6 +1277,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 
 	PacketParseResult RealmConnector::connectionPacketReceived(auth::IncomingPacket& packet)
 	{
+		const CrashContextScope crashContext("realm packet 0x%02x", static_cast<uint32>(packet.GetId()));
 		return HandleIncomingPacket(packet);
 	}
 

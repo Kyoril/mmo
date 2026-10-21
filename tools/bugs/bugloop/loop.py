@@ -12,7 +12,7 @@ import re
 import traceback
 import urllib.error
 
-from . import ci_runs, github, gitops, guard, inputs, notify, state as loop_state, verdicts, verification
+from . import ci_runs, github, gitops, guard, inputs, notify, state as loop_state, status as loop_status, verdicts, verification
 from .claude import REVIEW_TOOLS, TRIAGE_TOOLS, ClaudeError
 
 CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -66,6 +66,9 @@ ANNOUNCED_ELSEWHERE = ("shipped", "shipped-by-maintainer", "refix-limit", "shipp
 # Per-attempt outcomes of the open phase's emergency ticket: the CI messages say what matters,
 # once per event, never per attempt.
 EMERGENCY_QUIET = ("fix-started", "interrupted", "needs-info", "loop-error", "claimed-elsewhere")
+# The note in gate.json of a candidate that parks for other reasons: its gate run would change
+# nothing (a ship decision gates the merge anyway), so it is skipped to get to the next bug sooner.
+GATE_SKIPPED = "skipped: the candidate parks for other reasons; a ship decision runs the fast gate on the merge"
 
 
 class WorktreeUnavailable(RuntimeError):
@@ -138,16 +141,18 @@ class DryRunApi:
 
 def decide(fix, review, guard_result, proof, gate):
 	"""Every reason that forbids auto-ship. Empty means eligible; the breaker, the daily cap
-	and the freeze window are checked at ship time."""
+	and the freeze window are checked at ship time. `gate` None: not run."""
 	reasons = []
-	if fix.get("confidence") != "high":
+	# Medium confidence ships when a regression test proves the fix (fails before, passes after).
+	proven = proof is not None and proof["ok"]
+	if fix.get("confidence") != "high" and not (fix.get("confidence") == "medium" and proven):
 		reasons.append("fixer confidence is {}".format(fix.get("confidence")))
 	reasons.extend(verdicts.review_blockers(review))
 	reasons.extend("guard: " + reason for reason in guard_result["reasons"])
 	if proof is not None and not proof["ok"]:
 		reasons.append("proof: " + proof["reason"])
-	if not gate["ok"]:
-		reasons.append("the full gate is red")
+	if gate is not None and not gate["ok"]:
+		reasons.append("the fast gate is red")
 	return reasons
 
 
@@ -176,6 +181,11 @@ class BugLoop:
 		# GitHub Actions client of the CI watch; None turns the watch off.
 		self.github = github
 		self._backfilled = False
+		# status.json: what the loop does right now, for `bug_loop.py status`.
+		self._status_name = loop_status.DRY_STATUS_FILE if dry_run else loop_status.STATUS_FILE
+		self._started_at = clock().isoformat()
+		self._stage_key = None
+		self._stage_since = self._started_at
 
 	# ---- small helpers
 
@@ -204,6 +214,7 @@ class BugLoop:
 	def _finish(self, bug_id, outcome, announce=True, **details):
 		self.state.mark_attempted(bug_id, outcome)
 		self.state.record(bug_id, outcome, **details)
+		self._count_for_mode(outcome)
 		self.log("bug {}: {} {}".format(bug_id, outcome, json.dumps(details, default=str) if details else ""))
 		if announce:
 			self._announce(bug_id, outcome, details)
@@ -222,6 +233,81 @@ class BugLoop:
 		except Exception:  # a notification must never stop the loop
 			self.log(traceback.format_exc())
 
+	# ---- status and mode
+
+	def _stage(self, stage, bug_id=None, branch=None, detail="", until=None):
+		"""Rewrites status.json. A status that cannot be written never stops the loop."""
+		try:
+			now = self.clock()
+			if (stage, bug_id) != self._stage_key:
+				self._stage_key = (stage, bug_id)
+				self._stage_since = now.isoformat()
+			outcomes = self.state.data["outcomes"]
+			next_fix = self.state.next_fix()
+			snapshot = {
+				"pid": os.getpid(),
+				"dry_run": self.dry_run,
+				"started_at": self._started_at,
+				"updated_at": now.isoformat(),
+				"stage": stage,
+				"stage_since": self._stage_since,
+				"bug": bug_id,
+				"branch": branch,
+				"summary": self._summary(bug_id) if bug_id else "",
+				"detail": detail,
+				"until": until.isoformat() if until else None,
+				"mode": self.state.data.get("mode"),
+				# The next bug to fix first, then the rest in queue order.
+				"fix_queue": sorted((item["bug"] for item in self.state.data["fix_queue"]), key=lambda bug: bug != next_fix),
+				"ship_queue": len(self.state.data["ship_queue"]),
+				"invocations": self.state.data["invocations"],
+				"budget": self.config.invocation_budget_per_day,
+				"autoships": self.state.data["autoships"],
+				"autoship_cap": self.config.autoship_cap_per_day,
+				"breaker": loop_state.breaker_active(self.artifacts_dir),
+				"develop_red": self._develop_red(),
+				"last_outcome": outcomes[-1] if outcomes else None,
+			}
+			loop_status.write(self.artifacts_dir, snapshot, self._status_name)
+		except Exception:
+			self.log(traceback.format_exc())
+
+	def _update_mode(self):
+		"""busy while bugs are queued and the budget allows a fix, paused while they are queued but
+		the budget is used up, idle with an empty queue. Each change is logged and announced once;
+		the mode lives in the state, so a restart does not announce it again."""
+		queue = len(self.state.data["fix_queue"])
+		reason = ""
+		if not queue:
+			name = "idle"
+		elif not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+			name = "paused"
+			reason = "daily Claude budget used up ({} of {}); resumes at 00:00 UTC".format(
+				self.state.data["invocations"], self.config.invocation_budget_per_day)
+		else:
+			name = "busy"
+		previous = self.state.data.get("mode") or {}
+		if previous.get("name") == name:
+			return
+		now = self.clock()
+		self.state.data["mode"] = {"name": name, "since": now.isoformat(), "reason": reason, "counts": {}}
+		self.log("mode: {} -> {}{}".format(previous.get("name") or "none", name, " ({})".format(reason) if reason else ""))
+		# The first mode after an upgrade is only recorded: nothing changed for the maintainer.
+		if self.dry_run or not previous.get("name") or not self.config.notify_status_changes:
+			return
+		poll = min(self.config.poll_seconds, self.config.ci_poll_seconds) if self.github else self.config.poll_seconds
+		try:
+			self.notifier.send(notify.mode_message(name, previous, now, queue, reason, max(1, poll // 60)))
+		except Exception:  # a notification must never stop the loop
+			self.log(traceback.format_exc())
+
+	def _count_for_mode(self, outcome):
+		"""Counts a finished bug for the current mode; the idle message reports the busy stretch."""
+		mode = self.state.data.get("mode")
+		if mode is not None:
+			counts = mode.setdefault("counts", {})
+			counts[outcome] = counts.get(outcome, 0) + 1
+
 	# ---- one poll
 
 	def poll_once(self):
@@ -229,6 +315,7 @@ class BugLoop:
 		now = self.clock()
 		today = now.strftime("%Y-%m-%d")
 		self.state.roll(today)
+		self._stage("polling")
 		if self.state.data.get("pending_summary"):
 			if not self.dry_run:
 				self._send_daily_summary(self.state.data["pending_summary"])
@@ -249,6 +336,8 @@ class BugLoop:
 			self._reconcile_parked()
 		self._ship_queued(now)
 		worked = self._triage_new() or worked
+		# Before the fix below, which can take an hour: a backlog that just appeared is announced now.
+		self._update_mode()
 		if not self.dry_run and self.github is not None:
 			self._check_pending_ci(now)
 			# The emergency ticket goes before every other bug; the ordinary fix waits for the next poll.
@@ -286,6 +375,7 @@ class BugLoop:
 		return self._end_poll(worked)
 
 	def _end_poll(self, worked):
+		self._update_mode()
 		self._write_daily_report()
 		self.state.save()
 		return worked
@@ -301,7 +391,9 @@ class BugLoop:
 			if self.clock().strftime("%Y-%m-%d") != day:
 				return RESTART_EXIT_CODE
 			if not worked:
-				sleep(min(self.config.poll_seconds, self.config.ci_poll_seconds) if self.github else self.config.poll_seconds)
+				seconds = min(self.config.poll_seconds, self.config.ci_poll_seconds) if self.github else self.config.poll_seconds
+				self._stage("sleeping", until=self.clock() + datetime.timedelta(seconds=seconds))
+				sleep(seconds)
 
 	def _safe_release(self, bug_id, note, status="triaged", **fields):
 		try:
@@ -378,6 +470,7 @@ class BugLoop:
 			if other.get("_id") != bug.get("_id") and other.get("status") in verdicts.OPEN_STATUSES]
 
 	def _triage(self, bug_id):
+		self._stage("triaging", bug_id)
 		bug = self.api.show(bug_id)
 		self._write(bug_id, "report.json", bug)
 		related = self._related(bug)
@@ -439,6 +532,7 @@ class BugLoop:
 			raise ValueError("an emergency fix for {} which is not the recorded emergency ticket".format(bug_id))
 		# Before the bug is touched (queue, claim, attempt): a worktree that cannot reach develop
 		# raises WorktreeUnavailable and leaves everything as it was for a later poll.
+		self._stage("preparing", bug_id)
 		base = self._prepare_worktree()
 		self.state.drop_fix(bug_id)
 		self.state.mark_attempted(bug_id, "fix-started")
@@ -523,6 +617,8 @@ class BugLoop:
 			fix_input = inputs.build_emergency_fix_input(bug_id, emergency, branch, fix_path, previous=previous)
 		else:
 			fix_input = inputs.build_fix_input(bug, verdict, branch, fix_path, guidance=guidance, previous=previous, feature=feature)
+		self._stage("fixing", bug_id, branch, detail="guided refix" if guidance else "feature" if feature else
+			"emergency fix" if emergency is not None else "")
 		try:
 			result = self.runner.agent(self.prompts["fix"], fix_input,
 				self.worktree.path, self.config.fix_timeout_seconds, self.config.fix_max_usd)
@@ -584,9 +680,12 @@ class BugLoop:
 			if emergency is not None:
 				self._park_emergency(bug_id, "parked: " + reasons[0])
 			return
+		self._stage("reviewing", bug_id, branch)
 		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"], guidance=guidance, feature=feature,
 			ci_failure=(emergency.get("excerpt") or "(no log)") if emergency is not None else None)
+		self._stage("waiting-for-gate-lock", bug_id, branch)
 		with self.lock():
+			self._stage("proving", bug_id, branch)
 			proof = None
 			if fix["regression_test"]["kind"] == "none":
 				if not proof_exempt(changes):
@@ -597,9 +696,18 @@ class BugLoop:
 					# The CI failure does not reproduce on Windows; the Linux CI run on the pushed head is the proof.
 					proof = dict(proof, ok=True, waived="the test passed before the fix on Windows; the Linux CI run is the proof")
 				self._write(bug_id, "proof.json", proof)
-			self.worktree.checkout(head)
-			gate = self.verifier.gate("full")
-			self._write(bug_id, "gate.json", gate)
+			# A candidate that parks anyway skips the gate; emergency fixes and features always run it
+			# (the CI push and the "Feature ready" ping rely on a green result).
+			doomed = decide(fix, review, guard_result, proof, None)
+			if doomed and emergency is None and not self.state.is_feature(bug_id):
+				gate = None
+				self._write(bug_id, "gate.json", {"ok": None, "tier": "fast", "skipped": GATE_SKIPPED})
+			else:
+				self._stage("gating", bug_id, branch)
+				self.worktree.checkout(head)
+				# E2E needs the local MySQL and runs again in the nightly before anything is deployed.
+				gate = self.verifier.gate("fast")
+				self._write(bug_id, "gate.json", gate)
 		reasons = decide(fix, review, guard_result, proof, gate)
 		if emergency is not None:
 			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
@@ -1042,6 +1150,7 @@ class BugLoop:
 		else:
 			label = "maintainer decision" if by_maintainer else "gate green at " + head[:8]
 		message = "Merge {} (bug-loop, {})\n\nBug {}: {}\n\n{}".format(branch, label, bug_id, summary, CO_AUTHOR)
+		self._stage("shipping", bug_id, branch, detail=label)
 		with self.lock():
 			result = self.worktree.ship(branch, head, message, lambda: self.verifier.gate("fast")["ok"])
 		if not result.ok:

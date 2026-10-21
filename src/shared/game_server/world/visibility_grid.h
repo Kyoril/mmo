@@ -5,6 +5,8 @@
 #include "tile_area.h"
 #include "math/vector3.h"
 
+#include <functional>
+
 
 namespace mmo
 {
@@ -28,6 +30,10 @@ namespace mmo
 
 		/// @return The tile at the given index. An index outside the grid is clamped to the nearest edge tile.
 		virtual VisibilityTile& RequireTile(const TileIndex2D &position) = 0;
+
+		/// Calls the handler for every tile created so far. Never creates tiles, unlike GetTile.
+		/// @param handler Called once per existing tile.
+		virtual void ForEachExistingTile(const std::function<void(VisibilityTile&)>& handler) = 0;
 	};
 
 	

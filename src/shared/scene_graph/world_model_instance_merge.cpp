@@ -12,9 +12,11 @@
 #include "sub_mesh.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -77,6 +79,7 @@ namespace mmo
 
 		bool ReadSubMesh(const SubMesh& subMesh, SubMeshGeometry& out)
 		{
+			PROFILE_SCOPE("WMO: ReadSubMesh (GPU readback)");
 			const VertexData& vertexData = *subMesh.vertexData;
 			const IndexData& indexData = *subMesh.indexData;
 			const VertexBufferPtr& vertexBuffer = vertexData.vertexBufferBinding->GetBuffer(0);
@@ -128,6 +131,7 @@ namespace mmo
 
 		MeshPtr CreateMergedMesh(const String& name, std::map<String, MaterialBucket>& buckets)
 		{
+			PROFILE_SCOPE("WMO: CreateMergedMesh");
 			if (buckets.empty())
 			{
 				return nullptr;
@@ -195,23 +199,51 @@ namespace mmo
 			return mesh;
 		}
 
-		std::shared_ptr<WorldModelMergedGeometry> BuildMerged(const WorldModel& model)
+		/// @brief Merges a world model's groups, all at once or a few groups per call.
+		class MergedGeometryBuilder final
 		{
-			auto merged = std::make_shared<WorldModelMergedGeometry>();
-			merged->groups.resize(model.GetGroupCount());
-
-			// Read back every distinct submesh once, however often it is placed
-			std::map<std::pair<const Mesh*, uint16>, SubMeshGeometry> readBack;
-
-			for (size_t groupIndex = 0; groupIndex < model.GetGroupCount(); ++groupIndex)
+		public:
+			explicit MergedGeometryBuilder(const WorldModel& model)
+				: m_model(model)
+				, m_merged(std::make_shared<WorldModelMergedGeometry>())
 			{
+				m_merged->groups.resize(model.GetGroupCount());
+			}
+
+			/// @brief Merges up to maxGroups more groups. Returns true once every group is merged.
+			bool Step(const size_t maxGroups)
+			{
+				PROFILE_SCOPE("WMO: BuildMerged");
+				for (size_t built = 0; built < maxGroups && m_nextGroup < m_model.GetGroupCount(); ++built)
+				{
+					BuildGroup(m_nextGroup++);
+				}
+
+				if (m_nextGroup < m_model.GetGroupCount())
+				{
+					return false;
+				}
+
+				// The read-back copies are only needed while merging
+				m_readBack.clear();
+				return true;
+			}
+
+			[[nodiscard]] const std::shared_ptr<WorldModelMergedGeometry>& GetResult() const { return m_merged; }
+
+		private:
+			void BuildGroup(const size_t groupIndex)
+			{
+				const WorldModel& model = m_model;
+				auto& readBack = m_readBack;
+
 				const WorldModelGroup* group = model.GetGroup(groupIndex);
 				if (!group)
 				{
-					continue;
+					return;
 				}
 
-				auto& out = merged->groups[groupIndex];
+				auto& out = m_merged->groups[groupIndex];
 				std::map<String, MaterialBucket> structure;
 				std::map<String, MaterialBucket> detail;
 
@@ -278,26 +310,232 @@ namespace mmo
 				out.detail = CreateMergedMesh(prefix + "_detail", detail);
 			}
 
-			return merged;
-		}
+			const WorldModel& m_model;
+			std::shared_ptr<WorldModelMergedGeometry> m_merged;
+			size_t m_nextGroup = 0;
 
-		/// @brief Merged geometry per world model, shared by all live instances of it.
-		std::shared_ptr<const WorldModelMergedGeometry> GetOrBuildMerged(const WorldModelPtr& model)
+			/// Every distinct submesh is read back once, however often it is placed
+			std::map<std::pair<const Mesh*, uint16>, SubMeshGeometry> m_readBack;
+		};
+
+		size_t GetMeshBytes(const MeshPtr& mesh)
 		{
-			static std::mutex s_mutex;
-			static std::unordered_map<const WorldModel*, std::weak_ptr<const WorldModelMergedGeometry>> s_cache;
-
-			std::scoped_lock lock(s_mutex);
-			auto& slot = s_cache[model.get()];
-			if (auto existing = slot.lock())
+			if (!mesh)
 			{
-				return existing;
+				return 0;
 			}
 
-			std::shared_ptr<const WorldModelMergedGeometry> built = BuildMerged(*model);
-			slot = built;
-			return built;
+			size_t bytes = 0;
+			for (uint16 i = 0; i < mesh->GetSubMeshCount(); ++i)
+			{
+				const SubMesh& subMesh = mesh->GetSubMesh(i);
+				if (subMesh.vertexData)
+				{
+					bytes += subMesh.vertexData->vertexCount * sizeof(WorldModelMergeVertex);
+				}
+				if (subMesh.indexData && subMesh.indexData->indexBuffer)
+				{
+					const size_t indexSize = subMesh.indexData->indexBuffer->GetIndexSize() == IndexBufferSize::Index_16 ? 2 : 4;
+					bytes += subMesh.indexData->indexCount * indexSize;
+				}
+			}
+
+			return bytes;
 		}
+
+		/// @brief Merged geometry per world model, shared by all live instances of it, and kept for a
+		///        while after the last one is gone (see WorldModelInstance::SetMergedGeometryRetention).
+		class MergedGeometryCache final
+		{
+		public:
+			/// @brief Returns the model's merged geometry, merging whatever is not merged yet.
+			std::shared_ptr<const WorldModelMergedGeometry> GetOrBuild(const WorldModelPtr& model)
+			{
+				return Advance(model, std::numeric_limits<size_t>::max());
+			}
+
+			/// @brief Merges up to maxGroups more groups of the model. Returns its merged geometry once
+			///        complete, null while groups remain.
+			std::shared_ptr<const WorldModelMergedGeometry> Advance(const WorldModelPtr& model, const size_t maxGroups)
+			{
+				std::scoped_lock lock(m_mutex);
+
+				auto it = m_entries.find(model.get());
+				if (it != m_entries.end())
+				{
+					// The key is a raw pointer, so a world model that died may have been replaced by
+					// another one at the same address - its geometry must not be handed out.
+					if (it->second.model.lock() == model)
+					{
+						if (auto existing = it->second.Get())
+						{
+							it->second.lastUse = ++m_useCounter;
+							return existing;
+						}
+					}
+
+					m_entries.erase(it);
+				}
+
+				auto& builder = m_builders[model.get()];
+				if (!builder || builder->model.lock() != model)
+				{
+					builder = std::make_unique<PendingBuild>(model);
+				}
+
+				if (!builder->builder.Step(maxGroups))
+				{
+					return nullptr;
+				}
+
+				std::shared_ptr<const WorldModelMergedGeometry> built = builder->builder.GetResult();
+				m_builders.erase(model.get());
+
+				Entry entry;
+				entry.model = model;
+				entry.weak = built;
+				entry.lastUse = ++m_useCounter;
+				for (const auto& group : built->groups)
+				{
+					entry.bytes += GetMeshBytes(group.structure) + GetMeshBytes(group.detail);
+				}
+				if (m_retentionBytes > 0)
+				{
+					entry.strong = built;
+				}
+				m_entries.emplace(model.get(), std::move(entry));
+
+				Trim();
+				return built;
+			}
+
+			void SetRetention(const size_t bytes)
+			{
+				std::scoped_lock lock(m_mutex);
+				m_retentionBytes = bytes;
+				if (bytes == 0)
+				{
+					for (auto& [key, entry] : m_entries)
+					{
+						entry.strong.reset();
+					}
+				}
+
+				Trim();
+			}
+
+		private:
+			/// A merge in progress. Holds the model weakly, like the entries.
+			struct PendingBuild
+			{
+				explicit PendingBuild(const WorldModelPtr& source)
+					: model(source)
+					, builder(*source)
+				{
+				}
+
+				std::weak_ptr<WorldModel> model;
+				MergedGeometryBuilder builder;
+			};
+
+			struct Entry
+			{
+				std::weak_ptr<WorldModel> model;
+				std::weak_ptr<const WorldModelMergedGeometry> weak;
+
+				/// Set while retention is on: keeps the geometry alive after its last instance.
+				std::shared_ptr<const WorldModelMergedGeometry> strong;
+
+				size_t bytes = 0;
+				uint64 lastUse = 0;
+
+				[[nodiscard]] std::shared_ptr<const WorldModelMergedGeometry> Get() const
+				{
+					return strong ? strong : weak.lock();
+				}
+
+				/// Whether only the cache keeps the geometry alive.
+				[[nodiscard]] bool IsUnused() const
+				{
+					return strong && strong.use_count() == 1;
+				}
+			};
+
+			/// Drops expired entries, then releases the least recently used unused geometry until the
+			/// unused geometry fits the retention budget.
+			void Trim()
+			{
+				std::erase_if(m_builders, [](const auto& pending) { return pending.second->model.expired(); });
+
+				size_t unusedBytes = 0;
+				for (auto it = m_entries.begin(); it != m_entries.end();)
+				{
+					if (!it->second.Get())
+					{
+						it = m_entries.erase(it);
+						continue;
+					}
+
+					if (it->second.IsUnused())
+					{
+						unusedBytes += it->second.bytes;
+					}
+					++it;
+				}
+
+				while (unusedBytes > m_retentionBytes)
+				{
+					auto oldest = m_entries.end();
+					for (auto it = m_entries.begin(); it != m_entries.end(); ++it)
+					{
+						if (it->second.IsUnused() && (oldest == m_entries.end() || it->second.lastUse < oldest->second.lastUse))
+						{
+							oldest = it;
+						}
+					}
+
+					if (oldest == m_entries.end())
+					{
+						break;
+					}
+
+					unusedBytes -= oldest->second.bytes;
+					m_entries.erase(oldest);
+				}
+			}
+
+			std::mutex m_mutex;
+			std::unordered_map<const WorldModel*, Entry> m_entries;
+			std::unordered_map<const WorldModel*, std::unique_ptr<PendingBuild>> m_builders;
+			size_t m_retentionBytes = 0;
+			uint64 m_useCounter = 0;
+		};
+
+		MergedGeometryCache& GetMergedGeometryCache()
+		{
+			static MergedGeometryCache s_cache;
+			return s_cache;
+		}
+
+		std::shared_ptr<const WorldModelMergedGeometry> GetOrBuildMerged(const WorldModelPtr& model)
+		{
+			return GetMergedGeometryCache().GetOrBuild(model);
+		}
+	}
+
+	std::shared_ptr<const void> WorldModelInstance::PrewarmMergedGeometry(const WorldModelPtr& model, const size_t maxGroups)
+	{
+		if (!model)
+		{
+			return nullptr;
+		}
+
+		return GetMergedGeometryCache().Advance(model, std::max<size_t>(1, maxGroups));
+	}
+
+	void WorldModelInstance::SetMergedGeometryRetention(const size_t bytes)
+	{
+		GetMergedGeometryCache().SetRetention(bytes);
 	}
 
 	bool WorldModelInstance::CanMergeMesh(const Mesh& mesh)
@@ -326,6 +564,7 @@ namespace mmo
 
 	void WorldModelInstance::BuildMergedGeometry(Scene& scene)
 	{
+		PROFILE_SCOPE("WMO: BuildMergedGeometry");
 		if (!m_worldModel)
 		{
 			return;

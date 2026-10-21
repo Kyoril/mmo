@@ -67,6 +67,14 @@ namespace mmo
 		/// Set while a pending connection attempt should be discarded once it resolves (user cancelled).
 		bool m_cancelled = false;
 
+		/// Set between connectionEstablished(true) and connectionLost(): a receive is in flight, so
+		/// closing the socket is guaranteed to end in connectionLost().
+		bool m_sessionActive = false;
+
+		/// Realm to connect to once the current session has finished closing (realm switch from the
+		/// character screen). While set, the closing session does not fire Disconnected.
+		std::optional<RealmData> m_pendingRealm;
+
 		/// Reason the realm gave for terminating this session, if any. Cleared on each new connect.
 		std::optional<auth::SessionKickReason> m_kickReason;
 
@@ -324,6 +332,15 @@ namespace mmo
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Toggles damage immunity on the controlled character.
 		/// @param enable True to become immune to all incoming damage, false to restore normal damage.
 		void CheatGodmode(bool enable);
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Toggles game master invisibility on the controlled character.
+		/// @param enable True to hide the character from players and creatures, false to become visible again.
+		void CheatInvisible(bool enable);
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Ghosts an online player: you follow them into every
+		/// instance they enter, without being in their group, until one of you logs out.
+		/// @param playerName Name of the player to ghost, or empty to stop ghosting.
+		void CheatGhost(const String& playerName);
 
 		/// GAME MASTER only. Deals raw damage to the current target through the normal damage
 		///	path, so health-threshold triggers fire exactly as they would in a real fight.

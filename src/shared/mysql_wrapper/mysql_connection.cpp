@@ -95,6 +95,14 @@ namespace mmo
 				}
 			}
 
+			if (!info.initCommand.empty())
+			{
+				if (::mysql_options(GetHandle(), MYSQL_INIT_COMMAND, info.initCommand.c_str()) != 0)
+				{
+					return false;
+				}
+			}
+
 			MYSQL *const result = ::mysql_real_connect(GetHandle(),
 			                      info.host.c_str(),
 			                      info.user.c_str(),

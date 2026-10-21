@@ -335,7 +335,7 @@ namespace mmo
 					<< position.x << ", " << position.y << ", " << position.z << ")");
 
 				m_context->UpdateMovementInfo(m_realm->GetMovementInfo());
-				if (m_navService && effectiveMapId != 0)
+				if (m_navService)
 				{
 					static_cast<void>(m_navService->EnsureMapAvailable(effectiveMapId));
 				}

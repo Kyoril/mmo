@@ -67,6 +67,7 @@ bin/Debug2/
 /src/shared/deferred_shading/shaders/PS_Tonemap.h
 /src/shared/deferred_shading/shaders/PS_BloomDownsample.h
 /src/shared/deferred_shading/shaders/PS_BloomUpsample.h
+/src/shared/deferred_shading/shaders/CS_FogDepthTiles.h
 /src/shared/deferred_shading/shaders/CS_FogInject.h
 /src/shared/deferred_shading/shaders/CS_FogTemporal.h
 /src/shared/deferred_shading/shaders/CS_FogIntegrate.h

@@ -24,6 +24,7 @@
 #include "base/profiler.h"
 #include "client_data/project.h"
 #include "frame_ui/font_mgr.h"
+#include "graphics/graphics_device.h"
 #include "game/aura.h"
 #include "game/emote_defs.h"
 #include "game/spell.h"
@@ -298,6 +299,7 @@ namespace mmo
 		{
 			m_sceneNode->SetDerivedPosition(m_movementInfo.position);
 			m_sceneNode->SetDerivedOrientation(Quaternion(m_movementInfo.facing, Vector3::UnitY));
+			m_serverGroundPosition = m_movementInfo.position;
 
 			// Seed the remote movement queue with the spawn snapshot so the queue
 			// always has at least one anchor before the first movement packet arrives.
@@ -478,6 +480,21 @@ namespace mmo
 			{
 				m_nameComponentNode->SetFixedYawAxis(true);
 				m_nameComponentNode->LookAt(cam->GetDerivedPosition(), TransformSpace::World, Vector3::UnitZ);
+
+				// The name is a world-space quad sampled from a fixed-size font atlas. Close to the
+				// camera it would cover more screen pixels than the atlas has texels and turn blocky,
+				// so shrink it there to keep the glyphs at (at most) their native pixel size.
+				int32 viewportHeight = 0;
+				GraphicsDevice::Get().GetViewport(nullptr, nullptr, nullptr, &viewportHeight);
+				if (viewportHeight <= 0)
+				{
+					viewportHeight = 1080;
+				}
+
+				const float distance = (m_nameComponentNode->GetDerivedPosition() - cam->GetDerivedPosition()).GetLength();
+				const float worldUnitsPerScreenPixel = 2.0f * distance * std::tan(cam->GetFOVy().GetValueRadians() * 0.5f) / static_cast<float>(viewportHeight);
+				const float nameScale = std::clamp(worldUnitsPerScreenPixel / WorldTextComponent::WorldUnitsPerFontPixel, 0.05f, 1.0f);
+				m_nameComponentNode->SetScale(Vector3::UnitScale * nameScale);
 			}
 		}
 	}
@@ -505,7 +522,8 @@ namespace mmo
 			// For idle non-player units (NPCs without a path), correct ground height.
 			// Remote players apply ground correction inside UpdateRemoteMovement()
 			// after their dead-reckoning position is written to the scene node.
-			m_unitMovement->CorrectIdleGroundHeight(deltaTime);
+			m_unitMovement->CorrectIdleGroundHeight(deltaTime,
+				IdleGroundReferenceHeight(m_serverGroundPosition, m_sceneNode->GetDerivedPosition()));
 		}
 	}
 
@@ -629,6 +647,7 @@ namespace mmo
 		// extrapolation continues until the next packet arrives.
 		GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
+		m_serverGroundPosition = movementInfo.position;
 
 		if (IsControlledByLocalPlayer())
 		{
@@ -1145,9 +1164,10 @@ namespace mmo
 			std::ostringstream strm;
 			strm << GetName();
 
-			if (!m_creatureInfo.subname.empty())
+			const String subtitle = GetSubtitle();
+			if (!subtitle.empty())
 			{
-				strm << "\n<" << m_creatureInfo.subname << ">";
+				strm << "\n" << subtitle;
 			}
 
 			m_nameComponent->SetText(strm.str());
@@ -1762,6 +1782,14 @@ namespace mmo
 		// so the animation controller can run and animations reset properly.
 		if (m_pathTotalLength <= 0.0f)
 		{
+			// We already stand on the destination, so a target facing still applies: a creature
+			// evading home from its own spawn spot (stationary guards) or teleported home sends one.
+			if (m_targetRotation.has_value())
+			{
+				SetFacing(m_targetRotation.value());
+			}
+
+			m_serverGroundPosition = m_movementPath.back();
 			CompleteMovementPath(false);
 			return;
 		}
@@ -1819,9 +1847,10 @@ namespace mmo
 			// matches the server's expected movement target (the height is kept and follows
 			// the client's ground geometry).
 			m_sceneNode->SetPosition(Vector3(finalDestination.x, currentPosition.y, finalDestination.z));
+			m_serverGroundPosition = finalDestination;
 			if (m_unitMovement)
 			{
-				m_unitMovement->CorrectGroundHeight();
+				m_unitMovement->CorrectGroundHeight(5.0f, finalDestination.y);
 			}
 
 			CompleteMovementPath(true);
