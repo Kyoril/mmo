@@ -338,6 +338,8 @@ int main(int argc, char* arg[])
 	// from their stored collision recipes (editor-only CSRC chunk), saves them and exits.
 	// `--build-collision <asset.hmsh> [--build-collision ...]` does the same, but gives meshes without a
 	// recipe the default one (all render triangles) first, like Collision > Build for a fresh import.
+	// `--resave-mesh <asset.hmsh> [--resave-mesh ...]` loads the meshes and saves them again with
+	// their collision recipes, which bakes the load-time trim to four bone weights into the file.
 	// `--set-submesh-material <asset.hmsh> <submesh> <material> [...]` assigns a material to a
 	// submesh (by name, or index), saves the mesh with its collision recipe and exits.
 	// `--set-mesh-sounds <asset.hmsh> "<id>:<x>,<y>,<z>[:<volume>[:<maxDistance>]];..." [...]` replaces
@@ -450,6 +452,29 @@ int main(int argc, char* arg[])
 					if (std::string(args[j]) == "--stairs-to-ramp")
 					{
 						allSaved = mmo::MeshEditorInstance::StairsToRampInFile(args[j + 1]) && allSaved;
+					}
+				}
+
+				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--resave-mesh")
+			{
+				static std::ofstream resaveLog("resave_mesh.log", std::ios::out | std::ios::trunc);
+				static std::mutex resaveLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ resaveLogMutex };
+					resaveLog << entry.message << std::endl;
+				});
+
+				bool allSaved = true;
+				for (int j = 1; j + 1 < argCount; ++j)
+				{
+					if (std::string(args[j]) == "--resave-mesh")
+					{
+						allSaved = mmo::MeshEditorInstance::ResaveMeshFile(args[j + 1]) && allSaved;
 					}
 				}
 

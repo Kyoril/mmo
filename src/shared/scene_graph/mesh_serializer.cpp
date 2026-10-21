@@ -2,6 +2,8 @@
 
 #include "mesh_serializer.h"
 
+#include <cmath>
+#include <cstring>
 #include <ranges>
 
 #include "material_manager.h"
@@ -30,6 +32,48 @@ namespace mmo
 
 	/// Layout version of the SNDS chunk payload, written as its first byte.
 	static constexpr uint8 SoundEmittersChunkVersion = 1;
+
+	namespace
+	{
+		/// Reads size bytes in one source call. Element-wise reads cost one istream call each,
+		/// which made a character mesh load take tens of milliseconds.
+		bool ReadBlock(io::Reader& reader, void* dest, const size_t size)
+		{
+			if (!reader)
+			{
+				return false;
+			}
+
+			if (size > 0 && reader.getSource()->read(static_cast<char*>(dest), size) != size)
+			{
+				reader.setFailure();
+				return false;
+			}
+
+			return true;
+		}
+
+		/// Whether the source still holds size bytes. Checked before sizing a buffer from a count
+		/// in the file, so a corrupt count fails the read instead of allocating gigabytes.
+		bool HasBytes(const io::Reader& reader, const size_t size)
+		{
+			const io::ISource* source = reader.getSource();
+			return reader && source->position() <= source->size() && size <= source->size() - source->position();
+		}
+
+		bool AllFinite(const float* values, const size_t count)
+		{
+			for (size_t i = 0; i < count; ++i)
+			{
+				if (!std::isfinite(values[i]))
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+	}
 
 	void WriteVertexData(const VertexData& vertexData, io::Writer& writer)
 	{
@@ -627,41 +671,53 @@ namespace mmo
 				float u, v;
 			};
 
-			std::vector<VertexStruct> vertices(vertexCount);
+			// File layout per vertex: position, color, uvw, normal, binormal, tangent.
+			struct FileVertex
+			{
+				float position[3];
+				uint32 color;
+				float uvw[3];
+				float normal[3];
+				float binormal[3];
+				float tangent[3];
+			};
+			static_assert(sizeof(FileVertex) == 64);
 
-			VertexStruct* vert = vertices.data();
+			if (!HasBytes(reader, static_cast<size_t>(vertexCount) * sizeof(FileVertex)))
+			{
+				ELOG("Failed to read submesh vertex data");
+				return false;
+			}
+
+			std::vector<FileVertex> fileVertices(vertexCount);
+			if (!ReadBlock(reader, fileVertices.data(), fileVertices.size() * sizeof(FileVertex)))
+			{
+				ELOG("Failed to read submesh vertex data");
+				return false;
+			}
+
+			std::vector<VertexStruct> vertices(vertexCount);
 			for (uint32 i = 0; i < vertexCount; ++i)
 			{
-				if (!(reader
-					>> io::read<float>(vert->position.x)
-					>> io::read<float>(vert->position.y)
-					>> io::read<float>(vert->position.z)
-					
-					>> io::read<uint32>(vert->color)
-
-					>> io::read<float>(vert->u)
-					>> io::read<float>(vert->v)
-					>> io::skip<float>()
-					
-					>> io::read<float>(vert->normal.x)
-					>> io::read<float>(vert->normal.y)
-					>> io::read<float>(vert->normal.z)
-					
-					>> io::read<float>(vert->binormal.x)
-					>> io::read<float>(vert->binormal.y)
-					>> io::read<float>(vert->binormal.z)
-
-					>> io::read<float>(vert->tangent.x)
-					>> io::read<float>(vert->tangent.y)
-					>> io::read<float>(vert->tangent.z)))
+				const FileVertex& in = fileVertices[i];
+				// Like the float reads this replaces, reject NaN and infinity (the unused w is skipped unchecked).
+				if (!AllFinite(in.position, 3) || !AllFinite(in.uvw, 2) || !AllFinite(in.normal, 3) || !AllFinite(in.binormal, 3) || !AllFinite(in.tangent, 3))
 				{
+					reader.setFailure();
 					ELOG("Failed to read submesh vertex data");
 					return false;
 				}
 
-				bounds.Combine(vert->position);
+				VertexStruct& out = vertices[i];
+				out.position = Vector3(in.position[0], in.position[1], in.position[2]);
+				out.color = in.color;
+				out.u = in.uvw[0];
+				out.v = in.uvw[1];
+				out.normal = Vector3(in.normal[0], in.normal[1], in.normal[2]);
+				out.binormal = Vector3(in.binormal[0], in.binormal[1], in.binormal[2]);
+				out.tangent = Vector3(in.tangent[0], in.tangent[1], in.tangent[2]);
 
-				vert++;
+				bounds.Combine(out.position);
 			}
 
 			VertexBufferPtr bufferPtr = GraphicsDevice::Get().CreateVertexBuffer(vertexCount, subMesh.vertexData->vertexDeclaration->GetVertexSize(0), BufferUsage::StaticWriteOnly, vertices.data());
@@ -694,7 +750,7 @@ namespace mmo
 			if (indexSize == IndexBufferSize::Index_16)
 			{
 				std::vector<uint16> indices(indexCount, 0);
-				if (!(reader >> io::read_range(indices)))
+				if (!ReadBlock(reader, indices.data(), indices.size() * sizeof(uint16)))
 				{
 					ELOG("Failed to read submesh indices");
 					return false;
@@ -705,7 +761,7 @@ namespace mmo
 			else
 			{
 				std::vector<uint32> indices(indexCount, 0);
-				if (!(reader >> io::read_range(indices)))
+				if (!ReadBlock(reader, indices.data(), indices.size() * sizeof(uint32)))
 				{
 					ELOG("Failed to read submesh indices");
 					return false;
@@ -723,14 +779,31 @@ namespace mmo
 			return false;
 		}
 
+		// Packed in the file: uint32 vertex index, uint16 bone index, float weight.
+		constexpr size_t assignmentSize = sizeof(uint32) + sizeof(uint16) + sizeof(float);
+		if (!HasBytes(reader, static_cast<size_t>(vertexBoneAssignmentCount) * assignmentSize))
+		{
+			ELOG("Failed to read submesh vertexBoneAssignment");
+			return false;
+		}
+
+		std::vector<char> assignmentData(static_cast<size_t>(vertexBoneAssignmentCount) * assignmentSize);
+		if (!ReadBlock(reader, assignmentData.data(), assignmentData.size()))
+		{
+			ELOG("Failed to read submesh vertexBoneAssignment");
+			return false;
+		}
+
 		for (uint32 i = 0; i < vertexBoneAssignmentCount; ++i)
 		{
+			const char* data = &assignmentData[static_cast<size_t>(i) * assignmentSize];
 			VertexBoneAssignment assign;
-			if (!(reader
-				>> io::read<uint32>(assign.vertexIndex)
-				>> io::read<uint16>(assign.boneIndex)
-				>> io::read<float>(assign.weight)))
+			std::memcpy(&assign.vertexIndex, data, sizeof(uint32));
+			std::memcpy(&assign.boneIndex, data + sizeof(uint32), sizeof(uint16));
+			std::memcpy(&assign.weight, data + sizeof(uint32) + sizeof(uint16), sizeof(float));
+			if (!std::isfinite(assign.weight))
 			{
+				reader.setFailure();
 				ELOG("Failed to read submesh vertexBoneAssignment");
 				return false;
 			}
