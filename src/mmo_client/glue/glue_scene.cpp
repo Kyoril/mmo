@@ -74,6 +74,10 @@ namespace mmo
 
 		m_camera = m_scene->CreateCamera("Default");
 		m_cameraNode = &m_scene->CreateSceneNode("GlueCamera");
+
+		// Without a fixed yaw axis, LookAt turns the current orientation by the shortest arc every
+		// frame, so the camera picks up roll that never goes away (a tilted horizon).
+		m_cameraNode->SetFixedYawAxis(true, Vector3::UnitY);
 		m_scene->GetRootSceneNode().AddChild(*m_cameraNode);
 		m_cameraNode->AttachObject(*m_camera);
 
