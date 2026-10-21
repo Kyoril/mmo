@@ -486,6 +486,23 @@ namespace mmo
 		/// @return True if ground was found and position was corrected, false otherwise
 		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f, std::optional<float> referenceHeight = std::nullopt);
 
+		/// @brief Corrects the height of a remotely simulated player so it comes to rest where the
+		/// player's own client puts it.
+		/// @details The owning client stands its character on the floor with the collision capsule
+		///          (@ref FindFloor plus @ref AdjustFloorHeight), which leaves the feet a floor
+		///          distance above the surface and reacts to the shape of the ground under the
+		///          whole capsule, not just under its centre. Resolving the height with a single
+		///          downward ray at the unit's centre instead always ends up lower than that — by
+		///          a few centimetres on flat ground and by more on slopes, stairs and ledges —
+		///          so the observing client draws the character sunk into the floor. Settling with
+		///          the capsule removes that mismatch; the ray search stays as the fallback for
+		///          units that are too far from any floor for the capsule to reach one (large
+		///          dead-reckoning drift, or a unit that slipped through the geometry).
+		/// @param maxCorrectionDistance Maximum distance the fallback ray search looks for ground.
+		/// @param referenceHeight Optional authoritative height the fallback search band must cover.
+		/// @return True if a floor was found and the height corrected, false otherwise.
+		bool CorrectRemoteGroundHeight(float maxCorrectionDistance = 5.0f, std::optional<float> referenceHeight = std::nullopt);
+
 		/// @brief CorrectGroundHeight for a unit standing still (idle NPCs).
 		/// While the node sits exactly where the previous successful correction put it, the scene
 		/// query is skipped and only re-run every IdleGroundRecheckInterval seconds, so ground that
@@ -903,6 +920,11 @@ namespace mmo
 		/// @param bCheckRadius Whether to check radius constraints
 		/// @return True if perch result should be computed, false otherwise
 		[[nodiscard]] bool ShouldComputePerchResult(const CollisionHitResult& inHit, bool bCheckRadius = true) const;
+
+		/// @brief Settles the unit onto the floor beneath its capsule, the way the per-frame
+		///        movement simulation does for a locally controlled unit.
+		/// @return True if a walkable floor was within the capsule's reach, false otherwise.
+		bool SettleOnFloor();
 
 		/// @brief Find the floor beneath the unit
 		/// @param capsuleLocation Location of the unit's capsule center
