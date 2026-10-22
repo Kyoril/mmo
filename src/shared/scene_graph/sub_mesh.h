@@ -3,6 +3,8 @@
 #pragma once
 
 #include <set>
+#include <utility>
+#include <vector>
 
 #include "graphics/graphics_device.h"
 #include "graphics/material.h"
@@ -42,7 +44,7 @@ namespace mmo
 
 		void ClearBoneAssignments();
 
-		typedef std::multimap<size_t, VertexBoneAssignment> VertexBoneAssignmentList;
+		typedef std::vector<std::pair<size_t, VertexBoneAssignment>> VertexBoneAssignmentList;
 		const VertexBoneAssignmentList& GetBoneAssignments() const { return m_boneAssignments; }
 
 		void CompileBoneAssignments();

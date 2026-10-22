@@ -37,6 +37,9 @@
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/render_operation.h"
 #include "scene_graph/skeleton_serializer.h"
+#include "base/chunk_writer.h"
+#include "binary_io/reader.h"
+#include "binary_io/stream_source.h"
 
 namespace mmo
 {
@@ -615,6 +618,45 @@ namespace mmo
 			}
 			return result;
 		}
+
+		/// Reads the material path each SUBM chunk of a mesh file names, in submesh order, without
+		/// loading the mesh. A loaded mesh only knows the material it ended up with.
+		bool ReadSubMeshMaterialNames(const String& assetPath, std::vector<String>& out_materials)
+		{
+			const auto file = AssetRegistry::OpenFile(assetPath);
+			if (!file)
+			{
+				return false;
+			}
+
+			io::StreamSource source{ *file };
+			io::Reader reader{ source };
+
+			const ChunkMagic subMeshMagic = { { 'S', 'U', 'B', 'M' } };
+			out_materials.clear();
+			while (true)
+			{
+				uint32 chunkId = 0, chunkSize = 0;
+				if (!(reader >> io::read<uint32>(chunkId) >> io::read<uint32>(chunkSize)))
+				{
+					return true;
+				}
+
+				const size_t chunkStart = source.position();
+				if (chunkId == *subMeshMagic)
+				{
+					String name, material;
+					if (!(reader >> io::read_container<uint8>(name) >> io::read_container<uint16>(material)))
+					{
+						return false;
+					}
+
+					out_materials.push_back(material);
+				}
+
+				source.seek(chunkStart + chunkSize);
+			}
+		}
 	}
 
 	bool MeshEditorInstance::StairsToRampInFile(const String& assetPath)
@@ -742,6 +784,59 @@ namespace mmo
 		}
 
 		ILOG("Set mesh sounds: " << assetPath << " -> " << emitters.size() << " emitter(s) [" << FormatMeshSoundEmitterSpec(emitters) << "]");
+		return true;
+	}
+
+	bool MeshEditorInstance::ResaveMeshFile(const String& assetPath)
+	{
+		// Read the recipe first: saving without it would drop the mesh's collision shapes.
+		CollisionRecipe recipe;
+		collision_recipe_read::Type recipeResult = collision_recipe_read::Absent;
+		if (!LoadMeshCollisionRecipe(assetPath, recipe, recipeResult) || recipeResult == collision_recipe_read::Corrupt)
+		{
+			ELOG("Resave mesh: cannot read " << assetPath);
+			return false;
+		}
+
+		const MeshPtr mesh = MeshManager::Get().Load(assetPath);
+		if (!mesh)
+		{
+			ELOG("Resave mesh: cannot load " << assetPath);
+			return false;
+		}
+
+		// A material that failed to load was replaced by the default one, and saving would make
+		// that permanent.
+		std::vector<String> fileMaterials;
+		if (!ReadSubMeshMaterialNames(assetPath, fileMaterials) || fileMaterials.size() != mesh->GetSubMeshCount())
+		{
+			ELOG("Resave mesh: cannot read the submesh materials of " << assetPath);
+			return false;
+		}
+
+		for (uint16 i = 0; i < mesh->GetSubMeshCount(); ++i)
+		{
+			const MaterialPtr& material = mesh->GetSubMesh(i).GetMaterial();
+			if (!material || material->GetName() != fileMaterials[i])
+			{
+				ELOG("Resave mesh: " << assetPath << " submesh " << i << " cannot load its material " << fileMaterials[i] << ", refusing to save");
+				return false;
+			}
+		}
+
+		// A skinned mesh whose skeleton is missing is broken content; do not touch it.
+		if (mesh->HasSkeleton() && !mesh->GetSkeleton())
+		{
+			ELOG("Resave mesh: " << assetPath << " cannot load its skeleton " << mesh->GetSkeletonName() << ", refusing to save");
+			return false;
+		}
+
+		if (!SaveMeshWithRecipe(mesh, assetPath, recipeResult == collision_recipe_read::Read ? &recipe : nullptr))
+		{
+			return false;
+		}
+
+		ILOG("Resave mesh: saved " << assetPath);
 		return true;
 	}
 
