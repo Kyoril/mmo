@@ -2,7 +2,7 @@
 
 #include "catch.hpp"
 
-#include "game_client/glue_scene_definition.h"
+#include "game_common/glue_scene_definition.h"
 
 using namespace mmo;
 

@@ -6,7 +6,7 @@
 #include "base/typedefs.h"
 #include "char_creation/character_avatar_builder.h"
 #include "game/character_view.h"
-#include "game_client/glue_scene_definition.h"
+#include "game_common/glue_scene_definition.h"
 #include "game_client/item_display_applier.h"
 #include "game_client/plaza_interaction.h"
 #include "game_client/plaza_roster.h"

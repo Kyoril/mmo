@@ -3,8 +3,8 @@
 #pragma once
 
 #include "base/typedefs.h"
-#include "glue_camera_director.h"
-#include "plaza_roster.h"
+#include "glue_camera_path.h"
+#include "plaza_spot_count.h"
 
 #include <array>
 #include <optional>

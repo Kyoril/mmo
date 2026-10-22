@@ -2,23 +2,10 @@
 
 #pragma once
 
-#include "math/vector3.h"
-
-#include <vector>
+#include "game_common/glue_camera_path.h"
 
 namespace mmo
 {
-	/// A camera position and the point it looks at.
-	struct GlueCameraKey
-	{
-		Vector3 position;
-		Vector3 lookAt;
-	};
-
-	/// Evaluates a Catmull-Rom path through the keys. t in [0,1] is clamped and eased with
-	/// smoothstep. An empty list returns a default key, a single key returns that key.
-	GlueCameraKey EvaluateGluePath(const std::vector<GlueCameraKey>& keys, float t);
-
 	/// Current state of the glue camera.
 	enum class GlueCameraMode
 	{

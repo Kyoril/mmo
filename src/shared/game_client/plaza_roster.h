@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "game/character_view.h"
+#include "game_common/plaza_spot_count.h"
 
 #include <array>
 #include <unordered_map>
@@ -32,9 +33,6 @@ namespace mmo
 
 	/// Takes the appearance of a character view.
 	[[nodiscard]] PlazaAppearance MakePlazaAppearance(const CharacterView& view);
-
-	/// Number of fixed standing spots on the plaza.
-	constexpr int32 PlazaSpotCount = 5;
 
 	/// Which character stands where on the plaza.
 	struct PlazaAssignment

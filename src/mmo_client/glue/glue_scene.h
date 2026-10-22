@@ -7,7 +7,7 @@
 #include "client_data/project.h"
 #include "game_client/ambient_sound_emitters.h"
 #include "game_client/glue_camera_director.h"
-#include "game_client/glue_scene_definition.h"
+#include "game_common/glue_scene_definition.h"
 #include "scene_graph/environment_controller.h"
 #include "scene_graph/environment_profile_proto.h"
 
