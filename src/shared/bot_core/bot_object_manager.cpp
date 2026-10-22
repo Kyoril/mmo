@@ -470,6 +470,24 @@ namespace mmo
 		return result;
 	}
 
+	void BotObjectManager::SetItem(const BotItemState& item)
+	{
+		m_items[item.guid] = item;
+	}
+
+	void BotObjectManager::SetSelfInventorySlot(const uint8 slot, const uint64 itemGuid)
+	{
+		if (slot < m_selfInventorySlots.size())
+		{
+			m_selfInventorySlots[slot] = itemGuid;
+		}
+	}
+
+	uint64 BotObjectManager::GetSelfInventorySlot(const uint8 slot) const
+	{
+		return slot < m_selfInventorySlots.size() ? m_selfInventorySlots[slot] : 0;
+	}
+
 	void BotObjectManager::AddOrUpdateItem(const BotItemState& item)
 	{
 		auto it = m_items.find(item.guid);

@@ -750,6 +750,12 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatGodmode(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to toggle game master invisibility on their own character.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatInvisible(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to deal raw damage to their current target. Routed through
 		///	the normal damage path so health-threshold triggers, threat and death handling all run.
 		///	@param opCode The op code of the packet.
@@ -930,6 +936,13 @@ namespace mmo
 		void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) override;
 
 		void OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing) override;
+
+		/// Leaves the current world instance and asks the realm to transfer the character to mapId —
+		/// also used for a same-map move into another instance.
+		/// @param mapId The map to transfer to.
+		/// @param position The target position on that map.
+		/// @param facing The target facing.
+		void BeginMapTransfer(uint32 mapId, const Vector3& position, const Radian& facing);
 
 		void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff,
 			int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) override;

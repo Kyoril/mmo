@@ -11,6 +11,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -25,6 +26,9 @@ namespace
 		virtual ~ICounterDatabase() = default;
 		virtual void Store(uint64 id, int value) = 0;
 		virtual int Fetch(uint64 id) = 0;
+		virtual void StoreOrThrow(uint64 id) = 0;
+		virtual bool CheckOrThrow(uint64 id) = 0;
+		virtual int FetchOrThrow(uint64 id) = 0;
 	};
 
 	struct CounterDatabase final : ICounterDatabase
@@ -43,6 +47,22 @@ namespace
 			const std::lock_guard lock(mutex);
 			calls.push_back("fetch:" + std::to_string(id));
 			return 42;
+		}
+
+		/// Fail the way MySQLDatabase does when a statement errors (a deadlock, say): by throwing.
+		void StoreOrThrow(uint64 id) override
+		{
+			throw std::runtime_error("store failed for " + std::to_string(id));
+		}
+
+		bool CheckOrThrow(uint64 id) override
+		{
+			throw std::runtime_error("check failed for " + std::to_string(id));
+		}
+
+		int FetchOrThrow(uint64 id) override
+		{
+			throw std::runtime_error("fetch failed for " + std::to_string(id));
 		}
 	};
 
@@ -148,4 +168,82 @@ TEST_CASE("AsyncDatabaseKeyedWriteThenReadKeepsOrder", "[async_database]")
 	REQUIRE(observed.size() == 2);
 	CHECK(observed[0] == "store:555:1");
 	CHECK(observed[1] == "fetch:555");
+}
+
+// A void request whose database method throws must still reach its handler, with false. The realm
+// answers inventory saves to the world server from that handler, so a skipped handler meant a
+// failed save (MySQL 1213, for one) was never reported at all.
+TEST_CASE("AsyncDatabaseThrowingVoidRequestReportsFailure", "[async_database]")
+{
+	RecordingDispatcher dispatcher;
+	auto async = dispatcher.Make();
+
+	int calls = 0;
+	bool observed = true;
+	async.asyncRequestKeyed(3, [&calls, &observed](const bool success) { ++calls; observed = success; },
+		&ICounterDatabase::StoreOrThrow, static_cast<uint64>(3));
+
+	REQUIRE(dispatcher.results.size() == 1);
+	dispatcher.results[0]();
+	CHECK(calls == 1);
+	CHECK_FALSE(observed);
+}
+
+// The success path is unchanged: a void request that returns reports true.
+TEST_CASE("AsyncDatabaseVoidRequestReportsSuccess", "[async_database]")
+{
+	RecordingDispatcher dispatcher;
+	auto async = dispatcher.Make();
+
+	bool observed = false;
+	async.asyncRequestKeyed(3, [&observed](const bool success) { observed = success; },
+		&ICounterDatabase::Store, static_cast<uint64>(3), 1);
+
+	REQUIRE(dispatcher.results.size() == 1);
+	dispatcher.results[0]();
+	CHECK(observed);
+}
+
+// A bool result is a success flag, so a throw is reported as false too.
+TEST_CASE("AsyncDatabaseThrowingBoolRequestReportsFailure", "[async_database]")
+{
+	RecordingDispatcher dispatcher;
+	auto async = dispatcher.Make();
+
+	bool observed = true;
+	async.asyncRequestKeyed(3, [&observed](const bool success) { observed = success; },
+		&ICounterDatabase::CheckOrThrow, static_cast<uint64>(3));
+
+	REQUIRE(dispatcher.results.size() == 1);
+	dispatcher.results[0]();
+	CHECK_FALSE(observed);
+}
+
+// The same goes for an arbitrary callable returning bool.
+TEST_CASE("AsyncDatabaseThrowingBoolCallableReportsFailure", "[async_database]")
+{
+	RecordingDispatcher dispatcher;
+	auto async = dispatcher.Make();
+
+	bool observed = true;
+	async.asyncRequestKeyed<bool>(3,
+		[](ICounterDatabase* database) { return database->CheckOrThrow(3); },
+		[&observed](const bool success) { observed = success; });
+
+	REQUIRE(dispatcher.results.size() == 1);
+	dispatcher.results[0]();
+	CHECK_FALSE(observed);
+}
+
+// Any other result type has no value meaning "failed", so its handler is still skipped rather
+// than handed a default-constructed result it would mistake for a real one.
+TEST_CASE("AsyncDatabaseThrowingValueRequestSkipsHandler", "[async_database]")
+{
+	RecordingDispatcher dispatcher;
+	auto async = dispatcher.Make();
+
+	async.asyncRequestKeyed(3, [](int) { FAIL("handler must not run"); },
+		&ICounterDatabase::FetchOrThrow, static_cast<uint64>(3));
+
+	CHECK(dispatcher.results.empty());
 }

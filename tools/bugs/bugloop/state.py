@@ -33,6 +33,9 @@ _DEFAULT = {
 	"ci": {"last_check": "", "colours": {}, "phase": None, "pending": None},
 	# The fix worktree could not be prepared: {"since", "retry_at", "error", "notified"}; None when it works.
 	"worktree_down": None,
+	# busy / idle / paused: {"name", "since", "reason", "counts"} (counts: outcomes finished in this
+	# mode); None before the first poll. Kept so a restart does not announce the mode again.
+	"mode": None,
 }
 
 

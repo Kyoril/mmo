@@ -15,6 +15,7 @@ namespace mmo
 	namespace proto
 	{
 		class Project;
+		class UnitEntry;
 		class FactionTemplateEntry;
 	}
 
@@ -52,9 +53,9 @@ namespace mmo
 		///
 		/// @param project Loaded proto project.
 		/// @param playerFactionTemplate Faction template the bots belong to. Spawns not hostile to
-		///        it are dropped, using the same rule the server applies. Pass 0 when the bots have
-		///        no faction template - a dataset that does not populate them - and the faction
-		///        filter is skipped entirely rather than rejecting everything.
+		///        it are dropped, using the same rule the server applies. Template 0 is a real
+		///        template ("PLAYER, Human"); only a template the data does not contain skips the
+		///        faction filter, rather than rejecting everything.
 		///
 		/// Skipping is the right degradation rather than a shortcut: the runtime target picker
 		/// ignores faction too and attacks any creature without NPC flags, so an index that kept
@@ -84,6 +85,11 @@ namespace mmo
 		std::vector<GrindSpot> m_spots;
 		bool m_factionFiltered { false };
 	};
+
+	/// The NPC flags a creature spawns with. The data leaves npcflags empty for most service
+	/// NPCs; the server derives them from the trainer, vendor, gossip and quest entries at spawn
+	/// (GameCreatureS), and this does the same.
+	[[nodiscard]] uint32 EffectiveNpcFlags(const proto::UnitEntry& unit);
 
 	/// Whether the two faction templates are friendly with one another.
 	///

@@ -291,11 +291,18 @@ def build_sun_glitter(b, sun_color, sun_dir, coarse_slope):
     """The sun's reflection, shared by every water material. coarse_slope is a tangent-space
     XY slope (the procedural glint swell). Nothing here samples the ripple texture, so its
     pattern never shows through the glint."""
-    sun_rgb = b.out(sun_color, "RGB")
+    # The hue comes from the environment's sun scatter curve (SunScatterR/G/B), not from SunColor:
+    # the sun light colour stays near white all day, while the scatter colour is the hue the sun
+    # visibly has (deep orange at sunrise and sunset, warm white at noon, the moon's blue at night).
+    def scatter(channel):
+        return b.add("GlobalScalarParameterNode", {"Name": "SunScatter" + channel})
+    sun_rgb = b.add("AppendNode", ins={"A": b.add("AppendNode", ins={"A": scatter("R"), "B": scatter("G")}), "B": scatter("B")})
     sun_peak = b.add("MaxNode", {"Value 2": 0.001}, {"A": b.add("MaxNode", ins={
         "A": b.mask(sun_rgb, r=True), "B": b.add("MaxNode", ins={"A": b.mask(sun_rgb, g=True), "B": b.mask(sun_rgb, b=True)})})})
-    sun_tint = b.mul(b.add("PowerNode", ins={"Base": b.div(sun_rgb, sun_peak), "Exp": b.scalar("GlitterSaturation", 3.0)}),
-                     b.vector("GlitterTint", (1.0, 0.42, 0.06, 1.0)))
+    # Normalised to the brightest channel and raised a little, so ACES does not bleach the dusk
+    # orange of the bright core to white. GlitterTint stays white; change it only to shift the hue.
+    sun_tint = b.mul(b.add("PowerNode", ins={"Base": b.div(sun_rgb, sun_peak), "Exp": b.scalar("GlitterSaturation", 1.5)}),
+                     b.vector("GlitterTint", (1.0, 1.0, 1.0, 1.0)))
     # The sun's own light level (low at dusk, zero at night) still scales the glint.
     sun_strength = b.mul(b.out(sun_color, "A"), b.sat(b.out(sun_dir, "G")))
     sun_visible = b.sat(b.mul(sun_strength, constant=1.5))
@@ -576,9 +583,8 @@ def build_graph(b, mode, variant="ocean"):
         #   * core:   the hottest part of each flake, far above 1.0 so bloom haloes it.
         # The engine's GGX lobe is switched off (Specular 0 below): it is the soft white blob.
         #
-        # Colour: the sun colour normalised to its brightest channel and raised to a power keeps
-        # the hue and pushes the saturation; GlitterTint warms it, so even a near-white noon sun
-        # glints gold. ACES bleaches strong values toward white, which is why the glow and flakes
+        # Colour: the sun's visible hue from the environment's sun scatter curve, so the glint is
+        # orange at dawn and dusk and warm white at noon (see build_sun_glitter). ACES bleaches strong values toward white, which is why the glow and flakes
         # stay moderate and only the small core goes hot.
         coarse_slope = b.mul(swell_slope, distance_factor)
         glitter = build_sun_glitter(b, sun_color, sun_dir, coarse_slope)

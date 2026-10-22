@@ -70,6 +70,16 @@ namespace mmo
 		/// @brief Sets the sound entry player used to play PlaySound animation notifies on all units (nullptr disables them).
 		static void SetSoundEntryPlayer(SoundEntryPlayer* player);
 
+		/// Reads the given files on a streaming thread, then calls onReady on the main thread.
+		using ModelFilePrefetcher = std::function<void(std::vector<String> files, std::function<void()> onReady)>;
+
+		/// @brief Sets how unit model files are read ahead of use.
+		/// @details With a prefetcher set, a unit whose model was never loaded before gets its model a few
+		///	frames late: its files are read off the main thread first, instead of being opened inside the
+		///	frame that spawned it. The active player always loads at once. An empty prefetcher (the default)
+		///	loads every model synchronously.
+		static void SetModelFilePrefetcher(ModelFilePrefetcher prefetcher);
+
 	public:
 		virtual ObjectTypeId GetTypeId() const override
 		{
@@ -473,6 +483,10 @@ namespace mmo
 		/// Gets the amount of mana restored every five seconds while regenerating.
 		float GetManaRegen() const { return Get<float>(object_fields::ManaRegen); }
 
+		/// Gets the amount of mana restored every five seconds while casting (within five seconds
+		///	after mana was spent).
+		float GetManaRegenCasting() const { return Get<float>(object_fields::ManaRegenCasting); }
+
 		int32 GetStat(int32 statId) const;
 
 		int32 GetPosStat(int32 statId) const;
@@ -594,6 +608,10 @@ namespace mmo
 		void SetCreatureInfo(const CreatureInfo &creatureInfo);
 
 		const String &GetName() const override;
+
+		/// @brief The subtitle line of this unit's creature entry, as in "<General Goods>".
+		/// @return The bracketed subname, or an empty string when the unit has no subname.
+		String GetSubtitle() const { return m_creatureInfo.GetSubtitle(); }
 
 		/// @brief Plays a one-shot animation.
 		/// @param animState The animation state to play.
@@ -787,6 +805,13 @@ namespace mmo
 
 	protected:
 		virtual void OnDisplayIdChanged();
+
+		/// @brief Applies the display id now if its model was loaded before, otherwise reads the model's files
+		///	ahead (see SetModelFilePrefetcher) and applies the then current display id once they are read.
+		void RequestDisplayUpdate();
+
+		/// @brief Called after a model whose loading was deferred has been applied.
+		virtual void OnDeferredDisplayApplied() {}
 
 		/// Applies the item displays of the unit's model data entry (the outfit an NPC model
 		/// wears) to the entity. Players are skipped: their look comes from their equipment.
@@ -995,6 +1020,10 @@ namespace mmo
 		/// Used to ensure position consistency between stop and start packets.
 		Vector3 m_syncedPosition;
 
+		/// @brief The last position the server placed this unit at (spawn, teleport, end of a path).
+		/// Its height lets the idle ground correction find a floor that streamed in after the unit.
+		std::optional<Vector3> m_serverGroundPosition;
+
 		/// @brief Map of active spell tints (spellId -> tint color).
 		std::map<uint32, Vector4> m_spellTints;
 
@@ -1013,6 +1042,17 @@ namespace mmo
 
 		/// @brief Sound entry player used to play PlaySound animation notifies (injected by the client, may be null).
 		static SoundEntryPlayer* s_soundEntryPlayer;
+
+		/// @brief Reads model files ahead of use (injected by the client, may be empty).
+		static ModelFilePrefetcher s_modelFilePrefetcher;
+
+		/// @brief Id of the deferred display update in flight, or 0. Ids are unique across units, so the
+		///	completion of a request never applies to another unit spawned under the same guid.
+		uint64 m_pendingDisplayRequest = 0;
+
+		/// @brief Appends the files of a display id's model which were never opened before.
+		/// @return false if the model was loaded before (or is unknown) and can be applied at once.
+		bool CollectUnloadedModelFiles(uint32 displayId, std::vector<String>& outFiles) const;
 
 		ParticleSystem* m_sparkEmitter = nullptr;
 		SceneNode* m_sparkEmitterNode = nullptr;

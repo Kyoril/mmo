@@ -60,7 +60,8 @@ namespace mmo
 		/// 
 		virtual const std::string& GetVisualText() const override;
 
-		/// Tries to find the cursor position based on the given local coordinate.
+		/// Tries to find the cursor position based on the given position in pixels, relative to the
+		/// frame's top left corner with the scroll offsets already added (as OnMouseDown passes it).
 		int32 GetCursorAt(const Point& position);
 
 		inline HorizontalAlignment GetHorzAlignmnet() const { return m_horzAlign; }
@@ -71,8 +72,18 @@ namespace mmo
 		void SetVertAlignment(VerticalAlignment value);
 		void SetEnabledTextColor(const Color& value);
 		void SetDisabledTextColor(const Color& value);
+		/// Sets the text area insets (left, top, right, bottom) in UI units, measured from the frame edges.
 		void SetTextAreaOffset(const Rect& offset);
+		/// Gets the text area insets in UI units, as set by SetTextAreaOffset.
 		const Rect& GetTextAreaOffset() const { return m_textAreaOffset; }
+		/// Gets the text area insets converted to screen pixels at the current UI scale. Every caret,
+		/// click and scroll calculation works in pixels, so they all go through this one conversion.
+		Rect GetScaledTextAreaOffset() const;
+		/// Gets the absolute screen rectangle the text is laid out in: the frame rectangle inset by the
+		/// scaled text area offsets. Text is drawn from its left edge, the caret is placed relative to it.
+		Rect GetTextAreaRect() const;
+		/// Gets the caret's x distance in pixels from the left edge of the text area (GetTextAreaRect),
+		/// before horizontal scrolling. Does not include the text area offset itself.
 		float GetCursorOffset() const;
 
 		/// Sets the horizontal scroll offset for text display
@@ -81,7 +92,7 @@ namespace mmo
 		float GetScrollOffset() const { return m_scrollOffset; }
 		/// Ensures the cursor is visible by adjusting scroll offset
 		void EnsureCursorVisible();
-		/// Gets the visible width available for text
+		/// Gets the visible width available for text in pixels (the width of GetTextAreaRect).
 		float GetVisibleTextWidth() const;
 		/// Gets the parsed plain text (hyperlinks show as display text only)
 		const std::string& GetParsedPlainText() const;
@@ -158,6 +169,8 @@ namespace mmo
 		mutable std::string m_maskText;
 		/// Cursor index.
 		int32 m_cursor;
+		/// First half of a UTF-16 surrogate pair typed via OnKeyChar, 0 if none is pending.
+		uint16 m_pendingHighSurrogate{ 0 };
 
 		HorizontalAlignment m_horzAlign;
 

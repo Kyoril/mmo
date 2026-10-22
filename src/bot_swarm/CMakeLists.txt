@@ -5,6 +5,7 @@ add_exe(bot_swarm)
 target_link_libraries(bot_swarm
 	bot_ai
 	bot_core
+	bot_chat
 	base
 	log
 	game_protocol

@@ -39,9 +39,20 @@ namespace mmo
 			return m_volume;
 		}
 
+		void SetPlaybackPosition(const float seconds) override
+		{
+			m_playbackPosition = seconds;
+		}
+
+		float GetPlaybackPosition() const
+		{
+			return m_playbackPosition;
+		}
+
 	private:
 		float m_pitch = 1.0f;
 		float m_volume = 1.0f;
+		float m_playbackPosition = 0.0f;
 	};
 
 	/// @brief Headless IAudio double: hands out incrementing sound / channel indices and
@@ -105,9 +116,13 @@ namespace mmo
 			Start(sound, channelIndex);
 		}
 
-		void PlaySound3D(const SoundIndex sound, ChannelIndex* channelIndex, const Vector3&, float, float, float, SoundCategory) override
+		void PlaySound3D(const SoundIndex sound, ChannelIndex* channelIndex, const Vector3& position, float, float, float, SoundCategory) override
 		{
 			Start(sound, channelIndex);
+			if (channelIndex)
+			{
+				channelPositions[*channelIndex] = position;
+			}
 		}
 
 		void StopSound(ChannelIndex* channelIndex) override
@@ -180,6 +195,15 @@ namespace mmo
 		{
 			return m_channels[channel].GetVolume();
 		}
+
+		/// @brief Gets the playback position last set on the given channel, in seconds.
+		float GetChannelPlaybackPosition(const ChannelIndex channel)
+		{
+			return m_channels[channel].GetPlaybackPosition();
+		}
+
+		/// @brief World position each 3D channel was started at.
+		std::map<ChannelIndex, Vector3> channelPositions;
 
 		/// @brief Whether a sound created from the given file was played at least once.
 		bool PlayedFile(const String& fileName) const

@@ -44,6 +44,7 @@
 #include "ui/world_text_frame.h"
 
 #include "game_client/net_client.h"
+#include "game_client/ambient_sound_emitters.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/combat_sound_player.h"
 #include "deferred_shading/water_volume_system.h"
@@ -54,6 +55,7 @@
 
 #include <map>
 #include <optional>
+#include <set>
 #include <tuple>
 #include <vector>
 
@@ -316,6 +318,13 @@ namespace mmo
 		void OnPaint();
 
 		void CheckForZoneUpdate();
+
+		/// @brief Resolves a zone's music (or ambience) sound id, falling back along the parent zone chain.
+		/// @return The sound entry id, or 0 for none.
+		uint32 ResolveZoneSound(const proto_client::ZoneEntry *zone, bool music) const;
+
+		/// @brief Reads the music and ambience files of every zone on a loaded page ahead of use.
+		void PrefetchPageZoneSounds(uint32 pageX, uint32 pageY);
 
 		/// @brief Retargets the environment to the profile of a zone. Snaps on world enter and on
 		///        teleports (a move of more than 200 m within one update), fades otherwise.
@@ -608,6 +617,10 @@ namespace mmo
 
 		void Command_Godmode(const std::string &cmd, const std::string &args) const;
 
+		void Command_Invisible(const std::string &cmd, const std::string &args) const;
+
+		void Command_Ghost(const std::string &cmd, const std::string &args) const;
+
 		void Command_Damage(const std::string &cmd, const std::string &args) const;
 
 		void Command_ResetCooldowns(const std::string &cmd, const std::string &args) const;
@@ -852,6 +865,8 @@ namespace mmo
 		CrossfadingSoundLoop m_zoneMusic;
 		/// Crossfading zone ambience slot, driven by ZoneEntry::ambience_sound.
 		CrossfadingSoundLoop m_zoneAmbience;
+		/// Looping sounds of placed meshes (torches, campfires, portals) near the player.
+		AmbientSoundEmitters m_ambientSounds;
 
 		CharSelect &m_charSelect;
 		GuildClient &m_guildClient;
@@ -905,6 +920,9 @@ namespace mmo
 		std::unique_ptr<WorldPingVisualizer> m_worldPingVisualizer;
 
 		bool m_timeSyncResponseSent = false;
+
+		/// True between TransferPending and NewWorld; later TransferPending packets for the same transfer are ignored.
+		bool m_transferPending = false;
 
 		AreaTriggerManager m_areaTriggerManager;
 

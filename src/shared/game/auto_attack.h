@@ -23,6 +23,9 @@ namespace mmo
 			/// The target is dead and thus can not be attacked.
 			TargetDead = 4,
 
+			/// Something (e.g. a closed door) blocks the line of sight to the target.
+			NotInLineOfSight = 5,
+
 			/// Successful auto attack swing. Sent to the client when a swing lands again after a
 			/// failure, so it stops repeating the error message and voice line for that failure.
 			Success = 0xFFFFFFFE,

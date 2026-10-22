@@ -449,3 +449,15 @@ namespace mmo
 		vertexBuffer->Unmap();
 	}
 }
+
+namespace mmo
+{
+	void AppendPlacedSoundEmitters(const Mesh& mesh, const Vector3& position, const Quaternion& orientation, const Vector3& scale, std::vector<PlacedSoundEmitter>& out)
+	{
+		for (const MeshSoundEmitter& emitter : mesh.GetSoundEmitters())
+		{
+			const Vector3 scaled(emitter.offset.x * scale.x, emitter.offset.y * scale.y, emitter.offset.z * scale.z);
+			out.push_back(PlacedSoundEmitter{ emitter.soundEntryId, position + orientation * scaled, emitter.volume, emitter.maxDistance });
+		}
+	}
+}

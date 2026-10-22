@@ -62,11 +62,11 @@ namespace mmo
 		/// Gets whether authoritative movement info has been cached locally.
 		bool HasAuthoritativeMovementInfo() const { return m_hasAuthoritativeMovementInfo; }
 
-		/// Persists the authoritative current map id.
+		/// Persists the authoritative current map id. Any id counts as known, including 0.
 		void SetCurrentMapId(uint32 mapId);
 
-		/// Updates the current map id from a world-sync packet.
-		/// A zero map id is treated as unknown and will not overwrite an already-known non-zero map.
+		/// Updates the current map id from a world-sync packet. The server's map id is taken as it
+		/// is: map 0 is a real map, not a placeholder for "unknown".
 		void UpdateCurrentMapIdFromWorldSync(uint32 mapId);
 
 		/// Checks whether a current map id is known.

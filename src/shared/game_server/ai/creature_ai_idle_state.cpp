@@ -201,8 +201,12 @@ namespace mmo
 		m_waitCountdown.Cancel();
 		m_connections.disconnect();
 
-		// Save the world position so the reset state can return here instead of spawn.
-		GetAI().SavePatrolReturnPosition(GetControlled().GetMover().GetCurrentLocation());
+		// Save the world position so the reset state can return here instead of spawn. Stationary
+		// creatures have nowhere to resume: they go back to their spawn point and spawn facing.
+		if (GetControlled().GetMovementType() != creature_movement::None || GetControlled().GetFollowedUnit())
+		{
+			GetAI().SavePatrolReturnPosition(GetControlled().GetMover().GetCurrentLocation());
+		}
 
 		// Determine which waypoint the creature should resume from.
 		// m_chainProgressIndex tracks which waypoint in the chain the creature is heading

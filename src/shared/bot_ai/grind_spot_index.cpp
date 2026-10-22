@@ -2,6 +2,7 @@
 
 #include "grind_spot_index.h"
 
+#include "game/object_type_id.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -100,12 +101,38 @@ namespace mmo
 		return attacker->enemymask() != 0 && (attacker->enemymask() & defender->selfmask()) != 0;
 	}
 
+	uint32 EffectiveNpcFlags(const proto::UnitEntry& unit)
+	{
+		uint32 flags = unit.npcflags();
+		if (unit.trainerentry() != 0)
+		{
+			flags |= npc_flags::Trainer;
+		}
+		if (unit.vendorentry() != 0)
+		{
+			flags |= npc_flags::Vendor;
+		}
+		if (unit.gossip_menus_size() > 0)
+		{
+			flags |= npc_flags::Gossip;
+		}
+		if (unit.quests_size() > 0 || unit.end_quests_size() > 0)
+		{
+			flags |= npc_flags::QuestGiver;
+		}
+
+		return flags;
+	}
+
 	void GrindSpotIndex::Build(const proto::Project& project, const uint32 playerFactionTemplate)
 	{
 		m_spots.clear();
 		m_spotsByMap.clear();
-		m_factionFiltered = playerFactionTemplate != 0
-			&& project.factionTemplates.getById(playerFactionTemplate) != nullptr;
+		// Template 0 is a real template - "PLAYER, Human" - not "unknown". Treating it as unknown
+		// switched the filter off for human bots, and every guard, trainer and quest giver (all
+		// template 0 as well) became a spot to grind: bots crossed the map to stand next to a
+		// trainer they could not attack, gave up, and set off to the next one.
+		m_factionFiltered = project.factionTemplates.getById(playerFactionTemplate) != nullptr;
 
 		const auto& maps = project.maps.getTemplates();
 		for (int mapIndex = 0; mapIndex < maps.entry_size(); ++mapIndex)
@@ -149,7 +176,7 @@ namespace mmo
 					// Anything with an NPC flag is a vendor, questgiver, trainer or similar. The
 					// runtime target picker refuses to attack them, so a spot full of them would
 					// send the bot somewhere it can do nothing.
-					if (unit->npcflags() != 0)
+					if (EffectiveNpcFlags(*unit) != 0)
 					{
 						continue;
 					}

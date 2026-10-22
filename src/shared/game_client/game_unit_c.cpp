@@ -24,6 +24,7 @@
 #include "base/profiler.h"
 #include "client_data/project.h"
 #include "frame_ui/font_mgr.h"
+#include "graphics/graphics_device.h"
 #include "game/aura.h"
 #include "game/emote_defs.h"
 #include "game/spell.h"
@@ -62,6 +63,71 @@ namespace mmo
 	void GameUnitC::SetSoundEntryPlayer(SoundEntryPlayer* player)
 	{
 		s_soundEntryPlayer = player;
+	}
+
+	GameUnitC::ModelFilePrefetcher GameUnitC::s_modelFilePrefetcher;
+
+	void GameUnitC::SetModelFilePrefetcher(ModelFilePrefetcher prefetcher)
+	{
+		s_modelFilePrefetcher = std::move(prefetcher);
+	}
+
+	void GameUnitC::RequestDisplayUpdate()
+	{
+		if (m_pendingDisplayRequest != 0)
+		{
+			// The request in flight applies whatever display id is current once its files are read.
+			return;
+		}
+
+		std::vector<String> files;
+		if (!s_modelFilePrefetcher || ObjectMgr::GetActivePlayerGuid() == GetGuid() ||
+			!CollectUnloadedModelFiles(Get<uint32>(object_fields::DisplayId), files))
+		{
+			OnDisplayIdChanged();
+			return;
+		}
+
+		static uint64 s_lastRequest = 0;
+		const uint64 request = ++s_lastRequest;
+		m_pendingDisplayRequest = request;
+
+		s_modelFilePrefetcher(std::move(files), [guid = GetGuid(), request]()
+		{
+			const std::shared_ptr<GameUnitC> unit = ObjectMgr::Get<GameUnitC>(guid);
+			if (!unit || unit->m_pendingDisplayRequest != request)
+			{
+				// Despawned while its files were read
+				return;
+			}
+
+			PROFILE_SCOPE("Unit: deferred model");
+			unit->m_pendingDisplayRequest = 0;
+			unit->OnDisplayIdChanged();
+			unit->OnDeferredDisplayApplied();
+		});
+	}
+
+	bool GameUnitC::CollectUnloadedModelFiles(const uint32 displayId, std::vector<String>& outFiles) const
+	{
+		const proto_client::ModelDataEntry* modelEntry = ObjectMgr::GetModelData(displayId);
+		if (!modelEntry || modelEntry->filename().empty() || AssetRegistry::WasOpened(modelEntry->filename()))
+		{
+			return false;
+		}
+
+		// The mesh or avatar definition; reading it ahead follows its materials, textures and skeleton.
+		outFiles.push_back(modelEntry->filename());
+
+		for (const uint32 itemDisplayId : modelEntry->item_displays())
+		{
+			if (const proto_client::ItemDisplayEntry* display = m_project.itemDisplays.getById(itemDisplayId))
+			{
+				CollectItemDisplayFiles(*display, outFiles);
+			}
+		}
+
+		return true;
 	}
 
 	GameUnitC::GameUnitC(Scene &scene, NetClient &netDriver, const proto_client::Project &project, uint32 map) : GameObjectC(scene, project, map), m_netDriver(netDriver), m_unitSpeed{0.0f}, m_creatureInfo()
@@ -237,7 +303,7 @@ namespace mmo
 
 			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::DisplayId))
 			{
-				OnDisplayIdChanged();
+				RequestDisplayUpdate();
 			}
 
 			if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::Scale))
@@ -298,6 +364,7 @@ namespace mmo
 		{
 			m_sceneNode->SetDerivedPosition(m_movementInfo.position);
 			m_sceneNode->SetDerivedOrientation(Quaternion(m_movementInfo.facing, Vector3::UnitY));
+			m_serverGroundPosition = m_movementInfo.position;
 
 			// Seed the remote movement queue with the spawn snapshot so the queue
 			// always has at least one anchor before the first movement packet arrives.
@@ -478,6 +545,21 @@ namespace mmo
 			{
 				m_nameComponentNode->SetFixedYawAxis(true);
 				m_nameComponentNode->LookAt(cam->GetDerivedPosition(), TransformSpace::World, Vector3::UnitZ);
+
+				// The name is a world-space quad sampled from a fixed-size font atlas. Close to the
+				// camera it would cover more screen pixels than the atlas has texels and turn blocky,
+				// so shrink it there to keep the glyphs at (at most) their native pixel size.
+				int32 viewportHeight = 0;
+				GraphicsDevice::Get().GetViewport(nullptr, nullptr, nullptr, &viewportHeight);
+				if (viewportHeight <= 0)
+				{
+					viewportHeight = 1080;
+				}
+
+				const float distance = (m_nameComponentNode->GetDerivedPosition() - cam->GetDerivedPosition()).GetLength();
+				const float worldUnitsPerScreenPixel = 2.0f * distance * std::tan(cam->GetFOVy().GetValueRadians() * 0.5f) / static_cast<float>(viewportHeight);
+				const float nameScale = std::clamp(worldUnitsPerScreenPixel / WorldTextComponent::WorldUnitsPerFontPixel, 0.05f, 1.0f);
+				m_nameComponentNode->SetScale(Vector3::UnitScale * nameScale);
 			}
 		}
 	}
@@ -505,7 +587,8 @@ namespace mmo
 			// For idle non-player units (NPCs without a path), correct ground height.
 			// Remote players apply ground correction inside UpdateRemoteMovement()
 			// after their dead-reckoning position is written to the scene node.
-			m_unitMovement->CorrectIdleGroundHeight(deltaTime);
+			m_unitMovement->CorrectIdleGroundHeight(deltaTime,
+				IdleGroundReferenceHeight(m_serverGroundPosition, m_sceneNode->GetDerivedPosition()));
 		}
 	}
 
@@ -629,6 +712,7 @@ namespace mmo
 		// extrapolation continues until the next packet arrives.
 		GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
+		m_serverGroundPosition = movementInfo.position;
 
 		if (IsControlledByLocalPlayer())
 		{
@@ -741,7 +825,11 @@ namespace mmo
 			// overwrites the dead-reckoning target, a snap onto the wrong surface
 			// (terrain running underneath a raised building floor) would otherwise
 			// re-capture the unit below the floor every frame with no way back up.
-			if (m_unitMovement->CorrectGroundHeight(5.0f, m_remoteMovementRenderer.GetAuthoritativeY()))
+			// The correction settles the collision capsule on the floor rather than
+			// dropping the feet onto the surface point below the unit's centre, so
+			// the character stands at the height its own client reports instead of
+			// sinking into slopes, stairs and ledges.
+			if (m_unitMovement->CorrectRemoteGroundHeight(5.0f, m_remoteMovementRenderer.GetAuthoritativeY()))
 			{
 				m_remoteMovementRenderer.SetRenderedY(GetSceneNode()->GetDerivedPosition().y);
 			}
@@ -984,7 +1072,7 @@ namespace mmo
 		RefreshUnitName();
 
 		// Setup object display
-		OnDisplayIdChanged();
+		RequestDisplayUpdate();
 	}
 
 	void GameUnitC::OnEntryChanged()
@@ -1145,9 +1233,10 @@ namespace mmo
 			std::ostringstream strm;
 			strm << GetName();
 
-			if (!m_creatureInfo.subname.empty())
+			const String subtitle = GetSubtitle();
+			if (!subtitle.empty())
 			{
-				strm << "\n<" << m_creatureInfo.subname << ">";
+				strm << "\n" << subtitle;
 			}
 
 			m_nameComponent->SetText(strm.str());
@@ -1762,6 +1851,14 @@ namespace mmo
 		// so the animation controller can run and animations reset properly.
 		if (m_pathTotalLength <= 0.0f)
 		{
+			// We already stand on the destination, so a target facing still applies: a creature
+			// evading home from its own spawn spot (stationary guards) or teleported home sends one.
+			if (m_targetRotation.has_value())
+			{
+				SetFacing(m_targetRotation.value());
+			}
+
+			m_serverGroundPosition = m_movementPath.back();
 			CompleteMovementPath(false);
 			return;
 		}
@@ -1819,9 +1916,10 @@ namespace mmo
 			// matches the server's expected movement target (the height is kept and follows
 			// the client's ground geometry).
 			m_sceneNode->SetPosition(Vector3(finalDestination.x, currentPosition.y, finalDestination.z));
+			m_serverGroundPosition = finalDestination;
 			if (m_unitMovement)
 			{
-				m_unitMovement->CorrectGroundHeight();
+				m_unitMovement->CorrectGroundHeight(5.0f, finalDestination.y);
 			}
 
 			CompleteMovementPath(true);
@@ -2455,7 +2553,7 @@ namespace mmo
 			const proto_client::EmoteEntry* entry = ResolvePoseEmoteEntry(standState);
 
 			AnimationState* poseState = nullptr;
-			if (entry)
+			if (entry && m_entity)
 			{
 				poseState = m_entity->GetAnimationState(entry->animation());
 			}
@@ -2918,6 +3016,12 @@ namespace mmo
 
 	void GameUnitC::Apply(const VisibilitySetPropertyGroup &group, const AvatarConfiguration &configuration)
 	{
+		// No model yet (still being read): it is applied with the model.
+		if (!m_entity)
+		{
+			return;
+		}
+
 		// First, hide all sub entities with the given visibility set tag
 		if (!group.subEntityTag.empty())
 		{
@@ -2973,6 +3077,11 @@ namespace mmo
 
 	void GameUnitC::Apply(const MaterialOverridePropertyGroup &group, const AvatarConfiguration &configuration)
 	{
+		if (!m_entity)
+		{
+			return;
+		}
+
 		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
 		if (it == configuration.chosenOptionPerGroup.end())
 		{
@@ -3028,7 +3137,7 @@ namespace mmo
 
 	void GameUnitC::CreateCapsuleDebugVisualization()
 	{
-		if (m_capsuleDebugObject || !m_sceneNode)
+		if (m_capsuleDebugObject || !m_sceneNode || !m_entity)
 		{
 			return;
 		}

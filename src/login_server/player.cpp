@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "player.h"
+#include "base/crash_context.h"
 #include "database.h"
 #include "realm_manager.h"
 #include "player_manager.h"
@@ -110,6 +111,8 @@ namespace mmo
 	PacketParseResult Player::connectionPacketReceived(auth::IncomingPacket & packet)
 	{
 		const auto packetId = packet.GetId();
+		const CrashContextScope crashContext("client packet 0x%02x from %s, account '%s'",
+			static_cast<uint32>(packetId), m_address.c_str(), m_accountName.c_str());
 		bool isValid = true;
 
 		PacketHandler handler = nullptr;
@@ -187,12 +190,18 @@ namespace mmo
 					return;
 				}
 
+				// Everyone sees the coarse population band; only game masters see the exact count,
+				// since a low number on display keeps players from logging in at all.
+				const uint32 playerCount = realm.GetPlayerCount();
+
 				// Write realm data
 				packet 
 					<< io::write<uint32>(realm.GetRealmId())
 					<< io::write_dynamic_range<uint8>(realm.GetRealmName())
 					<< io::write_dynamic_range<uint8>(realm.GetRealmListAddress())
 					<< io::write<uint16>(realm.GetRealmListPort())
+					<< io::write<uint8>(auth::GetRealmPopulation(playerCount, realm.GetCapacity()))
+					<< io::write<uint32>(m_gmLevel > 0 ? playerCount : auth::HiddenRealmPlayerCount)
 					;
 
 				// Increase counter
@@ -344,6 +353,7 @@ namespace mmo
 
 						// Store account id
 						strongThis->m_accountId.store(result->id, std::memory_order_relaxed);
+						strongThis->m_gmLevel = result->gmLevel;
 
 						// We are NOT banned so continue
 						authResult = auth::auth_result::Success;

@@ -109,7 +109,7 @@ Actions:
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
 the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 `MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing),
-`SendChat(msg [, channel])` (channel `"say"` (default), `"party"`, `"yell"` or `"emote"`),
+`SendChat(msg [, channel [, target]])` (channel `"say"` (default), `"party"`, `"yell"`, `"emote"`, `"general"` or `"whisper"`, which needs the target name), `GetWhisperCount()` and `GetLastWhisper()` for whispers received,
 `InviteToParty(name)`, `AcceptPartyInvitation()` (only once `HasPendingPartyInvitation()` is
 true: the realm disconnects a client that accepts with no invitation pending), `LeaveParty()`,
 `IsInParty()`, `GetPartyMemberCount()`, `EquipFromBackpack()` (asks the server to equip every
@@ -165,7 +165,9 @@ yours. Ordered with the requests that follow, so a cast right after a reset is n
 `GM.Godmode(enable)` (toggles damage immunity on the GM character;
 school-agnostic, covers auto-attacks, periodic auras and spell effects alike —
 use to survive content the level-10 test character otherwise cannot, and disable
-it again before asserting anything about the fight's actual outcome)
+it again before asserting anything about the fight's actual outcome),
+`GM.Invisible(enable)` (hides the GM character from players and creatures; persisted per
+character, like godmode)
 
 ### Gotchas
 
@@ -180,12 +182,8 @@ it again before asserting anything about the fight's actual outcome)
   fires as soon as `LogonProof` succeeds, so picking a realm and a character would only make
   the scenario slower. It also means the second session never enters the world — don't reach
   for it as a way to get a second character in play.
-- `GM.Godmode` does **not survive a cross-map teleport**. Porting to another map spawns the
-  character into a new world instance (the world log shows a second "wants to join world")
-  and the flag is lost with the old one. Re-arm it after the final `GM.Worldport`, or the
-  character dies to whatever it was sent to fight. That death is easy to misread: it drops
-  the character from every threat list, and a creature whose threat list empties resets to
-  full health — so the visible symptom is "the boss keeps resetting", not "I died".
+- `GM.Godmode` and `GM.Invisible` are persisted per character by the realm: they survive ports and
+  relogs, so turn them off at the end of a scenario that uses its own character.
 - `GM.CreateMonster` spawns the monster **at the player's position**. Spells with an
   in-front requirement can never validate at zero distance — step aside first with
   `GM.Worldport` (see `spell_cast_smoke.lua`).

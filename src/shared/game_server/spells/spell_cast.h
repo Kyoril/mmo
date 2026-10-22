@@ -87,7 +87,14 @@ namespace mmo
 		void SetState(const std::shared_ptr<CastState>& castState);
 
 		/// Drops any cast in progress silently, for use when the casting unit leaves the world.
+		/// This includes every cast still resolving on its own (see TrackDetachedCast).
 		void AbandonCast();
+
+		/// Registers a cast that resolves on its own after it stopped being the current state -
+		/// a proc, or a finished cast whose projectile is still in flight. Such a cast reaches the
+		/// caster when it resolves, so AbandonCast has to be able to stop it.
+		/// @param castState The state. Only a weak reference is kept; the state keeps itself alive.
+		void TrackDetachedCast(const std::shared_ptr<CastState>& castState);
 
 		void FinishChanneling();
 
@@ -108,8 +115,9 @@ namespace mmo
 		TimerQueue& m_timerQueue;
 		GameUnitS& m_executor;
 		std::shared_ptr<CastState> m_castState;
-		/// Proc casts that may still be resolving, e.g. with a projectile in flight. They keep
-		/// themselves alive; these references only let AbandonCast reach them.
-		std::vector<std::weak_ptr<CastState>> m_procCasts;
+		/// Casts that may still be resolving beside the current state: procs, and finished casts
+		/// with a projectile in flight. They keep themselves alive; these references only let
+		/// AbandonCast reach them.
+		std::vector<std::weak_ptr<CastState>> m_detachedCasts;
 	};
 }

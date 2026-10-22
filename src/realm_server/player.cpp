@@ -1,7 +1,10 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "player.h"
+#include "character_name.h"
+#include "character_order.h"
 #include "character_spell_cache.h"
+#include "character_start.h"
 #include "player_manager.h"
 #include "world_manager.h"
 #include "world.h"
@@ -11,6 +14,8 @@
 #include "shutdown_manager.h"
 #include "instance_reset.h"
 
+#include "base/chat_text.h"
+#include "base/crash_context.h"
 #include "base/random.h"
 #include "base/sha1.h"
 #include "log/default_log_levels.h"
@@ -29,6 +34,7 @@
 #include "time_of_day_manager.h"
 #include "game/time_of_day.h"
 #include "game/gm_level.h"
+#include "game/gm_flags.h"
 #include "game/shutdown_countdown.h"
 #include "base/utilities.h"
 #include "game/chat_type.h"
@@ -103,6 +109,9 @@ namespace mmo
 			DeclineGroupInvite();
 		}
 
+		// GMs ghosting this character lose their link with it
+		EndGhostLinksToMe();
+
 		// Notify the group that the player is leaving
 		if (m_group && m_characterData)
 		{
@@ -154,12 +163,24 @@ namespace mmo
 		{
 			if (auto strongThis = weakThis.lock())
 			{
+				// The query failed (database error, or a schema the migrations have not caught up
+				// with). There is no error variant of CharEnum, and an empty list would tell the
+				// player their characters are gone, so end the session instead: the client shows its
+				// realm-disconnected dialog rather than waiting for a list that never comes.
+				if (!result)
+				{
+					ELOG("Failed to load the character list for account " << strongThis->GetAccountId() << ", disconnecting the session");
+					strongThis->Kick(std::nullopt);
+					return;
+				}
+
 				// Lock around m_characterViews
 				{
 					std::scoped_lock lock{strongThis->m_charViewMutex};
 
 					// Copy character view data
 					strongThis->m_characterViews.clear();
+					strongThis->m_characterOrder.clear();
 					for (auto &charView : result.value())
 					{
 						// Resolve display id from race/class (TODO: Maybe do this somewhere else or differently? This seems like a wrong place to do this, but it works :/)
@@ -169,14 +190,16 @@ namespace mmo
 						}
 
 						strongThis->m_characterViews[charView.GetGuid()] = charView;
+						strongThis->m_characterOrder.push_back(charView.GetGuid());
 					}
 				}
 
 				// Send result data to requesting client
-				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket &outPacket)
+				strongThis->GetConnection().sendSinglePacket([&result, &strongThis](game::OutgoingPacket &outPacket)
 															 {
 						outPacket.Start(game::realm_client_packet::CharEnum);
 						outPacket << io::write_dynamic_range<uint8>(*result);
+						outPacket << io::write<uint64>(strongThis->m_timeOfDayManager.GetTimeOfDay());
 						outPacket.Finish(); });
 			}
 			else
@@ -266,6 +289,9 @@ namespace mmo
 	PacketParseResult Player::connectionPacketReceived(game::IncomingPacket &packet)
 	{
 		const auto packetId = packet.GetId();
+		const CrashContextScope crashContext("client packet 0x%04x from account %llu '%s', character 0x%016llx",
+			static_cast<uint32>(packetId), static_cast<unsigned long long>(m_accountId), m_accountName.c_str(),
+			static_cast<unsigned long long>(GetCharacterGuid()));
 		bool isValid = true;
 
 		PacketHandler handler = nullptr;
@@ -417,7 +443,7 @@ namespace mmo
 		}
 
 		// Check input parameters for invalid values
-		if (characterName.empty() || characterName.size() > 12 || gender > 1)
+		if (gender > 1)
 		{
 			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
 											 {
@@ -427,9 +453,9 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Reject names that contain anything other than letters (no spaces, digits, symbols)
-		if (characterName.size() < 3 ||
-			!std::all_of(characterName.begin(), characterName.end(), [](unsigned char c) { return std::isalpha(c); }))
+		// Reject names that contain anything other than letters (no spaces, digits, symbols).
+		// The name is UTF-8: a German umlaut is two bytes but counts as one letter.
+		if (!IsValidCharacterName(characterName))
 		{
 			WLOG("Character creation rejected: invalid name '" << characterName << "'");
 			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
@@ -569,7 +595,7 @@ namespace mmo
 		const uint32 level = 1;
 		const uint32 map = raceEntry->startmap();
 		const Vector3 position(raceEntry->startposx(), raceEntry->startposy(), raceEntry->startposz());
-		const Angle rotation(raceEntry->startrotation());
+		const Degree rotation(GetRaceStartFacing(*raceEntry));
 
 		// Setup a temporary player object
 		GamePlayerS player(m_project, m_timerQueue);
@@ -809,6 +835,62 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnSetCharacterOrder(game::IncomingPacket &packet)
+	{
+		ASSERT(IsAuthenticated());
+
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<uint64> orderedGuids(count);
+		for (uint64 &guid : orderedGuids)
+		{
+			if (!(packet >> io::read<uint64>(guid)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		{
+			// Lock around m_characterViews
+			std::scoped_lock lock{m_charViewMutex};
+
+			std::set<uint64> owned;
+			for (const auto &entry : m_characterViews)
+			{
+				owned.insert(entry.first);
+			}
+
+			if (!IsValidCharacterOrder(orderedGuids, owned))
+			{
+				WLOG("Received an invalid character order from account 0x" << std::hex << m_accountId);
+				return PacketParseResult::Pass;
+			}
+
+			if (orderedGuids == m_characterOrder)
+			{
+				// Already the stored order: nothing to write.
+				return PacketParseResult::Pass;
+			}
+
+			m_characterOrder = orderedGuids;
+		}
+
+		const uint64 accountId = m_accountId;
+		m_database.asyncRequestKeyed<void>(accountId, [accountId, orderedGuids = std::move(orderedGuids)](auto &&database)
+										   { database->SetCharacterOrder(accountId, orderedGuids); }, [](const bool success)
+										   {
+			if (!success)
+			{
+				ELOG("Failed to save character order!");
+			} });
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult Player::OnProxyPacket(game::IncomingPacket &packet)
 	{
 		const auto strongWorld = m_world.lock();
@@ -851,7 +933,6 @@ namespace mmo
 		case game::client_realm_packet::CheatClearInventory:
 		case game::client_realm_packet::CheatClassLevelUp:
 		case game::client_realm_packet::CheatCreateObject:
-		case game::client_realm_packet::CheatGodmode:
 		case game::client_realm_packet::CheatSetInstanceVariable:
 		case game::client_realm_packet::CheatDamage:
 		case game::client_realm_packet::CheatResetCooldowns:
@@ -909,6 +990,14 @@ namespace mmo
 			{
 				return PacketParseResult::Disconnect;
 			}
+		}
+
+		// Never trust the client's text: drop malformed UTF-8 and invisible tricks before the
+		// message reaches other players or the database, and ignore messages with nothing left.
+		message = SanitizeChatText(message);
+		if (message.empty())
+		{
+			return PacketParseResult::Pass;
 		}
 
 		// Switch chat type
@@ -994,6 +1083,12 @@ namespace mmo
 			{
 				WLOG("Whisper received with empty target name, ignoring.");
 				break;
+			}
+
+			if (IsWhisperToSelf(m_characterData->name, targetName))
+			{
+				SendSystemMessage("You cannot whisper yourself.");
+				return PacketParseResult::Pass;
 			}
 
 			Player* target = m_manager.GetPlayerByCharacterName(targetName);
@@ -1249,8 +1344,23 @@ namespace mmo
 
 		// Resolve the correct instance id based on map type
 		InstanceId targetInstanceId{};
+		std::optional<InstanceId> overrideInstance = ConsumeInstanceOverride(m_pendingInstanceOverride, m_transferMap);
+		if (!overrideInstance && m_ghostTargetGuid != 0)
+		{
+			// A ghosting GM entering the target's map joins the target's instance, whatever way they got there.
+			if (Player* target = m_manager.GetPlayerByCharacterGuid(m_ghostTargetGuid); target && target->HasCharacterGuid())
+			{
+				overrideInstance = GhostInstanceFor(target->GetCharacterData().mapId, target->GetWorldInstanceId(), m_transferMap);
+			}
+		}
+		m_joinedByInstanceOverride = overrideInstance.has_value();
 		const proto::MapEntry* mapEntry = m_project.maps.getById(m_transferMap);
-		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
+		if (overrideInstance)
+		{
+			targetInstanceId = *overrideInstance;
+			DLOG("Using instance override for transfer map " << m_transferMap << ": " << targetInstanceId);
+		}
+		else if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
 		{
 			// Dungeon/raid map: resolve instance from group or personal bindings
 			targetInstanceId = ResolveDungeonInstanceId(m_transferMap);
@@ -2561,7 +2671,169 @@ namespace mmo
 		m_database.asyncRequestKeyed(GetCharacterGuid(), std::move(handler), &IDatabase::GetUnreadMailCount, GetCharacterGuid());
 	}
 
+	void Player::TeleportIntoPlayerInstance(const String &targetName)
+	{
+		Player *player = m_manager.GetPlayerByCharacterName(targetName);
+		if (!player || !player->HasCharacterGuid())
+		{
+			return;
+		}
+
+		const String playerName = targetName;
+
+		// The player is connected, so ask its world node for its current location first
+		std::weak_ptr weakThis{shared_from_this()};
+		player->FetchCharacterLocationAsync([weakThis, playerName](bool succeeded, uint32 mapId, Vector3 position, Radian facing)
+											{
+				auto strongThis = weakThis.lock();
+				if (!strongThis)
+				{
+					return;
+				}
+
+				if (!succeeded)
+				{
+					ELOG("Failed to fetch player position from world node, world node reported an error");
+					return;
+				}
+
+				// The GM may have logged out while the location was fetched: without a world node the
+				// teleport is dropped, so no override may be set for it either.
+				if (!strongThis->m_world.lock())
+				{
+					WLOG("Dropping teleport to player '" << playerName << "': not connected to a world node");
+					return;
+				}
+
+				// Follow the target into its instance, even across copies of the same dungeon map. The
+				// target may have changed maps since its location was fetched; its instance id is only
+				// valid for the fetched map, so it is used only while both still agree.
+				InstanceId targetInstance{};
+				if (Player* target = strongThis->m_manager.GetPlayerByCharacterName(playerName))
+				{
+					if (target->HasCharacterGuid() && target->GetCharacterData().mapId == mapId)
+					{
+						targetInstance = target->GetWorldInstanceId();
+					}
+				}
+
+				// Only when a transfer will actually happen: an in-place teleport inside our own instance
+				// never reaches OnMoveWorldPortAck, so an override set for it would linger and redirect a later transfer.
+				if (!targetInstance.is_nil() && targetInstance != strongThis->m_instanceId)
+				{
+					strongThis->m_pendingInstanceOverride = InstanceOverride{ mapId, targetInstance };
+				}
+
+				// Teleport player to the location
+				DLOG("Teleporting player to map " << mapId << ", instance " << targetInstance << ", location " << position << "...");
+				strongThis->SendTeleportRequest(mapId, position, facing, targetInstance); });
+	}
+
+	void Player::EndGhostLinksToMe()
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		const uint64 myGuid = m_characterData->characterId;
+		const String myName = m_characterData->name;
+		m_manager.ForEachPlayer([this, myGuid, &myName](Player &ghost)
+		{
+			if (&ghost == this || ghost.m_ghostTargetGuid != myGuid)
+			{
+				return;
+			}
+
+			ghost.m_ghostTargetGuid = 0;
+			ghost.SendSystemMessage(myName + " logged out. You are no longer ghosting them.");
+		});
+	}
+
+	void Player::PullGhostsAlong()
+	{
+		if (!m_characterData || m_instanceId.is_nil())
+		{
+			return;
+		}
+
+		const uint64 myGuid = m_characterData->characterId;
+		const String myName = m_characterData->name;
+		const InstanceId myInstance = m_instanceId;
+
+		// Collect first: the teleport looks players up by name, which takes the manager's lock again.
+		std::vector<Player*> ghosts;
+		m_manager.ForEachPlayer([this, myGuid, &myInstance, &ghosts](Player &ghost)
+		{
+			// Already there (ghosting each other, or followed in by hand): nothing to do.
+			if (&ghost != this && ghost.m_ghostTargetGuid == myGuid && ghost.HasCharacterGuid() && ghost.m_instanceId != myInstance)
+			{
+				ghosts.push_back(&ghost);
+			}
+		});
+
+		for (Player *ghost : ghosts)
+		{
+			ghost->TeleportIntoPlayerInstance(myName);
+		}
+	}
+
 #ifdef MMO_WITH_DEV_COMMANDS
+	PacketParseResult Player::OnCheatGhost(game::IncomingPacket &packet)
+	{
+		if (!HasGMLevel(gm_level::Gm))
+		{
+			WLOG("Player " << m_characterData->name << " attempted to use ghost command without sufficient privileges");
+			return PacketParseResult::Pass;
+		}
+
+		String playerName;
+		if (!(packet >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// No name: cancel the current ghost link.
+		if (playerName.empty())
+		{
+			if (m_ghostTargetGuid == 0)
+			{
+				SendSystemMessage("You are not ghosting anyone.");
+				return PacketParseResult::Pass;
+			}
+
+			const Player *target = m_manager.GetPlayerByCharacterGuid(m_ghostTargetGuid);
+			const String targetName = (target && target->HasCharacterGuid()) ? target->GetCharacterData().name : String("your target");
+			m_ghostTargetGuid = 0;
+			SendSystemMessage("You are no longer ghosting " + targetName + ".");
+			return PacketParseResult::Pass;
+		}
+
+		Player *target = m_manager.GetPlayerByCharacterName(playerName);
+		if (!target || !target->HasCharacterGuid())
+		{
+			SendSystemMessage("No player named " + playerName + " is online.");
+			return PacketParseResult::Pass;
+		}
+
+		if (target == this)
+		{
+			SendSystemMessage("You cannot ghost yourself.");
+			return PacketParseResult::Pass;
+		}
+
+		m_ghostTargetGuid = target->GetCharacterGuid();
+		SendSystemMessage("You are now ghosting " + target->GetCharacterData().name + ". You follow them into every instance they enter until one of you logs out or you type 'ghost'.");
+
+		// Join them right away, unless we already share their instance.
+		if (target->GetWorldInstanceId() != m_instanceId)
+		{
+			TeleportIntoPlayerInstance(target->GetCharacterData().name);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket &packet)
 	{
 		// Require GM level 1 for teleport commands
@@ -2602,25 +2874,8 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Player is currently connected, so we need to get the players location data first by asking the world node the player is currently connected to
-		std::weak_ptr weakThis{shared_from_this()};
-		player->FetchCharacterLocationAsync([weakThis](bool succeeded, uint32 mapId, Vector3 position, Radian facing)
-											{
-				auto strongThis = weakThis.lock();
-				if (!strongThis)
-				{
-					return;
-				}
-
-				if (!succeeded)
-				{
-					ELOG("Failed to fetch player position from world node, world node reported an error");
-					return;
-				}
-
-				// Teleport player to the location
-				DLOG("Teleporting player to map " << mapId << ", location " << position << "...");
-				strongThis->SendTeleportRequest(mapId, position, facing); });
+		// Player is currently connected: follow it into its instance
+		TeleportIntoPlayerInstance(playerName);
 
 		return PacketParseResult::Pass;
 	}
@@ -2685,7 +2940,109 @@ namespace mmo
 	}
 #endif
 
+	void Player::SendSystemMessage(const String &message)
+	{
+		m_connection->sendSinglePacket([&message](game::OutgoingPacket &outPacket)
+		{
+			outPacket.Start(game::realm_client_packet::ChatMessage);
+			outPacket
+				<< io::write_packed_guid(0)
+				<< io::write<uint8>(ChatType::System)
+				<< io::write_range(message) << io::write<uint8>(0)
+				<< io::write<uint8>(0)
+				<< io::write<uint8>(0);
+			outPacket.Finish();
+		});
+	}
+
+	void Player::ForwardProxyPayload(const uint16 opCode, const std::vector<uint8> &payload)
+	{
+		const auto strongWorld = m_world.lock();
+		if (!strongWorld || !m_characterData)
+		{
+			DLOG("Dropping proxy payload for opcode " << opCode << ": no world node or character");
+			return;
+		}
+
+		const auto characterId = m_characterData->characterId;
+		strongWorld->GetConnection().sendSinglePacket([characterId, opCode, &payload](auth::OutgoingPacket &outPacket)
+		{
+			outPacket.Start(auth::realm_world_packet::ProxyPacket);
+			outPacket
+				<< io::write<uint64>(characterId)
+				<< io::write<uint16>(opCode)
+				<< io::write<uint32>(payload.size());
+			if (!payload.empty())
+			{
+				outPacket << io::write_range(payload);
+			}
+			outPacket.Finish();
+		});
+	}
+
+	void Player::SendGmFlagStatus()
+	{
+		if (!m_characterData || m_characterData->gmFlags == gm_flags::None)
+		{
+			return;
+		}
+
+		if (m_characterData->gmFlags & gm_flags::Invisible)
+		{
+			SendSystemMessage("GM invisibility is on.");
+		}
+		if (m_characterData->gmFlags & gm_flags::Godmode)
+		{
+			SendSystemMessage("Godmode is on.");
+		}
+	}
+
 #ifdef MMO_WITH_DEV_COMMANDS
+	PacketParseResult Player::OnCheatGmFlag(game::IncomingPacket &packet)
+	{
+		const bool isInvisible = packet.GetId() == game::client_realm_packet::CheatInvisible;
+		const uint8 flag = isInvisible ? gm_flags::Invisible : gm_flags::Godmode;
+
+		if (!HasGMLevel(isInvisible ? gm_level::Gm : gm_level::SeniorGm))
+		{
+			WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
+			return PacketParseResult::Pass;
+		}
+
+		uint8 enable = 0;
+		if (!(packet >> io::read<uint8>(enable)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (enable)
+		{
+			m_characterData->gmFlags |= flag;
+		}
+		else
+		{
+			m_characterData->gmFlags &= ~flag;
+		}
+
+		m_database.asyncRequestKeyed(m_characterData->characterId, [](bool) {}, &IDatabase::SetCharacterGmFlags, m_characterData->characterId, m_characterData->gmFlags);
+
+		SendSystemMessage(std::string(isInvisible ? "GM invisibility" : "Godmode") + (enable ? " is on." : " is off."));
+		ForwardProxyPayload(static_cast<uint16>(packet.GetId()), { enable });
+		return PacketParseResult::Pass;
+	}
+
+	void Player::ForwardGmFlagsToWorld()
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		const uint8 flags = m_characterData->gmFlags;
+		ForwardProxyPayload(game::client_realm_packet::CheatGodmode, { static_cast<uint8>((flags & gm_flags::Godmode) != 0 ? 1 : 0) });
+		ForwardProxyPayload(game::client_realm_packet::CheatInvisible, { static_cast<uint8>((flags & gm_flags::Invisible) != 0 ? 1 : 0) });
+	}
+
 	PacketParseResult Player::OnCheatSummon(game::IncomingPacket &packet)
 	{
 		// Require GM level 2 for teleport commands
@@ -3125,12 +3482,13 @@ namespace mmo
 
 			// No group binding yet - check if the leader is currently inside that
 			// dungeon.  If so, adopt the leader's instance as the group binding so
-			// that other members entering the dungeon join the same instance.
+			// that other members entering the dungeon join the same instance. A leader
+			// who is only visiting (GM port into someone else's run) never binds the group.
 			const uint64 leaderGuid = m_group->GetLeader();
 			if (leaderGuid != 0 && leaderGuid != GetCharacterGuid())
 			{
 				Player* leader = m_manager.GetPlayerByCharacterGuid(leaderGuid);
-				if (leader && leader->HasCharacterGuid())
+				if (leader && leader->HasCharacterGuid() && !leader->IsVisitingInstance())
 				{
 					const auto& leaderData = leader->GetCharacterData();
 					if (leaderData.mapId == mapId && !leaderData.instanceId.is_nil())
@@ -3236,6 +3594,7 @@ namespace mmo
 		RegisterPacketHandler(game::client_realm_packet::CharEnum, *this, &Player::OnCharEnum);
 		RegisterPacketHandler(game::client_realm_packet::CreateChar, *this, &Player::OnCreateChar);
 		RegisterPacketHandler(game::client_realm_packet::DeleteChar, *this, &Player::OnDeleteChar);
+		RegisterPacketHandler(game::client_realm_packet::SetCharacterOrder, *this, &Player::OnSetCharacterOrder);
 		RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
 	}
 
@@ -3432,7 +3791,8 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatClearInventory, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatClassLevelUp, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatCreateObject, *this, &Player::OnProxyPacket);
-			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatGodmode, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatGodmode, *this, &Player::OnCheatGmFlag);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatInvisible, *this, &Player::OnCheatGmFlag);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatSetInstanceVariable, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatDamage, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatResetCooldowns, *this, &Player::OnProxyPacket);
@@ -3466,6 +3826,7 @@ namespace mmo
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatSetSubsystem, *this, &Player::OnCheatSetSubsystem);
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
+			RegisterPacketHandler(game::client_realm_packet::CheatGhost, *this, &Player::OnCheatGhost);
 			RegisterPacketHandler(game::client_realm_packet::CheatSummon, *this, &Player::OnCheatSummon);
 			RegisterPacketHandler(game::client_realm_packet::CheatSetTimeOfDay, *this, &Player::OnCheatSetTimeOfDay);
 			RegisterPacketHandler(game::client_realm_packet::GuildCreate, *this, &Player::OnGuildCreate);
@@ -3503,6 +3864,7 @@ namespace mmo
 #if MMO_WITH_DEV_COMMANDS
 			ClearPacketHandler(game::client_realm_packet::CheatSetSubsystem);
 			ClearPacketHandler(game::client_realm_packet::CheatTeleportToPlayer);
+			ClearPacketHandler(game::client_realm_packet::CheatGhost);
 			ClearPacketHandler(game::client_realm_packet::CheatSummon);
 			ClearPacketHandler(game::client_realm_packet::CheatSetTimeOfDay);
 			ClearPacketHandler(game::client_realm_packet::GuildCreate);
@@ -3534,6 +3896,12 @@ namespace mmo
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
+
+		// Login path: never joined through an instance override, and no override from an earlier
+		// session may redirect this one's transfers.
+		m_joinedByInstanceOverride = false;
+		m_pendingInstanceOverride.reset();
+		m_ghostTargetGuid = 0;
 
 		// Store dungeon instance binding if applicable
 		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
@@ -3567,6 +3935,10 @@ namespace mmo
 
 		// Tell the client which subsystems it may use on this world node
 		SendFullSubsystemStatus();
+		SendGmFlagStatus();
+#ifdef MMO_WITH_DEV_COMMANDS
+		ForwardGmFlagsToWorld();
+#endif
 
 		// Send Message of the Day to the player
 		String motd = GetManager().GetMessageOfTheDay();
@@ -3646,6 +4018,10 @@ namespace mmo
 
 		// The new node may offer different subsystems than the previous one.
 		SendFullSubsystemStatus();
+		SendGmFlagStatus();
+#ifdef MMO_WITH_DEV_COMMANDS
+		ForwardGmFlagsToWorld();
+#endif
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
@@ -3658,8 +4034,9 @@ namespace mmo
 		}
 
 		// Store dungeon instance binding if applicable
+		// A GM who followed a player in is a visitor: never bind them or their group to that instance.
 		const proto::MapEntry* transferMapEntry = m_project.maps.getById(m_characterData->mapId);
-		if (transferMapEntry && transferMapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
+		if (transferMapEntry && transferMapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil() && !m_joinedByInstanceOverride)
 		{
 			if (m_group && m_group->IsCreated())
 			{
@@ -3674,6 +4051,9 @@ namespace mmo
 				DLOG("Stored personal dungeon instance binding on map " << m_characterData->mapId);
 			}
 		}
+
+		// GMs ghosting this character follow it into its new instance.
+		PullGhostsAlong();
 	}
 
 	void Player::OnWorldJoinFailed(const game::player_login_response::Type response)
@@ -3713,10 +4093,16 @@ namespace mmo
 		switch (reason)
 		{
 		case auth::world_left_reason::Logout:
+			// A ghost link lasts until either character logs out.
+			EndGhostLinksToMe();
+			m_ghostTargetGuid = 0;
 			m_characterData.reset();
 			// Clear group and invite state so a fresh EnterWorld starts with no stale membership.
 			m_group.reset();
 			m_inviterGuid = 0;
+			// A pending GM instance override belongs to this session only.
+			m_pendingInstanceOverride.reset();
+			m_joinedByInstanceOverride = false;
 			EnableProxyPackets(false);
 			EnableEnterWorldPacket(true);
 			ILOG("Successfully logged out");
@@ -3756,6 +4142,7 @@ namespace mmo
 
 		m_characterData = characterData;
 		m_characterData->isGameMaster = (m_gmLevel > 0);
+		m_characterData->gmFlags = SanitizeGmFlags(m_characterData->gmFlags, m_gmLevel);
 
 		// This session may have hosted another character before (logging out returns the client to
 		// character selection without dropping the session). Dungeon bindings belong to a single
@@ -4464,7 +4851,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	void Player::SendTeleportRequest(uint32 mapId, const Vector3 &position, const Radian &facing) const
+	void Player::SendTeleportRequest(uint32 mapId, const Vector3 &position, const Radian &facing, const InstanceId &instanceId) const
 	{
 		// Check if we are currently connected to a world node
 		std::shared_ptr<World> world = m_world.lock();
@@ -4474,7 +4861,7 @@ namespace mmo
 		}
 
 		// Send a request to the world node to teleport the character
-		world->SendTeleportRequest(m_characterData->characterId, mapId, position, facing);
+		world->SendTeleportRequest(m_characterData->characterId, mapId, position, facing, instanceId);
 	}
 
 	void Player::SendPartyOperationResult(PartyOperation operation, PartyResult result, const String &playerName)

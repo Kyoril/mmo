@@ -122,7 +122,8 @@ namespace mmo
 		void SendFetchLocationRequestAsync(uint64 characterId, uint64 ackId);
 
 		/// Requests a teleport for the given character.
-		void SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing);
+		/// @param instanceId Instance the character should end up in, or nil to let the world node decide.
+		void SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing, const InstanceId& instanceId);
 
 		/// Tells the world node the realm-wide time of day.
 		/// @param timeOfDay Time of day in milliseconds since midnight.

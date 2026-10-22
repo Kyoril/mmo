@@ -896,12 +896,35 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertIn("does not match", self.api.notes(BUG_ID)[-1])
 
-	def test_ship_decision_respects_breaker_and_freeze(self):
+	def test_ship_decision_waits_for_the_breaker_instead_of_being_used_up(self):
 		self.park_with_decision("ship", head="head1")
 		loop_state.trip_breaker(self.artifacts, "test", self.now)
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped, [])
-		self.assertIn("circuit breaker", self.api.notes(BUG_ID)[-1])
+		self.assertIn("ships once the breaker is cleared", self.api.notes(BUG_ID)[-1])
+		self.assertTrue(self.state.data["ship_queue"][0]["by_maintainer"])
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		loop_state.reset_breaker(self.artifacts)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+		self.assertEqual(self.state.data["ship_queue"], [])
+
+	def test_ship_decision_queued_for_the_freeze_waits_for_a_breaker_tripped_meanwhile(self):
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		loop_state.trip_breaker(self.artifacts, "test", self.now)
+		self.now = utc("2026-10-08 01:00")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.assertNotIn("parked", self.outcomes())
+		loop_state.reset_breaker(self.artifacts)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+
+	def test_ship_decision_respects_freeze(self):
 		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped, [])
@@ -954,13 +977,16 @@ class LoopTests(unittest.TestCase):
 	def test_status_changes_are_announced(self):
 		self.make(gate_ok=False)
 		self.loop.poll_once()
-		self.assertEqual(len(self.notifier.messages), 3)
+		self.assertEqual(len(self.notifier.messages), 4)
 		self.assertIn("Triaged, queued", self.notifier.messages[0])
 		self.assertIn("severity high", self.notifier.messages[0])
 		self.assertIn("Fix started", self.notifier.messages[1])
 		self.assertIn("Parked for review", self.notifier.messages[2])
-		self.assertIn("the full gate is red", self.notifier.messages[2])
-		self.assertTrue(all(BUG_ID in m for m in self.notifier.messages))
+		self.assertIn("the fast gate is red", self.notifier.messages[2])
+		self.assertTrue(all(BUG_ID in m for m in self.notifier.messages[:3]))
+		# The queue ran empty: busy (recorded silently, the first mode) -> idle, with the stretch's work.
+		self.assertIn("Bug loop idle", self.notifier.messages[3])
+		self.assertIn("parked 1", self.notifier.messages[3])
 
 	def test_design_question_replaces_the_park_status_message(self):
 		self.make(review=dict(GOOD_REVIEW, design_question="Q?"))
@@ -1132,7 +1158,7 @@ class LoopTests(unittest.TestCase):
 		self.assertTrue(self.api.updates[-1][1]["release_claim"])
 		self.assertEqual(self.state.data["autoships"], 1)
 		self.assertEqual(self.worktree.deleted, [BRANCH])
-		self.assertEqual(self.verifier.gates, ["full"])
+		self.assertEqual(self.verifier.gates, ["fast"])
 		with open(os.path.join(self.reports, "bugloop-2026-10-07.json"), encoding="utf-8") as handle:
 			self.assertEqual(json.load(handle)["counts"]["shipped"], 1)
 
@@ -1155,13 +1181,20 @@ class LoopTests(unittest.TestCase):
 
 	def test_low_confidence_red_gate_failed_proof_and_bad_review_park(self):
 		for kwargs, fragment in (
-				({"fix": dict(GOOD_FIX, confidence="medium")}, "confidence is medium"),
-				({"gate_ok": False}, "full gate is red"),
+				({"fix": dict(GOOD_FIX, confidence="low")}, "confidence is low"),
+				({"fix": dict(GOOD_FIX, confidence="medium"), "proof_ok": False}, "confidence is medium"),
+				({"gate_ok": False}, "fast gate is red"),
 				({"proof_ok": False}, "proof:"),
 				({"review": dict(GOOD_REVIEW, reduces_security=True)}, "reduces a security")):
 			self.make(**kwargs)
 			self.loop.poll_once()
 			self.assertParked(fragment)
+
+	def test_medium_confidence_with_a_passing_proof_ships(self):
+		self.make(fix=dict(GOOD_FIX, confidence="medium"))
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 
 	def test_no_project_basis_is_wontfix(self):
 		self.make(fix=dict(GOOD_FIX, outcome="no_project_basis", expected_source=""))
@@ -1271,6 +1304,48 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 		self.assertIn("abc123", self.api.notes(BUG_ID)[-1])
+
+	BLAMING_RED = {"passed": False, "merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]}
+
+	def test_newer_green_nightly_clears_the_breaker_the_loop_tripped(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertFalse(loop_state.breaker_active(self.artifacts))
+		self.assertIsNone(self.state.data["breaker_source"])
+		self.assertTrue(any("breaker cleared" in m and "nightly run 8" in m for m in self.notifier.messages))
+		# The red run stays seen: it cannot trip the breaker a second time.
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		self.assertFalse(loop_state.breaker_active(self.artifacts))
+
+	def test_green_nightly_keeps_a_breaker_set_by_hand(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		loop_state.trip_breaker(self.artifacts, "rollback of nightly-x", self.now, by_hand=True)
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+
+	def test_green_nightly_keeps_a_hold_set_on_top_of_the_loops_trip(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		loop_state.trip_breaker(self.artifacts, "hold everything", self.now, by_hand=True)
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+
+	def test_cleared_breaker_ships_the_waiting_ship_decision(self):
+		self.park_with_decision("ship", head="head1")
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
 
 	def test_red_nightly_with_loop_merge_trips_breaker_once(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
@@ -2321,6 +2396,136 @@ class LoopTests(unittest.TestCase):
 		ticket = self.run_emergency(fix=dict(GOOD_FIX, outcome="cannot_reproduce"))
 		self.assertIn("needs-info", self.outcomes())
 		self.assertEqual(len(self.ticket_messages(ticket)), 1)  # develop is red
+
+
+class StatusAndModeTests(LoopTests):
+	"""status.json at every stage, the busy/idle/paused mode and its Discord messages, and the
+	gate a doomed candidate skips."""
+
+	def record_stages(self):
+		stages = []
+		original = loop.loop_status.write
+
+		def write(artifacts_dir, snapshot, name=loop.loop_status.STATUS_FILE):
+			stages.append(snapshot["stage"])
+			original(artifacts_dir, snapshot, name)
+
+		loop.loop_status.write = write
+		self.addCleanup(setattr, loop.loop_status, "write", original)
+		return stages
+
+	def status(self):
+		return loop.loop_status.read(self.artifacts)
+
+	def test_every_stage_of_a_fix_is_reported(self):
+		self.make()
+		stages = self.record_stages()
+		self.loop.poll_once()
+		for stage in ("polling", "triaging", "preparing", "fixing", "reviewing", "waiting-for-gate-lock", "proving",
+				"gating", "shipping"):
+			self.assertIn(stage, stages)
+		self.assertLess(stages.index("fixing"), stages.index("gating"))
+		snapshot = self.status()
+		self.assertEqual(snapshot["stage"], "shipping")
+		self.assertEqual(snapshot["bug"], BUG_ID)
+		self.assertEqual(snapshot["branch"], BRANCH)
+		self.assertEqual(snapshot["pid"], os.getpid())
+		self.assertEqual(snapshot["budget"], self.loop.config.invocation_budget_per_day)
+
+	def test_status_lists_the_next_fix_first(self):
+		self.make()
+		self.state.enqueue_fix("a" * 24, "low", "2026-10-07T07:00:00Z")
+		self.state.enqueue_fix("b" * 24, "critical", "2026-10-07T09:00:00Z")
+		self.loop._stage("polling")
+		self.assertEqual(self.status()["fix_queue"], ["b" * 24, "a" * 24])
+
+	def test_a_dry_run_writes_its_own_status_file(self):
+		self.make(dry_run=True)
+		self.loop.poll_once()
+		self.assertIsNone(self.status())
+		self.assertIsNotNone(loop.loop_status.read(self.artifacts, loop.loop_status.DRY_STATUS_FILE))
+
+	def test_watch_reports_the_sleep_and_the_next_poll(self):
+		self.make(bugs=[dict(BUG, status="resolved")])
+
+		class Stop(Exception):
+			pass
+
+		def sleep(seconds):
+			raise Stop()
+
+		with self.assertRaises(Stop):
+			self.loop.watch(sleep)
+		snapshot = self.status()
+		self.assertEqual(snapshot["stage"], "sleeping")
+		self.assertEqual(snapshot["until"], (self.now + datetime.timedelta(seconds=self.loop.config.poll_seconds)).isoformat())
+
+	def test_a_new_backlog_is_announced_busy_then_idle_with_the_work_done(self):
+		self.make(gate_ok=False)
+		self.state.data["mode"] = {"name": "idle", "since": "2026-10-07T09:00:00+00:00", "reason": "", "counts": {}}
+		self.loop.poll_once()
+		modes = [m for m in self.notifier.messages if m.startswith("**Bug loop")]
+		self.assertEqual(len(modes), 2)
+		self.assertIn("Bug loop busy", modes[0])
+		self.assertIn("1 bug(s) queued", modes[0])
+		self.assertIn("Bug loop idle", modes[1])
+		self.assertIn("parked 1", modes[1])
+		self.assertEqual(self.state.data["mode"]["name"], "idle")
+
+	def test_an_unchanged_mode_is_not_announced_again(self):
+		self.make(bugs=[dict(BUG, status="resolved")])
+		self.state.data["mode"] = {"name": "idle", "since": "2026-10-07T09:00:00+00:00", "reason": "", "counts": {}}
+		self.loop.poll_once()
+		self.loop.poll_once()
+		self.assertFalse(any(m.startswith("**Bug loop") for m in self.notifier.messages))
+
+	def test_the_first_mode_is_recorded_silently(self):
+		self.make(bugs=[dict(BUG, status="resolved")])
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["mode"]["name"], "idle")
+		self.assertEqual(self.notifier.messages, [])
+
+	def test_a_used_up_budget_with_bugs_queued_is_announced_as_paused(self):
+		other = dict(BUG, _id="65f0aa00bb11cc22dd33ee55", createdAt="2026-10-07T08:30:00Z",
+			subject={"type": "quest", "id": 13, "guid": "0", "name": "Wolf Trouble"})
+		self.make(bugs=[BUG, other], invocation_budget_per_day=4)
+		self.state.data["mode"] = {"name": "idle", "since": "2026-10-07T09:00:00+00:00", "reason": "", "counts": {}}
+		# The fake runner counts no invocations: room for a triage (1), not for a fix (2).
+		self.state.data["invocations"] = 3
+		self.loop.poll_once()
+		self.assertNotIn("fix", self.runner.calls)
+		self.assertEqual(self.state.data["mode"]["name"], "paused")
+		paused = [m for m in self.notifier.messages if "Bug loop paused" in m]
+		self.assertEqual(len(paused), 1)
+		self.assertIn("daily Claude budget used up (3 of 4)", paused[0])
+		self.assertIn("2 bug(s) wait", paused[0])
+
+	def test_mode_messages_follow_the_status_message_switch(self):
+		self.make(gate_ok=False, notify_status_changes=False)
+		self.state.data["mode"] = {"name": "idle", "since": "2026-10-07T09:00:00+00:00", "reason": "", "counts": {}}
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+		self.assertEqual(self.state.data["mode"]["name"], "idle")
+
+	def test_a_candidate_that_parks_anyway_skips_the_gate(self):
+		self.make(review=dict(GOOD_REVIEW, blocking_issues=["off by one"]), notify_status_changes=False)
+		self.loop.poll_once()
+		self.assertEqual(self.verifier.gates, [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		with open(os.path.join(self.artifacts, BUG_ID, "gate.json"), encoding="utf-8") as handle:
+			gate = json.load(handle)
+		self.assertIsNone(gate["ok"])
+		self.assertEqual(gate["skipped"], loop.GATE_SKIPPED)
+		with open(os.path.join(self.artifacts, BUG_ID, "decision.json"), encoding="utf-8") as handle:
+			reasons = json.load(handle)["reasons"]
+		self.assertFalse(any("gate" in reason for reason in reasons))
+		self.assertTrue(reasons)
+
+	def test_a_parking_feature_still_runs_the_gate(self):
+		self.make(review=dict(GOOD_REVIEW, blocking_issues=["off by one"]), notify_status_changes=False)
+		self.state.add_feature(BUG_ID, "A feature")
+		self.loop.poll_once()
+		self.assertEqual(self.verifier.gates, ["fast"])
 
 
 class DecideTests(unittest.TestCase):

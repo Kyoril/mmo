@@ -37,6 +37,17 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           submodules: recursive
+          # Full history and tags: the version is the newest vX.Y.Z tag plus the commit count.
+          fetch-depth: 0
+
+      # The build context has no .git (.dockerignore), so the build identity goes in as build args.
+      # Without it the servers report "Commit: UNKNOWN" and a crash cannot be matched to its symbols.
+      - name: Compute build identity
+        id: identity
+        shell: bash
+        run: |
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$(python3 tools/release/version.py)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -68,8 +79,37 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.tags.outputs.list }}
+          build-args: |
+            MMO_COMMIT=${{ steps.identity.outputs.commit }}
+            MMO_VERSION=${{ steps.identity.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      # The image ships a stripped server; the unstripped one of the same build (the builder stage
+      # is cached from the step above) is kept for symbolicating crash reports. The nightly packs
+      # these into its release as server-symbols.zip (tools/fetch_server_symbols.ps1 reads it).
+      - name: Export unstripped server binary
+        if: endsWith(matrix.image, '_server')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: symbols
+          push: false
+          outputs: type=local,dest=server-symbols
+          build-args: |
+            MMO_COMMIT=${{ steps.identity.outputs.commit }}
+            MMO_VERSION=${{ steps.identity.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+
+      - name: Upload unstripped server binary
+        if: endsWith(matrix.image, '_server')
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-symbols-${{ matrix.image }}
+          path: server-symbols/
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Smoke-test update_compiler in the deployer image
         if: matrix.image == 'mmo_deployer'

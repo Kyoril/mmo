@@ -42,6 +42,12 @@ namespace mmo
 		/// Whether the entry plays as a positional (3D) sound. False for unknown ids.
 		bool IsEntry3D(uint32 soundId) const;
 
+		/// Whether the entry plays as a loop. False for unknown ids.
+		bool IsEntryLooped(uint32 soundId) const;
+
+		/// @brief Gets the distance in metres beyond which a 3D entry is inaudible (0 if unknown).
+		float GetEntryMaxDistance(uint32 soundId) const;
+
 		/// @brief Gets the configured base volume [0, 1] of an entry (1.0 if unknown).
 		float GetEntryVolume(uint32 soundId) const;
 
@@ -50,6 +56,9 @@ namespace mmo
 
 		/// @brief Gets the configured fade-out duration of an entry in seconds (0 if unknown).
 		float GetEntryFadeOutSeconds(uint32 soundId) const;
+
+		/// @brief Appends the file names of an entry (none if unknown).
+		void GetEntryFiles(uint32 soundId, std::vector<String>& outFiles) const;
 
 	private:
 		/// @brief Resolves the playback SoundType from the entry flags.

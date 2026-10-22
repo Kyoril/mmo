@@ -2,10 +2,15 @@
 
 // Accumulates the smoothed froxels front to back along each grid column. Texel z holds the light
 // scattered toward the camera and the transmittance from the near plane to the END of slice z.
+//
+// The sun's scattering arrives without its phase function (t1, see CS_FogInject) and gets it here, for
+// this frame's view ray: the phase is the only view-dependent part of the sun term, and the temporal
+// history must not hold it or the sun glow and shafts trail every camera move.
 
 #include "VolumetricFogCommon.hlsli"
 
 Texture3D<float4> ScatteringVolume : register(t0);
+Texture3D<float4> SunScatteringVolume : register(t1);
 RWTexture3D<float4> IntegratedOutput : register(u0);
 
 [numthreads(8, 8, 1)]
@@ -19,6 +24,7 @@ void main(uint3 id : SV_DispatchThreadID)
     float2 uv = (float2(id.xy) + 0.5f) / float2(GridWidth, GridHeight);
     float3 ray = FogWorldRay(uv);
     float pathScale = 1.0f / max(dot(ray, CameraForward), 1e-4f);
+    float3 sunRadiance = FogSource(dot(ray, SunDirection), 1.0f) - FogTint;
 
     float3 scattered = float3(0.0f, 0.0f, 0.0f);
     float transmittance = 1.0f;
@@ -33,7 +39,8 @@ void main(uint3 id : SV_DispatchThreadID)
         float nextDepth = SliceToDepth(float(z + 1) / float(GridDepth));
         float thickness = (nextDepth - previousDepth) * pathScale;
         float sliceTransmittance = exp(-sigma * thickness);
-        float3 radiance = cell.rgb / max(sigma, 1e-6f);
+        float3 inScattered = cell.rgb + SunScatteringVolume.Load(int4(id.xy, z, 0)).rgb * sunRadiance;
+        float3 radiance = inScattered / max(sigma, 1e-6f);
 
         scattered += transmittance * radiance * (1.0f - sliceTransmittance);
         transmittance *= sliceTransmittance;

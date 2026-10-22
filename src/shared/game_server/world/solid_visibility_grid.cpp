@@ -55,6 +55,20 @@ namespace mmo
 		return nullptr;
 	}
 
+	void SolidVisibilityGrid::ForEachExistingTile(const std::function<void(VisibilityTile&)>& handler)
+	{
+		for (size_t y = 0; y < m_tiles.height(); ++y)
+		{
+			for (size_t x = 0; x < m_tiles.width(); ++x)
+			{
+				if (const auto& tile = m_tiles(x, y))
+				{
+					handler(*tile);
+				}
+			}
+		}
+	}
+
 	VisibilityTile &SolidVisibilityGrid::RequireTile(const TileIndex2D &position)
 	{
 		ASSERT(m_tiles.width());

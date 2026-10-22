@@ -10,6 +10,10 @@ namespace mmo
 	class WorldTextComponent : public MovableObject, public Renderable
 	{
 	public:
+		/// World units covered by one font atlas texel at node scale 1.
+		static constexpr float WorldUnitsPerFontPixel = 0.005f;
+
+	public:
 		WorldTextComponent(FontPtr font, MaterialPtr material, const String& text);
 
 		void PrepareRenderOperation(RenderOperation& operation) override;

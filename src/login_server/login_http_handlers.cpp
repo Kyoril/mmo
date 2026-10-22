@@ -584,6 +584,7 @@ namespace mmo
 					if (row.id == realm.GetRealmId())
 					{
 						row.is_online = realm.IsAuthentificated();
+						row.player_count = row.is_online ? realm.GetPlayerCount() : 0;
 						break;
 					}
 				}
@@ -601,6 +602,9 @@ namespace mmo
 				entry["last_ip"] = r.last_ip.empty() ? nullptr : json(r.last_ip);
 				entry["last_build"] = r.last_build.empty() ? nullptr : json(r.last_build);
 				entry["is_online"] = r.is_online;
+				entry["capacity"] = r.capacity;
+				entry["player_count"] = r.player_count;
+				entry["population"] = static_cast<uint32>(auth::GetRealmPopulation(r.player_count, r.capacity));
 				jsonRealms.push_back(std::move(entry));
 			}
 
@@ -1140,6 +1144,83 @@ namespace mmo
 			m_realmManager.NotifyRealmRequirementsChanged(*realmId);
 
 			jsonResponse["status"] = "SUCCESS";
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleSetRealmCapacity(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto realmIt = arguments.find("realm");
+		const auto capacityIt = arguments.find("capacity");
+
+		json jsonResponse;
+
+		if (realmIt == arguments.end() || realmIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'realm'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (capacityIt == arguments.end() || capacityIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'capacity'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		// A realm with capacity 0 would always read as full; keep the value meaningful.
+		constexpr uint32 maxCapacity = 1000000;
+		if (!isAllDigits(capacityIt->second) || capacityIt->second.size() > 7)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Parameter 'capacity' must be a whole number between 1 and " + std::to_string(maxCapacity);
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		const uint32 capacity = static_cast<uint32>(std::strtoul(capacityIt->second.c_str(), nullptr, 10));
+		if (capacity < 1 || capacity > maxCapacity)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Parameter 'capacity' must be a whole number between 1 and " + std::to_string(maxCapacity);
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		try
+		{
+			std::optional<uint32> realmId = isAllDigits(realmIt->second)
+				? std::optional<uint32>(static_cast<uint32>(std::strtoul(realmIt->second.c_str(), nullptr, 10)))
+				: m_database.GetRealmIdByName(realmIt->second);
+			if (!realmId || !m_database.SetRealmCapacity(*realmId, capacity))
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "REALM_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A realm '" + realmIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			// Connected realms pick the new value up right away; the next realm list shows it.
+			m_realmManager.NotifyRealmCapacityChanged(*realmId, capacity);
+
+			jsonResponse["status"] = "SUCCESS";
+			jsonResponse["realm_id"] = *realmId;
+			jsonResponse["capacity"] = capacity;
 			SendJsonResponse(response, jsonResponse);
 		}
 		catch (...)

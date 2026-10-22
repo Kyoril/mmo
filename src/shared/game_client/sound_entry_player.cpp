@@ -105,6 +105,18 @@ namespace mmo
 		return entry && entry->is_3d();
 	}
 
+	bool SoundEntryPlayer::IsEntryLooped(const uint32 soundId) const
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		return entry && entry->looped();
+	}
+
+	float SoundEntryPlayer::GetEntryMaxDistance(const uint32 soundId) const
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		return entry ? entry->max_distance() : 0.0f;
+	}
+
 	float SoundEntryPlayer::GetEntryVolume(const uint32 soundId) const
 	{
 		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
@@ -121,6 +133,14 @@ namespace mmo
 	{
 		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
 		return entry ? entry->fade_out_ms() / 1000.0f : 0.0f;
+	}
+
+	void SoundEntryPlayer::GetEntryFiles(const uint32 soundId, std::vector<String>& outFiles) const
+	{
+		if (const proto_client::SoundEntry* entry = m_sounds.getById(soundId))
+		{
+			outFiles.insert(outFiles.end(), entry->files().begin(), entry->files().end());
+		}
 	}
 
 	SoundType SoundEntryPlayer::GetSoundTypeFromEntry(const proto_client::SoundEntry& entry)

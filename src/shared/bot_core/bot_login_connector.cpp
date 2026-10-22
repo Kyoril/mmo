@@ -314,7 +314,9 @@ namespace mmo
 				>> io::read<uint32>(realm.id)
 				>> io::read_container<uint8>(realm.name)
 				>> io::read_container<uint8>(realm.address)
-				>> io::read<uint16>(realm.port);
+				>> io::read<uint16>(realm.port)
+				>> io::read<uint8>(realm.population)
+				>> io::read<uint32>(realm.playerCount);
 
 			// Add to the list of available realms
 			m_realms.emplace_back(std::move(realm));

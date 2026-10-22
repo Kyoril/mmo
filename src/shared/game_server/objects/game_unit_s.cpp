@@ -1804,8 +1804,22 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::SetGmInvisible(const bool enable)
+	{
+		m_gmInvisible = enable;
+		NotifyVisibilityChanged();
+	}
+
 	void GameUnitS::NotifyVisibilityChanged()
 	{
+		// Game master invisibility outranks every aura: an observing GM must never be revealed
+		// by a stealth or invisibility aura being added, removed or interrupted.
+		if (m_gmInvisible)
+		{
+			SetVisibility(unit_visibility::Off);
+			return;
+		}
+
 		// Invisibility (ModVisibility) has priority over everything else and keeps its
 		// original semantics: the unit is fully invisible except to game masters.
 		if (HasAuraEffect(aura_type::ModVisibility))
@@ -2594,6 +2608,20 @@ namespace mmo
 		return static_cast<float>(GetEffectivePowerRegenPerTick(power_type::Mana, static_cast<int32>(m_manaRegenPerTick))) * ticksPerFiveSeconds;
 	}
 
+	float GameUnitS::GetCastingManaRegenPercent() const
+	{
+		return Clamp(GetCombatSettings().casting_mana_regen_percent() + m_castingManaRegenPctBonus, 0.0f, 100.0f);
+	}
+
+	float GameUnitS::GetCastingManaRegenPerFiveSeconds() const
+	{
+		// Same tick math as GetManaRegenPerFiveSeconds, but without truncating to whole points:
+		// RegeneratePower() carries the fraction over, so over time the casting share is exact.
+		constexpr float ticksPerFiveSeconds = 5000.0f / static_cast<float>(constants::OneSecond * 2);
+		const float powerRegenScale = 1.0f + m_powerRegenPctBonus[static_cast<uint8>(power_type::Mana)] / 100.0f;
+		return GetCastingManaRegenPerTick() * powerRegenScale * ticksPerFiveSeconds;
+	}
+
 	void GameUnitS::UpdateCombatStatFields()
 	{
 		Set<float>(object_fields::SpellDamage, GetCalculatedModifierValue(unit_mods::SpellDamage));
@@ -2601,6 +2629,7 @@ namespace mmo
 		Set<float>(object_fields::SpellCritChance, Clamp(GetBaseSpellCritChance(), 0.0f, 100.0f));
 		Set<float>(object_fields::MeleeCritChance, Clamp(GetBaseMeleeCritChance(), 0.0f, 100.0f));
 		Set<float>(object_fields::ManaRegen, GetManaRegenPerFiveSeconds());
+		Set<float>(object_fields::ManaRegenCasting, GetCastingManaRegenPerFiveSeconds());
 	}
 
 	float GameUnitS::CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const
@@ -3150,6 +3179,18 @@ namespace mmo
 		return reach;
 	}
 
+	bool GameUnitS::IsInLineOfSightOf(const GameUnitS& other)
+	{
+		WorldInstance* world = GetWorldInstance();
+		if (!world)
+		{
+			return true;
+		}
+
+		MapData* mapData = world->GetMapData();
+		return !mapData || mapData->IsInLineOfSight(GetPosition(), other.GetPosition());
+	}
+
 	void GameUnitS::AddAttackingUnit(const GameUnitS &attacker)
 	{
 		m_attackingUnits.add(&attacker);
@@ -3677,12 +3718,21 @@ namespace mmo
 			amount += 20;
 			break;
 		case power_type::Mana:
-			// Don't regen mana if we used mana in the last 5 seconds
+			// Within five seconds after spending mana only the casting share of the normal
+			// regeneration flows. The fraction of a point it leaves is carried to the next tick.
 			if (GetAsyncTimeMs() - m_lastManaUse < 5000)
 			{
-				break;
+				// The aura percentage modifier is applied before the carry here instead of by
+				// GetEffectivePowerRegenPerTick below, which would truncate the whole points again.
+				m_castingManaRegenRemainder += GetCastingManaRegenPerTick()
+					* (1.0f + m_powerRegenPctBonus[static_cast<uint8>(power_type::Mana)] / 100.0f);
+				const float wholePoints = std::floor(m_castingManaRegenRemainder);
+				m_castingManaRegenRemainder -= wholePoints;
+				AddPower(powerType, static_cast<int32>(wholePoints));
+				return;
 			}
 
+			m_castingManaRegenRemainder = 0.0f;
 			amount += static_cast<int32>(m_manaRegenPerTick);
 			break;
 		}
@@ -4041,7 +4091,20 @@ namespace mmo
 			return;
 		}
 
-		// The swing has passed all pre-conditions (alive, in range, facing) and is going to
+		// Target must be in line of sight. Auto-attack spells are cast as procs, which skip the
+		// spell LoS check, and melee reach easily spans a closed door: without this a swing landed
+		// through the door and pulled the creatures behind it into a fight neither side could reach.
+		if (!IsInLineOfSightOf(*victim))
+		{
+			if (!isOffhand)
+			{
+				OnAttackSwingEvent(AttackSwingEvent::NotInLineOfSight);
+			}
+			swingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
+			return;
+		}
+
+		// The swing has passed all pre-conditions (alive, in range, facing, LoS) and is going to
 		// connect. Remove any auras that are interrupted by attacking (e.g. "removed when attacking").
 		RemoveAurasByInterrupt(spell_aura_interrupt_flags::Attack);
 

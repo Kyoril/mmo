@@ -14,7 +14,7 @@ test, and auto-ships low-risk fixes to `origin/develop`. Everything else is park
 | Review | `claude -p --tools Read,Grep,Glob` | read the branch; never sees the report |
 | Guard | `bugloop/guard.py` | protected paths, suspicious patterns, data field rules |
 | Proof | orchestrator | test fails on base, passes on the fix (E2E scenarios run here, under the gate lock) |
-| Gate | `verify.ps1 -Tier full` | build, unit, tool tests, Linux check (WSL), E2E |
+| Gate | `verify.ps1 -Tier fast` | build, unit, tool tests, Linux check (WSL); E2E runs in the nightly before deploy |
 
 Every Claude stage runs with `--strict-mcp-config` (no MCP servers) and a scrubbed environment:
 no stage gets `MMO_BUG_API_KEY` or `MMO_BUG_API_URL`; only the fixer gets
@@ -43,8 +43,10 @@ The guard is an allow-list: only paths under these roots (each with its own file
 
 The guard also parks: edits within 20 lines of a security-sensitive identifier or a rejection
 path; changed server-code lines containing economy words (xp, reward, loot, drop, credit,
-price, cost, ...) even without numbers; numeric literals in conditions or tuned values;
-added or removed preprocessor directives (including `#include`); Lua `require`, `dofile` and
+price, cost, ...) even without numbers; numeric literals in conditions or tuned values in server
+code (client code cannot cheat the server, and comment lines never count); added or removed
+preprocessor directives other than an `#include` of a header by a plain path and `#pragma once`
+in a header; Lua `require`, `dofile` and
 `loadstring`; an added `return true;` or `return PacketParseResult::...` in server code;
 control characters; unparseable diff headers; and submodule pointer changes.
 
@@ -63,10 +65,18 @@ The regression-proof waiver is decided by the diff, not the fixer's claim: a fix
 regression test only if it has at least one non-test change and all of its non-test changes are
 under `data/editor/data/`, `data/client/Locales/` or `data/client/Interface/`. Client UI Lua
 under `data/client/Interface/` needs no regression proof because it cannot cheat the server;
-the guard and the full gate still apply.
+the guard and the gate still apply.
 
-A fix auto-ships only with: a fixable category, fixer confidence `high`, a clean review, an
-empty guard, a passing proof (code fixes), a green full gate, fewer than 5 ships today, no
+The fast gate runs last and only when it can change the outcome: a candidate that already parks
+for another reason (guard, review, confidence, proof) skips it, and its `gate.json` says
+"skipped". That saves the 15–25 minutes a gate takes, and nothing is lost: a maintainer's ship
+decision merges the branch into today's develop and runs the fast gate on that merge before
+anything is pushed. Emergency fixes and features always run the gate, because the CI push and the
+"Feature ready" ping rely on a green result.
+
+A fix auto-ships only with: a fixable category, fixer confidence `high` (or `medium` with a
+passing regression proof), a clean review, an empty guard, a passing proof (code fixes), a green
+fast gate, fewer than `autoship_cap_per_day` (20) ships today, no
 breaker, and a time outside 21:30–23:59 UTC (fixes ready during the window ship after it).
 
 ## Running it
@@ -145,8 +155,42 @@ old task (`Disable-ScheduledTask -TaskName "MMO Bug Loop"`) before starting the 
 loops at once double the daily ship cap and both work the same red develop. To review a branch
 parked on another machine by hand: `git fetch origin refs/bugloop/bugfix/<id8>:bugfix/<id8>`.
 
+## What is it doing right now?
+
+```powershell
+python tools/bugs/bug_loop.py status          # from the main checkout; --json for the raw file
+```
+
+The loop rewrites `artifacts/bug-loop/status.json` at every stage change (`status-dry.json` in a
+dry run): its pid, the stage and since when (polling, triaging, preparing the worktree, fixing,
+reviewing, waiting for the gate lock, proving, gating, shipping, sleeping until the next poll),
+the bug and branch it works on, the fix queue (next bug first), today's invocations and
+auto-ships against their limits, breaker and red develop. The command prints it and exits 1 when
+the recorded process no longer runs ("NOT RUNNING"), so a loop that died is not mistaken for
+one that waits. Run it from a worktree with `--repo <main checkout>`.
+
+### Busy, idle and paused
+
+The loop never sleeps between bugs: a poll that did work starts the next one at once. It sleeps
+(`ci_poll_seconds`, 5 min, with the CI watch on, else `poll_seconds`) only after a poll that
+found nothing to do. The mode in `state.json` (`mode`) names which of three it is in:
+
+| Mode | When |
+|---|---|
+| busy | bugs are queued for a fix and the daily budget allows one |
+| paused | bugs are queued but the daily invocation budget is used up (it resumes at 00:00 UTC) |
+| idle | the fix queue is empty; the loop polls for new reports |
+
+Each change is logged (`mode: idle -> busy`) and posted to Discord once ("Bug loop busy — N
+bug(s) queued", "Bug loop paused — <reason>", "Bug loop idle", the last with what the busy
+stretch shipped, parked and gave up on). The mode survives a restart, so the day-boundary restart
+does not announce it again; the first mode after an upgrade is recorded silently. A dry run and
+`notify_status_changes: false` post nothing. A worktree that cannot reach develop keeps its own
+"stalled"/"resumed" messages and does not change the mode.
+
 ## Where to look
 
+- `python tools/bugs/bug_loop.py status`: what the loop does right now (see above).
 - `tools/gate/reports/bugloop-YYYY-MM-DD.json`: the day's outcomes, ships, parked branches,
   abuse flags, model invocations (`bugloop-dry-*.json` in shadow mode).
 - `artifacts/bug-loop/<bug id>/`: `report.json`, `triage.json`, `FIX.json`, `diff.patch`,
@@ -223,10 +267,10 @@ not parked (see below). The loop consumes decisions before it does anything else
   recorded commit, otherwise it re-parks ("the diff you approved does not match the candidate
   commit; decide again") and uploads the real diff. The API refuses a new review diff while a
   decision is pending, the UI proxy refuses review-diff uploads altogether, and "Ship as is" is
-  disabled until a diff is uploaded. An active circuit breaker also re-parks
-  the bug ("the circuit breaker is tripped"); decide again once it is cleared. Only the
-  nightly freeze window queues the ship until the window ends; a second ship decision for a
-  queued bug only adds a note.
+  disabled until a diff is uploaded. An active circuit breaker queues the ship
+  ("the circuit breaker is tripped; ships once the breaker is cleared"), and so do the nightly
+  freeze window and a red develop: the decision is never used up by a hold, and the ship goes
+  out on its own once the hold ends. A second ship decision for a queued bug only adds a note.
 
   Every ship (auto or decided) lands in the same order: each changed data submodule commit is
   pushed, fast-forward only, to `master` of the submodule's repository on GitHub (the remote
@@ -292,6 +336,8 @@ webhook nothing is sent. Messages:
   discarded, merged by hand, interrupted, loop error. Outcomes with a message of their own
   (shipped, refix limit, design decision needed, feature ready) are not repeated. Each message
   links the bug and quotes the triage summary;
+- the loop's mode changes: busy, paused (budget used up with bugs queued), idle (see "Busy, idle
+  and paused"), sent with the status messages and switched off with them;
 - a daily summary (outcomes, Claude invocations against the budget, bugs waiting for a
   decision: parked ones without a decision and `needs_info` ones, plus the day's parked and
   needs-info outcomes with their first reason), sent once per UTC day when the day rolls over; it is persisted, so the restart at
@@ -383,6 +429,14 @@ when the newest finished GitHub "Nightly Release" run on develop failed and a `M
 landed on develop since the last successful run (read through `gh` in the user's login, see
 `bugloop/ci.py`). If `gh` cannot be reached, the loop logs it and keeps going without the check.
 After a deploy rollback, trip it by hand. Only clear it once the cause is understood.
+
+A breaker the loop tripped itself clears itself once a newer Nightly Release on develop is
+green (Discord: "circuit breaker cleared"): the trip is a correlation (a red nightly with a
+bug-loop merge in it), and a green nightly after it shows develop no longer has the fault.
+On 2026-10-20 a red nightly caused by a bot change held seven ship decisions after the next
+nightly was already green. A breaker set by hand, or `breaker on` on top of the loop's trip,
+never clears itself. Ship decisions wait in the ship queue while the breaker is tripped and
+ship when it clears; auto-ship candidates still park.
 
 The one exemption: when the loop tripped the breaker for a red nightly run, it records that run
 id (`breaker_source` in `state.json`, together with the breaker file's text). A green emergency

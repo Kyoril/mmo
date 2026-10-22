@@ -214,28 +214,66 @@ float FindBlockerDepthCascade(Texture2D shadowMap, float2 uv, float receiverDept
     return 1.0f;
 }
 
-// Optimized PCF filter with rotated Poisson disk
-float PCF_FilterCascade(Texture2D shadowMap, float2 uv, float receiverDepth, float filterRadius)
+// Weight of the texel whose centre lies d filter texels from the sample point, in a trapezoid filter
+// of width n + 1 (an n-texel box widened by bilinear filtering). The weights of every texel sum to 1.
+float TentTexelWeight(float d, float n)
 {
-    float sum = 0.0f;
-    
-    // Generate a random rotation angle to reduce banding artifacts
-    float angle = frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) * PI;
-    float cosAngle = cos(angle);
-    float sinAngle = sin(angle);
-    float2x2 rot = float2x2(cosAngle, -sinAngle, sinAngle, cosAngle);
+    return saturate((n + 1.0f) * 0.5f - abs(d)) / n;
+}
 
-    // Sample count is driven by the shadow-quality setting (clamped to the 16-entry Poisson disk).
-    // Fewer taps = cheaper but slightly noisier/harder shadow edges.
-    uint sampleCount = clamp(PcfSampleCount, 1u, 16u);
-    [loop]
-    for (uint i = 0; i < sampleCount; i++)
+// One axis of the tent filter as (n + 1) / 2 bilinear taps: each tap covers two adjacent texels, placed
+// between them so the hardware's bilinear weights reproduce both texels' trapezoid weights exactly.
+// x: sample position in filter texels. Outputs tap positions (filter texels) and weights.
+void TentAxisTaps(float x, uint n, out float4 positions, out float4 weights)
+{
+    positions = 0.0f;
+    weights = 0.0f;
+    float first = floor(x - float(n) * 0.5f);
+    [unroll]
+    for (uint j = 0; j < 4; ++j)
     {
-        float2 offset = mul(rot, POISSON_DISK[i]) * filterRadius;
-        sum += shadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, receiverDepth - ShadowBias);
+        if (j < (n + 1) / 2)
+        {
+            float texel = first + 2.0f * float(j);
+            float a = TentTexelWeight(texel + 0.5f - x, float(n));
+            float b = TentTexelWeight(texel + 1.5f - x, float(n));
+            weights[j] = a + b;
+            positions[j] = texel + 0.5f + b / max(a + b, 1e-6f);
+        }
+    }
+}
+
+// Deterministic n x n tent PCF (n = 3, 5 or 7 -> 4, 9 or 16 bilinear comparison taps). Every texel's
+// weight is a fixed function of its distance to the sample, so the filtered shadow is continuous in
+// world space: it neither crawls nor sparkles while the camera moves, which a per-pixel randomly
+// rotated kernel cannot avoid. filterScale >= 1 widens the filter (texels per filter texel) for the
+// sky profile's softness.
+float PCF_FilterCascade(Texture2D shadowMap, float2 uv, float receiverDepth, uint n, float filterScale)
+{
+    float2 mapSize;
+    shadowMap.GetDimensions(mapSize.x, mapSize.y);
+    float2 filterTexel = filterScale / mapSize;
+    float2 position = uv / filterTexel;
+
+    float4 positionsU, weightsU, positionsV, weightsV;
+    TentAxisTaps(position.x, n, positionsU, weightsU);
+    TentAxisTaps(position.y, n, positionsV, weightsV);
+
+    float compareDepth = receiverDepth - ShadowBias;
+    float sum = 0.0f;
+    uint taps = (n + 1) / 2;
+    [loop]
+    for (uint j = 0; j < taps; ++j)
+    {
+        [loop]
+        for (uint i = 0; i < taps; ++i)
+        {
+            float2 tapUv = float2(positionsU[i], positionsV[j]) * filterTexel;
+            sum += weightsU[i] * weightsV[j] * shadowMap.SampleCmpLevelZero(ShadowSampler, tapUv, compareDepth);
+        }
     }
 
-    return sum / (float)sampleCount;
+    return sum;
 }
 
 // Sample shadow from a specific cascade
@@ -276,13 +314,16 @@ float SampleShadowCascade(Texture2D shadowMap, float3 worldPos, float3 normal, u
         return 0.0f;  // Surface faces away from light
     }
     
-    // Calculate filter radius based on cascade (larger cascades need larger filter radius in UV space)
-    // But since each cascade has similar world-space coverage per texel, use consistent filtering
-    float baseFilterRadius = 1.0f / 2048.0f;  // Base texel size
-    float filterRadius = baseFilterRadius * (1.0f + float(cascadeIndex) * 0.5f) * ShadowSoftness;
-    
-    // Use simpler PCF for quality/performance balance
-    return PCF_FilterCascade(shadowMap, uv, receiverDepth, filterRadius);
+    // Shadow quality picks the tent size (PcfSampleCount = bilinear taps: 4 -> 3x3, 9 -> 5x5, 16 -> 7x7).
+    // The sky profile's softness can widen it further, in the units the old Poisson radius used (2048
+    // texels per map, growing with the cascade index).
+    uint tentSize = PcfSampleCount <= 4u ? 3u : (PcfSampleCount <= 9u ? 5u : 7u);
+    float2 mapSize;
+    shadowMap.GetDimensions(mapSize.x, mapSize.y);
+    float softnessTexels = ShadowSoftness * (1.0f + float(cascadeIndex) * 0.5f) * (mapSize.x / 2048.0f);
+    float filterScale = max(1.0f, softnessTexels * 2.0f / float(tentSize));
+
+    return PCF_FilterCascade(shadowMap, uv, receiverDepth, tentSize, filterScale);
 }
 
 // Select cascade and sample shadow with optional blending
