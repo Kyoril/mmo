@@ -349,6 +349,9 @@ int main(int argc, char* arg[])
 	// `--glue-bake-dry-run <GlueScene.json>` opens the glue scene's world, collects what the glue
 	// cameras see and logs the counts to glue_bake_dry_run.log without writing anything (exit code 1
 	// when the definition or world cannot be loaded or nothing visible was found).
+	// `--glue-bake-meshes <GlueScene.json> <outDir>` collects the same and writes the merged chunk
+	// meshes into outDir (asset directory or absolute path), logging the counts to
+	// glue_bake_meshes.log (exit code 1 when loading fails or a file cannot be written).
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
@@ -663,6 +666,28 @@ int main(int argc, char* arg[])
 #endif
 
 				PostQuitMessage(mmo::RunGlueBakeDryRun(mainWindow, args[i + 1]) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--glue-bake-meshes" && i + 2 < argCount)
+			{
+				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("glue_bake_meshes.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("glue_bake_meshes_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				PostQuitMessage(mmo::RunGlueBakeMeshes(mainWindow, args[i + 1], args[i + 2]) ? 0 : 1);
 				break;
 			}
 		}

@@ -18,6 +18,16 @@ namespace mmo
 	/// @return False when the definition or world cannot be loaded or nothing visible was found.
 	bool RunGlueBakeDryRun(EditorHost& host, const String& sceneFile);
 
+	/// @brief Runs the collection and the chunk mesh writer of the glue scene bake and logs what it
+	///        wrote: the `--glue-bake-meshes <GlueScene.json> <outDir>` debug job.
+	/// @details Writes only the merged chunk meshes (no manifest), into outDir (an asset directory or an
+	///          absolute file system directory, see WriteMergedGlueMeshes).
+	/// @param host Opens the world.
+	/// @param sceneFile The GlueScene.json, as a file system path or an asset path.
+	/// @param outDir Where the chunk meshes go.
+	/// @return False when loading failed, nothing was written or a file could not be written.
+	bool RunGlueBakeMeshes(EditorHost& host, const String& sceneFile, const String& outDir);
+
 	/// @brief Vertical field of view of the glue camera in degrees (the client's Camera default).
 	constexpr float GlueBakeVerticalFovDegrees = 45.0f;
 

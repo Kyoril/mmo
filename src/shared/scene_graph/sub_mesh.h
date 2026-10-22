@@ -32,6 +32,9 @@ namespace mmo
 		/// @brief Gets the material assigned to this sub mesh.
 		[[nodiscard]] MaterialPtr& GetMaterial() { return m_material; }
 
+		/// @brief Gets the material assigned to this sub mesh.
+		[[nodiscard]] const MaterialPtr& GetMaterial() const { return m_material; }
+
 		void SetMaterialName(const String& name);
 
 		/// @brief Sets the material used by this sub mesh.

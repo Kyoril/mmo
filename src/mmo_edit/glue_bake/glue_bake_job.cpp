@@ -2,6 +2,7 @@
 
 #include "glue_bake_job.h"
 
+#include "glue_mesh_writer.h"
 #include "glue_scene_collector.h"
 
 #include "editor_host.h"
@@ -41,44 +42,59 @@ namespace mmo
 
 			return std::nullopt;
 		}
+
+		/// Reads the scene definition, opens its world and collects what the glue cameras see.
+		/// @param label Prefix of the log lines.
+		bool LoadAndCollect(EditorHost& host, const String& sceneFile, const char* label, WorldEditorInstance*& world, GlueCollection& collection)
+		{
+			const std::optional<String> json = ReadSceneFile(sceneFile);
+			if (!json)
+			{
+				ELOG(label << ": cannot read " << sceneFile);
+				return false;
+			}
+
+			const std::optional<GlueSceneDefinition> definition = ParseGlueSceneDefinition(*json);
+			if (!definition)
+			{
+				ELOG(label << ": " << sceneFile << " is not a valid glue scene definition");
+				return false;
+			}
+
+			const std::vector<GlueCameraPose> poses = SampleGlueCameraPoses(*definition, 48);
+			if (poses.empty())
+			{
+				ELOG(label << ": the glue scene has no flight path, so there is no camera pose to bake for");
+				return false;
+			}
+
+			const GlueBakeFrustumSet frusta = BuildGlueBakeFrusta(poses, GlueBakeVerticalFovDegrees, GlueBakeFarDistance);
+			ILOG(label << ": " << poses.size() << " camera poses, " << frusta.frusta.size() << " frusta (vertical FOV "
+				<< GlueBakeVerticalFovDegrees << ", far " << GlueBakeFarDistance << ")");
+
+			const String worldAsset = definition->world + ".hwld";
+			if (!host.OpenAsset(worldAsset) || !WorldEditorInstance::GetLastCreated())
+			{
+				ELOG(label << ": failed to open " << worldAsset);
+				return false;
+			}
+
+			world = WorldEditorInstance::GetLastCreated();
+			collection = CollectGlueScene(*world, *definition, frusta);
+			return true;
+		}
 	}
 
 	bool RunGlueBakeDryRun(EditorHost& host, const String& sceneFile)
 	{
-		const std::optional<String> json = ReadSceneFile(sceneFile);
-		if (!json)
+		WorldEditorInstance* worldInstance = nullptr;
+		GlueCollection collection;
+		if (!LoadAndCollect(host, sceneFile, "Glue bake dry run", worldInstance, collection))
 		{
-			ELOG("Glue bake dry run: cannot read " << sceneFile);
 			return false;
 		}
 
-		const std::optional<GlueSceneDefinition> definition = ParseGlueSceneDefinition(*json);
-		if (!definition)
-		{
-			ELOG("Glue bake dry run: " << sceneFile << " is not a valid glue scene definition");
-			return false;
-		}
-
-		const std::vector<GlueCameraPose> poses = SampleGlueCameraPoses(*definition, 48);
-		if (poses.empty())
-		{
-			ELOG("Glue bake dry run: the glue scene has no flight path, so there is no camera pose to bake for");
-			return false;
-		}
-
-		const GlueBakeFrustumSet frusta = BuildGlueBakeFrusta(poses, GlueBakeVerticalFovDegrees, GlueBakeFarDistance);
-		ILOG("Glue bake dry run: " << poses.size() << " camera poses, " << frusta.frusta.size() << " frusta (vertical FOV "
-			<< GlueBakeVerticalFovDegrees << ", far " << GlueBakeFarDistance << ")");
-
-		const String worldAsset = definition->world + ".hwld";
-		if (!host.OpenAsset(worldAsset) || !WorldEditorInstance::GetLastCreated())
-		{
-			ELOG("Glue bake dry run: failed to open " << worldAsset);
-			return false;
-		}
-
-		WorldEditorInstance& world = *WorldEditorInstance::GetLastCreated();
-		const GlueCollection collection = CollectGlueScene(world, *definition, frusta);
+		WorldEditorInstance& world = *worldInstance;
 
 		// Distinct meshes, so the log shows what made it in by path
 		std::map<String, uint32> meshCounts;
@@ -143,5 +159,33 @@ namespace mmo
 		}
 
 		return true;
+	}
+
+	bool RunGlueBakeMeshes(EditorHost& host, const String& sceneFile, const String& outDir)
+	{
+		WorldEditorInstance* world = nullptr;
+		GlueCollection collection;
+		if (!LoadAndCollect(host, sceneFile, "Glue mesh bake", world, collection))
+		{
+			return false;
+		}
+
+		GlueMeshWriteStats stats;
+		const std::vector<GlueBakeMesh> meshes = WriteMergedGlueMeshes(collection.items, outDir, 48.0f, &stats);
+
+		ILOG("Glue mesh bake summary (" << outDir << "):");
+		ILOG("  items:        " << collection.items.size());
+		ILOG("  chunks:       " << stats.chunks << " (" << stats.files << " files)");
+		ILOG("  submeshes:    " << stats.subMeshes);
+		ILOG("  vertices:     " << stats.vertices);
+		ILOG("  triangles:    " << stats.triangles);
+		ILOG("  unmerged:     " << stats.unmerged);
+		ILOG("  dropped:      " << stats.dropped);
+		ILOG("  incomplete:   " << stats.incomplete);
+		ILOG("  failed files: " << stats.failedFiles);
+		ILOG("  total bytes:  " << stats.bytes);
+		ILOG("  manifest meshes: " << meshes.size());
+
+		return stats.failedFiles == 0 && stats.files > 0;
 	}
 }
