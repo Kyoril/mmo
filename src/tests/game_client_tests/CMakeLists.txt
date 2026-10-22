@@ -19,6 +19,7 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_roster.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_interaction.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_nameplate_layout.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/placement_bounds.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glue_camera_director.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glue_scene_definition.cpp
 )

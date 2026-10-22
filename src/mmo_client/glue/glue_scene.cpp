@@ -401,7 +401,7 @@ namespace mmo
 		{
 			if (!m_worldInstance || !HasPendingGateContent())
 			{
-				MarkGateReady();
+				MarkGateReady(false);
 			}
 
 			return;
@@ -434,7 +434,7 @@ namespace mmo
 			if (now - m_gateLoadStartMs >= readinessTimeoutMs)
 			{
 				WLOG("Glue scene: gate view not loaded after " << (now - m_gateLoadStartMs) << " ms, showing it anyway");
-				MarkGateReady();
+				MarkGateReady(true);
 			}
 
 			// The plaza's clock starts when the gate is ready.
@@ -448,12 +448,20 @@ namespace mmo
 		}
 	}
 
-	void GlueScene::MarkGateReady()
+	void GlueScene::MarkGateReady(const bool timedOut)
 	{
 		m_gateReady = true;
 
 		const GameTime now = GetAsyncTimeMs();
 		m_plazaLoadStartMs = now;
+
+		if (timedOut)
+		{
+			// Neither the terrain nor the models finished: a split would be misleading.
+			ILOG("Glue scene: gate ready after " << (now - m_gateLoadStartMs) << " ms (timeout, "
+				<< (m_terrainLoadedMs != 0 ? "terrain done, models pending" : "terrain pending") << ")");
+			return;
+		}
 
 		// Terrain: until the last page was loaded (entity files still reading in the background).
 		// Models: from then until the world models the gate camera sees were created.

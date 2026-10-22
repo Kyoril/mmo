@@ -447,6 +447,10 @@ namespace mmo
 			UpdateRotationReturn(*avatar, deltaSeconds);
 			UpdateHover(*avatar, deltaSeconds, cameraPosition);
 
+			// Outside the hover update, which stops once the reaction is idle: a released greeting
+			// still has to play out its fade.
+			UpdateGreeting(*avatar, deltaSeconds);
+
 			if (avatar->visible && avatar->animationState)
 			{
 				avatar->animationState->AddTime(deltaSeconds);
@@ -560,6 +564,7 @@ namespace mmo
 		if (!visible)
 		{
 			ResetHover(avatar);
+			StopGreeting(avatar);
 		}
 
 		avatar.visible = visible;
@@ -717,6 +722,12 @@ namespace mmo
 	void PlazaAvatars::UpdateHover(Avatar& avatar, const float deltaSeconds, const Vector3& cameraPosition)
 	{
 		const bool active = m_hoveredGuid != 0 && avatar.guid == m_hoveredGuid && IsStandingOnPlaza(avatar);
+		if (!active && !avatar.greeting.IsReleased())
+		{
+			// The hover ended mid-greeting: let it play on and fade back to the pose.
+			ReleaseGreeting(avatar);
+		}
+
 		if (!active && avatar.hover.IsIdle())
 		{
 			return;
@@ -737,7 +748,6 @@ namespace mmo
 			}
 		}
 
-		UpdateGreeting(avatar, deltaSeconds);
 		ApplyTransform(avatar);
 
 		const float glow = avatar.hover.GetGlow();
@@ -780,10 +790,20 @@ namespace mmo
 
 	void PlazaAvatars::StartGreeting(Avatar& avatar)
 	{
-		if (!avatar.entity || avatar.greetingState)
+		if (!avatar.entity)
 		{
 			return;
 		}
+
+		if (avatar.greetingState && avatar.greeting.IsPlaying())
+		{
+			// Still waving (or fading out after the last hover): carry on from where the clip and
+			// its weight are, so nothing restarts or pops.
+			(void)avatar.greeting.Start(avatar.greetingState->GetLength(), greetingFadeInSeconds, greetingFadeOutSeconds);
+			return;
+		}
+
+		StopGreeting(avatar);
 
 		for (const String& clip : m_greetingClips)
 		{
@@ -799,12 +819,20 @@ namespace mmo
 			}
 
 			avatar.greetingState = state;
-			avatar.greetingElapsed = 0.0f;
+			(void)avatar.greeting.Start(state->GetLength(), greetingFadeInSeconds, greetingFadeOutSeconds);
 			state->SetTimePosition(0.0f);
 			state->SetLoop(false);
-			state->SetWeight(0.0f);
+			state->SetWeight(0.001f);
 			state->SetEnabled(true);
 			return;
+		}
+	}
+
+	void PlazaAvatars::ReleaseGreeting(Avatar& avatar)
+	{
+		if (avatar.greetingState)
+		{
+			avatar.greeting.Release();
 		}
 	}
 
@@ -815,10 +843,10 @@ namespace mmo
 			return;
 		}
 
-		avatar.greetingElapsed += deltaSeconds;
-
-		const float length = avatar.greetingState->GetLength();
-		if (avatar.greetingElapsed >= length)
+		// Runs every update, hovered or not: a greeting cut short keeps playing (its clip time
+		// advancing) while its weight fades out.
+		avatar.greeting.Update(deltaSeconds);
+		if (!avatar.greeting.IsPlaying())
 		{
 			StopGreeting(avatar);
 			return;
@@ -827,7 +855,7 @@ namespace mmo
 		avatar.greetingState->AddTime(deltaSeconds);
 
 		// The skeleton averages the enabled clips by weight, so pose and greeting share one weight.
-		const float weight = PlazaGreetingWeight(avatar.greetingElapsed, length, greetingFadeInSeconds, greetingFadeOutSeconds);
+		const float weight = avatar.greeting.GetWeight();
 		avatar.greetingState->SetWeight(std::max(weight, 0.001f));
 		if (avatar.animationState)
 		{
@@ -837,6 +865,8 @@ namespace mmo
 
 	void PlazaAvatars::StopGreeting(Avatar& avatar)
 	{
+		avatar.greeting.Reset();
+
 		if (!avatar.greetingState)
 		{
 			return;
@@ -845,7 +875,6 @@ namespace mmo
 		avatar.greetingState->SetEnabled(false);
 		avatar.greetingState->SetWeight(1.0f);
 		avatar.greetingState = nullptr;
-		avatar.greetingElapsed = 0.0f;
 
 		if (avatar.animationState)
 		{
@@ -920,7 +949,9 @@ namespace mmo
 	{
 		const bool wasReacting = !avatar.hover.IsIdle();
 
-		StopGreeting(avatar);
+		// The greeting fades back to the pose instead of freezing or snapping. A new animation (a
+		// run) or hiding the avatar stops it outright (PlayAnimation, SetVisible).
+		ReleaseGreeting(avatar);
 		RestoreMaterials(avatar);
 		avatar.hover.Reset();
 		avatar.hoverTurnDegrees = 0.0f;

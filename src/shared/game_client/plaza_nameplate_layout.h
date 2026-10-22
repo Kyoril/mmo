@@ -31,6 +31,11 @@ namespace mmo
 
 		/// The selected character's plate: placed first, so it keeps its place if it can.
 		bool priority = false;
+
+		/// Extra clearance this plate needs before it counts as free of the others. The declutter
+		/// sets it for plates that made way last frame, so they only return to their anchors once
+		/// clearly free and do not flip back and forth.
+		float hysteresis = 0.0f;
 	};
 
 	/// Resolves overlapping plates by moving them vertically. Plates are placed one after another,
@@ -53,6 +58,9 @@ namespace mmo
 		/// How fast a plate follows its resolved offset (1 / seconds, exponential).
 		static constexpr float EaseRate = 12.0f;
 
+		/// Extra clearance a plate that made way needs before it returns to its anchor.
+		static constexpr float Hysteresis = 16.0f;
+
 	public:
 		/// Resolves the plates and advances the easing. A plate seen for the first time starts at
 		/// its resolved offset; plates no longer passed are forgotten.
@@ -65,10 +73,17 @@ namespace mmo
 		const std::vector<float>& Update(const std::vector<PlazaNameplateBox>& boxes, float deltaSeconds, float gap, float screenTop, float screenBottom);
 
 		/// Forgets every plate, so the next update places them without easing.
-		void Reset() { m_offsets.clear(); }
+		void Reset()
+		{
+			m_offsets.clear();
+			m_moved.clear();
+		}
 
 	private:
 		std::map<int32, float> m_offsets;
+
+		/// Whether each plate (by key) had to make way at the last update.
+		std::map<int32, bool> m_moved;
 		std::vector<float> m_result;
 	};
 }

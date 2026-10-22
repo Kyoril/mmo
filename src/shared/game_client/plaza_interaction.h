@@ -56,6 +56,48 @@ namespace mmo
 	/// @param pose The pose's clip name.
 	[[nodiscard]] bool IsPlazaSeatedPose(const String& pose);
 
+	/// The weight of a one-shot greeting clip over the pose, including a greeting cut short: once
+	/// released (the hover ended), it fades out from whatever weight it has, while the clip keeps
+	/// playing. Started again while still playing, it resumes and fades back in from that weight.
+	class PlazaGreetingBlend final
+	{
+	public:
+		/// Starts a greeting, or resumes one that is still playing (fading out or not).
+		/// @param lengthSeconds Length of the clip.
+		/// @param fadeInSeconds Duration of the fade in (also the rate it recovers at when resumed).
+		/// @param fadeOutSeconds Duration of the fade out, at the clip's end and after a release.
+		/// @return True if a new greeting started (the clip should start from its beginning), false
+		///         if a playing one resumed (the clip keeps its time).
+		bool Start(float lengthSeconds, float fadeInSeconds, float fadeOutSeconds);
+
+		/// Fades the greeting out from its current weight. Nothing happens if none plays.
+		void Release();
+
+		/// Advances the greeting. It ends when the clip ends or a release faded it out.
+		void Update(float deltaSeconds);
+
+		/// Ends the greeting at once.
+		void Reset();
+
+		/// Whether a greeting plays (including while it fades out).
+		[[nodiscard]] bool IsPlaying() const { return m_playing; }
+
+		/// Whether the greeting was released and fades out.
+		[[nodiscard]] bool IsReleased() const { return m_released; }
+
+		/// Current weight in [0, 1]; 0 when none plays.
+		[[nodiscard]] float GetWeight() const { return m_playing ? m_weight : 0.0f; }
+
+	private:
+		bool m_playing = false;
+		bool m_released = false;
+		float m_elapsed = 0.0f;
+		float m_length = 0.0f;
+		float m_fadeIn = 0.0f;
+		float m_fadeOut = 0.0f;
+		float m_weight = 0.0f;
+	};
+
 	/// The eased hover reaction of one plaza character: the glow and the turn towards the camera
 	/// fade in while the reaction is active and back out when it ends.
 	class PlazaHoverReaction final

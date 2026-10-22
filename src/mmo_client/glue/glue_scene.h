@@ -147,7 +147,8 @@ namespace mmo
 
 		/// Marks the gate ready, logs how long its terrain and its world models took, and starts the
 		/// plaza's readiness clock.
-		void MarkGateReady();
+		/// @param timedOut Whether the readiness timeout forced it, which is logged instead of the split.
+		void MarkGateReady(bool timedOut);
 
 		/// Whether content the gate camera sees is still loading: an entity or foliage file not
 		/// handled yet, or a world model in the gate camera's frustum still being prepared. Once the

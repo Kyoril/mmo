@@ -107,6 +107,73 @@ namespace mmo
 		return containsNoCase(pose, "sit") || containsNoCase(pose, "sleep") || containsNoCase(pose, "kneel");
 	}
 
+	bool PlazaGreetingBlend::Start(const float lengthSeconds, const float fadeInSeconds, const float fadeOutSeconds)
+	{
+		if (m_playing)
+		{
+			// Resume: the weight recovers from where it is, so nothing pops.
+			m_released = false;
+			return false;
+		}
+
+		m_playing = lengthSeconds > 0.0f;
+		m_released = false;
+		m_elapsed = 0.0f;
+		m_length = lengthSeconds;
+		m_fadeIn = fadeInSeconds;
+		m_fadeOut = fadeOutSeconds;
+		m_weight = 0.0f;
+		return m_playing;
+	}
+
+	void PlazaGreetingBlend::Release()
+	{
+		if (m_playing)
+		{
+			m_released = true;
+		}
+	}
+
+	void PlazaGreetingBlend::Update(const float deltaSeconds)
+	{
+		if (!m_playing)
+		{
+			return;
+		}
+
+		const float delta = std::max(deltaSeconds, 0.0f);
+		m_elapsed += delta;
+		if (m_elapsed >= m_length)
+		{
+			Reset();
+			return;
+		}
+
+		if (m_released)
+		{
+			m_weight = m_fadeOut > 0.0f ? m_weight - delta / m_fadeOut : 0.0f;
+			if (m_weight <= 0.0f)
+			{
+				Reset();
+			}
+			return;
+		}
+
+		// Follows the clip's envelope, but never rises faster than the fade in (a resumed greeting
+		// climbs back from its faded weight).
+		const float envelope = PlazaGreetingWeight(m_elapsed, m_length, m_fadeIn, m_fadeOut);
+		const float rise = m_fadeIn > 0.0f ? m_weight + delta / m_fadeIn : 1.0f;
+		m_weight = std::clamp(std::min(envelope, rise), 0.0f, 1.0f);
+	}
+
+	void PlazaGreetingBlend::Reset()
+	{
+		m_playing = false;
+		m_released = false;
+		m_elapsed = 0.0f;
+		m_weight = 0.0f;
+	}
+
 	bool PlazaHoverReaction::Update(const bool active, const float deltaSeconds)
 	{
 		const bool entered = active && !m_active;

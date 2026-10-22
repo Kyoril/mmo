@@ -2,6 +2,8 @@
 #include "world_deserializer.h"
 
 #include <filesystem>
+#include <map>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -22,7 +24,7 @@
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/scene.h"
-#include "math/matrix4.h"
+#include "game_client/placement_bounds.h"
 #include "scene_graph/world_model.h"
 #include "scene_graph/world_model_instance.h"
 #include "scene_graph/world_model_manager.h"
@@ -68,6 +70,44 @@ namespace mmo
 		/// Loaded world models, in load order, waiting for their merged geometry.
 		std::vector<WorldModelPtr> models;
 		size_t nextMerge = 0;
+
+		/// The loaded world models by path, to find child models for the bounds.
+		std::map<String, WorldModelPtr> modelsByPath;
+
+		/// The placement's world-space bounds including every child model, once all are loaded.
+		std::optional<AABB> worldBounds;
+
+		/// Bounds of a loaded model in its own space, grown by its visible child models (nested
+		/// ones included). A model's own bounds only cover its own groups. Null if not loaded.
+		AABB LocalBounds(const String& path, const int depth) const
+		{
+			const auto it = modelsByPath.find(path);
+			if (it == modelsByPath.end() || !it->second)
+			{
+				return AABB();
+			}
+
+			AABB bounds = it->second->GetBoundingBox();
+
+			// The same depth limit WorldModelInstance uses for nested children.
+			constexpr int maxDepth = 8;
+			if (depth >= maxDepth)
+			{
+				return bounds;
+			}
+
+			for (const WorldModelChildRef& childRef : it->second->GetChildRefs())
+			{
+				if (!childRef.visible || childRef.wmoPath.empty() || childRef.wmoPath == path)
+				{
+					continue;
+				}
+
+				bounds = CombineChildBounds(bounds, LocalBounds(childRef.wmoPath, depth + 1), childRef.position, childRef.rotation, childRef.scale);
+			}
+
+			return bounds;
+		}
 
 		/// Keeps the merged geometry alive until the instance holds it itself.
 		std::vector<std::shared_ptr<const void>> mergedGeometry;
@@ -553,6 +593,7 @@ namespace mmo
 					}
 				}
 
+				prep.modelsByPath[path] = model;
 				prep.models.push_back(std::move(model));
 			}
 		}
@@ -626,22 +667,20 @@ namespace mmo
 				continue;
 			}
 
-			// The placed model is the first one loaded; until then where it shows is unknown
-			if (preparation->models.empty() || !preparation->models.front())
+			// Until the placed model and all of its child models are loaded, where the placement
+			// shows is not known: it counts (child models can stand anywhere around the root).
+			if (preparation->models.empty() || !preparation->pendingModels.empty())
 			{
 				return true;
 			}
 
-			AABB bounds = preparation->models.front()->GetBoundingBox();
-			if (bounds.IsNull())
+			if (!preparation->worldBounds)
 			{
-				return true;
+				preparation->worldBounds = TransformPlacementBounds(preparation->LocalBounds(preparation->entity.meshName, 0),
+					preparation->entity.position, preparation->entity.rotation, preparation->entity.scale);
 			}
 
-			Matrix4 transform;
-			transform.MakeTransform(preparation->entity.position, preparation->entity.scale, preparation->entity.rotation);
-			bounds.Transform(transform);
-			if (isRelevant(bounds))
+			if (preparation->worldBounds->IsNull() || isRelevant(*preparation->worldBounds))
 			{
 				return true;
 			}

@@ -147,3 +147,31 @@ TEST_CASE("The declutter forgets plates that disappear", "[plaza_nameplates]")
 	const auto offsets = declutter.Update({ boxes[0] }, 0.016f, gap, screenTop, screenBottom);
 	CHECK(offsets[0] == 0.0f);
 }
+
+TEST_CASE("A plate that made way only returns once clearly free", "[plaza_nameplates]")
+{
+	PlazaNameplateDeclutter declutter;
+
+	// Far plate overlaps the near one and moves up.
+	std::vector<PlazaNameplateBox> boxes{ makeBox(0, 1000.0f, 950.0f, 14.0f), makeBox(1, 1100.0f, 1000.0f, 9.0f) };
+	auto offsets = declutter.Update(boxes, 1.0f, gap, screenTop, screenBottom);
+	CHECK(offsets[0] < 0.0f);
+
+	// The near character steps aside until the plates just clear each other sideways (by less
+	// than the hysteresis): the far plate stays up instead of flipping back.
+	boxes[1].x = 1000.0f + 400.0f + 4.0f;
+	offsets = declutter.Update(boxes, 1.0f, gap, screenTop, screenBottom);
+	CHECK(offsets[0] < 0.0f);
+
+	// Clearly free now: back to its anchor.
+	boxes[1].x = 1000.0f + 400.0f + PlazaNameplateDeclutter::Hysteresis + 4.0f;
+	for (int frame = 0; frame < 60; ++frame)
+	{
+		offsets = declutter.Update(boxes, 0.05f, gap, screenTop, screenBottom);
+	}
+	CHECK(offsets[0] == Approx(0.0f));
+
+	// Without the hysteresis, the in-between position would already count as free.
+	const std::vector<PlazaNameplateBox> fresh{ makeBox(0, 1000.0f, 950.0f, 14.0f), makeBox(1, 1000.0f + 400.0f + 4.0f, 1000.0f, 9.0f) };
+	CHECK(ResolvePlazaNameplateOffsets(fresh, gap, screenTop, screenBottom)[0] == 0.0f);
+}

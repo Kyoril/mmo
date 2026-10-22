@@ -18,14 +18,14 @@ namespace mmo
 			float bottom;
 		};
 
-		bool Overlaps(const PlacedPlate& placed, const float x, const float halfWidth, const float top, const float bottom, const float gap)
+		bool Overlaps(const PlacedPlate& placed, const float x, const float halfWidth, const float top, const float bottom, const float gap, const float extra)
 		{
-			if (std::abs(placed.x - x) >= placed.halfWidth + halfWidth)
+			if (std::abs(placed.x - x) >= placed.halfWidth + halfWidth + extra)
 			{
 				return false;
 			}
 
-			return top < placed.bottom + gap && placed.top < bottom + gap;
+			return top < placed.bottom + gap + extra && placed.top < bottom + gap + extra;
 		}
 	}
 
@@ -74,10 +74,13 @@ namespace mmo
 				bool moved = false;
 				for (const PlacedPlate& other : placed)
 				{
-					if (Overlaps(other, box.x, halfWidth, bottom - height, bottom, gap))
+					if (Overlaps(other, box.x, halfWidth, bottom - height, bottom, gap, box.hysteresis))
 					{
-						bottom = other.top - gap;
-						moved = true;
+						if (other.top - gap < bottom)
+						{
+							bottom = other.top - gap;
+							moved = true;
+						}
 					}
 				}
 
@@ -96,10 +99,13 @@ namespace mmo
 					bool moved = false;
 					for (const PlacedPlate& other : placed)
 					{
-						if (Overlaps(other, box.x, halfWidth, below - height, below, gap))
+						if (Overlaps(other, box.x, halfWidth, below - height, below, gap, box.hysteresis))
 						{
-							below = other.bottom + gap + height;
-							moved = true;
+							if (other.bottom + gap + height > below)
+							{
+								below = other.bottom + gap + height;
+								moved = true;
+							}
 						}
 					}
 
@@ -121,7 +127,20 @@ namespace mmo
 
 	const std::vector<float>& PlazaNameplateDeclutter::Update(const std::vector<PlazaNameplateBox>& boxes, const float deltaSeconds, const float gap, const float screenTop, const float screenBottom)
 	{
-		const std::vector<float> targets = ResolvePlazaNameplateOffsets(boxes, gap, screenTop, screenBottom);
+		std::vector<PlazaNameplateBox> withHysteresis = boxes;
+		for (PlazaNameplateBox& box : withHysteresis)
+		{
+			const auto it = m_moved.find(box.key);
+			box.hysteresis = (it != m_moved.end() && it->second) ? Hysteresis : 0.0f;
+		}
+
+		const std::vector<float> targets = ResolvePlazaNameplateOffsets(withHysteresis, gap, screenTop, screenBottom);
+
+		m_moved.clear();
+		for (size_t i = 0; i < boxes.size(); ++i)
+		{
+			m_moved[boxes[i].key] = targets[i] != 0.0f;
+		}
 		const float follow = 1.0f - std::exp(-EaseRate * std::max(deltaSeconds, 0.0f));
 
 		std::map<int32, float> offsets;

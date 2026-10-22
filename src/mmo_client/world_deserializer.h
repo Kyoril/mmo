@@ -62,16 +62,19 @@ namespace mmo
 
 		void UnloadAllEntities();
 
-		/// @brief Whether page entities are still being read or world models still being prepared.
+		/// @brief Whether page entity or foliage files are still being read, or world models still
+		///        being prepared.
 		/// @details World models are created over several dispatcher steps, so a caller that must see
 		///          the finished world (the loading screen) keeps pumping the work queue and dispatcher
-		///          until this returns false.
+		///          until this returns false. Foliage files count too, so the loading screen also
+		///          waits for a page's trees.
 		bool HasPendingEntityLoads() const { return m_pendingEntityFiles.load() > 0 || m_pendingFoliageFiles.load() > 0 || m_pendingWorldModels > 0; }
 
 		/// @brief Whether content that may pass a bounds test is still on its way: an entity or
 		///        foliage file not handled yet (where its content lands is not known), or a world
-		///        model placement still being prepared whose bounds pass the test. A placement whose
-		///        own model is not loaded yet always counts.
+		///        model placement still being prepared whose bounds (child world models included)
+		///        pass the test. A placement whose model or child models are not all loaded yet
+		///        always counts.
 		/// @param isRelevant Tests a placement's world-space bounds, e.g. against a camera frustum.
 		bool HasPendingWorldModels(const std::function<bool(const AABB&)>& isRelevant) const;
 

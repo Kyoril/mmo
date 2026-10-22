@@ -120,3 +120,66 @@ TEST_CASE("A deselected character's rotation eases back to none", "[plaza]")
 	CHECK(PlazaRotationReturnDegrees(60.0f, 1.0f, 0.3f) == 0.0f);
 	CHECK(PlazaRotationReturnDegrees(60.0f, 0.0f, 0.0f) == 0.0f);
 }
+
+TEST_CASE("A greeting cut short fades out from its weight while the clip plays on", "[plaza]")
+{
+	PlazaGreetingBlend blend;
+	CHECK(blend.Start(2.0f, 0.2f, 0.3f));
+
+	// Fully in mid-clip.
+	for (int i = 0; i < 10; ++i)
+	{
+		blend.Update(0.05f);
+	}
+	CHECK(blend.GetWeight() == Approx(1.0f));
+
+	// The hover ends: the weight falls linearly over 0.3 s and never freezes.
+	blend.Release();
+	blend.Update(0.1f);
+	CHECK(blend.IsPlaying());
+	CHECK(blend.GetWeight() == Approx(2.0f / 3.0f));
+	blend.Update(0.1f);
+	CHECK(blend.GetWeight() == Approx(1.0f / 3.0f));
+	blend.Update(0.11f);
+	CHECK_FALSE(blend.IsPlaying());
+	CHECK(blend.GetWeight() == 0.0f);
+}
+
+TEST_CASE("A greeting resumed while fading out climbs back without a pop", "[plaza]")
+{
+	PlazaGreetingBlend blend;
+	CHECK(blend.Start(3.0f, 0.2f, 0.3f));
+	for (int i = 0; i < 10; ++i)
+	{
+		blend.Update(0.05f);
+	}
+
+	blend.Release();
+	blend.Update(0.15f);
+	const float faded = blend.GetWeight();
+	CHECK(faded == Approx(0.5f));
+
+	// Hovered again: the same greeting continues, no restart, and the weight rises gently.
+	CHECK_FALSE(blend.Start(3.0f, 0.2f, 0.3f));
+	CHECK_FALSE(blend.IsReleased());
+	blend.Update(0.05f);
+	CHECK(blend.GetWeight() == Approx(faded + 0.25f));
+	blend.Update(0.2f);
+	CHECK(blend.GetWeight() == Approx(1.0f));
+}
+
+TEST_CASE("A greeting that is not cut short follows the clip envelope and ends with it", "[plaza]")
+{
+	PlazaGreetingBlend blend;
+	CHECK(blend.Start(1.0f, 0.2f, 0.3f));
+	blend.Update(0.1f);
+	CHECK(blend.GetWeight() == Approx(0.5f));
+	blend.Update(0.75f);
+	CHECK(blend.GetWeight() == Approx(0.5f));
+	blend.Update(0.2f);
+	CHECK_FALSE(blend.IsPlaying());
+
+	// Releasing nothing does nothing.
+	blend.Release();
+	CHECK_FALSE(blend.IsReleased());
+}

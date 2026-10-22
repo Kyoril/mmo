@@ -171,7 +171,7 @@ namespace mmo
 
 			/// The greeting clip while it plays, over the pose.
 			AnimationState* greetingState = nullptr;
-			float greetingElapsed = 0.0f;
+			PlazaGreetingBlend greeting;
 
 			/// A per-avatar material instance carrying the glow tint, and the material it replaced.
 			struct GlowMaterial
@@ -225,6 +225,9 @@ namespace mmo
 		/// Advances a playing greeting and blends it with the pose; ends it after the clip.
 		void UpdateGreeting(Avatar& avatar, float deltaSeconds);
 
+		/// Lets a playing greeting fade back to the pose (its clip keeps playing). See UpdateGreeting.
+		void ReleaseGreeting(Avatar& avatar);
+
 		/// Stops a playing greeting at once and gives the pose its full weight back.
 		void StopGreeting(Avatar& avatar);
 
@@ -234,7 +237,7 @@ namespace mmo
 		/// Puts the original materials back and drops the glow instances.
 		void RestoreMaterials(Avatar& avatar);
 
-		/// Ends everything of the hover reaction at once: greeting, turn and glow.
+		/// Ends the hover reaction at once (turn and glow); a greeting fades back to the pose.
 		void ResetHover(Avatar& avatar);
 
 		/// Eases the rotation of a deselected avatar back to none.
