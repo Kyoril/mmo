@@ -87,6 +87,8 @@ namespace mmo
 
 		void SetPlaybackPosition(float seconds) override;
 
+		void Set3DSpread(float degrees) override;
+
 		// Add sound tracking
 		SoundIndex GetSoundIndex() const;
 		void SetSoundIndex(SoundIndex soundIndex);
@@ -120,6 +122,8 @@ namespace mmo
 		SoundIndex CreateLoopedSound(const String &fileName) override;
 
 		SoundIndex CreateLoopedStream(const String &fileName) override;
+
+		SoundIndex CreateLoopedStream3D(const String& fileName) override;
 
 		SoundIndex CreateSound(const String &fileName, SoundType type) override;
 

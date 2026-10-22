@@ -171,6 +171,14 @@ namespace mmo
 		m_channel->setPosition(positionMs, FMOD_TIMEUNIT_MS);
 	}
 
+	void FMODChannelInstance::Set3DSpread(const float degrees)
+	{
+		if (m_channel)
+		{
+			m_channel->set3DSpread(degrees);
+		}
+	}
+
 	SoundIndex FMODChannelInstance::GetSoundIndex() const
 	{
 		return m_soundIndex;
@@ -395,6 +403,11 @@ namespace mmo
 		return CreateSound(fileName, SoundType::SoundLooped2D);
 	}
 
+	SoundIndex FMODAudio::CreateLoopedStream3D(const String& fileName)
+	{
+		return CreateSound(fileName, SoundType::StreamLooped3D);
+	}
+
 	SoundIndex FMODAudio::CreateSound(const String& fileName, SoundType type)
 	{
 		// Check cache first
@@ -442,6 +455,10 @@ namespace mmo
 
 		case SoundType::SoundLooped3D:
 			result = m_system->createSound((const char *)newSoundInstance, FMOD_LOOP_NORMAL | FMOD_3D, 0, &sound);
+			break;
+
+		case SoundType::StreamLooped3D:
+			result = m_system->createStream((const char *)newSoundInstance, FMOD_LOOP_NORMAL | FMOD_3D, 0, &sound);
 			break;
 
 		case SoundType::Sound2D:
@@ -559,7 +576,7 @@ namespace mmo
 		channel->setVolume(1.0);
 
 		// For 3D sounds, set proper rolloff mode to ensure sounds beyond max distance are inaudible
-		if (instance.GetType() == SoundType::Sound3D || instance.GetType() == SoundType::SoundLooped3D)
+		if (instance.GetType() == SoundType::Sound3D || instance.GetType() == SoundType::SoundLooped3D || instance.GetType() == SoundType::StreamLooped3D)
 		{
 			channel->setMode(FMOD_3D | FMOD_3D_LINEARSQUAREROLLOFF);
 			channel->set3DLevel(1.0f);

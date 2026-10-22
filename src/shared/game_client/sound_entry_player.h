@@ -36,6 +36,15 @@ namespace mmo
 		/// @return The channel the sound plays on, or InvalidChannel.
 		ChannelIndex PlayEntry(uint32 soundId, const Vector3& position);
 
+		/// @brief Plays a sound entry as a streamed, positioned loop (e.g. a river or waterfall).
+		/// The file is picked like for PlayEntry (shuffle bag) but loaded through
+		/// IAudio::CreateLoopedStream3D, regardless of the entry's 2D/3D flag, and played in
+		/// the entry's category with the entry's volume and pitch.
+		/// @remark A stream plays on one channel only, so at most one voice per entry may be
+		///         live at any time. Callers must stop the previous channel first.
+		/// @return The channel the sound plays on, or InvalidChannel.
+		ChannelIndex PlayEntryPositionedLoop(uint32 soundId, const Vector3& position, float minDistance, float maxDistance);
+
 		/// @brief Gets the length of the (first) sound file of an entry in seconds.
 		float GetEntryLength(uint32 soundId) const;
 

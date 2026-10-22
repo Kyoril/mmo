@@ -43,6 +43,7 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 else()
 	set_source_files_properties(
 		${CMAKE_CURRENT_SOURCE_DIR}/test_crossfading_sound_loop.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_sound_entry_player_positioned.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_ambient_sound_emitters.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_sound_resolver.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_voice_gate.cpp

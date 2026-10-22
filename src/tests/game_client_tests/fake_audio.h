@@ -49,10 +49,21 @@ namespace mmo
 			return m_playbackPosition;
 		}
 
+		void Set3DSpread(const float degrees) override
+		{
+			m_spread = degrees;
+		}
+
+		float GetSpread() const
+		{
+			return m_spread;
+		}
+
 	private:
 		float m_pitch = 1.0f;
 		float m_volume = 1.0f;
 		float m_playbackPosition = 0.0f;
+		float m_spread = 0.0f;
 	};
 
 	/// @brief Headless IAudio double: hands out incrementing sound / channel indices and
@@ -102,6 +113,11 @@ namespace mmo
 		}
 
 		SoundIndex CreateLoopedStream(const String& fileName) override
+		{
+			return CreateSound(fileName);
+		}
+
+		SoundIndex CreateLoopedStream3D(const String& fileName) override
 		{
 			return CreateSound(fileName);
 		}
@@ -212,6 +228,12 @@ namespace mmo
 		float GetChannelPlaybackPosition(const ChannelIndex channel)
 		{
 			return m_channels[channel].GetPlaybackPosition();
+		}
+
+		/// @brief Gets the 3D spread in degrees last set on the given channel.
+		float GetChannelSpread(const ChannelIndex channel)
+		{
+			return m_channels[channel].GetSpread();
 		}
 
 		/// @brief World position each 3D channel was started at.

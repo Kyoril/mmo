@@ -17,6 +17,9 @@ namespace mmo
 		Sound2D,
 
 		SoundLooped2D,
+
+		/// Streamed, looped, positional sound. A stream can only play on one channel at a time.
+		StreamLooped3D,
 	};
 
 	/// Enumerates sound categories which can be individually adjusted in volume or muted
@@ -76,6 +79,11 @@ namespace mmo
 		/// @brief Moves playback to the given time. Looped sounds wrap it into their length, so
 		///        identical loops started together can be desynchronized with a random offset.
 		virtual void SetPlaybackPosition(float seconds) = 0;
+
+		/// @brief Sets how widely a 3D sound spreads across the speakers.
+		/// @param degrees Spread angle in degrees [0, 360]. 0 is a point source, larger values
+		///        make a sound that surrounds the listener (e.g. a long river).
+		virtual void Set3DSpread(float degrees) = 0;
 	};
 
 	class IAudio
@@ -91,6 +99,8 @@ namespace mmo
 		virtual SoundIndex CreateStream(const String& fileName) = 0;
 		virtual SoundIndex CreateLoopedSound(const String& fileName) = 0;
 		virtual SoundIndex CreateLoopedStream(const String &fileName) = 0;
+		/// Creates a streamed, looped sound which can be positioned in 3D space.
+		virtual SoundIndex CreateLoopedStream3D(const String& fileName) = 0;
 		virtual SoundIndex CreateSound(const String& fileName, SoundType type) = 0;
 		virtual void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f, SoundCategory category = SoundCategory::SoundEffects) = 0;
 		/// Plays a 3D sound at the given world position, applying position and min/max distance
