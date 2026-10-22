@@ -2244,6 +2244,7 @@ namespace mmo
 			     + h01 * (1.0f - fx)  * fz
 			     + h11 * fx           * fz;
 		}
+
 		float Terrain::GetWaterFlowSpeedAtWorldPos(float x, float z) const
 		{
 			const float halfW = static_cast<float>(m_width  * constants::PageSize) * 0.5f;

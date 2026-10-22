@@ -1164,10 +1164,13 @@ namespace mmo
 		// Update audio component to simulate 3d audio correctly from the player position
 		if (m_playerController->GetControlledUnit())
 		{
+			// Head height of the listener above the unit's feet; the water beds are placed around it too.
+			const Vector3 earOffset(0.0f, 1.6f, 0.0f);
+
 			{
 				PROFILE_SCOPE("OnIdle::Audio");
 				m_audio.SetListenerOrientation(audio_listener::FlattenedForward(m_playerController->GetCamera().GetDerivedDirection()), Vector3::UnitY);
-				m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+				m_audio.Update(m_playerController->GetControlledUnit()->GetPosition() + earOffset, deltaSeconds);
 			}
 
 			// Mesh sounds are selected around the same position the 3D listener sits at
@@ -1182,7 +1185,7 @@ namespace mmo
 				const TerrainWaterAmbienceSource waterSource(waterTerrain);
 				const GameUnitC &controlledUnit = *m_playerController->GetControlledUnit();
 				const Vector3 unitPosition = controlledUnit.GetPosition();
-				m_waterAmbience.Update(waterSource, unitPosition + Vector3(0.0f, 1.6f, 0.0f),
+				m_waterAmbience.Update(waterSource, unitPosition + earOffset,
 					controlledUnit.GetMovementInfo().IsSwimming(),
 					waterTerrain != nullptr ? static_cast<uint32>(waterTerrain->GetWaterTypeAtWorldPos(unitPosition.x, unitPosition.z)) : 0u,
 					deltaSeconds);
@@ -1746,11 +1749,12 @@ namespace mmo
 		m_waterVolume = std::make_unique<WaterVolumeSystem>(*m_waterQuery);
 		m_waterVolume->SetProfileResolver([this](const uint32 waterType) { return ResolveWaterProfile(waterType); });
 
-		// Water ambience: every profile with a calm bed takes part in the scan.
+		// Water ambience: every profile with a calm bed or a swim layer takes part. WaterAmbience
+		// only scans and plays beds for profiles with a calm sound.
 		std::vector<WaterAmbienceSounds> waterAmbienceProfiles;
 		for (const auto &profile : m_project.waterProfiles.getTemplates().entry())
 		{
-			if (profile.ambient_calm_sound() == 0)
+			if (profile.ambient_calm_sound() == 0 && profile.ambient_swim_sound() == 0)
 			{
 				continue;
 			}
@@ -2569,7 +2573,7 @@ namespace mmo
 									 }
 								 }, ConsoleCommandCategory::Sound, "Lists the water ambience fields and voices.");
 
-		Console::RegisterCommand(command_names::s_toggleAxis,[this](const std::string &, const std::string &)
+		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string &, const std::string &)
 								 { ToggleAxisVisibility(); }, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
 
 		Console::RegisterCommand(command_names::s_toggleGrid, [this](const std::string &, const std::string &)

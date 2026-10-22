@@ -127,14 +127,14 @@ namespace mmo
 			return CreateSound(fileName);
 		}
 
-		void PlaySound(const SoundIndex sound, ChannelIndex* channelIndex, float, SoundCategory) override
+		void PlaySound(const SoundIndex sound, ChannelIndex* channelIndex, const float priority, SoundCategory) override
 		{
-			Start(sound, channelIndex);
+			Start(sound, channelIndex, priority);
 		}
 
-		void PlaySound3D(const SoundIndex sound, ChannelIndex* channelIndex, const Vector3& position, float, float, float, SoundCategory) override
+		void PlaySound3D(const SoundIndex sound, ChannelIndex* channelIndex, const Vector3& position, float, float, const float priority, SoundCategory) override
 		{
-			Start(sound, channelIndex);
+			Start(sound, channelIndex, priority);
 			if (channelIndex)
 			{
 				channelPositions[*channelIndex] = position;
@@ -239,6 +239,9 @@ namespace mmo
 		/// @brief World position each 3D channel was started at.
 		std::map<ChannelIndex, Vector3> channelPositions;
 
+		/// @brief Priority each channel was started with.
+		std::map<ChannelIndex, float> channelPriorities;
+
 		/// @brief Whether a sound created from the given file was played at least once.
 		bool PlayedFile(const String& fileName) const
 		{
@@ -246,13 +249,14 @@ namespace mmo
 		}
 
 	private:
-		void Start(const SoundIndex sound, ChannelIndex* channelIndex)
+		void Start(const SoundIndex sound, ChannelIndex* channelIndex, const float priority)
 		{
 			const auto it = m_files.find(sound);
 			playedFiles.push_back(it == m_files.end() ? String() : it->second);
 
 			const ChannelIndex channel = m_nextChannel++;
 			startedChannels.push_back(channel);
+			channelPriorities[channel] = priority;
 
 			if (channelIndex)
 			{

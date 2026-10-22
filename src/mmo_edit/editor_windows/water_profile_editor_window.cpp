@@ -232,10 +232,13 @@ namespace mmo
 				ImGui::SetTooltip("2D loop layered in while the player swims in this liquid.");
 			}
 
+			// The client clamps longer ranges anyway (water_ambience::MaxRange): the scan cost grows
+			// with the square of the range.
+			constexpr float maxAmbienceRange = 100.0f;
 			float range = currentEntry.ambient_range();
-			if (ImGui::DragFloat("Ambience Range", &range, 0.5f, 1.0f, 500.0f, "%.1f m"))
+			if (ImGui::DragFloat("Ambience Range", &range, 0.5f, 1.0f, maxAmbienceRange, "%.1f m"))
 			{
-				currentEntry.set_ambient_range(std::clamp(range, 1.0f, 500.0f));
+				currentEntry.set_ambient_range(std::clamp(range, 1.0f, maxAmbienceRange));
 			}
 
 			float volume = currentEntry.ambient_volume();

@@ -351,6 +351,7 @@ namespace mmo
 		listenerUp.y = m_listenerUp.y;
 		listenerUp.z = m_listenerUp.z;
 		
+		// Intentionally zero: the Doppler scale is 1.0, so a listener velocity would shift the pitch of every 3D sound while moving.
 		listenerVelocity.x = 0.0f;
 		listenerVelocity.y = 0.0f;
 		listenerVelocity.z = 0.0f;

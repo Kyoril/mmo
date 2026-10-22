@@ -16,6 +16,14 @@ TEST_CASE("FlattenedForward drops pitch and normalises", "[audio_listener]")
 	CHECK(f.z == Approx(-1.0f));
 }
 
+TEST_CASE("FlattenedForward keeps the heading of a diagonal view", "[audio_listener]")
+{
+	const Vector3 f = audio_listener::FlattenedForward(Vector3(3.0f, 0.5f, -4.0f));
+	CHECK(f.x == Approx(0.6f));
+	CHECK(f.y == Approx(0.0f));
+	CHECK(f.z == Approx(-0.8f));
+}
+
 TEST_CASE("FlattenedForward looking straight down falls back to -Z", "[audio_listener]")
 {
 	const Vector3 f = audio_listener::FlattenedForward(Vector3(0.0f, -1.0f, 0.0f));

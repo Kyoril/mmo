@@ -9,6 +9,7 @@
 #include "game_client/water_ambience.h"
 
 #include <algorithm>
+#include <cmath>
 
 using namespace mmo;
 
@@ -244,7 +245,8 @@ TEST_CASE("surrounded widens the spread", "[water_ambience]")
 
 	const ChannelIndex calm = f.ChannelOf(CalmFile);
 	REQUIRE(calm != InvalidChannel);
-	CHECK(f.audio.GetChannelSpread(calm) > 250.0f);
+	CHECK(f.audio.GetChannelSpread(calm) > 160.0f);
+	CHECK(f.audio.GetChannelSpread(calm) <= water_ambience::MaxSpread);
 }
 
 TEST_CASE("one-sided water keeps the spread narrow", "[water_ambience]")
@@ -261,7 +263,7 @@ TEST_CASE("one-sided water keeps the spread narrow", "[water_ambience]")
 
 	const ChannelIndex calm = f.ChannelOf(CalmFile);
 	REQUIRE(calm != InvalidChannel);
-	CHECK(f.audio.GetChannelSpread(calm) < 250.0f);
+	CHECK(f.audio.GetChannelSpread(calm) < water_ambience::MaxSpread);
 	CHECK(f.audio.GetChannelSpread(calm) >= water_ambience::MinSpread);
 }
 
@@ -437,7 +439,7 @@ TEST_CASE("opposite shared beds glide through the ear and widen", "[water_ambien
 		if (std::abs(x) < 0.5f)
 		{
 			crossedEar = true;
-			CHECK(voices[0].spread > 250.0f);
+			CHECK(voices[0].spread > 160.0f);
 		}
 	}
 
@@ -477,4 +479,165 @@ TEST_CASE("destroying the ambience stops its voices", "[water_ambience]")
 
 	f.ambience.reset();
 	CHECK(f.audio.stoppedChannels.size() == f.audio.startedChannels.size());
+}
+
+TEST_CASE("spread follows the focus within the stereo-safe range", "[water_ambience]")
+{
+	CHECK(water_ambience::MaxSpread <= 180.0f);
+	CHECK(water_ambience::SpreadFromFocus(0.0f) == Approx(water_ambience::MaxSpread));
+	CHECK(water_ambience::SpreadFromFocus(water_ambience::WideFocus) == Approx(water_ambience::MaxSpread));
+	CHECK(water_ambience::SpreadFromFocus(water_ambience::NarrowFocus) == Approx(water_ambience::MinSpread));
+	CHECK(water_ambience::SpreadFromFocus(1.0f) == Approx(water_ambience::MinSpread));
+
+	// A riverbank (water on one side) scans at a focus of about 0.7: close to the narrow end.
+	CHECK(water_ambience::SpreadFromFocus(0.7f) < water_ambience::MinSpread + 0.15f * (water_ambience::MaxSpread - water_ambience::MinSpread));
+
+	// Monotonic: more focus never widens the voice.
+	float last = water_ambience::SpreadFromFocus(0.0f);
+	for (int i = 1; i <= 20; ++i)
+	{
+		const float spread = water_ambience::SpreadFromFocus(static_cast<float>(i) / 20.0f);
+		CHECK(spread <= last);
+		last = spread;
+	}
+}
+
+TEST_CASE("one-sided river gets the narrowest spread", "[water_ambience]")
+{
+	Fixture f;
+	f.ambience->SetProfiles({ RiverProfile() });
+
+	// A narrow strip of water straight to the left.
+	const FakeWaterSource source([](const float x, const float z)
+	{
+		return x < -10.0f && std::abs(z) < 4.0f ? MakeWater(1, 0.0f) : Dry();
+	});
+
+	f.Run(source, 2.0f);
+
+	REQUIRE(f.ambience->GetSmoothedFields()[0].GetFocus() > water_ambience::NarrowFocus);
+
+	const ChannelIndex calm = f.ChannelOf(CalmFile);
+	REQUIRE(calm != InvalidChannel);
+	CHECK(f.audio.GetChannelSpread(calm) == Approx(water_ambience::MinSpread).margin(0.01f));
+}
+
+TEST_CASE("water on the other side starts from its own direction", "[water_ambience]")
+{
+	Fixture f;
+	f.ambience->SetProfiles({ RiverProfile() });
+
+	bool rightSide = false;
+	bool water = true;
+	const FakeWaterSource source([&](const float x, float)
+	{
+		if (!water)
+		{
+			return Dry();
+		}
+
+		return (rightSide ? x > 10.0f : x < -10.0f) ? MakeWater(1, 0.0f) : Dry();
+	});
+
+	f.Run(source, 2.0f);
+	REQUIRE(f.audio.startedChannels.size() == 1);
+	const ChannelIndex left = f.audio.startedChannels[0];
+	CHECK(f.audio.channelPositions[left].x < 0.0f);
+
+	// Leave the river until its voice has stopped.
+	water = false;
+	for (int frame = 0; frame < 400 && f.audio.stoppedChannels.count(left) == 0; ++frame)
+	{
+		f.ambience->Update(source, Vector3::Zero, false, 0, FrameSeconds);
+	}
+	REQUIRE(f.audio.stoppedChannels.count(left) == 1);
+	REQUIRE(f.ambience->GetVoices().empty());
+
+	// New water on the right: the very first audible frame already places the voice right.
+	water = true;
+	rightSide = true;
+	bool heard = false;
+	for (int frame = 0; frame < 40 && !heard; ++frame)
+	{
+		f.ambience->Update(source, Vector3::Zero, false, 0, FrameSeconds);
+
+		const auto voices = f.ambience->GetVoices();
+		if (!voices.empty())
+		{
+			heard = true;
+			CHECK(voices[0].position.x > 0.0f);
+		}
+	}
+
+	REQUIRE(heard);
+	REQUIRE(f.audio.startedChannels.size() == 2);
+	CHECK(f.audio.channelPositions[f.audio.startedChannels[1]].x > 0.0f);
+}
+
+TEST_CASE("ambience range is clamped to the maximum", "[water_ambience]")
+{
+	Fixture f;
+	WaterAmbienceSounds profile = RiverProfile();
+	profile.profile.range = 500.0f;
+	f.ambience->SetProfiles({ profile });
+
+	float farthest = 0.0f;
+	const FakeWaterSource source([&farthest](const float x, const float z)
+	{
+		farthest = std::max(farthest, std::sqrt(x * x + z * z));
+		return Dry();
+	});
+
+	f.Run(source, 0.1f);
+
+	CHECK(farthest > 0.0f);
+	CHECK(farthest <= water_ambience::MaxRange);
+}
+
+TEST_CASE("swim-only profile plays its swim layer but no bed", "[water_ambience]")
+{
+	Fixture f;
+	WaterAmbienceSounds profile = RiverProfile();
+	profile.calmSound = 0;
+	profile.fastSound = 0;
+	f.ambience->SetProfiles({ profile });
+
+	const FakeWaterSource source([](float, float)
+	{
+		return MakeWater(1, 0.0f, 0.5f);
+	});
+
+	f.Run(source, 1.0f, true, 1);
+
+	REQUIRE(f.audio.startedChannels.size() == 1);
+	CHECK(f.audio.playedFiles[0] == SwimFile);
+
+	const auto voices = f.ambience->GetVoices();
+	REQUIRE(voices.size() == 1);
+	CHECK(voices[0].soundEntryId == SwimEntry);
+}
+
+TEST_CASE("bed voices and the swim layer play at raised priority", "[water_ambience]")
+{
+	Fixture f;
+	f.ambience->SetProfiles({ RiverProfile() });
+
+	const FakeWaterSource source([](float, float)
+	{
+		return MakeWater(1, 0.0f);
+	});
+
+	f.Run(source, 1.0f, true, 1);
+
+	const ChannelIndex calm = f.ChannelOf(CalmFile);
+	const ChannelIndex swim = f.ChannelOf(SwimFile);
+	REQUIRE(calm != InvalidChannel);
+	REQUIRE(swim != InvalidChannel);
+	CHECK(f.audio.channelPriorities[calm] == Approx(water_ambience::VoicePriority));
+	CHECK(f.audio.channelPriorities[swim] == Approx(water_ambience::VoicePriority));
+	CHECK(water_ambience::VoicePriority > 1.0f);
+
+	// Ordinary entries keep the default priority.
+	const ChannelIndex plain = f.player->PlayEntry(ShoreEntry);
+	CHECK(f.audio.channelPriorities[plain] == Approx(1.0f));
 }

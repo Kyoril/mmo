@@ -59,7 +59,31 @@ namespace mmo
 		constexpr float MinSpread = 60.0f;
 
 		/// @brief 3D spread in degrees of a bed voice whose water surrounds the ear.
-		constexpr float MaxSpread = 360.0f;
+		/// @remark FMOD spreads a stereo source to full width at 180 degrees; beyond that its
+		///	channels cross over and at 360 degrees they are swapped, so 180 is the widest bed.
+		constexpr float MaxSpread = 180.0f;
+
+		/// @brief Focus (length of the blended water direction) at or below which a bed voice
+		///	is spread to MaxSpread.
+		constexpr float WideFocus = 0.3f;
+
+		/// @brief Focus at or above which a bed voice is narrowed to MinSpread. A riverbank with
+		///	water on one side only scans at a focus of about 0.7, so it sits close to MinSpread.
+		constexpr float NarrowFocus = 0.8f;
+
+		/// @brief Largest scan range in world units a profile may use; longer ranges are clamped.
+		constexpr float MaxRange = 100.0f;
+
+		/// @brief Channel priority of the bed voices and the swim layer. Above the 1.0 of ordinary
+		///	sounds: FMODAudio::FindAvailableChannel never steals a channel whose priority is higher
+		///	than the requested sound's, so one-shots cannot take over these long-lived loops.
+		constexpr float VoicePriority = 2.0f;
+
+		/// @brief Maps a focus (length of the blended water direction, 0 = water all around the
+		///	ear, 1 = water in exactly one direction) to the 3D spread of a bed voice.
+		/// @param focus Focus in [0, 1]; values outside are clamped.
+		/// @return Spread in degrees within [MinSpread, MaxSpread].
+		[[nodiscard]] float SpreadFromFocus(float focus);
 	}
 
 	/// @brief Plays the water ambience around the listener.
@@ -82,6 +106,8 @@ namespace mmo
 
 	public:
 		/// @brief Replaces the profiles. Stops everything that plays and resets the smoothing.
+		///	Ranges are clamped to water_ambience::MaxRange. Profiles without a calm sound play no
+		///	bed (and are not scanned); they may still provide a swim layer.
 		/// @param profiles New profiles. An empty list disables the ambience.
 		void SetProfiles(std::vector<WaterAmbienceSounds> profiles);
 
@@ -175,7 +201,8 @@ namespace mmo
 		/// @brief Low-passed fields, one per profile.
 		std::vector<WaterAmbienceField> m_smoothedFields;
 
-		/// @brief Whether a smoothed field has ever seen water and thus owns a direction.
+		/// @brief Whether a smoothed field owns a direction: set when water is first heard, cleared
+		///	once its level has faded to silence so new water starts from its own direction.
 		std::vector<bool> m_hasDirection;
 
 		/// @brief Seconds until the next scan.

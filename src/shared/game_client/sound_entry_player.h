@@ -28,8 +28,11 @@ namespace mmo
 	public:
 		/// @brief Plays a sound entry as a global (2D) sound. 3D entries are played
 		/// unpositioned as well, so prefer the positional overload for those.
+		/// @param soundId Sound entry to play.
+		/// @param priority Channel priority (see IAudio::PlaySound). Sounds of lower priority
+		///	never steal the channel when all channels are busy.
 		/// @return The channel the sound plays on, or InvalidChannel.
-		ChannelIndex PlayEntry(uint32 soundId);
+		ChannelIndex PlayEntry(uint32 soundId, float priority = 1.0f);
 
 		/// @brief Plays a sound entry at a world position. Non-looped 3D sounds out of
 		/// hearing range are not started at all.
@@ -42,8 +45,10 @@ namespace mmo
 		/// the entry's category with the entry's volume and pitch.
 		/// @remark A stream plays on one channel only, so at most one voice per entry may be
 		///         live at any time. Callers must stop the previous channel first.
+		/// @param priority Channel priority (see IAudio::PlaySound3D). Long-lived loops should use
+		///	a priority above 1.0, or one-shots steal their channel once all channels are busy.
 		/// @return The channel the sound plays on, or InvalidChannel.
-		ChannelIndex PlayEntryPositionedLoop(uint32 soundId, const Vector3& position, float minDistance, float maxDistance);
+		ChannelIndex PlayEntryPositionedLoop(uint32 soundId, const Vector3& position, float minDistance, float maxDistance, float priority = 1.0f);
 
 		/// @brief Gets the length of the (first) sound file of an entry in seconds.
 		float GetEntryLength(uint32 soundId) const;

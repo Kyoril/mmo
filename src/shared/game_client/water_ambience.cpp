@@ -16,6 +16,16 @@ namespace mmo
 	{
 		/// Volume at or below which a voice counts as silent.
 		constexpr float SilentVolume = 0.001f;
+
+		/// Smoothed level at or below which a field counts as faded out and forgets its direction.
+		constexpr float SilentLevel = 0.001f;
+	}
+
+	float water_ambience::SpreadFromFocus(const float focus)
+	{
+		const float t = std::clamp((focus - WideFocus) / (NarrowFocus - WideFocus), 0.0f, 1.0f);
+		const float narrow = t * t * (3.0f - 2.0f * t);
+		return MinSpread + (MaxSpread - MinSpread) * (1.0f - narrow);
 	}
 
 	WaterAmbience::WaterAmbience(SoundEntryPlayer& player, IAudio& audio, const uint32 randomSeed)
@@ -37,9 +47,19 @@ namespace mmo
 		m_profiles = std::move(profiles);
 		m_scanProfiles.clear();
 		m_scanProfiles.reserve(m_profiles.size());
-		for (const WaterAmbienceSounds& sounds : m_profiles)
+		for (WaterAmbienceSounds& sounds : m_profiles)
 		{
-			m_scanProfiles.push_back(sounds.profile);
+			// The scan cost grows with the square of the range; data may ask for far too much.
+			sounds.profile.range = std::clamp(sounds.profile.range, 0.0f, water_ambience::MaxRange);
+
+			// A swim-only profile has no bed to place, so its water is not worth scanning.
+			WaterAmbienceProfile scanProfile = sounds.profile;
+			if (sounds.calmSound == 0)
+			{
+				scanProfile.range = 0.0f;
+			}
+
+			m_scanProfiles.push_back(scanProfile);
 		}
 
 		m_targetFields.assign(m_profiles.size(), WaterAmbienceField());
@@ -132,9 +152,15 @@ namespace mmo
 			smoothed.level += (target.level - smoothed.level) * alpha;
 
 			// Without water the scan has neither a direction nor a speed: keep the last ones so
-			// a fading voice neither swings onto the ear nor changes its loop mix.
+			// a fading voice neither swings onto the ear nor changes its loop mix. Once the
+			// level has faded out, forget the direction: water heard next may lie elsewhere.
 			if (target.level <= 0.0f)
 			{
+				if (smoothed.level <= SilentLevel)
+				{
+					m_hasDirection[i] = false;
+				}
+
 				continue;
 			}
 
@@ -195,6 +221,12 @@ namespace mmo
 			const WaterAmbienceSounds& sounds = m_profiles[i];
 			const WaterAmbienceField& field = m_smoothedFields[i];
 
+			// No calm loop means no bed at all; the profile may still provide a swim layer.
+			if (sounds.calmSound == 0)
+			{
+				continue;
+			}
+
 			const float speed = std::clamp(field.speed, 0.0f, 1.0f);
 			const float calmWeight = sounds.fastSound == 0 ? 1.0f : std::cos(speed * HalfPi);
 			const float fastWeight = std::sin(speed * HalfPi);
@@ -219,8 +251,7 @@ namespace mmo
 
 			// The direction is never normalised: its length is the focus, so the voice glides
 			// through the ear as the water spreads around the listener instead of snapping.
-			const float focus = std::clamp(direction.GetLength(), 0.0f, 1.0f);
-			target.spread = water_ambience::MinSpread + (1.0f - focus) * (water_ambience::MaxSpread - water_ambience::MinSpread);
+			target.spread = water_ambience::SpreadFromFocus(direction.GetLength());
 			target.position = ear + direction * water_ambience::VirtualDistance;
 		}
 
@@ -240,7 +271,7 @@ namespace mmo
 			}
 
 			BedVoice voice;
-			voice.channel = m_player.PlayEntryPositionedLoop(soundId, target.position, water_ambience::VirtualDistance, target.range);
+			voice.channel = m_player.PlayEntryPositionedLoop(soundId, target.position, water_ambience::VirtualDistance, target.range, water_ambience::VoicePriority);
 			if (voice.channel == InvalidChannel)
 			{
 				m_failedEntries.insert(soundId);
@@ -320,7 +351,7 @@ namespace mmo
 				return;
 			}
 
-			m_swimChannel = m_player.PlayEntry(wantedSound);
+			m_swimChannel = m_player.PlayEntry(wantedSound, water_ambience::VoicePriority);
 			if (m_swimChannel == InvalidChannel)
 			{
 				m_failedEntries.insert(wantedSound);
