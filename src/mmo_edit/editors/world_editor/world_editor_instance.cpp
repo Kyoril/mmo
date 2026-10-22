@@ -6,6 +6,7 @@
 #include <DetourDebugDraw.h>
 #include <imgui_internal.h>
 
+#include <chrono>
 #include <set>
 #include "editor_host.h"
 #include "icon_font.h"
@@ -377,7 +378,7 @@ namespace mmo
 			[this]()
 			{ Render(); },
 			[this]()
-			{ GenerateMinimaps(); },
+			{ m_openMinimapBakeDialog = true; },
 			[this]()
 			{ GenerateTerrainLod(true); },
 			[this]()
@@ -691,6 +692,8 @@ namespace mmo
 		const String spawnListId = "Spawns##" + GetAssetPath().string();
 
 		HandleKeyboardShortcuts();
+
+		DrawMinimapBakeDialog();
 
 		// Pick up kits saved by the prop kit editor since the last frame.
 		PollKitCache();
@@ -2612,6 +2615,138 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		m_minimapPanel.Refresh();
 
 		return stats.failed == 0;
+	}
+
+	void WorldEditorInstance::StartMinimapBake(const bool onlyStale)
+	{
+		if (m_minimapBake || !m_terrain || !m_hasTerrain)
+		{
+			return;
+		}
+
+		// Distant stand-ins hang below the terrain node the baker keeps: keep them away until the bake ends.
+		m_minimapBakeFarTerrainRadius = m_farTerrainRadius;
+		m_farTerrainRadius = 0;
+		if (m_farTerrain)
+		{
+			m_farTerrain->Clear();
+		}
+
+		m_minimapBakeStats = MinimapBaker::Stats{};
+		m_minimapBake = std::make_unique<MinimapBaker>(m_scene, *m_terrain, m_assetPath.filename().replace_extension().string(),
+			[this](const uint32 x, const uint32 z) { return PrepareMinimapBakeEntities(x, z); },
+			[this]() { return m_dispatcher.poll_one() > 0; });
+		m_minimapBakeQueue = m_minimapBake->CollectPages(onlyStale, MinimapBaker::Region{}, m_minimapBakeStats);
+		m_minimapBakeNext = 0;
+		ILOG("Minimap bake started: " << m_minimapBakeQueue.size() << " page(s), " << m_minimapBakeStats.upToDate << " up to date");
+	}
+
+	void WorldEditorInstance::TickMinimapBake()
+	{
+		if (!m_minimapBake)
+		{
+			return;
+		}
+
+		// At least one page per frame, then as many as fit the budget, so the editor keeps drawing.
+		constexpr auto frameBudget = std::chrono::milliseconds(100);
+		const auto tickStart = std::chrono::steady_clock::now();
+		do
+		{
+			if (m_minimapBakeNext >= m_minimapBakeQueue.size())
+			{
+				FinishMinimapBake();
+				return;
+			}
+
+			const MinimapBaker::PageCoord page = m_minimapBakeQueue[m_minimapBakeNext++];
+			if (m_minimapBake->BakeSinglePage(page.x, page.z))
+			{
+				++m_minimapBakeStats.baked;
+			}
+			else
+			{
+				++m_minimapBakeStats.failed;
+			}
+		} while (std::chrono::steady_clock::now() - tickStart < frameBudget);
+	}
+
+	void WorldEditorInstance::FinishMinimapBake()
+	{
+		if (!m_minimapBake)
+		{
+			return;
+		}
+
+		m_minimapBake.reset();
+		ReleaseMinimapBakeEntities();
+		m_farTerrainRadius = m_minimapBakeFarTerrainRadius;
+
+		ILOG("Minimap bake finished: " << m_minimapBakeStats.baked << " baked, " << m_minimapBakeStats.upToDate << " up to date, "
+			<< m_minimapBakeStats.failed << " failed, " << (m_minimapBakeQueue.size() - m_minimapBakeNext) << " not baked");
+		m_minimapBakeQueue.clear();
+		m_minimapBakeNext = 0;
+
+		// Force the minimap teleport panel to reload the freshly generated tiles.
+		m_minimapPanel.Refresh();
+	}
+
+	void WorldEditorInstance::DrawMinimapBakeDialog()
+	{
+		const char* popupId = "Generate Minimaps";
+		if (m_openMinimapBakeDialog)
+		{
+			ImGui::OpenPopup(popupId);
+			m_openMinimapBakeDialog = false;
+		}
+
+		if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			return;
+		}
+
+		if (!m_minimapBake)
+		{
+			ImGui::TextUnformatted("Bake the minimap tiles of the terrain pages of this world.");
+			ImGui::TextDisabled("World model edits do not change the page files: bake all pages after them.");
+			if (ImGui::Button("Changed pages"))
+			{
+				StartMinimapBake(true);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("All pages"))
+			{
+				StartMinimapBake(false);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Close"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		else
+		{
+			TickMinimapBake();
+
+			const size_t total = m_minimapBakeQueue.size();
+			if (m_minimapBake && total > 0)
+			{
+				const MinimapBaker::PageCoord& page = m_minimapBakeQueue[std::min(m_minimapBakeNext, total - 1)];
+				ImGui::Text("Page %zu of %zu (%u, %u)", m_minimapBakeNext, total, page.x, page.z);
+				ImGui::ProgressBar(static_cast<float>(m_minimapBakeNext) / static_cast<float>(total), ImVec2(320.0f, 0.0f));
+				if (ImGui::Button("Cancel"))
+				{
+					FinishMinimapBake();
+				}
+			}
+
+			if (!m_minimapBake)
+			{
+				ImGui::CloseCurrentPopup();
+			}
+		}
+
+		ImGui::EndPopup();
 	}
 
 	std::vector<const SceneNode*> WorldEditorInstance::PrepareMinimapBakeEntities(const uint32 x, const uint32 z)
