@@ -9,6 +9,8 @@
 #include "net/realm_connector.h"
 
 #include "client_data/project.h"
+#include "client_data/zone_names.h"
+#include "client_locale.h"
 #include "frame_ui/frame_mgr.h"
 #include "game_client/plaza_roster.h"
 
@@ -573,6 +575,6 @@ namespace mmo
 		}
 
 		const proto_client::ZoneEntry* zone = m_project.zones.getById(view->GetZoneId());
-		return zone ? zone->name() : String();
+		return zone ? GetZoneDisplayName(*zone, GetClientLocale()) : String();
 	}
 }
