@@ -57,6 +57,7 @@
 #include "stb_dxt.h"
 #include "minimap_baker.h"
 #include "terrain_lod_baker.h"
+#include "glue_bake/glue_scene_baker.h"
 
 namespace mmo
 {
@@ -373,7 +374,15 @@ namespace mmo
 			[this]()
 			{ GenerateMinimaps(); },
 			[this]()
-			{ GenerateTerrainLod(true); });
+			{ GenerateTerrainLod(true); },
+			[this]()
+			{
+				String summary;
+				if (!BakeGlueScene(*this, GlueSceneDefinitionPath, summary))
+				{
+					ELOG("Bake Glue Scene failed: " << summary);
+				}
+			});
 
 		// Load and set transform mode icons
 		static auto translateIcon = TextureManager::Get().CreateOrRetrieve("Editor/translate.htex");

@@ -91,6 +91,7 @@
 #include "editors/prop_kit_editor/prop_kit_editor.h"
 #include "prop_kit_job.h"
 #include "glue_bake/glue_bake_job.h"
+#include "glue_bake/glue_scene_baker.h"
 #include "editors/mesh_editor/mesh_editor_instance.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
@@ -355,6 +356,9 @@ int main(int argc, char* arg[])
 	// `--glue-bake-terrain <GlueScene.json> <outDir> [<compareDir>]` collects the same and writes the
 	// baked terrain into outDir; with compareDir it also renders live vs baked terrain images there
 	// (log in glue_bake_terrain.log, exit code 1 on failure).
+	// `--bake-glue-scene <GlueScene.json>` bakes the glue scene into Interface/GlueUI/GlueBake (merged
+	// meshes, terrain, water and the GlueBake.json manifest), replacing the previous bake's files; the
+	// summary goes to bake_glue_scene.log (exit code 1 on failure, no manifest written then).
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
@@ -691,6 +695,29 @@ int main(int argc, char* arg[])
 #endif
 
 				PostQuitMessage(mmo::RunGlueBakeMeshes(mainWindow, args[i + 1], args[i + 2]) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--bake-glue-scene")
+			{
+				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("bake_glue_scene.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("bake_glue_scene_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				mmo::String summary;
+				PostQuitMessage(mmo::BakeGlueScene(mainWindow, args[i + 1], summary) ? 0 : 1);
 				break;
 			}
 
