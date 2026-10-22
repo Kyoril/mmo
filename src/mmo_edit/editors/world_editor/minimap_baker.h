@@ -76,6 +76,25 @@ namespace mmo
 		~MinimapBaker() override;
 
 	public:
+		/// @brief Page coordinates of one page to bake.
+		struct PageCoord
+		{
+			uint32 x = 0;
+			uint32 z = 0;
+		};
+
+		/// @brief Lists the pages BakeAll would bake, in its order. Pages skipped as up to date are
+		///        counted into stats.upToDate.
+		/// @param onlyStale See BakeAll.
+		/// @param region See BakeAll.
+		/// @param stats Receives the number of up-to-date pages that were skipped.
+		std::vector<PageCoord> CollectPages(bool onlyStale, const Region& region, Stats& stats);
+
+		/// @brief Bakes one page, saving and restoring the device state around it, so an interactive
+		///        caller can spread a bake over many frames.
+		/// @return False when the page could not be baked.
+		bool BakeSinglePage(uint32 x, uint32 z);
+
 		/// @brief Bakes every page that has a .tile file.
 		/// @param onlyStale Skip pages without unsaved changes whose minimap is newer than their .tile.
 		///        World model edits do not touch the .tile, so a full bake is the safe default.

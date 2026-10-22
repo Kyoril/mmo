@@ -6,9 +6,11 @@
 #include "base/typedefs.h"
 #include "char_creation/character_avatar_builder.h"
 #include "game/character_view.h"
-#include "game_client/glue_scene_definition.h"
+#include "game_common/glue_scene_definition.h"
 #include "game_client/item_display_applier.h"
+#include "game_client/plaza_interaction.h"
 #include "game_client/plaza_roster.h"
+#include "graphics/material.h"
 #include "math/vector3.h"
 
 #include <memory>
@@ -19,8 +21,12 @@ namespace mmo
 {
 	class AnimationState;
 	class Entity;
+	class MaterialInstance;
+	class RaySceneQuery;
 	class Scene;
 	class SceneNode;
+	class SubEntity;
+	struct Ray;
 
 	namespace proto_client
 	{
@@ -28,8 +34,9 @@ namespace mmo
 	}
 
 	/// The characters of the character list standing on the Haven plaza: up to PlazaSpotCount at
-	/// their spots, the selected one at the front, and visitors (characters beyond the spots)
-	/// walking in from the entrance when selected.
+	/// their own spots (selected or not), and visitors (characters beyond the spots) running in
+	/// from the entrance to the visitor spot when selected. The character under the cursor reacts
+	/// to the hover: a greeting, a partial turn towards the camera and a soft rim glow.
 	/// @remark Main thread only. Must be destroyed before the scene is cleared.
 	class PlazaAvatars final : public NonCopyable
 	{
@@ -52,15 +59,15 @@ namespace mmo
 		/// @param ordered The characters in roster order.
 		void SetCharacters(const std::vector<CharacterView>& ordered);
 
-		/// Destroys every avatar, including those walking out, and forgets the front character's
-		/// rotation and the characters sent away. Used when the realm changes: guids are only
+		/// Destroys every avatar, including those walking out, and forgets the hover and the
+		/// characters sent away. Used when the realm changes: guids are only
 		/// unique per realm, so no avatar of the previous realm may be reused.
 		void Clear();
 
 		/// Places the characters for a selection.
 		/// @param orderIndex Order index of the selected character, or -1 for none.
-		/// @param animate False places everyone instantly. True makes characters walk to their new
-		///        place; a selected visitor walks in from the entrance and a previous visitor walks
+		/// @param animate False places everyone instantly. True makes characters run to their new
+		///        place; a selected visitor runs in from the entrance and a previous visitor runs
 		///        back to the entrance and is then hidden.
 		void Select(int32 orderIndex, bool animate);
 
@@ -74,9 +81,24 @@ namespace mmo
 		/// character list arrived and still holds them (the delete failed).
 		void ForgetLeaving() { m_leavingGuids.clear(); }
 
-		/// Turns the front character.
+		/// Turns the selected character, wherever it stands.
 		/// @param degrees Yaw to add, in degrees.
 		void Rotate(float degrees);
+
+		/// Finds the character under a ray: the nearest one whose model bounds the ray hits, among
+		/// the characters standing on the plaza (not hidden, running or leaving).
+		/// @param ray The ray, usually from the glue camera through the cursor.
+		/// @return The character's order index, or -1.
+		[[nodiscard]] int32 Pick(const Ray& ray) const;
+
+		/// Sets the character under the cursor, which reacts while it stands still.
+		/// @param orderIndex Order index of the character, or -1 for none.
+		void SetHovered(int32 orderIndex);
+
+		/// Gets the position a character stands at (or is running towards).
+		/// @param orderIndex Order index of the character.
+		/// @return The position, or nullopt for characters not on the plaza.
+		[[nodiscard]] std::optional<Vector3> GetCharacterPosition(int32 orderIndex) const;
 
 		/// Gets the world position for a character's nameplate: 0.4 m above the head bone, or the
 		/// top of the model's bounds when it has no head bone.
@@ -84,9 +106,14 @@ namespace mmo
 		/// @return The position, or nullopt for characters not on the plaza.
 		[[nodiscard]] std::optional<Vector3> GetNameplateAnchor(int32 orderIndex) const;
 
-		/// Moves walking characters and advances the animations.
+		/// Whether a running character arrived at its place on the plaza since the last call, so
+		/// the cursor may now be over a character that can react, though the cursor did not move.
+		[[nodiscard]] bool ConsumeArrival();
+
+		/// Moves running characters, advances the animations and the hover reaction.
 		/// @param deltaSeconds Real time since the last update.
-		void Update(float deltaSeconds);
+		/// @param cameraPosition The camera's position, which a hovered character turns towards.
+		void Update(float deltaSeconds, const Vector3& cameraPosition);
 
 	private:
 		/// One character's avatar.
@@ -110,6 +137,9 @@ namespace mmo
 			AnimationState* animationState = nullptr;
 			String animationName;
 
+			/// The pose the avatar holds while standing at its place.
+			String pose;
+
 			bool visible = false;
 
 			Vector3 position;
@@ -121,8 +151,38 @@ namespace mmo
 			String arrivalPose;
 			bool hideOnArrival = false;
 
-			/// Whether the avatar is (or is walking to) the front spot, where Rotate turns it.
-			bool atFront = false;
+			/// Whether the avatar is the selected character, which Rotate turns.
+			bool selected = false;
+
+			/// Yaw added by Rotate, in degrees. Eases back to 0 once the avatar is deselected.
+			float rotationDegrees = 0.0f;
+
+			/// The rotation when the avatar was deselected, and the time since, while it eases back.
+			bool rotationReturning = false;
+			float rotationReturnStart = 0.0f;
+			float rotationReturnElapsed = 0.0f;
+
+			/// Glow and turn of the hover reaction.
+			PlazaHoverReaction hover;
+
+			/// Yaw added at full turn, in degrees. Fixed when the hover starts, so a rotation while
+			/// hovered still turns the character.
+			float hoverTurnDegrees = 0.0f;
+
+			/// The greeting clip while it plays, over the pose.
+			AnimationState* greetingState = nullptr;
+			PlazaGreetingBlend greeting;
+
+			/// A per-avatar material instance carrying the glow tint, and the material it replaced.
+			struct GlowMaterial
+			{
+				SubEntity* subEntity = nullptr;
+				MaterialPtr original;
+				std::shared_ptr<MaterialInstance> instance;
+			};
+
+			/// Empty while the avatar does not glow.
+			std::vector<GlowMaterial> glowMaterials;
 		};
 
 	private:
@@ -132,7 +192,7 @@ namespace mmo
 		/// Clears the item attachments, then destroys the entity and the nodes.
 		void DestroyAvatar(Avatar& avatar);
 
-		/// Takes over another avatar's position, facing, walk, front flag, animation and
+		/// Takes over another avatar's position, facing, walk, selected flag, pose, animation and
 		/// visibility, for a model rebuilt in place of an older one of the same character.
 		void AdoptPlacement(Avatar& avatar, const Avatar& from);
 
@@ -142,17 +202,49 @@ namespace mmo
 		/// Puts the avatar at a position and facing, without walking.
 		void PlaceAt(Avatar& avatar, const Vector3& position, float facingDegrees);
 
-		/// Starts walking towards a target.
+		/// Starts running towards a target. Drops the hover reaction at once.
 		void WalkTo(Avatar& avatar, const Vector3& target, float arrivalFacingDegrees, const String& arrivalPose, bool hideOnArrival);
 
-		/// Loops the named animation, or Idle if the model has no such animation.
+		/// Loops the named animation, or Idle if the model has no such animation. Run falls back
+		/// to Walk before Idle.
 		void PlayAnimation(Avatar& avatar, const String& name);
 
-		/// Moves a walking avatar. Returns true when it arrived this update.
+		/// Moves a running avatar. Returns true when it arrived this update.
 		bool UpdateWalk(Avatar& avatar, float deltaSeconds);
 
-		/// Applies position and facing to the node; the front character also gets the rotation.
+		/// Applies position and facing to the node; the selected character also gets the
+		/// rotation, a hovered one the turn towards the camera.
 		void ApplyTransform(Avatar& avatar);
+
+		/// Advances the hover reaction of an avatar: glow, turn and greeting.
+		void UpdateHover(Avatar& avatar, float deltaSeconds, const Vector3& cameraPosition);
+
+		/// Starts the greeting clip over the pose, if the model has one and the pose is standing.
+		void StartGreeting(Avatar& avatar);
+
+		/// Advances a playing greeting and blends it with the pose; ends it after the clip.
+		void UpdateGreeting(Avatar& avatar, float deltaSeconds);
+
+		/// Lets a playing greeting fade back to the pose (its clip keeps playing). See UpdateGreeting.
+		void ReleaseGreeting(Avatar& avatar);
+
+		/// Stops a playing greeting at once and gives the pose its full weight back.
+		void StopGreeting(Avatar& avatar);
+
+		/// Sets the glow tint, creating the material instances first if needed.
+		void ApplyGlow(Avatar& avatar, float strength);
+
+		/// Puts the original materials back and drops the glow instances.
+		void RestoreMaterials(Avatar& avatar);
+
+		/// Ends the hover reaction at once (turn and glow); a greeting fades back to the pose.
+		void ResetHover(Avatar& avatar);
+
+		/// Eases the rotation of a deselected avatar back to none.
+		void UpdateRotationReturn(Avatar& avatar, float deltaSeconds);
+
+		/// Whether the avatar stands still on the plaza, so it may be picked and react to the cursor.
+		[[nodiscard]] bool IsStandingOnPlaza(const Avatar& avatar) const;
 
 		/// Whether the character was sent away with Leave.
 		[[nodiscard]] bool IsLeaving(uint64 guid) const;
@@ -171,9 +263,17 @@ namespace mmo
 		/// Characters sent away with Leave that are still in the roster.
 		std::vector<uint64> m_leavingGuids;
 
-		/// The character at the front, so the rotation is reset when it changes. 0 for none.
-		uint64 m_frontGuid = 0;
-		float m_frontRotationDegrees = 0.0f;
+		/// Set when a character arrived at its place on the plaza, until ConsumeArrival.
+		bool m_arrived = false;
+
+		/// The character under the cursor. 0 for none.
+		uint64 m_hoveredGuid = 0;
+
+		/// Greeting clips to try, in order (from the emote catalog's wave and bow emotes).
+		std::vector<String> m_greetingClips;
+
+		/// Finds the avatars under the cursor ray.
+		std::unique_ptr<RaySceneQuery> m_rayQuery;
 
 		uint32 m_nextEntityId = 0;
 	};

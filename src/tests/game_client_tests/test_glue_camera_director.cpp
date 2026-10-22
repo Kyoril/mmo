@@ -62,3 +62,28 @@ TEST_CASE("Path evaluation hits the end keys", "[glue_camera]")
 	CHECK(EvaluateGluePath(keys, 2.0f).position.x == Approx(20.0f));
 	CHECK(EvaluateGluePath({ keys[1] }, 0.3f).position.x == Approx(10.0f));
 }
+
+TEST_CASE("A fly-out from the plaza takes the fly-out time, or the flight time without one", "[glue_camera]")
+{
+	GlueCameraDirector same(3.0f);
+	same.SnapToPlaza();
+	same.FlyOut();
+	same.Update(1.5f);
+	CHECK(same.GetPathParameter() == Approx(0.5f));
+	same.Update(1.5f);
+	CHECK(same.GetMode() == GlueCameraMode::Gate);
+	CHECK(same.ConsumeFlightFinished());
+
+	GlueCameraDirector faster(3.0f, 2.0f);
+	faster.SnapToPlaza();
+	faster.FlyOut();
+	faster.Update(1.0f);
+	CHECK(faster.GetPathParameter() == Approx(0.5f));
+	faster.Update(1.0f);
+	CHECK(faster.GetMode() == GlueCameraMode::Gate);
+
+	// The fly-in keeps its own time.
+	faster.FlyIn();
+	faster.Update(1.5f);
+	CHECK(faster.GetPathParameter() == Approx(0.5f));
+}

@@ -244,6 +244,37 @@ namespace mmo
 		return true;
 	}
 
+	bool BuildMeshCollisionFromSubMeshes(const String& assetPath, const std::vector<uint16>& subMeshes)
+	{
+		const MeshPtr mesh = MeshManager::Get().Load(assetPath);
+		if (!mesh)
+		{
+			ELOG("Build collision: cannot load mesh " << assetPath);
+			return false;
+		}
+
+		for (const uint16 index : subMeshes)
+		{
+			if (index >= mesh->GetSubMeshCount())
+			{
+				ELOG("Build collision: " << assetPath << " has no submesh " << index);
+				return false;
+			}
+		}
+
+		CollisionRecipe recipe;
+		recipe.includedSubMeshes = subMeshes;
+
+		const CollisionBakeResult bake = RebuildMeshCollision(*mesh, recipe);
+		if (!SaveMeshWithRecipe(mesh, assetPath, &recipe))
+		{
+			return false;
+		}
+
+		ILOG("Build collision: " << assetPath << " - " << bake.indices.size() / 3 << " faces from " << recipe.includedSubMeshes.size() << " submeshes");
+		return true;
+	}
+
 	bool RebakeMeshCollisionFile(const String& assetPath)
 	{
 		CollisionRecipe recipe;

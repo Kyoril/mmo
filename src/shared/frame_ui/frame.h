@@ -324,6 +324,11 @@ namespace mmo
 		/// Determines whether the frame is currently hovered.
 		bool IsHovered() const;
 
+		/// Determines whether a mouse click at the current cursor position would go to this frame,
+		/// i.e. no other frame would take it first. Unlike IsHovered, this sees through frames that
+		/// are not clickable, as clicks do.
+		bool IsMouseClickTarget() const;
+
 		/// Invalidates the frame, causing a complete redraw the next time it is rendered.
 		void Invalidate(bool includeLayout = true);
 

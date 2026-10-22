@@ -147,6 +147,15 @@ namespace mmo
 		}
 		result.flightSeconds = root["flightSeconds"].get<float>();
 
+		if (root.contains("flyOutSeconds"))
+		{
+			if (!root["flyOutSeconds"].is_number())
+			{
+				return std::nullopt;
+			}
+			result.flyOutSeconds = root["flyOutSeconds"].get<float>();
+		}
+
 		if (!root.contains("front") || !readSpot(root["front"], result.front))
 		{
 			return std::nullopt;

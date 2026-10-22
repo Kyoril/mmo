@@ -17,6 +17,7 @@
 #include "base/win_utility.h"
 #include <crtdbg.h>
 #include <fstream>
+#include <sstream>
 #include <mutex>
 #else
 #include "null_audio/null_audio.h"
@@ -90,6 +91,9 @@
 #include "editors/world_model_editor/world_model_editor_instance.h"
 #include "editors/prop_kit_editor/prop_kit_editor.h"
 #include "prop_kit_job.h"
+#include "entities_to_world_model_job.h"
+#include "glue_bake/glue_bake_job.h"
+#include "glue_bake/glue_scene_baker.h"
 #include "editors/mesh_editor/mesh_editor_instance.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
@@ -347,10 +351,37 @@ int main(int argc, char* arg[])
 	// `--apply-prop-kit <job.json>` writes a prop kit asset, assigns kits to world model placements
 	// and/or strips named mesh refs from a world model as the job describes, then exits (see
 	// prop_kit_job.h; log in prop_kit_job.log, exit code 1 on load or write failures).
+	// `--glue-bake-dry-run <GlueScene.json>` opens the glue scene's world, collects what the glue
+	// cameras see and logs the counts to glue_bake_dry_run.log without writing anything (exit code 1
+	// when the definition or world cannot be loaded or nothing visible was found).
+	// `--glue-bake-meshes <GlueScene.json> <outDir>` collects the same and writes the merged chunk
+	// meshes into outDir (asset directory or absolute path), logging the counts to
+	// glue_bake_meshes.log (exit code 1 when loading fails or a file cannot be written).
+	// `--glue-bake-terrain <GlueScene.json> <outDir> [<compareDir>]` collects the same and writes the
+	// baked terrain into outDir; with compareDir it also renders live vs baked terrain images there
+	// (log in glue_bake_terrain.log, exit code 1 on failure).
+	// `--bake-glue-scene <GlueScene.json>` bakes the glue scene into Interface/GlueUI/GlueBake (merged
+	// meshes, terrain, water and the GlueBake.json manifest), replacing the previous bake's files; the
+	// summary goes to bake_glue_scene.log (exit code 1 on failure, no manifest written then).
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
-		for (int i = 1; args && i + 1 < argCount; ++i)
+
+		// A job flag without its arguments fails the run instead of opening the editor, so a
+		// scripted call cannot hang on an interactive window. Call it after the job's log is wired.
+		const auto missingArgs = [&argCount](const int flagIndex, const int count, const char* usage)
+		{
+			if (flagIndex + count < argCount)
+			{
+				return false;
+			}
+
+			ELOG("missing arguments, usage: " << usage);
+			PostQuitMessage(1);
+			return true;
+		};
+
+		for (int i = 1; args && i < argCount; ++i)
 		{
 			if (std::string(args[i]) == "--rebuild-material")
 			{
@@ -378,7 +409,7 @@ int main(int argc, char* arg[])
 				break;
 			}
 
-			if (std::string(args[i]) == "--rebake-collision" || std::string(args[i]) == "--build-collision")
+			if (std::string(args[i]) == "--rebake-collision" || std::string(args[i]) == "--build-collision" || std::string(args[i]) == "--build-collision-from")
 			{
 				static std::ofstream rebakeLog("collision_rebake.log", std::ios::out | std::ios::trunc);
 				static std::mutex rebakeLogMutex;
@@ -406,6 +437,17 @@ int main(int argc, char* arg[])
 					else if (std::string(args[j]) == "--build-collision")
 					{
 						allRebaked = mmo::BuildMeshCollisionFile(args[j + 1]) && allRebaked;
+					}
+					else if (std::string(args[j]) == "--build-collision-from" && j + 2 < argCount)
+					{
+						// `--build-collision-from <asset> <submesh>[,<submesh>...]`
+						std::vector<uint16> subMeshes;
+						std::stringstream list(args[j + 2]);
+						for (std::string index; std::getline(list, index, ',');)
+						{
+							subMeshes.push_back(static_cast<uint16>(std::stoi(index)));
+						}
+						allRebaked = mmo::BuildMeshCollisionFromSubMeshes(args[j + 1], subMeshes) && allRebaked;
 					}
 				}
 
@@ -571,6 +613,29 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--entities-to-wmo")
+			{
+				// `--entities-to-wmo <job.json>` bundles placed mesh entities into one placed world model
+				// (see entities_to_world_model_job.h; log in entities_to_wmo.log, exit code 1 on failure).
+				static std::ofstream wmoJobLog("entities_to_wmo.log", std::ios::out | std::ios::trunc);
+				static std::mutex wmoJobLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ wmoJobLogMutex };
+					wmoJobLog << entry.message << std::endl;
+				});
+
+				if (i + 1 >= argCount)
+				{
+					ELOG("--entities-to-wmo needs <job.json>");
+					PostQuitMessage(1);
+					break;
+				}
+
+				PostQuitMessage(mmo::ApplyEntitiesToWorldModelJob(args[i + 1]) ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--import-texture")
 			{
 				// mmo_edit --import-texture <asset folder> <image>... [--normal | --grayscale] [--compress] [--height-map]
@@ -605,6 +670,108 @@ int main(int argc, char* arg[])
 
 				mmo::TextureImport importer;
 				PostQuitMessage(importer.ImportUnattended(files, args[i + 1], usage, compress, heightMap) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--import-fbx")
+			{
+				// mmo_edit --import-fbx <asset folder> <model>... [--scale <s> | --scale <x> <y> <z>]
+				//   [--rotate <roll> <yaw> <pitch>] [--offset <x> <y> <z>] [--tangents] [--color-from-uv <channel>]
+				// Same transform settings as the import dialog (rotation in degrees, yaw * pitch * roll).
+				static std::ofstream importLog("fbx_import.log", std::ios::out | std::ios::trunc);
+				static std::mutex importLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ importLogMutex };
+					importLog << entry.message << std::endl;
+				});
+
+				if (i + 2 >= argCount)
+				{
+					ELOG("--import-fbx needs <asset folder> <model>...");
+					PostQuitMessage(1);
+					break;
+				}
+
+				const auto isNumber = [&](const int index)
+				{
+					char* end = nullptr;
+					return index < argCount && std::strtof(args[index], &end) != HUGE_VALF && end && *end == '\0';
+				};
+
+				std::vector<std::filesystem::path> files;
+				mmo::Vector3 offset = mmo::Vector3::Zero;
+				mmo::Vector3 scale = mmo::Vector3::UnitScale;
+				mmo::Quaternion rotation = mmo::Quaternion::Identity;
+				bool tangents = false;
+				int32 colorFromUv = -1;
+				bool badArgs = false;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					const std::string arg = args[j];
+					if (arg == "--tangents")
+					{
+						tangents = true;
+					}
+					else if (arg == "--color-from-uv" && isNumber(j + 1))
+					{
+						colorFromUv = std::atoi(args[++j]);
+					}
+					else if (arg == "--scale" && isNumber(j + 1))
+					{
+						if (isNumber(j + 2) && isNumber(j + 3))
+						{
+							scale = mmo::Vector3(std::stof(args[j + 1]), std::stof(args[j + 2]), std::stof(args[j + 3]));
+							j += 3;
+						}
+						else
+						{
+							const float s = std::stof(args[j + 1]);
+							scale = mmo::Vector3(s, s, s);
+							j += 1;
+						}
+					}
+					else if ((arg == "--offset" || arg == "--rotate") && isNumber(j + 1) && isNumber(j + 2) && isNumber(j + 3))
+					{
+						const mmo::Vector3 v(std::stof(args[j + 1]), std::stof(args[j + 2]), std::stof(args[j + 3]));
+						if (arg == "--offset")
+						{
+							offset = v;
+						}
+						else
+						{
+							const mmo::Quaternion qRoll(mmo::Degree(v.x), mmo::Vector3(1, 0, 0));
+							const mmo::Quaternion qYaw(mmo::Degree(v.y), mmo::Vector3(0, 1, 0));
+							const mmo::Quaternion qPitch(mmo::Degree(v.z), mmo::Vector3(0, 0, 1));
+							rotation = qYaw * qPitch * qRoll;
+							rotation.Normalize();
+						}
+						j += 3;
+					}
+					else if (arg.starts_with("--"))
+					{
+						ELOG("--import-fbx: unknown or incomplete option " << arg);
+						badArgs = true;
+					}
+					else
+					{
+						files.emplace_back(arg);
+					}
+				}
+
+				bool allImported = !badArgs && !files.empty();
+				if (allImported)
+				{
+					mmo::FbxImport importer(mainWindow);
+					for (const auto& file : files)
+					{
+						const bool imported = importer.ImportUnattended(file, args[i + 1], offset, scale, rotation, tangents, colorFromUv);
+						ILOG((imported ? "Imported " : "Failed to import ") << file);
+						allImported = imported && allImported;
+					}
+				}
+
+				PostQuitMessage(allImported ? 0 : 1);
 				break;
 			}
 
@@ -738,6 +905,11 @@ int main(int argc, char* arg[])
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
 
+				if (missingArgs(i, 1, "--bake-terrain-lod <world>"))
+				{
+					break;
+				}
+
 				// Bake right away instead of from the viewport's paint handler, so the job also runs
 				// with the window minimised (a minimised window never paints).
 				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
@@ -778,6 +950,11 @@ int main(int argc, char* arg[])
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
 
+				if (missingArgs(i, 1, "--bake-minimaps <world>"))
+				{
+					break;
+				}
+
 				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
 				{
 					bool onlyStale = false;
@@ -810,6 +987,116 @@ int main(int argc, char* arg[])
 					ELOG("--bake-minimaps: failed to open " << args[i + 1]);
 					PostQuitMessage(1);
 				}
+				break;
+			}
+
+			if (std::string(args[i]) == "--glue-bake-dry-run")
+			{
+				// Unattended like --bake-terrain-lod: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("glue_bake_dry_run.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("glue_bake_dry_run_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (missingArgs(i, 1, "--glue-bake-dry-run <GlueScene.json>"))
+				{
+					break;
+				}
+
+				PostQuitMessage(mmo::RunGlueBakeDryRun(mainWindow, args[i + 1]) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--glue-bake-meshes")
+			{
+				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("glue_bake_meshes.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("glue_bake_meshes_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (missingArgs(i, 2, "--glue-bake-meshes <GlueScene.json> <outDir>"))
+				{
+					break;
+				}
+
+				PostQuitMessage(mmo::RunGlueBakeMeshes(mainWindow, args[i + 1], args[i + 2]) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--bake-glue-scene")
+			{
+				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("bake_glue_scene.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("bake_glue_scene_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (missingArgs(i, 1, "--bake-glue-scene <GlueScene.json>"))
+				{
+					break;
+				}
+
+				mmo::String summary;
+				PostQuitMessage(mmo::BakeGlueScene(mainWindow, args[i + 1], summary) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--glue-bake-terrain")
+			{
+				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("glue_bake_terrain.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("glue_bake_terrain_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (missingArgs(i, 2, "--glue-bake-terrain <GlueScene.json> <outDir> [<compareDir>]"))
+				{
+					break;
+				}
+
+				const std::string compareDir = i + 3 < argCount && std::string(args[i + 3]).rfind("--", 0) != 0 ? args[i + 3] : "";
+				PostQuitMessage(mmo::RunGlueBakeTerrain(mainWindow, args[i + 1], args[i + 2], compareDir) ? 0 : 1);
 				break;
 			}
 		}

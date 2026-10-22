@@ -5,8 +5,10 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "game/character_view.h"
+#include "game_client/plaza_nameplate_layout.h"
 #include "math/vector3.h"
 
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -52,7 +54,7 @@ namespace mmo
 
 		/// Selects a character and places the characters on the plaza for it. The first valid
 		/// selection after the glue scene was set (or after the roster became empty) places everyone
-		/// instantly; later ones make them walk. An invalid index (-1) only records the selection
+		/// instantly; later ones make them run. An invalid index (-1) only records the selection
 		/// and leaves the plaza untouched, unless the roster is empty, in which case the plaza is
 		/// cleared.
 		/// @param index Order index of the character, or -1 for none.
@@ -112,10 +114,39 @@ namespace mmo
 		/// @return False when the position is not on screen or there is no glue scene.
 		bool ProjectToUi(const Vector3& worldPosition, float& x, float& y) const;
 
+		/// Gets the order index of the plaza character under the mouse cursor, or -1.
+		[[nodiscard]] int32 GetPlazaCharacterAtCursor() const;
+
 		/// Gets the name of a character's zone, or an empty string.
 		String GetCharacterZoneName(int32 index) const;
 
+		/// Places the nameplates set with SetPlazaNameplateBox over their characters and moves
+		/// overlapping ones apart (see PlazaNameplateDeclutter).
+		/// @param deltaSeconds Time since the last layout, for the easing.
+		void LayoutNameplates(float deltaSeconds);
+
 	private:
+		/// A nameplate of the character screen, as Lua describes it, and where the layout put it.
+		struct NameplateSlot
+		{
+			/// Order index of the character it shows, or -1 for none.
+			int32 index = -1;
+
+			/// Size of the plate's frame in UI units.
+			float width = 0.0f;
+			float height = 0.0f;
+
+			/// Empty space at the bottom of the frame (an empty last line), in UI units.
+			float inset = 0.0f;
+
+			/// Bottom centre of the frame in UI units, and whether it is on screen.
+			float x = 0.0f;
+			float y = 0.0f;
+			bool visible = false;
+		};
+
+		/// Most nameplates the character screen may show at once.
+		static constexpr size_t MaxNameplates = 8;
 		RealmConnector& m_realmConnector;
 		const proto_client::Project& m_project;
 
@@ -134,5 +165,10 @@ namespace mmo
 
 		/// Character guids in local roster order. Rebuilt lazily from the realm connector.
 		mutable std::vector<uint64> m_order;
+
+		/// The nameplates, by plate number - 1.
+		std::array<NameplateSlot, MaxNameplates> m_nameplates;
+
+		PlazaNameplateDeclutter m_nameplateDeclutter;
 	};
 }

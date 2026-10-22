@@ -698,6 +698,17 @@ namespace mmo
 			return m_colors[x + y * constants::OuterVerticesPerPageSide];
 		}
 
+		MaterialPtr Page::GetTileMaterial(const uint32 x, const uint32 y) const
+		{
+			const size_t index = static_cast<size_t>(x) + static_cast<size_t>(y) * constants::TilesPerPage;
+			if (x < constants::TilesPerPage && y < constants::TilesPerPage && index < m_materials.size() && m_materials[index])
+			{
+				return m_materials[index];
+			}
+
+			return m_terrain.GetDefaultMaterial();
+		}
+
 		uint32 Page::GetLayersAt(const size_t x, const size_t y) const
 		{
 			if (!IsPrepared())

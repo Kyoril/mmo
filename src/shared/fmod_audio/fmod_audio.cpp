@@ -2,6 +2,9 @@
 #include "fmod_audio.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <thread>
 #include <unordered_set>
 
@@ -16,7 +19,17 @@ namespace mmo
 {
 	namespace
 	{
-		/// Whether a non-blocking sound is still opening, or seeking back to its start after a stop.
+		/// Encodes a sound instance pointer as the "file name" handed to FMOD. FMOD treats the name as a
+			/// C string and, for FMOD_NONBLOCKING sounds, copies it for its loader thread, so a raw pointer
+			/// cast would be cut off at its first zero byte. Hex text survives that copy.
+			String EncodeInstanceName(const FMODSoundInstance* instance)
+			{
+				char buffer[32];
+				std::snprintf(buffer, sizeof(buffer), "%llx", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(instance)));
+				return buffer;
+			}
+
+			/// Whether a non-blocking sound is still opening, or seeking back to its start after a stop.
 		/// Either way FMOD refuses to play it (FMOD_ERR_NOTREADY) until it is done.
 		bool IsOpening(FMOD::Sound* sound)
 		{
@@ -464,18 +477,20 @@ namespace mmo
 		newSoundInstance->SetFileName(fullPathName);
 		newSoundInstance->SetType(type);
 
+		const String instanceName = EncodeInstanceName(newSoundInstance);
+
 		switch (type)
 		{
 		case SoundType::Sound3D:
-			result = m_system->createSound((const char *)newSoundInstance, FMOD_3D, 0, &sound);
+			result = m_system->createSound(instanceName.c_str(), FMOD_3D, 0, &sound);
 			break;
 
 		case SoundType::SoundLooped3D:
-			result = m_system->createSound((const char *)newSoundInstance, FMOD_LOOP_NORMAL | FMOD_3D, 0, &sound);
+			result = m_system->createSound(instanceName.c_str(), FMOD_LOOP_NORMAL | FMOD_3D, 0, &sound);
 			break;
 
 		case SoundType::Sound2D:
-			result = m_system->createSound((const char *)newSoundInstance, FMOD_DEFAULT, 0, &sound);
+			result = m_system->createSound(instanceName.c_str(), FMOD_DEFAULT, 0, &sound);
 			break;
 
 		case SoundType::SoundLooped2D:
@@ -484,7 +499,7 @@ namespace mmo
 			// for zone music and ambience. FMOD does that on its loader thread instead; the file
 			// callbacks it runs there only use the thread-safe AssetRegistry.
 			PROFILE_SCOPE("Audio: createStream");
-			result = m_system->createStream((const char *)newSoundInstance, FMOD_LOOP_NORMAL | FMOD_2D | FMOD_NONBLOCKING, 0, &sound);
+			result = m_system->createStream(instanceName.c_str(),FMOD_LOOP_NORMAL | FMOD_2D | FMOD_NONBLOCKING, 0, &sound);
 			break;
 		}
 
@@ -919,7 +934,12 @@ namespace mmo
 		assert(name);
 
 		// Create sound instance pointer
-		FMODSoundInstance *soundInstance = reinterpret_cast<FMODSoundInstance *>(const_cast<char *>(name));
+		FMODSoundInstance *soundInstance = reinterpret_cast<FMODSoundInstance *>(static_cast<uintptr_t>(std::strtoull(name, nullptr, 16)));
+		if (!soundInstance)
+		{
+			*filesize = 0;
+			return FMOD_ERR_FILE_NOTFOUND;
+		}
 
 		*handle = (void *)soundInstance;
 

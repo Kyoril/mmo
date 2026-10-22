@@ -30,6 +30,9 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import glue_bake_check  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[2]
 SKILLS = REPO / ".agents" / "skills"
 DATA = REPO / "data" / "editor" / "data"
@@ -232,6 +235,15 @@ def main() -> int:
             failed = (not result["passed"]) if name == "xp" else bool(result["failures"])
             if failed:
                 report["passed"] = False
+
+    # Warn-only: a stale glue bake never fails the audit, but lands in the report.
+    try:
+        glue_warnings = glue_bake_check.check(str(REPO))
+    except Exception as exc:  # warn-only: a broken checker must not crash the audit
+        glue_warnings = [f"WARNING: glue bake check failed: {exc}"]
+    for line in glue_warnings:
+        print(line)
+    report["glue_bake_warnings"] = glue_warnings
 
     report_dir = REPO / "tools" / "gate" / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)

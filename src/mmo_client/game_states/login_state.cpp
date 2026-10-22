@@ -15,6 +15,7 @@
 #include "net/realm_connector.h"
 #include "char_creation/char_select.h"
 #include "glue/glue_scene.h"
+#include "glue/plaza_avatars.h"
 #include "game_client/plaza_roster.h"
 #include "ui/world_renderer.h"
 
@@ -88,7 +89,10 @@ namespace mmo
 			return;
 		}
 
-		m_glueScene = std::make_unique<GlueScene>(m_project, std::move(*definition), m_soundEntryPlayer, m_audio);
+		// The glue bake is used only if it was baked from this text (line endings aside: a CRLF
+		// checkout must not make the bake look stale and stream the whole world instead).
+		const String definitionHash = HashGlueSceneDefinition(text.data(), text.size());
+		m_glueScene = std::make_unique<GlueScene>(m_project, std::move(*definition), definitionHash, m_soundEntryPlayer, m_audio);
 
 		// Before a realm is chosen, the realm's default time applies: UTC time of day.
 		const auto sinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
@@ -154,6 +158,13 @@ namespace mmo
 			{
 				TryEnterWorld();
 			}
+		}
+
+		if (m_glueScene->GetPlazaAvatars().ConsumeArrival())
+		{
+			// A character stopped running: the cursor may rest on it without moving, so the
+			// character screen looks again at what is under it.
+			FrameManager::Get().TriggerLuaEvent("GLUE_PLAZA_ARRIVAL");
 		}
 
 		if (m_glueScene->ConsumePushInFinished())

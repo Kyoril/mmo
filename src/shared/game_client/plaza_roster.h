@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "game/character_view.h"
+#include "game_common/plaza_spot_count.h"
 
 #include <array>
 #include <unordered_map>
@@ -33,21 +34,16 @@ namespace mmo
 	/// Takes the appearance of a character view.
 	[[nodiscard]] PlazaAppearance MakePlazaAppearance(const CharacterView& view);
 
-	/// Number of fixed standing spots on the plaza.
-	constexpr int32 PlazaSpotCount = 5;
-
 	/// Which character stands where on the plaza.
 	struct PlazaAssignment
 	{
-		/// Order index of the character standing at spot i, or -1. The selected plaza
-		/// character's own spot is -1, because they stand at the front.
+		/// Order index of the character standing at spot i, or -1. The plaza characters (order
+		/// index below PlazaSpotCount) always stand at their own spot, selected or not.
 		std::array<int32, PlazaSpotCount> spotCharacter;
 
-		/// Order index of the character at the front, or -1.
-		int32 frontCharacter;
-
-		/// True if the front character is not one of the plaza characters (a visitor).
-		bool frontIsVisitor;
+		/// Order index of the selected visitor (a character beyond the spots) standing at the
+		/// visitor spot, or -1.
+		int32 visitor;
 	};
 
 	/// Decides which character stands at which spot for the given selection.

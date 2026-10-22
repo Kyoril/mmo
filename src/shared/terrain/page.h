@@ -97,6 +97,12 @@ namespace mmo
 
 			uint32 GetLayersAt(size_t x, size_t y) const;
 
+			/// @brief The material a tile is drawn with: its own, or the terrain's default material when it has none.
+			/// @param x Tile X index within the page (0..15).
+			/// @param y Tile Y index within the page (0..15).
+			/// @remark Works on a prepared page; the tiles themselves do not need to exist.
+			[[nodiscard]] MaterialPtr GetTileMaterial(uint32 x, uint32 y) const;
+
 			float GetSmoothHeightAt(float x, float y) const;
 
 			Vector3 GetSmoothNormalAt(float x, float y) const;
