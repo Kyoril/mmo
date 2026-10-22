@@ -94,6 +94,49 @@ TEST_CASE("Pose sampling covers the path and the extra views", "[glue_bake]")
 	CHECK(few.size() == 4 + 1 + 2 + 1 + 5 + 1 + 8);
 }
 
+TEST_CASE("Sampled push-in and drift poses match the client camera", "[glue_bake]")
+{
+	const GlueSceneDefinition def = makeDefinition();
+	constexpr uint32 pathSamples = 4;
+	const auto poses = SampleGlueCameraPoses(def, pathSamples);
+
+	// Gate drift moves the position only, by the shared amplitude
+	const GlueCameraKey gate = EvaluateGluePath(def.flightPath, 0.0f);
+	for (size_t i = pathSamples + 1; i < pathSamples + 3; ++i)
+	{
+		CHECK(poses[i].lookAt.x == Approx(gate.lookAt.x));
+		CHECK(poses[i].lookAt.y == Approx(gate.lookAt.y));
+		CHECK(poses[i].lookAt.z == Approx(gate.lookAt.z));
+		CHECK((poses[i].position - gate.position).GetLength() == Approx(glue_camera::GateDriftAmplitude));
+	}
+
+	const GlueCameraPose& plaza = poses[pathSamples + 3];
+	CHECK(plaza.position.x == Approx(def.flightPath.back().position.x));
+	CHECK(plaza.lookAt.z == Approx(def.flightPath.back().lookAt.z));
+
+	// A finished push-in, as GlueScene::UpdateCamera computes it with eased == 1
+	std::vector<Vector3> characters;
+	for (const GlueSpot& spot : def.spots)
+	{
+		characters.push_back(spot.position);
+	}
+	characters.push_back(def.front.position);
+
+	for (size_t i = 0; i < characters.size(); ++i)
+	{
+		const GlueCameraPose& pose = poses[pathSamples + 4 + i];
+		const Vector3 target = characters[i] + Vector3(0.0f, glue_camera::PushInTargetHeight, 0.0f);
+		const Vector3 expected = plaza.position + (target - plaza.position) * glue_camera::PushInFraction;
+
+		CHECK(pose.lookAt.x == Approx(plaza.lookAt.x));
+		CHECK(pose.lookAt.y == Approx(plaza.lookAt.y));
+		CHECK(pose.lookAt.z == Approx(plaza.lookAt.z));
+		CHECK(pose.position.x == Approx(expected.x));
+		CHECK(pose.position.y == Approx(expected.y));
+		CHECK(pose.position.z == Approx(expected.z));
+	}
+}
+
 TEST_CASE("Frustum set includes the 21:9 edge that 16:9 misses", "[glue_bake]")
 {
 	// Looking down -Z, vertical FOV 60 degrees. At distance 10 the half width is

@@ -54,20 +54,11 @@ namespace mmo
 		/// is visible then, and the world models (hundreds of steps for the town) arrive sooner.
 		constexpr double coveredDispatchBudgetMs = 25.0;
 
-		/// Half the width of the idle drift at the gate, in metres.
-		constexpr float driftAmplitude = 0.3f;
-
 		/// Seconds of one idle drift cycle at the gate.
 		constexpr float driftPeriodSeconds = 20.0f;
 
-		/// Share of the way from the plaza camera to the selected character covered by the push-in.
-		constexpr float pushInFraction = 0.4f;
-
 		/// Farthest a cursor ray reaches, in metres.
 		constexpr float pickDistance = 200.0f;
-
-		/// Height above the character's feet the push-in moves towards, in metres (about chest height).
-		constexpr float pushInTargetHeight = 1.4f;
 
 		/// Milliseconds after loading of the gate (resp. the plaza) began when it counts as ready
 		/// even if it is not loaded, so neither the fade nor the flight input lock lasts forever.
@@ -1133,7 +1124,7 @@ namespace mmo
 			if (right.GetSquaredLength() > 0.0001f)
 			{
 				right.Normalize();
-				position += right * (driftAmplitude * std::sin(m_driftSeconds / driftPeriodSeconds * 2.0f * Pi));
+				position += right * (glue_camera::GateDriftAmplitude * std::sin(m_driftSeconds / driftPeriodSeconds * 2.0f * Pi));
 			}
 		}
 
@@ -1150,8 +1141,8 @@ namespace mmo
 
 			const float t = m_pushInElapsed / m_pushInSeconds;
 			const float eased = t * t * (3.0f - 2.0f * t);
-			const Vector3 target = m_pushInCharacterPosition + Vector3(0.0f, pushInTargetHeight, 0.0f);
-			position += (target - position) * (pushInFraction * eased);
+			const Vector3 target = m_pushInCharacterPosition + Vector3(0.0f, glue_camera::PushInTargetHeight, 0.0f);
+			position += (target - position) * (glue_camera::PushInFraction * eased);
 		}
 
 		m_cameraNode->SetPosition(position);

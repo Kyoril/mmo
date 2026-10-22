@@ -21,17 +21,8 @@ namespace mmo
 		/// Aspect ratios the bake has to look right at.
 		constexpr std::array<float, 3> AspectRatios = { 4.0f / 3.0f, 16.0f / 9.0f, 21.0f / 9.0f };
 
-		/// Sideways drift of the gate pose in metres.
-		constexpr float GateDrift = 0.3f;
-
 		/// Eye height of a character walking the plaza in metres.
 		constexpr float EyeHeight = 1.7f;
-
-		/// Height above a spot the push-in looks at in metres.
-		constexpr float PushInHeight = 1.4f;
-
-		/// Fraction of the way towards a spot the push-in end pose travels.
-		constexpr float PushInFraction = 0.4f;
 
 		/// Number of poses between the entrance and the front spot.
 		constexpr uint32 EntranceSamples = 8;
@@ -57,10 +48,14 @@ namespace mmo
 			return right;
 		}
 
-		void addPushIn(std::vector<GlueCameraPose>& poses, const GlueCameraPose& from, const Vector3& spotPosition)
+		/// The finished push-in towards a character standing at spotPosition, as the client's glue
+		/// camera computes it: the position moves part of the way towards the character's chest,
+		/// the look-at point stays the plaza's.
+		void addPushIn(std::vector<GlueCameraPose>& poses, const GlueCameraPose& plaza, const Vector3& spotPosition)
 		{
-			const Vector3 target = spotPosition + Vector3(0.0f, PushInHeight, 0.0f);
-			poses.push_back({ lerp(from.position, target, PushInFraction), target });
+			const Vector3 target = spotPosition + Vector3(0.0f, glue_camera::PushInTargetHeight, 0.0f);
+			const Vector3 position = plaza.position + (target - plaza.position) * glue_camera::PushInFraction;
+			poses.push_back({ position, plaza.lookAt });
 		}
 
 		// ---- JSON helpers ----
@@ -260,15 +255,16 @@ namespace mmo
 			poses.push_back({ key.position, key.lookAt });
 		}
 
-		// The gate pose, and the gate pose drifted sideways
+		// The gate pose, and the gate pose at both ends of its idle drift. As in the client, only
+		// the position drifts; the camera keeps looking at the gate look-at point.
 		const GlueCameraKey gate = EvaluateGluePath(def.flightPath, 0.0f);
 		poses.push_back({ gate.position, gate.lookAt });
 
 		Vector3 forward = gate.lookAt - gate.position;
 		forward.Normalize();
-		const Vector3 drift = rightOf(forward) * GateDrift;
-		poses.push_back({ gate.position + drift, gate.lookAt + drift });
-		poses.push_back({ gate.position - drift, gate.lookAt - drift });
+		const Vector3 drift = rightOf(forward) * glue_camera::GateDriftAmplitude;
+		poses.push_back({ gate.position + drift, gate.lookAt });
+		poses.push_back({ gate.position - drift, gate.lookAt });
 
 		// The plaza pose
 		const GlueCameraKey& plazaKey = def.flightPath.back();
