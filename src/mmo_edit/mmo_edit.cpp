@@ -362,7 +362,22 @@ int main(int argc, char* arg[])
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
-		for (int i = 1; args && i + 1 < argCount; ++i)
+
+		// A job flag without its arguments fails the run instead of opening the editor, so a
+		// scripted call cannot hang on an interactive window. Call it after the job's log is wired.
+		const auto missingArgs = [&argCount](const int flagIndex, const int count, const char* usage)
+		{
+			if (flagIndex + count < argCount)
+			{
+				return false;
+			}
+
+			ELOG("missing arguments, usage: " << usage);
+			PostQuitMessage(1);
+			return true;
+		};
+
+		for (int i = 1; args && i < argCount; ++i)
 		{
 			if (std::string(args[i]) == "--rebuild-material")
 			{
@@ -579,6 +594,11 @@ int main(int argc, char* arg[])
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
 
+				if (missingArgs(i, 1, "--bake-terrain-lod <world>"))
+				{
+					break;
+				}
+
 				// Bake right away instead of from the viewport's paint handler, so the job also runs
 				// with the window minimised (a minimised window never paints).
 				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
@@ -618,6 +638,11 @@ int main(int argc, char* arg[])
 				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
+
+				if (missingArgs(i, 1, "--bake-minimaps <world>"))
+				{
+					break;
+				}
 
 				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
 				{
@@ -672,11 +697,16 @@ int main(int argc, char* arg[])
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
 
+				if (missingArgs(i, 1, "--glue-bake-dry-run <GlueScene.json>"))
+				{
+					break;
+				}
+
 				PostQuitMessage(mmo::RunGlueBakeDryRun(mainWindow, args[i + 1]) ? 0 : 1);
 				break;
 			}
 
-			if (std::string(args[i]) == "--glue-bake-meshes" && i + 2 < argCount)
+			if (std::string(args[i]) == "--glue-bake-meshes")
 			{
 				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
 				static std::ofstream bakeLog("glue_bake_meshes.log", std::ios::out | std::ios::trunc);
@@ -693,6 +723,11 @@ int main(int argc, char* arg[])
 				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
+
+				if (missingArgs(i, 2, "--glue-bake-meshes <GlueScene.json> <outDir>"))
+				{
+					break;
+				}
 
 				PostQuitMessage(mmo::RunGlueBakeMeshes(mainWindow, args[i + 1], args[i + 2]) ? 0 : 1);
 				break;
@@ -716,12 +751,17 @@ int main(int argc, char* arg[])
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
 
+				if (missingArgs(i, 1, "--bake-glue-scene <GlueScene.json>"))
+				{
+					break;
+				}
+
 				mmo::String summary;
 				PostQuitMessage(mmo::BakeGlueScene(mainWindow, args[i + 1], summary) ? 0 : 1);
 				break;
 			}
 
-			if (std::string(args[i]) == "--glue-bake-terrain" && i + 2 < argCount)
+			if (std::string(args[i]) == "--glue-bake-terrain")
 			{
 				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
 				static std::ofstream bakeLog("glue_bake_terrain.log", std::ios::out | std::ios::trunc);
@@ -738,6 +778,11 @@ int main(int argc, char* arg[])
 				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
+
+				if (missingArgs(i, 2, "--glue-bake-terrain <GlueScene.json> <outDir> [<compareDir>]"))
+				{
+					break;
+				}
 
 				const std::string compareDir = i + 3 < argCount && std::string(args[i + 3]).rfind("--", 0) != 0 ? args[i + 3] : "";
 				PostQuitMessage(mmo::RunGlueBakeTerrain(mainWindow, args[i + 1], args[i + 2], compareDir) ? 0 : 1);

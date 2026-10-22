@@ -119,11 +119,31 @@ namespace mmo
 			return triangles;
 		}
 
-		/// Whether a manifest path lies in the bake's output directory, and so belongs to the bake.
+		/// Whether a manifest path lies in the bake's output directory, and so belongs to the bake. A path
+		/// with a ".." segment never does: it could climb out of the directory past the prefix test.
 		bool IsOwnedBakeFile(const String& path)
 		{
 			static const String prefix = String(GlueBakeOutputDirectory) + "/";
-			return ToForwardSlashes(path).rfind(prefix, 0) == 0;
+			const String normalized = ToForwardSlashes(path);
+
+			size_t segmentStart = 0;
+			while (segmentStart <= normalized.size())
+			{
+				size_t segmentEnd = normalized.find('/', segmentStart);
+				if (segmentEnd == String::npos)
+				{
+					segmentEnd = normalized.size();
+				}
+
+				if (normalized.compare(segmentStart, segmentEnd - segmentStart, "..") == 0)
+				{
+					return false;
+				}
+
+				segmentStart = segmentEnd + 1;
+			}
+
+			return normalized.rfind(prefix, 0) == 0;
 		}
 
 		/// Removes the files of the previous bake: the files its manifest lists inside the output directory, the

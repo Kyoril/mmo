@@ -36,6 +36,7 @@ namespace mmo
 	static_assert(glue_terrain::TilesPerPage == terrain::constants::TilesPerPage, "glue terrain grid must match the terrain");
 	static_assert(glue_terrain::TileSize == terrain::constants::TileSize, "glue terrain grid must match the terrain");
 	static_assert(glue_terrain::PageOriginIndex == terrain::constants::MaxPages / 2, "glue terrain grid must match the terrain");
+	static_assert(terrain::water_lookup::QuadsPerTileSide == glue_terrain::CellsPerTileSide, "water quads must line up with the glue terrain cells");
 
 	namespace
 	{
