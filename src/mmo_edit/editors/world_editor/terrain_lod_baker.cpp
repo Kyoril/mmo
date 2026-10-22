@@ -194,14 +194,16 @@ namespace mmo
 		albedoTarget.CopyPixelDataTo(reinterpret_cast<uint8*>(albedo.data()));
 		emissiveTarget.CopyPixelDataTo(reinterpret_cast<uint8*>(emissive.data()));
 
-		// Linear base colour to sRGB: the far material samples its albedo as a colour texture.
+		// Stored as is: material texture samples are never sRGB-decoded (MaterialNode compiles them with
+		// srgb = false), so the G-buffer albedo already holds raw texel values and the far material reads
+		// this texture the same way. Gamma-encoding it here made every far page brighter and paler.
 		srgb.resize(pixelCount * 4);
 		for (uint32 i = 0; i < pixelCount; ++i)
 		{
 			for (uint32 c = 0; c < 3; ++c)
 			{
-				const float linear = std::clamp(page_bake::HalfToFloat(albedo[i * 4 + c]) + page_bake::HalfToFloat(emissive[i * 4 + c]), 0.0f, 1.0f);
-				srgb[i * 4 + c] = static_cast<uint8>(std::lround(std::pow(linear, 1.0f / 2.2f) * 255.0f));
+				const float value = std::clamp(page_bake::HalfToFloat(albedo[i * 4 + c]) + page_bake::HalfToFloat(emissive[i * 4 + c]), 0.0f, 1.0f);
+				srgb[i * 4 + c] = static_cast<uint8>(std::lround(value * 255.0f));
 			}
 
 			srgb[i * 4 + 3] = 255;
