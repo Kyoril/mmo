@@ -65,6 +65,19 @@ namespace mmo
 		uint32 failedFiles = 0;
 	};
 
+	/// @brief Writes a bake output file to an asset path (through the asset registry) or to an absolute
+	///        file system path (directly, creating its directory; for debugging).
+	/// @return The number of bytes written, or zero on failure or when bytes is empty.
+	size_t WriteGlueBakeFile(const String& path, const String& bytes);
+
+	/// @brief Serializes a mesh and writes it like WriteGlueBakeFile.
+	/// @return The number of bytes written, or zero on failure.
+	size_t WriteGlueMeshFile(const MeshPtr& mesh, const String& path);
+
+	/// @brief Joins an output directory and a file name with a forward slash (backslashes in dir become
+	///        forward slashes). An empty dir yields the file name.
+	String JoinGlueBakePath(const String& dir, const String& file);
+
 	/// @brief Merges the glue render items into world-space chunk meshes and writes them.
 	/// @details Items whose mesh (path and material overrides) is placed at least MinInstancedPlacements
 	///          times, and items that cannot be merged, are returned as references to their original mesh

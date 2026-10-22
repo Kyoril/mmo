@@ -43,7 +43,8 @@ namespace mmo
 		/// @param pumpStreaming Runs one queued main-thread step of the owner's page streaming and returns
 		///        whether there was one. Pages the streaming is preparing when the bake reaches them
 		///        complete on that queue.
-		TerrainLodBaker(Scene& scene, terrain::Terrain& terrain, std::function<bool()> pumpStreaming);
+		/// @param textureSize Edge length of the rendered colour in texels (TextureSize for the .tlod bake).
+		TerrainLodBaker(Scene& scene, terrain::Terrain& terrain, std::function<bool()> pumpStreaming, uint32 textureSize = TextureSize);
 
 		~TerrainLodBaker() override;
 
@@ -53,6 +54,14 @@ namespace mmo
 		/// @remark Pages that are not loaded are loaded for the bake and released afterwards. Renders
 		///         with the graphics device directly; call it outside of any other render pass.
 		Stats BakeAll(bool onlyStale);
+
+		/// @brief Renders one page's top-down colour the way the bake does, without writing anything.
+		/// @param x Page X index.
+		/// @param z Page Z index.
+		/// @param srgb Receives textureSize² sRGB RGBA8 texels; texel (u, v) maps to page-local (x, z).
+		/// @return False when the page has no .tile file, cannot be loaded or the read-back failed.
+		/// @remark Loads the page for the render and releases it again, like BakeAll.
+		bool RenderPageColor(uint32 x, uint32 z, std::vector<uint8>& srgb);
 
 	private:
 		bool IsUpToDate(uint32 x, uint32 z) const;
@@ -65,6 +74,7 @@ namespace mmo
 		Scene& m_scene;
 		terrain::Terrain& m_terrain;
 		std::function<bool()> m_pumpStreaming;
+		uint32 m_textureSize = TextureSize;
 		std::unique_ptr<DeferredRenderer> m_renderer;
 		Camera* m_camera = nullptr;
 		SceneNode* m_cameraNode = nullptr;

@@ -2428,6 +2428,46 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		return terrainPage;
 	}
 
+	bool WorldEditorInstance::RenderTerrainPageColor(const PagePosition& page, const uint32 textureSize, std::vector<uint8>& srgb)
+	{
+		if (!m_terrain || !m_hasTerrain)
+		{
+			return false;
+		}
+
+		// Hidden by the baker along with everything else outside the terrain, but foliage keeps its own
+		// visibility flag on top of its scene objects (see GenerateTerrainLod).
+		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
+		if (m_foliage)
+		{
+			m_foliage->SetVisible(false);
+		}
+
+		bool success = false;
+		{
+			TerrainLodBaker baker(m_scene, *m_terrain, [this]() { return m_dispatcher.poll_one() > 0; }, textureSize);
+			success = baker.RenderPageColor(static_cast<uint32>(page.x()), static_cast<uint32>(page.y()), srgb);
+		}
+
+		if (m_foliage)
+		{
+			m_foliage->SetVisible(foliageWasVisible);
+		}
+		return success;
+	}
+
+	bool WorldEditorInstance::SetFoliageVisible(const bool visible)
+	{
+		if (!m_foliage)
+		{
+			return false;
+		}
+
+		const bool wasVisible = m_foliage->IsVisible();
+		m_foliage->SetVisible(visible);
+		return wasVisible;
+	}
+
 	std::vector<String> WorldEditorInstance::GetPageInputFiles(const PagePosition& page) const
 	{
 		std::vector<String> files;

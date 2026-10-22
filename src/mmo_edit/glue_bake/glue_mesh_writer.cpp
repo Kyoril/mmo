@@ -22,67 +22,6 @@ namespace mmo
 {
 	namespace
 	{
-		/// Serializes a mesh and writes it to an asset path or an absolute file system path.
-		/// Returns the number of bytes written, or zero on failure.
-		size_t WriteMeshFile(const MeshPtr& mesh, const String& path)
-		{
-			std::ostringstream buffer(std::ios::out | std::ios::binary);
-			{
-				io::StreamSink sink{ buffer };
-				io::Writer writer{ sink };
-				MeshSerializer serializer;
-				serializer.Serialize(mesh, writer, mesh_version::Latest);
-			}
-
-			const String bytes = buffer.str();
-			if (bytes.empty())
-			{
-				return 0;
-			}
-
-			const std::filesystem::path fsPath(path);
-			if (fsPath.is_absolute())
-			{
-				std::error_code error;
-				std::filesystem::create_directories(fsPath.parent_path(), error);
-				std::ofstream file(fsPath, std::ios::out | std::ios::binary | std::ios::trunc);
-				if (!file || !file.write(bytes.data(), static_cast<std::streamsize>(bytes.size())))
-				{
-					return 0;
-				}
-				return bytes.size();
-			}
-
-			const std::unique_ptr<std::ostream> file = AssetRegistry::CreateNewFile(path);
-			if (!file || !file->write(bytes.data(), static_cast<std::streamsize>(bytes.size())))
-			{
-				return 0;
-			}
-			return bytes.size();
-		}
-
-		String JoinPath(const String& dir, const String& file)
-		{
-			if (dir.empty())
-			{
-				return file;
-			}
-
-			String result = dir;
-			for (char& c : result)
-			{
-				if (c == '\\')
-				{
-					c = '/';
-				}
-			}
-			if (result.back() != '/')
-			{
-				result += '/';
-			}
-			return result + file;
-		}
-
 		/// Triangles of all submeshes of a mesh.
 		uint64 CountTriangles(const Mesh& mesh)
 		{
@@ -117,6 +56,69 @@ namespace mmo
 			}
 			return bytes;
 		}
+	}
+
+	size_t WriteGlueBakeFile(const String& path, const String& bytes)
+	{
+		if (bytes.empty())
+		{
+			return 0;
+		}
+
+		const std::filesystem::path fsPath(path);
+		if (fsPath.is_absolute())
+		{
+			std::error_code error;
+			std::filesystem::create_directories(fsPath.parent_path(), error);
+			std::ofstream file(fsPath, std::ios::out | std::ios::binary | std::ios::trunc);
+			if (!file || !file.write(bytes.data(), static_cast<std::streamsize>(bytes.size())))
+			{
+				return 0;
+			}
+			return bytes.size();
+		}
+
+		const std::unique_ptr<std::ostream> file = AssetRegistry::CreateNewFile(path);
+		if (!file || !file->write(bytes.data(), static_cast<std::streamsize>(bytes.size())))
+		{
+			return 0;
+		}
+		return bytes.size();
+	}
+
+	size_t WriteGlueMeshFile(const MeshPtr& mesh, const String& path)
+	{
+		std::ostringstream buffer(std::ios::out | std::ios::binary);
+		{
+			io::StreamSink sink{ buffer };
+			io::Writer writer{ sink };
+			MeshSerializer serializer;
+			serializer.Serialize(mesh, writer, mesh_version::Latest);
+		}
+
+		return WriteGlueBakeFile(path, buffer.str());
+	}
+
+	String JoinGlueBakePath(const String& dir, const String& file)
+	{
+		if (dir.empty())
+		{
+			return file;
+		}
+
+		String result = dir;
+		for (char& c : result)
+		{
+			if (c == '\\')
+			{
+				c = '/';
+			}
+		}
+		if (result.back() != '/')
+		{
+			result += '/';
+		}
+		return result + file;
 	}
 
 	std::vector<GlueBakeMesh> WriteMergedGlueMeshes(const std::vector<GlueRenderItem>& items, const String& outDir, float chunkSize, GlueMeshWriteStats* stats)
@@ -224,7 +226,7 @@ namespace mmo
 			for (size_t partIndex = 0; partIndex < parts.size(); ++partIndex)
 			{
 				const String fileName = "Chunk_" + std::to_string(key.first) + "_" + std::to_string(key.second) + "_" + std::to_string(partIndex) + ".hmsh";
-				const String path = JoinPath(outDir, fileName);
+				const String path = JoinGlueBakePath(outDir, fileName);
 
 				const MeshPtr mesh = CreateMergedMesh(path, parts[partIndex]);
 				if (!mesh)
@@ -232,7 +234,7 @@ namespace mmo
 					continue;
 				}
 
-				const size_t bytes = WriteMeshFile(mesh, path);
+				const size_t bytes = WriteGlueMeshFile(mesh, path);
 				if (bytes == 0)
 				{
 					ELOG("Glue mesh bake: failed to write " << path);

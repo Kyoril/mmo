@@ -26,12 +26,13 @@
 
 namespace mmo
 {
-	TerrainLodBaker::TerrainLodBaker(Scene& scene, terrain::Terrain& terrain, std::function<bool()> pumpStreaming)
+	TerrainLodBaker::TerrainLodBaker(Scene& scene, terrain::Terrain& terrain, std::function<bool()> pumpStreaming, const uint32 textureSize)
 		: m_scene(scene)
 		, m_terrain(terrain)
 		, m_pumpStreaming(std::move(pumpStreaming))
+		, m_textureSize(textureSize)
 	{
-		m_renderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, TextureSize, TextureSize);
+		m_renderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, m_textureSize, m_textureSize);
 
 		// Top-down orthographic camera covering exactly one page, set up like the minimap camera:
 		// image right = +X, image up = -Z, so texel (u, v) maps to page-local (x, z).
@@ -107,6 +108,37 @@ namespace mmo
 		return stats;
 	}
 
+	bool TerrainLodBaker::RenderPageColor(const uint32 x, const uint32 z, std::vector<uint8>& srgb)
+	{
+		if (x >= m_terrain.GetWidth() || z >= m_terrain.GetHeight() || !AssetRegistry::HasFile(m_terrain.GetPageFilename(x, z)))
+		{
+			return false;
+		}
+
+		terrain::Page* page = m_terrain.GetPage(x, z);
+		if (!page)
+		{
+			return false;
+		}
+
+		auto& gx = GraphicsDevice::Get();
+		gx.CaptureState();
+
+		const bool lodWasEnabled = m_terrain.IsLodEnabled();
+		m_terrain.SetLodEnabled(false);
+
+		bool success = false;
+		{
+			page_bake::ScopedVisibleSubtrees terrainOnly(m_scene.GetRootSceneNode(), { m_terrain.GetNode() });
+			const page_bake::ScopedPageLoad load(*page, x, z, m_pumpStreaming);
+			success = load.IsLoaded() && RenderColor(*page, srgb);
+		}
+
+		m_terrain.SetLodEnabled(lodWasEnabled);
+		gx.RestoreState();
+		return success;
+	}
+
 	bool TerrainLodBaker::IsUpToDate(const uint32 x, const uint32 z) const
 	{
 		const auto source = AssetRegistry::GetLastWriteTime(m_terrain.GetPageFilename(x, z));
@@ -144,7 +176,7 @@ namespace mmo
 
 		std::vector<uint8> color;
 		success = success && RenderColor(page, color);
-		success = success && page_bake::WriteDxt1Texture(m_terrain.GetPageLodTextureFilename(x, z), std::move(color), TextureSize);
+		success = success && page_bake::WriteDxt1Texture(m_terrain.GetPageLodTextureFilename(x, z), std::move(color), m_textureSize);
 
 		return success;
 	}
@@ -173,7 +205,7 @@ namespace mmo
 		{
 			// Same per-frame device reset the editor viewport does before it renders.
 			gx.Reset();
-			gx.SetViewport(0, 0, TextureSize, TextureSize, 0.0f, 1.0f);
+			gx.SetViewport(0, 0, m_textureSize, m_textureSize, 0.0f, 1.0f);
 			m_renderer->Render(m_scene, *m_camera);
 		}
 		page.SetMinimapWaterMode(false);
@@ -182,7 +214,7 @@ namespace mmo
 		RenderTexture& albedoTarget = gBuffer.GetAlbedoRT();
 		RenderTexture& emissiveTarget = gBuffer.GetEmissiveRT();
 
-		constexpr uint32 pixelCount = TextureSize * TextureSize;
+		const uint32 pixelCount = m_textureSize * m_textureSize;
 		if (albedoTarget.GetPixelDataSize() != pixelCount * 8 || emissiveTarget.GetPixelDataSize() != pixelCount * 8)
 		{
 			ELOG("Terrain LOD bake: unexpected G-buffer format");

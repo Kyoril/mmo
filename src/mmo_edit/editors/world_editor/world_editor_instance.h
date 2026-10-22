@@ -684,6 +684,26 @@ namespace mmo
 		///         its CPU data until streaming unloads it.
 		const terrain::Page* GetPreparedTerrainPage(const PagePosition& page);
 
+		/// @brief Renders a terrain page's top-down, unlit colour like the distant-terrain bake does
+		///        (see TerrainLodBaker::RenderPageColor), for one-shot jobs such as the glue bake.
+		/// @param page The page.
+		/// @param textureSize Edge length of the image in texels.
+		/// @param srgb Receives textureSize² sRGB RGBA8 texels; texel (u, v) maps to page-local (x, z).
+		/// @return False when there is no terrain or the page cannot be rendered.
+		bool RenderTerrainPageColor(const PagePosition& page, uint32 textureSize, std::vector<uint8>& srgb);
+
+		/// @brief The scene the world is shown in, for one-shot editor jobs that render it offscreen.
+		[[nodiscard]] Scene& GetScene() { return m_scene; }
+
+		/// @brief Shows or hides the authored instanced foliage, which keeps its own visibility flag on top
+		///        of its scene objects.
+		/// @return Whether it was visible before.
+		bool SetFoliageVisible(bool visible);
+
+		/// @brief Runs one queued main-thread step of the page streaming.
+		/// @return Whether there was one.
+		bool PumpStreaming() { return m_dispatcher.poll_one() > 0; }
+
 		/// @brief The asset files that define a page's content: its .tile, .hfol and .wobj files,
 		///        whichever exist.
 		std::vector<String> GetPageInputFiles(const PagePosition& page) const;

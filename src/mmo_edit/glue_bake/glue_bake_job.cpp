@@ -4,6 +4,8 @@
 
 #include "glue_mesh_writer.h"
 #include "glue_scene_collector.h"
+#include "glue_terrain_baker.h"
+#include "glue_terrain_compare.h"
 
 #include "editor_host.h"
 #include "editors/world_editor/world_editor_instance.h"
@@ -47,7 +49,8 @@ namespace mmo
 
 		/// Reads the scene definition, opens its world and collects what the glue cameras see.
 		/// @param label Prefix of the log lines.
-		bool LoadAndCollect(EditorHost& host, const String& sceneFile, const char* label, WorldEditorInstance*& world, GlueCollection& collection)
+		bool LoadAndCollect(EditorHost& host, const String& sceneFile, const char* label, WorldEditorInstance*& world, GlueCollection& collection,
+			std::vector<GlueCameraPose>* outPoses = nullptr, GlueBakeFrustumSet* outFrusta = nullptr)
 		{
 			const std::optional<String> json = ReadSceneFile(sceneFile);
 			if (!json)
@@ -83,6 +86,14 @@ namespace mmo
 
 			world = WorldEditorInstance::GetLastCreated();
 			collection = CollectGlueScene(*world, *definition, frusta);
+			if (outPoses)
+			{
+				*outPoses = poses;
+			}
+			if (outFrusta)
+			{
+				*outFrusta = frusta;
+			}
 			return true;
 		}
 	}
@@ -200,5 +211,50 @@ namespace mmo
 		ILOG("  manifest meshes:     " << meshes.size());
 
 		return stats.failedFiles == 0 && !meshes.empty();
+	}
+
+	bool RunGlueBakeTerrain(EditorHost& host, const String& sceneFile, const String& outDir, const String& compareDir)
+	{
+		WorldEditorInstance* world = nullptr;
+		GlueCollection collection;
+		std::vector<GlueCameraPose> poses;
+		GlueBakeFrustumSet frusta;
+		if (!LoadAndCollect(host, sceneFile, "Glue terrain bake", world, collection, &poses, &frusta))
+		{
+			return false;
+		}
+
+		GlueTerrainBakeStats stats;
+		const std::vector<GlueBakeTerrainTile> tiles = BakeGlueTerrain(*world, collection.terrainPages, frusta, poses, outDir, 80.0f, &stats);
+
+		ILOG("Glue terrain bake summary (" << outDir << "):");
+		ILOG("  candidate pages:   " << collection.terrainPages.size() << " (" << stats.pages << " with visible tiles)");
+		ILOG("  near tiles:        " << stats.nearTiles << " (" << stats.nearTriangles << " triangles)");
+		ILOG("  far tiles:         " << stats.farTiles << " in " << stats.farPages << " page meshes (" << stats.farTriangles << " triangles)");
+		ILOG("  empty tiles:       " << stats.emptyTiles);
+		ILOG("  vertices:          " << stats.vertices);
+		ILOG("  texture memory:    " << stats.textureBytes << " bytes");
+		ILOG("  files:             " << stats.files << " (" << stats.fileBytes << " bytes)");
+		ILOG("  failed files:      " << stats.failedFiles);
+		ILOG("  manifest entries:  " << tiles.size());
+
+		bool success = stats.failedFiles == 0 && !tiles.empty();
+		if (success && !compareDir.empty() && !poses.empty())
+		{
+			// The flight's start, middle and end, and a look down onto the plaza's near tiles.
+			std::vector<GlueTerrainCompareView> views;
+			views.push_back({ "flight_start", poses.front() });
+			views.push_back({ "flight_middle", poses[std::min<size_t>(24, poses.size() - 1)] });
+			views.push_back({ "flight_end", poses[std::min<size_t>(47, poses.size() - 1)] });
+
+			GlueCameraPose closeUp;
+			closeUp.position = poses[std::min<size_t>(47, poses.size() - 1)].position + Vector3(0.0f, 4.0f, 0.0f);
+			closeUp.lookAt = closeUp.position + Vector3(0.0f, -6.0f, 6.0f);
+			views.push_back({ "near_closeup", closeUp });
+
+			success = CompareGlueTerrainBake(*world, collection.terrainPages, tiles, views, compareDir);
+		}
+
+		return success;
 	}
 }

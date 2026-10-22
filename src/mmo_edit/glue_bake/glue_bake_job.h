@@ -28,6 +28,16 @@ namespace mmo
 	/// @return False when loading failed, nothing was produced or a file could not be written.
 	bool RunGlueBakeMeshes(EditorHost& host, const String& sceneFile, const String& outDir);
 
+	/// @brief Runs the collection and the terrain bake of the glue scene and logs what it wrote: the
+	///        `--glue-bake-terrain <GlueScene.json> <outDir> [<compareDir>]` debug job.
+	/// @details Writes only the terrain meshes, splatting maps and far albedo (no manifest) into outDir (an
+	///          asset directory or an absolute file system directory). With compareDir (absolute), also renders
+	///          the live and the baked terrain from a few glue views into images there (see
+	///          CompareGlueTerrainBake; needs an absolute outDir).
+	/// @return False when loading failed, nothing was produced, a file could not be written or the
+	///         comparison failed.
+	bool RunGlueBakeTerrain(EditorHost& host, const String& sceneFile, const String& outDir, const String& compareDir);
+
 	/// @brief Vertical field of view of the glue camera in degrees (the client's Camera default).
 	constexpr float GlueBakeVerticalFovDegrees = 45.0f;
 
