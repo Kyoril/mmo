@@ -327,6 +327,19 @@ TEST_CASE("Byte hashing is FNV-1a 64", "[glue_bake]")
 	CHECK(HashGlueBakeBytes("", 0) == "cbf29ce484222325");
 }
 
+TEST_CASE("The scene hash ignores line endings", "[glue_bake]")
+{
+	const String lf = "{\n\t\"a\": 1\n}\n";
+	const String crlf = "{\r\n\t\"a\": 1\r\n}\r\n";
+
+	// LF text hashes exactly like the bytes (bakes made before the CR-insensitive hash stay valid).
+	CHECK(HashGlueSceneDefinition(lf.data(), lf.size()) == HashGlueBakeBytes(lf.data(), lf.size()));
+	CHECK(HashGlueSceneDefinition(crlf.data(), crlf.size()) == HashGlueSceneDefinition(lf.data(), lf.size()));
+
+	const String changed = "{\n\t\"a\": 2\n}\n";
+	CHECK(HashGlueSceneDefinition(changed.data(), changed.size()) != HashGlueSceneDefinition(lf.data(), lf.size()));
+}
+
 TEST_CASE("Stale inputs are the changed and the missing ones", "[glue_bake]")
 {
 	GlueBakeManifest m;

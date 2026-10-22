@@ -371,7 +371,7 @@ namespace mmo
 
 		GlueBakeManifest manifest;
 		manifest.rulesVersion = GlueBakeRulesVersion;
-		manifest.sceneHash = HashGlueBakeBytes(source->bytes.data(), source->bytes.size());
+		manifest.sceneHash = HashGlueSceneDefinition(source->bytes.data(), source->bytes.size());
 		manifest.inputs = collection.inputs;
 		manifest.meshes = std::move(meshes);
 		manifest.terrainTiles = std::move(tiles);

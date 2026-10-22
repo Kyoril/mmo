@@ -669,6 +669,24 @@ namespace mmo
 		return result;
 	}
 
+	String HashGlueSceneDefinition(const void* data, const size_t size)
+	{
+		// Same FNV-1a as HashGlueBakeBytes over the bytes without '\r': an LF file hashes exactly
+		// as before, and a CRLF checkout of it (git core.autocrlf) hashes the same.
+		std::vector<char> text;
+		text.reserve(size);
+		const char* bytes = static_cast<const char*>(data);
+		for (size_t i = 0; i < size; ++i)
+		{
+			if (bytes[i] != '\r')
+			{
+				text.push_back(bytes[i]);
+			}
+		}
+
+		return HashGlueBakeBytes(text.data(), text.size());
+	}
+
 	std::vector<String> FindStaleGlueBakeInputs(const GlueBakeManifest& manifest, const std::function<std::optional<String>(const String& path)>& hashFile)
 	{
 		std::vector<String> stale;
