@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -86,6 +87,41 @@ namespace mmo
 		{
 			return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
 		}
+
+		/// Triangles of all submeshes of a mesh.
+		uint64 CountTriangles(const Mesh& mesh)
+		{
+			uint64 triangles = 0;
+			for (uint16 i = 0; i < mesh.GetSubMeshCount(); ++i)
+			{
+				const SubMesh& subMesh = mesh.GetSubMesh(i);
+				if (subMesh.indexData)
+				{
+					triangles += subMesh.indexData->indexCount / 3;
+				}
+			}
+			return triangles;
+		}
+
+		/// Approximate bytes one merged placement of a mesh adds to the written files (vertices as
+		/// serialized: 15 floats and a colour; indices counted at 32 bit).
+		uint64 EstimateMergedBytes(const Mesh& mesh)
+		{
+			uint64 bytes = 0;
+			for (uint16 i = 0; i < mesh.GetSubMeshCount(); ++i)
+			{
+				const SubMesh& subMesh = mesh.GetSubMesh(i);
+				if (subMesh.vertexData)
+				{
+					bytes += static_cast<uint64>(subMesh.vertexData->vertexCount) * (15 * sizeof(float) + sizeof(uint32));
+				}
+				if (subMesh.indexData)
+				{
+					bytes += static_cast<uint64>(subMesh.indexData->indexCount) * sizeof(uint32);
+				}
+			}
+			return bytes;
+		}
 	}
 
 	std::vector<GlueBakeMesh> WriteMergedGlueMeshes(const std::vector<GlueRenderItem>& items, const String& outDir, float chunkSize, GlueMeshWriteStats* stats)
@@ -106,8 +142,26 @@ namespace mmo
 		MeshReadBackCache readBack;
 		std::map<std::pair<int32, int32>, MeshMergeAccumulator> chunks;
 
+		// Meshes placed often are drawn instanced from their original file instead of being merged,
+		// so their geometry is not duplicated per placement.
+		std::vector<String> placementKeys;
+		placementKeys.reserve(items.size());
 		for (const GlueRenderItem& item : items)
 		{
+			String key = item.meshPath;
+			for (const String& material : item.materialOverrides)
+			{
+				key += '\n';
+				key += material;
+			}
+			placementKeys.push_back(std::move(key));
+		}
+		const std::vector<bool> repeated = FindRepeatedPlacements(placementKeys, MinInstancedPlacements);
+		std::set<String> instancedMeshes;
+
+		for (size_t itemIndex = 0; itemIndex < items.size(); ++itemIndex)
+		{
+			const GlueRenderItem& item = items[itemIndex];
 			if (!item.world.IsFinite())
 			{
 				WLOG("Glue mesh bake: dropping " << item.meshPath << ", its transform is not finite");
@@ -119,6 +173,15 @@ namespace mmo
 			{
 				unmerged.push_back(GlueBakeMesh{ item.meshPath, item.world });
 				++counts.unmerged;
+				continue;
+			}
+
+			if (repeated[itemIndex])
+			{
+				unmerged.push_back(GlueBakeMesh{ item.meshPath, item.world });
+				++counts.instanced;
+				counts.instancedTriangles += CountTriangles(*item.mesh);
+				instancedMeshes.insert(placementKeys[itemIndex]);
 				continue;
 			}
 
@@ -144,6 +207,11 @@ namespace mmo
 				WLOG("Glue mesh bake: " << item.meshPath << " was merged only in part (a submesh could not be read back or was not finite)");
 				++counts.incomplete;
 			}
+
+			++counts.merged;
+			GlueMeshWriteStats::MeshUse& use = counts.mergedByMesh[item.meshPath];
+			++use.placements;
+			use.bytes += EstimateMergedBytes(*item.mesh);
 		}
 
 		for (auto& [key, accumulator] : chunks)
@@ -191,6 +259,7 @@ namespace mmo
 			}
 		}
 
+		counts.instancedMeshes = static_cast<uint32>(instancedMeshes.size());
 		result.insert(result.end(), unmerged.begin(), unmerged.end());
 		return result;
 	}

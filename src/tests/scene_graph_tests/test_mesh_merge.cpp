@@ -329,3 +329,17 @@ TEST_CASE("A merged mesh survives a save and load", "[mesh_merge]")
 	}
 	CHECK(geometry.indices == expectedIndices);
 }
+
+TEST_CASE("Meshes placed at least three times are instanced, rarer ones merged", "[mesh_merge]")
+{
+	CHECK(MinInstancedPlacements == 3);
+
+	// Three placements of the lamp are instanced (references); two of the wall are merged. The same
+	// mesh with another material override is a different key.
+	const std::vector<String> keys{ "Lamp.hmsh", "Wall.hmsh", "Lamp.hmsh", "Wall.hmsh", "Lamp.hmsh", "Lamp.hmsh\nRed.hmat" };
+	const std::vector<bool> repeated = FindRepeatedPlacements(keys);
+	CHECK(repeated == std::vector<bool>{ true, false, true, false, true, false });
+
+	CHECK(FindRepeatedPlacements(keys, 2) == std::vector<bool>{ true, true, true, true, true, false });
+	CHECK(FindRepeatedPlacements({}).empty());
+}

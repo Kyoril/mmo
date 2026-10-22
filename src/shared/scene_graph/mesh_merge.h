@@ -78,6 +78,17 @@ namespace mmo
 		std::map<std::pair<const Mesh*, uint16>, std::unique_ptr<MeshMergeGeometry>> m_entries;
 	};
 
+	/// @brief Placements of one mesh at least this often are drawn instanced (one entity per placement
+	///        sharing the loaded mesh) instead of being merged, so their geometry is not duplicated.
+	constexpr size_t MinInstancedPlacements = 3;
+
+	/// @brief Flags the placements whose key occurs at least minCount times.
+	/// @param keys One key per placement: what makes two placements share one mesh (its path and
+	///        material overrides).
+	/// @param minCount The repeat count from which a placement counts as repeated.
+	/// @return One flag per key; true where the key occurs at least minCount times.
+	[[nodiscard]] std::vector<bool> FindRepeatedPlacements(const std::vector<String>& keys, size_t minCount = MinInstancedPlacements);
+
 	/// @brief Merges placed meshes into buckets by material, split into parts that stay within a vertex
 	///        budget per bucket.
 	/// @details Part n holds the n-th piece of every material bucket: a material whose geometry exceeds

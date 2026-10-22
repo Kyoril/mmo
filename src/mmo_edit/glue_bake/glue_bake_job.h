@@ -25,7 +25,7 @@ namespace mmo
 	/// @param host Opens the world.
 	/// @param sceneFile The GlueScene.json, as a file system path or an asset path.
 	/// @param outDir Where the chunk meshes go.
-	/// @return False when loading failed, nothing was written or a file could not be written.
+	/// @return False when loading failed, nothing was produced or a file could not be written.
 	bool RunGlueBakeMeshes(EditorHost& host, const String& sceneFile, const String& outDir);
 
 	/// @brief Vertical field of view of the glue camera in degrees (the client's Camera default).

@@ -211,6 +211,23 @@ namespace mmo
 		return mesh;
 	}
 
+	std::vector<bool> FindRepeatedPlacements(const std::vector<String>& keys, const size_t minCount)
+	{
+		std::map<String, size_t> counts;
+		for (const String& key : keys)
+		{
+			++counts[key];
+		}
+
+		std::vector<bool> repeated(keys.size(), false);
+		for (size_t i = 0; i < keys.size(); ++i)
+		{
+			repeated[i] = counts[keys[i]] >= minCount;
+		}
+
+		return repeated;
+	}
+
 	const MeshMergeGeometry* MeshReadBackCache::Get(const Mesh& mesh, const uint16 subMeshIndex)
 	{
 		const auto key = std::make_pair(&mesh, subMeshIndex);

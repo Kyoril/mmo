@@ -11,10 +11,12 @@
 #include "assets/asset_registry.h"
 #include "game_common/glue_bake.h"
 #include "game_common/glue_scene_definition.h"
+#include "scene_graph/mesh_merge.h"
 #include "log/default_log_levels.h"
 #include "terrain/constants.h"
 #include "terrain/page.h"
 
+#include <algorithm>
 #include <bit>
 #include <fstream>
 #include <iterator>
@@ -173,19 +175,30 @@ namespace mmo
 		GlueMeshWriteStats stats;
 		const std::vector<GlueBakeMesh> meshes = WriteMergedGlueMeshes(collection.items, outDir, 48.0f, &stats);
 
-		ILOG("Glue mesh bake summary (" << outDir << "):");
-		ILOG("  items:        " << collection.items.size());
-		ILOG("  chunks:       " << stats.chunks << " (" << stats.files << " files)");
-		ILOG("  submeshes:    " << stats.subMeshes);
-		ILOG("  vertices:     " << stats.vertices);
-		ILOG("  triangles:    " << stats.triangles);
-		ILOG("  unmerged:     " << stats.unmerged);
-		ILOG("  dropped:      " << stats.dropped);
-		ILOG("  incomplete:   " << stats.incomplete);
-		ILOG("  failed files: " << stats.failedFiles);
-		ILOG("  total bytes:  " << stats.bytes);
-		ILOG("  manifest meshes: " << meshes.size());
+		// The merged meshes that cost the most bytes, to see what to instance or drop next
+		std::vector<std::pair<String, GlueMeshWriteStats::MeshUse>> heaviest(stats.mergedByMesh.begin(), stats.mergedByMesh.end());
+		std::sort(heaviest.begin(), heaviest.end(), [](const auto& a, const auto& b) { return a.second.bytes > b.second.bytes; });
+		for (size_t i = 0; i < heaviest.size() && i < 10; ++i)
+		{
+			ILOG("  merged mesh " << heaviest[i].first << " x" << heaviest[i].second.placements << " ~" << heaviest[i].second.bytes << " bytes");
+		}
 
-		return stats.failedFiles == 0 && stats.files > 0;
+		ILOG("Glue mesh bake summary (" << outDir << "):");
+		ILOG("  items:               " << collection.items.size());
+		ILOG("  merged items:        " << stats.merged);
+		ILOG("  instanced items:     " << stats.instanced << " (" << stats.instancedMeshes << " distinct meshes, placed >= " << MinInstancedPlacements << " times)");
+		ILOG("  unmergeable items:   " << stats.unmerged);
+		ILOG("  chunks:              " << stats.chunks << " (" << stats.files << " files)");
+		ILOG("  submeshes:           " << stats.subMeshes);
+		ILOG("  merged vertices:     " << stats.vertices);
+		ILOG("  merged triangles:    " << stats.triangles);
+		ILOG("  instanced triangles: " << stats.instancedTriangles);
+		ILOG("  dropped:             " << stats.dropped);
+		ILOG("  incomplete:          " << stats.incomplete);
+		ILOG("  failed files:        " << stats.failedFiles);
+		ILOG("  written bytes:       " << stats.bytes);
+		ILOG("  manifest meshes:     " << meshes.size());
+
+		return stats.failedFiles == 0 && !meshes.empty();
 	}
 }
