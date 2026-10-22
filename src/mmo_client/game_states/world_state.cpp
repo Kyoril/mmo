@@ -126,10 +126,41 @@ namespace mmo
 		static const char *s_freezeCulling = "ToggleCullingFreeze";
 		static const char *s_reload = "reload";
 		static const char *s_ambientSounds = "AmbientSounds";
+		static const char *s_waterSounds = "waterSounds";
 	}
 
 	namespace
 	{
+		/// Answers the water ambience scan from the streamed client terrain. Without terrain every
+		/// sample is empty.
+		class TerrainWaterAmbienceSource final : public IWaterAmbienceSource
+		{
+		public:
+			explicit TerrainWaterAmbienceSource(terrain::Terrain* terrain)
+				: m_terrain(terrain)
+			{
+			}
+
+			[[nodiscard]] WaterSample Sample(const float x, const float z) const override
+			{
+				WaterSample sample;
+				if (m_terrain == nullptr)
+				{
+					return sample;
+				}
+
+				sample.hasWater = m_terrain->HasWaterAtWorldPos(x, z);
+				sample.waterType = static_cast<uint32>(m_terrain->GetWaterTypeAtWorldPos(x, z));
+				sample.surfaceY = m_terrain->GetWaterHeightAtWorldPos(x, z);
+				sample.hasGround = m_terrain->TryGetSmoothHeightAt(x, z, sample.groundY);
+				sample.flowSpeed = m_terrain->GetWaterFlowSpeedAtWorldPos(x, z);
+				return sample;
+			}
+
+		private:
+			terrain::Terrain* m_terrain;
+		};
+
 		/// Forgets all DB cache queries still in flight, so the next Get for such an entry queries again.
 		void ResetInFlightCacheQueries(ICacheProvider& cache)
 		{
@@ -343,6 +374,7 @@ namespace mmo
 		, m_zoneMusic(soundEntryPlayer, audio)
 		, m_zoneAmbience(soundEntryPlayer, audio)
 		, m_ambientSounds(soundEntryPlayer, audio)
+		, m_waterAmbience(soundEntryPlayer, audio)
 		, m_gameTime(gameTime)
 		, m_cache(cache)
 		, m_project(project)
@@ -555,6 +587,7 @@ namespace mmo
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
 		m_ambientSounds.Clear();
+		m_waterAmbience.Stop();
 		m_unitAttachedSounds.clear();
 
 		// UpdateWaterVolume stops running once the world is left, so a low-pass applied while
@@ -1140,6 +1173,20 @@ namespace mmo
 			// Mesh sounds are selected around the same position the 3D listener sits at
 			PROFILE_SCOPE("OnIdle::AmbientSounds");
 			m_ambientSounds.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+
+			// Water beds follow the terrain water around the ear; the terrain pointer is refreshed
+			// every frame because the world instance is rebuilt on every world change.
+			{
+				PROFILE_SCOPE("OnIdle::WaterAmbience");
+				terrain::Terrain *waterTerrain = (m_worldLoaded && m_worldInstance && m_worldInstance->HasTerrain()) ? m_worldInstance->GetTerrain() : nullptr;
+				const TerrainWaterAmbienceSource waterSource(waterTerrain);
+				const GameUnitC &controlledUnit = *m_playerController->GetControlledUnit();
+				const Vector3 unitPosition = controlledUnit.GetPosition();
+				m_waterAmbience.Update(waterSource, unitPosition + Vector3(0.0f, 1.6f, 0.0f),
+					controlledUnit.GetMovementInfo().IsSwimming(),
+					waterTerrain != nullptr ? static_cast<uint32>(waterTerrain->GetWaterTypeAtWorldPos(unitPosition.x, unitPosition.z)) : 0u,
+					deltaSeconds);
+			}
 		}
 
 		{
@@ -1698,6 +1745,27 @@ namespace mmo
 		m_waterQuery = std::make_unique<TerrainWaterQuery>();
 		m_waterVolume = std::make_unique<WaterVolumeSystem>(*m_waterQuery);
 		m_waterVolume->SetProfileResolver([this](const uint32 waterType) { return ResolveWaterProfile(waterType); });
+
+		// Water ambience: every profile with a calm bed takes part in the scan.
+		std::vector<WaterAmbienceSounds> waterAmbienceProfiles;
+		for (const auto &profile : m_project.waterProfiles.getTemplates().entry())
+		{
+			if (profile.ambient_calm_sound() == 0)
+			{
+				continue;
+			}
+
+			WaterAmbienceSounds sounds;
+			sounds.profile.waterType = profile.id();
+			sounds.profile.shoreOnly = profile.ambient_shore_only();
+			sounds.profile.range = profile.ambient_range();
+			sounds.calmSound = profile.ambient_calm_sound();
+			sounds.fastSound = profile.ambient_fast_sound();
+			sounds.swimSound = profile.ambient_swim_sound();
+			sounds.volume = profile.ambient_volume();
+			waterAmbienceProfiles.push_back(sounds);
+		}
+		m_waterAmbience.SetProfiles(std::move(waterAmbienceProfiles));
 
 		// Let terrain pages resolve their surface material from the profile table. A page that
 		// carries an explicit material name still overrides this, so nothing already authored
@@ -2487,7 +2555,21 @@ namespace mmo
 									 }
 								 }, ConsoleCommandCategory::Sound, "Lists the looping mesh sounds near the player.");
 
-		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string &, const std::string &)
+		Console::RegisterCommand(command_names::s_waterSounds, [this](const std::string &, const std::string &)
+								 {
+									 const auto &fields = m_waterAmbience.GetSmoothedFields();
+									 ILOG("Water ambience: " << fields.size() << " fields");
+									 for (const auto &field : fields)
+									 {
+										 ILOG("  water type " << field.waterType << ": level " << field.level << ", focus " << field.GetFocus() << ", speed " << field.speed << ", direction " << field.direction);
+									 }
+									 for (const auto &voice : m_waterAmbience.GetVoices())
+									 {
+										 ILOG("  voice sound " << voice.soundEntryId << ": volume " << voice.volume << ", spread " << voice.spread << ", position " << voice.position);
+									 }
+								 }, ConsoleCommandCategory::Sound, "Lists the water ambience fields and voices.");
+
+		Console::RegisterCommand(command_names::s_toggleAxis,[this](const std::string &, const std::string &)
 								 { ToggleAxisVisibility(); }, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
 
 		Console::RegisterCommand(command_names::s_toggleGrid, [this](const std::string &, const std::string &)
@@ -2625,7 +2707,8 @@ namespace mmo
 			command_names::s_toggleTerrainDebug,
 			command_names::s_freezeCulling,
 			command_names::s_reload,
-			command_names::s_ambientSounds};
+			command_names::s_ambientSounds,
+			command_names::s_waterSounds};
 
 		for (const auto &command : commandsToRemove)
 		{
@@ -6052,6 +6135,7 @@ namespace mmo
 
 		// The old world's placements do not remove their mesh sounds when it is destroyed
 		m_ambientSounds.Clear();
+		m_waterAmbience.Stop();
 		m_worldInstance.reset();
 
 		m_worldLoaded = false;

@@ -3,6 +3,7 @@
 #include "water_profile_editor_window.h"
 #include "editor_imgui_helpers.h"
 #include "asset_picker_widget.h"
+#include "sound_entry_combo.h"
 
 #include "terrain/constants.h"
 
@@ -195,6 +196,52 @@ namespace mmo
 			if (ImGui::IsItemHovered())
 			{
 				ImGui::SetTooltip("Muffles all audio while the player is submerged. 0 leaves audio untouched.");
+			}
+
+			ImGui::Separator();
+			ImGui::TextDisabled("Ambience");
+
+			DrawSoundEntryCombo(m_project.sounds, "Calm Sound", currentEntry.ambient_calm_sound(), m_calmSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_ambient_calm_sound(id); });
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Looping bed heard near this liquid. None disables the ambience of this liquid.");
+			}
+
+			DrawSoundEntryCombo(m_project.sounds, "Fast Sound", currentEntry.ambient_fast_sound(), m_fastSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_ambient_fast_sound(id); });
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Looping bed crossfaded in as the water flows faster.");
+			}
+
+			bool shoreOnly = currentEntry.ambient_shore_only();
+			if (ImGui::Checkbox("Shore Only", &shoreOnly))
+			{
+				currentEntry.set_ambient_shore_only(shoreOnly);
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Only water bordering land is audible (shorelines) instead of the whole body.");
+			}
+
+			DrawSoundEntryCombo(m_project.sounds, "Swim Sound", currentEntry.ambient_swim_sound(), m_swimSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_ambient_swim_sound(id); });
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("2D loop layered in while the player swims in this liquid.");
+			}
+
+			float range = currentEntry.ambient_range();
+			if (ImGui::DragFloat("Ambience Range", &range, 0.5f, 1.0f, 500.0f, "%.1f m"))
+			{
+				currentEntry.set_ambient_range(std::clamp(range, 1.0f, 500.0f));
+			}
+
+			float volume = currentEntry.ambient_volume();
+			if (ImGui::DragFloat("Ambience Volume", &volume, 0.01f, 0.0f, 2.0f, "%.2f"))
+			{
+				currentEntry.set_ambient_volume(std::clamp(volume, 0.0f, 2.0f));
 			}
 		}
 	}

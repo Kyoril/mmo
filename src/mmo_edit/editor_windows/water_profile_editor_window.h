@@ -38,5 +38,9 @@ namespace mmo
 	private:
 		EditorHost& m_host;
 		proto::Project& m_project;
+
+		ImGuiTextFilter m_calmSoundFilter;
+		ImGuiTextFilter m_fastSoundFilter;
+		ImGuiTextFilter m_swimSoundFilter;
 	};
 }
