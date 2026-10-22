@@ -13,6 +13,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stdout
 
@@ -132,12 +133,137 @@ class GlueBakeCheckTests(unittest.TestCase):
 		self.assertEqual(len(lines), 1)
 		self.assertIn("manifest malformed", lines[0])
 
+	def add_outputs(self):
+		manifest = self.read_manifest()
+		manifest["meshes"] = [{"mesh": "Interface/GlueUI/GlueBake/Chunk_0.hmsh"}, {"mesh": "Models/tree.hmsh"}]
+		manifest["terrainTiles"] = [
+			{"mesh": "Interface/GlueUI/GlueBake/NearTile_0.hmsh", "material": "Models/Terrain/a.hmi",
+			 "splatting": "Interface/GlueUI/GlueBake/Splat_0.htex"},
+			{"mesh": "Interface/GlueUI/GlueBake/FarTile_0.hmsh", "material": "Interface/GlueUI/GlueBake/FarAlbedo_0.hmi",
+			 "splatting": ""},
+		]
+		manifest["water"] = [{"mesh": "Interface/GlueUI/GlueBake/Water_0.hmsh"}]
+		self.write(gbc.MANIFEST, json.dumps(manifest).encode("utf-8"))
+		outputs = ["Chunk_0.hmsh", "NearTile_0.hmsh", "Splat_0.htex", "FarTile_0.hmsh", "FarAlbedo_0.hmi",
+				   "FarAlbedo_0.htex", "Water_0.hmsh"]
+		for name in outputs:
+			self.write("data/client/Interface/GlueUI/GlueBake/" + name, b"x")
+		return outputs
+
+	def test_present_outputs_are_silent(self):
+		self.add_outputs()
+		self.assertEqual(self.run_main(), [])
+
+	def test_each_missing_output_warns(self):
+		for name in self.add_outputs():
+			path = os.path.join(self.root, "data/client/Interface/GlueUI/GlueBake", name)
+			os.remove(path)
+			lines = self.run_main()
+			self.assertEqual(len(lines), 1, name)
+			self.assertTrue(lines[0].startswith("WARNING: glue bake incomplete: 1 output(s) missing"), lines[0])
+			self.assertIn(name, lines[0])
+			self.write("data/client/Interface/GlueUI/GlueBake/" + name, b"x")
+
+	def test_outputs_outside_the_bake_are_not_checked(self):
+		self.add_outputs()
+		self.assertNotIn("Models/tree.hmsh", gbc._owned_outputs(self.read_manifest()))
+		self.assertNotIn("Models/Terrain/a.hmi", gbc._owned_outputs(self.read_manifest()))
+
 	def test_missing_manifest_warns(self):
 		os.remove(os.path.join(self.root, gbc.MANIFEST))
 		self.assertEqual(len(self.run_main()), 1)
 
 	def test_real_header_constant_is_readable(self):
 		self.assertIsNotNone(gbc._read_rules_version(REPO_ROOT))
+
+
+class HashCacheTests(unittest.TestCase):
+	OLD = 1_600_000_000_000_000_000
+
+	def setUp(self):
+		self.root = tempfile.mkdtemp(prefix="glue_bake_cache_")
+		self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+		self.cache_path = os.path.join(self.root, "cache.json")
+		self.file = os.path.join(self.root, "a.bin")
+		self.write(b"abc")
+		self.calls = 0
+		original = gbc.fnv1a64
+
+		def counting(data):
+			self.calls += 1
+			return original(data)
+
+		gbc.fnv1a64 = counting
+		self.addCleanup(setattr, gbc, "fnv1a64", original)
+
+	def write(self, data, mtime_ns=None):
+		with open(self.file, "wb") as handle:
+			handle.write(data)
+		stamp = self.OLD if mtime_ns is None else mtime_ns
+		os.utime(self.file, ns=(stamp, stamp))
+
+	def hash_once(self):
+		cache = gbc.HashCache(self.cache_path)
+		value = cache.hash_file(self.file)
+		cache.save()
+		return value
+
+	def test_cache_hit_skips_hashing(self):
+		self.assertEqual(self.hash_once(), "e71fa2190541574b")
+		self.assertEqual(self.calls, 1)
+		self.assertEqual(self.hash_once(), "e71fa2190541574b")
+		self.assertEqual(self.calls, 1)
+
+	def test_changed_mtime_rehashes(self):
+		self.hash_once()
+		os.utime(self.file, ns=(self.OLD + 1000, self.OLD + 1000))
+		self.hash_once()
+		self.assertEqual(self.calls, 2)
+
+	def test_changed_size_rehashes(self):
+		self.hash_once()
+		self.write(b"abcd")
+		self.assertEqual(self.hash_once(), gbc.fnv1a64(b"abcd"))
+		self.assertEqual(self.calls, 3)
+
+	def test_recently_modified_file_is_not_cached(self):
+		now = time.time_ns()
+		self.write(b"abc", mtime_ns=now)
+		self.hash_once()
+		self.hash_once()
+		self.assertEqual(self.calls, 2)
+
+	def test_corrupt_cache_is_rebuilt(self):
+		for garbage in (b"{not json", b"[1, 2]", b'{"files": {"x": 5}}', b'{"files": []}', b"\xff\xfe"):
+			with open(self.cache_path, "wb") as handle:
+				handle.write(garbage)
+			self.assertEqual(self.hash_once(), "e71fa2190541574b")
+		self.assertEqual(self.hash_once(), "e71fa2190541574b")
+		self.assertEqual(self.calls, 5)
+
+	def test_wrong_typed_entry_rehashes(self):
+		key = os.path.normcase(os.path.abspath(self.file))
+		with open(self.cache_path, "w", encoding="utf-8") as handle:
+			json.dump({"files": {key: {"size": 3, "mtime_ns": self.OLD, "hash": 7}}}, handle)
+		self.assertEqual(self.hash_once(), "e71fa2190541574b")
+		self.assertEqual(self.calls, 1)
+
+	def test_missing_file_is_none(self):
+		os.remove(self.file)
+		self.assertIsNone(self.hash_once())
+
+	def test_check_uses_the_default_cache_in_the_root(self):
+		tree = GlueBakeCheckTests("test_fresh_tree_is_silent")
+		tree.setUp()
+		self.addCleanup(tree.doCleanups)
+		for directory, _, names in os.walk(os.path.join(tree.root, "data")):
+			for name in names:
+				os.utime(os.path.join(directory, name), ns=(self.OLD, self.OLD))
+		self.assertEqual(gbc.check(tree.root), [])
+		first = self.calls
+		self.assertTrue(os.path.isfile(os.path.join(tree.root, gbc.CACHE)))
+		self.assertEqual(gbc.check(tree.root), [])
+		self.assertEqual(self.calls, first)
 
 
 if __name__ == "__main__":
