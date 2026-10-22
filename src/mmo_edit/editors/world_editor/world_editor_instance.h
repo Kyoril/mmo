@@ -64,6 +64,7 @@
 #include "entity_factory.h"
 #include "minimap_baker.h"
 #include "minimap_grid_view.h"
+#include "glue_bake/glue_bake_placement.h"
 
 namespace mmo
 {
@@ -661,6 +662,29 @@ namespace mmo
 		///        job bakes the world it just opened). Null once that instance is gone.
 		static WorldEditorInstance* GetLastCreated() { return s_lastCreated; }
 
+		/// @brief Loads the entities and authored foliage of the given pages unless streaming already
+		///        did, for the glue bake. Pages this loads are tracked like the minimap bake's and
+		///        released by ReleaseForcedPages; streaming takes a page over when it arrives.
+		void ForceLoadPages(const std::vector<PagePosition>& pages);
+
+		/// @brief Unloads every page's entities and foliage that ForceLoadPages (or the minimap bake) loaded.
+		void ReleaseForcedPages();
+
+		/// @brief Calls the visitor for every loaded placement (mesh or world model), in world space.
+		void ForEachLoadedPlacement(const std::function<void(const GlueBakePlacement&)>& visitor) const;
+
+		/// @brief Calls the visitor for every authored foliage instance of the given pages that is loaded.
+		void ForEachFoliageInstance(const std::vector<PagePosition>& pages, const std::function<void(const InstancedFoliageInstance&)>& visitor) const;
+
+		/// @brief Prepares (parses, no GPU work) and returns a terrain page, giving read access to its
+		///        heights, layers and water. Null when the world has no terrain, the page is out of
+		///        range or it has no .tile file.
+		const terrain::Page* GetPreparedTerrainPage(const PagePosition& page);
+
+		/// @brief The asset files that define a page's content: its .tile, .hfol and .wobj files,
+		///        whichever exist.
+		std::vector<String> GetPageInputFiles(const PagePosition& page) const;
+
 		/// @brief Moves the editor camera so it focuses the given world location (X/Z plane). The
 		///        height is sampled from the terrain when available. Used by the minimap location
 		///        picker and the in-editor minimap teleport panel.
@@ -849,8 +873,10 @@ namespace mmo
 		MinimapGridView m_minimapPanel;
 		/// @brief Page indices whose entities are currently loaded (by streaming or the minimap bake).
 		std::set<uint16> m_entityPages;
-		/// @brief Page indices whose entities only the minimap bake loaded.
+		/// @brief Page indices whose entities only the minimap bake or ForceLoadPages loaded.
 		std::set<uint16> m_bakeEntityPages;
+		/// @brief Page indices whose authored foliage only ForceLoadPages loaded.
+		std::set<uint16> m_bakeFoliagePages;
 		/// @brief Whether the minimap panel's world name has been set yet (deferred until first draw
 		///        because the asset path is known at construction but minimaps may not exist yet).
 		bool m_minimapWorldSet{ false };
