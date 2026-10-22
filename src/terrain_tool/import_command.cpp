@@ -15,6 +15,8 @@
 #include "terrain_io/page_io.h"
 
 #include <algorithm>
+#include <limits>
+#include <cmath>
 #include <set>
 
 namespace mmo
@@ -95,6 +97,615 @@ namespace mmo
 
 			sink.Flush();
 			return true;
+		}
+
+		/// @brief Flow coordinate of a point relative to a river path: distance downstream along the
+		///	       path, signed distance across it (positive to the left of the flow seen from above, so
+		///	       the mapping is a rotation of the world mapping), and the channel half width there.
+		struct FlowCoordinate
+		{
+			float along = 0.0f;
+			float across = 0.0f;
+			float halfWidth = 0.0f;
+		};
+
+		FlowCoordinate ProjectOntoFlowPath(const std::vector<ZoneMeta::FlowPoint> &path, const float x, const float z)
+		{
+			FlowCoordinate best;
+			float bestDistance = std::numeric_limits<float>::max();
+			float start = 0.0f;
+			for (size_t i = 0; i + 1 < path.size(); ++i)
+			{
+				const ZoneMeta::FlowPoint &a = path[i];
+				const ZoneMeta::FlowPoint &b = path[i + 1];
+				const float dx = b.x - a.x;
+				const float dz = b.z - a.z;
+				const float length = std::sqrt(dx * dx + dz * dz);
+				if (length <= 0.0f)
+				{
+					continue;
+				}
+
+				const float t = std::clamp(((x - a.x) * dx + (z - a.z) * dz) / (length * length), 0.0f, 1.0f);
+				const float px = a.x + dx * t;
+				const float pz = a.z + dz * t;
+				const float distance = std::hypot(x - px, z - pz);
+				if (distance < bestDistance)
+				{
+					bestDistance = distance;
+					best.along = start + t * length;
+					// Left of the flow direction (dx, dz) is (-dz, dx): for flow along +X that is +Z,
+					// matching v = z of the world mapping.
+					best.across = ((x - px) * -dz + (z - pz) * dx) / length;
+					best.halfWidth = a.halfWidth + (b.halfWidth - a.halfWidth) * t;
+				}
+				start += length;
+			}
+
+			return best;
+		}
+
+		/// @brief Loads an existing terrain page.
+		bool LoadExistingPage(const String &filename, terrain_io::PageData &page)
+		{
+			const auto file = AssetRegistry::OpenFile(filename);
+			if (!file)
+			{
+				ELOG("Failed to open existing terrain page '" << filename << "'!");
+				return false;
+			}
+
+			io::StreamSource source{ *file };
+			io::Reader reader{ source };
+			if (!terrain_io::LoadPage(reader, page))
+			{
+				ELOG("Failed to load existing terrain page '" << filename << "'!");
+				return false;
+			}
+
+			return true;
+		}
+
+		/// @brief Adds a height offset grid to the existing pages of the rect and writes them back,
+		///	       keeping everything but heights, the normals of changed vertices and new water quads.
+		/// @param delta Height offsets on the continuous outer vertex grid of the rect.
+		int32 ApplyHeightDelta(const ZoneMeta &meta, const std::vector<float> &delta, const uint32 gridWidth, const uint32 gridHeight,
+			const GrayImage16 &zoneMap, const std::set<std::pair<int32, int32>> &pageFilter)
+		{
+			ZoneGrid existing;
+			if (!LoadZoneGrid(meta.world, meta.pageX0, meta.pageZ0, meta.pageX1, meta.pageZ1, existing))
+			{
+				return 1;
+			}
+
+			const uint32 pageCount = static_cast<uint32>(meta.GetPageCountX() * meta.GetPageCountZ());
+			if (existing.loadedPageCount != pageCount || existing.width != gridWidth || existing.height != gridHeight)
+			{
+				ELOG("A delta import needs every page of the rect to exist (" << existing.loadedPageCount << " of " << pageCount << " found)");
+				return 1;
+			}
+
+			constexpr uint32 splatSide = terrain::constants::PixelsPerPage;
+			const uint32 splatWidth = static_cast<uint32>(meta.GetPageCountX()) * (splatSide - 1) + 1;
+			const uint32 splatHeight = static_cast<uint32>(meta.GetPageCountZ()) * (splatSide - 1) + 1;
+			std::vector<GrayImage16> paintMasks(meta.paint.size());
+			for (size_t i = 0; i < meta.paint.size(); ++i)
+			{
+				if (!LoadGray16Png(meta.paint[i].mask, paintMasks[i]))
+				{
+					return 1;
+				}
+				if (paintMasks[i].width != splatWidth || paintMasks[i].height != splatHeight)
+				{
+					ELOG("Paint mask '" << meta.paint[i].mask.string() << "' is " << paintMasks[i].width << "x" << paintMasks[i].height
+						<< " but must be " << splatWidth << "x" << splatHeight);
+					return 1;
+				}
+			}
+
+			GrayImage16 tileMaterialMask;
+			if (!meta.tileMaterialMask.empty())
+			{
+				if (!LoadGray16Png(meta.tileMaterialMask, tileMaterialMask))
+				{
+					return 1;
+				}
+				if (tileMaterialMask.width != static_cast<uint32>(meta.GetPageCountX()) * TilesPerPage ||
+					tileMaterialMask.height != static_cast<uint32>(meta.GetPageCountZ()) * TilesPerPage)
+				{
+					ELOG("Tile material mask must hold one pixel per tile");
+					return 1;
+				}
+			}
+
+			GrayImage16 clearWater;
+			if (!meta.clearWaterMask.empty())
+			{
+				if (!LoadGray16Png(meta.clearWaterMask, clearWater))
+				{
+					return 1;
+				}
+				const uint32 quadsWide = static_cast<uint32>(meta.GetPageCountX()) * VerticesPerPageEdge;
+				const uint32 quadsHigh = static_cast<uint32>(meta.GetPageCountZ()) * VerticesPerPageEdge;
+				if (clearWater.width != quadsWide || clearWater.height != quadsHigh)
+				{
+					ELOG("Clear-water mask must hold one pixel per water quad (" << quadsWide << "x" << quadsHigh << ")");
+					return 1;
+				}
+			}
+
+			// Offsets this small are quantization noise of a zero delta.
+			constexpr float changeEpsilon = 0.0005f;
+
+			std::vector<float> heights(existing.heights.size());
+			std::vector<uint8> changed(existing.heights.size(), 0);
+			for (size_t i = 0; i < heights.size(); ++i)
+			{
+				heights[i] = existing.heights[i] + delta[i];
+				changed[i] = std::abs(delta[i]) > changeEpsilon ? 1 : 0;
+			}
+
+			// A vertex normal depends on its four neighbours, so it is recomputed when any of them moved.
+			// Everywhere else the stored normal stays bit for bit, including at the rect border where
+			// the neighbours outside the rect are unknown here.
+			const auto normalChanged = [&](const uint32 x, const uint32 z)
+			{
+				for (int32 dz = -1; dz <= 1; ++dz)
+				{
+					for (int32 dx = -1; dx <= 1; ++dx)
+					{
+						const int32 nx = static_cast<int32>(x) + dx;
+						const int32 nz = static_cast<int32>(z) + dz;
+						if (nx < 0 || nz < 0 || nx >= static_cast<int32>(gridWidth) || nz >= static_cast<int32>(gridHeight))
+						{
+							continue;
+						}
+						if (changed[static_cast<size_t>(nz) * gridWidth + nx])
+						{
+							return true;
+						}
+					}
+				}
+				return false;
+			};
+
+			// River flow coordinates for the whole rect at once, then smoothed: the nearest path segment
+			// switches on the inside of bends, which makes "along" jump by a little, and every jump
+			// shows as a seam in the panned ripples. The rect-wide grid also keeps page borders exact.
+			std::vector<float> flowAlong;
+			std::vector<float> flowAcross;
+			std::vector<float> flowSpeed;
+			if (meta.flowPath.size() >= 2)
+			{
+				const float vertexSpacing = terrain::constants::PageSize / static_cast<float>(VerticesPerPageEdge);
+				const float originX = static_cast<float>(meta.pageX0 - 32) * terrain::constants::PageSize;
+				const float originZ = static_cast<float>(meta.pageZ0 - 32) * terrain::constants::PageSize;
+				const size_t count = static_cast<size_t>(gridWidth) * gridHeight;
+				flowAlong.resize(count);
+				flowAcross.resize(count);
+				flowSpeed.resize(count);
+				for (uint32 z = 0; z < gridHeight; ++z)
+				{
+					for (uint32 x = 0; x < gridWidth; ++x)
+					{
+						const float wx = originX + static_cast<float>(x) * vertexSpacing;
+						const float wz = originZ + static_cast<float>(z) * vertexSpacing;
+						FlowCoordinate c = ProjectOntoFlowPath(meta.flowPath, wx, wz);
+						float distance = std::max(0.0f, std::abs(c.across) - c.halfWidth);
+						for (const auto &branch : meta.flowBranches)
+						{
+							const FlowCoordinate b = ProjectOntoFlowPath(branch, wx, wz);
+							const float bd = std::max(0.0f, std::abs(b.across) - b.halfWidth);
+							if (bd < distance || (bd == distance && std::abs(b.across) < std::abs(c.across)))
+							{
+								c = b;
+								distance = bd;
+							}
+						}
+						const size_t i = static_cast<size_t>(z) * gridWidth + x;
+						flowAlong[i] = c.along;
+						flowAcross[i] = c.across;
+						const float beyondBank = std::max(0.0f, std::abs(c.across) - c.halfWidth);
+						flowSpeed[i] = std::clamp(1.0f - beyondBank / std::max(meta.flowFalloff, 1.0f), meta.flowMinSpeed, 1.0f);
+					}
+				}
+
+				// Three separable box blurs of radius 3 approximate a Gaussian of about 3 vertices (12 m).
+				const auto blur = [&](std::vector<float> &values)
+				{
+					std::vector<float> scratch(values.size());
+					constexpr int32 radius = 3;
+					for (int pass = 0; pass < 3; ++pass)
+					{
+						for (uint32 z = 0; z < gridHeight; ++z)
+						{
+							for (uint32 x = 0; x < gridWidth; ++x)
+							{
+								float sum = 0.0f;
+								for (int32 k = -radius; k <= radius; ++k)
+								{
+									const int32 sx = std::clamp(static_cast<int32>(x) + k, 0, static_cast<int32>(gridWidth) - 1);
+									sum += values[static_cast<size_t>(z) * gridWidth + sx];
+								}
+								scratch[static_cast<size_t>(z) * gridWidth + x] = sum / static_cast<float>(radius * 2 + 1);
+							}
+						}
+						for (uint32 z = 0; z < gridHeight; ++z)
+						{
+							for (uint32 x = 0; x < gridWidth; ++x)
+							{
+								float sum = 0.0f;
+								for (int32 k = -radius; k <= radius; ++k)
+								{
+									const int32 sz = std::clamp(static_cast<int32>(z) + k, 0, static_cast<int32>(gridHeight) - 1);
+									sum += scratch[static_cast<size_t>(sz) * gridWidth + x];
+								}
+								values[static_cast<size_t>(z) * gridWidth + x] = sum / static_cast<float>(radius * 2 + 1);
+							}
+						}
+					}
+				};
+				blur(flowAlong);
+				blur(flowAcross);
+				blur(flowSpeed);
+			}
+
+			uint32 savedPages = 0;
+			uint32 changedVertices = 0;
+			uint32 addedWaterQuads = 0;
+			uint32 removedWaterQuads = 0;
+			terrain_io::PageData page;
+			for (int32 pageZ = meta.pageZ0; pageZ <= meta.pageZ1; ++pageZ)
+			{
+				for (int32 pageX = meta.pageX0; pageX <= meta.pageX1; ++pageX)
+				{
+					if (!pageFilter.empty() && !pageFilter.contains({ pageX, pageZ }))
+					{
+						continue;
+					}
+
+					const String filename = BuildPageFilename(meta.world, pageX, pageZ);
+					if (!LoadExistingPage(filename, page))
+					{
+						return 1;
+					}
+
+					const uint32 baseX = static_cast<uint32>(pageX - meta.pageX0) * VerticesPerPageEdge;
+					const uint32 baseZ = static_cast<uint32>(pageZ - meta.pageZ0) * VerticesPerPageEdge;
+					bool pageChanged = false;
+
+					std::vector<uint8> outerNormalChanged(static_cast<size_t>(OuterSide) * OuterSide, 0);
+					std::vector<Vector3> outerNormals(static_cast<size_t>(OuterSide) * OuterSide);
+					for (uint32 z = 0; z < OuterSide; ++z)
+					{
+						for (uint32 x = 0; x < OuterSide; ++x)
+						{
+							const uint32 gx = baseX + x;
+							const uint32 gz = baseZ + z;
+							const size_t gridIndex = static_cast<size_t>(gz) * gridWidth + gx;
+							const size_t pageIndex = static_cast<size_t>(z) * OuterSide + x;
+
+							if (changed[gridIndex])
+							{
+								page.heightmap[pageIndex] = heights[gridIndex];
+								++changedVertices;
+								pageChanged = true;
+							}
+
+							if (normalChanged(gx, gz))
+							{
+								const Vector3 normal = ComputeOuterNormal(heights, gridWidth, gridHeight, gx, gz);
+								outerNormals[pageIndex] = normal;
+								outerNormalChanged[pageIndex] = 1;
+								page.normals[pageIndex] = EncodeNormalSNorm8(normal.x, normal.y, normal.z);
+							}
+							else
+							{
+								DecodeNormalSNorm8(page.normals[pageIndex], outerNormals[pageIndex].x, outerNormals[pageIndex].y, outerNormals[pageIndex].z);
+							}
+						}
+					}
+
+					// Paint: blend each layer's weight towards the mask, keeping the four weights summing to 255.
+					for (size_t i = 0; i < meta.paint.size(); ++i)
+					{
+						const GrayImage16 &mask = paintMasks[i];
+						const uint32 target = meta.paint[i].layer;
+						const uint32 maskX = static_cast<uint32>(pageX - meta.pageX0) * (splatSide - 1);
+						const uint32 maskZ = static_cast<uint32>(pageZ - meta.pageZ0) * (splatSide - 1);
+						for (uint32 z = 0; z < splatSide; ++z)
+						{
+							for (uint32 x = 0; x < splatSide; ++x)
+							{
+								const float weight = std::clamp(meta.paint[i].strength *
+									static_cast<float>(mask.pixels[static_cast<size_t>(maskZ + z) * mask.width + maskX + x]) / 65535.0f, 0.0f, 1.0f);
+								if (weight <= 0.0f)
+								{
+									continue;
+								}
+
+								uint32 &packed = page.layers[static_cast<size_t>(z) * splatSide + x];
+								if (meta.paint[i].remove)
+								{
+									// Move this layer's weight onto layer 0 (grass).
+									uint32 b[4] = { packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF, packed >> 24 };
+									const uint32 moved = static_cast<uint32>(std::lround(static_cast<float>(b[target]) * weight));
+									if (moved == 0 || target == 0)
+									{
+										continue;
+									}
+									b[target] -= moved;
+									b[0] += moved;
+									packed = b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24);
+									pageChanged = true;
+									continue;
+								}
+
+								uint32 bytes[4];
+								uint32 others = 0;
+								for (uint32 c = 0; c < 4; ++c)
+								{
+									const float old = static_cast<float>((packed >> (c * 8)) & 0xFF);
+									const float blended = old * (1.0f - weight) + (c == target ? 255.0f * weight : 0.0f);
+									bytes[c] = static_cast<uint32>(std::lround(blended));
+									if (c != target)
+									{
+										others += bytes[c];
+									}
+								}
+								// Rounding can push the other layers one over 255 when the weight is tiny.
+								while (others > 255)
+								{
+									uint32 largest = target == 0 ? 1 : 0;
+									for (uint32 c = 0; c < 4; ++c)
+									{
+										if (c != target && bytes[c] > bytes[largest])
+										{
+											largest = c;
+										}
+									}
+									--bytes[largest];
+									--others;
+								}
+								bytes[target] = 255 - others;
+
+								const uint32 repacked = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);
+								if (repacked != packed)
+								{
+									packed = repacked;
+									pageChanged = true;
+								}
+							}
+						}
+					}
+
+					// River flow: every vertex of a page with water gets its flow-aligned UV and speed.
+					if (meta.flowPath.size() >= 2 && std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
+					{
+						page.waterFlowUVs.assign(static_cast<size_t>(OuterSide) * OuterSide * 2, 0.0f);
+						page.waterFlowSpeeds.assign(static_cast<size_t>(OuterSide) * OuterSide, 0);
+						for (uint32 vz = 0; vz < OuterSide; ++vz)
+						{
+							for (uint32 vx = 0; vx < OuterSide; ++vx)
+							{
+								const size_t g = static_cast<size_t>(baseZ + vz) * gridWidth + (baseX + vx);
+								const size_t index = static_cast<size_t>(vz) * OuterSide + vx;
+								page.waterFlowUVs[index * 2] = flowAlong[g] * meta.flowUVScale;
+								page.waterFlowUVs[index * 2 + 1] = flowAcross[g] * meta.flowUVScale;
+								page.waterFlowSpeeds[index] = static_cast<uint8>(std::lround(std::clamp(flowSpeed[g], 0.0f, 1.0f) * 255.0f));
+							}
+						}
+						pageChanged = true;
+					}
+
+					// Per-tile materials
+					if (!tileMaterialMask.pixels.empty())
+					{
+						for (uint32 tileZ = 0; tileZ < TilesPerPage; ++tileZ)
+						{
+							for (uint32 tileX = 0; tileX < TilesPerPage; ++tileX)
+							{
+								const uint32 mx = static_cast<uint32>(pageX - meta.pageX0) * TilesPerPage + tileX;
+								const uint32 mz = static_cast<uint32>(pageZ - meta.pageZ0) * TilesPerPage + tileZ;
+								const uint32 k = tileMaterialMask.pixels[static_cast<size_t>(mz) * tileMaterialMask.width + mx];
+								if (k == 0 || k > meta.tileMaterials.size())
+								{
+									continue;
+								}
+								String &name = page.materialNames[tileX + tileZ * TilesPerPage];
+								if (name != meta.tileMaterials[k - 1])
+								{
+									name = meta.tileMaterials[k - 1];
+									pageChanged = true;
+								}
+							}
+						}
+					}
+
+					// Remove water from the quads the clear-water mask marks, wherever it came from.
+					if (!clearWater.pixels.empty())
+					{
+						constexpr uint32 quadsPerTileSide = 8;
+						for (uint32 quadZ = 0; quadZ < VerticesPerPageEdge; ++quadZ)
+						{
+							for (uint32 quadX = 0; quadX < VerticesPerPageEdge; ++quadX)
+							{
+								if (clearWater.pixels[static_cast<size_t>(baseZ + quadZ) * clearWater.width + baseX + quadX] < 32768)
+								{
+									continue;
+								}
+
+								const uint32 tileIndex = quadX / quadsPerTileSide + (quadZ / quadsPerTileSide) * TilesPerPage;
+								const uint64 bit = uint64(1) << (quadX % quadsPerTileSide + (quadZ % quadsPerTileSide) * quadsPerTileSide);
+								if (page.waterQuadMasks[tileIndex] & bit)
+								{
+									page.waterQuadMasks[tileIndex] &= ~bit;
+									if (page.waterQuadMasks[tileIndex] == 0)
+									{
+										page.waterTypes[tileIndex] = 0;
+									}
+									++removedWaterQuads;
+									pageChanged = true;
+								}
+							}
+						}
+					}
+
+					if (meta.setWaterMaterial && page.waterMaterialName != meta.waterMaterial &&
+						std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
+					{
+						pageChanged = true;
+					}
+
+					if (!pageChanged)
+					{
+						continue;
+					}
+
+					// Inner vertices sit at the centre of each outer quad: they move by the mean offset of
+					// the quad's corners, so sculpted inner detail is kept, and take the engine's mean of
+					// the four corner normals.
+					for (uint32 j = 0; j < InnerSide; ++j)
+					{
+						for (uint32 i = 0; i < InnerSide; ++i)
+						{
+							const size_t g00 = static_cast<size_t>(baseZ + j) * gridWidth + (baseX + i);
+							const size_t p00 = static_cast<size_t>(j) * OuterSide + i;
+							const size_t innerIndex = static_cast<size_t>(j) * InnerSide + i;
+
+							const float meanOffset = (delta[g00] + delta[g00 + 1] + delta[g00 + gridWidth] + delta[g00 + gridWidth + 1]) * 0.25f;
+							if (std::abs(meanOffset) > changeEpsilon)
+							{
+								page.innerHeightmap[innerIndex] += meanOffset;
+							}
+
+							if (outerNormalChanged[p00] || outerNormalChanged[p00 + 1] || outerNormalChanged[p00 + OuterSide] || outerNormalChanged[p00 + OuterSide + 1])
+							{
+								const Vector3 average = ((outerNormals[p00] + outerNormals[p00 + 1] +
+									outerNormals[p00 + OuterSide] + outerNormals[p00 + OuterSide + 1]) * 0.25f).NormalizedCopy();
+								page.innerNormals[innerIndex] = EncodeNormalSNorm8(average.x, average.y, average.z);
+							}
+						}
+					}
+
+					// Water of reshaped quads follows the new ground: a reshaped quad holds water exactly
+					// where it dips below the level. Quads the delta left alone keep their water as it is,
+					// and water heights still used by untouched quads are not moved.
+					if (meta.HasWaterLevel())
+					{
+						constexpr uint32 quadsPerTileSide = 8;
+						const auto quadChanged = [&](const uint32 vertX, const uint32 vertZ)
+						{
+							const size_t g00 = static_cast<size_t>(baseZ + vertZ) * gridWidth + (baseX + vertX);
+							return changed[g00] || changed[g00 + 1] || changed[g00 + gridWidth] || changed[g00 + gridWidth + 1];
+						};
+
+						std::vector<uint8> vertexKept(static_cast<size_t>(OuterSide) * OuterSide, 0);
+						for (uint32 tileIndex = 0; tileIndex < TilesPerPage * TilesPerPage; ++tileIndex)
+						{
+							const uint64 mask = page.waterQuadMasks[tileIndex];
+							for (uint32 quad = 0; mask != 0 && quad < 64; ++quad)
+							{
+								const uint32 vertX = (tileIndex % TilesPerPage) * quadsPerTileSide + quad % quadsPerTileSide;
+								const uint32 vertZ = (tileIndex / TilesPerPage) * quadsPerTileSide + quad / quadsPerTileSide;
+								if (((mask >> quad) & 1) && !quadChanged(vertX, vertZ))
+								{
+									vertexKept[vertZ * OuterSide + vertX] = 1;
+									vertexKept[vertZ * OuterSide + vertX + 1] = 1;
+									vertexKept[(vertZ + 1) * OuterSide + vertX] = 1;
+									vertexKept[(vertZ + 1) * OuterSide + vertX + 1] = 1;
+								}
+							}
+						}
+
+						for (uint32 tileZ = 0; tileZ < TilesPerPage; ++tileZ)
+						{
+							for (uint32 tileX = 0; tileX < TilesPerPage; ++tileX)
+							{
+								const uint32 tileIndex = tileX + tileZ * TilesPerPage;
+								const bool hadWater = page.waterQuadMasks[tileIndex] != 0;
+								for (uint32 quadZ = 0; quadZ < quadsPerTileSide; ++quadZ)
+								{
+									for (uint32 quadX = 0; quadX < quadsPerTileSide; ++quadX)
+									{
+										const uint32 vertX = tileX * quadsPerTileSide + quadX;
+										const uint32 vertZ = tileZ * quadsPerTileSide + quadZ;
+										if (!quadChanged(vertX, vertZ))
+										{
+											continue;
+										}
+
+										const uint64 bit = uint64(1) << (quadX + quadZ * quadsPerTileSide);
+										const size_t c00 = static_cast<size_t>(vertZ) * OuterSide + vertX;
+										const float lowest = std::min(std::min(page.heightmap[c00], page.heightmap[c00 + 1]),
+											std::min(page.heightmap[c00 + OuterSide], page.heightmap[c00 + OuterSide + 1]));
+										const bool wantWater = lowest < meta.waterLevel;
+										const bool hasWater = (page.waterQuadMasks[tileIndex] & bit) != 0;
+										if (wantWater == hasWater)
+										{
+											continue;
+										}
+
+										if (wantWater)
+										{
+											page.waterQuadMasks[tileIndex] |= bit;
+											for (const size_t corner : { c00, c00 + 1, c00 + OuterSide, c00 + OuterSide + 1 })
+											{
+												if (!vertexKept[corner])
+												{
+													page.waterVertexHeights[corner] = meta.waterLevel;
+												}
+											}
+											++addedWaterQuads;
+										}
+										else
+										{
+											page.waterQuadMasks[tileIndex] &= ~bit;
+											++removedWaterQuads;
+										}
+									}
+								}
+
+								if (!hadWater && page.waterQuadMasks[tileIndex] != 0)
+								{
+									page.waterTypes[tileIndex] = meta.waterType;
+								}
+								else if (page.waterQuadMasks[tileIndex] == 0)
+								{
+									page.waterTypes[tileIndex] = 0;
+								}
+							}
+						}
+					}
+
+					// Optionally give every reshaped page that holds water the configured surface material.
+					if (meta.setWaterMaterial && std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
+					{
+						page.waterMaterialName = meta.waterMaterial;
+					}
+					else if (page.waterMaterialName.empty() && std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
+					{
+						page.waterMaterialName = meta.waterMaterial;
+					}
+
+					if (!zoneMap.pixels.empty())
+					{
+						ApplyZones(zoneMap, meta, pageX, pageZ, page.zones, false);
+					}
+
+					if (!WritePage(filename, page))
+					{
+						return 1;
+					}
+
+					++savedPages;
+				}
+			}
+
+			ILOG("Delta import changed " << changedVertices << " vertices on " << savedPages << " pages" << (meta.paint.empty() ? String() : " (with " + std::to_string(meta.paint.size()) + " painted layers)")
+				<< (meta.HasWaterLevel() || !clearWater.pixels.empty() ? ", water quads +" + std::to_string(addedWaterQuads) + " -" + std::to_string(removedWaterQuads) : String()));
+			ILOG("Note: rebake the distant terrain (mmo_edit --bake-terrain-lod) and the nav mesh of the changed pages");
+			return 0;
 		}
 
 		/// @brief Fills the unset zone ids of a page that already exists and is not overwritten.
@@ -241,6 +852,11 @@ namespace mmo
 				const double u = static_cast<double>(x) / static_cast<double>(gridWidth - 1);
 				outerHeights[static_cast<size_t>(z) * gridWidth + x] = SampleHeight(image, meta, u, v);
 			}
+		}
+
+		if (meta.applyAsDelta)
+		{
+			return ApplyHeightDelta(meta, outerHeights, gridWidth, gridHeight, zoneMap, pageFilter);
 		}
 
 		// Full-precision outer normals (needed both for the outer grid itself and for

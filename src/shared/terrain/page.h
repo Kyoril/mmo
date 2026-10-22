@@ -240,6 +240,9 @@ namespace mmo
 			/// @brief Get the material name used for all water in this page.
 			const String& GetWaterMaterialName() const { return m_waterMaterialName; }
 
+			/// @brief Whether this page's water carries river flow data.
+			[[nodiscard]] bool HasWaterFlow() const { return !m_waterFlowUVs.empty(); }
+
 			/// @brief Set the material name used for all water in this page.
 			void SetWaterMaterialName(const String& name);
 
@@ -283,6 +286,7 @@ namespace mmo
 			bool ReadMCWLChunk(io::Reader &reader, uint32 header, uint32 size);
 
 			bool ReadMCWQChunk(io::Reader &reader, uint32 header, uint32 size);
+			bool ReadWaterFlowChunk(io::Reader &reader, uint32 header, uint32 size);
 
 			bool ReadMCVRChunk(io::Reader &reader, uint32 header, uint32 size);
 
@@ -358,6 +362,10 @@ namespace mmo
 			std::vector<uint8> m_waterTypes;
 			/// Optional material name applied to all water geometry in this page.
 			String m_waterMaterialName;
+			/// Optional river flow: flow-aligned water UVs per outer vertex (2 floats each) and a flow
+			/// speed byte per outer vertex. Both empty when the water does not flow.
+			std::vector<float> m_waterFlowUVs;
+			std::vector<uint8> m_waterFlowSpeeds;
 			/// Runtime render object for water quads (created on Load, destroyed on Destroy).
 			ManualRenderObject* m_waterRenderObject{nullptr};
 			/// When true, water is rebuilt with an opaque solid-colour material for minimap rendering.

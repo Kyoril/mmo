@@ -790,6 +790,356 @@
     },
     {
       "map": 0,
+      "key": "prop_on_road|hfol:968274469553472080",
+      "message": "SM_Fence_01.hmsh at (-618.8, 524.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968275993376021981",
+      "message": "SM_Fence_01.hmsh at (-28.6, 501.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968280517565752909",
+      "message": "SM_Fence_04.hmsh at (-558.1, 443.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968284697349081263",
+      "message": "SM_Fence_06.hmsh at (-125.1, 471.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968288036787757896",
+      "message": "SM_Fence_01.hmsh at (-342.6, 416.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968291627071862026",
+      "message": "SM_Fence_03.hmsh at (-91.0, 485.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968293658297531087",
+      "message": "SM_Fence_05.hmsh at (-704.5, 679.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968295160255727453",
+      "message": "SM_Fence_06.hmsh at (-108.2, 467.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968310216127060596",
+      "message": "SM_Fence_06.hmsh at (-567.0, 461.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968311790456786046",
+      "message": "SM_Fence_05.hmsh at (-703.5, 677.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968317854773805753",
+      "message": "SM_Fence_04.hmsh at (-105.9, 469.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968327564222831724",
+      "message": "SM_Fence_01.hmsh at (-602.0, 516.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968328398761203327",
+      "message": "SM_Fence_01.hmsh at (-641.7, 571.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968328770153697714",
+      "message": "SM_Fence_04.hmsh at (-719.7, 744.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968330905670320591",
+      "message": "SM_Fence_01.hmsh at (-702.2, 814.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968332483700847862",
+      "message": "SM_Fence_05.hmsh at (-565.7, 458.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968333140271124979",
+      "message": "SM_Fence_01.hmsh at (-707.4, 769.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968334041700824178",
+      "message": "SM_Fence_03.hmsh at (-393.7, 382.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968342511834579108",
+      "message": "SM_Fence_01.hmsh at (-715.2, 779.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968343212853356904",
+      "message": "SM_Fence_01.hmsh at (-714.9, 783.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968346356581146810",
+      "message": "SM_Fence_01.hmsh at (-387.3, 401.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968346493798522041",
+      "message": "SM_Fence_03.hmsh at (-556.6, 440.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968347655289141269",
+      "message": "SM_Fence_05.hmsh at (-557.6, 422.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968348809462589872",
+      "message": "SM_Fence_04.hmsh at (-614.5, 519.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968352031128388955",
+      "message": "SM_Fence_04.hmsh at (-546.8, 421.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968359974804006444",
+      "message": "SM_Fence_03.hmsh at (-253.8, 460.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968363221882657494",
+      "message": "SM_Fence_01.hmsh at (-616.5, 521.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968382999442045838",
+      "message": "SM_Fence_01.hmsh at (-395.8, 380.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968399811623468200",
+      "message": "SM_Fence_06.hmsh at (-699.8, 816.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968401934356899729",
+      "message": "SM_Fence_05.hmsh at (-12.4, 491.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968403718618977237",
+      "message": "SM_Fence_01.hmsh at (-598.8, 511.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968404178033034389",
+      "message": "SM_Fence_04.hmsh at (-410.1, 390.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968404425488358502",
+      "message": "SM_Fence_05.hmsh at (-363.6, 409.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968409601126447962",
+      "message": "SM_Fence_04.hmsh at (36.9, 504.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968415751362158897",
+      "message": "SM_Fence_01.hmsh at (-709.8, 759.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968420681600058911",
+      "message": "SM_Fence_03.hmsh at (-640.5, 567.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968422368653540086",
+      "message": "SM_Fence_04.hmsh at (-25.4, 501.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968425007287506249",
+      "message": "SM_Fence_03.hmsh at (-704.1, 811.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968425945011076059",
+      "message": "SM_Fence_04.hmsh at (-165.8, 465.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968428216408828804",
+      "message": "SM_Fence_06.hmsh at (-251.3, 462.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968433176001638351",
+      "message": "SM_Fence_06.hmsh at (-169.3, 464.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968439313812764100",
+      "message": "SM_Fence_05.hmsh at (-9.1, 491.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968439994723209125",
+      "message": "SM_Fence_01.hmsh at (-398.6, 378.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968444252179034485",
+      "message": "SM_Fence_04.hmsh at (-703.1, 673.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968454411212800020",
+      "message": "SM_Fence_04.hmsh at (-713.6, 789.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968456162217988796",
+      "message": "SM_Fence_03.hmsh at (-336.7, 417.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968458803638613309",
+      "message": "SM_Fence_03.hmsh at (-637.6, 551.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968460339328541219",
+      "message": "SM_Fence_06.hmsh at (-360.8, 411.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968462277479779599",
+      "message": "SM_Fence_01.hmsh at (-541.8, 417.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968472541496114868",
+      "message": "SM_Fence_01.hmsh at (-549.1, 424.0): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968474421003097983",
+      "message": "SM_Fence_03.hmsh at (-719.1, 748.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968476076570575238",
+      "message": "SM_Fence_01.hmsh at (-694.0, 638.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968481605752347128",
+      "message": "SM_Fence_01.hmsh at (-390.1, 400.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968481952997512366",
+      "message": "SM_Fence_01.hmsh at (-327.6, 421.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968484523476858897",
+      "message": "SM_Fence_01.hmsh at (-333.5, 418.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968485131281372960",
+      "message": "SM_Fence_01.hmsh at (-692.3, 635.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968486107909828637",
+      "message": "SM_Fence_03.hmsh at (-622.6, 529.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968493019837586484",
+      "message": "SM_Fence_04.hmsh at (-645.4, 561.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968495387716851894",
+      "message": "SM_Fence_05.hmsh at (-635.6, 548.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968498666999273943",
+      "message": "SM_Fence_05.hmsh at (-641.6, 556.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968503358192588831",
+      "message": "SM_Fence_01.hmsh at (-718.7, 751.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968509464653442827",
+      "message": "SM_Fence_04.hmsh at (-600.2, 513.9): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968511775778281555",
+      "message": "SM_Fence_03.hmsh at (-568.7, 464.5): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968512659049424530",
+      "message": "SM_Fence_06.hmsh at (-121.8, 471.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968529632642121002",
+      "message": "SM_Fence_05.hmsh at (-708.4, 762.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968530733858656619",
+      "message": "SM_Fence_01.hmsh at (-702.1, 670.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968532615069674355",
+      "message": "SM_Fence_05.hmsh at (-128.3, 471.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968533682641482022",
+      "message": "SM_Fence_04.hmsh at (-357.4, 412.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968545670365481100",
+      "message": "SM_Fence_03.hmsh at (-715.4, 776.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|hfol:968548714807967835",
+      "message": "SM_Fence_01.hmsh at (-707.8, 766.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
       "key": "prop_on_road|wobj:10565906866567994135",
       "message": "SM_Fence_05.hmsh at (201.3, 516.6): stands on or next to a road"
     },
@@ -1317,6 +1667,66 @@
       "map": 0,
       "key": "prop_on_road|wobj:9658200298078390010",
       "message": "SM_hc_CampFire_A.hmsh at (258.2, 762.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:978049829992949230",
+      "message": "WoodLantern_A.hwmo at (-117.6, 471.8): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:978139122727089606",
+      "message": "WoodLantern_A.hwmo at (-145.8, 461.6): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:978240913172426009",
+      "message": "WoodLantern_A.hwmo at (-179.3, 457.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:978451196985954555",
+      "message": "WoodLantern_A.hwmo at (-247.4, 465.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:978659435020153177",
+      "message": "WoodLantern_A.hwmo at (-218.0, 461.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:978761652569856901",
+      "message": "WoodLantern_A.hwmo at (-391.0, 385.4): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:979531963819982093",
+      "message": "WoodLantern_A.hwmo at (-653.5, 574.3): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:979640719498251670",
+      "message": "WoodLantern_A.hwmo at (-671.8, 605.1): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:979792596403198155",
+      "message": "WoodLantern_A.hwmo at (-709.3, 704.2): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:979806831698682387",
+      "message": "WoodLantern_A.hwmo at (-689.6, 632.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:980020394847773422",
+      "message": "WoodLantern_A.hwmo at (-713.3, 772.7): stands on or next to a road"
+    },
+    {
+      "map": 0,
+      "key": "prop_on_road|wobj:980353745005476994",
+      "message": "WoodLantern_A.hwmo at (-706.4, 808.9): stands on or next to a road"
     },
     {
       "map": 0,

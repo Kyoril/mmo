@@ -42,6 +42,7 @@ namespace mmo
 			using terrain_io::HoleChunk;
 			using terrain_io::WaterChunk;
 			using terrain_io::WaterQuadChunk;
+			using terrain_io::WaterFlowChunk;
 		}
 
 		namespace
@@ -55,30 +56,26 @@ namespace mmo
 					static_cast<uint32>(val.x * 255));
 			}
 
-			/// Applies the tangent basis for an upward-facing horizontal water quad.
-			/// @remark Water UVs run u along +X and v along +Z (they are derived from world
-			///			position), so the tangent frame is fixed for the whole surface.
-			void SetTopFaceBasis(ManualTriangleListOperation::Triangle& triangle)
+			/// Water UVs run u along +X and v along +Z by default (derived from world position); river
+			/// pages carry flow-aligned UVs and a matching frame per vertex. The underside only flips the
+			/// normal: it shares the top face's UV parameterisation, so flipping the binormal too would
+			/// mirror the ripple slopes.
+			/// A tangent frame per triangle corner, so neighbouring quads share it at shared vertices.
+			struct VertexFrame
 			{
-				for (uint8 i = 0; i < 3; ++i)
-				{
-					triangle.SetNormal(i, Vector3::UnitY);
-					triangle.SetTangent(i, Vector3::UnitX);
-					triangle.SetBinormal(i, Vector3::UnitZ);
-				}
-			}
+				Vector3 tangent = Vector3::UnitX;
+				Vector3 binormal = Vector3::UnitZ;
+			};
 
-			/// Applies the tangent basis for a downward-facing horizontal water quad.
-			/// @remark Only the normal flips. The bottom face shares the top face's UV
-			///			parameterisation, so flipping the binormal too would mirror the ripple
-			///			slopes on the underside.
-			void SetBottomFaceBasis(ManualTriangleListOperation::Triangle& triangle)
+			void SetCornerBases(ManualTriangleListOperation::Triangle& triangle, const Vector3& normal,
+				const VertexFrame& a, const VertexFrame& b, const VertexFrame& c)
 			{
+				const VertexFrame* frames[3] = { &a, &b, &c };
 				for (uint8 i = 0; i < 3; ++i)
 				{
-					triangle.SetNormal(i, Vector3::NegativeUnitY);
-					triangle.SetTangent(i, Vector3::UnitX);
-					triangle.SetBinormal(i, Vector3::UnitZ);
+					triangle.SetNormal(i, normal);
+					triangle.SetTangent(i, frames[i]->tangent);
+					triangle.SetBinormal(i, frames[i]->binormal);
 				}
 			}
 		}
@@ -616,6 +613,8 @@ namespace mmo
 			release(m_waterVertexHeights);
 			release(m_waterTypes);
 			release(m_waterMaterialName);
+			release(m_waterFlowUVs);
+			release(m_waterFlowSpeeds);
 
 			m_prepared = false;
 			m_preparing = false;
@@ -1128,6 +1127,12 @@ namespace mmo
 			view.waterTypes = m_waterTypes.data();
 			view.waterVertexHeights = m_waterVertexHeights.data();
 			view.waterMaterialName = &m_waterMaterialName;
+			if (m_waterFlowUVs.size() == static_cast<size_t>(constants::OuterVerticesPerPageSide * constants::OuterVerticesPerPageSide) * 2 &&
+				m_waterFlowSpeeds.size() == static_cast<size_t>(constants::OuterVerticesPerPageSide * constants::OuterVerticesPerPageSide))
+			{
+				view.waterFlowUVs = m_waterFlowUVs.data();
+				view.waterFlowSpeeds = m_waterFlowSpeeds.data();
+			}
 
 			if (!terrain_io::SavePage(writer, view))
 			{
@@ -1764,6 +1769,36 @@ namespace mmo
 			const float worldOffsetZ = static_cast<float>((m_z - 32) * constants::PageSize);
 			constexpr float uvScale = 1.0f / 16.0f;
 
+			// The minimap material colours water flat; flow data would only tint it.
+			const bool useFlow = HasWaterFlow() && !m_minimapWaterMode &&
+				m_waterFlowSpeeds.size() == static_cast<size_t>(pvSide) * pvSide;
+
+			// Flow-aligned tangent frame at an outer vertex: the gradients of u and v, by central
+			// differences (one-sided at the page border).
+			const auto flowFrame = [&](const uint32 vx, const uint32 vz)
+			{
+				const auto uv = [&](const uint32 x, const uint32 z, const uint32 c)
+				{
+					return m_waterFlowUVs[(static_cast<size_t>(x) + static_cast<size_t>(z) * pvSide) * 2 + c];
+				};
+				const uint32 x0 = vx > 0 ? vx - 1 : vx;
+				const uint32 x1 = vx + 1 < pvSide ? vx + 1 : vx;
+				const uint32 z0 = vz > 0 ? vz - 1 : vz;
+				const uint32 z1 = vz + 1 < pvSide ? vz + 1 : vz;
+				const float sx = static_cast<float>(x1 - x0) * quadSize;
+				const float sz = static_cast<float>(z1 - z0) * quadSize;
+
+				VertexFrame frame;
+				const Vector3 t((uv(x1, vz, 0) - uv(x0, vz, 0)) / sx, 0.0f, (uv(vx, z1, 0) - uv(vx, z0, 0)) / sz);
+				const Vector3 b((uv(x1, vz, 1) - uv(x0, vz, 1)) / sx, 0.0f, (uv(vx, z1, 1) - uv(vx, z0, 1)) / sz);
+				if (t.GetSquaredLength() > 1e-10f && b.GetSquaredLength() > 1e-10f)
+				{
+					frame.tangent = t.NormalizedCopy();
+					frame.binormal = b.NormalizedCopy();
+				}
+				return frame;
+			};
+
 			for (const water_mesh::TypeBatch& batch : batches)
 			{
 				// Resolve material. In minimap mode we deliberately ignore the assigned (translucent)
@@ -1827,20 +1862,54 @@ namespace mmo
 					const float tBL = GetHeightAt(pvx0,     pvz0 + 1);
 					const float tBR = GetHeightAt(pvx0 + 1, pvz0 + 1);
 
-					const uint32 topTL = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yTL, tTL);
-					const uint32 topTR = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yTR, tTR);
-					const uint32 topBL = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yBL, tBL);
-					const uint32 topBR = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yBR, tBR);
+					uint32 topTL = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yTL, tTL);
+					uint32 topTR = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yTR, tTR);
+					uint32 topBL = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yBL, tBL);
+					uint32 topBR = water_mesh::MakeWaterVertexColor(water_mesh::TopFaceVertexAlpha, yBR, tBR);
 
 					const float lx1 = pvx0       * quadSize;
 					const float lz1 = pvz0       * quadSize;
 					const float lx2 = (pvx0 + 1) * quadSize;
 					const float lz2 = (pvz0 + 1) * quadSize;
 
-					const float u1 = (worldOffsetX + lx1) * uvScale;
-					const float u2 = (worldOffsetX + lx2) * uvScale;
-					const float v1 = (worldOffsetZ + lz1) * uvScale;
-					const float v2 = (worldOffsetZ + lz2) * uvScale;
+					// Texture coordinates per corner: world space by default; on rivers the authored
+					// flow-aligned coordinates, so the water material's +u panning follows the current.
+					float texUTL = (worldOffsetX + lx1) * uvScale, texVTL = (worldOffsetZ + lz1) * uvScale;
+					float texUTR = (worldOffsetX + lx2) * uvScale, texVTR = texVTL;
+					float texUBL = texUTL, texVBL = (worldOffsetZ + lz2) * uvScale;
+					float texUBR = texUTR, texVBR = texVBL;
+					VertexFrame frameTL, frameTR, frameBL, frameBR;
+					if (useFlow)
+					{
+						const auto flowUV = [&](const uint32 vx, const uint32 vz, float& u, float& v)
+						{
+							const size_t index = (static_cast<size_t>(vx) + static_cast<size_t>(vz) * pvSide) * 2;
+							u = m_waterFlowUVs[index];
+							v = m_waterFlowUVs[index + 1];
+						};
+						flowUV(pvx0, pvz0, texUTL, texVTL);
+						flowUV(pvx0 + 1, pvz0, texUTR, texVTR);
+						flowUV(pvx0, pvz0 + 1, texUBL, texVBL);
+						flowUV(pvx0 + 1, pvz0 + 1, texUBR, texVBR);
+
+						// The flow speed rides in the otherwise unused green byte of the vertex colour.
+						const auto withSpeed = [&](uint32& color, const uint32 vx, const uint32 vz)
+						{
+							color = (color & ~0x0000FF00u) | (static_cast<uint32>(m_waterFlowSpeeds[vx + vz * pvSide]) << 8);
+						};
+						withSpeed(topTL, pvx0, pvz0);
+						withSpeed(topTR, pvx0 + 1, pvz0);
+						withSpeed(topBL, pvx0, pvz0 + 1);
+						withSpeed(topBR, pvx0 + 1, pvz0 + 1);
+
+						// Tangent frame per vertex from central differences of u and v on the vertex grid:
+						// neighbouring quads share it, so the ripple lighting has no seams at quad edges.
+						// The authoring keeps the mapping a rotation of the world mapping (same handedness).
+						frameTL = flowFrame(pvx0, pvz0);
+						frameTR = flowFrame(pvx0 + 1, pvz0);
+						frameBL = flowFrame(pvx0, pvz0 + 1);
+						frameBR = flowFrame(pvx0 + 1, pvz0 + 1);
+					}
 
 					const Vector3 vTL(lx1, yTL, lz1);
 					const Vector3 vTR(lx2, yTR, lz1);
@@ -1850,14 +1919,14 @@ namespace mmo
 					// Top face (CCW winding = front-facing from above)
 					{
 						auto& t1 = op->AddTriangle(vTL, vBL, vTR);
-						t1.SetUV(0, u1, v1); t1.SetUV(1, u1, v2); t1.SetUV(2, u2, v1);
+						t1.SetUV(0, texUTL, texVTL); t1.SetUV(1, texUBL, texVBL); t1.SetUV(2, texUTR, texVTR);
 						t1.SetStartColor(0, topTL); t1.SetStartColor(1, topBL); t1.SetStartColor(2, topTR);
-						SetTopFaceBasis(t1);
+						SetCornerBases(t1, Vector3::UnitY, frameTL, frameBL, frameTR);
 
 						auto& t2 = op->AddTriangle(vTR, vBL, vBR);
-						t2.SetUV(0, u2, v1); t2.SetUV(1, u1, v2); t2.SetUV(2, u2, v2);
+						t2.SetUV(0, texUTR, texVTR); t2.SetUV(1, texUBL, texVBL); t2.SetUV(2, texUBR, texVBR);
 						t2.SetStartColor(0, topTR); t2.SetStartColor(1, topBL); t2.SetStartColor(2, topBR);
-						SetTopFaceBasis(t2);
+						SetCornerBases(t2, Vector3::UnitY, frameTR, frameBL, frameBR);
 					}
 
 					// Bottom face (reversed winding so water is visible from below). Only for
@@ -1870,14 +1939,14 @@ namespace mmo
 						const uint32 bottomBR = water_mesh::MakeWaterVertexColor(water_mesh::BottomFaceVertexAlpha, yBR, tBR);
 
 						auto& t3 = op->AddTriangle(vTR, vBL, vTL);
-						t3.SetUV(0, u2, v1); t3.SetUV(1, u1, v2); t3.SetUV(2, u1, v1);
+						t3.SetUV(0, texUTR, texVTR); t3.SetUV(1, texUBL, texVBL); t3.SetUV(2, texUTL, texVTL);
 						t3.SetStartColor(0, bottomTR); t3.SetStartColor(1, bottomBL); t3.SetStartColor(2, bottomTL);
-						SetBottomFaceBasis(t3);
+						SetCornerBases(t3, Vector3::NegativeUnitY, frameTR, frameBL, frameTL);
 
 						auto& t4 = op->AddTriangle(vBR, vBL, vTR);
-						t4.SetUV(0, u2, v2); t4.SetUV(1, u1, v2); t4.SetUV(2, u2, v1);
+						t4.SetUV(0, texUBR, texVBR); t4.SetUV(1, texUBL, texVBL); t4.SetUV(2, texUTR, texVTR);
 						t4.SetStartColor(0, bottomBR); t4.SetStartColor(1, bottomBL); t4.SetStartColor(2, bottomTR);
-						SetBottomFaceBasis(t4);
+						SetCornerBases(t4, Vector3::NegativeUnitY, frameBR, frameBL, frameTR);
 					}
 				}
 			}
@@ -1954,6 +2023,22 @@ namespace mmo
 			if (reader)
 			{
 				reader >> io::read_container<uint16>(m_waterMaterialName);
+			}
+
+			return reader;
+		}
+
+		bool Page::ReadWaterFlowChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			constexpr size_t vertexCount = static_cast<size_t>(constants::OuterVerticesPerPageSide) * constants::OuterVerticesPerPageSide;
+			m_waterFlowUVs.assign(vertexCount * 2, 0.0f);
+			m_waterFlowSpeeds.assign(vertexCount, 0);
+			if (!(reader >> io::read_range(m_waterFlowUVs) >> io::read_range(m_waterFlowSpeeds)))
+			{
+				ELOG("Failed to read water flow of terrain page " << m_x << "x" << m_z);
+				m_waterFlowUVs.clear();
+				m_waterFlowSpeeds.clear();
+				return false;
 			}
 
 			return reader;
@@ -2050,6 +2135,7 @@ namespace mmo
 				// Water chunks (optional — absent in files without liquid data)
 				AddChunkHandler(*constants::WaterChunk,     false, *this, &Page::ReadMCWLChunk); // legacy
 				AddChunkHandler(*constants::WaterQuadChunk, false, *this, &Page::ReadMCWQChunk); // current
+				AddChunkHandler(*constants::WaterFlowChunk, false, *this, &Page::ReadWaterFlowChunk); // optional river flow
 			}
 
 			return reader;

@@ -41,6 +41,16 @@ namespace mmo
 		return true;
 	}
 
+	bool TextureImport::ImportUnattended(const std::vector<Path>& filenames, const Path& assetPath, const TextureUsage usage, const bool compress, const bool generateHeightMap)
+	{
+		m_filesToImport = filenames;
+		m_importAssetPath = assetPath;
+		m_textureUsage = usage;
+		m_useCompression = compress;
+		m_generateHeightMap = generateHeightMap;
+		return DoImportInternal();
+	}
+
 	bool TextureImport::SupportsExtension(const String& extension) const
 	{
 		// Use formats supported by stb_image implementation

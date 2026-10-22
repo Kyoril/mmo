@@ -52,6 +52,44 @@ Shared page-edge pixels are copied from the same source column/row. Without
 `--splat`, import retains the original all-layer-0 default. Import regenerates
 whole pages; it is not a paint-only patch for existing terrain.
 
+## Reshaping existing pages (delta import)
+
+A plain import regenerates whole pages, so it wipes painted layers, holes, zones and water.
+To reshape terrain that already exists, set `"applyAsDelta": true` in the metadata JSON:
+the heightmap then holds height *offsets* (`minY`..`maxY`) that are added to the existing
+pages, and everything else in them is kept. Every page of the rect must exist.
+
+- Outer and inner heights move by the offset (inner vertices by the mean of their quad's
+  corners, so sculpted inner detail survives). Normals are recomputed only where heights
+  changed; untouched vertices stay bit for bit. Keep the offset zero at the rect border.
+- `"waterLevel"`: reshaped quads get water exactly where they now dip below the level
+  (and lose it where they no longer do). Quads the delta did not touch keep their water.
+- `"setWaterMaterial": true` gives every written page with water the `waterMaterial`.
+- `"clearWaterMask"`: 16-bit grey PNG with one pixel per water quad of the rect
+  (`nx·128 × nz·128`); white quads lose their water.
+- `"paint": [{"mask": "m.png", "layer": 1, "strength": 1.0}, ...]`: 16-bit grey masks at
+  splat resolution (`nx·1008+1`) blended into the existing layer weights, in order.
+
+- `"paint"` entries with `"mode": "remove"` move that layer's weight back to layer 0 instead.
+- `"tileMaterials": {"mask": "tiles.png", "materials": ["Models/Terrain/X.hmi", ...]}`: 16-bit grey
+  mask with one pixel per terrain tile (`nx·16 × nz·16`); value k > 0 gives the tile `materials[k-1]`.
+  Use it for material variants that swap layer textures (e.g. `Briarwatch_Farmland_*.hmi`).
+- `"waterFlow": {"path": [[x, z, halfWidth], ...], "uvScale": 0.0625, "falloff": 60, "minSpeed": 0.08}`:
+  river flow, downstream order. Every written page with water gets the optional `WFLW` chunk: per
+  water vertex a flow-aligned UV (u = distance downstream, v = across) and a speed that falls off
+  beyond the channel. `Worlds/Water_River.hmat` (`tools/water_gen/build_ocean_material.py --variant
+  river`) pans its normals and foam streaks along it. Pages without the chunk keep world UVs.
+
+A zero image with only `paint`, `tileMaterials`, `waterFlow` or `clearWaterMask` is a data-only patch. Rebake the distant
+terrain afterwards (`mmo_edit --bake-terrain-lod <world.hwld>`), rebuild the nav mesh, and move
+placements (trees, props, spawns) by the same offsets.
+
+To judge the result in context, `mmo_edit --capture-view <world.hwld> --view
+"x,y,z,yaw,pitch,fov,time" --out shot.png [--size WxH] [--fog] [--grass] [--far-radius N]`
+renders a viewpoint to PNG; the World Settings panel's View section copies the current one.
+`mmo_edit --import-texture <asset folder> <image>... [--normal | --grayscale] [--compress] [--height-map]`
+imports textures the same way the editor's import dialog does.
+
 `collision_rock_poc.py` generates the single-page Collision rock study in
 `generated/terrain/collision-rock-poc/`. Its README records assets, import and
 review details. The script writes source images/instance JSON only; importing
