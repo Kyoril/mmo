@@ -43,10 +43,10 @@ namespace mmo
 		constexpr float greetingFadeInSeconds = 0.2f;
 		constexpr float greetingFadeOutSeconds = 0.3f;
 
-		/// Warm ivory of the hover glow at full strength. The character materials add the "Tint"
-		/// parameter as an emissive rim (Tint x Fresnel), so it brightens the silhouette without
-		/// colouring the gear.
-		const Vector4 glowTint(0.85f, 0.8f, 0.68f, 1.0f);
+		/// Warm amber of the hover glow at full strength, matching the selected nameplate colour.
+		/// The character materials add the "Tint" parameter as an emissive rim (Tint x Fresnel), so
+		/// it tints the silhouette's edges without colouring the gear.
+		const Vector4 glowTint(0.9f, 0.52f, 0.18f, 1.0f);
 
 		/// Name of the material parameter carrying the glow (see GameUnitC::UpdateTintOnMaterials).
 		const char* const glowParameter = "Tint";
