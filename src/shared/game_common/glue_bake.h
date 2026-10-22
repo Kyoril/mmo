@@ -178,11 +178,16 @@ namespace mmo
 	/// FNV-1a 64 of the bytes as 16 lowercase hex characters.
 	String HashGlueBakeBytes(const void* data, size_t size);
 
+	/// The scene hash of a GlueScene.json: HashGlueBakeBytes of its bytes with every '\r'
+	/// dropped, so CRLF and LF checkouts of the same file (git core.autocrlf) hash alike. For an
+	/// LF file it equals HashGlueBakeBytes.
+	String HashGlueSceneDefinition(const void* data, size_t size);
+
 	/// Whether the client draws the glue scene from the bake: only for a parsed manifest whose
 	/// sceneHash matches the hash of the current GlueScene.json (a camera edit without a rebake
 	/// falls back to streaming the world) and whose rulesVersion is GlueBakeRulesVersion.
 	/// @param manifest The parsed manifest, or nullopt when it is missing or unparsable.
-	/// @param currentSceneHash HashGlueBakeBytes of the current GlueScene.json.
+	/// @param currentSceneHash HashGlueSceneDefinition of the current GlueScene.json.
 	bool ShouldUseGlueBake(const std::optional<GlueBakeManifest>& manifest, const String& currentSceneHash);
 
 	/// Baked mesh placements that can be drawn with one instanced draw call per submesh.

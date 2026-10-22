@@ -89,8 +89,9 @@ namespace mmo
 			return;
 		}
 
-		// The glue bake is used only if it was baked from exactly these bytes.
-		const String definitionHash = HashGlueBakeBytes(text.data(), text.size());
+		// The glue bake is used only if it was baked from this text (line endings aside: a CRLF
+		// checkout must not make the bake look stale and stream the whole world instead).
+		const String definitionHash = HashGlueSceneDefinition(text.data(), text.size());
 		m_glueScene = std::make_unique<GlueScene>(m_project, std::move(*definition), definitionHash, m_soundEntryPlayer, m_audio);
 
 		// Before a realm is chosen, the realm's default time applies: UTC time of day.
