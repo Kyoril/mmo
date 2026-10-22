@@ -81,8 +81,15 @@ interiors and nothing streamed.
   - WMO doodads and prop kits
   - free-standing mesh entities from `.wobj`
   - foliage instances
-- **Interiors are dropped:** WMO groups with the Interior flag and without the Exterior flag are
-  never included.
+- **Interior contents are dropped, interior-flagged facades are kept:** for WMO groups with the
+  Interior flag and without the Exterior flag, the group's own mesh references are included
+  (subject to the frustum and small-object culls), because several Haven houses
+  (Haven_House_03/07/08/13/16) keep their outer walls, windows and doorways in such "Storey_N"
+  groups, which the live client draws from outside through its portal culling. What lies inside
+  those groups stays out: doodads, kit props, lights, particle systems and child WMOs placed in
+  them. (`FlattenOptions::includeInteriorGroupMeshes`, set by the glue collector only; the
+  default flatten still skips the whole group.) Decided by the "no missing buildings" anti-goal:
+  skipping the groups left holes in the baked houses.
 - **Small-object cull:** anything whose largest projected size from every sample stays below
   ~2 px at 1080p is dropped.
 

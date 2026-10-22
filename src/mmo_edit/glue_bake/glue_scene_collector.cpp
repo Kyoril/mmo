@@ -420,10 +420,15 @@ namespace mmo
 			options.propKitPaths = placement.kitPaths;
 			options.maxChildDepth = WorldModelInstance::MaxChildDepth;
 
+			// Houses keep their outer walls in interior-flagged storey groups, which the live client draws
+			// from outside; their furniture, lights and nested rooms stay out of the bake.
+			options.includeInteriorGroupMeshes = true;
+
 			FlattenReport report;
 			const std::vector<FlattenedMeshRef> refs = FlattenWorldModelExterior(placement.worldModel, placementTransform, options, &report);
 
 			collection.skippedInterior += report.skippedInteriorGroups;
+			collection.includedInterior += report.includedInteriorGroups;
 			collection.skippedInteriorMeshes += report.skippedInteriorMeshes;
 			collection.skippedInteriorChildren += report.skippedInteriorChildren;
 
@@ -467,7 +472,8 @@ namespace mmo
 			if (kept > 0)
 			{
 				ILOG("Glue bake: world model " << placement.assetPath << ": " << kept << " of " << refs.size()
-					<< " meshes visible, " << report.skippedInteriorGroups << " interior groups skipped");
+					<< " meshes visible, " << report.includedInteriorGroups << " interior groups kept as facades, "
+					<< report.skippedInteriorGroups << " skipped");
 			}
 		});
 

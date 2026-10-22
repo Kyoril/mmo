@@ -56,6 +56,10 @@ namespace mmo
 		/// @brief Pure interior WMO groups left out (once per placed occurrence).
 		uint32 skippedInterior = 0;
 
+		/// @brief Pure interior WMO groups whose own meshes were kept as facades (once per placed
+		///        occurrence); their doodads, kit props, lights and child world models are still skipped.
+		uint32 includedInterior = 0;
+
 		/// @brief Meshes and foliage left out because they never reach the small-object threshold.
 		uint32 skippedSmall = 0;
 

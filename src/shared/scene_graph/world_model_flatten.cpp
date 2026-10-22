@@ -84,16 +84,28 @@ namespace mmo
 					}
 
 					const bool interior = m_options.skipInterior && IsPureInteriorWorldModelGroup(group->GetFlags());
+
+					// Facade groups flagged interior keep their own geometry; their contents stay skipped.
+					const bool keepGroupMeshes = interior && m_options.includeInteriorGroupMeshes;
 					if (interior && m_report)
 					{
-						++m_report->skippedInteriorGroups;
+						if (keepGroupMeshes)
+						{
+							++m_report->includedInteriorGroups;
+						}
+						else
+						{
+							++m_report->skippedInteriorGroups;
+						}
 					}
 
 					for (const WorldModelMeshRef& meshRef : group->GetMeshRefs())
 					{
 						if (meshRef.visible)
 						{
-							placeMesh(meshRef.meshPath, meshRef.position, meshRef.rotation, meshRef.scale, meshRef.materialOverride, interior);
+							// Particle systems placed in a room are room contents, even when the room's walls are kept.
+							const bool meshInterior = interior && !(keepGroupMeshes && !IsParticleSystemPath(meshRef.meshPath));
+							placeMesh(meshRef.meshPath, meshRef.position, meshRef.rotation, meshRef.scale, meshRef.materialOverride, meshInterior);
 						}
 					}
 				}

@@ -402,7 +402,8 @@ namespace mmo
 		summary << "  water:             " << manifest.water.size() << " meshes (" << terrainStats.waterQuads << " quads)"; summary.EndLine();
 		summary << "  materials:         " << materials.size(); summary.EndLine();
 		summary << "  texture memory:    " << FormatMegabytes(terrainStats.textureBytes) << " baked (splatting maps and far albedo)"; summary.EndLine();
-		summary << "  skipped interior:  " << collection.skippedInterior << " groups (" << collection.skippedInteriorMeshes << " meshes, "
+		summary << "  interior facades:  " << collection.includedInterior << " groups (meshes kept, contents skipped)"; summary.EndLine();
+		summary << "  skipped interior:  " << collection.skippedInterior << " groups ("<< collection.skippedInteriorMeshes << " meshes, "
 			<< collection.skippedInteriorChildren << " child world models inside)"; summary.EndLine();
 		summary << "  skipped small:     " << collection.skippedSmall; summary.EndLine();
 		summary << "  skipped outside:   " << collection.skippedOutside; summary.EndLine();

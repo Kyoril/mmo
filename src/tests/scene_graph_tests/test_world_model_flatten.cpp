@@ -336,6 +336,78 @@ TEST_CASE("Flatten skips child world models placed in an interior group", "[worl
 	CHECK(report.worldModelPaths.size() == 1);
 }
 
+TEST_CASE("Flatten keeps the meshes of interior groups on request but not what lies inside them", "[world_model_flatten]")
+{
+	ScopedWorldModel furniture("FlattenTest/StoreyFurniture.hwmo");
+	AddGroup(*furniture.model, WorldModelGroupFlags::Exterior, { "Bed.hmsh" });
+
+	// A storey flagged interior whose own meshes are the house's outer walls
+	ScopedWorldModel house("FlattenTest/StoreyHouse.hwmo");
+	AddGroup(*house.model, WorldModelGroupFlags::Exterior, { "Roof.hmsh" });
+	WorldModelGroup& storey = AddGroup(*house.model, WorldModelGroupFlags::Interior, { "Wall_01.hmsh", "Window_01.hmsh", "Effects/Hearth.hpar" });
+	const AABB storeyBox(Vector3(-5.0f, -5.0f, -5.0f), Vector3(5.0f, 5.0f, 5.0f));
+	storey.SetBoundingBox(storeyBox);
+	ContainmentVolume volume;
+	volume.boundingBox = storeyBox;
+	storey.AddContainmentVolume(volume);
+
+	// Contents of the storey: a doodad, a kit prop, a light and a child world model
+	house.model->GetDoodadNames() = { "Chair.hmsh" };
+	WorldModelDoodad doodad{};
+	doodad.rotation = Quaternion::Identity;
+	doodad.scale = 1.0f;
+	house.model->GetDoodads().push_back(doodad);
+	house.model->GetDoodadSets() = { { "Global", 0, 1 } };
+
+	WorldModelLight lamp{};
+	lamp.type = WorldModelLight::LightType::Omni;
+	lamp.rotation = Quaternion::Identity;
+	house.model->GetLights().push_back(lamp);
+
+	auto kit = std::make_shared<PropKit>();
+	WorldModelMeshRef rug;
+	rug.meshPath = "Rug.hmsh";
+	kit->props.push_back(rug);
+	const String kitPath = "FlattenTest/StoreyKit.hkit";
+	PropKitManager::Get().Insert(kitPath, kit);
+
+	WorldModelChildRef bedroom;
+	bedroom.wmoPath = furniture.name;
+	house.model->AddChildRef(bedroom);
+
+	FlattenOptions options;
+	options.propKitPaths = { kitPath };
+	options.includeInteriorGroupMeshes = true;
+
+	FlattenReport report;
+	const std::vector<FlattenedMeshRef> refs = FlattenWorldModelExterior(house.model, Matrix4::Identity, options, &report);
+
+	REQUIRE(refs.size() == 3);
+	CHECK(FindRef(refs, "Roof.hmsh"));
+	CHECK(FindRef(refs, "Wall_01.hmsh"));
+	CHECK(FindRef(refs, "Window_01.hmsh"));
+	CHECK(report.includedInteriorGroups == 1);
+	CHECK(report.skippedInteriorGroups == 0);
+	CHECK(report.skippedInteriorMeshes == 3);
+	CHECK(report.skippedInteriorChildren == 1);
+
+	// The storey's light and its particle system stay out
+	const FlattenedWorldModelExtras extras = FlattenWorldModelExtras(house.model, Matrix4::Identity, options);
+	CHECK(extras.lights.empty());
+	CHECK(extras.particles.empty());
+
+	// Without the flag the storey's walls are skipped as before
+	options.includeInteriorGroupMeshes = false;
+	FlattenReport defaultReport;
+	const std::vector<FlattenedMeshRef> defaultRefs = FlattenWorldModelExterior(house.model, Matrix4::Identity, options, &defaultReport);
+	REQUIRE(defaultRefs.size() == 1);
+	CHECK(defaultRefs[0].meshPath == "Roof.hmsh");
+	CHECK(defaultReport.includedInteriorGroups == 0);
+	CHECK(defaultReport.skippedInteriorGroups == 1);
+	CHECK(defaultReport.skippedInteriorMeshes == 5);
+	CHECK(defaultReport.skippedInteriorChildren == 1);
+}
+
 TEST_CASE("Flatten extras leave out ambient lights", "[world_model_flatten]")
 {
 	ScopedWorldModel wmo("FlattenTest/Ambient.hwmo");

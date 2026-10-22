@@ -85,6 +85,12 @@ namespace mmo
 		/// @brief Whether pure interior groups, and the doodads, kit props and lights inside them, are left
 		///        out. A pure interior group has the Interior flag and not the Exterior flag.
 		bool skipInterior = true;
+
+		/// @brief With skipInterior, still keep the mesh references of pure interior groups (not their
+		///        particle systems). Their doodads, kit props, lights and child world models stay skipped.
+		///        For houses whose outer facades live in interior-flagged storey groups, which the live
+		///        client draws from outside through its portal culling.
+		bool includeInteriorGroupMeshes = false;
 	};
 
 	/// @brief What a flatten walked and left out, for statistics and dependency tracking.
@@ -92,6 +98,10 @@ namespace mmo
 	{
 		/// @brief Pure interior groups that were skipped (counted once per placed occurrence).
 		uint32 skippedInteriorGroups = 0;
+
+		/// @brief Pure interior groups whose mesh references were kept (includeInteriorGroupMeshes),
+		///        counted once per placed occurrence. Not counted in skippedInteriorGroups.
+		uint32 includedInteriorGroups = 0;
 
 		/// @brief Mesh references, doodads and kit props left out because they lie in an interior group.
 		uint32 skippedInteriorMeshes = 0;
