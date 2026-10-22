@@ -153,6 +153,8 @@ namespace mmo
 
 		void SetLowPassCutoff(float cutoffHz) override;
 
+		void SetListenerOrientation(const Vector3& forward, const Vector3& up) override;
+
 	private:
 
 		typedef std::deque<FMODSoundInstance> SoundInstanceVector;
@@ -161,6 +163,8 @@ namespace mmo
 		SoundIndex m_nextSoundInstanceIndex;
 		FMOD::System *m_system;
 		Vector3	m_prevListenerPosition;
+		Vector3 m_listenerForward { 0.0f, 0.0f, -1.0f };
+		Vector3 m_listenerUp { 0.0f, 1.0f, 0.0f };
 		SoundInstanceVector m_soundInstanceVector;
 		FMODChannelInstance m_channelArray[MaximumSoundChannels];
 

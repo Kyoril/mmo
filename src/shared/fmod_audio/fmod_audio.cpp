@@ -227,7 +227,7 @@ namespace mmo
 			return;
 		}
 
-		result = m_system->init(MaximumSoundChannels, FMOD_INIT_NORMAL, 0);
+		result = m_system->init(MaximumSoundChannels, FMOD_INIT_NORMAL | FMOD_INIT_3D_RIGHTHANDED, 0);
 		if (result != FMOD_OK)
 		{
 			m_system->release();
@@ -305,6 +305,12 @@ namespace mmo
 		}
 	}
 
+	void FMODAudio::SetListenerOrientation(const Vector3& forward, const Vector3& up)
+	{
+		m_listenerForward = forward;
+		m_listenerUp = up;
+	}
+
 	void FMODAudio::Update(const Vector3& listenerPos, float time)
 	{
 		FMOD_VECTOR listenerPosition;
@@ -329,15 +335,13 @@ namespace mmo
 		listenerPosition.y = listenerPos.y;
 		listenerPosition.z = listenerPos.z;
 		
-		// TODO
-		listenerForward.x = 1.0f;
-		listenerForward.y = 0.0f;
-		listenerForward.z = 0.0f;
+		listenerForward.x = m_listenerForward.x;
+		listenerForward.y = m_listenerForward.y;
+		listenerForward.z = m_listenerForward.z;
 		
-		// TODO
-		listenerUp.x = 0.0f;
-		listenerUp.y = 1.0f;
-		listenerUp.z = 0.0f;
+		listenerUp.x = m_listenerUp.x;
+		listenerUp.y = m_listenerUp.y;
+		listenerUp.z = m_listenerUp.z;
 		
 		listenerVelocity.x = 0.0f;
 		listenerVelocity.y = 0.0f;

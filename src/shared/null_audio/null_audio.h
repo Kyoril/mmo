@@ -119,6 +119,8 @@ namespace mmo
 
 		void SetLowPassCutoff(float cutoffHz) override;
 
+		void SetListenerOrientation(const Vector3& forward, const Vector3& up) override;
+
 	private:
 
 		typedef std::vector<NullSoundInstance> SoundInstanceVector;

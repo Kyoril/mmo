@@ -5,6 +5,7 @@
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "client.h"
+#include "game_client/audio_listener.h"
 #include "client_locale.h"
 #include "perf_capture.h"
 #include "base/localization.h"
@@ -1132,6 +1133,7 @@ namespace mmo
 		{
 			{
 				PROFILE_SCOPE("OnIdle::Audio");
+				m_audio.SetListenerOrientation(audio_listener::FlattenedForward(m_playerController->GetCamera().GetDerivedDirection()), Vector3::UnitY);
 				m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
 			}
 

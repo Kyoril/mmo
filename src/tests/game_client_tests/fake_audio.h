@@ -187,6 +187,18 @@ namespace mmo
 			lowPassCutoffHz = cutoffHz;
 		}
 
+		void SetListenerOrientation(const Vector3& forward, const Vector3& up) override
+		{
+			listenerForward = forward;
+			listenerUp = up;
+		}
+
+		/// @brief The listener forward direction last requested.
+		Vector3 listenerForward { 0.0f, 0.0f, -1.0f };
+
+		/// @brief The listener up direction last requested.
+		Vector3 listenerUp { 0.0f, 1.0f, 0.0f };
+
 		/// @brief The low-pass cutoff last requested, in Hz. 0 means the audio is dry.
 		float lowPassCutoffHz = 0.0f;
 

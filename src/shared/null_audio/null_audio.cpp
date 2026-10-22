@@ -207,6 +207,10 @@ namespace mmo
 	{
 	}
 
+	void NullAudio::SetListenerOrientation(const Vector3& forward, const Vector3& up)
+	{
+	}
+
 	void NullAudio::IncrementNextSoundInstanceIndex()
 	{
 		SoundIndex oldVectorCapacity = m_soundInstanceVector.capacity();

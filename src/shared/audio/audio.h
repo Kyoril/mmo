@@ -123,5 +123,11 @@ namespace mmo
 		/// @remark Callers are expected to ramp this over a transition rather than switching it in
 		///         one step: an instant cutoff change is audible as a click.
 		virtual void SetLowPassCutoff(float cutoffHz) = 0;
+
+		/// Sets the listener orientation applied on the next Update. The coordinate system is
+		/// right-handed, matching the engine's cameras.
+		/// @param forward Direction the listener looks along. Expected to be normalized.
+		/// @param up Up direction of the listener. Expected to be normalized.
+		virtual void SetListenerOrientation(const Vector3& forward, const Vector3& up) = 0;
 	};
 }
