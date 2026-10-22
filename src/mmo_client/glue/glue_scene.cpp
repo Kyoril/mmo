@@ -12,18 +12,35 @@
 #include "binary_io/reader.h"
 #include "binary_io/stream_source.h"
 #include "console/console_var.h"
+#include "graphics/graphics_device.h"
+#include "graphics/material_instance.h"
 #include "graphics/sky_component.h"
+#include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 #include "math/constants.h"
+#include "math/ray.h"
 #include "scene_graph/camera.h"
+#include "scene_graph/entity.h"
+#include "scene_graph/instanced_foliage.h"
+#include "scene_graph/light.h"
+#include "scene_graph/material_manager.h"
+#include "scene_graph/mesh_manager.h"
 #include "scene_graph/octree_scene.h"
+#include "scene_graph/particle_emitter.h"
+#include "scene_graph/particle_emitter_serializer.h"
 #include "scene_graph/scene_node.h"
+#include "scene_graph/sub_entity.h"
+#include "scene_graph/world_model_batch.h"
+#include "scene_graph/world_model_instance.h"
+#include "terrain/constants.h"
 #include "terrain/page.h"
 #include "terrain/terrain.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <iterator>
+#include <set>
 
 namespace mmo
 {
@@ -32,17 +49,16 @@ namespace mmo
 		/// Milliseconds of queued streaming work finished per frame.
 		constexpr double dispatchBudgetMs = 4.0;
 
-		/// Half the width of the idle drift at the gate, in metres.
-		constexpr float driftAmplitude = 0.3f;
+		/// Milliseconds of queued streaming work finished per frame while a fade covers the scene
+		/// (before the gate view is ready, or while an arrival waits for the plaza). Nothing moving
+		/// is visible then, and the world models (hundreds of steps for the town) arrive sooner.
+		constexpr double coveredDispatchBudgetMs = 25.0;
 
 		/// Seconds of one idle drift cycle at the gate.
 		constexpr float driftPeriodSeconds = 20.0f;
 
-		/// Share of the way from the plaza camera to the front character covered by the push-in.
-		constexpr float pushInFraction = 0.4f;
-
-		/// Height above the front spot the push-in moves towards, in metres (about chest height).
-		constexpr float pushInTargetHeight = 1.4f;
+		/// Farthest a cursor ray reaches, in metres.
+		constexpr float pickDistance = 200.0f;
 
 		/// Milliseconds after loading of the gate (resp. the plaza) began when it counts as ready
 		/// even if it is not loaded, so neither the fade nor the flight input lock lasts forever.
@@ -50,12 +66,40 @@ namespace mmo
 
 		/// Overrides the camera path parameter while >= 0, to inspect points of the flight path.
 		ConsoleVar* s_glueCameraPathVar = nullptr;
+
+		/// The manifest mmo_edit --bake-glue-scene writes.
+		constexpr const char* glueBakeManifestFile = "Interface/GlueUI/GlueBake/GlueBake.json";
+
+		/// Milliseconds of bake creation per frame once the gate view shows. While the fade still
+		/// covers the gate, all remaining steps run in one frame instead: splitting them only adds
+		/// frames to the load time.
+		constexpr double bakeStepBudgetMs = 150.0;
+
+		/// Edge length of the cells baked placements are batched in, in metres: the cell size of
+		/// the world's instanced trees, so batches stay frustum culled in parts.
+		constexpr float bakeBatchCellSize = static_cast<float>(terrain::constants::PageSize / 4.0);
+
+		/// Triangles of every submesh of a mesh.
+		uint64 CountTriangles(const Mesh& mesh)
+		{
+			uint64 triangles = 0;
+			for (uint16 i = 0; i < mesh.GetSubMeshCount(); ++i)
+			{
+				const SubMesh& subMesh = mesh.GetSubMesh(i);
+				if (subMesh.indexData)
+				{
+					triangles += subMesh.indexData->indexCount / 3;
+				}
+			}
+
+			return triangles;
+		}
 	}
 
-	GlueScene::GlueScene(const proto_client::Project& project, GlueSceneDefinition definition, SoundEntryPlayer& soundEntryPlayer, IAudio& audio)
+	GlueScene::GlueScene(const proto_client::Project& project, GlueSceneDefinition definition, const String& definitionHash, SoundEntryPlayer& soundEntryPlayer, IAudio& audio)
 		: m_project(project)
 		, m_definition(std::move(definition))
-		, m_director(m_definition.flightSeconds)
+		, m_director(m_definition.flightSeconds, m_definition.flyOutSeconds)
 		, m_environmentProfiles(project.environmentProfiles)
 		, m_ambientSounds(soundEntryPlayer, audio)
 	{
@@ -98,6 +142,20 @@ namespace mmo
 				return profile->surface_material();
 			});
 
+		const auto readStart = std::chrono::steady_clock::now();
+		if (std::optional<GlueBakeManifest> bake = ReadBake(definitionHash))
+		{
+			m_bakeReadMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - readStart).count();
+
+			// Everything the views show is listed in the bake: no world instance, no pages, no
+			// loader thread.
+			m_useBake = true;
+			StartBakePrefetch(*bake);
+			QueueBakeSteps(std::make_shared<const GlueBakeManifest>(std::move(*bake)));
+			UpdateCamera(0.0f);
+			return;
+		}
+
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
 		m_dispatcherWork = std::make_unique<asio::io_service::work>(m_dispatcher);
 		auto& workQueue = m_workQueue;
@@ -108,14 +166,12 @@ namespace mmo
 
 		m_pageQueue = m_definition.gatePages;
 		m_pageQueue.insert(m_pageQueue.end(), m_definition.plazaPages.begin(), m_definition.plazaPages.end());
-		m_gatePageCount = m_definition.gatePages.size();
 
 		if (!LoadWorld())
 		{
 			// Nothing will ever load: an empty queue reports both views ready, so the screens are not
 			// left behind a fade forever.
 			m_pageQueue.clear();
-			m_gatePageCount = 0;
 		}
 
 		UpdateCamera(0.0f);
@@ -125,6 +181,12 @@ namespace mmo
 	{
 		// Characters and their item meshes go before anything else touches the scene.
 		m_plazaAvatars.reset();
+
+		m_stopBakePrefetch = true;
+		if (m_bakePrefetchThread.joinable())
+		{
+			m_bakePrefetchThread.join();
+		}
 
 		m_work.reset();
 		m_dispatcherWork.reset();
@@ -138,6 +200,17 @@ namespace mmo
 		// The world instance never clears its ambient sound target itself.
 		m_ambientSounds.Clear();
 		m_worldInstance.reset();
+
+		// The bake's batches are owned here, not by the scene: detach them before the scene goes.
+		for (const BakeBatch& entry : m_bakeBatches)
+		{
+			entry.node->DetachObject(*entry.batch);
+			m_scene->DestroySceneNode(*entry.node);
+		}
+		m_bakeBatches.clear();
+		m_bakeFoliage.reset();
+		m_bakeSteps.clear();
+
 		m_sky.reset();
 		m_scene->Clear();
 	}
@@ -214,8 +287,10 @@ namespace mmo
 		m_pushInFinished = false;
 	}
 
-	void GlueScene::PushIn(const float seconds)
+	void GlueScene::PushIn(const float seconds, const Vector3& characterPosition)
 	{
+		m_pushInCharacterPosition = characterPosition;
+
 		if (seconds <= 0.0f)
 		{
 			// Finished at once: hold the end of the push-in.
@@ -252,6 +327,515 @@ namespace mmo
 		return x >= 0.0f && x <= 1.0f && y >= 0.0f && y <= 1.0f;
 	}
 
+	int32 GlueScene::PickPlazaCharacter(const float x, const float y) const
+	{
+		if (IsFlightActive() || x < 0.0f || x > 1.0f || y < 0.0f || y > 1.0f)
+		{
+			return -1;
+		}
+
+		return m_plazaAvatars->Pick(m_camera->GetCameraToViewportRay(x, y, pickDistance));
+	}
+
+	std::optional<GlueBakeManifest> GlueScene::ReadBake(const String& definitionHash)
+	{
+		const std::unique_ptr<std::istream> stream = AssetRegistry::OpenFile(glueBakeManifestFile);
+		if (!stream)
+		{
+			WLOG("Glue scene: no glue bake (" << glueBakeManifestFile << " is missing), streaming the world instead");
+			return std::nullopt;
+		}
+
+		const String text{ std::istreambuf_iterator<char>(*stream), std::istreambuf_iterator<char>() };
+		std::optional<GlueBakeManifest> manifest = ParseGlueBakeManifest(text);
+		if (!manifest)
+		{
+			WLOG("Glue scene: " << glueBakeManifestFile << " is unparsable, streaming the world instead");
+			return std::nullopt;
+		}
+
+		if (manifest->rulesVersion != GlueBakeRulesVersion)
+		{
+			WLOG("Glue scene: the glue bake was made with bake rules version " << manifest->rulesVersion << ", but this build expects "
+				<< GlueBakeRulesVersion << " (bake rules version " << manifest->rulesVersion << " != " << GlueBakeRulesVersion
+				<< "), streaming the world instead. Rebake with mmo_edit --bake-glue-scene.");
+			return std::nullopt;
+		}
+
+		if (!ShouldUseGlueBake(manifest, definitionHash))
+		{
+			WLOG("Glue scene: the glue bake was made from another GlueScene.json (scene hash " << manifest->sceneHash
+				<< ", current " << definitionHash << "), streaming the world instead. Rebake with mmo_edit --bake-glue-scene.");
+			return std::nullopt;
+		}
+
+		return manifest;
+	}
+
+	void GlueScene::StartBakePrefetch(const GlueBakeManifest& manifest)
+	{
+		// In the order the steps load them, each file once.
+		std::vector<String> files;
+		std::set<String> seen;
+		const auto add = [&files, &seen](const String& file)
+		{
+			if (!file.empty() && seen.insert(file).second)
+			{
+				files.push_back(file);
+			}
+		};
+
+		for (const GlueBakeTerrainTile& tile : manifest.terrainTiles)
+		{
+			add(tile.mesh);
+			add(tile.material);
+			add(tile.splatting);
+		}
+		for (const GlueBakeMesh& water : manifest.water)
+		{
+			add(water.mesh);
+		}
+		for (const GlueBakeMesh& mesh : manifest.meshes)
+		{
+			add(mesh.mesh);
+			for (const String& material : mesh.materialOverrides)
+			{
+				add(material);
+			}
+		}
+		for (const GlueBakeFoliage& foliage : manifest.foliage)
+		{
+			add(foliage.mesh);
+		}
+		for (const GlueBakeParticles& particles : manifest.particles)
+		{
+			add(particles.file);
+		}
+
+		// Prefetch is what streaming threads use: it only reads files (and what they reference)
+		// into memory, and skips files the main thread opened already.
+		std::atomic<bool>& stop = m_stopBakePrefetch;
+		m_bakePrefetchThread = std::thread([files = std::move(files), &stop]()
+			{
+				for (const String& file : files)
+				{
+					if (stop)
+					{
+						return;
+					}
+
+					AssetRegistry::Prefetch(file);
+				}
+			});
+	}
+
+	void GlueScene::QueueBakeSteps(std::shared_ptr<const GlueBakeManifest> manifest)
+	{
+		// Terrain and water first, then the placed meshes, then everything that only decorates.
+		for (size_t i = 0; i < manifest->terrainTiles.size(); ++i)
+		{
+			m_bakeSteps.push_back(BakeStep{ BakePhaseTerrain, [this, manifest, i]()
+				{
+					CreateBakeTerrainTile(manifest->terrainTiles[i]);
+				} });
+		}
+
+		for (size_t i = 0; i < manifest->water.size(); ++i)
+		{
+			m_bakeSteps.push_back(BakeStep{ BakePhaseWater, [this, manifest, i]()
+				{
+					const GlueBakeMesh& water = manifest->water[i];
+					if (Entity* entity = CreateBakeEntity(water.mesh, water.transform, water.materialOverrides))
+					{
+						// Like the live water surface.
+						entity->SetCastShadows(false);
+					}
+				} });
+		}
+
+		auto groups = std::make_shared<const std::vector<GlueBakeMeshGroup>>(GroupGlueBakeMeshes(manifest->meshes, bakeBatchCellSize));
+		for (size_t i = 0; i < groups->size(); ++i)
+		{
+			m_bakeSteps.push_back(BakeStep{ BakePhaseMeshes, [this, manifest, groups, i]()
+				{
+					CreateBakeMeshGroup(manifest->meshes, (*groups)[i]);
+				} });
+		}
+
+		m_bakeSteps.push_back(BakeStep{ BakePhaseDecoration, [this, manifest]()
+			{
+				CreateBakeFoliage(manifest->foliage);
+
+				for (const GlueBakeLight& light : manifest->lights)
+				{
+					CreateBakeLight(light);
+				}
+
+				if (!manifest->sounds.empty())
+				{
+					std::vector<AmbientSoundSource> sources;
+					sources.reserve(manifest->sounds.size());
+					for (const GlueBakeSound& sound : manifest->sounds)
+					{
+						sources.push_back(AmbientSoundSource{ sound.soundEntry, sound.position, sound.volume, sound.radius });
+					}
+
+					m_ambientSounds.Add(ambient_sound_owner::MapEntity, 0, std::move(sources));
+				}
+
+				for (const GlueBakeParticles& particles : manifest->particles)
+				{
+					CreateBakeParticles(particles);
+				}
+			} });
+	}
+
+	void GlueScene::UpdateBakeLoading()
+	{
+		ApplyReadinessTimeout();
+
+		if (m_nextBakeStep >= m_bakeSteps.size())
+		{
+			return;
+		}
+
+		PROFILE_SCOPE("GlueScene::BakeLoading");
+
+		++m_bakeFrames;
+
+		// Behind the opaque fade nothing is shown, so the whole bake is created at once. Only steps
+		// left after the fade lifted (a readiness timeout) are spread over frames.
+		const bool covered = !m_gateReady;
+		const auto start = std::chrono::steady_clock::now();
+		auto stepStart = start;
+		while (m_nextBakeStep < m_bakeSteps.size())
+		{
+			const BakeStep& step = m_bakeSteps[m_nextBakeStep++];
+			step.run();
+
+			const auto now = std::chrono::steady_clock::now();
+			m_bakePhaseMs[step.phase] += std::chrono::duration<double, std::milli>(now - stepStart).count();
+			stepStart = now;
+
+			if (!covered && std::chrono::duration<double, std::milli>(now - start).count() >= bakeStepBudgetMs)
+			{
+				break;
+			}
+		}
+
+		if (m_nextBakeStep < m_bakeSteps.size())
+		{
+			return;
+		}
+
+		ILOG("Glue scene: glue bake loaded in " << (GetAsyncTimeMs() - m_gateLoadStartMs) << " ms (meshes "
+			<< (m_bakeEntityCount + m_bakeInstanceCount) << ", tris " << m_bakeTriangleCount << "; "
+			<< m_bakeBatches.size() << " instanced batches of " << m_bakeInstanceCount << " placements, "
+			<< m_bakeEntityCount << " entities, " << (m_bakeFoliage ? m_bakeFoliage->GetInstanceCount() : 0) << " foliage)");
+		ILOG("Glue scene: glue bake split: manifest " << static_cast<int32>(m_bakeReadMs) << " ms, terrain " << static_cast<int32>(m_bakePhaseMs[BakePhaseTerrain])
+			<< " ms, water " << static_cast<int32>(m_bakePhaseMs[BakePhaseWater]) << " ms, meshes " << static_cast<int32>(m_bakePhaseMs[BakePhaseMeshes])
+			<< " ms, foliage/lights/sounds/particles " << static_cast<int32>(m_bakePhaseMs[BakePhaseDecoration]) << " ms, over " << m_bakeFrames << " frames");
+
+		// The bake holds both views: the plaza is ready with the gate.
+		if (!m_gateReady)
+		{
+			MarkGateReady(false);
+		}
+		m_plazaReady = true;
+	}
+
+	void GlueScene::CreateBakeMeshGroup(const std::vector<GlueBakeMesh>& meshes, const GlueBakeMeshGroup& group)
+	{
+		const MeshPtr mesh = MeshManager::Get().Load(group.mesh);
+		if (!mesh)
+		{
+			WLOG("Glue scene: cannot load baked mesh " << group.mesh);
+			return;
+		}
+
+		// The effective material of every submesh: its override, else the mesh's own.
+		std::vector<MaterialPtr> materials(mesh->GetSubMeshCount());
+		bool batchable = WorldModelInstance::CanBatchMesh(*mesh);
+		for (uint16 i = 0; i < mesh->GetSubMeshCount(); ++i)
+		{
+			if (i < group.materialOverrides.size() && !group.materialOverrides[i].empty())
+			{
+				materials[i] = MaterialManager::Get().Load(group.materialOverrides[i]);
+				if (!materials[i])
+				{
+					WLOG("Glue scene: cannot load material override " << group.materialOverrides[i] << " of " << group.mesh);
+				}
+			}
+
+			if (!materials[i])
+			{
+				materials[i] = mesh->GetSubMesh(i).GetMaterial();
+			}
+
+			if (!WorldModelInstance::MaterialSupportsInstancing(materials[i]))
+			{
+				batchable = false;
+			}
+		}
+
+		if (!batchable)
+		{
+			// Skinned, unindexed, or a material without an instanced shader variant (which would draw
+			// nothing at all): one entity per placement.
+			for (const size_t index : group.placements)
+			{
+				CreateBakeEntity(meshes[index].mesh, meshes[index].transform, meshes[index].materialOverrides);
+			}
+			return;
+		}
+
+		const uint64 triangles = CountTriangles(*mesh);
+		for (uint16 i = 0; i < mesh->GetSubMeshCount(); ++i)
+		{
+			auto batch = std::make_shared<WorldModelBatch>("GlueBakeBatch_" + std::to_string(m_bakeObjectCounter++), mesh, i, materials[i]);
+			for (const size_t index : group.placements)
+			{
+				MeshInstanceData instance;
+				instance.worldMatrix = meshes[index].transform;
+				batch->AddInstance(instance);
+			}
+
+			// Uploaded before attaching, so the node's first bounds are the instances' bounds. The
+			// node stays at the identity: instance matrices and bounds are world space already.
+			batch->UploadInstances(GraphicsDevice::Get());
+
+			SceneNode* node = m_worldRootNode->CreateChildSceneNode();
+			node->AttachObject(*batch);
+			batch->SetScene(m_scene.get());
+			batch->SetQueryFlags(0);
+			node->UpdateBounds();
+
+			m_bakeBatches.push_back(BakeBatch{ std::move(batch), node });
+		}
+
+		m_bakeInstanceCount += static_cast<uint32>(group.placements.size());
+		m_bakeTriangleCount += triangles * group.placements.size();
+	}
+
+	Entity* GlueScene::CreateBakeEntity(const String& meshName, const Matrix4& transform, const std::vector<String>& materialOverrides)
+	{
+		const MeshPtr mesh = MeshManager::Get().Load(meshName);
+		if (!mesh)
+		{
+			WLOG("Glue scene: cannot load baked mesh " << meshName);
+			return nullptr;
+		}
+
+		Vector3 position;
+		Vector3 scale;
+		Quaternion orientation;
+		transform.Decomposition(position, scale, orientation);
+
+		SceneNode* node = m_worldRootNode->CreateChildSceneNode();
+		node->SetPosition(position);
+		node->SetOrientation(orientation);
+		node->SetScale(scale);
+
+		Entity* entity = m_scene->CreateEntity("GlueBakeEntity_" + std::to_string(m_bakeObjectCounter++), mesh);
+		node->AttachObject(*entity);
+
+		// Nothing in the glue scene is picked or collided with but the plaza characters.
+		entity->SetQueryFlags(0);
+
+		// The bake only holds what the glue cameras can see: no distance limit.
+		entity->SetRenderingDistance(0.0f);
+
+		const uint32 subEntityCount = entity->GetNumSubEntities();
+		for (size_t i = 0; i < materialOverrides.size() && i < subEntityCount; ++i)
+		{
+			if (materialOverrides[i].empty())
+			{
+				continue;
+			}
+
+			if (const MaterialPtr material = MaterialManager::Get().Load(materialOverrides[i]))
+			{
+				entity->GetSubEntity(static_cast<uint16>(i))->SetMaterial(material);
+			}
+			else
+			{
+				WLOG("Glue scene: cannot load material override " << materialOverrides[i] << " of " << meshName);
+			}
+		}
+
+		++m_bakeEntityCount;
+		m_bakeTriangleCount += CountTriangles(*mesh);
+		return entity;
+	}
+
+	void GlueScene::CreateBakeTerrainTile(const GlueBakeTerrainTile& tile)
+	{
+		Entity* entity = CreateBakeEntity(tile.mesh, Matrix4::Identity, {});
+		if (!entity)
+		{
+			return;
+		}
+
+		MaterialPtr material = MaterialManager::Get().Load(tile.material);
+		if (!material)
+		{
+			WLOG("Glue scene: cannot load terrain material " << tile.material << " of " << tile.mesh);
+			return;
+		}
+
+		if (!tile.splatting.empty())
+		{
+			// A near tile: the layered terrain material with the tile's layer coverage, sampled the
+			// way terrain::Tile samples its coverage texture (the .htex carries no sampler state, and
+			// the default Wrap would bleed the opposite edge into the tile border).
+			const TexturePtr splatting = TextureManager::Get().CreateOrRetrieve(tile.splatting);
+			if (!splatting)
+			{
+				WLOG("Glue scene: cannot load splatting texture " << tile.splatting);
+				return;
+			}
+
+			splatting->SetTextureAddressMode(TextureAddressMode::Clamp);
+			splatting->SetFilter(TextureFilter::Anisotropic);
+
+			auto instance = std::make_shared<MaterialInstance>("GlueBakeTerrain_" + std::to_string(m_bakeObjectCounter++), material);
+			instance->SetTextureParameter("Splatting", splatting);
+			entity->SetMaterial(instance);
+			return;
+		}
+
+		// A far tile: its ready material instance, with the albedo clamped as FarTerrain does.
+		String albedoName;
+		if (material->GetTextureParameter("Albedo", albedoName) && !albedoName.empty())
+		{
+			if (const TexturePtr albedo = TextureManager::Get().CreateOrRetrieve(albedoName))
+			{
+				albedo->SetTextureAddressMode(TextureAddressMode::Clamp);
+			}
+		}
+
+		entity->SetMaterial(material);
+	}
+
+	void GlueScene::CreateBakeFoliage(const std::vector<GlueBakeFoliage>& foliage)
+	{
+		if (foliage.empty())
+		{
+			return;
+		}
+
+		// The same hardware-instanced cells the world draws its trees with.
+		m_bakeFoliage = std::make_unique<InstancedFoliage>(*m_scene, GraphicsDevice::Get(), bakeBatchCellSize);
+		for (size_t i = 0; i < foliage.size(); ++i)
+		{
+			InstancedFoliageInstance instance;
+			instance.uniqueId = static_cast<uint64>(i) + 1;
+			instance.meshName = foliage[i].mesh;
+			instance.position = foliage[i].position;
+			instance.rotation = foliage[i].rotation;
+			instance.scale = foliage[i].scale;
+			instance.collides = false;
+			m_bakeFoliage->AddInstance(instance);
+		}
+
+		m_bakeFoliage->RebuildDirtyCells();
+	}
+
+	void GlueScene::CreateBakeLight(const GlueBakeLight& bakeLight)
+	{
+		// Mirrors WorldModelInstance::CreateLightFrom; the bake drops ambient lights already.
+		LightType type = LightType::Point;
+		switch (bakeLight.type)
+		{
+		case 1:
+			type = LightType::Spot;
+			break;
+		case 2:
+			type = LightType::Directional;
+			break;
+		case 3:
+			return;
+		default:
+			break;
+		}
+
+		const String name = "GlueBakeLight_" + std::to_string(m_bakeObjectCounter++);
+		SceneNode* node = m_worldRootNode->CreateChildSceneNode(name + "_node");
+		node->SetPosition(bakeLight.position);
+
+		if (type != LightType::Point)
+		{
+			Quaternion rotation = bakeLight.rotation;
+			const float lengthSq = rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z + rotation.w * rotation.w;
+			if (lengthSq > 0.001f)
+			{
+				rotation.Normalize();
+				node->SetOrientation(rotation);
+			}
+		}
+
+		Light& light = m_scene->CreateLight(name, type);
+
+		// 0xAARRGGBB.
+		const float r = static_cast<float>((bakeLight.color >> 16) & 0xFF) / 255.0f;
+		const float g = static_cast<float>((bakeLight.color >> 8) & 0xFF) / 255.0f;
+		const float b = static_cast<float>(bakeLight.color & 0xFF) / 255.0f;
+		light.SetColor(Vector4(r, g, b, 1.0f));
+		light.SetIntensity(std::min(bakeLight.intensity, 10.0f));
+		light.SetRange(bakeLight.useAttenuation && bakeLight.attenuationEnd > 0.0f ? bakeLight.attenuationEnd : 50.0f);
+
+		if (type == LightType::Spot)
+		{
+			light.SetOuterConeAngle(bakeLight.outerConeAngle);
+			light.SetInnerConeAngle(bakeLight.innerConeAngle);
+		}
+
+		light.SetFogScattering(bakeLight.fogScattering);
+		node->AttachObject(light);
+	}
+
+	void GlueScene::CreateBakeParticles(const GlueBakeParticles& particles)
+	{
+		const std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(particles.file);
+		if (!file)
+		{
+			WLOG("Glue scene: cannot open particle system " << particles.file);
+			return;
+		}
+
+		io::StreamSource source(*file);
+		io::Reader reader(source);
+		// The whole system: a .hpar may hold several emitters (flame, embers, ...)
+		ParticleSystemSerializer serializer;
+		ParticleSystemParameters parameters;
+		if (!serializer.Deserialize(parameters, reader))
+		{
+			WLOG("Glue scene: cannot read particle system " << particles.file);
+			return;
+		}
+
+		const String name = "GlueBakeParticles_" + std::to_string(m_bakeObjectCounter++);
+		ParticleEmitter* emitter = m_scene->CreateParticleEmitter(name);
+		if (!emitter)
+		{
+			return;
+		}
+
+		emitter->SetSystemParameters(parameters);
+
+		Vector3 position;
+		Vector3 scale;
+		Quaternion orientation;
+		particles.transform.Decomposition(position, scale, orientation);
+
+		SceneNode* node = m_worldRootNode->CreateChildSceneNode(name + "_node");
+		node->SetPosition(position);
+		node->SetOrientation(orientation);
+		node->SetScale(scale);
+		node->AttachObject(*emitter);
+		emitter->Play();
+	}
+
 	bool GlueScene::LoadWorld()
 	{
 		const String& assetPath = m_definition.world;
@@ -283,15 +867,27 @@ namespace mmo
 	{
 		PROFILE_SCOPE("GlueScene::Update");
 
-		UpdatePageLoading();
+		if (m_useBake)
+		{
+			UpdateBakeLoading();
+		}
+		else
+		{
+			UpdatePageLoading();
+		}
 
+		// The bake path has no world instance, so nothing is ever posted to the dispatcher.
+		if (!m_useBake)
 		{
 			PROFILE_SCOPE("GlueScene::StreamingDispatch");
+
+			const bool covered = !m_gateReady || (m_pendingArrival != PendingArrival::None && !m_plazaReady);
+			const double budgetMs = covered ? coveredDispatchBudgetMs : dispatchBudgetMs;
 
 			const auto start = std::chrono::steady_clock::now();
 			while (m_dispatcher.poll_one())
 			{
-				if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= dispatchBudgetMs)
+				if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= budgetMs)
 				{
 					break;
 				}
@@ -328,9 +924,9 @@ namespace mmo
 
 		UpdateCamera(deltaSeconds);
 
-		m_plazaAvatars->Update(deltaSeconds);
-
 		const Vector3 cameraPosition = m_camera->GetDerivedPosition();
+
+		m_plazaAvatars->Update(deltaSeconds, cameraPosition);
 		if (m_worldInstance && m_worldInstance->HasTerrain())
 		{
 			m_worldInstance->GetTerrain()->NotifyCameraPosition(cameraPosition);
@@ -361,26 +957,31 @@ namespace mmo
 	{
 		ApplyReadinessTimeout();
 
-		// The gate becomes ready before any plaza page starts, so the plaza's entities cannot hold
-		// back the gate view.
-		if (!m_gateReady && m_nextPage >= m_gatePageCount)
+		// Every page (gate pages first) is loaded before the gate counts as ready: the gate camera
+		// looks across the plaza pages too, and the world models it sees there must not pop in
+		// after the fade lifted. One page per update; their entities load in the background.
+		if (m_nextPage < m_pageQueue.size())
 		{
-			if (!m_worldInstance || !m_worldInstance->HasPendingEntityLoads())
+			const auto [x, y] = m_pageQueue[m_nextPage++];
+			LoadPage(x, y);
+			if (m_nextPage >= m_pageQueue.size())
 			{
-				MarkGateReady();
+				m_terrainLoadedMs = GetAsyncTimeMs();
+			}
+			return;
+		}
+
+		if (!m_gateReady)
+		{
+			if (!m_worldInstance || !HasPendingGateContent())
+			{
+				MarkGateReady(false);
 			}
 
 			return;
 		}
 
-		if (m_nextPage < m_pageQueue.size())
-		{
-			const auto [x, y] = m_pageQueue[m_nextPage++];
-			LoadPage(x, y);
-			return;
-		}
-
-		if (!m_plazaReady && m_gateReady)
+		if (!m_plazaReady)
 		{
 			if (!m_worldInstance || !m_worldInstance->HasPendingEntityLoads())
 			{
@@ -407,7 +1008,7 @@ namespace mmo
 			if (now - m_gateLoadStartMs >= readinessTimeoutMs)
 			{
 				WLOG("Glue scene: gate view not loaded after " << (now - m_gateLoadStartMs) << " ms, showing it anyway");
-				MarkGateReady();
+				MarkGateReady(true);
 			}
 
 			// The plaza's clock starts when the gate is ready.
@@ -421,11 +1022,47 @@ namespace mmo
 		}
 	}
 
-	void GlueScene::MarkGateReady()
+	void GlueScene::MarkGateReady(const bool timedOut)
 	{
 		m_gateReady = true;
-		m_plazaLoadStartMs = GetAsyncTimeMs();
-		DLOG("Glue scene: gate pages loaded after " << (m_plazaLoadStartMs - m_gateLoadStartMs) << " ms");
+
+		const GameTime now = GetAsyncTimeMs();
+		m_plazaLoadStartMs = now;
+
+		if (m_useBake)
+		{
+			ILOG("Glue scene: gate ready after " << (now - m_gateLoadStartMs) << " ms (bake" << (timedOut ? ", timeout" : "") << ")");
+			return;
+		}
+
+		if (timedOut)
+		{
+			// Neither the terrain nor the models finished: a split would be misleading.
+			ILOG("Glue scene: gate ready after " << (now - m_gateLoadStartMs) << " ms (timeout, "
+				<< (m_terrainLoadedMs != 0 ? "terrain done, models pending" : "terrain pending") << ")");
+			return;
+		}
+
+		// Terrain: until the last page was loaded (entity files still reading in the background).
+		// Models: from then until the world models the gate camera sees were created.
+		const GameTime terrainDoneMs = m_terrainLoadedMs != 0 ? m_terrainLoadedMs : now;
+		ILOG("Glue scene: gate ready after " << (now - m_gateLoadStartMs) << " ms (terrain "
+			<< (terrainDoneMs - m_gateLoadStartMs) << " ms, models " << (now - terrainDoneMs) << " ms)");
+	}
+
+	bool GlueScene::HasPendingGateContent() const
+	{
+		if (m_director.GetMode() != GlueCameraMode::Gate)
+		{
+			// Only the gate camera's view can be tested: anything still loading may show.
+			return m_worldInstance->HasPendingEntityLoads();
+		}
+
+		const Camera& camera = *m_camera;
+		return m_worldInstance->HasPendingWorldModels([&camera](const AABB& bounds)
+			{
+				return camera.IsVisible(bounds);
+			});
 	}
 
 	void GlueScene::LoadPage(const uint8 x, const uint8 y)
@@ -488,7 +1125,7 @@ namespace mmo
 			if (right.GetSquaredLength() > 0.0001f)
 			{
 				right.Normalize();
-				position += right * (driftAmplitude * std::sin(m_driftSeconds / driftPeriodSeconds * 2.0f * Pi));
+				position += right * (glue_camera::GateDriftAmplitude * std::sin(m_driftSeconds / driftPeriodSeconds * 2.0f * Pi));
 			}
 		}
 
@@ -505,8 +1142,8 @@ namespace mmo
 
 			const float t = m_pushInElapsed / m_pushInSeconds;
 			const float eased = t * t * (3.0f - 2.0f * t);
-			const Vector3 target = m_definition.front.position + Vector3(0.0f, pushInTargetHeight, 0.0f);
-			position += (target - position) * (pushInFraction * eased);
+			const Vector3 target = m_pushInCharacterPosition + Vector3(0.0f, glue_camera::PushInTargetHeight, 0.0f);
+			position += (target - position) * (glue_camera::PushInFraction * eased);
 		}
 
 		m_cameraNode->SetPosition(position);

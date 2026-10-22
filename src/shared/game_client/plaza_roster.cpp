@@ -94,30 +94,22 @@ namespace mmo
 	{
 		PlazaAssignment result;
 		result.spotCharacter.fill(-1);
-		result.frontCharacter = -1;
-		result.frontIsVisitor = false;
+		result.visitor = -1;
 
 		if (numCharacters <= 0)
 		{
 			return result;
 		}
 
+		// Plaza characters keep their spot when selected; only a visitor comes in.
 		for (int32 i = 0; i < PlazaSpotCount && i < numCharacters; ++i)
 		{
 			result.spotCharacter[i] = i;
 		}
 
-		if (selectedIndex >= 0 && selectedIndex < numCharacters)
+		if (selectedIndex >= PlazaSpotCount && selectedIndex < numCharacters)
 		{
-			result.frontCharacter = selectedIndex;
-			if (selectedIndex < PlazaSpotCount)
-			{
-				result.spotCharacter[selectedIndex] = -1;
-			}
-			else
-			{
-				result.frontIsVisitor = true;
-			}
+			result.visitor = selectedIndex;
 		}
 
 		return result;

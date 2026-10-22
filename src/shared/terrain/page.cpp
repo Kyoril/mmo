@@ -698,6 +698,17 @@ namespace mmo
 			return m_colors[x + y * constants::OuterVerticesPerPageSide];
 		}
 
+		MaterialPtr Page::GetTileMaterial(const uint32 x, const uint32 y) const
+		{
+			const size_t index = static_cast<size_t>(x) + static_cast<size_t>(y) * constants::TilesPerPage;
+			if (x < constants::TilesPerPage && y < constants::TilesPerPage && index < m_materials.size() && m_materials[index])
+			{
+				return m_materials[index];
+			}
+
+			return m_terrain.GetDefaultMaterial();
+		}
+
 		uint32 Page::GetLayersAt(const size_t x, const size_t y) const
 		{
 			if (!IsPrepared())
@@ -1739,6 +1750,47 @@ namespace mmo
 		{
 			m_waterMaterialName = name;
 			m_changed = true;
+		}
+
+		void Page::SetWaterFlow(std::vector<float> uvs, std::vector<uint8> speeds)
+		{
+			constexpr size_t vertexCount = static_cast<size_t>(constants::OuterVerticesPerPageSide) * constants::OuterVerticesPerPageSide;
+			if (uvs.size() != vertexCount * 2 || speeds.size() != vertexCount)
+			{
+				ELOG("Ignoring water flow of the wrong size for terrain page " << m_x << "x" << m_z);
+				return;
+			}
+
+			m_waterFlowUVs = std::move(uvs);
+			m_waterFlowSpeeds = std::move(speeds);
+			m_changed = true;
+		}
+
+		void Page::ClearWaterFlow()
+		{
+			if (m_waterFlowUVs.empty() && m_waterFlowSpeeds.empty())
+			{
+				return;
+			}
+
+			m_waterFlowUVs.clear();
+			m_waterFlowSpeeds.clear();
+			m_changed = true;
+		}
+
+		bool Page::GetWaterFlow(const uint32 pageVertX, const uint32 pageVertZ, float& u, float& v, float& speed) const
+		{
+			constexpr uint32 side = constants::OuterVerticesPerPageSide;
+			if (!HasWaterFlow() || pageVertX >= side || pageVertZ >= side || m_waterFlowSpeeds.size() != static_cast<size_t>(side) * side)
+			{
+				return false;
+			}
+
+			const size_t index = static_cast<size_t>(pageVertX) + static_cast<size_t>(pageVertZ) * side;
+			u = m_waterFlowUVs[index * 2];
+			v = m_waterFlowUVs[index * 2 + 1];
+			speed = static_cast<float>(m_waterFlowSpeeds[index]) / 255.0f;
+			return true;
 		}
 
 		void Page::RebuildWaterMesh()

@@ -99,52 +99,6 @@ namespace mmo
 			return true;
 		}
 
-		/// @brief Flow coordinate of a point relative to a river path: distance downstream along the
-		///	       path, signed distance across it (positive to the left of the flow seen from above, so
-		///	       the mapping is a rotation of the world mapping), and the channel half width there.
-		struct FlowCoordinate
-		{
-			float along = 0.0f;
-			float across = 0.0f;
-			float halfWidth = 0.0f;
-		};
-
-		FlowCoordinate ProjectOntoFlowPath(const std::vector<ZoneMeta::FlowPoint> &path, const float x, const float z)
-		{
-			FlowCoordinate best;
-			float bestDistance = std::numeric_limits<float>::max();
-			float start = 0.0f;
-			for (size_t i = 0; i + 1 < path.size(); ++i)
-			{
-				const ZoneMeta::FlowPoint &a = path[i];
-				const ZoneMeta::FlowPoint &b = path[i + 1];
-				const float dx = b.x - a.x;
-				const float dz = b.z - a.z;
-				const float length = std::sqrt(dx * dx + dz * dz);
-				if (length <= 0.0f)
-				{
-					continue;
-				}
-
-				const float t = std::clamp(((x - a.x) * dx + (z - a.z) * dz) / (length * length), 0.0f, 1.0f);
-				const float px = a.x + dx * t;
-				const float pz = a.z + dz * t;
-				const float distance = std::hypot(x - px, z - pz);
-				if (distance < bestDistance)
-				{
-					bestDistance = distance;
-					best.along = start + t * length;
-					// Left of the flow direction (dx, dz) is (-dz, dx): for flow along +X that is +Z,
-					// matching v = z of the world mapping.
-					best.across = ((x - px) * -dz + (z - pz) * dx) / length;
-					best.halfWidth = a.halfWidth + (b.halfWidth - a.halfWidth) * t;
-				}
-				start += length;
-			}
-
-			return best;
-		}
-
 		/// @brief Loads an existing terrain page.
 		bool LoadExistingPage(const String &filename, terrain_io::PageData &page)
 		{
@@ -269,86 +223,17 @@ namespace mmo
 				return false;
 			};
 
-			// River flow coordinates for the whole rect at once, then smoothed: the nearest path segment
-			// switches on the inside of bends, which makes "along" jump by a little, and every jump
-			// shows as a seam in the panned ripples. The rect-wide grid also keeps page borders exact.
-			std::vector<float> flowAlong;
-			std::vector<float> flowAcross;
-			std::vector<float> flowSpeed;
+			// River flow: the main path and its branches; each water vertex takes the nearest one.
+			std::vector<terrain_io::water_flow::FlowPath> flowPaths;
 			if (meta.flowPath.size() >= 2)
 			{
-				const float vertexSpacing = terrain::constants::PageSize / static_cast<float>(VerticesPerPageEdge);
-				const float originX = static_cast<float>(meta.pageX0 - 32) * terrain::constants::PageSize;
-				const float originZ = static_cast<float>(meta.pageZ0 - 32) * terrain::constants::PageSize;
-				const size_t count = static_cast<size_t>(gridWidth) * gridHeight;
-				flowAlong.resize(count);
-				flowAcross.resize(count);
-				flowSpeed.resize(count);
-				for (uint32 z = 0; z < gridHeight; ++z)
-				{
-					for (uint32 x = 0; x < gridWidth; ++x)
-					{
-						const float wx = originX + static_cast<float>(x) * vertexSpacing;
-						const float wz = originZ + static_cast<float>(z) * vertexSpacing;
-						FlowCoordinate c = ProjectOntoFlowPath(meta.flowPath, wx, wz);
-						float distance = std::max(0.0f, std::abs(c.across) - c.halfWidth);
-						for (const auto &branch : meta.flowBranches)
-						{
-							const FlowCoordinate b = ProjectOntoFlowPath(branch, wx, wz);
-							const float bd = std::max(0.0f, std::abs(b.across) - b.halfWidth);
-							if (bd < distance || (bd == distance && std::abs(b.across) < std::abs(c.across)))
-							{
-								c = b;
-								distance = bd;
-							}
-						}
-						const size_t i = static_cast<size_t>(z) * gridWidth + x;
-						flowAlong[i] = c.along;
-						flowAcross[i] = c.across;
-						const float beyondBank = std::max(0.0f, std::abs(c.across) - c.halfWidth);
-						flowSpeed[i] = std::clamp(1.0f - beyondBank / std::max(meta.flowFalloff, 1.0f), meta.flowMinSpeed, 1.0f);
-					}
-				}
-
-				// Three separable box blurs of radius 3 approximate a Gaussian of about 3 vertices (12 m).
-				const auto blur = [&](std::vector<float> &values)
-				{
-					std::vector<float> scratch(values.size());
-					constexpr int32 radius = 3;
-					for (int pass = 0; pass < 3; ++pass)
-					{
-						for (uint32 z = 0; z < gridHeight; ++z)
-						{
-							for (uint32 x = 0; x < gridWidth; ++x)
-							{
-								float sum = 0.0f;
-								for (int32 k = -radius; k <= radius; ++k)
-								{
-									const int32 sx = std::clamp(static_cast<int32>(x) + k, 0, static_cast<int32>(gridWidth) - 1);
-									sum += values[static_cast<size_t>(z) * gridWidth + sx];
-								}
-								scratch[static_cast<size_t>(z) * gridWidth + x] = sum / static_cast<float>(radius * 2 + 1);
-							}
-						}
-						for (uint32 z = 0; z < gridHeight; ++z)
-						{
-							for (uint32 x = 0; x < gridWidth; ++x)
-							{
-								float sum = 0.0f;
-								for (int32 k = -radius; k <= radius; ++k)
-								{
-									const int32 sz = std::clamp(static_cast<int32>(z) + k, 0, static_cast<int32>(gridHeight) - 1);
-									sum += scratch[static_cast<size_t>(sz) * gridWidth + x];
-								}
-								values[static_cast<size_t>(z) * gridWidth + x] = sum / static_cast<float>(radius * 2 + 1);
-							}
-						}
-					}
-				};
-				blur(flowAlong);
-				blur(flowAcross);
-				blur(flowSpeed);
+				flowPaths.push_back(meta.flowPath);
+				flowPaths.insert(flowPaths.end(), meta.flowBranches.begin(), meta.flowBranches.end());
 			}
+			terrain_io::water_flow::FlowSettings flowSettings;
+			flowSettings.uvScale = meta.flowUVScale;
+			flowSettings.falloff = meta.flowFalloff;
+			flowSettings.minSpeed = meta.flowMinSpeed;
 
 			uint32 savedPages = 0;
 			uint32 changedVertices = 0;
@@ -480,21 +365,11 @@ namespace mmo
 					}
 
 					// River flow: every vertex of a page with water gets its flow-aligned UV and speed.
-					if (meta.flowPath.size() >= 2 && std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
+					if (!flowPaths.empty() && std::any_of(page.waterQuadMasks.begin(), page.waterQuadMasks.end(), [](const uint64 mask) { return mask != 0; }))
 					{
-						page.waterFlowUVs.assign(static_cast<size_t>(OuterSide) * OuterSide * 2, 0.0f);
-						page.waterFlowSpeeds.assign(static_cast<size_t>(OuterSide) * OuterSide, 0);
-						for (uint32 vz = 0; vz < OuterSide; ++vz)
-						{
-							for (uint32 vx = 0; vx < OuterSide; ++vx)
-							{
-								const size_t g = static_cast<size_t>(baseZ + vz) * gridWidth + (baseX + vx);
-								const size_t index = static_cast<size_t>(vz) * OuterSide + vx;
-								page.waterFlowUVs[index * 2] = flowAlong[g] * meta.flowUVScale;
-								page.waterFlowUVs[index * 2 + 1] = flowAcross[g] * meta.flowUVScale;
-								page.waterFlowSpeeds[index] = static_cast<uint8>(std::lround(std::clamp(flowSpeed[g], 0.0f, 1.0f) * 255.0f));
-							}
-						}
+						const float pageOriginX = static_cast<float>((pageX - 32) * terrain::constants::PageSize);
+						const float pageOriginZ = static_cast<float>((pageZ - 32) * terrain::constants::PageSize);
+						terrain_io::water_flow::ComputePageFlow(flowPaths, flowSettings, pageOriginX, pageOriginZ, page.waterFlowUVs, page.waterFlowSpeeds);
 						pageChanged = true;
 					}
 

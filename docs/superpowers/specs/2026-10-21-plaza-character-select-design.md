@@ -28,8 +28,8 @@ screen reminds anyone of WoW.
 - A roster ("All characters (N)") lists every character and lets the player **reorder** them
   by drag and drop. The top 5 in that order are the plaza characters. The order persists per
   account on the server.
-- Picking a character who is not among the 5 makes them **walk into the plaza and take the
-  front spot** for this visit, without changing the saved order.
+- Picking a character who is not among the 5 makes them **run into the plaza to the visitor
+  spot** for this visit, without changing the saved order.
 - A restyle of all glue screens away from WoW: no Friz Quadrata, no WoW gold, no parchment
   panels.
 
@@ -62,7 +62,8 @@ screen reminds anyone of WoW.
 - "Change realm" flies back out through the gate; choosing a realm flies back in.
 - 5 characters on the plaza. Additional characters are reachable through a UI roster, and the
   player can sort the roster to decide which 5 are shown by default.
-- A character from outside the 5 walks in and takes the front spot.
+- A character from outside the 5 runs in to the visitor spot.
+- Plaza characters stay on their own spots; selecting one moves nobody (2026-10-22).
 - The primary button reads **"Enter World"** (existing `ENTER_WORLD` key).
 - Character creation stays separate for now.
 - The new font and colours apply to all glue screens, not just character select.
@@ -81,42 +82,55 @@ screen reminds anyone of WoW.
 2. The gate view loads first, at client start. The street and plaza continue loading in the
    background while the player logs in and picks a realm.
 3. Character list arrives → the camera flies from the gate view through the gate to the plaza
-   (~4–6 s, eased). Plaza characters are already in place when the camera arrives. Any click
-   or key skips straight to the end of the flight.
+   (about 3 s, eased; `flightSeconds` in `GlueScene.json`). Plaza characters are already in
+   place when the camera arrives. Any click or key skips straight to the end of the flight.
 4. **"Change realm" flies back out (user decision):** from the plaza, the camera flies back out
-   through the gate to the gate view, and the realm list appears there. Choosing a realm
-   (again) flies back in once its character list arrives. This flight is also skippable.
+   through the gate to the gate view, and the realm list appears there (about 2.5 s plus the
+   realm list's fade-in, `flyOutSeconds`). Choosing a realm (again) flies back in once its
+   character list arrives. This flight is also skippable.
 5. Logging out fully, or a disconnect, returns to the login screen at the gate view.
    - *My call:* there is no flight for these; it is a cut or fade to the gate view.
-6. On the plaza: the selected character stands at the front spot (in front of the fountain or
-   the plaza's focal point). The other plaza characters idle at their spots.
-7. Enter World → camera pushes in on the selected character, fade, then the normal loading
-   screen and `WorldState`.
+6. On the plaza: every plaza character idles at its own spot, the selected one included. The
+   camera keeps one fixed plaza shot; the selection shows on the nameplates only.
+7. Enter World → camera pushes in (about 0.5 s) towards the selected character wherever it
+   stands, fade, then the normal loading screen and `WorldState`.
 8. Logging out from the world back to character select lands **directly on the plaza**, with
    no flight. The flight is for arriving from the realm screen.
 
 ### The plaza
 
-- Five character spots around the square, plus the front spot used by the selected character.
-  *My call:* the selected plaza character moves to (or is framed at) the front spot; exactly
-  how is the builder's call.
+- Five character spots around the square, plus the visitor spot (`front` in `GlueScene.json`)
+  used only by a selected visitor. Characters stay on their spots when selected; nobody swaps
+  places (user decision 2026-10-22).
 - Each plaza character idles naturally with a pose or emote animation (sit on a bench, lean,
-  stand, cross arms…), taken from the existing emote/pose catalog. Variety beats realism; the
-  selected character plays a calm standing idle.
-- Switching selection eases the camera to frame the newly selected character, who turns
-  slightly towards the camera (a small greeting emote is welcome, but keep it subtle).
-- The selected character can be rotated by dragging (yaw), which the model frame supports
-  today but nothing calls.
-- **Visitors** (characters outside the 5): selecting one in the roster makes them walk in from
-  a street entrance and take the front spot. Switching back to a plaza character makes the
-  visitor walk back out. *My call:* the walk-out.
+  stand, cross arms…), taken from the existing emote/pose catalog. Variety beats realism.
+- **Selecting:** click a character on the plaza (a ray from the glue camera through the cursor
+  against the avatars; clicks the UI took do not count, and a press that turned into a
+  rotating drag does not select), or click its roster row. Both stay in sync.
+- **Hover reaction:** the character under the cursor greets once per hover (a wave or bow clip
+  from the emote catalog, blended over its pose), turns partly towards the camera and gets a
+  soft warm rim glow. Running or seated characters do not greet or turn.
+- The selected character is shown on its nameplate only: no tint or glow on the model, and no
+  camera move.
+- The selected character can be rotated by dragging empty plaza space (yaw), wherever it
+  stands. A character that loses the selection turns back to its facing over a moment.
+- All plaza movement runs (`Run` at about 7 m/s, falling back to `Walk`, then `Idle`).
+- **Visitors** (characters outside the 5): selecting one in the roster makes them run in from
+  a street entrance to the visitor spot. Switching back to a plaza character makes the visitor
+  run back out. *My call:* the run-out.
 - Fewer than 5 characters: empty spots show a faint "New character" marker that opens
   character creation. With 5 or more, "Create character" is a normal button instead.
-- Deleting (after the existing confirmation dialog): the character walks out of the plaza
+- Deleting (after the existing confirmation dialog): the character runs out of the plaza
   instead of vanishing. *My call.*
-- Each plaza character has a soft nameplate: name, and "Level N Class" underneath. The
-  selected character also shows the zone they are in (the zone ID is already in the character
-  list).
+- Each plaza character has a soft, text-only nameplate: name, and "Level N Class" underneath.
+  - The selected character's name is slightly larger and white-ivory, with a short ivory
+    underline flourish; its level line turns ivory and the zone line appears (the zone ID is
+    already in the character list).
+  - A hovered character's name and level brighten and their shadow deepens. No card or
+    backdrop behind any plate.
+  - Plates never overlap: each frame they are pushed apart vertically, the farther character's
+    plate making way upwards and the selected plate keeping its place, eased and kept on
+    screen (`PlazaNameplateDeclutter`).
 
 ### The scene
 
@@ -179,15 +193,18 @@ screen reminds anyone of WoW.
 - **Initial selection:** the plaza opens on the last-played character, remembered client-side
   per realm (a cvar holding the character GUID). If there is none, or it no longer exists, it
   opens on order #1. If the last-played character is a visitor (outside the top 5), they are
-  already standing at the front spot when the plaza appears. Nothing new goes on the wire for
+  already standing at the visitor spot when the plaza appears. Nothing new goes on the wire for
   this.
-- **Roster changes are live:** dragging someone into or out of the top 5 makes them walk in or
-  out right away. That needs simple choreography: walks are staggered and one character at a
+- **Roster changes are live:** dragging someone into or out of the top 5 makes them run in or
+  out right away. That needs simple choreography: runs are staggered and one character at a
   time is fine. The order is saved once, when the roster panel closes or on Enter World, not
   per drop. This avoids per-drag packets to the single-threaded realm.
 - **Gate view not ready at startup:** the login UI is shown over a dark, calm fill and the
-  scene fades in once the gate view is ready. No static image fallback is kept. The gate view
-  is small, so this should take a moment at most.
+  scene fades in once the gate view is ready. No static image fallback is kept. "Ready" means
+  every scene page's terrain is loaded and every world model in the gate camera's view (the
+  plaza pages included) was created, so buildings do not pop in after the fade (8 s safety
+  timeout). While the fade covers the scene, streaming gets a larger per-frame budget. The
+  client logs "gate ready after N ms (terrain X ms, models Y ms)".
 - **Plaza not ready when the list arrives** (user decision 2026-10-21): on a fresh login the
   flight is not skipped. This is common with auto-login, where the list arrives in 1-2 s and
   the scene needs about 3 s. The dark fade stays up until the scene is ready (gate and plaza,
@@ -229,7 +246,7 @@ screen reminds anyone of WoW.
 
 - How the simplified Haven scene is authored: a new small world/map, a single WMO assembled
   from Haven parts, or a hand-placed scene file. The camera path, spot positions, poses and
-  the front spot are authored data, not hardcoded, if practical.
+  the visitor spot are authored data, not hardcoded, if practical.
 - How the scene is rendered in the login state: a new frame renderer or extending
   `ModelFrame`/`ModelRenderer`, as long as it uses the deferred path for proper lighting.
 - Exact flight duration, easing, camera framing per spot, and the push-in on Enter World.

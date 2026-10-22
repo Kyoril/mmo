@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "terrain_io/water_flow.h"
 
 #include <cmath>
 #include <filesystem>
@@ -102,12 +103,7 @@ namespace mmo
 		std::vector<String> tileMaterials;
 
 		/// @brief One point of a river's flow path: position and half width of the channel there.
-		struct FlowPoint
-		{
-			float x = 0.0f;
-			float z = 0.0f;
-			float halfWidth = 10.0f;
-		};
+		typedef terrain_io::water_flow::FlowPoint FlowPoint;
 
 		/// @brief With applyAsDelta: optional river flow path, downstream order. Every written page
 		///	       with water gets flow-aligned water UVs and a flow speed from it.

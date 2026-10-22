@@ -3,6 +3,7 @@ mmo_add_test(game_client_tests
 	log
 	math
 	game
+	game_common
 	binary_io_hdrs
 	network_hdrs
 	${OPENSSL_LIBRARIES})
@@ -17,8 +18,10 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/world_text_layout.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/object_update_skip.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_roster.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_interaction.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_nameplate_layout.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/placement_bounds.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glue_camera_director.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glue_scene_definition.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/water_ambience_scan.cpp
 )
 

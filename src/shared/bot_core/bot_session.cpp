@@ -101,8 +101,41 @@ namespace mmo
 		// back.
 		m_stopRequested = false;
 		m_exitCode = bot_exit_code::Success;
+		m_failureStage = bot_failure_stage::None;
 
 		m_login->Connect(m_config.username, m_config.password);
+	}
+
+	void BotSession::BeginLogoutCycle()
+	{
+		if (!m_worldReady)
+		{
+			return;
+		}
+
+		m_realm->Logout();
+	}
+
+	void BotSession::BeginReroll(const std::string& newName, const uint8 race, const uint8 characterClass, const uint8 gender)
+	{
+		ILOG("Retiring character \"" << m_config.characterName << "\" of account " << m_config.username << " for \"" << newName << "\"");
+
+		m_retireCharacter = m_config.characterName;
+		m_retireAttempts = 0;
+		m_nameAttempts = 0;
+		m_config.characterName = newName;
+		m_config.race = race;
+		m_config.characterClass = characterClass;
+		m_config.gender = gender;
+		m_config.createCharacter = true;
+
+		// Out of the world on purpose: the brain stops at once, and the closed connection is not
+		// a failure.
+		m_context->SetWorldReady(false);
+		m_worldReady = false;
+		m_disconnectExpected = true;
+		m_realm->close();
+		m_login->close();
 	}
 
 	bot_exit_code::Type BotSession::Reconnect(const uint32 timeoutSeconds)
@@ -176,9 +209,10 @@ namespace mmo
 		PollRestarting(m_io);
 	}
 
-	void BotSession::Fail(const bot_exit_code::Type code)
+	void BotSession::Fail(const bot_exit_code::Type code, const bot_failure_stage::Type stage)
 	{
 		m_exitCode = code;
+		m_failureStage = stage;
 		m_stopRequested = true;
 	}
 
@@ -189,7 +223,9 @@ namespace mmo
 				if (result != auth::auth_result::Success)
 				{
 					ELOG("Authentication at login server failed with code " << static_cast<int32>(result));
-					Fail(bot_exit_code::SetupFailed);
+					// A connection the login server never accepted is reported as this same result.
+					Fail(bot_exit_code::SetupFailed, result == auth::auth_result::FailInvalidServer
+						? bot_failure_stage::LoginConnect : bot_failure_stage::LoginAuth);
 					return;
 				}
 
@@ -209,7 +245,7 @@ namespace mmo
 				if (realms.empty())
 				{
 					ELOG("No realms available.");
-					Fail(bot_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed, bot_failure_stage::RealmList);
 					return;
 				}
 
@@ -229,13 +265,19 @@ namespace mmo
 				if (!chosenRealm)
 				{
 					ELOG("Realm '" << m_config.realmName << "' not found in realm list.");
-					Fail(bot_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed, bot_failure_stage::RealmList);
 					return;
 				}
 
 				ILOG("Connecting to realm " << chosenRealm->name << " at " << chosenRealm->address << ":" << chosenRealm->port);
 				m_realm->SetLoginData(m_login->GetAccountName(), m_login->GetSessionKey());
 				m_realm->ConnectToRealm(*chosenRealm);
+
+				// Done with the login server, as a game client is. Left open, the connection is
+				// closed by the next reconnect's Connect instead, and its late "lost" callback then
+				// clears the packet handlers of the new connection: the handshake never answers and
+				// the reconnect hangs until the host times it out.
+				m_login->close();
 			});
 
 		m_realm->AuthenticationResult.connect([this](uint8 result)
@@ -243,7 +285,7 @@ namespace mmo
 				if (result != auth::auth_result::Success)
 				{
 					ELOG("Realm authentication failed with code " << static_cast<int32>(result));
-					Fail(bot_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed, bot_failure_stage::RealmAuth);
 					return;
 				}
 
@@ -258,6 +300,29 @@ namespace mmo
 				}
 
 				const auto& views = m_realm->GetCharacterViews();
+
+				// A retired character goes first. The realm sends the list again once it is gone; a
+				// deletion that keeps failing is given up after a few tries rather than looped on.
+				if (!m_retireCharacter.empty())
+				{
+					const auto retired = std::find_if(views.begin(), views.end(), [this](const CharacterView& view)
+						{
+							return view.GetName() == m_retireCharacter;
+						});
+					if (retired != views.end() && m_retireAttempts < 3)
+					{
+						++m_retireAttempts;
+						ILOG("Deleting retired character \"" << m_retireCharacter << "\"");
+						m_realm->DeleteCharacter(retired->GetGuid());
+						return;
+					}
+					if (retired != views.end())
+					{
+						WLOG("Could not delete retired character \"" << m_retireCharacter << "\"; keeping it");
+					}
+					m_retireCharacter.clear();
+				}
+
 				const StartupCharacterResolution resolution = ResolveStartupCharacterSelection(
 					std::string_view{},
 					m_config.characterName,
@@ -271,7 +336,7 @@ namespace mmo
 					if (!resolution.resolvedIndex.has_value() || *resolution.resolvedIndex >= views.size())
 					{
 						ELOG("Character resolution returned an invalid index");
-						Fail(bot_exit_code::SetupFailed);
+						Fail(bot_exit_code::SetupFailed, bot_failure_stage::Character);
 						return;
 					}
 
@@ -287,7 +352,7 @@ namespace mmo
 					if (resolution.selector.empty())
 					{
 						ELOG("No character name configured for character creation");
-						Fail(bot_exit_code::SetupFailed);
+						Fail(bot_exit_code::SetupFailed, bot_failure_stage::Character);
 						return;
 					}
 
@@ -302,17 +367,29 @@ namespace mmo
 				case StartupCharacterResolutionKind::NeedsPrompt:
 				case StartupCharacterResolutionKind::NotFound:
 					ELOG("Character \"" << m_config.characterName << "\" not found and character creation is disabled");
-					Fail(bot_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed, bot_failure_stage::Character);
 					return;
 				}
 			});
 
 		m_realm->CharacterCreated.connect([this](game::CharCreateResult result)
 			{
+				// A taken name is tried again under another, as a player would.
+				if (result == game::char_create_result::NameInUse && m_nameFallback && m_nameAttempts < 5)
+				{
+					++m_nameAttempts;
+					const std::string previous = m_config.characterName;
+					m_config.characterName = m_nameFallback(m_nameAttempts);
+					ILOG("Character name \"" << previous << "\" is taken; trying \"" << m_config.characterName << "\"");
+					AvatarConfiguration avatarConfig;
+					m_realm->CreateCharacter(m_config.characterName, m_config.race, m_config.characterClass, m_config.gender, avatarConfig);
+					return;
+				}
+
 				if (result != game::char_create_result::Unknown)
 				{
 					ELOG("Character creation failed with result " << static_cast<int32>(result));
-					Fail(bot_exit_code::SetupFailed);
+					Fail(bot_exit_code::SetupFailed, bot_failure_stage::Character);
 					return;
 				}
 
@@ -322,8 +399,35 @@ namespace mmo
 
 		m_realm->EnterWorldFailed.connect([this](game::player_login_response::Type reason)
 			{
+				m_enterWorldFailure = static_cast<uint8>(reason);
+
+				// The realm says the same when the world node of a character already in the world
+				// goes away: it keeps the connection and sends the character back to the list.
+				// Without this the session would go on believing it is in the world.
+				if (m_worldReady)
+				{
+					ELOG("Taken out of the world, reason code " << static_cast<int32>(reason));
+					m_context->SetWorldReady(false);
+					m_worldReady = false;
+					Fail(bot_exit_code::Disconnected, bot_failure_stage::WorldLost);
+
+					// A reconnect logs in from the start; the realm connection this one leaves open
+					// would be in its way. Closing it is not a second failure.
+					m_disconnectExpected = true;
+					m_realm->close();
+					return;
+				}
+
 				ELOG("Enter world failed, reason code " << static_cast<int32>(reason));
-				Fail(bot_exit_code::SetupFailed);
+				Fail(bot_exit_code::SetupFailed, bot_failure_stage::EnterWorld);
+			});
+
+		m_realm->ConnectFailed.connect([this]()
+			{
+				if (!m_shuttingDown)
+				{
+					Fail(bot_exit_code::SetupFailed, bot_failure_stage::RealmConnect);
+				}
 			});
 
 		m_realm->VerifyNewWorld.connect([this](uint32 mapId, Vector3 position, float facing)
@@ -347,6 +451,53 @@ namespace mmo
 
 				m_context->SetWorldReady(true);
 				m_worldReady = true;
+			});
+
+		m_realm->Teleported.connect([this]()
+			{
+				// The server moved the bot - to a graveyard on release, or wherever a spell or a
+				// trigger sends it - and now sees it falling there. Movement sent from the old
+				// position without the flag would be refused, every packet of it, so the bot takes
+				// the new position, lands, and lets whatever was walking plan again from here.
+				m_context->UpdateMovementInfo(m_realm->GetMovementInfo());
+				m_context->SendLandedPacket();
+				m_movementController.Reset();
+			});
+
+		m_realm->LoggedOut.connect([this]()
+			{
+				// Out of the world, connection kept: everything seen there is gone, and the character
+				// list brings the character back in (see CharListUpdated).
+				ILOG("Logged out to the character list.");
+				m_realm->GetObjectManager().Clear();
+				m_context->SetWorldReady(false);
+				m_worldReady = false;
+				m_movementController.Reset();
+				m_realm->RequestCharEnum();
+			});
+
+		m_realm->SetLiveMovementSource([this]() { return m_context->GetMovementInfo(); });
+
+		m_realm->MovementControlChanged.connect([this](const uint16 ackOpCode, const uint32 ackId, const bool applied)
+			{
+				// Rooted, stunned, asleep, feared or disoriented: the server moves the bot, if
+				// anything does, and takes no movement from it until it lets go. The bot stops where
+				// it stands, says so in the ack, and carries the flag in every packet until then.
+				MovementInfo info = m_context->GetMovementInfo();
+				if (applied)
+				{
+					info.movementFlags |= movement_flags::Rooted;
+					info.movementFlags &= ~movement_flags::Moving;
+					m_movementController.Reset();
+				}
+				else
+				{
+					info.movementFlags &= ~movement_flags::Rooted;
+				}
+
+				info.timestamp = m_context->GetServerTime();
+				m_realm->SendMovementControlAck(ackOpCode, ackId, info);
+				m_context->UpdateMovementInfo(info);
 			});
 
 		m_realm->Disconnected.connect([this]()
@@ -375,7 +526,7 @@ namespace mmo
 				m_context->SetWorldReady(false);
 				m_worldReady = false;
 
-				Fail(bot_exit_code::Disconnected);
+				Fail(bot_exit_code::Disconnected, bot_failure_stage::RealmLost);
 			});
 	}
 }

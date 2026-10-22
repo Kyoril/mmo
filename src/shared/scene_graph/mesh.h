@@ -71,7 +71,10 @@ namespace mmo
 	public:
 		typedef std::vector<std::unique_ptr<SubMesh>> SubMeshList;
 		typedef std::unordered_map<std::string, uint16> SubMeshNameMap;
-		typedef std::multimap<size_t, VertexBoneAssignment> VertexBoneAssignmentList;
+		/// Bone weights as (vertex index, assignment), sorted by vertex index once compiled. A vector,
+		/// not a multimap: character meshes carry ~75k of them, and a node allocation each was most
+		/// of their load time.
+		typedef std::vector<std::pair<size_t, VertexBoneAssignment>> VertexBoneAssignmentList;
 		typedef std::vector<uint16> IndexMap;
 
 	public:

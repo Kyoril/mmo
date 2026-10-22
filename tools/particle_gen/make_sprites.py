@@ -27,7 +27,9 @@ from PIL import Image
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 OUT_DIR = os.path.join(REPO_ROOT, "data", "client", "Particles")
-IMPORTER = os.path.join(REPO_ROOT, ".claude", "skills", "mmo-item-designer", "scripts", "import_item_icon.py")
+IMPORTER = os.path.join(REPO_ROOT, ".agents", "skills", "mmo-item-designer", "scripts", "import_item_icon.py")
+if not os.path.exists(IMPORTER):
+    IMPORTER = os.path.join(REPO_ROOT, ".claude", "skills", "mmo-item-designer", "scripts", "import_item_icon.py")
 
 
 def _write(name, rgba):
@@ -246,6 +248,69 @@ def smoke(size=256, seed=7, lobes=9):
     return rgba
 
 
+def _value_noise(rng, width, height, cells_x, cells_y):
+    grid = rng.uniform(0.0, 1.0, (cells_y + 3, cells_x + 3))
+    gx = np.linspace(0.0, cells_x, width, endpoint=False) + 1.0
+    gy = np.linspace(0.0, cells_y, height, endpoint=False) + 1.0
+    x0 = np.floor(gx).astype(int)
+    y0 = np.floor(gy).astype(int)
+    fx = gx - x0
+    fy = gy - y0
+    fx = fx * fx * (3.0 - 2.0 * fx)
+    fy = fy * fy * (3.0 - 2.0 * fy)
+    a = grid[np.ix_(y0, x0)]
+    b = grid[np.ix_(y0, x0 + 1)]
+    c = grid[np.ix_(y0 + 1, x0)]
+    d = grid[np.ix_(y0 + 1, x0 + 1)]
+    top = a + (b - a) * fx[None, :]
+    bottom = c + (d - c) * fx[None, :]
+    return top + (bottom - top) * fy[:, None]
+
+
+def _fbm(rng, width, height, base_x, base_y, octaves=4):
+    total = np.zeros((height, width))
+    amp, norm = 1.0, 0.0
+    for o in range(octaves):
+        total += amp * _value_noise(rng, width, height, base_x * 2 ** o, base_y * 2 ** o)
+        norm += amp
+        amp *= 0.5
+    return total / norm
+
+
+def fire_lick(width=128, height=256, variants=4, seed=11):
+    """Soft, ragged flame licks: a 4x1 sheet of 1:2 frames (use SPRITE_RANDOM_STATIC).
+
+    Unlike the teardrop `flame`, the body is a wide soft column whose edge and top are eroded
+    by fractal noise and bent by a low-frequency warp, so a cluster of them reads as a
+    natural fire rather than a ring of hard spikes. Deterministic (fixed seed).
+    """
+    rng = np.random.default_rng(seed)
+    frames = []
+    for _ in range(variants):
+        xx, yy = _axes(width, height)
+        yy = -yy
+        t = (yy + 1.0) * 0.5  # 0 bottom, 1 top
+        warp = _fbm(rng, width, height, 2, 4) - 0.5
+        detail = _fbm(rng, width, height, 4, 8)
+        lean = rng.uniform(-0.12, 0.12)
+        cx = lean * t * t + 0.65 * warp * t ** 1.2
+        half = 0.85 * np.sqrt(np.clip(1.0 - ((0.25 - t) / 0.25) ** 2, 0.0, 1.0)) * (t < 0.25) \
+            + (t >= 0.25) * (0.85 * np.clip(1.0 - (t - 0.25) / 0.72, 0.0, 1.0) ** 0.75)
+        half = np.clip(half, 0.0, None) + 1e-4
+        d = np.abs(xx - cx) / half
+        edge = d + 0.55 * (detail - 0.5) * (0.3 + t)
+        body = np.clip(1.0 - edge, 0.0, 1.0) ** 1.1
+        body *= 0.45 + 0.9 * detail
+        a = body * _smooth(0.0, 0.16, t) * (1.0 - _smooth(0.62, 0.95, t + 0.35 * (detail - 0.5)))
+        a = np.clip(a * 1.25, 0.0, 1.0)
+        a *= 1.0 - _smooth(0.9, 1.0, np.abs(xx))
+        frames.append(a)
+    sheet = np.concatenate(frames, axis=1)
+    rgba = np.ones((height, width * variants, 4))
+    rgba[..., 3] = sheet
+    return rgba
+
+
 def crosshair(size=256):
     """Hunter's mark: a broken ring with four inward-pointing ticks and a centre dot.
 
@@ -397,6 +462,7 @@ SPRITES = {
     "T_Particle_Skull": skull,
     "T_Particle_Wisp": wisp,
     "T_Particle_VoidSigil": void_sigil,
+    "T_Particle_FireLick": fire_lick,
 }
 
 
@@ -414,6 +480,7 @@ MATERIALS = {
     "Particle_Skull": "T_Particle_Skull",
     "Particle_Wisp": "T_Particle_Wisp",
     "Particle_VoidSigil": "T_Particle_VoidSigil",
+    "Particle_FireLick": "T_Particle_FireLick",
 }
 
 

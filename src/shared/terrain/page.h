@@ -97,6 +97,12 @@ namespace mmo
 
 			uint32 GetLayersAt(size_t x, size_t y) const;
 
+			/// @brief The material a tile is drawn with: its own, or the terrain's default material when it has none.
+			/// @param x Tile X index within the page (0..15).
+			/// @param y Tile Y index within the page (0..15).
+			/// @remark Works on a prepared page; the tiles themselves do not need to exist.
+			[[nodiscard]] MaterialPtr GetTileMaterial(uint32 x, uint32 y) const;
+
 			float GetSmoothHeightAt(float x, float y) const;
 
 			Vector3 GetSmoothNormalAt(float x, float y) const;
@@ -246,6 +252,24 @@ namespace mmo
 			/// @brief Per-vertex river flow speed, one byte per outer vertex (0 = still, 255 = full).
 			/// @return The speed grid, empty when the page has no flow data.
 			[[nodiscard]] const std::vector<uint8>& GetWaterFlowSpeeds() const { return m_waterFlowSpeeds; }
+
+			/// @brief Replaces this page's river flow. Does not rebuild the water mesh.
+			/// @param uvs OuterVerticesPerPageSide² (u, v) pairs, u downstream and v across the river.
+			/// @param speeds OuterVerticesPerPageSide² flow speeds (0..255).
+			void SetWaterFlow(std::vector<float> uvs, std::vector<uint8> speeds);
+
+			/// @brief Removes this page's river flow, so its water falls back to world UVs. Does not
+			///	       rebuild the water mesh.
+			void ClearWaterFlow();
+
+			/// @brief Gets the river flow at an outer vertex.
+			/// @param pageVertX Outer vertex x on the page.
+			/// @param pageVertZ Outer vertex z on the page.
+			/// @param u Receives the downstream coordinate.
+			/// @param v Receives the across coordinate.
+			/// @param speed Receives the flow speed (0..1).
+			/// @return False if the page has no flow or the vertex is out of range.
+			bool GetWaterFlow(uint32 pageVertX, uint32 pageVertZ, float& u, float& v, float& speed) const;
 
 			/// @brief Set the material name used for all water in this page.
 			void SetWaterMaterialName(const String& name);

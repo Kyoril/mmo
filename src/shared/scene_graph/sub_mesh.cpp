@@ -92,9 +92,8 @@ namespace mmo
 	{
 		ASSERT(!useSharedVertices);
 
-		m_boneAssignments.insert(
-			VertexBoneAssignmentList::value_type(vertBoneAssign.vertexIndex, vertBoneAssign)
-		);
+		// Kept in insertion order; NormalizeBoneAssignments sorts by vertex before compiling.
+		m_boneAssignments.emplace_back(vertBoneAssign.vertexIndex, vertBoneAssign);
 		m_boneAssignmentsOutOfDate = true;
 	}
 

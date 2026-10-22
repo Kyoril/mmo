@@ -98,3 +98,31 @@ entry and re-run the job. Top-level keys, all optional:
   move baked furniture out of a model and into a kit. Names that match no mesh ref are logged as
   warnings; when nothing is removed and there are no lights to clear (a re-run), the `.hwmo` is not
   rewritten.
+
+Two more top-level keys build small standalone props, such as the Haven plaza brazier
+(`data/world/props/haven_plaza_brazier.json`):
+
+```json
+{
+  "worldModel": {
+    "path": "Models/.../Prop.hwmo", "name": "Display name",
+    "props": [ ...as above, a "mesh" may also be a particle system (.hpar)... ],
+    "lights": [ ...as above... ]
+  },
+  "place": [
+    {"world": "Development", "worldModel": "Models/.../Prop.hwmo", "uniqueId": "1234",
+     "name": "", "category": "", "position": [x, y, z], "yaw": 0, "scale": 1.0}
+  ]
+}
+```
+
+- `worldModel` writes (or overwrites) a world model with one exterior group holding `props` as its
+  mesh references and `lights` as its lights. The group bounds come from the meshes (1.5 m around a
+  particle system), the lights' positions and nothing else.
+- `place` writes one world model placement per entry into the entity folder of the page its
+  position falls into, as the world editor's Save does, and removes a file of the same `uniqueId`
+  from another page folder. Pick a new random 64 bit id for a new placement.
+- A mesh reference, doodad or kit prop whose path ends in `.hpar` becomes a looping particle
+  system at that transform (`WorldModelInstance::CreateParticleSystems`, live client and editor)
+  and is carried into the glue bake (`FlattenWorldModelExtras`). The mesh paths (rendering,
+  batching, merging, sounds, nav_build collision) skip such references.

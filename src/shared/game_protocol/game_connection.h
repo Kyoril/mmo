@@ -195,6 +195,17 @@ namespace mmo
 
 		public:
 			inline MySocket &getSocket() { return *m_socket; }
+
+			/// Gives the connection a fresh socket when it has none: a malformed packet or a handler
+			/// asking to disconnect releases the socket outright, and a connection reused for the
+			/// next connect would otherwise dereference nothing.
+			void EnsureSocket(asio::io_service& ioService)
+			{
+				if (!m_socket)
+				{
+					m_socket = std::make_unique<Socket>(ioService);
+				}
+			}
 			inline game::Crypt &GetCrypt() { return m_crypt; }
 			inline Listener *GetListener() const { return m_listener; }
 
@@ -260,6 +271,12 @@ namespace mmo
 				{
 					Disconnected();
 					return;
+				}
+
+				// As the plain Connection reports it; the listener's default ignores it.
+				if (m_listener)
+				{
+					m_listener->connectionDataSent(m_sending.size());
 				}
 
 				m_sending.clear();

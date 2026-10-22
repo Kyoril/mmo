@@ -56,7 +56,6 @@
 
 #include <map>
 #include <optional>
-#include <set>
 #include <tuple>
 #include <vector>
 
@@ -323,9 +322,6 @@ namespace mmo
 		/// @brief Resolves a zone's music (or ambience) sound id, falling back along the parent zone chain.
 		/// @return The sound entry id, or 0 for none.
 		uint32 ResolveZoneSound(const proto_client::ZoneEntry *zone, bool music) const;
-
-		/// @brief Reads the music and ambience files of every zone on a loaded page ahead of use.
-		void PrefetchPageZoneSounds(uint32 pageX, uint32 pageY);
 
 		/// @brief Retargets the environment to the profile of a zone. Snaps on world enter and on
 		///        teleports (a move of more than 200 m within one update), fades otherwise.

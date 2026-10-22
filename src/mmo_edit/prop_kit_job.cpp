@@ -16,9 +16,12 @@
 #include "scene_graph/prop_kit_checks.h"
 #include "scene_graph/prop_kit_serializer.h"
 #include "scene_graph/world_model.h"
+#include "scene_graph/world_model_flatten.h"
 #include "scene_graph/world_model_serializer.h"
+#include "terrain/constants.h"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <set>
@@ -558,6 +561,223 @@ namespace mmo
 			sink.Flush();
 			return true;
 		}
+
+		/// Bounds of a mesh reference in world model space: the mesh bounds for meshes, a box of
+		/// ParticleRefExtent around the origin for particle systems (their extent is not known).
+		AABB boundsOfRef(const WorldModelMeshRef& ref)
+		{
+			constexpr float ParticleRefExtent = 1.5f;
+
+			AABB local;
+			if (IsParticleSystemPath(ref.meshPath))
+			{
+				local = AABB(Vector3(-ParticleRefExtent, 0.0f, -ParticleRefExtent), Vector3(ParticleRefExtent, 2.0f * ParticleRefExtent, ParticleRefExtent));
+			}
+			else if (const MeshPtr mesh = MeshManager::Get().Load(ref.meshPath))
+			{
+				local = mesh->GetBounds();
+			}
+			else
+			{
+				WLOG("Prop kit job: cannot load mesh " << ref.meshPath << " for the world model bounds");
+				local = AABB(Vector3(-0.5f, 0.0f, -0.5f), Vector3(0.5f, 1.0f, 0.5f));
+			}
+
+			Matrix4 transform;
+			transform.MakeTransform(ref.position, ref.scale, ref.rotation);
+			local.Transform(transform);
+			return local;
+		}
+
+		/// Parses the 'worldModel' object: a new world model with one exterior group holding 'props'
+		/// (meshes and .hpar particle systems) and the model lights 'lights'.
+		bool parseWorldModel(const json& entry, String& path, WorldModel& model)
+		{
+			if (!entry.is_object())
+			{
+				ELOG("Prop kit job: 'worldModel' must be an object");
+				return false;
+			}
+
+			String name;
+			if (!readString(entry, "path", path, true) || path.empty() || !readString(entry, "name", name, false))
+			{
+				ELOG("Prop kit job: 'worldModel' needs a 'path'");
+				return false;
+			}
+
+			model.SetName(name.empty() ? path : name);
+
+			WorldModelGroup& group = model.AddGroup();
+			group.SetName(name.empty() ? "Exterior" : name);
+			group.SetFlags(WorldModelGroupFlags::Exterior);
+
+			AABB bounds;
+			bounds.SetNull();
+
+			const auto propsIt = entry.find("props");
+			if (propsIt != entry.end())
+			{
+				if (!propsIt->is_array())
+				{
+					ELOG("Prop kit job: 'worldModel.props' must be an array");
+					return false;
+				}
+
+				for (const json& propEntry : *propsIt)
+				{
+					WorldModelMeshRef ref;
+					if (!parseProp(propEntry, ref))
+					{
+						return false;
+					}
+
+					bounds.Combine(boundsOfRef(ref));
+					group.AddMeshRef(ref);
+				}
+			}
+
+			const auto lightsIt = entry.find("lights");
+			if (lightsIt != entry.end())
+			{
+				if (!lightsIt->is_array())
+				{
+					ELOG("Prop kit job: 'worldModel.lights' must be an array");
+					return false;
+				}
+
+				for (const json& lightEntry : *lightsIt)
+				{
+					WorldModelLight light;
+					if (!parseLight(lightEntry, light))
+					{
+						return false;
+					}
+
+					bounds.Combine(light.position);
+					model.GetLights().push_back(light);
+				}
+			}
+
+			if (bounds.IsNull())
+			{
+				ELOG("Prop kit job: 'worldModel' " << path << " has neither props nor lights");
+				return false;
+			}
+
+			group.SetBoundingBox(bounds);
+			return true;
+		}
+
+		bool writeWorldModel(const String& path, WorldModel& model)
+		{
+			// As the world model editor's Save does
+			model.RecalculateBoundingBox();
+
+			const std::unique_ptr<std::ostream> out = AssetRegistry::CreateNewFile(path);
+			if (!out)
+			{
+				ELOG("Prop kit job: cannot write world model " << path);
+				return false;
+			}
+
+			io::StreamSink sink{ *out };
+			io::Writer writer{ sink };
+			WorldModelSerializer serializer;
+			serializer.Serialize(model, writer);
+			sink.Flush();
+
+			const WorldModelGroup* group = model.GetGroup(0);
+			ILOG("Prop kit job: wrote world model " << path << " (" << (group ? group->GetMeshRefs().size() : 0) << " mesh refs, " << model.GetLights().size() << " lights)");
+			return true;
+		}
+
+		/// Writes (or rewrites) one world model placement, in the entity folder of the page its
+		/// position falls into, as the world editor's Save does. A placement file of the same unique id
+		/// in another page folder is removed, so moving a placement and re-running the job is safe.
+		bool placeWorldModel(const json& entry)
+		{
+			WorldEntityLoader::MapEntity placement;
+			placement.entityType = WorldEntityType::WorldModel;
+			placement.position = Vector3::Zero;
+			placement.rotation = Quaternion::Identity;
+			placement.scale = Vector3(1.0f, 1.0f, 1.0f);
+
+			String world;
+			if (!entry.is_object() || !readString(entry, "world", world, true) || world.empty() ||
+				!readString(entry, "worldModel", placement.meshName, true) || placement.meshName.empty())
+			{
+				ELOG("Prop kit job: every place entry needs a 'world' and a 'worldModel'");
+				return false;
+			}
+
+			// The id is a decimal string, 64 bit ids do not survive json numbers
+			const auto idIt = entry.find("uniqueId");
+			if (idIt == entry.end() || !idIt->is_string() || idIt->get<String>().empty() ||
+				idIt->get<String>().find_first_not_of("0123456789") != String::npos)
+			{
+				ELOG("Prop kit job: every place entry needs a 'uniqueId' string of digits");
+				return false;
+			}
+
+			const String uniqueId = idIt->get<String>();
+			placement.uniqueId = std::stoull(uniqueId);
+
+			// Reuse the prop parser for the transform; 'worldModel' takes the place of 'mesh'
+			json transformEntry = entry;
+			transformEntry["mesh"] = placement.meshName;
+			WorldModelMeshRef transform;
+			if (!parseProp(transformEntry, transform))
+			{
+				return false;
+			}
+
+			placement.position = transform.position;
+			placement.rotation = transform.rotation;
+			placement.scale = transform.scale;
+			if (!readString(entry, "name", placement.name, false) || !readString(entry, "category", placement.category, false))
+			{
+				return false;
+			}
+
+			if (!AssetRegistry::HasFile(placement.meshName))
+			{
+				WLOG("Prop kit job: placed world model " << placement.meshName << " does not exist");
+			}
+
+			const int32 pageX = static_cast<int32>(std::floor(placement.position.x / terrain::constants::PageSize)) + 32;
+			const int32 pageZ = static_cast<int32>(std::floor(placement.position.z / terrain::constants::PageSize)) + 32;
+			if (pageX < 0 || pageZ < 0 || pageX >= static_cast<int32>(terrain::constants::MaxPages) || pageZ >= static_cast<int32>(terrain::constants::MaxPages))
+			{
+				ELOG("Prop kit job: placement " << uniqueId << " lies outside the world");
+				return false;
+			}
+
+			const uint32 pageIndex = (static_cast<uint32>(pageX) << 8) | static_cast<uint32>(pageZ);
+			const String file = "Worlds/" + world + "/" + world + "/Entities/" + std::to_string(pageIndex) + "/" + uniqueId + ".wobj";
+
+			const String existing = findPlacementFile(world, uniqueId);
+			if (!existing.empty() && existing != file)
+			{
+				ILOG("Prop kit job: placement " << uniqueId << " moved from " << existing);
+				AssetRegistry::RemoveFile(existing);
+			}
+
+			const std::unique_ptr<std::ostream> out = AssetRegistry::CreateNewFile(file);
+			if (!out)
+			{
+				ELOG("Prop kit job: cannot write placement " << file);
+				return false;
+			}
+
+			io::StreamSink sink{ *out };
+			io::Writer writer{ sink };
+			WriteWorldModelPlacement(writer, placement);
+			sink.Flush();
+
+			ILOG("Prop kit job: placed " << placement.meshName << " as " << file);
+			return true;
+		}
 	}
 
 	bool ApplyPropKitJob(const String& jsonPath)
@@ -636,6 +856,21 @@ namespace mmo
 			}
 		}
 
+		String worldModelPath;
+		WorldModel worldModel;
+		const bool hasWorldModel = job.contains("worldModel");
+		if (hasWorldModel && !parseWorldModel(job["worldModel"], worldModelPath, worldModel))
+		{
+			return false;
+		}
+
+		const auto placeIt = job.find("place");
+		if (placeIt != job.end() && !placeIt->is_array())
+		{
+			ELOG("Prop kit job: 'place' must be an array");
+			return false;
+		}
+
 		const auto assignIt = job.find("assign");
 		if (assignIt != job.end() && !assignIt->is_array())
 		{
@@ -675,6 +910,19 @@ namespace mmo
 			}
 
 			success = writeKit(kitPath, kit) && success;
+		}
+
+		if (hasWorldModel)
+		{
+			success = writeWorldModel(worldModelPath, worldModel) && success;
+		}
+
+		if (placeIt != job.end())
+		{
+			for (const json& entry : *placeIt)
+			{
+				success = placeWorldModel(entry) && success;
+			}
 		}
 
 		if (assignIt != job.end())

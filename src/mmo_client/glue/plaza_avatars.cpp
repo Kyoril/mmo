@@ -2,15 +2,20 @@
 
 #include "plaza_avatars.h"
 
+#include "client_data/project.h"
 #include "game_client/plaza_roster.h"
+#include "graphics/material_instance.h"
 #include "math/degree.h"
 #include "math/math_utils.h"
 #include "math/quaternion.h"
+#include "math/ray.h"
+#include "math/vector4.h"
 #include "scene_graph/animation_state.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/skeleton_instance.h"
+#include "scene_graph/sub_entity.h"
 
 #include <algorithm>
 #include <string>
@@ -19,8 +24,8 @@ namespace mmo
 {
 	namespace
 	{
-		/// Walking speed in metres per second.
-		constexpr float walkSpeed = 2.5f;
+		/// Running speed in metres per second.
+		constexpr float runSpeed = 7.0f;
 
 		/// Distance below which a character counts as standing at its target.
 		constexpr float arrivalEpsilon = 0.01f;
@@ -28,13 +33,49 @@ namespace mmo
 		/// Height of the nameplate anchor above the head bone, in metres.
 		constexpr float nameplateHeadOffset = 0.4f;
 
+		/// Seconds a deselected character takes to turn its manual rotation back.
+		constexpr float rotationReturnSeconds = 0.3f;
+
+		/// Largest turn of a hovered character towards the camera, in degrees.
+		constexpr float hoverMaxTurnDegrees = 35.0f;
+
+		/// Seconds the greeting takes to blend in over the pose, and back out at its end.
+		constexpr float greetingFadeInSeconds = 0.2f;
+		constexpr float greetingFadeOutSeconds = 0.3f;
+
+		/// Warm amber of the hover glow at full strength, matching the selected nameplate colour.
+		/// The character materials add the "Tint" parameter as an emissive rim (Tint x Fresnel), so
+		/// it tints the silhouette's edges without colouring the gear.
+		const Vector4 glowTint(0.9f, 0.52f, 0.18f, 1.0f);
+
+		/// Name of the material parameter carrying the glow (see GameUnitC::UpdateTintOnMaterials).
+		const char* const glowParameter = "Tint";
+
+		/// Query flag of the avatar entities, so the cursor ray only collects them.
+		constexpr uint32 avatarQueryFlag = 1u << 10;
+
 		const String idleAnimation = "Idle";
 		const String walkAnimation = "Walk";
+		const String runAnimation = "Run";
+
+		/// Greeting clips tried when the emote catalog has no wave or bow emote.
+		const char* const fallbackGreetingClips[] = { "EmoteWave", "Bow" };
+
+		/// Emote aliases whose clips greet, in order of preference.
+		const char* const greetingEmoteAliases[] = { "wave", "bow" };
 
 		/// Facing of a straight walk from one position to another, in degrees.
 		float TravelFacingDegrees(const Vector3& from, const Vector3& to)
 		{
 			return Radian(DirectionToFacing(to.x - from.x, to.z - from.z)).GetValueDegrees();
+		}
+
+		void AddUnique(std::vector<String>& list, const String& value)
+		{
+			if (!value.empty() && std::find(list.begin(), list.end(), value) == list.end())
+			{
+				list.push_back(value);
+			}
 		}
 	}
 
@@ -43,6 +84,27 @@ namespace mmo
 		, m_definition(definition)
 		, m_builder(project)
 	{
+		// The greeting comes from the emote catalog (its wave, then its bow emote), so it uses the
+		// same clips the emotes play in the world.
+		for (const char* alias : greetingEmoteAliases)
+		{
+			for (const auto& entry : project.emotes.getTemplates().entry())
+			{
+				if (std::find(entry.aliases().begin(), entry.aliases().end(), alias) != entry.aliases().end())
+				{
+					AddUnique(m_greetingClips, entry.animation());
+				}
+			}
+		}
+
+		for (const char* clip : fallbackGreetingClips)
+		{
+			AddUnique(m_greetingClips, clip);
+		}
+
+		m_rayQuery = m_scene.CreateRayQuery(Ray());
+		m_rayQuery->SetQueryMask(avatarQueryFlag);
+		m_rayQuery->SetSortByDistance(true);
 	}
 
 	PlazaAvatars::~PlazaAvatars()
@@ -95,7 +157,7 @@ namespace mmo
 		{
 			if (avatar->walking && avatar->hideOnArrival)
 			{
-				// Walking out after a delete: let them finish the walk.
+				// Running out after a delete: let them finish the run.
 				m_departing.push_back(std::move(avatar));
 				continue;
 			}
@@ -119,8 +181,8 @@ namespace mmo
 		m_departing.clear();
 
 		m_leavingGuids.clear();
-		m_frontGuid = 0;
-		m_frontRotationDegrees = 0.0f;
+		m_hoveredGuid = 0;
+		m_arrived = false;
 	}
 
 	void PlazaAvatars::Select(int32 orderIndex, const bool animate)
@@ -133,27 +195,20 @@ namespace mmo
 
 		const PlazaAssignment assignment = AssignPlaza(numCharacters, orderIndex);
 
-		const uint64 frontGuid = assignment.frontCharacter >= 0 ? m_avatars[assignment.frontCharacter]->guid : 0;
-		if (frontGuid != m_frontGuid)
-		{
-			m_frontRotationDegrees = 0.0f;
-			m_frontGuid = frontGuid;
-		}
-
 		for (int32 index = 0; index < numCharacters; ++index)
 		{
 			Avatar& avatar = *m_avatars[index];
 
 			if (IsLeaving(avatar.guid))
 			{
-				// Walking out before a delete: it must not come back while the list is refreshed.
-				avatar.atFront = false;
+				// Running out before a delete: it must not come back while the list is refreshed.
+				avatar.selected = false;
 				continue;
 			}
 
 			const GlueSpot* target = nullptr;
-			const bool isFront = index == assignment.frontCharacter;
-			if (isFront)
+			const bool isVisitor = index == assignment.visitor;
+			if (isVisitor)
 			{
 				target = &m_definition.front;
 			}
@@ -169,13 +224,29 @@ namespace mmo
 				}
 			}
 
-			avatar.atFront = isFront;
+			const bool wasSelected = avatar.selected;
+			avatar.selected = index == orderIndex;
+			if (wasSelected && !avatar.selected && avatar.rotationDegrees != 0.0f)
+			{
+				// The rotation belongs to the selected character: a deselected one turns back to its
+				// facing over a moment instead of snapping (see UpdateRotationReturn).
+				avatar.rotationReturning = true;
+				avatar.rotationReturnStart = avatar.rotationDegrees;
+				avatar.rotationReturnElapsed = 0.0f;
+			}
+			else if (avatar.selected)
+			{
+				// Selected again while turning back: Rotate continues from where it is.
+				avatar.rotationReturning = false;
+			}
 
 			if (target == nullptr)
 			{
 				// Not on the plaza for this selection.
+				avatar.pose.clear();
 				if (!animate)
 				{
+					ResetHover(avatar);
 					avatar.walking = false;
 					avatar.hideOnArrival = false;
 					SetVisible(avatar, false);
@@ -188,11 +259,12 @@ namespace mmo
 				continue;
 			}
 
-			// The front spot plays a calm standing idle; plaza spots their pose.
-			const String& pose = isFront ? idleAnimation : target->pose;
+			const String& pose = target->pose;
+			avatar.pose = pose;
 
 			if (!animate)
 			{
+				ResetHover(avatar);
 				avatar.walking = false;
 				avatar.hideOnArrival = false;
 				PlaceAt(avatar, target->position, target->facingDegrees);
@@ -203,13 +275,22 @@ namespace mmo
 
 			if (avatar.visible)
 			{
+				const bool atTarget = !avatar.walking && (target->position - avatar.position).GetLength() <= arrivalEpsilon;
+				if (atTarget)
+				{
+					// Already standing there (selecting a plaza character moves nobody): keep the pose
+					// and any hover reaction running. Playing the same pose again changes nothing.
+					PlayAnimation(avatar, pose);
+					continue;
+				}
+
 				WalkTo(avatar, target->position, target->facingDegrees, pose, false);
 				continue;
 			}
 
-			if (isFront && assignment.frontIsVisitor)
+			if (isVisitor)
 			{
-				// A visitor walks in from the street.
+				// A visitor runs in from the street.
 				PlaceAt(avatar, m_definition.entrance, TravelFacingDegrees(m_definition.entrance, target->position));
 				SetVisible(avatar, true);
 				WalkTo(avatar, target->position, target->facingDegrees, pose, false);
@@ -233,7 +314,9 @@ namespace mmo
 		}
 
 		Avatar& avatar = *m_avatars[orderIndex];
-		avatar.atFront = false;
+		avatar.selected = false;
+		avatar.rotationDegrees = 0.0f;
+		avatar.rotationReturning = false;
 
 		if (!IsLeaving(avatar.guid))
 		{
@@ -250,15 +333,67 @@ namespace mmo
 
 	void PlazaAvatars::Rotate(const float degrees)
 	{
-		m_frontRotationDegrees += degrees;
-
 		for (const auto& avatar : m_avatars)
 		{
-			if (avatar->atFront)
+			if (avatar->selected && !avatar->walking)
 			{
+				avatar->rotationReturning = false;
+				avatar->rotationDegrees += degrees;
 				ApplyTransform(*avatar);
 			}
 		}
+	}
+
+	bool PlazaAvatars::ConsumeArrival()
+	{
+		const bool arrived = m_arrived;
+		m_arrived = false;
+		return arrived;
+	}
+
+	int32 PlazaAvatars::Pick(const Ray& ray) const
+	{
+		m_rayQuery->ClearResult();
+		m_rayQuery->SetRay(ray);
+
+		std::vector<PlazaPickHit> hits;
+		for (const RaySceneQueryResultEntry& entry : m_rayQuery->Execute())
+		{
+			for (size_t index = 0; index < m_avatars.size(); ++index)
+			{
+				const Avatar& avatar = *m_avatars[index];
+				if (avatar.entity == nullptr || entry.movable != avatar.entity)
+				{
+					continue;
+				}
+
+				hits.push_back(PlazaPickHit{ static_cast<int32>(index), entry.distance, IsStandingOnPlaza(avatar) });
+				break;
+			}
+		}
+
+		return PickNearestPlazaHit(hits);
+	}
+
+	void PlazaAvatars::SetHovered(const int32 orderIndex)
+	{
+		m_hoveredGuid = (orderIndex >= 0 && orderIndex < static_cast<int32>(m_avatars.size())) ? m_avatars[orderIndex]->guid : 0;
+	}
+
+	std::optional<Vector3> PlazaAvatars::GetCharacterPosition(const int32 orderIndex) const
+	{
+		if (orderIndex < 0 || orderIndex >= static_cast<int32>(m_avatars.size()))
+		{
+			return std::nullopt;
+		}
+
+		const Avatar& avatar = *m_avatars[orderIndex];
+		if (!avatar.visible || (avatar.walking && avatar.hideOnArrival))
+		{
+			return std::nullopt;
+		}
+
+		return avatar.walking ? avatar.walkTarget : avatar.position;
 	}
 
 	std::optional<Vector3> PlazaAvatars::GetNameplateAnchor(const int32 orderIndex) const
@@ -297,14 +432,24 @@ namespace mmo
 		return Vector3(avatar.position.x, bounds.max.y, avatar.position.z);
 	}
 
-	void PlazaAvatars::Update(const float deltaSeconds)
+	void PlazaAvatars::Update(const float deltaSeconds, const Vector3& cameraPosition)
 	{
 		for (const auto& avatar : m_avatars)
 		{
 			if (avatar->walking)
 			{
-				UpdateWalk(*avatar, deltaSeconds);
+				if (UpdateWalk(*avatar, deltaSeconds) && avatar->visible)
+				{
+					m_arrived = true;
+				}
 			}
+
+			UpdateRotationReturn(*avatar, deltaSeconds);
+			UpdateHover(*avatar, deltaSeconds, cameraPosition);
+
+			// Outside the hover update, which stops once the reaction is idle: a released greeting
+			// still has to play out its fade.
+			UpdateGreeting(*avatar, deltaSeconds);
 
 			if (avatar->visible && avatar->animationState)
 			{
@@ -348,6 +493,11 @@ namespace mmo
 		avatar->offsetNode = avatar->node->CreateChildSceneNode(Vector3::Zero, rotationOffset);
 
 		avatar->entity = m_builder.Build(m_scene, *avatar->offsetNode, view, "PlazaAvatar_" + id, avatar->attachments);
+		if (avatar->entity)
+		{
+			// Only the avatars answer the cursor ray.
+			avatar->entity->SetQueryFlags(avatarQueryFlag);
+		}
 
 		SetVisible(*avatar, false);
 		return avatar;
@@ -355,6 +505,8 @@ namespace mmo
 
 	void PlazaAvatars::DestroyAvatar(Avatar& avatar)
 	{
+		StopGreeting(avatar);
+		RestoreMaterials(avatar);
 		avatar.animationState = nullptr;
 
 		if (avatar.entity)
@@ -391,7 +543,12 @@ namespace mmo
 		avatar.arrivalFacingDegrees = from.arrivalFacingDegrees;
 		avatar.arrivalPose = from.arrivalPose;
 		avatar.hideOnArrival = from.hideOnArrival;
-		avatar.atFront = from.atFront;
+		avatar.selected = from.selected;
+		avatar.rotationDegrees = from.rotationDegrees;
+		avatar.rotationReturning = from.rotationReturning;
+		avatar.rotationReturnStart = from.rotationReturnStart;
+		avatar.rotationReturnElapsed = from.rotationReturnElapsed;
+		avatar.pose = from.pose;
 		ApplyTransform(avatar);
 
 		if (!from.animationName.empty())
@@ -404,6 +561,12 @@ namespace mmo
 
 	void PlazaAvatars::SetVisible(Avatar& avatar, const bool visible)
 	{
+		if (!visible)
+		{
+			ResetHover(avatar);
+			StopGreeting(avatar);
+		}
+
 		avatar.visible = visible;
 		avatar.node->SetVisible(visible, true);
 
@@ -426,6 +589,13 @@ namespace mmo
 
 	void PlazaAvatars::WalkTo(Avatar& avatar, const Vector3& target, const float arrivalFacingDegrees, const String& arrivalPose, const bool hideOnArrival)
 	{
+		// Hover never interrupts a run, and a running character does not react.
+		ResetHover(avatar);
+
+		// A run turns the character anyway; it arrives facing the way its place wants.
+		avatar.rotationDegrees = 0.0f;
+		avatar.rotationReturning = false;
+
 		avatar.walkTarget = target;
 		avatar.arrivalFacingDegrees = arrivalFacingDegrees;
 		avatar.arrivalPose = arrivalPose;
@@ -441,7 +611,7 @@ namespace mmo
 
 		if (!avatar.walking)
 		{
-			PlayAnimation(avatar, walkAnimation);
+			PlayAnimation(avatar, runAnimation);
 		}
 
 		avatar.walking = true;
@@ -456,11 +626,25 @@ namespace mmo
 			return;
 		}
 
-		const String& resolved = avatar.entity->HasAnimationState(name) ? name : idleAnimation;
+		// Skeletons without a run cycle walk; anything missing falls back to Idle.
+		const String* resolvedPtr = &idleAnimation;
+		if (avatar.entity->HasAnimationState(name))
+		{
+			resolvedPtr = &name;
+		}
+		else if (name == runAnimation && avatar.entity->HasAnimationState(walkAnimation))
+		{
+			resolvedPtr = &walkAnimation;
+		}
+
+		const String resolved = *resolvedPtr;
 		if (avatar.animationState && avatar.animationName == resolved)
 		{
 			return;
 		}
+
+		// A greeting belongs to the pose it plays over.
+		StopGreeting(avatar);
 
 		if (avatar.animationState)
 		{
@@ -488,7 +672,7 @@ namespace mmo
 	{
 		const Vector3 toTarget = avatar.walkTarget - avatar.position;
 		const float distance = toTarget.GetLength();
-		const float step = walkSpeed * deltaSeconds;
+		const float step = runSpeed * deltaSeconds;
 
 		if (distance > arrivalEpsilon && step < distance)
 		{
@@ -517,15 +701,264 @@ namespace mmo
 		return std::find(m_leavingGuids.begin(), m_leavingGuids.end(), guid) != m_leavingGuids.end();
 	}
 
+	bool PlazaAvatars::IsStandingOnPlaza(const Avatar& avatar) const
+	{
+		return avatar.visible && avatar.entity != nullptr && !avatar.walking && !IsLeaving(avatar.guid);
+	}
+
 	void PlazaAvatars::ApplyTransform(Avatar& avatar)
 	{
 		float yaw = avatar.facingDegrees;
-		if (avatar.atFront && !avatar.walking)
+		if (!avatar.walking)
 		{
-			yaw += m_frontRotationDegrees;
+			yaw += avatar.rotationDegrees;
+			yaw += avatar.hoverTurnDegrees * avatar.hover.GetTurn();
 		}
 
 		avatar.node->SetPosition(avatar.position);
 		avatar.node->SetOrientation(Quaternion(Degree(yaw), Vector3::UnitY));
+	}
+
+	void PlazaAvatars::UpdateHover(Avatar& avatar, const float deltaSeconds, const Vector3& cameraPosition)
+	{
+		const bool active = m_hoveredGuid != 0 && avatar.guid == m_hoveredGuid && IsStandingOnPlaza(avatar);
+		if (!active && !avatar.greeting.IsReleased())
+		{
+			// The hover ended mid-greeting: let it play on and fade back to the pose.
+			ReleaseGreeting(avatar);
+		}
+
+		if (!active && avatar.hover.IsIdle())
+		{
+			return;
+		}
+
+		const bool entered = avatar.hover.Update(active, deltaSeconds);
+
+		const bool seated = IsPlazaSeatedPose(avatar.animationName);
+		if (entered)
+		{
+			// The turn is fixed for this hover: a rotation while hovered still turns the character.
+			const float yaw = avatar.facingDegrees + avatar.rotationDegrees;
+
+			avatar.hoverTurnDegrees = seated ? 0.0f : PlazaTurnTowardsDegrees(yaw, avatar.position, cameraPosition, hoverMaxTurnDegrees);
+			if (!seated)
+			{
+				StartGreeting(avatar);
+			}
+		}
+
+		ApplyTransform(avatar);
+
+		const float glow = avatar.hover.GetGlow();
+		if (glow > 0.0f)
+		{
+			ApplyGlow(avatar, glow);
+		}
+		else
+		{
+			// The glow is over even while the turn still eases back: put the materials back now,
+			// so the last faint tint does not linger until the turn is done.
+			RestoreMaterials(avatar);
+		}
+
+		if (avatar.hover.IsIdle())
+		{
+			avatar.hoverTurnDegrees = 0.0f;
+		}
+	}
+
+	void PlazaAvatars::UpdateRotationReturn(Avatar& avatar, const float deltaSeconds)
+	{
+		if (!avatar.rotationReturning)
+		{
+			return;
+		}
+
+		avatar.rotationReturnElapsed += deltaSeconds;
+		avatar.rotationDegrees = PlazaRotationReturnDegrees(avatar.rotationReturnStart, avatar.rotationReturnElapsed, rotationReturnSeconds);
+		if (avatar.rotationDegrees == 0.0f)
+		{
+			avatar.rotationReturning = false;
+		}
+
+		if (avatar.node)
+		{
+			ApplyTransform(avatar);
+		}
+	}
+
+	void PlazaAvatars::StartGreeting(Avatar& avatar)
+	{
+		if (!avatar.entity)
+		{
+			return;
+		}
+
+		if (avatar.greetingState && avatar.greeting.IsPlaying())
+		{
+			// Still waving (or fading out after the last hover): carry on from where the clip and
+			// its weight are, so nothing restarts or pops.
+			(void)avatar.greeting.Start(avatar.greetingState->GetLength(), greetingFadeInSeconds, greetingFadeOutSeconds);
+			return;
+		}
+
+		StopGreeting(avatar);
+
+		for (const String& clip : m_greetingClips)
+		{
+			if (clip == avatar.animationName || !avatar.entity->HasAnimationState(clip))
+			{
+				continue;
+			}
+
+			AnimationState* state = avatar.entity->GetAnimationState(clip);
+			if (!state || state->GetLength() <= 0.0f)
+			{
+				continue;
+			}
+
+			avatar.greetingState = state;
+			(void)avatar.greeting.Start(state->GetLength(), greetingFadeInSeconds, greetingFadeOutSeconds);
+			state->SetTimePosition(0.0f);
+			state->SetLoop(false);
+			state->SetWeight(0.001f);
+			state->SetEnabled(true);
+			return;
+		}
+	}
+
+	void PlazaAvatars::ReleaseGreeting(Avatar& avatar)
+	{
+		if (avatar.greetingState)
+		{
+			avatar.greeting.Release();
+		}
+	}
+
+	void PlazaAvatars::UpdateGreeting(Avatar& avatar, const float deltaSeconds)
+	{
+		if (!avatar.greetingState)
+		{
+			return;
+		}
+
+		// Runs every update, hovered or not: a greeting cut short keeps playing (its clip time
+		// advancing) while its weight fades out.
+		avatar.greeting.Update(deltaSeconds);
+		if (!avatar.greeting.IsPlaying())
+		{
+			StopGreeting(avatar);
+			return;
+		}
+
+		avatar.greetingState->AddTime(deltaSeconds);
+
+		// The skeleton averages the enabled clips by weight, so pose and greeting share one weight.
+		const float weight = avatar.greeting.GetWeight();
+		avatar.greetingState->SetWeight(std::max(weight, 0.001f));
+		if (avatar.animationState)
+		{
+			avatar.animationState->SetWeight(std::max(1.0f - weight, 0.001f));
+		}
+	}
+
+	void PlazaAvatars::StopGreeting(Avatar& avatar)
+	{
+		avatar.greeting.Reset();
+
+		if (!avatar.greetingState)
+		{
+			return;
+		}
+
+		avatar.greetingState->SetEnabled(false);
+		avatar.greetingState->SetWeight(1.0f);
+		avatar.greetingState = nullptr;
+
+		if (avatar.animationState)
+		{
+			avatar.animationState->SetWeight(1.0f);
+		}
+	}
+
+	void PlazaAvatars::ApplyGlow(Avatar& avatar, const float strength)
+	{
+		if (!avatar.entity)
+		{
+			return;
+		}
+
+		if (avatar.glowMaterials.empty())
+		{
+			// Per-avatar instances, as GameUnitC::EnsureMaterialInstances does for spell tints, so
+			// the shared character materials never glow on anyone else.
+			const auto addEntity = [&avatar](Entity& entity)
+			{
+				for (uint32 i = 0; i < entity.GetNumSubEntities(); ++i)
+				{
+					SubEntity* subEntity = entity.GetSubEntity(static_cast<uint16>(i));
+					if (!subEntity || !subEntity->IsVisible())
+					{
+						continue;
+					}
+
+					MaterialPtr original = subEntity->GetMaterial();
+					if (!original)
+					{
+						continue;
+					}
+
+					auto instance = std::make_shared<MaterialInstance>(String(entity.GetName()) + "_PlazaGlow_" + std::to_string(i), original);
+					subEntity->SetMaterial(std::static_pointer_cast<MaterialInterface>(instance));
+					avatar.glowMaterials.push_back(Avatar::GlowMaterial{ subEntity, std::move(original), std::move(instance) });
+				}
+			};
+
+			addEntity(*avatar.entity);
+			for (auto& [displayId, attachment] : avatar.attachments)
+			{
+				if (attachment.entity)
+				{
+					addEntity(*attachment.entity);
+				}
+			}
+		}
+
+		const Vector4 tint(glowTint.x * strength, glowTint.y * strength, glowTint.z * strength, 1.0f);
+		for (const Avatar::GlowMaterial& material : avatar.glowMaterials)
+		{
+			material.instance->SetVectorParameter(glowParameter, tint);
+		}
+	}
+
+	void PlazaAvatars::RestoreMaterials(Avatar& avatar)
+	{
+		for (const Avatar::GlowMaterial& material : avatar.glowMaterials)
+		{
+			if (material.subEntity && material.original)
+			{
+				material.subEntity->SetMaterial(material.original);
+			}
+		}
+
+		avatar.glowMaterials.clear();
+	}
+
+	void PlazaAvatars::ResetHover(Avatar& avatar)
+	{
+		const bool wasReacting = !avatar.hover.IsIdle();
+
+		// The greeting fades back to the pose instead of freezing or snapping. A new animation (a
+		// run) or hiding the avatar stops it outright (PlayAnimation, SetVisible).
+		ReleaseGreeting(avatar);
+		RestoreMaterials(avatar);
+		avatar.hover.Reset();
+		avatar.hoverTurnDegrees = 0.0f;
+
+		if (wasReacting && avatar.node)
+		{
+			ApplyTransform(avatar);
+		}
 	}
 }

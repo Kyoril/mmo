@@ -14,6 +14,7 @@
 
 #include "asio/io_service.hpp"
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -64,6 +65,14 @@ namespace mmo
 		/// provoke a disconnect, such as the duplicate-login check.
 		void ExpectDisconnect() { m_disconnectExpected = true; }
 
+		/// Logs the character out to the character list; the session enters the world again on its
+		/// own once the list arrives. A logout and login cycle without dropping the connection.
+		void BeginLogoutCycle();
+
+		/// Debug: closes the realm connection as if the realm server had gone away, without the
+		/// session expecting it. Lets a swarm rehearse its outage handling against a healthy server.
+		void DebugDropRealmConnection() { m_realm->close(); }
+
 		/// Whether the realm connection has been lost after ExpectDisconnect was called.
 		[[nodiscard]] bool IsDisconnected() const { return m_disconnected; }
 
@@ -107,6 +116,16 @@ namespace mmo
 		/// The caller watches IsWorldReady() afterwards, exactly as it does for the first login.
 		void BeginReconnect();
 
+		/// Retires the character played now for a new one on the same account: leaves the world,
+		/// and on the next login (BeginReconnect, called by the host once the realm has let go)
+		/// deletes the old character at character select and creates the new one.
+		void BeginReroll(const std::string& newName, uint8 race, uint8 characterClass, uint8 gender);
+
+		/// Called with the attempt number when the realm refuses a character name as taken; the
+		/// session retries the creation with the name it returns, up to a few times. Without it a
+		/// taken name fails the login.
+		void SetNameFallback(std::function<std::string(uint32 attempt)> fallback) { m_nameFallback = std::move(fallback); }
+
 		BotContext& GetContext() { return *m_context; }
 		BotRealmConnector& GetRealm() { return *m_realm; }
 		BotMovementController& GetMovementController() { return m_movementController; }
@@ -116,8 +135,14 @@ namespace mmo
 		bool IsStopRequested() const { return m_stopRequested; }
 		bot_exit_code::Type GetExitCode() const { return m_exitCode; }
 
+		/// Where the session last failed; None while it has not since it last started.
+		bot_failure_stage::Type GetFailureStage() const { return m_failureStage; }
+
+		/// The player_login_response code of the last refused or lost world entry.
+		uint8 GetEnterWorldFailure() const { return m_enterWorldFailure; }
+
 	private:
-		void Fail(bot_exit_code::Type code);
+		void Fail(bot_exit_code::Type code, bot_failure_stage::Type stage);
 		void BindSignals();
 
 	private:
@@ -135,5 +160,14 @@ namespace mmo
 		bool m_disconnectExpected { false };
 		bool m_disconnected { false };
 		bot_exit_code::Type m_exitCode { bot_exit_code::Success };
+		bot_failure_stage::Type m_failureStage { bot_failure_stage::None };
+		uint8 m_enterWorldFailure { 0 };
+
+		/// The character to delete at the next character select, and how often that was tried.
+		std::string m_retireCharacter;
+		uint32 m_retireAttempts { 0 };
+
+		std::function<std::string(uint32)> m_nameFallback;
+		uint32 m_nameAttempts { 0 };
 	};
 }

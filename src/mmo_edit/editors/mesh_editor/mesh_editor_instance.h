@@ -67,6 +67,13 @@ namespace mmo
 		/// @return True if the spec parsed and the file was saved.
 		static bool SetSoundEmittersInFile(const String& assetPath, const String& spec);
 
+		/// @brief Loads a mesh file and saves it again, keeping its collision recipe. Loading trims
+		/// skinned vertices to four bone weights and renormalizes them, so the re-saved file no longer
+		/// pays for that on every load. Used by the unattended `mmo_edit --resave-mesh <asset>` job.
+		/// @param assetPath The mesh's asset path.
+		/// @return True if the mesh and all its materials loaded and the file was saved.
+		static bool ResaveMeshFile(const String& assetPath);
+
 	private:
 		void SetAnimationState(AnimationState* animState);
 
