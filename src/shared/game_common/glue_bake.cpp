@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <map>
+#include <tuple>
 
 namespace mmo
 {
@@ -677,5 +679,48 @@ namespace mmo
 			}
 		}
 		return stale;
+	}
+
+	bool ShouldUseGlueBake(const std::optional<GlueBakeManifest>& manifest, const String& currentSceneHash)
+	{
+		return manifest.has_value() && !currentSceneHash.empty() && manifest->sceneHash == currentSceneHash;
+	}
+
+	std::vector<GlueBakeMeshGroup> GroupGlueBakeMeshes(const std::vector<GlueBakeMesh>& meshes, const float cellSize)
+	{
+		using Key = std::tuple<String, std::vector<String>, bool, int32, int32>;
+		std::map<Key, std::vector<size_t>> buckets;
+
+		for (size_t i = 0; i < meshes.size(); ++i)
+		{
+			const GlueBakeMesh& placement = meshes[i];
+
+			int32 cellX = 0;
+			int32 cellZ = 0;
+			if (cellSize > 0.0f)
+			{
+				const Vector3 position = placement.transform.GetTrans();
+				cellX = static_cast<int32>(std::floor(position.x / cellSize));
+				cellZ = static_cast<int32>(std::floor(position.z / cellSize));
+			}
+
+			buckets[Key(placement.mesh, placement.materialOverrides, placement.transform.HasNegativeScale(), cellX, cellZ)].push_back(i);
+		}
+
+		std::vector<GlueBakeMeshGroup> groups;
+		groups.reserve(buckets.size());
+		for (auto& [key, placements] : buckets)
+		{
+			GlueBakeMeshGroup group;
+			group.mesh = std::get<0>(key);
+			group.materialOverrides = std::get<1>(key);
+			group.mirrored = std::get<2>(key);
+			group.cellX = std::get<3>(key);
+			group.cellZ = std::get<4>(key);
+			group.placements = std::move(placements);
+			groups.push_back(std::move(group));
+		}
+
+		return groups;
 	}
 }

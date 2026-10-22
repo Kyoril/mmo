@@ -89,7 +89,9 @@ namespace mmo
 			return;
 		}
 
-		m_glueScene = std::make_unique<GlueScene>(m_project, std::move(*definition), m_soundEntryPlayer, m_audio);
+		// The glue bake is used only if it was baked from exactly these bytes.
+		const String definitionHash = HashGlueBakeBytes(text.data(), text.size());
+		m_glueScene = std::make_unique<GlueScene>(m_project, std::move(*definition), definitionHash, m_soundEntryPlayer, m_audio);
 
 		// Before a realm is chosen, the realm's default time applies: UTC time of day.
 		const auto sinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());

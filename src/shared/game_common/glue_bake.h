@@ -169,6 +169,37 @@ namespace mmo
 	/// FNV-1a 64 of the bytes as 16 lowercase hex characters.
 	String HashGlueBakeBytes(const void* data, size_t size);
 
+	/// Whether the client draws the glue scene from the bake: only for a parsed manifest whose
+	/// sceneHash matches the hash of the current GlueScene.json (a camera edit without a rebake
+	/// falls back to streaming the world).
+	/// @param manifest The parsed manifest, or nullopt when it is missing or unparsable.
+	/// @param currentSceneHash HashGlueBakeBytes of the current GlueScene.json.
+	bool ShouldUseGlueBake(const std::optional<GlueBakeManifest>& manifest, const String& currentSceneHash);
+
+	/// Baked mesh placements that can be drawn with one instanced draw call per submesh.
+	struct GlueBakeMeshGroup
+	{
+		String mesh;
+		std::vector<String> materialOverrides;
+
+		/// Whether the placements mirror the mesh (one draw call has one cull mode).
+		bool mirrored = false;
+
+		/// The cell of the placements' positions on the XZ plane.
+		int32 cellX = 0;
+		int32 cellZ = 0;
+
+		/// Indices into the grouped meshes, in input order.
+		std::vector<size_t> placements;
+	};
+
+	/// Groups baked mesh placements by mesh, material overrides, mirroring and square XZ cell, so
+	/// each group can be drawn instanced and still be frustum culled cell by cell.
+	/// @param meshes The placements to group.
+	/// @param cellSize Edge length of a cell in world units; 0 or less puts everything in one cell.
+	/// @return The groups, in a deterministic order (by key).
+	std::vector<GlueBakeMeshGroup> GroupGlueBakeMeshes(const std::vector<GlueBakeMesh>& meshes, float cellSize);
+
 	/// Returns the paths of the manifest's inputs whose current hash differs or which are missing.
 	/// hashFile returns the current hash of a path, or nullopt if it cannot be read.
 	std::vector<String> FindStaleGlueBakeInputs(const GlueBakeManifest& manifest, const std::function<std::optional<String>(const String& path)>& hashFile);

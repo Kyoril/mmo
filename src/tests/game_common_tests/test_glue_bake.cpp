@@ -299,3 +299,91 @@ TEST_CASE("Stale inputs are the changed and the missing ones", "[glue_bake]")
 	CHECK(stale[0] == "changed");
 	CHECK(stale[1] == "missing");
 }
+
+TEST_CASE("The bake is used only for a parsed manifest of the current scene", "[glue_bake]")
+{
+	CHECK_FALSE(ShouldUseGlueBake(std::nullopt, "94f0b479e45f9382"));
+
+	GlueBakeManifest manifest;
+	manifest.sceneHash = "94f0b479e45f9382";
+	CHECK_FALSE(ShouldUseGlueBake(manifest, "0000000000000000"));
+	CHECK_FALSE(ShouldUseGlueBake(manifest, ""));
+	CHECK(ShouldUseGlueBake(manifest, "94f0b479e45f9382"));
+
+	manifest.sceneHash.clear();
+	CHECK_FALSE(ShouldUseGlueBake(manifest, ""));
+}
+
+TEST_CASE("Baked mesh placements group by mesh, overrides, mirroring and cell", "[glue_bake]")
+{
+	const auto place = [](const String& mesh, const Vector3& position, const Vector3& scale = Vector3(1, 1, 1), std::vector<String> overrides = {})
+	{
+		GlueBakeMesh placement;
+		placement.mesh = mesh;
+		placement.transform.MakeTransform(position, scale, Quaternion::Identity);
+		placement.materialOverrides = std::move(overrides);
+		return placement;
+	};
+
+	const std::vector<GlueBakeMesh> meshes = {
+		place("B.hmsh", Vector3(1, 0, 1)),
+		place("A.hmsh", Vector3(2, 0, 2)),
+		place("A.hmsh", Vector3(5, 3, 7)),
+		place("A.hmsh", Vector3(150, 0, 2)),
+		place("A.hmsh", Vector3(3, 0, 3), Vector3(-1, 1, 1)),
+		place("A.hmsh", Vector3(4, 0, 4), Vector3(1, 1, 1), { "", "Other.hmat" }),
+		place("A.hmsh", Vector3(-1, 0, 4)),
+	};
+
+	const std::vector<GlueBakeMeshGroup> groups = GroupGlueBakeMeshes(meshes, 100.0f);
+
+	// A in cell (0,0): two plain placements, one mirrored, one overridden; A in cell (1,0); A in
+	// cell (-1,0); B in cell (0,0).
+	REQUIRE(groups.size() == 6);
+
+	size_t total = 0;
+	for (const GlueBakeMeshGroup& group : groups)
+	{
+		total += group.placements.size();
+		for (const size_t index : group.placements)
+		{
+			CHECK(meshes[index].mesh == group.mesh);
+			CHECK(meshes[index].materialOverrides == group.materialOverrides);
+			CHECK(meshes[index].transform.HasNegativeScale() == group.mirrored);
+		}
+	}
+	CHECK(total == meshes.size());
+
+	const auto find = [&groups](const String& mesh, const int32 cellX, const bool mirrored, const size_t overrideCount) -> const GlueBakeMeshGroup*
+	{
+		for (const GlueBakeMeshGroup& group : groups)
+		{
+			if (group.mesh == mesh && group.cellX == cellX && group.mirrored == mirrored && group.materialOverrides.size() == overrideCount)
+			{
+				return &group;
+			}
+		}
+		return nullptr;
+	};
+
+	const GlueBakeMeshGroup* plain = find("A.hmsh", 0, false, 0);
+	REQUIRE(plain != nullptr);
+	CHECK(plain->placements == std::vector<size_t>{ 1, 2 });
+	REQUIRE(find("A.hmsh", 1, false, 0) != nullptr);
+	REQUIRE(find("A.hmsh", -1, false, 0) != nullptr);
+	REQUIRE(find("A.hmsh", 0, true, 0) != nullptr);
+	REQUIRE(find("A.hmsh", 0, false, 2) != nullptr);
+	REQUIRE(find("B.hmsh", 0, false, 0) != nullptr);
+
+	// Deterministic: the same input groups the same way.
+	const std::vector<GlueBakeMeshGroup> again = GroupGlueBakeMeshes(meshes, 100.0f);
+	REQUIRE(again.size() == groups.size());
+	for (size_t i = 0; i < groups.size(); ++i)
+	{
+		CHECK(again[i].mesh == groups[i].mesh);
+		CHECK(again[i].placements == groups[i].placements);
+	}
+
+	// A cell size of 0 or less puts every placement in one cell.
+	CHECK(GroupGlueBakeMeshes(meshes, 0.0f).size() == 4);
+}
