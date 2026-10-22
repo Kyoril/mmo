@@ -79,8 +79,9 @@ namespace mmo
 		/// The manifest mmo_edit --bake-glue-scene writes.
 		constexpr const char* glueBakeManifestFile = "Interface/GlueUI/GlueBake/GlueBake.json";
 
-		/// Milliseconds of bake creation per frame. The fade covers the scene until all of it
-		/// exists, so a frame may take long; splitting only keeps the window responsive.
+		/// Milliseconds of bake creation per frame once the gate view shows. While the fade still
+		/// covers the gate, all remaining steps run in one frame instead: splitting them only adds
+		/// frames to the load time.
 		constexpr double bakeStepBudgetMs = 150.0;
 
 		/// Edge length of the cells baked placements are batched in, in metres: the cell size of
@@ -502,6 +503,10 @@ namespace mmo
 		PROFILE_SCOPE("GlueScene::BakeLoading");
 
 		++m_bakeFrames;
+
+		// Behind the opaque fade nothing is shown, so the whole bake is created at once. Only steps
+		// left after the fade lifted (a readiness timeout) are spread over frames.
+		const bool covered = !m_gateReady;
 		const auto start = std::chrono::steady_clock::now();
 		auto stepStart = start;
 		while (m_nextBakeStep < m_bakeSteps.size())
@@ -513,7 +518,7 @@ namespace mmo
 			m_bakePhaseMs[step.phase] += std::chrono::duration<double, std::milli>(now - stepStart).count();
 			stepStart = now;
 
-			if (std::chrono::duration<double, std::milli>(now - start).count() >= bakeStepBudgetMs)
+			if (!covered && std::chrono::duration<double, std::milli>(now - start).count() >= bakeStepBudgetMs)
 			{
 				break;
 			}
@@ -871,6 +876,8 @@ namespace mmo
 			UpdatePageLoading();
 		}
 
+		// The bake path has no world instance, so nothing is ever posted to the dispatcher.
+		if (!m_useBake)
 		{
 			PROFILE_SCOPE("GlueScene::StreamingDispatch");
 
