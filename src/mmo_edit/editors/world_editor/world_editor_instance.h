@@ -30,6 +30,7 @@
 #include "selection_raycaster.h"
 #include "nav_mesh/map.h"
 #include "terrain/terrain.h"
+#include "terrain_lod_baker.h"
 #include "edit_modes/terrain_edit_mode.h"
 #include "edit_modes/spawn_edit_mode.h"
 #include "edit_modes/entity_edit_mode.h"
@@ -684,13 +685,15 @@ namespace mmo
 		///         its CPU data until streaming unloads it.
 		const terrain::Page* GetPreparedTerrainPage(const PagePosition& page);
 
-		/// @brief Renders a terrain page's top-down, unlit colour like the distant-terrain bake does
-		///        (see TerrainLodBaker::RenderPageColor), for one-shot jobs such as the glue bake.
-		/// @param page The page.
-		/// @param textureSize Edge length of the image in texels.
-		/// @param srgb Receives textureSize² sRGB RGBA8 texels; texel (u, v) maps to page-local (x, z).
-		/// @return False when there is no terrain or the page cannot be rendered.
-		bool RenderTerrainPageColor(const PagePosition& page, uint32 textureSize, std::vector<uint8>& srgb);
+		/// @brief Renders terrain pages' top-down, unlit colour like the distant-terrain bake does
+		///        (see TerrainLodBaker::RenderPageColor) with one renderer, for one-shot jobs such as the glue bake.
+		/// @param pages The pages.
+		/// @param textureSize Edge length of each image in texels.
+		/// @param options Encoding and water.
+		/// @param out Receives one image per page (textureSize² RGBA8 texels; texel (u, v) maps to page-local
+		///        (x, z)); empty for a page that could not be rendered.
+		/// @return False when there is no terrain or any page could not be rendered.
+		bool RenderTerrainPageColors(const std::vector<PagePosition>& pages, uint32 textureSize, const TerrainLodBaker::ColorOptions& options, std::vector<std::vector<uint8>>& out);
 
 		/// @brief The scene the world is shown in, for one-shot editor jobs that render it offscreen.
 		[[nodiscard]] Scene& GetScene() { return m_scene; }

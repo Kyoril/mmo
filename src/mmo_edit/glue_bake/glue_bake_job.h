@@ -44,4 +44,7 @@ namespace mmo
 	/// @brief Far distance of the glue bake frusta. Shorter than the client camera's 1000 m far clip:
 	///        fog hides what lies beyond, and the bake stays small enough for its load target.
 	constexpr float GlueBakeFarDistance = 500.0f;
+
+	/// @brief Terrain tiles closer than this to a glue camera pose keep the layered terrain material.
+	constexpr float GlueBakeNearDistance = 80.0f;
 }

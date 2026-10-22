@@ -108,7 +108,7 @@ namespace mmo
 		return stats;
 	}
 
-	bool TerrainLodBaker::RenderPageColor(const uint32 x, const uint32 z, std::vector<uint8>& srgb)
+	bool TerrainLodBaker::RenderPageColor(const uint32 x, const uint32 z, std::vector<uint8>& srgb, const ColorOptions& options)
 	{
 		if (x >= m_terrain.GetWidth() || z >= m_terrain.GetHeight() || !AssetRegistry::HasFile(m_terrain.GetPageFilename(x, z)))
 		{
@@ -131,7 +131,7 @@ namespace mmo
 		{
 			page_bake::ScopedVisibleSubtrees terrainOnly(m_scene.GetRootSceneNode(), { m_terrain.GetNode() });
 			const page_bake::ScopedPageLoad load(*page, x, z, m_pumpStreaming);
-			success = load.IsLoaded() && RenderColor(*page, srgb);
+			success = load.IsLoaded() && RenderColor(*page, srgb, options);
 		}
 
 		m_terrain.SetLodEnabled(lodWasEnabled);
@@ -175,13 +175,13 @@ namespace mmo
 		}
 
 		std::vector<uint8> color;
-		success = success && RenderColor(page, color);
+		success = success && RenderColor(page, color, ColorOptions{});
 		success = success && page_bake::WriteDxt1Texture(m_terrain.GetPageLodTextureFilename(x, z), std::move(color), m_textureSize);
 
 		return success;
 	}
 
-	bool TerrainLodBaker::RenderColor(terrain::Page& page, std::vector<uint8>& srgb)
+	bool TerrainLodBaker::RenderColor(terrain::Page& page, std::vector<uint8>& srgb, const ColorOptions& options)
 	{
 		const AABB& bounds = page.GetBoundingBox();
 		const Vector3 pageOrigin = page.GetSceneNode()->GetDerivedPosition();
@@ -195,8 +195,15 @@ namespace mmo
 		m_camera->InvalidateView();
 
 		// The page water is translucent and samples scene depth/refraction; the opaque minimap
-		// variant lands in the G-buffer instead.
-		page.SetMinimapWaterMode(true);
+		// variant lands in the G-buffer instead. Without water the ground under it is rendered.
+		if (options.water)
+		{
+			page.SetMinimapWaterMode(true);
+		}
+		else
+		{
+			page.SetWaterVisible(false);
+		}
 		// Twice: freshly loaded tiles build their index buffers in PreRender, which the scene calls
 		// after it has already captured their (still empty) render operation, so a page's first
 		// frame draws nothing.
@@ -208,7 +215,14 @@ namespace mmo
 			gx.SetViewport(0, 0, m_textureSize, m_textureSize, 0.0f, 1.0f);
 			m_renderer->Render(m_scene, *m_camera);
 		}
-		page.SetMinimapWaterMode(false);
+		if (options.water)
+		{
+			page.SetMinimapWaterMode(false);
+		}
+		else
+		{
+			page.SetWaterVisible(m_terrain.IsWaterVisible());
+		}
 
 		GBuffer& gBuffer = m_renderer->GetGBuffer();
 		RenderTexture& albedoTarget = gBuffer.GetAlbedoRT();
@@ -226,17 +240,28 @@ namespace mmo
 		albedoTarget.CopyPixelDataTo(reinterpret_cast<uint8*>(albedo.data()));
 		emissiveTarget.CopyPixelDataTo(reinterpret_cast<uint8*>(emissive.data()));
 
-		// Linear base colour to sRGB: the far material samples its albedo as a colour texture.
+		// Linear base colour to sRGB: the far material samples its albedo as a colour texture. The raw
+		// encoding stores the G-buffer value itself, which is what a material sampling the texture
+		// without any sRGB decode writes back.
 		srgb.resize(pixelCount * 4);
+		double emissiveSum = 0.0;
 		for (uint32 i = 0; i < pixelCount; ++i)
 		{
 			for (uint32 c = 0; c < 3; ++c)
 			{
-				const float linear = std::clamp(page_bake::HalfToFloat(albedo[i * 4 + c]) + page_bake::HalfToFloat(emissive[i * 4 + c]), 0.0f, 1.0f);
-				srgb[i * 4 + c] = static_cast<uint8>(std::lround(std::pow(linear, 1.0f / 2.2f) * 255.0f));
+				const float emitted = page_bake::HalfToFloat(emissive[i * 4 + c]);
+				emissiveSum += emitted;
+				const float linear = std::clamp(page_bake::HalfToFloat(albedo[i * 4 + c]) + emitted, 0.0f, 1.0f);
+				const float encoded = options.srgb ? std::pow(linear, 1.0f / 2.2f) : linear;
+				srgb[i * 4 + c] = static_cast<uint8>(std::lround(encoded * 255.0f));
 			}
 
 			srgb[i * 4 + 3] = 255;
+		}
+
+		if (!options.srgb)
+		{
+			DLOG("Terrain colour render of page " << page.GetX() << "x" << page.GetY() << ": mean emissive " << emissiveSum / (pixelCount * 3.0));
 		}
 
 		// Terrain holes draw nothing and would bake as black spots, while the far mesh has no holes.

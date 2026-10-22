@@ -18,6 +18,9 @@ namespace mmo
 	/// @brief Parent material of the far tiles' material instances (the one FarTerrain uses).
 	constexpr const char* GlueFarTerrainMaterial = "Models/AlbedoNormal_Opaque_Base.hmat";
 
+	/// @brief Normal map of the far tiles' material instances (FarTerrain's flat normal map).
+	constexpr const char* GlueFarTerrainNormalMap = "Textures/Character/BaseFlattenNormalMap.htex";
+
 	/// @brief What BakeGlueTerrain produced.
 	struct GlueTerrainBakeStats
 	{
@@ -43,6 +46,12 @@ namespace mmo
 		/// @brief GPU memory of the written textures (splatting maps and far albedo with mips).
 		uint64 textureBytes = 0;
 
+		/// @brief Water quads written, their triangles (both faces where the material is single-sided) and
+		///        the water meshes (one per page with visible water).
+		uint64 waterQuads = 0;
+		uint64 waterTriangles = 0;
+		uint32 waterMeshes = 0;
+
 		/// @brief Bytes of all written files.
 		uint64 fileBytes = 0;
 		uint32 files = 0;
@@ -60,17 +69,22 @@ namespace mmo
 	///          - Far tiles are merged per page into `<outDir>/FarTile_<px>_<pz>.hmsh`, decimated to stride 2,
 	///            with full resolution edges towards near tiles and around holes, drawn with
 	///            `<outDir>/FarAlbedo_<px>_<pz>.hmi`: an instance of GlueFarTerrainMaterial whose "Albedo" is the
-	///            page's top-down colour `<outDir>/FarAlbedo_<px>_<pz>.htex` (GlueFarAlbedoSize², DXT1).
+	///            page's top-down colour `<outDir>/FarAlbedo_<px>_<pz>.htex` (GlueFarAlbedoSize², DXT1), set up
+	///            like FarTerrain's material (flat normal map, specular 0.2, roughness 1). The colour is the
+	///            unlit G-buffer albedo stored as is (no gamma), rendered without water.
+	///          - Water quads of visible tiles become `<outDir>/Water_<px>_<pz>.hmsh` per page, built like the
+	///            live water render object and drawn with the water profile's surface material.
 	/// @param world The world editor instance holding the glue scene's world.
 	/// @param pages The candidate terrain pages (GlueCollection::terrainPages).
 	/// @param frusta The glue camera frusta.
 	/// @param poses The glue camera poses.
-	/// @param outDir Asset directory (written through the asset registry), or an absolute file system
-	///        directory (for debugging).
+	/// @param outDir Asset directory (written through the asset registry). An absolute file system directory
+	///        is accepted for debugging, with an error logged: the files reference each other by that path.
 	/// @param nearDistance Tiles closer than this to a camera pose are near tiles.
 	/// @param stats Receives counts, if not null.
+	/// @param water Receives the water meshes (identity transform), if not null; otherwise no water is written.
 	/// @return One manifest entry per written mesh: near tiles with their material and splatting map, then the
 	///         far pages with their material instance and no splatting map.
 	std::vector<GlueBakeTerrainTile> BakeGlueTerrain(WorldEditorInstance& world, const std::vector<PagePosition>& pages, const GlueBakeFrustumSet& frusta,
-		const std::vector<GlueCameraPose>& poses, const String& outDir, float nearDistance = 80.0f, GlueTerrainBakeStats* stats = nullptr);
+		const std::vector<GlueCameraPose>& poses, const String& outDir, float nearDistance = 80.0f, GlueTerrainBakeStats* stats = nullptr, std::vector<GlueBakeMesh>* water = nullptr);
 }

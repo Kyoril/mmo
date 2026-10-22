@@ -80,12 +80,19 @@ namespace mmo
 	};
 
 	/// A baked terrain tile.
+	/// Sampler state contract (.htex files carry none): the runtime must set the splatting texture to
+	/// Clamp addressing with Anisotropic filtering (as terrain::Tile does with its coverage texture) and
+	/// the far tiles' albedo texture (the "Albedo" parameter of their material instance) to Clamp (as
+	/// FarTerrain does). With the default Wrap, edge texels bleed across tile and page borders.
 	struct GlueBakeTerrainTile
 	{
 		String mesh;
+
+		/// Near tiles: the tile's layered terrain material, to instance with the splatting texture.
+		/// Far tiles: their ready material instance (.hmi), used as is.
 		String material;
 
-		/// Splatting material; empty for far tiles.
+		/// Splatting (layer coverage) texture for the material's "Splatting" parameter; empty for far tiles.
 		String splatting;
 	};
 
@@ -141,6 +148,10 @@ namespace mmo
 		std::vector<GlueBakeInputFile> inputs;
 		std::vector<GlueBakeMesh> meshes;
 		std::vector<GlueBakeTerrainTile> terrainTiles;
+
+		/// Water surfaces in world space, drawn with their water profile's surface material (stored in
+		/// the mesh). They must not cast shadows.
+		std::vector<GlueBakeMesh> water;
 		std::vector<GlueBakeFoliage> foliage;
 		std::vector<GlueBakeLight> lights;
 		std::vector<GlueBakeSound> sounds;

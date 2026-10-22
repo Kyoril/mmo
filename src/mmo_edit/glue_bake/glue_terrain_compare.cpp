@@ -17,6 +17,7 @@
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/material_instance_serializer.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/scene.h"
@@ -146,6 +147,28 @@ namespace mmo
 			return mesh;
 		}
 
+		std::shared_ptr<MaterialInstance> LoadMaterialInstanceFile(const String& path)
+		{
+			std::ifstream file(path, std::ios::in | std::ios::binary);
+			if (!file)
+			{
+				return nullptr;
+			}
+
+			// Like MaterialManager::Load does for .hmi assets: the parent comes from the file.
+			auto material = std::make_shared<MaterialInstance>(path, std::make_shared<Material>("__DEFAULT__"));
+			io::StreamSource source{ file };
+			io::Reader reader{ source };
+			MaterialInstanceDeserializer deserializer{ *material };
+			if (!deserializer.Read(reader))
+			{
+				return nullptr;
+			}
+
+			material->Update();
+			return material;
+		}
+
 		TexturePtr LoadTextureFile(const String& path)
 		{
 			std::unique_ptr<std::istream> file = std::make_unique<std::ifstream>(path, std::ios::in | std::ios::binary);
@@ -177,7 +200,7 @@ namespace mmo
 	}
 
 	bool CompareGlueTerrainBake(WorldEditorInstance& world, const std::vector<PagePosition>& pages, const std::vector<GlueBakeTerrainTile>& tiles,
-		const std::vector<GlueTerrainCompareView>& views, const String& artDir)
+		const std::vector<GlueBakeMesh>& water, const std::vector<GlueTerrainCompareView>& views, const String& artDir)
 	{
 		terrain::Terrain* terrain = world.GetTerrain();
 		if (!terrain || views.empty())
@@ -241,24 +264,42 @@ namespace mmo
 				}
 				else
 				{
+					// The written material instance, with the albedo texture loaded from its file: the instance
+					// names it by its file system path, which the texture manager cannot open.
 					const String albedoPath = tile.material.substr(0, tile.material.size() - 4) + ".htex";
 					const TexturePtr albedo = LoadTextureFile(albedoPath);
-					const MaterialPtr parent = MaterialManager::Get().Load(GlueFarTerrainMaterial);
-					if (!albedo || !parent)
+					material = LoadMaterialInstanceFile(tile.material);
+					if (!albedo || !material)
 					{
-						ELOG("Glue terrain compare: cannot read " << albedoPath);
+						ELOG("Glue terrain compare: cannot read " << tile.material << " or " << albedoPath);
 						success = false;
 						continue;
 					}
 
 					// What FarTerrain does with its page colour.
 					albedo->SetTextureAddressMode(TextureAddressMode::Clamp);
-					material = std::make_shared<MaterialInstance>("GlueTerrainCompareMaterial" + std::to_string(i), parent);
 					material->SetTextureParameter("Albedo", albedo);
 				}
 
 				Entity* entity = scene.CreateEntity("GlueTerrainCompareEntity" + std::to_string(i), mesh);
 				entity->SetMaterial(material);
+				bakeNode->AttachObject(*entity);
+				entities.push_back(entity);
+			}
+
+			// Water keeps the surface material stored in its mesh and casts no shadow, like the live water.
+			for (size_t i = 0; i < water.size(); ++i)
+			{
+				const MeshPtr mesh = LoadMeshFile(water[i].mesh);
+				if (!mesh)
+				{
+					ELOG("Glue terrain compare: cannot read " << water[i].mesh);
+					success = false;
+					continue;
+				}
+
+				Entity* entity = scene.CreateEntity("GlueTerrainCompareWater" + std::to_string(i), mesh);
+				entity->SetCastShadows(false);
 				bakeNode->AttachObject(*entity);
 				entities.push_back(entity);
 			}
@@ -287,11 +328,11 @@ namespace mmo
 				Image liveAlbedo;
 				Image bakedAlbedo;
 				{
-					page_bake::ScopedVisibleSubtrees terrainOnly(scene.GetRootSceneNode(), { terrain->GetNode() });
+					page_bake::ScopedVisibleSubtrees terrainOnly(scene.GetRootSceneNode(), { terrain->GetNode() }, true);
 					Render(*renderer, scene, *camera, liveLit, liveAlbedo);
 				}
 				{
-					page_bake::ScopedVisibleSubtrees bakeOnly(scene.GetRootSceneNode(), { bakeNode });
+					page_bake::ScopedVisibleSubtrees bakeOnly(scene.GetRootSceneNode(), { bakeNode }, true);
 					Render(*renderer, scene, *camera, bakedLit, bakedAlbedo);
 				}
 

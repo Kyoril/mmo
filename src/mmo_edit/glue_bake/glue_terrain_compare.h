@@ -24,13 +24,14 @@ namespace mmo
 	/// @details For each view writes `<artDir>/<name>_live.ppm` and `<name>_baked.ppm` (the lit frame) plus
 	///          `<name>_live_albedo.ppm` and `<name>_baked_albedo.ppm` (the G-buffer albedo), and logs the mean
 	///          and maximum albedo difference over pixels both renders cover. Only the terrain (live) or only the
-	///          baked meshes are visible in the respective render.
+	///          baked meshes are visible in the respective render; lights stay on.
 	/// @param world The world editor instance holding the world.
 	/// @param pages The terrain pages to load for the live render.
 	/// @param tiles The baked tiles; their files must lie in the file system (an absolute output directory).
+	/// @param water The baked water meshes, files like the tiles.
 	/// @param views The views.
 	/// @param artDir Absolute directory for the images (created as needed).
 	/// @return False when a baked file could not be read or nothing could be rendered.
 	bool CompareGlueTerrainBake(WorldEditorInstance& world, const std::vector<PagePosition>& pages, const std::vector<GlueBakeTerrainTile>& tiles,
-		const std::vector<GlueTerrainCompareView>& views, const String& artDir);
+		const std::vector<GlueBakeMesh>& water, const std::vector<GlueTerrainCompareView>& views, const String& artDir);
 }

@@ -46,6 +46,9 @@ namespace
 		t[1][3] = -2.25f;
 		m.meshes = { { "Meshes/x.hmsh", t } };
 		m.terrainTiles = { { "t0.hmsh", "mat.hmat", "splat.hmat" }, { "far.hmsh", "far.hmat", "" } };
+		Matrix4 w = Matrix4::Identity;
+		w[2][3] = 7.0f;
+		m.water = { { "Glue/Water_30_33.hmsh", w } };
 		m.foliage = { { "Meshes/grass.hmsh", Vector3(1, 2, 3), Quaternion(0.5f, 0.5f, 0.5f, 0.5f), Vector3(1.1f, 1.2f, 1.3f) } };
 		GlueBakeLight l;
 		l.type = 1;
@@ -166,6 +169,9 @@ TEST_CASE("Manifest round trips", "[glue_bake]")
 	REQUIRE(parsed->terrainTiles.size() == 2);
 	CHECK(parsed->terrainTiles[0].splatting == "splat.hmat");
 	CHECK(parsed->terrainTiles[1].splatting.empty());
+	REQUIRE(parsed->water.size() == 1);
+	CHECK(parsed->water[0].mesh == "Glue/Water_30_33.hmsh");
+	CHECK(same(parsed->water[0].transform, m.water[0].transform));
 	REQUIRE(parsed->foliage.size() == 1);
 	CHECK(parsed->foliage[0].position == m.foliage[0].position);
 	CHECK((parsed->foliage[0].rotation == m.foliage[0].rotation));
@@ -214,6 +220,8 @@ TEST_CASE("Manifest parsing rejects bad input", "[glue_bake]")
 	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"version\":1", "\"version\":2")).has_value());
 	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"meshes\":[", "\"meshes\":{\"a\":[")).has_value());
 	CHECK_FALSE(ParseGlueBakeManifest(good.substr(0, good.size() / 2)).has_value());
+	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"water\":[", "\"waterX\":[")).has_value());
+	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"mesh\":\"Glue/Water_30_33.hmsh\"", "\"mesh\":3")).has_value());
 	CHECK_FALSE(ParseGlueBakeManifest("").has_value());
 	CHECK_FALSE(ParseGlueBakeManifest("[]").has_value());
 }

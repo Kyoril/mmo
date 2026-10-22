@@ -5,6 +5,7 @@
 #include "glue_mesh_writer.h"
 
 #include "editors/world_editor/page_bake_utils.h"
+#include "editors/world_editor/terrain_lod_baker.h"
 #include "editors/world_editor/world_editor_instance.h"
 
 #include "binary_io/stream_sink.h"
@@ -18,10 +19,14 @@
 #include "terrain/constants.h"
 #include "terrain/page.h"
 #include "terrain/tile.h"
+#include "terrain/water_lookup.h"
+#include "terrain/water_mesh_build.h"
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <map>
+#include <set>
 #include <sstream>
 
 namespace mmo
@@ -165,7 +170,12 @@ namespace mmo
 				bucket.material = material;
 				bucket.vertices = std::move(vertices);
 				bucket.indices = std::move(indices);
+				return WriteBuckets(path, buckets);
+			}
 
+			/// Writes one mesh with a submesh per bucket.
+			bool WriteBuckets(const String& path, MeshMergeBuckets& buckets)
+			{
 				const MeshPtr mesh = CreateMergedMesh(path, buckets);
 				if (!mesh)
 				{
@@ -182,7 +192,10 @@ namespace mmo
 
 				m_stats.fileBytes += written;
 				++m_stats.files;
-				m_stats.vertices += buckets.begin()->second.vertices.size();
+				for (const auto& [name, bucket] : buckets)
+				{
+					m_stats.vertices += bucket.vertices.size();
+				}
 				return true;
 			}
 
@@ -278,12 +291,133 @@ namespace mmo
 		}
 	}
 
+	namespace
+	{
+		/// Writes the page's water quads in the given tiles as one world-space mesh with a submesh per
+		/// surface material, built like terrain::Page::RebuildWaterMesh builds its water render object.
+		/// Returns false when nothing was written.
+		bool BakePageWater(TerrainBakeWriter& writer, const terrain::Page& page, const int32 pageX, const int32 pageZ,
+			const std::set<std::pair<uint32, uint32>>& tiles, GlueTerrainBakeStats& stats, GlueBakeMesh& out)
+		{
+			const std::vector<terrain::water_mesh::TypeBatch> batches = terrain::water_mesh::BucketQuadsByType(page.GetWaterView());
+
+			// The live water's texture coordinates: world position / 16, from the same float expressions.
+			constexpr float quadSize = terrain::water_lookup::QuadSize;
+			const float worldOffsetX = static_cast<float>((pageX - 32) * terrain::constants::PageSize);
+			const float worldOffsetZ = static_cast<float>((pageZ - 32) * terrain::constants::PageSize);
+			constexpr float uvScale = 1.0f / 16.0f;
+
+			MeshMergeBuckets buckets;
+			uint64 triangles = 0;
+			uint64 quads = 0;
+			for (const terrain::water_mesh::TypeBatch& batch : batches)
+			{
+				// Material precedence of the live water: the page's own override, then the water profile.
+				String materialName = page.GetWaterMaterialName();
+				if (materialName.empty())
+				{
+					materialName = terrain::Page::ResolveWaterMaterial(batch.type);
+				}
+
+				const MaterialPtr material = materialName.empty() ? nullptr : MaterialManager::Get().Load(materialName);
+				if (!material)
+				{
+					WLOG("Glue terrain bake: no surface material for water type " << static_cast<uint32>(batch.type) << " on page " << pageX << "," << pageZ << ", left out");
+					continue;
+				}
+
+				const bool emitBottomFaces = terrain::water_mesh::ShouldEmitBottomFaces(material->IsTwoSided());
+				MeshMergeBucket& bucket = buckets[String(material->GetName())];
+				bucket.material = material;
+
+				for (const terrain::water_mesh::QuadRef& quad : batch.quads)
+				{
+					if (tiles.find({ quad.tileX, quad.tileZ }) == tiles.end())
+					{
+						continue;
+					}
+
+					const uint32 x0 = quad.tileX * terrain::water_lookup::QuadsPerTileSide + quad.qx;
+					const uint32 z0 = quad.tileZ * terrain::water_lookup::QuadsPerTileSide + quad.qz;
+
+					// Top left, top right, bottom left, bottom right
+					const uint32 cornerX[4] = { x0, x0 + 1, x0, x0 + 1 };
+					const uint32 cornerZ[4] = { z0, z0, z0 + 1, z0 + 1 };
+
+					const auto addFace = [&](const uint32 faceAlpha, const Vector3& normal)
+					{
+						const uint32 base = static_cast<uint32>(bucket.vertices.size());
+						for (uint32 c = 0; c < 4; ++c)
+						{
+							const float waterHeight = page.GetWaterVertexHeight(cornerX[c], cornerZ[c]);
+							WorldModelMergeVertex vertex{};
+							vertex.pos = GlueTerrainVertexPosition(pageX, pageZ, GlueTerrainGridVertex{ cornerX[c], cornerZ[c], false }, waterHeight);
+							vertex.color = terrain::water_mesh::MakeWaterVertexColor(faceAlpha, waterHeight, page.GetHeightAt(cornerX[c], cornerZ[c]));
+							vertex.normal = normal;
+							vertex.tangent = Vector3::UnitX;
+							vertex.binormal = Vector3::UnitZ;
+							vertex.uv[0] = (worldOffsetX + static_cast<float>(cornerX[c]) * quadSize) * uvScale;
+							vertex.uv[1] = (worldOffsetZ + static_cast<float>(cornerZ[c]) * quadSize) * uvScale;
+							bucket.vertices.push_back(vertex);
+						}
+						return base;
+					};
+
+					// Top face, wound like the live water: (TL, BL, TR), (TR, BL, BR).
+					const uint32 top = addFace(terrain::water_mesh::TopFaceVertexAlpha, Vector3::UnitY);
+					bucket.indices.insert(bucket.indices.end(), { top + 0, top + 2, top + 1, top + 1, top + 2, top + 3 });
+					triangles += 2;
+
+					// Underside for single-sided materials: (TR, BL, TL), (BR, BL, TR).
+					if (emitBottomFaces)
+					{
+						const uint32 bottom = addFace(terrain::water_mesh::BottomFaceVertexAlpha, Vector3::NegativeUnitY);
+						bucket.indices.insert(bucket.indices.end(), { bottom + 1, bottom + 2, bottom + 0, bottom + 3, bottom + 2, bottom + 1 });
+						triangles += 2;
+					}
+
+					++quads;
+				}
+			}
+
+			if (triangles == 0)
+			{
+				return false;
+			}
+
+			const String path = writer.Path("Water_" + std::to_string(pageX) + "_" + std::to_string(pageZ) + ".hmsh");
+			if (!writer.WriteBuckets(path, buckets))
+			{
+				return false;
+			}
+
+			stats.waterQuads += quads;
+			stats.waterTriangles += triangles;
+			++stats.waterMeshes;
+			out.mesh = path;
+			out.transform = Matrix4::Identity;
+			return true;
+		}
+	}
+
 	std::vector<GlueBakeTerrainTile> BakeGlueTerrain(WorldEditorInstance& world, const std::vector<PagePosition>& pages, const GlueBakeFrustumSet& frusta,
-		const std::vector<GlueCameraPose>& poses, const String& outDir, const float nearDistance, GlueTerrainBakeStats* stats)
+		const std::vector<GlueCameraPose>& poses, const String& outDir, const float nearDistance, GlueTerrainBakeStats* stats, std::vector<GlueBakeMesh>* water)
 	{
 		GlueTerrainBakeStats localStats;
 		GlueTerrainBakeStats& counts = stats ? *stats : localStats;
 		counts = GlueTerrainBakeStats{};
+		if (water)
+		{
+			water->clear();
+		}
+
+		// Written files reference each other (meshes their materials, material instances their textures)
+		// by the path they were written to, which only resolves at runtime for asset paths.
+		if (std::filesystem::path(outDir).is_absolute())
+		{
+			ELOG("Glue terrain bake: " << outDir << " is an absolute path; the baked files reference each other by it, which only "
+				"loads through the asset registry for an asset directory (debug output only)");
+		}
 
 		std::vector<GlueBakeTerrainTile> nearResult;
 		std::vector<GlueBakeTerrainTile> farResult;
@@ -292,6 +426,9 @@ namespace mmo
 		// Classify every tile first: far tiles need to know which neighbours are drawn at full resolution.
 		TileMap tiles;
 		std::vector<PagePosition> visiblePages;
+
+		// Visible tiles with water, by page and page-local tile.
+		std::map<std::pair<int32, int32>, std::set<std::pair<uint32, uint32>>> waterTiles;
 		for (const PagePosition& position : pages)
 		{
 			const terrain::Page* page = world.GetPreparedTerrainPage(position);
@@ -317,11 +454,35 @@ namespace mmo
 					const uint32 startZ = tileZ * glue_terrain::CellsPerTileSide;
 					const Vector3 minCorner = GlueTerrainVertexPosition(pageX, pageZ, GlueTerrainGridVertex{ startX, startZ, false }, minHeight);
 					const Vector3 maxCorner = GlueTerrainVertexPosition(pageX, pageZ, GlueTerrainGridVertex{ startX + glue_terrain::CellsPerTileSide, startZ + glue_terrain::CellsPerTileSide, false }, maxHeight);
-					const AABB bounds(minCorner, maxCorner);
+					AABB bounds(minCorner, maxCorner);
+
+					// Water surfaces can rise above the ground.
+					const bool hasWater = page->HasWater(tileX, tileZ);
+					if (hasWater)
+					{
+						for (uint32 j = 0; j <= glue_terrain::CellsPerTileSide; ++j)
+						{
+							for (uint32 i = 0; i <= glue_terrain::CellsPerTileSide; ++i)
+							{
+								const float waterHeight = page->GetWaterVertexHeight(startX + i, startZ + j);
+								if (std::isfinite(waterHeight))
+								{
+									bounds.min.y = std::min(bounds.min.y, waterHeight);
+									bounds.max.y = std::max(bounds.max.y, waterHeight);
+								}
+							}
+						}
+					}
 
 					if (!std::isfinite(minHeight) || !std::isfinite(maxHeight) || !frusta.Intersects(bounds, VisibilityMargin))
 					{
 						continue;
+					}
+
+					if (hasWater)
+					{
+						waterTiles[{ pageX, pageZ }].emplace(tileX, tileZ);
+						anyVisible = true;
 					}
 
 					const uint64 holeMap = page->GetTileHoleMap(tileX, tileZ);
@@ -356,12 +517,14 @@ namespace mmo
 
 		counts.pages = static_cast<uint32>(visiblePages.size());
 
+		// The far colour of every page with far tiles, rendered with one renderer. Stored as the G-buffer
+		// value itself: materials sample textures without an sRGB decode. Water is left out so the ground
+		// under it shows; the water surface is baked as a mesh of its own.
+		std::vector<PagePosition> farPages;
 		for (const PagePosition& position : visiblePages)
 		{
 			const int32 pageX = static_cast<int32>(position.x());
 			const int32 pageZ = static_cast<int32>(position.y());
-
-			// Read the page's far colour before taking the page data: the render loads and may release the page.
 			bool pageHasFar = false;
 			for (uint32 tileZ = 0; tileZ < terrain::constants::TilesPerPage && !pageHasFar; ++tileZ)
 			{
@@ -372,12 +535,39 @@ namespace mmo
 				}
 			}
 
-			std::vector<uint8> albedo;
-			if (pageHasFar && !world.RenderTerrainPageColor(position, GlueFarAlbedoSize, albedo))
+			if (pageHasFar)
 			{
-				ELOG("Glue terrain bake: failed to render the far colour of page " << pageX << "," << pageZ);
-				++counts.failedFiles;
-				pageHasFar = false;
+				farPages.push_back(position);
+			}
+		}
+
+		std::vector<std::vector<uint8>> farColors;
+		TerrainLodBaker::ColorOptions colorOptions;
+		colorOptions.srgb = false;
+		colorOptions.water = false;
+		world.RenderTerrainPageColors(farPages, GlueFarAlbedoSize, colorOptions, farColors);
+
+		for (const PagePosition& position : visiblePages)
+		{
+			const int32 pageX = static_cast<int32>(position.x());
+			const int32 pageZ = static_cast<int32>(position.y());
+
+			std::vector<uint8> albedo;
+			bool pageHasFar = false;
+			for (size_t i = 0; i < farPages.size(); ++i)
+			{
+				if (farPages[i].x() != position.x() || farPages[i].y() != position.y())
+				{
+					continue;
+				}
+
+				albedo = std::move(farColors[i]);
+				pageHasFar = !albedo.empty();
+				if (!pageHasFar)
+				{
+					ELOG("Glue terrain bake: failed to render the far colour of page " << pageX << "," << pageZ);
+					++counts.failedFiles;
+				}
 			}
 
 			const terrain::Page* page = world.GetPreparedTerrainPage(position);
@@ -483,6 +673,16 @@ namespace mmo
 				}
 			}
 
+			const auto waterIt = waterTiles.find({ pageX, pageZ });
+			if (water && waterIt != waterTiles.end())
+			{
+				GlueBakeMesh waterMesh;
+				if (BakePageWater(writer, *page, pageX, pageZ, waterIt->second, counts, waterMesh))
+				{
+					water->push_back(std::move(waterMesh));
+				}
+			}
+
 			if (farIndices.empty())
 			{
 				continue;
@@ -510,6 +710,9 @@ namespace mmo
 			}
 
 			const auto material = std::make_shared<MaterialInstance>(materialPath, parent);
+			material->SetTextureParameter("Normal", GlueFarTerrainNormalMap);
+			material->SetScalarParameter("Specular", 0.2f);
+			material->SetScalarParameter("Roughness", 1.0f);
 			material->SetTextureParameter("Albedo", albedoPath);
 			const String materialBytes = WriteToBytes([&](std::ostream& stream)
 			{

@@ -43,7 +43,8 @@ namespace mmo
 		class ScopedVisibleSubtrees final
 		{
 		public:
-			ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep);
+			/// @param keepLights Leave lights visible too, so a lit render keeps the scene's lighting.
+			ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep, bool keepLights = false);
 
 			~ScopedVisibleSubtrees();
 
@@ -55,6 +56,7 @@ namespace mmo
 
 		private:
 			std::vector<const SceneNode*> m_keep;
+			bool m_keepLights = false;
 			std::vector<MovableObject*> m_hidden;
 		};
 

@@ -6,6 +6,7 @@
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
+#include "scene_graph/light.h"
 #include "scene_graph/movable_object.h"
 #include "scene_graph/scene_node.h"
 #include "stb_dxt.h"
@@ -150,8 +151,9 @@ namespace mmo
 			return static_cast<bool>(out);
 		}
 
-		ScopedVisibleSubtrees::ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep)
+		ScopedVisibleSubtrees::ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep, const bool keepLights)
 			: m_keep(std::move(keep))
+			, m_keepLights(keepLights)
 		{
 			Hide(root);
 		}
@@ -175,7 +177,7 @@ namespace mmo
 			{
 				// Cameras are never drawn; leave the bake camera (and everyone else's) alone.
 				MovableObject* object = node.GetAttachedObject(i);
-				if (object && object->IsVisible() && !dynamic_cast<Camera*>(object))
+				if (object && object->IsVisible() && !dynamic_cast<Camera*>(object) && !(m_keepLights && dynamic_cast<Light*>(object)))
 				{
 					m_hidden.push_back(object);
 					object->SetVisible(false);

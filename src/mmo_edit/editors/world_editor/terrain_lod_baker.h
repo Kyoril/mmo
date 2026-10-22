@@ -40,6 +40,18 @@ namespace mmo
 			uint32 failed = 0;
 		};
 
+		/// @brief How RenderPageColor renders and encodes the colour.
+		struct ColorOptions
+		{
+			/// @brief Encode the colour with pow(1/2.2) like the .tlod bake. False stores saturate(albedo +
+			///        emissive) as is, which is what a material sampling the texture (no sRGB decode) writes back.
+			bool srgb = true;
+
+			/// @brief Draw the page water as the opaque minimap water. False hides the water so the ground
+			///        under it is rendered.
+			bool water = true;
+		};
+
 		/// @param pumpStreaming Runs one queued main-thread step of the owner's page streaming and returns
 		///        whether there was one. Pages the streaming is preparing when the bake reaches them
 		///        complete on that queue.
@@ -58,17 +70,18 @@ namespace mmo
 		/// @brief Renders one page's top-down colour the way the bake does, without writing anything.
 		/// @param x Page X index.
 		/// @param z Page Z index.
-		/// @param srgb Receives textureSize² sRGB RGBA8 texels; texel (u, v) maps to page-local (x, z).
+		/// @param srgb Receives textureSize² RGBA8 texels, encoded as options say; texel (u, v) maps to page-local (x, z).
+		/// @param options Encoding and water.
 		/// @return False when the page has no .tile file, cannot be loaded or the read-back failed.
 		/// @remark Loads the page for the render and releases it again, like BakeAll.
-		bool RenderPageColor(uint32 x, uint32 z, std::vector<uint8>& srgb);
+		bool RenderPageColor(uint32 x, uint32 z, std::vector<uint8>& srgb, const ColorOptions& options = ColorOptions{});
 
 	private:
 		bool IsUpToDate(uint32 x, uint32 z) const;
 
 		bool BakePage(terrain::Page& page, uint32 x, uint32 z);
 
-		bool RenderColor(terrain::Page& page, std::vector<uint8>& srgb);
+		bool RenderColor(terrain::Page& page, std::vector<uint8>& srgb, const ColorOptions& options);
 
 	private:
 		Scene& m_scene;

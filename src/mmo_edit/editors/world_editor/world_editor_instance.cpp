@@ -2428,8 +2428,9 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		return terrainPage;
 	}
 
-	bool WorldEditorInstance::RenderTerrainPageColor(const PagePosition& page, const uint32 textureSize, std::vector<uint8>& srgb)
+	bool WorldEditorInstance::RenderTerrainPageColors(const std::vector<PagePosition>& pages, const uint32 textureSize, const TerrainLodBaker::ColorOptions& options, std::vector<std::vector<uint8>>& out)
 	{
+		out.assign(pages.size(), std::vector<uint8>());
 		if (!m_terrain || !m_hasTerrain)
 		{
 			return false;
@@ -2443,10 +2444,17 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			m_foliage->SetVisible(false);
 		}
 
-		bool success = false;
+		bool success = true;
 		{
 			TerrainLodBaker baker(m_scene, *m_terrain, [this]() { return m_dispatcher.poll_one() > 0; }, textureSize);
-			success = baker.RenderPageColor(static_cast<uint32>(page.x()), static_cast<uint32>(page.y()), srgb);
+			for (size_t i = 0; i < pages.size(); ++i)
+			{
+				if (!baker.RenderPageColor(static_cast<uint32>(pages[i].x()), static_cast<uint32>(pages[i].y()), out[i], options))
+				{
+					out[i].clear();
+					success = false;
+				}
+			}
 		}
 
 		if (m_foliage)

@@ -225,13 +225,15 @@ namespace mmo
 		}
 
 		GlueTerrainBakeStats stats;
-		const std::vector<GlueBakeTerrainTile> tiles = BakeGlueTerrain(*world, collection.terrainPages, frusta, poses, outDir, 80.0f, &stats);
+		std::vector<GlueBakeMesh> water;
+		const std::vector<GlueBakeTerrainTile> tiles = BakeGlueTerrain(*world, collection.terrainPages, frusta, poses, outDir, GlueBakeNearDistance, &stats, &water);
 
 		ILOG("Glue terrain bake summary (" << outDir << "):");
 		ILOG("  candidate pages:   " << collection.terrainPages.size() << " (" << stats.pages << " with visible tiles)");
 		ILOG("  near tiles:        " << stats.nearTiles << " (" << stats.nearTriangles << " triangles)");
 		ILOG("  far tiles:         " << stats.farTiles << " in " << stats.farPages << " page meshes (" << stats.farTriangles << " triangles)");
 		ILOG("  empty tiles:       " << stats.emptyTiles);
+		ILOG("  water:             " << stats.waterQuads << " quads in " << stats.waterMeshes << " meshes (" << stats.waterTriangles << " triangles)");
 		ILOG("  vertices:          " << stats.vertices);
 		ILOG("  texture memory:    " << stats.textureBytes << " bytes");
 		ILOG("  files:             " << stats.files << " (" << stats.fileBytes << " bytes)");
@@ -252,7 +254,7 @@ namespace mmo
 			closeUp.lookAt = closeUp.position + Vector3(0.0f, -6.0f, 6.0f);
 			views.push_back({ "near_closeup", closeUp });
 
-			success = CompareGlueTerrainBake(*world, collection.terrainPages, tiles, views, compareDir);
+			success = CompareGlueTerrainBake(*world, collection.terrainPages, tiles, water, views, compareDir);
 		}
 
 		return success;

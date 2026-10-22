@@ -445,6 +445,13 @@ namespace mmo
 		}
 		root["terrainTiles"] = std::move(tiles);
 
+		json water = json::array();
+		for (const GlueBakeMesh& mesh : manifest.water)
+		{
+			water.push_back({ { "mesh", mesh.mesh }, { "transform", writeMatrix(mesh.transform) } });
+		}
+		root["water"] = std::move(water);
+
 		json foliage = json::array();
 		for (const GlueBakeFoliage& item : manifest.foliage)
 		{
@@ -519,12 +526,13 @@ namespace mmo
 		const json* inputs = readArray(root, "inputs");
 		const json* meshes = readArray(root, "meshes");
 		const json* tiles = readArray(root, "terrainTiles");
+		const json* water = readArray(root, "water");
 		const json* foliage = readArray(root, "foliage");
 		const json* lights = readArray(root, "lights");
 		const json* sounds = readArray(root, "sounds");
 		const json* particles = readArray(root, "particles");
 		const json* bounds = field(root, "bounds");
-		if (!inputs || !meshes || !tiles || !foliage || !lights || !sounds || !particles || !bounds)
+		if (!inputs || !meshes || !tiles || !water || !foliage || !lights || !sounds || !particles || !bounds)
 		{
 			return std::nullopt;
 		}
@@ -558,6 +566,16 @@ namespace mmo
 				return std::nullopt;
 			}
 			result.terrainTiles.push_back(std::move(item));
+		}
+
+		for (const json& node : *water)
+		{
+			GlueBakeMesh item;
+			if (!readString(node, "mesh", item.mesh) || !readMatrix(node, "transform", item.transform))
+			{
+				return std::nullopt;
+			}
+			result.water.push_back(std::move(item));
 		}
 
 		for (const json& node : *foliage)
