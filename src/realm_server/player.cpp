@@ -1085,6 +1085,12 @@ namespace mmo
 				break;
 			}
 
+			if (IsWhisperToSelf(m_characterData->name, targetName))
+			{
+				SendSystemMessage("You cannot whisper yourself.");
+				return PacketParseResult::Pass;
+			}
+
 			Player* target = m_manager.GetPlayerByCharacterName(targetName);
 			if (target == nullptr)
 			{
