@@ -169,6 +169,12 @@
     - Returns manifest entries with an identity transform.
     - Items with `mergeable == false` are not merged: they are returned as `GlueBakeMesh{ meshPath, world }`, referencing the original mesh file.
   - Submesh names: `"m<index>"`, so names are never empty.
+- **Reuse for a later distant-WMO LOD bake** (user request; build it now, no LOD work yet):
+  - Put the WMO traversal that Task 2's collector uses in `src/shared/scene_graph/world_model_flatten.{h,cpp}` as
+    `std::vector<FlattenedMeshRef> FlattenWorldModelExterior(const WorldModelPtr& model, const Matrix4& transform, const FlattenOptions& options);`
+    with `FlattenedMeshRef { String meshPath; Matrix4 world; std::vector<String> materialOverrides; }`.
+  - It walks the exterior groups, child WMOs recursively, the active doodad set and prop kits, and drops interior groups.
+  - Task 2's collector calls it instead of keeping its own copy. This task moves the code there if Task 2 wrote it locally.
 
 - [ ] **Step 1: Write failing tests.** In `[mesh_merge]`, two quads with the same material and different transforms merge into one submesh. The vertex positions equal the transformed inputs, and a mirrored scale `(-1,1,1)` flips the triangle winding (Review Focus 2).
 - [ ] **Step 2: Extract the helpers.** `world_model_instance_merge.cpp` behaviour is unchanged. Run the existing `scene_graph_tests` and build `mmo_client`.
