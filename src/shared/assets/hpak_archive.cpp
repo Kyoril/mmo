@@ -100,6 +100,8 @@ namespace mmo
 			return nullptr;
 		}
 
+		std::unique_lock lock{ m_readLock };
+
 		hpak::v1_0::ContentFileReader fileReader(
 			m_header,
 			*it,

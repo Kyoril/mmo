@@ -90,3 +90,25 @@ TEST_CASE("Chat text length is limited in characters, not bytes", "[chat_text]")
 	CHECK(SanitizeChatText("abcdef", 3) == "abc");
 	CHECK(SanitizeChatText("ab cd", 3) == "ab");
 }
+
+TEST_CASE("A whisper addressed to the own character is recognized", "[chat_text]")
+{
+	// The realm refuses a private message to the sending character itself.
+	CHECK(IsWhisperToSelf("Ruiad", "Ruiad"));
+	CHECK(IsWhisperToSelf("Ruiad", "ruiad"));
+	CHECK(IsWhisperToSelf("Ruiad", "RUIAD"));
+
+	// Anyone else is a valid whisper target.
+	CHECK_FALSE(IsWhisperToSelf("Ruiad", "Ruiada"));
+	CHECK_FALSE(IsWhisperToSelf("Ruiad", "Rui"));
+	CHECK_FALSE(IsWhisperToSelf("Ruiad", "Kyoril"));
+
+	// A missing name on either side is never the own character.
+	CHECK_FALSE(IsWhisperToSelf("", ""));
+	CHECK_FALSE(IsWhisperToSelf("Ruiad", ""));
+	CHECK_FALSE(IsWhisperToSelf("", "Ruiad"));
+
+	// Non-ASCII letters are compared as they are: Juergen with an umlaut stays itself.
+	CHECK(IsWhisperToSelf("J\xC3\xBCrgen", "j\xC3\xBCrgen"));
+	CHECK_FALSE(IsWhisperToSelf("J\xC3\xBCrgen", "Jurgen"));
+}

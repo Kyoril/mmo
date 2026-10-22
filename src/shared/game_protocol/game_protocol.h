@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000001B;
+		constexpr uint32 ProtocolVersion = 0x0000001C;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -477,6 +477,11 @@ namespace mmo
 				/// along, without a group. Lasts until either character logs out. Handled by the realm.
 				/// Payload: uint8-length string target name (empty = stop ghosting).
 				CheatGhost, // GAME MASTER
+
+				/// Saves the order in which the account's characters are listed. Must contain every
+				/// character of the account exactly once. Handled by the realm.
+				/// Payload: uint8 count, then count uint64 character guids in the desired order.
+				SetCharacterOrder,
 
 				/// Counter constant
 				Count_,

@@ -61,6 +61,9 @@ namespace mmo
 
 		/// @copydoc IDatabase::DeleteCharacter
 		void DeleteCharacter(uint64 characterGuid) final override;
+
+		/// @copydoc IDatabase::SetCharacterOrder
+		void SetCharacterOrder(uint64 accountId, std::vector<uint64> orderedGuids) final override;
 		
 		/// @copydoc IDatabase::CreateCharacter
 		std::optional<CharCreateResult> CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration, const std::vector<ItemData>& items) final override;

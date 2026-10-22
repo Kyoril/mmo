@@ -1,127 +1,218 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "char_select.h"
 
-#include "client_data/project.h"
-#include "game/character_customization/avatar_definition_mgr.h"
-#include "game_states/game_state_mgr.h"
-#include "game_states/world_state.h"
+#include "base/macros.h"
+#include "console/console_var.h"
+#include "glue/glue_scene.h"
+#include "glue/plaza_avatars.h"
 #include "net/realm_connector.h"
-#include "scene_graph/material_manager.h"
-#include "scene_graph/tag_point.h"
-#include "ui/model_frame.h"
+
+#include "client_data/project.h"
+#include "frame_ui/frame_mgr.h"
+#include "game_client/plaza_roster.h"
 
 #include "luabind_lambda.h"
 
+#include <algorithm>
+
+namespace luabind
+{
+	// Combines several policies (same helper as in game_script.cpp).
+	template <typename... T>
+	using joined = typename luabind::meta::join<T...>::type;
+}
+
 namespace mmo
 {
-	CharSelect::CharSelect(const proto_client::Project& project, RealmConnector& realmConnector)
-		: m_project(project)
-		, m_realmConnector(realmConnector)
+	namespace
+	{
+		/// Name of the cvar remembering the last played character per realm.
+		const char* const lastCharactersVarName = "lastCharacters";
+
+		/// Seconds the camera takes to push in on the front character before entering the world.
+		constexpr float pushInSeconds = 0.8f;
+
+		/// Height above a plaza spot where its "new character" marker hangs, in metres.
+		constexpr float spotMarkerHeight = 1.0f;
+	}
+
+	CharSelect::CharSelect(RealmConnector& realmConnector, const proto_client::Project& project)
+		: m_realmConnector(realmConnector)
+		, m_project(project)
 	{
 	}
 
 	void CharSelect::RegisterScriptFunctions(lua_State* lua)
 	{
 		LUABIND_MODULE(lua,
-			luabind::def_lambda("SetCharSelectModelFrame", [this](Frame* frame) { SetModelFrame(frame); }),
 			luabind::def_lambda("GetNumCharacters", [this]() { return GetNumCharacters(); }),
 			luabind::def_lambda("GetCharacterInfo", [this](int32 index) { return GetCharacterView(index); }),
 			luabind::def_lambda("SelectCharacter", [this](int32 index) { return SelectCharacter(index); }),
-			luabind::def_lambda("IsCharacterDisabled", [this](int32 index) { return IsCharacterDisabled(index); })
+			luabind::def_lambda("GetSelectedCharacterIndex", [this]() { return GetSelectedCharacter(); }),
+			luabind::def_lambda("IsCharacterDisabled", [this](int32 index) { return IsCharacterDisabled(index); }),
+			luabind::def_lambda("GetCharacterZoneName", [this](int32 index) { return GetCharacterZoneName(index); }),
+			luabind::def_lambda("GetInitialCharacterIndex", [this]() { return GetInitialCharacterIndex(); }),
+			luabind::def_lambda("SetLastCharacter", [this](int32 index) { SetLastCharacter(index); }),
+			luabind::def_lambda("MoveCharacterInOrder", [this](int32 fromIndex, int32 toIndex) { MoveCharacterInOrder(fromIndex, toIndex); }),
+			luabind::def_lambda("SaveCharacterOrder", [this]() { SaveCharacterOrder(); }),
+
+			luabind::def_lambda("RotateCharacter", [this](float degrees)
+				{
+					if (m_glueScene)
+					{
+						m_glueScene->GetPlazaAvatars().Rotate(degrees);
+					}
+				}),
+
+			luabind::def_lambda("PlazaCharacterLeave", [this](int32 index)
+				{
+					if (m_glueScene && index >= 0 && index < GetNumCharacters())
+					{
+						SyncPlaza().Leave(index);
+					}
+				}),
+
+			// x, y in UI units and whether the character's nameplate is on screen.
+			luabind::def<std::function<void(int32, float&, float&, bool&)>>("GetPlazaNameplatePosition", [this](int32 index, float& outX, float& outY, bool& outVisible)
+				{
+					outX = 0.0f;
+					outY = 0.0f;
+					outVisible = false;
+					if (!m_glueScene)
+					{
+						return;
+					}
+
+					const std::optional<Vector3> anchor = m_glueScene->GetPlazaAvatars().GetNameplateAnchor(index);
+					if (anchor)
+					{
+						outVisible = ProjectToUi(*anchor, outX, outY);
+					}
+				}, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+
+			// x, y in UI units of a point above an empty plaza spot, and whether it is on screen.
+			luabind::def<std::function<void(int32, float&, float&, bool&)>>("GetPlazaSpotPosition", [this](int32 spot, float& outX, float& outY, bool& outVisible)
+				{
+					outX = 0.0f;
+					outY = 0.0f;
+					outVisible = false;
+					if (!m_glueScene || spot < 0 || spot >= PlazaSpotCount)
+					{
+						return;
+					}
+
+					const Vector3 position = m_glueScene->GetDefinition().spots[spot].position + Vector3(0.0f, spotMarkerHeight, 0.0f);
+					outVisible = ProjectToUi(position, outX, outY);
+				}, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+
+			// Returns true if a flight started; GLUE_FLIGHT_FINISHED follows when it ends.
+			luabind::def_lambda("GlueFlyToGate", [this]()
+				{
+					if (!m_glueScene)
+					{
+						return false;
+					}
+
+					GlueCameraDirector& director = m_glueScene->GetDirector();
+					director.FlyOut();
+					return director.GetMode() == GlueCameraMode::FlyingOut;
+				}),
+
+			// Returns true if a flight started; GLUE_FLIGHT_FINISHED follows when it ends.
+			luabind::def_lambda("GlueFlyToPlaza", [this]()
+				{
+					if (!m_glueScene)
+					{
+						return false;
+					}
+
+					GlueCameraDirector& director = m_glueScene->GetDirector();
+					director.FlyIn();
+					return director.GetMode() == GlueCameraMode::FlyingIn;
+				}),
+
+			luabind::def_lambda("GlueSkipFlight", [this]()
+				{
+					if (m_glueScene)
+					{
+						m_glueScene->SkipFlight();
+					}
+				}),
+
+			luabind::def_lambda("IsGlueFlightActive", [this]()
+				{
+					return m_glueScene != nullptr && m_glueScene->IsFlightActive();
+				}),
+
+			// Returns true if the push-in started; GLUE_PUSHIN_FINISHED follows when it ends.
+			luabind::def_lambda("GluePushIn", [this]()
+				{
+					if (!m_glueScene)
+					{
+						return false;
+					}
+
+					m_glueScene->PushIn(pushInSeconds);
+					return true;
+				})
 		);
 	}
 
-	void CharSelect::SetModelFrame(Frame* frame)
+	void CharSelect::SetGlueScene(GlueScene* scene)
 	{
-		const auto modelFrame = dynamic_cast<ModelFrame*>(frame);
-		// Entity pointers in m_itemAttachments belong to the previous scene and are
-		// now dangling. Drop them before assigning the new frame.
-		m_itemAttachments.clear();
-		m_modelFrame = modelFrame;
+		// The plaza and every avatar on it belong to the scene: nothing of it is kept here, so
+		// dropping the pointer is all that is needed when the scene goes away.
+		m_glueScene = scene;
+		m_plazaPlaced = false;
+		m_plazaRealmId.reset();
+	}
+
+	void CharSelect::OnCharacterListUpdated()
+	{
+		m_order.clear();
+		EnsureOrder();
+
+		if (m_glueScene)
+		{
+			// A list from another realm drops the previous realm's avatars right away.
+			CheckPlazaRealm();
+
+			// Characters that were sent away and are still listed were not deleted after all.
+			m_glueScene->GetPlazaAvatars().ForgetLeaving();
+		}
 	}
 
 	void CharSelect::SelectCharacter(const int32 index)
 	{
 		m_selectedCharacter = index;
 
-		if (!m_modelFrame)
+		if (!m_glueScene)
 		{
 			return;
 		}
 
-		// Detach and destroy any item entities attached from the previous selection
-		ClearItemAttachments();
+		// Cheap when the roster did not change: avatars are only rebuilt for new characters, for
+		// characters that look different, and for all of them after a realm change.
+		PlazaAvatars& plaza = SyncPlaza();
 
-		if (index < 0 || index >= GetNumCharacters())
+		if (index >= 0 && index < GetNumCharacters())
 		{
-			// No valid character selected (e.g. all characters were deleted) - clear the
-			// previously rendered model so the character selection screen stays empty.
-			m_modelFrame->SetModelFile("");
+			plaza.Select(index, m_plazaPlaced);
+			m_plazaPlaced = true;
 			return;
 		}
 
-		// Force entity recreation even when switching between same-race characters,
-		// so sub-entity visibility and material overrides are always reset to defaults
-		m_modelFrame->SetModelFile("");
-
-		const auto& view = m_realmConnector.GetCharacterViews()[index];
-
-		const proto_client::ModelDataEntry* model = m_project.models.getById(view.GetDisplayId());
-		if (!model)
+		if (GetNumCharacters() == 0)
 		{
-			return;
+			// Nobody left to show (e.g. every character was deleted).
+			plaza.Select(-1, false);
+			m_plazaPlaced = false;
 		}
 
-		if ((model->flags() & model_data_flags::IsCustomizable) == 0)
-		{
-			// Simple model, no customizations
-			m_modelFrame->SetModelFile(model->filename());
-		}
-		else
-		{
-			// Load avatar definition
-			const auto definition = AvatarDefinitionManager::Get().Load(model->filename());
-			if (definition)
-			{
-				m_modelFrame->SetModelFile(definition->GetBaseMesh());
-				view.GetConfiguration().Apply(*this, *definition);
-
-				// Apply item display IDs for equipped gear
-				Entity* entity = m_modelFrame->GetEntity();
-				if (entity)
-				{
-					const auto& equipDisplayIds = view.GetEquipmentDisplayIds();
-					for (const uint32 displayId : equipDisplayIds)
-					{
-						if (displayId == 0)
-						{
-							continue;
-						}
-
-						const auto* displayData = m_project.itemDisplays.getById(displayId);
-						if (!displayData)
-						{
-							continue;
-						}
-
-						// Characters are shown out of combat here, so weapons use their sheathed bone.
-						ApplyItemDisplay(m_modelFrame->GetScene(), *entity, view.GetDisplayId(), displayId, *displayData, false, m_itemAttachments);
-					}
-				}
-			}
-		}
-	}
-
-	void CharSelect::ClearItemAttachments()
-	{
-		Entity* entity = m_modelFrame ? m_modelFrame->GetEntity() : nullptr;
-		if (!entity)
-		{
-			m_itemAttachments.clear();
-			return;
-		}
-
-		ClearItemDisplayAttachments(m_modelFrame->GetScene(), *entity, m_itemAttachments);
+		// Otherwise "no selection" is a transient state of the character screen (it clears the
+		// selection before picking one): leave the plaza as it is, so the front character neither
+		// walks back to its spot nor restarts its pose, and the first real selection stays instant.
 	}
 
 	int32 CharSelect::GetNumCharacters() const
@@ -136,115 +227,209 @@ namespace mmo
 			return nullptr;
 		}
 
-		return &m_realmConnector.GetCharacterViews()[index];
+		EnsureOrder();
+		return FindCharacter(m_order[index]);
 	}
 
-	void CharSelect::Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration)
+	bool CharSelect::IsCharacterDisabled(const int32 index) const
 	{
-		if (!m_modelFrame)
-		{
-			return;
-		}
-
-		Entity* entity = m_modelFrame->GetEntity();
-		if (!entity || !entity->GetMesh())
-		{
-			return;
-		}
-
-		// First, hide all sub entities with the given visibility set tag
-		if (!group.subEntityTag.empty())
-		{
-			for (uint16 i = 0; i < entity->GetNumSubEntities(); ++i)
-			{
-				ASSERT(entity->GetMesh()->GetSubMeshCount() == entity->GetNumSubEntities());
-
-				SubMesh& subMesh = entity->GetMesh()->GetSubMesh(i);
-				if (subMesh.HasTag(group.subEntityTag))
-				{
-					SubEntity* subEntity = entity->GetSubEntity(i);
-					ASSERT(subEntity);
-					subEntity->SetVisible(false);
-				}
-			}
-		}
-
-		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
-		if (it == configuration.chosenOptionPerGroup.end())
-		{
-			// Nothing to do here because we have no value set
-			return;
-		}
-
-		// Now make each referenced sub entity visible
-		for (const auto& value : group.possibleValues)
-		{
-			if (value.valueId == it->second)
-			{
-				for (const auto& subEntityName : value.visibleSubEntities)
-				{
-					if (SubEntity* subEntity = entity->GetSubEntity(subEntityName))
-					{
-						subEntity->SetVisible(true);
-					}
-				}
-			}
-		}
-	}
-
-	void CharSelect::Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration)
-	{
-		if (!m_modelFrame)
-		{
-			return;
-		}
-
-		Entity* entity = m_modelFrame->GetEntity();
-		if (!entity || !entity->GetMesh())
-		{
-			return;
-		}
-
-		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
-		if (it == configuration.chosenOptionPerGroup.end())
-		{
-			// Nothing to do here because we have no value set
-			return;
-		}
-
-		// Now make each referenced sub entity visible
-		for (const auto& value : group.possibleValues)
-		{
-			if (value.valueId == it->second)
-			{
-				for (const auto& pair : value.subEntityToMaterial)
-				{
-					if (SubEntity* subEntity = entity->GetSubEntity(pair.first))
-					{
-						if (MaterialPtr material = MaterialManager::Get().Load(pair.second))
-						{
-							subEntity->SetMaterial(material);
-						}
-					}
-				}
-			}
-		}
-	}
-
-	void CharSelect::Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration)
-	{
-
-	}
-
-	bool CharSelect::IsCharacterDisabled(int32 index) const
-	{
-		if (index < 0 || index >= GetNumCharacters())
+		const CharacterView* view = GetCharacterView(index);
+		if (!view)
 		{
 			return false;
 		}
 
-		const auto& view = m_realmConnector.GetCharacterViews()[index];
-		return m_realmConnector.IsRaceDisabled(view.GetRaceId()) ||
-			   m_realmConnector.IsClassDisabled(view.GetClassId());
+		return m_realmConnector.IsRaceDisabled(view->GetRaceId()) ||
+			   m_realmConnector.IsClassDisabled(view->GetClassId());
+	}
+
+	void CharSelect::MoveCharacterInOrder(const int32 fromIndex, const int32 toIndex)
+	{
+		const int32 count = GetNumCharacters();
+		if (fromIndex < 0 || fromIndex >= count || toIndex < 0 || toIndex >= count || fromIndex == toIndex)
+		{
+			return;
+		}
+
+		EnsureOrder();
+
+		const uint64 selectedGuid = (m_selectedCharacter >= 0 && m_selectedCharacter < count) ? m_order[m_selectedCharacter] : 0;
+		MoveRosterEntry(m_order, static_cast<size_t>(fromIndex), static_cast<size_t>(toIndex));
+
+		// The selection follows its character.
+		if (selectedGuid != 0)
+		{
+			const auto it = std::find(m_order.begin(), m_order.end(), selectedGuid);
+			m_selectedCharacter = static_cast<int32>(it - m_order.begin());
+		}
+
+		if (!m_glueScene)
+		{
+			return;
+		}
+
+		// Characters dragged into or out of the top spots walk in or out right away.
+		PlazaAvatars& plaza = SyncPlaza();
+		if (m_selectedCharacter >= 0)
+		{
+			plaza.Select(m_selectedCharacter, m_plazaPlaced);
+			m_plazaPlaced = true;
+		}
+	}
+
+	void CharSelect::SaveCharacterOrder()
+	{
+		EnsureOrder();
+
+		const auto& views = m_realmConnector.GetCharacterViews();
+		bool changed = false;
+		for (size_t i = 0; i < views.size(); ++i)
+		{
+			if (views[i].GetGuid() != m_order[i])
+			{
+				changed = true;
+				break;
+			}
+		}
+
+		if (changed)
+		{
+			// Also reorders the connector's list, so it and the local order agree again.
+			m_realmConnector.SetCharacterOrder(m_order);
+		}
+	}
+
+	int32 CharSelect::GetInitialCharacterIndex() const
+	{
+		EnsureOrder();
+
+		uint64 lastGuid = 0;
+		if (const ConsoleVar* var = ConsoleVarMgr::FindConsoleVar(lastCharactersVarName))
+		{
+			lastGuid = GetLastCharacterForRealm(var->GetStringValue(), m_realmConnector.GetRealmId());
+		}
+
+		return ResolveInitialSelection(m_order, lastGuid);
+	}
+
+	void CharSelect::SetLastCharacter(const int32 index)
+	{
+		const CharacterView* view = GetCharacterView(index);
+		if (!view)
+		{
+			return;
+		}
+
+		ConsoleVar* var = ConsoleVarMgr::FindConsoleVar(lastCharactersVarName);
+		if (!var)
+		{
+			return;
+		}
+
+		var->Set(SetLastCharacterForRealm(var->GetStringValue(), m_realmConnector.GetRealmId(), view->GetGuid()));
+	}
+
+	void CharSelect::EnsureOrder() const
+	{
+		const auto& views = m_realmConnector.GetCharacterViews();
+
+		bool valid = m_order.size() == views.size();
+		for (size_t i = 0; valid && i < m_order.size(); ++i)
+		{
+			valid = FindCharacter(m_order[i]) != nullptr;
+		}
+
+		if (valid)
+		{
+			return;
+		}
+
+		m_order.clear();
+		m_order.reserve(views.size());
+		for (const CharacterView& view : views)
+		{
+			m_order.push_back(view.GetGuid());
+		}
+	}
+
+	const CharacterView* CharSelect::FindCharacter(const uint64 guid) const
+	{
+		const auto& views = m_realmConnector.GetCharacterViews();
+		const auto it = std::find_if(views.begin(), views.end(), [guid](const CharacterView& view) { return view.GetGuid() == guid; });
+		return it == views.end() ? nullptr : &*it;
+	}
+
+	std::vector<CharacterView> CharSelect::GetOrderedCharacters() const
+	{
+		EnsureOrder();
+
+		std::vector<CharacterView> ordered;
+		ordered.reserve(m_order.size());
+		for (const uint64 guid : m_order)
+		{
+			if (const CharacterView* view = FindCharacter(guid))
+			{
+				ordered.push_back(*view);
+			}
+		}
+
+		return ordered;
+	}
+
+	void CharSelect::CheckPlazaRealm()
+	{
+		ASSERT(m_glueScene);
+
+		const uint32 realmId = m_realmConnector.GetRealmId();
+		if (m_plazaRealmId == realmId)
+		{
+			return;
+		}
+
+		// Another realm's characters may share guids with the avatars standing there: start
+		// over, and place the new realm's first selection instantly.
+		m_glueScene->GetPlazaAvatars().Clear();
+		m_plazaPlaced = false;
+		m_plazaRealmId = realmId;
+	}
+
+	PlazaAvatars& CharSelect::SyncPlaza()
+	{
+		ASSERT(m_glueScene);
+
+		CheckPlazaRealm();
+
+		PlazaAvatars& plaza = m_glueScene->GetPlazaAvatars();
+		plaza.SetCharacters(GetOrderedCharacters());
+		return plaza;
+	}
+
+	bool CharSelect::ProjectToUi(const Vector3& worldPosition, float& x, float& y) const
+	{
+		float normalizedX = 0.0f;
+		float normalizedY = 0.0f;
+		if (!m_glueScene || !m_glueScene->ProjectToScreen(worldPosition, normalizedX, normalizedY))
+		{
+			return false;
+		}
+
+		// The scene fills the screen, and screen px / uiScale = UI units on each axis, so a
+		// normalized position times the native resolution is already in UI units.
+		const Size& native = FrameManager::Get().GetNativeResolution();
+		x = normalizedX * native.width;
+		y = normalizedY * native.height;
+		return true;
+	}
+
+	String CharSelect::GetCharacterZoneName(const int32 index) const
+	{
+		const CharacterView* view = GetCharacterView(index);
+		if (!view)
+		{
+			return String();
+		}
+
+		const proto_client::ZoneEntry* zone = m_project.zones.getById(view->GetZoneId());
+		return zone ? zone->name() : String();
 	}
 }
