@@ -43,9 +43,10 @@ namespace mmo
 		/// @brief How RenderPageColor renders and encodes the colour.
 		struct ColorOptions
 		{
-			/// @brief Encode the colour with pow(1/2.2) like the .tlod bake. False stores saturate(albedo +
-			///        emissive) as is, which is what a material sampling the texture (no sRGB decode) writes back.
-			bool srgb = true;
+			/// @brief Encode the colour with pow(1/2.2). False (the default, used by the .tlod bake) stores
+			///        saturate(albedo + emissive) as is, which is what a material sampling the texture (no sRGB
+			///        decode) writes back.
+			bool srgb = false;
 
 			/// @brief Draw the page water as the opaque minimap water. False hides the water so the ground
 			///        under it is rendered.

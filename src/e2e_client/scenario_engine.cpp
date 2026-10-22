@@ -1217,8 +1217,9 @@ namespace mmo
 			// into view appears at the edge of the visibility range, so a new one near the player is taken
 			// at once. The client's own position may lag the server's by a few units (right after a
 			// MoveTo, say), hence the generous radius; a farther one is only the fallback at the deadline.
-			const BotUnit* selfUnit = self();
-			const Vector3 spawnPosition = selfUnit ? selfUnit->GetPosition() : Vector3::Zero;
+			// The client's movement state, not the self unit: the server never echoes our own
+			// movement, so the unit still stands wherever the character last spawned.
+			const Vector3 spawnPosition = g_runtime->session->GetContext().GetPosition();
 			constexpr float nearSpawnDistanceSq = 10.0f * 10.0f;
 
 			g_runtime->session->GetRealm().CheatCreateMonster(entry);
@@ -1236,7 +1237,7 @@ namespace mmo
 							return;
 						}
 
-						const float distanceSq = selfUnit ? unit.GetDistanceToSquared(spawnPosition) : 0.0f;
+						const float distanceSq = unit.GetDistanceToSquared(spawnPosition);
 						if (distanceSq < nearestDistanceSq)
 						{
 							nearestDistanceSq = distanceSq;
@@ -1505,16 +1506,17 @@ namespace mmo
 			BotSession& session = *g_runtime->session;
 			session.GetRealm().CheatWorldPort(mapId, Vector3(x, y, z), facing);
 
-			// Same-map teleports arrive as a MoveTeleport packet the connector acks. Wait for
-			// it and resync the context's movement cache so facing/position math stays correct.
+			// The session takes the new position and lands once the teleport is acked, or - across
+			// maps - once the new world node has spawned the character. Wait for that rather than
+			// for the packet: walking off before the landing has every movement packet refused.
 			const Vector3 target(x, y, z);
 			const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(15);
 			while (std::chrono::steady_clock::now() < until)
 			{
-				const Vector3& position = session.GetRealm().GetMovementInfo().position;
-				if ((position - target).GetSquaredLength() < 1.0f)
+				const BotContext& context = session.GetContext();
+				if (context.IsWorldReady() && context.GetCurrentMapId() == mapId
+					&& (context.GetPosition() - target).GetSquaredLength() < 1.0f)
 				{
-					session.GetContext().UpdateMovementInfo(session.GetRealm().GetMovementInfo());
 					break;
 				}
 				pumpChecked();

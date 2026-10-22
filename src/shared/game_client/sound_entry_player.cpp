@@ -28,15 +28,25 @@ namespace mmo
 
 	ChannelIndex SoundEntryPlayer::PlayEntry(const uint32 soundId)
 	{
+		return PlayLoadedEntry(soundId, LoadEntry(soundId));
+	}
+
+	SoundIndex SoundEntryPlayer::LoadEntry(const uint32 soundId)
+	{
 		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
 		if (!entry)
 		{
 			WLOG("Unable to play sound entry " << soundId << ": unknown id");
-			return InvalidChannel;
+			return InvalidSound;
 		}
 
-		const SoundIndex sound = LoadRandomFile(*entry);
-		if (sound == InvalidSound)
+		return LoadRandomFile(*entry);
+	}
+
+	ChannelIndex SoundEntryPlayer::PlayLoadedEntry(const uint32 soundId, const SoundIndex sound)
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		if (!entry || sound == InvalidSound)
 		{
 			return InvalidChannel;
 		}
@@ -133,14 +143,6 @@ namespace mmo
 	{
 		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
 		return entry ? entry->fade_out_ms() / 1000.0f : 0.0f;
-	}
-
-	void SoundEntryPlayer::GetEntryFiles(const uint32 soundId, std::vector<String>& outFiles) const
-	{
-		if (const proto_client::SoundEntry* entry = m_sounds.getById(soundId))
-		{
-			outFiles.insert(outFiles.end(), entry->files().begin(), entry->files().end());
-		}
 	}
 
 	SoundType SoundEntryPlayer::GetSoundTypeFromEntry(const proto_client::SoundEntry& entry)
@@ -260,18 +262,27 @@ namespace mmo
 
 	void CrossfadingSoundLoop::SetSound(const uint32 soundId)
 	{
+		// Already waiting for exactly this sound to open: nothing to do.
+		if (soundId != 0 && soundId == m_pendingSoundId)
+		{
+			return;
+		}
+
+		// Any other request supersedes a sound that has not started yet. It stays cached by the
+		// audio system and simply never plays.
+		m_pendingSoundId = 0;
+		m_pendingSound = InvalidSound;
+
 		// Already the active (playing / fading-in) sound: nothing to do.
 		if (soundId == m_activeSoundId)
 		{
 			return;
 		}
 
-		// Fade out whatever is currently active.
-		RetireActiveSound();
-
-		// A request for "no sound" just leaves the fade-outs running.
+		// A request for "no sound" fades out whatever is active and leaves the fade-outs running.
 		if (soundId == 0)
 		{
+			RetireActiveSound();
 			return;
 		}
 
@@ -286,11 +297,15 @@ namespace mmo
 				continue;
 			}
 
-			m_activeChannel = it->channel;
-			m_activeSoundId = it->soundId;
-			m_activeBaseVolume = it->baseVolume;
-			m_activeFade = it->fade;
+			// Take it out before retiring the active sound, which appends to m_fadingOut.
+			const FadingChannel reclaimed = *it;
 			m_fadingOut.erase(it);
+			RetireActiveSound();
+
+			m_activeChannel = reclaimed.channel;
+			m_activeSoundId = reclaimed.soundId;
+			m_activeBaseVolume = reclaimed.baseVolume;
+			m_activeFade = reclaimed.fade;
 
 			const float reclaimFadeInSeconds = m_player.GetEntryFadeInSeconds(soundId);
 			if (reclaimFadeInSeconds > 0.0f)
@@ -311,8 +326,36 @@ namespace mmo
 			return;
 		}
 
-		// Start the new sound and fade it in from silence.
-		m_activeChannel = m_player.PlayEntry(soundId);
+		// Open the new sound. A stream opens in the background and the current sound keeps playing
+		// until it is ready, so the crossfade starts with both sounds actually audible.
+		const SoundIndex sound = m_player.LoadEntry(soundId);
+		if (sound == InvalidSound)
+		{
+			RetireActiveSound();
+			return;
+		}
+
+		m_pendingSoundId = soundId;
+		m_pendingSound = sound;
+		StartPendingSoundIfReady();
+	}
+
+	void CrossfadingSoundLoop::StartPendingSoundIfReady()
+	{
+		if (m_pendingSoundId == 0 || m_audio.IsSoundLoading(m_pendingSound))
+		{
+			return;
+		}
+
+		const uint32 soundId = m_pendingSoundId;
+		const SoundIndex sound = m_pendingSound;
+		m_pendingSoundId = 0;
+		m_pendingSound = InvalidSound;
+
+		// Fade out whatever is currently active, then start the new sound and fade it in from silence.
+		RetireActiveSound();
+
+		m_activeChannel = m_player.PlayLoadedEntry(soundId, sound);
 		if (m_activeChannel == InvalidChannel)
 		{
 			m_activeSoundId = 0;
@@ -342,6 +385,8 @@ namespace mmo
 
 	void CrossfadingSoundLoop::Update(const float deltaSeconds)
 	{
+		StartPendingSoundIfReady();
+
 		// Advance the active fade-in.
 		if (m_activeChannel != InvalidChannel && m_activeFadeInPerSec > 0.0f && m_activeFade < 1.0f)
 		{
@@ -379,6 +424,9 @@ namespace mmo
 
 	void CrossfadingSoundLoop::Stop()
 	{
+		m_pendingSoundId = 0;
+		m_pendingSound = InvalidSound;
+
 		if (m_activeChannel != InvalidChannel)
 		{
 			m_audio.StopSound(&m_activeChannel);

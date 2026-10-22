@@ -16,6 +16,7 @@
 #include "constants.h"
 #include "flatten_plane.h"
 #include "terrain_region_snapshot.h"
+#include "terrain_io/water_flow.h"
 
 
 namespace mmo
@@ -597,6 +598,35 @@ namespace mmo
 			/// @param radius Brush radius in world units.
 			/// @param materialName The asset path of the material to assign.
 			void SetWaterMaterial(float brushCenterX, float brushCenterZ, float radius, const String& materialName);
+
+			/// @brief Result of ApplyWaterFlow.
+			struct WaterFlowResult
+			{
+				/// @brief Pages that received new flow.
+				uint32 pagesWritten = 0;
+
+				/// @brief Pages whose flow was removed because no path reaches them any more.
+				uint32 pagesCleared = 0;
+			};
+
+			/// @brief Recomputes river flow from the given paths on every page with water within their
+			///	       reach, and removes it from pages only the previous paths reached.
+			/// @param paths The river paths (downstream order); each water vertex follows the nearest.
+			/// @param settings Flow settings for paths.
+			/// @param previousPaths The paths of the last apply. Pages they reached that paths no longer
+			///	       reach lose their flow. Pages neither set reaches are left as they are.
+			/// @param previousSettings Flow settings for previousPaths.
+			/// @param riverMaterialName Water material given to every page that receives flow (the
+			///	       flow only shows with a material that reads it). Empty leaves materials alone.
+			/// @remark Pages out of the streamed range are prepared (their data read, nothing rendered)
+			///	        so a long river is written in full; they are saved with the other changed pages.
+			WaterFlowResult ApplyWaterFlow(const std::vector<terrain_io::water_flow::FlowPath>& paths, const terrain_io::water_flow::FlowSettings& settings,
+				const std::vector<terrain_io::water_flow::FlowPath>& previousPaths, const terrain_io::water_flow::FlowSettings& previousSettings,
+				const String& riverMaterialName);
+
+			/// @brief Removes river flow from every page touched by a circular area.
+			/// @return The number of pages whose flow was removed.
+			uint32 ClearWaterFlow(float centerX, float centerZ, float radius);
 
 			/// @brief Updates tiles in a specified region.
 			/// @param fromX The starting X coordinate.

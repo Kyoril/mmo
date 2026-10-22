@@ -62,6 +62,7 @@ namespace mmo
 					AddChunkHandler(*AreaChunk, false, *this, &PageDataChunkReader::ReadAreaChunk);
 					AddChunkHandler(*VertexShadingChunk, false, *this, &PageDataChunkReader::ReadShadingChunk);
 					AddChunkHandler(*WaterQuadChunk, false, *this, &PageDataChunkReader::ReadWaterQuadChunk);
+					AddChunkHandler(*WaterFlowChunk, false, *this, &PageDataChunkReader::ReadWaterFlowChunk);
 
 					return reader;
 				}
@@ -219,6 +220,21 @@ namespace mmo
 					return reader;
 				}
 
+				bool ReadWaterFlowChunk(io::Reader &reader, uint32 header, uint32 size)
+				{
+					m_data.waterFlowUVs.assign(OuterVertexCount * 2, 0.0f);
+					m_data.waterFlowSpeeds.assign(OuterVertexCount, 0);
+					if (!(reader >> io::read_range(m_data.waterFlowUVs) >> io::read_range(m_data.waterFlowSpeeds)))
+					{
+						ELOG("Failed to read terrain page water flow!");
+						m_data.waterFlowUVs.clear();
+						m_data.waterFlowSpeeds.clear();
+						return false;
+					}
+
+					return reader;
+				}
+
 			private:
 				PageData &m_data;
 			};
@@ -240,6 +256,8 @@ namespace mmo
 			waterTypes.assign(TileCount, 0);
 			waterVertexHeights.assign(OuterVertexCount, 0.0f);
 			waterMaterialName.clear();
+			waterFlowUVs.clear();
+			waterFlowSpeeds.clear();
 		}
 
 		PageDataView MakeView(const PageData &data)
@@ -260,6 +278,11 @@ namespace mmo
 			view.waterTypes = data.waterTypes.data();
 			view.waterVertexHeights = data.waterVertexHeights.data();
 			view.waterMaterialName = &data.waterMaterialName;
+			if (data.waterFlowUVs.size() == OuterVertexCount * 2 && data.waterFlowSpeeds.size() == OuterVertexCount)
+			{
+				view.waterFlowUVs = data.waterFlowUVs.data();
+				view.waterFlowSpeeds = data.waterFlowSpeeds.data();
+			}
 			return view;
 		}
 
@@ -408,6 +431,21 @@ namespace mmo
 					writer << io::write_dynamic_range<uint16>(page.waterMaterialName ? *page.waterMaterialName : String());
 					waterChunkWriter.Finish();
 				}
+			}
+
+			// River flow (optional)
+			if (page.waterFlowUVs && page.waterFlowSpeeds)
+			{
+				ChunkWriter flowChunkWriter{ WaterFlowChunk, writer };
+				for (size_t i = 0; i < OuterVertexCount * 2; ++i)
+				{
+					writer << io::write<float>(page.waterFlowUVs[i]);
+				}
+				for (size_t i = 0; i < OuterVertexCount; ++i)
+				{
+					writer << io::write<uint8>(page.waterFlowSpeeds[i]);
+				}
+				flowChunkWriter.Finish();
 			}
 
 			// Zones

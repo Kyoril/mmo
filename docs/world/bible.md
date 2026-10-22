@@ -144,6 +144,14 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - **Deepwood Fringe** (zone 12): the thicker forest where the grown Forest Wolves hunt (q29). [C]
 - **Marsh Edge** (zone 13): broken ground and rotten reeds where marsh ambushers lie in wait (q30). [C]
 
+#### The green-valley concept (2026-10-18)
+
+- The user gave concept art for where Briarwatch should go: **"Briarwatch — The Green Valley"** (`docs/world/reference/briarwatch-green-valley-concept.webp`), "woodland frontier, sheltered wetlands, connected ground-level routes". [E]
+  - It looks south from above Briarwatch: the Oakenshire gate and Briarwatch camp on the left, mixed woodland with trails in the middle, the river on the right with meadows, the Old Stone Bridge and a Crossroads Inn, farmland on the far bank, and Haven on the river in the distance. [E]
+- The valley was shaped after it the same day, and reworked on the user's review: rolling hills and open woodland on both banks, the river rerouted from its old straight course south of the Mirewater (it now crosses the King's Road under a four-arch Old Stone Bridge, meanders east past the river meadows and opens into a broad harbour bay with an island in front of Haven's north wall), the Crossroads Inn just past the bridge, farmsteads and gently rolling fields on the west bank, the Haven road to Haven's north gate, a woodland backwater pond, and a barrow ridge south of the ring. The atlas carries them as placeholders. [C]
+- The user is fine with moving roads, atlas places and their NPC spawns to follow the concept. [E]
+- The concept puts the **Mirewater backwater** in the woodland south of the road and a **barrow ridge** far to the left of the view. In the game the Mirewater (q44–q47) and the Barrowfield (q48–q53) lie north-west of the road. The pond and the ridge exist now, but the quests have not moved. [?]
+
 ### 3.6 The Old King's Road / Kingsroad — atlas `kingsroad_waypost`, `kingsroad`
 
 - The old road running west from Oakenshire's west gate through Briarwatch March. [C]

@@ -31,6 +31,10 @@
 #include "nav_mesh/map.h"
 #include "terrain/terrain.h"
 #include "terrain_lod_baker.h"
+#include "terrain/far_terrain.h"
+#include "editor_viewpoint.h"
+#include <algorithm>
+#include <filesystem>
 #include "edit_modes/terrain_edit_mode.h"
 #include "edit_modes/spawn_edit_mode.h"
 #include "edit_modes/entity_edit_mode.h"
@@ -335,6 +339,9 @@ namespace mmo
 		void OnMouseMoved(uint16 x, uint16 y) override;
 
 		bool Save() override;
+
+		/// Asset path of the world's river flow paths (.hflow next to the world file).
+		[[nodiscard]] String GetFlowPathsFileName() const;
 
 	private:
 		// UI related methods
@@ -718,10 +725,55 @@ namespace mmo
 		/// @param worldZ Target world Z coordinate.
 		void MoveCameraToWorldPosition(float worldX, float worldZ);
 
+		/// @brief Describes where the editor camera is and where it looks, in the form SetViewpoint reads.
+		[[nodiscard]] EditorViewpoint GetViewpoint() const;
+
+		/// @brief Places the editor camera exactly at a viewpoint and applies its field of view and,
+		///        if the viewpoint carries one, its time of day.
+		void SetViewpoint(const EditorViewpoint& viewpoint);
+
+		/// @brief Renders the world from a viewpoint at a given resolution and saves the frame as PNG.
+		///
+		/// Before rendering, it waits until the pages around the viewpoint, their trees and the
+		/// distant terrain have streamed in, then renders a few warm-up frames so exposure and
+		/// temporal effects settle. The viewport size and camera are restored afterwards.
+		/// @param viewpoint Where to place the camera.
+		/// @param width Image width in pixels.
+		/// @param height Image height in pixels.
+		/// @param path Destination PNG file.
+		/// @param showGrass Whether procedural grass is shown in the shot.
+		/// @param warmupFrames Frames rendered before the one that is saved.
+		/// @return True if the image was written.
+		bool CaptureViewpoint(const EditorViewpoint& viewpoint, uint32 width, uint32 height, const std::filesystem::path& path, bool showGrass, uint32 warmupFrames = 24);
+
+		/// @brief Sets how many pages around the camera the distant terrain covers (0 turns it off).
+		void SetFarTerrainRadius(uint32 radius) { m_farTerrainRadius = std::min<uint32>(radius, 16); }
+
+		/// @brief Turns the scene's fog and atmosphere on or off, like the World Settings "Show Fog" box.
+		void SetFogEnabled(const bool enabled) { m_scene.SetFogEnabled(enabled); }
+
+		/// @brief Gets how many pages around the camera the distant terrain covers.
+		[[nodiscard]] uint32 GetFarTerrainRadius() const { return m_farTerrainRadius; }
+
 	private:
 		/// @brief Draws the dockable "World Map" panel which shows the world's minimap grid and lets
 		///        the user quickly teleport the camera by clicking a tile.
 		void DrawMinimapPanel(const String& id);
+
+		/// @brief Creates the distant terrain stand-ins for this world, mirroring the game client.
+		void CreateFarTerrain();
+
+		/// @brief Streams distant terrain around the camera and adapts the camera's far clip to it.
+		void UpdateFarTerrain();
+
+		/// @brief Waits until the pages around the camera and the distant terrain are loaded, pumping
+		///        the main-thread dispatcher. Gives up after the timeout.
+		/// @return True if everything finished loading in time.
+		bool WaitForStreaming(float timeoutSeconds);
+
+		/// @brief Draws the "View" section of the World Settings panel: distant terrain, viewpoint
+		///        and screenshot controls.
+		void DrawViewSettings();
 
 	private:
 		WorldEditor &m_editor;
@@ -750,6 +802,18 @@ namespace mmo
 
 		/// @brief Procedural grass/vegetation system (the dense foliage seen in the client). Hidden by default.
 		std::unique_ptr<Foliage> m_grass;
+
+		/// @brief Baked low-detail stand-ins for terrain pages beyond the streamed ones, as in the client.
+		std::unique_ptr<terrain::FarTerrain> m_farTerrain;
+
+		/// @brief Distant terrain radius in pages. The client's TerrainFarRadius default.
+		uint32 m_farTerrainRadius{4};
+
+		/// @brief Text field of the View settings, holding a viewpoint to jump to.
+		String m_viewpointText;
+
+		/// @brief Size of images captured from the View settings.
+		int m_captureSize[2]{1920, 1080};
 
 		/// Key identifying a distinct procedural foliage layer derived from terrain material data
 		/// (the painted .hmat or .hmi, the bound layer index and the mesh asset).

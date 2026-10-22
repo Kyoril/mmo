@@ -56,8 +56,13 @@
 
 #include "stb_dxt.h"
 #include "minimap_baker.h"
+#include "page_bake_utils.h"
 #include "terrain_lod_baker.h"
 #include "glue_bake/glue_scene_baker.h"
+#include "terrain/far_terrain.h"
+#include "tex/png_writer.h"
+#include "graphics/material_instance.h"
+#include "base/clock.h"
 
 namespace mmo
 {
@@ -505,6 +510,16 @@ namespace mmo
 			DLOG("Loaded " << m_fogVolumes.size() << " local fog volume(s) for map " << fogFileName);
 		}
 
+		// River flow paths (editor-only; the pages carry the computed flow).
+		if (m_waterEditMode)
+		{
+			m_waterEditMode->LoadFlowPaths(GetFlowPathsFileName());
+		}
+
+		CreateFarTerrain();
+
+		m_worldSettingsPanel->SetExtraContent([this]() { DrawViewSettings(); });
+
 		s_lastCreated = this;
 	}
 
@@ -534,6 +549,8 @@ namespace mmo
 		m_foliage.reset();
 		// Procedural grass also owns scene nodes and render chunks; destroy before Scene::Clear().
 		m_grass.reset();
+		// The distant terrain hangs its stand-ins below the terrain's scene node.
+		m_farTerrain.reset();
 		m_worldGrid.reset();
 		// Destroy the terrain before clearing the scene. Terrain pages own water render
 		// objects and page scene nodes that live in the scene; Scene::Clear() would destroy
@@ -639,6 +656,8 @@ namespace mmo
 		const auto pos = GetPagePositionFromCamera();
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
+
+		UpdateFarTerrain();
 
 		UpdateUnderwaterPreview(deltaTimeSeconds);
 
@@ -1004,8 +1023,23 @@ namespace mmo
 		}
 	}
 
+	String WorldEditorInstance::GetFlowPathsFileName() const
+	{
+		Path flowPath = m_assetPath;
+		flowPath.replace_extension(".hflow");
+		String fileName = flowPath.string();
+		std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+		return fileName;
+	}
+
 	bool WorldEditorInstance::Save()
 	{
+		// River flow first: a pending flow apply changes terrain pages, which are saved below.
+		if (m_waterEditMode)
+		{
+			m_waterEditMode->SaveFlowPaths(GetFlowPathsFileName());
+		}
+
 		// Build mesh name index map (only for mesh entities)
 		std::map<String, uint32> entityNames;
 		for (const auto &mapEntity : m_mapEntities)
@@ -1901,6 +1935,376 @@ namespace mmo
 		m_cameraVelocity = Vector3::Zero;
 	}
 
+	EditorViewpoint WorldEditorInstance::GetViewpoint() const
+	{
+		EditorViewpoint viewpoint;
+		viewpoint.position = m_camera->GetDerivedPosition();
+
+		const Vector3 forward = m_cameraAnchor->GetDerivedOrientation() * Vector3::NegativeUnitZ;
+		viewpoint.yawDegrees = Radian(std::atan2(-forward.x, -forward.z)).GetValueDegrees();
+		if (viewpoint.yawDegrees < 0.0f)
+		{
+			viewpoint.yawDegrees += 360.0f;
+		}
+		viewpoint.pitchDegrees = Radian(std::asin(std::clamp(forward.y, -1.0f, 1.0f))).GetValueDegrees();
+		viewpoint.fovDegrees = m_camera->GetFOVy().GetValueDegrees();
+		if (m_skyComponent)
+		{
+			viewpoint.timeOfDay = m_skyComponent->GetNormalizedTimeOfDay();
+		}
+		return viewpoint;
+	}
+
+	void WorldEditorInstance::SetViewpoint(const EditorViewpoint& viewpoint)
+	{
+		// Yaw about the world up axis, then pitch about the rotated right axis: the same order the
+		// mouse look uses, so dragging afterwards continues smoothly.
+		const Quaternion orientation =
+			Quaternion(Degree(viewpoint.yawDegrees), Vector3::UnitY) *
+			Quaternion(Degree(std::clamp(viewpoint.pitchDegrees, -89.0f, 89.0f)), Vector3::UnitX);
+
+		m_cameraAnchor->SetOrientation(orientation);
+
+		// The camera hangs behind the anchor; place the anchor so the eye lands on the position.
+		m_cameraAnchor->SetPosition(viewpoint.position - orientation * m_cameraNode->GetPosition());
+		m_cameraVelocity = Vector3::Zero;
+
+		m_camera->SetFOVy(Degree(std::clamp(viewpoint.fovDegrees, 5.0f, 150.0f)));
+
+		// Derived transforms are refreshed lazily during rendering; page streaming reads the camera's
+		// derived position before the next frame, so bring it up to date now.
+		m_cameraAnchor->Update(true, true);
+		m_camera->InvalidateView();
+
+		if (viewpoint.timeOfDay >= 0.0f && m_skyComponent)
+		{
+			m_skyComponent->SetNormalizedTimeOfDay(std::fmod(viewpoint.timeOfDay, 1.0f));
+		}
+	}
+
+	void WorldEditorInstance::CreateFarTerrain()
+	{
+		m_farTerrain.reset();
+
+		if (!m_terrain || !m_hasTerrain)
+		{
+			return;
+		}
+
+		// Same material setup as the client's WorldState::CreateFarTerrain, so the distance looks alike.
+		const MaterialPtr parent = MaterialManager::Get().Load("Models/AlbedoNormal_Opaque_Base.hmat");
+		if (!parent)
+		{
+			WLOG("Distant terrain disabled: its material could not be loaded");
+			return;
+		}
+
+		auto material = std::make_shared<MaterialInstance>("EditorFarTerrain", parent);
+		material->SetTextureParameter("Normal", "Textures/Character/BaseFlattenNormalMap.htex");
+		material->SetScalarParameter("Specular", 0.2f);
+		material->SetScalarParameter("Roughness", 1.0f);
+
+		auto& workQueue = m_workQueue;
+		auto& dispatcher = m_dispatcher;
+		m_farTerrain = std::make_unique<terrain::FarTerrain>(
+			*m_terrain,
+			std::move(material),
+			[&workQueue](std::function<void()> work) { workQueue.post(std::move(work)); },
+			[&dispatcher](std::function<void()> work) { dispatcher.post(std::move(work)); });
+	}
+
+	void WorldEditorInstance::UpdateFarTerrain()
+	{
+		if (!m_farTerrain && m_hasTerrain)
+		{
+			CreateFarTerrain();
+		}
+
+		const uint32 radius = m_hasTerrain ? m_farTerrainRadius : 0;
+		if (m_farTerrain)
+		{
+			if (m_farTerrain->GetRadius() != radius)
+			{
+				m_farTerrain->SetRadius(radius);
+			}
+
+			m_farTerrain->Update(m_camera->GetDerivedPosition());
+		}
+
+		// Far clip as in the client: half a page beyond the distant selection while it has pages.
+		constexpr float defaultFarClip = 1000.0f;
+		const bool hasDistantTerrain = m_farTerrain && radius > 0 && m_farTerrain->GetReadyPageCount() > 0;
+		const float farClip = hasDistantTerrain
+			? std::max(defaultFarClip, (static_cast<float>(radius) + 1.5f) * static_cast<float>(terrain::constants::PageSize))
+			: defaultFarClip;
+
+		if (m_camera->GetFarClipDistance() != farClip)
+		{
+			m_camera->SetFarClipDistance(farClip);
+		}
+	}
+
+	bool WorldEditorInstance::WaitForStreaming(const float timeoutSeconds)
+	{
+		const GameTime deadline = GetAsyncTimeMs() + static_cast<GameTime>(timeoutSeconds * 1000.0f);
+
+		while (GetAsyncTimeMs() < deadline)
+		{
+			const PagePosition center = GetPagePositionFromCamera();
+			m_memoryPointOfView->UpdateCenter(center);
+			m_visibleSection->UpdateCenter(center);
+			UpdateFarTerrain();
+
+			while (m_dispatcher.poll_one() > 0)
+			{
+			}
+
+			bool pagesLoaded = true;
+			if (m_hasTerrain && m_terrain)
+			{
+				for (int32 z = static_cast<int32>(center.y()) - 1; z <= static_cast<int32>(center.y()) + 1 && pagesLoaded; ++z)
+				{
+					for (int32 x = static_cast<int32>(center.x()) - 1; x <= static_cast<int32>(center.x()) + 1; ++x)
+					{
+						if (x < 0 || z < 0 || x >= 64 || z >= 64)
+						{
+							continue;
+						}
+
+						// Every page with a tile file must finish loading; pages that have not even
+						// started streaming yet count as not loaded.
+						terrain::Page* page = m_terrain->GetPage(x, z);
+						if (page && !page->IsLoaded() && AssetRegistry::HasFile(m_terrain->GetPageFilename(x, z)))
+						{
+							pagesLoaded = false;
+							break;
+						}
+					}
+				}
+			}
+
+			const bool farLoaded = !m_farTerrain || m_farTerrain->GetRadius() == 0 || m_farTerrain->GetLoadingPageCount() == 0;
+
+			if (pagesLoaded && farLoaded)
+			{
+				ILOG("Streaming ready around page " << center.x() << "," << center.y() << " ("
+					<< (m_farTerrain ? m_farTerrain->GetReadyPageCount() : 0) << " distant pages)");
+				return true;
+			}
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+
+		const PagePosition center = GetPagePositionFromCamera();
+		for (int32 z = static_cast<int32>(center.y()) - 1; z <= static_cast<int32>(center.y()) + 1; ++z)
+		{
+			for (int32 x = static_cast<int32>(center.x()) - 1; x <= static_cast<int32>(center.x()) + 1; ++x)
+			{
+				if (terrain::Page* page = m_terrain ? m_terrain->GetPage(x, z) : nullptr)
+				{
+					if (!page->IsLoaded())
+					{
+						WLOG("Page " << x << "," << z << " not loaded (prepared " << page->IsPrepared() << ", file "
+							<< AssetRegistry::HasFile(m_terrain->GetPageFilename(x, z)) << ")");
+					}
+				}
+			}
+		}
+		WLOG("Streaming did not finish within " << timeoutSeconds << " seconds; capturing what is loaded");
+		return false;
+	}
+
+	bool WorldEditorInstance::CaptureViewpoint(const EditorViewpoint& viewpoint, const uint32 width, const uint32 height,
+		const std::filesystem::path& path, const bool showGrass, const uint32 warmupFrames)
+	{
+		if (width == 0 || height == 0 || width > 8192 || height > 8192)
+		{
+			ELOG("Capture size " << width << "x" << height << " is not supported");
+			return false;
+		}
+
+		const EditorViewpoint previous = GetViewpoint();
+		SetViewpoint(viewpoint);
+		WaitForStreaming(120.0f);
+
+		// Editor helpers do not belong in the picture.
+		const bool gridWasVisible = m_worldGrid && m_worldGrid->IsVisible();
+		if (m_worldGrid) m_worldGrid->SetVisible(false);
+		const bool debugBoxWasVisible = m_debugBoundingBox && m_debugBoundingBox->IsVisible();
+		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(false);
+
+		const bool grassWasVisible = m_grass && m_grass->IsVisible();
+		if (m_grass && showGrass != grassWasVisible)
+		{
+			m_grass->SetVisible(showGrass);
+			if (showGrass)
+			{
+				m_grass->RebuildAll();
+			}
+		}
+
+		auto& gx = GraphicsDevice::Get();
+		m_deferredRenderer->Resize(width, height);
+		m_camera->SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
+
+		// Exposure adaptation, temporal shadows and the volumetric fog history need a few frames to
+		// settle; the last of these frames is the one that is saved.
+		constexpr float frameTime = 1.0f / 30.0f;
+		for (uint32 frame = 0; frame <= warmupFrames; ++frame)
+		{
+			while (m_dispatcher.poll_one() > 0)
+			{
+			}
+
+			UpdateFarTerrain();
+			if (m_grass && m_grass->IsVisible())
+			{
+				m_grass->Update(*m_camera);
+			}
+			if (m_skyComponent)
+			{
+				m_skyComponent->SetPosition(m_camera->GetDerivedPosition());
+				m_skyComponent->Update(frameTime, 0);
+				UpdateEnvironment(frameTime);
+			}
+
+			gx.Reset();
+			gx.SetViewport(0, 0, width, height, 0.0f, 1.0f);
+			m_camera->SetFillMode(FillMode::Solid);
+			m_camera->InvalidateView();
+			m_deferredRenderer->Render(m_scene, *m_camera);
+		}
+
+		bool written = false;
+		const auto target = std::dynamic_pointer_cast<RenderTexture>(m_deferredRenderer->GetFinalRenderTarget());
+		if (!target || target->GetColorFormat() != PixelFormat::R16G16B16A16)
+		{
+			ELOG("Capture: unexpected final render target");
+		}
+		else
+		{
+			gx.FlushCommands();
+
+			const uint32 pixelCount = width * height;
+			std::vector<uint16> halfPixels(static_cast<size_t>(pixelCount) * 4);
+			if (target->GetPixelDataSize() != halfPixels.size() * sizeof(uint16))
+			{
+				ELOG("Capture: render target size does not match " << width << "x" << height);
+			}
+			else
+			{
+				target->CopyPixelDataTo(reinterpret_cast<uint8*>(halfPixels.data()));
+
+				// The tonemap output is already display-referred (gamma applied), so only quantize.
+				std::vector<uint8> rgba(static_cast<size_t>(pixelCount) * 4);
+				for (size_t i = 0; i < halfPixels.size(); ++i)
+				{
+					const float value = (i % 4 == 3) ? 1.0f : page_bake::HalfToFloat(halfPixels[i]);
+					rgba[i] = static_cast<uint8>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
+				}
+
+				written = tex::WritePng(path, width, height, rgba.data());
+				if (written)
+				{
+					ILOG("Captured " << width << "x" << height << " view " << viewpoint.ToString() << " to " << path.string());
+				}
+				else
+				{
+					ELOG("Capture: failed to write " << path.string());
+				}
+			}
+		}
+
+		// Back to the interactive state.
+		if (m_grass && m_grass->IsVisible() != grassWasVisible)
+		{
+			m_grass->SetVisible(grassWasVisible);
+		}
+		if (m_worldGrid) m_worldGrid->SetVisible(gridWasVisible);
+		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(debugBoxWasVisible);
+
+		if (m_lastAvailViewportSize.x > 0.0f && m_lastAvailViewportSize.y > 0.0f)
+		{
+			m_deferredRenderer->Resize(static_cast<uint32>(m_lastAvailViewportSize.x), static_cast<uint32>(m_lastAvailViewportSize.y));
+		}
+
+		SetViewpoint(previous);
+		return written;
+	}
+
+	void WorldEditorInstance::DrawViewSettings()
+	{
+		if (!ImGui::CollapsingHeader("View", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			return;
+		}
+
+		int radius = static_cast<int>(m_farTerrainRadius);
+		if (ImGui::SliderInt("Distant Terrain", &radius, 0, 16, radius == 0 ? "Off" : "%d pages"))
+		{
+			SetFarTerrainRadius(static_cast<uint32>(radius));
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Draws the baked low-detail terrain (.tlod) beyond the streamed pages, like the "
+				"client's TerrainFarRadius (default 4). Bake it with Generate Terrain LOD after sculpting.");
+		}
+		if (m_farTerrain && m_farTerrainRadius > 0)
+		{
+			ImGui::TextDisabled("%u of %u distant pages ready", m_farTerrain->GetReadyPageCount(), m_farTerrain->GetVisiblePageCount());
+		}
+
+		float fov = m_camera->GetFOVy().GetValueDegrees();
+		if (ImGui::SliderFloat("Field of View", &fov, 10.0f, 120.0f, "%.0f deg"))
+		{
+			m_camera->SetFOVy(Degree(fov));
+			m_camera->InvalidateView();
+		}
+
+		ImGui::Separator();
+
+		const EditorViewpoint current = GetViewpoint();
+		const String currentText = current.ToString();
+		ImGui::TextWrapped("Viewpoint: %s", currentText.c_str());
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("x, y, z, yaw, pitch, field of view, time of day. Yaw 0 looks north, 90 west.\n"
+				"mmo_edit --capture-view <world.hwld> --view \"<viewpoint>\" --out shot.png takes the same picture unattended.");
+		}
+
+		if (ImGui::Button("Copy Viewpoint"))
+		{
+			ImGui::SetClipboardText(currentText.c_str());
+			m_viewpointText = currentText;
+		}
+
+		ImGui::InputText("##viewpoint", &m_viewpointText);
+		ImGui::SameLine();
+		const auto parsed = EditorViewpoint::Parse(m_viewpointText);
+		ImGui::BeginDisabled(!parsed.has_value());
+		if (ImGui::Button("Go") && parsed)
+		{
+			SetViewpoint(*parsed);
+		}
+		ImGui::EndDisabled();
+
+		ImGui::InputInt2("Capture Size", m_captureSize);
+		m_captureSize[0] = std::clamp(m_captureSize[0], 16, 8192);
+		m_captureSize[1] = std::clamp(m_captureSize[1], 16, 8192);
+
+		if (ImGui::Button("Capture Screenshot"))
+		{
+			const auto now = std::chrono::system_clock::now().time_since_epoch();
+			const std::filesystem::path path = std::filesystem::path("screenshots") /
+				(m_assetPath.stem().string() + "_" + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(now).count()) + ".png");
+			CaptureViewpoint(current, static_cast<uint32>(m_captureSize[0]), static_cast<uint32>(m_captureSize[1]), path, m_showFoliage);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Renders the current view at the capture size into screenshots/ next to the editor executable.");
+		}
+	}
+
 	void WorldEditorInstance::AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select)
 	{
 		// Create manual render object for visualization
@@ -2162,6 +2566,9 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
 		if (m_foliage) m_foliage->SetVisible(false);
 
+		// The stand-ins would draw over the pages being baked, and must reload the new bake anyway.
+		if (m_farTerrain) m_farTerrain->Clear();
+
 		TerrainLodBaker::Stats stats;
 		{
 			TerrainLodBaker baker(m_scene, *m_terrain, [this]() { return m_dispatcher.poll_one() > 0; });
@@ -2185,6 +2592,13 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		// editor helper are left out by the baker, which keeps only the terrain and these subtrees.
 		// Entities only exist for streamed-in pages, so each page's neighbourhood is loaded on demand.
 		MinimapBaker::Stats stats;
+
+		// Distant stand-ins hang below the terrain node the baker keeps, and lie over pages that are not streamed in.
+		if (m_farTerrain)
+		{
+			m_farTerrain->Clear();
+		}
+
 		{
 			MinimapBaker baker(m_scene, *m_terrain, m_assetPath.filename().replace_extension().string(),
 				[this](const uint32 x, const uint32 z) { return PrepareMinimapBakeEntities(x, z); },
@@ -3099,7 +3513,13 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		{
 			m_dispatcher.post([this, pos]()
 							  { EnsurePageIsLoaded(pos); });
+			return;
 		}
+
+		// Grass layers come from the materials of a fully loaded page. Page::Load creates one tile
+		// per call, so the registration in OnPageAvailabilityChanged usually saw an unfinished page
+		// and skipped it; this is the first point at which every tile exists.
+		RegisterPageFoliage(pos.x(), pos.y());
 	}
 
 	void WorldEditorInstance::Visit(SelectedMapEntity &selectable)

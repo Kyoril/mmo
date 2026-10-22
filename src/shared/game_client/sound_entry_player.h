@@ -31,6 +31,15 @@ namespace mmo
 		/// @return The channel the sound plays on, or InvalidChannel.
 		ChannelIndex PlayEntry(uint32 soundId);
 
+		/// @brief Creates the sound of an entry without playing it, picking the file the following
+		/// PlayLoadedEntry plays. Streams keep opening in the background (see IAudio::IsSoundLoading).
+		/// @return The sound to pass to PlayLoadedEntry, or InvalidSound.
+		SoundIndex LoadEntry(uint32 soundId);
+
+		/// @brief Plays a sound returned by LoadEntry as a global (2D) sound with the entry's settings.
+		/// @return The channel the sound plays on, or InvalidChannel.
+		ChannelIndex PlayLoadedEntry(uint32 soundId, SoundIndex sound);
+
 		/// @brief Plays a sound entry at a world position. Non-looped 3D sounds out of
 		/// hearing range are not started at all.
 		/// @return The channel the sound plays on, or InvalidChannel.
@@ -56,9 +65,6 @@ namespace mmo
 
 		/// @brief Gets the configured fade-out duration of an entry in seconds (0 if unknown).
 		float GetEntryFadeOutSeconds(uint32 soundId) const;
-
-		/// @brief Appends the file names of an entry (none if unknown).
-		void GetEntryFiles(uint32 soundId, std::vector<String>& outFiles) const;
 
 	private:
 		/// @brief Resolves the playback SoundType from the entry flags.
@@ -105,6 +111,9 @@ namespace mmo
 	/// the two overlap for a true crossfade rather than a hard cut. Multiple outgoing sounds
 	/// can be fading out at once (e.g. rapid zone changes).
 	///
+	/// A new sound starts only once its stream has opened in the background, so SetSound never
+	/// blocks the frame; until then the previous sound keeps playing untouched.
+	///
 	/// Call SetSound whenever the desired entry changes (comparison is by entry id, never by
 	/// channel, as audio channels are recycled), and Update once per frame to advance the fades.
 	class CrossfadingSoundLoop final : public NonCopyable
@@ -125,8 +134,9 @@ namespace mmo
 		/// @brief Immediately stops all playback (active and outgoing) without fading.
 		void Stop();
 
-		/// @brief Gets the id of the sound entry currently fading in / playing (0 = none).
-		[[nodiscard]] uint32 GetCurrentSoundId() const { return m_activeSoundId; }
+		/// @brief Gets the id of the sound entry last requested: the one fading in / playing, or the
+		/// one waiting for its stream to open (0 = none).
+		[[nodiscard]] uint32 GetCurrentSoundId() const { return m_pendingSoundId != 0 ? m_pendingSoundId : m_activeSoundId; }
 
 	private:
 		/// @brief A sound that is currently fading out towards silence.
@@ -144,6 +154,9 @@ namespace mmo
 		/// @brief Moves the current active sound (if any) into the fade-out list.
 		void RetireActiveSound();
 
+		/// @brief Crossfades to the pending sound once its stream has opened.
+		void StartPendingSoundIfReady();
+
 	private:
 		SoundEntryPlayer& m_player;
 		IAudio& m_audio;
@@ -158,5 +171,9 @@ namespace mmo
 		float m_activeFadeInPerSec = 0.0f;
 
 		std::vector<FadingChannel> m_fadingOut;
+
+		// Requested sound whose stream is still opening (0 = none).
+		uint32 m_pendingSoundId = 0;
+		SoundIndex m_pendingSound = InvalidSound;
 	};
 }

@@ -5,7 +5,11 @@
 #include "assets/asset_registry.h"
 #include "base/macros.h"
 #include "log/default_log_levels.h"
+#include "nav_mesh/instance_query_filter.h"
 #include "nav_mesh/map.h"
+
+#include "DetourNavMesh.h"
+#include "DetourNavMeshQuery.h"
 
 #include <cmath>
 #include <limits>
@@ -209,7 +213,62 @@ namespace mmo
 		return true;
 	}
 
-	BotPathResult BotNavService::FindPath(const uint32 mapId, const Vector3& start, const Vector3& end)
+	namespace
+	{
+		/// How close a door poly's centre must be to a closed door for the door to stand on it. A
+		/// doorway strip is a few yards wide; the next door is further than this.
+		constexpr float ClosedDoorPolyRadius = 5.0f;
+
+		/// The bot's own path filter: the default one, minus the door polys of the closed doors it
+		/// sees. The server blocks those per instance with the door's exact footprint; the bot
+		/// knows only where the doors stand, which tells one doorway from the next.
+		class ClosedDoorFilter final : public dtQueryFilter
+		{
+		public:
+			explicit ClosedDoorFilter(const std::vector<Vector3>& closedDoors)
+				: m_closedDoors(closedDoors)
+			{
+			}
+
+			bool passFilter(const dtPolyRef ref, const dtMeshTile* tile, const dtPoly* poly) const override
+			{
+				if (!dtQueryFilter::passFilter(ref, tile, poly))
+				{
+					return false;
+				}
+
+				if ((poly->flags & nav::DoorPolyFlag) == 0 || poly->vertCount == 0)
+				{
+					return true;
+				}
+
+				Vector3 centre = Vector3::Zero;
+				for (unsigned int i = 0; i < poly->vertCount; ++i)
+				{
+					const float* vertex = &tile->verts[poly->verts[i] * 3];
+					centre += Vector3(vertex[0], vertex[1], vertex[2]);
+				}
+				centre /= static_cast<float>(poly->vertCount);
+
+				for (const Vector3& door : m_closedDoors)
+				{
+					const float dx = door.x - centre.x;
+					const float dz = door.z - centre.z;
+					if (dx * dx + dz * dz <= ClosedDoorPolyRadius * ClosedDoorPolyRadius)
+					{
+						return false;
+					}
+				}
+
+				return true;
+			}
+
+		private:
+			const std::vector<Vector3>& m_closedDoors;
+		};
+	}
+
+	BotPathResult BotNavService::FindPath(const uint32 mapId, const Vector3& start, const Vector3& end, const std::vector<Vector3>& closedDoors)
 	{
 		if (!m_ready)
 		{
@@ -227,9 +286,40 @@ namespace mmo
 		BotPathResult result;
 		result.mapId = mapId;
 		result.mapDirectory = mapDirectory;
-		if (!map->FindPath(start, end, result.points, true))
+
+		const ClosedDoorFilter doorFilter(closedDoors);
+		const dtQueryFilter* filter = closedDoors.empty() ? nullptr : &doorFilter;
+		if (!map->FindPath(start, end, result.points, true, filter))
 		{
-			return FailPath(mapId, std::move(mapDirectory), "invalid_path", "phase=find_path status=query_failed", false);
+			// The start is not on the mesh where the bot stands. Nearest first: a step or two to the
+			// side - beside the mesh, pushed against a wall, at a gap in a floor - then a little
+			// above, and at most two yards down, which with the query's own reach still finds the
+			// ground under a bot hovering a few yards over a slope after a relog.
+			// Never further down: from a gap in the Oakenshire town hall's floor a probe four yards
+			// down found the terrain under the building, the bot walked down there through the
+			// floor, and from under it never found the floor again. Two yards down from a floor, the
+			// floor is still the nearest polygon.
+			bool found = false;
+			const Vector3 probes[] = {
+				{ 2.0f, 0.0f, 0.0f }, { -2.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 2.0f }, { 0.0f, 0.0f, -2.0f },
+				{ 1.5f, 0.0f, 1.5f }, { -1.5f, 0.0f, 1.5f }, { 1.5f, 0.0f, -1.5f }, { -1.5f, 0.0f, -1.5f },
+				{ 0.0f, 2.0f, 0.0f }, { 0.0f, 4.0f, 0.0f },
+				{ 4.0f, 0.0f, 0.0f }, { -4.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 4.0f }, { 0.0f, 0.0f, -4.0f },
+				{ 0.0f, -2.0f, 0.0f },
+			};
+			for (const Vector3& offset : probes)
+			{
+				if (map->FindPath(start + offset, end, result.points, true, filter))
+				{
+					found = true;
+					break;
+				}
+			}
+
+			if (!found)
+			{
+				return FailPath(mapId, std::move(mapDirectory), "invalid_path", "phase=find_path status=query_failed", false);
+			}
 		}
 
 		if (result.points.size() < 2)
@@ -363,6 +453,25 @@ namespace mmo
 
 		loadedMap->LoadAllPages();
 		return loadedMap;
+	}
+
+	std::optional<bool> BotNavService::IsOnMesh(const uint32 mapId, const Vector3& position)
+	{
+		std::string mapDirectory;
+		std::string reason;
+		const std::shared_ptr<nav::Map> map = m_ready ? GetOrLoadMap(mapId, mapDirectory, reason) : nullptr;
+		if (!map)
+		{
+			return std::nullopt;
+		}
+
+		// The same box nav::Map::FindPath searches for the polys under its start and end.
+		constexpr float extents[] = { 5.0f, 3.5f, 5.0f };
+		const float center[3] = { position.x, position.y, position.z };
+		const dtQueryFilter filter;
+		dtPolyRef poly = 0;
+		const dtStatus status = map->GetNavMeshQuery().findNearestPoly(center, extents, &filter, &poly, nullptr);
+		return dtStatusSucceed(status) && poly != 0;
 	}
 
 	BotPathResult BotNavService::FailPath(uint32 mapId, std::string mapDirectory, std::string reason, std::string details, const bool error)

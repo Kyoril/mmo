@@ -104,6 +104,10 @@ namespace mmo
 		virtual void Set3DMinMaxDistance(ChannelIndex channelIndex, float minDistance, float maxDistance) = 0;
 		virtual void Set3DPosition(ChannelIndex channelIndex, const Vector3& position) = 0;
 		virtual float GetSoundLength(SoundIndex sound) = 0;
+		/// Whether a sound is still being opened in the background. Streams (SoundLooped2D) open
+		/// without blocking the caller; playing one before it is ready waits for the open to finish,
+		/// so callers that must not stall poll this first.
+		virtual bool IsSoundLoading(SoundIndex /*sound*/) { return false; }
 		virtual ISoundInstance* GetSoundInstance(SoundIndex sound) = 0;
 		virtual IChannelInstance* GetChannelInstance(ChannelIndex channel) = 0;
 

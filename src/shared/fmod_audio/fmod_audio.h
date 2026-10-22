@@ -139,6 +139,8 @@ namespace mmo
 
 		float GetSoundLength(SoundIndex sound) override;
 
+		bool IsSoundLoading(SoundIndex sound) override;
+
 		ISoundInstance *GetSoundInstance(SoundIndex sound) override;
 
 		IChannelInstance *GetChannelInstance(ChannelIndex channel) override;

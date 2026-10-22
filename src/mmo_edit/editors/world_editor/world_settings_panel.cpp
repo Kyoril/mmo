@@ -141,8 +141,8 @@ namespace mmo
                     ImGui::SetTooltip("Fog, light shafts, exposure and bloom come from the environment profile of the zone under the camera.");
                 }
 
-                // Foliage rendering (authored trees) — mirrors the in-game client appearance.
-                // Hidden by default since dense foliage makes terrain editing harder.
+                // Procedural grass from the terrain materials, as in the client. Authored trees are
+                // always shown. Hidden by default since dense grass makes terrain editing harder.
                 bool showFoliage = m_showFoliage;
                 if (ImGui::Checkbox("Show Foliage", &showFoliage))
                 {
@@ -154,7 +154,7 @@ namespace mmo
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Render authored foliage (trees) just as in the game client.");
+                    ImGui::SetTooltip("Render the procedural grass and ground cover of the terrain materials, as in the game client. Placed trees are always shown.");
                 }
 
                 // Water rendering — visible by default. Note that water is always shown while
@@ -174,6 +174,11 @@ namespace mmo
                 }
 
                 ImGui::EndDisabled();
+            }
+
+            if (m_drawExtraContent)
+            {
+                m_drawExtraContent();
             }
         }
         ImGui::End();

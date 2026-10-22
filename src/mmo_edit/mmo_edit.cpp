@@ -340,6 +340,8 @@ int main(int argc, char* arg[])
 	// from their stored collision recipes (editor-only CSRC chunk), saves them and exits.
 	// `--build-collision <asset.hmsh> [--build-collision ...]` does the same, but gives meshes without a
 	// recipe the default one (all render triangles) first, like Collision > Build for a fresh import.
+	// `--resave-mesh <asset.hmsh> [--resave-mesh ...]` loads the meshes and saves them again with
+	// their collision recipes, which bakes the load-time trim to four bone weights into the file.
 	// `--set-submesh-material <asset.hmsh> <submesh> <material> [...]` assigns a material to a
 	// submesh (by name, or index), saves the mesh with its collision recipe and exits.
 	// `--set-mesh-sounds <asset.hmsh> "<id>:<x>,<y>,<z>[:<volume>[:<maxDistance>]];..." [...]` replaces
@@ -486,6 +488,29 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--resave-mesh")
+			{
+				static std::ofstream resaveLog("resave_mesh.log", std::ios::out | std::ios::trunc);
+				static std::mutex resaveLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ resaveLogMutex };
+					resaveLog << entry.message << std::endl;
+				});
+
+				bool allSaved = true;
+				for (int j = 1; j + 1 < argCount; ++j)
+				{
+					if (std::string(args[j]) == "--resave-mesh")
+					{
+						allSaved = mmo::MeshEditorInstance::ResaveMeshFile(args[j + 1]) && allSaved;
+					}
+				}
+
+				PostQuitMessage(allSaved ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--set-submesh-material")
 			{
 				// `--set-submesh-material <asset.hmsh> <submesh name|index> <material> [...]`
@@ -572,6 +597,154 @@ int main(int argc, char* arg[])
 				}
 
 				PostQuitMessage(mmo::ApplyPropKitJob(args[i + 1]) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--import-texture")
+			{
+				// mmo_edit --import-texture <asset folder> <image>... [--normal | --grayscale] [--compress] [--height-map]
+				static std::ofstream importLog("texture_import.log", std::ios::out | std::ios::trunc);
+				static std::mutex importLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ importLogMutex };
+					importLog << entry.message << std::endl;
+				});
+
+				if (i + 2 >= argCount)
+				{
+					ELOG("--import-texture needs <asset folder> <image>...");
+					PostQuitMessage(1);
+					break;
+				}
+
+				std::vector<std::filesystem::path> files;
+				mmo::TextureUsage usage = mmo::TextureUsage::Color;
+				bool compress = false;
+				bool heightMap = false;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					const std::string arg = args[j];
+					if (arg == "--normal") usage = mmo::TextureUsage::NormalMap;
+					else if (arg == "--grayscale") usage = mmo::TextureUsage::Grayscale;
+					else if (arg == "--compress") compress = true;
+					else if (arg == "--height-map") heightMap = true;
+					else files.emplace_back(arg);
+				}
+
+				mmo::TextureImport importer;
+				PostQuitMessage(importer.ImportUnattended(files, args[i + 1], usage, compress, heightMap) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--capture-view")
+			{
+				// mmo_edit --capture-view <world.hwld> --view <x,y,z,yaw,pitch[,fov[,time]]> --out <file.png>
+				//          [--view ... --out ...] [--size <w>x<h>] [--grass] [--fog] [--far-radius <pages>] [--warmup <frames>]
+				// Renders each viewpoint of the world into a PNG, for comparing a zone against concept art.
+				static std::ofstream captureLog("capture_view.log", std::ios::out | std::ios::trunc);
+				static std::mutex captureLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ captureLogMutex };
+					captureLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE captureAssertFile = CreateFileA("capture_view_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, captureAssertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, captureAssertFile);
+#endif
+
+				if (i + 1 >= argCount)
+				{
+					ELOG("--capture-view needs <world.hwld>");
+					PostQuitMessage(1);
+					break;
+				}
+
+				std::vector<mmo::EditorViewpoint> views;
+				std::vector<std::string> outputs;
+				uint32 width = 1920, height = 1080, warmup = 24;
+				int32 farRadius = -1;
+				bool grass = false;
+				bool fog = false;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					const std::string arg = args[j];
+					const bool hasValue = j + 1 < argCount;
+					if (arg == "--view" && hasValue)
+					{
+						const auto viewpoint = mmo::EditorViewpoint::Parse(args[++j]);
+						if (!viewpoint)
+						{
+							ELOG("--capture-view: cannot read viewpoint '" << args[j] << "'");
+							argumentsValid = false;
+							break;
+						}
+						views.push_back(*viewpoint);
+					}
+					else if (arg == "--out" && hasValue)
+					{
+						outputs.emplace_back(args[++j]);
+					}
+					else if (arg == "--size" && hasValue)
+					{
+						if (std::sscanf(args[++j], "%ux%u", &width, &height) != 2)
+						{
+							ELOG("--capture-view: --size expects <width>x<height>");
+							argumentsValid = false;
+							break;
+						}
+					}
+					else if (arg == "--warmup" && hasValue)
+					{
+						warmup = static_cast<uint32>(std::atoi(args[++j]));
+					}
+					else if (arg == "--far-radius" && hasValue)
+					{
+						farRadius = std::atoi(args[++j]);
+					}
+					else if (arg == "--grass")
+					{
+						grass = true;
+					}
+					else if (arg == "--fog")
+					{
+						fog = true;
+					}
+				}
+
+				if (argumentsValid && (views.empty() || views.size() != outputs.size()))
+				{
+					ELOG("--capture-view needs one --out per --view");
+					argumentsValid = false;
+				}
+
+				bool captured = false;
+				if (argumentsValid && mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				{
+					auto* world = mmo::WorldEditorInstance::GetLastCreated();
+					if (farRadius >= 0)
+					{
+						world->SetFarTerrainRadius(static_cast<uint32>(farRadius));
+					}
+					world->SetFogEnabled(fog);
+
+					captured = true;
+					for (size_t v = 0; v < views.size(); ++v)
+					{
+						captured = world->CaptureViewpoint(views[v], width, height, outputs[v], grass, warmup) && captured;
+					}
+				}
+				else if (argumentsValid)
+				{
+					ELOG("--capture-view: failed to open " << args[i + 1]);
+				}
+
+				PostQuitMessage(captured ? 0 : 1);
 				break;
 			}
 
