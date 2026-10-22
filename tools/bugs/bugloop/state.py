@@ -25,6 +25,9 @@ _DEFAULT = {
 	# {"nightly_run": <run id>, "text": <the BREAKER file's content>}. None for a manual trip.
 	"breaker_source": None,
 	"refix_rounds": {},
+	# Automatic re-applications of a fix on today's develop after a ship conflict nothing could
+	# resolve: bug id -> count. Separate from refix_rounds, which are the maintainer's.
+	"reapply_rounds": {},
 	"pending_summary": None,
 	# Maintainer-accepted features: bug id -> the accepted description. It lives here, not in
 	# the bug's artifacts folder, because the fixer can write that folder.
@@ -142,6 +145,12 @@ class LoopState:
 
 	def count_refix(self, bug_id):
 		self.data["refix_rounds"][bug_id] = self.refix_count(bug_id) + 1
+
+	def reapply_count(self, bug_id):
+		return self.data["reapply_rounds"].get(bug_id, 0)
+
+	def count_reapply(self, bug_id):
+		self.data["reapply_rounds"][bug_id] = self.reapply_count(bug_id) + 1
 
 	def ci_phase(self):
 		return self.data["ci"]["phase"]
