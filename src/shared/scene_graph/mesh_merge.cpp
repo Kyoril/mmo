@@ -6,6 +6,7 @@
 #include "sub_mesh.h"
 #include "graphics/graphics_device.h"
 #include "base/profiler.h"
+#include "log/default_log_levels.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,15 +17,10 @@ namespace mmo
 {
 	namespace
 	{
-		bool IsFinite(const Vector3& v)
-		{
-			return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-		}
-
 		/// Replaces a non-finite or degenerate direction with a unit fallback.
 		void SanitizeDirection(Vector3& v, const Vector3& fallback)
 		{
-			if (!IsFinite(v))
+			if (!IsFiniteVector(v))
 			{
 				v = fallback;
 				return;
@@ -228,21 +224,35 @@ namespace mmo
 		return repeated;
 	}
 
-	const MeshMergeGeometry* MeshReadBackCache::Get(const Mesh& mesh, const uint16 subMeshIndex)
+	const MeshMergeGeometry* MeshReadBackCache::Get(const Mesh& mesh, const uint16 subMeshIndex, const bool requireFinite)
 	{
 		const auto key = std::make_pair(&mesh, subMeshIndex);
 		auto it = m_entries.find(key);
 		if (it == m_entries.end())
 		{
-			auto geometry = std::make_unique<MeshMergeGeometry>();
-			if (subMeshIndex >= mesh.GetSubMeshCount() || !ReadSubMeshGeometry(mesh.GetSubMesh(subMeshIndex), *geometry))
+			Entry entry;
+			entry.geometry = std::make_unique<MeshMergeGeometry>();
+			if (subMeshIndex >= mesh.GetSubMeshCount() || !ReadSubMeshGeometry(mesh.GetSubMesh(subMeshIndex), *entry.geometry))
 			{
-				geometry.reset();
+				entry.geometry.reset();
 			}
-			it = m_entries.emplace(key, std::move(geometry)).first;
+			else
+			{
+				// Validated once here rather than per placement
+				const MeshMergeGeometry& geometry = *entry.geometry;
+				entry.finite =
+					std::all_of(geometry.vertices.begin(), geometry.vertices.end(), [](const WorldModelMergeVertex& v) { return IsFiniteVector(v.pos); }) &&
+					std::none_of(geometry.indices.begin(), geometry.indices.end(), [&geometry](const uint32 index) { return index >= geometry.vertices.size(); });
+			}
+			it = m_entries.emplace(key, std::move(entry)).first;
 		}
 
-		return it->second.get();
+		if (requireFinite && !it->second.finite)
+		{
+			return nullptr;
+		}
+
+		return it->second.geometry.get();
 	}
 
 	MeshMergeAccumulator::MeshMergeAccumulator(MeshReadBackCache& cache, const size_t maxVerticesPerBucket)
@@ -261,16 +271,10 @@ namespace mmo
 		bool complete = true;
 		for (uint16 subIndex = 0; subIndex < mesh.GetSubMeshCount(); ++subIndex)
 		{
-			const MeshMergeGeometry* geometry = m_cache.Get(mesh, subIndex);
+			// Source data can hold anything: unreadable geometry, positions that are not finite and
+			// indices out of range cannot be repaired, so such a submesh is left out.
+			const MeshMergeGeometry* geometry = m_cache.Get(mesh, subIndex, true);
 			if (!geometry)
-			{
-				complete = false;
-				continue;
-			}
-
-			// Source data can hold anything; positions that are not finite cannot be repaired.
-			if (!std::all_of(geometry->vertices.begin(), geometry->vertices.end(), [](const WorldModelMergeVertex& v) { return IsFinite(v.pos); }) ||
-				std::any_of(geometry->indices.begin(), geometry->indices.end(), [&](const uint32 index) { return index >= geometry->vertices.size(); }))
 			{
 				complete = false;
 				continue;
@@ -281,6 +285,11 @@ namespace mmo
 			if (subIndex < materialOverrides.size() && !materialOverrides[subIndex].empty())
 			{
 				material = MaterialManager::Get().Load(materialOverrides[subIndex]);
+				if (!material)
+				{
+					WLOG("Mesh merge: material override " << materialOverrides[subIndex] << " of " << mesh.GetName()
+						<< " submesh " << subIndex << " did not load, using the submesh's own material");
+				}
 			}
 			if (!material)
 			{
@@ -298,7 +307,7 @@ namespace mmo
 
 			// A finite transform of finite positions can still overflow; such a placement is undone.
 			if (!std::all_of(bucket.vertices.begin() + static_cast<std::ptrdiff_t>(first), bucket.vertices.end(),
-				[](const WorldModelMergeVertex& v) { return IsFinite(v.pos); }))
+				[](const WorldModelMergeVertex& v) { return IsFiniteVector(v.pos); }))
 			{
 				bucket.vertices.resize(first);
 				bucket.indices.resize(firstIndex);

@@ -8,6 +8,7 @@
 
 #include "math/matrix4.h"
 
+#include <cmath>
 #include <map>
 #include <memory>
 #include <utility>
@@ -20,6 +21,12 @@ namespace mmo
 
 	/// @brief Default vertex budget of one merged submesh; a bucket above it continues in the next part.
 	constexpr size_t MaxMergedSubMeshVertices = 1000000;
+
+	/// @brief Whether every component of a vector is finite (neither NaN nor infinite).
+	[[nodiscard]] inline bool IsFiniteVector(const Vector3& v)
+	{
+		return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+	}
 
 	/// @brief CPU copy of one submesh's geometry, read back from its GPU buffers.
 	struct MeshMergeGeometry
@@ -67,15 +74,25 @@ namespace mmo
 	{
 	public:
 		/// @brief Returns the geometry of a submesh, reading it back on first use.
-		/// @return Null when the submesh cannot be read back.
-		const MeshMergeGeometry* Get(const Mesh& mesh, uint16 subMeshIndex);
+		/// @param requireFinite When true, geometry with non-finite positions or indices out of range
+		///        counts as unreadable. The check runs once, when the submesh is first read.
+		/// @return Null when the submesh cannot be read back (or fails the check).
+		const MeshMergeGeometry* Get(const Mesh& mesh, uint16 subMeshIndex, bool requireFinite = false);
 
 		/// @brief Drops every cached copy.
 		void Clear() { m_entries.clear(); }
 
 	private:
-		/// Null geometry marks a submesh that could not be read, so it is not tried again.
-		std::map<std::pair<const Mesh*, uint16>, std::unique_ptr<MeshMergeGeometry>> m_entries;
+		struct Entry
+		{
+			/// Null marks a submesh that could not be read, so it is not tried again.
+			std::unique_ptr<MeshMergeGeometry> geometry;
+
+			/// Every position is finite and every index refers to a vertex.
+			bool finite = false;
+		};
+
+		std::map<std::pair<const Mesh*, uint16>, Entry> m_entries;
 	};
 
 	/// @brief Placements of one mesh at least this often are drawn instanced (one entity per placement

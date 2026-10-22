@@ -5,6 +5,7 @@
 #include "game_common/glue_bake.h"
 
 #include <cmath>
+#include <vector>
 
 using namespace mmo;
 
@@ -225,6 +226,43 @@ TEST_CASE("Manifest parsing rejects a non-array meshes field", "[glue_bake]")
 	REQUIRE(pos != String::npos);
 	s.replace(pos, from.size(), "\"meshes\":5");
 	CHECK_FALSE(ParseGlueBakeManifest(s).has_value());
+}
+
+TEST_CASE("Manifest mesh material overrides round trip and stay optional", "[glue_bake]")
+{
+	GlueBakeManifest m;
+	m.sceneHash = "0123456789abcdef";
+	m.meshes = { { "Meshes/plain.hmsh", Matrix4::Identity }, { "Meshes/lamp.hmsh", Matrix4::Identity, { "", "Materials/Red.hmat" } } };
+
+	const String json = WriteGlueBakeManifest(m);
+
+	// Written only where there are overrides
+	size_t count = 0;
+	for (size_t pos = json.find("\"materialOverrides\""); pos != String::npos; pos = json.find("\"materialOverrides\"", pos + 1))
+	{
+		++count;
+	}
+	CHECK(count == 1);
+
+	const auto parsed = ParseGlueBakeManifest(json);
+	REQUIRE(parsed.has_value());
+	REQUIRE(parsed->meshes.size() == 2);
+	CHECK(parsed->meshes[0].materialOverrides.empty());
+	CHECK(parsed->meshes[1].materialOverrides == std::vector<String>{ "", "Materials/Red.hmat" });
+
+	// A wrong type is rejected: not an array, or an array holding something other than strings
+	const auto replaced = [&json](const String& to)
+	{
+		String s = json;
+		const String from = "[\"\",\"Materials/Red.hmat\"]";
+		const size_t pos = s.find(from);
+		REQUIRE(pos != String::npos);
+		s.replace(pos, from.size(), to);
+		return s;
+	};
+	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"Materials/Red.hmat\"")).has_value());
+	CHECK_FALSE(ParseGlueBakeManifest(replaced("[\"\",5]")).has_value());
+	CHECK(ParseGlueBakeManifest(replaced("[]")).has_value());
 }
 
 TEST_CASE("Byte hashing is FNV-1a 64", "[glue_bake]")

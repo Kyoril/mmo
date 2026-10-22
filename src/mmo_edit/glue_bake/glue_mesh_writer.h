@@ -52,7 +52,7 @@ namespace mmo
 		/// @brief Merged placements by mesh path.
 		std::map<String, MeshUse> mergedByMesh;
 
-		/// @brief Items dropped: non-finite transform or bounds.
+		/// @brief Items dropped: non-finite transform or bounds, or a mesh that did not load.
 		uint32 dropped = 0;
 
 		/// @brief Items merged only in part because a submesh could not be read back.

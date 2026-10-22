@@ -83,11 +83,6 @@ namespace mmo
 			return result + file;
 		}
 
-		bool IsFinite(const Vector3& v)
-		{
-			return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-		}
-
 		/// Triangles of all submeshes of a mesh.
 		uint64 CountTriangles(const Mesh& mesh)
 		{
@@ -169,16 +164,24 @@ namespace mmo
 				continue;
 			}
 
-			if (!item.mergeable || !item.mesh)
+			if (!item.mesh)
 			{
-				unmerged.push_back(GlueBakeMesh{ item.meshPath, item.world });
+				// Referencing a mesh that did not load could point at a missing file
+				WLOG("Glue mesh bake: dropping " << item.meshPath << ", its mesh did not load");
+				++counts.dropped;
+				continue;
+			}
+
+			if (!item.mergeable)
+			{
+				unmerged.push_back(GlueBakeMesh{ item.meshPath, item.world, item.materialOverrides });
 				++counts.unmerged;
 				continue;
 			}
 
 			if (repeated[itemIndex])
 			{
-				unmerged.push_back(GlueBakeMesh{ item.meshPath, item.world });
+				unmerged.push_back(GlueBakeMesh{ item.meshPath, item.world, item.materialOverrides });
 				++counts.instanced;
 				counts.instancedTriangles += CountTriangles(*item.mesh);
 				instancedMeshes.insert(placementKeys[itemIndex]);
@@ -186,7 +189,7 @@ namespace mmo
 			}
 
 			const Vector3 center = item.worldBounds.GetCenter();
-			if (!IsFinite(center))
+			if (!IsFiniteVector(center))
 			{
 				WLOG("Glue mesh bake: dropping " << item.meshPath << ", its bounds are not finite");
 				++counts.dropped;

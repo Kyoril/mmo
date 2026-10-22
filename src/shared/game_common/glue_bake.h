@@ -73,6 +73,10 @@ namespace mmo
 	{
 		String mesh;
 		Matrix4 transform;
+
+		/// Material per submesh (by index); an empty entry keeps the mesh's own material. Empty when
+		/// nothing is overridden (merged chunk meshes carry their materials themselves).
+		std::vector<String> materialOverrides;
 	};
 
 	/// A baked terrain tile.

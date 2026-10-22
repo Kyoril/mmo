@@ -213,6 +213,33 @@ namespace mmo
 			const json* node = field(parent, name);
 			return (node != nullptr && node->is_array()) ? node : nullptr;
 		}
+
+		/// Reads an optional array of strings. A missing field leaves `out` empty; a field of another
+		/// type, or holding anything but strings, fails.
+		bool readOptionalStrings(const json& parent, const char* name, std::vector<String>& out)
+		{
+			out.clear();
+			const json* node = field(parent, name);
+			if (node == nullptr)
+			{
+				return true;
+			}
+
+			if (!node->is_array())
+			{
+				return false;
+			}
+
+			for (const json& entry : *node)
+			{
+				if (!entry.is_string())
+				{
+					return false;
+				}
+				out.push_back(entry.get<String>());
+			}
+			return true;
+		}
 	}
 
 	std::vector<GlueCameraPose> SampleGlueCameraPoses(const GlueSceneDefinition& def, uint32 pathSamples)
@@ -402,7 +429,12 @@ namespace mmo
 		json meshes = json::array();
 		for (const GlueBakeMesh& mesh : manifest.meshes)
 		{
-			meshes.push_back({ { "mesh", mesh.mesh }, { "transform", writeMatrix(mesh.transform) } });
+			json node = { { "mesh", mesh.mesh }, { "transform", writeMatrix(mesh.transform) } };
+			if (!mesh.materialOverrides.empty())
+			{
+				node["materialOverrides"] = mesh.materialOverrides;
+			}
+			meshes.push_back(std::move(node));
 		}
 		root["meshes"] = std::move(meshes);
 
@@ -510,7 +542,8 @@ namespace mmo
 		for (const json& node : *meshes)
 		{
 			GlueBakeMesh item;
-			if (!readString(node, "mesh", item.mesh) || !readMatrix(node, "transform", item.transform))
+			if (!readString(node, "mesh", item.mesh) || !readMatrix(node, "transform", item.transform) ||
+				!readOptionalStrings(node, "materialOverrides", item.materialOverrides))
 			{
 				return std::nullopt;
 			}
