@@ -338,6 +338,9 @@ namespace mmo
 
 		bool Save() override;
 
+		/// Asset path of the world's river flow paths (.hflow next to the world file).
+		[[nodiscard]] String GetFlowPathsFileName() const;
+
 	private:
 		// UI related methods
 		void HandleKeyboardShortcuts();

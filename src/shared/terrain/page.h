@@ -243,6 +243,24 @@ namespace mmo
 			/// @brief Whether this page's water carries river flow data.
 			[[nodiscard]] bool HasWaterFlow() const { return !m_waterFlowUVs.empty(); }
 
+			/// @brief Replaces this page's river flow. Does not rebuild the water mesh.
+			/// @param uvs OuterVerticesPerPageSide² (u, v) pairs, u downstream and v across the river.
+			/// @param speeds OuterVerticesPerPageSide² flow speeds (0..255).
+			void SetWaterFlow(std::vector<float> uvs, std::vector<uint8> speeds);
+
+			/// @brief Removes this page's river flow, so its water falls back to world UVs. Does not
+			///	       rebuild the water mesh.
+			void ClearWaterFlow();
+
+			/// @brief Gets the river flow at an outer vertex.
+			/// @param pageVertX Outer vertex x on the page.
+			/// @param pageVertZ Outer vertex z on the page.
+			/// @param u Receives the downstream coordinate.
+			/// @param v Receives the across coordinate.
+			/// @param speed Receives the flow speed (0..1).
+			/// @return False if the page has no flow or the vertex is out of range.
+			bool GetWaterFlow(uint32 pageVertX, uint32 pageVertZ, float& u, float& v, float& speed) const;
+
 			/// @brief Set the material name used for all water in this page.
 			void SetWaterMaterialName(const String& name);
 
