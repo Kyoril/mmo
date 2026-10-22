@@ -39,6 +39,7 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/combat_sound_player.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/spell_text_formatter.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/trade_skill_list.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/water_ambience.cpp
 	)
 	target_link_libraries(game_client_tests client_data)
 else()
@@ -51,6 +52,7 @@ else()
 		${CMAKE_CURRENT_SOURCE_DIR}/test_combat_sound_player.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_spell_text_formatter.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_trade_skill_list.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_water_ambience.cpp
 		PROPERTIES HEADER_FILE_ONLY TRUE
 	)
 endif()
