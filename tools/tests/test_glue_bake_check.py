@@ -109,6 +109,29 @@ class GlueBakeCheckTests(unittest.TestCase):
 		self.write(gbc.MANIFEST, json.dumps(manifest).encode("utf-8"))
 		self.assertEqual(len(self.run_main()), 1)
 
+	def test_top_level_list_is_malformed(self):
+		self.write(gbc.MANIFEST, b"[1, 2]")
+		lines = self.run_main()
+		self.assertEqual(len(lines), 1)
+		self.assertIn("manifest malformed", lines[0])
+
+	def test_inputs_not_a_list_is_malformed(self):
+		manifest = self.read_manifest()
+		manifest["inputs"] = {"a": 1}
+		self.write(gbc.MANIFEST, json.dumps(manifest).encode("utf-8"))
+		lines = self.run_main()
+		self.assertEqual(len(lines), 1)
+		self.assertIn("manifest malformed", lines[0])
+
+	def test_non_dict_entry_is_skipped_and_warned(self):
+		manifest = self.read_manifest()
+		manifest["inputs"].append("oops")
+		manifest["inputs"].append({"path": 3, "hash": None})
+		self.write(gbc.MANIFEST, json.dumps(manifest).encode("utf-8"))
+		lines = self.run_main()
+		self.assertEqual(len(lines), 1)
+		self.assertIn("manifest malformed", lines[0])
+
 	def test_missing_manifest_warns(self):
 		os.remove(os.path.join(self.root, gbc.MANIFEST))
 		self.assertEqual(len(self.run_main()), 1)

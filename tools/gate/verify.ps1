@@ -146,9 +146,22 @@ try
 
 	# Warning only: a stale glue scene bake makes the client stream the world on the login screen
 	# (or draw an outdated scene), but never breaks the build. The checker always exits 0.
-	foreach ($line in @(& $python (Join-Path $repoRoot "tools/glue_bake_check.py") --root $repoRoot))
+	$previousEap = $ErrorActionPreference
+	$ErrorActionPreference = "Continue"
+	try
 	{
-		Write-Host $line -ForegroundColor Yellow
+		foreach ($line in @(& $python (Join-Path $repoRoot "tools/glue_bake_check.py") --root $repoRoot 2>$null))
+		{
+			Write-Host $line -ForegroundColor Yellow
+		}
+	}
+	catch
+	{
+		Write-Host "glue bake check skipped: $_" -ForegroundColor Yellow
+	}
+	finally
+	{
+		$ErrorActionPreference = $previousEap
 	}
 
 	if ($ok)

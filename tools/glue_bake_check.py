@@ -66,12 +66,26 @@ def check(root):
 	except (OSError, ValueError):
 		return ["WARNING: glue bake unreadable: %s is not valid JSON - %s" % (MANIFEST, REBAKE)]
 
+	malformed = "WARNING: glue bake manifest malformed: %s - %s" % (MANIFEST, REBAKE)
+	if not isinstance(manifest, dict):
+		return [malformed]
+
+	inputs = manifest.get("inputs", [])
+	if not isinstance(inputs, list):
+		return [malformed]
+
 	client = os.path.join(root, CLIENT_DIR)
 	stale = []
-	for entry in manifest.get("inputs", []):
-		path = entry.get("path", "")
-		if _hash_file(os.path.join(client, path)) != entry.get("hash"):
+	bad_entries = 0
+	for entry in inputs:
+		if not isinstance(entry, dict) or not isinstance(entry.get("path"), str) or not isinstance(entry.get("hash"), str):
+			bad_entries += 1
+			continue
+		path = entry["path"]
+		if _hash_file(os.path.join(client, path)) != entry["hash"]:
 			stale.append(path)
+	if bad_entries:
+		warnings.append(malformed)
 	if stale:
 		listed = ", ".join(stale[:5])
 		if len(stale) > 5:
