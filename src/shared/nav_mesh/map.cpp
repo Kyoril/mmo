@@ -388,7 +388,7 @@ namespace mmo::nav
 	}
 
 
-	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial, const dtQueryFilter* filter) const
+	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial, const dtQueryFilter* filter, const float verticalSearchExtent) const
 	{
 		if (!m_valid)
 		{
@@ -397,7 +397,7 @@ namespace mmo::nav
 
 		const dtQueryFilter* queryFilter = filter ? filter : &m_queryFilter;
 
-		constexpr float extents[] = { 5.f, 3.5f, 5.f };
+		const float extents[] = { 5.f, verticalSearchExtent, 5.f };
 
 		float recastStart[3] = { start.x, start.y, start.z };
 		float recastEnd[3] = { end.x, end.y, end.z };

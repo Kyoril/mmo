@@ -104,6 +104,17 @@ namespace mmo
 
 	private:
 
+		/// @brief Whether a position lies in water this unit swims in rather than wades through.
+		/// @param position The position to test, usually where the unit came to a stop.
+		/// @return False for a unit which is not able to swim, and for a map without water data.
+		[[nodiscard]] bool IsInSwimmableWater(const Vector3& position) const;
+
+		/// @brief Sets or clears the moved unit's swimming movement flag.
+		/// @param swimming Whether the unit is swimming now.
+		void UpdateSwimmingFlag(bool swimming);
+
+	private:
+
 		GameUnitS& m_unit;
 		Countdown m_moveReached, m_moveUpdated;
 		Vector3 m_start, m_target;

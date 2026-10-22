@@ -6,6 +6,22 @@
 
 namespace mmo
 {
+	bool IsSwimmableWaterAt(const Vector3& position, const WaterSurfaceQuery& waterQuery)
+	{
+		if (!waterQuery)
+		{
+			return false;
+		}
+
+		float surfaceY = 0.0f;
+		if (!waterQuery(position.x, position.z, surfaceY))
+		{
+			return false;
+		}
+
+		return surfaceY - position.y >= swim::StartDepth;
+	}
+
 	WaterPathResult ApplyWaterToPath(std::vector<Vector3>& path, const MovementAbilityFlags movementAbilities,
 		const WaterSurfaceQuery& waterQuery)
 	{
@@ -36,10 +52,21 @@ namespace mmo
 
 			if (!canSwim)
 			{
-				// Water this deep is a wall for this unit. The path is left untouched, since
-				// the caller has to refuse the movement entirely.
+				if (i == 0)
+				{
+					// The unit already stands here, so it has to be allowed to walk out of the
+					// water rather than be locked in place by it.
+					continue;
+				}
+
+				// Water this deep is a wall for this unit. Its path was already routed around
+				// deep water by DeepWaterQueryFilter, so this only catches what poly-granular
+				// filtering let through: the unit walks up to the water and stops there.
+				path.resize(i);
+
 				result = WaterPathResult();
-				result.blocked = true;
+				result.truncated = true;
+				result.blocked = path.size() < 2;
 				return result;
 			}
 

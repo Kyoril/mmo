@@ -3451,12 +3451,12 @@ namespace mmo
 			}
 		}
 
-		// A unit whose movement this client does not simulate (an NPC, or a remote player whose
-		// capsule found no floor) swims at the water surface instead of being snapped onto the
-		// bottom of the water body it is in. The locally controlled player runs its own swim
-		// simulation in UpdateSwimState / HandleSwimming and is left alone here.
-		if (!m_movedUnit.IsControlledByLocalPlayer() &&
-			UpdateRemoteSwimState(currentPosition, closestHitY, foundGround))
+		// A creature swims at the water surface instead of being snapped onto the bottom of the
+		// water body it is in: the server paths it on a nav mesh baked on the ground. Players
+		// are left alone - the local one runs its own swim simulation in UpdateSwimState /
+		// HandleSwimming, and a remote one is placed by the height its own client reports, which
+		// is also where it dives to.
+		if (!m_movedUnit.IsPlayer() && UpdateRemoteSwimState(currentPosition, closestHitY, foundGround))
 		{
 			return true;
 		}

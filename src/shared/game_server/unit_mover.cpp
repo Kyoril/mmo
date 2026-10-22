@@ -37,6 +37,46 @@ namespace mmo
 		}
 	}
 
+	bool UnitMover::IsInSwimmableWater(const Vector3& position) const
+	{
+		GameUnitS& moved = GetMoved();
+		if ((moved.GetMovementAbilities() & movement_ability::CanSwim) == 0)
+		{
+			return false;
+		}
+
+		WorldInstance* world = moved.GetWorldInstance();
+		const MapData* map = world ? world->GetMapData() : nullptr;
+		if (!map)
+		{
+			return false;
+		}
+
+		return IsSwimmableWaterAt(position, MakeWaterSurfaceQuery(*map));
+	}
+
+	void UnitMover::UpdateSwimmingFlag(const bool swimming)
+	{
+		GameUnitS& moved = GetMoved();
+
+		auto movementInfo = moved.GetMovementInfo();
+		if (movementInfo.IsSwimming() == swimming)
+		{
+			return;
+		}
+
+		if (swimming)
+		{
+			movementInfo.movementFlags |= movement_flags::Swimming;
+		}
+		else
+		{
+			movementInfo.movementFlags &= ~movement_flags::Swimming;
+		}
+
+		moved.ApplyMovementInfo(movementInfo);
+	}
+
 	UnitMover::UnitMover(GameUnitS& unit)
 		: m_unit(unit)
 		, m_moveReached(unit.GetTimers())
@@ -250,7 +290,7 @@ namespace mmo
 
 		// Calculate path
 		std::vector<Vector3> path;
-		if (!map->CalculatePath(currentLoc, target, path))
+		if (!map->CalculatePath(currentLoc, target, path, moved.GetMovementAbilities()))
 		{
 			return false;
 		}
@@ -290,8 +330,9 @@ namespace mmo
 		}
 
 		// The nav mesh is baked on the ground, so a path through deep water would make the unit
-		// walk along its bottom. Lift it to the surface for a swimmer, and refuse the movement
-		// entirely for a unit which can not swim: deep water is a wall for it.
+		// walk along its bottom. Lift it to the surface for a swimmer; for a unit which can not
+		// swim the path was already routed around deep water, and whatever still leads into it
+		// is cut off at the water's edge.
 		const WaterPathResult waterResult = ApplyWaterToPath(path, moved.GetMovementAbilities(),
 			MakeWaterSurfaceQuery(*map));
 		if (waterResult.blocked)
@@ -439,7 +480,7 @@ namespace mmo
 		for (size_t i = 0; i < waypoints.size(); ++i)
 		{
 			std::vector<Vector3> segPath;
-			if (!map->CalculatePath(segmentStart, waypoints[i], segPath) || segPath.empty())
+			if (!map->CalculatePath(segmentStart, waypoints[i], segPath, moved.GetMovementAbilities()) || segPath.empty())
 			{
 				return false;
 			}
@@ -483,8 +524,8 @@ namespace mmo
 			return false;
 		}
 
-		// See MoveTo: deep water makes a swimmer float at the surface and blocks a unit which
-		// can not swim.
+		// See MoveTo: deep water makes a swimmer float at the surface and stops a unit which
+		// can not swim at its edge.
 		const WaterPathResult waterResult = ApplyWaterToPath(fullPath, moved.GetMovementAbilities(),
 			MakeWaterSurfaceQuery(*map));
 		if (waterResult.blocked)
@@ -586,6 +627,11 @@ namespace mmo
 		// Update with grid notification
 		auto& moved = GetMoved();
 		moved.Relocate(currentLoc, o);
+
+		// A movement interrupted on land must not leave the unit flagged as swimming, and one
+		// interrupted in deep water has to keep the flag: it gates the NotAboveWater and
+		// NotUnderWater aura interrupts.
+		UpdateSwimmingFlag(IsInSwimmableWater(currentLoc));
 
 		// Send movement packet
 		TileIndex2D tile;

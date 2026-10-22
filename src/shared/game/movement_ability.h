@@ -50,5 +50,11 @@ namespace mmo
 		/// @brief Submersion a swimming unit keeps while it floats at the water surface. The swim
 		///	animation lays the body out flat, so the torso stays in the water at this depth.
 		constexpr float SurfaceMargin = 1.5f;
+
+		/// @brief Vertical reach of a navigation query made for a unit floating in deep water.
+		///	The navigation mesh lies on the bottom of the water body, far below a unit swimming at
+		///	the surface, so the ordinary search extent would find no polygon under it at all and
+		///	it could never path out of the water again.
+		constexpr float NavSearchDepth = 64.0f;
 	}
 }

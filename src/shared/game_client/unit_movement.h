@@ -486,8 +486,8 @@ namespace mmo
 		/// @return True if ground was found and position was corrected, false otherwise
 		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f, std::optional<float> referenceHeight = std::nullopt);
 
-		/// @brief Floats a unit this client does not simulate at the water surface while it is in
-		/// water deep enough to swim in, and keeps its swimming movement flag in sync.
+		/// @brief Floats a creature at the water surface while it is in water deep enough to swim
+		/// in, and keeps its swimming movement flag in sync.
 		/// @details The navigation mesh the server paths creatures on is baked on the ground, so
 		///          the server lifts the paths of creatures which can swim into the water surface
 		///          band. Without this the per-frame ground correction would pull them straight
