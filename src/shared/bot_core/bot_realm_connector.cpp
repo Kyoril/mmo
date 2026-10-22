@@ -120,8 +120,14 @@ namespace mmo
 			std::uniform_int_distribution<uint32> dist;
 			m_clientSeed = dist(RandomGenerator);
 
-			// A reason left over from a previous session must not be reported for this one.
+			// A reason left over from a previous session must not be reported for this one, nor a
+			// request the old connection never had answered.
 			m_kickReason.reset();
+			for (std::deque<GameTime>& pending : m_pendingRequests)
+			{
+				pending.clear();
+			}
+			m_pendingCasts.clear();
 			m_lastSpellVisual.reset();
 			m_heardSounds.clear();
 			m_heardSoundCounts.clear();
@@ -142,6 +148,7 @@ namespace mmo
 		else
 		{
 			ELOG("Could not connect to the realm server");
+			ConnectFailed();
 		}
 
 		return true;
@@ -156,6 +163,7 @@ namespace mmo
 		// announces its own channel memberships.
 		m_pendingNameQueries.clear();
 		m_chatChannels.clear();
+		m_spellZones.clear();
 		m_hasChatChannelList = false;
 
 		Disconnected();
@@ -168,7 +176,94 @@ namespace mmo
 
 	PacketParseResult BotRealmConnector::connectionPacketReceived(game::IncomingPacket& packet)
 	{
+		++m_packetsReceived;
 		return HandleIncomingPacket(packet);
+	}
+
+	void BotRealmConnector::connectionDataSent(const size_t size)
+	{
+		m_bytesSent += size;
+	}
+
+	const char* GetBotRequestName(const bot_request::Type type)
+	{
+		switch (type)
+		{
+		case bot_request::Cast: return "cast";
+		case bot_request::Loot: return "loot";
+		case bot_request::NameQuery: return "name_query";
+		case bot_request::QuestHello: return "quest_hello";
+		case bot_request::QuestStatus: return "quest_status";
+		default: return "unknown";
+		}
+	}
+
+	namespace
+	{
+		/// An answer later than this is not paired with its request any more: it was lost, and
+		/// pairing the next answer with it would report a latency nobody waited for.
+		constexpr GameTime RequestGiveUpMs = 10000;
+
+		/// Outstanding requests kept per kind; a bot never has more than a handful in flight.
+		constexpr std::size_t MaxPendingRequests = 32;
+	}
+
+	void BotRealmConnector::BeginRequest(const bot_request::Type type)
+	{
+		std::deque<GameTime>& pending = m_pendingRequests[type];
+		const GameTime nowMs = GetAsyncTimeMs();
+		while (!pending.empty() && (nowMs - pending.front() > RequestGiveUpMs || pending.size() >= MaxPendingRequests))
+		{
+			pending.pop_front();
+		}
+
+		pending.push_back(nowMs);
+	}
+
+	void BotRealmConnector::BeginCastRequest(const uint32 spellId)
+	{
+		const GameTime nowMs = GetAsyncTimeMs();
+		for (auto it = m_pendingCasts.begin(); it != m_pendingCasts.end();)
+		{
+			it = nowMs - it->second > RequestGiveUpMs ? m_pendingCasts.erase(it) : std::next(it);
+		}
+
+		m_pendingCasts[spellId] = nowMs;
+	}
+
+	void BotRealmConnector::EndCastRequest(const uint32 spellId)
+	{
+		const auto it = m_pendingCasts.find(spellId);
+		if (it == m_pendingCasts.end())
+		{
+			return;
+		}
+
+		const GameTime latencyMs = GetAsyncTimeMs() - it->second;
+		m_pendingCasts.erase(it);
+		if (latencyMs <= RequestGiveUpMs)
+		{
+			RequestAnswered(bot_request::Cast, latencyMs);
+		}
+	}
+
+	void BotRealmConnector::EndRequest(const bot_request::Type type)
+	{
+		std::deque<GameTime>& pending = m_pendingRequests[type];
+		const GameTime nowMs = GetAsyncTimeMs();
+		while (!pending.empty() && nowMs - pending.front() > RequestGiveUpMs)
+		{
+			pending.pop_front();
+		}
+
+		if (pending.empty())
+		{
+			return;
+		}
+
+		const GameTime sentMs = pending.front();
+		pending.pop_front();
+		RequestAnswered(type, nowMs - sentMs);
 	}
 
 	void BotRealmConnector::SetLoginData(const std::string& accountName, const BigNumber& sessionKey)
@@ -233,6 +328,16 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::DeleteCharacter(const uint64 guid)
+	{
+		sendSinglePacket([guid](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::DeleteChar);
+				packet << io::write<uint64>(guid);
+				packet.Finish();
+			});
+	}
+
 	void BotRealmConnector::SendChatMessage(const String& message, ChatType chatType, const String& target)
 	{
 		sendSinglePacket([&message, chatType, &target](game::OutgoingPacket& packet)
@@ -256,6 +361,7 @@ namespace mmo
 			return;
 		}
 
+		BeginRequest(bot_request::NameQuery);
 		sendSinglePacket([guid](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::client_realm_packet::NameQuery);
@@ -406,6 +512,7 @@ namespace mmo
 		}
 		ClearSpellStateIssue();
 
+		BeginCastRequest(spellId);
 		if (autoFlush)
 		{
 			sendSinglePacket([spellId, &targetMap](game::OutgoingPacket& packet)
@@ -495,7 +602,33 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
 		RegisterPacketHandler(game::realm_client_packet::ChatMessage, *this, &BotRealmConnector::OnChatMessage);
 		RegisterPacketHandler(game::realm_client_packet::LootResponse, *this, &BotRealmConnector::OnLootResponse);
+		RegisterPacketHandler(game::realm_client_packet::SpellZoneStart, *this, &BotRealmConnector::OnSpellZoneStart);
+		RegisterPacketHandler(game::realm_client_packet::SpellZoneEnd, *this, &BotRealmConnector::OnSpellZoneEnd);
+		RegisterPacketHandler(game::realm_client_packet::StartLootRoll, *this, &BotRealmConnector::OnStartLootRoll);
+		RegisterPacketHandler(game::realm_client_packet::SetProficiency, *this, &BotRealmConnector::OnSetProficiency);
+		RegisterPacketHandler(game::realm_client_packet::ReviveRequest, *this, &BotRealmConnector::OnReviveOffer);
+		RegisterPacketHandler(game::realm_client_packet::MoveRoot, *this, &BotRealmConnector::OnMovementControl);
+		RegisterPacketHandler(game::realm_client_packet::MoveStun, *this, &BotRealmConnector::OnMovementControl);
+		RegisterPacketHandler(game::realm_client_packet::MoveSleep, *this, &BotRealmConnector::OnMovementControl);
+		RegisterPacketHandler(game::realm_client_packet::MoveFear, *this, &BotRealmConnector::OnMovementControl);
+		RegisterPacketHandler(game::realm_client_packet::MoveDisorient, *this, &BotRealmConnector::OnMovementControl);
 		RegisterPacketHandler(game::realm_client_packet::InventoryError, *this, &BotRealmConnector::OnInventoryError);
+		RegisterPacketHandler(game::realm_client_packet::QuestGiverStatus, *this, &BotRealmConnector::OnQuestGiverStatus);
+		RegisterPacketHandler(game::realm_client_packet::QuestGiverQuestList, *this, &BotRealmConnector::OnQuestGiverQuestList);
+		RegisterPacketHandler(game::realm_client_packet::QuestGiverQuestDetails, *this, &BotRealmConnector::OnQuestGiverQuestDetails);
+		RegisterPacketHandler(game::realm_client_packet::QuestGiverOfferReward, *this, &BotRealmConnector::OnQuestGiverOfferReward);
+		RegisterPacketHandler(game::realm_client_packet::QuestGiverQuestComplete, *this, &BotRealmConnector::OnQuestGiverQuestComplete);
+		RegisterPacketHandler(game::realm_client_packet::QuestAccepted, *this, &BotRealmConnector::OnQuestAccepted);
+		RegisterPacketHandler(game::realm_client_packet::QuestLogFull, *this, &BotRealmConnector::OnQuestLogFull);
+		RegisterPacketHandler(game::realm_client_packet::TradeInvite, *this, &BotRealmConnector::OnTradeInvite);
+		RegisterPacketHandler(game::realm_client_packet::TradeRequestResult, *this, &BotRealmConnector::OnTradeRequestResult);
+		RegisterPacketHandler(game::realm_client_packet::TradeSessionOpened, *this, &BotRealmConnector::OnTradeSessionOpened);
+		RegisterPacketHandler(game::realm_client_packet::TradeSessionClosed, *this, &BotRealmConnector::OnTradeSessionClosed);
+		RegisterPacketHandler(game::realm_client_packet::ShowMailbox, *this, &BotRealmConnector::OnShowMailbox);
+		RegisterPacketHandler(game::realm_client_packet::MailList, *this, &BotRealmConnector::OnMailList);
+		RegisterPacketHandler(game::realm_client_packet::MailSendResult, *this, &BotRealmConnector::OnMailSendResult);
+		RegisterPacketHandler(game::realm_client_packet::MailTakeResult, *this, &BotRealmConnector::OnMailTakeResult);
+		RegisterPacketHandler(game::realm_client_packet::LogoutResponse, *this, &BotRealmConnector::OnLogoutResponse);
 		RegisterPacketHandler(game::realm_client_packet::ChannelList, *this, &BotRealmConnector::OnChannelList);
 		RegisterPacketHandler(game::realm_client_packet::ChannelNotify, *this, &BotRealmConnector::OnChannelNotify);
 
@@ -772,6 +905,7 @@ namespace mmo
 		m_movementInfo.facing = Radian(facing);
 		m_movementInfo.timestamp = GetAsyncTimeMs();
 
+		m_awaitingWorldSpawn = false;
 		VerifyNewWorld(mapId, position, facing);
 
 		return PacketParseResult::Pass;
@@ -802,6 +936,15 @@ namespace mmo
 
 		GameTime clientTimestamp = GetAsyncTimeMs();
 		SendTimeSyncResponse(syncIndex, clientTimestamp);
+
+		// A world node asks right after it spawned the bot, and takes movement once it has the
+		// answer: after a transfer, this is the moment the bot is in the new world.
+		if (m_awaitingWorldSpawn)
+		{
+			m_awaitingWorldSpawn = false;
+			VerifyNewWorld(m_transferMapId, m_movementInfo.position, m_transferFacing);
+		}
+
 		return PacketParseResult::Pass;
 	}
 
@@ -834,7 +977,24 @@ namespace mmo
 		m_movementInfo.facing = Radian(facingRadianVal);
 		m_movementInfo.timestamp = GetAsyncTimeMs();
 
-		VerifyNewWorld(mapId, position, facingRadianVal);
+		// The ack is what makes the realm hand the bot to the new world node, and that node takes
+		// no movement until it has spawned the bot and had its time sync request answered.
+		// Anything sent before then is dropped - the landing that VerifyNewWorld sends among it -
+		// and a bot whose landing was dropped is falling for the server for good, which refuses
+		// every movement packet it sends from then on. So the world is verified once the new
+		// node's time sync request is answered (OnTimeSyncRequest), not here.
+		// Nothing the bot saw on the old map exists on the new one, and the new node spawns all of
+		// it afresh. Kept, the old units are targets the bot goes on swinging at, and the server
+		// answers each swing with "Failed to find target object".
+		m_objectManager.Clear();
+		m_spellZones.clear();
+		m_isAutoAttacking = false;
+		m_autoAttackTargetGuid = 0;
+
+		m_awaitingWorldSpawn = true;
+		m_transferMapId = mapId;
+		m_transferPosition = position;
+		m_transferFacing = facingRadianVal;
 		SendMoveWorldPortAck();
 
 		return PacketParseResult::Pass;
@@ -871,6 +1031,12 @@ namespace mmo
 
 		if (m_selectedCharacterGuid == guid)
 		{
+			// Whatever the bot was swinging at, it is not any more. The server does not always
+			// say so - a revive teleports the bot without an AttackStop - and a flag left set
+			// kept the bot "in combat" for good, where nothing walks it anywhere.
+			m_isAutoAttacking = false;
+			m_autoAttackTargetGuid = 0;
+
 			m_movementInfo = movementInfo;
 			SendMoveTeleportAck(ackId, m_movementInfo);
 
@@ -880,6 +1046,8 @@ namespace mmo
 			{
 				selfUnit->SetMovementInfo(m_movementInfo);
 			}
+
+			Teleported();
 		}
 
 		return PacketParseResult::Pass;
@@ -914,7 +1082,18 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		SendMovementSpeedAck(MovementTypeFromForcePacket(packet.GetId()), ackId, speed, m_movementInfo);
+		const MovementType type = MovementTypeFromForcePacket(packet.GetId());
+		if (BotUnit* self = m_objectManager.GetSelfMutable())
+		{
+			self->SetSpeed(type, speed);
+		}
+
+		// A slow or a sprint applies to the bot's own unit, which is what the movement controller
+		// takes its speed from: a bot that ran on at its old speed after a slow tripped the
+		// server's speed check, again and again, until the server kicked it.
+		MovementInfo info = m_liveMovement ? m_liveMovement() : m_movementInfo;
+		info.timestamp = GetAsyncTimeMs();
+		SendMovementSpeedAck(type, ackId, speed, info);
 		return PacketParseResult::Pass;
 	}
 
@@ -1007,6 +1186,15 @@ namespace mmo
 		return guids;
 	}
 
+	void BotRealmConnector::ResetInstances()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::ResetInstances);
+			packet.Finish();
+		});
+	}
+
 	void BotRealmConnector::LeaveParty()
 	{
 		if (!m_inParty)
@@ -1071,6 +1259,33 @@ namespace mmo
 			packet
 				<< io::write<uint8>(bag)
 				<< io::write<uint8>(slot);
+			packet.Finish();
+		});
+	}
+
+	void BotRealmConnector::UseItem(const uint8 bag, const uint8 slot, const uint64 itemGuid, const SpellTargetMap& targetMap)
+	{
+		sendSinglePacket([bag, slot, itemGuid, &targetMap](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::UseItem);
+			packet
+				<< io::write<uint8>(bag)
+				<< io::write<uint8>(slot)
+				<< io::write<uint64>(itemGuid)
+				<< targetMap;
+			packet.Finish();
+		});
+	}
+
+	void BotRealmConnector::DestroyItem(const uint8 bag, const uint8 slot, const uint8 count)
+	{
+		sendSinglePacket([bag, slot, count](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::DestroyItem);
+			packet
+				<< io::write<uint8>(bag)
+				<< io::write<uint8>(slot)
+				<< io::write<uint8>(count);
 			packet.Finish();
 		});
 	}
@@ -1420,6 +1635,11 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
+			if (const BotUnit* gone = m_objectManager.GetUnit(guid); gone && gone->IsPlayer())
+			{
+				DLOG("Player " << guid << " left the view of " << m_selectedCharacterGuid);
+			}
+
 			// Remove from object manager if it exists
 			if (m_objectManager.RemoveUnit(guid))
 			{
@@ -1436,6 +1656,7 @@ namespace mmo
 
 	PacketParseResult BotRealmConnector::OnNameQueryResult(game::IncomingPacket& packet)
 	{
+		EndRequest(bot_request::NameQuery);
 		// Same layout the game client reads: packed guid, success flag, then a
 		// zero-terminated name.
 		uint64 guid;
@@ -1657,6 +1878,19 @@ namespace mmo
 			}
 		}
 
+		// A player's creation block ends with its appearance. Nothing here needs it, but it has
+		// to be read: left in the stream, every object after the first player of a batch - the
+		// group already standing in an instance a bot enters - is read from the wrong offset.
+		if (typeId == ObjectTypeId::Player && creation)
+		{
+			AvatarConfiguration configuration;
+			if (!(reader >> configuration))
+			{
+				ELOG("Failed to read player appearance");
+				return false;
+			}
+		}
+
 		// Track item and container objects so scenarios can assert on inventory contents.
 		if (typeId == ObjectTypeId::Item || typeId == ObjectTypeId::Container)
 		{
@@ -1745,6 +1979,7 @@ namespace mmo
 				objectState.entry = fieldMap.GetFieldValue<uint32>(object_fields::Entry);
 				objectState.type = fieldMap.GetFieldValue<uint32>(object_fields::ObjectTypeId);
 				objectState.state = fieldMap.GetFieldValue<uint32>(object_fields::State);
+				objectState.lockEntry = fieldMap.GetFieldValue<uint32>(object_fields::LockEntry);
 				objectState.position = movementInfo.position;
 			}
 			else
@@ -1758,6 +1993,10 @@ namespace mmo
 				if (fieldMap.IsFieldMarkedAsChanged(object_fields::State))
 				{
 					objectState.state = fieldMap.GetFieldValue<uint32>(object_fields::State);
+				}
+				if (fieldMap.IsFieldMarkedAsChanged(object_fields::LockEntry))
+				{
+					objectState.lockEntry = fieldMap.GetFieldValue<uint32>(object_fields::LockEntry);
 				}
 			}
 
@@ -1885,6 +2124,31 @@ namespace mmo
 			}
 		}
 
+		// The bot's own quest log, which like the inventory slots only its own player object carries.
+		if (typeId == ObjectTypeId::Player && guid == m_selectedCharacterGuid)
+		{
+			constexpr uint32 fieldsPerSlot = sizeof(QuestField) / sizeof(uint32);
+			for (uint32 slot = 0; slot < MaxQuestLogSize; ++slot)
+			{
+				const uint32 first = object_fields::QuestLogSlot_1 + slot * fieldsPerSlot;
+				bool slotChanged = creation;
+				for (uint32 offset = 0; offset < fieldsPerSlot && !slotChanged; ++offset)
+				{
+					slotChanged = fieldMap.IsFieldMarkedAsChanged(static_cast<FieldMap<uint32>::FieldIndexType>(first + offset));
+				}
+
+				if (slotChanged)
+				{
+					QuestField field;
+					field.questId = fieldMap.GetFieldValue<uint32>(static_cast<FieldMap<uint32>::FieldIndexType>(first));
+					field.status = fieldMap.GetFieldValue<uint32>(static_cast<FieldMap<uint32>::FieldIndexType>(first + 1));
+					field.counterField = fieldMap.GetFieldValue<uint32>(static_cast<FieldMap<uint32>::FieldIndexType>(first + 2));
+					field.questTimer = fieldMap.GetFieldValue<uint32>(static_cast<FieldMap<uint32>::FieldIndexType>(first + 3));
+					m_objectManager.SetSelfQuestLogSlot(static_cast<uint8>(slot), field);
+				}
+			}
+		}
+
 		// Money is a player-only field used by scenario assertions.
 		if (typeId == ObjectTypeId::Player &&
 			(creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Money)))
@@ -1929,11 +2193,22 @@ namespace mmo
 		if (guid == m_selectedCharacterGuid)
 		{
 			m_objectManager.SetSelfGuid(guid);
+
+			// The new world node has spawned the bot after a transfer: take its movement state,
+			// falling as every spawn is.
+			if (m_awaitingWorldSpawn && (updateFlags & object_update_flags::HasMovementInfo))
+			{
+				m_movementInfo = movementInfo;
+			}
 		}
 
 		// Emit signals
 		if (isNewUnit)
 		{
+			if (typeId == ObjectTypeId::Player && guid != m_selectedCharacterGuid)
+			{
+				DLOG("Player " << guid << " came into the view of " << m_selectedCharacterGuid);
+			}
 			UnitSpawned(unit);
 		}
 		else
@@ -2028,8 +2303,10 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// Intermediate waypoints (pointCount - 1 of them, 3 floats each) are on the wire but not
-		// needed for a coarse "final destination" approximation - skip past them.
+		// The intermediate waypoints (pointCount - 1 of them, 3 floats each), between the start
+		// and the destination. With them and the move's duration the bot knows where the unit is
+		// on its way, not only where it ends up - which is what a cast at it has to face.
+		std::vector<Vector3> path { Vector3(oldX, oldY, oldZ) };
 		for (uint32 i = 0; i + 1 < pointCount; ++i)
 		{
 			float x = 0.0f, y = 0.0f, z = 0.0f;
@@ -2038,7 +2315,9 @@ namespace mmo
 				ELOG("Failed to parse CreatureMove intermediate waypoint");
 				return PacketParseResult::Disconnect;
 			}
+			path.emplace_back(x, y, z);
 		}
+		path.emplace_back(destX, destY, destZ);
 
 		BotUnit* unit = m_objectManager.GetUnitMutable(guid);
 		if (!unit)
@@ -2054,6 +2333,9 @@ namespace mmo
 			info.facing = Radian(facing);
 		}
 		unit->SetMovementInfo(info);
+
+		// The server's start and end are on its clock; the move starts about now on the bot's.
+		unit->SetMovePath(std::move(path), GetAsyncTimeMs(), endTime > startTime ? endTime - startTime : 0);
 
 		UnitUpdated(*unit);
 
@@ -2209,8 +2491,21 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		if (casterGuid == m_selectedCharacterGuid)
+		{
+			EndCastRequest(spellId);
+		}
+
 		if (casterGuid != m_selectedCharacterGuid)
 		{
+			// Someone else's cast: remembered so that a bot can see a boss start a spell worth
+			// interrupting, and how long it has left to do it.
+			if (BotUnit* caster = m_objectManager.GetUnitMutable(casterGuid))
+			{
+				caster->SetCurrentCast(spellId, GetAsyncTimeMs() + castTime);
+			}
+			UnitCastStarted(casterGuid, spellId, castTime);
+
 			return PacketParseResult::Pass;
 		}
 
@@ -2249,6 +2544,8 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		EndCastRequest(spellId);
+
 		if (BotUnit* self = GetSelfMutable())
 		{
 			const GameTime nowMs = GetAsyncTimeMs();
@@ -2276,8 +2573,22 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		if (casterGuid == m_selectedCharacterGuid)
+		{
+			EndCastRequest(spellId);
+		}
+
 		if (casterGuid != m_selectedCharacterGuid)
 		{
+			// Interrupted or failed: nothing left to interrupt.
+			if (BotUnit* caster = m_objectManager.GetUnitMutable(casterGuid))
+			{
+				if (caster->GetCurrentCast(GetAsyncTimeMs()) == spellId)
+				{
+					caster->SetCurrentCast(0, 0);
+				}
+			}
+			UnitCastFailed(casterGuid, spellId, static_cast<uint8>(result));
 			return PacketParseResult::Pass;
 		}
 
@@ -2464,6 +2775,30 @@ namespace mmo
 		// Note: m_isAutoAttacking will be set to false when we receive AttackStop from server
 	}
 
+	PacketParseResult BotRealmConnector::OnReviveOffer(game::IncomingPacket& packet)
+	{
+		uint64 casterGuid = 0;
+		uint32 spellId = 0;
+		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId)))
+		{
+			ELOG("Failed to read ReviveRequest packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		ReviveOffered(casterGuid);
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::SendReviveResponse(const bool accept)
+	{
+		sendSinglePacket([accept](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::ReviveResponse);
+				packet << io::write<uint8>(accept ? 1 : 0);
+				packet.Finish();
+			});
+	}
+
 	void BotRealmConnector::SendReviveRequest()
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet)
@@ -2532,6 +2867,16 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		// Someone else's channel counts as a cast to interrupt: Cantor Veyr's Dirge of the Grave is
+		// channelled, and only a spell start ever set a unit's current cast.
+		if (casterGuid != m_selectedCharacterGuid)
+		{
+			if (BotUnit* caster = m_objectManager.GetUnitMutable(casterGuid))
+			{
+				caster->SetCurrentCast(spellId, GetAsyncTimeMs() + static_cast<GameTime>(std::max(durationMs, 0)));
+			}
+		}
+
 		ChannelStarted(casterGuid, spellId, durationMs);
 
 		return PacketParseResult::Pass;
@@ -2545,6 +2890,14 @@ namespace mmo
 		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<GameTime>(remainingMs)))
 		{
 			return PacketParseResult::Disconnect;
+		}
+
+		if (casterGuid != m_selectedCharacterGuid && remainingMs == 0)
+		{
+			if (BotUnit* caster = m_objectManager.GetUnitMutable(casterGuid))
+			{
+				caster->SetCurrentCast(0, 0);
+			}
 		}
 
 		ChannelUpdated(casterGuid, remainingMs);
@@ -2649,6 +3002,14 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::CancelCast()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CancelCast);
+			packet.Finish();
+			});
+	}
+
 	void BotRealmConnector::CheatCheckLineOfSight(const uint64 targetGuid)
 	{
 		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
@@ -2667,7 +3028,18 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// The from/to/hit vectors that follow are only needed for the in-game visualizer — skip them.
+		// The tested ray and its hit point, for diagnostics.
+		Vector3 from, to, hit;
+		if (!(packet >> io::read<float>(from.x) >> io::read<float>(from.y) >> io::read<float>(from.z)
+			>> io::read<float>(to.x) >> io::read<float>(to.y) >> io::read<float>(to.z)
+			>> io::read<float>(hit.x) >> io::read<float>(hit.y) >> io::read<float>(hit.z)))
+		{
+			from = to = hit = Vector3::Zero;
+		}
+
+		m_lastLosFrom = from;
+		m_lastLosTo = to;
+		m_lastLosHit = hit;
 		m_lastLosResult = (hasLos != 0);
 		++m_losResultCounter;
 
@@ -2851,6 +3223,7 @@ namespace mmo
 
 	void BotRealmConnector::Loot(const uint64 lootObjectGuid)
 	{
+		BeginRequest(bot_request::Loot);
 		sendSinglePacket([lootObjectGuid](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::Loot);
 			packet << io::write<uint64>(lootObjectGuid);
@@ -2920,8 +3293,125 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::SendAreaTriggerTriggered(const uint32 triggerId)
+	{
+		sendSinglePacket([triggerId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AreaTriggerTriggered);
+			packet << io::write<uint32>(triggerId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::SendLootRoll(const uint64 lootGuid, const uint8 slot, const uint8 vote)
+	{
+		sendSinglePacket([lootGuid, slot, vote](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LootRoll);
+			packet << io::write<uint64>(lootGuid) << io::write<uint8>(slot) << io::write<uint8>(vote);
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnSpellZoneStart(game::IncomingPacket& packet)
+	{
+		BotSpellZone zone;
+		uint32 remainingMs = 0;
+		if (!(packet >> io::read<uint32>(zone.zoneId) >> io::read_packed_guid(zone.casterGuid) >> io::read<uint32>(zone.spellId)
+			>> io::read<float>(zone.position.x) >> io::read<float>(zone.position.y) >> io::read<float>(zone.position.z)
+			>> io::read<float>(zone.radius) >> io::read<uint32>(remainingMs)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		zone.endMs = GetAsyncTimeMs() + remainingMs;
+		m_spellZones[zone.zoneId] = zone;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnSpellZoneEnd(game::IncomingPacket& packet)
+	{
+		uint32 zoneId = 0;
+		uint8 expired = 0;
+		if (!(packet >> io::read<uint32>(zoneId) >> io::read<uint8>(expired)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_spellZones.erase(zoneId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnMovementControl(game::IncomingPacket& packet)
+	{
+		uint32 ackId = 0;
+		uint8 applied = 0;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
+		{
+			ELOG("Failed to read movement control packet " << packet.GetId());
+			return PacketParseResult::Disconnect;
+		}
+
+		uint16 ackOpCode = game::client_realm_packet::MoveRootAck;
+		switch (packet.GetId())
+		{
+		case game::realm_client_packet::MoveStun: ackOpCode = game::client_realm_packet::MoveStunAck; break;
+		case game::realm_client_packet::MoveSleep: ackOpCode = game::client_realm_packet::MoveSleepAck; break;
+		case game::realm_client_packet::MoveFear: ackOpCode = game::client_realm_packet::MoveFearAck; break;
+		case game::realm_client_packet::MoveDisorient: ackOpCode = game::client_realm_packet::MoveDisorientAck; break;
+		default: break;
+		}
+
+		MovementControlChanged(ackOpCode, ackId, applied != 0);
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::SendMovementControlAck(const uint16 ackOpCode, const uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackOpCode, ackId, &movementInfo](game::OutgoingPacket& packet)
+			{
+				packet.Start(ackOpCode);
+				packet << io::write<uint32>(ackId) << movementInfo;
+				packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnSetProficiency(game::IncomingPacket& packet)
+	{
+		uint32 proficiencyId = 0;
+		uint8 added = 0;
+		if (!(packet >> io::read<uint32>(proficiencyId) >> io::read<uint8>(added)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (added != 0)
+		{
+			m_proficiencies.insert(proficiencyId);
+		}
+		else
+		{
+			m_proficiencies.erase(proficiencyId);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnStartLootRoll(game::IncomingPacket& packet)
+	{
+		BotLootRoll roll;
+		uint32 rollTimeMs = 0;
+		if (!(packet >> io::read<uint64>(roll.lootGuid) >> io::read<uint8>(roll.slot) >> io::read<uint32>(roll.itemId) >> io::read<uint32>(rollTimeMs)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		roll.endMs = GetAsyncTimeMs() + rollTimeMs;
+		LootRollStarted(roll);
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult BotRealmConnector::OnLootResponse(game::IncomingPacket& packet)
 	{
+		EndRequest(bot_request::Loot);
 		BotLootWindow window;
 		uint8 lootType = 0;
 		if (!(packet >> io::read<uint64>(window.lootGuid) >> io::read<uint8>(lootType)))
@@ -2958,6 +3448,239 @@ namespace mmo
 		}
 
 		LootOpened(window);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnQuestGiverStatus(game::IncomingPacket& packet)
+	{
+		EndRequest(bot_request::QuestStatus);
+		uint64 questGiverGuid = 0;
+		uint8 status = 0;
+		if (!(packet >> io::read<uint64>(questGiverGuid) >> io::read<uint8>(status)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		QuestGiverStatusReceived(questGiverGuid, status);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnQuestGiverQuestList(game::IncomingPacket& packet)
+	{
+		EndRequest(bot_request::QuestHello);
+		uint64 questGiverGuid = 0;
+		std::string greeting;
+		uint8 questCount = 0;
+		if (!(packet >> io::read<uint64>(questGiverGuid) >> io::read_container<uint16>(greeting, 512) >> io::read<uint8>(questCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<BotQuestMenuEntry> entries(questCount);
+		for (BotQuestMenuEntry& entry : entries)
+		{
+			if (!(packet >> io::read<uint32>(entry.questId) >> io::read<uint32>(entry.menuIcon)
+				>> io::read<int32>(entry.level) >> io::read_container<uint8>(entry.title)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		QuestListReceived(questGiverGuid, entries);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnQuestGiverQuestDetails(game::IncomingPacket& packet)
+	{
+		// Only who offers what; the texts and rewards that follow are for a player to read.
+		uint64 questGiverGuid = 0;
+		uint32 questId = 0;
+		if (!(packet >> io::read<uint64>(questGiverGuid) >> io::read<uint32>(questId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		QuestDetailsReceived(questGiverGuid, questId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnQuestGiverOfferReward(game::IncomingPacket& packet)
+	{
+		uint64 questGiverGuid = 0;
+		uint32 questId = 0;
+		std::string title;
+		std::string text;
+		uint32 choiceCount = 0;
+		if (!(packet >> io::read<uint64>(questGiverGuid) >> io::read<uint32>(questId)
+			>> io::read_container<uint8>(title) >> io::read_container<uint16>(text, 512)
+			>> io::read<uint32>(choiceCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// The choices are the quest data's, a handful at most; anything larger is a misread.
+		if (choiceCount > 16)
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<uint32> choiceItems(choiceCount);
+		for (uint32& itemId : choiceItems)
+		{
+			if (!(packet >> io::read<uint32>(itemId) >> io::skip<uint32>() >> io::skip<uint32>()))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		QuestRewardOffered(questGiverGuid, questId, choiceItems);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnQuestGiverQuestComplete(game::IncomingPacket& packet)
+	{
+		uint64 questGiverGuid = 0;
+		uint32 questId = 0;
+		uint32 xp = 0;
+		uint32 money = 0;
+		if (!(packet >> io::read<uint64>(questGiverGuid) >> io::read<uint32>(questId) >> io::read<uint32>(xp) >> io::read<uint32>(money)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		QuestRewarded(questGiverGuid, questId, xp, money);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnQuestAccepted(game::IncomingPacket& packet)
+	{
+		std::string name;
+		uint32 questId = 0;
+		if (!(packet >> io::read_container<uint8>(name) >> io::read<uint32>(questId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		QuestAccepted(questId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnQuestLogFull(game::IncomingPacket& packet)
+	{
+		QuestLogFull();
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnTradeInvite(game::IncomingPacket& packet)
+	{
+		std::string inviterName;
+		uint64 inviterGuid = 0;
+		if (!(packet >> io::read_string(inviterName) >> io::read<uint64>(inviterGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		TradeInviteReceived(inviterName, inviterGuid);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnTradeRequestResult(game::IncomingPacket& packet)
+	{
+		uint8 result = 0;
+		if (!(packet >> io::read<uint8>(result)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		TradeRequestAnswered(result);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnTradeSessionOpened(game::IncomingPacket& packet)
+	{
+		std::string otherName;
+		uint64 otherGuid = 0;
+		if (!(packet >> io::read_string(otherName) >> io::read<uint64>(otherGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		TradeOpened(otherName, otherGuid);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnTradeSessionClosed(game::IncomingPacket& packet)
+	{
+		uint8 reason = 0;
+		if (!(packet >> io::read<uint8>(reason)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		TradeClosed(reason);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnShowMailbox(game::IncomingPacket& packet)
+	{
+		uint64 mailboxGuid = 0;
+		if (!(packet >> io::read<uint64>(mailboxGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		MailboxOpened(mailboxGuid);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnMailList(game::IncomingPacket& packet)
+	{
+		uint16 count = 0;
+		if (!(packet >> io::read<uint16>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<MailInfo> mails(count);
+		for (MailInfo& mail : mails)
+		{
+			if (!(packet >> mail))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		MailListReceived(mails);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnMailSendResult(game::IncomingPacket& packet)
+	{
+		uint8 result = 0;
+		if (!(packet >> io::read<uint8>(result)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		MailSendAnswered(result);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnMailTakeResult(game::IncomingPacket& packet)
+	{
+		uint8 result = 0;
+		if (!(packet >> io::read<uint8>(result)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		MailTakeAnswered(result);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnLogoutResponse(game::IncomingPacket& packet)
+	{
+		LoggedOut();
 		return PacketParseResult::Pass;
 	}
 
@@ -3039,6 +3762,178 @@ namespace mmo
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatRestorePower);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::UseObject(const uint64 objectGuid)
+	{
+		sendSinglePacket([objectGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::UseObject);
+			packet << io::write<uint64>(objectGuid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::InitiateTrade(const uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TradeInitiate);
+			packet << io::write<uint64>(targetGuid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::AcceptTradeInvite()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TradeInviteAccept);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::DeclineTradeInvite()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TradeInviteDecline);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::TradeSetMoney(const uint32 amount)
+	{
+		sendSinglePacket([amount](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TradeSetMoney);
+			packet << io::write<uint32>(amount);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::AcceptTrade()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TradeAccept);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CancelTrade()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::TradeCancelRequest);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::RequestMailList()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MailListRequest);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::SendMail(const std::string& recipient, const std::string& subject, const std::string& body, const uint32 money)
+	{
+		sendSinglePacket([&recipient, &subject, &body, money](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SendMail);
+			packet
+				<< io::write_dynamic_range<uint8>(recipient)
+				<< io::write_dynamic_range<uint8>(subject)
+				<< io::write_dynamic_range<uint16>(body)
+				<< io::write<uint32>(money)
+				<< io::write<uint8>(0);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::MailTakeMoney(const uint64 mailId)
+	{
+		sendSinglePacket([mailId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MailTakeMoney);
+			packet << io::write<uint64>(mailId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::Logout()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::LogoutRequest);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::SetLootMethod(const uint8 method, const uint64 masterGuid, const uint8 threshold)
+	{
+		sendSinglePacket([method, masterGuid, threshold](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SetLootMethod);
+			packet << io::write<uint8>(method) << io::write<uint64>(masterGuid) << io::write<uint8>(threshold);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::QuestGiverStatusQuery(const uint64 questGiverGuid)
+	{
+		BeginRequest(bot_request::QuestStatus);
+		sendSinglePacket([questGiverGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::QuestGiverStatusQuery);
+			packet << io::write<uint64>(questGiverGuid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::QuestGiverHello(const uint64 questGiverGuid)
+	{
+		BeginRequest(bot_request::QuestHello);
+		sendSinglePacket([questGiverGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::QuestGiverHello);
+			packet << io::write<uint64>(questGiverGuid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::QuestGiverQueryQuest(const uint64 questGiverGuid, const uint32 questId)
+	{
+		sendSinglePacket([questGiverGuid, questId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::QuestGiverQueryQuest);
+			packet << io::write<uint64>(questGiverGuid) << io::write<uint32>(questId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::AcceptQuest(const uint64 questGiverGuid, const uint32 questId)
+	{
+		sendSinglePacket([questGiverGuid, questId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AcceptQuest);
+			packet << io::write<uint64>(questGiverGuid) << io::write<uint32>(questId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::QuestGiverCompleteQuest(const uint64 questGiverGuid, const uint32 questId)
+	{
+		sendSinglePacket([questGiverGuid, questId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::QuestGiverCompleteQuest);
+			packet << io::write<uint64>(questGiverGuid) << io::write<uint32>(questId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::QuestGiverChooseQuestReward(const uint64 questGiverGuid, const uint32 questId, const uint32 rewardChoice)
+	{
+		sendSinglePacket([questGiverGuid, questId, rewardChoice](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::QuestGiverChooseQuestReward);
+			packet << io::write<uint64>(questGiverGuid) << io::write<uint32>(questId) << io::write<uint32>(rewardChoice);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::AbandonQuest(const uint32 questId)
+	{
+		sendSinglePacket([questId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AbandonQuest);
+			packet << io::write<uint32>(questId);
 			packet.Finish();
 			});
 	}

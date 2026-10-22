@@ -6,15 +6,16 @@ the same wire protocol as `mmo_client` — SRP6, the packet cipher, character en
 creation, and the world session — so a bot is indistinguishable from a player on the wire for
 every subsystem it implements.
 
-Two hosts build on it:
+Hosts build on it:
 
 - `e2e_client` — one session driven by an imperative Lua scenario. The regression suite.
-- `bot_swarm` — many autonomous sessions in one process, driven by `bot_ai`.
+- Hosts outside this repository that run many sessions in one process, added to the build
+  with `MMO_EXTERNAL_PROJECTS`.
 
 ## Ownership rules
 
 A `BotSession` owns its connectors and its object model, and nothing else. In particular it does
-**not** own the io service or the navigation service, because the swarm shares both:
+**not** own the io service or the navigation service, because a host running many sessions shares both:
 
 - **One `asio::io_service` per process.** The host polls it once per frame for every session.
   `BotSession::Pump` (poll + update + sleep) exists for the single-session case only; a host

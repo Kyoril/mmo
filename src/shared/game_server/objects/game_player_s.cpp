@@ -457,6 +457,10 @@ namespace mmo
 		// Clear talent data
 		m_talents.clear();
 
+		// The points come back: without this the character kept none to spend until it next
+		// levelled or logged in, and a reset left it with no talents and no way to learn any.
+		UpdateTalentPoints();
+
 		// Follow-up ranks of the removed talents are no longer usable (they stay known).
 		RefreshTalentGatedSpells();
 		RefreshStats();
