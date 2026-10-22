@@ -8,6 +8,7 @@
 #include "client_locale.h"
 #include "perf_capture.h"
 #include "base/localization.h"
+#include "client_data/zone_names.h"
 #include "systems/loot_client.h"
 #include "systems/spell_cast.h"
 #include "systems/trade_client.h"
@@ -1437,19 +1438,7 @@ namespace mmo
 			const proto_client::ZoneEntry *zone = m_project.zones.getById(m_lastZoneId);
 			if (zone)
 			{
-				const proto_client::ZoneEntry *parentZone =
-					(zone->parentzone() != 0) ? m_project.zones.getById(zone->parentzone()) : nullptr;
-
-				if (parentZone)
-				{
-					s_zoneName = parentZone->name();
-					s_subZoneName = zone->name();
-				}
-				else
-				{
-					s_zoneName = zone->name();
-					s_subZoneName.clear();
-				}
+				ResolveZoneDisplayNames(m_project.zones, *zone, GetClientLocale(), s_zoneName, s_subZoneName);
 
 				musicSoundId = ResolveZoneSound(zone, true);
 				ambienceSoundId = ResolveZoneSound(zone, false);
