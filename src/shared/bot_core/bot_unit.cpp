@@ -283,6 +283,51 @@ namespace mmo
 		m_movementInfo = info;
 		m_position = info.position;
 		m_facing = info.facing;
+
+		// Any newer word on where the unit is ends the path it was announced on.
+		m_movePath.clear();
+	}
+
+	void BotUnit::SetMovePath(std::vector<Vector3> points, const GameTime startMs, const GameTime durationMs)
+	{
+		m_movePath = std::move(points);
+		m_moveStartMs = startMs;
+		m_moveDurationMs = durationMs;
+	}
+
+	Vector3 BotUnit::GetPositionAt(const GameTime nowMs) const
+	{
+		if (m_movePath.size() < 2 || m_moveDurationMs == 0 || nowMs >= m_moveStartMs + m_moveDurationMs)
+		{
+			return m_position;
+		}
+
+		float total = 0.0f;
+		for (size_t i = 1; i < m_movePath.size(); ++i)
+		{
+			total += (m_movePath[i] - m_movePath[i - 1]).GetLength();
+		}
+
+		if (total <= 0.0f)
+		{
+			return m_position;
+		}
+
+		const float progress = nowMs <= m_moveStartMs ? 0.0f
+			: static_cast<float>(nowMs - m_moveStartMs) / static_cast<float>(m_moveDurationMs);
+		float remaining = total * progress;
+		for (size_t i = 1; i < m_movePath.size(); ++i)
+		{
+			const Vector3 segment = m_movePath[i] - m_movePath[i - 1];
+			const float length = segment.GetLength();
+			if (remaining <= length && length > 0.0f)
+			{
+				return m_movePath[i - 1] + segment * (remaining / length);
+			}
+			remaining -= length;
+		}
+
+		return m_position;
 	}
 
 	void BotUnit::SetSpeed(const MovementType type, const float speed)

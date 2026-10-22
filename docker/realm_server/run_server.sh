@@ -32,7 +32,7 @@ webServer =
 playerManager = 
 (
 	port = 8130
-	maxCount = 20
+	maxCount = ${REALM_MAX_PLAYERS:-4000}
 )
 
 worldManager = 

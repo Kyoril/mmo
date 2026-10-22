@@ -4,6 +4,7 @@
 
 #include "bot_unit.h"
 #include "base/signal.h"
+#include "game/quest.h"
 
 #include <functional>
 #include <unordered_map>
@@ -41,6 +42,8 @@ namespace mmo
 		uint32 type { 0 };
 		/// The object's State field (doors: 0 = closed, 1 = open).
 		uint32 state { 0 };
+		/// The lock type an open spell has to match; 0 for an unlocked object.
+		uint32 lockEntry { 0 };
 		Vector3 position;
 	};
 
@@ -279,6 +282,15 @@ namespace mmo
 		/// @brief The item in one of the bot's own inventory slots (see SetSelfInventorySlot), or 0.
 		uint64 GetSelfInventorySlot(uint8 slot) const;
 
+		/// @brief Records one slot of the bot's own quest log, as replicated in its player fields.
+		void SetSelfQuestLogSlot(uint8 slot, const QuestField& field);
+
+		/// @brief The bot's quest log. Empty slots have quest id 0.
+		const std::array<QuestField, MaxQuestLogSize>& GetSelfQuestLog() const { return m_selfQuestLog; }
+
+		/// @brief The quest log entry of the given quest, or nullptr if it is not in the log.
+		const QuestField* FindSelfQuest(uint32 questId) const;
+
 		/// @brief Removes an item by GUID.
 		/// @param guid The GUID of the item to remove.
 		/// @return True if the item was found and removed.
@@ -322,6 +334,12 @@ namespace mmo
 		/// @param position Position to measure from.
 		/// @return Pointer to the world object state, or nullptr if none is known.
 		const BotWorldObjectState* FindNearestWorldObjectByEntry(uint32 entry, const Vector3& position) const;
+
+		/// Where the closed doors the bot knows of stand, for keeping its paths out of them.
+		std::vector<Vector3> GetClosedDoorPositions() const;
+
+		/// The closed doors the bot knows of.
+		std::vector<BotWorldObjectState> GetClosedDoors() const;
 
 		// ============================================================
 		// Iteration
@@ -378,6 +396,9 @@ namespace mmo
 
 		/// Item guids in the bot's own equipment, bag and backpack slots, indexed by absolute slot.
 		std::array<uint64, 39> m_selfInventorySlots {};
+
+		/// The bot's own quest log slots.
+		std::array<QuestField, MaxQuestLogSize> m_selfQuestLog {};
 
 		/// @brief Map of GUIDs to known world objects (chests, doors, ...).
 		std::unordered_map<uint64, BotWorldObjectState> m_worldObjects;

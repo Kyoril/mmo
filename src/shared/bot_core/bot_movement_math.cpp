@@ -23,15 +23,22 @@ namespace mmo
 			return current + (delta / distance) * maxDistance;
 		}
 
+		/// One step towards a target, measured along the slope rather than over the ground.
+		///
+		/// The server checks a client's speed in three dimensions. A step measured in plan
+		/// covered the full run speed horizontally and the climb on top of it, and a bot walking
+		/// up the hill to the Hollow Choir failed the speed check on every heartbeat until it was
+		/// kicked; one that reached a waypoint in plan jumped straight to its height, nine yards
+		/// up in half a second.
 		Vector3 ComputePlanarStepTarget(const Vector3& current, const Vector3& target, const float stepDistance)
 		{
-			const float planarDistance = PlanarDistance(current, target);
-			if (planarDistance <= 1e-5f || planarDistance <= stepDistance)
+			const float distance = (target - current).GetLength();
+			if (distance <= 1e-5f || distance <= stepDistance)
 			{
 				return target;
 			}
 
-			const float t = stepDistance / planarDistance;
+			const float t = stepDistance / distance;
 			return Vector3(
 				current.x + (target.x - current.x) * t,
 				current.y + (target.y - current.y) * t,

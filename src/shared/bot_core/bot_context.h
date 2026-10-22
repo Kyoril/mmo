@@ -353,6 +353,15 @@ namespace mmo
 		/// @return The angle in radians.
 		Radian GetAngleTo(const Vector3& targetPosition) const;
 
+		/// Whether the bot faces a unit to within tolerance radians, as last sent to the server.
+		/// A unit it does not see counts as faced: there is nothing to turn to.
+		[[nodiscard]] bool IsFacing(uint64 targetGuid, float tolerance) const;
+
+		/// Whether a closed door stands between the bot and a position: the straight line to it
+		/// passes within a few yards of the door, which stands somewhere along it. Whatever is
+		/// there can be neither reached nor seen.
+		[[nodiscard]] bool IsBehindClosedDoor(const Vector3& position) const;
+
 	private:
 		std::shared_ptr<BotRealmConnector> m_realmConnector;
 		std::shared_ptr<BotNavService> m_navService;
