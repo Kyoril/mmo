@@ -73,7 +73,7 @@ namespace mmo
 		}
 	}
 
-	void WaterAmbience::Update(const IWaterAmbienceSource& source, const Vector3& ear, const bool swimming, const uint32 swimWaterType, const float deltaSeconds)
+	void WaterAmbience::Update(const IWaterAmbienceSource& source, const Vector3& ear, const bool swimming, const uint32 swimWaterType, const bool submerged, const uint32 submergedWaterType, const float deltaSeconds)
 	{
 		m_lastEar = ear;
 
@@ -92,7 +92,7 @@ namespace mmo
 
 		Smooth(deltaSeconds);
 		UpdateBedVoices(ear, deltaSeconds);
-		UpdateSwimLayer(swimming, swimWaterType, deltaSeconds);
+		UpdateSurfaceLayers(swimming, swimWaterType, submerged, submergedWaterType, deltaSeconds);
 	}
 
 	void WaterAmbience::Stop()
@@ -103,7 +103,8 @@ namespace mmo
 		}
 		m_bedVoices.clear();
 
-		StopSwimLayer();
+		StopLayer(m_swim);
+		StopLayer(m_underwater);
 
 		for (size_t i = 0; i < m_smoothedFields.size(); ++i)
 		{
@@ -132,9 +133,12 @@ namespace mmo
 			voices.push_back({ soundId, voice.volume, voice.spread, voice.position });
 		}
 
-		if (m_swimChannel != InvalidChannel)
+		for (const Layer* layer : { &m_swim, &m_underwater })
 		{
-			voices.push_back({ m_swimSoundId, m_swimBaseVolume * m_swimFade, water_ambience::MaxSpread, m_lastEar });
+			if (layer->channel != InvalidChannel)
+			{
+				voices.push_back({ layer->soundId, layer->baseVolume * layer->fade, water_ambience::MaxSpread, m_lastEar });
+			}
 		}
 
 		return voices;
@@ -327,61 +331,86 @@ namespace mmo
 		}
 	}
 
-	void WaterAmbience::UpdateSwimLayer(const bool swimming, const uint32 swimWaterType, const float deltaSeconds)
+	void WaterAmbience::UpdateSurfaceLayers(const bool swimming, const uint32 swimWaterType, const bool submerged, const uint32 submergedWaterType, const float deltaSeconds)
 	{
-		uint32 wantedSound = 0;
-		float wantedVolume = 1.0f;
-		if (swimming)
+		uint32 underwaterSound = 0;
+		float underwaterVolume = 1.0f;
+		if (submerged)
 		{
 			for (const WaterAmbienceSounds& sounds : m_profiles)
 			{
-				if (sounds.profile.waterType == swimWaterType && sounds.swimSound != 0)
+				if (sounds.profile.waterType == submergedWaterType && sounds.underwaterSound != 0)
 				{
-					wantedSound = sounds.swimSound;
-					wantedVolume = sounds.volume;
+					underwaterSound = sounds.underwaterSound;
+					underwaterVolume = sounds.volume;
 					break;
 				}
 			}
 		}
 
-		if (m_swimChannel == InvalidChannel)
+		// The swim layer gives way to the underwater layer while that is wanted.
+		uint32 swimSound = 0;
+		float swimVolume = 1.0f;
+		if (swimming && underwaterSound == 0)
 		{
-			if (wantedSound == 0 || m_failedEntries.count(wantedSound) != 0)
+			for (const WaterAmbienceSounds& sounds : m_profiles)
+			{
+				if (sounds.profile.waterType == swimWaterType && sounds.swimSound != 0)
+				{
+					swimSound = sounds.swimSound;
+					swimVolume = sounds.volume;
+					break;
+				}
+			}
+		}
+
+		// The swim layer is updated first so that it releases a shared entry before the
+		// underwater layer asks for it.
+		UpdateLayer(m_swim, swimSound, swimVolume, water_ambience::SwimFadeSeconds, m_underwater.soundId, deltaSeconds);
+		UpdateLayer(m_underwater, underwaterSound, underwaterVolume, water_ambience::UnderwaterFadeSeconds, m_swim.soundId, deltaSeconds);
+	}
+
+	void WaterAmbience::UpdateLayer(Layer& layer, const uint32 wantedSound, const float wantedVolume, const float fadeSeconds, const uint32 otherSound, const float deltaSeconds)
+	{
+		if (layer.channel == InvalidChannel)
+		{
+			// Never two live voices of one entry: wait until the other layer let go of it.
+			if (wantedSound == 0 || wantedSound == otherSound || m_failedEntries.count(wantedSound) != 0)
 			{
 				return;
 			}
 
-			m_swimChannel = m_player.PlayEntry(wantedSound, water_ambience::VoicePriority);
-			if (m_swimChannel == InvalidChannel)
+			layer.channel = m_player.PlayEntry(wantedSound, water_ambience::VoicePriority);
+			if (layer.channel == InvalidChannel)
 			{
 				m_failedEntries.insert(wantedSound);
 				return;
 			}
 
-			m_swimSoundId = wantedSound;
-			m_swimBaseVolume = m_player.GetEntryVolume(wantedSound) * wantedVolume;
-			m_swimFade = 0.0f;
+			layer.soundId = wantedSound;
+			layer.baseVolume = m_player.GetEntryVolume(wantedSound) * wantedVolume;
+			layer.fade = 0.0f;
 		}
 
-		const float step = std::max(deltaSeconds, 0.0f) / water_ambience::SwimFadeSeconds;
-		if (m_swimSoundId == wantedSound)
+		const float step = std::max(deltaSeconds, 0.0f) / fadeSeconds;
+		if (layer.soundId == wantedSound)
 		{
-			m_swimFade = std::min(1.0f, m_swimFade + step);
+			layer.fade = std::min(1.0f, layer.fade + step);
 		}
 		else
 		{
-			// Leaving the water, or swimming into another water's layer: fade out first.
-			m_swimFade = std::max(0.0f, m_swimFade - step);
-			if (m_swimFade <= 0.0f)
+			// Leaving the water, or moving into another water's layer: fade out first.
+			layer.fade = std::max(0.0f, layer.fade - step);
+			if (layer.fade <= 0.0f)
 			{
-				StopSwimLayer();
+				StopLayer(layer);
 				return;
 			}
 		}
 
-		if (IChannelInstance* channel = m_audio.GetChannelInstance(m_swimChannel))
+		if (IChannelInstance* channel = m_audio.GetChannelInstance(layer.channel))
 		{
-			channel->SetVolume(m_swimBaseVolume * m_swimFade);
+			channel->SetVolume(layer.baseVolume * layer.fade);
 		}
 	}
 
@@ -396,15 +425,15 @@ namespace mmo
 		}
 	}
 
-	void WaterAmbience::StopSwimLayer()
+	void WaterAmbience::StopLayer(Layer& layer)
 	{
-		if (m_swimChannel != InvalidChannel)
+		if (layer.channel != InvalidChannel)
 		{
-			m_audio.StopSound(&m_swimChannel);
+			m_audio.StopSound(&layer.channel);
 		}
 
-		m_swimChannel = InvalidChannel;
-		m_swimSoundId = 0;
-		m_swimFade = 0.0f;
+		layer.channel = InvalidChannel;
+		layer.soundId = 0;
+		layer.fade = 0.0f;
 	}
 }

@@ -59,6 +59,10 @@ message WaterProfile
 
 	// Volume multiplier of the ambience of this liquid.
 	optional float ambient_volume = 16 [default = 1];
+
+	// 2D sound entry looped while the player's head is under water of this liquid. It replaces the
+	// swim sound while submerged. 0 disables it.
+	optional uint32 ambient_underwater_sound = 17;
 }
 
 message WaterProfiles

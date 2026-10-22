@@ -232,6 +232,13 @@ namespace mmo
 				ImGui::SetTooltip("2D loop layered in while the player swims in this liquid.");
 			}
 
+			DrawSoundEntryCombo(m_project.sounds, "Underwater Sound", currentEntry.ambient_underwater_sound(), m_underwaterSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_ambient_underwater_sound(id); });
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("2D loop played while the player's head is under this liquid. Replaces the swim sound while submerged.");
+			}
+
 			// The client clamps longer ranges anyway (water_ambience::MaxRange): the scan cost grows
 			// with the square of the range.
 			constexpr float maxAmbienceRange = 100.0f;

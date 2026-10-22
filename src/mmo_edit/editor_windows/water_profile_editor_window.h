@@ -42,5 +42,6 @@ namespace mmo
 		ImGuiTextFilter m_calmSoundFilter;
 		ImGuiTextFilter m_fastSoundFilter;
 		ImGuiTextFilter m_swimSoundFilter;
+		ImGuiTextFilter m_underwaterSoundFilter;
 	};
 }

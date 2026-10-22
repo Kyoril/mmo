@@ -19,6 +19,7 @@ namespace
 	constexpr uint32 FastEntry = 2;
 	constexpr uint32 SwimEntry = 3;
 	constexpr uint32 ShoreEntry = 4;
+	constexpr uint32 UnderwaterEntry = 5;
 
 	constexpr float EntryVolume = 0.8f;
 	constexpr float FrameSeconds = 0.05f;
@@ -28,6 +29,7 @@ namespace
 	const char* const FastFile = "Sound/Ambience/Water/RiverFast.wav";
 	const char* const SwimFile = "Sound/Ambience/Water/Swim.wav";
 	const char* const ShoreFile = "Sound/Ambience/Water/Shore.wav";
+	const char* const UnderwaterFile = "Sound/Ambience/Water/Underwater.wav";
 
 	void AddEntry(proto_client::SoundManager& sounds, const uint32 id, const char* file)
 	{
@@ -55,16 +57,17 @@ namespace
 			AddEntry(sounds, FastEntry, FastFile);
 			AddEntry(sounds, SwimEntry, SwimFile);
 			AddEntry(sounds, ShoreEntry, ShoreFile);
+			AddEntry(sounds, UnderwaterEntry, UnderwaterFile);
 			player = std::make_unique<SoundEntryPlayer>(audio, sounds);
 			ambience = std::make_unique<WaterAmbience>(*player, audio, Seed);
 		}
 
-		void Run(const IWaterAmbienceSource& source, const float seconds, const bool swimming = false, const uint32 swimType = 0)
+		void Run(const IWaterAmbienceSource& source, const float seconds, const bool swimming = false, const uint32 swimType = 0, const bool submerged = false, const uint32 submergedType = 0)
 		{
 			const int frames = static_cast<int>(seconds / FrameSeconds + 0.5f);
 			for (int i = 0; i < frames; ++i)
 			{
-				ambience->Update(source, Vector3::Zero, swimming, swimType, FrameSeconds);
+				ambience->Update(source, Vector3::Zero, swimming, swimType, submerged, submergedType, FrameSeconds);
 			}
 		}
 
@@ -172,7 +175,7 @@ TEST_CASE("smoothing has no step", "[water_ambience]")
 	float level = 0.0f;
 	for (int i = 0; i < 10 && level <= 0.0f; ++i)
 	{
-		f.ambience->Update(source, Vector3::Zero, false, 0, FrameSeconds);
+		f.ambience->Update(source, Vector3::Zero, false, 0, false, 0, FrameSeconds);
 		level = f.ambience->GetSmoothedFields()[0].level;
 	}
 
@@ -367,7 +370,7 @@ TEST_CASE("a shared bed entry glides between its profiles", "[water_ambience]")
 	for (int frame = 0; frame < SwapFrames + 60; ++frame)
 	{
 		blend = std::min(1.0f, static_cast<float>(frame + 1) / SwapFrames);
-		f.ambience->Update(source, Vector3::Zero, false, 0, FrameSeconds);
+		f.ambience->Update(source, Vector3::Zero, false, 0, false, 0, FrameSeconds);
 
 		voices = f.ambience->GetVoices();
 		REQUIRE(voices.size() == 1);
@@ -414,7 +417,7 @@ TEST_CASE("opposite shared beds glide through the ear and widen", "[water_ambien
 	const Vector3 ear(0.0f, 1.6f, 0.0f);
 	for (int frame = 0; frame < 40; ++frame)
 	{
-		f.ambience->Update(source, ear, false, 0, FrameSeconds);
+		f.ambience->Update(source, ear, false, 0, false, 0, FrameSeconds);
 	}
 
 	auto voices = f.ambience->GetVoices();
@@ -428,7 +431,7 @@ TEST_CASE("opposite shared beds glide through the ear and widen", "[water_ambien
 	for (int frame = 0; frame < SwapFrames + 60; ++frame)
 	{
 		blend = std::min(1.0f, static_cast<float>(frame + 1) / SwapFrames);
-		f.ambience->Update(source, ear, false, 0, FrameSeconds);
+		f.ambience->Update(source, ear, false, 0, false, 0, FrameSeconds);
 
 		voices = f.ambience->GetVoices();
 		REQUIRE(voices.size() == 1);
@@ -548,7 +551,7 @@ TEST_CASE("water on the other side starts from its own direction", "[water_ambie
 	water = false;
 	for (int frame = 0; frame < 400 && f.audio.stoppedChannels.count(left) == 0; ++frame)
 	{
-		f.ambience->Update(source, Vector3::Zero, false, 0, FrameSeconds);
+		f.ambience->Update(source, Vector3::Zero, false, 0, false, 0, FrameSeconds);
 	}
 	REQUIRE(f.audio.stoppedChannels.count(left) == 1);
 	REQUIRE(f.ambience->GetVoices().empty());
@@ -559,7 +562,7 @@ TEST_CASE("water on the other side starts from its own direction", "[water_ambie
 	bool heard = false;
 	for (int frame = 0; frame < 40 && !heard; ++frame)
 	{
-		f.ambience->Update(source, Vector3::Zero, false, 0, FrameSeconds);
+		f.ambience->Update(source, Vector3::Zero, false, 0, false, 0, FrameSeconds);
 
 		const auto voices = f.ambience->GetVoices();
 		if (!voices.empty())
@@ -640,4 +643,86 @@ TEST_CASE("bed voices and the swim layer play at raised priority", "[water_ambie
 	// Ordinary entries keep the default priority.
 	const ChannelIndex plain = f.player->PlayEntry(ShoreEntry);
 	CHECK(f.audio.channelPriorities[plain] == Approx(1.0f));
+}
+
+TEST_CASE("underwater layer replaces the swim layer while submerged", "[water_ambience]")
+{
+	Fixture f;
+	WaterAmbienceSounds profile = RiverProfile();
+	profile.underwaterSound = UnderwaterEntry;
+	f.ambience->SetProfiles({ profile });
+
+	const FakeWaterSource source([](float, float)
+	{
+		return Dry();
+	});
+
+	// Swimming at the surface: only the swim layer.
+	f.Run(source, 1.0f, true, 1);
+	const ChannelIndex swim = f.ChannelOf(SwimFile);
+	REQUIRE(swim != InvalidChannel);
+	CHECK(f.audio.GetChannelVolume(swim) == Approx(EntryVolume));
+	CHECK(f.ChannelOf(UnderwaterFile) == InvalidChannel);
+
+	// Diving: the underwater layer fades in while the swim layer fades out.
+	f.Run(source, 0.2f, true, 1, true, 1);
+	const ChannelIndex underwater = f.ChannelOf(UnderwaterFile);
+	REQUIRE(underwater != InvalidChannel);
+	CHECK(f.audio.GetChannelVolume(underwater) > 0.0f);
+	CHECK(f.audio.GetChannelVolume(underwater) < EntryVolume);
+	CHECK(f.audio.GetChannelVolume(swim) < EntryVolume);
+
+	f.Run(source, 0.6f, true, 1, true, 1);
+	CHECK(f.audio.GetChannelVolume(underwater) == Approx(EntryVolume));
+	CHECK(f.audio.stoppedChannels.count(swim) == 1);
+}
+
+TEST_CASE("surfacing fades the underwater layer out and brings the swim layer back", "[water_ambience]")
+{
+	Fixture f;
+	WaterAmbienceSounds profile = RiverProfile();
+	profile.underwaterSound = UnderwaterEntry;
+	f.ambience->SetProfiles({ profile });
+
+	const FakeWaterSource source([](float, float)
+	{
+		return Dry();
+	});
+
+	f.Run(source, 1.5f, true, 1, true, 1);
+	const ChannelIndex underwater = f.ChannelOf(UnderwaterFile);
+	REQUIRE(underwater != InvalidChannel);
+	CHECK(f.audio.GetChannelVolume(underwater) == Approx(EntryVolume));
+
+	// Surfacing while still swimming.
+	f.Run(source, 0.2f, true, 1, false, 0);
+	CHECK(f.audio.GetChannelVolume(underwater) < EntryVolume);
+	CHECK(f.audio.GetChannelVolume(underwater) > 0.0f);
+
+	f.Run(source, 0.4f, true, 1, false, 0);
+	CHECK(f.audio.stoppedChannels.count(underwater) == 1);
+
+	f.Run(source, 0.6f, true, 1, false, 0);
+	const ChannelIndex swim = f.ChannelOf(SwimFile);
+	REQUIRE(swim != InvalidChannel);
+	CHECK(f.audio.GetChannelVolume(swim) == Approx(EntryVolume));
+}
+
+TEST_CASE("submerged without an underwater sound keeps the swim layer", "[water_ambience]")
+{
+	Fixture f;
+	f.ambience->SetProfiles({ RiverProfile() });
+
+	const FakeWaterSource source([](float, float)
+	{
+		return Dry();
+	});
+
+	f.Run(source, 1.5f, true, 1, true, 1);
+
+	const ChannelIndex swim = f.ChannelOf(SwimFile);
+	REQUIRE(swim != InvalidChannel);
+	CHECK(f.audio.GetChannelVolume(swim) == Approx(EntryVolume));
+	CHECK(f.audio.stoppedChannels.count(swim) == 0);
+	CHECK(f.ChannelOf(UnderwaterFile) == InvalidChannel);
 }

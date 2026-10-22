@@ -33,6 +33,10 @@ namespace mmo
 		/// @brief Sound entry of the close 2D layer while swimming in this water (0 = none).
 		uint32 swimSound = 0;
 
+		/// @brief Sound entry of the 2D layer while the head is under this water; replaces the
+		///	swim layer while it plays (0 = none, the swim layer continues).
+		uint32 underwaterSound = 0;
+
 		/// @brief Volume multiplier of every sound of this profile.
 		float volume = 1.0f;
 	};
@@ -54,6 +58,9 @@ namespace mmo
 
 		/// @brief Fade in and fade out time of the swim layer, in seconds.
 		constexpr float SwimFadeSeconds = 0.5f;
+
+		/// @brief Fade in and fade out time of the underwater layer, in seconds.
+		constexpr float UnderwaterFadeSeconds = 0.4f;
 
 		/// @brief 3D spread in degrees of a bed voice whose water lies in one direction.
 		constexpr float MinSpread = 60.0f;
@@ -91,7 +98,8 @@ namespace mmo
 	///	Scans the water around the ear every water_ambience::ScanInterval, low-passes the scan
 	///	result and drives per profile a calm and a fast bed loop (equal-power crossfaded by flow
 	///	speed), placed in the direction of the water and widened by 3D spread when the water
-	///	surrounds the ear. While swimming, a 2D swim layer of the swum water fades in.
+	///	surrounds the ear. While swimming, a 2D swim layer of the swum water fades in; while the head
+	///	is under water with an underwater sound, that 2D layer fades in and the swim layer out.
 	class WaterAmbience final : public NonCopyable
 	{
 	public:
@@ -116,8 +124,11 @@ namespace mmo
 		/// @param ear World position of the listener.
 		/// @param swimming Whether the player currently swims.
 		/// @param swimWaterType Water type the player swims in. Only used while swimming.
+		/// @param submerged Whether the listener's head is under water.
+		/// @param submergedWaterType Water type at the head. Only used while submerged; its profile
+		///	selects the underwater sound.
 		/// @param deltaSeconds Seconds since the last update.
-		void Update(const IWaterAmbienceSource& source, const Vector3& ear, bool swimming, uint32 swimWaterType, float deltaSeconds);
+		void Update(const IWaterAmbienceSource& source, const Vector3& ear, bool swimming, uint32 swimWaterType, bool submerged, uint32 submergedWaterType, float deltaSeconds);
 
 		/// @brief Immediately stops every voice and resets the smoothing.
 		void Stop();
@@ -141,7 +152,7 @@ namespace mmo
 			Vector3 position;
 		};
 
-		/// @brief Gets the live voices: the bed voices, then the swim layer if it plays.
+		/// @brief Gets the live voices: the bed voices, then the swim layer and the underwater layer if they play.
 		[[nodiscard]] std::vector<VoiceInfo> GetVoices() const;
 
 	private:
@@ -178,14 +189,35 @@ namespace mmo
 		/// @brief Starts, adjusts and stops the bed voices.
 		void UpdateBedVoices(const Vector3& ear, float deltaSeconds);
 
-		/// @brief Starts, fades and stops the swim layer.
-		void UpdateSwimLayer(bool swimming, uint32 swimWaterType, float deltaSeconds);
+		/// @brief A 2D loop layer which fades in and out as a whole.
+		struct Layer
+		{
+			ChannelIndex channel = InvalidChannel;
+			uint32 soundId = 0;
+			float baseVolume = 1.0f;
+
+			/// @brief Normalized fade in [0, 1].
+			float fade = 0.0f;
+		};
+
+		/// @brief Starts, fades and stops the swim layer and the underwater layer.
+		void UpdateSurfaceLayers(bool swimming, uint32 swimWaterType, bool submerged, uint32 submergedWaterType, float deltaSeconds);
+
+		/// @brief Fades a layer towards a wanted sound; starts, switches and stops it as needed.
+		/// @param layer Layer to drive.
+		/// @param wantedSound Entry the layer should play, 0 for none.
+		/// @param wantedVolume Profile volume of the wanted sound.
+		/// @param fadeSeconds Full fade time.
+		/// @param otherSound Entry the other layer plays; it is never started twice.
+		/// @param deltaSeconds Seconds since the last update.
+		void UpdateLayer(Layer& layer, uint32 wantedSound, float wantedVolume, float fadeSeconds, uint32 otherSound, float deltaSeconds);
+
+		/// @brief Stops a layer immediately.
+		void StopLayer(Layer& layer);
 
 		/// @brief Applies volume, position and spread to a channel.
 		void ApplyBedVoice(const BedVoice& voice) const;
 
-		/// @brief Stops the swim layer immediately.
-		void StopSwimLayer();
 
 	private:
 		SoundEntryPlayer& m_player;
@@ -214,12 +246,8 @@ namespace mmo
 		/// @brief Live bed voices by sound entry id.
 		std::map<uint32, BedVoice> m_bedVoices;
 
-		ChannelIndex m_swimChannel = InvalidChannel;
-		uint32 m_swimSoundId = 0;
-		float m_swimBaseVolume = 1.0f;
-
-		/// @brief Normalized fade of the swim layer in [0, 1].
-		float m_swimFade = 0.0f;
+		Layer m_swim;
+		Layer m_underwater;
 
 		/// @brief Sound entries which failed to start. They are not retried until the profiles
 		///	change, so a broken entry does not log a warning every frame.

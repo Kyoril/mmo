@@ -1185,9 +1185,14 @@ namespace mmo
 				const TerrainWaterAmbienceSource waterSource(waterTerrain);
 				const GameUnitC &controlledUnit = *m_playerController->GetControlledUnit();
 				const Vector3 unitPosition = controlledUnit.GetPosition();
+				// The water type lookup is horizontal only, so the head (unit + earOffset) shares it.
+				const bool submerged = m_waterVolume != nullptr && m_waterVolume->IsPlayerSubmerged();
+				const uint32 footWaterType = waterTerrain != nullptr ? static_cast<uint32>(waterTerrain->GetWaterTypeAtWorldPos(unitPosition.x, unitPosition.z)) : 0u;
+				const uint32 headWaterType = waterTerrain != nullptr ? static_cast<uint32>(waterTerrain->GetWaterTypeAtWorldPos(unitPosition.x + earOffset.x, unitPosition.z + earOffset.z)) : 0u;
 				m_waterAmbience.Update(waterSource, unitPosition + earOffset,
 					controlledUnit.GetMovementInfo().IsSwimming(),
-					waterTerrain != nullptr ? static_cast<uint32>(waterTerrain->GetWaterTypeAtWorldPos(unitPosition.x, unitPosition.z)) : 0u,
+					footWaterType,
+					submerged, headWaterType,
 					deltaSeconds);
 			}
 		}
@@ -1749,12 +1754,12 @@ namespace mmo
 		m_waterVolume = std::make_unique<WaterVolumeSystem>(*m_waterQuery);
 		m_waterVolume->SetProfileResolver([this](const uint32 waterType) { return ResolveWaterProfile(waterType); });
 
-		// Water ambience: every profile with a calm bed or a swim layer takes part. WaterAmbience
+		// Water ambience: every profile with a calm bed, a swim layer or an underwater layer takes part. WaterAmbience
 		// only scans and plays beds for profiles with a calm sound.
 		std::vector<WaterAmbienceSounds> waterAmbienceProfiles;
 		for (const auto &profile : m_project.waterProfiles.getTemplates().entry())
 		{
-			if (profile.ambient_calm_sound() == 0 && profile.ambient_swim_sound() == 0)
+			if (profile.ambient_calm_sound() == 0 && profile.ambient_swim_sound() == 0 && profile.ambient_underwater_sound() == 0)
 			{
 				continue;
 			}
@@ -1766,6 +1771,7 @@ namespace mmo
 			sounds.calmSound = profile.ambient_calm_sound();
 			sounds.fastSound = profile.ambient_fast_sound();
 			sounds.swimSound = profile.ambient_swim_sound();
+			sounds.underwaterSound = profile.ambient_underwater_sound();
 			sounds.volume = profile.ambient_volume();
 			waterAmbienceProfiles.push_back(sounds);
 		}
