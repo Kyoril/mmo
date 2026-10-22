@@ -340,7 +340,7 @@ namespace mmo
 		return false;
 	}
 
-	float GlueBakeFrustumSet::MaxProjectedSizePixels(const AABB& worldBounds, float screenHeightPixels) const
+	float GlueBakeFrustumSet::MaxProjectedSizePixels(const AABB& worldBounds, float screenHeightPixels, float margin) const
 	{
 		const Vector3 size = worldBounds.GetSize();
 		const float extent = std::max({ size.x, size.y, size.z });
@@ -350,9 +350,9 @@ namespace mmo
 		float best = 0.0f;
 		for (const Frustum& frustum : frusta)
 		{
-			// Skip frusta the bounds are outside of.
+			// Skip frusta the bounds, grown by margin, are outside of.
 			const Vector3 center = worldBounds.GetCenter();
-			const Vector3 half = worldBounds.GetExtents();
+			const Vector3 half = worldBounds.GetExtents() + Vector3(margin, margin, margin);
 			bool inside = true;
 			for (const Plane& plane : frustum.planes)
 			{

@@ -11,6 +11,31 @@
 
 namespace mmo
 {
+	/// @brief A position, orientation and scale, composed the way SceneNode derives a child's
+	///        transform from its parent's (see Node::UpdateFromParentImpl). Unlike multiplying
+	///        matrices, this matches what the scene shows under a non-uniform or mirrored parent
+	///        scale with rotated children.
+	struct FlattenTransform
+	{
+		Vector3 position { 0.0f, 0.0f, 0.0f };
+		Quaternion orientation { Quaternion::Identity };
+		Vector3 scale { 1.0f, 1.0f, 1.0f };
+
+		/// @brief Decomposes an affine matrix (a mirroring matrix loses its sign into the rotation).
+		static FlattenTransform FromMatrix(const Matrix4& matrix);
+
+		/// @brief The transform as a matrix (MakeTransform).
+		[[nodiscard]] Matrix4 ToMatrix() const;
+
+		/// @brief The derived transform of a child placed at the given local transform:
+		///        orientation * localOrientation, scale * localScale (componentwise) and
+		///        position + orientation * (scale * localPosition).
+		[[nodiscard]] FlattenTransform Compose(const Vector3& localPosition, const Quaternion& localOrientation, const Vector3& localScale) const;
+
+		/// @brief A local point in this transform's parent space: position + orientation * (scale * point).
+		[[nodiscard]] Vector3 TransformPoint(const Vector3& point) const;
+	};
+
 	/// @brief One mesh a world model places, resolved to world space.
 	struct FlattenedMeshRef
 	{
@@ -75,6 +100,10 @@ namespace mmo
 		///        a model inside itself.
 		uint32 skippedChildren = 0;
 
+		/// @brief Child world models skipped because their origin lies in a pure interior group of
+		///        their parent (furniture or rooms modelled as separate world models).
+		uint32 skippedInteriorChildren = 0;
+
 		/// @brief Paths of every child world model file read (the top-level model is not included).
 		std::vector<String> worldModelPaths;
 
@@ -87,7 +116,11 @@ namespace mmo
 	{
 		/// @brief Lights of the models and their prop kits. Position and rotation are in world space;
 		///        ranges and cone angles are left unscaled, as scene lights under a scaled node are.
+		///        Ambient lights are left out, as WorldModelInstance creates no scene light for them.
 		std::vector<WorldModelLight> lights;
+
+		/// @brief Every mesh path the walk loaded (or tried to load) for its sound emitters.
+		std::vector<String> meshPaths;
 
 		/// @brief Mesh sound emitters of every mesh placed (interior meshes included: a sound inside a
 		///        building is audible outside), like WorldModelInstance::CollectSoundEmitters.
@@ -109,7 +142,9 @@ namespace mmo
 	/// @brief Lists every mesh a placed world model shows from outside: the visible mesh references of
 	///        its non-interior groups, the doodads of the active sets and the kit props (both skipped
 	///        inside interior groups), and recursively the same of its child world models with their
-	///        transforms. Particle system references (.hpar) are left out; see FlattenWorldModelExtras.
+	///        transforms (composed like SceneNode, see FlattenTransform). Child world models whose origin
+	///        lies in a pure interior group are skipped like doodads there. Particle system references
+	///        (.hpar) are left out; see FlattenWorldModelExtras.
 	/// @details Works on the model data only; needs no scene and no graphics device. Child models and
 	///          prop kits are loaded through WorldModelManager and PropKitManager.
 	/// @param model The world model to flatten. Null gives an empty list.
@@ -118,10 +153,17 @@ namespace mmo
 	/// @param report Optional: receives what was skipped and which files were read.
 	std::vector<FlattenedMeshRef> FlattenWorldModelExterior(const WorldModelPtr& model, const Matrix4& transform, const FlattenOptions& options, FlattenReport* report = nullptr);
 
+	/// @brief FlattenWorldModelExterior for a placement given as position, orientation and scale,
+	///        which is how the scene holds it; avoids decomposing a matrix.
+	std::vector<FlattenedMeshRef> FlattenWorldModelExterior(const WorldModelPtr& model, const FlattenTransform& transform, const FlattenOptions& options, FlattenReport* report = nullptr);
+
 	/// @brief Lists the lights, mesh sound emitters and particle systems a placed world model brings
 	///        along, walked exactly like FlattenWorldModelExterior. Loads meshes through MeshManager to
 	///        read their sound emitters.
 	FlattenedWorldModelExtras FlattenWorldModelExtras(const WorldModelPtr& model, const Matrix4& transform, const FlattenOptions& options);
+
+	/// @copydoc FlattenWorldModelExtras
+	FlattenedWorldModelExtras FlattenWorldModelExtras(const WorldModelPtr& model, const FlattenTransform& transform, const FlattenOptions& options);
 
 	/// @brief Whether a path names a particle system file (.hpar, case-insensitive).
 	bool IsParticleSystemPath(const String& path);

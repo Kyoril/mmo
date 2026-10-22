@@ -45,8 +45,10 @@ namespace mmo
 		bool Intersects(const AABB& worldBounds, float margin) const;
 
 		/// The largest size in pixels the bounds (its longest extent) can take on a screen of
-		/// the given height, taken over every frustum the bounds are visible in. 0 if invisible.
-		float MaxProjectedSizePixels(const AABB& worldBounds, float screenHeightPixels) const;
+		/// the given height, taken over every frustum the bounds, grown by margin, are visible in.
+		/// The margin only widens which frusta count; the size is that of the bounds themselves.
+		/// 0 if invisible.
+		float MaxProjectedSizePixels(const AABB& worldBounds, float screenHeightPixels, float margin = 0.0f) const;
 
 		/// Vertical field of view the frusta were built with, in degrees.
 		float verticalFovDegrees = 60.0f;

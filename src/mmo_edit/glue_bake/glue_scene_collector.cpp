@@ -40,6 +40,9 @@ namespace mmo
 		/// Assumed extent of a particle system around its origin for the visibility test.
 		constexpr float ParticleRadius = 10.0f;
 
+		/// Hash recorded for an input that could not be read.
+		const char* const MissingInputHash = "missing";
+
 		bool IsFinite(const float value)
 		{
 			return std::isfinite(value);
@@ -85,8 +88,9 @@ namespace mmo
 				std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(path);
 				if (!file)
 				{
-					WLOG("Glue bake: cannot read input " << path << " to fingerprint it");
-					m_files.emplace(path, String());
+					// Kept with a hash no file has, so the staleness check reports it.
+					WLOG("Glue bake: cannot read input " << path << " to fingerprint it, recorded as missing");
+					m_files.emplace(path, MissingInputHash);
 					return;
 				}
 
@@ -100,10 +104,7 @@ namespace mmo
 				inputs.reserve(m_files.size());
 				for (const auto& [path, hash] : m_files)
 				{
-					if (!hash.empty())
-					{
-						inputs.push_back(GlueBakeInputFile{ path, hash });
-					}
+					inputs.push_back(GlueBakeInputFile{ path, hash });
 				}
 
 				return inputs;
@@ -230,23 +231,14 @@ namespace mmo
 			collection.entityPages.emplace_back(x, z);
 		}
 
-		const std::set<std::pair<uint32, uint32>> terrainPageSet = [&collection]()
-		{
-			std::set<std::pair<uint32, uint32>> pages;
-			for (const PagePosition& page : collection.terrainPages)
-			{
-				pages.emplace(static_cast<uint32>(page.x()), static_cast<uint32>(page.y()));
-			}
-			return pages;
-		}();
-
 		for (const PagePosition& page : collection.entityPages)
 		{
-			const bool isTerrainPage = terrainPageSet.contains({ static_cast<uint32>(page.x()), static_cast<uint32>(page.y()) });
+			const bool isCandidatePage = candidatePages.contains({ static_cast<uint32>(page.x()), static_cast<uint32>(page.y()) });
 			for (const String& file : world.GetPageInputFiles(page))
 			{
-				// Only the terrain of visible pages is baked; their neighbours count for placements only.
-				if (!isTerrainPage && EndsWith(file, ".tile"))
+				// The terrain of every candidate page is read (its heights decide visibility); the
+				// pages around the candidates only count for their placements.
+				if (!isCandidatePage && EndsWith(file, ".tile"))
 				{
 					continue;
 				}
@@ -260,6 +252,9 @@ namespace mmo
 		// Adds a mesh placement if a frustum sees it and it is large enough on screen.
 		const auto addMesh = [&](const String& meshPath, const Matrix4& transform, const std::vector<String>& materialOverrides) -> bool
 		{
+			// Read whatever the outcome, so it is an input even when culled
+			inputs.Add(meshPath);
+
 			if (!IsFinite(transform))
 			{
 				WLOG("Glue bake: mesh " << meshPath << " has a non-finite transform, skipped");
@@ -282,7 +277,7 @@ namespace mmo
 				return false;
 			}
 
-			if (frusta.MaxProjectedSizePixels(bounds, ReferenceScreenHeight) < smallObjectPixels)
+			if (frusta.MaxProjectedSizePixels(bounds, ReferenceScreenHeight, VisibilityMargin) < smallObjectPixels)
 			{
 				++collection.skippedSmall;
 				return false;
@@ -301,7 +296,6 @@ namespace mmo
 				++collection.unmergeable;
 			}
 
-			inputs.Add(meshPath);
 			collection.items.push_back(std::move(item));
 			return true;
 		};
@@ -344,7 +338,13 @@ namespace mmo
 				return;
 			}
 
-			// Directional and ambient lights reach everywhere; a ranged light only where its range does.
+			// Ambient lights become no scene light at runtime (WorldModelInstance::CreateLightFrom).
+			if (light.type == WorldModelLight::LightType::Ambient)
+			{
+				return;
+			}
+
+			// Directional lights reach everywhere; a ranged light only where its range does.
 			const bool ranged = light.type == WorldModelLight::LightType::Omni || light.type == WorldModelLight::LightType::Spot;
 			if (ranged && light.attenuationEnd > 0.0f && !frusta.Intersects(SphereBounds(light.position, light.attenuationEnd), VisibilityMargin))
 			{
@@ -368,6 +368,8 @@ namespace mmo
 
 		const auto addParticles = [&](const FlattenedParticles& particles)
 		{
+			inputs.Add(particles.path);
+
 			if (!IsFinite(particles.world))
 			{
 				return;
@@ -378,7 +380,6 @@ namespace mmo
 				return;
 			}
 
-			inputs.Add(particles.path);
 			collection.particles.push_back(GlueBakeParticles{ particles.path, particles.world });
 		};
 
@@ -387,8 +388,11 @@ namespace mmo
 		uint32 meshPlacements = 0;
 		world.ForEachLoadedPlacement([&](const GlueBakePlacement& placement)
 		{
-			Matrix4 transform;
-			transform.MakeTransform(placement.position, placement.scale, placement.rotation);
+			// Read whatever the outcome, so it is an input even when culled
+			inputs.Add(placement.assetPath);
+
+			const FlattenTransform placementTransform{ placement.position, placement.rotation, placement.scale };
+			const Matrix4 transform = placementTransform.ToMatrix();
 
 			if (!placement.isWorldModel)
 			{
@@ -417,10 +421,11 @@ namespace mmo
 			options.maxChildDepth = WorldModelInstance::MaxChildDepth;
 
 			FlattenReport report;
-			const std::vector<FlattenedMeshRef> refs = FlattenWorldModelExterior(placement.worldModel, transform, options, &report);
+			const std::vector<FlattenedMeshRef> refs = FlattenWorldModelExterior(placement.worldModel, placementTransform, options, &report);
 
 			collection.skippedInterior += report.skippedInteriorGroups;
 			collection.skippedInteriorMeshes += report.skippedInteriorMeshes;
+			collection.skippedInteriorChildren += report.skippedInteriorChildren;
 
 			size_t kept = 0;
 			for (const FlattenedMeshRef& ref : refs)
@@ -431,7 +436,7 @@ namespace mmo
 				}
 			}
 
-			const FlattenedWorldModelExtras extras = FlattenWorldModelExtras(placement.worldModel, transform, options);
+			const FlattenedWorldModelExtras extras = FlattenWorldModelExtras(placement.worldModel, placementTransform, options);
 			for (const WorldModelLight& light : extras.lights)
 			{
 				addLight(light);
@@ -445,19 +450,22 @@ namespace mmo
 				addParticles(particles);
 			}
 
-			// The world model files only count when the placement contributes something.
+			// Every file the walks read, whether it contributes or not
+			for (const String& path : report.worldModelPaths)
+			{
+				inputs.Add(path);
+			}
+			for (const String& path : report.propKitPaths)
+			{
+				inputs.Add(path);
+			}
+			for (const String& path : extras.meshPaths)
+			{
+				inputs.Add(path);
+			}
+
 			if (kept > 0)
 			{
-				inputs.Add(placement.assetPath);
-				for (const String& path : report.worldModelPaths)
-				{
-					inputs.Add(path);
-				}
-				for (const String& path : report.propKitPaths)
-				{
-					inputs.Add(path);
-				}
-
 				ILOG("Glue bake: world model " << placement.assetPath << ": " << kept << " of " << refs.size()
 					<< " meshes visible, " << report.skippedInteriorGroups << " interior groups skipped");
 			}
@@ -470,6 +478,9 @@ namespace mmo
 			{
 				return;
 			}
+
+			// Read whatever the outcome, so it is an input even when culled
+			inputs.Add(instance.meshName);
 
 			const MeshPtr mesh = MeshManager::Get().Load(instance.meshName);
 			if (!mesh)
@@ -489,13 +500,12 @@ namespace mmo
 				return;
 			}
 
-			if (frusta.MaxProjectedSizePixels(bounds, ReferenceScreenHeight) < smallObjectPixels)
+			if (frusta.MaxProjectedSizePixels(bounds, ReferenceScreenHeight, VisibilityMargin) < smallObjectPixels)
 			{
 				++collection.skippedSmall;
 				return;
 			}
 
-			inputs.Add(instance.meshName);
 			collection.foliage.push_back(GlueBakeFoliage{ instance.meshName, instance.position, instance.rotation, instance.scale });
 		});
 

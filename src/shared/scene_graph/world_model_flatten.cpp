@@ -18,16 +18,16 @@ namespace mmo
 {
 	namespace
 	{
-		/// Receives one placed mesh: its path, mesh-to-world transform, single material override and
-		/// whether it lies in an interior group.
-		using MeshVisitor = std::function<void(const String& meshPath, const Matrix4& world, const String& materialOverride, bool interior)>;
+		/// Receives one placed mesh: its path, the transform of the model placing it, its transform
+		/// local to that model, its single material override and whether it lies in an interior group.
+		using MeshVisitor = std::function<void(const String& meshPath, const FlattenTransform& model, const FlattenTransform& local, const String& materialOverride, bool interior)>;
 
-		/// Receives one light in model space with the model-to-world transform of its model.
-		using LightVisitor = std::function<void(const WorldModelLight& light, const Matrix4& modelToWorld, bool interior)>;
+		/// Receives one light in model space with the transform of its model.
+		using LightVisitor = std::function<void(const WorldModelLight& light, const FlattenTransform& model, bool interior)>;
 
-		/// The walk shared by FlattenWorldModelExterior and FlattenWorldModelExtras. Visits everything,
-		/// interior or not, and leaves the decision to the visitors; counts skips into the report only
-		/// when skipping is enabled.
+		/// The walk shared by FlattenWorldModelExterior and FlattenWorldModelExtras. Visits every mesh and
+		/// light, interior or not, and leaves the decision to the visitors; counts skips into the report
+		/// only when skipping is enabled. Child world models in an interior group are not walked at all.
 		class WorldModelWalker final
 		{
 		public:
@@ -39,7 +39,7 @@ namespace mmo
 			{
 			}
 
-			void Walk(const WorldModel& model, const Matrix4& transform, std::vector<const WorldModel*>& chain)
+			void Walk(const WorldModel& model, const FlattenTransform& transform, std::vector<const WorldModel*>& chain)
 			{
 				const bool isTopLevel = chain.empty();
 
@@ -68,11 +68,9 @@ namespace mmo
 						++m_report->skippedInteriorMeshes;
 					}
 
-					Matrix4 local;
-					local.MakeTransform(position, scale, rotation);
 					if (m_onMesh)
 					{
-						m_onMesh(meshPath, transform * local, materialOverride, interior);
+						m_onMesh(meshPath, transform, FlattenTransform{ position, rotation, scale }, materialOverride, interior);
 					}
 				};
 
@@ -156,16 +154,17 @@ namespace mmo
 							continue;
 						}
 
+						// Recorded before loading: a kit that fails to load is still an input.
+						if (m_report)
+						{
+							m_report->propKitPaths.push_back(kitPath);
+						}
+
 						const PropKitPtr kit = PropKitManager::Get().Load(kitPath);
 						if (!kit)
 						{
 							WLOG("Flatten: failed to load prop kit " << kitPath);
 							continue;
-						}
-
-						if (m_report)
-						{
-							m_report->propKitPaths.push_back(kitPath);
 						}
 
 						for (const WorldModelMeshRef& prop : kit->props)
@@ -211,6 +210,22 @@ namespace mmo
 						continue;
 					}
 
+					// A world model placed inside a room is furniture of that room.
+					if (isInteriorPoint(childRef.position))
+					{
+						if (m_report)
+						{
+							++m_report->skippedInteriorChildren;
+						}
+						continue;
+					}
+
+					// Recorded before loading: a child that fails to load is still an input.
+					if (m_report)
+					{
+						m_report->worldModelPaths.push_back(childRef.wmoPath);
+					}
+
 					const WorldModelPtr child = WorldModelManager::Get().Load(childRef.wmoPath);
 					if (!child || std::find(chain.begin(), chain.end(), child.get()) != chain.end())
 					{
@@ -222,14 +237,7 @@ namespace mmo
 						continue;
 					}
 
-					if (m_report)
-					{
-						m_report->worldModelPaths.push_back(childRef.wmoPath);
-					}
-
-					Matrix4 childLocal;
-					childLocal.MakeTransform(childRef.position, childRef.scale, childRef.rotation);
-					Walk(*child, transform * childLocal, chain);
+					Walk(*child, transform.Compose(childRef.position, childRef.rotation, childRef.scale), chain);
 				}
 
 				chain.pop_back();
@@ -242,7 +250,7 @@ namespace mmo
 			LightVisitor m_onLight;
 		};
 
-		void RunWalk(const WorldModelPtr& model, const Matrix4& transform, const FlattenOptions& options, FlattenReport* report, MeshVisitor onMesh, LightVisitor onLight)
+		void RunWalk(const WorldModelPtr& model, const FlattenTransform& transform, const FlattenOptions& options, FlattenReport* report, MeshVisitor onMesh, LightVisitor onLight)
 		{
 			if (!model)
 			{
@@ -253,6 +261,47 @@ namespace mmo
 			std::vector<const WorldModel*> chain;
 			walker.Walk(*model, transform, chain);
 		}
+
+		Quaternion NormalizedOrIdentity(Quaternion rotation)
+		{
+			const float lengthSq = rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z + rotation.w * rotation.w;
+			if (lengthSq > 0.001f)
+			{
+				rotation.Normalize();
+				return rotation;
+			}
+
+			return Quaternion::Identity;
+		}
+	}
+
+	FlattenTransform FlattenTransform::FromMatrix(const Matrix4& matrix)
+	{
+		FlattenTransform transform;
+		matrix.Decomposition(transform.position, transform.scale, transform.orientation);
+		return transform;
+	}
+
+	Matrix4 FlattenTransform::ToMatrix() const
+	{
+		Matrix4 matrix;
+		matrix.MakeTransform(position, scale, orientation);
+		return matrix;
+	}
+
+	FlattenTransform FlattenTransform::Compose(const Vector3& localPosition, const Quaternion& localOrientation, const Vector3& localScale) const
+	{
+		// Same order as Node::UpdateFromParentImpl
+		FlattenTransform derived;
+		derived.orientation = orientation * localOrientation;
+		derived.scale = scale * localScale;
+		derived.position = TransformPoint(localPosition);
+		return derived;
+	}
+
+	Vector3 FlattenTransform::TransformPoint(const Vector3& point) const
+	{
+		return position + orientation * (scale * point);
 	}
 
 	bool IsPureInteriorWorldModelGroup(const uint32 groupFlags)
@@ -314,10 +363,15 @@ namespace mmo
 
 	std::vector<FlattenedMeshRef> FlattenWorldModelExterior(const WorldModelPtr& model, const Matrix4& transform, const FlattenOptions& options, FlattenReport* report)
 	{
+		return FlattenWorldModelExterior(model, FlattenTransform::FromMatrix(transform), options, report);
+	}
+
+	std::vector<FlattenedMeshRef> FlattenWorldModelExterior(const WorldModelPtr& model, const FlattenTransform& transform, const FlattenOptions& options, FlattenReport* report)
+	{
 		std::vector<FlattenedMeshRef> result;
 
 		RunWalk(model, transform, options, report,
-			[&result](const String& meshPath, const Matrix4& world, const String& materialOverride, const bool interior)
+			[&result](const String& meshPath, const FlattenTransform& modelTransform, const FlattenTransform& local, const String& materialOverride, const bool interior)
 			{
 				if (interior || IsParticleSystemPath(meshPath))
 				{
@@ -326,7 +380,7 @@ namespace mmo
 
 				FlattenedMeshRef ref;
 				ref.meshPath = meshPath;
-				ref.world = world;
+				ref.world = modelTransform.Compose(local.position, local.orientation, local.scale).ToMatrix();
 				if (!materialOverride.empty())
 				{
 					ref.materialOverrides.push_back(materialOverride);
@@ -340,57 +394,51 @@ namespace mmo
 
 	FlattenedWorldModelExtras FlattenWorldModelExtras(const WorldModelPtr& model, const Matrix4& transform, const FlattenOptions& options)
 	{
+		return FlattenWorldModelExtras(model, FlattenTransform::FromMatrix(transform), options);
+	}
+
+	FlattenedWorldModelExtras FlattenWorldModelExtras(const WorldModelPtr& model, const FlattenTransform& transform, const FlattenOptions& options)
+	{
 		FlattenedWorldModelExtras extras;
 
 		RunWalk(model, transform, options, nullptr,
-			[&extras](const String& meshPath, const Matrix4& world, const String&, const bool interior)
+			[&extras](const String& meshPath, const FlattenTransform& modelTransform, const FlattenTransform& local, const String&, const bool interior)
 			{
 				if (IsParticleSystemPath(meshPath))
 				{
 					if (!interior)
 					{
-						extras.particles.push_back(FlattenedParticles{ meshPath, world });
+						extras.particles.push_back(FlattenedParticles{ meshPath, modelTransform.Compose(local.position, local.orientation, local.scale).ToMatrix() });
 					}
 					return;
 				}
 
+				extras.meshPaths.push_back(meshPath);
 				const MeshPtr mesh = MeshManager::Get().Load(meshPath);
 				if (!mesh)
 				{
 					return;
 				}
 
+				// Point by point like WorldModelInstance::CollectSoundEmitters: the emitter placed by the
+				// mesh transform in model space, then by the model's placement.
 				for (const MeshSoundEmitter& emitter : mesh->GetSoundEmitters())
 				{
-					extras.sounds.push_back(PlacedSoundEmitter{ emitter.soundEntryId, world * emitter.offset, emitter.volume, emitter.maxDistance });
+					const Vector3 inModel = local.TransformPoint(emitter.offset);
+					extras.sounds.push_back(PlacedSoundEmitter{ emitter.soundEntryId, modelTransform.TransformPoint(inModel), emitter.volume, emitter.maxDistance });
 				}
 			},
-			[&extras](const WorldModelLight& light, const Matrix4& modelToWorld, const bool interior)
+			[&extras](const WorldModelLight& light, const FlattenTransform& modelTransform, const bool interior)
 			{
-				if (interior)
+				// Ambient lights become no scene light (WorldModelInstance::CreateLightFrom)
+				if (interior || light.type == WorldModelLight::LightType::Ambient)
 				{
 					return;
 				}
 
-				Vector3 position, scale;
-				Quaternion orientation;
-				modelToWorld.Decomposition(position, scale, orientation);
-
 				WorldModelLight placed = light;
-				placed.position = modelToWorld * light.position;
-
-				Quaternion rotation = orientation * light.rotation;
-				const float lengthSq = rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z + rotation.w * rotation.w;
-				if (lengthSq > 0.001f)
-				{
-					rotation.Normalize();
-				}
-				else
-				{
-					rotation = Quaternion::Identity;
-				}
-				placed.rotation = rotation;
-
+				placed.position = modelTransform.TransformPoint(light.position);
+				placed.rotation = NormalizedOrIdentity(modelTransform.orientation * light.rotation);
 				extras.lights.push_back(placed);
 			});
 

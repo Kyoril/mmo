@@ -131,6 +131,7 @@ namespace mmo
 		ILOG("  entity pages scanned:  " << collection.entityPages.size());
 		ILOG("  inputs:                " << collection.inputs.size());
 		ILOG("  skippedInterior:       " << collection.skippedInterior << " groups (" << collection.skippedInteriorMeshes << " meshes inside them)");
+		ILOG("  skippedInteriorChildren: " << collection.skippedInteriorChildren);
 		ILOG("  skippedSmall:          " << collection.skippedSmall);
 		ILOG("  skippedOutside:        " << collection.skippedOutside);
 		ILOG("  missingMeshes:         " << collection.missingMeshes);

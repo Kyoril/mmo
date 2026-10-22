@@ -125,6 +125,21 @@ TEST_CASE("Projected size of a distant box", "[glue_bake]")
 	CHECK(set.MaxProjectedSizePixels(boxAt(Vector3(0, 0, 100), 0.5f), 1080.0f) == 0.0f);
 }
 
+TEST_CASE("Projected size counts frusta the margin reaches, at the unmargined size", "[glue_bake]")
+{
+	const GlueBakeFrustumSet set = BuildGlueBakeFrusta({ { Vector3(0, 0, 0), Vector3(0, 0, -1) } }, 60.0f, 500.0f);
+
+	// Just beyond the far plane: invisible without the margin, visible with it.
+	const AABB box = boxAt(Vector3(0, 0, -501.5f), 1.0f);
+	CHECK(set.MaxProjectedSizePixels(box, 1080.0f) == 0.0f);
+
+	const float withMargin = set.MaxProjectedSizePixels(box, 1080.0f, 1.0f);
+	CHECK(withMargin > 0.0f);
+
+	// The size is the 2 m box's, not the 4 m grown one's: 2 * 935 / 500.5.
+	CHECK(withMargin == Approx(2.0f * 935.3f / 500.5f).epsilon(0.05));
+}
+
 TEST_CASE("Interior group detection", "[glue_bake]")
 {
 	CHECK(IsGlueBakeInteriorGroup(0x2000));

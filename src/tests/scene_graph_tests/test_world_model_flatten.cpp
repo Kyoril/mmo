@@ -4,6 +4,7 @@
 
 #include "math/matrix4.h"
 #include "math/quaternion.h"
+#include "math/radian.h"
 #include "math/vector3.h"
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/world_model_flatten.h"
@@ -251,4 +252,118 @@ TEST_CASE("Particle system paths are recognized case-insensitively", "[world_mod
 	CHECK(IsParticleSystemPath("Effects/Fire.HPAR"));
 	CHECK_FALSE(IsParticleSystemPath("Models/Fire.hmsh"));
 	CHECK_FALSE(IsParticleSystemPath("par"));
+}
+
+TEST_CASE("Flatten composes like SceneNode under a non-uniform parent scale with a rotated child", "[world_model_flatten]")
+{
+	const Quaternion quarterTurn(Radian(1.5707963f), Vector3::UnitY);
+
+	ScopedWorldModel child("FlattenTest/RotatedChild.hwmo");
+	WorldModelGroup& childGroup = AddGroup(*child.model, WorldModelGroupFlags::Exterior, {});
+	WorldModelMeshRef childMesh;
+	childMesh.meshPath = "RotatedMesh.hmsh";
+	childMesh.position = Vector3(1.0f, 0.0f, 0.0f);
+	childGroup.AddMeshRef(childMesh);
+
+	ScopedWorldModel parent("FlattenTest/StretchedParent.hwmo");
+	AddGroup(*parent.model, WorldModelGroupFlags::Exterior, {});
+	WorldModelChildRef childRef;
+	childRef.wmoPath = child.name;
+	childRef.position = Vector3(1.0f, 0.0f, 0.0f);
+	childRef.rotation = quarterTurn;
+	parent.model->AddChildRef(childRef);
+
+	// Parent stretched 2x along X only
+	const FlattenTransform placement{ Vector3(0.0f, 0.0f, 0.0f), Quaternion::Identity, Vector3(2.0f, 1.0f, 1.0f) };
+	const std::vector<FlattenedMeshRef> refs = FlattenWorldModelExterior(parent.model, placement, FlattenOptions{});
+	REQUIRE(refs.size() == 1);
+
+	// SceneNode: child node at parentScale * (1,0,0) = (2,0,0), derived scale (2,1,1), rotation a
+	// quarter turn. The mesh node then sits at child + childOri * (childScale * (1,0,0)) =
+	// (2,0,0) + quarterTurn * (2,0,0). Multiplying the matrices instead applies the X stretch after
+	// the rotation, so the rotated offset (now along Z) keeps a length of 1.
+	const Vector3 expected = Vector3(2.0f, 0.0f, 0.0f) + quarterTurn * Vector3(2.0f, 0.0f, 0.0f);
+	CHECK(Near(refs[0].world * Vector3::Zero, expected));
+
+	Matrix4 parentMatrix;
+	parentMatrix.MakeTransform(placement.position, placement.scale, placement.orientation);
+	Matrix4 childMatrix;
+	childMatrix.MakeTransform(childRef.position, childRef.scale, childRef.rotation);
+	Matrix4 meshMatrix;
+	meshMatrix.MakeTransform(childMesh.position, childMesh.scale, childMesh.rotation);
+	CHECK_FALSE(Near((parentMatrix * childMatrix * meshMatrix) * Vector3::Zero, expected));
+}
+
+TEST_CASE("FlattenTransform composes position, orientation and scale like SceneNode", "[world_model_flatten]")
+{
+	const Quaternion quarterTurn(Radian(1.5707963f), Vector3::UnitY);
+	const FlattenTransform parent{ Vector3(10.0f, 0.0f, 0.0f), quarterTurn, Vector3(2.0f, 3.0f, 4.0f) };
+
+	const FlattenTransform derived = parent.Compose(Vector3(1.0f, 1.0f, 1.0f), quarterTurn, Vector3(0.5f, 0.5f, 0.5f));
+	CHECK(Near(derived.position, Vector3(10.0f, 0.0f, 0.0f) + quarterTurn * Vector3(2.0f, 3.0f, 4.0f)));
+	CHECK(Near(derived.scale, Vector3(1.0f, 1.5f, 2.0f)));
+	CHECK(Near(derived.orientation * Vector3::UnitX, (quarterTurn * quarterTurn) * Vector3::UnitX));
+}
+
+TEST_CASE("Flatten skips child world models placed in an interior group", "[world_model_flatten]")
+{
+	ScopedWorldModel furniture("FlattenTest/Furniture.hwmo");
+	AddGroup(*furniture.model, WorldModelGroupFlags::Exterior, { "Table.hmsh" });
+
+	ScopedWorldModel house("FlattenTest/House.hwmo");
+	AddGroup(*house.model, WorldModelGroupFlags::Exterior, { "Facade.hmsh" });
+
+	WorldModelGroup& room = AddGroup(*house.model, WorldModelGroupFlags::Interior, {});
+	const AABB roomBox(Vector3(-5.0f, -5.0f, -5.0f), Vector3(5.0f, 5.0f, 5.0f));
+	room.SetBoundingBox(roomBox);
+	ContainmentVolume volume;
+	volume.boundingBox = roomBox;
+	room.AddContainmentVolume(volume);
+
+	WorldModelChildRef inside;
+	inside.wmoPath = furniture.name;
+	house.model->AddChildRef(inside);
+
+	WorldModelChildRef outside = inside;
+	outside.position = Vector3(20.0f, 0.0f, 0.0f);
+	house.model->AddChildRef(outside);
+
+	FlattenReport report;
+	const std::vector<FlattenedMeshRef> refs = FlattenWorldModelExterior(house.model, Matrix4::Identity, FlattenOptions{}, &report);
+
+	CHECK(refs.size() == 2);
+	CHECK(report.skippedInteriorChildren == 1);
+	CHECK(report.worldModelPaths.size() == 1);
+}
+
+TEST_CASE("Flatten extras leave out ambient lights", "[world_model_flatten]")
+{
+	ScopedWorldModel wmo("FlattenTest/Ambient.hwmo");
+	AddGroup(*wmo.model, WorldModelGroupFlags::Exterior, {});
+
+	WorldModelLight ambient{};
+	ambient.type = WorldModelLight::LightType::Ambient;
+	ambient.rotation = Quaternion::Identity;
+	wmo.model->GetLights().push_back(ambient);
+
+	WorldModelLight spot = ambient;
+	spot.type = WorldModelLight::LightType::Spot;
+	wmo.model->GetLights().push_back(spot);
+
+	const FlattenedWorldModelExtras extras = FlattenWorldModelExtras(wmo.model, Matrix4::Identity, FlattenOptions{});
+	REQUIRE(extras.lights.size() == 1);
+	CHECK(extras.lights[0].type == WorldModelLight::LightType::Spot);
+}
+
+TEST_CASE("The pure interior rule is Interior 0x2000 without Exterior 0x8, as IsGlueBakeInteriorGroup", "[world_model_flatten]")
+{
+	// Pinned to the raw values game_common's IsGlueBakeInteriorGroup test uses, so the two rules
+	// (which cannot share code across the libraries) stay the same.
+	CHECK(WorldModelGroupFlags::Interior == 0x2000);
+	CHECK(WorldModelGroupFlags::Exterior == 0x8);
+	CHECK(IsPureInteriorWorldModelGroup(0x2000));
+	CHECK_FALSE(IsPureInteriorWorldModelGroup(0x2000 | 0x8));
+	CHECK_FALSE(IsPureInteriorWorldModelGroup(0x8));
+	CHECK_FALSE(IsPureInteriorWorldModelGroup(0));
+	CHECK(IsPureInteriorWorldModelGroup(0x2000 | 0x0800));
 }

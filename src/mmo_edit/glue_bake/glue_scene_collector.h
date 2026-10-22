@@ -49,7 +49,8 @@ namespace mmo
 		/// @brief Terrain pages (with a .tile file) whose bounds the frusta intersect.
 		std::vector<PagePosition> terrainPages;
 
-		/// @brief Every file the collection read, with its content hash, sorted by path.
+		/// @brief Every file the collection read, whether what it holds was kept or culled, with its
+		///        content hash, sorted by path. A file that could not be read has the hash "missing".
 		std::vector<GlueBakeInputFile> inputs;
 
 		/// @brief Pure interior WMO groups left out (once per placed occurrence).
@@ -66,6 +67,9 @@ namespace mmo
 
 		/// @brief Mesh references, doodads and kit props left out because they lie in an interior group.
 		uint32 skippedInteriorMeshes = 0;
+
+		/// @brief Child world models left out because their origin lies in an interior group of their parent.
+		uint32 skippedInteriorChildren = 0;
 
 		/// @brief Meshes that failed to load.
 		uint32 missingMeshes = 0;

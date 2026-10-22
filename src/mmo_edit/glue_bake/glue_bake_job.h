@@ -21,6 +21,7 @@ namespace mmo
 	/// @brief Vertical field of view of the glue camera in degrees (the client's Camera default).
 	constexpr float GlueBakeVerticalFovDegrees = 45.0f;
 
-	/// @brief Far distance of the glue bake frusta (the client's Camera default far clip).
-	constexpr float GlueBakeFarDistance = 1000.0f;
+	/// @brief Far distance of the glue bake frusta. Shorter than the client camera's 1000 m far clip:
+	///        fog hides what lies beyond, and the bake stays small enough for its load target.
+	constexpr float GlueBakeFarDistance = 500.0f;
 }

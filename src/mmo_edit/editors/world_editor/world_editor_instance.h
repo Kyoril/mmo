@@ -679,6 +679,9 @@ namespace mmo
 		/// @brief Prepares (parses, no GPU work) and returns a terrain page, giving read access to its
 		///        heights, layers and water. Null when the world has no terrain, the page is out of
 		///        range or it has no .tile file.
+		/// @remark Meant for one-shot jobs such as the glue bake: preparing a page resets its pending
+		///         unload request (Page::BeginPrepare), and the page stays prepared afterwards, holding
+		///         its CPU data until streaming unloads it.
 		const terrain::Page* GetPreparedTerrainPage(const PagePosition& page);
 
 		/// @brief The asset files that define a page's content: its .tile, .hfol and .wobj files,
