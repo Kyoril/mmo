@@ -106,18 +106,33 @@ The output goes to `data/client/Interface/GlueUI/GlueBake/`, or a similar folder
     their materials may depend on instancing or wind.
   - The client creates plain entities for them; there are only a few dozen in view.
   - If they render correctly as merged static geometry, merging them is allowed.
-- **Terrain.**
-  - The visible pages are clipped to the visibility area and emitted as one mesh per page, or
-    per chunk. Heights and normals come from the real page data at full resolution, or
-    decimated where far from every camera sample (builder's call; no visible LOD seams from the
-    camera path).
-  - Colour is baked into one albedo texture per terrain chunk with the existing `.tlod`
-    approach: a top-down orthographic deferred render of only the terrain node, read back from
-    albedo + emissive.
-  - The resolution is high enough for the plaza close-ups: at least ~0.25 m per texel on the
-    plaza and gate street, coarser further away.
-  - The material is the same `AlbedoNormal_Opaque_Base` instance that far terrain uses.
-  - Terrain holes stay holes.
+- **Terrain (user decision: option A, keep the near ground crisp).**
+  - **Geometry:** the visible pages are clipped to the visibility area and emitted as baked
+    meshes. Heights and normals come from the real page data, at full resolution near the
+    camera samples. Far away they may be decimated, as long as the camera path shows no
+    visible seams.
+  - **Near tiles** (the plaza and the gate street, i.e. tiles within a near distance of any
+    camera sample):
+    - They keep the **real layered terrain material**: the same per-tile material, layer
+      textures and normal maps the live terrain uses, so the cobblestones stay as crisp as
+      today.
+    - The tile's small blend data (layer coverage, and vertex colours if used) is baked into
+      the mesh or into small per-tile textures, in whatever form the terrain material reads
+      it.
+    - No terrain paging and no `Page` objects at runtime.
+  - **Far tiles:** colour is baked into an albedo texture per chunk with the existing `.tlod`
+    approach (a top-down orthographic deferred render of only the terrain node, read back from
+    albedo + emissive), using the `AlbedoNormal_Opaque_Base` instance that far terrain uses.
+  - **Holes** stay holes.
+  - **Near versus far:** the boundary must not show a visible colour or brightness jump from the
+    camera path. Place it where the camera never looks closely, or blend it.
+  - **Sharpness versus speed:** if crispness and the < 1 s target conflict, crispness on the
+    near tiles wins and the far tiles get coarser.
+- **Lights, sounds and particles.**
+  - WMO and prop-kit point lights (e.g. lanterns), ambient sound emitters and particle emitters
+    on doodads and kits that are in view, or audible from the camera path, are written to the
+    manifest with their parameters and world transforms.
+  - The runtime recreates them, so the baked scene is not darker or quieter than the live one.
 - **Water.**
   - Visible water surfaces, such as the river under the bridge, are emitted as flat meshes with
     their water profile's surface material.
@@ -139,9 +154,19 @@ The output goes to `data/client/Interface/GlueUI/GlueBake/`, or a similar folder
 - **Readiness:** the gate view is ready once all bake meshes and their textures are created.
   The loading can be done synchronously on enter, or in a few steps across the first frames,
   as long as the target holds.
-- **Fallback:** if the manifest is missing, or its input hash does not match `GlueScene.json`,
-  log a warning and fall back to today's world streaming, so a camera edit without a rebake
-  still works in development.
+- **Fallback:** if the manifest is missing, or its recorded hash of `GlueScene.json` does not
+  match the current file, log a warning and fall back to today's world streaming, so a camera
+  edit without a rebake still works in development.
+- **Staleness of the world input (user decision: option b, warn only):**
+  - The manifest also records a fingerprint of the world input files the bake read: the
+    `.wobj`, `.hfol`, WMO, kit and page files it actually used.
+  - A small checker run by the fast gate and by the weekly content audit compares that
+    fingerprint and prints a **warning, not a failure**, naming the changed inputs and the
+    rebake command.
+  - The client does not check the world fingerprint at runtime, since that would mean reading
+    the files the bake exists to skip.
+  - Add a reminder line where Haven is edited (the world editor's save path for that map, or
+    the relevant docs) that the glue bake should be rerun.
 - **Plaza characters:** they keep their authored spot positions. No ground queries against the
   bake are needed.
 
