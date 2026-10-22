@@ -57,6 +57,9 @@ namespace mmo
 		/// @brief Gets the configured fade-out duration of an entry in seconds (0 if unknown).
 		float GetEntryFadeOutSeconds(uint32 soundId) const;
 
+		/// @brief Appends the file names of an entry (none if unknown).
+		void GetEntryFiles(uint32 soundId, std::vector<String>& outFiles) const;
+
 	private:
 		/// @brief Resolves the playback SoundType from the entry flags.
 		static SoundType GetSoundTypeFromEntry(const proto_client::SoundEntry& entry);

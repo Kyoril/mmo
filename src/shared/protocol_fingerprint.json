@@ -137,8 +137,8 @@
 		]
 	},
 	"game": {
-		"version": 27,
-		"fingerprint": "sha256:8ce664bb4e921cefab62cd8fd55b258d265e3241fa82c37895ef1f05571a08be",
+		"version": 28,
+		"fingerprint": "sha256:f97849a578ecdcb444208ac78cf9822a4d0d93911255a2bf4cd86cd0f87a2ac6",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -155,7 +155,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:fb767b60a727489b0f5ff3d000b17d1d7753655d9701299e048949da1ab654f0"
+			"src/shared/game_protocol/game_protocol.h": "sha256:3083719d3be761b27aee87804819faa08ae73ae2826e368882bcef035808eabd"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -243,7 +243,7 @@
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 174",
+			"game::client_realm_packet::Count_ = 175",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",
@@ -342,6 +342,7 @@
 			"game::client_realm_packet::SellItem = 63",
 			"game::client_realm_packet::SendMail = 148",
 			"game::client_realm_packet::SetActionBarButton = 66",
+			"game::client_realm_packet::SetCharacterOrder = 174",
 			"game::client_realm_packet::SetLootMethod = 121",
 			"game::client_realm_packet::SetSelection = 18",
 			"game::client_realm_packet::SplitItem = 51",

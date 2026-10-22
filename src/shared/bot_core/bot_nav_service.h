@@ -49,7 +49,14 @@ namespace mmo
 		[[nodiscard]] std::optional<std::string> ResolveMapDirectory(uint32 mapId) const;
 		[[nodiscard]] bool EnsureMapAvailable(uint32 mapId);
 		[[nodiscard]] std::optional<uint32> InferMapId(const Vector3& start, const Vector3& end);
-		[[nodiscard]] BotPathResult FindPath(uint32 mapId, const Vector3& start, const Vector3& end);
+		/// @param closedDoors Where the closed doors the bot sees stand. The door polys under them -
+		///        the strip nav_builder cuts out at a doorway - are not walked; an open door's are.
+		[[nodiscard]] BotPathResult FindPath(uint32 mapId, const Vector3& start, const Vector3& end, const std::vector<Vector3>& closedDoors = {});
+
+		/// Whether there is walkable mesh at a position, searched the way a path query looks for
+		/// its start and end. Empty when the map has no mesh at all.
+		/// @remarks A page that is not loaded yet reads as no mesh.
+		[[nodiscard]] std::optional<bool> IsOnMesh(uint32 mapId, const Vector3& position);
 
 	private:
 		[[nodiscard]] bool Initialize();

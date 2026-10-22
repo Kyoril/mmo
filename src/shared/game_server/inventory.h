@@ -249,8 +249,8 @@ namespace mmo
 		/// @return True if inventory needs saving.
 		bool IsDirty() const noexcept;
 
-	private:
-		/// Marks inventory as dirty (needs saving).
+		/// Marks inventory as dirty (needs saving). Besides local changes, the world server calls this
+		/// when the realm reports that a sent snapshot failed to persist, so the next save resends it.
 		void MarkDirty() noexcept;
 
 	public:

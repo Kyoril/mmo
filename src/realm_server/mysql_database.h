@@ -61,6 +61,9 @@ namespace mmo
 
 		/// @copydoc IDatabase::DeleteCharacter
 		void DeleteCharacter(uint64 characterGuid) final override;
+
+		/// @copydoc IDatabase::SetCharacterOrder
+		void SetCharacterOrder(uint64 accountId, std::vector<uint64> orderedGuids) final override;
 		
 		/// @copydoc IDatabase::CreateCharacter
 		std::optional<CharCreateResult> CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration, const std::vector<ItemData>& items) final override;
@@ -216,6 +219,12 @@ namespace mmo
 	private:
 		/// Logs the last database error to the default logger.
 		void PrintDatabaseError();
+
+		/// Runs `statements` in one transaction, retrying the whole transaction a bounded number of
+		/// times when InnoDB rolls it back for lock contention (deadlock 1213, lock wait timeout 1205).
+		/// Throws mysql::Exception when a statement fails for any other reason or retries run out.
+		/// @param what Short description of the operation, used in log output and the exception.
+		void ExecuteTransactionWithLockRetry(const char* what, uint64 characterId, const std::vector<String>& statements);
 
 	private:
 		const proto::Project& m_project;

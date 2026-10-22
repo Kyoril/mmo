@@ -135,6 +135,14 @@ namespace mmo
 		return entry ? entry->fade_out_ms() / 1000.0f : 0.0f;
 	}
 
+	void SoundEntryPlayer::GetEntryFiles(const uint32 soundId, std::vector<String>& outFiles) const
+	{
+		if (const proto_client::SoundEntry* entry = m_sounds.getById(soundId))
+		{
+			outFiles.insert(outFiles.end(), entry->files().begin(), entry->files().end());
+		}
+	}
+
 	SoundType SoundEntryPlayer::GetSoundTypeFromEntry(const proto_client::SoundEntry& entry)
 	{
 		if (entry.is_3d())

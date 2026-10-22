@@ -8,6 +8,7 @@
 
 #include "common.h"
 #include "door_marking.h"
+#include "erosion.h"
 #include "Recast.h"
 #include "recast_context.h"
 
@@ -27,6 +28,10 @@ namespace mmo
         static constexpr float CellHeight = 0.25f;
         static constexpr float WalkableHeight = 1.6f; // agent height in world units (units)
         static constexpr float WalkableRadius = 0.5f; // agent radius in world units; the nav mesh keeps this much clearance from obstacles
+        // Clearance on the floors of world models, which is a character's collider radius (0.25).
+        // The full radius closed every stairwell and doorway under a yard wide: the stairs to the
+        // Oakenshire inn's cellar and to the town hall's upper floor left both cut off.
+        static constexpr float FloorWalkableRadius = 0.25f;
         static constexpr float WalkableSlope = 75.f; // maximum walkable slope, in degrees
         static constexpr float WalkableClimb = 0.5f; // maximum 'step' height for which slope is ignored (units)
         static constexpr float DetailSampleDistance = 2.0f; // heightfield detail mesh sample distance (units)
@@ -47,6 +52,7 @@ namespace mmo
         // Round (rather than truncate) so a sub-voxel fraction is not silently dropped, which
         // would otherwise reduce the effective agent radius to almost nothing.
         static constexpr int VoxelWalkableRadius = static_cast<int>(WalkableRadius / CellSize + 0.5f);
+        static constexpr int VoxelFloorWalkableRadius = static_cast<int>(FloorWalkableRadius / CellSize + 0.5f);
         static constexpr int VoxelWalkableHeight = static_cast<int>(WalkableHeight / CellHeight + 0.5f);
         static constexpr int VoxelWalkableClimb = static_cast<int>(WalkableClimb / CellHeight);
         static constexpr int VoxelEdgeMaxLen = static_cast<int>(EdgeMaxLen / CellSize);
@@ -168,7 +174,7 @@ namespace mmo
             // Erode the walkable area by the agent radius. Without this the nav mesh extends right up
             // to obstacle edges (no clearance), which makes paths hug trees/fences. This is what
             // actually applies config.walkableRadius to the resulting polygons.
-            if (!rcErodeWalkableArea(&ctx, config.walkableRadius, *chf))
+            if (!ErodeWalkableArea(ctx, *chf, config.walkableRadius, settings::VoxelFloorWalkableRadius, poly_flags::WorldModel))
             {
                 return false;
             }
