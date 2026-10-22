@@ -50,6 +50,24 @@ namespace mmo
 		/// @brief Water type written for flagged water quads (see terrain::WaterType, 1 = Water, 2 = Ocean).
 		uint8 waterType = 1;
 
+		/// @brief Optional 16-bit grey map with one pixel per water quad of the rect ((pages x * 128) by
+		///	       (pages z * 128)) giving each quad its own water level, for lakes above the sea. Pixel 0
+		///	       means "no level here" (waterLevel applies, if set); other pixels map linearly from
+		///	       waterLevelMapMinY (1) to waterLevelMapMaxY (65535). Full imports only.
+		std::filesystem::path waterLevelMap;
+
+		/// @brief Water level of waterLevelMap pixel value 1.
+		float waterLevelMapMinY = 0.0f;
+
+		/// @brief Water level of waterLevelMap pixel value 65535.
+		float waterLevelMapMaxY = 0.0f;
+
+		/// @brief Water type of the tiles whose water comes from waterLevelMap.
+		uint8 waterLevelMapType = 1;
+
+		/// @brief Whether any water source (waterLevel or waterLevelMap) is configured.
+		[[nodiscard]] bool HasAnyWater() const { return HasWaterLevel() || !waterLevelMap.empty(); }
+
 		/// @brief Optional 16-bit PNG holding one zone (area) id per terrain tile, sized
 		///	       (pages x · 16) × (pages z · 16). Resolved relative to the metadata file. Empty = no zones.
 		std::filesystem::path zoneMap;

@@ -282,6 +282,20 @@ namespace mmo
         return true;
     }
 
+	bool FbxImport::ImportUnattended(const Path& filename, const Path& assetPath, const Vector3& offset, const Vector3& scale, const Quaternion& rotation, const bool importTangents, const int32 colorFromUvChannel)
+	{
+		m_fileToImport = filename;
+		m_importAssetPath = assetPath;
+		m_importOffset = offset;
+		m_importScale = scale;
+		m_importRotation = rotation;
+		m_importTangents = importTangents;
+		m_colorFromUvChannel = colorFromUvChannel;
+		const bool imported = DoImportInternal();
+		m_colorFromUvChannel = -1;
+		return imported;
+	}
+
 	bool FbxImport::SupportsExtension(const String& extension) const
 	{
 		return extension == ".fbx" || extension == ".gltf" || extension == ".glb";
@@ -310,6 +324,12 @@ namespace mmo
         aiVector3D* tang = aiMesh->mTangents;
         aiVector3D* uv = aiMesh->mTextureCoords[0];
         aiColor4D* col = aiMesh->mColors[0];
+        const aiVector3D* colorUv = (m_colorFromUvChannel >= 0 && m_colorFromUvChannel < AI_MAX_NUMBER_OF_TEXTURECOORDS)
+            ? aiMesh->mTextureCoords[m_colorFromUvChannel] : nullptr;
+        if (m_colorFromUvChannel >= 0 && !colorUv)
+        {
+            WLOG("Mesh " << aiMesh->mName.C_Str() << " has no UV channel " << m_colorFromUvChannel << "; keeping its vertex colours");
+        }
 
         // We must create the vertex data, indicating how many vertices there will be
         submesh.vertexData = std::make_unique<VertexData>();
@@ -348,7 +368,16 @@ namespace mmo
             boundingBox.Combine(vectorData);
 
             // Color
-            if (col)
+            if (colorUv)
+            {
+                dataPointer->color = Color(colorUv->x, colorUv->y, 0.0f, 1.0f);
+                colorUv++;
+                if (col)
+                {
+                    col++;
+                }
+            }
+            else if (col)
             {
                 dataPointer->color = Color(col->r, col->g, col->b, col->a);
                 col++;

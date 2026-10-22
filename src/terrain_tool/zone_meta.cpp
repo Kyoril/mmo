@@ -144,6 +144,13 @@ namespace mmo
 		{
 			out.clearWaterMask = std::filesystem::path(clearWater).is_absolute() ? std::filesystem::path(clearWater) : path.parent_path() / clearWater;
 		}
+		if (const String levelMap = json.value("waterLevelMap", String()); !levelMap.empty())
+		{
+			out.waterLevelMap = std::filesystem::path(levelMap).is_absolute() ? std::filesystem::path(levelMap) : path.parent_path() / levelMap;
+			out.waterLevelMapMinY = json.value("waterLevelMapMinY", 0.0f);
+			out.waterLevelMapMaxY = json.value("waterLevelMapMaxY", 0.0f);
+			out.waterLevelMapType = static_cast<uint8>(json.value("waterLevelMapType", 1));
+		}
 
 		out.paint.clear();
 		if (const auto paint = json.find("paint"); paint != json.end() && paint->is_array())

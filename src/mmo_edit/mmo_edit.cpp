@@ -17,6 +17,7 @@
 #include "base/win_utility.h"
 #include <crtdbg.h>
 #include <fstream>
+#include <sstream>
 #include <mutex>
 #else
 #include "null_audio/null_audio.h"
@@ -407,7 +408,7 @@ int main(int argc, char* arg[])
 				break;
 			}
 
-			if (std::string(args[i]) == "--rebake-collision" || std::string(args[i]) == "--build-collision")
+			if (std::string(args[i]) == "--rebake-collision" || std::string(args[i]) == "--build-collision" || std::string(args[i]) == "--build-collision-from")
 			{
 				static std::ofstream rebakeLog("collision_rebake.log", std::ios::out | std::ios::trunc);
 				static std::mutex rebakeLogMutex;
@@ -435,6 +436,17 @@ int main(int argc, char* arg[])
 					else if (std::string(args[j]) == "--build-collision")
 					{
 						allRebaked = mmo::BuildMeshCollisionFile(args[j + 1]) && allRebaked;
+					}
+					else if (std::string(args[j]) == "--build-collision-from" && j + 2 < argCount)
+					{
+						// `--build-collision-from <asset> <submesh>[,<submesh>...]`
+						std::vector<uint16> subMeshes;
+						std::stringstream list(args[j + 2]);
+						for (std::string index; std::getline(list, index, ',');)
+						{
+							subMeshes.push_back(static_cast<uint16>(std::stoi(index)));
+						}
+						allRebaked = mmo::BuildMeshCollisionFromSubMeshes(args[j + 1], subMeshes) && allRebaked;
 					}
 				}
 
@@ -634,6 +646,108 @@ int main(int argc, char* arg[])
 
 				mmo::TextureImport importer;
 				PostQuitMessage(importer.ImportUnattended(files, args[i + 1], usage, compress, heightMap) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--import-fbx")
+			{
+				// mmo_edit --import-fbx <asset folder> <model>... [--scale <s> | --scale <x> <y> <z>]
+				//   [--rotate <roll> <yaw> <pitch>] [--offset <x> <y> <z>] [--tangents] [--color-from-uv <channel>]
+				// Same transform settings as the import dialog (rotation in degrees, yaw * pitch * roll).
+				static std::ofstream importLog("fbx_import.log", std::ios::out | std::ios::trunc);
+				static std::mutex importLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ importLogMutex };
+					importLog << entry.message << std::endl;
+				});
+
+				if (i + 2 >= argCount)
+				{
+					ELOG("--import-fbx needs <asset folder> <model>...");
+					PostQuitMessage(1);
+					break;
+				}
+
+				const auto isNumber = [&](const int index)
+				{
+					char* end = nullptr;
+					return index < argCount && std::strtof(args[index], &end) != HUGE_VALF && end && *end == '\0';
+				};
+
+				std::vector<std::filesystem::path> files;
+				mmo::Vector3 offset = mmo::Vector3::Zero;
+				mmo::Vector3 scale = mmo::Vector3::UnitScale;
+				mmo::Quaternion rotation = mmo::Quaternion::Identity;
+				bool tangents = false;
+				int32 colorFromUv = -1;
+				bool badArgs = false;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					const std::string arg = args[j];
+					if (arg == "--tangents")
+					{
+						tangents = true;
+					}
+					else if (arg == "--color-from-uv" && isNumber(j + 1))
+					{
+						colorFromUv = std::atoi(args[++j]);
+					}
+					else if (arg == "--scale" && isNumber(j + 1))
+					{
+						if (isNumber(j + 2) && isNumber(j + 3))
+						{
+							scale = mmo::Vector3(std::stof(args[j + 1]), std::stof(args[j + 2]), std::stof(args[j + 3]));
+							j += 3;
+						}
+						else
+						{
+							const float s = std::stof(args[j + 1]);
+							scale = mmo::Vector3(s, s, s);
+							j += 1;
+						}
+					}
+					else if ((arg == "--offset" || arg == "--rotate") && isNumber(j + 1) && isNumber(j + 2) && isNumber(j + 3))
+					{
+						const mmo::Vector3 v(std::stof(args[j + 1]), std::stof(args[j + 2]), std::stof(args[j + 3]));
+						if (arg == "--offset")
+						{
+							offset = v;
+						}
+						else
+						{
+							const mmo::Quaternion qRoll(mmo::Degree(v.x), mmo::Vector3(1, 0, 0));
+							const mmo::Quaternion qYaw(mmo::Degree(v.y), mmo::Vector3(0, 1, 0));
+							const mmo::Quaternion qPitch(mmo::Degree(v.z), mmo::Vector3(0, 0, 1));
+							rotation = qYaw * qPitch * qRoll;
+							rotation.Normalize();
+						}
+						j += 3;
+					}
+					else if (arg.starts_with("--"))
+					{
+						ELOG("--import-fbx: unknown or incomplete option " << arg);
+						badArgs = true;
+					}
+					else
+					{
+						files.emplace_back(arg);
+					}
+				}
+
+				bool allImported = !badArgs && !files.empty();
+				if (allImported)
+				{
+					mmo::FbxImport importer(mainWindow);
+					for (const auto& file : files)
+					{
+						const bool imported = importer.ImportUnattended(file, args[i + 1], offset, scale, rotation, tangents, colorFromUv);
+						ILOG((imported ? "Imported " : "Failed to import ") << file);
+						allImported = imported && allImported;
+					}
+				}
+
+				PostQuitMessage(allImported ? 0 : 1);
 				break;
 			}
 

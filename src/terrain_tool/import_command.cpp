@@ -654,7 +654,7 @@ namespace mmo
 			WLOG("World file '" << BuildWorldFilename(meta.world) << "' does not exist. Create the world in the editor first (with terrain enabled and a default material), otherwise the imported terrain won't be usable!");
 		}
 
-		if (meta.HasWaterLevel() && !meta.waterMaterial.empty() && !AssetRegistry::HasFile(meta.waterMaterial))
+		if (meta.HasAnyWater() && !meta.waterMaterial.empty() && !AssetRegistry::HasFile(meta.waterMaterial))
 		{
 			WLOG("Water material '" << meta.waterMaterial << "' does not exist - water will render as wireframe until a valid material is assigned!");
 		}
@@ -681,6 +681,25 @@ namespace mmo
 		}
 
 		const std::set<std::pair<int32, int32>> pageFilter(meta.pages.begin(), meta.pages.end());
+
+		GrayImage16 waterLevels;
+		if (!meta.waterLevelMap.empty())
+		{
+			if (meta.applyAsDelta)
+			{
+				ELOG("waterLevelMap is only supported by full imports, not by applyAsDelta");
+				return 1;
+			}
+			if (!LoadGray16Png(meta.waterLevelMap, waterLevels))
+			{
+				return 1;
+			}
+			if (waterLevels.width != pagesX * VerticesPerPageEdge || waterLevels.height != pagesZ * VerticesPerPageEdge)
+			{
+				ELOG("Water level map must hold one pixel per water quad (" << pagesX * VerticesPerPageEdge << "x" << pagesZ * VerticesPerPageEdge << ")");
+				return 1;
+			}
+		}
 
 		// Validate all layer data before opening any destination page for writing.
 		constexpr uint32 splatSide = terrain::constants::PixelsPerPage;
@@ -838,17 +857,25 @@ namespace mmo
 					}
 				}
 
-				// Water quads: flag every 1/8-tile quad whose terrain dips below the water level
-				if (meta.HasWaterLevel())
+				// Water quads: flag every 1/8-tile quad whose terrain dips below its water level (the
+				// level map's where it has one, else the global level). Flagged quads lift their corner
+				// vertices to that level; the rest of the surface keeps the global level.
+				if (meta.HasAnyWater())
 				{
 					constexpr uint32 quadsPerTileSide = 8;
 					bool pageHasWater = false;
+					const float defaultLevel = meta.HasWaterLevel() ? meta.waterLevel : 0.0f;
+					for (float &height : page.waterVertexHeights)
+					{
+						height = defaultLevel;
+					}
 
 					for (uint32 tileZ = 0; tileZ < terrain::constants::TilesPerPage; ++tileZ)
 					{
 						for (uint32 tileX = 0; tileX < terrain::constants::TilesPerPage; ++tileX)
 						{
 							uint64 mask = 0;
+							bool tileFromMap = false;
 							for (uint32 quadZ = 0; quadZ < quadsPerTileSide; ++quadZ)
 							{
 								for (uint32 quadX = 0; quadX < quadsPerTileSide; ++quadX)
@@ -861,9 +888,31 @@ namespace mmo
 									const float corner01 = page.heightmap[(vertZ + 1) * OuterSide + vertX];
 									const float corner11 = page.heightmap[(vertZ + 1) * OuterSide + vertX + 1];
 									const float lowest = std::min(std::min(corner00, corner10), std::min(corner01, corner11));
-									if (lowest < meta.waterLevel)
+
+									float level = meta.waterLevel;
+									bool fromMap = false;
+									if (!waterLevels.pixels.empty())
+									{
+										const size_t mapX = static_cast<size_t>(pageX - meta.pageX0) * VerticesPerPageEdge + vertX;
+										const size_t mapZ = static_cast<size_t>(pageZ - meta.pageZ0) * VerticesPerPageEdge + vertZ;
+										if (const uint16 value = waterLevels.pixels[mapZ * waterLevels.width + mapX]; value != 0)
+										{
+											level = meta.waterLevelMapMinY + (meta.waterLevelMapMaxY - meta.waterLevelMapMinY) * static_cast<float>(value - 1) / 65534.0f;
+											fromMap = true;
+										}
+									}
+
+									if (!std::isnan(level) && lowest < level)
 									{
 										mask |= uint64(1) << (quadX + quadZ * quadsPerTileSide);
+										tileFromMap = tileFromMap || fromMap;
+										if (fromMap)
+										{
+											page.waterVertexHeights[vertZ * OuterSide + vertX] = level;
+											page.waterVertexHeights[vertZ * OuterSide + vertX + 1] = level;
+											page.waterVertexHeights[(vertZ + 1) * OuterSide + vertX] = level;
+											page.waterVertexHeights[(vertZ + 1) * OuterSide + vertX + 1] = level;
+										}
 									}
 								}
 							}
@@ -872,7 +921,7 @@ namespace mmo
 							{
 								const uint32 tileIndex = tileX + tileZ * terrain::constants::TilesPerPage;
 								page.waterQuadMasks[tileIndex] = mask;
-								page.waterTypes[tileIndex] = meta.waterType;
+								page.waterTypes[tileIndex] = tileFromMap ? meta.waterLevelMapType : meta.waterType;
 								pageHasWater = true;
 							}
 						}
@@ -880,10 +929,6 @@ namespace mmo
 
 					if (pageHasWater)
 					{
-						for (float &height : page.waterVertexHeights)
-						{
-							height = meta.waterLevel;
-						}
 						page.waterMaterialName = meta.waterMaterial;
 					}
 				}
