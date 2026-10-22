@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -722,12 +723,64 @@ class LoopTests(unittest.TestCase):
 		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
 		self.assertTrue(any("Refix limit" in m for m in self.notifier.messages))
 
-	def test_refix_on_an_unusable_branch_is_released(self):
+	def test_refix_on_a_branch_that_cannot_take_develop_restarts_from_develop(self):
+		# Before 2026-10-22 this ended the refix ("decide again"), and a ship decision failed on the
+		# same conflict: the bug could never move again.
 		self.park_with_decision("refix", "Again.")
-		self.worktree.resume_error = gitops.GitError("merge conflict")
+		self.worktree.resume_error = gitops.GitError("merge conflict in src/a.cpp (needs a manual merge)")
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
 		self.loop.poll_once()
-		self.assertIn("cannot refix", self.api.notes(BUG_ID)[-1])
-		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(self.worktree.started, [(BRANCH, "base1")])
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("Again.", fix_input)
+		self.assertIn("restarted_from_develop", fix_input)
+		self.assertIn("src/a.cpp", fix_input)
+		self.assertIn("earlier_diff", fix_input)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_ship_conflict_reapplies_the_fix_on_develop(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.ship_result = gitops.ShipResult(False, "", "merge conflict with head1: data/maps.data changed differently", True)
+
+		def refixed():
+			self.worktree.head_ = "head2"
+			self.worktree.branch_heads[BRANCH] = "head2"
+			self.worktree.ship_result = gitops.ShipResult(True, "merge2", "")
+		patcher = mock.patch.dict(FILES, {"head2": FILES["head1"]})
+		patcher.start()
+		self.addCleanup(patcher.stop)
+		self.runner.on_fix = refixed
+		self.loop.poll_once()
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("From the bug loop, not the maintainer", fix_input)
+		self.assertIn("data/maps.data", fix_input)
+		self.assertEqual(self.worktree.shipped_heads, ["head1", "head2"])
+		self.assertEqual(self.state.reapply_count(BUG_ID), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_ship_conflict_reapply_is_limited(self):
+		self.park_with_decision("ship", head="head1", max_reapply=0)
+		self.worktree.ship_result = gitops.ShipResult(False, "", "merge conflict with head1: x", True)
+		self.loop.poll_once()
+		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertIn("ship: merge conflict", self.api.notes(BUG_ID)[-1])
+
+	def test_other_ship_failures_do_not_reapply(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.ship_result = gitops.ShipResult(False, "", "the fast gate on the merge is red")
+		self.loop.poll_once()
+		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_ship_records_the_conflicts_it_resolved(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.resolutions = [{"repo": ".", "data": ["data/editor/data/items.data"], "text": [{"path": "src/a.cpp"}]}]
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+		self.assertIn("resolved in data/editor/data/items.data, src/a.cpp", self.api.notes(BUG_ID)[-1])
+		with open(os.path.join(self.artifacts, BUG_ID, "merge.json"), encoding="utf-8") as handle:
+			self.assertEqual(json.load(handle)[0]["text"], [{"path": "src/a.cpp"}])
 
 	def test_refix_on_a_missing_branch_starts_fresh_with_the_guidance(self):
 		self.park_with_decision("refix", "Exclude terrain from line of sight.")
